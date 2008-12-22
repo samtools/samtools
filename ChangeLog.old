@@ -1,0 +1,806 @@
+------------------------------------------------------------------------
+r703 | lh3 | 2008-11-25 20:20:02 +0000 (Tue, 25 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/samtools.1
+
+rename bamtk to samtools
+
+------------------------------------------------------------------------
+r702 | lh3 | 2008-11-25 20:15:09 +0000 (Tue, 25 Nov 2008) | 2 lines
+Changed paths:
+   D /branches/prog/bam/bamtk.1
+   A /branches/prog/bam/samtools.1 (from /branches/prog/bam/bamtk.1:679)
+
+rename bamtk.1 to samtools.1
+
+------------------------------------------------------------------------
+r701 | lh3 | 2008-11-25 13:29:10 +0000 (Tue, 25 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/misc/Makefile
+
+ * samtools-0.1.0-41
+ * small (but a bit dangerous) changes to meet the latest specification
+
+------------------------------------------------------------------------
+r700 | lh3 | 2008-11-25 13:15:11 +0000 (Tue, 25 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/prog/bam/misc/all2sam.pl (from /branches/prog/bam/misc/all2tam.pl:649)
+   D /branches/prog/bam/misc/all2tam.pl
+   A /branches/prog/bam/misc/maq2sam.c (from /branches/prog/bam/misc/maq2tam.c:699)
+   D /branches/prog/bam/misc/maq2tam.c
+
+rename tam to sam
+
+------------------------------------------------------------------------
+r699 | lh3 | 2008-11-25 13:14:49 +0000 (Tue, 25 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/misc/maq2tam.c
+
+change for the new specification
+
+------------------------------------------------------------------------
+r698 | lh3 | 2008-11-24 13:15:20 +0000 (Mon, 24 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/razf.c
+   M /branches/prog/bam/razf.h
+
+ * add a fake BGZF mode to razf. It is fake in that it loads razf index into
+   memory but gives BGZF like virtual offset
+
+------------------------------------------------------------------------
+r697 | lh3 | 2008-11-24 09:53:44 +0000 (Mon, 24 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/prog/bam/ChangeLog
+
+change log
+
+------------------------------------------------------------------------
+r696 | lh3 | 2008-11-24 09:53:23 +0000 (Mon, 24 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bgzf.c
+
+updated bgzf, on behalf of Bob
+
+------------------------------------------------------------------------
+r695 | lh3 | 2008-11-23 11:40:31 +0000 (Sun, 23 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/razf.c
+
+fixed a bug in razf
+
+------------------------------------------------------------------------
+r694 | lh3 | 2008-11-22 16:23:52 +0000 (Sat, 22 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_lpileup.c
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bam-0.1.0-40
+ * fixed two small memory leaks
+ * fixed a memory problem when seek outside the length of the sequence
+
+------------------------------------------------------------------------
+r693 | lh3 | 2008-11-22 16:10:04 +0000 (Sat, 22 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+
+ * bam-0.1.0-39
+ * fixed an uninitialized warning. This does not matter in fact
+
+------------------------------------------------------------------------
+r692 | lh3 | 2008-11-22 15:44:05 +0000 (Sat, 22 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/razf.c
+   M /branches/prog/bam/razf.h
+
+Jue's new razf
+
+------------------------------------------------------------------------
+r691 | lh3 | 2008-11-21 21:30:39 +0000 (Fri, 21 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/bgzip.c
+
+ * bam-0.1.0-38
+ * get rid of some warings in bgzip.c
+ * potentially improve performance in indexing for BGZF
+
+------------------------------------------------------------------------
+r690 | lh3 | 2008-11-21 21:15:51 +0000 (Fri, 21 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bgzf.c
+
+I think I have fixed the bug in bgzf
+
+------------------------------------------------------------------------
+r689 | lh3 | 2008-11-21 20:48:56 +0000 (Fri, 21 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bgzf.c
+
+bug fix by Bob
+
+------------------------------------------------------------------------
+r688 | lh3 | 2008-11-21 20:37:27 +0000 (Fri, 21 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+
+fixed a bug due to the name change in _IOLIB
+
+------------------------------------------------------------------------
+r687 | lh3 | 2008-11-21 14:42:56 +0000 (Fri, 21 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bgzf.c
+
+fix small things
+
+------------------------------------------------------------------------
+r686 | lh3 | 2008-11-21 14:37:59 +0000 (Fri, 21 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/prog/bam/bgzf.c
+   A /branches/prog/bam/bgzf.h
+   A /branches/prog/bam/bgzip.c
+
+Bob's BGZF format, although currently buggy
+
+------------------------------------------------------------------------
+r685 | lh3 | 2008-11-21 09:48:20 +0000 (Fri, 21 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bam-0.1.0-37
+ * improve interface a little bit
+
+------------------------------------------------------------------------
+r684 | lh3 | 2008-11-21 09:30:18 +0000 (Fri, 21 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bam-0.1.0-36
+ * improve the interface of tview, a little bit
+
+------------------------------------------------------------------------
+r683 | lh3 | 2008-11-20 22:33:54 +0000 (Thu, 20 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam_tview.c
+
+a little better viewer
+
+------------------------------------------------------------------------
+r682 | lh3 | 2008-11-20 22:27:01 +0000 (Thu, 20 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-35
+ * better viewer
+
+------------------------------------------------------------------------
+r681 | lh3 | 2008-11-20 20:51:16 +0000 (Thu, 20 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-34
+ * tview is now a component of bamtk
+
+------------------------------------------------------------------------
+r680 | lh3 | 2008-11-20 19:17:30 +0000 (Thu, 20 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/prog/bam/bam_tview.c
+
+text alignment viewer
+
+------------------------------------------------------------------------
+r679 | lh3 | 2008-11-20 19:17:15 +0000 (Thu, 20 Nov 2008) | 5 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_lpileup.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.1
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/faidx.c
+
+ * bamtk-0.1.0-33
+ * added routines to reset pileup bufferes
+ * fixed a bug in faidx
+ * add text alignment viewer
+
+------------------------------------------------------------------------
+r678 | lh3 | 2008-11-20 11:05:02 +0000 (Thu, 20 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   A /branches/prog/bam/bam_lpileup.c (from /branches/prog/bam/bam_tview.c:668)
+   D /branches/prog/bam/bam_tview.c
+
+rename tview as lpileup
+
+------------------------------------------------------------------------
+r677 | lh3 | 2008-11-20 10:08:52 +0000 (Thu, 20 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/razf.c
+
+fixed a bug in razf
+
+------------------------------------------------------------------------
+r676 | lh3 | 2008-11-19 22:52:20 +0000 (Wed, 19 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/faidx.h
+
+add documentations
+
+------------------------------------------------------------------------
+r674 | lh3 | 2008-11-19 21:39:17 +0000 (Wed, 19 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bamtk.1
+   M /branches/prog/bam/faidx.h
+
+update documentation
+
+------------------------------------------------------------------------
+r673 | lh3 | 2008-11-19 21:19:03 +0000 (Wed, 19 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/prog/bam/bamtk.1
+
+add manual page
+
+------------------------------------------------------------------------
+r672 | lh3 | 2008-11-19 16:40:49 +0000 (Wed, 19 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/faidx.c
+
+ * bamtk-0.1.0-32
+ * make faidx more error resistant
+
+------------------------------------------------------------------------
+r671 | lh3 | 2008-11-19 16:09:55 +0000 (Wed, 19 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/faidx.h
+
+add index
+
+------------------------------------------------------------------------
+r670 | lh3 | 2008-11-19 16:02:39 +0000 (Wed, 19 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/faidx.c
+
+ * bamtk-0.1.0-31
+ * show reference sequence in pileup -v (not in the default pileup)
+
+------------------------------------------------------------------------
+r669 | lh3 | 2008-11-19 14:51:17 +0000 (Wed, 19 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/faidx.c
+
+ * bamtk-0.1.0-30
+ * put faidx in bamtk and remove faidx_main.c
+
+------------------------------------------------------------------------
+r668 | lh3 | 2008-11-19 14:15:05 +0000 (Wed, 19 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+   A /branches/prog/bam/faidx.c
+   A /branches/prog/bam/faidx.h
+   M /branches/prog/bam/razf.c
+
+ * bamtk-0.1.0-29
+ * fixed a bug in tview.c
+ * prepare to add faidx
+
+------------------------------------------------------------------------
+r667 | lh3 | 2008-11-19 10:20:45 +0000 (Wed, 19 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/razf.c
+   M /branches/prog/bam/razf.h
+
+gzip-compatible razf
+
+------------------------------------------------------------------------
+r664 | lh3 | 2008-11-18 12:50:23 +0000 (Tue, 18 Nov 2008) | 5 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-28
+ * fetch: fixed a bug at an array boundary
+ * fetch: fixed a bug when the whole chromosome is retrieved
+ * add linear index
+
+------------------------------------------------------------------------
+r663 | lh3 | 2008-11-17 21:29:22 +0000 (Mon, 17 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-27
+ * put l_qseq into core and move l_aux to bam1_t
+
+------------------------------------------------------------------------
+r662 | lh3 | 2008-11-17 20:55:16 +0000 (Mon, 17 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-26
+ * save seq and qual separately
+
+------------------------------------------------------------------------
+r661 | lh3 | 2008-11-17 13:09:37 +0000 (Mon, 17 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+
+little
+
+------------------------------------------------------------------------
+r660 | lh3 | 2008-11-17 13:06:14 +0000 (Mon, 17 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+
+more documentations
+
+------------------------------------------------------------------------
+r659 | lh3 | 2008-11-17 12:55:08 +0000 (Mon, 17 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-25
+ * make tview work for TAM
+
+------------------------------------------------------------------------
+r658 | lh3 | 2008-11-17 12:50:21 +0000 (Mon, 17 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-24
+ * make tview as an independent module
+
+------------------------------------------------------------------------
+r657 | lh3 | 2008-11-17 11:26:06 +0000 (Mon, 17 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_pileup.c
+
+change little
+
+------------------------------------------------------------------------
+r656 | lh3 | 2008-11-16 21:33:19 +0000 (Sun, 16 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-23
+ * also add tview for TAM
+
+------------------------------------------------------------------------
+r655 | lh3 | 2008-11-16 21:29:46 +0000 (Sun, 16 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-22
+ * make tview more efficient for deep depth
+
+------------------------------------------------------------------------
+r654 | lh3 | 2008-11-16 20:52:19 +0000 (Sun, 16 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_pileup.c
+   A /branches/prog/bam/bam_tview.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-21
+ * fixed bug in the TAM parser: lowercase not recognized
+ * unfinished function to leveled pileup (tview)
+
+------------------------------------------------------------------------
+r653 | lh3 | 2008-11-15 12:58:36 +0000 (Sat, 15 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-20
+ * pileup now display deleted bases as '*'
+
+------------------------------------------------------------------------
+r652 | lh3 | 2008-11-15 09:58:39 +0000 (Sat, 15 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-19
+ * fixed a bug in fetch()
+ * reduce memory in indexing
+
+------------------------------------------------------------------------
+r651 | lh3 | 2008-11-14 21:56:05 +0000 (Fri, 14 Nov 2008) | 5 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-18
+ * important changes are made to index: the index size is increased, but
+   now we have no limit on file sizes and the new method potentially
+   works with BGZF, Bob's new compression format.
+
+------------------------------------------------------------------------
+r650 | lh3 | 2008-11-14 16:03:22 +0000 (Fri, 14 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-17
+ * more comments in bam.h
+ * fixed a bug in bam_index.c
+
+------------------------------------------------------------------------
+r649 | lh3 | 2008-11-13 16:04:18 +0000 (Thu, 13 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bam_sort.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-16
+ * use macros to retrieve pointers from bam1_t and thus reduce the size
+   of bam1_t struct.
+
+------------------------------------------------------------------------
+r648 | lh3 | 2008-11-13 13:21:39 +0000 (Thu, 13 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_sort.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-15
+ * make more things work over pipe
+
+------------------------------------------------------------------------
+r647 | lh3 | 2008-11-13 12:49:28 +0000 (Thu, 13 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/misc/maq2tam.c
+
+fixed a bug in maq2tam
+
+------------------------------------------------------------------------
+r646 | lh3 | 2008-11-13 11:46:59 +0000 (Thu, 13 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/Makefile
+   M /branches/prog/bam/misc/Makefile
+   M /branches/prog/bam/misc/maq2tam.c
+
+ * bug fix in maq2tam.c
+ * improve Makefile
+
+------------------------------------------------------------------------
+r645 | lh3 | 2008-11-13 11:39:46 +0000 (Thu, 13 Nov 2008) | 3 lines
+Changed paths:
+   A /branches/prog/bam/misc/Makefile
+   M /branches/prog/bam/misc/maq2tam.c
+
+ * corrected maq2tam
+ * add Makefile
+
+------------------------------------------------------------------------
+r644 | lh3 | 2008-11-13 11:25:45 +0000 (Thu, 13 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/razf.c
+
+fixed the bug in buffered write (on behalf of Jue)
+
+------------------------------------------------------------------------
+r643 | lh3 | 2008-11-13 10:53:42 +0000 (Thu, 13 Nov 2008) | 2 lines
+Changed paths:
+   D /branches/prog/bam/all2tam.pl
+   A /branches/prog/bam/misc/all2tam.pl (from /branches/prog/bam/all2tam.pl:642)
+
+move to misc
+
+------------------------------------------------------------------------
+r642 | lh3 | 2008-11-13 10:53:23 +0000 (Thu, 13 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/all2tam.pl
+
+change tag
+
+------------------------------------------------------------------------
+r641 | lh3 | 2008-11-13 10:53:12 +0000 (Thu, 13 Nov 2008) | 2 lines
+Changed paths:
+   D /branches/prog/bam/utils
+
+has been renamed
+
+------------------------------------------------------------------------
+r640 | lh3 | 2008-11-13 10:52:50 +0000 (Thu, 13 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/prog/bam/misc (from /branches/prog/bam/utils:639)
+
+rename
+
+------------------------------------------------------------------------
+r639 | lh3 | 2008-11-13 10:52:35 +0000 (Thu, 13 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/prog/bam/utils
+   A /branches/prog/bam/utils/maq2tam.c
+
+utilities (converters and so on)
+
+------------------------------------------------------------------------
+r638 | lh3 | 2008-11-12 22:24:22 +0000 (Wed, 12 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-14
+ * copy the text header to BAM
+ * add BAM1 header flag
+
+------------------------------------------------------------------------
+r637 | lh3 | 2008-11-12 14:56:08 +0000 (Wed, 12 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/razf.c
+
+ * bamtk-0.1.0-13
+ * fixed a bug in razf
+ * improved and fixed potential bugs in index
+
+------------------------------------------------------------------------
+r636 | lh3 | 2008-11-12 11:57:13 +0000 (Wed, 12 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+update documentation in the HeaderDOC format
+
+------------------------------------------------------------------------
+r635 | lh3 | 2008-11-12 10:08:38 +0000 (Wed, 12 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-12
+ * more documentations
+ * rename baf1_core_t as bam1_core_t
+
+------------------------------------------------------------------------
+r634 | lh3 | 2008-11-11 23:00:35 +0000 (Tue, 11 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_pileup.c
+
+documentation
+
+------------------------------------------------------------------------
+r633 | lh3 | 2008-11-11 21:23:49 +0000 (Tue, 11 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-11
+ * give up regional pileup. We can now use pipe to mimic that.
+ * for index file, change suffix .idx to .bmi
+
+------------------------------------------------------------------------
+r632 | lh3 | 2008-11-11 21:00:11 +0000 (Tue, 11 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/razf.c
+
+ * bamtk-0.1.0-10
+ * make pileup work on TAM
+
+------------------------------------------------------------------------
+r631 | lh3 | 2008-11-11 09:20:29 +0000 (Tue, 11 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/razf.c
+   M /branches/prog/bam/razf.h
+   M /branches/prog/bam/razip.c
+
+ * bamtk-0.1.0-9
+ * razf now supports streaming
+ * prepare to improve pileup (have not yet)
+
+------------------------------------------------------------------------
+r630 | lh3 | 2008-11-10 18:34:40 +0000 (Mon, 10 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-8
+ * improve the interface of TAM parser
+
+------------------------------------------------------------------------
+r629 | lh3 | 2008-11-10 13:06:13 +0000 (Mon, 10 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-7
+ * almost nothing
+
+------------------------------------------------------------------------
+r628 | lh3 | 2008-11-10 12:56:36 +0000 (Mon, 10 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-6
+ * fixed a bug in bam_pileup.c
+
+------------------------------------------------------------------------
+r627 | lh3 | 2008-11-10 11:32:46 +0000 (Mon, 10 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bamtk.c
+   M /branches/prog/bam/razf.c
+
+ * bamtk-0.1.0-5
+ * fixed a bug in razf.c, caused by my modifications
+ * improve the interface of pileup. Now it will be slower but more flexible
+
+------------------------------------------------------------------------
+r626 | lh3 | 2008-11-09 20:51:04 +0000 (Sun, 09 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-4
+ * view: dumping binary output
+
+------------------------------------------------------------------------
+r625 | lh3 | 2008-11-09 20:31:54 +0000 (Sun, 09 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bam_pileup.c
+   M /branches/prog/bam/bam_sort.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-3
+ * rename functions
+
+------------------------------------------------------------------------
+r624 | lh3 | 2008-11-09 15:07:32 +0000 (Sun, 09 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/prog/bam/bam.h
+
+add comments
+
+------------------------------------------------------------------------
+r623 | lh3 | 2008-11-08 22:32:49 +0000 (Sat, 08 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-2
+ * improve indexing for a mixture of long and short reads, although currently
+   I do not know whether it really works...
+
+------------------------------------------------------------------------
+r622 | lh3 | 2008-11-08 22:13:58 +0000 (Sat, 08 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/prog/bam/bam_index.c
+   M /branches/prog/bam/bamtk.c
+
+ * bamtk-0.1.0-1
+ * prepare for improving indexing algorithm
+
+------------------------------------------------------------------------
+r621 | lh3 | 2008-11-08 20:28:09 +0000 (Sat, 08 Nov 2008) | 4 lines
+Changed paths:
+   A /branches/prog/bam/all2tam.pl
+   M /branches/prog/bam/bam.c
+   M /branches/prog/bam/bam.h
+   M /branches/prog/bam/bam_import.c
+   M /branches/prog/bam/bamtk.c
+   D /branches/prog/bam/tam_utils.pl
+
+ * bamtk-0.1.0
+ * smarter integers
+ * rename tam_utils.pl to all2tam.pl
+
+------------------------------------------------------------------------
+r620 | lh3 | 2008-11-08 17:17:22 +0000 (Sat, 08 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/prog/bam
+   A /branches/prog/bam/Makefile
+   A /branches/prog/bam/bam.c
+   A /branches/prog/bam/bam.h
+   A /branches/prog/bam/bam_endian.h
+   A /branches/prog/bam/bam_import.c
+   A /branches/prog/bam/bam_index.c
+   A /branches/prog/bam/bam_pileup.c
+   A /branches/prog/bam/bam_sort.c
+   A /branches/prog/bam/bamtk.c
+   A /branches/prog/bam/khash.h
+   A /branches/prog/bam/ksort.h
+   A /branches/prog/bam/kstream.h
+   A /branches/prog/bam/razf.c
+   A /branches/prog/bam/razf.h
+   A /branches/prog/bam/razip.c
+   A /branches/prog/bam/tam_utils.pl
+   A /branches/prog/bam/zutil.h
+
+The Binary Alignment/Mapping format.
+
+------------------------------------------------------------------------

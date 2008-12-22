@@ -1,0 +1,540 @@
+------------------------------------------------------------------------
+r58 | lh3lh3 | 2008-12-20 23:06:00 +0000 (Sat, 20 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/misc/export2sam.pl
+
+ * added comments
+ * fixed several bugs 
+
+------------------------------------------------------------------------
+r57 | lh3lh3 | 2008-12-20 15:44:20 +0000 (Sat, 20 Dec 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/misc/export2sam.pl
+
+convert Export format to SAM; not thoroughly tested
+
+------------------------------------------------------------------------
+r56 | lh3lh3 | 2008-12-19 22:13:28 +0000 (Fri, 19 Dec 2008) | 6 lines
+Changed paths:
+   M /branches/dev/samtools/bam_import.c
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bam_tview.c
+   M /branches/dev/samtools/bamtk.c
+   A /branches/dev/samtools/source.dot
+
+ * samtools-0.1.0-65
+ * pileup: generate maq-like simple output
+ * pileup: allow to output pileup at required sites
+ * source.dot: source file relationship graph
+ * tview: fixed a minor bug
+
+------------------------------------------------------------------------
+r55 | lh3lh3 | 2008-12-19 20:10:26 +0000 (Fri, 19 Dec 2008) | 2 lines
+Changed paths:
+   D /branches/dev/samtools/misc/all2sam.pl
+
+remove all2sam.pl
+
+------------------------------------------------------------------------
+r54 | lh3lh3 | 2008-12-16 22:34:25 +0000 (Tue, 16 Dec 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/COPYING
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/faidx.h
+   M /branches/dev/samtools/khash.h
+   M /branches/dev/samtools/kseq.h
+   M /branches/dev/samtools/ksort.h
+   M /branches/dev/samtools/samtools.1
+
+Added copyright information and a bit more documentation. No code change.
+
+------------------------------------------------------------------------
+r53 | lh3lh3 | 2008-12-16 13:40:18 +0000 (Tue, 16 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam.c
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_index.c
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-64
+ * improved efficiency of the indel caller for spliced alignments
+
+------------------------------------------------------------------------
+r52 | lh3lh3 | 2008-12-16 10:28:20 +0000 (Tue, 16 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam.c
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_aux.c
+   M /branches/dev/samtools/bam_index.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-63
+ * a bit code cleanup: reduce the dependency between source files
+
+------------------------------------------------------------------------
+r51 | lh3lh3 | 2008-12-15 14:29:32 +0000 (Mon, 15 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-62
+ * fixed a memory leak
+
+------------------------------------------------------------------------
+r50 | lh3lh3 | 2008-12-15 14:00:13 +0000 (Mon, 15 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/ChangeLog
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/samtools.1
+
+update documentation, ChangeLog and a comment
+
+------------------------------------------------------------------------
+r49 | lh3lh3 | 2008-12-15 13:36:43 +0000 (Mon, 15 Dec 2008) | 6 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bam_maqcns.h
+   M /branches/dev/samtools/bam_pileup.c
+   A /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/samtools.1
+
+ * samtools-0.1.0-61
+ * moved pileup command to a separate source file
+ * added indel caller
+ * added bam_cal_segend(). (NOT WORKING for spliced alignment!!!)
+ * updated documentation
+
+------------------------------------------------------------------------
+r48 | lh3lh3 | 2008-12-12 13:55:36 +0000 (Fri, 12 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-60
+ * fixed another bug in maqcns when there is a nearby deletion
+
+------------------------------------------------------------------------
+r47 | lh3lh3 | 2008-12-12 13:42:16 +0000 (Fri, 12 Dec 2008) | 5 lines
+Changed paths:
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bam_pileup.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-59
+ * pileup: outputing consensus is now optional
+ * fixed a bug in glfgen. This bug also exists in maq's glfgen. However,
+   I am not quite sure why the previous version may have problem.
+
+------------------------------------------------------------------------
+r46 | lh3lh3 | 2008-12-12 11:44:56 +0000 (Fri, 12 Dec 2008) | 6 lines
+Changed paths:
+   M /branches/dev/samtools/bam_pileup.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-58
+ * add maq consensus to pileup. However, I will move this part to a new
+   command as strictly speaking, consensus callin is not part of pileup,
+   and imposing it would make it harder to generate for other language
+   bindings.
+
+------------------------------------------------------------------------
+r45 | bhandsaker | 2008-12-11 20:43:56 +0000 (Thu, 11 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/bgzf.c
+
+Fix bug in tell() after reads that consume to the exact end of a block.
+
+------------------------------------------------------------------------
+r44 | lh3lh3 | 2008-12-11 09:36:53 +0000 (Thu, 11 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/samtools.1
+
+update manual
+
+------------------------------------------------------------------------
+r43 | lh3lh3 | 2008-12-11 09:25:36 +0000 (Thu, 11 Dec 2008) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bam_import.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-57
+ * fixed a bug in parser when there is auxiliary fields
+ * made the parser a bit more robust
+
+------------------------------------------------------------------------
+r42 | lh3lh3 | 2008-12-10 14:57:29 +0000 (Wed, 10 Dec 2008) | 5 lines
+Changed paths:
+   M /branches/dev/samtools/bam_index.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/bgzf.c
+
+ * samtools-0.1.0-56
+ * fixed a bug in bgzf (only reading is affected)
+ * fixed a typo in bam_index.c
+ * in bam_index.c, check potential bugs in the underlying I/O library
+
+------------------------------------------------------------------------
+r41 | lh3lh3 | 2008-12-10 12:53:08 +0000 (Wed, 10 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/samtools.1
+
+update manual
+
+------------------------------------------------------------------------
+r40 | lh3lh3 | 2008-12-10 11:52:10 +0000 (Wed, 10 Dec 2008) | 5 lines
+Changed paths:
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_pileup.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-55
+ * tried to make pileup work with clipping (previously not), though NOT tested
+ * removed -v from pileup
+ * made pileup take the reference sequence
+
+------------------------------------------------------------------------
+r39 | lh3lh3 | 2008-12-09 11:59:28 +0000 (Tue, 09 Dec 2008) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bam_import.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/samtools.1
+
+ * samtools-0.1.0-54
+ * in parser, recognize "=", rather than ",", as a match
+ * in parser, correctl parse "=" at the MRNM field.
+
+------------------------------------------------------------------------
+r38 | lh3lh3 | 2008-12-09 11:39:07 +0000 (Tue, 09 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/maq2sam.c
+
+fixed a bug in handling maq flag 64 and 192
+
+------------------------------------------------------------------------
+r37 | lh3lh3 | 2008-12-09 09:53:46 +0000 (Tue, 09 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/md5fa.c
+
+also calculate unordered md5sum check
+
+------------------------------------------------------------------------
+r36 | lh3lh3 | 2008-12-09 09:46:21 +0000 (Tue, 09 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/md5fa.c
+
+fixed a minor bug when there are space in the sequence
+
+------------------------------------------------------------------------
+r35 | lh3lh3 | 2008-12-09 09:40:45 +0000 (Tue, 09 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/md5fa.c
+
+fixed a potential memory leak
+
+------------------------------------------------------------------------
+r34 | lh3lh3 | 2008-12-08 14:52:17 +0000 (Mon, 08 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/bam_import.c
+   M /branches/dev/samtools/bam_index.c
+   M /branches/dev/samtools/bamtk.c
+
+ * fixed a bug in import: bin is wrongly calculated
+
+------------------------------------------------------------------------
+r33 | lh3lh3 | 2008-12-08 14:08:01 +0000 (Mon, 08 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/all2sam.pl
+
+nothing, really
+
+------------------------------------------------------------------------
+r32 | lh3lh3 | 2008-12-08 12:56:02 +0000 (Mon, 08 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/kseq.h
+   M /branches/dev/samtools/misc/Makefile
+   A /branches/dev/samtools/misc/md5.c
+   A /branches/dev/samtools/misc/md5.h
+   A /branches/dev/samtools/misc/md5fa.c
+
+ * fixed two warnings in kseq.h
+ * added md5sum utilities
+
+------------------------------------------------------------------------
+r31 | lh3lh3 | 2008-12-08 11:35:29 +0000 (Mon, 08 Dec 2008) | 5 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bam_import.c
+   M /branches/dev/samtools/bamtk.c
+   A /branches/dev/samtools/kseq.h
+   D /branches/dev/samtools/kstream.h
+
+ * samtools-0.1.0-52
+ * replace kstream with kseq. kseq is a superset of kstream. I need the
+   extra functions in kseq.h.
+ * also compile stand-alone faidx
+
+------------------------------------------------------------------------
+r30 | lh3lh3 | 2008-12-08 11:17:04 +0000 (Mon, 08 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_sort.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-51
+ * sorting by read names is available
+
+------------------------------------------------------------------------
+r29 | lh3lh3 | 2008-12-08 10:29:02 +0000 (Mon, 08 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam.c
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_import.c
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bam_pileup.c
+   M /branches/dev/samtools/bam_sort.c
+   M /branches/dev/samtools/bam_tview.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/misc/maq2sam.c
+
+ * samtools-0.1.0-50
+ * format change to meet the latest specification
+
+------------------------------------------------------------------------
+r28 | lh3lh3 | 2008-12-04 16:09:21 +0000 (Thu, 04 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/misc/maq2sam.c
+
+ * minor change in maqcns: special care when n==0
+ * change maq2sam to meet the latest specification
+
+------------------------------------------------------------------------
+r27 | lh3lh3 | 2008-12-04 15:55:44 +0000 (Thu, 04 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/razf.c
+   M /branches/dev/samtools/razf.h
+
+considerable code clean up in razf
+
+------------------------------------------------------------------------
+r26 | lh3lh3 | 2008-12-04 15:08:18 +0000 (Thu, 04 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/ChangeLog
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/faidx.c
+
+make RAZF optional in faidx.c
+
+------------------------------------------------------------------------
+r25 | lh3lh3 | 2008-12-01 15:27:22 +0000 (Mon, 01 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_aux.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/samtools.1
+
+ * samtools-0.1.0-49
+ * added routines for retrieving aux data, NOT TESTED YET!
+
+------------------------------------------------------------------------
+r24 | lh3lh3 | 2008-12-01 14:29:43 +0000 (Mon, 01 Dec 2008) | 5 lines
+Changed paths:
+   M /branches/dev/samtools/bam.c
+   M /branches/dev/samtools/bam_import.c
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/bgzf.c
+   M /branches/dev/samtools/samtools.1
+
+ * samtools-0.1.0-48
+ * bgzf: fixed a potential integer overflow on 32-it machines
+ * maqcns: set the minimum combined quality as 0
+ * supporting hex strings
+
+------------------------------------------------------------------------
+r23 | lh3lh3 | 2008-11-27 17:14:37 +0000 (Thu, 27 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-47
+ * fixed the bug in maqcns
+
+------------------------------------------------------------------------
+r22 | lh3lh3 | 2008-11-27 17:08:11 +0000 (Thu, 27 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bam.h
+   A /branches/dev/samtools/bam_maqcns.c
+   A /branches/dev/samtools/bam_maqcns.h
+   M /branches/dev/samtools/bam_tview.c
+   M /branches/dev/samtools/bamtk.c
+   A /branches/dev/samtools/glf.h
+
+ * samtools-0.1.0-46
+ * add MAQ consensus caller, currently BUGGY!
+
+------------------------------------------------------------------------
+r21 | lh3lh3 | 2008-11-27 13:51:28 +0000 (Thu, 27 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bam_pileup.c
+   M /branches/dev/samtools/bam_tview.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-45
+ * tview: display padded alignment (but not P operation)
+ * better coordinates and reference sequence
+
+------------------------------------------------------------------------
+r19 | lh3lh3 | 2008-11-27 09:26:05 +0000 (Thu, 27 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/ChangeLog
+
+new ChangeLog
+
+------------------------------------------------------------------------
+r18 | lh3lh3 | 2008-11-27 09:24:45 +0000 (Thu, 27 Nov 2008) | 3 lines
+Changed paths:
+   D /branches/dev/samtools/ChangeLog
+   A /branches/dev/samtools/ChangeLog.old (from /branches/dev/samtools/ChangeLog:6)
+
+Rename ChangeLog to ChangeLog.old. This old ChangeLog is generated from
+the log of my personal SVN repository.
+
+------------------------------------------------------------------------
+r17 | lh3lh3 | 2008-11-27 09:22:55 +0000 (Thu, 27 Nov 2008) | 6 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/bgzf.c
+
+ * samtools-0.1.0-44
+ * declare fseeko and ftello as some Linux may not do this by default and
+   missing these declarations will make bgzf buggy
+ * get rid of some harmless warings
+ * use BGZF by default, now
+
+------------------------------------------------------------------------
+r16 | lh3lh3 | 2008-11-26 21:19:11 +0000 (Wed, 26 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bam_index.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/razf.c
+
+ * samtools-0.1.0-43
+ * fixed a bug in razf_read()
+ * give more warnings when the file is truncated (or due to bugs in I/O library)
+
+------------------------------------------------------------------------
+r15 | lh3lh3 | 2008-11-26 20:41:39 +0000 (Wed, 26 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/bgzf.c
+
+fixed a bug in bgzf.c at the end of the file
+
+------------------------------------------------------------------------
+r14 | lh3lh3 | 2008-11-26 17:05:18 +0000 (Wed, 26 Nov 2008) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.0-42
+ * a lot happened to RAZF, although samtools itself is untouched. Better
+   also update the version number anyway to avoid confusion
+
+------------------------------------------------------------------------
+r13 | lh3lh3 | 2008-11-26 17:03:48 +0000 (Wed, 26 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/razf.c
+
+a change from Jue, but I think it should not matter
+
+------------------------------------------------------------------------
+r12 | lh3lh3 | 2008-11-26 16:48:14 +0000 (Wed, 26 Nov 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/razf.c
+
+fixed a potential bug in razf. However, it seems still buggy, just
+rarely happens, very rarely.
+
+------------------------------------------------------------------------
+r11 | lh3lh3 | 2008-11-26 14:02:56 +0000 (Wed, 26 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/razf.c
+
+fixed a bug in razf, with the help of Jue
+
+------------------------------------------------------------------------
+r10 | lh3lh3 | 2008-11-26 11:55:32 +0000 (Wed, 26 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/bam_index.c
+
+remove a comment
+
+------------------------------------------------------------------------
+r9 | lh3lh3 | 2008-11-26 11:37:05 +0000 (Wed, 26 Nov 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/razf.c
+   M /branches/dev/samtools/razf.h
+
+ * Jue has updated razf to realize Bob's scheme
+
+------------------------------------------------------------------------
+r7 | lh3lh3 | 2008-11-25 20:37:37 +0000 (Tue, 25 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/samtools.1
+
+the manual page
+
+------------------------------------------------------------------------
+r6 | lh3lh3 | 2008-11-25 20:37:16 +0000 (Tue, 25 Nov 2008) | 3 lines
+Changed paths:
+   A /branches/dev/samtools/ChangeLog
+   A /branches/dev/samtools/Makefile
+   A /branches/dev/samtools/bam.c
+   A /branches/dev/samtools/bam.h
+   A /branches/dev/samtools/bam_aux.c
+   A /branches/dev/samtools/bam_endian.h
+   A /branches/dev/samtools/bam_import.c
+   A /branches/dev/samtools/bam_index.c
+   A /branches/dev/samtools/bam_lpileup.c
+   A /branches/dev/samtools/bam_pileup.c
+   A /branches/dev/samtools/bam_sort.c
+   A /branches/dev/samtools/bam_tview.c
+   A /branches/dev/samtools/bamtk.c
+   A /branches/dev/samtools/bgzf.c
+   A /branches/dev/samtools/bgzf.h
+   A /branches/dev/samtools/bgzip.c
+   A /branches/dev/samtools/faidx.c
+   A /branches/dev/samtools/faidx.h
+   A /branches/dev/samtools/khash.h
+   A /branches/dev/samtools/ksort.h
+   A /branches/dev/samtools/kstream.h
+   A /branches/dev/samtools/misc
+   A /branches/dev/samtools/misc/Makefile
+   A /branches/dev/samtools/misc/all2sam.pl
+   A /branches/dev/samtools/misc/maq2sam.c
+   A /branches/dev/samtools/razf.c
+   A /branches/dev/samtools/razf.h
+   A /branches/dev/samtools/razip.c
+   A /branches/dev/samtools/zutil.h
+
+The initial version of samtools, replicated from my local SVN repository.
+The current version is: 0.1.0-42. All future development will happen here.
+
+------------------------------------------------------------------------
+r5 | lh3lh3 | 2008-11-25 20:30:49 +0000 (Tue, 25 Nov 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools
+
+samtools (C version)
+
+------------------------------------------------------------------------

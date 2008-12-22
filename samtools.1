@@ -1,0 +1,258 @@
+.TH samtools 1 "22 December 2008" "samtools-0.1.1" "Bioinformatics tools"
+.SH NAME
+.PP
+samtools - Utilities for the Sequence Alignment/Map (SAM) format
+.SH SYNOPSIS
+.PP
+samtools import ref_list.txt aln.sam.gz aln.bam
+.PP
+samtools sort aln.bam aln.sorted
+.PP
+samtools index aln.sorted.bam
+.PP
+samtools view aln.sorted.bam chr2:20,100,000-20,200,000
+.PP
+samtools merge out.bam in1.bam in2.bam in3.bam
+.PP
+samtools faidx ref.fasta
+.PP
+samtools pileup -f ref.fasta aln.sorted.bam
+.PP
+samtools tview aln.sorted.bam ref.fasta
+
+.SH DESCRIPTION
+.PP
+Samtools is a set of utilities that manipulate alignments in the BAM
+format. It imports from and exports to the SAM (Sequence
+Alignment/Map) format, does sorting, merging and indexing, and
+allows to retrieve reads in any regions swiftly.
+
+.SH COMMANDS AND OPTIONS
+.TP 10
+.B import
+samtools import <in.ref_list> <in.sam> <out.bam>
+
+Convert alignments in SAM format to BAM format. File
+.I <in.ref_list>
+is TAB-delimited. Each line must contain the reference name and the
+length of the reference, one line for each distinct reference;
+additional fields are ignored. This file also defines the order of the
+reference sequences in sorting. File
+.I <in.sam>
+can be optionally compressed by zlib or gzip. A single hyphen is
+recognized as stdin or stdout, depending on the context.
+
+.TP
+.B sort
+samtools sort [-n] [-m maxMem] <in.bam> <out.prefix>
+
+Sort alignments based on the leftmost coordinate. File
+.I <out.prefix>.bam
+will be created. This command may also create temporary files
+.I <out.prefix>.%d.bam
+when the whole alignment cannot be fitted into memory (controlled by
+option -m).
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -n
+Sort by read names rather than by chromosomal coordinates
+.TP
+.B -m INT
+Approximately the maximum required memory.
+.RE
+
+.TP
+.B merge
+samtools merge [-n] <out.bam> <in1.bam> <in2.bam> [...]
+
+Merge multiple sorted alignments. The header of
+.I <in1.bam>
+will be copied to
+.I <out.bam>
+and the headers of other files will be ignored.
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -n
+The input alignments are sorted by read names rather than by chromosomal
+coordinates
+.RE
+
+.TP
+.B index
+samtools index <aln.bam>
+
+Index sorted alignment for fast random access. Index file
+.I <aln.bam>.bai
+will be created.
+
+.TP
+.B view
+samtools view [-b] <in.bam> [region1 [...]]
+
+Extract/print all or sub alignments in SAM or BAM format. If no region
+is specified, all the alignments will be printed; otherwise only
+alignments overlapping with the specified regions will be output. An
+alignment may be given multiple times if it is overlapping several
+regions. A region can be presented, for example, in the following
+format: `chr2', `chr2:1000000' or `chr2:1,000,000-2,000,000'.
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -b
+Output in the BAM format.
+.RE
+
+.TP
+.B faidx
+samtools faidx <ref.fasta> [region1 [...]]
+
+Index reference sequence in the FASTA format or extract subsequence from
+indexed reference sequence. If no region is specified,
+.B faidx
+will index the file and create
+.I <ref.fasta>.fai
+on the disk. If regions are speficified, the subsequences will be
+retrieved and printed to stdout in the FASTA format. The input file can
+be compressed in the
+.B RAZF
+format.
+
+.TP
+.B pileup
+samtools pileup [-f in.ref.fasta] [-t in.ref_list] [-l in.site_list]
+[-s] [-c] [-T theta] [-N nHap] [-r pairDiffRate] <in.alignment>
+
+Print the alignment in the pileup format. In the pileup format, each
+line represents a genomic position, consisting of chromosome name,
+coordinate, reference base, read bases, read qualities and alignment
+mapping qualities. Information on match, mismatch, indel, strand,
+mapping quality and start and end of a read are all encoded at the read
+base column. At this column, a dot stands for a match to the reference
+base on the forward strand, a comma for a match on the reverse strand,
+`ACGTN' for a mismatch on the forward strand and `acgtn' for a mismatch
+on the reverse strand. A pattern `\\+[0-9]+[ACGTNacgtn]+' indicates
+there is an insertion between this reference position and the next
+reference position. The length of the insertion is given by the integer
+in the pattern, followed by the inserted sequence. Similarly, a pattern
+`-[0-9]+[ACGTNacgtn]+' represents a deletion from the reference. Also at
+the read base column, a symbol `^' marks the start of a read segment
+which is a contiguous subsequence on the read separated by `N/S/H' CIGAR
+operations. The ASCII of the character following `^' minus 33 gives the
+mapping quality. A symbol `$' marks the end of a read segment.
+
+If option
+.B -c
+is applied, the consensus base, consensus quality, SNP quality and
+maximum mapping quality of the reads covering the site will be inserted
+between the `reference base' and the `read bases' columns. An indel
+occupies an additional line. Each indel line consists of chromosome
+name, coordinate, a star, top two high-scoring ins/del sequences, the
+number of reads strongly supporting the first indel, the number of reads
+strongly supporting the second indel, the number of reads that confer
+little information on distinguishing indels and the number of reads that
+contain indels different from the top two ones.
+
+.B OPTIONS:
+.RS
+
+.TP 10
+.B -s
+Print the mapping quality as the last column. This option makes the
+output easier to parse, although this format is not space efficient.
+
+.TP
+.B -f FILE
+The reference sequence in the FASTA format. Index file
+.I FILE.fai
+will be created if
+absent.
+
+.TP
+.B -t FILE
+List of reference names ane sequence lengths, in the format described
+for the
+.B import
+command. If this option is present, samtools assumes the input
+.I <in.alignment>
+is in SAM format; otherwise it assumes in BAM format.
+
+.TP
+.B -l FILE
+List of sites at which pileup is output. This file is space
+delimited. The first two columns are required to be chromosome and
+1-based coordinate. Additional columns are ignored. It is
+recommended to use option
+.B -s
+together with
+.B -l
+as in the default format we may not know the mapping quality.
+
+.TP
+.B -c
+Call the consensus sequnce using MAQ consensus model. Options
+.B -T,
+.B -N
+and
+.B -r
+are only effective when
+.B -c
+is in use.
+
+.TP
+.B -T FLOAT
+The theta parameter (error dependency coefficient) in the maq consensus
+calling model [0.85]
+
+.TP
+.B -N INT
+Number of haplotypes in the sample (>=2) [2]
+
+.TP
+.B -r FLOAT
+Expected fraction of differences between a pair of haplotypes [0.001]
+
+.RE
+
+.TP
+.B tview
+samtools tview <in.sorted.bam> [ref.fasta]
+
+Text alignment viewer (based on the ncurses library). In the viewer,
+press `?' for help and press `g' to check the alignment start from a
+region in the format like `chr10:10,000,000'. Note that if the region
+showed on the screen contains no mapped reads, a blank screen will be
+seen. This is a known issue and will be improved later.
+
+.RE
+
+.SH LIMITATIONS
+.PP
+.IP o 2
+In general, more testing is needed to ensure there is no severe bug.
+.IP o 2
+PCR duplicate removal has not been implemented.
+.IP o 2
+Only MAQ->SAM converter is implemented. More converters are needed.
+.IP o 2
+Reference sequence names and lengths are not acquired from the BAM/SAM header.
+.IP o 2
+CIGAR operations N and P may not be properly handled.
+.IP o 2
+There is a small known memory leak in the viewer.
+
+.SH AUTHOR
+.PP
+Heng Li from the Sanger Institute is the author of samtools. Bob
+Handsaker from the Broad Institute implemented the BGZF library and Jue
+Ruan from Beijing Genomics Institute wrote the RAZF library. Various
+people in the 1000Genomes Project contributed to the SAM format
+specification.
+
+.SH SEE ALSO
+.PP
+Samtools website: http://samtools.sourceforge.net
