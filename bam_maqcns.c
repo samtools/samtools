@@ -15,6 +15,8 @@ typedef struct {
 	uint32_t mapQ_max;
 } glf_call_aux_t;
 
+char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
+
 /*
   P(<b1,b2>) = \theta \sum_{i=1}^{N-1} 1/i
   P(D|<b1,b2>) = \sum_{k=1}^{N-1} p_k 1/2 [(k/N)^n_2(1-k/N)^n_1 + (k/N)^n1(1-k/N)^n_2]

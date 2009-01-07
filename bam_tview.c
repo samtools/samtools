@@ -31,8 +31,6 @@ typedef struct {
 	char *ref;
 } tview_t;
 
-char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
-
 int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
 {
 	tview_t *tv = (tview_t*)data;
@@ -176,7 +174,6 @@ int tv_fetch_func(const bam1_t *b, void *data)
 
 int tv_draw_aln(tview_t *tv, int tid, int pos)
 {
-	int end;
 	// reset
 	clear();
 	tv->curr_tid = tid; tv->left_pos = pos;
