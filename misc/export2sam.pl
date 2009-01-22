@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 # Contact: lh3
-# Version: 0.1.0
+# Version: 0.1.1 (03JAN2009)
 
 use strict;
 use warnings;
@@ -83,7 +83,7 @@ sub export2sam_aux {
   # coor
   my $has_coor = 0;
   $s->[2] = "*";
-  if ($t[10] eq 'NM') {
+  if ($t[10] eq 'NM' || $t[10] eq 'QC') {
 	$s->[1] |= 0x8; # unmapped
   } elsif ($t[10] =~ /(\d+):(\d+):(\d+)/) {
 	$s->[1] |= 0x8; # TODO: should I set BAM_FUNMAP in this case?

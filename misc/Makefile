@@ -4,7 +4,7 @@ CFLAGS=		-g -Wall -O2 -m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
 DFLAGS=		#-D_FILE_OFFSET_BITS=64
 OBJS=		
-PROG=		faidx md5sum-lite md5fa maq2sam-short maq2sam-long
+PROG=		faidx md5sum-lite md5fa maq2sam-short maq2sam-long wgsim
 INCLUDES=
 LIBS=		-lm -lz
 SUBDIRS=	.
@@ -27,6 +27,9 @@ lib-recur all-recur clean-recur cleanlocal-recur install-recur:
 		done;
 
 lib:
+
+wgsim:wgsim.o
+		$(CC) $(CFLAGS) -o $@ wgsim.o -lm
 
 faidx:../faidx.c ../faidx.h
 		$(CC) $(CFLAGS) -D_NO_RAZF -DFAIDX_MAIN -o $@ ../faidx.c
