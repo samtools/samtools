@@ -35,6 +35,7 @@
  */
 
 #define BAM_MIN_CHUNK_GAP 32768
+// 1<<14 is the size of minimum bin.
 #define BAM_LIDX_SHIFT    14
 
 typedef struct {
@@ -81,17 +82,21 @@ static inline void insert_offset(khash_t(i) *h, int bin, uint64_t beg, uint64_t 
 	l->list[l->n].u = beg; l->list[l->n++].v = end;
 }
 
-static inline void insert_offset2(bam_lidx_t *index2, int last, int curr, uint64_t offset)
+static inline void insert_offset2(bam_lidx_t *index2, bam1_t *b, uint64_t offset)
 {
-	int i;
-	if (index2->m < curr + 1) {
-		index2->m = curr + 1;
+	int i, beg, end;
+	beg = b->core.pos >> BAM_LIDX_SHIFT;
+	end = (bam_calend(&b->core, bam1_cigar(b)) - 1) >> BAM_LIDX_SHIFT;
+	if (index2->m < end + 1) {
+		int old_m = index2->m;
+		index2->m = end + 1;
 		kroundup32(index2->m);
 		index2->offset = (uint64_t*)realloc(index2->offset, index2->m * 8);
+		memset(index2->offset + old_m, 0, 8 * (index2->m - old_m));
 	}
-	if (last > curr) last = -1;
-	for (i = last + 1; i <= curr; ++i) index2->offset[i] = offset;
-	index2->n = curr + 1;
+	for (i = beg + 1; i <= end; ++i)
+		if (index2->offset[i] == 0) index2->offset[i] = offset;
+	index2->n = end + 1;
 }
 
 static void merge_chunks(bam_index_t *idx)
@@ -127,7 +132,8 @@ bam_index_t *bam_index_core(bamFile fp)
 	bam_header_t *h;
 	int i, ret;
 	bam_index_t *idx;
-	uint32_t last_coor, last_tid, last_bin, save_bin, save_tid;
+	uint32_t last_bin, save_bin;
+	int32_t last_coor, last_tid, save_tid;
 	bam1_core_t *c;
 	uint64_t save_off, last_off;
 
@@ -152,14 +158,14 @@ bam_index_t *bam_index_core(bamFile fp)
 			fprintf(stderr, "[bam_index_core] the alignment is not sorted. Abort!\n");
 			exit(1);
 		}
-		if (last_coor>>BAM_LIDX_SHIFT != b->core.pos>>BAM_LIDX_SHIFT) // then write the linear index
-			insert_offset2(&idx->index2[b->core.tid], last_coor>>BAM_LIDX_SHIFT, b->core.pos>>BAM_LIDX_SHIFT, last_off);
+		if (b->core.bin < 4681) insert_offset2(&idx->index2[b->core.tid], b, last_off);
 		if (c->bin != last_bin) { // then possibly write the binning index
 			if (save_bin != 0xffffffffu) // save_bin==0xffffffffu only happens to the first record
 				insert_offset(idx->index[save_tid], save_bin, save_off, last_off);
 			save_off = last_off;
 			save_bin = last_bin = c->bin;
 			save_tid = c->tid;
+			if (save_tid < 0) break;
 		}
 		if (bam_tell(fp) <= last_off) {
 			fprintf(stderr, "[bam_index_core] bug in BGZF/RAZF: %llx < %llx\n",
@@ -169,7 +175,7 @@ bam_index_t *bam_index_core(bamFile fp)
 		last_off = bam_tell(fp);
 		last_coor = b->core.pos;
 	}
-	insert_offset(idx->index[save_tid], save_bin, save_off, bam_tell(fp));
+	if (save_tid >= 0) insert_offset(idx->index[save_tid], save_bin, save_off, bam_tell(fp));
 	merge_chunks(idx);
 	if (ret < -1) fprintf(stderr, "[bam_index_core] truncated file? Continue anyway. (%d)\n", ret);
 	free(b->data); free(b);

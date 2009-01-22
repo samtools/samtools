@@ -262,6 +262,9 @@ uint32_t bam_maqcns_call(int n, const bam_pileup1_t *pl, bam_maqcns_t *bm)
 bam_maqindel_opt_t *bam_maqindel_opt_init()
 {
 	bam_maqindel_opt_t *mi = (bam_maqindel_opt_t*)calloc(1, sizeof(bam_maqindel_opt_t));
+	mi->q_indel = 40;
+	mi->r_indel = 0.00015;
+	//
 	mi->mm_penalty = 3;
 	mi->indel_err = 4;
 	mi->ambi_thres = 10;
@@ -271,7 +274,7 @@ bam_maqindel_opt_t *bam_maqindel_opt_init()
 void bam_maqindel_ret_destroy(bam_maqindel_ret_t *mir)
 {
 	if (mir == 0) return;
-	free(mir->s1); free(mir->s2); free(mir);
+	free(mir->s[0]); free(mir->s[1]); free(mir);
 }
 
 #define MINUS_CONST 0x10000000
@@ -323,7 +326,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 	}
 	{ // the core part
 		char *ref2, *inscns = 0;
-		int k, l, *score, max_ins = types[n_types-1];
+		int k, l, *score, *pscore, max_ins = types[n_types-1];
 		ref2 = (char*)calloc(right - left + types[n_types-1] + 2, 1);
 		if (max_ins > 0) { // get the consensus of inserted sequences
 			int *inscns_aux = (int*)calloc(4 * n_types * max_ins, sizeof(int));
@@ -340,7 +343,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 					}
 				}
 			}
-			// construct the consensus
+			// construct the consensus of inserted sequence
 			inscns = (char*)calloc(n_types * max_ins, sizeof(char));
 			for (i = 0; i < n_types; ++i) {
 				for (j = 0; j < types[i]; ++j) {
@@ -358,6 +361,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 		}
 		// calculate score
 		score = (int*)calloc(n_types * n, sizeof(int));
+		pscore = (int*)calloc(n_types * n, sizeof(int));
 		for (i = 0; i < n_types; ++i) {
 			// write ref2
 			for (k = 0, j = left; j <= pos; ++j)
@@ -372,27 +376,32 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				const bam_pileup1_t *p = pl + j;
 				uint32_t *cigar;
 				bam1_core_t *c = &p->b->core;
-				int s;
+				int s, ps;
 				bam_segreg_t seg;
 				if (c->flag&BAM_FUNMAP) continue;
 				cigar = bam1_cigar(p->b);
 				bam_segreg(pos, c, cigar, &seg);
-				for (s = 0, l = seg.qbeg; c->pos + l < right && l < seg.qend; ++l) {
+				for (ps = s = 0, l = seg.qbeg; c->pos + l < right && l < seg.qend; ++l) {
 					int cq = bam1_seqi(bam1_seq(p->b), l), ct;
 					ct = c->pos + l >= left? ref2[c->pos + l - left] : 15; // "<" should not happen if there is no bug
-					if (cq < 15 && ct < 15)
+					if (cq < 15 && ct < 15) {
 						s += cq == ct? 1 : -mi->mm_penalty;
+						if (cq != ct) ps += bam1_qual(p->b)[l];
+					}
 				}
-				score[i*n + j] = s;
+				score[i*n + j] = s; pscore[i*n + j] = ps;
 				if (types[i] != 0) { // then try the other way to calculate the score
-					for (s = 0, l = seg.qbeg; c->pos + l + types[i] < right && l < seg.qend; ++l) {
+					for (ps = s = 0, l = seg.qbeg; c->pos + l + types[i] < right && l < seg.qend; ++l) {
 						int cq = bam1_seqi(bam1_seq(p->b), l), ct;
 						ct = c->pos + l + types[i] >= left? ref2[c->pos + l + types[i] - left] : 15;
-						if (cq < 15 && ct < 15)
+						if (cq < 15 && ct < 15) {
 							s += cq == ct? 1 : -mi->mm_penalty;
+							if (cq != ct) ps += bam1_qual(p->b)[l];
+						}
 					}
 				}
 				if (score[i*n+j] < s) score[i*n+j] = s; // choose the higher of the two scores
+				if (pscore[i*n+j] > ps) pscore[i*n+j] = ps;
 				if (types[i] != 0) score[i*n+j] -= mi->indel_err;
 				//printf("%d, %d, %d, %d\n", i, types[i], j, score[i*n+j]);
 			}
@@ -403,7 +412,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 			sum = (int*)calloc(n_types, sizeof(int));
 			for (i = 0; i < n_types; ++i)
 				for (j = 0; j < n; ++j)
-					sum[i] += score[i*n+j];
+					sum[i] += -pscore[i*n+j];
 			max1 = max2 = -0x7fffffff; max1_i = max2_i = -1;
 			for (i = 0; i < n_types; ++i) {
 				if (sum[i] > max1) {
@@ -416,26 +425,28 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 			// write ret
 			ret = (bam_maqindel_ret_t*)calloc(1, sizeof(bam_maqindel_ret_t));
 			ret->indel1 = types[max1_i]; ret->indel2 = types[max2_i];
-			ret->s1 = (char*)calloc(abs(ret->indel1) + 2, 1);
-			ret->s2 = (char*)calloc(abs(ret->indel2) + 2, 1);
+			ret->s[0] = (char*)calloc(abs(ret->indel1) + 2, 1);
+			ret->s[1] = (char*)calloc(abs(ret->indel2) + 2, 1);
+			// write indel sequence
 			if (ret->indel1 > 0) {
-				ret->s1[0] = '+';
+				ret->s[0][0] = '+';
 				for (k = 0; k < ret->indel1; ++k)
-					ret->s1[k+1] = bam_nt16_rev_table[(int)inscns[max1_i*max_ins + k]];
+					ret->s[0][k+1] = bam_nt16_rev_table[(int)inscns[max1_i*max_ins + k]];
 			} else if (ret->indel1 < 0) {
-				ret->s1[0] = '-';
+				ret->s[0][0] = '-';
 				for (k = 0; k < -ret->indel1 && ref[pos + k + 1]; ++k)
-					ret->s1[k+1] = ref[pos + k + 1];
-			} else ret->s1[0] = '*';
+					ret->s[0][k+1] = ref[pos + k + 1];
+			} else ret->s[0][0] = '*';
 			if (ret->indel2 > 0) {
-				ret->s2[0] = '+';
+				ret->s[1][0] = '+';
 				for (k = 0; k < ret->indel2; ++k)
-					ret->s2[k+1] = bam_nt16_rev_table[(int)inscns[max2_i*max_ins + k]];
+					ret->s[1][k+1] = bam_nt16_rev_table[(int)inscns[max2_i*max_ins + k]];
 			} else if (ret->indel2 < 0) {
-				ret->s2[0] = '-';
+				ret->s[1][0] = '-';
 				for (k = 0; k < -ret->indel2 && ref[pos + k + 1]; ++k)
-					ret->s2[k+1] = ref[pos + k + 1];
-			} else ret->s2[0] = '*';
+					ret->s[1][k+1] = ref[pos + k + 1];
+			} else ret->s[1][0] = '*';
+			// write count
 			for (j = 0; j < n; ++j) {
 				if (score[max1_i*n+j] < 0 && score[max2_i*n+j] < 0) ++ret->cnt_anti;
 				else {
@@ -445,8 +456,34 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 					else ++ret->cnt_ambi;
 				}
 			}
+			// write gl[]
+			ret->gl[0] = ret->gl[1] = 0;
+			for (j = 0; j < n; ++j) {
+				int s1 = pscore[max1_i*n + j], s2 = pscore[max2_i*n + j];
+				ret->gl[0] += s1 < s2? 0 : s1 - s2 < mi->q_indel? s1 - s2 : mi->q_indel;
+				ret->gl[1] += s2 < s1? 0 : s2 - s1 < mi->q_indel? s2 - s1 : mi->q_indel;
+			}
 		}
-		free(score); free(ref2); free(inscns);
+		free(score); free(pscore); free(ref2); free(inscns);
+	}
+	{ // call genotype
+		int q[3], qr_indel = (int)(-4.343 * log(mi->r_indel) + 0.5);
+		int min1, min2, min1_i;
+		q[0] = ret->gl[0] + (ret->s[0][0] != '*'? 0 : 0) * qr_indel;
+		q[1] = ret->gl[1] + (ret->s[1][0] != '*'? 0 : 0) * qr_indel;
+		q[2] = n * 3 + (ret->s[0][0] == '*' || ret->s[1][0] == '*'? 1 : 1) * qr_indel;
+		min1 = min2 = 0x7fffffff; min1_i = -1;
+		for (i = 0; i < 3; ++i) {
+			if (q[i] < min1) {
+				min2 = min1; min1 = q[i]; min1_i = i;
+			} else if (q[i] < min2) min2 = q[i];
+		}
+		ret->gt = min1_i;
+		ret->q_cns = min2 - min1;
+		// set q_ref
+		if (ret->gt < 2) ret->q_ref = (ret->s[ret->gt][0] == '*')? 0 : q[1-ret->gt] - q[ret->gt] - qr_indel - 3;
+		else ret->q_ref = (ret->s[0][0] == '*')? q[0] - q[2] : q[1] - q[2];
+		if (ret->q_ref < 0) ret->q_ref = 0;
 	}
 	free(types);
 	return ret;

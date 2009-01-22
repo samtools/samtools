@@ -46,7 +46,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#if _IOLIB == 1
+#if _IOLIB == 1 && !defined(_NO_RAZF)
 #define BAM_TRUE_OFFSET
 #include "razf.h"
 /*! @abstract BAM file handler */
@@ -118,6 +118,10 @@ typedef struct {
 #define BAM_FREAD1        64
 #define BAM_FREAD2       128
 #define BAM_FSECONDARY   256
+#define BAM_FQCFAIL      512
+#define BAM_FDUP        1024
+
+#define BAM_DEF_MASK (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP)
 
 #define BAM_CORE_SIZE   sizeof(bam1_core_t)
 
@@ -461,6 +465,8 @@ extern "C" {
 	/*! @abstract pileup buffer */
 	typedef struct __bam_plbuf_t bam_plbuf_t;
 
+	void bam_plbuf_set_mask(bam_plbuf_t *buf, int mask);
+
 	/*! @typedef
 	  @abstract    Type of function to be called by bam_plbuf_push().
 	  @param  tid  chromosome ID as is defined in the header
@@ -516,7 +522,7 @@ extern "C" {
 	  @discussion The file position indicator must be placed right
 	  before the start of an alignment. See also bam_plbuf_push().
 	 */
-	int bam_pileup_file(bamFile fp, bam_pileup_f func, void *func_data);
+	int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data);
 
 	struct __bam_lplbuf_t;
 	typedef struct __bam_lplbuf_t bam_lplbuf_t;
@@ -533,7 +539,7 @@ extern "C" {
 	int bam_lplbuf_push(const bam1_t *b, bam_lplbuf_t *buf);
 
 	/*! @abstract  bam_plbuf_file() equivalent with level calculated. */
-	int bam_lpileup_file(bamFile fp, bam_pileup_f func, void *func_data);
+	int bam_lpileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data);
 
 	struct __bam_index_t;
 	typedef struct __bam_index_t bam_index_t;
@@ -641,7 +647,7 @@ static inline int bam_reg2bin(uint32_t beg, uint32_t end)
 	return 0;
 }
 
-static inline void bam_copy1(bam1_t *bdst, const bam1_t *bsrc)
+static inline bam1_t *bam_copy1(bam1_t *bdst, const bam1_t *bsrc)
 {
 	uint8_t *data = bdst->data;
 	int m_data = bdst->m_data;   // backup data and m_data
@@ -654,6 +660,18 @@ static inline void bam_copy1(bam1_t *bdst, const bam1_t *bsrc)
 	// restore the backup
 	bdst->m_data = m_data;
 	bdst->data = data;
+	return bdst;
+}
+
+static inline bam1_t *bam_dup1(const bam1_t *src)
+{
+	bam1_t *b;
+	b = bam_init1();
+	*b = *src;
+	b->m_data = b->data_len;
+	b->data = (uint8_t*)calloc(b->data_len, 1);
+	memcpy(b->data, src->data, b->data_len);
+	return b;
 }
 
 #endif

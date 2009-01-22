@@ -111,6 +111,7 @@ struct __bam_plbuf_t {
 	int32_t tid, pos, max_tid, max_pos;
 	int max_pu, is_eof;
 	bam_pileup1_t *pu;
+	int flag_mask;
 };
 
 void bam_plbuf_reset(bam_plbuf_t *buf)
@@ -127,6 +128,12 @@ void bam_plbuf_reset(bam_plbuf_t *buf)
 	buf->head = buf->tail;
 }
 
+void bam_plbuf_set_mask(bam_plbuf_t *buf, int mask)
+{
+	if (mask < 0) buf->flag_mask = BAM_DEF_MASK;
+	else buf->flag_mask = BAM_FUNMAP | mask;
+}
+
 bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data)
 {
 	bam_plbuf_t *buf;
@@ -136,6 +143,7 @@ bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data)
 	buf->head = buf->tail = mp_alloc(buf->mp);
 	buf->dummy = mp_alloc(buf->mp);
 	buf->max_tid = buf->max_pos = -1;
+	buf->flag_mask = BAM_DEF_MASK;
 	return buf;
 }
 
@@ -153,6 +161,7 @@ void bam_plbuf_destroy(bam_plbuf_t *buf)
 int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 {
 	if (b) { // fill buffer
+		if (b->core.flag & buf->flag_mask) return 0;
 		bam_copy1(&buf->tail->b, b);
 		buf->tail->beg = b->core.pos; buf->tail->end = bam_calend(&b->core, bam1_cigar(b));
 		if (!(b->core.tid >= buf->max_tid || (b->core.tid == buf->max_tid && buf->tail->beg >= buf->max_pos))) {
@@ -197,13 +206,14 @@ int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 	return 0;
 }
 
-int bam_pileup_file(bamFile fp, bam_pileup_f func, void *func_data)
+int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data)
 {
 	bam_plbuf_t *buf;
 	int ret;
 	bam1_t *b;
 	b = (bam1_t*)calloc(1, sizeof(bam1_t));
 	buf = bam_plbuf_init(func, func_data);
+	bam_plbuf_set_mask(buf, mask);
 	while ((ret = bam_read1(fp, b)) >= 0)
 		bam_plbuf_push(b, buf);
 	bam_plbuf_push(0, buf);

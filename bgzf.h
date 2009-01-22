@@ -9,7 +9,7 @@
  * or functionality.
  */
 
-#ifndef __BCGZ_H
+#ifndef __BGZF_H
 #define __BGZF_H
 
 #include <stdint.h>

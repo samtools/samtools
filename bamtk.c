@@ -3,7 +3,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.1"
+#define PACKAGE_VERSION "0.1.1-18"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -12,7 +12,11 @@ int bam_merge(int argc, char *argv[]);
 int bam_index(int argc, char *argv[]);
 int bam_sort(int argc, char *argv[]);
 int bam_tview_main(int argc, char *argv[]);
+int bam_mating(int argc, char *argv[]);
+int bam_rmdup(int argc, char *argv[]);
+
 int faidx_main(int argc, char *argv[]);
+int glf_view_main(int argc, char *argv[]);
 
 static int view_aux(const bam1_t *b, void *data)
 {
@@ -87,6 +91,9 @@ static int usage()
 	fprintf(stderr, "         tview       text alignment viewer\n");
 #endif
 	fprintf(stderr, "         index       index alignment\n");
+	fprintf(stderr, "         fixmate     fix mate information\n");
+	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
+	fprintf(stderr, "         glfview     print GLFv2 file\n");
 	fprintf(stderr, "\n");
 	return 1;
 }
@@ -101,6 +108,9 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "sort") == 0) return bam_sort(argc-1, argv+1);
 	else if (strcmp(argv[1], "index") == 0) return bam_index(argc-1, argv+1);
 	else if (strcmp(argv[1], "faidx") == 0) return faidx_main(argc-1, argv+1);
+	else if (strcmp(argv[1], "fixmate") == 0) return bam_mating(argc-1, argv+1);
+	else if (strcmp(argv[1], "rmdup") == 0) return bam_rmdup(argc-1, argv+1);
+	else if (strcmp(argv[1], "glfview") == 0) return glf_view_main(argc-1, argv+1);
 #ifndef _NO_CURSES
 	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif

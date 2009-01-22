@@ -31,6 +31,8 @@
  * To compile razf.c, zlib-1.2.3(or greater) is required.
  */
 
+#ifndef _NO_RAZF
+
 #include <fcntl.h>
 #include <stdio.h>
 #include "razf.h"
@@ -645,3 +647,5 @@ void razf_close(RAZF *rz){
 	close(rz->filedes);
 	free(rz);
 }
+
+#endif

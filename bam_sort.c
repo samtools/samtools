@@ -191,7 +191,7 @@ void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t m
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
 			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
 		}
-		bam_merge_core(0, fnout, n, fns);
+		bam_merge_core(is_by_qname, fnout, n, fns);
 		free(fnout);
 		for (i = 0; i < n; ++i) {
 			unlink(fns[i]);

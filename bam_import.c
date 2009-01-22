@@ -245,9 +245,9 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 			type = str->s[3];
 			s = alloc_data(b, doff + 3) + doff;
 			s[0] = key[0]; s[1] = key[1]; s += 2; doff += 2;
-			if (type == 'A' || type == 'a') {
+			if (type == 'A' || type == 'a' || type == 'c' || type == 'C') { // c and C for backward compatibility
 				s = alloc_data(b, doff + 2) + doff;
-				*s++ = type; *s = str->s[5];
+				*s++ = 'A'; *s = str->s[5];
 				doff += 2;
 			} else if (type == 'I' || type == 'i') {
 				long long x;
@@ -341,7 +341,7 @@ static void taf2baf_core(const char *fntaf, const char *fnbaf, bam_header_t *hea
 	int ret;
 
 	b = (bam1_t*)calloc(1, sizeof(bam1_t));
-	fpbaf = bam_open(fnbaf, "w");
+	fpbaf = (strcmp(fnbaf, "-") == 0)? bam_dopen(fileno(stdout), "w") : bam_open(fnbaf, "w");
 	fp = sam_open(fntaf);
 	ret = sam_read1(fp, header, b);
 	bam_header_write(fpbaf, header);

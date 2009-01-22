@@ -92,7 +92,7 @@ static int tview_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl
 	max_level = 0;
 	for (i = l = 0; i < n; ++i) {
 		const bam_pileup1_t *p = pl + i;
-		if (p->qpos == 0) {
+		if (p->is_head) {
 			if (tv->head->next && tv->head->cnt == 0) { // then take a free slot
 				freenode_t *p = tv->head->next;
 				tv->cur_level[i] = tv->head->level;
@@ -146,7 +146,7 @@ static int tview_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl
 	// squeeze out terminated levels
 	for (i = l = 0; i < n; ++i) {
 		const bam_pileup1_t *p = pl + i;
-		if (p->qpos != p->b->core.l_qseq - 1)
+		if (!p->is_tail)
 			tv->pre_level[l++] = tv->pre_level[i];
 	}
 	tv->n_pre = l;
@@ -180,13 +180,14 @@ int bam_lplbuf_push(const bam1_t *b, bam_lplbuf_t *tv)
 	return bam_plbuf_push(b, tv->plbuf);
 }
 
-int bam_lpileup_file(bamFile fp, bam_pileup_f func, void *func_data)
+int bam_lpileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data)
 {
 	bam_lplbuf_t *buf;
 	int ret;
 	bam1_t *b;
 	b = (bam1_t*)calloc(1, sizeof(bam1_t));
 	buf = bam_lplbuf_init(func, func_data);
+	bam_plbuf_set_mask(buf->plbuf, mask);
 	while ((ret = bam_read1(fp, b)) >= 0)
 		bam_lplbuf_push(b, buf);
 	bam_lplbuf_push(0, buf);

@@ -12,7 +12,7 @@ typedef struct {
 } faidx1_t;
 KHASH_MAP_INIT_STR(s, faidx1_t)
 
-#ifdef HAVE_RAZF
+#ifndef _NO_RAZF
 #include "razf.h"
 #else
 extern off_t ftello(FILE *stream);

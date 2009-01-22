@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <assert.h>
 
+#define PACKAGE_VERSION "0.1.1 (20090120)"
+
 //#define MAQ_LONGREADS
 
 #ifdef MAQ_LONGREADS
@@ -84,7 +86,7 @@ maqmap_t *maqmap_read_header(gzFile fp)
 	return mm;
 }
 
-void maq2tam_core(gzFile fp)
+void maq2tam_core(gzFile fp, const char *rg)
 {
 	maqmap_t *mm;
 	maqmap1_t mm1, *m1;
@@ -141,6 +143,7 @@ void maq2tam_core(gzFile fp)
 		for (j = 0; j != m1->size; ++j)
 			putchar((m1->seq[j]&0x3f) + 33);
 		putchar('\t');
+		if (rg) printf("RG:Z:%s\t", rg);
 		if (flag&4) {
 			printf("MF:i:%d\n", m1->flag);
 		} else {
@@ -158,11 +161,12 @@ int main(int argc, char *argv[])
 {
 	gzFile fp;
 	if (argc == 1) {
-		fprintf(stderr, "Usage: maq2tam <in.map>\n");
+		fprintf(stderr, "Version: %s\n", PACKAGE_VERSION);
+		fprintf(stderr, "Usage: maq2sam <in.map> [<readGroup>]\n");
 		return 1;
 	}
 	fp = strcmp(argv[1], "-")? gzopen(argv[1], "r") : gzdopen(fileno(stdin), "r");
-	maq2tam_core(fp);
+	maq2tam_core(fp, argc > 2? argv[2] : 0);
 	gzclose(fp);
 	return 0;
 }

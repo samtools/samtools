@@ -29,7 +29,7 @@ lib-recur all-recur clean-recur cleanlocal-recur install-recur:
 lib:
 
 faidx:../faidx.c ../faidx.h
-		$(CC) $(CFLAGS) -DFAIDX_MAIN -o $@ ../faidx.c
+		$(CC) $(CFLAGS) -D_NO_RAZF -DFAIDX_MAIN -o $@ ../faidx.c
 
 md5fa:md5.o md5fa.o md5.h ../kseq.h
 		$(CC) $(CFLAGS) -o $@ md5.o md5fa.o -lz

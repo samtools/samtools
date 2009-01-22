@@ -249,6 +249,7 @@ void bam_view1(const bam_header_t *header, const bam1_t *b)
 	}
 	putchar('\t');
 	if (c->mtid < 0) printf("*\t");
+	else if (c->mtid == c->tid) printf("=\t");
 	else printf("%s\t", header->target_name[c->mtid]);
 	printf("%d\t%d\t", c->mpos + 1, c->isize);
 	for (i = 0; i < c->l_qseq; ++i) putchar(bam_nt16_rev_table[bam1_seqi(s, i)]);

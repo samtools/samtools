@@ -16,13 +16,19 @@ typedef struct {
 } bam_maqcns_t;
 
 typedef struct {
+	int q_indel;
+	float r_indel;
+	// hidden parameters, unchangeable from command line
 	int mm_penalty, indel_err, ambi_thres;
 } bam_maqindel_opt_t;
 
 typedef struct {
 	int indel1, indel2;
 	int cnt1, cnt2, cnt_ambi, cnt_anti;
-	char *s1, *s2;
+	char *s[2];
+	//
+	int gt, gl[2];
+	int q_cns, q_ref;
 } bam_maqindel_ret_t;
 
 #ifdef __cplusplus

@@ -1,4 +1,367 @@
 ------------------------------------------------------------------------
+r104 | lh3lh3 | 2009-01-18 17:31:21 +0000 (Sun, 18 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_lpileup.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-18
+ * fixed a bug in bam_lpileup.c: segment start and end are not correctly recognized
+
+------------------------------------------------------------------------
+r103 | lh3lh3 | 2009-01-18 16:34:03 +0000 (Sun, 18 Jan 2009) | 5 lines
+Changed paths:
+   M /branches/dev/samtools/bam_import.c
+   M /branches/dev/samtools/bam_index.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-17
+ * fixed a bug when there are reads without coordinates
+ * also recognize type 'c' as 'A'	
+ * found a bug in bam_lpileup.c; NOT fixed yet
+
+------------------------------------------------------------------------
+r102 | lh3lh3 | 2009-01-17 19:46:49 +0000 (Sat, 17 Jan 2009) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/INSTALL
+
+Instruction for compilation
+
+------------------------------------------------------------------------
+r101 | lh3lh3 | 2009-01-17 19:31:36 +0000 (Sat, 17 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   A /branches/dev/samtools/Makefile.lite
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/faidx.c
+   M /branches/dev/samtools/misc/Makefile
+   M /branches/dev/samtools/razf.c
+
+ * replaced HAVE_RAZF with _NO_RAZF
+ * added Makefile.lite for people who have trouble with razf.c
+
+------------------------------------------------------------------------
+r100 | lh3lh3 | 2009-01-16 10:03:37 +0000 (Fri, 16 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_mate.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/misc/wgsim.c
+
+ * samtools-0.1.1-15
+ * fixed another bug in fixmate: unmapped pair has non-zero isize
+
+------------------------------------------------------------------------
+r99 | lh3lh3 | 2009-01-16 09:13:36 +0000 (Fri, 16 Jan 2009) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/ChangeLog
+   M /branches/dev/samtools/bam_mate.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-14
+ * fixed a bug in fixmate: isize not equal to zero if two ends mapped to
+   different chr
+
+------------------------------------------------------------------------
+r98 | lh3lh3 | 2009-01-15 16:47:41 +0000 (Thu, 15 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-13
+ * fixed the prior for hom indels (Richard pointed this out)
+
+------------------------------------------------------------------------
+r97 | lh3lh3 | 2009-01-15 16:38:47 +0000 (Thu, 15 Jan 2009) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/COPYING
+   M /branches/dev/samtools/bam_sort.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/source.dot
+
+ * samtools-0.1.1-12
+ * fixed a bug in sort
+ * update source file graph and copyright information
+
+------------------------------------------------------------------------
+r96 | lh3lh3 | 2009-01-14 21:46:14 +0000 (Wed, 14 Jan 2009) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/glf.c
+
+fixed a typo
+
+------------------------------------------------------------------------
+r95 | lh3lh3 | 2009-01-14 21:44:53 +0000 (Wed, 14 Jan 2009) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/glf.c
+
+added a main function for glf.c
+
+------------------------------------------------------------------------
+r94 | lh3lh3 | 2009-01-14 17:14:59 +0000 (Wed, 14 Jan 2009) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/bgzf.h
+   A /branches/dev/samtools/glf.c
+   M /branches/dev/samtools/glf.h
+
+ * samtools-0.1.1-11
+ * generate binary GLFv2
+ * added glfview command to dump GLFv2 binary file
+
+------------------------------------------------------------------------
+r93 | lh3lh3 | 2009-01-14 15:07:44 +0000 (Wed, 14 Jan 2009) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bam_rmdup.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/glf.h
+
+ * samtools-0.1.1-10
+ * fixed several bugs in rmdup
+ * prepare to generate GLF2
+
+------------------------------------------------------------------------
+r92 | lh3lh3 | 2009-01-14 13:27:44 +0000 (Wed, 14 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_import.c
+   A /branches/dev/samtools/bam_rmdup.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-9
+ * implemented rmdup; NOT tested yet
+
+------------------------------------------------------------------------
+r91 | lh3lh3 | 2009-01-13 20:15:43 +0000 (Tue, 13 Jan 2009) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/examples/00README.txt
+
+update README for typos
+
+------------------------------------------------------------------------
+r90 | lh3lh3 | 2009-01-13 19:57:50 +0000 (Tue, 13 Jan 2009) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/examples/ex1.sam.gz
+
+update example
+
+------------------------------------------------------------------------
+r89 | lh3lh3 | 2009-01-13 17:21:38 +0000 (Tue, 13 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/Makefile
+   M /branches/dev/samtools/bam.c
+   A /branches/dev/samtools/bam_mate.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-8
+ * added fixmate command
+
+------------------------------------------------------------------------
+r88 | lh3lh3 | 2009-01-13 10:48:23 +0000 (Tue, 13 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-7
+ * change the reported indel position to the previous way
+
+------------------------------------------------------------------------
+r87 | lh3lh3 | 2009-01-12 22:12:12 +0000 (Mon, 12 Jan 2009) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-6
+ * addd glt output
+ * allow to change indel calling parameters at the command line
+
+------------------------------------------------------------------------
+r86 | lh3lh3 | 2009-01-12 21:16:48 +0000 (Mon, 12 Jan 2009) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bam.h
+   M /branches/dev/samtools/bam_pileup.c
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-5
+ * added two more flags
+ * allowed to select reads shown in pileup with a mask
+
+------------------------------------------------------------------------
+r85 | lh3lh3 | 2009-01-12 20:47:51 +0000 (Mon, 12 Jan 2009) | 4 lines
+Changed paths:
+   M /branches/dev/samtools/bam_index.c
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-4
+ * fixed a bug in indexing (linear index)
+ * prepare to add glt output from pileup
+
+------------------------------------------------------------------------
+r84 | lh3lh3 | 2009-01-12 09:22:35 +0000 (Mon, 12 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-3
+ * fixed a bug in outputing the coordinate of an indel
+
+------------------------------------------------------------------------
+r83 | lh3lh3 | 2009-01-11 15:18:01 +0000 (Sun, 11 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-2
+ * pileup: allows to output indel sites only
+
+------------------------------------------------------------------------
+r82 | lh3lh3 | 2009-01-10 23:34:31 +0000 (Sat, 10 Jan 2009) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bam_maqcns.h
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bamtk.c
+
+ * samtools-0.1.1-1
+ * implemented a Bayesian indel caller
+
+------------------------------------------------------------------------
+r81 | lh3lh3 | 2009-01-09 09:54:28 +0000 (Fri, 09 Jan 2009) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/examples/00README.txt
+   D /branches/dev/samtools/examples/ex1.fa.fai
+
+Let users generate ex1.fa.fai.
+
+------------------------------------------------------------------------
+r80 | lh3lh3 | 2009-01-08 16:10:08 +0000 (Thu, 08 Jan 2009) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/bowtie2sam.pl
+
+make the bowtie converter works for "-k 2"
+
+------------------------------------------------------------------------
+r78 | lh3lh3 | 2009-01-03 17:25:24 +0000 (Sat, 03 Jan 2009) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/export2sam.pl
+
+fixed a bug for "QC" reads
+
+------------------------------------------------------------------------
+r77 | lh3lh3 | 2009-01-01 18:32:06 +0000 (Thu, 01 Jan 2009) | 3 lines
+Changed paths:
+   A /branches/dev/samtools/misc/bowtie2sam.pl
+   M /branches/dev/samtools/misc/soap2sam.pl
+
+ * soap2sam.pl: added NM tag
+ * bowtie2sam.pl: converter for bowtie
+
+------------------------------------------------------------------------
+r76 | lh3lh3 | 2008-12-31 23:24:24 +0000 (Wed, 31 Dec 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/misc/soap2sam.pl
+
+soap2sam.pl: convert soap output to SAM
+
+------------------------------------------------------------------------
+r75 | lh3lh3 | 2008-12-31 17:54:32 +0000 (Wed, 31 Dec 2008) | 3 lines
+Changed paths:
+   M /branches/dev/samtools/misc/wgsim_eval.pl
+
+ * wgsim_eval.pl-0.1.1
+ * fixed a bug for a contig name like "NT_012345"
+
+------------------------------------------------------------------------
+r74 | lh3lh3 | 2008-12-31 16:38:21 +0000 (Wed, 31 Dec 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/misc/wgsim_eval.pl
+
+ * evaluate alignment for reads generated by wgsim
+
+------------------------------------------------------------------------
+r73 | lh3lh3 | 2008-12-31 15:11:22 +0000 (Wed, 31 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/Makefile
+   M /branches/dev/samtools/misc/wgsim.c
+
+fixed compiling warnings for wgsim
+
+------------------------------------------------------------------------
+r72 | lh3lh3 | 2008-12-31 13:40:51 +0000 (Wed, 31 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/bam_tview.c
+
+remove an unused variable (a compiler warning only)
+
+------------------------------------------------------------------------
+r71 | lh3lh3 | 2008-12-31 13:37:16 +0000 (Wed, 31 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/misc/Makefile
+   A /branches/dev/samtools/misc/wgsim.c
+
+wgsim: Paired-end reads simulator
+
+------------------------------------------------------------------------
+r70 | bhandsaker | 2008-12-29 20:27:16 +0000 (Mon, 29 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/bam_maqcns.c
+   M /branches/dev/samtools/bam_tview.c
+
+Move definition of bam_nt16_nt4_table so we can build without curses.
+
+------------------------------------------------------------------------
+r62 | lh3lh3 | 2008-12-22 15:55:13 +0000 (Mon, 22 Dec 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/NEWS
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/samtools.1
+
+Release samtools-0.1.1
+
+------------------------------------------------------------------------
+r61 | lh3lh3 | 2008-12-22 15:46:08 +0000 (Mon, 22 Dec 2008) | 10 lines
+Changed paths:
+   M /branches/dev/samtools/bam_aux.c
+   M /branches/dev/samtools/bam_index.c
+   M /branches/dev/samtools/bam_plcmd.c
+   M /branches/dev/samtools/bam_tview.c
+   M /branches/dev/samtools/bamtk.c
+   M /branches/dev/samtools/razf.c
+   M /branches/dev/samtools/samtools.1
+
+ * samtools-0.1.0-66
+ * fixed a bug in razf.c: reset z_eof when razf_seek() is called
+ * fixed a memory leak in parsing a region
+ * changed pileup a little bit when -s is in use: output ^ and $
+ * when a bam is not indexed, output more meaningful error message
+ * fixed a bug in indexing for small alignment
+ * fixed a bug in the viewer when we come to the end of a reference file
+ * updated documentation
+ * prepare to release 0.1.1
+
+------------------------------------------------------------------------
+r60 | lh3lh3 | 2008-12-22 15:10:16 +0000 (Mon, 22 Dec 2008) | 2 lines
+Changed paths:
+   A /branches/dev/samtools/examples
+   A /branches/dev/samtools/examples/00README.txt
+   A /branches/dev/samtools/examples/ex1.fa
+   A /branches/dev/samtools/examples/ex1.fa.fai
+   A /branches/dev/samtools/examples/ex1.sam.gz
+
+example
+
+------------------------------------------------------------------------
+r59 | lh3lh3 | 2008-12-22 09:38:15 +0000 (Mon, 22 Dec 2008) | 2 lines
+Changed paths:
+   M /branches/dev/samtools/ChangeLog
+
+update ChangeLog
+
+------------------------------------------------------------------------
 r58 | lh3lh3 | 2008-12-20 23:06:00 +0000 (Sat, 20 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/misc/export2sam.pl
