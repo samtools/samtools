@@ -1,4 +1,4 @@
-.TH samtools 1 "22 December 2008" "samtools-0.1.1" "Bioinformatics tools"
+.TH samtools 1 "23 January 2009" "samtools-0.1.2" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -40,13 +40,18 @@ additional fields are ignored. This file also defines the order of the
 reference sequences in sorting. File
 .I <in.sam>
 can be optionally compressed by zlib or gzip. A single hyphen is
-recognized as stdin or stdout, depending on the context.
+recognized as stdin or stdout, depending on the context. If you run
+`samtools faidx <ref.fa>', the resultant index file
+.I <ref.fa>.fai
+can be used as this
+.I <in.ref_list>
+file.
 
 .TP
 .B sort
 samtools sort [-n] [-m maxMem] <in.bam> <out.prefix>
 
-Sort alignments based on the leftmost coordinate. File
+Sort alignments by leftmost coordinates. File
 .I <out.prefix>.bam
 will be created. This command may also create temporary files
 .I <out.prefix>.%d.bam
@@ -60,7 +65,7 @@ option -m).
 Sort by read names rather than by chromosomal coordinates
 .TP
 .B -m INT
-Approximately the maximum required memory.
+Approximately the maximum required memory. [500000000]
 .RE
 
 .TP
@@ -125,7 +130,7 @@ format.
 .TP
 .B pileup
 samtools pileup [-f in.ref.fasta] [-t in.ref_list] [-l in.site_list]
-[-s] [-c] [-T theta] [-N nHap] [-r pairDiffRate] <in.alignment>
+[-iscg] [-T theta] [-N nHap] [-r pairDiffRate] <in.alignment>
 
 Print the alignment in the pileup format. In the pileup format, each
 line represents a genomic position, consisting of chromosome name,
@@ -166,6 +171,10 @@ Print the mapping quality as the last column. This option makes the
 output easier to parse, although this format is not space efficient.
 
 .TP
+.B -i
+Only output pileup lines containing indels.
+
+.TP
 .B -f FILE
 The reference sequence in the FASTA format. Index file
 .I FILE.fai
@@ -204,6 +213,11 @@ are only effective when
 is in use.
 
 .TP
+.B -g
+Generate genotype likelihood in the binary GLFv2 format. This option
+suppresses -c, -i and -s.
+
+.TP
 .B -T FLOAT
 The theta parameter (error dependency coefficient) in the maq consensus
 calling model [0.85]
@@ -230,14 +244,77 @@ seen. This is a known issue and will be improved later.
 
 .RE
 
+.TP
+.B fixmate
+samtools fixmate <in.nameSrt.bam> <out.bam>
+
+Fill in mate coordinates, ISIZE and mate related flags from a
+name-sorted alignment.
+
+.TP
+.B rmdup
+samtools rmdup <input.srt.bam> <out.bam>
+
+Remove potential PCR duplicates: if multiple read pairs have identical
+external coordinates, only retain the pair with highest mapping quality.
+This command
+.B ONLY
+works with FR orientation and requires ISIZE is correctly set.
+
+.RE
+
+
+.SH SAM FORFAM
+
+SAM is TAB-delimited. Apart from the header lines, which are started
+with the `@' symbol, each alignment line consists of:
+
+.TS
+center box;
+cb | cb | cb
+n | l | l .
+Col	Field	Description
+_
+1	QNAME	Query (pair) NAME
+2	FLAG	bitwise FLAG
+3	RNAME	Reference sequence NAME
+4	POS	1-based leftmost POSition/coordinate of clipped sequence
+5	MAPQ	MAPping Quality (Phred-scaled)
+6	CIAGR	extended CIGAR string
+7	MRNM	Mate Reference sequence NaMe (`=' if same as RNAME)
+8	MPOS	1-based Mate POSistion
+9	ISIZE	Inferred insert SIZE
+10	SEQ	query SEQuence on the same strand as the reference
+11	QUAL	query QUALity (ASCII-33 gives the Phred base quality)
+12	OPT	variable OPTional fields in the format TAG:VTYPE:VALUE
+.TE
+
+.PP
+Each bit in the FLAG field is defined as:
+
+.TS
+center box;
+cb | cb
+l | l .
+Flag	Description
+_
+0x0001	the read is paired in sequencing
+0x0002	the read is mapped in a proper pair
+0x0004	the query sequence itself is unmapped
+0x0008	the mate is unmapped
+0x0010	strand of the query (1 for reverse)
+0x0020	strand of the mate
+0x0040	the read is the first read in a pair
+0x0080	the read is the second read in a pair
+0x0100	the alignment is not primary
+0x0200	the read fails platform/vendor quality checks
+0x0400	the read is either a PCR or an optical duplicate
+.TE
+
 .SH LIMITATIONS
 .PP
 .IP o 2
 In general, more testing is needed to ensure there is no severe bug.
-.IP o 2
-PCR duplicate removal has not been implemented.
-.IP o 2
-Only MAQ->SAM converter is implemented. More converters are needed.
 .IP o 2
 Reference sequence names and lengths are not acquired from the BAM/SAM header.
 .IP o 2
@@ -247,11 +324,11 @@ There is a small known memory leak in the viewer.
 
 .SH AUTHOR
 .PP
-Heng Li from the Sanger Institute is the author of samtools. Bob
-Handsaker from the Broad Institute implemented the BGZF library and Jue
-Ruan from Beijing Genomics Institute wrote the RAZF library. Various
-people in the 1000Genomes Project contributed to the SAM format
-specification.
+Heng Li from the Sanger Institute is the author of the C version of
+samtools. Bob Handsaker from the Broad Institute implemented the BGZF
+library and Jue Ruan from Beijing Genomics Institute wrote the RAZF
+library. Various people in the 1000Genomes Project contributed to the
+SAM format specification.
 
 .SH SEE ALSO
 .PP
