@@ -115,7 +115,7 @@ int bam_merge(int argc, char *argv[])
 		case 'n': is_by_qname = 1; break;
 		}
 	}
-	if (optind + 3 >= argc) {
+	if (optind + 2 >= argc) {
 		fprintf(stderr, "Usage: samtools merge [-n] <out.bam> <in1.bam> <in2.bam> [...]\n");
 		return 1;
 	}
