@@ -1,4 +1,34 @@
 ------------------------------------------------------------------------
+r115 | lh3lh3 | 2009-01-28 12:54:08 +0000 (Wed, 28 Jan 2009) | 2 lines
+Changed paths:
+   A /trunk/samtools/misc/indel_filter.pl
+
+Script for filtering indel results
+
+------------------------------------------------------------------------
+r114 | lh3lh3 | 2009-01-25 11:45:37 +0000 (Sun, 25 Jan 2009) | 2 lines
+Changed paths:
+   A /trunk/samtools/misc/zoom2sam.pl
+
+convert ZOOM to SAM
+
+------------------------------------------------------------------------
+r113 | lh3lh3 | 2009-01-24 14:25:07 +0000 (Sat, 24 Jan 2009) | 2 lines
+Changed paths:
+   A /trunk/samtools/misc/novo2sam.pl
+
+add a script to convert novo alignment to SAM
+
+------------------------------------------------------------------------
+r112 | lh3lh3 | 2009-01-23 20:57:39 +0000 (Fri, 23 Jan 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/ChangeLog.old
+   M /trunk/samtools/samtools.1
+
+update documentation and ChangeLog
+
+------------------------------------------------------------------------
 r111 | lh3lh3 | 2009-01-23 19:22:59 +0000 (Fri, 23 Jan 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_sort.c
