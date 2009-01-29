@@ -5,7 +5,7 @@ CXXFLAGS=	$(CFLAGS)
 DFLAGS=		-D_IOLIB=2 -D_FILE_OFFSET_BITS=64 #-D_NO_RAZF #-D_NO_CURSES
 OBJS=		bam.o bam_import.o bam_pileup.o bam_lpileup.o bam_sort.o bam_index.o \
 			razf.o bgzf.o faidx.o bam_tview.o bam_maqcns.o bam_aux.o bam_plcmd.o \
-			bam_mate.o bam_rmdup.o glf.o
+			bam_mate.o bam_rmdup.o glf.o bam_stat.o
 PROG=		razip bgzip samtools
 INCLUDES=	
 LIBS=		-lm -lz
