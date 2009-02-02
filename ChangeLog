@@ -1,4 +1,24 @@
 ------------------------------------------------------------------------
+r118 | lh3lh3 | 2009-01-29 12:33:23 +0000 (Thu, 29 Jan 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   A /trunk/samtools/bam_stat.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-1
+ * added flagstat command
+
+------------------------------------------------------------------------
+r116 | lh3lh3 | 2009-01-28 13:31:12 +0000 (Wed, 28 Jan 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+Release SAMtools-0.1.2
+
+------------------------------------------------------------------------
 r115 | lh3lh3 | 2009-01-28 12:54:08 +0000 (Wed, 28 Jan 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/misc/indel_filter.pl

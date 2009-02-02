@@ -87,13 +87,12 @@ static int glt_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu, 
 		min = g3;
 		if (min > r->gl[0]) min = r->gl[0];
 		if (min > r->gl[1]) min = r->gl[1];
-		g3 -= min;
 		g2.ref_base = 0;
 		g2.type = GLF_TYPE_INDEL;
 		memset(g2.lk, 0, 10);
-		g2.lk[0] = r->gl[0] < 255? r->gl[0] : 255;
-		g2.lk[1] = r->gl[1] < 255? r->gl[1] : 255;
-		g2.lk[2] = g3 < 255? g3 : 255;
+		g2.lk[0] = r->gl[0] - min < 255? r->gl[0] - min : 255;
+		g2.lk[1] = r->gl[1] - min < 255? r->gl[1] - min : 255;
+		g2.lk[2] = g3 - min < 255? g3 - min : 255;
 		*(int16_t*)(g2.lk + 3) = (int16_t)r->indel1;
 		*(int16_t*)(g2.lk + 5) = (int16_t)r->indel2;
 		g2.min_lk = min < 255? min : 255;
