@@ -22,7 +22,7 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
 			$(MAKE) CC="$(CC)" CXX="$(CXX)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				INCLUDES="$(INCLUDES)" $$target || exit 1; \
+				INCLUDES="$(INCLUDES)" LIBS="$(LIBS)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
 
