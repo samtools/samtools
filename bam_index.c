@@ -158,7 +158,7 @@ bam_index_t *bam_index_core(bamFile fp)
 			fprintf(stderr, "[bam_index_core] the alignment is not sorted. Abort!\n");
 			exit(1);
 		}
-		if (b->core.bin < 4681) insert_offset2(&idx->index2[b->core.tid], b, last_off);
+		if (b->core.tid >= 0 && b->core.bin < 4681) insert_offset2(&idx->index2[b->core.tid], b, last_off);
 		if (c->bin != last_bin) { // then possibly write the binning index
 			if (save_bin != 0xffffffffu) // save_bin==0xffffffffu only happens to the first record
 				insert_offset(idx->index[save_tid], save_bin, save_off, last_off);
