@@ -148,7 +148,7 @@ void maq2tam_core(gzFile fp, const char *rg)
 			printf("MF:i:%d\n", m1->flag);
 		} else {
 			printf("MF:i:%d\t", m1->flag);
-			if (m1->flag) printf("Aq:i:%d\t", m1->alt_qual);
+			if (m1->flag) printf("AM:i:%d\t", m1->alt_qual);
 			printf("NM:i:%d\tUQ:i:%d\tH0:i:%d\tH1:i:%d\n", m1->info1&0xf, m1->info2, m1->c[0], m1->c[1]);
 		}
 	}
