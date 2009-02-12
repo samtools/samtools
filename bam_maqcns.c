@@ -4,6 +4,8 @@
 #include "ksort.h"
 KSORT_INIT_GENERIC(uint32_t)
 
+#define MAX_WINDOW 33
+
 typedef struct __bmc_aux_t {
 	int max;
 	uint32_t *info;
@@ -323,6 +325,8 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				if (seg.tend > right) right = seg.tend;
 			}
 		}
+		if (pos - left > MAX_WINDOW) left = pos - MAX_WINDOW;
+		if (right - pos> MAX_WINDOW) right = pos + MAX_WINDOW;
 	}
 	{ // the core part
 		char *ref2, *inscns = 0;
@@ -383,7 +387,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				bam_segreg(pos, c, cigar, &seg);
 				for (ps = s = 0, l = seg.qbeg; c->pos + l < right && l < seg.qend; ++l) {
 					int cq = bam1_seqi(bam1_seq(p->b), l), ct;
-					ct = c->pos + l >= left? ref2[c->pos + l - left] : 15; // "<" should not happen if there is no bug
+					ct = c->pos + l >= left? ref2[c->pos + l - left] : 15; // "<" will happen if reads are too long
 					if (cq < 15 && ct < 15) {
 						s += cq == ct? 1 : -mi->mm_penalty;
 						if (cq != ct) ps += bam1_qual(p->b)[l];
@@ -460,8 +464,9 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 			ret->gl[0] = ret->gl[1] = 0;
 			for (j = 0; j < n; ++j) {
 				int s1 = pscore[max1_i*n + j], s2 = pscore[max2_i*n + j];
-				ret->gl[0] += s1 < s2? 0 : s1 - s2 < mi->q_indel? s1 - s2 : mi->q_indel;
-				ret->gl[1] += s2 < s1? 0 : s2 - s1 < mi->q_indel? s2 - s1 : mi->q_indel;
+				//printf("%d, %d\n", s1, s2);
+				if (s1 > s2) ret->gl[0] += s1 - s2 < mi->q_indel? s1 - s2 : mi->q_indel;
+				else ret->gl[1] += s2 - s1 < mi->q_indel? s2 - s1 : mi->q_indel;
 			}
 		}
 		free(score); free(pscore); free(ref2); free(inscns);

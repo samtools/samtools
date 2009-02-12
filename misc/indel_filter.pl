@@ -25,7 +25,7 @@ while (<>) {
 	next if ($t[3] eq '*/*');
 	next if ($t[5] == 0);
   }
-  next if ($t[8] + $t[9] + $t[10] + $t[11] > $opts{D});
+  next if ($t[7] > $opts{D});
   @$curr = ($t[0], $t[1], $t[5], $_);
   my $do_swap = 1;
   if (defined $last->[0]) {
