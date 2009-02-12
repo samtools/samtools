@@ -109,7 +109,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 {
 	pu_data_t *d = (pu_data_t*)data;
 	bam_maqindel_ret_t *r = 0;
-	int i, j, rb;
+	int i, j, rb, max_mapq = 0;
 	uint32_t x;
 	if (d->hash && kh_get(64, d->hash, (uint64_t)tid<<32|pos) == kh_end(d->hash)) return 0;
 	if (d->format & BAM_PLF_GLF) return glt_func(tid, pos, n, pu, data);
@@ -143,6 +143,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	printf("%d\t", n);
 	for (i = 0; i < n; ++i) {
 		const bam_pileup1_t *p = pu + i;
+		if (max_mapq < p->b->core.qual) max_mapq = p->b->core.qual;
 		if (p->is_head) printf("^%c", p->b->core.qual > 93? 126 : p->b->core.qual + 33);
 		if (!p->is_del) {
 			int c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
@@ -186,6 +187,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		if (r->gt < 2) printf("%s/%s\t", r->s[r->gt], r->s[r->gt]);
 		else printf("%s/%s\t", r->s[0], r->s[1]);
 		printf("%d\t%d\t", r->q_cns, r->q_ref);
+		printf("%d\t%d\t", max_mapq, n);
 		printf("%s\t%s\t", r->s[0], r->s[1]);
 		//printf("%d\t%d\t", r->gl[0], r->gl[1]);
 		printf("%d\t%d\t%d\t%d\n", r->cnt1, r->cnt2, r->cnt_ambi, r->cnt_anti);
