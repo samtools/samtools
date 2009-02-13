@@ -62,9 +62,9 @@ int bam_flagstat(int argc, char *argv[])
 	printf("%lld paired in sequencing\n", s->n_pair_all);
 	printf("%lld read1\n", s->n_read1);
 	printf("%lld read2\n", s->n_read2);
-	printf("%lld properly paired (%.2f%%)\n", s->n_pair_good, (float)s->n_pair_good / s->n_reads * 100.0);
+	printf("%lld properly paired (%.2f%%)\n", s->n_pair_good, (float)s->n_pair_good / s->n_pair_all * 100.0);
 	printf("%lld with itself and mate mapped\n", s->n_pair_map);
-	printf("%lld singletons (%.2f%%)\n", s->n_sgltn, (float)s->n_sgltn / s->n_reads * 100.0);
+	printf("%lld singletons (%.2f%%)\n", s->n_sgltn, (float)s->n_sgltn / s->n_pair_all * 100.0);
 	printf("%lld with mate mapped to a different chr\n", s->n_diffchr);
 	printf("%lld with mate mapped to a different chr (mapQ>=5)\n", s->n_diffhigh);
 	free(s);
