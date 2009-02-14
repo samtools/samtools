@@ -40,8 +40,10 @@ void bam_mating_core(bamFile in, bamFile out)
 				has_prev = 0;
 			} else { // unpaired or singleton
 				pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
-				pre->core.flag |= BAM_FMUNMAP;
-				pre->core.flag &= ~BAM_FMREVERSE & ~BAM_FPROPER_PAIR;
+				if (pre->core.flag & BAM_FPAIRED) {
+					pre->core.flag |= BAM_FMUNMAP;
+					pre->core.flag &= ~BAM_FMREVERSE & ~BAM_FPROPER_PAIR;
+				}
 				bam_write1(out, pre);
 			}
 		} else has_prev = 1;
