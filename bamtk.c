@@ -65,6 +65,7 @@ int bam_view(int argc, char *argv[])
 		for (i = optind + 1; i < argc; ++i) {
 			int tid, beg, end;
 			bam_parse_region(header, argv[i], &tid, &beg, &end);
+			if (tid < 0) return 0;
 			if (is_bam) bam_fetch(fp, idx, tid, beg, end, fpout, view_auxb);
 			else bam_fetch(fp, idx, tid, beg, end, header, view_aux);
 		}
