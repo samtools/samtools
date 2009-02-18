@@ -410,16 +410,20 @@ int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, voi
 	free(bins);
 	{
 		bam1_t *b;
-		int ret, n_seeks;
+		int l, ret, n_seeks;
 		uint64_t curr_off;
 		b = (bam1_t*)calloc(1, sizeof(bam1_t));
 		ks_introsort(off, n_off, off);
-		// resolve overlaps between adjecent blocks; this may happen due to the merge in indexing
+		// resolve completely contained adjacent blocks
+		for (i = 1, l = 0; i < n_off; ++i)
+			if (off[l].v < off[i].v)
+				off[++l] = off[i];
+		n_off = l + 1;
+		// resolve overlaps between adjacent blocks; this may happen due to the merge in indexing
 		for (i = 1; i < n_off; ++i)
 			if (off[i-1].v >= off[i].u) off[i-1].v = off[i].u;
 		{ // merge adjacent blocks
 #if defined(BAM_TRUE_OFFSET) || defined(BAM_VIRTUAL_OFFSET16)
-			int l;
 			for (i = 1, l = 0; i < n_off; ++i) {
 #ifdef BAM_TRUE_OFFSET
 				if (off[l].v + BAM_MIN_CHUNK_GAP > off[i].u) off[l].v = off[i].v;
