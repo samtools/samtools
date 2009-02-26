@@ -39,7 +39,7 @@
 #include <ctype.h>
 #include <string.h>
 
-#define PACKAGE_VERSION "0.2.0"
+#define PACKAGE_VERSION "0.2.1"
 
 const uint8_t nst_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
@@ -352,14 +352,11 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, FILE *fp_fa, int is_hap, uint64_t N,
 			n_sub[0] = n_sub[1] = n_indel[0] = n_indel[1] = n_err[0] = n_err[1] = 0;
 
 #define __gen_read(x, start, iter) do {									\
-				for (i = (start), k = 0, ext_coor[x] = -1; i >= 0 && i < seq.l && k < s[x]; iter) {	\
+				for (i = (start), k = 0, ext_coor[x] = -10; i >= 0 && i < seq.l && k < s[x]; iter) {	\
 					int c = target[i], mut_type = c & mutmsk;			\
 					if (ext_coor[x] < 0) {								\
+						if (mut_type != NOCHANGE && mut_type != SUBSTITUTE) continue; \
 						ext_coor[x] = i;								\
-						if (mut_type != NOCHANGE && mut_type != SUBSTITUTE) { \
-							ext_coor[x] = -1;							\
-							break;										\
-						}												\
 					}													\
 					if (mut_type == DELETE) ++n_indel[x];				\
 					else if (mut_type == NOCHANGE || mut_type == SUBSTITUTE) { \
@@ -372,7 +369,7 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, FILE *fp_fa, int is_hap, uint64_t N,
 							tmp_seq[x][k++] = ins & 0x3;				\
 					}													\
 				}														\
-				if (k != s[x]) ext_coor[x] = -1;						\
+				if (k != s[x]) ext_coor[x] = -10;						\
 			} while (0)
 
 			if (!IS_SOLID) {
@@ -388,6 +385,7 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, FILE *fp_fa, int is_hap, uint64_t N,
 				} else { // FF pair
 					__gen_read(0, pos, ++i);
 					__gen_read(1, pos + d - 1 - s[1], ++i);
+					++ext_coor[0]; ++ext_coor[1];
 				}
 				// change to color sequence: (0,1,2,3) -> (A,C,G,T)
 				for (j = 0; j < 2; ++j) {
@@ -423,8 +421,9 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, FILE *fp_fa, int is_hap, uint64_t N,
 			for (j = 0; j < 2; ++j) {
 				for (i = 0; i < s[j]; ++i) qstr[i] = Q;
 				qstr[i] = 0;
-				fprintf(fpo[j], "@%s_%u_%u_%d:%d:%d_%llx/%d\n", name, ext_coor[0]+1, ext_coor[1]+1,
-						n_err[j], n_sub[j], n_indel[j], (long long)ii, j==0? is_flip+1 : 2-is_flip);
+				fprintf(fpo[j], "@%s_%u_%u_%d:%d:%d_%d:%d:%d_%llx/%d\n", name, ext_coor[0]+1, ext_coor[1]+1,
+						n_err[0], n_sub[0], n_indel[0], n_err[1], n_sub[1], n_indel[1],
+						(long long)ii, j==0? is_flip+1 : 2-is_flip);
 				for (i = 0; i < s[j]; ++i)
 					fputc("ACGTN"[(int)tmp_seq[j][i]], fpo[j]);
 				fprintf(fpo[j], "\n+\n%s\n", qstr);

@@ -1,4 +1,98 @@
 ------------------------------------------------------------------------
+r129 | lh3lh3 | 2009-02-18 22:23:27 +0000 (Wed, 18 Feb 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-9
+ * fixed a bug in bam_fetch, caused by completely contained adjacent chunks
+
+------------------------------------------------------------------------
+r128 | bhandsaker | 2009-02-18 19:06:57 +0000 (Wed, 18 Feb 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+
+Fix annoying segv when invalid region specified.
+
+------------------------------------------------------------------------
+r127 | lh3lh3 | 2009-02-17 10:49:55 +0000 (Tue, 17 Feb 2009) | 2 lines
+Changed paths:
+   D /trunk/samtools/misc/indel_filter.pl
+   A /trunk/samtools/misc/samtools.pl
+
+ * move indel_filter.pl to samtools.pl
+
+------------------------------------------------------------------------
+r126 | lh3lh3 | 2009-02-14 21:22:30 +0000 (Sat, 14 Feb 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_mate.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-7
+ * fixed a bug in fixmate: SE reads are flagged as BAM_FMUNMAP
+
+------------------------------------------------------------------------
+r125 | lh3lh3 | 2009-02-13 09:54:45 +0000 (Fri, 13 Feb 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_stat.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-7
+ * fixed a minor bug in flagstat
+
+------------------------------------------------------------------------
+r124 | lh3lh3 | 2009-02-12 11:15:32 +0000 (Thu, 12 Feb 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/indel_filter.pl
+
+ * samtools-0.1.2-6
+ * improve indel caller by setting maximum window size
+
+------------------------------------------------------------------------
+r123 | lh3lh3 | 2009-02-12 10:30:29 +0000 (Thu, 12 Feb 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * output max mapping quality in indel line
+
+------------------------------------------------------------------------
+r122 | lh3lh3 | 2009-02-11 10:59:10 +0000 (Wed, 11 Feb 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/maq2sam.c
+
+fixed a bug in generating tag AM
+
+------------------------------------------------------------------------
+r121 | lh3lh3 | 2009-02-03 10:43:11 +0000 (Tue, 03 Feb 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+fixed a potential memory problem in indexing
+
+------------------------------------------------------------------------
+r120 | bhandsaker | 2009-02-02 15:52:52 +0000 (Mon, 02 Feb 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+
+Pass LIBS to recursive targets to facilitate building at Broad.
+
+------------------------------------------------------------------------
+r119 | lh3lh3 | 2009-02-02 10:12:15 +0000 (Mon, 02 Feb 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_stat.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-3
+ * fixed a bug in generating GLFv2 for indels
+ * improve flagstat report a little bit
+
+------------------------------------------------------------------------
 r118 | lh3lh3 | 2009-01-29 12:33:23 +0000 (Thu, 29 Jan 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile
