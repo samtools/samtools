@@ -39,7 +39,7 @@
 #include <ctype.h>
 #include <string.h>
 
-#define PACKAGE_VERSION "0.2.1"
+#define PACKAGE_VERSION "0.2.2"
 
 const uint8_t nst_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
@@ -173,6 +173,7 @@ static double MUT_RATE = 0.001;
 static double INDEL_FRAC = 0.1;
 static double INDEL_EXTEND = 0.3;
 static int IS_SOLID = 0;
+static int SHOW_MM_INFO = 1;
 
 void maq_mut_diref(const seq_t *seq, int is_hap, mutseq_t *hap1, mutseq_t *hap2)
 {
@@ -421,9 +422,15 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, FILE *fp_fa, int is_hap, uint64_t N,
 			for (j = 0; j < 2; ++j) {
 				for (i = 0; i < s[j]; ++i) qstr[i] = Q;
 				qstr[i] = 0;
-				fprintf(fpo[j], "@%s_%u_%u_%d:%d:%d_%d:%d:%d_%llx/%d\n", name, ext_coor[0]+1, ext_coor[1]+1,
-						n_err[0], n_sub[0], n_indel[0], n_err[1], n_sub[1], n_indel[1],
-						(long long)ii, j==0? is_flip+1 : 2-is_flip);
+				if (SHOW_MM_INFO) {
+					fprintf(fpo[j], "@%s_%u_%u_%d:%d:%d_%d:%d:%d_%llx/%d\n", name, ext_coor[0]+1, ext_coor[1]+1,
+							n_err[0], n_sub[0], n_indel[0], n_err[1], n_sub[1], n_indel[1],
+							(long long)ii, j==0? is_flip+1 : 2-is_flip);
+				} else {
+					fprintf(fpo[j], "@%s_%u_%u_%llx/%d %d:%d:%d_%d:%d:%d\n", name, ext_coor[0]+1, ext_coor[1]+1,
+							(long long)ii, j==0? is_flip+1 : 2-is_flip,
+							n_err[0], n_sub[0], n_indel[0], n_err[1], n_sub[1], n_indel[1]);
+				}
 				for (i = 0; i < s[j]; ++i)
 					fputc("ACGTN"[(int)tmp_seq[j][i]], fpo[j]);
 				fprintf(fpo[j], "\n+\n%s\n", qstr);
@@ -452,6 +459,7 @@ static int simu_usage()
 	fprintf(stderr, "         -R FLOAT      fraction of indels [%.2f]\n", INDEL_FRAC);
 	fprintf(stderr, "         -X FLOAT      probability an indel is extended [%.2f]\n", INDEL_EXTEND);
 	fprintf(stderr, "         -c            generate reads in color space (SOLiD reads)\n");
+	fprintf(stderr, "         -C            show mismatch info in comment rather than read name\n");
 	fprintf(stderr, "         -h            haplotype mode\n");
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Note: For SOLiD reads, the first read is F3 and the second is R3.\n\n");
@@ -466,7 +474,7 @@ int main(int argc, char *argv[])
 
 	N = 1000000; dist = 500; std_dev = 50;
 	size_l = size_r = 70;
-	while ((c = getopt(argc, argv, "e:d:s:N:1:2:r:R:hX:c")) >= 0) {
+	while ((c = getopt(argc, argv, "e:d:s:N:1:2:r:R:hX:cC")) >= 0) {
 		switch (c) {
 		case 'd': dist = atoi(optarg); break;
 		case 's': std_dev = atoi(optarg); break;
@@ -478,6 +486,7 @@ int main(int argc, char *argv[])
 		case 'R': INDEL_FRAC = atof(optarg); break;
 		case 'X': INDEL_EXTEND = atof(optarg); break;
 		case 'c': IS_SOLID = 1; break;
+		case 'C': SHOW_MM_INFO = 0; break;
 		case 'h': is_hap = 1; break;
 		}
 	}
