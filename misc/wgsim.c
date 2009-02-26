@@ -453,8 +453,9 @@ static int simu_usage()
 	fprintf(stderr, "         -R FLOAT      fraction of indels [%.2f]\n", INDEL_FRAC);
 	fprintf(stderr, "         -X FLOAT      probability an indel is extended [%.2f]\n", INDEL_EXTEND);
 	fprintf(stderr, "         -c            generate reads in color space (SOLiD reads)\n");
-	fprintf(stderr, "         -h            haploid mode\n");
+	fprintf(stderr, "         -h            haplotype mode\n");
 	fprintf(stderr, "\n");
+	fprintf(stderr, "Note: For SOLiD reads, the first read is F3 and the second is R3.\n\n");
 	return 1;
 }
 

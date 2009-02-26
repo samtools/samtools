@@ -4,8 +4,8 @@ CFLAGS=		-g -Wall -O2 -m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
 DFLAGS=		#-D_FILE_OFFSET_BITS=64
 OBJS=		
-PROG=		faidx md5sum-lite md5fa maq2sam-short maq2sam-long wgsim
-INCLUDES=
+PROG=		faidx md5sum-lite md5fa maq2sam-short maq2sam-long wgsim fa2csfa
+INCLUDES=	-I..
 LIBS=		-lm -lz
 SUBDIRS=	.
 
@@ -34,11 +34,19 @@ wgsim:wgsim.o
 faidx:../faidx.c ../faidx.h
 		$(CC) $(CFLAGS) -D_NO_RAZF -DFAIDX_MAIN -o $@ ../faidx.c
 
+fa2csfa:fa2csfa.o
+		$(CC) $(CFLAGS) -o $@ fa2csfa.o -lz
+
 md5fa:md5.o md5fa.o md5.h ../kseq.h
 		$(CC) $(CFLAGS) -o $@ md5.o md5fa.o -lz
 
-md5sum-lite:md5.c md5.h
-		$(CC) $(CFLAGS) -DMD5SUM_MAIN -o $@ md5.c
+md5sum-lite:md5sum-lite.o
+		$(CC) $(CFLAGS) -o $@ md5sum-lite.o
+
+md5sum-lite.o:md5.c md5.h
+		$(CC) -c $(CFLAGS) -DMD5SUM_MAIN -o $@ md5.c
+
+fa2csfa:fa2csfa.c ../kseq.h
 
 maq2sam-short:maq2sam.c
 		$(CC) $(CFLAGS) -o $@ maq2sam.c -lz
