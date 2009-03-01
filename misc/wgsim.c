@@ -39,7 +39,7 @@
 #include <ctype.h>
 #include <string.h>
 
-#define PACKAGE_VERSION "0.2.2"
+#define PACKAGE_VERSION "0.2.3"
 
 const uint8_t nst_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
@@ -366,6 +366,7 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, FILE *fp_fa, int is_hap, uint64_t N,
 					} else {											\
 						int n, ins;										\
 						++n_indel[x];									\
+						tmp_seq[x][k++] = c & 0xf;						\
 						for (n = mut_type>>12, ins = c>>4; n > 0 && k < s[x]; --n, ins >>= 2) \
 							tmp_seq[x][k++] = ins & 0x3;				\
 					}													\
