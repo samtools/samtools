@@ -27,7 +27,7 @@ glf_header_t *glf_header_read(glfFile fp)
 	}
 	h = (glf_header_t*)calloc(1, sizeof(glf_header_t));
 	bgzf_read(fp, magic, 4);
-	if (strncmp(magic, "GLF\2", 4)) {
+	if (strncmp(magic, "GLF\3", 4)) {
 		fprintf(stderr, "[glf_header_read] invalid magic. Abort.\n");
 		exit(1);
 	}
@@ -41,7 +41,7 @@ glf_header_t *glf_header_read(glfFile fp)
 
 void glf_header_write(glfFile fp, const glf_header_t *h)
 {
-	bgzf_write(fp, "GLF\2", 4);
+	bgzf_write(fp, "GLF\3", 4);
 	bgzf_write(fp, &h->l_text, 4);
 	if (h->l_text) bgzf_write(fp, h->text, h->l_text);
 }
