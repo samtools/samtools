@@ -74,10 +74,10 @@ void glf_ref_write(glfFile fp, const char *str)
 	bgzf_write(fp, str, n);
 }
 
-void glf_view_normal(const char *ref_name, glf2_t *g1)
+void glf_view_normal(const char *ref_name, glf3_t *g1, int pos)
 {
 	int j;
-	printf("%s\t%d\t%c\t%d\t%d\t%d", ref_name, g1->pos + 1, "XACMGRSVTWYHKDBN"[g1->ref_base],
+	printf("%s\t%d\t%c\t%d\t%d\t%d", ref_name, pos + 1, "XACMGRSVTWYHKDBN"[g1->ref_base],
 		   g1->depth, g1->max_mapQ, g1->min_lk);
 	for (j = 0; j != 10; ++j) printf("\t%d", g1->lk[j]);
 	printf("\n");
@@ -99,18 +99,20 @@ void glf_view(glfFile fp)
 {
 	glf_header_t *h;
 	char *name, *str;
-	glf2_t g2;
+	glf3_t g2;
 	int max;
 	
 	h = glf_header_read(fp);
 	str = 0; max = 0;
 	while ((name = glf_ref_read(fp)) != 0) {
-		while (bgzf_read(fp, &g2, sizeof(glf2_t))) {
+		int pos = 0;
+		while (bgzf_read(fp, &g2, sizeof(glf3_t))) {
 			if (g2.type == GLF_TYPE_END) break;
-			else if (g2.type == GLF_TYPE_NORMAL) glf_view_normal(name, &g2);
+			pos += g2.offset;
+			if (g2.type == GLF_TYPE_NORMAL) glf_view_normal(name, &g2, pos);
 			else if (g2.type == GLF_TYPE_INDEL) {
 				int16_t indel1, indel2;
-				printf("%s\t%d\t*\t%d\t%d\t%d\t", name, g2.pos + 1, g2.depth, g2.max_mapQ, g2.min_lk);
+				printf("%s\t%d\t*\t%d\t%d\t%d\t", name, pos + 1, g2.depth, g2.max_mapQ, g2.min_lk);
 				printf("%d\t%d\t%d\t", g2.lk[0], g2.lk[1], g2.lk[2]);
 				indel1 = *(int16_t*)(g2.lk + 3);
 				indel2 = *(int16_t*)(g2.lk + 5);

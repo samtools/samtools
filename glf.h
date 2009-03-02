@@ -21,8 +21,8 @@ typedef struct {
 	unsigned char max_mapQ; /** maximum mapping quality */
 	unsigned char lk[10];   /** log likelihood ratio, capped at 255 */
 	unsigned min_lk:8, depth:24; /** minimum lk capped at 255, and the number of mapped reads */
-	unsigned pos; /** this is ***ZERO-BASED*** coordinate */
-} glf2_t;
+	unsigned offset; /** the first base in a chromosome has offset zero. */
+} glf3_t;
 
 typedef struct {
 	int32_t l_text;

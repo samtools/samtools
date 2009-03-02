@@ -46,13 +46,14 @@ razip.o:razf.h
 bam.o:bam.h razf.h bam_endian.h
 bam_import.o:bam.h kseq.h khash.h razf.h
 bam_pileup.o:bam.h razf.h ksort.h
-bam_plcmd.o:bam.h faidx.h bam_maqcns.h
+bam_plcmd.o:bam.h faidx.h bam_maqcns.h glf.h
 bam_index.o:bam.h khash.h ksort.h razf.h bam_endian.h
 bam_lpileup.o:bam.h ksort.h
 bam_tview.o:bam.h faidx.h bam_maqcns.h
 bam_maqcns.o:bam.h ksort.h bam_maqcns.h
 bam_sort.o:bam.h ksort.h razf.h
 razf.o:razf.h
+glf.o:glf.h
 
 faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h

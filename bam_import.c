@@ -209,7 +209,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 			if (*s) parse_error(fp->n_lines, "unmatched CIGAR operation");
 			c->bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
 			doff += c->n_cigar * 4;
-		}
+		} else c->bin = bam_reg2bin(c->pos, c->pos + 1);
 	}
 	{ // mtid, mpos, isize
 		ret = ks_getuntil(ks, 0, str, &dret); c->mtid = strcmp(str->s, "=")? bam_get_tid(header, str->s) : c->tid;

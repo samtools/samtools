@@ -374,7 +374,7 @@ static inline int reg2bins(uint32_t beg, uint32_t end, uint16_t list[MAX_BIN])
 static inline int is_overlap(uint32_t beg, uint32_t end, const bam1_t *b)
 {
 	uint32_t rbeg = b->core.pos;
-	uint32_t rend = bam_calend(&b->core, bam1_cigar(b));
+	uint32_t rend = b->core.n_cigar? bam_calend(&b->core, bam1_cigar(b)) : b->core.pos + 1;
 	return (rend > beg && rbeg < end);
 }
 
