@@ -1,4 +1,80 @@
 ------------------------------------------------------------------------
+r153 | lh3lh3 | 2009-03-02 10:45:28 +0000 (Mon, 02 Mar 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/glf.c
+
+ * samtools-0.1.2-11
+ * use "GLF\3" as the magic for GLFv3 files
+
+------------------------------------------------------------------------
+r152 | lh3lh3 | 2009-03-02 10:39:09 +0000 (Mon, 02 Mar 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/glf.c
+   M /trunk/samtools/glf.h
+
+ * samtools-0.1.2-10
+ * fixed a bug in import: core.bin is undefined for unmapped reads
+ * this bug can be alleviated (not completely solved) in bam_index.c
+ * update to GLFv3: pos is changed to offset for better compression
+
+------------------------------------------------------------------------
+r151 | lh3lh3 | 2009-03-01 15:18:43 +0000 (Sun, 01 Mar 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/wgsim.c
+
+ * wgsim-0.2.3
+ * fixed a bug in simulating indels
+
+------------------------------------------------------------------------
+r145 | lh3lh3 | 2009-02-26 19:43:57 +0000 (Thu, 26 Feb 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/misc/wgsim.c
+
+ * wgsim-0.2.2
+ * allow to print mismatch information as fastq comment. MAQ does
+   not like long read names.
+
+------------------------------------------------------------------------
+r141 | lh3lh3 | 2009-02-26 14:53:03 +0000 (Thu, 26 Feb 2009) | 6 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/misc/wgsim.c
+   M /trunk/samtools/misc/wgsim_eval.pl
+
+ * wgsim-0.2.1
+ * fixed a bug about color read coordinates
+ * fixed a bug in read names
+ * wgsim_eval.pl-0.1.3
+ * make the script work with color reads
+
+------------------------------------------------------------------------
+r140 | lh3lh3 | 2009-02-26 14:02:57 +0000 (Thu, 26 Feb 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/Makefile
+   M /trunk/samtools/misc/wgsim.c
+
+ * wgsim: added a note
+
+------------------------------------------------------------------------
+r139 | lh3lh3 | 2009-02-26 11:39:08 +0000 (Thu, 26 Feb 2009) | 7 lines
+Changed paths:
+   M /trunk/samtools/misc/wgsim.c
+   M /trunk/samtools/misc/wgsim_eval.pl
+
+ * wgsim-0.2.0
+ * considerable code clean up
+ * print number of substitutions/indels/errors on each read
+ * potentially support SOLiD simulation, though not tested at the moment
+ * wgsim_eval.pl-0.1.2
+ * change in accordant with wgsim
+
+------------------------------------------------------------------------
 r129 | lh3lh3 | 2009-02-18 22:23:27 +0000 (Wed, 18 Feb 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_index.c

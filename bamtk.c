@@ -3,7 +3,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.2-11"
+#define PACKAGE_VERSION "0.1.2-12"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -35,15 +35,17 @@ int bam_view(int argc, char *argv[])
 	bamFile fp, fpout = 0;
 	bam_header_t *header;
 	bam1_t *b;
-	int ret, c, is_bam = 0;
-	while ((c = getopt(argc, argv, "b")) >= 0) {
+	int ret, c, is_bam = 0, is_header = 0, is_headeronly = 0;
+	while ((c = getopt(argc, argv, "bhH")) >= 0) {
 		switch (c) {
 		case 'b': is_bam = 1; break;
+		case 'h': is_header = 1; break;
+		case 'H': is_headeronly = 1; break;
 		default: fprintf(stderr, "Unrecognized option: -%c\n", c); return 1;
 		}
 	}
 	if (argc == optind) {
-		fprintf(stderr, "Usage: samtools view [-b] <in.bam> [<region> [...]]\n");
+		fprintf(stderr, "Usage: samtools view [-bhH] <in.bam> [<region> [...]]\n");
 		return 1;
 	}
 	fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
@@ -52,6 +54,16 @@ int bam_view(int argc, char *argv[])
 	if (is_bam) {
 		assert(fpout = bam_dopen(fileno(stdout), "w"));
 		bam_header_write(fpout, header);
+	}
+	if (is_header || is_headeronly) {
+		int i;
+		for (i = 0; i < header->n_targets; ++i)
+			printf("@SQ\tSN:%s\tLN:%d\n", header->target_name[i], header->target_len[i]);
+		if (is_headeronly) {
+			bam_header_destroy(header);
+			bam_close(fp);
+			return 0;
+		}
 	}
 	if (optind + 1 == argc) {
 		b = (bam1_t*)calloc(1, sizeof(bam1_t));
