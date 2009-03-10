@@ -14,7 +14,7 @@ typedef struct __bmc_aux_t {
 typedef struct {
 	float esum[4], fsum[4];
 	uint32_t c[4];
-	uint32_t mapQ_max;
+	uint32_t rms_mapQ;
 } glf_call_aux_t;
 
 char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
@@ -129,6 +129,7 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 	int i, j, k, w[8], c, n;
 	glf1_t *g = (glf1_t*)calloc(1, sizeof(glf1_t));
 	float p[16], min_p = 1e30;
+	uint64_t rms;
 
 	g->ref_base = ref_base;
 	if (_n == 0) return g;
@@ -155,7 +156,7 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 	// generate esum and fsum
 	b = (glf_call_aux_t*)calloc(1, sizeof(glf_call_aux_t));
 	for (k = 0; k != 8; ++k) w[k] = 0;
-	b->mapQ_max = 0;
+	rms = 0;
 	for (j = n - 1; j >= 0; --j) { // calculate esum and fsum
 		uint32_t info = bm->aux->info[j];
 		if (info>>24 < 4 && (info>>8&0x3f) != 0) info = 4<<24 | (info&0xffffff);
@@ -166,8 +167,9 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 			if (w[k] < 0xff) ++w[k];
 			++b->c[k&3];
 		}
-		if (b->mapQ_max < (info&0x7f)) b->mapQ_max = info&0x7f;
+		rms += (int)(info&0x7f) * (info&0x7f);
 	}
+	b->rms_mapQ = (uint8_t)(sqrt((double)rms / n) + .499);
 	// rescale ->c[]
 	for (j = c = 0; j != 4; ++j) c += b->c[j];
 	if (c > 255) {
@@ -208,7 +210,7 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 	}
 
 	// convert necessary information to glf1_t
-	g->ref_base = ref_base; g->max_mapQ = b->mapQ_max;
+	g->ref_base = ref_base; g->max_mapQ = b->rms_mapQ;
 	g->depth = n > 16777215? 16777215 : n;
 	for (j = 0; j != 4; ++j)
 		for (k = j; k < 4; ++k)
