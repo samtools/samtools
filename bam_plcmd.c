@@ -52,57 +52,61 @@ static khash_t(64) *load_pos(const char *fn, bam_header_t *h)
 }
 
 // an analogy to pileup_func() below
-static int glt_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu, void *data)
+static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu, void *data)
 {
 	pu_data_t *d = (pu_data_t*)data;
 	bam_maqindel_ret_t *r = 0;
 	int rb;
 	glf1_t *g;
-	glf3_t g2;
+	glf3_t *g3;
 	if (d->fai == 0) {
-		fprintf(stderr, "[glt_func] reference sequence is required for generating GLT. Abort!\n");
+		fprintf(stderr, "[glt3_func] reference sequence is required for generating GLT. Abort!\n");
 		exit(1);
 	}
 	if (d->hash && kh_get(64, d->hash, (uint64_t)tid<<32|pos) == kh_end(d->hash)) return 0;
+	g3 = glf3_init1();
 	if (d->fai && (int)tid != d->tid) {
 		if (d->ref) { // then write the end mark
-			memset(&g2, 0, sizeof(glf3_t));
-			g2.type = GLF_TYPE_END;
-			bgzf_write(d->fp, &g2, sizeof(glf3_t));
+			g3->rtype = GLF3_RTYPE_END;
+			glf3_write1(d->fp, g3);
 		}
-		glf_ref_write(d->fp, d->h->target_name[tid]); // write reference
+		glf3_ref_write(d->fp, d->h->target_name[tid], d->h->target_len[tid]); // write reference
 		free(d->ref);
 		d->ref = fai_fetch(d->fai, d->h->target_name[tid], &d->len);
 		d->tid = tid;
+		d->last_pos = 0;
 	}
 	rb = (d->ref && (int)pos < d->len)? d->ref[pos] : 'N';
 	g = bam_maqcns_glfgen(n, pu, bam_nt16_table[rb], d->c);
-	memcpy(&g2, g, sizeof(glf1_t));
-	g2.type = GLF_TYPE_NORMAL;
-	g2.offset = pos - d->last_pos;
+	memcpy(g3, g, sizeof(glf1_t));
+	g3->rtype = GLF3_RTYPE_SUB;
+	g3->offset = pos - d->last_pos;
 	d->last_pos = pos;
-	bgzf_write(d->fp, &g2, sizeof(glf3_t));
+	glf3_write1(d->fp, g3);
 	r = bam_maqindel(n, pos, d->ido, pu, d->ref);
 	if (r) { // then write indel line
-		int g3 = 3 * n, min;
-		min = g3;
+		int het = 3 * n, min;
+		min = het;
 		if (min > r->gl[0]) min = r->gl[0];
 		if (min > r->gl[1]) min = r->gl[1];
-		g2.ref_base = 0;
-		g2.type = GLF_TYPE_INDEL;
-		memset(g2.lk, 0, 10);
-		g2.lk[0] = r->gl[0] - min < 255? r->gl[0] - min : 255;
-		g2.lk[1] = r->gl[1] - min < 255? r->gl[1] - min : 255;
-		g2.lk[2] = g3 - min < 255? g3 - min : 255;
-		*(int16_t*)(g2.lk + 3) = (int16_t)r->indel1;
-		*(int16_t*)(g2.lk + 5) = (int16_t)r->indel2;
-		g2.min_lk = min < 255? min : 255;
-		bgzf_write(d->fp, &g2, sizeof(glf3_t));
-		if (r->indel1) bgzf_write(d->fp, r->s[0]+1, r->indel1>0? r->indel1 : -r->indel1);
-		if (r->indel2) bgzf_write(d->fp, r->s[1]+1, r->indel2>0? r->indel2 : -r->indel2);
+		g3->ref_base = 0;
+		g3->rtype = GLF3_RTYPE_INDEL;
+		memset(g3->lk, 0, 10);
+		g3->lk[0] = r->gl[0] - min < 255? r->gl[0] - min : 255;
+		g3->lk[1] = r->gl[1] - min < 255? r->gl[1] - min : 255;
+		g3->lk[2] = het - min < 255? het - min : 255;
+		g3->offset = 0;
+		g3->indel_len[0] = r->indel1;
+		g3->indel_len[1] = r->indel2;
+		g3->min_lk = min < 255? min : 255;
+		g3->max_len = (abs(r->indel1) > abs(r->indel2)? abs(r->indel1) : abs(r->indel2)) + 1;
+		g3->indel_seq[0] = strdup(r->s[0]+1);
+		g3->indel_seq[1] = strdup(r->s[1]+1);
+		glf3_write1(d->fp, g3);
 		bam_maqindel_ret_destroy(r);
 	}
 	free(g);
+	glf3_destroy1(g3);
 	return 0;
 }
 
@@ -113,7 +117,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	int i, j, rb, max_mapq = 0;
 	uint32_t x;
 	if (d->hash && kh_get(64, d->hash, (uint64_t)tid<<32|pos) == kh_end(d->hash)) return 0;
-	if (d->format & BAM_PLF_GLF) return glt_func(tid, pos, n, pu, data);
+	if (d->format & BAM_PLF_GLF) return glt3_func(tid, pos, n, pu, data);
 	if (d->fai && (int)tid != d->tid) {
 		free(d->ref);
 		d->ref = fai_fetch(d->fai, d->h->target_name[tid], &d->len);
@@ -247,11 +251,11 @@ int bam_pileup(int argc, char *argv[])
 	free(fn_fa);
 	bam_maqcns_prepare(d->c);
 	if (d->format & BAM_PLF_GLF) {
-		glf_header_t *h;
-		h = glf_header_init();
+		glf3_header_t *h;
+		h = glf3_header_init();
 		d->fp = bgzf_fdopen(fileno(stdout), "w");
-		glf_header_write(d->fp, h);
-		glf_header_destroy(h);
+		glf3_header_write(d->fp, h);
+		glf3_header_destroy(h);
 	}
 	if (fn_list) {
 		tamFile fp;
