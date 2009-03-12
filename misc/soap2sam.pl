@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 # Contact: lh3
-# Version: 0.1.0
+# Version: 0.1.1
 
 use strict;
 use warnings;
@@ -43,7 +43,7 @@ sub soap2sam {
   my @s2 = ();
   my ($s_last, $s_curr) = (\@s1, \@s2);
   while (<>) {
-	&soap2sam_aux($_, $s_curr, $is_paired);
+	next if (&soap2sam_aux($_, $s_curr, $is_paired) < 0);
 	if (@$s_last != 0 && $s_last->[0] eq $s_curr->[0]) {
 	  &mating($s_last, $s_curr);
 	  print join("\t", @$s_last), "\n";
@@ -61,6 +61,7 @@ sub soap2sam_aux {
   my ($line, $s, $is_paired) = @_;
   chomp($line);
   my @t = split("\t", $line);
+  return -1 if (@t < 9);
   @$s = ();
   # read name
   $s->[0] = $t[0];
@@ -100,4 +101,5 @@ sub soap2sam_aux {
 	$md = length($t[1]);
   }
   push(@$s, "MD:Z:$md");
+  return 0;
 }
