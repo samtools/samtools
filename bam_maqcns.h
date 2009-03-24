@@ -44,7 +44,8 @@ extern "C" {
 	uint32_t glf2cns(const glf1_t *g, int q_r);
 
 	bam_maqindel_opt_t *bam_maqindel_opt_init();
-	bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, const bam_pileup1_t *pl, const char *ref);
+	bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, const bam_pileup1_t *pl, const char *ref,
+									 int _n_types, int *_types);
 	void bam_maqindel_ret_destroy(bam_maqindel_ret_t*);
 
 #ifdef __cplusplus

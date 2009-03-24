@@ -283,19 +283,23 @@ void bam_maqindel_ret_destroy(bam_maqindel_ret_t *mir)
 
 #define MINUS_CONST 0x10000000
 
-bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, const bam_pileup1_t *pl, const char *ref)
+bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, const bam_pileup1_t *pl, const char *ref,
+								 int _n_types, int *_types)
 {
 	int i, j, n_types, *types, left, right;
 	bam_maqindel_ret_t *ret = 0;
-	for (i = 0; i < n; ++i) {
-		const bam_pileup1_t *p = pl + i;
-		if (!(p->b->core.flag&BAM_FUNMAP) && p->indel != 0) break;
+	// if there is no proposed indel, check if there is an indel from the alignment
+	if (_n_types == 0) {
+		for (i = 0; i < n; ++i) {
+			const bam_pileup1_t *p = pl + i;
+			if (!(p->b->core.flag&BAM_FUNMAP) && p->indel != 0) break;
+		}
+		if (i == n) return 0; // no indel
 	}
-	if (i == n) return 0; // no indel
 	{ // calculate how many types of indels are available (set n_types and types)
 		int m;
 		uint32_t *aux;
-		aux = (uint32_t*)calloc(n+1, 4);
+		aux = (uint32_t*)calloc(n + _n_types + 1, 4);
 		m = 0;
 		aux[m++] = MINUS_CONST; // zero indel is always a type
 		for (i = 0; i < n; ++i) {
@@ -303,9 +307,12 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 			if (!(p->b->core.flag&BAM_FUNMAP) && p->indel != 0)
 				aux[m++] = MINUS_CONST + p->indel;
 		}
+		if (_n_types) // then also add this to aux[]
+			for (i = 0; i < _n_types; ++i)
+				if (_types[i]) aux[m++] = MINUS_CONST + _types[i];
 		ks_introsort(uint32_t, m, aux);
-		n_types = 1;
-		for (i = 1; i < m; ++i)
+		// squeeze out identical types
+		for (i = 1, n_types = 1; i < m; ++i)
 			if (aux[i] != aux[i-1]) ++n_types;
 		types = (int*)calloc(n_types, sizeof(int));
 		j = 0;

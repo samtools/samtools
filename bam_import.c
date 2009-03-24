@@ -44,29 +44,27 @@ struct __tamFile_t {
 	uint64_t n_lines;
 };
 
-char **bam_load_pos(const char *fn, int *_n)
+char **__bam_get_lines(const char *fn, int *_n) // for bam_plcmd.c only
 {
 	char **list = 0, *s;
-	int n = 0, dret, m = 0, c;
+	int n = 0, dret, m = 0;
 	gzFile fp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
 	kstream_t *ks;
 	kstring_t *str;
 	str = (kstring_t*)calloc(1, sizeof(kstring_t));
 	ks = ks_init(fp);
-	while (ks_getuntil(ks, 0, str, &dret) > 0) {
+	while (ks_getuntil(ks, '\n', str, &dret) > 0) {
 		if (n == m) {
 			m = m? m << 1 : 16;
 			list = (char**)realloc(list, m * sizeof(char*));
 		}
-		s = list[n++] = (char*)calloc(str->l + 5, 1);
+		if (str->s[str->l-1] == '\r')
+			str->s[--str->l] = '\0';
+		s = list[n++] = (char*)calloc(str->l + 1, 1);
 		strcpy(s, str->s);
-		s += str->l + 1;
-		ks_getuntil(ks, 0, str, &dret);
-		*((uint32_t*)s) = atoi(str->s);
-		if (dret != '\n')
-			while ((c = ks_getc(fp)) >= 0 && c != '\n');
 	}
 	ks_destroy(ks);
+	gzclose(fp);
 	free(str->s); free(str);
 	*_n = n;
 	return list;

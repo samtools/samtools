@@ -6,7 +6,10 @@
 #include "bam_maqcns.h"
 #include "khash.h"
 #include "glf.h"
-KHASH_SET_INIT_INT64(64)
+#include "kstring.h"
+
+typedef int *indel_list_t;
+KHASH_MAP_INIT_INT64(64, indel_list_t)
 
 #define BAM_PLF_SIMPLE     0x01
 #define BAM_PLF_CNS        0x02
@@ -26,28 +29,55 @@ typedef struct {
 	glfFile fp; // for glf output only
 } pu_data_t;
 
-char **bam_load_pos(const char *fn, int *_n);
+char **__bam_get_lines(const char *fn, int *_n);
 void bam_init_header_hash(bam_header_t *header);
 int32_t bam_get_tid(const bam_header_t *header, const char *seq_name);
 
 static khash_t(64) *load_pos(const char *fn, bam_header_t *h)
 {
-	int n, tmp, i;
-	char **list, *s;
-	uint64_t x;
+	char **list;
+	int i, j, n, *fields, max_fields;
 	khash_t(64) *hash;
 	bam_init_header_hash(h);
-	list = bam_load_pos(fn, &n);
+	list = __bam_get_lines(fn, &n);
 	hash = kh_init(64);
+	max_fields = 0; fields = 0;
 	for (i = 0; i < n; ++i) {
-		x = (uint64_t)bam_get_tid(h, list[i]) << 32;
-		s = list[i];
-		while (*s++);
-		x |= *((uint32_t*)s) - 1;
-		kh_put(64, hash, x, &tmp);
-		free(list[i]);
+		char *str = list[i];
+		int chr, n_fields, ret;
+		khint_t k;
+		uint64_t x;
+		n_fields = ksplit_core(str, 0, &max_fields, &fields);
+		if (n_fields < 2) continue;
+		chr = bam_get_tid(h, str + fields[0]);
+		if (chr < 0) {
+			fprintf(stderr, "[load_pos] unknown reference sequence name: %s\n", str + fields[0]);
+			continue;
+		}
+		x = (uint64_t)chr << 32 | (atoi(str + fields[1]) - 1);
+		k = kh_put(64, hash, x, &ret);
+		if (ret == 0) {
+			fprintf(stderr, "[load_pos] position %s:%s has been loaded.\n", str+fields[0], str+fields[1]);
+			continue;
+		}
+		kh_val(hash, k) = 0;
+		if (n_fields > 2) {
+			// count
+			for (j = 2; j < n_fields; ++j) {
+				char *s = str + fields[j];
+				if ((*s != '+' && *s != '-') || !isdigit(s[1])) break;
+ 			}
+			if (j > 2) { // update kh_val()
+				int *q, y, z;
+				q = kh_val(hash, k) = (int*)calloc(j - 1, sizeof(int));
+				q[0] = j - 2; z = j; y = 1;
+				for (j = 2; j < z; ++j)
+					q[y++] = atoi(str + fields[j]);
+			}
+		}
+		free(str);
 	}
-	free(list);
+	free(list); free(fields);
 	return hash;
 }
 
@@ -56,14 +86,19 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 {
 	pu_data_t *d = (pu_data_t*)data;
 	bam_maqindel_ret_t *r = 0;
-	int rb;
+	int rb, *proposed_indels = 0;
 	glf1_t *g;
 	glf3_t *g3;
+
 	if (d->fai == 0) {
 		fprintf(stderr, "[glt3_func] reference sequence is required for generating GLT. Abort!\n");
 		exit(1);
 	}
-	if (d->hash && kh_get(64, d->hash, (uint64_t)tid<<32|pos) == kh_end(d->hash)) return 0;
+	if (d->hash) { // only output a list of sites
+		khint_t k = kh_get(64, d->hash, (uint64_t)tid<<32|pos);
+		if (k == kh_end(d->hash)) return 0;
+		proposed_indels = kh_val(d->hash, k);
+	}
 	g3 = glf3_init1();
 	if (d->fai && (int)tid != d->tid) {
 		if (d->ref) { // then write the end mark
@@ -83,7 +118,9 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 	g3->offset = pos - d->last_pos;
 	d->last_pos = pos;
 	glf3_write1(d->fp, g3);
-	r = bam_maqindel(n, pos, d->ido, pu, d->ref);
+	if (proposed_indels)
+		r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
+	else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);
 	if (r) { // then write indel line
 		int het = 3 * n, min;
 		min = het;
@@ -114,11 +151,16 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 {
 	pu_data_t *d = (pu_data_t*)data;
 	bam_maqindel_ret_t *r = 0;
-	int i, j, rb, max_mapq = 0;
+	int i, j, rb, max_mapq = 0, *proposed_indels = 0;
 	uint32_t x;
-	if (d->hash && kh_get(64, d->hash, (uint64_t)tid<<32|pos) == kh_end(d->hash)) return 0;
+
 	if (d->format & BAM_PLF_GLF) return glt3_func(tid, pos, n, pu, data);
-	if (d->fai && (int)tid != d->tid) {
+	if (d->hash) { // only output a list of sites
+		khint_t k = kh_get(64, d->hash, (uint64_t)tid<<32|pos);
+		if (k == kh_end(d->hash)) return 0;
+		proposed_indels = kh_val(d->hash, k);
+	}
+	if (d->fai && (int)tid != d->tid) { // then update d->ref
 		free(d->ref);
 		d->ref = fai_fetch(d->fai, d->h->target_name[tid], &d->len);
 		d->tid = tid;
@@ -140,9 +182,10 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		}
 		printf("%c\t%d\t%d\t%d\t", bam_nt16_rev_table[x>>28], x>>8&0xff, ref_q, x>>16&0xff);
 	}
-	if (d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) {
-		if (d->ref) // indel calling
-			r = bam_maqindel(n, pos, d->ido, pu, d->ref);
+	if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref) {
+		if (proposed_indels)
+			r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
+		else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);
 	}
 	// pileup strings
 	printf("%d\t", n);
@@ -257,7 +300,9 @@ int bam_pileup(int argc, char *argv[])
 		glf3_header_write(d->fp, h);
 		glf3_header_destroy(h);
 	}
-	if (fn_list) {
+	if (d->fai == 0)
+		fprintf(stderr, "[bam_pileup] indels will not be called when -f is absent.\n");
+	if (fn_list) { // the input is SAM
 		tamFile fp;
 		bam1_t *b;
 		int ret;
@@ -273,7 +318,7 @@ int bam_pileup(int argc, char *argv[])
 		bam_plbuf_destroy(buf);
 		bam_destroy1(b);
 		sam_close(fp);
-	} else {
+	} else { // the input is BAM
 		bamFile fp;
 		fp = (strcmp(argv[optind], "-") == 0)? bam_dopen(fileno(stdin), "r") : bam_open(argv[optind], "r");
 		d->h = bam_header_read(fp);
@@ -282,8 +327,13 @@ int bam_pileup(int argc, char *argv[])
 		bam_close(fp);
 	}
 	if (d->format & BAM_PLF_GLF) bgzf_close(d->fp);
+	if (fn_pos) { // free the hash table
+		khint_t k;
+		for (k = kh_begin(d->hash); k < kh_end(d->hash); ++k)
+			if (kh_exist(d->hash, k)) free(kh_val(d->hash, k));
+		kh_destroy(64, d->hash);
+	}
 	free(fn_pos); free(fn_list);
-	kh_destroy(64, d->hash);
 	bam_header_destroy(d->h);
 	if (d->fai) fai_destroy(d->fai);
 	bam_maqcns_destroy(d->c);
