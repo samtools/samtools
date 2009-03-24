@@ -221,7 +221,7 @@ int bam_sort(int argc, char *argv[])
 		}
 	}
 	if (optind + 2 > argc) {
-		fprintf(stderr, "Usage: samtools sort [-n] [-m <maxMem>] <in.baf> <out.prefix>\n");
+		fprintf(stderr, "Usage: samtools sort [-n] [-m <maxMem>] <in.bam> <out.prefix>\n");
 		return 1;
 	}
 	bam_sort_core(is_by_qname, argv[optind], argv[optind+1], max_mem);

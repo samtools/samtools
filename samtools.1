@@ -96,7 +96,7 @@ will be created.
 
 .TP
 .B view
-samtools view [-b] <in.bam> [region1 [...]]
+samtools view [-bhH] <in.bam> [region1 [...]]
 
 Extract/print all or sub alignments in SAM or BAM format. If no region
 is specified, all the alignments will be printed; otherwise only
@@ -110,6 +110,12 @@ format: `chr2', `chr2:1000000' or `chr2:1,000,000-2,000,000'.
 .TP 8
 .B -b
 Output in the BAM format.
+.TP
+.B -h
+Include the header in the output.
+.TP
+.B -H
+Output the header only.
 .RE
 
 .TP
@@ -203,7 +209,7 @@ as in the default format we may not know the mapping quality.
 
 .TP
 .B -c
-Call the consensus sequnce using MAQ consensus model. Options
+Call the consensus sequence using MAQ consensus model. Options
 .B -T,
 .B -N
 and
