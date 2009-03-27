@@ -260,7 +260,7 @@ int bam_pileup(int argc, char *argv[])
 		case 'f': fn_fa = strdup(optarg); break;
 		case 'T': d->c->theta = atof(optarg); break;
 		case 'N': d->c->n_hap = atoi(optarg); break;
-		case 'r': d->c->het_rate = atoi(optarg); break;
+		case 'r': d->c->het_rate = atof(optarg); break;
 		case 'c': d->format |= BAM_PLF_CNS; break;
 		case 'i': d->format |= BAM_PLF_INDEL_ONLY; break;
 		case 'm': d->mask = atoi(optarg); break;
@@ -272,7 +272,7 @@ int bam_pileup(int argc, char *argv[])
 	}
 	if (optind == argc) {
 		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:  bamtk pileup [options] <in.bam>|<in.sam>\n\n");
+		fprintf(stderr, "Usage:  samtools pileup [options] <in.bam>|<in.sam>\n\n");
 		fprintf(stderr, "Option: -s        simple (yet incomplete) pileup format\n");
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
 		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);
