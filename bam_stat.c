@@ -33,13 +33,15 @@ bam_flagstat_t *bam_flagstat_core(bamFile fp)
 	bam_flagstat_t *s;
 	bam1_t *b;
 	bam1_core_t *c;
+	int ret;
 	s = (bam_flagstat_t*)calloc(1, sizeof(bam_flagstat_t));
 	b = bam_init1();
 	c = &b->core;
-	while (bam_read1(fp, b) >= 0) {
+	while ((ret = bam_read1(fp, b)) >= 0)
 		flagstat_loop(s, c);
-	}
 	bam_destroy1(b);
+	if (ret != -1)
+		fprintf(stderr, "[bam_flagstat_core] Truncated file? Continue anyway.\n");
 	return s;
 }
 int bam_flagstat(int argc, char *argv[])
