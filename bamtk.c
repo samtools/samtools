@@ -3,7 +3,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.2-18"
+#define PACKAGE_VERSION "0.1.2-19"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -56,7 +56,12 @@ int bam_view(int argc, char *argv[])
 		bam_header_write(fpout, header);
 	}
 	if (is_header || is_headeronly) {
-		int i;
+		int i, c;
+		c = header->text[header->l_text-1];
+		header->text[header->l_text-1] = 0;
+		printf("%s", header->text);
+		if (c) putchar(c);
+		header->text[header->l_text-1] = c;
 		for (i = 0; i < header->n_targets; ++i)
 			printf("@SQ\tSN:%s\tLN:%d\n", header->target_name[i], header->target_len[i]);
 		if (is_headeronly) {
