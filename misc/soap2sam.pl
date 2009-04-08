@@ -36,13 +36,14 @@ sub mating {
 sub soap2sam {
   my %opts = ();
   getopts("p", \%opts);
-  die("Usage: soap2sam.pl [-p] <aln.soap>\n") if (@ARGV == 0);
+  die("Usage: soap2sam.pl [-p] <aln.soap>\n") if (@ARGV == 0 && -t STDIN);
   my $is_paired = defined($opts{p});
   # core loop
   my @s1 = ();
   my @s2 = ();
   my ($s_last, $s_curr) = (\@s1, \@s2);
   while (<>) {
+	s/[\177-\377]|[\000-\010]|[\012-\040]//g;
 	next if (&soap2sam_aux($_, $s_curr, $is_paired) < 0);
 	if (@$s_last != 0 && $s_last->[0] eq $s_curr->[0]) {
 	  &mating($s_last, $s_curr);
@@ -60,8 +61,8 @@ sub soap2sam {
 sub soap2sam_aux {
   my ($line, $s, $is_paired) = @_;
   chomp($line);
-  my @t = split("\t", $line);
-  return -1 if (@t < 9);
+  my @t = split(/\s+/, $line);
+  return -1 if (@t < 9 || $line =~ /^\s/ || !$t[0]);
   @$s = ();
   # read name
   $s->[0] = $t[0];
@@ -71,7 +72,8 @@ sub soap2sam_aux {
   $s->[1] |= 1 | 1<<($t[4] eq 'a'? 6 : 7);
   $s->[1] |= 2 if ($is_paired);
   # read & quality
-  $s->[9] = $t[1]; $s->[10] = $t[2];
+  $s->[9] = $t[1];
+  $s->[10] = (length($t[2]) > length($t[1]))? substr($t[2], 0, length($t[1])) : $t[2];
   # cigar
   $s->[5] = length($s->[9]) . "M";
   # coor

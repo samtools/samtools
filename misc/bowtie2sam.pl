@@ -12,7 +12,7 @@ exit;
 
 sub bowtie2sam {
   my %opts = ();
-  die("Usage: bowtie2sam.pl <aln.bowtie>\n") if (@ARGV == 0);
+  die("Usage: bowtie2sam.pl <aln.bowtie>\n") if (@ARGV == 0 && -t STDIN);
   # core loop
   my (@s, $last, @staging, $k, $best_s, $subbest_s, $best_k);
   $last = '';
