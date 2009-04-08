@@ -64,6 +64,8 @@ sub soap2sam_aux {
   my @t = split(/\s+/, $line);
   return -1 if (@t < 9 || $line =~ /^\s/ || !$t[0]);
   @$s = ();
+  # fix SOAP-2.1.x bugs
+  @t = @t[0..2,4..$#t] unless ($t[3] =~ /^\d+$/);
   # read name
   $s->[0] = $t[0];
   $s->[0] =~ s/\/[12]$//g;

@@ -29,9 +29,9 @@ void bam_mating_core(bamFile in, bamFile out)
 					pre5 = (pre->core.flag&BAM_FREVERSE)? bam_calend(&pre->core, bam1_cigar(pre)) : pre->core.pos;
 					cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
 				} else cur->core.isize = pre->core.isize = 0;
-				if (pre->core.flag&BAM_FREVERSE) cur->core.flag |= BAM_FREVERSE;
+				if (pre->core.flag&BAM_FREVERSE) cur->core.flag |= BAM_FMREVERSE;
 				else cur->core.flag &= ~BAM_FMREVERSE;
-				if (cur->core.flag&BAM_FREVERSE) pre->core.flag |= BAM_FREVERSE;
+				if (cur->core.flag&BAM_FREVERSE) pre->core.flag |= BAM_FMREVERSE;
 				else pre->core.flag &= ~BAM_FMREVERSE;
 				if (cur->core.flag & BAM_FUNMAP) { pre->core.flag |= BAM_FMUNMAP; pre->core.flag &= ~BAM_FPROPER_PAIR; }
 				if (pre->core.flag & BAM_FUNMAP) { cur->core.flag |= BAM_FMUNMAP; cur->core.flag &= ~BAM_FPROPER_PAIR; }
