@@ -151,7 +151,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	kstring_t *str = fp->str;
 	kstream_t *ks = fp->ks;
 
-	while ((ret = ks_getuntil(fp->ks, 0, str, &dret)) >= 0 && str->s[0] == '@') { // skip header
+	while ((ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret)) >= 0 && str->s[0] == '@') { // skip header
 		str->s[str->l] = dret; // note that str->s is NOT null terminated!!
 		append_text(header, str);
 		if (dret != '\n') {
@@ -161,7 +161,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		}
 		++fp->n_lines;
 	}
-	while (ret == 0) ret = ks_getuntil(fp->ks, 0, str, &dret); // special consideration for "\r\n"
+	while (ret == 0) ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret); // special consideration for "\r\n"
 	if (ret < 0) return -1;
 	++fp->n_lines;
 	doff = 0;
@@ -172,10 +172,10 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		doff += c->l_qname;
 	}
 	{ // flag, tid, pos, qual
-		ret = ks_getuntil(ks, 0, str, &dret); c->flag = atoi(str->s);
-		ret = ks_getuntil(ks, 0, str, &dret); c->tid = bam_get_tid(header, str->s);
-		ret = ks_getuntil(ks, 0, str, &dret); c->pos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
-		ret = ks_getuntil(ks, 0, str, &dret); c->qual = isdigit(str->s[0])? atoi(str->s) : 0;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->flag = atoi(str->s);
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->tid = bam_get_tid(header, str->s);
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->pos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->qual = isdigit(str->s[0])? atoi(str->s) : 0;
 		if (ret < 0) return -2;
 	}
 	{ // cigar
@@ -183,7 +183,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		int i, op;
 		long x;
 		c->n_cigar = 0;
-		if (ks_getuntil(ks, 0, str, &dret) < 0) return -3;
+		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -3;
 		if (str->s[0] != '*') {
 			for (s = str->s; *s; ++s) {
 				if (isalpha(*s)) ++c->n_cigar;
@@ -210,15 +210,15 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		} else c->bin = bam_reg2bin(c->pos, c->pos + 1);
 	}
 	{ // mtid, mpos, isize
-		ret = ks_getuntil(ks, 0, str, &dret); c->mtid = strcmp(str->s, "=")? bam_get_tid(header, str->s) : c->tid;
-		ret = ks_getuntil(ks, 0, str, &dret); c->mpos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
-		ret = ks_getuntil(ks, 0, str, &dret); c->isize = (str->s[0] == '-' || isdigit(str->s[0]))? atoi(str->s) : 0;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->mtid = strcmp(str->s, "=")? bam_get_tid(header, str->s) : c->tid;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->mpos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->isize = (str->s[0] == '-' || isdigit(str->s[0]))? atoi(str->s) : 0;
 		if (ret < 0) return -4;
 	}
 	{ // seq and qual
 		int i;
 		uint8_t *p;
-		if (ks_getuntil(ks, 0, str, &dret) < 0) return -5; // seq
+		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -5; // seq
 		c->l_qseq = strlen(str->s);
 		if (c->n_cigar && c->l_qseq != (int32_t)bam_cigar2qlen(c, bam1_cigar(b)))
 			parse_error(fp->n_lines, "CIGAR and sequence length are inconsistent");
@@ -226,7 +226,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		bzero(p, (c->l_qseq+1)/2);
 		for (i = 0; i < c->l_qseq; ++i)
 			p[i/2] |= bam_nt16_table[(int)str->s[i]] << 4*(1-i%2);
-		if (ks_getuntil(ks, 0, str, &dret) < 0) return -6; // qual
+		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -6; // qual
 		if (c->l_qseq != strlen(str->s))
 			parse_error(fp->n_lines, "sequence and quality are inconsistent");
 		p += (c->l_qseq+1)/2;
@@ -235,7 +235,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	}
 	doff0 = doff;
 	if (dret != '\n' && dret != '\r') { // aux
-		while (ks_getuntil(ks, 0, str, &dret) >= 0) {
+		while (ks_getuntil(ks, KS_SEP_TAB, str, &dret) >= 0) {
 			uint8_t *s, type, key[2];
 			if (str->l < 6 || str->s[2] != ':' || str->s[4] != ':')
 				parse_error(fp->n_lines, "missing colon in auxiliary data");

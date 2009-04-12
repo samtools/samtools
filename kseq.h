@@ -25,12 +25,18 @@
 
 /* Contact: Heng Li <lh3@sanger.ac.uk> */
 
+/* Last Modified: 12APR2009 */
+
 #ifndef AC_KSEQ_H
 #define AC_KSEQ_H
 
 #include <ctype.h>
 #include <string.h>
 #include <stdlib.h>
+
+#define KS_SEP_SPACE 0 // isspace(): \t, \n, \v, \f, \r
+#define KS_SEP_TAB   1 // isspace() && !' '
+#define KS_SEP_MAX   1
 
 #define __KS_TYPE(type_t)						\
 	typedef struct __kstream_t {				\
@@ -99,13 +105,16 @@ typedef struct __kstring_t {
 					if (ks->end == 0) break;							\
 				} else break;											\
 			}															\
-			if (delimiter) {											\
+			if (delimiter > KS_SEP_MAX) {								\
 				for (i = ks->begin; i < ks->end; ++i)					\
 					if (ks->buf[i] == delimiter) break;					\
-			} else {													\
+			} else if (delimiter == KS_SEP_SPACE) {						\
 				for (i = ks->begin; i < ks->end; ++i)					\
 					if (isspace(ks->buf[i])) break;						\
-			}															\
+			} else if (delimiter == KS_SEP_TAB) {						\
+				for (i = ks->begin; i < ks->end; ++i)					\
+					if (isspace(ks->buf[i]) && ks->buf[i] != ' ') break; \
+			} else i = 0; /* never come to here! */						\
 			if (str->m - str->l < i - ks->begin + 1) {					\
 				str->m = str->l + (i - ks->begin) + 1;					\
 				kroundup32(str->m);										\
