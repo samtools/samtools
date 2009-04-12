@@ -128,6 +128,10 @@ typedef struct __kstring_t {
 				break;													\
 			}															\
 		}																\
+		if (str->l == 0) {												\
+			str->m = 1;													\
+			str->s = (char*)calloc(1, 1);								\
+		}																\
 		str->s[str->l] = '\0';											\
 		return str->l;													\
 	}

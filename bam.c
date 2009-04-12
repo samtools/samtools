@@ -102,7 +102,6 @@ bam_header_t *bam_header_read(bamFile fp)
 	bam_read(fp, header->text, header->l_text);
 	bam_read(fp, &header->n_targets, 4);
 	if (bam_is_be) bam_swap_endian_4p(&header->n_targets);
-	assert(header->n_targets > 0);
 	// read reference sequence names and lengths
 	header->target_name = (char**)calloc(header->n_targets, sizeof(char*));
 	header->target_len = (uint32_t*)calloc(header->n_targets, 4);

@@ -102,7 +102,7 @@ bam_header_t *sam_header_read2(const char *fn)
 	assert(fp);
 	ks = ks_init(fp);
 	str = (kstring_t*)calloc(1, sizeof(kstring_t));
-	while (ks_getuntil(ks, 0, str, &dret) >= 0) {
+	while (ks_getuntil(ks, 0, str, &dret) > 0) {
 		char *s = strdup(str->s);
 		int len, i;
 		i = kh_size(hash);
