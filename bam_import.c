@@ -227,10 +227,11 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		for (i = 0; i < c->l_qseq; ++i)
 			p[i/2] |= bam_nt16_table[(int)str->s[i]] << 4*(1-i%2);
 		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -6; // qual
-		if (c->l_qseq != strlen(str->s))
+		if (strcmp(str->s, "*") && c->l_qseq != strlen(str->s))
 			parse_error(fp->n_lines, "sequence and quality are inconsistent");
 		p += (c->l_qseq+1)/2;
-		for (i = 0; i < c->l_qseq; ++i) p[i] = str->s[i] - 33;
+		if (strcmp(str->s, "*") == 0) for (i = 0; i < c->l_qseq; ++i) p[i] = 0xff;
+		else for (i = 0; i < c->l_qseq; ++i) p[i] = str->s[i] - 33;
 		doff += c->l_qseq + (c->l_qseq+1)/2;
 	}
 	doff0 = doff;
@@ -285,6 +286,11 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				*s++ = 'f';
 				*(float*)s = (float)atof(str->s + 5);
 				s += 4; doff += 5;
+			} else if (type == 'd') {
+				s = alloc_data(b, doff + 9) + doff;
+				*s++ = 'd';
+				*(float*)s = (float)atof(str->s + 9);
+				s += 8; doff += 9;
 			} else if (type == 'Z' || type == 'H') {
 				int size = 1 + (str->l - 5) + 1;
 				if (type == 'H') { // check whether the hex string is valid

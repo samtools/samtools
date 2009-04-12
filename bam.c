@@ -166,6 +166,7 @@ static void swap_endian_data(const bam1_core_t *c, int data_len, uint8_t *data)
 		if (type == 'C' || type == 'A') ++s;
 		else if (type == 'S') { bam_swap_endian_2p(s); s += 2; }
 		else if (type == 'I' || type == 'F') { bam_swap_endian_4p(s); s += 4; }
+		else if (type == 'D') { bam_swap_endian_8p(s); s += 8; }
 		else if (type == 'Z' || type == 'H') { while (*s) ++s; ++s; }
 	}
 }
@@ -254,7 +255,8 @@ void bam_view1(const bam_header_t *header, const bam1_t *b)
 	printf("%d\t%d\t", c->mpos + 1, c->isize);
 	for (i = 0; i < c->l_qseq; ++i) putchar(bam_nt16_rev_table[bam1_seqi(s, i)]);
 	putchar('\t');
-	for (i = 0; i < c->l_qseq; ++i) putchar(t[i] + 33);
+	if (t[0] == 0xff) putchar('*');
+	else for (i = 0; i < c->l_qseq; ++i) putchar(t[i] + 33);
 	s = bam1_aux(b);
 	while (s < b->data + b->data_len) {
 		uint8_t type, key[2];
@@ -269,6 +271,7 @@ void bam_view1(const bam_header_t *header, const bam1_t *b)
 		else if (type == 'I') { printf("i:%u", *(uint32_t*)s); s += 4; }
 		else if (type == 'i') { printf("i:%d", *(int32_t*)s); s += 4; }
 		else if (type == 'f') { printf("f:%g", *(float*)s); s += 4; }
+		else if (type == 'd') { printf("d:%lg", *(double*)s); s += 8; }
 		else if (type == 'Z' || type == 'H') { printf("%c:", type); while (*s) putchar(*s++); ++s; }
 	}
 	putchar('\n');
