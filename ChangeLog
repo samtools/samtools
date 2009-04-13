@@ -1,4 +1,186 @@
 ------------------------------------------------------------------------
+r210 | lh3lh3 | 2009-04-12 20:57:05 +0100 (Sun, 12 Apr 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/kseq.h
+
+ * samtools-0.1.2-24
+ * in merge, gives a warning rather than error if the target sequence length is different
+ * allow empty header
+
+------------------------------------------------------------------------
+r209 | lh3lh3 | 2009-04-12 20:32:44 +0100 (Sun, 12 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-23
+ * recognize '*' at the QUAL field
+
+------------------------------------------------------------------------
+r208 | lh3lh3 | 2009-04-12 20:08:02 +0100 (Sun, 12 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/kseq.h
+
+ * samtools-0.1.2-22
+ * the field separater is TAB only, now
+
+------------------------------------------------------------------------
+r207 | lh3lh3 | 2009-04-08 15:18:03 +0100 (Wed, 08 Apr 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/examples/ex1.sam.gz
+
+ * fixed the problem in the example alignment due to the bug in fixmate
+
+------------------------------------------------------------------------
+r206 | lh3lh3 | 2009-04-08 15:15:05 +0100 (Wed, 08 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_mate.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/soap2sam.pl
+
+ * samtools-0.1.2-21
+ * fixed a nasty bug in `fixmate'
+
+------------------------------------------------------------------------
+r205 | lh3lh3 | 2009-04-08 10:57:08 +0100 (Wed, 08 Apr 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/bowtie2sam.pl
+   M /trunk/samtools/misc/soap2sam.pl
+   M /trunk/samtools/misc/wgsim_eval.pl
+
+make the script robust to the bugs in SOAP-2.1.7
+
+------------------------------------------------------------------------
+r200 | lh3lh3 | 2009-04-02 15:14:56 +0100 (Thu, 02 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_stat.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-20
+ * check if file is truncated in flagstat
+
+------------------------------------------------------------------------
+r199 | lh3lh3 | 2009-04-02 15:09:10 +0100 (Thu, 02 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-19
+ * print the header if requested
+
+------------------------------------------------------------------------
+r193 | lh3lh3 | 2009-03-27 15:09:50 +0000 (Fri, 27 Mar 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-18
+ * fixed a minor bug reported by Nils Homer
+
+------------------------------------------------------------------------
+r185 | lh3lh3 | 2009-03-24 11:50:32 +0000 (Tue, 24 Mar 2009) | 2 lines
+Changed paths:
+   A /trunk/samtools/Makefile (from /trunk/samtools/Makefile.std:184)
+   D /trunk/samtools/Makefile.std
+   A /trunk/samtools/misc/Makefile (from /trunk/samtools/misc/Makefile.std:184)
+   D /trunk/samtools/misc/Makefile.std
+
+rename Makefile.std as Makefile. GNU building systerm is not ready and may take some time...
+
+------------------------------------------------------------------------
+r184 | lh3lh3 | 2009-03-24 10:36:38 +0000 (Tue, 24 Mar 2009) | 4 lines
+Changed paths:
+   D /trunk/samtools/Makefile
+   A /trunk/samtools/Makefile.std (from /trunk/samtools/Makefile:183)
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+   D /trunk/samtools/misc/Makefile
+   A /trunk/samtools/misc/Makefile.std (from /trunk/samtools/misc/Makefile:182)
+   M /trunk/samtools/samtools.1
+
+ * samtools-0.1.2-17
+ * incorporating Nils' changes
+ * rename Makefile to Makefile.std and prepare to add the GNU building systerms (also by Nils)
+
+------------------------------------------------------------------------
+r183 | lh3lh3 | 2009-03-24 10:30:23 +0000 (Tue, 24 Mar 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_maqcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/kseq.h
+   A /trunk/samtools/kstring.c
+   A /trunk/samtools/kstring.h
+
+ * samtools-0.1.2-16
+ * made pileup take a list of proposed indels. An insertion is N at the moment.
+ * added my kstring library for a bit complex parsing of the position list.
+
+------------------------------------------------------------------------
+r169 | lh3lh3 | 2009-03-12 13:40:14 +0000 (Thu, 12 Mar 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/soap2sam.pl
+
+ * soap2sam.pl-0.1.2
+ * more robust to truncated soap output
+
+------------------------------------------------------------------------
+r168 | lh3lh3 | 2009-03-11 10:49:00 +0000 (Wed, 11 Mar 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile.lite
+
+added bam_stat.o to Makefile.lite
+
+------------------------------------------------------------------------
+r167 | lh3lh3 | 2009-03-10 22:11:31 +0000 (Tue, 10 Mar 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-15
+ * generate RMS of mapQ instead of max mapQ
+
+------------------------------------------------------------------------
+r166 | lh3lh3 | 2009-03-10 22:06:45 +0000 (Tue, 10 Mar 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/glf.c
+   M /trunk/samtools/glf.h
+   M /trunk/samtools/misc/Makefile
+
+ * samtools-0.1.2-14
+ * implemented GLFv3
+
+------------------------------------------------------------------------
+r159 | lh3lh3 | 2009-03-03 11:26:08 +0000 (Tue, 03 Mar 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-13
+ * fixed a minor bug in displaying pileup
+
+------------------------------------------------------------------------
+r158 | lh3lh3 | 2009-03-03 11:24:16 +0000 (Tue, 03 Mar 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-12
+ * optionally print SAM header
+
+------------------------------------------------------------------------
 r153 | lh3lh3 | 2009-03-02 10:45:28 +0000 (Mon, 02 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
