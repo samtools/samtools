@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use Getopt::Std;
 
-my $version = '0.1.0';
+my $version = '0.1.1';
 &usage if (@ARGV < 1);
 
 my $command = shift(@ARGV);
@@ -36,8 +36,8 @@ sub showALEN {
 #
 
 sub indelFilter {
-  my %opts = (D=>100, m=>10, r=>undef);
-  getopts('D:m:r', \%opts);
+  my %opts = (D=>100, m=>10, r=>undef, s=>100);
+  getopts('D:m:rs:', \%opts); # -s for scaling factor in score calculation
 
   die(qq/
 Usage:   samtools.pl indelFilter [options] <in.indel>\n
@@ -56,7 +56,11 @@ Options: -D INT    maximum read depth [$opts{D}]
 	  next if ($t[5] == 0);
 	}
 	next if ($t[7] > $opts{D});
-	@$curr = ($t[0], $t[1], $t[5], $_);
+	# calculate indel score
+	my $score = $t[5];
+	$score += $opts{s} * $t[10] if ($t[8] ne '*');
+	$score += $opts{s} * $t[11] if ($t[9] ne '*');
+	@$curr = ($t[0], $t[1], $score, $_);
 	my $do_swap = 1;
 	if (defined $last->[0]) {
 	  if ($curr->[0] eq $last->[0] && $last->[1] + $opts{m} > $curr->[1]) {
