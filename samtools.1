@@ -163,10 +163,9 @@ maximum mapping quality of the reads covering the site will be inserted
 between the `reference base' and the `read bases' columns. An indel
 occupies an additional line. Each indel line consists of chromosome
 name, coordinate, a star, top two high-scoring ins/del sequences, the
-number of reads strongly supporting the first indel, the number of reads
-strongly supporting the second indel, the number of reads that confer
-little information on distinguishing indels and the number of reads that
-contain indels different from the top two ones.
+number of alignments containing the first indel allele, the number of
+alignments containing the second indel allele, and the number of
+alignments containing indels different from the top two alleles.
 
 .B OPTIONS:
 .RS
@@ -324,17 +323,17 @@ In general, more testing is needed to ensure there is no severe bug.
 .IP o 2
 Reference sequence names and lengths are not acquired from the BAM/SAM header.
 .IP o 2
-CIGAR operations N and P may not be properly handled.
+CIGAR operation P is not properly handled at the moment.
 .IP o 2
 There is a small memory leak in the viewer.
 
 .SH AUTHOR
 .PP
-Heng Li from the Sanger Institute is the author of the C version of
-samtools. Bob Handsaker from the Broad Institute implemented the BGZF
-library and Jue Ruan from Beijing Genomics Institute wrote the RAZF
-library. Various people in the 1000Genomes Project contributed to the
-SAM format specification.
+Heng Li from the Sanger Institute wrote the C version of samtools. Bob
+Handsaker from the Broad Institute implemented the BGZF library and Jue
+Ruan from Beijing Genomics Institute wrote the RAZF library. Various
+people in the 1000Genomes Project contributed to the SAM format
+specification.
 
 .SH SEE ALSO
 .PP

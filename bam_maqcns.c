@@ -460,14 +460,11 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 					ret->s[1][k+1] = ref[pos + k + 1];
 			} else ret->s[1][0] = '*';
 			// write count
-			for (j = 0; j < n; ++j) {
-				if (score[max1_i*n+j] < 0 && score[max2_i*n+j] < 0) ++ret->cnt_anti;
-				else {
-					int diff = score[max1_i*n+j] - score[max2_i*n+j];
-					if (diff > mi->ambi_thres) ++ret->cnt1;
-					else if (diff < -mi->ambi_thres) ++ret->cnt2;
-					else ++ret->cnt_ambi;
-				}
+			for (i = 0; i < n; ++i) {
+				const bam_pileup1_t *p = pl + i;
+				if (p->indel == ret->indel1) ++ret->cnt1;
+				else if (p->indel == ret->indel2) ++ret->cnt2;
+				else ++ret->cnt_anti;
 			}
 			// write gl[]
 			ret->gl[0] = ret->gl[1] = 0;
