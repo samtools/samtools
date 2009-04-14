@@ -1,4 +1,32 @@
 ------------------------------------------------------------------------
+r216 | lh3lh3 | 2009-04-14 22:10:46 +0100 (Tue, 14 Apr 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools.pl-0.1.1
+ * improve indelFilter to avoid filtering true indels. The new filter relies
+   on the new pileup indel line implemented in samtools-0.1.2-25
+
+------------------------------------------------------------------------
+r215 | lh3lh3 | 2009-04-14 22:04:19 +0100 (Tue, 14 Apr 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+ * samtools-0.1.2-25
+ * change the pileup indel line to shows the number of alignments actually
+   containing indels
+
+------------------------------------------------------------------------
+r211 | lh3lh3 | 2009-04-13 12:07:13 +0100 (Mon, 13 Apr 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+
+update ChangeLog from "svn log"
+
+------------------------------------------------------------------------
 r210 | lh3lh3 | 2009-04-12 20:57:05 +0100 (Sun, 12 Apr 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam.c
