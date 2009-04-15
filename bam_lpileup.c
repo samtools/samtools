@@ -167,11 +167,17 @@ bam_lplbuf_t *bam_lplbuf_init(bam_pileup_f func, void *data)
 
 void bam_lplbuf_destroy(bam_lplbuf_t *tv)
 {
-	mp_free(tv->mp, tv->head);
-	mp_destroy(tv->mp);
+	freenode_t *p, *q;
 	free(tv->cur_level); free(tv->pre_level);
 	bam_plbuf_destroy(tv->plbuf);
 	free(tv->aux);
+	for (p = tv->head; p->next;) {
+		q = p->next;
+		mp_free(tv->mp, p); p = q;
+	}
+	mp_free(tv->mp, p);
+	assert(tv->mp->cnt == 0);
+	mp_destroy(tv->mp);
 	free(tv);
 }
 
