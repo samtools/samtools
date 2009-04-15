@@ -76,6 +76,11 @@ void bam_rmdup_core(bamFile in, bamFile out)
 					fprintf(stderr, "[bam_rmdup_core] %llu unmatched pairs\n", (long long)kh_size(del_set));
 					clear_del_set(del_set);
 				}
+				if ((int)c->tid == -1) { // append unmapped reads
+					bam_write1(out, b);
+					while (bam_read1(in, b) >= 0) bam_write1(out, b);
+					break;
+				}
 				last_tid = c->tid;
 				fprintf(stderr, "[bam_rmdup_core] processing reference %s...\n", header->target_name[c->tid]);
 			}
