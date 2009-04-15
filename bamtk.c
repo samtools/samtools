@@ -3,7 +3,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.2-27"
+#define PACKAGE_VERSION "0.1.2-28"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -51,6 +51,10 @@ int bam_view(int argc, char *argv[])
 	fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	assert(fp);
 	header = bam_header_read(fp);
+	if (header == 0) {
+		fprintf(stderr, "[bam_view] fail to read the BAM header. Abort!\n");
+		return 1;
+	}
 	if (is_bam) {
 		assert(fpout = bam_dopen(fileno(stdout), "w"));
 		bam_header_write(fpout, header);
@@ -82,7 +86,10 @@ int bam_view(int argc, char *argv[])
 		for (i = optind + 1; i < argc; ++i) {
 			int tid, beg, end;
 			bam_parse_region(header, argv[i], &tid, &beg, &end);
-			if (tid < 0) return 0;
+			if (tid < 0) {
+				fprintf(stderr, "[bam_view] fail to get the reference name. Abort!\n");
+				return 1;
+			}
 			if (is_bam) bam_fetch(fp, idx, tid, beg, end, fpout, view_auxb);
 			else bam_fetch(fp, idx, tid, beg, end, header, view_aux);
 		}

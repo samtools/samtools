@@ -280,7 +280,7 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "        -l FILE   list of sites at which pileup is output\n");
 		fprintf(stderr, "        -f FILE   reference sequence in the FASTA format\n\n");
 		fprintf(stderr, "        -c        output the maq consensus sequence\n");
-		fprintf(stderr, "        -g        output in the extended GLT format (suppressing -c/-i/-s)\n");
+		fprintf(stderr, "        -g        output in the GLFv3 format (suppressing -c/-i/-s)\n");
 		fprintf(stderr, "        -T FLOAT  theta in maq consensus calling model (for -c/-g) [%f]\n", d->c->theta);
 		fprintf(stderr, "        -N INT    number of haplotypes in the sample (for -c/-g) [%d]\n", d->c->n_hap);
 		fprintf(stderr, "        -r FLOAT  prior of a difference between two haplotypes (for -c/-g) [%f]\n", d->c->het_rate);
@@ -292,7 +292,7 @@ int bam_pileup(int argc, char *argv[])
 	}
 	if (fn_fa) d->fai = fai_load(fn_fa);
 	free(fn_fa);
-	bam_maqcns_prepare(d->c);
+	if (d->format & (BAM_PLF_CNS|BAM_PLF_GLF)) bam_maqcns_prepare(d->c);
 	if (d->format & BAM_PLF_GLF) {
 		glf3_header_t *h;
 		h = glf3_header_init();
@@ -300,7 +300,7 @@ int bam_pileup(int argc, char *argv[])
 		glf3_header_write(d->fp, h);
 		glf3_header_destroy(h);
 	}
-	if (d->fai == 0)
+	if (d->fai == 0 && (d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)))
 		fprintf(stderr, "[bam_pileup] indels will not be called when -f is absent.\n");
 	if (fn_list) { // the input is SAM
 		tamFile fp;
@@ -322,6 +322,10 @@ int bam_pileup(int argc, char *argv[])
 		bamFile fp;
 		fp = (strcmp(argv[optind], "-") == 0)? bam_dopen(fileno(stdin), "r") : bam_open(argv[optind], "r");
 		d->h = bam_header_read(fp);
+		if (d->h == 0) {
+			fprintf(stderr, "[bam_pileup] fail to read the BAM header. Abort!\n");
+			return 1;
+		}
 		if (fn_pos) d->hash = load_pos(fn_pos, d->h);
 		bam_pileup_file(fp, d->mask, pileup_func, d);
 		bam_close(fp);
