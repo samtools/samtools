@@ -1,4 +1,37 @@
 ------------------------------------------------------------------------
+r221 | lh3lh3 | 2009-04-15 13:32:14 +0100 (Wed, 15 Apr 2009) | 2 lines
+Changed paths:
+   A /trunk/samtools/misc/blast2sam.pl
+
+convert NCBI-BLASTN to SAM
+
+------------------------------------------------------------------------
+r220 | lh3lh3 | 2009-04-15 13:18:19 +0100 (Wed, 15 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_lpileup.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-27
+ * fixed a small memory leak in tview
+
+------------------------------------------------------------------------
+r219 | lh3lh3 | 2009-04-15 13:00:08 +0100 (Wed, 15 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_rmdup.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-26
+ * fixed a bug in rmdup when there are unmapped reads
+
+------------------------------------------------------------------------
+r218 | lh3lh3 | 2009-04-14 22:28:58 +0100 (Tue, 14 Apr 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+
+proposed NEWS for the new release (have not yet)
+
+------------------------------------------------------------------------
 r216 | lh3lh3 | 2009-04-14 22:10:46 +0100 (Tue, 14 Apr 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
