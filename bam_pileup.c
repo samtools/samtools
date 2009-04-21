@@ -169,7 +169,7 @@ int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 			abort();
 		}
 		buf->max_tid = b->core.tid; buf->max_pos = buf->tail->beg;
-		if (buf->tail->end > buf->pos) {
+		if (buf->tail->end > buf->pos || buf->tail->b.core.tid > buf->tid) {
 			buf->tail->next = mp_alloc(buf->mp);
 			buf->tail = buf->tail->next;
 		}
