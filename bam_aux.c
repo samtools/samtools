@@ -1,8 +1,26 @@
 #include <ctype.h>
 #include "bam.h"
 #include "khash.h"
-KHASH_MAP_INIT_INT(aux, uint8_t*)
 KHASH_MAP_INIT_STR(s, int)
+
+uint8_t *bam_aux_get(bam1_t *b, const char tag[2])
+{
+	uint8_t *s;
+	int y = tag[0]<<8 | tag[1];
+	s = bam1_aux(b);
+	while (s < b->data + b->data_len) {
+		int type, x = (int)s[0]<<8 | s[1];
+		s += 2;
+		if (x == y) return s;
+		type = toupper(*s); ++s;
+		if (type == 'C') ++s;
+		else if (type == 'S') s += 2;
+		else if (type == 'I' || type == 'F') s += 4;
+		else if (type == 'D') s += 8;
+		else if (type == 'Z' || type == 'H') { while (*s) putchar(*s++); ++s; }
+	}
+	return 0;
+}
 
 void bam_init_header_hash(bam_header_t *header)
 {
@@ -71,90 +89,51 @@ void bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *b
 	free(s);
 }
 
-void bam_aux_init(bam1_t *b)
-{
-	khash_t(aux) *h;
-	uint8_t *s;
-	if (b->hash == 0) {
-		h = kh_init(aux);
-		b->hash = h;
-	} else {
-		h = (khash_t(aux)*)b->hash;
-		kh_clear(aux, h);
-	}
-	s = bam1_aux(b);
-	while (s < b->data + b->data_len) {
-		uint32_t x = (uint32_t)s[0]<<8 | s[1];
-		int ret, type;
-		khint_t k;
-		s += 2; type = toupper(*s); ++s;
-		k = kh_put(aux, h, x, &ret);
-		kh_value(h, k) = s;
-		if (type == 'C') ++s;
-		else if (type == 'S') s += 2;
-		else if (type == 'I') s += 4;
-		else if (type == 'F') s += 4;
-		else if (type == 'Z') { while (*s) putchar(*s++); ++s; }
-	}
-}
-void bam_aux_destroy(bam1_t *b)
-{
-	khash_t(aux) *h = (khash_t(aux)*)b->hash;
-	kh_destroy(aux, h);
-	b->hash = 0;
-}
-static uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2])
-{
-	uint32_t x = (uint32_t)tag[0]<<8 | tag[1];
-	khint_t k;
-	khash_t(aux) *h;
-	if (b->hash == 0) bam_aux_init(b);
-	h = (khash_t(aux)*)b->hash;
-	k = kh_get(aux, h, x);
-	if (k == kh_end(h)) return 0;
-	return kh_value(h, k);
-}
-int32_t bam_aux_geti(bam1_t *b, const char tag[2], int *err)
+int32_t bam_aux2i(const uint8_t *s)
 {
 	int type;
-	uint8_t *s = bam_aux_get_core(b, tag);
-	*err = 0;
-	if (s == 0) { *err = -1; return 0; }
+	if (s == 0) return 0;
 	type = *s++;
 	if (type == 'c') return (int32_t)*(int8_t*)s;
 	else if (type == 'C') return (int32_t)*(uint8_t*)s;
 	else if (type == 's') return (int32_t)*(int16_t*)s;
 	else if (type == 'S') return (int32_t)*(uint16_t*)s;
 	else if (type == 'i' || type == 'I') return *(int32_t*)s;
-	else { *err = -2; return 0; }
+	else return 0;
 }
-float bam_aux_getf(bam1_t *b, const char tag[2], int *err)
+
+float bam_aux2f(const uint8_t *s)
 {
 	int type;
-	uint8_t *s = bam_aux_get_core(b, tag);
-	*err = 0;
 	type = *s++;
-	if (s == 0) { *err = -1; return 0; }
+	if (s == 0) return 0.0;
 	if (type == 'f') return *(float*)s;
-	else { *err = -2; return 0; }
+	else return 0.0;
 }
-char bam_aux_getc(bam1_t *b, const char tag[2], int *err)
+
+double bam_aux2d(const uint8_t *s)
 {
 	int type;
-	uint8_t *s = bam_aux_get_core(b, tag);
-	*err = 0;
 	type = *s++;
-	if (s == 0) { *err = -1; return 0; }
-	if (type == 'c') return *(char*)s;
-	else { *err = -2; return 0; }
+	if (s == 0) return 0.0;
+	if (type == 'd') return *(double*)s;
+	else return 0.0;
 }
-char *bam_aux_getZH(bam1_t *b, const char tag[2], int *err)
+
+char bam_aux2A(const uint8_t *s)
 {
 	int type;
-	uint8_t *s = bam_aux_get_core(b, tag);
-	*err = 0;
 	type = *s++;
-	if (s == 0) { *err = -1; return 0; }
+	if (s == 0) return 0;
+	if (type == 'A') return *(char*)s;
+	else return 0;
+}
+
+char *bam_aux2Z(const uint8_t *s)
+{
+	int type;
+	type = *s++;
+	if (s == 0) return 0;
 	if (type == 'Z' || type == 'H') return (char*)s;
-	else { *err = -2; return 0; }
+	else return 0;
 }

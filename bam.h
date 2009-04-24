@@ -401,8 +401,8 @@ extern "C" {
 	  @abstract  Free the memory allocated for an alignment.
 	  @param  b  pointer to an alignment
 	 */
-#define bam_destroy1(b) do {											\
-		if ((b)->hash) bam_aux_destroy(b); free((b)->data); free(b);	\
+#define bam_destroy1(b) do {						\
+		if ((b)->hash) free((b)->data); free(b);	\
 	} while (0)
 
 	/*!
@@ -600,11 +600,12 @@ extern "C" {
 	 */
 	void bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
 
-	int32_t bam_aux_geti(bam1_t *b, const char tag[2], int *err);
-	float bam_aux_getf(bam1_t *b, const char tag[2], int *err);
-	char bam_aux_getc(bam1_t *b, const char tag[2], int *err);
-	char *bam_aux_getZH(bam1_t *b, const char tag[2], int *err);
-	void bam_aux_destroy(bam1_t *b);
+	uint8_t *bam_aux_get(bam1_t *b, const char tag[2]);
+	int32_t bam_aux2i(const uint8_t *s);
+	float bam_aux2f(const uint8_t *s);
+	double bam_aux2d(const uint8_t *s);
+	char bam_aux2A(const uint8_t *s);
+	char *bam_aux2Z(const uint8_t *s);
 
 	/*!  
 	  @abstract Calculate the rightmost coordinate of an alignment on the
