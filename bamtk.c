@@ -3,7 +3,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.3-2"
+#define PACKAGE_VERSION "0.1.3-3"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -15,6 +15,7 @@ int bam_tview_main(int argc, char *argv[]);
 int bam_mating(int argc, char *argv[]);
 int bam_rmdup(int argc, char *argv[]);
 int bam_flagstat(int argc, char *argv[]);
+int bam_fillmd(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 int glf3_view_main(int argc, char *argv[]);
@@ -161,6 +162,7 @@ static int usage()
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
 	fprintf(stderr, "         glfview     print GLFv2 file\n");
 	fprintf(stderr, "         flagstat    simple stats\n");
+	fprintf(stderr, "         fillmd      fill the MD tag and change identical base to =\n");
 	fprintf(stderr, "\n");
 	return 1;
 }
@@ -180,6 +182,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "glfview") == 0) return glf3_view_main(argc-1, argv+1);
 	else if (strcmp(argv[1], "flagstat") == 0) return bam_flagstat(argc-1, argv+1);
 	else if (strcmp(argv[1], "tagview") == 0) return bam_tagview(argc-1, argv+1);
+	else if (strcmp(argv[1], "fillmd") == 0) return bam_fillmd(argc-1, argv+1);
 #ifndef _NO_CURSES
 	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif

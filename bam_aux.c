@@ -3,6 +3,21 @@
 #include "khash.h"
 KHASH_MAP_INIT_STR(s, int)
 
+void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data)
+{
+	int ori_len = b->data_len;
+	b->data_len += 3 + len;
+	b->l_aux += 3 + len;
+	if (b->m_data < b->data_len) {
+		b->m_data = b->data_len;
+		kroundup32(b->m_data);
+		b->data = (uint8_t*)realloc(b->data, b->m_data);
+	}
+	b->data[ori_len] = tag[0]; b->data[ori_len + 1] = tag[1];
+	b->data[ori_len + 2] = type;
+	memcpy(b->data + ori_len + 3, data, len);
+}
+
 uint8_t *bam_aux_get(bam1_t *b, const char tag[2])
 {
 	uint8_t *s;

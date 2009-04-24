@@ -195,7 +195,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		if (p->is_head) printf("^%c", p->b->core.qual > 93? 126 : p->b->core.qual + 33);
 		if (!p->is_del) {
 			int c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
-			if (toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+			if (c == '=' || toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
 			else c = bam1_strand(p->b)? tolower(c) : toupper(c);
 			putchar(c);
 			if (p->indel > 0) {
