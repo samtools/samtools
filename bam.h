@@ -179,7 +179,6 @@ typedef struct {
   @field  data_len   current length of bam1_t::data
   @field  m_data     maximum length of bam1_t::data
   @field  data       all variable-length data, concatenated; structure: cigar-qname-seq-qual-aux
-  @field  hash       hash table for fast retrieval of tag-value pairs; private
 
   @discussion Notes:
  
@@ -191,7 +190,6 @@ typedef struct {
 	bam1_core_t core;
 	int l_aux, data_len, m_data;
 	uint8_t *data;
-	void *hash;
 } bam1_t;
 
 #define bam1_strand(b) (((b)->core.flag&BAM_FREVERSE) != 0)
@@ -401,8 +399,8 @@ extern "C" {
 	  @abstract  Free the memory allocated for an alignment.
 	  @param  b  pointer to an alignment
 	 */
-#define bam_destroy1(b) do {						\
-		if ((b)->hash) free((b)->data); free(b);	\
+#define bam_destroy1(b) do {		\
+		free((b)->data); free(b);	\
 	} while (0)
 
 	/*!

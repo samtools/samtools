@@ -1,4 +1,6 @@
 #include <unistd.h>
+#include <string.h>
+#include <ctype.h>
 #include "faidx.h"
 #include "bam.h"
 #include "kstring.h"
@@ -8,13 +10,14 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 	uint8_t *seq = bam1_seq(b);
 	uint32_t *cigar = bam1_cigar(b);
 	bam1_core_t *c = &b->core;
-	int i, x, y, u = 0, has_md = 0;
+	int i, x, y, u = 0;
 	kstring_t *str;
+	uint8_t *old_md;
 
-	if (bam_aux_get(b, "MD")) has_md = 1;
-	if (has_md == 1 && !is_equal) return; // no need to add MD
-	str = (kstring_t*)calloc(1, sizeof(kstring_t));
+	old_md = bam_aux_get(b, "MD");
 	if (c->flag & BAM_FUNMAP) return;
+	if (old_md && !is_equal) return; // no need to add MD
+	str = (kstring_t*)calloc(1, sizeof(kstring_t));
 	for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 		int j, l = cigar[i]>>4, op = cigar[i]&0xf;
 		if (op == BAM_CMATCH) {
@@ -40,6 +43,7 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 				if (ref[x+j] == 0) break;
 				kputc(ref[x+j], str);
 			}
+			u = 0;
 			if (j < l) break;
 			x += l;
 		} else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) {
@@ -49,7 +53,18 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 		}
 	}
 	ksprintf(str, "%d", u);
-	if (!has_md) bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+	if (!old_md) bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+	else {
+		int is_diff = 0;
+		if (strlen((char*)old_md+1) == str->l) {
+			for (i = 0; i < str->l; ++i)
+				if (toupper(old_md[i+1]) != toupper(str->s[i]))
+					break;
+			if (i < str->l) is_diff = 1;
+		} else is_diff = 1;
+		if (is_diff)
+			fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' != '%s'\n", bam1_qname(b), old_md+1, str->s);
+	}
 	free(str->s); free(str);
 }
 
@@ -91,6 +106,7 @@ int bam_fillmd(int argc, char *argv[])
 	}
 	bam_destroy1(b);
 
+	free(ref);
 	fai_destroy(fai);
 	bam_header_destroy(header);
 	bam_close(fp); bam_close(fpout);

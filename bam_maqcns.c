@@ -142,13 +142,14 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 	}
 	for (i = n = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
-		uint32_t q, x = 0;
+		uint32_t q, x = 0, qq;
 		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue;
 		q = (uint32_t)bam1_qual(p->b)[p->qpos];
 		x |= (uint32_t)bam1_strand(p->b) << 18 | q << 8 | p->b->core.qual;
 		if (p->b->core.qual < q) q = p->b->core.qual;
 		x |= q << 24;
-		q = bam_nt16_nt4_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
+		qq = bam1_seqi(bam1_seq(p->b), p->qpos);
+		q = bam_nt16_nt4_table[qq? qq : ref_base];
 		if (!p->is_del && q < 4) x |= 1 << 21 | q << 16;
 		bm->aux->info[n++] = x;
 	}
