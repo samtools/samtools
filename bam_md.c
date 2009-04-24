@@ -81,8 +81,11 @@ int bam_fillmd(int argc, char *argv[])
 
 	b = bam_init1();
 	while ((ret = bam_read1(fp, b)) >= 0) {
-		if (tid != b->core.tid)
+		if (tid != b->core.tid) {
+			free(ref);
 			ref = fai_fetch(fai, header->target_name[b->core.tid], &len);
+			tid = b->core.tid;
+		}
 		bam_fillmd1(b, ref, is_equal);
 		bam_write1(fpout, b);
 	}
