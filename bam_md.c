@@ -70,7 +70,7 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 
 int bam_fillmd(int argc, char *argv[])
 {
-	int c, is_equal = 0, tid = -1, ret, len;
+	int c, is_equal = 0, tid = -2, ret, len;
 	bamFile fp, fpout = 0;
 	bam_header_t *header;
 	faidx_t *fai;
@@ -96,12 +96,14 @@ int bam_fillmd(int argc, char *argv[])
 
 	b = bam_init1();
 	while ((ret = bam_read1(fp, b)) >= 0) {
-		if (tid != b->core.tid) {
-			free(ref);
-			ref = fai_fetch(fai, header->target_name[b->core.tid], &len);
-			tid = b->core.tid;
+		if (b->core.tid >= 0) {
+			if (tid != b->core.tid) {
+				free(ref);
+				ref = fai_fetch(fai, header->target_name[b->core.tid], &len);
+				tid = b->core.tid;
+			}
+			bam_fillmd1(b, ref, is_equal);
 		}
-		bam_fillmd1(b, ref, is_equal);
 		bam_write1(fpout, b);
 	}
 	bam_destroy1(b);

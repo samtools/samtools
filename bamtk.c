@@ -3,7 +3,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.3-5 (r243)"
+#define PACKAGE_VERSION "0.1.3-6 (r244)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -160,7 +160,7 @@ static int usage()
 	fprintf(stderr, "         index       index alignment\n");
 	fprintf(stderr, "         fixmate     fix mate information\n");
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
-	fprintf(stderr, "         glfview     print GLFv2 file\n");
+	fprintf(stderr, "         glfview     print GLFv3 file\n");
 	fprintf(stderr, "         flagstat    simple stats\n");
 	fprintf(stderr, "         fillmd      fill the MD tag and change identical base to =\n");
 	fprintf(stderr, "\n");
