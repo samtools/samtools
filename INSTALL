@@ -1,7 +1,8 @@
 Compiling samtools requires the zlib library <http://www.zlib.net/>;
 compiling the alignment viewer further requires the GNU ncurses library
-<http://www.gnu.org/software/ncurses/>. The default Makefile builds the
-alignment viewer. If compilation fails due to errors in RAZF or the lack
-of ncurses, you can compile with `make -f Makefile.lite'. However, the
-alignment viewer will not be available; the FASTA indexer will not
-support indexing compressed FASTA, either.
+<http://www.gnu.org/software/ncurses/>.
+
+Please type `./configure; make' to compile samtools. If it fails, try
+`make -f Makefile.generic'. If the compilation still fails due to errors
+in RAZF or the lack of ncurses, try `make -f Makefile.lite' to disable
+the alignment viewer and the RAZF-enhanced FASTA indexer.
