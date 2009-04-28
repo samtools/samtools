@@ -11,9 +11,14 @@
 #define TV_MAX_GOTO  40
 #define TV_LOW_MAPQ  10
 
-#define TV_COLOR_MAPQ  0
-#define TV_COLOR_BASEQ 1
-#define TV_COLOR_NUCL  2
+#define TV_COLOR_MAPQ   0
+#define TV_COLOR_BASEQ  1
+#define TV_COLOR_NUCL   2
+#define TV_COLOR_COL    3
+#define TV_COLOR_COLQ   4
+
+#define TV_BASE_NUCL 0
+#define TV_BASE_COLOR_SPACE 1
 
 typedef struct {
 	int mrow, mcol;
@@ -27,7 +32,7 @@ typedef struct {
 	faidx_t *fai;
 	bam_maqcns_t *bmc;
 
-	int ccol, last_pos, row_shift, color_for, is_nucl, l_ref;
+	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins;
 	char *ref;
 } tview_t;
 
@@ -56,10 +61,12 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 	attron(attr);
 	mvaddch(2, tv->ccol, c);
 	attroff(attr);
-	// calculate maximum insert
-	for (i = 0; i < n; ++i) {
-		const bam_pileup1_t *p = pl + i;
-		if (p->indel > 0 && max_ins < p->indel) max_ins = p->indel;
+	if(tv->ins) {
+		// calculate maximum insert
+		for (i = 0; i < n; ++i) {
+			const bam_pileup1_t *p = pl + i;
+			if (p->indel > 0 && max_ins < p->indel) max_ins = p->indel;
+		}
 	}
 	// core loop
 	for (j = 0; j <= max_ins; ++j) {
@@ -68,21 +75,35 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 			int row = TV_MIN_ALNROW + p->level - tv->row_shift;
 			if (j == 0) {
 				if (!p->is_del) {
-					c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
-					if (!tv->is_nucl && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+					if (tv->base_for == TV_BASE_COLOR_SPACE && 
+							(c = bam_aux_getCSi(p->b, p->qpos))) {
+						c = bam_aux_getCSi(p->b, p->qpos);
+						// assume that if we found one color, we will be able to get the color error
+						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos)) c = bam1_strand(p->b)? ',' : '.';
+					}
+					else {
+						c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
+						if (tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+					}
 				} else c = '*';
 			} else { // padding
 				if (j > p->indel) c = '*';
 				else { // insertion
-					c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
-					if (j == 0 && !tv->is_nucl && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+					if (tv->base_for ==  TV_BASE_NUCL) {
+						c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
+						if (j == 0 && tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+					}
+					else {
+						c = bam_aux_getCSi(p->b, p->qpos + j);
+						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos + j)) c = bam1_strand(p->b)? ',' : '.';
+					}
 				}
 			}
 			if (row > TV_MIN_ALNROW && row < tv->mrow) {
 				int x;
 				attr = 0;
 				if (((p->b->core.flag&BAM_FPAIRED) && !(p->b->core.flag&BAM_FPROPER_PAIR))
-					|| (p->b->core.flag & BAM_FSECONDARY)) attr |= A_UNDERLINE;
+						|| (p->b->core.flag & BAM_FSECONDARY)) attr |= A_UNDERLINE;
 				if (tv->color_for == TV_COLOR_BASEQ) {
 					x = bam1_qual(p->b)[p->qpos]/10 + 1;
 					if (x > 4) x = 4;
@@ -93,6 +114,24 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 					attr |= COLOR_PAIR(x);
 				} else if (tv->color_for == TV_COLOR_NUCL) {
 					x = bam_nt16_nt4_table[bam1_seqi(bam1_seq(p->b), p->qpos)] + 5;
+					attr |= COLOR_PAIR(x);
+				} else if(tv->color_for == TV_COLOR_COL) {
+					x = 0;
+					switch(bam_aux_getCSi(p->b, p->qpos)) {
+						case '0': x = 0; break;
+						case '1': x = 1; break;
+						case '2': x = 2; break;
+						case '3': x = 3; break;
+						case '4': x = 4; break;
+						default: x = bam_nt16_nt4_table[bam1_seqi(bam1_seq(p->b), p->qpos)]; break;
+					}
+					x+=5;
+					attr |= COLOR_PAIR(x);
+				} else if(tv->color_for == TV_COLOR_COLQ) {
+					x = bam_aux_getCQi(p->b, p->qpos);
+					if(0 == x) x = bam1_qual(p->b)[p->qpos];
+					x = x/10 + 1;
+					if (x > 4) x = 4;
 					attr |= COLOR_PAIR(x);
 				}
 				attron(attr);
@@ -122,20 +161,21 @@ tview_t *tv_init(const char *fn, const char *fn_fa)
 	tv->lplbuf = bam_lplbuf_init(tv_pl_func, tv);
 	if (fn_fa) tv->fai = fai_load(fn_fa);
 	tv->bmc = bam_maqcns_init();
+	tv->ins = 1;
 	bam_maqcns_prepare(tv->bmc);
 
 	initscr();
 	keypad(stdscr, TRUE);
-    clear();
-    noecho();
-    cbreak();
+	clear();
+	noecho();
+	cbreak();
 #ifdef NCURSES_VERSION
 	getmaxyx(stdscr, tv->mrow, tv->mcol);
 #else
 	tv->mrow = 80; tv->mcol = 40;
 #endif
 	tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
-	tv->whelp = newwin(22,40, 5, 5);
+	tv->whelp = newwin(27, 40, 5, 5);
 	tv->color_for = TV_COLOR_MAPQ;
 	start_color();
 	init_pair(1, COLOR_BLUE, COLOR_BLACK);
@@ -200,8 +240,8 @@ static void tv_win_goto(tview_t *tv, int *tid, int *pos)
 	char str[256];
 	int i, l = 0;
 	wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
-    mvwprintw(tv->wgoto, 1, 2, "Goto: ");
-    for (;;) {
+	mvwprintw(tv->wgoto, 1, 2, "Goto: ");
+	for (;;) {
 		int c = wgetch(tv->wgoto);
 		wrefresh(tv->wgoto);
 		if (c == KEY_BACKSPACE || c == '\010' || c == '\177') {
@@ -220,35 +260,40 @@ static void tv_win_goto(tview_t *tv, int *tid, int *pos)
 		str[l] = '\0';
 		for (i = 0; i < TV_MAX_GOTO; ++i) mvwaddch(tv->wgoto, 1, 8 + i, ' ');
 		mvwprintw(tv->wgoto, 1, 8, "%s", str);
-    }
+	}
 }
 
 static void tv_win_help(tview_t *tv) {
-    int r = 1;
+	int r = 1;
 	WINDOW *win = tv->whelp;
-    wborder(win, '|', '|', '-', '-', '+', '+', '+', '+');
-    mvwprintw(win, r++, 2, "        -=-    Help    -=- ");
-    r++;
-    mvwprintw(win, r++, 2, "?          This window");
-    mvwprintw(win, r++, 2, "Arrows     Small scroll movement");
-    mvwprintw(win, r++, 2, "h,j,k,l    Small scroll movement");
-    mvwprintw(win, r++, 2, "H,J,K,L    Large scroll movement");
-    mvwprintw(win, r++, 2, "ctrl-H     Scroll 1k left");
-    mvwprintw(win, r++, 2, "ctrl-L     Scroll 1k right");
-    mvwprintw(win, r++, 2, "space      Scroll one screen");
-    mvwprintw(win, r++, 2, "backspace  Scroll back one screen");
-    mvwprintw(win, r++, 2, "g          Go to specific location");
-    mvwprintw(win, r++, 2, "b          Color for base quality");
-    mvwprintw(win, r++, 2, "m          Color for mapping qual");
-    mvwprintw(win, r++, 2, "n          Color for nucleotide");
-    mvwprintw(win, r++, 2, ".          Toggle on/off dot view");
-    mvwprintw(win, r++, 2, "q          Exit");
+	wborder(win, '|', '|', '-', '-', '+', '+', '+', '+');
+	mvwprintw(win, r++, 2, "        -=-    Help    -=- ");
+	r++;
+	mvwprintw(win, r++, 2, "?          This window");
+	mvwprintw(win, r++, 2, "Arrows     Small scroll movement");
+	mvwprintw(win, r++, 2, "h,j,k,l    Small scroll movement");
+	mvwprintw(win, r++, 2, "H,J,K,L    Large scroll movement");
+	mvwprintw(win, r++, 2, "ctrl-H     Scroll 1k left");
+	mvwprintw(win, r++, 2, "ctrl-L     Scroll 1k right");
+	mvwprintw(win, r++, 2, "space      Scroll one screen");
+	mvwprintw(win, r++, 2, "backspace  Scroll back one screen");
+	mvwprintw(win, r++, 2, "g          Go to specific location");
+	mvwprintw(win, r++, 2, "m          Color for mapping qual");
+	mvwprintw(win, r++, 2, "n          Color for nucleotide");
+	mvwprintw(win, r++, 2, "b          Color for base quality");
+	mvwprintw(win, r++, 2, "c          Color for cs color");
+	mvwprintw(win, r++, 2, "z          Color for cs qual");
+	mvwprintw(win, r++, 2, ".          Toggle on/off dot view");
+	mvwprintw(win, r++, 2, "N          Turn on nt view");
+	mvwprintw(win, r++, 2, "C          Turn on cs view");
+	mvwprintw(win, r++, 2, "i          Toggle on/off ins");
+	mvwprintw(win, r++, 2, "q          Exit");
 	r++;
 	mvwprintw(win, r++, 2, "Underline:      Secondary or orphan");
 	mvwprintw(win, r++, 2, "Blue:    0-9    Green: 10-19");
 	mvwprintw(win, r++, 2, "Yellow: 20-29   White: >=30");
-    wrefresh(win);
-    wgetch(win);
+	wrefresh(win);
+	wgetch(win);
 }
 
 void tv_loop(tview_t *tv)
@@ -259,35 +304,40 @@ void tv_loop(tview_t *tv)
 		int c = getch();
 		if(256 < c) {c = 1 + (c%256);} // Terminal was displaying ctrl-H as 263 via ssh from Mac OS X 10.5 computer 
 		switch (c) {
-		case '?': tv_win_help(tv); break;
-		case '\033':
-		case 'q': goto end_loop;
-		case 'g': tv_win_goto(tv, &tid, &pos); break;
-		case 'b': tv->color_for = TV_COLOR_BASEQ; break;
-		case 'm': tv->color_for = TV_COLOR_MAPQ; break;
-		case 'n': tv->color_for = TV_COLOR_NUCL; break;
-		case KEY_LEFT:
-		case 'h': --pos; break;
-		case KEY_RIGHT:
-		case 'l': ++pos; break;
-		case KEY_SLEFT:
-		case 'H': pos -= 20; break;
-		case KEY_SRIGHT:
-		case 'L': pos += 20; break;
-		case '.': tv->is_nucl = !tv->is_nucl; break;
-		case '\010': pos -= 1000; break;
-		case '\014': pos += 1000; break;
-		case ' ': pos += tv->mcol; break;
-		case KEY_UP:
-		case 'j': --tv->row_shift; break;
-		case KEY_DOWN:
-		case 'k': ++tv->row_shift; break;
-		case KEY_BACKSPACE:
-		case '\177': pos -= tv->mcol; break;
+			case '?': tv_win_help(tv); break;
+			case '\033':
+			case 'q': goto end_loop;
+			case 'g': tv_win_goto(tv, &tid, &pos); break;
+			case 'm': tv->color_for = TV_COLOR_MAPQ; break;
+			case 'b': tv->color_for = TV_COLOR_BASEQ; break;
+			case 'n': tv->color_for = TV_COLOR_NUCL; break;
+			case 'c': tv->color_for = TV_COLOR_COL; break;
+			case 'z': tv->color_for = TV_COLOR_COLQ; break;
+			case KEY_LEFT:
+			case 'h': --pos; break;
+			case KEY_RIGHT:
+			case 'l': ++pos; break;
+			case KEY_SLEFT:
+			case 'H': pos -= 20; break;
+			case KEY_SRIGHT:
+			case 'L': pos += 20; break;
+			case '.': tv->is_dot = !tv->is_dot; break;
+			case 'N': tv->base_for = TV_BASE_NUCL; break;
+			case 'C': tv->base_for = TV_BASE_COLOR_SPACE; break;
+			case 'i': tv->ins = !tv->ins; break;
+			case '\010': pos -= 1000; break;
+			case '\014': pos += 1000; break;
+			case ' ': pos += tv->mcol; break;
+			case KEY_UP:
+			case 'j': --tv->row_shift; break;
+			case KEY_DOWN:
+			case 'k': ++tv->row_shift; break;
+			case KEY_BACKSPACE:
+			case '\177': pos -= tv->mcol; break;
 #ifdef KEY_RESIZE
-		case KEY_RESIZE: getmaxyx(stdscr, tv->mrow, tv->mcol); break;
+			case KEY_RESIZE: getmaxyx(stdscr, tv->mrow, tv->mcol); break;
 #endif
-		default: continue;
+			default: continue;
 		}
 		if (pos < 0) pos = 0;
 		if (tv->row_shift < 0) tv->row_shift = 0;

@@ -1,4 +1,105 @@
 ------------------------------------------------------------------------
+r244 | lh3lh3 | 2009-04-25 11:49:40 +0100 (Sat, 25 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-6 (r244)
+ * fixed segfault for unmapped reads
+
+------------------------------------------------------------------------
+r243 | lh3lh3 | 2009-04-24 21:27:26 +0100 (Fri, 24 Apr 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-5 (r243)
+ * fixed a long existing bug which may cause memory leak
+ * check MD
+ * consensus calling now works with "=", but indel calling not
+
+------------------------------------------------------------------------
+r242 | lh3lh3 | 2009-04-24 20:44:46 +0100 (Fri, 24 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-4 (r242)
+ * fixed a memory leak
+
+------------------------------------------------------------------------
+r240 | lh3lh3 | 2009-04-24 16:40:18 +0100 (Fri, 24 Apr 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/Makefile.lite
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_aux.c
+   A /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-3 (r240)
+ * generate MD tag
+ * generate "=" bases
+ * the plain pileup now support "=" bases, but consensus calling and glfgen may fail
+
+------------------------------------------------------------------------
+r239 | lh3lh3 | 2009-04-24 12:08:20 +0100 (Fri, 24 Apr 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-2 (r239)
+ * fixed bugs in bam_aux.c (these functions nevered used by samtools)
+ * removed bam_aux_init()/bam_aux_destroy()
+ * added tagview for testing bam_aux
+
+------------------------------------------------------------------------
+r235 | lh3lh3 | 2009-04-21 23:17:39 +0100 (Tue, 21 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-1
+ * fixed a bug in pileup: the first read in a chromosome may not be printed
+
+------------------------------------------------------------------------
+r232 | lh3lh3 | 2009-04-16 15:25:43 +0100 (Thu, 16 Apr 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile.lite
+
+a missing file in Makefile.lite
+
+------------------------------------------------------------------------
+r227 | lh3lh3 | 2009-04-15 22:02:53 +0100 (Wed, 15 Apr 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bamtk.c
+
+Release samtools-0.1.3
+
+------------------------------------------------------------------------
+r223 | lh3lh3 | 2009-04-15 14:31:32 +0100 (Wed, 15 Apr 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.2-28
+ * make samtools more robust to weird input such as empty file
+
+------------------------------------------------------------------------
+r222 | lh3lh3 | 2009-04-15 14:05:33 +0100 (Wed, 15 Apr 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/samtools.1
+
+prepare for release 0.1.3
+
+------------------------------------------------------------------------
 r221 | lh3lh3 | 2009-04-15 13:32:14 +0100 (Wed, 15 Apr 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/misc/blast2sam.pl

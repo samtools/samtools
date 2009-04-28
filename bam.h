@@ -606,6 +606,35 @@ extern "C" {
 	char bam_aux2A(const uint8_t *s);
 	char *bam_aux2Z(const uint8_t *s);
 
+	/*!
+	 @abstract     Get the color encoding the previous and current base
+	 @param b      pointer to an alignment
+	 @param i      The i-th position, 0-based
+	 @return       color
+
+	 @discussion   Returns 0 no color information is found.
+	 */
+	char bam_aux_getCSi(bam1_t *b, int i);
+
+	/*!
+	 @abstract     Get the color quality of the color encoding the previous and current base
+	 @param b      pointer to an alignment
+	 @param i      The i-th position, 0-based
+	 @return       color quality
+
+	 @discussion   Returns 0 no color information is found.
+	 */
+	char bam_aux_getCQi(bam1_t *b, int i);
+
+	/*!
+	 @abstract     Get the color error profile at the give position    
+	 @param b      pointer to an alignment
+	 @return       the original color if the color was an error, '-' (dash) otherwise
+
+	 @discussion   Returns 0 no color information is found.
+	 */
+	char bam_aux_getCEi(bam1_t *b, int i);
+
 	/*!  
 	  @abstract Calculate the rightmost coordinate of an alignment on the
 	  reference genome.
