@@ -161,6 +161,7 @@ void bam_plbuf_destroy(bam_plbuf_t *buf)
 int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 {
 	if (b) { // fill buffer
+		if (b->core.tid < 0) return 0;
 		if (b->core.flag & buf->flag_mask) return 0;
 		bam_copy1(&buf->tail->b, b);
 		buf->tail->beg = b->core.pos; buf->tail->end = bam_calend(&b->core, bam1_cigar(b));
