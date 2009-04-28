@@ -8,7 +8,7 @@ AC_PROG_INSTALL
 AC_PROG_CC
 
 # set CFLAGS and CXXFLAGS
-user_CFLAGS="${CFLAGS} -D_IOLIB=2 -D_FILE_OFFSET_BITS=64"
+user_CFLAGS="${CFLAGS} -D_IOLIB=2 -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE"
 generic_CFLAGS="-Wall -L."
 
 AC_ARG_ENABLE(norazf, [  --disable-razf	  disable razf support],

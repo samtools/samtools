@@ -2,7 +2,7 @@ CC=			gcc
 CXX=		g++
 CFLAGS=		-g -Wall -O2 -m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
-DFLAGS=		#-D_FILE_OFFSET_BITS=64
+DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE
 OBJS=		
 PROG=		faidx md5sum-lite md5fa maq2sam-short maq2sam-long wgsim
 INCLUDES=	-I..
