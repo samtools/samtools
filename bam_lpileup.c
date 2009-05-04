@@ -102,7 +102,7 @@ static int tview_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl
 			} else tv->cur_level[i] = ++tv->max_level;
 		} else {
 			tv->cur_level[i] = tv->pre_level[l++];
-			if (p->qpos == p->b->core.l_qseq - 1) { // then return a free slot
+			if (p->is_tail) { // then return a free slot
 				tv->tail->level = tv->cur_level[i];
 				tv->tail->next = mp_alloc(tv->mp);
 				tv->tail = tv->tail->next;
@@ -150,6 +150,16 @@ static int tview_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl
 			tv->pre_level[l++] = tv->pre_level[i];
 	}
 	tv->n_pre = l;
+/*
+	fprintf(stderr, "%d\t", pos+1);
+	for (i = 0; i < n; ++i) {
+		const bam_pileup1_t *p = pl + i;
+		if (p->is_head) fprintf(stderr, "^");
+		if (p->is_tail) fprintf(stderr, "$");
+		fprintf(stderr, "%d,", p->level);
+	}
+	fprintf(stderr, "\n");
+*/
 	return 0;
 }
 
