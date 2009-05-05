@@ -263,7 +263,7 @@ int bam_pileup(int argc, char *argv[])
 		case 'r': d->c->het_rate = atof(optarg); break;
 		case 'c': d->format |= BAM_PLF_CNS; break;
 		case 'i': d->format |= BAM_PLF_INDEL_ONLY; break;
-		case 'm': d->mask = atoi(optarg); break;
+		case 'm': d->mask = strtol(optarg, 0, 0); break;
 		case 'g': d->format |= BAM_PLF_GLF; break;
 		case 'I': d->ido->q_indel = atoi(optarg); break;
 		case 'G': d->ido->r_indel = atof(optarg); break;
