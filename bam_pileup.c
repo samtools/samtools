@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include "bam.h"
+#include "sam.h"
 
 typedef struct __linkbuf_t {
 	bam1_t b;
@@ -204,21 +204,5 @@ int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 		} else ++buf->pos; // scan contiguously
 		if (buf->is_eof && buf->head->next == 0) break;
 	}
-	return 0;
-}
-
-int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data)
-{
-	bam_plbuf_t *buf;
-	int ret;
-	bam1_t *b;
-	b = (bam1_t*)calloc(1, sizeof(bam1_t));
-	buf = bam_plbuf_init(func, func_data);
-	bam_plbuf_set_mask(buf, mask);
-	while ((ret = bam_read1(fp, b)) >= 0)
-		bam_plbuf_push(b, buf);
-	bam_plbuf_push(0, buf);
-	bam_plbuf_destroy(buf);
-	free(b->data); free(b);
 	return 0;
 }

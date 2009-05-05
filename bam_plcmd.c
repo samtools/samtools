@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <ctype.h>
-#include "bam.h"
+#include "sam.h"
 #include "faidx.h"
 #include "bam_maqcns.h"
 #include "khash.h"
@@ -26,7 +26,7 @@ typedef struct {
 	int tid, len, last_pos;
 	int mask;
 	char *ref;
-	glfFile fp; // for glf output only
+	glfFile fp_glf; // for glf output only
 } pu_data_t;
 
 char **__bam_get_lines(const char *fn, int *_n);
@@ -103,9 +103,9 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 	if (d->fai && (int)tid != d->tid) {
 		if (d->ref) { // then write the end mark
 			g3->rtype = GLF3_RTYPE_END;
-			glf3_write1(d->fp, g3);
+			glf3_write1(d->fp_glf, g3);
 		}
-		glf3_ref_write(d->fp, d->h->target_name[tid], d->h->target_len[tid]); // write reference
+		glf3_ref_write(d->fp_glf, d->h->target_name[tid], d->h->target_len[tid]); // write reference
 		free(d->ref);
 		d->ref = fai_fetch(d->fai, d->h->target_name[tid], &d->len);
 		d->tid = tid;
@@ -117,7 +117,7 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 	g3->rtype = GLF3_RTYPE_SUB;
 	g3->offset = pos - d->last_pos;
 	d->last_pos = pos;
-	glf3_write1(d->fp, g3);
+	glf3_write1(d->fp_glf, g3);
 	if (proposed_indels)
 		r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
 	else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);
@@ -139,7 +139,7 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 		g3->max_len = (abs(r->indel1) > abs(r->indel2)? abs(r->indel1) : abs(r->indel2)) + 1;
 		g3->indel_seq[0] = strdup(r->s[0]+1);
 		g3->indel_seq[1] = strdup(r->s[1]+1);
-		glf3_write1(d->fp, g3);
+		glf3_write1(d->fp_glf, g3);
 		bam_maqindel_ret_destroy(r);
 	}
 	free(g);
@@ -291,54 +291,38 @@ int bam_pileup(int argc, char *argv[])
 		return 1;
 	}
 	if (fn_fa) d->fai = fai_load(fn_fa);
-	free(fn_fa);
-	if (d->format & (BAM_PLF_CNS|BAM_PLF_GLF)) bam_maqcns_prepare(d->c);
-	if (d->format & BAM_PLF_GLF) {
+	if (d->format & (BAM_PLF_CNS|BAM_PLF_GLF)) bam_maqcns_prepare(d->c); // consensus calling
+	if (d->format & BAM_PLF_GLF) { // for glf output
 		glf3_header_t *h;
 		h = glf3_header_init();
-		d->fp = bgzf_fdopen(fileno(stdout), "w");
-		glf3_header_write(d->fp, h);
+		d->fp_glf = bgzf_fdopen(fileno(stdout), "w");
+		glf3_header_write(d->fp_glf, h);
 		glf3_header_destroy(h);
 	}
 	if (d->fai == 0 && (d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)))
 		fprintf(stderr, "[bam_pileup] indels will not be called when -f is absent.\n");
-	if (fn_list) { // the input is SAM
-		tamFile fp;
-		bam1_t *b;
-		int ret;
-		bam_plbuf_t *buf = bam_plbuf_init(pileup_func, d);
-		bam_plbuf_set_mask(buf, d->mask);
-		d->h = sam_header_read2(fn_list);
-		if (fn_pos) d->hash = load_pos(fn_pos, d->h);
-		fp = sam_open(argv[optind]);
-		b = (bam1_t*)calloc(1, sizeof(bam1_t));
-		while ((ret = sam_read1(fp, d->h, b)) >= 0)
-			bam_plbuf_push(b, buf);
-		bam_plbuf_push(0, buf);
-		bam_plbuf_destroy(buf);
-		bam_destroy1(b);
-		sam_close(fp);
-	} else { // the input is BAM
-		bamFile fp;
-		fp = (strcmp(argv[optind], "-") == 0)? bam_dopen(fileno(stdin), "r") : bam_open(argv[optind], "r");
-		d->h = bam_header_read(fp);
-		if (d->h == 0) {
+	{
+		samfile_t *fp;
+		fp = fn_list? samopen(argv[optind], "r", fn_list) : samopen(argv[optind], "rb", 0);
+		if (fp->header == 0) {
 			fprintf(stderr, "[bam_pileup] fail to read the BAM header. Abort!\n");
 			return 1;
 		}
+		d->h = fp->header;
 		if (fn_pos) d->hash = load_pos(fn_pos, d->h);
-		bam_pileup_file(fp, d->mask, pileup_func, d);
-		bam_close(fp);
+		sampileup(fp, d->mask, pileup_func, d);
+		samclose(fp); // d->h will be destroyed here
 	}
-	if (d->format & BAM_PLF_GLF) bgzf_close(d->fp);
+
+	// free
+	if (d->format & BAM_PLF_GLF) bgzf_close(d->fp_glf);
 	if (fn_pos) { // free the hash table
 		khint_t k;
 		for (k = kh_begin(d->hash); k < kh_end(d->hash); ++k)
 			if (kh_exist(d->hash, k)) free(kh_val(d->hash, k));
 		kh_destroy(64, d->hash);
 	}
-	free(fn_pos); free(fn_list);
-	bam_header_destroy(d->h);
+	free(fn_pos); free(fn_list); free(fn_fa);
 	if (d->fai) fai_destroy(d->fai);
 	bam_maqcns_destroy(d->c);
 	free(d->ido); free(d->ref); free(d);

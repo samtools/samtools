@@ -512,17 +512,6 @@ extern "C" {
 	 */
 	int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf);
 
-	/*!
-	  @abstract         A more convenient interface to bam_plbuf_push()
-	  @param  fp        BAM file handler
-	  @param  func      user defined function
-	  @param  func_data user provided data
-
-	  @discussion The file position indicator must be placed right
-	  before the start of an alignment. See also bam_plbuf_push().
-	 */
-	int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data);
-
 	struct __bam_lplbuf_t;
 	typedef struct __bam_lplbuf_t bam_lplbuf_t;
 

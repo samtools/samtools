@@ -22,6 +22,7 @@ extern "C" {
 	void samclose(samfile_t *fp);
 	int samread(samfile_t *fp, bam1_t *b);
 	int samwrite(samfile_t *fp, const bam1_t *b);
+	int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data);
 
 #ifdef __cplusplus
 }
