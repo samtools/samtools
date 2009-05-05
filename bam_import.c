@@ -241,8 +241,12 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	{ // flag, tid, pos, qual
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->flag = atoi(str->s);
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->tid = bam_get_tid(header, str->s);
-		if (c->tid < 0 && strcmp(str->s, "*"))
-			fprintf(stderr, "[sam_read1] reference '%s' is recognized as '*'.\n", str->s);
+		if (c->tid < 0 && strcmp(str->s, "*")) {
+			if (header->n_targets == 0) {
+				fprintf(stderr, "[sam_read1] missing header? Abort!\n");
+				exit(1);
+			} else fprintf(stderr, "[sam_read1] reference '%s' is recognized as '*'.\n", str->s);
+		}
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->pos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->qual = isdigit(str->s[0])? atoi(str->s) : 0;
 		if (ret < 0) return -2;
