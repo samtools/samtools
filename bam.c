@@ -2,6 +2,7 @@
 #include <ctype.h>
 #include "bam.h"
 #include "bam_endian.h"
+#include "kstring.h"
 
 int bam_is_be = 0;
 
@@ -233,45 +234,54 @@ int bam_write1(bamFile fp, const bam1_t *b)
 	return bam_write1_core(fp, &b->core, b->data_len, b->data);
 }
 
-void bam_view1(const bam_header_t *header, const bam1_t *b)
+char *bam_format1(const bam_header_t *header, const bam1_t *b)
 {
 	uint8_t *s = bam1_seq(b), *t = bam1_qual(b);
 	int i;
 	const bam1_core_t *c = &b->core;
-	printf("%s\t%d\t", bam1_qname(b), c->flag);
-	if (c->tid < 0) printf("*\t");
-	else printf("%s\t", header->target_name[c->tid]);
-	printf("%d\t%d\t", c->pos + 1, c->qual);
-	if (c->n_cigar == 0) putchar('*');
+	kstring_t str;
+	str.l = str.m = 0; str.s = 0;
+
+	ksprintf(&str, "%s\t%d\t", bam1_qname(b), c->flag);
+	if (c->tid < 0) kputs("*\t", &str);
+	else ksprintf(&str, "%s\t", header->target_name[c->tid]);
+	ksprintf(&str, "%d\t%d\t", c->pos + 1, c->qual);
+	if (c->n_cigar == 0) kputc('*', &str);
 	else {
 		for (i = 0; i < c->n_cigar; ++i)
-			printf("%d%c", bam1_cigar(b)[i]>>BAM_CIGAR_SHIFT, "MIDNSHP"[bam1_cigar(b)[i]&BAM_CIGAR_MASK]);
+			ksprintf(&str, "%d%c", bam1_cigar(b)[i]>>BAM_CIGAR_SHIFT, "MIDNSHP"[bam1_cigar(b)[i]&BAM_CIGAR_MASK]);
 	}
-	putchar('\t');
-	if (c->mtid < 0) printf("*\t");
-	else if (c->mtid == c->tid) printf("=\t");
-	else printf("%s\t", header->target_name[c->mtid]);
-	printf("%d\t%d\t", c->mpos + 1, c->isize);
-	for (i = 0; i < c->l_qseq; ++i) putchar(bam_nt16_rev_table[bam1_seqi(s, i)]);
-	putchar('\t');
-	if (t[0] == 0xff) putchar('*');
-	else for (i = 0; i < c->l_qseq; ++i) putchar(t[i] + 33);
+	kputc('\t', &str);
+	if (c->mtid < 0) kputs("*\t", &str);
+	else if (c->mtid == c->tid) kputs("=\t", &str);
+	else ksprintf(&str, "%s\t", header->target_name[c->mtid]);
+	ksprintf(&str, "%d\t%d\t", c->mpos + 1, c->isize);
+	for (i = 0; i < c->l_qseq; ++i) kputc(bam_nt16_rev_table[bam1_seqi(s, i)], &str);
+	kputc('\t', &str);
+	if (t[0] == 0xff) kputc('*', &str);
+	else for (i = 0; i < c->l_qseq; ++i) kputc(t[i] + 33, &str);
 	s = bam1_aux(b);
 	while (s < b->data + b->data_len) {
 		uint8_t type, key[2];
 		key[0] = s[0]; key[1] = s[1];
 		s += 2; type = *s; ++s;
-		printf("\t%c%c:", key[0], key[1]);
-		if (type == 'A') { printf("A:%c", *s); ++s; }
-		else if (type == 'C') { printf("i:%u", *s); ++s; }
-		else if (type == 'c') { printf("i:%d", *s); ++s; }
-		else if (type == 'S') { printf("i:%u", *(uint16_t*)s); s += 2; }
-		else if (type == 's') { printf("i:%d", *(int16_t*)s); s += 2; }
-		else if (type == 'I') { printf("i:%u", *(uint32_t*)s); s += 4; }
-		else if (type == 'i') { printf("i:%d", *(int32_t*)s); s += 4; }
-		else if (type == 'f') { printf("f:%g", *(float*)s); s += 4; }
-		else if (type == 'd') { printf("d:%lg", *(double*)s); s += 8; }
-		else if (type == 'Z' || type == 'H') { printf("%c:", type); while (*s) putchar(*s++); ++s; }
+		ksprintf(&str, "\t%c%c:", key[0], key[1]);
+		if (type == 'A') { ksprintf(&str, "A:%c", *s); ++s; }
+		else if (type == 'C') { ksprintf(&str, "i:%u", *s); ++s; }
+		else if (type == 'c') { ksprintf(&str, "i:%d", *s); ++s; }
+		else if (type == 'S') { ksprintf(&str, "i:%u", *(uint16_t*)s); s += 2; }
+		else if (type == 's') { ksprintf(&str, "i:%d", *(int16_t*)s); s += 2; }
+		else if (type == 'I') { ksprintf(&str, "i:%u", *(uint32_t*)s); s += 4; }
+		else if (type == 'i') { ksprintf(&str, "i:%d", *(int32_t*)s); s += 4; }
+		else if (type == 'f') { ksprintf(&str, "f:%g", *(float*)s); s += 4; }
+		else if (type == 'd') { ksprintf(&str, "d:%lg", *(double*)s); s += 8; }
+		else if (type == 'Z' || type == 'H') { ksprintf(&str, "%c:", type); while (*s) kputc(*s++, &str); ++s; }
 	}
-	putchar('\n');
+	return str.s;
+}
+
+void bam_view1(const bam_header_t *header, const bam1_t *b)
+{
+	char *s = bam_format1(header, b);
+	printf("%s\n", s);
 }

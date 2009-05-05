@@ -146,22 +146,27 @@ static inline void append_text(bam_header_t *header, kstring_t *str)
 }
 int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 {
-	int ret, doff, doff0, dret;
+	int ret, doff, doff0, dret, z = 0;
 	bam1_core_t *c = &b->core;
 	kstring_t *str = fp->str;
 	kstream_t *ks = fp->ks;
 
 	while ((ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret)) >= 0 && str->s[0] == '@') { // skip header
+		z += str->l + 1;
 		str->s[str->l] = dret; // note that str->s is NOT null terminated!!
 		append_text(header, str);
 		if (dret != '\n') {
 			ret = ks_getuntil(fp->ks, '\n', str, &dret);
+			z += str->l + 1;
 			str->s[str->l] = '\n'; // NOT null terminated!!
 			append_text(header, str);
 		}
 		++fp->n_lines;
 	}
-	while (ret == 0) ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret); // special consideration for "\r\n"
+	while (ret == 0) { // special consideration for "\r\n" and empty lines
+		ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret);
+		if (ret >= 0) z += str->l + 1;
+	}
 	if (ret < 0) return -1;
 	++fp->n_lines;
 	doff = 0;
@@ -172,10 +177,10 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		doff += c->l_qname;
 	}
 	{ // flag, tid, pos, qual
-		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->flag = atoi(str->s);
-		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->tid = bam_get_tid(header, str->s);
-		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->pos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
-		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->qual = isdigit(str->s[0])? atoi(str->s) : 0;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->flag = atoi(str->s);
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->tid = bam_get_tid(header, str->s);
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->pos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->qual = isdigit(str->s[0])? atoi(str->s) : 0;
 		if (ret < 0) return -2;
 	}
 	{ // cigar
@@ -184,6 +189,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		long x;
 		c->n_cigar = 0;
 		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -3;
+		z += str->l + 1;
 		if (str->s[0] != '*') {
 			for (s = str->s; *s; ++s) {
 				if (isalpha(*s)) ++c->n_cigar;
@@ -210,15 +216,19 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		} else c->bin = bam_reg2bin(c->pos, c->pos + 1);
 	}
 	{ // mtid, mpos, isize
-		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->mtid = strcmp(str->s, "=")? bam_get_tid(header, str->s) : c->tid;
-		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->mpos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
-		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); c->isize = (str->s[0] == '-' || isdigit(str->s[0]))? atoi(str->s) : 0;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1;
+		c->mtid = strcmp(str->s, "=")? bam_get_tid(header, str->s) : c->tid;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1;
+		c->mpos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1;
+		c->isize = (str->s[0] == '-' || isdigit(str->s[0]))? atoi(str->s) : 0;
 		if (ret < 0) return -4;
 	}
 	{ // seq and qual
 		int i;
 		uint8_t *p;
 		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -5; // seq
+		z += str->l + 1;
 		c->l_qseq = strlen(str->s);
 		if (c->n_cigar && c->l_qseq != (int32_t)bam_cigar2qlen(c, bam1_cigar(b)))
 			parse_error(fp->n_lines, "CIGAR and sequence length are inconsistent");
@@ -227,6 +237,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		for (i = 0; i < c->l_qseq; ++i)
 			p[i/2] |= bam_nt16_table[(int)str->s[i]] << 4*(1-i%2);
 		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -6; // qual
+		z += str->l + 1;
 		if (strcmp(str->s, "*") && c->l_qseq != strlen(str->s))
 			parse_error(fp->n_lines, "sequence and quality are inconsistent");
 		p += (c->l_qseq+1)/2;
@@ -238,6 +249,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	if (dret != '\n' && dret != '\r') { // aux
 		while (ks_getuntil(ks, KS_SEP_TAB, str, &dret) >= 0) {
 			uint8_t *s, type, key[2];
+			z += str->l + 1;
 			if (str->l < 6 || str->s[2] != ':' || str->s[4] != ':')
 				parse_error(fp->n_lines, "missing colon in auxiliary data");
 			key[0] = str->s[0]; key[1] = str->s[1];
@@ -313,7 +325,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	}
 	b->l_aux = doff - doff0;
 	b->data_len = doff;
-	return 0;
+	return z;
 }
 
 tamFile sam_open(const char *fn)
@@ -335,42 +347,4 @@ void sam_close(tamFile fp)
 		free(fp->str->s); free(fp->str);
 		free(fp);
 	}
-}
-
-static void taf2baf_core(const char *fntaf, const char *fnbaf, bam_header_t *header)
-{
-	bamFile fpbaf;
-	bam1_t *b;
-	tamFile fp;
-	int ret;
-
-	b = (bam1_t*)calloc(1, sizeof(bam1_t));
-	fpbaf = (strcmp(fnbaf, "-") == 0)? bam_dopen(fileno(stdout), "w") : bam_open(fnbaf, "w");
-	fp = sam_open(fntaf);
-	ret = sam_read1(fp, header, b);
-	bam_header_write(fpbaf, header);
-	if (ret >= 0) {
-		bam_write1(fpbaf, b);
-		while (sam_read1(fp, header, b) >= 0) bam_write1(fpbaf, b);
-	}
-	bam_close(fpbaf);
-	free(b->data); free(b);
-	sam_close(fp);
-}
-
-int bam_taf2baf(int argc, char *argv[])
-{
-	int c;
-	bam_header_t *header;
-
-	while ((c = getopt(argc, argv, "")) >= 0) {
-	}
-	if (optind + 3 > argc) {
-		fprintf(stderr, "Usage: bamtk import <in.ref_list> <in.sam> <out.bam>\n");
-		return 1;
-	}
-	header = sam_header_read2(argv[optind]);
-	taf2baf_core(argv[optind+1], argv[optind+2], header);
-	bam_header_destroy(header);
-	return 0;
 }

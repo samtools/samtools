@@ -404,11 +404,12 @@ extern "C" {
 	} while (0)
 
 	/*!
-	  @abstract       Print an alignment to the standard output in TAM format.
+	  @abstract       Format a BAM record in the SAM format
 	  @param  header  pointer to the header structure
 	  @param  b       alignment to print
+	  @return         a pointer to the SAM string
 	 */
-	void bam_view1(const bam_header_t *header, const bam1_t *b);
+	char *bam_format1(const bam_header_t *header, const bam1_t *b);
 
 	/*!
 	  @abstract    Merge multiple sorted BAM.
