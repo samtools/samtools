@@ -315,6 +315,9 @@ extern "C" {
 	 */
 	bam_header_t *sam_header_read2(const char *fn_list);
 
+	bam_header_t *sam_header_read(tamFile fp);
+	int sam_header_parse(bam_header_t *h);
+
 #define sam_write1(header, b) bam_view1(header, b)
 
 	/*!

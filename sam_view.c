@@ -26,15 +26,16 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "bt:hHo:q:f:F:")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:")) >= 0) {
 		switch (c) {
+		case 'S': is_bamin = 0; break;
 		case 'b': strcat(out_mode, "b"); break;
 		case 't': fn_list = strdup(optarg); is_bamin = 0; break;
 		case 'h': is_header = 1; break;
 		case 'H': is_header_only = 1; break;
 		case 'o': fn_out = strdup(optarg); break;
 		case 'f': g_flag_on = strtol(optarg, 0, 0); break;
-		case 'F': g_flag_on = strtol(optarg, 0, 0); break;
+		case 'F': g_flag_off = strtol(optarg, 0, 0); break;
 		case 'q': g_min_mapQ = atoi(optarg); break;
 		default: return usage();
 		}
@@ -98,7 +99,8 @@ static int usage()
 	fprintf(stderr, "Options: -b       output BAM\n");
 	fprintf(stderr, "         -h       print header for the SAM output\n");
 	fprintf(stderr, "         -H       print header only (no alignments)\n");
-	fprintf(stderr, "         -t FILE  list of reference names and lengths, assuming SAM input [null]\n");
+	fprintf(stderr, "         -S       input is SAM\n");
+	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -o FILE  output file name [stdout]\n");
 	fprintf(stderr, "         -f INT   required flag, 0 for unset [0]\n");
 	fprintf(stderr, "         -F INT   filtering flag, 0 for unset [0]\n");

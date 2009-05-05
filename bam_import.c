@@ -42,6 +42,7 @@ struct __tamFile_t {
 	kstream_t *ks;
 	kstring_t *str;
 	uint64_t n_lines;
+	int is_first;
 };
 
 char **__bam_get_lines(const char *fn, int *_n) // for bam_plcmd.c only
@@ -144,6 +145,74 @@ static inline void append_text(bam_header_t *header, kstring_t *str)
 	header->l_text += str->l + 1;
 	header->text[header->l_text] = 0;
 }
+
+int sam_header_parse(bam_header_t *h)
+{
+	int i;
+	char *s, *p, *q, *r;
+
+	// free
+	free(h->target_len); free(h->target_name);
+	h->n_targets = 0; h->target_len = 0; h->target_name = 0;
+	if (h->l_text < 3) return 0;
+	// count number of @SQ
+	s = h->text;
+	while ((s = strstr(s, "@SQ")) != 0) {
+		++h->n_targets;
+		s += 3;
+	}
+	if (h->n_targets == 0) return 0;
+	h->target_len = (uint32_t*)calloc(h->n_targets, 4);
+	h->target_name = (char**)calloc(h->n_targets, sizeof(void*));
+	// parse @SQ lines
+	i = 0;
+	s = h->text;
+	while ((s = strstr(s, "@SQ")) != 0) {
+		s += 3;
+		r = s;
+		if ((p = strstr(s, "SN:")) != 0) {
+			q = p + 3;
+			for (p = q; *p && *p != '\t' && *p != '\r' && *p != '\n'; ++p);
+			h->target_name[i] = (char*)calloc(p - q + 1, 1);
+			strncpy(h->target_name[i], q, p - q);
+		} else goto header_err_ret;
+		if (r < p) r = p;
+		if ((p = strstr(s, "LN:")) != 0) h->target_len[i] = strtol(p + 3, 0, 10);
+		else goto header_err_ret;
+		if (r < p) r = p;
+		s = r + 3;
+		++i;
+	}
+	return h->n_targets;
+
+header_err_ret:
+	fprintf(stderr, "[bam_header_parse] missing SN or LN tag in @SQ lines.\n");
+	free(h->target_len); free(h->target_name);
+	h->n_targets = 0; h->target_len = 0; h->target_name = 0;
+	return 0;
+}
+
+bam_header_t *sam_header_read(tamFile fp)
+{
+	int ret, dret;
+	bam_header_t *header = bam_header_init();
+	kstring_t *str = fp->str;
+	while ((ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret)) >= 0 && str->s[0] == '@') { // skip header
+		str->s[str->l] = dret; // note that str->s is NOT null terminated!!
+		append_text(header, str);
+		if (dret != '\n') {
+			ret = ks_getuntil(fp->ks, '\n', str, &dret);
+			str->s[str->l] = '\n'; // NOT null terminated!!
+			append_text(header, str);
+		}
+		++fp->n_lines;
+	}
+	sam_header_parse(header);
+	bam_init_header_hash(header);
+	fp->is_first = 1;
+	return header;
+}
+
 int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 {
 	int ret, doff, doff0, dret, z = 0;
@@ -151,21 +220,14 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	kstring_t *str = fp->str;
 	kstream_t *ks = fp->ks;
 
-	while ((ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret)) >= 0 && str->s[0] == '@') { // skip header
-		z += str->l + 1;
-		str->s[str->l] = dret; // note that str->s is NOT null terminated!!
-		append_text(header, str);
-		if (dret != '\n') {
-			ret = ks_getuntil(fp->ks, '\n', str, &dret);
-			z += str->l + 1;
-			str->s[str->l] = '\n'; // NOT null terminated!!
-			append_text(header, str);
-		}
-		++fp->n_lines;
-	}
-	while (ret == 0) { // special consideration for "\r\n" and empty lines
-		ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret);
-		if (ret >= 0) z += str->l + 1;
+	if (fp->is_first) {
+		fp->is_first = 0;
+		ret = str->l;
+	} else {
+		do { // special consideration for empty lines
+			ret = ks_getuntil(fp->ks, KS_SEP_TAB, str, &dret);
+			if (ret >= 0) z += str->l + 1;
+		} while (ret == 0);
 	}
 	if (ret < 0) return -1;
 	++fp->n_lines;
@@ -179,6 +241,8 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	{ // flag, tid, pos, qual
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->flag = atoi(str->s);
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->tid = bam_get_tid(header, str->s);
+		if (c->tid < 0 && strcmp(str->s, "*"))
+			fprintf(stderr, "[sam_read1] reference '%s' is recognized as '*'.\n", str->s);
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->pos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->qual = isdigit(str->s[0])? atoi(str->s) : 0;
 		if (ret < 0) return -2;
@@ -335,7 +399,6 @@ tamFile sam_open(const char *fn)
 	fp->str = (kstring_t*)calloc(1, sizeof(kstring_t));
 	fp->fp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
 	fp->ks = ks_init(fp->fp);
-	fp->n_lines = 0;
 	return fp;
 }
 
