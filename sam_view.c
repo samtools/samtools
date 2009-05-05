@@ -6,13 +6,13 @@
 
 static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0;
 
+#define __g_skip_aln(b) (((b)->core.qual < g_min_mapQ) || ((b->core.flag & g_flag_on) != g_flag_on) \
+						 || (b->core.flag & g_flag_off))
+
 // callback function for bam_fetch()
 static int view_func(const bam1_t *b, void *data)
 {
-	if (b->core.qual < g_min_mapQ) return 0;
-	if (g_flag_on && (b->core.flag & g_flag_on) == 0) return 0;
-	if (b->core.flag & g_flag_off) return 0;
-	samwrite((samfile_t*)data, b);
+	if (!__g_skip_aln(b)) samwrite((samfile_t*)data, b);
 	return 0;
 }
 
@@ -60,7 +60,8 @@ int main_samview(int argc, char *argv[])
 		bam1_t *b = bam_init1();
 		int r;
 		while ((r = samread(in, b)) >= 0) // read one alignment from `in'
-			samwrite(out, b); // write the alignment to `out'
+			if (!__g_skip_aln(b))
+				samwrite(out, b); // write the alignment to `out'
 		if (r < -1) fprintf(stderr, "[main_samview] truncated file.\n");
 		bam_destroy1(b);
 	} else { // retrieve alignments in specified regions
