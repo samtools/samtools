@@ -304,8 +304,8 @@ int bam_pileup(int argc, char *argv[])
 	{
 		samfile_t *fp;
 		fp = fn_list? samopen(argv[optind], "r", fn_list) : samopen(argv[optind], "rb", 0);
-		if (fp->header == 0) {
-			fprintf(stderr, "[bam_pileup] fail to read the BAM header. Abort!\n");
+		if (fp == 0 || fp->header == 0) {
+			fprintf(stderr, "[bam_pileup] fail to read the header: non-exisiting file or wrong format.\n");
 			return 1;
 		}
 		d->h = fp->header;

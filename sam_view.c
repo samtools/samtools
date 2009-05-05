@@ -21,7 +21,7 @@ static int usage(void);
 int main_samview(int argc, char *argv[])
 {
 	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0;
-	samfile_t *in, *out;
+	samfile_t *in = 0, *out = 0;
 	char in_mode[4], out_mode[4], *fn_out = 0, *fn_list = 0;
 
 	/* parse command-line options */
@@ -45,8 +45,14 @@ int main_samview(int argc, char *argv[])
 	if (argc == optind) return usage();
 
 	// open file handlers
-	in = samopen(argv[optind], in_mode, fn_list);
-	out = samopen(fn_out? fn_out : "-", out_mode, in->header);
+	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
+		fprintf(stderr, "[main_samview] fail to open file for reading.\n");
+		goto view_end;
+	}
+	if ((out = samopen(fn_out? fn_out : "-", out_mode, in->header)) == 0) {
+		fprintf(stderr, "[main_samview] fail to open file for writing.\n");
+		goto view_end;
+	}
 	if (is_header_only) goto view_end; // no need to print alignments
 
 	if (argc == optind + 1) { // convert/print the entire file

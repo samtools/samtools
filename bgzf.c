@@ -86,7 +86,9 @@ BGZF*
 open_read(int fd)
 {
     FILE* file = fdopen(fd, "r");
-    BGZF* fp = malloc(sizeof(BGZF));
+    BGZF* fp;
+	if (file == 0) return 0;
+	fp = malloc(sizeof(BGZF));
     fp->file_descriptor = fd;
     fp->open_mode = 'r';
     fp->owned_file = 0;
@@ -107,7 +109,9 @@ BGZF*
 open_write(int fd)
 {
     FILE* file = fdopen(fd, "w");
-    BGZF* fp = malloc(sizeof(BGZF));
+    BGZF* fp;
+	if (file == 0) return 0;
+	fp = malloc(sizeof(BGZF));
     fp->file_descriptor = fd;
     fp->open_mode = 'w';
     fp->owned_file = 0;

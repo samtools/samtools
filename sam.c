@@ -79,9 +79,11 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 		if (mode[1] == 'b') { // binary
 			fp->type |= TYPE_BAM;
 			fp->x.bam = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
+			if (fp->x.bam == 0) goto open_err_ret;
 			fp->header = bam_header_read(fp->x.bam);
 		} else {
 			fp->x.tamr = sam_open(fn);
+			if (fp->x.tamr == 0) goto open_err_ret;
 			fp->header = sam_header_read2(fn_list);
 		}
 	} else if (mode[0] == 'w') {
@@ -89,12 +91,14 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 		if (mode[1] == 'b') { // binary
 			fp->type |= TYPE_BAM;
 			fp->x.bam = strcmp(fn, "-")? bam_open(fn, "w") : bam_dopen(fileno(stdout), "w");
+			if (fp->x.bam == 0) goto open_err_ret;
 			bam_header_write(fp->x.bam, fp->header);
 		} else {
 			int i;
 			bam_header_t *alt = 0;
 			alt = bam_header_parse(fp->header->text);
 			fp->x.tamw = strcmp(fn, "-")? fopen(fn, "w") : stdout;
+			if (fp->x.tamr == 0) goto open_err_ret;
 			if (alt) {
 				if (alt->n_targets != fp->header->n_targets)
 					fprintf(stderr, "[samopen] inconsistent number of target sequences.\n");
@@ -107,6 +111,10 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 		}
 	}
 	return fp;
+
+open_err_ret:
+	free(fp);
+	return 0;
 }
 
 void samclose(samfile_t *fp)
