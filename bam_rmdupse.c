@@ -63,12 +63,13 @@ static int fill_buf(samfile_t *in, buffer_t *buf)
 		for (i = 0; i < c->l_qseq; ++i) e->score += qual[i] + 1;
 		e->score = (double)e->score / sqrt(c->l_qseq + 1);
 		is_mapped = (c->tid < 0 || c->tid >= in->header->n_targets || (c->flag&BAM_FUNMAP))? 0 : 1;
+		if (!is_mapped) e->score = -1;
 		if (is_mapped && (c->flag & BAM_FREVERSE)) {
 			e->rpos = b->core.pos + bam_calend(&b->core, bam1_cigar(b));
 			if (min_rpos > e->rpos) min_rpos = e->rpos;
 		}
 		if (buf->n >= capacity) {
-			if (c->pos <= min_rpos) capacity += BLOCK_SIZE;
+			if (is_mapped && c->pos <= min_rpos) capacity += BLOCK_SIZE;
 			else break;
 		}
 	}
