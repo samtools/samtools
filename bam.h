@@ -190,6 +190,7 @@ typedef struct {
 	bam1_core_t core;
 	int l_aux, data_len, m_data;
 	uint8_t *data;
+	void *hash; // for backward compatibility. It is NEVER used.
 } bam1_t;
 
 #define bam1_strand(b) (((b)->core.flag&BAM_FREVERSE) != 0)
