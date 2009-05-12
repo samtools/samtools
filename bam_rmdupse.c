@@ -9,8 +9,7 @@ typedef struct {
 
 KHASH_MAP_INIT_INT(32, listelem_t)
 
-//#define BLOCK_SIZE 65536
-#define BLOCK_SIZE 100
+#define BLOCK_SIZE 65536
 
 typedef struct {
 	bam1_t *b;
