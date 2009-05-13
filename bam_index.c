@@ -268,7 +268,16 @@ bam_index_t *bam_index_load(const char *fn)
 
 	fnidx = (char*)calloc(strlen(fn) + 5, 1);
 	strcpy(fnidx, fn); strcat(fnidx, ".bai");
-	if ((fp = fopen(fnidx, "r")) == 0) {
+	fp = fopen(fnidx, "r");
+	if (fp == 0) { // try "{base}.bai"
+		char *s = strstr(fn, "bam");
+		if (s == fn + strlen(fn) - 3) {
+			strcpy(fnidx, fn);
+			fnidx[strlen(fn)-1] = 'i';
+			fp = fopen(fnidx, "r");
+		}
+	}
+	if (fp == 0) {
 		fprintf(stderr, "[bam_index_load] the alignment is not indexed. Please run `index' command first. Abort!\n");
 		exit(1);
 	}
@@ -327,7 +336,7 @@ bam_index_t *bam_index_load(const char *fn)
 	return idx;
 }
 
-int bam_index_build(const char *fn)
+int bam_index_build2(const char *fn, const char *_fnidx)
 {
 	char *fnidx;
 	FILE *fpidx;
@@ -336,9 +345,16 @@ int bam_index_build(const char *fn)
 	assert(fp = bam_open(fn, "r"));
 	idx = bam_index_core(fp);
 	bam_close(fp);
-	fnidx = (char*)calloc(strlen(fn) + 5, 1);
-	strcpy(fnidx, fn); strcat(fnidx, ".bai");
-	assert(fpidx = fopen(fnidx, "w"));
+	if (_fnidx == 0) {
+		fnidx = (char*)calloc(strlen(fn) + 5, 1);
+		strcpy(fnidx, fn); strcat(fnidx, ".bai");
+	} else fnidx = strdup(_fnidx);
+	fpidx = fopen(fnidx, "w");
+	if (fpidx == 0) {
+		fprintf(stderr, "[bam_index_build2] fail to create the index file.\n");
+		free(fnidx);
+		return 1;
+	}
 	bam_index_save(idx, fpidx);
 	bam_index_destroy(idx);
 	fclose(fpidx);
@@ -346,13 +362,19 @@ int bam_index_build(const char *fn)
 	return 0;
 }
 
+int bam_index_build(const char *fn)
+{
+	return bam_index_build2(fn, 0);
+}
+
 int bam_index(int argc, char *argv[])
 {
 	if (argc < 2) {
-		fprintf(stderr, "Usage: samtools index <in.bam>\n");
+		fprintf(stderr, "Usage: samtools index <in.bam> [<out.index>]\n");
 		return 1;
 	}
-	bam_index_build(argv[1]);
+	if (argc >= 3) bam_index_build2(argv[1], argv[2]);
+	else bam_index_build(argv[1]);
 	return 0;
 }
 
