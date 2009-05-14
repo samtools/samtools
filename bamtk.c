@@ -3,7 +3,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.3-20 (r276)"
+#define PACKAGE_VERSION "0.1.3-21 (r286)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);

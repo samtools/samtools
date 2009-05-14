@@ -592,6 +592,7 @@ extern "C" {
 	void bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
 
 	void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
+	uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]); // an alias of bam_aux_get()
 	uint8_t *bam_aux_get(bam1_t *b, const char tag[2]);
 	int32_t bam_aux2i(const uint8_t *s);
 	float bam_aux2f(const uint8_t *s);
