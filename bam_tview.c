@@ -154,6 +154,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 tview_t *tv_init(const char *fn, const char *fn_fa)
 {
 	tview_t *tv = (tview_t*)calloc(1, sizeof(tview_t));
+	tv->is_dot = 1;
 	tv->idx = bam_index_load(fn);
 	tv->fp = bam_open(fn, "r");
 	assert(tv->fp);
