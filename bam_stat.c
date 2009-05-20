@@ -1,3 +1,4 @@
+#include <unistd.h>
 #include "bam.h"
 
 typedef struct {
