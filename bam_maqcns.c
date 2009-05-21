@@ -408,7 +408,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				if (types[i] != 0) { // then try the other way to calculate the score
 					for (ps = s = 0, l = seg.qbeg; c->pos + l + types[i] < right && l < seg.qend; ++l) {
 						int cq = bam1_seqi(bam1_seq(p->b), l), ct;
-						ct = c->pos + l + types[i] >= left? ref2[c->pos + l + types[i] - left] : 15;
+						ct = c->pos + l - seg.qbeg + types[i] >= left? ref2[c->pos + l - seg.qbeg + types[i] - left] : 15;
 						if (cq < 15 && ct < 15) {
 							s += cq == ct? 1 : -mi->mm_penalty;
 							if (cq != ct) ps += bam1_qual(p->b)[l];
