@@ -1,4 +1,82 @@
 ------------------------------------------------------------------------
+r296 | lh3lh3 | 2009-05-21 12:53:14 +0100 (Thu, 21 May 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-24 (r296)
+ * another similar bug in the indel caller
+
+------------------------------------------------------------------------
+r295 | lh3lh3 | 2009-05-21 12:50:28 +0100 (Thu, 21 May 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-23 (r295)
+ * fixed a critical bug in the indel caller
+
+------------------------------------------------------------------------
+r294 | lh3lh3 | 2009-05-20 13:00:20 +0100 (Wed, 20 May 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_stat.c
+
+added a missing header file
+
+------------------------------------------------------------------------
+r293 | lh3lh3 | 2009-05-19 23:44:25 +0100 (Tue, 19 May 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-22 (r293)
+ * open tview in the dot-view mode by default
+
+------------------------------------------------------------------------
+r292 | lh3lh3 | 2009-05-18 21:01:23 +0100 (Mon, 18 May 2009) | 6 lines
+Changed paths:
+   M /trunk/samtools/samtools.1
+
+Added a note to the manual. Currently SAMtools used unaligned words in
+several places. Although this does not cause bus errors to me, it may
+affect portability. Please see the "Bus error" wiki page for more
+information. Also thank James Bonfields for pointing this out.
+
+
+------------------------------------------------------------------------
+r286 | lh3lh3 | 2009-05-14 15:23:13 +0100 (Thu, 14 May 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-21 (286)
+ * declare bam_aux_get_core() in bam.h
+
+------------------------------------------------------------------------
+r276 | lh3lh3 | 2009-05-13 10:07:55 +0100 (Wed, 13 May 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-20 (r276)
+ * remove bam1_t::hash again. We need to modify the Perl API anyway to
+   make it work with the latest SVN.
+ * As is suggested by Tim, scan "{base}.bai" and "{base}.bam.bai" for index
+
+------------------------------------------------------------------------
+r275 | lh3lh3 | 2009-05-12 21:14:10 +0100 (Tue, 12 May 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.3-19 (r275)
+ * a minor change to the bam1_t struct: added back "void *hash" for the
+   backward compatibility with Bio::DB::Sam
+
+------------------------------------------------------------------------
 r273 | lh3lh3 | 2009-05-12 14:28:39 +0100 (Tue, 12 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_rmdupse.c

@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#define PACKAGE_VERSION "0.1.1 (20090120)"
+#define PACKAGE_VERSION "0.1.2 (20090521)"
 
 //#define MAQ_LONGREADS
 
@@ -94,7 +94,7 @@ void maq2tam_core(gzFile fp, const char *rg)
 	m1 = &mm1;
 	mm = maqmap_read_header(fp);
 	while ((ret = gzread(fp, m1, sizeof(maqmap1_t))) == sizeof(maqmap1_t)) {
-		int j, flag = 0;
+		int j, flag = 0, se_mapq = m1->seq[MAX_READLEN-1];
 		if (m1->flag) flag |= 1;
 		if ((m1->flag&PAIRFLAG_PAIRED) || ((m1->flag&PAIRFLAG_SW) && m1->flag != 192)) flag |= 2;
 		if (m1->flag == 192) flag |= 4;
@@ -130,6 +130,7 @@ void maq2tam_core(gzFile fp, const char *rg)
 				if (c > 0) printf("%dM%dI%dM\t", m1->map_qual, c, m1->size - m1->map_qual - c);
 				else printf("%dM%dD%dM\t", m1->map_qual, -c, m1->size - m1->map_qual);
 			}
+			se_mapq = 0; // zero SE mapQ for reads aligned by SW
 		} else {
 			if (flag&4) printf("0\t*\t");
 			else printf("%d\t%dM\t", m1->map_qual, m1->size);
@@ -144,11 +145,11 @@ void maq2tam_core(gzFile fp, const char *rg)
 			putchar((m1->seq[j]&0x3f) + 33);
 		putchar('\t');
 		if (rg) printf("RG:Z:%s\t", rg);
-		if (flag&4) {
+		if (flag&4) { // unmapped
 			printf("MF:i:%d\n", m1->flag);
 		} else {
 			printf("MF:i:%d\t", m1->flag);
-			if (m1->flag) printf("AM:i:%d\t", m1->alt_qual);
+			if (m1->flag) printf("AM:i:%d\tSM:i:%d\t", m1->alt_qual, se_mapq);
 			printf("NM:i:%d\tUQ:i:%d\tH0:i:%d\tH1:i:%d\n", m1->info1&0xf, m1->info2, m1->c[0], m1->c[1]);
 		}
 	}

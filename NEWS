@@ -1,3 +1,44 @@
+Beta Release 0.1.4 (21 May, 2009)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes:
+
+ * Added the 'rmdupse' command: removing duplicates for SE reads.
+
+ * Fixed a critical bug in the indel caller: clipped alignments are not
+   processed correctly.
+
+ * Fixed a bug in the tview: gapped alignment may be incorrectly
+   displayed.
+
+ * Unified the interface to BAM and SAM I/O. This is done by
+   implementing a wrapper on top of the old APIs and therefore old APIs
+   are still valid. The new I/O APIs also recognize the @SQ header
+   lines.
+
+ * Generate the MD tag.
+
+ * Generate "=" bases. However, the indel caller will not work when "="
+   bases are present.
+
+ * Enhanced support of color-read display (by Nils Homer).
+
+ * Implemented the GNU building system. However, currently the building
+   system does not generate libbam.a. We will improve this later. For
+   the time being, `make -f Makefile.generic' is preferred.
+
+ * Fixed a minor bug in pileup: the first read in a chromosome may be
+   skipped.
+
+ * Fixed bugs in bam_aux.c. These bugs do not affect other components as
+   they were not used previously.
+
+ * Output the 'SM' tag from maq2sam.
+
+(0.1.4: 21 May 2009, r297)
+
+
+
 Beta Release 0.1.3 (15 April, 2009)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

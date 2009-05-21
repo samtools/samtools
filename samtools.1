@@ -1,10 +1,10 @@
-.TH samtools 1 "15 April 2009" "samtools-0.1.3" "Bioinformatics tools"
+.TH samtools 1 "21 May 2009" "samtools-0.1.4" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
 .SH SYNOPSIS
 .PP
-samtools import ref_list.txt aln.sam.gz aln.bam
+samtools view -bt ref_list.txt -o aln.bam aln.sam.gz
 .PP
 samtools sort aln.bam aln.sorted
 .PP
@@ -32,20 +32,9 @@ allows to retrieve reads in any regions swiftly.
 .B import
 samtools import <in.ref_list> <in.sam> <out.bam>
 
-Convert alignments in SAM format to BAM format. File
-.I <in.ref_list>
-is TAB-delimited. Each line must contain the reference name and the
-length of the reference, one line for each distinct reference;
-additional fields are ignored. This file also defines the order of the
-reference sequences in sorting. File
-.I <in.sam>
-can be optionally compressed by zlib or gzip. A single hyphen is
-recognized as stdin or stdout, depending on the context. If you run
-`samtools faidx <ref.fa>', the resultant index file
-.I <ref.fa>.fai
-can be used as this
-.I <in.ref_list>
-file.
+Since 0.1.4, this command is an alias of:
+
+samtools view -bt <in.ref_list> -o <out.bam> <in.sam>
 
 .TP
 .B sort
@@ -96,7 +85,8 @@ will be created.
 
 .TP
 .B view
-samtools view [-bhH] <in.bam> [region1 [...]]
+samtools view [-bhHS] [-t in.refList] [-o output] [-f reqFlag] [-F
+skipFlag] [-q minMapQ] <in.bam> [region1 [...]]
 
 Extract/print all or sub alignments in SAM or BAM format. If no region
 is specified, all the alignments will be printed; otherwise only
@@ -116,6 +106,35 @@ Include the header in the output.
 .TP
 .B -H
 Output the header only.
+.TP
+.B -S
+Input is in SAM. If @SQ header lines are absent, the
+.B `-t'
+option is required.
+.TP
+.B -t FILE
+This file is TAB-delimited. Each line must contain the reference name
+and the length of the reference, one line for each distinct reference;
+additional fields are ignored. This file also defines the order of the
+reference sequences in sorting. If you run `samtools faidx <ref.fa>',
+the resultant index file
+.I <ref.fa>.fai
+can be used as this
+.I <in.ref_list>
+file.
+.TP
+.B -o FILE
+Output file [stdout]
+.TP
+.B -f INT
+Only output alignments with all bits in INT present in the FLAG
+field. INT can be in hex in the format of /^0x[0-9A-F]+/ [0]
+.TP
+.B -F INT
+Skip alignments with bits present in INT [0]
+.TP
+.B -q INT
+Skip alignments with MAPQ smaller than INT [0]
 .RE
 
 .TP
@@ -150,7 +169,8 @@ on the reverse strand. A pattern `\\+[0-9]+[ACGTNacgtn]+' indicates
 there is an insertion between this reference position and the next
 reference position. The length of the insertion is given by the integer
 in the pattern, followed by the inserted sequence. Similarly, a pattern
-`-[0-9]+[ACGTNacgtn]+' represents a deletion from the reference. Also at
+`-[0-9]+[ACGTNacgtn]+' represents a deletion from the reference. The
+deleted bases will be presented as `*' in the following lines. Also at
 the read base column, a symbol `^' marks the start of a read segment
 which is a contiguous subsequence on the read separated by `N/S/H' CIGAR
 operations. The ASCII of the character following `^' minus 33 gives the
@@ -158,14 +178,14 @@ mapping quality. A symbol `$' marks the end of a read segment.
 
 If option
 .B -c
-is applied, the consensus base, consensus quality, SNP quality and
-maximum mapping quality of the reads covering the site will be inserted
-between the `reference base' and the `read bases' columns. An indel
-occupies an additional line. Each indel line consists of chromosome
-name, coordinate, a star, top two high-scoring ins/del sequences, the
-number of alignments containing the first indel allele, the number of
-alignments containing the second indel allele, and the number of
-alignments containing indels different from the top two alleles.
+is applied, the consensus base, consensus quality, SNP quality and RMS
+mapping quality of the reads covering the site will be inserted between
+the `reference base' and the `read bases' columns. An indel occupies an
+additional line. Each indel line consists of chromosome name,
+coordinate, a star, the genotype, consensus quality, SNP quality, RMS
+mapping quality, # covering reads, the first alllele, the second allele,
+# reads supporting the first allele, # reads supporting the second
+allele and # reads containing indels different from the top two alleles.
 
 .B OPTIONS:
 .RS
@@ -219,7 +239,7 @@ is in use.
 
 .TP
 .B -g
-Generate genotype likelihood in the binary GLFv2 format. This option
+Generate genotype likelihood in the binary GLFv3 format. This option
 suppresses -c, -i and -s.
 
 .TP
@@ -265,6 +285,32 @@ external coordinates, only retain the pair with highest mapping quality.
 This command
 .B ONLY
 works with FR orientation and requires ISIZE is correctly set.
+
+.RE
+
+.TP
+.B rmdupse
+samtools rmdupse <input.srt.bam> <out.bam>
+
+Remove potential duplicates for single-ended reads. This command will
+treat all reads as single-ended even if they are paired in fact.
+
+.RE
+
+.TP
+.B fillmd
+samtools fillmd [-e] <aln.bam> <ref.fasta>
+
+Generate the MD tag. If the MD tag is already present, this command will
+give a warning if the MD tag generated is different from the existing
+tag.
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -e
+Convert a the read base to = if it is identical to the aligned reference
+base. Indel caller does not support the = bases at the moment.
 
 .RE
 
