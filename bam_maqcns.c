@@ -397,7 +397,8 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				bam_segreg(pos, c, cigar, &seg);
 				for (ps = s = 0, l = seg.qbeg; c->pos + l < right && l < seg.qend; ++l) {
 					int cq = bam1_seqi(bam1_seq(p->b), l), ct;
-					ct = c->pos + l >= left? ref2[c->pos + l - left] : 15; // "<" will happen if reads are too long
+					// in the following line, "<" will happen if reads are too long
+					ct = c->pos + l - seg.qbeg >= left? ref2[c->pos + l - seg.qbeg - left] : 15;
 					if (cq < 15 && ct < 15) {
 						s += cq == ct? 1 : -mi->mm_penalty;
 						if (cq != ct) ps += bam1_qual(p->b)[l];
@@ -417,7 +418,8 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				if (score[i*n+j] < s) score[i*n+j] = s; // choose the higher of the two scores
 				if (pscore[i*n+j] > ps) pscore[i*n+j] = ps;
 				if (types[i] != 0) score[i*n+j] -= mi->indel_err;
-				//printf("%d, %d, %d, %d\n", i, types[i], j, score[i*n+j]);
+				//printf("%d, %d, %d, %d, %d, %d, %d\n", p->b->core.pos + 1, seg.qbeg, i, types[i], j,
+				//	   score[i*n+j], pscore[i*n+j]);
 			}
 		}
 		{ // get final result
@@ -471,7 +473,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 			ret->gl[0] = ret->gl[1] = 0;
 			for (j = 0; j < n; ++j) {
 				int s1 = pscore[max1_i*n + j], s2 = pscore[max2_i*n + j];
-				//printf("%d, %d\n", s1, s2);
+				//printf("%d, %d, %d, %d, %d\n", pl[j].b->core.pos+1, max1_i, max2_i, s1, s2);
 				if (s1 > s2) ret->gl[0] += s1 - s2 < mi->q_indel? s1 - s2 : mi->q_indel;
 				else ret->gl[1] += s2 - s1 < mi->q_indel? s2 - s1 : mi->q_indel;
 			}
