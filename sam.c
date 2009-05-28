@@ -67,10 +67,10 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 				sam_header_parse(alt);
 				alt->l_text = 0; alt->text = 0;
 				// check if there are @SQ lines in the header
+				fwrite(fp->header->text, 1, fp->header->l_text, fp->x.tamw);
 				if (alt->n_targets) { // then write the header text without dumping ->target_{name,len}
 					if (alt->n_targets != fp->header->n_targets)
 						fprintf(stderr, "[samopen] inconsistent number of target sequences.\n");
-					fwrite(fp->header->text, 1, fp->header->l_text, fp->x.tamw);
 				} else { // then dump ->target_{name,len}
 					for (i = 0; i < fp->header->n_targets; ++i)
 						fprintf(fp->x.tamw, "@SQ\tSN:%s\tLN:%d\n", fp->header->target_name[i], fp->header->target_len[i]);
