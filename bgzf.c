@@ -132,12 +132,14 @@ bgzf_open(const char* __restrict path, const char* __restrict mode)
 {
     BGZF* fp = NULL;
     if (strcasecmp(mode, "r") == 0) {
-	int oflag = O_RDONLY;
-	int fd = open(path, oflag);
+		int oflag = O_RDONLY;
+		int fd = open(path, oflag);
+		if (fd == -1) return 0;
         fp = open_read(fd);
     } else if (strcasecmp(mode, "w") == 0) {
-	int oflag = O_WRONLY | O_CREAT | O_TRUNC;
-	int fd = open(path, oflag, 0644);
+		int oflag = O_WRONLY | O_CREAT | O_TRUNC;
+		int fd = open(path, oflag, 0644);
+		if (fd == -1) return 0;
         fp = open_write(fd);
     }
     if (fp != NULL) {
@@ -149,6 +151,7 @@ bgzf_open(const char* __restrict path, const char* __restrict mode)
 BGZF*
 bgzf_fdopen(int fd, const char * __restrict mode)
 {
+	if (fd == -1) return 0;
     if (strcasecmp(mode, "r") == 0) {
         return open_read(fd);
     } else if (strcasecmp(mode, "w") == 0) {
