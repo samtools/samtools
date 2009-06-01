@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use Getopt::Std;
 
-my $version = '0.2.0';
+my $version = '0.2.1';
 &usage if (@ARGV < 1);
 
 my $command = shift(@ARGV);
@@ -82,7 +82,7 @@ Options: -D INT    maximum read depth [$opts{D}]
 
 sub snpFilter {
   my %opts = (f=>'', Q=>40, d=>3, w=>10, D=>0, N=>2, W=>10, q=>20, s=>50);
-  getopts('fs:w:q:Q:d:D:W:N:', \%opts);
+  getopts('f:s:w:q:Q:d:D:W:N:', \%opts);
   die(qq{
 Usage:   samtools.pl snpFilter [options] <cns2snp.snp>
 
