@@ -118,6 +118,7 @@ Options: -d INT        minimum depth to call a SNP [$opts{d}]
   while (<>) {
 	my @t = split;
 	next if ($t[2] eq '*' || $hash{$t[0],$t[1]});
+	next if ($t[2] eq $t[3]);
 	my $is_good = ($t[7] >= $opts{d} && $t[7] <= $opts{D} && $t[6] >= $opts{Q} && $t[5] >= $opts{q})? 1 : 0;
 	next unless ($is_good); # drop
 	if ($t[0] ne $last_chr) { # a different chr, print
