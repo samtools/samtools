@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <ctype.h>
@@ -15,6 +16,7 @@ KHASH_MAP_INIT_INT64(64, indel_list_t)
 #define BAM_PLF_CNS        0x02
 #define BAM_PLF_INDEL_ONLY 0x04
 #define BAM_PLF_GLF        0x08
+#define BAM_PLF_VAR_ONLY   0x10
 
 typedef struct {
 	bam_header_t *h;
@@ -151,48 +153,66 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 {
 	pu_data_t *d = (pu_data_t*)data;
 	bam_maqindel_ret_t *r = 0;
-	int i, j, rb, rms_mapq = -1, max_mapq = 0, *proposed_indels = 0;
-	uint32_t x;
+	int i, j, rb, rms_mapq = -1, *proposed_indels = 0;
+	uint64_t rms_aux;
+	uint32_t cns = 0;
 
+	// if GLF is required, suppress -c completely
 	if (d->format & BAM_PLF_GLF) return glt3_func(tid, pos, n, pu, data);
-	if (d->hash) { // only output a list of sites
+	// if d->hash is initialized, only output the sites in the hash table
+	if (d->hash) {
 		khint_t k = kh_get(64, d->hash, (uint64_t)tid<<32|pos);
 		if (k == kh_end(d->hash)) return 0;
 		proposed_indels = kh_val(d->hash, k);
 	}
-	if (d->fai && (int)tid != d->tid) { // then update d->ref
+	// update d->ref if necessary
+	if (d->fai && (int)tid != d->tid) {
 		free(d->ref);
 		d->ref = fai_fetch(d->fai, d->h->target_name[tid], &d->len);
 		d->tid = tid;
 	}
 	rb = (d->ref && (int)pos < d->len)? d->ref[pos] : 'N';
+	// when the indel-only mode is asked for, return if no reads mapped with indels
 	if (d->format & BAM_PLF_INDEL_ONLY) {
 		for (i = 0; i < n; ++i)
 			if (pu[i].indel != 0) break;
 		if (i == n) return 0;
 	}
-	printf("%s\t%d\t%c\t", d->h->target_name[tid], pos + 1, rb);
-	if (d->format & BAM_PLF_CNS) { // consensus
-		int ref_q, rb4 = bam_nt16_table[rb];
-		x = bam_maqcns_call(n, pu, d->c);
-		ref_q = 0;
-		if (rb4 != 15 && x>>28 != 15 && x>>28 != rb4) { // a SNP
-			ref_q = ((x>>24&0xf) == rb4)? x>>8&0xff : (x>>8&0xff) + (x&0xff);
-			if (ref_q > 255) ref_q = 255;
-		}
-		printf("%c\t%d\t%d\t%d\t", bam_nt16_rev_table[x>>28], x>>8&0xff, ref_q, x>>16&0xff);
-		rms_mapq = x>>16&0xff;
-	}
-	if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref) {
-		if (proposed_indels)
+	// call the consensus and indel
+	if (d->format & BAM_PLF_CNS) // call consensus
+		cns = bam_maqcns_call(n, pu, d->c);
+	if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref) { // call indels
+		if (proposed_indels) // the first element gives the size of the array
 			r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
 		else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);
 	}
-	// pileup strings
+	// when only variant sites are asked for, test if the site is a variant
+	if ((d->format & BAM_PLF_CNS) && (d->format & BAM_PLF_VAR_ONLY)) {
+		if (!(bam_nt16_table[rb] != 15 && cns>>28 != bam_nt16_table[rb])) { // not a SNP
+			if (!(r && (r->gt == 2 || strcmp(r->s[r->gt], "*")))) // not an indel
+				return 0;
+		}
+	}
+	// print the first 3 columns
+	printf("%s\t%d\t%c\t", d->h->target_name[tid], pos + 1, rb);
+	// print consensus information if required
+	if (d->format & BAM_PLF_CNS) {
+		int ref_q, rb4 = bam_nt16_table[rb];
+		ref_q = 0;
+		if (rb4 != 15 && cns>>28 != 15 && cns>>28 != rb4) { // a SNP
+			ref_q = ((cns>>24&0xf) == rb4)? cns>>8&0xff : (cns>>8&0xff) + (cns&0xff);
+			if (ref_q > 255) ref_q = 255;
+		}
+		rms_mapq = cns>>16&0xff;
+		printf("%c\t%d\t%d\t%d\t", bam_nt16_rev_table[cns>>28], cns>>8&0xff, ref_q, rms_mapq);
+	}
+	// print pileup sequences
 	printf("%d\t", n);
+	rms_aux = 0; // we need to recalculate rms_mapq when -c is not flagged on the command line
 	for (i = 0; i < n; ++i) {
 		const bam_pileup1_t *p = pu + i;
-		if (max_mapq < p->b->core.qual) max_mapq = p->b->core.qual;
+		int tmp = p->b->core.qual < d->c->cap_mapQ? p->b->core.qual : d->c->cap_mapQ;
+		rms_aux += tmp * tmp;
 		if (p->is_head) printf("^%c", p->b->core.qual > 93? 126 : p->b->core.qual + 33);
 		if (!p->is_del) {
 			int c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
@@ -215,13 +235,18 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		} else putchar('*');
 		if (p->is_tail) putchar('$');
 	}
+	// finalize rms_mapq
+	rms_aux = (uint64_t)(sqrt((double)rms_aux / n) + .499);
+	if (rms_mapq < 0) rms_mapq = rms_aux;
 	putchar('\t');
+	// print quality
 	for (i = 0; i < n; ++i) {
 		const bam_pileup1_t *p = pu + i;
 		int c = bam1_qual(p->b)[p->qpos] + 33;
 		if (c > 126) c = 126;
 		putchar(c);
 	}
+	// print mapping quality if -s is flagged on the command line
 	if (d->format & BAM_PLF_SIMPLE) {
 		putchar('\t');
 		for (i = 0; i < n; ++i) {
@@ -231,12 +256,14 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		}
 	}
 	putchar('\n');
-	if (r) { // then print indel line
+	// print the indel line if r has been calculated. This only happens if:
+	// a) -c or -i are flagged, AND b) the reference sequence is available
+	if (r) {
 		printf("%s\t%d\t*\t", d->h->target_name[tid], pos + 1);
 		if (r->gt < 2) printf("%s/%s\t", r->s[r->gt], r->s[r->gt]);
 		else printf("%s/%s\t", r->s[0], r->s[1]);
 		printf("%d\t%d\t", r->q_cns, r->q_ref);
-		printf("%d\t%d\t", rms_mapq >= 0? rms_mapq : max_mapq, n);
+		printf("%d\t%d\t", rms_mapq, n);
 		printf("%s\t%s\t", r->s[0], r->s[1]);
 		//printf("%d\t%d\t", r->gl[0], r->gl[1]);
 		printf("%d\t%d\t%d\n", r->cnt1, r->cnt2, r->cnt_anti);
@@ -253,7 +280,7 @@ int bam_pileup(int argc, char *argv[])
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
 	d->ido = bam_maqindel_opt_init();
-	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:")) >= 0) {
+	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:")) >= 0) {
 		switch (c) {
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
 		case 't': fn_list = strdup(optarg); break;
@@ -262,8 +289,10 @@ int bam_pileup(int argc, char *argv[])
 		case 'T': d->c->theta = atof(optarg); break;
 		case 'N': d->c->n_hap = atoi(optarg); break;
 		case 'r': d->c->het_rate = atof(optarg); break;
+		case 'M': d->c->cap_mapQ = atoi(optarg); break;
 		case 'c': d->format |= BAM_PLF_CNS; break;
 		case 'i': d->format |= BAM_PLF_INDEL_ONLY; break;
+		case 'v': d->format |= BAM_PLF_VAR_ONLY; break;
 		case 'm': d->mask = strtol(optarg, 0, 0); break;
 		case 'g': d->format |= BAM_PLF_GLF; break;
 		case 'I': d->ido->q_indel = atoi(optarg); break;
@@ -277,10 +306,12 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "Option: -s        simple (yet incomplete) pileup format\n");
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
 		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);
+		fprintf(stderr, "        -M INT    cap mapping quality at INT [%d]\n", d->c->cap_mapQ);
 		fprintf(stderr, "        -t FILE   list of reference sequences (assume the input is in SAM)\n");
 		fprintf(stderr, "        -l FILE   list of sites at which pileup is output\n");
 		fprintf(stderr, "        -f FILE   reference sequence in the FASTA format\n\n");
 		fprintf(stderr, "        -c        output the maq consensus sequence\n");
+		fprintf(stderr, "        -v        print variants only (for -c)\n");
 		fprintf(stderr, "        -g        output in the GLFv3 format (suppressing -c/-i/-s)\n");
 		fprintf(stderr, "        -T FLOAT  theta in maq consensus calling model (for -c/-g) [%f]\n", d->c->theta);
 		fprintf(stderr, "        -N INT    number of haplotypes in the sample (for -c/-g) [%d]\n", d->c->n_hap);

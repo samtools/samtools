@@ -43,7 +43,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 					fp->header = sam_header_read2((const char*)aux);
 				}
 				if (fp->header->n_targets == 0)
-					fprintf(stderr, "[samopen] empty header.\n");
+					fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
 			} else fprintf(stderr, "[samopen] SAM header is present: %d sequences.\n", fp->header->n_targets);
 		}
 	} else if (mode[0] == 'w') { // write

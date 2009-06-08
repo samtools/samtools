@@ -108,6 +108,7 @@ bam_maqcns_t *bam_maqcns_init()
 	bm->theta = 0.85;
 	bm->n_hap = 2;
 	bm->eta = 0.03;
+	bm->cap_mapQ = 60;
 	return bm;
 }
 
@@ -160,6 +161,7 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 	rms = 0;
 	for (j = n - 1; j >= 0; --j) { // calculate esum and fsum
 		uint32_t info = bm->aux->info[j];
+		int tmp;
 		if (info>>24 < 4 && (info>>8&0x3f) != 0) info = 4<<24 | (info&0xffffff);
 		k = info>>16&7;
 		if (info>>24 > 0) {
@@ -168,7 +170,8 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 			if (w[k] < 0xff) ++w[k];
 			++b->c[k&3];
 		}
-		rms += (int)(info&0x7f) * (info&0x7f);
+		tmp = (int)(info&0x7f) < bm->cap_mapQ? (int)(info&0x7f) : bm->cap_mapQ;
+		rms += tmp * tmp;
 	}
 	b->rms_mapQ = (uint8_t)(sqrt((double)rms / n) + .499);
 	// rescale ->c[]
