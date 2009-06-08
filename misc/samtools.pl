@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use Getopt::Std;
 
-my $version = '0.3.0';
+my $version = '0.3.1';
 &usage if (@ARGV < 1);
 
 my $command = shift(@ARGV);
@@ -36,8 +36,8 @@ sub showALEN {
 #
 
 sub varFilter {
-  my %opts = (d=>3, D=>100, l=>30, Q=>25, G=>20, s=>100, w=>10, W=>10, N=>2);
-  getopts('d:D:l:Q:w:W:N:G:', \%opts);
+  my %opts = (d=>3, D=>100, l=>30, Q=>25, G=>25, s=>100, w=>10, W=>10, N=>2, p=>undef);
+  getopts('pd:D:l:Q:w:W:N:G:', \%opts);
   die(qq/
 Usage:   samtools.pl varFilter [options] <in.cns-pileup>
 
@@ -51,7 +51,9 @@ Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
          -W INT    window size for filtering dense SNPs [$opts{W}]
          -N INT    max number of SNPs in a window [$opts{W}]
 
-         -l INT    window size for filtering adjacent gaps [$opts{l}]\n
+         -l INT    window size for filtering adjacent gaps [$opts{l}]
+
+         -p        print filtered variants
 /) if (@ARGV == 0 && -t STDIN);
 
   # calculate the window size
@@ -66,7 +68,7 @@ Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
 	# clear the out-of-range elements
 	while (@staging) {
 	  if ($staging[0][2] ne $t[0] || $staging[0][3] + $max_dist < $t[1]) {
-		varFilter_aux(shift @staging);
+		varFilter_aux(shift @staging, $opts{p});
 	  } else {
 		last;
 	  }
@@ -129,15 +131,15 @@ Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
   }
   # output the last few elements in the staging list
   while (@staging) {
-	varFilter_aux(shift @staging);
+	varFilter_aux(shift @staging, $opts{p});
   }
 }
 
 sub varFilter_aux {
-  my $first = shift;
+  my ($first, $is_print) = @_;
   if ($first->[1] == 0) {
 	print join("\t", @$first[2 .. @$first-1]), "\n";
-  } else {
+  } elsif ($is_print) {
 	print STDERR join("\t", substr("UQdDWGgX", $first->[1], 1), @$first[2 .. @$first-1]), "\n";
   }
 }
@@ -147,7 +149,7 @@ sub varFilter_aux {
 #
 
 sub pileup2fq {
-  my %opts = (d=>3, D=>255, Q=>25, G=>50, l=>10);
+  my %opts = (d=>3, D=>255, Q=>25, G=>25, l=>10);
   getopts('d:D:Q:G:l:', \%opts);
   die(qq/
 Usage:   samtools.pl pileup2fq [options] <in.cns-pileup>
