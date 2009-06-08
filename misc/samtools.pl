@@ -67,11 +67,8 @@ Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
 	next if ($t[2] eq $t[3] || $t[3] eq '*/*'); # skip non-var sites
 	# clear the out-of-range elements
 	while (@staging) {
-	  if ($staging[0][2] ne $t[0] || $staging[0][3] + $max_dist < $t[1]) {
-		varFilter_aux(shift @staging, $opts{p});
-	  } else {
-		last;
-	  }
+	  last if ($staging[0][2] eq $t[0] && $staging[0][3] + $max_dist >= $t[1]);
+	  varFilter_aux(shift(@staging), $opts{p}); # calling a function is a bit slower, not much
 	}
 	my ($flt, $score) = (0, -1);
 	# first a simple filter
