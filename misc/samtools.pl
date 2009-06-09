@@ -49,12 +49,12 @@ Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
          -w INT    SNP within INT bp around a gap to be filtered [$opts{w}]
 
          -W INT    window size for filtering dense SNPs [$opts{W}]
-         -N INT    max number of SNPs in a window [$opts{W}]
+         -N INT    max number of SNPs in a window [$opts{N}]
 
          -l INT    window size for filtering adjacent gaps [$opts{l}]
 
          -p        print filtered variants
-/) if (@ARGV == 0 && -t STDIN);
+\n/) if (@ARGV == 0 && -t STDIN);
 
   # calculate the window size
   my ($ol, $ow, $oW) = ($opts{l}, $opts{w}, $opts{W});
