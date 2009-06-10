@@ -214,25 +214,22 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 	}
 
 	{ // fix p[k<<2|k]
-		float max1, max2, min;
+		float max1, max2, min1, min2;
 		int max_k, min_k;
 		max_k = min_k = -1;
-		max1 = max2 = -1.0; min = 1e30;
+		max1 = max2 = -1.0; min1 = min2 = 1e30;
 		for (k = 0; k < 4; ++k) {
 			if (b->esum[k] > max1) {
 				max2 = max1; max1 = b->esum[k]; max_k = k;
-			} else if (b->esum[k] > max2) {
-				max2 = b->esum[k];
-			}
+			} else if (b->esum[k] > max2) max2 = b->esum[k];
 		}
 		for (k = 0; k < 4; ++k) {
-			if (min > p[k<<2|k]) {
-				min = p[k<<2|k];
-				min_k = k;
-			}
+			if (p[k<<2|k] < min1) {
+				min2 = min1; min1 = p[k<<2|k]; min_k = k;
+			} else if (p[k<<2|k] < min2) min2 = p[k<<2|k];
 		}
-		if (max1 > max2 && min_k != max_k)
-			p[max_k<<2|max_k] = min > 1.0? min - 1.0 : 0.0;
+		if (max1 > max2 && (min_k != max_k || min1 + 1.0 > min2))
+			p[max_k<<2|max_k] = min1 > 1.0? min1 - 1.0 : 0.0;
 	}
 
 	// convert necessary information to glf1_t
