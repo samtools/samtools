@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use Getopt::Std;
 
-my $version = '0.3.1';
+my $version = '0.3.2 (r321)';
 &usage if (@ARGV < 1);
 
 my $command = shift(@ARGV);
@@ -36,12 +36,13 @@ sub showALEN {
 #
 
 sub varFilter {
-  my %opts = (d=>3, D=>100, l=>30, Q=>25, G=>25, s=>100, w=>10, W=>10, N=>2, p=>undef);
+  my %opts = (d=>3, D=>100, l=>30, Q=>25, q=>10, G=>25, s=>100, w=>10, W=>10, N=>2, p=>undef);
   getopts('pd:D:l:Q:w:W:N:G:', \%opts);
   die(qq/
 Usage:   samtools.pl varFilter [options] <in.cns-pileup>
 
-Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
+Options: -Q INT    minimum RMS mapping quality for SNPs [$opts{Q}]
+         -q INT    minimum RMS mapping quality for gaps [$opts{q}]
          -d INT    minimum read depth [$opts{d}]
          -D INT    maximum read depth [$opts{D}]
 
@@ -72,9 +73,7 @@ Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
 	}
 	my ($flt, $score) = (0, -1);
 	# first a simple filter
-	if ($t[6] < $opts{Q}) {
-	  $flt = 1;
-	} elsif ($t[7] < $opts{d}) {
+	if ($t[7] < $opts{d}) {
 	  $flt = 2;
 	} elsif ($t[7] > $opts{D}) {
 	  $flt = 3;
@@ -82,6 +81,7 @@ Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
 	# site dependent filters
 	if ($flt == 0) {
 	  if ($t[2] eq '*') { # an indel
+		$flt = 1 if ($t[6] < $opts{q});
 		# filtering SNPs
 		if ($t[5] >= $opts{G}) {
 		  for my $x (@staging) {
@@ -103,6 +103,7 @@ Options: -Q INT    minimum RMS mapping quality [$opts{Q}]
 		  }
 		}
 	  } else { # a SNP
+		$flt = 1 if ($t[6] < $opts{Q});
 		# check adjacent SNPs
 		my $k = 1;
 		for my $x (@staging) {
