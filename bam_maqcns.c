@@ -213,6 +213,28 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 			if (p[j<<2|k] < 0.0) p[j<<2|k] = 0.0;
 	}
 
+	{ // fix p[k<<2|k]
+		float max1, max2, min;
+		int max_k, min_k;
+		max_k = min_k = -1;
+		max1 = max2 = -1.0; min = 1e30;
+		for (k = 0; k < 4; ++k) {
+			if (b->esum[k] > max1) {
+				max2 = max1; max1 = b->esum[k]; max_k = k;
+			} else if (b->esum[k] > max2) {
+				max2 = b->esum[k];
+			}
+		}
+		for (k = 0; k < 4; ++k) {
+			if (min > p[k<<2|k]) {
+				min = p[k<<2|k];
+				min_k = k;
+			}
+		}
+		if (max1 > max2 && min_k != max_k)
+			p[max_k<<2|max_k] = min > 1.0? min - 1.0 : 0.0;
+	}
+
 	// convert necessary information to glf1_t
 	g->ref_base = ref_base; g->max_mapQ = b->rms_mapQ;
 	g->depth = n > 16777215? 16777215 : n;
