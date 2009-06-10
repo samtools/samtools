@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 # Contact: lh3
-# Version: 0.1.1 (03JAN2009)
+# Version: 0.1.2 (03JAN2009)
 
 use strict;
 use warnings;
@@ -84,9 +84,9 @@ sub export2sam_aux {
   my $has_coor = 0;
   $s->[2] = "*";
   if ($t[10] eq 'NM' || $t[10] eq 'QC') {
-	$s->[1] |= 0x8; # unmapped
+	$s->[1] |= 0x4; # unmapped
   } elsif ($t[10] =~ /(\d+):(\d+):(\d+)/) {
-	$s->[1] |= 0x8; # TODO: should I set BAM_FUNMAP in this case?
+	$s->[1] |= 0x4; # TODO: should I set BAM_FUNMAP in this case?
 	push(@$s, "H0:i:$1", "H1:i:$2", "H2:i:$3")
   } else {
 	$s->[2] = $t[10];
