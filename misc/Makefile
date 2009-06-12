@@ -31,7 +31,7 @@ wgsim:wgsim.o
 		$(CC) $(CFLAGS) -o $@ wgsim.o -lm
 
 md5fa:md5.o md5fa.o md5.h ../kseq.h
-		$(CC) $(CFLAGS) -o $@ md5.o md5fa.o -L../zlib -lz
+		$(CC) $(CFLAGS) -o $@ md5.o md5fa.o -lz
 
 md5sum-lite:md5sum-lite.o
 		$(CC) $(CFLAGS) -o $@ md5sum-lite.o
@@ -40,10 +40,10 @@ md5sum-lite.o:md5.c md5.h
 		$(CC) -c $(CFLAGS) -DMD5SUM_MAIN -o $@ md5.c
 
 maq2sam-short:maq2sam.c
-		$(CC) $(CFLAGS) -I../zlib -o $@ maq2sam.c -L../zlib -lz
+		$(CC) $(CFLAGS) -o $@ maq2sam.c -lz
 
 maq2sam-long:maq2sam.c
-		$(CC) $(CFLAGS) -I../zlib -DMAQ_LONGREADS -o $@ maq2sam.c -L../zlib -lz
+		$(CC) $(CFLAGS) -DMAQ_LONGREADS -o $@ maq2sam.c -lz
 
 md5fa.o:md5.h md5fa.c
 		$(CC) $(CFLAGS) -c -I.. -o $@ md5fa.c

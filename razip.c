@@ -2,6 +2,8 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdlib.h>
+#include <string.h>
 #include "razf.h"
 
 #define WINDOW_SIZE 4096

@@ -35,8 +35,30 @@
 
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 #include "razf.h"
+
+#if ZLIB_VERNUM < 0x1221
+struct _gz_header_s {
+    int     text;
+    uLong   time;
+    int     xflags;
+    int     os;
+    Bytef   *extra;
+    uInt    extra_len;
+    uInt    extra_max;
+    Bytef   *name;
+    uInt    name_max;
+    Bytef   *comment;
+    uInt    comm_max;
+    int     hcrc;
+    int     done;
+};
+#endif
+
+#define DEF_MEM_LEVEL 8
 
 static inline uint32_t byte_swap_4(uint32_t v){
 	v = ((v & 0x0000FFFFU) << 16) | (v >> 16);
@@ -55,6 +77,7 @@ static inline int is_big_endian(){
 	return (c[0] != 0x01);
 }
 
+#ifndef _RZ_READONLY
 static void add_zindex(RAZF *rz, int64_t in, int64_t out){
 	if(rz->index->size == rz->index->cap){
 		rz->index->cap = rz->index->cap * 1.5 + 2;
@@ -83,6 +106,7 @@ static void save_zindex(RAZF *rz, int fd){
 	write(fd, rz->index->bin_offsets, sizeof(int64_t) * v32);
 	write(fd, rz->index->cell_offsets, sizeof(int32_t) * rz->index->size);
 }
+#endif
 
 static void load_zindex(RAZF *rz, int fd){
 	int32_t i, v32;
@@ -104,6 +128,13 @@ static void load_zindex(RAZF *rz, int fd){
 	}
 }
 
+#ifdef _RZ_READONLY
+static RAZF* razf_open_w(int fd)
+{
+	fprintf(stderr, "[razf_open_w] Writing is not available with zlib ver < 1.2.2.1\n");
+	return 0;
+}
+#else
 static RAZF* razf_open_w(int fd){
 	RAZF *rz;
 	rz = calloc(1, sizeof(RAZF));
@@ -233,6 +264,7 @@ int razf_write(RAZF* rz, const void *data, int size){
 	_razf_buffered_write(rz, data, size);
 	return ori_size;
 }
+#endif
 
 /* gzip flag byte */
 #define ASCII_FLAG   0x01 /* bit 0 set: file probably ascii text */
@@ -614,8 +646,8 @@ int64_t razf_seek2(RAZF *rz, uint64_t voffset, int where)
 }
 
 void razf_close(RAZF *rz){
-	uint64_t v64;
 	if(rz->mode == 'w'){
+#ifndef _RZ_READONLY
 		razf_end_flush(rz);
 		deflateEnd(rz->stream);
 		save_zindex(rz, rz->filedes);
@@ -623,11 +655,12 @@ void razf_close(RAZF *rz){
 			write(rz->filedes, &rz->in, sizeof(int64_t));
 			write(rz->filedes, &rz->out, sizeof(int64_t));
 		} else {
-			v64 = byte_swap_8((uint64_t)rz->in);
+			uint64_t v64 = byte_swap_8((uint64_t)rz->in);
 			write(rz->filedes, &v64, sizeof(int64_t));
 			v64 = byte_swap_8((uint64_t)rz->out);
 			write(rz->filedes, &v64, sizeof(int64_t));
 		}
+#endif
 	} else if(rz->mode == 'r'){
 		if(rz->stream) inflateEnd(rz->stream);
 	}

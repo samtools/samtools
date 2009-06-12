@@ -36,7 +36,13 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "zlib.h"
-#include "zutil.h"
+
+#if ZLIB_VERNUM < 0x1221
+#define _RZ_READONLY
+struct _gz_header_s;
+typedef struct _gz_header_s _gz_header;
+#define gz_header _gz_header
+#endif
 
 #define WINDOW_BITS   15
 
