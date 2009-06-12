@@ -1,10 +1,13 @@
 #!/usr/bin/perl -w
 
 # Contact: lh3
-# Version: 0.1.0
+# Version: 0.1.3
 
-use strict;
-use warnings;
+#Modified by Zayed Albertyn(zayed.albertyn@gmail.com) & Colin Hercus(colin@novocraft.com)
+
+#use strict;
+#use warnings;
+use Data::Dumper;
 use Getopt::Std;
 
 &novo2sam;
@@ -36,7 +39,7 @@ sub mating {
 sub novo2sam {
   my %opts = ();
   getopts("p", \%opts);
-  die("Usage: novo2sam.pl [-p] <aln.novo>\nWarning: gapped alignments are NOT converted properly!\n") if (@ARGV == 0);
+  die("Usage: novo2sam.pl [-p] <aln.novo>\n") if (@ARGV == 0);
   my $is_paired = defined($opts{p});
   # core loop
   my @s1 = ();
@@ -61,8 +64,10 @@ sub novo2sam {
 
 sub novo2sam_aux {
   my ($line, $s, $is_paired) = @_;
+
   chomp($line);
   my @t = split(/\s+/, $line);
+  my @variations =  @t[13 .. $#t];
   @$s = ();
   return if ($t[4] ne 'U');
   my $len = length($t[2]);
@@ -82,8 +87,21 @@ sub novo2sam_aux {
 	$s->[9] = $t[2]; $s->[10] = $t[3];
   }
   # cigar
-  $s->[5] = $len . "M"; # IMPORTANT: this cigar is not correct for gapped alignment
-  # coor
+   my $cigarstring ="";
+  if (scalar @variations ==0 ) {
+ 	 $s->[5] = $len . "M"; # IMPORTANT: this cigar is not correct for gapped alignment
+  } else {
+	#convert to correct CIGAR
+	my $tmpstr =  join" ",@variations ;
+	if ( $tmpstr=~ /\+|\-/ ) {
+		$cigarstring  = cigar_method($line,\@variations,$len);
+		$s->[5]=$cigarstring;
+	} else {
+		$s->[5]=$len. "M";
+	}
+}  
+
+# coor
   $s->[2] = substr($t[7], 1); $s->[3] = $t[8];
   $s->[1] |= 0x10 if ($t[9] eq 'R');
   # mapQ
@@ -93,21 +111,171 @@ sub novo2sam_aux {
   # aux
   push(@$s, "NM:i:".(@t-13));
   my $md = '';
-  if ($t[13]) {
-	my @x;
-	for (13 .. $#t) {
-	  push(@x, sprintf("%.4d,$2", $1-1)) if ($t[$_] =~ /^(\d+)([ACGT])>([ACGT])/i);
-	}
-	#@x = sort(@x);
-	my $a = 0;
-	for (@x) {
-	  my ($y, $z) = split(",");
-	  $md .= (int($y)-$a? (int($y)-$a) : '') . $z;
-	  $a += $y - $a + 1;
-	}
-	$md .= $len - $a if ($len - $a);
-  } else {
-	$md = $len;
-  }
+  $md = mdtag($md,$line,\@variations,$len);
   push(@$s, "MD:Z:$md");
+
+}
+
+sub mdtag {
+	my $oldmd = shift;
+	my $line = shift;
+	my $ref =shift;
+	my $rdlen  = shift;
+	my @variations = @$ref;
+	my $string="";
+	my $mdtag="";
+	my $t=1;
+	my $q=1;
+	my $deleteflag=0;
+	my $len =0;
+	foreach $string (@variations) {
+		my ($indeltype,$insert) = indeltype($string);
+		if ($indeltype eq "+") {
+			$len = length ($insert);
+			$q+=$len;
+                  next;
+		}
+		my $pos = $1 if $string =~ /^(\d+)/;
+		$len = $pos - $t;	
+		if ($len !=0 || ($deleteflag eq 1 && $indeltype eq ">")) {
+			$mdtag.=$len;
+		}	
+		$t+=$len;
+		$q+=$len;
+		if ($indeltype eq ">") {
+			$mdtag.=$insert;
+			$deleteflag=0;
+		      $t+=1;
+		      $q+=1;
+		}
+		if ($indeltype eq "-") {
+			my $deletedbase = $2 if $string =~ /(\d+)\-([A-Z]+)/;
+			if ($deleteflag == 0 ) {
+				$mdtag.="^";
+			}
+			$mdtag.=$deletedbase;
+			$deleteflag=1;
+			$t+=1;
+		}
+	}
+	$len = $rdlen - $q + 1;
+	if ($len > 0) {
+		$mdtag.="$len";
+	}
+#	print "In:$line\n";
+#	print "MD: OLD => NEW\nMD: $oldmd => $mdtag\n\n";
+
+	return $mdtag;
+}
+
+sub indeltype {
+	my $string =  shift;
+	my $insert="";
+	my $indeltype;
+               if ($string =~ /([A-Z]+)\>/) {
+                        $indeltype=">";
+                        $insert=$1;
+                } elsif ($string =~ /\-/) {
+                        $indeltype="-";
+                } elsif ($string =~ /\+([A-Z]+)/) {
+                        $indeltype="+";
+                        $insert=$1;
+                }
+	 return ($indeltype,$insert);
+	
+}
+
+
+sub cigar_method {
+	my $line = shift;
+	my $ref =shift;
+	my $rdlen  = shift;
+	my @variations = @$ref;
+	my $string="";
+	my $type="";
+	my $t =1;
+	my $q=1;
+	my $indeltype="";
+	my $cigar=  "";	
+	my $insert = "";
+	my $len=0;
+	my @cig=();
+	foreach $string (@variations) {
+		next if $string =~  />/;
+		my $pos = $1 if $string =~ /^(\d+)/;
+		
+		if ($string =~ /\+([A-Z]+)/) {	
+			$indeltype="+";
+			$insert = $1;
+		}elsif ($string =~ /\-([A-Z]+)/) {
+			$indeltype="-";
+			$insert = $1;
+		}
+#print "$pos $indeltype $insert $t $q\n";	
+		$len = $pos - $t;
+		if ( $len > 0) {
+			$cigar.=$len."M";
+			push(@cig,$len."M");
+		}
+		$t+=$len;
+		$q+=$len;
+
+		if ($indeltype eq "-") {
+			$cigar.="D";
+			push(@cig,"D");
+			$t++;
+		}
+		if ($indeltype eq "+") {
+			$len = length ($insert);
+			if ($len == 1) {
+				$cigar.="I";
+				push(@cig,"I");
+			}
+			if ($len > 1) {
+				$cigar.=$len."I";
+				push(@cig,$len."I")
+			}
+			$q+=$len;
+		}
+		$insert="";
+	}
+	$len= $rdlen - $q + 1;
+	if ($len > 0) {
+		$cigar.=$len."M"; 
+		push(@cig,$len."M");
+	}
+	
+      $cigar = newcigar($cigar,'D');
+      $cigar = newcigar($cigar,'I');
+	
+	#print "$line\n";
+	#print "c CIGAR:\t$cigar\n\n";
+	return $cigar;
+
+}
+
+
+
+sub newcigar {
+	my $cigar = shift;
+	my $char = shift;
+	my $new = "";
+	my $copy = $cigar;
+#print "$cigar\n";
+	$copy =~ s/^($char+)/$1;/g;
+#print "$copy\n";
+	$copy =~ s/([^0-9$char])($char+)/$1;$2;/g;
+#print "$copy\n";
+	my @parts = split(/;/,$copy);
+	my $el="";
+	foreach $el (@parts) {
+#print "$el\n";
+		if ($el =~ /^$char+$/) {
+			$new.=length($el).$char;
+		}else {
+			$new.=$el;
+		}
+
+	}
+     return  $new;
 }
