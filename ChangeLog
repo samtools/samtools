@@ -1,4 +1,257 @@
 ------------------------------------------------------------------------
+r332 | lh3lh3 | 2009-06-12 15:21:21 +0100 (Fri, 12 Jun 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/AUTHORS
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/misc/Makefile
+
+fixed minor things in Makefile
+
+------------------------------------------------------------------------
+r331 | lh3lh3 | 2009-06-12 15:07:05 +0100 (Fri, 12 Jun 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.4-5 (r3310
+ * no change to samtools itself. Version number is increased to reflect the
+   changes in the Makefile building system.
+
+------------------------------------------------------------------------
+r330 | lh3lh3 | 2009-06-12 15:03:38 +0100 (Fri, 12 Jun 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/AUTHORS
+   D /trunk/samtools/README
+
+update information...
+
+------------------------------------------------------------------------
+r329 | lh3lh3 | 2009-06-12 14:52:21 +0100 (Fri, 12 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/novo2sam.pl
+
+ * updated novoalign converter by Colin Hercus et al.
+ * this version works with indels
+
+------------------------------------------------------------------------
+r328 | lh3lh3 | 2009-06-12 14:50:53 +0100 (Fri, 12 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/INSTALL
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/misc/Makefile
+   M /trunk/samtools/zlib/Makefile
+
+ * update Makefile
+ * update INSTALL instruction
+
+------------------------------------------------------------------------
+r327 | lh3lh3 | 2009-06-12 14:18:29 +0100 (Fri, 12 Jun 2009) | 4 lines
+Changed paths:
+   A /trunk/samtools/Makefile (from /trunk/samtools/Makefile.generic:325)
+   D /trunk/samtools/Makefile.am
+   D /trunk/samtools/Makefile.generic
+   D /trunk/samtools/Makefile.lite
+   D /trunk/samtools/autogen.sh
+   D /trunk/samtools/cleanup.sh
+   D /trunk/samtools/configure.ac
+   A /trunk/samtools/misc/Makefile (from /trunk/samtools/misc/Makefile.generic:305)
+   D /trunk/samtools/misc/Makefile.am
+   D /trunk/samtools/misc/Makefile.generic
+   M /trunk/samtools/razf.c
+   A /trunk/samtools/zlib
+   A /trunk/samtools/zlib/Makefile
+   A /trunk/samtools/zlib/adler32.c
+   A /trunk/samtools/zlib/compress.c
+   A /trunk/samtools/zlib/crc32.c
+   A /trunk/samtools/zlib/crc32.h
+   A /trunk/samtools/zlib/deflate.c
+   A /trunk/samtools/zlib/deflate.h
+   A /trunk/samtools/zlib/gzio.c
+   A /trunk/samtools/zlib/infback.c
+   A /trunk/samtools/zlib/inffast.c
+   A /trunk/samtools/zlib/inffast.h
+   A /trunk/samtools/zlib/inffixed.h
+   A /trunk/samtools/zlib/inflate.c
+   A /trunk/samtools/zlib/inflate.h
+   A /trunk/samtools/zlib/inftrees.c
+   A /trunk/samtools/zlib/inftrees.h
+   A /trunk/samtools/zlib/trees.c
+   A /trunk/samtools/zlib/trees.h
+   A /trunk/samtools/zlib/uncompr.c
+   A /trunk/samtools/zlib/zconf.h
+   A /trunk/samtools/zlib/zlib.h
+   A /trunk/samtools/zlib/zutil.c
+   A /trunk/samtools/zlib/zutil.h
+   D /trunk/samtools/zutil.h
+
+ * added zlib-1.2.3 as razip requires that
+ * prepare to changed back to the Makefile building system
+ * unfinished! (will be soon)
+
+------------------------------------------------------------------------
+r326 | lh3lh3 | 2009-06-12 14:12:03 +0100 (Fri, 12 Jun 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+Unfinished
+
+------------------------------------------------------------------------
+r325 | lh3lh3 | 2009-06-10 16:27:59 +0100 (Wed, 10 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.4-4 (r325)
+ * further avoid wrong consensus calls in repetitive regions.
+
+------------------------------------------------------------------------
+r324 | lh3lh3 | 2009-06-10 15:56:17 +0100 (Wed, 10 Jun 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.c
+   M /trunk/samtools/sam.h
+
+ * samtools-0.1.4-3 (r324)
+ * make maqcns generate the correct call in repetitive regions.
+ * allow filtering on mapQ at the pileup command line
+
+------------------------------------------------------------------------
+r323 | lh3lh3 | 2009-06-10 10:04:21 +0100 (Wed, 10 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools.pl-0.3.2 (r322)
+ * indels and SNPs use different mapping quality threshold
+
+------------------------------------------------------------------------
+r322 | lh3lh3 | 2009-06-10 10:03:22 +0100 (Wed, 10 Jun 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/export2sam.pl
+
+fixed a typo
+
+------------------------------------------------------------------------
+r321 | lh3lh3 | 2009-06-09 09:21:48 +0100 (Tue, 09 Jun 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+just typo. no real change
+
+------------------------------------------------------------------------
+r320 | lh3lh3 | 2009-06-08 14:32:51 +0100 (Mon, 08 Jun 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+a little bit code cleanup
+
+------------------------------------------------------------------------
+r319 | lh3lh3 | 2009-06-08 14:22:33 +0100 (Mon, 08 Jun 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools.pl-0.3.1
+ * change default parameters
+ * optionally print filtered variants
+
+------------------------------------------------------------------------
+r318 | lh3lh3 | 2009-06-08 14:14:26 +0100 (Mon, 08 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools.pl-0.3.0
+ * combine snpFilter and indelFilter
+
+------------------------------------------------------------------------
+r317 | lh3lh3 | 2009-06-08 11:31:42 +0100 (Mon, 08 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools.pl-0.2.3
+ * change a default parameter
+
+------------------------------------------------------------------------
+r316 | lh3lh3 | 2009-06-08 11:11:06 +0100 (Mon, 08 Jun 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_maqcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.c
+
+ * samtools-0.1.4-2 (r316)
+ * pileup: cap mapping quality at 60 (by default)
+ * pileup: always calculate RMS mapq
+ * pileup: allow to output variant sites only
+
+------------------------------------------------------------------------
+r312 | lh3lh3 | 2009-06-04 13:01:10 +0100 (Thu, 04 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools.pl-0.2.2
+ * added pileup2fq
+
+------------------------------------------------------------------------
+r311 | lh3lh3 | 2009-06-03 09:40:40 +0100 (Wed, 03 Jun 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * in snpFilter, suppress non-SNP sites
+
+------------------------------------------------------------------------
+r310 | lh3lh3 | 2009-06-01 14:35:13 +0100 (Mon, 01 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools.pl-0.2.1
+ * fixed a typo
+
+------------------------------------------------------------------------
+r309 | lh3lh3 | 2009-06-01 14:04:39 +0100 (Mon, 01 Jun 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools.pl-0.2.0
+ * snpFilter
+
+------------------------------------------------------------------------
+r306 | lh3lh3 | 2009-05-28 11:49:35 +0100 (Thu, 28 May 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bgzf.c
+
+ * minor changes to bgzf: return NULL if fd == -1
+ * suggested by {kdj,jm18}@sanger.ac.uk
+
+------------------------------------------------------------------------
+r305 | lh3lh3 | 2009-05-28 11:16:08 +0100 (Thu, 28 May 2009) | 2 lines
+Changed paths:
+   A /trunk/samtools/misc/interpolate_sam.pl
+
+Script for paired-end pileup, contributed by Stephen Montgomery.
+
+------------------------------------------------------------------------
+r304 | lh3lh3 | 2009-05-28 11:08:49 +0100 (Thu, 28 May 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.c
+
+ * samtools-0.1.4-1 (r304)
+ * fixed a minor bug in printing headers
+
+------------------------------------------------------------------------
+r297 | lh3lh3 | 2009-05-21 16:06:16 +0100 (Thu, 21 May 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/maq2sam.c
+   M /trunk/samtools/samtools.1
+
+Release samtools-0.1.4
+
+------------------------------------------------------------------------
 r296 | lh3lh3 | 2009-05-21 12:53:14 +0100 (Thu, 21 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
