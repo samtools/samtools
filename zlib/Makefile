@@ -31,7 +31,7 @@ uncompr.o: zlib.h zconf.h
 zutil.o: zutil.h zlib.h zconf.h
 
 cleanlocal:
-		rm -f *.o a.out *~ *.a libzr.a gmon.out
+		rm -f *.o a.out *~ *.a libz.a gmon.out
 
 clean:cleanlocal
 

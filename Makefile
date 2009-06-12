@@ -1,16 +1,17 @@
 CC=			gcc
 CXX=		g++
-CFLAGS=		-g -Wall #-O2 -m64 #-arch ppc
+CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
-DFLAGS=		-D_IOLIB=2 -D_LARGEFILE_SOURCE -D_FILE_OFFSET_BITS=64 #-D_NO_RAZF #-D_NO_CURSES
+### For ncurses: please apply `-D_NO_CURSES' if you do not have ncurses installed
+DFLAGS=		-D_IOLIB=2 -D_FILE_OFFSET_BITS=64 #-D_NO_CURSES
 OBJS=		bam.o bam_import.o bam_pileup.o bam_lpileup.o bam_sort.o bam_index.o \
 			razf.o bgzf.o faidx.o bam_tview.o bam_maqcns.o bam_aux.o bam_plcmd.o \
 			bam_mate.o bam_rmdup.o glf.o bam_stat.o kstring.o bam_md.o sam.o sam_view.o \
 			bam_rmdupse.o
 PROG=		razip bgzip samtools
-INCLUDES=	
-LIBS=		-lm -lz
-SUBDIRS=	. misc
+INCLUDES=	-Izlib
+LIBS=		-lm -Lzlib -lz
+SUBDIRS=	zlib . misc
 
 .SUFFIXES:.c .o
 
@@ -22,7 +23,7 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		wdir=`pwd`; \
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
-			$(MAKE) -f Makefile.generic CC="$(CC)" CXX="$(CXX)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
+			$(MAKE) -f Makefile CC="$(CC)" CXX="$(CXX)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
 				INCLUDES="$(INCLUDES)" LIBS="$(LIBS)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
@@ -34,6 +35,7 @@ lib:libbam.a
 libbam.a:$(OBJS)
 		$(AR) -cru $@ $(OBJS)
 
+### For ncurses: comment out `-lcurses' if you do not have ncurses installed
 samtools:lib bamtk.o
 		$(CC) $(CFLAGS) -o $@ bamtk.o $(LIBS) -L. -lbam -lcurses
 
