@@ -100,7 +100,7 @@ typedef struct {
 	int32_t n_targets;
 	char **target_name;
 	uint32_t *target_len;
-	void *hash;
+	void *hash, *rg2lib;
 	int l_text;
 	char *text;
 } bam_header_t;
@@ -317,8 +317,15 @@ extern "C" {
 
 	bam_header_t *sam_header_read(tamFile fp);
 	int sam_header_parse(bam_header_t *h);
+	int sam_header_parse_rg(bam_header_t *h);
 
 #define sam_write1(header, b) bam_view1(header, b)
+
+	int bam_strmap_put(void *strmap, const char *rg, const char *lib);
+	const char *bam_strmap_get(const void *strmap, const char *rg);
+	void *bam_strmap_dup(const void*);
+	void *bam_strmap_init();
+	void bam_strmap_destroy(void *strmap);
 
 	/*!
 	  @abstract Initialize a header structure.
@@ -593,7 +600,7 @@ extern "C" {
 
 	void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
 	// uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]); // an alias of bam_aux_get()
-	uint8_t *bam_aux_get(bam1_t *b, const char tag[2]);
+	uint8_t *bam_aux_get(const bam1_t *b, const char tag[2]);
 	int32_t bam_aux2i(const uint8_t *s);
 	float bam_aux2f(const uint8_t *s);
 	double bam_aux2d(const uint8_t *s);

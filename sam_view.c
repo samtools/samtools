@@ -5,14 +5,26 @@
 #include "sam.h"
 
 static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0;
+static char *g_library;
 
-#define __g_skip_aln(b) (((b)->core.qual < g_min_mapQ) || ((b->core.flag & g_flag_on) != g_flag_on) \
-						 || (b->core.flag & g_flag_off))
+static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
+{
+	if (b->core.qual < g_min_mapQ || ((b->core.flag & g_flag_on) != g_flag_on) || (b->core.flag & g_flag_off))
+		return 1;
+	if (g_library) {
+		uint8_t *s = bam_aux_get(b, "RG");
+		if (s) {
+			const char *p = bam_strmap_get(h->rg2lib, s + 1);
+			return (p && strcmp(p, g_library) == 0)? 0 : 1;
+		} else return 1;
+	} else return 0;
+}
 
 // callback function for bam_fetch()
 static int view_func(const bam1_t *b, void *data)
 {
-	if (!__g_skip_aln(b)) samwrite((samfile_t*)data, b);
+	if (!__g_skip_aln(((samfile_t*)data)->header, b))
+		samwrite((samfile_t*)data, b);
 	return 0;
 }
 
@@ -26,7 +38,7 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:u")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:")) >= 0) {
 		switch (c) {
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
@@ -38,6 +50,7 @@ int main_samview(int argc, char *argv[])
 		case 'F': g_flag_off = strtol(optarg, 0, 0); break;
 		case 'q': g_min_mapQ = atoi(optarg); break;
 		case 'u': is_uncompressed = 1; break;
+		case 'l': g_library = strdup(optarg); break;
 		default: return usage();
 		}
 	}
@@ -64,7 +77,7 @@ int main_samview(int argc, char *argv[])
 		bam1_t *b = bam_init1();
 		int r;
 		while ((r = samread(in, b)) >= 0) // read one alignment from `in'
-			if (!__g_skip_aln(b))
+			if (!__g_skip_aln(in->header, b))
 				samwrite(out, b); // write the alignment to `out'
 		if (r < -1) fprintf(stderr, "[main_samview] truncated file.\n");
 		bam_destroy1(b);
@@ -91,7 +104,7 @@ int main_samview(int argc, char *argv[])
 
 view_end:
 	// close files, free and return
-	free(fn_list); free(fn_out);
+	free(fn_list); free(fn_out); free(g_library);
 	samclose(in);
 	samclose(out);
 	return ret;

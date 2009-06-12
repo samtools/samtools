@@ -19,17 +19,22 @@ typedef struct __kstring_t {
 int ksprintf(kstring_t *s, const char *fmt, ...);
 int ksplit_core(char *s, int delimiter, int *_max, int **_offsets);
 
-static inline int kputs(const char *p, kstring_t *s)
+static inline int kputsn(const char *p, int l, kstring_t *s)
 {
-	int l = strlen(p);
 	if (s->l + l + 1 >= s->m) {
 		s->m = s->l + l + 2;
 		kroundup32(s->m);
 		s->s = (char*)realloc(s->s, s->m);
 	}
-	strcpy(s->s + s->l, p);
+	strncpy(s->s + s->l, p, l);
 	s->l += l;
+	s->s[s->l] = 0;
 	return l;
+}
+
+static inline int kputs(const char *p, kstring_t *s)
+{
+	return kputsn(p, strlen(p), s);
 }
 
 static inline int kputc(int c, kstring_t *s)

@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
+#include "kstring.h"
 #include "bam.h"
 #include "kseq.h"
 #include "khash.h"
@@ -146,6 +147,55 @@ static inline void append_text(bam_header_t *header, kstring_t *str)
 	header->text[header->l_text] = 0;
 }
 
+int sam_header_parse_rg(bam_header_t *h)
+{
+	kstring_t *rgid, *rglib;
+	char *p, *q, *s, *r;
+	int n = 0;
+
+	bam_strmap_destroy(h->rg2lib);
+	// parse @RG lines
+	h->rg2lib = bam_strmap_init();
+	rgid = calloc(1, sizeof(kstring_t));
+	rglib = calloc(1, sizeof(kstring_t));
+	s = h->text;
+	while ((s = strstr(s, "@RG")) != 0) {
+		if (rgid->l && rglib->l) {
+			bam_strmap_put(h->rg2lib, rgid->s, rglib->s);
+			++n;
+		}
+		rgid->l = rglib->l = 0;
+		s += 3;
+		r = s;
+		if ((p = strstr(s, "ID:")) != 0) {
+			q = p + 3;
+			for (p = q; *p && *p != '\t' && *p != '\r' && *p != '\n'; ++p);
+			kputsn(q, p - q, rgid);
+		} else {
+			fprintf(stderr, "[bam_header_parse] missing ID tag in @RG lines.\n");
+			break;
+		}
+		if (r < p) r = p;
+		if ((p = strstr(s, "LB:")) != 0) {
+			q = p + 3;
+			for (p = q; *p && *p != '\t' && *p != '\r' && *p != '\n'; ++p);
+			kputsn(q, p - q, rglib);
+		} else {
+			fprintf(stderr, "[bam_header_parse] missing LB tag in @RG lines.\n");
+			break;
+		}
+		if (r < p) r = p;
+		s = r + 3;
+	}
+	if (rgid->l && rglib->l) {
+		bam_strmap_put(h->rg2lib, rgid->s, rglib->s);
+		++n;
+	}
+	free(rgid->s); free(rgid);
+	free(rglib->s); free(rglib);
+	return n;
+}
+
 int sam_header_parse(bam_header_t *h)
 {
 	int i;
@@ -183,6 +233,7 @@ int sam_header_parse(bam_header_t *h)
 		s = r + 3;
 		++i;
 	}
+	sam_header_parse_rg(h);
 	return h->n_targets;
 
 header_err_ret:

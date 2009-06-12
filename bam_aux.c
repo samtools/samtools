@@ -1,7 +1,9 @@
 #include <ctype.h>
 #include "bam.h"
 #include "khash.h"
+typedef char *str_p;
 KHASH_MAP_INIT_STR(s, int)
+KHASH_MAP_INIT_STR(r2l, str_p)
 
 void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data)
 {
@@ -23,7 +25,7 @@ uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2])
 	return bam_aux_get(b, tag);
 }
 */
-uint8_t *bam_aux_get(bam1_t *b, const char tag[2])
+uint8_t *bam_aux_get(const bam1_t *b, const char tag[2])
 {
 	uint8_t *s;
 	int y = tag[0]<<8 | tag[1];
@@ -157,6 +159,70 @@ char *bam_aux2Z(const uint8_t *s)
 	if (type == 'Z' || type == 'H') return (char*)s;
 	else return 0;
 }
+
+/******************
+ * rg2lib related *
+ ******************/
+
+int bam_strmap_put(void *rg2lib, const char *rg, const char *lib)
+{
+	int ret;
+	khint_t k;
+	khash_t(r2l) *h = (khash_t(r2l)*)rg2lib;
+	char *key = strdup(rg);
+	k = kh_put(r2l, h, key, &ret);
+	if (ret) kh_val(h, k) = strdup(lib);
+	else {
+		fprintf(stderr, "[bam_rg2lib_put] duplicated @RG ID: %s\n", rg);
+		free(key);
+	}
+	return 0;
+}
+
+const char *bam_strmap_get(const void *rg2lib, const char *rg)
+{
+	const khash_t(r2l) *h = (const khash_t(r2l)*)rg2lib;
+	khint_t k;
+	k = kh_get(r2l, h, rg);
+	if (k != kh_end(h)) return (const char*)kh_val(h, k);
+	else return 0;
+}
+
+void *bam_strmap_dup(const void *rg2lib)
+{
+	const khash_t(r2l) *h = (const khash_t(r2l)*)rg2lib;
+	khash_t(r2l) *g = kh_init(r2l);
+	khint_t k, l;
+	int ret;
+	for (k = kh_begin(h); k < kh_end(h); ++k) {
+		if (kh_exist(h, k)) {
+			char *key = strdup(kh_key(h, k));
+			l = kh_put(r2l, g, key, &ret);
+			kh_val(g, l) = strdup(kh_val(h, k));
+		}
+	}
+	return g;
+}
+
+void *bam_strmap_init()
+{
+	return (void*)kh_init(r2l);
+}
+
+void bam_strmap_destroy(void *rg2lib)
+{
+	khash_t(r2l) *h = (khash_t(r2l)*)rg2lib;
+	khint_t k;
+	if (h == 0) return;
+	for (k = kh_begin(h); k < kh_end(h); ++k) {
+		if (kh_exist(h, k)) {
+			free((char*)kh_key(h, k)); free(kh_val(h, k));
+		}
+	}
+	kh_destroy(r2l, h);
+}
+
+/*** The following routines were implemented by Nils Homer for color-space support in tview ***/
 
 char bam_aux_getCSi(bam1_t *b, int i)
 {

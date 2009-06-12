@@ -79,6 +79,7 @@ void bam_header_destroy(bam_header_t *header)
 	}
 	free(header->text);
 #ifndef BAM_NO_HASH
+	if (header->rg2lib) bam_strmap_destroy(header->rg2lib);
 	bam_destroy_header_hash(header);
 #endif
 	free(header);
