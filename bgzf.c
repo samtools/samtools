@@ -9,6 +9,8 @@
  * or functionality.
  */
 
+/* 2009-06-12 by lh3: support a mode string like "wu" where 'u' for uncompressed output */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,7 +93,7 @@ open_read(int fd)
 	fp = malloc(sizeof(BGZF));
     fp->file_descriptor = fd;
     fp->open_mode = 'r';
-    fp->owned_file = 0;
+    fp->owned_file = 0; fp->is_uncompressed = 0;
     fp->file = file;
     fp->uncompressed_block_size = MAX_BLOCK_SIZE;
     fp->uncompressed_block = malloc(MAX_BLOCK_SIZE);
@@ -106,7 +108,7 @@ open_read(int fd)
 
 static
 BGZF*
-open_write(int fd)
+open_write(int fd, bool is_uncompressed)
 {
     FILE* file = fdopen(fd, "w");
     BGZF* fp;
@@ -114,7 +116,7 @@ open_write(int fd)
 	fp = malloc(sizeof(BGZF));
     fp->file_descriptor = fd;
     fp->open_mode = 'w';
-    fp->owned_file = 0;
+    fp->owned_file = 0; fp->is_uncompressed = is_uncompressed;
     fp->file = file;
     fp->uncompressed_block_size = DEFAULT_BLOCK_SIZE;
     fp->uncompressed_block = NULL;
@@ -131,16 +133,16 @@ BGZF*
 bgzf_open(const char* __restrict path, const char* __restrict mode)
 {
     BGZF* fp = NULL;
-    if (strcasecmp(mode, "r") == 0) {
+    if (mode[0] == 'r' || mode[0] == 'R') { /* The reading mode is preferred. */
 		int oflag = O_RDONLY;
 		int fd = open(path, oflag);
 		if (fd == -1) return 0;
         fp = open_read(fd);
-    } else if (strcasecmp(mode, "w") == 0) {
+    } else if (mode[0] == 'w' || mode[0] == 'W') {
 		int oflag = O_WRONLY | O_CREAT | O_TRUNC;
 		int fd = open(path, oflag, 0644);
 		if (fd == -1) return 0;
-        fp = open_write(fd);
+        fp = open_write(fd, strstr(mode, "u")? 1 : 0);
     }
     if (fp != NULL) {
         fp->owned_file = 1;
@@ -152,10 +154,10 @@ BGZF*
 bgzf_fdopen(int fd, const char * __restrict mode)
 {
 	if (fd == -1) return 0;
-    if (strcasecmp(mode, "r") == 0) {
+    if (mode[0] == 'r' || mode[0] == 'R') {
         return open_read(fd);
-    } else if (strcasecmp(mode, "w") == 0) {
-        return open_write(fd);
+    } else if (mode[0] == 'w' || mode[0] == 'W') {
+        return open_write(fd, strstr(mode, "u")? 1 : 0);
     } else {
         return NULL;
     }
@@ -195,7 +197,7 @@ deflate_block(BGZF* fp, int block_length)
     int input_length = block_length;
     int compressed_length = 0;
     while (1) {
-
+		int compress_level = fp->is_uncompressed? 0 : Z_DEFAULT_COMPRESSION;
         z_stream zs;
         zs.zalloc = NULL;
         zs.zfree = NULL;
@@ -204,7 +206,7 @@ deflate_block(BGZF* fp, int block_length)
         zs.next_out = (void*)&buffer[BLOCK_HEADER_LENGTH];
         zs.avail_out = buffer_size - BLOCK_HEADER_LENGTH - BLOCK_FOOTER_LENGTH;
 
-        int status = deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED,
+        int status = deflateInit2(&zs, compress_level, Z_DEFLATED,
                                   GZIP_WINDOW_BITS, Z_DEFAULT_MEM_LEVEL, Z_DEFAULT_STRATEGY);
         if (status != Z_OK) {
             report_error(fp, "deflate init failed");

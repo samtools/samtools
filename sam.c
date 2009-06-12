@@ -49,8 +49,10 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 	} else if (mode[0] == 'w') { // write
 		fp->header = bam_header_dup((const bam_header_t*)aux);
 		if (mode[1] == 'b') { // binary
+			char bmode[3];
+			bmode[0] = 'w'; bmode[1] = strstr(mode, "u")? 'u' : 0; bmode[2] = 0;
 			fp->type |= TYPE_BAM;
-			fp->x.bam = strcmp(fn, "-")? bam_open(fn, "w") : bam_dopen(fileno(stdout), "w");
+			fp->x.bam = strcmp(fn, "-")? bam_open(fn, bmode) : bam_dopen(fileno(stdout), bmode);
 			if (fp->x.bam == 0) goto open_err_ret;
 			bam_header_write(fp->x.bam, fp->header);
 		} else { // text

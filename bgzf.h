@@ -14,16 +14,15 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include "zlib.h"
 #include <stdbool.h>
-//#include "zutil.h"
+#include <zlib.h>
 
 //typedef int8_t bool;
 
 typedef struct {
     int file_descriptor;
     char open_mode;  // 'r' or 'w'
-    bool owned_file;
+    bool owned_file, is_uncompressed;
     FILE* file;
     int uncompressed_block_size;
     int compressed_block_size;

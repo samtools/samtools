@@ -20,16 +20,16 @@ static int usage(void);
 
 int main_samview(int argc, char *argv[])
 {
-	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0;
+	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, is_uncompressed = 0, is_bamout = 0;
 	samfile_t *in = 0, *out = 0;
-	char in_mode[4], out_mode[4], *fn_out = 0, *fn_list = 0;
+	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:u")) >= 0) {
 		switch (c) {
 		case 'S': is_bamin = 0; break;
-		case 'b': strcat(out_mode, "b"); break;
+		case 'b': is_bamout = 1; break;
 		case 't': fn_list = strdup(optarg); is_bamin = 0; break;
 		case 'h': is_header = 1; break;
 		case 'H': is_header_only = 1; break;
@@ -37,12 +37,16 @@ int main_samview(int argc, char *argv[])
 		case 'f': g_flag_on = strtol(optarg, 0, 0); break;
 		case 'F': g_flag_off = strtol(optarg, 0, 0); break;
 		case 'q': g_min_mapQ = atoi(optarg); break;
+		case 'u': is_uncompressed = 1; break;
 		default: return usage();
 		}
 	}
+	if (is_uncompressed) is_bamout = 1;
 	if (is_header_only) is_header = 1;
+	if (is_bamout) strcat(out_mode, "b");
 	if (is_bamin) strcat(in_mode, "b");
 	if (is_header) strcat(out_mode, "h");
+	if (is_uncompressed) strcat(out_mode, "u");
 	if (argc == optind) return usage();
 
 	// open file handlers
@@ -101,6 +105,7 @@ static int usage()
 	fprintf(stderr, "         -h       print header for the SAM output\n");
 	fprintf(stderr, "         -H       print header only (no alignments)\n");
 	fprintf(stderr, "         -S       input is SAM\n");
+	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -o FILE  output file name [stdout]\n");
 	fprintf(stderr, "         -f INT   required flag, 0 for unset [0]\n");
