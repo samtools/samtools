@@ -35,6 +35,7 @@
 
 #include <fcntl.h>
 #include <stdio.h>
+#include <unistd.h>
 #include "razf.h"
 
 static inline uint32_t byte_swap_4(uint32_t v){
