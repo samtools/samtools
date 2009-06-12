@@ -10,7 +10,6 @@ OBJS=		bam.o bam_import.o bam_pileup.o bam_lpileup.o bam_sort.o bam_index.o \
 			bam_rmdupse.o
 PROG=		razip bgzip samtools
 INCLUDES=	-Izlib
-LIBS=		-lm -Lzlib -lz
 SUBDIRS=	zlib . misc
 
 .SUFFIXES:.c .o
@@ -23,8 +22,8 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		wdir=`pwd`; \
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
-			$(MAKE) -f Makefile CC="$(CC)" CXX="$(CXX)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				INCLUDES="$(INCLUDES)" LIBS="$(LIBS)" $$target || exit 1; \
+			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
+				INCLUDES="$(INCLUDES)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
 
@@ -37,13 +36,13 @@ libbam.a:$(OBJS)
 
 ### For ncurses: comment out `-lcurses' if you do not have ncurses installed
 samtools:lib bamtk.o
-		$(CC) $(CFLAGS) -o $@ bamtk.o $(LIBS) -L. -lbam -lcurses
+		$(CC) $(CFLAGS) -o $@ bamtk.o -lm -L. -lbam -lcurses -Lzlib -lz
 
 razip:razip.o razf.o
-		$(CC) $(CFLAGS) -o $@ razf.o razip.o $(LIBS)
+		$(CC) $(CFLAGS) -o $@ razf.o razip.o -Lzlib -lz
 
 bgzip:bgzip.o bgzf.o
-		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o $(LIBS)
+		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o -Lzlib -lz
 
 razip.o:razf.h
 bam.o:bam.h razf.h bam_endian.h kstring.h
