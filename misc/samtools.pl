@@ -215,6 +215,30 @@ sub p2q_print_str {
 }
 
 #
+# varStats
+#
+
+sub varStats {
+  my %opts = (d=>'', c=>5);
+  getopts('d:c:', \%opts);
+  die("Usage: samtools.pl varStats [-d dbSNP.snp] [-c $opts{c}] <in.plp.snp>\n") if (@ARGV == 0 && -t STDIN);
+  my (@cnt, %hash);
+  my $col = $opts{c} - 1;
+  while (<>) {
+	my @t = split;
+	if ($t[2] eq '*') {
+	} else {
+	  my $q = $t[$col];
+	  $q = 99 if ($q > 99);
+	  $q = int($q/10);
+	  my $is_het = ($t[3] =~ /^[ACGT]$/)? 0 : 1;
+	  ++$cnt[$q][$is_het];
+	  $hash{$t[0],$t[1]} = $q;
+	}
+  }
+}
+
+#
 # Usage
 #
 
