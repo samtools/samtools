@@ -8,7 +8,7 @@ LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 AOBJS=		bam_sort.o bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
 			bamtk.o
-PROG=		samtools bgzip
+PROG=		samtools
 INCLUDES=	
 SUBDIRS=	. misc
 

@@ -5,17 +5,20 @@
 #include "sam.h"
 
 static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0;
-static char *g_library;
+static char *g_library, *g_rg;
 
 static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 {
 	if (b->core.qual < g_min_mapQ || ((b->core.flag & g_flag_on) != g_flag_on) || (b->core.flag & g_flag_off))
 		return 1;
-	if (g_library) {
+	if (g_library || g_rg) {
 		uint8_t *s = bam_aux_get(b, "RG");
 		if (s) {
-			const char *p = bam_strmap_get(h->rg2lib, (char*)(s + 1));
-			return (p && strcmp(p, g_library) == 0)? 0 : 1;
+			if (g_rg && strcmp(g_rg, (char*)(s + 1)) == 0) return 0;
+			if (g_library) {
+				const char *p = bam_strmap_get(h->rg2lib, (char*)(s + 1));
+				return (p && strcmp(p, g_library) == 0)? 0 : 1;
+			} return 1;
 		} else return 1;
 	} else return 0;
 }
@@ -38,7 +41,7 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:r:")) >= 0) {
 		switch (c) {
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
@@ -51,6 +54,7 @@ int main_samview(int argc, char *argv[])
 		case 'q': g_min_mapQ = atoi(optarg); break;
 		case 'u': is_uncompressed = 1; break;
 		case 'l': g_library = strdup(optarg); break;
+		case 'r': g_rg = strdup(optarg); break;
 		default: return usage();
 		}
 	}
@@ -104,7 +108,7 @@ int main_samview(int argc, char *argv[])
 
 view_end:
 	// close files, free and return
-	free(fn_list); free(fn_out); free(g_library);
+	free(fn_list); free(fn_out); free(g_library); free(g_rg);
 	samclose(in);
 	samclose(out);
 	return ret;
@@ -124,6 +128,8 @@ static int usage()
 	fprintf(stderr, "         -f INT   required flag, 0 for unset [0]\n");
 	fprintf(stderr, "         -F INT   filtering flag, 0 for unset [0]\n");
 	fprintf(stderr, "         -q INT   minimum mapping quality [0]\n");
+	fprintf(stderr, "         -l STR   only output reads in library STR [null]\n");
+	fprintf(stderr, "         -r STR   only output reads in read group STR [null]\n");
 	fprintf(stderr, "\n\
 Notes:\n\
 \n\
