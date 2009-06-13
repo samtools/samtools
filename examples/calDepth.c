@@ -35,25 +35,25 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Fail to open BAM file %s\n", argv[1]);
 		return 1;
 	}
-	if (argc == 2) {
+	if (argc == 2) { // if a region is not specified
 		sampileup(tmp.in, -1, pileup_func, &tmp);
 	} else {
 		int ref;
 		bam_index_t *idx;
 		bam_plbuf_t *buf;
-		idx = bam_index_load(argv[1]);
+		idx = bam_index_load(argv[1]); // load BAM index
 		if (idx == 0) {
 			fprintf(stderr, "BAM indexing file is not available.\n");
 			return 1;
 		}
-		bam_parse_region(tmp.in->header, argv[2], &ref, &tmp.beg, &tmp.end);
+		bam_parse_region(tmp.in->header, argv[2], &ref, &tmp.beg, &tmp.end); // parse the region
 		if (ref < 0) {
 			fprintf(stderr, "Invalid region %s\n", argv[2]);
 			return 1;
 		}
-		buf = bam_plbuf_init(pileup_func, &tmp);
+		buf = bam_plbuf_init(pileup_func, &tmp); // initialize pileup
 		bam_fetch(tmp.in->x.bam, idx, ref, tmp.beg, tmp.end, buf, fetch_func);
-		bam_plbuf_push(0, buf);
+		bam_plbuf_push(0, buf); // finalize pileup
 		bam_index_destroy(idx);
 		bam_plbuf_destroy(buf);
 	}
