@@ -8,6 +8,10 @@
 #include "faidx.h"
 #include "bam_maqcns.h"
 
+char bam_aux_getCEi(bam1_t *b, int i);
+char bam_aux_getCSi(bam1_t *b, int i);
+char bam_aux_getCQi(bam1_t *b, int i);
+
 #define TV_MIN_ALNROW 2
 #define TV_MAX_GOTO  40
 #define TV_LOW_MAPQ  10

@@ -120,7 +120,7 @@ int samwrite(samfile_t *fp, const bam1_t *b)
 	}
 }
 
-int sampileup(samfile_t *fp, int mask, int min_mapQ, bam_pileup_f func, void *func_data)
+int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)
 {
 	bam_plbuf_t *buf;
 	int ret;
@@ -129,8 +129,7 @@ int sampileup(samfile_t *fp, int mask, int min_mapQ, bam_pileup_f func, void *fu
 	buf = bam_plbuf_init(func, func_data);
 	bam_plbuf_set_mask(buf, mask);
 	while ((ret = samread(fp, b)) >= 0)
-		if (b->core.qual >= min_mapQ)
-			bam_plbuf_push(b, buf);
+		bam_plbuf_push(b, buf);
 	bam_plbuf_push(0, buf);
 	bam_plbuf_destroy(buf);
 	bam_destroy1(b);

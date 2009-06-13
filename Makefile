@@ -2,12 +2,13 @@ CC=			gcc
 CXX=		g++
 CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
-DFLAGS=		-D_IOLIB=2 -D_FILE_OFFSET_BITS=64 #-D_NO_CURSES
-OBJS=		bam.o bam_import.o bam_pileup.o bam_lpileup.o bam_sort.o bam_index.o \
-			razf.o bgzf.o faidx.o bam_tview.o bam_maqcns.o bam_aux.o bam_plcmd.o \
-			bam_mate.o bam_rmdup.o glf.o bam_stat.o kstring.o bam_md.o sam.o sam_view.o \
-			bam_rmdupse.o
-PROG=		bgzip samtools
+DFLAGS=		-D_FILE_OFFSET_BITS=64 #-D_NO_CURSES
+LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
+			bam_pileup.o bam_lpileup.o bam_md.o glf.o razf.o faidx.o
+AOBJS=		bam_sort.o bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
+			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
+			bamtk.o
+PROG=		samtools bgzip
 INCLUDES=	
 SUBDIRS=	. misc
 
@@ -30,12 +31,12 @@ all:$(PROG)
 
 lib:libbam.a
 
-libbam.a:$(OBJS)
-		$(AR) -cru $@ $(OBJS)
+libbam.a:$(LOBJS)
+		$(AR) -cru $@ $(LOBJS)
 
 ### For the curses library: comment out `-lcurses' if you do not have curses installed
-samtools:lib bamtk.o
-		$(CC) $(CFLAGS) -o $@ bamtk.o -lm -L. -lbam -lcurses -lz
+samtools:lib $(AOBJS)
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) -lm -lcurses -lz -L. -lbam
 
 razip:razip.o razf.o
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o -lz

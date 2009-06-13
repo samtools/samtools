@@ -47,6 +47,16 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 
 KSORT_INIT(heap, heap1_t, heap_lt)
 
+/*!
+  @abstract    Merge multiple sorted BAM.
+  @param  is_by_qname whether to sort by query name
+  @param  out  output BAM file name
+  @param  n    number of files to be merged
+  @param  fn   names of files to be merged
+
+  @discussion Padding information may NOT correctly maintained. This
+  function is NOT thread safe.
+ */
 void bam_merge_core(int by_qname, const char *out, int n, char * const *fn)
 {
 	bamFile fpout, *fp;
@@ -155,6 +165,20 @@ static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam
 	bam_close(fp);
 }
 
+/*!
+  @abstract Sort an unsorted BAM file based on the chromosome order
+  and the leftmost position of an alignment
+
+  @param  is_by_qname whether to sort by query name
+  @param  fn       name of the file to be sorted
+  @param  prefix   prefix of the output and the temporary files; upon
+	                   sucessess, prefix.bam will be written.
+  @param  max_mem  approxiate maximum memory (very inaccurate)
+
+  @discussion It may create multiple temporary subalignment files
+  and then merge them by calling bam_merge_core(). This function is
+  NOT thread safe.
+ */
 void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
 {
 	int n, ret, k, i;

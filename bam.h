@@ -32,7 +32,7 @@
   @header
 
   BAM library provides I/O and various operations on manipulating files
-  in the BAM (Binary Alignment/Mapping) or TAM (Text Alignment/Mapping)
+  in the BAM (Binary Alignment/Mapping) or SAM (Sequence Alignment/Map)
   format. It now supports importing from or exporting to TAM, sorting,
   merging, generating pileup, and quickly retrieval of reads overlapped
   with a specified region.
@@ -45,6 +45,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+#define _IOLIB 2
 
 #if _IOLIB == 1 && !defined(_NO_RAZF)
 #define BAM_TRUE_OFFSET
@@ -90,6 +92,7 @@ typedef RAZF *bamFile;
   @field target_name names of the reference sequences
   @field target_len  lengths of the referene sequences
   @field hash        hash table for fast name lookup
+  @field rg2lib      hash table for @RG-ID -> LB lookup
   @field l_text      length of the plain text in the header
   @field text        plain text
 
@@ -113,14 +116,22 @@ typedef struct {
 #define BAM_FUNMAP         4
 /*! @abstract the mate is unmapped */
 #define BAM_FMUNMAP        8
+/*! @abstract the read is mapped to the reverse strand */
 #define BAM_FREVERSE      16
+/*! @abstract the mate is mapped to the reverse strand */
 #define BAM_FMREVERSE     32
+/*! @abstract this is read1 */
 #define BAM_FREAD1        64
+/*! @abstract this is read2 */
 #define BAM_FREAD2       128
+/*! @abstract not primary alignment */
 #define BAM_FSECONDARY   256
+/*! @abstract QC failure */
 #define BAM_FQCFAIL      512
+/*! @abstract optical or PCR duplicate */
 #define BAM_FDUP        1024
 
+/*! @abstract defautl mask for pileup */
 #define BAM_DEF_MASK (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP)
 
 #define BAM_CORE_SIZE   sizeof(bam1_core_t)
@@ -247,12 +258,6 @@ typedef struct {
  */
 #define bam1_aux(b) ((b)->data + (b)->core.n_cigar*4 + (b)->core.l_qname + (b)->core.l_qseq + ((b)->core.l_qseq + 1)/2)
 
-typedef struct {
-	int32_t qbeg, qend;
-	int32_t tbeg, tend;
-	int32_t cbeg, cend;
-} bam_segreg_t;
-
 #ifndef kroundup32
 /*! @function
   @abstract  Round an integer to the next closest power-2 integer.
@@ -284,21 +289,21 @@ extern "C" {
 	typedef struct __tamFile_t *tamFile;
 
 	/*!
-	  @abstract   Open a TAM file, either uncompressed or compressed by gzip/zlib.
-	  @param  fn  TAM file name
-	  @return     TAM file handler
+	  @abstract   Open a SAM file for reading, either uncompressed or compressed by gzip/zlib.
+	  @param  fn  SAM file name
+	  @return     SAM file handler
 	 */
 	tamFile sam_open(const char *fn);
 
 	/*!
-	  @abstract   Close a TAM file handler
-	  @param  fp  TAM file handler
+	  @abstract   Close a SAM file handler
+	  @param  fp  SAM file handler
 	 */
 	void sam_close(tamFile fp);
 
 	/*!
-	  @abstract      Read one alignment from a TAM file handler
-	  @param  fp     TAM file handler
+	  @abstract      Read one alignment from a SAM file handler
+	  @param  fp     SAM file handler
 	  @param  header header information (ordered names of chromosomes)
 	  @param  b      read alignment; all members in b will be updated
 	  @return        0 if successful; otherwise negative
@@ -315,8 +320,31 @@ extern "C" {
 	 */
 	bam_header_t *sam_header_read2(const char *fn_list);
 
+	/*!
+	  @abstract       Read header from a SAM file (if present)
+	  @param  fp      SAM file handler
+	  @return         pointer to header struct; 0 if no @SQ lines available
+	 */
 	bam_header_t *sam_header_read(tamFile fp);
+
+	/*!
+	  @abstract       Parse @SQ lines a update a header struct
+	  @param  h       pointer to the header struct to be updated
+	  @return         number of target sequences
+
+	  @discussion bam_header_t::{n_targets,target_len,target_name} will
+	  be destroyed in the first place.
+	 */
 	int sam_header_parse(bam_header_t *h);
+
+	/*!
+	  @abstract       Parse @RG lines a update a header struct
+	  @param  h       pointer to the header struct to be updated
+	  @return         number of @RG lines
+
+	  @discussion bam_header_t::rg2lib will be destroyed in the first
+	  place.
+	 */
 	int sam_header_parse_rg(bam_header_t *h);
 
 #define sam_write1(header, b) bam_view1(header, b)
@@ -421,34 +449,6 @@ extern "C" {
 	 */
 	char *bam_format1(const bam_header_t *header, const bam1_t *b);
 
-	/*!
-	  @abstract    Merge multiple sorted BAM.
-	  @param  is_by_qname whether to sort by query name
-	  @param  out  output BAM file name
-	  @param  n    number of files to be merged
-	  @param  fn   names of files to be merged
-
-	  @discussion Padding information may NOT correctly maintained. This
-	  function is NOT thread safe.
-	 */
-	void bam_merge_core(int is_by_qname, const char *out, int n, char * const *fn);
-
-	/*!
-	  @abstract Sort an unsorted BAM file based on the chromosome order
-	  and the leftmost position of an alignment
-
-	  @param  is_by_qname whether to sort by query name
-	  @param  fn       name of the file to be sorted
-	  @param  prefix   prefix of the output and the temporary files; upon
-	                   sucessess, prefix.bam will be written.
-	  @param  max_mem  approxiate maximum memory (very inaccurate)
-
-	  @discussion It may create multiple temporary subalignment files
-	  and then merge them by calling bam_merge_core(). This function is
-	  NOT thread safe.
-	 */
-	void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem);
-
 	/*! @typedef
 	  @abstract Structure for one alignment covering the pileup position.
 	  @field  b      pointer to the alignment
@@ -487,6 +487,10 @@ extern "C" {
 	 */
 	typedef int (*bam_pileup_f)(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data);
 
+	/*!
+	  @abstract     Reset a pileup buffer for another pileup process
+	  @param  buf   the pileup buffer to be reset
+	 */
 	void bam_plbuf_reset(bam_plbuf_t *buf);
 
 	/*!
@@ -512,13 +516,14 @@ extern "C" {
 
 	  @discussion If all the alignments covering a particular site have
 	  been collected, this function will call the user defined function
-	  as is provided to bam_plbuf_init(). The coordinate of the site the
+	  as is provided to bam_plbuf_init(). The coordinate of the site and
 	  all the alignments will be transferred to the user defined
 	  function as function parameters.
 	 
 	  When all the alignments are pushed to the buffer, this function
 	  needs to be called with b equal to NULL. This will flush the
-	  buffer. A pileup buffer cannot be reused.
+	  buffer. A pileup buffer can only be reused when bam_plbuf_reset()
+	  is called.
 	 */
 	int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf);
 
@@ -598,43 +603,28 @@ extern "C" {
 	 */
 	void bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
 
-	void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
-	// uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]); // an alias of bam_aux_get()
+	/*!
+	  @abstract       Retrieve data of a tag
+	  @param  b       pointer to an alignment struct
+	  @param  tag     two-character tag to be retrieved
+
+	  @return  pointer to the type and data. The first character is the
+	  type that can be 'iIsScCdfAZH'.
+
+	  @discussion  Use bam_aux2?() series to convert the returned data to
+	  the corresponding type.
+	*/
 	uint8_t *bam_aux_get(const bam1_t *b, const char tag[2]);
+
 	int32_t bam_aux2i(const uint8_t *s);
 	float bam_aux2f(const uint8_t *s);
 	double bam_aux2d(const uint8_t *s);
 	char bam_aux2A(const uint8_t *s);
 	char *bam_aux2Z(const uint8_t *s);
 
-	/*!
-	 @abstract     Get the color encoding the previous and current base
-	 @param b      pointer to an alignment
-	 @param i      The i-th position, 0-based
-	 @return       color
+	void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
 
-	 @discussion   Returns 0 no color information is found.
-	 */
-	char bam_aux_getCSi(bam1_t *b, int i);
-
-	/*!
-	 @abstract     Get the color quality of the color encoding the previous and current base
-	 @param b      pointer to an alignment
-	 @param i      The i-th position, 0-based
-	 @return       color quality
-
-	 @discussion   Returns 0 no color information is found.
-	 */
-	char bam_aux_getCQi(bam1_t *b, int i);
-
-	/*!
-	 @abstract     Get the color error profile at the give position    
-	 @param b      pointer to an alignment
-	 @return       the original color if the color was an error, '-' (dash) otherwise
-
-	 @discussion   Returns 0 no color information is found.
-	 */
-	char bam_aux_getCEi(bam1_t *b, int i);
+	// uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]); // an alias of bam_aux_get()
 
 	/*!  
 	  @abstract Calculate the rightmost coordinate of an alignment on the
@@ -653,6 +643,12 @@ extern "C" {
 	  @return        length of the query sequence
 	*/
 	int32_t bam_cigar2qlen(const bam1_core_t *c, const uint32_t *cigar);
+
+	typedef struct {
+		int32_t qbeg, qend;
+		int32_t tbeg, tend;
+		int32_t cbeg, cend;
+	} bam_segreg_t;
 
 	int bam_segreg(int32_t pos, const bam1_core_t *c, const uint32_t *cigar, bam_segreg_t *reg);
 
@@ -677,6 +673,12 @@ static inline int bam_reg2bin(uint32_t beg, uint32_t end)
 	return 0;
 }
 
+/*!
+  @abstract     Copy an alignment
+  @param  bdst  destination alignment struct
+  @param  bsrc  source alignment struct
+  @return       pointer to the destination alignment struct
+ */
 static inline bam1_t *bam_copy1(bam1_t *bdst, const bam1_t *bsrc)
 {
 	uint8_t *data = bdst->data;
@@ -693,6 +695,11 @@ static inline bam1_t *bam_copy1(bam1_t *bdst, const bam1_t *bsrc)
 	return bdst;
 }
 
+/*!
+  @abstract     Duplicate an alignment
+  @param  src   source alignment struct
+  @return       pointer to the destination alignment struct
+ */
 static inline bam1_t *bam_dup1(const bam1_t *src)
 {
 	bam1_t *b;

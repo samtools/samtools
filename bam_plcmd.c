@@ -26,7 +26,7 @@ typedef struct {
 	khash_t(64) *hash;
 	uint32_t format;
 	int tid, len, last_pos;
-	int mask, min_mapQ;
+	int mask;
 	char *ref;
 	glfFile fp_glf; // for glf output only
 } pu_data_t;
@@ -280,7 +280,7 @@ int bam_pileup(int argc, char *argv[])
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
 	d->ido = bam_maqindel_opt_init();
-	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:q:")) >= 0) {
+	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:")) >= 0) {
 		switch (c) {
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
 		case 't': fn_list = strdup(optarg); break;
@@ -297,7 +297,6 @@ int bam_pileup(int argc, char *argv[])
 		case 'g': d->format |= BAM_PLF_GLF; break;
 		case 'I': d->ido->q_indel = atoi(optarg); break;
 		case 'G': d->ido->r_indel = atof(optarg); break;
-		case 'q': d->min_mapQ = atoi(optarg); break;
 		default: fprintf(stderr, "Unrecognizd option '-%c'.\n", c); return 1;
 		}
 	}
@@ -307,7 +306,6 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "Option: -s        simple (yet incomplete) pileup format\n");
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
 		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);
-		fprintf(stderr, "        -q INT    filtering reads with mapping quality smaller than INT [%d]\n", d->min_mapQ);
 		fprintf(stderr, "        -M INT    cap mapping quality at INT [%d]\n", d->c->cap_mapQ);
 		fprintf(stderr, "        -t FILE   list of reference sequences (assume the input is in SAM)\n");
 		fprintf(stderr, "        -l FILE   list of sites at which pileup is output\n");
@@ -344,7 +342,7 @@ int bam_pileup(int argc, char *argv[])
 		}
 		d->h = fp->header;
 		if (fn_pos) d->hash = load_pos(fn_pos, d->h);
-		sampileup(fp, d->mask, d->min_mapQ, pileup_func, d);
+		sampileup(fp, d->mask, pileup_func, d);
 		samclose(fp); // d->h will be destroyed here
 	}
 
