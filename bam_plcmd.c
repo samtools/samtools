@@ -274,13 +274,13 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 
 int bam_pileup(int argc, char *argv[])
 {
-	int c;
+	int c, is_SAM = 0;
 	char *fn_list = 0, *fn_fa = 0, *fn_pos = 0;
 	pu_data_t *d = (pu_data_t*)calloc(1, sizeof(pu_data_t));
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
 	d->ido = bam_maqindel_opt_init();
-	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:")) >= 0) {
+	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:S")) >= 0) {
 		switch (c) {
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
 		case 't': fn_list = strdup(optarg); break;
@@ -297,13 +297,16 @@ int bam_pileup(int argc, char *argv[])
 		case 'g': d->format |= BAM_PLF_GLF; break;
 		case 'I': d->ido->q_indel = atoi(optarg); break;
 		case 'G': d->ido->r_indel = atof(optarg); break;
+		case 'S': is_SAM = 1; break;
 		default: fprintf(stderr, "Unrecognizd option '-%c'.\n", c); return 1;
 		}
 	}
+	if (fn_list) is_SAM = 1;
 	if (optind == argc) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:  samtools pileup [options] <in.bam>|<in.sam>\n\n");
 		fprintf(stderr, "Option: -s        simple (yet incomplete) pileup format\n");
+		fprintf(stderr, "        -S        the input is in SAM\n");
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
 		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);
 		fprintf(stderr, "        -M INT    cap mapping quality at INT [%d]\n", d->c->cap_mapQ);
@@ -335,7 +338,7 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "[bam_pileup] indels will not be called when -f is absent.\n");
 	{
 		samfile_t *fp;
-		fp = fn_list? samopen(argv[optind], "r", fn_list) : samopen(argv[optind], "rb", 0);
+		fp = is_SAM? samopen(argv[optind], "r", fn_list) : samopen(argv[optind], "rb", 0);
 		if (fp == 0 || fp->header == 0) {
 			fprintf(stderr, "[bam_pileup] fail to read the header: non-exisiting file or wrong format.\n");
 			return 1;

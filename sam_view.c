@@ -148,6 +148,9 @@ Notes:\n\
   4. A region should be presented in one of the following formats:\n\
      `chr1', `chr2:1,000' and `chr3:1000-2,000'. When a region is\n\
      specified, the input alignment file must be an indexed BAM file.\n\
+\n\
+  5. Option `-u' is preferred over `-b' when the output is piped to\n\
+     another samtools command.\n\
 \n");
 	return 1;
 }
