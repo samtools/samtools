@@ -1,7 +1,4 @@
-#include <stdlib.h>
-#include <string.h>
 #include <stdio.h>
-#include <unistd.h>
 #include "sam.h"
 
 typedef struct {
