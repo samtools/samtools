@@ -1,19 +1,25 @@
 System Requirements
 ===================
 
-Most of SAMtools functionality only depends on zlib which is included in
-this source code package. Compiling the alignment viewer further
-requires the GNU ncurses library <http://www.gnu.org/software/ncurses/>,
-which comes with Mac OS X and most of the modern Linux/Unix
-distributions. If you do not have this library installed, you can still
-compile the rest of SAMtools by manually modifying two lines in Makefile
-as is described in the Makefile.
+SAMtools depends on the zlib library <http://www.zlib.net>. The latest
+version 1.2.3 is preferred and with the latest version you can compile
+razip and use it to compress a FASTA file. SAMtools' faidx is able to
+index a razip-compressed FASTA file to save diskspace. Older zlib also
+works with SAMtools, but razip cannot be compiled.
+
+The text-based viewer (tview) requires the GNU ncurses library
+<http://www.gnu.org/software/ncurses/>, which comes with Mac OS X and
+most of the modern Linux/Unix distributions. If you do not have this
+library installed, you can still compile the rest of SAMtools by
+manually modifying two lines in Makefile as is described in the
+Makefile.
 
 
 Compilation
 ===========
 
-Type `make' to compile samtools.
+Type `make' to compile samtools. If you have zlib >= 1.2.2.1, you can
+compile razip with `make razip'.
 
 
 Installation
