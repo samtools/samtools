@@ -11,8 +11,7 @@ The text-based viewer (tview) requires the GNU ncurses library
 <http://www.gnu.org/software/ncurses/>, which comes with Mac OS X and
 most of the modern Linux/Unix distributions. If you do not have this
 library installed, you can still compile the rest of SAMtools by
-manually modifying two lines in Makefile as is described in the
-Makefile.
+manually modifying one line in Makefile.
 
 
 Compilation

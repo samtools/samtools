@@ -27,8 +27,6 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
- * To compile razf.c, zlib-1.2.3(or greater) is required.
  */
 
 #ifndef _NO_RAZF
@@ -56,6 +54,7 @@ struct _gz_header_s {
     int     hcrc;
     int     done;
 };
+#warning "zlib < 1.2.2.1; RAZF writing is disabled."
 #endif
 
 #define DEF_MEM_LEVEL 8

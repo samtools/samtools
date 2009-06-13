@@ -1,5 +1,6 @@
 #ifndef _NO_CURSES
 #include <curses.h>
+#ifdef NCURSES_VERSION
 #include <ctype.h>
 #include <assert.h>
 #include <string.h>
@@ -303,7 +304,7 @@ void tv_loop(tview_t *tv)
 	tid = tv->curr_tid; pos = tv->left_pos;
 	while (1) {
 		int c = getch();
-		if(256 < c) {c = 1 + (c%256);} // Terminal was displaying ctrl-H as 263 via ssh from Mac OS X 10.5 computer 
+		//if(256 < c) {c = 1 + (c%256);} // Terminal was displaying ctrl-H as 263 via ssh from Mac OS X 10.5 computer 
 		switch (c) {
 			case '?': tv_win_help(tv); break;
 			case '\033':
@@ -361,4 +362,12 @@ int bam_tview_main(int argc, char *argv[])
 	tv_destroy(tv);
 	return 0;
 }
+#else // #ifdef NCURSES_VERSION
+#warning "The ncurses library is unavailable; tview is disabled."
+int bam_tview_main(int argc, char *argv[])
+{
+	fprintf(stderr, "[bam_tview_main] The ncurses library is unavailable; tview is not compiled.\n");
+	return 1;
+}
 #endif
+#endif // #ifndef _NO_CURSES

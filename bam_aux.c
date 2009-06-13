@@ -169,7 +169,9 @@ int bam_strmap_put(void *rg2lib, const char *rg, const char *lib)
 	int ret;
 	khint_t k;
 	khash_t(r2l) *h = (khash_t(r2l)*)rg2lib;
-	char *key = strdup(rg);
+	char *key;
+	if (h == 0) return 1;
+	key = strdup(rg);
 	k = kh_put(r2l, h, key, &ret);
 	if (ret) kh_val(h, k) = strdup(lib);
 	else {
@@ -183,6 +185,7 @@ const char *bam_strmap_get(const void *rg2lib, const char *rg)
 {
 	const khash_t(r2l) *h = (const khash_t(r2l)*)rg2lib;
 	khint_t k;
+	if (h == 0) return 0;
 	k = kh_get(r2l, h, rg);
 	if (k != kh_end(h)) return (const char*)kh_val(h, k);
 	else return 0;
@@ -191,9 +194,11 @@ const char *bam_strmap_get(const void *rg2lib, const char *rg)
 void *bam_strmap_dup(const void *rg2lib)
 {
 	const khash_t(r2l) *h = (const khash_t(r2l)*)rg2lib;
-	khash_t(r2l) *g = kh_init(r2l);
+	khash_t(r2l) *g;
 	khint_t k, l;
 	int ret;
+	if (h == 0) return 0;
+	g = kh_init(r2l);
 	for (k = kh_begin(h); k < kh_end(h); ++k) {
 		if (kh_exist(h, k)) {
 			char *key = strdup(kh_key(h, k));

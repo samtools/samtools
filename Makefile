@@ -2,7 +2,6 @@ CC=			gcc
 CXX=		g++
 CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
-### For ncurses: please apply `-D_NO_CURSES' if you do not have ncurses installed
 DFLAGS=		-D_IOLIB=2 -D_FILE_OFFSET_BITS=64 #-D_NO_CURSES
 OBJS=		bam.o bam_import.o bam_pileup.o bam_lpileup.o bam_sort.o bam_index.o \
 			razf.o bgzf.o faidx.o bam_tview.o bam_maqcns.o bam_aux.o bam_plcmd.o \
@@ -34,7 +33,7 @@ lib:libbam.a
 libbam.a:$(OBJS)
 		$(AR) -cru $@ $(OBJS)
 
-### For ncurses: comment out `-lcurses' if you do not have ncurses installed
+### For the curses library: comment out `-lcurses' if you do not have curses installed
 samtools:lib bamtk.o
 		$(CC) $(CFLAGS) -o $@ bamtk.o -lm -L. -lbam -lcurses -lz
 

@@ -14,7 +14,7 @@ static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 	if (g_library) {
 		uint8_t *s = bam_aux_get(b, "RG");
 		if (s) {
-			const char *p = bam_strmap_get(h->rg2lib, s + 1);
+			const char *p = bam_strmap_get(h->rg2lib, (char*)(s + 1));
 			return (p && strcmp(p, g_library) == 0)? 0 : 1;
 		} else return 1;
 	} else return 0;

@@ -153,7 +153,9 @@ int sam_header_parse_rg(bam_header_t *h)
 	char *p, *q, *s, *r;
 	int n = 0;
 
-	bam_strmap_destroy(h->rg2lib);
+	// free
+	bam_strmap_destroy(h->rg2lib); h->rg2lib = 0;
+	if (h->l_text < 3) return 0;
 	// parse @RG lines
 	h->rg2lib = bam_strmap_init();
 	rgid = calloc(1, sizeof(kstring_t));
@@ -193,6 +195,10 @@ int sam_header_parse_rg(bam_header_t *h)
 	}
 	free(rgid->s); free(rgid);
 	free(rglib->s); free(rglib);
+	if (n == 0) {
+		bam_strmap_destroy(h->rg2lib);
+		h->rg2lib = 0;
+	}
 	return n;
 }
 
