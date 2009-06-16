@@ -189,8 +189,10 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	// when only variant sites are asked for, test if the site is a variant
 	if ((d->format & BAM_PLF_CNS) && (d->format & BAM_PLF_VAR_ONLY)) {
 		if (!(bam_nt16_table[rb] != 15 && cns>>28 != bam_nt16_table[rb])) { // not a SNP
-			if (!(r && (r->gt == 2 || strcmp(r->s[r->gt], "*")))) // not an indel
+			if (!(r && (r->gt == 2 || strcmp(r->s[r->gt], "*")))) { // not an indel
+				if (r) bam_maqindel_ret_destroy(r);
 				return 0;
+			}
 		}
 	}
 	// print the first 3 columns
