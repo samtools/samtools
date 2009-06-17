@@ -66,6 +66,12 @@ faidx_t *fai_build_core(RAZF *rz)
 	name = 0; l_name = m_name = 0;
 	len = line_len = line_blen = -1; state = 0; l1 = l2 = -1; offset = 0;
 	while (razf_read(rz, &c, 1)) {
+		if (c == '\n') { // an empty line
+			if (state == 1) {
+				offset = razf_tell(rz);
+				continue;
+			} else if ((state == 0 && len < 0) || state == 2) continue;
+		}
 		if (c == '>') { // fasta header
 			if (len >= 0)
 				fai_insert_index(idx, name, len, line_len, line_blen, offset);
