@@ -285,4 +285,5 @@ void bam_view1(const bam_header_t *header, const bam1_t *b)
 {
 	char *s = bam_format1(header, b);
 	printf("%s\n", s);
+	free(s);
 }
