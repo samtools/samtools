@@ -9,7 +9,9 @@
  * or functionality.
  */
 
-/* 2009-06-12 by lh3: support a mode string like "wu" where 'u' for uncompressed output */
+/*
+  2009-06-25 by lh3: optionally use my knetfile library to access file on a FTP.
+  2009-06-12 by lh3: support a mode string like "wu" where 'u' for uncompressed output */
 
 #include <stdio.h>
 #include <stdlib.h>
