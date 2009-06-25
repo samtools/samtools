@@ -30,7 +30,7 @@ extern "C" {
 	knetFile *knet_open(const char *fn, const char *mode);
 	knetFile *knet_dopen(int fd, const char *mode);
 	off_t knet_read(knetFile *fp, void *buf, off_t len);
-	off_t knet_seek(knetFile *fp, off_t off, int whence);
+	int knet_seek(knetFile *fp, off_t off, int whence);
 	int knet_close(knetFile *fp);
 
 #ifdef __cplusplus

@@ -154,6 +154,7 @@ int sam_header_parse_rg(bam_header_t *h)
 	int n = 0;
 
 	// free
+	if (h == 0) return 0;
 	bam_strmap_destroy(h->rg2lib); h->rg2lib = 0;
 	if (h->l_text < 3) return 0;
 	// parse @RG lines

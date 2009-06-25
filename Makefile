@@ -2,9 +2,9 @@ CC=			gcc
 CXX=		g++
 CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
-DFLAGS=		-D_FILE_OFFSET_BITS=64 #-D_NO_CURSES
+DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_USE_KNETFILE #-D_NO_CURSES
 LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
-			bam_pileup.o bam_lpileup.o bam_md.o glf.o razf.o faidx.o
+			bam_pileup.o bam_lpileup.o bam_md.o glf.o razf.o faidx.o knetfile.o
 AOBJS=		bam_sort.o bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
 			bamtk.o

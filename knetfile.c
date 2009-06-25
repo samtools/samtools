@@ -208,22 +208,26 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 	return l;
 }
 
-off_t knet_seek(knetFile *fp, off_t off, int whence)
+int knet_seek(knetFile *fp, off_t off, int whence)
 {
 	if (fp->type == KNF_TYPE_LOCAL) {
-		fp->offset = lseek(fp->fd, off, whence);
-		return fp->offset;
+		if (lseek(fp->fd, off, whence) == -1) {
+			perror("lseek");
+			return -1;
+		}
+		fp->offset = off;
+		return 0;
 	}
 	if (fp->type == KNF_TYPE_FTP) {
-		if (whence != SEEK_SET) {
+		if (whence != SEEK_SET) { // FIXME: we can surely allow SEEK_CUR and SEEK_END in future
 			fprintf(stderr, "[knet_seek] only SEEK_SET is supported for FTP. Offset is unchanged.\n");
 			return -1;
 		}
 		if (!fp->no_reconnect) kftp_reconnect(fp);
 		kftp_connect_file(fp, off);
-		return fp->offset;
+		return 0;
 	}
-	return 0;
+	return -1;
 }
 
 int knet_close(knetFile *fp)

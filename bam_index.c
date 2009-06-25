@@ -155,7 +155,8 @@ bam_index_t *bam_index_core(bamFile fp)
 			last_tid = c->tid;
 			last_bin = 0xffffffffu;
 		} else if (last_coor > c->pos) {
-			fprintf(stderr, "[bam_index_core] the alignment is not sorted. Abort!\n");
+			fprintf(stderr, "[bam_index_core] the alignment is not sorted (%s): %u > %u in %d-th chr\n",
+					bam1_qname(b), last_coor, c->pos, c->tid+1);
 			exit(1);
 		}
 		if (b->core.tid >= 0 && b->core.bin < 4681) insert_offset2(&idx->index2[b->core.tid], b, last_off);

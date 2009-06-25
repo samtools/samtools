@@ -16,6 +16,9 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <zlib.h>
+#ifdef _USE_KNETFILE
+#include "knetfile.h"
+#endif
 
 //typedef int8_t bool;
 
@@ -23,7 +26,14 @@ typedef struct {
     int file_descriptor;
     char open_mode;  // 'r' or 'w'
     bool owned_file, is_uncompressed;
+#ifdef _USE_KNETFILE
+	union {
+		knetFile *fpr;
+		FILE *fpw;
+	} x;
+#else
     FILE* file;
+#endif
     int uncompressed_block_size;
     int compressed_block_size;
     void* uncompressed_block;
