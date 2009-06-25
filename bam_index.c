@@ -260,30 +260,15 @@ void bam_index_save(const bam_index_t *idx, FILE *fp)
 	fflush(fp);
 }
 
-bam_index_t *bam_index_load(const char *fn)
+static bam_index_t *bam_index_load_core(FILE *fp)
 {
-	bam_index_t *idx;
-	FILE *fp;
 	int i;
-	char *fnidx, magic[4];
-
-	fnidx = (char*)calloc(strlen(fn) + 5, 1);
-	strcpy(fnidx, fn); strcat(fnidx, ".bai");
-	fp = fopen(fnidx, "r");
-	if (fp == 0) { // try "{base}.bai"
-		char *s = strstr(fn, "bam");
-		if (s == fn + strlen(fn) - 3) {
-			strcpy(fnidx, fn);
-			fnidx[strlen(fn)-1] = 'i';
-			fp = fopen(fnidx, "r");
-		}
-	}
+	char magic[4];
+	bam_index_t *idx;
 	if (fp == 0) {
-		fprintf(stderr, "[bam_index_load] the alignment is not indexed. Please run `index' command first. Abort!\n");
-		exit(1);
+		fprintf(stderr, "[bam_index_load_core] fail to load index.\n");
+		return 0;
 	}
-	free(fnidx);
-
 	fread(magic, 1, 4, fp);
 	if (strncmp(magic, "BAI\1", 4)) {
 		fprintf(stderr, "[bam_index_load] wrong magic number.\n");
@@ -333,6 +318,44 @@ bam_index_t *bam_index_load(const char *fn)
 		if (bam_is_be)
 			for (j = 0; j < index2->n; ++j) bam_swap_endian_8p(&index2->offset[j]);
 	}
+	return idx;
+}
+
+bam_index_t *bam_index_load2(const char *fnidx)
+{
+	bam_index_t *idx;
+	FILE *fp = fopen(fnidx, "r");
+	idx = bam_index_load_core(fp);
+	fclose(fp);
+	return idx;
+}
+
+bam_index_t *bam_index_load(const char *_fn)
+{
+	bam_index_t *idx;
+	FILE *fp;
+	char *fnidx, *fn;
+
+	if (strstr(_fn, "ftp://") == _fn) {
+		const char *p;
+		int l = strlen(_fn);
+		for (p = _fn + l - 1; p >= _fn; --p)
+			if (*p == '/') break;
+		fn = strdup(p + 1);
+	} else fn = strdup(_fn);
+	fnidx = (char*)calloc(strlen(fn) + 5, 1);
+	strcpy(fnidx, fn); strcat(fnidx, ".bai");
+	fp = fopen(fnidx, "r");
+	if (fp == 0) { // try "{base}.bai"
+		char *s = strstr(fn, "bam");
+		if (s == fn + strlen(fn) - 3) {
+			strcpy(fnidx, fn);
+			fnidx[strlen(fn)-1] = 'i';
+			fp = fopen(fnidx, "r");
+		}
+	}
+	free(fnidx); free(fn);
+	idx = bam_index_load_core(fp);
 	fclose(fp);
 	return idx;
 }
