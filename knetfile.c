@@ -22,7 +22,8 @@ static int kftp_get_response(knetFile *ftp)
 		}
 		ftp->response[n++] = c;
 		if (c == '\n') {
-			if (n >= 4 && isdigit(ftp->response[0]) && isdigit(ftp->response[1]) && isdigit(ftp->response[2]) && ftp->response[3] != '-') break;
+			if (n >= 4 && isdigit(ftp->response[0]) && isdigit(ftp->response[1]) && isdigit(ftp->response[2])
+				&& ftp->response[3] != '-') break;
 			n = 0;
 			continue;
 		}
@@ -58,7 +59,7 @@ static int kftp_pasv_connect(knetFile *ftp)
 
 	struct addrinfo hints, *res;
 	struct linger lng = { 0, 0 };
-	int on;
+	int on = 1;
 	char host[80], port[10];
 
 	if (ftp->pasv_port == 0) {
@@ -83,7 +84,7 @@ int kftp_connect(knetFile *ftp)
 {
 #define __err_connect(func) do { perror(func); return -1; } while (0)
 
-	int on;
+	int on = 1;
 	{ // open socket
 		struct addrinfo hints, *res;
 		memset(&hints, 0, sizeof(struct addrinfo));
@@ -129,7 +130,7 @@ knetFile *kftp_prep(const char *fn, const char *mode)
 	fp->host = calloc(l + 1, 1);
 	if (strchr(mode, 'c')) fp->no_reconnect = 1;
 	strncpy(fp->host, fn + 6, l);
-	fp->retr = calloc(strlen(p) + 7, 1);
+	fp->retr = calloc(strlen(p) + 8, 1);
 	sprintf(fp->retr, "RETR %s\r\n", p);
 	return fp;
 }
@@ -181,10 +182,29 @@ knetFile *knet_open(const char *fn, const char *mode)
 	return fp;
 }
 
+knetFile *knet_dopen(int fd, const char *mode)
+{
+	knetFile *fp = (knetFile*)calloc(1, sizeof(knetFile));
+	fp->type = KNF_TYPE_LOCAL;
+	fp->fd = fd;
+	return fp;
+}
+
 off_t knet_read(knetFile *fp, void *buf, off_t len)
 {
-	off_t l = read(fp->fd, buf, len);
-	fp->offset += l;
+	off_t l = 0;
+	if (fp->type == KNF_TYPE_LOCAL) {
+		l = read(fp->fd, buf, len);
+		fp->offset += l;
+	} else {
+		off_t rest = len, curr;
+		while (rest) {
+			curr = read(fp->fd, buf + l, rest);
+			if (curr == 0) break; // FIXME: end of file or bad network? I do not know...
+			l += curr; rest -= curr;
+		}
+		fp->offset += l;
+	}
 	return l;
 }
 
@@ -222,8 +242,8 @@ int main(void)
 	char buf[256];
 	knetFile *fp;
 //	fp = knet_open("ftp://ftp.ncbi.nih.gov/1000genomes/ftp/data/NA12878/alignment/NA12878.chrom6.SLX.SRP000032.2009_06.bam", "r"); knet_seek(fp, 2500000000ll, SEEK_SET);
-//	fp = knet_open("ftp://ftp.sanger.ac.uk/pub4/treefam/tmp/index.shtml", "r"); knet_seek(fp, 2000, SEEK_SET);
-	fp = knet_open("knetfile.c", "r"); knet_seek(fp, 2000, SEEK_SET);
+	fp = knet_open("ftp://ftp.sanger.ac.uk/pub4/treefam/tmp/index.shtml", "r"); knet_seek(fp, 2000, SEEK_SET);
+//	fp = knet_open("knetfile.c", "r"); knet_seek(fp, 2000, SEEK_SET);
 	knet_read(fp, buf, 255);
 	buf[255] = 0;
 	printf("%s\n", buf);
