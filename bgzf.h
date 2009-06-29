@@ -41,7 +41,9 @@ typedef struct {
     int64_t block_address;
     int block_length;
     int block_offset;
+	int cache_size;
     const char* error;
+	void *cache; // a pointer to a hash table
 } BGZF;
 
 #ifdef __cplusplus
@@ -103,6 +105,13 @@ int64_t bgzf_tell(BGZF* fp);
  * Returns zero on success, -1 on error.
  */
 int64_t bgzf_seek(BGZF* fp, int64_t pos, int where);
+
+/*
+ * Set the cache size. Zero to disable. By default, caching is
+ * disabled. The recommended cache size for frequent random access is
+ * about 8M bytes.
+ */
+void bgzf_set_cache_size(BGZF *fp, int cache_size);
 
 #ifdef __cplusplus
 }

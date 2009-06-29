@@ -162,6 +162,7 @@ tview_t *tv_init(const char *fn, const char *fn_fa)
 	tv->is_dot = 1;
 	tv->idx = bam_index_load(fn);
 	tv->fp = bam_open(fn, "r");
+	bgzf_set_cache_size(tv->fp, 8 * 1024 *1024);
 	assert(tv->fp);
 	tv->header = bam_header_read(tv->fp);
 	tv->lplbuf = bam_lplbuf_init(tv_pl_func, tv);

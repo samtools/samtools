@@ -132,25 +132,26 @@ knetFile *kftp_prep(const char *fn, const char *mode)
 	strncpy(fp->host, fn + 6, l);
 	fp->retr = calloc(strlen(p) + 8, 1);
 	sprintf(fp->retr, "RETR %s\r\n", p);
+	fp->seek_offset = -1;
 	return fp;
 }
 // place ->fd at offset off
-int kftp_connect_file(knetFile *fp, off_t off)
+int kftp_connect_file(knetFile *fp)
 {
 	if (fp->fd) {
 		close(fp->fd);
 		if (fp->no_reconnect) kftp_get_response(fp);
 	}
 	kftp_pasv_prep(fp);
-	if (off) {
+	if (fp->offset) {
 		char tmp[32];
-		sprintf(tmp, "REST %lld\r\n", (long long)off);
+		sprintf(tmp, "REST %lld\r\n", (long long)fp->offset);
 		kftp_send_cmd(fp, tmp, 1);
 	}
 	kftp_send_cmd(fp, fp->retr, 0);
 	kftp_pasv_connect(fp);
 	kftp_get_response(fp);
-	fp->offset = off;
+	fp->is_ready = 1;
 	return 0;
 }
 
@@ -168,7 +169,7 @@ knetFile *knet_open(const char *fn, const char *mode)
 			knet_close(fp);
 			return 0;
 		}
-		kftp_connect_file(fp, 0);
+		kftp_connect_file(fp);
 	} else {
 		int fd = open(fn, O_RDONLY);
 		if (fd == -1) {
@@ -198,6 +199,11 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 		fp->offset += l;
 	} else {
 		off_t rest = len, curr;
+		if (fp->is_ready == 0) {
+			if (!fp->no_reconnect) kftp_reconnect(fp);
+			kftp_connect_file(fp);
+			fp->is_ready = 1;
+		}
 		while (rest) {
 			curr = read(fp->fd, buf + l, rest);
 			if (curr == 0) break; // FIXME: end of file or bad network? I do not know...
@@ -223,8 +229,8 @@ int knet_seek(knetFile *fp, off_t off, int whence)
 			fprintf(stderr, "[knet_seek] only SEEK_SET is supported for FTP. Offset is unchanged.\n");
 			return -1;
 		}
-		if (!fp->no_reconnect) kftp_reconnect(fp);
-		kftp_connect_file(fp, off);
+		fp->offset = off;
+		fp->is_ready = 0;
 		return 0;
 	}
 	return -1;

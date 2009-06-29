@@ -16,8 +16,9 @@ typedef struct knetFile_s {
 	char *host;
 
 	// the following are for FTP only
-	int ctrl_fd, pasv_ip[4], pasv_port, max_response, no_reconnect;
+	int ctrl_fd, pasv_ip[4], pasv_port, max_response, no_reconnect, is_ready;
 	char *response, *retr;
+	int64_t seek_offset; // for lazy seek
 } knetFile;
 
 #define knet_tell(fp) ((fp)->offset)

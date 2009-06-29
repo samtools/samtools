@@ -10,6 +10,7 @@
  */
 
 /*
+  2009-06-29 by lh3: cache recent uncompressed blocks.
   2009-06-25 by lh3: optionally use my knetfile library to access file on a FTP.
   2009-06-12 by lh3: support a mode string like "wu" where 'u' for uncompressed output */
 
@@ -21,6 +22,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include "bgzf.h"
+
+#include "khash.h"
+typedef struct {
+	int size;
+	uint8_t *block;
+	int64_t end_offset;
+} cache_t;
+KHASH_MAP_INIT_INT64(cache, cache_t)
 
 extern off_t ftello(FILE *stream);
 extern int fseeko(FILE *stream, off_t offset, int whence);
@@ -93,6 +102,8 @@ static BGZF *bgzf_read_init()
     fp->uncompressed_block = malloc(MAX_BLOCK_SIZE);
     fp->compressed_block_size = MAX_BLOCK_SIZE;
     fp->compressed_block = malloc(MAX_BLOCK_SIZE);
+	fp->cache_size = 0;
+	fp->cache = kh_init(cache);
 	return fp;
 }
 
@@ -338,22 +349,83 @@ check_header(const byte* header)
             unpackInt16((uint8_t*)&header[14]) == BGZF_LEN);
 }
 
+static void free_cache(BGZF *fp)
+{
+	khint_t k;
+	khash_t(cache) *h = (khash_t(cache)*)fp->cache;
+	if (fp->open_mode != 'r') return;
+	for (k = kh_begin(h); k < kh_end(h); ++k)
+		if (kh_exist(h, k)) free(kh_val(h, k).block);
+	kh_destroy(cache, h);
+}
+
+static int load_block_from_cache(BGZF *fp, int64_t block_address)
+{
+	khint_t k;
+	cache_t *p;
+	khash_t(cache) *h = (khash_t(cache)*)fp->cache;
+	k = kh_get(cache, h, block_address);
+	if (k == kh_end(h)) return 0;
+	p = &kh_val(h, k);
+	if (fp->block_length != 0) fp->block_offset = 0;
+	fp->block_address = block_address;
+	fp->block_length = p->size;
+	memcpy(fp->uncompressed_block, p->block, MAX_BLOCK_SIZE);
+#ifdef _USE_KNETFILE
+	knet_seek(fp->x.fpr, p->end_offset, SEEK_SET);
+#else
+	fseeko(fp->file, p->end_offset, SEEK_SET);
+#endif
+	return p->size;
+}
+
+static void cache_block(BGZF *fp, int size)
+{
+	int ret;
+	khint_t k;
+	cache_t *p;
+	khash_t(cache) *h = (khash_t(cache)*)fp->cache;
+	if (MAX_BLOCK_SIZE >= fp->cache_size) return;
+	if ((kh_size(h) + 1) * MAX_BLOCK_SIZE > fp->cache_size) {
+		/* A better way would be to remove the oldest block in the
+		 * cache, but here we remove a random one for simplicity. This
+		 * should not have a big impact on performance. */
+		for (k = kh_begin(h); k < kh_end(h); ++k)
+			if (kh_exist(h, k)) break;
+		if (k < kh_end(h)) {
+			free(kh_val(h, k).block);
+			kh_del(cache, h, k);
+		}
+	}
+	k = kh_put(cache, h, fp->block_address, &ret);
+	if (ret == 0) return; // if this happens, a bug!
+	p = &kh_val(h, k);
+	p->size = fp->block_length;
+	p->end_offset = fp->block_address + size;
+	p->block = malloc(MAX_BLOCK_SIZE);
+	memcpy(kh_val(h, k).block, fp->uncompressed_block, MAX_BLOCK_SIZE);
+}
+
 static
 int
 read_block(BGZF* fp)
 {
     byte header[BLOCK_HEADER_LENGTH];
+	int size = 0;
 #ifdef _USE_KNETFILE
     int64_t block_address = knet_tell(fp->x.fpr);
+	if (load_block_from_cache(fp, block_address)) return 0;
     int count = knet_read(fp->x.fpr, header, sizeof(header));
 #else
     int64_t block_address = ftello(fp->file);
+	if (load_block_from_cache(fp, block_address)) return 0;
     int count = fread(header, 1, sizeof(header), fp->file);
 #endif
     if (count == 0) {
         fp->block_length = 0;
         return 0;
     }
+	size = count;
     if (count != sizeof(header)) {
         report_error(fp, "read failed");
         return -1;
@@ -375,6 +447,7 @@ read_block(BGZF* fp)
         report_error(fp, "read failed");
         return -1;
     }
+	size += count;
     count = inflate_block(fp, block_length);
     if (count < 0) {
         return -1;
@@ -385,6 +458,7 @@ read_block(BGZF* fp)
     }
     fp->block_address = block_address;
     fp->block_length = count;
+	cache_block(fp, size);
     return 0;
 }
 
@@ -515,6 +589,7 @@ bgzf_close(BGZF* fp)
     }
     free(fp->uncompressed_block);
     free(fp->compressed_block);
+	free_cache(fp);
     free(fp);
     return 0;
 }
@@ -523,6 +598,11 @@ int64_t
 bgzf_tell(BGZF* fp)
 {
     return ((fp->block_address << 16) | (fp->block_offset & 0xFFFF));
+}
+
+void bgzf_set_cache_size(BGZF *fp, int cache_size)
+{
+	if (fp) fp->cache_size = cache_size;
 }
 
 int64_t
