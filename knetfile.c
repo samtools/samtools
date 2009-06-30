@@ -107,9 +107,9 @@ int kftp_connect(knetFile *ftp)
 
 int kftp_reconnect(knetFile *ftp)
 {
-	if (ftp->ctrl_fd) {
+	if (ftp->ctrl_fd >= 0) {
 		close(ftp->ctrl_fd);
-		ftp->ctrl_fd = 0;
+		ftp->ctrl_fd = -1;
 	}
 	close(ftp->fd);
 	return kftp_connect(ftp);
@@ -127,6 +127,7 @@ knetFile *kftp_parse_url(const char *fn, const char *mode)
 	l = p - fn - 6;
 	fp = calloc(1, sizeof(knetFile));
 	fp->type = KNF_TYPE_FTP;
+	fp->fd = -1;
 	fp->host = calloc(l + 1, 1);
 	if (strchr(mode, 'c')) fp->no_reconnect = 1;
 	strncpy(fp->host, fn + 6, l);
@@ -139,7 +140,7 @@ knetFile *kftp_parse_url(const char *fn, const char *mode)
 int kftp_connect_file(knetFile *fp)
 {
 	int ret;
-	if (fp->fd) {
+	if (fp->fd >= 0) {
 		close(fp->fd);
 		if (fp->no_reconnect) kftp_get_response(fp);
 	}
@@ -177,7 +178,7 @@ knetFile *knet_open(const char *fn, const char *mode)
 			return 0;
 		}
 		kftp_connect_file(fp);
-		if (fp->fd == -1) {
+		if (fp->fd < 0) {
 			knet_close(fp);
 			return 0;
 		}
@@ -251,8 +252,8 @@ int knet_seek(knetFile *fp, off_t off, int whence)
 int knet_close(knetFile *fp)
 {
 	if (fp == 0) return 0;
-	if (fp->ctrl_fd > 0) close(fp->ctrl_fd);
-	if (fp->fd > 0) close(fp->fd);
+	if (fp->ctrl_fd >= 0) close(fp->ctrl_fd);
+	if (fp->fd >= 0) close(fp->fd);
 	free(fp->response); free(fp->retr); free(fp->host);
 	free(fp);
 	return 0;
