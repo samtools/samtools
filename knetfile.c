@@ -15,7 +15,7 @@ static int kftp_get_response(knetFile *ftp)
 	int n = 0;
 	char *p;
 	while (read(ftp->ctrl_fd, &c, 1)) { // FIXME: this is *VERY BAD* for unbuffered I/O
-//		fputc(c, stderr);
+		//fputc(c, stderr);
 		if (n >= ftp->max_response) {
 			ftp->max_response = ftp->max_response? ftp->max_response<<1 : 256;
 			ftp->response = realloc(ftp->response, ftp->max_response);
@@ -138,6 +138,7 @@ knetFile *kftp_prep(const char *fn, const char *mode)
 // place ->fd at offset off
 int kftp_connect_file(knetFile *fp)
 {
+	int ret;
 	if (fp->fd) {
 		close(fp->fd);
 		if (fp->no_reconnect) kftp_get_response(fp);
@@ -150,7 +151,12 @@ int kftp_connect_file(knetFile *fp)
 	}
 	kftp_send_cmd(fp, fp->retr, 0);
 	kftp_pasv_connect(fp);
-	kftp_get_response(fp);
+	ret = kftp_get_response(fp);
+	if (ret != 150) {
+		fprintf(stderr, "[kftp_connect_file] %s\n", fp->response);
+		close(fp->fd);
+		fp->fd = -1;
+	}
 	fp->is_ready = 1;
 	return 0;
 }
@@ -170,6 +176,10 @@ knetFile *knet_open(const char *fn, const char *mode)
 			return 0;
 		}
 		kftp_connect_file(fp);
+		if (fp->fd == -1) {
+			knet_close(fp);
+			return 0;
+		}
 	} else {
 		int fd = open(fn, O_RDONLY);
 		if (fd == -1) {
@@ -194,6 +204,7 @@ knetFile *knet_dopen(int fd, const char *mode)
 off_t knet_read(knetFile *fp, void *buf, off_t len)
 {
 	off_t l = 0;
+	if (fp->fd < 0) return 0;
 	if (fp->type == KNF_TYPE_LOCAL) {
 		l = read(fp->fd, buf, len);
 		fp->offset += l;
