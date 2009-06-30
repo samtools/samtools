@@ -3,6 +3,7 @@
 #include "khash.h"
 #include "ksort.h"
 #include "bam_endian.h"
+#include "knetfile.h"
 
 /*!
   @header
@@ -321,16 +322,7 @@ static bam_index_t *bam_index_load_core(FILE *fp)
 	return idx;
 }
 
-bam_index_t *bam_index_load2(const char *fnidx)
-{
-	bam_index_t *idx;
-	FILE *fp = fopen(fnidx, "r");
-	idx = bam_index_load_core(fp);
-	fclose(fp);
-	return idx;
-}
-
-bam_index_t *bam_index_load(const char *_fn)
+bam_index_t *bam_index_load_local(const char *_fn)
 {
 	bam_index_t *idx;
 	FILE *fp;
@@ -357,6 +349,51 @@ bam_index_t *bam_index_load(const char *_fn)
 	free(fnidx); free(fn);
 	idx = bam_index_load_core(fp);
 	fclose(fp);
+	return idx;
+}
+
+static void download_from_remote(const char *url)
+{
+	const int buf_size = 1 * 1024 * 1024;
+	char *fn;
+	FILE *fp;
+	uint8_t *buf;
+	knetFile *fp_remote;
+	int l;
+	if (strstr(url, "ftp://") != url) return;
+	l = strlen(url);
+	for (fn = (char*)url + l - 1; fn >= url; --fn)
+		if (*fn == '/') break;
+	++fn; // fn now points to the file name
+	fp_remote = knet_open(url, "r");
+	if (fp_remote == 0) {
+		fprintf(stderr, "[download_from_remote] fail to open remote file.\n");
+		return;
+	}
+	if ((fp = fopen(fn, "w")) == 0) {
+		fprintf(stderr, "[download_from_remote] fail to create file in the working directory.\n");
+		knet_close(fp_remote);
+		return;
+	}
+	buf = (uint8_t*)calloc(buf_size, 1);
+	while ((l = knet_read(fp_remote, buf, buf_size)) != 0)
+		fwrite(buf, 1, l, fp);
+	free(buf);
+	fclose(fp);
+	knet_close(fp_remote);
+}
+
+bam_index_t *bam_index_load(const char *fn)
+{
+	bam_index_t *idx;
+	idx = bam_index_load_local(fn);
+	if (idx == 0 && strstr(fn, "ftp://") == fn) {
+		char *fnidx = calloc(strlen(fn) + 5, 1);
+		strcat(strcpy(fnidx, fn), ".bai");
+		fprintf(stderr, "[bam_index_load] attempting to download the remote index file.\n");
+		download_from_remote(fnidx);
+		idx = bam_index_load_local(fn);
+	}
 	return idx;
 }
 

@@ -29,8 +29,22 @@ extern "C" {
 #endif
 
 	knetFile *knet_open(const char *fn, const char *mode);
+
+	/* 
+	   This only works with local files.
+	 */
 	knetFile *knet_dopen(int fd, const char *mode);
+
+	/*
+	  If ->is_ready==0, this routine updates ->fd; otherwise, it simply
+	  reads from ->fd.
+	 */
 	off_t knet_read(knetFile *fp, void *buf, off_t len);
+
+	/*
+	  This routine only sets ->offset and ->is_ready=0. It does not
+	  communicate with the FTP server.
+	 */
 	int knet_seek(knetFile *fp, off_t off, int whence);
 	int knet_close(knetFile *fp);
 

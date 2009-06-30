@@ -116,7 +116,7 @@ int kftp_reconnect(knetFile *ftp)
 }
 
 // initialize ->type, ->host and ->retr
-knetFile *kftp_prep(const char *fn, const char *mode)
+knetFile *kftp_parse_url(const char *fn, const char *mode)
 {
 	knetFile *fp;
 	char *p;
@@ -156,6 +156,7 @@ int kftp_connect_file(knetFile *fp)
 		fprintf(stderr, "[kftp_connect_file] %s\n", fp->response);
 		close(fp->fd);
 		fp->fd = -1;
+		return -1;
 	}
 	fp->is_ready = 1;
 	return 0;
@@ -169,7 +170,7 @@ knetFile *knet_open(const char *fn, const char *mode)
 		return 0;
 	}
 	if (strstr(fn, "ftp://") == fn) {
-		fp = kftp_prep(fn, mode);
+		fp = kftp_parse_url(fn, mode);
 		if (fp == 0) return 0;
 		if (kftp_connect(fp) == -1) {
 			knet_close(fp);
