@@ -1,3 +1,4 @@
+#include <time.h>
 #include <stdio.h>
 #include <netdb.h>
 #include <ctype.h>
@@ -9,11 +10,27 @@
 #include <sys/socket.h>
 #include "knetfile.h"
 
+static int socket_wait(int fd, int is_read)
+{
+	fd_set fds, *fdr = 0, *fdw = 0;
+	struct timeval tv;
+	int ret;
+	tv.tv_sec = 5; tv.tv_usec = 0; // 5 seconds time out
+	FD_ZERO(&fds);
+	FD_SET(fd, &fds);
+	if (is_read) fdr = &fds;
+	else fdw = &fds;
+	ret = select(fd+1, fdr, fdw, 0, &tv);
+	if (ret == -1) perror("select");
+	return ret;
+}
+
 static int kftp_get_response(knetFile *ftp)
 {
 	unsigned char c;
 	int n = 0;
 	char *p;
+	if (socket_wait(ftp->ctrl_fd, 1) <= 0) return 0;
 	while (read(ftp->ctrl_fd, &c, 1)) { // FIXME: this is *VERY BAD* for unbuffered I/O
 		//fputc(c, stderr);
 		if (n >= ftp->max_response) {
@@ -35,6 +52,7 @@ static int kftp_get_response(knetFile *ftp)
 
 static int kftp_send_cmd(knetFile *ftp, const char *cmd, int is_get)
 {
+	if (socket_wait(ftp->ctrl_fd, 0) <= 0) return -1; // socket is not ready for writing
 	write(ftp->ctrl_fd, cmd, strlen(cmd));
 	return is_get? kftp_get_response(ftp) : 0;
 }
@@ -218,6 +236,7 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 			fp->is_ready = 1;
 		}
 		while (rest) {
+			if (socket_wait(fp->fd, 1) <= 0) break; // socket is not ready for reading
 			curr = read(fp->fd, buf + l, rest);
 			if (curr == 0) break; // FIXME: end of file or bad network? I do not know...
 			l += curr; rest -= curr;
