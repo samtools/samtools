@@ -11,6 +11,7 @@ AOBJS=		bam_sort.o bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 PROG=		samtools
 INCLUDES=	
 SUBDIRS=	. misc
+LIBPATH=	
 
 .SUFFIXES:.c .o
 
@@ -23,7 +24,7 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
 			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				INCLUDES="$(INCLUDES)" $$target || exit 1; \
+				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
 
@@ -36,7 +37,7 @@ libbam.a:$(LOBJS)
 
 ### For the curses library: comment out `-lcurses' if you do not have curses installed
 samtools:lib $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) -lm -lcurses -lz -L. -lbam
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LIBPATH) -lm -lcurses -lz -L. -lbam
 
 razip:razip.o razf.o
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o -lz
