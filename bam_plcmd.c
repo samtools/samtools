@@ -17,6 +17,7 @@ KHASH_MAP_INIT_INT64(64, indel_list_t)
 #define BAM_PLF_INDEL_ONLY 0x04
 #define BAM_PLF_GLF        0x08
 #define BAM_PLF_VAR_ONLY   0x10
+#define BAM_PLF_2ND        0x20
 
 typedef struct {
 	bam_header_t *h;
@@ -248,6 +249,21 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		if (c > 126) c = 126;
 		putchar(c);
 	}
+	if (d->format & BAM_PLF_2ND) { // print 2nd calls and qualities
+		const unsigned char *q;
+		putchar('\t');
+		for (i = 0; i < n; ++i) {
+			const bam_pileup1_t *p = pu + i;
+			q = bam_aux_get(p->b, "E2");
+			putchar(q? q[p->qpos + 1] : 'N');
+		}
+		putchar('\t');
+		for (i = 0; i < n; ++i) {
+			const bam_pileup1_t *p = pu + i;
+			q = bam_aux_get(p->b, "U2");
+			putchar(q? q[p->qpos + 1] : '!');
+		}
+	}
 	// print mapping quality if -s is flagged on the command line
 	if (d->format & BAM_PLF_SIMPLE) {
 		putchar('\t');
@@ -282,7 +298,7 @@ int bam_pileup(int argc, char *argv[])
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
 	d->ido = bam_maqindel_opt_init();
-	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:S")) >= 0) {
+	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:S2")) >= 0) {
 		switch (c) {
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
 		case 't': fn_list = strdup(optarg); break;
@@ -297,6 +313,7 @@ int bam_pileup(int argc, char *argv[])
 		case 'v': d->format |= BAM_PLF_VAR_ONLY; break;
 		case 'm': d->mask = strtol(optarg, 0, 0); break;
 		case 'g': d->format |= BAM_PLF_GLF; break;
+		case '2': d->format |= BAM_PLF_2ND; break;
 		case 'I': d->ido->q_indel = atoi(optarg); break;
 		case 'G': d->ido->r_indel = atof(optarg); break;
 		case 'S': is_SAM = 1; break;
@@ -309,6 +326,7 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "Usage:  samtools pileup [options] <in.bam>|<in.sam>\n\n");
 		fprintf(stderr, "Option: -s        simple (yet incomplete) pileup format\n");
 		fprintf(stderr, "        -S        the input is in SAM\n");
+		fprintf(stderr, "        -2        output the 2nd best call and quality\n");
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
 		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);
 		fprintf(stderr, "        -M INT    cap mapping quality at INT [%d]\n", d->c->cap_mapQ);
