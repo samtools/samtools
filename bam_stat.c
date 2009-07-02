@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <assert.h>
 #include "bam.h"
 
 typedef struct {

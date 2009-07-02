@@ -1,9 +1,10 @@
 #include <stdio.h>
 #include <unistd.h>
+#include <assert.h>
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.4-20 (r365)"
+#define PACKAGE_VERSION "0.1.4-21 (r368)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);

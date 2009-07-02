@@ -38,8 +38,9 @@ glf3_header_t *glf3_header_read(glfFile fp)
 	h = glf3_header_init();
 	bgzf_read(fp, magic, 4);
 	if (strncmp(magic, "GLF\3", 4)) {
-		fprintf(stderr, "[glf3_header_read] invalid magic. Abort.\n");
-		exit(1);
+		fprintf(stderr, "[glf3_header_read] invalid magic.\n");
+		glf3_header_destroy(h);
+		return 0;
 	}
 	bgzf_read(fp, &h->l_text, 4);
 	if (glf3_is_BE) h->l_text = bam_swap_endian_4(h->l_text);

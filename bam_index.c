@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <assert.h>
 #include "bam.h"
 #include "khash.h"
 #include "ksort.h"
@@ -324,7 +325,6 @@ static bam_index_t *bam_index_load_core(FILE *fp)
 
 bam_index_t *bam_index_load_local(const char *_fn)
 {
-	bam_index_t *idx;
 	FILE *fp;
 	char *fnidx, *fn;
 
@@ -347,9 +347,11 @@ bam_index_t *bam_index_load_local(const char *_fn)
 		}
 	}
 	free(fnidx); free(fn);
-	idx = bam_index_load_core(fp);
-	fclose(fp);
-	return idx;
+	if (fp) {
+		bam_index_t *idx = bam_index_load_core(fp);
+		fclose(fp);
+		return idx;
+	} else return 0;
 }
 
 static void download_from_remote(const char *url)
@@ -394,6 +396,7 @@ bam_index_t *bam_index_load(const char *fn)
 		download_from_remote(fnidx);
 		idx = bam_index_load_local(fn);
 	}
+	if (idx == 0) fprintf(stderr, "[bam_index_load] fail to load BAM index.\n");
 	return idx;
 }
 
@@ -403,7 +406,10 @@ int bam_index_build2(const char *fn, const char *_fnidx)
 	FILE *fpidx;
 	bamFile fp;
 	bam_index_t *idx;
-	assert(fp = bam_open(fn, "r"));
+	if ((fp = bam_open(fn, "r")) == 0) {
+		fprintf(stderr, "[bam_index_build2] fail to open the BAM file.\n");
+		return -1;
+	}
 	idx = bam_index_core(fp);
 	bam_close(fp);
 	if (_fnidx == 0) {
@@ -414,7 +420,7 @@ int bam_index_build2(const char *fn, const char *_fnidx)
 	if (fpidx == 0) {
 		fprintf(stderr, "[bam_index_build2] fail to create the index file.\n");
 		free(fnidx);
-		return 1;
+		return -1;
 	}
 	bam_index_save(idx, fpidx);
 	bam_index_destroy(idx);

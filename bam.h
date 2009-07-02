@@ -41,7 +41,6 @@
  */
 
 #include <stdint.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -600,8 +599,9 @@ extern "C" {
 	  @param  ref_id  the returned chromosome ID
 	  @param  begin   the returned start coordinate
 	  @param  end     the returned end coordinate
+	  @return         0 on success; -1 on failure
 	 */
-	void bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
+	int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
 
 	/*!
 	  @abstract       Retrieve data of a tag

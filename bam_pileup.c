@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <assert.h>
 #include "sam.h"
 
 typedef struct __linkbuf_t {
@@ -61,7 +62,7 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 	int ret = 1, is_restart = 1;
 
 	if (c->flag&BAM_FUNMAP) return 0; // unmapped read
-	assert(x <= pos);
+	assert(x <= pos); // otherwise a bug
 	p->qpos = -1; p->indel = 0; p->is_del = p->is_head = p->is_tail = 0;
 	for (k = 0; k < c->n_cigar; ++k) {
 		int op = bam1_cigar(b)[k] & BAM_CIGAR_MASK; // operation
@@ -97,7 +98,7 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 			break;
 		}
 	}
-	assert(x > pos);
+	assert(x > pos); // otherwise a bug
 	return ret;
 }
 
@@ -196,7 +197,12 @@ int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 			buf->func(buf->tid, buf->pos, n_pu, buf->pu, buf->func_data);
 		}
 		// update tid and pos
-		if (buf->head->next) assert(buf->tid <= buf->head->b.core.tid); // otherwise, not sorted
+		if (buf->head->next) {
+			if (buf->tid > buf->head->b.core.tid) {
+				fprintf(stderr, "[bam_plbuf_push] unsorted input. Pileup aborts.\n");
+				return 1;
+			}
+		}
 		if (buf->tid < buf->head->b.core.tid) { // come to a new reference sequence
 			buf->tid = buf->head->b.core.tid; buf->pos = buf->head->beg; // jump to the next reference
 		} else if (buf->pos < buf->head->beg) { // here: tid == head->b.core.tid

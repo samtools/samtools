@@ -1,5 +1,4 @@
 #include <ctype.h>
-#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -85,14 +84,19 @@ faidx_t *fai_build_core(RAZF *rz)
 				name[l_name++] = c;
 			}
 			name[l_name] = '\0';
-			assert(ret);
+			if (ret == 0) {
+				fprintf(stderr, "[fai_build_core] the last entry has no sequence\n");
+				free(name); fai_destroy(idx);
+				return 0;
+			}
 			if (c != '\n') while (razf_read(rz, &c, 1) && c != '\n');
 			state = 1; len = 0;
 			offset = razf_tell(rz);
 		} else {
 			if (state == 3) {
-				fprintf(stderr, "[fai_build_core] inlined empty line is not allowed in sequence '%s'. Abort!\n", name);
-				exit(1);
+				fprintf(stderr, "[fai_build_core] inlined empty line is not allowed in sequence '%s'.\n", name);
+				free(name); fai_destroy(idx);
+				return 0;
 			}
 			if (state == 2) state = 3;
 			l1 = l2 = 0;
@@ -101,13 +105,15 @@ faidx_t *fai_build_core(RAZF *rz)
 				if (isgraph(c)) ++l2;
 			} while ((ret = razf_read(rz, &c, 1)) && c != '\n');
 			if (state == 3 && l2) {
-				fprintf(stderr, "[fai_build_core] different line length in sequence '%s'. Abort!\n", name);
-				exit(1);
+				fprintf(stderr, "[fai_build_core] different line length in sequence '%s'.\n", name);
+				free(name); fai_destroy(idx);
+				return 0;
 			}
 			++l1; len += l2;
 			if (l2 >= 0x10000) {
-				fprintf(stderr, "[fai_build_core] line length exceeds 65535 in sequence '%s'. Abort!\n", name);
-				exit(1);
+				fprintf(stderr, "[fai_build_core] line length exceeds 65535 in sequence '%s'.\n", name);
+				free(name); fai_destroy(idx);
+				return 0;
 			}
 			if (state == 1) line_len = l1, line_blen = l2, state = 0;
 			else if (state == 0) {
@@ -161,7 +167,7 @@ void fai_destroy(faidx_t *fai)
 	free(fai);
 }
 
-void fai_build(const char *fn)
+int fai_build(const char *fn)
 {
 	char *str;
 	RAZF *rz;
@@ -170,15 +176,24 @@ void fai_build(const char *fn)
 	str = (char*)calloc(strlen(fn) + 5, 1);
 	sprintf(str, "%s.fai", fn);
 	rz = razf_open(fn, "r");
-	assert(rz);
+	if (rz == 0) {
+		fprintf(stderr, "[fai_build] fail to open the FASTA file.\n");
+		free(str);
+		return -1;
+	}
 	fai = fai_build_core(rz);
 	razf_close(rz);
 	fp = fopen(str, "w");
-	assert(fp);
+	if (fp == 0) {
+		fprintf(stderr, "[fai_build] fail to write FASTA index.\n");
+		fai_destroy(fai); free(str);
+		return -1;
+	}
 	fai_save(fai, fp);
 	fclose(fp);
 	free(str);
 	fai_destroy(fai);
+	return 0;
 }
 
 faidx_t *fai_load(const char *fn)
@@ -194,6 +209,7 @@ faidx_t *fai_load(const char *fn)
 		fai_build(fn);
 		fp = fopen(str, "r");
 		if (fp == 0) {
+			fprintf(stderr, "[fai_load] fail to open FASTA index.\n");
 			free(str);
 			return 0;
 		}
@@ -201,9 +217,11 @@ faidx_t *fai_load(const char *fn)
 	fai = fai_read(fp);
 	fclose(fp);
 	fai->rz = razf_open(fn, "r");
-	if (fai->rz == 0) return 0;
-	assert(fai->rz);
 	free(str);
+	if (fai->rz == 0) {
+		fprintf(stderr, "[fai_load] fail to open FASTA file.\n");
+		return 0;
+	}
 	return fai;
 }
 
@@ -271,7 +289,7 @@ int faidx_main(int argc, char *argv[])
 			char *s;
 			faidx_t *fai;
 			fai = fai_load(argv[1]);
-			assert(fai);
+			if (fai == 0) return 1;
 			for (i = 2; i != argc; ++i) {
 				printf(">%s\n", argv[i]);
 				s = fai_fetch(fai, argv[i], &l);

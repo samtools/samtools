@@ -46,9 +46,10 @@ extern "C" {
 	/*!
 	  @abstract   Build index for a FASTA or razip compressed FASTA file.
 	  @param  fn  FASTA file name
+	  @return     0 on success; or -1 on failure
 	  @discussion File "fn.fai" will be generated.
 	 */
-	void fai_build(const char *fn);
+	int fai_build(const char *fn);
 
 	/*!
 	  @abstract    Distroy a faidx_t struct.

@@ -1,4 +1,5 @@
 #include <unistd.h>
+#include <assert.h>
 #include <string.h>
 #include <ctype.h>
 #include "faidx.h"

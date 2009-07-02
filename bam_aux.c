@@ -72,7 +72,7 @@ int32_t bam_get_tid(const bam_header_t *header, const char *seq_name)
 	return k == kh_end(h)? -1 : kh_value(h, k);
 }
 
-void bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end)
+int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end)
 {
 	char *s, *p;
 	int i, l, k;
@@ -93,12 +93,12 @@ void bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *b
 	iter = kh_get(s, h, s); /* get the ref_id */
 	if (iter == kh_end(h)) { // name not found
 		*ref_id = -1; free(s);
-		return;
+		return -1;
 	}
 	*ref_id = kh_value(h, iter);
 	if (i == k) { /* dump the whole sequence */
 		*begin = 0; *end = 1<<29; free(s);
-		return;
+		return -1;
 	}
 	for (p = s + i + 1; i != k; ++i) if (s[i] == '-') break;
 	*begin = atoi(p);
@@ -107,8 +107,12 @@ void bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *b
 		*end = atoi(p);
 	} else *end = 1<<29;
 	if (*begin > 0) --*begin;
-	assert(*begin <= *end);
 	free(s);
+	if (*begin > *end) {
+		fprintf(stderr, "[bam_parse_region] invalid region.\n");
+		return -1;
+	}
+	return 0;
 }
 
 int32_t bam_aux2i(const uint8_t *s)
