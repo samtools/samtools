@@ -624,7 +624,7 @@ extern "C" {
 
 	void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
 
-	// uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]); // an alias of bam_aux_get()
+	uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]); // an alias of bam_aux_get()
 
 	/*!  
 	  @abstract Calculate the rightmost coordinate of an alignment on the

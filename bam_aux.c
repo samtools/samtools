@@ -19,12 +19,12 @@ void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *d
 	b->data[ori_len + 2] = type;
 	memcpy(b->data + ori_len + 3, data, len);
 }
-/*
+
 uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2])
 {
 	return bam_aux_get(b, tag);
 }
-*/
+
 uint8_t *bam_aux_get(const bam1_t *b, const char tag[2])
 {
 	uint8_t *s;
