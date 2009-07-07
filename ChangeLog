@@ -1,4 +1,39 @@
 ------------------------------------------------------------------------
+r372 | lh3lh3 | 2009-07-07 09:49:27 +0100 (Tue, 07 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.c
+
+ * samtools-0.1.4-23 (r372)
+ * keep header text if "view -t" is used (by Gerton)
+
+------------------------------------------------------------------------
+r371 | lh3lh3 | 2009-07-07 01:13:32 +0100 (Tue, 07 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/samtools.1
+
+update documentation
+
+------------------------------------------------------------------------
+r370 | bhandsaker | 2009-07-02 22:24:34 +0100 (Thu, 02 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+
+Introduced LIBPATH variable so this could be overridden to allow samtools to build correct at the Broad.
+
+------------------------------------------------------------------------
+r369 | lh3lh3 | 2009-07-02 13:36:53 +0100 (Thu, 02 Jul 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.4-22 (r369)
+ * in pileup, optionally print E2 and U2
+ * remove the debugging code in bam_aux_get() (Drat!)
+
+------------------------------------------------------------------------
 r368 | lh3lh3 | 2009-07-02 11:32:26 +0100 (Thu, 02 Jul 2009) | 6 lines
 Changed paths:
    M /trunk/samtools/bam.c

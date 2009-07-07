@@ -23,21 +23,22 @@ samtools tview aln.sorted.bam ref.fasta
 .SH DESCRIPTION
 .PP
 Samtools is a set of utilities that manipulate alignments in the BAM
-format. It imports from and exports to the SAM (Sequence
-Alignment/Map) format, does sorting, merging and indexing, and
-allows to retrieve reads in any regions swiftly.
+format. It imports from and exports to the SAM (Sequence Alignment/Map)
+format, does sorting, merging and indexing, and allows to retrieve reads
+in any regions swiftly.
 
 Samtools is designed to work on a stream. It regards an input file `-'
-as the standard input (stdin) and an output file `-' as the standard output
-(stdout). Several commands can thus be combined with Unix pipes. Samtools
-always output warning and error messages to the standard error output (stderr).
+as the standard input (stdin) and an output file `-' as the standard
+output (stdout). Several commands can thus be combined with Unix
+pipes. Samtools always output warning and error messages to the standard
+error output (stderr).
 
-Samtools is also able to open a BAM (not SAM) file on a remote FTP server if the BAM
-file name starts with `ftp://'.
-Samtools checks the current working directory for the index file and will
-download the index upon absence. Samtools achieves random FTP file access
-with the `REST' ftp command. It does not retrieve the entire
-alignment file unless it is asked to do so.
+Samtools is also able to open a BAM (not SAM) file on a remote FTP
+server if the BAM file name starts with `ftp://'.  Samtools checks the
+current working directory for the index file and will download the index
+upon absence. Samtools achieves random FTP file access with the `REST'
+ftp command. It does not retrieve the entire alignment file unless it is
+asked to do so.
 
 .SH COMMANDS AND OPTIONS
 
@@ -106,8 +107,8 @@ is specified, all the alignments will be printed; otherwise only
 alignments overlapping the specified regions will be output. An
 alignment may be given multiple times if it is overlapping several
 regions. A region can be presented, for example, in the following
-format: `chr2', `chr2:1000000' or `chr2:1,000,000-2,000,000'. The coordinate
-is 1-based.
+format: `chr2', `chr2:1000000' or `chr2:1,000,000-2,000,000'. The
+coordinate is 1-based.
 
 .B OPTIONS:
 .RS
@@ -116,8 +117,9 @@ is 1-based.
 Output in the BAM format.
 .TP
 .B -u
-Output uncompressed BAM. This option saves time spent on compression/decomprssion
-and is thus preferred when the output is piped to another samtools command.
+Output uncompressed BAM. This option saves time spent on
+compression/decomprssion and is thus preferred when the output is piped
+to another samtools command.
 .TP
 .B -h
 Include the header in the output.

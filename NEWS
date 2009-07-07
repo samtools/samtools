@@ -1,3 +1,64 @@
+Beta Release 0.1.5 (7 July, 2009)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes:
+
+ * Support opening a BAM alignment on FTP. Users can now use "tview" to
+   view alignments at the NCBI ftp site. Please read manual for more
+   information.
+
+ * In library, propagate errors rather than exit or complain assertion
+   failure.
+
+ * Simplified the building system and fixed compiling errors caused by
+   zlib<1.2.2.1.
+
+ * Fixed an issue about lost header information when a SAM is imported
+   with "view -t".
+
+ * Implemented "samtool.pl varFilter" which filters both SNPs and short
+   indels. This command replaces "indelFilter".
+
+ * Implemented "samtools.pl pileup2fq" to generate FASTQ consensus from
+   pileup output.
+
+ * In pileup, cap mapping quality at 60. This helps filtering when
+   different aligners are in use.
+
+ * In pileup, allow to output variant sites only.
+
+ * Made pileup generate correct calls in repetitive region. At the same
+   time, I am considering to implement a simplified model in SOAPsnp,
+   although this has not happened yet.
+
+ * In view, added '-u' option to output BAM without compression. This
+   option is preferred when the output is piped to other commands.
+
+ * In view, added '-l' and '-r' to get the alignments for one library or
+   read group. The "@RG" header lines are now partially parsed.
+
+ * Do not include command line utilities to libbam.a.
+
+ * Fixed memory leaks in pileup and bam_view1().
+
+ * Made faidx more tolerant to empty lines right before or after FASTA >
+   lines.
+
+
+Changes in other utilities:
+
+ * Updated novo2sam.pl by Colin Hercus, the key developer of novoalign.
+
+
+This release involves several modifications to the key code base which
+may potentially introduce new bugs even though we have tried to minimize
+this by testing on several examples. Please let us know if you catch
+bugs.
+
+(0.1.5: 7 July 2009, r373)
+
+
+
 Beta Release 0.1.4 (21 May, 2009)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
