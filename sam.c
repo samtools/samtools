@@ -26,6 +26,7 @@ static void append_header_text(bam_header_t *header, char* text, int len)
 {
 	int x = header->l_text + 1;
 	int y = header->l_text + len + 1; // 1 byte null
+	if (text == 0) return;
 	kroundup32(x); 
 	kroundup32(y);
 	if (x < y) header->text = (char*)realloc(header->text, y);
