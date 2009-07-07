@@ -226,7 +226,12 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 	off_t l = 0;
 	if (fp->fd < 0) return 0;
 	if (fp->type == KNF_TYPE_LOCAL) {
-		l = read(fp->fd, buf, len);
+		off_t rest = len, curr;
+		while (rest) {
+			curr = read(fp->fd, buf + l, rest);
+			if (curr == 0) break;
+			l += curr; rest -= curr;
+		}
 		fp->offset += l;
 	} else {
 		off_t rest = len, curr;
