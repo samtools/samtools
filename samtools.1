@@ -1,4 +1,4 @@
-.TH samtools 1 "21 May 2009" "samtools-0.1.4" "Bioinformatics tools"
+.TH samtools 1 "6 July 2009" "samtools-0.1.5" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -27,7 +27,20 @@ format. It imports from and exports to the SAM (Sequence
 Alignment/Map) format, does sorting, merging and indexing, and
 allows to retrieve reads in any regions swiftly.
 
+Samtools is designed to work on a stream. It regards an input file `-'
+as the standard input (stdin) and an output file `-' as the standard output
+(stdout). Several commands can thus be combined with Unix pipes. Samtools
+always output warning and error messages to the standard error output (stderr).
+
+Samtools is also able to open a BAM (not SAM) file on a remote FTP server if the BAM
+file name starts with `ftp://'.
+Samtools checks the current working directory for the index file and will
+download the index upon absence. Samtools achieves random FTP file access
+with the `REST' ftp command. It does not retrieve the entire
+alignment file unless it is asked to do so.
+
 .SH COMMANDS AND OPTIONS
+
 .TP 10
 .B import
 samtools import <in.ref_list> <in.sam> <out.bam>
@@ -85,21 +98,26 @@ will be created.
 
 .TP
 .B view
-samtools view [-bhHS] [-t in.refList] [-o output] [-f reqFlag] [-F
-skipFlag] [-q minMapQ] <in.bam> [region1 [...]]
+samtools view [-bhuHS] [-t in.refList] [-o output] [-f reqFlag] [-F
+skipFlag] [-q minMapQ] [-l library] [-r readGroup] <in.bam>|<in.sam> [region1 [...]]
 
 Extract/print all or sub alignments in SAM or BAM format. If no region
 is specified, all the alignments will be printed; otherwise only
-alignments overlapping with the specified regions will be output. An
+alignments overlapping the specified regions will be output. An
 alignment may be given multiple times if it is overlapping several
 regions. A region can be presented, for example, in the following
-format: `chr2', `chr2:1000000' or `chr2:1,000,000-2,000,000'.
+format: `chr2', `chr2:1000000' or `chr2:1,000,000-2,000,000'. The coordinate
+is 1-based.
 
 .B OPTIONS:
 .RS
 .TP 8
 .B -b
 Output in the BAM format.
+.TP
+.B -u
+Output uncompressed BAM. This option saves time spent on compression/decomprssion
+and is thus preferred when the output is piped to another samtools command.
 .TP
 .B -h
 Include the header in the output.
@@ -135,6 +153,12 @@ Skip alignments with bits present in INT [0]
 .TP
 .B -q INT
 Skip alignments with MAPQ smaller than INT [0]
+.TP
+.B -l STR
+Only output reads in library STR [null]
+.TP
+.B -r STR
+Only output reads in read group STR [null]
 .RE
 
 .TP
@@ -155,7 +179,7 @@ format.
 .TP
 .B pileup
 samtools pileup [-f in.ref.fasta] [-t in.ref_list] [-l in.site_list]
-[-iscg] [-T theta] [-N nHap] [-r pairDiffRate] <in.alignment>
+[-iscgS2] [-T theta] [-N nHap] [-r pairDiffRate] <in.bam>|<in.sam>
 
 Print the alignment in the pileup format. In the pileup format, each
 line represents a genomic position, consisting of chromosome name,
@@ -196,6 +220,10 @@ Print the mapping quality as the last column. This option makes the
 output easier to parse, although this format is not space efficient.
 
 .TP
+.B -S
+The input file is in SAM.
+
+.TP
 .B -i
 Only output pileup lines containing indels.
 
@@ -205,6 +233,10 @@ The reference sequence in the FASTA format. Index file
 .I FILE.fai
 will be created if
 absent.
+
+.TP
+.B -M INT
+Cap mapping quality at INT [60]
 
 .TP
 .B -t FILE
@@ -230,11 +262,14 @@ as in the default format we may not know the mapping quality.
 .B -c
 Call the consensus sequence using MAQ consensus model. Options
 .B -T,
-.B -N
+.B -N,
+.B -I
 and
 .B -r
 are only effective when
 .B -c
+or
+.B -g
 is in use.
 
 .TP
@@ -254,6 +289,10 @@ Number of haplotypes in the sample (>=2) [2]
 .TP
 .B -r FLOAT
 Expected fraction of differences between a pair of haplotypes [0.001]
+
+.TP
+.B -I INT
+Phred probability of an indel in sequencing/prep. [40]
 
 .RE
 
@@ -314,8 +353,7 @@ base. Indel caller does not support the = bases at the moment.
 
 .RE
 
-
-.SH SAM FORFAM
+.SH SAM FORMAT
 
 SAM is TAB-delimited. Apart from the header lines, which are started
 with the `@' symbol, each alignment line consists of:
