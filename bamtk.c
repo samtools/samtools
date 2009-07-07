@@ -4,7 +4,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.4-22 (r369)"
+#define PACKAGE_VERSION "0.1.4-23 (r372)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);

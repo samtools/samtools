@@ -22,6 +22,17 @@ bam_header_t *bam_header_dup(const bam_header_t *h0)
 	if (h0->rg2lib) h->rg2lib = bam_strmap_dup(h0->rg2lib);
 	return h;
 }
+static void append_header_text(bam_header_t *header, char* text, int len)
+{
+	int x = header->l_text + 1;
+	int y = header->l_text + len + 1; // 1 byte null
+	kroundup32(x); 
+	kroundup32(y);
+	if (x < y) header->text = (char*)realloc(header->text, y);
+	strncpy(header->text + header->l_text, text, len); // we cannot use strcpy() here.
+	header->l_text += len;
+	header->text[header->l_text] = 0;
+}
 
 samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 {
@@ -40,8 +51,10 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 			fp->header = sam_header_read(fp->x.tamr);
 			if (fp->header->n_targets == 0) { // no @SQ fields
 				if (aux) { // check if aux is present
-					bam_header_destroy(fp->header);
+					bam_header_t *textheader = fp->header;
 					fp->header = sam_header_read2((const char*)aux);
+					append_header_text(fp->header, textheader->text, textheader->l_text);
+					bam_header_destroy(textheader);
 				}
 				if (fp->header->n_targets == 0)
 					fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
