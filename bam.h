@@ -45,21 +45,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#define _IOLIB 2
-
-#if _IOLIB == 1 && !defined(_NO_RAZF)
-#define BAM_TRUE_OFFSET
-#include "razf.h"
-/*! @abstract BAM file handler */
-typedef RAZF *bamFile;
-#define bam_open(fn, mode) razf_open(fn, mode)
-#define bam_dopen(fd, mode) razf_dopen(fd, mode)
-#define bam_close(fp) razf_close(fp)
-#define bam_read(fp, buf, size) razf_read(fp, buf, size)
-#define bam_write(fp, buf, size) razf_write(fp, buf, size)
-#define bam_tell(fp) razf_tell(fp)
-#define bam_seek(fp, pos, dir) razf_seek(fp, pos, dir)
-#elif _IOLIB == 2
+#ifndef BAM_LITE
 #define BAM_VIRTUAL_OFFSET16
 #include "bgzf.h"
 /*! @abstract BAM file handler */
@@ -71,18 +57,15 @@ typedef BGZF *bamFile;
 #define bam_write(fp, buf, size) bgzf_write(fp, buf, size)
 #define bam_tell(fp) bgzf_tell(fp)
 #define bam_seek(fp, pos, dir) bgzf_seek(fp, pos, dir)
-#elif _IOLIB == 3
-#define BAM_VIRTUAL_OFFSET16
-#include "razf.h"
-/*! @abstract BAM file handler */
-typedef RAZF *bamFile;
-#define bam_open(fn, mode) razf_open2(fn, mode)
-#define bam_dopen(fd, mode) razf_dopen2(fd, mode)
-#define bam_close(fp) razf_close(fp)
-#define bam_read(fp, buf, size) razf_read(fp, buf, size)
-#define bam_write(fp, buf, size) razf_write(fp, buf, size)
-#define bam_tell(fp) razf_tell2(fp)
-#define bam_seek(fp, pos, dir) razf_seek2(fp, pos, dir)
+#else
+#define BAM_TRUE_OFFSET
+#include <zlib.h>
+typedef gzFile bamFile;
+#define bam_open(fn, mode) gzopen(fn, mode)
+#define bam_dopen(fd, mode) gzdopen(fd, mode)
+#define bam_close(fp) gzclose(fp)
+#define bam_read(fp, buf, size) gzread(fp, buf, size)
+/* no bam_write/bam_tell/bam_seek() here */
 #endif
 
 /*! @typedef
