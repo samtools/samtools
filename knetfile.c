@@ -123,7 +123,7 @@ static int kftp_pasv_connect(knetFile *ftp)
 
 int kftp_connect(knetFile *ftp)
 {
-	ftp->ctrl_fd = socket_connect(ftp->host, "ftp");
+	ftp->ctrl_fd = socket_connect(ftp->host, ftp->port);
 	if (ftp->ctrl_fd == -1) return -1;
 	kftp_get_response(ftp);
 	kftp_send_cmd(ftp, "USER anonymous\r\n", 1);
@@ -155,6 +155,7 @@ knetFile *kftp_parse_url(const char *fn, const char *mode)
 	fp = calloc(1, sizeof(knetFile));
 	fp->type = KNF_TYPE_FTP;
 	fp->fd = -1;
+	fp->port = strdup("ftp");
 	fp->host = calloc(l + 1, 1);
 	if (strchr(mode, 'c')) fp->no_reconnect = 1;
 	strncpy(fp->host, fn + 6, l);
@@ -197,20 +198,34 @@ int kftp_connect_file(knetFile *fp)
 knetFile *khttp_parse_url(const char *fn, const char *mode)
 {
 	knetFile *fp;
-	char *p;
+	char *p, *proxy, *q;
 	int l;
 	if (strstr(fn, "http://") != fn) return 0;
+	// set ->http_host
 	for (p = (char*)fn + 7; *p && *p != '/'; ++p);
 	l = p - fn - 7;
 	fp = calloc(1, sizeof(knetFile));
+	fp->http_host = calloc(l + 1, 1);
+	strncpy(fp->http_host, fn + 7, l);
+	fp->http_host[l] = 0;
+	for (q = fp->http_host; *q && *q != ':'; ++q);
+	if (*q == ':') *q++ = 0;
+	// get http_proxy
+	proxy = getenv("http_proxy");
+	// set ->host, ->port and ->path
+	if (proxy == 0) {
+		fp->host = strdup(fp->http_host); // when there is no proxy, server name is identical to http_host name.
+		fp->port = strdup(*q? q : "http");
+		fp->path = strdup(*p? p : "/");
+	} else {
+		fp->host = (strstr(proxy, "http://") == proxy)? strdup(proxy + 7) : strdup(proxy);
+		for (q = fp->host; *q && *q != ':'; ++q);
+		if (*q == ':') *q++ = 0; 
+		fp->port = strdup(*q? q : "http");
+		fp->path = strdup(fn);
+	}
 	fp->type = KNF_TYPE_HTTP;
-	fp->fd = fp->ctrl_fd = -1;
-	fp->host = calloc(l + 1, 1);
-	if (strchr(mode, 'c')) fp->no_reconnect = 1;
-	strncpy(fp->host, fn + 7, l);
-	l = strlen(fn);
-	fp->path = calloc(strlen(p) + 2, 1);
-	strcpy(fp->path, *p? p : "/");
+	fp->ctrl_fd = fp->fd = -1;
 	fp->seek_offset = -1;
 	return fp;
 }
@@ -220,9 +235,9 @@ int khttp_connect_file(knetFile *fp)
 	int ret, l = 0;
 	char *buf, *p;
 	if (fp->fd >= 0) close(fp->fd);
-	fp->fd = socket_connect(fp->host, "http");
+	fp->fd = socket_connect(fp->host, fp->port);
 	buf = calloc(0x10000, 1); // FIXME: I am lazy... But in principle, 64KB should be large enough.
-	l += sprintf(buf + l, "GET %s HTTP/1.0\r\nHost: %s\r\n", fp->path, fp->host);
+	l += sprintf(buf + l, "GET %s HTTP/1.0\r\nHost: %s\r\n", fp->path, fp->http_host);
 	if (fp->offset)
 		l += sprintf(buf + l, "Range: bytes=%lld-\r\n", (long long)fp->offset);
 	l += sprintf(buf + l, "\r\n");
@@ -350,9 +365,11 @@ int knet_seek(knetFile *fp, off_t off, int whence)
 int knet_close(knetFile *fp)
 {
 	if (fp == 0) return 0;
-	if (fp->ctrl_fd >= 0) close(fp->ctrl_fd);
+	if (fp->ctrl_fd >= 0) close(fp->ctrl_fd); // FTP specific
 	if (fp->fd >= 0) close(fp->fd);
-	free(fp->response); free(fp->retr); free(fp->host); free(fp->path);
+	free(fp->host); free(fp->port);
+	free(fp->response); free(fp->retr); // FTP specific
+	free(fp->path); free(fp->http_host); // HTTP specific
 	free(fp);
 	return 0;
 }
