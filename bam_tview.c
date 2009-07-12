@@ -317,7 +317,6 @@ void tv_loop(tview_t *tv)
 	tid = tv->curr_tid; pos = tv->left_pos;
 	while (1) {
 		int c = getch();
-		//if(256 < c) {c = 1 + (c%256);} // Terminal was displaying ctrl-H as 263 via ssh from Mac OS X 10.5 computer 
 		switch (c) {
 			case '?': tv_win_help(tv); break;
 			case '\033':

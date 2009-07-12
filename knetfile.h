@@ -19,6 +19,9 @@ typedef struct knetFile_s {
 	int ctrl_fd, pasv_ip[4], pasv_port, max_response, no_reconnect, is_ready;
 	char *response, *retr;
 	int64_t seek_offset; // for lazy seek
+
+	// the following are for HTTP only
+	char *path;
 } knetFile;
 
 #define knet_tell(fp) ((fp)->offset)
