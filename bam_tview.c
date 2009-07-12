@@ -50,11 +50,11 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 	// print referece
 	rb = (tv->ref && pos - tv->left_pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N';
 	for (i = tv->last_pos + 1; i < pos; ++i) {
-		if (i%10 == 0) mvprintw(0, tv->ccol, "%-d", i+1);
+		if (i%10 == 0 && tv->mcol - tv->ccol >= 10) mvprintw(0, tv->ccol, "%-d", i+1);
 		c = tv->ref? tv->ref[i - tv->left_pos] : 'N';
 		mvaddch(1, tv->ccol++, c);
 	}
-	if (pos%10 == 0) mvprintw(0, tv->ccol, "%-d", pos+1);
+	if (pos%10 == 0 && tv->mcol - tv->ccol >= 10) mvprintw(0, tv->ccol, "%-d", pos+1);
 	// print consensus
 	call = bam_maqcns_call(n, pl, tv->bmc);
 	attr = A_UNDERLINE;
@@ -240,6 +240,13 @@ int tv_draw_aln(tview_t *tv, int tid, int pos)
 	bam_lplbuf_reset(tv->lplbuf);
 	bam_fetch(tv->fp, tv->idx, tv->curr_tid, tv->left_pos, tv->left_pos + tv->mcol, tv, tv_fetch_func);
 	bam_lplbuf_push(0, tv->lplbuf);
+
+	while (tv->ccol < tv->mcol) {
+		int pos = tv->last_pos + 1;
+		if (pos%10 == 0 && tv->mcol - tv->ccol >= 10) mvprintw(0, tv->ccol, "%-d", pos+1);
+		mvaddch(1, tv->ccol++, (tv->ref && pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N');
+		++tv->last_pos;
+	}
 	return 0;
 }
 
