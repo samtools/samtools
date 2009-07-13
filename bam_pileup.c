@@ -212,3 +212,19 @@ int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 	}
 	return 0;
 }
+
+int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data)
+{
+	bam_plbuf_t *buf;
+	int ret;
+	bam1_t *b;
+	b = bam_init1();
+	buf = bam_plbuf_init(func, func_data);
+	bam_plbuf_set_mask(buf, mask);
+	while ((ret = bam_read1(fp, b)) >= 0)
+		bam_plbuf_push(b, buf);
+	bam_plbuf_push(0, buf);
+	bam_plbuf_destroy(buf);
+	bam_destroy1(b);
+	return 0;
+}

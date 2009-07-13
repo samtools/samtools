@@ -509,6 +509,8 @@ extern "C" {
 	 */
 	int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf);
 
+	int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data);
+
 	struct __bam_lplbuf_t;
 	typedef struct __bam_lplbuf_t bam_lplbuf_t;
 
@@ -522,9 +524,6 @@ extern "C" {
 
 	/*! @abstract  bam_plbuf_push() equivalent with level calculated. */
 	int bam_lplbuf_push(const bam1_t *b, bam_lplbuf_t *buf);
-
-	/*! @abstract  bam_plbuf_file() equivalent with level calculated. */
-	int bam_lpileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data);
 
 	struct __bam_index_t;
 	typedef struct __bam_index_t bam_index_t;
