@@ -192,11 +192,8 @@ tview_t *tv_init(const char *fn, const char *fn_fa)
 	clear();
 	noecho();
 	cbreak();
-#ifdef NCURSES_VERSION
+	tv->mrow = 24; tv->mcol = 80;
 	getmaxyx(stdscr, tv->mrow, tv->mcol);
-#else
-	tv->mrow = 80; tv->mcol = 40;
-#endif
 	tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
 	tv->whelp = newwin(27, 40, 5, 5);
 	tv->color_for = TV_COLOR_MAPQ;
