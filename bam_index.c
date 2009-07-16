@@ -354,6 +354,7 @@ bam_index_t *bam_index_load_local(const char *_fn)
 	} else return 0;
 }
 
+#ifdef _USE_KNETFILE
 static void download_from_remote(const char *url)
 {
 	const int buf_size = 1 * 1024 * 1024;
@@ -384,6 +385,12 @@ static void download_from_remote(const char *url)
 	fclose(fp);
 	knet_close(fp_remote);
 }
+#else
+static void download_from_remote(const char *url)
+{
+	return;
+}
+#endif
 
 bam_index_t *bam_index_load(const char *fn)
 {

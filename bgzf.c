@@ -31,8 +31,13 @@ typedef struct {
 } cache_t;
 KHASH_MAP_INIT_INT64(cache, cache_t)
 
+#ifdef _NO_LFS
+#define ftello(fp) ftell(fp)
+#define fseeko(fp, offset, whence) fseek(fp, offset, whence)
+#else
 extern off_t ftello(FILE *stream);
 extern int fseeko(FILE *stream, off_t offset, int whence);
+#endif
 
 typedef int8_t byte;
 
