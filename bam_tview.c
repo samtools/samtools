@@ -1,6 +1,21 @@
-#ifndef _NO_CURSES
+#undef _HAVE_CURSES
+
+#if _CURSES_LIB == 0
+#elif _CURSES_LIB == 1
 #include <curses.h>
-#ifdef NCURSES_VERSION
+#ifndef NCURSES_VERSION
+#warning "_CURSES_LIB=1 but NCURSES_VERSION not defined; tview is NOT compiled"
+#else
+#define _HAVE_CURSES
+#endif
+#elif _CURSES_LIB == 2
+#include <xcurses.h>
+#define _HAVE_CURSES
+#else
+#warning "_CURSES_LIB is not 0, 1 or 2; tview is NOT compiled"
+#endif
+
+#ifdef _HAVE_CURSES
 #include <ctype.h>
 #include <assert.h>
 #include <string.h>
@@ -348,9 +363,7 @@ void tv_loop(tview_t *tv)
 			case 'k': ++tv->row_shift; break;
 			case KEY_BACKSPACE:
 			case '\177': pos -= tv->mcol; break;
-#ifdef KEY_RESIZE
 			case KEY_RESIZE: getmaxyx(stdscr, tv->mrow, tv->mcol); break;
-#endif
 			default: continue;
 		}
 		if (pos < 0) pos = 0;
@@ -381,5 +394,4 @@ int bam_tview_main(int argc, char *argv[])
 	fprintf(stderr, "[bam_tview_main] The ncurses library is unavailable; tview is not compiled.\n");
 	return 1;
 }
-#endif
-#endif // #ifndef _NO_CURSES
+#endif // #ifdef _HAVE_CURSES

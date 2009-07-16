@@ -4,7 +4,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.5-7 (r403)"
+#define PACKAGE_VERSION "0.1.5-8 (r404)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -77,7 +77,7 @@ static int usage()
 	fprintf(stderr, "         merge       merge multiple sorted alignment files\n");
 	fprintf(stderr, "         pileup      generate pileup output\n");
 	fprintf(stderr, "         faidx       index/extract FASTA\n");
-#ifndef _NO_CURSES
+#if _CURSES_LIB != 0
 	fprintf(stderr, "         tview       text alignment viewer\n");
 #endif
 	fprintf(stderr, "         index       index alignment\n");
@@ -107,7 +107,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "flagstat") == 0) return bam_flagstat(argc-1, argv+1);
 	else if (strcmp(argv[1], "tagview") == 0) return bam_tagview(argc-1, argv+1);
 	else if (strcmp(argv[1], "fillmd") == 0) return bam_fillmd(argc-1, argv+1);
-#ifndef _NO_CURSES
+#if _CURSES_LIB != 0
 	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif
 	else {
