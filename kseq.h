@@ -25,6 +25,10 @@
 
 /* Contact: Heng Li <lh3@sanger.ac.uk> */
 
+/*
+  2009-07-16 (lh3): in kstream_t, change "char*" to "unsigned char*"
+ */
+
 /* Last Modified: 12APR2009 */
 
 #ifndef AC_KSEQ_H
@@ -40,7 +44,7 @@
 
 #define __KS_TYPE(type_t)						\
 	typedef struct __kstream_t {				\
-		char *buf;								\
+		unsigned char *buf;						\
 		int begin, end, is_eof;					\
 		type_t f;								\
 	} kstream_t;
@@ -53,7 +57,7 @@
 	{																\
 		kstream_t *ks = (kstream_t*)calloc(1, sizeof(kstream_t));	\
 		ks->f = f;													\
-		ks->buf = (char*)malloc(__bufsize);							\
+		ks->buf = malloc(__bufsize);								\
 		return ks;													\
 	}																\
 	static inline void ks_destroy(kstream_t *ks)					\
