@@ -25,22 +25,39 @@ uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2])
 	return bam_aux_get(b, tag);
 }
 
+#define __skip_tag(s) do { \
+		int type = toupper(*(s));										\
+		++(s);															\
+		if (type == 'C') ++(s);											\
+		else if (type == 'S') (s) += 2;									\
+		else if (type == 'I' || type == 'F') (s) += 4;					\
+		else if (type == 'D') (s) += 8;									\
+		else if (type == 'Z' || type == 'H') { while (*(s)) ++(s); ++(s); } \
+	} while (0)
+
 uint8_t *bam_aux_get(const bam1_t *b, const char tag[2])
 {
 	uint8_t *s;
 	int y = tag[0]<<8 | tag[1];
 	s = bam1_aux(b);
 	while (s < b->data + b->data_len) {
-		int type, x = (int)s[0]<<8 | s[1];
+		int x = (int)s[0]<<8 | s[1];
 		s += 2;
 		if (x == y) return s;
-		type = toupper(*s); ++s;
-		if (type == 'C') ++s;
-		else if (type == 'S') s += 2;
-		else if (type == 'I' || type == 'F') s += 4;
-		else if (type == 'D') s += 8;
-		else if (type == 'Z' || type == 'H') { while (*s) ++s; ++s; }
+		__skip_tag(s);
 	}
+	return 0;
+}
+// s MUST BE returned by bam_aux_get()
+int bam_aux_del(bam1_t *b, uint8_t *s)
+{
+	uint8_t *p, *aux;
+	aux = bam1_aux(b);
+	p = s - 2;
+	__skip_tag(s);
+	memmove(p, s, b->l_aux - (s - aux));
+	b->data_len -= s - p;
+	b->l_aux -= s - p;
 	return 0;
 }
 

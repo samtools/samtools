@@ -48,7 +48,7 @@ extern "C" {
 	  "wbu" exclusively.
 
 	  @param aux auxiliary data; if mode[0]=='w', aux points to
-	  bam_header_t; if strcmp(mode, "rb")==0 and @SQ header lines in SAM
+	  bam_header_t; if strcmp(mode, "rb")!=0 and @SQ header lines in SAM
 	  are absent, aux points the file name of the list of the reference;
 	  aux is not used otherwise.
 
