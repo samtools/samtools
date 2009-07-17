@@ -4,7 +4,9 @@
 #include "khash.h"
 #include "ksort.h"
 #include "bam_endian.h"
+#ifdef _USE_KNETFILE
 #include "knetfile.h"
+#endif
 
 /*!
   @header
