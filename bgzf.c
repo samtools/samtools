@@ -39,7 +39,7 @@ extern off_t ftello(FILE *stream);
 extern int fseeko(FILE *stream, off_t offset, int whence);
 #endif
 
-typedef int8_t byte;
+typedef int8_t bgzf_byte_t;
 
 static const int DEFAULT_BLOCK_SIZE = 64 * 1024;
 static const int MAX_BLOCK_SIZE = 64 * 1024;
@@ -86,9 +86,9 @@ packInt32(uint8_t* buffer, uint32_t value)
     buffer[3] = value >> 24;
 }
 
-inline
+static inline
 int
-min(int x, int y)
+bgzf_min(int x, int y)
 {
     return (x < y) ? x : y;
 }
@@ -211,7 +211,7 @@ deflate_block(BGZF* fp, int block_length)
     // Deflate the block in fp->uncompressed_block into fp->compressed_block.
     // Also adds an extra field that stores the compressed block length.
 
-    byte* buffer = fp->compressed_block;
+    bgzf_byte_t* buffer = fp->compressed_block;
     int buffer_size = fp->compressed_block_size;
 
     // Init gzip header
@@ -342,10 +342,10 @@ inflate_block(BGZF* fp, int block_length)
 
 static
 int
-check_header(const byte* header)
+check_header(const bgzf_byte_t* header)
 {
     return (header[0] == GZIP_ID1 &&
-            header[1] == (byte) GZIP_ID2 &&
+            header[1] == (bgzf_byte_t) GZIP_ID2 &&
             header[2] == Z_DEFLATED &&
             (header[3] & FLG_FEXTRA) != 0 &&
             unpackInt16((uint8_t*)&header[10]) == BGZF_XLEN &&
@@ -415,7 +415,7 @@ static
 int
 read_block(BGZF* fp)
 {
-    byte header[BLOCK_HEADER_LENGTH];
+    bgzf_byte_t header[BLOCK_HEADER_LENGTH];
 	int size = 0;
 #ifdef _USE_KNETFILE
     int64_t block_address = knet_tell(fp->x.fpr);
@@ -440,7 +440,7 @@ read_block(BGZF* fp)
         return -1;
     }
     int block_length = unpackInt16((uint8_t*)&header[16]) + 1;
-    byte* compressed_block = (byte*) fp->compressed_block;
+    bgzf_byte_t* compressed_block = (bgzf_byte_t*) fp->compressed_block;
     memcpy(compressed_block, header, BLOCK_HEADER_LENGTH);
     int remaining = block_length - BLOCK_HEADER_LENGTH;
 #ifdef _USE_KNETFILE
@@ -479,7 +479,7 @@ bgzf_read(BGZF* fp, void* data, int length)
     }
 
     int bytes_read = 0;
-    byte* output = data;
+    bgzf_byte_t* output = data;
     while (bytes_read < length) {
         int available = fp->block_length - fp->block_offset;
         if (available <= 0) {
@@ -491,8 +491,8 @@ bgzf_read(BGZF* fp, void* data, int length)
                 break;
             }
         }
-        int copy_length = min(length-bytes_read, available);
-        byte* buffer = fp->uncompressed_block;
+        int copy_length = bgzf_min(length-bytes_read, available);
+        bgzf_byte_t* buffer = fp->uncompressed_block;
         memcpy(output, buffer + fp->block_offset, copy_length);
         fp->block_offset += copy_length;
         output += copy_length;
@@ -545,12 +545,12 @@ bgzf_write(BGZF* fp, const void* data, int length)
         fp->uncompressed_block = malloc(fp->uncompressed_block_size);
     }
 
-    const byte* input = data;
+    const bgzf_byte_t* input = data;
     int block_length = fp->uncompressed_block_size;
     int bytes_written = 0;
     while (bytes_written < length) {
-        int copy_length = min(block_length - fp->block_offset, length - bytes_written);
-        byte* buffer = fp->uncompressed_block;
+        int copy_length = bgzf_min(block_length - fp->block_offset, length - bytes_written);
+        bgzf_byte_t* buffer = fp->uncompressed_block;
         memcpy(buffer + fp->block_offset, input, copy_length);
         fp->block_offset += copy_length;
         input += copy_length;

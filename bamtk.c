@@ -4,7 +4,7 @@
 #include "bam.h"
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.5-10 (r407)"
+#define PACKAGE_VERSION "0.1.5-11 (r408)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -85,7 +85,7 @@ static int usage()
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
 	fprintf(stderr, "         glfview     print GLFv3 file\n");
 	fprintf(stderr, "         flagstat    simple stats\n");
-	fprintf(stderr, "         fillmd      fill the MD/NM tag and generate '=' bases\n");
+	fprintf(stderr, "         fillmd      recalculate MD/NM tags and '=' bases\n");
 	fprintf(stderr, "\n");
 	return 1;
 }

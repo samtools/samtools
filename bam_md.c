@@ -59,7 +59,7 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 	ksprintf(str, "%d", u);
 	if (!old_nm) bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
 	else if (nm != old_nm_i) {
-		fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d != %d\n", bam1_qname(b), old_nm_i, nm);
+		fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d -> %d\n", bam1_qname(b), old_nm_i, nm);
 		bam_aux_del(b, old_nm);
 		bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
 	}
@@ -72,8 +72,11 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 					break;
 			if (i < str->l) is_diff = 1;
 		} else is_diff = 1;
-		if (is_diff)
-			fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' != '%s'\n", bam1_qname(b), old_md+1, str->s);
+		if (is_diff) {
+			fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam1_qname(b), old_md+1, str->s);
+			bam_aux_del(b, old_md);
+			bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+		}
 	}
 	free(str->s); free(str);
 }

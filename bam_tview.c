@@ -384,8 +384,9 @@ int bam_tview_main(int argc, char *argv[])
 	tv_destroy(tv);
 	return 0;
 }
-#else // #ifdef NCURSES_VERSION
-#warning "The ncurses library is unavailable; tview is disabled."
+#else // #ifdef _HAVE_CURSES
+#include <stdio.h>
+#warning "No curses library is available; tview is disabled."
 int bam_tview_main(int argc, char *argv[])
 {
 	fprintf(stderr, "[bam_tview_main] The ncurses library is unavailable; tview is not compiled.\n");
