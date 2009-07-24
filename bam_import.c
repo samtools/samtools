@@ -36,6 +36,25 @@ unsigned char bam_nt16_table[256] = {
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15
 };
 
+unsigned short bam_char2flag_table[256] = {
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,BAM_FREAD1,BAM_FREAD2,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	BAM_FPROPER_PAIR,0,BAM_FMREVERSE,0, 0,BAM_FMUNMAP,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, BAM_FDUP,0,BAM_FQCFAIL,0, 0,0,0,0, 0,0,0,0,
+	BAM_FPAIRED,0,BAM_FREVERSE,BAM_FSECONDARY, 0,BAM_FUNMAP,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
+	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0
+};
+
 char *bam_nt16_rev_table = "=ACMGRSVTWYHKDBN";
 
 struct __tamFile_t {
@@ -296,12 +315,19 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		memcpy(alloc_data(b, doff + c->l_qname) + doff, str->s, c->l_qname);
 		doff += c->l_qname;
 	}
-	{ // flag, tid, pos, qual
+	{ // flag
 		long flag;
 		char *s;
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1;
 		flag = strtol((char*)str->s, &s, 0);
+		if (*s) { // not the end of the string
+			flag = 0;
+			for (s = str->s; *s; ++s)
+				flag |= bam_char2flag_table[(int)*s];
+		}
 		c->flag = flag;
+	}
+	{ // tid, pos, qual
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->tid = bam_get_tid(header, str->s);
 		if (c->tid < 0 && strcmp(str->s, "*")) {
 			if (header->n_targets == 0) {

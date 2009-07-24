@@ -6,6 +6,7 @@
 #include "kstring.h"
 
 int bam_is_be = 0;
+char *bam_flag2char_table = "pPuUrR12sfd\0\0\0\0\0";
 
 /**************************
  * CIGAR related routines *
@@ -236,7 +237,7 @@ int bam_write1(bamFile fp, const bam1_t *b)
 	return bam_write1_core(fp, &b->core, b->data_len, b->data);
 }
 
-char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int is_hex)
+char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 {
 	uint8_t *s = bam1_seq(b), *t = bam1_qual(b);
 	int i;
@@ -244,8 +245,15 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int is_hex)
 	kstring_t str;
 	str.l = str.m = 0; str.s = 0;
 
-	if (is_hex) ksprintf(&str, "%s\t0x%x\t", bam1_qname(b), c->flag);
-	else ksprintf(&str, "%s\t%d\t", bam1_qname(b), c->flag);
+	ksprintf(&str, "%s\t", bam1_qname(b));
+	if (of == BAM_OFDEC) ksprintf(&str, "%d\t", c->flag);
+	else if (of == BAM_OFHEX) ksprintf(&str, "0x%x\t", c->flag);
+	else { // BAM_OFSTR
+		for (i = 0; i < 16; ++i)
+			if ((c->flag & 1<<i) && bam_flag2char_table[i])
+				kputc(bam_flag2char_table[i], &str);
+		kputc('\t', &str);
+	}
 	if (c->tid < 0) kputs("*\t", &str);
 	else ksprintf(&str, "%s\t", header->target_name[c->tid]);
 	ksprintf(&str, "%d\t%d\t", c->pos + 1, c->qual);
@@ -285,7 +293,7 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int is_hex)
 
 char *bam_format1(const bam_header_t *header, const bam1_t *b)
 {
-	return bam_format1_core(header, b, 0);
+	return bam_format1_core(header, b, BAM_OFDEC);
 }
 
 void bam_view1(const bam_header_t *header, const bam1_t *b)

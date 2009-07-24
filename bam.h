@@ -113,6 +113,10 @@ typedef struct {
 /*! @abstract optical or PCR duplicate */
 #define BAM_FDUP        1024
 
+#define BAM_OFDEC          0
+#define BAM_OFHEX          1
+#define BAM_OFSTR          2
+
 /*! @abstract defautl mask for pileup */
 #define BAM_DEF_MASK (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP)
 
@@ -431,7 +435,7 @@ extern "C" {
 	 */
 	char *bam_format1(const bam_header_t *header, const bam1_t *b);
 
-	char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int is_hex);
+	char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of);
 
 	/*! @typedef
 	  @abstract Structure for one alignment covering the pileup position.
