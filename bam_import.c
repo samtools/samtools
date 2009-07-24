@@ -297,7 +297,11 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		doff += c->l_qname;
 	}
 	{ // flag, tid, pos, qual
-		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->flag = atoi(str->s);
+		long flag;
+		char *s;
+		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1;
+		flag = strtol((char*)str->s, &s, 0);
+		c->flag = flag;
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->tid = bam_get_tid(header, str->s);
 		if (c->tid < 0 && strcmp(str->s, "*")) {
 			if (header->n_targets == 0) {

@@ -15,7 +15,7 @@
 
 /*! @typedef
   @abstract SAM/BAM file handler
-  @field  type    type of the handler; bit 1 for BAM and bit 2 for reading
+  @field  type    type of the handler; bit 1 for BAM, 2 for reading and bit 3 for is_hex
   @field  bam   BAM file handler; valid if (type&1) == 1
   @field  tamr  SAM file handler for reading; valid if type == 2
   @field  tamw  SAM file handler for writing; valid if type == 0
@@ -41,11 +41,11 @@ extern "C" {
 	  @param fn SAM/BAM file name; "-" is recognized as stdin (for
 	  reading) or stdout (for writing).
 
-	  @param mode open mode /[rw](b?)(u?)(h?)/: 'r' for reading, 'w' for
-	  writing, 'b' for BAM I/O, 'u' for uncompressed BAM output and 'h'
-	  for outputing header in SAM. If 'b' present, it must immediately
-	  follow 'r' or 'w'. Valid modes are "r", "w", "wh", "rb", "wb" and
-	  "wbu" exclusively.
+	  @param mode open mode /[rw](b?)(u?)(h?)(x?)/: 'r' for reading, 'w'
+	  for writing, 'b' for BAM I/O, 'u' for uncompressed BAM output, 'h'
+	  for outputing header in SAM and 'x' for HEX flag. If 'b' present,
+	  it must immediately follow 'r' or 'w'. Valid modes are "r", "w",
+	  "wh", "wx", "whx", "rb", "wb" and "wbu" exclusively.
 
 	  @param aux auxiliary data; if mode[0]=='w', aux points to
 	  bam_header_t; if strcmp(mode, "rb")!=0 and @SQ header lines in SAM

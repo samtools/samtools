@@ -3,6 +3,7 @@
 
 #define TYPE_BAM  1
 #define TYPE_READ 2
+#define TYPE_HEX  4
 
 bam_header_t *bam_header_dup(const bam_header_t *h0)
 {
@@ -75,6 +76,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 			// open file
 			fp->x.tamw = strcmp(fn, "-")? fopen(fn, "w") : stdout;
 			if (fp->x.tamr == 0) goto open_err_ret;
+			if (strstr(mode, "x")) fp->type |= TYPE_HEX;
 			// write header
 			if (strstr(mode, "h")) {
 				int i;
@@ -126,7 +128,7 @@ int samwrite(samfile_t *fp, const bam1_t *b)
 	if (fp == 0 || (fp->type & TYPE_READ)) return -1; // not open for writing
 	if (fp->type & TYPE_BAM) return bam_write1(fp->x.bam, b);
 	else {
-		char *s = bam_format1(fp->header, b);
+		char *s = bam_format1_core(fp->header, b, fp->type & TYPE_HEX);
 		int l = strlen(s);
 		fputs(s, fp->x.tamw); fputc('\n', fp->x.tamw);
 		free(s);

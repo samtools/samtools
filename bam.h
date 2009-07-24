@@ -431,6 +431,8 @@ extern "C" {
 	 */
 	char *bam_format1(const bam_header_t *header, const bam1_t *b);
 
+	char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int is_hex);
+
 	/*! @typedef
 	  @abstract Structure for one alignment covering the pileup position.
 	  @field  b      pointer to the alignment

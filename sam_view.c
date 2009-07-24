@@ -35,13 +35,13 @@ static int usage(void);
 
 int main_samview(int argc, char *argv[])
 {
-	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, is_uncompressed = 0, is_bamout = 0;
+	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, is_uncompressed = 0, is_bamout = 0, is_hex = 0;
 	samfile_t *in = 0, *out = 0;
 	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:r:")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:r:x")) >= 0) {
 		switch (c) {
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
@@ -55,6 +55,7 @@ int main_samview(int argc, char *argv[])
 		case 'u': is_uncompressed = 1; break;
 		case 'l': g_library = strdup(optarg); break;
 		case 'r': g_rg = strdup(optarg); break;
+		case 'x': is_hex = 1; break;
 		default: return usage();
 		}
 	}
@@ -64,6 +65,7 @@ int main_samview(int argc, char *argv[])
 	if (is_bamin) strcat(in_mode, "b");
 	if (is_header) strcat(out_mode, "h");
 	if (is_uncompressed) strcat(out_mode, "u");
+	if (is_hex && !is_bamout) strcat(out_mode, "x");
 	if (argc == optind) return usage();
 
 	// open file handlers
@@ -123,6 +125,7 @@ static int usage()
 	fprintf(stderr, "         -H       print header only (no alignments)\n");
 	fprintf(stderr, "         -S       input is SAM\n");
 	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
+	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -o FILE  output file name [stdout]\n");
 	fprintf(stderr, "         -f INT   required flag, 0 for unset [0]\n");

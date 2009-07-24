@@ -236,7 +236,7 @@ int bam_write1(bamFile fp, const bam1_t *b)
 	return bam_write1_core(fp, &b->core, b->data_len, b->data);
 }
 
-char *bam_format1(const bam_header_t *header, const bam1_t *b)
+char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int is_hex)
 {
 	uint8_t *s = bam1_seq(b), *t = bam1_qual(b);
 	int i;
@@ -244,7 +244,8 @@ char *bam_format1(const bam_header_t *header, const bam1_t *b)
 	kstring_t str;
 	str.l = str.m = 0; str.s = 0;
 
-	ksprintf(&str, "%s\t%d\t", bam1_qname(b), c->flag);
+	if (is_hex) ksprintf(&str, "%s\t0x%x\t", bam1_qname(b), c->flag);
+	else ksprintf(&str, "%s\t%d\t", bam1_qname(b), c->flag);
 	if (c->tid < 0) kputs("*\t", &str);
 	else ksprintf(&str, "%s\t", header->target_name[c->tid]);
 	ksprintf(&str, "%d\t%d\t", c->pos + 1, c->qual);
@@ -280,6 +281,11 @@ char *bam_format1(const bam_header_t *header, const bam1_t *b)
 		else if (type == 'Z' || type == 'H') { ksprintf(&str, "%c:", type); while (*s) kputc(*s++, &str); ++s; }
 	}
 	return str.s;
+}
+
+char *bam_format1(const bam_header_t *header, const bam1_t *b)
+{
+	return bam_format1_core(header, b, 0);
 }
 
 void bam_view1(const bam_header_t *header, const bam1_t *b)
