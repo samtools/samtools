@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 # Contact: lh3
-# Version: 0.1.3
+# Version: 0.1.4
 
 use strict;
 use warnings;
@@ -20,6 +20,7 @@ sub wgsim_eval {
   $flag |= 1 if (defined $opts{p});
   $flag |= 2 if (defined $opts{c});
   while (<>) {
+	next if (/^\@/);
 	my @t = split;
 	my $line = $_;
 	my ($q, $is_correct, $chr, $left, $rght) = (int($t[4]/10), 1, $t[2], $t[3], $t[3]);
