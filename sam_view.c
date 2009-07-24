@@ -31,18 +31,18 @@ static int view_func(const bam1_t *b, void *data)
 	return 0;
 }
 
-static int usage(void);
+static int usage(int is_long_help);
 
 int main_samview(int argc, char *argv[])
 {
 	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, is_uncompressed = 0, is_bamout = 0;
-	int of_type = BAM_OFDEC;
+	int of_type = BAM_OFDEC, is_long_help = 0;
 	samfile_t *in = 0, *out = 0;
 	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:r:xX")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:r:xX?")) >= 0) {
 		switch (c) {
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
@@ -58,7 +58,8 @@ int main_samview(int argc, char *argv[])
 		case 'r': g_rg = strdup(optarg); break;
 		case 'x': of_type = BAM_OFHEX; break;
 		case 'X': of_type = BAM_OFSTR; break;
-		default: return usage();
+		case '?': is_long_help = 1; break;
+		default: return usage(is_long_help);
 		}
 	}
 	if (is_uncompressed) is_bamout = 1;
@@ -71,7 +72,7 @@ int main_samview(int argc, char *argv[])
 	if (is_bamin) strcat(in_mode, "b");
 	if (is_header) strcat(out_mode, "h");
 	if (is_uncompressed) strcat(out_mode, "u");
-	if (argc == optind) return usage();
+	if (argc == optind) return usage(is_long_help);
 
 	// open file handlers
 	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
@@ -121,7 +122,7 @@ view_end:
 	return ret;
 }
 
-static int usage()
+static int usage(int is_long_help)
 {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Usage:   samtools view [options] <in.bam>|<in.sam> [region1 [...]]\n\n");
@@ -139,8 +140,10 @@ static int usage()
 	fprintf(stderr, "         -q INT   minimum mapping quality [0]\n");
 	fprintf(stderr, "         -l STR   only output reads in library STR [null]\n");
 	fprintf(stderr, "         -r STR   only output reads in read group STR [null]\n");
-	fprintf(stderr, "\n\
-Notes:\n\
+	fprintf(stderr, "         -?       longer help\n");
+	fprintf(stderr, "\n");
+	if (is_long_help)
+		fprintf(stderr, "Notes:\n\
 \n\
   1. By default, this command assumes the file on the command line is in\n\
      the BAM format and it prints the alignments in SAM. If `-t' is\n\
@@ -160,6 +163,14 @@ Notes:\n\
 \n\
   5. Option `-u' is preferred over `-b' when the output is piped to\n\
      another samtools command.\n\
+\n\
+  6. In a string FLAG, each character represents one bit with\n\
+     p=0x1 (paired), P=0x2 (properly paired), u=0x4 (unmapped),\n\
+     U=0x8 (mate unmapped), r=0x10 (reverse), R=0x20 (mate reverse)\n\
+     1=0x40 (first), 2=0x80 (second), s=0x100 (not primary), \n\
+     f=0x200 (failure) and d=0x400 (duplicate). Note that `-x' and\n\
+     `-X' are samtools-C specific. Picard and older samtools do not\n\
+     support HEX or string flags.\n\
 \n");
 	return 1;
 }
