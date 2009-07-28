@@ -487,9 +487,11 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 tamFile sam_open(const char *fn)
 {
 	tamFile fp;
+	gzFile gzfp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
+	if (gzfp == 0) return 0;
 	fp = (tamFile)calloc(1, sizeof(struct __tamFile_t));
 	fp->str = (kstring_t*)calloc(1, sizeof(kstring_t));
-	fp->fp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
+	fp->fp = gzfp;
 	fp->ks = ks_init(fp->fp);
 	return fp;
 }

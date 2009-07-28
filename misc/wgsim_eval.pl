@@ -1,7 +1,7 @@
 #!/usr/bin/perl -w
 
 # Contact: lh3
-# Version: 0.1.4
+# Version: 0.1.5
 
 use strict;
 use warnings;
@@ -11,17 +11,18 @@ use Getopt::Std;
 exit;
 
 sub wgsim_eval {
-  my %opts;
-  getopts('pc', \%opts);
-  die("Usage: wgsim_eval.pl [-pc] <in.sam>\n") if (@ARGV == 0 && -t STDIN);
+  my %opts = (g=>5);
+  getopts('pcg:', \%opts);
+  die("Usage: wgsim_eval.pl [-pc] [-g $opts{g}] <in.sam>\n") if (@ARGV == 0 && -t STDIN);
   my (@c0, @c1);
   my ($max_q, $flag) = (0, 0);
-  my $gap = 5;
+  my $gap = $opts{g};
   $flag |= 1 if (defined $opts{p});
   $flag |= 2 if (defined $opts{c});
   while (<>) {
 	next if (/^\@/);
-	my @t = split;
+	my @t = split("\t");
+	next if (@t < 11);
 	my $line = $_;
 	my ($q, $is_correct, $chr, $left, $rght) = (int($t[4]/10), 1, $t[2], $t[3], $t[3]);
 	$max_q = $q if ($q > $max_q);
@@ -29,8 +30,8 @@ sub wgsim_eval {
 	$_ = $t[5]; s/(\d+)[MDN]/$rght+=$1,'x'/eg;
 	--$rght;
 	# correct for soft clipping
-	$left -= $1 if (/^(\d+)S/);
-	$rght += $1 if (/(\d+)S$/);
+	$left -= $1 if (/^(\d+)[SH]/);
+	$rght += $1 if (/(\d+)[SH]$/);
 	# skip unmapped reads
 	next if (($t[1]&0x4) || $chr eq '*');
 	# parse read name and check

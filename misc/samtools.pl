@@ -10,7 +10,7 @@ my $version = '0.3.2 (r321)';
 &usage if (@ARGV < 1);
 
 my $command = shift(@ARGV);
-my %func = (showALEN=>\&showALEN, pileup2fq=>\&pileup2fq, varFilter=>\&varFilter);
+my %func = (showALEN=>\&showALEN, pileup2fq=>\&pileup2fq, varFilter=>\&varFilter, unique=>\&unique);
 
 die("Unknown command \"$command\".\n") if (!defined($func{$command}));
 &{$func{$command}};
@@ -215,27 +215,52 @@ sub p2q_print_str {
 }
 
 #
-# varStats
+# unique
 #
 
-sub varStats {
-  my %opts = (d=>'', c=>5);
-  getopts('d:c:', \%opts);
-  die("Usage: samtools.pl varStats [-d dbSNP.snp] [-c $opts{c}] <in.plp.snp>\n") if (@ARGV == 0 && -t STDIN);
-  my (@cnt, %hash);
-  my $col = $opts{c} - 1;
+sub unique {
+  my %opts = (f=>5.0, q=>5, r=>2, a=>1, b=>3);
+  getopts('f:', \%opts);
+  die("Usage: samtools.pl unique [-f $opts{f}] <in.sam>\n") if (@ARGV == 0 && -t STDIN);
+  my $last = '';
+  my @a;
   while (<>) {
-	my @t = split;
-	if ($t[2] eq '*') {
-	} else {
-	  my $q = $t[$col];
-	  $q = 99 if ($q > 99);
-	  $q = int($q/10);
-	  my $is_het = ($t[3] =~ /^[ACGT]$/)? 0 : 1;
-	  ++$cnt[$q][$is_het];
-	  $hash{$t[0],$t[1]} = $q;
+	my $score = -1;
+	print $_ if (/^\@/);
+	$score = $1 if (/AS:i:(\d+)/);
+	my @t = split("\t");
+	if ($score < 0) { # AS tag is unavailable
+	  my $cigar = $t[5];
+	  my ($mm, $go, $ge) = (0, 0, 0);
+	  $cigar =~ s/(\d+)[ID]/++$go,$ge+=$1/eg;
+	  $cigar = $t[5];
+	  $cigar =~ s/(\d+)M/$mm+=$1/eg;
+	  $score = $mm * $opts{a} - $go * $opts{q} - $ge * $opts{r}; # no mismatches...
+	}
+	$score = 0 if ($score < 0);
+	if ($t[0] ne $last) {
+	  &unique_aux(\@a, $opts{f}) if (@a);
+	  $last = $t[0];
+	}
+	push(@a, [$score, \@t]);
+  }
+  &unique_aux(\@a, $opts{f}) if (@a);
+}
+
+sub unique_aux {
+  my ($a, $fac) = @_;
+  my ($max, $max2, $max_i) = (-1, -1, -1);
+  for (my $i = 0; $i < @$a; ++$i) {
+	if ($a->[$i][0] > $max) {
+	  $max2 = $max; $max = $a->[$i][0]; $max_i = $i;
+	} elsif ($a->[$i][0] > $max2) {
+	  $max2 = $a->[$i][0];
 	}
   }
+  my $q = int($fac * ($max - $max2) + .499);
+  $a->[$max_i][1][4] = $q < 250? $q : 250;
+  print join("\t", @{$a->[$max_i][1]});
+  @$a = ();
 }
 
 #
