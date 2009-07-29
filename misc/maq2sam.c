@@ -113,7 +113,7 @@ void maq2tam_core(gzFile fp, const char *rg)
 			}
 			flag |= c;
 		}
-		if (flag) {
+		if (m1->flag) {
 			int l = strlen(m1->name);
 			if (m1->name[l-2] == '/') {
 				flag |= (m1->name[l-1] == '1')? 0x40 : 0x80;
