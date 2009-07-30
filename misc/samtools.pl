@@ -229,6 +229,7 @@ sub unique {
 	print $_ if (/^\@/);
 	$score = $1 if (/AS:i:(\d+)/);
 	my @t = split("\t");
+	next if (@t < 11);
 	if ($score < 0) { # AS tag is unavailable
 	  my $cigar = $t[5];
 	  my ($mm, $go, $ge) = (0, 0, 0);

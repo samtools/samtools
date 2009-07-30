@@ -118,9 +118,10 @@ bam_header_t *sam_header_read2(const char *fn)
 	kstring_t *str;
 	kh_ref_t *hash;
 	khiter_t k;
-	hash = kh_init(ref);
+	if (fn == 0) return 0;
 	fp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
-	assert(fp);
+	if (fp == 0) return 0;
+	hash = kh_init(ref);
 	ks = ks_init(fp);
 	str = (kstring_t*)calloc(1, sizeof(kstring_t));
 	while (ks_getuntil(ks, 0, str, &dret) > 0) {

@@ -51,7 +51,8 @@ extern "C" {
 	  @param aux auxiliary data; if mode[0]=='w', aux points to
 	  bam_header_t; if strcmp(mode, "rb")!=0 and @SQ header lines in SAM
 	  are absent, aux points the file name of the list of the reference;
-	  aux is not used otherwise.
+	  aux is not used otherwise. If @SQ header lines are present in SAM,
+	  aux is not used, either.
 
 	  @return       SAM/BAM file handler
 	 */
@@ -87,6 +88,8 @@ extern "C" {
 	  #param  data  user provided data for func()
 	 */
 	int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *data);
+
+	char *samfaipath(const char *fn_ref);
 
 #ifdef __cplusplus
 }

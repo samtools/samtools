@@ -330,7 +330,7 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
 		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);
 		fprintf(stderr, "        -M INT    cap mapping quality at INT [%d]\n", d->c->cap_mapQ);
-		fprintf(stderr, "        -t FILE   list of reference sequences (assume the input is in SAM)\n");
+		fprintf(stderr, "        -t FILE   list of reference sequences (force -S)\n");
 		fprintf(stderr, "        -l FILE   list of sites at which pileup is output\n");
 		fprintf(stderr, "        -f FILE   reference sequence in the FASTA format\n\n");
 		fprintf(stderr, "        -c        output the maq consensus sequence\n");
@@ -356,6 +356,8 @@ int bam_pileup(int argc, char *argv[])
 	}
 	if (d->fai == 0 && (d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)))
 		fprintf(stderr, "[bam_pileup] indels will not be called when -f is absent.\n");
+	if (fn_fa && is_SAM && fn_list == 0) fn_list = samfaipath(fn_fa);
+
 	{
 		samfile_t *fp;
 		fp = is_SAM? samopen(argv[optind], "r", fn_list) : samopen(argv[optind], "rb", 0);
