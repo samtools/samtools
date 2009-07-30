@@ -158,6 +158,7 @@ int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)
 char *samfaipath(const char *fn_ref)
 {
 	char *fn_list = 0;
+	if (fn_ref == 0) return 0;
 	fn_list = calloc(strlen(fn_ref) + 5, 1);
 	strcat(strcpy(fn_list, fn_ref), ".fai");
 	if (access(fn_list, R_OK) == -1) { // fn_list is unreadable

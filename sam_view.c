@@ -86,7 +86,7 @@ int main_samview(int argc, char *argv[])
 		goto view_end;
 	}
 	if (in->header == 0) {
-		fprintf(stderr, "[main_samview] fail to read SAM header.\n");
+		fprintf(stderr, "[main_samview] fail to read the header.\n");
 		goto view_end;
 	}
 	if ((out = samopen(fn_out? fn_out : "-", out_mode, in->header)) == 0) {

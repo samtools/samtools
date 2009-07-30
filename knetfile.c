@@ -344,11 +344,12 @@ int knet_seek(knetFile *fp, off_t off, int whence)
 {
 	if (whence == SEEK_SET && off == fp->offset) return 0;
 	if (fp->type == KNF_TYPE_LOCAL) {
-		if (lseek(fp->fd, off, whence) == -1) {
+		off_t offset = lseek(fp->fd, off, whence);
+		if (offset == -1) {
 			perror("lseek");
 			return -1;
 		}
-		fp->offset = off;
+		fp->offset = offset;
 		return 0;
 	} else if (fp->type == KNF_TYPE_FTP || fp->type == KNF_TYPE_HTTP) {
 		if (whence != SEEK_SET) { // FIXME: we can surely allow SEEK_CUR and SEEK_END in future

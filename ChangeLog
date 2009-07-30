@@ -1,4 +1,288 @@
 ------------------------------------------------------------------------
+r421 | lh3lh3 | 2009-07-30 10:03:39 +0100 (Thu, 30 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/samtools.pl
+   M /trunk/samtools/sam.c
+   M /trunk/samtools/sam.h
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.5-16 (r421)
+ * in view and pileup, load header from FASTA index if the input is SAM.
+
+------------------------------------------------------------------------
+r420 | lh3lh3 | 2009-07-29 09:18:55 +0100 (Wed, 29 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/maq2sam.c
+
+do not set "read 1" if reads are not mapped in the PE mode of maq
+
+------------------------------------------------------------------------
+r419 | lh3lh3 | 2009-07-28 09:52:33 +0100 (Tue, 28 Jul 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/samtools.pl
+   M /trunk/samtools/misc/wgsim_eval.pl
+
+ * samtools-0.1.5-15 (r419)
+ * in sam_open(), return NULL when the file cannot be opened.
+ * make wgsim_eval.pl more robust to imperfect SAM
+ * add "unique" command to samtools.pl
+
+------------------------------------------------------------------------
+r418 | lh3lh3 | 2009-07-24 14:04:19 +0100 (Fri, 24 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/wgsim_eval.pl
+
+skip @header lines in SAM
+
+------------------------------------------------------------------------
+r417 | lh3lh3 | 2009-07-24 12:42:38 +0100 (Fri, 24 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.5-14 (r417)
+ * more help in "samtools view" due to the recent changes.
+
+------------------------------------------------------------------------
+r416 | lh3lh3 | 2009-07-24 12:34:30 +0100 (Fri, 24 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.c
+   M /trunk/samtools/sam.h
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.5-17 (r416)
+ * support import/export SAM with string tags
+
+------------------------------------------------------------------------
+r415 | lh3lh3 | 2009-07-24 11:39:26 +0100 (Fri, 24 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.c
+   M /trunk/samtools/sam.h
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.5-12 (r415)
+ * FLAG now can be in HEX
+
+------------------------------------------------------------------------
+r414 | lh3lh3 | 2009-07-22 22:03:49 +0100 (Wed, 22 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/kstring.h
+
+fixed a compiling error (thank Ken for fixing it)
+
+------------------------------------------------------------------------
+r412 | lh3lh3 | 2009-07-21 22:19:40 +0100 (Tue, 21 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/kstring.c
+   M /trunk/samtools/kstring.h
+
+Implemented Boyer-Moore search in the kstring library.
+
+------------------------------------------------------------------------
+r409 | lh3lh3 | 2009-07-17 17:10:20 +0100 (Fri, 17 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+
+do not include knetfile.h when _USE_KNETFILE is not defined
+
+------------------------------------------------------------------------
+r408 | lh3lh3 | 2009-07-17 15:29:21 +0100 (Fri, 17 Jul 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bgzf.c
+
+ * samtools-0.1.5-11 (r408)
+ * force to overwirte existing MD if it is different from the one calculated
+   from fillmd.
+ * bgzf.c: improved the compatibility with Windows headers
+
+------------------------------------------------------------------------
+r407 | lh3lh3 | 2009-07-17 14:46:56 +0100 (Fri, 17 Jul 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.h
+
+ * samtools-0.1.5-10 (r407)
+ * implemented bam_aux_del() to remove a tag
+ * fillmd: generate the NM tag
+ * fillmd: cmd interface improvement
+
+------------------------------------------------------------------------
+r406 | lh3lh3 | 2009-07-16 23:30:40 +0100 (Thu, 16 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+
+Sorry. The old Makefile is for PDCurses...
+
+------------------------------------------------------------------------
+r405 | lh3lh3 | 2009-07-16 23:30:11 +0100 (Thu, 16 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-9 (r405)
+ * improved the compatibility with PDCurses a little bit
+
+------------------------------------------------------------------------
+r404 | lh3lh3 | 2009-07-16 23:23:52 +0100 (Thu, 16 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-8 (r404)
+ * compatible with PDCurses
+
+------------------------------------------------------------------------
+r403 | lh3lh3 | 2009-07-16 22:39:39 +0100 (Thu, 16 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/kseq.h
+
+ * samtools-0.1.5-7 (r403)
+ * fixed a bug in kseq.h for binary files (text files are fine)
+
+------------------------------------------------------------------------
+r402 | lh3lh3 | 2009-07-16 11:49:53 +0100 (Thu, 16 Jul 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bgzf.c
+
+ * samtools-0.1.5-6 (r402)
+ * fixed compiling error when "-D_USE_NETFILE" is not applied
+ * improve portability to MinGW
+
+------------------------------------------------------------------------
+r398 | lh3lh3 | 2009-07-13 10:21:36 +0100 (Mon, 13 Jul 2009) | 3 lines
+Changed paths:
+   A /trunk/bam-lite/bam.h (from /trunk/samtools/bam.h:395)
+   A /trunk/bam-lite/bam_lite.c (from /trunk/samtools/bam_lite.c:395)
+   D /trunk/samtools/bam_lite.c
+
+ * move bam_lite.c to bam-lite
+ * copy bam.h to bam-lite
+
+------------------------------------------------------------------------
+r395 | lh3lh3 | 2009-07-13 10:12:57 +0100 (Mon, 13 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_lite.c
+   M /trunk/samtools/bam_lpileup.c
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-5 (r395)
+ * added bam_pileup_file() and removed bam_lpileup_file()
+
+------------------------------------------------------------------------
+r394 | lh3lh3 | 2009-07-13 00:35:10 +0100 (Mon, 13 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/knetfile.c
+   M /trunk/samtools/knetfile.h
+
+ * samtools-0.1.5-4 (r394)
+ * http_proxy support in knetfile library (check http_proxy ENV)
+
+------------------------------------------------------------------------
+r393 | lh3lh3 | 2009-07-12 23:57:07 +0100 (Sun, 12 Jul 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/knetfile.c
+   M /trunk/samtools/knetfile.h
+
+ * samtools-0.1.5-3 (r393)
+ * knetfile now supports HTTP (no proxy at the moment)
+ * fixed a potential issue in knetfile on opening ordinary file, although I have
+   not seen the sideeffect so far.
+
+------------------------------------------------------------------------
+r392 | lh3lh3 | 2009-07-12 18:50:55 +0100 (Sun, 12 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/samtools.1
+
+Remove the warning in tview
+
+------------------------------------------------------------------------
+r391 | lh3lh3 | 2009-07-12 18:42:43 +0100 (Sun, 12 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-2 (r391)
+ * do not show a blank screen when no reads mapped
+
+------------------------------------------------------------------------
+r390 | lh3lh3 | 2009-07-09 14:01:42 +0100 (Thu, 09 Jul 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   A /trunk/samtools/bam_lite.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-1 (r390)
+ * removed useless _IOLIB in bam.h. This should cause no change at all.
+ * added bam_lite.c for light-weight BAM reading
+
+------------------------------------------------------------------------
+r385 | lh3lh3 | 2009-07-07 16:53:29 +0100 (Tue, 07 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/knetfile.c
+
+Release samtools-0.1.5c (fixed a bug in piping)
+
+------------------------------------------------------------------------
+r383 | lh3lh3 | 2009-07-07 11:39:55 +0100 (Tue, 07 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.c
+
+Release samtools-0.1.5b (BUG! so embarrassing!)
+
+------------------------------------------------------------------------
+r381 | lh3lh3 | 2009-07-07 11:20:06 +0100 (Tue, 07 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bamtk.c
+
+Release samtools-0.1.5a (for compatibility with Bio::DB::Sam)
+
+------------------------------------------------------------------------
+r373 | lh3lh3 | 2009-07-07 10:26:57 +0100 (Tue, 07 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+Release samtools-0.1.5
+
+------------------------------------------------------------------------
 r372 | lh3lh3 | 2009-07-07 09:49:27 +0100 (Tue, 07 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c

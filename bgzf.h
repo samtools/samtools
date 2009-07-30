@@ -113,6 +113,8 @@ int64_t bgzf_seek(BGZF* fp, int64_t pos, int where);
  */
 void bgzf_set_cache_size(BGZF *fp, int cache_size);
 
+int bgzf_check_EOF(BGZF *fp);
+
 #ifdef __cplusplus
 }
 #endif

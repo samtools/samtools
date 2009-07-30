@@ -91,7 +91,11 @@ bam_header_t *bam_header_read(bamFile fp)
 {
 	bam_header_t *header;
 	char buf[4];
-	int32_t i, name_len;
+	int32_t i = 1, name_len;
+	// check EOF
+	i = bgzf_check_EOF(fp);
+	if (i < 0) fprintf(stderr, "[bam_header_read] read from pipe; skip EOF checking.\n");
+	else if (i == 0) fprintf(stderr, "[bam_header_read] EOF marker is absent.\n");
 	// read "BAM1"
 	if (bam_read(fp, buf, 4) != 4) return 0;
 	if (strncmp(buf, "BAM\001", 4)) {
