@@ -31,7 +31,7 @@ typedef struct {
 } cache_t;
 KHASH_MAP_INIT_INT64(cache, cache_t)
 
-#ifdef _NO_LFS
+#if defined(_WIN32) || defined(_MSC_VER)
 #define ftello(fp) ftell(fp)
 #define fseeko(fp, offset, whence) fseek(fp, offset, whence)
 #else
@@ -174,14 +174,20 @@ bgzf_open(const char* __restrict path, const char* __restrict mode)
 		fp->open_mode = 'r';
 		fp->x.fpr = file;
 #else
-		int oflag = O_RDONLY;
-		int fd = open(path, oflag);
+		int fd, oflag = O_RDONLY;
+#ifdef _WIN32
+		oflag |= O_BINARY;
+#endif
+		fd = open(path, oflag);
 		if (fd == -1) return 0;
         fp = open_read(fd);
 #endif
     } else if (mode[0] == 'w' || mode[0] == 'W') {
-		int oflag = O_WRONLY | O_CREAT | O_TRUNC;
-		int fd = open(path, oflag, 0644);
+		int fd, oflag = O_WRONLY | O_CREAT | O_TRUNC;
+#ifdef _WIN32
+		oflag |= O_BINARY;
+#endif
+		fd = open(path, oflag, 0644);
 		if (fd == -1) return 0;
         fp = open_write(fd, strstr(mode, "u")? 1 : 0);
     }
