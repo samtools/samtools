@@ -1,7 +1,5 @@
-#CC=			gcc
-#AR=			ar
-CC=			gccwine # on my laptop, this is an alias to [wine "c:/mingw/bin/gcc"]
-AR=			arwine
+CC=			gcc.exe
+AR=			ar.exe
 CFLAGS=		-g -Wall -O2
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_CURSES_LIB=0 #-D_USE_KNETFILE
 LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
@@ -19,16 +17,6 @@ LIBPATH=
 .c.o:
 		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
 
-all-recur lib-recur clean-recur cleanlocal-recur install-recur:
-		@target=`echo $@ | sed s/-recur//`; \
-		wdir=`pwd`; \
-		list='$(SUBDIRS)'; for subdir in $$list; do \
-			cd $$subdir; \
-			$(MAKE) -f Makefile.mingw AR="$(AR)" CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
-			cd $$wdir; \
-		done;
-
 all:$(PROG)
 
 lib:libbam.a
@@ -36,9 +24,8 @@ lib:libbam.a
 libbam.a:$(LOBJS)
 		$(AR) -cru $@ $(LOBJS)
 
-### For the curses library: comment out `-lcurses' if you do not have curses installed
 samtools:lib $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LIBPATH) -lm -L. -lbam -Lwin32 -lz #-lcurses
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LIBPATH) -lm -L. -lbam -Lwin32 -lz
 
 razip:razip.o razf.o
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o -lz
@@ -63,7 +50,5 @@ glf.o:glf.h
 faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h
 
-cleanlocal:
-		rm -fr gmon.out *.o a.out *.dSYM razip $(PROG) *~ *.a
-
-clean:cleanlocal-recur
+clean:
+		rm -fr gmon.out *.o *.exe *.dSYM razip $(PROG) *~ *.a
