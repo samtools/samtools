@@ -77,9 +77,7 @@ int main_samview(int argc, char *argv[])
 	if (argc == optind) return usage(is_long_help);
 
 	// generate the fn_list if necessary
-	if (fn_list && fn_ref) {
-		fprintf(stderr, "[main_samview] both -t and -T are applied. -T is ignored.\n");
-	} else fn_list = samfaipath(fn_ref);
+	if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
 	// open file handlers
 	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
 		fprintf(stderr, "[main_samview] fail to open file for reading.\n");
