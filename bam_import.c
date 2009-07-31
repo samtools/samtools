@@ -5,6 +5,9 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <assert.h>
+#ifdef _WIN32
+#include <fcntl.h>
+#endif
 #include "kstring.h"
 #include "bam.h"
 #include "kseq.h"
@@ -488,7 +491,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 tamFile sam_open(const char *fn)
 {
 	tamFile fp;
-	gzFile gzfp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
+	gzFile gzfp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "rb") : gzopen(fn, "rb");
 	if (gzfp == 0) return 0;
 	fp = (tamFile)calloc(1, sizeof(struct __tamFile_t));
 	fp->str = (kstring_t*)calloc(1, sizeof(kstring_t));

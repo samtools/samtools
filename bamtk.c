@@ -3,8 +3,12 @@
 #include <assert.h>
 #include "bam.h"
 
+#if defined(_WIN32) || defined(_MSC_VER)
+#include <fcntl.h>
+#endif
+
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.5-19 (r426)"
+#define PACKAGE_VERSION "0.1.5-20 (r427)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -92,6 +96,10 @@ static int usage()
 
 int main(int argc, char *argv[])
 {
+#ifdef _WIN32
+	setmode(fileno(stdout), O_BINARY);
+	setmode(fileno(stdin),  O_BINARY);
+#endif
 	if (argc < 2) return usage();
 	if (strcmp(argv[1], "view") == 0) return main_samview(argc-1, argv+1);
 	else if (strcmp(argv[1], "import") == 0) return main_import(argc-1, argv+1);
