@@ -439,7 +439,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				}
 				if (score[i*n+j] < s) score[i*n+j] = s; // choose the higher of the two scores
 				if (pscore[i*n+j] > ps) pscore[i*n+j] = ps;
-				if (types[i] != 0) score[i*n+j] -= mi->indel_err;
+				//if (types[i] != 0) score[i*n+j] -= mi->indel_err;
 				//printf("%d, %d, %d, %d, %d, %d, %d\n", p->b->core.pos + 1, seg.qbeg, i, types[i], j,
 				//	   score[i*n+j], pscore[i*n+j]);
 			}
@@ -498,6 +498,15 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				//printf("%d, %d, %d, %d, %d\n", pl[j].b->core.pos+1, max1_i, max2_i, s1, s2);
 				if (s1 > s2) ret->gl[0] += s1 - s2 < mi->q_indel? s1 - s2 : mi->q_indel;
 				else ret->gl[1] += s2 - s1 < mi->q_indel? s2 - s1 : mi->q_indel;
+			}
+			// write cnt_ref and cnt_ambi
+			if (max1_i != 0 && max2_i != 0) {
+				for (j = 0; j < n; ++j) {
+					int diff1 = score[j] - score[max1_i * n + j];
+					int diff2 = score[j] - score[max2_i * n + j];
+					if (diff1 > 0 && diff2 > 0) ++ret->cnt_ref;
+					else if (diff1 == 0 || diff2 == 0) ++ret->cnt_ambi;
+				}
 			}
 		}
 		free(score); free(pscore); free(ref2); free(inscns);

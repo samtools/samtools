@@ -24,6 +24,7 @@ sub showALEN {
   die(qq/Usage: samtools.pl showALEN <in.sam>\n/) if (@ARGV == 0 && -t STDIN);
   while (<>) {
 	my @t = split;
+	next if (/^\@/ || @t < 11);
 	my $l = 0;
 	$_ = $t[5];
 	s/(\d+)[SMI]/$l+=$1/eg;

@@ -24,7 +24,8 @@ typedef struct {
 
 typedef struct {
 	int indel1, indel2;
-	int cnt1, cnt2, cnt_ambi, cnt_anti;
+	int cnt1, cnt2, cnt_anti;
+	int cnt_ref, cnt_ambi;
 	char *s[2];
 	//
 	int gt, gl[2];

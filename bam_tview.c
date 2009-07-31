@@ -52,7 +52,7 @@ typedef struct {
 	faidx_t *fai;
 	bam_maqcns_t *bmc;
 
-	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins;
+	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip;
 	char *ref;
 } tview_t;
 
@@ -195,7 +195,7 @@ tview_t *tv_init(const char *fn, const char *fn_fa)
 	tv->mrow = 24; tv->mcol = 80;
 	getmaxyx(stdscr, tv->mrow, tv->mcol);
 	tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
-	tv->whelp = newwin(27, 40, 5, 5);
+	tv->whelp = newwin(28, 40, 5, 5);
 	tv->color_for = TV_COLOR_MAPQ;
 	start_color();
 	init_pair(1, COLOR_BLUE, COLOR_BLACK);
@@ -228,6 +228,14 @@ void tv_destroy(tview_t *tv)
 int tv_fetch_func(const bam1_t *b, void *data)
 {
 	tview_t *tv = (tview_t*)data;
+	if (tv->no_skip) {
+		uint32_t *cigar = bam1_cigar(b); // this is cheating...
+		int i;
+		for (i = 0; i <b->core.n_cigar; ++i) {
+			if ((cigar[i]&0xf) == BAM_CREF_SKIP)
+				cigar[i] = cigar[i]>>4<<4 | BAM_CDEL;
+		}
+	}
 	bam_lplbuf_push(b, tv->lplbuf);
 	return 0;
 }
@@ -311,6 +319,7 @@ static void tv_win_help(tview_t *tv) {
 	mvwprintw(win, r++, 2, "c          Color for cs color");
 	mvwprintw(win, r++, 2, "z          Color for cs qual");
 	mvwprintw(win, r++, 2, ".          Toggle on/off dot view");
+	mvwprintw(win, r++, 2, "s          Toggle on/off ref skip");
 	mvwprintw(win, r++, 2, "N          Turn on nt view");
 	mvwprintw(win, r++, 2, "C          Turn on cs view");
 	mvwprintw(win, r++, 2, "i          Toggle on/off ins");
@@ -339,6 +348,7 @@ void tv_loop(tview_t *tv)
 			case 'n': tv->color_for = TV_COLOR_NUCL; break;
 			case 'c': tv->color_for = TV_COLOR_COL; break;
 			case 'z': tv->color_for = TV_COLOR_COLQ; break;
+			case 's': tv->no_skip = !tv->no_skip; break;
 			case KEY_LEFT:
 			case 'h': --pos; break;
 			case KEY_RIGHT:

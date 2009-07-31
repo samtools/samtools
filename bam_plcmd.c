@@ -284,7 +284,8 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		printf("%d\t%d\t", rms_mapq, n);
 		printf("%s\t%s\t", r->s[0], r->s[1]);
 		//printf("%d\t%d\t", r->gl[0], r->gl[1]);
-		printf("%d\t%d\t%d\n", r->cnt1, r->cnt2, r->cnt_anti);
+		printf("%d\t%d\t%d\t", r->cnt1, r->cnt2, r->cnt_anti);
+		printf("%d\t%d\n", r->cnt_ref, r->cnt_ambi);
 		bam_maqindel_ret_destroy(r);
 	}
 	return 0;
