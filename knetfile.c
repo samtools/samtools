@@ -1,3 +1,34 @@
+/* The MIT License
+
+   Copyright (c) 2008 Genome Research Ltd (GRL).
+
+   Permission is hereby granted, free of charge, to any person obtaining
+   a copy of this software and associated documentation files (the
+   "Software"), to deal in the Software without restriction, including
+   without limitation the rights to use, copy, modify, merge, publish,
+   distribute, sublicense, and/or sell copies of the Software, and to
+   permit persons to whom the Software is furnished to do so, subject to
+   the following conditions:
+
+   The above copyright notice and this permission notice shall be
+   included in all copies or substantial portions of the Software.
+
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+   EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+   MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+   BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+   CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+   SOFTWARE.
+*/
+
+/* Contact: Heng Li <lh3@sanger.ac.uk> */
+
+/* Probably I will not do socket programming in the next few years and
+   therefore I decide to heavily annotate this file, for Linux and
+   Windows as well.  -lh3 */
+
 #include <time.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -16,6 +47,18 @@
 
 #include "knetfile.h"
 
+/* In winsock.h, the type of a socket is SOCKET, which is: "typedef
+ * u_int SOCKET". An invalid SOCKET is: "(SOCKET)(~0)", or signed
+ * integer -1. In knetfile.c, I use "int" for socket type
+ * throughout. This should be improved to avoid confusion.
+ *
+ * In Linux/Mac, recv() and read() do almost the same thing. You can see
+ * in the header file that netread() is simply an alias of read(). In
+ * Windows, however, they are different and using recv() is mandatory.
+ */
+
+/* This function tests if the file handler is ready for reading (or
+ * writing if is_read==0). */
 static int socket_wait(int fd, int is_read)
 {
 	fd_set fds, *fdr = 0, *fdw = 0;
@@ -32,6 +75,9 @@ static int socket_wait(int fd, int is_read)
 }
 
 #ifndef _WIN32
+/* This function does not work with Windows due to the lack of
+ * getaddrinfo() in winsock. It is addapted from an example in "Beej's
+ * Guide to Network Programming" (http://beej.us/guide/bgnet/). */
 static int socket_connect(const char *host, const char *port)
 {
 #define __err_connect(func) do { perror(func); freeaddrinfo(res); return -1; } while (0)
@@ -42,8 +88,13 @@ static int socket_connect(const char *host, const char *port)
 	memset(&hints, 0, sizeof(struct addrinfo));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
+	/* In Unix/Mac, getaddrinfo() is the most convenient way to get
+	 * server information. */
 	if (getaddrinfo(host, port, &hints, &res) != 0) __err_connect("getaddrinfo");
 	if ((fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol)) == -1) __err_connect("socket");
+	/* The following two setsockopt() are used by ftplib
+	 * (http://nbpfaus.net/~pfau/ftplib/). I am not sure if they
+	 * necessary. */
 	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) __err_connect("setsockopt");
 	if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &lng, sizeof(lng)) == -1) __err_connect("setsockopt");
 	if (connect(fd, res->ai_addr, res->ai_addrlen) != 0) __err_connect("connect");
@@ -51,6 +102,7 @@ static int socket_connect(const char *host, const char *port)
 	return fd;
 }
 #else
+/* In windows, the first thing is to establish the TCP connection. */
 int knet_win32_init()
 {
 	WSADATA wsaData;
@@ -60,6 +112,10 @@ void knet_win32_destroy()
 {
 	WSACleanup();
 }
+/* A slightly modfied version of the following function also works on
+ * Mac (and presummably Linux). However, this function is not stable on
+ * my Mac. It sometimes works fine but sometimes does not. Therefore for
+ * non-Windows OS, I do not use this one. */
 static SOCKET socket_connect(const char *host, const char *port)
 {
 #define __err_connect(func) do { perror(func); return -1; } while (0)
@@ -94,9 +150,15 @@ static SOCKET socket_connect(const char *host, const char *port)
 static off_t my_netread(int fd, void *buf, off_t len)
 {
 	off_t rest = len, curr, l = 0;
+	/* recv() and read() may not read the required length of data with
+	 * one call. They have to be called repeatedly. */
 	while (rest) {
 		if (socket_wait(fd, 1) <= 0) break; // socket is not ready for reading
 		curr = netread(fd, buf + l, rest);
+		/* According to the glibc manual, section 13.2, a zero returned
+		 * value indicates end-of-file (EOF), which should mean that
+		 * read() will not return zero if EOF has not been met but data
+		 * are not immediately available. */
 		if (curr == 0) break;
 		l += curr; rest -= curr;
 	}
@@ -202,6 +264,8 @@ knetFile *kftp_parse_url(const char *fn, const char *mode)
 	fp = calloc(1, sizeof(knetFile));
 	fp->type = KNF_TYPE_FTP;
 	fp->fd = -1;
+	/* the Linux/Mac version of socket_connect() also recognizes a port
+	 * like "ftp", but the Windows version does not. */
 	fp->port = strdup("21");
 	fp->host = calloc(l + 1, 1);
 	if (strchr(mode, 'c')) fp->no_reconnect = 1;
@@ -345,6 +409,9 @@ knetFile *knet_open(const char *fn, const char *mode)
 		khttp_connect_file(fp);
 	} else { // local file
 #ifdef _WIN32
+		/* In windows, O_BINARY is necessary. In Linux/Mac, O_BINARY may
+		 * be undefined on some systems, although it is defined on my
+		 * Mac and the Linux I have tested on. */
 		int fd = open(fn, O_RDONLY | O_BINARY);
 #else		
 		int fd = open(fn, O_RDONLY);
@@ -402,6 +469,8 @@ int knet_seek(knetFile *fp, off_t off, int whence)
 {
 	if (whence == SEEK_SET && off == fp->offset) return 0;
 	if (fp->type == KNF_TYPE_LOCAL) {
+		/* Be aware that lseek() returns the offset after seeking,
+		 * while fseek() returns zero on success. */
 		off_t offset = lseek(fp->fd, off, whence);
 		if (offset == -1) {
 			perror("lseek");
@@ -426,6 +495,8 @@ int knet_close(knetFile *fp)
 	if (fp == 0) return 0;
 	if (fp->ctrl_fd != -1) netclose(fp->ctrl_fd); // FTP specific
 	if (fp->fd != -1) {
+		/* On Linux/Mac, netclose() is an alias of close(), but on
+		 * Windows, it is an alias of closesocket(). */
 		if (fp->type == KNF_TYPE_LOCAL) close(fp->fd);
 		else netclose(fp->fd);
 	}
