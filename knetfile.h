@@ -4,6 +4,17 @@
 #include <stdint.h>
 #include <fcntl.h>
 
+#ifndef _WIN32
+#define netread(fd, ptr, len) read(fd, ptr, len)
+#define netwrite(fd, ptr, len) write(fd, ptr, len)
+#define netclose(fd) close(fd)
+#else
+#include <winsock.h>
+#define netread(fd, ptr, len) recv(fd, ptr, len, 0)
+#define netwrite(fd, ptr, len) send(fd, ptr, len, 0)
+#define netclose(fd) closesocket(fd)
+#endif
+
 // FIXME: currently I/O is unbuffered
 
 #define KNF_TYPE_LOCAL 1
@@ -29,6 +40,11 @@ typedef struct knetFile_s {
 
 #ifdef __cplusplus
 extern "C" {
+#endif
+
+#ifdef _WIN32
+	int knet_win32_init();
+	void knet_win32_destroy();
 #endif
 
 	knetFile *knet_open(const char *fn, const char *mode);

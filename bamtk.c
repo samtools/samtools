@@ -1,14 +1,15 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <assert.h>
+#include <fcntl.h>
 #include "bam.h"
 
-#if defined(_WIN32) || defined(_MSC_VER)
-#include <fcntl.h>
+#ifdef _USE_KNETFILE
+#include "knetfile.h"
 #endif
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.5-20 (r427)"
+#define PACKAGE_VERSION "0.1.5-21 (r428)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -99,6 +100,9 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
 	setmode(fileno(stdout), O_BINARY);
 	setmode(fileno(stdin),  O_BINARY);
+#ifdef _USE_KNETFILE
+	knet_win32_init();
+#endif
 #endif
 	if (argc < 2) return usage();
 	if (strcmp(argv[1], "view") == 0) return main_samview(argc-1, argv+1);

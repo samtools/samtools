@@ -1,13 +1,19 @@
 #include <time.h>
 #include <stdio.h>
-#include <netdb.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <sys/types.h>
+
+#ifdef _WIN32
+#include <winsock.h>
+#else
+#include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#endif
+
 #include "knetfile.h"
 
 static int socket_wait(int fd, int is_read)
@@ -25,6 +31,7 @@ static int socket_wait(int fd, int is_read)
 	return ret;
 }
 
+#ifndef _WIN32
 static int socket_connect(const char *host, const char *port)
 {
 #define __err_connect(func) do { perror(func); freeaddrinfo(res); return -1; } while (0)
@@ -43,13 +50,53 @@ static int socket_connect(const char *host, const char *port)
 	freeaddrinfo(res);
 	return fd;
 }
+#else
+int knet_win32_init()
+{
+	WSADATA wsaData;
+	return WSAStartup(MAKEWORD(2, 2), &wsaData);
+}
+void knet_win32_destroy()
+{
+	WSACleanup();
+}
+static SOCKET socket_connect(const char *host, const char *port)
+{
+#define __err_connect(func) do { perror(func); return -1; } while (0)
 
-static off_t my_read(int fd, void *buf, off_t len)
+	int on = 1;
+	SOCKET fd;
+	struct linger lng = { 0, 0 };
+	struct sockaddr_in server;
+	struct hostent *hp = 0;
+	// open socket
+	if ((fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == INVALID_SOCKET) __err_connect("socket");
+	if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, (char*)&on, sizeof(on)) == -1) __err_connect("setsockopt");
+	if (setsockopt(fd, SOL_SOCKET, SO_LINGER, (char*)&lng, sizeof(lng)) == -1) __err_connect("setsockopt");
+	// get host info
+	if (isalpha(host[0])) hp = gethostbyname(host);
+	else {
+		struct in_addr addr;
+		addr.s_addr = inet_addr(host);
+		hp = gethostbyaddr((char*)&addr, 4, AF_INET);
+	}
+	if (hp == 0) __err_connect("gethost");
+	// connect
+	server.sin_addr.s_addr = *((unsigned long*)hp->h_addr);
+	server.sin_family= AF_INET;
+	server.sin_port = htons(atoi(port));
+	if (connect(fd, (struct sockaddr*)&server, sizeof(server)) != 0) __err_connect("connect");
+	// freehostent(hp); // strangely in MSDN, hp is NOT freed (memory leak?!)
+	return fd;
+}
+#endif
+
+static off_t my_netread(int fd, void *buf, off_t len)
 {
 	off_t rest = len, curr, l = 0;
 	while (rest) {
 		if (socket_wait(fd, 1) <= 0) break; // socket is not ready for reading
-		curr = read(fd, buf + l, rest);
+		curr = netread(fd, buf + l, rest);
 		if (curr == 0) break;
 		l += curr; rest -= curr;
 	}
@@ -66,7 +113,7 @@ static int kftp_get_response(knetFile *ftp)
 	int n = 0;
 	char *p;
 	if (socket_wait(ftp->ctrl_fd, 1) <= 0) return 0;
-	while (read(ftp->ctrl_fd, &c, 1)) { // FIXME: this is *VERY BAD* for unbuffered I/O
+	while (netread(ftp->ctrl_fd, &c, 1)) { // FIXME: this is *VERY BAD* for unbuffered I/O
 		//fputc(c, stderr);
 		if (n >= ftp->max_response) {
 			ftp->max_response = ftp->max_response? ftp->max_response<<1 : 256;
@@ -88,7 +135,7 @@ static int kftp_get_response(knetFile *ftp)
 static int kftp_send_cmd(knetFile *ftp, const char *cmd, int is_get)
 {
 	if (socket_wait(ftp->ctrl_fd, 0) <= 0) return -1; // socket is not ready for writing
-	write(ftp->ctrl_fd, cmd, strlen(cmd));
+	netwrite(ftp->ctrl_fd, cmd, strlen(cmd));
 	return is_get? kftp_get_response(ftp) : 0;
 }
 
@@ -134,11 +181,11 @@ int kftp_connect(knetFile *ftp)
 
 int kftp_reconnect(knetFile *ftp)
 {
-	if (ftp->ctrl_fd >= 0) {
-		close(ftp->ctrl_fd);
+	if (ftp->ctrl_fd != -1) {
+		netclose(ftp->ctrl_fd);
 		ftp->ctrl_fd = -1;
 	}
-	close(ftp->fd);
+	netclose(ftp->fd);
 	return kftp_connect(ftp);
 }
 
@@ -155,7 +202,7 @@ knetFile *kftp_parse_url(const char *fn, const char *mode)
 	fp = calloc(1, sizeof(knetFile));
 	fp->type = KNF_TYPE_FTP;
 	fp->fd = -1;
-	fp->port = strdup("ftp");
+	fp->port = strdup("21");
 	fp->host = calloc(l + 1, 1);
 	if (strchr(mode, 'c')) fp->no_reconnect = 1;
 	strncpy(fp->host, fn + 6, l);
@@ -168,8 +215,8 @@ knetFile *kftp_parse_url(const char *fn, const char *mode)
 int kftp_connect_file(knetFile *fp)
 {
 	int ret;
-	if (fp->fd >= 0) {
-		close(fp->fd);
+	if (fp->fd != -1) {
+		netclose(fp->fd);
 		if (fp->no_reconnect) kftp_get_response(fp);
 	}
 	kftp_pasv_prep(fp);
@@ -183,7 +230,7 @@ int kftp_connect_file(knetFile *fp)
 	ret = kftp_get_response(fp);
 	if (ret != 150) {
 		fprintf(stderr, "[kftp_connect_file] %s\n", fp->response);
-		close(fp->fd);
+		netclose(fp->fd);
 		fp->fd = -1;
 		return -1;
 	}
@@ -215,13 +262,13 @@ knetFile *khttp_parse_url(const char *fn, const char *mode)
 	// set ->host, ->port and ->path
 	if (proxy == 0) {
 		fp->host = strdup(fp->http_host); // when there is no proxy, server name is identical to http_host name.
-		fp->port = strdup(*q? q : "http");
+		fp->port = strdup(*q? q : "80");
 		fp->path = strdup(*p? p : "/");
 	} else {
 		fp->host = (strstr(proxy, "http://") == proxy)? strdup(proxy + 7) : strdup(proxy);
 		for (q = fp->host; *q && *q != ':'; ++q);
 		if (*q == ':') *q++ = 0; 
-		fp->port = strdup(*q? q : "http");
+		fp->port = strdup(*q? q : "80");
 		fp->path = strdup(fn);
 	}
 	fp->type = KNF_TYPE_HTTP;
@@ -234,23 +281,23 @@ int khttp_connect_file(knetFile *fp)
 {
 	int ret, l = 0;
 	char *buf, *p;
-	if (fp->fd >= 0) close(fp->fd);
+	if (fp->fd != -1) netclose(fp->fd);
 	fp->fd = socket_connect(fp->host, fp->port);
 	buf = calloc(0x10000, 1); // FIXME: I am lazy... But in principle, 64KB should be large enough.
 	l += sprintf(buf + l, "GET %s HTTP/1.0\r\nHost: %s\r\n", fp->path, fp->http_host);
 	if (fp->offset)
 		l += sprintf(buf + l, "Range: bytes=%lld-\r\n", (long long)fp->offset);
 	l += sprintf(buf + l, "\r\n");
-	write(fp->fd, buf, l);
+	netwrite(fp->fd, buf, l);
 	l = 0;
-	while (read(fp->fd, buf + l, 1)) { // read HTTP header; FIXME: bad efficiency
+	while (netread(fp->fd, buf + l, 1)) { // read HTTP header; FIXME: bad efficiency
 		if (buf[l] == '\n' && l >= 3)
 			if (strncmp(buf + l - 3, "\r\n\r\n", 4) == 0) break;
 		++l;
 	}
 	buf[l] = 0;
 	if (l < 14) { // prematured header
-		close(fp->fd);
+		netclose(fp->fd);
 		fp->fd = -1;
 		return -1;
 	}
@@ -259,12 +306,12 @@ int khttp_connect_file(knetFile *fp)
 		off_t rest = fp->offset;
 		while (rest) {
 			off_t l = rest < 0x10000? rest : 0x10000;
-			rest -= my_read(fp->fd, buf, l);
+			rest -= my_netread(fp->fd, buf, l);
 		}
 	} else if (ret != 206 && ret != 200) {
 		free(buf);
 		fprintf(stderr, "[khttp_connect_file] fail to open file (HTTP code: %d).\n", ret);
-		close(fp->fd);
+		netclose(fp->fd);
 		fp->fd = -1;
 		return -1;
 	}
@@ -297,7 +344,11 @@ knetFile *knet_open(const char *fn, const char *mode)
 		if (fp == 0) return 0;
 		khttp_connect_file(fp);
 	} else { // local file
+#ifdef _WIN32
+		int fd = open(fn, O_RDONLY | O_BINARY);
+#else		
 		int fd = open(fn, O_RDONLY);
+#endif
 		if (fd == -1) {
 			perror("open");
 			return 0;
@@ -307,7 +358,7 @@ knetFile *knet_open(const char *fn, const char *mode)
 		fp->fd = fd;
 		fp->ctrl_fd = -1;
 	}
-	if (fp && fp->fd < 0) {
+	if (fp && fp->fd == -1) {
 		knet_close(fp);
 		return 0;
 	}
@@ -325,7 +376,7 @@ knetFile *knet_dopen(int fd, const char *mode)
 off_t knet_read(knetFile *fp, void *buf, off_t len)
 {
 	off_t l = 0;
-	if (fp->fd < 0) return 0;
+	if (fp->fd == -1) return 0;
 	if (fp->type == KNF_TYPE_FTP) {
 		if (fp->is_ready == 0) {
 			if (!fp->no_reconnect) kftp_reconnect(fp);
@@ -335,7 +386,14 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 		if (fp->is_ready == 0)
 			khttp_connect_file(fp);
 	}
-	l = my_read(fp->fd, buf, len);
+	if (fp->type == KNF_TYPE_LOCAL) { // on Windows, the following block is necessary; not on UNIX
+		off_t rest = len, curr;
+		while (rest) {
+			curr = read(fp->fd, buf + l, rest);
+			if (curr == 0) break;
+			l += curr; rest -= curr;
+		}
+	} else l = my_netread(fp->fd, buf, len);
 	fp->offset += l;
 	return l;
 }
@@ -366,8 +424,11 @@ int knet_seek(knetFile *fp, off_t off, int whence)
 int knet_close(knetFile *fp)
 {
 	if (fp == 0) return 0;
-	if (fp->ctrl_fd >= 0) close(fp->ctrl_fd); // FTP specific
-	if (fp->fd >= 0) close(fp->fd);
+	if (fp->ctrl_fd != -1) netclose(fp->ctrl_fd); // FTP specific
+	if (fp->fd != -1) {
+		if (fp->type == KNF_TYPE_LOCAL) close(fp->fd);
+		else netclose(fp->fd);
+	}
 	free(fp->host); free(fp->port);
 	free(fp->response); free(fp->retr); // FTP specific
 	free(fp->path); free(fp->http_host); // HTTP specific
@@ -381,6 +442,9 @@ int main(void)
 	char *buf;
 	knetFile *fp;
 	int type = 4, l;
+#ifdef _WIN32
+	knet_win32_init();
+#endif
 	buf = calloc(0x100000, 1);
 	if (type == 0) {
 		fp = knet_open("knetfile.c", "r");
