@@ -136,6 +136,9 @@ static RAZF* razf_open_w(int fd)
 #else
 static RAZF* razf_open_w(int fd){
 	RAZF *rz;
+#ifdef _WIN32
+	setmode(fd, O_BINARY);
+#endif
 	rz = calloc(1, sizeof(RAZF));
 	rz->mode = 'w';
 	rz->filedes = fd;
@@ -311,6 +314,9 @@ static RAZF* razf_open_r(int fd, int _load_index){
 	int n, is_be, ret;
 	int64_t end;
 	unsigned char c[] = "RAZF";
+#ifdef _WIN32
+	setmode(fd, O_BINARY);
+#endif
 	rz = calloc(1, sizeof(RAZF));
 	rz->mode = 'r';
 	rz->filedes = fd;
@@ -382,26 +388,34 @@ static RAZF* razf_open_r(int fd, int _load_index){
 }
 
 RAZF* razf_dopen(int fd, const char *mode){
-	if(strcasecmp(mode, "r") == 0) return razf_open_r(fd, 1);
-	else if(strcasecmp(mode, "w") == 0) return razf_open_w(fd);
+	if(strstr(mode, "r")) return razf_open_r(fd, 1);
+	else if(strstr(mode, "w")) return razf_open_w(fd);
 	else return NULL;
 }
 
 RAZF* razf_dopen2(int fd, const char *mode)
 {
-	if(strcasecmp(mode, "r") == 0) return razf_open_r(fd, 0);
-	else if(strcasecmp(mode, "w") == 0) return razf_open_w(fd);
+	if(strstr(mode, "r")) return razf_open_r(fd, 0);
+	else if(strstr(mode, "w")) return razf_open_w(fd);
 	else return NULL;
 }
 
 static inline RAZF* _razf_open(const char *filename, const char *mode, int _load_index){
 	int fd;
 	RAZF *rz;
-	if(strcasecmp(mode, "r") == 0){
+	if(strstr(mode, "r")){
+#ifdef _WIN32
+		fd = open(filename, O_RDONLY | O_BINARY);
+#else
 		fd = open(filename, O_RDONLY);
+#endif
 		rz = razf_open_r(fd, _load_index);
-	} else if(strcasecmp(mode, "w") == 0){
+	} else if(strstr(mode, "w")){
+#ifdef _WIN32
+		fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644);
+#else
 		fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+#endif
 		rz = razf_open_w(fd);
 	} else return NULL;
 	return rz;

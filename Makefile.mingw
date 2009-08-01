@@ -1,7 +1,7 @@
 CC=			gcc.exe
 AR=			ar.exe
 CFLAGS=		-g -Wall -O2
-DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_CURSES_LIB=0 -D_USE_KNETFILE
+DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_CURSES_LIB=2 -D_USE_KNETFILE
 LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 			bam_pileup.o bam_lpileup.o bam_md.o glf.o razf.o faidx.o bam_sort.o \
 			knetfile.o
@@ -26,7 +26,7 @@ libbam.a:$(LOBJS)
 		$(AR) -cru $@ $(LOBJS)
 
 samtools:lib $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LIBPATH) -lm -L. -lbam -Lwin32 -lz -lws2_32
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LIBPATH) -lm -L. -lbam -Lwin32 -lz -lcurses -lws2_32
 
 razip:razip.o razf.o
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o -lz

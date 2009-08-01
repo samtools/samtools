@@ -14,8 +14,13 @@ KHASH_MAP_INIT_STR(s, faidx1_t)
 #ifndef _NO_RAZF
 #include "razf.h"
 #else
+#ifdef _WIN32
+#define ftello(fp) ftell(fp)
+#define fseeko(fp, offset, whence) fseek(fp, offset, whence)
+#else
 extern off_t ftello(FILE *stream);
 extern int fseeko(FILE *stream, off_t offset, int whence);
+#endif
 #define RAZF FILE
 #define razf_read(fp, buf, size) fread(buf, 1, size, fp)
 #define razf_open(fn, mode) fopen(fn, mode)
@@ -134,7 +139,11 @@ void fai_save(const faidx_t *fai, FILE *fp)
 		faidx1_t x;
 		k = kh_get(s, fai->hash, fai->name[i]);
 		x = kh_value(fai->hash, k);
+#ifdef _WIN32
+		fprintf(fp, "%s\t%d\t%ld\t%d\t%d\n", fai->name[i], (int)x.len, (long)x.offset, (int)x.line_blen, (int)x.line_len);
+#else
 		fprintf(fp, "%s\t%d\t%lld\t%d\t%d\n", fai->name[i], (int)x.len, (long long)x.offset, (int)x.line_blen, (int)x.line_len);
+#endif
 	}
 }
 
@@ -143,14 +152,22 @@ faidx_t *fai_read(FILE *fp)
 	faidx_t *fai;
 	char *buf, *p;
 	int len, line_len, line_blen;
+#ifdef _WIN32
+	long offset;
+#else
 	long long offset;
+#endif
 	fai = (faidx_t*)calloc(1, sizeof(faidx_t));
 	fai->hash = kh_init(s);
 	buf = (char*)calloc(0x10000, 1);
 	while (!feof(fp) && fgets(buf, 0x10000, fp)) {
 		for (p = buf; *p && isgraph(*p); ++p);
 		*p = 0; ++p;
+#ifdef _WIN32
+		sscanf(p, "%d%ld%d%d", &len, &offset, &line_blen, &line_len);
+#else
 		sscanf(p, "%d%lld%d%d", &len, &offset, &line_blen, &line_len);
+#endif
 		fai_insert_index(fai, buf, len, line_len, line_blen, offset);
 	}
 	free(buf);
@@ -183,7 +200,7 @@ int fai_build(const char *fn)
 	}
 	fai = fai_build_core(rz);
 	razf_close(rz);
-	fp = fopen(str, "w");
+	fp = fopen(str, "wb");
 	if (fp == 0) {
 		fprintf(stderr, "[fai_build] fail to write FASTA index.\n");
 		fai_destroy(fai); free(str);
@@ -203,7 +220,7 @@ faidx_t *fai_load(const char *fn)
 	faidx_t *fai;
 	str = (char*)calloc(strlen(fn) + 5, 1);
 	sprintf(str, "%s.fai", fn);
-	fp = fopen(str, "r");
+	fp = fopen(str, "rb");
 	if (fp == 0) {
 		fprintf(stderr, "[fai_load] build FASTA index.\n");
 		fai_build(fn);
@@ -216,7 +233,7 @@ faidx_t *fai_load(const char *fn)
 	}
 	fai = fai_read(fp);
 	fclose(fp);
-	fai->rz = razf_open(fn, "r");
+	fai->rz = razf_open(fn, "rb");
 	free(str);
 	if (fai->rz == 0) {
 		fprintf(stderr, "[fai_load] fail to open FASTA file.\n");
