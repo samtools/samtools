@@ -102,6 +102,17 @@ static int socket_connect(const char *host, const char *port)
 	return fd;
 }
 #else
+/* MinGW's printf has problem with "%lld" */
+char *uint64tostr(char *buf, uint64_t x)
+{
+	int i, cnt;
+	for (i = 0; x; x /= 10) buf[i++] = '0' + x%10;
+	buf[i] = 0;
+	for (cnt = i, i = 0; i < cnt/2; ++i) {
+		int c = buf[i]; buf[i] = buf[cnt-i-1]; buf[cnt-i-1] = c;
+	}
+	return buf;
+}
 /* In windows, the first thing is to establish the TCP connection. */
 int knet_win32_init()
 {
@@ -286,7 +297,13 @@ int kftp_connect_file(knetFile *fp)
 	kftp_pasv_prep(fp);
 	if (fp->offset) {
 		char tmp[32];
+#ifndef _WIN32
 		sprintf(tmp, "REST %lld\r\n", (long long)fp->offset);
+#else
+		strcpy(tmp, "REST ");
+		uint64tostr(tmp + 5, fp->offset);
+		strcat(tmp, "\r\n");
+#endif
 		kftp_send_cmd(fp, tmp, 1);
 	}
 	kftp_send_cmd(fp, fp->retr, 0);
