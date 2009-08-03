@@ -52,7 +52,7 @@ typedef struct {
 	faidx_t *fai;
 	bam_maqcns_t *bmc;
 
-	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip;
+	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip, show_name;
 	char *ref;
 } tview_t;
 
@@ -100,20 +100,28 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 						c = bam_aux_getCSi(p->b, p->qpos);
 						// assume that if we found one color, we will be able to get the color error
 						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos)) c = bam1_strand(p->b)? ',' : '.';
-					}
-					else {
-						c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
-						if (tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+					} else {
+						if (tv->show_name) {
+							char *name = bam1_qname(p->b);
+							c = (p->qpos + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos];
+						} else {
+							c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
+							if (tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+						}
 					}
 				} else c = '*';
 			} else { // padding
 				if (j > p->indel) c = '*';
 				else { // insertion
 					if (tv->base_for ==  TV_BASE_NUCL) {
-						c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
-						if (j == 0 && tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
-					}
-					else {
+						if (tv->show_name) {
+							char *name = bam1_qname(p->b);
+							c = (p->qpos + j + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos + j];
+						} else {
+							c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
+							if (j == 0 && tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+						}
+					} else {
 						c = bam_aux_getCSi(p->b, p->qpos + j);
 						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos + j)) c = bam1_strand(p->b)? ',' : '.';
 					}
@@ -195,7 +203,7 @@ tview_t *tv_init(const char *fn, const char *fn_fa)
 	tv->mrow = 24; tv->mcol = 80;
 	getmaxyx(stdscr, tv->mrow, tv->mcol);
 	tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
-	tv->whelp = newwin(28, 40, 5, 5);
+	tv->whelp = newwin(29, 40, 5, 5);
 	tv->color_for = TV_COLOR_MAPQ;
 	start_color();
 	init_pair(1, COLOR_BLUE, COLOR_BLACK);
@@ -320,6 +328,7 @@ static void tv_win_help(tview_t *tv) {
 	mvwprintw(win, r++, 2, "z          Color for cs qual");
 	mvwprintw(win, r++, 2, ".          Toggle on/off dot view");
 	mvwprintw(win, r++, 2, "s          Toggle on/off ref skip");
+	mvwprintw(win, r++, 2, "r          Toggle on/off rd name");
 	mvwprintw(win, r++, 2, "N          Turn on nt view");
 	mvwprintw(win, r++, 2, "C          Turn on cs view");
 	mvwprintw(win, r++, 2, "i          Toggle on/off ins");
@@ -349,6 +358,7 @@ void tv_loop(tview_t *tv)
 			case 'c': tv->color_for = TV_COLOR_COL; break;
 			case 'z': tv->color_for = TV_COLOR_COLQ; break;
 			case 's': tv->no_skip = !tv->no_skip; break;
+			case 'r': tv->show_name = !tv->show_name; break;
 			case KEY_LEFT:
 			case 'h': --pos; break;
 			case KEY_RIGHT:
