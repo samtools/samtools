@@ -10,7 +10,8 @@ my $version = '0.3.2 (r321)';
 &usage if (@ARGV < 1);
 
 my $command = shift(@ARGV);
-my %func = (showALEN=>\&showALEN, pileup2fq=>\&pileup2fq, varFilter=>\&varFilter, unique=>\&unique);
+my %func = (showALEN=>\&showALEN, pileup2fq=>\&pileup2fq, varFilter=>\&varFilter,
+			unique=>\&unique, uniqcmp=>\&uniqcmp);
 
 die("Unknown command \"$command\".\n") if (!defined($func{$command}));
 &{$func{$command}};
@@ -27,7 +28,7 @@ sub showALEN {
 	next if (/^\@/ || @t < 11);
 	my $l = 0;
 	$_ = $t[5];
-	s/(\d+)[SMI]/$l+=$1/eg;
+	s/(\d+)[MI]/$l+=$1/eg;
 	print join("\t", @t[0..5]), "\t$l\t", join("\t", @t[6..$#t]), "\n";
   }
 }
@@ -220,10 +221,11 @@ sub p2q_print_str {
 #
 
 sub unique {
-  my %opts = (f=>5.0, q=>5, r=>2, a=>1, b=>3);
-  getopts('f:', \%opts);
+  my %opts = (f=>250.0, q=>5, r=>2, a=>1, b=>3);
+  getopts('Qf:q:r:a:b:', \%opts);
   die("Usage: samtools.pl unique [-f $opts{f}] <in.sam>\n") if (@ARGV == 0 && -t STDIN);
   my $last = '';
+  my $recal_Q = !defined($opts{Q});
   my @a;
   while (<>) {
 	my $score = -1;
@@ -239,19 +241,19 @@ sub unique {
 	  $cigar =~ s/(\d+)M/$mm+=$1/eg;
 	  $score = $mm * $opts{a} - $go * $opts{q} - $ge * $opts{r}; # no mismatches...
 	}
-	$score = 0 if ($score < 0);
+	$score = 1 if ($score < 1);
 	if ($t[0] ne $last) {
-	  &unique_aux(\@a, $opts{f}) if (@a);
+	  &unique_aux(\@a, $opts{f}, $recal_Q) if (@a);
 	  $last = $t[0];
 	}
 	push(@a, [$score, \@t]);
   }
-  &unique_aux(\@a, $opts{f}) if (@a);
+  &unique_aux(\@a, $opts{f}, $recal_Q) if (@a);
 }
 
 sub unique_aux {
-  my ($a, $fac) = @_;
-  my ($max, $max2, $max_i) = (-1, -1, -1);
+  my ($a, $fac, $is_recal) = @_;
+  my ($max, $max2, $max_i) = (0, 0, -1);
   for (my $i = 0; $i < @$a; ++$i) {
 	if ($a->[$i][0] > $max) {
 	  $max2 = $max; $max = $a->[$i][0]; $max_i = $i;
@@ -259,10 +261,79 @@ sub unique_aux {
 	  $max2 = $a->[$i][0];
 	}
   }
-  my $q = int($fac * ($max - $max2) + .499);
-  $a->[$max_i][1][4] = $q < 250? $q : 250;
+  if ($is_recal) {
+	my $q = int($fac * ($max - $max2) / $max + .499);
+	$q = 250 if ($q > 250);
+	$a->[$max_i][1][4] = $q < 250? $q : 250;
+  }
   print join("\t", @{$a->[$max_i][1]});
   @$a = ();
+}
+
+#
+# uniqcmp: compare two SAM files
+#
+
+sub uniqcmp {
+  my %opts = (q=>10, s=>100);
+  getopts('pq:s:', \%opts);
+  die("Usage: samtools.pl uniqcmp <in1.sam> <in2.sam>\n") if (@ARGV < 2);
+  my ($fh, %a);
+  warn("[uniqcmp] read the first file...\n");
+  &uniqcmp_aux($ARGV[0], \%a, 0);
+  warn("[uniqcmp] read the second file...\n");
+  &uniqcmp_aux($ARGV[1], \%a, 1);
+  warn("[uniqcmp] stats...\n");
+  my @cnt;
+  $cnt[$_] = 0 for (0..9);
+  for my $x (keys %a) {
+	my $p = $a{$x};
+	my $z;
+	if (defined($p->[0]) && defined($p->[1])) {
+	  $z = ($p->[0][0] == $p->[1][0] && $p->[0][1] eq $p->[1][1] && abs($p->[0][2] - $p->[1][2]) < $opts{s})? 0 : 1;
+	  if ($p->[0][3] >= $opts{q} && $p->[1][3] >= $opts{q}) {
+		++$cnt[$z*3+0];
+	  } elsif ($p->[0][3] >= $opts{q}) {
+		++$cnt[$z*3+1];
+	  } elsif ($p->[1][3] >= $opts{q}) {
+		++$cnt[$z*3+2];
+	  }
+	  print STDERR "$x\t$p->[0][1]:$p->[0][2]\t$p->[0][3]\t$p->[0][4]\t$p->[1][1]:$p->[1][2]\t$p->[1][3]\t$p->[1][4]\t",
+		$p->[0][5]-$p->[1][5], "\n" if ($z && defined($opts{p}) && ($p->[0][3] >= $opts{q} || $p->[1][3] >= $opts{q}));
+	} elsif (defined($p->[0])) {
+	  ++$cnt[$p->[0][3]>=$opts{q}? 6 : 7];
+	} else {
+	  ++$cnt[$p->[1][3]>=$opts{q}? 8 : 9];
+	}
+  }
+  print "Consistent (high, high):   $cnt[0]\n";
+  print "Consistent (high, low ):   $cnt[1]\n";
+  print "Consistent (low , high):   $cnt[2]\n";
+  print "Inconsistent (high, high): $cnt[3]\n";
+  print "Inconsistent (high, low ): $cnt[4]\n";
+  print "Inconsistent (low , high): $cnt[5]\n";
+  print "Second missing (high):     $cnt[6]\n";
+  print "Second missing (low ):     $cnt[7]\n";
+  print "First  missing (high):     $cnt[8]\n";
+  print "First  missing (low ):     $cnt[9]\n";
+}
+
+sub uniqcmp_aux {
+  my ($fn, $a, $which) = @_;
+  my $fh;
+  $fn = "samtools view $fn |" if ($fn =~ /\.bam/);
+  open($fh, $fn) || die;
+  while (<$fh>) {
+	my @t = split;
+	next if (@t < 11);
+	my $l = ($t[5] =~ /^(\d+)S/)? $1 : 0;
+	my ($x, $nm) = (0, 0);
+	$nm = $1 if (/NM:i:(\d+)/);
+	$_ = $t[5];
+	s/(\d+)[MI]/$x+=$1/eg;
+	@{$a->{$t[0]}[$which]} = (($t[1]&0x10)? 1 : 0, $t[2], $t[3]-$l, $t[4], "$x:$nm", $x - 4 * $nm);
+  }
+  close($fh);
 }
 
 #

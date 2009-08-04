@@ -140,7 +140,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -S       input is SAM\n");
 	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
 	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
-	fprintf(stderr, "         -X       output FLAG in stirng (samtools-C specific)\n");
+	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
 	fprintf(stderr, "         -o FILE  output file name [stdout]\n");
