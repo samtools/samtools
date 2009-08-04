@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use Getopt::Std;
 
-my $version = '0.3.2 (r321)';
+my $version = '0.3.3';
 &usage if (@ARGV < 1);
 
 my $command = shift(@ARGV);
@@ -39,7 +39,7 @@ sub showALEN {
 
 sub varFilter {
   my %opts = (d=>3, D=>100, l=>30, Q=>25, q=>10, G=>25, s=>100, w=>10, W=>10, N=>2, p=>undef);
-  getopts('pd:D:l:Q:w:W:N:G:', \%opts);
+  getopts('pq:d:D:l:Q:w:W:N:G:', \%opts);
   die(qq/
 Usage:   samtools.pl varFilter [options] <in.cns-pileup>
 
@@ -67,7 +67,7 @@ Options: -Q INT    minimum RMS mapping quality for SNPs [$opts{Q}]
   my @staging; # (indel_filtering_score, flt_tag)
   while (<>) {
 	my @t = split;
-	next if ($t[2] eq $t[3] || $t[3] eq '*/*'); # skip non-var sites
+	next if (uc($t[2]) eq uc($t[3]) || $t[3] eq '*/*'); # skip non-var sites
 	# clear the out-of-range elements
 	while (@staging) {
 	  last if ($staging[0][2] eq $t[0] && $staging[0][3] + $max_dist >= $t[1]);
