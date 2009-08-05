@@ -16,7 +16,7 @@ typedef struct {
 			if ((c)->flag & BAM_FPROPER_PAIR) ++(s)->n_pair_good;		\
 			if ((c)->flag & BAM_FREAD1) ++(s)->n_read1;					\
 			if ((c)->flag & BAM_FREAD2) ++(s)->n_read2;					\
-			if ((c)->flag & BAM_FMUNMAP) ++(s)->n_sgltn;				\
+			if (((c)->flag & BAM_FMUNMAP) && !((c)->flag & BAM_FUNMAP)) ++(s)->n_sgltn;	\
 			if (!((c)->flag & BAM_FUNMAP) && !((c)->flag & BAM_FMUNMAP)) { \
 				++(s)->n_pair_map;										\
 				if ((c)->mtid != (c)->tid) {							\
