@@ -1,68 +1,57 @@
 /*
- **********************************************************************
- ** md5.h -- Header file for implementation of MD5                   **
- ** RSA Data Security, Inc. MD5 Message Digest Algorithm             **
- ** Created: 2/17/90 RLR                                             **
- ** Revised: 12/27/90 SRD,AJ,BSK,JT Reference C version              **
- ** Revised (for MD5): RLR 4/27/91                                   **
- **   -- G modified to have y&~z instead of y&z                      **
- **   -- FF, GG, HH modified to add in last register done            **
- **   -- Access pattern: round 2 works mod 5, round 3 works mod 3    **
- **   -- distinct additive constant for each step                    **
- **   -- round 4 added, working mod 7                                **
- **********************************************************************
- */
+  This file is adapted from a program in this page:
 
-/*
- **********************************************************************
- ** Copyright (C) 1990, RSA Data Security, Inc. All rights reserved. **
- **                                                                  **
- ** License to copy and use this software is granted provided that   **
- ** it is identified as the "RSA Data Security, Inc. MD5 Message     **
- ** Digest Algorithm" in all material mentioning or referencing this **
- ** software or this function.                                       **
- **                                                                  **
- ** License is also granted to make and use derivative works         **
- ** provided that such works are identified as "derived from the RSA **
- ** Data Security, Inc. MD5 Message Digest Algorithm" in all         **
- ** material mentioning or referencing the derived work.             **
- **                                                                  **
- ** RSA Data Security, Inc. makes no representations concerning      **
- ** either the merchantability of this software or the suitability   **
- ** of this software for any particular purpose.  It is provided "as **
- ** is" without express or implied warranty of any kind.             **
- **                                                                  **
- ** These notices must be retained in any copies of any part of this **
- ** documentation and/or software.                                   **
- **********************************************************************
+  http://www.fourmilab.ch/md5/
+
+  The original source code does not work on 64-bit machines due to the
+  wrong typedef "uint32". I also added prototypes.
+
+  -lh3
  */
 
 #ifndef MD5_H
 #define MD5_H
 
+/*  The following tests optimise behaviour on little-endian
+    machines, where there is no need to reverse the byte order
+    of 32 bit words in the MD5 computation.  By default,
+    HIGHFIRST is defined, which indicates we're running on a
+    big-endian (most significant byte first) machine, on which
+    the byteReverse function in md5.c must be invoked. However,
+    byteReverse is coded in such a way that it is an identity
+    function when run on a little-endian machine, so calling it
+    on such a platform causes no harm apart from wasting time. 
+    If the platform is known to be little-endian, we speed
+    things up by undefining HIGHFIRST, which defines
+    byteReverse as a null macro.  Doing things in this manner
+    insures we work on new platforms regardless of their byte
+    order.  */
+
+#define HIGHFIRST
+
+#if __LITTLE_ENDIAN__ != 0
+#undef HIGHFIRST
+#endif
+
 #include <stdint.h>
 
-/* typedef a 32 bit type */
-typedef uint32_t UINT4;
+struct MD5Context {
+        uint32_t buf[4];
+        uint32_t bits[2];
+        unsigned char in[64];
+};
 
-/* Data structure for MD5 (Message Digest) computation */
-typedef struct {
-  UINT4 i[2];                   /* number of _bits_ handled mod 2^64 */
-  UINT4 buf[4];                                    /* scratch buffer */
-  unsigned char in[64];                              /* input buffer */
-  unsigned char digest[16];     /* actual digest after MD5Final call */
-} MD5_CTX;
+void MD5Init(struct MD5Context *ctx);
+void MD5Update(struct MD5Context *ctx, unsigned char *buf, unsigned len);
+void MD5Final(unsigned char digest[16], struct MD5Context *ctx);
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/*
+ * This is needed to make RSAREF happy on some MS-DOS compilers.
+ */
+typedef struct MD5Context MD5_CTX;
 
-	void MD5Init(MD5_CTX *mdContext);
-	void MD5Update(MD5_CTX *mdContext, unsigned char *inBuf, unsigned intinLen);
-	void MD5Final(MD5_CTX *mdContext);
+/*  Define CHECK_HARDWARE_PROPERTIES to have main,c verify
+    byte order and uint32_t settings.  */
+#define CHECK_HARDWARE_PROPERTIES
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif
+#endif /* !MD5_H */

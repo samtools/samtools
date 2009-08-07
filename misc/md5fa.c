@@ -13,7 +13,7 @@ static void md5_one(const char *fn)
 	int l, i, k;
 	gzFile fp;
 	kseq_t *seq;
-	unsigned char unordered[16];
+	unsigned char unordered[16], digest[16];
 
 	for (l = 0; l < 16; ++l) unordered[l] = 0;
 	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
@@ -31,18 +31,18 @@ static void md5_one(const char *fn)
 		}
 		MD5Init(&md5_one);
 		MD5Update(&md5_one, (unsigned char*)seq->seq.s, k);
-		MD5Final(&md5_one);
+		MD5Final(digest, &md5_one);
 		for (l = 0; l < 16; ++l) {
-			printf("%c%c", HEX_STR[md5_one.digest[l]>>4&0xf], HEX_STR[md5_one.digest[l]&0xf]);
-			unordered[l] ^= md5_one.digest[l];
+			printf("%c%c", HEX_STR[digest[l]>>4&0xf], HEX_STR[digest[l]&0xf]);
+			unordered[l] ^= digest[l];
 		}
 		printf("  %s  %s\n", fn, seq->name.s);
 		MD5Update(&md5_all, (unsigned char*)seq->seq.s, k);
 	}
-	MD5Final(&md5_all);
+	MD5Final(digest, &md5_all);
 	kseq_destroy(seq);
 	for (l = 0; l < 16; ++l)
-		printf("%c%c", HEX_STR[md5_all.digest[l]>>4&0xf], HEX_STR[md5_all.digest[l]&0xf]);
+		printf("%c%c", HEX_STR[digest[l]>>4&0xf], HEX_STR[digest[l]&0xf]);
 	printf("  %s  >ordered\n", fn);
 	for (l = 0; l < 16; ++l)
 		printf("%c%c", HEX_STR[unordered[l]>>4&0xf], HEX_STR[unordered[l]&0xf]);

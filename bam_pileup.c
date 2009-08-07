@@ -166,9 +166,13 @@ int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 		if (b->core.flag & buf->flag_mask) return 0;
 		bam_copy1(&buf->tail->b, b);
 		buf->tail->beg = b->core.pos; buf->tail->end = bam_calend(&b->core, bam1_cigar(b));
-		if (!(b->core.tid >= buf->max_tid || (b->core.tid == buf->max_tid && buf->tail->beg >= buf->max_pos))) {
-			fprintf(stderr, "[bam_pileup_core] the input is not sorted. Abort!\n");
-			abort();
+		if (b->core.tid < buf->max_tid) {
+			fprintf(stderr, "[bam_pileup_core] the input is not sorted (chromosomes out of order)\n");
+			return -1;
+		}
+		if ((b->core.tid == buf->max_tid) && (buf->tail->beg < buf->max_pos)) {
+			fprintf(stderr, "[bam_pileup_core] the input is not sorted (reads out of order)\n");
+			return -1;
 		}
 		buf->max_tid = b->core.tid; buf->max_pos = buf->tail->beg;
 		if (buf->tail->end > buf->pos || buf->tail->b.core.tid > buf->tid) {
