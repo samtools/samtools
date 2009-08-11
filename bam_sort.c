@@ -40,7 +40,9 @@ typedef struct {
 static inline int heap_lt(const heap1_t a, const heap1_t b)
 {
 	if (g_is_by_qname) {
-		int t = strnum_cmp(bam1_qname(a.b), bam1_qname(b.b));
+		int t;
+		if (a.b == 0 || b.b == 0) return a.b == 0? 1 : 0;
+		t = strnum_cmp(bam1_qname(a.b), bam1_qname(b.b));
 		return (t > 0 || (t == 0 && a.pos > b.pos));
 	} else return (a.pos > b.pos);
 }
@@ -106,18 +108,17 @@ void bam_merge_core(int by_qname, const char *out, int n, char * const *fn)
 	while (heap->pos != HEAP_EMPTY) {
 		bam1_t *b = heap->b;
 		bam_write1_core(fpout, &b->core, b->data_len, b->data);
-		if ((j = bam_read1(fp[heap->i], b)) >= 0)
+		if ((j = bam_read1(fp[heap->i], b)) >= 0) {
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)b->core.pos<<1 | bam1_strand(b);
-		else if (j == -1) heap->pos = HEAP_EMPTY;
-		else fprintf(stderr, "[bam_merge_core] '%s' is truncated. Continue anyway.\n", fn[heap->i]);
+		} else if (j == -1) {
+			heap->pos = HEAP_EMPTY;
+			free(heap->b->data); free(heap->b);
+			heap->b = 0;
+		} else fprintf(stderr, "[bam_merge_core] '%s' is truncated. Continue anyway.\n", fn[heap->i]);
 		ks_heapadjust(heap, 0, n, heap);
 	}
 
-	for (i = 0; i != n; ++i) {
-		bam_close(fp[i]);
-		free(heap[i].b->data);
-		free(heap[i].b);
-	}
+	for (i = 0; i != n; ++i) bam_close(fp[i]);
 	bam_close(fpout);
 	free(fp); free(heap);
 }
@@ -222,7 +223,7 @@ void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t m
 		bam_merge_core(is_by_qname, fnout, n, fns);
 		free(fnout);
 		for (i = 0; i < n; ++i) {
-			unlink(fns[i]);
+//			unlink(fns[i]);
 			free(fns[i]);
 		}
 		free(fns);
