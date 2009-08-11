@@ -271,10 +271,12 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 	else if (c->mtid == c->tid) kputs("=\t", &str);
 	else ksprintf(&str, "%s\t", header->target_name[c->mtid]);
 	ksprintf(&str, "%d\t%d\t", c->mpos + 1, c->isize);
-	for (i = 0; i < c->l_qseq; ++i) kputc(bam_nt16_rev_table[bam1_seqi(s, i)], &str);
-	kputc('\t', &str);
-	if (t[0] == 0xff) kputc('*', &str);
-	else for (i = 0; i < c->l_qseq; ++i) kputc(t[i] + 33, &str);
+	if (c->l_qseq) {
+		for (i = 0; i < c->l_qseq; ++i) kputc(bam_nt16_rev_table[bam1_seqi(s, i)], &str);
+		kputc('\t', &str);
+		if (t[0] == 0xff) kputc('*', &str);
+		else for (i = 0; i < c->l_qseq; ++i) kputc(t[i] + 33, &str);
+	} else ksprintf(&str, "*\t*");
 	s = bam1_aux(b);
 	while (s < b->data + b->data_len) {
 		uint8_t type, key[2];
