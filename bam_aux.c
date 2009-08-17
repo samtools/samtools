@@ -42,7 +42,6 @@ uint8_t *bam_aux_get(const bam1_t *b, const char tag[2])
 	s = bam1_aux(b);
 	while (s < b->data + b->data_len) {
 		int x = (int)s[0]<<8 | s[1];
-		printf("%c%c\n", s[0], s[1]);
 		s += 2;
 		if (x == y) return s;
 		__skip_tag(s);
