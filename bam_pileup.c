@@ -78,6 +78,10 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 						int op_next = cigar&BAM_CIGAR_MASK; // next CIGAR operation
 						if (op_next == BAM_CDEL) p->indel = -(int32_t)(cigar>>BAM_CIGAR_SHIFT); // del
 						else if (op_next == BAM_CINS) p->indel = cigar>>BAM_CIGAR_SHIFT; // ins
+						if (op_next == BAM_CDEL || op_next == BAM_CINS) {
+							if (k + 2 < c->n_cigar) op_next = bam1_cigar(b)[k+2]&BAM_CIGAR_MASK;
+							else p->is_tail = 1;
+						}
 						if (op_next == BAM_CSOFT_CLIP || op_next == BAM_CREF_SKIP || op_next == BAM_CHARD_CLIP)
 							p->is_tail = 1; // tail
 					} else p->is_tail = 1; // this is the last operation; set tail

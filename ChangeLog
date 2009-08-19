@@ -1,4 +1,232 @@
 ------------------------------------------------------------------------
+r447 | lh3lh3 | 2009-08-17 09:34:57 +0100 (Mon, 17 Aug 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-30 (r447)
+ * fixed a bug in bam_aux_get(): 'A' is not checked
+
+------------------------------------------------------------------------
+r446 | lh3lh3 | 2009-08-17 09:33:17 +0100 (Mon, 17 Aug 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bamtk.c
+
+ * 
+
+------------------------------------------------------------------------
+r444 | lh3lh3 | 2009-08-11 10:02:36 +0100 (Tue, 11 Aug 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-28 (r444)
+ * bug in "merge -n"
+
+------------------------------------------------------------------------
+r443 | lh3lh3 | 2009-08-11 09:29:11 +0100 (Tue, 11 Aug 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-27 (r443)
+ * SEQ and QUAL can be "*"
+ * parse CIGAR "=" and "X" as "M"
+
+------------------------------------------------------------------------
+r442 | lh3lh3 | 2009-08-07 21:56:38 +0100 (Fri, 07 Aug 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/md5.c
+   M /trunk/samtools/misc/md5.h
+   M /trunk/samtools/misc/md5fa.c
+
+ * samtools-0.1.5-26 (r442)
+ * replace RSA Inc md5.* with ones under permissive lincense
+ * fixed a bug in detecting unsorted bam in pileup
+
+------------------------------------------------------------------------
+r441 | bhandsaker | 2009-08-05 14:41:28 +0100 (Wed, 05 Aug 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bgzf.c
+   M /trunk/samtools/bgzf.h
+   M /trunk/samtools/bgzip.c
+
+Change copyright notices now that MIT has approved open source distribution.
+
+------------------------------------------------------------------------
+r440 | lh3lh3 | 2009-08-05 10:44:24 +0100 (Wed, 05 Aug 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_stat.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-25 (r436)
+ * in flagstats, do not report singletons if both ends are unmapped
+
+------------------------------------------------------------------------
+r439 | lh3lh3 | 2009-08-04 22:16:51 +0100 (Tue, 04 Aug 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/maq2sam.c
+
+fixed a SERIOUS bug in setting 0x20 flag
+
+------------------------------------------------------------------------
+r438 | lh3lh3 | 2009-08-04 21:50:43 +0100 (Tue, 04 Aug 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+fixed two minor bugs (suggested by Tim M Storm)
+
+------------------------------------------------------------------------
+r437 | lh3lh3 | 2009-08-04 09:13:24 +0100 (Tue, 04 Aug 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/samtools.pl
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.5-24 (r435)
+ * fixed a typo
+
+------------------------------------------------------------------------
+r434 | lh3lh3 | 2009-08-03 10:40:42 +0100 (Mon, 03 Aug 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-23 (r434)
+ * in tview, press 'r' to show read names rather than sequences
+
+------------------------------------------------------------------------
+r433 | lh3lh3 | 2009-08-02 19:13:35 +0100 (Sun, 02 Aug 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/knetfile.c
+
+ * tried to fixed the buggy FTP random access in Windows. FAILED.
+ * anyway, MinGW seems to have problem with "%lld".
+
+------------------------------------------------------------------------
+r432 | lh3lh3 | 2009-08-02 00:32:07 +0100 (Sun, 02 Aug 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/Makefile.mingw
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/faidx.c
+   M /trunk/samtools/razf.c
+   A /trunk/samtools/win32/libcurses.a
+   A /trunk/samtools/win32/xcurses.h
+
+ * samtools-0.1.5-22 (r432)
+ * faidx: fixed compitability issue with _WIN32
+ * razf: fixed potential compitability issue with _WIN32
+ * PDCurses support in Windows
+
+------------------------------------------------------------------------
+r431 | lh3lh3 | 2009-08-01 23:34:54 +0100 (Sat, 01 Aug 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/win32/libz.a
+
+replace the GnuWin32 version of libz.a with my own build with MinGW.
+
+------------------------------------------------------------------------
+r430 | lh3lh3 | 2009-08-01 23:21:07 +0100 (Sat, 01 Aug 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/knetfile.c
+
+add comments
+
+------------------------------------------------------------------------
+r429 | lh3lh3 | 2009-08-01 22:41:19 +0100 (Sat, 01 Aug 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile.mingw
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/knetfile.c
+   M /trunk/samtools/knetfile.h
+
+ * samtools-0.1.5-21 (r428)
+ * knetfile.c is now compatible with mingw-winsock
+
+------------------------------------------------------------------------
+r428 | lh3lh3 | 2009-08-01 00:39:07 +0100 (Sat, 01 Aug 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile.mingw
+
+simplify MinGW Makefile
+
+------------------------------------------------------------------------
+r427 | lh3lh3 | 2009-08-01 00:30:54 +0100 (Sat, 01 Aug 2009) | 5 lines
+Changed paths:
+   A /trunk/samtools/Makefile.mingw
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+   A /trunk/samtools/win32
+   A /trunk/samtools/win32/libz.a
+   A /trunk/samtools/win32/zconf.h
+   A /trunk/samtools/win32/zlib.h
+
+ * samtools-0.1.5-20 (r427)
+ * MinGW support. At least SAM<->BAM conversion is working. Other
+   functionality are not tested at the moment.
+ * zlib headers and Windows version of libz.a are included in win32/
+
+------------------------------------------------------------------------
+r426 | lh3lh3 | 2009-07-31 23:32:09 +0100 (Fri, 31 Jul 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.5-19 (r426)
+ * fixed a bug caused by recent modifications. Sorry.
+
+------------------------------------------------------------------------
+r425 | lh3lh3 | 2009-07-31 23:23:51 +0100 (Fri, 31 Jul 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bgzf.c
+
+compatible with Windows binary files
+
+------------------------------------------------------------------------
+r424 | lh3lh3 | 2009-07-31 10:19:59 +0100 (Fri, 31 Jul 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_maqcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools-0.1.5-18 (r423)
+ * output additional information in pileup indel lines, for the purepose
+   of debugging at the moment
+ * in tview, optionally allow to treat reference skip as deletion
+
+------------------------------------------------------------------------
+r423 | lh3lh3 | 2009-07-30 22:00:36 +0100 (Thu, 30 Jul 2009) | 2 lines
+Changed paths:
+   A /trunk/samtools/misc/psl2sam.pl
+
+convert BLAT psl to SAM.
+
+------------------------------------------------------------------------
+r422 | lh3lh3 | 2009-07-30 11:24:39 +0100 (Thu, 30 Jul 2009) | 6 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bgzf.c
+   M /trunk/samtools/bgzf.h
+   M /trunk/samtools/knetfile.c
+   M /trunk/samtools/sam.c
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.5-17 (r422)
+ * fixed a but in knetfile.c when seek type is not SEEK_SET
+ * write an empty BGZF block to every BGZF file
+ * check BGZF EOF marker in bam_header_read()
+ * update ChangeLog
+
+------------------------------------------------------------------------
 r421 | lh3lh3 | 2009-07-30 10:03:39 +0100 (Thu, 30 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_import.c
