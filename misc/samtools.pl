@@ -302,7 +302,11 @@ sub uniqcmp {
 		$p->[0][5]-$p->[1][5], "\n" if ($z && defined($opts{p}) && ($p->[0][3] >= $opts{q} || $p->[1][3] >= $opts{q}));
 	} elsif (defined($p->[0])) {
 	  ++$cnt[$p->[0][3]>=$opts{q}? 6 : 7];
+	  print STDERR "$x\t$p->[0][1]:$p->[0][2]\t$p->[0][3]\t$p->[0][4]\t*\t0\t*\t",
+		$p->[0][5], "\n" if (defined($opts{p}) && $p->[0][3] >= $opts{q});
 	} else {
+	  print STDERR "$x\t*\t0\t*\t$p->[1][1]:$p->[1][2]\t$p->[1][3]\t$p->[1][4]\t",
+		-$p->[1][5], "\n" if (defined($opts{p}) && $p->[1][3] >= $opts{q});
 	  ++$cnt[$p->[1][3]>=$opts{q}? 8 : 9];
 	}
   }
@@ -326,7 +330,8 @@ sub uniqcmp_aux {
   while (<$fh>) {
 	my @t = split;
 	next if (@t < 11);
-	my $l = ($t[5] =~ /^(\d+)S/)? $1 : 0;
+#	my $l = ($t[5] =~ /^(\d+)S/)? $1 : 0;
+	my $l = 0;
 	my ($x, $nm) = (0, 0);
 	$nm = $1 if (/NM:i:(\d+)/);
 	$_ = $t[5];

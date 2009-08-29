@@ -16,10 +16,6 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 	uint8_t *old_md, *old_nm;
 	int32_t old_nm_i = -1, nm = 0;
 
-	old_md = bam_aux_get(b, "MD");
-	old_nm = bam_aux_get(b, "NM");
-	if (c->flag & BAM_FUNMAP) return;
-	if (old_nm) old_nm_i = bam_aux2i(old_nm);
 	str = (kstring_t*)calloc(1, sizeof(kstring_t));
 	for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 		int j, l = cigar[i]>>4, op = cigar[i]&0xf;
@@ -57,12 +53,19 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 		}
 	}
 	ksprintf(str, "%d", u);
+	// update NM
+	old_nm = bam_aux_get(b, "NM");
+	if (c->flag & BAM_FUNMAP) return;
+	if (old_nm) old_nm_i = bam_aux2i(old_nm);
 	if (!old_nm) bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
 	else if (nm != old_nm_i) {
+		uint8_t *old_data = b->data;
 		fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d -> %d\n", bam1_qname(b), old_nm_i, nm);
 		bam_aux_del(b, old_nm);
 		bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
 	}
+	// update MD
+	old_md = bam_aux_get(b, "MD");
 	if (!old_md) bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
 	else {
 		int is_diff = 0;

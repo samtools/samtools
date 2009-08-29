@@ -374,7 +374,10 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 			c->bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
 			doff += c->n_cigar * 4;
 		} else {
-			if (!(c->flag&BAM_FUNMAP)) parse_error(fp->n_lines, "mapped sequence without CIGAR");
+			if (!(c->flag&BAM_FUNMAP)) {
+				fprintf(stderr, "Parse warning at line %lld: mapped sequence without CIGAR\n", (long long)fp->n_lines);
+				c->flag |= BAM_FUNMAP;
+			}
 			c->bin = bam_reg2bin(c->pos, c->pos + 1);
 		}
 	}
