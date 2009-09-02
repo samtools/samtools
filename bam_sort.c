@@ -49,22 +49,43 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 
 KSORT_INIT(heap, heap1_t, heap_lt)
 
+static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
+{
+	int tempi;
+	char *temps;
+	tempi = h1->l_text, h1->l_text = h2->l_text, h2->l_text = tempi;
+	temps = h1->text, h1->text = h2->text, h2->text = temps;
+}
+
 /*!
   @abstract    Merge multiple sorted BAM.
   @param  is_by_qname whether to sort by query name
   @param  out  output BAM file name
+  @param  headers  name of SAM file from which to copy '@' header lines,
+                   or NULL to copy them from the first file to be merged
   @param  n    number of files to be merged
   @param  fn   names of files to be merged
 
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-void bam_merge_core(int by_qname, const char *out, int n, char * const *fn)
+void bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn)
 {
 	bamFile fpout, *fp;
 	heap1_t *heap;
 	bam_header_t *hout = 0;
+	bam_header_t *hheaders = NULL;
 	int i, j;
+
+	if (headers) {
+		tamFile fpheaders = sam_open(headers);
+		if (fpheaders == 0) {
+			fprintf(stderr, "[bam_merge_core] Cannot open file `%s'. Continue anyway.\n", headers);
+		} else {
+			hheaders = sam_header_read(fpheaders);
+			sam_close(fpheaders);
+		}
+	}
 
 	g_is_by_qname = by_qname;
 	fp = (bamFile*)calloc(n, sizeof(bamFile));
@@ -74,8 +95,24 @@ void bam_merge_core(int by_qname, const char *out, int n, char * const *fn)
 		bam_header_t *hin;
 		assert(fp[i] = bam_open(fn[i], "r"));
 		hin = bam_header_read(fp[i]);
-		if (i == 0) hout = hin;
-		else { // validate multiple baf
+		if (i == 0) { // the first SAM
+			hout = hin;
+			if (hheaders) {
+				// If the text headers to be swapped in include any @SQ headers,
+				// check that they are consistent with the existing binary list
+				// of reference information.
+				if (hheaders->n_targets > 0) {
+					if (hout->n_targets != hheaders->n_targets)
+						fprintf(stderr, "[bam_merge_core] number of @SQ headers in `%s' differs from number of target sequences", headers);
+					for (j = 0; j < hout->n_targets; ++j)
+						if (strcmp(hout->target_name[j], hheaders->target_name[j]) != 0)
+							fprintf(stderr, "[bam_merge_core] @SQ header '%s' in '%s' differs from target sequence", hheaders->target_name[j], headers);
+				}
+				swap_header_text(hout, hheaders);
+				bam_header_destroy(hheaders);
+				hheaders = NULL;
+			}
+		} else { // validate multiple baf
 			if (hout->n_targets != hin->n_targets) {
 				fprintf(stderr, "[bam_merge_core] file '%s' has different number of target sequences. Abort!\n", fn[i]);
 				exit(1);
@@ -86,9 +123,6 @@ void bam_merge_core(int by_qname, const char *out, int n, char * const *fn)
 							hout->target_name[j], hin->target_name[j], fn[i]);
 					exit(1);
 				}
-				if (hout->target_len[j] != hin->target_len[j])
-					fprintf(stderr, "[bam_merge_core] different target sequence length: %d != %d in file '%s'. Continue.\n",
-							hout->target_len[j], hin->target_len[j], fn[i]);
 			}
 			bam_header_destroy(hin);
 		}
@@ -125,16 +159,26 @@ void bam_merge_core(int by_qname, const char *out, int n, char * const *fn)
 int bam_merge(int argc, char *argv[])
 {
 	int c, is_by_qname = 0;
-	while ((c = getopt(argc, argv, "n")) >= 0) {
+	char *fn_headers = NULL;
+
+	while ((c = getopt(argc, argv, "h:n")) >= 0) {
 		switch (c) {
+		case 'h': fn_headers = strdup(optarg); break;
 		case 'n': is_by_qname = 1; break;
 		}
 	}
 	if (optind + 2 >= argc) {
-		fprintf(stderr, "Usage: samtools merge [-n] <out.bam> <in1.bam> <in2.bam> [...]\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Usage:   samtools merge [-n] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
+		fprintf(stderr, "Options: -n       sort by read names\n");
+		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n\n");
+		fprintf(stderr, "Note: Samtools' merge does not reconstruct the @RG dictionary in the header. Users\n");
+		fprintf(stderr, "      must provide the correct header with -h, or uses Picard which properly maintains\n");
+		fprintf(stderr, "      the header dictionary in merging.\n\n");
 		return 1;
 	}
-	bam_merge_core(is_by_qname, argv[optind], argc - optind - 1, argv + optind + 1);
+	bam_merge_core(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1);
+	free(fn_headers);
 	return 0;
 }
 
@@ -220,10 +264,10 @@ void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t m
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
 			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
 		}
-		bam_merge_core(is_by_qname, fnout, n, fns);
+		bam_merge_core(is_by_qname, fnout, 0, n, fns);
 		free(fnout);
 		for (i = 0; i < n; ++i) {
-//			unlink(fns[i]);
+			unlink(fns[i]);
 			free(fns[i]);
 		}
 		free(fns);

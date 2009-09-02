@@ -128,7 +128,8 @@ int bam_rmdup(int argc, char *argv[])
 {
 	bamFile in, out;
 	if (argc < 3) {
-		fprintf(stderr, "Usage: samtools rmdup <input.srt.bam> <output.bam>\n");
+		fprintf(stderr, "Usage: samtools rmdup <input.srt.bam> <output.bam>\n\n");
+		fprintf(stderr, "Note: Picard is recommended for this task.\n");
 		return 1;
 	}
 	in = (strcmp(argv[1], "-") == 0)? bam_dopen(fileno(stdin), "r") : bam_open(argv[1], "r");

@@ -59,7 +59,6 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 	if (old_nm) old_nm_i = bam_aux2i(old_nm);
 	if (!old_nm) bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
 	else if (nm != old_nm_i) {
-		uint8_t *old_data = b->data;
 		fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d -> %d\n", bam1_qname(b), old_nm_i, nm);
 		bam_aux_del(b, old_nm);
 		bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);

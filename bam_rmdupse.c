@@ -161,7 +161,8 @@ int bam_rmdupse(int argc, char *argv[])
 	samfile_t *in, *out;
 	buffer_t *buf;
 	if (argc < 3) {
-		fprintf(stderr, "Usage: samtools rmdupse <in.bam> <out.bam>\n");
+		fprintf(stderr, "Usage: samtools rmdupse <in.bam> <out.bam>\n\n");
+		fprintf(stderr, "Note: Picard is recommended for this task.\n");
 		return 1;
 	}
 	buf = calloc(1, sizeof(buffer_t));

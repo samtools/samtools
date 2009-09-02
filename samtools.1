@@ -33,12 +33,11 @@ output (stdout). Several commands can thus be combined with Unix
 pipes. Samtools always output warning and error messages to the standard
 error output (stderr).
 
-Samtools is also able to open a BAM (not SAM) file on a remote FTP
-server if the BAM file name starts with `ftp://'.  Samtools checks the
-current working directory for the index file and will download the index
-upon absence. Samtools achieves random FTP file access with the `REST'
-ftp command. It does not retrieve the entire alignment file unless it is
-asked to do so.
+Samtools is also able to open a BAM (not SAM) file on a remote FTP or
+HTTP server if the BAM file name starts with `ftp://' or `http://'.
+Samtools checks the current working directory for the index file and
+will download the index upon absence. Samtools does not retrieve the
+entire alignment file unless it is asked to do so.
 
 .SH COMMANDS AND OPTIONS
 
@@ -73,17 +72,34 @@ Approximately the maximum required memory. [500000000]
 
 .TP
 .B merge
-samtools merge [-n] <out.bam> <in1.bam> <in2.bam> [...]
+samtools merge [-h inh.sam] [-n] <out.bam> <in1.bam> <in2.bam> [...]
 
-Merge multiple sorted alignments. The header of
-.I <in1.bam>
+Merge multiple sorted alignments.
+The header reference lists of all the input BAM files, and the @SQ headers of
+.IR inh.sam ,
+if any, must all refer to the same set of reference sequences.
+The header reference list and (unless overridden by
+.BR -h )
+`@' headers of
+.I in1.bam
 will be copied to
-.I <out.bam>
+.IR out.bam ,
 and the headers of other files will be ignored.
 
 .B OPTIONS:
 .RS
 .TP 8
+.B -h FILE
+Use the lines of
+.I FILE
+as `@' headers to be copied to
+.IR out.bam ,
+replacing any header lines that would otherwise be copied from
+.IR in1.bam .
+.RI ( FILE
+is actually in SAM format, though any alignment records it may contain
+are ignored.)
+.TP
 .B -n
 The input alignments are sorted by read names rather than by chromosomal
 coordinates
@@ -406,6 +422,15 @@ _
 Unaligned words used in bam_import.c, bam_endian.h, bam.c and bam_aux.c.
 .IP o 2
 CIGAR operation P is not properly handled at the moment.
+.IP o 2
+In merging, the input files are required to have the same number of
+reference sequences. The requirement can be relaxed. In addition,
+merging does not reconstruct the header dictionaries
+automatically. Endusers have to provide the correct header. Picard is
+better at merging.
+.IP o 2
+Samtools' rmdup does not work for single-end data and does not remove
+duplicates across chromosomes. Picard is better.
 
 .SH AUTHOR
 .PP
@@ -417,4 +442,4 @@ specification.
 
 .SH SEE ALSO
 .PP
-Samtools website: http://samtools.sourceforge.net
+Samtools website: <http://samtools.sourceforge.net>
