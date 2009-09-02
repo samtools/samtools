@@ -9,7 +9,7 @@
 #endif
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.5-34 (r451)"
+#define PACKAGE_VERSION "0.1.6 (r453)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -78,7 +78,6 @@ static int usage()
 	fprintf(stderr, "Usage:   samtools <command> [options]\n\n");
 	fprintf(stderr, "Command: view        SAM<->BAM conversion\n");
 	fprintf(stderr, "         sort        sort alignment file\n");
-	fprintf(stderr, "         merge       merge sorted alignments (Picard recommended)\n");
 	fprintf(stderr, "         pileup      generate pileup output\n");
 	fprintf(stderr, "         faidx       index/extract FASTA\n");
 #if _CURSES_LIB != 0
@@ -86,10 +85,11 @@ static int usage()
 #endif
 	fprintf(stderr, "         index       index alignment\n");
 	fprintf(stderr, "         fixmate     fix mate information\n");
-	fprintf(stderr, "         rmdup       remove PCR duplicates (Picard recommended)\n");
 	fprintf(stderr, "         glfview     print GLFv3 file\n");
 	fprintf(stderr, "         flagstat    simple stats\n");
 	fprintf(stderr, "         calmd       recalculate MD/NM tags and '=' bases\n");
+	fprintf(stderr, "         merge       merge sorted alignments (Picard recommended)\n");
+	fprintf(stderr, "         rmdup       remove PCR duplicates (Picard recommended)\n");
 	fprintf(stderr, "\n");
 	return 1;
 }

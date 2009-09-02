@@ -1,4 +1,50 @@
 ------------------------------------------------------------------------
+r451 | lh3lh3 | 2009-09-02 10:44:48 +0100 (Wed, 02 Sep 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_rmdup.c
+   M /trunk/samtools/bam_rmdupse.c
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+ * samtools-0.1.5-34 (r451)
+ * applied the patch by John
+ * improved the help message a little bit
+
+------------------------------------------------------------------------
+r450 | lh3lh3 | 2009-09-02 09:55:55 +0100 (Wed, 02 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_color.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.5-33 (r450)
+ * fixed a bug in bam_color.c (on behalf of Nils Homer)
+
+------------------------------------------------------------------------
+r449 | lh3lh3 | 2009-08-29 20:36:41 +0100 (Sat, 29 Aug 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools-0.1.5-32 (r449)
+ * fillmd: fixed a bug in modifying MD/NM tags
+ * in import, give a warning if the read is aligned but there is no CIGAR.
+
+------------------------------------------------------------------------
+r448 | lh3lh3 | 2009-08-19 09:44:28 +0100 (Wed, 19 Aug 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/wgsim_eval.pl
+
+ * samtools-0.1.5-31 (r448)
+ * fixed an issue when the last CIGAR is I or D
+
+------------------------------------------------------------------------
 r447 | lh3lh3 | 2009-08-17 09:34:57 +0100 (Mon, 17 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_aux.c
