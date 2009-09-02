@@ -100,8 +100,8 @@ char bam_aux_getCEi(bam1_t *b, int i)
 		cs_i = strlen(cs) - 1 - i;
 		// get current color
 		cur_color = cs[cs_i];
-		// get previous base
-		prev_b = (0 == cs_i) ? cs[0] : bam_nt16_rev_table[bam1_seqi(bam1_seq(b), i+1)];
+		// get previous base.  Note: must rc adaptor
+		prev_b = (cs_i == 1) ? "TGCAN"[(int)bam_aux_nt2int(cs[0])] : bam_nt16_rev_table[bam1_seqi(bam1_seq(b), i+1)];
 		// get current base
 		cur_b = bam_nt16_rev_table[bam1_seqi(bam1_seq(b), i)]; 
 	}
