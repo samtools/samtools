@@ -93,7 +93,15 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 	for (i = 0; i != n; ++i) {
 		heap1_t *h;
 		bam_header_t *hin;
-		assert(fp[i] = bam_open(fn[i], "r"));
+		fp[i] = bam_open(fn[i], "r");
+		if (fp[i] == 0) {
+			int j;
+			fprintf(stderr, "[bam_merge_core] fail to open file %s\n", fn[i]);
+			for (j = 0; j < i; ++j) bam_close(fp[j]);
+			free(fp); free(heap);
+			// FIXME: possible memory leak
+			return;
+		}
 		hin = bam_header_read(fp[i]);
 		if (i == 0) { // the first SAM
 			hout = hin;
@@ -202,7 +210,13 @@ static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam
 	name = (char*)calloc(strlen(prefix) + 20, 1);
 	if (n >= 0) sprintf(name, "%s.%.4d.bam", prefix, n);
 	else sprintf(name, "%s.bam", prefix);
-	assert(fp = bam_open(name, "w"));
+	fp = bam_open(name, "w");
+	if (fp == 0) {
+		fprintf(stderr, "[sort_blocks] fail to create file %s.\n", name);
+		free(name);
+		// FIXME: possible memory leak
+		return;
+	}
 	free(name);
 	bam_header_write(fp, h);
 	for (i = 0; i < k; ++i)
@@ -235,7 +249,10 @@ void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t m
 	g_is_by_qname = is_by_qname;
 	n = k = 0; mem = 0;
 	fp = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
-	assert(fp);
+	if (fp == 0) {
+		fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
+		return;
+	}
 	header = bam_header_read(fp);
 	buf = (bam1_t**)calloc(max_mem / BAM_CORE_SIZE, sizeof(bam1_t*));
 	// write sub files
