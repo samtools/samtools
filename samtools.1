@@ -220,14 +220,16 @@ mapping quality. A symbol `$' marks the end of a read segment.
 
 If option
 .B -c
-is applied, the consensus base, consensus quality, SNP quality and RMS
-mapping quality of the reads covering the site will be inserted between
-the `reference base' and the `read bases' columns. An indel occupies an
-additional line. Each indel line consists of chromosome name,
-coordinate, a star, the genotype, consensus quality, SNP quality, RMS
-mapping quality, # covering reads, the first alllele, the second allele,
-# reads supporting the first allele, # reads supporting the second
-allele and # reads containing indels different from the top two alleles.
+is applied, the consensus base, Phred-scaled consensus quality, SNP
+quality (i.e. the Phred-scaled probability of the consensus being
+identical to the reference) and root mean square (RMS) mapping quality
+of the reads covering the site will be inserted between the `reference
+base' and the `read bases' columns. An indel occupies an additional
+line. Each indel line consists of chromosome name, coordinate, a star,
+the genotype, consensus quality, SNP quality, RMS mapping quality, #
+covering reads, the first alllele, the second allele, # reads supporting
+the first allele, # reads supporting the second allele and # reads
+containing indels different from the top two alleles.
 
 .B OPTIONS:
 .RS

@@ -323,6 +323,40 @@ int faidx_main(int argc, char *argv[])
 	return 0;
 }
 
+int faidx_fetch_nseq(const faidx_t *fai) 
+{
+	return fai->n;
+}
+
+char *faidx_fetch_seq(const faidx_t *fai, char *c_name, int p_beg_i, int p_end_i, int *len)
+{
+	int l;
+	char c;
+    khiter_t iter;
+    faidx1_t val;
+	char *seq=NULL;
+
+    // Adjust position
+    iter = kh_get(s, fai->hash, c_name);
+    if(iter == kh_end(fai->hash)) return 0;
+    val = kh_value(fai->hash, iter);
+	if(p_end_i < p_beg_i) p_beg_i = p_end_i;
+    if(p_beg_i < 0) p_beg_i = 0;
+    else if(val.len <= p_beg_i) p_beg_i = val.len - 1;
+    if(p_end_i < 0) p_end_i = 0;
+    else if(val.len <= p_end_i) p_end_i = val.len - 1;
+
+    // Now retrieve the sequence 
+	l = 0;
+	seq = (char*)malloc(p_end_i - p_beg_i + 2);
+	razf_seek(fai->rz, val.offset + p_beg_i / val.line_blen * val.line_len + p_beg_i % val.line_blen, SEEK_SET);
+	while (razf_read(fai->rz, &c, 1) == 1 && l < p_end_i - p_beg_i + 1)
+		if (isgraph(c)) seq[l++] = c;
+	seq[l] = '\0';
+	*len = l;
+	return seq;
+}
+
 #ifdef FAIDX_MAIN
 int main(int argc, char *argv[]) { return faidx_main(argc, argv); }
 #endif

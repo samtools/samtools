@@ -75,6 +75,27 @@ extern "C" {
 	 */
 	char *fai_fetch(const faidx_t *fai, const char *reg, int *len);
 
+	/*!
+	  @abstract	   Fetch the number of sequences. 
+	  @param  fai  Pointer to the faidx_t struct
+	  @return	   The number of sequences
+	 */
+	int faidx_fetch_nseq(const faidx_t *fai);
+
+	/*!
+	  @abstract    Fetch the sequence in a region.
+	  @param  fai  Pointer to the faidx_t struct
+	  @param  c_name Region name
+	  @param  p_beg_i  Beginning position number (zero-based)
+	  @param  p_end_i  End position number (zero-based)
+	  @param  len  Length of the region
+	  @return      Pointer to the sequence; null on failure
+
+	  @discussion The returned sequence is allocated by malloc family
+	  and should be destroyed by end users by calling free() on it.
+	 */
+	char *faidx_fetch_seq(const faidx_t *fai, char *c_name, int p_beg_i, int p_end_i, int *len);
+
 #ifdef __cplusplus
 }
 #endif
