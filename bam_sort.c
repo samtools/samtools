@@ -201,7 +201,7 @@ static inline int bam1_lt(const bam1_p a, const bam1_p b)
 }
 KSORT_INIT(sort, bam1_p, bam1_lt)
 
-static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam_header_t *h)
+static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam_header_t *h, int is_stdout)
 {
 	char *name;
 	int i;
@@ -210,7 +210,7 @@ static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam
 	name = (char*)calloc(strlen(prefix) + 20, 1);
 	if (n >= 0) sprintf(name, "%s.%.4d.bam", prefix, n);
 	else sprintf(name, "%s.bam", prefix);
-	fp = bam_open(name, "w");
+	fp = is_stdout? bam_dopen(fileno(stdout), "w") : bam_open(name, "w");
 	if (fp == 0) {
 		fprintf(stderr, "[sort_blocks] fail to create file %s.\n", name);
 		free(name);
@@ -238,7 +238,7 @@ static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam
   and then merge them by calling bam_merge_core(). This function is
   NOT thread safe.
  */
-void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
+void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t max_mem, int is_stdout)
 {
 	int n, ret, k, i;
 	size_t mem;
@@ -263,19 +263,20 @@ void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t m
 		mem += ret;
 		++k;
 		if (mem >= max_mem) {
-			sort_blocks(n++, k, buf, prefix, header);
+			sort_blocks(n++, k, buf, prefix, header, is_stdout);
 			mem = 0; k = 0;
 		}
 	}
 	if (ret != -1)
 		fprintf(stderr, "[bam_sort_core] truncated file. Continue anyway.\n");
-	if (n == 0) sort_blocks(-1, k, buf, prefix, header);
+	if (n == 0) sort_blocks(-1, k, buf, prefix, header, is_stdout);
 	else { // then merge
 		char **fns, *fnout;
 		fprintf(stderr, "[bam_sort_core] merging from %d files...\n", n+1);
-		sort_blocks(n++, k, buf, prefix, header);
+		sort_blocks(n++, k, buf, prefix, header, is_stdout);
 		fnout = (char*)calloc(strlen(prefix) + 20, 1);
-		sprintf(fnout, "%s.bam", prefix);
+		if (is_stdout) sprintf(fnout, "-");
+		else sprintf(fnout, "%s.bam", prefix);
 		fns = (char**)calloc(n, sizeof(char*));
 		for (i = 0; i < n; ++i) {
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
@@ -300,20 +301,26 @@ void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t m
 	bam_close(fp);
 }
 
+void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
+{
+	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0);
+}
+
 int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 500000000;
-	int c, is_by_qname = 0;
-	while ((c = getopt(argc, argv, "nm:")) >= 0) {
+	int c, is_by_qname = 0, is_stdout = 0;
+	while ((c = getopt(argc, argv, "nom:")) >= 0) {
 		switch (c) {
+		case 'o': is_stdout = 1; break;
 		case 'n': is_by_qname = 1; break;
 		case 'm': max_mem = atol(optarg); break;
 		}
 	}
 	if (optind + 2 > argc) {
-		fprintf(stderr, "Usage: samtools sort [-n] [-m <maxMem>] <in.bam> <out.prefix>\n");
+		fprintf(stderr, "Usage: samtools sort [-on] [-m <maxMem>] <in.bam> <out.prefix>\n");
 		return 1;
 	}
-	bam_sort_core(is_by_qname, argv[optind], argv[optind+1], max_mem);
+	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout);
 	return 0;
 }
