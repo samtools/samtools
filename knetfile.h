@@ -28,8 +28,9 @@ typedef struct knetFile_s {
 
 	// the following are for FTP only
 	int ctrl_fd, pasv_ip[4], pasv_port, max_response, no_reconnect, is_ready;
-	char *response, *retr;
+	char *response, *retr, *size_cmd;
 	int64_t seek_offset; // for lazy seek
+    int64_t file_size;
 
 	// the following are for HTTP only
 	char *path, *http_host;
@@ -64,7 +65,7 @@ extern "C" {
 	  This routine only sets ->offset and ->is_ready=0. It does not
 	  communicate with the FTP server.
 	 */
-	int knet_seek(knetFile *fp, off_t off, int whence);
+	off_t knet_seek(knetFile *fp, off_t off, int whence);
 	int knet_close(knetFile *fp);
 
 #ifdef __cplusplus

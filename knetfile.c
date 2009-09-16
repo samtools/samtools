@@ -262,7 +262,7 @@ int kftp_reconnect(knetFile *ftp)
 	return kftp_connect(ftp);
 }
 
-// initialize ->type, ->host and ->retr
+// initialize ->type, ->host, ->retr and ->size
 knetFile *kftp_parse_url(const char *fn, const char *mode)
 {
 	knetFile *fp;
@@ -283,19 +283,28 @@ knetFile *kftp_parse_url(const char *fn, const char *mode)
 	strncpy(fp->host, fn + 6, l);
 	fp->retr = calloc(strlen(p) + 8, 1);
 	sprintf(fp->retr, "RETR %s\r\n", p);
-	fp->seek_offset = -1;
+    fp->size_cmd = calloc(strlen(p) + 8, 1);
+    sprintf(fp->size_cmd, "SIZE %s\r\n", p);
+	fp->seek_offset = 0;
 	return fp;
 }
 // place ->fd at offset off
 int kftp_connect_file(knetFile *fp)
 {
 	int ret;
+	long long file_size;
 	if (fp->fd != -1) {
 		netclose(fp->fd);
 		if (fp->no_reconnect) kftp_get_response(fp);
 	}
 	kftp_pasv_prep(fp);
-	if (fp->offset) {
+    kftp_send_cmd(fp, fp->size_cmd, 1);
+    if ( sscanf(fp->response,"%*d %lld", &file_size) != 1 )
+    {
+        fprintf(stderr,"[kftp_connect_file] %s\n", fp->response);
+        return -1;
+    } else fp->file_size = file_size;
+	if (fp->offset>=0) {
 		char tmp[32];
 #ifndef _WIN32
 		sprintf(tmp, "REST %lld\r\n", (long long)fp->offset);
@@ -318,6 +327,7 @@ int kftp_connect_file(knetFile *fp)
 	fp->is_ready = 1;
 	return 0;
 }
+
 
 /**************************
  * HTTP specific routines *
@@ -354,7 +364,7 @@ knetFile *khttp_parse_url(const char *fn, const char *mode)
 	}
 	fp->type = KNF_TYPE_HTTP;
 	fp->ctrl_fd = fp->fd = -1;
-	fp->seek_offset = -1;
+	fp->seek_offset = 0;
 	return fp;
 }
 
@@ -366,8 +376,7 @@ int khttp_connect_file(knetFile *fp)
 	fp->fd = socket_connect(fp->host, fp->port);
 	buf = calloc(0x10000, 1); // FIXME: I am lazy... But in principle, 64KB should be large enough.
 	l += sprintf(buf + l, "GET %s HTTP/1.0\r\nHost: %s\r\n", fp->path, fp->http_host);
-	if (fp->offset)
-		l += sprintf(buf + l, "Range: bytes=%lld-\r\n", (long long)fp->offset);
+    l += sprintf(buf + l, "Range: bytes=%lld-\r\n", (long long)fp->offset);
 	l += sprintf(buf + l, "\r\n");
 	netwrite(fp->fd, buf, l);
 	l = 0;
@@ -383,7 +392,7 @@ int khttp_connect_file(knetFile *fp)
 		return -1;
 	}
 	ret = strtol(buf + 8, &p, 0); // HTTP return code
-	if (ret == 200 && fp->offset) { // 200 (complete result); then skip beginning of the file
+	if (ret == 200 && fp->offset>0) { // 200 (complete result); then skip beginning of the file
 		off_t rest = fp->offset;
 		while (rest) {
 			off_t l = rest < 0x10000? rest : 0x10000;
@@ -482,7 +491,7 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 	return l;
 }
 
-int knet_seek(knetFile *fp, off_t off, int whence)
+off_t knet_seek(knetFile *fp, off_t off, int whence)
 {
 	if (whence == SEEK_SET && off == fp->offset) return 0;
 	if (fp->type == KNF_TYPE_LOCAL) {
@@ -494,15 +503,31 @@ int knet_seek(knetFile *fp, off_t off, int whence)
 			return -1;
 		}
 		fp->offset = offset;
-		return 0;
-	} else if (fp->type == KNF_TYPE_FTP || fp->type == KNF_TYPE_HTTP) {
-		if (whence != SEEK_SET) { // FIXME: we can surely allow SEEK_CUR and SEEK_END in future
-			fprintf(stderr, "[knet_seek] only SEEK_SET is supported for FTP/HTTP. Offset is unchanged.\n");
+		return fp->offset;
+	}
+    else if (fp->type == KNF_TYPE_FTP) 
+    {
+        if (whence==SEEK_CUR)
+            fp->offset += off;
+        else if (whence==SEEK_SET)
+            fp->offset = off;
+        else if ( whence==SEEK_END)
+            fp->offset = fp->file_size+off;
+		fp->is_ready = 0;
+		return fp->offset;
+	} 
+    else if (fp->type == KNF_TYPE_HTTP) 
+    {
+		if (whence == SEEK_END) { // FIXME: we can surely allow SEEK_CUR and SEEK_END in future
+			fprintf(stderr, "[knet_seek] SEEK_END is supported for HTTP. Offset is unchanged.\n");
 			return -1;
 		}
-		fp->offset = off;
+        if (whence==SEEK_CUR)
+            fp->offset += off;
+        else if (whence==SEEK_SET)
+            fp->offset = off;
 		fp->is_ready = 0;
-		return 0;
+		return fp->offset;
 	}
 	return -1;
 }
