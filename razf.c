@@ -536,8 +536,10 @@ int razf_get_data_size(RAZF *rz, int64_t *u_size, int64_t *c_size){
 		case FILE_TYPE_PLAIN:
 			if(rz->end == 0x7fffffffffffffffLL){
 #ifdef _USE_KNETFILE
-				if((n = knet_seek(rz->x.fpr, 0, SEEK_CUR)) == -1) return 0;
-				rz->end = knet_seek(rz->x.fpr, 0, SEEK_END);
+				if(knet_seek(rz->x.fpr, 0, SEEK_CUR) == -1) return 0;
+                n = knet_tell(rz->x.fpr);
+				knet_seek(rz->x.fpr, 0, SEEK_END);
+                rz->end = knet_tell(rz->x.fpr);
 				knet_seek(rz->x.fpr, n, SEEK_SET);
 #else
 				if((n = lseek(rz->filedes, 0, SEEK_CUR)) == -1) return 0;
@@ -715,7 +717,8 @@ int64_t razf_jump(RAZF *rz, int64_t block_start, int block_offset){
 		rz->buf_off = rz->buf_len = 0;
 		pos = block_start + block_offset;
 #ifdef _USE_KNETFILE
-		pos = knet_seek(rz->x.fpr, pos, SEEK_SET);
+		knet_seek(rz->x.fpr, pos, SEEK_SET);
+        pos = knet_tell(rz->x.fpr);
 #else
 		pos = lseek(rz->filedes, pos, SEEK_SET);
 #endif
@@ -741,7 +744,8 @@ int64_t razf_seek(RAZF* rz, int64_t pos, int where){
 	else if (where == SEEK_END) pos += rz->src_end;
 	if(rz->file_type == FILE_TYPE_PLAIN){
 #ifdef _USE_KNETFILE
-		seek_pos = knet_seek(rz->x.fpr, pos, SEEK_SET);
+		knet_seek(rz->x.fpr, pos, SEEK_SET);
+        seek_pos = knet_tell(rz->x.fpr);
 #else
 		seek_pos = lseek(rz->filedes, pos, SEEK_SET);
 #endif

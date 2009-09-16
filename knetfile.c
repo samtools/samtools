@@ -503,7 +503,7 @@ off_t knet_seek(knetFile *fp, off_t off, int whence)
 			return -1;
 		}
 		fp->offset = offset;
-		return fp->offset;
+		return 0;
 	}
     else if (fp->type == KNF_TYPE_FTP) 
     {
@@ -514,12 +514,12 @@ off_t knet_seek(knetFile *fp, off_t off, int whence)
         else if ( whence==SEEK_END)
             fp->offset = fp->file_size+off;
 		fp->is_ready = 0;
-		return fp->offset;
+		return 0;
 	} 
     else if (fp->type == KNF_TYPE_HTTP) 
     {
-		if (whence == SEEK_END) { // FIXME: we can surely allow SEEK_CUR and SEEK_END in future
-			fprintf(stderr, "[knet_seek] SEEK_END is supported for HTTP. Offset is unchanged.\n");
+		if (whence == SEEK_END) { // FIXME: can we allow SEEK_END in future?
+			fprintf(stderr, "[knet_seek] SEEK_END is not supported for HTTP. Offset is unchanged.\n");
 			return -1;
 		}
         if (whence==SEEK_CUR)
