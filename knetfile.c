@@ -34,6 +34,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
 #include <unistd.h>
 #include <sys/types.h>
 
@@ -499,7 +500,6 @@ off_t knet_seek(knetFile *fp, off_t off, int whence)
 		 * while fseek() returns zero on success. */
 		off_t offset = lseek(fp->fd, off, whence);
 		if (offset == -1) {
-			perror("lseek");
 			return -1;
 		}
 		fp->offset = offset;
@@ -520,6 +520,7 @@ off_t knet_seek(knetFile *fp, off_t off, int whence)
     {
 		if (whence == SEEK_END) { // FIXME: can we allow SEEK_END in future?
 			fprintf(stderr, "[knet_seek] SEEK_END is not supported for HTTP. Offset is unchanged.\n");
+			errno = ESPIPE;
 			return -1;
 		}
         if (whence==SEEK_CUR)
@@ -529,6 +530,7 @@ off_t knet_seek(knetFile *fp, off_t off, int whence)
 		fp->is_ready = 0;
 		return fp->offset;
 	}
+	errno = EINVAL;
 	return -1;
 }
 

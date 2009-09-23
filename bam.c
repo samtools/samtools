@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <ctype.h>
+#include <errno.h>
 #include <assert.h>
 #include "bam.h"
 #include "bam_endian.h"
@@ -94,7 +95,11 @@ bam_header_t *bam_header_read(bamFile fp)
 	int32_t i = 1, name_len;
 	// check EOF
 	i = bgzf_check_EOF(fp);
-	if (i < 0) fprintf(stderr, "[bam_header_read] read from pipe; skip EOF checking.\n");
+	if (i < 0) {
+		// If the file is a pipe, checking the EOF marker will *always* fail
+		// with ESPIPE.  Suppress the error message in this case.
+		if (errno != ESPIPE) perror("[bam_header_read] bgzf_check_EOF");
+	}
 	else if (i == 0) fprintf(stderr, "[bam_header_read] EOF marker is absent.\n");
 	// read "BAM1"
 	if (bam_read(fp, buf, 4) != 4) return 0;
