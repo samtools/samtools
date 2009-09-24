@@ -132,8 +132,11 @@ int bam_fillmd(int argc, char *argv[])
 				free(ref);
 				ref = fai_fetch(fai, fp->header->target_name[b->core.tid], &len);
 				tid = b->core.tid;
+				if (ref == 0)
+					fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
+							fp->header->target_name[tid]);
 			}
-			bam_fillmd1(b, ref, is_equal);
+			if (ref) bam_fillmd1(b, ref, is_equal);
 		}
 		samwrite(fpout, b);
 	}

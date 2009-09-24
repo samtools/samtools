@@ -1,4 +1,73 @@
 ------------------------------------------------------------------------
+r462 | lh3lh3 | 2009-09-16 09:51:07 +0100 (Wed, 16 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/faidx.c
+   M /trunk/samtools/knetfile.c
+   M /trunk/samtools/knetfile.h
+   M /trunk/samtools/razf.c
+   M /trunk/samtools/razf.h
+
+ * samtools-0.1.6-5 (r462)
+ * Added knetfile support in razf and faidx (on behalf of Petr Danecek)
+
+------------------------------------------------------------------------
+r460 | lh3lh3 | 2009-09-09 12:06:22 +0100 (Wed, 09 Sep 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/samtools.1
+
+fixed a formatting issue
+
+------------------------------------------------------------------------
+r459 | lh3lh3 | 2009-09-08 23:14:08 +0100 (Tue, 08 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-4 (r459)
+ * make sort output the result to stdout when -o is in use
+
+------------------------------------------------------------------------
+r458 | lh3lh3 | 2009-09-07 10:10:28 +0100 (Mon, 07 Sep 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/faidx.c
+   M /trunk/samtools/faidx.h
+   M /trunk/samtools/samtools.1
+
+ * samtools-0.1.6-2 (r458)
+ * added more interface to faidx (by Nils)
+ * updated documentation
+
+------------------------------------------------------------------------
+r457 | lh3lh3 | 2009-09-05 21:12:04 +0100 (Sat, 05 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-2 (r457)
+ * get rid of three assert() in bam_sort.c
+
+------------------------------------------------------------------------
+r456 | jmarshall | 2009-09-04 17:46:25 +0100 (Fri, 04 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/razf.c
+
+Return NULL from _razf_open() (and hence razf_open()/razf_open2())
+when opening the file fails.
+
+------------------------------------------------------------------------
+r453 | lh3lh3 | 2009-09-02 13:56:33 +0100 (Wed, 02 Sep 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+   D /trunk/samtools/source.dot
+
+Release samtools-0.1.6
+
+------------------------------------------------------------------------
 r451 | lh3lh3 | 2009-09-02 10:44:48 +0100 (Wed, 02 Sep 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_md.c
