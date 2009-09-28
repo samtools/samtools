@@ -199,7 +199,7 @@ bgzf_open(const char* __restrict path, const char* __restrict mode)
 #ifdef _WIN32
 		oflag |= O_BINARY;
 #endif
-		fd = open(path, oflag, 0644);
+		fd = open(path, oflag, 0666);
 		if (fd == -1) return 0;
         fp = open_write(fd, strstr(mode, "u")? 1 : 0);
     }

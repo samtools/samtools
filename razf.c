@@ -511,9 +511,9 @@ static inline RAZF* _razf_open(const char *filename, const char *mode, int _load
 		rz = razf_open_r(fd, _load_index);
 	} else if(strstr(mode, "w")){
 #ifdef _WIN32
-		fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644);
+		fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
 #else
-		fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+		fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
 #endif
 		if(fd < 0) return NULL;
 		rz = razf_open_w(fd);

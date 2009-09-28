@@ -50,7 +50,7 @@ static int write_open(const char *fn, int is_forced)
 	int fd = -1;
 	char c;
 	if (!is_forced) {
-		if ((fd = open(fn, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL, 0644)) < 0 && errno == EEXIST) {
+		if ((fd = open(fn, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL, 0666)) < 0 && errno == EEXIST) {
 			printf("bgzip: %s already exists; do you wish to overwrite (y or n)? ", fn);
 			scanf("%c", &c);
 			if (c != 'Y' && c != 'y') {
@@ -60,7 +60,7 @@ static int write_open(const char *fn, int is_forced)
 		}
 	}
 	if (fd < 0) {
-		if ((fd = open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0644)) < 0) {
+		if ((fd = open(fn, O_WRONLY | O_CREAT | O_TRUNC, 0666)) < 0) {
 			fprintf(stderr, "bgzip: %s: Fail to write\n", fn);
 			exit(1);
 		}
