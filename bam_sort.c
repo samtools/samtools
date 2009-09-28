@@ -33,9 +33,11 @@ static inline int strnum_cmp(const char *a, const char *b)
 
 typedef struct {
 	int i;
-	uint64_t pos;
+	uint64_t pos, idx;
 	bam1_t *b;
 } heap1_t;
+
+#define __pos_cmp(a, b) ((a).pos > (b).pos || ((a).pos == (b).pos && ((a).i > (b).i || ((a).i == (b).i && (a).idx > (b).idx))))
 
 static inline int heap_lt(const heap1_t a, const heap1_t b)
 {
@@ -43,8 +45,8 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 		int t;
 		if (a.b == 0 || b.b == 0) return a.b == 0? 1 : 0;
 		t = strnum_cmp(bam1_qname(a.b), bam1_qname(b.b));
-		return (t > 0 || (t == 0 && a.pos > b.pos));
-	} else return (a.pos > b.pos);
+		return (t > 0 || (t == 0 && __pos_cmp(a, b)));
+	} else return __pos_cmp(a, b);
 }
 
 KSORT_INIT(heap, heap1_t, heap_lt)
@@ -76,6 +78,7 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 	bam_header_t *hout = 0;
 	bam_header_t *hheaders = NULL;
 	int i, j;
+	uint64_t idx = 0;
 
 	if (headers) {
 		tamFile fpheaders = sam_open(headers);
@@ -137,8 +140,10 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 		h = heap + i;
 		h->i = i;
 		h->b = (bam1_t*)calloc(1, sizeof(bam1_t));
-		if (bam_read1(fp[i], h->b) >= 0)
+		if (bam_read1(fp[i], h->b) >= 0) {
 			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)h->b->core.pos<<1 | bam1_strand(h->b);
+			h->idx = idx++;
+		}
 		else h->pos = HEAP_EMPTY;
 	}
 	fpout = strcmp(out, "-")? bam_open(out, "w") : bam_dopen(fileno(stdout), "w");
@@ -152,6 +157,7 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 		bam_write1_core(fpout, &b->core, b->data_len, b->data);
 		if ((j = bam_read1(fp[heap->i], b)) >= 0) {
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)b->core.pos<<1 | bam1_strand(b);
+			heap->idx = idx++;
 		} else if (j == -1) {
 			heap->pos = HEAP_EMPTY;
 			free(heap->b->data); free(heap->b);

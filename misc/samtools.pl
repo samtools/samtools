@@ -37,6 +37,16 @@ sub showALEN {
 # varFilter
 #
 
+#
+# Filtration code:
+#
+# d low depth
+# D high depth
+# W too many SNPs in a window (SNP only)
+# G close to a high-quality indel (SNP only)
+# Q low RMS mapping quality (SNP only)
+# g close to another indel with higher quality (indel only)
+
 sub varFilter {
   my %opts = (d=>3, D=>100, l=>30, Q=>25, q=>10, G=>25, s=>100, w=>10, W=>10, N=>2, p=>undef);
   getopts('pq:d:D:l:Q:w:W:N:G:', \%opts);
