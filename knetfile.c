@@ -71,7 +71,14 @@ static int socket_wait(int fd, int is_read)
 	if (is_read) fdr = &fds;
 	else fdw = &fds;
 	ret = select(fd+1, fdr, fdw, 0, &tv);
+#ifndef _WIN32
 	if (ret == -1) perror("select");
+#else
+	if (ret == 0)
+		fprintf(stderr, "select time-out\n");
+	else if (ret == SOCKET_ERROR)
+		fprintf(stderr, "select: %d\n", WSAGetLastError());
+#endif
 	return ret;
 }
 
@@ -104,15 +111,27 @@ static int socket_connect(const char *host, const char *port)
 }
 #else
 /* MinGW's printf has problem with "%lld" */
-char *uint64tostr(char *buf, uint64_t x)
+char *int64tostr(char *buf, int64_t x)
 {
-	int i, cnt;
-	for (i = 0; x; x /= 10) buf[i++] = '0' + x%10;
+	int cnt;
+	int i = 0;
+	do {
+		buf[i++] = '0' + x % 10;
+		x /= 10;
+	} while (x);
 	buf[i] = 0;
 	for (cnt = i, i = 0; i < cnt/2; ++i) {
 		int c = buf[i]; buf[i] = buf[cnt-i-1]; buf[cnt-i-1] = c;
 	}
 	return buf;
+}
+
+int64_t strtoint64(const char *buf)
+{
+	int64_t x;
+	for (x = 0; *buf != '\0'; ++buf)
+		x = x * 10 + ((int64_t) *buf - 48);
+	return x;
 }
 /* In windows, the first thing is to establish the TCP connection. */
 int knet_win32_init()
@@ -130,7 +149,11 @@ void knet_win32_destroy()
  * non-Windows OS, I do not use this one. */
 static SOCKET socket_connect(const char *host, const char *port)
 {
-#define __err_connect(func) do { perror(func); return -1; } while (0)
+#define __err_connect(func)										\
+	do {														\
+		fprintf(stderr, "%s: %d\n", func, WSAGetLastError());	\
+		return -1;												\
+	} while (0)
 
 	int on = 1;
 	SOCKET fd;
@@ -183,7 +206,11 @@ static off_t my_netread(int fd, void *buf, off_t len)
 
 static int kftp_get_response(knetFile *ftp)
 {
+#ifndef _WIN32
 	unsigned char c;
+#else
+	char c;
+#endif
 	int n = 0;
 	char *p;
 	if (socket_wait(ftp->ctrl_fd, 1) <= 0) return 0;
@@ -260,6 +287,7 @@ int kftp_reconnect(knetFile *ftp)
 		ftp->ctrl_fd = -1;
 	}
 	netclose(ftp->fd);
+	ftp->fd = -1;
 	return kftp_connect(ftp);
 }
 
@@ -300,18 +328,26 @@ int kftp_connect_file(knetFile *fp)
 	}
 	kftp_pasv_prep(fp);
     kftp_send_cmd(fp, fp->size_cmd, 1);
+#ifndef _WIN32
     if ( sscanf(fp->response,"%*d %lld", &file_size) != 1 )
     {
         fprintf(stderr,"[kftp_connect_file] %s\n", fp->response);
         return -1;
-    } else fp->file_size = file_size;
+    }
+#else
+	const char *p = fp->response;
+	while (*p != ' ') ++p;
+	while (*p < '0' || *p > '9') ++p;
+	file_size = strtoint64(p);
+#endif
+	fp->file_size = file_size;
 	if (fp->offset>=0) {
 		char tmp[32];
 #ifndef _WIN32
 		sprintf(tmp, "REST %lld\r\n", (long long)fp->offset);
 #else
 		strcpy(tmp, "REST ");
-		uint64tostr(tmp + 5, fp->offset);
+		int64tostr(tmp + 5, fp->offset);
 		strcat(tmp, "\r\n");
 #endif
 		kftp_send_cmd(fp, tmp, 1);
@@ -492,7 +528,7 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 	return l;
 }
 
-off_t knet_seek(knetFile *fp, off_t off, int whence)
+off_t knet_seek(knetFile *fp, int64_t off, int whence)
 {
 	if (whence == SEEK_SET && off == fp->offset) return 0;
 	if (fp->type == KNF_TYPE_LOCAL) {

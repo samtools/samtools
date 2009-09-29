@@ -9,7 +9,7 @@
 #define netwrite(fd, ptr, len) write(fd, ptr, len)
 #define netclose(fd) close(fd)
 #else
-#include <winsock.h>
+#include <winsock2.h>
 #define netread(fd, ptr, len) recv(fd, ptr, len, 0)
 #define netwrite(fd, ptr, len) send(fd, ptr, len, 0)
 #define netclose(fd) closesocket(fd)
@@ -65,7 +65,7 @@ extern "C" {
 	  This routine only sets ->offset and ->is_ready=0. It does not
 	  communicate with the FTP server.
 	 */
-	off_t knet_seek(knetFile *fp, off_t off, int whence);
+	off_t knet_seek(knetFile *fp, int64_t off, int whence);
 	int knet_close(knetFile *fp);
 
 #ifdef __cplusplus
