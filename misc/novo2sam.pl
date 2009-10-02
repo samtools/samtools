@@ -149,7 +149,7 @@ sub mdtag {
 		      $q+=1;
 		}
 		if ($indeltype eq "-") {
-			my $deletedbase = $2 if $string =~ /(\d+)\-([A-Z]+)/;
+			my $deletedbase = $2 if $string =~ /(\d+)\-([A-Za-z]+)/;
 			if ($deleteflag == 0 ) {
 				$mdtag.="^";
 			}
@@ -172,12 +172,12 @@ sub indeltype {
 	my $string =  shift;
 	my $insert="";
 	my $indeltype;
-               if ($string =~ /([A-Z]+)\>/) {
+               if ($string =~ /([A-Za-z]+)\>/) {
                         $indeltype=">";
                         $insert=$1;
                 } elsif ($string =~ /\-/) {
                         $indeltype="-";
-                } elsif ($string =~ /\+([A-Z]+)/) {
+                } elsif ($string =~ /\+([A-Za-z]+)/) {
                         $indeltype="+";
                         $insert=$1;
                 }
@@ -204,10 +204,10 @@ sub cigar_method {
 		next if $string =~  />/;
 		my $pos = $1 if $string =~ /^(\d+)/;
 		
-		if ($string =~ /\+([A-Z]+)/) {	
+		if ($string =~ /\+([A-Za-z]+)/) {	
 			$indeltype="+";
 			$insert = $1;
-		}elsif ($string =~ /\-([A-Z]+)/) {
+		}elsif ($string =~ /\-([A-Za-z]+)/) {
 			$indeltype="-";
 			$insert = $1;
 		}
