@@ -444,7 +444,8 @@ static RAZF* razf_open_r(int fd, int _load_index){
 			goto UNSEEKABLE;
 		}
 #ifdef _USE_KNETFILE
-		if(knet_seek(fp, rz->end, SEEK_SET) != rz->end){
+        knet_seek(fp, rz->end, SEEK_SET);
+		if(knet_tell(fp) != rz->end){
 			knet_seek(fp, rz->in, SEEK_SET);
 #else
 		if(lseek(fd, rz->end, SEEK_SET) != rz->end){
@@ -497,7 +498,7 @@ static inline RAZF* _razf_open(const char *filename, const char *mode, int _load
 #ifdef _USE_KNETFILE
         knetFile *fd = knet_open(filename, "r");
         if (fd == 0) {
-            fprintf(stderr, "[_razf_open] fail to open remote file %s\n", filename);
+            fprintf(stderr, "[_razf_open] fail to open %s\n", filename);
             return NULL;
         }
 #else

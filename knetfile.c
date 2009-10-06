@@ -536,6 +536,7 @@ off_t knet_seek(knetFile *fp, int64_t off, int whence)
 		 * while fseek() returns zero on success. */
 		off_t offset = lseek(fp->fd, off, whence);
 		if (offset == -1) {
+            fprintf(stderr,"[knet_seek] %s\n", strerror(errno));
 			return -1;
 		}
 		fp->offset = offset;
@@ -567,6 +568,7 @@ off_t knet_seek(knetFile *fp, int64_t off, int whence)
 		return fp->offset;
 	}
 	errno = EINVAL;
+    fprintf(stderr,"[knet_seek] %s\n", strerror(errno));
 	return -1;
 }
 
