@@ -632,13 +632,7 @@ extern "C" {
 	*/
 	int32_t bam_cigar2qlen(const bam1_core_t *c, const uint32_t *cigar);
 
-	typedef struct {
-		int32_t qbeg, qend;
-		int32_t tbeg, tend;
-		int32_t cbeg, cend;
-	} bam_segreg_t;
-
-	int bam_segreg(int32_t pos, const bam1_core_t *c, const uint32_t *cigar, bam_segreg_t *reg);
+	int bam_tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, int32_t *_tpos);
 
 #ifdef __cplusplus
 }

@@ -13,26 +13,32 @@ char *bam_flag2char_table = "pPuUrR12sfd\0\0\0\0\0";
  * CIGAR related routines *
  **************************/
 
-int bam_segreg(int32_t pos, const bam1_core_t *c, const uint32_t *cigar, bam_segreg_t *reg)
+int bam_tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, int32_t *_tpos)
 {
-	unsigned k;
-	int32_t x = c->pos, y = 0;
-	int state = 0;
+	int k, x = c->pos, y = 0, last_y = 0;
+	*_tpos = c->pos;
 	for (k = 0; k < c->n_cigar; ++k) {
-		int op = cigar[k] & BAM_CIGAR_MASK; // operation
-		int l = cigar[k] >> BAM_CIGAR_SHIFT; // length
-		if (state == 0 && (op == BAM_CMATCH || op == BAM_CDEL || op == BAM_CINS) && x + l > pos) {
-			reg->tbeg = x; reg->qbeg = y; reg->cbeg = k;
-			state = 1;
-		}
-		if (op == BAM_CMATCH) { x += l; y += l; }
-		else if (op == BAM_CDEL || op == BAM_CREF_SKIP) x += l;
-		else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
-		if (state == 1 && (op == BAM_CSOFT_CLIP || op == BAM_CHARD_CLIP || op == BAM_CREF_SKIP || k == c->n_cigar - 1)) {
-			reg->tend = x; reg->qend = y; reg->cend = k;
+		int op = cigar[k] & BAM_CIGAR_MASK;
+		int l = cigar[k] >> BAM_CIGAR_SHIFT;
+		if (op == BAM_CMATCH) {
+			if (c->pos > tpos) return y;
+			if (x + l > tpos) {
+				*_tpos = tpos;
+				return y + (tpos - x);
+			}
+			x += l; y += l;
+			last_y = y;
+		} else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
+		else if (op == BAM_CDEL || op == BAM_CREF_SKIP) {
+			if (x + l > tpos) {
+				*_tpos = x;
+				return y;
+			}
+			x += l;
 		}
 	}
-	return state? 0 : -1;
+	*_tpos = x;
+	return last_y;
 }
 
 uint32_t bam_calend(const bam1_core_t *c, const uint32_t *cigar)
