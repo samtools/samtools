@@ -542,6 +542,7 @@ int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, voi
 {
 	int n_off;
 	pair64_t *off = get_chunk_coordinates(idx, tid, beg, end, &n_off);
+	if (off == 0) return 0;
 	{
 		// retrive alignments
 		uint64_t curr_off;
