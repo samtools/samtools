@@ -13,34 +13,6 @@ char *bam_flag2char_table = "pPuUrR12sfd\0\0\0\0\0";
  * CIGAR related routines *
  **************************/
 
-int bam_tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, int32_t *_tpos)
-{
-	int k, x = c->pos, y = 0, last_y = 0;
-	*_tpos = c->pos;
-	for (k = 0; k < c->n_cigar; ++k) {
-		int op = cigar[k] & BAM_CIGAR_MASK;
-		int l = cigar[k] >> BAM_CIGAR_SHIFT;
-		if (op == BAM_CMATCH) {
-			if (c->pos > tpos) return y;
-			if (x + l > tpos) {
-				*_tpos = tpos;
-				return y + (tpos - x);
-			}
-			x += l; y += l;
-			last_y = y;
-		} else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
-		else if (op == BAM_CDEL || op == BAM_CREF_SKIP) {
-			if (x + l > tpos) {
-				*_tpos = x;
-				return y;
-			}
-			x += l;
-		}
-	}
-	*_tpos = x;
-	return last_y;
-}
-
 uint32_t bam_calend(const bam1_core_t *c, const uint32_t *cigar)
 {
 	uint32_t k, end;

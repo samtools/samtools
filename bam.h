@@ -632,8 +632,6 @@ extern "C" {
 	*/
 	int32_t bam_cigar2qlen(const bam1_core_t *c, const uint32_t *cigar);
 
-	int bam_tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, int32_t *_tpos);
-
 #ifdef __cplusplus
 }
 #endif

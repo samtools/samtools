@@ -1,4 +1,5 @@
 #include <math.h>
+#include <assert.h>
 #include "bam.h"
 #include "bam_maqcns.h"
 #include "ksort.h"
@@ -6,6 +7,7 @@
 KSORT_INIT_GENERIC(uint32_t)
 
 #define INDEL_WINDOW_SIZE 50
+#define INDEL_EXT_DEP 0.9
 
 typedef struct __bmc_aux_t {
 	int max;
@@ -305,6 +307,34 @@ void bam_maqindel_ret_destroy(bam_maqindel_ret_t *mir)
 	free(mir->s[0]); free(mir->s[1]); free(mir);
 }
 
+int bam_tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, int is_left, int32_t *_tpos)
+{
+	int k, x = c->pos, y = 0, last_y = 0;
+	*_tpos = c->pos;
+	for (k = 0; k < c->n_cigar; ++k) {
+		int op = cigar[k] & BAM_CIGAR_MASK;
+		int l = cigar[k] >> BAM_CIGAR_SHIFT;
+		if (op == BAM_CMATCH) {
+			if (c->pos > tpos) return y;
+			if (x + l > tpos) {
+				*_tpos = tpos;
+				return y + (tpos - x);
+			}
+			x += l; y += l;
+			last_y = y;
+		} else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
+		else if (op == BAM_CDEL || op == BAM_CREF_SKIP) {
+			if (x + l > tpos) {
+				*_tpos = is_left? x : x + l;
+				return y;
+			}
+			x += l;
+		}
+	}
+	*_tpos = x;
+	return last_y;
+}
+
 #define MINUS_CONST 0x10000000
 
 bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, const bam_pileup1_t *pl, const char *ref,
@@ -352,12 +382,11 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 	{ // calculate left and right boundary
 		left = pos > INDEL_WINDOW_SIZE? pos - INDEL_WINDOW_SIZE : 0;
 		right = pos + INDEL_WINDOW_SIZE;
+		if (types[0] < 0) right -= types[0];
 	}
 	{ // the core part
 		char *ref2, *rs, *inscns = 0;
 		int k, l, *score, *pscore, max_ins = types[n_types-1];
-		ref2 = (char*)calloc(right - left + types[n_types-1] + 2, 1);
-		rs   = (char*)calloc(right - left + max_rd_len + types[n_types-1] + 2, 1);
 		if (max_ins > 0) { // get the consensus of inserted sequences
 			int *inscns_aux = (int*)calloc(4 * n_types * max_ins, sizeof(int));
 			// count occurrences
@@ -390,6 +419,8 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 			free(inscns_aux);
 		}
 		// calculate score
+		ref2 = (char*)calloc(right - left + types[n_types-1] + 2, 1);
+		rs   = (char*)calloc(right - left + max_rd_len + types[n_types-1] + 2, 1);
 		score = (int*)calloc(n_types * n, sizeof(int));
 		pscore = (int*)calloc(n_types * n, sizeof(int));
 		for (i = 0; i < n_types; ++i) {
@@ -400,7 +431,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				ref2[k++] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[j]]];
 			if (types[i] <= 0) j += -types[i];
 			else for (l = 0; l < types[i]; ++l)
-					 ref2[k++] = inscns[i*max_ins + l];
+					 ref2[k++] = bam_nt16_nt4_table[(int)inscns[i*max_ins + l]];
 			for (; j < right && ref[j]; ++j)
 				ref2[k++] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[j]]];
 			if (j < right) right = j;
@@ -409,14 +440,20 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				const bam_pileup1_t *p = pl + j;
 				int qbeg, qend, tbeg, tend;
 				if (p->b->core.flag & BAM_FUNMAP) continue;
-				qbeg = bam_tpos2qpos(&p->b->core, bam1_cigar(p->b), left,  &tbeg);
-				qend = bam_tpos2qpos(&p->b->core, bam1_cigar(p->b), right, &tend);
+				qbeg = bam_tpos2qpos(&p->b->core, bam1_cigar(p->b), left,  0, &tbeg);
+				qend = bam_tpos2qpos(&p->b->core, bam1_cigar(p->b), right, 1, &tend);
+				assert(tbeg >= left);
 				for (l = qbeg; l < qend; ++l)
 					rs[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(bam1_seq(p->b), l)];
 				{
 					int x, y, n_acigar, ps;
 					uint32_t *acigar;
 					ps = 0;
+					if (tend - tbeg + types[i] <= 0) {
+						score[i*n+j] = -(1<<20);
+						pscore[i*n+j] = 1<<20;
+						continue;
+					}
 					acigar = ka_global_core((uint8_t*)ref2 + tbeg - left, tend - tbeg + types[i], (uint8_t*)rs, qend - qbeg, &ap, &score[i*n+j], &n_acigar);
 					x = tbeg - left; y = 0;
 					for (l = 0; l < n_acigar; ++l) {
@@ -436,8 +473,12 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 						}
 					}
 					pscore[i*n+j] = ps;
-					//printf("pos=%d, type=%d, j=%d, score=%d, psore=%d, %d, %d, %d, %d, ", pos+1, types[i], j, score[i*n+j], pscore[i*n+j], tbeg, tend, qbeg, qend);
-					//for (l = 0; l < n_acigar; ++l) printf("%d%c", acigar[l]>>4, "MIDS"[acigar[l]&0xf]); printf("\n");
+					/*if (pos == 2618517) { // for debugging only
+						fprintf(stderr, "pos=%d, type=%d, j=%d, score=%d, psore=%d, %d, %d, %d, %d, ", pos+1, types[i], j, score[i*n+j], pscore[i*n+j], tbeg, tend, qbeg, qend);
+						for (l = 0; l < n_acigar; ++l) fprintf(stderr, "%d%c", acigar[l]>>4, "MIDS"[acigar[l]&0xf]); fprintf(stderr, "\n");
+						for (l = 0; l < tend - tbeg + types[i]; ++l) fputc("ACGTN"[ref2[l]], stderr); fputc('\n', stderr);
+						for (l = 0; l < qend - qbeg; ++l) fputc("ACGTN"[rs[l]], stderr); fputc('\n', stderr);
+						}*/
 					free(acigar);
 				}
 			}
@@ -489,13 +530,20 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				else if (p->indel == ret->indel2) ++ret->cnt2;
 				else ++ret->cnt_anti;
 			}
-			// write gl[]
-			ret->gl[0] = ret->gl[1] = 0;
-			for (j = 0; j < n; ++j) {
-				int s1 = pscore[max1_i*n + j], s2 = pscore[max2_i*n + j];
-				//printf("%d, %d, %d, %d, %d\n", pl[j].b->core.pos+1, max1_i, max2_i, s1, s2);
-				if (s1 > s2) ret->gl[0] += s1 - s2 < mi->q_indel? s1 - s2 : mi->q_indel;
-				else ret->gl[1] += s2 - s1 < mi->q_indel? s2 - s1 : mi->q_indel;
+			{ // write gl[]
+				int tmp, seq_err = 0;
+				double x = 1.0;
+				tmp = max1_i - max2_i;
+				if (tmp < 0) tmp = -tmp;
+				for (j = 0; j < tmp + 1; ++j) x *= INDEL_EXT_DEP;
+				seq_err = mi->q_indel * (1.0 - x) / (1.0 - INDEL_EXT_DEP);
+				ret->gl[0] = ret->gl[1] = 0;
+				for (j = 0; j < n; ++j) {
+					int s1 = pscore[max1_i*n + j], s2 = pscore[max2_i*n + j];
+					//printf("%d, %d, %d, %d, %d\n", pl[j].b->core.pos+1, max1_i, max2_i, s1, s2);
+					if (s1 > s2) ret->gl[0] += s1 - s2 < seq_err? s1 - s2 : seq_err;
+					else ret->gl[1] += s2 - s1 < seq_err? s2 - s1 : seq_err;
+				}
 			}
 			// write cnt_ref and cnt_ambi
 			if (max1_i != 0 && max2_i != 0) {

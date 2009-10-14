@@ -216,7 +216,8 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 	b = ap->band_width;
 	score_matrix = ap->matrix;
 	N_MATRIX_ROW = ap->row;
-	
+
+	*n_cigar = 0;
 	if (len1 == 0 || len2 == 0) return 0;
 
 	/* calculate b1 and b2 */
