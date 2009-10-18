@@ -11,7 +11,7 @@ my $version = '0.3.3';
 
 my $command = shift(@ARGV);
 my %func = (showALEN=>\&showALEN, pileup2fq=>\&pileup2fq, varFilter=>\&varFilter,
-			unique=>\&unique, uniqcmp=>\&uniqcmp);
+			unique=>\&unique, uniqcmp=>\&uniqcmp, sra2hdr=>\&sra2hdr);
 
 die("Unknown command \"$command\".\n") if (!defined($func{$command}));
 &{$func{$command}};
@@ -224,6 +224,59 @@ sub p2q_print_str {
   for (my $i = 0; $i < $l; $i += 60) {
 	print substr($$s, $i, 60), "\n";
   }
+}
+
+#
+# sra2hdr
+#
+
+# This subroutine does not use an XML parser. It requires that the SRA
+# XML files are properly formated.
+sub sra2hdr {
+  my %opts = ();
+  getopts('', \%opts);
+  die("Usage: samtools.pl sra2hdr <SRA.prefix>\n") if (@ARGV == 0);
+  my $pre = $ARGV[0];
+  my $fh;
+  # read sample
+  my $sample = 'UNKNOWN';
+  open($fh, "$pre.sample.xml") || die;
+  while (<$fh>) {
+	$sample = $1 if (/<SAMPLE.*alias="([^"]+)"/i);
+  }
+  close($fh);
+  # read experiment
+  my (%exp2lib, $exp);
+  open($fh, "$pre.experiment.xml") || die;
+  while (<$fh>) {
+	if (/<EXPERIMENT.*accession="([^\s"]+)"/i) {
+	  $exp = $1;
+	} elsif (/<LIBRARY_NAME>\s*(\S+)\s*<\/LIBRARY_NAME>/i) {
+	  $exp2lib{$exp} = $1;
+	}
+  }
+  close($fh);
+  # read run
+  my ($run, @fn);
+  open($fh, "$pre.run.xml") || die;
+  while (<$fh>) {
+	if (/<RUN.*accession="([^\s"]+)"/i) {
+	  $run = $1; @fn = ();
+	} elsif (/<EXPERIMENT_REF.*accession="([^\s"]+)"/i) {
+	  print "\@RG\tID:$run\tSM:$sample\tLB:$exp2lib{$1}\n";
+	} elsif (/<FILE.*filename="([^\s"]+)"/i) {
+	  push(@fn, $1);
+	} elsif (/<\/RUN>/i) {
+	  if (@fn == 1) {
+		print STDERR "$fn[0]\t$run\n";
+	  } else {
+		for (0 .. $#fn) {
+		  print STDERR "$fn[$_]\t$run", "_", $_+1, "\n";
+		}
+	  }
+	}
+  }
+  close($fh);
 }
 
 #
