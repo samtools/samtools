@@ -25,14 +25,13 @@ char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 /*
   P(<b1,b2>) = \theta \sum_{i=1}^{N-1} 1/i
   P(D|<b1,b2>) = \sum_{k=1}^{N-1} p_k 1/2 [(k/N)^n_2(1-k/N)^n_1 + (k/N)^n1(1-k/N)^n_2]
-  p_k = i/k / \sum_{i=1}^{N-1} 1/i
+  p_k = 1/k / \sum_{i=1}^{N-1} 1/i
  */
 static void cal_het(bam_maqcns_t *aa)
 {
 	int k, n1, n2;
 	double sum_harmo; // harmonic sum
 	double poly_rate;
-	double p1 = 0.0, p3 = 0.0; // just for testing
 
 	free(aa->lhet);
 	aa->lhet = (double*)calloc(256 * 256, sizeof(double));
@@ -42,7 +41,7 @@ static void cal_het(bam_maqcns_t *aa)
 	for (n1 = 0; n1 < 256; ++n1) {
 		for (n2 = 0; n2 < 256; ++n2) {
 			long double sum = 0.0;
-			double lC = lgamma(n1+n2+1) - lgamma(n1+1) - lgamma(n2+1); // \binom{n1+n2}{n1}
+			double lC = aa->is_soap? 0 : lgamma(n1+n2+1) - lgamma(n1+1) - lgamma(n2+1); // \binom{n1+n2}{n1}
 			for (k = 1; k <= aa->n_hap - 1; ++k) {
 				double pk = 1.0 / k / sum_harmo;
 				double log1 = log((double)k/aa->n_hap);
@@ -50,8 +49,6 @@ static void cal_het(bam_maqcns_t *aa)
 				sum += pk * 0.5 * (expl(log1*n2) * expl(log2*n1) + expl(log1*n1) * expl(log2*n2));
 			}
 			aa->lhet[n1<<8|n2] = lC + logl(sum);
-			if (n1 == 17 && n2 == 3) p3 = lC + logl(expl(logl(0.5) * 20));
-			if (n1 == 19 && n2 == 1) p1 = lC + logl(expl(logl(0.5) * 20));
 		}
 	}
 	poly_rate = aa->het_rate * sum_harmo;
@@ -65,16 +62,18 @@ static void cal_coef(bam_maqcns_t *aa)
 	long double sum_a[257], b[256], q_c[256], tmp[256], fk2[256];
 	double *lC;
 
-	lC = (double*)calloc(256 * 256, sizeof(double));
 	// aa->lhet will be allocated and initialized 
 	free(aa->fk); free(aa->coef);
+	aa->coef = 0;
 	aa->fk = (double*)calloc(256, sizeof(double));
-	aa->coef = (double*)calloc(256*256*64, sizeof(double));
 	aa->fk[0] = fk2[0] = 1.0;
 	for (n = 1; n != 256; ++n) {
 		aa->fk[n] = pow(aa->theta, n) * (1.0 - aa->eta) + aa->eta;
 		fk2[n] = aa->fk[n>>1]; // this is an approximation, assuming reads equally likely come from both strands
 	}
+	if (aa->is_soap) return;
+	aa->coef = (double*)calloc(256*256*64, sizeof(double));
+	lC = (double*)calloc(256 * 256, sizeof(double));
 	for (n = 1; n != 256; ++n)
 		for (k = 1; k <= n; ++k)
 			lC[n<<8|k] = lgamma(n+1) - lgamma(k+1) - lgamma(n-k+1);
@@ -183,56 +182,73 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 		for (j = 0; j != 4; ++j) b->c[j] = (int)(254.0 * b->c[j] / c + 0.5);
 		for (j = c = 0; j != 4; ++j) c += b->c[j];
 	}
-	// generate likelihood
-	for (j = 0; j != 4; ++j) {
-		// homozygous
-		float tmp1, tmp3;
-		int tmp2, bar_e;
-		for (k = 0, tmp1 = tmp3 = 0.0, tmp2 = 0; k != 4; ++k) {
-			if (j == k) continue;
-			tmp1 += b->esum[k]; tmp2 += b->c[k]; tmp3 += b->fsum[k];
-		}
-		if (tmp2) {
-			bar_e = (int)(tmp1 / tmp3 + 0.5);
-			if (bar_e < 4) bar_e = 4; // should not happen
-			if (bar_e > 63) bar_e = 63;
-			p[j<<2|j] = tmp1 + bm->coef[bar_e<<16|c<<8|tmp2];
-		} else p[j<<2|j] = 0.0; // all the bases are j
-		// heterozygous
-		for (k = j + 1; k < 4; ++k) {
-			for (i = 0, tmp2 = 0, tmp1 = tmp3 = 0.0; i != 4; ++i) {
-				if (i == j || i == k) continue;
-				tmp1 += b->esum[i]; tmp2 += b->c[i]; tmp3 += b->fsum[i];
+	if (!bm->is_soap) {
+		// generate likelihood
+		for (j = 0; j != 4; ++j) {
+			// homozygous
+			float tmp1, tmp3;
+			int tmp2, bar_e;
+			for (k = 0, tmp1 = tmp3 = 0.0, tmp2 = 0; k != 4; ++k) {
+				if (j == k) continue;
+				tmp1 += b->esum[k]; tmp2 += b->c[k]; tmp3 += b->fsum[k];
 			}
 			if (tmp2) {
 				bar_e = (int)(tmp1 / tmp3 + 0.5);
-				if (bar_e < 4) bar_e = 4;
+				if (bar_e < 4) bar_e = 4; // should not happen
 				if (bar_e > 63) bar_e = 63;
-				p[j<<2|k] = p[k<<2|j] = -4.343 * bm->lhet[b->c[j]<<8|b->c[k]] + tmp1 + bm->coef[bar_e<<16|c<<8|tmp2];
-			} else p[j<<2|k] = p[k<<2|j] = -4.343 * bm->lhet[b->c[j]<<8|b->c[k]]; // all the bases are either j or k
+				p[j<<2|j] = tmp1 + bm->coef[bar_e<<16|c<<8|tmp2];
+			} else p[j<<2|j] = 0.0; // all the bases are j
+			// heterozygous
+			for (k = j + 1; k < 4; ++k) {
+				for (i = 0, tmp2 = 0, tmp1 = tmp3 = 0.0; i != 4; ++i) {
+					if (i == j || i == k) continue;
+					tmp1 += b->esum[i]; tmp2 += b->c[i]; tmp3 += b->fsum[i];
+				}
+				if (tmp2) {
+					bar_e = (int)(tmp1 / tmp3 + 0.5);
+					if (bar_e < 4) bar_e = 4;
+					if (bar_e > 63) bar_e = 63;
+					p[j<<2|k] = p[k<<2|j] = -4.343 * bm->lhet[b->c[j]<<8|b->c[k]] + tmp1 + bm->coef[bar_e<<16|c<<8|tmp2];
+				} else p[j<<2|k] = p[k<<2|j] = -4.343 * bm->lhet[b->c[j]<<8|b->c[k]]; // all the bases are either j or k
+			}
+			//
+			for (k = 0; k != 4; ++k)
+				if (p[j<<2|k] < 0.0) p[j<<2|k] = 0.0;
 		}
-		//
-		for (k = 0; k != 4; ++k)
-			if (p[j<<2|k] < 0.0) p[j<<2|k] = 0.0;
-	}
 
-	{ // fix p[k<<2|k]
-		float max1, max2, min1, min2;
-		int max_k, min_k;
-		max_k = min_k = -1;
-		max1 = max2 = -1.0; min1 = min2 = 1e30;
-		for (k = 0; k < 4; ++k) {
-			if (b->esum[k] > max1) {
-				max2 = max1; max1 = b->esum[k]; max_k = k;
-			} else if (b->esum[k] > max2) max2 = b->esum[k];
+		{ // fix p[k<<2|k]
+			float max1, max2, min1, min2;
+			int max_k, min_k;
+			max_k = min_k = -1;
+			max1 = max2 = -1.0; min1 = min2 = 1e30;
+			for (k = 0; k < 4; ++k) {
+				if (b->esum[k] > max1) {
+					max2 = max1; max1 = b->esum[k]; max_k = k;
+				} else if (b->esum[k] > max2) max2 = b->esum[k];
+			}
+			for (k = 0; k < 4; ++k) {
+				if (p[k<<2|k] < min1) {
+					min2 = min1; min1 = p[k<<2|k]; min_k = k;
+				} else if (p[k<<2|k] < min2) min2 = p[k<<2|k];
+			}
+			if (max1 > max2 && (min_k != max_k || min1 + 1.0 > min2))
+				p[max_k<<2|max_k] = min1 > 1.0? min1 - 1.0 : 0.0;
 		}
-		for (k = 0; k < 4; ++k) {
-			if (p[k<<2|k] < min1) {
-				min2 = min1; min1 = p[k<<2|k]; min_k = k;
-			} else if (p[k<<2|k] < min2) min2 = p[k<<2|k];
+	} else { // apply the SOAP model
+		// generate likelihood
+		for (j = 0; j != 4; ++j) {
+			float tmp;
+			// homozygous
+			for (k = 0, tmp = 0.0; k != 4; ++k)
+				if (j != k) tmp += b->esum[k];
+			p[j<<2|j] = tmp;
+			// heterozygous
+			for (k = j + 1; k < 4; ++k) {
+				for (i = 0, tmp = 0.0; i != 4; ++i)
+					if (i != j && i != k) tmp += b->esum[i];
+				p[j<<2|k] = p[k<<2|j] = -4.343 * bm->lhet[b->c[j]<<8|b->c[k]] + tmp;
+			}
 		}
-		if (max1 > max2 && (min_k != max_k || min1 + 1.0 > min2))
-			p[max_k<<2|max_k] = min1 > 1.0? min1 - 1.0 : 0.0;
 	}
 
 	// convert necessary information to glf1_t

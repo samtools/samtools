@@ -7,7 +7,7 @@ struct __bmc_aux_t;
 
 typedef struct {
 	float het_rate, theta;
-	int n_hap, cap_mapQ;
+	int n_hap, cap_mapQ, is_soap;
 
 	float eta, q_r;
 	double *fk, *coef;

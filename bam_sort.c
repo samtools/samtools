@@ -71,14 +71,15 @@ static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-void bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn)
+void bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn, int add_RG)
 {
 	bamFile fpout, *fp;
 	heap1_t *heap;
 	bam_header_t *hout = 0;
 	bam_header_t *hheaders = NULL;
-	int i, j;
+	int i, j, *RG_len = 0;
 	uint64_t idx = 0;
+	char **RG = 0;
 
 	if (headers) {
 		tamFile fpheaders = sam_open(headers);
@@ -93,6 +94,22 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 	g_is_by_qname = by_qname;
 	fp = (bamFile*)calloc(n, sizeof(bamFile));
 	heap = (heap1_t*)calloc(n, sizeof(heap1_t));
+	// prepare RG tag
+	if (add_RG) {
+		RG = (char**)calloc(n, sizeof(void*));
+		RG_len = (int*)calloc(n, sizeof(int));
+		for (i = 0; i != n; ++i) {
+			int l = strlen(fn[i]);
+			const char *s = fn[i];
+			if (l > 4 && strcmp(s + l - 4, ".bam") == 0) l -= 4;
+			for (j = l - 1; j >= 0; --j) if (s[j] == '/') break;
+			++j; l -= j;
+			RG[i] = calloc(l + 1, 1);
+			RG_len[i] = l;
+			strncpy(RG[i], s + j, l);
+		}
+	}
+	// read the first
 	for (i = 0; i != n; ++i) {
 		heap1_t *h;
 		bam_header_t *hin;
@@ -154,6 +171,8 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 	ks_heapmake(heap, n, heap);
 	while (heap->pos != HEAP_EMPTY) {
 		bam1_t *b = heap->b;
+		if (add_RG && bam_aux_get(b, "RG") == 0)
+			bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
 		bam_write1_core(fpout, &b->core, b->data_len, b->data);
 		if ((j = bam_read1(fp[heap->i], b)) >= 0) {
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)b->core.pos<<1 | bam1_strand(b);
@@ -166,32 +185,38 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 		ks_heapadjust(heap, 0, n, heap);
 	}
 
+	if (add_RG) {
+		for (i = 0; i != n; ++i) free(RG[i]);
+		free(RG); free(RG_len);
+	}
 	for (i = 0; i != n; ++i) bam_close(fp[i]);
 	bam_close(fpout);
 	free(fp); free(heap);
 }
 int bam_merge(int argc, char *argv[])
 {
-	int c, is_by_qname = 0;
+	int c, is_by_qname = 0, add_RG = 0;
 	char *fn_headers = NULL;
 
-	while ((c = getopt(argc, argv, "h:n")) >= 0) {
+	while ((c = getopt(argc, argv, "h:nr")) >= 0) {
 		switch (c) {
+		case 'r': add_RG = 1; break;
 		case 'h': fn_headers = strdup(optarg); break;
 		case 'n': is_by_qname = 1; break;
 		}
 	}
 	if (optind + 2 >= argc) {
 		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:   samtools merge [-n] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
+		fprintf(stderr, "Usage:   samtools merge [-nr] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
 		fprintf(stderr, "Options: -n       sort by read names\n");
+		fprintf(stderr, "         -r       attach RG tag (inferred from file names)\n");
 		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n\n");
 		fprintf(stderr, "Note: Samtools' merge does not reconstruct the @RG dictionary in the header. Users\n");
 		fprintf(stderr, "      must provide the correct header with -h, or uses Picard which properly maintains\n");
 		fprintf(stderr, "      the header dictionary in merging.\n\n");
 		return 1;
 	}
-	bam_merge_core(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1);
+	bam_merge_core(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1, add_RG);
 	free(fn_headers);
 	return 0;
 }
@@ -288,7 +313,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
 			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
 		}
-		bam_merge_core(is_by_qname, fnout, 0, n, fns);
+		bam_merge_core(is_by_qname, fnout, 0, n, fns, 0);
 		free(fnout);
 		for (i = 0; i < n; ++i) {
 			unlink(fns[i]);
