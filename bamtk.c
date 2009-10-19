@@ -9,7 +9,7 @@
 #endif
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.6-15 (r482)"
+#define PACKAGE_VERSION "0.1.6-16 (r483)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -20,7 +20,6 @@ int bam_sort(int argc, char *argv[]);
 int bam_tview_main(int argc, char *argv[]);
 int bam_mating(int argc, char *argv[]);
 int bam_rmdup(int argc, char *argv[]);
-int bam_rmdupse(int argc, char *argv[]);
 int bam_flagstat(int argc, char *argv[]);
 int bam_fillmd(int argc, char *argv[]);
 
@@ -88,8 +87,8 @@ static int usage()
 	fprintf(stderr, "         glfview     print GLFv3 file\n");
 	fprintf(stderr, "         flagstat    simple stats\n");
 	fprintf(stderr, "         calmd       recalculate MD/NM tags and '=' bases\n");
-	fprintf(stderr, "         merge       merge sorted alignments (Picard recommended)\n");
-	fprintf(stderr, "         rmdup       remove PCR duplicates (Picard recommended)\n");
+	fprintf(stderr, "         merge       merge sorted alignments\n");
+	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
 	fprintf(stderr, "\n");
 	return 1;
 }
@@ -113,7 +112,6 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "faidx") == 0) return faidx_main(argc-1, argv+1);
 	else if (strcmp(argv[1], "fixmate") == 0) return bam_mating(argc-1, argv+1);
 	else if (strcmp(argv[1], "rmdup") == 0) return bam_rmdup(argc-1, argv+1);
-	else if (strcmp(argv[1], "rmdupse") == 0) return bam_rmdupse(argc-1, argv+1);
 	else if (strcmp(argv[1], "glfview") == 0) return glf3_view_main(argc-1, argv+1);
 	else if (strcmp(argv[1], "flagstat") == 0) return bam_flagstat(argc-1, argv+1);
 	else if (strcmp(argv[1], "tagview") == 0) return bam_tagview(argc-1, argv+1);

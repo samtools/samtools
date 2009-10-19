@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <zlib.h>
+#include <unistd.h>
 #include "sam.h"
 
 typedef bam1_t *bam1_p;
@@ -32,11 +33,11 @@ static inline void stack_insert(tmp_stack_t *stack, bam1_t *b)
 	stack->a[stack->n++] = b;
 }
 
-static inline void dump_best(tmp_stack_t *stack, bamFile out)
+static inline void dump_best(tmp_stack_t *stack, samfile_t *out)
 {
 	int i;
 	for (i = 0; i != stack->n; ++i) {
-		bam_write1(out, stack->a[i]);
+		samwrite(out, stack->a[i]);
 		bam_destroy1(stack->a[i]);
 	}
 	stack->n = 0;
@@ -86,9 +87,8 @@ static inline int sum_qual(const bam1_t *b)
 	return q;
 }
 
-void bam_rmdup_core(bamFile in, bamFile out)
+void bam_rmdup_core(samfile_t *in, samfile_t *out)
 {
-	bam_header_t *header;
 	bam1_t *b;
 	int last_tid = -1, last_pos = -1;
 	tmp_stack_t stack;
@@ -100,12 +100,9 @@ void bam_rmdup_core(bamFile in, bamFile out)
 	del_set = kh_init(name);
 	b = bam_init1();
 	memset(&stack, 0, sizeof(tmp_stack_t));
-	header = bam_header_read(in);
-	sam_header_parse_rg(header);
-	bam_header_write(out, header);
 
 	kh_resize(name, del_set, 4 * BUFFER_SIZE);
-	while (bam_read1(in, b) >= 0) {
+	while (samread(in, b) >= 0) {
 		bam1_core_t *c = &b->core;
 		if (c->tid != last_tid || last_pos != c->pos) {
 			dump_best(&stack, out); // write the result
@@ -117,16 +114,16 @@ void bam_rmdup_core(bamFile in, bamFile out)
 					clear_del_set(del_set);
 				}
 				if ((int)c->tid == -1) { // append unmapped reads
-					bam_write1(out, b);
-					while (bam_read1(in, b) >= 0) bam_write1(out, b);
+					samwrite(out, b);
+					while (samread(in, b) >= 0) samwrite(out, b);
 					break;
 				}
 				last_tid = c->tid;
-				fprintf(stderr, "[bam_rmdup_core] processing reference %s...\n", header->target_name[c->tid]);
+				fprintf(stderr, "[bam_rmdup_core] processing reference %s...\n", in->header->target_name[c->tid]);
 			}
 		}
 		if (!(c->flag&BAM_FPAIRED) || (c->flag&(BAM_FUNMAP|BAM_FMUNMAP)) || (c->mtid >= 0 && c->tid != c->mtid)) {
-			bam_write1(out, b);
+			samwrite(out, b);
 		} else if (c->isize > 0) { // paired, head
 			uint64_t key = (uint64_t)c->pos<<32 | c->isize;
 			const char *lib;
@@ -134,7 +131,7 @@ void bam_rmdup_core(bamFile in, bamFile out)
 			lib_aux_t *q;
 			int ret;
 			rg = bam_aux_get(b, "RG");
-			lib = (rg == 0)? 0 : bam_strmap_get(header->rg2lib, (char*)(rg + 1));
+			lib = (rg == 0)? 0 : bam_strmap_get(in->header->rg2lib, (char*)(rg + 1));
 			q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
 			++q->n_checked;
 			k = kh_put(pos, q->best_hash, key, &ret);
@@ -156,7 +153,7 @@ void bam_rmdup_core(bamFile in, bamFile out)
 			if (k != kh_end(del_set)) {
 				free((char*)kh_key(del_set, k));
 				kh_del(name, del_set, k);
-			} else bam_write1(out, b);
+			} else samwrite(out, b);
 		}
 		last_pos = c->pos;
 	}
@@ -173,28 +170,39 @@ void bam_rmdup_core(bamFile in, bamFile out)
 	}
 	kh_destroy(lib, aux);
 
-	bam_header_destroy(header);
 	clear_del_set(del_set);
 	kh_destroy(name, del_set);
 	free(stack.a);
 	bam_destroy1(b);
 }
 
+void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se);
+
 int bam_rmdup(int argc, char *argv[])
 {
-	bamFile in, out;
-	if (argc < 3) {
-		fprintf(stderr, "Usage: samtools rmdup <input.srt.bam> <output.bam>\n");
+	int c, is_se = 0, force_se = 0;
+	samfile_t *in, *out;
+	while ((c = getopt(argc, argv, "sS")) >= 0) {
+		switch (c) {
+		case 's': is_se = 1; break;
+		case 'S': force_se = is_se = 1; break;
+		}
+	}
+	if (optind + 2 > argc) {
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Usage:  samtools rmdup [-sS] <input.srt.bam> <output.bam>\n\n");
+		fprintf(stderr, "Option: -s    rmdup for SE reads\n");
+		fprintf(stderr, "        -S    treat PE reads as SE in rmdup (force -s)\n\n");
 		return 1;
 	}
-	in = (strcmp(argv[1], "-") == 0)? bam_dopen(fileno(stdin), "r") : bam_open(argv[1], "r");
-	out = (strcmp(argv[2], "-") == 0)? bam_dopen(fileno(stdout), "w") : bam_open(argv[2], "w");
+	in = samopen(argv[optind], "rb", 0);
+	out = samopen(argv[optind+1], "wb", in->header);
 	if (in == 0 || out == 0) {
 		fprintf(stderr, "[bam_rmdup] fail to read/write input files\n");
 		return 1;
 	}
-	bam_rmdup_core(in, out);
-	bam_close(in);
-	bam_close(out);
+	if (is_se) bam_rmdupse_core(in, out, force_se);
+	else bam_rmdup_core(in, out);
+	samclose(in); samclose(out);
 	return 0;
 }

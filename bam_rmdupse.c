@@ -124,11 +124,13 @@ void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se)
 			rg = bam_aux_get(b, "RG");
 			lib = (rg == 0)? 0 : bam_strmap_get(in->header->rg2lib, (char*)(rg + 1));
 			q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
+			++q->n_checked;
 			h = (c->flag&BAM_FREVERSE)? q->rght : q->left;
 			key = (c->flag&BAM_FREVERSE)? endpos : c->pos;
 			k = kh_put(best, h, key, &ret);
 			if (ret == 0) { // in the hash table
 				elem_t *p = kh_val(h, k);
+				++q->n_removed;
 				if (p->score < score) {
 					if (c->flag&BAM_FREVERSE) { // mark "discarded" and push the queue
 						p->discarded = 1;
@@ -145,26 +147,14 @@ void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se)
 
 	for (k = kh_begin(aux); k != kh_end(aux); ++k) {
 		if (kh_exist(aux, k)) {
-			kh_destroy(best, kh_val(aux, k).rght);
-			kh_destroy(best, kh_val(aux, k).left);
+			lib_aux_t *q = &kh_val(aux, k);
+			fprintf(stderr, "[bam_rmdupse_core] %lld / %lld = %.4lf in library '%s'\n", (long long)q->n_removed,
+					(long long)q->n_checked, (double)q->n_removed/q->n_checked, kh_key(aux, k));
+			kh_destroy(best, q->left); kh_destroy(best, q->rght);
 			free((char*)kh_key(aux, k));
 		}
 	}
 	kh_destroy(lib, aux);
 	bam_destroy1(b);
 	kl_destroy(q, queue);
-}
-
-int bam_rmdupse(int argc, char *argv[])
-{
-	samfile_t *in, *out;
-	if (argc < 3) {
-		fprintf(stderr, "Usage: samtools rmdupse <in.bam> <out.bam>\n");
-		return 1;
-	}
-	in = samopen(argv[1], "rb", 0);
-	out = samopen(argv[2], "wb", in->header);
-	bam_rmdupse_core(in, out, 1);
-	samclose(in); samclose(out);
-	return 0;
 }
