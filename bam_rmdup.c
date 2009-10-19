@@ -179,12 +179,12 @@ void bam_rmdup_core(bamFile in, bamFile out)
 	free(stack.a);
 	bam_destroy1(b);
 }
+
 int bam_rmdup(int argc, char *argv[])
 {
 	bamFile in, out;
 	if (argc < 3) {
-		fprintf(stderr, "Usage: samtools rmdup <input.srt.bam> <output.bam>\n\n");
-		fprintf(stderr, "Note: Picard is recommended for this task.\n");
+		fprintf(stderr, "Usage: samtools rmdup <input.srt.bam> <output.bam>\n");
 		return 1;
 	}
 	in = (strcmp(argv[1], "-") == 0)? bam_dopen(fileno(stdin), "r") : bam_open(argv[1], "r");

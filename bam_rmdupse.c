@@ -1,178 +1,170 @@
 #include <math.h>
 #include "sam.h"
 #include "khash.h"
+#include "klist.h"
+
+#define QUEUE_CLEAR_SIZE 0x100000
+#define MAX_POS 0x7fffffff
 
 typedef struct {
-	int n, m;
-	int *a;
-} listelem_t;
-
-KHASH_MAP_INIT_INT(32, listelem_t)
-
-#define BLOCK_SIZE 65536
-
-typedef struct {
+	int endpos;
+	uint32_t score:31, discarded:1;
 	bam1_t *b;
-	int rpos, score;
-} elem_t;
+} elem_t, *elem_p;
+#define __free_elem(p) bam_destroy1((p)->data.b)
+KLIST_INIT(q, elem_t, __free_elem)
+typedef klist_t(q) queue_t;
+
+KHASH_MAP_INIT_INT(best, elem_p)
+typedef khash_t(best) besthash_t;
 
 typedef struct {
-	int n, max, x;
-	elem_t *buf;
-} buffer_t;
+	uint64_t n_checked, n_removed;
+	besthash_t *left, *rght;
+} lib_aux_t;
+KHASH_MAP_INIT_STR(lib, lib_aux_t)
 
-static int fill_buf(samfile_t *in, buffer_t *buf)
+static lib_aux_t *get_aux(khash_t(lib) *aux, const char *lib)
 {
-	int i, ret, last_tid, min_rpos = 0x7fffffff, capacity;
-	bam1_t *b = bam_init1();
-	bam1_core_t *c = &b->core;
-	// squeeze out the empty cells at the beginning
-	for (i = 0; i < buf->n; ++i)
-		if (buf->buf[i].b) break;
-	if (i < buf->n) { // squeeze
-		if (i > 0) {
-			memmove(buf->buf, buf->buf + i, sizeof(elem_t) * (buf->n - i));
-			buf->n = buf->n - i;
-		}
-	} else buf->n = 0;
-	// calculate min_rpos
-	for (i = 0; i < buf->n; ++i) {
-		elem_t *e = buf->buf + i;
-		if (e->b && e->rpos >= 0 && e->rpos < min_rpos)
-			min_rpos = buf->buf[i].rpos;
-	}
-	// fill the buffer
-	buf->x = -1;
-	last_tid = buf->n? buf->buf[0].b->core.tid : -1;
-	capacity = buf->n + BLOCK_SIZE;
-	while ((ret = samread(in, b)) >= 0) {
-		elem_t *e;
-		uint8_t *qual = bam1_qual(b);
-		int is_mapped;
-		if (last_tid < 0) last_tid = c->tid;
-		if (c->tid != last_tid) {
-			if (buf->x < 0) buf->x = buf->n;
-		}
-		if (buf->n >= buf->max) { // enlarge
-			buf->max = buf->max? buf->max<<1 : 8;
-			buf->buf = (elem_t*)realloc(buf->buf, sizeof(elem_t) * buf->max);
-		}
-		e = &buf->buf[buf->n++];
-		e->b = bam_dup1(b);
-		e->rpos = -1; e->score = 0;
-		for (i = 0; i < c->l_qseq; ++i) e->score += qual[i] + 1;
-		e->score = (double)e->score / sqrt(c->l_qseq + 1);
-		is_mapped = (c->tid < 0 || c->tid >= in->header->n_targets || (c->flag&BAM_FUNMAP))? 0 : 1;
-		if (!is_mapped) e->score = -1;
-		if (is_mapped && (c->flag & BAM_FREVERSE)) {
-			e->rpos = b->core.pos + bam_calend(&b->core, bam1_cigar(b));
-			if (min_rpos > e->rpos) min_rpos = e->rpos;
-		}
-		if (buf->n >= capacity) {
-			if (is_mapped && c->pos <= min_rpos) capacity += BLOCK_SIZE;
-			else break;
-		}
-	}
-	if (ret >= 0 && buf->x < 0) buf->x = buf->n;
-	bam_destroy1(b);
-	return buf->n;
-}
-
-static void rmdupse_buf(buffer_t *buf)
-{
-	khash_t(32) *h;
-	uint32_t key;
-	khint_t k;
-	int mpos, i, upper;
-	listelem_t *p;
-	mpos = 0x7fffffff;
-	mpos = (buf->x == buf->n)? buf->buf[buf->x-1].b->core.pos : 0x7fffffff;
-	upper = (buf->x < 0)? buf->n : buf->x;
-	// fill the hash table
-	h = kh_init(32);
-	for (i = 0; i < upper; ++i) {
-		elem_t *e = buf->buf + i;
+	khint_t k = kh_get(lib, aux, lib);
+	if (k == kh_end(aux)) {
 		int ret;
-		if (e->score < 0) continue;
-		if (e->rpos >= 0) {
-			if (e->rpos <= mpos) key = (uint32_t)e->rpos<<1 | 1;
-			else continue;
-		} else {
-			if (e->b->core.pos < mpos) key = (uint32_t)e->b->core.pos<<1;
-			else continue;
-		}
-		k = kh_put(32, h, key, &ret);
-		p = &kh_val(h, k);
-		if (ret == 0) { // present in the hash table
-			if (p->n == p->m) {
-				p->m <<= 1;
-				p->a = (int*)realloc(p->a, p->m * sizeof(int));
-			}
-			p->a[p->n++] = i;
-		} else {
-			p->m = p->n = 1;
-			p->a = (int*)calloc(p->m, sizeof(int));
-			p->a[0] = i;
-		}
-	}
-	// rmdup
-	for (k = kh_begin(h); k < kh_end(h); ++k) {
-		if (kh_exist(h, k)) {
-			int max, maxi;
-			p = &kh_val(h, k);
-			// get the max
-			for (i = max = 0, maxi = -1; i < p->n; ++i) {
-				if (buf->buf[p->a[i]].score > max) {
-					max = buf->buf[p->a[i]].score;
-					maxi = i;
-				}
-			}
-			// mark the elements
-			for (i = 0; i < p->n; ++i) {
-				buf->buf[p->a[i]].score = -1;
-				if (i != maxi) {
-					bam_destroy1(buf->buf[p->a[i]].b);
-					buf->buf[p->a[i]].b = 0;
-				}
-			}
-			// free
-			free(p->a);
-		}
-	}
-	kh_destroy(32, h);
+		char *p = strdup(lib);
+		lib_aux_t *q;
+		k = kh_put(lib, aux, p, &ret);
+		q = &kh_val(aux, k);
+		q->left = kh_init(best);
+		q->rght = kh_init(best);
+		q->n_checked = q->n_removed = 0;
+		return q;
+	} else return &kh_val(aux, k);
 }
 
-static void dump_buf(buffer_t *buf, samfile_t *out)
+static inline int sum_qual(const bam1_t *b)
 {
-	int i;
-	for (i = 0; i < buf->n; ++i) {
-		elem_t *e = buf->buf + i;
-		if (e->score != -1) break;
-		if (e->b) {
-			samwrite(out, e->b);
-			bam_destroy1(e->b);
-			e->b = 0;
+	int i, q;
+	uint8_t *qual = bam1_qual(b);
+	for (i = q = 0; i < b->core.l_qseq; ++i) q += qual[i];
+	return q;
+}
+
+static inline elem_t *push_queue(queue_t *queue, const bam1_t *b, int endpos, int score)
+{
+	elem_t *p = kl_pushp(q, queue);
+	p->discarded = 0;
+	p->endpos = endpos; p->score = score;
+	p->b = bam_dup1(b);
+	return p;
+}
+
+static void clear_besthash(besthash_t *h, int32_t pos)
+{
+	khint_t k;
+	for (k = kh_begin(h); k != kh_end(h); ++k)
+		if (kh_exist(h, k) && kh_val(h, k)->endpos <= pos)
+			kh_del(best, h, k);
+}
+
+static void dump_alignment(samfile_t *out, queue_t *queue, int32_t pos, khash_t(lib) *h)
+{
+	if (queue->size > QUEUE_CLEAR_SIZE || pos == MAX_POS) {
+		khint_t k;
+		while (1) {
+			elem_t *q;
+			if (queue->head == queue->tail) break;
+			q = &kl_val(queue->head);
+			if (q->discarded) {
+				q->b->data_len = 0;
+				kl_shift(q, queue, 0);
+				continue;
+			}
+			if ((q->b->core.flag&BAM_FREVERSE) && q->endpos > pos) break;
+			samwrite(out, q->b);
+			q->b->data_len = 0;
+			kl_shift(q, queue, 0);
+		}
+		for (k = kh_begin(h); k != kh_end(h); ++k) {
+			if (kh_exist(h, k)) {
+				clear_besthash(kh_val(h, k).left, pos);
+				clear_besthash(kh_val(h, k).rght, pos);
+			}
 		}
 	}
+}
+
+void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se)
+{
+	bam1_t *b;
+	queue_t *queue;
+	khint_t k;
+	int last_tid = -2;
+	khash_t(lib) *aux;
+
+	aux = kh_init(lib);
+	b = bam_init1();
+	queue = kl_init(q);
+	while (samread(in, b) >= 0) {
+		bam1_core_t *c = &b->core;
+		int endpos = bam_calend(c, bam1_cigar(b));
+		int score = sum_qual(b);
+		
+		if (last_tid != c->tid) {
+			if (last_tid >= 0) dump_alignment(out, queue, MAX_POS, aux);
+			last_tid = c->tid;
+		} else dump_alignment(out, queue, c->pos, aux);
+		if ((c->flag&BAM_FUNMAP) || ((c->flag&BAM_FPAIRED) && !force_se)) {
+			push_queue(queue, b, endpos, score);
+		} else {
+			const char *lib;
+			const uint8_t *rg;
+			lib_aux_t *q;
+			besthash_t *h;
+			uint32_t key;
+			int ret;
+			rg = bam_aux_get(b, "RG");
+			lib = (rg == 0)? 0 : bam_strmap_get(in->header->rg2lib, (char*)(rg + 1));
+			q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
+			h = (c->flag&BAM_FREVERSE)? q->rght : q->left;
+			key = (c->flag&BAM_FREVERSE)? endpos : c->pos;
+			k = kh_put(best, h, key, &ret);
+			if (ret == 0) { // in the hash table
+				elem_t *p = kh_val(h, k);
+				if (p->score < score) {
+					if (c->flag&BAM_FREVERSE) { // mark "discarded" and push the queue
+						p->discarded = 1;
+						kh_val(h, k) = push_queue(queue, b, endpos, score);
+					} else { // replace
+						p->score = score; p->endpos = endpos;
+						bam_copy1(p->b, b);
+					}
+				} // otherwise, discard the alignment
+			} else kh_val(h, k) = push_queue(queue, b, endpos, score);
+		}
+	}
+	dump_alignment(out, queue, MAX_POS, aux);
+
+	for (k = kh_begin(aux); k != kh_end(aux); ++k) {
+		if (kh_exist(aux, k)) {
+			kh_destroy(best, kh_val(aux, k).rght);
+			kh_destroy(best, kh_val(aux, k).left);
+			free((char*)kh_key(aux, k));
+		}
+	}
+	kh_destroy(lib, aux);
+	bam_destroy1(b);
+	kl_destroy(q, queue);
 }
 
 int bam_rmdupse(int argc, char *argv[])
 {
 	samfile_t *in, *out;
-	buffer_t *buf;
 	if (argc < 3) {
-		fprintf(stderr, "Usage: samtools rmdupse <in.bam> <out.bam>\n\n");
-		fprintf(stderr, "Note: Picard is recommended for this task.\n");
+		fprintf(stderr, "Usage: samtools rmdupse <in.bam> <out.bam>\n");
 		return 1;
 	}
-	buf = calloc(1, sizeof(buffer_t));
 	in = samopen(argv[1], "rb", 0);
 	out = samopen(argv[2], "wb", in->header);
-	while (fill_buf(in, buf)) {
-		rmdupse_buf(buf);
-		dump_buf(buf, out);
-	}
+	bam_rmdupse_core(in, out, 1);
 	samclose(in); samclose(out);
-	free(buf->buf); free(buf);
 	return 0;
 }

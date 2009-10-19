@@ -423,8 +423,8 @@ extern "C" {
 	  @abstract  Free the memory allocated for an alignment.
 	  @param  b  pointer to an alignment
 	 */
-#define bam_destroy1(b) do {		\
-		free((b)->data); free(b);	\
+#define bam_destroy1(b) do {					\
+		if (b) { free((b)->data); free(b); }	\
 	} while (0)
 
 	/*!
