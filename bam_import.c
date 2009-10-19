@@ -211,7 +211,6 @@ int sam_header_parse_rg(bam_header_t *h)
 			break;
 		}
 		if (r < p) r = p;
-		s = r + 3;
 	}
 	if (rgid->l && rglib->l) {
 		bam_strmap_put(h->rg2lib, rgid->s, rglib->s);

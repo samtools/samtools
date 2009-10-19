@@ -53,7 +53,8 @@ static inline elem_t *push_queue(queue_t *queue, const bam1_t *b, int endpos, in
 	elem_t *p = kl_pushp(q, queue);
 	p->discarded = 0;
 	p->endpos = endpos; p->score = score;
-	p->b = bam_dup1(b);
+	if (p->b == 0) p->b = bam_init1();
+	bam_copy1(p->b, b);
 	return p;
 }
 
