@@ -3,6 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdlib.h>
+#include <stdarg.h>
 
 const char *o_hd_tags[] = {"SO","GO",NULL};
 const char *r_hd_tags[] = {"VN",NULL};
@@ -16,6 +17,22 @@ const char *types[]          = {"HD","SQ","RG","PG","CO",NULL};
 const char **optional_tags[] = {o_hd_tags,o_sq_tags,o_rg_tags,o_pg_tags,NULL,NULL};
 const char **required_tags[] = {r_hd_tags,r_sq_tags,r_rg_tags,r_pg_tags,NULL,NULL};
 
+void debug(const char *format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    vfprintf(stderr, format, ap);
+    va_end(ap);
+}
+
+void error(const char *format, ...)
+{
+    va_list ap;
+    va_start(ap, format);
+    vfprintf(stderr, format, ap);
+    va_end(ap);
+    exit(-1);
+}
 
 list_t *list_append(list_t *root, void *data)
 {
