@@ -7,15 +7,23 @@
 
 const char *o_hd_tags[] = {"SO","GO",NULL};
 const char *r_hd_tags[] = {"VN",NULL};
+
 const char *o_sq_tags[] = {"AS","M5","UR","SP",NULL};
 const char *r_sq_tags[] = {"SN","LN",NULL};
+const char *u_sq_tags[] = {"SN",NULL};
+
 const char *o_rg_tags[] = {"LB","DS","PU","PI","CN","DT","PL",NULL};
 const char *r_rg_tags[] = {"ID","SM",NULL};
+const char *u_rg_tags[] = {"ID",NULL};
+
 const char *o_pg_tags[] = {"VN","CL",NULL};
 const char *r_pg_tags[] = {"ID",NULL};
+
 const char *types[]          = {"HD","SQ","RG","PG","CO",NULL};
 const char **optional_tags[] = {o_hd_tags,o_sq_tags,o_rg_tags,o_pg_tags,NULL,NULL};
 const char **required_tags[] = {r_hd_tags,r_sq_tags,r_rg_tags,r_pg_tags,NULL,NULL};
+const char **unique_tags[]   = {NULL,     u_sq_tags,u_rg_tags,NULL,NULL,NULL};
+
 
 void debug(const char *format, ...)
 {
@@ -150,41 +158,133 @@ HeaderTag *header_line_has_tag(HeaderLine *hline, const char *key)
     return NULL;
 }
 
-#if 0
-// Is there a HeaderLine with all required fields identical to those given in the hline?
-HeaderLine *sam_header_has_line(HeaderDict *dict, HeaderLine *hline)
+
+// Return codes:
+//   0 .. different types or unique tags differ or conflicting tags, cannot be merged
+//   1 .. all tags identical -> no need to merge, drop one
+//   2 .. the unique tags match and there are some conflicting tags (same tag, different value) -> error, cannot be merged nor duplicated
+//   3 .. there are some missing complementary tags and no unique conflict -> can be merged into a single line
+int sam_header_compare_lines(HeaderLine *hline1, HeaderLine *hline2)
 {
-    HeaderLine *found=NULL;
+    HeaderTag *t1, *t2;
 
-    while (dict)
+    if ( hline1->type[0]!=hline2->type[0] || hline1->type[1]!=hline2->type[1] )
+        return 0;
+
+    int itype = tag_exists(hline1->type,types);
+    if ( itype==-1 ) error("[sam_header_compare_lines] Unknown type [%c%c]\n", hline1->type[0],hline1->type[1]);
+
+    if ( unique_tags[itype] )
     {
-        HeaderLine *dline = dict->data;
+        t1 = header_line_has_tag(hline1,unique_tags[itype][0]);
+        t2 = header_line_has_tag(hline2,unique_tags[itype][0]);
+        if ( !t1 || !t2 ) // this should never happen, the unique tags are required
+            return 2;
 
-        if ( hline->type[0]!=dline->type[0] || hline->type[1]!=dline->type[1] )
+        if ( strcmp(t1->value,t2->value) )
+            return 0;   // the unique tags differ, cannot be merged
+    }
+    if ( !required_tags[itype] && !optional_tags[itype] )
+    {
+        t1 = hline1->tags->data;
+        t2 = hline2->tags->data;
+        if ( !strcmp(t1->value,t2->value) ) return 1; // identical comments
+        return 0;
+    }
+
+    int missing=0, itag=0;
+    while ( required_tags[itype] && required_tags[itype][itag] )
+    {
+        t1 = header_line_has_tag(hline1,required_tags[itype][itag]);
+        t2 = header_line_has_tag(hline2,required_tags[itype][itag]);
+        if ( !t1 && !t2 )
+            return 2;       // this should never happen
+        else if ( !t1 || !t2 )
+            missing = 1;    // there is some tag missing in one of the hlines
+        else if ( strcmp(t1->value,t2->value) )
         {
-            dict = dict->next;
+            if ( unique_tags[itype] )
+                return 2;   // the lines have a matching unique tag but have a conflicting tag
+                    
+            return 0;    // the lines contain conflicting tags, cannot be merged
+        }
+        itag++;
+    }
+    itag = 0;
+    while ( optional_tags[itype] && optional_tags[itype][itag] )
+    {
+        t1 = header_line_has_tag(hline1,optional_tags[itype][itag]);
+        t2 = header_line_has_tag(hline2,optional_tags[itype][itag]);
+        if ( !t1 && !t2 )
+        {
+            itag++;
             continue;
         }
-
-        int itype = tag_exists(hline->type,types);
-        if ( itype==-1 ) error("[sam_header_has_line] Unknown type [%c%c]\n", hline->type[0],hline->type[1]);
-
-        int ireq=0, differ=0;
-        while ( required_tags[itype] && required_tags[itype][ireq] )
+        if ( !t1 || !t2 )
+            missing = 1;    // there is some tag missing in one of the hlines
+        else if ( strcmp(t1->value,t2->value) )
         {
-            HeaderTag *t1, *t2;
-            t1 = header_line_has_tag(hline,required_tags[itype][ireq]);
-            t2 = header_line_has_tag(dline,required_tags[itype][ireq]);
-            if ( !t1 || !t2 ) error("[sam_header_has_line] Missing a required tag [%c%c]\n",
-                required_tags[itype][ireq][0],required_tags[itype][ireq][1]);
-            if ( strcmp(t1->value,t2->value) )
-            ireq++;
+            if ( unique_tags[itype] )
+                return 2;   // the lines have a matching unique tag but have a conflicting tag
+
+            return 0;   // the lines contain conflicting tags, cannot be merged
         }
-        dict = dict->next; 
+        itag++;
     }
-    return found;
+    if ( missing ) return 3;    // there are some missing complementary tags with no conflicts, can be merged
+    return 1;
 }
-#endif
+
+
+HeaderLine *sam_header_line_clone(const HeaderLine *hline)
+{
+    list_t *tags;
+    HeaderLine *out = malloc(sizeof(HeaderLine));
+    out->type[0] = hline->type[0];
+    out->type[1] = hline->type[1];
+    out->tags = NULL;
+
+    tags = hline->tags;
+    while (tags)
+    {
+        HeaderTag *old = tags->data;
+
+        HeaderTag *new = malloc(sizeof(HeaderTag));
+        new->key[0] = old->key[0];
+        new->key[1] = old->key[1];
+        new->value  = strdup(old->value);
+        out->tags = list_append(out->tags, new);
+
+        tags = tags->next;
+    }
+    return out;
+}
+
+int sam_header_line_merge_with(HeaderLine *out_hline, const HeaderLine *tmpl_hline)
+{
+    list_t *tmpl_tags;
+
+    if ( out_hline->type[0]!=tmpl_hline->type[0] || out_hline->type[1]!=tmpl_hline->type[1] )
+        return 0;
+    
+    tmpl_tags = tmpl_hline->tags;
+    while (tmpl_tags)
+    {
+        HeaderTag *tmpl_tag = tmpl_tags->data;
+        HeaderTag *out_tag  = header_line_has_tag(out_hline, tmpl_tag->key);
+        if ( !out_tag )
+        {
+            HeaderTag *tag = malloc(sizeof(HeaderTag));
+            tag->key[0] = tmpl_tag->key[0];
+            tag->key[1] = tmpl_tag->key[1];
+            tag->value  = strdup(tmpl_tag->value);
+            out_hline->tags = list_append(out_hline->tags,tag);
+        }
+        tmpl_tags = tmpl_tags->next;
+    }
+    return 1;
+}
+
 
 HeaderLine *sam_header_line_parse(const char *headerLine)
 {
@@ -279,19 +379,25 @@ int sam_header_line_validate(HeaderLine *hline)
     return 1;
 }
 
-void print_header_line(HeaderLine *hline)
+
+void print_header_line(FILE *fp, HeaderLine *hline)
 {
     list_t *tags = hline->tags;
     HeaderTag *tag;
 
-    printf("@%c%c", hline->type[0],hline->type[1]);
+    fprintf(fp, "@%c%c", hline->type[0],hline->type[1]);
     while (tags)
     {
         tag = tags->data;
-        printf("\t%c%c:%s", tag->key[0],tag->key[1],tag->value);
+
+        fprintf(fp, "\t");
+        if ( tag->key[0]!=' ' || tag->key[1]!=' ' )
+            fprintf(fp, "%c%c:", tag->key[0],tag->key[1]);
+        fprintf(fp, "%s", tag->value);
+
         tags = tags->next;
     }
-    printf("\n");
+    fprintf(fp,"\n");
 }
 
 
@@ -314,6 +420,18 @@ void sam_header_free(HeaderDict *header)
         hlines = hlines->next;
     }
     list_free(header);
+}
+
+HeaderDict *sam_header_clone(const HeaderDict *dict)
+{
+    HeaderDict *out = NULL;
+    while (dict)
+    {
+        HeaderLine *hline = dict->data;
+        out = list_append(out, sam_header_line_clone(hline));
+        dict = dict->next;
+    }
+    return out;
 }
 
 // Returns a newly allocated string
@@ -433,23 +551,52 @@ khash_t(str) *sam_header_lookup_table(const HeaderDict *dict, char type[2], char
 }
 
 
-#if 0
-TODO
 HeaderDict *sam_header_merge(int n, const HeaderDict **dicts)
 {
-    HeaderDict *out=NULL;
-    int idict;
+    HeaderDict *out_dict;
+    int idict, status;
 
-    for (idict=0; idict<n; idict++)
+    if ( n<2 ) return NULL;
+
+    out_dict = sam_header_clone(dicts[0]);
+
+    for (idict=1; idict<n; idict++)
     {
-        list_t *hlines = dicts[idict];
-        while (hlines)
+        const list_t *tmpl_hlines = dicts[idict];
+
+        while ( tmpl_hlines )
         {
-            HeaderLine *hline = sam_header_has_line(out, hlines->data);
-            sam_header_line_merge(hline,hlines->data);
-            hlines = hlines->next;
+            list_t *out_hlines = out_dict;
+            int inserted = 0;
+            while ( out_hlines )
+            {
+                status = sam_header_compare_lines(tmpl_hlines->data, out_hlines->data);
+                if ( status==0 )
+                {
+                    out_hlines = out_hlines->next;
+                    continue;
+                }
+                
+                if ( status==2 ) 
+                {
+                    print_header_line(stderr,tmpl_hlines->data);
+                    print_header_line(stderr,out_hlines->data);
+                    error("Conflicting lines, cannot merge the headers.\n");
+                }
+                if ( status==3 )
+                    sam_header_line_merge_with(out_hlines->data, tmpl_hlines->data);
+
+                inserted = 1;
+                break;
+            }
+            if ( !inserted )
+                out_dict = list_append(out_dict, sam_header_line_clone(tmpl_hlines->data));
+
+            tmpl_hlines = tmpl_hlines->next;
         }
     }
+
+    return out_dict;
 }
-#endif
+
 

@@ -32,6 +32,7 @@ void debug(const char *format, ...);
 void error(const char *format, ...);
 
 HeaderDict *sam_header_parse(const char *headerText);
+HeaderDict *sam_header_merge(int n, const HeaderDict **dicts);
 void sam_header_free(HeaderDict *header);
 char *sam_header_write(const HeaderDict *headerDict);   // returns a newly allocated string
 
@@ -40,7 +41,6 @@ khash_t(str) *sam_header_lookup_table(const HeaderDict *dict, char type[2], char
 list_t *list_append(list_t *root, void *data);
 void list_free(list_t *root);
 
-//HeaderDict *sam_header_merge(int n, const HeaderDict **dicts);  // if n=1, the func clones the dictionary
 //char *sam_header_get(const HeaderDict *d, char type[2], int i, char tag[2]);  
 //int sam_header_ins(HeaderDict *d, char tp[2], int i, char tg[2], const char *s);  
 //int sam_header_del(HeaderDict *d, char type[2], int i, char tag[2]);  
