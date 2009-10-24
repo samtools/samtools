@@ -13,16 +13,15 @@ static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 {
 	if (b->core.qual < g_min_mapQ || ((b->core.flag & g_flag_on) != g_flag_on) || (b->core.flag & g_flag_off))
 		return 1;
-	if (g_library || g_rg) {
+	if (g_rg) {
 		uint8_t *s = bam_aux_get(b, "RG");
-		if (s) {
-			if (g_rg && strcmp(g_rg, (char*)(s + 1)) == 0) return 0;
-			if (g_library) {
-				const char *p = sam_tbl_get(h->rg2lib, (const char*)(s + 1));
-				return (p && strcmp(p, g_library) == 0)? 0 : 1;
-			} return 1;
-		} else return 1;
-	} else return 0;
+		if (s && strcmp(g_rg, (char*)(s + 1)) == 0) return 0;
+	}
+	if (g_library) {
+		const char *p = bam_get_library((bam_header_t*)h, b);
+		return (p && strcmp(p, g_library) == 0)? 0 : 1;
+	}
+	return 0;
 }
 
 // callback function for bam_fetch()
