@@ -10,6 +10,7 @@
 #endif
 #include "kstring.h"
 #include "bam.h"
+#include "sam_header.h"
 #include "kseq.h"
 #include "khash.h"
 
@@ -172,104 +173,35 @@ static inline void append_text(bam_header_t *header, kstring_t *str)
 
 int sam_header_parse_rg(bam_header_t *h)
 {
-	kstring_t *rgid, *rglib;
-	char *p, *q, *s, *r;
-	int n = 0;
-
-	// free
-	if (h == 0) return 0;
-	bam_strmap_destroy(h->rg2lib); h->rg2lib = 0;
-	if (h->l_text < 3) return 0;
-	// parse @RG lines
-	h->rg2lib = bam_strmap_init();
-	rgid = calloc(1, sizeof(kstring_t));
-	rglib = calloc(1, sizeof(kstring_t));
-	s = h->text;
-	while ((s = strstr(s, "@RG")) != 0) {
-		if (rgid->l && rglib->l) {
-			bam_strmap_put(h->rg2lib, rgid->s, rglib->s);
-			++n;
-		}
-		rgid->l = rglib->l = 0;
-		s += 3;
-		r = s;
-		if ((p = strstr(s, "ID:")) != 0) {
-			q = p + 3;
-			for (p = q; *p && *p != '\t' && *p != '\r' && *p != '\n'; ++p);
-			kputsn(q, p - q, rgid);
-		} else {
-			fprintf(stderr, "[bam_header_parse] missing ID tag in @RG lines.\n");
-			break;
-		}
-		if (r < p) r = p;
-		if ((p = strstr(s, "LB:")) != 0) {
-			q = p + 3;
-			for (p = q; *p && *p != '\t' && *p != '\r' && *p != '\n'; ++p);
-			kputsn(q, p - q, rglib);
-		} else {
-			fprintf(stderr, "[bam_header_parse] missing LB tag in @RG lines.\n");
-			break;
-		}
-		if (r < p) r = p;
-	}
-	if (rgid->l && rglib->l) {
-		bam_strmap_put(h->rg2lib, rgid->s, rglib->s);
-		++n;
-	}
-	free(rgid->s); free(rgid);
-	free(rglib->s); free(rglib);
-	if (n == 0) {
-		bam_strmap_destroy(h->rg2lib);
-		h->rg2lib = 0;
-	}
-	return n;
+	if (h->dict == 0) h->dict = sam_header_parse2(h->text);
+	if (h->rg2lib) h->rg2lib = sam_header2tbl(h->dict, "RG", "ID", "LB");
+	return sam_tbl_size(h->rg2lib);
 }
 
 int sam_header_parse(bam_header_t *h)
 {
+	void *tbl;
+	char **tmp;
 	int i;
-	char *s, *p, *q, *r;
-
-	// free
 	free(h->target_len); free(h->target_name);
 	h->n_targets = 0; h->target_len = 0; h->target_name = 0;
 	if (h->l_text < 3) return 0;
-	// count number of @SQ
-	s = h->text;
-	while ((s = strstr(s, "@SQ")) != 0) {
-		++h->n_targets;
-		s += 3;
+	if (h->dict == 0) h->dict = sam_header_parse2(h->text);
+	tbl = sam_header2tbl(h->dict, "SQ", "SN", "LN");
+	h->n_targets = sam_tbl_size(tbl);
+	if (h->n_targets == 0) {
+		sam_tbl_destroy(tbl);
+		return 0;
 	}
-	if (h->n_targets == 0) return 0;
 	h->target_len = (uint32_t*)calloc(h->n_targets, 4);
 	h->target_name = (char**)calloc(h->n_targets, sizeof(void*));
-	// parse @SQ lines
-	i = 0;
-	s = h->text;
-	while ((s = strstr(s, "@SQ")) != 0) {
-		s += 3;
-		r = s;
-		if ((p = strstr(s, "SN:")) != 0) {
-			q = p + 3;
-			for (p = q; *p && *p != '\t' && *p != '\r' && *p != '\n'; ++p);
-			h->target_name[i] = (char*)calloc(p - q + 1, 1);
-			strncpy(h->target_name[i], q, p - q);
-		} else goto header_err_ret;
-		if (r < p) r = p;
-		if ((p = strstr(s, "LN:")) != 0) h->target_len[i] = strtol(p + 3, 0, 10);
-		else goto header_err_ret;
-		if (r < p) r = p;
-		s = r + 3;
-		++i;
-	}
-	sam_header_parse_rg(h);
+	tmp = (char**)calloc(h->n_targets, sizeof(void*));
+	sam_tbl_pair(tbl, h->target_name, tmp);
+	for (i = 0; i < h->n_targets; ++i)
+		h->target_len[i] = atoi(tmp[i]);
+	free(tmp);
+	sam_tbl_destroy(tbl);
 	return h->n_targets;
-
-header_err_ret:
-	fprintf(stderr, "[bam_header_parse] missing SN or LN tag in @SQ lines.\n");
-	free(h->target_len); free(h->target_name);
-	h->n_targets = 0; h->target_len = 0; h->target_name = 0;
-	return 0;
 }
 
 bam_header_t *sam_header_read(tamFile fp)

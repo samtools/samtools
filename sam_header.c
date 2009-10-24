@@ -5,6 +5,31 @@
 #include <stdlib.h>
 #include <stdarg.h>
 
+#include "khash.h"
+KHASH_MAP_INIT_STR(str, const char *)
+
+struct _HeaderList
+{
+    struct _HeaderList *next;
+    void *data;
+};
+typedef struct _HeaderList list_t;
+typedef list_t HeaderDict;
+
+typedef struct
+{
+    char key[2];
+    char *value;
+}
+HeaderTag;
+
+typedef struct
+{
+    char type[2];
+    list_t *tags;
+}
+HeaderLine;
+
 const char *o_hd_tags[] = {"SO","GO",NULL};
 const char *r_hd_tags[] = {"VN",NULL};
 
@@ -13,7 +38,7 @@ const char *r_sq_tags[] = {"SN","LN",NULL};
 const char *u_sq_tags[] = {"SN",NULL};
 
 const char *o_rg_tags[] = {"LB","DS","PU","PI","CN","DT","PL",NULL};
-const char *r_rg_tags[] = {"ID","SM",NULL};
+const char *r_rg_tags[] = {"ID",NULL};
 const char *u_rg_tags[] = {"ID",NULL};
 
 const char *o_pg_tags[] = {"VN","CL",NULL};
@@ -401,8 +426,9 @@ void print_header_line(FILE *fp, HeaderLine *hline)
 }
 
 
-void sam_header_free(HeaderDict *header)
+void sam_header_free(void *_header)
 {
+	HeaderDict *header = (HeaderDict*)_header;
     list_t *hlines = header;
     while (hlines)
     {
@@ -435,8 +461,9 @@ HeaderDict *sam_header_clone(const HeaderDict *dict)
 }
 
 // Returns a newly allocated string
-char *sam_header_write(const HeaderDict *header)
+char *sam_header_write(const void *_header)
 {
+	const HeaderDict *header = (const HeaderDict*)_header;
     char *out = NULL;
     int len=0, nout=0;
     const list_t *hlines;
@@ -486,7 +513,7 @@ char *sam_header_write(const HeaderDict *header)
     return out;
 }
 
-HeaderDict *sam_header_parse(const char *headerText)
+void *sam_header_parse2(const char *headerText)
 {
     list_t *hlines = NULL;
     HeaderLine *hline;
@@ -514,8 +541,9 @@ HeaderDict *sam_header_parse(const char *headerText)
     return hlines;
 }
 
-khash_t(str) *sam_header_lookup_table(const HeaderDict *dict, char type[2], char key_tag[2], char value_tag[2])
+void *sam_header2tbl(const void *_dict, char type[2], char key_tag[2], char value_tag[2])
 {
+	const HeaderDict *dict = (const HeaderDict*)_dict;
     const list_t *l   = dict;
     khash_t(str) *tbl = kh_init(str);
     khiter_t k;
@@ -550,9 +578,44 @@ khash_t(str) *sam_header_lookup_table(const HeaderDict *dict, char type[2], char
     return tbl;
 }
 
-
-HeaderDict *sam_header_merge(int n, const HeaderDict **dicts)
+const char *sam_tbl_get(void *h, const char *key)
 {
+	khash_t(str) *tbl = (khash_t(str)*)h;
+	khint_t k;
+	k = kh_get(str, tbl, key);
+	return k == kh_end(tbl)? 0 : kh_val(tbl, k);
+}
+
+int sam_tbl_size(void *h)
+{
+	khash_t(str) *tbl = (khash_t(str)*)h;
+	return h? kh_size(tbl) : 0;
+}
+
+int sam_tbl_pair(void *h, char **keys, char **vals)
+{
+	khash_t(str) *tbl = (khash_t(str)*)h;
+	int i = 0;
+	khint_t k;
+	if (h == 0) return -1;
+	for (k = kh_begin(tbl); k != kh_end(tbl); ++k) {
+		if (kh_exist(tbl, k)) {
+			keys[i] = (char*)kh_key(tbl, k);
+			vals[i++] = (char*)kh_val(tbl, k);
+		}
+	}
+	return kh_size(tbl);
+}
+
+void sam_tbl_destroy(void *h)
+{
+	khash_t(str) *tbl = (khash_t(str)*)h;
+	kh_destroy(str, tbl);
+}
+
+void *sam_header_merge(int n, const void **_dicts)
+{
+	const HeaderDict **dicts = (const HeaderDict**)_dicts;
     HeaderDict *out_dict;
     int idict, status;
 

@@ -5,6 +5,7 @@
 #include "bam.h"
 #include "bam_endian.h"
 #include "kstring.h"
+#include "sam_header.h"
 
 int bam_is_be = 0;
 char *bam_flag2char_table = "pPuUrR12sfd\0\0\0\0\0";
@@ -59,10 +60,9 @@ void bam_header_destroy(bam_header_t *header)
 		free(header->target_len);
 	}
 	free(header->text);
-#ifndef BAM_NO_HASH
-	if (header->rg2lib) bam_strmap_destroy(header->rg2lib);
+	if (header->dict) sam_header_free(header->dict);
+	if (header->rg2lib) sam_tbl_destroy(header->rg2lib);
 	bam_destroy_header_hash(header);
-#endif
 	free(header);
 }
 
@@ -290,4 +290,11 @@ void bam_view1(const bam_header_t *header, const bam1_t *b)
 	char *s = bam_format1(header, b);
 	printf("%s\n", s);
 	free(s);
+}
+
+const char *bam_get_library(const bam_header_t *header, const bam1_t *b)
+{
+	const uint8_t *rg;
+	rg = bam_aux_get(b, "RG");
+	return (rg == 0)? 0 : sam_tbl_get(header->rg2lib, (const char*)(rg + 1));
 }

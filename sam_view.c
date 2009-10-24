@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include "sam_header.h"
 #include "sam.h"
 #include "faidx.h"
 
@@ -17,7 +18,7 @@ static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 		if (s) {
 			if (g_rg && strcmp(g_rg, (char*)(s + 1)) == 0) return 0;
 			if (g_library) {
-				const char *p = bam_strmap_get(h->rg2lib, (char*)(s + 1));
+				const char *p = sam_tbl_get(h->rg2lib, (const char*)(s + 1));
 				return (p && strcmp(p, g_library) == 0)? 0 : 1;
 			} return 1;
 		} else return 1;

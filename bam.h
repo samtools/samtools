@@ -73,6 +73,7 @@ typedef gzFile bamFile;
   @field n_targets   number of reference sequences
   @field target_name names of the reference sequences
   @field target_len  lengths of the referene sequences
+  @field dict        header dictionary
   @field hash        hash table for fast name lookup
   @field rg2lib      hash table for @RG-ID -> LB lookup
   @field l_text      length of the plain text in the header
@@ -85,7 +86,7 @@ typedef struct {
 	int32_t n_targets;
 	char **target_name;
 	uint32_t *target_len;
-	void *hash, *rg2lib;
+	void *dict, *hash, *rg2lib;
 	int l_text;
 	char *text;
 } bam_header_t;
@@ -436,6 +437,8 @@ extern "C" {
 	char *bam_format1(const bam_header_t *header, const bam1_t *b);
 
 	char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of);
+
+	const char *bam_get_library(const bam_header_t *header, const bam1_t *b);
 
 	/*! @typedef
 	  @abstract Structure for one alignment covering the pileup position.

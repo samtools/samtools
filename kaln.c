@@ -182,17 +182,6 @@ typedef struct {
 	int M, I, D;
 } dpscore_t;
 
-/* build score profile for accelerating alignment, in theory */
-static void aln_init_score_array(uint8_t *seq, int len, int row, int *score_matrix, int **s_array)
-{
-	int *tmp, *tmp2, i, k;
-	for (i = 0; i != row; ++i) {
-		tmp = score_matrix + i * row;
-		tmp2 = s_array[i];
-		for (k = 0; k != len; ++k)
-			tmp2[k] = tmp[seq[k]];
-	}
-}
 /***************************
  * banded global alignment *
  ***************************/

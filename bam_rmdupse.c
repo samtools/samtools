@@ -117,13 +117,11 @@ void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se)
 			push_queue(queue, b, endpos, score);
 		} else {
 			const char *lib;
-			const uint8_t *rg;
 			lib_aux_t *q;
 			besthash_t *h;
 			uint32_t key;
 			int ret;
-			rg = bam_aux_get(b, "RG");
-			lib = (rg == 0)? 0 : bam_strmap_get(in->header->rg2lib, (char*)(rg + 1));
+			lib = bam_get_library(in->header, b);
 			q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
 			++q->n_checked;
 			h = (c->flag&BAM_FREVERSE)? q->rght : q->left;

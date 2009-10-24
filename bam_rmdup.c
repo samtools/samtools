@@ -127,11 +127,9 @@ void bam_rmdup_core(samfile_t *in, samfile_t *out)
 		} else if (c->isize > 0) { // paired, head
 			uint64_t key = (uint64_t)c->pos<<32 | c->isize;
 			const char *lib;
-			const uint8_t *rg;
 			lib_aux_t *q;
 			int ret;
-			rg = bam_aux_get(b, "RG");
-			lib = (rg == 0)? 0 : bam_strmap_get(in->header->rg2lib, (char*)(rg + 1));
+			lib = bam_get_library(in->header, b);
 			q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
 			++q->n_checked;
 			k = kh_put(pos, q->best_hash, key, &ret);
