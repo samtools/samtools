@@ -426,23 +426,27 @@ void print_header_line(FILE *fp, HeaderLine *hline)
 }
 
 
+void sam_header_line_free(HeaderLine *hline)
+{
+    list_t *tags = hline->tags;
+    while (tags)
+    {
+        HeaderTag *tag = tags->data;
+        free(tag->value);
+        free(tag);
+        tags = tags->next;
+    }
+    list_free(hline->tags);
+    free(hline);
+}
+
 void sam_header_free(void *_header)
 {
 	HeaderDict *header = (HeaderDict*)_header;
     list_t *hlines = header;
     while (hlines)
     {
-        HeaderLine *hline = hlines->data;
-        list_t *tags = hline->tags;
-        while (tags)
-        {
-            HeaderTag *tag = tags->data;
-            free(tag->value);
-            free(tag);
-            tags = tags->next;
-        }
-        list_free(hline->tags);
-        free(hline);
+        sam_header_line_free(hlines->data);
         hlines = hlines->next;
     }
     list_free(header);
@@ -532,7 +536,9 @@ void *sam_header_parse2(const char *headerText)
             hlines = list_append(hlines, hline);
         else
         {
+            sam_header_line_free(hline);
             sam_header_free(hlines);
+            if ( buf ) free(buf);
             return NULL;
         }
     }
