@@ -171,13 +171,6 @@ static inline void append_text(bam_header_t *header, kstring_t *str)
 	header->text[header->l_text] = 0;
 }
 
-int sam_header_parse_rg(bam_header_t *h)
-{
-	if (h->dict == 0) h->dict = sam_header_parse2(h->text);
-	if (h->rg2lib) h->rg2lib = sam_header2tbl(h->dict, "RG", "ID", "LB");
-	return sam_tbl_size(h->rg2lib);
-}
-
 int sam_header_parse(bam_header_t *h)
 {
 	char **tmp;

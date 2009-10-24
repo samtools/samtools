@@ -438,7 +438,7 @@ extern "C" {
 
 	char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of);
 
-	const char *bam_get_library(const bam_header_t *header, const bam1_t *b);
+	const char *bam_get_library(bam_header_t *header, const bam1_t *b);
 
 	/*! @typedef
 	  @abstract Structure for one alignment covering the pileup position.

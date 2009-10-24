@@ -292,9 +292,11 @@ void bam_view1(const bam_header_t *header, const bam1_t *b)
 	free(s);
 }
 
-const char *bam_get_library(const bam_header_t *header, const bam1_t *b)
+const char *bam_get_library(bam_header_t *h, const bam1_t *b)
 {
 	const uint8_t *rg;
+	if (h->dict == 0) h->dict = sam_header_parse2(h->text);
+	if (h->rg2lib) h->rg2lib = sam_header2tbl(h->dict, "RG", "ID", "LB");
 	rg = bam_aux_get(b, "RG");
-	return (rg == 0)? 0 : sam_tbl_get(header->rg2lib, (const char*)(rg + 1));
+	return (rg == 0)? 0 : sam_tbl_get(h->rg2lib, (const char*)(rg + 1));
 }
