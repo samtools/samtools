@@ -180,27 +180,19 @@ int sam_header_parse_rg(bam_header_t *h)
 
 int sam_header_parse(bam_header_t *h)
 {
-	void *tbl;
 	char **tmp;
 	int i;
 	free(h->target_len); free(h->target_name);
 	h->n_targets = 0; h->target_len = 0; h->target_name = 0;
 	if (h->l_text < 3) return 0;
 	if (h->dict == 0) h->dict = sam_header_parse2(h->text);
-	tbl = sam_header2tbl(h->dict, "SQ", "SN", "LN");
-	h->n_targets = sam_tbl_size(tbl);
-	if (h->n_targets == 0) {
-		sam_tbl_destroy(tbl);
-		return 0;
-	}
+	h->target_name = sam_header2list(h->dict, "SQ", "SN", &h->n_targets);
+	if (h->n_targets == 0) return 0;
+	tmp = sam_header2list(h->dict, "SQ", "LN", &h->n_targets);
 	h->target_len = (uint32_t*)calloc(h->n_targets, 4);
-	h->target_name = (char**)calloc(h->n_targets, sizeof(void*));
-	tmp = (char**)calloc(h->n_targets, sizeof(void*));
-	sam_tbl_pair(tbl, h->target_name, tmp);
 	for (i = 0; i < h->n_targets; ++i)
 		h->target_len[i] = atoi(tmp[i]);
 	free(tmp);
-	sam_tbl_destroy(tbl);
 	return h->n_targets;
 }
 

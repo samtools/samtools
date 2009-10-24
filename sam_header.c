@@ -578,6 +578,43 @@ void *sam_header2tbl(const void *_dict, char type[2], char key_tag[2], char valu
     return tbl;
 }
 
+char **sam_header2list(const void *_dict, char type[2], char key_tag[2], int *_n)
+{
+	const HeaderDict *dict = (const HeaderDict*)_dict;
+    const list_t *l   = dict;
+    int max, n;
+	char **ret;
+
+	ret = 0; *_n = max = n = 0;
+    while (l)
+    {
+        HeaderLine *hline = l->data;
+        if ( hline->type[0]!=type[0] || hline->type[1]!=type[1] ) 
+        {
+            l = l->next;
+            continue;
+        }
+        
+        HeaderTag *key;
+        key   = header_line_has_tag(hline,key_tag);
+        if ( !key )
+        {
+            l = l->next;
+            continue;
+        }
+
+		if (n == max) {
+			max = max? max<<1 : 4;
+			ret = realloc(ret, max * sizeof(void*));
+		}
+		ret[n++] = key->value;
+
+        l = l->next;
+    }
+	*_n = n;
+    return ret;
+}
+
 const char *sam_tbl_get(void *h, const char *key)
 {
 	khash_t(str) *tbl = (khash_t(str)*)h;
@@ -590,21 +627,6 @@ int sam_tbl_size(void *h)
 {
 	khash_t(str) *tbl = (khash_t(str)*)h;
 	return h? kh_size(tbl) : 0;
-}
-
-int sam_tbl_pair(void *h, char **keys, char **vals)
-{
-	khash_t(str) *tbl = (khash_t(str)*)h;
-	int i = 0;
-	khint_t k;
-	if (h == 0) return -1;
-	for (k = kh_begin(tbl); k != kh_end(tbl); ++k) {
-		if (kh_exist(tbl, k)) {
-			keys[i] = (char*)kh_key(tbl, k);
-			vals[i++] = (char*)kh_val(tbl, k);
-		}
-	}
-	return kh_size(tbl);
 }
 
 void sam_tbl_destroy(void *h)

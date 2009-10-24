@@ -10,10 +10,11 @@ extern "C" {
 	void sam_header_free(void *header);
 	char *sam_header_write(const void *headerDict);   // returns a newly allocated string
 
+	char **sam_header2list(const void *_dict, char type[2], char key_tag[2], int *_n);
+
 	void *sam_header2tbl(const void *dict, char type[2], char key_tag[2], char value_tag[2]);
 	const char *sam_tbl_get(void *h, const char *key);
 	int sam_tbl_size(void *h);
-	int sam_tbl_pair(void *h, char **keys, char **vals);
 	void sam_tbl_destroy(void *h);
 
 #ifdef __cplusplus
