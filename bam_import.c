@@ -179,10 +179,14 @@ int sam_header_parse(bam_header_t *h)
 	h->n_targets = 0; h->target_len = 0; h->target_name = 0;
 	if (h->l_text < 3) return 0;
 	if (h->dict == 0) h->dict = sam_header_parse2(h->text);
-	h->target_name = sam_header2list(h->dict, "SQ", "SN", &h->n_targets);
+	tmp = sam_header2list(h->dict, "SQ", "SN", &h->n_targets);
 	if (h->n_targets == 0) return 0;
+	h->target_name = calloc(h->n_targets, sizeof(void*));
+	for (i = 0; i < h->n_targets; ++i)
+		h->target_name[i] = strdup(tmp[i]);
+	free(tmp);
 	tmp = sam_header2list(h->dict, "SQ", "LN", &h->n_targets);
-	h->target_len = (uint32_t*)calloc(h->n_targets, 4);
+	h->target_len = calloc(h->n_targets, 4);
 	for (i = 0; i < h->n_targets; ++i)
 		h->target_len[i] = atoi(tmp[i]);
 	free(tmp);

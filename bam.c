@@ -292,11 +292,12 @@ void bam_view1(const bam_header_t *header, const bam1_t *b)
 	free(s);
 }
 
+// FIXME: we should also check the LB tag associated with each alignment
 const char *bam_get_library(bam_header_t *h, const bam1_t *b)
 {
 	const uint8_t *rg;
 	if (h->dict == 0) h->dict = sam_header_parse2(h->text);
-	if (h->rg2lib) h->rg2lib = sam_header2tbl(h->dict, "RG", "ID", "LB");
+	if (h->rg2lib == 0) h->rg2lib = sam_header2tbl(h->dict, "RG", "ID", "LB");
 	rg = bam_aux_get(b, "RG");
 	return (rg == 0)? 0 : sam_tbl_get(h->rg2lib, (const char*)(rg + 1));
 }

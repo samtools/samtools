@@ -50,7 +50,7 @@ const char **required_tags[] = {r_hd_tags,r_sq_tags,r_rg_tags,r_pg_tags,NULL,NUL
 const char **unique_tags[]   = {NULL,     u_sq_tags,u_rg_tags,NULL,NULL,NULL};
 
 
-void debug(const char *format, ...)
+static void debug(const char *format, ...)
 {
     va_list ap;
     va_start(ap, format);
@@ -58,16 +58,7 @@ void debug(const char *format, ...)
     va_end(ap);
 }
 
-void error(const char *format, ...)
-{
-    va_list ap;
-    va_start(ap, format);
-    vfprintf(stderr, format, ap);
-    va_end(ap);
-    exit(-1);
-}
-
-list_t *list_append(list_t *root, void *data)
+static list_t *list_append(list_t *root, void *data)
 {
     list_t *l = root;
     while (l && l->next)
@@ -87,7 +78,7 @@ list_t *list_append(list_t *root, void *data)
     return root;
 }
 
-void list_free(list_t *root)
+static void list_free(list_t *root)
 {
     list_t *l = root;
     while (root)
@@ -101,7 +92,7 @@ void list_free(list_t *root)
 
 
 // Look for a tag "XY" in a predefined const char *[] array.
-int tag_exists(const char *tag, const char **tags)
+static int tag_exists(const char *tag, const char **tags)
 {
     int itag=0;
     if ( !tags ) return -1;
@@ -118,7 +109,7 @@ int tag_exists(const char *tag, const char **tags)
 // Mimics the behaviour of getline, except it returns pointer to the next chunk of the text
 //  or NULL if everything has been read. The lineptr should be freed by the caller. The
 //  newline character is stripped.
-const char *nextline(char **lineptr, size_t *n, const char *text)
+static const char *nextline(char **lineptr, size_t *n, const char *text)
 {
     int len;
     const char *to = text;
@@ -147,8 +138,10 @@ const char *nextline(char **lineptr, size_t *n, const char *text)
         *lineptr = realloc(*lineptr, len);
         *n = len;
     }
-    if ( !*lineptr )
-            error("FIXME\n");
+    if ( !*lineptr ) {
+		debug("[nextline] Insufficient memory!\n");
+		return 0;
+	}
 
     memcpy(*lineptr,text,len);
     (*lineptr)[len-1] = 0;
@@ -158,7 +151,7 @@ const char *nextline(char **lineptr, size_t *n, const char *text)
 
 // name points to "XY", value_from points to the first character of the value string and
 //  value_to points to the last character of the value string.
-HeaderTag *new_tag(const char *name, const char *value_from, const char *value_to)
+static HeaderTag *new_tag(const char *name, const char *value_from, const char *value_to)
 {
     HeaderTag *tag = malloc(sizeof(HeaderTag));
     int len = value_to-value_from+1;
@@ -171,7 +164,7 @@ HeaderTag *new_tag(const char *name, const char *value_from, const char *value_t
     return tag;
 }
 
-HeaderTag *header_line_has_tag(HeaderLine *hline, const char *key)
+static HeaderTag *header_line_has_tag(HeaderLine *hline, const char *key)
 {
     list_t *tags = hline->tags;
     while (tags)
@@ -189,7 +182,7 @@ HeaderTag *header_line_has_tag(HeaderLine *hline, const char *key)
 //   1 .. all tags identical -> no need to merge, drop one
 //   2 .. the unique tags match and there are some conflicting tags (same tag, different value) -> error, cannot be merged nor duplicated
 //   3 .. there are some missing complementary tags and no unique conflict -> can be merged into a single line
-int sam_header_compare_lines(HeaderLine *hline1, HeaderLine *hline2)
+static int sam_header_compare_lines(HeaderLine *hline1, HeaderLine *hline2)
 {
     HeaderTag *t1, *t2;
 
@@ -197,7 +190,10 @@ int sam_header_compare_lines(HeaderLine *hline1, HeaderLine *hline2)
         return 0;
 
     int itype = tag_exists(hline1->type,types);
-    if ( itype==-1 ) error("[sam_header_compare_lines] Unknown type [%c%c]\n", hline1->type[0],hline1->type[1]);
+    if ( itype==-1 ) {
+		debug("[sam_header_compare_lines] Unknown type [%c%c]\n", hline1->type[0],hline1->type[1]);
+		return -1; // FIXME (lh3): error; I do not know how this will be handled in Petr's code
+	}
 
     if ( unique_tags[itype] )
     {
@@ -261,7 +257,7 @@ int sam_header_compare_lines(HeaderLine *hline1, HeaderLine *hline2)
 }
 
 
-HeaderLine *sam_header_line_clone(const HeaderLine *hline)
+static HeaderLine *sam_header_line_clone(const HeaderLine *hline)
 {
     list_t *tags;
     HeaderLine *out = malloc(sizeof(HeaderLine));
@@ -285,7 +281,7 @@ HeaderLine *sam_header_line_clone(const HeaderLine *hline)
     return out;
 }
 
-int sam_header_line_merge_with(HeaderLine *out_hline, const HeaderLine *tmpl_hline)
+static int sam_header_line_merge_with(HeaderLine *out_hline, const HeaderLine *tmpl_hline)
 {
     list_t *tmpl_tags;
 
@@ -311,18 +307,24 @@ int sam_header_line_merge_with(HeaderLine *out_hline, const HeaderLine *tmpl_hli
 }
 
 
-HeaderLine *sam_header_line_parse(const char *headerLine)
+static HeaderLine *sam_header_line_parse(const char *headerLine)
 {
     HeaderLine *hline;
     HeaderTag *tag;
     const char *from, *to;
     from = headerLine;
 
-    if ( *from != '@' ) error("[sam_header_line_parse] expected '@', got [%s]\n", headerLine);
+    if ( *from != '@' ) {
+		debug("[sam_header_line_parse] expected '@', got [%s]\n", headerLine);
+		return 0;
+	}
     to = ++from;
 
     while (*to && *to!='\t') to++;
-    if ( to-from != 2 ) error("[sam_header_line_parse] expected '@XY', got [%s]\n", headerLine);
+    if ( to-from != 2 ) {
+		debug("[sam_header_line_parse] expected '@XY', got [%s]\n", headerLine);
+		return 0;
+	}
     
     hline = malloc(sizeof(HeaderLine));
     hline->type[0] = from[0];
@@ -333,8 +335,10 @@ HeaderLine *sam_header_line_parse(const char *headerLine)
     
     from = to;
     while (*to && *to=='\t') to++;
-    if ( to-from != 1 ) 
-        error("[sam_header_line_parse] multiple tabs on line [%s] (%d)\n", headerLine,(int)(to-from));
+    if ( to-from != 1 ) {
+        debug("[sam_header_line_parse] multiple tabs on line [%s] (%d)\n", headerLine,(int)(to-from));
+		return 0;
+	}
     from = to;
     while (*from)
     {
@@ -351,8 +355,10 @@ HeaderLine *sam_header_line_parse(const char *headerLine)
 
         from = to;
         while (*to && *to=='\t') to++;
-        if ( *to && to-from != 1 ) 
-                error("[sam_header_line_parse] multiple tabs on line [%s] (%d)\n", headerLine,(int)(to-from));
+        if ( *to && to-from != 1 ) {
+			debug("[sam_header_line_parse] multiple tabs on line [%s] (%d)\n", headerLine,(int)(to-from));
+			return 0;
+		}
 
         from = to;
     }
@@ -361,7 +367,7 @@ HeaderLine *sam_header_line_parse(const char *headerLine)
 
 
 // Must be of an existing type, all tags must be recognised and all required tags must be present
-int sam_header_line_validate(HeaderLine *hline)
+static int sam_header_line_validate(HeaderLine *hline)
 {
     list_t *tags;
     HeaderTag *tag;
@@ -405,7 +411,7 @@ int sam_header_line_validate(HeaderLine *hline)
 }
 
 
-void print_header_line(FILE *fp, HeaderLine *hline)
+static void print_header_line(FILE *fp, HeaderLine *hline)
 {
     list_t *tags = hline->tags;
     HeaderTag *tag;
@@ -426,7 +432,7 @@ void print_header_line(FILE *fp, HeaderLine *hline)
 }
 
 
-void sam_header_line_free(HeaderLine *hline)
+static void sam_header_line_free(HeaderLine *hline)
 {
     list_t *tags = hline->tags;
     while (tags)
@@ -526,18 +532,18 @@ void *sam_header_parse2(const char *headerText)
     size_t nbuf = 0;
 
     if ( !headerText )
-        error("FIXME");
+		return 0;
 
     text = headerText;
     while ( (text=nextline(&buf, &nbuf, text)) )
     {
         hline = sam_header_line_parse(buf);
-        if ( sam_header_line_validate(hline) )
+        if ( hline && sam_header_line_validate(hline) )
             hlines = list_append(hlines, hline);
         else
         {
-            sam_header_line_free(hline);
-            sam_header_free(hlines);
+			if (hline) sam_header_line_free(hline);
+			sam_header_free(hlines);
             if ( buf ) free(buf);
             return NULL;
         }
@@ -555,6 +561,7 @@ void *sam_header2tbl(const void *_dict, char type[2], char key_tag[2], char valu
     khiter_t k;
     int ret;
 
+	if (_dict == 0) return tbl; // return an empty (not null) hash table
     while (l)
     {
         HeaderLine *hline = l->data;
@@ -672,7 +679,8 @@ void *sam_header_merge(int n, const void **_dicts)
                 {
                     print_header_line(stderr,tmpl_hlines->data);
                     print_header_line(stderr,out_hlines->data);
-                    error("Conflicting lines, cannot merge the headers.\n");
+                    debug("Conflicting lines, cannot merge the headers.\n");
+					return 0;
                 }
                 if ( status==3 )
                     sam_header_line_merge_with(out_hlines->data, tmpl_hlines->data);
