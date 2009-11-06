@@ -182,7 +182,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	// call the consensus and indel
 	if (d->format & BAM_PLF_CNS) // call consensus
 		cns = bam_maqcns_call(n, pu, d->c);
-	if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref) { // call indels
+	if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref && pos < d->len) { // call indels
 		if (proposed_indels) // the first element gives the size of the array
 			r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
 		else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);

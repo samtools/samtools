@@ -21,8 +21,11 @@ static void sol2sanger(bam1_t *b)
 			if (g_sol2sanger_tbl[l] >= 93) g_sol2sanger_tbl[l] = 93;
 		}
 	}
-	for (l = 0; l < b->core.l_qseq; ++l)
-		qual[l] = g_sol2sanger_tbl[qual[l]];
+	for (l = 0; l < b->core.l_qseq; ++l) {
+		int q = qual[l];
+		if (q > 127) q = 127;
+		qual[l] = g_sol2sanger_tbl[q];
+	}
 }
 
 static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)

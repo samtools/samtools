@@ -399,6 +399,10 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 		left = pos > INDEL_WINDOW_SIZE? pos - INDEL_WINDOW_SIZE : 0;
 		right = pos + INDEL_WINDOW_SIZE;
 		if (types[0] < 0) right -= types[0];
+		// in case the alignments stand out the reference
+		for (i = pos; i < right; ++i)
+			if (ref[i] == 0) break;
+		right = i;
 	}
 	{ // the core part
 		char *ref2, *rs, *inscns = 0;
