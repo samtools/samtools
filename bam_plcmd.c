@@ -121,9 +121,11 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 	g3->offset = pos - d->last_pos;
 	d->last_pos = pos;
 	glf3_write1(d->fp_glf, g3);
-	if (proposed_indels)
-		r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
-	else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);
+	if (pos < d->len) {
+		if (proposed_indels)
+			r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
+		else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);
+	}
 	if (r) { // then write indel line
 		int het = 3 * n, min;
 		min = het;
