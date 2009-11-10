@@ -1,3 +1,43 @@
+Beta Release 0.1.7 (10 November, 2009)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes:
+
+ * Improved the indel caller in complex scenariors, in particular for
+   long reads. The indel caller is now able to make reasonable indel
+   calls from Craig Venter capillary reads.
+
+ * Rewrote single-end duplicate removal with improved
+   performance. Paired-end reads are not touched.
+
+ * Duplicate removal is now library aware. Samtools remove potential
+   PCR/optical dupliates inside a library rather than across libraries.
+
+ * SAM header is now fully parsed, although this functionality is not
+   used in merging and so on.
+
+ * In samtools merge, optionally take the input file name as RG-ID and
+   attach the RG tag to each alignment.
+
+ * Added FTP support in the RAZF library. RAZF-compressed reference
+   sequence can be retrieved remotely.
+
+ * Improved network support for Win32.
+
+ * Samtools sort and merge are now stable.
+
+Changes in other utilities:
+
+ * Implemented sam2vcf.pl that converts the pileup format to the VCF
+   format.
+
+ * This release of samtools is known to work with the latest
+   Bio-Samtools Perl module.
+
+(0.1.7: 10 November 2009, r510)
+
+
+
 Beta Release 0.1.6 (2 September, 2009)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

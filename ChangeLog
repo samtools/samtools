@@ -1,5 +1,320 @@
 ------------------------------------------------------------------------
-r462 | lh3lh3 | 2009-09-16 09:51:07 +0100 (Wed, 16 Sep 2009) | 3 lines
+r509 | lh3lh3 | 2009-11-06 09:17:09 -0500 (Fri, 06 Nov 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-22 (r509)
+ * forget to fix a similar problem in glfgen
+
+------------------------------------------------------------------------
+r508 | lh3lh3 | 2009-11-06 09:06:40 -0500 (Fri, 06 Nov 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.6-21 (r508)
+ * fixed a potential bug in the indel caller towards the end of a chromosome
+
+------------------------------------------------------------------------
+r494 | lh3lh3 | 2009-10-26 11:38:00 -0400 (Mon, 26 Oct 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.6-19 (r494)
+ * allow to convert Illumina quality (64 based) to the BAM quality
+
+------------------------------------------------------------------------
+r493 | lh3lh3 | 2009-10-26 10:24:39 -0400 (Mon, 26 Oct 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam.c
+   M /trunk/samtools/sam_header.c
+
+ * samtools-0.1.6-18 (r493)
+ * fixed the bugs due to improperly incorporating Petr's header parser
+ * a little code clean up in sam_header.c
+
+------------------------------------------------------------------------
+r492 | petulda | 2009-10-24 09:43:25 -0400 (Sat, 24 Oct 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/sam_header.c
+
+Added sam_header_line_free call for sam_header_parse2
+------------------------------------------------------------------------
+r491 | lh3lh3 | 2009-10-24 00:50:16 -0400 (Sat, 24 Oct 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/sam_view.c
+
+ * BUGGY VERSION
+ * fixed a minor bug
+
+------------------------------------------------------------------------
+r490 | lh3lh3 | 2009-10-24 00:45:12 -0400 (Sat, 24 Oct 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/sam.c
+
+ * BUGGY VERSION
+ * improved the interface a bit
+ * bug unfixed
+
+------------------------------------------------------------------------
+r489 | lh3lh3 | 2009-10-24 00:41:50 -0400 (Sat, 24 Oct 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/sam_header.c
+   M /trunk/samtools/sam_header.h
+
+ * BUGGY VERSION. Please NOT use it.
+ * Fixed a minor bug, but the major bug is still there.
+
+------------------------------------------------------------------------
+r488 | lh3lh3 | 2009-10-24 00:17:10 -0400 (Sat, 24 Oct 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bam_rmdup.c
+   M /trunk/samtools/bam_rmdupse.c
+   M /trunk/samtools/kaln.c
+   M /trunk/samtools/sam.c
+   M /trunk/samtools/sam_header.c
+   M /trunk/samtools/sam_header.h
+   M /trunk/samtools/sam_view.c
+
+ * This revision is SERIOUSLY BUGGY. Please NOT use it.
+ * Start to incorporate header parsing from Petr Danecek
+
+------------------------------------------------------------------------
+r487 | petulda | 2009-10-23 11:44:32 -0400 (Fri, 23 Oct 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/sam_header.c
+   M /trunk/samtools/sam_header.h
+
+Now possible to merge multiple HeaderDict dictionaries
+------------------------------------------------------------------------
+r486 | petulda | 2009-10-22 11:46:58 -0400 (Thu, 22 Oct 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/sam_header.c
+
+
+------------------------------------------------------------------------
+r485 | petulda | 2009-10-22 11:41:56 -0400 (Thu, 22 Oct 2009) | 1 line
+Changed paths:
+   A /trunk/samtools/sam_header.c
+   A /trunk/samtools/sam_header.h
+
+
+------------------------------------------------------------------------
+r484 | lh3lh3 | 2009-10-19 14:31:32 -0400 (Mon, 19 Oct 2009) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bam_rmdupse.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/examples/Makefile
+
+ * samtools-0.1.6-17 (r484)
+ * fixed a memory leak in rmdupse
+ * fixed a bug in parsing @RG header lines
+ * test rmdup in examples/
+
+------------------------------------------------------------------------
+r483 | lh3lh3 | 2009-10-19 13:22:48 -0400 (Mon, 19 Oct 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_rmdup.c
+   M /trunk/samtools/bam_rmdupse.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-16 (r483)
+ * unify the interface of rmdup and rmdupse
+ * a new bug found in rg2lib(). Have not been fixed yet.
+
+------------------------------------------------------------------------
+r482 | lh3lh3 | 2009-10-19 13:03:34 -0400 (Mon, 19 Oct 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_rmdup.c
+   M /trunk/samtools/bam_rmdupse.c
+   M /trunk/samtools/bamtk.c
+   A /trunk/samtools/klist.h
+
+ * samtools-0.1.6-15 (r482)
+ * rewrite rmdupse
+ * rmdupse is now library aware
+
+------------------------------------------------------------------------
+r481 | lh3lh3 | 2009-10-18 00:07:21 -0400 (Sun, 18 Oct 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_rmdup.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-14 (r480)
+ * rmdup is now RG aware
+
+------------------------------------------------------------------------
+r480 | lh3lh3 | 2009-10-17 22:05:20 -0400 (Sat, 17 Oct 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+added a small unitity to parse SRA XML files
+
+------------------------------------------------------------------------
+r479 | lh3lh3 | 2009-10-17 20:57:26 -0400 (Sat, 17 Oct 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_maqcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-13 (r479)
+ * merge: optionally use file names as RG tags
+
+------------------------------------------------------------------------
+r478 | lh3lh3 | 2009-10-14 14:18:12 -0400 (Wed, 14 Oct 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/kaln.c
+
+ * samtools-0.1.6-12 (r478)
+ * fixed a bug in the indel caller
+
+------------------------------------------------------------------------
+r477 | lh3lh3 | 2009-10-10 06:12:26 -0400 (Sat, 10 Oct 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-11 (r477)
+ * fixed a bug due to recent change in bam_index.c (thank Nicole Washington for the patch)
+
+------------------------------------------------------------------------
+r476 | petulda | 2009-10-09 11:45:36 -0400 (Fri, 09 Oct 2009) | 1 line
+Changed paths:
+   A /trunk/samtools/misc/sam2vcf.pl
+
+Added the sam2vcf.pl script.
+------------------------------------------------------------------------
+r475 | lh3lh3 | 2009-10-08 10:19:16 -0400 (Thu, 08 Oct 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+   A /trunk/samtools/kaln.c
+   A /trunk/samtools/kaln.h
+
+Unfinished modification. Please do not use this revision...
+
+------------------------------------------------------------------------
+r474 | petulda | 2009-10-08 06:39:54 -0400 (Thu, 08 Oct 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/knetfile.c
+
+Removed the offending knet_seek message.
+------------------------------------------------------------------------
+r473 | petulda | 2009-10-06 09:26:35 -0400 (Tue, 06 Oct 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/knetfile.c
+   M /trunk/samtools/razf.c
+
+Bug fix - faidx on RAZF compressed files now working.
+------------------------------------------------------------------------
+r472 | lh3lh3 | 2009-10-02 08:42:57 -0400 (Fri, 02 Oct 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/samtools.1
+
+Clarify the meaning of a region like "chr2:1,000,000".
+
+------------------------------------------------------------------------
+r471 | lh3lh3 | 2009-10-02 05:42:19 -0400 (Fri, 02 Oct 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/novo2sam.pl
+
+Fixed minor bugs in novo2sam.pl (on behalf of Ken Chen and Colin Hercus)
+
+------------------------------------------------------------------------
+r470 | lh3lh3 | 2009-09-29 15:01:27 -0400 (Tue, 29 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile.mingw
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/knetfile.c
+   M /trunk/samtools/knetfile.h
+
+ * samtools-0.1.6-9 (r470)
+ * make knetfile.c compatible with MinGW (thank Martin Morgan for the patch)
+
+------------------------------------------------------------------------
+r469 | lh3lh3 | 2009-09-29 08:07:44 -0400 (Tue, 29 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-9 (r469)
+ * refactor bam_fetch() for Python binding. On behalf of Leo Goodstadt.
+
+------------------------------------------------------------------------
+r468 | lh3lh3 | 2009-09-28 05:18:29 -0400 (Mon, 28 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools-0.1.6-7 (r468)
+ * make merge stable
+
+------------------------------------------------------------------------
+r467 | petulda | 2009-09-28 04:51:29 -0400 (Mon, 28 Sep 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/bgzf.c
+   M /trunk/samtools/bgzip.c
+   M /trunk/samtools/razf.c
+   M /trunk/samtools/razip.c
+
+Changed the mode for newly created files to 0666. This allows less strict permissions with umask properly set (e.g. 0002 vs. 0022).
+------------------------------------------------------------------------
+r466 | lh3lh3 | 2009-09-24 06:29:19 -0400 (Thu, 24 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.6-6 (r466)
+ * do not crash calmd when some sequences are absent from the reference.
+
+------------------------------------------------------------------------
+r464 | jmarshall | 2009-09-23 06:14:32 -0400 (Wed, 23 Sep 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/knetfile.c
+
+Suppress bgzf_check_EOF() messages when reading from a pipe, as there is
+no way to seek on a pipe and the messages always appear.
+
+------------------------------------------------------------------------
+r463 | petulda | 2009-09-16 07:05:41 -0400 (Wed, 16 Sep 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/knetfile.c
+   M /trunk/samtools/razf.c
+
+A bug fix, "samtools view" is now working again.
+------------------------------------------------------------------------
+r462 | lh3lh3 | 2009-09-16 04:51:07 -0400 (Wed, 16 Sep 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/faidx.c
@@ -12,14 +327,14 @@ Changed paths:
  * Added knetfile support in razf and faidx (on behalf of Petr Danecek)
 
 ------------------------------------------------------------------------
-r460 | lh3lh3 | 2009-09-09 12:06:22 +0100 (Wed, 09 Sep 2009) | 2 lines
+r460 | lh3lh3 | 2009-09-09 07:06:22 -0400 (Wed, 09 Sep 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/samtools.1
 
 fixed a formatting issue
 
 ------------------------------------------------------------------------
-r459 | lh3lh3 | 2009-09-08 23:14:08 +0100 (Tue, 08 Sep 2009) | 3 lines
+r459 | lh3lh3 | 2009-09-08 18:14:08 -0400 (Tue, 08 Sep 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_sort.c
    M /trunk/samtools/bamtk.c
@@ -28,7 +343,7 @@ Changed paths:
  * make sort output the result to stdout when -o is in use
 
 ------------------------------------------------------------------------
-r458 | lh3lh3 | 2009-09-07 10:10:28 +0100 (Mon, 07 Sep 2009) | 4 lines
+r458 | lh3lh3 | 2009-09-07 05:10:28 -0400 (Mon, 07 Sep 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/faidx.c
@@ -40,7 +355,7 @@ Changed paths:
  * updated documentation
 
 ------------------------------------------------------------------------
-r457 | lh3lh3 | 2009-09-05 21:12:04 +0100 (Sat, 05 Sep 2009) | 3 lines
+r457 | lh3lh3 | 2009-09-05 16:12:04 -0400 (Sat, 05 Sep 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_sort.c
    M /trunk/samtools/bamtk.c
@@ -49,7 +364,7 @@ Changed paths:
  * get rid of three assert() in bam_sort.c
 
 ------------------------------------------------------------------------
-r456 | jmarshall | 2009-09-04 17:46:25 +0100 (Fri, 04 Sep 2009) | 3 lines
+r456 | jmarshall | 2009-09-04 12:46:25 -0400 (Fri, 04 Sep 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/razf.c
 
@@ -57,7 +372,7 @@ Return NULL from _razf_open() (and hence razf_open()/razf_open2())
 when opening the file fails.
 
 ------------------------------------------------------------------------
-r453 | lh3lh3 | 2009-09-02 13:56:33 +0100 (Wed, 02 Sep 2009) | 2 lines
+r453 | lh3lh3 | 2009-09-02 08:56:33 -0400 (Wed, 02 Sep 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/NEWS
@@ -68,7 +383,7 @@ Changed paths:
 Release samtools-0.1.6
 
 ------------------------------------------------------------------------
-r451 | lh3lh3 | 2009-09-02 10:44:48 +0100 (Wed, 02 Sep 2009) | 4 lines
+r451 | lh3lh3 | 2009-09-02 05:44:48 -0400 (Wed, 02 Sep 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_md.c
    M /trunk/samtools/bam_rmdup.c
@@ -82,7 +397,7 @@ Changed paths:
  * improved the help message a little bit
 
 ------------------------------------------------------------------------
-r450 | lh3lh3 | 2009-09-02 09:55:55 +0100 (Wed, 02 Sep 2009) | 3 lines
+r450 | lh3lh3 | 2009-09-02 04:55:55 -0400 (Wed, 02 Sep 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_color.c
    M /trunk/samtools/bamtk.c
@@ -91,7 +406,7 @@ Changed paths:
  * fixed a bug in bam_color.c (on behalf of Nils Homer)
 
 ------------------------------------------------------------------------
-r449 | lh3lh3 | 2009-08-29 20:36:41 +0100 (Sat, 29 Aug 2009) | 4 lines
+r449 | lh3lh3 | 2009-08-29 15:36:41 -0400 (Sat, 29 Aug 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_import.c
    M /trunk/samtools/bam_md.c
@@ -103,7 +418,7 @@ Changed paths:
  * in import, give a warning if the read is aligned but there is no CIGAR.
 
 ------------------------------------------------------------------------
-r448 | lh3lh3 | 2009-08-19 09:44:28 +0100 (Wed, 19 Aug 2009) | 3 lines
+r448 | lh3lh3 | 2009-08-19 04:44:28 -0400 (Wed, 19 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/bam_pileup.c
@@ -114,7 +429,7 @@ Changed paths:
  * fixed an issue when the last CIGAR is I or D
 
 ------------------------------------------------------------------------
-r447 | lh3lh3 | 2009-08-17 09:34:57 +0100 (Mon, 17 Aug 2009) | 3 lines
+r447 | lh3lh3 | 2009-08-17 04:34:57 -0400 (Mon, 17 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_aux.c
    M /trunk/samtools/bamtk.c
@@ -123,7 +438,7 @@ Changed paths:
  * fixed a bug in bam_aux_get(): 'A' is not checked
 
 ------------------------------------------------------------------------
-r446 | lh3lh3 | 2009-08-17 09:33:17 +0100 (Mon, 17 Aug 2009) | 2 lines
+r446 | lh3lh3 | 2009-08-17 04:33:17 -0400 (Mon, 17 Aug 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bam_aux.c
    M /trunk/samtools/bamtk.c
@@ -131,7 +446,7 @@ Changed paths:
  * 
 
 ------------------------------------------------------------------------
-r444 | lh3lh3 | 2009-08-11 10:02:36 +0100 (Tue, 11 Aug 2009) | 3 lines
+r444 | lh3lh3 | 2009-08-11 05:02:36 -0400 (Tue, 11 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_sort.c
    M /trunk/samtools/bamtk.c
@@ -140,7 +455,7 @@ Changed paths:
  * bug in "merge -n"
 
 ------------------------------------------------------------------------
-r443 | lh3lh3 | 2009-08-11 09:29:11 +0100 (Tue, 11 Aug 2009) | 4 lines
+r443 | lh3lh3 | 2009-08-11 04:29:11 -0400 (Tue, 11 Aug 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam.c
    M /trunk/samtools/bam_import.c
@@ -151,7 +466,7 @@ Changed paths:
  * parse CIGAR "=" and "X" as "M"
 
 ------------------------------------------------------------------------
-r442 | lh3lh3 | 2009-08-07 21:56:38 +0100 (Fri, 07 Aug 2009) | 4 lines
+r442 | lh3lh3 | 2009-08-07 16:56:38 -0400 (Fri, 07 Aug 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_pileup.c
    M /trunk/samtools/bamtk.c
@@ -164,7 +479,7 @@ Changed paths:
  * fixed a bug in detecting unsorted bam in pileup
 
 ------------------------------------------------------------------------
-r441 | bhandsaker | 2009-08-05 14:41:28 +0100 (Wed, 05 Aug 2009) | 2 lines
+r441 | bhandsaker | 2009-08-05 09:41:28 -0400 (Wed, 05 Aug 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bgzf.c
    M /trunk/samtools/bgzf.h
@@ -173,7 +488,7 @@ Changed paths:
 Change copyright notices now that MIT has approved open source distribution.
 
 ------------------------------------------------------------------------
-r440 | lh3lh3 | 2009-08-05 10:44:24 +0100 (Wed, 05 Aug 2009) | 3 lines
+r440 | lh3lh3 | 2009-08-05 05:44:24 -0400 (Wed, 05 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_stat.c
    M /trunk/samtools/bamtk.c
@@ -182,21 +497,21 @@ Changed paths:
  * in flagstats, do not report singletons if both ends are unmapped
 
 ------------------------------------------------------------------------
-r439 | lh3lh3 | 2009-08-04 22:16:51 +0100 (Tue, 04 Aug 2009) | 2 lines
+r439 | lh3lh3 | 2009-08-04 17:16:51 -0400 (Tue, 04 Aug 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/maq2sam.c
 
 fixed a SERIOUS bug in setting 0x20 flag
 
 ------------------------------------------------------------------------
-r438 | lh3lh3 | 2009-08-04 21:50:43 +0100 (Tue, 04 Aug 2009) | 2 lines
+r438 | lh3lh3 | 2009-08-04 16:50:43 -0400 (Tue, 04 Aug 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
 fixed two minor bugs (suggested by Tim M Storm)
 
 ------------------------------------------------------------------------
-r437 | lh3lh3 | 2009-08-04 09:13:24 +0100 (Tue, 04 Aug 2009) | 3 lines
+r437 | lh3lh3 | 2009-08-04 04:13:24 -0400 (Tue, 04 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/misc/samtools.pl
@@ -206,7 +521,7 @@ Changed paths:
  * fixed a typo
 
 ------------------------------------------------------------------------
-r434 | lh3lh3 | 2009-08-03 10:40:42 +0100 (Mon, 03 Aug 2009) | 3 lines
+r434 | lh3lh3 | 2009-08-03 05:40:42 -0400 (Mon, 03 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_tview.c
    M /trunk/samtools/bamtk.c
@@ -215,7 +530,7 @@ Changed paths:
  * in tview, press 'r' to show read names rather than sequences
 
 ------------------------------------------------------------------------
-r433 | lh3lh3 | 2009-08-02 19:13:35 +0100 (Sun, 02 Aug 2009) | 3 lines
+r433 | lh3lh3 | 2009-08-02 14:13:35 -0400 (Sun, 02 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/knetfile.c
 
@@ -223,7 +538,7 @@ Changed paths:
  * anyway, MinGW seems to have problem with "%lld".
 
 ------------------------------------------------------------------------
-r432 | lh3lh3 | 2009-08-02 00:32:07 +0100 (Sun, 02 Aug 2009) | 5 lines
+r432 | lh3lh3 | 2009-08-01 19:32:07 -0400 (Sat, 01 Aug 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/Makefile.mingw
    M /trunk/samtools/bamtk.c
@@ -238,21 +553,21 @@ Changed paths:
  * PDCurses support in Windows
 
 ------------------------------------------------------------------------
-r431 | lh3lh3 | 2009-08-01 23:34:54 +0100 (Sat, 01 Aug 2009) | 2 lines
+r431 | lh3lh3 | 2009-08-01 18:34:54 -0400 (Sat, 01 Aug 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/win32/libz.a
 
 replace the GnuWin32 version of libz.a with my own build with MinGW.
 
 ------------------------------------------------------------------------
-r430 | lh3lh3 | 2009-08-01 23:21:07 +0100 (Sat, 01 Aug 2009) | 2 lines
+r430 | lh3lh3 | 2009-08-01 18:21:07 -0400 (Sat, 01 Aug 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/knetfile.c
 
 add comments
 
 ------------------------------------------------------------------------
-r429 | lh3lh3 | 2009-08-01 22:41:19 +0100 (Sat, 01 Aug 2009) | 3 lines
+r429 | lh3lh3 | 2009-08-01 17:41:19 -0400 (Sat, 01 Aug 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile.mingw
    M /trunk/samtools/bamtk.c
@@ -263,14 +578,14 @@ Changed paths:
  * knetfile.c is now compatible with mingw-winsock
 
 ------------------------------------------------------------------------
-r428 | lh3lh3 | 2009-08-01 00:39:07 +0100 (Sat, 01 Aug 2009) | 2 lines
+r428 | lh3lh3 | 2009-07-31 19:39:07 -0400 (Fri, 31 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile.mingw
 
 simplify MinGW Makefile
 
 ------------------------------------------------------------------------
-r427 | lh3lh3 | 2009-08-01 00:30:54 +0100 (Sat, 01 Aug 2009) | 5 lines
+r427 | lh3lh3 | 2009-07-31 19:30:54 -0400 (Fri, 31 Jul 2009) | 5 lines
 Changed paths:
    A /trunk/samtools/Makefile.mingw
    M /trunk/samtools/bam_import.c
@@ -286,7 +601,7 @@ Changed paths:
  * zlib headers and Windows version of libz.a are included in win32/
 
 ------------------------------------------------------------------------
-r426 | lh3lh3 | 2009-07-31 23:32:09 +0100 (Fri, 31 Jul 2009) | 3 lines
+r426 | lh3lh3 | 2009-07-31 18:32:09 -0400 (Fri, 31 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/sam_view.c
@@ -295,14 +610,14 @@ Changed paths:
  * fixed a bug caused by recent modifications. Sorry.
 
 ------------------------------------------------------------------------
-r425 | lh3lh3 | 2009-07-31 23:23:51 +0100 (Fri, 31 Jul 2009) | 2 lines
+r425 | lh3lh3 | 2009-07-31 18:23:51 -0400 (Fri, 31 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bgzf.c
 
 compatible with Windows binary files
 
 ------------------------------------------------------------------------
-r424 | lh3lh3 | 2009-07-31 10:19:59 +0100 (Fri, 31 Jul 2009) | 5 lines
+r424 | lh3lh3 | 2009-07-31 05:19:59 -0400 (Fri, 31 Jul 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bam_maqcns.h
@@ -317,14 +632,14 @@ Changed paths:
  * in tview, optionally allow to treat reference skip as deletion
 
 ------------------------------------------------------------------------
-r423 | lh3lh3 | 2009-07-30 22:00:36 +0100 (Thu, 30 Jul 2009) | 2 lines
+r423 | lh3lh3 | 2009-07-30 17:00:36 -0400 (Thu, 30 Jul 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/misc/psl2sam.pl
 
 convert BLAT psl to SAM.
 
 ------------------------------------------------------------------------
-r422 | lh3lh3 | 2009-07-30 11:24:39 +0100 (Thu, 30 Jul 2009) | 6 lines
+r422 | lh3lh3 | 2009-07-30 06:24:39 -0400 (Thu, 30 Jul 2009) | 6 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/bam.c
@@ -342,7 +657,7 @@ Changed paths:
  * update ChangeLog
 
 ------------------------------------------------------------------------
-r421 | lh3lh3 | 2009-07-30 10:03:39 +0100 (Thu, 30 Jul 2009) | 3 lines
+r421 | lh3lh3 | 2009-07-30 05:03:39 -0400 (Thu, 30 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_import.c
    M /trunk/samtools/bam_plcmd.c
@@ -356,14 +671,14 @@ Changed paths:
  * in view and pileup, load header from FASTA index if the input is SAM.
 
 ------------------------------------------------------------------------
-r420 | lh3lh3 | 2009-07-29 09:18:55 +0100 (Wed, 29 Jul 2009) | 2 lines
+r420 | lh3lh3 | 2009-07-29 04:18:55 -0400 (Wed, 29 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/maq2sam.c
 
 do not set "read 1" if reads are not mapped in the PE mode of maq
 
 ------------------------------------------------------------------------
-r419 | lh3lh3 | 2009-07-28 09:52:33 +0100 (Tue, 28 Jul 2009) | 5 lines
+r419 | lh3lh3 | 2009-07-28 04:52:33 -0400 (Tue, 28 Jul 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam_import.c
    M /trunk/samtools/bamtk.c
@@ -376,14 +691,14 @@ Changed paths:
  * add "unique" command to samtools.pl
 
 ------------------------------------------------------------------------
-r418 | lh3lh3 | 2009-07-24 14:04:19 +0100 (Fri, 24 Jul 2009) | 2 lines
+r418 | lh3lh3 | 2009-07-24 09:04:19 -0400 (Fri, 24 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/wgsim_eval.pl
 
 skip @header lines in SAM
 
 ------------------------------------------------------------------------
-r417 | lh3lh3 | 2009-07-24 12:42:38 +0100 (Fri, 24 Jul 2009) | 3 lines
+r417 | lh3lh3 | 2009-07-24 07:42:38 -0400 (Fri, 24 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/sam_view.c
@@ -392,7 +707,7 @@ Changed paths:
  * more help in "samtools view" due to the recent changes.
 
 ------------------------------------------------------------------------
-r416 | lh3lh3 | 2009-07-24 12:34:30 +0100 (Fri, 24 Jul 2009) | 3 lines
+r416 | lh3lh3 | 2009-07-24 07:34:30 -0400 (Fri, 24 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.c
    M /trunk/samtools/bam.h
@@ -406,7 +721,7 @@ Changed paths:
  * support import/export SAM with string tags
 
 ------------------------------------------------------------------------
-r415 | lh3lh3 | 2009-07-24 11:39:26 +0100 (Fri, 24 Jul 2009) | 3 lines
+r415 | lh3lh3 | 2009-07-24 06:39:26 -0400 (Fri, 24 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.c
    M /trunk/samtools/bam.h
@@ -420,14 +735,14 @@ Changed paths:
  * FLAG now can be in HEX
 
 ------------------------------------------------------------------------
-r414 | lh3lh3 | 2009-07-22 22:03:49 +0100 (Wed, 22 Jul 2009) | 2 lines
+r414 | lh3lh3 | 2009-07-22 17:03:49 -0400 (Wed, 22 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/kstring.h
 
 fixed a compiling error (thank Ken for fixing it)
 
 ------------------------------------------------------------------------
-r412 | lh3lh3 | 2009-07-21 22:19:40 +0100 (Tue, 21 Jul 2009) | 2 lines
+r412 | lh3lh3 | 2009-07-21 17:19:40 -0400 (Tue, 21 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/kstring.c
    M /trunk/samtools/kstring.h
@@ -435,14 +750,14 @@ Changed paths:
 Implemented Boyer-Moore search in the kstring library.
 
 ------------------------------------------------------------------------
-r409 | lh3lh3 | 2009-07-17 17:10:20 +0100 (Fri, 17 Jul 2009) | 2 lines
+r409 | lh3lh3 | 2009-07-17 12:10:20 -0400 (Fri, 17 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bam_index.c
 
 do not include knetfile.h when _USE_KNETFILE is not defined
 
 ------------------------------------------------------------------------
-r408 | lh3lh3 | 2009-07-17 15:29:21 +0100 (Fri, 17 Jul 2009) | 5 lines
+r408 | lh3lh3 | 2009-07-17 10:29:21 -0400 (Fri, 17 Jul 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam_md.c
    M /trunk/samtools/bam_tview.c
@@ -455,7 +770,7 @@ Changed paths:
  * bgzf.c: improved the compatibility with Windows headers
 
 ------------------------------------------------------------------------
-r407 | lh3lh3 | 2009-07-17 14:46:56 +0100 (Fri, 17 Jul 2009) | 5 lines
+r407 | lh3lh3 | 2009-07-17 09:46:56 -0400 (Fri, 17 Jul 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_aux.c
@@ -469,14 +784,14 @@ Changed paths:
  * fillmd: cmd interface improvement
 
 ------------------------------------------------------------------------
-r406 | lh3lh3 | 2009-07-16 23:30:40 +0100 (Thu, 16 Jul 2009) | 2 lines
+r406 | lh3lh3 | 2009-07-16 18:30:40 -0400 (Thu, 16 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile
 
 Sorry. The old Makefile is for PDCurses...
 
 ------------------------------------------------------------------------
-r405 | lh3lh3 | 2009-07-16 23:30:11 +0100 (Thu, 16 Jul 2009) | 3 lines
+r405 | lh3lh3 | 2009-07-16 18:30:11 -0400 (Thu, 16 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/bam_tview.c
@@ -486,7 +801,7 @@ Changed paths:
  * improved the compatibility with PDCurses a little bit
 
 ------------------------------------------------------------------------
-r404 | lh3lh3 | 2009-07-16 23:23:52 +0100 (Thu, 16 Jul 2009) | 3 lines
+r404 | lh3lh3 | 2009-07-16 18:23:52 -0400 (Thu, 16 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/bam_tview.c
@@ -496,7 +811,7 @@ Changed paths:
  * compatible with PDCurses
 
 ------------------------------------------------------------------------
-r403 | lh3lh3 | 2009-07-16 22:39:39 +0100 (Thu, 16 Jul 2009) | 3 lines
+r403 | lh3lh3 | 2009-07-16 17:39:39 -0400 (Thu, 16 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/kseq.h
@@ -505,7 +820,7 @@ Changed paths:
  * fixed a bug in kseq.h for binary files (text files are fine)
 
 ------------------------------------------------------------------------
-r402 | lh3lh3 | 2009-07-16 11:49:53 +0100 (Thu, 16 Jul 2009) | 4 lines
+r402 | lh3lh3 | 2009-07-16 06:49:53 -0400 (Thu, 16 Jul 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_import.c
    M /trunk/samtools/bam_index.c
@@ -517,7 +832,7 @@ Changed paths:
  * improve portability to MinGW
 
 ------------------------------------------------------------------------
-r398 | lh3lh3 | 2009-07-13 10:21:36 +0100 (Mon, 13 Jul 2009) | 3 lines
+r398 | lh3lh3 | 2009-07-13 05:21:36 -0400 (Mon, 13 Jul 2009) | 3 lines
 Changed paths:
    A /trunk/bam-lite/bam.h (from /trunk/samtools/bam.h:395)
    A /trunk/bam-lite/bam_lite.c (from /trunk/samtools/bam_lite.c:395)
@@ -527,7 +842,7 @@ Changed paths:
  * copy bam.h to bam-lite
 
 ------------------------------------------------------------------------
-r395 | lh3lh3 | 2009-07-13 10:12:57 +0100 (Mon, 13 Jul 2009) | 3 lines
+r395 | lh3lh3 | 2009-07-13 05:12:57 -0400 (Mon, 13 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_lite.c
@@ -539,7 +854,7 @@ Changed paths:
  * added bam_pileup_file() and removed bam_lpileup_file()
 
 ------------------------------------------------------------------------
-r394 | lh3lh3 | 2009-07-13 00:35:10 +0100 (Mon, 13 Jul 2009) | 3 lines
+r394 | lh3lh3 | 2009-07-12 19:35:10 -0400 (Sun, 12 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/knetfile.c
@@ -549,7 +864,7 @@ Changed paths:
  * http_proxy support in knetfile library (check http_proxy ENV)
 
 ------------------------------------------------------------------------
-r393 | lh3lh3 | 2009-07-12 23:57:07 +0100 (Sun, 12 Jul 2009) | 5 lines
+r393 | lh3lh3 | 2009-07-12 18:57:07 -0400 (Sun, 12 Jul 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam_index.c
    M /trunk/samtools/bam_tview.c
@@ -563,14 +878,14 @@ Changed paths:
    not seen the sideeffect so far.
 
 ------------------------------------------------------------------------
-r392 | lh3lh3 | 2009-07-12 18:50:55 +0100 (Sun, 12 Jul 2009) | 2 lines
+r392 | lh3lh3 | 2009-07-12 13:50:55 -0400 (Sun, 12 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/samtools.1
 
 Remove the warning in tview
 
 ------------------------------------------------------------------------
-r391 | lh3lh3 | 2009-07-12 18:42:43 +0100 (Sun, 12 Jul 2009) | 3 lines
+r391 | lh3lh3 | 2009-07-12 13:42:43 -0400 (Sun, 12 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_tview.c
    M /trunk/samtools/bamtk.c
@@ -579,7 +894,7 @@ Changed paths:
  * do not show a blank screen when no reads mapped
 
 ------------------------------------------------------------------------
-r390 | lh3lh3 | 2009-07-09 14:01:42 +0100 (Thu, 09 Jul 2009) | 4 lines
+r390 | lh3lh3 | 2009-07-09 09:01:42 -0400 (Thu, 09 Jul 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam.h
    A /trunk/samtools/bam_lite.c
@@ -590,7 +905,7 @@ Changed paths:
  * added bam_lite.c for light-weight BAM reading
 
 ------------------------------------------------------------------------
-r385 | lh3lh3 | 2009-07-07 16:53:29 +0100 (Tue, 07 Jul 2009) | 2 lines
+r385 | lh3lh3 | 2009-07-07 11:53:29 -0400 (Tue, 07 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/knetfile.c
@@ -598,7 +913,7 @@ Changed paths:
 Release samtools-0.1.5c (fixed a bug in piping)
 
 ------------------------------------------------------------------------
-r383 | lh3lh3 | 2009-07-07 11:39:55 +0100 (Tue, 07 Jul 2009) | 2 lines
+r383 | lh3lh3 | 2009-07-07 06:39:55 -0400 (Tue, 07 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/sam.c
@@ -606,7 +921,7 @@ Changed paths:
 Release samtools-0.1.5b (BUG! so embarrassing!)
 
 ------------------------------------------------------------------------
-r381 | lh3lh3 | 2009-07-07 11:20:06 +0100 (Tue, 07 Jul 2009) | 2 lines
+r381 | lh3lh3 | 2009-07-07 06:20:06 -0400 (Tue, 07 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/bam.h
@@ -616,7 +931,7 @@ Changed paths:
 Release samtools-0.1.5a (for compatibility with Bio::DB::Sam)
 
 ------------------------------------------------------------------------
-r373 | lh3lh3 | 2009-07-07 10:26:57 +0100 (Tue, 07 Jul 2009) | 2 lines
+r373 | lh3lh3 | 2009-07-07 05:26:57 -0400 (Tue, 07 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/NEWS
@@ -626,7 +941,7 @@ Changed paths:
 Release samtools-0.1.5
 
 ------------------------------------------------------------------------
-r372 | lh3lh3 | 2009-07-07 09:49:27 +0100 (Tue, 07 Jul 2009) | 3 lines
+r372 | lh3lh3 | 2009-07-07 04:49:27 -0400 (Tue, 07 Jul 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/sam.c
@@ -635,21 +950,21 @@ Changed paths:
  * keep header text if "view -t" is used (by Gerton)
 
 ------------------------------------------------------------------------
-r371 | lh3lh3 | 2009-07-07 01:13:32 +0100 (Tue, 07 Jul 2009) | 2 lines
+r371 | lh3lh3 | 2009-07-06 20:13:32 -0400 (Mon, 06 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/samtools.1
 
 update documentation
 
 ------------------------------------------------------------------------
-r370 | bhandsaker | 2009-07-02 22:24:34 +0100 (Thu, 02 Jul 2009) | 2 lines
+r370 | bhandsaker | 2009-07-02 17:24:34 -0400 (Thu, 02 Jul 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile
 
 Introduced LIBPATH variable so this could be overridden to allow samtools to build correct at the Broad.
 
 ------------------------------------------------------------------------
-r369 | lh3lh3 | 2009-07-02 13:36:53 +0100 (Thu, 02 Jul 2009) | 4 lines
+r369 | lh3lh3 | 2009-07-02 08:36:53 -0400 (Thu, 02 Jul 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/bam_aux.c
@@ -661,7 +976,7 @@ Changed paths:
  * remove the debugging code in bam_aux_get() (Drat!)
 
 ------------------------------------------------------------------------
-r368 | lh3lh3 | 2009-07-02 11:32:26 +0100 (Thu, 02 Jul 2009) | 6 lines
+r368 | lh3lh3 | 2009-07-02 06:32:26 -0400 (Thu, 02 Jul 2009) | 6 lines
 Changed paths:
    M /trunk/samtools/bam.c
    M /trunk/samtools/bam.h
@@ -685,21 +1000,21 @@ Changed paths:
  * small memory leak may be present on failure, though
 
 ------------------------------------------------------------------------
-r367 | lh3lh3 | 2009-06-30 16:18:42 +0100 (Tue, 30 Jun 2009) | 2 lines
+r367 | lh3lh3 | 2009-06-30 11:18:42 -0400 (Tue, 30 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/knetfile.c
 
 reduce the chance of blocking in FTP connection
 
 ------------------------------------------------------------------------
-r366 | lh3lh3 | 2009-06-30 15:35:21 +0100 (Tue, 30 Jun 2009) | 2 lines
+r366 | lh3lh3 | 2009-06-30 10:35:21 -0400 (Tue, 30 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/knetfile.c
 
 minor changes to knetfile: invalid fd equals -1 rather than 0
 
 ------------------------------------------------------------------------
-r365 | lh3lh3 | 2009-06-30 14:04:30 +0100 (Tue, 30 Jun 2009) | 3 lines
+r365 | lh3lh3 | 2009-06-30 09:04:30 -0400 (Tue, 30 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_index.c
    M /trunk/samtools/bamtk.c
@@ -710,7 +1025,7 @@ Changed paths:
  * download the BAM index file if it is not found in the current working directory.
 
 ------------------------------------------------------------------------
-r364 | lh3lh3 | 2009-06-30 12:39:07 +0100 (Tue, 30 Jun 2009) | 3 lines
+r364 | lh3lh3 | 2009-06-30 07:39:07 -0400 (Tue, 30 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/knetfile.c
@@ -719,7 +1034,7 @@ Changed paths:
  * knetfile: report error when the file is not present on FTP
 
 ------------------------------------------------------------------------
-r363 | lh3lh3 | 2009-06-29 23:23:32 +0100 (Mon, 29 Jun 2009) | 4 lines
+r363 | lh3lh3 | 2009-06-29 18:23:32 -0400 (Mon, 29 Jun 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_tview.c
    M /trunk/samtools/bamtk.c
@@ -733,14 +1048,14 @@ Changed paths:
  * bgzf: cache recent blocks (disabled by default)
 
 ------------------------------------------------------------------------
-r362 | lh3lh3 | 2009-06-25 21:04:34 +0100 (Thu, 25 Jun 2009) | 2 lines
+r362 | lh3lh3 | 2009-06-25 16:04:34 -0400 (Thu, 25 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bgzf.c
 
 write changelog
 
 ------------------------------------------------------------------------
-r361 | lh3lh3 | 2009-06-25 21:03:10 +0100 (Thu, 25 Jun 2009) | 3 lines
+r361 | lh3lh3 | 2009-06-25 16:03:10 -0400 (Thu, 25 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_index.c
    M /trunk/samtools/bamtk.c
@@ -749,7 +1064,7 @@ Changed paths:
  * if a file is given on FTP, search locally for the BAM index
 
 ------------------------------------------------------------------------
-r360 | lh3lh3 | 2009-06-25 20:44:52 +0100 (Thu, 25 Jun 2009) | 5 lines
+r360 | lh3lh3 | 2009-06-25 15:44:52 -0400 (Thu, 25 Jun 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/bam_import.c
@@ -766,7 +1081,7 @@ Changed paths:
  * support knetfile library in BGZF
 
 ------------------------------------------------------------------------
-r359 | lh3lh3 | 2009-06-25 17:10:55 +0100 (Thu, 25 Jun 2009) | 2 lines
+r359 | lh3lh3 | 2009-06-25 12:10:55 -0400 (Thu, 25 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/knetfile.c
    M /trunk/samtools/knetfile.h
@@ -774,14 +1089,14 @@ Changed paths:
 fixed bugs in knetfile.*
 
 ------------------------------------------------------------------------
-r358 | lh3lh3 | 2009-06-25 13:53:19 +0100 (Thu, 25 Jun 2009) | 2 lines
+r358 | lh3lh3 | 2009-06-25 08:53:19 -0400 (Thu, 25 Jun 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/knetfile.h
 
 this is the header file
 
 ------------------------------------------------------------------------
-r357 | lh3lh3 | 2009-06-25 13:52:03 +0100 (Thu, 25 Jun 2009) | 3 lines
+r357 | lh3lh3 | 2009-06-25 08:52:03 -0400 (Thu, 25 Jun 2009) | 3 lines
 Changed paths:
    A /trunk/samtools/knetfile.c
 
@@ -789,7 +1104,7 @@ Changed paths:
  * preliminary version
 
 ------------------------------------------------------------------------
-r354 | lh3lh3 | 2009-06-24 14:02:25 +0100 (Wed, 24 Jun 2009) | 3 lines
+r354 | lh3lh3 | 2009-06-24 09:02:25 -0400 (Wed, 24 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.c
    M /trunk/samtools/bamtk.c
@@ -798,7 +1113,7 @@ Changed paths:
  * fixed a memory leak in bam_view1(), although samtools is not using this routine.
 
 ------------------------------------------------------------------------
-r351 | lh3lh3 | 2009-06-18 00:16:26 +0100 (Thu, 18 Jun 2009) | 4 lines
+r351 | lh3lh3 | 2009-06-17 19:16:26 -0400 (Wed, 17 Jun 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/faidx.c
@@ -808,7 +1123,7 @@ Changed paths:
  * hope this does not introduce new bugs...
 
 ------------------------------------------------------------------------
-r350 | lh3lh3 | 2009-06-16 14:37:01 +0100 (Tue, 16 Jun 2009) | 3 lines
+r350 | lh3lh3 | 2009-06-16 09:37:01 -0400 (Tue, 16 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
    M /trunk/samtools/bamtk.c
@@ -817,7 +1132,7 @@ Changed paths:
  * fixed a small memory leak in pileup, caused by recent modifications
 
 ------------------------------------------------------------------------
-r347 | lh3lh3 | 2009-06-13 21:20:49 +0100 (Sat, 13 Jun 2009) | 3 lines
+r347 | lh3lh3 | 2009-06-13 16:20:49 -0400 (Sat, 13 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
    M /trunk/samtools/bamtk.c
@@ -827,7 +1142,7 @@ Changed paths:
  * added `-S' to pileup, similar to `view -S' 
 
 ------------------------------------------------------------------------
-r346 | lh3lh3 | 2009-06-13 17:52:31 +0100 (Sat, 13 Jun 2009) | 3 lines
+r346 | lh3lh3 | 2009-06-13 12:52:31 -0400 (Sat, 13 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/bamtk.c
@@ -838,21 +1153,21 @@ Changed paths:
  * allow to select a read group at view command-line
 
 ------------------------------------------------------------------------
-r344 | lh3lh3 | 2009-06-13 14:06:24 +0100 (Sat, 13 Jun 2009) | 2 lines
+r344 | lh3lh3 | 2009-06-13 09:06:24 -0400 (Sat, 13 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/examples/calDepth.c
 
 added more comments
 
 ------------------------------------------------------------------------
-r343 | lh3lh3 | 2009-06-13 14:01:22 +0100 (Sat, 13 Jun 2009) | 2 lines
+r343 | lh3lh3 | 2009-06-13 09:01:22 -0400 (Sat, 13 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/examples/calDepth.c
 
 nothing really
 
 ------------------------------------------------------------------------
-r342 | lh3lh3 | 2009-06-13 13:58:48 +0100 (Sat, 13 Jun 2009) | 2 lines
+r342 | lh3lh3 | 2009-06-13 08:58:48 -0400 (Sat, 13 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/examples/Makefile
    A /trunk/samtools/examples/calDepth.c
@@ -860,7 +1175,7 @@ Changed paths:
 added an example of calculating read depth
 
 ------------------------------------------------------------------------
-r341 | lh3lh3 | 2009-06-13 13:00:08 +0100 (Sat, 13 Jun 2009) | 6 lines
+r341 | lh3lh3 | 2009-06-13 08:00:08 -0400 (Sat, 13 Jun 2009) | 6 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/bam.h
@@ -880,7 +1195,7 @@ Changed paths:
  * remove the support of -q in pileup
 
 ------------------------------------------------------------------------
-r340 | lh3lh3 | 2009-06-13 11:17:14 +0100 (Sat, 13 Jun 2009) | 6 lines
+r340 | lh3lh3 | 2009-06-13 06:17:14 -0400 (Sat, 13 Jun 2009) | 6 lines
 Changed paths:
    M /trunk/samtools/INSTALL
    M /trunk/samtools/Makefile
@@ -898,14 +1213,14 @@ Changed paths:
  * detect NCURSES in bam_tview.c
 
 ------------------------------------------------------------------------
-r339 | lh3lh3 | 2009-06-13 10:35:19 +0100 (Sat, 13 Jun 2009) | 2 lines
+r339 | lh3lh3 | 2009-06-13 05:35:19 -0400 (Sat, 13 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/INSTALL
 
 update INSTALL
 
 ------------------------------------------------------------------------
-r338 | lh3lh3 | 2009-06-13 00:15:24 +0100 (Sat, 13 Jun 2009) | 4 lines
+r338 | lh3lh3 | 2009-06-12 19:15:24 -0400 (Fri, 12 Jun 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam.c
    M /trunk/samtools/bam.h
@@ -921,7 +1236,7 @@ Changed paths:
    command line
 
 ------------------------------------------------------------------------
-r337 | lh3lh3 | 2009-06-12 21:25:50 +0100 (Fri, 12 Jun 2009) | 4 lines
+r337 | lh3lh3 | 2009-06-12 16:25:50 -0400 (Fri, 12 Jun 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/bgzf.c
@@ -934,7 +1249,7 @@ Changed paths:
  * "samtools view" support "-u" command-line option
 
 ------------------------------------------------------------------------
-r336 | lh3lh3 | 2009-06-12 17:20:12 +0100 (Fri, 12 Jun 2009) | 5 lines
+r336 | lh3lh3 | 2009-06-12 12:20:12 -0400 (Fri, 12 Jun 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/misc/Makefile
@@ -948,14 +1263,14 @@ Changed paths:
  * on old version of zlib, writing is not available
 
 ------------------------------------------------------------------------
-r335 | lh3lh3 | 2009-06-12 16:47:33 +0100 (Fri, 12 Jun 2009) | 2 lines
+r335 | lh3lh3 | 2009-06-12 11:47:33 -0400 (Fri, 12 Jun 2009) | 2 lines
 Changed paths:
    D /trunk/samtools/zlib
 
 remove zlib for simplification...
 
 ------------------------------------------------------------------------
-r334 | lh3lh3 | 2009-06-12 15:43:36 +0100 (Fri, 12 Jun 2009) | 5 lines
+r334 | lh3lh3 | 2009-06-12 10:43:36 -0400 (Fri, 12 Jun 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_aux.c
@@ -967,14 +1282,14 @@ Changed paths:
  * this version works with the latest Bio::DB::Sam (20090612)
 
 ------------------------------------------------------------------------
-r333 | lh3lh3 | 2009-06-12 15:33:42 +0100 (Fri, 12 Jun 2009) | 2 lines
+r333 | lh3lh3 | 2009-06-12 10:33:42 -0400 (Fri, 12 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
 
 update ChangeLog
 
 ------------------------------------------------------------------------
-r332 | lh3lh3 | 2009-06-12 15:21:21 +0100 (Fri, 12 Jun 2009) | 2 lines
+r332 | lh3lh3 | 2009-06-12 10:21:21 -0400 (Fri, 12 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/AUTHORS
    M /trunk/samtools/Makefile
@@ -983,7 +1298,7 @@ Changed paths:
 fixed minor things in Makefile
 
 ------------------------------------------------------------------------
-r331 | lh3lh3 | 2009-06-12 15:07:05 +0100 (Fri, 12 Jun 2009) | 4 lines
+r331 | lh3lh3 | 2009-06-12 10:07:05 -0400 (Fri, 12 Jun 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
 
@@ -992,7 +1307,7 @@ Changed paths:
    changes in the Makefile building system.
 
 ------------------------------------------------------------------------
-r330 | lh3lh3 | 2009-06-12 15:03:38 +0100 (Fri, 12 Jun 2009) | 2 lines
+r330 | lh3lh3 | 2009-06-12 10:03:38 -0400 (Fri, 12 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/AUTHORS
    D /trunk/samtools/README
@@ -1000,7 +1315,7 @@ Changed paths:
 update information...
 
 ------------------------------------------------------------------------
-r329 | lh3lh3 | 2009-06-12 14:52:21 +0100 (Fri, 12 Jun 2009) | 3 lines
+r329 | lh3lh3 | 2009-06-12 09:52:21 -0400 (Fri, 12 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/novo2sam.pl
 
@@ -1008,7 +1323,7 @@ Changed paths:
  * this version works with indels
 
 ------------------------------------------------------------------------
-r328 | lh3lh3 | 2009-06-12 14:50:53 +0100 (Fri, 12 Jun 2009) | 3 lines
+r328 | lh3lh3 | 2009-06-12 09:50:53 -0400 (Fri, 12 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/INSTALL
    M /trunk/samtools/Makefile
@@ -1019,7 +1334,7 @@ Changed paths:
  * update INSTALL instruction
 
 ------------------------------------------------------------------------
-r327 | lh3lh3 | 2009-06-12 14:18:29 +0100 (Fri, 12 Jun 2009) | 4 lines
+r327 | lh3lh3 | 2009-06-12 09:18:29 -0400 (Fri, 12 Jun 2009) | 4 lines
 Changed paths:
    A /trunk/samtools/Makefile (from /trunk/samtools/Makefile.generic:325)
    D /trunk/samtools/Makefile.am
@@ -1063,14 +1378,14 @@ Changed paths:
  * unfinished! (will be soon)
 
 ------------------------------------------------------------------------
-r326 | lh3lh3 | 2009-06-12 14:12:03 +0100 (Fri, 12 Jun 2009) | 2 lines
+r326 | lh3lh3 | 2009-06-12 09:12:03 -0400 (Fri, 12 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
 Unfinished
 
 ------------------------------------------------------------------------
-r325 | lh3lh3 | 2009-06-10 16:27:59 +0100 (Wed, 10 Jun 2009) | 3 lines
+r325 | lh3lh3 | 2009-06-10 11:27:59 -0400 (Wed, 10 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bamtk.c
@@ -1079,7 +1394,7 @@ Changed paths:
  * further avoid wrong consensus calls in repetitive regions.
 
 ------------------------------------------------------------------------
-r324 | lh3lh3 | 2009-06-10 15:56:17 +0100 (Wed, 10 Jun 2009) | 4 lines
+r324 | lh3lh3 | 2009-06-10 10:56:17 -0400 (Wed, 10 Jun 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bam_plcmd.c
@@ -1092,7 +1407,7 @@ Changed paths:
  * allow filtering on mapQ at the pileup command line
 
 ------------------------------------------------------------------------
-r323 | lh3lh3 | 2009-06-10 10:04:21 +0100 (Wed, 10 Jun 2009) | 3 lines
+r323 | lh3lh3 | 2009-06-10 05:04:21 -0400 (Wed, 10 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
@@ -1100,28 +1415,28 @@ Changed paths:
  * indels and SNPs use different mapping quality threshold
 
 ------------------------------------------------------------------------
-r322 | lh3lh3 | 2009-06-10 10:03:22 +0100 (Wed, 10 Jun 2009) | 2 lines
+r322 | lh3lh3 | 2009-06-10 05:03:22 -0400 (Wed, 10 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/export2sam.pl
 
 fixed a typo
 
 ------------------------------------------------------------------------
-r321 | lh3lh3 | 2009-06-09 09:21:48 +0100 (Tue, 09 Jun 2009) | 2 lines
+r321 | lh3lh3 | 2009-06-09 04:21:48 -0400 (Tue, 09 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
 just typo. no real change
 
 ------------------------------------------------------------------------
-r320 | lh3lh3 | 2009-06-08 14:32:51 +0100 (Mon, 08 Jun 2009) | 2 lines
+r320 | lh3lh3 | 2009-06-08 09:32:51 -0400 (Mon, 08 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
 a little bit code cleanup
 
 ------------------------------------------------------------------------
-r319 | lh3lh3 | 2009-06-08 14:22:33 +0100 (Mon, 08 Jun 2009) | 4 lines
+r319 | lh3lh3 | 2009-06-08 09:22:33 -0400 (Mon, 08 Jun 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
@@ -1130,7 +1445,7 @@ Changed paths:
  * optionally print filtered variants
 
 ------------------------------------------------------------------------
-r318 | lh3lh3 | 2009-06-08 14:14:26 +0100 (Mon, 08 Jun 2009) | 3 lines
+r318 | lh3lh3 | 2009-06-08 09:14:26 -0400 (Mon, 08 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
@@ -1138,7 +1453,7 @@ Changed paths:
  * combine snpFilter and indelFilter
 
 ------------------------------------------------------------------------
-r317 | lh3lh3 | 2009-06-08 11:31:42 +0100 (Mon, 08 Jun 2009) | 3 lines
+r317 | lh3lh3 | 2009-06-08 06:31:42 -0400 (Mon, 08 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
@@ -1146,7 +1461,7 @@ Changed paths:
  * change a default parameter
 
 ------------------------------------------------------------------------
-r316 | lh3lh3 | 2009-06-08 11:11:06 +0100 (Mon, 08 Jun 2009) | 5 lines
+r316 | lh3lh3 | 2009-06-08 06:11:06 -0400 (Mon, 08 Jun 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bam_maqcns.h
@@ -1160,7 +1475,7 @@ Changed paths:
  * pileup: allow to output variant sites only
 
 ------------------------------------------------------------------------
-r312 | lh3lh3 | 2009-06-04 13:01:10 +0100 (Thu, 04 Jun 2009) | 3 lines
+r312 | lh3lh3 | 2009-06-04 08:01:10 -0400 (Thu, 04 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
@@ -1168,14 +1483,14 @@ Changed paths:
  * added pileup2fq
 
 ------------------------------------------------------------------------
-r311 | lh3lh3 | 2009-06-03 09:40:40 +0100 (Wed, 03 Jun 2009) | 2 lines
+r311 | lh3lh3 | 2009-06-03 04:40:40 -0400 (Wed, 03 Jun 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
  * in snpFilter, suppress non-SNP sites
 
 ------------------------------------------------------------------------
-r310 | lh3lh3 | 2009-06-01 14:35:13 +0100 (Mon, 01 Jun 2009) | 3 lines
+r310 | lh3lh3 | 2009-06-01 09:35:13 -0400 (Mon, 01 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
@@ -1183,7 +1498,7 @@ Changed paths:
  * fixed a typo
 
 ------------------------------------------------------------------------
-r309 | lh3lh3 | 2009-06-01 14:04:39 +0100 (Mon, 01 Jun 2009) | 3 lines
+r309 | lh3lh3 | 2009-06-01 09:04:39 -0400 (Mon, 01 Jun 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
@@ -1191,7 +1506,7 @@ Changed paths:
  * snpFilter
 
 ------------------------------------------------------------------------
-r306 | lh3lh3 | 2009-05-28 11:49:35 +0100 (Thu, 28 May 2009) | 3 lines
+r306 | lh3lh3 | 2009-05-28 06:49:35 -0400 (Thu, 28 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bgzf.c
 
@@ -1199,14 +1514,14 @@ Changed paths:
  * suggested by {kdj,jm18}@sanger.ac.uk
 
 ------------------------------------------------------------------------
-r305 | lh3lh3 | 2009-05-28 11:16:08 +0100 (Thu, 28 May 2009) | 2 lines
+r305 | lh3lh3 | 2009-05-28 06:16:08 -0400 (Thu, 28 May 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/misc/interpolate_sam.pl
 
 Script for paired-end pileup, contributed by Stephen Montgomery.
 
 ------------------------------------------------------------------------
-r304 | lh3lh3 | 2009-05-28 11:08:49 +0100 (Thu, 28 May 2009) | 3 lines
+r304 | lh3lh3 | 2009-05-28 06:08:49 -0400 (Thu, 28 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/sam.c
@@ -1215,7 +1530,7 @@ Changed paths:
  * fixed a minor bug in printing headers
 
 ------------------------------------------------------------------------
-r297 | lh3lh3 | 2009-05-21 16:06:16 +0100 (Thu, 21 May 2009) | 2 lines
+r297 | lh3lh3 | 2009-05-21 11:06:16 -0400 (Thu, 21 May 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/NEWS
@@ -1227,7 +1542,7 @@ Changed paths:
 Release samtools-0.1.4
 
 ------------------------------------------------------------------------
-r296 | lh3lh3 | 2009-05-21 12:53:14 +0100 (Thu, 21 May 2009) | 3 lines
+r296 | lh3lh3 | 2009-05-21 07:53:14 -0400 (Thu, 21 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bamtk.c
@@ -1236,7 +1551,7 @@ Changed paths:
  * another similar bug in the indel caller
 
 ------------------------------------------------------------------------
-r295 | lh3lh3 | 2009-05-21 12:50:28 +0100 (Thu, 21 May 2009) | 3 lines
+r295 | lh3lh3 | 2009-05-21 07:50:28 -0400 (Thu, 21 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bamtk.c
@@ -1245,14 +1560,14 @@ Changed paths:
  * fixed a critical bug in the indel caller
 
 ------------------------------------------------------------------------
-r294 | lh3lh3 | 2009-05-20 13:00:20 +0100 (Wed, 20 May 2009) | 2 lines
+r294 | lh3lh3 | 2009-05-20 08:00:20 -0400 (Wed, 20 May 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bam_stat.c
 
 added a missing header file
 
 ------------------------------------------------------------------------
-r293 | lh3lh3 | 2009-05-19 23:44:25 +0100 (Tue, 19 May 2009) | 3 lines
+r293 | lh3lh3 | 2009-05-19 18:44:25 -0400 (Tue, 19 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_tview.c
    M /trunk/samtools/bamtk.c
@@ -1261,7 +1576,7 @@ Changed paths:
  * open tview in the dot-view mode by default
 
 ------------------------------------------------------------------------
-r292 | lh3lh3 | 2009-05-18 21:01:23 +0100 (Mon, 18 May 2009) | 6 lines
+r292 | lh3lh3 | 2009-05-18 16:01:23 -0400 (Mon, 18 May 2009) | 6 lines
 Changed paths:
    M /trunk/samtools/samtools.1
 
@@ -1272,7 +1587,7 @@ information. Also thank James Bonfields for pointing this out.
 
 
 ------------------------------------------------------------------------
-r286 | lh3lh3 | 2009-05-14 15:23:13 +0100 (Thu, 14 May 2009) | 3 lines
+r286 | lh3lh3 | 2009-05-14 10:23:13 -0400 (Thu, 14 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_aux.c
@@ -1282,7 +1597,7 @@ Changed paths:
  * declare bam_aux_get_core() in bam.h
 
 ------------------------------------------------------------------------
-r276 | lh3lh3 | 2009-05-13 10:07:55 +0100 (Wed, 13 May 2009) | 5 lines
+r276 | lh3lh3 | 2009-05-13 05:07:55 -0400 (Wed, 13 May 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_index.c
@@ -1294,7 +1609,7 @@ Changed paths:
  * As is suggested by Tim, scan "{base}.bai" and "{base}.bam.bai" for index
 
 ------------------------------------------------------------------------
-r275 | lh3lh3 | 2009-05-12 21:14:10 +0100 (Tue, 12 May 2009) | 4 lines
+r275 | lh3lh3 | 2009-05-12 16:14:10 -0400 (Tue, 12 May 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/bam.h
@@ -1305,7 +1620,7 @@ Changed paths:
    backward compatibility with Bio::DB::Sam
 
 ------------------------------------------------------------------------
-r273 | lh3lh3 | 2009-05-12 14:28:39 +0100 (Tue, 12 May 2009) | 3 lines
+r273 | lh3lh3 | 2009-05-12 09:28:39 -0400 (Tue, 12 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_rmdupse.c
    M /trunk/samtools/bamtk.c
@@ -1314,14 +1629,14 @@ Changed paths:
  * rmdupse: do not remove unmapped reads
 
 ------------------------------------------------------------------------
-r272 | lh3lh3 | 2009-05-12 14:20:00 +0100 (Tue, 12 May 2009) | 2 lines
+r272 | lh3lh3 | 2009-05-12 09:20:00 -0400 (Tue, 12 May 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bam_rmdupse.c
 
 change a parameter. It does nothing
 
 ------------------------------------------------------------------------
-r271 | lh3lh3 | 2009-05-12 14:17:58 +0100 (Tue, 12 May 2009) | 3 lines
+r271 | lh3lh3 | 2009-05-12 09:17:58 -0400 (Tue, 12 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile.am
    M /trunk/samtools/Makefile.generic
@@ -1334,7 +1649,7 @@ Changed paths:
  * added 'rmdupse' command
 
 ------------------------------------------------------------------------
-r267 | lh3lh3 | 2009-05-05 22:31:41 +0100 (Tue, 05 May 2009) | 3 lines
+r267 | lh3lh3 | 2009-05-05 17:31:41 -0400 (Tue, 05 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/sam_view.c
@@ -1343,7 +1658,7 @@ Changed paths:
  * in sam_view.c, changed g_flag_on based on the suggestion by Angie Hinrichs
 
 ------------------------------------------------------------------------
-r266 | lh3lh3 | 2009-05-05 22:23:27 +0100 (Tue, 05 May 2009) | 3 lines
+r266 | lh3lh3 | 2009-05-05 17:23:27 -0400 (Tue, 05 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_import.c
    M /trunk/samtools/bamtk.c
@@ -1352,7 +1667,7 @@ Changed paths:
  * report an error if a non-* reference is present while @SQ is absent
 
 ------------------------------------------------------------------------
-r265 | lh3lh3 | 2009-05-05 22:09:00 +0100 (Tue, 05 May 2009) | 3 lines
+r265 | lh3lh3 | 2009-05-05 17:09:00 -0400 (Tue, 05 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_import.c
@@ -1364,7 +1679,7 @@ Changed paths:
  * make samopen() recognize @SQ header lines
 
 ------------------------------------------------------------------------
-r261 | lh3lh3 | 2009-05-05 15:10:30 +0100 (Tue, 05 May 2009) | 3 lines
+r261 | lh3lh3 | 2009-05-05 10:10:30 -0400 (Tue, 05 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
    M /trunk/samtools/bamtk.c
@@ -1376,14 +1691,14 @@ Changed paths:
  * report error for file I/O error
 
 ------------------------------------------------------------------------
-r260 | lh3lh3 | 2009-05-05 15:01:16 +0100 (Tue, 05 May 2009) | 2 lines
+r260 | lh3lh3 | 2009-05-05 10:01:16 -0400 (Tue, 05 May 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile.am
 
 update Makefile.am
 
 ------------------------------------------------------------------------
-r259 | lh3lh3 | 2009-05-05 14:52:25 +0100 (Tue, 05 May 2009) | 3 lines
+r259 | lh3lh3 | 2009-05-05 09:52:25 -0400 (Tue, 05 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_pileup.c
@@ -1396,7 +1711,7 @@ Changed paths:
  * use the new I/O interface in pileup
 
 ------------------------------------------------------------------------
-r258 | lh3lh3 | 2009-05-05 14:33:22 +0100 (Tue, 05 May 2009) | 3 lines
+r258 | lh3lh3 | 2009-05-05 09:33:22 -0400 (Tue, 05 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile.generic
    M /trunk/samtools/Makefile.lite
@@ -1412,7 +1727,7 @@ Changed paths:
  * unify the interface to BAM and SAM I/O
 
 ------------------------------------------------------------------------
-r257 | lh3lh3 | 2009-05-05 09:53:35 +0100 (Tue, 05 May 2009) | 3 lines
+r257 | lh3lh3 | 2009-05-05 04:53:35 -0400 (Tue, 05 May 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile.lite
    M /trunk/samtools/bam_plcmd.c
@@ -1422,7 +1737,7 @@ Changed paths:
  * allow hex with "pileup -m"
 
 ------------------------------------------------------------------------
-r256 | lh3lh3 | 2009-05-04 19:16:50 +0100 (Mon, 04 May 2009) | 4 lines
+r256 | lh3lh3 | 2009-05-04 14:16:50 -0400 (Mon, 04 May 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_lpileup.c
    M /trunk/samtools/bamtk.c
@@ -1432,7 +1747,7 @@ Changed paths:
  * I do not know if this also fixes the bug causing assertion failure in the tview
 
 ------------------------------------------------------------------------
-r251 | lh3lh3 | 2009-04-28 13:53:23 +0100 (Tue, 28 Apr 2009) | 3 lines
+r251 | lh3lh3 | 2009-04-28 08:53:23 -0400 (Tue, 28 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_pileup.c
    M /trunk/samtools/bamtk.c
@@ -1441,7 +1756,7 @@ Changed paths:
  * fixed a bug when there are reads without coordinates
 
 ------------------------------------------------------------------------
-r250 | lh3lh3 | 2009-04-28 13:43:33 +0100 (Tue, 28 Apr 2009) | 2 lines
+r250 | lh3lh3 | 2009-04-28 08:43:33 -0400 (Tue, 28 Apr 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/AUTHORS
    A /trunk/samtools/README
@@ -1450,7 +1765,7 @@ Changed paths:
 added missing files
 
 ------------------------------------------------------------------------
-r249 | lh3lh3 | 2009-04-28 13:37:16 +0100 (Tue, 28 Apr 2009) | 2 lines
+r249 | lh3lh3 | 2009-04-28 08:37:16 -0400 (Tue, 28 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile.generic
    M /trunk/samtools/Makefile.lite
@@ -1460,14 +1775,14 @@ Changed paths:
 improve large file support in compilation
 
 ------------------------------------------------------------------------
-r248 | lh3lh3 | 2009-04-28 13:33:24 +0100 (Tue, 28 Apr 2009) | 2 lines
+r248 | lh3lh3 | 2009-04-28 08:33:24 -0400 (Tue, 28 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/INSTALL
 
 update INSTALL
 
 ------------------------------------------------------------------------
-r247 | lh3lh3 | 2009-04-28 13:28:50 +0100 (Tue, 28 Apr 2009) | 2 lines
+r247 | lh3lh3 | 2009-04-28 08:28:50 -0400 (Tue, 28 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile.am
    M /trunk/samtools/autogen.sh
@@ -1478,7 +1793,7 @@ Changed paths:
 fixed various issues about the GNU building scripts
 
 ------------------------------------------------------------------------
-r246 | lh3lh3 | 2009-04-28 13:10:23 +0100 (Tue, 28 Apr 2009) | 4 lines
+r246 | lh3lh3 | 2009-04-28 08:10:23 -0400 (Tue, 28 Apr 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    D /trunk/samtools/Makefile
@@ -1499,7 +1814,7 @@ Changed paths:
  * enhanced support of displaying color-space reads
 
 ------------------------------------------------------------------------
-r244 | lh3lh3 | 2009-04-25 11:49:40 +0100 (Sat, 25 Apr 2009) | 3 lines
+r244 | lh3lh3 | 2009-04-25 06:49:40 -0400 (Sat, 25 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_md.c
    M /trunk/samtools/bamtk.c
@@ -1508,7 +1823,7 @@ Changed paths:
  * fixed segfault for unmapped reads
 
 ------------------------------------------------------------------------
-r243 | lh3lh3 | 2009-04-24 21:27:26 +0100 (Fri, 24 Apr 2009) | 5 lines
+r243 | lh3lh3 | 2009-04-24 16:27:26 -0400 (Fri, 24 Apr 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_maqcns.c
@@ -1521,7 +1836,7 @@ Changed paths:
  * consensus calling now works with "=", but indel calling not
 
 ------------------------------------------------------------------------
-r242 | lh3lh3 | 2009-04-24 20:44:46 +0100 (Fri, 24 Apr 2009) | 3 lines
+r242 | lh3lh3 | 2009-04-24 15:44:46 -0400 (Fri, 24 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_md.c
    M /trunk/samtools/bamtk.c
@@ -1530,7 +1845,7 @@ Changed paths:
  * fixed a memory leak
 
 ------------------------------------------------------------------------
-r240 | lh3lh3 | 2009-04-24 16:40:18 +0100 (Fri, 24 Apr 2009) | 5 lines
+r240 | lh3lh3 | 2009-04-24 11:40:18 -0400 (Fri, 24 Apr 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/Makefile.lite
@@ -1546,7 +1861,7 @@ Changed paths:
  * the plain pileup now support "=" bases, but consensus calling and glfgen may fail
 
 ------------------------------------------------------------------------
-r239 | lh3lh3 | 2009-04-24 12:08:20 +0100 (Fri, 24 Apr 2009) | 5 lines
+r239 | lh3lh3 | 2009-04-24 07:08:20 -0400 (Fri, 24 Apr 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/bam.h
    M /trunk/samtools/bam_aux.c
@@ -1558,7 +1873,7 @@ Changed paths:
  * added tagview for testing bam_aux
 
 ------------------------------------------------------------------------
-r235 | lh3lh3 | 2009-04-21 23:17:39 +0100 (Tue, 21 Apr 2009) | 3 lines
+r235 | lh3lh3 | 2009-04-21 18:17:39 -0400 (Tue, 21 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_pileup.c
    M /trunk/samtools/bamtk.c
@@ -1567,14 +1882,14 @@ Changed paths:
  * fixed a bug in pileup: the first read in a chromosome may not be printed
 
 ------------------------------------------------------------------------
-r232 | lh3lh3 | 2009-04-16 15:25:43 +0100 (Thu, 16 Apr 2009) | 2 lines
+r232 | lh3lh3 | 2009-04-16 10:25:43 -0400 (Thu, 16 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile.lite
 
 a missing file in Makefile.lite
 
 ------------------------------------------------------------------------
-r227 | lh3lh3 | 2009-04-15 22:02:53 +0100 (Wed, 15 Apr 2009) | 2 lines
+r227 | lh3lh3 | 2009-04-15 17:02:53 -0400 (Wed, 15 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/NEWS
    M /trunk/samtools/bamtk.c
@@ -1582,7 +1897,7 @@ Changed paths:
 Release samtools-0.1.3
 
 ------------------------------------------------------------------------
-r223 | lh3lh3 | 2009-04-15 14:31:32 +0100 (Wed, 15 Apr 2009) | 3 lines
+r223 | lh3lh3 | 2009-04-15 09:31:32 -0400 (Wed, 15 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
    M /trunk/samtools/bamtk.c
@@ -1591,7 +1906,7 @@ Changed paths:
  * make samtools more robust to weird input such as empty file
 
 ------------------------------------------------------------------------
-r222 | lh3lh3 | 2009-04-15 14:05:33 +0100 (Wed, 15 Apr 2009) | 2 lines
+r222 | lh3lh3 | 2009-04-15 09:05:33 -0400 (Wed, 15 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/NEWS
@@ -1600,14 +1915,14 @@ Changed paths:
 prepare for release 0.1.3
 
 ------------------------------------------------------------------------
-r221 | lh3lh3 | 2009-04-15 13:32:14 +0100 (Wed, 15 Apr 2009) | 2 lines
+r221 | lh3lh3 | 2009-04-15 08:32:14 -0400 (Wed, 15 Apr 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/misc/blast2sam.pl
 
 convert NCBI-BLASTN to SAM
 
 ------------------------------------------------------------------------
-r220 | lh3lh3 | 2009-04-15 13:18:19 +0100 (Wed, 15 Apr 2009) | 3 lines
+r220 | lh3lh3 | 2009-04-15 08:18:19 -0400 (Wed, 15 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_lpileup.c
    M /trunk/samtools/bamtk.c
@@ -1616,7 +1931,7 @@ Changed paths:
  * fixed a small memory leak in tview
 
 ------------------------------------------------------------------------
-r219 | lh3lh3 | 2009-04-15 13:00:08 +0100 (Wed, 15 Apr 2009) | 3 lines
+r219 | lh3lh3 | 2009-04-15 08:00:08 -0400 (Wed, 15 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_rmdup.c
    M /trunk/samtools/bamtk.c
@@ -1625,7 +1940,7 @@ Changed paths:
  * fixed a bug in rmdup when there are unmapped reads
 
 ------------------------------------------------------------------------
-r218 | lh3lh3 | 2009-04-14 22:28:58 +0100 (Tue, 14 Apr 2009) | 2 lines
+r218 | lh3lh3 | 2009-04-14 17:28:58 -0400 (Tue, 14 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/NEWS
@@ -1633,7 +1948,7 @@ Changed paths:
 proposed NEWS for the new release (have not yet)
 
 ------------------------------------------------------------------------
-r216 | lh3lh3 | 2009-04-14 22:10:46 +0100 (Tue, 14 Apr 2009) | 4 lines
+r216 | lh3lh3 | 2009-04-14 17:10:46 -0400 (Tue, 14 Apr 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/misc/samtools.pl
 
@@ -1642,7 +1957,7 @@ Changed paths:
    on the new pileup indel line implemented in samtools-0.1.2-25
 
 ------------------------------------------------------------------------
-r215 | lh3lh3 | 2009-04-14 22:04:19 +0100 (Tue, 14 Apr 2009) | 4 lines
+r215 | lh3lh3 | 2009-04-14 17:04:19 -0400 (Tue, 14 Apr 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bam_plcmd.c
@@ -1654,14 +1969,14 @@ Changed paths:
    containing indels
 
 ------------------------------------------------------------------------
-r211 | lh3lh3 | 2009-04-13 12:07:13 +0100 (Mon, 13 Apr 2009) | 2 lines
+r211 | lh3lh3 | 2009-04-13 07:07:13 -0400 (Mon, 13 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
 
 update ChangeLog from "svn log"
 
 ------------------------------------------------------------------------
-r210 | lh3lh3 | 2009-04-12 20:57:05 +0100 (Sun, 12 Apr 2009) | 4 lines
+r210 | lh3lh3 | 2009-04-12 15:57:05 -0400 (Sun, 12 Apr 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/bam.c
    M /trunk/samtools/bam_import.c
@@ -1674,7 +1989,7 @@ Changed paths:
  * allow empty header
 
 ------------------------------------------------------------------------
-r209 | lh3lh3 | 2009-04-12 20:32:44 +0100 (Sun, 12 Apr 2009) | 3 lines
+r209 | lh3lh3 | 2009-04-12 15:32:44 -0400 (Sun, 12 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.c
    M /trunk/samtools/bam_import.c
@@ -1684,7 +1999,7 @@ Changed paths:
  * recognize '*' at the QUAL field
 
 ------------------------------------------------------------------------
-r208 | lh3lh3 | 2009-04-12 20:08:02 +0100 (Sun, 12 Apr 2009) | 3 lines
+r208 | lh3lh3 | 2009-04-12 15:08:02 -0400 (Sun, 12 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_import.c
    M /trunk/samtools/bamtk.c
@@ -1694,14 +2009,14 @@ Changed paths:
  * the field separater is TAB only, now
 
 ------------------------------------------------------------------------
-r207 | lh3lh3 | 2009-04-08 15:18:03 +0100 (Wed, 08 Apr 2009) | 2 lines
+r207 | lh3lh3 | 2009-04-08 10:18:03 -0400 (Wed, 08 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/examples/ex1.sam.gz
 
  * fixed the problem in the example alignment due to the bug in fixmate
 
 ------------------------------------------------------------------------
-r206 | lh3lh3 | 2009-04-08 15:15:05 +0100 (Wed, 08 Apr 2009) | 3 lines
+r206 | lh3lh3 | 2009-04-08 10:15:05 -0400 (Wed, 08 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_mate.c
    M /trunk/samtools/bamtk.c
@@ -1711,7 +2026,7 @@ Changed paths:
  * fixed a nasty bug in `fixmate'
 
 ------------------------------------------------------------------------
-r205 | lh3lh3 | 2009-04-08 10:57:08 +0100 (Wed, 08 Apr 2009) | 2 lines
+r205 | lh3lh3 | 2009-04-08 05:57:08 -0400 (Wed, 08 Apr 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/bowtie2sam.pl
    M /trunk/samtools/misc/soap2sam.pl
@@ -1720,7 +2035,7 @@ Changed paths:
 make the script robust to the bugs in SOAP-2.1.7
 
 ------------------------------------------------------------------------
-r200 | lh3lh3 | 2009-04-02 15:14:56 +0100 (Thu, 02 Apr 2009) | 3 lines
+r200 | lh3lh3 | 2009-04-02 10:14:56 -0400 (Thu, 02 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_stat.c
    M /trunk/samtools/bamtk.c
@@ -1729,7 +2044,7 @@ Changed paths:
  * check if file is truncated in flagstat
 
 ------------------------------------------------------------------------
-r199 | lh3lh3 | 2009-04-02 15:09:10 +0100 (Thu, 02 Apr 2009) | 3 lines
+r199 | lh3lh3 | 2009-04-02 10:09:10 -0400 (Thu, 02 Apr 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
 
@@ -1737,7 +2052,7 @@ Changed paths:
  * print the header if requested
 
 ------------------------------------------------------------------------
-r193 | lh3lh3 | 2009-03-27 15:09:50 +0000 (Fri, 27 Mar 2009) | 3 lines
+r193 | lh3lh3 | 2009-03-27 11:09:50 -0400 (Fri, 27 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
    M /trunk/samtools/bamtk.c
@@ -1746,7 +2061,7 @@ Changed paths:
  * fixed a minor bug reported by Nils Homer
 
 ------------------------------------------------------------------------
-r185 | lh3lh3 | 2009-03-24 11:50:32 +0000 (Tue, 24 Mar 2009) | 2 lines
+r185 | lh3lh3 | 2009-03-24 07:50:32 -0400 (Tue, 24 Mar 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/Makefile (from /trunk/samtools/Makefile.std:184)
    D /trunk/samtools/Makefile.std
@@ -1756,7 +2071,7 @@ Changed paths:
 rename Makefile.std as Makefile. GNU building systerm is not ready and may take some time...
 
 ------------------------------------------------------------------------
-r184 | lh3lh3 | 2009-03-24 10:36:38 +0000 (Tue, 24 Mar 2009) | 4 lines
+r184 | lh3lh3 | 2009-03-24 06:36:38 -0400 (Tue, 24 Mar 2009) | 4 lines
 Changed paths:
    D /trunk/samtools/Makefile
    A /trunk/samtools/Makefile.std (from /trunk/samtools/Makefile:183)
@@ -1772,7 +2087,7 @@ Changed paths:
  * rename Makefile to Makefile.std and prepare to add the GNU building systerms (also by Nils)
 
 ------------------------------------------------------------------------
-r183 | lh3lh3 | 2009-03-24 10:30:23 +0000 (Tue, 24 Mar 2009) | 4 lines
+r183 | lh3lh3 | 2009-03-24 06:30:23 -0400 (Tue, 24 Mar 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/bam_import.c
@@ -1789,7 +2104,7 @@ Changed paths:
  * added my kstring library for a bit complex parsing of the position list.
 
 ------------------------------------------------------------------------
-r169 | lh3lh3 | 2009-03-12 13:40:14 +0000 (Thu, 12 Mar 2009) | 3 lines
+r169 | lh3lh3 | 2009-03-12 09:40:14 -0400 (Thu, 12 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/soap2sam.pl
 
@@ -1797,14 +2112,14 @@ Changed paths:
  * more robust to truncated soap output
 
 ------------------------------------------------------------------------
-r168 | lh3lh3 | 2009-03-11 10:49:00 +0000 (Wed, 11 Mar 2009) | 2 lines
+r168 | lh3lh3 | 2009-03-11 06:49:00 -0400 (Wed, 11 Mar 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile.lite
 
 added bam_stat.o to Makefile.lite
 
 ------------------------------------------------------------------------
-r167 | lh3lh3 | 2009-03-10 22:11:31 +0000 (Tue, 10 Mar 2009) | 3 lines
+r167 | lh3lh3 | 2009-03-10 18:11:31 -0400 (Tue, 10 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bamtk.c
@@ -1813,7 +2128,7 @@ Changed paths:
  * generate RMS of mapQ instead of max mapQ
 
 ------------------------------------------------------------------------
-r166 | lh3lh3 | 2009-03-10 22:06:45 +0000 (Tue, 10 Mar 2009) | 3 lines
+r166 | lh3lh3 | 2009-03-10 18:06:45 -0400 (Tue, 10 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
    M /trunk/samtools/bamtk.c
@@ -1825,7 +2140,7 @@ Changed paths:
  * implemented GLFv3
 
 ------------------------------------------------------------------------
-r159 | lh3lh3 | 2009-03-03 11:26:08 +0000 (Tue, 03 Mar 2009) | 3 lines
+r159 | lh3lh3 | 2009-03-03 06:26:08 -0500 (Tue, 03 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
    M /trunk/samtools/bamtk.c
@@ -1834,7 +2149,7 @@ Changed paths:
  * fixed a minor bug in displaying pileup
 
 ------------------------------------------------------------------------
-r158 | lh3lh3 | 2009-03-03 11:24:16 +0000 (Tue, 03 Mar 2009) | 3 lines
+r158 | lh3lh3 | 2009-03-03 06:24:16 -0500 (Tue, 03 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/bamtk.c
@@ -1843,7 +2158,7 @@ Changed paths:
  * optionally print SAM header
 
 ------------------------------------------------------------------------
-r153 | lh3lh3 | 2009-03-02 10:45:28 +0000 (Mon, 02 Mar 2009) | 3 lines
+r153 | lh3lh3 | 2009-03-02 05:45:28 -0500 (Mon, 02 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
    M /trunk/samtools/glf.c
@@ -1852,7 +2167,7 @@ Changed paths:
  * use "GLF\3" as the magic for GLFv3 files
 
 ------------------------------------------------------------------------
-r152 | lh3lh3 | 2009-03-02 10:39:09 +0000 (Mon, 02 Mar 2009) | 5 lines
+r152 | lh3lh3 | 2009-03-02 05:39:09 -0500 (Mon, 02 Mar 2009) | 5 lines
 Changed paths:
    M /trunk/samtools/Makefile
    M /trunk/samtools/bam_import.c
@@ -1868,7 +2183,7 @@ Changed paths:
  * update to GLFv3: pos is changed to offset for better compression
 
 ------------------------------------------------------------------------
-r151 | lh3lh3 | 2009-03-01 15:18:43 +0000 (Sun, 01 Mar 2009) | 3 lines
+r151 | lh3lh3 | 2009-03-01 10:18:43 -0500 (Sun, 01 Mar 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/wgsim.c
 
@@ -1876,7 +2191,7 @@ Changed paths:
  * fixed a bug in simulating indels
 
 ------------------------------------------------------------------------
-r145 | lh3lh3 | 2009-02-26 19:43:57 +0000 (Thu, 26 Feb 2009) | 4 lines
+r145 | lh3lh3 | 2009-02-26 14:43:57 -0500 (Thu, 26 Feb 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/misc/wgsim.c
 
@@ -1885,7 +2200,7 @@ Changed paths:
    not like long read names.
 
 ------------------------------------------------------------------------
-r141 | lh3lh3 | 2009-02-26 14:53:03 +0000 (Thu, 26 Feb 2009) | 6 lines
+r141 | lh3lh3 | 2009-02-26 09:53:03 -0500 (Thu, 26 Feb 2009) | 6 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/misc/wgsim.c
@@ -1898,7 +2213,7 @@ Changed paths:
  * make the script work with color reads
 
 ------------------------------------------------------------------------
-r140 | lh3lh3 | 2009-02-26 14:02:57 +0000 (Thu, 26 Feb 2009) | 2 lines
+r140 | lh3lh3 | 2009-02-26 09:02:57 -0500 (Thu, 26 Feb 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/Makefile
    M /trunk/samtools/misc/wgsim.c
@@ -1906,7 +2221,7 @@ Changed paths:
  * wgsim: added a note
 
 ------------------------------------------------------------------------
-r139 | lh3lh3 | 2009-02-26 11:39:08 +0000 (Thu, 26 Feb 2009) | 7 lines
+r139 | lh3lh3 | 2009-02-26 06:39:08 -0500 (Thu, 26 Feb 2009) | 7 lines
 Changed paths:
    M /trunk/samtools/misc/wgsim.c
    M /trunk/samtools/misc/wgsim_eval.pl
@@ -1919,7 +2234,7 @@ Changed paths:
  * change in accordant with wgsim
 
 ------------------------------------------------------------------------
-r129 | lh3lh3 | 2009-02-18 22:23:27 +0000 (Wed, 18 Feb 2009) | 3 lines
+r129 | lh3lh3 | 2009-02-18 17:23:27 -0500 (Wed, 18 Feb 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_index.c
    M /trunk/samtools/bamtk.c
@@ -1928,14 +2243,14 @@ Changed paths:
  * fixed a bug in bam_fetch, caused by completely contained adjacent chunks
 
 ------------------------------------------------------------------------
-r128 | bhandsaker | 2009-02-18 19:06:57 +0000 (Wed, 18 Feb 2009) | 2 lines
+r128 | bhandsaker | 2009-02-18 14:06:57 -0500 (Wed, 18 Feb 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
 
 Fix annoying segv when invalid region specified.
 
 ------------------------------------------------------------------------
-r127 | lh3lh3 | 2009-02-17 10:49:55 +0000 (Tue, 17 Feb 2009) | 2 lines
+r127 | lh3lh3 | 2009-02-17 05:49:55 -0500 (Tue, 17 Feb 2009) | 2 lines
 Changed paths:
    D /trunk/samtools/misc/indel_filter.pl
    A /trunk/samtools/misc/samtools.pl
@@ -1943,7 +2258,7 @@ Changed paths:
  * move indel_filter.pl to samtools.pl
 
 ------------------------------------------------------------------------
-r126 | lh3lh3 | 2009-02-14 21:22:30 +0000 (Sat, 14 Feb 2009) | 3 lines
+r126 | lh3lh3 | 2009-02-14 16:22:30 -0500 (Sat, 14 Feb 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_mate.c
    M /trunk/samtools/bamtk.c
@@ -1952,7 +2267,7 @@ Changed paths:
  * fixed a bug in fixmate: SE reads are flagged as BAM_FMUNMAP
 
 ------------------------------------------------------------------------
-r125 | lh3lh3 | 2009-02-13 09:54:45 +0000 (Fri, 13 Feb 2009) | 3 lines
+r125 | lh3lh3 | 2009-02-13 04:54:45 -0500 (Fri, 13 Feb 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_stat.c
    M /trunk/samtools/bamtk.c
@@ -1961,7 +2276,7 @@ Changed paths:
  * fixed a minor bug in flagstat
 
 ------------------------------------------------------------------------
-r124 | lh3lh3 | 2009-02-12 11:15:32 +0000 (Thu, 12 Feb 2009) | 3 lines
+r124 | lh3lh3 | 2009-02-12 06:15:32 -0500 (Thu, 12 Feb 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bamtk.c
@@ -1971,7 +2286,7 @@ Changed paths:
  * improve indel caller by setting maximum window size
 
 ------------------------------------------------------------------------
-r123 | lh3lh3 | 2009-02-12 10:30:29 +0000 (Thu, 12 Feb 2009) | 2 lines
+r123 | lh3lh3 | 2009-02-12 05:30:29 -0500 (Thu, 12 Feb 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
    M /trunk/samtools/bamtk.c
@@ -1979,14 +2294,14 @@ Changed paths:
  * output max mapping quality in indel line
 
 ------------------------------------------------------------------------
-r122 | lh3lh3 | 2009-02-11 10:59:10 +0000 (Wed, 11 Feb 2009) | 2 lines
+r122 | lh3lh3 | 2009-02-11 05:59:10 -0500 (Wed, 11 Feb 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/misc/maq2sam.c
 
 fixed a bug in generating tag AM
 
 ------------------------------------------------------------------------
-r121 | lh3lh3 | 2009-02-03 10:43:11 +0000 (Tue, 03 Feb 2009) | 2 lines
+r121 | lh3lh3 | 2009-02-03 05:43:11 -0500 (Tue, 03 Feb 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bam_index.c
    M /trunk/samtools/bamtk.c
@@ -1994,14 +2309,14 @@ Changed paths:
 fixed a potential memory problem in indexing
 
 ------------------------------------------------------------------------
-r120 | bhandsaker | 2009-02-02 15:52:52 +0000 (Mon, 02 Feb 2009) | 2 lines
+r120 | bhandsaker | 2009-02-02 10:52:52 -0500 (Mon, 02 Feb 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/Makefile
 
 Pass LIBS to recursive targets to facilitate building at Broad.
 
 ------------------------------------------------------------------------
-r119 | lh3lh3 | 2009-02-02 10:12:15 +0000 (Mon, 02 Feb 2009) | 4 lines
+r119 | lh3lh3 | 2009-02-02 05:12:15 -0500 (Mon, 02 Feb 2009) | 4 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/bam_plcmd.c
@@ -2013,7 +2328,7 @@ Changed paths:
  * improve flagstat report a little bit
 
 ------------------------------------------------------------------------
-r118 | lh3lh3 | 2009-01-29 12:33:23 +0000 (Thu, 29 Jan 2009) | 3 lines
+r118 | lh3lh3 | 2009-01-29 07:33:23 -0500 (Thu, 29 Jan 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/Makefile
    A /trunk/samtools/bam_stat.c
@@ -2023,7 +2338,7 @@ Changed paths:
  * added flagstat command
 
 ------------------------------------------------------------------------
-r116 | lh3lh3 | 2009-01-28 13:31:12 +0000 (Wed, 28 Jan 2009) | 2 lines
+r116 | lh3lh3 | 2009-01-28 08:31:12 -0500 (Wed, 28 Jan 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/NEWS
@@ -2033,28 +2348,28 @@ Changed paths:
 Release SAMtools-0.1.2
 
 ------------------------------------------------------------------------
-r115 | lh3lh3 | 2009-01-28 12:54:08 +0000 (Wed, 28 Jan 2009) | 2 lines
+r115 | lh3lh3 | 2009-01-28 07:54:08 -0500 (Wed, 28 Jan 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/misc/indel_filter.pl
 
 Script for filtering indel results
 
 ------------------------------------------------------------------------
-r114 | lh3lh3 | 2009-01-25 11:45:37 +0000 (Sun, 25 Jan 2009) | 2 lines
+r114 | lh3lh3 | 2009-01-25 06:45:37 -0500 (Sun, 25 Jan 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/misc/zoom2sam.pl
 
 convert ZOOM to SAM
 
 ------------------------------------------------------------------------
-r113 | lh3lh3 | 2009-01-24 14:25:07 +0000 (Sat, 24 Jan 2009) | 2 lines
+r113 | lh3lh3 | 2009-01-24 09:25:07 -0500 (Sat, 24 Jan 2009) | 2 lines
 Changed paths:
    A /trunk/samtools/misc/novo2sam.pl
 
 add a script to convert novo alignment to SAM
 
 ------------------------------------------------------------------------
-r112 | lh3lh3 | 2009-01-23 20:57:39 +0000 (Fri, 23 Jan 2009) | 2 lines
+r112 | lh3lh3 | 2009-01-23 15:57:39 -0500 (Fri, 23 Jan 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/ChangeLog
    M /trunk/samtools/ChangeLog.old
@@ -2063,7 +2378,7 @@ Changed paths:
 update documentation and ChangeLog
 
 ------------------------------------------------------------------------
-r111 | lh3lh3 | 2009-01-23 19:22:59 +0000 (Fri, 23 Jan 2009) | 3 lines
+r111 | lh3lh3 | 2009-01-23 14:22:59 -0500 (Fri, 23 Jan 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_sort.c
    M /trunk/samtools/bamtk.c
@@ -2072,7 +2387,7 @@ Changed paths:
  * fixed a bug in "merge" command line
 
 ------------------------------------------------------------------------
-r110 | lh3lh3 | 2009-01-22 15:36:48 +0000 (Thu, 22 Jan 2009) | 3 lines
+r110 | lh3lh3 | 2009-01-22 10:36:48 -0500 (Thu, 22 Jan 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/misc/Makefile
    A /trunk/samtools/misc/bowtie2sam.pl (from /branches/dev/samtools/misc/bowtie2sam.pl:108)
@@ -2085,7 +2400,7 @@ Changed paths:
  * all future development will happen here
 
 ------------------------------------------------------------------------
-r109 | lh3lh3 | 2009-01-22 15:14:27 +0000 (Thu, 22 Jan 2009) | 3 lines
+r109 | lh3lh3 | 2009-01-22 10:14:27 -0500 (Thu, 22 Jan 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/COPYING
    M /trunk/samtools/ChangeLog
@@ -2122,7 +2437,7 @@ Changed paths:
  * all future development will happen here at trunk/
 
 ------------------------------------------------------------------------
-r79 | bhandsaker | 2009-01-07 21:42:15 +0000 (Wed, 07 Jan 2009) | 2 lines
+r79 | bhandsaker | 2009-01-07 16:42:15 -0500 (Wed, 07 Jan 2009) | 2 lines
 Changed paths:
    M /trunk/samtools/bam_maqcns.c
    M /trunk/samtools/bam_tview.c
@@ -2130,14 +2445,14 @@ Changed paths:
 Fix problem with compiling without curses.
 
 ------------------------------------------------------------------------
-r63 | lh3lh3 | 2008-12-22 15:58:02 +0000 (Mon, 22 Dec 2008) | 2 lines
+r63 | lh3lh3 | 2008-12-22 10:58:02 -0500 (Mon, 22 Dec 2008) | 2 lines
 Changed paths:
    A /trunk/samtools (from /branches/dev/samtools:62)
 
 Create trunk copy
 
 ------------------------------------------------------------------------
-r62 | lh3lh3 | 2008-12-22 15:55:13 +0000 (Mon, 22 Dec 2008) | 2 lines
+r62 | lh3lh3 | 2008-12-22 10:55:13 -0500 (Mon, 22 Dec 2008) | 2 lines
 Changed paths:
    A /branches/dev/samtools/NEWS
    M /branches/dev/samtools/bamtk.c
@@ -2146,7 +2461,7 @@ Changed paths:
 Release samtools-0.1.1
 
 ------------------------------------------------------------------------
-r61 | lh3lh3 | 2008-12-22 15:46:08 +0000 (Mon, 22 Dec 2008) | 10 lines
+r61 | lh3lh3 | 2008-12-22 10:46:08 -0500 (Mon, 22 Dec 2008) | 10 lines
 Changed paths:
    M /branches/dev/samtools/bam_aux.c
    M /branches/dev/samtools/bam_index.c
@@ -2167,7 +2482,7 @@ Changed paths:
  * prepare to release 0.1.1
 
 ------------------------------------------------------------------------
-r60 | lh3lh3 | 2008-12-22 15:10:16 +0000 (Mon, 22 Dec 2008) | 2 lines
+r60 | lh3lh3 | 2008-12-22 10:10:16 -0500 (Mon, 22 Dec 2008) | 2 lines
 Changed paths:
    A /branches/dev/samtools/examples
    A /branches/dev/samtools/examples/00README.txt
@@ -2178,14 +2493,14 @@ Changed paths:
 example
 
 ------------------------------------------------------------------------
-r59 | lh3lh3 | 2008-12-22 09:38:15 +0000 (Mon, 22 Dec 2008) | 2 lines
+r59 | lh3lh3 | 2008-12-22 04:38:15 -0500 (Mon, 22 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/ChangeLog
 
 update ChangeLog
 
 ------------------------------------------------------------------------
-r58 | lh3lh3 | 2008-12-20 23:06:00 +0000 (Sat, 20 Dec 2008) | 3 lines
+r58 | lh3lh3 | 2008-12-20 18:06:00 -0500 (Sat, 20 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/misc/export2sam.pl
 
@@ -2193,14 +2508,14 @@ Changed paths:
  * fixed several bugs 
 
 ------------------------------------------------------------------------
-r57 | lh3lh3 | 2008-12-20 15:44:20 +0000 (Sat, 20 Dec 2008) | 2 lines
+r57 | lh3lh3 | 2008-12-20 10:44:20 -0500 (Sat, 20 Dec 2008) | 2 lines
 Changed paths:
    A /branches/dev/samtools/misc/export2sam.pl
 
 convert Export format to SAM; not thoroughly tested
 
 ------------------------------------------------------------------------
-r56 | lh3lh3 | 2008-12-19 22:13:28 +0000 (Fri, 19 Dec 2008) | 6 lines
+r56 | lh3lh3 | 2008-12-19 17:13:28 -0500 (Fri, 19 Dec 2008) | 6 lines
 Changed paths:
    M /branches/dev/samtools/bam_import.c
    M /branches/dev/samtools/bam_plcmd.c
@@ -2215,14 +2530,14 @@ Changed paths:
  * tview: fixed a minor bug
 
 ------------------------------------------------------------------------
-r55 | lh3lh3 | 2008-12-19 20:10:26 +0000 (Fri, 19 Dec 2008) | 2 lines
+r55 | lh3lh3 | 2008-12-19 15:10:26 -0500 (Fri, 19 Dec 2008) | 2 lines
 Changed paths:
    D /branches/dev/samtools/misc/all2sam.pl
 
 remove all2sam.pl
 
 ------------------------------------------------------------------------
-r54 | lh3lh3 | 2008-12-16 22:34:25 +0000 (Tue, 16 Dec 2008) | 2 lines
+r54 | lh3lh3 | 2008-12-16 17:34:25 -0500 (Tue, 16 Dec 2008) | 2 lines
 Changed paths:
    A /branches/dev/samtools/COPYING
    M /branches/dev/samtools/bam.h
@@ -2235,7 +2550,7 @@ Changed paths:
 Added copyright information and a bit more documentation. No code change.
 
 ------------------------------------------------------------------------
-r53 | lh3lh3 | 2008-12-16 13:40:18 +0000 (Tue, 16 Dec 2008) | 3 lines
+r53 | lh3lh3 | 2008-12-16 08:40:18 -0500 (Tue, 16 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/bam.c
    M /branches/dev/samtools/bam.h
@@ -2247,7 +2562,7 @@ Changed paths:
  * improved efficiency of the indel caller for spliced alignments
 
 ------------------------------------------------------------------------
-r52 | lh3lh3 | 2008-12-16 10:28:20 +0000 (Tue, 16 Dec 2008) | 3 lines
+r52 | lh3lh3 | 2008-12-16 05:28:20 -0500 (Tue, 16 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/bam.c
    M /branches/dev/samtools/bam.h
@@ -2259,7 +2574,7 @@ Changed paths:
  * a bit code cleanup: reduce the dependency between source files
 
 ------------------------------------------------------------------------
-r51 | lh3lh3 | 2008-12-15 14:29:32 +0000 (Mon, 15 Dec 2008) | 3 lines
+r51 | lh3lh3 | 2008-12-15 09:29:32 -0500 (Mon, 15 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/bam_maqcns.c
    M /branches/dev/samtools/bam_plcmd.c
@@ -2269,7 +2584,7 @@ Changed paths:
  * fixed a memory leak
 
 ------------------------------------------------------------------------
-r50 | lh3lh3 | 2008-12-15 14:00:13 +0000 (Mon, 15 Dec 2008) | 2 lines
+r50 | lh3lh3 | 2008-12-15 09:00:13 -0500 (Mon, 15 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/ChangeLog
    M /branches/dev/samtools/bam.h
@@ -2278,7 +2593,7 @@ Changed paths:
 update documentation, ChangeLog and a comment
 
 ------------------------------------------------------------------------
-r49 | lh3lh3 | 2008-12-15 13:36:43 +0000 (Mon, 15 Dec 2008) | 6 lines
+r49 | lh3lh3 | 2008-12-15 08:36:43 -0500 (Mon, 15 Dec 2008) | 6 lines
 Changed paths:
    M /branches/dev/samtools/Makefile
    M /branches/dev/samtools/bam.h
@@ -2296,7 +2611,7 @@ Changed paths:
  * updated documentation
 
 ------------------------------------------------------------------------
-r48 | lh3lh3 | 2008-12-12 13:55:36 +0000 (Fri, 12 Dec 2008) | 3 lines
+r48 | lh3lh3 | 2008-12-12 08:55:36 -0500 (Fri, 12 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/bam_maqcns.c
    M /branches/dev/samtools/bamtk.c
@@ -2305,7 +2620,7 @@ Changed paths:
  * fixed another bug in maqcns when there is a nearby deletion
 
 ------------------------------------------------------------------------
-r47 | lh3lh3 | 2008-12-12 13:42:16 +0000 (Fri, 12 Dec 2008) | 5 lines
+r47 | lh3lh3 | 2008-12-12 08:42:16 -0500 (Fri, 12 Dec 2008) | 5 lines
 Changed paths:
    M /branches/dev/samtools/bam_maqcns.c
    M /branches/dev/samtools/bam_pileup.c
@@ -2317,7 +2632,7 @@ Changed paths:
    I am not quite sure why the previous version may have problem.
 
 ------------------------------------------------------------------------
-r46 | lh3lh3 | 2008-12-12 11:44:56 +0000 (Fri, 12 Dec 2008) | 6 lines
+r46 | lh3lh3 | 2008-12-12 06:44:56 -0500 (Fri, 12 Dec 2008) | 6 lines
 Changed paths:
    M /branches/dev/samtools/bam_pileup.c
    M /branches/dev/samtools/bamtk.c
@@ -2329,21 +2644,21 @@ Changed paths:
    bindings.
 
 ------------------------------------------------------------------------
-r45 | bhandsaker | 2008-12-11 20:43:56 +0000 (Thu, 11 Dec 2008) | 2 lines
+r45 | bhandsaker | 2008-12-11 15:43:56 -0500 (Thu, 11 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/bgzf.c
 
 Fix bug in tell() after reads that consume to the exact end of a block.
 
 ------------------------------------------------------------------------
-r44 | lh3lh3 | 2008-12-11 09:36:53 +0000 (Thu, 11 Dec 2008) | 2 lines
+r44 | lh3lh3 | 2008-12-11 04:36:53 -0500 (Thu, 11 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/samtools.1
 
 update manual
 
 ------------------------------------------------------------------------
-r43 | lh3lh3 | 2008-12-11 09:25:36 +0000 (Thu, 11 Dec 2008) | 4 lines
+r43 | lh3lh3 | 2008-12-11 04:25:36 -0500 (Thu, 11 Dec 2008) | 4 lines
 Changed paths:
    M /branches/dev/samtools/bam_import.c
    M /branches/dev/samtools/bamtk.c
@@ -2353,7 +2668,7 @@ Changed paths:
  * made the parser a bit more robust
 
 ------------------------------------------------------------------------
-r42 | lh3lh3 | 2008-12-10 14:57:29 +0000 (Wed, 10 Dec 2008) | 5 lines
+r42 | lh3lh3 | 2008-12-10 09:57:29 -0500 (Wed, 10 Dec 2008) | 5 lines
 Changed paths:
    M /branches/dev/samtools/bam_index.c
    M /branches/dev/samtools/bamtk.c
@@ -2365,14 +2680,14 @@ Changed paths:
  * in bam_index.c, check potential bugs in the underlying I/O library
 
 ------------------------------------------------------------------------
-r41 | lh3lh3 | 2008-12-10 12:53:08 +0000 (Wed, 10 Dec 2008) | 2 lines
+r41 | lh3lh3 | 2008-12-10 07:53:08 -0500 (Wed, 10 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/samtools.1
 
 update manual
 
 ------------------------------------------------------------------------
-r40 | lh3lh3 | 2008-12-10 11:52:10 +0000 (Wed, 10 Dec 2008) | 5 lines
+r40 | lh3lh3 | 2008-12-10 06:52:10 -0500 (Wed, 10 Dec 2008) | 5 lines
 Changed paths:
    M /branches/dev/samtools/bam.h
    M /branches/dev/samtools/bam_pileup.c
@@ -2384,7 +2699,7 @@ Changed paths:
  * made pileup take the reference sequence
 
 ------------------------------------------------------------------------
-r39 | lh3lh3 | 2008-12-09 11:59:28 +0000 (Tue, 09 Dec 2008) | 4 lines
+r39 | lh3lh3 | 2008-12-09 06:59:28 -0500 (Tue, 09 Dec 2008) | 4 lines
 Changed paths:
    M /branches/dev/samtools/bam_import.c
    M /branches/dev/samtools/bamtk.c
@@ -2395,35 +2710,35 @@ Changed paths:
  * in parser, correctl parse "=" at the MRNM field.
 
 ------------------------------------------------------------------------
-r38 | lh3lh3 | 2008-12-09 11:39:07 +0000 (Tue, 09 Dec 2008) | 2 lines
+r38 | lh3lh3 | 2008-12-09 06:39:07 -0500 (Tue, 09 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/misc/maq2sam.c
 
 fixed a bug in handling maq flag 64 and 192
 
 ------------------------------------------------------------------------
-r37 | lh3lh3 | 2008-12-09 09:53:46 +0000 (Tue, 09 Dec 2008) | 2 lines
+r37 | lh3lh3 | 2008-12-09 04:53:46 -0500 (Tue, 09 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/misc/md5fa.c
 
 also calculate unordered md5sum check
 
 ------------------------------------------------------------------------
-r36 | lh3lh3 | 2008-12-09 09:46:21 +0000 (Tue, 09 Dec 2008) | 2 lines
+r36 | lh3lh3 | 2008-12-09 04:46:21 -0500 (Tue, 09 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/misc/md5fa.c
 
 fixed a minor bug when there are space in the sequence
 
 ------------------------------------------------------------------------
-r35 | lh3lh3 | 2008-12-09 09:40:45 +0000 (Tue, 09 Dec 2008) | 2 lines
+r35 | lh3lh3 | 2008-12-09 04:40:45 -0500 (Tue, 09 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/misc/md5fa.c
 
 fixed a potential memory leak
 
 ------------------------------------------------------------------------
-r34 | lh3lh3 | 2008-12-08 14:52:17 +0000 (Mon, 08 Dec 2008) | 2 lines
+r34 | lh3lh3 | 2008-12-08 09:52:17 -0500 (Mon, 08 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/bam_import.c
    M /branches/dev/samtools/bam_index.c
@@ -2432,14 +2747,14 @@ Changed paths:
  * fixed a bug in import: bin is wrongly calculated
 
 ------------------------------------------------------------------------
-r33 | lh3lh3 | 2008-12-08 14:08:01 +0000 (Mon, 08 Dec 2008) | 2 lines
+r33 | lh3lh3 | 2008-12-08 09:08:01 -0500 (Mon, 08 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/misc/all2sam.pl
 
 nothing, really
 
 ------------------------------------------------------------------------
-r32 | lh3lh3 | 2008-12-08 12:56:02 +0000 (Mon, 08 Dec 2008) | 3 lines
+r32 | lh3lh3 | 2008-12-08 07:56:02 -0500 (Mon, 08 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/Makefile
    M /branches/dev/samtools/kseq.h
@@ -2452,7 +2767,7 @@ Changed paths:
  * added md5sum utilities
 
 ------------------------------------------------------------------------
-r31 | lh3lh3 | 2008-12-08 11:35:29 +0000 (Mon, 08 Dec 2008) | 5 lines
+r31 | lh3lh3 | 2008-12-08 06:35:29 -0500 (Mon, 08 Dec 2008) | 5 lines
 Changed paths:
    M /branches/dev/samtools/Makefile
    M /branches/dev/samtools/bam_import.c
@@ -2466,7 +2781,7 @@ Changed paths:
  * also compile stand-alone faidx
 
 ------------------------------------------------------------------------
-r30 | lh3lh3 | 2008-12-08 11:17:04 +0000 (Mon, 08 Dec 2008) | 3 lines
+r30 | lh3lh3 | 2008-12-08 06:17:04 -0500 (Mon, 08 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/bam.h
    M /branches/dev/samtools/bam_sort.c
@@ -2476,7 +2791,7 @@ Changed paths:
  * sorting by read names is available
 
 ------------------------------------------------------------------------
-r29 | lh3lh3 | 2008-12-08 10:29:02 +0000 (Mon, 08 Dec 2008) | 3 lines
+r29 | lh3lh3 | 2008-12-08 05:29:02 -0500 (Mon, 08 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/bam.c
    M /branches/dev/samtools/bam.h
@@ -2492,7 +2807,7 @@ Changed paths:
  * format change to meet the latest specification
 
 ------------------------------------------------------------------------
-r28 | lh3lh3 | 2008-12-04 16:09:21 +0000 (Thu, 04 Dec 2008) | 3 lines
+r28 | lh3lh3 | 2008-12-04 11:09:21 -0500 (Thu, 04 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/bam_maqcns.c
    M /branches/dev/samtools/misc/maq2sam.c
@@ -2501,7 +2816,7 @@ Changed paths:
  * change maq2sam to meet the latest specification
 
 ------------------------------------------------------------------------
-r27 | lh3lh3 | 2008-12-04 15:55:44 +0000 (Thu, 04 Dec 2008) | 2 lines
+r27 | lh3lh3 | 2008-12-04 10:55:44 -0500 (Thu, 04 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/razf.c
    M /branches/dev/samtools/razf.h
@@ -2509,7 +2824,7 @@ Changed paths:
 considerable code clean up in razf
 
 ------------------------------------------------------------------------
-r26 | lh3lh3 | 2008-12-04 15:08:18 +0000 (Thu, 04 Dec 2008) | 2 lines
+r26 | lh3lh3 | 2008-12-04 10:08:18 -0500 (Thu, 04 Dec 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/ChangeLog
    M /branches/dev/samtools/Makefile
@@ -2518,7 +2833,7 @@ Changed paths:
 make RAZF optional in faidx.c
 
 ------------------------------------------------------------------------
-r25 | lh3lh3 | 2008-12-01 15:27:22 +0000 (Mon, 01 Dec 2008) | 3 lines
+r25 | lh3lh3 | 2008-12-01 10:27:22 -0500 (Mon, 01 Dec 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/Makefile
    M /branches/dev/samtools/bam.h
@@ -2530,7 +2845,7 @@ Changed paths:
  * added routines for retrieving aux data, NOT TESTED YET!
 
 ------------------------------------------------------------------------
-r24 | lh3lh3 | 2008-12-01 14:29:43 +0000 (Mon, 01 Dec 2008) | 5 lines
+r24 | lh3lh3 | 2008-12-01 09:29:43 -0500 (Mon, 01 Dec 2008) | 5 lines
 Changed paths:
    M /branches/dev/samtools/bam.c
    M /branches/dev/samtools/bam_import.c
@@ -2545,7 +2860,7 @@ Changed paths:
  * supporting hex strings
 
 ------------------------------------------------------------------------
-r23 | lh3lh3 | 2008-11-27 17:14:37 +0000 (Thu, 27 Nov 2008) | 3 lines
+r23 | lh3lh3 | 2008-11-27 12:14:37 -0500 (Thu, 27 Nov 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/bam_maqcns.c
    M /branches/dev/samtools/bamtk.c
@@ -2554,7 +2869,7 @@ Changed paths:
  * fixed the bug in maqcns
 
 ------------------------------------------------------------------------
-r22 | lh3lh3 | 2008-11-27 17:08:11 +0000 (Thu, 27 Nov 2008) | 3 lines
+r22 | lh3lh3 | 2008-11-27 12:08:11 -0500 (Thu, 27 Nov 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/Makefile
    M /branches/dev/samtools/bam.h
@@ -2568,7 +2883,7 @@ Changed paths:
  * add MAQ consensus caller, currently BUGGY!
 
 ------------------------------------------------------------------------
-r21 | lh3lh3 | 2008-11-27 13:51:28 +0000 (Thu, 27 Nov 2008) | 4 lines
+r21 | lh3lh3 | 2008-11-27 08:51:28 -0500 (Thu, 27 Nov 2008) | 4 lines
 Changed paths:
    M /branches/dev/samtools/bam_pileup.c
    M /branches/dev/samtools/bam_tview.c
@@ -2579,14 +2894,14 @@ Changed paths:
  * better coordinates and reference sequence
 
 ------------------------------------------------------------------------
-r19 | lh3lh3 | 2008-11-27 09:26:05 +0000 (Thu, 27 Nov 2008) | 2 lines
+r19 | lh3lh3 | 2008-11-27 04:26:05 -0500 (Thu, 27 Nov 2008) | 2 lines
 Changed paths:
    A /branches/dev/samtools/ChangeLog
 
 new ChangeLog
 
 ------------------------------------------------------------------------
-r18 | lh3lh3 | 2008-11-27 09:24:45 +0000 (Thu, 27 Nov 2008) | 3 lines
+r18 | lh3lh3 | 2008-11-27 04:24:45 -0500 (Thu, 27 Nov 2008) | 3 lines
 Changed paths:
    D /branches/dev/samtools/ChangeLog
    A /branches/dev/samtools/ChangeLog.old (from /branches/dev/samtools/ChangeLog:6)
@@ -2595,7 +2910,7 @@ Rename ChangeLog to ChangeLog.old. This old ChangeLog is generated from
 the log of my personal SVN repository.
 
 ------------------------------------------------------------------------
-r17 | lh3lh3 | 2008-11-27 09:22:55 +0000 (Thu, 27 Nov 2008) | 6 lines
+r17 | lh3lh3 | 2008-11-27 04:22:55 -0500 (Thu, 27 Nov 2008) | 6 lines
 Changed paths:
    M /branches/dev/samtools/Makefile
    M /branches/dev/samtools/bamtk.c
@@ -2608,7 +2923,7 @@ Changed paths:
  * use BGZF by default, now
 
 ------------------------------------------------------------------------
-r16 | lh3lh3 | 2008-11-26 21:19:11 +0000 (Wed, 26 Nov 2008) | 4 lines
+r16 | lh3lh3 | 2008-11-26 16:19:11 -0500 (Wed, 26 Nov 2008) | 4 lines
 Changed paths:
    M /branches/dev/samtools/bam_index.c
    M /branches/dev/samtools/bamtk.c
@@ -2619,14 +2934,14 @@ Changed paths:
  * give more warnings when the file is truncated (or due to bugs in I/O library)
 
 ------------------------------------------------------------------------
-r15 | lh3lh3 | 2008-11-26 20:41:39 +0000 (Wed, 26 Nov 2008) | 2 lines
+r15 | lh3lh3 | 2008-11-26 15:41:39 -0500 (Wed, 26 Nov 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/bgzf.c
 
 fixed a bug in bgzf.c at the end of the file
 
 ------------------------------------------------------------------------
-r14 | lh3lh3 | 2008-11-26 17:05:18 +0000 (Wed, 26 Nov 2008) | 4 lines
+r14 | lh3lh3 | 2008-11-26 12:05:18 -0500 (Wed, 26 Nov 2008) | 4 lines
 Changed paths:
    M /branches/dev/samtools/bamtk.c
 
@@ -2635,14 +2950,14 @@ Changed paths:
    also update the version number anyway to avoid confusion
 
 ------------------------------------------------------------------------
-r13 | lh3lh3 | 2008-11-26 17:03:48 +0000 (Wed, 26 Nov 2008) | 2 lines
+r13 | lh3lh3 | 2008-11-26 12:03:48 -0500 (Wed, 26 Nov 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/razf.c
 
 a change from Jue, but I think it should not matter
 
 ------------------------------------------------------------------------
-r12 | lh3lh3 | 2008-11-26 16:48:14 +0000 (Wed, 26 Nov 2008) | 3 lines
+r12 | lh3lh3 | 2008-11-26 11:48:14 -0500 (Wed, 26 Nov 2008) | 3 lines
 Changed paths:
    M /branches/dev/samtools/razf.c
 
@@ -2650,21 +2965,21 @@ fixed a potential bug in razf. However, it seems still buggy, just
 rarely happens, very rarely.
 
 ------------------------------------------------------------------------
-r11 | lh3lh3 | 2008-11-26 14:02:56 +0000 (Wed, 26 Nov 2008) | 2 lines
+r11 | lh3lh3 | 2008-11-26 09:02:56 -0500 (Wed, 26 Nov 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/razf.c
 
 fixed a bug in razf, with the help of Jue
 
 ------------------------------------------------------------------------
-r10 | lh3lh3 | 2008-11-26 11:55:32 +0000 (Wed, 26 Nov 2008) | 2 lines
+r10 | lh3lh3 | 2008-11-26 06:55:32 -0500 (Wed, 26 Nov 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/bam_index.c
 
 remove a comment
 
 ------------------------------------------------------------------------
-r9 | lh3lh3 | 2008-11-26 11:37:05 +0000 (Wed, 26 Nov 2008) | 2 lines
+r9 | lh3lh3 | 2008-11-26 06:37:05 -0500 (Wed, 26 Nov 2008) | 2 lines
 Changed paths:
    M /branches/dev/samtools/Makefile
    M /branches/dev/samtools/bam.h
@@ -2674,14 +2989,14 @@ Changed paths:
  * Jue has updated razf to realize Bob's scheme
 
 ------------------------------------------------------------------------
-r7 | lh3lh3 | 2008-11-25 20:37:37 +0000 (Tue, 25 Nov 2008) | 2 lines
+r7 | lh3lh3 | 2008-11-25 15:37:37 -0500 (Tue, 25 Nov 2008) | 2 lines
 Changed paths:
    A /branches/dev/samtools/samtools.1
 
 the manual page
 
 ------------------------------------------------------------------------
-r6 | lh3lh3 | 2008-11-25 20:37:16 +0000 (Tue, 25 Nov 2008) | 3 lines
+r6 | lh3lh3 | 2008-11-25 15:37:16 -0500 (Tue, 25 Nov 2008) | 3 lines
 Changed paths:
    A /branches/dev/samtools/ChangeLog
    A /branches/dev/samtools/Makefile
@@ -2717,7 +3032,7 @@ The initial version of samtools, replicated from my local SVN repository.
 The current version is: 0.1.0-42. All future development will happen here.
 
 ------------------------------------------------------------------------
-r5 | lh3lh3 | 2008-11-25 20:30:49 +0000 (Tue, 25 Nov 2008) | 2 lines
+r5 | lh3lh3 | 2008-11-25 15:30:49 -0500 (Tue, 25 Nov 2008) | 2 lines
 Changed paths:
    A /branches/dev/samtools
 
