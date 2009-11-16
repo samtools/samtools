@@ -38,8 +38,8 @@ libbam.a:$(LOBJS)
 samtools:lib $(AOBJS)
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) -lm $(LIBPATH) $(LIBCURSES) -lz -L. -lbam
 
-razip:razip.o razf.o
-		$(CC) $(CFLAGS) -o $@ razf.o razip.o -lz
+razip:razip.o razf.o knetfile.o
+		$(CC) $(CFLAGS) -o $@ razf.o razip.o knetfile.o -lz
 
 bgzip:bgzip.o bgzf.o
 		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o -lz
