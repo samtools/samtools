@@ -268,7 +268,7 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 		ksprintf(&str, "\t%c%c:", key[0], key[1]);
 		if (type == 'A') { ksprintf(&str, "A:%c", *s); ++s; }
 		else if (type == 'C') { ksprintf(&str, "i:%u", *s); ++s; }
-		else if (type == 'c') { ksprintf(&str, "i:%d", *s); ++s; }
+		else if (type == 'c') { ksprintf(&str, "i:%d", *(int8_t*)s); ++s; }
 		else if (type == 'S') { ksprintf(&str, "i:%u", *(uint16_t*)s); s += 2; }
 		else if (type == 's') { ksprintf(&str, "i:%d", *(int16_t*)s); s += 2; }
 		else if (type == 'I') { ksprintf(&str, "i:%u", *(uint32_t*)s); s += 4; }
