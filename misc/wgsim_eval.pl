@@ -12,9 +12,9 @@ exit;
 
 sub wgsim_eval {
   my %opts = (g=>5);
-  getopts('pcg:', \%opts);
-  die("Usage: wgsim_eval.pl [-pc] [-g $opts{g}] <in.sam>\n") if (@ARGV == 0 && -t STDIN);
-  my (@c0, @c1);
+  getopts('pcag:', \%opts);
+  die("Usage: wgsim_eval.pl [-pca] [-g $opts{g}] <in.sam>\n") if (@ARGV == 0 && -t STDIN);
+  my (@c0, @c1, %fnfp);
   my ($max_q, $flag) = (0, 0);
   my $gap = $opts{g};
   $flag |= 1 if (defined $opts{p});
@@ -66,14 +66,26 @@ sub wgsim_eval {
 	}
 	++$c0[$q];
 	++$c1[$q] unless ($is_correct);
+	@{$fnfp{$t[4]}} = (0, 0) unless (defined $fnfp{$t[4]});
+	++$fnfp{$t[4]}[0];
+	++$fnfp{$t[4]}[1] unless ($is_correct);
 	print STDERR $line if (($flag&1) && !$is_correct && $q > 0);
   }
   # print
   my ($cc0, $cc1) = (0, 0);
-  for (my $i = $max_q; $i >= 0; --$i) {
-	$c0[$i] = 0 unless (defined $c0[$i]);
-	$c1[$i] = 0 unless (defined $c1[$i]);
-	$cc0 += $c0[$i]; $cc1 += $c1[$i];
-	printf("%.2dx %12d / %-12d  %12d  %.3e\n", $i, $c1[$i], $c0[$i], $cc0, $cc1/$cc0);
+  if (!defined($opts{a})) {
+	for (my $i = $max_q; $i >= 0; --$i) {
+	  $c0[$i] = 0 unless (defined $c0[$i]);
+	  $c1[$i] = 0 unless (defined $c1[$i]);
+	  $cc0 += $c0[$i]; $cc1 += $c1[$i];
+	  printf("%.2dx %12d / %-12d  %12d  %.3e\n", $i, $c1[$i], $c0[$i], $cc0, $cc1/$cc0);
+	}
+  } else {
+	for (reverse(sort {$a<=>$b} (keys %fnfp))) {
+	  next if ($_ == 0);
+	  $cc0 += $fnfp{$_}[0];
+	  $cc1 += $fnfp{$_}[1];
+	  print join("\t", $_, $cc0, $cc1), "\n";
+	}
   }
 }

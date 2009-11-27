@@ -55,6 +55,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 				if (aux) { // check if aux is present
 					bam_header_t *textheader = fp->header;
 					fp->header = sam_header_read2((const char*)aux);
+					if (fp->header == 0) goto open_err_ret;
 					append_header_text(fp->header, textheader->text, textheader->l_text);
 					bam_header_destroy(textheader);
 				}

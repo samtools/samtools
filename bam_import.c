@@ -116,7 +116,7 @@ static bam_header_t *hash2header(const kh_ref_t *hash)
 bam_header_t *sam_header_read2(const char *fn)
 {
 	bam_header_t *header;
-	int c, dret, ret;
+	int c, dret, ret, error = 0;
 	gzFile fp;
 	kstream_t *ks;
 	kstring_t *str;
@@ -135,6 +135,10 @@ bam_header_t *sam_header_read2(const char *fn)
 		ks_getuntil(ks, 0, str, &dret);
 		len = atoi(str->s);
 		k = kh_put(ref, hash, s, &ret);
+		if (ret == 0) {
+			fprintf(stderr, "[sam_header_read2] duplicated sequence name: %s\n", s);
+			error = 1;
+		}
 		kh_value(hash, k) = (uint64_t)len<<32 | i;
 		if (dret != '\n')
 			while ((c = ks_getc(ks)) != '\n' && c != -1);
@@ -143,6 +147,7 @@ bam_header_t *sam_header_read2(const char *fn)
 	gzclose(fp);
 	free(str->s); free(str);
 	fprintf(stderr, "[sam_header_read2] %d sequences loaded.\n", kh_size(hash));
+	if (error) return 0;
 	header = hash2header(hash);
 	kh_destroy(ref, hash);
 	return header;
