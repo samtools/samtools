@@ -49,6 +49,6 @@ md5fa.o:md5.h md5fa.c
 		$(CC) $(CFLAGS) -c -I.. -o $@ md5fa.c
 
 cleanlocal:
-		rm -fr gmon.out *.o a.out *.dSYM $(PROG) *~ *.a
+		rm -fr gmon.out *.o a.out *.exe *.dSYM $(PROG) *~ *.a
 
 clean:cleanlocal-recur

@@ -63,6 +63,6 @@ faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h
 
 cleanlocal:
-		rm -fr gmon.out *.o a.out *.dSYM razip $(PROG) *~ *.a
+		rm -fr gmon.out *.o a.out *.exe *.dSYM razip $(PROG) *~ *.a
 
 clean:cleanlocal-recur
