@@ -36,7 +36,7 @@ libbam.a:$(LOBJS)
 		$(AR) -cru $@ $(LOBJS)
 
 samtools:lib $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) -lm $(LIBPATH) $(LIBCURSES) -lz -L. -lbam
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) libbam.a -lm $(LIBPATH) $(LIBCURSES) -lz
 
 razip:razip.o razf.o knetfile.o
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o knetfile.o -lz
