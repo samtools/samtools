@@ -6,7 +6,7 @@
 #include "sam.h"
 #include "kstring.h"
 
-void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
+void bam_fillmd1_core(bam1_t *b, char *ref, int is_equal, int max_nm)
 {
 	uint8_t *seq = bam1_seq(b);
 	uint32_t *cigar = bam1_cigar(b);
@@ -53,6 +53,26 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 		}
 	}
 	ksprintf(str, "%d", u);
+	// apply max_nm
+	if (max_nm > 0 && nm >= max_nm) {
+		for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
+			int j, l = cigar[i]>>4, op = cigar[i]&0xf;
+			if (op == BAM_CMATCH) {
+				for (j = 0; j < l; ++j) {
+					int z = y + j;
+					int c1 = bam1_seqi(seq, z), c2 = bam_nt16_table[(int)ref[x+j]];
+					if (ref[x+j] == 0) break; // out of boundary
+					if ((c1 == c2 && c1 != 15 && c2 != 15) || c1 == 0) { // a match
+						seq[z/2] |= (z&1)? 0x0f : 0xf0;
+						bam1_qual(b)[z] = 0;
+					}
+				}
+				if (j < l) break;
+				x += l; y += l;
+			} else if (op == BAM_CDEL || op == BAM_CREF_SKIP) x += l;
+			else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
+		}
+	}
 	// update NM
 	old_nm = bam_aux_get(b, "NM");
 	if (c->flag & BAM_FUNMAP) return;
@@ -83,9 +103,14 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 	free(str->s); free(str);
 }
 
+void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
+{
+	bam_fillmd1_core(b, ref, is_equal, 0);
+}
+
 int bam_fillmd(int argc, char *argv[])
 {
-	int c, is_equal = 0, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed;
+	int c, is_equal = 0, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm = 0;
 	samfile_t *fp, *fpout = 0;
 	faidx_t *fai;
 	char *ref = 0, mode_w[8], mode_r[8];
@@ -94,12 +119,13 @@ int bam_fillmd(int argc, char *argv[])
 	is_bam_out = is_sam_in = is_uncompressed = 0;
 	mode_w[0] = mode_r[0] = 0;
 	strcpy(mode_r, "r"); strcpy(mode_w, "w");
-	while ((c = getopt(argc, argv, "eubS")) >= 0) {
+	while ((c = getopt(argc, argv, "eubSn:")) >= 0) {
 		switch (c) {
 		case 'e': is_equal = 1; break;
 		case 'b': is_bam_out = 1; break;
 		case 'u': is_uncompressed = is_bam_out = 1; break;
 		case 'S': is_sam_in = 1; break;
+		case 'n': max_nm = atoi(optarg); break;
 		default: fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n", c); return 1;
 		}
 	}
@@ -136,7 +162,7 @@ int bam_fillmd(int argc, char *argv[])
 					fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
 							fp->header->target_name[tid]);
 			}
-			if (ref) bam_fillmd1(b, ref, is_equal);
+			if (ref) bam_fillmd1_core(b, ref, is_equal, max_nm);
 		}
 		samwrite(fpout, b);
 	}
