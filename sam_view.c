@@ -6,7 +6,12 @@
 #include "sam_header.h"
 #include "sam.h"
 #include "faidx.h"
+#include "khash.h"
+KHASH_SET_INIT_STR(rg)
 
+typedef khash_t(rg) *rghash_t;
+
+rghash_t g_rghash = 0;
 static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0;
 static char *g_library, *g_rg;
 static int g_sol2sanger_tbl[128];
@@ -32,9 +37,15 @@ static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 {
 	if (b->core.qual < g_min_mapQ || ((b->core.flag & g_flag_on) != g_flag_on) || (b->core.flag & g_flag_off))
 		return 1;
-	if (g_rg) {
+	if (g_rg || g_rghash) {
 		uint8_t *s = bam_aux_get(b, "RG");
-		if (s && strcmp(g_rg, (char*)(s + 1)) == 0) return 0;
+		if (s) {
+			if (g_rg) return (strcmp(g_rg, (char*)(s + 1)) == 0)? 0 : 1;
+			if (g_rghash) {
+				khint_t k = kh_get(rg, g_rghash, (char*)(s + 1));
+				return (k != kh_end(g_rghash))? 0 : 1;
+			}
+		}
 	}
 	if (g_library) {
 		const char *p = bam_get_library((bam_header_t*)h, b);
@@ -58,11 +69,11 @@ int main_samview(int argc, char *argv[])
 	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, is_uncompressed = 0, is_bamout = 0, slx2sngr = 0;
 	int of_type = BAM_OFDEC, is_long_help = 0;
 	samfile_t *in = 0, *out = 0;
-	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0;
+	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:r:xX?T:C")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:r:xX?T:CR:")) >= 0) {
 		switch (c) {
 		case 'C': slx2sngr = 1; break;
 		case 'S': is_bamin = 0; break;
@@ -77,6 +88,7 @@ int main_samview(int argc, char *argv[])
 		case 'u': is_uncompressed = 1; break;
 		case 'l': g_library = strdup(optarg); break;
 		case 'r': g_rg = strdup(optarg); break;
+		case 'R': fn_rg = strdup(optarg); break;
 		case 'x': of_type = BAM_OFHEX; break;
 		case 'X': of_type = BAM_OFSTR; break;
 		case '?': is_long_help = 1; break;
@@ -94,7 +106,19 @@ int main_samview(int argc, char *argv[])
 	if (is_bamin) strcat(in_mode, "b");
 	if (is_header) strcat(out_mode, "h");
 	if (is_uncompressed) strcat(out_mode, "u");
-	if (argc == optind) return usage(is_long_help);
+	if (argc == optind) return usage(is_long_help); // potential memory leak...
+
+	// read the list of read groups
+	if (fn_rg) {
+		FILE *fp_rg;
+		char buf[1024];
+		int ret;
+		g_rghash = kh_init(rg);
+		fp_rg = fopen(fn_rg, "r");
+		while (!feof(fp_rg) && fscanf(fp_rg, "%s", buf) > 0) // this is not a good style, but bear me...
+			kh_put(rg, g_rghash, strdup(buf), &ret); // we'd better check duplicates...
+		fclose(fp_rg);
+	}
 
 	// generate the fn_list if necessary
 	if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
@@ -147,7 +171,13 @@ int main_samview(int argc, char *argv[])
 
 view_end:
 	// close files, free and return
-	free(fn_list); free(fn_ref); free(fn_out); free(g_library); free(g_rg);
+	free(fn_list); free(fn_ref); free(fn_out); free(g_library); free(g_rg); free(fn_rg);
+	if (g_rghash) {
+		khint_t k;
+		for (k = 0; k < kh_end(g_rghash); ++k)
+			if (kh_exist(g_rghash, k)) free((char*)kh_key(g_rghash, k));
+		kh_destroy(rg, g_rghash);
+	}
 	samclose(in);
 	samclose(out);
 	return ret;
@@ -167,6 +197,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
 	fprintf(stderr, "         -o FILE  output file name [stdout]\n");
+	fprintf(stderr, "         -R FILE  list of read groups to be outputted [null]\n");
 	fprintf(stderr, "         -f INT   required flag, 0 for unset [0]\n");
 	fprintf(stderr, "         -F INT   filtering flag, 0 for unset [0]\n");
 	fprintf(stderr, "         -q INT   minimum mapping quality [0]\n");
