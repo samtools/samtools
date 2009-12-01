@@ -11,7 +11,7 @@ my $version = '0.3.3';
 
 my $command = shift(@ARGV);
 my %func = (showALEN=>\&showALEN, pileup2fq=>\&pileup2fq, varFilter=>\&varFilter,
-			unique=>\&unique, uniqcmp=>\&uniqcmp, sra2hdr=>\&sra2hdr);
+			unique=>\&unique, uniqcmp=>\&uniqcmp, sra2hdr=>\&sra2hdr, sam2fq=>\&sam2fq);
 
 die("Unknown command \"$command\".\n") if (!defined($func{$command}));
 &{$func{$command}};
@@ -223,6 +223,49 @@ sub p2q_print_str {
   my $l = length($$s);
   for (my $i = 0; $i < $l; $i += 60) {
 	print substr($$s, $i, 60), "\n";
+  }
+}
+
+#
+# sam2fq
+#
+
+sub sam2fq {
+  my %opts = (n=>20, p=>'');
+  getopts('n:p:', \%opts);
+  die("Usage: samtools.pl sam2fq [-n 20] [-p <prefix>] <inp.sam>\n") if (@ARGV == 0 && -t STDIN);
+  if ($opts{p} && $opts{n} > 1) {
+	my $pre = $opts{p};
+	my @fh;
+	for (0 .. $opts{n}-1) {
+	  open($fh[$_], sprintf("| gzip > $pre.%.3d.fq.gz", $_)) || die;
+	}
+	my $i = 0;
+	while (<>) {
+	  next if (/^@/);
+	  chomp;
+	  my @t = split("\t");
+	  next if ($t[9] eq '*');
+	  my ($name, $seq, $qual);
+	  if ($t[1] & 16) { # reverse strand
+		$seq = reverse($t[9]);
+		$qual = reverse($t[10]);
+		$seq =~ tr/ACGTacgt/TGCAtgca/;
+	  } else {
+		($seq, $qual) = @t[9,10];
+	  }
+	  $name = $t[0];
+	  $name .= "/1" if ($t[1] & 0x40);
+	  $name .= "/2" if ($t[1] & 0x80);
+	  print {$fh[$i]} "\@$name\n$seq\n";
+	  if ($qual ne '*') {
+		print {$fh[$i]} "+\n$qual\n";
+	  }
+	  $i = 0 if (++$i == $opts{n});
+	}
+	close($fh[$_]) for (0 .. $opts{n}-1);
+  } else {
+	die("To be implemented.\n");
   }
 }
 
