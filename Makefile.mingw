@@ -21,12 +21,15 @@ LIBPATH=
 
 all:$(PROG)
 
+.PHONY:all lib clean cleanlocal
+.PHONY:all-recur lib-recur clean-recur cleanlocal-recur install-recur
+
 lib:libbam.a
 
 libbam.a:$(LOBJS)
 		$(AR) -cru $@ $(LOBJS)
 
-samtools:lib $(AOBJS)
+samtools:$(AOBJS) libbam.a
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LIBPATH) -lm -L. -lbam -Lwin32 -lz -lcurses -lws2_32
 
 razip:razip.o razf.o $(KNETFILE_O)
@@ -53,4 +56,4 @@ faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h
 
 clean:
-		rm -fr gmon.out *.o *.exe *.dSYM razip $(PROG) *~ *.a
+		rm -fr gmon.out *.o *.exe *.dSYM razip bgzip $(PROG) *~ *.a

@@ -31,12 +31,15 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 
 all:$(PROG)
 
+.PHONY:all lib clean cleanlocal
+.PHONY:all-recur lib-recur clean-recur cleanlocal-recur install-recur
+
 lib:libbam.a
 
 libbam.a:$(LOBJS)
 		$(AR) -cru $@ $(LOBJS)
 
-samtools:lib $(AOBJS)
+samtools:$(AOBJS) libbam.a
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) libbam.a -lm $(LIBPATH) $(LIBCURSES) -lz
 
 razip:razip.o razf.o $(KNETFILE_O)
@@ -64,6 +67,6 @@ faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h
 
 cleanlocal:
-		rm -fr gmon.out *.o a.out *.exe *.dSYM razip $(PROG) *~ *.a
+		rm -fr gmon.out *.o a.out *.exe *.dSYM razip bgzip $(PROG) *~ *.a
 
 clean:cleanlocal-recur
