@@ -2,9 +2,10 @@ CC=			gcc.exe
 AR=			ar.exe
 CFLAGS=		-g -Wall -O2
 DFLAGS=		-D_CURSES_LIB=2 -D_USE_KNETFILE
+KNETFILE_O=	knetfile.o
 LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 			bam_pileup.o bam_lpileup.o bam_md.o glf.o razf.o faidx.o bam_sort.o \
-			knetfile.o
+			$(KNETFILE_O)
 AOBJS=		bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
 			bamtk.o kaln.o sam_header.o
@@ -28,11 +29,11 @@ libbam.a:$(LOBJS)
 samtools:lib $(AOBJS)
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LIBPATH) -lm -L. -lbam -Lwin32 -lz -lcurses -lws2_32
 
-razip:razip.o razf.o knetfile.o
-		$(CC) $(CFLAGS) -o $@ razf.o razip.o knetfile.o -lz
+razip:razip.o razf.o $(KNETFILE_O)
+		$(CC) $(CFLAGS) -o $@ razf.o razip.o $(KNETFILE_O) -lz
 
-bgzip:bgzip.o bgzf.o
-		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o -lz
+bgzip:bgzip.o bgzf.o $(KNETFILE_O)
+		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o $(KNETFILE_O) -lz
 
 razip.o:razf.h
 bam.o:bam.h razf.h bam_endian.h kstring.h
