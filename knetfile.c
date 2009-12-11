@@ -566,7 +566,7 @@ off_t knet_seek(knetFile *fp, int64_t off, int whence)
         else if (whence==SEEK_SET)
             fp->offset = off;
 		fp->is_ready = 0;
-		return fp->offset;
+		return 0;
 	}
 	errno = EINVAL;
     fprintf(stderr,"[knet_seek] %s\n", strerror(errno));
