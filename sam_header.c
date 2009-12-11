@@ -345,7 +345,11 @@ static HeaderLine *sam_header_line_parse(const char *headerLine)
         while (*to && *to!='\t') to++;
 
         if ( !required_tags[itype] && !optional_tags[itype] )
+        {
+            // CO is a special case, it can contain anything, including tabs
+            if ( *to ) { to++; continue; }
             tag = new_tag("  ",from,to-1);
+        }
         else
             tag = new_tag(from,from+3,to-1);
 
