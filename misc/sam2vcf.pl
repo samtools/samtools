@@ -1,9 +1,9 @@
 #!/usr/bin/perl -w
 # 
-# VCF specs: http://www.1000genomes.org/wiki/doku.php?id=1000_genomes:analysis:vcfv3.2
-
+# VCF specs: http://www.1000genomes.org/wiki/doku.php?id=1000_genomes:analysis:vcf3.3
+# 
 # Contact: pd3@sanger
-# Version: 2009-10-08
+# Version: 2009-12-08
 
 use strict;
 use warnings;
@@ -23,7 +23,8 @@ sub error
     die
         "Usage: sam2vcf.pl [OPTIONS] < in.pileup > out.vcf\n",
         "Options:\n",
-        "   -r, -refseq <file.fa>            The reference sequence, required when indels are present.\n",
+        "   -r, --refseq <file.fa>           The reference sequence, required when indels are present.\n",
+        "   -s, --snps-only                  Ignore indels.\n",
         "   -h, -?, --help                   This help message.\n",
         "\n";
 }
@@ -39,6 +40,7 @@ sub parse_params
     while (my $arg=shift(@ARGV))
     {
         if ( $arg eq '-r' || $arg eq '--refseq' ) { $opts{refseq}=shift(@ARGV); next; }
+        if ( $arg eq '-s' || $arg eq '--snps-only' ) { $opts{snps_only}=1; next; }
         if ( $arg eq '-?' || $arg eq '-h' || $arg eq '--help' ) { error(); }
 
         error("Unknown parameter \"$arg\". Run -h for help.\n");
@@ -97,6 +99,7 @@ sub do_pileup_to_vcf
     my $fh_out = $$opts{fh_out};
     my ($prev_chr,$prev_pos,$prev_ref);
     my $refseq;
+    my $ignore_indels = $$opts{snps_only} ? 1 : 0;
 
     while (my $line=<$fh_in>)
     {
@@ -107,6 +110,8 @@ sub do_pileup_to_vcf
         if ( $ref eq '*' )
         {
             # An indel is involved.
+            if ( $ignore_indels ) { next; }
+
             if ($chr ne $prev_chr || $pos ne $prev_pos) 
             {
                 if ( !$$opts{refseq} ) { error("Cannot do indels without the reference.\n"); }
@@ -143,7 +148,7 @@ sub do_pileup_to_vcf
             ($alt,$gt) = iupac_to_gtype($ref,$cons);
         }
 
-        print $fh_out "$chr\t$pos\t.\t$ref\t$alt\t$snp_qual\t0\t\tGT:GQ:DP\t$gt:$cons_qual:$depth\n";
+        print $fh_out "$chr\t$pos\t.\t$ref\t$alt\t$snp_qual\t0\t.\tGT:GQ:DP\t$gt:$cons_qual:$depth\n";
 
         $prev_ref = $ref;
         $prev_pos = $pos;
@@ -167,7 +172,8 @@ use Carp;
 sub Fasta::new
 {
     my ($class,@args) = @_;
-    my $self = @args ? {@args} : {};
+    my $self = {@args};
+    bless $self, ref($class) || $class;
     if ( !$$self{file} ) { $self->throw(qq[Missing the parameter "file"\n]); }
     $$self{chr}  = undef;
     $$self{from} = undef;
