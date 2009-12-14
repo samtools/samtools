@@ -19,6 +19,8 @@ KHASH_MAP_INIT_INT64(64, indel_list_t)
 #define BAM_PLF_VAR_ONLY   0x10
 #define BAM_PLF_2ND        0x20
 #define BAM_PLF_RANBASE    0x40
+#define BAM_PLF_1STBASE    0x80
+#define BAM_PLF_ALLBASE    0x100
 
 typedef struct {
 	bam_header_t *h;
@@ -184,12 +186,23 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	}
 	// call the consensus and indel
 	if (d->format & BAM_PLF_CNS) { // call consensus
-		if (d->format & BAM_PLF_RANBASE) {
-			const bam_pileup1_t *p = pu + (int)(drand48() * n);
+		if (d->format & (BAM_PLF_RANBASE|BAM_PLF_1STBASE)) { // use a random base or the 1st base as the consensus call
+			const bam_pileup1_t *p = (d->format & BAM_PLF_1STBASE)? pu : pu + (int)(drand48() * n);
 			int q = bam1_qual(p->b)[p->qpos];
 			int mapQ = p->b->core.qual < d->c->cap_mapQ? p->b->core.qual : d->c->cap_mapQ;
 			uint32_t b = bam1_seqi(bam1_seq(p->b), p->qpos);
 			cns = b<<28 | 0xf<<24 | mapQ<<16 | q<<8;
+		} else if (d->format & BAM_PLF_ALLBASE) { // collapse all bases
+			uint64_t rmsQ = 0;
+			uint32_t b = 0;
+			for (i = 0; i < n; ++i) {
+				const bam_pileup1_t *p = pu + i;
+				int q = p->b->core.qual < d->c->cap_mapQ? p->b->core.qual : d->c->cap_mapQ;
+				b |= bam1_seqi(bam1_seq(p->b), p->qpos);
+				rmsQ += q * q;
+			}
+			rmsQ = (uint64_t)(sqrt((double)rmsQ / n) + .499);
+			cns = b<<28 | 0xf<<24 | rmsQ<<16 | 60<<8;
 		} else cns = bam_maqcns_call(n, pu, d->c);
 	}
 	if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref && pos < d->len) { // call indels
@@ -309,7 +322,7 @@ int bam_pileup(int argc, char *argv[])
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
 	d->ido = bam_maqindel_opt_init();
-	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:S2aR")) >= 0) {
+	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:S2aR:")) >= 0) {
 		switch (c) {
 		case 'a': d->c->is_soap = 1; break;
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
@@ -326,10 +339,15 @@ int bam_pileup(int argc, char *argv[])
 		case 'm': d->mask = strtol(optarg, 0, 0); break;
 		case 'g': d->format |= BAM_PLF_GLF; break;
 		case '2': d->format |= BAM_PLF_2ND; break;
-		case 'R': d->format |= BAM_PLF_RANBASE; break;
 		case 'I': d->ido->q_indel = atoi(optarg); break;
 		case 'G': d->ido->r_indel = atof(optarg); break;
 		case 'S': is_SAM = 1; break;
+		case 'R':
+			if (strcmp(optarg, "random") == 0) d->format |= BAM_PLF_RANBASE;
+			else if (strcmp(optarg, "first") == 0) d->format |= BAM_PLF_1STBASE;
+			else if (strcmp(optarg, "all") == 0) d->format |= BAM_PLF_ALLBASE;
+			else fprintf(stderr, "[bam_pileup] unrecognized -R\n");
+			break;
 		default: fprintf(stderr, "Unrecognizd option '-%c'.\n", c); return 1;
 		}
 	}
@@ -348,7 +366,6 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "        -l FILE   list of sites at which pileup is output\n");
 		fprintf(stderr, "        -f FILE   reference sequence in the FASTA format\n\n");
 		fprintf(stderr, "        -c        output the maq consensus sequence\n");
-		fprintf(stderr, "        -R        randomly choose a random base as the consensus (force -c)\n");
 		fprintf(stderr, "        -v        print variants only (for -c)\n");
 		fprintf(stderr, "        -g        output in the GLFv3 format (suppressing -c/-i/-s)\n");
 		fprintf(stderr, "        -T FLOAT  theta in maq consensus calling model (for -c/-g) [%f]\n", d->c->theta);
@@ -360,7 +377,7 @@ int bam_pileup(int argc, char *argv[])
 		free(fn_list); free(fn_fa); free(d);
 		return 1;
 	}
-	if (d->format & BAM_PLF_RANBASE) d->format |= BAM_PLF_CNS;
+	if (d->format & (BAM_PLF_RANBASE|BAM_PLF_1STBASE|BAM_PLF_ALLBASE)) d->format |= BAM_PLF_CNS;
 	if (fn_fa) d->fai = fai_load(fn_fa);
 	if (d->format & (BAM_PLF_CNS|BAM_PLF_GLF)) bam_maqcns_prepare(d->c); // consensus calling
 	if (d->format & BAM_PLF_GLF) { // for glf output
