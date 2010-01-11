@@ -197,7 +197,7 @@ int fai_build(const char *fn)
 	sprintf(str, "%s.fai", fn);
 	rz = razf_open(fn, "r");
 	if (rz == 0) {
-		fprintf(stderr, "[fai_build] fail to open the FASTA file %s\n",str);
+		fprintf(stderr, "[fai_build] fail to open the FASTA file %s\n",fn);
 		free(str);
 		return -1;
 	}
