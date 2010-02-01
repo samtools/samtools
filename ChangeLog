@@ -1,4 +1,162 @@
 ------------------------------------------------------------------------
+r529 | jmarshall | 2010-01-11 18:51:49 -0500 (Mon, 11 Jan 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/faidx.c
+
+Put the right filename in the error message.
+
+------------------------------------------------------------------------
+r528 | lh3lh3 | 2009-12-14 11:26:47 -0500 (Mon, 14 Dec 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-5 (r528)
+ * further add new consensus generation strategy
+
+------------------------------------------------------------------------
+r527 | petulda | 2009-12-11 12:31:05 -0500 (Fri, 11 Dec 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/knetfile.c
+
+Fixed a bug in knet_seek
+------------------------------------------------------------------------
+r526 | petulda | 2009-12-11 07:51:18 -0500 (Fri, 11 Dec 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/misc/sam2vcf.pl
+
+Small fix in VCF format: dot for the empty INFO field
+------------------------------------------------------------------------
+r525 | petulda | 2009-12-11 04:36:18 -0500 (Fri, 11 Dec 2009) | 1 line
+Changed paths:
+   M /trunk/samtools/sam_header.c
+
+Allow tabs in the CO header field
+------------------------------------------------------------------------
+r524 | jmarshall | 2009-12-10 10:03:58 -0500 (Thu, 10 Dec 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/Makefile.mingw
+
+Depend on libbam.a rather than the phony target, so that samtools is not
+unnecessarily rebuilt every time.  Also clean bgzip.
+
+------------------------------------------------------------------------
+r523 | jmarshall | 2009-12-10 09:45:32 -0500 (Thu, 10 Dec 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/Makefile.mingw
+
+Fix a bug in compiling bgzip: this also needs knetfile.o when _USE_KNETFILE
+is defined.  Also introduce $(KNETFILE_O) which can be set to empty to
+facilitate non-knet builds.
+
+------------------------------------------------------------------------
+r522 | lh3lh3 | 2009-12-01 13:02:36 -0500 (Tue, 01 Dec 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/sam_view.c
+
+ * samtools-0.1.7-4 (r522)
+ * fixed a bug in "view -r"
+ * added a new option "view -R" to read required read groups from a file
+
+------------------------------------------------------------------------
+r521 | lh3lh3 | 2009-12-01 10:00:12 -0500 (Tue, 01 Dec 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-3 (r521)
+ * calmd: optionally mask matching bases as N
+
+------------------------------------------------------------------------
+r520 | lh3lh3 | 2009-12-01 09:37:17 -0500 (Tue, 01 Dec 2009) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools-0.1.7-2 (r520)
+ * fixed a few issues with compilation in Windows (on behalf of John)
+ * choose a random base as the consensus (for population genetics studies)
+
+------------------------------------------------------------------------
+r519 | jmarshall | 2009-11-30 10:53:02 -0500 (Mon, 30 Nov 2009) | 6 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+
+Put libraries at the end, so they can resolve references from libbam.a
+as well, even with old-fashioned linkers.
+
+Also use libbam.a explicitly rather than "-L. -lbam" to ensure that we get
+the freshly built library, not some other libbam.a lying around the system.
+
+------------------------------------------------------------------------
+r518 | jmarshall | 2009-11-30 08:44:56 -0500 (Mon, 30 Nov 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/misc/Makefile
+
+Also clean *.exe (for Cygwin users using this makefile).
+
+------------------------------------------------------------------------
+r517 | jmarshall | 2009-11-30 07:09:04 -0500 (Mon, 30 Nov 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+
+Index files should be opened in binary mode, not text mode.
+
+------------------------------------------------------------------------
+r516 | lh3lh3 | 2009-11-27 15:18:59 -0500 (Fri, 27 Nov 2009) | 2 lines
+Changed paths:
+   A /trunk/samtools/examples/bam2bed.c
+
+another example program
+
+------------------------------------------------------------------------
+r515 | lh3lh3 | 2009-11-27 10:44:56 -0500 (Fri, 27 Nov 2009) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/wgsim_eval.pl
+   M /trunk/samtools/sam.c
+
+ * samtools-0.1.7-1 (r515)
+ * report an error when .fai contains duplicated names, instead of segfault
+
+------------------------------------------------------------------------
+r514 | jmarshall | 2009-11-24 09:45:35 -0500 (Tue, 24 Nov 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+
+Format 'c'-encoded auxiliary fields correctly, as *signed* integers.
+
+------------------------------------------------------------------------
+r513 | lh3lh3 | 2009-11-16 10:13:07 -0500 (Mon, 16 Nov 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile.mingw
+
+Update Makefile.mingw for the same reason
+
+------------------------------------------------------------------------
+r512 | lh3lh3 | 2009-11-16 10:00:08 -0500 (Mon, 16 Nov 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+
+Fixed a bug in compiling razip
+
+------------------------------------------------------------------------
+r510 | lh3lh3 | 2009-11-10 10:55:41 -0500 (Tue, 10 Nov 2009) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+Release samtools-0.1.7 (r510)
+
+------------------------------------------------------------------------
 r509 | lh3lh3 | 2009-11-06 09:17:09 -0500 (Fri, 06 Nov 2009) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c

@@ -328,10 +328,11 @@ sub sra2hdr {
 
 sub unique {
   my %opts = (f=>250.0, q=>5, r=>2, a=>1, b=>3);
-  getopts('Qf:q:r:a:b:', \%opts);
+  getopts('Qf:q:r:a:b:m', \%opts);
   die("Usage: samtools.pl unique [-f $opts{f}] <in.sam>\n") if (@ARGV == 0 && -t STDIN);
   my $last = '';
   my $recal_Q = !defined($opts{Q});
+  my $multi_only = defined($opts{m});
   my @a;
   while (<>) {
 	my $score = -1;
@@ -349,16 +350,16 @@ sub unique {
 	}
 	$score = 1 if ($score < 1);
 	if ($t[0] ne $last) {
-	  &unique_aux(\@a, $opts{f}, $recal_Q) if (@a);
+	  &unique_aux(\@a, $opts{f}, $recal_Q, $multi_only) if (@a);
 	  $last = $t[0];
 	}
 	push(@a, [$score, \@t]);
   }
-  &unique_aux(\@a, $opts{f}, $recal_Q) if (@a);
+  &unique_aux(\@a, $opts{f}, $recal_Q, $multi_only) if (@a);
 }
 
 sub unique_aux {
-  my ($a, $fac, $is_recal) = @_;
+  my ($a, $fac, $is_recal, $multi_only) = @_;
   my ($max, $max2, $max_i) = (0, 0, -1);
   for (my $i = 0; $i < @$a; ++$i) {
 	if ($a->[$i][0] > $max) {
@@ -368,9 +369,11 @@ sub unique_aux {
 	}
   }
   if ($is_recal) {
-	my $q = int($fac * ($max - $max2) / $max + .499);
-	$q = 250 if ($q > 250);
-	$a->[$max_i][1][4] = $q < 250? $q : 250;
+	if (!$multi_only || @$a > 1) {
+	  my $q = int($fac * ($max - $max2) / $max + .499);
+	  $q = 250 if ($q > 250);
+	  $a->[$max_i][1][4] = $q < 250? $q : 250;
+	}
   }
   print join("\t", @{$a->[$max_i][1]});
   @$a = ();

@@ -174,7 +174,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	// update d->ref if necessary
 	if (d->fai && (int)tid != d->tid) {
 		free(d->ref);
-		d->ref = fai_fetch(d->fai, d->h->target_name[tid], &d->len);
+		d->ref = faidx_fetch_seq(d->fai, d->h->target_name[tid], 0, 0x7fffffff, &d->len);
 		d->tid = tid;
 	}
 	rb = (d->ref && (int)pos < d->len)? d->ref[pos] : 'N';

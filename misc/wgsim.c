@@ -238,7 +238,7 @@ void maq_print_mutref(const char *name, const seq_t *seq, mutseq_t *hap1, mutseq
 		c[0] = nst_nt4_table[(int)seq->s[i]];
 		c[1] = hap1->s[i]; c[2] = hap2->s[i];
 		if (c[0] >= 4) continue;
-		if ((c[1] & mutmsk) != NOCHANGE || (c[1] & mutmsk) != NOCHANGE) {
+		if ((c[1] & mutmsk) != NOCHANGE || (c[2] & mutmsk) != NOCHANGE) {
 			printf("%s\t%d\t", name, i+1);
 			if (c[1] == c[2]) { // hom
 				if ((c[1]&mutmsk) == SUBSTITUTE) { // substitution
@@ -304,7 +304,7 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, FILE *fp_fa, int is_hap, uint64_t N,
 	tmp_seq[1] = (uint8_t*)calloc(l+2, 1);
 	size[0] = size_l; size[1] = size_r;
 
-	Q = (int)(-10.0 * log(ERR_RATE) / log(10.0) + 0.499) + 33;
+	Q = (ERR_RATE == 0.0)? 'I' : (int)(-10.0 * log(ERR_RATE) / log(10.0) + 0.499) + 33;
 
 	tot_len = n_ref = 0;
 	while ((l = seq_read_fasta(fp_fa, &seq, name, 0)) >= 0) {
