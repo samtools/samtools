@@ -61,13 +61,14 @@ sub iupac_to_gtype
             );
     if ( !exists($iupac{$base}) ) 
     { 
-        if ( $ref eq $base ) { return ('.','0|0'); }
-        return ($base,'1|1');
+        if ( $base ne 'A' && $base ne 'C' && $base ne 'G' && $base ne 'T' ) { error("FIXME: what is this [$base]?\n"); }
+        if ( $ref eq $base ) { return ('.','0/0'); }
+        return ($base,'1/1');
     }
     my $gt = $iupac{$base};
-    if ( $$gt[0] eq $ref  ) { return ($$gt[1],'0|1'); }
-    elsif ( $$gt[1] eq $ref ) { return ($$gt[0],'0|1'); }
-    return ("$$gt[0],$$gt[1]",'1|2');
+    if ( $$gt[0] eq $ref  ) { return ($$gt[1],'0/1'); }
+    elsif ( $$gt[1] eq $ref ) { return ($$gt[0],'0/1'); }
+    return ("$$gt[0],$$gt[1]",'1/2');
 }
 
 
@@ -101,6 +102,15 @@ sub do_pileup_to_vcf
     my $refseq;
     my $ignore_indels = $$opts{snps_only} ? 1 : 0;
 
+    print $fh_out 
+        qq[##fileformat=VCFv3.3\n],
+        qq[##INFO=DP,1,Integer,"Total Depth"\n],
+        qq[##FORMAT=GT,1,String,"Genotype"\n],
+        qq[##FORMAT=GQ,1,Integer,"Genotype Quality"\n],
+        qq[##FORMAT=DP,1,Integer,"Read Depth"\n],
+        qq[#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tdata\n]
+        ;
+
     while (my $line=<$fh_in>)
     {
         chomp($line);
@@ -129,17 +139,17 @@ sub do_pileup_to_vcf
             if ( !$alt1 ) 
             { 
                 $alt=$alt2; 
-                $gt='0|1'; 
+                $gt='0/1'; 
             }
             elsif ( !$alt2 ) 
             { 
                 $alt=$alt1; 
-                $gt='0|1'; 
+                $gt='0/1'; 
             }
             else 
             { 
                 $alt="$alt1,$alt2"; 
-                $gt='1|2'; 
+                $gt='1/2'; 
             }
         }
         else
@@ -148,7 +158,7 @@ sub do_pileup_to_vcf
             ($alt,$gt) = iupac_to_gtype($ref,$cons);
         }
 
-        print $fh_out "$chr\t$pos\t.\t$ref\t$alt\t$snp_qual\t0\t.\tGT:GQ:DP\t$gt:$cons_qual:$depth\n";
+        print $fh_out "$chr\t$pos\t.\t$ref\t$alt\t$snp_qual\t0\tDP=$depth\tGT:GQ:DP\t$gt:$cons_qual:$depth\n";
 
         $prev_ref = $ref;
         $prev_pos = $pos;
