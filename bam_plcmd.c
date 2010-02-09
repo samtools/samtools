@@ -31,6 +31,7 @@ typedef struct {
 	uint32_t format;
 	int tid, len, last_pos;
 	int mask;
+    int max_depth;  // for indel calling, ignore reads with the depth too high. 0 for unlimited
 	char *ref;
 	glfFile fp_glf; // for glf output only
 } pu_data_t;
@@ -124,10 +125,11 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 	g3->offset = pos - d->last_pos;
 	d->last_pos = pos;
 	glf3_write1(d->fp_glf, g3);
-	if (pos < d->len) {
+    if (pos < d->len) {
+        int m = (!d->max_depth || d->max_depth>n) ? n : d->max_depth;
 		if (proposed_indels)
-			r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
-		else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);
+			r = bam_maqindel(m, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
+		else r = bam_maqindel(m, pos, d->ido, pu, d->ref, 0, 0);
 	}
 	if (r) { // then write indel line
 		int het = 3 * n, min;
@@ -205,10 +207,11 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 			cns = b<<28 | 0xf<<24 | rmsQ<<16 | 60<<8;
 		} else cns = bam_maqcns_call(n, pu, d->c);
 	}
-	if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref && pos < d->len) { // call indels
-		if (proposed_indels) // the first element gives the size of the array
-			r = bam_maqindel(n, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
-		else r = bam_maqindel(n, pos, d->ido, pu, d->ref, 0, 0);
+    if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref && pos < d->len) { // call indels
+        int m = (!d->max_depth || d->max_depth>n) ? n : d->max_depth;
+        if (proposed_indels) // the first element gives the size of the array
+            r = bam_maqindel(m, pos, d->ido, pu, d->ref, proposed_indels[0], proposed_indels+1);
+        else r = bam_maqindel(m, pos, d->ido, pu, d->ref, 0, 0);
 	}
 	// when only variant sites are asked for, test if the site is a variant
 	if ((d->format & BAM_PLF_CNS) && (d->format & BAM_PLF_VAR_ONLY)) {
@@ -319,10 +322,11 @@ int bam_pileup(int argc, char *argv[])
 	int c, is_SAM = 0;
 	char *fn_list = 0, *fn_fa = 0, *fn_pos = 0;
 	pu_data_t *d = (pu_data_t*)calloc(1, sizeof(pu_data_t));
+    d->max_depth = 0;
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
 	d->ido = bam_maqindel_opt_init();
-	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:im:gI:G:vM:S2aR:")) >= 0) {
+	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:d:im:gI:G:vM:S2aR:")) >= 0) {
 		switch (c) {
 		case 'a': d->c->is_soap = 1; break;
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
@@ -333,6 +337,7 @@ int bam_pileup(int argc, char *argv[])
 		case 'N': d->c->n_hap = atoi(optarg); break;
 		case 'r': d->c->het_rate = atof(optarg); break;
 		case 'M': d->c->cap_mapQ = atoi(optarg); break;
+		case 'd': d->max_depth = atoi(optarg); break;
 		case 'c': d->format |= BAM_PLF_CNS; break;
 		case 'i': d->format |= BAM_PLF_INDEL_ONLY; break;
 		case 'v': d->format |= BAM_PLF_VAR_ONLY; break;
@@ -362,6 +367,7 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
 		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);
 		fprintf(stderr, "        -M INT    cap mapping quality at INT [%d]\n", d->c->cap_mapQ);
+        fprintf(stderr, "        -d INT    limit maximum depth for indels [unlimited]\n");
 		fprintf(stderr, "        -t FILE   list of reference sequences (force -S)\n");
 		fprintf(stderr, "        -l FILE   list of sites at which pileup is output\n");
 		fprintf(stderr, "        -f FILE   reference sequence in the FASTA format\n\n");
