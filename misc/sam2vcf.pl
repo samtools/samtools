@@ -25,6 +25,7 @@ sub error
         "Options:\n",
         "   -r, --refseq <file.fa>           The reference sequence, required when indels are present.\n",
         "   -s, --snps-only                  Ignore indels.\n",
+        "   -t, --column-title <string>      The column title.\n",
         "   -h, -?, --help                   This help message.\n",
         "\n";
 }
@@ -40,6 +41,7 @@ sub parse_params
     while (my $arg=shift(@ARGV))
     {
         if ( $arg eq '-r' || $arg eq '--refseq' ) { $opts{refseq}=shift(@ARGV); next; }
+        if ( $arg eq '-t' || $arg eq '--column-title' ) { $opts{title}=shift(@ARGV); next; }
         if ( $arg eq '-s' || $arg eq '--snps-only' ) { $opts{snps_only}=1; next; }
         if ( $arg eq '-?' || $arg eq '-h' || $arg eq '--help' ) { error(); }
 
@@ -101,6 +103,7 @@ sub do_pileup_to_vcf
     my ($prev_chr,$prev_pos,$prev_ref);
     my $refseq;
     my $ignore_indels = $$opts{snps_only} ? 1 : 0;
+    my $title = exists($$opts{title}) ? $$opts{title} : 'data';
 
     print $fh_out 
         qq[##fileformat=VCFv3.3\n],
@@ -108,7 +111,7 @@ sub do_pileup_to_vcf
         qq[##FORMAT=GT,1,String,"Genotype"\n],
         qq[##FORMAT=GQ,1,Integer,"Genotype Quality"\n],
         qq[##FORMAT=DP,1,Integer,"Read Depth"\n],
-        qq[#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\tdata\n]
+        qq[#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t$title\n]
         ;
 
     while (my $line=<$fh_in>)
