@@ -21,6 +21,7 @@ KHASH_MAP_INIT_INT64(64, indel_list_t)
 #define BAM_PLF_RANBASE    0x40
 #define BAM_PLF_1STBASE    0x80
 #define BAM_PLF_ALLBASE    0x100
+#define BAM_PLF_READPOS    0x200
 
 typedef struct {
 	bam_header_t *h;
@@ -299,6 +300,15 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 			putchar(c);
 		}
 	}
+	// print read position
+	if (d->format & BAM_PLF_READPOS) {
+		putchar('\t');
+		for (i = 0; i < n; ++i) {
+			int x = pu[i].qpos;
+			int l = pu[i].b->core.l_qseq;
+			printf("%d,", x < l/2? x+1 : -((l-1)-x+1));
+		}
+	}
 	putchar('\n');
 	// print the indel line if r has been calculated. This only happens if:
 	// a) -c or -i are flagged, AND b) the reference sequence is available
@@ -326,7 +336,7 @@ int bam_pileup(int argc, char *argv[])
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
 	d->ido = bam_maqindel_opt_init();
-	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:d:im:gI:G:vM:S2aR:")) >= 0) {
+	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:d:im:gI:G:vM:S2aR:P")) >= 0) {
 		switch (c) {
 		case 'a': d->c->is_soap = 1; break;
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
@@ -344,6 +354,7 @@ int bam_pileup(int argc, char *argv[])
 		case 'm': d->mask = strtol(optarg, 0, 0); break;
 		case 'g': d->format |= BAM_PLF_GLF; break;
 		case '2': d->format |= BAM_PLF_2ND; break;
+		case 'P': d->format |= BAM_PLF_READPOS; break;
 		case 'I': d->ido->q_indel = atoi(optarg); break;
 		case 'G': d->ido->r_indel = atof(optarg); break;
 		case 'S': is_SAM = 1; break;
