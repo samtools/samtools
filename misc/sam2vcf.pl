@@ -117,7 +117,12 @@ sub do_pileup_to_vcf
     while (my $line=<$fh_in>)
     {
         chomp($line);
-        my ($chr,$pos,$ref,$cons,$cons_qual,$snp_qual,$rms_qual,$depth,@items) = split(/\t/,$line);
+        my (@items) = split(/\t/,$line);
+        if ( scalar @items<8 ) 
+        { 
+            error("\nToo few columns, does not look like output of 'samtools pileup -c': $line\n"); 
+        }
+        my ($chr,$pos,$ref,$cons,$cons_qual,$snp_qual,$rms_qual,$depth) = @items;
 
         my ($alt,$gt);
         if ( $ref eq '*' )
