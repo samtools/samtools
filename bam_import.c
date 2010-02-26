@@ -168,9 +168,24 @@ static inline void parse_error(int64_t n_lines, const char * __restrict msg)
 }
 static inline void append_text(bam_header_t *header, kstring_t *str)
 {
-	int x = header->l_text, y = header->l_text + str->l + 2; // 2 = 1 byte dret + 1 byte null
+	size_t x = header->l_text, y = header->l_text + str->l + 2; // 2 = 1 byte dret + 1 byte null
 	kroundup32(x); kroundup32(y);
-	if (x < y) header->text = (char*)realloc(header->text, y);
+	if (x < y) 
+    {
+        header->n_text = y;
+        header->text = (char*)realloc(header->text, y);
+        if ( !header->text ) 
+        {
+            fprintf(stderr,"realloc failed to alloc %ld bytes\n", y);
+            abort();
+        }
+    }
+    // Sanity check
+    if ( header->l_text+str->l+1 >= header->n_text )
+    {
+        fprintf(stderr,"append_text FIXME: %ld>=%ld, x=%ld,y=%ld\n",  header->l_text+str->l+1,header->n_text,x,y);
+        abort();
+    }
 	strncpy(header->text + header->l_text, str->s, str->l+1); // we cannot use strcpy() here.
 	header->l_text += str->l + 1;
 	header->text[header->l_text] = 0;

@@ -58,6 +58,14 @@ static void debug(const char *format, ...)
     va_end(ap);
 }
 
+static list_t *list_prepend(list_t *root, void *data)
+{
+    list_t *l = malloc(sizeof(list_t));
+    l->next = root;
+    l->data = data;
+    return l;
+}
+
 static list_t *list_append(list_t *root, void *data)
 {
     list_t *l = root;
@@ -543,7 +551,7 @@ void *sam_header_parse2(const char *headerText)
     {
         hline = sam_header_line_parse(buf);
         if ( hline && sam_header_line_validate(hline) )
-            hlines = list_append(hlines, hline);
+            hlines = list_prepend(hlines, hline);
         else
         {
 			if (hline) sam_header_line_free(hline);
