@@ -70,6 +70,7 @@ bam_header_t *bam_header_read(bamFile fp)
 {
 	bam_header_t *header;
 	char buf[4];
+	int magic_len;
 	int32_t i = 1, name_len;
 	// check EOF
 	i = bgzf_check_EOF(fp);
@@ -80,9 +81,9 @@ bam_header_t *bam_header_read(bamFile fp)
 	}
 	else if (i == 0) fprintf(stderr, "[bam_header_read] EOF marker is absent.\n");
 	// read "BAM1"
-	if (bam_read(fp, buf, 4) != 4) return 0;
-	if (strncmp(buf, "BAM\001", 4)) {
-		fprintf(stderr, "[bam_header_read] wrong header\n");
+	magic_len = bam_read(fp, buf, 4);
+	if (magic_len != 4 || strncmp(buf, "BAM\001", 4) != 0) {
+		fprintf(stderr, "[bam_header_read] invalid BAM binary header (this is not a BAM file).\n");
 		return 0;
 	}
 	header = bam_header_init();
