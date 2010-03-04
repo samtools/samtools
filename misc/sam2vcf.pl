@@ -23,6 +23,7 @@ sub error
     die
         "Usage: sam2vcf.pl [OPTIONS] < in.pileup > out.vcf\n",
         "Options:\n",
+        "   -i, --indels-only                Ignore SNPs.\n",
         "   -r, --refseq <file.fa>           The reference sequence, required when indels are present.\n",
         "   -s, --snps-only                  Ignore indels.\n",
         "   -t, --column-title <string>      The column title.\n",
@@ -43,6 +44,7 @@ sub parse_params
         if ( $arg eq '-r' || $arg eq '--refseq' ) { $opts{refseq}=shift(@ARGV); next; }
         if ( $arg eq '-t' || $arg eq '--column-title' ) { $opts{title}=shift(@ARGV); next; }
         if ( $arg eq '-s' || $arg eq '--snps-only' ) { $opts{snps_only}=1; next; }
+        if ( $arg eq '-i' || $arg eq '--indels-only' ) { $opts{indels_only}=1; next; }
         if ( $arg eq '-?' || $arg eq '-h' || $arg eq '--help' ) { error(); }
 
         error("Unknown parameter \"$arg\". Run -h for help.\n");
@@ -103,6 +105,7 @@ sub do_pileup_to_vcf
     my ($prev_chr,$prev_pos,$prev_ref);
     my $refseq;
     my $ignore_indels = $$opts{snps_only} ? 1 : 0;
+    my $ignore_snps   = $$opts{indels_only} ? 1 : 0;
     my $title = exists($$opts{title}) ? $$opts{title} : 'data';
 
     print $fh_out 
@@ -122,7 +125,7 @@ sub do_pileup_to_vcf
         { 
             error("\nToo few columns, does not look like output of 'samtools pileup -c': $line\n"); 
         }
-        my ($chr,$pos,$ref,$cons,$cons_qual,$snp_qual,$rms_qual,$depth) = @items;
+        my ($chr,$pos,$ref,$cons,$cons_qual,$snp_qual,$rms_qual,$depth,$a1,$a2) = @items;
 
         my ($alt,$gt);
         if ( $ref eq '*' )
@@ -130,7 +133,7 @@ sub do_pileup_to_vcf
             # An indel is involved.
             if ( $ignore_indels ) { next; }
 
-            if ($chr ne $prev_chr || $pos ne $prev_pos) 
+            if (!defined $prev_chr || $chr ne $prev_chr || $pos ne $prev_pos) 
             {
                 if ( !$$opts{refseq} ) { error("Cannot do indels without the reference.\n"); }
                 if ( !$refseq ) { $refseq = Fasta->new(file=>$$opts{refseq}); }
@@ -138,12 +141,13 @@ sub do_pileup_to_vcf
             }
             else { $ref = $prev_ref; }
 
-            # One of the alleles can be a reference and it can come in arbitrary order
+            # One of the alleles can be a reference and it can come in arbitrary order. In some
+            #   cases */* can be encountered. In such a case, look in the additional columns.
             my ($al1,$al2) = split(m{/},$cons);
+            if ( $al1 eq $al2 && $al1 eq '*' ) { $al1=$a1; $al2=$a2; }
             my $alt1 = parse_indel($al1);
             my $alt2 = parse_indel($al2);
             if ( !$alt1 && !$alt2 ) { error("FIXME: could not parse indel:\n", $line); }
-            if ( $alt1 && $alt2 && $alt1 eq $alt2 ) { $alt2=''; }
             if ( !$alt1 ) 
             { 
                 $alt=$alt2; 
@@ -154,7 +158,12 @@ sub do_pileup_to_vcf
                 $alt=$alt1; 
                 $gt='0/1'; 
             }
-            else 
+            elsif ( $alt1 eq $alt2 )
+            { 
+                $alt="$alt1"; 
+                $gt='1/1'; 
+            }
+            else
             { 
                 $alt="$alt1,$alt2"; 
                 $gt='1/2'; 
@@ -162,6 +171,8 @@ sub do_pileup_to_vcf
         }
         else
         {
+            if ( $ignore_snps ) { next; }
+
             # SNP
             ($alt,$gt) = iupac_to_gtype($ref,$cons);
         }
