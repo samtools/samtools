@@ -10,6 +10,7 @@ KHASH_MAP_INIT_STR(str, const char *)
 
 struct _HeaderList
 {
+    struct _HeaderList *last;   // Hack: Used and maintained only by list_append_to_end. Maintained in the root node only.
     struct _HeaderList *next;
     void *data;
 };
@@ -58,12 +59,32 @@ static void debug(const char *format, ...)
     va_end(ap);
 }
 
+#if 0
+// Replaced by list_append_to_end
 static list_t *list_prepend(list_t *root, void *data)
 {
     list_t *l = malloc(sizeof(list_t));
     l->next = root;
     l->data = data;
     return l;
+}
+#endif
+
+// Relies on the root->last being correct. Do not use with the other list_*
+//  routines unless they are fixed to modify root->last as well.
+static list_t *list_append_to_end(list_t *root, void *data)
+{
+    list_t *l = malloc(sizeof(list_t));
+    l->last = l;
+    l->next = NULL;
+    l->data = data;
+
+    if ( !root )
+        return l;
+
+    root->last->next = l;
+    root->last = l;
+    return root;
 }
 
 static list_t *list_append(list_t *root, void *data)
@@ -551,7 +572,8 @@ void *sam_header_parse2(const char *headerText)
     {
         hline = sam_header_line_parse(buf);
         if ( hline && sam_header_line_validate(hline) )
-            hlines = list_prepend(hlines, hline);
+            // With too many (~250,000) reference sequences the header parsing was too slow with list_append.
+            hlines = list_append_to_end(hlines, hline);
         else
         {
 			if (hline) sam_header_line_free(hline);
