@@ -131,7 +131,13 @@ sub do_pileup_to_vcf
         if ( $ref eq '*' )
         {
             # An indel is involved.
-            if ( $ignore_indels ) { next; }
+            if ( $ignore_indels )
+            { 
+                $prev_ref = $ref;
+                $prev_pos = $pos;
+                $prev_chr = $chr;
+                next; 
+            }
 
             if (!defined $prev_chr || $chr ne $prev_chr || $pos ne $prev_pos) 
             {
@@ -171,7 +177,13 @@ sub do_pileup_to_vcf
         }
         else
         {
-            if ( $ignore_snps ) { next; }
+            if ( $ignore_snps ) 
+            { 
+                $prev_ref = $ref;
+                $prev_pos = $pos;
+                $prev_chr = $chr;
+                next; 
+            }
 
             # SNP
             ($alt,$gt) = iupac_to_gtype($ref,$cons);
