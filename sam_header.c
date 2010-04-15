@@ -351,7 +351,7 @@ static HeaderLine *sam_header_line_parse(const char *headerLine)
 
     while (*to && *to!='\t') to++;
     if ( to-from != 2 ) {
-		debug("[sam_header_line_parse] expected '@XY', got [%s]\n", headerLine);
+		debug("[sam_header_line_parse] expected '@XY', got [%s]\nHint: The header tags must be tab-separated.\n", headerLine);
 		return 0;
 	}
     
