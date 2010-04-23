@@ -3,7 +3,7 @@
 # VCF specs: http://www.1000genomes.org/wiki/doku.php?id=1000_genomes:analysis:vcf3.3
 # 
 # Contact: pd3@sanger
-# Version: 2009-12-08
+# Version: 2010-04-23
 
 use strict;
 use warnings;
@@ -23,11 +23,12 @@ sub error
     die
         "Usage: sam2vcf.pl [OPTIONS] < in.pileup > out.vcf\n",
         "Options:\n",
-        "   -i, --indels-only                Ignore SNPs.\n",
-        "   -r, --refseq <file.fa>           The reference sequence, required when indels are present.\n",
-        "   -s, --snps-only                  Ignore indels.\n",
-        "   -t, --column-title <string>      The column title.\n",
-        "   -h, -?, --help                   This help message.\n",
+        "   -h, -?, --help                  This help message.\n",
+        "   -i, --indels-only               Ignore SNPs.\n",
+        "   -r, --refseq <file.fa>          The reference sequence, required when indels are present.\n",
+        "   -R, --keep-ref                  Print reference alleles as well.\n",
+        "   -s, --snps-only                 Ignore indels.\n",
+        "   -t, --column-title <string>     The column title.\n",
         "\n";
 }
 
@@ -41,6 +42,7 @@ sub parse_params
 
     while (my $arg=shift(@ARGV))
     {
+        if ( $arg eq '-R' || $arg eq '--keep-ref' ) { $opts{keep_ref}=1; next; }
         if ( $arg eq '-r' || $arg eq '--refseq' ) { $opts{refseq}=shift(@ARGV); next; }
         if ( $arg eq '-t' || $arg eq '--column-title' ) { $opts{title}=shift(@ARGV); next; }
         if ( $arg eq '-s' || $arg eq '--snps-only' ) { $opts{snps_only}=1; next; }
@@ -106,6 +108,7 @@ sub do_pileup_to_vcf
     my $refseq;
     my $ignore_indels = $$opts{snps_only} ? 1 : 0;
     my $ignore_snps   = $$opts{indels_only} ? 1 : 0;
+    my $keep_ref      = $$opts{keep_ref} ? 1 : 0;
     my $title = exists($$opts{title}) ? $$opts{title} : 'data';
 
     print $fh_out 
@@ -126,6 +129,8 @@ sub do_pileup_to_vcf
             error("\nToo few columns, does not look like output of 'samtools pileup -c': $line\n"); 
         }
         my ($chr,$pos,$ref,$cons,$cons_qual,$snp_qual,$rms_qual,$depth,$a1,$a2) = @items;
+        $ref  = uc($ref);
+        $cons = uc($cons);
 
         my ($alt,$gt);
         if ( $ref eq '*' )
@@ -144,6 +149,7 @@ sub do_pileup_to_vcf
                 if ( !$$opts{refseq} ) { error("Cannot do indels without the reference.\n"); }
                 if ( !$refseq ) { $refseq = Fasta->new(file=>$$opts{refseq}); }
                 $ref = $refseq->get_base($chr,$pos);
+                $ref = uc($ref);
             }
             else { $ref = $prev_ref; }
 
@@ -177,7 +183,7 @@ sub do_pileup_to_vcf
         }
         else
         {
-            if ( $ignore_snps ) 
+            if ( $ignore_snps || (!$keep_ref && $ref eq $cons) ) 
             { 
                 $prev_ref = $ref;
                 $prev_pos = $pos;
