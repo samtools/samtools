@@ -98,8 +98,12 @@ static inline void insert_offset2(bam_lidx_t *index2, bam1_t *b, uint64_t offset
 		index2->offset = (uint64_t*)realloc(index2->offset, index2->m * 8);
 		memset(index2->offset + old_m, 0, 8 * (index2->m - old_m));
 	}
-	for (i = beg + 1; i <= end; ++i)
-		if (index2->offset[i] == 0) index2->offset[i] = offset;
+	if (beg == end) {
+		if (index2->offset[beg] == 0) index2->offset[beg] = offset;
+	} else {
+		for (i = beg; i <= end; ++i)
+			if (index2->offset[i] == 0) index2->offset[i] = offset;
+	}
 	index2->n = end + 1;
 }
 
@@ -128,6 +132,17 @@ static void merge_chunks(bam_index_t *idx)
 		} // ~for(k)
 	} // ~for(i)
 #endif // defined(BAM_TRUE_OFFSET) || defined(BAM_BGZF)
+}
+
+static void fill_missing(bam_index_t *idx)
+{
+	int i, j;
+	for (i = 0; i < idx->n; ++i) {
+		bam_lidx_t *idx2 = &idx->index2[i];
+		for (j = 1; j < idx2->n; ++j)
+			if (idx2->offset[j] == 0)
+				idx2->offset[j] = idx2->offset[j-1];
+	}
 }
 
 bam_index_t *bam_index_core(bamFile fp)
@@ -163,7 +178,7 @@ bam_index_t *bam_index_core(bamFile fp)
 					bam1_qname(b), last_coor, c->pos, c->tid+1);
 			exit(1);
 		}
-		if (b->core.tid >= 0 && b->core.bin < 4681) insert_offset2(&idx->index2[b->core.tid], b, last_off);
+		insert_offset2(&idx->index2[b->core.tid], b, last_off);
 		if (c->bin != last_bin) { // then possibly write the binning index
 			if (save_bin != 0xffffffffu) // save_bin==0xffffffffu only happens to the first record
 				insert_offset(idx->index[save_tid], save_bin, save_off, last_off);
@@ -182,6 +197,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	}
 	if (save_tid >= 0) insert_offset(idx->index[save_tid], save_bin, save_off, bam_tell(fp));
 	merge_chunks(idx);
+	fill_missing(idx);
 	if (ret < -1) fprintf(stderr, "[bam_index_core] truncated file? Continue anyway. (%d)\n", ret);
 	free(b->data); free(b);
 	return idx;
@@ -504,7 +520,17 @@ bam_iterf_t bam_iterf_query(const bam_index_t *idx, int tid, int beg, int end)
 	bins = (uint16_t*)calloc(MAX_BIN, 2);
 	n_bins = reg2bins(beg, end, bins);
 	index = idx->index[tid];
-	min_off = (beg>>BAM_LIDX_SHIFT >= idx->index2[tid].n)? 0 : idx->index2[tid].offset[beg>>BAM_LIDX_SHIFT];
+	if (idx->index2[tid].n > 0) {
+		min_off = (beg>>BAM_LIDX_SHIFT >= idx->index2[tid].n)? idx->index2[tid].offset[idx->index2[tid].n-1]
+			: idx->index2[tid].offset[beg>>BAM_LIDX_SHIFT];
+		if (min_off == 0) { // improvement for index files built by tabix prior to 0.1.4
+			int n = beg>>BAM_LIDX_SHIFT;
+			if (n > idx->index2[tid].n) n = idx->index2[tid].n;
+			for (i = n - 1; i >= 0; --i)
+				if (idx->index2[tid].offset[i] != 0) break;
+			if (i >= 0) min_off = idx->index2[tid].offset[i];
+		}
+	} else min_off = 0; // tabix 0.1.2 may produce such index files
 	for (i = n_off = 0; i < n_bins; ++i) {
 		if ((k = kh_get(i, index, bins[i])) != kh_end(index))
 			n_off += kh_value(index, k).n;
