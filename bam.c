@@ -235,8 +235,8 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 	kstring_t str;
 	str.l = str.m = 0; str.s = 0;
 
-	ksprintf(&str, "%s\t", bam1_qname(b));
-	if (of == BAM_OFDEC) ksprintf(&str, "%d\t", c->flag);
+	kputsn(bam1_qname(b), c->l_qname-1, &str); kputc('\t', &str);
+	if (of == BAM_OFDEC) { kputw(c->flag, &str); kputc('\t', &str); }
 	else if (of == BAM_OFHEX) ksprintf(&str, "0x%x\t", c->flag);
 	else { // BAM_OFSTR
 		for (i = 0; i < 16; ++i)
@@ -244,41 +244,43 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 				kputc(bam_flag2char_table[i], &str);
 		kputc('\t', &str);
 	}
-	if (c->tid < 0) kputs("*\t", &str);
-	else ksprintf(&str, "%s\t", header->target_name[c->tid]);
-	ksprintf(&str, "%d\t%d\t", c->pos + 1, c->qual);
+	if (c->tid < 0) kputsn("*\t", 2, &str);
+	else { kputs(header->target_name[c->tid], &str); kputc('\t', &str); }
+	kputw(c->pos + 1, &str); kputc('\t', &str); kputw(c->qual, &str); kputc('\t', &str);
 	if (c->n_cigar == 0) kputc('*', &str);
 	else {
-		for (i = 0; i < c->n_cigar; ++i)
-			ksprintf(&str, "%d%c", bam1_cigar(b)[i]>>BAM_CIGAR_SHIFT, "MIDNSHP"[bam1_cigar(b)[i]&BAM_CIGAR_MASK]);
+		for (i = 0; i < c->n_cigar; ++i) {
+			kputw(bam1_cigar(b)[i]>>BAM_CIGAR_SHIFT, &str);
+			kputc("MIDNSHP"[bam1_cigar(b)[i]&BAM_CIGAR_MASK], &str);
+		}
 	}
 	kputc('\t', &str);
-	if (c->mtid < 0) kputs("*\t", &str);
-	else if (c->mtid == c->tid) kputs("=\t", &str);
-	else ksprintf(&str, "%s\t", header->target_name[c->mtid]);
-	ksprintf(&str, "%d\t%d\t", c->mpos + 1, c->isize);
+	if (c->mtid < 0) kputsn("*\t", 2, &str);
+	else if (c->mtid == c->tid) kputsn("=\t", 2, &str);
+	else { kputs(header->target_name[c->mtid], &str); kputc('\t', &str); }
+	kputw(c->mpos + 1, &str); kputc('\t', &str); kputw(c->isize, &str); kputc('\t', &str);
 	if (c->l_qseq) {
 		for (i = 0; i < c->l_qseq; ++i) kputc(bam_nt16_rev_table[bam1_seqi(s, i)], &str);
 		kputc('\t', &str);
 		if (t[0] == 0xff) kputc('*', &str);
 		else for (i = 0; i < c->l_qseq; ++i) kputc(t[i] + 33, &str);
-	} else ksprintf(&str, "*\t*");
+	} else kputsn("*\t*", 3, &str);
 	s = bam1_aux(b);
 	while (s < b->data + b->data_len) {
 		uint8_t type, key[2];
 		key[0] = s[0]; key[1] = s[1];
 		s += 2; type = *s; ++s;
-		ksprintf(&str, "\t%c%c:", key[0], key[1]);
-		if (type == 'A') { ksprintf(&str, "A:%c", *s); ++s; }
-		else if (type == 'C') { ksprintf(&str, "i:%u", *s); ++s; }
-		else if (type == 'c') { ksprintf(&str, "i:%d", *(int8_t*)s); ++s; }
-		else if (type == 'S') { ksprintf(&str, "i:%u", *(uint16_t*)s); s += 2; }
-		else if (type == 's') { ksprintf(&str, "i:%d", *(int16_t*)s); s += 2; }
-		else if (type == 'I') { ksprintf(&str, "i:%u", *(uint32_t*)s); s += 4; }
-		else if (type == 'i') { ksprintf(&str, "i:%d", *(int32_t*)s); s += 4; }
+		kputc('\t', &str); kputsn((char*)key, 2, &str); kputc(':', &str);
+		if (type == 'A') { kputsn("A:", 2, &str); kputc(*s, &str); ++s; }
+		else if (type == 'C') { kputsn("i:", 2, &str); kputw(*s, &str); ++s; }
+		else if (type == 'c') { kputsn("i:", 2, &str); kputw(*(int8_t*)s, &str); ++s; }
+		else if (type == 'S') { kputsn("i:", 2, &str); kputw(*(uint16_t*)s, &str); s += 2; }
+		else if (type == 's') { kputsn("i:", 2, &str); kputw(*(int16_t*)s, &str); s += 2; }
+		else if (type == 'I') { kputsn("i:", 2, &str); kputuw(*(uint32_t*)s, &str); s += 4; }
+		else if (type == 'i') { kputsn("i:", 2, &str); kputw(*(int32_t*)s, &str); s += 4; }
 		else if (type == 'f') { ksprintf(&str, "f:%g", *(float*)s); s += 4; }
 		else if (type == 'd') { ksprintf(&str, "d:%lg", *(double*)s); s += 8; }
-		else if (type == 'Z' || type == 'H') { ksprintf(&str, "%c:", type); while (*s) kputc(*s++, &str); ++s; }
+		else if (type == 'Z' || type == 'H') { kputc(type, &str); kputc(':', &str); while (*s) kputc(*s++, &str); ++s; }
 	}
 	return str.s;
 }
