@@ -9,7 +9,7 @@
 #endif
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.7-8 (r585)"
+#define PACKAGE_VERSION "0.1.7-9 (r586)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -25,6 +25,7 @@ int bam_fillmd(int argc, char *argv[]);
 
 int main_samview(int argc, char *argv[]);
 int main_import(int argc, char *argv[]);
+int main_reheader(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 int glf3_view_main(int argc, char *argv[]);
@@ -89,6 +90,7 @@ static int usage()
 	fprintf(stderr, "         calmd       recalculate MD/NM tags and '=' bases\n");
 	fprintf(stderr, "         merge       merge sorted alignments\n");
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
+	fprintf(stderr, "         reheader    replace BAM header\n");
 	fprintf(stderr, "\n");
 	return 1;
 }
@@ -117,6 +119,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "tagview") == 0) return bam_tagview(argc-1, argv+1);
 	else if (strcmp(argv[1], "calmd") == 0) return bam_fillmd(argc-1, argv+1);
 	else if (strcmp(argv[1], "fillmd") == 0) return bam_fillmd(argc-1, argv+1);
+	else if (strcmp(argv[1], "reheader") == 0) return main_reheader(argc-1, argv+1);
 #if _CURSES_LIB != 0
 	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif

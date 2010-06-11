@@ -203,9 +203,7 @@ bgzf_open(const char* __restrict path, const char* __restrict mode)
 		if (fd == -1) return 0;
         fp = open_write(fd, strstr(mode, "u")? 1 : 0);
     }
-    if (fp != NULL) {
-        fp->owned_file = 1;
-    }
+    if (fp != NULL) fp->owned_file = 1;
     return fp;
 }
 
@@ -433,15 +431,15 @@ int
 bgzf_read_block(BGZF* fp)
 {
     bgzf_byte_t header[BLOCK_HEADER_LENGTH];
-	int size = 0;
+	int count, size = 0;
 #ifdef _USE_KNETFILE
     int64_t block_address = knet_tell(fp->x.fpr);
 	if (load_block_from_cache(fp, block_address)) return 0;
-    int count = knet_read(fp->x.fpr, header, sizeof(header));
+    count = knet_read(fp->x.fpr, header, sizeof(header));
 #else
     int64_t block_address = ftello(fp->file);
 	if (load_block_from_cache(fp, block_address)) return 0;
-    int count = fread(header, 1, sizeof(header), fp->file);
+    count = fread(header, 1, sizeof(header), fp->file);
 #endif
     if (count == 0) {
         fp->block_length = 0;
@@ -471,9 +469,7 @@ bgzf_read_block(BGZF* fp)
     }
 	size += count;
     count = inflate_block(fp, block_length);
-    if (count < 0) {
-        return -1;
-    }
+    if (count < 0) return -1;
     if (fp->block_length != 0) {
         // Do not reset offset if this read follows a seek.
         fp->block_offset = 0;
@@ -611,9 +607,7 @@ int bgzf_close(BGZF* fp)
 		else ret = knet_close(fp->x.fpr);
         if (ret != 0) return -1;
 #else
-        if (fclose(fp->file) != 0) {
-            return -1;
-        }
+        if (fclose(fp->file) != 0) return -1;
 #endif
     }
     free(fp->uncompressed_block);
