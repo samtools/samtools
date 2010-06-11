@@ -476,8 +476,16 @@ static inline int is_overlap(uint32_t beg, uint32_t end, const bam1_t *b)
 	return (rend > beg && rbeg < end);
 }
 
+struct __bam_iterf_t {
+	int from_first; // read from the first record; no random access
+	int tid, beg, end, n_off, i, finished;
+	uint64_t curr_off;
+	const bam_index_t *idx;
+	pair64_t *off;
+};
+
 // bam_fetch helper function retrieves 
-pair64_t * get_chunk_coordinates(const bam_index_t *idx, int tid, int beg, int end, int* cnt_off)
+bam_iterf_t bam_iterf_query(const bam_index_t *idx, int tid, int beg, int end)
 {
 	uint16_t *bins;
 	int i, n_bins, n_off;
@@ -485,7 +493,14 @@ pair64_t * get_chunk_coordinates(const bam_index_t *idx, int tid, int beg, int e
 	khint_t k;
 	khash_t(i) *index;
 	uint64_t min_off;
+	bam_iterf_t iter = 0;
 
+	if (beg < 0) beg = 0;
+	if (end < beg) return 0;
+	// initialize iter
+	iter = calloc(1, sizeof(struct __bam_iterf_t));
+	iter->idx = idx; iter->tid = tid, iter->beg = beg, iter->end = end; iter->i = -1;
+	//
 	bins = (uint16_t*)calloc(MAX_BIN, 2);
 	n_bins = reg2bins(beg, end, bins);
 	index = idx->index[tid];
@@ -495,7 +510,7 @@ pair64_t * get_chunk_coordinates(const bam_index_t *idx, int tid, int beg, int e
 			n_off += kh_value(index, k).n;
 	}
 	if (n_off == 0) {
-		free(bins); return 0;
+		free(bins); return iter;
 	}
 	off = (pair64_t*)calloc(n_off, 16);
 	for (i = n_off = 0; i < n_bins; ++i) {
@@ -534,41 +549,62 @@ pair64_t * get_chunk_coordinates(const bam_index_t *idx, int tid, int beg, int e
 		}
 		bam_destroy1(b);
 	}
-	*cnt_off = n_off;
+	iter->n_off = n_off; iter->off = off;
+	return iter;
+}
+
+pair64_t *get_chunk_coordinates(const bam_index_t *idx, int tid, int beg, int end, int *cnt_off)
+{ // for pysam compatibility
+	bam_iterf_t iter;
+	pair64_t *off;
+	iter = bam_iterf_query(idx, tid, beg, end);
+	off = iter->off; *cnt_off = iter->n_off;
+	free(iter);
 	return off;
+}
+
+void bam_iterf_destroy(bam_iterf_t iter)
+{
+	if (iter) { free(iter->off); free(iter); }
+}
+
+int bam_iterf_read(bamFile fp, bam_iterf_t iter, bam1_t *b)
+{
+	if (iter->finished) return -1;
+	if (iter->from_first) {
+		int ret = bam_read1(fp, b);
+		if (ret < 0) iter->finished = 1;
+		return ret;
+	}
+	if (iter->off == 0) return -1;
+	for (;;) {
+		int ret;
+		if (iter->curr_off == 0 || iter->curr_off >= iter->off[iter->i].v) { // then jump to the next chunk
+			if (iter->i == iter->n_off - 1) break; // no more chunks
+			if (iter->i >= 0) assert(iter->curr_off == iter->off[iter->i].v); // otherwise bug
+			if (iter->i < 0 || iter->off[iter->i].v != iter->off[iter->i+1].u) { // not adjacent chunks; then seek
+				bam_seek(fp, iter->off[iter->i+1].u, SEEK_SET);
+				iter->curr_off = bam_tell(fp);
+			}
+			++iter->i;
+		}
+		if ((ret = bam_read1(fp, b)) > 0) {
+			iter->curr_off = bam_tell(fp);
+			if (b->core.tid != iter->tid || b->core.pos >= iter->end) break; // no need to proceed
+			else if (is_overlap(iter->beg, iter->end, b)) return ret;
+		} else break; // end of file
+	}
+	iter->finished = 1;
+	return -1;
 }
 
 int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)
 {
-	int n_off;
-	pair64_t *off = get_chunk_coordinates(idx, tid, beg, end, &n_off);
-	if (off == 0) return 0;
-	{
-		// retrive alignments
-		uint64_t curr_off;
-		int i, ret, n_seeks;
-		n_seeks = 0; i = -1; curr_off = 0;
-		bam1_t *b = (bam1_t*)calloc(1, sizeof(bam1_t));
-		for (;;) {
-			if (curr_off == 0 || curr_off >= off[i].v) { // then jump to the next chunk
-				if (i == n_off - 1) break; // no more chunks
-				if (i >= 0) assert(curr_off == off[i].v); // otherwise bug
-				if (i < 0 || off[i].v != off[i+1].u) { // not adjacent chunks; then seek
-					bam_seek(fp, off[i+1].u, SEEK_SET);
-					curr_off = bam_tell(fp);
-					++n_seeks;
-				}
-				++i;
-			}
-			if ((ret = bam_read1(fp, b)) > 0) {
-				curr_off = bam_tell(fp);
-				if (b->core.tid != tid || b->core.pos >= end) break; // no need to proceed
-				else if (is_overlap(beg, end, b)) func(b, data);
-			} else break; // end of file
-		}
-//		fprintf(stderr, "[bam_fetch] # seek calls: %d\n", n_seeks);
-		bam_destroy1(b);
-	}
-	free(off);
+	bam_iterf_t iter;
+	bam1_t *b;
+	b = bam_init1();
+	iter = bam_iterf_query(idx, tid, beg, end);
+	while (bam_iterf_read(fp, iter, b) >= 0) func(b, data);
+	bam_destroy1(b);
 	return 0;
 }
