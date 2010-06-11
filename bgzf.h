@@ -106,7 +106,7 @@ int bgzf_write(BGZF* fp, const void* data, int length);
  * Return value is non-negative on success.
  * Returns -1 on error.
  */
-int64_t bgzf_tell(BGZF* fp);
+#define bgzf_tell(fp) ((fp->block_address << 16) | (fp->block_offset & 0xFFFF))
 
 /*
  * Set the file to read from the location specified by pos, which must
@@ -126,9 +126,32 @@ int64_t bgzf_seek(BGZF* fp, int64_t pos, int where);
 void bgzf_set_cache_size(BGZF *fp, int cache_size);
 
 int bgzf_check_EOF(BGZF *fp);
+int bgzf_read_block(BGZF* fp);
+int bgzf_flush(BGZF* fp);
+int bgzf_flush_try(BGZF *fp, int size);
 
 #ifdef __cplusplus
 }
 #endif
+
+static inline int bgzf_getc(BGZF *fp)
+{
+	int c;
+	if (fp->block_offset >= fp->block_length) {
+		if (bgzf_read_block(fp) != 0) return -2; /* error */
+		if (fp->block_length == 0) return -1; /* end-of-file */
+	}
+	c = ((unsigned char*)fp->uncompressed_block)[fp->block_offset++];
+    if (fp->block_offset == fp->block_length) {
+#ifdef _USE_KNETFILE
+        fp->block_address = knet_tell(fp->x.fpr);
+#else
+        fp->block_address = ftello(fp->file);
+#endif
+        fp->block_offset = 0;
+        fp->block_length = 0;
+    }
+	return c;
+}
 
 #endif

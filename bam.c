@@ -141,6 +141,7 @@ int bam_header_write(bamFile fp, const bam_header_t *header)
 			bam_write(fp, &x, 4);
 		} else bam_write(fp, &header->target_len[i], 4);
 	}
+	bgzf_flush(fp);
 	return 0;
 }
 
@@ -208,6 +209,7 @@ inline int bam_write1_core(bamFile fp, const bam1_core_t *c, int data_len, uint8
 	x[5] = c->mtid;
 	x[6] = c->mpos;
 	x[7] = c->isize;
+	bgzf_flush_try(fp, 4 + block_len);
 	if (bam_is_be) {
 		for (i = 0; i < 8; ++i) bam_swap_endian_4p(x + i);
 		y = block_len;

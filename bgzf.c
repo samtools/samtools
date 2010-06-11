@@ -429,9 +429,8 @@ static void cache_block(BGZF *fp, int size)
 	memcpy(kh_val(h, k).block, fp->uncompressed_block, MAX_BLOCK_SIZE);
 }
 
-static
 int
-read_block(BGZF* fp)
+bgzf_read_block(BGZF* fp)
 {
     bgzf_byte_t header[BLOCK_HEADER_LENGTH];
 	int size = 0;
@@ -501,7 +500,7 @@ bgzf_read(BGZF* fp, void* data, int length)
     while (bytes_read < length) {
         int available = fp->block_length - fp->block_offset;
         if (available <= 0) {
-            if (read_block(fp) != 0) {
+            if (bgzf_read_block(fp) != 0) {
                 return -1;
             }
             available = fp->block_length - fp->block_offset;
@@ -528,19 +527,16 @@ bgzf_read(BGZF* fp, void* data, int length)
     return bytes_read;
 }
 
-static
-int
-flush_block(BGZF* fp)
+int bgzf_flush(BGZF* fp)
 {
     while (fp->block_offset > 0) {
-        int block_length = deflate_block(fp, fp->block_offset);
-        if (block_length < 0) {
-            return -1;
-        }
+        int count, block_length;
+		block_length = deflate_block(fp, fp->block_offset);
+        if (block_length < 0) return -1;
 #ifdef _USE_KNETFILE
-        int count = fwrite(fp->compressed_block, 1, block_length, fp->x.fpw);
+        count = fwrite(fp->compressed_block, 1, block_length, fp->x.fpw);
 #else
-        int count = fwrite(fp->compressed_block, 1, block_length, fp->file);
+        count = fwrite(fp->compressed_block, 1, block_length, fp->file);
 #endif
         if (count != block_length) {
             report_error(fp, "write failed");
@@ -551,17 +547,22 @@ flush_block(BGZF* fp)
     return 0;
 }
 
-int
-bgzf_write(BGZF* fp, const void* data, int length)
+int bgzf_flush_try(BGZF *fp, int size)
+{
+	if (fp->block_offset + size > fp->uncompressed_block_size)
+		return bgzf_flush(fp);
+	return -1;
+}
+
+int bgzf_write(BGZF* fp, const void* data, int length)
 {
     if (fp->open_mode != 'w') {
         report_error(fp, "file not open for writing");
         return -1;
     }
 
-    if (fp->uncompressed_block == NULL) {
+    if (fp->uncompressed_block == NULL)
         fp->uncompressed_block = malloc(fp->uncompressed_block_size);
-    }
 
     const bgzf_byte_t* input = data;
     int block_length = fp->uncompressed_block_size;
@@ -574,7 +575,7 @@ bgzf_write(BGZF* fp, const void* data, int length)
         input += copy_length;
         bytes_written += copy_length;
         if (fp->block_offset == block_length) {
-            if (flush_block(fp) != 0) {
+            if (bgzf_flush(fp) != 0) {
                 break;
             }
         }
@@ -582,13 +583,10 @@ bgzf_write(BGZF* fp, const void* data, int length)
     return bytes_written;
 }
 
-int
-bgzf_close(BGZF* fp)
+int bgzf_close(BGZF* fp)
 {
     if (fp->open_mode == 'w') {
-        if (flush_block(fp) != 0) {
-            return -1;
-        }
+        if (bgzf_flush(fp) != 0) return -1;
 		{ // add an empty block
 			int count, block_length = deflate_block(fp, 0);
 #ifdef _USE_KNETFILE
@@ -625,12 +623,6 @@ bgzf_close(BGZF* fp)
     return 0;
 }
 
-int64_t
-bgzf_tell(BGZF* fp)
-{
-    return ((fp->block_address << 16) | (fp->block_offset & 0xFFFF));
-}
-
 void bgzf_set_cache_size(BGZF *fp, int cache_size)
 {
 	if (fp) fp->cache_size = cache_size;
@@ -655,9 +647,11 @@ int bgzf_check_EOF(BGZF *fp)
 	return (memcmp(magic, buf, 28) == 0)? 1 : 0;
 }
 
-int64_t
-bgzf_seek(BGZF* fp, int64_t pos, int where)
+int64_t bgzf_seek(BGZF* fp, int64_t pos, int where)
 {
+	int block_offset;
+	int64_t block_address;
+
     if (fp->open_mode != 'r') {
         report_error(fp, "file not open for read");
         return -1;
@@ -666,8 +660,8 @@ bgzf_seek(BGZF* fp, int64_t pos, int where)
         report_error(fp, "unimplemented seek option");
         return -1;
     }
-    int block_offset = pos & 0xFFFF;
-    int64_t block_address = (pos >> 16) & 0xFFFFFFFFFFFFLL;
+    block_offset = pos & 0xFFFF;
+    block_address = (pos >> 16) & 0xFFFFFFFFFFFFLL;
 #ifdef _USE_KNETFILE
     if (knet_seek(fp->x.fpr, block_address, SEEK_SET) != 0) {
 #else

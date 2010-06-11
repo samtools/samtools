@@ -78,7 +78,7 @@ sub wgsim_eval {
 	  $c0[$i] = 0 unless (defined $c0[$i]);
 	  $c1[$i] = 0 unless (defined $c1[$i]);
 	  $cc0 += $c0[$i]; $cc1 += $c1[$i];
-	  printf("%.2dx %12d / %-12d  %12d  %.3e\n", $i, $c1[$i], $c0[$i], $cc0, $cc1/$cc0);
+	  printf("%.2dx %12d / %-12d  %12d  %.3e\n", $i, $c1[$i], $c0[$i], $cc0, $cc1/$cc0) if ($cc0);
 	}
   } else {
 	for (reverse(sort {$a<=>$b} (keys %fnfp))) {
