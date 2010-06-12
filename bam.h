@@ -482,7 +482,7 @@ extern "C" {
 		uint32_t is_del:1, is_head:1, is_tail:1;
 	} bam_pileup1_t;
 
-	typedef int (*bam_plp_auto_f)(bam1_t *b, void *data);
+	typedef int (*bam_plp_auto_f)(void *data, bam1_t *b);
 
 	struct __bam_plp_t;
 	typedef struct __bam_plp_t *bam_plp_t;

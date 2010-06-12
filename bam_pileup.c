@@ -229,15 +229,15 @@ const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_
 {
 	const bam_pileup1_t *plp;
 	if (iter->func == 0 || iter->error) { *_n_plp = -1; return 0; }
-	if ((plp = bam_plp_next(iter, _n_plp, _tid, _pos)) != 0) return plp;
+	if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
 	else {
 		*_n_plp = 0;
-		while (iter->func(iter->b, iter->data) >= 0) {
+		while (iter->func(iter->data, iter->b) >= 0) {
 			if (bam_plp_push(iter, iter->b) < 0) {
 				*_n_plp = -1;
 				return 0;
 			}
-			if ((plp = bam_plp_next(iter, _n_plp, _tid, _pos)) != 0) return plp;
+			if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
 		}
 		return 0;
 	}
@@ -339,10 +339,13 @@ bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func, void **data)
 	iter->pos = calloc(n, 8);
 	iter->n_plp = calloc(n, sizeof(int));
 	iter->plp = calloc(n, sizeof(void*));
+	iter->iter = calloc(n, sizeof(void*));
 	iter->n = n;
 	iter->min = (uint64_t)-1;
-	for (i = 0; i < n; ++i)
+	for (i = 0; i < n; ++i) {
 		iter->iter[i] = bam_plp_init(func, data[i]);
+		iter->pos[i] = iter->min;
+	}
 	return iter;
 }
 

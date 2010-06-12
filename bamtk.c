@@ -9,11 +9,12 @@
 #endif
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.7-13 (r590)"
+#define PACKAGE_VERSION "0.1.7-14 (r591)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
 int bam_pileup(int argc, char *argv[]);
+int bam_mpileup(int argc, char *argv[]);
 int bam_merge(int argc, char *argv[]);
 int bam_index(int argc, char *argv[]);
 int bam_sort(int argc, char *argv[]);
@@ -79,6 +80,7 @@ static int usage()
 	fprintf(stderr, "Command: view        SAM<->BAM conversion\n");
 	fprintf(stderr, "         sort        sort alignment file\n");
 	fprintf(stderr, "         pileup      generate pileup output\n");
+	fprintf(stderr, "         mpileup     multi-way pileup\n");
 	fprintf(stderr, "         faidx       index/extract FASTA\n");
 #if _CURSES_LIB != 0
 	fprintf(stderr, "         tview       text alignment viewer\n");
@@ -108,6 +110,7 @@ int main(int argc, char *argv[])
 	if (strcmp(argv[1], "view") == 0) return main_samview(argc-1, argv+1);
 	else if (strcmp(argv[1], "import") == 0) return main_import(argc-1, argv+1);
 	else if (strcmp(argv[1], "pileup") == 0) return bam_pileup(argc-1, argv+1);
+	else if (strcmp(argv[1], "mpileup") == 0) return bam_mpileup(argc-1, argv+1);
 	else if (strcmp(argv[1], "merge") == 0) return bam_merge(argc-1, argv+1);
 	else if (strcmp(argv[1], "sort") == 0) return bam_sort(argc-1, argv+1);
 	else if (strcmp(argv[1], "index") == 0) return bam_index(argc-1, argv+1);

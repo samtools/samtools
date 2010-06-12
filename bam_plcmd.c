@@ -158,11 +158,37 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 	return 0;
 }
 
+static void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, const char *ref)
+{
+	if (p->is_head) printf("^%c", p->b->core.qual > 93? 126 : p->b->core.qual + 33);
+	if (!p->is_del) {
+		int j, rb, c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
+		rb = (ref && (int)pos < ref_len)? ref[pos] : 'N';
+		if (c == '=' || toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+		else c = bam1_strand(p->b)? tolower(c) : toupper(c);
+		putchar(c);
+		if (p->indel > 0) {
+			putchar('+'); putw(p->indel, stdout);
+			for (j = 1; j <= p->indel; ++j) {
+				c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
+				putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
+			}
+		} else if (p->indel < 0) {
+			putw(p->indel, stdout);
+			for (j = 1; j <= -p->indel; ++j) {
+				c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
+				putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
+			}
+		}
+	} else putchar('*');
+	if (p->is_tail) putchar('$');
+}
+
 static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu, void *data)
 {
 	pu_data_t *d = (pu_data_t*)data;
 	bam_maqindel_ret_t *r = 0;
-	int i, j, rb, rms_mapq = -1, *proposed_indels = 0;
+	int i, rb, rms_mapq = -1, *proposed_indels = 0;
 	uint64_t rms_aux;
 	uint32_t cns = 0;
 
@@ -243,27 +269,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		const bam_pileup1_t *p = pu + i;
 		int tmp = p->b->core.qual < d->c->cap_mapQ? p->b->core.qual : d->c->cap_mapQ;
 		rms_aux += tmp * tmp;
-		if (p->is_head) printf("^%c", p->b->core.qual > 93? 126 : p->b->core.qual + 33);
-		if (!p->is_del) {
-			int c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
-			if (c == '=' || toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
-			else c = bam1_strand(p->b)? tolower(c) : toupper(c);
-			putchar(c);
-			if (p->indel > 0) {
-				printf("+%d", p->indel);
-				for (j = 1; j <= p->indel; ++j) {
-					c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
-					putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
-				}
-			} else if (p->indel < 0) {
-				printf("%d", p->indel);
-				for (j = 1; j <= -p->indel; ++j) {
-					c = (d->ref && (int)pos+j < d->len)? d->ref[pos+j] : 'N';
-					putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
-				}
-			}
-		} else putchar('*');
-		if (p->is_tail) putchar('$');
+		pileup_seq(p, pos, d->len, d->ref);
 	}
 	// finalize rms_mapq
 	rms_aux = (uint64_t)(sqrt((double)rms_aux / n) + .499);
@@ -433,5 +439,67 @@ int bam_pileup(int argc, char *argv[])
 	if (d->fai) fai_destroy(d->fai);
 	bam_maqcns_destroy(d->c);
 	free(d->ido); free(d->ref); free(d);
+	return 0;
+}
+
+/***********
+ * mpileup *
+ ***********/
+
+static int mpileup(int n, char **fn)
+{
+	bamFile *fp;
+	int i, tid, pos, *n_plp;
+	const bam_pileup1_t **plp;
+	bam_mplp_t iter;
+	bam_header_t *h = 0;
+	fp = calloc(n, sizeof(void*));
+	plp = calloc(n, sizeof(void*));
+	n_plp = calloc(n, sizeof(int*));
+	for (i = 0; i < n; ++i) {
+		bam_header_t *h_tmp;
+		fp[i] = bam_open(fn[i], "r");
+		h_tmp = bam_header_read(fp[i]);
+		if (i == 0) h = h_tmp;
+		else {
+			// FIXME: to check consistency
+			bam_header_destroy(h_tmp);
+		}
+	}
+	iter = bam_mplp_init(n, bam_read1, fp);
+	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
+		printf("%s\t%d\tN", h->target_name[tid], pos + 1);
+		for (i = 0; i < n; ++i) {
+			int j;
+			printf("\t%d\t", n_plp[i]);
+			if (n_plp[i] == 0) printf("*\t*");
+			else {
+				for (j = 0; j < n_plp[i]; ++j)
+					pileup_seq(plp[i] + j, pos, 0, 0);
+				putchar('\t');
+				for (j = 0; j < n_plp[i]; ++j) {
+					const bam_pileup1_t *p = plp[i] + j;
+					int c = bam1_qual(p->b)[p->qpos] + 33;
+					if (c > 126) c = 126;
+					putchar(c);
+				}
+			}
+		}
+		putchar('\n');
+	}
+	bam_mplp_destroy(iter);
+	bam_header_destroy(h);
+	for (i = 0; i < n; ++i) bam_close(fp[i]);
+	free(fp); free(plp);
+	return 0;
+}
+
+int bam_mpileup(int argc, char *argv[])
+{
+	if (argc == 1) {
+		fprintf(stderr, "Usage: samtools mpileup <in1.bam> [<in2.bam> [...]]\n");
+		return 1;
+	}
+	mpileup(argc - 1, argv + 1);
 	return 0;
 }
