@@ -116,11 +116,15 @@ struct __bam_plp_t {
 	mempool_t *mp;
 	lbnode_t *head, *tail, *dummy;
 	int32_t tid, pos, max_tid, max_pos;
-	int is_eof, flag_mask, max_plp;
+	int is_eof, flag_mask, max_plp, error;
 	bam_pileup1_t *plp;
+	// for the "auto" interface only
+	bam1_t *b;
+	bam_plp_auto_f func;
+	void *data;
 };
 
-bam_plp_t bam_plp_init(void)
+bam_plp_t bam_plp_init(bam_plp_auto_f func, void *data)
 {
 	bam_plp_t iter;
 	iter = calloc(1, sizeof(struct __bam_plp_t));
@@ -129,11 +133,29 @@ bam_plp_t bam_plp_init(void)
 	iter->dummy = mp_alloc(iter->mp);
 	iter->max_tid = iter->max_pos = -1;
 	iter->flag_mask = BAM_DEF_MASK;
+	if (func) {
+		iter->func = func;
+		iter->data = data;
+		iter->b = bam_init1();
+	}
 	return iter;
 }
 
-const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_n_plp, int *_tid, int *_pos)
+void bam_plp_destroy(bam_plp_t iter)
 {
+	mp_free(iter->mp, iter->dummy);
+	mp_free(iter->mp, iter->head);
+	if (iter->mp->cnt != 0)
+		fprintf(stderr, "[bam_plp_destroy] memory leak: %d. Continue anyway.\n", iter->mp->cnt);
+	mp_destroy(iter->mp);
+	if (iter->b) bam_destroy1(iter->b);
+	free(iter->plp);
+	free(iter);
+}
+
+const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp)
+{
+	if (iter->error) { *_n_plp = -1; return 0; }
 	*_n_plp = 0;
 	if (iter->is_eof && iter->head->next == 0) return 0;
 	while (iter->is_eof || iter->max_tid > iter->tid || (iter->max_tid == iter->tid && iter->max_pos > iter->pos)) {
@@ -159,6 +181,7 @@ const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_n_plp, int *_tid, int *_
 		if (iter->head->next) {
 			if (iter->tid > iter->head->b.core.tid) {
 				fprintf(stderr, "[%s] unsorted input. Pileup aborts.\n", __func__);
+				iter->error = 1;
 				*_n_plp = -1;
 				return 0;
 			}
@@ -177,6 +200,7 @@ const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_n_plp, int *_tid, int *_
 
 int bam_plp_push(bam_plp_t iter, const bam1_t *b)
 {
+	if (iter->error) return -1;
 	if (b) {
 		if (b->core.tid < 0) return 0;
 		if (b->core.flag & iter->flag_mask) return 0;
@@ -184,10 +208,12 @@ int bam_plp_push(bam_plp_t iter, const bam1_t *b)
 		iter->tail->beg = b->core.pos; iter->tail->end = bam_calend(&b->core, bam1_cigar(b));
 		if (b->core.tid < iter->max_tid) {
 			fprintf(stderr, "[bam_pileup_core] the input is not sorted (chromosomes out of order)\n");
+			iter->error = 1;
 			return -1;
 		}
 		if ((b->core.tid == iter->max_tid) && (iter->tail->beg < iter->max_pos)) {
 			fprintf(stderr, "[bam_pileup_core] the input is not sorted (reads out of order)\n");
+			iter->error = 1;
 			return -1;
 		}
 		iter->max_tid = b->core.tid; iter->max_pos = iter->tail->beg;
@@ -197,6 +223,24 @@ int bam_plp_push(bam_plp_t iter, const bam1_t *b)
 		}
 	} else iter->is_eof = 1;
 	return 0;
+}
+
+const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp)
+{
+	const bam_pileup1_t *plp;
+	if (iter->func == 0 || iter->error) { *_n_plp = -1; return 0; }
+	if ((plp = bam_plp_next(iter, _n_plp, _tid, _pos)) != 0) return plp;
+	else {
+		*_n_plp = 0;
+		while (iter->func(iter->b, iter->data) >= 0) {
+			if (bam_plp_push(iter, iter->b) < 0) {
+				*_n_plp = -1;
+				return 0;
+			}
+			if ((plp = bam_plp_next(iter, _n_plp, _tid, _pos)) != 0) return plp;
+		}
+		return 0;
+	}
 }
 
 void bam_plp_reset(bam_plp_t iter)
@@ -216,17 +260,6 @@ void bam_plp_reset(bam_plp_t iter)
 void bam_plp_set_mask(bam_plp_t iter, int mask)
 {
 	iter->flag_mask = mask < 0? BAM_DEF_MASK : (BAM_FUNMAP | mask);
-}
-
-void bam_plp_destroy(bam_plp_t iter)
-{
-	mp_free(iter->mp, iter->dummy);
-	mp_free(iter->mp, iter->head);
-	if (iter->mp->cnt != 0)
-		fprintf(stderr, "[bam_plp_destroy] memory leak: %d. Continue anyway.\n", iter->mp->cnt);
-	mp_destroy(iter->mp);
-	free(iter->plp);
-	free(iter);
 }
 
 /*****************
@@ -263,7 +296,7 @@ bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data)
 {
 	bam_plbuf_t *buf;
 	buf = calloc(1, sizeof(bam_plbuf_t));
-	buf->iter = bam_plp_init();
+	buf->iter = bam_plp_init(0, 0);
 	buf->func = func;
 	buf->data = data;
 	return buf;
@@ -281,7 +314,66 @@ int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 	const bam_pileup1_t *plp;
 	ret = bam_plp_push(buf->iter, b);
 	if (ret < 0) return ret;
-	while ((plp = bam_plp_next(buf->iter, &n_plp, &tid, &pos)) != 0)
+	while ((plp = bam_plp_next(buf->iter, &tid, &pos, &n_plp)) != 0)
 		buf->func(tid, pos, n_plp, plp, buf->data);
 	return 0;
+}
+
+/***********
+ * mpileup *
+ ***********/
+
+struct __bam_mplp_t {
+	int n;
+	uint64_t min, *pos;
+	bam_plp_t *iter;
+	int *n_plp;
+	const bam_pileup1_t **plp;
+};
+
+bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func, void **data)
+{
+	int i;
+	bam_mplp_t iter;
+	iter = calloc(1, sizeof(struct __bam_mplp_t));
+	iter->pos = calloc(n, 8);
+	iter->n_plp = calloc(n, sizeof(int));
+	iter->plp = calloc(n, sizeof(void*));
+	iter->n = n;
+	iter->min = (uint64_t)-1;
+	for (i = 0; i < n; ++i)
+		iter->iter[i] = bam_plp_init(func, data[i]);
+	return iter;
+}
+
+void bam_mplp_destroy(bam_mplp_t iter)
+{
+	int i;
+	for (i = 0; i < iter->n; ++i) bam_plp_destroy(iter->iter[i]);
+	free(iter->pos); free(iter->n_plp); free(iter->plp);
+	free(iter);
+}
+
+int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_pileup1_t **plp)
+{
+	int i, ret = 0;
+	uint64_t new_min = (uint64_t)-1;
+	for (i = 0; i < iter->n; ++i) {
+		if (iter->pos[i] == iter->min) {
+			int tid, pos;
+			iter->plp[i] = bam_plp_auto(iter->iter[i], &tid, &pos, &iter->n_plp[i]);
+			iter->pos[i] = (uint64_t)tid<<32 | pos;
+		}
+		if (iter->pos[i] < new_min) new_min = iter->pos[i];
+	}
+	iter->min = new_min;
+	if (new_min == (uint64_t)-1) return 0;
+	*_tid = new_min>>32; *_pos = (uint32_t)new_min;
+	for (i = 0; i < iter->n; ++i) {
+		if (iter->pos[i] == iter->min) {
+			n_plp[i] = iter->n_plp[i], plp[i] = iter->plp[i];
+			++ret;
+		} else n_plp[i] = 0, plp[i] = 0;
+	}
+	return ret;
 }

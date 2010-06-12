@@ -274,6 +274,10 @@ extern char bam_nt16_nt4_table[];
 extern "C" {
 #endif
 
+	/*********************
+	 * Low-level SAM I/O *
+	 *********************/
+
 	/*! @abstract TAM file handler */
 	typedef struct __tamFile_t *tamFile;
 
@@ -338,11 +342,21 @@ extern "C" {
 
 #define sam_write1(header, b) bam_view1(header, b)
 
+
+	/********************************
+	 * APIs for string dictionaries *
+	 ********************************/
+
 	int bam_strmap_put(void *strmap, const char *rg, const char *lib);
 	const char *bam_strmap_get(const void *strmap, const char *rg);
 	void *bam_strmap_dup(const void*);
 	void *bam_strmap_init();
 	void bam_strmap_destroy(void *strmap);
+
+
+	/*********************
+	 * Low-level BAM I/O *
+	 *********************/
 
 	/*!
 	  @abstract Initialize a header structure.
@@ -442,6 +456,11 @@ extern "C" {
 
 	const char *bam_get_library(bam_header_t *header, const bam1_t *b);
 
+
+	/***************
+	 * pileup APIs *
+	 ***************/
+
 	/*! @typedef
 	  @abstract Structure for one alignment covering the pileup position.
 	  @field  b      pointer to the alignment
@@ -463,15 +482,25 @@ extern "C" {
 		uint32_t is_del:1, is_head:1, is_tail:1;
 	} bam_pileup1_t;
 
+	typedef int (*bam_plp_auto_f)(bam1_t *b, void *data);
+
 	struct __bam_plp_t;
 	typedef struct __bam_plp_t *bam_plp_t;
 
-	bam_plp_t bam_plp_init();
+	bam_plp_t bam_plp_init(bam_plp_auto_f func, void *data);
 	int bam_plp_push(bam_plp_t iter, const bam1_t *b);
-	const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_n_plp, int *_tid, int *_pos);
+	const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
+	const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
 	void bam_plp_set_mask(bam_plp_t iter, int mask);
 	void bam_plp_reset(bam_plp_t iter);
 	void bam_plp_destroy(bam_plp_t iter);
+
+	struct __bam_mplp_t;
+	typedef struct __bam_mplp_t *bam_mplp_t;
+
+	bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func, void **data);
+	void bam_mplp_destroy(bam_mplp_t iter);
+	int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_pileup1_t **plp);
 
 	/*! @typedef
 	  @abstract    Type of function to be called by bam_plbuf_push().
@@ -511,6 +540,11 @@ extern "C" {
 
 	/*! @abstract  bam_plbuf_push() equivalent with level calculated. */
 	int bam_lplbuf_push(const bam1_t *b, bam_lplbuf_t *buf);
+
+
+	/*********************
+	 * BAM indexing APIs *
+	 *********************/
 
 	struct __bam_index_t;
 	typedef struct __bam_index_t bam_index_t;
@@ -576,6 +610,11 @@ extern "C" {
 	 */
 	int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
 
+
+	/**************************
+	 * APIs for optional tags *
+	 **************************/
+
 	/*!
 	  @abstract       Retrieve data of a tag
 	  @param  b       pointer to an alignment struct
@@ -598,6 +637,11 @@ extern "C" {
 	int bam_aux_del(bam1_t *b, uint8_t *s);
 	void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
 	uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]); // an alias of bam_aux_get()
+
+
+	/*****************
+	 * Miscellaneous *
+	 *****************/
 
 	/*!  
 	  @abstract Calculate the rightmost coordinate of an alignment on the
