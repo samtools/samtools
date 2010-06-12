@@ -115,7 +115,7 @@ int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *be
 	*ref_id = kh_value(h, iter);
 	if (i == k) { /* dump the whole sequence */
 		*begin = 0; *end = 1<<29; free(s);
-		return -1;
+		return 0;
 	}
 	for (p = s + i + 1; i != k; ++i) if (s[i] == '-') break;
 	*begin = atoi(p);

@@ -475,6 +475,8 @@ int bam_index(int argc, char *argv[])
 static inline int reg2bins(uint32_t beg, uint32_t end, uint16_t list[MAX_BIN])
 {
 	int i = 0, k;
+	if (beg >= end) return 0;
+	if (end >= 1u<<29) end = 1u<<29;
 	--end;
 	list[i++] = 0;
 	for (k =    1 + (beg>>26); k <=    1 + (end>>26); ++k) list[i++] = k;
@@ -496,7 +498,6 @@ struct __bam_iterf_t {
 	int from_first; // read from the first record; no random access
 	int tid, beg, end, n_off, i, finished;
 	uint64_t curr_off;
-	const bam_index_t *idx;
 	pair64_t *off;
 };
 
@@ -515,7 +516,7 @@ bam_iterf_t bam_iterf_query(const bam_index_t *idx, int tid, int beg, int end)
 	if (end < beg) return 0;
 	// initialize iter
 	iter = calloc(1, sizeof(struct __bam_iterf_t));
-	iter->idx = idx; iter->tid = tid, iter->beg = beg, iter->end = end; iter->i = -1;
+	iter->tid = tid, iter->beg = beg, iter->end = end; iter->i = -1;
 	//
 	bins = (uint16_t*)calloc(MAX_BIN, 2);
 	n_bins = reg2bins(beg, end, bins);

@@ -1,4 +1,206 @@
 ------------------------------------------------------------------------
+r591 | lh3lh3 | 2010-06-12 14:09:22 -0400 (Sat, 12 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-14 (r591)
+ * elementary multi-way pileup. More testing and more functionality to be done.
+
+------------------------------------------------------------------------
+r590 | lh3lh3 | 2010-06-12 01:00:24 -0400 (Sat, 12 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-13 (r590)
+ * added mpileup APIs. No compiling errors, but not tested at all. It is late.
+
+------------------------------------------------------------------------
+r589 | lh3lh3 | 2010-06-11 22:37:09 -0400 (Fri, 11 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-12 (r589)
+ * added iterator-like APIs for pileup
+
+------------------------------------------------------------------------
+r588 | lh3lh3 | 2010-06-11 17:41:13 -0400 (Fri, 11 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-11 (r588)
+ * ported a few improvements from tabix back to samtools
+
+------------------------------------------------------------------------
+r587 | lh3lh3 | 2010-06-11 17:33:16 -0400 (Fri, 11 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-10 (r587)
+ * added iterator interface for bam_fetch (ported back from tabix)
+
+------------------------------------------------------------------------
+r586 | lh3lh3 | 2010-06-11 13:23:53 -0400 (Fri, 11 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   A /trunk/samtools/bam_reheader.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bgzf.c
+
+ * samtools-0.1.7-9 (r586)
+ * added "reheader" to replace the BAM header
+
+------------------------------------------------------------------------
+r585 | lh3lh3 | 2010-06-11 12:22:06 -0400 (Fri, 11 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/kstring.h
+
+ * samtools-0.1.7-8 (r585)
+ * speed up "view"
+
+------------------------------------------------------------------------
+r584 | lh3lh3 | 2010-06-11 12:00:41 -0400 (Fri, 11 Jun 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bgzf.c
+   M /trunk/samtools/bgzf.h
+   M /trunk/samtools/kstring.h
+   M /trunk/samtools/misc/wgsim_eval.pl
+
+ * samtools-0.1.7-7 (r584)
+ * ported tabix BGZF to samtools
+ * flush BGZF after writing the BAM header and between alignment boundaries
+
+------------------------------------------------------------------------
+r583 | petulda | 2010-06-11 11:58:20 -0400 (Fri, 11 Jun 2010) | 1 line
+Changed paths:
+   A /trunk/samtools/misc/varfilter.py
+
+Initial release on behalf of Aylwyn Scally
+------------------------------------------------------------------------
+r561 | petulda | 2010-05-07 08:41:56 -0400 (Fri, 07 May 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/samtools.1
+
+Added a note about the indels coordinates
+------------------------------------------------------------------------
+r551 | petulda | 2010-04-23 09:42:13 -0400 (Fri, 23 Apr 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/misc/sam2vcf.pl
+
+Added the possibility to print or not to print the reference allele
+------------------------------------------------------------------------
+r546 | petulda | 2010-04-15 04:33:55 -0400 (Thu, 15 Apr 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/sam_header.c
+
+More descriptive message for space separated tags
+------------------------------------------------------------------------
+r545 | petulda | 2010-04-14 11:44:50 -0400 (Wed, 14 Apr 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/misc/sam2vcf.pl
+
+Speedup with -i, no need to query the reference all the time
+------------------------------------------------------------------------
+r541 | petulda | 2010-03-15 10:03:51 -0400 (Mon, 15 Mar 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/sam_header.c
+
+Fixed the order of sequences in the header
+------------------------------------------------------------------------
+r540 | petulda | 2010-03-04 06:28:35 -0500 (Thu, 04 Mar 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/misc/sam2vcf.pl
+
+Added possibility to select indels only and fixed a bug in reporting homozygous indels.
+------------------------------------------------------------------------
+r539 | jmarshall | 2010-02-27 06:48:17 -0500 (Sat, 27 Feb 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+
+Improve the invalid 'BAM\1' magic number error message, and also print it
+when no bytes can be read from the alleged BAM file, e.g., in the common
+user error case when a SAM file has accidentally been supplied.
+
+------------------------------------------------------------------------
+r538 | petulda | 2010-02-26 10:51:40 -0500 (Fri, 26 Feb 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/AUTHORS
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_import.c
+   M /trunk/samtools/sam_header.c
+
+Improved efficiency of header parsing
+------------------------------------------------------------------------
+r537 | lh3lh3 | 2010-02-23 21:08:48 -0500 (Tue, 23 Feb 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/misc/export2sam.pl
+
+Updated export2sam.pl by Chris Saunders from Illumina.
+
+
+------------------------------------------------------------------------
+r536 | petulda | 2010-02-17 08:32:53 -0500 (Wed, 17 Feb 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/misc/samtools.pl
+
+Fixed filtering of SNPs near indels. Added min indel and SNP quality filter.
+------------------------------------------------------------------------
+r535 | petulda | 2010-02-12 04:52:37 -0500 (Fri, 12 Feb 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/misc/sam2vcf.pl
+
+Print an error for pileups in simple format
+------------------------------------------------------------------------
+r534 | lh3lh3 | 2010-02-11 14:01:41 -0500 (Thu, 11 Feb 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+added a hidden option in pileup to output the base position (for Erin)
+
+------------------------------------------------------------------------
+r533 | petulda | 2010-02-09 10:12:14 -0500 (Tue, 09 Feb 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/misc/sam2vcf.pl
+
+Added possibility to specify a custom column title for the data column
+------------------------------------------------------------------------
+r532 | petulda | 2010-02-09 09:46:09 -0500 (Tue, 09 Feb 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+Added the -d option to limit maximum depth for indels.
+------------------------------------------------------------------------
+r531 | petulda | 2010-02-03 07:57:27 -0500 (Wed, 03 Feb 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/misc/sam2vcf.pl
+
+Added VCF header
+------------------------------------------------------------------------
+r530 | lh3lh3 | 2010-02-01 09:13:19 -0500 (Mon, 01 Feb 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/samtools.pl
+   M /trunk/samtools/misc/wgsim.c
+
+ * samtools-0.1.7-6
+ * fixed a bug in faidx
+
+------------------------------------------------------------------------
 r529 | jmarshall | 2010-01-11 18:51:49 -0500 (Mon, 11 Jan 2010) | 2 lines
 Changed paths:
    M /trunk/samtools/faidx.c

@@ -232,6 +232,7 @@ const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_
 	if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
 	else {
 		*_n_plp = 0;
+		if (iter->is_eof) return 0;
 		while (iter->func(iter->data, iter->b) >= 0) {
 			if (bam_plp_push(iter, iter->b) < 0) {
 				*_n_plp = -1;
@@ -239,6 +240,8 @@ const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_
 			}
 			if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
 		}
+		bam_plp_push(iter, 0);
+		if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
 		return 0;
 	}
 }
@@ -353,7 +356,7 @@ void bam_mplp_destroy(bam_mplp_t iter)
 {
 	int i;
 	for (i = 0; i < iter->n; ++i) bam_plp_destroy(iter->iter[i]);
-	free(iter->pos); free(iter->n_plp); free(iter->plp);
+	free(iter->iter); free(iter->pos); free(iter->n_plp); free(iter->plp);
 	free(iter);
 }
 
@@ -367,7 +370,7 @@ int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_p
 			iter->plp[i] = bam_plp_auto(iter->iter[i], &tid, &pos, &iter->n_plp[i]);
 			iter->pos[i] = (uint64_t)tid<<32 | pos;
 		}
-		if (iter->pos[i] < new_min) new_min = iter->pos[i];
+		if (iter->plp[i] && iter->pos[i] < new_min) new_min = iter->pos[i];
 	}
 	iter->min = new_min;
 	if (new_min == (uint64_t)-1) return 0;

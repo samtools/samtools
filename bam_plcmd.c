@@ -163,18 +163,18 @@ static void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, const char 
 	if (p->is_head) printf("^%c", p->b->core.qual > 93? 126 : p->b->core.qual + 33);
 	if (!p->is_del) {
 		int j, rb, c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
-		rb = (ref && (int)pos < ref_len)? ref[pos] : 'N';
+		rb = (ref && pos < ref_len)? ref[pos] : 'N';
 		if (c == '=' || toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
 		else c = bam1_strand(p->b)? tolower(c) : toupper(c);
 		putchar(c);
 		if (p->indel > 0) {
-			putchar('+'); putw(p->indel, stdout);
+			printf("+%d", p->indel);
 			for (j = 1; j <= p->indel; ++j) {
 				c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
 				putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
 			}
 		} else if (p->indel < 0) {
-			putw(p->indel, stdout);
+			printf("%d", p->indel);
 			for (j = 1; j <= -p->indel; ++j) {
 				c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
 				putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
@@ -446,36 +446,81 @@ int bam_pileup(int argc, char *argv[])
  * mpileup *
  ***********/
 
-static int mpileup(int n, char **fn)
+typedef struct {
+	char *reg;
+	faidx_t *fai;
+} mplp_conf_t;
+
+typedef struct {
+	bamFile fp;
+	bam_iterf_t iter;
+} mplp_aux_t;
+
+static int mplp_func(void *data, bam1_t *b)
 {
-	bamFile *fp;
-	int i, tid, pos, *n_plp;
+	mplp_aux_t *ma = (mplp_aux_t*)data;
+	if (ma->iter) return bam_iterf_read(ma->fp, ma->iter, b);
+	return bam_read1(ma->fp, b);
+}
+
+static int mpileup(mplp_conf_t *conf, int n, char **fn)
+{
+	mplp_aux_t **data;
+	int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid;
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
-	fp = calloc(n, sizeof(void*));
+	char *ref;
+	// allocate
+	data = calloc(n, sizeof(void*));
 	plp = calloc(n, sizeof(void*));
 	n_plp = calloc(n, sizeof(int*));
+	// read the header and initialize data
 	for (i = 0; i < n; ++i) {
 		bam_header_t *h_tmp;
-		fp[i] = bam_open(fn[i], "r");
-		h_tmp = bam_header_read(fp[i]);
+		data[i] = calloc(1, sizeof(mplp_aux_t));
+		data[i]->fp = bam_open(fn[i], "r");
+		h_tmp = bam_header_read(data[i]->fp);
+		if (conf->reg) {
+			int beg, end;
+			bam_index_t *idx;
+			idx = bam_index_load(fn[i]);
+			if (idx == 0) {
+				fprintf(stderr, "[%s] fail to load index for %d-th input.\n", __func__, i+1);
+				exit(1);
+			}
+			if (bam_parse_region(h_tmp, conf->reg, &tid, &beg, &end) < 0) {
+				fprintf(stderr, "[%s] malformatted region or wrong seqname for %d-th input.\n", __func__, i+1);
+				exit(1);
+			}
+			if (i == 0) beg0 = beg, end0 = end;
+			data[i]->iter = bam_iterf_query(idx, tid, beg, end);
+			bam_index_destroy(idx);
+		}
 		if (i == 0) h = h_tmp;
 		else {
 			// FIXME: to check consistency
 			bam_header_destroy(h_tmp);
 		}
 	}
-	iter = bam_mplp_init(n, bam_read1, fp);
+	// mpileup
+	ref_tid = -1; ref = 0;
+	iter = bam_mplp_init(n, mplp_func, (void**)data);
 	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
-		printf("%s\t%d\tN", h->target_name[tid], pos + 1);
+		if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
+		if (tid != ref_tid) {
+			free(ref);
+			if (conf->fai) ref = fai_fetch(conf->fai, h->target_name[tid], &ref_len);
+			ref_tid = tid;
+		}
+		printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
 		for (i = 0; i < n; ++i) {
 			int j;
 			printf("\t%d\t", n_plp[i]);
 			if (n_plp[i] == 0) printf("*\t*");
 			else {
 				for (j = 0; j < n_plp[i]; ++j)
-					pileup_seq(plp[i] + j, pos, 0, 0);
+					pileup_seq(plp[i] + j, pos, ref_len, ref);
 				putchar('\t');
 				for (j = 0; j < n_plp[i]; ++j) {
 					const bam_pileup1_t *p = plp[i] + j;
@@ -489,17 +534,35 @@ static int mpileup(int n, char **fn)
 	}
 	bam_mplp_destroy(iter);
 	bam_header_destroy(h);
-	for (i = 0; i < n; ++i) bam_close(fp[i]);
-	free(fp); free(plp);
+	for (i = 0; i < n; ++i) {
+		bam_close(data[i]->fp);
+		if (data[i]->iter) bam_iterf_destroy(data[i]->iter);
+		free(data[i]);
+	}
+	free(data); free(plp); free(ref); free(n_plp);
 	return 0;
 }
 
 int bam_mpileup(int argc, char *argv[])
 {
+	int c;
+	mplp_conf_t mplp;
+	memset(&mplp, 0, sizeof(mplp_conf_t));
+	while ((c = getopt(argc, argv, "f:r:")) >= 0) {
+		switch (c) {
+		case 'f':
+			mplp.fai = fai_load(optarg);
+			if (mplp.fai == 0) return 1;
+			break;
+		case 'r': mplp.reg = strdup(optarg);
+		}
+	}
 	if (argc == 1) {
-		fprintf(stderr, "Usage: samtools mpileup <in1.bam> [<in2.bam> [...]]\n");
+		fprintf(stderr, "Usage: samtools mpileup [-r reg] [-f in.fa] in1.bam [in2.bam [...]]\n");
 		return 1;
 	}
-	mpileup(argc - 1, argv + 1);
+	mpileup(&mplp, argc - optind, argv + optind);
+	free(mplp.reg);
+	if (mplp.fai) fai_destroy(mplp.fai);
 	return 0;
 }
