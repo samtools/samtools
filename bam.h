@@ -190,7 +190,7 @@ typedef struct {
 	uint8_t *data;
 } bam1_t;
 
-typedef struct __bam_iterf_t *bam_iterf_t;
+typedef struct __bam_iter_t *bam_iter_t;
 
 #define bam1_strand(b) (((b)->core.flag&BAM_FREVERSE) != 0)
 #define bam1_mstrand(b) (((b)->core.flag&BAM_FMREVERSE) != 0)
@@ -594,9 +594,9 @@ extern "C" {
 	 */
 	int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func);
 
-	bam_iterf_t bam_iterf_query(const bam_index_t *idx, int tid, int beg, int end);
-	int bam_iterf_read(bamFile fp, bam_iterf_t iter, bam1_t *b);
-	void bam_iterf_destroy(bam_iterf_t iter);
+	bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end);
+	int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b);
+	void bam_iter_destroy(bam_iter_t iter);
 
 	/*!
 	  @abstract       Parse a region in the format: "chr2:100,000-200,000".

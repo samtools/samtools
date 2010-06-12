@@ -453,13 +453,13 @@ typedef struct {
 
 typedef struct {
 	bamFile fp;
-	bam_iterf_t iter;
+	bam_iter_t iter;
 } mplp_aux_t;
 
 static int mplp_func(void *data, bam1_t *b)
 {
 	mplp_aux_t *ma = (mplp_aux_t*)data;
-	if (ma->iter) return bam_iterf_read(ma->fp, ma->iter, b);
+	if (ma->iter) return bam_iter_read(ma->fp, ma->iter, b);
 	return bam_read1(ma->fp, b);
 }
 
@@ -494,7 +494,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				exit(1);
 			}
 			if (i == 0) beg0 = beg, end0 = end;
-			data[i]->iter = bam_iterf_query(idx, tid, beg, end);
+			data[i]->iter = bam_iter_query(idx, tid, beg, end);
 			bam_index_destroy(idx);
 		}
 		if (i == 0) h = h_tmp;
@@ -536,7 +536,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bam_header_destroy(h);
 	for (i = 0; i < n; ++i) {
 		bam_close(data[i]->fp);
-		if (data[i]->iter) bam_iterf_destroy(data[i]->iter);
+		if (data[i]->iter) bam_iter_destroy(data[i]->iter);
 		free(data[i]);
 	}
 	free(data); free(plp); free(ref); free(n_plp);

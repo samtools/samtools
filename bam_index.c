@@ -494,7 +494,7 @@ static inline int is_overlap(uint32_t beg, uint32_t end, const bam1_t *b)
 	return (rend > beg && rbeg < end);
 }
 
-struct __bam_iterf_t {
+struct __bam_iter_t {
 	int from_first; // read from the first record; no random access
 	int tid, beg, end, n_off, i, finished;
 	uint64_t curr_off;
@@ -502,7 +502,7 @@ struct __bam_iterf_t {
 };
 
 // bam_fetch helper function retrieves 
-bam_iterf_t bam_iterf_query(const bam_index_t *idx, int tid, int beg, int end)
+bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end)
 {
 	uint16_t *bins;
 	int i, n_bins, n_off;
@@ -510,12 +510,12 @@ bam_iterf_t bam_iterf_query(const bam_index_t *idx, int tid, int beg, int end)
 	khint_t k;
 	khash_t(i) *index;
 	uint64_t min_off;
-	bam_iterf_t iter = 0;
+	bam_iter_t iter = 0;
 
 	if (beg < 0) beg = 0;
 	if (end < beg) return 0;
 	// initialize iter
-	iter = calloc(1, sizeof(struct __bam_iterf_t));
+	iter = calloc(1, sizeof(struct __bam_iter_t));
 	iter->tid = tid, iter->beg = beg, iter->end = end; iter->i = -1;
 	//
 	bins = (uint16_t*)calloc(MAX_BIN, 2);
@@ -582,20 +582,20 @@ bam_iterf_t bam_iterf_query(const bam_index_t *idx, int tid, int beg, int end)
 
 pair64_t *get_chunk_coordinates(const bam_index_t *idx, int tid, int beg, int end, int *cnt_off)
 { // for pysam compatibility
-	bam_iterf_t iter;
+	bam_iter_t iter;
 	pair64_t *off;
-	iter = bam_iterf_query(idx, tid, beg, end);
+	iter = bam_iter_query(idx, tid, beg, end);
 	off = iter->off; *cnt_off = iter->n_off;
 	free(iter);
 	return off;
 }
 
-void bam_iterf_destroy(bam_iterf_t iter)
+void bam_iter_destroy(bam_iter_t iter)
 {
 	if (iter) { free(iter->off); free(iter); }
 }
 
-int bam_iterf_read(bamFile fp, bam_iterf_t iter, bam1_t *b)
+int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b)
 {
 	if (iter->finished) return -1;
 	if (iter->from_first) {
@@ -627,11 +627,11 @@ int bam_iterf_read(bamFile fp, bam_iterf_t iter, bam1_t *b)
 
 int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)
 {
-	bam_iterf_t iter;
+	bam_iter_t iter;
 	bam1_t *b;
 	b = bam_init1();
-	iter = bam_iterf_query(idx, tid, beg, end);
-	while (bam_iterf_read(fp, iter, b) >= 0) func(b, data);
+	iter = bam_iter_query(idx, tid, beg, end);
+	while (bam_iter_read(fp, iter, b) >= 0) func(b, data);
 	bam_destroy1(b);
 	return 0;
 }
