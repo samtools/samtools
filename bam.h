@@ -463,11 +463,15 @@ extern "C" {
 		uint32_t is_del:1, is_head:1, is_tail:1;
 	} bam_pileup1_t;
 
-	struct __bam_plbuf_t;
-	/*! @abstract pileup buffer */
-	typedef struct __bam_plbuf_t bam_plbuf_t;
+	struct __bam_plp_t;
+	typedef struct __bam_plp_t *bam_plp_t;
 
-	void bam_plbuf_set_mask(bam_plbuf_t *buf, int mask);
+	bam_plp_t bam_plp_init();
+	int bam_plp_push(bam_plp_t iter, const bam1_t *b);
+	const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_n_plp, int *_tid, int *_pos);
+	void bam_plp_set_mask(bam_plp_t iter, int mask);
+	void bam_plp_reset(bam_plp_t iter);
+	void bam_plp_destroy(bam_plp_t iter);
 
 	/*! @typedef
 	  @abstract    Type of function to be called by bam_plbuf_push().
@@ -480,44 +484,16 @@ extern "C" {
 	 */
 	typedef int (*bam_pileup_f)(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data);
 
-	/*!
-	  @abstract     Reset a pileup buffer for another pileup process
-	  @param  buf   the pileup buffer to be reset
-	 */
+	typedef struct {
+		bam_plp_t iter;
+		bam_pileup_f func;
+		void *data;
+	} bam_plbuf_t;
+
+	void bam_plbuf_set_mask(bam_plbuf_t *buf, int mask);
 	void bam_plbuf_reset(bam_plbuf_t *buf);
-
-	/*!
-	  @abstract     Initialize a buffer for pileup.
-	  @param  func  fucntion to be called by bam_pileup_core()
-	  @param  data  user provided data
-	  @return       pointer to the pileup buffer
-	 */
 	bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data);
-
-	/*!
-	  @abstract    Destroy a pileup buffer.
-	  @param  buf  pointer to the pileup buffer
-	 */
 	void bam_plbuf_destroy(bam_plbuf_t *buf);
-
-	/*!
-	  @abstract    Push an alignment to the pileup buffer.
-	  @param  b    alignment to be pushed
-	  @param  buf  pileup buffer
-	  @see         bam_plbuf_init()
-	  @return      always 0 currently
-
-	  @discussion If all the alignments covering a particular site have
-	  been collected, this function will call the user defined function
-	  as is provided to bam_plbuf_init(). The coordinate of the site and
-	  all the alignments will be transferred to the user defined
-	  function as function parameters.
-	 
-	  When all the alignments are pushed to the buffer, this function
-	  needs to be called with b equal to NULL. This will flush the
-	  buffer. A pileup buffer can only be reused when bam_plbuf_reset()
-	  is called.
-	 */
 	int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf);
 
 	int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data);
