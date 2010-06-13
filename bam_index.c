@@ -178,7 +178,7 @@ bam_index_t *bam_index_core(bamFile fp)
 					bam1_qname(b), last_coor, c->pos, c->tid+1);
 			exit(1);
 		}
-		insert_offset2(&idx->index2[b->core.tid], b, last_off);
+		if (c->tid >= 0) insert_offset2(&idx->index2[b->core.tid], b, last_off);
 		if (c->bin != last_bin) { // then possibly write the binning index
 			if (save_bin != 0xffffffffu) // save_bin==0xffffffffu only happens to the first record
 				insert_offset(idx->index[save_tid], save_bin, save_off, last_off);
