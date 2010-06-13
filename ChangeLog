@@ -1,4 +1,44 @@
 ------------------------------------------------------------------------
+r595 | lh3lh3 | 2010-06-13 18:54:26 -0400 (Sun, 13 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-16 (r595)
+ * write additional information to bam index
+
+------------------------------------------------------------------------
+r594 | lh3lh3 | 2010-06-13 17:29:52 -0400 (Sun, 13 Jun 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+
+fixed a bug for unmapped sequences in indexing
+
+------------------------------------------------------------------------
+r593 | lh3lh3 | 2010-06-12 18:11:32 -0400 (Sat, 12 Jun 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/samtools.1
+
+rename iterf as iter
+
+------------------------------------------------------------------------
+r592 | lh3lh3 | 2010-06-12 18:02:38 -0400 (Sat, 12 Jun 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_aux.c
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-15 (r592)
+ * fixed a few minor memory leaks in the new pileup code
+ * improved the functionality of mpileup
+
+------------------------------------------------------------------------
 r591 | lh3lh3 | 2010-06-12 14:09:22 -0400 (Sat, 12 Jun 2010) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.h

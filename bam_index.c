@@ -65,6 +65,7 @@ KHASH_MAP_INIT_INT(i, bam_binlist_t)
 
 struct __bam_index_t {
 	int32_t n;
+	uint64_t n_no_coor; // unmapped reads without coordinate
 	khash_t(i) **index;
 	bam_lidx_t *index2;
 };
@@ -156,7 +157,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	uint32_t last_bin, save_bin;
 	int32_t last_coor, last_tid, save_tid;
 	bam1_core_t *c;
-	uint64_t save_off, last_off, n_mapped, n_unmapped, off_beg, off_end;
+	uint64_t save_off, last_off, n_mapped, n_unmapped, off_beg, off_end, n_no_coor;
 
 	idx = (bam_index_t*)calloc(1, sizeof(bam_index_t));
 	b = (bam1_t*)calloc(1, sizeof(bam1_t));
@@ -171,9 +172,10 @@ bam_index_t *bam_index_core(bamFile fp)
 
 	save_bin = save_tid = last_tid = last_bin = 0xffffffffu;
 	save_off = last_off = bam_tell(fp); last_coor = 0xffffffffu;
-    n_mapped = n_unmapped = off_end = 0;
+    n_mapped = n_unmapped = n_no_coor = off_end = 0;
 	off_beg = off_end = bam_tell(fp);
 	while ((ret = bam_read1(fp, b)) >= 0) {
+		if (c->tid < 0) ++n_no_coor;
 		if (last_tid != c->tid) { // change of chromosomes
 			last_tid = c->tid;
 			last_bin = 0xffffffffu;
@@ -208,11 +210,18 @@ bam_index_t *bam_index_core(bamFile fp)
 		last_off = bam_tell(fp);
 		last_coor = b->core.pos;
 	}
-	if (save_tid >= 0) insert_offset(idx->index[save_tid], save_bin, save_off, bam_tell(fp));
+	if (save_tid >= 0) {
+		insert_offset(idx->index[save_tid], save_bin, save_off, bam_tell(fp));
+		insert_offset(idx->index[save_tid], BAM_MAX_BIN, off_beg, off_end);
+		insert_offset(idx->index[save_tid], BAM_MAX_BIN, n_mapped, n_unmapped);
+	}
 	merge_chunks(idx);
 	fill_missing(idx);
+	if (ret >= 0)
+		while ((ret = bam_read1(fp, b)) >= 0) ++n_no_coor;
 	if (ret < -1) fprintf(stderr, "[bam_index_core] truncated file? Continue anyway. (%d)\n", ret);
 	free(b->data); free(b);
+	idx->n_no_coor = n_no_coor;
 	return idx;
 }
 
@@ -290,6 +299,11 @@ void bam_index_save(const bam_index_t *idx, FILE *fp)
 				bam_swap_endian_8p(&index2->offset[x]);
 		} else fwrite(index2->offset, 8, index2->n, fp);
 	}
+	{ // write the number of reads coor-less records.
+		uint64_t x = idx->n_no_coor;
+		if (bam_is_be) bam_swap_endian_8p(&x);
+		fwrite(&x, 8, 1, fp);
+	}
 	fflush(fp);
 }
 
@@ -351,6 +365,8 @@ static bam_index_t *bam_index_load_core(FILE *fp)
 		if (bam_is_be)
 			for (j = 0; j < index2->n; ++j) bam_swap_endian_8p(&index2->offset[j]);
 	}
+	if (fread(&idx->n_no_coor, 8, 1, fp) == 0) idx->n_no_coor = 0;
+	if (bam_is_be) bam_swap_endian_8p(&idx->n_no_coor);
 	return idx;
 }
 
@@ -488,7 +504,7 @@ int bam_idxstats(int argc, char *argv[])
 	bam_index_t *idx;
 	bam_header_t *header;
 	bamFile fp;
-	int i;
+	int i, no_stats = 0;
 	if (argc < 2) {
 		fprintf(stderr, "Usage: samtools idxstats <in.bam>\n");
 		return 1;
@@ -506,8 +522,12 @@ int bam_idxstats(int argc, char *argv[])
 		k = kh_get(i, h, BAM_MAX_BIN);
 		if (k != kh_end(h))
 			printf("\t%llu\t%llu", (long long)kh_val(h, k).list[1].u, (long long)kh_val(h, k).list[1].v);
+		else no_stats = 1;
 		putchar('\n');
 	}
+	printf("*\t0");
+	if (!no_stats) printf("\t0\t%llu", (long long)idx->n_no_coor);
+	putchar('\n');
 	bam_header_destroy(header);
 	bam_index_destroy(idx);
 	return 0;
