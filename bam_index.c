@@ -42,6 +42,8 @@
 // 1<<14 is the size of minimum bin.
 #define BAM_LIDX_SHIFT    14
 
+#define BAM_MAX_BIN 37450 // =(8^6-1)/7+1
+
 typedef struct {
 	uint64_t u, v;
 } pair64_t;
@@ -154,7 +156,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	uint32_t last_bin, save_bin;
 	int32_t last_coor, last_tid, save_tid;
 	bam1_core_t *c;
-	uint64_t save_off, last_off;
+	uint64_t save_off, last_off, n_mapped, n_unmapped, off_beg, off_end;
 
 	idx = (bam_index_t*)calloc(1, sizeof(bam_index_t));
 	b = (bam1_t*)calloc(1, sizeof(bam1_t));
@@ -169,6 +171,8 @@ bam_index_t *bam_index_core(bamFile fp)
 
 	save_bin = save_tid = last_tid = last_bin = 0xffffffffu;
 	save_off = last_off = bam_tell(fp); last_coor = 0xffffffffu;
+    n_mapped = n_unmapped = off_end = 0;
+	off_beg = off_end = bam_tell(fp);
 	while ((ret = bam_read1(fp, b)) >= 0) {
 		if (last_tid != c->tid) { // change of chromosomes
 			last_tid = c->tid;
@@ -182,6 +186,13 @@ bam_index_t *bam_index_core(bamFile fp)
 		if (c->bin != last_bin) { // then possibly write the binning index
 			if (save_bin != 0xffffffffu) // save_bin==0xffffffffu only happens to the first record
 				insert_offset(idx->index[save_tid], save_bin, save_off, last_off);
+			if (last_bin == 0xffffffffu && save_tid != 0xffffffffu) { // write the meta element
+				off_end = last_off;
+				insert_offset(idx->index[save_tid], BAM_MAX_BIN, off_beg, off_end);
+				insert_offset(idx->index[save_tid], BAM_MAX_BIN, n_mapped, n_unmapped);
+				n_mapped = n_unmapped = 0;
+				off_beg = off_end;
+			}
 			save_off = last_off;
 			save_bin = last_bin = c->bin;
 			save_tid = c->tid;
@@ -192,6 +203,8 @@ bam_index_t *bam_index_core(bamFile fp)
 					(unsigned long long)bam_tell(fp), (unsigned long long)last_off);
 			exit(1);
 		}
+		if (c->flag & BAM_FUNMAP) ++n_unmapped;
+		else ++n_mapped;
 		last_off = bam_tell(fp);
 		last_coor = b->core.pos;
 	}
@@ -462,7 +475,7 @@ int bam_index_build(const char *fn)
 int bam_index(int argc, char *argv[])
 {
 	if (argc < 2) {
-		fprintf(stderr, "Usage: samtools index <in.bam> [<out.index>]\n");
+		fprintf(stderr, "Usage: samtools index <in.bam> [out.index]\n");
 		return 1;
 	}
 	if (argc >= 3) bam_index_build2(argv[1], argv[2]);
@@ -470,9 +483,37 @@ int bam_index(int argc, char *argv[])
 	return 0;
 }
 
-#define MAX_BIN 37450 // =(8^6-1)/7+1
+int bam_idxstats(int argc, char *argv[])
+{
+	bam_index_t *idx;
+	bam_header_t *header;
+	bamFile fp;
+	int i;
+	if (argc < 2) {
+		fprintf(stderr, "Usage: samtools idxstats <in.bam>\n");
+		return 1;
+	}
+	fp = bam_open(argv[1], "r");
+	if (fp == 0) { fprintf(stderr, "[%s] fail to open BAM.\n", __func__); return 1; }
+	header = bam_header_read(fp);
+	bam_close(fp);
+	idx = bam_index_load(argv[1]);
+	if (idx == 0) { fprintf(stderr, "[%s] fail to load the index.\n", __func__); return 1; }
+	for (i = 0; i < idx->n; ++i) {
+		khint_t k;
+		khash_t(i) *h = idx->index[i];
+		printf("%s\t%d", header->target_name[i], header->target_len[i]);
+		k = kh_get(i, h, BAM_MAX_BIN);
+		if (k != kh_end(h))
+			printf("\t%llu\t%llu", (long long)kh_val(h, k).list[1].u, (long long)kh_val(h, k).list[1].v);
+		putchar('\n');
+	}
+	bam_header_destroy(header);
+	bam_index_destroy(idx);
+	return 0;
+}
 
-static inline int reg2bins(uint32_t beg, uint32_t end, uint16_t list[MAX_BIN])
+static inline int reg2bins(uint32_t beg, uint32_t end, uint16_t list[BAM_MAX_BIN])
 {
 	int i = 0, k;
 	if (beg >= end) return 0;
@@ -518,7 +559,7 @@ bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end)
 	iter = calloc(1, sizeof(struct __bam_iter_t));
 	iter->tid = tid, iter->beg = beg, iter->end = end; iter->i = -1;
 	//
-	bins = (uint16_t*)calloc(MAX_BIN, 2);
+	bins = (uint16_t*)calloc(BAM_MAX_BIN, 2);
 	n_bins = reg2bins(beg, end, bins);
 	index = idx->index[tid];
 	if (idx->index2[tid].n > 0) {

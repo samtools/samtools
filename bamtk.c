@@ -9,7 +9,7 @@
 #endif
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.7-15 (r592)"
+#define PACKAGE_VERSION "0.1.7-16 (r595)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);
@@ -23,7 +23,7 @@ int bam_mating(int argc, char *argv[]);
 int bam_rmdup(int argc, char *argv[]);
 int bam_flagstat(int argc, char *argv[]);
 int bam_fillmd(int argc, char *argv[]);
-
+int bam_idxstats(int argc, char *argv[]);
 int main_samview(int argc, char *argv[]);
 int main_import(int argc, char *argv[]);
 int main_reheader(int argc, char *argv[]);
@@ -114,6 +114,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "merge") == 0) return bam_merge(argc-1, argv+1);
 	else if (strcmp(argv[1], "sort") == 0) return bam_sort(argc-1, argv+1);
 	else if (strcmp(argv[1], "index") == 0) return bam_index(argc-1, argv+1);
+	else if (strcmp(argv[1], "idxstats") == 0) return bam_idxstats(argc-1, argv+1);
 	else if (strcmp(argv[1], "faidx") == 0) return faidx_main(argc-1, argv+1);
 	else if (strcmp(argv[1], "fixmate") == 0) return bam_mating(argc-1, argv+1);
 	else if (strcmp(argv[1], "rmdup") == 0) return bam_rmdup(argc-1, argv+1);
