@@ -66,7 +66,23 @@ sam_header.o:sam_header.h khash.h
 faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h
 
+
+libbam.1.dylib-local:$(LOBJS)
+		libtool -dynamic $(LOBJS) -o libbam.1.dylib -lc -lz
+
+libbam.so.1-local:$(LOBJS)
+		$(CC) -shared -Wl,-soname,libbam.so -o libbam.so.1 $(LOBJS) -lc -lz
+
+dylib:
+		@$(MAKE) cleanlocal; \
+		case `uname` in \
+			Linux) $(MAKE) CFLAGS="$(CFLAGS) -fPIC" libbam.so.1-local;; \
+			Darwin) $(MAKE) CFLAGS="$(CFLAGS) -fPIC" libbam.1.dylib-local;; \
+			*) echo 'Unknown OS';; \
+		esac
+
+
 cleanlocal:
-		rm -fr gmon.out *.o a.out *.exe *.dSYM razip bgzip $(PROG) *~ *.a
+		rm -fr gmon.out *.o a.out *.exe *.dSYM razip bgzip $(PROG) *~ *.a *.so.* *.so *.dylib
 
 clean:cleanlocal-recur
