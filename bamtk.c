@@ -86,6 +86,7 @@ static int usage()
 	fprintf(stderr, "         tview       text alignment viewer\n");
 #endif
 	fprintf(stderr, "         index       index alignment\n");
+	fprintf(stderr, "         idxstats    BAM index stats (r595 or later)\n");
 	fprintf(stderr, "         fixmate     fix mate information\n");
 	fprintf(stderr, "         glfview     print GLFv3 file\n");
 	fprintf(stderr, "         flagstat    simple stats\n");
