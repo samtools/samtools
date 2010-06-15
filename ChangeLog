@@ -1,4 +1,28 @@
 ------------------------------------------------------------------------
+r599 | lh3lh3 | 2010-06-13 21:41:11 -0400 (Sun, 13 Jun 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+
+minor fix. No actual effect.
+
+------------------------------------------------------------------------
+r598 | lh3lh3 | 2010-06-13 21:32:45 -0400 (Sun, 13 Jun 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+
+added Makefile targets to compile shared/dynamic library
+
+------------------------------------------------------------------------
+r596 | lh3lh3 | 2010-06-13 19:48:07 -0400 (Sun, 13 Jun 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-17 (r596)
+ * also keep the number of coor-less reads in the index file
+
+------------------------------------------------------------------------
 r595 | lh3lh3 | 2010-06-13 18:54:26 -0400 (Sun, 13 Jun 2010) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_index.c
