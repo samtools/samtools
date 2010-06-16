@@ -120,7 +120,7 @@ static void merge_chunks(bam_index_t *idx)
 		index = idx->index[i];
 		for (k = kh_begin(index); k != kh_end(index); ++k) {
 			bam_binlist_t *p;
-			if (!kh_exist(index, k)) continue;
+			if (!kh_exist(index, k) || kh_key(index, k) == BAM_MAX_BIN) continue;
 			p = &kh_value(index, k);
 			m = 0;
 			for (l = 1; l < p->n; ++l) {
