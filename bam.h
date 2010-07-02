@@ -329,6 +329,7 @@ extern "C" {
 	  be destroyed in the first place.
 	 */
 	int sam_header_parse(bam_header_t *h);
+	int32_t bam_get_tid(const bam_header_t *header, const char *seq_name);
 
 	/*!
 	  @abstract       Parse @RG lines a update a header struct

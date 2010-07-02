@@ -504,7 +504,7 @@ int bam_idxstats(int argc, char *argv[])
 	bam_index_t *idx;
 	bam_header_t *header;
 	bamFile fp;
-	int i, no_stats = 0;
+	int i;
 	if (argc < 2) {
 		fprintf(stderr, "Usage: samtools idxstats <in.bam>\n");
 		return 1;
@@ -522,12 +522,10 @@ int bam_idxstats(int argc, char *argv[])
 		k = kh_get(i, h, BAM_MAX_BIN);
 		if (k != kh_end(h))
 			printf("\t%llu\t%llu", (long long)kh_val(h, k).list[1].u, (long long)kh_val(h, k).list[1].v);
-		else no_stats = 1;
+		else printf("\t0\t0");
 		putchar('\n');
 	}
-	printf("*\t0");
-	if (!no_stats) printf("\t0\t%llu", (long long)idx->n_no_coor);
-	putchar('\n');
+	printf("*\t0\t0\t%llu\n", (long long)idx->n_no_coor);
 	bam_header_destroy(header);
 	bam_index_destroy(idx);
 	return 0;
