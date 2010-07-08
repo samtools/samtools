@@ -4,7 +4,7 @@ CFLAGS=		-g -Wall #-O2 #-m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
 DFLAGS=		-D_FILE_OFFSET_BITS=64
 OBJS=		
-PROG=		md5sum-lite md5fa maq2sam-short maq2sam-long wgsim afs2
+PROG=		md5sum-lite md5fa maq2sam-short maq2sam-long wgsim
 INCLUDES=	-I..
 SUBDIRS=	.
 
