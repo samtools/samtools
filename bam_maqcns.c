@@ -452,6 +452,11 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 			if (types[i] <= 0) j += -types[i];
 			else for (l = 0; l < types[i]; ++l)
 					 ref2[k++] = bam_nt16_nt4_table[(int)inscns[i*max_ins + l]];
+			if (types[0] < 0) { // mask deleted sequences
+				int jj, tmp = types[i] >= 0? -types[0] : -types[0] + types[i];
+				for (jj = 0; jj < tmp && j < right && ref[j]; ++jj, ++j)
+					ref2[k++] = 4;
+			}
 			for (; j < right && ref[j]; ++j)
 				ref2[k++] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[j]]];
 			if (j < right) right = j;
@@ -482,7 +487,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 						if (op == BAM_CMATCH) {
 							int k;
 							for (k = 0; k < len; ++k)
-								if (ref2[x+k] != rs[y+k]) ps += bam1_qual(p->b)[y+k];
+								if (ref2[x+k] != rs[y+k] && ref2[x+k] < 4) ps += bam1_qual(p->b)[y+k];
 							x += len; y += len;
 						} else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) {
 							if (op == BAM_CINS) ps += mi->q_indel * len;
@@ -493,11 +498,15 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 						}
 					}
 					pscore[i*n+j] = ps;
-					/*if (pos == 2618517) { // for debugging only
-						fprintf(stderr, "pos=%d, type=%d, j=%d, score=%d, psore=%d, %d, %d, %d, %d, ", pos+1, types[i], j, score[i*n+j], pscore[i*n+j], tbeg, tend, qbeg, qend);
-						for (l = 0; l < n_acigar; ++l) fprintf(stderr, "%d%c", acigar[l]>>4, "MIDS"[acigar[l]&0xf]); fprintf(stderr, "\n");
-						for (l = 0; l < tend - tbeg + types[i]; ++l) fputc("ACGTN"[ref2[l]], stderr); fputc('\n', stderr);
-						for (l = 0; l < qend - qbeg; ++l) fputc("ACGTN"[rs[l]], stderr); fputc('\n', stderr);
+					/*if (1) { // for debugging only
+						fprintf(stderr, "id=%d, pos=%d, type=%d, j=%d, score=%d, psore=%d, %d, %d, %d, %d, %d, ",
+								j, pos+1, types[i], j, score[i*n+j], pscore[i*n+j], tbeg, tend, qbeg, qend, mi->q_indel);
+						for (l = 0; l < n_acigar; ++l) fprintf(stderr, "%d%c", acigar[l]>>4, "MIDS"[acigar[l]&0xf]);
+						fprintf(stderr, "\n");
+						for (l = 0; l < tend - tbeg + types[i]; ++l) fputc("ACGTN"[ref2[l+tbeg-left]], stderr);
+						fputc('\n', stderr);
+						for (l = 0; l < qend - qbeg; ++l) fputc("ACGTN"[rs[l]], stderr);
+						fputc('\n', stderr);
 						}*/
 					free(acigar);
 				}
@@ -560,7 +569,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 				ret->gl[0] = ret->gl[1] = 0;
 				for (j = 0; j < n; ++j) {
 					int s1 = pscore[max1_i*n + j], s2 = pscore[max2_i*n + j];
-					//printf("%d, %d, %d, %d, %d\n", pl[j].b->core.pos+1, max1_i, max2_i, s1, s2);
+					//fprintf(stderr, "id=%d, %d, %d, %d, %d, %d\n", j, pl[j].b->core.pos+1, types[max1_i], types[max2_i], s1, s2);
 					if (s1 > s2) ret->gl[0] += s1 - s2 < seq_err? s1 - s2 : seq_err;
 					else ret->gl[1] += s2 - s1 < seq_err? s2 - s1 : seq_err;
 				}
