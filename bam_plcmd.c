@@ -341,10 +341,11 @@ int bam_pileup(int argc, char *argv[])
     d->max_depth = 0;
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
+	d->c->is_soap = 1; // change the default model
 	d->ido = bam_maqindel_opt_init();
 	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:d:im:gI:G:vM:S2aR:P")) >= 0) {
 		switch (c) {
-		case 'a': d->c->is_soap = 1; break;
+		case 'a': d->c->is_soap = 0; break;
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
 		case 't': fn_list = strdup(optarg); break;
 		case 'l': fn_pos = strdup(optarg); break;
@@ -379,7 +380,7 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "Usage:  samtools pileup [options] <in.bam>|<in.sam>\n\n");
 		fprintf(stderr, "Option: -s        simple (yet incomplete) pileup format\n");
 		fprintf(stderr, "        -S        the input is in SAM\n");
-		fprintf(stderr, "        -a        use the SOAPsnp model for SNP calling\n");
+		fprintf(stderr, "        -a        use the MAQ model for SNP calling\n");
 		fprintf(stderr, "        -2        output the 2nd best call and quality\n");
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
 		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);

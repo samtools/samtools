@@ -446,6 +446,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 		for (i = 0; i < n_types; ++i) {
 			ka_param_t ap = ka_param_blast;
 			ap.band_width = 2 * types[n_types - 1] + 2;
+			ap.gap_end = 0;
 			// write ref2
 			for (k = 0, j = left; j <= pos; ++j)
 				ref2[k++] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[j]]];
@@ -490,10 +491,10 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 								if (ref2[x+k] != rs[y+k] && ref2[x+k] < 4) ps += bam1_qual(p->b)[y+k];
 							x += len; y += len;
 						} else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) {
-							if (op == BAM_CINS) ps += mi->q_indel * len;
+							if (op == BAM_CINS && l > 0 && l < n_acigar - 1) ps += mi->q_indel * len;
 							y += len;
 						} else if (op == BAM_CDEL) {
-							ps += mi->q_indel * len;
+							if (l > 0 && l < n_acigar - 1) ps += mi->q_indel * len;
 							x += len;
 						}
 					}
