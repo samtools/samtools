@@ -352,7 +352,7 @@ int bam_pileup(int argc, char *argv[])
 		case 'f': fn_fa = strdup(optarg); break;
 		case 'T': d->c->theta = atof(optarg); break;
 		case 'N': d->c->n_hap = atoi(optarg); break;
-		case 'r': d->c->het_rate = atof(optarg); break;
+		case 'r': d->c->het_rate = atof(optarg); d->ido->r_snp = d->c->het_rate; break;
 		case 'M': d->c->cap_mapQ = atoi(optarg); break;
 		case 'd': d->max_depth = atoi(optarg); break;
 		case 'c': d->format |= BAM_PLF_CNS; break;

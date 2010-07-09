@@ -280,7 +280,7 @@ int tv_draw_aln(tview_t *tv, int tid, int pos)
 
 static void tv_win_goto(tview_t *tv, int *tid, int *pos)
 {
-	char str[256];
+	char str[256], *p;
 	int i, l = 0;
 	wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
 	mvwprintw(tv->wgoto, 1, 2, "Goto: ");
@@ -291,10 +291,18 @@ static void tv_win_goto(tview_t *tv, int *tid, int *pos)
 			--l;
 		} else if (c == KEY_ENTER || c == '\012' || c == '\015') {
 			int _tid = -1, _beg, _end;
-			bam_parse_region(tv->header, str, &_tid, &_beg, &_end);
-			if (_tid >= 0) {
-				*tid = _tid; *pos = _beg;
-				return;
+			if (str[0] == '=') {
+				_beg = strtol(str+1, &p, 10);
+				if (_beg > 0) {
+					*pos = _beg;
+					return;
+				}
+			} else {
+				bam_parse_region(tv->header, str, &_tid, &_beg, &_end);
+				if (_tid >= 0) {
+					*tid = _tid; *pos = _beg;
+					return;
+				}
 			}
 		} else if (isgraph(c)) {
 			if (l < TV_MAX_GOTO) str[l++] = c;
@@ -351,6 +359,7 @@ void tv_loop(tview_t *tv)
 			case '?': tv_win_help(tv); break;
 			case '\033':
 			case 'q': goto end_loop;
+			case '/': 
 			case 'g': tv_win_goto(tv, &tid, &pos); break;
 			case 'm': tv->color_for = TV_COLOR_MAPQ; break;
 			case 'b': tv->color_for = TV_COLOR_BASEQ; break;

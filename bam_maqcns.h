@@ -16,8 +16,9 @@ typedef struct {
 } bam_maqcns_t;
 
 typedef struct {
-	int q_indel;
-	float r_indel;
+	int q_indel; // indel sequencing error, phred scaled
+	float r_indel; // indel prior
+	float r_snp; // snp prior
 	// hidden parameters, unchangeable from command line
 	int mm_penalty, indel_err, ambi_thres;
 } bam_maqindel_opt_t;

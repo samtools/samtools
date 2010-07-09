@@ -310,6 +310,7 @@ bam_maqindel_opt_t *bam_maqindel_opt_init()
 	bam_maqindel_opt_t *mi = (bam_maqindel_opt_t*)calloc(1, sizeof(bam_maqindel_opt_t));
 	mi->q_indel = 40;
 	mi->r_indel = 0.00015;
+	mi->r_snp = 0.001;
 	//
 	mi->mm_penalty = 3;
 	mi->indel_err = 4;
@@ -406,7 +407,8 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 	}
 	{ // the core part
 		char *ref2, *rs, *inscns = 0;
-		int k, l, *score, *pscore, max_ins = types[n_types-1];
+		int qr_snp, k, l, *score, *pscore, max_ins = types[n_types-1];
+		qr_snp = (int)(-4.343 * log(mi->r_snp) + .499);
 		if (max_ins > 0) { // get the consensus of inserted sequences
 			int *inscns_aux = (int*)calloc(4 * n_types * max_ins, sizeof(int));
 			// count occurrences
@@ -488,7 +490,8 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 						if (op == BAM_CMATCH) {
 							int k;
 							for (k = 0; k < len; ++k)
-								if (ref2[x+k] != rs[y+k] && ref2[x+k] < 4) ps += bam1_qual(p->b)[y+k];
+								if (ref2[x+k] != rs[y+k] && ref2[x+k] < 4)
+									ps += bam1_qual(p->b)[y+k] < qr_snp? bam1_qual(p->b)[y+k] : qr_snp;
 							x += len; y += len;
 						} else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) {
 							if (op == BAM_CINS && l > 0 && l < n_acigar - 1) ps += mi->q_indel * len;
