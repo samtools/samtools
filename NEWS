@@ -1,3 +1,77 @@
+Beta Release 0.1.8 (?)
+~~~~~~~~~~~~~~~~~~~~~~
+
+Notable functional changes:
+
+ * Added the `reheader' command which replaces a BAM header with a new
+   header. This command is much faster than replacing header by
+   BAM->SAM->BAM conversions.
+
+ * Added the `mpileup' command which computes the pileup of multiple
+   alignments.
+
+ * The `index' command now stores the number of mapped and unmapped
+   reads in the index file. This information can be retrieved quickly by
+   the new `idxstats' command.
+
+ * By default, pileup used the SOAPsnp model for SNP calling. This
+   avoids the floating overflow in the MAQ model which leads to spurious
+   calls in repetitive regions, although these calls will be immediately
+   filtered by varFilter.
+
+ * The `tview' command now correctly handles CIGARs like 7I10M and
+   10M1P1I10M which cause assertion failure in earlier versions.
+
+ * Added the `-d' option to `pileup' which avoids slow indel calling
+   in ultradeep regions by subsampling reads locally.
+
+ * Added the `-R' option to `view' which retrieves alignments in read
+   groups listed in the specified file.
+
+Performance improvements:
+
+ * The BAM->SAM conversion is up to twice faster, depending on the
+   characteristic of the input.
+
+ * Parsing SAM headers with a lot of reference sequences is now much
+   faster.
+
+ * The number of lseek() calls per query is reduced when the query
+   region contains no read alignments.
+
+Bug fixes:
+
+ * Fixed an issue in the indel caller that leads to miscall of indels.
+   Note that this solution may not work well when the sequencing indel
+   error rate is higher than the rate of SNPs.
+
+ * Fixed another issue in the indel caller which may lead to incorrect
+   genotype.
+
+ * Fixed a bug in `view -r'.
+
+APIs and other changes:
+
+ * Added iterator interfaces to random access and pileup. The callback
+   interfaces directly call the iterator interfaces.
+
+ * The BGZF blocks holding the BAM header are indepedent of alignment
+   BGZF blocks. Alignment records shorter than 64kB is guaranteed to be
+   fully contained in one BGZF block. This change is fully compatible
+   with the old version of samtools/picard.
+
+Changes in other utilities:
+
+ * Updated export2sam.pl by Chris Saunders.
+
+ * Improved the sam2vcf.pl script.
+
+ * Added a Python version of varfilter.py by Aylwyn Scally.
+
+(0.1.8: ?)
+
+
+
 Beta Release 0.1.7 (10 November, 2009)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
