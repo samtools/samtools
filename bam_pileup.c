@@ -73,18 +73,28 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 				p->qpos = y + (pos - x);
 				if (x == pos && is_restart) p->is_head = 1;
 				if (x + l - 1 == pos) { // come to the end of a match
-					if (k < c->n_cigar - 1) { // there are additional operation(s)
+					int has_next_match = 0;
+					unsigned i;
+					for (i = k + 1; i < c->n_cigar; ++i) {
+						uint32_t cigar = bam1_cigar(b)[i];
+						int opi = cigar&BAM_CIGAR_MASK;
+						if (opi == BAM_CMATCH) {
+							has_next_match = 1;
+							break;
+						} else if (opi == BAM_CSOFT_CLIP || opi == BAM_CREF_SKIP || opi == BAM_CHARD_CLIP) break;
+					}
+					if (!has_next_match) p->is_tail = 1;
+					if (k < c->n_cigar - 1 && has_next_match) { // there are additional operation(s)
 						uint32_t cigar = bam1_cigar(b)[k+1]; // next CIGAR
 						int op_next = cigar&BAM_CIGAR_MASK; // next CIGAR operation
 						if (op_next == BAM_CDEL) p->indel = -(int32_t)(cigar>>BAM_CIGAR_SHIFT); // del
 						else if (op_next == BAM_CINS) p->indel = cigar>>BAM_CIGAR_SHIFT; // ins
-						if (op_next == BAM_CDEL || op_next == BAM_CINS) {
-							if (k + 2 < c->n_cigar) op_next = bam1_cigar(b)[k+2]&BAM_CIGAR_MASK;
-							else p->is_tail = 1;
+						else if (op_next == BAM_CPAD && k + 2 < c->n_cigar) { // no working for adjacent padding
+							cigar = bam1_cigar(b)[k+2]; op_next = cigar&BAM_CIGAR_MASK;
+							if (op_next == BAM_CDEL) p->indel = -(int32_t)(cigar>>BAM_CIGAR_SHIFT); // del
+							else if (op_next == BAM_CINS) p->indel = cigar>>BAM_CIGAR_SHIFT; // ins
 						}
-						if (op_next == BAM_CSOFT_CLIP || op_next == BAM_CREF_SKIP || op_next == BAM_CHARD_CLIP)
-							p->is_tail = 1; // tail
-					} else p->is_tail = 1; // this is the last operation; set tail
+					}
 				}
 			}
 			x += l; y += l;
@@ -96,7 +106,8 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 			x += l;
 		} else if (op == BAM_CREF_SKIP) x += l;
 		else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
-		is_restart = (op == BAM_CREF_SKIP || op == BAM_CSOFT_CLIP || op == BAM_CHARD_CLIP);
+		if (is_restart) is_restart ^= (op == BAM_CMATCH);
+		else is_restart ^= (op == BAM_CREF_SKIP || op == BAM_CSOFT_CLIP || op == BAM_CHARD_CLIP);
 		if (x > pos) {
 			if (op == BAM_CREF_SKIP) ret = 0; // then do not put it into pileup at all
 			break;
