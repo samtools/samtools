@@ -38,9 +38,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-#ifdef _WIN32
-#include <winsock.h>
-#else
+#ifndef _WIN32
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
