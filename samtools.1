@@ -1,4 +1,4 @@
-.TH samtools 1 "10 November 2009" "samtools-0.1.7" "Bioinformatics tools"
+.TH samtools 1 "11 July 2010" "samtools-0.1.8" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -9,6 +9,8 @@ samtools view -bt ref_list.txt -o aln.bam aln.sam.gz
 samtools sort aln.bam aln.sorted
 .PP
 samtools index aln.sorted.bam
+.PP
+samtools idxstats aln.sorted.bam
 .PP
 samtools view aln.sorted.bam chr2:20,100,000-20,200,000
 .PP
@@ -44,81 +46,9 @@ entire alignment file unless it is asked to do so.
 .SH COMMANDS AND OPTIONS
 
 .TP 10
-.B import
-samtools import <in.ref_list> <in.sam> <out.bam>
-
-Since 0.1.4, this command is an alias of:
-
-samtools view -bt <in.ref_list> -o <out.bam> <in.sam>
-
-.TP
-.B sort
-samtools sort [-n] [-m maxMem] <in.bam> <out.prefix>
-
-Sort alignments by leftmost coordinates. File
-.I <out.prefix>.bam
-will be created. This command may also create temporary files
-.I <out.prefix>.%d.bam
-when the whole alignment cannot be fitted into memory (controlled by
-option -m).
-
-.B OPTIONS:
-.RS
-.TP 8
-.B -n
-Sort by read names rather than by chromosomal coordinates
-.TP
-.B -m INT
-Approximately the maximum required memory. [500000000]
-.RE
-
-.TP
-.B merge
-samtools merge [-h inh.sam] [-n] <out.bam> <in1.bam> <in2.bam> [...]
-
-Merge multiple sorted alignments.
-The header reference lists of all the input BAM files, and the @SQ headers of
-.IR inh.sam ,
-if any, must all refer to the same set of reference sequences.
-The header reference list and (unless overridden by
-.BR -h )
-`@' headers of
-.I in1.bam
-will be copied to
-.IR out.bam ,
-and the headers of other files will be ignored.
-
-.B OPTIONS:
-.RS
-.TP 8
-.B -h FILE
-Use the lines of
-.I FILE
-as `@' headers to be copied to
-.IR out.bam ,
-replacing any header lines that would otherwise be copied from
-.IR in1.bam .
-.RI ( FILE
-is actually in SAM format, though any alignment records it may contain
-are ignored.)
-.TP
-.B -n
-The input alignments are sorted by read names rather than by chromosomal
-coordinates
-.RE
-
-.TP
-.B index
-samtools index <aln.bam>
-
-Index sorted alignment for fast random access. Index file
-.I <aln.bam>.bai
-will be created.
-
-.TP
 .B view
 samtools view [-bhuHS] [-t in.refList] [-o output] [-f reqFlag] [-F
-skipFlag] [-q minMapQ] [-l library] [-r readGroup] <in.bam>|<in.sam> [region1 [...]]
+skipFlag] [-q minMapQ] [-l library] [-r readGroup] [-R rgFile] <in.bam>|<in.sam> [region1 [...]]
 
 Extract/print all or sub alignments in SAM or BAM format. If no region
 is specified, all the alignments will be printed; otherwise only
@@ -180,22 +110,21 @@ Only output reads in library STR [null]
 .TP
 .B -r STR
 Only output reads in read group STR [null]
+.TP
+.B -R FILE
+Output reads in read groups listed in
+.I FILE
+[null]
 .RE
 
 .TP
-.B faidx
-samtools faidx <ref.fasta> [region1 [...]]
+.B tview
+samtools tview <in.sorted.bam> [ref.fasta]
 
-Index reference sequence in the FASTA format or extract subsequence from
-indexed reference sequence. If no region is specified,
-.B faidx
-will index the file and create
-.I <ref.fasta>.fai
-on the disk. If regions are speficified, the subsequences will be
-retrieved and printed to stdout in the FASTA format. The input file can
-be compressed in the
-.B RAZF
-format.
+Text alignment viewer (based on the ncurses library). In the viewer,
+press `?' for help and press `g' to check the alignment start from a
+region in the format like `chr10:10,000,000' or `=10,000,000' when
+viewing the same reference sequence.
 
 .TP
 .B pileup
@@ -238,31 +167,36 @@ The position of indels is offset by -1.
 
 .B OPTIONS:
 .RS
-
 .TP 10
 .B -s
 Print the mapping quality as the last column. This option makes the
 output easier to parse, although this format is not space efficient.
-
 .TP
 .B -S
 The input file is in SAM.
-
 .TP
 .B -i
 Only output pileup lines containing indels.
-
 .TP
 .B -f FILE
 The reference sequence in the FASTA format. Index file
 .I FILE.fai
 will be created if
 absent.
-
 .TP
 .B -M INT
 Cap mapping quality at INT [60]
-
+.TP
+.B -m INT
+Filter reads with flag containing bits in
+.I
+INT
+[1796]
+.TP
+.B -d INT
+Use the first
+.I NUM
+reads in the pileup for indel calling for speed up. Zero for unlimited. [0]
 .TP
 .B -t FILE
 List of reference names ane sequence lengths, in the format described
@@ -271,7 +205,6 @@ for the
 command. If this option is present, samtools assumes the input
 .I <in.alignment>
 is in SAM format; otherwise it assumes in BAM format.
-
 .TP
 .B -l FILE
 List of sites at which pileup is output. This file is space
@@ -282,10 +215,9 @@ recommended to use option
 together with
 .B -l
 as in the default format we may not know the mapping quality.
-
 .TP
 .B -c
-Call the consensus sequence using MAQ consensus model. Options
+Call the consensus sequence using SOAPsnp consensus model. Options
 .B -T,
 .B -N,
 .B -I
@@ -296,38 +228,147 @@ are only effective when
 or
 .B -g
 is in use.
-
 .TP
 .B -g
 Generate genotype likelihood in the binary GLFv3 format. This option
 suppresses -c, -i and -s.
-
 .TP
 .B -T FLOAT
 The theta parameter (error dependency coefficient) in the maq consensus
 calling model [0.85]
-
 .TP
 .B -N INT
 Number of haplotypes in the sample (>=2) [2]
-
 .TP
 .B -r FLOAT
 Expected fraction of differences between a pair of haplotypes [0.001]
-
 .TP
 .B -I INT
 Phred probability of an indel in sequencing/prep. [40]
-
 .RE
 
 .TP
-.B tview
-samtools tview <in.sorted.bam> [ref.fasta]
+.B mpileup
+samtools mpileup [-r reg] [-f in.fa] in.bam [in2.bam [...]]
 
-Text alignment viewer (based on the ncurses library). In the viewer,
-press `?' for help and press `g' to check the alignment start from a
-region in the format like `chr10:10,000,000'.
+Generate pileup for multiple BAM files. Consensus calling is not
+implemented.
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -r STR
+Only generate pileup in region
+.I STR
+[all sites]
+.TP
+.B -f FILE
+The reference file [null]
+.RE
+
+.TP
+.B reheader
+samtools reheader <in.header.sam> <in.bam>
+
+Replace the header in
+.I in.bam
+with the header in
+.I in.header.sam.
+This command is much faster than replacing the header with a
+BAM->SAM->BAM conversion.
+
+.TP
+.B sort
+samtools sort [-no] [-m maxMem] <in.bam> <out.prefix>
+
+Sort alignments by leftmost coordinates. File
+.I <out.prefix>.bam
+will be created. This command may also create temporary files
+.I <out.prefix>.%d.bam
+when the whole alignment cannot be fitted into memory (controlled by
+option -m).
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -o
+Output the final alignment to the standard output.
+.TP
+.B -n
+Sort by read names rather than by chromosomal coordinates
+.TP
+.B -m INT
+Approximately the maximum required memory. [500000000]
+.RE
+
+.TP
+.B merge
+samtools merge [-h inh.sam] [-nr] <out.bam> <in1.bam> <in2.bam> [...]
+
+Merge multiple sorted alignments.
+The header reference lists of all the input BAM files, and the @SQ headers of
+.IR inh.sam ,
+if any, must all refer to the same set of reference sequences.
+The header reference list and (unless overridden by
+.BR -h )
+`@' headers of
+.I in1.bam
+will be copied to
+.IR out.bam ,
+and the headers of other files will be ignored.
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -h FILE
+Use the lines of
+.I FILE
+as `@' headers to be copied to
+.IR out.bam ,
+replacing any header lines that would otherwise be copied from
+.IR in1.bam .
+.RI ( FILE
+is actually in SAM format, though any alignment records it may contain
+are ignored.)
+.TP
+.B -r
+Attach an RG tag to each alignment. The tag value is inferred from file names.
+.TP
+.B -n
+The input alignments are sorted by read names rather than by chromosomal
+coordinates
+.RE
+
+.TP
+.B index
+samtools index <aln.bam>
+
+Index sorted alignment for fast random access. Index file
+.I <aln.bam>.bai
+will be created.
+
+.TP
+.B idxstats
+samtools idxstats <aln.bam>
+
+Retrieve and print stats in the index file. The output is TAB delimited
+with each line consisting of reference sequence name, sequence length, #
+mapped reads and # unmapped reads.
+
+.TP
+.B faidx
+samtools faidx <ref.fasta> [region1 [...]]
+
+Index reference sequence in the FASTA format or extract subsequence from
+indexed reference sequence. If no region is specified,
+.B faidx
+will index the file and create
+.I <ref.fasta>.fai
+on the disk. If regions are speficified, the subsequences will be
+retrieved and printed to stdout in the FASTA format. The input file can
+be compressed in the
+.B RAZF
+format.
 
 .TP
 .B fixmate
@@ -338,28 +379,34 @@ name-sorted alignment.
 
 .TP
 .B rmdup
-samtools rmdup <input.srt.bam> <out.bam>
+samtools rmdup [-sS] <input.srt.bam> <out.bam>
 
 Remove potential PCR duplicates: if multiple read pairs have identical
 external coordinates, only retain the pair with highest mapping quality.
-This command
+In the paired-end mode, this command
 .B ONLY
-works with FR orientation and requires ISIZE is correctly set.
+works with FR orientation and requires ISIZE is correctly set. It does
+not work for unpaired reads (e.g. two ends mapped to different
+chromosomes or orphan reads).
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -s
+Remove duplicate for single-end reads. By default, the command works for
+paired-end reads only.
+.TP 8
+.B -S
+Treat paired-end reads and single-end reads.
+.RE
 
 .TP
-.B rmdupse
-samtools rmdupse <input.srt.bam> <out.bam>
-
-Remove potential duplicates for single-ended reads. This command will
-treat all reads as single-ended even if they are paired in fact.
-
-.TP
-.B fillmd
-samtools fillmd [-e] <aln.bam> <ref.fasta>
+.B calmd
+samtools calmd [-eubS] <aln.bam> <ref.fasta>
 
 Generate the MD tag. If the MD tag is already present, this command will
 give a warning if the MD tag generated is different from the existing
-tag.
+tag. Output SAM by default.
 
 .B OPTIONS:
 .RS
@@ -367,7 +414,15 @@ tag.
 .B -e
 Convert a the read base to = if it is identical to the aligned reference
 base. Indel caller does not support the = bases at the moment.
-
+.TP
+.B -u
+Output uncompressed BAM
+.TP
+.B -b
+Output compressed BAM
+.TP
+.B -S
+The input is SAM with header lines
 .RE
 
 .SH SAM FORMAT
@@ -400,21 +455,21 @@ Each bit in the FLAG field is defined as:
 
 .TS
 center box;
-cb | cb
-l | l .
-Flag	Description
+cb | cb | cb
+l | c | l .
+Flag	Chr	Description
 _
-0x0001	the read is paired in sequencing
-0x0002	the read is mapped in a proper pair
-0x0004	the query sequence itself is unmapped
-0x0008	the mate is unmapped
-0x0010	strand of the query (1 for reverse)
-0x0020	strand of the mate
-0x0040	the read is the first read in a pair
-0x0080	the read is the second read in a pair
-0x0100	the alignment is not primary
-0x0200	the read fails platform/vendor quality checks
-0x0400	the read is either a PCR or an optical duplicate
+0x0001	p	the read is paired in sequencing
+0x0002	P	the read is mapped in a proper pair
+0x0004	u	the query sequence itself is unmapped
+0x0008	U	the mate is unmapped
+0x0010	r	strand of the query (1 for reverse)
+0x0020	R	strand of the mate
+0x0040	1	the read is the first read in a pair
+0x0080	2	the read is the second read in a pair
+0x0100	s	the alignment is not primary
+0x0200	f	the read fails platform/vendor quality checks
+0x0400	d	the read is either a PCR or an optical duplicate
 .TE
 
 .SH LIMITATIONS
@@ -422,23 +477,23 @@ _
 .IP o 2
 Unaligned words used in bam_import.c, bam_endian.h, bam.c and bam_aux.c.
 .IP o 2
-CIGAR operation P is not properly handled at the moment.
-.IP o 2
 In merging, the input files are required to have the same number of
 reference sequences. The requirement can be relaxed. In addition,
 merging does not reconstruct the header dictionaries
 automatically. Endusers have to provide the correct header. Picard is
 better at merging.
 .IP o 2
-Samtools' rmdup does not work for single-end data and does not remove
-duplicates across chromosomes. Picard is better.
+Samtools paired-end rmdup does not work for unpaired reads (e.g. orphan
+reads or ends mapped to different chromosomes). If this is a concern,
+please use Picard's MarkDuplicate which correctly handles these cases,
+although a little slower.
 
 .SH AUTHOR
 .PP
 Heng Li from the Sanger Institute wrote the C version of samtools. Bob
 Handsaker from the Broad Institute implemented the BGZF library and Jue
 Ruan from Beijing Genomics Institute wrote the RAZF library. Various
-people in the 1000Genomes Project contributed to the SAM format
+people in the 1000 Genomes Project contributed to the SAM format
 specification.
 
 .SH SEE ALSO

@@ -390,7 +390,7 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "        -t FILE   list of reference sequences (force -S)\n");
 		fprintf(stderr, "        -l FILE   list of sites at which pileup is output\n");
 		fprintf(stderr, "        -f FILE   reference sequence in the FASTA format\n\n");
-		fprintf(stderr, "        -c        output the maq consensus sequence\n");
+		fprintf(stderr, "        -c        output the SOAPsnp consensus sequence\n");
 		fprintf(stderr, "        -v        print variants only (for -c)\n");
 		fprintf(stderr, "        -g        output in the GLFv3 format (suppressing -c/-i/-s)\n");
 		fprintf(stderr, "        -T FLOAT  theta in maq consensus calling model (for -c/-g) [%f]\n", d->c->theta);

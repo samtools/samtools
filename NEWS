@@ -1,5 +1,5 @@
-Beta Release 0.1.8 (?)
-~~~~~~~~~~~~~~~~~~~~~~
+Beta Release 0.1.8 (11 July, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Notable functional changes:
 
@@ -21,6 +21,9 @@ Notable functional changes:
 
  * The `tview' command now correctly handles CIGARs like 7I10M and
    10M1P1I10M which cause assertion failure in earlier versions.
+
+ * Tview accepts a region like `=10,000' where `=' stands for the
+   current sequence name. This saves typing for long sequence names.
 
  * Added the `-d' option to `pileup' which avoids slow indel calling
    in ultradeep regions by subsampling reads locally.
@@ -48,6 +51,8 @@ Bug fixes:
  * Fixed another issue in the indel caller which may lead to incorrect
    genotype.
 
+ * Fixed a bug in `sort' when option `-o' is applied.
+
  * Fixed a bug in `view -r'.
 
 APIs and other changes:
@@ -68,7 +73,7 @@ Changes in other utilities:
 
  * Added a Python version of varfilter.py by Aylwyn Scally.
 
-(0.1.8: ?)
+(0.1.8: 11 July 2010, r613)
 
 
 

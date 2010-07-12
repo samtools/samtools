@@ -1,4 +1,98 @@
 ------------------------------------------------------------------------
+r612 | lh3lh3 | 2010-07-11 21:08:56 -0400 (Sun, 11 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/knetfile.c
+
+fixed a compiling issue for Windows
+
+------------------------------------------------------------------------
+r611 | lh3lh3 | 2010-07-11 20:59:15 -0400 (Sun, 11 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_sort.c
+
+fixed a bug in sorting when output to stdout (by Peter Chines)
+
+------------------------------------------------------------------------
+r610 | lh3lh3 | 2010-07-09 17:05:10 -0400 (Fri, 09 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bam_plcmd.c
+
+change the command line option of pileup
+
+------------------------------------------------------------------------
+r609 | lh3lh3 | 2010-07-09 00:39:34 -0400 (Fri, 09 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_pileup.c
+   A /trunk/samtools/examples/toy.fa
+   A /trunk/samtools/examples/toy.sam
+
+make pileup work with CIGAR with I/D at the beginning or in the end
+
+------------------------------------------------------------------------
+r608 | lh3lh3 | 2010-07-08 22:36:12 -0400 (Thu, 08 Jul 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_maqcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_tview.c
+
+ * make tview more friendly
+ * a temporary remedy for an issue in indel calling
+
+------------------------------------------------------------------------
+r607 | lh3lh3 | 2010-07-08 14:43:52 -0400 (Thu, 08 Jul 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.7-r607
+ * improved the genotype accuracy for indels
+ * use the SOAPsnp model for SNP calling by default.
+
+------------------------------------------------------------------------
+r606 | lh3lh3 | 2010-07-08 01:05:19 -0400 (Thu, 08 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/misc/Makefile
+
+removed a debugging example
+
+------------------------------------------------------------------------
+r605 | lh3lh3 | 2010-07-08 01:04:09 -0400 (Thu, 08 Jul 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-.1.7-18 (r605)
+ * fixed an issue when a deletion and mismatch occur at the same time
+   and the base quality is higher than 40 (if -I40).
+
+------------------------------------------------------------------------
+r604 | lh3lh3 | 2010-07-02 19:32:24 -0400 (Fri, 02 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/misc/Makefile
+
+fixed a minor bug in idxstats
+
+------------------------------------------------------------------------
+r601 | lh3lh3 | 2010-06-16 09:03:59 -0400 (Wed, 16 Jun 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+
+fixed a minor bug in indexing
+
+------------------------------------------------------------------------
+r600 | lh3lh3 | 2010-06-15 10:17:53 -0400 (Tue, 15 Jun 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam.c
+
+change printf() to puts in exporting
+
+------------------------------------------------------------------------
 r599 | lh3lh3 | 2010-06-13 21:41:11 -0400 (Sun, 13 Jun 2010) | 2 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
