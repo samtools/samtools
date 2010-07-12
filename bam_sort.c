@@ -294,7 +294,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		mem += ret;
 		++k;
 		if (mem >= max_mem) {
-			sort_blocks(n++, k, buf, prefix, header, is_stdout);
+			sort_blocks(n++, k, buf, prefix, header, 0);
 			mem = 0; k = 0;
 		}
 	}
@@ -304,7 +304,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	else { // then merge
 		char **fns, *fnout;
 		fprintf(stderr, "[bam_sort_core] merging from %d files...\n", n+1);
-		sort_blocks(n++, k, buf, prefix, header, is_stdout);
+		sort_blocks(n++, k, buf, prefix, header, 0);
 		fnout = (char*)calloc(strlen(prefix) + 20, 1);
 		if (is_stdout) sprintf(fnout, "-");
 		else sprintf(fnout, "%s.bam", prefix);
