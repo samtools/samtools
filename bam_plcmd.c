@@ -449,8 +449,9 @@ int bam_pileup(int argc, char *argv[])
  ***********/
 
 typedef struct {
-	char *reg;
+	char *reg, *fn_pos;
 	faidx_t *fai;
+	kh_64_t *hash;
 } mplp_conf_t;
 
 typedef struct {
@@ -473,6 +474,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
 	char *ref;
+	khash_t(64) *hash = 0;
 	// allocate
 	data = calloc(n, sizeof(void*));
 	plp = calloc(n, sizeof(void*));
@@ -505,11 +507,17 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bam_header_destroy(h_tmp);
 		}
 	}
+	if (conf->fn_pos) hash = load_pos(conf->fn_pos, h);
 	// mpileup
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
 	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
 		if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
+		if (hash) {
+			khint_t k;
+			k = kh_get(64, hash, (uint64_t)tid<<32 | pos);
+			if (k == kh_end(hash)) continue;
+		}
 		if (tid != ref_tid) {
 			free(ref);
 			if (conf->fai) ref = fai_fetch(conf->fai, h->target_name[tid], &ref_len);
@@ -534,6 +542,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		}
 		putchar('\n');
 	}
+	if (hash) { // free the hash table
+		khint_t k;
+		for (k = kh_begin(hash); k < kh_end(hash); ++k)
+			if (kh_exist(hash, k)) free(kh_val(hash, k));
+		kh_destroy(64, hash);
+	}
 	bam_mplp_destroy(iter);
 	bam_header_destroy(h);
 	for (i = 0; i < n; ++i) {
@@ -550,17 +564,18 @@ int bam_mpileup(int argc, char *argv[])
 	int c;
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
-	while ((c = getopt(argc, argv, "f:r:")) >= 0) {
+	while ((c = getopt(argc, argv, "f:r:l:")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
 			break;
-		case 'r': mplp.reg = strdup(optarg);
+		case 'r': mplp.reg = strdup(optarg); break;
+		case 'l': mplp.fn_pos = strdup(optarg); break;
 		}
 	}
 	if (argc == 1) {
-		fprintf(stderr, "Usage: samtools mpileup [-r reg] [-f in.fa] in1.bam [in2.bam [...]]\n");
+		fprintf(stderr, "Usage: samtools mpileup [-r reg] [-f in.fa] [-l pos] in1.bam [in2.bam [...]]\n");
 		return 1;
 	}
 	mpileup(&mplp, argc - optind, argv + optind);

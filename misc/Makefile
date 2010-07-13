@@ -1,6 +1,6 @@
 CC=			gcc
 CXX=		g++
-CFLAGS=		-g -Wall #-O2 #-m64 #-arch ppc
+CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
 CXXFLAGS=	$(CFLAGS)
 DFLAGS=		-D_FILE_OFFSET_BITS=64
 OBJS=		
