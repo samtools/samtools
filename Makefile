@@ -7,7 +7,7 @@ LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 			$(KNETFILE_O) bam_sort.o sam_header.o bam_reheader.o
 AOBJS=		bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
-			bamtk.o kaln.o
+			bamtk.o kaln.o bam_mcns.o
 PROG=		samtools
 INCLUDES=
 SUBDIRS=	. misc

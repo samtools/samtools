@@ -5,6 +5,7 @@
 #include "sam.h"
 #include "faidx.h"
 #include "bam_maqcns.h"
+#include "bam_mcns.h"
 #include "khash.h"
 #include "glf.h"
 #include "kstring.h"
@@ -449,6 +450,7 @@ int bam_pileup(int argc, char *argv[])
  ***********/
 
 typedef struct {
+	int vcf, max_mq, min_mq;
 	char *reg, *fn_pos;
 	faidx_t *fai;
 	kh_64_t *hash;
@@ -457,18 +459,23 @@ typedef struct {
 typedef struct {
 	bamFile fp;
 	bam_iter_t iter;
+	int min_mq;
 } mplp_aux_t;
 
 static int mplp_func(void *data, bam1_t *b)
 {
 	mplp_aux_t *ma = (mplp_aux_t*)data;
-	if (ma->iter) return bam_iter_read(ma->fp, ma->iter, b);
-	return bam_read1(ma->fp, b);
+	int ret;
+	do {
+		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
+	} while (b->core.qual < ma->min_mq && ret >= 0);
+	return ret;
 }
 
 static int mpileup(mplp_conf_t *conf, int n, char **fn)
 {
 	mplp_aux_t **data;
+	mc_aux_t *ma = 0;
 	int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid;
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
@@ -483,6 +490,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	for (i = 0; i < n; ++i) {
 		bam_header_t *h_tmp;
 		data[i] = calloc(1, sizeof(mplp_aux_t));
+		data[i]->min_mq = conf->min_mq;
 		data[i]->fp = bam_open(fn[i], "r");
 		h_tmp = bam_header_read(data[i]->fp);
 		if (conf->reg) {
@@ -508,7 +516,23 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		}
 	}
 	if (conf->fn_pos) hash = load_pos(conf->fn_pos, h);
+	// write the VCF header
+	if (conf->vcf) {
+		kstring_t s;
+		s.l = s.m = 0; s.s = 0;
+		kputs("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", &s);
+		for (i = 0; i < n; ++i) {
+			const char *p;
+			kputc('\t', &s);
+			if ((p = strstr(fn[i], ".bam")) != 0)
+				kputsn(fn[i], p - fn[i], &s);
+			else kputs(fn[i], &s);
+		}
+		puts(s.s);
+		free(s.s);
+	}
 	// mpileup
+	if (conf->vcf) ma = mc_init(n);
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
 	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
@@ -523,24 +547,52 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			if (conf->fai) ref = fai_fetch(conf->fai, h->target_name[tid], &ref_len);
 			ref_tid = tid;
 		}
-		printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
-		for (i = 0; i < n; ++i) {
-			int j;
-			printf("\t%d\t", n_plp[i]);
-			if (n_plp[i] == 0) printf("*\t*");
-			else {
-				for (j = 0; j < n_plp[i]; ++j)
-					pileup_seq(plp[i] + j, pos, ref_len, ref);
-				putchar('\t');
+		if (conf->vcf) {
+			double f;
+			int j, _ref, _alt, _ref0, depth, rms_q;
+			uint64_t sqr_sum;
+			_ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
+			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
+			f = mc_freq0(_ref0, n_plp, plp, ma, &_ref, &_alt);
+			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, "ACGTN"[_ref0]);
+			if (_ref0 == _ref) putchar("ACGTN"[_alt]);
+			else printf("%c,%c", "ACGTN"[_ref], "ACGTN"[_alt]);
+			printf("\t0\tPASS\t"); // FIXME: currently these not available
+			for (i = depth = 0, sqr_sum = 0; i < n; ++i) {
+				depth += n_plp[i];
 				for (j = 0; j < n_plp[i]; ++j) {
-					const bam_pileup1_t *p = plp[i] + j;
-					int c = bam1_qual(p->b)[p->qpos] + 33;
-					if (c > 126) c = 126;
-					putchar(c);
+					int q = plp[i][j].b->core.qual;
+					if (q > conf->max_mq) q = conf->max_mq;
+					sqr_sum += q * q;
 				}
 			}
+			rms_q = (int)(sqrt((double)sqr_sum / depth) + .499);
+			printf("DP=%d;MQ=%d;AF=%.3lg", depth, rms_q, 1.-f); // FIXME: not working for triallelic alleles
+			printf("\tDP");
+			// output genotype information; FIXME: to be implmented...
+			for (i = 0; i < n; ++i)
+				printf("\t%d", n_plp[i]);
+			putchar('\n');
+		} else {
+			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
+			for (i = 0; i < n; ++i) {
+				int j;
+				printf("\t%d\t", n_plp[i]);
+				if (n_plp[i] == 0) printf("*\t*");
+				else {
+					for (j = 0; j < n_plp[i]; ++j)
+						pileup_seq(plp[i] + j, pos, ref_len, ref);
+					putchar('\t');
+					for (j = 0; j < n_plp[i]; ++j) {
+						const bam_pileup1_t *p = plp[i] + j;
+						int c = bam1_qual(p->b)[p->qpos] + 33;
+						if (c > 126) c = 126;
+						putchar(c);
+					}
+				}
+			}
+			putchar('\n');
 		}
-		putchar('\n');
 	}
 	if (hash) { // free the hash table
 		khint_t k;
@@ -548,6 +600,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			if (kh_exist(hash, k)) free(kh_val(hash, k));
 		kh_destroy(64, hash);
 	}
+	mc_destroy(ma);
 	bam_mplp_destroy(iter);
 	bam_header_destroy(h);
 	for (i = 0; i < n; ++i) {
@@ -564,7 +617,8 @@ int bam_mpileup(int argc, char *argv[])
 	int c;
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
-	while ((c = getopt(argc, argv, "f:r:l:")) >= 0) {
+	mplp.max_mq = 60;
+	while ((c = getopt(argc, argv, "f:r:l:VM:q:")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -572,6 +626,9 @@ int bam_mpileup(int argc, char *argv[])
 			break;
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.fn_pos = strdup(optarg); break;
+		case 'V': mplp.vcf = 1; break;
+		case 'M': mplp.max_mq = atoi(optarg); break;
+		case 'q': mplp.min_mq = atoi(optarg); break;
 		}
 	}
 	if (argc == 1) {
