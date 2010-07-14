@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include "bam_mcns.h"
 
-#define MC_MIN_QUAL 20
+#define MC_MIN_QUAL 13
 #define MC_MAX_SUMQ 3000
 #define MC_MAX_SUMQP 1e-300
 
@@ -10,7 +10,7 @@ struct __mc_aux_t {
 	int n, N;
 	int ref, alt;
 	double *q2p, *pdg; // pdg -> P(D|g)
-	int *qsum, *bcnt;
+	int *qsum, *bcnt, rcnt[4];
 };
 
 mc_aux_t *mc_init(int n) // FIXME: assuming diploid
@@ -42,10 +42,12 @@ static void sum_err(int *n, const bam_pileup1_t **plp, mc_aux_t *ma)
 	int i, j;
 	memset(ma->qsum, 0, sizeof(int) * 4 * ma->n);
 	memset(ma->bcnt, 0, sizeof(int) * 4 * ma->n);
+	memset(ma->rcnt, 0, sizeof(int) * 4);
 	for (j = 0; j < ma->n; ++j) {
-		int *qsum = ma->qsum + j * 4;
+		int tmp, *qsum = ma->qsum + j * 4;
 		int *bcnt = ma->bcnt + j * 4;
-		for (i = 0; i < n[j]; ++i) {
+		double r = drand48(), rr;
+		for (i = tmp = 0; i < n[j]; ++i) {
 			const bam_pileup1_t *p = plp[j] + i;
 			int q, b;
 			if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue;
@@ -56,6 +58,14 @@ static void sum_err(int *n, const bam_pileup1_t **plp, mc_aux_t *ma)
 			if (b > 3) continue; // N
 			qsum[b] += q;
 			++bcnt[b];
+			++tmp;
+		}
+		if (tmp) {
+			for (i = 0, rr = 0.; i < 4; ++i) {
+				rr += (double)bcnt[i] / tmp;
+				if (rr >= r) break;
+			}
+			if (i < 4) ++ma->rcnt[i];
 		}
 	}
 }
@@ -85,17 +95,17 @@ static void cal_pdg(mc_aux_t *ma)
 		qsum = ma->qsum + j * 4;
 		bcnt = ma->bcnt + j * 4;
 		pi[1] = 3 * (bcnt[ma->ref] + bcnt[ma->alt]);
-		pi[0] = qsum[ma->alt];
-		pi[2] = qsum[ma->ref];
+		pi[0] = qsum[ma->ref];
+		pi[2] = qsum[ma->alt];
 		for (i = 0; i < 3; ++i)
-			pdg[i] = pi[i] < MC_MAX_SUMQ? MC_MAX_SUMQP : ma->q2p[pi[i]];
+			pdg[i] = pi[i] > MC_MAX_SUMQ? MC_MAX_SUMQP : ma->q2p[pi[i]];
 	}
 }
 
 double mc_freq0(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, int *_ref, int *alt)
 {
 	int i, acnt[4], j;
-	double f0;
+	double fr = -1., f0 = -1.;
 	sum_err(n, plp, ma);
 	set_allele(ref, ma);
 	cal_pdg(ma);
@@ -103,17 +113,19 @@ double mc_freq0(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, int *_
 	for (i = 0; i < ma->n; ++i)
 		for (j = 0; j < 4; ++j)
 			acnt[j] += ma->bcnt[i * 4 + j];
-	f0 = acnt[ma->ref] + acnt[ma->alt] == 0? -1.
-		: (double)acnt[ref] / (acnt[ma->ref] + acnt[ma->alt]);
+	if (ma->rcnt[ma->ref] + ma->rcnt[ma->alt]) // never used...
+		fr = (double)ma->rcnt[ref] / (ma->rcnt[ma->ref] + ma->rcnt[ma->alt]);
+	if (acnt[ma->ref] + acnt[ma->alt])
+		f0 = (double)acnt[ref] / (acnt[ma->ref] + acnt[ma->alt]);
 	*_ref = ma->ref; *alt = ma->alt;
-	return f0;
+	return ma->n == 1 || fr < 0.? f0 : fr;
 }
 
 double mc_freq_iter(double f0, mc_aux_t *ma)
 {
 	double f, f3[3];
 	int i, j;
-	f3[0] = f0*f0; f3[1] = 2.*f0*(1.-f0); f3[2] = (1.-f0)*(1.-f0);
+	f3[0] = (1.-f0)*(1.-f0); f3[1] = 2.*f0*(1.-f0); f3[2] = f0*f0;
 	for (i = 0, f = 0.; i < ma->n; ++i) {
 		double up, dn, *pdg;
 		pdg = ma->pdg + i * 3;
@@ -123,5 +135,6 @@ double mc_freq_iter(double f0, mc_aux_t *ma)
 			dn += pdg[j] * f3[j];
 		f += up / dn;
 	}
+	f /= ma->n * 2.;
 	return f;
 }

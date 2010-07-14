@@ -548,16 +548,26 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			ref_tid = tid;
 		}
 		if (conf->vcf) {
-			double f;
-			int j, _ref, _alt, _ref0, depth, rms_q;
+			double f0, f; // the reference allele frequency
+			int j, _ref, _alt, _ref0, depth, rms_q, _ref0b;
 			uint64_t sqr_sum;
-			_ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
+			_ref0 = _ref0b = (ref && pos < ref_len)? ref[pos] : 'N';
 			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
-			f = mc_freq0(_ref0, n_plp, plp, ma, &_ref, &_alt);
-			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, "ACGTN"[_ref0]);
+			f = f0 = mc_freq0(_ref0, n_plp, plp, ma, &_ref, &_alt);
+			if (f >= 0.0) {
+				double flast = f;
+				for (j = 0; j < 10; ++j) {
+					f = mc_freq_iter(flast, ma);
+					if (fabs(f - flast) < 1e-3) break;
+					flast = f;
+				}
+			}
+			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, _ref0b);
 			if (_ref0 == _ref) putchar("ACGTN"[_alt]);
 			else printf("%c,%c", "ACGTN"[_ref], "ACGTN"[_alt]);
-			printf("\t0\tPASS\t"); // FIXME: currently these not available
+			printf("\t0\t"); // FIXME: currently these not available
+			if (f0 < 0.) printf("Q13\t");
+			else printf(".\t");
 			for (i = depth = 0, sqr_sum = 0; i < n; ++i) {
 				depth += n_plp[i];
 				for (j = 0; j < n_plp[i]; ++j) {
@@ -567,7 +577,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				}
 			}
 			rms_q = (int)(sqrt((double)sqr_sum / depth) + .499);
-			printf("DP=%d;MQ=%d;AF=%.3lg", depth, rms_q, 1.-f); // FIXME: not working for triallelic alleles
+			printf("DP=%d;MQ=%d;AF=%.3lg", depth, rms_q, f0<0.?0.:1.-f);
 			printf("\tDP");
 			// output genotype information; FIXME: to be implmented...
 			for (i = 0; i < n; ++i)
