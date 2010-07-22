@@ -292,7 +292,7 @@ static void tv_win_goto(tview_t *tv, int *tid, int *pos)
 		} else if (c == KEY_ENTER || c == '\012' || c == '\015') {
 			int _tid = -1, _beg, _end;
 			if (str[0] == '=') {
-				_beg = strtol(str+1, &p, 10);
+				_beg = strtol(str+1, &p, 10) - 1;
 				if (_beg > 0) {
 					*pos = _beg;
 					return;

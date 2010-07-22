@@ -450,7 +450,7 @@ int bam_pileup(int argc, char *argv[])
  ***********/
 
 typedef struct {
-	int vcf, max_mq, min_mq;
+	int vcf, max_mq, min_mq, var_only;
 	char *reg, *fn_pos;
 	faidx_t *fai;
 	kh_64_t *hash;
@@ -520,6 +520,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	if (conf->vcf) {
 		kstring_t s;
 		s.l = s.m = 0; s.s = 0;
+		puts("##fileformat=VCFv4.0");
 		kputs("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", &s);
 		for (i = 0; i < n; ++i) {
 			const char *p;
@@ -548,24 +549,33 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			ref_tid = tid;
 		}
 		if (conf->vcf) {
-			double f0, f; // the reference allele frequency
-			int j, _ref, _alt, _ref0, depth, rms_q, _ref0b;
+			double f0, f, pref = -1.0; // the reference allele frequency
+			int j, _ref, _alt, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0;
 			uint64_t sqr_sum;
 			_ref0 = _ref0b = (ref && pos < ref_len)? ref[pos] : 'N';
 			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
 			f = f0 = mc_freq0(_ref0, n_plp, plp, ma, &_ref, &_alt);
 			if (f >= 0.0) {
-				double flast = f;
-				for (j = 0; j < 10; ++j) {
+				double q, flast = f;
+				for (j = 0; j < 10; ++j){
 					f = mc_freq_iter(flast, ma);
 					if (fabs(f - flast) < 1e-3) break;
 					flast = f;
 				}
+				pref = mc_ref_prob(ma);
+				is_var = (pref < .5);
+				q = is_var? pref : 1. - pref;
+				if (q < 1e-308) q = 1e-308;
+				qref = (int)(-3.434 * log(q) + .499);
+				if (qref > 99) qref = 99;
 			}
+			if (conf->var_only && !is_var) continue;
 			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, _ref0b);
-			if (_ref0 == _ref) putchar("ACGTN"[_alt]);
-			else printf("%c,%c", "ACGTN"[_ref], "ACGTN"[_alt]);
-			printf("\t0\t"); // FIXME: currently these not available
+			if (is_var) {
+				if (_ref0 == _ref) putchar("ACGTN"[_alt]);
+				else printf("%c,%c", "ACGTN"[_ref], "ACGTN"[_alt]);
+			} else putchar('.');
+			printf("\t%d\t", qref);
 			if (f0 < 0.) printf("Q13\t");
 			else printf(".\t");
 			for (i = depth = 0, sqr_sum = 0; i < n; ++i) {
@@ -578,10 +588,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			}
 			rms_q = (int)(sqrt((double)sqr_sum / depth) + .499);
 			printf("DP=%d;MQ=%d;AF=%.3lg", depth, rms_q, f0<0.?0.:1.-f);
-			printf("\tDP");
+			printf("\tGT:GQ:DP");
 			// output genotype information; FIXME: to be implmented...
-			for (i = 0; i < n; ++i)
-				printf("\t%d", n_plp[i]);
+			for (i = 0; i < n; ++i) {
+				int x = mc_call_gt(ma, f, i);
+				printf("\t%c/%c:%d:%d", "10"[((x&3)==2)], "10"[((x&3)>0)], x>>2, n_plp[i]);
+			}
 			putchar('\n');
 		} else {
 			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
@@ -628,7 +640,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
 	mplp.max_mq = 60;
-	while ((c = getopt(argc, argv, "f:r:l:VM:q:")) >= 0) {
+	while ((c = getopt(argc, argv, "f:r:l:VvM:q:")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -636,6 +648,7 @@ int bam_mpileup(int argc, char *argv[])
 			break;
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.fn_pos = strdup(optarg); break;
+		case 'v': mplp.var_only = 1; break;
 		case 'V': mplp.vcf = 1; break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
