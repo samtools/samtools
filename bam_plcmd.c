@@ -558,7 +558,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		}
 		if (conf->vcf) {
 			double f0, f, fpost, pref = -1.0; // the reference allele frequency
-			int j, _ref, _alt, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0;
+			int j, _ref, _alt, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0, filtered = 0;
 			uint64_t sqr_sum;
 			_ref0 = _ref0b = (ref && pos < ref_len)? ref[pos] : 'N';
 			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
@@ -581,6 +581,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				qref = (int)(-3.434 * log(q) + .499);
 				if (qref > 99) qref = 99;
 			}
+			filtered = (f >= 0. && f <= 1.)? 0 : 1;
 			if (conf->var_only && !is_var) continue;
 			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, _ref0b);
 			if (is_var) {
@@ -588,7 +589,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				else printf("%c,%c", "ACGTN"[_ref], "ACGTN"[_alt]);
 			} else putchar('.');
 			printf("\t%d\t", qref);
-			if (f0 < 0.) printf("Q13\t");
+			if (filtered) printf("Q13\t");
 			else printf(".\t");
 			for (i = depth = 0, sqr_sum = 0; i < n; ++i) {
 				depth += n_plp[i];
