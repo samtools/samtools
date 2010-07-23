@@ -450,7 +450,8 @@ int bam_pileup(int argc, char *argv[])
  ***********/
 
 typedef struct {
-	int vcf, max_mq, min_mq, var_only;
+	int vcf, max_mq, min_mq, var_only, prior_type;
+	double theta;
 	char *reg, *fn_pos;
 	faidx_t *fai;
 	kh_64_t *hash;
@@ -537,7 +538,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		free(s.s);
 	}
 	// mpileup
-	if (conf->vcf) ma = mc_init(n);
+	if (conf->vcf) {
+		ma = mc_init(n);
+		mc_init_prior(ma, conf->prior_type, conf->theta);
+	}
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
 	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
@@ -650,8 +654,12 @@ int bam_mpileup(int argc, char *argv[])
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
 	mplp.max_mq = 60;
-	while ((c = getopt(argc, argv, "f:r:l:VvM:q:")) >= 0) {
+	mplp.prior_type = MC_PTYPE_FULL;
+	mplp.theta = 1e-3;
+	while ((c = getopt(argc, argv, "f:r:l:VvM:q:t:2")) >= 0) {
 		switch (c) {
+		case 't': mplp.theta = atof(optarg); break;
+		case '2': mplp.prior_type = MC_PTYPE_COND2; break;
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
@@ -672,8 +680,10 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -l FILE     list of positions (format: chr pos) [null]\n");
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
+		fprintf(stderr, "         -t FLOAT    scaled mutation rate [%lg]\n", mplp.theta);
 		fprintf(stderr, "         -V          generate VCF output (SNP calling)\n");
 		fprintf(stderr, "         -v          show variant sites only\n");
+		fprintf(stderr, "         -2          conditional prior\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming error independency and diploid individuals.\n\n");
 		return 1;

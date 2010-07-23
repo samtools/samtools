@@ -9,20 +9,23 @@
 struct __mc_aux_t {
 	int n, N;
 	int ref, alt;
-	double theta;
 	double *q2p, *pdg; // pdg -> P(D|g)
 	double *alpha, *beta;
 	int *qsum, *bcnt;
 };
 
-void mc_init_prior(mc_aux_t *ma, double theta)
+void mc_init_prior(mc_aux_t *ma, int type, double theta)
 {
-	double sum;
 	int i;
-	ma->theta = theta;
-	for (i = 0, sum = 0.; i < 2 * ma->n; ++i)
-		sum += (ma->alpha[i] = ma->theta / (2 * ma->n - i));
-	ma->alpha[2 * ma->n] = 1. - sum;
+	if (type == MC_PTYPE_COND2) {
+		for (i = 0; i <= 2 * ma->n; ++i)
+			ma->alpha[i] = 2. * (i + 1) / (2 * ma->n + 1) / (2 * ma->n + 2);
+	} else {
+		double sum;
+		for (i = 0, sum = 0.; i < 2 * ma->n; ++i)
+			sum += (ma->alpha[i] = theta / (2 * ma->n - i));
+		ma->alpha[2 * ma->n] = 1. - sum;
+	}
 }
 
 mc_aux_t *mc_init(int n) // FIXME: assuming diploid
@@ -46,7 +49,7 @@ mc_aux_t *mc_init(int n) // FIXME: assuming diploid
 		bi[1] = 2 * f * (1. - f);
 		bi[2] = f * f;
 	}
-	mc_init_prior(ma, 1e-3); // the simplest prior
+	mc_init_prior(ma, MC_PTYPE_FULL, 1e-3); // the simplest prior
 	return ma;
 }
 
