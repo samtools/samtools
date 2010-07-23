@@ -521,6 +521,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		kstring_t s;
 		s.l = s.m = 0; s.s = 0;
 		puts("##fileformat=VCFv4.0");
+		puts("##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total read depth\">");
+		puts("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Posterior non-reference allele frequency\">");
+		puts("##INFO=<ID=AFEM,Number=1,Type=Float,Description=\"Prior-free non-reference allele frequency by EM\">");
+		puts("##FILTER=<ID=Q13,Description=\"All min{baseQ,mapQ} below 13\">");
 		kputs("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", &s);
 		for (i = 0; i < n; ++i) {
 			const char *p;
@@ -549,12 +553,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			ref_tid = tid;
 		}
 		if (conf->vcf) {
-			double f0, f, pref = -1.0; // the reference allele frequency
+			double f0, f, fpost, pref = -1.0; // the reference allele frequency
 			int j, _ref, _alt, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0;
 			uint64_t sqr_sum;
 			_ref0 = _ref0b = (ref && pos < ref_len)? ref[pos] : 'N';
 			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
-			f = f0 = mc_freq0(_ref0, n_plp, plp, ma, &_ref, &_alt);
+			f = f0 = fpost = mc_freq0(_ref0, n_plp, plp, ma, &_ref, &_alt);
 			if (f >= 0.0) {
 				double q, flast = f;
 				for (j = 0; j < 10; ++j) {
@@ -563,8 +567,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 					if (fabs(f - flast) < 1e-3) break;
 					flast = f;
 				}
-				if (1. - f < 1e-4) f = 1.;
 				pref = mc_ref_prob(ma);
+				fpost = mc_freq_post(ma);
+				if (1. - f < 1e-4) f = 1.;
+				if (1. - fpost < 1e-4) fpost = 1.;
 				is_var = (pref < .5);
 				q = is_var? pref : 1. - pref;
 				if (q < 1e-308) q = 1e-308;
@@ -589,13 +595,15 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				}
 			}
 			rms_q = (int)(sqrt((double)sqr_sum / depth) + .499);
-			printf("DP=%d;MQ=%d;AF=%.3lg", depth, rms_q, f0<0.?0.:1.-f);
-			printf("\tGT:GQ:DP");
-			// output genotype information; FIXME: to be implmented...
-			for (i = 0; i < n; ++i) {
-				int x = mc_call_gt(ma, f, i);
-				printf("\t%c/%c:%d:%d", "10"[((x&3)==2)], "10"[((x&3)>0)], x>>2, n_plp[i]);
-			}
+			printf("DP=%d;MQ=%d", depth, rms_q);
+			if (fpost >= 0. && fpost <= 1.) printf(";AF=%.3lg", 1. - fpost);
+			if (f >= 0. && f <= 1.) printf(";AFEM=%.3lg", 1. - f);
+			if (fpost >= 0. && fpost <= 1.) {
+				for (i = 0; i < n; ++i) {
+					int x = mc_call_gt(ma, fpost, i);
+					printf("\t%c/%c:%d:%d", "10"[((x&3)==2)], "10"[((x&3)>0)], x>>2, n_plp[i]);
+				}
+			} else for (i = 0; i < n; ++i) printf("\t./.:0:0");
 			putchar('\n');
 		} else {
 			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');

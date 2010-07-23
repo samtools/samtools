@@ -39,7 +39,7 @@ mc_aux_t *mc_init(int n) // FIXME: assuming diploid
 	ma->beta = calloc((2 * ma->n + 1) * 3, sizeof(double));
 	for (i = 0; i <= MC_MAX_SUMQ; ++i)
 		ma->q2p[i] = pow(10., -i / 10.);
-	for (i = 0; i <= 2 * ma->n; ++i) {
+	for (i = 0; i <= 2 * ma->n; ++i) { // beta[k][g]=P(g|k/M)
 		double *bi = ma->beta + 3 * i;
 		double f = (double)i / (2 * ma->n);
 		bi[0] = (1. - f) * (1. - f);
@@ -153,18 +153,44 @@ double mc_freq_iter(double f0, mc_aux_t *ma)
 	return f;
 }
 
+double mc_freq_post(mc_aux_t *ma)
+{
+	int i, k;
+	long double f = 0.;
+	for (i = 0; i < ma->n; ++i) {
+		double *pdg = ma->pdg + i * 3;
+		long double y = 0., z = 0.;
+		for (k = 0; k <= ma->n * 2; ++k) {
+			double *bk = ma->beta + k * 3;
+/*
+			int g;
+			double yk = 0., zk = 0.;
+			for (g = 0; g < 3; ++g) {
+				yk += g * pdg[g] * bk[g];
+				zk += pdg[g] * bk[g];
+			}
+			y += yk * ma->alpha[k];
+			z += zk * ma->alpha[k];
+*/
+			y += (pdg[1] * bk[1] + 2. * pdg[2] * bk[2]) * ma->alpha[k];
+			z += (pdg[0] * bk[0] + pdg[1] * bk[1] + pdg[2] * bk[2]) * ma->alpha[k];
+		}
+		f += y / z;
+	}
+	return f / ma->n / 2;
+}
+
 double mc_ref_prob(mc_aux_t *ma)
 {
-	int k, i, g;
+	int k, i;
 	long double PD = 0., Pref = 0.;
 	for (k = 0; k <= ma->n * 2; ++k) {
 		long double x = 1.;
 		double *bk = ma->beta + k * 3;
 		for (i = 0; i < ma->n; ++i) {
-			double y = 0., *pdg = ma->pdg + i * 3;
-			for (g = 0; g < 3; ++g)
-				y += pdg[g] * bk[g];
-			x *= y;
+			double *pdg = ma->pdg + i * 3;
+//			int g; double y=0.; for (g = 0; g < 3; ++g) y += pdg[g] * bk[g];
+			x *= pdg[0] * bk[0] + pdg[1] * bk[1] + pdg[2] * bk[2];
 		}
 		PD += x * ma->alpha[k];
 	}
@@ -189,6 +215,7 @@ int mc_call_gt(const mc_aux_t *ma, double f0, int k)
 		g[i] /= sum;
 		if (g[i] > max) max = g[i], max_i = i;
 	}
+//	printf("***%lg,%lg,%lg,%lg,%lg,%lg\n", g[0], g[1], g[2], pdg[0], pdg[1], pdg[2]);
 	max = 1. - max;
 	if (max < 1e-308) max = 1e-308;
 	q = (int)(-3.434 * log(max) + .499);
