@@ -602,6 +602,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			printf("DP=%d;MQ=%d", depth, rms_q);
 			if (fpost >= 0. && fpost <= 1.) printf(";AF=%.3lg", 1. - fpost);
 			if (f >= 0. && f <= 1.) printf(";AFEM=%.3lg", 1. - f);
+			printf("\tGT:GQ:DP");
 			if (fpost >= 0. && fpost <= 1.) {
 				for (i = 0; i < n; ++i) {
 					int x = mc_call_gt(ma, fpost, i);
