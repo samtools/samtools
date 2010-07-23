@@ -557,11 +557,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			f = f0 = mc_freq0(_ref0, n_plp, plp, ma, &_ref, &_alt);
 			if (f >= 0.0) {
 				double q, flast = f;
-				for (j = 0; j < 10; ++j){
+				for (j = 0; j < 10; ++j) {
 					f = mc_freq_iter(flast, ma);
+//					printf("%lg->%lg\n", flast, f);
 					if (fabs(f - flast) < 1e-3) break;
 					flast = f;
 				}
+				if (1. - f < 1e-4) f = 1.;
 				pref = mc_ref_prob(ma);
 				is_var = (pref < .5);
 				q = is_var? pref : 1. - pref;
@@ -655,7 +657,17 @@ int bam_mpileup(int argc, char *argv[])
 		}
 	}
 	if (argc == 1) {
-		fprintf(stderr, "Usage: samtools mpileup [-r reg] [-f in.fa] [-l pos] in1.bam [in2.bam [...]]\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Usage:   samtools mpileup [options] in1.bam [in2.bam [...]]\n\n");
+		fprintf(stderr, "Options: -f FILE     reference sequence file [null]\n");
+		fprintf(stderr, "         -r STR      region in which pileup is generated [null]\n");
+		fprintf(stderr, "         -l FILE     list of positions (format: chr pos) [null]\n");
+		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
+		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
+		fprintf(stderr, "         -V          generate VCF output (SNP calling)\n");
+		fprintf(stderr, "         -v          show variant sites only\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Notes: Assuming error independency and diploid individuals.\n\n");
 		return 1;
 	}
 	mpileup(&mplp, argc - optind, argv + optind);
