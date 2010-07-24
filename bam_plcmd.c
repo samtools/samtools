@@ -450,7 +450,7 @@ int bam_pileup(int argc, char *argv[])
  ***********/
 
 typedef struct {
-	int vcf, max_mq, min_mq, var_only, prior_type;
+	int vcf, max_mq, min_mq, var_only, prior_type, afs;
 	double theta;
 	char *reg, *fn_pos;
 	faidx_t *fai;
@@ -523,8 +523,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		s.l = s.m = 0; s.s = 0;
 		puts("##fileformat=VCFv4.0");
 		puts("##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total read depth\">");
-		puts("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Posterior non-reference allele frequency\">");
-		puts("##INFO=<ID=AFEM,Number=1,Type=Float,Description=\"Prior-free non-reference allele frequency by EM\">");
+//		puts("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Posterior non-reference allele frequency\">");
+//		puts("##INFO=<ID=AFEM,Number=1,Type=Float,Description=\"Prior-free non-reference allele frequency by EM\">");
 		puts("##FILTER=<ID=Q13,Description=\"All min{baseQ,mapQ} below 13\">");
 		kputs("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", &s);
 		for (i = 0; i < n; ++i) {
@@ -557,39 +557,29 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			ref_tid = tid;
 		}
 		if (conf->vcf) {
-			double f0, f, fpost, pref = -1.0; // the reference allele frequency
-			int j, _ref, _alt, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0, filtered = 0;
+			mc_rst_t r;
+			int j, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0, level = 2, tot;
 			uint64_t sqr_sum;
+			if (conf->afs) level = 3;
 			_ref0 = _ref0b = (ref && pos < ref_len)? ref[pos] : 'N';
 			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
-			f = f0 = fpost = mc_freq0(_ref0, n_plp, plp, ma, &_ref, &_alt);
-			if (f >= 0.0) {
-				double q, flast = f;
-				for (j = 0; j < 10; ++j) {
-					f = mc_freq_iter(flast, ma);
-//					printf("%lg->%lg\n", flast, f);
-					if (fabs(f - flast) < 1e-3) break;
-					flast = f;
-				}
-				pref = mc_ref_prob(ma);
-				fpost = mc_freq_post(ma);
-				if (1. - f < 1e-4) f = 1.;
-				if (1. - fpost < 1e-4) fpost = 1.;
-				is_var = (pref < .5);
-				q = is_var? pref : 1. - pref;
+			tot = mc_cal(_ref0, n_plp, plp, ma, &r, level);
+			if (tot) { // has good bases
+				double q;
+				is_var = (r.p_ref < .5);
+				q = is_var? r.p_ref : 1. - r.p_ref;
 				if (q < 1e-308) q = 1e-308;
 				qref = (int)(-3.434 * log(q) + .499);
 				if (qref > 99) qref = 99;
 			}
-			filtered = (f >= 0. && f <= 1.)? 0 : 1;
 			if (conf->var_only && !is_var) continue;
 			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, _ref0b);
 			if (is_var) {
-				if (_ref0 == _ref) putchar("ACGTN"[_alt]);
-				else printf("%c,%c", "ACGTN"[_ref], "ACGTN"[_alt]);
+				if (_ref0 == r.ref) putchar("ACGTN"[r.alt]);
+				else printf("%c,%c", "ACGTN"[r.ref], "ACGTN"[r.alt]);
 			} else putchar('.');
 			printf("\t%d\t", qref);
-			if (filtered) printf("Q13\t");
+			if (!tot) printf("Q13\t");
 			else printf(".\t");
 			for (i = depth = 0, sqr_sum = 0; i < n; ++i) {
 				depth += n_plp[i];
@@ -601,12 +591,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			}
 			rms_q = (int)(sqrt((double)sqr_sum / depth) + .499);
 			printf("DP=%d;MQ=%d", depth, rms_q);
-			if (fpost >= 0. && fpost <= 1.) printf(";AF=%.3lg", 1. - fpost);
-			if (f >= 0. && f <= 1.) printf(";AFEM=%.3lg", 1. - f);
+			printf(";AF=%.3lg", 1. - r.f_em);
+			if (conf->afs)
+				printf(";AF0=%.3lg;AFN=%.3lg;AFE=%.3lg", 1-r.f_naive, 1-r.f_nielsen, 1-r.f_exp);
 			printf("\tGT:GQ:DP");
-			if (fpost >= 0. && fpost <= 1.) {
+			if (tot) {
 				for (i = 0; i < n; ++i) {
-					int x = mc_call_gt(ma, fpost, i);
+					int x = mc_call_gt(ma, r.f_em, i);
 					printf("\t%c/%c:%d:%d", "10"[((x&3)==2)], "10"[((x&3)>0)], x>>2, n_plp[i]);
 				}
 			} else for (i = 0; i < n; ++i) printf("\t./.:0:0");
@@ -658,7 +649,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.prior_type = MC_PTYPE_FULL;
 	mplp.theta = 1e-3;
-	while ((c = getopt(argc, argv, "f:r:l:VvM:q:t:2")) >= 0) {
+	while ((c = getopt(argc, argv, "f:r:l:VvM:q:t:2F")) >= 0) {
 		switch (c) {
 		case 't': mplp.theta = atof(optarg); break;
 		case '2': mplp.prior_type = MC_PTYPE_COND2; break;
@@ -672,6 +663,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'V': mplp.vcf = 1; break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
+		case 'F': mplp.afs = 1; break;
 		}
 	}
 	if (argc == 1) {
