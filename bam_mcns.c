@@ -264,8 +264,8 @@ static void mc_add_afs(mc_aux_t *ma, double PD, double *f_map, double *p_map)
 			if (ma->afs1[k] > max) max = ma->afs1[k], max_k = k;
 			e += k * ma->afs1[k];
 		}
-		*f_map = .5 * max_k / ma->n; *p_map = max;
-		printf(" * %.3lg:%.3lg:%.3lg:%.3lg * ", sum, 1.-.5*max_k/ma->n, max, 1.-.5*e/ma->n);
+		*f_map = .5 * max_k / ma->n; *p_map = max; // e should equal mc_rst_t::f_exp
+//		printf(" * %.3lg:%.3lg:%.3lg:%.3lg * ", sum, 1.-.5*max_k/ma->n, max, 1.-.5*e/ma->n);
 	}
 }
 
@@ -296,4 +296,14 @@ int mc_cal(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, mc_rst_t *r
 	if (level >= 3)
 		mc_add_afs(ma, rst->PD, &rst->f_map, &rst->p_map);
 	return tot;
+}
+
+void mc_dump_afs(mc_aux_t *ma)
+{
+	int k;
+	fprintf(stderr, "[afs]");
+	for (k = 0; k <= ma->M; ++k)
+		fprintf(stderr, " %d:%.3lf", k, ma->afs[ma->M - k]);
+	fprintf(stderr, "\n");
+	memset(ma->afs, 0, sizeof(double) * (ma->M + 1));
 }

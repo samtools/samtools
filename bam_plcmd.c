@@ -449,8 +449,15 @@ int bam_pileup(int argc, char *argv[])
  * mpileup *
  ***********/
 
+#define MPLP_VCF   0x1
+#define MPLP_VAR   0x2
+#define MPLP_AFS   0x4
+#define MPLP_AFALL 0x8
+
+#define MPLP_AFS_BLOCK 0x10000
+
 typedef struct {
-	int vcf, max_mq, min_mq, var_only, prior_type, afs;
+	int max_mq, min_mq, prior_type, flag;
 	double theta;
 	char *reg, *fn_pos;
 	faidx_t *fai;
@@ -481,6 +488,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
+	uint64_t N = 0;
 	char *ref;
 	khash_t(64) *hash = 0;
 	// allocate
@@ -518,7 +526,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	}
 	if (conf->fn_pos) hash = load_pos(conf->fn_pos, h);
 	// write the VCF header
-	if (conf->vcf) {
+	if (conf->flag & MPLP_VCF) {
 		kstring_t s;
 		s.l = s.m = 0; s.s = 0;
 		puts("##fileformat=VCFv4.0");
@@ -538,7 +546,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		free(s.s);
 	}
 	// mpileup
-	if (conf->vcf) {
+	if (conf->flag & MPLP_VCF) {
 		ma = mc_init(n);
 		mc_init_prior(ma, conf->prior_type, conf->theta);
 	}
@@ -556,11 +564,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			if (conf->fai) ref = fai_fetch(conf->fai, h->target_name[tid], &ref_len);
 			ref_tid = tid;
 		}
-		if (conf->vcf) {
+		if (conf->flag & MPLP_VCF) {
 			mc_rst_t r;
 			int j, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0, level = 2, tot;
 			uint64_t sqr_sum;
-			if (conf->afs) level = 3;
+			if (conf->flag & MPLP_AFS) level = 3;
 			_ref0 = _ref0b = (ref && pos < ref_len)? ref[pos] : 'N';
 			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
 			tot = mc_cal(_ref0, n_plp, plp, ma, &r, level);
@@ -572,7 +580,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				qref = (int)(-3.434 * log(q) + .499);
 				if (qref > 99) qref = 99;
 			}
-			if (conf->var_only && !is_var) continue;
+			if ((conf->flag & MPLP_VAR) && !is_var) continue;
+			++N; // number of processed lines
 			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, _ref0b);
 			if (is_var) {
 				if (_ref0 == r.ref) putchar("ACGTN"[r.alt]);
@@ -591,9 +600,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			}
 			rms_q = (int)(sqrt((double)sqr_sum / depth) + .499);
 			printf("DP=%d;MQ=%d", depth, rms_q);
-			printf(";AF=%.3lg", 1. - r.f_em);
-			if (conf->afs)
-				printf(";AF0=%.3lg;AFN=%.3lg;AFE=%.3lg", 1-r.f_naive, 1-r.f_nielsen, 1-r.f_exp);
+			if (tot) {
+				printf(";AF=%.3lf", 1. - r.f_em);
+				if (conf->flag & MPLP_AFALL) {
+					printf(";AF0=%.3lf;AFN=%.3lf;AFE=%.3lf", 1-r.f_naive, 1-r.f_nielsen, 1-r.f_exp);
+					if (conf->flag & MPLP_AFS) printf(";AFB=%.3lf", 1-r.f_map);
+				}
+			}
 			printf("\tGT:GQ:DP");
 			if (tot) {
 				for (i = 0; i < n; ++i) {
@@ -602,6 +615,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				}
 			} else for (i = 0; i < n; ++i) printf("\t./.:0:0");
 			putchar('\n');
+			if (N % MPLP_AFS_BLOCK == 0) mc_dump_afs(ma);
 		} else {
 			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
 			for (i = 0; i < n; ++i) {
@@ -623,6 +637,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			putchar('\n');
 		}
 	}
+	if ((conf->flag&MPLP_VCF) && (conf->flag&MPLP_AFS)) mc_dump_afs(ma);
 	if (hash) { // free the hash table
 		khint_t k;
 		for (k = kh_begin(hash); k < kh_end(hash); ++k)
@@ -649,7 +664,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.prior_type = MC_PTYPE_FULL;
 	mplp.theta = 1e-3;
-	while ((c = getopt(argc, argv, "f:r:l:VvM:q:t:2F")) >= 0) {
+	while ((c = getopt(argc, argv, "vVcF2Sf:r:l:VM:q:t:")) >= 0) {
 		switch (c) {
 		case 't': mplp.theta = atof(optarg); break;
 		case '2': mplp.prior_type = MC_PTYPE_COND2; break;
@@ -659,11 +674,13 @@ int bam_mpileup(int argc, char *argv[])
 			break;
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.fn_pos = strdup(optarg); break;
-		case 'v': mplp.var_only = 1; break;
-		case 'V': mplp.vcf = 1; break;
+		case 'V':
+		case 'c': mplp.flag |= MPLP_VCF; break;
+		case 'S': mplp.flag |= MPLP_AFS; break;
+		case 'F': mplp.flag |= MPLP_AFALL; break;
+		case 'v': mplp.flag |= MPLP_VAR; break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
-		case 'F': mplp.afs = 1; break;
 		}
 	}
 	if (argc == 1) {
@@ -675,8 +692,9 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -t FLOAT    scaled mutation rate [%lg]\n", mplp.theta);
-		fprintf(stderr, "         -V          generate VCF output (SNP calling)\n");
+		fprintf(stderr, "         -c          generate VCF output (consensus calling)\n");
 		fprintf(stderr, "         -v          show variant sites only\n");
+		fprintf(stderr, "         -S          calculate AFS (slow, to stderr)\n");
 		fprintf(stderr, "         -2          conditional prior\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming error independency and diploid individuals.\n\n");

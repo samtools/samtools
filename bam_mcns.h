@@ -28,6 +28,7 @@ extern "C" {
 	void mc_destroy(mc_aux_t *ma);
 	int mc_cal(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, mc_rst_t *rst, int level);
 	int mc_call_gt(const mc_aux_t *ma, double f0, int k);
+	void mc_dump_afs(mc_aux_t *ma);
 
 #ifdef __cplusplus
 }
