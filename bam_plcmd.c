@@ -531,8 +531,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		s.l = s.m = 0; s.s = 0;
 		puts("##fileformat=VCFv4.0");
 		puts("##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total read depth\">");
-//		puts("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Posterior non-reference allele frequency\">");
-//		puts("##INFO=<ID=AFEM,Number=1,Type=Float,Description=\"Prior-free non-reference allele frequency by EM\">");
+		puts("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Non-reference allele frequency \\argmax_f P(D|f)\">");
+		puts("##INFO=<ID=AFE,Number=1,Type=Float,Description=\"Expected non-reference allele frequency\">");
 		puts("##FILTER=<ID=Q13,Description=\"All min{baseQ,mapQ} below 13\">");
 		kputs("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", &s);
 		for (i = 0; i < n; ++i) {
@@ -602,15 +602,16 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			printf("DP=%d;MQ=%d", depth, rms_q);
 			if (tot) {
 				printf(";AF=%.3lf", 1. - r.f_em);
+				if (level >= 2) printf(";AFE=%.3lf", 1-r.f_exp);
 				if (conf->flag & MPLP_AFALL) {
-					printf(";AF0=%.3lf;AFN=%.3lf;AFE=%.3lf", 1-r.f_naive, 1-r.f_nielsen, 1-r.f_exp);
+					printf(";AF0=%.3lf;AFN=%.3lf", 1-r.f_naive, 1-r.f_nielsen);
 					if (conf->flag & MPLP_AFS) printf(";AFB=%.3lf", 1-r.f_map);
 				}
 			}
 			printf("\tGT:GQ:DP");
 			if (tot) {
 				for (i = 0; i < n; ++i) {
-					int x = mc_call_gt(ma, r.f_em, i);
+					int x = mc_call_gt(ma, r.f_exp, i);
 					printf("\t%c/%c:%d:%d", "10"[((x&3)==2)], "10"[((x&3)>0)], x>>2, n_plp[i]);
 				}
 			} else for (i = 0; i < n; ++i) printf("\t./.:0:0");
