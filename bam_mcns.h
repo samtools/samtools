@@ -8,7 +8,7 @@ typedef struct __mc_aux_t mc_aux_t;
 
 typedef struct {
 	// O(n)
-	int ref, alt;
+	int ref, alt, alt2;
 	double f_em, f_naive, f_nielsen;
 	// O(n^2)
 	double PD, p_ref, f_exp;
@@ -18,6 +18,7 @@ typedef struct {
 
 #define MC_PTYPE_FULL  1
 #define MC_PTYPE_COND2 2
+#define MC_PTYPE_FLAT  3
 
 #ifdef __cplusplus
 extern "C" {

@@ -12,7 +12,7 @@
 
 struct __mc_aux_t {
 	int n, M;
-	int ref, alt;
+	int ref, alt, alt2;
 	double *q2p, *pdg; // pdg -> P(D|g)
 	double *alpha, *beta;
 	double *z, *zswap; // aux for afs
@@ -26,6 +26,9 @@ void mc_init_prior(mc_aux_t *ma, int type, double theta)
 	if (type == MC_PTYPE_COND2) {
 		for (i = 0; i <= 2 * ma->n; ++i)
 			ma->alpha[i] = 2. * (i + 1) / (2 * ma->n + 1) / (2 * ma->n + 2);
+	} else if (type == MC_PTYPE_FLAT) {
+		for (i = 0; i <= ma->M; ++i)
+			ma->alpha[i] = 1. / (ma->M + 1);
 	} else {
 		double sum;
 		for (i = 0, sum = 0.; i < 2 * ma->n; ++i)
@@ -111,9 +114,11 @@ static void set_allele(int ref, mc_aux_t *ma)
 	for (i = 1; i < 4; ++i) // insertion sort
 		for (j = i; j > 0 && sum[j] < sum[j-1]; --j)
 			tmp = sum[j], sum[j] = sum[j-1], sum[j-1] = tmp;
-	ma->ref = sum[3]&3; ma->alt = sum[2]&3;
-	if (ref == ma->alt) tmp = ma->ref, ma->ref = ma->alt, ma->alt = tmp;
-	// note that ma->ref might not be ref in case of triallele
+	ma->ref = sum[3]&3; ma->alt = sum[2]&3; ma->alt2 = -1;
+	if (ma->ref != ref) {
+		if (ma->alt == ref) tmp = ma->ref, ma->ref = ma->alt, ma->alt = tmp;
+		else ma->alt2 = ma->alt, ma->alt = ma->ref, ma->ref = ref;
+	}
 }
 
 static void cal_pdg(mc_aux_t *ma)
@@ -248,11 +253,14 @@ static void mc_add_afs(mc_aux_t *ma, double PD, double *f_map, double *p_map)
 	int k, l;
 	double sum = 0.;
 	memset(ma->afs1, 0, sizeof(double) * (2 * ma->n + 1));
+	*f_map = *p_map = -1.;
 	for (k = 0; k <= 2 * ma->n; ++k) {
 		mc_cal_z(ma, k);
 		for (l = 0; l <= 2 * ma->n; ++l)
 			ma->afs1[l] += ma->alpha[k] * ma->z[l] / PD;
 	}
+	for (k = 0; k <= ma->M; ++k)
+		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return;
 	for (k = 0; k <= 2 * ma->n; ++k) {
 		ma->afs[k] += ma->afs1[k];
 		sum += ma->afs1[k];
@@ -280,7 +288,7 @@ int mc_cal(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, mc_rst_t *r
 	set_allele(ref, ma);
 	cal_pdg(ma);
 	// set ref/major allele
-	rst->ref = ma->ref; rst->alt = ma->alt;
+	rst->ref = ma->ref; rst->alt = ma->alt; rst->alt2 = ma->alt2;
 	// calculate naive and Nielsen's freq
 	rst->f_naive = mc_freq0(ma, &rst->f_nielsen);
 	{ // calculate f_em

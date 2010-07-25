@@ -584,8 +584,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			++N; // number of processed lines
 			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, _ref0b);
 			if (is_var) {
-				if (_ref0 == r.ref) putchar("ACGTN"[r.alt]);
-				else printf("%c,%c", "ACGTN"[r.ref], "ACGTN"[r.alt]);
+				putchar("ACGTN"[r.alt]);
+				if (r.alt2 >= 0 && r.alt2 < 4) printf(",%c", "ACGT"[r.alt2]);
 			} else putchar('.');
 			printf("\t%d\t", qref);
 			if (!tot) printf("Q13\t");
@@ -665,10 +665,18 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.prior_type = MC_PTYPE_FULL;
 	mplp.theta = 1e-3;
-	while ((c = getopt(argc, argv, "vVcF2Sf:r:l:VM:q:t:")) >= 0) {
+	while ((c = getopt(argc, argv, "vVcFSP:f:r:l:VM:q:t:")) >= 0) {
 		switch (c) {
 		case 't': mplp.theta = atof(optarg); break;
-		case '2': mplp.prior_type = MC_PTYPE_COND2; break;
+		case 'P':
+			if (strcmp(optarg, "full") == 0) mplp.prior_type = MC_PTYPE_FULL;
+			else if (strcmp(optarg, "cond2") == 0) mplp.prior_type = MC_PTYPE_COND2;
+			else if (strcmp(optarg, "flat") == 0) mplp.prior_type = MC_PTYPE_FLAT;
+			else {
+				fprintf(stderr, "[%s] unrecognized prior type.\n", __func__);
+				return 1;
+			}
+			break;
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
@@ -693,10 +701,10 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -t FLOAT    scaled mutation rate [%lg]\n", mplp.theta);
+		fprintf(stderr, "         -P STR      prior: full, flat, cond2 [full]");
 		fprintf(stderr, "         -c          generate VCF output (consensus calling)\n");
 		fprintf(stderr, "         -v          show variant sites only\n");
 		fprintf(stderr, "         -S          calculate AFS (slow, to stderr)\n");
-		fprintf(stderr, "         -2          conditional prior\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming error independency and diploid individuals.\n\n");
 		return 1;
