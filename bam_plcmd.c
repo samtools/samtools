@@ -701,7 +701,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -t FLOAT    scaled mutation rate [%lg]\n", mplp.theta);
-		fprintf(stderr, "         -P STR      prior: full, flat, cond2 [full]");
+		fprintf(stderr, "         -P STR      prior: full, flat, cond2 [full]\n");
 		fprintf(stderr, "         -c          generate VCF output (consensus calling)\n");
 		fprintf(stderr, "         -v          show variant sites only\n");
 		fprintf(stderr, "         -S          calculate AFS (slow, to stderr)\n");

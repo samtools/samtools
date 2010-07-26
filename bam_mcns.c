@@ -115,9 +115,11 @@ static void set_allele(int ref, mc_aux_t *ma)
 		for (j = i; j > 0 && sum[j] < sum[j-1]; --j)
 			tmp = sum[j], sum[j] = sum[j-1], sum[j-1] = tmp;
 	ma->ref = sum[3]&3; ma->alt = sum[2]&3; ma->alt2 = -1;
-	if (ma->ref != ref) {
-		if (ma->alt == ref) tmp = ma->ref, ma->ref = ma->alt, ma->alt = tmp;
-		else ma->alt2 = ma->alt, ma->alt = ma->ref, ma->ref = ref;
+	if (ma->ref != ref) { // the best base is not ref
+		if (ref >= 0 && ref <= 3) { // ref is not N
+			if (ma->alt == ref) tmp = ma->ref, ma->ref = ma->alt, ma->alt = tmp; // then switch alt and ref
+			else ma->alt2 = ma->alt, ma->alt = ma->ref, ma->ref = ref; // then set ref as ref
+		} else ma->alt2 = ma->alt, ma->alt = ma->ref, ma->ref = sum[0]&3; // then set the weakest as ref
 	}
 }
 
