@@ -14,30 +14,11 @@ struct __mc_aux_t {
 	int n, M;
 	int ref, alt, alt2;
 	double *q2p, *pdg; // pdg -> P(D|g)
-	double *phi, *alpha, *CMk; // CMk=\binom{M}{k}
+	double *phi, *CMk; // CMk=\binom{M}{k}
 	double *z, *zswap; // aux for afs
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
 	int *qsum, *bcnt;
 };
-
-static void precal_alpha(mc_aux_t *ma) // \alpha[k]=\binom{M}{k}\sum_l\phi_l(l/M)^k(1-l/M)^{M-k}
-{
-	int k, l;
-	memset(ma->alpha, 0, sizeof(double) * (ma->M + 1));
-	for (l = 0; l <= ma->M; ++l)
-		ma->alpha[0] += ma->phi[l] * pow(1. - (double)l / ma->M, ma->M);
-	for (k = 1; k < ma->M; ++k) {
-		for (l = 1; l < ma->M; ++l) { // for k!=0 and k!=ma->M, l=0 and l=ma->M leads to zero
-			double x = exp((lgamma(ma->M + 1) - lgamma(k + 1) - lgamma(ma->M - k + 1))
-						   + k * log((double)l / ma->M)
-						   + (ma->M - k) * log(1. - (double)l / ma->M));
-			ma->alpha[k] += x * ma->phi[l];
-		}
-	}
-	for (l = 0; l <= ma->M; ++l)
-		ma->alpha[ma->M] += ma->phi[l] * pow((double)l / ma->M, ma->M);
-	fflush(stdout);
-}
 
 void mc_init_prior(mc_aux_t *ma, int type, double theta)
 {
@@ -54,7 +35,6 @@ void mc_init_prior(mc_aux_t *ma, int type, double theta)
 			sum += (ma->phi[i] = theta / (2 * ma->n - i));
 		ma->phi[2 * ma->n] = 1. - sum;
 	}
-	precal_alpha(ma);
 }
 
 mc_aux_t *mc_init(int n) // FIXME: assuming diploid
@@ -68,7 +48,6 @@ mc_aux_t *mc_init(int n) // FIXME: assuming diploid
 	ma->bcnt = calloc(4 * ma->n, sizeof(int));
 	ma->pdg = calloc(3 * ma->n, sizeof(double));
 	ma->phi = calloc(ma->M + 1, sizeof(double));
-	ma->alpha = calloc(ma->M + 1, sizeof(double));
 	ma->CMk = calloc(ma->M + 1, sizeof(double));
 	ma->z = calloc(2 * ma->n + 1, sizeof(double));
 	ma->zswap = calloc(2 * ma->n + 1, sizeof(double));
@@ -87,7 +66,7 @@ void mc_destroy(mc_aux_t *ma)
 	if (ma) {
 		free(ma->qsum); free(ma->bcnt);
 		free(ma->q2p); free(ma->pdg);
-		free(ma->phi); free(ma->alpha); free(ma->CMk);
+		free(ma->phi); free(ma->CMk);
 		free(ma->z); free(ma->zswap);
 		free(ma->afs); free(ma->afs1);
 		free(ma);
@@ -247,9 +226,9 @@ static double mc_add_afs(mc_aux_t *ma)
 	memset(ma->afs1, 0, sizeof(double) * (ma->M + 1));
 	mc_cal_z(ma);
 	for (k = 0, sum = 0.; k <= ma->M; ++k)
-		sum += (long double)ma->alpha[k] * ma->z[k] / ma->CMk[k];
+		sum += (long double)ma->phi[k] * ma->z[k] / ma->CMk[k];
 	for (k = 0; k <= ma->M; ++k) {
-		ma->afs1[k] = ma->alpha[k] * ma->z[k] / ma->CMk[k] / sum;
+		ma->afs1[k] = ma->phi[k] * ma->z[k] / ma->CMk[k] / sum;
 		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return -1.;
 	}
 	for (k = 0, sum = 0.; k <= ma->M; ++k) {
