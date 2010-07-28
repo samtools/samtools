@@ -14,12 +14,30 @@ struct __mc_aux_t {
 	int n, M;
 	int ref, alt, alt2;
 	double *q2p, *pdg; // pdg -> P(D|g)
-	double *phi;
+	double *phi, *alpha, *CMk; // CMk=\binom{M}{k}
 	double *z, *zswap; // aux for afs
-	double *CMk; // \binom{M}{k}
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
 	int *qsum, *bcnt;
 };
+
+static void precal_alpha(mc_aux_t *ma) // \alpha[k]=\binom{M}{k}\sum_l\phi_l(l/M)^k(1-l/M)^{M-k}
+{
+	int k, l;
+	memset(ma->alpha, 0, sizeof(double) * (ma->M + 1));
+	for (l = 0; l <= ma->M; ++l)
+		ma->alpha[0] += ma->phi[l] * pow(1. - (double)l / ma->M, ma->M);
+	for (k = 1; k < ma->M; ++k) {
+		for (l = 1; l < ma->M; ++l) { // for k!=0 and k!=ma->M, l=0 and l=ma->M leads to zero
+			double x = exp((lgamma(ma->M + 1) - lgamma(k + 1) - lgamma(ma->M - k + 1))
+						   + k * log((double)l / ma->M)
+						   + (ma->M - k) * log(1. - (double)l / ma->M));
+			ma->alpha[k] += x * ma->phi[l];
+		}
+	}
+	for (l = 0; l <= ma->M; ++l)
+		ma->alpha[ma->M] += ma->phi[l] * pow((double)l / ma->M, ma->M);
+	fflush(stdout);
+}
 
 void mc_init_prior(mc_aux_t *ma, int type, double theta)
 {
@@ -36,6 +54,7 @@ void mc_init_prior(mc_aux_t *ma, int type, double theta)
 			sum += (ma->phi[i] = theta / (2 * ma->n - i));
 		ma->phi[2 * ma->n] = 1. - sum;
 	}
+	precal_alpha(ma);
 }
 
 mc_aux_t *mc_init(int n) // FIXME: assuming diploid
@@ -48,16 +67,17 @@ mc_aux_t *mc_init(int n) // FIXME: assuming diploid
 	ma->qsum = calloc(4 * ma->n, sizeof(int));
 	ma->bcnt = calloc(4 * ma->n, sizeof(int));
 	ma->pdg = calloc(3 * ma->n, sizeof(double));
-	ma->phi = calloc(2 * ma->n + 1, sizeof(double));
+	ma->phi = calloc(ma->M + 1, sizeof(double));
+	ma->alpha = calloc(ma->M + 1, sizeof(double));
+	ma->CMk = calloc(ma->M + 1, sizeof(double));
 	ma->z = calloc(2 * ma->n + 1, sizeof(double));
 	ma->zswap = calloc(2 * ma->n + 1, sizeof(double));
 	ma->afs = calloc(2 * ma->n + 1, sizeof(double));
 	ma->afs1 = calloc(2 * ma->n + 1, sizeof(double));
-	ma->CMk = calloc(ma->M + 1, sizeof(double));
 	for (i = 0; i <= MC_MAX_SUMQ; ++i)
 		ma->q2p[i] = pow(10., -i / 10.);
 	for (i = 0; i <= ma->M; ++i)
-		ma->CMk[i] = exp(lgamma(ma->M+1) - lgamma(ma->M-i+1) - lgamma(i+1));
+		ma->CMk[i] = exp(lgamma(ma->M + 1) - lgamma(i + 1) - lgamma(ma->M - i + 1));
 	mc_init_prior(ma, MC_PTYPE_FULL, 1e-3); // the simplest prior
 	return ma;
 }
@@ -67,10 +87,9 @@ void mc_destroy(mc_aux_t *ma)
 	if (ma) {
 		free(ma->qsum); free(ma->bcnt);
 		free(ma->q2p); free(ma->pdg);
-		free(ma->phi);
+		free(ma->phi); free(ma->alpha); free(ma->CMk);
 		free(ma->z); free(ma->zswap);
 		free(ma->afs); free(ma->afs1);
-		free(ma->CMk);
 		free(ma);
 	}
 }
@@ -215,6 +234,7 @@ static void mc_cal_z(mc_aux_t *ma)
 		for (i = 2; i <= max; ++i)
 			z[1][i] = p[0] * z[0][i] + p[1] * z[0][i-1] + p[2] * z[0][i-2];
 		if (j < ma->n - 1) z[1][max+1] = z[1][max+2] = 0.;
+//		int k; for (k = 0; k <= max; ++k) printf("%d:%.3lg ", k, z[1][k]); putchar('\n');
 		tmp = z[0]; z[0] = z[1]; z[1] = tmp;
 	}
 	if (z[0] != ma->z) memcpy(ma->z, z[0], sizeof(double) * (2 * ma->n + 1));
@@ -222,24 +242,21 @@ static void mc_cal_z(mc_aux_t *ma)
 
 static double mc_add_afs(mc_aux_t *ma)
 {
-	int k, l;
-	double sum = 0., avg = 0.;
+	int k;
+	long double sum = 0.;
 	memset(ma->afs1, 0, sizeof(double) * (ma->M + 1));
 	mc_cal_z(ma);
+	for (k = 0, sum = 0.; k <= ma->M; ++k)
+		sum += (long double)ma->alpha[k] * ma->z[k] / ma->CMk[k];
 	for (k = 0; k <= ma->M; ++k) {
-		for (l = 0, sum = 0.; l <= ma->M; ++l)
-			sum += ma->phi[l] * ma->z[l];
-		ma->afs1[k] = ma->phi[k] * ma->z[k] / sum;
-	}
-	for (k = 0; k <= ma->M; ++k)
+		ma->afs1[k] = ma->alpha[k] * ma->z[k] / ma->CMk[k] / sum;
 		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return -1.;
-	for (k = 0, sum = avg = 0.; k <= ma->M; ++k) {
-		ma->afs[k] += ma->afs1[k];
-		sum += ma->afs1[k];
-		avg += k * ma->afs1[k];
 	}
-//	for (k = 0; k <= ma->M; ++k) printf("^%lg:%lg:%lg ", ma->z[k], ma->phi[k], ma->afs1[k]);
-	return avg / ma->M;
+	for (k = 0, sum = 0.; k <= ma->M; ++k) {
+		ma->afs[k] += ma->afs1[k];
+		sum += k * ma->afs1[k];
+	}
+	return sum / ma->M;
 }
 
 int mc_cal(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, mc_rst_t *rst, int level)
