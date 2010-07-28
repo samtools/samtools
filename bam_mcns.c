@@ -226,6 +226,57 @@ int mc_call_gt(const mc_aux_t *ma, double f0, int k)
 	if (q > 99) q = 99;
 	return q<<2|max_i;
 }
+static void mc_cal_z2(mc_aux_t *ma)
+{
+	double *z[2], *tmp, *pdg;
+	int i, j;
+	z[0] = ma->z;
+	z[1] = ma->zswap;
+	pdg = ma->pdg;
+	z[0][0] = 1.; z[0][1] = z[0][2] = 0.;
+	for (j = 0; j < ma->n; ++j) {
+		int max = (j + 1) * 2;
+		double p[3];
+		pdg = ma->pdg + j * 3;
+		p[0] = pdg[0]; p[1] = 2. * pdg[1]; p[2] = pdg[2];
+		z[1][0] = p[0] * z[0][0];
+		z[1][1] = p[0] * z[0][1] + p[1] * z[0][0];
+		for (i = 2; i <= max; ++i)
+			z[1][i] = p[0] * z[0][i] + p[1] * z[0][i-1] + p[2] * z[0][i-2];
+		if (j < ma->n - 1) z[1][max+1] = z[1][max+2] = 0.;
+		tmp = z[0]; z[0] = z[1]; z[1] = tmp;
+	}
+	if (z[0] != ma->z) memcpy(ma->z, z[0], sizeof(double) * (2 * ma->n + 1));
+}
+static void mc_add_afs2(mc_aux_t *ma, double PD, double *f_map, double *p_map)
+{
+	int k, l;
+	double sum = 0.;
+	memset(ma->afs1, 0, sizeof(double) * (2 * ma->n + 1));
+	*f_map = *p_map = -1.;
+	mc_cal_z2(ma);
+	for (k = 0; k <= ma->M; ++k) {
+		for (l = 0, sum = 0.; l <= ma->M; ++l)
+			sum += ma->alpha[l] * pow((double)l / ma->M, k) * pow(1. - (double)l / ma->M, ma->M - k);
+		ma->afs1[k] = ma->z[k] * sum / PD;
+	}
+	for (k = 0; k <= ma->M; ++k)
+		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return;
+	for (k = 0, sum = 0.; k <= 2 * ma->n; ++k) {
+		ma->afs[k] += ma->afs1[k];
+		sum += ma->afs1[k];
+	}
+	{
+		int max_k = 0;
+		double max = -1., e = 0.;
+		for (k = 0; k <= 2 * ma->n; ++k) {
+			if (ma->afs1[k] > max) max = ma->afs1[k], max_k = k;
+			e += k * ma->afs1[k];
+		}
+		*f_map = .5 * max_k / ma->n; *p_map = max; // e should equal mc_rst_t::f_exp
+		printf(" * %.3lg:%.3lg:%.3lg:%.3lg * ", sum, 1.-.5*max_k/ma->n, max, 1.-.5*e/ma->n);
+	}
+}
 // calculate z_{nr}^{(k)}
 static void mc_cal_z(mc_aux_t *ma, int k)
 {
@@ -275,7 +326,7 @@ static void mc_add_afs(mc_aux_t *ma, double PD, double *f_map, double *p_map)
 			e += k * ma->afs1[k];
 		}
 		*f_map = .5 * max_k / ma->n; *p_map = max; // e should equal mc_rst_t::f_exp
-//		printf(" * %.3lg:%.3lg:%.3lg:%.3lg * ", sum, 1.-.5*max_k/ma->n, max, 1.-.5*e/ma->n);
+		printf(" * %.3lg:%.3lg:%.3lg:%.3lg * ", sum, 1.-.5*max_k/ma->n, max, 1.-.5*e/ma->n);
 	}
 }
 
@@ -303,8 +354,10 @@ int mc_cal(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, mc_rst_t *r
 	}
 	if (level >= 2) // quadratic-time calculations; necessary for genotyping
 		rst->p_ref = mc_ref_prob(ma, &rst->PD, &rst->f_exp);
-	if (level >= 3)
+	if (level >= 3) {
+		mc_add_afs2(ma, rst->PD, &rst->f_map, &rst->p_map);
 		mc_add_afs(ma, rst->PD, &rst->f_map, &rst->p_map);
+	}
 	return tot;
 }
 
