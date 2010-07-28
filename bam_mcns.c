@@ -14,8 +14,9 @@ struct __mc_aux_t {
 	int n, M;
 	int ref, alt, alt2;
 	double *q2p, *pdg; // pdg -> P(D|g)
-	double *alpha, *beta;
+	double *phi;
 	double *z, *zswap; // aux for afs
+	double *CMk; // \binom{M}{k}
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
 	int *qsum, *bcnt;
 };
@@ -25,15 +26,15 @@ void mc_init_prior(mc_aux_t *ma, int type, double theta)
 	int i;
 	if (type == MC_PTYPE_COND2) {
 		for (i = 0; i <= 2 * ma->n; ++i)
-			ma->alpha[i] = 2. * (i + 1) / (2 * ma->n + 1) / (2 * ma->n + 2);
+			ma->phi[i] = 2. * (i + 1) / (2 * ma->n + 1) / (2 * ma->n + 2);
 	} else if (type == MC_PTYPE_FLAT) {
 		for (i = 0; i <= ma->M; ++i)
-			ma->alpha[i] = 1. / (ma->M + 1);
+			ma->phi[i] = 1. / (ma->M + 1);
 	} else {
 		double sum;
 		for (i = 0, sum = 0.; i < 2 * ma->n; ++i)
-			sum += (ma->alpha[i] = theta / (2 * ma->n - i));
-		ma->alpha[2 * ma->n] = 1. - sum;
+			sum += (ma->phi[i] = theta / (2 * ma->n - i));
+		ma->phi[2 * ma->n] = 1. - sum;
 	}
 }
 
@@ -47,21 +48,16 @@ mc_aux_t *mc_init(int n) // FIXME: assuming diploid
 	ma->qsum = calloc(4 * ma->n, sizeof(int));
 	ma->bcnt = calloc(4 * ma->n, sizeof(int));
 	ma->pdg = calloc(3 * ma->n, sizeof(double));
-	ma->alpha = calloc(2 * ma->n + 1, sizeof(double));
-	ma->beta = calloc((2 * ma->n + 1) * 3, sizeof(double));
+	ma->phi = calloc(2 * ma->n + 1, sizeof(double));
 	ma->z = calloc(2 * ma->n + 1, sizeof(double));
 	ma->zswap = calloc(2 * ma->n + 1, sizeof(double));
 	ma->afs = calloc(2 * ma->n + 1, sizeof(double));
 	ma->afs1 = calloc(2 * ma->n + 1, sizeof(double));
+	ma->CMk = calloc(ma->M + 1, sizeof(double));
 	for (i = 0; i <= MC_MAX_SUMQ; ++i)
 		ma->q2p[i] = pow(10., -i / 10.);
-	for (i = 0; i <= ma->M; ++i) { // beta[k][g]=P(g|k/M)
-		double *bi = ma->beta + 3 * i;
-		double f = (double)i / ma->M;
-		bi[0] = (1. - f) * (1. - f);
-		bi[1] = 2 * f * (1. - f);
-		bi[2] = f * f;
-	}
+	for (i = 0; i <= ma->M; ++i)
+		ma->CMk[i] = exp(lgamma(ma->M+1) - lgamma(ma->M-i+1) - lgamma(i+1));
 	mc_init_prior(ma, MC_PTYPE_FULL, 1e-3); // the simplest prior
 	return ma;
 }
@@ -71,9 +67,10 @@ void mc_destroy(mc_aux_t *ma)
 	if (ma) {
 		free(ma->qsum); free(ma->bcnt);
 		free(ma->q2p); free(ma->pdg);
-		free(ma->alpha); free(ma->beta);
+		free(ma->phi);
 		free(ma->z); free(ma->zswap);
 		free(ma->afs); free(ma->afs1);
+		free(ma->CMk);
 		free(ma);
 	}
 }
@@ -181,33 +178,6 @@ static double mc_freq_iter(double f0, const mc_aux_t *ma)
 	return f;
 }
 
-static double mc_ref_prob(const mc_aux_t *ma, double *_PD, double *f_exp)
-{
-	int k, i;
-	long double PD = 0., Pref = 0., Ef = 0.;
-	for (k = 0; k <= ma->M; ++k) {
-		long double x = 1., y = 0.;
-		double *bk = ma->beta + k * 3;
-		for (i = 0; i < ma->n; ++i) {
-			double *pdg = ma->pdg + i * 3;
-			double z = pdg[0] * bk[0] + pdg[1] * bk[1] + pdg[2] * bk[2];
-			x *= z;
-			y += (pdg[1] * bk[1] + 2. * pdg[2] * bk[2]) / z;
-		}
-		PD += x * ma->alpha[k];
-		Ef += x * y * ma->alpha[k];
-	}
-	for (k = 0; k <= ma->n * 2; ++k) {
-		long double x = 1.0;
-		for (i = 0; i < ma->n; ++i)
-			x *= ma->pdg[i * 3 + 2] * ma->beta[k * 3 + 2];
-		Pref += x * ma->alpha[k];
-	}
-	*f_exp = (double)(Ef / PD / ma->M);
-	*_PD = PD;
-	return Pref / PD;
-}
-
 int mc_call_gt(const mc_aux_t *ma, double f0, int k)
 {
 	double sum, g[3];
@@ -226,7 +196,8 @@ int mc_call_gt(const mc_aux_t *ma, double f0, int k)
 	if (q > 99) q = 99;
 	return q<<2|max_i;
 }
-static void mc_cal_z2(mc_aux_t *ma)
+
+static void mc_cal_z(mc_aux_t *ma)
 {
 	double *z[2], *tmp, *pdg;
 	int i, j;
@@ -248,86 +219,27 @@ static void mc_cal_z2(mc_aux_t *ma)
 	}
 	if (z[0] != ma->z) memcpy(ma->z, z[0], sizeof(double) * (2 * ma->n + 1));
 }
-static void mc_add_afs2(mc_aux_t *ma, double PD, double *f_map, double *p_map)
+
+static double mc_add_afs(mc_aux_t *ma)
 {
 	int k, l;
-	double sum = 0.;
-	memset(ma->afs1, 0, sizeof(double) * (2 * ma->n + 1));
-	*f_map = *p_map = -1.;
-	mc_cal_z2(ma);
+	double sum = 0., avg = 0.;
+	memset(ma->afs1, 0, sizeof(double) * (ma->M + 1));
+	mc_cal_z(ma);
 	for (k = 0; k <= ma->M; ++k) {
 		for (l = 0, sum = 0.; l <= ma->M; ++l)
-			sum += ma->alpha[l] * pow((double)l / ma->M, k) * pow(1. - (double)l / ma->M, ma->M - k);
-		ma->afs1[k] = ma->z[k] * sum / PD;
+			sum += ma->phi[l] * ma->z[l];
+		ma->afs1[k] = ma->phi[k] * ma->z[k] / sum;
 	}
 	for (k = 0; k <= ma->M; ++k)
-		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return;
-	for (k = 0, sum = 0.; k <= 2 * ma->n; ++k) {
+		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return -1.;
+	for (k = 0, sum = avg = 0.; k <= ma->M; ++k) {
 		ma->afs[k] += ma->afs1[k];
 		sum += ma->afs1[k];
+		avg += k * ma->afs1[k];
 	}
-	{
-		int max_k = 0;
-		double max = -1., e = 0.;
-		for (k = 0; k <= 2 * ma->n; ++k) {
-			if (ma->afs1[k] > max) max = ma->afs1[k], max_k = k;
-			e += k * ma->afs1[k];
-		}
-		*f_map = .5 * max_k / ma->n; *p_map = max; // e should equal mc_rst_t::f_exp
-		printf(" * %.3lg:%.3lg:%.3lg:%.3lg * ", sum, 1.-.5*max_k/ma->n, max, 1.-.5*e/ma->n);
-	}
-}
-// calculate z_{nr}^{(k)}
-static void mc_cal_z(mc_aux_t *ma, int k)
-{
-	double *z[2], *tmp, *bk, *pdg;
-	int i, j;
-	z[0] = ma->z;
-	z[1] = ma->zswap;
-	bk = ma->beta + k * 3; pdg = ma->pdg;
-	z[0][0] = 1.; z[0][1] = z[0][2] = 0.;
-	for (j = 0; j < ma->n; ++j) {
-		int max = (j + 1) * 2;
-		double p[3];
-		pdg = ma->pdg + j * 3;
-		p[0] = bk[0] * pdg[0]; p[1] = bk[1] * pdg[1]; p[2] = bk[2] * pdg[2];
-		z[1][0] = p[0] * z[0][0];
-		z[1][1] = p[0] * z[0][1] + p[1] * z[0][0];
-		for (i = 2; i <= max; ++i)
-			z[1][i] = p[0] * z[0][i] + p[1] * z[0][i-1] + p[2] * z[0][i-2];
-		if (j < ma->n - 1) z[1][max+1] = z[1][max+2] = 0.;
-		tmp = z[0]; z[0] = z[1]; z[1] = tmp;
-	}
-	if (z[0] != ma->z) memcpy(ma->z, z[0], sizeof(double) * (2 * ma->n + 1));
-}
-// Warning: this is cubic in ma->n, very sloooooow
-static void mc_add_afs(mc_aux_t *ma, double PD, double *f_map, double *p_map)
-{
-	int k, l;
-	double sum = 0.;
-	memset(ma->afs1, 0, sizeof(double) * (2 * ma->n + 1));
-	*f_map = *p_map = -1.;
-	for (k = 0; k <= 2 * ma->n; ++k) {
-		mc_cal_z(ma, k);
-		for (l = 0; l <= 2 * ma->n; ++l)
-			ma->afs1[l] += ma->alpha[k] * ma->z[l] / PD;
-	}
-	for (k = 0; k <= ma->M; ++k)
-		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return;
-	for (k = 0; k <= 2 * ma->n; ++k) {
-		ma->afs[k] += ma->afs1[k];
-		sum += ma->afs1[k];
-	}
-	{
-		int max_k = 0;
-		double max = -1., e = 0.;
-		for (k = 0; k <= 2 * ma->n; ++k) {
-			if (ma->afs1[k] > max) max = ma->afs1[k], max_k = k;
-			e += k * ma->afs1[k];
-		}
-		*f_map = .5 * max_k / ma->n; *p_map = max; // e should equal mc_rst_t::f_exp
-		printf(" * %.3lg:%.3lg:%.3lg:%.3lg * ", sum, 1.-.5*max_k/ma->n, max, 1.-.5*e/ma->n);
-	}
+//	for (k = 0; k <= ma->M; ++k) printf("^%lg:%lg:%lg ", ma->z[k], ma->phi[k], ma->afs1[k]);
+	return avg / ma->M;
 }
 
 int mc_cal(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, mc_rst_t *rst, int level)
@@ -352,11 +264,9 @@ int mc_cal(int ref, int *n, const bam_pileup1_t **plp, mc_aux_t *ma, mc_rst_t *r
 			flast = rst->f_em;
 		}
 	}
-	if (level >= 2) // quadratic-time calculations; necessary for genotyping
-		rst->p_ref = mc_ref_prob(ma, &rst->PD, &rst->f_exp);
-	if (level >= 3) {
-		mc_add_afs2(ma, rst->PD, &rst->f_map, &rst->p_map);
-		mc_add_afs(ma, rst->PD, &rst->f_map, &rst->p_map);
+	if (level >= 2) {
+		rst->f_exp = mc_add_afs(ma);
+		rst->p_ref = ma->afs1[ma->M];
 	}
 	return tot;
 }

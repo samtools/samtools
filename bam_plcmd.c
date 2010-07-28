@@ -451,7 +451,6 @@ int bam_pileup(int argc, char *argv[])
 
 #define MPLP_VCF   0x1
 #define MPLP_VAR   0x2
-#define MPLP_AFS   0x4
 #define MPLP_AFALL 0x8
 
 #define MPLP_AFS_BLOCK 0x10000
@@ -534,6 +533,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		puts("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Non-reference allele frequency \\argmax_f P(D|f)\">");
 		puts("##INFO=<ID=AFE,Number=1,Type=Float,Description=\"Expected non-reference allele frequency\">");
 		puts("##FILTER=<ID=Q13,Description=\"All min{baseQ,mapQ} below 13\">");
+		puts("##FILTER=<ID=FPE,Description=\"Floating point error\">");
 		kputs("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", &s);
 		for (i = 0; i < n; ++i) {
 			const char *p;
@@ -568,7 +568,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			mc_rst_t r;
 			int j, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0, level = 2, tot;
 			uint64_t sqr_sum;
-			if (conf->flag & MPLP_AFS) level = 3;
 			_ref0 = _ref0b = (ref && pos < ref_len)? ref[pos] : 'N';
 			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
 			tot = mc_cal(_ref0, n_plp, plp, ma, &r, level);
@@ -589,6 +588,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			} else putchar('.');
 			printf("\t%d\t", qref);
 			if (!tot) printf("Q13\t");
+			else if (r.f_exp < 0.) printf("FPE\t");
 			else printf(".\t");
 			for (i = depth = 0, sqr_sum = 0; i < n; ++i) {
 				depth += n_plp[i];
@@ -603,10 +603,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			if (tot) {
 				printf(";AF=%.3lf", 1. - r.f_em);
 				if (level >= 2) printf(";AFE=%.3lf", 1-r.f_exp);
-				if (conf->flag & MPLP_AFALL) {
+				if (conf->flag & MPLP_AFALL)
 					printf(";AF0=%.3lf;AFN=%.3lf", 1-r.f_naive, 1-r.f_nielsen);
-					if (conf->flag & MPLP_AFS) printf(";AFB=%.3lf", 1-r.f_map);
-				}
 			}
 			printf("\tGT:GQ:DP");
 			if (tot) {
@@ -638,7 +636,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			putchar('\n');
 		}
 	}
-	if ((conf->flag&MPLP_VCF) && (conf->flag&MPLP_AFS)) mc_dump_afs(ma);
+	if (conf->flag&MPLP_VCF) mc_dump_afs(ma);
 	if (hash) { // free the hash table
 		khint_t k;
 		for (k = kh_begin(hash); k < kh_end(hash); ++k)
@@ -685,7 +683,6 @@ int bam_mpileup(int argc, char *argv[])
 		case 'l': mplp.fn_pos = strdup(optarg); break;
 		case 'V':
 		case 'c': mplp.flag |= MPLP_VCF; break;
-		case 'S': mplp.flag |= MPLP_AFS; break;
 		case 'F': mplp.flag |= MPLP_AFALL; break;
 		case 'v': mplp.flag |= MPLP_VAR; break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
@@ -704,7 +701,6 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -P STR      prior: full, flat, cond2 [full]\n");
 		fprintf(stderr, "         -c          generate VCF output (consensus calling)\n");
 		fprintf(stderr, "         -v          show variant sites only\n");
-		fprintf(stderr, "         -S          calculate AFS (slow, to stderr)\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming error independency and diploid individuals.\n\n");
 		return 1;

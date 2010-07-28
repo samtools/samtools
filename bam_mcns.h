@@ -11,9 +11,7 @@ typedef struct {
 	int ref, alt, alt2;
 	double f_em, f_naive, f_nielsen;
 	// O(n^2)
-	double PD, p_ref, f_exp;
-	// O(n^3)
-	double f_map, p_map; // map=maximum a posterior
+	double p_ref, f_exp;
 } mc_rst_t;
 
 #define MC_PTYPE_FULL  1
