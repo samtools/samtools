@@ -15,7 +15,7 @@ typedef struct {
 
 typedef struct {
 	int a[4]; // alleles: ref, alt, alt2, alt3
-	int n, n_alleles, shift, ori_ref;
+	int n, n_alleles, shift, ori_ref, unseen;
 	int depth, rmsQ;
 	uint8_t *PL;
 } bcf_call_t;

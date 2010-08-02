@@ -168,13 +168,25 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	for (i = 1; i < 4; ++i) // insertion sort
 		for (j = i; j > 0 && sum[j] < sum[j-1]; --j)
 			tmp = sum[j], sum[j] = sum[j-1], sum[j-1] = tmp;
-	call->a[0] = sum[3]&3; call->a[1] = sum[2]&3; call->a[2] = -1;
 	// set the reference allele and alternative allele(s)
-	if (ref4 != call->a[0]) { // ref is not the best
-		if (ref4 < 4) { // not ambiguous
-			if (ref4 == call->a[1]) tmp = call->a[0], call->a[0] = call->a[1], call->a[1] = tmp; // switch 0 and 1
-			else call->a[2] = call->a[1], call->a[1] = call->a[0], call->a[0] = ref4; // triallele
+	for (i = 0; i < 4; ++i) call->a[i] = -1;
+	call->unseen = -1;
+	if (ref4 < 4) {
+		call->a[0] = ref4;
+		for (i = 3, j = 1; i >= 0; --i) {
+			if ((sum[i]&3) != ref4) {
+				if (sum[i]>>2 != 0) call->a[j++] = sum[i]&3;
+				else break;
+			}
 		}
+		if (j < 4 && i >= 0) call->unseen = j, call->a[j++] = sum[i]&3;
+		call->n_alleles = j;
+	} else {
+		for (i = 3, j = 0; i >= 0; --i)
+			if (sum[i]>>2 != 0) call->a[j++] = sum[i]&3;
+			else break;
+		if (j < 4 && i >= 0) call->unseen = j, call->a[j++] = sum[i]&3;
+		call->n_alleles = j;
 	}
 	// set the PL array
 	if (call->n < n) {
@@ -184,7 +196,6 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	{
 		int x, g[6], z;
 		double sum_min = 0.;
-		call->n_alleles = call->a[2] < 0? 2 : 3;
 		x = call->n_alleles * (call->n_alleles + 1) / 2;
 		// get the possible genotypes
 		for (i = z = 0; i < call->n_alleles; ++i)
@@ -226,11 +237,12 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 	for (i = beg; i < 4; ++i) {
 		if (bc->a[i] < 0) break;
 		if (i > beg) kputc(',', &s);
-		kputc("ACGT"[bc->a[i]], &s);
+//		kputc(bc->unseen == i && i != 3? 'X' : "ACGT"[bc->a[i]], &s);
+		kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &s);
 	}
 	kputc('\0', &s);
 	kputc('\0', &s);
-	kputs("MQ=", &s); kputw(bc->rmsQ, &s); kputc('\0', &s);
+	kputs("MQ=", &s); kputw(bc->rmsQ, &s); kputs(";DP=", &s); kputw(bc->depth, &s); kputc('\0', &s);
 	kputs("PL", &s); kputc('\0', &s);
 	b->m_str = s.m; b->str = s.s; b->l_str = s.l;
 	bcf_sync(bc->n, b);
