@@ -101,7 +101,7 @@ int bcf_hdr_sync(bcf_hdr_t *b)
 
 int bcf_sync(int n_smpl, bcf1_t *b)
 {
-	char *p, *tmp[4], *s;
+	char *p, *tmp[5], *s;
 	int i, n, c;
 	// set ref, alt, flt, info, fmt
 	b->ref = b->alt = b->flt = b->info = b->fmt = 0;
