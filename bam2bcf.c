@@ -191,7 +191,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	// set the PL array
 	if (call->n < n) {
 		call->n = n;
-		call->PL = realloc(call->PL, 6 * n);
+		call->PL = realloc(call->PL, 10 * n);
 	}
 	{
 		int x, g[6], z;
