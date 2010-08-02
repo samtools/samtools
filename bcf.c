@@ -222,6 +222,7 @@ char *bcf_fmt(bcf_t *bp, bcf1_t *b)
 	fmt_str(b->ref, &s); kputc('\t', &s);
 	fmt_str(b->alt, &s); kputc('\t', &s);
 	kputw(b->qual, &s); kputc('\t', &s);
+	fmt_str(b->flt, &s); kputc('\t', &s);
 	fmt_str(b->info, &s); kputc('\t', &s);
 	fmt_str(b->fmt, &s);
 	x = b->n_alleles * (b->n_alleles + 1) / 2;
