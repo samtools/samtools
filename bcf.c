@@ -146,7 +146,7 @@ int bcf_sync(int n_smpl, bcf1_t *b)
 		} else if (b->gi[i].fmt == char2int("GL")) {
 			b->gi[i].len = 4;
 		}
-		b->gi[i].data = malloc(n_smpl * b->gi[i].len);
+		b->gi[i].data = realloc(b->gi[i].data, n_smpl * b->gi[i].len);
 	}
 	return 0;
 }
