@@ -52,6 +52,19 @@ int bcf_hdr_write(bcf_t *b)
 	return 16 + h->l_nm + h->l_smpl + h->l_txt;
 }
 
+int bcf_hdr_cpy(bcf_hdr_t *h, const bcf_hdr_t *h0)
+{
+	*h = *h0;
+	h->name = malloc(h->l_nm);
+	h->sname = malloc(h->l_smpl);
+	h->txt = malloc(h->l_txt);
+	memcpy(h->name, h0->name, h->l_nm);
+	memcpy(h->sname, h0->sname, h->l_smpl);
+	memcpy(h->txt, h0->txt, h->l_txt);
+	bcf_hdr_sync(h);
+	return 0;
+}
+
 int bcf_hdr_read(bcf_t *b)
 {
 	uint8_t magic[4];
@@ -102,7 +115,7 @@ int bcf_hdr_sync(bcf_hdr_t *b)
 int bcf_sync(int n_smpl, bcf1_t *b)
 {
 	char *p, *tmp[5], *s;
-	int i, n, c;
+	int i, n;
 	// set ref, alt, flt, info, fmt
 	b->ref = b->alt = b->flt = b->info = b->fmt = 0;
 	for (p = b->str, n = 0; p < b->str + b->l_str; ++p)
@@ -112,10 +125,7 @@ int bcf_sync(int n_smpl, bcf1_t *b)
 	// set n_alleles
 	for (p = b->alt, n = 1; *p; ++p)
 		if (*p == ',') ++n;
-	b->n_alleles = n;
-	c = toupper(*b->ref);
-	if (b->alt - b->ref == 2 && (c == 'A' || c == 'C' || c == 'G' || c == 'T'))
-		++b->n_alleles;
+	b->n_alleles = n + 1;
 	// set n_gi and gi[i].fmt
 	for (p = b->fmt, n = 1; *p; ++p)
 		if (*p == ':') ++n;
@@ -223,8 +233,11 @@ char *bcf_fmt(bcf_t *bp, bcf1_t *b)
 	fmt_str(b->alt, &s); kputc('\t', &s);
 	kputw(b->qual, &s); kputc('\t', &s);
 	fmt_str(b->flt, &s); kputc('\t', &s);
-	fmt_str(b->info, &s); kputc('\t', &s);
-	fmt_str(b->fmt, &s);
+	fmt_str(b->info, &s);
+	if (b->fmt[0]) {
+		kputc('\t', &s);
+		fmt_str(b->fmt, &s);
+	}
 	x = b->n_alleles * (b->n_alleles + 1) / 2;
 	for (j = 0; j < bp->h.n_smpl; ++j) {
 		kputc('\t', &s);
