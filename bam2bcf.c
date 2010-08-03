@@ -169,7 +169,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		for (j = i; j > 0 && sum[j] < sum[j-1]; --j)
 			tmp = sum[j], sum[j] = sum[j-1], sum[j-1] = tmp;
 	// set the reference allele and alternative allele(s)
-	for (i = 0; i < 4; ++i) call->a[i] = -1;
+	for (i = 0; i < 5; ++i) call->a[i] = -1;
 	call->unseen = -1;
 	call->a[0] = ref4;
 	for (i = 3, j = 1; i >= 0; --i) {
