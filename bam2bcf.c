@@ -40,8 +40,8 @@ void bcf_call_destroy(bcf_callaux_t *bca)
 }
 
 typedef struct {
-	float esum[4], fsum[4];
-	uint32_t c[4];
+	float esum[5], fsum[5];
+	uint32_t c[5];
 	int w[8];
 } auxaux_t;
 
@@ -116,7 +116,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 		tmp = (int)(info&0xff) < bca->capQ? (int)(info&0xff) : bca->capQ;
 		r->sum_Q2 += tmp * tmp;
 	}
-	memcpy(r->esum, aux.esum, 4 * sizeof(float));
+	memcpy(r->esum, aux.esum, 5 * sizeof(float));
 	// rescale ->c[]
 	for (j = c = 0; j != 4; ++j) c += aux.c[j];
 	if (c > 255) {
@@ -124,17 +124,17 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 		for (j = c = 0; j != 4; ++j) c += aux.c[j];
 	}
 	// generate likelihood
-	for (j = 0; j != 4; ++j) {
+	for (j = 0; j != 5; ++j) {
 		float tmp;
 		// homozygous
-		for (k = 0, tmp = 0.0; k != 4; ++k)
+		for (k = 0, tmp = 0.0; k != 5; ++k)
 			if (j != k) tmp += aux.esum[k];
-		p[j<<2|j] = tmp; // anything that is not j
+		p[j*5+j] = tmp; // anything that is not j
 		// heterozygous
-		for (k = j + 1; k < 4; ++k) {
-			for (i = 0, tmp = 0.0; i != 4; ++i)
+		for (k = j + 1; k < 5; ++k) {
+			for (i = 0, tmp = 0.0; i != 5; ++i)
 				if (i != j && i != k) tmp += aux.esum[i];
-			p[j<<2|k] = p[k<<2|j] = 3.01 * (aux.c[j] + aux.c[k]) + tmp;
+			p[j*5+k] = p[k*5+j] = 3.01 * (aux.c[j] + aux.c[k]) + tmp;
 		}
 	}
 	return 0;
@@ -151,11 +151,11 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call)
 {
 	int ref4, i, j;
-	int64_t sum[4], tmp;
+	int64_t sum[5], tmp;
 	call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
 	if (ref4 > 4) ref4 = 4;
 	{ // calculate esum
-		double esum[4];
+		double esum[5];
 		memset(esum, 0, sizeof(double) * 4);
 		for (i = 0; i < n; ++i) {
 			for (j = 0; j < 4; ++j)
@@ -171,36 +171,29 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	// set the reference allele and alternative allele(s)
 	for (i = 0; i < 4; ++i) call->a[i] = -1;
 	call->unseen = -1;
-	if (ref4 < 4) {
-		call->a[0] = ref4;
-		for (i = 3, j = 1; i >= 0; --i) {
-			if ((sum[i]&3) != ref4) {
-				if (sum[i]>>2 != 0) call->a[j++] = sum[i]&3;
-				else break;
-			}
-		}
-		if (j < 4 && i >= 0) call->unseen = j, call->a[j++] = sum[i]&3;
-		call->n_alleles = j;
-	} else {
-		for (i = 3, j = 0; i >= 0; --i)
+	call->a[0] = ref4;
+	for (i = 3, j = 1; i >= 0; --i) {
+		if ((sum[i]&3) != ref4) {
 			if (sum[i]>>2 != 0) call->a[j++] = sum[i]&3;
 			else break;
-		if (j < 4 && i >= 0) call->unseen = j, call->a[j++] = sum[i]&3;
-		call->n_alleles = j;
+		}
 	}
+	if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
+		call->unseen = j, call->a[j++] = sum[i]&3;
+	call->n_alleles = j;
 	// set the PL array
 	if (call->n < n) {
 		call->n = n;
-		call->PL = realloc(call->PL, 10 * n);
+		call->PL = realloc(call->PL, 15 * n);
 	}
 	{
-		int x, g[6], z;
+		int x, g[15], z;
 		double sum_min = 0.;
 		x = call->n_alleles * (call->n_alleles + 1) / 2;
 		// get the possible genotypes
 		for (i = z = 0; i < call->n_alleles; ++i)
 			for (j = i; j < call->n_alleles; ++j)
-				g[z++] = call->a[i]<<2 | call->a[j];
+				g[z++] = call->a[i] * 5 + call->a[j];
 		for (i = 0; i < n; ++i) {
 			uint8_t *PL = call->PL + x * i;
 			const bcf_callret1_t *r = calls + i;
@@ -228,15 +221,14 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 {
 	kstring_t s;
-	int i, beg;
+	int i;
 	b->tid = tid; b->pos = pos; b->qual = 0;
 	s.s = b->str; s.m = b->m_str; s.l = 0;
 	kputc('\0', &s);
 	kputc("ACGTN"[bc->ori_ref], &s); kputc('\0', &s);
-	beg = bc->ori_ref > 3? 0 : 1;
-	for (i = beg; i < 4; ++i) {
+	for (i = 1; i < 5; ++i) {
 		if (bc->a[i] < 0) break;
-		if (i > beg) kputc(',', &s);
+		if (i > 1) kputc(',', &s);
 //		kputc(bc->unseen == i && i != 3? 'X' : "ACGT"[bc->a[i]], &s);
 		kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &s);
 	}

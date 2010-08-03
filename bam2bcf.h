@@ -10,11 +10,11 @@ typedef struct __bcf_callaux_t bcf_callaux_t;
 typedef struct {
 	int depth;
 	uint64_t sum_Q2;
-	float p[16], esum[4];
+	float p[25], esum[5];
 } bcf_callret1_t;
 
 typedef struct {
-	int a[4]; // alleles: ref, alt, alt2, alt3
+	int a[5]; // alleles: ref, alt, alt2, alt3
 	int n, n_alleles, shift, ori_ref, unseen;
 	int depth, rmsQ;
 	uint8_t *PL;
