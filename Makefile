@@ -7,10 +7,10 @@ LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 			$(KNETFILE_O) bam_sort.o sam_header.o bam_reheader.o
 AOBJS=		bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
-			bamtk.o kaln.o bam_mcns.o bam2bcf.o bcf.o
+			bamtk.o kaln.o bam_mcns.o bam2bcf.o
 PROG=		samtools
-INCLUDES=
-SUBDIRS=	. misc
+INCLUDES=	-Ibcftools
+SUBDIRS=	. bcftools misc
 LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
 
@@ -25,7 +25,7 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
 			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
+				LIBPATH="$(LIBPATH)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
 
@@ -39,8 +39,8 @@ lib:libbam.a
 libbam.a:$(LOBJS)
 		$(AR) -cru $@ $(LOBJS)
 
-samtools:$(AOBJS) libbam.a
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) libbam.a -lm $(LIBPATH) $(LIBCURSES) -lz
+samtools:lib-recur $(AOBJS)
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) libbam.a -lm $(LIBPATH) $(LIBCURSES) -lz -Lbcftools -lbcf
 
 razip:razip.o razf.o $(KNETFILE_O)
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o $(KNETFILE_O) -lz

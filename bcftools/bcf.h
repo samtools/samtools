@@ -36,6 +36,9 @@ typedef struct {
 	bcf_hdr_t h;
 } bcf_t;
 
+struct __bcf_idx_t;
+typedef struct __bcf_idx_t bcf_idx_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -47,8 +50,19 @@ extern "C" {
 	int bcf_write(bcf_t *bp, const bcf1_t *b);
 	int bcf_hdr_write(bcf_t *b);
 	int bcf_hdr_sync(bcf_hdr_t *b);
+	int bcf_hdr_cpy(bcf_hdr_t *h, const bcf_hdr_t *h0);
 	int bcf_destroy(bcf1_t *b);
 	char *bcf_fmt(bcf_t *bp, bcf1_t *b);
+
+	void *bcf_build_refhash(bcf_hdr_t *h);
+	void bcf_str2id_destroy(void *_hash);
+	int bcf_str2id(void *_hash, const char *str);
+
+	int bcf_idx_build(const char *fn);
+	uint64_t bcf_idx_query(const bcf_idx_t *idx, int tid, int beg, int end);
+	int bcf_parse_region(void *str2id, const char *str, int *tid, int *begin, int *end);
+	bcf_idx_t *bcf_idx_load(const char *fn);
+	void bcf_idx_destroy(bcf_idx_t *idx);
 
 #ifdef __cplusplus
 }
