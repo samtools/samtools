@@ -17,9 +17,9 @@ bcf_t *bcf_open(const char *fn, const char *mode)
 	bcf_t *b;
 	b = calloc(1, sizeof(bcf_t));
 	if (strchr(mode, 'w')) {
-		b->fp = strcmp(fn, "-")? bgzf_open(fn, mode) : bgzf_fdopen(fileno(stdout), "w");
+		b->fp = strcmp(fn, "-")? bgzf_open(fn, mode) : bgzf_fdopen(fileno(stdout), mode);
 	} else {
-		b->fp = strcmp(fn, "-")? bgzf_open(fn, mode) : bgzf_fdopen(fileno(stdin), "r");
+		b->fp = strcmp(fn, "-")? bgzf_open(fn, mode) : bgzf_fdopen(fileno(stdin), mode);
 	}
 	b->fp->owned_file = 1;
 	if (strchr(mode, 'r')) bcf_hdr_read(b);

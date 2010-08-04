@@ -12,18 +12,19 @@ extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 #define CALL_DEFTHETA 0.85f
 
 struct __bcf_callaux_t {
-	int max_info, capQ;
+	int max_info, capQ, min_baseQ;
 	double *fk;
 	uint32_t *info;
 };
 
-bcf_callaux_t *bcf_call_init(double theta)
+bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 {
 	bcf_callaux_t *bca;
 	int n;
 	if (theta <= 0.) theta = CALL_DEFTHETA;
 	bca = calloc(1, sizeof(bcf_callaux_t));
 	bca->capQ = 60;
+	bca->min_baseQ = min_baseQ;
 	bca->fk = calloc(CALL_MAX, sizeof(double));
 	bca->fk[0] = 1.;
 	for (n = 1; n < CALL_MAX; ++n)
@@ -89,6 +90,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 		uint32_t q, x = 0, qq;
 		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue; // skip unmapped reads and deleted bases
 		q = (uint32_t)bam1_qual(p->b)[p->qpos]; // base quality
+		if (q < bca->min_baseQ) continue;
 		x |= (uint32_t)bam1_strand(p->b) << 18 | q << 8 | p->b->core.qual;
 		if (p->b->core.qual < q) q = p->b->core.qual; // cap the overall quality at mapping quality
 		x |= q << 24;
@@ -137,17 +139,9 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 			p[j*5+k] = p[k*5+j] = 3.01 * (aux.c[j] + aux.c[k]) + tmp;
 		}
 	}
-	return 0;
+	return r->depth;
 }
 
-/*
-  1) Find the top 2 bases (from esum[4]).
-
-  2) If the reference base is among the top 2, consider the locus is
-     potentially biallelic and set call->a[2] as -1; otherwise, the
-     locus is potentially triallelic. If the reference is ambiguous,
-     take the weakest call as the pseudo-reference.
- */
 int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call)
 {
 	int ref4, i, j;

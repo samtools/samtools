@@ -454,11 +454,12 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_VAR   0x2
 #define MPLP_AFALL 0x8
 #define MPLP_GLF   0x10
+#define MPLP_NO_COMP 0x20
 
 #define MPLP_AFS_BLOCK 0x10000
 
 typedef struct {
-	int max_mq, min_mq, prior_type, flag;
+	int max_mq, min_mq, prior_type, flag, min_baseQ;
 	double theta;
 	char *reg, *fn_pos;
 	faidx_t *fai;
@@ -538,7 +539,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	if (conf->flag & MPLP_GLF) {
 		kstring_t s;
 		s.l = s.m = 0; s.s = 0;
-		bp = bcf_open("-", "w");
+		bp = bcf_open("-", (conf->flag&MPLP_NO_COMP)? "wu" : "w");
 		for (i = 0; i < h->n_targets; ++i) {
 			kputs(h->target_name[i], &s);
 			kputc('\0', &s);
@@ -583,7 +584,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	}
 	// mpileup
 	if (conf->flag & MPLP_GLF) {
-		bca = bcf_call_init(-1.);
+		bca = bcf_call_init(-1., conf->min_baseQ);
 		bcr = calloc(n, sizeof(bcf_callret1_t));
 	} else if (conf->flag & MPLP_VCF) {
 		ma = mc_init(n);
@@ -716,7 +717,8 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.prior_type = MC_PTYPE_FULL;
 	mplp.theta = 1e-3;
-	while ((c = getopt(argc, argv, "gvVcFSP:f:r:l:VM:q:t:")) >= 0) {
+	mplp.min_baseQ = 13;
+	while ((c = getopt(argc, argv, "gvVcFSP:f:r:l:VM:q:t:Q:u")) >= 0) {
 		switch (c) {
 		case 't': mplp.theta = atof(optarg); break;
 		case 'P':
@@ -739,8 +741,10 @@ int bam_mpileup(int argc, char *argv[])
 		case 'c': mplp.flag |= MPLP_VCF; break;
 		case 'F': mplp.flag |= MPLP_AFALL; break;
 		case 'v': mplp.flag |= MPLP_VAR; break;
+		case 'u': mplp.flag |= MPLP_NO_COMP; break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
+		case 'Q': mplp.min_baseQ = atoi(optarg); break;
 		}
 	}
 	if (mplp.flag&MPLP_GLF) mplp.flag &= ~MPLP_VCF;
@@ -754,6 +758,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -t FLOAT    scaled mutation rate [%lg]\n", mplp.theta);
 		fprintf(stderr, "         -P STR      prior: full, flat, cond2 [full]\n");
+		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "         -c          generate VCF output (consensus calling)\n");
 		fprintf(stderr, "         -g          generate GLF output\n");
 		fprintf(stderr, "         -v          show variant sites only\n");
