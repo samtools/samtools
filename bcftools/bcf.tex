@@ -1,0 +1,62 @@
+\documentclass[10pt,pdftex]{article}
+\usepackage{color}
+\definecolor{gray}{rgb}{0.7,0.7,0.7}
+
+\setlength{\topmargin}{0.0cm}
+\setlength{\textheight}{21.5cm}
+\setlength{\oddsidemargin}{0cm} 
+\setlength{\textwidth}{16.5cm}
+\setlength{\columnsep}{0.6cm}
+
+\begin{document}
+
+\begin{center}
+\begin{tabular}{|l|l|l|l|l|}
+\hline
+\multicolumn{2}{|c|}{\bf Field} & \multicolumn{1}{c|}{\bf Descrption} & \multicolumn{1}{c|}{\bf Type} & \multicolumn{1}{c|}{\bf Value} \\\hline\hline
+\multicolumn{2}{|l|}{\tt magic} & Magic string & {\tt char[4]} & {\tt BCF\char92 4} \\\hline
+\multicolumn{2}{|l|}{\tt l\_nm} & Length of concatenated sequence names & {\tt int32\_t} & \\\hline
+\multicolumn{2}{|l|}{\tt name} & Concatenated names, {\tt NULL} padded & {\tt char[l\_nm]} & \\\hline
+\multicolumn{2}{|l|}{\tt l\_smpl} & Length of concatenated sample names & {\tt int32\_t} & \\\hline
+\multicolumn{2}{|l|}{\tt sname} & Concatenated sample names & {\tt char[l\_smpl]} & \\\hline
+\multicolumn{2}{|l|}{\tt l\_txt} & Length of the meta text (double-hash lines)& {\tt int32\_t} & \\\hline
+\multicolumn{2}{|l|}{\tt text} & Meta text, {\tt NULL} terminated & {\tt char[l\_txt]} & \\\hline
+\multicolumn{5}{|c|}{\it \color{gray}{List of records until the end of the file}}\\\cline{2-5}
+& {\tt seq\_id} & Reference sequence ID & {\tt int32\_t} & \\\cline{2-5}
+& {\tt pos} & Position & {\tt int32\_t} & \\\cline{2-5}
+& {\tt qual\_slen} & {\tt varQual\char60\char60 24 | slen} & {\tt uint32\_t} & \\\cline{2-5}
+& {\tt str} & {\tt ID+REF+ALT+FILTER+INFO+FORMAT}, {\tt NULL} padded & {\tt char[slen]} &\\\cline{2-5}
+& \multicolumn{4}{c|}{Blocks of data; \#blocks and formats defined by {\tt FORMAT} (table below)}\\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{center}
+\begin{tabular}{cll}
+\hline
+\multicolumn{1}{l}{\bf Field} & \multicolumn{1}{l}{\bf Type} & \multicolumn{1}{l}{\bf Description} \\\hline
+{\tt DP} & {\tt uint16\_t[n]} & Read depth \\
+{\tt GL} & {\tt float[n*x]} & Log10 likelihood of data; $x=\frac{m(m+1)}{2}$, $m=\#\{alleles\}$\\
+{\tt GT} & {\tt uint8\_t[n]} & {\tt phase\char60\char60 6 | allele1\char60\char60 3 | allele2} \\
+{\tt GQ} & {\tt uint8\_t[n]} & {Genotype quality}\\
+{\tt HQ} & {\tt uint8\_t[n*2]} & {Haplotype quality}\\
+{\tt PL} & {\tt uint8\_t[n*x]} & {Phred-scaled likelihood of data}\\
+\emph{misc} & {\tt int32\_t+char*} & {\tt NULL} padded concatenated strings (integer equal to the length) \\
+\hline
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+\item The file is {\tt BGZF} compressed.
+\item All integers are little-endian.
+\item In a string, a missing value `.' is an empty C string ``{\tt
+    \char92 0}'' (not ``{\tt .\char92 0}'')
+\item For {\tt GL} and {\tt PL}, likelihoods of genotypes appear in the
+  order of alleles in {\tt REF} and then {\tt ALT}. For example, if {\tt
+    REF=C}, {\tt ALT=T,A}, likelihoods appear in the order of {\tt
+    CC,CT,CA,TT,TA,AA}.
+\item {\tt GL} is an extension to and is backward compatible with the
+  {\tt GL} genotype field in {\tt VCFv4.0}.
+\end{itemize}
+
+\end{document}
