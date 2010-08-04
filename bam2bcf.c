@@ -3,7 +3,7 @@
 #include "bam.h"
 #include "kstring.h"
 #include "bam2bcf.h"
-#include "bcf.h"
+#include "bcftools/bcf.h"
 
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 

@@ -2,7 +2,7 @@
 #define BAM2BCF_H
 
 #include <stdint.h>
-#include "bcf.h"
+#include "bcftools/bcf.h"
 
 struct __bcf_callaux_t;
 typedef struct __bcf_callaux_t bcf_callaux_t;

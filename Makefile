@@ -9,7 +9,7 @@ AOBJS=		bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
 			bamtk.o kaln.o bam_mcns.o bam2bcf.o
 PROG=		samtools
-INCLUDES=	-Ibcftools
+INCLUDES=	-I.
 SUBDIRS=	. bcftools misc
 LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
@@ -25,7 +25,7 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
 			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				LIBPATH="$(LIBPATH)" $$target || exit 1; \
+				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
 
@@ -53,7 +53,7 @@ bam.o:bam.h razf.h bam_endian.h kstring.h sam_header.h
 sam.o:sam.h bam.h
 bam_import.o:bam.h kseq.h khash.h razf.h
 bam_pileup.o:bam.h razf.h ksort.h
-bam_plcmd.o:bam.h faidx.h bam_maqcns.h glf.h bam_mcns.h bcf.h bam2bcf.h
+bam_plcmd.o:bam.h faidx.h bam_maqcns.h glf.h bam_mcns.h bcftools/bcf.h bam2bcf.h
 bam_index.o:bam.h khash.h ksort.h razf.h bam_endian.h
 bam_lpileup.o:bam.h ksort.h
 bam_tview.o:bam.h faidx.h bam_maqcns.h
@@ -62,8 +62,8 @@ bam_sort.o:bam.h ksort.h razf.h
 bam_md.o:bam.h faidx.h
 glf.o:glf.h
 sam_header.o:sam_header.h khash.h
-bcf.o:bcf.h
-bam2bcf.o:bam2bcf.h bcf.h
+bcf.o:bcftools/bcf.h
+bam2bcf.o:bam2bcf.h bcftools/bcf.h
 
 faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h

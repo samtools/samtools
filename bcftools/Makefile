@@ -5,13 +5,13 @@ LOBJS=		bcf.o bcfutils.o prob1.o index.o
 OMISC=		..
 AOBJS=		vcfout.o main.o $(OMISC)/kstring.o $(OMISC)/bgzf.o $(OMISC)/knetfile.o
 PROG=		bcftools
-INCLUDES=	-I..
+INCLUDES=	
 SUBDIRS=	.
 
 .SUFFIXES:.c .o
 
 .c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
+		$(CC) -c $(CFLAGS) $(DFLAGS) -I.. $(INCLUDES) $< -o $@
 
 all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		@target=`echo $@ | sed s/-recur//`; \
