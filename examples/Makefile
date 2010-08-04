@@ -1,4 +1,5 @@
-all:../libbam.a ../samtools ex1.glf ex1.pileup.gz ex1.bam.bai ex1f-rmduppe.bam ex1f-rmdupse.bam ex1.glfview.gz calDepth
+all:../libbam.a ../samtools ../bcftools/bcftools \
+	ex1.glf ex1.pileup.gz ex1.bam.bai ex1f-rmduppe.bam ex1f-rmdupse.bam ex1.glfview.gz ex1.bcf calDepth
 		@echo; echo \# You can now launch the viewer with: \'samtools tview ex1.bam ex1.fa\'; echo;
 
 ex1.fa.fai:ex1.fa
@@ -26,6 +27,12 @@ ex1f-rmduppe.bam:ex1f.bam
 ex1f-rmdupse.bam:ex1f.bam
 		../samtools rmdup -S ex1f.bam $@
 
+ex1.bcf:ex1.bam ex1.fa.fai
+		../samtools mpileup -gf ex1.fa ex1.bam > $@
+
+../bcftools/bcftools:
+		(cd ../bcftools; make bcftools)
+
 ../samtools:
 		(cd ..; make samtools)
 
@@ -36,4 +43,4 @@ calDepth:../libbam.a calDepth.c
 		gcc -g -Wall -O2 -I.. calDepth.c -o $@ -lm -lz -L.. -lbam
 
 clean:
-		rm -fr *.bam *.bai *.glf* *.fai *.pileup* *~ calDepth *.dSYM ex1*.rg
+		rm -fr *.bam *.bai *.glf* *.fai *.pileup* *~ calDepth *.dSYM ex1*.rg ex1.bcf
