@@ -4,8 +4,6 @@
 #include "kstring.h"
 #include "bcf.h"
 
-int bcf_hdr_read(bcf_t *b);
-
 void bcf_hdr_clear(bcf_hdr_t *b)
 {
 	free(b->name); free(b->sname); free(b->txt); free(b->ns); free(b->sns);
@@ -22,25 +20,18 @@ bcf_t *bcf_open(const char *fn, const char *mode)
 		b->fp = strcmp(fn, "-")? bgzf_open(fn, mode) : bgzf_fdopen(fileno(stdin), mode);
 	}
 	b->fp->owned_file = 1;
-	if (strchr(mode, 'r')) bcf_hdr_read(b);
 	return b;
 }
 
 int bcf_close(bcf_t *b)
 {
-	int ret;
 	if (b == 0) return 0;
-	ret = bgzf_close(b->fp);
-	free(b->h.name); free(b->h.sname); free(b->h.txt); free(b->h.ns); free(b->h.sns);
-	free(b);
-	return ret;
+	return bgzf_close(b->fp);
 }
 
-int bcf_hdr_write(bcf_t *b)
+int bcf_hdr_write(bcf_t *b, const bcf_hdr_t *h)
 {
-	bcf_hdr_t *h;
-	if (b == 0) return -1;
-	h = &b->h;
+	if (b == 0 || h == 0) return -1;
 	bgzf_write(b->fp, "BCF\4", 4);
 	bgzf_write(b->fp, &h->l_nm, 4);
 	bgzf_write(b->fp, h->name, h->l_nm);
@@ -52,26 +43,12 @@ int bcf_hdr_write(bcf_t *b)
 	return 16 + h->l_nm + h->l_smpl + h->l_txt;
 }
 
-int bcf_hdr_cpy(bcf_hdr_t *h, const bcf_hdr_t *h0)
-{
-	*h = *h0;
-	h->name = malloc(h->l_nm);
-	h->sname = malloc(h->l_smpl);
-	h->txt = malloc(h->l_txt);
-	memcpy(h->name, h0->name, h->l_nm);
-	memcpy(h->sname, h0->sname, h->l_smpl);
-	memcpy(h->txt, h0->txt, h->l_txt);
-	bcf_hdr_sync(h);
-	return 0;
-}
-
-int bcf_hdr_read(bcf_t *b)
+bcf_hdr_t *bcf_hdr_read(bcf_t *b)
 {
 	uint8_t magic[4];
 	bcf_hdr_t *h;
-	if (b == 0) return -1;
-	bcf_hdr_clear(&b->h);
-	h = &b->h;
+	if (b == 0) return 0;
+	h = calloc(1, sizeof(bcf_hdr_t));
 	bgzf_read(b->fp, magic, 4);
 	bgzf_read(b->fp, &h->l_nm, 4);
 	h->name = malloc(h->l_nm);
@@ -82,8 +59,15 @@ int bcf_hdr_read(bcf_t *b)
 	bgzf_read(b->fp, &h->l_txt, 4);
 	h->txt = malloc(h->l_txt);
 	bgzf_read(b->fp, h->txt, h->l_txt);
-	bcf_hdr_sync(&b->h);
-	return 16 + h->l_nm + h->l_smpl + h->l_txt;
+	bcf_hdr_sync(h);
+	return h;
+}
+
+void bcf_hdr_destroy(bcf_hdr_t *h)
+{
+	if (h == 0) return;
+	free(h->name); free(h->sname); free(h->txt); free(h->ns); free(h->sns);
+	free(h);
 }
 
 static inline char **cnt_null(int l, char *str, int *_n)
@@ -105,7 +89,10 @@ static inline char **cnt_null(int l, char *str, int *_n)
 int bcf_hdr_sync(bcf_hdr_t *b)
 {
 	if (b == 0) return -1;
-	b->ns = cnt_null(b->l_nm, b->name, &b->n_ref);
+	if (b->ns) free(b->ns);
+	if (b->sns) free(b->sns);
+	if (b->l_nm) b->ns = cnt_null(b->l_nm, b->name, &b->n_ref);
+	else b->ns = 0, b->n_ref = 0;
 	b->sns = cnt_null(b->l_smpl, b->sname, &b->n_smpl);
 	return 0;
 }
@@ -161,7 +148,7 @@ int bcf_sync(int n_smpl, bcf1_t *b)
 	return 0;
 }
 
-int bcf_write(bcf_t *bp, const bcf1_t *b)
+int bcf_write(bcf_t *bp, const bcf_hdr_t *h, const bcf1_t *b)
 {
 	uint32_t x;
 	int i, l = 0;
@@ -173,18 +160,18 @@ int bcf_write(bcf_t *bp, const bcf1_t *b)
 	bgzf_write(bp->fp, b->str, b->l_str);
 	l = 12 + b->l_str;
 	for (i = 0; i < b->n_gi; ++i) {
-		bgzf_write(bp->fp, b->gi[i].data, b->gi[i].len * bp->h.n_smpl);
-		l += b->gi[i].len * bp->h.n_smpl;
+		bgzf_write(bp->fp, b->gi[i].data, b->gi[i].len * h->n_smpl);
+		l += b->gi[i].len * h->n_smpl;
 	}
 	return l;
 }
 
-int bcf_read(bcf_t *bp, bcf1_t *b)
+int bcf_read(bcf_t *bp, const bcf_hdr_t *h, bcf1_t *b)
 {
 	int i, l = 0;
 	uint32_t x;
 	if (b == 0) return -1;
-	if (bgzf_read(bp->fp, &b->tid, 4) == 0) return 0;
+	if (bgzf_read(bp->fp, &b->tid, 4) == 0) return -1;
 	bgzf_read(bp->fp, &b->pos, 4);
 	bgzf_read(bp->fp, &x, 4);
 	b->qual = x >> 24; b->l_str = x << 8 >> 8;
@@ -195,10 +182,10 @@ int bcf_read(bcf_t *bp, bcf1_t *b)
 	}
 	bgzf_read(bp->fp, b->str, b->l_str);
 	l = 12 + b->l_str;
-	bcf_sync(bp->h.n_smpl, b);
+	bcf_sync(h->n_smpl, b);
 	for (i = 0; i < b->n_gi; ++i) {
-		bgzf_read(bp->fp, b->gi[i].data, b->gi[i].len * bp->h.n_smpl);
-		l += b->gi[i].len * bp->h.n_smpl;
+		bgzf_read(bp->fp, b->gi[i].data, b->gi[i].len * h->n_smpl);
+		l += b->gi[i].len * h->n_smpl;
 	}
 	return l;
 }
@@ -221,12 +208,12 @@ static inline void fmt_str(const char *p, kstring_t *s)
 	else kputs(p, s);
 }
 
-char *bcf_fmt(bcf_t *bp, bcf1_t *b)
+char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b)
 {
 	kstring_t s;
 	int i, j, x;
 	memset(&s, 0, sizeof(kstring_t));
-	kputs(bp->h.ns[b->tid], &s); kputc('\t', &s);
+	kputs(h->ns[b->tid], &s); kputc('\t', &s);
 	kputw(b->pos + 1, &s); kputc('\t', &s);
 	fmt_str(b->str, &s); kputc('\t', &s);
 	fmt_str(b->ref, &s); kputc('\t', &s);
@@ -239,7 +226,7 @@ char *bcf_fmt(bcf_t *bp, bcf1_t *b)
 		fmt_str(b->fmt, &s);
 	}
 	x = b->n_alleles * (b->n_alleles + 1) / 2;
-	for (j = 0; j < bp->h.n_smpl; ++j) {
+	for (j = 0; j < h->n_smpl; ++j) {
 		kputc('\t', &s);
 		for (i = 0; i < b->n_gi; ++i) {
 			if (i) kputc(':', &s);

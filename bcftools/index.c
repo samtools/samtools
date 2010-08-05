@@ -56,7 +56,7 @@ static void fill_missing(bcf_idx_t *idx)
 	}
 }
 
-bcf_idx_t *bcf_idx_core(bcf_t *bp)
+bcf_idx_t *bcf_idx_core(bcf_t *bp, bcf_hdr_t *h)
 {
 	bcf_idx_t *idx;
 	int32_t last_coor, last_tid;
@@ -69,12 +69,12 @@ bcf_idx_t *bcf_idx_core(bcf_t *bp)
 	b = calloc(1, sizeof(bcf1_t));
 	str = calloc(1, sizeof(kstring_t));
 	idx = (bcf_idx_t*)calloc(1, sizeof(bcf_idx_t));
-	idx->n = bp->h.n_ref;
-	idx->index2 = calloc(bp->h.n_ref, sizeof(bcf_lidx_t));
+	idx->n = h->n_ref;
+	idx->index2 = calloc(h->n_ref, sizeof(bcf_lidx_t));
 
 	last_tid = 0xffffffffu;
 	last_off = bgzf_tell(fp); last_coor = 0xffffffffu;
-	while ((ret = bcf_read(bp, b)) > 0) {
+	while ((ret = bcf_read(bp, h, b)) > 0) {
 		int end, tmp;
 		if (last_tid != b->tid) { // change of chromosomes
 			last_tid = b->tid;
@@ -255,11 +255,13 @@ int bcf_idx_build2(const char *fn, const char *_fnidx)
 	BGZF *fpidx;
 	bcf_t *bp;
 	bcf_idx_t *idx;
+	bcf_hdr_t *h;
 	if ((bp = bcf_open(fn, "r")) == 0) {
 		fprintf(stderr, "[bcf_idx_build2] fail to open the BAM file.\n");
 		return -1;
 	}
-	idx = bcf_idx_core(bp);
+	h = bcf_hdr_read(bp);
+	idx = bcf_idx_core(bp, h);
 	bcf_close(bp);
 	if (_fnidx == 0) {
 		fnidx = (char*)calloc(strlen(fn) + 5, 1);

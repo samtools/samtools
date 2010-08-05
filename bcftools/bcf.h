@@ -2,6 +2,7 @@
 #define BCF_H
 
 #include <stdint.h>
+#include <zlib.h>
 #include "bgzf.h"
 
 typedef struct {
@@ -32,8 +33,9 @@ typedef struct {
 } bcf_hdr_t;
 
 typedef struct {
+	int is_vcf;
+	void *v;
 	BGZF *fp;
-	bcf_hdr_t h;
 } bcf_t;
 
 struct __bcf_idx_t;
@@ -45,14 +47,17 @@ extern "C" {
 
 	bcf_t *bcf_open(const char *fn, const char *mode);
 	int bcf_close(bcf_t *b);
-	int bcf_read(bcf_t *bp, bcf1_t *b);
+	int bcf_read(bcf_t *bp, const bcf_hdr_t *h, bcf1_t *b);
 	int bcf_sync(int n_smpl, bcf1_t *b);
-	int bcf_write(bcf_t *bp, const bcf1_t *b);
-	int bcf_hdr_write(bcf_t *b);
+	int bcf_write(bcf_t *bp, const bcf_hdr_t *h, const bcf1_t *b);
+	bcf_hdr_t *bcf_hdr_read(bcf_t *b);
+	int bcf_hdr_write(bcf_t *b, const bcf_hdr_t *h);
 	int bcf_hdr_sync(bcf_hdr_t *b);
-	int bcf_hdr_cpy(bcf_hdr_t *h, const bcf_hdr_t *h0);
+	void bcf_hdr_destroy(bcf_hdr_t *h);
 	int bcf_destroy(bcf1_t *b);
-	char *bcf_fmt(bcf_t *bp, bcf1_t *b);
+	char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b);
+
+	int vcf_close(bcf_t *bp);
 
 	void *bcf_build_refhash(bcf_hdr_t *h);
 	void bcf_str2id_destroy(void *_hash);

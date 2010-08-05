@@ -15,6 +15,16 @@ void *bcf_build_refhash(bcf_hdr_t *h)
 	return hash;
 }
 
+void *bcf_str2id_init()
+{
+	return kh_init(str2id);
+}
+
+int bcf_str2id_put(void *_hash, const char *str, int id)
+{
+	return 0;
+}
+
 void bcf_str2id_destroy(void *_hash)
 {
 	khash_t(str2id) *hash = (khash_t(str2id)*)_hash;

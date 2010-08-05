@@ -88,6 +88,7 @@ int bcfview(int argc, char *argv[])
 	uint64_t n_processed = 0;
 	viewconf_t vc;
 	bcf_p1aux_t *p1 = 0;
+	bcf_hdr_t *h;
 	int tid, begin, end;
 	khash_t(set64) *hash = 0;
 
@@ -117,18 +118,18 @@ int bcfview(int argc, char *argv[])
 
 	b = calloc(1, sizeof(bcf1_t));
 	bp = bcf_open(argv[optind], "r");
+	h = bcf_hdr_read(bp);
 	if (vc.flag & VC_BCF) {
 		bout = bcf_open("-", "w");
-		bcf_hdr_cpy(&bout->h, &bp->h);
-		bcf_hdr_write(bout);
+		bcf_hdr_write(bout, h);
 	}
 	if (vc.flag & VC_CALL) {
-		p1 = bcf_p1_init(bp->h.n_smpl);
+		p1 = bcf_p1_init(h->n_smpl);
 		bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
 	}
-	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, &bp->h);
+	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, h);
 	if (optind + 1 < argc) {
-		void *str2id = bcf_build_refhash(&bp->h);
+		void *str2id = bcf_build_refhash(h);
 		if (bcf_parse_region(str2id, argv[optind+1], &tid, &begin, &end) >= 0) {
 			bcf_idx_t *idx;
 			idx = bcf_idx_load(argv[optind]);
@@ -140,7 +141,7 @@ int bcfview(int argc, char *argv[])
 			}
 		}
 	}
-	while (bcf_read(bp, b) > 0) {
+	while (bcf_read(bp, h, b) > 0) {
 		if (hash) {
 			uint64_t x = (uint64_t)b->tid<<32 | b->pos;
 			khint_t k = kh_get(set64, hash, x);
@@ -157,24 +158,25 @@ int bcfview(int argc, char *argv[])
 			int is_var;
 			bcf_p1_cal(b, p1, &pr);
 			is_var = update_bcf1(b, p1, &pr, vc.flag);
-			bcf_sync(bp->h.n_smpl, b);
+			bcf_sync(h->n_smpl, b);
 			if ((n_processed + 1) % 50000 == 0) bcf_p1_dump_afs(p1);
 			if ((vc.flag & VC_VARONLY) && !is_var) continue;
 		}
-		if (vc.flag & VC_BCF) bcf_write(bout, b);
+		if (vc.flag & VC_BCF) bcf_write(bout, h, b);
 		else {
 			char *vcf;
 			if (vc.flag & VC_NO_GENO) {
 				b->n_gi = 0;
 				b->fmt[0] = '\0';
 			}
-			vcf = bcf_fmt(bp, b);
+			vcf = bcf_fmt(h, b);
 			puts(vcf);
 			free(vcf);
 		}
 		++n_processed;
 	}
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);
+	bcf_hdr_destroy(h);
 	bcf_close(bp); bcf_close(bout);
 	bcf_destroy(b);
 	if (hash) kh_destroy(set64, hash);
