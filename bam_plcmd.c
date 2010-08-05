@@ -499,6 +499,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bcf_callret1_t *bcr = 0;
 	bcf_call_t bc;
 	bcf_t *bp = 0;
+	bcf_hdr_t *bh = 0;
 
 	memset(&bc, 0, sizeof(bcf_call_t));
 	data = calloc(n, sizeof(void*));
@@ -538,15 +539,16 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	// write the VCF header
 	if (conf->flag & MPLP_GLF) {
 		kstring_t s;
+		bh = calloc(1, sizeof(bcf_hdr_t));
 		s.l = s.m = 0; s.s = 0;
 		bp = bcf_open("-", (conf->flag&MPLP_NO_COMP)? "wu" : "w");
 		for (i = 0; i < h->n_targets; ++i) {
 			kputs(h->target_name[i], &s);
 			kputc('\0', &s);
 		}
-		bp->h.l_nm = s.l;
-		bp->h.name = malloc(s.l);
-		memcpy(bp->h.name, s.s, s.l);
+		bh->l_nm = s.l;
+		bh->name = malloc(s.l);
+		memcpy(bh->name, s.s, s.l);
 		s.l = 0;
 		for (i = 0; i < n; ++i) {
 			const char *p;
@@ -555,13 +557,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			else kputs(fn[i], &s);
 			kputc('\0', &s);
 		}
-		bp->h.l_smpl = s.l;
-		bp->h.sname = malloc(s.l);
-		memcpy(bp->h.sname, s.s, s.l);
-		bp->h.l_txt = 0;
+		bh->l_smpl = s.l;
+		bh->sname = malloc(s.l);
+		memcpy(bh->sname, s.s, s.l);
+		bh->l_txt = 0;
 		free(s.s);
-		bcf_hdr_sync(&bp->h);
-		bcf_hdr_write(bp);
+		bcf_hdr_sync(bh);
+		bcf_hdr_write(bp, bh);
 	} else if (conf->flag & MPLP_VCF) {
 		kstring_t s;
 		s.l = s.m = 0; s.s = 0;
@@ -613,7 +615,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				bcf_call_glfgen(n_plp[i], plp[i], ref16, bca, bcr + i);
 			bcf_call_combine(n, bcr, ref16, &bc);
 			bcf_call2bcf(tid, pos, &bc, b);
-			bcf_write(bp, b);
+			bcf_write(bp, bh, b);
 			//fprintf(stderr, "%d,%d,%d\n", b->tid, b->pos, b->l_str);
 			bcf_destroy(b);
 		} else if (conf->flag & MPLP_VCF) {
@@ -696,7 +698,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			if (kh_exist(hash, k)) free(kh_val(hash, k));
 		kh_destroy(64, hash);
 	}
-	bcf_call_destroy(bca); free(bc.PL); free(bcr);
+	bcf_hdr_destroy(bh); bcf_call_destroy(bca); free(bc.PL); free(bcr);
 	mc_destroy(ma);
 	bam_mplp_destroy(iter);
 	bam_header_destroy(h);

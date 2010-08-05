@@ -4,6 +4,7 @@
 
 int bcfview(int argc, char *argv[]);
 int bcf_main_index(int argc, char *argv[]);
+int vcf_test(int argc, char *argv[]);
 
 int main(int argc, char *argv[])
 {

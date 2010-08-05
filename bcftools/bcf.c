@@ -25,8 +25,11 @@ bcf_t *bcf_open(const char *fn, const char *mode)
 
 int bcf_close(bcf_t *b)
 {
+	int ret;
 	if (b == 0) return 0;
-	return bgzf_close(b->fp);
+	ret = bgzf_close(b->fp);
+	free(b);
+	return ret;
 }
 
 int bcf_hdr_write(bcf_t *b, const bcf_hdr_t *h)
