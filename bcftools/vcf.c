@@ -13,6 +13,7 @@ typedef struct {
 	kstream_t *ks;
 	void *refhash;
 	kstring_t line;
+	int max_ref;
 } vcf_t;
 
 bcf_hdr_t *vcf_hdr_read(bcf_t *bp)
@@ -104,12 +105,32 @@ int vcf_hdr_write(bcf_t *bp, const bcf_hdr_t *h)
 	return 0;
 }
 
-int vcf_read(bcf_t *bp, bcf1_t *b)
+int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 {
-	int dret;
+	int dret, k;
 	vcf_t *v = (vcf_t*)bp->v;
+	char *p, *q, *r;
+	kstring_t str;
 	v->line.l = 0;
+	str.l = 0; str.m = b->m_str; str.s = b->str;
 	if (ks_getuntil(v->ks, '\n', &v->line, &dret) < 0) return -1;
+	for (q = v->line.s, p = q + 1, k = 0; *p; ++p) {
+		if (*p == '\t' || *(p+1) == '\0') {
+			++k;
+			r = *(p+1)? p : p + 1;
+			*r = '\0';
+			if (k == 1) { // ref
+			} else if (k == 2) {
+				b->pos = atoi(q);
+			} else if (k == 3 || k == 4 || k == 5 || k == 7 || k == 8 || k == 9) {
+				kputsn(q, r - q + 1, &str);
+				if (k == 9) bcf_sync(h->n_smpl, b);
+			} else if (k == 6) {
+				b->qual = (q[0] >= '0' && q[0] <= '9')? atoi(q) : 0;
+			}
+			q = p + 1;
+		}
+	}
 	return v->line.l + 1;
 }
 
