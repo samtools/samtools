@@ -5,6 +5,8 @@
 #include "bam2bcf.h"
 #include "bcftools/bcf.h"
 
+#define MAX_END_DIST 30
+
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
 #define CALL_ETA 0.03f
@@ -71,11 +73,12 @@ typedef struct {
  */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
-	int i, j, k, c, n;
+	int i, j, k, c, n, ref4;
 	float *p = r->p;
 	auxaux_t aux;
 
 	memset(r, 0, sizeof(bcf_callret1_t));
+	ref4 = bam_nt16_nt4_table[ref_base];
 	if (_n == 0) return -1;
 
 	// enlarge the aux array if necessary
@@ -88,6 +91,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 	for (i = n = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
 		uint32_t q, x = 0, qq;
+		int min_dist;
 		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue; // skip unmapped reads and deleted bases
 		q = (uint32_t)bam1_qual(p->b)[p->qpos]; // base quality
 		if (q < bca->min_baseQ) continue;
@@ -97,8 +101,17 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 		qq = bam1_seqi(bam1_seq(p->b), p->qpos); // base
 		q = bam_nt16_nt4_table[qq? qq : ref_base]; // q is the 2-bit base
 		if (q < 4) x |= 1 << 21 | q << 16;
-		
+		k = (ref4 < 4 && q == ref4)? 0 : 1;
+		k = k<<1 | bam1_strand(p->b);
+		++r->d[k];
 		bca->info[n++] = x;
+		// calculate min_dist
+		min_dist = p->b->core.l_qseq - 1 - p->qpos;
+		if (min_dist > p->qpos) min_dist = p->qpos;
+		if (min_dist > MAX_END_DIST) min_dist = MAX_END_DIST;
+		k >>= 1;
+		r->dsum[k]  += min_dist;
+		r->d2sum[k] += min_dist * min_dist;
 	}
 	ks_introsort_uint32_t(n, bca->info);
 	r->depth = n;
@@ -204,9 +217,25 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		}
 		call->shift = (int)(sum_min + .499);
 	}
+	memset(call->d, 0, 4 * sizeof(int));
+	call->davg[0] = call->davg[1] = call->dstd[0] = call->dstd[1] = 0.;
 	for (i = call->depth = 0, tmp = 0; i < n; ++i) {
 		call->depth += calls[i].depth;
+		for (j = 0; j < 4; ++j) call->d[j] += calls[i].d[j];
+		for (j = 0; j < 2; ++j) {
+			call->davg[j] += calls[i].dsum[j];
+			call->dstd[j] += calls[i].d2sum[j];
+		}
 		tmp += calls[i].sum_Q2;
+	}
+	for (j = 0; j < 2; ++j) {
+		int x = call->d[j*2] + call->d[j*2+1];
+		if (x == 0) {
+			call->davg[j] = call->dstd[j] = 0.;
+		} else {
+			call->davg[j] /= x;
+			call->dstd[j] = sqrt(call->dstd[j] / x - call->davg[j] * call->davg[j]);
+		}
 	}
 	call->rmsQ = (int)(sqrt((double)tmp / call->depth) + .499);
 	return 0;
@@ -228,7 +257,17 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 	}
 	kputc('\0', &s);
 	kputc('\0', &s);
-	kputs("MQ=", &s); kputw(bc->rmsQ, &s); kputs(";DP=", &s); kputw(bc->depth, &s); kputc('\0', &s);
+	// INFO
+	kputs("MQ=", &s); kputw(bc->rmsQ, &s); // kputs(";DP=", &s); kputw(bc->depth, &s);
+	kputs(";DP4=", &s);
+	for (i = 0; i < 4; ++i) {
+		if (i) kputc(',', &s);
+		kputw(bc->d[i], &s);
+	}
+	if (bc->d[2] + bc->d[3] > 1)
+		ksprintf(&s, ";MED=%.1lf,%.1lf,%.1lf,%.1lf", bc->davg[0], bc->dstd[0], bc->davg[1], bc->dstd[1]);
+	kputc('\0', &s);
+	// FMT
 	kputs("PL", &s); kputc('\0', &s);
 	b->m_str = s.m; b->str = s.s; b->l_str = s.l;
 	bcf_sync(bc->n, b);

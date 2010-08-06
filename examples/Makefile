@@ -45,4 +45,4 @@ calDepth:../libbam.a calDepth.c
 clean:
 		rm -fr *.bam *.bai *.glf* *.fai *.pileup* *~ calDepth *.dSYM ex1*.rg ex1.bcf
 
-# ../samtools pileup ex1.bam|perl -ape '$_=$F[4];s/\^.//g;$x=tr/A-Z/X/;$y=tr/a-z/x/;s/(\d+)(X)/$x-=$1,$2/eg;s/(\d+)(x)/$y-=$1,$2/eg;$_=join("\t",@F[0,1],$x,$y)."\n"'
+# ../samtools pileup ex1.bam|perl -ape '$_=$F[4];s/(\d+)(??{".{$1}"})|\^.//g;@_=(tr/A-Z//,tr/a-z//);$_=join("\t",@F[0,1],@_)."\n"'
