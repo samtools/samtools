@@ -1,6 +1,11 @@
 #include <math.h>
 #include <stdlib.h>
 
+/* This program is implemented with ideas from this web page:
+ *
+ *   http://www.langsrud.com/fisher.htm
+ */
+
 // log\binom{n}{k}
 static double lbinom(int n, int k)
 {
@@ -31,13 +36,13 @@ static double hypergeo_acc(int n11, int n1_, int n_1, int n, hgacc_t *aux)
 		aux->n11 = n11; aux->n1_ = n1_; aux->n_1 = n_1; aux->n = n;
 	} else { // then only n11 changed; the rest fixed
 		if (n11%11 && n11 + aux->n - aux->n1_ - aux->n_1) {
-			if (n11 == aux->n11 + 1) {
+			if (n11 == aux->n11 + 1) { // incremental
 				aux->p *= (double)(aux->n1_ - aux->n11) / n11
 					* (aux->n_1 - aux->n11) / (n11 + aux->n - aux->n1_ - aux->n_1);
 				aux->n11 = n11;
 				return aux->p;
 			}
-			if (n11 == aux->n11 - 1) {
+			if (n11 == aux->n11 - 1) { // incremental
 				aux->p *= (double)aux->n11 / (aux->n1_ - n11)
 					* (aux->n11 + aux->n - aux->n1_ - aux->n_1) / (aux->n_1 - n11);
 				aux->n11 = n11;
@@ -58,29 +63,22 @@ double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double
 	int n1_, n_1, n;
 
 	n1_ = n11 + n12; n_1 = n11 + n21; n = n11 + n12 + n21 + n22; // calculate n1_, n_1 and n
-	max = (n_1 < n1_) ? n_1 : n1_; // for right tail
-	min = (n1_ + n_1 - n < 0) ? 0 : (n1_ + n_1 - n < 0); // for left tail
-	if (min == max) { // no need to do test
-		*two = *_left = *_right = 1.;
-		return 1.;
-	}
-	// the probability of the current table
-	q = hypergeo_acc(n11, n1_, n_1, n, &aux);
+	max = (n_1 < n1_) ? n_1 : n1_; // max n11, for right tail
+	min = (n1_ + n_1 - n < 0) ? 0 : (n1_ + n_1 - n < 0); // min n11, for left tail
+	*two = *_left = *_right = 1.;
+	if (min == max) return 1.; // no need to do test
+	q = hypergeo_acc(n11, n1_, n_1, n, &aux); // the probability of the current table
 	// left tail
 	p = hypergeo_acc(min, 0, 0, 0, &aux);
-	for (left = 0., i = min + 1; p < 0.99999999 * q; ++i) {
-		left += p;
-		p = hypergeo_acc(i, 0, 0, 0, &aux);
-	}
+	for (left = 0., i = min + 1; p < 0.99999999 * q; ++i) // loop until underflow
+		left += p, p = hypergeo_acc(i, 0, 0, 0, &aux);
 	--i;
 	if (p < 1.00000001 * q) left += p;
 	else --i;
 	// right tail
 	p = hypergeo_acc(max, 0, 0, 0, &aux);
-	for (right = 0., j = max - 1; p < 0.99999999 * q; --j) {
-		right += p;
-		p = hypergeo_acc(j, 0, 0, 0, &aux);
-	}
+	for (right = 0., j = max - 1; p < 0.99999999 * q; --j) // loop until underflow
+		right += p, p = hypergeo_acc(j, 0, 0, 0, &aux);
 	if (p < 1.00000001 * q) right += p;
 	else ++j;
 	// two-tail

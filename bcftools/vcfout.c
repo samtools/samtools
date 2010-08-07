@@ -70,7 +70,7 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
-	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
+	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf;HWE=%.3lf,%.3lf,%.3lf", 1.-pr->f_em, 1.-pr->f_exp, pr->g[0], pr->g[1], pr->g[2]);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);

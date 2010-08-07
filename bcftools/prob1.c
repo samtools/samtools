@@ -189,6 +189,32 @@ static double mc_cal_afs(bcf_p1aux_t *ma)
 	return sum / ma->M;
 }
 
+static long double p1_cal_g3(bcf_p1aux_t *p1a, double g[3])
+{
+	long double pd = 0., g2[3];
+	int i, k;
+	memset(g2, 0, sizeof(long double) * 3);
+	for (k = 0; k < p1a->M; ++k) {
+		double f = (double)k / p1a->M, f3[3], g1[3];
+		long double z = 1.;
+		g1[0] = g1[1] = g1[2] = 0.;
+		f3[0] = (1. - f) * (1. - f); f3[1] = 2. * f * (1. - f); f3[2] = f * f;
+		for (i = 0; i < p1a->n; ++i) {
+			double *pdg = p1a->pdg + i * 3;
+			double x = pdg[0] * f3[0] + pdg[1] * f3[1] + pdg[2] * f3[2];
+			z *= x;
+			g1[0] += pdg[0] * f3[0] / x;
+			g1[1] += pdg[1] * f3[1] / x;
+			g1[2] += pdg[2] * f3[2] / x;
+		}
+		pd += p1a->phi[k] * z;
+		for (i = 0; i < 3; ++i)
+			g2[i] += p1a->phi[k] * z * g1[i];
+	}
+	for (i = 0; i < 3; ++i) g[i] = g2[i] / pd;
+	return pd;
+}
+
 int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 {
 	int i, k;
@@ -223,6 +249,7 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 			flast = rst->f_em;
 		}
 	}
+	p1_cal_g3(ma, rst->g);
 	return 0;
 }
 

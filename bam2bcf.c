@@ -5,7 +5,7 @@
 #include "bam2bcf.h"
 #include "bcftools/bcf.h"
 
-#define MAX_END_DIST 30
+#define END_DIST_THRES 11
 
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
@@ -108,10 +108,8 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 		// calculate min_dist
 		min_dist = p->b->core.l_qseq - 1 - p->qpos;
 		if (min_dist > p->qpos) min_dist = p->qpos;
-		if (min_dist > MAX_END_DIST) min_dist = MAX_END_DIST;
-		k >>= 1;
-		r->dsum[k]  += min_dist;
-		r->d2sum[k] += min_dist * min_dist;
+		k = (k&2) | (min_dist <= END_DIST_THRES);
+		++r->ed[k];
 	}
 	ks_introsort_uint32_t(n, bca->info);
 	r->depth = n;
@@ -218,24 +216,11 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		call->shift = (int)(sum_min + .499);
 	}
 	memset(call->d, 0, 4 * sizeof(int));
-	call->davg[0] = call->davg[1] = call->dstd[0] = call->dstd[1] = 0.;
+	memset(call->ed, 0, 4 * sizeof(int));
 	for (i = call->depth = 0, tmp = 0; i < n; ++i) {
 		call->depth += calls[i].depth;
-		for (j = 0; j < 4; ++j) call->d[j] += calls[i].d[j];
-		for (j = 0; j < 2; ++j) {
-			call->davg[j] += calls[i].dsum[j];
-			call->dstd[j] += calls[i].d2sum[j];
-		}
+		for (j = 0; j < 4; ++j) call->d[j] += calls[i].d[j], call->ed[j] += calls[i].ed[j];
 		tmp += calls[i].sum_Q2;
-	}
-	for (j = 0; j < 2; ++j) {
-		int x = call->d[j*2] + call->d[j*2+1];
-		if (x == 0) {
-			call->davg[j] = call->dstd[j] = 0.;
-		} else {
-			call->davg[j] /= x;
-			call->dstd[j] = sqrt(call->dstd[j] / x - call->davg[j] * call->davg[j]);
-		}
 	}
 	call->rmsQ = (int)(sqrt((double)tmp / call->depth) + .499);
 	return 0;
@@ -264,8 +249,11 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 		if (i) kputc(',', &s);
 		kputw(bc->d[i], &s);
 	}
-	if (bc->d[2] + bc->d[3] > 1)
-		ksprintf(&s, ";MED=%.1lf,%.1lf,%.1lf,%.1lf", bc->davg[0], bc->dstd[0], bc->davg[1], bc->dstd[1]);
+	kputs(";ED4=", &s);
+	for (i = 0; i < 4; ++i) {
+		if (i) kputc(',', &s);
+		kputw(bc->ed[i], &s);
+	}
 	kputc('\0', &s);
 	// FMT
 	kputs("PL", &s); kputc('\0', &s);
