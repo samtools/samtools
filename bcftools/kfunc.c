@@ -52,78 +52,63 @@ double kf_erfc(double x)
 	return x > 0.? 2. * p : 2. * (1. - p);
 }
 
-/* Regularized (incomplete lower) gamma function
- * \frac{\gamma(p,x)}{\Gamma(p)}=\frac{1}{\Gamma(p)} \int_0^x t^{p-1}e^{-t} dt
- * AS245, http://lib.stat.cmu.edu/apstat/245
+/* The following computes regularized incomplete gamma functions.
+ * Formulas are taken from Wiki, with additional input from Numerical
+ * Recipes in C (for modified Lentz's algorithm) and AS245
+ * (http://lib.stat.cmu.edu/apstat/245).
  */
-double kf_gammap(double p, double x)
-{
-    double ret_val;
-    double a, b, c, an, rn, pn1, pn2, pn3, pn4, pn5, pn6, arg;
 
-	if (x == 0.) return 0.;
-	// The following line is not thoroughly tested, so it is commented out.
-	if (p > 1e3) return .5 * kf_erfc(-M_SQRT1_2 * sqrt(p) * 3. * (pow(x / p, 1./3.) + 1. / (p * 9.) - 1.));
-	if (x > 1e8) return 1.;
-	if (x <= 1. || x < p) { // series expansion
-		c = 1.;
-		arg = p * log(x) - x - kf_lgamma(p + 1.);
-		ret_val = 1.;
-		a = p;
-		while (c > 1e-14) {
-			a += 1.;
-			c = c * x / a;
-			ret_val += c;
-		}
-		arg += log(ret_val);
-		ret_val = 0.;
-		if (arg >= -88.) ret_val = exp(arg);
-	} else { // continued expansion
-		arg = p * log(x) - x - kf_lgamma(p);
-		a = 1. - p;
-		b = a + x + 1.;
-		c = 0.;
-		pn1 = 1.;
-		pn2 = x;
-		pn3 = x + 1.;
-		pn4 = x * b;
-		ret_val = pn3 / pn4;
-		while (1) {
-			a += 1.; b += 2.; c += 1.;
-			an = a * c;
-			pn5 = b * pn3 - an * pn1;
-			pn6 = b * pn4 - an * pn2;
-			if (fabs(pn6) > 0.) {
-				rn = pn5 / pn6;
-				if (fabs(ret_val - rn) <= fmin(1e-14, rn * 1e-14)) break;
-				ret_val = rn;
-			}
-			pn1 = pn3; pn2 = pn4; pn3 = pn5; pn4 = pn6;
-			if (fabs(pn5) >= 1e37)
-				pn1 /= 1e37, pn2 /= 1e37, pn3 /= 1e37, pn4 /= 1e37;
-		}
-		arg += log(ret_val);
-		ret_val = 1.;
-		if (arg >= -88.) ret_val = 1. - exp(arg);
-    }
-	return ret_val;
+#define KF_GAMMA_EPS 1e-14
+#define KF_TINY 1e-290
+
+// regularized lower incomplete gamma function, by series expansion
+static double _kf_gammap(double s, double z)
+{
+	double sum, x;
+	int k;
+	for (k = 1, sum = x = 1.; k < 100; ++k) {
+		sum += (x *= z / (s + k));
+		if (x / sum < KF_GAMMA_EPS) break;
+	}
+	return exp(s * log(z) - z - kf_lgamma(s + 1.) + log(sum));
+}
+// regularized upper incomplete gamma function, by continued fraction
+static double _kf_gammaq(double s, double z)
+{
+	int j;
+	double C, D, f;
+	f = 1. + z - s; C = f; D = 0.;
+	// Modified Lentz's algorithm for computing continued fraction
+	// See Numerical Recipes in C, 2nd edition, page 172
+	for (j = 1; j < 100; ++j) {
+		double a = j * (s - j), b = (j<<1) + 1 + z - s, d;
+		D = b + a * D;
+		if (D < KF_TINY) D = KF_TINY;
+		C = b + a / C;
+		if (C < KF_TINY) C = KF_TINY;
+		D = 1. / D;
+		d = C * D;
+		f *= d;
+		if (fabs(d - 1.) < KF_GAMMA_EPS) break;
+	}
+	return exp(s * log(z) - z - kf_lgamma(s) - log(f));
 }
 
-/* Numerical Recipe separates series expansion and continued
- * expansion. This may potentially reduce underflow for some
- * combinations of p and x. Nonetheless, the precision here is good
- * enough for me. I will not spend more time for now.
- */
-double kf_gammaq(double p, double x)
+double kf_gammap(double s, double z)
 {
-	return 1. - kf_gammap(p, x);
+	return z <= 1. || z < s? _kf_gammap(s, z) : 1. - _kf_gammaq(s, z);
+}
+
+double kf_gammaq(double s, double z)
+{
+	return z <= 1. || z < s? 1. - _kf_gammap(s, z) : _kf_gammaq(s, z);
 }
 
 #ifdef KF_MAIN
 #include <stdio.h>
 int main(int argc, char *argv[])
 {
-	double x = 10, y = 2.5;
+	double x = 5.5, y = 3;
 	printf("erfc(%lg): %lg, %lg\n", x, erfc(x), kf_erfc(x));
 	printf("lower-gamma(%lg,%lg): %lg\n", x, y, (1.0-kf_gammap(y, x))*tgamma(y));
 	return 0;
