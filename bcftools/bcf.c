@@ -208,7 +208,9 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 {
 	int i, j, x;
 	s->l = 0;
-	kputs(h->ns[b->tid], s); kputc('\t', s);
+	if (h->n_ref) kputs(h->ns[b->tid], s);
+	else kputw(b->tid, s);
+	kputc('\t', s);
 	kputw(b->pos + 1, s); kputc('\t', s);
 	fmt_str(b->str, s); kputc('\t', s);
 	fmt_str(b->ref, s); kputc('\t', s);
