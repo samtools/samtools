@@ -100,12 +100,11 @@ int bcf_hdr_sync(bcf_hdr_t *b)
 	return 0;
 }
 
-#define char2int(s) (((int)s[0])<<8|s[1])
-
 int bcf_sync(int n_smpl, bcf1_t *b)
 {
-	char *p, *tmp[5], *s;
+	char *p, *tmp[5];
 	int i, n;
+	ks_tokaux_t aux;
 	// set ref, alt, flt, info, fmt
 	b->ref = b->alt = b->flt = b->info = b->fmt = 0;
 	for (p = b->str, n = 0; p < b->str + b->l_str; ++p)
@@ -127,23 +126,17 @@ int bcf_sync(int n_smpl, bcf1_t *b)
 		memset(b->gi + old_m, 0, (b->m_gi - old_m) * sizeof(bcf_ginfo_t));
 	}
 	b->n_gi = n;
-	for (p = s = b->fmt, n = 0; *p; ++p) {
-		if (*p == ':' || *(p+1) == 0) {
-			char *q = *p == ':'? p : p + 1;
-			if ((q - s) != 2) return -2;
-			b->gi[n].fmt = char2int(s);
-			s = q;
-		}
-	}
+	for (p = kstrtok(b->fmt, ":", &aux), n = 0; p; p = kstrtok(0, 0, &aux))
+		b->gi[n++].fmt = bcf_str2int(p, aux.p - p);
 	// set gi[i].len
 	for (i = 0; i < b->n_gi; ++i) {
-		if (b->gi[i].fmt == char2int("PL")) {
+		if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
 			b->gi[i].len = b->n_alleles * (b->n_alleles + 1) / 2;
-		} else if (b->gi[i].fmt == char2int("DP") || b->gi[i].fmt == char2int("HQ")) {
+		} else if (b->gi[i].fmt == bcf_str2int("DP", 2) || b->gi[i].fmt == bcf_str2int("HQ", 2)) {
 			b->gi[i].len = 2;
-		} else if (b->gi[i].fmt == char2int("GQ") || b->gi[i].fmt == char2int("GT")) {
+		} else if (b->gi[i].fmt == bcf_str2int("GQ", 2) || b->gi[i].fmt == bcf_str2int("GT", 2)) {
 			b->gi[i].len = 1;
-		} else if (b->gi[i].fmt == char2int("GL")) {
+		} else if (b->gi[i].fmt == bcf_str2int("GL", 2)) {
 			b->gi[i].len = 4;
 		}
 		b->gi[i].data = realloc(b->gi[i].data, n_smpl * b->gi[i].len);
@@ -233,16 +226,16 @@ char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b)
 		kputc('\t', &s);
 		for (i = 0; i < b->n_gi; ++i) {
 			if (i) kputc(':', &s);
-			if (b->gi[i].fmt == char2int("PL")) {
+			if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
 				uint8_t *d = (uint8_t*)b->gi[i].data + j * x;
 				int k;
 				for (k = 0; k < x; ++k) {
 					if (k > 0) kputc(',', &s);
 					kputw(d[k], &s);
 				}
-			} else if (b->gi[i].fmt == char2int("DP")) {
+			} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
 				kputw(((uint16_t*)b->gi[i].data)[j], &s);
-			} else if (b->gi[i].fmt == char2int("GQ")) {
+			} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
 				kputw(((uint8_t*)b->gi[i].data)[j], &s);
 			}
 		}

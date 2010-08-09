@@ -24,6 +24,24 @@ int ksprintf(kstring_t *s, const char *fmt, ...)
 	return l;
 }
 
+char *kstrtok(const char *str, const char *sep, ks_tokaux_t *aux)
+{
+	const char *p, *start;
+	if (sep) { // set up the table
+		if (str == 0 && (aux->tab[0]&1)) return 0; // no need to set up if we have finished
+		aux->tab[0] = aux->tab[1] = aux->tab[2] = aux->tab[3] = 0;
+		for (p = sep; *p; ++p)
+			aux->tab[*p/64] |= 1ull<<(*p%64);
+	}
+	if (str) aux->p = str - 1, aux->tab[0] &= ~1ull;
+	else if (aux->tab[0]&1) return 0;
+	for (p = start = aux->p + 1; *p; ++p)
+		if (aux->tab[*p/64]>>(*p%64)) break;
+	aux->p = p; // end of token
+	if (*p == 0) aux->tab[0] |= 1; // no more tokens
+	return (char*)start;
+}
+
 // s MUST BE a null terminated string; l = strlen(s)
 int ksplit_core(char *s, int delimiter, int *_max, int **_offsets)
 {
@@ -66,11 +84,13 @@ int ksplit_core(char *s, int delimiter, int *_max, int **_offsets)
  * Boyer-Moore search *
  **********************/
 
+typedef unsigned char ubyte_t;
+
 // reference: http://www-igm.univ-mlv.fr/~lecroq/string/node14.html
-int *ksBM_prep(const uint8_t *pat, int m)
+static int *ksBM_prep(const ubyte_t *pat, int m)
 {
 	int i, *suff, *prep, *bmGs, *bmBc;
-	prep = calloc(m + 256, 1);
+	prep = calloc(m + 256, sizeof(int));
 	bmGs = prep; bmBc = prep + m;
 	{ // preBmBc()
 		for (i = 0; i < 256; ++i) bmBc[i] = m;
@@ -107,32 +127,40 @@ int *ksBM_prep(const uint8_t *pat, int m)
 	return prep;
 }
 
-int *ksBM_search(const uint8_t *str, int n, const uint8_t *pat, int m, int *_prep, int *n_matches)
+void *kmemmem(const void *_str, int n, const void *_pat, int m, int **_prep)
 {
-	int i, j, *prep, *bmGs, *bmBc;
-	int *matches = 0, mm = 0, nm = 0;
-	prep = _prep? _prep : ksBM_prep(pat, m);
+	int i, j, *prep = 0, *bmGs, *bmBc;
+	const ubyte_t *str, *pat;
+	str = (const ubyte_t*)_str; pat = (const ubyte_t*)_pat;
+	prep = (_prep == 0 || *_prep == 0)? ksBM_prep(pat, m) : *_prep;
+	if (_prep && *_prep == 0) *_prep = prep;
 	bmGs = prep; bmBc = prep + m;
 	j = 0;
 	while (j <= n - m) {
 		for (i = m - 1; i >= 0 && pat[i] == str[i+j]; --i);
-		if (i < 0) {
-			if (nm == mm) {
-				mm = mm? mm<<1 : 1;
-				matches = realloc(matches, mm * sizeof(int));
-			}
-			matches[nm++] = j;
-			j += bmGs[0];
-		} else {
+		if (i >= 0) {
 			int max = bmBc[str[i+j]] - m + 1 + i;
 			if (max < bmGs[i]) max = bmGs[i];
 			j += max;
-		}
+		} else return (void*)(str + j);
 	}
-	*n_matches = nm;
 	if (_prep == 0) free(prep);
-	return matches;
+	return 0;
 }
+
+char *kstrstr(const char *str, const char *pat, int **_prep)
+{
+	return (char*)kmemmem(str, strlen(str), pat, strlen(pat), _prep);
+}
+
+char *kstrnstr(const char *str, const char *pat, int n, int **_prep)
+{
+	return (char*)kmemmem(str, n, pat, strlen(pat), _prep);
+}
+
+/***********************
+ * The main() function *
+ ***********************/
 
 #ifdef KSTRING_MAIN
 #include <stdio.h>
@@ -140,6 +168,8 @@ int main()
 {
 	kstring_t *s;
 	int *fields, n, i;
+	ks_tokaux_t aux;
+	char *p;
 	s = (kstring_t*)calloc(1, sizeof(kstring_t));
 	// test ksprintf()
 	ksprintf(s, " abcdefg:    %d ", 100);
@@ -148,17 +178,26 @@ int main()
 	fields = ksplit(s, 0, &n);
 	for (i = 0; i < n; ++i)
 		printf("field[%d] = '%s'\n", i, s->s + fields[i]);
-	free(s);
+	// test kstrtok()
+	s->l = 0;
+	for (p = kstrtok("ab:cde:fg/hij::k", ":/", &aux); p; p = kstrtok(0, 0, &aux)) {
+		kputsn(p, aux.p - p, s);
+		kputc('\n', s);
+	}
+	printf("%s", s->s);
+	// free
+	free(s->s); free(s); free(fields);
 
 	{
-		static char *str = "abcdefgcdg";
+		static char *str = "abcdefgcdgcagtcakcdcd";
 		static char *pat = "cd";
-		int n, *matches;
-		matches = ksBM_search(str, strlen(str), pat, strlen(pat), 0, &n);
-		printf("%d: \n", n);
-		for (i = 0; i < n; ++i)
-			printf("- %d\n", matches[i]);
-		free(matches);
+		char *ret, *s = str;
+		int *prep = 0;
+		while ((ret = kstrstr(s, pat, &prep)) != 0) {
+			printf("match: %s\n", ret);
+			s = ret + prep[0];
+		}
+		free(prep);
 	}
 	return 0;
 }

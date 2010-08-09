@@ -6,7 +6,8 @@
 #include "bgzf.h"
 
 typedef struct {
-	int fmt, len; // len is the unit length
+	uint32_t fmt;
+	int len; // len is the unit length
 	void *data;
 	// derived info: fmt, len
 } bcf_ginfo_t;
@@ -72,5 +73,16 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
+
+static inline uint32_t bcf_str2int(const char *str, int l)
+{
+	int i;
+	uint32_t x = 0;
+	for (i = 0; i < l && i < 4; ++i) {
+		if (str[i] == 0) return x;
+		x = x<<8 | str[i];
+	}
+	return x;
+}
 
 #endif

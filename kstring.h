@@ -17,17 +17,31 @@ typedef struct __kstring_t {
 } kstring_t;
 #endif
 
-int ksprintf(kstring_t *s, const char *fmt, ...);
-int ksplit_core(char *s, int delimiter, int *_max, int **_offsets);
+typedef struct {
+	uint64_t tab[4];
+	const char *p; // end of the current token
+} ks_tokaux_t;
 
-// calculate the auxiliary array, allocated by calloc()
-int *ksBM_prep(const uint8_t *pat, int m);
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/* Search pat in str and returned the list of matches. The size of the
- * list is returned as n_matches. _prep is the array returned by
- * ksBM_prep(). If it is a NULL pointer, ksBM_prep() will be called. */
-int *ksBM_search(const uint8_t *str, int n, const uint8_t *pat, int m, int *_prep, int *n_matches);
+	int ksprintf(kstring_t *s, const char *fmt, ...);
+	int ksplit_core(char *s, int delimiter, int *_max, int **_offsets);
+	char *kstrstr(const char *str, const char *pat, int **_prep);
+	char *kstrnstr(const char *str, const char *pat, int n, int **_prep);
+	void *kmemmem(const void *_str, int n, const void *_pat, int m, int **_prep);
 
+	/* kstrtok() is similar to strtok_r() except that str is not
+	 * modified and both str and sep can be NULL. For efficiency, it is
+	 * actually recommended to set both to NULL in the subsequent calls
+	 * if sep is not changed. */
+	char *kstrtok(const char *str, const char *sep, ks_tokaux_t *aux);
+
+#ifdef __cplusplus
+}
+#endif
+	
 static inline int kputsn(const char *p, int l, kstring_t *s)
 {
 	if (s->l + l + 1 >= s->m) {
@@ -35,7 +49,7 @@ static inline int kputsn(const char *p, int l, kstring_t *s)
 		kroundup32(s->m);
 		s->s = (char*)realloc(s->s, s->m);
 	}
-	strncpy(s->s + s->l, p, l);
+	memcpy(s->s + s->l, p, l);
 	s->l += l;
 	s->s[s->l] = 0;
 	return l;

@@ -175,6 +175,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   bcftools view [options] <in.bcf> [reg]\n\n");
 		fprintf(stderr, "Options: -c        SNP calling\n");
+		fprintf(stderr, "         -b        output BCF instead of VCF\n");
 		fprintf(stderr, "         -G        suppress all individual genotype information\n");
 		fprintf(stderr, "         -L        discard the PL genotype field\n");
 		fprintf(stderr, "         -v        output potential variant sites only\n");
