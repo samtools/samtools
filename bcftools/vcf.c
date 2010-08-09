@@ -132,7 +132,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 			int tid = bcf_str2id(v->refhash, p);
 			if (tid < 0) {
 				tid = bcf_str2id_add(v->refhash, p);
-				kputs(p, &rn);
+				kputs(p, &rn); kputc('\0', &rn);
 				sync = 1;
 			}
 			b->tid = tid;
@@ -156,6 +156,15 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 					int x = strtol(q, &q, 10);
 					if (x > 0xffff) x = 0xffff;
 					((uint16_t*)b->gi[i].data)[k-9] = x;
+				} else if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
+					int x, j;
+					uint8_t *data = (uint8_t*)b->gi[i].data;
+					for (j = 0; j < b->gi[i].len; ++j) {
+						x = strtol(q, &q, 10);
+						if (x > 255) x = 255;
+						data[i * b->gi[i].len + j] = x;
+						++q;
+					}
 				}
 			}
 		}
