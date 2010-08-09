@@ -77,7 +77,7 @@ static double test_hwe(const double g[3])
 
 extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
 
-static double test_fisher(bcf1_t *b, const char *key, int d[4])
+static double test_fisher(bcf1_t *b, const char *key, int d[4], int is_single)
 {
 	double left, right, two;
 	char *p;
@@ -90,7 +90,7 @@ static double test_fisher(bcf1_t *b, const char *key, int d[4])
 		++p;
 	}
 	kt_fisher_exact(d[0], d[1], d[2], d[3], &left, &right, &two);
-	return two;
+	return is_single? right : two;
 }
 
 static void rm_info(int n_smpl, bcf1_t *b, const char *key)
@@ -111,8 +111,8 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	double p_hwe, p_dp, p_ed, r = is_var? pr->p_ref : 1. - pr->p_ref;
 
 	p_hwe = test_hwe(pr->g);
-	p_ed = test_fisher(b, "ED4=", d);
-	p_dp = test_fisher(b, "DP4=", d);
+	p_ed = test_fisher(b, "ED4=", d, 1);
+	p_dp = test_fisher(b, "DP4=", d, 0);
 	rm_info(n_smpl, b, "ED4=");
 
 	memset(&s, 0, sizeof(kstring_t));
