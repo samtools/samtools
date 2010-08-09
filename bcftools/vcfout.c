@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <zlib.h>
+#include <errno.h>
 #include "bcf.h"
 #include "prob1.h"
 #include "kstring.h"
@@ -21,7 +22,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 typedef struct {
 	int flag, prior_type;
 	char *fn_list;
-	double theta;
+	double theta, pref;
 } viewconf_t;
 
 khash_t(set64) *bcf_load_pos(const char *fn, bcf_hdr_t *_h)
@@ -57,11 +58,63 @@ khash_t(set64) *bcf_load_pos(const char *fn, bcf_hdr_t *_h)
 	return hash;
 }
 
-static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, int flag)
+static double test_hwe(const double g[3])
+{
+	extern double kf_gammaq(double p, double x);
+	double fexp, chi2, f[3], n;
+	int i;
+	n = g[0] + g[1] + g[2];
+	fexp = (2. * g[2] + g[1]) / (2. * n);
+	if (fexp > 1. - 1e-10) fexp = 1. - 1e-10;
+	if (fexp < 1e-10) fexp = 1e-10;
+	f[0] = n * (1. - fexp) * (1. - fexp);
+	f[1] = n * 2. * fexp * (1. - fexp);
+	f[2] = n * fexp * fexp;
+	for (i = 0, chi2 = 0.; i < 3; ++i)
+		chi2 += (g[i] - f[i]) * (g[i] - f[i]) / f[i];
+	return kf_gammaq(.5, chi2 / 2.);
+}
+
+extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
+
+static double test_fisher(bcf1_t *b, const char *key, int d[4])
+{
+	double left, right, two;
+	char *p;
+	int i;
+	if ((p = strstr(b->info, key)) == 0) return -1.;
+	p += 4;
+	for (i = 0; i < 4; ++i) {
+		d[i] = strtol(p, &p, 10);
+		if (errno == EINVAL || errno == ERANGE) return -2.;
+		++p;
+	}
+	kt_fisher_exact(d[0], d[1], d[2], d[3], &left, &right, &two);
+	return two;
+}
+
+static void rm_info(int n_smpl, bcf1_t *b, const char *key)
+{
+	char *p, *q;
+	if ((p = strstr(b->info, key)) == 0) return;
+	for (q = p; *q && *q != ';'; ++q);
+	if (p > b->info && *(p-1) == ';') --p;
+	memmove(p, q, b->l_str - (q - b->str));
+	b->l_str -= q - p;
+	bcf_sync(n_smpl, b);
+}
+
+static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
 {
 	kstring_t s;
-	int x, is_var = (pr->p_ref < .5);
-	double r = is_var? pr->p_ref : 1. - pr->p_ref;
+	int d[4], x, is_var = (pr->p_ref < pref);
+	double p_hwe, p_dp, p_ed, r = is_var? pr->p_ref : 1. - pr->p_ref;
+
+	p_hwe = test_hwe(pr->g);
+	p_ed = test_fisher(b, "ED4=", d);
+	p_dp = test_fisher(b, "DP4=", d);
+	rm_info(n_smpl, b, "ED4=");
+
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
 	if (is_var) {
@@ -69,14 +122,20 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	}
 	kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
-	if (b->info[0]) kputc(';', &s);
-	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf;HWE=%.3lf,%.3lf,%.3lf", 1.-pr->f_em, 1.-pr->f_exp, pr->g[0], pr->g[1], pr->g[2]);
+	if (p_dp >= 0. && d[2] + d[3] > 0) { // has at least one non-reference base
+		if (b->info[0]) kputc(';', &s);
+		ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
+	}
+	if (p_hwe <= .2) ksprintf(&s, ";HWE=%.3lf", p_hwe);
+	if (p_dp >= 0. && p_dp <= .2) ksprintf(&s, ";TDP=%.3lf", p_dp);
+	if (p_ed >= 0. && p_ed <= .2) ksprintf(&s, ";TED=%.3lf", p_ed);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
 	b->m_str = s.m; b->l_str = s.l; b->str = s.s;
 	x = (int)(r < 1e-100? 99 : -3.434 * log(r) + .499);
 	b->qual = x > 99? 99 : x;
+	bcf_sync(n_smpl, b);
 	return is_var;
 }
 
@@ -94,8 +153,8 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = -1; vc.theta = 1e-3;
-	while ((c = getopt(argc, argv, "l:cGvLbP:t:")) >= 0) {
+	vc.prior_type = -1; vc.theta = 1e-3; vc.pref = 0.9;
+	while ((c = getopt(argc, argv, "l:cGvLbP:t:p:")) >= 0) {
 		switch (c) {
 		case 'l': vc.fn_list = strdup(optarg); break;
 		case 'G': vc.flag |= VC_NO_GENO; break;
@@ -104,6 +163,7 @@ int bcfview(int argc, char *argv[])
 		case 'c': vc.flag |= VC_CALL; break;
 		case 'v': vc.flag |= VC_VARONLY; break;
 		case 't': vc.theta = atof(optarg); break;
+		case 'p': vc.pref = atof(optarg); break;
 		case 'P':
 			if (strcmp(optarg, "full") == 0) vc.prior_type = MC_PTYPE_FULL;
 			else if (strcmp(optarg, "cond2") == 0) vc.prior_type = MC_PTYPE_COND2;
@@ -155,12 +215,10 @@ int bcfview(int argc, char *argv[])
 		}
 		if (vc.flag & VC_CALL) {
 			bcf_p1rst_t pr;
-			int is_var;
 			bcf_p1_cal(b, p1, &pr);
-			is_var = update_bcf1(b, p1, &pr, vc.flag);
-			bcf_sync(h->n_smpl, b);
 			if ((n_processed + 1) % 50000 == 0) bcf_p1_dump_afs(p1);
-			if ((vc.flag & VC_VARONLY) && !is_var) continue;
+			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
+			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
 		if (vc.flag & VC_BCF) bcf_write(bout, h, b);
 		else {

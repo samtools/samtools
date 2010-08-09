@@ -56,6 +56,13 @@ double kf_erfc(double x)
  * Formulas are taken from Wiki, with additional input from Numerical
  * Recipes in C (for modified Lentz's algorithm) and AS245
  * (http://lib.stat.cmu.edu/apstat/245).
+ *
+ * A good online calculator is available at:
+ *
+ *   http://www.danielsoper.com/statcalc/calc23.aspx
+ *
+ * It calculates upper incomplete gamma function, which equals
+ * kf_gammap(s,z)*tgamma(s).
  */
 
 #define KF_GAMMA_EPS 1e-14
