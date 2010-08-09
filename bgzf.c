@@ -177,7 +177,7 @@ BGZF*
 bgzf_open(const char* __restrict path, const char* __restrict mode)
 {
     BGZF* fp = NULL;
-    if (mode[0] == 'r' || mode[0] == 'R') { /* The reading mode is preferred. */
+    if (strchr(mode, 'r') || strchr(mode, 'R')) { /* The reading mode is preferred. */
 #ifdef _USE_KNETFILE
 		knetFile *file = knet_open(path, mode);
 		if (file == 0) return 0;
@@ -194,14 +194,14 @@ bgzf_open(const char* __restrict path, const char* __restrict mode)
 		if (fd == -1) return 0;
         fp = open_read(fd);
 #endif
-    } else if (mode[0] == 'w' || mode[0] == 'W') {
+    } else if (strchr(mode, 'w') || strchr(mode, 'W')) {
 		int fd, oflag = O_WRONLY | O_CREAT | O_TRUNC;
 #ifdef _WIN32
 		oflag |= O_BINARY;
 #endif
 		fd = open(path, oflag, 0666);
 		if (fd == -1) return 0;
-        fp = open_write(fd, strstr(mode, "u")? 1 : 0);
+        fp = open_write(fd, strchr(mode, 'u')? 1 : 0);
     }
     if (fp != NULL) fp->owned_file = 1;
     return fp;

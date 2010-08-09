@@ -36,7 +36,7 @@ char *kstrtok(const char *str, const char *sep, ks_tokaux_t *aux)
 	if (str) aux->p = str - 1, aux->tab[0] &= ~1ull;
 	else if (aux->tab[0]&1) return 0;
 	for (p = start = aux->p + 1; *p; ++p)
-		if (aux->tab[*p/64]>>(*p%64)) break;
+		if (aux->tab[*p/64]>>(*p%64)&1) break;
 	aux->p = p; // end of token
 	if (*p == 0) aux->tab[0] |= 1; // no more tokens
 	return (char*)start;

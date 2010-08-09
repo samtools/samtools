@@ -4,7 +4,6 @@
 
 int bcfview(int argc, char *argv[]);
 int bcf_main_index(int argc, char *argv[]);
-int vcf_test(int argc, char *argv[]);
 
 int main(int argc, char *argv[])
 {
@@ -18,7 +17,6 @@ int main(int argc, char *argv[])
 	}
 	if (strcmp(argv[1], "view") == 0) return bcfview(argc-1, argv+1);
 	if (strcmp(argv[1], "index") == 0) return bcf_main_index(argc-1, argv+1);
-	if (strcmp(argv[1], "test") == 0) return vcf_test(argc-1, argv+1);
 	else {
 		fprintf(stderr, "[main] Unrecognized command.\n");
 		return 1;

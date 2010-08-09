@@ -15,9 +15,11 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define VC_NO_PL   1
 #define VC_NO_GENO 2
-#define VC_BCF     4
+#define VC_BCFOUT  4
 #define VC_CALL    8
 #define VC_VARONLY 16
+#define VC_VCFIN   32
+#define VC_UNCOMP  64
 
 typedef struct {
 	int flag, prior_type;
@@ -149,19 +151,22 @@ int bcfview(int argc, char *argv[])
 	bcf_p1aux_t *p1 = 0;
 	bcf_hdr_t *h;
 	int tid, begin, end;
+	char moder[4], modew[4];
 	khash_t(set64) *hash = 0;
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = -1; vc.theta = 1e-3; vc.pref = 0.9;
-	while ((c = getopt(argc, argv, "l:cGvLbP:t:p:")) >= 0) {
+	while ((c = getopt(argc, argv, "l:cGvLbSuP:t:p:")) >= 0) {
 		switch (c) {
 		case 'l': vc.fn_list = strdup(optarg); break;
 		case 'G': vc.flag |= VC_NO_GENO; break;
 		case 'L': vc.flag |= VC_NO_PL; break;
-		case 'b': vc.flag |= VC_BCF; break;
+		case 'b': vc.flag |= VC_BCFOUT; break;
+		case 'S': vc.flag |= VC_VCFIN; break;
 		case 'c': vc.flag |= VC_CALL; break;
 		case 'v': vc.flag |= VC_VARONLY; break;
+		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'P':
@@ -176,6 +181,8 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "Usage:   bcftools view [options] <in.bcf> [reg]\n\n");
 		fprintf(stderr, "Options: -c        SNP calling\n");
 		fprintf(stderr, "         -b        output BCF instead of VCF\n");
+		fprintf(stderr, "         -u        uncompressed BCF output\n");
+		fprintf(stderr, "         -S        input is VCF\n");
 		fprintf(stderr, "         -G        suppress all individual genotype information\n");
 		fprintf(stderr, "         -L        discard the PL genotype field\n");
 		fprintf(stderr, "         -v        output potential variant sites only\n");
@@ -188,18 +195,21 @@ int bcfview(int argc, char *argv[])
 	}
 
 	b = calloc(1, sizeof(bcf1_t));
-	bp = bcf_open(argv[optind], "r");
-	h = bcf_hdr_read(bp);
-	if (vc.flag & VC_BCF) {
-		bout = bcf_open("-", "w");
-		bcf_hdr_write(bout, h);
-	}
+	strcpy(moder, "r");
+	if (!(vc.flag & VC_VCFIN)) strcat(moder, "b");
+	strcpy(modew, "w");
+	if (vc.flag & VC_BCFOUT) strcat(modew, "b");
+	if (vc.flag & VC_UNCOMP) strcat(modew, "u");
+	bp = vcf_open(argv[optind], moder);
+	h = vcf_hdr_read(bp);
+	bout = vcf_open("-", modew);
+	vcf_hdr_write(bout, h);
 	if (vc.flag & VC_CALL) {
 		p1 = bcf_p1_init(h->n_smpl);
 		bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
 	}
 	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, h);
-	if (optind + 1 < argc) {
+	if (optind + 1 < argc && !(vc.flag&VC_VCFIN)) {
 		void *str2id = bcf_build_refhash(h);
 		if (bcf_parse_region(str2id, argv[optind+1], &tid, &begin, &end) >= 0) {
 			bcf_idx_t *idx;
@@ -212,7 +222,7 @@ int bcfview(int argc, char *argv[])
 			}
 		}
 	}
-	while (bcf_read(bp, h, b) > 0) {
+	while (vcf_read(bp, h, b) > 0) {
 		if (hash) {
 			uint64_t x = (uint64_t)b->tid<<32 | b->pos;
 			khint_t k = kh_get(set64, hash, x);
@@ -231,23 +241,17 @@ int bcfview(int argc, char *argv[])
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
 			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
-		if (vc.flag & VC_BCF) bcf_write(bout, h, b);
-		else {
-			char *vcf;
-			if (vc.flag & VC_NO_GENO) {
-				b->n_gi = 0;
-				b->fmt[0] = '\0';
-			}
-			vcf = bcf_fmt(h, b);
-			puts(vcf);
-			free(vcf);
+		if (vc.flag & VC_NO_GENO) {
+			b->n_gi = 0;
+			b->fmt[0] = '\0';
 		}
+		vcf_write(bout, h, b);
 		++n_processed;
 	}
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);
 	bcf_hdr_destroy(h);
-	bcf_close(bp); bcf_close(bout);
 	bcf_destroy(b);
+	vcf_close(bp); vcf_close(bout);
 	if (hash) kh_destroy(set64, hash);
 	if (vc.fn_list) free(vc.fn_list);
 	if (p1) bcf_p1_destroy(p1);

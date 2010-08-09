@@ -204,41 +204,52 @@ static inline void fmt_str(const char *p, kstring_t *s)
 	else kputs(p, s);
 }
 
-char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b)
+void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 {
-	kstring_t s;
 	int i, j, x;
-	memset(&s, 0, sizeof(kstring_t));
-	kputs(h->ns[b->tid], &s); kputc('\t', &s);
-	kputw(b->pos + 1, &s); kputc('\t', &s);
-	fmt_str(b->str, &s); kputc('\t', &s);
-	fmt_str(b->ref, &s); kputc('\t', &s);
-	fmt_str(b->alt, &s); kputc('\t', &s);
-	kputw(b->qual, &s); kputc('\t', &s);
-	fmt_str(b->flt, &s); kputc('\t', &s);
-	fmt_str(b->info, &s);
+	s->l = 0;
+	kputs(h->ns[b->tid], s); kputc('\t', s);
+	kputw(b->pos + 1, s); kputc('\t', s);
+	fmt_str(b->str, s); kputc('\t', s);
+	fmt_str(b->ref, s); kputc('\t', s);
+	fmt_str(b->alt, s); kputc('\t', s);
+	kputw(b->qual, s); kputc('\t', s);
+	fmt_str(b->flt, s); kputc('\t', s);
+	fmt_str(b->info, s);
 	if (b->fmt[0]) {
-		kputc('\t', &s);
-		fmt_str(b->fmt, &s);
+		kputc('\t', s);
+		fmt_str(b->fmt, s);
 	}
 	x = b->n_alleles * (b->n_alleles + 1) / 2;
 	for (j = 0; j < h->n_smpl; ++j) {
-		kputc('\t', &s);
+		kputc('\t', s);
 		for (i = 0; i < b->n_gi; ++i) {
-			if (i) kputc(':', &s);
+			if (i) kputc(':', s);
 			if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
 				uint8_t *d = (uint8_t*)b->gi[i].data + j * x;
 				int k;
 				for (k = 0; k < x; ++k) {
-					if (k > 0) kputc(',', &s);
-					kputw(d[k], &s);
+					if (k > 0) kputc(',', s);
+					kputw(d[k], s);
 				}
 			} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
-				kputw(((uint16_t*)b->gi[i].data)[j], &s);
+				kputw(((uint16_t*)b->gi[i].data)[j], s);
 			} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
-				kputw(((uint8_t*)b->gi[i].data)[j], &s);
+				kputw(((uint8_t*)b->gi[i].data)[j], s);
+			} else if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
+				int y = ((uint8_t*)b->gi[i].data)[j];
+				kputc('0' + (y>>3&7), s);
+				kputc("/|"[y>>6&1], s);
+				kputc('0' + (y&7), s);
 			}
 		}
 	}
+}
+
+char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b)
+{
+	kstring_t s;
+	s.l = s.m = 0; s.s = 0;
+	bcf_fmt_core(h, b, &s);
 	return s.s;
 }

@@ -22,7 +22,7 @@ bcf_hdr_t *vcf_hdr_read(bcf_t *bp)
 	int dret;
 	vcf_t *v;
 	bcf_hdr_t *h;
-	if (!bp->is_vcf) return 0;
+	if (!bp->is_vcf) return bcf_hdr_read(bp);
 	h = calloc(1, sizeof(bcf_hdr_t));
 	v = (vcf_t*)bp->v;
 	v->line.l = 0;
@@ -35,15 +35,12 @@ bcf_hdr_t *vcf_hdr_read(bcf_t *bp)
 			kputsn(v->line.s, v->line.l, &meta); kputc('\n', &meta);
 		} else if (v->line.s[0] == '#') {
 			int k;
-			char *p, *q, *r;
-			for (q = v->line.s, p = q + 1, k = 0; *p; ++p) {
-				if (*p == '\t' || *(p+1) == 0) {
-					r = *(p+1) == 0? p+1 : p;
-					if (k >= 9) {
-						kputsn(q, r - q, &smpl);
-						kputc('\0', &smpl);
-					}
-					q = p + 1; ++k;
+			ks_tokaux_t aux;
+			char *p;
+			for (p = kstrtok(v->line.s, "\t\n", &aux), k = 0; p; p = kstrtok(0, 0, &aux), ++k) {
+				if (k >= 9) {
+					kputsn(p, aux.p - p, &smpl);
+					kputc('\0', &smpl);
 				}
 			}
 			break;
@@ -61,25 +58,25 @@ bcf_t *vcf_open(const char *fn, const char *mode)
 {
 	bcf_t *bp;
 	vcf_t *v;
+	if (strchr(mode, 'b')) return bcf_open(fn, mode);
 	bp = calloc(1, sizeof(bcf_t));
 	v = calloc(1, sizeof(vcf_t));
 	bp->is_vcf = 1;
 	bp->v = v;
+	v->refhash = bcf_str2id_init();
 	if (strchr(mode, 'r')) {
 		v->fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
 		v->ks = ks_init(v->fp);
 	} else if (strchr(mode, 'w'))
-		v->fpout = strcmp(fn, "-")? fopen(fn, "w") : fdopen(fileno(stdout), "w");
+		v->fpout = strcmp(fn, "-")? fopen(fn, "w") : stdout;
 	return bp;
 }
-
-void bcf_hdr_clear(bcf_hdr_t *b);
 
 int vcf_close(bcf_t *bp)
 {
 	vcf_t *v;
 	if (bp == 0) return -1;
-	if (bp->v == 0) return -1;
+	if (!bp->is_vcf) return bcf_close(bp);
 	v = (vcf_t*)bp->v;
 	if (v->fp) {
 		ks_destroy(v->ks);
@@ -87,6 +84,7 @@ int vcf_close(bcf_t *bp)
 	}
 	if (v->fpout) fclose(v->fpout);
 	free(v->line.s);
+	bcf_str2id_destroy(v->refhash);
 	free(v);
 	free(bp);
 	return 0;
@@ -96,52 +94,73 @@ int vcf_hdr_write(bcf_t *bp, const bcf_hdr_t *h)
 {
 	vcf_t *v = (vcf_t*)bp->v;
 	int i;
-	if (v == 0 || v->fpout == 0) return -1;
-	fwrite(h->txt, 1, h->l_txt, v->fpout);
-	fprintf(v->fpout, "#CHROM\tPOS\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
+	if (!bp->is_vcf) return bcf_hdr_write(bp, h);
+	if (h->l_txt > 0) fwrite(h->txt, 1, h->l_txt - 1, v->fpout);
+	fprintf(v->fpout, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
 	for (i = 0; i < h->n_smpl; ++i)
 		fprintf(v->fpout, "\t%s", h->sns[i]);
 	fputc('\n', v->fpout);
 	return 0;
 }
 
-int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
+int vcf_write(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 {
-	int dret, k;
 	vcf_t *v = (vcf_t*)bp->v;
-	char *p, *q, *r;
-	kstring_t str;
-	v->line.l = 0;
-	str.l = 0; str.m = b->m_str; str.s = b->str;
-	if (ks_getuntil(v->ks, '\n', &v->line, &dret) < 0) return -1;
-	for (q = v->line.s, p = q + 1, k = 0; *p; ++p) {
-		if (*p == '\t' || *(p+1) == '\0') {
-			++k;
-			r = *(p+1)? p : p + 1;
-			*r = '\0';
-			if (k == 1) { // ref
-			} else if (k == 2) {
-				b->pos = atoi(q);
-			} else if (k == 3 || k == 4 || k == 5 || k == 7 || k == 8 || k == 9) {
-				kputsn(q, r - q + 1, &str);
-				if (k == 9) bcf_sync(h->n_smpl, b);
-			} else if (k == 6) {
-				b->qual = (q[0] >= '0' && q[0] <= '9')? atoi(q) : 0;
-			}
-			q = p + 1;
-		}
-	}
+	extern void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s);
+	if (!bp->is_vcf) return bcf_write(bp, h, b);
+	bcf_fmt_core(h, b, &v->line);
+	fwrite(v->line.s, 1, v->line.l, v->fpout);
+	fputc('\n', v->fpout);
 	return v->line.l + 1;
 }
 
-int vcf_test(int argc, char *argv[])
+int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 {
-	bcf_t *bp, *bpout;
-	bcf_hdr_t *h;
-	bp = vcf_open(argv[1], "r");
-	bpout = vcf_open("-", "w");
-	h = vcf_hdr_read(bpout);
-	vcf_hdr_write(bpout, h);
-	vcf_close(bp);
-	return 0;
+	int dret, k, i, sync = 0;
+	vcf_t *v = (vcf_t*)bp->v;
+	char *p, *q;
+	kstring_t str, rn;
+	ks_tokaux_t aux, a2;
+	if (!bp->is_vcf) return bcf_read(bp, h, b);
+	v->line.l = 0;
+	str.l = 0; str.m = b->m_str; str.s = b->str;
+	rn.l = rn.m = h->l_nm; rn.s = h->name;
+	if (ks_getuntil(v->ks, '\n', &v->line, &dret) < 0) return -1;
+	for (p = kstrtok(v->line.s, "\t", &aux), k = 0; p; p = kstrtok(0, 0, &aux), ++k) {
+		*(char*)aux.p = 0;
+		if (k == 0) { // ref
+			int tid = bcf_str2id(v->refhash, p);
+			if (tid < 0) {
+				tid = bcf_str2id_add(v->refhash, p);
+				kputs(p, &rn);
+				sync = 1;
+			}
+			b->tid = tid;
+		} else if (k == 1) { // pos
+			b->pos = atoi(p);
+		} else if (k == 5) { // qual
+			b->qual = (p[0] >= '0' && p[0] <= '9')? atoi(p) : 0;
+		} else if (k <= 8) { // variable length strings
+			kputs(p, &str); kputc('\0', &str);
+			b->l_str = str.l; b->m_str = str.m; b->str = str.s;
+			if (k == 8) bcf_sync(h->n_smpl, b);
+		} else {
+			for (q = kstrtok(p, ":", &a2), i = 0; q && i < b->n_gi; q = kstrtok(0, 0, &a2), ++i) {
+				if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
+					((uint8_t*)b->gi[i].data)[k-9] = (q[0] - '0')<<3 | (q[2] - '0') | (q[1] == '/'? 0 : 1) << 6;
+				} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
+					int x = strtol(q, &q, 10);
+					if (x > 255) x = 255;
+					((uint8_t*)b->gi[i].data)[k-9] = x;
+				} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
+					int x = strtol(q, &q, 10);
+					if (x > 0xffff) x = 0xffff;
+					((uint16_t*)b->gi[i].data)[k-9] = x;
+				}
+			}
+		}
+	}
+	h->l_nm = rn.l; h->name = rn.s;
+	if (sync) bcf_hdr_sync(h);
+	return v->line.l + 1;
 }

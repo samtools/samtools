@@ -58,11 +58,18 @@ extern "C" {
 	int bcf_destroy(bcf1_t *b);
 	char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b);
 
+	bcf_t *vcf_open(const char *fn, const char *mode);
 	int vcf_close(bcf_t *bp);
+	bcf_hdr_t *vcf_hdr_read(bcf_t *bp);
+	int vcf_hdr_write(bcf_t *bp, const bcf_hdr_t *h);
+	int vcf_write(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b);
+	int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b);
 
 	void *bcf_build_refhash(bcf_hdr_t *h);
 	void bcf_str2id_destroy(void *_hash);
+	int bcf_str2id_add(void *_hash, const char *str);
 	int bcf_str2id(void *_hash, const char *str);
+	void *bcf_str2id_init();
 
 	int bcf_idx_build(const char *fn);
 	uint64_t bcf_idx_query(const bcf_idx_t *idx, int tid, int beg, int end);
