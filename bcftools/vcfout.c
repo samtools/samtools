@@ -126,7 +126,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 		if (b->info[0]) kputc(';', &s);
 		ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
 	}
-	if (p_hwe <= .2) ksprintf(&s, ";HWE=%.3lf", p_hwe);
+	if (p_hwe <= .2) ksprintf(&s, ";GC=%.2lf,%.2lf,%.2lf;HWE=%.3lf", pr->g[2], pr->g[1], pr->g[0], p_hwe);
 	if (p_dp >= 0. && p_dp <= .2) ksprintf(&s, ";TDP=%.3lf", p_dp);
 	if (p_ed >= 0. && p_ed <= .2) ksprintf(&s, ";TED=%.3lf", p_ed);
 	kputc('\0', &s);
@@ -172,7 +172,17 @@ int bcfview(int argc, char *argv[])
 		}
 	}
 	if (argc == optind) {
-		fprintf(stderr, "Usage: bcftools view [-cGPb] [-l list] <in.bcf> [reg]\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Usage:   bcftools view [options] <in.bcf> [reg]\n\n");
+		fprintf(stderr, "Options: -c        SNP calling\n");
+		fprintf(stderr, "         -G        suppress all individual genotype information\n");
+		fprintf(stderr, "         -L        discard the PL genotype field\n");
+		fprintf(stderr, "         -v        output potential variant sites only\n");
+		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
+		fprintf(stderr, "         -t FLOAT  scaled mutation rate [%.4lg]\n", vc.theta);
+		fprintf(stderr, "         -p FLOAT  variant if P(ref|D)<FLOAT [%.3lg]\n", vc.pref);
+		fprintf(stderr, "         -P STR    type of prior: full, cond2, flat [full]\n");
+		fprintf(stderr, "\n");
 		return 1;
 	}
 
