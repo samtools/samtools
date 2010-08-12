@@ -88,7 +88,7 @@ static double test_fisher(bcf1_t *b, const char *key, int d[4], int is_single)
 	p += 4;
 	for (i = 0; i < 4; ++i) {
 		d[i] = strtol(p, &p, 10);
-		if (errno == EINVAL || errno == ERANGE) return -2.;
+		if (d[i] == 0 && (errno == EINVAL || errno == ERANGE)) return -2.;
 		++p;
 	}
 	kt_fisher_exact(d[0], d[1], d[2], d[3], &left, &right, &two);
