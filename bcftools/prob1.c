@@ -148,20 +148,22 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 
 static void mc_cal_y(bcf_p1aux_t *ma)
 {
-	double *z[2], *tmp, *pdg, last_min, last_max;
-	int k, j;
+	double *z[2], *tmp, *pdg;
+	int k, j, last_min, last_max;
 	z[0] = ma->z;
 	z[1] = ma->zswap;
 	pdg = ma->pdg;
-	z[0][0] = 1.; z[0][1] = z[0][2] = 0.;
+	memset(z[0], 0, sizeof(double) * (ma->M + 1));
+	memset(z[1], 0, sizeof(double) * (ma->M + 1));
+	z[0][0] = 1.;
 	last_min = last_max = 0;
 	for (j = 0; j < ma->n; ++j) {
 		int _min = last_min, _max = last_max;
 		double p[3], sum;
 		pdg = ma->pdg + j * 3;
 		p[0] = pdg[0]; p[1] = 2. * pdg[1]; p[2] = pdg[2];
-//		for (; _min < _max && z[0][_min] < TINY; ++_min) z[1][_min] = 0.;
-//		for (; _max > _min && z[0][_max] < TINY; --_max) z[1][_max] = 0.;
+		for (; _min < _max && z[0][_min] < TINY; ++_min) z[0][_min] = z[1][_min] = 0.;
+		for (; _max > _min && z[0][_max] < TINY; --_max) z[0][_max] = z[1][_max] = 0.;
 		_max += 2;
 		if (_min == 0) 
 			k = 0, z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k];
@@ -173,6 +175,8 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 				+ k*(k-1)* p[2] * z[0][k-2];
 		for (k = _min, sum = 0.; k <= _max; ++k) sum += z[1][k];
 		for (k = _min; k <= _max; ++k) z[1][k] /= sum;
+		if (_min >= 1) z[1][_min-1] = 0.;
+		if (_min >= 2) z[1][_min-2] = 0.;
 		if (j < ma->n - 1) z[1][_max+1] = z[1][_max+2] = 0.;
 		tmp = z[0]; z[0] = z[1]; z[1] = tmp;
 		last_min = _min; last_max = _max;

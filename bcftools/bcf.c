@@ -223,6 +223,7 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 		fmt_str(b->fmt, s);
 	}
 	x = b->n_alleles * (b->n_alleles + 1) / 2;
+	if (b->n_gi == 0) return;
 	for (j = 0; j < h->n_smpl; ++j) {
 		kputc('\t', s);
 		for (i = 0; i < b->n_gi; ++i) {
