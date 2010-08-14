@@ -30,7 +30,7 @@ unsigned char seq_nt4_table[256] = {
 struct __bcf_p1aux_t {
 	int n, M;
 	double *q2p, *pdg; // pdg -> P(D|g)
-	double *phi, *CMk; // CMk=\binom{M}{k}
+	double *phi;
 	double *z, *zswap; // aux for afs
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
 	const uint8_t *PL; // point to PL
@@ -63,15 +63,12 @@ bcf_p1aux_t *bcf_p1_init(int n) // FIXME: assuming diploid
 	ma->q2p = calloc(256, sizeof(double));
 	ma->pdg = calloc(3 * ma->n, sizeof(double));
 	ma->phi = calloc(ma->M + 1, sizeof(double));
-	ma->CMk = calloc(ma->M + 1, sizeof(double));
 	ma->z = calloc(2 * ma->n + 1, sizeof(double));
 	ma->zswap = calloc(2 * ma->n + 1, sizeof(double));
 	ma->afs = calloc(2 * ma->n + 1, sizeof(double));
 	ma->afs1 = calloc(2 * ma->n + 1, sizeof(double));
 	for (i = 0; i < 256; ++i)
 		ma->q2p[i] = pow(10., -i / 10.);
-	for (i = 0; i <= ma->M; ++i)
-		ma->CMk[i] = exp(lgamma(ma->M + 1) - lgamma(i + 1) - lgamma(ma->M - i + 1));
 	bcf_p1_init_prior(ma, MC_PTYPE_FULL, 1e-3); // the simplest prior
 	return ma;
 }
@@ -80,7 +77,7 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 {
 	if (ma) {
 		free(ma->q2p); free(ma->pdg);
-		free(ma->phi); free(ma->CMk);
+		free(ma->phi);
 		free(ma->z); free(ma->zswap);
 		free(ma->afs); free(ma->afs1);
 		free(ma);
@@ -147,25 +144,38 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 	return q<<2|max_i;
 }
 
-static void mc_cal_z(bcf_p1aux_t *ma)
+#define TINY 1e-20
+
+static void mc_cal_y(bcf_p1aux_t *ma)
 {
-	double *z[2], *tmp, *pdg;
-	int i, j;
+	double *z[2], *tmp, *pdg, last_min, last_max;
+	int k, j;
 	z[0] = ma->z;
 	z[1] = ma->zswap;
 	pdg = ma->pdg;
 	z[0][0] = 1.; z[0][1] = z[0][2] = 0.;
+	last_min = last_max = 0;
 	for (j = 0; j < ma->n; ++j) {
-		int max = (j + 1) * 2;
-		double p[3];
+		int _min = last_min, _max = last_max;
+		double p[3], sum;
 		pdg = ma->pdg + j * 3;
 		p[0] = pdg[0]; p[1] = 2. * pdg[1]; p[2] = pdg[2];
-		z[1][0] = p[0] * z[0][0];
-		z[1][1] = p[0] * z[0][1] + p[1] * z[0][0];
-		for (i = 2; i <= max; ++i)
-			z[1][i] = p[0] * z[0][i] + p[1] * z[0][i-1] + p[2] * z[0][i-2];
-		if (j < ma->n - 1) z[1][max+1] = z[1][max+2] = 0.;
+//		for (; _min < _max && z[0][_min] < TINY; ++_min) z[1][_min] = 0.;
+//		for (; _max > _min && z[0][_max] < TINY; --_max) z[1][_max] = 0.;
+		_max += 2;
+		if (_min == 0) 
+			k = 0, z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k];
+		if (_min <= 1)
+			k = 1, z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k] + k*(2*j+2-k) * p[1] * z[0][k-1];
+		for (k = _min < 2? 2 : _min; k <= _max; ++k)
+			z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k]
+				+ k*(2*j+2-k) * p[1] * z[0][k-1]
+				+ k*(k-1)* p[2] * z[0][k-2];
+		for (k = _min, sum = 0.; k <= _max; ++k) sum += z[1][k];
+		for (k = _min; k <= _max; ++k) z[1][k] /= sum;
+		if (j < ma->n - 1) z[1][_max+1] = z[1][_max+2] = 0.;
 		tmp = z[0]; z[0] = z[1]; z[1] = tmp;
+		last_min = _min; last_max = _max;
 	}
 	if (z[0] != ma->z) memcpy(ma->z, z[0], sizeof(double) * (ma->M + 1));
 }
@@ -175,11 +185,11 @@ static double mc_cal_afs(bcf_p1aux_t *ma)
 	int k;
 	long double sum = 0.;
 	memset(ma->afs1, 0, sizeof(double) * (ma->M + 1));
-	mc_cal_z(ma);
+	mc_cal_y(ma);
 	for (k = 0, sum = 0.; k <= ma->M; ++k)
-		sum += (long double)ma->phi[k] * ma->z[k] / ma->CMk[k];
+		sum += (long double)ma->phi[k] * ma->z[k];
 	for (k = 0; k <= ma->M; ++k) {
-		ma->afs1[k] = ma->phi[k] * ma->z[k] / ma->CMk[k] / sum;
+		ma->afs1[k] = ma->phi[k] * ma->z[k] / sum;
 		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return -1.;
 	}
 	for (k = 0, sum = 0.; k <= ma->M; ++k) {
@@ -234,10 +244,10 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	rst->p_ref = ma->afs1[ma->M];
 	// calculate f_flat and f_em
 	for (k = 0, sum = 0.; k <= ma->M; ++k)
-		sum += (long double)ma->z[k] / ma->CMk[k];
+		sum += (long double)ma->z[k];
 	rst->f_flat = 0.;
 	for (k = 0; k <= ma->M; ++k) {
-		double p = ma->z[k] / ma->CMk[k] / sum;
+		double p = ma->z[k] / sum;
 		rst->f_flat += k * p;
 	}
 	rst->f_flat /= ma->M;
