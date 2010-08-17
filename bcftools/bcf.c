@@ -146,13 +146,12 @@ int bcf_sync(int n_smpl, bcf1_t *b)
 
 int bcf_write(bcf_t *bp, const bcf_hdr_t *h, const bcf1_t *b)
 {
-	uint32_t x;
 	int i, l = 0;
 	if (b == 0) return -1;
 	bgzf_write(bp->fp, &b->tid, 4);
 	bgzf_write(bp->fp, &b->pos, 4);
-	x = b->qual<<24 | b->l_str;
-	bgzf_write(bp->fp, &x, 4);
+	bgzf_write(bp->fp, &b->qual, 4);
+	bgzf_write(bp->fp, &b->l_str, 4);
 	bgzf_write(bp->fp, b->str, b->l_str);
 	l = 12 + b->l_str;
 	for (i = 0; i < b->n_gi; ++i) {
@@ -165,12 +164,11 @@ int bcf_write(bcf_t *bp, const bcf_hdr_t *h, const bcf1_t *b)
 int bcf_read(bcf_t *bp, const bcf_hdr_t *h, bcf1_t *b)
 {
 	int i, l = 0;
-	uint32_t x;
 	if (b == 0) return -1;
 	if (bgzf_read(bp->fp, &b->tid, 4) == 0) return -1;
 	bgzf_read(bp->fp, &b->pos, 4);
-	bgzf_read(bp->fp, &x, 4);
-	b->qual = x >> 24; b->l_str = x << 8 >> 8;
+	bgzf_read(bp->fp, &b->qual, 4);
+	bgzf_read(bp->fp, &b->l_str, 4);
 	if (b->l_str > b->m_str) {
 		b->m_str = b->l_str;
 		kroundup32(b->m_str);

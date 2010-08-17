@@ -24,7 +24,8 @@
 \multicolumn{5}{|c|}{\it \color{gray}{List of records until the end of the file}}\\\cline{2-5}
 & {\tt seq\_id} & Reference sequence ID & {\tt int32\_t} & \\\cline{2-5}
 & {\tt pos} & Position & {\tt int32\_t} & \\\cline{2-5}
-& {\tt qual\_slen} & {\tt varQual\char60\char60 24 | slen} & {\tt uint32\_t} & \\\cline{2-5}
+& {\tt qual} & Variant quality & {\tt float} & \\\cline{2-5}
+& {\tt l\_str} & Length of str & {\tt int32\_t} & \\\cline{2-5}
 & {\tt str} & {\tt ID+REF+ALT+FILTER+INFO+FORMAT}, {\tt NULL} padded & {\tt char[slen]} &\\\cline{2-5}
 & \multicolumn{4}{c|}{Blocks of data; \#blocks and formats defined by {\tt FORMAT} (table below)}\\
 \hline

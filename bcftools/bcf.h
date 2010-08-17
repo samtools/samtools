@@ -14,8 +14,8 @@ typedef struct {
 
 typedef struct {
 	int32_t tid, pos;
-	uint32_t qual:8, l_str:24;
-	int m_str;
+	int32_t l_str, m_str;
+	float qual;
 	char *str, *ref, *alt, *flt, *info, *fmt; // fmt, ref, alt and info point to str
 	int n_gi, m_gi;
 	bcf_ginfo_t *gi;
