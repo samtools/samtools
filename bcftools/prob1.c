@@ -2,7 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 #include "prob1.h"
+
+#include "kseq.h"
+KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define MC_AVG_ERR 0.007
 #define MC_MAX_EM_ITER 16
@@ -52,6 +56,43 @@ void bcf_p1_init_prior(bcf_p1aux_t *ma, int type, double theta)
 			sum += (ma->phi[i] = theta / (ma->M - i));
 		ma->phi[ma->M] = 1. - sum;
 	}
+}
+
+int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn)
+{
+	gzFile fp;
+	kstring_t s;
+	kstream_t *ks;
+	long double sum;
+	int dret, k;
+	memset(&s, 0, sizeof(kstring_t));
+	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
+	ks = ks_init(fp);
+	memset(ma->phi, 0, sizeof(double) * (ma->M + 1));
+	while (ks_getuntil(ks, '\n', &s, &dret) >= 0) {
+		if (strstr(s.s, "[afs] ") == s.s) {
+			char *p = s.s + 6;
+			for (k = 0; k <= ma->M; ++k) {
+				int x;
+				double y;
+				x = strtol(p, &p, 10);
+				if (x != k && (errno == EINVAL || errno == ERANGE)) return -1;
+				++p;
+				y = strtod(p, &p);
+				if (y == 0. && (errno == EINVAL || errno == ERANGE)) return -1;
+				ma->phi[ma->M - k] += y;
+			}
+		}
+	}
+	ks_destroy(ks);
+	gzclose(fp);
+	free(s.s);
+	for (sum = 0., k = 0; k <= ma->M; ++k) sum += ma->phi[k];
+	fprintf(stderr, "[prior]");
+	for (k = 0; k <= ma->M; ++k) ma->phi[k] /= sum;
+	for (k = 0; k <= ma->M; ++k) fprintf(stderr, " %d:%.3lg", k, ma->phi[ma->M - k]);
+	fputc('\n', stderr);
+	return 0;
 }
 
 bcf_p1aux_t *bcf_p1_init(int n) // FIXME: assuming diploid

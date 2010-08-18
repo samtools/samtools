@@ -23,7 +23,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
 	int flag, prior_type;
-	char *fn_list;
+	char *fn_list, *prior_file;
 	double theta, pref;
 } viewconf_t;
 
@@ -124,10 +124,8 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	}
 	kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
-	if (p_dp >= 0. && d[2] + d[3] > 0) { // has at least one non-reference base
-		if (b->info[0]) kputc(';', &s);
-		ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
-	}
+	if (b->info[0]) kputc(';', &s);
+	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
 	if (p_hwe <= .2) ksprintf(&s, ";GC=%.2lf,%.2lf,%.2lf;HWE=%.3lf", pr->g[2], pr->g[1], pr->g[0], p_hwe);
 	if (p_dp >= 0. && p_dp <= .2) ksprintf(&s, ";TDP=%.3lf", p_dp);
 	if (p_ed >= 0. && p_ed <= .2) ksprintf(&s, ";TED=%.3lf", p_ed);
@@ -173,6 +171,7 @@ int bcfview(int argc, char *argv[])
 			if (strcmp(optarg, "full") == 0) vc.prior_type = MC_PTYPE_FULL;
 			else if (strcmp(optarg, "cond2") == 0) vc.prior_type = MC_PTYPE_COND2;
 			else if (strcmp(optarg, "flat") == 0) vc.prior_type = MC_PTYPE_FLAT;
+			else vc.prior_file = strdup(optarg);
 			break;
 		}
 	}
@@ -206,7 +205,12 @@ int bcfview(int argc, char *argv[])
 	vcf_hdr_write(bout, h);
 	if (vc.flag & VC_CALL) {
 		p1 = bcf_p1_init(h->n_smpl);
-		bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
+		if (vc.prior_file) {
+			if (bcf_p1_read_prior(p1, vc.prior_file) < 0) {
+				fprintf(stderr, "[%s] fail to read the prior AFS.\n", __func__);
+				return 1;
+			}
+		} else bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
 	}
 	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, h);
 	if (optind + 1 < argc && !(vc.flag&VC_VCFIN)) {
@@ -248,6 +252,7 @@ int bcfview(int argc, char *argv[])
 		vcf_write(bout, h, b);
 		++n_processed;
 	}
+	if (vc.prior_file) free(vc.prior_file);
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);
 	bcf_hdr_destroy(h);
 	bcf_destroy(b);
