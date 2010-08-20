@@ -3,6 +3,7 @@
 #include "bam.h"
 #include "bam_maqcns.h"
 #include "ksort.h"
+#include "errmod.h"
 #include "kaln.h"
 KSORT_INIT_GENERIC(uint32_t)
 
@@ -12,12 +13,13 @@ KSORT_INIT_GENERIC(uint32_t)
 typedef struct __bmc_aux_t {
 	int max;
 	uint32_t *info;
+	uint16_t *info16;
+	errmod_t *em;
 } bmc_aux_t;
 
 typedef struct {
 	float esum[4], fsum[4];
 	uint32_t c[4];
-	uint32_t rms_mapQ;
 } glf_call_aux_t;
 
 char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
@@ -41,7 +43,7 @@ static void cal_het(bam_maqcns_t *aa)
 	for (n1 = 0; n1 < 256; ++n1) {
 		for (n2 = 0; n2 < 256; ++n2) {
 			long double sum = 0.0;
-			double lC = aa->is_soap? 0 : lgamma(n1+n2+1) - lgamma(n1+1) - lgamma(n2+1); // \binom{n1+n2}{n1}
+			double lC = aa->errmod == BAM_ERRMOD_SOAP? 0 : lgamma(n1+n2+1) - lgamma(n1+1) - lgamma(n2+1);
 			for (k = 1; k <= aa->n_hap - 1; ++k) {
 				double pk = 1.0 / k / sum_harmo;
 				double log1 = log((double)k/aa->n_hap);
@@ -62,6 +64,7 @@ static void cal_coef(bam_maqcns_t *aa)
 	long double sum_a[257], b[256], q_c[256], tmp[256], fk2[256];
 	double *lC;
 
+	if (aa->errmod == BAM_ERRMOD_MAQ2) return; // no need to do the following
 	// aa->lhet will be allocated and initialized 
 	free(aa->fk); free(aa->coef);
 	aa->coef = 0;
@@ -71,7 +74,7 @@ static void cal_coef(bam_maqcns_t *aa)
 		aa->fk[n] = pow(aa->theta, n) * (1.0 - aa->eta) + aa->eta;
 		fk2[n] = aa->fk[n>>1]; // this is an approximation, assuming reads equally likely come from both strands
 	}
-	if (aa->is_soap) return;
+	if (aa->errmod == BAM_ERRMOD_SOAP) return;
 	aa->coef = (double*)calloc(256*256*64, sizeof(double));
 	lC = (double*)calloc(256 * 256, sizeof(double));
 	for (n = 1; n != 256; ++n)
@@ -116,19 +119,21 @@ bam_maqcns_t *bam_maqcns_init()
 
 void bam_maqcns_prepare(bam_maqcns_t *bm)
 {
+	if (bm->errmod == BAM_ERRMOD_MAQ2) bm->aux->em = errmod_init(1. - bm->theta);
 	cal_coef(bm); cal_het(bm);
 }
 
 void bam_maqcns_destroy(bam_maqcns_t *bm)
 {
 	if (bm == 0) return;
-	free(bm->lhet); free(bm->fk); free(bm->coef); free(bm->aux->info);
+	free(bm->lhet); free(bm->fk); free(bm->coef); free(bm->aux->info); free(bm->aux->info16);
+	if (bm->aux->em) errmod_destroy(bm->aux->em);
 	free(bm->aux); free(bm);
 }
 
 glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam_maqcns_t *bm)
 {
-	glf_call_aux_t *b;
+	glf_call_aux_t *b = 0;
 	int i, j, k, w[8], c, n;
 	glf1_t *g = (glf1_t*)calloc(1, sizeof(glf1_t));
 	float p[16], min_p = 1e30;
@@ -142,28 +147,38 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 		bm->aux->max = _n;
 		kroundup32(bm->aux->max);
 		bm->aux->info = (uint32_t*)realloc(bm->aux->info, 4 * bm->aux->max);
+		bm->aux->info16 = (uint16_t*)realloc(bm->aux->info16, 2 * bm->aux->max);
 	}
-	for (i = n = 0; i < _n; ++i) {
+	for (i = n = 0, rms = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
 		uint32_t q, x = 0, qq;
+		uint16_t y = 0;
 		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue;
 		q = (uint32_t)bam1_qual(p->b)[p->qpos];
 		x |= (uint32_t)bam1_strand(p->b) << 18 | q << 8 | p->b->core.qual;
+		y |= bam1_strand(p->b)<<4;
 		if (p->b->core.qual < q) q = p->b->core.qual;
+		c = p->b->core.qual < bm->cap_mapQ? p->b->core.qual : bm->cap_mapQ;
+		rms += c * c;
 		x |= q << 24;
+		y |= q << 5;
 		qq = bam1_seqi(bam1_seq(p->b), p->qpos);
 		q = bam_nt16_nt4_table[qq? qq : ref_base];
-		if (!p->is_del && q < 4) x |= 1 << 21 | q << 16;
+		if (!p->is_del && q < 4) x |= 1 << 21 | q << 16, y |= q;
+		bm->aux->info16[n] = y;
 		bm->aux->info[n++] = x;
+	}
+	rms = (uint8_t)(sqrt((double)rms / n) + .499);
+	if (bm->errmod == BAM_ERRMOD_MAQ2) {
+		errmod_cal(bm->aux->em, n, 4, bm->aux->info16, p);
+		goto goto_glf;
 	}
 	ks_introsort(uint32_t, n, bm->aux->info);
 	// generate esum and fsum
 	b = (glf_call_aux_t*)calloc(1, sizeof(glf_call_aux_t));
 	for (k = 0; k != 8; ++k) w[k] = 0;
-	rms = 0;
 	for (j = n - 1; j >= 0; --j) { // calculate esum and fsum
 		uint32_t info = bm->aux->info[j];
-		int tmp;
 		if (info>>24 < 4 && (info>>8&0x3f) != 0) info = 4<<24 | (info&0xffffff);
 		k = info>>16&7;
 		if (info>>24 > 0) {
@@ -172,17 +187,14 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 			if (w[k] < 0xff) ++w[k];
 			++b->c[k&3];
 		}
-		tmp = (int)(info&0xff) < bm->cap_mapQ? (int)(info&0xff) : bm->cap_mapQ;
-		rms += tmp * tmp;
 	}
-	b->rms_mapQ = (uint8_t)(sqrt((double)rms / n) + .499);
 	// rescale ->c[]
 	for (j = c = 0; j != 4; ++j) c += b->c[j];
 	if (c > 255) {
 		for (j = 0; j != 4; ++j) b->c[j] = (int)(254.0 * b->c[j] / c + 0.5);
 		for (j = c = 0; j != 4; ++j) c += b->c[j];
 	}
-	if (!bm->is_soap) {
+	if (bm->errmod == BAM_ERRMOD_MAQ) {
 		// generate likelihood
 		for (j = 0; j != 4; ++j) {
 			// homozygous
@@ -234,7 +246,7 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 			if (max1 > max2 && (min_k != max_k || min1 + 1.0 > min2))
 				p[max_k<<2|max_k] = min1 > 1.0? min1 - 1.0 : 0.0;
 		}
-	} else { // apply the SOAP model
+	} else if (bm->errmod == BAM_ERRMOD_SOAP) { // apply the SOAP model
 		// generate likelihood
 		for (j = 0; j != 4; ++j) {
 			float tmp;
@@ -251,8 +263,9 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 		}
 	}
 
+goto_glf:
 	// convert necessary information to glf1_t
-	g->ref_base = ref_base; g->max_mapQ = b->rms_mapQ;
+	g->ref_base = ref_base; g->max_mapQ = rms;
 	g->depth = n > 16777215? 16777215 : n;
 	for (j = 0; j != 4; ++j)
 		for (k = j; k < 4; ++k)

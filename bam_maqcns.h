@@ -3,11 +3,15 @@
 
 #include "glf.h"
 
+#define BAM_ERRMOD_MAQ2 0
+#define BAM_ERRMOD_MAQ  1
+#define BAM_ERRMOD_SOAP 2
+
 struct __bmc_aux_t;
 
 typedef struct {
 	float het_rate, theta;
-	int n_hap, cap_mapQ, is_soap;
+	int n_hap, cap_mapQ, errmod;
 
 	float eta, q_r;
 	double *fk, *coef;

@@ -343,12 +343,12 @@ int bam_pileup(int argc, char *argv[])
     d->max_depth = 0;
 	d->tid = -1; d->mask = BAM_DEF_MASK;
 	d->c = bam_maqcns_init();
-	d->c->is_soap = 1; // change the default model
+	d->c->errmod = BAM_ERRMOD_MAQ2; // change the default model
 	d->ido = bam_maqindel_opt_init();
 	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:d:im:gI:G:vM:S2aR:PA")) >= 0) {
 		switch (c) {
-		case 'a': d->c->is_soap = 1; break;
-		case 'A': d->c->is_soap = 0; break;
+		case 'a': d->c->errmod = BAM_ERRMOD_SOAP; break;
+		case 'A': d->c->errmod = BAM_ERRMOD_MAQ; break;
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
 		case 't': fn_list = strdup(optarg); break;
 		case 'l': fn_pos = strdup(optarg); break;

@@ -250,6 +250,15 @@ typedef struct {
 			if (hh <= k) low = ll;										\
 			if (hh >= k) high = hh - 1;									\
 		}																\
+	}																	\
+	void ks_shuffle_##name(size_t n, type_t a[])						\
+	{																	\
+		int i, j;														\
+		for (i = n; i > 1; --i) {										\
+			type_t tmp;													\
+			j = (int)(drand48() * i);									\
+			tmp = a[j]; a[j] = a[i-1]; a[i-1] = tmp;					\
+		}																\
 	}
 
 #define ks_mergesort(name, n, a, t) ks_mergesort_##name(n, a, t)
@@ -259,6 +268,7 @@ typedef struct {
 #define ks_heapmake(name, n, a) ks_heapmake_##name(n, a)
 #define ks_heapadjust(name, i, n, a) ks_heapadjust_##name(i, n, a)
 #define ks_ksmall(name, n, a, k) ks_ksmall_##name(n, a, k)
+#define ks_shuffle(name, n, a) ks_shuffle_##name(n, a)
 
 #define ks_lt_generic(a, b) ((a) < (b))
 #define ks_lt_str(a, b) (strcmp((a), (b)) < 0)
