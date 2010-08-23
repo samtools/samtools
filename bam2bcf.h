@@ -8,9 +8,9 @@ struct __bcf_callaux_t;
 typedef struct __bcf_callaux_t bcf_callaux_t;
 
 typedef struct {
-	int depth, d[4], ed[4];
+	int depth, d[4], ed[4], qsum[4];
 	uint64_t sum_Q2;
-	float p[25], esum[5];
+	float p[25];
 } bcf_callret1_t;
 
 typedef struct {

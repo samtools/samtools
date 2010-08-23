@@ -3,6 +3,7 @@
 #include "bam.h"
 #include "kstring.h"
 #include "bam2bcf.h"
+#include "errmod.h"
 #include "bcftools/bcf.h"
 
 #define END_DIST_THRES 11
@@ -11,180 +12,108 @@ extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
 #define CALL_ETA 0.03f
 #define CALL_MAX 256
-#define CALL_DEFTHETA 0.85f
+#define CALL_DEFTHETA 0.83f
 
 struct __bcf_callaux_t {
-	int max_info, capQ, min_baseQ;
-	double *fk;
-	uint32_t *info;
+	int max_bases, capQ, min_baseQ;
+	uint16_t *bases;
+	errmod_t *e;
 };
 
 bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 {
 	bcf_callaux_t *bca;
-	int n;
 	if (theta <= 0.) theta = CALL_DEFTHETA;
 	bca = calloc(1, sizeof(bcf_callaux_t));
 	bca->capQ = 60;
 	bca->min_baseQ = min_baseQ;
-	bca->fk = calloc(CALL_MAX, sizeof(double));
-	bca->fk[0] = 1.;
-	for (n = 1; n < CALL_MAX; ++n)
-		bca->fk[n] = theta >= 1.? 1. : pow(theta, n) * (1.0 - CALL_ETA) + CALL_ETA;
-	bca->fk[CALL_MAX-1] = 0.;
+	bca->e = errmod_init(1. - theta);
 	return bca;
 }
 
 void bcf_call_destroy(bcf_callaux_t *bca)
 {
-	if (bca) {
-		free(bca->info); free(bca->fk); free(bca);
-	}
+	if (bca == 0) return;
+	errmod_destroy(bca->e);
+	free(bca->bases); free(bca);
 }
 
-typedef struct {
-	float esum[5], fsum[5];
-	uint32_t c[5];
-	int w[8];
-} auxaux_t;
-
-/*
-  The following code is nearly identical to bam_maqcns_glfgen() under
-  the simplified SOAPsnp model. It does the following:
-
-  1) Collect strand, base, quality and mapping quality information for
-     each base and combine them in an integer:
-
-	   x = min{baseQ,mapQ}<<24 | 1<<21 | strand<<18 | base<<16 | baseQ<<8 | mapQ
-
-  2) Sort the list of integers for the next step.
-
-  3) For each base, calculate e_b, the sum of weighted qualities. For
-     each type of base on each strand, the best quality has the highest
-     weight. Only the top 255 bases on each strand are used (different
-     from maqcns).
-
-  4) Rescale the total read depth to 255.
-
-  5) Calculate Q(D|g) = -10\log_{10}P(D|g) (d_a is the allele count):
-
-       Q(D|<aa>)=\sum_{b\not=a}e_b
-	   Q(D|<aA>)=3*(d_a+d_A)+\sum_{b\not=a,b\not=A}e_b
- */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
-	int i, j, k, c, n, ref4;
-	float *p = r->p;
-	auxaux_t aux;
-
+	int i, k, n, ref4;
 	memset(r, 0, sizeof(bcf_callret1_t));
 	ref4 = bam_nt16_nt4_table[ref_base];
 	if (_n == 0) return -1;
 
-	// enlarge the aux array if necessary
-	if (bca->max_info < _n) {
-		bca->max_info = _n;
-		kroundup32(bca->max_info);
-		bca->info = (uint32_t*)realloc(bca->info, 4 * bca->max_info);
+	// enlarge the bases array if necessary
+	if (bca->max_bases < _n) {
+		bca->max_bases = _n;
+		kroundup32(bca->max_bases);
+		bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
 	}
-	// fill the aux array
-	for (i = n = 0; i < _n; ++i) {
+	// fill the bases array
+	memset(r->qsum, 0, 4 * sizeof(float));
+	for (i = n = 0, r->sum_Q2 = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
-		uint32_t q, x = 0, qq;
+		int q, b, mapQ;
 		int min_dist;
+		// set base
 		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue; // skip unmapped reads and deleted bases
-		q = (uint32_t)bam1_qual(p->b)[p->qpos]; // base quality
+		q = (int)bam1_qual(p->b)[p->qpos]; // base quality
 		if (q < bca->min_baseQ) continue;
-		x |= (uint32_t)bam1_strand(p->b) << 18 | q << 8 | p->b->core.qual;
-		if (p->b->core.qual < q) q = p->b->core.qual; // cap the overall quality at mapping quality
-		x |= q << 24;
-		qq = bam1_seqi(bam1_seq(p->b), p->qpos); // base
-		q = bam_nt16_nt4_table[qq? qq : ref_base]; // q is the 2-bit base
-		if (q < 4) x |= 1 << 21 | q << 16;
-		k = (ref4 < 4 && q == ref4)? 0 : 1;
+		mapQ = p->b->core.qual < bca->capQ? p->b->core.qual : bca->capQ;
+		r->sum_Q2 += mapQ * mapQ;
+		if (q > mapQ) q = mapQ;
+		if (q > 63) q = 63;
+		if (q < 4) q = 4;
+		b = bam1_seqi(bam1_seq(p->b), p->qpos); // base
+		b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
+		bca->bases[n++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
+		// collect other information
+		r->qsum[b] += q;
+		k = (ref4 < 4 && b == ref4)? 0 : 1;
 		k = k<<1 | bam1_strand(p->b);
 		++r->d[k];
-		bca->info[n++] = x;
 		// calculate min_dist
 		min_dist = p->b->core.l_qseq - 1 - p->qpos;
 		if (min_dist > p->qpos) min_dist = p->qpos;
 		k = (k&2) | (min_dist <= END_DIST_THRES);
 		++r->ed[k];
 	}
-	ks_introsort_uint32_t(n, bca->info);
 	r->depth = n;
-	// generate esum and fsum
-	memset(&aux, 0, sizeof(auxaux_t));
-	for (j = n - 1, r->sum_Q2 = 0; j >= 0; --j) { // calculate esum and fsum
-		uint32_t info = bca->info[j];
-		int tmp;
-		if (info>>24 < 4 && (info>>8&0x3f) != 0) info = 4<<24 | (info&0xffffff);
-		k = info>>16&7;
-		if (info>>24 > 0) {
-			aux.esum[k&3] += bca->fk[aux.w[k]] * (info>>24);
-			aux.fsum[k&3] += bca->fk[aux.w[k]];
-			if (aux.w[k] + 1 < CALL_MAX) ++aux.w[k];
-			++aux.c[k&3];
-		}
-		tmp = (int)(info&0xff) < bca->capQ? (int)(info&0xff) : bca->capQ;
-		r->sum_Q2 += tmp * tmp;
-	}
-	memcpy(r->esum, aux.esum, 5 * sizeof(float));
-	// rescale ->c[]
-	for (j = c = 0; j != 4; ++j) c += aux.c[j];
-	if (c > 255) {
-		for (j = 0; j != 4; ++j) aux.c[j] = (int)(254.0 * aux.c[j] / c + 0.499);
-		for (j = c = 0; j != 4; ++j) c += aux.c[j];
-	}
-	// generate likelihood
-	for (j = 0; j != 5; ++j) {
-		float tmp;
-		// homozygous
-		for (k = 0, tmp = 0.0; k != 5; ++k)
-			if (j != k) tmp += aux.esum[k];
-		p[j*5+j] = tmp; // anything that is not j
-		// heterozygous
-		for (k = j + 1; k < 5; ++k) {
-			for (i = 0, tmp = 0.0; i != 5; ++i)
-				if (i != j && i != k) tmp += aux.esum[i];
-			p[j*5+k] = p[k*5+j] = 3.01 * (aux.c[j] + aux.c[k]) + tmp;
-		}
-	}
+	// glfgen
+	errmod_cal(bca->e, n, 5, bca->bases, r->p);
 	return r->depth;
 }
 
 int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call)
 {
-	int ref4, i, j;
-	int64_t sum[5], tmp;
+	int ref4, i, j, qsum[4];
+	int64_t tmp;
 	call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
 	if (ref4 > 4) ref4 = 4;
-	{ // calculate esum
-		double esum[5];
-		memset(esum, 0, sizeof(double) * 4);
-		for (i = 0; i < n; ++i) {
-			for (j = 0; j < 4; ++j)
-				esum[j] += calls[i].esum[j];
-		}
+	// calculate esum
+	memset(qsum, 0, 4 * sizeof(int));
+	for (i = 0; i < n; ++i)
 		for (j = 0; j < 4; ++j)
-			sum[j] = (int)(esum[j] * 100. + .499) << 2 | j;
-	}
+			qsum[j] += calls[i].qsum[j];
+	for (j = 0; j < 4; ++j) qsum[j] = qsum[j] << 2 | j;
 	// find the top 2 alleles
 	for (i = 1; i < 4; ++i) // insertion sort
-		for (j = i; j > 0 && sum[j] < sum[j-1]; --j)
-			tmp = sum[j], sum[j] = sum[j-1], sum[j-1] = tmp;
+		for (j = i; j > 0 && qsum[j] < qsum[j-1]; --j)
+			tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
 	// set the reference allele and alternative allele(s)
 	for (i = 0; i < 5; ++i) call->a[i] = -1;
 	call->unseen = -1;
 	call->a[0] = ref4;
 	for (i = 3, j = 1; i >= 0; --i) {
-		if ((sum[i]&3) != ref4) {
-			if (sum[i]>>2 != 0) call->a[j++] = sum[i]&3;
+		if ((qsum[i]&3) != ref4) {
+			if (qsum[i]>>2 != 0) call->a[j++] = qsum[i]&3;
 			else break;
 		}
 	}
 	if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
-		call->unseen = j, call->a[j++] = sum[i]&3;
+		call->unseen = j, call->a[j++] = qsum[i]&3;
 	call->n_alleles = j;
 	// set the PL array
 	if (call->n < n) {
@@ -215,6 +144,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		}
 		call->shift = (int)(sum_min + .499);
 	}
+	// combine annotations
 	memset(call->d, 0, 4 * sizeof(int));
 	memset(call->ed, 0, 4 * sizeof(int));
 	for (i = call->depth = 0, tmp = 0; i < n; ++i) {
@@ -237,13 +167,12 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 	for (i = 1; i < 5; ++i) {
 		if (bc->a[i] < 0) break;
 		if (i > 1) kputc(',', &s);
-//		kputc(bc->unseen == i && i != 3? 'X' : "ACGT"[bc->a[i]], &s);
 		kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &s);
 	}
 	kputc('\0', &s);
 	kputc('\0', &s);
 	// INFO
-	kputs("MQ=", &s); kputw(bc->rmsQ, &s); // kputs(";DP=", &s); kputw(bc->depth, &s);
+	kputs("MQ=", &s); kputw(bc->rmsQ, &s);
 	kputs(";DP4=", &s);
 	for (i = 0; i < 4; ++i) {
 		if (i) kputc(',', &s);
