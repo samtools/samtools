@@ -5,7 +5,6 @@
 #include "sam.h"
 #include "faidx.h"
 #include "bam_maqcns.h"
-#include "bam_mcns.h"
 #include "bam2bcf.h"
 #include "khash.h"
 #include "glf.h"
@@ -450,16 +449,11 @@ int bam_pileup(int argc, char *argv[])
  * mpileup *
  ***********/
 
-#define MPLP_VCF   0x1
-#define MPLP_VAR   0x2
-#define MPLP_AFALL 0x8
 #define MPLP_GLF   0x10
 #define MPLP_NO_COMP 0x20
 
-#define MPLP_AFS_BLOCK 0x10000
-
 typedef struct {
-	int max_mq, min_mq, prior_type, flag, min_baseQ;
+	int max_mq, min_mq, flag, min_baseQ;
 	double theta;
 	char *reg, *fn_pos;
 	faidx_t *fai;
@@ -489,11 +483,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
-	uint64_t N = 0;
 	char *ref;
 	khash_t(64) *hash = 0;
-
-	mc_aux_t *ma = 0;
 
 	bcf_callaux_t *bca = 0;
 	bcf_callret1_t *bcr = 0;
@@ -564,33 +555,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		free(s.s);
 		bcf_hdr_sync(bh);
 		bcf_hdr_write(bp, bh);
-	} else if (conf->flag & MPLP_VCF) {
-		kstring_t s;
-		s.l = s.m = 0; s.s = 0;
-		puts("##fileformat=VCFv4.0");
-		puts("##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Total read depth\">");
-		puts("##INFO=<ID=AF,Number=1,Type=Float,Description=\"Non-reference allele frequency \\argmax_f P(D|f)\">");
-		puts("##INFO=<ID=AFE,Number=1,Type=Float,Description=\"Expected non-reference allele frequency\">");
-		puts("##FILTER=<ID=Q13,Description=\"All min{baseQ,mapQ} below 13\">");
-		puts("##FILTER=<ID=FPE,Description=\"Floating point error\">");
-		kputs("#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", &s);
-		for (i = 0; i < n; ++i) {
-			const char *p;
-			kputc('\t', &s);
-			if ((p = strstr(fn[i], ".bam")) != 0)
-				kputsn(fn[i], p - fn[i], &s);
-			else kputs(fn[i], &s);
-		}
-		puts(s.s);
-		free(s.s);
 	}
 	// mpileup
 	if (conf->flag & MPLP_GLF) {
 		bca = bcf_call_init(-1., conf->min_baseQ);
 		bcr = calloc(n, sizeof(bcf_callret1_t));
-	} else if (conf->flag & MPLP_VCF) {
-		ma = mc_init(n);
-		mc_init_prior(ma, conf->prior_type, conf->theta);
 	}
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
@@ -618,57 +587,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_write(bp, bh, b);
 			//fprintf(stderr, "%d,%d,%d\n", b->tid, b->pos, b->l_str);
 			bcf_destroy(b);
-		} else if (conf->flag & MPLP_VCF) {
-			mc_rst_t r;
-			int j, _ref0, depth, rms_q, _ref0b, is_var = 0, qref = 0, level = 2, tot;
-			uint64_t sqr_sum;
-			_ref0 = _ref0b = (ref && pos < ref_len)? ref[pos] : 'N';
-			_ref0 = bam_nt16_nt4_table[bam_nt16_table[_ref0]];
-			tot = mc_cal(_ref0, n_plp, plp, ma, &r, level);
-			if (tot) { // has good bases
-				double q;
-				is_var = (r.p_ref < .5);
-				q = is_var? r.p_ref : 1. - r.p_ref;
-				if (q < 1e-308) q = 1e-308;
-				qref = (int)(-3.434 * log(q) + .499);
-				if (qref > 99) qref = 99;
-			}
-			if ((conf->flag & MPLP_VAR) && !is_var) continue;
-			++N; // number of processed lines
-			printf("%s\t%d\t.\t%c\t", h->target_name[tid], pos + 1, _ref0b);
-			if (is_var) {
-				putchar("ACGTN"[r.alt]);
-				if (r.alt2 >= 0 && r.alt2 < 4) printf(",%c", "ACGT"[r.alt2]);
-			} else putchar('.');
-			printf("\t%d\t", qref);
-			if (!tot) printf("Q13\t");
-			else if (r.f_exp < 0.) printf("FPE\t");
-			else printf(".\t");
-			for (i = depth = 0, sqr_sum = 0; i < n; ++i) {
-				depth += n_plp[i];
-				for (j = 0; j < n_plp[i]; ++j) {
-					int q = plp[i][j].b->core.qual;
-					if (q > conf->max_mq) q = conf->max_mq;
-					sqr_sum += q * q;
-				}
-			}
-			rms_q = (int)(sqrt((double)sqr_sum / depth) + .499);
-			printf("DP=%d;MQ=%d", depth, rms_q);
-			if (tot) {
-				printf(";AF=%.3lf", 1. - r.f_em);
-				if (level >= 2) printf(";AFE=%.3lf", 1-r.f_exp);
-				if (conf->flag & MPLP_AFALL)
-					printf(";AF0=%.3lf;AFN=%.3lf", 1-r.f_naive, 1-r.f_nielsen);
-			}
-			printf("\tGT:GQ:DP");
-			if (tot) {
-				for (i = 0; i < n; ++i) {
-					int x = mc_call_gt(ma, r.f_exp, i);
-					printf("\t%c/%c:%d:%d", "10"[((x&3)==2)], "10"[((x&3)>0)], x>>2, n_plp[i]);
-				}
-			} else for (i = 0; i < n; ++i) printf("\t./.:0:0");
-			putchar('\n');
-			if (N % MPLP_AFS_BLOCK == 0) mc_dump_afs(ma);
 		} else {
 			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
 			for (i = 0; i < n; ++i) {
@@ -691,7 +609,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		}
 	}
 	bcf_close(bp);
-	if (conf->flag&MPLP_VCF) mc_dump_afs(ma);
 	if (hash) { // free the hash table
 		khint_t k;
 		for (k = kh_begin(hash); k < kh_end(hash); ++k)
@@ -699,7 +616,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		kh_destroy(64, hash);
 	}
 	bcf_hdr_destroy(bh); bcf_call_destroy(bca); free(bc.PL); free(bcr);
-	mc_destroy(ma);
 	bam_mplp_destroy(iter);
 	bam_header_destroy(h);
 	for (i = 0; i < n; ++i) {
@@ -717,21 +633,11 @@ int bam_mpileup(int argc, char *argv[])
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
 	mplp.max_mq = 60;
-	mplp.prior_type = MC_PTYPE_FULL;
 	mplp.theta = 1e-3;
 	mplp.min_baseQ = 13;
-	while ((c = getopt(argc, argv, "gvVcFSP:f:r:l:VM:q:t:Q:u")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:t:Q:u")) >= 0) {
 		switch (c) {
 		case 't': mplp.theta = atof(optarg); break;
-		case 'P':
-			if (strcmp(optarg, "full") == 0) mplp.prior_type = MC_PTYPE_FULL;
-			else if (strcmp(optarg, "cond2") == 0) mplp.prior_type = MC_PTYPE_COND2;
-			else if (strcmp(optarg, "flat") == 0) mplp.prior_type = MC_PTYPE_FLAT;
-			else {
-				fprintf(stderr, "[%s] unrecognized prior type.\n", __func__);
-				return 1;
-			}
-			break;
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
@@ -739,17 +645,12 @@ int bam_mpileup(int argc, char *argv[])
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.fn_pos = strdup(optarg); break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
-		case 'V':
-		case 'c': mplp.flag |= MPLP_VCF; break;
-		case 'F': mplp.flag |= MPLP_AFALL; break;
-		case 'v': mplp.flag |= MPLP_VAR; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP; break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
 		case 'Q': mplp.min_baseQ = atoi(optarg); break;
 		}
 	}
-	if (mplp.flag&MPLP_GLF) mplp.flag &= ~MPLP_VCF;
 	if (argc == 1) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools mpileup [options] in1.bam [in2.bam [...]]\n\n");
@@ -757,15 +658,12 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -r STR      region in which pileup is generated [null]\n");
 		fprintf(stderr, "         -l FILE     list of positions (format: chr pos) [null]\n");
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
+		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -t FLOAT    scaled mutation rate [%lg]\n", mplp.theta);
-		fprintf(stderr, "         -P STR      prior: full, flat, cond2 [full]\n");
-		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
-		fprintf(stderr, "         -c          generate VCF output (consensus calling)\n");
 		fprintf(stderr, "         -g          generate GLF output\n");
-		fprintf(stderr, "         -v          show variant sites only\n");
 		fprintf(stderr, "\n");
-		fprintf(stderr, "Notes: Assuming error independency and diploid individuals.\n\n");
+		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
 	}
 	mpileup(&mplp, argc - optind, argv + optind);
