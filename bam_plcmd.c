@@ -5,7 +5,6 @@
 #include "sam.h"
 #include "faidx.h"
 #include "bam_maqcns.h"
-#include "bam2bcf.h"
 #include "khash.h"
 #include "glf.h"
 #include "kstring.h"
@@ -449,6 +448,10 @@ int bam_pileup(int argc, char *argv[])
  * mpileup *
  ***********/
 
+#include <assert.h>
+#include "bam2bcf.h"
+#include "sample.h"
+
 #define MPLP_GLF   0x10
 #define MPLP_NO_COMP 0x20
 
@@ -466,6 +469,12 @@ typedef struct {
 	int min_mq;
 } mplp_aux_t;
 
+typedef struct {
+	int n;
+	int *n_plp, *m_plp;
+	bam_pileup1_t **plp;
+} mplp_pileup_t;
+
 static int mplp_func(void *data, bam1_t *b)
 {
 	mplp_aux_t *ma = (mplp_aux_t*)data;
@@ -474,6 +483,29 @@ static int mplp_func(void *data, bam1_t *b)
 		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
 	} while (b->core.qual < ma->min_mq && ret >= 0);
 	return ret;
+}
+
+static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
+					   int n, char *const*fn, int *n_plp, const bam_pileup1_t **plp)
+{
+	int i, j;
+	memset(m->n_plp, 0, m->n * sizeof(int));
+	for (i = 0; i < n; ++i) {
+		for (j = 0; j < n_plp[i]; ++j) {
+			const bam_pileup1_t *p = plp[i] + j;
+			uint8_t *q;
+			int id = -1;
+			q = bam_aux_get(p->b, "RG");
+			if (q) id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
+			if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
+			assert(id >= 0 && id < m->n);
+			if (m->n_plp[id] == m->m_plp[id]) {
+				m->m_plp[id] = m->m_plp[id]? m->m_plp[id]<<1 : 8;
+				m->plp[id] = realloc(m->plp[id], sizeof(bam_pileup1_t) * m->m_plp[id]);
+			}
+			m->plp[id][m->n_plp[id]++] = *p;
+		}
+	}
 }
 
 static int mpileup(mplp_conf_t *conf, int n, char **fn)
@@ -492,10 +524,17 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bcf_t *bp = 0;
 	bcf_hdr_t *bh = 0;
 
+	bam_sample_t *sm = 0;
+	kstring_t buf;
+	mplp_pileup_t gplp;
+
+	memset(&gplp, 0, sizeof(mplp_pileup_t));
+	memset(&buf, 0, sizeof(kstring_t));
 	memset(&bc, 0, sizeof(bcf_call_t));
 	data = calloc(n, sizeof(void*));
 	plp = calloc(n, sizeof(void*));
 	n_plp = calloc(n, sizeof(int*));
+	sm = bam_smpl_init();
 
 	// read the header and initialize data
 	for (i = 0; i < n; ++i) {
@@ -504,6 +543,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		data[i]->min_mq = conf->min_mq;
 		data[i]->fp = bam_open(fn[i], "r");
 		h_tmp = bam_header_read(data[i]->fp);
+		bam_smpl_add(sm, fn[i], h_tmp->text);
 		if (conf->reg) {
 			int beg, end;
 			bam_index_t *idx;
@@ -526,6 +566,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bam_header_destroy(h_tmp);
 		}
 	}
+	gplp.n = sm->n;
+	gplp.n_plp = calloc(sm->n, sizeof(int));
+	gplp.m_plp = calloc(sm->n, sizeof(int));
+	gplp.plp = calloc(sm->n, sizeof(void*));
+
+	fprintf(stderr, "[%s] %d samples in %d input files\n", __func__, sm->n, n);
 	if (conf->fn_pos) hash = load_pos(conf->fn_pos, h);
 	// write the VCF header
 	if (conf->flag & MPLP_GLF) {
@@ -541,12 +587,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bh->name = malloc(s.l);
 		memcpy(bh->name, s.s, s.l);
 		s.l = 0;
-		for (i = 0; i < n; ++i) {
-			const char *p;
-			if ((p = strstr(fn[i], ".bam")) != 0)
-				kputsn(fn[i], p - fn[i], &s);
-			else kputs(fn[i], &s);
-			kputc('\0', &s);
+		for (i = 0; i < sm->n; ++i) {
+			kputs(sm->smpl[i], &s); kputc('\0', &s);
 		}
 		bh->l_smpl = s.l;
 		bh->sname = malloc(s.l);
@@ -555,11 +597,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		free(s.s);
 		bcf_hdr_sync(bh);
 		bcf_hdr_write(bp, bh);
-	}
-	// mpileup
-	if (conf->flag & MPLP_GLF) {
 		bca = bcf_call_init(-1., conf->min_baseQ);
-		bcr = calloc(n, sizeof(bcf_callret1_t));
+		bcr = calloc(sm->n, sizeof(bcf_callret1_t));
 	}
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
@@ -578,14 +617,14 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		if (conf->flag & MPLP_GLF) {
 			int _ref0, ref16;
 			bcf1_t *b = calloc(1, sizeof(bcf1_t));
+			group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp);
 			_ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
 			ref16 = bam_nt16_table[_ref0];
-			for (i = 0; i < n; ++i)
-				bcf_call_glfgen(n_plp[i], plp[i], ref16, bca, bcr + i);
-			bcf_call_combine(n, bcr, ref16, &bc);
+			for (i = 0; i < gplp.n; ++i)
+				bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], ref16, bca, bcr + i);
+			bcf_call_combine(gplp.n, bcr, ref16, &bc);
 			bcf_call2bcf(tid, pos, &bc, b);
 			bcf_write(bp, bh, b);
-			//fprintf(stderr, "%d,%d,%d\n", b->tid, b->pos, b->l_str);
 			bcf_destroy(b);
 		} else {
 			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
@@ -608,7 +647,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			putchar('\n');
 		}
 	}
+
 	bcf_close(bp);
+	bam_smpl_destroy(sm); free(buf.s);
+	for (i = 0; i < gplp.n; ++i) free(gplp.plp[i]);
+	free(gplp.plp); free(gplp.n_plp); free(gplp.m_plp);
 	if (hash) { // free the hash table
 		khint_t k;
 		for (k = kh_begin(hash); k < kh_end(hash); ++k)

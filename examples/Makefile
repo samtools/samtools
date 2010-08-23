@@ -19,7 +19,7 @@ ex1a.bam:ex1.bam
 ex1b.bam:ex1.bam
 		../samtools view -h ex1.bam | awk 'BEGIN{FS=OFS="\t"}{if(/^@/)print;else{$$1=$$1"b";print}}' | ../samtools view -bS - > $@
 ex1f.rg:
-		(echo "@RG	ID:ex1	LB:ex1"; echo "@RG	ID:ex1a	LB:ex1"; echo "@RG	ID:ex1b	LB:ex1b") > $@
+		(echo "@RG	ID:ex1	LB:ex1	SM:ex1"; echo "@RG	ID:ex1a	LB:ex1	SM:ex1"; echo "@RG	ID:ex1b	LB:ex1b	SM:ex1b") > $@
 ex1f.bam:ex1.bam ex1a.bam ex1b.bam ex1f.rg
 		../samtools merge -rh ex1f.rg $@ ex1.bam ex1a.bam ex1b.bam
 ex1f-rmduppe.bam:ex1f.bam
