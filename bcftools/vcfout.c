@@ -109,7 +109,7 @@ static void rm_info(int n_smpl, bcf1_t *b, const char *key)
 static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
 {
 	kstring_t s;
-	int d[4], x, is_var = (pr->p_ref < pref);
+	int d[4], is_var = (pr->p_ref < pref);
 	double p_hwe, p_dp, p_ed, r = is_var? pr->p_ref : 1. - pr->p_ref;
 
 	p_hwe = test_hwe(pr->g);
@@ -133,8 +133,8 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
 	b->m_str = s.m; b->l_str = s.l; b->str = s.s;
-	x = (int)(r < 1e-100? 99 : -3.434 * log(r) + .499);
-	b->qual = x > 99? 99 : x;
+	b->qual = r < 1e-100? 99 : -3.434 * log(r);
+	if (b->qual > 99) b->qual = 99;
 	bcf_sync(n_smpl, b);
 	return is_var;
 }

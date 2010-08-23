@@ -213,7 +213,7 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 	fmt_str(b->str, s); kputc('\t', s);
 	fmt_str(b->ref, s); kputc('\t', s);
 	fmt_str(b->alt, s); kputc('\t', s);
-	kputw(b->qual, s); kputc('\t', s);
+	ksprintf(s, "%.3g", b->qual); /*kputw(b->qual, s);*/ kputc('\t', s);
 	fmt_str(b->flt, s); kputc('\t', s);
 	fmt_str(b->info, s);
 	if (b->fmt[0]) {
