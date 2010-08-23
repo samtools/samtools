@@ -110,7 +110,7 @@ bam_maqcns_t *bam_maqcns_init()
 	bm = (bam_maqcns_t*)calloc(1, sizeof(bam_maqcns_t));
 	bm->aux = (bmc_aux_t*)calloc(1, sizeof(bmc_aux_t));
 	bm->het_rate = 0.001;
-	bm->theta = 0.85;
+	bm->theta = 0.83f;
 	bm->n_hap = 2;
 	bm->eta = 0.03;
 	bm->cap_mapQ = 60;

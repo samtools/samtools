@@ -375,6 +375,8 @@ int bam_pileup(int argc, char *argv[])
 		default: fprintf(stderr, "Unrecognizd option '-%c'.\n", c); return 1;
 		}
 	}
+	if (d->c->errmod != BAM_ERRMOD_MAQ2) d->c->theta += 0.02;
+	if (d->c->theta > 1.0) d->c->theta = 1.0;
 	if (fn_list) is_SAM = 1;
 	if (optind == argc) {
 		fprintf(stderr, "\n");
