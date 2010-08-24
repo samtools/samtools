@@ -85,11 +85,13 @@ typedef struct {
 static double ttest(int n1, int n2, int a[4])
 {
 	extern double kf_betai(double a, double b, double x);
-	double t, v;
+	double t, v, u1, u2;
 	if (n1 == 0 || n2 == 0 || n1 + n2 < 3) return 1.0;
-	t = (a[0] / n1 - a[2] / n2) / sqrt((a[1] + a[3]) / (n1 + n2 - 2) * (1./n1 + 1./n2));
+	u1 = (double)a[0] / n1; u2 = (double)a[2] / n2;
+	if (u1 <= u2) return 1.;
+	t = (u1 - u2) / sqrt(((a[1] - n1 * u1 * u1) + (a[3] - n2 * u2 * u2)) / (n1 + n2 - 2) * (1./n1 + 1./n2));
 	v = n1 + n2 - 2;
-//	printf("%d,%d,%d,%d,%lf\n", a[0], a[1], a[2], a[3], t);
+//	printf("%d,%d,%d,%d,%lf,%lf,%lf\n", a[0], a[1], a[2], a[3], t, u1, u2);
 	return t < 0.? 1. : .5 * kf_betai(.5*v, .5, v/(v+t*t));
 }
 
