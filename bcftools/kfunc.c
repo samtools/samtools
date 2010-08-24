@@ -62,7 +62,7 @@ double kf_erfc(double x)
  *   http://www.danielsoper.com/statcalc/calc23.aspx
  *
  * It calculates upper incomplete gamma function, which equals
- * kf_gammap(s,z)*tgamma(s).
+ * kf_gammaq(s,z)*tgamma(s).
  */
 
 #define KF_GAMMA_EPS 1e-14
@@ -86,7 +86,7 @@ static double _kf_gammaq(double s, double z)
 	double C, D, f;
 	f = 1. + z - s; C = f; D = 0.;
 	// Modified Lentz's algorithm for computing continued fraction
-	// See Numerical Recipes in C, 2nd edition, page 172
+	// See Numerical Recipes in C, 2nd edition, section 5.2
 	for (j = 1; j < 100; ++j) {
 		double a = j * (s - j), b = (j<<1) + 1 + z - s, d;
 		D = b + a * D;
@@ -111,13 +111,51 @@ double kf_gammaq(double s, double z)
 	return z <= 1. || z < s? 1. - _kf_gammap(s, z) : _kf_gammaq(s, z);
 }
 
+/* Regularized incomplete beta function. The method is taken from
+ * Numerical Recipe in C, 2nd edition, section 6.4. The following page
+ * calculates the incomplete beta function, which equals
+ * kf_betai(a,b,x) * gamma(a) * gamma(b) / gamma(a+b):
+ *
+ *   http://www.danielsoper.com/statcalc/calc36.aspx
+ */
+static double kf_betai_aux(double a, double b, double x)
+{
+	double C, D, f, z;
+	int j;
+	f = 1.; C = f; D = 0.;
+	// Modified Lentz's algorithm for computing continued fraction
+	for (j = 1; j < 200; ++j) {
+		double aa, d;
+		int m = j>>1;
+		aa = (j&1)? -(a + m) * (a + b + m) * x / ((a + 2*m) * (a + 2*m + 1))
+			: m * (b - m) * x / ((a + 2*m - 1) * (a + 2*m));
+		D = 1. + aa * D;
+		if (D < KF_TINY) D = KF_TINY;
+		C = 1. + aa / C;
+		if (C < KF_TINY) C = KF_TINY;
+		D = 1. / D;
+		d = C * D;
+		f *= d;
+		if (fabs(d - 1.) < KF_GAMMA_EPS) break;
+	}
+	z = (x == 0. || x == 1.)? 0. : exp(kf_lgamma(a+b) - kf_lgamma(a) - kf_lgamma(b) + a * log(x) + b * log(1.-x));
+	return z / a / f;
+}
+double kf_betai(double a, double b, double x)
+{
+	return x < (a + 1.) / (a + b + 2.)? kf_betai_aux(a, b, x) : 1. - kf_betai_aux(b, a, 1. - x);
+}
+
 #ifdef KF_MAIN
 #include <stdio.h>
 int main(int argc, char *argv[])
 {
 	double x = 5.5, y = 3;
+	double a, b;
 	printf("erfc(%lg): %lg, %lg\n", x, erfc(x), kf_erfc(x));
-	printf("lower-gamma(%lg,%lg): %lg\n", x, y, (1.0-kf_gammap(y, x))*tgamma(y));
+	printf("upper-gamma(%lg,%lg): %lg\n", x, y, kf_gammaq(y, x)*tgamma(y));
+	a = 2; b = 2; x = 0.5;
+	printf("incomplete-beta(%lg,%lg,%lg): %lg\n", a, b, x, kf_betai(a, b, x) / exp(kf_lgamma(a+b) - kf_lgamma(a) - kf_lgamma(b)));
 	return 0;
 }
 #endif
