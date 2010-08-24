@@ -77,22 +77,54 @@ static double test_hwe(const double g[3])
 	return kf_gammaq(.5, chi2 / 2.);
 }
 
-extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
+typedef struct {
+	double p[4];
+	int mq, depth, is_tested, d[4];
+} anno16_t;
 
-static double test_fisher(bcf1_t *b, const char *key, int d[4], int is_single)
+static double ttest(int n1, int n2, int a[4])
 {
-	double left, right, two;
-	char *p;
+	extern double kf_betai(double a, double b, double x);
+	double t, v;
+	if (n1 == 0 || n2 == 0 || n1 + n2 < 3) return 1.0;
+	t = (a[0] / n1 - a[2] / n2) / sqrt((a[1] + a[3]) / (n1 + n2 - 2) * (1./n1 + 1./n2));
+	v = n1 + n2 - 2;
+//	printf("%d,%d,%d,%d,%lf\n", a[0], a[1], a[2], a[3], t);
+	return t < 0.? 1. : .5 * kf_betai(.5*v, .5, v/(v+t*t));
+}
+
+static int test16_core(int anno[16], anno16_t *a)
+{
+	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
+	double left, right;
 	int i;
-	if ((p = strstr(b->info, key)) == 0) return -1.;
+	a->p[0] = a->p[1] = a->p[2] = a->p[3] = 1.;
+	memcpy(a->d, anno, 4 * sizeof(int));
+	a->depth = anno[0] + anno[1] + anno[2] + anno[3];
+	a->is_tested = (anno[0] + anno[1] > 0 && anno[2] + anno[3] > 0);
+	if (a->depth == 0) return -1;
+	a->mq = (int)(sqrt((anno[9] + anno[11]) / a->depth) + .499);
+	kt_fisher_exact(anno[0], anno[1], anno[2], anno[3], &left, &right, &a->p[0]);
+	for (i = 1; i < 4; ++i)
+		a->p[i] = ttest(anno[0] + anno[1], anno[2] + anno[3], anno+4*i);
+	return 0;
+}
+
+static int test16(bcf1_t *b, anno16_t *a)
+{
+	char *p;
+	int i, anno[16];
+	a->p[0] = a->p[1] = a->p[2] = a->p[3] = 1.;
+	a->d[0] = a->d[1] = a->d[2] = a->d[3] = 0.;
+	a->mq = a->depth = a->is_tested = 0;
+	if ((p = strstr(b->info, "I16=")) == 0) return -1;
 	p += 4;
-	for (i = 0; i < 4; ++i) {
-		d[i] = strtol(p, &p, 10);
-		if (d[i] == 0 && (errno == EINVAL || errno == ERANGE)) return -2.;
+	for (i = 0; i < 16; ++i) {
+		anno[i] = strtol(p, &p, 10);
+		if (anno[i] == 0 && (errno == EINVAL || errno == ERANGE)) return -2;
 		++p;
 	}
-	kt_fisher_exact(d[0], d[1], d[2], d[3], &left, &right, &two);
-	return is_single? right : two;
+	return test16_core(anno, a);
 }
 
 static void rm_info(int n_smpl, bcf1_t *b, const char *key)
@@ -109,13 +141,13 @@ static void rm_info(int n_smpl, bcf1_t *b, const char *key)
 static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
 {
 	kstring_t s;
-	int d[4], is_var = (pr->p_ref < pref);
-	double p_hwe, p_dp, p_ed, r = is_var? pr->p_ref : 1. - pr->p_ref;
+	int is_var = (pr->p_ref < pref);
+	double p_hwe, r = is_var? pr->p_ref : 1. - pr->p_ref;
+	anno16_t a;
 
 	p_hwe = test_hwe(pr->g);
-	p_ed = test_fisher(b, "ED4=", d, 1);
-	p_dp = test_fisher(b, "DP4=", d, 0);
-	rm_info(n_smpl, b, "ED4=");
+	test16(b, &a);
+	rm_info(n_smpl, b, "I16=");
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
@@ -126,9 +158,9 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
 	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
+	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+	if (a.is_tested) ksprintf(&s, ";PV4=%.2lg,%.2lg,%.2lg,%.2lg", a.p[0], a.p[1], a.p[2], a.p[3]);
 	if (p_hwe <= .2) ksprintf(&s, ";GC=%.2lf,%.2lf,%.2lf;HWE=%.3lf", pr->g[2], pr->g[1], pr->g[0], p_hwe);
-	if (p_dp >= 0. && p_dp <= .2) ksprintf(&s, ";TDP=%.3lf", p_dp);
-	if (p_ed >= 0. && p_ed <= .2) ksprintf(&s, ";TED=%.3lf", p_ed);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);

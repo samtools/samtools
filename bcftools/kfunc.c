@@ -112,16 +112,18 @@ double kf_gammaq(double s, double z)
 }
 
 /* Regularized incomplete beta function. The method is taken from
- * Numerical Recipe in C, 2nd edition, section 6.4. The following page
- * calculates the incomplete beta function, which equals
+ * Numerical Recipe in C, 2nd edition, section 6.4. The following web
+ * page calculates the incomplete beta function, which equals
  * kf_betai(a,b,x) * gamma(a) * gamma(b) / gamma(a+b):
  *
  *   http://www.danielsoper.com/statcalc/calc36.aspx
  */
 static double kf_betai_aux(double a, double b, double x)
 {
-	double C, D, f, z;
+	double C, D, f;
 	int j;
+	if (x == 0.) return 0.;
+	if (x == 1.) return 1.;
 	f = 1.; C = f; D = 0.;
 	// Modified Lentz's algorithm for computing continued fraction
 	for (j = 1; j < 200; ++j) {
@@ -138,8 +140,7 @@ static double kf_betai_aux(double a, double b, double x)
 		f *= d;
 		if (fabs(d - 1.) < KF_GAMMA_EPS) break;
 	}
-	z = (x == 0. || x == 1.)? 0. : exp(kf_lgamma(a+b) - kf_lgamma(a) - kf_lgamma(b) + a * log(x) + b * log(1.-x));
-	return z / a / f;
+	return exp(kf_lgamma(a+b) - kf_lgamma(a) - kf_lgamma(b) + a * log(x) + b * log(1.-x)) / a / f;
 }
 double kf_betai(double a, double b, double x)
 {

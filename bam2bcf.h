@@ -8,15 +8,15 @@ struct __bcf_callaux_t;
 typedef struct __bcf_callaux_t bcf_callaux_t;
 
 typedef struct {
-	int depth, d[4], ed[4], qsum[4];
-	uint64_t sum_Q2;
+	int depth, qsum[4];
+	int anno[16];
 	float p[25];
 } bcf_callret1_t;
 
 typedef struct {
 	int a[5]; // alleles: ref, alt, alt2, alt3
 	int n, n_alleles, shift, ori_ref, unseen;
-	int d[4], ed[4], depth, rmsQ;
+	int anno[16], depth;
 	uint8_t *PL;
 } bcf_call_t;
 

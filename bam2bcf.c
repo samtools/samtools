@@ -6,13 +6,13 @@
 #include "errmod.h"
 #include "bcftools/bcf.h"
 
-#define END_DIST_THRES 11
-
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
 #define CALL_ETA 0.03f
 #define CALL_MAX 256
 #define CALL_DEFTHETA 0.83f
+
+#define CAP_DIST 25
 
 struct __bcf_callaux_t {
 	int max_bases, capQ, min_baseQ;
@@ -40,7 +40,7 @@ void bcf_call_destroy(bcf_callaux_t *bca)
 
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
-	int i, k, n, ref4;
+	int i, n, ref4;
 	memset(r, 0, sizeof(bcf_callret1_t));
 	ref4 = bam_nt16_nt4_table[ref_base];
 	if (_n == 0) return -1;
@@ -52,33 +52,34 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 		bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
 	}
 	// fill the bases array
-	memset(r->qsum, 0, 4 * sizeof(float));
-	for (i = n = 0, r->sum_Q2 = 0; i < _n; ++i) {
+	memset(r, 0, sizeof(bcf_callret1_t));
+	for (i = n = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
-		int q, b, mapQ;
-		int min_dist;
+		int q, b, mapQ, baseQ, is_diff, min_dist;
 		// set base
 		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue; // skip unmapped reads and deleted bases
-		q = (int)bam1_qual(p->b)[p->qpos]; // base quality
+		baseQ = q = (int)bam1_qual(p->b)[p->qpos]; // base quality
 		if (q < bca->min_baseQ) continue;
 		mapQ = p->b->core.qual < bca->capQ? p->b->core.qual : bca->capQ;
-		r->sum_Q2 += mapQ * mapQ;
 		if (q > mapQ) q = mapQ;
 		if (q > 63) q = 63;
 		if (q < 4) q = 4;
 		b = bam1_seqi(bam1_seq(p->b), p->qpos); // base
 		b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
 		bca->bases[n++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
-		// collect other information
+		// collect annotations
 		r->qsum[b] += q;
-		k = (ref4 < 4 && b == ref4)? 0 : 1;
-		k = k<<1 | bam1_strand(p->b);
-		++r->d[k];
-		// calculate min_dist
+		is_diff = (ref4 < 4 && b == ref4)? 0 : 1;
+		++r->anno[0<<2|is_diff<<1|bam1_strand(p->b)];
 		min_dist = p->b->core.l_qseq - 1 - p->qpos;
 		if (min_dist > p->qpos) min_dist = p->qpos;
-		k = (k&2) | (min_dist <= END_DIST_THRES);
-		++r->ed[k];
+		if (min_dist > CAP_DIST) min_dist = CAP_DIST;
+		r->anno[1<<2|is_diff<<1|0] += baseQ;
+		r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;
+		r->anno[2<<2|is_diff<<1|0] += mapQ;
+		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;
+		r->anno[3<<2|is_diff<<1|0] += min_dist;
+		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
 	}
 	r->depth = n;
 	// glfgen
@@ -92,7 +93,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	int64_t tmp;
 	call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
 	if (ref4 > 4) ref4 = 4;
-	// calculate esum
+	// calculate qsum
 	memset(qsum, 0, 4 * sizeof(int));
 	for (i = 0; i < n; ++i)
 		for (j = 0; j < 4; ++j)
@@ -145,14 +146,11 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		call->shift = (int)(sum_min + .499);
 	}
 	// combine annotations
-	memset(call->d, 0, 4 * sizeof(int));
-	memset(call->ed, 0, 4 * sizeof(int));
+	memset(call->anno, 0, 16 * sizeof(int));
 	for (i = call->depth = 0, tmp = 0; i < n; ++i) {
 		call->depth += calls[i].depth;
-		for (j = 0; j < 4; ++j) call->d[j] += calls[i].d[j], call->ed[j] += calls[i].ed[j];
-		tmp += calls[i].sum_Q2;
+		for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
 	}
-	call->rmsQ = (int)(sqrt((double)tmp / call->depth) + .499);
 	return 0;
 }
 
@@ -172,16 +170,10 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 	kputc('\0', &s);
 	kputc('\0', &s);
 	// INFO
-	kputs("MQ=", &s); kputw(bc->rmsQ, &s);
-	kputs(";DP4=", &s);
-	for (i = 0; i < 4; ++i) {
+	kputs("I16=", &s);
+	for (i = 0; i < 16; ++i) {
 		if (i) kputc(',', &s);
-		kputw(bc->d[i], &s);
-	}
-	kputs(";ED4=", &s);
-	for (i = 0; i < 4; ++i) {
-		if (i) kputc(',', &s);
-		kputw(bc->ed[i], &s);
+		kputw(bc->anno[i], &s);
 	}
 	kputc('\0', &s);
 	// FMT
