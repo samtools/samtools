@@ -32,7 +32,7 @@ unsigned char seq_nt4_table[256] = {
 };
 
 struct __bcf_p1aux_t {
-	int n, M;
+	int n, M, n1;
 	double *q2p, *pdg; // pdg -> P(D|g)
 	double *phi;
 	double *z, *zswap; // aux for afs
@@ -100,6 +100,7 @@ bcf_p1aux_t *bcf_p1_init(int n) // FIXME: assuming diploid
 	bcf_p1aux_t *ma;
 	int i;
 	ma = calloc(1, sizeof(bcf_p1aux_t));
+	ma->n1 = -1;
 	ma->n = n; ma->M = 2 * n;
 	ma->q2p = calloc(256, sizeof(double));
 	ma->pdg = calloc(3 * ma->n, sizeof(double));
@@ -112,6 +113,13 @@ bcf_p1aux_t *bcf_p1_init(int n) // FIXME: assuming diploid
 		ma->q2p[i] = pow(10., -i / 10.);
 	bcf_p1_init_prior(ma, MC_PTYPE_FULL, 1e-3); // the simplest prior
 	return ma;
+}
+
+int bcf_p1_set_n1(bcf_p1aux_t *b, int n1)
+{
+	if (n1 == 0 || n1 >= b->n) return -1;
+	b->n1 = n1;
+	return 0;
 }
 
 void bcf_p1_destroy(bcf_p1aux_t *ma)
