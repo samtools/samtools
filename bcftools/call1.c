@@ -20,9 +20,10 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_VARONLY 16
 #define VC_VCFIN   32
 #define VC_UNCOMP  64
+#define VC_HWE     128
 
 typedef struct {
-	int flag, prior_type;
+	int flag, prior_type, n1;
 	char *fn_list, *prior_file;
 	double theta, pref;
 } viewconf_t;
@@ -140,14 +141,14 @@ static void rm_info(int n_smpl, bcf1_t *b, const char *key)
 	bcf_sync(n_smpl, b);
 }
 
-static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
+static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref)
 {
 	kstring_t s;
 	int is_var = (pr->p_ref < pref);
 	double p_hwe, r = is_var? pr->p_ref : 1. - pr->p_ref;
 	anno16_t a;
 
-	p_hwe = test_hwe(pr->g);
+	p_hwe = pr->g[0] >= 0.? test_hwe(pr->g) : 1.0; // only do HWE g[] is calculated
 	test16(b, &a);
 	rm_info(n_smpl, b, "I16=");
 
@@ -162,7 +163,8 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
 	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	if (a.is_tested) ksprintf(&s, ";PV4=%.2lg,%.2lg,%.2lg,%.2lg", a.p[0], a.p[1], a.p[2], a.p[3]);
-	if (p_hwe <= .2) ksprintf(&s, ";GC=%.2lf,%.2lf,%.2lf;HWE=%.3lf", pr->g[2], pr->g[1], pr->g[0], p_hwe);
+	if (pr->g[0] >= 0. && p_hwe <= .2)
+		ksprintf(&s, ";GC=%.2lf,%.2lf,%.2lf;HWE=%.3lf", pr->g[2], pr->g[1], pr->g[0], p_hwe);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
@@ -188,9 +190,10 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = -1; vc.theta = 1e-3; vc.pref = 0.9;
-	while ((c = getopt(argc, argv, "l:cGvLbSuP:t:p:")) >= 0) {
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.9;
+	while ((c = getopt(argc, argv, "1:l:cHGvLbSuP:t:p:")) >= 0) {
 		switch (c) {
+		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
 		case 'G': vc.flag |= VC_NO_GENO; break;
 		case 'L': vc.flag |= VC_NO_PL; break;
@@ -199,6 +202,7 @@ int bcfview(int argc, char *argv[])
 		case 'c': vc.flag |= VC_CALL; break;
 		case 'v': vc.flag |= VC_VARONLY; break;
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
+		case 'H': vc.flag |= VC_HWE; break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'P':
@@ -218,6 +222,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -S        input is VCF\n");
 		fprintf(stderr, "         -G        suppress all individual genotype information\n");
 		fprintf(stderr, "         -L        discard the PL genotype field\n");
+		fprintf(stderr, "         -H        perform Hardy-Weinberg test (slower)\n");
 		fprintf(stderr, "         -v        output potential variant sites only\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
 		fprintf(stderr, "         -t FLOAT  scaled mutation rate [%.4lg]\n", vc.theta);
@@ -245,6 +250,7 @@ int bcfview(int argc, char *argv[])
 				return 1;
 			}
 		} else bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
+		if (vc.n1 > 0) bcf_p1_set_n1(p1, vc.n1);
 	}
 	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, h);
 	if (optind + 1 < argc && !(vc.flag&VC_VCFIN)) {
@@ -274,10 +280,11 @@ int bcfview(int argc, char *argv[])
 		}
 		if (vc.flag & VC_CALL) {
 			bcf_p1rst_t pr;
-			bcf_p1_cal(b, p1, &pr);
+			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
+			if (vc.flag&VC_HWE) bcf_p1_cal_g3(p1, pr.g);
 			if ((n_processed + 1) % 50000 == 0) bcf_p1_dump_afs(p1);
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
-			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref, vc.flag);
+			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref);
 		}
 		if (vc.flag & VC_NO_GENO) {
 			b->n_gi = 0;

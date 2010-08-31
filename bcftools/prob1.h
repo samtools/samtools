@@ -26,6 +26,8 @@ extern "C" {
 	int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k);
 	void bcf_p1_dump_afs(bcf_p1aux_t *ma);
 	int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn);
+	long double bcf_p1_cal_g3(bcf_p1aux_t *p1a, double g[3]);
+	int bcf_p1_set_n1(bcf_p1aux_t *b, int n1);
 
 #ifdef __cplusplus
 }

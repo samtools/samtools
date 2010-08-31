@@ -36,6 +36,8 @@ struct __bcf_p1aux_t {
 	double *q2p, *pdg; // pdg -> P(D|g)
 	double *phi;
 	double *z, *zswap; // aux for afs
+	double *z1, *z2; // only calculated when n1 is set
+	double t, t1, t2;
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
 	const uint8_t *PL; // point to PL
 	int PL_len;
@@ -107,6 +109,8 @@ bcf_p1aux_t *bcf_p1_init(int n) // FIXME: assuming diploid
 	ma->phi = calloc(ma->M + 1, sizeof(double));
 	ma->z = calloc(2 * ma->n + 1, sizeof(double));
 	ma->zswap = calloc(2 * ma->n + 1, sizeof(double));
+	ma->z1 = calloc(ma->M + 1, sizeof(double)); // actually we do not need this large
+	ma->z2 = calloc(ma->M + 1, sizeof(double));
 	ma->afs = calloc(2 * ma->n + 1, sizeof(double));
 	ma->afs1 = calloc(2 * ma->n + 1, sizeof(double));
 	for (i = 0; i < 256; ++i)
@@ -127,7 +131,7 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 	if (ma) {
 		free(ma->q2p); free(ma->pdg);
 		free(ma->phi);
-		free(ma->z); free(ma->zswap);
+		free(ma->z); free(ma->zswap); free(ma->z1); free(ma->z2);
 		free(ma->afs); free(ma->afs1);
 		free(ma);
 	}
@@ -195,10 +199,10 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 
 #define TINY 1e-20
 
-static void mc_cal_y(bcf_p1aux_t *ma)
+static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 {
 	double *z[2], *tmp, *pdg;
-	int k, j, last_min, last_max;
+	int _j, last_min, last_max;
 	z[0] = ma->z;
 	z[1] = ma->zswap;
 	pdg = ma->pdg;
@@ -206,10 +210,11 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 	memset(z[1], 0, sizeof(double) * (ma->M + 1));
 	z[0][0] = 1.;
 	last_min = last_max = 0;
-	for (j = 0; j < ma->n; ++j) {
-		int _min = last_min, _max = last_max;
+	ma->t = 0.;
+	for (_j = beg; _j < ma->n; ++_j) {
+		int k, j = _j - beg, _min = last_min, _max = last_max;
 		double p[3], sum;
-		pdg = ma->pdg + j * 3;
+		pdg = ma->pdg + _j * 3;
 		p[0] = pdg[0]; p[1] = 2. * pdg[1]; p[2] = pdg[2];
 		for (; _min < _max && z[0][_min] < TINY; ++_min) z[0][_min] = z[1][_min] = 0.;
 		for (; _max > _min && z[0][_max] < TINY; --_max) z[0][_max] = z[1][_max] = 0.;
@@ -223,14 +228,54 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 				+ k*(2*j+2-k) * p[1] * z[0][k-1]
 				+ k*(k-1)* p[2] * z[0][k-2];
 		for (k = _min, sum = 0.; k <= _max; ++k) sum += z[1][k];
+		ma->t += log(sum / ((2. * j + 2) * (2. * j + 1)));
 		for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 		if (_min >= 1) z[1][_min-1] = 0.;
 		if (_min >= 2) z[1][_min-2] = 0.;
 		if (j < ma->n - 1) z[1][_max+1] = z[1][_max+2] = 0.;
+		if (_j == ma->n1 - 1) { // set pop1
+			ma->t1 = ma->t;
+			memcpy(ma->z1, z[1], sizeof(double) * (ma->n1 * 2 + 1));
+		}
 		tmp = z[0]; z[0] = z[1]; z[1] = tmp;
 		last_min = _min; last_max = _max;
 	}
 	if (z[0] != ma->z) memcpy(ma->z, z[0], sizeof(double) * (ma->M + 1));
+}
+
+static void mc_cal_y(bcf_p1aux_t *ma)
+{
+	if (ma->n1 > 0 && ma->n1 < ma->n) {
+		int k;
+		double x;
+		memset(ma->z1, 0, sizeof(double) * (2 * ma->n1 + 1));
+		memset(ma->z2, 0, sizeof(double) * (2 * (ma->n - ma->n1) + 1));
+		ma->t1 = ma->t2 = 0.;
+		mc_cal_y_core(ma, ma->n1);
+		ma->t2 = ma->t;
+		memcpy(ma->z2, ma->z, sizeof(double) * (2 * (ma->n - ma->n1) + 1));
+		mc_cal_y_core(ma, 0);
+		// rescale z
+		x = exp(ma->t - (ma->t1 + ma->t2));
+		for (k = 0; k <= ma->M; ++k) ma->z[k] *= x;
+	} else mc_cal_y_core(ma, 0);
+/*
+	if (ma->n1 > 0 && ma->n1 < ma->n) {
+		int i;
+		double y[5];
+		printf("*****\n");
+		for (i = 0; i <= 2; ++i)
+			printf("(%lf,%lf) ", ma->z1[i], ma->z2[i]);
+		printf("\n");
+		y[0] = ma->z1[0] * ma->z2[0];
+		y[1] = 1./2. * (ma->z1[0] * ma->z2[1] + ma->z1[1] * ma->z2[0]);
+		y[2] = 1./6. * (ma->z1[0] * ma->z2[2] + ma->z1[2] * ma->z2[0]) + 4./6. * ma->z1[1] * ma->z2[1];
+		y[3] = 1./2. * (ma->z1[1] * ma->z2[2] + ma->z1[2] * ma->z2[1]);
+		y[4] = ma->z1[2] * ma->z2[2];
+		for (i = 0; i <= 4; ++i) printf("(%lf,%lf) ", ma->z[i], y[i]);
+		printf("\n");
+	}
+*/
 }
 
 static double mc_cal_afs(bcf_p1aux_t *ma)
@@ -252,7 +297,7 @@ static double mc_cal_afs(bcf_p1aux_t *ma)
 	return sum / ma->M;
 }
 
-static long double p1_cal_g3(bcf_p1aux_t *p1a, double g[3])
+long double bcf_p1_cal_g3(bcf_p1aux_t *p1a, double g[3])
 {
 	long double pd = 0., g2[3];
 	int i, k;
@@ -312,7 +357,8 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 			flast = rst->f_em;
 		}
 	}
-	p1_cal_g3(ma, rst->g);
+	rst->g[0] = rst->g[1] = rst->g[2] = -1.;
+//	bcf_p1_cal_g3(ma, rst->g);
 	return 0;
 }
 
