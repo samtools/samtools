@@ -162,7 +162,10 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	if (b->info[0]) kputc(';', &s);
 	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
 	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
-	if (a.is_tested) ksprintf(&s, ";PV4=%.2lg,%.2lg,%.2lg,%.2lg", a.p[0], a.p[1], a.p[2], a.p[3]);
+	if (a.is_tested) {
+		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%.2lg,%.2lg,%.2lg,%.2lg", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
+		ksprintf(&s, ";PV4=%.2lg,%.2lg,%.2lg,%.2lg", a.p[0], a.p[1], a.p[2], a.p[3]);
+	}
 	if (pr->g[0] >= 0. && p_hwe <= .2)
 		ksprintf(&s, ";GC=%.2lf,%.2lf,%.2lf;HWE=%.3lf", pr->g[2], pr->g[1], pr->g[0], p_hwe);
 	kputc('\0', &s);
@@ -224,6 +227,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -L        discard the PL genotype field\n");
 		fprintf(stderr, "         -H        perform Hardy-Weinberg test (slower)\n");
 		fprintf(stderr, "         -v        output potential variant sites only\n");
+		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
 		fprintf(stderr, "         -t FLOAT  scaled mutation rate [%.4lg]\n", vc.theta);
 		fprintf(stderr, "         -p FLOAT  variant if P(ref|D)<FLOAT [%.3lg]\n", vc.pref);

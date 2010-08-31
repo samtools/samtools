@@ -12,6 +12,8 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define MC_MAX_EM_ITER 16
 #define MC_EM_EPS 1e-4
 
+//#define _BCF_QUAD
+
 unsigned char seq_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
@@ -39,6 +41,7 @@ struct __bcf_p1aux_t {
 	double *z1, *z2; // only calculated when n1 is set
 	double t, t1, t2;
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
+	double *k1k2;
 	const uint8_t *PL; // point to PL
 	int PL_len;
 };
@@ -97,7 +100,7 @@ int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn)
 	return 0;
 }
 
-bcf_p1aux_t *bcf_p1_init(int n) // FIXME: assuming diploid
+bcf_p1aux_t *bcf_p1_init(int n)
 {
 	bcf_p1aux_t *ma;
 	int i;
@@ -119,10 +122,26 @@ bcf_p1aux_t *bcf_p1_init(int n) // FIXME: assuming diploid
 	return ma;
 }
 
+#ifdef _BCF_QUAD
+static double lbinom(int n, int k)
+{
+	return lgamma(n+1) - lgamma(k+1) - lgamma(n-k+1);
+}
+#endif
+
 int bcf_p1_set_n1(bcf_p1aux_t *b, int n1)
 {
 	if (n1 == 0 || n1 >= b->n) return -1;
 	b->n1 = n1;
+#ifdef _BCF_QUAD
+	{
+		int k1, k2, n2 = b->n - b->n1;
+		b->k1k2 = calloc((2*n1+1) * (2*n2+1), sizeof(double));
+		for (k1 = 0; k1 <= 2*n1; ++k1)
+			for (k2 = 0; k2 <= 2*n2; ++k2)
+				b->k1k2[k1*(2*n2+1)+k2] = exp(lbinom(2*n1,k1) + lbinom(2*n2,k2) - lbinom(b->M,k1+k2));
+	}
+#endif
 	return 0;
 }
 
@@ -133,6 +152,7 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 		free(ma->phi);
 		free(ma->z); free(ma->zswap); free(ma->z1); free(ma->z2);
 		free(ma->afs); free(ma->afs1);
+		free(ma->k1k2);
 		free(ma);
 	}
 }
@@ -247,7 +267,7 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 {
 	if (ma->n1 > 0 && ma->n1 < ma->n) {
 		int k;
-		double x;
+		long double x;
 		memset(ma->z1, 0, sizeof(double) * (2 * ma->n1 + 1));
 		memset(ma->z2, 0, sizeof(double) * (2 * (ma->n - ma->n1) + 1));
 		ma->t1 = ma->t2 = 0.;
@@ -256,26 +276,68 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 		memcpy(ma->z2, ma->z, sizeof(double) * (2 * (ma->n - ma->n1) + 1));
 		mc_cal_y_core(ma, 0);
 		// rescale z
-		x = exp(ma->t - (ma->t1 + ma->t2));
+		x = expl(ma->t - (ma->t1 + ma->t2));
 		for (k = 0; k <= ma->M; ++k) ma->z[k] *= x;
 	} else mc_cal_y_core(ma, 0);
+#ifdef _BCF_QUAD
 /*
-	if (ma->n1 > 0 && ma->n1 < ma->n) {
-		int i;
-		double y[5];
-		printf("*****\n");
-		for (i = 0; i <= 2; ++i)
-			printf("(%lf,%lf) ", ma->z1[i], ma->z2[i]);
+	if (ma->n1 > 0 && ma->n1 < ma->n) { // DEBUG: consistency check; z[i] should equal y[i]
+		int i, k1, k2, n1 = ma->n1, n2 = ma->n - n1;
+		double *y;
+		printf("*** ");
+		y = calloc(ma->M + 1, sizeof(double));
+		for (k1 = 0; k1 <= 2*n1; ++k1)
+			for (k2 = 0; k2 <= 2*n2; ++k2)
+				y[k1+k2] += ma->k1k2[k1*(2*n2+1)+k2] * ma->z1[k1] * ma->z2[k2];
+		for (i = 0; i <= ma->M; ++i) printf("(%lf,%lf) ", ma->z[i], y[i]);
 		printf("\n");
-		y[0] = ma->z1[0] * ma->z2[0];
-		y[1] = 1./2. * (ma->z1[0] * ma->z2[1] + ma->z1[1] * ma->z2[0]);
-		y[2] = 1./6. * (ma->z1[0] * ma->z2[2] + ma->z1[2] * ma->z2[0]) + 4./6. * ma->z1[1] * ma->z2[1];
-		y[3] = 1./2. * (ma->z1[1] * ma->z2[2] + ma->z1[2] * ma->z2[1]);
-		y[4] = ma->z1[2] * ma->z2[2];
-		for (i = 0; i <= 4; ++i) printf("(%lf,%lf) ", ma->z[i], y[i]);
-		printf("\n");
+		free(y);
 	}
 */
+#endif
+}
+
+static void contrast(bcf_p1aux_t *ma, double pc[4]) // mc_cal_y() must be called before hand
+{
+	int k, n1 = ma->n1, n2 = ma->n - ma->n1;
+	long double sum = -1., x, sum_alt;
+	double y;
+	pc[0] = pc[1] = pc[2] = pc[3] = -1.;
+	if (n1 <= 0 || n2 <= 0) return;
+#ifdef _BCF_QUAD
+	{ // FIXME: can be improved by skipping zero cells
+		int k1, k2;
+		long double z[3];
+		z[0] = z[1] = z[2] = 0.;
+		for (k1 = 0; k1 <= 2*n1; ++k1)
+			for (k2 = 0; k2 <= 2*n2; ++k2) {
+				double zz = ma->phi[k1+k2] * ma->z1[k1] * ma->z2[k2] * ma->k1k2[k1*(2*n2+1)+k2];
+				if ((double)k1/n1 < (double)k2/n2) z[0] += zz;
+				else if ((double)k1/n1 > (double)k2/n2) z[1] += zz;
+				else z[2] += zz;
+			}
+		sum = z[0] + z[1] + z[2];
+		pc[2] = z[0] / sum; pc[3] = z[1] / sum;
+	}
+#endif
+	for (k = 0, sum_alt = 0.; k <= ma->M; ++k)
+		sum_alt += (long double)ma->phi[k] * ma->z[k];
+//	printf("* %lg, %lg *\n", (double)sum, (double)sum_alt); // DEBUG: sum should equal sum_alt
+	sum = sum_alt;
+	y = lgamma(2*n1 + 1) - lgamma(ma->M + 1);
+	for (k = 1, x = 0.; k <= 2 * n2; ++k)
+		x += ma->phi[k] * ma->z2[k] * exp(lgamma(ma->M - k + 1) - lgamma(2*n2 - k + 1) + y);
+	pc[0] = ma->z1[0] * x / sum;
+	y = lgamma(2*n2 + 1) - lgamma(ma->M + 1);
+	for (k = 1, x = 0.; k <= 2 * n1; ++k)
+		x += ma->phi[k] * ma->z1[k] * exp(lgamma(ma->M - k + 1) - lgamma(2*n1 - k + 1) + y);
+	pc[1] = ma->z2[0] * x / sum;
+	for (k = 0; k < 4; ++k) {
+		y = 1. - pc[k];
+		if (y <= 0.) y = 1e-100;
+		pc[k] = (int)(-3.434 * log(y) + .499);
+		if (pc[k] > 99.) pc[k] = 99.;
+	}
 }
 
 static double mc_cal_afs(bcf_p1aux_t *ma)
@@ -358,6 +420,7 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 		}
 	}
 	rst->g[0] = rst->g[1] = rst->g[2] = -1.;
+	contrast(ma, rst->pc);
 //	bcf_p1_cal_g3(ma, rst->g);
 	return 0;
 }
