@@ -319,6 +319,8 @@ static void contrast(bcf_p1aux_t *ma, double pc[4]) // mc_cal_y() must be called
 		sum = z[0] + z[1] + z[2];
 		pc[2] = z[0] / sum; pc[3] = z[1] / sum;
 	}
+#else
+	pc[2] = pc[3] = 0.;
 #endif
 	for (k = 0, sum_alt = 0.; k <= ma->M; ++k)
 		sum_alt += (long double)ma->phi[k] * ma->z[k];
