@@ -109,12 +109,18 @@ int bcf_sync(int n_smpl, bcf1_t *b)
 	b->ref = b->alt = b->flt = b->info = b->fmt = 0;
 	for (p = b->str, n = 0; p < b->str + b->l_str; ++p)
 		if (*p == 0 && p+1 != b->str + b->l_str) tmp[n++] = p + 1;
-	if (n != 5) return -1;
+	if (n != 5) {
+		fprintf(stderr, "[bcf_sync] incorrect number of fields (%d != 5)\n", n);
+		return -1;
+	}
 	b->ref = tmp[0]; b->alt = tmp[1]; b->flt = tmp[2]; b->info = tmp[3]; b->fmt = tmp[4];
 	// set n_alleles
-	for (p = b->alt, n = 1; *p; ++p)
-		if (*p == ',') ++n;
-	b->n_alleles = n + 1;
+	if (*b->alt == 0) b->n_alleles = 1;
+	else {
+		for (p = b->alt, n = 1; *p; ++p)
+			if (*p == ',') ++n;
+		b->n_alleles = n + 1;
+	}
 	// set n_gi and gi[i].fmt
 	for (p = b->fmt, n = 1; *p; ++p)
 		if (*p == ':') ++n;

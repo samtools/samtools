@@ -21,6 +21,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_VCFIN   32
 #define VC_UNCOMP  64
 #define VC_HWE     128
+#define VC_KEEPALT 256
 
 typedef struct {
 	int flag, prior_type, n1;
@@ -141,7 +142,7 @@ static void rm_info(int n_smpl, bcf1_t *b, const char *key)
 	bcf_sync(n_smpl, b);
 }
 
-static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref)
+static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
 {
 	kstring_t s;
 	int is_var = (pr->p_ref < pref);
@@ -154,10 +155,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
-	if (is_var) {
-		kputs(b->alt, &s);
-	}
-	kputc('\0', &s); kputc('\0', &s);
+	kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
 	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
@@ -175,6 +173,9 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	b->qual = r < 1e-100? 99 : -3.434 * log(r);
 	if (b->qual > 99) b->qual = 99;
 	bcf_sync(n_smpl, b);
+	if (!is_var) bcf_shrink_alt(n_smpl, b, 1);
+	else if (!(flag&VC_KEEPALT))
+		bcf_shrink_alt(n_smpl, b, pr->rank0 < 2? 2 : pr->rank0+1);
 	return is_var;
 }
 
@@ -194,12 +195,13 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.9;
-	while ((c = getopt(argc, argv, "1:l:cHGvLbSuP:t:p:")) >= 0) {
+	while ((c = getopt(argc, argv, "1:l:cHAGvLbSuP:t:p:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
 		case 'G': vc.flag |= VC_NO_GENO; break;
 		case 'L': vc.flag |= VC_NO_PL; break;
+		case 'A': vc.flag |= VC_KEEPALT; break;
 		case 'b': vc.flag |= VC_BCFOUT; break;
 		case 'S': vc.flag |= VC_VCFIN; break;
 		case 'c': vc.flag |= VC_CALL; break;
@@ -223,6 +225,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -b        output BCF instead of VCF\n");
 		fprintf(stderr, "         -u        uncompressed BCF output\n");
 		fprintf(stderr, "         -S        input is VCF\n");
+		fprintf(stderr, "         -A        keep all possible alternate alleles at variant sites\n");
 		fprintf(stderr, "         -G        suppress all individual genotype information\n");
 		fprintf(stderr, "         -L        discard the PL genotype field\n");
 		fprintf(stderr, "         -H        perform Hardy-Weinberg test (slower)\n");
@@ -288,7 +291,7 @@ int bcfview(int argc, char *argv[])
 			if (vc.flag&VC_HWE) bcf_p1_cal_g3(p1, pr.g);
 			if ((n_processed + 1) % 50000 == 0) bcf_p1_dump_afs(p1);
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
-			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref);
+			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
 		if (vc.flag & VC_NO_GENO) {
 			b->n_gi = 0;

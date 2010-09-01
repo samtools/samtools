@@ -1,4 +1,5 @@
 #include "bcf.h"
+#include "kstring.h"
 #include "khash.h"
 KHASH_MAP_INIT_STR(str2id, int)
 
@@ -45,4 +46,39 @@ int bcf_str2id_add(void *_hash, const char *str)
 	if (ret == 0) return kh_val(hash, k);
 	kh_val(hash, k) = kh_size(hash) - 1;
 	return kh_val(hash, k);
+}
+
+int bcf_shrink_alt(int n_smpl, bcf1_t *b, int n)
+{
+	char *p;
+	int i, j, k;
+	int *z;
+	if (b->n_alleles <= n) return -1;
+	if (n > 1) {
+		for (p = b->alt, k = 1; *p; ++p)
+			if (*p == ',' && ++k == n) break;
+		*p = '\0';
+	} else p = b->alt, *p = '\0';
+	++p;
+	memmove(p, b->flt, b->str + b->l_str - b->flt);
+	b->l_str -= b->flt - p;
+	z = alloca(sizeof(int) / 2 * n * (n+1));
+	for (i = k = 0; i < n; ++i)
+		for (j = 0; j < n - i; ++j)
+			z[k++] = i * b->n_alleles + j;
+	for (i = 0; i < b->n_gi; ++i) {
+		bcf_ginfo_t *g = b->gi + i;
+		if (g->fmt == bcf_str2int("PL", 2)) {
+			int l, x = b->n_alleles * (b->n_alleles + 1) / 2;
+			uint8_t *d = (uint8_t*)g->data;
+			g->len = n * (n + 1) / 2;
+			for (l = k = 0; l < n_smpl; ++l) {
+				uint8_t *dl = d + l * x;
+				for (j = 0; j < g->len; ++j) d[k++] = dl[z[j]];
+			}
+		} // FIXME: to add GL
+	}
+	b->n_alleles = n;
+	bcf_sync(n_smpl, b);
+	return 0;
 }
