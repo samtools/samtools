@@ -152,7 +152,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 		} else if (k == 1) { // pos
 			b->pos = atoi(p) - 1;
 		} else if (k == 5) { // qual
-			b->qual = (p[0] >= '0' && p[0] <= '9')? atoi(p) : 0;
+			b->qual = (p[0] >= '0' && p[0] <= '9')? atof(p) : 0;
 		} else if (k <= 8) { // variable length strings
 			kputs(p, &str); kputc('\0', &str);
 			b->l_str = str.l; b->m_str = str.m; b->str = str.s;
