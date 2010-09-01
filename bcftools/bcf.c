@@ -143,7 +143,7 @@ int bcf_sync(int n_smpl, bcf1_t *b)
 		} else if (b->gi[i].fmt == bcf_str2int("GQ", 2) || b->gi[i].fmt == bcf_str2int("GT", 2)) {
 			b->gi[i].len = 1;
 		} else if (b->gi[i].fmt == bcf_str2int("GL", 2)) {
-			b->gi[i].len = 4;
+			b->gi[i].len = b->n_alleles * (b->n_alleles + 1) / 2 * 4;
 		}
 		b->gi[i].data = realloc(b->gi[i].data, n_smpl * b->gi[i].len);
 	}
@@ -245,9 +245,21 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 				kputw(((uint8_t*)b->gi[i].data)[j], s);
 			} else if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
 				int y = ((uint8_t*)b->gi[i].data)[j];
-				kputc('0' + (y>>3&7), s);
-				kputc("/|"[y>>6&1], s);
-				kputc('0' + (y&7), s);
+				if (y>>7&1) {
+					kputsn("./.", 3, s);
+				} else {
+					kputc('0' + (y>>3&7), s);
+					kputc("/|"[y>>6&1], s);
+					kputc('0' + (y&7), s);
+				}
+			} else if (b->gi[i].fmt == bcf_str2int("GL", 2)) {
+				float *d = (float*)b->gi[i].data + j * x;
+				int k;
+				//printf("- %lx\n", d);
+				for (k = 0; k < x; ++k) {
+					if (k > 0) kputc(',', s);
+					ksprintf(s, "%.2f", d[k]);
+				}
 			}
 		}
 	}

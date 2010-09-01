@@ -150,19 +150,38 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 			}
 			b->tid = tid;
 		} else if (k == 1) { // pos
-			b->pos = atoi(p);
+			b->pos = atoi(p) - 1;
 		} else if (k == 5) { // qual
 			b->qual = (p[0] >= '0' && p[0] <= '9')? atoi(p) : 0;
 		} else if (k <= 8) { // variable length strings
 			kputs(p, &str); kputc('\0', &str);
 			b->l_str = str.l; b->m_str = str.m; b->str = str.s;
 			if (k == 8) bcf_sync(h->n_smpl, b);
-		} else {
+		} else { // k > 9
+			if (strncmp(p, "./.", 3) == 0) {
+				for (i = 0; i < b->n_gi; ++i) {
+					if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
+						((uint8_t*)b->gi[i].data)[k-9] = 1<<7;
+					} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
+						((uint8_t*)b->gi[i].data)[k-9] = 0;
+					} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
+						((uint16_t*)b->gi[i].data)[k-9] = 0;
+					} else if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
+						int y = b->n_alleles * (b->n_alleles + 1) / 2;
+						memset((uint8_t*)b->gi[i].data + (k - 9) * y, 0, y);
+					} else if (b->gi[i].fmt == bcf_str2int("GL", 2)) {
+						int y = b->n_alleles * (b->n_alleles + 1) / 2;
+						memset((float*)b->gi[i].data + (k - 9) * y, 0, y * 4);
+					}
+				}
+				goto endblock;
+			}
 			for (q = kstrtok(p, ":", &a2), i = 0; q && i < b->n_gi; q = kstrtok(0, 0, &a2), ++i) {
 				if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
 					((uint8_t*)b->gi[i].data)[k-9] = (q[0] - '0')<<3 | (q[2] - '0') | (q[1] == '/'? 0 : 1) << 6;
 				} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
-					int x = strtol(q, &q, 10);
+					double _x = strtod(q, &q);
+					int x = (int)(_x + .499);
 					if (x > 255) x = 255;
 					((uint8_t*)b->gi[i].data)[k-9] = x;
 				} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
@@ -170,16 +189,27 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 					if (x > 0xffff) x = 0xffff;
 					((uint16_t*)b->gi[i].data)[k-9] = x;
 				} else if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
-					int x, j;
+					int x, y, j;
 					uint8_t *data = (uint8_t*)b->gi[i].data;
-					for (j = 0; j < b->gi[i].len; ++j) {
+					y = b->n_alleles * (b->n_alleles + 1) / 2;
+					for (j = 0; j < y; ++j) {
 						x = strtol(q, &q, 10);
 						if (x > 255) x = 255;
-						data[i * b->gi[i].len + j] = x;
+						data[(k-9) * y + j] = x;
+						++q;
+					}
+				} else if (b->gi[i].fmt == bcf_str2int("GL", 2)) {
+					int j, y;
+					float x, *data = (float*)b->gi[i].data;
+					y = b->n_alleles * (b->n_alleles + 1) / 2;
+					for (j = 0; j < y; ++j) {
+						x = strtod(q, &q);
+						data[(k-9) * y + j] = x;
 						++q;
 					}
 				}
 			}
+		endblock: i = i;
 		}
 	}
 	h->l_nm = rn.l; h->name = rn.s;
