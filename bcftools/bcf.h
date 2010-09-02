@@ -66,6 +66,8 @@ extern "C" {
 	int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b);
 
 	int bcf_shrink_alt(int n_smpl, bcf1_t *b, int n);
+	int bcf_gl2pl(int n_smpl, bcf1_t *b);
+
 	void *bcf_build_refhash(bcf_hdr_t *h);
 	void bcf_str2id_destroy(void *_hash);
 	int bcf_str2id_add(void *_hash, const char *str);

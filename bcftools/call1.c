@@ -287,6 +287,7 @@ int bcfview(int argc, char *argv[])
 		}
 		if (vc.flag & VC_CALL) {
 			bcf_p1rst_t pr;
+			bcf_gl2pl(h->n_smpl, b);
 			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
 			if (vc.flag&VC_HWE) bcf_p1_cal_g3(p1, pr.g);
 			if ((n_processed + 1) % 50000 == 0) bcf_p1_dump_afs(p1);

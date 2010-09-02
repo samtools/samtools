@@ -82,3 +82,29 @@ int bcf_shrink_alt(int n_smpl, bcf1_t *b, int n)
 	bcf_sync(n_smpl, b);
 	return 0;
 }
+
+int bcf_gl2pl(int n_smpl, bcf1_t *b)
+{
+	char *p;
+	int i;
+	bcf_ginfo_t *g;
+	float *d0;
+	uint8_t *d1;
+	if (strstr(b->fmt, "PL")) return -1;
+	if ((p = strstr(b->fmt, "GL")) == 0) return -1;
+	*p = 'P';
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == bcf_str2int("GL", 2))
+			break;
+	g = b->gi + i;
+	g->fmt = bcf_str2int("PL", 2);
+	g->len /= 4; // 4 == sizeof(float)
+	d0 = (float*)g->data; d1 = (uint8_t*)g->data;
+	for (i = 0; i < n_smpl * g->len; ++i) {
+		int x = (int)(-10. * d0[i] + .499);
+		if (x > 255) x = 255;
+		if (x < 0) x = 0;
+		d1[i] = x;
+	}
+	return 0;
+}
