@@ -161,7 +161,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
 	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	if (a.is_tested) {
-		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%.4lf,%.4lf,%.2lg,%.2lg", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
+		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%lg,%lg,%lg,%lg", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
 		ksprintf(&s, ";PV4=%.2lg,%.2lg,%.2lg,%.2lg", a.p[0], a.p[1], a.p[2], a.p[3]);
 	}
 	if (pr->g[0] >= 0. && p_hwe <= .2)
@@ -257,7 +257,10 @@ int bcfview(int argc, char *argv[])
 				return 1;
 			}
 		} else bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
-		if (vc.n1 > 0) bcf_p1_set_n1(p1, vc.n1);
+		if (vc.n1 > 0) {
+			bcf_p1_set_n1(p1, vc.n1);
+			bcf_p1_init_subprior(p1, vc.prior_type, vc.theta);
+		}
 	}
 	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, h);
 	if (optind + 1 < argc && !(vc.flag&VC_VCFIN)) {
@@ -277,7 +280,9 @@ int bcfview(int argc, char *argv[])
 		if (hash) {
 			uint64_t x = (uint64_t)b->tid<<32 | b->pos;
 			khint_t k = kh_get(set64, hash, x);
+			if (kh_size(hash) == 0) break;
 			if (k == kh_end(hash)) continue;
+			kh_del(set64, hash, k);
 		}
 		if (tid >= 0) {
 			int l = strlen(b->ref);

@@ -12,8 +12,6 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define MC_MAX_EM_ITER 16
 #define MC_EM_EPS 1e-4
 
-//#define _BCF_QUAD
-
 unsigned char seq_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
@@ -38,29 +36,40 @@ struct __bcf_p1aux_t {
 	double *q2p, *pdg; // pdg -> P(D|g)
 	double *phi;
 	double *z, *zswap; // aux for afs
-	double *z1, *z2; // only calculated when n1 is set
+	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
 	double t, t1, t2;
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
-	double *k1k2;
 	const uint8_t *PL; // point to PL
 	int PL_len;
 };
 
-void bcf_p1_init_prior(bcf_p1aux_t *ma, int type, double theta)
+static void init_prior(int type, double theta, int M, double *phi)
 {
 	int i;
 	if (type == MC_PTYPE_COND2) {
-		for (i = 0; i <= ma->M; ++i)
-			ma->phi[i] = 2. * (i + 1) / (ma->M + 1) / (ma->M + 2);
+		for (i = 0; i <= M; ++i)
+			phi[i] = 2. * (i + 1) / (M + 1) / (M + 2);
 	} else if (type == MC_PTYPE_FLAT) {
-		for (i = 0; i <= ma->M; ++i)
-			ma->phi[i] = 1. / (ma->M + 1);
+		for (i = 0; i <= M; ++i)
+			phi[i] = 1. / (M + 1);
 	} else {
 		double sum;
-		for (i = 0, sum = 0.; i < ma->M; ++i)
-			sum += (ma->phi[i] = theta / (ma->M - i));
-		ma->phi[ma->M] = 1. - sum;
+		for (i = 0, sum = 0.; i < M; ++i)
+			sum += (phi[i] = theta / (M - i));
+		phi[M] = 1. - sum;
 	}
+}
+
+void bcf_p1_init_prior(bcf_p1aux_t *ma, int type, double theta)
+{
+	init_prior(type, theta, ma->M, ma->phi);
+}
+
+void bcf_p1_init_subprior(bcf_p1aux_t *ma, int type, double theta)
+{
+	if (ma->n1 <= 0 || ma->n1 >= ma->M) return;
+	init_prior(type, theta, 2*ma->n1, ma->phi1);
+	init_prior(type, theta, 2*(ma->n - ma->n1), ma->phi2);
 }
 
 int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn)
@@ -112,6 +121,8 @@ bcf_p1aux_t *bcf_p1_init(int n)
 	ma->q2p = calloc(256, sizeof(double));
 	ma->pdg = calloc(3 * ma->n, sizeof(double));
 	ma->phi = calloc(ma->M + 1, sizeof(double));
+	ma->phi1 = calloc(ma->M + 1, sizeof(double));
+	ma->phi2 = calloc(ma->M + 1, sizeof(double));
 	ma->z = calloc(2 * ma->n + 1, sizeof(double));
 	ma->zswap = calloc(2 * ma->n + 1, sizeof(double));
 	ma->z1 = calloc(ma->M + 1, sizeof(double)); // actually we do not need this large
@@ -124,26 +135,10 @@ bcf_p1aux_t *bcf_p1_init(int n)
 	return ma;
 }
 
-#ifdef _BCF_QUAD
-static double lbinom(int n, int k)
-{
-	return lgamma(n+1) - lgamma(k+1) - lgamma(n-k+1);
-}
-#endif
-
 int bcf_p1_set_n1(bcf_p1aux_t *b, int n1)
 {
 	if (n1 == 0 || n1 >= b->n) return -1;
 	b->n1 = n1;
-#ifdef _BCF_QUAD
-	{
-		int k1, k2, n2 = b->n - b->n1;
-		b->k1k2 = calloc((2*n1+1) * (2*n2+1), sizeof(double));
-		for (k1 = 0; k1 <= 2*n1; ++k1)
-			for (k2 = 0; k2 <= 2*n2; ++k2)
-				b->k1k2[k1*(2*n2+1)+k2] = exp(lbinom(2*n1,k1) + lbinom(2*n2,k2) - lbinom(b->M,k1+k2));
-	}
-#endif
 	return 0;
 }
 
@@ -151,10 +146,9 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 {
 	if (ma) {
 		free(ma->q2p); free(ma->pdg);
-		free(ma->phi);
+		free(ma->phi); free(ma->phi1); free(ma->phi2);
 		free(ma->z); free(ma->zswap); free(ma->z1); free(ma->z2);
 		free(ma->afs); free(ma->afs1);
-		free(ma->k1k2);
 		free(ma);
 	}
 }
@@ -281,77 +275,28 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 		x = expl(ma->t - (ma->t1 + ma->t2));
 		for (k = 0; k <= ma->M; ++k) ma->z[k] *= x;
 	} else mc_cal_y_core(ma, 0);
-#ifdef _BCF_QUAD
-/*
-	if (ma->n1 > 0 && ma->n1 < ma->n) { // DEBUG: consistency check; z[i] should equal y[i]
-		int i, k1, k2, n1 = ma->n1, n2 = ma->n - n1;
-		double *y;
-		printf("*** ");
-		y = calloc(ma->M + 1, sizeof(double));
-		for (k1 = 0; k1 <= 2*n1; ++k1)
-			for (k2 = 0; k2 <= 2*n2; ++k2)
-				y[k1+k2] += ma->k1k2[k1*(2*n2+1)+k2] * ma->z1[k1] * ma->z2[k2];
-		for (i = 0; i <= ma->M; ++i) printf("(%lf,%lf) ", ma->z[i], y[i]);
-		printf("\n");
-		free(y);
-	}
-*/
-#endif
 }
 
 static void contrast(bcf_p1aux_t *ma, double pc[4]) // mc_cal_y() must be called before hand
 {
 	int k, n1 = ma->n1, n2 = ma->n - ma->n1;
-	long double sum = -1., x, sum_alt;
-	double y;
-	pc[0] = pc[1] = pc[2] = pc[3] = -1.;
+	long double sum1, sum2;
+	pc[0] = pc[1] = pc[2] = pc[3] = 0.;
 	if (n1 <= 0 || n2 <= 0) return;
-#ifdef _BCF_QUAD
-	{ // FIXME: can be improved by skipping zero cells
-		int k1, k2;
-		long double z[3];
-		z[0] = z[1] = z[2] = 0.;
-		for (k1 = 0; k1 <= 2*n1; ++k1)
-			for (k2 = 0; k2 <= 2*n2; ++k2) {
-				double zz = ma->phi[k1+k2] * ma->z1[k1] * ma->z2[k2] * ma->k1k2[k1*(2*n2+1)+k2];
-				if ((double)k1/n1 < (double)k2/n2) z[0] += zz;
-				else if ((double)k1/n1 > (double)k2/n2) z[1] += zz;
-				else z[2] += zz;
-			}
-		sum = z[0] + z[1] + z[2];
-		pc[2] = z[0] / sum; pc[3] = z[1] / sum;
-	}
-#else
-	pc[2] = pc[3] = 0.;
-#endif
-	for (k = 0, sum_alt = 0.; k <= ma->M; ++k)
-		sum_alt += (long double)ma->phi[k] * ma->z[k];
-//	printf("* %lg, %lg *\n", (double)sum, (double)sum_alt); // DEBUG: sum should equal sum_alt
-	sum = sum_alt;
-	// the variant is specific to group2
-//	printf("%lg %lg %lg %lg\n", ma->z[2*(n1+n2)]/exp(ma->t - (ma->t1 + ma->t2)), ma->z1[2*n1], ma->z2[2*n2], (double)sum);
-	y = lgamma(2*n2 + 1) - lgamma(ma->M + 1);
-	for (k = 0, x = 0.; k < 2 * n2; ++k)
-		x += ma->phi[2*n1+k] * ma->z2[k] * expl(lgamma(2*n1 + k + 1) - lgamma(k + 1) + y);
-	pc[1] = ma->z1[2*n1] * x / sum;
-	for (k = 1, x = 0.; k <= 2 * n2; ++k)
-		x += ma->phi[k] * ma->z2[k] * expl(lgamma(ma->M - k + 1) - lgamma(2*n2 - k + 1) + y);
-	pc[1] += ma->z1[0] * x / sum;
-	// the variant is specific to group1
-	y = lgamma(2*n1 + 1) - lgamma(ma->M + 1);
-	for (k = 0, x = 0.; k < 2 * n1; ++k)
-		x += ma->phi[2*n2+k] * ma->z1[k] * expl(lgamma(2*n2 + k + 1) - lgamma(k + 1) + y);
-	pc[0] = ma->z2[2*n2] * x / sum;
-	for (k = 1, x = 0.; k <= 2 * n1; ++k)
-		x += ma->phi[k] * ma->z1[k] * expl(lgamma(ma->M - k + 1) - lgamma(2*n1 - k + 1) + y);
-	pc[0] += ma->z2[0] * x / sum;
-	// rescale
+	for (k = 0, sum1 = 0.; k <= 2*n1; ++k) sum1 += ma->phi1[k] * ma->z1[k];
+	for (k = 0, sum2 = 0.; k <= 2*n2; ++k) sum2 += ma->phi2[k] * ma->z2[k];
+	pc[2] = ma->phi1[2*n1] * ma->z1[2*n1] / sum1;
+	pc[3] = ma->phi2[2*n2] * ma->z2[2*n2] / sum2;
 	for (k = 2; k < 4; ++k) {
-		y = 1. - pc[k];
-		if (y <= 0.) y = 1e-100;
-		pc[k] = (int)(-4.343 * log(y) + .499);
-		if (pc[k] > 99.) pc[k] = 99.;
+		pc[k] = pc[k] > .5? -(-4.343 * log(1. - pc[k] + TINY) + .499) : -4.343 * log(pc[k] + TINY) + .499;
+		pc[k] = (int)pc[k];
+		if (pc[k] > 99) pc[k] = 99;
+		if (pc[k] < -99) pc[k] = -99;
 	}
+	pc[0] = ma->phi2[2*n2] * ma->z2[2*n2] / sum2 * (1. - ma->phi1[2*n1] * ma->z1[2*n1] / sum1);
+	pc[1] = ma->phi1[2*n1] * ma->z1[2*n1] / sum1 * (1. - ma->phi2[2*n2] * ma->z2[2*n2] / sum2);
+	pc[0] = pc[0] == 1.? 99 : (int)(-4.343 * log(1. - pc[0]) + .499);
+	pc[1] = pc[1] == 1.? 99 : (int)(-4.343 * log(1. - pc[1]) + .499);
 }
 
 static double mc_cal_afs(bcf_p1aux_t *ma)
@@ -435,7 +380,6 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	}
 	rst->g[0] = rst->g[1] = rst->g[2] = -1.;
 	contrast(ma, rst->pc);
-//	bcf_p1_cal_g3(ma, rst->g);
 	return 0;
 }
 
