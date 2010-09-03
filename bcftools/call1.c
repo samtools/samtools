@@ -161,7 +161,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
 	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	if (a.is_tested) {
-		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%.2lg,%.2lg,%.2lg,%.2lg", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
+		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%.4lf,%.4lf,%.2lg,%.2lg", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
 		ksprintf(&s, ";PV4=%.2lg,%.2lg,%.2lg,%.2lg", a.p[0], a.p[1], a.p[2], a.p[3]);
 	}
 	if (pr->g[0] >= 0. && p_hwe <= .2)
@@ -170,7 +170,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
 	b->m_str = s.m; b->l_str = s.l; b->str = s.s;
-	b->qual = r < 1e-100? 99 : -3.434 * log(r);
+	b->qual = r < 1e-100? 99 : -4.343 * log(r);
 	if (b->qual > 99) b->qual = 99;
 	bcf_sync(n_smpl, b);
 	if (!is_var) bcf_shrink_alt(n_smpl, b, 1);
@@ -194,7 +194,7 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.9;
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5;
 	while ((c = getopt(argc, argv, "1:l:cHAGvLbSuP:t:p:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
@@ -285,12 +285,16 @@ int bcfview(int argc, char *argv[])
 			if (b->tid != tid || b->pos >= end) break;
 			if (!(l > begin && end > b->pos)) continue;
 		}
+		++n_processed;
 		if (vc.flag & VC_CALL) {
 			bcf_p1rst_t pr;
 			bcf_gl2pl(h->n_smpl, b);
 			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
 			if (vc.flag&VC_HWE) bcf_p1_cal_g3(p1, pr.g);
-			if ((n_processed + 1) % 50000 == 0) bcf_p1_dump_afs(p1);
+			if (n_processed % 100000 == 0) {
+				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
+				bcf_p1_dump_afs(p1);
+			}
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
 			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
@@ -299,7 +303,6 @@ int bcfview(int argc, char *argv[])
 			b->fmt[0] = '\0';
 		}
 		vcf_write(bout, h, b);
-		++n_processed;
 	}
 	if (vc.prior_file) free(vc.prior_file);
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);

@@ -97,6 +97,8 @@ int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn)
 	for (k = 0; k <= ma->M; ++k) ma->phi[k] /= sum;
 	for (k = 0; k <= ma->M; ++k) fprintf(stderr, " %d:%.3lg", k, ma->phi[ma->M - k]);
 	fputc('\n', stderr);
+	for (sum = 0., k = 1; k <= ma->M; ++k) sum += k * ma->phi[ma->M - k];
+	fprintf(stderr, "[heterozygosity] %lf\n", (double)sum / ma->M);
 	return 0;
 }
 
@@ -212,7 +214,7 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 	}
 	max = 1. - max;
 	if (max < 1e-308) max = 1e-308;
-	q = (int)(-3.434 * log(max) + .499);
+	q = (int)(-4.343 * log(max) + .499);
 	if (q > 99) q = 99;
 	return q<<2|max_i;
 }
@@ -326,18 +328,28 @@ static void contrast(bcf_p1aux_t *ma, double pc[4]) // mc_cal_y() must be called
 		sum_alt += (long double)ma->phi[k] * ma->z[k];
 //	printf("* %lg, %lg *\n", (double)sum, (double)sum_alt); // DEBUG: sum should equal sum_alt
 	sum = sum_alt;
-	y = lgamma(2*n1 + 1) - lgamma(ma->M + 1);
-	for (k = 1, x = 0.; k <= 2 * n2; ++k)
-		x += ma->phi[k] * ma->z2[k] * exp(lgamma(ma->M - k + 1) - lgamma(2*n2 - k + 1) + y);
-	pc[0] = ma->z1[0] * x / sum;
+	// the variant is specific to group2
+//	printf("%lg %lg %lg %lg\n", ma->z[2*(n1+n2)]/exp(ma->t - (ma->t1 + ma->t2)), ma->z1[2*n1], ma->z2[2*n2], (double)sum);
 	y = lgamma(2*n2 + 1) - lgamma(ma->M + 1);
+	for (k = 0, x = 0.; k < 2 * n2; ++k)
+		x += ma->phi[2*n1+k] * ma->z2[k] * expl(lgamma(2*n1 + k + 1) - lgamma(k + 1) + y);
+	pc[1] = ma->z1[2*n1] * x / sum;
+	for (k = 1, x = 0.; k <= 2 * n2; ++k)
+		x += ma->phi[k] * ma->z2[k] * expl(lgamma(ma->M - k + 1) - lgamma(2*n2 - k + 1) + y);
+	pc[1] += ma->z1[0] * x / sum;
+	// the variant is specific to group1
+	y = lgamma(2*n1 + 1) - lgamma(ma->M + 1);
+	for (k = 0, x = 0.; k < 2 * n1; ++k)
+		x += ma->phi[2*n2+k] * ma->z1[k] * expl(lgamma(2*n2 + k + 1) - lgamma(k + 1) + y);
+	pc[0] = ma->z2[2*n2] * x / sum;
 	for (k = 1, x = 0.; k <= 2 * n1; ++k)
-		x += ma->phi[k] * ma->z1[k] * exp(lgamma(ma->M - k + 1) - lgamma(2*n1 - k + 1) + y);
-	pc[1] = ma->z2[0] * x / sum;
-	for (k = 0; k < 4; ++k) {
+		x += ma->phi[k] * ma->z1[k] * expl(lgamma(ma->M - k + 1) - lgamma(2*n1 - k + 1) + y);
+	pc[0] += ma->z2[0] * x / sum;
+	// rescale
+	for (k = 2; k < 4; ++k) {
 		y = 1. - pc[k];
 		if (y <= 0.) y = 1e-100;
-		pc[k] = (int)(-3.434 * log(y) + .499);
+		pc[k] = (int)(-4.343 * log(y) + .499);
 		if (pc[k] > 99.) pc[k] = 99.;
 	}
 }

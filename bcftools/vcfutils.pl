@@ -116,6 +116,7 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
 	my @t = split;
 	next if (length($t[3]) != 1 || uc($t[3]) eq 'N');
 	my @s = split(',', $t[4]);
+	$t[5] = 3 if ($t[5] < 0);
 	$t[3] = uc($t[3]); $t[4] = uc($t[4]);
 	next if (length($s[0]) != 1);
 	push(@a, [$t[5], ($t[4] eq '.' || $t[4] eq $t[3])? 0 : 1, $ts{$t[3].$s[0]}? 1 : 0, $h{$t[0],$t[1]}? 1 : 0]);
@@ -131,7 +132,7 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
 	  my @x;
 	  $x[0] = sprintf("%.3f", $c[1]-$c[2]? $c[2] / ($c[1] - $c[2]) : 100);
 	  $x[1] = sprintf("%.3f", $hsize? $c[3] / $hsize : 0);
-	  $x[2] = sprintf("%.3f", $c[3] / $c[0]);
+	  $x[2] = sprintf("%.3f", $c[3] / $c[1]);
 	  print join("\t", $last, @c, @x), "\n";
 	  $next = $c[0]/@a + $opts{s};
 	}
