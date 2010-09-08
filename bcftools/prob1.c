@@ -106,8 +106,10 @@ int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn)
 	for (k = 0; k <= ma->M; ++k) ma->phi[k] /= sum;
 	for (k = 0; k <= ma->M; ++k) fprintf(stderr, " %d:%.3lg", k, ma->phi[ma->M - k]);
 	fputc('\n', stderr);
-	for (sum = 0., k = 1; k <= ma->M; ++k) sum += k * ma->phi[ma->M - k];
-	fprintf(stderr, "[heterozygosity] %lf\n", (double)sum / ma->M);
+	for (sum = 0., k = 1; k < ma->M; ++k) sum += ma->phi[ma->M - k] * (2.* k * (ma->M - k) / ma->M / (ma->M - 1));
+	fprintf(stderr, "[%s] heterozygosity=%lf, ", __func__, (double)sum);
+	for (sum = 0., k = 1; k <= ma->M; ++k) sum += k * ma->phi[ma->M - k] / ma->M;
+	fprintf(stderr, "theta=%lf\n", (double)sum);
 	return 0;
 }
 

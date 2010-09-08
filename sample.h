@@ -6,7 +6,7 @@
 typedef struct {
 	int n, m;
 	char **smpl;
-	void *rg2smid;
+	void *rg2smid, *sm2id;
 } bam_sample_t;
 
 bam_sample_t *bam_smpl_init(void);

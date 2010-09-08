@@ -22,6 +22,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_UNCOMP  64
 #define VC_HWE     128
 #define VC_KEEPALT 256
+#define VC_ACGT_ONLY 512
 
 typedef struct {
 	int flag, prior_type, n1;
@@ -195,10 +196,11 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5;
-	while ((c = getopt(argc, argv, "1:l:cHAGvLbSuP:t:p:")) >= 0) {
+	while ((c = getopt(argc, argv, "N1:l:cHAGvLbSuP:t:p:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
+		case 'N': vc.flag |= VC_ACGT_ONLY; break;
 		case 'G': vc.flag |= VC_NO_GENO; break;
 		case 'L': vc.flag |= VC_NO_PL; break;
 		case 'A': vc.flag |= VC_KEEPALT; break;
@@ -230,6 +232,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -L        discard the PL genotype field\n");
 		fprintf(stderr, "         -H        perform Hardy-Weinberg test (slower)\n");
 		fprintf(stderr, "         -v        output potential variant sites only\n");
+		fprintf(stderr, "         -N        skip sites where REF is not A/C/G/T\n");
 		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
 		fprintf(stderr, "         -t FLOAT  scaled mutation rate [%.4lg]\n", vc.theta);
@@ -277,6 +280,12 @@ int bcfview(int argc, char *argv[])
 		}
 	}
 	while (vcf_read(bp, h, b) > 0) {
+		if (vc.flag & VC_ACGT_ONLY) {
+			int x;
+			if (b->ref[0] == 0 || b->ref[1] != 0) continue;
+			x = toupper(b->ref[0]);
+			if (x != 'A' && x != 'C' && x != 'G' && x != 'T') continue;
+		}
 		if (hash) {
 			uint64_t x = (uint64_t)b->tid<<32 | b->pos;
 			khint_t k = kh_get(set64, hash, x);

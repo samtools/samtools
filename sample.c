@@ -9,6 +9,7 @@ bam_sample_t *bam_smpl_init(void)
 	bam_sample_t *s;
 	s = calloc(1, sizeof(bam_sample_t));
 	s->rg2smid = kh_init(sm);
+	s->sm2id = kh_init(sm);
 	return s;
 }
 
@@ -23,6 +24,7 @@ void bam_smpl_destroy(bam_sample_t *sm)
 	for (k = kh_begin(rg2smid); k != kh_end(rg2smid); ++k)
 		if (kh_exist(rg2smid, k)) free((char*)kh_key(rg2smid, k));
 	kh_destroy(sm, sm->rg2smid);
+	kh_destroy(sm, sm->sm2id);
 	free(sm);
 }
 
@@ -52,8 +54,7 @@ int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
 	const char *p = txt, *q, *r;
 	kstring_t buf;
 	int n = 0;
-	khash_t(sm) *sm2id;
-	sm2id = kh_init(sm);
+	khash_t(sm) *sm2id = (khash_t(sm)*)sm->sm2id;
 	memset(&buf, 0, sizeof(kstring_t));
 	while ((q = strstr(p, "@RG")) != 0) {
 		p = q + 3;
@@ -75,7 +76,6 @@ int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
 	}
 	if (n == 0) add_pair(sm, sm2id, fn, fn);
 	free(buf.s);
-	kh_destroy(sm, sm2id);
 	return 0;
 }
 
