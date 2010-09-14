@@ -57,7 +57,7 @@ bam_plcmd.o:bam.h faidx.h bam_maqcns.h glf.h bcftools/bcf.h bam2bcf.h
 bam_index.o:bam.h khash.h ksort.h razf.h bam_endian.h
 bam_lpileup.o:bam.h ksort.h
 bam_tview.o:bam.h faidx.h bam_maqcns.h
-bam_maqcns.o:bam.h ksort.h bam_maqcns.h
+bam_maqcns.o:bam.h ksort.h bam_maqcns.h kaln.h
 bam_sort.o:bam.h ksort.h razf.h
 bam_md.o:bam.h faidx.h
 glf.o:glf.h

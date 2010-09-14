@@ -142,6 +142,7 @@ int bam_realn(bam1_t *b, const char *ref)
 	cigar = ka_global_core(s_ref, l_ref, s_read, c->l_qseq, &par, &score, &n_cigar);
 	if (score <= 0) { // realignment failed
 		free(cigar); free(s_ref); free(s_read);
+		return -1;
 	}
 	// copy over the alignment
 	if (4 * (n_cigar - (int)c->n_cigar) + b->data_len > b->m_data) { // enlarge b->data

@@ -461,7 +461,7 @@ bam_maqindel_ret_t *bam_maqindel(int n, int pos, const bam_maqindel_opt_t *mi, c
 		for (i = 0; i < n_types; ++i) {
 			ka_param_t ap = ka_param_blast;
 			ap.band_width = 2 * types[n_types - 1] + 2;
-			ap.gap_end = 0;
+			ap.gap_end_ext = 0;
 			// write ref2
 			for (k = 0, j = left; j <= pos; ++j)
 				ref2[k++] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[j]]];
