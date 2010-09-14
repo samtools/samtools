@@ -456,6 +456,9 @@ int bam_pileup(int argc, char *argv[])
 
 #define MPLP_GLF   0x10
 #define MPLP_NO_COMP 0x20
+#define MPLP_NO_ORPHAN 0x40
+#define MPLP_REALN   0x80
+#define MPLP_NO_HALFTRIM 0x100
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ;
@@ -468,7 +471,8 @@ typedef struct {
 typedef struct {
 	bamFile fp;
 	bam_iter_t iter;
-	int min_mq;
+	int min_mq, flag;
+	char *ref;
 } mplp_aux_t;
 
 typedef struct {
@@ -479,11 +483,17 @@ typedef struct {
 
 static int mplp_func(void *data, bam1_t *b)
 {
+	extern int bam_realn(bam1_t *b, const char *ref);
 	mplp_aux_t *ma = (mplp_aux_t*)data;
-	int ret;
+	int ret, cond = 0;
 	do {
+		cond = 0;
 		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
-	} while (b->core.qual < ma->min_mq && ret >= 0);
+		if (ret < 0) break;
+		if (b->core.qual < ma->min_mq) cond = 1; 
+		else if ((ma->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) cond = 1;
+		if (ma->ref && !cond && (ma->flag&MPLP_REALN)) bam_realn(b, ma->ref);
+	} while (cond);
 	return ret;
 }
 
@@ -543,6 +553,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bam_header_t *h_tmp;
 		data[i] = calloc(1, sizeof(mplp_aux_t));
 		data[i]->min_mq = conf->min_mq;
+		data[i]->flag = conf->flag;
 		data[i]->fp = bam_open(fn[i], "r");
 		h_tmp = bam_header_read(data[i]->fp);
 		bam_smpl_add(sm, fn[i], h_tmp->text);
@@ -614,6 +625,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		if (tid != ref_tid) {
 			free(ref);
 			if (conf->fai) ref = fai_fetch(conf->fai, h->target_name[tid], &ref_len);
+			for (i = 0; i < n; ++i) data[i]->ref = ref;
 			ref_tid = tid;
 		}
 		if (conf->flag & MPLP_GLF) {
@@ -680,7 +692,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.theta = 1e-3;
 	mplp.min_baseQ = 13;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:t:Q:u")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:t:Q:uaORH")) >= 0) {
 		switch (c) {
 		case 't': mplp.theta = atof(optarg); break;
 		case 'f':
@@ -691,6 +703,10 @@ int bam_mpileup(int argc, char *argv[])
 		case 'l': mplp.fn_pos = strdup(optarg); break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP; break;
+		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN | MPLP_NO_HALFTRIM; break;
+		case 'O': mplp.flag |= MPLP_NO_ORPHAN; break;
+		case 'H': mplp.flag |= MPLP_NO_HALFTRIM; break;
+		case 'R': mplp.flag |= MPLP_REALN; break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
 		case 'Q': mplp.min_baseQ = atoi(optarg); break;
@@ -706,7 +722,8 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -t FLOAT    scaled mutation rate [%lg]\n", mplp.theta);
-		fprintf(stderr, "         -g          generate GLF output\n");
+		fprintf(stderr, "         -g          generate BCF output\n");
+		fprintf(stderr, "         -u          do not compress BCF output\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
