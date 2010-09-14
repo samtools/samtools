@@ -59,11 +59,13 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 	bam1_t *b = p->b;
 	bam1_core_t *c = &b->core;
 	uint32_t x = c->pos, y = 0;
-	int ret = 1, is_restart = 1;
+	int ret = 1, is_restart = 1, first_op, last_op;
 
 	if (c->flag&BAM_FUNMAP) return 0; // unmapped read
 	assert(x <= pos); // otherwise a bug
 	p->qpos = -1; p->indel = 0; p->is_del = p->is_head = p->is_tail = 0;
+	first_op = bam1_cigar(b)[0] & BAM_CIGAR_MASK;
+	last_op = bam1_cigar(b)[c->n_cigar-1] & BAM_CIGAR_MASK;
 	for (k = 0; k < c->n_cigar; ++k) {
 		int op = bam1_cigar(b)[k] & BAM_CIGAR_MASK; // operation
 		int l = bam1_cigar(b)[k] >> BAM_CIGAR_SHIFT; // length
@@ -71,7 +73,7 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 			if (x + l > pos) { // overlap with pos
 				p->indel = p->is_del = 0;
 				p->qpos = y + (pos - x);
-				if (x == pos && is_restart) p->is_head = 1;
+				if (x == pos && is_restart && first_op != BAM_CDEL) p->is_head = 1;
 				if (x + l - 1 == pos) { // come to the end of a match
 					int has_next_match = 0;
 					unsigned i;
@@ -83,7 +85,7 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 							break;
 						} else if (opi == BAM_CSOFT_CLIP || opi == BAM_CREF_SKIP || opi == BAM_CHARD_CLIP) break;
 					}
-					if (!has_next_match) p->is_tail = 1;
+					if (!has_next_match && last_op != BAM_CDEL) p->is_tail = 1;
 					if (k < c->n_cigar - 1 && has_next_match) { // there are additional operation(s)
 						uint32_t cigar = bam1_cigar(b)[k+1]; // next CIGAR
 						int op_next = cigar&BAM_CIGAR_MASK; // next CIGAR operation
@@ -99,9 +101,11 @@ static inline int resolve_cigar(bam_pileup1_t *p, uint32_t pos)
 			}
 			x += l; y += l;
 		} else if (op == BAM_CDEL) { // then set ->is_del
+			if (k == 0 && x == pos) p->is_head = 1;
+			else if (x + l - 1 == pos && k == c->n_cigar - 1) p->is_tail = 1;
 			if (x + l > pos) {
 				p->indel = 0; p->is_del = 1;
-				p->qpos = y + (pos - x);
+				p->qpos = y;
 			}
 			x += l;
 		} else if (op == BAM_CREF_SKIP) x += l;

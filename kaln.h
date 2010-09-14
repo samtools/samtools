@@ -33,7 +33,8 @@
 typedef struct {
 	int gap_open;
 	int gap_ext;
-	int gap_end;
+	int gap_end_open;
+	int gap_end_ext;
 
 	int *matrix;
 	int row;
@@ -50,6 +51,6 @@ extern "C" {
 }
 #endif
 
-extern ka_param_t ka_param_blast; /* = {  5,  2,  2, aln_sm_blast, 5, 50 }; */
+extern ka_param_t ka_param_blast; /* = { 5, 2, 5, 2, aln_sm_blast, 5, 50 }; */
 
 #endif

@@ -72,8 +72,8 @@ int aln_sm_blast[] = {
 	-2, -2, -2, -2, -2
 };
 
-ka_param_t ka_param_blast = {  5,  2,  2, aln_sm_blast, 5, 50 };
-ka_param_t ka_param_aa2aa = { 10,  2,  2, aln_sm_blosum62, 22, 50 };
+ka_param_t ka_param_blast = {  5,  2,   5, 2, aln_sm_blast, 5, 50 };
+ka_param_t ka_param_aa2aa = { 10,  2,  10, 2, aln_sm_blosum62, 22, 50 };
 
 static uint32_t *ka_path2cigar32(const path_t *path, int path_len, int *n_cigar)
 {
@@ -141,13 +141,13 @@ static uint32_t *ka_path2cigar32(const path_t *path, int path_len, int *n_cigar)
 }
 #define set_end_I(II, cur, p)							\
 {														\
-	if (gap_end >= 0) {									\
-		if ((p)->M - gap_open > (p)->I) {				\
+	if (gap_end_ext >= 0) {								\
+		if ((p)->M - gap_end_open > (p)->I) {			\
 			(cur)->It = FROM_M;							\
-			(II) = (p)->M - gap_open - gap_end;			\
+			(II) = (p)->M - gap_end_open - gap_end_ext;	\
 		} else {										\
 			(cur)->It = FROM_I;							\
-			(II) = (p)->I - gap_end;					\
+			(II) = (p)->I - gap_end_ext;				\
 		}												\
 	} else set_I(II, cur, p);							\
 }
@@ -163,13 +163,13 @@ static uint32_t *ka_path2cigar32(const path_t *path, int path_len, int *n_cigar)
 }
 #define set_end_D(DD, cur, p)							\
 {														\
-	if (gap_end >= 0) {									\
-		if ((p)->M - gap_open > (p)->D) {				\
+	if (gap_end_ext >= 0) {								\
+		if ((p)->M - gap_end_open > (p)->D) {			\
 			(cur)->Dt = FROM_M;							\
-			(DD) = (p)->M - gap_open - gap_end;			\
+			(DD) = (p)->M - gap_end_open - gap_end_ext;	\
 		} else {										\
 			(cur)->Dt = FROM_D;							\
-			(DD) = (p)->D - gap_end;					\
+			(DD) = (p)->D - gap_end_ext;				\
 		}												\
 	} else set_D(DD, cur, p);							\
 }
@@ -195,13 +195,14 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 	uint8_t type, ctype;
 	uint32_t *cigar = 0;
 
-	int gap_open, gap_ext, gap_end, b;
+	int gap_open, gap_ext, gap_end_open, gap_end_ext, b;
 	int *score_matrix, N_MATRIX_ROW;
 
 	/* initialize some align-related parameters. just for compatibility */
 	gap_open = ap->gap_open;
 	gap_ext = ap->gap_ext;
-	gap_end = ap->gap_end;
+	gap_end_open = ap->gap_end_open;
+	gap_end_ext = ap->gap_end_ext;
 	b = ap->band_width;
 	score_matrix = ap->matrix;
 	N_MATRIX_ROW = ap->row;
