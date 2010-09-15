@@ -490,7 +490,8 @@ static int mplp_func(void *data, bam1_t *b)
 		cond = 0;
 		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
 		if (ret < 0) break;
-		if (b->core.qual < ma->min_mq) cond = 1; 
+		if (b->core.flag&BAM_FUNMAP) cond = 1;
+		else if (b->core.qual < ma->min_mq) cond = 1; 
 		else if ((ma->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) cond = 1;
 		if (ma->ref && !cond && (ma->flag&MPLP_REALN)) bam_realn(b, ma->ref);
 	} while (cond);

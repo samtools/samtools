@@ -150,8 +150,10 @@ int bam_realn(bam1_t *b, const char *ref)
 		kroundup32(b->m_data);
 		b->data = realloc(b->data, b->m_data);
 	}
-	if (n_cigar != (int)c->n_cigar) // move data
-		memmove(b->data + c->l_qname + 4 * n_cigar, bam1_seq(b), b->data_len - c->l_qseq - 4 * c->n_cigar);
+	if (n_cigar != (int)c->n_cigar) { // move data
+		memmove(b->data + c->l_qname + 4 * n_cigar, bam1_seq(b), b->data_len - c->l_qname - 4 * c->n_cigar);
+		b->data_len += 4 * (n_cigar - (int)c->n_cigar);
+	}
 	memcpy(bam1_cigar(b), cigar, n_cigar * 4);
 	c->n_cigar = n_cigar;
 	free(s_ref); free(s_read); free(cigar);
