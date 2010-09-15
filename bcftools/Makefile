@@ -1,7 +1,7 @@
 CC=			gcc
 CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_USE_KNETFILE
-LOBJS=		bcf.o vcf.o bcfutils.o prob1.o kfunc.o index.o fet.o
+LOBJS=		bcf.o vcf.o bcfutils.o prob1.o kfunc.o index.o fet.o bcf2qcall.o
 OMISC=		..
 AOBJS=		call1.o main.o $(OMISC)/kstring.o $(OMISC)/bgzf.o $(OMISC)/knetfile.o
 PROG=		bcftools
