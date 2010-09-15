@@ -112,6 +112,7 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 // local realignment
 
 #define MIN_REF_LEN 10
+#define MIN_BAND_WIDTH 11
 
 int bam_realn(bam1_t *b, const char *ref)
 {
@@ -121,7 +122,16 @@ int bam_realn(bam1_t *b, const char *ref)
 	ka_param_t par;
 	bam1_core_t *c = &b->core;
 	// set S/W parameters
-	par = ka_param_blast; par.gap_open = 4; par.gap_ext = 1; par.gap_end_open = par.gap_end_ext = 0;
+	par = ka_param_blast;
+	par.gap_open = 4; par.gap_ext = 1; par.gap_end_open = par.gap_end_ext = 0;
+	if (c->n_cigar > 1) { // set band width
+		int sumi, sumd;
+		sumi = sumd = 0;
+		for (k = 0; k < c->n_cigar; ++k)
+			if ((cigar[k]&0xf) == BAM_CINS) sumi += cigar[k]>>4;
+			else if ((cigar[k]&0xf) == BAM_CDEL) sumd += cigar[k]>>4;
+		par.band_width = (sumi > sumd? sumi : sumd) + MIN_BAND_WIDTH;
+	} else par.band_width = MIN_BAND_WIDTH;
 	// calculate the length of the reference in the alignment
 	for (k = l_ref = 0; k < c->n_cigar; ++k) {
 		if ((cigar[k]&0xf) == BAM_CREF_SKIP) break; // do not do realignment if there is an `N' operation
