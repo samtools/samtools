@@ -283,7 +283,7 @@ static void contrast(bcf_p1aux_t *ma, double pc[4]) // mc_cal_y() must be called
 {
 	int k, n1 = ma->n1, n2 = ma->n - ma->n1;
 	long double sum1, sum2;
-	pc[0] = pc[1] = pc[2] = pc[3] = 0.;
+	pc[0] = pc[1] = pc[2] = pc[3] = -1.;
 	if (n1 <= 0 || n2 <= 0) return;
 	for (k = 0, sum1 = 0.; k <= 2*n1; ++k) sum1 += ma->phi1[k] * ma->z1[k];
 	for (k = 0, sum2 = 0.; k <= 2*n2; ++k) sum2 += ma->phi2[k] * ma->z2[k];
