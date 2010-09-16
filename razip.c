@@ -94,7 +94,7 @@ int main(int argc, char **argv)
 		buffer = malloc(WINDOW_SIZE);
 		while((c = read(f_src, buffer, WINDOW_SIZE)) > 0) razf_write(rz, buffer, c);
 		razf_close(rz); // f_dst will be closed here
-		if (argc > optind) unlink(argv[optind]);
+		if (argc > optind && !pstdout) unlink(argv[optind]);
 		free(buffer);
 		close(f_src);
 		return 0;
