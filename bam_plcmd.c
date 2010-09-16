@@ -458,10 +458,9 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_NO_COMP 0x20
 #define MPLP_NO_ORPHAN 0x40
 #define MPLP_REALN   0x80
-#define MPLP_CAPQ    0x100
 
 typedef struct {
-	int max_mq, min_mq, flag, min_baseQ;
+	int max_mq, min_mq, flag, min_baseQ, capQ_thres;
 	double theta;
 	char *reg, *fn_pos;
 	faidx_t *fai;
@@ -471,7 +470,7 @@ typedef struct {
 typedef struct {
 	bamFile fp;
 	bam_iter_t iter;
-	int min_mq, flag, ref_id;
+	int min_mq, flag, ref_id, capQ_thres;
 	char *ref;
 } mplp_aux_t;
 
@@ -484,7 +483,7 @@ typedef struct {
 static int mplp_func(void *data, bam1_t *b)
 {
 	extern int bam_realn(bam1_t *b, const char *ref);
-	extern int bam_cap_mapQ(bam1_t *b, char *ref);
+	extern int bam_cap_mapQ(bam1_t *b, char *ref, int thres);
 	mplp_aux_t *ma = (mplp_aux_t*)data;
 	int ret, skip = 0;
 	do {
@@ -493,8 +492,8 @@ static int mplp_func(void *data, bam1_t *b)
 		if (ret < 0) break;
 		skip = 0;
 		if (has_ref && (ma->flag&MPLP_REALN)) bam_realn(b, ma->ref);
-		if ((ma->flag&MPLP_CAPQ) && has_ref) {
-			int q = bam_cap_mapQ(b, ma->ref);
+		if (has_ref && ma->capQ_thres > 10) {
+			int q = bam_cap_mapQ(b, ma->ref, ma->capQ_thres);
 			if (q < 0) skip = 1;
 			else if (b->core.qual > q) b->core.qual = q;
 		} else if (b->core.flag&BAM_FUNMAP) skip = 1;
@@ -561,6 +560,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		data[i] = calloc(1, sizeof(mplp_aux_t));
 		data[i]->min_mq = conf->min_mq;
 		data[i]->flag = conf->flag;
+		data[i]->capQ_thres = conf->capQ_thres;
 		data[i]->fp = bam_open(fn[i], "r");
 		h_tmp = bam_header_read(data[i]->fp);
 		bam_smpl_add(sm, fn[i], h_tmp->text);
@@ -699,7 +699,8 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.theta = 1e-3;
 	mplp.min_baseQ = 13;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:t:Q:uaORC")) >= 0) {
+	mplp.capQ_thres = 0;
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:t:Q:uaORC:")) >= 0) {
 		switch (c) {
 		case 't': mplp.theta = atof(optarg); break;
 		case 'f':
@@ -712,8 +713,8 @@ int bam_mpileup(int argc, char *argv[])
 		case 'u': mplp.flag |= MPLP_NO_COMP; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'O': mplp.flag |= MPLP_NO_ORPHAN; break;
-		case 'C': mplp.flag |= MPLP_CAPQ; break;
 		case 'R': mplp.flag |= MPLP_REALN; break;
+		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
 		case 'Q': mplp.min_baseQ = atoi(optarg); break;

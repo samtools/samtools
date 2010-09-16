@@ -110,14 +110,14 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 	bam_fillmd1_core(b, ref, is_equal, 0);
 }
 
-int bam_cap_mapQ(bam1_t *b, char *ref)
+int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
 {
 	uint8_t *seq = bam1_seq(b), *qual = bam1_qual(b);
 	uint32_t *cigar = bam1_cigar(b);
 	bam1_core_t *c = &b->core;
 	int i, x, y, mm, q, len, clip_l, clip_q;
 	double t;
-
+	if (thres < 0) thres = 40; // set the default
 	mm = q = len = clip_l = clip_q = 0;
 	for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 		int j, l = cigar[i]>>4, op = cigar[i]&0xf;
@@ -154,10 +154,10 @@ int bam_cap_mapQ(bam1_t *b, char *ref)
 	for (i = 0, t = 1; i < mm; ++i)
 		t *= (double)len / (i+1);
 	t = q - 4.343 * log(t) + clip_q / 5.;
-	if (t > 40) return -1;
+	if (t > thres) return -1;
 	if (t < 0) t = 0;
-	t = sqrt((40 - t) / 40) * 40;
-	fprintf(stderr, "%s %lf %d\n", bam1_qname(b), t, q);
+	t = sqrt((thres - t) / thres) * thres;
+//	fprintf(stderr, "%s %lf %d\n", bam1_qname(b), t, q);
 	return (int)(t + .499);
 }
 
@@ -320,7 +320,7 @@ int bam_fillmd(int argc, char *argv[])
 			}
 			if (is_realn) bam_realn(b, ref);
 			if (is_capQ) {
-				int q = bam_cap_mapQ(b, ref);
+				int q = bam_cap_mapQ(b, ref, 40);
 				if (b->core.qual > q) b->core.qual = q;
 			}
 			if (ref) bam_fillmd1_core(b, ref, is_equal, max_nm);
