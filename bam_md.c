@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <string.h>
 #include <ctype.h>
+#include <math.h>
 #include "faidx.h"
 #include "sam.h"
 #include "kstring.h"
@@ -109,6 +110,57 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 	bam_fillmd1_core(b, ref, is_equal, 0);
 }
 
+int bam_cap_mapQ(bam1_t *b, char *ref)
+{
+	uint8_t *seq = bam1_seq(b), *qual = bam1_qual(b);
+	uint32_t *cigar = bam1_cigar(b);
+	bam1_core_t *c = &b->core;
+	int i, x, y, mm, q, len, clip_l, clip_q;
+	double t;
+
+	mm = q = len = clip_l = clip_q = 0;
+	for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
+		int j, l = cigar[i]>>4, op = cigar[i]&0xf;
+		if (op == BAM_CMATCH) {
+			for (j = 0; j < l; ++j) {
+				int z = y + j;
+				int c1 = bam1_seqi(seq, z), c2 = bam_nt16_table[(int)ref[x+j]];
+				if (ref[x+j] == 0) break; // out of boundary
+				if (c2 != 15 && c1 != 15 && qual[z] >= 13) { // not ambiguous
+					++len;
+					if (c1 && c1 != c2 && qual[z] >= 13) { // mismatch
+						++mm;
+						q += qual[z] > 33? 33 : qual[z];
+					}
+				}
+			}
+			if (j < l) break;
+			x += l; y += l; len += l;
+		} else if (op == BAM_CDEL) {
+			for (j = 0; j < l; ++j)
+				if (ref[x+j] == 0) break;
+			if (j < l) break;
+			x += l;
+		} else if (op == BAM_CSOFT_CLIP) {
+			for (j = 0; j < l; ++j) clip_q += qual[y+j];
+			clip_l += l;
+			y += l;
+		} else if (op == BAM_CHARD_CLIP) {
+			clip_q += 13 * l;
+			clip_l += l;
+		} else if (op == BAM_CINS) y += l;
+		else if (op == BAM_CREF_SKIP) x += l;
+	}
+	for (i = 0, t = 1; i < mm; ++i)
+		t *= (double)len / (i+1);
+	t = q - 4.343 * log(t) + clip_q / 5.;
+	if (t > 40) return -1;
+	if (t < 0) t = 0;
+	t = sqrt((40 - t) / 40) * 40;
+	fprintf(stderr, "%s %lf %d\n", bam1_qname(b), t, q);
+	return (int)(t + .499);
+}
+
 // local realignment
 
 #define MIN_REF_LEN 10
@@ -116,44 +168,83 @@ void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
 
 int bam_realn(bam1_t *b, const char *ref)
 {
-	int k, l_ref, score, n_cigar;
+	int k, score, q[2], r[2], kk[2], kl[2], x, y, max, j, n_cigar, endx = -1;
 	uint32_t *cigar = bam1_cigar(b);
-	uint8_t *s_ref = 0, *s_read = 0, *seq;
-	ka_param_t par;
+	uint8_t *seq = bam1_seq(b);
 	bam1_core_t *c = &b->core;
-	// set S/W parameters
-	par = ka_param_blast;
-	par.gap_open = 4; par.gap_ext = 1; par.gap_end_open = par.gap_end_ext = 0;
-	if (c->n_cigar > 1) { // set band width
-		int sumi, sumd;
-		sumi = sumd = 0;
-		for (k = 0; k < c->n_cigar; ++k)
-			if ((cigar[k]&0xf) == BAM_CINS) sumi += cigar[k]>>4;
-			else if ((cigar[k]&0xf) == BAM_CDEL) sumd += cigar[k]>>4;
-		par.band_width = (sumi > sumd? sumi : sumd) + MIN_BAND_WIDTH;
-	} else par.band_width = MIN_BAND_WIDTH;
-	// calculate the length of the reference in the alignment
-	for (k = l_ref = 0; k < c->n_cigar; ++k) {
-		if ((cigar[k]&0xf) == BAM_CREF_SKIP) break; // do not do realignment if there is an `N' operation
-		if ((cigar[k]&0xf) == BAM_CMATCH || (cigar[k]&0xf) == BAM_CDEL)
-			l_ref += cigar[k]>>4;
+	q[0] = q[1] = r[0] = r[1] = kk[0] = kk[1] = kl[0] = kl[1] = -1;
+	// find the right boundary
+	for (k = 0, score = max = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
+		int op = cigar[k]&0xf;
+		int ol = cigar[k]>>4;
+		if (op == BAM_CMATCH) {
+			for (j = 0; j < ol; ++j) {
+				int c1, c2, z = y + j;
+				c1 = bam_nt16_nt4_table[bam1_seqi(seq, z)];
+				if (ref[x+j] == 0) return -1;
+				c2 = bam_nt16_nt4_table[(int)bam_nt16_table[(int)ref[x+j]]];
+				if (c1 < 3 && c2 < 3)
+					score += c1 == c2? 5 : -4;
+				if (score < 0) score = 0;
+				if (score > max) max = score, q[1] = z, r[1] = x+j, kk[1] = k, kl[1] = j + 1;
+			}
+			x += ol; y += ol;
+		} else if (op == BAM_CINS) {
+			score -= 4 - ol * 3;
+			y += ol;
+			if (score < 0) score = 0;
+		} else if (op == BAM_CDEL) {
+			score -= 4 - ol * 3;
+			x += ol;
+			if (score < 0) score = 0;
+		} else if (op == BAM_CSOFT_CLIP) y += ol;
+		else if (op == BAM_CREF_SKIP) x += ol;
 	}
-	if (k != c->n_cigar || l_ref < MIN_REF_LEN) return -1;
-	for (k = 0; k < l_ref; ++k)
-		if (ref[c->pos + k] == 0) return -1; // the read stands out of the reference
-	// allocate
-	s_ref = calloc(l_ref, 1);
-	s_read = calloc(c->l_qseq, 1);
-	for (k = 0, seq = bam1_seq(b); k < c->l_qseq; ++k)
-		s_read[k] = bam_nt16_nt4_table[bam1_seqi(seq, k)];
-	for (k = 0; k < l_ref; ++k)
-		s_ref[k] = bam_nt16_nt4_table[(int)bam_nt16_table[(int)ref[c->pos + k]]];
-	// do alignment
-	cigar = ka_global_core(s_ref, l_ref, s_read, c->l_qseq, &par, &score, &n_cigar);
-	if (score <= 0) { // realignment failed
-		free(cigar); free(s_ref); free(s_read);
-		return -1;
+	if (score < 0) return -1; // no high scoring segments
+	endx = x - 1;
+	// find the left boundary
+	for (k = c->n_cigar - 1, score = max = 0, x = x-1, y = y-1; k >= 0; --k) {
+		int op = cigar[k]&0xf;
+		int ol = cigar[k]>>4;
+		if (op == BAM_CMATCH) {
+			for (j = 0; j < ol; ++j) {
+				int c1, c2, z = y - j;
+				c1 = bam_nt16_nt4_table[bam1_seqi(seq, z)];
+				if (ref[x+j] == 0) return -1;
+				c2 = bam_nt16_nt4_table[(int)bam_nt16_table[(int)ref[x-j]]];
+				if (c1 < 3 && c2 < 3)
+					score += c1 == c2? 5 : -4;
+				if (score < 0) score = 0;
+				if (score > max) max = score, q[0] = z, r[0] = x-j, kk[0] = k, kl[0] = j + 1;
+			}
+			x -= ol; y -= ol;
+		} else if (op == BAM_CINS) {
+			score -= 4 - ol * 3;
+			y -= ol;
+			if (score < 0) score = 0;
+		} else if (op == BAM_CDEL) {
+			score -= 4 - ol * 3;
+			x -= ol;
+			if (score < 0) score = 0;
+		} else if (op == BAM_CSOFT_CLIP) y -= ol;
+		else if (op == BAM_CREF_SKIP) x -= ol;
 	}
+	if (q[1] - q[0] < 15) return -1; // the high-scoring segment is too short
+	// modify CIGAR
+	n_cigar = 0;
+	cigar = calloc(c->n_cigar + 4, 4);
+	if (q[0] != 0) cigar[n_cigar++] = (uint32_t)q[0]<<4 | BAM_CSOFT_CLIP;
+	if (r[0] != c->pos) cigar[n_cigar++] = (uint32_t)(r[0] - c->pos)<<4 | BAM_CREF_SKIP;
+	if (kk[0] == kk[1]) {
+		cigar[n_cigar++] = (uint32_t)(kl[0] + kl[1] - (bam1_cigar(b)[kk[0]]>>4))<<4 | BAM_CMATCH;
+	} else {
+		cigar[n_cigar++] = (uint32_t)kl[0]<<4 | BAM_CMATCH;
+		for (k = kk[0] + 1; k < kk[1]; ++k)
+			cigar[n_cigar++] = bam1_cigar(b)[k];
+		cigar[n_cigar++] = (uint32_t)kl[1]<<4 | BAM_CMATCH; // FIXME: add ref_skip after this line
+	}
+	if (q[1] + 1 != c->l_qseq)
+		cigar[n_cigar++] = (uint32_t)(c->l_qseq - q[1] - 1)<<4 | BAM_CSOFT_CLIP;
 	// copy over the alignment
 	if (4 * (n_cigar - (int)c->n_cigar) + b->data_len > b->m_data) { // enlarge b->data
 		b->m_data = 4 * (n_cigar - (int)c->n_cigar) + b->data_len;
@@ -166,22 +257,22 @@ int bam_realn(bam1_t *b, const char *ref)
 	}
 	memcpy(bam1_cigar(b), cigar, n_cigar * 4);
 	c->n_cigar = n_cigar;
-	free(s_ref); free(s_read); free(cigar);
+	free(cigar);
 	return 0;
 }
 
 int bam_fillmd(int argc, char *argv[])
 {
-	int c, is_equal = 0, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm = 0, is_realn;
+	int c, is_equal = 0, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm = 0, is_realn, is_capQ;
 	samfile_t *fp, *fpout = 0;
 	faidx_t *fai;
 	char *ref = 0, mode_w[8], mode_r[8];
 	bam1_t *b;
 
-	is_bam_out = is_sam_in = is_uncompressed = is_realn = 0;
+	is_bam_out = is_sam_in = is_uncompressed = is_realn = is_capQ = 0;
 	mode_w[0] = mode_r[0] = 0;
 	strcpy(mode_r, "r"); strcpy(mode_w, "w");
-	while ((c = getopt(argc, argv, "reubSn:")) >= 0) {
+	while ((c = getopt(argc, argv, "reubSCn:")) >= 0) {
 		switch (c) {
 		case 'r': is_realn = 1; break;
 		case 'e': is_equal = 1; break;
@@ -189,6 +280,7 @@ int bam_fillmd(int argc, char *argv[])
 		case 'u': is_uncompressed = is_bam_out = 1; break;
 		case 'S': is_sam_in = 1; break;
 		case 'n': max_nm = atoi(optarg); break;
+		case 'C': is_capQ = 1; break;
 		default: fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n", c); return 1;
 		}
 	}
@@ -227,6 +319,10 @@ int bam_fillmd(int argc, char *argv[])
 							fp->header->target_name[tid]);
 			}
 			if (is_realn) bam_realn(b, ref);
+			if (is_capQ) {
+				int q = bam_cap_mapQ(b, ref);
+				if (b->core.qual > q) b->core.qual = q;
+			}
 			if (ref) bam_fillmd1_core(b, ref, is_equal, max_nm);
 		}
 		samwrite(fpout, b);

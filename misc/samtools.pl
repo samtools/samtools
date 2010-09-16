@@ -104,7 +104,6 @@ Options: -Q INT    minimum RMS mapping quality for SNPs [$opts{Q}]
     my $len=0;
 	if ($flt == 0) {
 	  if ($t[2] eq '*') { # an indel
-        
         # If deletion, remember the length of the deletion
         my ($a,$b) = split(m{/},$t[3]);
         my $alen = length($a) - 1;

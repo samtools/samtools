@@ -458,7 +458,7 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_NO_COMP 0x20
 #define MPLP_NO_ORPHAN 0x40
 #define MPLP_REALN   0x80
-#define MPLP_NO_HALFTRIM 0x100
+#define MPLP_CAPQ    0x100
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ;
@@ -471,7 +471,7 @@ typedef struct {
 typedef struct {
 	bamFile fp;
 	bam_iter_t iter;
-	int min_mq, flag;
+	int min_mq, flag, ref_id;
 	char *ref;
 } mplp_aux_t;
 
@@ -484,17 +484,23 @@ typedef struct {
 static int mplp_func(void *data, bam1_t *b)
 {
 	extern int bam_realn(bam1_t *b, const char *ref);
+	extern int bam_cap_mapQ(bam1_t *b, char *ref);
 	mplp_aux_t *ma = (mplp_aux_t*)data;
-	int ret, cond = 0;
+	int ret, skip = 0;
 	do {
-		cond = 0;
+		int has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
 		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
 		if (ret < 0) break;
-		if (b->core.flag&BAM_FUNMAP) cond = 1;
-		else if (b->core.qual < ma->min_mq) cond = 1; 
-		else if ((ma->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) cond = 1;
-		if (ma->ref && !cond && (ma->flag&MPLP_REALN)) bam_realn(b, ma->ref);
-	} while (cond);
+		skip = 0;
+		if (has_ref && (ma->flag&MPLP_REALN)) bam_realn(b, ma->ref);
+		if ((ma->flag&MPLP_CAPQ) && has_ref) {
+			int q = bam_cap_mapQ(b, ma->ref);
+			if (q < 0) skip = 1;
+			else if (b->core.qual > q) b->core.qual = q;
+		} else if (b->core.flag&BAM_FUNMAP) skip = 1;
+		else if (b->core.qual < ma->min_mq) skip = 1; 
+		else if ((ma->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) skip = 1;
+	} while (skip);
 	return ret;
 }
 
@@ -624,9 +630,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			if (k == kh_end(hash)) continue;
 		}
 		if (tid != ref_tid) {
-			free(ref);
+			free(ref); ref = 0;
 			if (conf->fai) ref = fai_fetch(conf->fai, h->target_name[tid], &ref_len);
-			for (i = 0; i < n; ++i) data[i]->ref = ref;
+			for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid;
 			ref_tid = tid;
 		}
 		if (conf->flag & MPLP_GLF) {
@@ -693,7 +699,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.theta = 1e-3;
 	mplp.min_baseQ = 13;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:t:Q:uaORH")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:t:Q:uaORC")) >= 0) {
 		switch (c) {
 		case 't': mplp.theta = atof(optarg); break;
 		case 'f':
@@ -704,9 +710,9 @@ int bam_mpileup(int argc, char *argv[])
 		case 'l': mplp.fn_pos = strdup(optarg); break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP; break;
-		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN | MPLP_NO_HALFTRIM; break;
+		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'O': mplp.flag |= MPLP_NO_ORPHAN; break;
-		case 'H': mplp.flag |= MPLP_NO_HALFTRIM; break;
+		case 'C': mplp.flag |= MPLP_CAPQ; break;
 		case 'R': mplp.flag |= MPLP_REALN; break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
