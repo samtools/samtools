@@ -200,7 +200,7 @@ int bam_realn(bam1_t *b, const char *ref)
 		} else if (op == BAM_CSOFT_CLIP) y += ol;
 		else if (op == BAM_CREF_SKIP) x += ol;
 	}
-	if (score < 0) return -1; // no high scoring segments
+	if (q[1] < 0) return -1; // no high scoring segments
 	endx = x - 1;
 	// find the left boundary
 	for (k = c->n_cigar - 1, score = max = 0, x = x-1, y = y-1; k >= 0; --k) {
@@ -229,7 +229,7 @@ int bam_realn(bam1_t *b, const char *ref)
 		} else if (op == BAM_CSOFT_CLIP) y -= ol;
 		else if (op == BAM_CREF_SKIP) x -= ol;
 	}
-	if (q[1] - q[0] < 15) return -1; // the high-scoring segment is too short
+	if (q[0] < 0 || q[1] - q[0] < 15) return -1; // the high-scoring segment is too short
 	// modify CIGAR
 	n_cigar = 0;
 	cigar = calloc(c->n_cigar + 4, 4);

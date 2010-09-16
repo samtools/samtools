@@ -245,7 +245,11 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 		kputc('\t', &str);
 	}
 	if (c->tid < 0) kputsn("*\t", 2, &str);
-	else { kputs(header->target_name[c->tid], &str); kputc('\t', &str); }
+	else {
+		if (header) kputs(header->target_name[c->tid] , &str);
+		else kputw(c->tid, &str);
+		kputc('\t', &str);
+	}
 	kputw(c->pos + 1, &str); kputc('\t', &str); kputw(c->qual, &str); kputc('\t', &str);
 	if (c->n_cigar == 0) kputc('*', &str);
 	else {
@@ -257,7 +261,11 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 	kputc('\t', &str);
 	if (c->mtid < 0) kputsn("*\t", 2, &str);
 	else if (c->mtid == c->tid) kputsn("=\t", 2, &str);
-	else { kputs(header->target_name[c->mtid], &str); kputc('\t', &str); }
+	else {
+		if (header) kputs(header->target_name[c->mtid], &str);
+		else kputw(c->mtid, &str);
+		kputc('\t', &str);
+	}
 	kputw(c->mpos + 1, &str); kputc('\t', &str); kputw(c->isize, &str); kputc('\t', &str);
 	if (c->l_qseq) {
 		for (i = 0; i < c->l_qseq; ++i) kputc(bam_nt16_rev_table[bam1_seqi(s, i)], &str);
