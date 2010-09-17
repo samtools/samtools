@@ -48,11 +48,10 @@ int bcf_str2id_add(void *_hash, const char *str)
 	return kh_val(hash, k);
 }
 
-int bcf_shrink_alt(int n_smpl, bcf1_t *b, int n)
+int bcf_shrink_alt(bcf1_t *b, int n)
 {
 	char *p;
-	int i, j, k;
-	int *z;
+	int i, j, k, *z, n_smpl = b->n_smpl;
 	if (b->n_alleles <= n) return -1;
 	if (n > 1) {
 		for (p = b->alt, k = 1; *p; ++p)
@@ -79,14 +78,14 @@ int bcf_shrink_alt(int n_smpl, bcf1_t *b, int n)
 		} // FIXME: to add GL
 	}
 	b->n_alleles = n;
-	bcf_sync(n_smpl, b);
+	bcf_sync(b);
 	return 0;
 }
 
-int bcf_gl2pl(int n_smpl, bcf1_t *b)
+int bcf_gl2pl(bcf1_t *b)
 {
 	char *p;
-	int i;
+	int i, n_smpl = b->n_smpl;
 	bcf_ginfo_t *g;
 	float *d0;
 	uint8_t *d1;

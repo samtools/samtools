@@ -139,6 +139,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 	str.l = 0; str.m = b->m_str; str.s = b->str;
 	rn.l = rn.m = h->l_nm; rn.s = h->name;
 	if (ks_getuntil(v->ks, '\n', &v->line, &dret) < 0) return -1;
+	b->n_smpl = h->n_smpl;
 	for (p = kstrtok(v->line.s, "\t", &aux), k = 0; p; p = kstrtok(0, 0, &aux), ++k) {
 		*(char*)aux.p = 0;
 		if (k == 0) { // ref
@@ -156,7 +157,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 		} else if (k <= 8) { // variable length strings
 			kputs(p, &str); kputc('\0', &str);
 			b->l_str = str.l; b->m_str = str.m; b->str = str.s;
-			if (k == 8) bcf_sync(h->n_smpl, b);
+			if (k == 8) bcf_sync(b);
 		} else { // k > 9
 			if (strncmp(p, "./.", 3) == 0) {
 				for (i = 0; i < b->n_gi; ++i) {

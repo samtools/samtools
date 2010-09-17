@@ -19,7 +19,7 @@ typedef struct {
 	char *str, *ref, *alt, *flt, *info, *fmt; // fmt, ref, alt and info point to str
 	int n_gi, m_gi;
 	bcf_ginfo_t *gi;
-	int n_alleles;
+	int n_alleles, n_smpl;
 	// derived info: ref, alt, flt, info, fmt, n_gi, n_alleles
 } bcf1_t;
 
@@ -49,7 +49,7 @@ extern "C" {
 	bcf_t *bcf_open(const char *fn, const char *mode);
 	int bcf_close(bcf_t *b);
 	int bcf_read(bcf_t *bp, const bcf_hdr_t *h, bcf1_t *b);
-	int bcf_sync(int n_smpl, bcf1_t *b);
+	int bcf_sync(bcf1_t *b);
 	int bcf_write(bcf_t *bp, const bcf_hdr_t *h, const bcf1_t *b);
 	bcf_hdr_t *bcf_hdr_read(bcf_t *b);
 	int bcf_hdr_write(bcf_t *b, const bcf_hdr_t *h);
@@ -65,8 +65,8 @@ extern "C" {
 	int vcf_write(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b);
 	int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b);
 
-	int bcf_shrink_alt(int n_smpl, bcf1_t *b, int n);
-	int bcf_gl2pl(int n_smpl, bcf1_t *b);
+	int bcf_shrink_alt(bcf1_t *b, int n);
+	int bcf_gl2pl(bcf1_t *b);
 
 	void *bcf_build_refhash(bcf_hdr_t *h);
 	void bcf_str2id_destroy(void *_hash);

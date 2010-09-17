@@ -158,6 +158,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 {
 	kstring_t s;
 	int i;
+	b->n_smpl = bc->n;
 	b->tid = tid; b->pos = pos; b->qual = 0;
 	s.s = b->str; s.m = b->m_str; s.l = 0;
 	kputc('\0', &s);
@@ -179,7 +180,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 	// FMT
 	kputs("PL", &s); kputc('\0', &s);
 	b->m_str = s.m; b->str = s.s; b->l_str = s.l;
-	bcf_sync(bc->n, b);
+	bcf_sync(b);
 	memcpy(b->gi[0].data, bc->PL, b->gi[0].len * bc->n);
 	return 0;
 }

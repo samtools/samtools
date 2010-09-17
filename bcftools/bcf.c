@@ -100,10 +100,10 @@ int bcf_hdr_sync(bcf_hdr_t *b)
 	return 0;
 }
 
-int bcf_sync(int n_smpl, bcf1_t *b)
+int bcf_sync(bcf1_t *b)
 {
 	char *p, *tmp[5];
-	int i, n;
+	int i, n, n_smpl = b->n_smpl;
 	ks_tokaux_t aux;
 	// set ref, alt, flt, info, fmt
 	b->ref = b->alt = b->flt = b->info = b->fmt = 0;
@@ -172,6 +172,7 @@ int bcf_read(bcf_t *bp, const bcf_hdr_t *h, bcf1_t *b)
 	int i, l = 0;
 	if (b == 0) return -1;
 	if (bgzf_read(bp->fp, &b->tid, 4) == 0) return -1;
+	b->n_smpl = h->n_smpl;
 	bgzf_read(bp->fp, &b->pos, 4);
 	bgzf_read(bp->fp, &b->qual, 4);
 	bgzf_read(bp->fp, &b->l_str, 4);
@@ -182,7 +183,7 @@ int bcf_read(bcf_t *bp, const bcf_hdr_t *h, bcf1_t *b)
 	}
 	bgzf_read(bp->fp, b->str, b->l_str);
 	l = 12 + b->l_str;
-	bcf_sync(h->n_smpl, b);
+	bcf_sync(b);
 	for (i = 0; i < b->n_gi; ++i) {
 		bgzf_read(bp->fp, b->gi[i].data, b->gi[i].len * h->n_smpl);
 		l += b->gi[i].len * h->n_smpl;
@@ -219,7 +220,7 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 	fmt_str(b->str, s); kputc('\t', s);
 	fmt_str(b->ref, s); kputc('\t', s);
 	fmt_str(b->alt, s); kputc('\t', s);
-	ksprintf(s, "%.3g", b->qual); /*kputw(b->qual, s);*/ kputc('\t', s);
+	ksprintf(s, "%.3g", b->qual); kputc('\t', s);
 	fmt_str(b->flt, s); kputc('\t', s);
 	fmt_str(b->info, s);
 	if (b->fmt[0]) {

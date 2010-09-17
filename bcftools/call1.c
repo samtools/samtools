@@ -133,7 +133,7 @@ static int test16(bcf1_t *b, anno16_t *a)
 	return test16_core(anno, a);
 }
 
-static void rm_info(int n_smpl, bcf1_t *b, const char *key)
+static void rm_info(bcf1_t *b, const char *key)
 {
 	char *p, *q;
 	if ((p = strstr(b->info, key)) == 0) return;
@@ -141,7 +141,7 @@ static void rm_info(int n_smpl, bcf1_t *b, const char *key)
 	if (p > b->info && *(p-1) == ';') --p;
 	memmove(p, q, b->l_str - (q - b->str));
 	b->l_str -= q - p;
-	bcf_sync(n_smpl, b);
+	bcf_sync(b);
 }
 
 static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
@@ -153,7 +153,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 
 	p_hwe = pr->g[0] >= 0.? test_hwe(pr->g) : 1.0; // only do HWE g[] is calculated
 	test16(b, &a);
-	rm_info(n_smpl, b, "I16=");
+	rm_info(b, "I16=");
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
@@ -174,10 +174,10 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	b->m_str = s.m; b->l_str = s.l; b->str = s.s;
 	b->qual = r < 1e-100? 99 : -4.343 * log(r);
 	if (b->qual > 99) b->qual = 99;
-	bcf_sync(n_smpl, b);
-	if (!is_var) bcf_shrink_alt(n_smpl, b, 1);
+	bcf_sync(b);
+	if (!is_var) bcf_shrink_alt(b, 1);
 	else if (!(flag&VC_KEEPALT))
-		bcf_shrink_alt(n_smpl, b, pr->rank0 < 2? 2 : pr->rank0+1);
+		bcf_shrink_alt(b, pr->rank0 < 2? 2 : pr->rank0+1);
 	return is_var;
 }
 
@@ -314,7 +314,7 @@ int bcfview(int argc, char *argv[])
 		}
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
-			bcf_gl2pl(h->n_smpl, b);
+			bcf_gl2pl(b);
 			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
 			if (vc.flag&VC_HWE) bcf_p1_cal_g3(p1, pr.g);
 			if (n_processed % 100000 == 0) {
