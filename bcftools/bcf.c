@@ -4,12 +4,6 @@
 #include "kstring.h"
 #include "bcf.h"
 
-void bcf_hdr_clear(bcf_hdr_t *b)
-{
-	free(b->name); free(b->sname); free(b->txt); free(b->ns); free(b->sns);
-	memset(b, 0, sizeof(bcf_hdr_t));
-}
-
 bcf_t *bcf_open(const char *fn, const char *mode)
 {
 	bcf_t *b;
@@ -110,7 +104,7 @@ int bcf_sync(bcf1_t *b)
 	for (p = b->str, n = 0; p < b->str + b->l_str; ++p)
 		if (*p == 0 && p+1 != b->str + b->l_str) tmp[n++] = p + 1;
 	if (n != 5) {
-		fprintf(stderr, "[bcf_sync] incorrect number of fields (%d != 5)\n", n);
+		fprintf(stderr, "[%s] incorrect number of fields (%d != 5). Corrupted file?\n", __func__, n);
 		return -1;
 	}
 	b->ref = tmp[0]; b->alt = tmp[1]; b->flt = tmp[2]; b->info = tmp[3]; b->fmt = tmp[4];

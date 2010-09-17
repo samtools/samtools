@@ -102,13 +102,6 @@ int vcf_hdr_write(bcf_t *bp, const bcf_hdr_t *h)
 		if (strstr(h->txt, "##SQ=")) has_ref = 1;
 	}
 	if (has_ver == 0) fprintf(v->fpout, "##fileformat=VCFv4.0\n");
-	if (!has_ref) {
-		fprintf(v->fpout, "##SQ=");
-		for (i = 0; i < h->n_ref; ++i) {
-			fprintf(v->fpout, "%s", h->ns[i]);
-			fputc(i == h->n_ref - 1? '\n' : ',', v->fpout);
-		}
-	}
 	fprintf(v->fpout, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
 	for (i = 0; i < h->n_smpl; ++i)
 		fprintf(v->fpout, "\t%s", h->sns[i]);

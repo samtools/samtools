@@ -34,8 +34,12 @@ bcftools:lib $(AOBJS)
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) -lm $(LIBPATH) -lz -L. -lbcf
 
 bcf.o:bcf.h
+vcf.o:bcf.h
+index.o:bcf.h
+bcfutils.o:bcf.h
 prob1.o:prob1.h bcf.h
-vcfout.o:bcf.h prob1.h
+call1.o:prob1.h bcf.h
+bcf2qcall.o:bcf.h
 main.o:bcf.h
 
 bcf.pdf:bcf.tex
