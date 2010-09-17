@@ -13,7 +13,8 @@ sub main {
   my $version = '0.1.0';
   &usage if (@ARGV < 1);
   my $command = shift(@ARGV);
-  my %func = (subsam=>\&subsam, listsam=>\&listsam, fillac=>\&fillac, qstats=>\&qstats, varFilter=>\&varFilter);
+  my %func = (subsam=>\&subsam, listsam=>\&listsam, fillac=>\&fillac, qstats=>\&qstats, varFilter=>\&varFilter,
+			  hapmap2vcf=>\&hapmap2vcf);
   die("Unknown command \"$command\".\n") if (!defined($func{$command}));
   &{$func{$command}};
 }
@@ -130,9 +131,9 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
   for my $p (@a) {
 	if ($p->[0] == -1 || ($p->[0] != $last && $c[0]/@a > $next)) {
 	  my @x;
-	  $x[0] = sprintf("%.3f", $c[1]-$c[2]? $c[2] / ($c[1] - $c[2]) : 100);
-	  $x[1] = sprintf("%.3f", $hsize? $c[3] / $hsize : 0);
-	  $x[2] = sprintf("%.3f", $c[3] / $c[1]);
+	  $x[0] = sprintf("%.4f", $c[1]-$c[2]? $c[2] / ($c[1] - $c[2]) : 100);
+	  $x[1] = sprintf("%.4f", $hsize? $c[3] / $hsize : 0);
+	  $x[2] = sprintf("%.4f", $c[3] / $c[1]);
 	  print join("\t", $last, @c, @x), "\n";
 	  $next = $c[0]/@a + $opts{s};
 	}
@@ -281,6 +282,58 @@ sub varFilter_aux {
   }
 }
 
+sub hapmap2vcf {
+  die("Usage: vcfutils.pl <in.ucsc.snp> <in.hapmap>\n") if (@ARGV == 0);
+  my $fn = shift(@ARGV);
+  # parse UCSC SNP
+  warn("Parsing UCSC SNPs...\n");
+  my ($fh, %map);
+  open($fh, ($fn =~ /\.gz$/)? "gzip -dc $fn |" : $fn) || die;
+  while (<$fh>) {
+	my @t = split;
+	next if ($t[3] - $t[2] != 1); # not SNP
+	@{$map{$t[4]}} = @t[1,3,7];
+  }
+  close($fh);
+  # write VCF
+  warn("Writing VCF...\n");
+  print "##fileformat=VCFv4.0\n";
+  while (<>) {
+	my @t = split;
+	if ($t[0] eq 'rs#') { # the first line
+	  print join("\t", "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT", @t[11..$#t]), "\n";
+	} else {
+	  next unless ($map{$t[0]});
+	  next if (length($t[1]) != 3); # skip non-SNPs
+	  my $a = \@{$map{$t[0]}};
+	  my $ref = $a->[2];
+	  my @u = split('/', $t[1]);
+	  if ($u[1] eq $ref) {
+		$u[1] = $u[0]; $u[0] = $ref;
+	  } elsif ($u[0] ne $ref) { next; }
+	  my $alt = $u[1];
+	  my %w;
+	  $w{$u[0]} = 0; $w{$u[1]} = 1;
+	  my @s = (@$a[0,1], $t[0], $ref, $alt, 0, '.', '.', 'GT');
+	  my $is_tri = 0;
+	  for (@t[11..$#t]) {
+		if ($_ eq 'NN') {
+		  push(@s, './.');
+		} else {
+		  my @a = ($w{substr($_,0,1)}, $w{substr($_,1,1)});
+		  if (!defined($a[0]) || !defined($a[1])) {
+			$is_tri = 1;
+			last;
+		  }
+		  push(@s, "$a[0]/$a[1]");
+		}
+	  }
+	  next if ($is_tri);
+	  print join("\t", @s), "\n";
+	}
+  }
+}
+
 sub usage {
   die(qq/
 Usage:   vcfutils.pl <command> [<arguments>]\n
@@ -289,5 +342,6 @@ Command: subsam       get a subset of samples
          fillac       fill the allele count field
          qstats       SNP stats stratified by QUAL
          varFilter    filtering short variants
+         hapmap2vcf   convert the hapmap format to VCF
 \n/);
 }
