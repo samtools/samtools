@@ -75,7 +75,7 @@ extern "C" {
 	void *bcf_str2id_init();
 
 	int bcf_idx_build(const char *fn);
-	uint64_t bcf_idx_query(const bcf_idx_t *idx, int tid, int beg, int end);
+	uint64_t bcf_idx_query(const bcf_idx_t *idx, int tid, int beg);
 	int bcf_parse_region(void *str2id, const char *str, int *tid, int *begin, int *end);
 	bcf_idx_t *bcf_idx_load(const char *fn);
 	void bcf_idx_destroy(bcf_idx_t *idx);

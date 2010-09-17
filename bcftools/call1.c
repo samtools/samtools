@@ -277,7 +277,11 @@ int bcfview(int argc, char *argv[])
 			idx = bcf_idx_load(argv[optind]);
 			if (idx) {
 				uint64_t off;
-				off = bcf_idx_query(idx, tid, begin, end);
+				off = bcf_idx_query(idx, tid, begin);
+				if (off == 0) {
+					fprintf(stderr, "[%s] no records in the query region.\n", __func__);
+					return 1; // FIXME: a lot of memory leaks...
+				}
 				bgzf_seek(bp->fp, off, SEEK_SET);
 				bcf_idx_destroy(idx);
 			}

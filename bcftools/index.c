@@ -45,17 +45,6 @@ static inline void insert_offset2(bcf_lidx_t *index2, int _beg, int _end, uint64
 	if (index2->n < end + 1) index2->n = end + 1;
 }
 
-static void fill_missing(bcf_idx_t *idx)
-{
-	int i, j;
-	for (i = 0; i < idx->n; ++i) {
-		bcf_lidx_t *idx2 = &idx->index2[i];
-		for (j = 1; j < idx2->n; ++j)
-			if (idx2->offset[j] == 0)
-				idx2->offset[j] = idx2->offset[j-1];
-	}
-}
-
 bcf_idx_t *bcf_idx_core(bcf_t *bp, bcf_hdr_t *h)
 {
 	bcf_idx_t *idx;
@@ -89,7 +78,6 @@ bcf_idx_t *bcf_idx_core(bcf_t *bp, bcf_hdr_t *h)
 		last_off = bgzf_tell(fp);
 		last_coor = b->pos;
 	}
-	fill_missing(idx);
 	free(str->s); free(str); bcf_destroy(b);
 	return idx;
 }
@@ -325,14 +313,14 @@ int bcf_parse_region(void *str2id, const char *str, int *tid, int *begin, int *e
  * retrieve a specified region *
  *******************************/
 
-uint64_t bcf_idx_query(const bcf_idx_t *idx, int tid, int beg, int end)
+uint64_t bcf_idx_query(const bcf_idx_t *idx, int tid, int beg)
 {
-	uint64_t min_off;
+	uint64_t min_off, *offset;
+	int i;
 	if (beg < 0) beg = 0;
-	if (end < beg) return 0xffffffffffffffffull;
-	min_off = (beg>>TAD_LIDX_SHIFT >= idx->index2[tid].n)? idx->index2[tid].offset[idx->index2[tid].n-1]
-		: idx->index2[tid].offset[beg>>TAD_LIDX_SHIFT];
-	assert(min_off);
+	offset = idx->index2[tid].offset;
+	for (i = beg>>TAD_LIDX_SHIFT; i < idx->index2[tid].n && offset[i] == 0; ++i);
+	min_off = (i == idx->index2[tid].n)? offset[idx->index2[tid].n-1] : offset[i];
 	return min_off;
 }
 
