@@ -14,7 +14,7 @@ sub main {
   &usage if (@ARGV < 1);
   my $command = shift(@ARGV);
   my %func = (subsam=>\&subsam, listsam=>\&listsam, fillac=>\&fillac, qstats=>\&qstats, varFilter=>\&varFilter,
-			  hapmap2vcf=>\&hapmap2vcf);
+			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf);
   die("Unknown command \"$command\".\n") if (!defined($func{$command}));
   &{$func{$command}};
 }
@@ -282,6 +282,39 @@ sub varFilter_aux {
   }
 }
 
+sub ucscsnp2vcf {
+  die("Usage: vcfutils.pl <in.ucsc.snp>\n") if (@ARGV == 0 && -t STDIN);
+  print "##fileformat=VCFv4.0\n";
+  print join("\t", "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO"), "\n";
+  while (<>) {
+	my @t = split("\t");
+	my $indel = ($t[9] =~ /^[ACGT](\/[ACGT])+$/)? 0 : 1;
+	my $pos = $t[2] + 1;
+	my @alt;
+	push(@alt, $t[7]);
+	if ($t[6] eq '-') {
+	  $t[9] = reverse($t[9]);
+	  $t[9] =~ tr/ACGTRYMKWSNacgtrymkwsn/TGCAYRKMWSNtgcayrkmwsn/;
+	}
+	my @a = split("/", $t[9]);
+	for (@a) {
+	  push(@alt, $_) if ($_ ne $alt[0]);
+	}
+	if ($indel) {
+	  --$pos;
+	  for (0 .. $#alt) {
+		$alt[$_] =~ tr/-//d;
+		$alt[$_] = "N$alt[$_]";
+	  }
+	}
+	my $ref = shift(@alt);
+	my $af = $t[13] > 0? ";AF=$t[13]" : '';
+	my $valid = ($t[12] eq 'unknown')? '' : ";valid=$t[12]";
+	my $info = "molType=$t[10];class=$t[11]$valid$af";
+	print join("\t", $t[1], $pos, $t[4], $ref, join(",", @alt), 0, '.', $info), "\n";
+  }
+}
+
 sub hapmap2vcf {
   die("Usage: vcfutils.pl <in.ucsc.snp> <in.hapmap>\n") if (@ARGV == 0);
   my $fn = shift(@ARGV);
@@ -343,5 +376,6 @@ Command: subsam       get a subset of samples
          qstats       SNP stats stratified by QUAL
          varFilter    filtering short variants
          hapmap2vcf   convert the hapmap format to VCF
+         ucscsnp2vcf  convert UCSC SNP SQL dump to VCF
 \n/);
 }
