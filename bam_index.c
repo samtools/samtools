@@ -656,10 +656,10 @@ void bam_iter_destroy(bam_iter_t iter)
 
 int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b)
 {
-	if (iter->finished) return -1;
-	if (iter->from_first) {
+	if (iter && iter->finished) return -1;
+	if (iter == 0 || iter->from_first) {
 		int ret = bam_read1(fp, b);
-		if (ret < 0) iter->finished = 1;
+		if (ret < 0 && iter) iter->finished = 1;
 		return ret;
 	}
 	if (iter->off == 0) return -1;

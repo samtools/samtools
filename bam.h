@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2008 Genome Research Ltd (GRL).
+   Copyright (c) 2008-2010 Genome Research Ltd (GRL).
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the

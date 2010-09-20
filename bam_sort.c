@@ -59,6 +59,9 @@ static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
 	temps = h1->text, h1->text = h2->text, h2->text = temps;
 }
 
+#define MERGE_RG     1
+#define MERGE_UNCOMP 2
+
 /*!
   @abstract    Merge multiple sorted BAM.
   @param  is_by_qname whether to sort by query name
@@ -71,7 +74,8 @@ static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-void bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn, int add_RG)
+int bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn,
+					int flag, const char *reg)
 {
 	bamFile fpout, *fp;
 	heap1_t *heap;
@@ -80,6 +84,7 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 	int i, j, *RG_len = 0;
 	uint64_t idx = 0;
 	char **RG = 0;
+	bam_iter_t *iter = 0;
 
 	if (headers) {
 		tamFile fpheaders = sam_open(headers);
@@ -94,8 +99,9 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 	g_is_by_qname = by_qname;
 	fp = (bamFile*)calloc(n, sizeof(bamFile));
 	heap = (heap1_t*)calloc(n, sizeof(heap1_t));
+	iter = (bam_iter_t*)calloc(n, sizeof(bam_iter_t));
 	// prepare RG tag
-	if (add_RG) {
+	if (flag & MERGE_RG) {
 		RG = (char**)calloc(n, sizeof(void*));
 		RG_len = (int*)calloc(n, sizeof(int));
 		for (i = 0; i != n; ++i) {
@@ -111,7 +117,6 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 	}
 	// read the first
 	for (i = 0; i != n; ++i) {
-		heap1_t *h;
 		bam_header_t *hin;
 		fp[i] = bam_open(fn[i], "r");
 		if (fp[i] == 0) {
@@ -120,7 +125,7 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 			for (j = 0; j < i; ++j) bam_close(fp[j]);
 			free(fp); free(heap);
 			// FIXME: possible memory leak
-			return;
+			return -1;
 		}
 		hin = bam_header_read(fp[i]);
 		if (i == 0) { // the first SAM
@@ -154,27 +159,51 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 			}
 			bam_header_destroy(hin);
 		}
-		h = heap + i;
+	}
+
+	if (reg) {
+		int tid, beg, end;
+		if (bam_parse_region(hout, reg, &tid, &beg, &end) < 0) {
+			fprintf(stderr, "[%s] Malformated region string or undefined reference name\n", __func__);
+			return -1;
+		}
+		for (i = 0; i < n; ++i) {
+			bam_index_t *idx;
+			idx = bam_index_load(fn[i]);
+			iter[i] = bam_iter_query(idx, tid, beg, end);
+			bam_index_destroy(idx);
+		}
+	}
+
+	for (i = 0; i < n; ++i) {
+		heap1_t *h = heap + i;
 		h->i = i;
 		h->b = (bam1_t*)calloc(1, sizeof(bam1_t));
-		if (bam_read1(fp[i], h->b) >= 0) {
+		if (bam_iter_read(fp[i], iter[i], h->b) >= 0) {
 			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)h->b->core.pos<<1 | bam1_strand(h->b);
 			h->idx = idx++;
 		}
 		else h->pos = HEAP_EMPTY;
 	}
-	fpout = strcmp(out, "-")? bam_open(out, "w") : bam_dopen(fileno(stdout), "w");
-	assert(fpout);
+	if (flag & MERGE_UNCOMP) {
+		fpout = strcmp(out, "-")? bam_open(out, "wu") : bam_dopen(fileno(stdout), "wu");
+	} else {
+		fpout = strcmp(out, "-")? bam_open(out, "w") : bam_dopen(fileno(stdout), "w");
+	}
+	if (fpout == 0) {
+		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
+		return -1;
+	}
 	bam_header_write(fpout, hout);
 	bam_header_destroy(hout);
 
 	ks_heapmake(heap, n, heap);
 	while (heap->pos != HEAP_EMPTY) {
 		bam1_t *b = heap->b;
-		if (add_RG && bam_aux_get(b, "RG") == 0)
+		if ((flag & MERGE_RG) && bam_aux_get(b, "RG") == 0)
 			bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
 		bam_write1_core(fpout, &b->core, b->data_len, b->data);
-		if ((j = bam_read1(fp[heap->i], b)) >= 0) {
+		if ((j = bam_iter_read(fp[heap->i], iter[heap->i], b)) >= 0) {
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)b->core.pos<<1 | bam1_strand(b);
 			heap->idx = idx++;
 		} else if (j == -1) {
@@ -185,24 +214,31 @@ void bam_merge_core(int by_qname, const char *out, const char *headers, int n, c
 		ks_heapadjust(heap, 0, n, heap);
 	}
 
-	if (add_RG) {
+	if (flag & MERGE_RG) {
 		for (i = 0; i != n; ++i) free(RG[i]);
 		free(RG); free(RG_len);
 	}
-	for (i = 0; i != n; ++i) bam_close(fp[i]);
+	for (i = 0; i != n; ++i) {
+		bam_iter_destroy(iter[i]);
+		bam_close(fp[i]);
+	}
 	bam_close(fpout);
-	free(fp); free(heap);
+	free(fp); free(heap); free(iter);
+	return 0;
 }
+
 int bam_merge(int argc, char *argv[])
 {
-	int c, is_by_qname = 0, add_RG = 0;
-	char *fn_headers = NULL;
+	int c, is_by_qname = 0, flag = 0;
+	char *fn_headers = NULL, *reg = 0;
 
-	while ((c = getopt(argc, argv, "h:nr")) >= 0) {
+	while ((c = getopt(argc, argv, "h:nruR:")) >= 0) {
 		switch (c) {
-		case 'r': add_RG = 1; break;
+		case 'r': flag |= MERGE_RG; break;
 		case 'h': fn_headers = strdup(optarg); break;
 		case 'n': is_by_qname = 1; break;
+		case 'u': flag |= MERGE_UNCOMP; break;
+		case 'R': reg = strdup(optarg); break;
 		}
 	}
 	if (optind + 2 >= argc) {
@@ -210,13 +246,16 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "Usage:   samtools merge [-nr] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
 		fprintf(stderr, "Options: -n       sort by read names\n");
 		fprintf(stderr, "         -r       attach RG tag (inferred from file names)\n");
+		fprintf(stderr, "         -u       uncompressed BAM output\n");
+		fprintf(stderr, "         -R STR   merge file in the specified region STR [all]\n");
 		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n\n");
 		fprintf(stderr, "Note: Samtools' merge does not reconstruct the @RG dictionary in the header. Users\n");
 		fprintf(stderr, "      must provide the correct header with -h, or uses Picard which properly maintains\n");
 		fprintf(stderr, "      the header dictionary in merging.\n\n");
 		return 1;
 	}
-	bam_merge_core(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1, add_RG);
+	bam_merge_core(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1, flag, reg);
+	free(reg);
 	free(fn_headers);
 	return 0;
 }
@@ -313,7 +352,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
 			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
 		}
-		bam_merge_core(is_by_qname, fnout, 0, n, fns, 0);
+		bam_merge_core(is_by_qname, fnout, 0, n, fns, 0, 0);
 		free(fnout);
 		for (i = 0; i < n; ++i) {
 			unlink(fns[i]);
