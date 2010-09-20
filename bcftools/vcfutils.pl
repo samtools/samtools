@@ -95,18 +95,24 @@ sub fillac {
 }
 
 sub qstats {
-  my %opts = (r=>'', s=>0.01);
-  getopts('r:s:', \%opts);
+  my %opts = (r=>'', s=>0.01, v=>undef);
+  getopts('r:s:v', \%opts);
   die("Usage: vcfutils.pl qstats [-r ref.vcf] <in.vcf>\n
 Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #joint ts/tv #joint/#ref #joint/#non-indel \n") if (@ARGV == 0 && -t STDIN);
   my %ts = (AG=>1, GA=>1, CT=>1, TC=>1);
   my %h = ();
+  my $is_vcf = defined($opts{v})? 1 : 0;
   if ($opts{r}) { # read the reference positions
 	my $fh;
 	open($fh, $opts{r}) || die;
 	while (<$fh>) {
 	  next if (/^#/);
-	  $h{$1,$2} = 1 if (/^(\S+)\s+(\d+)/);
+	  if ($is_vcf) {
+		my @t = split;
+		$h{$t[0],$t[1]} = $t[4];
+	  } else {
+		$h{$1,$2} = 1 if (/^(\S+)\s+(\d+)/);
+	  }
 	}
 	close($fh);
   }
@@ -120,7 +126,20 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
 	my @s = split(',', $t[4]);
 	$t[5] = 3 if ($t[5] < 0);
 	next if (length($s[0]) != 1);
-	push(@a, [$t[5], ($t[4] eq '.' || $t[4] eq $t[3])? 0 : 1, $ts{$t[3].$s[0]}? 1 : 0, $h{$t[0],$t[1]}? 1 : 0]);
+	my $hit;
+	if ($is_vcf) {
+	  $hit = 0;
+	  my $aa = $h{$t[0],$t[1]};
+	  if (defined($aa)) {
+		my @aaa = split(",", $aa);
+		for (@aaa) {
+		  $hit = 1 if ($_ eq $s[0]);
+		}
+	  }
+	} else {
+	  $hit = defined($h{$t[0],$t[1]})? 1 : 0;
+	}
+	push(@a, [$t[5], ($t[4] eq '.' || $t[4] eq $t[3])? 0 : 1, $ts{$t[3].$s[0]}? 1 : 0, $hit]);
   }
   push(@a, [-1, 0, 0, 0]); # end marker
   die("[qstats] No SNP data!\n") if (@a == 0);
