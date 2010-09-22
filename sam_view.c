@@ -164,7 +164,12 @@ int main_samview(int argc, char *argv[])
 				fprintf(stderr, "[main_samview] fail to get the reference name. Continue anyway.\n");
 				continue;
 			}
-			bam_fetch(in->x.bam, idx, tid, beg, end, out, view_func); // fetch alignments
+			// fetch alignments
+			if (bam_fetch(in->x.bam, idx, tid, beg, end, out, view_func) < 0) {
+				fprintf(stderr, "[main_samview] retrieval failed due to truncated file or corrupt BAM index file\n");
+				ret = 1;
+				break;
+			}
 		}
 		bam_index_destroy(idx); // destroy the BAM index
 	}

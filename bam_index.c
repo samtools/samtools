@@ -656,17 +656,17 @@ void bam_iter_destroy(bam_iter_t iter)
 
 int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b)
 {
+	int ret;
 	if (iter && iter->finished) return -1;
 	if (iter == 0 || iter->from_first) {
-		int ret = bam_read1(fp, b);
+		ret = bam_read1(fp, b);
 		if (ret < 0 && iter) iter->finished = 1;
 		return ret;
 	}
 	if (iter->off == 0) return -1;
 	for (;;) {
-		int ret;
 		if (iter->curr_off == 0 || iter->curr_off >= iter->off[iter->i].v) { // then jump to the next chunk
-			if (iter->i == iter->n_off - 1) break; // no more chunks
+			if (iter->i == iter->n_off - 1) { ret = -1; break; } // no more chunks
 			if (iter->i >= 0) assert(iter->curr_off == iter->off[iter->i].v); // otherwise bug
 			if (iter->i < 0 || iter->off[iter->i].v != iter->off[iter->i+1].u) { // not adjacent chunks; then seek
 				bam_seek(fp, iter->off[iter->i+1].u, SEEK_SET);
@@ -676,21 +676,22 @@ int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b)
 		}
 		if ((ret = bam_read1(fp, b)) >= 0) {
 			iter->curr_off = bam_tell(fp);
-			if (b->core.tid != iter->tid || b->core.pos >= iter->end) break; // no need to proceed
+			if (b->core.tid != iter->tid || b->core.pos >= iter->end) { ret = -1; break; } // no need to proceed
 			else if (is_overlap(iter->beg, iter->end, b)) return ret;
-		} else break; // end of file
+		} else break; // end of file or error
 	}
 	iter->finished = 1;
-	return -1;
+	return ret;
 }
 
 int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)
 {
+	int ret;
 	bam_iter_t iter;
 	bam1_t *b;
 	b = bam_init1();
 	iter = bam_iter_query(idx, tid, beg, end);
-	while (bam_iter_read(fp, iter, b) >= 0) func(b, data);
+	while ((ret = bam_iter_read(fp, iter, b)) >= 0) func(b, data);
 	bam_destroy1(b);
-	return 0;
+	return (ret == -1)? 0 : ret;
 }
