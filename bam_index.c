@@ -674,7 +674,7 @@ int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b)
 			}
 			++iter->i;
 		}
-		if ((ret = bam_read1(fp, b)) > 0) {
+		if ((ret = bam_read1(fp, b)) >= 0) {
 			iter->curr_off = bam_tell(fp);
 			if (b->core.tid != iter->tid || b->core.pos >= iter->end) break; // no need to proceed
 			else if (is_overlap(iter->beg, iter->end, b)) return ret;
