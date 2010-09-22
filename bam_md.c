@@ -263,16 +263,16 @@ int bam_realn(bam1_t *b, const char *ref)
 
 int bam_fillmd(int argc, char *argv[])
 {
-	int c, is_equal = 0, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm = 0, is_realn, is_capQ;
+	int c, is_equal = 0, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm = 0, is_realn, capQ = 0;
 	samfile_t *fp, *fpout = 0;
 	faidx_t *fai;
 	char *ref = 0, mode_w[8], mode_r[8];
 	bam1_t *b;
 
-	is_bam_out = is_sam_in = is_uncompressed = is_realn = is_capQ = 0;
+	is_bam_out = is_sam_in = is_uncompressed = is_realn = 0;
 	mode_w[0] = mode_r[0] = 0;
 	strcpy(mode_r, "r"); strcpy(mode_w, "w");
-	while ((c = getopt(argc, argv, "reubSCn:")) >= 0) {
+	while ((c = getopt(argc, argv, "reubSC:n:")) >= 0) {
 		switch (c) {
 		case 'r': is_realn = 1; break;
 		case 'e': is_equal = 1; break;
@@ -280,7 +280,7 @@ int bam_fillmd(int argc, char *argv[])
 		case 'u': is_uncompressed = is_bam_out = 1; break;
 		case 'S': is_sam_in = 1; break;
 		case 'n': max_nm = atoi(optarg); break;
-		case 'C': is_capQ = 1; break;
+		case 'C': capQ = atoi(optarg); break;
 		default: fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n", c); return 1;
 		}
 	}
@@ -319,8 +319,8 @@ int bam_fillmd(int argc, char *argv[])
 							fp->header->target_name[tid]);
 			}
 			if (is_realn) bam_realn(b, ref);
-			if (is_capQ) {
-				int q = bam_cap_mapQ(b, ref, 40);
+			if (capQ > 10) {
+				int q = bam_cap_mapQ(b, ref, capQ);
 				if (b->core.qual > q) b->core.qual = q;
 			}
 			if (ref) bam_fillmd1_core(b, ref, is_equal, max_nm);
