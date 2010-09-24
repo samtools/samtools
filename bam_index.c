@@ -676,7 +676,10 @@ int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b)
 		}
 		if ((ret = bam_read1(fp, b)) >= 0) {
 			iter->curr_off = bam_tell(fp);
-			if (b->core.tid != iter->tid || b->core.pos >= iter->end) { ret = -1; break; } // no need to proceed
+			if (b->core.tid != iter->tid || b->core.pos >= iter->end) { // no need to proceed
+				ret = bam_validate1(NULL, b)? -1 : -5; // determine whether end of region or error
+				break;
+			}
 			else if (is_overlap(iter->beg, iter->end, b)) return ret;
 		} else break; // end of file or error
 	}
