@@ -305,6 +305,22 @@ void bam_view1(const bam_header_t *header, const bam1_t *b)
 	free(s);
 }
 
+int bam_validate1(const bam_header_t *header, const bam1_t *b)
+{
+	char *s;
+
+	if (b->core.tid < -1 || b->core.mtid < -1) return 0;
+	if (header && (b->core.tid >= header->n_targets || b->core.mtid >= header->n_targets)) return 0;
+
+	if (b->data_len < b->core.l_qname) return 0;
+	s = memchr(bam1_qname(b), '\0', b->core.l_qname);
+	if (s != &bam1_qname(b)[b->core.l_qname-1]) return 0;
+
+	// FIXME: Other fields could also be checked, especially the auxiliary data
+
+	return 1;
+}
+
 // FIXME: we should also check the LB tag associated with each alignment
 const char *bam_get_library(bam_header_t *h, const bam1_t *b)
 {
