@@ -149,14 +149,13 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 			}
 		} else { // validate multiple baf
 			if (hout->n_targets != hin->n_targets) {
-				fprintf(stderr, "[bam_merge_core] file '%s' has different number of target sequences. Abort!\n", fn[i]);
-				exit(1);
-			}
-			for (j = 0; j < hout->n_targets; ++j) {
-				if (strcmp(hout->target_name[j], hin->target_name[j])) {
-					fprintf(stderr, "[bam_merge_core] different target sequence name: '%s' != '%s' in file '%s'. Abort!\n",
-							hout->target_name[j], hin->target_name[j], fn[i]);
-					exit(1);
+				fprintf(stderr, "[bam_merge_core] file '%s' has different number of target sequences. Continue anyway!\n", fn[i]);
+			} else {
+				for (j = 0; j < hout->n_targets; ++j) {
+					if (strcmp(hout->target_name[j], hin->target_name[j])) {
+						fprintf(stderr, "[bam_merge_core] different target sequence name: '%s' != '%s' in file '%s'. Continue anyway!\n",
+								hout->target_name[j], hin->target_name[j], fn[i]);
+					}
 				}
 			}
 			bam_header_destroy(hin);

@@ -369,3 +369,136 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 
 	return cigar;
 }
+
+#define get_k(b, i, kk) ((i) < (b)? (kk)/3 : (kk)/3+(i)-(b))
+#define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
+
+ka_probpar_t ka_probpar_def = { 0.0001, 0.1, 10 };
+
+int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float *_qual,
+				   const ka_probpar_t *c, int *state, uint8_t *q)
+{
+	double **f, **b, m[9], f_sink, sI, sM, pf, pb;
+	float *qual;
+	uint8_t *ref, *query;
+	int bw, bw2, i, k;
+	/*** initialization ***/
+	ref = _ref - 1;
+	query = _query - 1;
+	qual = _qual - 1;
+	bw = c->bw;
+	bw2 = c->bw * 2 + 1;
+	f = calloc(l_query+1, sizeof(void*));
+	b = calloc(l_query+1, sizeof(void*));
+	for (i = 0; i <= l_query; ++i) {
+		f[i] = calloc(bw2 * 3 + 6, sizeof(double));
+		b[i] = calloc(bw2 * 3 + 6, sizeof(double));
+	}
+	// initialize m
+	sM = sI = 1. / (2 * l_query + 1);
+	m[0*3+0] = (1 - c->d - c->d) * (1 - sM);
+	m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
+	m[1*3+0] = (1 - c->e) * (1 - sI);
+	m[1*3+1] = c->e * (1 - sI);
+	m[1*3+2] = 0.;
+	m[2*3+0] = 1 - c->e;
+	m[2*3+1] = 0.;
+	m[2*3+2] = c->e;
+	/*** forward ***/
+	// f[0]
+	set_u(k, bw, 0, 0);
+	f[0][k] = 1.;
+	// f[1..l_query]; core loop
+	for (i = 1; i <= l_query; ++i) {
+		double *fi = f[i], *fi1 = f[i-1];
+		int beg = 0, end = l_ref, x;
+		x = i - bw; beg = beg > x? beg : x;
+		x = i + bw; end = end < x? end : x;
+		for (k = beg; k <= end; ++k) {
+			int u, v11, v01, v10;
+			double e;
+			e = (ref[k] == 4 || query[i] == 4)? 1. : ref[k] == query[i]? 1. - qual[i] : qual[i]; // FIXME: can be better
+			set_u(u, bw, i, k);
+			set_u(v11, bw, i-1, k-1);
+			set_u(v10, bw, i-1, k);
+			set_u(v01, bw, i, k-1);
+			fi[u+0] = e * (m[0] * fi1[v11+0] + m[3] * fi1[v11+1] + m[6] * fi1[v11+2]);
+			fi[u+1] = .25 * (m[1] * fi1[v10+0] + m[4] * fi1[v10+1]);
+			fi[u+2] = m[2] * fi[v01+0] + m[8] * fi[v01+2];
+			fprintf(stderr, "{%d,%d}@%d %.10lg,%.10lg,%.10lg\n", i, k, u, fi[u], fi[u+1], fi[u+2]);
+		}
+	}
+	// sink
+	for (k = 0, f_sink = 0.; k <= l_ref; ++k) {
+		int u;
+		set_u(u, bw, l_query, k);
+		if (u < 3 || u >= bw2*3+3) continue;
+		f_sink += f[l_query][u+0] * sM + f[l_query][u+1] * sI;
+	}
+	pf = f_sink;
+	/*** backward ***/
+	// sink
+	for (k = 0; k <= l_ref; ++k) {
+		int u;
+		double *bi = b[l_query];
+		set_u(u, bw, l_query, k);
+		if (u < 3 || u >= bw2*3+3) continue;
+		bi[u+0] = sM; bi[u+1] = sI;
+		fprintf(stderr, "[%d,%d]@%d %.10lg,%.10lg,%.10lg\n", l_query, k, u, bi[u], bi[u+1], bi[u+2]);
+	}
+	// b[l_query..1]; core loop
+	for (i = l_query - 1; i > 0; --i) {
+		int beg = 0, end = l_ref, x;
+		double *bi = b[i], *bi1 = b[i+1];
+		x = i - bw; beg = beg > x? beg : x;
+		x = i + bw; end = end < x? end : x;
+		for (k = end; k >= beg; --k) {
+			int u, v11, v01, v10;
+			double e;
+			e = k >= l_ref? 0 : (ref[k+1] == 4 || query[i+1] == 4)? 1. : ref[k+1] == query[i+1]? 1. - qual[i+1] : qual[i+1];
+			set_u(u, bw, i, k);
+			set_u(v11, bw, i+1, k+1);
+			set_u(v10, bw, i+1, k);
+			set_u(v01, bw, i, k+1);
+			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
+			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
+			bi[u+2] = e * m[6] * bi1[v11+0] + m[8] * bi[v01+2];
+			fprintf(stderr, "[%d,%d]@%d %.10lg,%.10lg,%.10lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]);
+		}
+	}
+	{
+		int beg = 0, end = l_ref, x;
+		double *bi = b[0], *bi1 = b[1];
+		x = i - bw; beg = beg > x? beg : x;
+		x = i + bw; end = end < x? end : x;
+		for (k = end; k >= beg; --k) {
+			int u, v11, v01, v10;
+			double e;
+			e = k >= l_ref? 0 : (ref[k+1] == 4 || query[1] == 4)? 1. : ref[k+1] == query[1]? 1. - qual[1] : qual[1];
+			set_u(u, bw, 0, k);
+			set_u(v11, bw, 1, k+1);
+			set_u(v10, bw, 1, k);
+			set_u(v01, bw, 0, k+1);
+			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
+			fprintf(stderr, "[%d,%d]@%d %.10lg,%.10lg,%.10lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]);
+		}
+	}
+	set_u(k, bw, 0, 0);
+	pb = b[0][k];
+	fprintf(stderr, "(%.10lg,%.10lg):(%.10lg,%.10lg)\n", pf, pb, pb-pf, pb/pf-1);
+	/*** MAP ***/
+	return 0;
+}
+
+#ifdef _MAIN
+int main()
+{
+	int l_ref = 5, l_query = 4;
+	uint8_t *ref = (uint8_t*)"\0\1\3\3\1";
+	uint8_t *query = (uint8_t*)"\0\1\3\1";
+//	uint8_t *query = "\1\3\3\1";
+	static float qual[4] = {.2, .01, .01, .01};
+	ka_prob_extend(ref, l_ref, query, l_query, qual, &ka_probpar_def, 0, 0);
+	return 0;
+}
+#endif

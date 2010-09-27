@@ -41,6 +41,11 @@ typedef struct {
 	int band_width;
 } ka_param_t;
 
+typedef struct {
+	float d, e;
+	int bw;
+} ka_probpar_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif

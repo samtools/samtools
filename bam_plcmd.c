@@ -561,7 +561,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		data[i]->min_mq = conf->min_mq;
 		data[i]->flag = conf->flag;
 		data[i]->capQ_thres = conf->capQ_thres;
-		data[i]->fp = bam_open(fn[i], "r");
+		data[i]->fp = strcmp(fn[i], "-") == 0? bam_dopen(fileno(stdin), "r") : bam_open(fn[i], "r");
 		h_tmp = bam_header_read(data[i]->fp);
 		bam_smpl_add(sm, fn[i], h_tmp->text);
 		if (conf->reg) {
