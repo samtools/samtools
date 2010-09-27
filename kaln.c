@@ -27,6 +27,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
+#include <math.h>
 #include "kaln.h"
 
 #define FROM_M 0
@@ -396,14 +397,9 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	}
 	// initialize m
 	sM = sI = 1. / (2 * l_query + 1);
-	m[0*3+0] = (1 - c->d - c->d) * (1 - sM);
-	m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
-	m[1*3+0] = (1 - c->e) * (1 - sI);
-	m[1*3+1] = c->e * (1 - sI);
-	m[1*3+2] = 0.;
-	m[2*3+0] = 1 - c->e;
-	m[2*3+1] = 0.;
-	m[2*3+2] = c->e;
+	m[0*3+0] = (1 - c->d - c->d) * (1 - sM); m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
+	m[1*3+0] = (1 - c->e) * (1 - sI); m[1*3+1] = c->e * (1 - sI); m[1*3+2] = 0.;
+	m[2*3+0] = 1 - c->e; m[2*3+1] = 0.; m[2*3+2] = c->e;
 	/*** forward ***/
 	// f[0]
 	set_u(k, bw, 0, 0);
@@ -418,14 +414,10 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 			int u, v11, v01, v10;
 			double e;
 			e = (ref[k] == 4 || query[i] == 4)? 1. : ref[k] == query[i]? 1. - qual[i] : qual[i]; // FIXME: can be better
-			set_u(u, bw, i, k);
-			set_u(v11, bw, i-1, k-1);
-			set_u(v10, bw, i-1, k);
-			set_u(v01, bw, i, k-1);
+			set_u(u, bw, i, k); set_u(v11, bw, i-1, k-1); set_u(v10, bw, i-1, k); set_u(v01, bw, i, k-1);
 			fi[u+0] = e * (m[0] * fi1[v11+0] + m[3] * fi1[v11+1] + m[6] * fi1[v11+2]);
 			fi[u+1] = .25 * (m[1] * fi1[v10+0] + m[4] * fi1[v10+1]);
 			fi[u+2] = m[2] * fi[v01+0] + m[8] * fi[v01+2];
-			fprintf(stderr, "{%d,%d}@%d %.10lg,%.10lg,%.10lg\n", i, k, u, fi[u], fi[u+1], fi[u+2]);
 		}
 	}
 	// sink
@@ -444,9 +436,8 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		set_u(u, bw, l_query, k);
 		if (u < 3 || u >= bw2*3+3) continue;
 		bi[u+0] = sM; bi[u+1] = sI;
-		fprintf(stderr, "[%d,%d]@%d %.10lg,%.10lg,%.10lg\n", l_query, k, u, bi[u], bi[u+1], bi[u+2]);
 	}
-	// b[l_query..1]; core loop
+	// b[l_query-1..1]; core loop
 	for (i = l_query - 1; i > 0; --i) {
 		int beg = 0, end = l_ref, x;
 		double *bi = b[i], *bi1 = b[i+1];
@@ -456,36 +447,25 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 			int u, v11, v01, v10;
 			double e;
 			e = k >= l_ref? 0 : (ref[k+1] == 4 || query[i+1] == 4)? 1. : ref[k+1] == query[i+1]? 1. - qual[i+1] : qual[i+1];
-			set_u(u, bw, i, k);
-			set_u(v11, bw, i+1, k+1);
-			set_u(v10, bw, i+1, k);
-			set_u(v01, bw, i, k+1);
+			set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
 			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
 			bi[u+2] = e * m[6] * bi1[v11+0] + m[8] * bi[v01+2];
-			fprintf(stderr, "[%d,%d]@%d %.10lg,%.10lg,%.10lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]);
 		}
 	}
-	{
-		int beg = 0, end = l_ref, x;
+	{ // the "zero" coordinate (i==k==0)
 		double *bi = b[0], *bi1 = b[1];
-		x = i - bw; beg = beg > x? beg : x;
-		x = i + bw; end = end < x? end : x;
-		for (k = end; k >= beg; --k) {
-			int u, v11, v01, v10;
-			double e;
-			e = k >= l_ref? 0 : (ref[k+1] == 4 || query[1] == 4)? 1. : ref[k+1] == query[1]? 1. - qual[1] : qual[1];
-			set_u(u, bw, 0, k);
-			set_u(v11, bw, 1, k+1);
-			set_u(v10, bw, 1, k);
-			set_u(v01, bw, 0, k+1);
-			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
-			fprintf(stderr, "[%d,%d]@%d %.10lg,%.10lg,%.10lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]);
-		}
+		int u, v11, v01, v10;
+		double e = (ref[1] == 4 || query[1] == 4)? 1. : ref[1] == query[1]? 1. - qual[1] : qual[1];
+		set_u(u, bw, 0, 0); set_u(v11, bw, 1, 1); set_u(v10, bw, 1, 0); set_u(v01, bw, 0, 1);
+		bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 	}
 	set_u(k, bw, 0, 0);
 	pb = b[0][k];
-	fprintf(stderr, "(%.10lg,%.10lg):(%.10lg,%.10lg)\n", pf, pb, pb-pf, pb/pf-1);
+	{ // pf should equal pb as they are both the likelihood of data but calculated in different ways
+		double z = fabs(pb/pf - 1.);
+		if (z > 1e-7) fprintf(stderr, "[%s] %lg!=%lg\n", __func__, pf, pb);
+	}
 	/*** MAP ***/
 	return 0;
 }
