@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -89,11 +90,12 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 	if (headers) {
 		tamFile fpheaders = sam_open(headers);
 		if (fpheaders == 0) {
-			fprintf(stderr, "[bam_merge_core] Cannot open file `%s'. Continue anyway.\n", headers);
-		} else {
-			hheaders = sam_header_read(fpheaders);
-			sam_close(fpheaders);
+			const char *message = strerror(errno);
+			fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", headers, message);
+			return -1;
 		}
+		hheaders = sam_header_read(fpheaders);
+		sam_close(fpheaders);
 	}
 
 	g_is_by_qname = by_qname;
@@ -229,7 +231,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 
 int bam_merge(int argc, char *argv[])
 {
-	int c, is_by_qname = 0, flag = 0;
+	int c, is_by_qname = 0, flag = 0, ret = 0;
 	char *fn_headers = NULL, *reg = 0;
 
 	while ((c = getopt(argc, argv, "h:nruR:")) >= 0) {
@@ -254,10 +256,10 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "      the header dictionary in merging.\n\n");
 		return 1;
 	}
-	bam_merge_core(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1, flag, reg);
+	if (bam_merge_core(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1, flag, reg) < 0) ret = 1;
 	free(reg);
 	free(fn_headers);
-	return 0;
+	return ret;
 }
 
 typedef bam1_t *bam1_p;
