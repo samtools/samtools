@@ -371,18 +371,42 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 	return cigar;
 }
 
-#define get_k(b, i, kk) ((i) < (b)? (kk)/3 : (kk)/3+(i)-(b))
+/***************************
+ * Probabilistic extension *
+ ***************************/
+
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
 ka_probpar_t ka_probpar_def = { 0.0001, 0.1, 10 };
 
+/*
+  The profile HMM is:
+
+    /\      /\             /\        /\             /\
+    I[0]    I[1]           I[k-1]    I[k]           I[L]
+     ^   \   ^   \      \    ^    \   ^   \      \   ^
+     |    \  |    \      \   |     \  |    \      \  |
+    M[0] -> M[1] -> ... -> M[k-1] -> M[k] -> ... -> M[L]   M[L+1]
+         \       \/     \/        \/      \/      /
+          \      /\     /\        /\      /\     /
+            D[1] ->     -> D[k-1] -> D[k] ->
+            \/             \/        \/
+
+  Every {M,I}[k], k=0..L connects M[L+1] at the same probability, while
+  no D[k], k=1..L-1 connects M[L+1]. This means an alignment can end up
+  with M or I but not D.
+
+  Deletions are dumb states which do not emit residues. Frankly, I am
+  not sure if they are handled properly in the following
+  implementation. This is a potential concern to be resolved in future.
+ */
 int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float *_qual,
 				   const ka_probpar_t *c, int *state, uint8_t *q)
 {
-	double **f, **b, m[9], f_sink, sI, sM, pf, pb;
+	double **f, **b, m[9], f_sink, sI, sM, pf, pb, pD;
 	float *qual;
 	uint8_t *ref, *query;
-	int bw, bw2, i, k;
+	int bw, bw2, i, k, is_diff = 0;
 	/*** initialization ***/
 	ref = _ref - 1;
 	query = _query - 1;
@@ -396,7 +420,7 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		b[i] = calloc(bw2 * 3 + 6, sizeof(double));
 	}
 	// initialize m
-	sM = sI = 1. / (2 * l_query + 1);
+	sM = sI = 1. / (2 * l_query + 2);
 	m[0*3+0] = (1 - c->d - c->d) * (1 - sM); m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
 	m[1*3+0] = (1 - c->e) * (1 - sI); m[1*3+1] = c->e * (1 - sI); m[1*3+2] = 0.;
 	m[2*3+0] = 1 - c->e; m[2*3+1] = 0.; m[2*3+2] = c->e;
@@ -413,11 +437,12 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		for (k = beg; k <= end; ++k) {
 			int u, v11, v01, v10;
 			double e;
-			e = (ref[k] == 4 || query[i] == 4)? 1. : ref[k] == query[i]? 1. - qual[i] : qual[i]; // FIXME: can be better
+			e = (ref[k] > 3 || query[i] > 3)? 1. : ref[k] == query[i]? 1. - qual[i] : qual[i] / 3.;
 			set_u(u, bw, i, k); set_u(v11, bw, i-1, k-1); set_u(v10, bw, i-1, k); set_u(v01, bw, i, k-1);
 			fi[u+0] = e * (m[0] * fi1[v11+0] + m[3] * fi1[v11+1] + m[6] * fi1[v11+2]);
 			fi[u+1] = .25 * (m[1] * fi1[v10+0] + m[4] * fi1[v10+1]);
 			fi[u+2] = m[2] * fi[v01+0] + m[8] * fi[v01+2];
+			fprintf(stderr, "F (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, fi[u], fi[u+1], fi[u+2]); // DEBUG
 		}
 	}
 	// sink
@@ -446,27 +471,50 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		for (k = end; k >= beg; --k) {
 			int u, v11, v01, v10;
 			double e;
-			e = k >= l_ref? 0 : (ref[k+1] == 4 || query[i+1] == 4)? 1. : ref[k+1] == query[i+1]? 1. - qual[i+1] : qual[i+1];
+			e = k >= l_ref? 0 : (ref[k+1] > 3 || query[i+1] > 3)? 1. : ref[k+1] == query[i+1]? 1. - qual[i+1] : qual[i+1] / 3.;
 			set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
 			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
 			bi[u+2] = e * m[6] * bi1[v11+0] + m[8] * bi[v01+2];
+			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
 	}
 	{ // the "zero" coordinate (i==k==0)
 		double *bi = b[0], *bi1 = b[1];
 		int u, v11, v01, v10;
-		double e = (ref[1] == 4 || query[1] == 4)? 1. : ref[1] == query[1]? 1. - qual[1] : qual[1];
+		double e = (ref[1] > 3 || query[1] > 3)? 1. : ref[1] == query[1]? 1. - qual[1] : qual[1] / 3.;
 		set_u(u, bw, 0, 0); set_u(v11, bw, 1, 1); set_u(v10, bw, 1, 0); set_u(v01, bw, 0, 1);
 		bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 	}
 	set_u(k, bw, 0, 0);
 	pb = b[0][k];
-	{ // pf should equal pb as they are both the likelihood of data but calculated in different ways
-		double z = fabs(pb/pf - 1.);
-		if (z > 1e-7) fprintf(stderr, "[%s] %lg!=%lg\n", __func__, pf, pb);
-	}
+	pD = (pf + pb) / 2.;
+	is_diff = fabs(pb/pf - 1.) > 1e-7? 1 : 0;
 	/*** MAP ***/
+	for (i = 1; i <= l_query; ++i) {
+		double sum = 0., *fi = f[i], *bi = b[i], max = 0.;
+		int beg = 0, end = l_ref, x, max_k = -1;
+		x = i - bw; beg = beg > x? beg : x;
+		x = i + bw; end = end < x? end : x;
+		for (k = beg; k <= end; ++k) {
+			int u;
+			double z;
+			set_u(u, bw, i, k);
+			z = fi[u+0] * bi[u+0]; if (z > max) max = z, max_k = k<<2 | 0; sum += z;
+			z = fi[u+1] * bi[u+1]; if (z > max) max = z, max_k = k<<2 | 1; sum += z;
+		}
+		max /= sum; sum /= pD; // if everything works as is expected, sum == 1.0
+		if (state) state[i-1] = max_k;
+		if (q) q[i-1] = -4.343 * log(1. - max);
+#ifdef _MAIN
+		fprintf(stderr, "[%d],%d,%lg,%d:%d,%lg\n", is_diff, i, sum, max_k>>2, max_k&3, max); // DEBUG
+#endif
+	}
+	/*** free ***/
+	for (i = 0; i <= l_query; ++i) {
+		free(f[i]); free(b[i]);
+	}
+	free(f); free(b);
 	return 0;
 }
 
@@ -475,9 +523,9 @@ int main()
 {
 	int l_ref = 5, l_query = 4;
 	uint8_t *ref = (uint8_t*)"\0\1\3\3\1";
-	uint8_t *query = (uint8_t*)"\0\1\3\1";
-//	uint8_t *query = "\1\3\3\1";
-	static float qual[4] = {.2, .01, .01, .01};
+//	uint8_t *query = (uint8_t*)"\0\3\3\1";
+	uint8_t *query = (uint8_t*)"\1\3\3\1"; // FIXME: the output is not so right given this input!!!
+	static float qual[4] = {.01, .01, .01, .01};
 	ka_prob_extend(ref, l_ref, query, l_query, qual, &ka_probpar_def, 0, 0);
 	return 0;
 }
