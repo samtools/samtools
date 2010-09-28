@@ -377,7 +377,7 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
-ka_probpar_t ka_probpar_def = { 0.0001, 0.1, 1 };
+ka_probpar_t ka_probpar_def = { 0.0001, 0.1, 10 };
 
 /*
   The profile HMM is:
@@ -403,12 +403,10 @@ ka_probpar_t ka_probpar_def = { 0.0001, 0.1, 1 };
 int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float *_qual,
 				   const ka_probpar_t *c, int *state, uint8_t *q)
 {
-	double **f, **b, m[9], f_sink, sI, sM, pf, pb, pD;
+	double **f, **b, *s, m[9], sI, sM, pb;
 	float *qual;
 	uint8_t *ref, *query;
 	int bw, bw2, i, k, is_diff = 0;
-
-	// FIXME: floating point underflow
 
 	/*** initialization ***/
 	ref = _ref - 1; // change to 1-based coordinate
@@ -423,6 +421,7 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		f[i] = calloc(bw2 * 3 + 6, sizeof(double)); // FIXME: this is over-allocated for very short seqs
 		b[i] = calloc(bw2 * 3 + 6, sizeof(double));
 	}
+	s = calloc(l_query+2, sizeof(double)); // s[] is the scaling factor to avoid underflow
 	// initialize transition probability
 	sM = sI = 1. / (2 * l_query + 2); // the value here seems not to affect results; FIXME: need proof
 	m[0*3+0] = (1 - c->d - c->d) * (1 - sM); m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
@@ -433,59 +432,72 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	set_u(k, bw, 0, 0);
 	f[0][k] = 1.;
 	{ // write D cells
-		int beg = 1, end = l_ref, x;
+		int beg = 1, end = l_ref, x, _beg, _end;
+		double sum;
 		x = 0 - bw; beg = beg > x? beg : x;
 		x = 0 + bw; end = end < x? end : x;
-		for (k = beg; k <= end; ++k) {
+		for (k = beg, sum = 0.; k <= end; ++k) {
 			int u, v01;
 			set_u(u, bw, 0, k); set_u(v01, bw, 0, k-1);
-			f[0][u+2] = m[2] * f[0][v01+0] + m[8] * f[0][v01+2];
+			sum += (f[0][u+2] = m[2] * f[0][v01+0] + m[8] * f[0][v01+2]);
 		}
+		// rescale to avoid floating point underflow
+		s[0] = sum;
+		set_u(_beg, bw, 0, 0); set_u(_end, bw, 0, end); _end += 2;
+		for (k = _beg; k <= _end; ++k) f[0][k] /= sum;
 	}
 	// f[1..l_query]; core loop
 	for (i = 1; i <= l_query; ++i) {
-		double *fi = f[i], *fi1 = f[i-1];
-		int beg = 0, end = l_ref, x;
+		double *fi = f[i], *fi1 = f[i-1], sum;
+		int beg = 0, end = l_ref, x, _beg, _end;
 		x = i - bw; beg = beg > x? beg : x; // band start
 		x = i + bw; end = end < x? end : x; // band end
-		for (k = beg; k <= end; ++k) {
+		for (k = beg, sum = 0.; k <= end; ++k) {
 			int u, v11, v01, v10;
 			double e;
-			// FIXME: the following line can be optimized without branching!
+			// FIXME: the following line can be optimized without branching
 			e = (ref[k] > 3 || query[i] > 3)? 1. : ref[k] == query[i]? 1. - qual[i] : qual[i] / 3.;
 			set_u(u, bw, i, k); set_u(v11, bw, i-1, k-1); set_u(v10, bw, i-1, k); set_u(v01, bw, i, k-1);
 			fi[u+0] = e * (m[0] * fi1[v11+0] + m[3] * fi1[v11+1] + m[6] * fi1[v11+2]);
 			fi[u+1] = .25 * (m[1] * fi1[v10+0] + m[4] * fi1[v10+1]);
 			fi[u+2] = m[2] * fi[v01+0] + m[8] * fi[v01+2];
+			sum += fi[u] + fi[u+1] + fi[u+2];
 //			fprintf(stderr, "F (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, fi[u], fi[u+1], fi[u+2]); // DEBUG
 		}
+		// rescale
+		s[i] = sum;
+		set_u(_beg, bw, i, beg); set_u(_end, bw, i, end); _end += 2;
+		for (k = _beg; k <= _end; ++k) fi[k] /= sum;
 	}
-	// sink
-	for (k = 0, f_sink = 0.; k <= l_ref; ++k) {
-		int u;
-		set_u(u, bw, l_query, k);
-		if (u < 3 || u >= bw2*3+3) continue;
-		f_sink += f[l_query][u+0] * sM + f[l_query][u+1] * sI;
+	{ // sink (actually f[l_query+1])
+		double sum;
+		for (k = 0, sum = 0.; k <= l_ref; ++k) {
+			int u;
+			set_u(u, bw, l_query, k);
+			if (u < 3 || u >= bw2*3+3) continue;
+		    sum += f[l_query][u+0] * sM + f[l_query][u+1] * sI;
+		}
+		s[l_query+1] = sum; // the last scaling factor
 	}
-	pf = f_sink; // this P(x) calculated by the forward algorithm
 	/*** backward ***/
-	// sink
+	// b[l_query] (b[l_query+1][0]=1 and thus \tilde{b}[][]=1/s[l_query+1]; this is where s[l_query+1] comes from)
 	for (k = 0; k <= l_ref; ++k) {
 		int u;
 		double *bi = b[l_query];
 		set_u(u, bw, l_query, k);
 		if (u < 3 || u >= bw2*3+3) continue;
-		bi[u+0] = sM; bi[u+1] = sI;
+		bi[u+0] = sM / s[l_query] / s[l_query+1]; bi[u+1] = sI / s[l_query] / s[l_query+1];
 	}
 	// b[l_query-1..1]; core loop
 	for (i = l_query - 1; i >= 0; --i) {
-		int beg = 0, end = l_ref, x;
+		int beg = 0, end = l_ref, x, _beg, _end;
 		double *bi = b[i], *bi1 = b[i+1];
 		x = i - bw; beg = beg > x? beg : x;
 		x = i + bw; end = end < x? end : x;
 		for (k = end; k >= beg; --k) {
 			int u, v11, v01, v10;
 			double e;
+			// FIXME: the following can be optimized without branching
 			e = k >= l_ref? 0 : (ref[k+1] > 3 || query[i+1] > 3)? 1. : ref[k+1] == query[i+1]? 1. - qual[i+1] : qual[i+1] / 3.;
 			set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
 			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
@@ -493,11 +505,13 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 			bi[u+2] = e * m[6] * bi1[v11+0] + m[8] * bi[v01+2];
 //			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
+		// rescale
+		set_u(_beg, bw, i, beg); set_u(_end, bw, i, end); _end += 2;
+		for (k = _beg; k <= _end; ++k) bi[k] /= s[i];
 	}
 	set_u(k, bw, 0, 0);
-	pb = b[0][k];
-	pD = (pf + pb) / 2.;
-	is_diff = fabs(pb/pf - 1.) > 1e-7? 1 : 0;
+	pb = b[0][k]; // if everything works as is expected, pb==1
+	is_diff = fabs(pb - 1.) > 1e-7? 1 : 0;
 	/*** MAP ***/
 	for (i = 1; i <= l_query; ++i) {
 		double sum = 0., *fi = f[i], *bi = b[i], max = 0.;
@@ -511,28 +525,28 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 			z = fi[u+0] * bi[u+0]; if (z > max) max = z, max_k = k<<2 | 0; sum += z;
 			z = fi[u+1] * bi[u+1]; if (z > max) max = z, max_k = k<<2 | 1; sum += z;
 		}
-		max /= sum; sum /= pD; // if everything works as is expected, sum == 1.0
+		max /= sum; sum *= s[i]; // if everything works as is expected, sum == 1.0
 		if (state) state[i-1] = max_k;
 		if (q) q[i-1] = -4.343 * log(1. - max);
 #ifdef _MAIN
-		fprintf(stderr, "[%d,%.10lg,%.10lg],%d,%lg,%d:%d,%lg\n", is_diff, pf, pb, i, sum, max_k>>2, max_k&3, max);
+		fprintf(stderr, "(%.10lg,%.10lg) (%d,%d:%d)~%lg\n", pb, sum, i, max_k>>2, max_k&3, max); // DEBUG
 #endif
 	}
 	/*** free ***/
 	for (i = 0; i <= l_query; ++i) {
 		free(f[i]); free(b[i]);
 	}
-	free(f); free(b);
+	free(f); free(b); free(s);
 	return 0;
 }
 
 #ifdef _MAIN
 int main()
 {
-	int l_ref = 5, l_query = 3;
+	int l_ref = 5, l_query = 4;
 	uint8_t *ref = (uint8_t*)"\0\1\3\3\1";
-//	uint8_t *query = (uint8_t*)"\0\3\3\1";
-	uint8_t *query = (uint8_t*)"\1\3\3\1"; // FIXME: the output is not so right given this input!!!
+	uint8_t *query = (uint8_t*)"\0\3\3\1";
+//	uint8_t *query = (uint8_t*)"\1\3\3\1"; // FIXME: the output is not so right given this input!!!
 	static float qual[4] = {.01, .01, .01, .01};
 	ka_prob_extend(ref, l_ref, query, l_query, qual, &ka_probpar_def, 0, 0);
 	return 0;
