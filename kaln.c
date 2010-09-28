@@ -452,15 +452,15 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 	}
 	// f[2..l_query]
 	for (i = 2; i <= l_query; ++i) {
-		double *fi = f[i], *fi1 = f[i-1], sum;
+		double *fi = f[i], *fi1 = f[i-1], sum, qli = qual[i];
 		int beg = 1, end = l_ref, x, _beg, _end;
+		uint8_t qyi = query[i];
 		x = i - bw; beg = beg > x? beg : x; // band start
 		x = i + bw; end = end < x? end : x; // band end
 		for (k = beg, sum = 0.; k <= end; ++k) {
 			int u, v11, v01, v10;
 			double e;
-			// FIXME: the following line can be optimized without branching
-			e = (ref[k] > 3 || query[i] > 3)? 1. : ref[k] == query[i]? 1. - qual[i] : qual[i] / 3.;
+			e = (ref[k] > 3 || qyi > 3)? 1. : ref[k] == qyi? 1. - qli : qli / 3.;
 			set_u(u, bw, i, k); set_u(v11, bw, i-1, k-1); set_u(v10, bw, i-1, k); set_u(v01, bw, i, k-1);
 			fi[u+0] = e * (m[0] * fi1[v11+0] + m[3] * fi1[v11+1] + m[6] * fi1[v11+2]);
 			fi[u+1] = .25 * (m[1] * fi1[v10+0] + m[4] * fi1[v10+1]);
@@ -495,25 +495,23 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 	// b[l_query-1..1]
 	for (i = l_query - 1; i >= 1; --i) {
 		int beg = 1, end = l_ref, x, _beg, _end;
-		double *bi = b[i], *bi1 = b[i+1], y = (i > 1);
+		double *bi = b[i], *bi1 = b[i+1], y = (i > 1), qli1 = qual[i+1];
+		uint8_t qyi1 = query[i+1];
 		x = i - bw; beg = beg > x? beg : x;
 		x = i + bw; end = end < x? end : x;
 		for (k = end; k >= beg; --k) {
 			int u, v11, v01, v10;
 			double e;
-			// FIXME: the following can be optimized without branching
-			e = k >= l_ref? 0 : (ref[k+1] > 3 || query[i+1] > 3)? 1. : ref[k+1] == query[i+1]? 1. - qual[i+1] : qual[i+1] / 3.;
+			e = k >= l_ref? 0 : (ref[k+1] > 3 || qyi1 > 3)? 1. : ref[k+1] == qyi1? 1. - qli1 : qli1 / 3.;
 			set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
 			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
-			// FIXME: I do not know why I need this (i>1) factor, but only with it the result makes sense.
 			bi[u+2] = (e * m[6] * bi1[v11+0] + m[8] * bi[v01+2]) * y;
 //			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
 		// rescale
 		set_u(_beg, bw, i, beg); set_u(_end, bw, i, end); _end += 2;
-		y = s[i];
-		for (k = _beg; k <= _end; ++k) bi[k] /= y;
+		for (k = _beg; k <= _end; ++k) bi[k] /= s[i];
 	}
 	{ // b[0]
 		int beg = 1, end = l_ref < bw + 1? l_ref : bw + 1;
