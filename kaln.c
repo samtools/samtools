@@ -502,11 +502,11 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 		for (k = end; k >= beg; --k) {
 			int u, v11, v01, v10;
 			double e;
-			e = k >= l_ref? 0 : (ref[k+1] > 3 || qyi1 > 3)? 1. : ref[k+1] == qyi1? 1. - qli1 : qli1 / 3.;
 			set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
-			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
-			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
-			bi[u+2] = (e * m[6] * bi1[v11+0] + m[8] * bi[v01+2]) * y;
+			e = (k >= l_ref? 0 : (ref[k+1] > 3 || qyi1 > 3)? 1. : ref[k+1] == qyi1? 1. - qli1 : qli1 / 3.) * bi1[v11];
+			bi[u+0] = e * m[0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2]; // bi1[v11] has been foled into e.
+			bi[u+1] = e * m[3] + .25 * m[4] * bi1[v10+1];
+			bi[u+2] = (e * m[6] + m[8] * bi[v01+2]) * y;
 //			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
 		// rescale
