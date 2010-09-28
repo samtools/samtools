@@ -371,9 +371,11 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 	return cigar;
 }
 
-/***************************
- * Probabilistic extension *
- ***************************/
+/************************
+ * Probabilistic glocal *
+ ************************/
+
+static float g_qual2prob[256];
 
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
@@ -394,16 +396,16 @@ ka_probpar_t ka_probpar_def = { 0.001, 0.1, 10 };
 
    M[0] points to every {M,I}[k] and every {M,I}[k] points M[L+1].
  */
-int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_query, const float *_qual,
+int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_query, const uint8_t *iqual,
 				   const ka_probpar_t *c, int *state, uint8_t *q)
 {
 	double **f, **b, *s, m[9], sI, sM, bI, bM, pb;
-	const float *qual;
+	float *qual, *_qual;
 	const uint8_t *ref, *query;
 	int bw, bw2, i, k, is_diff = 0;
 
 	/*** initialization ***/
-	ref = _ref - 1; query = _query - 1; qual = _qual - 1; // change to 1-based coordinate
+	ref = _ref - 1; query = _query - 1; // change to 1-based coordinate
 	bw = l_ref > l_query? l_ref : l_query;
 	if (bw > c->bw) bw = c->bw;
 	if (bw < abs(l_ref - l_query)) bw = abs(l_ref - l_query);
@@ -416,6 +418,13 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 		b[i] = calloc(bw2 * 3 + 6, sizeof(double));
 	}
 	s = calloc(l_query+2, sizeof(double)); // s[] is the scaling factor to avoid underflow
+	// initialize qual
+	_qual = calloc(l_query, sizeof(float));
+	if (g_qual2prob[0] == 0)
+		for (i = 0; i < 256; ++i)
+			g_qual2prob[i] = pow(10, -i/10.);
+	for (i = 0; i < l_query; ++i) _qual[i] = g_qual2prob[iqual? iqual[i] : 30];
+	qual = _qual - 1;
 	// initialize transition probability
 	sM = sI = 1. / (2 * l_query + 2); // the value here seems not to affect results; FIXME: need proof
 	m[0*3+0] = (1 - c->d - c->d) * (1 - sM); m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
@@ -497,7 +506,7 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 			set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
 			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
-			// FIXME: I do not know why I need this (i>1) factor, but only with it the result is correct
+			// FIXME: I do not know why I need this (i>1) factor, but only with it the result makes sense.
 			bi[u+2] = (e * m[6] * bi1[v11+0] + m[8] * bi[v01+2]) * (i > 1);
 //			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
@@ -516,7 +525,7 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 		    sum += e * b[1][u+0] * bM + .25 * b[1][u+1] * bI;
 		}
 		set_u(k, bw, 0, 0);
-		pb = b[0][k] = sum / s[0];
+		pb = b[0][k] = sum / s[0]; // if everything works as is expected, pb == 1.0
 	}
 	is_diff = fabs(pb - 1.) > 1e-7? 1 : 0;
 	/*** MAP ***/
@@ -543,7 +552,7 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 	for (i = 0; i <= l_query; ++i) {
 		free(f[i]); free(b[i]);
 	}
-	free(f); free(b); free(s);
+	free(f); free(b); free(s); free(_qual);
 	return 0;
 }
 
@@ -554,7 +563,7 @@ int main()
 	uint8_t *ref = (uint8_t*)"\0\1\3\3\1";
 	uint8_t *query = (uint8_t*)"\0\3\3\1";
 //	uint8_t *query = (uint8_t*)"\1\3\3\1"; // FIXME: the output is not so right given this input!!!
-	static float qual[4] = {.01, .01, .01, .01};
+	static uint8_t qual[4] = {20, 20, 20, 20};
 	ka_prob_glocal(ref, l_ref, query, l_query, qual, &ka_probpar_def, 0, 0);
 	return 0;
 }
