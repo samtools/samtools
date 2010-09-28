@@ -562,7 +562,7 @@ int main()
 	int l_ref = 5, l_query = 4;
 	uint8_t *ref = (uint8_t*)"\0\1\3\3\1";
 	uint8_t *query = (uint8_t*)"\0\3\3\1";
-//	uint8_t *query = (uint8_t*)"\1\3\3\1"; // FIXME: the output is not so right given this input!!!
+//	uint8_t *query = (uint8_t*)"\1\3\3\1";
 	static uint8_t qual[4] = {20, 20, 20, 20};
 	ka_prob_glocal(ref, l_ref, query, l_query, qual, &ka_probpar_def, 0, 0);
 	return 0;
