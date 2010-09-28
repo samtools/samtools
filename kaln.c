@@ -377,7 +377,7 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
-ka_probpar_t ka_probpar_def = { 0.0001, 0.1, 10 };
+ka_probpar_t ka_probpar_def = { 0.0001, 0.1, 1 };
 
 /*
   The profile HMM is:
@@ -430,8 +430,8 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	f[0][k] = 1.;
 	{
 		int beg = 1, end = l_ref, x;
-		x = i - bw; beg = beg > x? beg : x;
-		x = i + bw; end = end < x? end : x;
+		x = 0 - bw; beg = beg > x? beg : x;
+		x = 0 + bw; end = end < x? end : x;
 		for (k = beg; k <= end; ++k) {
 			int u, v01;
 			set_u(u, bw, 0, k); set_u(v01, bw, 0, k-1);
@@ -510,7 +510,7 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		if (state) state[i-1] = max_k;
 		if (q) q[i-1] = -4.343 * log(1. - max);
 #ifdef _MAIN
-		fprintf(stderr, "[%d],%d,%lg,%d:%d,%lg\n", is_diff, i, sum, max_k>>2, max_k&3, max); // DEBUG
+		fprintf(stderr, "[%d,%.10lg,%.10lg],%d,%lg,%d:%d,%lg\n", is_diff, pf, pb, i, sum, max_k>>2, max_k&3, max);
 #endif
 	}
 	/*** free ***/
@@ -524,7 +524,7 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 #ifdef _MAIN
 int main()
 {
-	int l_ref = 5, l_query = 4;
+	int l_ref = 5, l_query = 3;
 	uint8_t *ref = (uint8_t*)"\0\1\3\3\1";
 //	uint8_t *query = (uint8_t*)"\0\3\3\1";
 	uint8_t *query = (uint8_t*)"\1\3\3\1"; // FIXME: the output is not so right given this input!!!
