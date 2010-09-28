@@ -371,9 +371,9 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 	return cigar;
 }
 
-/************************
- * Probabilistic glocal *
- ************************/
+/*****************************************
+ * Probabilistic banded glocal alignment *
+ *****************************************/
 
 static float g_qual2prob[256];
 
@@ -495,7 +495,7 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 	// b[l_query-1..1]
 	for (i = l_query - 1; i >= 1; --i) {
 		int beg = 1, end = l_ref, x, _beg, _end;
-		double *bi = b[i], *bi1 = b[i+1];
+		double *bi = b[i], *bi1 = b[i+1], y = (i > 1);
 		x = i - bw; beg = beg > x? beg : x;
 		x = i + bw; end = end < x? end : x;
 		for (k = end; k >= beg; --k) {
@@ -507,12 +507,13 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
 			// FIXME: I do not know why I need this (i>1) factor, but only with it the result makes sense.
-			bi[u+2] = (e * m[6] * bi1[v11+0] + m[8] * bi[v01+2]) * (i > 1);
+			bi[u+2] = (e * m[6] * bi1[v11+0] + m[8] * bi[v01+2]) * y;
 //			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
 		// rescale
 		set_u(_beg, bw, i, beg); set_u(_end, bw, i, end); _end += 2;
-		for (k = _beg; k <= _end; ++k) bi[k] /= s[i];
+		y = s[i];
+		for (k = _beg; k <= _end; ++k) bi[k] /= y;
 	}
 	{ // b[0]
 		int beg = 1, end = l_ref < bw + 1? l_ref : bw + 1;
@@ -531,21 +532,21 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 	/*** MAP ***/
 	for (i = 1; i <= l_query; ++i) {
 		double sum = 0., *fi = f[i], *bi = b[i], max = 0.;
-		int beg = 0, end = l_ref, x, max_k = -1;
+		int beg = 1, end = l_ref, x, max_k = -1;
 		x = i - bw; beg = beg > x? beg : x;
 		x = i + bw; end = end < x? end : x;
 		for (k = beg; k <= end; ++k) {
 			int u;
 			double z;
 			set_u(u, bw, i, k);
-			z = fi[u+0] * bi[u+0]; if (z > max) max = z, max_k = k<<2 | 0; sum += z;
-			z = fi[u+1] * bi[u+1]; if (z > max) max = z, max_k = k<<2 | 1; sum += z;
+			z = fi[u+0] * bi[u+0]; if (z > max) max = z, max_k = (k-1)<<2 | 0; sum += z;
+			z = fi[u+1] * bi[u+1]; if (z > max) max = z, max_k = (k-1)<<2 | 1; sum += z;
 		}
 		max /= sum; sum *= s[i]; // if everything works as is expected, sum == 1.0
 		if (state) state[i-1] = max_k;
-		if (q) q[i-1] = -4.343 * log(1. - max);
+		if (q) k = -4.343 * log(1. - max), q[i-1] = k > 100? 99 : k;
 #ifdef _MAIN
-		fprintf(stderr, "(%.10lg,%.10lg) (%d,%d:%d)~%lg\n", pb, sum, i, max_k>>2, max_k&3, max); // DEBUG
+		fprintf(stderr, "(%.10lg,%.10lg) (%d,%d:%d)~%lg\n", pb, sum, i-1, max_k>>2, max_k&3, max); // DEBUG
 #endif
 	}
 	/*** free ***/

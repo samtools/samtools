@@ -261,6 +261,63 @@ int bam_realn(bam1_t *b, const char *ref)
 	return 0;
 }
 
+int bam_prob_realn(bam1_t *b, const char *ref)
+{
+	int k, i, bw, x, y, yb, ye, xb, xe;
+	uint32_t *cigar = bam1_cigar(b);
+	bam1_core_t *c = &b->core;
+	ka_probpar_t conf = ka_probpar_def;
+	// find the start and end of the alignment
+	if (c->flag & BAM_FUNMAP) return -1;
+	x = c->pos, y = 0, yb = ye = xb = xe = -1;
+	for (k = 0; k < c->n_cigar; ++k) {
+		int op, l;
+		op = cigar[k]&0xf; l = cigar[k]>>4;
+		if (op == BAM_CMATCH) {
+			if (yb < 0) yb = y;
+			if (xb < 0) xb = x;
+			ye = y + l; xe = x + l;
+			x += l; y += l;
+		} else if (op == BAM_CSOFT_CLIP || op == BAM_CINS) y += l;
+		else if (op == BAM_CDEL) x += l;
+		else if (op == BAM_CREF_SKIP) return -1;
+	}
+	// set bandwidth and the start and the end
+	bw = 7;
+	if (abs((xe - xb) - (ye - yb)) > bw)
+		bw = abs((xe - xb) - (ye - yb)) + 3;
+	conf.bw = bw;
+	xb -= yb + bw/2; if (xb < 0) xb = 0;
+	xe += c->l_qseq - ye + bw/2;
+	if (xe - xb - c->l_qseq > bw)
+		xb += (xe - xb - c->l_qseq - bw) / 2, xe -= (xe - xb - c->l_qseq - bw) / 2;
+	{ // glocal
+		uint8_t *s, *r, *q, *seq = bam1_seq(b), *qual = bam1_qual(b);
+		int *state;
+		s = calloc(c->l_qseq, 1);
+		for (i = 0; i < c->l_qseq; ++i) s[i] = bam_nt16_nt4_table[bam1_seqi(seq, i)];
+		r = calloc(xe - xb, 1);
+		for (i = xb; i < xe; ++i)
+			r[i-xb] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[i]]];
+		state = calloc(c->l_qseq, sizeof(int));
+		q = calloc(c->l_qseq, 1);
+		ka_prob_glocal(r, xe-xb, s, c->l_qseq, qual, &conf, state, q);
+		for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
+			int op = cigar[k]&0xf, l = cigar[k]>>4;
+			if (op == BAM_CMATCH) {
+				for (i = y; i < y + l; ++i) {
+					if ((state[i]&3) != 0 || state[i]>>2 != x - xb + (i - y)) qual[i] = 0;
+					else qual[i] = qual[i] < q[i]? qual[i] : q[i];
+				}
+				x += l; y += l;
+			} else if (op == BAM_CSOFT_CLIP || op == BAM_CINS) y += l;
+			else if (op == BAM_CDEL) x += l;
+		}
+		free(s); free(r); free(q); free(state);
+	}
+	return 0;
+}
+
 int bam_fillmd(int argc, char *argv[])
 {
 	int c, is_equal = 0, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm = 0, is_realn, capQ = 0;
@@ -318,7 +375,8 @@ int bam_fillmd(int argc, char *argv[])
 					fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
 							fp->header->target_name[tid]);
 			}
-			if (is_realn) bam_realn(b, ref);
+//			if (is_realn) bam_realn(b, ref);
+			if (is_realn) bam_prob_realn(b, ref);
 			if (capQ > 10) {
 				int q = bam_cap_mapQ(b, ref, capQ);
 				if (b->core.qual > q) b->core.qual = q;

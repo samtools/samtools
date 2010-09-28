@@ -483,6 +483,7 @@ typedef struct {
 static int mplp_func(void *data, bam1_t *b)
 {
 	extern int bam_realn(bam1_t *b, const char *ref);
+	extern int bam_prob_realn(bam1_t *b, const char *ref);
 	extern int bam_cap_mapQ(bam1_t *b, char *ref, int thres);
 	mplp_aux_t *ma = (mplp_aux_t*)data;
 	int ret, skip = 0;
@@ -491,7 +492,7 @@ static int mplp_func(void *data, bam1_t *b)
 		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
 		if (ret < 0) break;
 		skip = 0;
-		if (has_ref && (ma->flag&MPLP_REALN)) bam_realn(b, ma->ref);
+		if (has_ref && (ma->flag&MPLP_REALN)) bam_prob_realn(b, ma->ref);
 		if (has_ref && ma->capQ_thres > 10) {
 			int q = bam_cap_mapQ(b, ma->ref, ma->capQ_thres);
 			if (q < 0) skip = 1;
