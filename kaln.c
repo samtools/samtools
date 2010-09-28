@@ -407,20 +407,24 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	float *qual;
 	uint8_t *ref, *query;
 	int bw, bw2, i, k, is_diff = 0;
+
+	// FIXME: floating point underflow
+
 	/*** initialization ***/
-	ref = _ref - 1;
+	ref = _ref - 1; // change to 1-based coordinate
 	query = _query - 1;
 	qual = _qual - 1;
 	bw = c->bw;
 	bw2 = c->bw * 2 + 1;
+	// allocate forward and backward matrices f[][] and b[][]
 	f = calloc(l_query+1, sizeof(void*));
 	b = calloc(l_query+1, sizeof(void*));
 	for (i = 0; i <= l_query; ++i) {
-		f[i] = calloc(bw2 * 3 + 6, sizeof(double));
+		f[i] = calloc(bw2 * 3 + 6, sizeof(double)); // FIXME: this is over-allocated for very short seqs
 		b[i] = calloc(bw2 * 3 + 6, sizeof(double));
 	}
-	// initialize m
-	sM = sI = 1. / (2 * l_query + 2);
+	// initialize transition probability
+	sM = sI = 1. / (2 * l_query + 2); // the value here seems not to affect results; FIXME: need proof
 	m[0*3+0] = (1 - c->d - c->d) * (1 - sM); m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
 	m[1*3+0] = (1 - c->e) * (1 - sI); m[1*3+1] = c->e * (1 - sI); m[1*3+2] = 0.;
 	m[2*3+0] = 1 - c->e; m[2*3+1] = 0.; m[2*3+2] = c->e;
@@ -428,7 +432,7 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	// f[0]
 	set_u(k, bw, 0, 0);
 	f[0][k] = 1.;
-	{
+	{ // write D cells
 		int beg = 1, end = l_ref, x;
 		x = 0 - bw; beg = beg > x? beg : x;
 		x = 0 + bw; end = end < x? end : x;
@@ -442,11 +446,12 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	for (i = 1; i <= l_query; ++i) {
 		double *fi = f[i], *fi1 = f[i-1];
 		int beg = 0, end = l_ref, x;
-		x = i - bw; beg = beg > x? beg : x;
-		x = i + bw; end = end < x? end : x;
+		x = i - bw; beg = beg > x? beg : x; // band start
+		x = i + bw; end = end < x? end : x; // band end
 		for (k = beg; k <= end; ++k) {
 			int u, v11, v01, v10;
 			double e;
+			// FIXME: the following line can be optimized without branching!
 			e = (ref[k] > 3 || query[i] > 3)? 1. : ref[k] == query[i]? 1. - qual[i] : qual[i] / 3.;
 			set_u(u, bw, i, k); set_u(v11, bw, i-1, k-1); set_u(v10, bw, i-1, k); set_u(v01, bw, i, k-1);
 			fi[u+0] = e * (m[0] * fi1[v11+0] + m[3] * fi1[v11+1] + m[6] * fi1[v11+2]);
@@ -462,7 +467,7 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		if (u < 3 || u >= bw2*3+3) continue;
 		f_sink += f[l_query][u+0] * sM + f[l_query][u+1] * sI;
 	}
-	pf = f_sink;
+	pf = f_sink; // this P(x) calculated by the forward algorithm
 	/*** backward ***/
 	// sink
 	for (k = 0; k <= l_ref; ++k) {
