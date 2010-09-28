@@ -471,7 +471,7 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 		// rescale
 		s[i] = sum;
 		set_u(_beg, bw, i, beg); set_u(_end, bw, i, end); _end += 2;
-		for (k = _beg; k <= _end; ++k) fi[k] /= sum;
+		for (k = _beg, sum = 1./sum; k <= _end; ++k) fi[k] *= sum;
 	}
 	{ // f[l_query+1]
 		double sum;
@@ -511,7 +511,7 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 		}
 		// rescale
 		set_u(_beg, bw, i, beg); set_u(_end, bw, i, end); _end += 2;
-		for (k = _beg; k <= _end; ++k) bi[k] /= s[i];
+		for (k = _beg, y = 1./s[i]; k <= _end; ++k) bi[k] *= y;
 	}
 	{ // b[0]
 		int beg = 1, end = l_ref < bw + 1? l_ref : bw + 1;
