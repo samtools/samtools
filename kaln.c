@@ -428,6 +428,16 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	// f[0]
 	set_u(k, bw, 0, 0);
 	f[0][k] = 1.;
+	{
+		int beg = 1, end = l_ref, x;
+		x = i - bw; beg = beg > x? beg : x;
+		x = i + bw; end = end < x? end : x;
+		for (k = beg; k <= end; ++k) {
+			int u, v01;
+			set_u(u, bw, 0, k); set_u(v01, bw, 0, k-1);
+			f[0][u+2] = m[2] * f[0][v01+0] + m[8] * f[0][v01+2];
+		}
+	}
 	// f[1..l_query]; core loop
 	for (i = 1; i <= l_query; ++i) {
 		double *fi = f[i], *fi1 = f[i-1];
@@ -442,7 +452,7 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 			fi[u+0] = e * (m[0] * fi1[v11+0] + m[3] * fi1[v11+1] + m[6] * fi1[v11+2]);
 			fi[u+1] = .25 * (m[1] * fi1[v10+0] + m[4] * fi1[v10+1]);
 			fi[u+2] = m[2] * fi[v01+0] + m[8] * fi[v01+2];
-			fprintf(stderr, "F (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, fi[u], fi[u+1], fi[u+2]); // DEBUG
+//			fprintf(stderr, "F (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, fi[u], fi[u+1], fi[u+2]); // DEBUG
 		}
 	}
 	// sink
@@ -463,7 +473,7 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		bi[u+0] = sM; bi[u+1] = sI;
 	}
 	// b[l_query-1..1]; core loop
-	for (i = l_query - 1; i > 0; --i) {
+	for (i = l_query - 1; i >= 0; --i) {
 		int beg = 0, end = l_ref, x;
 		double *bi = b[i], *bi1 = b[i+1];
 		x = i - bw; beg = beg > x? beg : x;
@@ -476,15 +486,8 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
 			bi[u+2] = e * m[6] * bi1[v11+0] + m[8] * bi[v01+2];
-			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
+//			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
-	}
-	{ // the "zero" coordinate (i==k==0)
-		double *bi = b[0], *bi1 = b[1];
-		int u, v11, v01, v10;
-		double e = (ref[1] > 3 || query[1] > 3)? 1. : ref[1] == query[1]? 1. - qual[1] : qual[1] / 3.;
-		set_u(u, bw, 0, 0); set_u(v11, bw, 1, 1); set_u(v10, bw, 1, 0); set_u(v01, bw, 0, 1);
-		bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 	}
 	set_u(k, bw, 0, 0);
 	pb = b[0][k];
