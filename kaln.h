@@ -50,12 +50,16 @@ typedef struct {
 extern "C" {
 #endif
 
-	uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const ka_param_t *ap, int *_score, int *n_cigar);
+	uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const ka_param_t *ap,
+							 int *_score, int *n_cigar);
+	int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_query, const float *_qual,
+					   const ka_probpar_t *c, int *state, uint8_t *q);
 
 #ifdef __cplusplus
 }
 #endif
 
 extern ka_param_t ka_param_blast; /* = { 5, 2, 5, 2, aln_sm_blast, 5, 50 }; */
+extern ka_probpar_t ka_probpar_def; /* { 0.0001, 0.1, 10 } */
 
 #endif

@@ -377,44 +377,38 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
-ka_probpar_t ka_probpar_def = { 0.0001, 0.1, 10 };
+ka_probpar_t ka_probpar_def = { 0.001, 0.1, 10 };
 
 /*
-  The profile HMM is:
+  The topology of the profile HMM:
 
-    /\      /\             /\        /\             /\
-    I[0]    I[1]           I[k-1]    I[k]           I[L]
-     ^   \   ^   \      \    ^    \   ^   \      \   ^
-     |    \  |    \      \   |     \  |    \      \  |
-    M[0] -> M[1] -> ... -> M[k-1] -> M[k] -> ... -> M[L]   M[L+1]
-         \       \/     \/        \/      \/      /
-          \      /\     /\        /\      /\     /
-            D[1] ->     -> D[k-1] -> D[k] ->
-            \/             \/        \/
+           /\             /\        /\             /\
+           I[1]           I[k-1]    I[k]           I[L]
+            ^   \      \    ^    \   ^   \      \   ^
+            |    \      \   |     \  |    \      \  |
+    M[0]   M[1] -> ... -> M[k-1] -> M[k] -> ... -> M[L]   M[L+1]
+                \      \/        \/      \/      /
+                 \     /\        /\      /\     /
+                       -> D[k-1] -> D[k] ->
+                          \/        \/
 
-  Every {M,I}[k], k=0..L connects M[L+1] at the same probability, while
-  no D[k], k=1..L-1 connects M[L+1]. This means an alignment can end up
-  with M or I but not D.
-
-  Deletions are dumb states which do not emit residues. Frankly, I am
-  not sure if they are handled properly in the following
-  implementation. This is a potential concern to be resolved in future.
+   M[0] points to every {M,I}[k] and every {M,I}[k] points M[L+1].
  */
-int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float *_qual,
+int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_query, const float *_qual,
 				   const ka_probpar_t *c, int *state, uint8_t *q)
 {
-	double **f, **b, *s, m[9], sI, sM, pb;
-	float *qual;
-	uint8_t *ref, *query;
+	double **f, **b, *s, m[9], sI, sM, bI, bM, pb;
+	const float *qual;
+	const uint8_t *ref, *query;
 	int bw, bw2, i, k, is_diff = 0;
 
 	/*** initialization ***/
-	ref = _ref - 1; // change to 1-based coordinate
-	query = _query - 1;
-	qual = _qual - 1;
-	bw = c->bw;
-	bw2 = c->bw * 2 + 1;
-	// allocate forward and backward matrices f[][] and b[][]
+	ref = _ref - 1; query = _query - 1; qual = _qual - 1; // change to 1-based coordinate
+	bw = l_ref > l_query? l_ref : l_query;
+	if (bw > c->bw) bw = c->bw;
+	if (bw < abs(l_ref - l_query)) bw = abs(l_ref - l_query);
+	bw2 = bw * 2 + 1;
+	// allocate the forward and backward matrices f[][] and b[][] and the scaling array s[]
 	f = calloc(l_query+1, sizeof(void*));
 	b = calloc(l_query+1, sizeof(void*));
 	for (i = 0; i <= l_query; ++i) {
@@ -427,29 +421,30 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	m[0*3+0] = (1 - c->d - c->d) * (1 - sM); m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
 	m[1*3+0] = (1 - c->e) * (1 - sI); m[1*3+1] = c->e * (1 - sI); m[1*3+2] = 0.;
 	m[2*3+0] = 1 - c->e; m[2*3+1] = 0.; m[2*3+2] = c->e;
+	bM = (1 - c->d) / l_query; bI = c->d / l_query; // (bM+bI)*l_query==1
 	/*** forward ***/
 	// f[0]
 	set_u(k, bw, 0, 0);
-	f[0][k] = 1.;
-	{ // write D cells
-		int beg = 1, end = l_ref, x, _beg, _end;
-		double sum;
-		x = 0 - bw; beg = beg > x? beg : x;
-		x = 0 + bw; end = end < x? end : x;
+	f[0][k] = s[0] = 1.;
+	{ // f[1]
+		double *fi = f[1], sum;
+		int beg = 1, end = l_ref < bw + 1? l_ref : bw + 1, _beg, _end;
 		for (k = beg, sum = 0.; k <= end; ++k) {
-			int u, v01;
-			set_u(u, bw, 0, k); set_u(v01, bw, 0, k-1);
-			sum += (f[0][u+2] = m[2] * f[0][v01+0] + m[8] * f[0][v01+2]);
+			int u;
+			double e = (ref[k] > 3 || query[1] > 3)? 1. : ref[k] == query[1]? 1. - qual[1] : qual[1] / 3.;
+			set_u(u, bw, 1, k);
+			fi[u+0] = e * bM; fi[u+1] = .25 * bI;
+			sum += fi[u] + fi[u+1];
 		}
-		// rescale to avoid floating point underflow
-		s[0] = sum;
-		set_u(_beg, bw, 0, 0); set_u(_end, bw, 0, end); _end += 2;
-		for (k = _beg; k <= _end; ++k) f[0][k] /= sum;
+		// rescale
+		s[1] = sum;
+		set_u(_beg, bw, 1, beg); set_u(_end, bw, 1, end); _end += 2;
+		for (k = _beg; k <= _end; ++k) fi[k] /= sum;
 	}
-	// f[1..l_query]; core loop
-	for (i = 1; i <= l_query; ++i) {
+	// f[2..l_query]
+	for (i = 2; i <= l_query; ++i) {
 		double *fi = f[i], *fi1 = f[i-1], sum;
-		int beg = 0, end = l_ref, x, _beg, _end;
+		int beg = 1, end = l_ref, x, _beg, _end;
 		x = i - bw; beg = beg > x? beg : x; // band start
 		x = i + bw; end = end < x? end : x; // band end
 		for (k = beg, sum = 0.; k <= end; ++k) {
@@ -469,9 +464,9 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 		set_u(_beg, bw, i, beg); set_u(_end, bw, i, end); _end += 2;
 		for (k = _beg; k <= _end; ++k) fi[k] /= sum;
 	}
-	{ // sink (actually f[l_query+1])
+	{ // f[l_query+1]
 		double sum;
-		for (k = 0, sum = 0.; k <= l_ref; ++k) {
+		for (k = 1, sum = 0.; k <= l_ref; ++k) {
 			int u;
 			set_u(u, bw, l_query, k);
 			if (u < 3 || u >= bw2*3+3) continue;
@@ -481,16 +476,16 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 	}
 	/*** backward ***/
 	// b[l_query] (b[l_query+1][0]=1 and thus \tilde{b}[][]=1/s[l_query+1]; this is where s[l_query+1] comes from)
-	for (k = 0; k <= l_ref; ++k) {
+	for (k = 1; k <= l_ref; ++k) {
 		int u;
 		double *bi = b[l_query];
 		set_u(u, bw, l_query, k);
 		if (u < 3 || u >= bw2*3+3) continue;
 		bi[u+0] = sM / s[l_query] / s[l_query+1]; bi[u+1] = sI / s[l_query] / s[l_query+1];
 	}
-	// b[l_query-1..1]; core loop
-	for (i = l_query - 1; i >= 0; --i) {
-		int beg = 0, end = l_ref, x, _beg, _end;
+	// b[l_query-1..1]
+	for (i = l_query - 1; i >= 1; --i) {
+		int beg = 1, end = l_ref, x, _beg, _end;
 		double *bi = b[i], *bi1 = b[i+1];
 		x = i - bw; beg = beg > x? beg : x;
 		x = i + bw; end = end < x? end : x;
@@ -502,15 +497,27 @@ int ka_prob_extend(uint8_t *_ref, int l_ref, uint8_t *_query, int l_query, float
 			set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
 			bi[u+0] = e * m[0] * bi1[v11+0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2];
 			bi[u+1] = e * m[3] * bi1[v11+0] + .25 * m[4] * bi1[v10+1];
-			bi[u+2] = e * m[6] * bi1[v11+0] + m[8] * bi[v01+2];
+			// FIXME: I do not know why I need this (i>1) factor, but only with it the result is correct
+			bi[u+2] = (e * m[6] * bi1[v11+0] + m[8] * bi[v01+2]) * (i > 1);
 //			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
 		// rescale
 		set_u(_beg, bw, i, beg); set_u(_end, bw, i, end); _end += 2;
 		for (k = _beg; k <= _end; ++k) bi[k] /= s[i];
 	}
-	set_u(k, bw, 0, 0);
-	pb = b[0][k]; // if everything works as is expected, pb==1
+	{ // b[0]
+		int beg = 1, end = l_ref < bw + 1? l_ref : bw + 1;
+		double sum = 0.;
+		for (k = end; k >= beg; --k) {
+			int u;
+			double e = (ref[k] > 3 || query[1] > 3)? 1. : ref[k] == query[1]? 1. - qual[1] : qual[1] / 3.;
+			set_u(u, bw, 1, k);
+			if (u < 3 || u >= bw2*3+3) continue;
+		    sum += e * b[1][u+0] * bM + .25 * b[1][u+1] * bI;
+		}
+		set_u(k, bw, 0, 0);
+		pb = b[0][k] = sum / s[0];
+	}
 	is_diff = fabs(pb - 1.) > 1e-7? 1 : 0;
 	/*** MAP ***/
 	for (i = 1; i <= l_query; ++i) {
@@ -548,7 +555,7 @@ int main()
 	uint8_t *query = (uint8_t*)"\0\3\3\1";
 //	uint8_t *query = (uint8_t*)"\1\3\3\1"; // FIXME: the output is not so right given this input!!!
 	static float qual[4] = {.01, .01, .01, .01};
-	ka_prob_extend(ref, l_ref, query, l_query, qual, &ka_probpar_def, 0, 0);
+	ka_prob_glocal(ref, l_ref, query, l_query, qual, &ka_probpar_def, 0, 0);
 	return 0;
 }
 #endif
