@@ -4,7 +4,7 @@ import java.lang.*;
 public class HmmGlocal
 {
 	private double[] qual2prob;
-	private double cd, ce; // gap open probility [1e-4], gap extension probability [0.1]
+	private double cd, ce; // gap open probility [1e-3], gap extension probability [0.1]
 	private int cb; // band width [7]
 
 	public HmmGlocal(final double d, final double e, final int b) {

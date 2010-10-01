@@ -379,7 +379,7 @@ static float g_qual2prob[256];
 
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
-ka_probpar_t ka_probpar_def = { 1e-4, 0.1, 10 };
+ka_probpar_t ka_probpar_def = { 0.001, 0.1, 10 };
 
 /*
   The topology of the profile HMM:
