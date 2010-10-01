@@ -379,7 +379,7 @@ static float g_qual2prob[256];
 
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
-ka_probpar_t ka_probpar_def = { 0.001, 0.1, 10 };
+ka_probpar_t ka_probpar_def = { 1e-4, 0.1, 10 };
 
 /*
   The topology of the profile HMM:
@@ -395,6 +395,17 @@ ka_probpar_t ka_probpar_def = { 0.001, 0.1, 10 };
                           \/        \/
 
    M[0] points to every {M,I}[k] and every {M,I}[k] points M[L+1].
+
+   On input, _ref is the reference sequence and _query is the query
+   sequence. Both are sequences of 0/1/2/3/4 where 4 stands for an
+   ambiguous residue. iqual is the base quality. c sets the gap open
+   probability, gap extension probability and band width.
+
+   On output, state and q are arrays of length l_query. The higher 30
+   bits give the reference position the query base is matched to and the
+   lower two bits can be 0 (an alignment match) or 1 (an
+   insertion). q[i] gives the phred scaled posterior probability of
+   state[i] being wrong.
  */
 int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_query, const uint8_t *iqual,
 				   const ka_probpar_t *c, int *state, uint8_t *q)
