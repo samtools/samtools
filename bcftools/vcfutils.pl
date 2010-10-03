@@ -95,7 +95,7 @@ sub fillac {
 }
 
 sub qstats {
-  my %opts = (r=>'', s=>0.01, v=>undef);
+  my %opts = (r=>'', s=>0.02, v=>undef);
   getopts('r:s:v', \%opts);
   die("Usage: vcfutils.pl qstats [-r ref.vcf] <in.vcf>\n
 Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #joint ts/tv #joint/#ref #joint/#non-indel \n") if (@ARGV == 0 && -t STDIN);
@@ -147,14 +147,20 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
   my $next = $opts{s};
   my $last = $a[0];
   my @c = (0, 0, 0, 0);
+  my @lc;
+  $lc[1] = $lc[2] = 0;
   for my $p (@a) {
 	if ($p->[0] == -1 || ($p->[0] != $last && $c[0]/@a > $next)) {
 	  my @x;
 	  $x[0] = sprintf("%.4f", $c[1]-$c[2]? $c[2] / ($c[1] - $c[2]) : 100);
 	  $x[1] = sprintf("%.4f", $hsize? $c[3] / $hsize : 0);
 	  $x[2] = sprintf("%.4f", $c[3] / $c[1]);
+	  my $a = $c[1] - $lc[1];
+	  my $b = $c[2] - $lc[2];
+	  $x[3] = sprintf("%.4f", $a-$b? $b / ($a-$b) : 100);
 	  print join("\t", $last, @c, @x), "\n";
 	  $next = $c[0]/@a + $opts{s};
+	  $lc[1] = $c[1]; $lc[2] = $c[2];
 	}
 	++$c[0]; $c[1] += $p->[1]; $c[2] += $p->[2]; $c[3] += $p->[3];
 	$last = $p->[0];

@@ -24,6 +24,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_KEEPALT 256
 #define VC_ACGT_ONLY 512
 #define VC_QCALL   1024
+#define VC_CALL_GT 2048
 
 typedef struct {
 	int flag, prior_type, n1;
@@ -178,6 +179,18 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	if (!is_var) bcf_shrink_alt(b, 1);
 	else if (!(flag&VC_KEEPALT))
 		bcf_shrink_alt(b, pr->rank0 < 2? 2 : pr->rank0+1);
+	if (is_var && (flag&VC_CALL_GT)) { // call individual genotype
+		int i, x, old_n_gi = b->n_gi;
+		s.m = b->m_str; s.l = b->l_str - 1; s.s = b->str;
+		kputs(":GT:GQ", &s); kputc('\0', &s);
+		b->m_str = s.m; b->l_str = s.l; b->str = s.s;
+		bcf_sync(b);
+		for (i = 0; i < b->n_smpl; ++i) {
+			x = bcf_p1_call_gt(pa, pr->f_em, i);
+			((uint8_t*)b->gi[old_n_gi].data)[i] = (x&3) == 0? 1<<3|1 : (x&3) == 1? 1 : 0;
+			((uint8_t*)b->gi[old_n_gi+1].data)[i] = x>>2;
+		}
+	}
 	return is_var;
 }
 
@@ -198,7 +211,7 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvLbSuP:t:p:Q")) >= 0) {
+	while ((c = getopt(argc, argv, "N1:l:cHAGvLbSuP:t:p:Qg")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
@@ -212,6 +225,7 @@ int bcfview(int argc, char *argv[])
 		case 'v': vc.flag |= VC_VARONLY; break;
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
 		case 'H': vc.flag |= VC_HWE; break;
+		case 'g': vc.flag |= VC_CALL_GT; break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
@@ -232,6 +246,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -S        input is VCF\n");
 		fprintf(stderr, "         -A        keep all possible alternate alleles at variant sites\n");
 		fprintf(stderr, "         -G        suppress all individual genotype information\n");
+		fprintf(stderr, "         -g        call genotypes for variant sites\n");
 		fprintf(stderr, "         -L        discard the PL genotype field\n");
 		fprintf(stderr, "         -H        perform Hardy-Weinberg test (slower)\n");
 		fprintf(stderr, "         -v        output potential variant sites only\n");
