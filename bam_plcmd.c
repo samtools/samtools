@@ -461,7 +461,6 @@ int bam_pileup(int argc, char *argv[])
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres;
-	double theta;
 	char *reg, *fn_pos;
 	faidx_t *fai;
 	kh_64_t *hash;
@@ -698,12 +697,10 @@ int bam_mpileup(int argc, char *argv[])
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
 	mplp.max_mq = 60;
-	mplp.theta = 1e-3;
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:t:Q:uaORC:")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:")) >= 0) {
 		switch (c) {
-		case 't': mplp.theta = atof(optarg); break;
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
@@ -711,7 +708,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.fn_pos = strdup(optarg); break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
-		case 'u': mplp.flag |= MPLP_NO_COMP; break;
+		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'O': mplp.flag |= MPLP_NO_ORPHAN; break;
 		case 'R': mplp.flag |= MPLP_REALN; break;
@@ -730,7 +727,6 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
-		fprintf(stderr, "         -t FLOAT    scaled mutation rate [%lg]\n", mplp.theta);
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
 		fprintf(stderr, "\n");

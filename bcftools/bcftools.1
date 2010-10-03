@@ -1,0 +1,115 @@
+.TH bcftools 1 "2 October 2010" "bcftools" "Bioinformatics tools"
+.SH NAME
+.PP
+bcftools - Utilities for the Binary Call Format (BCF) and VCF.
+.SH SYNOPSIS
+.PP
+bcftools index in.bcf
+.PP
+bcftools view in.bcf chr2:100-200 > out.vcf
+.PP
+bcftools view -vc in.bcf > out.vcf 2> out.afs
+
+.SH DESCRIPTION
+.PP
+Bcftools is a toolkit for processing VCF/BCF files, calling variants and
+estimating site allele frequencies and allele frequency spectrums.
+
+.SH COMMANDS AND OPTIONS
+
+.TP 10
+.B view
+.B bcftools view
+.RB [ \-cbuSAGgHvNQ ]
+.RB [ \-1
+.IR nGroup1 ]
+.RB [ \-l
+.IR listFile ]
+.RB [ \-t
+.IR mutRate ]
+.RB [ \-p
+.IR varThres ]
+.RB [ \-P
+.IR prior ]
+.I in.bcf
+.RI [ region ]
+
+Convert between BCF and VCF, call variant candidates and estimate allele
+frequencies.
+
+.B OPTIONS:
+.RS
+.TP 10
+.B -b
+Output in the BCF format. The default is VCF.
+.TP
+.B -c
+Call variants.
+.TP
+.B -v
+Output variant sites only (force -c)
+.TP
+.B -g
+Call per-sample genotypes at variant sites (force -c)
+.TP
+.B -u
+Uncompressed BCF output (force -b).
+.TP
+.B -S
+The input is VCF instead of BCF.
+.TP
+.B -A
+Retain all possible alternate alleles at variant sites. By default, this
+command discards unlikely alleles.
+.TP
+.B -G
+Suppress all individual genotype information.
+.TP
+.B -H
+Perform Hardy-Weiberg Equilibrium test. This will add computation time, sometimes considerably.
+.TP
+.B -N
+Skip sites where the REF field is not A/C/G/T
+.TP
+.B -Q
+Output the QCALL likelihood format
+.TP
+.BI "-1 " INT
+Number of group-1 samples. This option is used for dividing input into
+two groups for comparing. A zero value disables this functionality. [0]
+.TP
+.BI "-l " FILE
+List of sites at which information are outputted [all sites]
+.TP
+.BI "-t " FLOAT
+Scaled muttion rate for variant calling [0.001]
+.TP
+.BI "-p " FLOAT
+A site is considered to be a variant if P(ref|D)<FLOAT [0.5]
+.TP
+.BI "-P " STR
+Prior or initial allele frequency spectrum. If STR can be
+.IR full ,
+.IR cond2 ,
+.I flat
+or the file consisting of error output from a previous variant calling
+run.
+.RE
+
+.TP
+.B index
+.B bcftools index
+.I in.bcf
+
+Index sorted BCF for random access.
+.RE
+
+.TP
+.B cat
+.B bcftools cat
+.I in1.bcf
+.RI [ "in2.bcf " [ ... "]]]"
+
+Concatenate BCF files. The input files are required to be sorted and
+have identical samples appearing in the same order.
+.RE

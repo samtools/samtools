@@ -13,7 +13,6 @@ KHASH_SET_INIT_INT64(set64)
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
-#define VC_NO_PL   1
 #define VC_NO_GENO 2
 #define VC_BCFOUT  4
 #define VC_CALL    8
@@ -211,21 +210,20 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvLbSuP:t:p:Qg")) >= 0) {
+	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:Qg")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
 		case 'N': vc.flag |= VC_ACGT_ONLY; break;
 		case 'G': vc.flag |= VC_NO_GENO; break;
-		case 'L': vc.flag |= VC_NO_PL; break;
 		case 'A': vc.flag |= VC_KEEPALT; break;
 		case 'b': vc.flag |= VC_BCFOUT; break;
 		case 'S': vc.flag |= VC_VCFIN; break;
 		case 'c': vc.flag |= VC_CALL; break;
-		case 'v': vc.flag |= VC_VARONLY; break;
+		case 'v': vc.flag |= VC_VARONLY | VC_CALL; break;
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
 		case 'H': vc.flag |= VC_HWE; break;
-		case 'g': vc.flag |= VC_CALL_GT; break;
+		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
@@ -241,15 +239,14 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   bcftools view [options] <in.bcf> [reg]\n\n");
 		fprintf(stderr, "Options: -c        SNP calling\n");
+		fprintf(stderr, "         -v        output potential variant sites only (force -c)\n");
+		fprintf(stderr, "         -g        call genotypes at variant sites (force -c)\n");
 		fprintf(stderr, "         -b        output BCF instead of VCF\n");
-		fprintf(stderr, "         -u        uncompressed BCF output\n");
+		fprintf(stderr, "         -u        uncompressed BCF output (force -b)\n");
 		fprintf(stderr, "         -S        input is VCF\n");
 		fprintf(stderr, "         -A        keep all possible alternate alleles at variant sites\n");
 		fprintf(stderr, "         -G        suppress all individual genotype information\n");
-		fprintf(stderr, "         -g        call genotypes for variant sites\n");
-		fprintf(stderr, "         -L        discard the PL genotype field\n");
 		fprintf(stderr, "         -H        perform Hardy-Weinberg test (slower)\n");
-		fprintf(stderr, "         -v        output potential variant sites only\n");
 		fprintf(stderr, "         -N        skip sites where REF is not A/C/G/T\n");
 		fprintf(stderr, "         -Q        output the QCALL likelihood format\n");
 		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");

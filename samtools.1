@@ -1,4 +1,4 @@
-.TH samtools 1 "11 July 2010" "samtools-0.1.8" "Bioinformatics tools"
+.TH samtools 1 "2 October 2010" "samtools-0.1.8" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -20,7 +20,7 @@ samtools faidx ref.fasta
 .PP
 samtools pileup -f ref.fasta aln.sorted.bam
 .PP
-samtools mpileup -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
+samtools mpileup -C50 -agf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools tview aln.sorted.bam ref.fasta
 
@@ -249,21 +249,50 @@ Phred probability of an indel in sequencing/prep. [40]
 
 .TP
 .B mpileup
-samtools mpileup [-r reg] [-f in.fa] in.bam [in2.bam [...]]
+samtools mpileup [-aug] [-C coef] [-r reg] [-f in.fa] [-l list] [-M capMapQ] [-Q minBaseQ] [-q minMapQ] in.bam [in2.bam [...]]
 
-Generate pileup for multiple BAM files. Consensus calling is not
-implemented.
+Generate BCF or pileup for one or multiple BAM files. Alignment records
+are grouped by sample identifiers in @RG header lines. If sample
+identifiers are absent, each input file is regarded as one sample.
 
 .B OPTIONS:
 .RS
 .TP 8
+.B -a
+Perform HMM realignment to compute base alignment quality (BAQ). Base
+quality will be capped by BAQ.
+.TP
+.B -g
+Compute genotype likelihoods and output them in the binary call format (BCF).
+.TP
+.B -u
+Similar to
+.B -g
+except that the output is uncompressed BCF, which is preferred for pipeing.
+.TP
+.B -C INT
+Coefficient for downgrading mapping quality for reads containing
+excessive mismatches. Given a read with a phred-scaled probability q of
+being generated from the mapped position, the new mapping quality is
+about sqrt((INT-q)/INT)*INT. A zero value disables this
+functionality; if enabled, the recommended value is 50. [0]
+.TP
+.B -f FILE
+The reference file [null]
+.TP
+.B -l FILE
+File containing a list of sites where pileup or BCF is outputted [null]
+.TP
+.B -q INT
+Minimum mapping quality for an alignment to be used [0]
+.TP
+.B -Q INT
+Minimum base quality for a base to be considered [13]
+.TP
 .B -r STR
 Only generate pileup in region
 .I STR
 [all sites]
-.TP
-.B -f FILE
-The reference file [null]
 .RE
 
 .TP
