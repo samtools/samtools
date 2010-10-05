@@ -392,7 +392,6 @@ ka_probpar_t ka_probpar_def = { 0.001, 0.1, 10 };
                 \      \/        \/      \/      /
                  \     /\        /\      /\     /
                        -> D[k-1] -> D[k] ->
-                          \/        \/
 
    M[0] points to every {M,I}[k] and every {M,I}[k] points M[L+1].
 
