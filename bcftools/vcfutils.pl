@@ -14,7 +14,7 @@ sub main {
   &usage if (@ARGV < 1);
   my $command = shift(@ARGV);
   my %func = (subsam=>\&subsam, listsam=>\&listsam, fillac=>\&fillac, qstats=>\&qstats, varFilter=>\&varFilter,
-			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf);
+			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf, filter4vcf=>\&filter4vcf);
   die("Unknown command \"$command\".\n") if (!defined($func{$command}));
   &{$func{$command}};
 }
@@ -316,6 +316,42 @@ sub varFilter_aux {
   }
 }
 
+sub filter4vcf {
+  my %opts = (d=>3, D=>2000, 1=>1e-4, 2=>1e-100, 3=>0, 4=>1e-4, Q=>10, q=>3);
+  getopts('d:D:1:2:3:4:Q:q:', \%opts);
+  die(qq/
+Usage:   vcfutils.pl filter4vcf [options] <in.vcf>
+
+Options: -d INT     min total depth (given DP or DP4) [$opts{D}]
+         -D INT     max total depth [$opts{d}]
+         -q INT     min SNP quality [$opts{q}]
+         -Q INT     min RMS mapQ (given MQ) [$opts{Q}]
+         -1 FLOAT   min P-value for strand bias (given PV4) [$opts{1}]
+         -2 FLOAT   min P-value for baseQ bias [$opts{2}]
+         -3 FLOAT   min P-value for mapQ bias [$opts{3}]
+         -4 FLOAT   min P-value for end distance bias [$opts{4}]\n
+/) if (@ARGV == 0 && -t STDIN);
+
+  my %ts = (AG=>1, GA=>1, CT=>1, TC=>1);
+
+  my @n = (0, 0);
+  while (<>) {
+	next if (/^#/);
+	next if (/PV4=([^,]+),([^,]+),([^,]+),([^,;\t]+)/ && ($1<$opts{1} || $2<$opts{2} || $3<$opts{3} || $4<$opts{4}));
+	my $depth = -1;
+	$depth = $1 if (/DP=(\d+)/);
+	$depth = $1+$2+$3+$4 if (/DP4=(\d+),(\d+),(\d+),(\d+)/);
+	next if ($depth > 0 && ($depth < $opts{d} || $depth > $opts{D}));
+	next if (/MQ=(\d+)/ && $1 < $opts{Q});
+	my @t = split;
+	next if ($t[5] >= 0 && $t[5] < $opts{q});
+	++$n[0];
+	my @s = split(',', $t[4]);
+	++$n[1] if ($ts{$t[3].$s[0]});
+	print;
+  }
+}
+
 sub ucscsnp2vcf {
   die("Usage: vcfutils.pl <in.ucsc.snp>\n") if (@ARGV == 0 && -t STDIN);
   print "##fileformat=VCFv4.0\n";
@@ -409,6 +445,7 @@ Command: subsam       get a subset of samples
          fillac       fill the allele count field
          qstats       SNP stats stratified by QUAL
          varFilter    filtering short variants
+         filter4vcf   filtering VCFs produced by samtools+bcftools
          hapmap2vcf   convert the hapmap format to VCF
          ucscsnp2vcf  convert UCSC SNP SQL dump to VCF
 \n/);
