@@ -283,8 +283,7 @@ int bcf_append_info(bcf1_t *b, const char *info, int l)
 	b->str[shift + l - 1] = '\0';
 	b->fmt = b->str + shift + l;
 	b->l_str += l;
-	bcf_sync(b);
-//	if (ori != b->str) bcf_sync(b); // synchronize when realloc changes the pointer
+	if (ori != b->str) bcf_sync(b); // synchronize when realloc changes the pointer
 	return 0;
 }
 
