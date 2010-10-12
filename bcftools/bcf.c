@@ -267,3 +267,41 @@ char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b)
 	bcf_fmt_core(h, b, &s);
 	return s.s;
 }
+
+int bcf_append_info(bcf1_t *b, const char *info, int l)
+{
+	int shift = b->fmt - b->str;
+	int l_fmt = b->l_str - shift;
+	char *ori = b->str;
+	if (b->l_str + l > b->m_str) { // enlarge if necessary
+		b->m_str = b->l_str + l;
+		kroundup32(b->m_str);
+		b->str = realloc(b->str, b->m_str);
+	}
+	memmove(b->str + shift + l, b->str + shift, l_fmt); // move the FORMAT field
+	memcpy(b->str + shift - 1, info, l); // append to the INFO field
+	b->str[shift + l - 1] = '\0';
+	b->fmt = b->str + shift + l;
+	b->l_str += l;
+	bcf_sync(b);
+//	if (ori != b->str) bcf_sync(b); // synchronize when realloc changes the pointer
+	return 0;
+}
+
+int bcf_cpy(bcf1_t *r, const bcf1_t *b)
+{
+	char *t1 = r->str;
+	bcf_ginfo_t *t2 = r->gi;
+	int i, t3 = r->m_str, t4 = r->m_gi;
+	*r = *b;
+	r->str = t1; r->gi = t2; r->m_str = t3; r->m_gi = t4;
+	if (r->m_str < b->m_str) {
+		r->m_str = b->m_str;
+		r->str = realloc(r->str, r->m_str);
+	}
+	memcpy(r->str, b->str, r->m_str);
+	bcf_sync(r); // calling bcf_sync() is simple but inefficient
+	for (i = 0; i < r->n_gi; ++i)
+		memcpy(r->gi[i].data, b->gi[i].data, r->n_smpl * r->gi[i].len);
+	return 0;
+}

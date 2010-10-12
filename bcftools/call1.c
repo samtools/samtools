@@ -24,6 +24,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_ACGT_ONLY 512
 #define VC_QCALL   1024
 #define VC_CALL_GT 2048
+#define VC_ADJLD   4096
 
 typedef struct {
 	int flag, prior_type, n1;
@@ -193,11 +194,13 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	return is_var;
 }
 
+double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4]);
+
 int bcfview(int argc, char *argv[])
 {
 	extern int bcf_2qcall(bcf_hdr_t *h, bcf1_t *b);
 	bcf_t *bp, *bout = 0;
-	bcf1_t *b;
+	bcf1_t *b, *blast;
 	int c;
 	uint64_t n_processed = 0;
 	viewconf_t vc;
@@ -210,7 +213,7 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:Qg")) >= 0) {
+	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgL")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
@@ -227,6 +230,7 @@ int bcfview(int argc, char *argv[])
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
+		case 'L': vc.flag |= VC_ADJLD; break;
 		case 'P':
 			if (strcmp(optarg, "full") == 0) vc.prior_type = MC_PTYPE_FULL;
 			else if (strcmp(optarg, "cond2") == 0) vc.prior_type = MC_PTYPE_COND2;
@@ -249,6 +253,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -H        perform Hardy-Weinberg test (slower)\n");
 		fprintf(stderr, "         -N        skip sites where REF is not A/C/G/T\n");
 		fprintf(stderr, "         -Q        output the QCALL likelihood format\n");
+		fprintf(stderr, "         -L        calculate LD for adjacent sites\n");
 		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
 		fprintf(stderr, "         -t FLOAT  scaled mutation rate [%.4lg]\n", vc.theta);
@@ -259,6 +264,7 @@ int bcfview(int argc, char *argv[])
 	}
 
 	b = calloc(1, sizeof(bcf1_t));
+	blast = calloc(1, sizeof(bcf1_t));
 	strcpy(moder, "r");
 	if (!(vc.flag & VC_VCFIN)) strcat(moder, "b");
 	strcpy(modew, "w");
@@ -336,6 +342,18 @@ int bcfview(int argc, char *argv[])
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
 			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
+		if (vc.flag & VC_ADJLD) { // compute LD
+			double f[4], r2;
+			if ((r2 = bcf_ld_freq(blast, b, f)) >= 0) {
+				kstring_t s;
+				s.m = s.l = 0; s.s = 0;
+				if (*b->info) kputc(';', &s);
+				ksprintf(&s, "NEIR=%.3lf", r2);
+				bcf_append_info(b, s.s, s.l);
+				free(s.s);
+			}
+			bcf_cpy(blast, b);
+		}
 		if (vc.flag & VC_NO_GENO) { // do not output GENO fields
 			b->n_gi = 0;
 			b->fmt[0] = '\0';
@@ -345,11 +363,10 @@ int bcfview(int argc, char *argv[])
 	if (vc.prior_file) free(vc.prior_file);
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);
 	bcf_hdr_destroy(h);
-	bcf_destroy(b);
+	bcf_destroy(b); bcf_destroy(blast);
 	vcf_close(bp); vcf_close(bout);
 	if (hash) kh_destroy(set64, hash);
 	if (vc.fn_list) free(vc.fn_list);
 	if (p1) bcf_p1_destroy(p1);
 	return 0;
 }
-

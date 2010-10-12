@@ -155,8 +155,6 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 	}
 }
 
-#define char2int(s) (((int)s[0])<<8|s[1])
-
 static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 {
 	int i, j, k;
@@ -352,7 +350,7 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	long double sum = 0.;
 	// set PL and PL_len
 	for (i = 0; i < b->n_gi; ++i) {
-		if (b->gi[i].fmt == char2int("PL")) {
+		if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
 			ma->PL = (uint8_t*)b->gi[i].data;
 			ma->PL_len = b->gi[i].len;
 			break;

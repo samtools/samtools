@@ -106,6 +106,10 @@ extern "C" {
 	int bcf_destroy(bcf1_t *b);
 	// BCF->VCF conversion
 	char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b);
+	// append more info
+	int bcf_append_info(bcf1_t *b, const char *info, int l);
+	// copy
+	int bcf_cpy(bcf1_t *r, const bcf1_t *b);
 
 	// open a VCF or BCF file if "b" is set in "mode"
 	bcf_t *vcf_open(const char *fn, const char *mode);

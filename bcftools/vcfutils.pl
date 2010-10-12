@@ -322,8 +322,8 @@ sub filter4vcf {
   die(qq/
 Usage:   vcfutils.pl filter4vcf [options] <in.vcf>
 
-Options: -d INT     min total depth (given DP or DP4) [$opts{D}]
-         -D INT     max total depth [$opts{d}]
+Options: -d INT     min total depth (given DP or DP4) [$opts{d}]
+         -D INT     max total depth [$opts{D}]
          -q INT     min SNP quality [$opts{q}]
          -Q INT     min RMS mapQ (given MQ) [$opts{Q}]
          -1 FLOAT   min P-value for strand bias (given PV4) [$opts{1}]
