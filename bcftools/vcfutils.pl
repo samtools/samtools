@@ -14,7 +14,7 @@ sub main {
   &usage if (@ARGV < 1);
   my $command = shift(@ARGV);
   my %func = (subsam=>\&subsam, listsam=>\&listsam, fillac=>\&fillac, qstats=>\&qstats, varFilter=>\&varFilter,
-			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf, filter4vcf=>\&filter4vcf);
+			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf, filter4vcf=>\&filter4vcf, ldstats=>\&ldstats);
   die("Unknown command \"$command\".\n") if (!defined($func{$command}));
   &{$func{$command}};
 }
@@ -100,6 +100,41 @@ sub fillac {
 	  $t[7] = $info;
 	  print join("\t", @t), "\n";
 	}
+  }
+}
+
+sub ldstats {
+  my %opts = (s=>0.01);
+  getopts('ps:', \%opts);
+  die("Usage: vcfutils.pl ldstats [-s $opts{s}] <in.vcf>\n") if (@ARGV == 0 && -t STDIN);
+  my ($lastchr, $lastpos) = ('', 0);
+  my @a;
+  my $is_print = defined($opts{p})? 1 : 0;
+  while (<>) {
+	next if (/^#/);
+	my @t = split;
+	if ($t[0] ne $lastchr) {
+	  $lastchr = $t[0];
+	} elsif (/NEIR=([\d\.]+)/) {
+	  push(@a, [$t[1] - $lastpos, $1, $t[1]]);
+	}
+	$lastpos = $t[1];
+  }
+  my $max = 1000000000;
+  push(@a, [$max, 0, 0]); # end marker
+  @a = sort {$a->[0]<=>$b->[0]} @a;
+  my $next = $opts{s};
+  my $last = $a[0];
+  my @c = (0, 0, 0, 0);
+  for my $p (@a) {
+	print STDERR "$p->[0]\t$p->[1]\t$p->[2]\n" if ($is_print);
+	if ($p->[0] == $max || ($p->[0] != $last && $c[0]/@a > $next)) {
+	  printf("%d\t%.2f\t%.4f\n", $c[1], $c[2]/$c[1], $c[3]/$c[1]);
+	  $c[1] = $c[2] = $c[3] = 0;
+	  $next = $c[0]/@a + $opts{s};
+	}
+	++$c[0]; ++$c[1]; $c[2] += $p->[0]; $c[3] += $p->[1];
+	$last = $p->[0];
   }
 }
 
@@ -336,7 +371,10 @@ Options: -d INT     min total depth (given DP or DP4) [$opts{d}]
 
   my @n = (0, 0);
   while (<>) {
-	next if (/^#/);
+	if (/^#/) {
+	  print;
+	  next;
+	}
 	next if (/PV4=([^,]+),([^,]+),([^,]+),([^,;\t]+)/ && ($1<$opts{1} || $2<$opts{2} || $3<$opts{3} || $4<$opts{4}));
 	my $depth = -1;
 	$depth = $1 if (/DP=(\d+)/);

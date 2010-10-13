@@ -330,9 +330,9 @@ int bcfview(int argc, char *argv[])
 			bcf_2qcall(h, b);
 			continue;
 		}
+		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
-			bcf_gl2pl(b);
 			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
 			if (vc.flag&VC_HWE) bcf_p1_cal_g3(p1, pr.g);
 			if (n_processed % 100000 == 0) {
