@@ -348,7 +348,7 @@ int bcfview(int argc, char *argv[])
 				kstring_t s;
 				s.m = s.l = 0; s.s = 0;
 				if (*b->info) kputc(';', &s);
-				ksprintf(&s, "NEIR=%.3lf", r2);
+				ksprintf(&s, "NEIR=%.3lf;NEIF=%.3lf,%.3lf", r2, f[0]+f[2], f[0]+f[1]);
 				bcf_append_info(b, s.s, s.l);
 				free(s.s);
 			}

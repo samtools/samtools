@@ -104,38 +104,25 @@ sub fillac {
 }
 
 sub ldstats {
-  my %opts = (s=>0.01);
-  getopts('ps:', \%opts);
-  die("Usage: vcfutils.pl ldstats [-s $opts{s}] <in.vcf>\n") if (@ARGV == 0 && -t STDIN);
-  my ($lastchr, $lastpos) = ('', 0);
-  my @a;
-  my $is_print = defined($opts{p})? 1 : 0;
+  my %opts = (t=>0.9);
+  getopts('t:', \%opts);
+  die("Usage: vcfutils.pl ldstats [-t $opts{t}] <in.vcf>\n") if (@ARGV == 0 && -t STDIN);
+  my $cutoff = $opts{t};
+  my ($last, $lastchr) = (0x7fffffff, '');
+  my ($x, $y, $n) = (0, 0, 0);
   while (<>) {
-	next if (/^#/);
-	my @t = split;
-	if ($t[0] ne $lastchr) {
-	  $lastchr = $t[0];
-	} elsif (/NEIR=([\d\.]+)/) {
-	  push(@a, [$t[1] - $lastpos, $1, $t[1]]);
+	if (/^([^#\s]+)\s(\d+)/) {
+	  my ($chr, $pos) = ($1, $2);
+	  if (/NEIR=([\d\.]+)/) {
+		++$n;
+		++$y, $x += $pos - $last if ($lastchr eq $chr && $pos > $last && $1 > $cutoff);
+	  }
+	  $last = $pos; $lastchr = $chr;
 	}
-	$lastpos = $t[1];
   }
-  my $max = 1000000000;
-  push(@a, [$max, 0, 0]); # end marker
-  @a = sort {$a->[0]<=>$b->[0]} @a;
-  my $next = $opts{s};
-  my $last = $a[0];
-  my @c = (0, 0, 0, 0);
-  for my $p (@a) {
-	print STDERR "$p->[0]\t$p->[1]\t$p->[2]\n" if ($is_print);
-	if ($p->[0] == $max || ($p->[0] != $last && $c[0]/@a > $next)) {
-	  printf("%d\t%.2f\t%.4f\n", $c[1], $c[2]/$c[1], $c[3]/$c[1]);
-	  $c[1] = $c[2] = $c[3] = 0;
-	  $next = $c[0]/@a + $opts{s};
-	}
-	++$c[0]; ++$c[1]; $c[2] += $p->[0]; $c[3] += $p->[1];
-	$last = $p->[0];
-  }
+  print "Number of SNP intervals in strong LD (r > $opts{t}): $y\n";
+  print "Fraction: ", $y/$n, "\n";
+  print "Length: $x\n";
 }
 
 sub qstats {

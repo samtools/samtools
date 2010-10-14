@@ -90,7 +90,7 @@ double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 	{ // calculate r^2
 		double p[2], q[2], D;
 		p[0] = f[0] + f[1]; q[0] = 1 - p[0];
-		p[1] = f[2] + f[3]; q[1] = 1 - p[1];
+		p[1] = f[0] + f[2]; q[1] = 1 - p[1];
 		D = f[0] * f[3] - f[1] * f[2];
 		r = sqrt(D * D / (p[0] * p[1] * q[0] * q[1]));
 		// fprintf(stderr, "R(%lf,%lf,%lf,%lf)=%lf\n", f[0], f[1], f[2], f[3], r2);
