@@ -377,6 +377,8 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 
 static float g_qual2prob[256];
 
+#define EI .25
+#define EM .3333333333333
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
 ka_probpar_t ka_probpar_def = { 0.001, 0.1, 10 };
@@ -450,9 +452,9 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 		int beg = 1, end = l_ref < bw + 1? l_ref : bw + 1, _beg, _end;
 		for (k = beg, sum = 0.; k <= end; ++k) {
 			int u;
-			double e = (ref[k] > 3 || query[1] > 3)? 1. : ref[k] == query[1]? 1. - qual[1] : qual[1] / 3.;
+			double e = (ref[k] > 3 || query[1] > 3)? 1. : ref[k] == query[1]? 1. - qual[1] : qual[1] * EM;
 			set_u(u, bw, 1, k);
-			fi[u+0] = e * bM; fi[u+1] = .25 * bI;
+			fi[u+0] = e * bM; fi[u+1] = EI * bI;
 			sum += fi[u] + fi[u+1];
 		}
 		// rescale
@@ -470,10 +472,10 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 		for (k = beg, sum = 0.; k <= end; ++k) {
 			int u, v11, v01, v10;
 			double e;
-			e = (ref[k] > 3 || qyi > 3)? 1. : ref[k] == qyi? 1. - qli : qli / 3.;
+			e = (ref[k] > 3 || qyi > 3)? 1. : ref[k] == qyi? 1. - qli : qli * EM;
 			set_u(u, bw, i, k); set_u(v11, bw, i-1, k-1); set_u(v10, bw, i-1, k); set_u(v01, bw, i, k-1);
 			fi[u+0] = e * (m[0] * fi1[v11+0] + m[3] * fi1[v11+1] + m[6] * fi1[v11+2]);
-			fi[u+1] = .25 * (m[1] * fi1[v10+0] + m[4] * fi1[v10+1]);
+			fi[u+1] = EI * (m[1] * fi1[v10+0] + m[4] * fi1[v10+1]);
 			fi[u+2] = m[2] * fi[v01+0] + m[8] * fi[v01+2];
 			sum += fi[u] + fi[u+1] + fi[u+2];
 //			fprintf(stderr, "F (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, fi[u], fi[u+1], fi[u+2]); // DEBUG
@@ -513,9 +515,9 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 			int u, v11, v01, v10;
 			double e;
 			set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
-			e = (k >= l_ref? 0 : (ref[k+1] > 3 || qyi1 > 3)? 1. : ref[k+1] == qyi1? 1. - qli1 : qli1 / 3.) * bi1[v11];
-			bi[u+0] = e * m[0] + .25 * m[1] * bi1[v10+1] + m[2] * bi[v01+2]; // bi1[v11] has been foled into e.
-			bi[u+1] = e * m[3] + .25 * m[4] * bi1[v10+1];
+			e = (k >= l_ref? 0 : (ref[k+1] > 3 || qyi1 > 3)? 1. : ref[k+1] == qyi1? 1. - qli1 : qli1 * EM) * bi1[v11];
+			bi[u+0] = e * m[0] + EI * m[1] * bi1[v10+1] + m[2] * bi[v01+2]; // bi1[v11] has been foled into e.
+			bi[u+1] = e * m[3] + EI * m[4] * bi1[v10+1];
 			bi[u+2] = (e * m[6] + m[8] * bi[v01+2]) * y;
 //			fprintf(stderr, "B (%d,%d;%d): %lg,%lg,%lg\n", i, k, u, bi[u], bi[u+1], bi[u+2]); // DEBUG
 		}
@@ -528,10 +530,10 @@ int ka_prob_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_
 		double sum = 0.;
 		for (k = end; k >= beg; --k) {
 			int u;
-			double e = (ref[k] > 3 || query[1] > 3)? 1. : ref[k] == query[1]? 1. - qual[1] : qual[1] / 3.;
+			double e = (ref[k] > 3 || query[1] > 3)? 1. : ref[k] == query[1]? 1. - qual[1] : qual[1] * EM;
 			set_u(u, bw, 1, k);
 			if (u < 3 || u >= bw2*3+3) continue;
-		    sum += e * b[1][u+0] * bM + .25 * b[1][u+1] * bI;
+		    sum += e * b[1][u+0] * bM + EI * b[1][u+1] * bI;
 		}
 		set_u(k, bw, 0, 0);
 		pb = b[0][k] = sum / s[0]; // if everything works as is expected, pb == 1.0
