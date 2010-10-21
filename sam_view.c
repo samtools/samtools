@@ -124,15 +124,18 @@ int main_samview(int argc, char *argv[])
 	if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
 	// open file handlers
 	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
-		fprintf(stderr, "[main_samview] fail to open file for reading.\n");
+		fprintf(stderr, "[main_samview] fail to open \"%s\" for reading.\n", argv[optind]);
+		ret = 1;
 		goto view_end;
 	}
 	if (in->header == 0) {
-		fprintf(stderr, "[main_samview] fail to read the header.\n");
+		fprintf(stderr, "[main_samview] fail to read the header from \"%s\".\n", argv[optind]);
+		ret = 1;
 		goto view_end;
 	}
 	if ((out = samopen(fn_out? fn_out : "-", out_mode, in->header)) == 0) {
-		fprintf(stderr, "[main_samview] fail to open file for writing.\n");
+		fprintf(stderr, "[main_samview] fail to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
+		ret = 1;
 		goto view_end;
 	}
 	if (is_header_only) goto view_end; // no need to print alignments
@@ -146,7 +149,10 @@ int main_samview(int argc, char *argv[])
 				samwrite(out, b); // write the alignment to `out'
 			}
 		}
-		if (r < -1) fprintf(stderr, "[main_samview] truncated file.\n");
+		if (r < -1) {
+			fprintf(stderr, "[main_samview] truncated file.\n");
+			ret = 1;
+		}
 		bam_destroy1(b);
 	} else { // retrieve alignments in specified regions
 		int i;
@@ -161,12 +167,12 @@ int main_samview(int argc, char *argv[])
 			int tid, beg, end;
 			bam_parse_region(in->header, argv[i], &tid, &beg, &end); // parse a region in the format like `chr2:100-200'
 			if (tid < 0) { // reference name is not found
-				fprintf(stderr, "[main_samview] fail to get the reference name. Continue anyway.\n");
+				fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
 				continue;
 			}
 			// fetch alignments
 			if (bam_fetch(in->x.bam, idx, tid, beg, end, out, view_func) < 0) {
-				fprintf(stderr, "[main_samview] retrieval failed due to truncated file or corrupt BAM index file\n");
+				fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", argv[i]);
 				ret = 1;
 				break;
 			}
