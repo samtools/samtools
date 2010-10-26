@@ -22,6 +22,7 @@ KHASH_MAP_INIT_INT64(64, indel_list_t)
 #define BAM_PLF_1STBASE    0x80
 #define BAM_PLF_ALLBASE    0x100
 #define BAM_PLF_READPOS    0x200
+#define BAM_PLF_NOBAQ      0x400
 
 typedef struct {
 	bam_header_t *h;
@@ -32,6 +33,7 @@ typedef struct {
 	uint32_t format;
 	int tid, len, last_pos;
 	int mask;
+	int capQ_thres, min_baseQ;
     int max_depth;  // for indel calling, ignore reads with the depth too high. 0 for unlimited
 	char *ref;
 	glfFile fp_glf; // for glf output only
@@ -232,7 +234,11 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 			}
 			rmsQ = (uint64_t)(sqrt((double)rmsQ / n) + .499);
 			cns = b<<28 | 0xf<<24 | rmsQ<<16 | 60<<8;
-		} else cns = bam_maqcns_call(n, pu, d->c);
+		} else {
+			glf1_t *g = bam_maqcns_glfgen(n, pu, bam_nt16_table[rb], d->c);
+			cns = g->depth == 0? (0xfu<<28 | 0xf<<24) : glf2cns(g, (int)(d->c->q_r + .499));
+			free(g);
+		}
 	}
     if ((d->format & (BAM_PLF_CNS|BAM_PLF_INDEL_ONLY)) && d->ref && pos < d->len) { // call indels
         int m = (!d->max_depth || d->max_depth>n) ? n : d->max_depth;
@@ -242,7 +248,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	}
 	// when only variant sites are asked for, test if the site is a variant
 	if ((d->format & BAM_PLF_CNS) && (d->format & BAM_PLF_VAR_ONLY)) {
-		if (!(bam_nt16_table[rb] != 15 && cns>>28 != bam_nt16_table[rb])) { // not a SNP
+		if (!(bam_nt16_table[rb] != 15 && cns>>28 != 15 && cns>>28 != bam_nt16_table[rb])) { // not a SNP
 			if (!(r && (r->gt == 2 || strcmp(r->s[r->gt], "*")))) { // not an indel
 				if (r) bam_maqindel_ret_destroy(r);
 				return 0;
@@ -252,16 +258,8 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	// print the first 3 columns
 	printf("%s\t%d\t%c\t", d->h->target_name[tid], pos + 1, rb);
 	// print consensus information if required
-	if (d->format & BAM_PLF_CNS) {
-		int ref_q, rb4 = bam_nt16_table[rb];
-		ref_q = 0;
-		if (rb4 != 15 && cns>>28 != 15 && cns>>28 != rb4) { // a SNP
-			ref_q = ((cns>>24&0xf) == rb4)? cns>>8&0xff : (cns>>8&0xff) + (cns&0xff);
-			if (ref_q > 255) ref_q = 255;
-		}
-		rms_mapq = cns>>16&0xff;
-		printf("%c\t%d\t%d\t%d\t", bam_nt16_rev_table[cns>>28], cns>>8&0xff, ref_q, rms_mapq);
-	}
+	if (d->format & BAM_PLF_CNS)
+		printf("%c\t%d\t%d\t%d\t", bam_nt16_rev_table[cns>>28], cns>>8&0xff, cns&0xff, cns>>16&0xff);
 	// print pileup sequences
 	printf("%d\t", n);
 	rms_aux = 0; // we need to recalculate rms_mapq when -c is not flagged on the command line
@@ -338,13 +336,15 @@ int bam_pileup(int argc, char *argv[])
 	int c, is_SAM = 0;
 	char *fn_list = 0, *fn_fa = 0, *fn_pos = 0;
 	pu_data_t *d = (pu_data_t*)calloc(1, sizeof(pu_data_t));
-    d->max_depth = 0;
-	d->tid = -1; d->mask = BAM_DEF_MASK;
+    d->max_depth = 1024; d->tid = -1; d->mask = BAM_DEF_MASK; d->min_baseQ = 13;
 	d->c = bam_maqcns_init();
 	d->c->errmod = BAM_ERRMOD_MAQ2; // change the default model
 	d->ido = bam_maqindel_opt_init();
-	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:d:im:gI:G:vM:S2aR:PA")) >= 0) {
+	while ((c = getopt(argc, argv, "st:f:cT:N:r:l:d:im:gI:G:vM:S2aR:PAQ:C:B")) >= 0) {
 		switch (c) {
+		case 'Q': d->c->min_baseQ = atoi(optarg); break;
+		case 'C': d->capQ_thres = atoi(optarg); break;
+		case 'B': d->format |= BAM_PLF_NOBAQ; break;
 		case 'a': d->c->errmod = BAM_ERRMOD_SOAP; break;
 		case 'A': d->c->errmod = BAM_ERRMOD_MAQ; break;
 		case 's': d->format |= BAM_PLF_SIMPLE; break;
@@ -383,23 +383,26 @@ int bam_pileup(int argc, char *argv[])
 		fprintf(stderr, "Usage:  samtools pileup [options] <in.bam>|<in.sam>\n\n");
 		fprintf(stderr, "Option: -s        simple (yet incomplete) pileup format\n");
 		fprintf(stderr, "        -S        the input is in SAM\n");
-		fprintf(stderr, "        -A        use the MAQ model for SNP calling\n");
+		fprintf(stderr, "        -B        disable BAQ computation\n");
+		fprintf(stderr, "        -A        use the original MAQ model for SNP calling (DEPRECATED)\n");
 		fprintf(stderr, "        -2        output the 2nd best call and quality\n");
 		fprintf(stderr, "        -i        only show lines/consensus with indels\n");
-		fprintf(stderr, "        -m INT    filtering reads with bits in INT [%d]\n", d->mask);
+		fprintf(stderr, "        -Q INT    min base quality (possibly capped by BAQ) [%d]\n", d->c->min_baseQ);
+		fprintf(stderr, "        -C INT    coefficient for adjusting mapQ of poor mappings [%d]\n", d->capQ_thres);
+		fprintf(stderr, "        -m INT    filtering reads with bits in INT [0x%x]\n", d->mask);
 		fprintf(stderr, "        -M INT    cap mapping quality at INT [%d]\n", d->c->cap_mapQ);
-        fprintf(stderr, "        -d INT    limit maximum depth for indels [unlimited]\n");
+        fprintf(stderr, "        -d INT    limit maximum depth for indels [%d]\n", d->max_depth);
 		fprintf(stderr, "        -t FILE   list of reference sequences (force -S)\n");
 		fprintf(stderr, "        -l FILE   list of sites at which pileup is output\n");
 		fprintf(stderr, "        -f FILE   reference sequence in the FASTA format\n\n");
-		fprintf(stderr, "        -c        output the SOAPsnp consensus sequence\n");
+		fprintf(stderr, "        -c        compute the consensus sequence\n");
 		fprintf(stderr, "        -v        print variants only (for -c)\n");
-		fprintf(stderr, "        -g        output in the GLFv3 format (suppressing -c/-i/-s)\n");
-		fprintf(stderr, "        -T FLOAT  theta in maq consensus calling model (for -c/-g) [%f]\n", d->c->theta);
-		fprintf(stderr, "        -N INT    number of haplotypes in the sample (for -c/-g) [%d]\n", d->c->n_hap);
-		fprintf(stderr, "        -r FLOAT  prior of a difference between two haplotypes (for -c/-g) [%f]\n", d->c->het_rate);
-		fprintf(stderr, "        -G FLOAT  prior of an indel between two haplotypes (for -c/-g) [%f]\n", d->ido->r_indel);
-		fprintf(stderr, "        -I INT    phred prob. of an indel in sequencing/prep. (for -c/-g) [%d]\n", d->ido->q_indel);
+		fprintf(stderr, "        -g        output in the GLFv3 format (DEPRECATED)\n");
+		fprintf(stderr, "        -T FLOAT  theta in maq consensus calling model (for -c) [%.4g]\n", d->c->theta);
+		fprintf(stderr, "        -N INT    number of haplotypes in the sample (for -c) [%d]\n", d->c->n_hap);
+		fprintf(stderr, "        -r FLOAT  prior of a difference between two haplotypes (for -c) [%.4g]\n", d->c->het_rate);
+		fprintf(stderr, "        -G FLOAT  prior of an indel between two haplotypes (for -c) [%.4g]\n", d->ido->r_indel);
+		fprintf(stderr, "        -I INT    phred prob. of an indel in sequencing/prep. (for -c) [%d]\n", d->ido->q_indel);
 		fprintf(stderr, "\n");
 		free(fn_list); free(fn_fa); free(d);
 		return 1;
@@ -427,7 +430,42 @@ int bam_pileup(int argc, char *argv[])
 		}
 		d->h = fp->header;
 		if (fn_pos) d->hash = load_pos(fn_pos, d->h);
-		sampileup(fp, d->mask, pileup_func, d);
+		{ // run pileup
+			extern int bam_prob_realn(bam1_t *b, const char *ref);
+			extern int bam_cap_mapQ(bam1_t *b, char *ref, int thres);
+			bam1_t *b;
+			int ret, tid, pos, n_plp;
+			bam_plp_t iter;
+			const bam_pileup1_t *plp;
+			b = bam_init1();
+			iter = bam_plp_init(0, 0);
+			bam_plp_set_mask(iter, d->mask);
+			while ((ret = samread(fp, b)) >= 0) {
+				int skip = 0;
+				// update d->ref if necessary
+				if (d->fai && (int)b->core.tid != d->tid) {
+					free(d->ref);
+					d->ref = faidx_fetch_seq(d->fai, d->h->target_name[b->core.tid], 0, 0x7fffffff, &d->len);
+					d->tid = b->core.tid;
+				}
+				if (d->ref && (d->format&BAM_PLF_CNS) && !(d->format&BAM_PLF_NOBAQ)) bam_prob_realn(b, d->ref);
+				if (d->ref && (d->format&BAM_PLF_CNS) && d->capQ_thres > 10) {
+					int q = bam_cap_mapQ(b, d->ref, d->capQ_thres);
+					if (q < 0) skip = 1;
+					else if (b->core.qual > q) b->core.qual = q;
+				} else if (b->core.flag&BAM_FUNMAP) skip = 1;
+				else if ((d->format&BAM_PLF_CNS) && (b->core.flag&1) && !(b->core.flag&2)) skip = 1;
+				if (skip) continue;
+				bam_plp_push(iter, b);
+				while ((plp = bam_plp_next(iter, &tid, &pos, &n_plp)) != 0)
+					pileup_func(tid, pos, n_plp, plp, d);
+			}
+			bam_plp_push(iter, 0);
+			while ((plp = bam_plp_next(iter, &tid, &pos, &n_plp)) != 0)
+				pileup_func(tid, pos, n_plp, plp, d);
+			bam_plp_destroy(iter);
+			bam_destroy1(b);
+		}
 		samclose(fp); // d->h will be destroyed here
 	}
 

@@ -114,6 +114,7 @@ bam_maqcns_t *bam_maqcns_init()
 	bm->n_hap = 2;
 	bm->eta = 0.03;
 	bm->cap_mapQ = 60;
+	bm->min_baseQ = 13;
 	return bm;
 }
 
@@ -155,6 +156,7 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 		uint16_t y = 0;
 		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue;
 		q = (uint32_t)bam1_qual(p->b)[p->qpos];
+		if (q < bm->min_baseQ) continue;
 		x |= (uint32_t)bam1_strand(p->b) << 18 | q << 8 | p->b->core.qual;
 		y |= bam1_strand(p->b)<<4;
 		if (p->b->core.qual < q) q = p->b->core.qual;
@@ -281,26 +283,25 @@ goto_glf:
 
 uint32_t glf2cns(const glf1_t *g, int q_r)
 {
-	int i, j, k, tmp[16], min = 10000, min2 = 10000, min3 = 10000, min_g = -1, min_g2 = -1;
+	int i, j, k, p[10], ref4;
 	uint32_t x = 0;
+	ref4 = bam_nt16_nt4_table[g->ref_base];
 	for (i = k = 0; i < 4; ++i)
 		for (j = i; j < 4; ++j) {
-			tmp[j<<2|i] = -1;
-			tmp[i<<2|j] = g->lk[k++] + (i == j? 0 : q_r);
+			int prior = (i == ref4 && j == ref4? 0 : i == ref4 || j == ref4? q_r : q_r + 3);
+			p[k] = (g->lk[k] + prior)<<4 | i<<2 | j;
+			++k;
 		}
-	for (i = 0; i < 16; ++i) {
-		if (tmp[i] < 0) continue;
-		if (tmp[i] < min) {
-			min3 = min2; min2 = min; min = tmp[i]; min_g2 = min_g; min_g = i;
-		} else if (tmp[i] < min2) {
-			min3 = min2; min2 = tmp[i]; min_g2 = i;
-		} else if (tmp[i] < min3) min3 = tmp[i];
-	}
-	x = min_g >= 0? (1U<<(min_g>>2&3) | 1U<<(min_g&3)) << 28 : 0xf << 28;
-	x |= min_g2 >= 0? (1U<<(min_g2>>2&3) | 1U<<(min_g2&3)) << 24 : 0xf << 24;
-	x |= (uint32_t)g->max_mapQ << 16;
-	x |= min2 < 10000? (min2 - min < 256? min2 - min : 255) << 8 : 0xff << 8;
-	x |= min2 < 10000 && min3 < 10000? (min3 - min2 < 256? min3 - min2 : 255) : 0xff;
+	for (i = 1; i < 10; ++i) // insertion sort
+		for (j = i; j > 0 && p[j] < p[j-1]; --j)
+			k = p[j], p[j] = p[j-1], p[j-1] = k;
+	x = (1u<<(p[0]&3) | 1u<<(p[0]>>2&3)) << 28; // the best genotype
+	x |= (uint32_t)g->max_mapQ << 16; // rms mapQ
+	x |= ((p[1]>>4) - (p[0]>>4) < 256? (p[1]>>4) - (p[0]>>4) : 255) << 8; // consensus Q
+	for (k = 0; k < 10; ++k)
+		if ((p[k]&0xf) == (ref4<<2|ref4)) break;
+	if (k == 10) k = 9;
+	x |= (p[k]>>4) - (p[0]>>4) < 256? (p[k]>>4) - (p[0]>>4) : 255; // snp Q
 	return x;
 }
 
@@ -310,7 +311,7 @@ uint32_t bam_maqcns_call(int n, const bam_pileup1_t *pl, bam_maqcns_t *bm)
 	uint32_t x;
 	if (n) {
 		g = bam_maqcns_glfgen(n, pl, 0xf, bm);
-		x = glf2cns(g, (int)(bm->q_r + 0.5));
+		x = g->depth == 0? (0xfU<<28 | 0xfU<<24) : glf2cns(g, (int)(bm->q_r + 0.5));
 		free(g);
 	} else x = 0xfU<<28 | 0xfU<<24;
 	return x;

@@ -46,3 +46,5 @@ clean:
 		rm -fr *.bam *.bai *.glf* *.fai *.pileup* *~ calDepth *.dSYM ex1*.rg ex1.bcf
 
 # ../samtools pileup ex1.bam|perl -ape '$_=$F[4];s/(\d+)(??{".{$1}"})|\^.//g;@_=(tr/A-Z//,tr/a-z//);$_=join("\t",@F[0,1],@_)."\n"'
+
+# ../samtools pileup -cf ex1.fa ex1.bam|perl -ape '$_=$F[8];s/\^.//g;s/(\d+)(??{".{$1}"})|\^.//g;@_=(tr/A-Za-z//,tr/,.//);$_=join("\t",@F[0,1],@_)."\n"'
