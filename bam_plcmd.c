@@ -473,6 +473,7 @@ int bam_pileup(int argc, char *argv[])
 			bam_plp_set_mask(iter, d->mask);
 			while ((ret = samread(fp, b)) >= 0) {
 				int skip = 0;
+				if ((int)b->core.tid < 0) break;
 				// update d->ref if necessary
 				if (d->fai && (int)b->core.tid != d->tid) {
 					free(d->ref);
