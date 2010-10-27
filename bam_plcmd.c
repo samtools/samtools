@@ -175,32 +175,33 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 	return 0;
 }
 
-static void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, const char *ref)
+static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, const char *ref)
 {
+	int j;
 	if (p->is_head) {
 		putchar('^');
 		putchar(p->b->core.qual > 93? 126 : p->b->core.qual + 33);
 	}
 	if (!p->is_del) {
-		int j, rb, c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
+		int rb, c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
 		rb = (ref && pos < ref_len)? ref[pos] : 'N';
 		if (c == '=' || toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
 		else c = bam1_strand(p->b)? tolower(c) : toupper(c);
 		putchar(c);
-		if (p->indel > 0) {
-			putchar('+'); printw(p->indel, stdout);
-			for (j = 1; j <= p->indel; ++j) {
-				c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
-				putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
-			}
-		} else if (p->indel < 0) {
-			printw(p->indel, stdout);
-			for (j = 1; j <= -p->indel; ++j) {
-				c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
-				putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
-			}
-		}
 	} else putchar(p->is_refskip? (bam1_strand(p->b)? '<' : '>') : '*');
+	if (p->indel > 0) {
+		putchar('+'); printw(p->indel, stdout);
+		for (j = 1; j <= p->indel; ++j) {
+			int c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
+			putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
+		}
+	} else if (p->indel < 0) {
+		printw(p->indel, stdout);
+		for (j = 1; j <= -p->indel; ++j) {
+			int c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
+			putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
+		}
+	}
 	if (p->is_tail) putchar('$');
 }
 

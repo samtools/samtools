@@ -114,22 +114,25 @@ static inline int resolve_cigar2(bam_pileup1_t *p, uint32_t pos, cstate_t *s)
 	}
 	{ // collect pileup information
 		int op, l;
-		op = _cop(cigar[s->k]);
-		l = _cln(cigar[s->k]);
+		op = _cop(cigar[s->k]); l = _cln(cigar[s->k]);
 		p->is_del = p->indel = p->is_refskip = 0;
+		if (s->x + l - 1 == pos && s->k + 1 < c->n_cigar) { // peek the next operation
+			int op2 = _cop(cigar[s->k+1]);
+			int l2 = _cln(cigar[s->k+1]);
+			if (op2 == BAM_CDEL) p->indel = -(int)l2;
+			else if (op2 == BAM_CINS) p->indel = l2;
+			else if (op2 == BAM_CPAD && s->k + 2 < c->n_cigar) { // no working for adjacent padding
+				int l3 = 0;
+				for (k = s->k + 2; k < c->n_cigar; ++k) {
+					op2 = _cop(cigar[k]); l2 = _cln(cigar[k]);
+					if (op2 == BAM_CINS) l3 += l2;
+					else if (op2 == BAM_CDEL || op2 == BAM_CMATCH || op2 == BAM_CREF_SKIP) break;
+				}
+				if (l3 > 0) p->indel = l3;
+			}
+		}
 		if (op == BAM_CMATCH) {
 			p->qpos = s->y + (pos - s->x);
-			if (s->x + l - 1 == pos && s->k + 1 < c->n_cigar) { // peek the next operation
-				int op2 = _cop(cigar[s->k+1]);
-				int l2 = _cln(cigar[s->k+1]);
-				if (op2 == BAM_CDEL) p->indel = -(int)l2;
-				else if (op2 == BAM_CINS) p->indel = l2;
-				else if (op2 == BAM_CPAD && s->k + 2 < c->n_cigar) { // no working for adjacent padding
-					op2 = _cop(cigar[s->k+2]); l2 = _cln(cigar[s->k+2]);
-					if (op2 == BAM_CDEL) p->indel = -(int)l2;
-					else if (op2 == BAM_CINS) p->indel = l2;
-				}
-			}
 		} else if (op == BAM_CDEL || op == BAM_CREF_SKIP) {
 			p->is_del = 1; p->qpos = s->y; // FIXME: distinguish D and N!!!!!
 			p->is_refskip = (op == BAM_CREF_SKIP);
