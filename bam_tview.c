@@ -109,7 +109,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 							if (tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
 						}
 					}
-				} else c = '*';
+				} else c = p->is_refskip? (bam1_strand(p->b)? '<' : '>') : '*';
 			} else { // padding
 				if (j > p->indel) c = '*';
 				else { // insertion

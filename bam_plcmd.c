@@ -91,6 +91,21 @@ static khash_t(64) *load_pos(const char *fn, bam_header_t *h)
 	return hash;
 }
 
+static inline int printw(int c, FILE *fp)
+{
+	char buf[16];
+	int l, x;
+	if (c == 0) return fputc('0', fp);
+	for (l = 0, x = c < 0? -c : c; x > 0; x /= 10) buf[l++] = x%10 + '0';
+	if (c < 0) buf[l++] = '-';
+	buf[l] = 0;
+	for (x = 0; x < l/2; ++x) {
+		int y = buf[x]; buf[x] = buf[l-1-x]; buf[l-1-x] = y;
+	}
+	fputs(buf, fp);
+	return 0;
+}
+
 // an analogy to pileup_func() below
 static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu, void *data)
 {
@@ -162,7 +177,10 @@ static int glt3_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pu,
 
 static void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, const char *ref)
 {
-	if (p->is_head) printf("^%c", p->b->core.qual > 93? 126 : p->b->core.qual + 33);
+	if (p->is_head) {
+		putchar('^');
+		putchar(p->b->core.qual > 93? 126 : p->b->core.qual + 33);
+	}
 	if (!p->is_del) {
 		int j, rb, c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
 		rb = (ref && pos < ref_len)? ref[pos] : 'N';
@@ -170,19 +188,19 @@ static void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, const char 
 		else c = bam1_strand(p->b)? tolower(c) : toupper(c);
 		putchar(c);
 		if (p->indel > 0) {
-			printf("+%d", p->indel);
+			putchar('+'); printw(p->indel, stdout);
 			for (j = 1; j <= p->indel; ++j) {
 				c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
 				putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
 			}
 		} else if (p->indel < 0) {
-			printf("%d", p->indel);
+			printw(p->indel, stdout);
 			for (j = 1; j <= -p->indel; ++j) {
 				c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
 				putchar(bam1_strand(p->b)? tolower(c) : toupper(c));
 			}
 		}
-	} else putchar('*');
+	} else putchar(p->is_refskip? (bam1_strand(p->b)? '<' : '>') : '*');
 	if (p->is_tail) putchar('$');
 }
 
@@ -256,12 +274,17 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		}
 	}
 	// print the first 3 columns
-	printf("%s\t%d\t%c\t", d->h->target_name[tid], pos + 1, rb);
+	fputs(d->h->target_name[tid], stdout); putchar('\t');
+	printw(pos+1, stdout); putchar('\t'); putchar(rb); putchar('\t');
 	// print consensus information if required
-	if (d->format & BAM_PLF_CNS)
-		printf("%c\t%d\t%d\t%d\t", bam_nt16_rev_table[cns>>28], cns>>8&0xff, cns&0xff, cns>>16&0xff);
+	if (d->format & BAM_PLF_CNS) {
+		putchar(bam_nt16_rev_table[cns>>28]); putchar('\t');
+		printw(cns>>8&0xff, stdout); putchar('\t');
+		printw(cns&0xff, stdout); putchar('\t');
+		printw(cns>>16&0xff, stdout); putchar('\t');
+	}
 	// print pileup sequences
-	printf("%d\t", n);
+	printw(n, stdout); putchar('\t');
 	rms_aux = 0; // we need to recalculate rms_mapq when -c is not flagged on the command line
 	for (i = 0; i < n; ++i) {
 		const bam_pileup1_t *p = pu + i;
@@ -310,7 +333,7 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 		for (i = 0; i < n; ++i) {
 			int x = pu[i].qpos;
 			int l = pu[i].b->core.l_qseq;
-			printf("%d,", x < l/2? x+1 : -((l-1)-x+1));
+			printw(x < l/2? x+1 : -((l-1)-x+1), stdout); putchar(',');
 		}
 	}
 	putchar('\n');
