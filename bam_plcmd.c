@@ -183,10 +183,15 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 		putchar(p->b->core.qual > 93? 126 : p->b->core.qual + 33);
 	}
 	if (!p->is_del) {
-		int rb, c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
-		rb = (ref && pos < ref_len)? ref[pos] : 'N';
-		if (c == '=' || toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
-		else c = bam1_strand(p->b)? tolower(c) : toupper(c);
+		int c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
+		if (ref) {
+			int rb = pos < ref_len? ref[pos] : 'N';
+			if (c == '=' || bam_nt16_table[c] == bam_nt16_table[rb]) c = bam1_strand(p->b)? ',' : '.';
+			else c = bam1_strand(p->b)? tolower(c) : toupper(c);
+		} else {
+			if (c == '=') c = bam1_strand(p->b)? ',' : '.';
+			else c = bam1_strand(p->b)? tolower(c) : toupper(c);
+		}
 		putchar(c);
 	} else putchar(p->is_refskip? (bam1_strand(p->b)? '<' : '>') : '*');
 	if (p->indel > 0) {
@@ -286,16 +291,18 @@ static int pileup_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *p
 	}
 	// print pileup sequences
 	printw(n, stdout); putchar('\t');
-	rms_aux = 0; // we need to recalculate rms_mapq when -c is not flagged on the command line
-	for (i = 0; i < n; ++i) {
-		const bam_pileup1_t *p = pu + i;
-		int tmp = p->b->core.qual < d->c->cap_mapQ? p->b->core.qual : d->c->cap_mapQ;
-		rms_aux += tmp * tmp;
-		pileup_seq(p, pos, d->len, d->ref);
-	}
+	for (i = 0; i < n; ++i)
+		pileup_seq(pu + i, pos, d->len, d->ref);
 	// finalize rms_mapq
-	rms_aux = (uint64_t)(sqrt((double)rms_aux / n) + .499);
-	if (rms_mapq < 0) rms_mapq = rms_aux;
+	if (d->format & BAM_PLF_CNS) {
+		for (i = rms_aux = 0; i < n; ++i) {
+			const bam_pileup1_t *p = pu + i;
+			int tmp = p->b->core.qual < d->c->cap_mapQ? p->b->core.qual : d->c->cap_mapQ;
+			rms_aux += tmp * tmp;
+		}
+		rms_aux = (uint64_t)(sqrt((double)rms_aux / n) + .499);
+		if (rms_mapq < 0) rms_mapq = rms_aux;
+	}
 	putchar('\t');
 	// print quality
 	for (i = 0; i < n; ++i) {

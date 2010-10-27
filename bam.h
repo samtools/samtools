@@ -230,7 +230,7 @@ typedef struct __bam_iter_t *bam_iter_t;
   @param  b  pointer to an alignment
   @return    pointer to quality string
  */
-#define bam1_qual(b) ((b)->data + (b)->core.n_cigar*4 + (b)->core.l_qname + ((b)->core.l_qseq + 1)/2)
+#define bam1_qual(b) ((b)->data + (b)->core.n_cigar*4 + (b)->core.l_qname + (((b)->core.l_qseq + 1)>>1))
 
 /*! @function
   @abstract  Get a base on read
