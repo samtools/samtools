@@ -1,4 +1,1287 @@
 ------------------------------------------------------------------------
+r780 | lh3lh3 | 2010-10-27 11:01:11 -0400 (Wed, 27 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-21 (r780)
+ * minor speedup to pileup
+
+------------------------------------------------------------------------
+r779 | lh3lh3 | 2010-10-27 09:58:56 -0400 (Wed, 27 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/examples/toy.sam
+
+improve pileup a little bit
+
+------------------------------------------------------------------------
+r778 | lh3lh3 | 2010-10-27 00:14:43 -0400 (Wed, 27 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-20 (r778)
+ * speed up pileup, although I do not know how much is the improvement
+
+------------------------------------------------------------------------
+r777 | lh3lh3 | 2010-10-26 17:26:04 -0400 (Tue, 26 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_maqcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/examples/Makefile
+
+ * samtools-0.1.8-19 (r777)
+ * integrate mpileup features to pileup: min_baseQ, capQ, prob_realn, paired-only and biased prior
+
+------------------------------------------------------------------------
+r776 | lh3lh3 | 2010-10-26 15:27:46 -0400 (Tue, 26 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+
+remove local realignment (probabilistic realignment is still there)
+
+------------------------------------------------------------------------
+r774 | jmarshall | 2010-10-21 06:52:38 -0400 (Thu, 21 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/sam_view.c
+
+Add the relevant filename or region to error messages, and cause a failure
+exit status where appropriate.  Based on a patch provided by Marcel Martin.
+
+------------------------------------------------------------------------
+r773 | lh3lh3 | 2010-10-19 19:44:31 -0400 (Tue, 19 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/examples/toy.sam
+   M /trunk/samtools/kaln.c
+
+ * Minor code changes. No real effect.
+ * change quality to 30 in toy.sam
+
+------------------------------------------------------------------------
+r772 | lh3lh3 | 2010-10-18 23:40:13 -0400 (Mon, 18 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/examples/toy.fa
+   M /trunk/samtools/examples/toy.sam
+
+added another toy example
+
+------------------------------------------------------------------------
+r771 | lh3lh3 | 2010-10-13 23:32:12 -0400 (Wed, 13 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/ld.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+improve the LD statistics
+
+------------------------------------------------------------------------
+r770 | lh3lh3 | 2010-10-12 23:49:26 -0400 (Tue, 12 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * a minor fix to the -L option
+ * add ldstats to vcfutils.pl
+
+------------------------------------------------------------------------
+r769 | lh3lh3 | 2010-10-12 15:51:57 -0400 (Tue, 12 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+
+a minor change
+
+------------------------------------------------------------------------
+r768 | lh3lh3 | 2010-10-12 15:49:06 -0400 (Tue, 12 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   A /trunk/samtools/bcftools/ld.c
+
+forget to add the key file
+
+------------------------------------------------------------------------
+r767 | lh3lh3 | 2010-10-12 15:48:46 -0400 (Tue, 12 Oct 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * vcfutils.pl: fixed a typo in help message
+ * added APIs: bcf_append_info() and bcf_cpy()
+ * calculate adjacent LD
+
+------------------------------------------------------------------------
+r766 | lh3lh3 | 2010-10-11 11:06:40 -0400 (Mon, 11 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+added filter for samtools/bcftools genetated VCFs
+
+------------------------------------------------------------------------
+r765 | lh3lh3 | 2010-10-05 14:05:18 -0400 (Tue, 05 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+   M /trunk/samtools/kaln.c
+
+ * removed a comment line in kaln.c
+ * vcfutils.pl fillac works when GT is not the first field
+
+------------------------------------------------------------------------
+r764 | petulda | 2010-10-05 08:59:36 -0400 (Tue, 05 Oct 2010) | 1 line
+Changed paths:
+   A /trunk/samtools/bcftools/bcf-fix.pl
+
+Convert VCF output of "bcftools view -bgcv" to a valid VCF file
+------------------------------------------------------------------------
+r763 | lh3lh3 | 2010-10-02 22:51:03 -0400 (Sat, 02 Oct 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   A /trunk/samtools/bcftools/bcftools.1
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/samtools.1
+
+ * samtools-0.1.8-18 (r763)
+ * added bcftools manual page
+ * minor fix to mpileup and view command lines
+
+------------------------------------------------------------------------
+r762 | lh3lh3 | 2010-10-02 21:46:25 -0400 (Sat, 02 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * vcfutils.pl qstats: calculate marginal ts/tv
+ * allow to call genotypes at variant sites
+
+------------------------------------------------------------------------
+r761 | lh3lh3 | 2010-10-01 00:29:55 -0400 (Fri, 01 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+   M /trunk/samtools/misc/HmmGlocal.java
+
+I am changing the gap open probability back to 0.001. It seems that
+being conservative here is a good thing...
+
+------------------------------------------------------------------------
+r760 | lh3lh3 | 2010-10-01 00:11:27 -0400 (Fri, 01 Oct 2010) | 5 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/kaln.c
+   A /trunk/samtools/misc/HmmGlocal.java
+
+ * samtools-0.1.8-17 (r760)
+ * the default gap open penalty is too small (a typo)
+ * added comments on hmm_realn
+ * Java implementation
+
+------------------------------------------------------------------------
+r759 | lh3lh3 | 2010-09-30 10:12:54 -0400 (Thu, 30 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+
+mark samtools-0.1.8-16 (r759)
+
+------------------------------------------------------------------------
+r758 | lh3lh3 | 2010-09-30 10:12:02 -0400 (Thu, 30 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+round to the nearest integer
+
+------------------------------------------------------------------------
+r757 | lh3lh3 | 2010-09-28 17:16:43 -0400 (Tue, 28 Sep 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+I was trying to accelerate ka_prob_glocal() as this will be the
+bottleneck. After an hour, the only gain is to change division to
+multiplication. OK. I will stop.
+
+------------------------------------------------------------------------
+r756 | lh3lh3 | 2010-09-28 16:57:49 -0400 (Tue, 28 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+this is interesting. multiplication is much faster than division, at least on my Mac
+
+------------------------------------------------------------------------
+r755 | lh3lh3 | 2010-09-28 16:19:13 -0400 (Tue, 28 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+minor changes
+
+------------------------------------------------------------------------
+r754 | lh3lh3 | 2010-09-28 15:44:16 -0400 (Tue, 28 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/kaln.c
+
+prob_realn() seems working!
+
+------------------------------------------------------------------------
+r753 | lh3lh3 | 2010-09-28 12:48:23 -0400 (Tue, 28 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+minor
+
+------------------------------------------------------------------------
+r752 | lh3lh3 | 2010-09-28 12:47:41 -0400 (Tue, 28 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+   M /trunk/samtools/kaln.h
+
+Convert phredQ to probabilities
+
+------------------------------------------------------------------------
+r751 | lh3lh3 | 2010-09-28 12:32:08 -0400 (Tue, 28 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+   M /trunk/samtools/kaln.h
+
+Implement the glocal HMM; discard the extention HMM
+
+------------------------------------------------------------------------
+r750 | lh3lh3 | 2010-09-28 00:06:11 -0400 (Tue, 28 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+improve numerical stability
+
+------------------------------------------------------------------------
+r749 | lh3lh3 | 2010-09-27 23:27:54 -0400 (Mon, 27 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+more comments
+
+------------------------------------------------------------------------
+r748 | lh3lh3 | 2010-09-27 23:17:16 -0400 (Mon, 27 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+fixed a bug in banded DP
+
+------------------------------------------------------------------------
+r747 | lh3lh3 | 2010-09-27 23:05:12 -0400 (Mon, 27 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+ * fixed that weird issue.
+ * the banded version is NOT working
+
+------------------------------------------------------------------------
+r746 | lh3lh3 | 2010-09-27 22:57:05 -0400 (Mon, 27 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+More comments. This version seems working, but something is a little weird...
+
+------------------------------------------------------------------------
+r745 | lh3lh3 | 2010-09-27 17:21:40 -0400 (Mon, 27 Sep 2010) | 6 lines
+Changed paths:
+   M /trunk/samtools/kaln.c
+
+A little code cleanup. Now the forward and backback algorithms give
+nearly identical P(x), which means both are close to the correct
+forms. However, I have only tested on toy examples. Minor errors in
+the implementation may not be obvious.
+
+
+------------------------------------------------------------------------
+r744 | lh3lh3 | 2010-09-27 16:55:15 -0400 (Mon, 27 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/kaln.c
+   M /trunk/samtools/kaln.h
+
+...
+
+------------------------------------------------------------------------
+r743 | jmarshall | 2010-09-27 08:19:06 -0400 (Mon, 27 Sep 2010) | 6 lines
+Changed paths:
+   M /trunk/samtools/bam_sort.c
+
+Abort if merge -h's INH.SAM cannot be opened, just as we abort
+if any of the IN#.BAM input files cannot be opened.
+
+Also propagate any error indication returned by bam_merge_core()
+to samtools merge's exit status.
+
+------------------------------------------------------------------------
+r741 | jmarshall | 2010-09-24 11:08:24 -0400 (Fri, 24 Sep 2010) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+
+Use bam_validate1() to detect garbage records in the event of a corrupt
+BAI index file that causes a bam_seek() to an invalid position.  At most
+one record (namely, the bam_iter_read terminator) is tested per bam_fetch()
+call, so the cost is insignificant in the normal case.
+
+------------------------------------------------------------------------
+r740 | jmarshall | 2010-09-24 11:00:19 -0400 (Fri, 24 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam.h
+
+Add bam_validate1().
+
+------------------------------------------------------------------------
+r739 | lh3lh3 | 2010-09-22 12:07:50 -0400 (Wed, 22 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-15 (r379)
+ * allow to change capQ parameter in calmd
+
+------------------------------------------------------------------------
+r738 | jmarshall | 2010-09-22 11:15:33 -0400 (Wed, 22 Sep 2010) | 13 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/sam_view.c
+
+When bam_read1() returns an error (return value <= -2), propagate that error
+to bam_iter_read()'s own return value.  Similarly, also propagate it up to
+bam_fetch()'s return value.  Previously bam_fetch() always returned 0, and
+callers ignored its return value anyway.  With this change, 0 continues to
+indicate success, while <= -2 (which can be written as < 0, as -1 is never
+returned) indicates corrupted input.
+
+bam_iter_read() ought also to propagate errors returned by bam_seek().
+
+main_samview() can now print an error message and fail when bam_fetch()
+detects that a .bai index file is corrupted or otherwise does not correspond
+to the .bam file it is being used with.
+
+------------------------------------------------------------------------
+r737 | jmarshall | 2010-09-22 10:47:42 -0400 (Wed, 22 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+
+0 is a successful return value from bam_read1().  (In practice, it never
+returns 0 anyway; but all the other callers treat 0 as successful.)
+
+------------------------------------------------------------------------
+r736 | lh3lh3 | 2010-09-20 17:43:08 -0400 (Mon, 20 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bam_sort.c
+
+ * merge files region-by-region. work on small examples but more tests are needed.
+
+------------------------------------------------------------------------
+r735 | lh3lh3 | 2010-09-20 16:56:24 -0400 (Mon, 20 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+improve qstats by checking the alleles as well
+
+------------------------------------------------------------------------
+r734 | lh3lh3 | 2010-09-17 18:12:13 -0400 (Fri, 17 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+convert UCSC SNP SQL dump to VCF
+
+------------------------------------------------------------------------
+r733 | lh3lh3 | 2010-09-17 13:02:11 -0400 (Fri, 17 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+hapmap2vcf convertor
+
+------------------------------------------------------------------------
+r732 | lh3lh3 | 2010-09-17 10:11:37 -0400 (Fri, 17 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/vcf.c
+
+ * added comments
+ * VCF->BCF is not possible without knowing the sequence dictionary before hand...
+
+------------------------------------------------------------------------
+r731 | lh3lh3 | 2010-09-17 09:15:53 -0400 (Fri, 17 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/vcf.c
+
+ * put n_smpl to "bcf1_t" to simplify API a little
+
+------------------------------------------------------------------------
+r730 | lh3lh3 | 2010-09-16 21:36:01 -0400 (Thu, 16 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/index.c
+
+fixed a bug in indexing
+
+------------------------------------------------------------------------
+r729 | lh3lh3 | 2010-09-16 16:54:48 -0400 (Thu, 16 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_pileup.c
+
+ * fixed a bug in capQ
+ * valgrind identifies a use of uninitialised value, but I have not fixed it.
+
+------------------------------------------------------------------------
+r728 | lh3lh3 | 2010-09-16 15:03:59 -0400 (Thu, 16 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bgzip.c
+   M /trunk/samtools/razip.c
+
+ * fixed a bug in razip: -c will delete the input file
+ * copy tabix/bgzip to here
+
+------------------------------------------------------------------------
+r727 | lh3lh3 | 2010-09-16 13:45:49 -0400 (Thu, 16 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-14 (r727)
+ * allow to change the capQ parameter at the command line
+
+------------------------------------------------------------------------
+r726 | lh3lh3 | 2010-09-16 13:38:43 -0400 (Thu, 16 Sep 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+   M /trunk/samtools/misc/samtools.pl
+
+ * added varFilter to vcfutils.pl
+ * reimplement realn(). now it performs a local alignment
+ * added cap_mapQ() to cap mapping quality when there are many substitutions
+
+------------------------------------------------------------------------
+r724 | lh3lh3 | 2010-09-15 00:18:31 -0400 (Wed, 15 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   A /trunk/samtools/bcftools/bcf2qcall.c
+   M /trunk/samtools/bcftools/call1.c
+
+ * convert BCF to QCALL input
+
+------------------------------------------------------------------------
+r723 | lh3lh3 | 2010-09-14 22:41:50 -0400 (Tue, 14 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+
+dynamic band width in realignment
+
+------------------------------------------------------------------------
+r722 | lh3lh3 | 2010-09-14 22:05:32 -0400 (Tue, 14 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_plcmd.c
+
+fixed a bug in realignment
+
+------------------------------------------------------------------------
+r721 | lh3lh3 | 2010-09-14 20:54:09 -0400 (Tue, 14 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/prob1.c
+
+fixed a minor issue
+
+------------------------------------------------------------------------
+r720 | lh3lh3 | 2010-09-14 19:25:10 -0400 (Tue, 14 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_md.c
+
+fixed a bug in realignment
+
+------------------------------------------------------------------------
+r719 | lh3lh3 | 2010-09-14 19:18:24 -0400 (Tue, 14 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+minor changes. It is BUGGY now!
+
+------------------------------------------------------------------------
+r718 | lh3lh3 | 2010-09-14 16:32:33 -0400 (Tue, 14 Sep 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/kaln.c
+   M /trunk/samtools/kaln.h
+
+ * aggressive gapped aligner is implemented in calmd.
+ * distinguish gap_open and gap_end_open in banded alignment
+ * make tview accepts alignment with heading and tailing D
+
+------------------------------------------------------------------------
+r717 | jmarshall | 2010-09-14 09:04:28 -0400 (Tue, 14 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools
+
+Add svn:ignore properties for generated files that don't appear in "make all".
+
+------------------------------------------------------------------------
+r716 | jmarshall | 2010-09-13 08:37:53 -0400 (Mon, 13 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools
+   M /trunk/samtools/bcftools
+   M /trunk/samtools/misc
+
+Add svn:ignore properties listing the generated files.
+(Except for *.o, which we'll assume is in global-ignores.)
+
+------------------------------------------------------------------------
+r715 | lh3lh3 | 2010-09-08 12:53:55 -0400 (Wed, 08 Sep 2010) | 5 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/sample.c
+   M /trunk/samtools/sample.h
+
+ * samtools-0.1.8-13 (r715)
+ * fixed a bug in identifying SM across files
+ * bcftools: estimate heterozygosity
+ * bcftools: allow to skip sites without reference bases
+
+------------------------------------------------------------------------
+r713 | lh3lh3 | 2010-09-03 17:19:12 -0400 (Fri, 03 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+
+quite a lot changes to the contrast caller, but I still feel something is missing...
+
+------------------------------------------------------------------------
+r711 | lh3lh3 | 2010-09-03 00:30:48 -0400 (Fri, 03 Sep 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * changed 3.434 to 4.343 (typo!)
+ * fixed a bug in the contrast caller
+ * calculate heterozygosity
+
+------------------------------------------------------------------------
+r710 | lh3lh3 | 2010-09-01 23:24:47 -0400 (Wed, 01 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/call1.c
+
+SNP calling from the GL field
+
+------------------------------------------------------------------------
+r709 | lh3lh3 | 2010-09-01 18:52:30 -0400 (Wed, 01 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcf.c
+
+fixed another problem
+
+------------------------------------------------------------------------
+r708 | lh3lh3 | 2010-09-01 18:31:17 -0400 (Wed, 01 Sep 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/vcf.c
+
+ * fixed bugs in parsing VCF
+ * parser now works with GT/GQ/DP/PL/GL
+
+------------------------------------------------------------------------
+r707 | lh3lh3 | 2010-09-01 15:28:29 -0400 (Wed, 01 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/bcftools/prob1.c
+
+Do not compile _BCF_QUAD by default
+
+------------------------------------------------------------------------
+r706 | lh3lh3 | 2010-09-01 15:21:41 -0400 (Wed, 01 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/call1.c
+
+Write the correct ALT and PL in the SNP calling mode.
+
+------------------------------------------------------------------------
+r705 | lh3lh3 | 2010-09-01 12:50:33 -0400 (Wed, 01 Sep 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+more commands for my own uses
+
+------------------------------------------------------------------------
+r704 | lh3lh3 | 2010-09-01 09:26:10 -0400 (Wed, 01 Sep 2010) | 2 lines
+Changed paths:
+   A /trunk/samtools/bcftools/vcfutils.pl
+
+Utilities for processing VCF
+
+------------------------------------------------------------------------
+r703 | lh3lh3 | 2010-08-31 16:44:57 -0400 (Tue, 31 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+
+preliminary contrast variant caller
+
+------------------------------------------------------------------------
+r702 | lh3lh3 | 2010-08-31 12:28:39 -0400 (Tue, 31 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+
+z' and z'' can be calculated
+
+------------------------------------------------------------------------
+r701 | lh3lh3 | 2010-08-31 10:20:57 -0400 (Tue, 31 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   A /trunk/samtools/bcftools/call1.c (from /trunk/samtools/bcftools/vcfout.c:699)
+   M /trunk/samtools/bcftools/prob1.c
+   D /trunk/samtools/bcftools/vcfout.c
+
+ * rename vcfout.c as call1.c
+ * prepare to add two-sample comparison
+
+------------------------------------------------------------------------
+r699 | lh3lh3 | 2010-08-24 15:28:16 -0400 (Tue, 24 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfout.c
+
+fixed a bug in calculating the t statistics
+
+------------------------------------------------------------------------
+r698 | lh3lh3 | 2010-08-24 14:05:50 -0400 (Tue, 24 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/kfunc.c
+   M /trunk/samtools/bcftools/vcfout.c
+
+ * samtools-0.1.8-13 (r698)
+ * perform one-tailed t-test for baseQ, mapQ and endDist
+
+------------------------------------------------------------------------
+r697 | lh3lh3 | 2010-08-24 12:30:13 -0400 (Tue, 24 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/kfunc.c
+
+added regularized incomplete beta function
+
+------------------------------------------------------------------------
+r695 | lh3lh3 | 2010-08-23 17:36:17 -0400 (Mon, 23 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_plcmd.c
+
+change the default correlation coefficient
+
+------------------------------------------------------------------------
+r694 | lh3lh3 | 2010-08-23 14:46:52 -0400 (Mon, 23 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/vcfout.c
+
+print QUAL as floating numbers
+
+------------------------------------------------------------------------
+r693 | lh3lh3 | 2010-08-23 14:06:07 -0400 (Mon, 23 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/examples/Makefile
+   A /trunk/samtools/sample.c
+   A /trunk/samtools/sample.h
+
+ * samtools-0.1.8-12 (r692)
+ * group data by samples in "mpileup -g"
+
+------------------------------------------------------------------------
+r692 | lh3lh3 | 2010-08-23 10:58:53 -0400 (Mon, 23 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   D /trunk/samtools/bam_mcns.c
+   D /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+
+remove VCF output in mpileup
+
+------------------------------------------------------------------------
+r691 | lh3lh3 | 2010-08-23 10:48:20 -0400 (Mon, 23 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+
+ * use the revised MAQ error model for mpileup
+ * prepare to remove the independent model from mpileup
+
+------------------------------------------------------------------------
+r690 | lh3lh3 | 2010-08-20 15:46:40 -0400 (Fri, 20 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_maqcns.h
+   M /trunk/samtools/bam_plcmd.c
+   A /trunk/samtools/errmod.c
+   A /trunk/samtools/errmod.h
+   M /trunk/samtools/ksort.h
+
+added revised MAQ error model
+
+------------------------------------------------------------------------
+r689 | lh3lh3 | 2010-08-18 09:55:20 -0400 (Wed, 18 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+   M /trunk/samtools/bcftools/vcfout.c
+
+allow to read the prior from the error output. EM iteration is working.
+
+------------------------------------------------------------------------
+r688 | lh3lh3 | 2010-08-17 12:12:20 -0400 (Tue, 17 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/main.c
+   M /trunk/samtools/bcftools/vcf.c
+
+ * write a little more VCF header
+ * concatenate BCFs
+
+------------------------------------------------------------------------
+r687 | lh3lh3 | 2010-08-16 20:53:16 -0400 (Mon, 16 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/bcf.tex
+
+use float for QUAL
+
+------------------------------------------------------------------------
+r686 | lh3lh3 | 2010-08-14 00:11:13 -0400 (Sat, 14 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/prob1.c
+
+faster for large sample size (in principle)
+
+------------------------------------------------------------------------
+r685 | lh3lh3 | 2010-08-13 23:28:31 -0400 (Fri, 13 Aug 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bcftools/prob1.c
+
+ * a numerically stable method to calculate z_{jk}
+ * currently slower than the old method but will be important for large sample size
+ * in principle, we can speed up for large n, but have not tried
+
+------------------------------------------------------------------------
+r684 | lh3lh3 | 2010-08-11 21:58:31 -0400 (Wed, 11 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfout.c
+
+fixed an issue in parsing integer
+
+------------------------------------------------------------------------
+r683 | lh3lh3 | 2010-08-09 13:05:07 -0400 (Mon, 09 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+
+do not print refname if file is converted from VCF
+
+------------------------------------------------------------------------
+r682 | lh3lh3 | 2010-08-09 12:59:47 -0400 (Mon, 09 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcf.c
+
+ * parse PL
+ * fixed a bug in parsing VCF
+
+------------------------------------------------------------------------
+r681 | lh3lh3 | 2010-08-09 12:49:23 -0400 (Mon, 09 Aug 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/main.c
+   M /trunk/samtools/bcftools/vcf.c
+   M /trunk/samtools/bcftools/vcfout.c
+   M /trunk/samtools/bgzf.c
+   M /trunk/samtools/kstring.c
+
+ * fixed a bug in kstrtok@kstring.c
+ * preliminary VCF parser (not parse everything for now)
+ * improved view interface
+
+------------------------------------------------------------------------
+r680 | lh3lh3 | 2010-08-09 10:43:13 -0400 (Mon, 09 Aug 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/vcfout.c
+   M /trunk/samtools/kstring.c
+   M /trunk/samtools/kstring.h
+
+ * improved kstring (added kstrtok)
+ * removed the limit on the format string length in bcftools
+ * use kstrtok to parse format which fixed a bug in the old code
+
+------------------------------------------------------------------------
+r679 | lh3lh3 | 2010-08-09 01:12:05 -0400 (Mon, 09 Aug 2010) | 2 lines
+Changed paths:
+   A /trunk/samtools/bcftools/README
+   M /trunk/samtools/bcftools/vcfout.c
+
+help messages
+
+------------------------------------------------------------------------
+r678 | lh3lh3 | 2010-08-09 00:01:52 -0400 (Mon, 09 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfout.c
+
+perform single-tail test for ED4
+
+------------------------------------------------------------------------
+r677 | lh3lh3 | 2010-08-08 23:48:35 -0400 (Sun, 08 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/bcftools/kfunc.c
+   M /trunk/samtools/bcftools/vcfout.c
+
+ * test depth, end distance and HWE
+
+------------------------------------------------------------------------
+r676 | lh3lh3 | 2010-08-08 02:04:15 -0400 (Sun, 08 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/kfunc.c
+
+reimplement incomplete gamma functions. no copy-paste
+
+------------------------------------------------------------------------
+r675 | lh3lh3 | 2010-08-06 22:42:54 -0400 (Fri, 06 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bcftools/fet.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+   M /trunk/samtools/bcftools/vcfout.c
+
+ * bcftools: add HWE (no testing for now)
+ * record end dist in a 2x2 table, not avg, std any more
+
+------------------------------------------------------------------------
+r674 | lh3lh3 | 2010-08-06 17:30:16 -0400 (Fri, 06 Aug 2010) | 3 lines
+Changed paths:
+   A /trunk/samtools/bcftools/kfunc.c
+
+ * Special functions: log(gamma()), erfc(), P(a,x) (incomplete gamma)
+ * Not using Numerical Recipe due to licensing issues
+
+------------------------------------------------------------------------
+r673 | lh3lh3 | 2010-08-05 23:46:53 -0400 (Thu, 05 Aug 2010) | 2 lines
+Changed paths:
+   A /trunk/samtools/bcftools/fet.c
+
+Fisher's exact test
+
+------------------------------------------------------------------------
+r672 | lh3lh3 | 2010-08-05 21:48:33 -0400 (Thu, 05 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/examples/Makefile
+
+ * samtools-0.1.8-11 (r672)
+ * collect more stats for allele balance test in bcftools (not yet)
+
+------------------------------------------------------------------------
+r671 | lh3lh3 | 2010-08-05 16:17:58 -0400 (Thu, 05 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/main.c
+
+ * the code base is stablized again.
+ * I will delay the vcf parser, which is quite complicated but with little value for now
+
+------------------------------------------------------------------------
+r670 | lh3lh3 | 2010-08-05 16:03:23 -0400 (Thu, 05 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/examples/Makefile
+
+minor
+
+------------------------------------------------------------------------
+r669 | lh3lh3 | 2010-08-05 16:03:08 -0400 (Thu, 05 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcf.c
+
+unfinished vcf parser
+
+------------------------------------------------------------------------
+r668 | lh3lh3 | 2010-08-05 15:46:40 -0400 (Thu, 05 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/index.c
+   M /trunk/samtools/bcftools/main.c
+   A /trunk/samtools/bcftools/vcf.c
+   M /trunk/samtools/bcftools/vcfout.c
+
+ * added prelimiary VCF parser (not finished)
+ * change struct a bit
+
+------------------------------------------------------------------------
+r667 | lh3lh3 | 2010-08-03 22:35:27 -0400 (Tue, 03 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bcftools/bcf.c
+
+ * allow to set min base q
+ * fixed a bug in mpileup -u
+
+------------------------------------------------------------------------
+r666 | lh3lh3 | 2010-08-03 22:08:44 -0400 (Tue, 03 Aug 2010) | 2 lines
+Changed paths:
+   A /trunk/samtools/bcftools/bcf.tex
+
+spec
+
+------------------------------------------------------------------------
+r665 | lh3lh3 | 2010-08-03 21:18:57 -0400 (Tue, 03 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/examples/Makefile
+
+added more examples
+
+------------------------------------------------------------------------
+r664 | lh3lh3 | 2010-08-03 21:13:00 -0400 (Tue, 03 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bcftools/Makefile
+
+fixed compilation error
+
+------------------------------------------------------------------------
+r662 | lh3lh3 | 2010-08-03 21:04:00 -0400 (Tue, 03 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   D /trunk/samtools/bcf.c
+   D /trunk/samtools/bcf.h
+   A /trunk/samtools/bcftools
+   A /trunk/samtools/bcftools/Makefile
+   A /trunk/samtools/bcftools/bcf.c
+   A /trunk/samtools/bcftools/bcf.h
+   A /trunk/samtools/bcftools/bcfutils.c
+   A /trunk/samtools/bcftools/index.c
+   A /trunk/samtools/bcftools/main.c
+   A /trunk/samtools/bcftools/prob1.c
+   A /trunk/samtools/bcftools/prob1.h
+   A /trunk/samtools/bcftools/vcfout.c
+
+move bcftools to samtools
+
+------------------------------------------------------------------------
+r660 | lh3lh3 | 2010-08-03 15:58:32 -0400 (Tue, 03 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+
+fixed another minor bug
+
+------------------------------------------------------------------------
+r658 | lh3lh3 | 2010-08-03 15:06:45 -0400 (Tue, 03 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcf.c
+
+ * samtools-0.1.8-10 (r658)
+ * fixed a bug in bam2bcf when the reference is N
+
+------------------------------------------------------------------------
+r657 | lh3lh3 | 2010-08-03 14:50:23 -0400 (Tue, 03 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+
+ * fixed a bug
+ * treat ambiguous ref base as the fifth base
+
+------------------------------------------------------------------------
+r654 | lh3lh3 | 2010-08-02 17:38:27 -0400 (Mon, 02 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/bcftools/bcf.c
+   M /trunk/samtools/bcf.c
+
+missing a column in VCF output...
+
+------------------------------------------------------------------------
+r653 | lh3lh3 | 2010-08-02 17:31:33 -0400 (Mon, 02 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcf.c
+
+fixed a memory leak
+
+------------------------------------------------------------------------
+r651 | lh3lh3 | 2010-08-02 17:27:31 -0400 (Mon, 02 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcf.c
+
+fixed a bug in bcf reader
+
+------------------------------------------------------------------------
+r650 | lh3lh3 | 2010-08-02 17:00:41 -0400 (Mon, 02 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+
+fixed a bug
+
+------------------------------------------------------------------------
+r649 | lh3lh3 | 2010-08-02 16:49:35 -0400 (Mon, 02 Aug 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-9 (r649)
+ * lossless representation of PL in BCF output
+
+------------------------------------------------------------------------
+r648 | lh3lh3 | 2010-08-02 16:07:25 -0400 (Mon, 02 Aug 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   A /trunk/samtools/bam2bcf.c
+   A /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam_plcmd.c
+   A /trunk/samtools/bcf.c
+   A /trunk/samtools/bcf.h
+
+Generate binary VCF
+
+------------------------------------------------------------------------
+r644 | lh3lh3 | 2010-07-28 11:59:19 -0400 (Wed, 28 Jul 2010) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-8 (r644)
+ * mpileup becomes a little stable again
+ * the method is slightly different, but is more theoretically correct
+ * snp calling is O(n^2) instead of O(n^3)
+
+------------------------------------------------------------------------
+r643 | lh3lh3 | 2010-07-28 11:54:15 -0400 (Wed, 28 Jul 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+
+ * fixed a STUPID bug, which cost me a lot of time.
+ * I am going to clean up mcns a little bit
+
+------------------------------------------------------------------------
+r642 | lh3lh3 | 2010-07-27 23:23:07 -0400 (Tue, 27 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+
+supposedly this is THE correct implementation, but more testing is needed
+
+------------------------------------------------------------------------
+r641 | lh3lh3 | 2010-07-27 22:43:39 -0400 (Tue, 27 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+
+NOT ready yet. Going to make further changes...
+
+------------------------------------------------------------------------
+r639 | lh3lh3 | 2010-07-25 22:18:38 -0400 (Sun, 25 Jul 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-7 (r639)
+ * fixed the reference allele assignment
+
+------------------------------------------------------------------------
+r638 | lh3lh3 | 2010-07-25 12:01:26 -0400 (Sun, 25 Jul 2010) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-6 (r638)
+ * skip isnan/isinf in case of float underflow
+ * added the flat prior
+ * fixed an issue where there are no reads supporting the reference
+
+------------------------------------------------------------------------
+r637 | lh3lh3 | 2010-07-24 14:16:27 -0400 (Sat, 24 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+minor changes
+
+------------------------------------------------------------------------
+r636 | lh3lh3 | 2010-07-24 14:07:27 -0400 (Sat, 24 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+minor tweaks
+
+------------------------------------------------------------------------
+r635 | lh3lh3 | 2010-07-24 01:49:49 -0400 (Sat, 24 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+
+posterior expectation FINALLY working. I am so tired...
+
+------------------------------------------------------------------------
+r633 | lh3lh3 | 2010-07-23 13:50:48 -0400 (Fri, 23 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+another minor fix to mpileup
+
+------------------------------------------------------------------------
+r632 | lh3lh3 | 2010-07-23 13:43:31 -0400 (Fri, 23 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+added the format column
+
+------------------------------------------------------------------------
+r631 | lh3lh3 | 2010-07-23 13:25:44 -0400 (Fri, 23 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+added an alternative prior
+
+------------------------------------------------------------------------
+r628 | lh3lh3 | 2010-07-23 11:48:51 -0400 (Fri, 23 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+
+calculate posterior allele frequency
+
+------------------------------------------------------------------------
+r627 | lh3lh3 | 2010-07-22 21:39:13 -0400 (Thu, 22 Jul 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-3 (r627)
+ * multi-sample snp calling appears to work. More tests needed.
+
+------------------------------------------------------------------------
+r626 | lh3lh3 | 2010-07-22 16:37:56 -0400 (Thu, 22 Jul 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_tview.c
+
+ * preliminary multisample SNP caller.
+ * something looks not so right, but it largely works
+
+------------------------------------------------------------------------
+r617 | lh3lh3 | 2010-07-14 16:26:27 -0400 (Wed, 14 Jul 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_mcns.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.8-2 (r617)
+ * allele frequency calculation apparently works...
+
+------------------------------------------------------------------------
+r616 | lh3lh3 | 2010-07-14 13:33:51 -0400 (Wed, 14 Jul 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   A /trunk/samtools/bam_mcns.c
+   A /trunk/samtools/bam_mcns.h
+   M /trunk/samtools/bam_plcmd.c
+
+ * added mutli-sample framework. It is not working, yet.
+ * improved the mpileup interface
+
+------------------------------------------------------------------------
+r615 | lh3lh3 | 2010-07-13 14:50:12 -0400 (Tue, 13 Jul 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/misc/Makefile
+
+ * samtools-0.1.8-1 (r615)
+ * allow to get mpileup at required sites
+
+------------------------------------------------------------------------
+r613 | lh3lh3 | 2010-07-11 22:40:56 -0400 (Sun, 11 Jul 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+Release samtools-0.1.8
+
+------------------------------------------------------------------------
 r612 | lh3lh3 | 2010-07-11 21:08:56 -0400 (Sun, 11 Jul 2010) | 2 lines
 Changed paths:
    M /trunk/samtools/knetfile.c

@@ -137,11 +137,15 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 				// check that they are consistent with the existing binary list
 				// of reference information.
 				if (hheaders->n_targets > 0) {
-					if (hout->n_targets != hheaders->n_targets)
+					if (hout->n_targets != hheaders->n_targets) {
 						fprintf(stderr, "[bam_merge_core] number of @SQ headers in `%s' differs from number of target sequences", headers);
+						if (!reg) return -1;
+					}
 					for (j = 0; j < hout->n_targets; ++j)
-						if (strcmp(hout->target_name[j], hheaders->target_name[j]) != 0)
+						if (strcmp(hout->target_name[j], hheaders->target_name[j]) != 0) {
 							fprintf(stderr, "[bam_merge_core] @SQ header '%s' in '%s' differs from target sequence", hheaders->target_name[j], headers);
+							if (!reg) return -1;
+						}
 				}
 				swap_header_text(hout, hheaders);
 				bam_header_destroy(hheaders);

@@ -768,7 +768,8 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:")) >= 0) {
+	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:B")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -779,6 +780,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'g': mplp.flag |= MPLP_GLF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
+		case 'B': mplp.flag &= ~MPLP_REALN & ~MPLP_NO_ORPHAN; break;
 		case 'O': mplp.flag |= MPLP_NO_ORPHAN; break;
 		case 'R': mplp.flag |= MPLP_REALN; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
@@ -798,6 +800,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
+		fprintf(stderr, "         -B          disable BAQ computation\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
