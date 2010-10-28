@@ -1,3 +1,52 @@
+Beta Release 0.1.9 (27 October, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This release is featured as the first major improvement to the samtools'
+SNP caller.  It comes with a revised MAQ error model, the support of
+multi-sample SNP calling and the computation of base alignment quality
+(BAQ).
+
+The revised MAQ error model is based on the original model. It solves an
+issue of miscalling SNPs in repetitive regions. Althought such SNPs can
+usually be filtered at a later step, they mess up unfiltered calls. This
+is a theoretical flaw in the original model. The revised MAQ model
+deprecates the orginal MAQ model and the simplified SOAPsnp model.
+
+Multi-sample SNP calling is separated in two steps. The first is done by
+samtools mpileup and the second by a new program, bcftools, which is
+included in the samtools source code tree. Multi-sample SNP calling also
+works for single sample and has the advantage of enabling more powerful
+filtration. It is likely to deprecate pileup in future once a proper
+indel calling method is implemented.
+
+BAQ is the Phred-scaled probability of a read base being wrongly
+aligned. Capping base quality by BAQ has been shown to be very effective
+in suppressing false SNPs caused by misalignments around indels or in
+low-complexity regions with acceptable compromise on computation
+time. This strategy is highly recommended and can be used with other SNP
+callers as well.
+
+In addition to the three major improvements, other notable changes are:
+
+ * Changes to the pileup format. A reference skip (the N CIGAR operator)
+   is shown as '<' or '>' depending on the strand. Tview is also changed
+   accordingly.
+
+ * Accelerated pileup. The plain pileup is about 50% faster.
+
+ * Regional merge. The merge command now accepts a new option to merge
+   files in a specified region.
+
+ * Fixed a bug in bgzip and razip which causes source files to be
+   deleted even if option -c is applied.
+
+ * In APIs, propogate errors to downstream callers and make samtools
+   return non-zero values once errors occur.
+
+(0.1.9: 27 October 2010, r783)
+
+
+
 Beta Release 0.1.8 (11 July, 2010)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

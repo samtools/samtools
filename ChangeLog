@@ -1,4 +1,25 @@
 ------------------------------------------------------------------------
+r782 | lh3lh3 | 2010-10-27 19:58:54 -0400 (Wed, 27 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+fixed a silly bug in pileup
+
+------------------------------------------------------------------------
+r781 | lh3lh3 | 2010-10-27 14:39:48 -0400 (Wed, 27 Oct 2010) | 5 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+ * samtools-0.1.8-22 (r781)
+ * made BAQ the default behavior of mpileup
+ * updated manual
+ * in merge, force to exit given inconsistent header when "-R" is not in use.
+
+------------------------------------------------------------------------
 r780 | lh3lh3 | 2010-10-27 11:01:11 -0400 (Wed, 27 Oct 2010) | 3 lines
 Changed paths:
    M /trunk/samtools/bam.h
