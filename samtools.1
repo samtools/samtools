@@ -601,12 +601,13 @@ Individuals are identified from the
 tags in the
 .B @RG
 header lines. Individuals can be pooled in one alignment file; one
-individual can also be separated into multiple files. Similarly, one may
-consider to apply
+individual can also be separated into multiple files. In addition, one
+may consider to apply
 .B -C50
 to
 .BR mpileup .
-SNP calling in this way also works for single sample and has the
+
+SNP calling with mpileup also works for single sample and has the
 advantage of enabling more powerful filtering. The drawback is the lack
 of short indel calling, which may be implemented in future.
 
@@ -640,7 +641,7 @@ tags at the same time. The
 .B calmd
 command also comes with the
 .B -C
-option, the same as the on in
+option, the same as the one in
 .B pileup
 and
 .BR mpileup .
@@ -666,8 +667,9 @@ although a little slower.
 .PP
 Heng Li from the Sanger Institute wrote the C version of samtools. Bob
 Handsaker from the Broad Institute implemented the BGZF library and Jue
-Ruan from Beijing Genomics Institute wrote the RAZF library. Various
-people in the 1000 Genomes Project contributed to the SAM format
+Ruan from Beijing Genomics Institute wrote the RAZF library. John
+Marshall and Petr Danecek contribute to the source code and various
+people from the 1000 Genomes Project have contributed to the SAM format
 specification.
 
 .SH SEE ALSO
