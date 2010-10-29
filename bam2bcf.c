@@ -154,8 +154,9 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	return 0;
 }
 
-int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
+int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr)
 {
+	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
 	kstring_t s;
 	int i;
 	b->n_smpl = bc->n;
@@ -178,9 +179,19 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b)
 	}
 	kputc('\0', &s);
 	// FMT
-	kputs("PL", &s); kputc('\0', &s);
+	kputs("PL", &s);
+	if (bcr) {
+		kputs(":DP", &s);
+	}
+	kputc('\0', &s);
 	b->m_str = s.m; b->str = s.s; b->l_str = s.l;
 	bcf_sync(b);
 	memcpy(b->gi[0].data, bc->PL, b->gi[0].len * bc->n);
+	if (bcr) {
+		uint16_t *dp = (uint16_t*)b->gi[1].data;
+		for (i = 0; i < bc->n; ++i) {
+			dp[i] = bcr[i].depth < 0xffff? bcr[i].depth : 0xffff;
+		}
+	}
 	return 0;
 }

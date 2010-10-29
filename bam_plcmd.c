@@ -528,6 +528,7 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_NO_COMP 0x20
 #define MPLP_NO_ORPHAN 0x40
 #define MPLP_REALN   0x80
+#define MPLP_SAMINFO 0x100
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres;
@@ -714,7 +715,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			for (i = 0; i < gplp.n; ++i)
 				bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], ref16, bca, bcr + i);
 			bcf_call_combine(gplp.n, bcr, ref16, &bc);
-			bcf_call2bcf(tid, pos, &bc, b);
+			bcf_call2bcf(tid, pos, &bc, b, (conf->flag&MPLP_SAMINFO)? bcr : 0);
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
 		} else {
@@ -770,7 +771,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:B")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BI")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -784,6 +785,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'B': mplp.flag &= ~MPLP_REALN & ~MPLP_NO_ORPHAN; break;
 		case 'O': mplp.flag |= MPLP_NO_ORPHAN; break;
 		case 'R': mplp.flag |= MPLP_REALN; break;
+		case 'I': mplp.flag |= MPLP_SAMINFO; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
@@ -802,6 +804,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
 		fprintf(stderr, "         -B          disable BAQ computation\n");
+		fprintf(stderr, "         -I          additional individual information (DP and ST)\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
