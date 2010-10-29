@@ -156,7 +156,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 				for (i = 0; i < b->n_gi; ++i) {
 					if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
 						((uint8_t*)b->gi[i].data)[k-9] = 1<<7;
-					} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
+					} else if (b->gi[i].fmt == bcf_str2int("GQ", 2) || b->gi[i].fmt == bcf_str2int("SP", 2)) {
 						((uint8_t*)b->gi[i].data)[k-9] = 0;
 					} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
 						((uint16_t*)b->gi[i].data)[k-9] = 0;
@@ -173,7 +173,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 			for (q = kstrtok(p, ":", &a2), i = 0; q && i < b->n_gi; q = kstrtok(0, 0, &a2), ++i) {
 				if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
 					((uint8_t*)b->gi[i].data)[k-9] = (q[0] - '0')<<3 | (q[2] - '0') | (q[1] == '/'? 0 : 1) << 6;
-				} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
+				} else if (b->gi[i].fmt == bcf_str2int("GQ", 2) || b->gi[i].fmt == bcf_str2int("SP", 2)) {
 					double _x = strtod(q, &q);
 					int x = (int)(_x + .499);
 					if (x > 255) x = 255;

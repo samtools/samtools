@@ -154,7 +154,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	return 0;
 }
 
-int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr)
+int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int is_SP)
 {
 	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
 	kstring_t s;
@@ -182,6 +182,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	kputs("PL", &s);
 	if (bcr) {
 		kputs(":DP", &s);
+		if (is_SP) kputs(":SP", &s);
 	}
 	kputc('\0', &s);
 	b->m_str = s.m; b->str = s.s; b->l_str = s.l;
@@ -189,8 +190,24 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	memcpy(b->gi[0].data, bc->PL, b->gi[0].len * bc->n);
 	if (bcr) {
 		uint16_t *dp = (uint16_t*)b->gi[1].data;
+		uint8_t *sp = is_SP? b->gi[2].data : 0;
 		for (i = 0; i < bc->n; ++i) {
-			dp[i] = bcr[i].depth < 0xffff? bcr[i].depth : 0xffff;
+			bcf_callret1_t *p = bcr + i;
+			dp[i] = p->depth < 0xffff? p->depth : 0xffff;
+			if (is_SP) {
+				if (p->anno[0] + p->anno[1] < 2 || p->anno[2] + p->anno[3] < 2
+					|| p->anno[0] + p->anno[2] < 2 || p->anno[1] + p->anno[3] < 2)
+				{
+					sp[i] = 0;
+				} else {
+					double left, right, two;
+					int x;
+					kt_fisher_exact(p->anno[0], p->anno[1], p->anno[2], p->anno[3], &left, &right, &two);
+					x = (int)(-4.343 * log(two) + .499);
+					if (x > 255) x = 255;
+					sp[i] = x;
+				}
+			}
 		}
 	}
 	return 0;
