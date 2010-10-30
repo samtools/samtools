@@ -532,7 +532,7 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_FMT_SP 0x200
 
 typedef struct {
-	int max_mq, min_mq, flag, min_baseQ, capQ_thres;
+	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth;
 	char *reg, *fn_pos;
 	faidx_t *fai;
 	kh_64_t *hash;
@@ -601,7 +601,7 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 static int mpileup(mplp_conf_t *conf, int n, char **fn)
 {
 	mplp_aux_t **data;
-	int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid;
+	int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid, max_depth;
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
@@ -694,6 +694,14 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	}
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
+	max_depth = conf->max_depth;
+	if (max_depth * sm->n > 1<<20)
+		fprintf(stderr, "(%s) Max depth is above 1M. Potential memory hog!\n", __func__);
+	if (max_depth * sm->n < 8000) {
+		max_depth = 8000 / sm->n;
+		fprintf(stderr, "<%s> Set max per-sample depth to %d\n", __func__, max_depth);
+	}
+	bam_mplp_set_maxcnt(iter, max_depth);
 	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
 		if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
 		if (hash) {
@@ -771,13 +779,15 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
+	mplp.max_depth = 250;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDS")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDSd:")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
 			break;
+		case 'd': mplp.max_depth = atoi(optarg); break;
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.fn_pos = strdup(optarg); break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
@@ -803,6 +813,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
+		fprintf(stderr, "         -d INT      max per-sample depth [%d]\n", mplp.max_depth);
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
 		fprintf(stderr, "         -B          disable BAQ computation\n");

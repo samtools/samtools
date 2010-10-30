@@ -152,7 +152,7 @@ struct __bam_plp_t {
 	mempool_t *mp;
 	lbnode_t *head, *tail, *dummy;
 	int32_t tid, pos, max_tid, max_pos;
-	int is_eof, flag_mask, max_plp, error;
+	int is_eof, flag_mask, max_plp, error, maxcnt;
 	bam_pileup1_t *plp;
 	// for the "auto" interface only
 	bam1_t *b;
@@ -169,6 +169,7 @@ bam_plp_t bam_plp_init(bam_plp_auto_f func, void *data)
 	iter->dummy = mp_alloc(iter->mp);
 	iter->max_tid = iter->max_pos = -1;
 	iter->flag_mask = BAM_DEF_MASK;
+	iter->maxcnt = 8000;
 	if (func) {
 		iter->func = func;
 		iter->data = data;
@@ -240,6 +241,7 @@ int bam_plp_push(bam_plp_t iter, const bam1_t *b)
 	if (b) {
 		if (b->core.tid < 0) return 0;
 		if (b->core.flag & iter->flag_mask) return 0;
+		if (iter->tid == b->core.tid && iter->pos == b->core.pos && iter->mp->cnt > iter->maxcnt) return 0;
 		bam_copy1(&iter->tail->b, b);
 		iter->tail->beg = b->core.pos; iter->tail->end = bam_calend(&b->core, bam1_cigar(b));
 		iter->tail->s = g_cstate_null; iter->tail->s.end = iter->tail->end - 1; // initialize cstate_t
@@ -267,7 +269,7 @@ const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_
 	const bam_pileup1_t *plp;
 	if (iter->func == 0 || iter->error) { *_n_plp = -1; return 0; }
 	if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
-	else {
+	else { // no pileup line can be obtained; read alignments
 		*_n_plp = 0;
 		if (iter->is_eof) return 0;
 		while (iter->func(iter->data, iter->b) >= 0) {
@@ -276,6 +278,7 @@ const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_
 				return 0;
 			}
 			if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
+			// otherwise no pileup line can be returned; read the next alignment.
 		}
 		bam_plp_push(iter, 0);
 		if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
@@ -300,6 +303,11 @@ void bam_plp_reset(bam_plp_t iter)
 void bam_plp_set_mask(bam_plp_t iter, int mask)
 {
 	iter->flag_mask = mask < 0? BAM_DEF_MASK : (BAM_FUNMAP | mask);
+}
+
+void bam_plp_set_maxcnt(bam_plp_t iter, int maxcnt)
+{
+	iter->maxcnt = maxcnt;
 }
 
 /*****************
@@ -387,6 +395,13 @@ bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func, void **data)
 		iter->pos[i] = iter->min;
 	}
 	return iter;
+}
+
+void bam_mplp_set_maxcnt(bam_mplp_t iter, int maxcnt)
+{
+	int i;
+	for (i = 0; i < iter->n; ++i)
+		iter->iter[i]->maxcnt = maxcnt;
 }
 
 void bam_mplp_destroy(bam_mplp_t iter)
