@@ -7,6 +7,7 @@
 #include "sam.h"
 #include "kstring.h"
 #include "kaln.h"
+#include "kprobaln.h"
 
 void bam_fillmd1_core(bam1_t *b, char *ref, int is_equal, int max_nm)
 {
@@ -166,7 +167,7 @@ int bam_prob_realn(bam1_t *b, const char *ref)
 	int k, i, bw, x, y, yb, ye, xb, xe;
 	uint32_t *cigar = bam1_cigar(b);
 	bam1_core_t *c = &b->core;
-	ka_probpar_t conf = ka_probpar_def;
+	kpa_par_t conf = kpa_par_def;
 	// find the start and end of the alignment
 	if (c->flag & BAM_FUNMAP) return -1;
 	x = c->pos, y = 0, yb = ye = xb = xe = -1;
@@ -201,7 +202,7 @@ int bam_prob_realn(bam1_t *b, const char *ref)
 			r[i-xb] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[i]]];
 		state = calloc(c->l_qseq, sizeof(int));
 		q = calloc(c->l_qseq, 1);
-		ka_prob_glocal(r, xe-xb, s, c->l_qseq, qual, &conf, state, q);
+		kpa_glocal(r, xe-xb, s, c->l_qseq, qual, &conf, state, q);
 		for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
 			int op = cigar[k]&0xf, l = cigar[k]>>4;
 			if (op == BAM_CMATCH) {
@@ -275,7 +276,6 @@ int bam_fillmd(int argc, char *argv[])
 					fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
 							fp->header->target_name[tid]);
 			}
-//			if (is_realn) bam_realn(b, ref);
 			if (is_realn) bam_prob_realn(b, ref);
 			if (capQ > 10) {
 				int q = bam_cap_mapQ(b, ref, capQ);

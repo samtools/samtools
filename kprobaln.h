@@ -23,34 +23,27 @@
    SOFTWARE.
 */
 
-#ifndef LH3_KALN_H_
-#define LH3_KALN_H_
+#ifndef LH3_KPROBALN_H_
+#define LH3_KPROBALN_H_
 
 #include <stdint.h>
 
-#define MINOR_INF -1073741823
-
 typedef struct {
-	int gap_open;
-	int gap_ext;
-	int gap_end_open;
-	int gap_end_ext;
-
-	int *matrix;
-	int row;
-	int band_width;
-} ka_param_t;
+	float d, e;
+	int bw;
+} kpa_par_t;
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-	uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const ka_param_t *ap,
-							 int *_score, int *n_cigar);
+	int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_query, const uint8_t *iqual,
+				   const kpa_par_t *c, int *state, uint8_t *q);
+
 #ifdef __cplusplus
 }
 #endif
 
-extern ka_param_t ka_param_blast; /* = { 5, 2, 5, 2, aln_sm_blast, 5, 50 }; */
+extern kpa_par_t kpa_par_def; /* { 0.001, 0.1, 10 } */
 
 #endif
