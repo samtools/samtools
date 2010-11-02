@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <ctype.h>
+#include <string.h>
+#include <errno.h>
 #include "sam.h"
 #include "faidx.h"
 #include "bam_maqcns.h"
@@ -771,9 +773,61 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	return 0;
 }
 
+#define MAX_PATH_LEN 1024
+int read_file_list(const char *file_list,int *n,char **argv[])
+{
+    char buf[MAX_PATH_LEN];
+    int len, nfiles;
+    char **files;
+
+    FILE *fh = fopen(file_list,"r");
+    if ( !fh )
+    {
+        fprintf(stderr,"%s: %s\n", file_list,strerror(errno));
+        return 1;
+    }
+
+    // Speed is not an issue here, determine the number of files by reading the file twice
+    nfiles = 0;
+    while ( fgets(buf,MAX_PATH_LEN,fh) ) nfiles++;
+
+    if ( fseek(fh, 0L, SEEK_SET) )
+    {
+        fprintf(stderr,"%s: %s\n", file_list,strerror(errno));
+        return 1;
+    }
+
+    files = calloc(nfiles,sizeof(char*));
+    nfiles = 0;
+    while ( fgets(buf,MAX_PATH_LEN,fh) ) 
+    {
+        len = strlen(buf);
+        while ( len>0 && isspace(buf[len-1]) ) len--;
+        if ( !len ) continue;
+
+        files[nfiles] = malloc(sizeof(char)*(len+1)); 
+        strncpy(files[nfiles],buf,len);
+        files[nfiles][len] = 0;
+        nfiles++;
+    }
+    fclose(fh);
+    if ( !nfiles )
+    {
+        fprintf(stderr,"No files read from %s\n", file_list);
+        return 1;
+    }
+    *argv = files;
+    *n    = nfiles;
+    return 0;
+}
+#undef MAX_PATH_LEN
+
 int bam_mpileup(int argc, char *argv[])
 {
 	int c;
+    const char *file_list = NULL;
+    char **fn = NULL;
+    int nfiles = 0;
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
 	mplp.max_mq = 60;
@@ -781,7 +835,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.capQ_thres = 0;
 	mplp.max_depth = 250;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDSd:")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDSd:b:")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -802,6 +856,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
 		case 'Q': mplp.min_baseQ = atoi(optarg); break;
+        case 'b': file_list = optarg; break;
 		}
 	}
 	if (argc == 1) {
@@ -810,6 +865,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "Options: -f FILE     reference sequence file [null]\n");
 		fprintf(stderr, "         -r STR      region in which pileup is generated [null]\n");
 		fprintf(stderr, "         -l FILE     list of positions (format: chr pos) [null]\n");
+		fprintf(stderr, "         -b FILE     list of input BAM files [null]\n");
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
@@ -823,7 +879,15 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
 	}
-	mpileup(&mplp, argc - optind, argv + optind);
+    if ( file_list )
+    {
+        if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
+        mpileup(&mplp,nfiles,fn);
+        for (c=0; c<nfiles; c++) free(fn[c]);
+        free(fn);
+    }
+    else
+	    mpileup(&mplp, argc - optind, argv + optind);
 	free(mplp.reg);
 	if (mplp.fai) fai_destroy(mplp.fai);
 	return 0;
