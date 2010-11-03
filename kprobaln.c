@@ -285,7 +285,7 @@ int main(int argc, char *argv[])
 	iqual = malloc(l_query);
 	memset(iqual, q, l_query);
 	kpa_par_def.bw = b;
-	kpa_glocal(ref, l_ref, query, l_query, iqual, &kpa_par_def, 0, 0, 0);
+	kpa_glocal(ref, l_ref, query, l_query, iqual, &kpa_par_def, 0, 0);
 	free(iqual);
 	return 0;
 }

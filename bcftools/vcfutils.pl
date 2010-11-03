@@ -155,7 +155,7 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
 	next if (length($t[3]) != 1 || uc($t[3]) eq 'N');
 	$t[3] = uc($t[3]); $t[4] = uc($t[4]);
 	my @s = split(',', $t[4]);
-	$t[5] = 3 if ($t[5] < 0);
+	$t[5] = 3 if ($t[5] eq '.' || $t[5] < 0);
 	next if (length($s[0]) != 1);
 	my $hit;
 	if ($is_vcf) {
