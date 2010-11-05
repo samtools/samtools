@@ -729,6 +729,21 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0, (conf->flag&MPLP_FMT_SP));
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
+			// test if there is an indel
+			if (conf->flag&MPLP_REALN) {
+				for (i = 0; i < gplp.n; ++i) {
+					int j;
+					for (j = 0; j < gplp.n_plp[i]; ++j) {
+						const bam_pileup1_t *p = gplp.plp[i] + j;
+						if (p->indel != 0) break;
+					}
+					if (j != gplp.n_plp[i]) break;
+				}
+				if (i < gplp.n) { // at least one of the read contains a gap
+					for (i = 0; i < gplp.n; ++i)
+						bcf_call_glfgen_gap(pos, gplp.n_plp[i], gplp.plp[i], bca, bcr + i);
+				}
+			}
 		} else {
 			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
 			for (i = 0; i < n; ++i) {

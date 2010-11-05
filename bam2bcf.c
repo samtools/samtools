@@ -3,7 +3,6 @@
 #include "bam.h"
 #include "kstring.h"
 #include "bam2bcf.h"
-#include "errmod.h"
 #include "bcftools/bcf.h"
 
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
@@ -14,18 +13,15 @@ extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
 #define CAP_DIST 25
 
-struct __bcf_callaux_t {
-	int max_bases, capQ, min_baseQ;
-	uint16_t *bases;
-	errmod_t *e;
-};
-
 bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 {
 	bcf_callaux_t *bca;
 	if (theta <= 0.) theta = CALL_DEFTHETA;
 	bca = calloc(1, sizeof(bcf_callaux_t));
 	bca->capQ = 60;
+	bca->openQ = 40;
+	bca->extQ = 20;
+	bca->tandemQ = 100;
 	bca->min_baseQ = min_baseQ;
 	bca->e = errmod_init(1. - theta);
 	return bca;
@@ -57,7 +53,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 		const bam_pileup1_t *p = pl + i;
 		int q, b, mapQ, baseQ, is_diff, min_dist;
 		// set base
-		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue; // skip unmapped reads and deleted bases
+		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
 		baseQ = q = (int)bam1_qual(p->b)[p->qpos]; // base quality
 		if (q < bca->min_baseQ) continue;
 		mapQ = p->b->core.qual < bca->capQ? p->b->core.qual : bca->capQ;
@@ -85,6 +81,109 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 	// glfgen
 	errmod_cal(bca->e, n, 5, bca->bases, r->p);
 	return r->depth;
+}
+
+int bcf_call_glfgen_gap(int pos, int _n, const bam_pileup1_t *pl, bcf_callaux_t *bca, bcf_callret1_t *r)
+{
+	int i, n, n_ins, n_del;
+	memset(r, 0, sizeof(bcf_callret1_t));
+	if (_n == 0) return -1;
+
+	// enlarge the bases array if necessary
+	if (bca->max_bases < _n) {
+		bca->max_bases = _n;
+		kroundup32(bca->max_bases);
+		bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
+	}
+	// fill the bases array
+	memset(r, 0, sizeof(bcf_callret1_t));
+	r->indelreg = 10000;
+	for (i = n = 0; i < _n; ++i) {
+		const bam_pileup1_t *p = pl + i;
+		int q, b, mapQ, indelQ, is_diff, min_dist;
+		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
+		{ // compute indel (base) quality
+			// this can be made more efficient, but realignment is the bottleneck anyway
+			int j, k, x, y, op, len = 0, max_left, max_rght, seqQ, indelreg;
+			bam1_core_t *c = &p->b->core;
+			uint32_t *cigar = bam1_cigar(p->b);
+			uint8_t *qual = bam1_qual(p->b);
+			for (k = y = 0, x = c->pos; k < c->n_cigar && y <= p->qpos; ++k) {
+				op = cigar[k]&0xf;
+				len = cigar[k]>>4;
+				if (op == BAM_CMATCH) {
+					if (pos > x && pos < x + len) break;
+					x += len; y += len;
+				} else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += len;
+				else if (op == BAM_CDEL || op == BAM_CREF_SKIP) x += len;
+			}
+			if (k == c->n_cigar) continue; // this actually should not happen
+			max_left = max_rght = 0; indelreg = 0;
+			if (pos == x + len - 1 && k+2 < c->n_cigar && ((cigar[k+1]&0xf) == BAM_CINS || (cigar[k+1]&0xf) == BAM_CDEL)
+				&& (cigar[k+2]&0xf) == BAM_CMATCH)
+			{
+				for (j = y; j < y + len; ++j)
+					if (max_left < qual[j]) max_left = qual[j];
+				if ((cigar[k+1]&0xf) == BAM_CINS) y += cigar[k+1]>>4;
+				else x += cigar[k+1]>>4;
+				op = cigar[k+2]&0xf; len = cigar[k+2]>>4;
+				for (j = y; j < y + len; ++j) {
+					if (max_rght < qual[j]) max_rght = qual[j];
+					if (qual[j] > BAM2BCF_INDELREG_THRES && indelreg == 0)
+						indelreg = j - y + 1;
+				}
+			} else {
+				for (j = y; j <= p->qpos; ++j)
+					if (max_left < qual[j]) max_left = qual[j];
+				for (j = p->qpos + 1; j < y + len; ++j)
+					if (max_rght < qual[j]) max_rght = qual[j];
+					
+			}
+			indelQ = max_left < max_rght? max_left : max_rght;
+			// estimate the sequencing error rate
+			seqQ = bca->openQ;
+			if (p->indel != 0) seqQ += bca->extQ * (abs(p->indel) - 1); // FIXME: better to model homopolymer
+			if (p->indel != 0) { // a different model for tandem repeats
+				uint8_t *seq = bam1_seq(p->b);
+				int tandemQ, qb = bam1_seqi(seq, p->qpos), l;
+				for (j = p->qpos + 1; j < c->l_qseq; ++j)
+					if (qb != bam1_seqi(seq, j)) break;
+				l = j;
+				for (j = (int)p->qpos - 1; j >= 0; --j)
+					if (qb != bam1_seqi(seq, j)) break;
+				l = l - (j + 1);
+				tandemQ = (int)((double)(abs(p->indel)) / l * bca->tandemQ + .499);
+				if (seqQ > tandemQ) seqQ = tandemQ;
+			}
+//			fprintf(stderr, "%s\t%d\t%d\t%d\t%d\t%d\t%d\n", bam1_qname(p->b), pos+1, p->indel, indelQ, seqQ, max_left, max_rght);
+			if (indelQ > seqQ) indelQ = seqQ;
+			q = indelQ;
+		}
+		if (q < bca->min_baseQ) continue;
+		mapQ = p->b->core.qual < bca->capQ? p->b->core.qual : bca->capQ;
+		if (q > mapQ) q = mapQ;
+		if (q > 63) q = 63;
+		if (q < 4) q = 4;
+		b = p->indel? 1 : 0;
+		bca->bases[n++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
+		// collect annotations
+		r->qsum[b] += q;
+		is_diff = b;
+		++r->anno[0<<2|is_diff<<1|bam1_strand(p->b)];
+		min_dist = p->b->core.l_qseq - 1 - p->qpos;
+		if (min_dist > p->qpos) min_dist = p->qpos;
+		if (min_dist > CAP_DIST) min_dist = CAP_DIST;
+		r->anno[1<<2|is_diff<<1|0] += indelQ;
+		r->anno[1<<2|is_diff<<1|1] += indelQ * indelQ;
+		r->anno[2<<2|is_diff<<1|0] += mapQ;
+		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;
+		r->anno[3<<2|is_diff<<1|0] += min_dist;
+		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
+	}
+	r->depth = n;
+	// glfgen
+	errmod_cal(bca->e, n, 2, bca->bases, r->p);
+	return r->depth;	
 }
 
 int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call)
