@@ -742,6 +742,14 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				if (i < gplp.n) { // at least one of the read contains a gap
 					for (i = 0; i < gplp.n; ++i)
 						bcf_call_glfgen_gap(pos, gplp.n_plp[i], gplp.plp[i], bca, bcr + i);
+					bcf_call_combine_gap(gplp.n, bcr, &bc);
+					if (bc.depth > 0) {
+						b = calloc(1, sizeof(bcf1_t));
+						bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0,
+									 (conf->flag&MPLP_FMT_SP));
+						bcf_write(bp, bh, b);
+						bcf_destroy(b);
+					}
 				}
 			}
 		} else {

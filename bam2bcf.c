@@ -98,6 +98,7 @@ int bcf_call_glfgen_gap(int pos, int _n, const bam_pileup1_t *pl, bcf_callaux_t 
 	// fill the bases array
 	memset(r, 0, sizeof(bcf_callret1_t));
 	r->indelreg = 10000;
+	n_ins = n_del = 0;
 	for (i = n = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
 		int q, b, mapQ, indelQ, is_diff, min_dist;
@@ -132,6 +133,7 @@ int bcf_call_glfgen_gap(int pos, int _n, const bam_pileup1_t *pl, bcf_callaux_t 
 					if (qual[j] > BAM2BCF_INDELREG_THRES && indelreg == 0)
 						indelreg = j - y + 1;
 				}
+				if (r->indelreg > indelreg) r->indelreg = indelreg;
 			} else {
 				for (j = y; j <= p->qpos; ++j)
 					if (max_left < qual[j]) max_left = qual[j];
@@ -143,6 +145,11 @@ int bcf_call_glfgen_gap(int pos, int _n, const bam_pileup1_t *pl, bcf_callaux_t 
 			// estimate the sequencing error rate
 			seqQ = bca->openQ;
 			if (p->indel != 0) seqQ += bca->extQ * (abs(p->indel) - 1); // FIXME: better to model homopolymer
+			if (p->indel > 0) {
+				++n_ins; r->ins_len += p->indel;
+			} else if (p->indel < 0) {
+				++n_del; r->del_len += -p->indel;
+			}
 			if (p->indel != 0) { // a different model for tandem repeats
 				uint8_t *seq = bam1_seq(p->b);
 				int tandemQ, qb = bam1_seqi(seq, p->qpos), l;
@@ -181,6 +188,9 @@ int bcf_call_glfgen_gap(int pos, int _n, const bam_pileup1_t *pl, bcf_callaux_t 
 		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
 	}
 	r->depth = n;
+	r->ins_len = n_ins? r->ins_len / n_ins : 0;
+	r->del_len = n_del? r->del_len / n_del : 0;
+	if (r->indelreg >= 10000) r->indelreg = 0;
 	// glfgen
 	errmod_cal(bca->e, n, 2, bca->bases, r->p);
 	return r->depth;	
@@ -191,6 +201,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	int ref4, i, j, qsum[4];
 	int64_t tmp;
 	call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
+	call->ins_len = call->del_len = 0; call->indelreg = 0;
 	if (ref4 > 4) ref4 = 4;
 	// calculate qsum
 	memset(qsum, 0, 4 * sizeof(int));
@@ -253,6 +264,66 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	return 0;
 }
 
+int bcf_call_combine_gap(int n, const bcf_callret1_t *calls, bcf_call_t *call)
+{
+	int i, j, n_ins, n_del;
+	// combine annotations
+	call->ori_ref = 4;
+	memset(call->anno, 0, 16 * sizeof(int));
+	call->ins_len = call->del_len = 0; call->indelreg = 10000;
+	for (i = call->depth = 0, n_ins = n_del = 0; i < n; ++i) {
+		const bcf_callret1_t *r = calls + i;
+		if (r->depth > 0) {
+			call->depth += r->depth;
+			if (r->ins_len > 0) {
+				call->ins_len += r->ins_len;
+				++n_ins;
+			}
+			if (r->del_len > 0) {
+				call->del_len += r->del_len;
+				++n_del;
+			}
+			if (r->indelreg > 0 && call->indelreg > r->indelreg)
+				call->indelreg = r->indelreg;
+			for (j = 0; j < 16; ++j) call->anno[j] += r->anno[j];
+		}
+	}
+	if (call->depth == 0) return 0; // no indels
+	call->ins_len = n_ins? call->ins_len / n_ins : 0;
+	call->del_len = n_del? call->del_len / n_del : 0;
+	//
+	for (i = 0; i < 5; ++i) call->a[i] = -1;
+	call->a[0] = 0; call->a[1] = 1;
+	call->unseen = -1;
+	call->n_alleles = 2;
+	// set the PL array
+	if (call->n < n) {
+		call->n = n;
+		call->PL = realloc(call->PL, 15 * n);
+	}
+	{
+		int g[3];
+		double sum_min = 0.;
+		g[0] = 0; g[1] = 1; g[2] = 3;
+		for (i = 0; i < n; ++i) {
+			uint8_t *PL = call->PL + 3 * i;
+			const bcf_callret1_t *r = calls + i;
+			float min = 1e37;
+			for (j = 0; j < 3; ++j)
+				if (min > r->p[g[j]]) min = r->p[g[j]];
+			sum_min += min;
+			for (j = 0; j < 3; ++j) {
+				int y;
+				y = (int)(r->p[g[j]] - min + .499);
+				if (y > 255) y = 255;
+				PL[j] = y;
+			}
+		}
+		call->shift = (int)(sum_min + .499);
+	}
+	return 0;
+}
+
 int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int is_SP)
 {
 	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
@@ -262,11 +333,19 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	b->tid = tid; b->pos = pos; b->qual = 0;
 	s.s = b->str; s.m = b->m_str; s.l = 0;
 	kputc('\0', &s);
-	kputc("ACGTN"[bc->ori_ref], &s); kputc('\0', &s);
-	for (i = 1; i < 5; ++i) {
-		if (bc->a[i] < 0) break;
-		if (i > 1) kputc(',', &s);
-		kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &s);
+	if (bc->ins_len > 0 || bc->del_len > 0) { // an indel
+		for (i = 0; i < bc->indelreg; ++i) kputc('N', &s);
+		kputc('\0', &s);
+		if (bc->ins_len > 0 && bc->del_len > 0) kputs("<INDEL>", &s);
+		else if (bc->ins_len > 0) kputs("<INS>", &s);
+		else if (bc->del_len > 0) kputs("<DEL>", &s);
+	} else { // SNP
+		kputc("ACGTN"[bc->ori_ref], &s); kputc('\0', &s);
+		for (i = 1; i < 5; ++i) {
+			if (bc->a[i] < 0) break;
+			if (i > 1) kputc(',', &s);
+			kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &s);
+		}
 	}
 	kputc('\0', &s);
 	kputc('\0', &s);
