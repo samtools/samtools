@@ -495,7 +495,7 @@ extern "C" {
 		bam1_t *b;
 		int32_t qpos;
 		int indel, level;
-		uint32_t is_del:1, is_head:1, is_tail:1, is_refskip:1;
+		uint32_t is_del:1, is_head:1, is_tail:1, is_refskip:1, aux:28;
 	} bam_pileup1_t;
 
 	typedef int (*bam_plp_auto_f)(void *data, bam1_t *b);

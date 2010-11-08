@@ -14,18 +14,13 @@ extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
 #define CAP_DIST 25
 
-struct __bcf_callaux_t {
-	int max_bases, capQ, min_baseQ;
-	uint16_t *bases;
-	errmod_t *e;
-};
-
 bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 {
 	bcf_callaux_t *bca;
 	if (theta <= 0.) theta = CALL_DEFTHETA;
 	bca = calloc(1, sizeof(bcf_callaux_t));
 	bca->capQ = 60;
+	bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 70;
 	bca->min_baseQ = min_baseQ;
 	bca->e = errmod_init(1. - theta);
 	return bca;

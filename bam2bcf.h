@@ -2,10 +2,20 @@
 #define BAM2BCF_H
 
 #include <stdint.h>
+#include "errmod.h"
 #include "bcftools/bcf.h"
 
-struct __bcf_callaux_t;
-typedef struct __bcf_callaux_t bcf_callaux_t;
+#define B2B_INDEL_NULL 10000
+
+typedef struct __bcf_callaux_t {
+	int capQ, min_baseQ;
+	int openQ, extQ, tandemQ;
+	// for internal uses
+	int max_bases;
+	int indel_types[4];
+	uint16_t *bases;
+	errmod_t *e;
+} bcf_callaux_t;
 
 typedef struct {
 	int depth, qsum[4];
@@ -29,6 +39,7 @@ extern "C" {
 	int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf_callaux_t *bca, bcf_callret1_t *r);
 	int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call);
 	int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int is_SP);
+	int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref);
 
 #ifdef __cplusplus
 }

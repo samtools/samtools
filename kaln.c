@@ -73,8 +73,18 @@ int aln_sm_blast[] = {
 	-2, -2, -2, -2, -2
 };
 
+int aln_sm_qual[] = {
+	  0, -23, -23, -23, 0,
+	-23,   0, -23, -23, 0,
+	-23, -23,   0, -23, 0,
+	-23, -23, -23,   0, 0,
+	  0,   0,   0,   0, 0
+};
+
 ka_param_t ka_param_blast = {  5,  2,   5, 2, aln_sm_blast, 5, 50 };
 ka_param_t ka_param_aa2aa = { 10,  2,  10, 2, aln_sm_blosum62, 22, 50 };
+
+ka_param2_t ka_param2_qual  = { 35, 5, 35, 5, 35, 5, 0, 0, aln_sm_qual, 5, 50 };
 
 static uint32_t *ka_path2cigar32(const path_t *path, int path_len, int *n_cigar)
 {
@@ -176,7 +186,7 @@ static uint32_t *ka_path2cigar32(const path_t *path, int path_len, int *n_cigar)
 }
 
 typedef struct {
-	uint8_t Mt:3, It:2, Dt:2;
+	uint8_t Mt:3, It:2, Dt:3;
 } dpcell_t;
 
 typedef struct {
@@ -208,7 +218,7 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 	score_matrix = ap->matrix;
 	N_MATRIX_ROW = ap->row;
 
-	*n_cigar = 0;
+	if (n_cigar) *n_cigar = 0;
 	if (len1 == 0 || len2 == 0) return 0;
 
 	/* calculate b1 and b2 */
@@ -370,3 +380,107 @@ uint32_t *ka_global_core(uint8_t *seq1, int len1, uint8_t *seq2, int len2, const
 
 	return cigar;
 }
+
+typedef struct {
+	int M, I, D;
+} score_aux_t;
+
+#define MINUS_INF -0x40000000
+
+// matrix: len2 rows and len1 columns
+int ka_global_score(const uint8_t *_seq1, int len1, const uint8_t *_seq2, int len2, const ka_param2_t *ap)
+{
+	
+#define __score_aux(_p, _q0, _sc, _io, _ie, _do, _de) {					\
+		int t1, t2;														\
+		score_aux_t *_q;												\
+		_q = _q0;														\
+		_p->M = _q->M >= _q->I? _q->M : _q->I;							\
+		_p->M = _p->M >= _q->D? _p->M : _q->D;							\
+		_p->M += (_sc);													\
+		++_q;      t1 = _q->M - _io - _ie; t2 = _q->I - _ie; _p->I = t1 >= t2? t1 : t2; \
+		_q = _p-1; t1 = _q->M - _do - _de; t2 = _q->D - _de; _p->D = t1 >= t2? t1 : t2; \
+	}
+
+	int i, j, bw, scmat_size = ap->row, *scmat = ap->matrix, ret;
+	const uint8_t *seq1, *seq2;
+	score_aux_t *curr, *last, *swap;
+	bw = abs(len1 - len2) + ap->band_width;
+	i = len1 > len2? len1 : len2;
+	if (bw > i + 1) bw = i + 1;
+	seq1 = _seq1 - 1; seq2 = _seq2 - 1;
+	curr = calloc(len1 + 2, sizeof(score_aux_t));
+	last = calloc(len1 + 2, sizeof(score_aux_t));
+	{ // the zero-th row
+		int x, end = len1;
+		score_aux_t *p;
+		j = 0;
+		x = j + bw; end = len1 < x? len1 : x; // band end
+		p = curr;
+		p->M = 0; p->I = p->D = MINUS_INF;
+		for (i = 1, p = &curr[1]; i <= end; ++i, ++p)
+			p->M = p->I = MINUS_INF, p->D = -(ap->edo + ap->ede * i);
+		p->M = p->I = p->D = MINUS_INF;
+		swap = curr; curr = last; last = swap;
+	}
+	for (j = 1; j < len2; ++j) {
+		int x, beg = 0, end = len1, *scrow, col_end;
+		score_aux_t *p;
+		x = j - bw; beg =    0 > x?    0 : x; // band start
+		x = j + bw; end = len1 < x? len1 : x; // band end
+		if (beg == 0) { // from zero-th column
+			p = curr;
+			p->M = p->D = MINUS_INF; p->I = -(ap->eio + ap->eie * j);
+			++beg; // then beg = 1
+		}
+		scrow = scmat + seq2[j] * scmat_size;
+		if (end == len1) col_end = 1, --end;
+		else col_end = 0;
+		for (i = beg, p = &curr[beg]; i <= end; ++i, ++p)
+			__score_aux(p, &last[i-1], scrow[(int)seq1[i]], ap->iio, ap->iie, ap->ido, ap->ide);
+		if (col_end) {
+			__score_aux(p, &last[i-1], scrow[(int)seq1[i]], ap->eio, ap->eie, ap->ido, ap->ide);
+			++p;
+		}
+		p->M = p->I = p->D = MINUS_INF;
+//		for (i = 0; i <= len1; ++i) printf("(%d,%d,%d) ", curr[i].M, curr[i].I, curr[i].D); putchar('\n');
+		swap = curr; curr = last; last = swap;
+	}
+	{ // the last row
+		int x, beg = 0, *scrow;
+		score_aux_t *p;
+		j = len2;
+		x = j - bw; beg = 0 > x?    0 : x; // band start
+		if (beg == 0) { // from zero-th column
+			p = curr;
+			p->M = p->D = MINUS_INF; p->I = -(ap->eio + ap->eie * j);
+			++beg; // then beg = 1
+		}
+		scrow = scmat + seq2[j] * scmat_size;
+		for (i = beg, p = &curr[beg]; i < len1; ++i, ++p)
+			__score_aux(p, &last[i-1], scrow[(int)seq1[i]], ap->iio, ap->iie, ap->edo, ap->ede);
+		__score_aux(p, &last[i-1], scrow[(int)seq1[i]], ap->eio, ap->eie, ap->edo, ap->ede);
+//		for (i = 0; i <= len1; ++i) printf("(%d,%d,%d) ", curr[i].M, curr[i].I, curr[i].D); putchar('\n');
+	}
+	ret = curr[len1].M >= curr[len1].I? curr[len1].M : curr[len1].I;
+	ret = ret >= curr[len1].D? ret : curr[len1].D;
+	free(curr); free(last);
+	return ret;
+}
+
+#ifdef _MAIN
+int main(int argc, char *argv[])
+{
+//	int len1 = 35, len2 = 35;
+//	uint8_t *seq1 = (uint8_t*)"\0\0\3\3\2\0\0\0\1\0\2\1\2\1\3\2\3\3\3\0\2\3\2\1\1\3\3\3\2\3\3\1\0\0\1";
+//	uint8_t *seq2 = (uint8_t*)"\0\0\3\3\2\0\0\0\1\0\2\1\2\1\3\2\3\3\3\0\2\3\2\1\1\3\3\3\2\3\3\1\0\1\0";
+	int len1 = 4, len2 = 4;
+	uint8_t *seq1 = (uint8_t*)"\1\0\0\1";
+	uint8_t *seq2 = (uint8_t*)"\1\0\1\0";
+	int sc;
+//	ka_global_core(seq1, 2, seq2, 1, &ka_param_qual, &sc, 0);
+	sc = ka_global_score(seq1, len1, seq2, len2, &ka_param2_qual);
+	printf("%d\n", sc);
+	return 0;
+}
+#endif
