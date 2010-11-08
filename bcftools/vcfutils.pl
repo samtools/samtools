@@ -199,33 +199,24 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
 }
 
 sub varFilter {
-  my %opts = (d=>1, D=>10000, l=>30, Q=>25, q=>10, G=>25, s=>100, w=>10, W=>10, N=>2, p=>undef, F=>.001);
-  getopts('pq:d:D:l:Q:w:W:N:G:F:', \%opts);
+  my %opts = (d=>1, D=>10000, l=>10, Q=>10, s=>100, w=>10, p=>undef, F=>.001);
+  getopts('pd:D:l:Q:w:G:F:', \%opts);
   die(qq/
 Usage:   vcfutils.pl varFilter [options] <in.vcf>
 
 Options: -Q INT    minimum RMS mapping quality for SNPs [$opts{Q}]
-         -q INT    minimum RMS mapping quality for gaps [$opts{q}]
          -d INT    minimum read depth [$opts{d}]
          -D INT    maximum read depth [$opts{D}]
-
-         -G INT    min indel score for nearby SNP filtering [$opts{G}]
          -w INT    SNP within INT bp around a gap to be filtered [$opts{w}]
-
-         -W INT    window size for filtering dense SNPs [$opts{W}]
-         -N INT    max number of SNPs in a window [$opts{N}]
-
          -l INT    window size for filtering adjacent gaps [$opts{l}]
-
          -p        print filtered variants
 \n/) if (@ARGV == 0 && -t STDIN);
 
   # calculate the window size
-  my ($ol, $ow, $oW) = ($opts{l}, $opts{w}, $opts{W});
+  my ($ol, $ow) = ($opts{l}, $opts{w});
   my $max_dist = $ol > $ow? $ol : $ow;
-  $max_dist = $oW if ($max_dist < $oW);
   # the core loop
-  my @staging; # (indel_filtering_score, flt_tag)
+  my @staging; # (indel_filtering_score, flt_tag, indel_span; chr, pos, ...)
   while (<>) {
 	my @t = split;
 	next if (/^#/);
@@ -245,24 +236,18 @@ Options: -Q INT    minimum RMS mapping quality for SNPs [$opts{Q}]
 	  last if ($staging[0][3] eq $t[0] && $staging[0][4] + $staging[0][2] + $max_dist >= $t[1]);
 	  varFilter_aux(shift(@staging), $opts{p}); # calling a function is a bit slower, not much
 	}
-	my ($flt, $score) = (0, -1);
+	my $flt = 0;
 
-	# collect key annotations
-	my ($dp, $mq, $af) = (-1, -1, 1);
+	# parse annotations
+	my ($dp, $mq, $dp_alt) = (-1, -1, -1);
 	if ($t[7] =~ /DP=(\d+)/i) {
 	  $dp = $1;
 	} elsif ($t[7] =~ /DP4=(\d+),(\d+),(\d+),(\d+)/i) {
 	  $dp = $1 + $2 + $3 + $4;
+	  $dp_alt = $3 + $4;
 	}
-	if ($t[7] =~ /MQ=(\d+)/i) {
-	  $mq = $1;
-	}
-	if ($t[7] =~ /AF=([^\s;=]+)/i) {
-	  $af = $1;
-	} elsif ($t[7] =~ /AF1=([^\s;=]+)/i) {
-	  $af = $1;
-	}
-	# the depth filter
+	$mq = $1 if ($t[7] =~ /MQ=(\d+)/i);
+	# the depth and mapQ filter
 	if ($dp >= 0) {
 	  if ($dp < $opts{d}) {
 		$flt = 2;
@@ -270,58 +255,37 @@ Options: -Q INT    minimum RMS mapping quality for SNPs [$opts{Q}]
 		$flt = 3;
 	  }
 	}
+	$flt = 1 if ($flt == 0 && $mq >= 0 && $mq < $opts{Q});
 
 	# site dependent filters
-	my $dlen = 0;
+	my ($rlen, $indel_score) = (0, -1); # $indel_score<0 for SNPs
 	if ($flt == 0) {
 	  if (!$is_snp) { # an indel
-        # If deletion, remember the length of the deletion
-		$dlen = length($t[3]) - 1;
-		$flt = 1 if ($mq < $opts{q});
+		$rlen = length($t[3]) - 1;
+		$indel_score = $t[5] * 100 + $dp_alt;
 		# filtering SNPs
-		if ($t[5] >= $opts{G}) {
-		  for my $x (@staging) {
-            # Is it a SNP and is it outside the SNP filter window?
-			next if ($x->[0] >= 0 || $x->[4] + $x->[2] + $ow < $t[1]);
-			$x->[1] = 5 if ($x->[1] == 0);
-		  }
+		for my $x (@staging) {
+		  next if ($x->[0] >= 0 || $x->[1] || $x->[4] + $x->[2] + $ow < $t[1]);
+		  $x->[1] = 5;
 		}
-		# the indel filtering score
-		$score = $t[5];
 		# check the staging list for indel filtering
 		for my $x (@staging) {
-          # Is it a SNP and is it outside the gap filter window
-		  next if ($x->[0] < 0 || $x->[4] + $x->[2] + $ol < $t[1]);
-		  if ($x->[0] < $score) {
+		  next if ($x->[0] < 0 || $x->[1] || $x->[4] + $x->[2] + $ol < $t[1]);
+		  if ($x->[0] < $indel_score) {
 			$x->[1] = 6;
 		  } else {
 			$flt = 6; last;
 		  }
 		}
 	  } else { # a SNP
-		$flt = 1 if ($mq < $opts{Q});
-		# check adjacent SNPs
-		my $k = 1;
 		for my $x (@staging) {
-		  ++$k if ($x->[0] < 0 && -($x->[0] + 1) > $opts{F} && $x->[4] + $x->[2] + $oW >= $t[1] && ($x->[1] == 0 || $x->[1] == 4 || $x->[1] == 5));
-		}
-		# filtering is necessary
-		if ($k > $opts{N}) {
-		  $flt = 4;
-		  for my $x (@staging) {
-			 $x->[1] = 4 if ($x->[0] < 0 && $x->[4] + $x->[2] + $oW >= $t[1] && $x->[1] == 0);
-		  }
-		} else { # then check gap filter
-		  for my $x (@staging) {
-			next if ($x->[0] < 0 || $x->[4] + $x->[2] + $ow < $t[1]);
-			if ($x->[0] >= $opts{G}) {
-			  $flt = 5; last;
-			}
-		  }
+		  next if ($x->[0] < 0 || $x->[1] || $x->[4] + $x->[2] + $ow < $t[1]);
+		  $flt = 5;
+		  last;
 		}
 	  }
 	}
-	push(@staging, [$score < 0? -$af-1 : $score, $flt, $dlen, @t]);
+	push(@staging, [$indel_score, $flt, $rlen, @t]);
   }
   # output the last few elements in the staging list
   while (@staging) {

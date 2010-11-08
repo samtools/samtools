@@ -206,15 +206,15 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					query[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(seq, l)];
 				// do alignment; this takes most of computing time for indel calling
 				sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
-									 (uint8_t*)query + qbeg, qend - qbeg, &ap);
+									 (uint8_t*)query, qend - qbeg, &ap);
 				score[K*n_types + t] = -sc;
 /*
 				for (l = 0; l < tend - tbeg + abs(types[t]); ++l)
 					fputc("ACGTN"[(int)ref2[tbeg-left+l]], stderr);
 				fputc('\n', stderr);
-				for (l = 0; l < qend - qbeg; ++l) fputc("ACGTN"[(int)query[qbeg + l]], stderr);
+				for (l = 0; l < qend - qbeg; ++l) fputc("ACGTN"[(int)query[l]], stderr);
 				fputc('\n', stderr);
-				fprintf(stderr, "pos=%d type=%d read=%d:%d name=%s score=%d\n", pos, types[t], s, i, bam1_qname(p->b), sc);
+				fprintf(stderr, "pos=%d type=%d read=%d:%d name=%s qbeg=%d tbeg=%d score=%d\n", pos, types[t], s, i, bam1_qname(p->b), qbeg, tbeg, sc);
 */
 			}
 		}
