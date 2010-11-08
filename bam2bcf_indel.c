@@ -42,7 +42,7 @@ static inline int est_seqQ(const bcf_callaux_t *bca, int l, int l_run)
 {
 	int q, qh;
 	q = bca->openQ + bca->extQ * (abs(l) - 1);
-	qh = l_run >= 3? (int)(bca->tandemQ * (double)l / l_run + .499) : 1000;
+	qh = l_run >= 3? (int)(bca->tandemQ * (double)abs(l) / l_run + .499) : 1000;
 	return q < qh? q : qh;
 }
 
@@ -53,7 +53,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	char *inscns = 0, *ref2, *query;
 	if (ref == 0 || bca == 0) return -1;
 	// determine if there is a gap
-	for (s = 0; s < n; ++s) {
+	for (s = N = 0; s < n; ++s) {
+		N += n_plp[s]; // N is the total number of reads
 		for (i = 0; i < n_plp[s]; ++i)
 			if (plp[s][i].indel != 0) break;
 		if (i < n_plp[s]) break;
@@ -62,11 +63,10 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	{ // find out how many types of indels are present
 		int m;
 		uint32_t *aux;
-		aux = calloc(n + 1, 4);
+		aux = calloc(N + 1, 4);
 		m = max_rd_len = 0;
 		aux[m++] = MINUS_CONST; // zero indel is always a type
-		for (s = N = 0; s < n; ++s) {
-			N += n_plp[s]; // N is the total number of reads
+		for (s = 0; s < n; ++s) {
 			for (i = 0; i < n_plp[s]; ++i) {
 				const bam_pileup1_t *p = plp[s] + i;
 				if (p->indel != 0)
@@ -178,30 +178,29 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				// determine the start and end of sequences for alignment
 				qbeg = tpos2qpos(&p->b->core, bam1_cigar(p->b), left,  0, &tbeg);
 				qend = tpos2qpos(&p->b->core, bam1_cigar(p->b), right, 1, &tend);
-				assert(tbeg >= left);
+				if (types[t] < 0) {
+					int l = -types[t];
+					tbeg = tbeg - l > left?  tbeg - l : left;
+				}
 				// write the query sequence
 				for (l = qbeg; l < qend; ++l)
 					query[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(seq, l)];
 				// do alignment; this takes most of computing time for indel calling
-#ifdef INDEL_DEBUG
-				for (sc = 0; sc < tend - tbeg + types[t]; ++sc)
-					fputc("ACGTN"[(int)ref2[tbeg-left+sc]], stderr);
-				fputc('\n', stderr);
-				for (sc = 0; sc < qend - qbeg; ++sc) fputc("ACGTN"[(int)query[qbeg + sc]], stderr);
-				fputc('\n', stderr);				
-#endif
 				sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
 									 (uint8_t*)query + qbeg, qend - qbeg, &ap);
-#ifdef INDEL_DEBUG
-				fprintf(stderr, "pos=%d type=%d read=%d:%d name=%s score=%d\n", pos, types[t], s, i, bam1_qname(p->b), sc);
-#endif
 				score[K*n_types + t] = -sc;
+///*
+				for (l = 0; l < tend - tbeg + abs(types[t]); ++l)
+					fputc("ACGTN"[(int)ref2[tbeg-left+l]], stderr);
+				fputc('\n', stderr);
+				for (l = 0; l < qend - qbeg; ++l) fputc("ACGTN"[(int)query[qbeg + l]], stderr);
+				fputc('\n', stderr);
+				fprintf(stderr, "pos=%d type=%d read=%d:%d name=%s score=%d\n", pos, types[t], s, i, bam1_qname(p->b), sc);
+//*/
 			}
 		}
 	}
 	free(ref2); free(query);
-	{ // choose the top 4 indel types; reference must be included
-	}
 	{ // compute indelQ
 		int *sc, tmp, *sumq;
 		sc   = alloca(n_types * sizeof(int));
@@ -235,6 +234,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				if (indelQ > bca->capQ) indelQ = bca->capQ;
 				p->aux = (sc[0]&0x3f)<<8 | indelQ;
 				sumq[sc[0]&0x3f] += indelQ;
+				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d,%d\n", pos, s, i, bam1_qname(p->b),
+						types[sc[0]&0x3f], indelQ, tmp);
 			}
 		}
 		// determine bca->indel_types[]

@@ -20,7 +20,7 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 	if (theta <= 0.) theta = CALL_DEFTHETA;
 	bca = calloc(1, sizeof(bcf_callaux_t));
 	bca->capQ = 60;
-	bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 70;
+	bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 100;
 	bca->min_baseQ = min_baseQ;
 	bca->e = errmod_init(1. - theta);
 	return bca;
