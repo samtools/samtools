@@ -729,7 +729,17 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0, (conf->flag&MPLP_FMT_SP));
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
-//			bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref);
+			// call indels
+			if (bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref) >= 0) {
+				for (i = 0; i < gplp.n; ++i)
+					bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], -1, bca, bcr + i);
+				bcf_call_combine(gplp.n, bcr, -1, &bc);
+				b = calloc(1, sizeof(bcf1_t));
+				bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0,
+							 (conf->flag&MPLP_FMT_SP));
+				bcf_write(bp, bh, b);
+				bcf_destroy(b);
+			}
 		} else {
 			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
 			for (i = 0; i < n; ++i) {

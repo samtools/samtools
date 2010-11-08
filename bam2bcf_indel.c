@@ -4,11 +4,8 @@
 #include "ksort.h"
 #include "kaln.h"
 
-#define INDEL_DEBUG
-
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
-#define INDEL_BAD_SCORE 10000
 
 static int tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, int is_left, int32_t *_tpos)
 {
@@ -37,6 +34,7 @@ static int tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, 
 	*_tpos = x;
 	return last_y;
 }
+// FIXME: check if the inserted sequence is consistent with the homopolymer run
 // l is the relative gap length and l_run is the length of the homopolymer on the reference
 static inline int est_seqQ(const bcf_callaux_t *bca, int l, int l_run)
 {
@@ -189,14 +187,14 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
 									 (uint8_t*)query + qbeg, qend - qbeg, &ap);
 				score[K*n_types + t] = -sc;
-///*
+/*
 				for (l = 0; l < tend - tbeg + abs(types[t]); ++l)
 					fputc("ACGTN"[(int)ref2[tbeg-left+l]], stderr);
 				fputc('\n', stderr);
 				for (l = 0; l < qend - qbeg; ++l) fputc("ACGTN"[(int)query[qbeg + l]], stderr);
 				fputc('\n', stderr);
 				fprintf(stderr, "pos=%d type=%d read=%d:%d name=%s score=%d\n", pos, types[t], s, i, bam1_qname(p->b), sc);
-//*/
+*/
 			}
 		}
 	}
@@ -230,12 +228,9 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					tmp = est_seqQ(bca, types[sc[0]&0x3f], l_run);
 				}
 				if (indelQ > tmp) indelQ = tmp;
-				if (indelQ > p->b->core.qual) indelQ = p->b->core.qual;
-				if (indelQ > bca->capQ) indelQ = bca->capQ;
 				p->aux = (sc[0]&0x3f)<<8 | indelQ;
 				sumq[sc[0]&0x3f] += indelQ;
-				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d,%d\n", pos, s, i, bam1_qname(p->b),
-						types[sc[0]&0x3f], indelQ, tmp);
+//				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ);
 			}
 		}
 		// determine bca->indel_types[]
@@ -254,6 +249,17 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		for (t = 0; t < 4; ++t) bca->indel_types[t] = B2B_INDEL_NULL;
 		for (t = 0; t < 4 && t < n_types; ++t)
 			bca->indel_types[t] = types[sumq[t]&0x3f];
+		// update p->aux
+		for (s = K = 0; s < n; ++s) {
+			for (i = 0; i < n_plp[s]; ++i, ++K) {
+				bam_pileup1_t *p = plp[s] + i;
+				int x = types[p->aux>>8&0x3f];
+				for (j = 0; j < 4; ++j)
+					if (x == bca->indel_types[j]) break;
+				p->aux = j<<8 | (j == 4? 0 : (p->aux&0xff));
+//				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), p->aux>>8&63, p->aux&0xff);
+			}
+		}		
 	}
 	// FIXME: to set the inserted sequence
 	free(score);

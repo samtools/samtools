@@ -84,7 +84,7 @@ int aln_sm_qual[] = {
 ka_param_t ka_param_blast = {  5,  2,   5, 2, aln_sm_blast, 5, 50 };
 ka_param_t ka_param_aa2aa = { 10,  2,  10, 2, aln_sm_blosum62, 22, 50 };
 
-ka_param2_t ka_param2_qual  = { 35, 5, 35, 5, 35, 5, 0, 0, aln_sm_qual, 5, 50 };
+ka_param2_t ka_param2_qual  = { 37, 11, 37, 11, 37, 11, 0, 0, aln_sm_qual, 5, 50 };
 
 static uint32_t *ka_path2cigar32(const path_t *path, int path_len, int *n_cigar)
 {

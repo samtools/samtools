@@ -20,7 +20,7 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 	if (theta <= 0.) theta = CALL_DEFTHETA;
 	bca = calloc(1, sizeof(bcf_callaux_t));
 	bca->capQ = 60;
-	bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 100;
+	bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 80;
 	bca->min_baseQ = min_baseQ;
 	bca->e = errmod_init(1. - theta);
 	return bca;
@@ -32,14 +32,17 @@ void bcf_call_destroy(bcf_callaux_t *bca)
 	errmod_destroy(bca->e);
 	free(bca->bases); free(bca);
 }
-
-int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf_callaux_t *bca, bcf_callret1_t *r)
+/* ref_base is the 4-bit representation of the reference base. It is
+ * negative if we are looking at an indel. */
+int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
-	int i, n, ref4;
+	int i, n, ref4, is_indel;
 	memset(r, 0, sizeof(bcf_callret1_t));
-	ref4 = bam_nt16_nt4_table[ref_base];
+	if (ref_base >= 0) {
+		ref4 = bam_nt16_nt4_table[ref_base];
+		is_indel = 0;
+	} else ref4 = 4, is_indel = 1;
 	if (_n == 0) return -1;
-
 	// enlarge the bases array if necessary
 	if (bca->max_bases < _n) {
 		bca->max_bases = _n;
@@ -52,19 +55,24 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base /*4-bit*/, bcf
 		const bam_pileup1_t *p = pl + i;
 		int q, b, mapQ, baseQ, is_diff, min_dist;
 		// set base
-		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue; // skip unmapped reads and deleted bases
-		baseQ = q = (int)bam1_qual(p->b)[p->qpos]; // base quality
+		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
+		baseQ = q = is_indel? p->aux&0xff : (int)bam1_qual(p->b)[p->qpos]; // base/indel quality
 		if (q < bca->min_baseQ) continue;
 		mapQ = p->b->core.qual < bca->capQ? p->b->core.qual : bca->capQ;
 		if (q > mapQ) q = mapQ;
 		if (q > 63) q = 63;
 		if (q < 4) q = 4;
-		b = bam1_seqi(bam1_seq(p->b), p->qpos); // base
-		b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
+		if (!is_indel) {
+			b = bam1_seqi(bam1_seq(p->b), p->qpos); // base
+			b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
+			is_diff = (ref4 < 4 && b == ref4)? 0 : 1;
+		} else {
+			b = p->aux>>8&0x3f;
+			is_diff = (b != 0);
+		}
 		bca->bases[n++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
 		// collect annotations
 		r->qsum[b] += q;
-		is_diff = (ref4 < 4 && b == ref4)? 0 : 1;
 		++r->anno[0<<2|is_diff<<1|bam1_strand(p->b)];
 		min_dist = p->b->core.l_qseq - 1 - p->qpos;
 		if (min_dist > p->qpos) min_dist = p->qpos;
@@ -86,8 +94,10 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 {
 	int ref4, i, j, qsum[4];
 	int64_t tmp;
-	call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
-	if (ref4 > 4) ref4 = 4;
+	if (ref_base >= 0) {
+		call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
+		if (ref4 > 4) ref4 = 4;
+	} else call->ori_ref = -1, ref4 = 0;
 	// calculate qsum
 	memset(qsum, 0, 4 * sizeof(int));
 	for (i = 0; i < n; ++i)
@@ -108,9 +118,11 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 			else break;
 		}
 	}
-	if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
-		call->unseen = j, call->a[j++] = qsum[i]&3;
-	call->n_alleles = j;
+	if (ref_base >= 0) { // for SNPs, find the "unseen" base
+		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
+			call->unseen = j, call->a[j++] = qsum[i]&3;
+		call->n_alleles = j;
+	} else call->n_alleles = j;
 	// set the PL array
 	if (call->n < n) {
 		call->n = n;
@@ -138,6 +150,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 				PL[j] = y;
 			}
 		}
+//		if (ref_base < 0) fprintf(stderr, "%d,%d,%f,%d\n", call->n_alleles, x, sum_min, call->unseen);
 		call->shift = (int)(sum_min + .499);
 	}
 	// combine annotations
@@ -158,13 +171,18 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	b->tid = tid; b->pos = pos; b->qual = 0;
 	s.s = b->str; s.m = b->m_str; s.l = 0;
 	kputc('\0', &s);
-	kputc("ACGTN"[bc->ori_ref], &s); kputc('\0', &s);
-	for (i = 1; i < 5; ++i) {
-		if (bc->a[i] < 0) break;
-		if (i > 1) kputc(',', &s);
-		kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &s);
+	if (bc->ori_ref < 0) {
+		kputc('N', &s); kputc('\0', &s);
+		kputs("<INDEL>", &s); kputc('\0', &s);
+	} else {
+		kputc("ACGTN"[bc->ori_ref], &s); kputc('\0', &s);
+		for (i = 1; i < 5; ++i) {
+			if (bc->a[i] < 0) break;
+			if (i > 1) kputc(',', &s);
+			kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &s);
+		}
+		kputc('\0', &s);
 	}
-	kputc('\0', &s);
 	kputc('\0', &s);
 	// INFO
 	kputs("I16=", &s);
