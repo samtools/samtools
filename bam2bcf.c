@@ -183,7 +183,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 			if (bc->a[i] < 0) break;
 			if (i > 1) kputc(',', &s);
 			if (bca->indel_types[bc->a[i]] < 0) { // deletion
-				for (j = -bca->indel_types[bc->a[i]]; j < bca->indelreg; ++i)
+				for (j = -bca->indel_types[bc->a[i]]; j < bca->indelreg; ++j)
 					kputc(ref[pos+1+j], &s);
 			} else { // insertion; cannot be a reference unless a bug
 				char *inscns = &bca->inscns[bc->a[i] * bca->maxins];
