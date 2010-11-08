@@ -1,4 +1,163 @@
 ------------------------------------------------------------------------
+r797 | lh3lh3 | 2010-11-08 13:39:52 -0500 (Mon, 08 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-2 (r797)
+ * mpileup: indel calling seems to be working
+
+------------------------------------------------------------------------
+r796 | lh3lh3 | 2010-11-08 10:54:46 -0500 (Mon, 08 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/kaln.c
+
+indel calling is apparently working, but more information needs to be collected
+
+------------------------------------------------------------------------
+r795 | lh3lh3 | 2010-11-08 00:39:18 -0500 (Mon, 08 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf_indel.c
+
+fixed a few bugs in the indel caller. Probably there are more.
+
+------------------------------------------------------------------------
+r794 | lh3lh3 | 2010-11-07 22:23:16 -0500 (Sun, 07 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   A /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/kaln.c
+   M /trunk/samtools/kaln.h
+
+prepare for the indel caller. It is not ready yet.
+
+------------------------------------------------------------------------
+r793 | lh3lh3 | 2010-11-05 11:28:23 -0400 (Fri, 05 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam_plcmd.c
+
+Revert to r790. The recent changes are not good...
+
+------------------------------------------------------------------------
+r792 | lh3lh3 | 2010-11-05 00:19:14 -0400 (Fri, 05 Nov 2010) | 6 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam_plcmd.c
+
+ * this revision is UNSTABLE
+
+ * indel caller seems working, but it is very insensitive and has
+   several things I do not quite understand.
+
+
+------------------------------------------------------------------------
+r791 | lh3lh3 | 2010-11-04 22:58:43 -0400 (Thu, 04 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam_plcmd.c
+
+for backup. no effective changes
+
+------------------------------------------------------------------------
+r790 | lh3lh3 | 2010-11-03 15:51:24 -0400 (Wed, 03 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+   M /trunk/samtools/kprobaln.c
+
+fixed a minor problem in the example coming with kprobaln.c
+
+------------------------------------------------------------------------
+r789 | lh3lh3 | 2010-11-02 15:41:27 -0400 (Tue, 02 Nov 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/kaln.c
+   M /trunk/samtools/kaln.h
+   A /trunk/samtools/kprobaln.c
+   A /trunk/samtools/kprobaln.h
+
+Separate kaln and kprobaln as I am preparing further changes. At
+present, the results should be identical to the previous.
+
+
+------------------------------------------------------------------------
+r788 | petulda | 2010-11-02 12:19:04 -0400 (Tue, 02 Nov 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+Added -b option: read file names from a file
+------------------------------------------------------------------------
+r787 | lh3lh3 | 2010-10-29 23:17:22 -0400 (Fri, 29 Oct 2010) | 7 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-2 (r787)
+
+ * Allow to set a maximum per-sample depth to reduce memory. However,
+   BAQ computation is still applied to every read. The speed is not
+   improved.
+
+
+------------------------------------------------------------------------
+r786 | lh3lh3 | 2010-10-29 12:10:40 -0400 (Fri, 29 Oct 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/vcf.c
+
+ * samtools-0.1.9-1 (r786)
+ * samtools: optionally perform exact test for each sample
+
+------------------------------------------------------------------------
+r785 | lh3lh3 | 2010-10-29 09:42:25 -0400 (Fri, 29 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bcftools/bcf.c
+
+Optionally output "DP", the individual read depth
+
+------------------------------------------------------------------------
+r784 | lh3lh3 | 2010-10-27 23:10:27 -0400 (Wed, 27 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/samtools.1
+
+acknowledge Petr and John who have greatly contributed to the project.
+
+------------------------------------------------------------------------
+r783 | lh3lh3 | 2010-10-27 22:47:47 -0400 (Wed, 27 Oct 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+Release samtools-0.1.9 (r783)
+
+------------------------------------------------------------------------
 r782 | lh3lh3 | 2010-10-27 19:58:54 -0400 (Wed, 27 Oct 2010) | 2 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c

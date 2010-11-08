@@ -9,6 +9,13 @@
 #include "khash.h"
 KHASH_SET_INIT_STR(rg)
 
+// When counting records instead of printing them,
+// data passed to the bam_fetch callback is encapsulated in this struct.
+typedef struct {
+	bam_header_t *header;
+	int *count;
+} count_func_data_t;
+
 typedef khash_t(rg) *rghash_t;
 
 rghash_t g_rghash = 0;
@@ -54,7 +61,7 @@ static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 	return 0;
 }
 
-// callback function for bam_fetch()
+// callback function for bam_fetch() that prints nonskipped records
 static int view_func(const bam1_t *b, void *data)
 {
 	if (!__g_skip_aln(((samfile_t*)data)->header, b))
@@ -62,19 +69,30 @@ static int view_func(const bam1_t *b, void *data)
 	return 0;
 }
 
+// callback function for bam_fetch() that counts nonskipped records
+static int count_func(const bam1_t *b, void *data)
+{
+	if (!__g_skip_aln(((count_func_data_t*)data)->header, b)) {
+		(*((count_func_data_t*)data)->count)++;
+	}
+	return 0;
+}
+
 static int usage(int is_long_help);
 
 int main_samview(int argc, char *argv[])
 {
-	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, is_uncompressed = 0, is_bamout = 0, slx2sngr = 0;
+	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, is_uncompressed = 0, is_bamout = 0, slx2sngr = 0, is_count = 0;
 	int of_type = BAM_OFDEC, is_long_help = 0;
+	int count = 0;
 	samfile_t *in = 0, *out = 0;
 	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbt:hHo:q:f:F:ul:r:xX?T:CR:")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbct:hHo:q:f:F:ul:r:xX?T:CR:")) >= 0) {
 		switch (c) {
+		case 'c': is_count = 1; break;
 		case 'C': slx2sngr = 1; break;
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
@@ -133,7 +151,7 @@ int main_samview(int argc, char *argv[])
 		ret = 1;
 		goto view_end;
 	}
-	if ((out = samopen(fn_out? fn_out : "-", out_mode, in->header)) == 0) {
+	if (!is_count && (out = samopen(fn_out? fn_out : "-", out_mode, in->header)) == 0) {
 		fprintf(stderr, "[main_samview] fail to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
 		ret = 1;
 		goto view_end;
@@ -146,7 +164,8 @@ int main_samview(int argc, char *argv[])
 		while ((r = samread(in, b)) >= 0) { // read one alignment from `in'
 			if (!__g_skip_aln(in->header, b)) {
 				if (slx2sngr) sol2sanger(b);
-				samwrite(out, b); // write the alignment to `out'
+				if (!is_count) samwrite(out, b); // write the alignment to `out'
+				count++;
 			}
 		}
 		if (r < -1) {
@@ -164,14 +183,19 @@ int main_samview(int argc, char *argv[])
 			goto view_end;
 		}
 		for (i = optind + 1; i < argc; ++i) {
-			int tid, beg, end;
+			int tid, beg, end, result;
 			bam_parse_region(in->header, argv[i], &tid, &beg, &end); // parse a region in the format like `chr2:100-200'
 			if (tid < 0) { // reference name is not found
 				fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
 				continue;
 			}
 			// fetch alignments
-			if (bam_fetch(in->x.bam, idx, tid, beg, end, out, view_func) < 0) {
+			if (is_count) {
+				count_func_data_t count_data = { in->header, &count };
+				result = bam_fetch(in->x.bam, idx, tid, beg, end, &count_data, count_func);
+			} else
+				result = bam_fetch(in->x.bam, idx, tid, beg, end, out, view_func);
+			if (result < 0) {
 				fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", argv[i]);
 				ret = 1;
 				break;
@@ -181,6 +205,9 @@ int main_samview(int argc, char *argv[])
 	}
 
 view_end:
+	if (is_count && ret == 0) {
+		printf("%d\n", count);
+	}
 	// close files, free and return
 	free(fn_list); free(fn_ref); free(fn_out); free(g_library); free(g_rg); free(fn_rg);
 	if (g_rghash) {
@@ -190,7 +217,8 @@ view_end:
 		kh_destroy(rg, g_rghash);
 	}
 	samclose(in);
-	samclose(out);
+	if (!is_count)
+		samclose(out);
 	return ret;
 }
 
@@ -205,6 +233,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
 	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
 	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
+	fprintf(stderr, "         -c       print only the count of matching records\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
 	fprintf(stderr, "         -o FILE  output file name [stdout]\n");

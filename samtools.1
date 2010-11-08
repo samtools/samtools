@@ -47,7 +47,7 @@ entire alignment file unless it is asked to do so.
 
 .TP 10
 .B view
-samtools view [-bhuHS] [-t in.refList] [-o output] [-f reqFlag] [-F
+samtools view [-bchuHS] [-t in.refList] [-o output] [-f reqFlag] [-F
 skipFlag] [-q minMapQ] [-l library] [-r readGroup] [-R rgFile] <in.bam>|<in.sam> [region1 [...]]
 
 Extract/print all or sub alignments in SAM or BAM format. If no region
@@ -99,6 +99,15 @@ Output reads in read groups listed in
 Input is in SAM. If @SQ header lines are absent, the
 .B `-t'
 option is required.
+.TP
+.B -c
+Instead of printing the alignments, only count them and print the
+total number. All filter options, such as
+.B `-f',
+.B `-F'
+and
+.B `-q'
+, are taken into account.
 .TP
 .BI -t " FILE"
 This file is TAB-delimited. Each line must contain the reference name
