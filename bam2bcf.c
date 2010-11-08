@@ -30,7 +30,7 @@ void bcf_call_destroy(bcf_callaux_t *bca)
 {
 	if (bca == 0) return;
 	errmod_destroy(bca->e);
-	free(bca->bases); free(bca);
+	free(bca->bases); free(bca->inscns); free(bca);
 }
 /* ref_base is the 4-bit representation of the reference base. It is
  * negative if we are looking at an indel. */
@@ -162,19 +162,38 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	return 0;
 }
 
-int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int is_SP)
+int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int is_SP,
+				 const bcf_callaux_t *bca, const char *ref)
 {
 	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
 	kstring_t s;
-	int i;
+	int i, j;
 	b->n_smpl = bc->n;
 	b->tid = tid; b->pos = pos; b->qual = 0;
 	s.s = b->str; s.m = b->m_str; s.l = 0;
 	kputc('\0', &s);
-	if (bc->ori_ref < 0) {
-		kputc('N', &s); kputc('\0', &s);
-		kputs("<INDEL>", &s); kputc('\0', &s);
-	} else {
+	if (bc->ori_ref < 0) { // an indel
+		// write REF
+		kputc(ref[pos], &s);
+		for (j = 0; j < bca->indelreg; ++j) kputc(ref[pos+1+j], &s);
+		kputc('\0', &s);
+		// write ALT
+		kputc(ref[pos], &s);
+		for (i = 1; i < 4; ++i) {
+			if (bc->a[i] < 0) break;
+			if (i > 1) kputc(',', &s);
+			if (bca->indel_types[bc->a[i]] < 0) { // deletion
+				for (j = -bca->indel_types[bc->a[i]]; j < bca->indelreg; ++i)
+					kputc(ref[pos+1+j], &s);
+			} else { // insertion; cannot be a reference unless a bug
+				char *inscns = &bca->inscns[bc->a[i] * bca->maxins];
+				for (j = 0; j < bca->indel_types[bc->a[i]]; ++j)
+					kputc("ACGTN"[(int)inscns[j]], &s);
+				for (j = 0; j < bca->indelreg; ++j) kputc(ref[pos+1+j], &s);
+			}
+		}
+		kputc('\0', &s);
+	} else { // a SNP
 		kputc("ACGTN"[bc->ori_ref], &s); kputc('\0', &s);
 		for (i = 1; i < 5; ++i) {
 			if (bc->a[i] < 0) break;
@@ -185,6 +204,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	}
 	kputc('\0', &s);
 	// INFO
+	if (bc->ori_ref < 0) kputs("INDEL;", &s);
 	kputs("I16=", &s);
 	for (i = 0; i < 16; ++i) {
 		if (i) kputc(',', &s);

@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <ctype.h>
 #include "bam.h"
 #include "bam2bcf.h"
 #include "ksort.h"
@@ -42,6 +43,19 @@ static inline int est_seqQ(const bcf_callaux_t *bca, int l, int l_run)
 	q = bca->openQ + bca->extQ * (abs(l) - 1);
 	qh = l_run >= 3? (int)(bca->tandemQ * (double)abs(l) / l_run + .499) : 1000;
 	return q < qh? q : qh;
+}
+
+static inline int est_indelreg(int pos, const char *ref, int l, char *ins4)
+{
+	int i, j, max = 0, max_i = pos, score = 0;
+	l = abs(l);
+	for (i = pos + 1, j = 0; ref[i]; ++i, ++j) {
+		if (ins4) score += (toupper(ref[i]) != "ACGTN"[(int)ins4[j%l]])? -10 : 1;
+		else score += (toupper(ref[i]) != toupper(ref[pos+1+j%l]))? -10 : 1;
+		if (score < 0) break;
+		if (max < score) max = score, max_i = i;
+	}
+	return max_i - pos;
 }
 
 int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref)
@@ -149,10 +163,17 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	ref2  = calloc(right - left + max_ins + 2, 1);
 	query = calloc(right - left + max_rd_len + max_ins + 2, 1);
 	score = calloc(N * n_types, sizeof(int));
+	bca->indelreg = 0;
 	for (t = 0; t < n_types; ++t) {
-		int l;
+		int l, ir;
 		ka_param2_t ap = ka_param2_qual;
 		ap.band_width = abs(types[t]) + 3;
+		// compute indelreg
+		if (types[t] == 0) ir = 0;
+		else if (types[t] > 0) ir = est_indelreg(pos, ref, types[t], &inscns[t*max_ins]);
+		else ir = est_indelreg(pos, ref, -types[t], 0);
+		if (ir > bca->indelreg) bca->indelreg = ir;
+//		fprintf(stderr, "%d, %d, %d\n", pos, types[t], ir);
 		// write ref2
 		for (k = 0, j = left; j <= pos; ++j)
 			ref2[k++] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[j]]];
@@ -233,7 +254,9 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 //				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ);
 			}
 		}
-		// determine bca->indel_types[]
+		// determine bca->indel_types[] and bca->inscns
+		bca->maxins = max_ins;
+		bca->inscns = realloc(bca->inscns, bca->maxins * 4);
 		for (t = 0; t < n_types; ++t)
 			sumq[t] = sumq[t]<<6 | t;
 		for (t = 1; t < n_types; ++t) // insertion sort
@@ -247,8 +270,10 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 			sumq[0] = tmp;
 		}
 		for (t = 0; t < 4; ++t) bca->indel_types[t] = B2B_INDEL_NULL;
-		for (t = 0; t < 4 && t < n_types; ++t)
+		for (t = 0; t < 4 && t < n_types; ++t) {
 			bca->indel_types[t] = types[sumq[t]&0x3f];
+			memcpy(&bca->inscns[t * bca->maxins], &inscns[(sumq[t]&0x3f) * max_ins], bca->maxins);
+		}
 		// update p->aux
 		for (s = K = 0; s < n; ++s) {
 			for (i = 0; i < n_plp[s]; ++i, ++K) {
@@ -261,7 +286,6 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 			}
 		}		
 	}
-	// FIXME: to set the inserted sequence
 	free(score);
 	// free
 	free(types); free(inscns);

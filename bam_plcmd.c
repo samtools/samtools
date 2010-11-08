@@ -726,7 +726,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			for (i = 0; i < gplp.n; ++i)
 				bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], ref16, bca, bcr + i);
 			bcf_call_combine(gplp.n, bcr, ref16, &bc);
-			bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0, (conf->flag&MPLP_FMT_SP));
+			bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0,
+						 (conf->flag&MPLP_FMT_SP), 0, 0);
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
 			// call indels
@@ -736,7 +737,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				bcf_call_combine(gplp.n, bcr, -1, &bc);
 				b = calloc(1, sizeof(bcf1_t));
 				bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0,
-							 (conf->flag&MPLP_FMT_SP));
+							 (conf->flag&MPLP_FMT_SP), bca, ref);
 				bcf_write(bp, bh, b);
 				bcf_destroy(b);
 			}
