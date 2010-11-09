@@ -199,14 +199,15 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
 }
 
 sub varFilter {
-  my %opts = (d=>1, D=>10000, l=>10, Q=>10, s=>100, w=>10, p=>undef, F=>.001);
-  getopts('pd:D:l:Q:w:G:F:', \%opts);
+  my %opts = (d=>1, D=>10000, a=>2, l=>10, Q=>10, s=>100, w=>10, p=>undef, F=>.001);
+  getopts('pd:D:l:Q:w:G:F:a:', \%opts);
   die(qq/
 Usage:   vcfutils.pl varFilter [options] <in.vcf>
 
 Options: -Q INT    minimum RMS mapping quality for SNPs [$opts{Q}]
          -d INT    minimum read depth [$opts{d}]
          -D INT    maximum read depth [$opts{D}]
+         -a INT    minimum number of alternate bases [$opts{a}]
          -w INT    SNP within INT bp around a gap to be filtered [$opts{w}]
          -l INT    window size for filtering adjacent gaps [$opts{l}]
          -p        print filtered variants
@@ -255,6 +256,7 @@ Options: -Q INT    minimum RMS mapping quality for SNPs [$opts{Q}]
 		$flt = 3;
 	  }
 	}
+	$flt = 4 if ($dp_alt >= 0 && $dp_alt < $opts{a});
 	$flt = 1 if ($flt == 0 && $mq >= 0 && $mq < $opts{Q});
 
 	# site dependent filters
@@ -298,7 +300,7 @@ sub varFilter_aux {
   if ($first->[1] == 0) {
 	print join("\t", @$first[3 .. @$first-1]), "\n";
   } elsif ($is_print) {
-	print STDERR join("\t", substr("UQdDWGgsiX", $first->[1], 1), @$first[3 .. @$first-1]), "\n";
+	print STDERR join("\t", substr("UQdDaGgsiX", $first->[1], 1), @$first[3 .. @$first-1]), "\n";
   }
 }
 
