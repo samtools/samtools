@@ -306,3 +306,13 @@ int bcf_cpy(bcf1_t *r, const bcf1_t *b)
 		memcpy(r->gi[i].data, b->gi[i].data, r->n_smpl * r->gi[i].len);
 	return 0;
 }
+
+int bcf_is_indel(const bcf1_t *b)
+{
+	char *p;
+	if (strlen(b->ref) > 1) return 1;
+	for (p = b->alt; *p; ++p)
+		if (*p != ',' && p[1] != ',' && p[1] != '\0')
+			return 1;
+	return 0;
+}

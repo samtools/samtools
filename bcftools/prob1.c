@@ -8,9 +8,9 @@
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
-#define MC_AVG_ERR 0.007
 #define MC_MAX_EM_ITER 16
 #define MC_EM_EPS 1e-4
+#define MC_DEF_INDEL 0.15
 
 unsigned char seq_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
@@ -32,9 +32,9 @@ unsigned char seq_nt4_table[256] = {
 };
 
 struct __bcf_p1aux_t {
-	int n, M, n1;
+	int n, M, n1, is_indel;
 	double *q2p, *pdg; // pdg -> P(D|g)
-	double *phi;
+	double *phi, *phi_indel;
 	double *z, *zswap; // aux for afs
 	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
 	double t, t1, t2;
@@ -42,6 +42,14 @@ struct __bcf_p1aux_t {
 	const uint8_t *PL; // point to PL
 	int PL_len;
 };
+
+void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x)
+{
+	int i;
+	for (i = 0; i < ma->M; ++i)
+		ma->phi_indel[i] = ma->phi[i] * x;
+	ma->phi_indel[ma->M] = 1. - ma->phi[ma->M] * x;
+}
 
 static void init_prior(int type, double theta, int M, double *phi)
 {
@@ -63,6 +71,7 @@ static void init_prior(int type, double theta, int M, double *phi)
 void bcf_p1_init_prior(bcf_p1aux_t *ma, int type, double theta)
 {
 	init_prior(type, theta, ma->M, ma->phi);
+	bcf_p1_indel_prior(ma, MC_DEF_INDEL);
 }
 
 void bcf_p1_init_subprior(bcf_p1aux_t *ma, int type, double theta)
@@ -110,6 +119,7 @@ int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn)
 	fprintf(stderr, "[%s] heterozygosity=%lf, ", __func__, (double)sum);
 	for (sum = 0., k = 1; k <= ma->M; ++k) sum += k * ma->phi[ma->M - k] / ma->M;
 	fprintf(stderr, "theta=%lf\n", (double)sum);
+	bcf_p1_indel_prior(ma, MC_DEF_INDEL);
 	return 0;
 }
 
@@ -123,6 +133,7 @@ bcf_p1aux_t *bcf_p1_init(int n)
 	ma->q2p = calloc(256, sizeof(double));
 	ma->pdg = calloc(3 * ma->n, sizeof(double));
 	ma->phi = calloc(ma->M + 1, sizeof(double));
+	ma->phi_indel = calloc(ma->M + 1, sizeof(double));
 	ma->phi1 = calloc(ma->M + 1, sizeof(double));
 	ma->phi2 = calloc(ma->M + 1, sizeof(double));
 	ma->z = calloc(2 * ma->n + 1, sizeof(double));
@@ -148,7 +159,7 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 {
 	if (ma) {
 		free(ma->q2p); free(ma->pdg);
-		free(ma->phi); free(ma->phi1); free(ma->phi2);
+		free(ma->phi); free(ma->phi_indel); free(ma->phi1); free(ma->phi2);
 		free(ma->z); free(ma->zswap); free(ma->z1); free(ma->z2);
 		free(ma->afs); free(ma->afs1);
 		free(ma);
@@ -303,12 +314,13 @@ static double mc_cal_afs(bcf_p1aux_t *ma)
 {
 	int k;
 	long double sum = 0.;
+	double *phi = ma->is_indel? ma->phi_indel : ma->phi;
 	memset(ma->afs1, 0, sizeof(double) * (ma->M + 1));
 	mc_cal_y(ma);
 	for (k = 0, sum = 0.; k <= ma->M; ++k)
-		sum += (long double)ma->phi[k] * ma->z[k];
+		sum += (long double)phi[k] * ma->z[k];
 	for (k = 0; k <= ma->M; ++k) {
-		ma->afs1[k] = ma->phi[k] * ma->z[k] / sum;
+		ma->afs1[k] = phi[k] * ma->z[k] / sum;
 		if (isnan(ma->afs1[k]) || isinf(ma->afs1[k])) return -1.;
 	}
 	for (k = 0, sum = 0.; k <= ma->M; ++k) {
@@ -348,6 +360,7 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 {
 	int i, k;
 	long double sum = 0.;
+	ma->is_indel = bcf_is_indel(b);
 	// set PL and PL_len
 	for (i = 0; i < b->n_gi; ++i) {
 		if (b->gi[i].fmt == bcf_str2int("PL", 2)) {

@@ -228,7 +228,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		for (s = K = 0; s < n; ++s) {
 			for (i = 0; i < n_plp[s]; ++i, ++K) {
 				bam_pileup1_t *p = plp[s] + i;
-				int *sct = &score[K*n_types], indelQ;
+				int *sct = &score[K*n_types], indelQ, seqQ;
 				for (t = 0; t < n_types; ++t) sc[t] = sct[t]<<6 | t;
 				for (t = 1; t < n_types; ++t) // insertion sort
 					for (j = t; j > 0 && sc[j] < sc[j-1]; --j)
@@ -241,16 +241,15 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				 */
 				if ((sc[0]&0x3f) == ref_type) {
 					indelQ = (sc[1]>>6) - (sc[0]>>6);
-					tmp = est_seqQ(bca, types[sc[1]&0x3f], l_run);
+					seqQ = est_seqQ(bca, types[sc[1]&0x3f], l_run);
 				} else {
 					for (t = 0; t < n_types; ++t) // look for the reference type
 						if ((sc[t]&0x3f) == ref_type) break;
 					indelQ = (sc[t]>>6) - (sc[0]>>6);
-					tmp = est_seqQ(bca, types[sc[0]&0x3f], l_run);
+					seqQ = est_seqQ(bca, types[sc[0]&0x3f], l_run);
 				}
-				if (indelQ > tmp) indelQ = tmp;
-				p->aux = (sc[0]&0x3f)<<8 | indelQ;
-				sumq[sc[0]&0x3f] += indelQ;
+				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ;
+				sumq[sc[0]&0x3f] += indelQ < seqQ? indelQ : seqQ;
 //				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ);
 			}
 		}
@@ -278,11 +277,11 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		for (s = K = 0; s < n; ++s) {
 			for (i = 0; i < n_plp[s]; ++i, ++K) {
 				bam_pileup1_t *p = plp[s] + i;
-				int x = types[p->aux>>8&0x3f];
+				int x = types[p->aux>>16&0x3f];
 				for (j = 0; j < 4; ++j)
 					if (x == bca->indel_types[j]) break;
-				p->aux = j<<8 | (j == 4? 0 : (p->aux&0xff));
-//				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), p->aux>>8&63, p->aux&0xff);
+				p->aux = j<<16 | (j == 4? 0 : (p->aux&0xffff));
+//				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), p->aux>>16&63, p->aux&0xff);
 			}
 		}		
 	}

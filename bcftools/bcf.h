@@ -128,6 +128,8 @@ extern "C" {
 	int bcf_shrink_alt(bcf1_t *b, int n);
 	// convert GL to PL
 	int bcf_gl2pl(bcf1_t *b);
+	// if the site is an indel
+	int bcf_is_indel(const bcf1_t *b);
 
 	// string hash table
 	void *bcf_build_refhash(bcf_hdr_t *h);

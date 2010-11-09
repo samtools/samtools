@@ -53,11 +53,13 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 	memset(r, 0, sizeof(bcf_callret1_t));
 	for (i = n = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
-		int q, b, mapQ, baseQ, is_diff, min_dist;
+		int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
 		// set base
 		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
 		baseQ = q = is_indel? p->aux&0xff : (int)bam1_qual(p->b)[p->qpos]; // base/indel quality
+		seqQ = is_indel? (p->aux>>8&0xff) : 99;
 		if (q < bca->min_baseQ) continue;
+		if (q > seqQ) q = seqQ;
 		mapQ = p->b->core.qual < bca->capQ? p->b->core.qual : bca->capQ;
 		if (q > mapQ) q = mapQ;
 		if (q > 63) q = 63;
@@ -67,7 +69,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 			b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
 			is_diff = (ref4 < 4 && b == ref4)? 0 : 1;
 		} else {
-			b = p->aux>>8&0x3f;
+			b = p->aux>>16&0x3f;
 			is_diff = (b != 0);
 		}
 		bca->bases[n++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
