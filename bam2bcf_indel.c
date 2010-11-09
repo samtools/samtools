@@ -66,12 +66,12 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	if (ref == 0 || bca == 0) return -1;
 	// determine if there is a gap
 	for (s = N = 0; s < n; ++s) {
-		N += n_plp[s]; // N is the total number of reads
 		for (i = 0; i < n_plp[s]; ++i)
 			if (plp[s][i].indel != 0) break;
 		if (i < n_plp[s]) break;
 	}
 	if (s == n) return -1; // there is no indel at this position.
+	for (s = N = 0; s < n; ++s) N += n_plp[s]; // N is the total number of reads
 	{ // find out how many types of indels are present
 		int m;
 		uint32_t *aux;
