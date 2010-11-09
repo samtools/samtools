@@ -181,7 +181,9 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		kputc(ref[pos], &s);
 		for (i = 1; i < 4; ++i) {
 			if (bc->a[i] < 0) break;
-			if (i > 1) kputc(',', &s);
+			if (i > 1) {
+				kputc(',', &s); kputc(ref[pos], &s);
+			}
 			if (bca->indel_types[bc->a[i]] < 0) { // deletion
 				for (j = -bca->indel_types[bc->a[i]]; j < bca->indelreg; ++j)
 					kputc(ref[pos+1+j], &s);
