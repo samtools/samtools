@@ -64,6 +64,7 @@ glf.o:glf.h
 sam_header.o:sam_header.h khash.h
 bcf.o:bcftools/bcf.h
 bam2bcf.o:bam2bcf.h errmod.h bcftools/bcf.h
+bam2bcf_indel.o:bam2bcf.h
 errmod.o:errmod.h
 
 faidx.o:faidx.h razf.h khash.h

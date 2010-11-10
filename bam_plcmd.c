@@ -535,7 +535,7 @@ int bam_pileup(int argc, char *argv[])
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth;
-	char *reg, *fn_pos;
+	char *reg, *fn_pos, *pl_list;
 	faidx_t *fai;
 	kh_64_t *hash;
 } mplp_conf_t;
@@ -602,6 +602,8 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 
 static int mpileup(mplp_conf_t *conf, int n, char **fn)
 {
+	extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
+	extern void bcf_call_del_rghash(void *rghash);
 	mplp_aux_t **data;
 	int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid, max_depth;
 	const bam_pileup1_t **plp;
@@ -609,6 +611,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bam_header_t *h = 0;
 	char *ref;
 	khash_t(64) *hash = 0;
+	void *rghash = 0;
 
 	bcf_callaux_t *bca = 0;
 	bcf_callret1_t *bcr = 0;
@@ -638,6 +641,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		data[i]->fp = strcmp(fn[i], "-") == 0? bam_dopen(fileno(stdin), "r") : bam_open(fn[i], "r");
 		h_tmp = bam_header_read(data[i]->fp);
 		bam_smpl_add(sm, fn[i], h_tmp->text);
+		rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
 		if (conf->reg) {
 			int beg, end;
 			bam_index_t *idx;
@@ -693,6 +697,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bcf_hdr_write(bp, bh);
 		bca = bcf_call_init(-1., conf->min_baseQ);
 		bcr = calloc(sm->n, sizeof(bcf_callret1_t));
+		bca->rghash = rghash;
 	}
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
@@ -731,7 +736,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
 			// call indels
-			if (bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref) >= 0) {
+			if (bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
 				for (i = 0; i < gplp.n; ++i)
 					bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], -1, bca, bcr + i);
 				bcf_call_combine(gplp.n, bcr, -1, &bc);
@@ -767,6 +772,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bam_smpl_destroy(sm); free(buf.s);
 	for (i = 0; i < gplp.n; ++i) free(gplp.plp[i]);
 	free(gplp.plp); free(gplp.n_plp); free(gplp.m_plp);
+	bcf_call_del_rghash(rghash);
 	if (hash) { // free the hash table
 		khint_t k;
 		for (k = kh_begin(hash); k < kh_end(hash); ++k)
@@ -847,7 +853,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.capQ_thres = 0;
 	mplp.max_depth = 250;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDSd:b:")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDSd:b:P:")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -856,6 +862,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'd': mplp.max_depth = atoi(optarg); break;
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.fn_pos = strdup(optarg); break;
+		case 'P': mplp.pl_list = strdup(optarg); break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
@@ -882,6 +889,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -d INT      max per-sample depth [%d]\n", mplp.max_depth);
+		fprintf(stderr, "         -P STR      comma separated list of platforms for indels [all]\n");
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
 		fprintf(stderr, "         -B          disable BAQ computation\n");
@@ -900,7 +908,7 @@ int bam_mpileup(int argc, char *argv[])
     }
     else
 	    mpileup(&mplp, argc - optind, argv + optind);
-	free(mplp.reg);
+	free(mplp.reg); free(mplp.pl_list);
 	if (mplp.fai) fai_destroy(mplp.fai);
 	return 0;
 }

@@ -17,6 +17,7 @@ typedef struct __bcf_callaux_t {
 	char *inscns;
 	uint16_t *bases;
 	errmod_t *e;
+	void *rghash;
 } bcf_callaux_t;
 
 typedef struct {
@@ -42,7 +43,8 @@ extern "C" {
 	int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call);
 	int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int is_SP,
 					 const bcf_callaux_t *bca, const char *ref);
-	int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref);
+	int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
+						  const void *rghash);
 
 #ifdef __cplusplus
 }
