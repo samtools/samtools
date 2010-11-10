@@ -30,7 +30,19 @@
 
 #include <stdint.h>
 #include <zlib.h>
+
+#ifndef BCF_LITE
 #include "bgzf.h"
+typedef BGZF *bcfFile;
+#else
+typedef gzFile bcfFile;
+#define bgzf_open(fn, mode) gzopen(fn, mode)
+#define bgzf_fdopen(fd, mode) gzdopen(fd, mode)
+#define bgzf_close(fp) gzclose(fp)
+#define bgzf_read(fp, buf, len) gzread(fp, buf, len)
+#define bgzf_write(fp, buf, len)
+#define bgzf_flush(fp)
+#endif
 
 /*
   A member in the structs below is said to "primary" if its content
@@ -74,7 +86,7 @@ typedef struct {
 typedef struct {
 	int is_vcf; // if the file in operation is a VCF
 	void *v; // auxillary data structure for VCF
-	BGZF *fp; // file handler for BCF
+	bcfFile fp; // file handler for BCF
 } bcf_t;
 
 struct __bcf_idx_t;
