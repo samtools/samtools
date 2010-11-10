@@ -9,6 +9,7 @@ typedef struct __bcf_p1aux_t bcf_p1aux_t;
 typedef struct {
 	int rank0;
 	double f_em, f_exp, f_flat, p_ref;
+	double cil, cih;
 	double pc[4];
 	double g[3];
 } bcf_p1rst_t;

@@ -391,6 +391,19 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 			flast = rst->f_em;
 		}
 	}
+	{ // estimate equal-tail credible interval (95% level)
+		int l, h;
+		double p;
+		for (i = 0, p = 0.; i < ma->M; ++i)
+			if (p + ma->afs1[i] > 0.025) break;
+			else p += ma->afs1[i];
+		l = i;
+		for (i = ma->M-1, p = 0.; i >= 0; --i)
+			if (p + ma->afs1[i] > 0.025) break;
+			else p += ma->afs1[i];
+		h = i;
+		rst->cil = (double)(ma->M - h) / ma->M; rst->cih = (double)(ma->M - l) / ma->M;
+	}
 	rst->g[0] = rst->g[1] = rst->g[2] = -1.;
 	contrast(ma, rst->pc);
 	return 0;

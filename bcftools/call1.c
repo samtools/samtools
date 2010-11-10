@@ -161,7 +161,8 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
-	ksprintf(&s, "AF1=%.3lf;AFE=%.3lf", 1.-pr->f_em, 1.-pr->f_exp);
+//	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
+	ksprintf(&s, "AF1=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, pr->cil, pr->cih);
 	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	if (a.is_tested) {
 		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%lg,%lg,%lg,%lg", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
