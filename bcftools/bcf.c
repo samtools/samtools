@@ -14,7 +14,7 @@ bcf_t *bcf_open(const char *fn, const char *mode)
 		b->fp = strcmp(fn, "-")? bgzf_open(fn, mode) : bgzf_fdopen(fileno(stdin), mode);
 	}
 #ifndef BCF_LITE
-	b->fp->ownede_file = 1;
+	b->fp->owned_file = 1;
 #endif
 	return b;
 }
