@@ -124,7 +124,10 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
 			call->unseen = j, call->a[j++] = qsum[i]&3;
 		call->n_alleles = j;
-	} else call->n_alleles = j;
+	} else {
+		call->n_alleles = j;
+		if (call->n_alleles == 1) return -1; // no reliable supporting read. stop doing anything
+	}
 	// set the PL array
 	if (call->n < n) {
 		call->n = n;
