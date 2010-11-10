@@ -10,6 +10,7 @@ KHASH_SET_INIT_STR(rg)
 
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
+#define MAX_SCORE 90
 
 void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
 {
@@ -316,6 +317,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					indelQ = (sc[t]>>6) - (sc[0]>>6);
 					seqQ = est_seqQ(bca, types[sc[0]&0x3f], l_run);
 				}
+				if (sc[0]>>6 > MAX_SCORE) indelQ = 0; // too many mismatches; something bad possibly happened
 				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ;
 				sumq[sc[0]&0x3f] += indelQ < seqQ? indelQ : seqQ;
 //				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ);
@@ -327,7 +329,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		for (t = 0; t < n_types; ++t)
 			sumq[t] = sumq[t]<<6 | t;
 		for (t = 1; t < n_types; ++t) // insertion sort
-			for (j = t; j > 0 && sumq[j] < sumq[j-1]; --j)
+			for (j = t; j > 0 && sumq[j] > sumq[j-1]; --j)
 				tmp = sumq[j], sumq[j] = sumq[j-1], sumq[j-1] = tmp;
 		for (t = 0; t < n_types; ++t) // look for the reference type
 			if ((sumq[t]&0x3f) == ref_type) break;
@@ -350,7 +352,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					if (x == bca->indel_types[j]) break;
 				p->aux = j<<16 | (j == 4? 0 : (p->aux&0xffff));
 				if ((p->aux>>16&0x3f) > 0) ++n_alt;
-//				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), p->aux>>16&63, p->aux&0xff);
+//				fprintf(stderr, "X pos=%d read=%d:%d name=%s call=%d type=%d q=%d seqQ=%d\n", pos, s, i, bam1_qname(p->b), p->aux>>16&63, bca->indel_types[p->aux>>16&63], p->aux&0xff, p->aux>>8&0xff);
 			}
 		}		
 	}
