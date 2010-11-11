@@ -162,7 +162,7 @@ int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
 	return (int)(t + .499);
 }
 
-int bam_prob_realn(bam1_t *b, const char *ref)
+int bam_prob_realn_core(bam1_t *b, const char *ref, int write_bq)
 {
 	int k, i, bw, x, y, yb, ye, xb, xe;
 	uint32_t *cigar = bam1_cigar(b);
@@ -193,8 +193,12 @@ int bam_prob_realn(bam1_t *b, const char *ref)
 	if (xe - xb - c->l_qseq > bw)
 		xb += (xe - xb - c->l_qseq - bw) / 2, xe -= (xe - xb - c->l_qseq - bw) / 2;
 	{ // glocal
-		uint8_t *s, *r, *q, *seq = bam1_seq(b), *qual = bam1_qual(b);
+		uint8_t *s, *r, *q, *seq = bam1_seq(b), *qual = bam1_qual(b), *bq = 0;
 		int *state;
+		if (write_bq) {
+			bq = calloc(c->l_qseq + 1, 1);
+			memcpy(bq, qual, c->l_qseq);
+		}
 		s = calloc(c->l_qseq, 1);
 		for (i = 0; i < c->l_qseq; ++i) s[i] = bam_nt16_nt4_table[bam1_seqi(seq, i)];
 		r = calloc(xe - xb, 1);
@@ -214,9 +218,19 @@ int bam_prob_realn(bam1_t *b, const char *ref)
 			} else if (op == BAM_CSOFT_CLIP || op == BAM_CINS) y += l;
 			else if (op == BAM_CDEL) x += l;
 		}
+		if (write_bq) {
+			for (i = 0; i < c->l_qseq; ++i) bq[i] = bq[i] - qual[i] + 33;
+			bam_aux_append(b, "BQ", 'Z', c->l_qseq + 1, bq);
+			free(bq);
+		}
 		free(s); free(r); free(q); free(state);
 	}
 	return 0;
+}
+
+int bam_prob_realn(bam1_t *b, const char *ref)
+{
+	return bam_prob_realn_core(b, ref, 0);
 }
 
 int bam_fillmd(int argc, char *argv[])
@@ -276,7 +290,7 @@ int bam_fillmd(int argc, char *argv[])
 					fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
 							fp->header->target_name[tid]);
 			}
-			if (is_realn) bam_prob_realn(b, ref);
+			if (is_realn) bam_prob_realn_core(b, ref, 0);
 			if (capQ > 10) {
 				int q = bam_cap_mapQ(b, ref, capQ);
 				if (b->core.qual > q) b->core.qual = q;

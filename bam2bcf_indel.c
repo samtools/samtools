@@ -236,8 +236,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	bca->indelreg = 0;
 	for (t = 0; t < n_types; ++t) {
 		int l, ir;
-		ka_param2_t ap = ka_param2_qual;
-		ap.band_width = abs(types[t]) + 3;
+		kpa_par_t ap = { 1e-4, 1e-2, 10 };
+		ap.bw = abs(types[t]) + 3;
 		// compute indelreg
 		if (types[t] == 0) ir = 0;
 		else if (types[t] > 0) ir = est_indelreg(pos, ref, types[t], &inscns[t*max_ins]);
@@ -264,6 +264,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				bam_pileup1_t *p = plp[s] + i;
 				int qbeg, qend, tbeg, tend, sc;
 				uint8_t *seq = bam1_seq(p->b);
+				// FIXME: the following skips soft clips, but using them may be more sensitive.
 				// determine the start and end of sequences for alignment
 				qbeg = tpos2qpos(&p->b->core, bam1_cigar(p->b), left,  0, &tbeg);
 				qend = tpos2qpos(&p->b->core, bam1_cigar(p->b), right, 1, &tend);
@@ -274,17 +275,18 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				// write the query sequence
 				for (l = qbeg; l < qend; ++l)
 					query[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(seq, l)];
-				// do alignment; this takes most of computing time for indel calling
-				if (0) {
-					uint8_t *qq = calloc(qend - qbeg, 1);
-					for (l = 0; l < qend - qbeg; ++l) qq[l] = 23;
+				{ // do alignment; this is the bottleneck
+					const uint8_t *qual = bam1_qual(p->b), *bq;
+					uint8_t *qq = 0;
+					qq = calloc(qend - qbeg, 1);
+					bq = (uint8_t*)bam_aux_get(p->b, "BQ");
+					if (bq) ++bq;
+					for (l = qbeg; l < qend; ++l)
+						qq[l - qbeg] = bq? qual[l] + (bq[l] - 33) : qual[l];
 					sc = kpa_glocal((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
-									(uint8_t*)query, qend - qbeg, qq, &kpa_par_alt, 0, 0);
+									(uint8_t*)query, qend - qbeg, qq, &ap, 0, 0);
 					score[K*n_types + t] = sc;
-				} else {
-					sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
-										 (uint8_t*)query, qend - qbeg, &ap);
-					score[K*n_types + t] = -sc;
+					free(qq);
 				}
 /*
 				for (l = 0; l < tend - tbeg + abs(types[t]); ++l)
