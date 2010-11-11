@@ -236,8 +236,9 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	bca->indelreg = 0;
 	for (t = 0; t < n_types; ++t) {
 		int l, ir;
-		kpa_par_t ap = { 1e-4, 1e-2, 10 };
-		ap.bw = abs(types[t]) + 3;
+		kpa_par_t apf = { 1e-4, 1e-2, 10 };
+		ka_param2_t apv = ka_param2_qual;
+		apf.bw = apv.band_width = abs(types[t]) + 3;
 		// compute indelreg
 		if (types[t] == 0) ir = 0;
 		else if (types[t] > 0) ir = est_indelreg(pos, ref, types[t], &inscns[t*max_ins]);
@@ -275,18 +276,25 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				// write the query sequence
 				for (l = qbeg; l < qend; ++l)
 					query[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(seq, l)];
-				{ // do alignment; this is the bottleneck
+				// do alignment; this is the bottleneck
+				if (0) {
 					const uint8_t *qual = bam1_qual(p->b), *bq;
 					uint8_t *qq = 0;
 					qq = calloc(qend - qbeg, 1);
 					bq = (uint8_t*)bam_aux_get(p->b, "BQ");
 					if (bq) ++bq;
-					for (l = qbeg; l < qend; ++l)
+					for (l = qbeg; l < qend; ++l) {
 						qq[l - qbeg] = bq? qual[l] + (bq[l] - 33) : qual[l];
+						if (qq[l - qbeg] > 30) qq[l - qbeg] = 30;
+					}
 					sc = kpa_glocal((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
-									(uint8_t*)query, qend - qbeg, qq, &ap, 0, 0);
+									(uint8_t*)query, qend - qbeg, qq, &apf, 0, 0);
 					score[K*n_types + t] = sc;
 					free(qq);
+				} else {
+					sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
+										 (uint8_t*)query, qend - qbeg, &apv);
+					score[K*n_types + t] = -sc;
 				}
 /*
 				for (l = 0; l < tend - tbeg + abs(types[t]); ++l)

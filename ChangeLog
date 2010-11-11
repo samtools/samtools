@@ -1,4 +1,161 @@
 ------------------------------------------------------------------------
+r814 | lh3lh3 | 2010-11-11 00:18:02 -0500 (Thu, 11 Nov 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-9 (r810)
+ * use forward, instead of viterbi, for realignment
+ * realignment is now quality aware
+
+------------------------------------------------------------------------
+r813 | lh3lh3 | 2010-11-10 22:45:24 -0500 (Wed, 10 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/kprobaln.c
+   M /trunk/samtools/kprobaln.h
+
+ * prepare to replace kaln with kprobaln in realignment
+
+------------------------------------------------------------------------
+r812 | lh3lh3 | 2010-11-10 17:28:50 -0500 (Wed, 10 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+
+fixed a typo
+
+------------------------------------------------------------------------
+r811 | lh3lh3 | 2010-11-10 16:54:46 -0500 (Wed, 10 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+
+use zlib for direct reading when BCF_LITE is in use
+
+------------------------------------------------------------------------
+r810 | lh3lh3 | 2010-11-10 16:32:13 -0500 (Wed, 10 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+
+ * do not use reads containing too many mismatches for indel calling
+ * fixed a trivial bug in case of multi-allelic indels
+
+------------------------------------------------------------------------
+r809 | lh3lh3 | 2010-11-10 13:23:02 -0500 (Wed, 10 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-8 (r809)
+ * fixed a bug in the indel caller
+
+------------------------------------------------------------------------
+r808 | lh3lh3 | 2010-11-10 12:24:10 -0500 (Wed, 10 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+
+minor change to makefile
+
+------------------------------------------------------------------------
+r807 | lh3lh3 | 2010-11-10 12:10:21 -0500 (Wed, 10 Nov 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * samtools-0.1.9-8 (r807)
+ * collect indel candidates only from specified platforms (@RG-PL)
+ * merge varFilter and filter4vcf in vcfutils.pl 
+
+------------------------------------------------------------------------
+r806 | lh3lh3 | 2010-11-09 22:05:46 -0500 (Tue, 09 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+
+bcftools: compute equal-tail (Bayesian) credible interval
+
+------------------------------------------------------------------------
+r805 | lh3lh3 | 2010-11-09 16:28:39 -0500 (Tue, 09 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+added a double-hit filter to avoid overestimated indel likelihood
+
+------------------------------------------------------------------------
+r804 | lh3lh3 | 2010-11-09 14:12:06 -0500 (Tue, 09 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-7 (r804)
+ * fixed a bug in the gap caller
+
+------------------------------------------------------------------------
+r803 | lh3lh3 | 2010-11-09 10:45:33 -0500 (Tue, 09 Nov 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/prob1.c
+
+ * samtools-0.1.9-6 (r803)
+ * mpileup: apply homopolymer correction when calculating GL, instead of before
+ * bcftools: apply a different prior to indels
+
+------------------------------------------------------------------------
+r802 | lh3lh3 | 2010-11-08 23:53:15 -0500 (Mon, 08 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-5 (r802)
+ * relax tandem penalty. this will be made a command-line option in future.
+
+------------------------------------------------------------------------
+r801 | lh3lh3 | 2010-11-08 23:35:52 -0500 (Mon, 08 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-4 (r801)
+ * fixed a minor issue in printing indel VCF
+
+------------------------------------------------------------------------
+r800 | lh3lh3 | 2010-11-08 15:28:14 -0500 (Mon, 08 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+fixed another silly bug in mpileup's indel caller
+
+------------------------------------------------------------------------
+r799 | lh3lh3 | 2010-11-08 14:28:27 -0500 (Mon, 08 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+
+fixed a silly bug in the indel caller
+
+------------------------------------------------------------------------
+r798 | lh3lh3 | 2010-11-08 14:07:33 -0500 (Mon, 08 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/sam_view.c
+   M /trunk/samtools/samtools.1
+
+Incorporate patches by Marcel Martin for read counting.
+
+------------------------------------------------------------------------
 r797 | lh3lh3 | 2010-11-08 13:39:52 -0500 (Mon, 08 Nov 2010) | 3 lines
 Changed paths:
    M /trunk/samtools/bam2bcf.c
