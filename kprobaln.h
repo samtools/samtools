@@ -44,6 +44,6 @@ extern "C" {
 }
 #endif
 
-extern kpa_par_t kpa_par_def; /* { 0.001, 0.1, 10 } */
+extern kpa_par_t kpa_par_def, kpa_par_alt;
 
 #endif

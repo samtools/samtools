@@ -5,6 +5,7 @@
 #include "bam2bcf.h"
 #include "ksort.h"
 #include "kaln.h"
+#include "kprobaln.h"
 #include "khash.h"
 KHASH_SET_INIT_STR(rg)
 
@@ -274,9 +275,17 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				for (l = qbeg; l < qend; ++l)
 					query[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(seq, l)];
 				// do alignment; this takes most of computing time for indel calling
-				sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
-									 (uint8_t*)query, qend - qbeg, &ap);
-				score[K*n_types + t] = -sc;
+				if (0) {
+					uint8_t *qq = calloc(qend - qbeg, 1);
+					for (l = 0; l < qend - qbeg; ++l) qq[l] = 23;
+					sc = kpa_glocal((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
+									(uint8_t*)query, qend - qbeg, qq, &kpa_par_alt, 0, 0);
+					score[K*n_types + t] = sc;
+				} else {
+					sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
+										 (uint8_t*)query, qend - qbeg, &ap);
+					score[K*n_types + t] = -sc;
+				}
 /*
 				for (l = 0; l < tend - tbeg + abs(types[t]); ++l)
 					fputc("ACGTN"[(int)ref2[tbeg-left+l]], stderr);

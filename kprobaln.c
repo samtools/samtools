@@ -42,6 +42,7 @@ static float g_qual2prob[256];
 #define set_u(u, b, i, k) { int x=(i)-(b); x=x>0?x:0; (u)=((k)-x+1)*3; }
 
 kpa_par_t kpa_par_def = { 0.001, 0.1, 10 };
+kpa_par_t kpa_par_alt = { 0.0001, 0.01, 10 };
 
 /*
   The topology of the profile HMM:
@@ -71,12 +72,13 @@ kpa_par_t kpa_par_def = { 0.001, 0.1, 10 };
 int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_query, const uint8_t *iqual,
 			   const kpa_par_t *c, int *state, uint8_t *q)
 {
-	double **f, **b, *s, m[9], sI, sM, bI, bM, pb;
+	double **f, **b = 0, *s, m[9], sI, sM, bI, bM, pb;
 	float *qual, *_qual;
 	const uint8_t *ref, *query;
-	int bw, bw2, i, k, is_diff = 0;
+	int bw, bw2, i, k, is_diff = 0, is_backward = 1, Pr;
 
 	/*** initialization ***/
+	is_backward = state && q? 1 : 0;
 	ref = _ref - 1; query = _query - 1; // change to 1-based coordinate
 	bw = l_ref > l_query? l_ref : l_query;
 	if (bw > c->bw) bw = c->bw;
@@ -84,10 +86,10 @@ int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_quer
 	bw2 = bw * 2 + 1;
 	// allocate the forward and backward matrices f[][] and b[][] and the scaling array s[]
 	f = calloc(l_query+1, sizeof(void*));
-	b = calloc(l_query+1, sizeof(void*));
+	if (is_backward) b = calloc(l_query+1, sizeof(void*));
 	for (i = 0; i <= l_query; ++i) {
 		f[i] = calloc(bw2 * 3 + 6, sizeof(double)); // FIXME: this is over-allocated for very short seqs
-		b[i] = calloc(bw2 * 3 + 6, sizeof(double));
+		if (is_backward) b[i] = calloc(bw2 * 3 + 6, sizeof(double));
 	}
 	s = calloc(l_query+2, sizeof(double)); // s[] is the scaling factor to avoid underflow
 	// initialize qual
@@ -102,7 +104,7 @@ int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_quer
 	m[0*3+0] = (1 - c->d - c->d) * (1 - sM); m[0*3+1] = m[0*3+2] = c->d * (1 - sM);
 	m[1*3+0] = (1 - c->e) * (1 - sI); m[1*3+1] = c->e * (1 - sI); m[1*3+2] = 0.;
 	m[2*3+0] = 1 - c->e; m[2*3+1] = 0.; m[2*3+2] = c->e;
-	bM = (1 - c->d) / l_query; bI = c->d / l_query; // (bM+bI)*l_query==1
+	bM = (1 - c->d) / l_ref; bI = c->d / l_ref; // (bM+bI)*l_ref==1
 	/*** forward ***/
 	// f[0]
 	set_u(k, bw, 0, 0);
@@ -154,6 +156,20 @@ int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_quer
 		    sum += f[l_query][u+0] * sM + f[l_query][u+1] * sI;
 		}
 		s[l_query+1] = sum; // the last scaling factor
+	}
+	{ // compute likelihood
+		double p = 1., Pr1 = 0.;
+		for (i = 0; i <= l_query + 1; ++i) {
+			p *= s[i];
+			if (p < 1e-100) Pr += -4.343 * log(p), p = 1.;
+		}
+		Pr1 += -4.343 * log(p * l_ref * l_query);
+		Pr = (int)(Pr1 + .499);
+		if (!is_backward) { // skip backward and MAP
+			for (i = 0; i <= l_query; ++i) free(f[i]);
+			free(f); free(s); free(_qual);
+			return Pr;
+		}
 	}
 	/*** backward ***/
 	// b[l_query] (b[l_query+1][0]=1 and thus \tilde{b}[][]=1/s[l_query+1]; this is where s[l_query+1] comes from)
@@ -220,43 +236,12 @@ int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_quer
 				"ACGT"[query[i]], "ACGT"[ref[(max_k>>2)+1]], max_k&3, max); // DEBUG
 #endif
 	}
-	/*** Compute A ***/
-	/* // compute the posterior of a gap, but I do not know how to use it...
-	if (1) {
-		double *a;
-		a = calloc(3 * (l_ref + 2), sizeof(double));
-		for (i = 1; i < l_query; ++i) {
-			double sum = 0., *fi = f[i], *bi1 = b[i+1], qli1 = qual[i+1];
-			int beg = 1, end = l_ref, x;
-			uint8_t qyi1 = query[i+1];
-			x = i - bw; beg = beg > x? beg : x;
-			x = i + bw; end = end < x? end : x;
-			for (k = beg; k <= end; ++k) {
-				double *ak = a + 3 * k;
-				int u, v11, v01, v10;
-				double e;
-				set_u(u, bw, i, k); set_u(v11, bw, i+1, k+1); set_u(v10, bw, i+1, k); set_u(v01, bw, i, k+1);
-				e = k >= l_ref? 0 : (ref[k+1] > 3 || qyi1 > 3)? 1. : ref[k+1] == qyi1? 1. - qli1 : qli1 * EM;
-				ak[0] += fi[u] * bi1[v11] * m[0] * e;
-				ak[1] += fi[u] * bi1[v10+1] * m[1] * EI;
-				ak[2] += fi[u] * bi1[v01+2] * m[2];
-			}
-		}
-		for (k = 1; k < l_ref; ++k) {
-			double sum = 0., *ak = a + 3 * k;
-			sum += 1. / (ak[0] + ak[1] + ak[2]);
-			ak[0] *= sum; ak[1] *= sum; ak[2] *= sum;
-			fprintf(stderr, "%d: %lf, %lf, %lf\n", k, ak[0], ak[1], ak[2]);
-		}
-		free(a);
-	}
-	*/
 	/*** free ***/
 	for (i = 0; i <= l_query; ++i) {
 		free(f[i]); free(b[i]);
 	}
 	free(f); free(b); free(s); free(_qual);
-	return 0;
+	return Pr;
 }
 
 #ifdef _MAIN
@@ -264,7 +249,7 @@ int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_quer
 int main(int argc, char *argv[])
 {
 	uint8_t conv[256], *iqual, *ref, *query;
-	int c, l_ref, l_query, i, q = 30, b = 10;
+	int c, l_ref, l_query, i, q = 30, b = 10, P;
 	while ((c = getopt(argc, argv, "b:q:")) >= 0) {
 		switch (c) {
 		case 'b': b = atoi(optarg); break;
@@ -285,7 +270,8 @@ int main(int argc, char *argv[])
 	iqual = malloc(l_query);
 	memset(iqual, q, l_query);
 	kpa_par_def.bw = b;
-	kpa_glocal(ref, l_ref, query, l_query, iqual, &kpa_par_def, 0, 0);
+	P = kpa_glocal(ref, l_ref, query, l_query, iqual, &kpa_par_alt, 0, 0);
+	fprintf(stderr, "%d\n", P);
 	free(iqual);
 	return 0;
 }
