@@ -277,7 +277,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				for (l = qbeg; l < qend; ++l)
 					query[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(seq, l)];
 				// do alignment; this is the bottleneck
-				if (0) {
+				if (1) {
 					const uint8_t *qual = bam1_qual(p->b), *bq;
 					uint8_t *qq = 0;
 					qq = calloc(qend - qbeg, 1);
@@ -286,12 +286,13 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					for (l = qbeg; l < qend; ++l) {
 						qq[l - qbeg] = bq? qual[l] + (bq[l] - 33) : qual[l];
 						if (qq[l - qbeg] > 30) qq[l - qbeg] = 30;
+						if (qq[l - qbeg] < 7) qq[l - qbeg] = 7;
 					}
 					sc = kpa_glocal((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
 									(uint8_t*)query, qend - qbeg, qq, &apf, 0, 0);
 					score[K*n_types + t] = sc;
 					free(qq);
-				} else {
+				} else { // the following block is for testing only
 					sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
 										 (uint8_t*)query, qend - qbeg, &apv);
 					score[K*n_types + t] = -sc;
