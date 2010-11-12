@@ -13,7 +13,8 @@ sub main {
   &usage if (@ARGV < 1);
   my $command = shift(@ARGV);
   my %func = (subsam=>\&subsam, listsam=>\&listsam, fillac=>\&fillac, qstats=>\&qstats, varFilter=>\&varFilter,
-			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf, filter4vcf=>\&varFilter, ldstats=>\&ldstats);
+			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf, filter4vcf=>\&varFilter, ldstats=>\&ldstats,
+			  gapstats=>\&gapstats);
   die("Unknown command \"$command\".\n") if (!defined($func{$command}));
   &{$func{$command}};
 }
@@ -310,6 +311,25 @@ sub varFilter_aux {
 	print join("\t", @$first[3 .. @$first-1]), "\n";
   } elsif ($is_print) {
 	print STDERR join("\t", substr("UQdDaGgP", $first->[1], 1), @$first[3 .. @$first-1]), "\n";
+  }
+}
+
+sub gapstats {
+  my (@c0, @c1);
+  $c0[$_] = $c1[$_] = 0 for (0 .. 10000);
+  while (<>) {
+	next if (/^#/);
+	my @t = split;
+	next if (length($t[3]) == 1 && $t[4] =~ /^[A-Za-z](,[A-Za-z])*$/); # not an indel
+	my @s = split(',', $t[4]);
+	for my $x (@s) {
+	  my $l = length($x) - length($t[3]) + 5000;
+	  $c0[$l] += 1 / @s;
+	}
+  }
+  for (my $i = 0; $i < 10000; ++$i) {
+	next if ($c0[$i] == 0);
+	printf("%d\t%.2f\n", ($i-5000), $c0[$i]);
   }
 }
 

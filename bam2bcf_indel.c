@@ -12,6 +12,7 @@ KHASH_SET_INIT_STR(rg)
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
 #define MAX_SCORE 90
+#define MIN_SUPPORT_COEF 500
 
 void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
 {
@@ -141,7 +142,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	if (s == n) return -1; // there is no indel at this position.
 	for (s = N = 0; s < n; ++s) N += n_plp[s]; // N is the total number of reads
 	{ // find out how many types of indels are present
-		int m;
+		int m, n_alt = 0, n_tot = 0;
 		uint32_t *aux;
 		aux = calloc(N + 1, 4);
 		m = max_rd_len = 0;
@@ -149,8 +150,13 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		for (s = 0; s < n; ++s) {
 			for (i = 0; i < n_plp[s]; ++i) {
 				const bam_pileup1_t *p = plp[s] + i;
-				if (p->indel != 0 && (rghash == 0 || p->aux == 0))
-					aux[m++] = MINUS_CONST + p->indel;
+				if (rghash == 0 || p->aux == 0) {
+					++n_tot;
+					if (p->indel != 0) {
+						++n_alt;
+						aux[m++] = MINUS_CONST + p->indel;
+					}
+				}
 				j = bam_cigar2qlen(&p->b->core, bam1_cigar(p->b));
 				if (j > max_rd_len) max_rd_len = j;
 			}
@@ -159,7 +165,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		// squeeze out identical types
 		for (i = 1, n_types = 1; i < m; ++i)
 			if (aux[i] != aux[i-1]) ++n_types;
-		if (n_types == 1) { // no indels
+		if (n_types == 1 || n_alt * MIN_SUPPORT_COEF < n_tot) { // no indels or too few supporting reads
 			free(aux); return -1;
 		}
 		types = (int*)calloc(n_types, sizeof(int));
