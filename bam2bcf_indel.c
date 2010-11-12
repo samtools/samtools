@@ -113,7 +113,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					  const void *rghash)
 {
 	extern void ks_introsort_uint32_t(int, uint32_t*);
-	int i, s, j, k, t, n_types, *types, max_rd_len, left, right, max_ins, *score, N, K, l_run, ref_type, n_alt;
+	int i, s, j, k, t, n_types, *types, max_rd_len, left, right, max_ins, *score1, *score2;
+	int N, K, l_run, ref_type, n_alt;
 	char *inscns = 0, *ref2, *query;
 	khash_t(rg) *hash = (khash_t(rg)*)rghash;
 	if (ref == 0 || bca == 0) return -1;
@@ -238,13 +239,13 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	// compute the likelihood given each type of indel for each read
 	ref2  = calloc(right - left + max_ins + 2, 1);
 	query = calloc(right - left + max_rd_len + max_ins + 2, 1);
-	score = calloc(N * n_types, sizeof(int));
+	score1 = calloc(N * n_types, sizeof(int));
+	score2 = calloc(N * n_types, sizeof(int));
 	bca->indelreg = 0;
 	for (t = 0; t < n_types; ++t) {
 		int l, ir;
-		kpa_par_t apf = { 1e-4, 1e-2, 10 };
-		ka_param2_t apv = ka_param2_qual;
-		apf.bw = apv.band_width = abs(types[t]) + 3;
+		kpa_par_t apf1 = { 1e-4, 1e-2, 10 }, apf2 = { 1e-6, 1e-3, 10 };
+		apf1.bw = apf2.bw = abs(types[t]) + 3;
 		// compute indelreg
 		if (types[t] == 0) ir = 0;
 		else if (types[t] > 0) ir = est_indelreg(pos, ref, types[t], &inscns[t*max_ins]);
@@ -282,26 +283,26 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				// write the query sequence
 				for (l = qbeg; l < qend; ++l)
 					query[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(seq, l)];
-				// do alignment; this is the bottleneck
-				if (1) {
+				{ // do realignment; this is the bottleneck
 					const uint8_t *qual = bam1_qual(p->b), *bq;
-					uint8_t *qq = 0;
+					uint8_t *qq;
 					qq = calloc(qend - qbeg, 1);
 					bq = (uint8_t*)bam_aux_get(p->b, "BQ");
-					if (bq) ++bq;
+					if (bq) ++bq; // skip type
 					for (l = qbeg; l < qend; ++l) {
 						qq[l - qbeg] = bq? qual[l] + (bq[l] - 33) : qual[l];
 						if (qq[l - qbeg] > 30) qq[l - qbeg] = 30;
 						if (qq[l - qbeg] < 7) qq[l - qbeg] = 7;
 					}
 					sc = kpa_glocal((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
-									(uint8_t*)query, qend - qbeg, qq, &apf, 0, 0);
-					score[K*n_types + t] = sc;
+									(uint8_t*)query, qend - qbeg, qq, &apf1, 0, 0);
+					score1[K*n_types + t] = score2[K*n_types + t] = sc;
+					if (sc > 5) { // I do not know why, but a long exact match always has sc==5
+						sc = kpa_glocal((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
+										(uint8_t*)query, qend - qbeg, qq, &apf2, 0, 0);
+						score2[K*n_types + t] = sc;
+					}
 					free(qq);
-				} else { // the following block is for testing only
-					sc = ka_global_score((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
-										 (uint8_t*)query, qend - qbeg, &apv);
-					score[K*n_types + t] = -sc;
 				}
 /*
 				for (l = 0; l < tend - tbeg + abs(types[t]); ++l)
@@ -323,7 +324,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		for (s = K = 0; s < n; ++s) {
 			for (i = 0; i < n_plp[s]; ++i, ++K) {
 				bam_pileup1_t *p = plp[s] + i;
-				int *sct = &score[K*n_types], indelQ, seqQ;
+				int *sct = &score1[K*n_types], indelQ1, indelQ2, seqQ, indelQ;
 				for (t = 0; t < n_types; ++t) sc[t] = sct[t]<<6 | t;
 				for (t = 1; t < n_types; ++t) // insertion sort
 					for (j = t; j > 0 && sc[j] < sc[j-1]; --j)
@@ -335,14 +336,27 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				 * compromise for multi-allelic indels.
 				 */
 				if ((sc[0]&0x3f) == ref_type) {
-					indelQ = (sc[1]>>6) - (sc[0]>>6);
+					indelQ1 = (sc[1]>>6) - (sc[0]>>6);
 					seqQ = est_seqQ(bca, types[sc[1]&0x3f], l_run);
 				} else {
 					for (t = 0; t < n_types; ++t) // look for the reference type
 						if ((sc[t]&0x3f) == ref_type) break;
-					indelQ = (sc[t]>>6) - (sc[0]>>6);
+					indelQ1 = (sc[t]>>6) - (sc[0]>>6);
 					seqQ = est_seqQ(bca, types[sc[0]&0x3f], l_run);
 				}
+				sct = &score2[K*n_types];
+				for (t = 0; t < n_types; ++t) sc[t] = sct[t]<<6 | t;
+				for (t = 1; t < n_types; ++t) // insertion sort
+					for (j = t; j > 0 && sc[j] < sc[j-1]; --j)
+						tmp = sc[j], sc[j] = sc[j-1], sc[j-1] = tmp;
+				if ((sc[0]&0x3f) == ref_type) {
+					indelQ2 = (sc[1]>>6) - (sc[0]>>6);
+				} else {
+					for (t = 0; t < n_types; ++t) // look for the reference type
+						if ((sc[t]&0x3f) == ref_type) break;
+					indelQ2 = (sc[t]>>6) - (sc[0]>>6);
+				}
+				indelQ = indelQ1 < indelQ2? indelQ1 : indelQ2;
 				if (sc[0]>>6 > MAX_SCORE) indelQ = 0; // too many mismatches; something bad possibly happened
 				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ;
 				sumq[sc[0]&0x3f] += indelQ < seqQ? indelQ : seqQ;
@@ -382,7 +396,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 			}
 		}		
 	}
-	free(score);
+	free(score1); free(score2);
 	// free
 	free(types); free(inscns);
 	return n_alt > 0? 0 : -1;
