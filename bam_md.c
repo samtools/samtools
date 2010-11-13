@@ -168,8 +168,9 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int write_bq)
 	uint32_t *cigar = bam1_cigar(b);
 	bam1_core_t *c = &b->core;
 	kpa_par_t conf = kpa_par_def;
-	// find the start and end of the alignment
 	if (c->flag & BAM_FUNMAP) return -1;
+	if (bam_aux_get(b, "BQ")) return -2;
+	// find the start and end of the alignment	
 	x = c->pos, y = 0, yb = ye = xb = xe = -1;
 	for (k = 0; k < c->n_cigar; ++k) {
 		int op, l;
@@ -290,7 +291,7 @@ int bam_fillmd(int argc, char *argv[])
 					fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
 							fp->header->target_name[tid]);
 			}
-			if (is_realn) bam_prob_realn_core(b, ref, 0);
+			if (is_realn) bam_prob_realn_core(b, ref, 1);
 			if (capQ > 10) {
 				int q = bam_cap_mapQ(b, ref, capQ);
 				if (b->core.qual > q) b->core.qual = q;
