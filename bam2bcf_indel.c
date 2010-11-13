@@ -11,7 +11,6 @@ KHASH_SET_INIT_STR(rg)
 
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
-#define MAX_SCORE 90
 #define MIN_SUPPORT_COEF 500
 
 void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
@@ -296,11 +295,15 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					}
 					sc = kpa_glocal((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
 									(uint8_t*)query, qend - qbeg, qq, &apf1, 0, 0);
-					score1[K*n_types + t] = score2[K*n_types + t] = sc;
-					if (sc > 5) { // I do not know why, but a long exact match always has sc==5
+					l = (int)(100. * sc / (qend - qbeg) + .499); // used for adjusting indelQ below
+					if (l > 255) l = 255;
+					score1[K*n_types + t] = score2[K*n_types + t] = sc<<8 | l;
+					if (sc > 5) {
 						sc = kpa_glocal((uint8_t*)ref2 + tbeg - left, tend - tbeg + abs(types[t]),
 										(uint8_t*)query, qend - qbeg, qq, &apf2, 0, 0);
-						score2[K*n_types + t] = sc;
+						l = (int)(100. * sc / (qend - qbeg) + .499);
+						if (l > 255) l = 255;
+						score2[K*n_types + t] = sc<<8 | l;
 					}
 					free(qq);
 				}
@@ -336,28 +339,32 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				 * compromise for multi-allelic indels.
 				 */
 				if ((sc[0]&0x3f) == ref_type) {
-					indelQ1 = (sc[1]>>6) - (sc[0]>>6);
+					indelQ1 = (sc[1]>>14) - (sc[0]>>14);
 					seqQ = est_seqQ(bca, types[sc[1]&0x3f], l_run);
 				} else {
 					for (t = 0; t < n_types; ++t) // look for the reference type
 						if ((sc[t]&0x3f) == ref_type) break;
-					indelQ1 = (sc[t]>>6) - (sc[0]>>6);
+					indelQ1 = (sc[t]>>14) - (sc[0]>>14);
 					seqQ = est_seqQ(bca, types[sc[0]&0x3f], l_run);
 				}
+				tmp = sc[0]>>6 & 0xff;
+				indelQ1 = tmp > 111? 0 : (int)((1. - tmp/111.) * indelQ1 + .499); // reduce indelQ
 				sct = &score2[K*n_types];
 				for (t = 0; t < n_types; ++t) sc[t] = sct[t]<<6 | t;
 				for (t = 1; t < n_types; ++t) // insertion sort
 					for (j = t; j > 0 && sc[j] < sc[j-1]; --j)
 						tmp = sc[j], sc[j] = sc[j-1], sc[j-1] = tmp;
 				if ((sc[0]&0x3f) == ref_type) {
-					indelQ2 = (sc[1]>>6) - (sc[0]>>6);
+					indelQ2 = (sc[1]>>14) - (sc[0]>>14);
 				} else {
 					for (t = 0; t < n_types; ++t) // look for the reference type
 						if ((sc[t]&0x3f) == ref_type) break;
-					indelQ2 = (sc[t]>>6) - (sc[0]>>6);
+					indelQ2 = (sc[t]>>14) - (sc[0]>>14);
 				}
+				tmp = sc[0]>>6 & 0xff;
+				indelQ2 = tmp > 111? 0 : (int)((1. - tmp/111.) * indelQ2 + .499);
+				// pick the smaller between indelQ1 and indelQ2
 				indelQ = indelQ1 < indelQ2? indelQ1 : indelQ2;
-				if (sc[0]>>6 > MAX_SCORE) indelQ = 0; // too many mismatches; something bad possibly happened
 				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ;
 				sumq[sc[0]&0x3f] += indelQ < seqQ? indelQ : seqQ;
 //				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ);
