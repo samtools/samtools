@@ -154,7 +154,7 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 		const bam_pileup1_t *p = pl + i;
 		uint32_t q, x = 0, qq;
 		uint16_t y = 0;
-		if (p->is_del || (p->b->core.flag&BAM_FUNMAP)) continue;
+		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
 		q = (uint32_t)bam1_qual(p->b)[p->qpos];
 		if (q < bm->min_baseQ) continue;
 		x |= (uint32_t)bam1_strand(p->b) << 18 | q << 8 | p->b->core.qual;
@@ -166,7 +166,7 @@ glf1_t *bam_maqcns_glfgen(int _n, const bam_pileup1_t *pl, uint8_t ref_base, bam
 		y |= q << 5;
 		qq = bam1_seqi(bam1_seq(p->b), p->qpos);
 		q = bam_nt16_nt4_table[qq? qq : ref_base];
-		if (!p->is_del && q < 4) x |= 1 << 21 | q << 16, y |= q;
+		if (!p->is_del && !p->is_refskip && q < 4) x |= 1 << 21 | q << 16, y |= q;
 		bm->aux->info16[n] = y;
 		bm->aux->info[n++] = x;
 	}
