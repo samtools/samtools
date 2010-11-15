@@ -220,7 +220,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int write_bq)
 			else if (op == BAM_CDEL) x += l;
 		}
 		if (write_bq) {
-			for (i = 0; i < c->l_qseq; ++i) bq[i] = bq[i] - qual[i] + 33;
+			for (i = 0; i < c->l_qseq; ++i) bq[i] = bq[i] - qual[i] + 64;
 			bam_aux_append(b, "BQ", 'Z', c->l_qseq + 1, bq);
 			free(bq);
 		}

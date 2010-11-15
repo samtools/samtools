@@ -289,7 +289,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					bq = (uint8_t*)bam_aux_get(p->b, "BQ");
 					if (bq) ++bq; // skip type
 					for (l = qbeg; l < qend; ++l) {
-						qq[l - qbeg] = bq? qual[l] + (bq[l] - 33) : qual[l];
+						qq[l - qbeg] = bq? qual[l] + (bq[l] - 64) : qual[l];
 						if (qq[l - qbeg] > 30) qq[l - qbeg] = 30;
 						if (qq[l - qbeg] < 7) qq[l - qbeg] = 7;
 					}
