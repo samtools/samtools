@@ -21,7 +21,7 @@ typedef struct __bcf_callaux_t {
 } bcf_callaux_t;
 
 typedef struct {
-	int depth, qsum[4];
+	int depth, ori_depth, qsum[4];
 	int anno[16];
 	float p[25];
 } bcf_callret1_t;
@@ -29,7 +29,7 @@ typedef struct {
 typedef struct {
 	int a[5]; // alleles: ref, alt, alt2, alt3
 	int n, n_alleles, shift, ori_ref, unseen;
-	int anno[16], depth;
+	int anno[16], depth, ori_depth;
 	uint8_t *PL;
 } bcf_call_t;
 

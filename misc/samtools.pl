@@ -10,7 +10,7 @@ my $version = '0.3.3';
 &usage if (@ARGV < 1);
 
 my $command = shift(@ARGV);
-my %func = (showALEN=>\&showALEN, pileup2fq=>\&pileup2fq, varFilter=>\&varFilter,
+my %func = (showALEN=>\&showALEN, pileup2fq=>\&pileup2fq, varFilter=>\&varFilter, plp2vcf=>\&plp2vcf,
 			unique=>\&unique, uniqcmp=>\&uniqcmp, sra2hdr=>\&sra2hdr, sam2fq=>\&sam2fq);
 
 die("Unknown command \"$command\".\n") if (!defined($func{$command}));
@@ -471,6 +471,44 @@ sub uniqcmp_aux {
 	@{$a->{$t[0]}[$which]} = (($t[1]&0x10)? 1 : 0, $t[2], $t[3]-$l, $t[4], "$x:$nm", $x - 4 * $nm);
   }
   close($fh);
+}
+
+sub plp2vcf {
+  while (<>) {
+	my @t = split;
+	next if ($t[3] eq '*/*');
+	if ($t[2] eq '*') { # indel
+	  my @s = split("/", $t[3]);
+	  my (@a, @b);
+	  my ($ref, $alt);
+	  for (@s) {
+		next if ($_ eq '*');
+		if (/^-/) {
+		  push(@a, 'N'.substr($_, 1));
+		  push(@b, 'N');
+		} elsif (/^\+/) {
+		  push(@a, 'N');
+		  push(@b, 'N'.substr($_, 1));
+		}
+	  }
+	  if ($a[0] && $a[1]) {
+		if (length($a[0]) < length($a[1])) {
+		  $ref = $a[1];
+		  $alt = ($b[0] . ('N' x (length($a[1]) - length($a[0])))) . ",$b[1]";
+		} elsif (length($a[0]) > length($a[1])) {
+		  $ref = $a[0];
+		  $alt = ($b[1] . ('N' x (length($a[0]) - length($a[1])))) . ",$b[0]";
+		} else {
+		  $ref = $a[0];
+		  $alt = ($b[0] eq $b[1])? $b[0] : "$b[0],$b[1]";
+		}
+	  } else {
+		$ref = $a[0]; $alt = $b[0];
+	  }
+	  print join("\t", @t[0,1], '.', $ref, $alt, $t[5], '.', '.'), "\n";
+	} else { # SNP
+	}
+  }
 }
 
 #

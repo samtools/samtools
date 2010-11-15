@@ -36,7 +36,7 @@ void bcf_call_destroy(bcf_callaux_t *bca)
  * negative if we are looking at an indel. */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
-	int i, n, ref4, is_indel;
+	int i, n, ref4, is_indel, ori_depth = 0;
 	memset(r, 0, sizeof(bcf_callret1_t));
 	if (ref_base >= 0) {
 		ref4 = bam_nt16_nt4_table[ref_base];
@@ -56,6 +56,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
 		// set base
 		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
+		++ori_depth;
 		baseQ = q = is_indel? p->aux&0xff : (int)bam1_qual(p->b)[p->qpos]; // base/indel quality
 		seqQ = is_indel? (p->aux>>8&0xff) : 99;
 		if (q < bca->min_baseQ) continue;
@@ -86,7 +87,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		r->anno[3<<2|is_diff<<1|0] += min_dist;
 		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
 	}
-	r->depth = n;
+	r->depth = n; r->ori_depth = ori_depth;
 	// glfgen
 	errmod_cal(bca->e, n, 5, bca->bases, r->p);
 	return r->depth;
@@ -160,8 +161,9 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	}
 	// combine annotations
 	memset(call->anno, 0, 16 * sizeof(int));
-	for (i = call->depth = 0, tmp = 0; i < n; ++i) {
+	for (i = call->depth = call->ori_depth = 0, tmp = 0; i < n; ++i) {
 		call->depth += calls[i].depth;
+		call->ori_depth += calls[i].ori_depth;
 		for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
 	}
 	return 0;
@@ -212,7 +214,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	kputc('\0', &s);
 	// INFO
 	if (bc->ori_ref < 0) kputs("INDEL;", &s);
-	kputs("I16=", &s);
+	kputs("DP=", &s); kputw(bc->ori_depth, &s); kputs(";I16=", &s);
 	for (i = 0; i < 16; ++i) {
 		if (i) kputc(',', &s);
 		kputw(bc->anno[i], &s);
