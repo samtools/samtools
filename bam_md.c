@@ -173,7 +173,10 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int apply_baq)
 	// test if BQ or ZQ is present
 	if ((bq = bam_aux_get(b, "BQ")) != 0) ++bq;
 	if ((zq = bam_aux_get(b, "ZQ")) != 0 && *zq == 'Z') ++zq;
-	if (bq && zq) return -2; // do not know what to do...
+	if (bq && zq) { // remove the ZQ tag
+		bam_aux_del(b, zq-1);
+		zq = 0;
+	}
 	if (bq || zq) {
 		if ((apply_baq && zq) || (!apply_baq && bq)) return -3; // in both cases, do nothing
 		if (bq && apply_baq) { // then convert BQ to ZQ
