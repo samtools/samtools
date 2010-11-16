@@ -25,6 +25,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_QCALL   1024
 #define VC_CALL_GT 2048
 #define VC_ADJLD   4096
+#define VC_NO_INDEL 8192
 
 typedef struct {
 	int flag, prior_type, n1;
@@ -215,7 +216,7 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:")) >= 0) {
+	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:I")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
@@ -229,6 +230,7 @@ int bcfview(int argc, char *argv[])
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
 		case 'H': vc.flag |= VC_HWE; break;
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
+		case 'I': vc.flag |= VC_NO_INDEL; break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'i': vc.indel_frac = atof(optarg); break;
@@ -257,6 +259,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -N        skip sites where REF is not A/C/G/T\n");
 		fprintf(stderr, "         -Q        output the QCALL likelihood format\n");
 		fprintf(stderr, "         -L        calculate LD for adjacent sites\n");
+		fprintf(stderr, "         -I        skip indels\n");
 		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
 		fprintf(stderr, "         -t FLOAT  scaled substitution mutation rate [%.4lg]\n", vc.theta);
@@ -311,7 +314,9 @@ int bcfview(int argc, char *argv[])
 		}
 	}
 	while (vcf_read(bp, h, b) > 0) {
-		if (vc.flag & VC_ACGT_ONLY) {
+		int is_indel = bcf_is_indel(b);
+		if ((vc.flag & VC_NO_INDEL) && is_indel) continue;
+		if ((vc.flag & VC_ACGT_ONLY) && !is_indel) {
 			int x;
 			if (b->ref[0] == 0 || b->ref[1] != 0) continue;
 			x = toupper(b->ref[0]);
