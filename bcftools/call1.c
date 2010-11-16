@@ -29,7 +29,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 typedef struct {
 	int flag, prior_type, n1;
 	char *fn_list, *prior_file;
-	double theta, pref;
+	double theta, pref, indel_frac;
 } viewconf_t;
 
 khash_t(set64) *bcf_load_pos(const char *fn, bcf_hdr_t *_h)
@@ -200,6 +200,7 @@ double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4]);
 int bcfview(int argc, char *argv[])
 {
 	extern int bcf_2qcall(bcf_hdr_t *h, bcf1_t *b);
+	extern void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x);
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
 	int c;
@@ -213,8 +214,8 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgL")) >= 0) {
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
+	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
@@ -230,6 +231,7 @@ int bcfview(int argc, char *argv[])
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
+		case 'i': vc.indel_frac = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
 		case 'P':
@@ -257,7 +259,8 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -L        calculate LD for adjacent sites\n");
 		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
-		fprintf(stderr, "         -t FLOAT  scaled mutation rate [%.4lg]\n", vc.theta);
+		fprintf(stderr, "         -t FLOAT  scaled substitution mutation rate [%.4lg]\n", vc.theta);
+		fprintf(stderr, "         -i FLOAT  indel-to-substitution ratio [%.4lg]\n", vc.indel_frac);
 		fprintf(stderr, "         -p FLOAT  variant if P(ref|D)<FLOAT [%.3lg]\n", vc.pref);
 		fprintf(stderr, "         -P STR    type of prior: full, cond2, flat [full]\n");
 		fprintf(stderr, "\n");
@@ -287,6 +290,7 @@ int bcfview(int argc, char *argv[])
 			bcf_p1_set_n1(p1, vc.n1);
 			bcf_p1_init_subprior(p1, vc.prior_type, vc.theta);
 		}
+		if (vc.indel_frac > 0.) bcf_p1_indel_prior(p1, vc.indel_frac);
 	}
 	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, h);
 	if (optind + 1 < argc && !(vc.flag&VC_VCFIN)) {

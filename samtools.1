@@ -1,4 +1,4 @@
-.TH samtools 1 "27 October 2010" "samtools-0.1.9" "Bioinformatics tools"
+.TH samtools 1 "15 November 2010" "samtools-0.1.10" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -20,7 +20,7 @@ samtools faidx ref.fasta
 .PP
 samtools pileup -vcf ref.fasta aln.sorted.bam
 .PP
-samtools mpileup -C50 -agf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
+samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools tview aln.sorted.bam ref.fasta
 
@@ -65,11 +65,11 @@ format: `chr2' (the whole chr2), `chr2:1000000' (region starting from
 .B -b
 Output in the BAM format.
 .TP
-.BI -f " INT"
+.BI -f \ INT
 Only output alignments with all bits in INT present in the FLAG
 field. INT can be in hex in the format of /^0x[0-9A-F]+/ [0]
 .TP
-.BI -F " INT"
+.BI -F \ INT
 Skip alignments with bits present in INT [0]
 .TP
 .B -h
@@ -78,19 +78,19 @@ Include the header in the output.
 .B -H
 Output the header only.
 .TP
-.BI -l " STR"
+.BI -l \ STR
 Only output reads in library STR [null]
 .TP
-.BI -o " FILE"
+.BI -o \ FILE
 Output file [stdout]
 .TP
-.BI -q " INT"
+.BI -q \ INT
 Skip alignments with MAPQ smaller than INT [0]
 .TP
-.BI -r " STR"
+.BI -r \ STR
 Only output reads in read group STR [null]
 .TP
-.BI -R " FILE"
+.BI -R \ FILE
 Output reads in read groups listed in
 .I FILE
 [null]
@@ -109,7 +109,7 @@ and
 .B `-q'
 , are taken into account.
 .TP
-.BI -t " FILE"
+.BI -t \ FILE
 This file is TAB-delimited. Each line must contain the reference name
 and the length of the reference, one line for each distinct reference;
 additional fields are ignored. This file also defines the order of the
@@ -136,135 +136,6 @@ region in the format like `chr10:10,000,000' or `=10,000,000' when
 viewing the same reference sequence.
 
 .TP
-.B pileup
-samtools pileup [-2sSBicv] [-f in.ref.fasta] [-t in.ref_list] [-l
-in.site_list] [-C capMapQ] [-M maxMapQ] [-T theta] [-N nHap] [-r
-pairDiffRate] [-m mask] [-d maxIndelDepth] [-G indelPrior]
-<in.bam>|<in.sam>
-
-Print the alignment in the pileup format. In the pileup format, each
-line represents a genomic position, consisting of chromosome name,
-coordinate, reference base, read bases, read qualities and alignment
-mapping qualities. Information on match, mismatch, indel, strand,
-mapping quality and start and end of a read are all encoded at the read
-base column. At this column, a dot stands for a match to the reference
-base on the forward strand, a comma for a match on the reverse strand,
-a '>' or '<' for a reference skip, `ACGTN' for a mismatch on the forward
-strand and `acgtn' for a mismatch on the reverse strand. A pattern
-`\\+[0-9]+[ACGTNacgtn]+' indicates there is an insertion between this
-reference position and the next reference position. The length of the
-insertion is given by the integer in the pattern, followed by the
-inserted sequence. Similarly, a pattern `-[0-9]+[ACGTNacgtn]+'
-represents a deletion from the reference. The deleted bases will be
-presented as `*' in the following lines. Also at the read base column, a
-symbol `^' marks the start of a read. The ASCII of the character
-following `^' minus 33 gives the mapping quality. A symbol `$' marks the
-end of a read segment.
-
-If option
-.B -c
-is applied, the consensus base, Phred-scaled consensus quality, SNP
-quality (i.e. the Phred-scaled probability of the consensus being
-identical to the reference) and root mean square (RMS) mapping quality
-of the reads covering the site will be inserted between the `reference
-base' and the `read bases' columns. An indel occupies an additional
-line. Each indel line consists of chromosome name, coordinate, a star,
-the genotype, consensus quality, SNP quality, RMS mapping quality, #
-covering reads, the first alllele, the second allele, # reads supporting
-the first allele, # reads supporting the second allele and # reads
-containing indels different from the top two alleles.
-
-The position of indels is offset by -1.
-
-.B OPTIONS:
-.RS
-.TP 10
-.B -B
-Disable the BAQ computation. See the
-.B mpileup
-command for details.
-.TP
-.B -c
-Call the consensus sequence using SOAPsnp consensus model. Options
-.BR -T ", " -N ", " -I " and " -r
-are only effective when
-.BR -c " or " -g
-is in use.
-.TP
-.BI -C " INT"
-Coefficient for downgrading the mapping quality of poorly mapped
-reads. See the
-.B mpileup
-command for details. [0]
-.TP
-.BI -d " INT"
-Use the first
-.I NUM
-reads in the pileup for indel calling for speed up. Zero for unlimited. [1024]
-.TP
-.BI -f " FILE"
-The reference sequence in the FASTA format. Index file
-.I FILE.fai
-will be created if
-absent.
-.TP
-.B -g
-Generate genotype likelihood in the binary GLFv3 format. This option
-suppresses -c, -i and -s. This option is deprecated by the
-.B mpileup
-command.
-.TP
-.B -i
-Only output pileup lines containing indels.
-.TP
-.BI -I " INT"
-Phred probability of an indel in sequencing/prep. [40]
-.TP
-.BI -l " FILE"
-List of sites at which pileup is output. This file is space
-delimited. The first two columns are required to be chromosome and
-1-based coordinate. Additional columns are ignored. It is
-recommended to use option
-.TP
-.BI -m " INT"
-Filter reads with flag containing bits in
-.I INT
-[1796]
-.TP
-.BI -M " INT"
-Cap mapping quality at INT [60]
-.TP
-.BI -N " INT"
-Number of haplotypes in the sample (>=2) [2]
-.TP
-.BI -r " FLOAT"
-Expected fraction of differences between a pair of haplotypes [0.001]
-.TP
-.B -s
-Print the mapping quality as the last column. This option makes the
-output easier to parse, although this format is not space efficient.
-.TP
-.B -S
-The input file is in SAM.
-.TP
-.BI -t " FILE"
-List of reference names ane sequence lengths, in the format described
-for the
-.B import
-command. If this option is present, samtools assumes the input
-.I <in.alignment>
-is in SAM format; otherwise it assumes in BAM format.
-.B -s
-together with
-.B -l
-as in the default format we may not know the mapping quality.
-.TP
-.BI -T " FLOAT"
-The theta parameter (error dependency coefficient) in the maq consensus
-calling model [0.85]
-.RE
-
-.TP
 .B mpileup
 samtools mpileup [-Bug] [-C capQcoef] [-r reg] [-f in.fa] [-l list] [-M capMapQ] [-Q minBaseQ] [-q minMapQ] in.bam [in2.bam [...]]
 
@@ -281,37 +152,64 @@ quality (BAQ). BAQ is the Phred-scaled probability of a read base being
 misaligned. Applying this option greatly helps to reduce false SNPs
 caused by misalignments.
 .TP
-.BI -C " INT"
+.BI -C \ INT
 Coefficient for downgrading mapping quality for reads containing
 excessive mismatches. Given a read with a phred-scaled probability q of
 being generated from the mapped position, the new mapping quality is
 about sqrt((INT-q)/INT)*INT. A zero value disables this
-functionality; if enabled, the recommended value is 50. [0]
+functionality; if enabled, the recommended value for BWA is 50. [0]
 .TP
-.BI -f " FILE"
+.BI -e \ INT
+Phred-scaled gap extension sequencing error probability. Reducing
+.I INT
+leads to longer indels. [20]
+.TP
+.BI -f \ FILE
 The reference file [null]
 .TP
 .B -g
 Compute genotype likelihoods and output them in the binary call format (BCF).
 .TP
-.B -u
-Similar to
-.B -g
-except that the output is uncompressed BCF, which is preferred for pipeing.
+.BI -h \ INT
+Coefficient for modeling homopolymer errors. Given an
+.IR l -long
+homopolymer
+run, the sequencing error of an indel of size
+.I s
+is modeled as
+.IR INT * s / l .
+[100]
 .TP
-.BI -l " FILE"
+.BI -l \ FILE
 File containing a list of sites where pileup or BCF is outputted [null]
 .TP
-.BI -q " INT"
+.BI -o \ INT
+Phred-scaled gap open sequencing error probability. Reducing
+.I INT
+leads to more indel calls. [40]
+.TP
+.BI -P \ STR
+Comma dilimited list of platforms (determined by
+.BR @RG-PL )
+from which indel candidates are obtained. It is recommended to collect
+indel candidates from sequencing technologies that have low indel error
+rate such as ILLUMINA. [all]
+.TP
+.BI -q \ INT
 Minimum mapping quality for an alignment to be used [0]
 .TP
-.BI -Q " INT"
+.BI -Q \ INT
 Minimum base quality for a base to be considered [13]
 .TP
-.BI -r " STR"
+.BI -r \ STR
 Only generate pileup in region
 .I STR
 [all sites]
+.TP
+.B -u
+Similar to
+.B -g
+except that the output is uncompressed BCF, which is preferred for piping.
 .RE
 
 .TP
@@ -345,7 +243,7 @@ Output the final alignment to the standard output.
 .B -n
 Sort by read names rather than by chromosomal coordinates
 .TP
-.B -m INT
+.BI -m \ INT
 Approximately the maximum required memory. [500000000]
 .RE
 
@@ -368,7 +266,7 @@ and the headers of other files will be ignored.
 .B OPTIONS:
 .RS
 .TP 8
-.BI -h " FILE"
+.BI -h \ FILE
 Use the lines of
 .I FILE
 as `@' headers to be copied to
@@ -379,7 +277,7 @@ replacing any header lines that would otherwise be copied from
 is actually in SAM format, though any alignment records it may contain
 are ignored.)
 .TP
-.BI -R " STR"
+.BI -R \ STR
 Merge files in the specified region indicated by
 .I STR
 .TP
@@ -479,7 +377,7 @@ Output compressed BAM
 .B -S
 The input is SAM with header lines
 .TP
-.BI -C " INT"
+.BI -C \ INT
 Coefficient to cap mapping quality of poorly mapped reads. See the
 .B pileup
 command for details. [0]
@@ -487,6 +385,136 @@ command for details. [0]
 .B -r
 Perform probabilistic realignment to compute BAQ, which will be used to
 cap base quality.
+.RE
+
+.TP
+.B pileup
+samtools pileup [-2sSBicv] [-f in.ref.fasta] [-t in.ref_list] [-l
+in.site_list] [-C capMapQ] [-M maxMapQ] [-T theta] [-N nHap] [-r
+pairDiffRate] [-m mask] [-d maxIndelDepth] [-G indelPrior]
+<in.bam>|<in.sam>
+
+Print the alignment in the pileup format. In the pileup format, each
+line represents a genomic position, consisting of chromosome name,
+coordinate, reference base, read bases, read qualities and alignment
+mapping qualities. Information on match, mismatch, indel, strand,
+mapping quality and start and end of a read are all encoded at the read
+base column. At this column, a dot stands for a match to the reference
+base on the forward strand, a comma for a match on the reverse strand,
+a '>' or '<' for a reference skip, `ACGTN' for a mismatch on the forward
+strand and `acgtn' for a mismatch on the reverse strand. A pattern
+`\\+[0-9]+[ACGTNacgtn]+' indicates there is an insertion between this
+reference position and the next reference position. The length of the
+insertion is given by the integer in the pattern, followed by the
+inserted sequence. Similarly, a pattern `-[0-9]+[ACGTNacgtn]+'
+represents a deletion from the reference. The deleted bases will be
+presented as `*' in the following lines. Also at the read base column, a
+symbol `^' marks the start of a read. The ASCII of the character
+following `^' minus 33 gives the mapping quality. A symbol `$' marks the
+end of a read segment.
+
+If option
+.B -c
+is applied, the consensus base, Phred-scaled consensus quality, SNP
+quality (i.e. the Phred-scaled probability of the consensus being
+identical to the reference) and root mean square (RMS) mapping quality
+of the reads covering the site will be inserted between the `reference
+base' and the `read bases' columns. An indel occupies an additional
+line. Each indel line consists of chromosome name, coordinate, a star,
+the genotype, consensus quality, SNP quality, RMS mapping quality, #
+covering reads, the first alllele, the second allele, # reads supporting
+the first allele, # reads supporting the second allele and # reads
+containing indels different from the top two alleles.
+
+.B NOTE:
+Since 0.1.10, the `pileup' command is deprecated by `mpileup'.
+
+.B OPTIONS:
+.RS
+.TP 10
+.B -B
+Disable the BAQ computation. See the
+.B mpileup
+command for details.
+.TP
+.B -c
+Call the consensus sequence. Options
+.BR -T ", " -N ", " -I " and " -r
+are only effective when
+.BR -c " or " -g
+is in use.
+.TP
+.BI -C \ INT
+Coefficient for downgrading the mapping quality of poorly mapped
+reads. See the
+.B mpileup
+command for details. [0]
+.TP
+.BI -d \ INT
+Use the first
+.I NUM
+reads in the pileup for indel calling for speed up. Zero for unlimited. [1024]
+.TP
+.BI -f \ FILE
+The reference sequence in the FASTA format. Index file
+.I FILE.fai
+will be created if
+absent.
+.TP
+.B -g
+Generate genotype likelihood in the binary GLFv3 format. This option
+suppresses -c, -i and -s. This option is deprecated by the
+.B mpileup
+command.
+.TP
+.B -i
+Only output pileup lines containing indels.
+.TP
+.BI -I \ INT
+Phred probability of an indel in sequencing/prep. [40]
+.TP
+.BI -l \ FILE
+List of sites at which pileup is output. This file is space
+delimited. The first two columns are required to be chromosome and
+1-based coordinate. Additional columns are ignored. It is
+recommended to use option
+.TP
+.BI -m \ INT
+Filter reads with flag containing bits in
+.I INT
+[1796]
+.TP
+.BI -M \ INT
+Cap mapping quality at INT [60]
+.TP
+.BI -N \ INT
+Number of haplotypes in the sample (>=2) [2]
+.TP
+.BI -r \ FLOAT
+Expected fraction of differences between a pair of haplotypes [0.001]
+.TP
+.B -s
+Print the mapping quality as the last column. This option makes the
+output easier to parse, although this format is not space efficient.
+.TP
+.B -S
+The input file is in SAM.
+.TP
+.BI -t \ FILE
+List of reference names ane sequence lengths, in the format described
+for the
+.B import
+command. If this option is present, samtools assumes the input
+.I <in.alignment>
+is in SAM format; otherwise it assumes in BAM format.
+.B -s
+together with
+.B -l
+as in the default format we may not know the mapping quality.
+.TP
+.BI -T \ FLOAT
+The theta parameter (error dependency coefficient) in the maq consensus
+calling model [0.85]
 .RE
 
 .SH SAM FORMAT
@@ -582,9 +610,8 @@ will be attached
 .IP o 2
 Call SNPs and short indels for one diploid individual:
 
-  samtools pileup -vcf ref.fa aln.bam > var.raw.plp
-  samtools.pl varFilter -D 100 var.raw.plp > var.flt.plp
-  awk '($3=="*"&&$6>=50)||($3!="*"&&$6>=20)' var.flt.plp > var.final.plp
+  samtools mpileup -ugf ref.fa aln.bam | bcftools view -bvcg - > var.raw.bcf
+  bcftools view var.raw.bcf | vcfutils.pl varFilter -D 100 > var.flt.vcf
 
 The
 .B -D
@@ -592,38 +619,37 @@ option of varFilter controls the maximum read depth, which should be
 adjusted to about twice the average read depth.  One may consider to add
 .B -C50
 to
-.B pileup
+.B mpileup
 if mapping quality is overestimated for reads containing excessive
 mismatches. Applying this option usually helps
 .B BWA-short
-but may not other mappers. It also potentially increases reference
-biases.
+but may not other mappers.
 
 .IP o 2
-Call SNPs (not short indels) for multiple diploid individuals:
+Call SNPs and short indels for multiple diploid individuals:
 
-  samtools mpileup -augf ref.fa *.bam | bcftools view -bcv - > snp.raw.bcf
-  bcftools view snp.raw.bcf | vcfutils.pl filter4vcf -D 2000 | bgzip > snp.flt.vcf.gz
+  samtools mpileup -P ILLUMINA -ugf ref.fa *.bam | bcftools view -bcvg - > var.raw.bcf
+  bcftools view var.raw.bcf | vcfutils.pl varFilter -D 2000 > var.flt.vcf
 
 Individuals are identified from the
 .B SM
 tags in the
 .B @RG
 header lines. Individuals can be pooled in one alignment file; one
-individual can also be separated into multiple files. In addition, one
-may consider to apply
-.B -C50
-to
-.BR mpileup .
-
-SNP calling with mpileup also works for single sample and has the
-advantage of enabling more powerful filtering. The drawback is the lack
-of short indel calling, which may be implemented in future.
+individual can also be separated into multiple files. The
+.B -P
+option specifies that indel candidates should be collected only from
+read groups with the
+.B @RG-PL
+tag set to
+.IR ILLUMINA .
+Collecting indel candidates from reads sequenced by an indel-prone
+technology may affect the performance of indel calling.
 
 .IP o 2
 Derive the allele frequency spectrum (AFS) on a list of sites from multiple individuals:
 
-  samtools mpileup -gf ref.fa *.bam > all.bcf
+  samtools mpileup -Igf ref.fa *.bam > all.bcf
   bcftools view -bl sites.list all.bcf > sites.bcf
   bcftools view -cGP cond2 sites.bcf > /dev/null 2> sites.1.afs
   bcftools view -cGP sites.1.afs sites.bcf > /dev/null 2> sites.2.afs

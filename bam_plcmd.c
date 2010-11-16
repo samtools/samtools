@@ -532,9 +532,11 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_REALN   0x80
 #define MPLP_FMT_DP 0x100
 #define MPLP_FMT_SP 0x200
+#define MPLP_NO_INDEL 0x400
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth;
+	int openQ, extQ, tandemQ;
 	char *reg, *fn_pos, *pl_list;
 	faidx_t *fai;
 	kh_64_t *hash;
@@ -698,6 +700,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bca = bcf_call_init(-1., conf->min_baseQ);
 		bcr = calloc(sm->n, sizeof(bcf_callret1_t));
 		bca->rghash = rghash;
+		bca->openQ = conf->openQ, bca->extQ = conf->extQ, bca->tandemQ = conf->tandemQ;
 	}
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
@@ -736,7 +739,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
 			// call indels
-			if (bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
+			if (!(conf->flag&MPLP_NO_INDEL) && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
 				for (i = 0; i < gplp.n; ++i)
 					bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], -1, bca, bcr + i);
 				if (bcf_call_combine(gplp.n, bcr, -1, &bc) >= 0) {
@@ -853,8 +856,9 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
 	mplp.max_depth = 250;
+	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDSd:b:P:")) >= 0) {
+	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDSd:b:P:o:e:h:I")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -872,11 +876,15 @@ int bam_mpileup(int argc, char *argv[])
 		case 'R': mplp.flag |= MPLP_REALN; break;
 		case 'D': mplp.flag |= MPLP_FMT_DP; break;
 		case 'S': mplp.flag |= MPLP_FMT_SP; break;
+		case 'I': mplp.flag |= MPLP_NO_INDEL; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
 		case 'Q': mplp.min_baseQ = atoi(optarg); break;
         case 'b': file_list = optarg; break;
+		case 'o': mplp.openQ = atoi(optarg); break;
+		case 'e': mplp.extQ = atoi(optarg); break;
+		case 'h': mplp.tandemQ = atoi(optarg); break;
 		}
 	}
 	if (argc == 1) {
@@ -891,11 +899,15 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "         -d INT      max per-sample depth [%d]\n", mplp.max_depth);
 		fprintf(stderr, "         -P STR      comma separated list of platforms for indels [all]\n");
+		fprintf(stderr, "         -o INT      Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
+		fprintf(stderr, "         -e INT      Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
+		fprintf(stderr, "         -h INT      coefficient for homopolyer errors [%d]\n", mplp.tandemQ);
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
 		fprintf(stderr, "         -B          disable BAQ computation\n");
 		fprintf(stderr, "         -D          output per-sample DP\n");
 		fprintf(stderr, "         -S          output per-sample SP (strand bias P-value, slow)\n");
+		fprintf(stderr, "         -I          do not perform indel calling\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
