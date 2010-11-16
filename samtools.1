@@ -364,6 +364,11 @@ tag. Output SAM by default.
 .B OPTIONS:
 .RS
 .TP 8
+.B -A
+When used jointly with
+.B -r
+this option overwrites the original base quality.
+.TP 8
 .B -e
 Convert a the read base to = if it is identical to the aligned reference
 base. Indel caller does not support the = bases at the moment.
@@ -383,8 +388,7 @@ Coefficient to cap mapping quality of poorly mapped reads. See the
 command for details. [0]
 .TP
 .B -r
-Perform probabilistic realignment to compute BAQ, which will be used to
-cap base quality.
+Compute the BQ tag without changing the base quality.
 .RE
 
 .TP
@@ -666,7 +670,7 @@ commands estimate AFS by EM.
 .IP o 2
 Dump BAQ applied alignment for other SNP callers:
 
-  samtools calmd -br aln.bam > aln.baq.bam
+  samtools calmd -bAr aln.bam > aln.baq.bam
 
 It adds and corrects the
 .B NM

@@ -286,7 +286,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					const uint8_t *qual = bam1_qual(p->b), *bq;
 					uint8_t *qq;
 					qq = calloc(qend - qbeg, 1);
-					bq = (uint8_t*)bam_aux_get(p->b, "BQ");
+					bq = (uint8_t*)bam_aux_get(p->b, "ZQ");
 					if (bq) ++bq; // skip type
 					for (l = qbeg; l < qend; ++l) {
 						qq[l - qbeg] = bq? qual[l] + (bq[l] - 64) : qual[l];
