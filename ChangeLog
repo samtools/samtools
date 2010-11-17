@@ -1,4 +1,138 @@
 ------------------------------------------------------------------------
+r828 | lh3lh3 | 2010-11-16 20:48:49 -0500 (Tue, 16 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+
+update version information: samtools-0.1.9-20 (r828)
+
+------------------------------------------------------------------------
+r827 | lh3lh3 | 2010-11-16 15:32:50 -0500 (Tue, 16 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+
+bcftools: allow to skip indels
+
+------------------------------------------------------------------------
+r826 | lh3lh3 | 2010-11-16 14:11:58 -0500 (Tue, 16 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+
+remove ZQ if both BQ and ZQ are present
+
+------------------------------------------------------------------------
+r825 | lh3lh3 | 2010-11-16 13:51:33 -0500 (Tue, 16 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+ * samtools-0.1.9-18 (r825)
+ * change the behaviour of calmd such that by default it does not change the base quality
+
+------------------------------------------------------------------------
+r824 | lh3lh3 | 2010-11-15 23:31:53 -0500 (Mon, 15 Nov 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/samtools.1
+
+ * samtools-0.1.9-17 (r824)
+ * added command line options to change the default parameters in indel calling
+ * update the manual
+
+------------------------------------------------------------------------
+r823 | lh3lh3 | 2010-11-15 12:20:13 -0500 (Mon, 15 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-r823
+ * the BQ tag is now 64 shifted, not 33 shifted
+
+------------------------------------------------------------------------
+r822 | lh3lh3 | 2010-11-15 00:30:18 -0500 (Mon, 15 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+   M /trunk/samtools/misc/samtools.pl
+
+ * samtools-0.1.9-16 (r822)
+ * keep the raw depth because in indel calling, DP4 may be way off the true depth
+
+------------------------------------------------------------------------
+r821 | lh3lh3 | 2010-11-13 01:18:31 -0500 (Sat, 13 Nov 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-15 (r821)
+ * calmd: write BQ
+ * skip realignment if BQ is present
+
+------------------------------------------------------------------------
+r820 | lh3lh3 | 2010-11-13 01:08:26 -0500 (Sat, 13 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-14 (r820)
+ * penalize reads with excessive differences in indel calling
+
+------------------------------------------------------------------------
+r819 | lh3lh3 | 2010-11-12 21:36:27 -0500 (Fri, 12 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-13 (r819)
+ * fixed a bug in pileup given refskip
+
+------------------------------------------------------------------------
+r818 | lh3lh3 | 2010-11-12 13:04:53 -0500 (Fri, 12 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-r818
+ * for indel calling, do two rounds of probabilistic realignments
+
+------------------------------------------------------------------------
+r817 | lh3lh3 | 2010-11-11 20:04:07 -0500 (Thu, 11 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * samtools-0.1.19-11 (r817)
+ * only initiate indel calling when 0.2% of reads contain a gap
+
+------------------------------------------------------------------------
+r816 | lh3lh3 | 2010-11-11 01:22:59 -0500 (Thu, 11 Nov 2010) | 7 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.9-10 (r816)
+
+ * I know why the forward method fails. it is because of zero base
+   qualities. when that is fixed, the forward method seems to give
+   better results than Viterbi, as it should be. I am tired...
+
+
+------------------------------------------------------------------------
+r815 | lh3lh3 | 2010-11-11 00:57:15 -0500 (Thu, 11 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam2bcf_indel.c
+
+effectively revert to the viterbi version. The forward realignment gives too many false positives.
+
+------------------------------------------------------------------------
 r814 | lh3lh3 | 2010-11-11 00:18:02 -0500 (Thu, 11 Nov 2010) | 4 lines
 Changed paths:
    M /trunk/samtools/bam2bcf_indel.c

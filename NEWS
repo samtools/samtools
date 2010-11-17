@@ -1,3 +1,38 @@
+Beta Release 0.1.10 (16 November, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This release is featured as the first major improvement to the indel
+caller. The method is similar to the old one implemented in the pileup
+command, but the details are handled more carefully both in theory and
+in practice. As a result, the new indel caller usually gives more
+accurate indel calls, though at the cost of sensitivity. The caller is
+implemented in the mpileup command and is invoked by default. It works
+with multiple samples.
+
+Other notable changes:
+
+ * With the -r option, the calmd command writes the difference between
+   the original base quality and the BAQ capped base quality at the BQ
+   tag but does not modify the base quality. Please use -Ar to overwrite
+   the original base quality (the 0.1.9 behavior).
+
+ * Allow to set a maximum per-sample read depth to reduce memory. In
+   0.1.9, most of memory is wasted for the ultra high read depth in some
+   regions (e.g. the chr1 centromere).
+
+ * Optionally write per-sample read depth and per-sample strand bias
+   P-value.
+
+ * Compute equal-tail (Bayesian) credible interval of site allele
+   frequency at the CI95 VCF annotation.
+
+ * Merged the vcfutils.pl varFilter and filter4vcf for better SNP/indel
+   filtering.
+
+(0.1.10: 16 November 2010, r829)
+
+
+
 Beta Release 0.1.9 (27 October, 2010)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
