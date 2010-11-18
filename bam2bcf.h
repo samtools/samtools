@@ -5,7 +5,7 @@
 #include "errmod.h"
 #include "bcftools/bcf.h"
 
-#define B2B_INDEL_NULL 10000
+#define B2B_INDEL_NULL 0x7fff
 #define B2B_MAX_MNP    4 // cannot be larger than 4!!!
 #define B2B_MNP_WIN    10
 #define B2B_REF_INDEL  (-1)
