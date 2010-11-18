@@ -517,7 +517,10 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 	if (fp->type == KNF_TYPE_LOCAL) { // on Windows, the following block is necessary; not on UNIX
 		off_t rest = len, curr;
 		while (rest) {
-			curr = read(fp->fd, buf + l, rest);
+			do {
+				curr = read(fp->fd, buf + l, rest);
+			} while (curr < 0 && EINTR == errno);
+			if (curr < 0) return -1;
 			if (curr == 0) break;
 			l += curr; rest -= curr;
 		}
