@@ -625,6 +625,7 @@ int bcf_call_mnp_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				seqQ = _seqQ[K];
 				tmp = sc[0]>>6 & 0xff;
 				indelQ = tmp > 111? 0 : (int)((1. - tmp/111.) * indelQ + .499); // reduce indelQ
+				if (indelQ > seqQ) indelQ = seqQ; // this is different from indel calling!
 				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ;
 				sumq[sc[0]&0x3f] += indelQ < seqQ? indelQ : seqQ;
 			}
