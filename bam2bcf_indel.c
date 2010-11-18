@@ -455,7 +455,7 @@ int bcf_call_mnp_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		aux = calloc(N + 1, 4);
 		for (i = 0, x = 0; i < B2B_MAX_MNP; ++i)
 			x |= bam_nt16_nt4_table[bam_nt16_table[(int)ref[pos+i]]] << 2*i;
-		ref_seq = aux[m++] = x;
+		ref_seq = x;
 		bca->indelreg = 0;
 		for (s = 0; s < n; ++s) {
 			for (i = 0; i < n_plp[s]; ++i) {
@@ -472,7 +472,7 @@ int bcf_call_mnp_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					else stop = 1;
 					x |= c << 2*k;
 				}
-//				fprintf(stderr, "* %d, %d\n", x, j);
+//				if (j >= 2 && k == B2B_MAX_MNP) fprintf(stderr, "* %c%c%c%c, %d\n", "ACGT"[x&3], "ACGT"[x>>2&3], "ACGT"[x>>4&3], "ACGT"[x>>6&3], j);
 				if (k == B2B_MAX_MNP && j >= 2) aux[m++] = x;
 			}
 		}
@@ -495,12 +495,9 @@ int bcf_call_mnp_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		free(aux);
 		// collect types
 		ks_introsort(uint32_t, n_types, cnt);
-		for (t = 0; t < n_types; ++t)
-			if ((cnt[t]&0xff) == ref_seq) break;
-		if (t == n_types - 1) --t; // we get at least two types
-		types = (int*)calloc(n_types, sizeof(int));
-		for (i = 0; t < n_types; ++i, ++t) types[i] = cnt[t]&0xff;
-		n_types = i;
+		types = (int*)calloc(2, sizeof(int));
+		types[0] = ref_seq; types[1] = cnt[n_types-1]&0xff;
+		ref_type = 0; n_types = 2;
 		// calculate MNP length
 		for (i = B2B_MAX_MNP - 1, k = 0; i >= 0; --i) {
 			int c = types[0] >> 2*i & 3;
@@ -513,10 +510,7 @@ int bcf_call_mnp_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		x = (1<<2*bca->indelreg) - 1;
 		for (t = 0; t < n_types; ++t) types[t] &= x;
 		ref_seq &= x;
-		for (t = 0; t < n_types; ++t)
-			if (types[t] == ref_seq) break;
-		ref_type = t;
-//		fprintf(stderr, "%d, %d, [%x,%x] %d\n", pos, n_types, types[0], types[1], bca->indelreg);
+//		x = types[1]; fprintf(stderr, "%d, %d, %d, %c%c%c%c\n", pos, n_types, bca->indelreg, "ACGT"[x&3], "ACGT"[x>>2&3], "ACGT"[x>>4&3], "ACGT"[x>>6&3]);
 	}
 	{ // calculate left and right boundary
 		left = pos > INDEL_WINDOW_SIZE? pos - INDEL_WINDOW_SIZE : 0;

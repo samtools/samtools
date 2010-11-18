@@ -215,7 +215,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 			if (bc->a[i] < 0) break;
 			if (i > 1) kputc(',', &s);
 			for (j = 0; j < bca->indelreg; ++j)
-				kputc("ACGT"[bca->indel_types[i]>>2*i&3], &s);
+				kputc("ACGT"[bca->indel_types[i]>>2*j&3], &s);
 		}
 		kputc('\0', &s);
 	} else { // a SNP
