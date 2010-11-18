@@ -9,7 +9,7 @@
 #endif
 
 #ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.10-4 (r834)"
+#define PACKAGE_VERSION "0.1.10-5 (r836)"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);

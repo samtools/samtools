@@ -480,9 +480,6 @@ int bcf_call_mnp_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		// squeeze out indentical types
 		for (i = 1, n_types = 1; i < m; ++i)
 			if (aux[i] != aux[i-1]) ++n_types;
-		if (n_types == 1) { // no indels
-			free(aux); return -1;
-		}
 		// count reads for each type
 		cnt = alloca(n_types * 4);
 		cnt[0] = 1<<8 | aux[0];
@@ -495,6 +492,8 @@ int bcf_call_mnp_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		free(aux);
 		// collect types
 		ks_introsort(uint32_t, n_types, cnt);
+		if (n_types == 1 || (cnt[n_types-1]>>8) * MIN_SUPPORT_COEF < N) // no MNPs or too few supporting reads
+			return -1;
 		types = (int*)calloc(2, sizeof(int));
 		types[0] = ref_seq; types[1] = cnt[n_types-1]&0xff;
 		ref_type = 0; n_types = 2;
