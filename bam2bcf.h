@@ -6,6 +6,10 @@
 #include "bcftools/bcf.h"
 
 #define B2B_INDEL_NULL 10000
+#define B2B_MAX_MNP    4 // cannot be larger than 4!!!
+#define B2B_MNP_WIN    10
+#define B2B_REF_INDEL  (-1)
+#define B2B_REF_MNP    (-2)
 
 typedef struct __bcf_callaux_t {
 	int capQ, min_baseQ;
@@ -13,7 +17,7 @@ typedef struct __bcf_callaux_t {
 	// for internal uses
 	int max_bases;
 	int indel_types[4];
-	int maxins, indelreg;
+	int maxins, indelreg, last_mnp_pos;
 	char *inscns;
 	uint16_t *bases;
 	errmod_t *e;
@@ -28,7 +32,7 @@ typedef struct {
 
 typedef struct {
 	int a[5]; // alleles: ref, alt, alt2, alt3
-	int n, n_alleles, shift, ori_ref, unseen;
+	int n, n_alleles, shift, ori_ref, unseen; // ori_ref can be B2B_REF_INDEL/B2B_REF_MNP
 	int anno[16], depth, ori_depth;
 	uint8_t *PL;
 } bcf_call_t;
@@ -45,6 +49,7 @@ extern "C" {
 					 const bcf_callaux_t *bca, const char *ref);
 	int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
 						  const void *rghash);
+	int bcf_call_mnp_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref);
 
 #ifdef __cplusplus
 }

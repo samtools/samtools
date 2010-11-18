@@ -738,16 +738,31 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 						 (conf->flag&MPLP_FMT_SP), 0, 0);
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
-			// call indels
-			if (!(conf->flag&MPLP_NO_INDEL) && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
-				for (i = 0; i < gplp.n; ++i)
-					bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], -1, bca, bcr + i);
-				if (bcf_call_combine(gplp.n, bcr, -1, &bc) >= 0) {
-					b = calloc(1, sizeof(bcf1_t));
-					bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0,
-								 (conf->flag&MPLP_FMT_SP), bca, ref);
-					bcf_write(bp, bh, b);
-					bcf_destroy(b);
+			if (!(conf->flag&MPLP_NO_INDEL)) {
+				// call MNPs
+				if (bcf_call_mnp_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref) >= 0) {
+					for (i = 0; i < gplp.n; ++i)
+						bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], B2B_REF_MNP, bca, bcr + i);
+					if (bcf_call_combine(gplp.n, bcr, B2B_REF_MNP, &bc) >= 0) {
+						b = calloc(1, sizeof(bcf1_t));
+						bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0,
+									 (conf->flag&MPLP_FMT_SP), bca, ref);
+						bcf_write(bp, bh, b);
+						bcf_destroy(b);
+						bca->last_mnp_pos = pos;
+					}
+				}
+				// call indels
+				if (bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
+					for (i = 0; i < gplp.n; ++i)
+						bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], B2B_REF_INDEL, bca, bcr + i);
+					if (bcf_call_combine(gplp.n, bcr, B2B_REF_INDEL, &bc) >= 0) {
+						b = calloc(1, sizeof(bcf1_t));
+						bcf_call2bcf(tid, pos, &bc, b, (conf->flag&(MPLP_FMT_DP|MPLP_FMT_SP))? bcr : 0,
+									 (conf->flag&MPLP_FMT_SP), bca, ref);
+						bcf_write(bp, bh, b);
+						bcf_destroy(b);
+					}
 				}
 			}
 		} else {
