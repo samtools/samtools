@@ -209,7 +209,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		}
 		kputc('\0', &s);
 	} else if (bc->ori_ref == B2B_REF_MNP) {
-		for (j = 0; j < bca->indelreg; ++j) kputc(ref[pos+1+j], &s);
+		for (j = 0; j < bca->indelreg; ++j) kputc(ref[pos+j], &s);
 		kputc('\0', &s);
 		for (i = 1; i < 4; ++i) {
 			if (bc->a[i] < 0) break;
