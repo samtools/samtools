@@ -1,4 +1,92 @@
 ------------------------------------------------------------------------
+r839 | lh3lh3 | 2010-11-18 17:30:11 -0500 (Thu, 18 Nov 2010) | 9 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.10-6 (r839)
+
+ * call MNPs without realignment because it seems to me that it is not
+   worthwhile to significantly slow down SNP calling.
+
+ * the result looks quite different from the previous version. I have
+   work to do...
+
+
+------------------------------------------------------------------------
+r838 | lh3lh3 | 2010-11-18 11:26:09 -0500 (Thu, 18 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/knetfile.c
+
+Apply a patch by Rob Davis, which improves fault detection.
+
+------------------------------------------------------------------------
+r836 | lh3lh3 | 2010-11-18 11:09:23 -0500 (Thu, 18 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-r836
+ * initiate MNP realignment when the MNP has at least 0.2% frequency (otherwise too slow)
+
+------------------------------------------------------------------------
+r835 | lh3lh3 | 2010-11-18 00:25:13 -0500 (Thu, 18 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * modify the filtering rule: also filter SNPs around filtered indels
+ * added MNP filter
+
+------------------------------------------------------------------------
+r834 | lh3lh3 | 2010-11-17 23:13:52 -0500 (Wed, 17 Nov 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.10-4 (r834)
+ * fixed a silly bug in printing MNP
+ * restrict to at most 1 alternative allele
+
+------------------------------------------------------------------------
+r833 | lh3lh3 | 2010-11-17 21:58:58 -0500 (Wed, 17 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bamtk.c
+
+fixed a bug in printing MNPs
+
+------------------------------------------------------------------------
+r832 | lh3lh3 | 2010-11-17 21:47:20 -0500 (Wed, 17 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+minor change to how seqQ is applied
+
+------------------------------------------------------------------------
+r831 | lh3lh3 | 2010-11-17 21:41:12 -0500 (Wed, 17 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.10 (r831)
+ * initial MNP caller
+
+------------------------------------------------------------------------
+r829 | lh3lh3 | 2010-11-16 23:14:15 -0500 (Tue, 16 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bamtk.c
+
+Release samtools-0.1.10 (r829)
+
+------------------------------------------------------------------------
 r828 | lh3lh3 | 2010-11-16 20:48:49 -0500 (Tue, 16 Nov 2010) | 2 lines
 Changed paths:
    M /trunk/samtools/bamtk.c

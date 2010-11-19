@@ -22,7 +22,6 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 	bca->capQ = 60;
 	bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 100;
 	bca->min_baseQ = min_baseQ;
-	bca->last_mnp_pos = -100;
 	bca->e = errmod_init(1. - theta);
 	return bca;
 }
@@ -33,10 +32,8 @@ void bcf_call_destroy(bcf_callaux_t *bca)
 	errmod_destroy(bca->e);
 	free(bca->bases); free(bca->inscns); free(bca);
 }
-/* Compute genotype likelihood by combining likelihood of each
- * read. ref_base is the 4-bit representation of the reference base. It
- * is negative if we are looking at an indel or an MNP. Indel and MNP
- * are indistinguishable in this function. */
+/* ref_base is the 4-bit representation of the reference base. It is
+ * negative if we are looking at an indel. */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
 	int i, n, ref4, is_indel, ori_depth = 0;
@@ -95,9 +92,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 	errmod_cal(bca->e, n, 5, bca->bases, r->p);
 	return r->depth;
 }
-/* Combine individual calls. ref_base is a 4-bit A/C/G/T for a SNP, or
- * B2B_REF_MNP, or B2B_REF_INDEL. Indel and MNP are indistinguishable in
- * this function. */
+
 int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call)
 {
 	int ref4, i, j, qsum[4];
@@ -105,7 +100,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	if (ref_base >= 0) {
 		call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
 		if (ref4 > 4) ref4 = 4;
-	} else call->ori_ref = ref_base, ref4 = 0; // ref_base < 0
+	} else call->ori_ref = -1, ref4 = 0;
 	// calculate qsum
 	memset(qsum, 0, 4 * sizeof(int));
 	for (i = 0; i < n; ++i)
@@ -130,7 +125,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
 			call->unseen = j, call->a[j++] = qsum[i]&3;
 		call->n_alleles = j;
-	} else { // for indels and MNPs
+	} else {
 		call->n_alleles = j;
 		if (call->n_alleles == 1) return -1; // no reliable supporting read. stop doing anything
 	}
@@ -173,8 +168,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	}
 	return 0;
 }
-/* Fill a bcf1_t record. The type of the record (SNP, MNP or INDEL) is
- * determined by bca->ori_ref. */
+
 int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int is_SP,
 				 const bcf_callaux_t *bca, const char *ref)
 {
@@ -185,7 +179,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	b->tid = tid; b->pos = pos; b->qual = 0;
 	s.s = b->str; s.m = b->m_str; s.l = 0;
 	kputc('\0', &s);
-	if (bc->ori_ref == B2B_REF_INDEL) { // an indel
+	if (bc->ori_ref < 0) { // an indel
 		// write REF
 		kputc(ref[pos], &s);
 		for (j = 0; j < bca->indelreg; ++j) kputc(ref[pos+1+j], &s);
@@ -208,16 +202,6 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 			}
 		}
 		kputc('\0', &s);
-	} else if (bc->ori_ref == B2B_REF_MNP) {
-		for (j = 0; j < bca->indelreg; ++j) kputc(ref[pos+j], &s);
-		kputc('\0', &s);
-		for (i = 1; i < 4; ++i) {
-			if (bc->a[i] < 0) break;
-			if (i > 1) kputc(',', &s);
-			for (j = 0; j < bca->indelreg; ++j)
-				kputc("ACGT"[bca->indel_types[i]>>2*j&3], &s);
-		}
-		kputc('\0', &s);
 	} else { // a SNP
 		kputc("ACGTN"[bc->ori_ref], &s); kputc('\0', &s);
 		for (i = 1; i < 5; ++i) {
@@ -229,8 +213,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	}
 	kputc('\0', &s);
 	// INFO
-	if (bc->ori_ref == B2B_REF_INDEL) kputs("INDEL;", &s);
-	else if (bc->ori_ref == B2B_REF_MNP) kputs("MNP;", &s);
+	if (bc->ori_ref < 0) kputs("INDEL;", &s);
 	kputs("DP=", &s); kputw(bc->ori_depth, &s); kputs(";I16=", &s);
 	for (i = 0; i < 16; ++i) {
 		if (i) kputc(',', &s);
