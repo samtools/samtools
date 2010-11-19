@@ -608,6 +608,9 @@ bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end)
 		}
 	}
 	free(bins);
+	if (n_off == 0) {
+		free(off); return iter;
+	}
 	{
 		bam1_t *b = (bam1_t*)calloc(1, sizeof(bam1_t));
 		int l;

@@ -79,12 +79,12 @@ static inline int resolve_cigar2(bam_pileup1_t *p, uint32_t pos, cstate_t *s)
 		is_head = 1;
 		if (c->n_cigar == 1) { // just one operation, save a loop
 			if (_cop(cigar[0]) == BAM_CMATCH) s->k = 0, s->x = c->pos, s->y = 0;
-		} else { // find the first match
+		} else { // find the first match or deletion
 			for (k = 0, s->x = c->pos, s->y = 0; k < c->n_cigar; ++k) {
 				int op = _cop(cigar[k]);
 				int l = _cln(cigar[k]);
-				if (op == BAM_CMATCH) break;
-				else if (op == BAM_CDEL || op == BAM_CREF_SKIP) s->x += l;
+				if (op == BAM_CMATCH || op == BAM_CDEL) break;
+				else if (op == BAM_CREF_SKIP) s->x += l;
 				else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) s->y += l;
 			}
 			assert(k < c->n_cigar);
