@@ -1,3 +1,25 @@
+Beta release 0.1.11 (19 November, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is a bug fix release:
+
+ * Fixed a bug in random retrieval (since 0.1.8). It occurs when reads
+   are retrieved from a small region containing no reads.
+
+ * Fixed a bug in pileup (since 0.1.9). The bug causes an assertion
+   failure when the first CIGAR operation is a deletion.
+
+ * Improved fault tolerence in remote access.
+
+In addition, since 0.1.10, the `pileup' command has been deprecated by
+`mpileup' which is more powerful and more accurate. The `pileup' command
+will not be removed in the next few releases, but new features will not
+be added.
+
+(0.1.11: 19 November 2010, r842)
+
+
+
 Beta Release 0.1.10 (16 November, 2010)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

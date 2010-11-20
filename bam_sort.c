@@ -170,12 +170,12 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 		if (hheaders->n_targets > 0) {
 			if (hout->n_targets != hheaders->n_targets) {
 				fprintf(stderr, "[bam_merge_core] number of @SQ headers in '%s' differs from number of target sequences\n", headers);
-				return -1;
+				if (!reg) return -1;
 			}
 			for (j = 0; j < hout->n_targets; ++j)
 				if (strcmp(hout->target_name[j], hheaders->target_name[j]) != 0) {
 					fprintf(stderr, "[bam_merge_core] @SQ header '%s' in '%s' differs from target sequence\n", hheaders->target_name[j], headers);
-					return -1;
+					if (!reg) return -1;
 				}
 		}
 
