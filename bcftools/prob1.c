@@ -32,7 +32,7 @@ unsigned char seq_nt4_table[256] = {
 };
 
 struct __bcf_p1aux_t {
-	int n, M, n1, is_indel;
+	int n, M, n1, is_indel, is_folded;
 	double *q2p, *pdg; // pdg -> P(D|g)
 	double *phi, *phi_indel;
 	double *z, *zswap; // aux for afs
@@ -42,6 +42,13 @@ struct __bcf_p1aux_t {
 	const uint8_t *PL; // point to PL
 	int PL_len;
 };
+
+static void fold_array(int M, double *x)
+{
+	int k;
+	for (k = 0; k < M/2; ++k)
+		x[k] = x[M-k] = (x[k] + x[M-k]) / 2.;
+}
 
 void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x)
 {
@@ -153,6 +160,15 @@ int bcf_p1_set_n1(bcf_p1aux_t *b, int n1)
 	if (n1 == 0 || n1 >= b->n) return -1;
 	b->n1 = n1;
 	return 0;
+}
+
+void bcf_p1_set_folded(bcf_p1aux_t *p1a)
+{
+	if (p1a->n1 < 0) {
+		p1a->is_folded = 1;
+		fold_array(p1a->M, p1a->phi);
+		fold_array(p1a->M, p1a->phi_indel);
+	}
 }
 
 void bcf_p1_destroy(bcf_p1aux_t *ma)
@@ -373,7 +389,7 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	// 
 	rst->rank0 = cal_pdg(b, ma);
 	rst->f_exp = mc_cal_afs(ma);
-	rst->p_ref = ma->afs1[ma->M];
+	rst->p_ref = ma->is_folded? ma->afs1[ma->M] + ma->afs1[0] : ma->afs1[ma->M];
 	// calculate f_flat and f_em
 	for (k = 0, sum = 0.; k <= ma->M; ++k)
 		sum += (long double)ma->z[k];
@@ -412,6 +428,7 @@ int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 void bcf_p1_dump_afs(bcf_p1aux_t *ma)
 {
 	int k;
+	if (ma->is_folded) fold_array(ma->M, ma->afs);
 	fprintf(stderr, "[afs]");
 	for (k = 0; k <= ma->M; ++k)
 		fprintf(stderr, " %d:%.3lf", k, ma->afs[ma->M - k]);
