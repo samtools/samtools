@@ -52,6 +52,14 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 
 KSORT_INIT(heap, heap1_t, heap_lt)
 
+static void swap_header_targets(bam_header_t *h1, bam_header_t *h2)
+{
+	bam_header_t t;
+	t.n_targets = h1->n_targets, h1->n_targets = h2->n_targets, h2->n_targets = t.n_targets;
+	t.target_name = h1->target_name, h1->target_name = h2->target_name, h2->target_name = t.target_name;
+	t.target_len = h1->target_len, h1->target_len = h2->target_len, h2->target_len = t.target_len;
+}
+
 static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
 {
 	int tempi;
@@ -130,40 +138,49 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 			return -1;
 		}
 		hin = bam_header_read(fp[i]);
-		if (i == 0) { // the first SAM
+		if (i == 0) { // the first BAM
 			hout = hin;
-			if (hheaders) {
-				// If the text headers to be swapped in include any @SQ headers,
-				// check that they are consistent with the existing binary list
-				// of reference information.
-				if (hheaders->n_targets > 0) {
-					if (hout->n_targets != hheaders->n_targets) {
-						fprintf(stderr, "[bam_merge_core] number of @SQ headers in `%s' differs from number of target sequences", headers);
-						if (!reg) return -1;
-					}
-					for (j = 0; j < hout->n_targets; ++j)
-						if (strcmp(hout->target_name[j], hheaders->target_name[j]) != 0) {
-							fprintf(stderr, "[bam_merge_core] @SQ header '%s' in '%s' differs from target sequence", hheaders->target_name[j], headers);
-							if (!reg) return -1;
-						}
-				}
-				swap_header_text(hout, hheaders);
-				bam_header_destroy(hheaders);
-				hheaders = NULL;
-			}
 		} else { // validate multiple baf
-			if (hout->n_targets != hin->n_targets) {
-				fprintf(stderr, "[bam_merge_core] file '%s' has different number of target sequences. Continue anyway!\n", fn[i]);
-			} else {
-				for (j = 0; j < hout->n_targets; ++j) {
-					if (strcmp(hout->target_name[j], hin->target_name[j])) {
-						fprintf(stderr, "[bam_merge_core] different target sequence name: '%s' != '%s' in file '%s'. Continue anyway!\n",
-								hout->target_name[j], hin->target_name[j], fn[i]);
-					}
+			int min_n_targets = hout->n_targets;
+			if (hin->n_targets < min_n_targets) min_n_targets = hin->n_targets;
+
+			for (j = 0; j < min_n_targets; ++j)
+				if (strcmp(hout->target_name[j], hin->target_name[j]) != 0) {
+					fprintf(stderr, "[bam_merge_core] different target sequence name: '%s' != '%s' in file '%s'\n",
+							hout->target_name[j], hin->target_name[j], fn[i]);
+					return -1;
 				}
+
+			// If this input file has additional target reference sequences,
+			// add them to the headers to be output
+			if (hin->n_targets > hout->n_targets) {
+				swap_header_targets(hout, hin);
+				// FIXME Possibly we should also create @SQ text headers
+				// for the newly added reference sequences
 			}
+
 			bam_header_destroy(hin);
 		}
+	}
+
+	if (hheaders) {
+		// If the text headers to be swapped in include any @SQ headers,
+		// check that they are consistent with the existing binary list
+		// of reference information.
+		if (hheaders->n_targets > 0) {
+			if (hout->n_targets != hheaders->n_targets) {
+				fprintf(stderr, "[bam_merge_core] number of @SQ headers in '%s' differs from number of target sequences\n", headers);
+				return -1;
+			}
+			for (j = 0; j < hout->n_targets; ++j)
+				if (strcmp(hout->target_name[j], hheaders->target_name[j]) != 0) {
+					fprintf(stderr, "[bam_merge_core] @SQ header '%s' in '%s' differs from target sequence\n", hheaders->target_name[j], headers);
+					return -1;
+				}
+		}
+
+		swap_header_text(hout, hheaders);
+		bam_header_destroy(hheaders);
 	}
 
 	if (reg) {
