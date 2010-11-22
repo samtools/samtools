@@ -74,6 +74,11 @@ Skip sites where the REF field is not A/C/G/T
 .B -Q
 Output the QCALL likelihood format
 .TP
+.B -f
+Reference-free variant calling mode. In this mode, the prior will be
+folded; a variant is called iff the sample(s) contains at least two
+alleles; the QUAL field in the VCF/BCF output is changed accordingly.
+.TP
 .BI "-1 " INT
 Number of group-1 samples. This option is used for dividing input into
 two groups for comparing. A zero value disables this functionality. [0]

@@ -1,4 +1,64 @@
 ------------------------------------------------------------------------
+r844 | lh3lh3 | 2010-11-19 23:16:08 -0500 (Fri, 19 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+
+ * samtools-0.1.10-9 (r844)
+ * added the "folded" or reference-free mode for variant calling
+
+------------------------------------------------------------------------
+r843 | lh3lh3 | 2010-11-19 22:26:36 -0500 (Fri, 19 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bam_sort.c
+
+In merging, if -R is specified, do not abort if the sequence dictionary is different.
+
+------------------------------------------------------------------------
+r842 | jmarshall | 2010-11-19 21:24:28 -0500 (Fri, 19 Nov 2010) | 5 lines
+Changed paths:
+   M /trunk/samtools/bam_sort.c
+
+When merging BAM headers, compare the list of target reference sequences
+strictly (and fail/abort if there is a mismatch), but allow one list to be a
+prefix of the other.  (i.e., check that the lists are identical up until the
+shorter runs out, and add the excess targets from the longer to the output.)
+
+------------------------------------------------------------------------
+r841 | lh3lh3 | 2010-11-19 14:49:27 -0500 (Fri, 19 Nov 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bam_pileup.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.10 (r841)
+ * fixed a bug in pileup when the first CIGAR operation is D
+ * fixed a bug in view with range query
+
+------------------------------------------------------------------------
+r840 | lh3lh3 | 2010-11-19 13:45:51 -0500 (Fri, 19 Nov 2010) | 10 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.10-4 (r840)
+
+ * drop the MNP caller. It is slow while does not diliver too much
+   benefit. Possibly I will work on it in future given more time.
+
+ * there is a segfault in pileup 
+
+ * someone has reported segfault from view/index/sort
+
+
+------------------------------------------------------------------------
 r839 | lh3lh3 | 2010-11-18 17:30:11 -0500 (Thu, 18 Nov 2010) | 9 lines
 Changed paths:
    M /trunk/samtools/bam2bcf.h
