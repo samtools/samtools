@@ -80,7 +80,7 @@ double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 		memcpy(flast, f, 4 * sizeof(double));
 		freq_iter(n_smpl, pdg, f);
 		for (i = 0; i < 4; ++i) {
-			double x = fabs(f[0] - flast[0]);
+			double x = fabs(f[i] - flast[i]);
 			if (x > eps) eps = x;
 		}
 		if (eps < LD_ITER_EPS) break;
