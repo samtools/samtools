@@ -112,7 +112,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					  const void *rghash)
 {
 	extern void ks_introsort_uint32_t(int, uint32_t*);
-	int i, s, j, k, t, n_types, *types, max_rd_len, left, right, max_ins, *score1, *score2;
+	int i, s, j, k, t, n_types, *types, max_rd_len, left, right, max_ins, *score1, *score2, max_ref2;
 	int N, K, l_run, ref_type, n_alt;
 	char *inscns = 0, *ref2, *query;
 	khash_t(rg) *hash = (khash_t(rg)*)rghash;
@@ -236,7 +236,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		free(inscns_aux);
 	}
 	// compute the likelihood given each type of indel for each read
-	ref2  = calloc(right - left + max_ins + 2, 1);
+	max_ref2 = right - left + 2 + 2 * (max_ins > -types[0]? max_ins : -types[0]);
+	ref2  = calloc(max_ref2, 1);
 	query = calloc(right - left + max_rd_len + max_ins + 2, 1);
 	score1 = calloc(N * n_types, sizeof(int));
 	score2 = calloc(N * n_types, sizeof(int));
@@ -264,6 +265,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		}
 		for (; j < right && ref[j]; ++j)
 			ref2[k++] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[j]]];
+		for (; k < max_ref2; ++k) ref2[k] = 4;
 		if (j < right) right = j;
 		// align each read to ref2
 		for (s = K = 0; s < n; ++s) {

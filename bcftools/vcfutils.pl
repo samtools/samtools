@@ -14,9 +14,25 @@ sub main {
   my $command = shift(@ARGV);
   my %func = (subsam=>\&subsam, listsam=>\&listsam, fillac=>\&fillac, qstats=>\&qstats, varFilter=>\&varFilter,
 			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf, filter4vcf=>\&varFilter, ldstats=>\&ldstats,
-			  gapstats=>\&gapstats);
+			  gapstats=>\&gapstats, splitchr=>\&splitchr);
   die("Unknown command \"$command\".\n") if (!defined($func{$command}));
   &{$func{$command}};
+}
+
+sub splitchr {
+  my %opts = (l=>5000000);
+  getopts('l:', \%opts);
+  my $l = $opts{l};
+  die(qq/Usage: vcfutils.pl splitchr [-l $opts{l}] <in.fa.fai>\n/) if (@ARGV == 0 && -t STDIN);
+  while (<>) {
+	my @t = split;
+	my $last = 0;
+	for (my $i = 0; $i < $t[1];) {
+	  my $e = ($t[1] - $i) / $l < 1.1? $t[1] : $i + $l;
+	  print "$t[0]:".($i+1)."-$e\n";
+	  $i = $e;
+	}
+  }
 }
 
 sub subsam {
