@@ -698,6 +698,7 @@ int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, voi
 	b = bam_init1();
 	iter = bam_iter_query(idx, tid, beg, end);
 	while ((ret = bam_iter_read(fp, iter, b)) >= 0) func(b, data);
+	bam_iter_destroy(iter);
 	bam_destroy1(b);
 	return (ret == -1)? 0 : ret;
 }
