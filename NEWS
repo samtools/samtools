@@ -1,3 +1,27 @@
+Beta release 0.1.12 (2 December, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is another bug fix release:
+
+ * Fixed a memory violation in mpileup, which causes segfault. Release
+   0.1.9 and above are affected.
+
+ * Fixed a memory violation in the indel caller, which does not causes
+   segfault, but may potentially affect deletion calls in an unexpected
+   way. Release 0.1.10 and above are affected.
+
+ * Fixed a bug in computing r-square in bcftools. Few are using this
+   functionality and it only has minor effect.
+
+ * Fixed a memory leak in bam_fetch().
+
+ * Fixed a bug in writing meta information to the BAM index for the last
+   sequence. This bug is invisible to most users, but it is a bug anyway.
+
+(0.1.12: 2 December 2010, r859)
+
+
+
 Beta release 0.1.11 (21 November, 2010)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
