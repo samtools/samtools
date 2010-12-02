@@ -129,7 +129,7 @@ static int test16(bcf1_t *b, anno16_t *a)
 	if ((p = strstr(b->info, "I16=")) == 0) return -1;
 	p += 4;
 	for (i = 0; i < 16; ++i) {
-		anno[i] = strtol(p, &p, 10);
+		errno = 0; anno[i] = strtol(p, &p, 10);
 		if (anno[i] == 0 && (errno == EINVAL || errno == ERANGE)) return -2;
 		++p;
 	}
