@@ -563,9 +563,10 @@ static int mplp_func(void *data, bam1_t *b)
 	mplp_aux_t *ma = (mplp_aux_t*)data;
 	int ret, skip = 0;
 	do {
-		int has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
+		int has_ref;
 		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
 		if (ret < 0) break;
+		has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
 		skip = 0;
 		if (has_ref && (ma->flag&MPLP_REALN)) bam_prob_realn_core(b, ma->ref, 1);
 		if (has_ref && ma->capQ_thres > 10) {

@@ -181,7 +181,7 @@ int bcf_read(bcf_t *bp, const bcf_hdr_t *h, bcf1_t *b)
 	}
 	bgzf_read(bp->fp, b->str, b->l_str);
 	l = 12 + b->l_str;
-	bcf_sync(b);
+	if (bcf_sync(b) < 0) return -2;
 	for (i = 0; i < b->n_gi; ++i) {
 		bgzf_read(bp->fp, b->gi[i].data, b->gi[i].len * h->n_smpl);
 		l += b->gi[i].len * h->n_smpl;
