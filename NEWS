@@ -1,5 +1,5 @@
-Beta release 0.1.12 (2 December, 2010)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Beta release 0.1.12a (2 December, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 This is another bug fix release:
 
@@ -18,7 +18,9 @@ This is another bug fix release:
  * Fixed a bug in writing meta information to the BAM index for the last
    sequence. This bug is invisible to most users, but it is a bug anyway.
 
-(0.1.12: 2 December 2010, r859)
+ * Fixed a bug in bcftools which causes false "DP4=0,0,0,0" annotations.
+
+(0.1.12: 2 December 2010, r862)
 
 
 
