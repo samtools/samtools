@@ -106,7 +106,7 @@ int bcf_sync(bcf1_t *b)
 	for (p = b->str, n = 0; p < b->str + b->l_str; ++p)
 		if (*p == 0 && p+1 != b->str + b->l_str) tmp[n++] = p + 1;
 	if (n != 5) {
-		fprintf(stderr, "[%s] incorrect number of fields (%d != 5). Corrupted file?\n", __func__, n);
+		fprintf(stderr, "[%s] incorrect number of fields (%d != 5) at %d:%d\n", __func__, n, b->tid, b->pos);
 		return -1;
 	}
 	b->ref = tmp[0]; b->alt = tmp[1]; b->flt = tmp[2]; b->info = tmp[3]; b->fmt = tmp[4];
