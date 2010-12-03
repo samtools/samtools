@@ -26,7 +26,6 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_CALL_GT 2048
 #define VC_ADJLD   4096
 #define VC_NO_INDEL 8192
-#define VC_FOLDED 16384
 
 typedef struct {
 	int flag, prior_type, n1;
@@ -151,7 +150,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 {
 	kstring_t s;
 	int is_var = (pr->p_ref < pref);
-	double p_hwe, r = is_var? pr->p_ref : 1. - pr->p_ref;
+	double p_hwe, r = is_var? pr->p_ref : pr->p_var, fq;
 	anno16_t a;
 
 	p_hwe = pr->g[0] >= 0.? test_hwe(pr->g) : 1.0; // only do HWE g[] is calculated
@@ -166,6 +165,10 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 //	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
 	ksprintf(&s, "AF1=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, pr->cil, pr->cih);
 	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
+	if (fq < -999) fq = -999;
+	if (fq > 999) fq = 999;
+	ksprintf(&s, ";FQ=%.3lg", fq);
 	if (a.is_tested) {
 		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%lg,%lg,%lg,%lg", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
 		ksprintf(&s, ";PV4=%.2lg,%.2lg,%.2lg,%.2lg", a.p[0], a.p[1], a.p[2], a.p[3]);
@@ -176,8 +179,8 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
 	b->m_str = s.m; b->l_str = s.l; b->str = s.s;
-	b->qual = r < 1e-100? 99 : -4.343 * log(r);
-	if (b->qual > 99) b->qual = 99;
+	b->qual = r < 1e-100? 999 : -4.343 * log(r);
+	if (b->qual > 999) b->qual = 999;
 	bcf_sync(b);
 	if (!is_var) bcf_shrink_alt(b, 1);
 	else if (!(flag&VC_KEEPALT))
@@ -217,9 +220,8 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
-	while ((c = getopt(argc, argv, "fN1:l:cHAGvbSuP:t:p:QgLi:I")) >= 0) {
+	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:I")) >= 0) {
 		switch (c) {
-		case 'f': vc.flag |= VC_FOLDED; break;
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
 		case 'N': vc.flag |= VC_ACGT_ONLY; break;
@@ -262,7 +264,6 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -Q        output the QCALL likelihood format\n");
 		fprintf(stderr, "         -L        calculate LD for adjacent sites\n");
 		fprintf(stderr, "         -I        skip indels\n");
-		fprintf(stderr, "         -f        reference-free variant calling\n");
 		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
 		fprintf(stderr, "         -t FLOAT  scaled substitution mutation rate [%.4lg]\n", vc.theta);
@@ -297,7 +298,6 @@ int bcfview(int argc, char *argv[])
 			bcf_p1_init_subprior(p1, vc.prior_type, vc.theta);
 		}
 		if (vc.indel_frac > 0.) bcf_p1_indel_prior(p1, vc.indel_frac); // otherwise use the default indel_frac
-		if (vc.flag & VC_FOLDED) bcf_p1_set_folded(p1);
 	}
 	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, h);
 	if (optind + 1 < argc && !(vc.flag&VC_VCFIN)) {
