@@ -14,7 +14,7 @@ sub main {
   my $command = shift(@ARGV);
   my %func = (subsam=>\&subsam, listsam=>\&listsam, fillac=>\&fillac, qstats=>\&qstats, varFilter=>\&varFilter,
 			  hapmap2vcf=>\&hapmap2vcf, ucscsnp2vcf=>\&ucscsnp2vcf, filter4vcf=>\&varFilter, ldstats=>\&ldstats,
-			  gapstats=>\&gapstats, splitchr=>\&splitchr);
+			  gapstats=>\&gapstats, splitchr=>\&splitchr, vcf2fq=>\&vcf2fq);
   die("Unknown command \"$command\".\n") if (!defined($func{$command}));
   &{$func{$command}};
 }
@@ -454,6 +454,86 @@ sub hapmap2vcf {
   }
 }
 
+sub vcf2fq {
+  my %opts = (d=>3, D=>100000, Q=>10, l=>10);
+  getopts('d:D:Q:l:', \%opts);
+  die(qq/
+Usage:   vcfutils.pl vcf2fq [options] <all-site.vcf>
+
+Options: -d INT    minimum depth          [$opts{d}]
+         -D INT    maximum depth          [$opts{D}]
+         -Q INT    min RMS mapQ           [$opts{Q}]
+         -l INT    INDEL filtering window [$opts{l}]
+\n/) if (@ARGV == 0 && -t STDIN);
+
+  my ($last_chr, $seq, $qual, $last_pos, @gaps);
+  my $_Q = $opts{Q};
+  my $_d = $opts{d};
+  my $_D = $opts{D};
+
+  my %het = (AC=>'M', AG=>'R', AT=>'W', CA=>'M', CG=>'S', CT=>'Y',
+			 GA=>'R', GC=>'S', GT=>'K', TA=>'W', TC=>'Y', TG=>'K');
+
+  $last_chr = '';
+  while (<>) {
+	next if (/^#/);
+	my @t = split;
+	if ($last_chr ne $t[0]) {
+	  &v2q_post_process($last_chr, \$seq, \$qual, \@gaps, $opts{l}) if ($last_chr);
+	  ($last_chr, $last_pos) = ($t[0], 0);
+	  $seq = $qual = '';
+	  @gaps = ();
+	}
+	if ($t[1] - $last_pos != 1) {
+	  $seq .= 'n' x ($t[1] - $last_pos - 1);
+	  $qual .= '!' x ($t[1] - $last_pos - 1);
+	}
+	if (length($t[3]) == 1 && $t[4] =~ /^([A-Za-z.])(,[A-Za-z])*$/) { # a SNP or reference
+	  my ($ref, $alt) = ($t[3], $1);
+	  my ($b, $q);
+	  $q = $1 if ($t[7] =~ /FQ=(-?[\d\.]+)/);
+	  if ($q < 0) {
+		$_ = $1 if ($t[7] =~ /AF1=([\d\.]+)/);
+		$b = ($_ < .5 || $alt eq '.')? $ref : $alt;
+		$q = -$q;
+	  } else {
+		$b = $het{"$ref$alt"};
+		$b ||= 'N';
+	  }
+	  $b = lc($b);
+	  $b = uc($b) if (($t[7] =~ /MQ=(\d+)/ && $1 >= $_Q) && ($t[7] =~ /DP=(\d+)/ && $1 >= $_d && $1 <= $_D));
+	  $q = int($q + 33 + .499);
+	  $q = chr($q <= 126? $q : 126);
+	  $seq .= $b;
+	  $qual .= $q;
+	} else { # an INDEL
+	  push(@gaps, [$t[1], length($t[3])]);
+	}
+	$last_pos = $t[1];
+  }
+  &v2q_post_process($last_chr, \$seq, \$qual, \@gaps, $opts{l});
+}
+
+sub v2q_post_process {
+  my ($chr, $seq, $qual, $gaps, $l) = @_;
+  for my $g (@$gaps) {
+	my $beg = $g->[0] > $l? $g->[0] - $l : 0;
+	my $end = $g->[0] + $g->[1] + $l;
+	$end = length($$seq) if ($end > length($$seq));
+	substr($$seq, $beg, $end - $beg) = lc(substr($$seq, $beg, $end - $beg));
+  }
+  print "\@$chr\n"; &v2q_print_str($seq);
+  print "+\n"; &v2q_print_str($qual);
+}
+
+sub v2q_print_str {
+  my ($s) = @_;
+  my $l = length($$s);
+  for (my $i = 0; $i < $l; $i += 60) {
+	print substr($$s, $i, 60), "\n";
+  }
+}
+
 sub usage {
   die(qq/
 Usage:   vcfutils.pl <command> [<arguments>]\n
@@ -461,8 +541,14 @@ Command: subsam       get a subset of samples
          listsam      list the samples
          fillac       fill the allele count field
          qstats       SNP stats stratified by QUAL
-         varFilter    filtering short variants
+
          hapmap2vcf   convert the hapmap format to VCF
          ucscsnp2vcf  convert UCSC SNP SQL dump to VCF
+
+         varFilter    filtering short variants (*)
+         vcf2fq       VCF->fastq (*)
+
+Notes: Commands with description endting with (*) may need bcftools
+       specific annotations.
 \n/);
 }
