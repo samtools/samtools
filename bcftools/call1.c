@@ -163,18 +163,18 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
 //	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
-	ksprintf(&s, "AF1=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, pr->cil, pr->cih);
+	ksprintf(&s, "AF1=%.4g;CI95=%.4g,%.4g", 1.-pr->f_em, pr->cil, pr->cih);
 	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
 	if (fq > 999) fq = 999;
-	ksprintf(&s, ";FQ=%.3lg", fq);
+	ksprintf(&s, ";FQ=%.3g", fq);
 	if (a.is_tested) {
-		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%lg,%lg,%lg,%lg", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
-		ksprintf(&s, ";PV4=%.2lg,%.2lg,%.2lg,%.2lg", a.p[0], a.p[1], a.p[2], a.p[3]);
+		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%g,%g,%g,%g", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
+		ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	}
 	if (pr->g[0] >= 0. && p_hwe <= .2)
-		ksprintf(&s, ";GC=%.2lf,%.2lf,%.2lf;HWE=%.3lf", pr->g[2], pr->g[1], pr->g[0], p_hwe);
+		ksprintf(&s, ";GC=%.2f,%.2f,%.2f;HWE=%.3f", pr->g[2], pr->g[1], pr->g[0], p_hwe);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
@@ -266,9 +266,9 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -I        skip indels\n");
 		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
-		fprintf(stderr, "         -t FLOAT  scaled substitution mutation rate [%.4lg]\n", vc.theta);
-		fprintf(stderr, "         -i FLOAT  indel-to-substitution ratio [%.4lg]\n", vc.indel_frac);
-		fprintf(stderr, "         -p FLOAT  variant if P(ref|D)<FLOAT [%.3lg]\n", vc.pref);
+		fprintf(stderr, "         -t FLOAT  scaled substitution mutation rate [%.4g]\n", vc.theta);
+		fprintf(stderr, "         -i FLOAT  indel-to-substitution ratio [%.4g]\n", vc.indel_frac);
+		fprintf(stderr, "         -p FLOAT  variant if P(ref|D)<FLOAT [%.3g]\n", vc.pref);
 		fprintf(stderr, "         -P STR    type of prior: full, cond2, flat [full]\n");
 		fprintf(stderr, "\n");
 		return 1;
@@ -362,7 +362,7 @@ int bcfview(int argc, char *argv[])
 				kstring_t s;
 				s.m = s.l = 0; s.s = 0;
 				if (*b->info) kputc(';', &s);
-				ksprintf(&s, "NEIR=%.3lf;NEIF=%.3lf,%.3lf", r2, f[0]+f[2], f[0]+f[1]);
+				ksprintf(&s, "NEIR=%.3f;NEIF=%.3f,%.3f", r2, f[0]+f[2], f[0]+f[1]);
 				bcf_append_info(b, s.s, s.l);
 				free(s.s);
 			}
