@@ -180,3 +180,10 @@ char *bam_aux2Z(const uint8_t *s)
 	if (type == 'Z' || type == 'H') return (char*)s;
 	else return 0;
 }
+
+#ifdef _WIN32
+double drand48()
+{
+	return (double)rand() / RAND_MAX;
+}
+#endif
