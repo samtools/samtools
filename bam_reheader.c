@@ -22,10 +22,11 @@ int bam_reheader(BGZF *in, const bam_header_t *h, int fd)
 	}
 #ifdef _USE_KNETFILE
 	while ((len = knet_read(in->x.fpr, buf, BUF_SIZE)) > 0)
+		fwrite(buf, 1, len, fp->x.fpw);
 #else
 	while (!feof(in->file) && (len = fread(buf, 1, BUF_SIZE, in->file)) > 0)
+		fwrite(buf, 1, len, fp->file);
 #endif
-		fwrite(buf, 1, len, fp->x.fpw);
 	free(buf);
 	fp->block_offset = in->block_offset = 0;
 	bgzf_close(fp);

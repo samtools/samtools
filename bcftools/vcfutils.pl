@@ -455,7 +455,7 @@ sub hapmap2vcf {
 }
 
 sub vcf2fq {
-  my %opts = (d=>3, D=>100000, Q=>10, l=>10);
+  my %opts = (d=>3, D=>100000, Q=>10, l=>5);
   getopts('d:D:Q:l:', \%opts);
   die(qq/
 Usage:   vcfutils.pl vcf2fq [options] <all-site.vcf>
