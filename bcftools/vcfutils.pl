@@ -484,11 +484,12 @@ Options: -d INT    minimum depth          [$opts{d}]
 	  $seq = $qual = '';
 	  @gaps = ();
 	}
-	if ($t[1] - $last_pos != 1) {
+	die("[vcf2fq] unsorted input\n") if ($t[1] - $last_pos < 0);
+	if ($t[1] - $last_pos > 1) {
 	  $seq .= 'n' x ($t[1] - $last_pos - 1);
 	  $qual .= '!' x ($t[1] - $last_pos - 1);
 	}
-	if (length($t[3]) == 1 && $t[4] =~ /^([A-Za-z.])(,[A-Za-z])*$/) { # a SNP or reference
+	if (length($t[3]) == 1 && $t[7] !~ /INDEL/ && $t[4] =~ /^([A-Za-z.])(,[A-Za-z])*$/) { # a SNP or reference
 	  my ($ref, $alt) = ($t[3], $1);
 	  my ($b, $q);
 	  $q = $1 if ($t[7] =~ /FQ=(-?[\d\.]+)/);
@@ -546,7 +547,7 @@ Command: subsam       get a subset of samples
          ucscsnp2vcf  convert UCSC SNP SQL dump to VCF
 
          varFilter    filtering short variants (*)
-         vcf2fq       VCF->fastq (*)
+         vcf2fq       VCF->fastq (**)
 
 Notes: Commands with description endting with (*) may need bcftools
        specific annotations.
