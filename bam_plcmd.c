@@ -850,7 +850,7 @@ int bam_mpileup(int argc, char *argv[])
 	int c;
     const char *file_list = NULL;
     char **fn = NULL;
-    int nfiles = 0;
+    int nfiles = 0, use_orphan = 0;
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
 	mplp.max_mq = 60;
@@ -859,7 +859,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_depth = 250;
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "gf:r:l:M:q:Q:uaORC:BDSd:b:P:o:e:h:I")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:b:P:o:e:h:I")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -873,7 +873,6 @@ int bam_mpileup(int argc, char *argv[])
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'B': mplp.flag &= ~MPLP_REALN & ~MPLP_NO_ORPHAN; break;
-		case 'O': mplp.flag |= MPLP_NO_ORPHAN; break;
 		case 'R': mplp.flag |= MPLP_REALN; break;
 		case 'D': mplp.flag |= MPLP_FMT_DP; break;
 		case 'S': mplp.flag |= MPLP_FMT_SP; break;
@@ -886,8 +885,10 @@ int bam_mpileup(int argc, char *argv[])
 		case 'o': mplp.openQ = atoi(optarg); break;
 		case 'e': mplp.extQ = atoi(optarg); break;
 		case 'h': mplp.tandemQ = atoi(optarg); break;
+		case 'A': use_orphan = 1; break;
 		}
 	}
+	if (use_orphan) mplp.flag &= ~MPLP_NO_ORPHAN;
 	if (argc == 1) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools mpileup [options] in1.bam [in2.bam [...]]\n\n");
@@ -903,6 +904,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -o INT      Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
 		fprintf(stderr, "         -e INT      Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
 		fprintf(stderr, "         -h INT      coefficient for homopolyer errors [%d]\n", mplp.tandemQ);
+		fprintf(stderr, "         -A          use anomolous read pairs in SNP/INDEL calling\n");
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
 		fprintf(stderr, "         -B          disable BAQ computation\n");
