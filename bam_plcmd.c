@@ -904,7 +904,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -o INT      Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
 		fprintf(stderr, "         -e INT      Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
 		fprintf(stderr, "         -h INT      coefficient for homopolyer errors [%d]\n", mplp.tandemQ);
-		fprintf(stderr, "         -A          use anomolous read pairs in SNP/INDEL calling\n");
+		fprintf(stderr, "         -A          use anomalous read pairs in SNP/INDEL calling\n");
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
 		fprintf(stderr, "         -B          disable BAQ computation\n");
