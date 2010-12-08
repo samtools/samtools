@@ -536,7 +536,8 @@ int bam_pileup(int argc, char *argv[])
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth;
-	int openQ, extQ, tandemQ;
+	int openQ, extQ, tandemQ, min_support; // for indels
+	double min_frac; // for indels
 	char *reg, *fn_pos, *pl_list;
 	faidx_t *fai;
 	kh_64_t *hash;
@@ -702,6 +703,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bcr = calloc(sm->n, sizeof(bcf_callret1_t));
 		bca->rghash = rghash;
 		bca->openQ = conf->openQ, bca->extQ = conf->extQ, bca->tandemQ = conf->tandemQ;
+		bca->min_frac = conf->min_frac;
+		bca->min_support = conf->min_support;
 	}
 	ref_tid = -1; ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
@@ -858,8 +861,9 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.capQ_thres = 0;
 	mplp.max_depth = 250;
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
+	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:b:P:o:e:h:I")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:b:P:o:e:h:Im:F:")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -886,6 +890,8 @@ int bam_mpileup(int argc, char *argv[])
 		case 'e': mplp.extQ = atoi(optarg); break;
 		case 'h': mplp.tandemQ = atoi(optarg); break;
 		case 'A': use_orphan = 1; break;
+		case 'F': mplp.min_frac = atof(optarg); break;
+		case 'm': mplp.min_support = atoi(optarg); break;
 		}
 	}
 	if (use_orphan) mplp.flag &= ~MPLP_NO_ORPHAN;
@@ -904,6 +910,8 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -o INT      Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
 		fprintf(stderr, "         -e INT      Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
 		fprintf(stderr, "         -h INT      coefficient for homopolyer errors [%d]\n", mplp.tandemQ);
+		fprintf(stderr, "         -m INT      minimum gapped reads for indel candidates [%d]\n", mplp.min_support);
+		fprintf(stderr, "         -F FLOAT    minimum fraction of gapped reads for candidates [%g]\n", mplp.min_frac);
 		fprintf(stderr, "         -A          use anomalous read pairs in SNP/INDEL calling\n");
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");

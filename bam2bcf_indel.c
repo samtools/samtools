@@ -11,7 +11,6 @@ KHASH_SET_INIT_STR(rg)
 
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
-#define MIN_SUPPORT_COEF 500
 
 void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
 {
@@ -165,7 +164,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		// squeeze out identical types
 		for (i = 1, n_types = 1; i < m; ++i)
 			if (aux[i] != aux[i-1]) ++n_types;
-		if (n_types == 1 || n_alt * MIN_SUPPORT_COEF < n_tot) { // no indels or too few supporting reads
+		if (n_types == 1 || (double)n_alt / n_tot < bca->min_frac || n_alt < bca->min_support) { // then skip
 			free(aux); return -1;
 		}
 		types = (int*)calloc(n_types, sizeof(int));

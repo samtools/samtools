@@ -9,7 +9,9 @@
 
 typedef struct __bcf_callaux_t {
 	int capQ, min_baseQ;
-	int openQ, extQ, tandemQ;
+	int openQ, extQ, tandemQ; // for indels
+	int min_support; // for collecting indel candidates
+	double min_frac; // for collecting indel candidates
 	// for internal uses
 	int max_bases;
 	int indel_types[4];
