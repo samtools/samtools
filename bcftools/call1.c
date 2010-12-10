@@ -200,6 +200,34 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	return is_var;
 }
 
+static void write_header(bcf_hdr_t *h)
+{
+	kstring_t str;
+	str.l = h->l_txt? h->l_txt - 1 : 0;
+	str.m = str.l + 1; str.s = h->txt;
+	if (!strstr(str.s, "##INFO=<ID=DP,"))
+		kputs("##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Raw read depth\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=DP4,"))
+		kputs("##INFO=<ID=DP4,Number=4,Type=Integer,Description=\"# high-quality ref-forward bases, ref-reverse, alt-forward and alt-reverse bases\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=MQ,"))
+		kputs("##INFO=<ID=MQ,Number=1,Type=Integer,Description=\"Root-mean-square mapping quality of covering reads\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=FQ,"))
+		kputs("##INFO=<ID=FQ,Number=1,Type=Integer,Description=\"Phred probability that sample chromosomes are not all the same\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=AF1,"))
+		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the site allele frequency of the first ALT allele\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=CI95,"))
+		kputs("##INFO=<ID=CI95,Number=2,Type=Float,Description=\"Equal-tail Bayesian credible interval of the site allele frequency at the 95% level\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=PV4,"))
+		kputs("##INFO=<ID=PV4,Number=4,Type=Float,Description=\"P-values for strand bias, baseQ bias, mapQ bias and tail distance bias\">\n", &str);
+	if (!strstr(str.s, "##FORMAT=<ID=DP,"))
+		kputs("##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"# high-quality bases\">\n", &str);
+	if (!strstr(str.s, "##FORMAT=<ID=SP,"))
+		kputs("##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">\n", &str);
+	if (!strstr(str.s, "##FORMAT=<ID=PL,"))
+		kputs("##FORMAT=<ID=PL,Number=(#ALT+1)*(#ALT+2)/2,Type=Integer,Description=\"List of Phred-scaled genotype likelihoods\">\n", &str);
+	h->l_txt = str.l + 1; h->txt = str.s;
+}
+
 double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4]);
 
 int bcfview(int argc, char *argv[])
@@ -285,7 +313,10 @@ int bcfview(int argc, char *argv[])
 	bp = vcf_open(argv[optind], moder);
 	h = vcf_hdr_read(bp);
 	bout = vcf_open("-", modew);
-	if (!(vc.flag & VC_QCALL)) vcf_hdr_write(bout, h);
+	if (!(vc.flag & VC_QCALL)) {
+		if (vc.flag & VC_CALL) write_header(h);
+		vcf_hdr_write(bout, h);
+	}
 	if (vc.flag & VC_CALL) {
 		p1 = bcf_p1_init(h->n_smpl);
 		if (vc.prior_file) {

@@ -101,7 +101,7 @@ int vcf_hdr_write(bcf_t *bp, const bcf_hdr_t *h)
 		fwrite(h->txt, 1, h->l_txt - 1, v->fpout);
 		if (strstr(h->txt, "##SQ=")) has_ref = 1;
 	}
-	if (has_ver == 0) fprintf(v->fpout, "##fileformat=VCFv4.0\n");
+	if (h->l_txt == 0) fprintf(v->fpout, "##fileformat=VCFv4.0\n");
 	fprintf(v->fpout, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
 	for (i = 0; i < h->n_smpl; ++i)
 		fprintf(v->fpout, "\t%s", h->sns[i]);
