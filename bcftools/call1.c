@@ -206,6 +206,7 @@ int bcfview(int argc, char *argv[])
 {
 	extern int bcf_2qcall(bcf_hdr_t *h, bcf1_t *b);
 	extern void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x);
+	extern int bcf_fix_gt(bcf1_t *b);
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
 	int c;
@@ -372,6 +373,7 @@ int bcfview(int argc, char *argv[])
 			b->n_gi = 0;
 			b->fmt[0] = '\0';
 		}
+		bcf_fix_gt(b);
 		vcf_write(bout, h, b);
 	}
 	if (vc.prior_file) free(vc.prior_file);

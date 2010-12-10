@@ -1,3 +1,4 @@
+#include <string.h>
 #include "bcf.h"
 #include "kstring.h"
 #include "khash.h"
@@ -105,5 +106,28 @@ int bcf_gl2pl(bcf1_t *b)
 		if (x < 0) x = 0;
 		d1[i] = x;
 	}
+	return 0;
+}
+/* FIXME: this function will fail given AB:GTX:GT. BCFtools never
+ * produces such FMT, but others may do. */
+int bcf_fix_gt(bcf1_t *b)
+{
+	char *s;
+	int i;
+	uint32_t tmp;
+	bcf_ginfo_t gt;
+	// check the presence of the GT FMT
+	if ((s = strstr(b->fmt, ":GT")) == 0) return 0; // no GT or GT is already the first
+	if (s[3] != '\0' && s[3] != ':') return 0; // :GTX in fact
+	tmp = bcf_str2int("GT", 2);
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == tmp) break;
+	if (i == b->n_gi) return 0; // no GT in b->gi; probably a bug...
+	gt = b->gi[i];
+	// move GT to the first
+	for (; i > 0; --i) b->gi[i] = b->gi[i-1];
+	b->gi[0] = gt;
+	memmove(b->fmt + 3, b->fmt, s + 1 - b->fmt);
+	b->fmt[0] = 'G'; b->fmt[1] = 'T'; b->fmt[2] = ':';
 	return 0;
 }
