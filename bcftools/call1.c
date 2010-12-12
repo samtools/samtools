@@ -26,6 +26,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_CALL_GT 2048
 #define VC_ADJLD   4096
 #define VC_NO_INDEL 8192
+#define VC_ANNO_MAX 16384
 
 typedef struct {
 	int flag, prior_type, n1;
@@ -235,6 +236,7 @@ int bcfview(int argc, char *argv[])
 	extern int bcf_2qcall(bcf_hdr_t *h, bcf1_t *b);
 	extern void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x);
 	extern int bcf_fix_gt(bcf1_t *b);
+	extern int bcf_anno_max(bcf1_t *b);
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
 	int c;
@@ -249,7 +251,7 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:I")) >= 0) {
+	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:IM")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
@@ -264,6 +266,7 @@ int bcfview(int argc, char *argv[])
 		case 'H': vc.flag |= VC_HWE; break;
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
 		case 'I': vc.flag |= VC_NO_INDEL; break;
+		case 'M': vc.flag |= VC_ANNO_MAX; break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'i': vc.indel_frac = atof(optarg); break;
@@ -400,11 +403,12 @@ int bcfview(int argc, char *argv[])
 			}
 			bcf_cpy(blast, b);
 		}
+		if (vc.flag & VC_ANNO_MAX) bcf_anno_max(b);
 		if (vc.flag & VC_NO_GENO) { // do not output GENO fields
 			b->n_gi = 0;
 			b->fmt[0] = '\0';
-		}
-		bcf_fix_gt(b);
+			b->l_str = b->fmt - b->str + 1;
+		} else bcf_fix_gt(b);
 		vcf_write(bout, h, b);
 	}
 	if (vc.prior_file) free(vc.prior_file);

@@ -1,4 +1,5 @@
 #include <string.h>
+#include <math.h>
 #include "bcf.h"
 #include "kstring.h"
 #include "khash.h"
@@ -129,5 +130,51 @@ int bcf_fix_gt(bcf1_t *b)
 	b->gi[0] = gt;
 	memmove(b->fmt + 3, b->fmt, s + 1 - b->fmt);
 	b->fmt[0] = 'G'; b->fmt[1] = 'T'; b->fmt[2] = ':';
+	return 0;
+}
+
+static void *locate_field(const bcf1_t *b, const char *fmt, int l)
+{
+	int i;
+	uint32_t tmp;
+	tmp = bcf_str2int(fmt, l);
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == tmp) break;
+	return i == b->n_gi? 0 : b->gi[i].data;
+}
+
+int bcf_anno_max(bcf1_t *b)
+{
+	int k, max_gq, max_sp, n_het;
+	kstring_t str;
+	uint8_t *gt, *gq, *sp;
+	max_gq = max_sp = n_het = 0;
+	gt = locate_field(b, "GT", 2);
+	if (gt == 0) return -1;
+	gq = locate_field(b, "GQ", 2);
+	sp = locate_field(b, "SP", 2);
+	if (sp)
+		for (k = 0; k < b->n_smpl; ++k)
+			if (gt[k]&0x3f)
+				max_sp = max_sp > (int)sp[k]? max_sp : sp[k];
+	if (gq)
+		for (k = 0; k < b->n_smpl; ++k)
+			if (gt[k]&0x3f)
+				max_gq = max_gq > (int)gq[k]? max_gq : gq[k];
+	for (k = 0; k < b->n_smpl; ++k) {
+		int a1, a2;
+		a1 = gt[k]&7; a2 = gt[k]>>3&7;
+		if ((!a1 && a2) || (!a2 && a1)) { // a het
+			if (gq == 0) ++n_het;
+			else if (gq[k] >= 20) ++n_het;
+		}
+	}
+	if (n_het) max_sp -= (int)(4.343 * log(n_het) + .499);
+	if (max_sp < 0) max_sp = 0;
+	memset(&str, 0, sizeof(kstring_t));
+	if (*b->info) kputc(';', &str);
+	ksprintf(&str, "MXSP=%d;MXGQ=%d", max_sp, max_gq);
+	bcf_append_info(b, str.s, str.l);
+	free(str.s);
 	return 0;
 }
