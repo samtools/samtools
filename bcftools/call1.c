@@ -213,19 +213,27 @@ static void write_header(bcf_hdr_t *h)
 	if (!strstr(str.s, "##INFO=<ID=MQ,"))
 		kputs("##INFO=<ID=MQ,Number=1,Type=Integer,Description=\"Root-mean-square mapping quality of covering reads\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=FQ,"))
-		kputs("##INFO=<ID=FQ,Number=1,Type=Integer,Description=\"Phred probability that sample chromosomes are not all the same\">\n", &str);
+		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability that sample chromosomes are not all the same\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AF1,"))
 		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the site allele frequency of the first ALT allele\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=CI95,"))
 		kputs("##INFO=<ID=CI95,Number=2,Type=Float,Description=\"Equal-tail Bayesian credible interval of the site allele frequency at the 95% level\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=PV4,"))
 		kputs("##INFO=<ID=PV4,Number=4,Type=Float,Description=\"P-values for strand bias, baseQ bias, mapQ bias and tail distance bias\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=INDEL,"))
+        kputs("##INFO=<ID=INDEL,Number=0,Type=Flag,Descriptin=\"Indicates that the variant is an INDEL.\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=GT,"))
+        kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n", &str);
+    if (!strstr(str.s, "##FORMAT=<ID=GQ,"))
+        kputs("##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">\n", &str);
+    if (!strstr(str.s, "##FORMAT=<ID=GL,"))
+        kputs("##FORMAT=<ID=GL,Number=3,Type=Float,Description=\"Likelihoods for RR,RA,AA genotypes (R=ref,A=alt)\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=DP,"))
 		kputs("##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"# high-quality bases\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=SP,"))
 		kputs("##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=PL,"))
-		kputs("##FORMAT=<ID=PL,Number=(#ALT+1)*(#ALT+2)/2,Type=Integer,Description=\"List of Phred-scaled genotype likelihoods\">\n", &str);
+		kputs("##FORMAT=<ID=PL,Number=-1,Type=Integer,Description=\"List of Phred-scaled genotype likelihoods, number of values is (#ALT+1)*(#ALT+2)/2\">\n", &str);
 	h->l_txt = str.l + 1; h->txt = str.s;
 }
 
