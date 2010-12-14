@@ -195,8 +195,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	 * sequence realignment helps to increase the power.
 	 */
 	{ // construct per-sample consensus
-		int L = right - left + 1;
-		uint32_t *cns;
+		int L = right - left + 1, max_i, max2_i;
+		uint32_t *cns, max, max2;
 		char *ref0, *r;
 		ref_sample = calloc(n, sizeof(void*));
 		cns = calloc(L, 4);
@@ -226,8 +226,16 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				}
 			}
 			// determine the consensus
-			for (i = 0; i < right - left; ++i)
-				r[i] = (cns[i] && (double)(cns[i]&0xffff) / ((cns[i]&0xffff)+(cns[i]>>16&0xffff)) < 0.7)? 15 : ref0[i];
+			for (i = 0; i < right - left; ++i) r[i] = ref0[i];
+			max = max2 = 0; max_i = max2_i = -1;
+			for (i = 0; i < right - left; ++i) {
+				if (cns[i]>>16 >= max>>16) max2 = max, max2_i = max_i, max = cns[i], max_i = i;
+				else if (cns[i]>>16 >= max2>>16) max2 = cns[i], max2_i = i;
+			}
+			if ((double)(max&0xffff) / ((max&0xffff) + (max>>16)) >= 0.7) max_i = -1;
+			if ((double)(max2&0xffff) / ((max2&0xffff) + (max2>>16)) >= 0.7) max2_i = -1;
+			if (max_i >= 0) r[max_i] = 15;
+			if (max2_i >= 0) r[max2_i] = 15;
 //			for (i = 0; i < right - left; ++i) fputc("=ACMGRSVTWYHKDBN"[(int)r[i]], stderr); fputc('\n', stderr);
 		}
 		free(ref0); free(cns);
