@@ -877,7 +877,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'g': mplp.flag |= MPLP_GLF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
-		case 'B': mplp.flag &= ~MPLP_REALN & ~MPLP_NO_ORPHAN; break;
+		case 'B': mplp.flag &= ~MPLP_REALN; break;
 		case 'R': mplp.flag |= MPLP_REALN; break;
 		case 'D': mplp.flag |= MPLP_FMT_DP; break;
 		case 'S': mplp.flag |= MPLP_FMT_SP; break;
