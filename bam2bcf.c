@@ -11,6 +11,7 @@ extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 #define CALL_ETA 0.03f
 #define CALL_MAX 256
 #define CALL_DEFTHETA 0.83f
+#define DEF_MAPQ 20
 
 #define CAP_DIST 25
 
@@ -63,7 +64,8 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		seqQ = is_indel? (p->aux>>8&0xff) : 99;
 		if (q < bca->min_baseQ) continue;
 		if (q > seqQ) q = seqQ;
-		mapQ = p->b->core.qual < bca->capQ? p->b->core.qual : bca->capQ;
+		mapQ = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
+		mapQ = mapQ < bca->capQ? mapQ : bca->capQ;
 		if (q > mapQ) q = mapQ;
 		if (q > 63) q = 63;
 		if (q < 4) q = 4;
