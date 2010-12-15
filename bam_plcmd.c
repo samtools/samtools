@@ -533,6 +533,7 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_FMT_DP 0x100
 #define MPLP_FMT_SP 0x200
 #define MPLP_NO_INDEL 0x400
+#define MPLP_EXT_BAQ 0x800
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth;
@@ -569,7 +570,7 @@ static int mplp_func(void *data, bam1_t *b)
 		if (ret < 0) break;
 		has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
 		skip = 0;
-		if (has_ref && (ma->flag&MPLP_REALN)) bam_prob_realn_core(b, ma->ref, 1);
+		if (has_ref && (ma->flag&MPLP_REALN)) bam_prob_realn_core(b, ma->ref, (ma->flag & MPLP_EXT_BAQ)? 3 : 1);
 		if (has_ref && ma->capQ_thres > 10) {
 			int q = bam_cap_mapQ(b, ma->ref, ma->capQ_thres);
 			if (q < 0) skip = 1;
@@ -863,7 +864,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:b:P:o:e:h:Im:F:")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:b:P:o:e:h:Im:F:E")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -881,6 +882,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'D': mplp.flag |= MPLP_FMT_DP; break;
 		case 'S': mplp.flag |= MPLP_FMT_SP; break;
 		case 'I': mplp.flag |= MPLP_NO_INDEL; break;
+		case 'E': mplp.flag |= MPLP_EXT_BAQ; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;

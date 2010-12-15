@@ -162,14 +162,14 @@ int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
 	return (int)(t + .499);
 }
 
-int bam_prob_realn_core(bam1_t *b, const char *ref, int apply_baq)
+int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 {
-	int k, i, bw, x, y, yb, ye, xb, xe;
+	int k, i, bw, x, y, yb, ye, xb, xe, apply_baq = flag&1, extend_baq = flag>>1&1;
 	uint32_t *cigar = bam1_cigar(b);
 	bam1_core_t *c = &b->core;
 	kpa_par_t conf = kpa_par_def;
 	uint8_t *bq = 0, *zq = 0, *qual = bam1_qual(b);
-	if (c->flag & BAM_FUNMAP) return -1; // do nothing
+	if ((c->flag & BAM_FUNMAP) || b->core.l_qseq == 0) return -1; // do nothing
 	// test if BQ or ZQ is present
 	if ((bq = bam_aux_get(b, "BQ")) != 0) ++bq;
 	if ((zq = bam_aux_get(b, "ZQ")) != 0 && *zq == 'Z') ++zq;
@@ -226,18 +226,40 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int apply_baq)
 		state = calloc(c->l_qseq, sizeof(int));
 		q = calloc(c->l_qseq, 1);
 		kpa_glocal(r, xe-xb, s, c->l_qseq, qual, &conf, state, q);
-		for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
-			int op = cigar[k]&0xf, l = cigar[k]>>4;
-			if (op == BAM_CMATCH) {
-				for (i = y; i < y + l; ++i) {
-					if ((state[i]&3) != 0 || state[i]>>2 != x - xb + (i - y)) bq[i] = 0;
-					else bq[i] = bq[i] < q[i]? bq[i] : q[i];
-				}
-				x += l; y += l;
-			} else if (op == BAM_CSOFT_CLIP || op == BAM_CINS) y += l;
-			else if (op == BAM_CDEL) x += l;
+		if (!extend_baq) { // in this block, bq[] is capped by base quality qual[]
+			for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
+				int op = cigar[k]&0xf, l = cigar[k]>>4;
+				if (op == BAM_CMATCH) {
+					for (i = y; i < y + l; ++i) {
+						if ((state[i]&3) != 0 || state[i]>>2 != x - xb + (i - y)) bq[i] = 0;
+						else bq[i] = bq[i] < q[i]? bq[i] : q[i];
+					}
+					x += l; y += l;
+				} else if (op == BAM_CSOFT_CLIP || op == BAM_CINS) y += l;
+				else if (op == BAM_CDEL) x += l;
+			}
+			for (i = 0; i < c->l_qseq; ++i) bq[i] = qual[i] - bq[i] + 64; // finalize BQ
+		} else { // in this block, bq[] is BAQ that can be larger than qual[] (different from the above!)
+			uint8_t *left, *rght;
+			left = calloc(c->l_qseq, 1); rght = calloc(c->l_qseq, 1);
+			for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
+				int op = cigar[k]&0xf, l = cigar[k]>>4;
+				if (op == BAM_CMATCH) {
+					for (i = y; i < y + l; ++i)
+						bq[i] = ((state[i]&3) != 0 || state[i]>>2 != x - xb + (i - y))? 0 : q[i];
+					for (left[y] = bq[y], i = y + 1; i < y + l; ++i)
+						left[i] = bq[i] > left[i-1]? bq[i] : left[i-1];
+					for (rght[y+l-1] = bq[y+l-1], i = y + l - 2; i >= y; --i)
+						rght[i] = bq[i] > rght[i+1]? bq[i] : rght[i+1];
+					for (i = y; i < y + l; ++i)
+						bq[i] = left[i] < rght[i]? left[i] : rght[i];
+					x += l; y += l;
+				} else if (op == BAM_CSOFT_CLIP || op == BAM_CINS) y += l;
+				else if (op == BAM_CDEL) x += l;
+			}
+			for (i = 0; i < c->l_qseq; ++i) bq[i] = 64 + (qual[i] <= bq[i]? 0 : qual[i] - bq[i]); // finalize BQ
+			free(left); free(rght);
 		}
-		for (i = 0; i < c->l_qseq; ++i) bq[i] = qual[i] - bq[i] + 64; // finalize BQ
 		if (apply_baq) {
 			for (i = 0; i < c->l_qseq; ++i) qual[i] -= bq[i] - 64; // modify qual
 			bam_aux_append(b, "ZQ", 'Z', c->l_qseq + 1, bq);
@@ -254,16 +276,16 @@ int bam_prob_realn(bam1_t *b, const char *ref)
 
 int bam_fillmd(int argc, char *argv[])
 {
-	int c, is_equal, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm, is_realn, capQ, apply_baq;
+	int c, is_equal, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm, is_realn, capQ, baq_flag;
 	samfile_t *fp, *fpout = 0;
 	faidx_t *fai;
 	char *ref = 0, mode_w[8], mode_r[8];
 	bam1_t *b;
 
-	is_equal = is_bam_out = is_sam_in = is_uncompressed = is_realn = max_nm = apply_baq = capQ = 0;
+	is_equal = is_bam_out = is_sam_in = is_uncompressed = is_realn = max_nm = capQ = baq_flag = 0;
 	mode_w[0] = mode_r[0] = 0;
 	strcpy(mode_r, "r"); strcpy(mode_w, "w");
-	while ((c = getopt(argc, argv, "reubSC:n:A")) >= 0) {
+	while ((c = getopt(argc, argv, "EreubSC:n:A")) >= 0) {
 		switch (c) {
 		case 'r': is_realn = 1; break;
 		case 'e': is_equal = 1; break;
@@ -272,7 +294,8 @@ int bam_fillmd(int argc, char *argv[])
 		case 'S': is_sam_in = 1; break;
 		case 'n': max_nm = atoi(optarg); break;
 		case 'C': capQ = atoi(optarg); break;
-		case 'A': apply_baq = 1; break;
+		case 'A': baq_flag |= 1; break;
+		case 'E': baq_flag |= 2; break;
 		default: fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n", c); return 1;
 		}
 	}
@@ -311,7 +334,7 @@ int bam_fillmd(int argc, char *argv[])
 					fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
 							fp->header->target_name[tid]);
 			}
-			if (is_realn) bam_prob_realn_core(b, ref, apply_baq);
+			if (is_realn) bam_prob_realn_core(b, ref, baq_flag);
 			if (capQ > 10) {
 				int q = bam_cap_mapQ(b, ref, capQ);
 				if (b->core.qual > q) b->core.qual = q;
