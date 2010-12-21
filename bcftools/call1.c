@@ -29,8 +29,8 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_ANNO_MAX 16384
 
 typedef struct {
-	int flag, prior_type, n1;
-	char *fn_list, *prior_file;
+	int flag, prior_type, n1, n_sub, *sublist;
+	char *fn_list, *prior_file, **subsam;
 	double theta, pref, indel_frac;
 } viewconf_t;
 
@@ -201,6 +201,30 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	return is_var;
 }
 
+static char **read_samples(const char *fn, int *_n)
+{
+	gzFile fp;
+	kstream_t *ks;
+	kstring_t s;
+	int dret, n = 0, max = 0;
+	char **sam = 0;
+	s.l = s.m = 0; s.s = 0;
+	fp = gzopen(fn, "r");
+	ks = ks_init(fp);
+	while (ks_getuntil(ks, 0, &s, &dret) >= 0) {
+		if (max == n) {
+			max = max? max<<1 : 4;
+			sam = realloc(sam, sizeof(void*));
+		}
+		sam[n++] = strdup(s.s);
+	}
+	ks_destroy(ks);
+	gzclose(fp);
+	free(s.s);
+	*_n = n;
+	return sam;
+}
+
 static void write_header(bcf_hdr_t *h)
 {
 	kstring_t str;
@@ -251,7 +275,7 @@ int bcfview(int argc, char *argv[])
 	uint64_t n_processed = 0;
 	viewconf_t vc;
 	bcf_p1aux_t *p1 = 0;
-	bcf_hdr_t *h;
+	bcf_hdr_t *hin, *hout;
 	int tid, begin, end;
 	char moder[4], modew[4];
 	khash_t(set64) *hash = 0;
@@ -259,7 +283,8 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:IM")) >= 0) {
+	vc.n_sub = 0; vc.subsam = 0; vc.sublist = 0;
+	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:IMs:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
@@ -280,6 +305,7 @@ int bcfview(int argc, char *argv[])
 		case 'i': vc.indel_frac = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
+		case 's': vc.subsam = read_samples(optarg, &vc.n_sub); break;
 		case 'P':
 			if (strcmp(optarg, "full") == 0) vc.prior_type = MC_PTYPE_FULL;
 			else if (strcmp(optarg, "cond2") == 0) vc.prior_type = MC_PTYPE_COND2;
@@ -310,6 +336,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -i FLOAT  indel-to-substitution ratio [%.4g]\n", vc.indel_frac);
 		fprintf(stderr, "         -p FLOAT  variant if P(ref|D)<FLOAT [%.3g]\n", vc.pref);
 		fprintf(stderr, "         -P STR    type of prior: full, cond2, flat [full]\n");
+		fprintf(stderr, "         -s FILE   list of samples to use [all samples]\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}
@@ -322,14 +349,18 @@ int bcfview(int argc, char *argv[])
 	if (vc.flag & VC_BCFOUT) strcat(modew, "b");
 	if (vc.flag & VC_UNCOMP) strcat(modew, "u");
 	bp = vcf_open(argv[optind], moder);
-	h = vcf_hdr_read(bp);
+	hin = hout = vcf_hdr_read(bp);
 	bout = vcf_open("-", modew);
 	if (!(vc.flag & VC_QCALL)) {
-		if (vc.flag & VC_CALL) write_header(h);
-		vcf_hdr_write(bout, h);
+		if (vc.n_sub) {
+			vc.sublist = calloc(vc.n_sub, sizeof(int));
+			hout = bcf_hdr_subsam(hin, vc.n_sub, vc.subsam, vc.sublist);
+		}
+		if (vc.flag & VC_CALL) write_header(hout);
+		vcf_hdr_write(bout, hout);
 	}
 	if (vc.flag & VC_CALL) {
-		p1 = bcf_p1_init(h->n_smpl);
+		p1 = bcf_p1_init(hout->n_smpl);
 		if (vc.prior_file) {
 			if (bcf_p1_read_prior(p1, vc.prior_file) < 0) {
 				fprintf(stderr, "[%s] fail to read the prior AFS.\n", __func__);
@@ -342,9 +373,9 @@ int bcfview(int argc, char *argv[])
 		}
 		if (vc.indel_frac > 0.) bcf_p1_indel_prior(p1, vc.indel_frac); // otherwise use the default indel_frac
 	}
-	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, h);
+	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, hin);
 	if (optind + 1 < argc && !(vc.flag&VC_VCFIN)) {
-		void *str2id = bcf_build_refhash(h);
+		void *str2id = bcf_build_refhash(hout);
 		if (bcf_parse_region(str2id, argv[optind+1], &tid, &begin, &end) >= 0) {
 			bcf_idx_t *idx;
 			idx = bcf_idx_load(argv[optind]);
@@ -360,8 +391,10 @@ int bcfview(int argc, char *argv[])
 			}
 		}
 	}
-	while (vcf_read(bp, h, b) > 0) {
-		int is_indel = bcf_is_indel(b);
+	while (vcf_read(bp, hin, b) > 0) {
+		int is_indel;
+		if (vc.n_sub) bcf_subsam(vc.n_sub, vc.sublist, b);
+		is_indel = bcf_is_indel(b);
 		if ((vc.flag & VC_NO_INDEL) && is_indel) continue;
 		if ((vc.flag & VC_ACGT_ONLY) && !is_indel) {
 			int x;
@@ -384,7 +417,7 @@ int bcfview(int argc, char *argv[])
 		}
 		++n_processed;
 		if (vc.flag & VC_QCALL) { // output QCALL format; STOP here
-			bcf_2qcall(h, b);
+			bcf_2qcall(hout, b);
 			continue;
 		}
 		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
@@ -397,7 +430,7 @@ int bcfview(int argc, char *argv[])
 				bcf_p1_dump_afs(p1);
 			}
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
-			update_bcf1(h->n_smpl, b, p1, &pr, vc.pref, vc.flag);
+			update_bcf1(hout->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;
@@ -417,15 +450,21 @@ int bcfview(int argc, char *argv[])
 			b->fmt[0] = '\0';
 			b->l_str = b->fmt - b->str + 1;
 		} else bcf_fix_gt(b);
-		vcf_write(bout, h, b);
+		vcf_write(bout, hout, b);
 	}
 	if (vc.prior_file) free(vc.prior_file);
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);
-	bcf_hdr_destroy(h);
+	if (hin != hout) bcf_hdr_destroy(hout);
+	bcf_hdr_destroy(hin);
 	bcf_destroy(b); bcf_destroy(blast);
 	vcf_close(bp); vcf_close(bout);
 	if (hash) kh_destroy(set64, hash);
 	if (vc.fn_list) free(vc.fn_list);
+	if (vc.n_sub) {
+		int i;
+		for (i = 0; i < vc.n_sub; ++i) free(vc.subsam[i]);
+		free(vc.subsam); free(vc.sublist);
+	}
 	if (p1) bcf_p1_destroy(p1);
 	return 0;
 }

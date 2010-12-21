@@ -178,3 +178,44 @@ int bcf_anno_max(bcf1_t *b)
 	free(str.s);
 	return 0;
 }
+
+bcf_hdr_t *bcf_hdr_subsam(const bcf_hdr_t *h0, int n, char *const* samples, int *list)
+{
+	int i, ret, j;
+	khint_t k;
+	bcf_hdr_t *h;
+	khash_t(str2id) *hash;
+	kstring_t s;
+	s.l = s.m = 0; s.s = 0;
+	hash = kh_init(str2id);
+	for (i = 0; i < n; ++i)
+		k = kh_put(str2id, hash, samples[i], &ret);
+	for (i = j = 0; i < h0->n_smpl; ++i) {
+		if (kh_get(str2id, hash, h0->sns[i]) != kh_end(hash)) {
+			list[j++] = i;
+			kputs(h0->sns[i], &s); kputc('\0', &s);
+		}
+	}
+	if (j < n) fprintf(stderr, "<%s> %d samples in the list but not in BCF.", __func__, n - j);
+	kh_destroy(str2id, hash);
+	h = calloc(1, sizeof(bcf_hdr_t));
+	*h = *h0;
+	h->ns = 0; h->sns = 0;
+	h->name = malloc(h->l_nm); memcpy(h->name, h0->name, h->l_nm);
+	h->txt = calloc(1, h->l_txt + 1); memcpy(h->txt, h0->txt, h->l_txt);
+	h->l_smpl = s.l; h->sname = s.s;
+	bcf_hdr_sync(h);
+	return h;
+}
+
+int bcf_subsam(int n_smpl, int *list, bcf1_t *b) // list MUST BE sorted
+{
+	int i, j;
+	for (j = 0; j < b->n_gi; ++j) {
+		bcf_ginfo_t *gi = b->gi + j;
+		for (i = 0; i < n_smpl; ++i)
+			memcpy((uint8_t*)gi->data + i * gi->len, (uint8_t*)gi->data + list[i] * gi->len, gi->len);
+	}
+	b->n_smpl = n_smpl;
+	return 0;
+}
