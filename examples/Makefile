@@ -40,7 +40,7 @@ ex1.bcf:ex1.bam ex1.fa.fai
 		(cd ..; make libbam.a)
 
 calDepth:../libbam.a calDepth.c
-		gcc -g -Wall -O2 -I.. calDepth.c -o $@ -lm -lz -L.. -lbam
+		gcc -g -Wall -O2 -I.. calDepth.c -o $@ -L.. -lbam -lm -lz
 
 clean:
 		rm -fr *.bam *.bai *.glf* *.fai *.pileup* *~ calDepth *.dSYM ex1*.rg ex1.bcf
