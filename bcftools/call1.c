@@ -214,7 +214,7 @@ static char **read_samples(const char *fn, int *_n)
 	while (ks_getuntil(ks, 0, &s, &dret) >= 0) {
 		if (max == n) {
 			max = max? max<<1 : 4;
-			sam = realloc(sam, sizeof(void*));
+			sam = realloc(sam, sizeof(void*)*max);
 		}
 		sam[n++] = strdup(s.s);
 	}
