@@ -208,8 +208,10 @@ static char **read_samples(const char *fn, int *_n)
 	kstring_t s;
 	int dret, n = 0, max = 0;
 	char **sam = 0;
+	*_n = 0;
 	s.l = s.m = 0; s.s = 0;
 	fp = gzopen(fn, "r");
+	if (fp == 0) return 0; // fail to open file
 	ks = ks_init(fp);
 	while (ks_getuntil(ks, 0, &s, &dret) >= 0) {
 		if (max == n) {

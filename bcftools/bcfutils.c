@@ -29,6 +29,16 @@ void bcf_str2id_destroy(void *_hash)
 	if (hash) kh_destroy(str2id, hash); // Note that strings are not freed.
 }
 
+void bcf_str2id_thorough_destroy(void *_hash)
+{
+	khash_t(str2id) *hash = (khash_t(str2id)*)_hash;
+	khint_t k;
+	if (hash == 0) return;
+	for (k = 0; k < kh_end(hash); ++k)
+		if (kh_exist(hash, k)) free((char*)kh_key(hash, k));
+	kh_destroy(str2id, hash);
+}
+
 int bcf_str2id(void *_hash, const char *str)
 {
 	khash_t(str2id) *hash = (khash_t(str2id)*)_hash;
