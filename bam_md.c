@@ -9,6 +9,8 @@
 #include "kaln.h"
 #include "kprobaln.h"
 
+char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
+
 void bam_fillmd1_core(bam1_t *b, char *ref, int is_equal, int max_nm)
 {
 	uint8_t *seq = bam1_seq(b);

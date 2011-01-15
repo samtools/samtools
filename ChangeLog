@@ -1,4 +1,319 @@
 ------------------------------------------------------------------------
+r896 | lh3lh3 | 2011-01-06 10:52:15 -0500 (Thu, 06 Jan 2011) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/call1.c
+
+ * samtools-0.1.12-10 (r896)
+ * allow to exclude read groups in mpileup
+
+------------------------------------------------------------------------
+r895 | lh3lh3 | 2011-01-04 11:31:29 -0500 (Tue, 04 Jan 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.tex
+
+sorry. It is SP not ST
+
+------------------------------------------------------------------------
+r894 | lh3lh3 | 2011-01-04 11:29:06 -0500 (Tue, 04 Jan 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.tex
+
+added ST
+
+------------------------------------------------------------------------
+r893 | petulda | 2011-01-04 06:55:56 -0500 (Tue, 04 Jan 2011) | 1 line
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+
+Fixed a typo in read_samples
+------------------------------------------------------------------------
+r892 | jmarshall | 2010-12-28 08:06:49 -0500 (Tue, 28 Dec 2010) | 9 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bcftools/Makefile
+   M /trunk/samtools/examples/Makefile
+
+System libraries go *after* user libraries in link commands, because
+the user libraries may themselves have dependencies that are satisfied
+by the system libraries.  It's not rocket science!
+
+This makes a difference with some linkers; or with -static or --as-needed.
+
+The examples/Makefile fix is from Charles Plessy.
+See also http://bugs.debian.org/cgi-bin/bugreport.cgi?bug=606004
+
+------------------------------------------------------------------------
+r891 | lh3lh3 | 2010-12-21 12:16:33 -0500 (Tue, 21 Dec 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/call1.c
+
+ * samtools-0.1.12-9 (r891)
+ * allow to call SNPs from a subset of samples
+
+------------------------------------------------------------------------
+r889 | lh3lh3 | 2010-12-15 11:28:16 -0500 (Wed, 15 Dec 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.12-12 (r889)
+ * set mapQ as 20 if it equals 255
+
+------------------------------------------------------------------------
+r888 | lh3lh3 | 2010-12-14 22:41:09 -0500 (Tue, 14 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+When -B is applied to mpileup, still use paired reads only unless -A is flagged.
+
+------------------------------------------------------------------------
+r887 | lh3lh3 | 2010-12-14 22:37:05 -0500 (Tue, 14 Dec 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.12-6 (r887)
+ * added a hidden option -E to mpileup/calmd. -E triggers an alternative way to apply BAQ.
+
+------------------------------------------------------------------------
+r886 | lh3lh3 | 2010-12-14 12:51:03 -0500 (Tue, 14 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+
+(Arguably) improved the indel caller a tiny bit for lowCov data.
+
+------------------------------------------------------------------------
+r885 | petulda | 2010-12-14 04:55:46 -0500 (Tue, 14 Dec 2010) | 1 line
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+
+Fixed the VCF header to pass validation
+------------------------------------------------------------------------
+r884 | lh3lh3 | 2010-12-12 23:02:19 -0500 (Sun, 12 Dec 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * samtools-0.1.12-4 (r884)
+ * fixed a long-existing flaw in the INDEL calling model
+
+------------------------------------------------------------------------
+r883 | lh3lh3 | 2010-12-11 20:05:42 -0500 (Sat, 11 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+compute max SP and max GQ from sample genotypes
+
+------------------------------------------------------------------------
+r880 | lh3lh3 | 2010-12-10 10:50:54 -0500 (Fri, 10 Dec 2010) | 2 lines
+Changed paths:
+   D /trunk/samtools/bcftools/bcf-fix.pl
+
+drop bcf-fix.pl as it is redundant by the latest changes
+
+------------------------------------------------------------------------
+r879 | lh3lh3 | 2010-12-10 10:50:29 -0500 (Fri, 10 Dec 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/vcf.c
+
+ * fixed a minor issue in printing VCFs
+ * write bcftools specific INFO and FORMAT in the header
+
+------------------------------------------------------------------------
+r878 | lh3lh3 | 2010-12-10 10:09:14 -0500 (Fri, 10 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/call1.c
+
+Make sure that the GT genotype field is the first
+
+------------------------------------------------------------------------
+r877 | lh3lh3 | 2010-12-08 17:27:05 -0500 (Wed, 08 Dec 2010) | 7 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam2bcf.h
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.12-2 (r877)
+
+ * allow to fine control the selection of indel candidates. The current
+   setting is okay for lowCov and highCov with ~100 samples, but it
+   skips too many indels for highCov with >250 samples.
+
+
+------------------------------------------------------------------------
+r874 | lh3lh3 | 2010-12-07 22:40:35 -0500 (Tue, 07 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+
+a spelling error..
+
+------------------------------------------------------------------------
+r873 | lh3lh3 | 2010-12-07 22:39:57 -0500 (Tue, 07 Dec 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+
+ * samtools-0.1.12-1 (r873)
+ * added a switch to allow anomalous read pairs in calling
+
+------------------------------------------------------------------------
+r872 | lh3lh3 | 2010-12-07 14:43:54 -0500 (Tue, 07 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+fixed a bug in vcf2fq
+
+------------------------------------------------------------------------
+r869 | lh3lh3 | 2010-12-05 01:18:06 -0500 (Sun, 05 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+
+added a warning for the Windows version
+
+------------------------------------------------------------------------
+r868 | lh3lh3 | 2010-12-05 01:05:51 -0500 (Sun, 05 Dec 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+
+In ksprintf(), change "%lf" and "%lg" to "%f" and "%g", respectively.
+According to the manual page, this change is valid. However, MinGW seems
+to interpret "%lf" as "%Lf".
+
+------------------------------------------------------------------------
+r867 | lh3lh3 | 2010-12-05 00:35:43 -0500 (Sun, 05 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile.mingw
+   M /trunk/samtools/bam_aux.c
+
+bring back the windows support
+
+------------------------------------------------------------------------
+r866 | lh3lh3 | 2010-12-04 23:33:51 -0500 (Sat, 04 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_reheader.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+Fixed a compiling error when knetfile is not used.
+
+------------------------------------------------------------------------
+r865 | lh3lh3 | 2010-12-04 00:13:22 -0500 (Sat, 04 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+vcf->fastq
+
+------------------------------------------------------------------------
+r864 | lh3lh3 | 2010-12-03 17:12:30 -0500 (Fri, 03 Dec 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+
+ * remove "-f". Instead always compute consensus quality
+ * increase the upper limit of quality
+
+------------------------------------------------------------------------
+r863 | lh3lh3 | 2010-12-03 15:28:15 -0500 (Fri, 03 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+
+more informative error message
+
+------------------------------------------------------------------------
+r862 | lh3lh3 | 2010-12-02 16:16:08 -0500 (Thu, 02 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bamtk.c
+
+Release samtools-0.1.12a
+
+------------------------------------------------------------------------
+r861 | lh3lh3 | 2010-12-02 15:55:06 -0500 (Thu, 02 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+
+a possible fix to DP4=0,0,0,0; have not tested, but should have no side-effect
+
+------------------------------------------------------------------------
+r859 | lh3lh3 | 2010-12-02 11:39:57 -0500 (Thu, 02 Dec 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bam_index.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/samtools.1
+
+Release samtools-0.1.12
+
+------------------------------------------------------------------------
+r858 | lh3lh3 | 2010-12-02 11:24:41 -0500 (Thu, 02 Dec 2010) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/bcf.c
+
+ * samtools-0.1.11-1 (r858)
+ * fixed a bug in mpileup which causes segfaults
+ * bcftools: do not segfault when BCF contains errors
+
+------------------------------------------------------------------------
+r857 | lh3lh3 | 2010-11-30 23:52:50 -0500 (Tue, 30 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam_index.c
+
+fixed a memory leak in bam_fetch()
+
+------------------------------------------------------------------------
+r856 | lh3lh3 | 2010-11-26 00:07:31 -0500 (Fri, 26 Nov 2010) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+ * fixed a memory violation
+ * added splitchr to vcfutils.pl
+
+------------------------------------------------------------------------
+r854 | lh3lh3 | 2010-11-23 09:05:08 -0500 (Tue, 23 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/ld.c
+
+fixed a typo/bug in r^2 computation
+
+------------------------------------------------------------------------
+r852 | lh3lh3 | 2010-11-21 22:20:20 -0500 (Sun, 21 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/bamtk.c
+
+forget to change the version information
+
+------------------------------------------------------------------------
+r851 | lh3lh3 | 2010-11-21 22:16:52 -0500 (Sun, 21 Nov 2010) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/NEWS
+   M /trunk/samtools/bcftools/bcftools.1
+   M /trunk/samtools/samtools.1
+
+Release samtools-0.1.11
+
+------------------------------------------------------------------------
 r844 | lh3lh3 | 2010-11-19 23:16:08 -0500 (Fri, 19 Nov 2010) | 3 lines
 Changed paths:
    M /trunk/samtools/bamtk.c
