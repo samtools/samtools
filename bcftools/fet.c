@@ -64,7 +64,8 @@ double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double
 
 	n1_ = n11 + n12; n_1 = n11 + n21; n = n11 + n12 + n21 + n22; // calculate n1_, n_1 and n
 	max = (n_1 < n1_) ? n_1 : n1_; // max n11, for right tail
-	min = (n1_ + n_1 - n < 0) ? 0 : (n1_ + n_1 - n < 0); // min n11, for left tail
+	min = n1_ + n_1 - n;
+	if (min < 0) min = 0; // min n11, for left tail
 	*two = *_left = *_right = 1.;
 	if (min == max) return 1.; // no need to do test
 	q = hypergeo_acc(n11, n1_, n_1, n, &aux); // the probability of the current table
@@ -79,6 +80,7 @@ double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double
 	p = hypergeo_acc(max, 0, 0, 0, &aux);
 	for (right = 0., j = max - 1; p < 0.99999999 * q; --j) // loop until underflow
 		right += p, p = hypergeo_acc(j, 0, 0, 0, &aux);
+	++j;
 	if (p < 1.00000001 * q) right += p;
 	else ++j;
 	// two-tail
