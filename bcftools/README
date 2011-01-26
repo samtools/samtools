@@ -1,0 +1,36 @@
+The view command of bcftools calls variants, tests Hardy-Weinberg
+equilibrium (HWE), tests allele balances and estimates allele frequency.
+
+This command calls a site as a potential variant if P(ref|D,F) is below
+0.9 (controlled by the -p option), where D is data and F is the prior
+allele frequency spectrum (AFS).
+
+The view command performs two types of allele balance tests, both based
+on Fisher's exact test for 2x2 contingency tables with the row variable
+being reference allele or not. In the first table, the column variable
+is strand. Two-tail P-value is taken. We test if variant bases tend to
+come from one strand. In the second table, the column variable is
+whether a base appears in the first or the last 11bp of the read.
+One-tail P-value is taken. We test if variant bases tend to occur
+towards the end of reads, which is usually an indication of
+misalignment.
+
+Site allele frequency is estimated in two ways. In the first way, the
+frequency is esimated as \argmax_f P(D|f) under the assumption of
+HWE. Prior AFS is not used. In the second way, the frequency is
+estimated as the posterior expectation of allele counts \sum_k
+kP(k|D,F), dividied by the total number of haplotypes. HWE is not
+assumed, but the estimate depends on the prior AFS. The two estimates
+largely agree when the signal is strong, but may differ greatly on weak
+sites as in this case, the prior plays an important role.
+
+To test HWE, we calculate the posterior distribution of genotypes
+(ref-hom, het and alt-hom). Chi-square test is performed. It is worth
+noting that the model used here is prior dependent and assumes HWE,
+which is different from both models for allele frequency estimate. The
+new model actually yields a third estimate of site allele frequency.
+
+The estimate allele frequency spectrum is printed to stderr per 64k
+sites. The estimate is in fact only the first round of a EM
+procedure. The second model (not the model for HWE testing) is used to
+estimate the AFS.

@@ -1,0 +1,535 @@
+Beta release 0.1.12a (2 December, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is another bug fix release:
+
+ * Fixed a memory violation in mpileup, which causes segfault. Release
+   0.1.9 and above are affected.
+
+ * Fixed a memory violation in the indel caller, which does not causes
+   segfault, but may potentially affect deletion calls in an unexpected
+   way. Release 0.1.10 and above are affected.
+
+ * Fixed a bug in computing r-square in bcftools. Few are using this
+   functionality and it only has minor effect.
+
+ * Fixed a memory leak in bam_fetch().
+
+ * Fixed a bug in writing meta information to the BAM index for the last
+   sequence. This bug is invisible to most users, but it is a bug anyway.
+
+ * Fixed a bug in bcftools which causes false "DP4=0,0,0,0" annotations.
+
+(0.1.12: 2 December 2010, r862)
+
+
+
+Beta release 0.1.11 (21 November, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is mainly a bug fix release:
+
+ * Fixed a bug in random retrieval (since 0.1.8). It occurs when reads
+   are retrieved from a small region containing no reads.
+
+ * Fixed a bug in pileup (since 0.1.9). The bug causes an assertion
+   failure when the first CIGAR operation is a deletion.
+
+ * Improved fault tolerence in remote access.
+
+One minor feature has been implemented in bcftools:
+
+ * Added a reference-free variant calling mode. In this mode, a site is
+   regarded as a variat iff the sample(s) contains two or more alleles;
+   the meaning of the QUAL field in the VCF output is changed
+   accordingly. Effectively, the reference allele is irrelevant to the
+   result in the new mode, although the reference sequence has to be
+   used in realignment when SAMtools computes genotype likelihoods.
+
+In addition, since 0.1.10, the `pileup' command has been deprecated by
+`mpileup' which is more powerful and more accurate. The `pileup' command
+will not be removed in the next few releases, but new features will not
+be added.
+
+(0.1.11: 21 November 2010, r851)
+
+
+
+Beta Release 0.1.10 (16 November, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This release is featured as the first major improvement to the indel
+caller. The method is similar to the old one implemented in the pileup
+command, but the details are handled more carefully both in theory and
+in practice. As a result, the new indel caller usually gives more
+accurate indel calls, though at the cost of sensitivity. The caller is
+implemented in the mpileup command and is invoked by default. It works
+with multiple samples.
+
+Other notable changes:
+
+ * With the -r option, the calmd command writes the difference between
+   the original base quality and the BAQ capped base quality at the BQ
+   tag but does not modify the base quality. Please use -Ar to overwrite
+   the original base quality (the 0.1.9 behavior).
+
+ * Allow to set a maximum per-sample read depth to reduce memory. In
+   0.1.9, most of memory is wasted for the ultra high read depth in some
+   regions (e.g. the chr1 centromere).
+
+ * Optionally write per-sample read depth and per-sample strand bias
+   P-value.
+
+ * Compute equal-tail (Bayesian) credible interval of site allele
+   frequency at the CI95 VCF annotation.
+
+ * Merged the vcfutils.pl varFilter and filter4vcf for better SNP/indel
+   filtering.
+
+(0.1.10: 16 November 2010, r829)
+
+
+
+Beta Release 0.1.9 (27 October, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This release is featured as the first major improvement to the samtools'
+SNP caller.  It comes with a revised MAQ error model, the support of
+multi-sample SNP calling and the computation of base alignment quality
+(BAQ).
+
+The revised MAQ error model is based on the original model. It solves an
+issue of miscalling SNPs in repetitive regions. Althought such SNPs can
+usually be filtered at a later step, they mess up unfiltered calls. This
+is a theoretical flaw in the original model. The revised MAQ model
+deprecates the orginal MAQ model and the simplified SOAPsnp model.
+
+Multi-sample SNP calling is separated in two steps. The first is done by
+samtools mpileup and the second by a new program, bcftools, which is
+included in the samtools source code tree. Multi-sample SNP calling also
+works for single sample and has the advantage of enabling more powerful
+filtration. It is likely to deprecate pileup in future once a proper
+indel calling method is implemented.
+
+BAQ is the Phred-scaled probability of a read base being wrongly
+aligned. Capping base quality by BAQ has been shown to be very effective
+in suppressing false SNPs caused by misalignments around indels or in
+low-complexity regions with acceptable compromise on computation
+time. This strategy is highly recommended and can be used with other SNP
+callers as well.
+
+In addition to the three major improvements, other notable changes are:
+
+ * Changes to the pileup format. A reference skip (the N CIGAR operator)
+   is shown as '<' or '>' depending on the strand. Tview is also changed
+   accordingly.
+
+ * Accelerated pileup. The plain pileup is about 50% faster.
+
+ * Regional merge. The merge command now accepts a new option to merge
+   files in a specified region.
+
+ * Fixed a bug in bgzip and razip which causes source files to be
+   deleted even if option -c is applied.
+
+ * In APIs, propogate errors to downstream callers and make samtools
+   return non-zero values once errors occur.
+
+(0.1.9: 27 October 2010, r783)
+
+
+
+Beta Release 0.1.8 (11 July, 2010)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable functional changes:
+
+ * Added the `reheader' command which replaces a BAM header with a new
+   header. This command is much faster than replacing header by
+   BAM->SAM->BAM conversions.
+
+ * Added the `mpileup' command which computes the pileup of multiple
+   alignments.
+
+ * The `index' command now stores the number of mapped and unmapped
+   reads in the index file. This information can be retrieved quickly by
+   the new `idxstats' command.
+
+ * By default, pileup used the SOAPsnp model for SNP calling. This
+   avoids the floating overflow in the MAQ model which leads to spurious
+   calls in repetitive regions, although these calls will be immediately
+   filtered by varFilter.
+
+ * The `tview' command now correctly handles CIGARs like 7I10M and
+   10M1P1I10M which cause assertion failure in earlier versions.
+
+ * Tview accepts a region like `=10,000' where `=' stands for the
+   current sequence name. This saves typing for long sequence names.
+
+ * Added the `-d' option to `pileup' which avoids slow indel calling
+   in ultradeep regions by subsampling reads locally.
+
+ * Added the `-R' option to `view' which retrieves alignments in read
+   groups listed in the specified file.
+
+Performance improvements:
+
+ * The BAM->SAM conversion is up to twice faster, depending on the
+   characteristic of the input.
+
+ * Parsing SAM headers with a lot of reference sequences is now much
+   faster.
+
+ * The number of lseek() calls per query is reduced when the query
+   region contains no read alignments.
+
+Bug fixes:
+
+ * Fixed an issue in the indel caller that leads to miscall of indels.
+   Note that this solution may not work well when the sequencing indel
+   error rate is higher than the rate of SNPs.
+
+ * Fixed another issue in the indel caller which may lead to incorrect
+   genotype.
+
+ * Fixed a bug in `sort' when option `-o' is applied.
+
+ * Fixed a bug in `view -r'.
+
+APIs and other changes:
+
+ * Added iterator interfaces to random access and pileup. The callback
+   interfaces directly call the iterator interfaces.
+
+ * The BGZF blocks holding the BAM header are indepedent of alignment
+   BGZF blocks. Alignment records shorter than 64kB is guaranteed to be
+   fully contained in one BGZF block. This change is fully compatible
+   with the old version of samtools/picard.
+
+Changes in other utilities:
+
+ * Updated export2sam.pl by Chris Saunders.
+
+ * Improved the sam2vcf.pl script.
+
+ * Added a Python version of varfilter.py by Aylwyn Scally.
+
+(0.1.8: 11 July 2010, r613)
+
+
+
+Beta Release 0.1.7 (10 November, 2009)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes:
+
+ * Improved the indel caller in complex scenariors, in particular for
+   long reads. The indel caller is now able to make reasonable indel
+   calls from Craig Venter capillary reads.
+
+ * Rewrote single-end duplicate removal with improved
+   performance. Paired-end reads are not touched.
+
+ * Duplicate removal is now library aware. Samtools remove potential
+   PCR/optical dupliates inside a library rather than across libraries.
+
+ * SAM header is now fully parsed, although this functionality is not
+   used in merging and so on.
+
+ * In samtools merge, optionally take the input file name as RG-ID and
+   attach the RG tag to each alignment.
+
+ * Added FTP support in the RAZF library. RAZF-compressed reference
+   sequence can be retrieved remotely.
+
+ * Improved network support for Win32.
+
+ * Samtools sort and merge are now stable.
+
+Changes in other utilities:
+
+ * Implemented sam2vcf.pl that converts the pileup format to the VCF
+   format.
+
+ * This release of samtools is known to work with the latest
+   Bio-Samtools Perl module.
+
+(0.1.7: 10 November 2009, r510)
+
+
+
+Beta Release 0.1.6 (2 September, 2009)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes:
+
+ * In tview, do not show a blank screen when no reads mapped to the
+   corresponding region.
+
+ * Implemented native HTTP support in the BGZF library. Samtools is now
+   able to directly open a BAM file on HTTP. HTTP proxy is also
+   supported via the "http_proxy" environmental variable.
+
+ * Samtools is now compitable with the MinGW (win32) compiler and the
+   PDCurses library.
+
+ * The calmd (or fillmd) command now calculates the NM tag and replaces
+   MD tags if they are wrong.
+
+ * The view command now recognizes and optionally prints FLAG in HEXs or
+   strings to make a SAM file more friendly to human eyes. This is a
+   samtools-C extension, not implemented in Picard for the time
+   being. Please type `samtools view -?' for more information.
+
+ * BAM files now have an end-of-file (EOF) marker to facilitate
+   truncation detection. A warning will be given if an on-disk BAM file
+   does not have this marker. The warning will be seen on BAM files
+   generated by an older version of samtools. It does NO harm.
+
+ * New key bindings in tview: `r' to show read names and `s' to show
+   reference skip (N operation) as deletions.
+
+ * Fixed a bug in `samtools merge -n'.
+
+ * Samtools merge now optionally copies the header of a user specified
+   SAM file to the resultant BAM output.
+
+ * Samtools pileup/tview works with a CIGAR with the first or the last
+   operation is an indel.
+
+ * Fixed a bug in bam_aux_get().
+
+
+Changes in other utilies:
+
+ * Fixed wrong FLAG in maq2sam.
+
+
+(0.1.6: 2 September 2009, r453)
+
+
+
+Beta Release 0.1.5 (7 July, 2009)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes:
+
+ * Support opening a BAM alignment on FTP. Users can now use "tview" to
+   view alignments at the NCBI ftp site. Please read manual for more
+   information.
+
+ * In library, propagate errors rather than exit or complain assertion
+   failure.
+
+ * Simplified the building system and fixed compiling errors caused by
+   zlib<1.2.2.1.
+
+ * Fixed an issue about lost header information when a SAM is imported
+   with "view -t".
+
+ * Implemented "samtool.pl varFilter" which filters both SNPs and short
+   indels. This command replaces "indelFilter".
+
+ * Implemented "samtools.pl pileup2fq" to generate FASTQ consensus from
+   pileup output.
+
+ * In pileup, cap mapping quality at 60. This helps filtering when
+   different aligners are in use.
+
+ * In pileup, allow to output variant sites only.
+
+ * Made pileup generate correct calls in repetitive region. At the same
+   time, I am considering to implement a simplified model in SOAPsnp,
+   although this has not happened yet.
+
+ * In view, added '-u' option to output BAM without compression. This
+   option is preferred when the output is piped to other commands.
+
+ * In view, added '-l' and '-r' to get the alignments for one library or
+   read group. The "@RG" header lines are now partially parsed.
+
+ * Do not include command line utilities to libbam.a.
+
+ * Fixed memory leaks in pileup and bam_view1().
+
+ * Made faidx more tolerant to empty lines right before or after FASTA >
+   lines.
+
+
+Changes in other utilities:
+
+ * Updated novo2sam.pl by Colin Hercus, the key developer of novoalign.
+
+
+This release involves several modifications to the key code base which
+may potentially introduce new bugs even though we have tried to minimize
+this by testing on several examples. Please let us know if you catch
+bugs.
+
+(0.1.5: 7 July 2009, r373)
+
+
+
+Beta Release 0.1.4 (21 May, 2009)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes:
+
+ * Added the 'rmdupse' command: removing duplicates for SE reads.
+
+ * Fixed a critical bug in the indel caller: clipped alignments are not
+   processed correctly.
+
+ * Fixed a bug in the tview: gapped alignment may be incorrectly
+   displayed.
+
+ * Unified the interface to BAM and SAM I/O. This is done by
+   implementing a wrapper on top of the old APIs and therefore old APIs
+   are still valid. The new I/O APIs also recognize the @SQ header
+   lines.
+
+ * Generate the MD tag.
+
+ * Generate "=" bases. However, the indel caller will not work when "="
+   bases are present.
+
+ * Enhanced support of color-read display (by Nils Homer).
+
+ * Implemented the GNU building system. However, currently the building
+   system does not generate libbam.a. We will improve this later. For
+   the time being, `make -f Makefile.generic' is preferred.
+
+ * Fixed a minor bug in pileup: the first read in a chromosome may be
+   skipped.
+
+ * Fixed bugs in bam_aux.c. These bugs do not affect other components as
+   they were not used previously.
+
+ * Output the 'SM' tag from maq2sam.
+
+(0.1.4: 21 May 2009, r297)
+
+
+
+Beta Release 0.1.3 (15 April, 2009)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes in SAMtools:
+
+ * SAMtools is more consistent with the specification: a) '*' in the
+   QUAL field is allowed; b) the field separator is TAB only and SPACE
+   is treated as a character in a field; c) empty header is allowed.
+
+ * Implemented GLFv3 support in pileup.
+
+ * Fixed a severe bug in fixmate: strand information is wrongly
+   overwritten.
+
+ * Fixed a bug in alignment retrieval: alignments bridging n*16384bp are
+   not correctly retrieved sometimes.
+
+ * Fixed a bug in rmdup: segfault if unmapped reads are present.
+
+ * Move indel_filter.pl to samtools.pl and improved the filtering by
+   checking the actual number of alignments containing indels. The indel
+   pileup line is also changed a little to make this filtration easier.
+
+ * Fixed a minor bug in indexing: the bin number of an unmapped read is
+   wrongly calculated.
+
+ * Added `flagstat' command to show statistics on the FLAG field.
+
+ * Improved indel caller by setting the maximum window size in local
+   realignment.
+
+Changes in other utilities:
+
+ * Fixed a bug in maq2sam: a tag name is obsolete.
+
+ * Improvement to wgsim: a) added support for SOLiD read simulation; b)
+   show the number of substitutions/indels/errors in read name; c)
+   considerable code clean up.
+
+ * Various converters: improved functionality in general.
+
+ * Updated the example SAM due to the previous bug in fixmate.
+
+(0.1.3: 15 April 2009, r227)
+
+
+
+Beta Release 0.1.2 (28 January, 2008)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes in SAMtools:
+
+ * Implemented a Bayesian indel caller. The new caller generate scores
+   and genotype and is potentially more accurate than Maq's indel
+   caller. The pileup format is also changed accordingly.
+
+ * Implemented rmdup command: remove potential PCR duplicates. Note that
+   this command ONLY works for FR orientation and requires ISIZE is
+   correctly set.
+
+ * Added fixmate command: fill in mate coordinates, ISIZE and mate
+   related flags from a name-sorted alignment.
+
+ * Fixed a bug in indexing: reads bridging 16x kbp were not retrieved.
+
+ * Allow to select reads shown in the pileup output with a mask.
+
+ * Generate GLFv2 from pileup.
+
+ * Added two more flags for flagging PCR/optical duplicates and for QC
+   failure.
+
+ * Fixed a bug in sort command: name sorting for large alignment did not
+   work.
+
+ * Allow to completely disable RAZF (using Makefile.lite) as some people
+   have problem to compile it.
+
+ * Fixed a bug in import command when there are reads without
+   coordinates.
+
+ * Fixed a bug in tview: clipping broke the alignment viewer.
+
+ * Fixed a compiling error when _NO_CURSES is applied.
+
+ * Fixed a bug in merge command.
+
+Changes in other utilities:
+
+ * Added wgsim, a paired-end reads simulator. Wgsim was adapted from
+   maq's reads simulator. Colin Hercus further improved it to allow
+   longer indels.
+
+ * Added wgsim_eval.pl, a script that evaluates the accuracy of
+   alignment on reads generated by wgsim.
+
+ * Added soap2sam.pl, a SOAP2->SAM converter. This converter does not
+   work properly when multiple hits are output.
+
+ * Added bowtie2sam.pl, a Bowtie->SAM converter. Only the top hit will
+   be retained when multiple hits are present.
+
+ * Fixed a bug in export2sam.pl for QC reads.
+
+ * Support RG tag at MAQ->SAM converter.
+
+ * Added novo2sam.pl, a NovoAlign->SAM converter. Multiple hits and
+   indel are not properly handled, though.
+
+ * Added zoom2sam.pl, a ZOOM->SAM converter. It only works with the
+   default Illumina output.
+
+(0.1.2: 28 January 2008; r116)
+
+
+
+Beta Release 0.1.1 (22 December, 2008)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The is the first public release of samtools. For more information,
+please check the manual page `samtools.1' and the samtools website
+http://samtools.sourceforge.net
