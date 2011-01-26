@@ -1,1 +1,5 @@
 all:
+
+lib:
+
+cleanlocal:
