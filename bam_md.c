@@ -223,8 +223,10 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 		s = calloc(c->l_qseq, 1);
 		for (i = 0; i < c->l_qseq; ++i) s[i] = bam_nt16_nt4_table[bam1_seqi(seq, i)];
 		r = calloc(xe - xb, 1);
-		for (i = xb; i < xe; ++i)
+		for (i = xb; i < xe; ++i) {
+			if (ref[i] == 0) { xe = i; break; }
 			r[i-xb] = bam_nt16_nt4_table[bam_nt16_table[(int)ref[i]]];
+		}
 		state = calloc(c->l_qseq, sizeof(int));
 		q = calloc(c->l_qseq, 1);
 		kpa_glocal(r, xe-xb, s, c->l_qseq, qual, &conf, state, q);
