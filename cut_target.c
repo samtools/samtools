@@ -6,7 +6,10 @@ typedef struct {
 	int e[2][3], p[2][2];
 } score_param_t;
 
-static score_param_t param = { {{1,0,-3},{-3,1,3}}, {{0,-10000}, {-10000,0}} };
+/* Note that although the two matrics have 10 parameters in total, there are
+ * only 4 FREE parameters. Changing the scoring matrices in a sort of symmetric
+ * way will not change the result. */
+static score_param_t param = { {{0,0,0},{-4,1,6}}, {{0,-14000}, {0,0}} };
 
 static int min_Q = 20;
 
@@ -44,7 +47,7 @@ static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
 {
 	int i, f[2][2], *prev, *curr, *swap_tmp, s;
 	uint8_t *b; // backtrack array
-	b = calloc(l, 1); // we actually only need 1/4 of the memory, but it does not matter...
+	b = calloc(l, 1);
 	f[0][0] = f[0][1] = 0;
 	prev = f[0]; curr = f[1];
 	// fill the backtrack matrix
@@ -70,13 +73,14 @@ static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
 		b[i] |= s<<2;
 		s = b[i]>>s&1;
 	}
-	// TODO: split overlapping fosmids
+	// TODO: split overlapping or false joining fosmids
+
 	// print
 	for (i = 0, s = -1; i <= l; ++i) {
-		if (i == l || (b[i]>>2 == 0 && s >= 0)) {
-			if (s >= 0) printf("%s\t%d\t%d\n", h->target_name[tid], s, i);
+		if (i == l || ((b[i]>>2&3) == 0 && s >= 0)) {
+			if (s >= 0) printf("%s\t%d\t%d\t%d\n", h->target_name[tid], s, i, i - s);
 			s = -1;
-		} else if (b[i]>>2 && s < 0) s = i;
+		} else if ((b[i]>>2&3) && s < 0) s = i;
 	}
 	free(b);
 }
@@ -90,9 +94,13 @@ int main_cut_target(int argc, char *argv[])
 	bam_header_t *h;
 	uint16_t *cns;
 
-	while ((c = getopt(argc, argv, "Q:")) >= 0) {
+	while ((c = getopt(argc, argv, "Q:i:o:0:1:2:")) >= 0) {
 		switch (c) {
-			case 'Q': min_Q = atoi(optarg); break;
+			case 'Q': min_Q = atoi(optarg); break; // quality cutoff
+			case 'i': param.p[0][1] = -atoi(optarg); break; // 0->1 transition (in) PENALTY
+			case '0': param.e[1][0] = atoi(optarg); break; // emission SCORE
+			case '1': param.e[1][1] = atoi(optarg); break;
+			case '2': param.e[1][2] = atoi(optarg); break;
 		}
 	}
 	if (argc == optind) {
