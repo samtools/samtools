@@ -6,7 +6,7 @@ typedef struct {
 	int e[2][3], p[2][2];
 } score_param_t;
 
-static score_param_t param = { {{1,0,-3},{-1,1,3}}, {{0,-20000}, {-20000,0}} };
+static score_param_t param = { {{1,0,-3},{-3,1,3}}, {{0,-10000}, {-10000,0}} };
 
 static int min_Q = 20;
 
@@ -74,7 +74,7 @@ static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
 	// print
 	for (i = 0, s = -1; i <= l; ++i) {
 		if (i == l || (b[i]>>2 == 0 && s >= 0)) {
-			printf("%s\t%d\t%d\n", h->target_name[tid], s, i);
+			if (s >= 0) printf("%s\t%d\t%d\n", h->target_name[tid], s, i);
 			s = -1;
 		} else if (b[i]>>2 && s < 0) s = i;
 	}
