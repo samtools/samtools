@@ -318,8 +318,14 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 			// align each read to ref2
 			for (i = 0; i < n_plp[s]; ++i, ++K) {
 				bam_pileup1_t *p = plp[s] + i;
-				int qbeg, qend, tbeg, tend, sc;
+				int qbeg, qend, tbeg, tend, sc, kk;
 				uint8_t *seq = bam1_seq(p->b);
+				uint32_t *cigar = bam1_cigar(p->b);
+				if (p->b->core.flag&4) continue; // unmapped reads
+				// FIXME: the following loop should be better moved outside; nonetheless, realignment should be much slower anyway.
+				for (kk = 0; kk < p->b->core.n_cigar; ++kk)
+					if ((cigar[kk]&BAM_CIGAR_MASK) == BAM_CREF_SKIP) break;
+				if (kk < p->b->core.n_cigar) continue;
 				// FIXME: the following skips soft clips, but using them may be more sensitive.
 				// determine the start and end of sequences for alignment
 				qbeg = tpos2qpos(&p->b->core, bam1_cigar(p->b), left,  0, &tbeg);
@@ -414,7 +420,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				indelQ2 = tmp > 111? 0 : (int)((1. - tmp/111.) * indelQ2 + .499);
 				// pick the smaller between indelQ1 and indelQ2
 				indelQ = indelQ1 < indelQ2? indelQ1 : indelQ2;
-				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ;
+				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ; // use 22 bits in total
 				sumq[sc[0]&0x3f] += indelQ < seqQ? indelQ : seqQ;
 //				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ);
 			}
