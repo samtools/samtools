@@ -6,8 +6,8 @@ typedef struct {
 	int e[2][3], p[2][2];
 } score_param_t;
 
-/* Note that although the two matrics have 10 parameters in total, there are
- * only 4 FREE parameters. Changing the scoring matrices in a sort of symmetric
+/* Note that although the two matrics have 10 parameters in total, only 4
+ * (probably 3) are free.  Changing the scoring matrices in a sort of symmetric
  * way will not change the result. */
 static score_param_t param = { {{0,0,0},{-4,1,6}}, {{0,-14000}, {0,0}} };
 
@@ -40,7 +40,7 @@ static uint16_t gencns(int n, const bam_pileup1_t *plp)
 	if (sum[0]>>2 == 0) return depth; 
 	if (sum[1]>>2 > min_Q) ret = 61<<2 | (sum[0]&3); // a het
 	else ret = (sum[0]>>2 < 60? sum[0]>>2 : 60) << 2 | (sum[0]&3);
-	return depth<<8|ret;
+	return ret<<8|depth;
 }
 
 static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
