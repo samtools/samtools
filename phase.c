@@ -14,7 +14,7 @@ KHASH_MAP_INIT_INT64(64, rseq_t)
 
 typedef khash_t(64) nseq_t;
 
-static int min_Q = 20;
+static int min_varQ = 40, min_mapQ = 10;
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
 static inline uint64_t X31_hash_string(const char *s)
@@ -69,8 +69,8 @@ int main_phase(int argc, char *argv[])
 			uint8_t *seq = bam1_seq(p->b);
 			uint8_t *qual = bam1_qual(p->b);
 			if (p->is_del || p->is_refskip) continue;
-			if (p->b->core.qual < min_Q || qual[p->qpos] < min_Q) continue;
-			++cnt[(int)nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)]];
+			if (p->b->core.qual < min_mapQ) continue;
+			cnt[(int)nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)]] += qual[p->qpos];
 		}
 		for (i = 0; i < 4; ++i) {
 			if (cnt[i] >= 1<<14) cnt[i] = (1<<14) - 1;
@@ -79,7 +79,7 @@ int main_phase(int argc, char *argv[])
 		for (i = 1; i < 4; ++i) // insertion sort
 			for (j = i; j > 0 && cnt[j] > cnt[j-1]; --j)
 				tmp = cnt[j], cnt[j] = cnt[j-1], cnt[j-1] = tmp;
-		if (cnt[1]>>2 == 0) continue; // not a variant
+		if (cnt[1]>>2 <= min_varQ) continue; // not a variant
 		if (vpos == max_vpos) {
 			max_vpos = max_vpos? max_vpos<<1 : 128;
 			cns = realloc(cns, max_vpos * 8);
@@ -90,10 +90,9 @@ int main_phase(int argc, char *argv[])
 			uint64_t key;
 			khint_t k;
 			uint8_t *seq = bam1_seq(p->b);
-			uint8_t *qual = bam1_qual(p->b);
 			rseq_t *r;
 			if (p->is_del || p->is_refskip) continue;
-			if (p->b->core.qual < min_Q || qual[p->qpos] < min_Q) continue;
+			if (p->b->core.qual < min_mapQ) continue;
 			// get the base code
 			c = nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
 			if (c > 3) c = 0;
