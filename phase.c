@@ -24,6 +24,14 @@ static inline uint64_t X31_hash_string(const char *s)
 	return h;
 }
 
+static void phase(int vpos, uint64_t *cns)
+{
+	int i;
+	for (i = 0; i < vpos; ++i) {
+		printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
+	}
+}
+
 int main_phase(int argc, char *argv[])
 {
 	bamFile fp;
@@ -32,7 +40,7 @@ int main_phase(int argc, char *argv[])
 	bam_plp_t iter;
 	bam_header_t *h;
 	nseq_t *seqs;
-	int8_t *cns = 0;
+	uint64_t *cns = 0;
 
 	while ((c = getopt(argc, argv, "")) >= 0) {
 		switch (c) {
@@ -51,7 +59,9 @@ int main_phase(int argc, char *argv[])
 		int i, j, c, cnt[4], tmp;
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
+			phase(vpos, cns);
 			lasttid = tid;
+			vpos = 0;
 		}
 		cnt[0] = cnt[1] = cnt[2] = cnt[3] = 0;
 		for (i = 0; i < n; ++i) { // check if there are variants
@@ -62,15 +72,19 @@ int main_phase(int argc, char *argv[])
 			if (p->b->core.qual < min_Q || qual[p->qpos] < min_Q) continue;
 			++cnt[(int)nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)]];
 		}
-		for (i = 0; i < 4; ++i) cnt[i] = cnt[i]<<2 | i;
+		for (i = 0; i < 4; ++i) {
+			if (cnt[i] >= 1<<14) cnt[i] = (1<<14) - 1;
+			cnt[i] = cnt[i]<<2 | i; // cnt[i] is 16-bit at most
+		}
 		for (i = 1; i < 4; ++i) // insertion sort
 			for (j = i; j > 0 && cnt[j] > cnt[j-1]; --j)
 				tmp = cnt[j], cnt[j] = cnt[j-1], cnt[j-1] = tmp;
 		if (cnt[1]>>2 == 0) continue; // not a variant
 		if (vpos == max_vpos) {
 			max_vpos = max_vpos? max_vpos<<1 : 128;
-			cns = realloc(cns, max_vpos);
+			cns = realloc(cns, max_vpos * 8);
 		}
+		cns[vpos] = (uint64_t)pos<<32 | cnt[1] << 16 | cnt[0];
 		for (i = 0; i < n; ++i) {
 			const bam_pileup1_t *p = plp + i;
 			uint64_t key;
@@ -95,11 +109,13 @@ int main_phase(int argc, char *argv[])
 					r->seq |= c << (vpos - r->vpos)*2;
 			} else r->vpos = vpos, r->seq = c; // absent
 		}
-		// TODO: write the consensus
+		++vpos;
 	}
+	phase(vpos, cns);
 	bam_header_destroy(h);
 	bam_plp_destroy(iter);
 	bam_close(fp);
 	kh_destroy(64, seqs);
+	free(cns);
 	return 0;
 }
