@@ -28,6 +28,7 @@ int main_samview(int argc, char *argv[]);
 int main_import(int argc, char *argv[]);
 int main_reheader(int argc, char *argv[]);
 int main_cut_target(int argc, char *argv[]);
+int main_phase(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 int glf3_view_main(int argc, char *argv[]);
@@ -133,6 +134,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "fillmd") == 0) return bam_fillmd(argc-1, argv+1);
 	else if (strcmp(argv[1], "reheader") == 0) return main_reheader(argc-1, argv+1);
 	else if (strcmp(argv[1], "targetcut") == 0) return main_cut_target(argc-1, argv+1);
+	else if (strcmp(argv[1], "phase") == 0) return main_phase(argc-1, argv+1);
 #if _CURSES_LIB != 0
 	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif
