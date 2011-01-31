@@ -78,7 +78,24 @@ static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
 	// print
 	for (i = 0, s = -1; i <= l; ++i) {
 		if (i == l || ((b[i]>>2&3) == 0 && s >= 0)) {
-			if (s >= 0) printf("%s\t%d\t%d\t%d\n", h->target_name[tid], s, i, i - s);
+			if (s >= 0) {
+				int j;
+				printf("%s:%d-%d\t0\t%s\t%d\t60\t%dM\t*\t0\t0\t", h->target_name[tid], s+1, i, h->target_name[tid], s+1, i-s);
+				for (j = s; j < i; ++j) {
+					int c = cns[j]>>8;
+					if (c>>2 == 61) putchar('N');
+					else if (c == 0) putchar('N');
+					else putchar("ACGT"[c&3]);
+				}
+				putchar('\t');
+				for (j = s; j < i; ++j) {
+					int c = cns[j]>>8;
+					if (c>>2 == 61) putchar(33);
+					else putchar(33 + (c>>2));
+				}
+				putchar('\n');
+			}
+			//if (s >= 0) printf("%s\t%d\t%d\t%d\n", h->target_name[tid], s, i, i - s);
 			s = -1;
 		} else if ((b[i]>>2&3) && s < 0) s = i;
 	}
