@@ -4,15 +4,22 @@
 #include <stdint.h>
 #include "bam.h"
 
+#define MAX_VARS 256
+
 typedef struct {
-	uint64_t seq;
-	int vpos; // 4 bytes wasted on 64-bit machines
-} rseq_t;
+	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
+	int vpos, vlen;
+} rseq_t, *rseq_p;
+
+#define rseq_lt(a,b) ((a)->vpos < (b)->vpos)
 
 #include "khash.h"
 KHASH_MAP_INIT_INT64(64, rseq_t)
 
 typedef khash_t(64) nseq_t;
+
+#include "ksort.h"
+KSORT_INIT(rseq, rseq_p, rseq_lt)
 
 static int min_varQ = 40, min_mapQ = 10;
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
@@ -24,12 +31,47 @@ static inline uint64_t X31_hash_string(const char *s)
 	return h;
 }
 
-static void phase(int vpos, uint64_t *cns)
+static void count_aux(int l, const uint8_t *seq, float *cnt)
 {
-	int i;
-	for (i = 0; i < vpos; ++i) {
-		printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
+	int i, j, n_ambi;
+	uint32_t z, x;
+	double y;
+	for (i = n_ambi = 0; i < l; ++i)
+		if (seq[i] == 0) ++n_ambi;
+	if (n_ambi >= l - 1) return; // do nothing if too many ambiguous bases
+	y = 1. / (1<<n_ambi);
+	for (x = 0; x <= (1u<<n_ambi)-1; ++x) {
+		for (i = j = 0, z = 0; i < l; ++i) {
+			int c = seq[i]? seq[i] - 1 : (x>>j&1);
+			z = z<<1 | c;
+		}
+		cnt[z] += y;
 	}
+}
+
+static float **count_all(int l, nseq_t *hash)
+{
+}
+
+static void phase(int vpos, uint64_t *cns, nseq_t *hash)
+{
+	int i, j, n_seqs = kh_size(hash);
+	khint_t k;
+	rseq_t **seqs;
+	seqs = calloc(n_seqs, sizeof(void*));
+	for (k = 0, i = 0; k < kh_end(hash); ++k) 
+		if (kh_exist(hash, k)) seqs[i++] = &kh_val(hash, k);
+	ks_introsort_rseq(n_seqs, seqs);
+	if (1) {
+		for (i = 0; i < n_seqs; ++i) {
+			printf("%d\t%d\t%d\t", (int)(cns[seqs[i]->vpos]>>32), seqs[i]->vpos, seqs[i]->vlen);
+			for (j = 0; j < seqs[i]->vlen; ++j)
+				putchar('0' + seqs[i]->seq[j]);
+			putchar('\n');
+		}
+	}
+//	for (i = 0; i < vpos; ++i) printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
+	free(seqs);
 }
 
 int main_phase(int argc, char *argv[])
@@ -59,7 +101,7 @@ int main_phase(int argc, char *argv[])
 		int i, j, c, cnt[4], tmp;
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
-			phase(vpos, cns);
+			phase(vpos, cns, seqs);
 			lasttid = tid;
 			vpos = 0;
 		}
@@ -104,13 +146,15 @@ int main_phase(int argc, char *argv[])
 			k = kh_put(64, seqs, key, &tmp);
 			r = &kh_val(seqs, k);
 			if (tmp == 0) { // present in the hash table
-				if (vpos - r->vpos < 32) // 32 bases at the maximum
-					r->seq |= c << (vpos - r->vpos)*2;
-			} else r->vpos = vpos, r->seq = c; // absent
+				if (vpos - r->vpos + 1 < MAX_VARS) {
+					r->vlen = vpos - r->vpos + 1;
+					r->seq[r->vlen-1] = c;
+				}
+			} else r->vpos = vpos, r->vlen = 1, r->seq[0] = c; // absent
 		}
 		++vpos;
 	}
-	phase(vpos, cns);
+	phase(vpos, cns, seqs);
 	bam_header_destroy(h);
 	bam_plp_destroy(iter);
 	bam_close(fp);
