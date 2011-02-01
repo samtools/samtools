@@ -176,7 +176,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	off_beg = off_end = bam_tell(fp);
 	while ((ret = bam_read1(fp, b)) >= 0) {
 		if (c->tid >= 0 && n_no_coor) {
-			fprintf(stderr, "[bam_index_core] the alignment is not sorted: unmapped reads appear before mapped reads.\n");
+			fprintf(stderr, "[bam_index_core] the alignment is not sorted: reads without coordinate prior to reads with coordinates.\n");
 			exit(1);
 		}
 		if (c->tid < 0) ++n_no_coor;
