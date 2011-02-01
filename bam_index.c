@@ -175,6 +175,10 @@ bam_index_t *bam_index_core(bamFile fp)
     n_mapped = n_unmapped = n_no_coor = off_end = 0;
 	off_beg = off_end = bam_tell(fp);
 	while ((ret = bam_read1(fp, b)) >= 0) {
+		if (c->tid >= 0 && n_no_coor) {
+			fprintf(stderr, "[bam_index_core] the alignment is not sorted: reads without coordinate prior to reads with coordinates.\n");
+			exit(1);
+		}
 		if (c->tid < 0) ++n_no_coor;
 		if (last_tid != c->tid) { // change of chromosomes
 			last_tid = c->tid;
