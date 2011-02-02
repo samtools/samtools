@@ -247,7 +247,7 @@ static void write_header(bcf_hdr_t *h)
 	if (!strstr(str.s, "##INFO=<ID=PV4,"))
 		kputs("##INFO=<ID=PV4,Number=4,Type=Float,Description=\"P-values for strand bias, baseQ bias, mapQ bias and tail distance bias\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=INDEL,"))
-        kputs("##INFO=<ID=INDEL,Number=0,Type=Flag,Descriptin=\"Indicates that the variant is an INDEL.\">\n", &str);
+        kputs("##INFO=<ID=INDEL,Number=0,Type=Flag,Description=\"Indicates that the variant is an INDEL.\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=GT,"))
         kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GQ,"))
