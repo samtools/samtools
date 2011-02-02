@@ -79,7 +79,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		}
 		bca->bases[n++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
 		// collect annotations
-		r->qsum[b] += q;
+		if (b < 4) r->qsum[b] += q;
 		++r->anno[0<<2|is_diff<<1|bam1_strand(p->b)];
 		min_dist = p->b->core.l_qseq - 1 - p->qpos;
 		if (min_dist > p->qpos) min_dist = p->qpos;

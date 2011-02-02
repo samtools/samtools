@@ -217,8 +217,15 @@ bam_index_t *bam_index_core(bamFile fp)
 	}
 	merge_chunks(idx);
 	fill_missing(idx);
-	if (ret >= 0)
-		while ((ret = bam_read1(fp, b)) >= 0) ++n_no_coor;
+	if (ret >= 0) {
+		while ((ret = bam_read1(fp, b)) >= 0) {
+			++n_no_coor;
+			if (c->tid >= 0 && n_no_coor) {
+				fprintf(stderr, "[bam_index_core] the alignment is not sorted: reads without coordinates prior to reads with coordinates.\n");
+				exit(1);
+			}
+		}
+	}
 	if (ret < -1) fprintf(stderr, "[bam_index_core] truncated file? Continue anyway. (%d)\n", ret);
 	free(b->data); free(b);
 	idx->n_no_coor = n_no_coor;
