@@ -201,7 +201,7 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
 	  my @x;
 	  $x[0] = sprintf("%.4f", $c[1]-$c[2]? $c[2] / ($c[1] - $c[2]) : 100);
 	  $x[1] = sprintf("%.4f", $hsize? $c[3] / $hsize : 0);
-	  $x[2] = sprintf("%.4f", $c[3] / $c[1]);
+	  $x[2] = sprintf("%.4f", $c[1] ? $c[3] / $c[1] : 0);
 	  my $a = $c[1] - $lc[1];
 	  my $b = $c[2] - $lc[2];
 	  $x[3] = sprintf("%.4f", $a-$b? $b / ($a-$b) : 100);
