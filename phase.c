@@ -21,7 +21,7 @@ typedef khash_t(64) nseq_t;
 #include "ksort.h"
 KSORT_INIT(rseq, rseq_p, rseq_lt)
 
-static int min_varQ = 40, min_mapQ = 10;
+static int min_varQ = 40, min_mapQ = 10, var_len = 3;
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
 static inline uint64_t X31_hash_string(const char *s)
@@ -49,8 +49,28 @@ static void count_aux(int l, const uint8_t *seq, float *cnt)
 	}
 }
 
-static float **count_all(int l, nseq_t *hash)
+static float **count_all(int l, int vpos, const nseq_t *hash)
 {
+	khint_t k;
+	int i, j;
+	uint8_t *seq;
+	float **cnt;
+	seq = calloc(l, 1);
+	cnt = calloc(vpos, sizeof(void*));
+	for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(float));
+	for (k = 0; k < kh_end(hash); ++k) {
+		if (kh_exist(hash, k)) {
+			rseq_t *p = &kh_val(hash, k);
+			if (p->vlen == 1) continue; // no phasing information
+			for (j = 1; j < p->vlen; ++j) {
+				for (i = 0; i < l; ++i)
+					seq[i] = j < l - 1 - i? 0 : p->seq[j - (l - 1 - i)];
+				count_aux(l, seq, cnt[p->vpos + j]);
+			}
+		}
+	}
+	free(seq);
+	return cnt;
 }
 
 static void phase(int vpos, uint64_t *cns, nseq_t *hash)
@@ -58,6 +78,16 @@ static void phase(int vpos, uint64_t *cns, nseq_t *hash)
 	int i, j, n_seqs = kh_size(hash);
 	khint_t k;
 	rseq_t **seqs;
+	float **cnt;
+	cnt = count_all(var_len, vpos, hash);
+	for (i = 0; i < vpos; ++i) {
+		printf("%d", i);
+		for (j = 0; j < 1<<var_len; ++j)
+			printf("\t%.2f", cnt[i][j]);
+		printf("\n");
+	}
+	for (i = 0; i < vpos; ++i) free(cnt[i]);
+	free(cnt);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
 		if (kh_exist(hash, k)) seqs[i++] = &kh_val(hash, k);
