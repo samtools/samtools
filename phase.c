@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <math.h>
 #include "bam.h"
 
 #define MAX_VARS 256
@@ -22,6 +23,7 @@ typedef khash_t(64) nseq_t;
 KSORT_INIT(rseq, rseq_p, rseq_lt)
 
 static int min_varQ = 40, min_mapQ = 10, var_len = 3;
+static float mm_prob = 0.05;
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
 static inline uint64_t X31_hash_string(const char *s)
@@ -31,7 +33,7 @@ static inline uint64_t X31_hash_string(const char *s)
 	return h;
 }
 
-static void count_aux(int l, const uint8_t *seq, float *cnt)
+static void count_fast(int l, const uint8_t *seq, float *cnt)
 {
 	int i, j, n_ambi;
 	uint32_t z, x;
@@ -46,6 +48,23 @@ static void count_aux(int l, const uint8_t *seq, float *cnt)
 			z = z<<1 | c;
 		}
 		cnt[z] += y;
+	}
+}
+
+static void count_slow(int l, const uint8_t *seq, float *cnt)
+{
+	uint32_t x, z = 1<<l;
+	int i, n_ambi;
+	for (i = n_ambi = 0; i < l; ++i)
+		if (seq[i] == 0) ++n_ambi;
+	if (n_ambi >= l - 1) return; // do nothing if too many ambiguous bases
+	for (x = 0; x < z; ++x) {
+		double y = 1.;
+		for (i = 0; i < l; ++i) {
+			if (seq[i] == 0) y *= .5;
+			else y *= (seq[i]-1 == (x>>(l-1-i)&1))? 1. - mm_prob : mm_prob;
+		}
+		cnt[x] += y;
 	}
 }
 
@@ -65,7 +84,7 @@ static float **count_all(int l, int vpos, const nseq_t *hash)
 			for (j = 1; j < p->vlen; ++j) {
 				for (i = 0; i < l; ++i)
 					seq[i] = j < l - 1 - i? 0 : p->seq[j - (l - 1 - i)];
-				count_aux(l, seq, cnt[p->vpos + j]);
+				count_slow(l, seq, cnt[p->vpos + j]);
 			}
 		}
 	}
