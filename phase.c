@@ -68,6 +68,30 @@ static void count_slow(int l, const uint8_t *seq, float *cnt)
 	}
 }
 
+static void dynaprog(int l, int vpos, float **w)
+{
+	double *f[2], *curr, *prev;
+	int8_t **b;
+	uint32_t x, z = 1u<<l;
+	f[0] = calloc(z, sizeof(double));
+	f[1] = calloc(z, sizeof(double));
+	prev = f[0]; curr = f[1];
+	for (i = 0; i < vpos; ++i) {
+		for (x = 0; x < z; ++x) {
+			uint32_t y0, y1;
+			y0 = x>>1; y1 = x>>1 | 1<<(l-1);
+			if (prev[y0] > prev[y1]) {
+				b[i][x] = 0;
+				curr[x] = prev[y0] + w[i][x];
+			} else {
+				b[i][x] = 1;
+				curr[x] = prev[y1] + w[i][x];
+			}
+		}
+	}
+	free(f[0]); free(f[1]);
+}
+
 static float **count_all(int l, int vpos, const nseq_t *hash)
 {
 	khint_t k;
