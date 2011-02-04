@@ -23,7 +23,6 @@ typedef khash_t(64) nseq_t;
 KSORT_INIT(rseq, rseq_p, rseq_lt)
 
 static int min_varQ = 40, min_mapQ = 10, var_len = 3;
-static float mm_prob = 0.05;
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
 static inline uint64_t X31_hash_string(const char *s)
@@ -33,74 +32,77 @@ static inline uint64_t X31_hash_string(const char *s)
 	return h;
 }
 
-static void count_fast(int l, const uint8_t *seq, float *cnt)
+static void count1(int l, const uint8_t *seq, int *cnt)
 {
 	int i, j, n_ambi;
 	uint32_t z, x;
-	double y;
-	for (i = n_ambi = 0; i < l; ++i)
+	if (seq[l-1] == 0) return; // do nothing is the last base is ambiguous
+	for (i = n_ambi = 0; i < l; ++i) // collect ambiguous bases
 		if (seq[i] == 0) ++n_ambi;
-	if (n_ambi >= l - 1) return; // do nothing if too many ambiguous bases
-	y = 1. / (1<<n_ambi);
-	for (x = 0; x <= (1u<<n_ambi)-1; ++x) {
+	for (x = 0; x < 1u<<n_ambi; ++x) { // count
 		for (i = j = 0, z = 0; i < l; ++i) {
-			int c = seq[i]? seq[i] - 1 : (x>>j&1);
+			int c;
+			if (seq[i]) c = seq[i] - 1;
+			else {
+				c = x>>j&1;
+				++j;
+			}
 			z = z<<1 | c;
 		}
-		cnt[z] += y;
+		++cnt[z];
 	}
 }
 
-static void count_slow(int l, const uint8_t *seq, float *cnt)
+static void dynaprog(int l, int vpos, int **w)
 {
-	uint32_t x, z = 1<<l;
-	int i, n_ambi;
-	for (i = n_ambi = 0; i < l; ++i)
-		if (seq[i] == 0) ++n_ambi;
-	if (n_ambi >= l - 1) return; // do nothing if too many ambiguous bases
-	for (x = 0; x < z; ++x) {
-		double y = 1.;
-		for (i = 0; i < l; ++i) {
-			if (seq[i] == 0) y *= .5;
-			else y *= (seq[i]-1 == (x>>(l-1-i)&1))? 1. - mm_prob : mm_prob;
-		}
-		cnt[x] += y;
-	}
-}
-
-static void dynaprog(int l, int vpos, float **w)
-{
-	double *f[2], *curr, *prev;
+	int *f[2], *curr, *prev, max, i;
 	int8_t **b;
-	uint32_t x, z = 1u<<l;
-	f[0] = calloc(z, sizeof(double));
-	f[1] = calloc(z, sizeof(double));
+	uint32_t x, z = 1u<<l, mask = (1u<<l) - 1;
+	f[0] = calloc(z, sizeof(int));
+	f[1] = calloc(z, sizeof(int));
+	b = calloc(vpos, sizeof(void*));
 	prev = f[0]; curr = f[1];
+	// fill the backtrack matrix
 	for (i = 0; i < vpos; ++i) {
+		int *wi = w[i], *tmp;
+		b[i] = calloc(z, 1);
 		for (x = 0; x < z; ++x) {
 			uint32_t y0, y1;
-			y0 = x>>1; y1 = x>>1 | 1<<(l-1);
-			if (prev[y0] > prev[y1]) {
+			int c0, c1;
+			y0 = x>>1; // y0 = x>>1 | 0<<(l-1)
+			y1 = x>>1 | 1<<(l-1);
+			c0 = prev[y0] + prev[~y0&mask];
+			c1 = prev[y1] + prev[~y1&mask];
+			if (c0 > c1) {
 				b[i][x] = 0;
-				curr[x] = prev[y0] + w[i][x];
+				curr[x] = c0 + wi[x] + wi[~x&mask];
 			} else {
 				b[i][x] = 1;
-				curr[x] = prev[y1] + w[i][x];
+				curr[x] = c1 + wi[x] + wi[~x&mask];
 			}
 		}
+		tmp = prev; prev = curr; curr = tmp; // swap
 	}
-	free(f[0]); free(f[1]);
+	{ // backtrack
+		uint32_t max_x = 0;
+		for (x = 0, max = 0, max_x = 0; x < z; ++x)
+			if (prev[x] > max) max = prev[x], max_x = x;
+		for (i = vpos - 1, x = max_x; i >= 0; --i) {
+		}
+	}
+	// free
+	for (i = 0; i < vpos; ++i) free(b[i]);
+	free(f[0]); free(f[1]); free(b);
 }
 
-static float **count_all(int l, int vpos, const nseq_t *hash)
+static int **count_all(int l, int vpos, const nseq_t *hash)
 {
 	khint_t k;
-	int i, j;
+	int i, j, **cnt;
 	uint8_t *seq;
-	float **cnt;
 	seq = calloc(l, 1);
 	cnt = calloc(vpos, sizeof(void*));
-	for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(float));
+	for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(int));
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
 			rseq_t *p = &kh_val(hash, k);
@@ -108,7 +110,7 @@ static float **count_all(int l, int vpos, const nseq_t *hash)
 			for (j = 1; j < p->vlen; ++j) {
 				for (i = 0; i < l; ++i)
 					seq[i] = j < l - 1 - i? 0 : p->seq[j - (l - 1 - i)];
-				count_slow(l, seq, cnt[p->vpos + j]);
+				count1(l, seq, cnt[p->vpos + j]);
 			}
 		}
 	}
@@ -121,12 +123,12 @@ static void phase(int vpos, uint64_t *cns, nseq_t *hash)
 	int i, j, n_seqs = kh_size(hash);
 	khint_t k;
 	rseq_t **seqs;
-	float **cnt;
+	int **cnt;
 	cnt = count_all(var_len, vpos, hash);
 	for (i = 0; i < vpos; ++i) {
 		printf("%d", i);
 		for (j = 0; j < 1<<var_len; ++j)
-			printf("\t%.2f", cnt[i][j]);
+			printf("%c%d", (j&1)? ' ' : '\t', cnt[i][j]);
 		printf("\n");
 	}
 	for (i = 0; i < vpos; ++i) free(cnt[i]);
