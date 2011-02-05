@@ -53,10 +53,10 @@ static void count1(int l, const uint8_t *seq, int *cnt)
 	}
 }
 
-static void dynaprog(int l, int vpos, int **w)
+static int8_t *dynaprog(int l, int vpos, int **w)
 {
 	int *f[2], *curr, *prev, max, i;
-	int8_t **b;
+	int8_t **b, *h = 0;
 	uint32_t x, z = 1u<<(l-1), mask = (1u<<l) - 1;
 	f[0] = calloc(z, sizeof(int));
 	f[1] = calloc(z, sizeof(int));
@@ -84,14 +84,20 @@ static void dynaprog(int l, int vpos, int **w)
 	}
 	{ // backtrack
 		uint32_t max_x = 0;
+		int which = 0;
+		h = calloc(vpos, 1);
 		for (x = 0, max = 0, max_x = 0; x < z; ++x)
 			if (prev[x] > max) max = prev[x], max_x = x;
 		for (i = vpos - 1, x = max_x; i >= 0; --i) {
+			h[i] = which? (~x&1) : (x&1);
+			which = b[i][x];
+			x = which? (~x&mask)>>1 : x>>1;
 		}
 	}
 	// free
 	for (i = 0; i < vpos; ++i) free(b[i]);
 	free(f[0]); free(f[1]); free(b);
+	return h;
 }
 
 static int **count_all(int l, int vpos, const nseq_t *hash)
