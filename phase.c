@@ -57,7 +57,7 @@ static void dynaprog(int l, int vpos, int **w)
 {
 	int *f[2], *curr, *prev, max, i;
 	int8_t **b;
-	uint32_t x, z = 1u<<l, mask = (1u<<l) - 1;
+	uint32_t x, z = 1u<<(l-1), mask = (1u<<l) - 1;
 	f[0] = calloc(z, sizeof(int));
 	f[1] = calloc(z, sizeof(int));
 	b = calloc(vpos, sizeof(void*));
@@ -65,21 +65,20 @@ static void dynaprog(int l, int vpos, int **w)
 	// fill the backtrack matrix
 	for (i = 0; i < vpos; ++i) {
 		int *wi = w[i], *tmp;
-		b[i] = calloc(z, 1);
-		for (x = 0; x < z; ++x) {
-			uint32_t y0, y1;
+		int8_t *bi;
+		bi = b[i] = calloc(z, 1);
+		/* In the following, x is the current state, which is the
+		 * lexicographically smaller local haplotype. xc is the complement of
+		 * x, or the larger local haplotype; y0 and y1 are the two predecessors
+		 * of x. */
+		for (x = 0; x < z; ++x) { // x0 is the smaller 
+			uint32_t y0, y1, xc;
 			int c0, c1;
-			y0 = x>>1; // y0 = x>>1 | 0<<(l-1)
-			y1 = x>>1 | 1<<(l-1);
-			c0 = prev[y0] + prev[~y0&mask];
-			c1 = prev[y1] + prev[~y1&mask];
-			if (c0 > c1) {
-				b[i][x] = 0;
-				curr[x] = c0 + wi[x] + wi[~x&mask];
-			} else {
-				b[i][x] = 1;
-				curr[x] = c1 + wi[x] + wi[~x&mask];
-			}
+			xc = ~x&mask; y0 = x>>1; y1 = xc>>1;
+			c0 = prev[y0] + wi[x] + wi[xc];
+			c1 = prev[y1] + wi[x] + wi[xc];
+			if (c0 > c1) bi[x] = 0, curr[x] = c0;
+			else bi[x] = 1, curr[x] = c1;
 		}
 		tmp = prev; prev = curr; curr = tmp; // swap
 	}
