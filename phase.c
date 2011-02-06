@@ -53,6 +53,29 @@ static void count1(int l, const uint8_t *seq, int *cnt)
 	}
 }
 
+static int **count_all(int l, int vpos, const nseq_t *hash)
+{
+	khint_t k;
+	int i, j, **cnt;
+	uint8_t *seq;
+	seq = calloc(l, 1);
+	cnt = calloc(vpos, sizeof(void*));
+	for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(int));
+	for (k = 0; k < kh_end(hash); ++k) {
+		if (kh_exist(hash, k)) {
+			rseq_t *p = &kh_val(hash, k);
+			if (p->vlen == 1 || p->vpos >= vpos) continue; // no phasing information or out of region
+			for (j = 1; j < p->vlen; ++j) {
+				for (i = 0; i < l; ++i)
+					seq[i] = j < l - 1 - i? 0 : p->seq[j - (l - 1 - i)];
+				count1(l, seq, cnt[p->vpos + j]);
+			}
+		}
+	}
+	free(seq);
+	return cnt;
+}
+
 static int8_t *dynaprog(int l, int vpos, int **w)
 {
 	int *f[2], *curr, *prev, max, i;
@@ -100,29 +123,6 @@ static int8_t *dynaprog(int l, int vpos, int **w)
 	return h;
 }
 
-static int **count_all(int l, int vpos, const nseq_t *hash)
-{
-	khint_t k;
-	int i, j, **cnt;
-	uint8_t *seq;
-	seq = calloc(l, 1);
-	cnt = calloc(vpos, sizeof(void*));
-	for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(int));
-	for (k = 0; k < kh_end(hash); ++k) {
-		if (kh_exist(hash, k)) {
-			rseq_t *p = &kh_val(hash, k);
-			if (p->vlen == 1) continue; // no phasing information
-			for (j = 1; j < p->vlen; ++j) {
-				for (i = 0; i < l; ++i)
-					seq[i] = j < l - 1 - i? 0 : p->seq[j - (l - 1 - i)];
-				count1(l, seq, cnt[p->vpos + j]);
-			}
-		}
-	}
-	free(seq);
-	return cnt;
-}
-
 static void phase(int vpos, uint64_t *cns, nseq_t *hash)
 {
 	int i, j, n_seqs = kh_size(hash);
@@ -142,7 +142,8 @@ static void phase(int vpos, uint64_t *cns, nseq_t *hash)
 	free(cnt);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
-		if (kh_exist(hash, k)) seqs[i++] = &kh_val(hash, k);
+		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos) seqs[i++] = &kh_val(hash, k);
+	n_seqs = i;
 	ks_introsort_rseq(n_seqs, seqs);
 	if (1) {
 		for (i = 0; i < n_seqs; ++i) {
@@ -154,6 +155,18 @@ static void phase(int vpos, uint64_t *cns, nseq_t *hash)
 	}
 //	for (i = 0; i < vpos; ++i) printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
 	free(seqs);
+}
+
+static void update_vpos(int vpos, nseq_t *hash)
+{
+	khint_t k;
+	for (k = 0; k < kh_end(hash); ++k) {
+		if (kh_exist(hash, k)) {
+			rseq_t *p = &kh_val(hash, k);
+			if (p->vpos < vpos) kh_del(64, hash, k); // TODO: if rseq_t::seq is allocated dynamically, free it
+			else p->vpos -= vpos;
+		}
+	}
 }
 
 int main_phase(int argc, char *argv[])
@@ -180,7 +193,7 @@ int main_phase(int argc, char *argv[])
 
 	seqs = kh_init(64);
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
-		int i, j, c, cnt[4], tmp;
+		int i, j, c, cnt[4], tmp, dophase = 1;
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
 			if (lasttid >= 0) phase(vpos, cns, seqs);
@@ -188,7 +201,8 @@ int main_phase(int argc, char *argv[])
 			vpos = 0;
 		}
 		cnt[0] = cnt[1] = cnt[2] = cnt[3] = 0;
-		for (i = 0; i < n; ++i) { // check if there are variants
+		// check if there is a variant
+		for (i = 0; i < n; ++i) {
 			const bam_pileup1_t *p = plp + i;
 			uint8_t *seq = bam1_seq(p->b);
 			uint8_t *qual = bam1_qual(p->b);
@@ -204,6 +218,7 @@ int main_phase(int argc, char *argv[])
 			for (j = i; j > 0 && cnt[j] > cnt[j-1]; --j)
 				tmp = cnt[j], cnt[j] = cnt[j-1], cnt[j-1] = tmp;
 		if (cnt[1]>>2 <= min_varQ) continue; // not a variant
+		// add the variant
 		if (vpos == max_vpos) {
 			max_vpos = max_vpos? max_vpos<<1 : 128;
 			cns = realloc(cns, max_vpos * 8);
@@ -232,7 +247,14 @@ int main_phase(int argc, char *argv[])
 					r->vlen = vpos - r->vpos + 1;
 					r->seq[r->vlen-1] = c;
 				}
+				dophase = 0;
 			} else r->vpos = vpos, r->vlen = 1, r->seq[0] = c; // absent
+		}
+		if (dophase) {
+			phase(vpos, cns, seqs);
+			update_vpos(vpos, seqs);
+			cns[0] = cns[vpos];
+			vpos = 0;
 		}
 		++vpos;
 	}
