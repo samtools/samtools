@@ -90,8 +90,8 @@ static int8_t *dynaprog(int l, int vpos, int **w)
 			if (prev[x] > max) max = prev[x], max_x = x;
 		for (i = vpos - 1, x = max_x; i >= 0; --i) {
 			h[i] = which? (~x&1) : (x&1);
-			which = b[i][x];
-			x = which? (~x&mask)>>1 : x>>1;
+			which = b[i][x]? !which : which;
+			x = b[i][x]? (~x&mask)>>1 : x>>1;
 		}
 	}
 	// free
@@ -129,9 +129,11 @@ static void phase(int vpos, uint64_t *cns, nseq_t *hash)
 	khint_t k;
 	rseq_t **seqs;
 	int **cnt;
+	int8_t *path = 0;
 	cnt = count_all(var_len, vpos, hash);
+	path = dynaprog(var_len, vpos, cnt);
 	for (i = 0; i < vpos; ++i) {
-		printf("%d", i);
+		printf("%d\t%d", i, path[i]);
 		for (j = 0; j < 1<<var_len; ++j)
 			printf("%c%d", (j&1)? ' ' : '\t', cnt[i][j]);
 		printf("\n");
@@ -181,7 +183,7 @@ int main_phase(int argc, char *argv[])
 		int i, j, c, cnt[4], tmp;
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
-			phase(vpos, cns, seqs);
+			if (lasttid >= 0) phase(vpos, cns, seqs);
 			lasttid = tid;
 			vpos = 0;
 		}
