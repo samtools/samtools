@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include <stdlib.h>
+#include <string.h>
 #include "bam.h"
 #include "faidx.h"
 
@@ -115,10 +116,11 @@ static int read_aln(void *data, bam1_t *b)
 	ct_t *g = (ct_t*)data;
 	int ret, len;
 	ret = bam_read1(g->fp, b);
-	if (ret >= 0 && b->core.tid >= 0 && (b->core.flag&4) == 0) {
+	if (ret >= 0 && g->fai && b->core.tid >= 0 && (b->core.flag&4) == 0) {
 		if (b->core.tid != g->tid) { // then load the sequence
 			free(g->ref);
 			g->ref = fai_fetch(g->fai, g->h->target_name[b->core.tid], &len);
+			g->tid = b->core.tid;
 		}
 		bam_prob_realn_core(b, g->ref, 1<<1|1);
 	}
@@ -151,7 +153,7 @@ int main_cut_target(int argc, char *argv[])
 		return 1;
 	}
 	l = max_l = 0; cns = 0;
-	g.fp = bam_open(argv[optind], "r");
+	g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	g.h = bam_header_read(g.fp);
 	plp = bam_plp_init(read_aln, &g);
 	while ((p = bam_plp_auto(plp, &tid, &pos, &n)) != 0) {
