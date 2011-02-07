@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include "bam.h"
+#include "faidx.h"
 
 typedef struct {
 	int e[2][3], p[2][2];
@@ -9,11 +10,17 @@ typedef struct {
 /* Note that although the two matrics have 10 parameters in total, only 4
  * (probably 3) are free.  Changing the scoring matrices in a sort of symmetric
  * way will not change the result. */
-static score_param_t param = { {{0,0,0},{-4,1,6}}, {{0,-14000}, {0,0}} };
+static score_param_t g_param = { {{0,0,0},{-4,1,6}}, {{0,-14000}, {0,0}} };
 
-static int min_Q = 20;
+typedef struct {
+	int min_Q, tid;
+	bamFile fp;
+	bam_header_t *h;
+	char *ref;
+	faidx_t *fai;
+} ct_t;
 
-static uint16_t gencns(int n, const bam_pileup1_t *plp)
+static uint16_t gencns(int n, const bam_pileup1_t *plp, int min_Q)
 {
 	int i, j, ret, depth = 0, sum[4], tmp;
 	sum[0] = sum[1] = sum[2] = sum[3] = 0;
@@ -55,13 +62,13 @@ static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
 		int c = (cns[i] == 0)? 0 : (cns[i]>>8 == 0)? 1 : 2;
 		int tmp0, tmp1;
 		// compute f[0]
-		tmp0 = prev[0] + param.e[0][c] + param.p[0][0]; // (s[i+1],s[i])=(0,0)
-		tmp1 = prev[1] + param.e[0][c] + param.p[1][0]; // (0,1)
+		tmp0 = prev[0] + g_param.e[0][c] + g_param.p[0][0]; // (s[i+1],s[i])=(0,0)
+		tmp1 = prev[1] + g_param.e[0][c] + g_param.p[1][0]; // (0,1)
 		if (tmp0 > tmp1) curr[0] = tmp0, b[i] = 0;
 		else curr[0] = tmp1, b[i] = 1;
 		// compute f[1]
-		tmp0 = prev[0] + param.e[1][c] + param.p[0][1]; // (s[i+1],s[i])=(1,0)
-		tmp1 = prev[1] + param.e[1][c] + param.p[1][1]; // (1,1)
+		tmp0 = prev[0] + g_param.e[1][c] + g_param.p[0][1]; // (s[i+1],s[i])=(1,0)
+		tmp1 = prev[1] + g_param.e[1][c] + g_param.p[1][1]; // (1,1)
 		if (tmp0 > tmp1) curr[1] = tmp0, b[i] |= 0<<1;
 		else curr[1] = tmp1, b[i] |= 1<<1;
 		// swap
@@ -102,52 +109,74 @@ static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
 	free(b);
 }
 
+static int read_aln(void *data, bam1_t *b)
+{
+	extern int bam_prob_realn_core(bam1_t *b, const char *ref, int flag);
+	ct_t *g = (ct_t*)data;
+	int ret, len;
+	ret = bam_read1(g->fp, b);
+	if (ret >= 0 && b->core.tid >= 0 && (b->core.flag&4) == 0) {
+		if (b->core.tid != g->tid) { // then load the sequence
+			free(g->ref);
+			g->ref = fai_fetch(g->fai, g->h->target_name[b->core.tid], &len);
+		}
+		bam_prob_realn_core(b, g->ref, 1<<1|1);
+	}
+	return ret;
+}
+
 int main_cut_target(int argc, char *argv[])
 {
-	bamFile fp;
 	int c, tid, pos, n, lasttid = -1, lastpos = -1, l, max_l;
 	const bam_pileup1_t *p;
 	bam_plp_t plp;
-	bam_header_t *h;
 	uint16_t *cns;
+	ct_t g;
 
-	while ((c = getopt(argc, argv, "Q:i:o:0:1:2:")) >= 0) {
+	g.min_Q = 20; g.fp = 0; g.ref = 0; g.fai = 0; g.tid = -1;
+	while ((c = getopt(argc, argv, "f:Q:i:o:0:1:2:")) >= 0) {
 		switch (c) {
-			case 'Q': min_Q = atoi(optarg); break; // quality cutoff
-			case 'i': param.p[0][1] = -atoi(optarg); break; // 0->1 transition (in) PENALTY
-			case '0': param.e[1][0] = atoi(optarg); break; // emission SCORE
-			case '1': param.e[1][1] = atoi(optarg); break;
-			case '2': param.e[1][2] = atoi(optarg); break;
+			case 'Q': g.min_Q = atoi(optarg); break; // quality cutoff
+			case 'i': g_param.p[0][1] = -atoi(optarg); break; // 0->1 transition (in) PENALTY
+			case '0': g_param.e[1][0] = atoi(optarg); break; // emission SCORE
+			case '1': g_param.e[1][1] = atoi(optarg); break;
+			case '2': g_param.e[1][2] = atoi(optarg); break;
+			case 'f': g.fai = fai_load(optarg);
+				if (g.fai == 0) fprintf(stderr, "[%s] fail to load the fasta index.\n", __func__);
+				break;
 		}
 	}
 	if (argc == optind) {
-		fprintf(stderr, "Usage: samtools targetcut <in.bam>\n");
+		fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] [-f ref] <in.bam>\n");
 		return 1;
 	}
 	l = max_l = 0; cns = 0;
-	fp = bam_open(argv[optind], "r");
-	h = bam_header_read(fp);
-	plp = bam_plp_init((bam_plp_auto_f)bam_read1, fp);
+	g.fp = bam_open(argv[optind], "r");
+	g.h = bam_header_read(g.fp);
+	plp = bam_plp_init(read_aln, &g);
 	while ((p = bam_plp_auto(plp, &tid, &pos, &n)) != 0) {
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
-			if (cns) process_cns(h, lasttid, l, cns);
-			if (max_l < h->target_len[tid]) {
-				max_l = h->target_len[tid];
+			if (cns) process_cns(g.h, lasttid, l, cns);
+			if (max_l < g.h->target_len[tid]) {
+				max_l = g.h->target_len[tid];
 				kroundup32(max_l);
 				cns = realloc(cns, max_l * 2);
 			}
-			l = h->target_len[tid];
+			l = g.h->target_len[tid];
 			memset(cns, 0, max_l * 2);
 			lasttid = tid;
 		}
-		cns[pos] = gencns(n, p);
+		cns[pos] = gencns(n, p, g.min_Q);
 		lastpos = pos;
 	}
-	process_cns(h, lasttid, l, cns);
+	process_cns(g.h, lasttid, l, cns);
 	free(cns);
-	bam_header_destroy(h);
+	bam_header_destroy(g.h);
 	bam_plp_destroy(plp);
-	bam_close(fp);
+	bam_close(g.fp);
+	if (g.fai) {
+		fai_destroy(g.fai); free(g.ref);
+	}
 	return 0;
 }
