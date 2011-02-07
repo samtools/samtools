@@ -9,7 +9,8 @@
 
 typedef struct {
 	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
-	int vpos, vlen;
+	int vpos, beg, end;
+	uint32_t vlen:30, phase:2;
 } rseq_t, *rseq_p;
 
 #define rseq_lt(a,b) ((a)->vpos < (b)->vpos)
@@ -22,7 +23,7 @@ typedef khash_t(64) nseq_t;
 #include "ksort.h"
 KSORT_INIT(rseq, rseq_p, rseq_lt)
 
-static int min_varQ = 40, min_mapQ = 10, var_len = 3;
+static int min_varQ = 40, min_mapQ = 10, var_len = 5;
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
 static inline uint64_t X31_hash_string(const char *s)
@@ -123,20 +124,27 @@ static int8_t *dynaprog(int l, int vpos, int **w)
 	return h;
 }
 
-static void phase(int vpos, uint64_t *cns, nseq_t *hash)
+static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
 	int i, j, n_seqs = kh_size(hash);
 	khint_t k;
 	rseq_t **seqs;
 	int **cnt;
 	int8_t *path = 0;
+	if (vpos == 0) return;
+	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	cnt = count_all(var_len, vpos, hash);
 	path = dynaprog(var_len, vpos, cnt);
-	for (i = 0; i < vpos; ++i) {
-		printf("%d\t%d", i, path[i]);
-		for (j = 0; j < 1<<var_len; ++j)
-			printf("%c%d", (j&1)? ' ' : '\t', cnt[i][j]);
-		printf("\n");
+	{
+		uint32_t x0, x1, mask = (1<<var_len) - 1;
+		for (i = 0, x0 = x1 = 0; i < vpos; ++i) {
+			int8_t c[2];
+			c[0] = cns[i]&3; c[1] = cns[i]>>16&3;
+			x0 = (x0<<1 | path[i]) & mask ; x1 = ~x0 & mask;
+			printf("VL\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]], path[i],
+				cnt[i][x0], cnt[i][x0^1], cnt[i][x1], cnt[i][x1^1]);
+			//for (j = 0; j < 1<<var_len; ++j) printf("%c%d", (j&1)? ' ' : '\t', cnt[i][j]);
+		}
 	}
 	for (i = 0; i < vpos; ++i) free(cnt[i]);
 	free(cnt);
@@ -155,6 +163,8 @@ static void phase(int vpos, uint64_t *cns, nseq_t *hash)
 	}
 //	for (i = 0; i < vpos; ++i) printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
 	free(seqs);
+	printf("//\n");
+	fflush(stdout);
 }
 
 static void update_vpos(int vpos, nseq_t *hash)
@@ -196,7 +206,7 @@ int main_phase(int argc, char *argv[])
 		int i, j, c, cnt[4], tmp, dophase = 1;
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
-			if (lasttid >= 0) phase(vpos, cns, seqs);
+			if (lasttid >= 0) phase(h->target_name[lasttid], vpos, cns, seqs);
 			lasttid = tid;
 			vpos = 0;
 		}
@@ -248,17 +258,21 @@ int main_phase(int argc, char *argv[])
 					r->seq[r->vlen-1] = c;
 				}
 				dophase = 0;
-			} else r->vpos = vpos, r->vlen = 1, r->seq[0] = c; // absent
+			} else { // absent
+				r->beg = p->b->core.pos;
+				r->end = bam_calend(&p->b->core, bam1_cigar(p->b));
+				r->vpos = vpos, r->vlen = 1, r->seq[0] = c;
+			}
 		}
 		if (dophase) {
-			phase(vpos, cns, seqs);
+			phase(h->target_name[tid], vpos, cns, seqs);
 			update_vpos(vpos, seqs);
 			cns[0] = cns[vpos];
 			vpos = 0;
 		}
 		++vpos;
 	}
-	phase(vpos, cns, seqs);
+	if (tid >= 0) phase(h->target_name[tid], vpos, cns, seqs);
 	bam_header_destroy(h);
 	bam_plp_destroy(iter);
 	bam_close(fp);
