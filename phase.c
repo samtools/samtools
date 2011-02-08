@@ -134,7 +134,7 @@ static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, 
 	uint32_t x0, x1, mask = (1<<var_len) - 1;
 	flt = calloc(vpos, 1);
 	// get the list of sites to be filtered
-	for (i = 0, x0 = x1 = 0; i < vpos; ++i) {
+	for (i = 1, x0 = x1 = 0; i < vpos; ++i) {
 		int *ci = cnt[i];
 		x0 = (x0<<1 | path[i]) & mask; x1 = ~x0 & mask;
 		if (ci[x0] == 0 || ci[x1] == 0) flt[i] = 1; // no supporting fragment for either haplotype
@@ -143,6 +143,7 @@ static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, 
 	for (j = 0; j < kh_end(hash); ++j) {
 		if (kh_exist(hash, j)) {
 			rseq_t *s = &kh_val(hash, j);
+			if (s->vpos >= vpos) continue;
 			for (i = k = 0; i < s->vlen; ++i)
 				if (flt[s->vpos + i] == 0 && i != k)
 					s->seq[k++] = s->seq[i];
