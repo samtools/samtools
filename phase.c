@@ -13,7 +13,7 @@ typedef struct {
 	uint32_t vlen:30, phase:2;
 } rseq_t, *rseq_p;
 
-#define rseq_lt(a,b) ((a)->vpos < (b)->vpos)
+#define rseq_lt(a,b) ((a)->beg < (b)->beg)
 
 #include "khash.h"
 KHASH_MAP_INIT_INT64(64, rseq_t)
@@ -24,6 +24,7 @@ typedef khash_t(64) nseq_t;
 KSORT_INIT(rseq, rseq_p, rseq_lt)
 
 static int min_varQ = 40, min_mapQ = 10, var_len = 5;
+static int g_vpos_shift = 0;
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
 static inline uint64_t X31_hash_string(const char *s)
@@ -141,7 +142,7 @@ static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 			int8_t c[2];
 			c[0] = cns[i]&3; c[1] = cns[i]>>16&3;
 			x0 = (x0<<1 | path[i]) & mask ; x1 = ~x0 & mask;
-			printf("VL\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]], path[i],
+			printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + g_vpos_shift + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]], path[i],
 				cnt[i][x0], cnt[i][x0^1], cnt[i][x1], cnt[i][x1^1]);
 			//for (j = 0; j < 1<<var_len; ++j) printf("%c%d", (j&1)? ' ' : '\t', cnt[i][j]);
 		}
@@ -153,18 +154,21 @@ static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos) seqs[i++] = &kh_val(hash, k);
 	n_seqs = i;
 	ks_introsort_rseq(n_seqs, seqs);
-	if (1) {
-		for (i = 0; i < n_seqs; ++i) {
-			printf("%d\t%d\t%d\t", (int)(cns[seqs[i]->vpos]>>32), seqs[i]->vpos, seqs[i]->vlen);
-			for (j = 0; j < seqs[i]->vlen; ++j)
-				putchar('0' + seqs[i]->seq[j]);
-			putchar('\n');
+	for (i = 0; i < n_seqs; ++i) {
+		rseq_t *s = seqs[i];
+		printf("EV\t0\t%s\t%d\t40\t%dM\t*\t0\t0\t", chr, s->vpos + 1 + g_vpos_shift, s->vlen);
+		for (j = 0; j < s->vlen; ++j) {
+			uint32_t c = cns[s->vpos + j];
+			if (s->seq[j] == 0) putchar('N');
+			else putchar("ACGT"[s->seq[j] == 1? (c&3) : (c>>16&3)]);
 		}
+		printf("\t*\n");
 	}
 //	for (i = 0; i < vpos; ++i) printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
 	free(seqs);
 	printf("//\n");
 	fflush(stdout);
+	g_vpos_shift += vpos;
 }
 
 static void update_vpos(int vpos, nseq_t *hash)
@@ -206,6 +210,7 @@ int main_phase(int argc, char *argv[])
 		int i, j, c, cnt[4], tmp, dophase = 1;
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
+			g_vpos_shift = 0;
 			if (lasttid >= 0) phase(h->target_name[lasttid], vpos, cns, seqs);
 			lasttid = tid;
 			vpos = 0;
