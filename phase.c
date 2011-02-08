@@ -41,6 +41,7 @@ static void count1(int l, const uint8_t *seq, int *cnt)
 	if (seq[l-1] == 0) return; // do nothing is the last base is ambiguous
 	for (i = n_ambi = 0; i < l; ++i) // collect ambiguous bases
 		if (seq[i] == 0) ++n_ambi;
+	if (l - n_ambi <= 1) return; // only one SNP
 	for (x = 0; x < 1u<<n_ambi; ++x) { // count
 		for (i = j = 0, z = 0; i < l; ++i) {
 			int c;
@@ -125,9 +126,40 @@ static int8_t *dynaprog(int l, int vpos, int **w)
 	return h;
 }
 
+static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, nseq_t *hash)
+{
+	int8_t *flt;
+	int i, k;
+	khint_t j;
+	uint32_t x0, x1, mask = (1<<var_len) - 1;
+	flt = calloc(vpos, 1);
+	// get the list of sites to be filtered
+	for (i = 0, x0 = x1 = 0; i < vpos; ++i) {
+		int *ci = cnt[i];
+		x0 = (x0<<1 | path[i]) & mask; x1 = ~x0 & mask;
+		if (ci[x0] == 0 || ci[x1] == 0) flt[i] = 1; // no supporting fragment for either haplotype
+	}
+	// filter hash
+	for (j = 0; j < kh_end(hash); ++j) {
+		if (kh_exist(hash, j)) {
+			rseq_t *s = &kh_val(hash, j);
+			for (i = k = 0; i < s->vlen; ++i)
+				if (flt[s->vpos + i] == 0 && i != k)
+					s->seq[k++] = s->seq[i];
+			s->vlen = k;
+			if (k < 2) kh_del(64, hash, j);
+		}
+	}
+	// filter cns
+	for (i = k = 0; i < vpos; ++i)
+		if (flt[i] == 0) cns[k++] = cns[i];
+	free(flt);
+	return k;
+}
+
 static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
-	int i, j, n_seqs = kh_size(hash);
+	int i, j, n_seqs = kh_size(hash), ori_vpos;
 	khint_t k;
 	rseq_t **seqs;
 	int **cnt;
@@ -136,6 +168,14 @@ static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	cnt = count_all(var_len, vpos, hash);
 	path = dynaprog(var_len, vpos, cnt);
+	ori_vpos = vpos;
+	vpos = filter(vpos, cnt, path, cns, hash);
+	if (ori_vpos > vpos) { // some loci have been filtered out
+		for (i = 0; i < ori_vpos; ++i) free(cnt[i]);
+		free(cnt); free(path);
+		cnt = count_all(var_len, vpos, hash);
+		path = dynaprog(var_len, vpos, cnt);
+	}
 	{
 		uint32_t x0, x1, mask = (1<<var_len) - 1;
 		for (i = 0, x0 = x1 = 0; i < vpos; ++i) {
