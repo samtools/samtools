@@ -129,15 +129,21 @@ static int8_t *dynaprog(int l, int vpos, int **w)
 static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
-	int i, k;
+	int i, k, *map;
 	khint_t j;
 	uint32_t x0, x1, mask = (1<<var_len) - 1;
 	flt = calloc(vpos, 1);
+	map = calloc(vpos, sizeof(int));
 	// get the list of sites to be filtered
 	for (i = 1, x0 = x1 = 0; i < vpos; ++i) {
 		int *ci = cnt[i];
 		x0 = (x0<<1 | path[i]) & mask; x1 = ~x0 & mask;
 		if (ci[x0] == 0 || ci[x1] == 0) flt[i] = 1; // no supporting fragment for either haplotype
+	}
+	// generate map[]
+	for (i = k = 0; i < vpos; ++i) {
+		if (flt[i]) map[i] = -1;
+		else map[i] = k++;
 	}
 	// filter hash
 	for (j = 0; j < kh_end(hash); ++j) {
@@ -147,14 +153,14 @@ static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, 
 			for (i = k = 0; i < s->vlen; ++i)
 				if (flt[s->vpos + i] == 0 && i != k)
 					s->seq[k++] = s->seq[i];
-			s->vlen = k;
 			if (k < 2) kh_del(64, hash, j);
+			s->vlen = k; s->vpos = map[s->vpos];
 		}
 	}
 	// filter cns
 	for (i = k = 0; i < vpos; ++i)
 		if (flt[i] == 0) cns[k++] = cns[i];
-	free(flt);
+	free(flt); free(map);
 	return k;
 }
 
@@ -189,7 +195,7 @@ static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 		}
 	}
 	for (i = 0; i < vpos; ++i) free(cnt[i]);
-	free(cnt);
+	free(cnt); free(path);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
 		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos) seqs[i++] = &kh_val(hash, k);
