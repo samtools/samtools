@@ -7,12 +7,10 @@
 
 #define MAX_VARS 256
 
-#define PERR_BIT 15
-
 typedef struct {
 	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
 	int vpos, beg, end;
-	uint32_t vlen:16, perr:15, phase:1;
+	uint32_t vlen:31, phase:1;
 } frag_t, *frag_p;
 
 #define rseq_lt(a,b) ((a)->beg < (b)->beg)
@@ -136,6 +134,8 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 {
 	khint_t k;
 	uint64_t *pcnt;
+	uint32_t *left, *rght, max;
+	left = rght = 0; max = 0;
 	pcnt = calloc(vpos, 8);
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
@@ -149,7 +149,52 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 				++c[f->seq[i] == path[f->vpos + i] + 1? 0 : 1];
 			}
 			f->phase = c[0] > c[1]? 0 : 1;
-			f->perr = (int)((double)c[1 - f->phase] / (c[0] + c[1]) * (1<<PERR_BIT));
+			// fix chimera
+			if (c[0] >= 3 && c[1] >= 3) {
+				int sum[2], m, mi, md;
+				if (f->vlen > max) { // enlarge the array
+					max = f->vlen;
+					kroundup32(max);
+					left = realloc(left, max * 4);
+					rght = realloc(rght, max * 4);
+				}
+				for (i = 0, sum[0] = sum[1] = 0; i < f->vlen; ++i) { // get left counts
+					if (f->seq[i]) {
+						int c = f->phase? 2 - f->seq[i] : f->seq[i] - 1;
+						++sum[c == path[f->vpos + i]? 0 : 1];
+					}
+					left[i] = sum[1]<<16 | sum[0];
+				}
+				for (i = f->vlen - 1, sum[0] = sum[1] = 0; i >= 0; --i) { // get right counts
+					if (f->seq[i]) {
+						int c = f->phase? 2 - f->seq[i] : f->seq[i] - 1;
+						++sum[c == path[f->vpos + i]? 0 : 1];
+					}
+					rght[i] = sum[1]<<16 | sum[0];
+				}
+				// find the best flip point
+				for (i = m = 0, mi = -1, md = -1; i < f->vlen - 1; ++i) {
+					int a[2];
+					a[0] = (left[i]&0xffff) + (rght[i+1]>>16&0xffff);
+					a[1] = (left[i]>>16&0xffff) + (rght[i+1]&0xffff);
+					if (a[0] > a[1]) {
+						if (a[0] > m) m = a[0], md = 0, mi = i;
+					} else {
+						if (a[1] > m) m = a[1], md = 1, mi = i;
+					}
+				}
+				if (m - c[0] >= 3 && m - c[1] >= 3) { // then flip
+					if (md == 0) { // flip the tail
+						for (i = mi; i < f->vlen; ++i)
+							if (f->seq[i] == 1) f->seq[i] == 2;
+							else if (f->seq[i] == 2) f->seq[i] = 1;
+					} else { // flip the head
+						for (i = 0; i < mi; ++i)
+							if (f->seq[i] == 1) f->seq[i] == 2;
+							else if (f->seq[i] == 2) f->seq[i] = 1;
+					}
+				}
+			}
 			// update pcnt[]
 			for (i = 0; i < f->vlen; ++i) {
 				int c;
@@ -165,6 +210,7 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 			}
 		}
 	}
+	free(left); free(rght);
 	return pcnt;
 }
 
