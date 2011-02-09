@@ -175,8 +175,8 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 				// find the best flip point
 				for (i = m = 0, mi = -1, md = -1; i < f->vlen - 1; ++i) {
 					int a[2];
-					a[0] = (left[i]&0xffff) + (rght[i+1]>>16&0xffff);
-					a[1] = (left[i]>>16&0xffff) + (rght[i+1]&0xffff);
+					a[0] = (left[i]&0xffff) + (rght[i+1]>>16&0xffff) - (rght[i+1]&0xffff);
+					a[1] = (left[i]>>16&0xffff) + (rght[i+1]&0xffff) - (rght[i+1]>>16&0xffff);
 					if (a[0] > a[1]) {
 						if (a[0] > m) m = a[0], md = 0, mi = i;
 					} else {
@@ -185,11 +185,11 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 				}
 				if (m - c[0] >= 3 && m - c[1] >= 3) { // then flip
 					if (md == 0) { // flip the tail
-						for (i = mi; i < f->vlen; ++i)
+						for (i = mi + 1; i < f->vlen; ++i)
 							if (f->seq[i] == 1) f->seq[i] = 2;
 							else if (f->seq[i] == 2) f->seq[i] = 1;
 					} else { // flip the head
-						for (i = 0; i < mi; ++i)
+						for (i = 0; i <= mi; ++i)
 							if (f->seq[i] == 1) f->seq[i] = 2;
 							else if (f->seq[i] == 2) f->seq[i] = 1;
 					}
