@@ -168,19 +168,17 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 	return pcnt;
 }
 
-static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, nseq_t *hash)
+static int filter(int vpos, const uint64_t *pcnt, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
 	int i, k, *map;
 	khint_t j;
-	uint32_t x0, x1, mask = (1<<var_len) - 1;
 	flt = calloc(vpos, 1);
 	map = calloc(vpos, sizeof(int));
 	// get the list of sites to be filtered
-	for (i = 1, x0 = x1 = 0; i < vpos; ++i) {
-		int *ci = cnt[i];
-		x0 = (x0<<1 | path[i]) & mask; x1 = ~x0 & mask;
-		if (ci[x0] == 0 || ci[x1] == 0) flt[i] = 1; // no supporting fragment for either haplotype
+	for (i = 0; i < vpos; ++i) {
+		uint64_t x = pcnt[i];
+		if ((x>>16&0xffff) > (x&0xffff) || (x>>48&0xffff) > (x>>32&0xffff)) flt[i] = 1;
 	}
 	// generate map[]
 	for (i = k = 0; i < vpos; ++i) {
@@ -208,7 +206,7 @@ static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, 
 
 static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
-	int **cnt, i, j, n_seqs = kh_size(hash), ori_vpos = vpos;
+	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos;
 	khint_t k;
 	frag_t **seqs;
 	int8_t *path;
@@ -216,12 +214,22 @@ static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 
 	if (vpos == 0) return;
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
-	//filter(vpos, cnt, cns, hash);
-	cnt = count_all(var_len, vpos, hash);
-	path = dynaprog(var_len, vpos, cnt);
-	for (i = 0; i < vpos; ++i) free(cnt[i]);
-	free(cnt);
-	pcnt = fragphase(vpos, path, hash);
+	{ // phase
+		int **cnt;
+		cnt = count_all(var_len, vpos, hash);
+		path = dynaprog(var_len, vpos, cnt);
+		for (i = 0; i < vpos; ++i) free(cnt[i]);
+		free(cnt);
+		pcnt = fragphase(vpos, path, hash);
+		if (0 && (vpos = filter(vpos, pcnt, path, cns, hash)) < ori_vpos) {
+			free(path); free(pcnt);
+			cnt = count_all(var_len, vpos, hash);
+			path = dynaprog(var_len, vpos, cnt);
+			for (i = 0; i < vpos; ++i) free(cnt[i]);
+			free(cnt);
+			pcnt = fragphase(vpos, path, hash);
+		}
+	}
 	for (i = 0; i < vpos; ++i) {
 		uint64_t x = pcnt[i];
 		int8_t c[2];
