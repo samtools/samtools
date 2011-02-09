@@ -166,23 +166,15 @@ static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, 
 
 static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
-	int i, j, n_seqs = kh_size(hash), ori_vpos;
+	int **cnt, i, j, n_seqs = kh_size(hash), ori_vpos = vpos;
 	khint_t k;
 	rseq_t **seqs;
-	int **cnt;
 	int8_t *path = 0;
 	if (vpos == 0) return;
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
+	//filter(vpos, cnt, cns, hash);
 	cnt = count_all(var_len, vpos, hash);
 	path = dynaprog(var_len, vpos, cnt);
-	ori_vpos = vpos;
-	vpos = filter(vpos, cnt, path, cns, hash);
-	if (ori_vpos > vpos) { // some loci have been filtered out
-		for (i = 0; i < ori_vpos; ++i) free(cnt[i]);
-		free(cnt); free(path);
-		cnt = count_all(var_len, vpos, hash);
-		path = dynaprog(var_len, vpos, cnt);
-	}
 	{
 		uint32_t x0, x1, mask = (1<<var_len) - 1;
 		for (i = 0, x0 = x1 = 0; i < vpos; ++i) {
