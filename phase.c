@@ -6,11 +6,13 @@
 #include "bam.h"
 
 #define MAX_VARS 256
+#define FLIP_PENALTY 2
+#define FLIP_THRES 4
 
 typedef struct {
 	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
 	int vpos, beg, end;
-	uint32_t vlen:31, phase:1;
+	uint32_t vlen:16, err:14, flip:1, phase:1; // TODO: err is not used currently
 } frag_t, *frag_p;
 
 #define rseq_lt(a,b) ((a)->beg < (b)->beg)
@@ -23,7 +25,7 @@ typedef khash_t(64) nseq_t;
 #include "ksort.h"
 KSORT_INIT(rseq, frag_p, rseq_lt)
 
-static int min_varQ = 40, min_mapQ = 10, var_len = 5;
+static int min_varQ = 40, min_mapQ = 10, var_len = 7;
 static int g_vpos_shift = 0;
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
@@ -149,6 +151,7 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 				++c[f->seq[i] == path[f->vpos + i] + 1? 0 : 1];
 			}
 			f->phase = c[0] > c[1]? 0 : 1;
+			f->flip = 0;
 			// fix chimera
 			if (c[0] >= 3 && c[1] >= 3) {
 				int sum[2], m, mi, md;
@@ -175,15 +178,16 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 				// find the best flip point
 				for (i = m = 0, mi = -1, md = -1; i < f->vlen - 1; ++i) {
 					int a[2];
-					a[0] = (left[i]&0xffff) + (rght[i+1]>>16&0xffff) - (rght[i+1]&0xffff);
-					a[1] = (left[i]>>16&0xffff) + (rght[i+1]&0xffff) - (rght[i+1]>>16&0xffff);
+					a[0] = (left[i]&0xffff) + (rght[i+1]>>16&0xffff) - (rght[i+1]&0xffff) * FLIP_PENALTY;
+					a[1] = (left[i]>>16&0xffff) + (rght[i+1]&0xffff) - (rght[i+1]>>16&0xffff) * FLIP_PENALTY;
 					if (a[0] > a[1]) {
 						if (a[0] > m) m = a[0], md = 0, mi = i;
 					} else {
 						if (a[1] > m) m = a[1], md = 1, mi = i;
 					}
 				}
-				if (m - c[0] >= 3 && m - c[1] >= 3) { // then flip
+				if (m - c[0] >= FLIP_THRES && m - c[1] >= FLIP_THRES) { // then flip
+					f->flip = 1;
 					if (md == 0) { // flip the tail
 						for (i = mi + 1; i < f->vlen; ++i)
 							if (f->seq[i] == 1) f->seq[i] = 2;
@@ -297,7 +301,7 @@ static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 			if (s->seq[j] == 0) putchar('N');
 			else putchar("ACGT"[s->seq[j] == 1? (c&3) : (c>>16&3)]);
 		}
-		printf("\t*\n");
+		printf("\t*\tYP:i:%d\tYF:i:%d\n", s->phase, s->flip);
 	}
 //	for (i = 0; i < vpos; ++i) printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
 	free(seqs);
