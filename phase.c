@@ -186,11 +186,11 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
 				if (m - c[0] >= 3 && m - c[1] >= 3) { // then flip
 					if (md == 0) { // flip the tail
 						for (i = mi; i < f->vlen; ++i)
-							if (f->seq[i] == 1) f->seq[i] == 2;
+							if (f->seq[i] == 1) f->seq[i] = 2;
 							else if (f->seq[i] == 2) f->seq[i] = 1;
 					} else { // flip the head
 						for (i = 0; i < mi; ++i)
-							if (f->seq[i] == 1) f->seq[i] == 2;
+							if (f->seq[i] == 1) f->seq[i] = 2;
 							else if (f->seq[i] == 2) f->seq[i] = 1;
 					}
 				}
