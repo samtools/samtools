@@ -7,21 +7,23 @@
 
 #define MAX_VARS 256
 
+#define PERR_BIT 15
+
 typedef struct {
 	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
 	int vpos, beg, end;
-	uint32_t vlen:30, phase:2;
-} rseq_t, *rseq_p;
+	uint32_t vlen:16, perr:15, phase:1;
+} frag_t, *frag_p;
 
 #define rseq_lt(a,b) ((a)->beg < (b)->beg)
 
 #include "khash.h"
-KHASH_MAP_INIT_INT64(64, rseq_t)
+KHASH_MAP_INIT_INT64(64, frag_t)
 
 typedef khash_t(64) nseq_t;
 
 #include "ksort.h"
-KSORT_INIT(rseq, rseq_p, rseq_lt)
+KSORT_INIT(rseq, frag_p, rseq_lt)
 
 static int min_varQ = 40, min_mapQ = 10, var_len = 5;
 static int g_vpos_shift = 0;
@@ -56,7 +58,7 @@ static void count1(int l, const uint8_t *seq, int *cnt)
 	}
 }
 
-static int **count_all(int l, int vpos, const nseq_t *hash)
+static int **count_all(int l, int vpos, nseq_t *hash)
 {
 	khint_t k;
 	int i, j, **cnt;
@@ -66,8 +68,12 @@ static int **count_all(int l, int vpos, const nseq_t *hash)
 	for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(int));
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
-			rseq_t *p = &kh_val(hash, k);
-			if (p->vlen == 1 || p->vpos >= vpos) continue; // no phasing information or out of region
+			frag_t *p = &kh_val(hash, k);
+			if (p->vpos >= vpos) continue; // out of region
+			if (p->vlen == 1) { // no phasing information
+				kh_del(64, hash, k);
+				continue;
+			}
 			for (j = 1; j < p->vlen; ++j) {
 				for (i = 0; i < l; ++i)
 					seq[i] = j < l - 1 - i? 0 : p->seq[j - (l - 1 - i)];
@@ -126,6 +132,42 @@ static int8_t *dynaprog(int l, int vpos, int **w)
 	return h;
 }
 
+static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash)
+{
+	khint_t k;
+	uint64_t *pcnt;
+	pcnt = calloc(vpos, 8);
+	for (k = 0; k < kh_end(hash); ++k) {
+		if (kh_exist(hash, k)) {
+			int i, c[2];
+			frag_t *f = &kh_val(hash, k);
+			if (f->vpos >= vpos) continue;
+			// get the phase
+			c[0] = c[1] = 0;
+			for (i = 0; i < f->vlen; ++i) {
+				if (f->seq[i] == 0) continue;
+				++c[f->seq[i] == path[f->vpos + i] + 1? 0 : 1];
+			}
+			f->phase = c[0] > c[1]? 0 : 1;
+			f->perr = (int)((double)c[1 - f->phase] / (c[0] + c[1]) * (1<<PERR_BIT));
+			// update pcnt[]
+			for (i = 0; i < f->vlen; ++i) {
+				int c;
+				if (f->seq[i] == 0) continue;
+				c = f->phase? 2 - f->seq[i] : f->seq[i] - 1;
+				if (c == path[f->vpos + i]) {
+					if (f->phase == 0) ++pcnt[f->vpos + i];
+					else pcnt[f->vpos + i] += 1ull<<32;
+				} else {
+					if (f->phase == 0) pcnt[f->vpos + i] += 1<<16;
+					else pcnt[f->vpos + i] += 1ull<<48;
+				}
+			}
+		}
+	}
+	return pcnt;
+}
+
 static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
@@ -148,7 +190,7 @@ static int filter(int vpos, int *const* cnt, const int8_t *path, uint64_t *cns, 
 	// filter hash
 	for (j = 0; j < kh_end(hash); ++j) {
 		if (kh_exist(hash, j)) {
-			rseq_t *s = &kh_val(hash, j);
+			frag_t *s = &kh_val(hash, j);
 			if (s->vpos >= vpos) continue;
 			for (i = k = 0; i < s->vlen; ++i)
 				if (flt[s->vpos + i] == 0 && i != k)
@@ -168,33 +210,33 @@ static void phase(const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
 	int **cnt, i, j, n_seqs = kh_size(hash), ori_vpos = vpos;
 	khint_t k;
-	rseq_t **seqs;
-	int8_t *path = 0;
+	frag_t **seqs;
+	int8_t *path;
+	uint64_t *pcnt = 0;
+
 	if (vpos == 0) return;
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	//filter(vpos, cnt, cns, hash);
 	cnt = count_all(var_len, vpos, hash);
 	path = dynaprog(var_len, vpos, cnt);
-	{
-		uint32_t x0, x1, mask = (1<<var_len) - 1;
-		for (i = 0, x0 = x1 = 0; i < vpos; ++i) {
-			int8_t c[2];
-			c[0] = cns[i]&3; c[1] = cns[i]>>16&3;
-			x0 = (x0<<1 | path[i]) & mask ; x1 = ~x0 & mask;
-			printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + g_vpos_shift + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]], path[i],
-				cnt[i][x0], cnt[i][x0^1], cnt[i][x1], cnt[i][x1^1]);
-			//for (j = 0; j < 1<<var_len; ++j) printf("%c%d", (j&1)? ' ' : '\t', cnt[i][j]);
-		}
-	}
 	for (i = 0; i < vpos; ++i) free(cnt[i]);
-	free(cnt); free(path);
+	free(cnt);
+	pcnt = fragphase(vpos, path, hash);
+	for (i = 0; i < vpos; ++i) {
+		uint64_t x = pcnt[i];
+		int8_t c[2];
+		c[0] = cns[i]&3; c[1] = cns[i]>>16&3;
+		printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + g_vpos_shift + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]],
+			(int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
+	}
+	free(path); free(pcnt);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
 		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos) seqs[i++] = &kh_val(hash, k);
 	n_seqs = i;
 	ks_introsort_rseq(n_seqs, seqs);
 	for (i = 0; i < n_seqs; ++i) {
-		rseq_t *s = seqs[i];
+		frag_t *s = seqs[i];
 		printf("EV\t0\t%s\t%d\t40\t%dM\t*\t0\t0\t", chr, s->vpos + 1 + g_vpos_shift, s->vlen);
 		for (j = 0; j < s->vlen; ++j) {
 			uint32_t c = cns[s->vpos + j];
@@ -215,8 +257,8 @@ static void update_vpos(int vpos, nseq_t *hash)
 	khint_t k;
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
-			rseq_t *p = &kh_val(hash, k);
-			if (p->vpos < vpos) kh_del(64, hash, k); // TODO: if rseq_t::seq is allocated dynamically, free it
+			frag_t *p = &kh_val(hash, k);
+			if (p->vpos < vpos) kh_del(64, hash, k); // TODO: if frag_t::seq is allocated dynamically, free it
 			else p->vpos -= vpos;
 		}
 	}
@@ -283,7 +325,7 @@ int main_phase(int argc, char *argv[])
 			uint64_t key;
 			khint_t k;
 			uint8_t *seq = bam1_seq(p->b);
-			rseq_t *r;
+			frag_t *r;
 			if (p->is_del || p->is_refskip) continue;
 			if (p->b->core.qual < min_mapQ) continue;
 			// get the base code
