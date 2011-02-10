@@ -253,7 +253,7 @@ static uint64_t *maskreg(int vpos, const uint64_t *pcnt, int *_n)
 	return list;
 }
 
-static int filter(int vpos, const uint64_t *pcnt, const int8_t *path, uint64_t *cns, nseq_t *hash)
+static int filter(int vpos, int n_masked, const uint64_t *mask, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
 	int i, k, *map;
@@ -261,10 +261,9 @@ static int filter(int vpos, const uint64_t *pcnt, const int8_t *path, uint64_t *
 	flt = calloc(vpos, 1);
 	map = calloc(vpos, sizeof(int));
 	// get the list of sites to be filtered
-	for (i = 0; i < vpos; ++i) {
-		uint64_t x = pcnt[i];
-		if ((x>>16&0xffff) > (x&0xffff) || (x>>48&0xffff) > (x>>32&0xffff)) flt[i] = 1;
-	}
+	for (i = 0; i < n_masked; ++i)
+		for (k = mask[i]>>32; k <= (int)mask[i]; ++k)
+			flt[k] = 1;
 	// generate map[]
 	for (i = k = 0; i < vpos; ++i) {
 		if (flt[i]) map[i] = -1;
@@ -309,21 +308,20 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 			uint64_t *mask = 0;
 			pcnt = fragphase(vpos, path, hash, 0); // do not fix chimeras during masking
 			mask = maskreg(vpos, pcnt, &n_masked);
+			free(pcnt);
 			regmask = calloc(n_masked, 8);
 			for (i = 0; i < n_masked; ++i)
 				regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
-			free(pcnt);
+			if (0 && (vpos = filter(vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
+				free(path);
+				cnt = count_all(o->k, vpos, hash);
+				path = dynaprog(o->k, vpos, cnt);
+				for (i = 0; i < vpos; ++i) free(cnt[i]);
+				free(cnt);
+			}
 			free(mask);
 		}
 		pcnt = fragphase(vpos, path, hash, o->flag & PHASE_FIX_CHIMERA);
-		if (0 && (vpos = filter(vpos, pcnt, path, cns, hash)) < ori_vpos) {
-			free(path); free(pcnt);
-			cnt = count_all(o->k, vpos, hash);
-			path = dynaprog(o->k, vpos, cnt);
-			for (i = 0; i < vpos; ++i) free(cnt[i]);
-			free(cnt);
-			pcnt = fragphase(vpos, path, hash, o->flag & PHASE_FIX_CHIMERA);
-		}
 	}
 	if (regmask)
 		for (i = 0; i < n_masked; ++i)
@@ -335,7 +333,7 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 		printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + vpos_shift + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]],
 			(int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
 	}
-	free(path); free(pcnt);
+	free(path); free(pcnt); free(regmask);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
 		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos) seqs[i++] = &kh_val(hash, k);
@@ -352,7 +350,7 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 		printf("\t*\tYP:i:%d\tYF:i:%d\n", s->phase, s->flip);
 	}
 //	for (i = 0; i < vpos; ++i) printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
-	free(seqs); free(regmask);
+	free(seqs);
 	printf("//\n");
 	fflush(stdout);
 	return vpos;
