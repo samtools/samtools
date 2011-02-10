@@ -273,12 +273,15 @@ static int filter(int vpos, int n_masked, const uint64_t *mask, const int8_t *pa
 	for (j = 0; j < kh_end(hash); ++j) {
 		if (kh_exist(hash, j)) {
 			frag_t *s = &kh_val(hash, j);
+			int new_vpos = -1;
 			if (s->vpos >= vpos) continue;
-			for (i = k = 0; i < s->vlen; ++i)
-				if (flt[s->vpos + i] == 0 && i != k)
+			for (i = k = 0; i < s->vlen; ++i) {
+				if (new_vpos < 0 && flt[s->vpos + i] == 0) new_vpos = s->vpos + i;
+				if (flt[s->vpos + i] == 0)
 					s->seq[k++] = s->seq[i];
+			}
 			if (k < 2) kh_del(64, hash, j);
-			s->vlen = k; s->vpos = map[s->vpos];
+			else s->vlen = k, s->vpos = map[new_vpos];
 		}
 	}
 	// filter cns
@@ -312,7 +315,7 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 			regmask = calloc(n_masked, 8);
 			for (i = 0; i < n_masked; ++i)
 				regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
-			if (0 && (vpos = filter(vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
+			if ((vpos = filter(vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
 				free(path);
 				cnt = count_all(o->k, vpos, hash);
 				path = dynaprog(o->k, vpos, cnt);
