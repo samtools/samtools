@@ -299,7 +299,7 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 	int8_t *path;
 	uint64_t *pcnt = 0, *regmask = 0;
 
-	if (vpos == 0) return 0;
+	if (vpos < 2) return 0;
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	{ // phase
 		int **cnt;
