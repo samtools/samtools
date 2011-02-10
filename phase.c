@@ -8,8 +8,10 @@
 #define MAX_VARS 256
 #define FLIP_PENALTY 2
 #define FLIP_THRES 4
+#define MASK_THRES 3
 
 #define PHASE_FIX_CHIMERA 0x1
+#define PHASE_MASK_POOR   0x2
 
 typedef struct {
 	int flag, k, min_mapQ, min_varQ; // initialized in the main function
@@ -222,6 +224,35 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 	return pcnt;
 }
 
+static uint64_t *maskreg(int vpos, const uint64_t *pcnt, int *_n)
+{
+	int i, max = 0, score = 0, max_i = -1, m = 0, n = 0, beg = 0;
+	uint64_t *list = 0;
+	for (i = 0; i < vpos; ++i) {
+		uint64_t x = pcnt[i];
+		int c = (x>>16&0xffff) + (x>>48&0xffff);
+		int pre = score;
+		//printf("%d\t%d\t%d\t%d\t%d\n", i, c, score, max, beg);
+		score += c - 1;
+		if ((x>>16&0xffff) > (x&0xffff)) score += (x>>16&0xffff) - (x&0xffff); // further penalty when there are more out-of-phase alleles
+		if ((x>>48&0xffff) > (x>>32&0xffff)) score += (x>>48&0xffff) - (x>>32&0xffff);
+		if (score < 0) score = 0;
+		if (pre == 0 && score > 0) beg = i; // change from zero to non-zero
+		if ((i == vpos - 1 || score == 0) && max >= MASK_THRES) {
+			if (n == m) {
+				m = m? m<<1 : 4;
+				list = realloc(list, m * 8);
+			}
+			list[n++] = (uint64_t)beg<<32 | max_i;
+			i = max_i; // reset i to max_i
+			score = 0;
+		} else if (score > max) max = score, max_i = i;
+		if (score == 0) max = 0;
+	}
+	*_n = n;
+	return list;
+}
+
 static int filter(int vpos, const uint64_t *pcnt, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
@@ -269,12 +300,19 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 	if (vpos == 0) return 0;
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	{ // phase
-		int **cnt;
+		int **cnt, n_masked;
+		uint64_t *mask = 0;
 		cnt = count_all(o->k, vpos, hash);
 		path = dynaprog(o->k, vpos, cnt);
 		for (i = 0; i < vpos; ++i) free(cnt[i]);
 		free(cnt);
-		pcnt = fragphase(vpos, path, hash, o->flag & PHASE_FIX_CHIMERA);
+		pcnt = fragphase(vpos, path, hash, 0);
+		mask = maskreg(vpos, pcnt, &n_masked);
+		for (i = 0; i < n_masked; ++i)
+			printf("MK\t%d\t%d\n", (int)(mask[i]>>32) + vpos_shift + 1, (int)mask[i] + vpos_shift + 1);
+		//free(pcnt);
+		//pcnt = fragphase(vpos, path, hash, o->flag & PHASE_FIX_CHIMERA);
+		free(mask);
 		if (0 && (vpos = filter(vpos, pcnt, path, cns, hash)) < ori_vpos) {
 			free(path); free(pcnt);
 			cnt = count_all(o->k, vpos, hash);
@@ -337,14 +375,15 @@ int main_phase(int argc, char *argv[])
 	uint64_t *cns = 0;
 	phaseopt_t conf;
 
-	conf.flag = PHASE_FIX_CHIMERA;
+	conf.flag = PHASE_FIX_CHIMERA | PHASE_MASK_POOR;
 	conf.min_varQ = 40; conf.min_mapQ = 10; conf.k = 7;
-	while ((c = getopt(argc, argv, "Fq:Q:k:")) >= 0) {
+	while ((c = getopt(argc, argv, "FMq:Q:k:")) >= 0) {
 		switch (c) {
 			case 'q': conf.min_varQ = atoi(optarg); break;
 			case 'Q': conf.min_mapQ = atoi(optarg); break;
 			case 'k': conf.k = atoi(optarg); break;
 			case 'F': conf.flag &= ~PHASE_FIX_CHIMERA; break;
+			case 'M': conf.flag &= ~PHASE_MASK_POOR; break;
 		}
 	}
 	if (argc == optind) {
