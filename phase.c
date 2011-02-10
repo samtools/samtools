@@ -291,28 +291,31 @@ static int filter(int vpos, const uint64_t *pcnt, const int8_t *path, uint64_t *
 
 static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, nseq_t *hash, int vpos_shift)
 {
-	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos;
+	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos, n_masked = 0;
 	khint_t k;
 	frag_t **seqs;
 	int8_t *path;
-	uint64_t *pcnt = 0;
+	uint64_t *pcnt = 0, *regmask = 0;
 
 	if (vpos == 0) return 0;
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	{ // phase
-		int **cnt, n_masked;
-		uint64_t *mask = 0;
+		int **cnt;
 		cnt = count_all(o->k, vpos, hash);
 		path = dynaprog(o->k, vpos, cnt);
 		for (i = 0; i < vpos; ++i) free(cnt[i]);
 		free(cnt);
-		pcnt = fragphase(vpos, path, hash, 0);
-		mask = maskreg(vpos, pcnt, &n_masked);
-		for (i = 0; i < n_masked; ++i)
-			printf("MK\t%d\t%d\n", (int)(mask[i]>>32) + vpos_shift + 1, (int)mask[i] + vpos_shift + 1);
-		//free(pcnt);
-		//pcnt = fragphase(vpos, path, hash, o->flag & PHASE_FIX_CHIMERA);
-		free(mask);
+		if (o->flag & PHASE_MASK_POOR) {
+			uint64_t *mask = 0;
+			pcnt = fragphase(vpos, path, hash, 0); // do not fix chimeras during masking
+			mask = maskreg(vpos, pcnt, &n_masked);
+			regmask = calloc(n_masked, 8);
+			for (i = 0; i < n_masked; ++i)
+				regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
+			free(pcnt);
+			free(mask);
+		}
+		pcnt = fragphase(vpos, path, hash, o->flag & PHASE_FIX_CHIMERA);
 		if (0 && (vpos = filter(vpos, pcnt, path, cns, hash)) < ori_vpos) {
 			free(path); free(pcnt);
 			cnt = count_all(o->k, vpos, hash);
@@ -322,6 +325,9 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 			pcnt = fragphase(vpos, path, hash, o->flag & PHASE_FIX_CHIMERA);
 		}
 	}
+	if (regmask)
+		for (i = 0; i < n_masked; ++i)
+			printf("MK\t%d\t%d\n", (int)(regmask[i]>>32) + 1, (int)regmask[i] + 1);
 	for (i = 0; i < vpos; ++i) {
 		uint64_t x = pcnt[i];
 		int8_t c[2];
@@ -346,7 +352,7 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 		printf("\t*\tYP:i:%d\tYF:i:%d\n", s->phase, s->flip);
 	}
 //	for (i = 0; i < vpos; ++i) printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
-	free(seqs);
+	free(seqs); free(regmask);
 	printf("//\n");
 	fflush(stdout);
 	return vpos;
@@ -393,6 +399,7 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "         -q INT    min variant quality to call SNP [%d]\n", conf.min_varQ);
 		fprintf(stderr, "         -Q INT    min mapping quality [%d]\n", conf.min_mapQ);
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
+		fprintf(stderr, "         -M        do not mask poorly phased regions\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}
