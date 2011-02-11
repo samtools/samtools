@@ -72,6 +72,33 @@ bcf_t *vcf_open(const char *fn, const char *mode)
 	return bp;
 }
 
+int vcf_dictread(bcf_t *bp, bcf_hdr_t *h, const char *fn)
+{
+	vcf_t *v;
+	gzFile fp;
+	kstream_t *ks;
+	kstring_t s, rn;
+	int dret;
+	if (bp == 0) return -1;
+	if (!bp->is_vcf) return 0;
+	s.l = s.m = 0; s.s = 0;
+	rn.m = rn.l = h->l_nm; rn.s = h->name;
+	v = (vcf_t*)bp->v;
+	fp = gzopen(fn, "r");
+	ks = ks_init(fp);
+	while (ks_getuntil(ks, 0, &s, &dret) >= 0) {
+		bcf_str2id_add(v->refhash, strdup(s.s));
+		kputs(s.s, &rn); kputc('\0', &rn);
+		if (dret != '\n') ks_getuntil(ks, '\n', &s, &dret);
+	}
+	ks_destroy(ks);
+	gzclose(fp);
+	h->l_nm = rn.l; h->name = rn.s;
+	bcf_hdr_sync(h);
+	free(s.s);
+	return 0;
+}
+
 int vcf_close(bcf_t *bp)
 {
 	vcf_t *v;
@@ -84,7 +111,7 @@ int vcf_close(bcf_t *bp)
 	}
 	if (v->fpout) fclose(v->fpout);
 	free(v->line.s);
-	bcf_str2id_destroy(v->refhash);
+	bcf_str2id_thorough_destroy(v->refhash);
 	free(v);
 	free(bp);
 	return 0;
@@ -93,13 +120,12 @@ int vcf_close(bcf_t *bp)
 int vcf_hdr_write(bcf_t *bp, const bcf_hdr_t *h)
 {
 	vcf_t *v = (vcf_t*)bp->v;
-	int i, has_ref = 0, has_ver = 0;
+	int i, has_ver = 0;
 	if (!bp->is_vcf) return bcf_hdr_write(bp, h);
 	if (h->l_txt > 0) {
 		if (strstr(h->txt, "##fileformat=")) has_ver = 1;
 		if (has_ver == 0) fprintf(v->fpout, "##fileformat=VCFv4.0\n");
 		fwrite(h->txt, 1, h->l_txt - 1, v->fpout);
-		if (strstr(h->txt, "##SQ=")) has_ref = 1;
 	}
 	if (h->l_txt == 0) fprintf(v->fpout, "##fileformat=VCFv4.0\n");
 	fprintf(v->fpout, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT");
@@ -138,7 +164,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 		if (k == 0) { // ref
 			int tid = bcf_str2id(v->refhash, p);
 			if (tid < 0) {
-				tid = bcf_str2id_add(v->refhash, p);
+				tid = bcf_str2id_add(v->refhash, strdup(p));
 				kputs(p, &rn); kputc('\0', &rn);
 				sync = 1;
 			}

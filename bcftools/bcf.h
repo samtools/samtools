@@ -129,6 +129,8 @@ extern "C" {
 	int vcf_close(bcf_t *bp);
 	// read the VCF/BCF header
 	bcf_hdr_t *vcf_hdr_read(bcf_t *bp);
+	// read the sequence dictionary from a separate file; required for VCF->BCF conversion
+	int vcf_dictread(bcf_t *bp, bcf_hdr_t *h, const char *fn);
 	// read a VCF/BCF record; return -1 on end-of-file and <-1 for errors
 	int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b);
 	// write the VCF header
