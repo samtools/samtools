@@ -259,7 +259,7 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 					if (k > 0) kputc(',', s);
 					ksprintf(s, "%.2f", d[k]);
 				}
-			}
+			} else kputc('.', s); // custom fields
 		}
 	}
 }
