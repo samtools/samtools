@@ -84,7 +84,7 @@ int vcf_close(bcf_t *bp)
 	}
 	if (v->fpout) fclose(v->fpout);
 	free(v->line.s);
-	bcf_str2id_destroy(v->refhash);
+	bcf_str2id_thorough_destroy(v->refhash);
 	free(v);
 	free(bp);
 	return 0;
@@ -138,7 +138,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 		if (k == 0) { // ref
 			int tid = bcf_str2id(v->refhash, p);
 			if (tid < 0) {
-				tid = bcf_str2id_add(v->refhash, p);
+				tid = bcf_str2id_add(v->refhash, strdup(p));
 				kputs(p, &rn); kputc('\0', &rn);
 				sync = 1;
 			}
