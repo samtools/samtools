@@ -30,7 +30,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist;
-	char *fn_list, *prior_file, **subsam;
+	char *fn_list, *prior_file, **subsam, *fn_dict;
 	double theta, pref, indel_frac;
 } viewconf_t;
 
@@ -286,10 +286,11 @@ int bcfview(int argc, char *argv[])
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
 	vc.n_sub = 0; vc.subsam = 0; vc.sublist = 0;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:IMs:")) >= 0) {
+	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:IMs:D:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
+		case 'D': vc.fn_dict = strdup(optarg); break;
 		case 'N': vc.flag |= VC_ACGT_ONLY; break;
 		case 'G': vc.flag |= VC_NO_GENO; break;
 		case 'A': vc.flag |= VC_KEEPALT; break;
@@ -332,6 +333,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -Q        output the QCALL likelihood format\n");
 		fprintf(stderr, "         -L        calculate LD for adjacent sites\n");
 		fprintf(stderr, "         -I        skip indels\n");
+		fprintf(stderr, "         -D FILE   sequence dictionary for VCF->BCF conversion [null]\n");
 		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
 		fprintf(stderr, "         -t FLOAT  scaled substitution mutation rate [%.4g]\n", vc.theta);
@@ -343,6 +345,10 @@ int bcfview(int argc, char *argv[])
 		return 1;
 	}
 
+	if ((vc.flag & VC_VCFIN) && (vc.flag & VC_BCFOUT) && vc.fn_dict == 0) {
+		fprintf(stderr, "[%s] For VCF->BCF conversion please specify the sequence dictionary with -D\n", __func__);
+		return 1;
+	}
 	b = calloc(1, sizeof(bcf1_t));
 	blast = calloc(1, sizeof(bcf1_t));
 	strcpy(moder, "r");
@@ -352,6 +358,8 @@ int bcfview(int argc, char *argv[])
 	if (vc.flag & VC_UNCOMP) strcat(modew, "u");
 	bp = vcf_open(argv[optind], moder);
 	hin = hout = vcf_hdr_read(bp);
+	if (vc.fn_dict && (vc.flag & VC_VCFIN))
+		vcf_dictread(bp, hin, vc.fn_dict);
 	bout = vcf_open("-", modew);
 	if (!(vc.flag & VC_QCALL)) {
 		if (vc.n_sub) {
@@ -462,6 +470,7 @@ int bcfview(int argc, char *argv[])
 	vcf_close(bp); vcf_close(bout);
 	if (hash) kh_destroy(set64, hash);
 	if (vc.fn_list) free(vc.fn_list);
+	if (vc.fn_dict) free(vc.fn_dict);
 	if (vc.n_sub) {
 		int i;
 		for (i = 0; i < vc.n_sub; ++i) free(vc.subsam[i]);
