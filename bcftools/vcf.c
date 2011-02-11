@@ -224,7 +224,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 					y = b->n_alleles * (b->n_alleles + 1) / 2;
 					for (j = 0; j < y; ++j) {
 						x = strtod(q, &q);
-						data[(k-9) * y + j] = x;
+						data[(k-9) * y + j] = x > 0? -x/10. : x;
 						++q;
 					}
 				}
