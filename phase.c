@@ -14,8 +14,11 @@
 #define PHASE_MASK_POOR   0x2
 
 typedef struct {
-	int flag, k, min_mapQ, min_varQ; // initialized in the main function
-} phaseopt_t;
+	// configurations, initialized in the main function
+	int flag, k, min_mapQ, min_varQ;
+	// other global variables
+	int vpos_shift, last_end;
+} phaseg_t;
 
 typedef struct {
 	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
@@ -224,7 +227,7 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 	return pcnt;
 }
 
-static uint64_t *maskreg(int vpos, const uint64_t *pcnt, int *_n)
+static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
 {
 	int i, max = 0, score = 0, max_i = -1, m = 0, n = 0, beg = 0;
 	uint64_t *list = 0;
@@ -253,7 +256,7 @@ static uint64_t *maskreg(int vpos, const uint64_t *pcnt, int *_n)
 	return list;
 }
 
-static int filter(int vpos, int n_masked, const uint64_t *mask, const int8_t *path, uint64_t *cns, nseq_t *hash)
+static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
 	int i, k, *map;
@@ -291,7 +294,7 @@ static int filter(int vpos, int n_masked, const uint64_t *mask, const int8_t *pa
 	return k;
 }
 
-static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, nseq_t *hash, int vpos_shift)
+static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
 	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos, n_masked = 0;
 	khint_t k;
@@ -303,28 +306,28 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	{ // phase
 		int **cnt;
-		cnt = count_all(o->k, vpos, hash);
-		path = dynaprog(o->k, vpos, cnt);
+		cnt = count_all(g->k, vpos, hash);
+		path = dynaprog(g->k, vpos, cnt);
 		for (i = 0; i < vpos; ++i) free(cnt[i]);
 		free(cnt);
-		if (o->flag & PHASE_MASK_POOR) {
+		if (g->flag & PHASE_MASK_POOR) {
 			uint64_t *mask = 0;
 			pcnt = fragphase(vpos, path, hash, 0); // do not fix chimeras during masking
-			mask = maskreg(vpos, pcnt, &n_masked);
+			mask = genmask(vpos, pcnt, &n_masked);
 			free(pcnt);
 			regmask = calloc(n_masked, 8);
 			for (i = 0; i < n_masked; ++i)
 				regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
-			if ((vpos = filter(vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
+			if ((vpos = dropreg(vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
 				free(path);
-				cnt = count_all(o->k, vpos, hash);
-				path = dynaprog(o->k, vpos, cnt);
+				cnt = count_all(g->k, vpos, hash);
+				path = dynaprog(g->k, vpos, cnt);
 				for (i = 0; i < vpos; ++i) free(cnt[i]);
 				free(cnt);
 			}
 			free(mask);
 		}
-		pcnt = fragphase(vpos, path, hash, o->flag & PHASE_FIX_CHIMERA);
+		pcnt = fragphase(vpos, path, hash, g->flag & PHASE_FIX_CHIMERA);
 	}
 	if (regmask)
 		for (i = 0; i < n_masked; ++i)
@@ -333,7 +336,7 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 		uint64_t x = pcnt[i];
 		int8_t c[2];
 		c[0] = cns[i]&3; c[1] = cns[i]>>16&3;
-		printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + vpos_shift + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]],
+		printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + g->vpos_shift + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]],
 			(int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
 	}
 	free(path); free(pcnt); free(regmask);
@@ -344,7 +347,7 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 	ks_introsort_rseq(n_seqs, seqs);
 	for (i = 0; i < n_seqs; ++i) {
 		frag_t *s = seqs[i];
-		printf("EV\t0\t%s\t%d\t40\t%dM\t*\t0\t0\t", chr, s->vpos + 1 + vpos_shift, s->vlen);
+		printf("EV\t0\t%s\t%d\t40\t%dM\t*\t0\t0\t", chr, s->vpos + 1 + g->vpos_shift, s->vlen);
 		for (j = 0; j < s->vlen; ++j) {
 			uint32_t c = cns[s->vpos + j];
 			if (s->seq[j] == 0) putchar('N');
@@ -352,10 +355,10 @@ static int phase(const phaseopt_t *o, const char *chr, int vpos, uint64_t *cns, 
 		}
 		printf("\t*\tYP:i:%d\tYF:i:%d\n", s->phase, s->flip);
 	}
-//	for (i = 0; i < vpos; ++i) printf("%d\t%c\t%d\t%c\t%d\n", (int)(cns[i]>>32) + 1, "ACGT"[cns[i]&3], (int)(cns[i]&0xffff)>>2, "ACGT"[cns[i]>>16&3], (int)(cns[i]>>16&0xffff)>>2);
 	free(seqs);
 	printf("//\n");
 	fflush(stdout);
+	g->vpos_shift += vpos;
 	return vpos;
 }
 
@@ -371,34 +374,39 @@ static void update_vpos(int vpos, nseq_t *hash)
 	}
 }
 
+static nseq_t *shrink_hash(nseq_t *hash) // TODO: to implement
+{
+	return hash;
+}
+
 int main_phase(int argc, char *argv[])
 {
 	bamFile fp;
-	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0, vpos_shift = 0;
+	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
 	bam_header_t *h;
 	nseq_t *seqs;
 	uint64_t *cns = 0;
-	phaseopt_t conf;
+	phaseg_t g;
 
-	conf.flag = PHASE_FIX_CHIMERA | PHASE_MASK_POOR;
-	conf.min_varQ = 40; conf.min_mapQ = 10; conf.k = 7;
+	g.flag = PHASE_FIX_CHIMERA | PHASE_MASK_POOR;
+	g.min_varQ = 40; g.min_mapQ = 10; g.k = 7;
 	while ((c = getopt(argc, argv, "FMq:Q:k:")) >= 0) {
 		switch (c) {
-			case 'q': conf.min_varQ = atoi(optarg); break;
-			case 'Q': conf.min_mapQ = atoi(optarg); break;
-			case 'k': conf.k = atoi(optarg); break;
-			case 'F': conf.flag &= ~PHASE_FIX_CHIMERA; break;
-			case 'M': conf.flag &= ~PHASE_MASK_POOR; break;
+			case 'q': g.min_varQ = atoi(optarg); break;
+			case 'Q': g.min_mapQ = atoi(optarg); break;
+			case 'k': g.k = atoi(optarg); break;
+			case 'F': g.flag &= ~PHASE_FIX_CHIMERA; break;
+			case 'M': g.flag &= ~PHASE_MASK_POOR; break;
 		}
 	}
 	if (argc == optind) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools phase [options] <in.bam>\n\n");
-		fprintf(stderr, "Options: -k INT    block length [%d]\n", conf.k);
-		fprintf(stderr, "         -q INT    min variant quality to call SNP [%d]\n", conf.min_varQ);
-		fprintf(stderr, "         -Q INT    min mapping quality [%d]\n", conf.min_mapQ);
+		fprintf(stderr, "Options: -k INT    block length [%d]\n", g.k);
+		fprintf(stderr, "         -q INT    min variant quality to call SNP [%d]\n", g.min_varQ);
+		fprintf(stderr, "         -Q INT    min mapping quality [%d]\n", g.min_mapQ);
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
 		fprintf(stderr, "         -M        do not mask poorly phased regions\n");
 		fprintf(stderr, "\n");
@@ -408,14 +416,18 @@ int main_phase(int argc, char *argv[])
 	h = bam_header_read(fp);
 	iter = bam_plp_init((bam_plp_auto_f)bam_read1, fp);
 
+	g.vpos_shift = g.last_end = 0;
 	seqs = kh_init(64);
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
 		int i, j, c, cnt[4], tmp, dophase = 1;
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
-			vpos_shift = 0;
-			if (lasttid >= 0)
-				vpos_shift += phase(&conf, h->target_name[lasttid], vpos, cns, seqs, vpos_shift);
+			g.vpos_shift = 0;
+			if (lasttid >= 0) {
+				shrink_hash(seqs);
+				phase(&g, h->target_name[lasttid], vpos, cns, seqs);
+				update_vpos(0x7fffffff, seqs);
+			}
 			lasttid = tid;
 			vpos = 0;
 		}
@@ -426,7 +438,7 @@ int main_phase(int argc, char *argv[])
 			uint8_t *seq = bam1_seq(p->b);
 			uint8_t *qual = bam1_qual(p->b);
 			if (p->is_del || p->is_refskip) continue;
-			if (p->b->core.qual < conf.min_mapQ) continue;
+			if (p->b->core.qual < g.min_mapQ) continue;
 			cnt[(int)nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)]] += qual[p->qpos];
 		}
 		for (i = 0; i < 4; ++i) {
@@ -436,7 +448,7 @@ int main_phase(int argc, char *argv[])
 		for (i = 1; i < 4; ++i) // insertion sort
 			for (j = i; j > 0 && cnt[j] > cnt[j-1]; --j)
 				tmp = cnt[j], cnt[j] = cnt[j-1], cnt[j-1] = tmp;
-		if (cnt[1]>>2 <= conf.min_varQ) continue; // not a variant
+		if (cnt[1]>>2 <= g.min_varQ) continue; // not a variant
 		// add the variant
 		if (vpos == max_vpos) {
 			max_vpos = max_vpos? max_vpos<<1 : 128;
@@ -450,7 +462,7 @@ int main_phase(int argc, char *argv[])
 			uint8_t *seq = bam1_seq(p->b);
 			frag_t *r;
 			if (p->is_del || p->is_refskip) continue;
-			if (p->b->core.qual < conf.min_mapQ) continue;
+			if (p->b->core.qual < g.min_mapQ) continue;
 			// get the base code
 			c = nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
 			if (c > 3) c = 0;
@@ -474,15 +486,15 @@ int main_phase(int argc, char *argv[])
 			}
 		}
 		if (dophase) {
-			vpos_shift += phase(&conf, h->target_name[tid], vpos, cns, seqs, vpos_shift);
+			seqs = shrink_hash(seqs);
+			phase(&g, h->target_name[tid], vpos, cns, seqs);
 			update_vpos(vpos, seqs);
 			cns[0] = cns[vpos];
 			vpos = 0;
 		}
 		++vpos;
 	}
-	if (tid >= 0)
-		vpos_shift += phase(&conf, h->target_name[tid], vpos, cns, seqs, vpos_shift);
+	if (tid >= 0) phase(&g, h->target_name[tid], vpos, cns, seqs);
 	bam_header_destroy(h);
 	bam_plp_destroy(iter);
 	bam_close(fp);
