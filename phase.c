@@ -17,7 +17,7 @@ typedef struct {
 	// configurations, initialized in the main function
 	int flag, k, min_mapQ, min_varQ;
 	// other global variables
-	int vpos_shift, last_end;
+	int vpos_shift;
 } phaseg_t;
 
 typedef struct {
@@ -256,6 +256,29 @@ static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
 	return list;
 }
 
+static void clean_seqs(int vpos, nseq_t *hash)
+{
+	khint_t k;
+	for (k = 0; k < kh_end(hash); ++k) {
+		if (kh_exist(hash, k)) {
+			frag_t *f = &kh_val(hash, k);
+			int beg, end, i;
+			if (f->vpos >= vpos) continue;
+			for (i = 0; i < f->vlen; ++i)
+				if (f->seq[i] != 0) break;
+			beg = i;
+			for (i = f->vlen - 1; i >= 0; --i)
+				if (f->seq[i] != 0) break;
+			end = i + 1;
+			if (end - beg < 2) kh_del(64, hash, k);
+			else {
+				if (beg != 0) memmove(f->seq, f->seq + beg, end - beg);
+				f->vpos += beg; f->vlen = end - beg;
+			}
+		}
+	}
+}
+
 static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
@@ -303,6 +326,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	uint64_t *pcnt = 0, *regmask = 0;
 
 	if (vpos < 2) return 0;
+	clean_seqs(vpos, hash);
 	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	{ // phase
 		int **cnt;
@@ -320,6 +344,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 				regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
 			if ((vpos = dropreg(vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
 				free(path);
+				clean_seqs(vpos, hash);
 				cnt = count_all(g->k, vpos, hash);
 				path = dynaprog(g->k, vpos, cnt);
 				for (i = 0; i < vpos; ++i) free(cnt[i]);
@@ -416,7 +441,7 @@ int main_phase(int argc, char *argv[])
 	h = bam_header_read(fp);
 	iter = bam_plp_init((bam_plp_auto_f)bam_read1, fp);
 
-	g.vpos_shift = g.last_end = 0;
+	g.vpos_shift = 0;
 	seqs = kh_init(64);
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
 		int i, j, c, cnt[4], tmp, dophase = 1;
