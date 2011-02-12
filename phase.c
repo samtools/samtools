@@ -327,7 +327,6 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 
 	if (vpos < 2) return 0;
 	clean_seqs(vpos, hash);
-	printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[vpos-1]>>32));
 	{ // phase
 		int **cnt;
 		cnt = count_all(g->k, vpos, hash);
@@ -343,20 +342,30 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 			for (i = 0; i < n_masked; ++i)
 				regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
 			if ((vpos = dropreg(vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
+				int last_i;
 				free(path);
 				clean_seqs(vpos, hash);
 				cnt = count_all(g->k, vpos, hash);
 				path = dynaprog(g->k, vpos, cnt);
+				for (i = 1, last_i = 0; i < vpos; ++i) {
+					int *c = cnt[i], j;
+					for (j = 0; j < 1<<g->k && c[j] == 0; ++j);
+					if (j == 1<<g->k) {
+						printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[last_i]>>32) + 1, (int)(cns[i-1]>>32) + 1);
+						last_i = i;
+					}
+				}
+				printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[last_i]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
 				for (i = 0; i < vpos; ++i) free(cnt[i]);
 				free(cnt);
-			}
+			} else printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
 			free(mask);
 		}
 		pcnt = fragphase(vpos, path, hash, g->flag & PHASE_FIX_CHIMERA);
 	}
 	if (regmask)
 		for (i = 0; i < n_masked; ++i)
-			printf("MK\t%d\t%d\n", (int)(regmask[i]>>32) + 1, (int)regmask[i] + 1);
+			printf("MK\t%s\t%d\t%d\n", chr, (int)(regmask[i]>>32) + 1, (int)regmask[i] + 1);
 	for (i = 0; i < vpos; ++i) {
 		uint64_t x = pcnt[i];
 		int8_t c[2];
