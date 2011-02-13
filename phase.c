@@ -18,12 +18,14 @@ typedef struct {
 	int flag, k, min_mapQ, min_varQ;
 	// other global variables
 	int vpos_shift;
+	bamFile fp;
+	char *pre;
 } phaseg_t;
 
 typedef struct {
 	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
 	int vpos, beg, end;
-	uint32_t vlen:16, err:14, flip:1, phase:1; // TODO: err is not used currently
+	uint32_t vlen:16, single:1, flip:1, phase:1, phased:1;
 } frag_t, *frag_p;
 
 #define rseq_lt(a,b) ((a)->beg < (b)->beg)
@@ -78,9 +80,9 @@ static int **count_all(int l, int vpos, nseq_t *hash)
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
 			frag_t *p = &kh_val(hash, k);
-			if (p->vpos >= vpos) continue; // out of region
-			if (p->vlen == 1) { // no phasing information
-				kh_del(64, hash, k);
+			if (p->vpos >= vpos || p->single) continue; // out of region; or singleton
+			if (p->vlen == 1) { // such reads should be flagged as deleted previously if everything is right
+				p->single = 1;
 				continue;
 			}
 			for (j = 1; j < p->vlen; ++j) {
@@ -94,6 +96,7 @@ static int **count_all(int l, int vpos, nseq_t *hash)
 	return cnt;
 }
 
+// phasing
 static int8_t *dynaprog(int l, int vpos, int **w)
 {
 	int *f[2], *curr, *prev, max, i;
@@ -141,6 +144,7 @@ static int8_t *dynaprog(int l, int vpos, int **w)
 	return h;
 }
 
+// phase each fragment
 static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 {
 	khint_t k;
@@ -160,8 +164,9 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 				++c[f->seq[i] == path[f->vpos + i] + 1? 0 : 1];
 			}
 			f->phase = c[0] > c[1]? 0 : 1;
-			f->flip = 0;
+			f->phased = c[0] == c[1]? 0 : 1;
 			// fix chimera
+			f->flip = 0;
 			if (flip && c[0] >= 3 && c[1] >= 3) {
 				int sum[2], m, mi, md;
 				if (f->vlen > max) { // enlarge the array
@@ -209,16 +214,18 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 				}
 			}
 			// update pcnt[]
-			for (i = 0; i < f->vlen; ++i) {
-				int c;
-				if (f->seq[i] == 0) continue;
-				c = f->phase? 2 - f->seq[i] : f->seq[i] - 1;
-				if (c == path[f->vpos + i]) {
-					if (f->phase == 0) ++pcnt[f->vpos + i];
-					else pcnt[f->vpos + i] += 1ull<<32;
-				} else {
-					if (f->phase == 0) pcnt[f->vpos + i] += 1<<16;
-					else pcnt[f->vpos + i] += 1ull<<48;
+			if (!f->single) {
+				for (i = 0; i < f->vlen; ++i) {
+					int c;
+					if (f->seq[i] == 0) continue;
+					c = f->phase? 2 - f->seq[i] : f->seq[i] - 1;
+					if (c == path[f->vpos + i]) {
+						if (f->phase == 0) ++pcnt[f->vpos + i];
+						else pcnt[f->vpos + i] += 1ull<<32;
+					} else {
+						if (f->phase == 0) pcnt[f->vpos + i] += 1<<16;
+						else pcnt[f->vpos + i] += 1ull<<48;
+					}
 				}
 			}
 		}
@@ -256,6 +263,7 @@ static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
 	return list;
 }
 
+// trim heading and tailing ambiguous bases; mark deleted and remove sequence
 static void clean_seqs(int vpos, nseq_t *hash)
 {
 	khint_t k;
@@ -270,15 +278,17 @@ static void clean_seqs(int vpos, nseq_t *hash)
 			for (i = f->vlen - 1; i >= 0; --i)
 				if (f->seq[i] != 0) break;
 			end = i + 1;
-			if (end - beg < 2) kh_del(64, hash, k);
+			if (end - beg <= 0) kh_del(64, hash, k);
 			else {
 				if (beg != 0) memmove(f->seq, f->seq + beg, end - beg);
 				f->vpos += beg; f->vlen = end - beg;
+				f->single = f->vlen == 1? 1 : 0;
 			}
 		}
 	}
 }
 
+// drop variants in specified regions; update cns and hash at the same time
 static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
@@ -300,14 +310,14 @@ static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *p
 		if (kh_exist(hash, j)) {
 			frag_t *s = &kh_val(hash, j);
 			int new_vpos = -1;
-			if (s->vpos >= vpos) continue;
+			if (s->vpos >= vpos || s->single) continue;
 			for (i = k = 0; i < s->vlen; ++i) {
 				if (new_vpos < 0 && flt[s->vpos + i] == 0) new_vpos = s->vpos + i;
 				if (flt[s->vpos + i] == 0)
 					s->seq[k++] = s->seq[i];
 			}
-			if (k < 2) kh_del(64, hash, j);
-			else s->vlen = k, s->vpos = map[new_vpos];
+			if (k == 0) kh_del(64, hash, j); // no SNP
+			else s->vlen = k, s->vpos = map[new_vpos], s->single = k==1? 1 : 0;
 		}
 	}
 	// filter cns
@@ -376,7 +386,8 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	free(path); free(pcnt); free(regmask);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
-		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos) seqs[i++] = &kh_val(hash, k);
+		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos && !kh_val(hash, k).single)
+			seqs[i++] = &kh_val(hash, k);
 	n_seqs = i;
 	ks_introsort_rseq(n_seqs, seqs);
 	for (i = 0; i < n_seqs; ++i) {
@@ -413,9 +424,16 @@ static nseq_t *shrink_hash(nseq_t *hash) // TODO: to implement
 	return hash;
 }
 
+static int readaln(void *data, bam1_t *b)
+{
+	phaseg_t *g = (phaseg_t*)data;
+	int ret;
+	ret = bam_read1(g->fp, b);
+	return ret;
+}
+
 int main_phase(int argc, char *argv[])
 {
-	bamFile fp;
 	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
@@ -424,15 +442,17 @@ int main_phase(int argc, char *argv[])
 	uint64_t *cns = 0;
 	phaseg_t g;
 
+	memset(&g, 0, sizeof(phaseg_t));
 	g.flag = PHASE_FIX_CHIMERA | PHASE_MASK_POOR;
 	g.min_varQ = 40; g.min_mapQ = 10; g.k = 7;
-	while ((c = getopt(argc, argv, "FMq:Q:k:")) >= 0) {
+	while ((c = getopt(argc, argv, "FMq:Q:k:b:")) >= 0) {
 		switch (c) {
 			case 'q': g.min_varQ = atoi(optarg); break;
 			case 'Q': g.min_mapQ = atoi(optarg); break;
 			case 'k': g.k = atoi(optarg); break;
 			case 'F': g.flag &= ~PHASE_FIX_CHIMERA; break;
 			case 'M': g.flag &= ~PHASE_MASK_POOR; break;
+			case 'b': g.pre = strdup(optarg); break;
 		}
 	}
 	if (argc == optind) {
@@ -446,9 +466,9 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		return 1;
 	}
-	fp = bam_open(argv[optind], "r");
-	h = bam_header_read(fp);
-	iter = bam_plp_init((bam_plp_auto_f)bam_read1, fp);
+	g.fp = bam_open(argv[optind], "r");
+	h = bam_header_read(g.fp);
+	iter = bam_plp_init(readaln, &g);
 
 	g.vpos_shift = 0;
 	seqs = kh_init(64);
@@ -516,7 +536,7 @@ int main_phase(int argc, char *argv[])
 			} else { // absent
 				r->beg = p->b->core.pos;
 				r->end = bam_calend(&p->b->core, bam1_cigar(p->b));
-				r->vpos = vpos, r->vlen = 1, r->seq[0] = c;
+				r->vpos = vpos, r->vlen = 1, r->seq[0] = c, r->single = 0;
 			}
 		}
 		if (dophase) {
@@ -531,8 +551,9 @@ int main_phase(int argc, char *argv[])
 	if (tid >= 0) phase(&g, h->target_name[tid], vpos, cns, seqs);
 	bam_header_destroy(h);
 	bam_plp_destroy(iter);
-	bam_close(fp);
+	bam_close(g.fp);
 	kh_destroy(64, seqs);
+	free(g.pre);
 	free(cns);
 	return 0;
 }
