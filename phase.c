@@ -18,6 +18,8 @@ typedef struct {
 	int flag, k, min_mapQ, min_varQ;
 	// other global variables
 	int vpos_shift;
+	bamFile fp;
+	char *pre;
 } phaseg_t;
 
 typedef struct {
@@ -413,9 +415,16 @@ static nseq_t *shrink_hash(nseq_t *hash) // TODO: to implement
 	return hash;
 }
 
+static int readaln(void *data, bam1_t *b)
+{
+	phaseg_t *g = (phaseg_t*)data;
+	int ret;
+	ret = bam_read1(g->fp, b);
+	return ret;
+}
+
 int main_phase(int argc, char *argv[])
 {
-	bamFile fp;
 	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
@@ -424,15 +433,17 @@ int main_phase(int argc, char *argv[])
 	uint64_t *cns = 0;
 	phaseg_t g;
 
+	memset(&g, 0, sizeof(phaseg_t));
 	g.flag = PHASE_FIX_CHIMERA | PHASE_MASK_POOR;
 	g.min_varQ = 40; g.min_mapQ = 10; g.k = 7;
-	while ((c = getopt(argc, argv, "FMq:Q:k:")) >= 0) {
+	while ((c = getopt(argc, argv, "FMq:Q:k:b:")) >= 0) {
 		switch (c) {
 			case 'q': g.min_varQ = atoi(optarg); break;
 			case 'Q': g.min_mapQ = atoi(optarg); break;
 			case 'k': g.k = atoi(optarg); break;
 			case 'F': g.flag &= ~PHASE_FIX_CHIMERA; break;
 			case 'M': g.flag &= ~PHASE_MASK_POOR; break;
+			case 'b': g.pre = strdup(optarg); break;
 		}
 	}
 	if (argc == optind) {
@@ -446,9 +457,9 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		return 1;
 	}
-	fp = bam_open(argv[optind], "r");
-	h = bam_header_read(fp);
-	iter = bam_plp_init((bam_plp_auto_f)bam_read1, fp);
+	g.fp = bam_open(argv[optind], "r");
+	h = bam_header_read(g.fp);
+	iter = bam_plp_init(readaln, &g);
 
 	g.vpos_shift = 0;
 	seqs = kh_init(64);
@@ -531,8 +542,9 @@ int main_phase(int argc, char *argv[])
 	if (tid >= 0) phase(&g, h->target_name[tid], vpos, cns, seqs);
 	bam_header_destroy(h);
 	bam_plp_destroy(iter);
-	bam_close(fp);
+	bam_close(g.fp);
 	kh_destroy(64, seqs);
+	free(g.pre);
 	free(cns);
 	return 0;
 }
