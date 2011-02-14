@@ -519,6 +519,7 @@ int main_phase(int argc, char *argv[])
 		strcpy(s, g.pre); strcat(s, ".1.bam"); g.out[1] = bam_open(s, "w");
 		strcpy(s, g.pre); strcat(s, ".un.bam"); g.out[2] = bam_open(s, "w");
 		for (c = 0; c <= 2; ++c) bam_header_write(g.out[c], h);
+		free(s);
 	}
 
 	iter = bam_plp_init(readaln, &g);
@@ -608,7 +609,7 @@ int main_phase(int argc, char *argv[])
 	free(cns);
 	if (g.pre) {
 		for (c = 0; c <= 2; ++c) bam_close(g.out[c]);
-		free(g.pre);
+		free(g.pre); free(g.b);
 	}
 	return 0;
 }
