@@ -20,7 +20,7 @@ typedef struct {
 	int vpos_shift;
 	bamFile fp;
 	char *pre;
-	bamFile out[3];
+	bamFile out[4];
 	// alignment queue
 	int n, m;
 	bam1_t **b;
@@ -348,10 +348,11 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 		end = bam_calend(&b->core, bam1_cigar(b));
 		if (end > min_pos) break;
 		k = kh_get(64, hash, key);
-		if (k == kh_end(hash)) which = 2;
+		if (k == kh_end(hash)) which = 3;
 		else {
 			frag_t *f = &kh_val(hash, k);
-			if (f->phased == 0 || f->flip) which = 2;
+			if (f->phased && f->flip) which = 2;
+			else if (f->phased == 0) which = 3;
 			else which = f->phase;
 		}
 		bam_write1(g->out[which], b);
@@ -514,11 +515,12 @@ int main_phase(int argc, char *argv[])
 	g.fp = bam_open(argv[optind], "r");
 	h = bam_header_read(g.fp);
 	if (g.pre) {
-		char *s = malloc(strlen(g.pre) + 10);
+		char *s = malloc(strlen(g.pre) + 20);
 		strcpy(s, g.pre); strcat(s, ".0.bam"); g.out[0] = bam_open(s, "w");
 		strcpy(s, g.pre); strcat(s, ".1.bam"); g.out[1] = bam_open(s, "w");
-		strcpy(s, g.pre); strcat(s, ".un.bam"); g.out[2] = bam_open(s, "w");
-		for (c = 0; c <= 2; ++c) bam_header_write(g.out[c], h);
+		strcpy(s, g.pre); strcat(s, ".chimera.bam"); g.out[2] = bam_open(s, "w");
+		strcpy(s, g.pre); strcat(s, ".unphased.bam"); g.out[3] = bam_open(s, "w");
+		for (c = 0; c <= 3; ++c) bam_header_write(g.out[c], h);
 		free(s);
 	}
 
@@ -608,7 +610,7 @@ int main_phase(int argc, char *argv[])
 	kh_destroy(64, seqs);
 	free(cns);
 	if (g.pre) {
-		for (c = 0; c <= 2; ++c) bam_close(g.out[c]);
+		for (c = 0; c <= 3; ++c) bam_close(g.out[c]);
 		free(g.pre); free(g.b);
 	}
 	return 0;
