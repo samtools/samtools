@@ -338,7 +338,8 @@ static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *p
 
 static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 {
-	int i;
+	int i, is_flip;
+	is_flip = (drand48() < 0.5);
 	for (i = 0; i < g->n; ++i) {
 		int end, which;
 		uint64_t key;
@@ -354,6 +355,7 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 			if (f->phased && f->flip) which = 2;
 			else if (f->phased == 0) which = 3;
 			else which = f->phase;
+			if (which < 2 && is_flip) which = 1 - which; // increase the randomness
 		}
 		bam_write1(g->out[which], b);
 		bam_destroy1(b);
