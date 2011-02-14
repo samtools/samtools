@@ -491,7 +491,7 @@ int main_phase(int argc, char *argv[])
 
 	memset(&g, 0, sizeof(phaseg_t));
 	g.flag = PHASE_FIX_CHIMERA | PHASE_MASK_POOR;
-	g.min_varQ = 40; g.min_mapQ = 10; g.k = 7;
+	g.min_varQ = 40; g.min_mapQ = 10; g.k = 11;
 	while ((c = getopt(argc, argv, "FMq:Q:k:b:")) >= 0) {
 		switch (c) {
 			case 'q': g.min_varQ = atoi(optarg); break;
