@@ -20,7 +20,7 @@ typedef struct {
 	int vpos_shift;
 	bamFile fp;
 	char *pre;
-	bamFile *out[3];
+	bamFile out[3];
 	// alignment queue
 	int n, m;
 	bam1_t **b;
@@ -351,9 +351,12 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 		if (k == kh_end(hash)) which = 2;
 		else {
 			frag_t *f = &kh_val(hash, k);
-			if (f->phased == 0) which = 2;
+			if (f->phased == 0 || f->flip) which = 2;
 			else which = f->phase;
 		}
+		bam_write1(g->out[which], b);
+		bam_destroy1(b);
+		g->b[i] = 0;
 	}
 	memmove(g->b, g->b + i, (g->n - i) * sizeof(void*));
 	g->n -= i;
@@ -437,6 +440,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	printf("//\n");
 	fflush(stdout);
 	g->vpos_shift += vpos;
+	dump_aln(g, min_pos, hash);
 	return vpos;
 }
 
@@ -499,6 +503,7 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools phase [options] <in.bam>\n\n");
 		fprintf(stderr, "Options: -k INT    block length [%d]\n", g.k);
+		fprintf(stderr, "         -b STR    prefix of BAMs to output [null]\n");
 		fprintf(stderr, "         -q INT    min variant quality to call SNP [%d]\n", g.min_varQ);
 		fprintf(stderr, "         -Q INT    min mapping quality [%d]\n", g.min_mapQ);
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
@@ -508,8 +513,15 @@ int main_phase(int argc, char *argv[])
 	}
 	g.fp = bam_open(argv[optind], "r");
 	h = bam_header_read(g.fp);
-	iter = bam_plp_init(readaln, &g);
+	if (g.pre) {
+		char *s = malloc(strlen(g.pre) + 10);
+		strcpy(s, g.pre); strcat(s, ".0.bam"); g.out[0] = bam_open(s, "w");
+		strcpy(s, g.pre); strcat(s, ".1.bam"); g.out[1] = bam_open(s, "w");
+		strcpy(s, g.pre); strcat(s, ".un.bam"); g.out[2] = bam_open(s, "w");
+		for (c = 0; c <= 2; ++c) bam_header_write(g.out[c], h);
+	}
 
+	iter = bam_plp_init(readaln, &g);
 	g.vpos_shift = 0;
 	seqs = kh_init(64);
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
@@ -593,7 +605,10 @@ int main_phase(int argc, char *argv[])
 	bam_plp_destroy(iter);
 	bam_close(g.fp);
 	kh_destroy(64, seqs);
-	free(g.pre);
 	free(cns);
+	if (g.pre) {
+		for (c = 0; c <= 2; ++c) bam_close(g.out[c]);
+		free(g.pre);
+	}
 	return 0;
 }
