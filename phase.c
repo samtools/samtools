@@ -20,6 +20,10 @@ typedef struct {
 	int vpos_shift;
 	bamFile fp;
 	char *pre;
+	bamFile *out[3];
+	// alignment queue
+	int n, m;
+	bam1_t **b;
 } phaseg_t;
 
 typedef struct {
@@ -264,14 +268,18 @@ static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
 }
 
 // trim heading and tailing ambiguous bases; mark deleted and remove sequence
-static void clean_seqs(int vpos, nseq_t *hash)
+static int clean_seqs(int vpos, nseq_t *hash)
 {
 	khint_t k;
+	int ret = 0;
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
 			frag_t *f = &kh_val(hash, k);
 			int beg, end, i;
-			if (f->vpos >= vpos) continue;
+			if (f->vpos >= vpos) {
+				ret = 1;
+				continue;
+			}
 			for (i = 0; i < f->vlen; ++i)
 				if (f->seq[i] != 0) break;
 			beg = i;
@@ -286,6 +294,7 @@ static void clean_seqs(int vpos, nseq_t *hash)
 			}
 		}
 	}
+	return ret;
 }
 
 // drop variants in specified regions; update cns and hash at the same time
@@ -327,16 +336,40 @@ static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *p
 	return k;
 }
 
+static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
+{
+	int i;
+	for (i = 0; i < g->n; ++i) {
+		int end, which;
+		uint64_t key;
+		khint_t k;
+		bam1_t *b = g->b[i];
+		key = X31_hash_string(bam1_qname(b));
+		end = bam_calend(&b->core, bam1_cigar(b));
+		if (end > min_pos) break;
+		k = kh_get(64, hash, key);
+		if (k == kh_end(hash)) which = 2;
+		else {
+			frag_t *f = &kh_val(hash, k);
+			if (f->phased == 0) which = 2;
+			else which = f->phase;
+		}
+	}
+	memmove(g->b, g->b + i, (g->n - i) * sizeof(void*));
+	g->n -= i;
+}
+
 static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
-	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos, n_masked = 0;
+	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos, n_masked = 0, min_pos;
 	khint_t k;
 	frag_t **seqs;
 	int8_t *path;
 	uint64_t *pcnt = 0, *regmask = 0;
 
 	if (vpos < 2) return 0;
-	clean_seqs(vpos, hash);
+	i = clean_seqs(vpos, hash); // i is true if hash has an element with its vpos >= vpos
+	min_pos = i? cns[vpos]>>32 : 0x7fffffff;
 	{ // phase
 		int **cnt;
 		cnt = count_all(g->k, vpos, hash);
@@ -429,6 +462,13 @@ static int readaln(void *data, bam1_t *b)
 	phaseg_t *g = (phaseg_t*)data;
 	int ret;
 	ret = bam_read1(g->fp, b);
+	if (!(b->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FQCFAIL|BAM_FDUP)) && g->pre) {
+		if (g->n == g->m) {
+			g->m = g->m? g->m<<1 : 16;
+			g->b = realloc(g->b, g->m * sizeof(void*));
+		}
+		g->b[g->n++] = bam_dup1(b);
+	}
 	return ret;
 }
 
