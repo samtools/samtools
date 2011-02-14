@@ -32,7 +32,7 @@ typedef struct {
 	uint32_t vlen:16, single:1, flip:1, phase:1, phased:1;
 } frag_t, *frag_p;
 
-#define rseq_lt(a,b) ((a)->beg < (b)->beg)
+#define rseq_lt(a,b) ((a)->vpos < (b)->vpos)
 
 #include "khash.h"
 KHASH_MAP_INIT_INT64(64, frag_t)
