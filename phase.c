@@ -3,15 +3,20 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <math.h>
+#include <zlib.h>
 #include "bam.h"
+
+#include "kseq.h"
+KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define MAX_VARS 256
 #define FLIP_PENALTY 2
 #define FLIP_THRES 4
 #define MASK_THRES 3
 
-#define PHASE_FIX_CHIMERA 0x1
-#define PHASE_MASK_POOR   0x2
+#define FLAG_FIX_CHIMERA 0x1
+#define FLAG_MASK_POOR   0x2
+#define FLAG_LIST_EXCL   0x4
 
 typedef struct {
 	// configurations, initialized in the main function
@@ -35,6 +40,7 @@ typedef struct {
 #define rseq_lt(a,b) ((a)->vpos < (b)->vpos)
 
 #include "khash.h"
+KHASH_SET_INIT_INT64(set64)
 KHASH_MAP_INIT_INT64(64, frag_t)
 
 typedef khash_t(64) nseq_t;
@@ -382,7 +388,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 		path = dynaprog(g->k, vpos, cnt);
 		for (i = 0; i < vpos; ++i) free(cnt[i]);
 		free(cnt);
-		if (g->flag & PHASE_MASK_POOR) {
+		if (g->flag & FLAG_MASK_POOR) {
 			uint64_t *mask = 0;
 			pcnt = fragphase(vpos, path, hash, 0); // do not fix chimeras during masking
 			mask = genmask(vpos, pcnt, &n_masked);
@@ -410,7 +416,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 			} else printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
 			free(mask);
 		}
-		pcnt = fragphase(vpos, path, hash, g->flag & PHASE_FIX_CHIMERA);
+		pcnt = fragphase(vpos, path, hash, g->flag & FLAG_FIX_CHIMERA);
 	}
 	if (regmask)
 		for (i = 0; i < n_masked; ++i)
@@ -479,8 +485,38 @@ static int readaln(void *data, bam1_t *b)
 	return ret;
 }
 
+static khash_t(set64) *loadpos(const char *fn, bam_header_t *h)
+{
+	gzFile fp;
+	kstream_t *ks;
+	int ret, dret;
+	kstring_t *str;
+	khash_t(set64) *hash;
+
+	hash = kh_init(set64);
+	str = calloc(1, sizeof(kstring_t));
+	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
+	ks = ks_init(fp);
+	while (ks_getuntil(ks, 0, str, &dret) >= 0) {
+		int tid = bam_get_tid(h, str->s);
+		if (tid >= 0 && dret != '\n') {
+			if (ks_getuntil(ks, 0, str, &dret) >= 0) {
+				uint64_t x = (uint64_t)tid<<32 | (atoi(str->s) - 1);
+				kh_put(set64, hash, x, &ret);
+			} else break;
+		}
+		if (dret != '\n') while ((dret = ks_getc(ks)) > 0 && dret != '\n');
+		if (dret < 0) break;
+	}
+	ks_destroy(ks);
+	gzclose(fp);
+	free(str->s); free(str);
+	return hash;
+}
+
 int main_phase(int argc, char *argv[])
 {
+	extern void bam_init_header_hash(bam_header_t *header);
 	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
@@ -488,18 +524,22 @@ int main_phase(int argc, char *argv[])
 	nseq_t *seqs;
 	uint64_t *cns = 0;
 	phaseg_t g;
+	char *fn_list = 0;
+	khash_t(set64) *set = 0;
 
 	memset(&g, 0, sizeof(phaseg_t));
-	g.flag = PHASE_FIX_CHIMERA | PHASE_MASK_POOR;
+	g.flag = FLAG_FIX_CHIMERA | FLAG_MASK_POOR;
 	g.min_varQ = 40; g.min_mapQ = 10; g.k = 11;
-	while ((c = getopt(argc, argv, "FMq:Q:k:b:")) >= 0) {
+	while ((c = getopt(argc, argv, "eFMq:Q:k:b:l:")) >= 0) {
 		switch (c) {
 			case 'q': g.min_varQ = atoi(optarg); break;
 			case 'Q': g.min_mapQ = atoi(optarg); break;
 			case 'k': g.k = atoi(optarg); break;
-			case 'F': g.flag &= ~PHASE_FIX_CHIMERA; break;
-			case 'M': g.flag &= ~PHASE_MASK_POOR; break;
+			case 'F': g.flag &= ~FLAG_FIX_CHIMERA; break;
+			case 'M': g.flag &= ~FLAG_MASK_POOR; break;
+			case 'e': g.flag |= FLAG_LIST_EXCL; break;
 			case 'b': g.pre = strdup(optarg); break;
+			case 'l': fn_list = strdup(optarg); break;
 		}
 	}
 	if (argc == optind) {
@@ -509,14 +549,21 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "         -b STR    prefix of BAMs to output [null]\n");
 		fprintf(stderr, "         -q INT    min variant quality to call SNP [%d]\n", g.min_varQ);
 		fprintf(stderr, "         -Q INT    min mapping quality [%d]\n", g.min_mapQ);
+		fprintf(stderr, "         -l FILE   list of sites to phase [null]\n");
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
 		fprintf(stderr, "         -M        do not mask poorly phased regions\n");
+		fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}
 	g.fp = bam_open(argv[optind], "r");
 	h = bam_header_read(g.fp);
-	if (g.pre) {
+	if (fn_list) { // read the list of sites to phase
+		bam_init_header_hash(h);
+		set = loadpos(fn_list, h);
+		free(fn_list);
+	} else g.flag &= ~FLAG_LIST_EXCL;
+	if (g.pre) { // open BAMs to write
 		char *s = malloc(strlen(g.pre) + 20);
 		strcpy(s, g.pre); strcat(s, ".0.bam"); g.out[0] = bam_open(s, "w");
 		strcpy(s, g.pre); strcat(s, ".1.bam"); g.out[1] = bam_open(s, "w");
@@ -530,7 +577,7 @@ int main_phase(int argc, char *argv[])
 	g.vpos_shift = 0;
 	seqs = kh_init(64);
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
-		int i, j, c, cnt[4], tmp, dophase = 1;
+		int i, j, c, cnt[4], tmp, dophase = 1, in_set = 0;
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
 			g.vpos_shift = 0;
@@ -542,6 +589,7 @@ int main_phase(int argc, char *argv[])
 			lasttid = tid;
 			vpos = 0;
 		}
+		if (set && kh_get(set64, set, (uint64_t)tid<<32 | pos) != kh_end(set)) in_set = 1;
 		cnt[0] = cnt[1] = cnt[2] = cnt[3] = 0;
 		// check if there is a variant
 		for (i = 0; i < n; ++i) {
@@ -559,7 +607,8 @@ int main_phase(int argc, char *argv[])
 		for (i = 1; i < 4; ++i) // insertion sort
 			for (j = i; j > 0 && cnt[j] > cnt[j-1]; --j)
 				tmp = cnt[j], cnt[j] = cnt[j-1], cnt[j-1] = tmp;
-		if (cnt[1]>>2 <= g.min_varQ) continue; // not a variant
+		if (set && (g.flag&FLAG_LIST_EXCL) && !in_set) continue; // not in the list
+		if (!in_set && cnt[1]>>2 <= g.min_varQ) continue; // not a variant
 		// add the variant
 		if (vpos == max_vpos) {
 			max_vpos = max_vpos? max_vpos<<1 : 128;
@@ -610,6 +659,7 @@ int main_phase(int argc, char *argv[])
 	bam_plp_destroy(iter);
 	bam_close(g.fp);
 	kh_destroy(64, seqs);
+	kh_destroy(set64, set);
 	free(cns);
 	if (g.pre) {
 		for (c = 0; c <= 3; ++c) bam_close(g.out[c]);
