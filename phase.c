@@ -426,8 +426,9 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	for (i = 0; i < vpos; ++i) {
 		uint64_t x = pcnt[i];
 		int8_t c[2];
-		c[0] = cns[i]&3; c[1] = cns[i]>>16&3;
-		printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + g->vpos_shift + 1, "ACGT"[c[path[i]]], "ACGT"[c[1-path[i]]],
+		c[0] = (cns[i]&0xffff)>>2 == 0? 4 : (cns[i]&3);
+		c[1] = (cns[i]>>16&0xffff)>>2 == 0? 4 : (cns[i]>>16&3);
+		printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + g->vpos_shift + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]],
 			(int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
 	}
 	free(path); free(pcnt); free(regmask);
@@ -609,6 +610,7 @@ int main_phase(int argc, char *argv[])
 		for (i = 1; i < 4; ++i) // insertion sort
 			for (j = i; j > 0 && cnt[j] > cnt[j-1]; --j)
 				tmp = cnt[j], cnt[j] = cnt[j-1], cnt[j-1] = tmp;
+		if (cnt[0]>>2 == 0) continue; // no covering fragments
 		if (set && (g.flag&FLAG_LIST_EXCL) && !in_set) continue; // not in the list
 		if (!in_set && cnt[1]>>2 <= g.min_varQ) continue; // not a variant
 		// add the variant
