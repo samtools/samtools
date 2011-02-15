@@ -383,7 +383,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	i = clean_seqs(vpos, hash); // i is true if hash has an element with its vpos >= vpos
 	min_pos = i? cns[vpos]>>32 : 0x7fffffff;
 	{ // phase
-		int **cnt;
+		int **cnt, bl_printed = 0;
 		cnt = count_all(g->k, vpos, hash);
 		path = dynaprog(g->k, vpos, cnt);
 		for (i = 0; i < vpos; ++i) free(cnt[i]);
@@ -413,9 +413,11 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 				printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[last_i]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
 				for (i = 0; i < vpos; ++i) free(cnt[i]);
 				free(cnt);
-			} else printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
+				bl_printed = 1;
+			}
 			free(mask);
 		}
+		if (!bl_printed) printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
 		pcnt = fragphase(vpos, path, hash, g->flag & FLAG_FIX_CHIMERA);
 	}
 	if (regmask)
