@@ -379,9 +379,13 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	int8_t *path;
 	uint64_t *pcnt = 0, *regmask = 0;
 
-	if (vpos < 2) return 0;
+	if (vpos == 0) return 0;
 	i = clean_seqs(vpos, hash); // i is true if hash has an element with its vpos >= vpos
 	min_pos = i? cns[vpos]>>32 : 0x7fffffff;
+	if (vpos == 1) {
+		dump_aln(g, min_pos, hash);
+		return 0;
+	}
 	{ // phase
 		int **cnt, bl_printed = 0;
 		cnt = count_all(g->k, vpos, hash);
