@@ -373,7 +373,7 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 
 static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
-	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos, n_masked = 0, min_pos;
+	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos, n_masked = 0, min_pos, *ps;
 	khint_t k;
 	frag_t **seqs;
 	int8_t *path;
@@ -388,6 +388,8 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	}
 	{ // phase
 		int **cnt, bl_printed = 0;
+		ps = calloc(vpos, sizeof(int));
+		for (i = 0; i < vpos; ++i) ps[i] = cns[0]>>32;
 		cnt = count_all(g->k, vpos, hash);
 		path = dynaprog(g->k, vpos, cnt);
 		for (i = 0; i < vpos; ++i) free(cnt[i]);
@@ -406,6 +408,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 				clean_seqs(vpos, hash);
 				cnt = count_all(g->k, vpos, hash);
 				path = dynaprog(g->k, vpos, cnt);
+				ps[0] = cns[0]>>32;
 				for (i = 1, last_i = 0; i < vpos; ++i) {
 					int *c = cnt[i], j;
 					for (j = 0; j < 1<<g->k && c[j] == 0; ++j);
@@ -413,6 +416,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 						printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[last_i]>>32) + 1, (int)(cns[i-1]>>32) + 1);
 						last_i = i;
 					}
+					ps[i] = cns[last_i]>>32;
 				}
 				printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[last_i]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
 				for (i = 0; i < vpos; ++i) free(cnt[i]);
@@ -432,10 +436,10 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 		int8_t c[2];
 		c[0] = (cns[i]&0xffff)>>2 == 0? 4 : (cns[i]&3);
 		c[1] = (cns[i]>>16&0xffff)>>2 == 0? 4 : (cns[i]>>16&3);
-		printf("VL\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\n", (int)(cns[i]>>32) + 1, i + g->vpos_shift + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]],
+		printf("VL\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", chr, ps[i]+1, (int)(cns[i]>>32) + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]], i + g->vpos_shift + 1,
 			(int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
 	}
-	free(path); free(pcnt); free(regmask);
+	free(path); free(pcnt); free(regmask); free(ps);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
 		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos && !kh_val(hash, k).single)
