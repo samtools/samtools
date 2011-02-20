@@ -2,7 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include "bam.h"
+#include "errmod.h"
 #include "faidx.h"
+
+#define ERR_DEP 0.83f
 
 typedef struct {
 	int e[2][3], p[2][2];
@@ -14,41 +17,47 @@ typedef struct {
 static score_param_t g_param = { {{0,0,0},{-4,1,6}}, {{0,-14000}, {0,0}} };
 
 typedef struct {
-	int min_Q, tid;
+	int min_baseQ, tid, max_bases;
+	uint16_t *bases;
 	bamFile fp;
 	bam_header_t *h;
 	char *ref;
 	faidx_t *fai;
+	errmod_t *em;
 } ct_t;
 
-static uint16_t gencns(int n, const bam_pileup1_t *plp, int min_Q)
+static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
 {
-	int i, j, ret, depth = 0, sum[4], tmp;
-	sum[0] = sum[1] = sum[2] = sum[3] = 0;
-	for (i = 0; i < n; ++i) {
+	int i, j, ret, tmp, k, sum[4], qual;
+	float q[16];
+	if (n > g->max_bases) { // enlarge g->bases
+		g->max_bases = n;
+		kroundup32(g->max_bases);
+		g->bases = realloc(g->bases, g->max_bases * 2);
+	}
+	for (i = k = 0; i < n; ++i) {
 		const bam_pileup1_t *p = plp + i;
 		uint8_t *seq;
-		int c, q;
-		if (p->is_refskip) continue;
-		++depth;
-		if (p->is_del || p->b->core.qual < min_Q) continue;
-		q = bam1_qual(p->b)[p->qpos];
-		if (q < min_Q) continue;
+		int q, baseQ, b;
+		if (p->is_refskip || p->is_del) continue;
+		baseQ = bam1_qual(p->b)[p->qpos];
+		if (baseQ < g->min_baseQ) continue;
 		seq = bam1_seq(p->b);
-		c = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos)];
-		if (c > 3) continue;
-		sum[c] += q;
+		b = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos)];
+		if (b > 3) continue;
+		q = baseQ < p->b->core.qual? baseQ : p->b->core.qual;
+		g->bases[k++] = q<<5 | bam1_strand(p->b)<<4 | b;
 	}
-	if (depth == 0) return 0;
-	for (i = 0; i < 4; ++i) sum[i] = sum[i]<<2 | i;
+	if (k == 0) return 0;
+	errmod_cal(g->em, k, 4, g->bases, q);
+	for (i = 0; i < 4; ++i) sum[i] = (int)(q[i<<2|i] + .499) << 2 | i;
 	for (i = 1; i < 4; ++i) // insertion sort
-		for (j = i; j > 0 && sum[j] > sum[j-1]; --j)
+		for (j = i; j > 0 && sum[j] < sum[j-1]; --j)
 			tmp = sum[j], sum[j] = sum[j-1], sum[j-1] = tmp;
-	depth = depth < 256? depth : 255;
-	if (sum[0]>>2 == 0) return depth; 
-	if (sum[1]>>2 > min_Q) ret = 61<<2 | (sum[0]&3); // a het
-	else ret = (sum[0]>>2 < 60? sum[0]>>2 : 60) << 2 | (sum[0]&3);
-	return ret<<8|depth;
+	qual = (sum[1]>>2) - (sum[0]>>2);
+	k = k < 256? k : 255;
+	ret = (qual < 63? qual : 63) << 2 | (sum[0]&3);
+	return ret<<8|k;
 }
 
 static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
@@ -81,8 +90,6 @@ static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
 		b[i] |= s<<2;
 		s = b[i]>>s&1;
 	}
-	// TODO: split overlapping or false joining fosmids
-
 	// print
 	for (i = 0, s = -1; i <= l; ++i) {
 		if (i == l || ((b[i]>>2&3) == 0 && s >= 0)) {
@@ -91,16 +98,12 @@ static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
 				printf("%s:%d-%d\t0\t%s\t%d\t60\t%dM\t*\t0\t0\t", h->target_name[tid], s+1, i, h->target_name[tid], s+1, i-s);
 				for (j = s; j < i; ++j) {
 					int c = cns[j]>>8;
-					if (c>>2 == 61) putchar('N');
-					else if (c == 0) putchar('N');
+					if (c == 0) putchar('N');
 					else putchar("ACGT"[c&3]);
 				}
 				putchar('\t');
-				for (j = s; j < i; ++j) {
-					int c = cns[j]>>8;
-					if (c>>2 == 61) putchar(33);
-					else putchar(33 + (c>>2));
-				}
+				for (j = s; j < i; ++j)
+					putchar(33 + (cns[j]>>8>>2));
 				putchar('\n');
 			}
 			//if (s >= 0) printf("%s\t%d\t%d\t%d\n", h->target_name[tid], s, i, i - s);
@@ -135,10 +138,11 @@ int main_cut_target(int argc, char *argv[])
 	uint16_t *cns;
 	ct_t g;
 
-	g.min_Q = 20; g.fp = 0; g.ref = 0; g.fai = 0; g.tid = -1;
+	memset(&g, 0, sizeof(ct_t));
+	g.min_baseQ = 13; g.tid = -1;
 	while ((c = getopt(argc, argv, "f:Q:i:o:0:1:2:")) >= 0) {
 		switch (c) {
-			case 'Q': g.min_Q = atoi(optarg); break; // quality cutoff
+			case 'Q': g.min_baseQ = atoi(optarg); break; // quality cutoff
 			case 'i': g_param.p[0][1] = -atoi(optarg); break; // 0->1 transition (in) PENALTY
 			case '0': g_param.e[1][0] = atoi(optarg); break; // emission SCORE
 			case '1': g_param.e[1][1] = atoi(optarg); break;
@@ -155,6 +159,7 @@ int main_cut_target(int argc, char *argv[])
 	l = max_l = 0; cns = 0;
 	g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	g.h = bam_header_read(g.fp);
+	g.em = errmod_init(ERR_DEP);
 	plp = bam_plp_init(read_aln, &g);
 	while ((p = bam_plp_auto(plp, &tid, &pos, &n)) != 0) {
 		if (tid < 0) break;
@@ -169,7 +174,7 @@ int main_cut_target(int argc, char *argv[])
 			memset(cns, 0, max_l * 2);
 			lasttid = tid;
 		}
-		cns[pos] = gencns(n, p, g.min_Q);
+		cns[pos] = gencns(&g, n, p);
 		lastpos = pos;
 	}
 	process_cns(g.h, lasttid, l, cns);
@@ -180,5 +185,7 @@ int main_cut_target(int argc, char *argv[])
 	if (g.fai) {
 		fai_destroy(g.fai); free(g.ref);
 	}
+	errmod_destroy(g.em);
+	free(g.bases);
 	return 0;
 }
