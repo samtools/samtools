@@ -537,7 +537,7 @@ static int gl2cns(float q[16])
 			else if (q[i<<2|j] < min2) min2 = q[i<<2|j];
 		}
 	}
-	return (min_ij>>2&3) == (min_ij&3)? 0 : (min_ij>>2&3)<<16 | (min_ij&3) | (int)(min2 - min + .499) << 2;
+	return (min_ij>>2&3) == (min_ij&3)? 0 : 1<<18 | (min_ij>>2&3)<<16 | (min_ij&3) | (int)(min2 - min + .499) << 2;
 }
 
 int main_phase(int argc, char *argv[])
