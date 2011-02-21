@@ -21,7 +21,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
 	// configurations, initialized in the main function
-	int flag, k, min_baseQ, min_varLOD;
+	int flag, k, min_baseQ, min_varLOD, max_depth;
 	// other global variables
 	int vpos_shift;
 	bamFile fp;
@@ -90,16 +90,16 @@ static int **count_all(int l, int vpos, nseq_t *hash)
 	for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(int));
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
-			frag_t *p = &kh_val(hash, k);
-			if (p->vpos >= vpos || p->single) continue; // out of region; or singleton
-			if (p->vlen == 1) { // such reads should be flagged as deleted previously if everything is right
-				p->single = 1;
+			frag_t *f = &kh_val(hash, k);
+			if (f->vpos >= vpos || f->single) continue; // out of region; or singleton
+			if (f->vlen == 1) { // such reads should be flagged as deleted previously if everything is right
+				f->single = 1;
 				continue;
 			}
-			for (j = 1; j < p->vlen; ++j) {
+			for (j = 1; j < f->vlen; ++j) {
 				for (i = 0; i < l; ++i)
-					seq[i] = j < l - 1 - i? 0 : p->seq[j - (l - 1 - i)];
-				count1(l, seq, cnt[p->vpos + j]);
+					seq[i] = j < l - 1 - i? 0 : f->seq[j - (l - 1 - i)];
+				count1(l, seq, cnt[f->vpos + j]);
 			}
 		}
 	}
@@ -324,16 +324,16 @@ static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *p
 	// filter hash
 	for (j = 0; j < kh_end(hash); ++j) {
 		if (kh_exist(hash, j)) {
-			frag_t *s = &kh_val(hash, j);
+			frag_t *f = &kh_val(hash, j);
 			int new_vpos = -1;
-			if (s->vpos >= vpos || s->single) continue;
-			for (i = k = 0; i < s->vlen; ++i) {
-				if (new_vpos < 0 && flt[s->vpos + i] == 0) new_vpos = s->vpos + i;
-				if (flt[s->vpos + i] == 0)
-					s->seq[k++] = s->seq[i];
+			if (f->vpos >= vpos || f->single) continue;
+			for (i = k = 0; i < f->vlen; ++i) {
+				if (new_vpos < 0 && flt[f->vpos + i] == 0) new_vpos = f->vpos + i;
+				if (flt[f->vpos + i] == 0)
+					f->seq[k++] = f->seq[i];
 			}
 			if (k == 0) kh_del(64, hash, j); // no SNP
-			else s->vlen = k, s->vpos = map[new_vpos], s->single = k==1? 1 : 0;
+			else f->vlen = k, f->vpos = map[new_vpos], f->single = k==1? 1 : 0;
 		}
 	}
 	// filter cns
@@ -448,14 +448,14 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	n_seqs = i;
 	ks_introsort_rseq(n_seqs, seqs);
 	for (i = 0; i < n_seqs; ++i) {
-		frag_t *s = seqs[i];
-		printf("EV\t0\t%s\t%d\t40\t%dM\t*\t0\t0\t", chr, s->vpos + 1 + g->vpos_shift, s->vlen);
-		for (j = 0; j < s->vlen; ++j) {
-			uint32_t c = cns[s->vpos + j];
-			if (s->seq[j] == 0) putchar('N');
-			else putchar("ACGT"[s->seq[j] == 1? (c&3) : (c>>16&3)]);
+		frag_t *f = seqs[i];
+		printf("EV\t0\t%s\t%d\t40\t%dM\t*\t0\t0\t", chr, f->vpos + 1 + g->vpos_shift, f->vlen);
+		for (j = 0; j < f->vlen; ++j) {
+			uint32_t c = cns[f->vpos + j];
+			if (f->seq[j] == 0) putchar('N');
+			else putchar("ACGT"[f->seq[j] == 1? (c&3) : (c>>16&3)]);
 		}
-		printf("\t*\tYP:i:%d\tYF:i:%d\n", s->phase, s->flip);
+		printf("\t*\tYP:i:%d\tYF:i:%d\n", f->phase, f->flip);
 	}
 	free(seqs);
 	printf("//\n");
@@ -470,9 +470,9 @@ static void update_vpos(int vpos, nseq_t *hash)
 	khint_t k;
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
-			frag_t *p = &kh_val(hash, k);
-			if (p->vpos < vpos) kh_del(64, hash, k); // TODO: if frag_t::seq is allocated dynamically, free it
-			else p->vpos -= vpos;
+			frag_t *f = &kh_val(hash, k);
+			if (f->vpos < vpos) kh_del(64, hash, k); // TODO: if frag_t::seq is allocated dynamically, free it
+			else f->vpos -= vpos;
 		}
 	}
 }
@@ -543,7 +543,7 @@ static int gl2cns(float q[16])
 int main_phase(int argc, char *argv[])
 {
 	extern void bam_init_header_hash(bam_header_t *header);
-	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0, max_bases;
+	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
 	bam_header_t *h;
@@ -557,9 +557,10 @@ int main_phase(int argc, char *argv[])
 
 	memset(&g, 0, sizeof(phaseg_t));
 	g.flag = FLAG_FIX_CHIMERA | FLAG_MASK_POOR;
-	g.min_varLOD = 40; g.k = 11; g.min_baseQ = 13;
-	while ((c = getopt(argc, argv, "Q:eFMq:k:b:l:")) >= 0) {
+	g.min_varLOD = 40; g.k = 11; g.min_baseQ = 13; g.max_depth = 256;
+	while ((c = getopt(argc, argv, "Q:eFMq:k:b:l:D:")) >= 0) {
 		switch (c) {
+			case 'D': g.max_depth = atoi(optarg); break;
 			case 'q': g.min_varLOD = atoi(optarg); break;
 			case 'Q': g.min_baseQ = atoi(optarg); break;
 			case 'k': g.k = atoi(optarg); break;
@@ -605,7 +606,7 @@ int main_phase(int argc, char *argv[])
 	g.vpos_shift = 0;
 	seqs = kh_init(64);
 	em = errmod_init(0.83);
-	bases = 0; max_bases = 0;
+	bases = calloc(g.max_depth, 2);
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
 		int i, k, c, tmp, dophase = 1, in_set = 0;
 		float q[16];
@@ -621,12 +622,7 @@ int main_phase(int argc, char *argv[])
 			vpos = 0;
 		}
 		if (set && kh_get(set64, set, (uint64_t)tid<<32 | pos) != kh_end(set)) in_set = 1;
-		// enlarge bases when necessary
-		if (n > max_bases) {
-			max_bases = n;
-			kroundup32(max_bases);
-			bases = realloc(bases, max_bases * 2);
-		}
+		if (n > g.max_depth) continue; // do not proceed if the depth is too high
 		// fill the bases array and check if there is a variant
 		for (i = k = 0; i < n; ++i) {
 			const bam_pileup1_t *p = plp + i;
@@ -658,7 +654,7 @@ int main_phase(int argc, char *argv[])
 			uint64_t key;
 			khint_t k;
 			uint8_t *seq = bam1_seq(p->b);
-			frag_t *r;
+			frag_t *f;
 			if (p->is_del || p->is_refskip) continue;
 			// get the base code
 			c = nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
@@ -668,18 +664,18 @@ int main_phase(int argc, char *argv[])
 			// write to seqs
 			key = X31_hash_string(bam1_qname(p->b));
 			k = kh_put(64, seqs, key, &tmp);
-			r = &kh_val(seqs, k);
+			f = &kh_val(seqs, k);
 			if (tmp == 0) { // present in the hash table
-				if (vpos - r->vpos + 1 < MAX_VARS) {
-					r->vlen = vpos - r->vpos + 1;
-					r->seq[r->vlen-1] = c;
+				if (vpos - f->vpos + 1 < MAX_VARS) {
+					f->vlen = vpos - f->vpos + 1;
+					f->seq[f->vlen-1] = c;
 				}
 				dophase = 0;
 			} else { // absent
-				memset(r->seq, 0, MAX_VARS);
-				r->beg = p->b->core.pos;
-				r->end = bam_calend(&p->b->core, bam1_cigar(p->b));
-				r->vpos = vpos, r->vlen = 1, r->seq[0] = c, r->single = 0;
+				memset(f->seq, 0, MAX_VARS);
+				f->beg = p->b->core.pos;
+				f->end = bam_calend(&p->b->core, bam1_cigar(p->b));
+				f->vpos = vpos, f->vlen = 1, f->seq[0] = c, f->single = 0;
 			}
 		}
 		if (dophase) {
