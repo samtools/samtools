@@ -384,8 +384,12 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	i = clean_seqs(vpos, hash); // i is true if hash has an element with its vpos >= vpos
 	min_pos = i? cns[vpos]>>32 : 0x7fffffff;
 	if (vpos == 1) {
+		printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[0]>>32) + 1);
+		printf("VL\t%s\t%d\t%d\t%c\t%c\t%d\t0\t0\t0\t0\n//\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[0]>>32) + 1,
+			"ACGTX"[cns[0]&3], "ACGTX"[cns[0]>>16&3], g->vpos_shift + 1);
 		dump_aln(g, min_pos, hash);
-		return 0;
+		++g->vpos_shift;
+		return 1;
 	}
 	{ // phase
 		int **cnt, bl_printed = 0;
