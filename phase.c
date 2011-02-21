@@ -656,6 +656,7 @@ int main_phase(int argc, char *argv[])
 			uint8_t *seq = bam1_seq(p->b);
 			frag_t *f;
 			if (p->is_del || p->is_refskip) continue;
+			if (p->b->core.qual == 0) continue;
 			// get the base code
 			c = nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
 			if (c == (cns[vpos]&3)) c = 1;
