@@ -21,7 +21,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
 	// configurations, initialized in the main function
-	int flag, k, min_mapQ, min_varQ;
+	int flag, k, min_baseQ, min_varLOD;
 	// other global variables
 	int vpos_shift;
 	bamFile fp;
@@ -526,6 +526,20 @@ static khash_t(set64) *loadpos(const char *fn, bam_header_t *h)
 	return hash;
 }
 
+static int gl2cns(float q[16])
+{
+	int i, j, min_ij;
+	float min, min2;
+	min = min2 = 1e30; min_ij = -1;
+	for (i = 0; i < 4; ++i) {
+		for (j = i; j < 4; ++j) {
+			if (q[i<<2|j] < min) min_ij = i<<2|j, min2 = min, min = q[i<<2|j];
+			else if (q[i<<2|j] < min2) min2 = q[i<<2|j];
+		}
+	}
+	return (min_ij>>2&3) == (min_ij&3)? 0 : (min_ij>>2&3)<<16 | (min_ij&3) | (int)(min2 - min + .499) << 2;
+}
+
 int main_phase(int argc, char *argv[])
 {
 	extern void bam_init_header_hash(bam_header_t *header);
@@ -543,11 +557,11 @@ int main_phase(int argc, char *argv[])
 
 	memset(&g, 0, sizeof(phaseg_t));
 	g.flag = FLAG_FIX_CHIMERA | FLAG_MASK_POOR;
-	g.min_varQ = 40; g.min_mapQ = 10; g.k = 11;
-	while ((c = getopt(argc, argv, "eFMq:Q:k:b:l:")) >= 0) {
+	g.min_varLOD = 40; g.k = 11; g.min_baseQ = 13;
+	while ((c = getopt(argc, argv, "Q:eFMq:k:b:l:")) >= 0) {
 		switch (c) {
-			case 'q': g.min_varQ = atoi(optarg); break;
-			case 'Q': g.min_mapQ = atoi(optarg); break;
+			case 'q': g.min_varLOD = atoi(optarg); break;
+			case 'Q': g.min_baseQ = atoi(optarg); break;
 			case 'k': g.k = atoi(optarg); break;
 			case 'F': g.flag &= ~FLAG_FIX_CHIMERA; break;
 			case 'M': g.flag &= ~FLAG_MASK_POOR; break;
@@ -561,8 +575,8 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "Usage:   samtools phase [options] <in.bam>\n\n");
 		fprintf(stderr, "Options: -k INT    block length [%d]\n", g.k);
 		fprintf(stderr, "         -b STR    prefix of BAMs to output [null]\n");
-		fprintf(stderr, "         -q INT    min variant quality to call SNP [%d]\n", g.min_varQ);
-		fprintf(stderr, "         -Q INT    min mapping quality [%d]\n", g.min_mapQ);
+		fprintf(stderr, "         -q INT    min variant phred-LOD to call SNP [%d]\n", g.min_varLOD);
+		fprintf(stderr, "         -Q INT    min base quality to call SNP [%d]\n", g.min_baseQ);
 		fprintf(stderr, "         -l FILE   list of sites to phase [null]\n");
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
 		fprintf(stderr, "         -M        do not mask poorly phased regions\n");
@@ -593,7 +607,7 @@ int main_phase(int argc, char *argv[])
 	em = errmod_init(0.83);
 	bases = 0; max_bases = 0;
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
-		int i, j, k, c, cnt[4], tmp, dophase = 1, in_set = 0;
+		int i, k, c, tmp, dophase = 1, in_set = 0;
 		float q[16];
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
@@ -613,7 +627,6 @@ int main_phase(int argc, char *argv[])
 			kroundup32(max_bases);
 			bases = realloc(bases, max_bases * 2);
 		}
-		cnt[0] = cnt[1] = cnt[2] = cnt[3] = 0;
 		// fill the bases array and check if there is a variant
 		for (i = k = 0; i < n; ++i) {
 			const bam_pileup1_t *p = plp + i;
@@ -629,24 +642,17 @@ int main_phase(int argc, char *argv[])
 			bases[k++] = q<<5 | bam1_strand(p->b)<<4 | b;
 		}
 		if (k == 0) continue;
-		errmod_cal(em, k, 4, bases, q);
-
-		for (i = 0; i < 4; ++i) {
-			if (cnt[i] >= 1<<14) cnt[i] = (1<<14) - 1;
-			cnt[i] = cnt[i]<<2 | i; // cnt[i] is 16-bit at most
-		}
-		for (i = 1; i < 4; ++i) // insertion sort
-			for (j = i; j > 0 && cnt[j] > cnt[j-1]; --j)
-				tmp = cnt[j], cnt[j] = cnt[j-1], cnt[j-1] = tmp;
-		if (cnt[0]>>2 == 0) continue; // no covering fragments
+		errmod_cal(em, k, 4, bases, q); // compute genotype likelihood
+		c = gl2cns(q); // get the consensus
+		// tell if to proceed
 		if (set && (g.flag&FLAG_LIST_EXCL) && !in_set) continue; // not in the list
-		if (!in_set && cnt[1]>>2 <= g.min_varQ) continue; // not a variant
+		if (!in_set && (c&0xffff)>>2 < g.min_varLOD) continue; // not a variant
 		// add the variant
 		if (vpos == max_vpos) {
 			max_vpos = max_vpos? max_vpos<<1 : 128;
 			cns = realloc(cns, max_vpos * 8);
 		}
-		cns[vpos] = (uint64_t)pos<<32 | cnt[1] << 16 | cnt[0];
+		cns[vpos] = (uint64_t)pos<<32 | c;
 		for (i = 0; i < n; ++i) {
 			const bam_pileup1_t *p = plp + i;
 			uint64_t key;
@@ -654,13 +660,11 @@ int main_phase(int argc, char *argv[])
 			uint8_t *seq = bam1_seq(p->b);
 			frag_t *r;
 			if (p->is_del || p->is_refskip) continue;
-			if (p->b->core.qual < g.min_mapQ) continue;
 			// get the base code
 			c = nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
-			if (c > 3) c = 0;
-			else if (c == (cnt[0]&3)) c = 1;
-			else if (c == (cnt[1]&3)) c = 2;
-			else c = 0; // TODO: perhaps c=3 is better? Watch out other dependencies!
+			if (c == (cns[vpos]&3)) c = 1;
+			else if (c == (cns[vpos]>>16&3)) c = 2;
+			else c = 0;
 			// write to seqs
 			key = X31_hash_string(bam1_qname(p->b));
 			k = kh_put(64, seqs, key, &tmp);
@@ -672,6 +676,7 @@ int main_phase(int argc, char *argv[])
 				}
 				dophase = 0;
 			} else { // absent
+				memset(r->seq, 0, MAX_VARS);
 				r->beg = p->b->core.pos;
 				r->end = bam_calend(&p->b->core, bam1_cigar(p->b));
 				r->vpos = vpos, r->vlen = 1, r->seq[0] = c, r->single = 0;
