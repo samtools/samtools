@@ -5,6 +5,7 @@
 #include <math.h>
 #include <zlib.h>
 #include "bam.h"
+#include "errmod.h"
 
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
@@ -528,7 +529,7 @@ static khash_t(set64) *loadpos(const char *fn, bam_header_t *h)
 int main_phase(int argc, char *argv[])
 {
 	extern void bam_init_header_hash(bam_header_t *header);
-	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
+	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0, max_bases;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
 	bam_header_t *h;
@@ -537,6 +538,8 @@ int main_phase(int argc, char *argv[])
 	phaseg_t g;
 	char *fn_list = 0;
 	khash_t(set64) *set = 0;
+	errmod_t *em;
+	uint16_t *bases;
 
 	memset(&g, 0, sizeof(phaseg_t));
 	g.flag = FLAG_FIX_CHIMERA | FLAG_MASK_POOR;
@@ -587,13 +590,16 @@ int main_phase(int argc, char *argv[])
 	iter = bam_plp_init(readaln, &g);
 	g.vpos_shift = 0;
 	seqs = kh_init(64);
+	em = errmod_init(0.83);
+	bases = 0; max_bases = 0;
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
-		int i, j, c, cnt[4], tmp, dophase = 1, in_set = 0;
+		int i, j, k, c, cnt[4], tmp, dophase = 1, in_set = 0;
+		float q[16];
 		if (tid < 0) break;
 		if (tid != lasttid) { // change of chromosome
 			g.vpos_shift = 0;
 			if (lasttid >= 0) {
-				shrink_hash(seqs);
+				seqs = shrink_hash(seqs);
 				phase(&g, h->target_name[lasttid], vpos, cns, seqs);
 				update_vpos(0x7fffffff, seqs);
 			}
@@ -601,16 +607,30 @@ int main_phase(int argc, char *argv[])
 			vpos = 0;
 		}
 		if (set && kh_get(set64, set, (uint64_t)tid<<32 | pos) != kh_end(set)) in_set = 1;
-		cnt[0] = cnt[1] = cnt[2] = cnt[3] = 0;
-		// check if there is a variant
-		for (i = 0; i < n; ++i) {
-			const bam_pileup1_t *p = plp + i;
-			uint8_t *seq = bam1_seq(p->b);
-			uint8_t *qual = bam1_qual(p->b);
-			if (p->is_del || p->is_refskip) continue;
-			if (p->b->core.qual < g.min_mapQ) continue;
-			cnt[(int)nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)]] += qual[p->qpos];
+		// enlarge bases when necessary
+		if (n > max_bases) {
+			max_bases = n;
+			kroundup32(max_bases);
+			bases = realloc(bases, max_bases * 2);
 		}
+		cnt[0] = cnt[1] = cnt[2] = cnt[3] = 0;
+		// fill the bases array and check if there is a variant
+		for (i = k = 0; i < n; ++i) {
+			const bam_pileup1_t *p = plp + i;
+			uint8_t *seq;
+			int q, baseQ, b;
+			if (p->is_del || p->is_refskip) continue;
+			baseQ = bam1_qual(p->b)[p->qpos];
+			if (baseQ < g.min_baseQ) continue;
+			seq = bam1_seq(p->b);
+			b = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos)];
+			if (b > 3) continue;
+			q = baseQ < p->b->core.qual? baseQ : p->b->core.qual;
+			bases[k++] = q<<5 | bam1_strand(p->b)<<4 | b;
+		}
+		if (k == 0) continue;
+		errmod_cal(em, k, 4, bases, q);
+
 		for (i = 0; i < 4; ++i) {
 			if (cnt[i] >= 1<<14) cnt[i] = (1<<14) - 1;
 			cnt[i] = cnt[i]<<2 | i; // cnt[i] is 16-bit at most
@@ -673,6 +693,8 @@ int main_phase(int argc, char *argv[])
 	kh_destroy(64, seqs);
 	kh_destroy(set64, set);
 	free(cns);
+	errmod_destroy(em);
+	free(bases);
 	if (g.pre) {
 		for (c = 0; c <= 3; ++c) bam_close(g.out[c]);
 		free(g.pre); free(g.b);

@@ -222,8 +222,11 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 	ks_heapmake(heap, n, heap);
 	while (heap->pos != HEAP_EMPTY) {
 		bam1_t *b = heap->b;
-		if ((flag & MERGE_RG) && bam_aux_get(b, "RG") == 0)
+		if (flag & MERGE_RG) {
+			uint8_t *rg = bam_aux_get(b, "RG");
+			if (rg) bam_aux_del(b, rg);
 			bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
+		}
 		bam_write1_core(fpout, &b->core, b->data_len, b->data);
 		if ((j = bam_iter_read(fp[heap->i], iter[heap->i], b)) >= 0) {
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)b->core.pos<<1 | bam1_strand(b);
