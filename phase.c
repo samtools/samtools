@@ -305,7 +305,7 @@ static int clean_seqs(int vpos, nseq_t *hash)
 }
 
 // drop variants in specified regions; update cns and hash at the same time
-static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *path, uint64_t *cns, nseq_t *hash)
+static int dropreg(const char *chr, int vpos, int n_masked, const uint64_t *mask, const int8_t *path, uint64_t *cns, nseq_t *hash)
 {
 	int8_t *flt;
 	int i, k, *map;
@@ -332,8 +332,10 @@ static int dropreg(int vpos, int n_masked, const uint64_t *mask, const int8_t *p
 				if (flt[f->vpos + i] == 0)
 					f->seq[k++] = f->seq[i];
 			}
-			if (k == 0) kh_del(64, hash, j); // no SNP
-			else f->vlen = k, f->vpos = map[new_vpos], f->single = k==1? 1 : 0;
+			if (k == 0) {
+				printf("DP\t%s\t%d\t%d\n", chr, f->beg, f->end);
+				kh_del(64, hash, j); // no SNP
+			} else f->vlen = k, f->vpos = map[new_vpos], f->single = k==1? 1 : 0;
 		}
 	}
 	// filter cns
@@ -416,7 +418,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 			regmask = calloc(n_masked, 8);
 			for (i = 0; i < n_masked; ++i)
 				regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
-			if ((vpos = dropreg(vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
+			if ((vpos = dropreg(chr, vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
 				int last_i;
 				free(path);
 				clean_seqs(vpos, hash);
@@ -683,6 +685,7 @@ int main_phase(int argc, char *argv[])
 				if (vpos - f->vpos + 1 < MAX_VARS) {
 					f->vlen = vpos - f->vpos + 1;
 					f->seq[f->vlen-1] = c;
+					f->end = bam_calend(&p->b->core, bam1_cigar(p->b));
 				}
 				dophase = 0;
 			} else { // absent
