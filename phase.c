@@ -600,7 +600,7 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		return 1;
 	}
-	g.fp = bam_open(argv[optind], "r");
+	g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	h = bam_header_read(g.fp);
 	if (fn_list) { // read the list of sites to phase
 		bam_init_header_hash(h);
