@@ -363,7 +363,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	{ // phase
 		int **cnt;
 		uint64_t *mask;
-		printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
+		printf("PS\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
 		sitemask = calloc(vpos, 1);
 		cnt = count_all(g->k, vpos, hash);
 		path = dynaprog(g->k, vpos, cnt);
