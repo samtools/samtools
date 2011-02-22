@@ -250,11 +250,12 @@ static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
 	uint64_t *list = 0;
 	for (i = 0; i < vpos; ++i) {
 		uint64_t x = pcnt[i];
-		int c[4], pre = score;
+		int c[4], pre = score, s;
 		c[0] = x&0xffff; c[1] = x>>16&0xffff; c[2] = x>>32&0xffff; c[3] = x>>48&0xffff;
-		score += (c[1] + c[3] == 0)? -(c[0] + c[2]) : (c[1] + c[3] - 1);
-		if (c[3] > c[2]) score += c[3] - c[2];
-		if (c[1] > c[0]) score += c[1] - c[0];
+		s = (c[1] + c[3] == 0)? -(c[0] + c[2]) : (c[1] + c[3] - 1);
+		if (c[3] > c[2]) s += c[3] - c[2];
+		if (c[1] > c[0]) s += c[1] - c[0];
+		score += s;
 		if (score < 0) score = 0;
 		if (pre == 0 && score > 0) beg = i; // change from zero to non-zero
 		if ((i == vpos - 1 || score == 0) && max >= MASK_THRES) {
@@ -336,15 +337,15 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 	int i, j, n_seqs = kh_size(hash), n_masked = 0, min_pos;
 	khint_t k;
 	frag_t **seqs;
-	int8_t *path;
-	uint64_t *pcnt = 0, *regmask;
+	int8_t *path, *sitemask;
+	uint64_t *pcnt, *regmask;
 
 	if (vpos == 0) return 0;
 	i = clean_seqs(vpos, hash); // i is true if hash has an element with its vpos >= vpos
 	min_pos = i? cns[vpos]>>32 : 0x7fffffff;
 	if (vpos == 1) {
-		printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[0]>>32) + 1);
-		printf("VL\t%s\t%d\t%d\t%c\t%c\t%d\t0\t0\t0\t0\n//\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[0]>>32) + 1,
+		printf("PS\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[0]>>32) + 1);
+		printf("M0\t%s\t%d\t%d\t%c\t%c\t%d\t0\t0\t0\t0\n//\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[0]>>32) + 1,
 			"ACGTX"[cns[0]&3], "ACGTX"[cns[0]>>16&3], g->vpos_shift + 1);
 		for (k = 0; k < kh_end(hash); ++k) {
 			if (kh_exist(hash, k)) {
@@ -363,6 +364,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 		int **cnt;
 		uint64_t *mask;
 		printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
+		sitemask = calloc(vpos, 1);
 		cnt = count_all(g->k, vpos, hash);
 		path = dynaprog(g->k, vpos, cnt);
 		for (i = 0; i < vpos; ++i) free(cnt[i]);
@@ -370,8 +372,11 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 		pcnt = fragphase(vpos, path, hash, 0); // do not fix chimeras when masking
 		mask = genmask(vpos, pcnt, &n_masked);
 		regmask = calloc(n_masked, 8);
-		for (i = 0; i < n_masked; ++i)
+		for (i = 0; i < n_masked; ++i) {
 			regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
+			for (j = mask[i]>>32; j <= (int32_t)mask[i]; ++j)
+				sitemask[j] = 1;
+		}
 		free(mask);
 		if (g->flag & FLAG_FIX_CHIMERA) {
 			free(pcnt);
@@ -379,16 +384,16 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 		}
 	}
 	for (i = 0; i < n_masked; ++i)
-		printf("MK\t%s\t%d\t%d\n", chr, (int)(regmask[i]>>32) + 1, (int)regmask[i] + 1);
+		printf("FL\t%s\t%d\t%d\n", chr, (int)(regmask[i]>>32) + 1, (int)regmask[i] + 1);
 	for (i = 0; i < vpos; ++i) {
 		uint64_t x = pcnt[i];
 		int8_t c[2];
 		c[0] = (cns[i]&0xffff)>>2 == 0? 4 : (cns[i]&3);
 		c[1] = (cns[i]>>16&0xffff)>>2 == 0? 4 : (cns[i]>>16&3);
-		printf("VL\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[i]>>32) + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]],
+		printf("M%d\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", sitemask[i]+1, chr, (int)(cns[0]>>32), (int)(cns[i]>>32) + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]],
 			i + g->vpos_shift + 1, (int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
 	}
-	free(path); free(pcnt); free(regmask);
+	free(path); free(pcnt); free(regmask); free(sitemask);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
 		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos && !kh_val(hash, k).single)
