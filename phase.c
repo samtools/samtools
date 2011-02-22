@@ -387,6 +387,15 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 		printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[0]>>32) + 1);
 		printf("VL\t%s\t%d\t%d\t%c\t%c\t%d\t0\t0\t0\t0\n//\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[0]>>32) + 1,
 			"ACGTX"[cns[0]&3], "ACGTX"[cns[0]>>16&3], g->vpos_shift + 1);
+		for (k = 0; k < kh_end(hash); ++k) {
+			if (kh_exist(hash, k)) {
+				frag_t *f = &kh_val(hash, k);
+				if (f->vpos) continue;
+				f->flip = 0;
+				if (f->seq[0] == 0) f->phased = 0;
+				else f->phased = 1, f->phase = f->seq[0] - 1;
+			}
+		}
 		dump_aln(g, min_pos, hash);
 		++g->vpos_shift;
 		return 1;
@@ -680,7 +689,7 @@ int main_phase(int argc, char *argv[])
 				memset(f->seq, 0, MAX_VARS);
 				f->beg = p->b->core.pos;
 				f->end = bam_calend(&p->b->core, bam1_cigar(p->b));
-				f->vpos = vpos, f->vlen = 1, f->seq[0] = c, f->single = 0;
+				f->vpos = vpos, f->vlen = 1, f->seq[0] = c, f->single = f->phased = f->flip = 0;
 			}
 		}
 		if (dophase) {
