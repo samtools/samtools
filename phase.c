@@ -620,7 +620,7 @@ int main_phase(int argc, char *argv[])
 	iter = bam_plp_init(readaln, &g);
 	g.vpos_shift = 0;
 	seqs = kh_init(64);
-	em = errmod_init(0.83);
+	em = errmod_init(1. - 0.83);
 	bases = calloc(g.max_depth, 2);
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
 		int i, k, c, tmp, dophase = 1, in_set = 0;
@@ -650,7 +650,9 @@ int main_phase(int argc, char *argv[])
 			b = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos)];
 			if (b > 3) continue;
 			q = baseQ < p->b->core.qual? baseQ : p->b->core.qual;
-			bases[k++] = q<<5 | bam1_strand(p->b)<<4 | b;
+			if (q < 4) q = 4;
+			if (q > 63) q = 63;
+			bases[k++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
 		}
 		if (k == 0) continue;
 		errmod_cal(em, k, 4, bases, q); // compute genotype likelihood

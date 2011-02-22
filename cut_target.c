@@ -159,7 +159,7 @@ int main_cut_target(int argc, char *argv[])
 	l = max_l = 0; cns = 0;
 	g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	g.h = bam_header_read(g.fp);
-	g.em = errmod_init(ERR_DEP);
+	g.em = errmod_init(1 - ERR_DEP);
 	plp = bam_plp_init(read_aln, &g);
 	while ((p = bam_plp_auto(plp, &tid, &pos, &n)) != 0) {
 		if (tid < 0) break;
