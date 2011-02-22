@@ -252,7 +252,9 @@ static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
 		uint64_t x = pcnt[i];
 		int c[4], pre = score;
 		c[0] = x&0xffff; c[1] = x>>16&0xffff; c[2] = x>>32&0xffff; c[3] = x>>48&0xffff;
-		score += (c[1] + c[3] == 0)? -5 : (c[1] + c[3] - 1);
+		score += (c[1] + c[3] == 0)? -(c[0] < c[2]? c[0] : c[2]) : (c[1] + c[3] - 1);
+		if (c[3] > c[2]) score += c[3] - c[2];
+		if (c[1] > c[0]) score += c[1] - c[0];
 		if (score < 0) score = 0;
 		if (pre == 0 && score > 0) beg = i; // change from zero to non-zero
 		if ((i == vpos - 1 || score == 0) && max >= MASK_THRES) {
