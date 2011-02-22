@@ -16,7 +16,6 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define MASK_THRES 3
 
 #define FLAG_FIX_CHIMERA 0x1
-#define FLAG_MASK_POOR   0x2
 #define FLAG_LIST_EXCL   0x4
 
 typedef struct {
@@ -247,16 +246,13 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 
 static uint64_t *genmask(int vpos, const uint64_t *pcnt, int *_n)
 {
-	int i, max = 0, score = 0, max_i = -1, m = 0, n = 0, beg = 0;
+	int i, max = 0, max_i = -1, m = 0, n = 0, beg = 0, score = 0;
 	uint64_t *list = 0;
 	for (i = 0; i < vpos; ++i) {
 		uint64_t x = pcnt[i];
-		int c = (x>>16&0xffff) + (x>>48&0xffff);
-		int pre = score;
-		//printf("%d\t%d\t%d\t%d\t%d\n", i, c, score, max, beg);
-		score += c - 1;
-		if ((x>>16&0xffff) > (x&0xffff)) score += (x>>16&0xffff) - (x&0xffff); // further penalty when there are more out-of-phase alleles
-		if ((x>>48&0xffff) > (x>>32&0xffff)) score += (x>>48&0xffff) - (x>>32&0xffff);
+		int c[4], pre = score;
+		c[0] = x&0xffff; c[1] = x>>16&0xffff; c[2] = x>>32&0xffff; c[3] = x>>48&0xffff;
+		score += (c[1] + c[3] == 0)? -5 : (c[1] + c[3] - 1);
 		if (score < 0) score = 0;
 		if (pre == 0 && score > 0) beg = i; // change from zero to non-zero
 		if ((i == vpos - 1 || score == 0) && max >= MASK_THRES) {
@@ -304,47 +300,6 @@ static int clean_seqs(int vpos, nseq_t *hash)
 	return ret;
 }
 
-// drop variants in specified regions; update cns and hash at the same time
-static int dropreg(const char *chr, int vpos, int n_masked, const uint64_t *mask, const int8_t *path, uint64_t *cns, nseq_t *hash)
-{
-	int8_t *flt;
-	int i, k, *map;
-	khint_t j;
-	flt = calloc(vpos, 1);
-	map = calloc(vpos, sizeof(int));
-	// get the list of sites to be filtered
-	for (i = 0; i < n_masked; ++i)
-		for (k = mask[i]>>32; k <= (int)mask[i]; ++k)
-			flt[k] = 1;
-	// generate map[]
-	for (i = k = 0; i < vpos; ++i) {
-		if (flt[i]) map[i] = -1;
-		else map[i] = k++;
-	}
-	// filter hash
-	for (j = 0; j < kh_end(hash); ++j) {
-		if (kh_exist(hash, j)) {
-			frag_t *f = &kh_val(hash, j);
-			int new_vpos = -1;
-			if (f->vpos >= vpos || f->single) continue;
-			for (i = k = 0; i < f->vlen; ++i) {
-				if (new_vpos < 0 && flt[f->vpos + i] == 0) new_vpos = f->vpos + i;
-				if (flt[f->vpos + i] == 0)
-					f->seq[k++] = f->seq[i];
-			}
-			if (k == 0) {
-				printf("DP\t%s\t%d\t%d\n", chr, f->beg, f->end);
-				kh_del(64, hash, j); // no SNP
-			} else f->vlen = k, f->vpos = map[new_vpos], f->single = k==1? 1 : 0;
-		}
-	}
-	// filter cns
-	for (i = k = 0; i < vpos; ++i)
-		if (flt[i] == 0) cns[k++] = cns[i];
-	free(flt); free(map);
-	return k;
-}
-
 static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 {
 	int i, is_flip;
@@ -376,11 +331,11 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 
 static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *hash)
 {
-	int i, j, n_seqs = kh_size(hash), ori_vpos = vpos, n_masked = 0, min_pos, *ps;
+	int i, j, n_seqs = kh_size(hash), n_masked = 0, min_pos;
 	khint_t k;
 	frag_t **seqs;
 	int8_t *path;
-	uint64_t *pcnt = 0, *regmask = 0;
+	uint64_t *pcnt = 0, *regmask;
 
 	if (vpos == 0) return 0;
 	i = clean_seqs(vpos, hash); // i is true if hash has an element with its vpos >= vpos
@@ -403,59 +358,35 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 		return 1;
 	}
 	{ // phase
-		int **cnt, bl_printed = 0;
-		ps = calloc(vpos, sizeof(int));
-		for (i = 0; i < vpos; ++i) ps[i] = cns[0]>>32;
+		int **cnt;
+		uint64_t *mask;
+		printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
 		cnt = count_all(g->k, vpos, hash);
 		path = dynaprog(g->k, vpos, cnt);
 		for (i = 0; i < vpos; ++i) free(cnt[i]);
 		free(cnt);
-		if (g->flag & FLAG_MASK_POOR) {
-			uint64_t *mask = 0;
-			pcnt = fragphase(vpos, path, hash, 0); // do not fix chimeras during masking
-			mask = genmask(vpos, pcnt, &n_masked);
-			free(pcnt);
-			regmask = calloc(n_masked, 8);
-			for (i = 0; i < n_masked; ++i)
-				regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
-			if ((vpos = dropreg(chr, vpos, n_masked, mask, path, cns, hash)) < ori_vpos) {
-				int last_i;
-				free(path);
-				clean_seqs(vpos, hash);
-				cnt = count_all(g->k, vpos, hash);
-				path = dynaprog(g->k, vpos, cnt);
-				ps[0] = cns[0]>>32;
-				for (i = 1, last_i = 0; i < vpos; ++i) {
-					int *c = cnt[i], j;
-					for (j = 0; j < 1<<g->k && c[j] == 0; ++j);
-					if (j == 1<<g->k) {
-						printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[last_i]>>32) + 1, (int)(cns[i-1]>>32) + 1);
-						last_i = i;
-					}
-					ps[i] = cns[last_i]>>32;
-				}
-				printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[last_i]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
-				for (i = 0; i < vpos; ++i) free(cnt[i]);
-				free(cnt);
-				bl_printed = 1;
-			}
-			free(mask);
-		}
-		if (!bl_printed) printf("BL\t%s\t%d\t%d\n", chr, (int)(cns[0]>>32) + 1, (int)(cns[vpos-1]>>32) + 1);
-		pcnt = fragphase(vpos, path, hash, g->flag & FLAG_FIX_CHIMERA);
-	}
-	if (regmask)
+		pcnt = fragphase(vpos, path, hash, 0); // do not fix chimeras when masking
+		mask = genmask(vpos, pcnt, &n_masked);
+		regmask = calloc(n_masked, 8);
 		for (i = 0; i < n_masked; ++i)
-			printf("MK\t%s\t%d\t%d\n", chr, (int)(regmask[i]>>32) + 1, (int)regmask[i] + 1);
+			regmask[i] = cns[mask[i]>>32]>>32<<32 | cns[(uint32_t)mask[i]]>>32;
+		free(mask);
+		if (g->flag & FLAG_FIX_CHIMERA) {
+			free(pcnt);
+			pcnt = fragphase(vpos, path, hash, 1);
+		}
+	}
+	for (i = 0; i < n_masked; ++i)
+		printf("MK\t%s\t%d\t%d\n", chr, (int)(regmask[i]>>32) + 1, (int)regmask[i] + 1);
 	for (i = 0; i < vpos; ++i) {
 		uint64_t x = pcnt[i];
 		int8_t c[2];
 		c[0] = (cns[i]&0xffff)>>2 == 0? 4 : (cns[i]&3);
 		c[1] = (cns[i]>>16&0xffff)>>2 == 0? 4 : (cns[i]>>16&3);
-		printf("VL\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", chr, ps[i]+1, (int)(cns[i]>>32) + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]], i + g->vpos_shift + 1,
-			(int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
+		printf("VL\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", chr, (int)(cns[0]>>32), (int)(cns[i]>>32) + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]],
+			i + g->vpos_shift + 1, (int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
 	}
-	free(path); free(pcnt); free(regmask); free(ps);
+	free(path); free(pcnt); free(regmask);
 	seqs = calloc(n_seqs, sizeof(void*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
 		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos && !kh_val(hash, k).single)
@@ -571,16 +502,15 @@ int main_phase(int argc, char *argv[])
 	uint16_t *bases;
 
 	memset(&g, 0, sizeof(phaseg_t));
-	g.flag = FLAG_FIX_CHIMERA | FLAG_MASK_POOR;
+	g.flag = FLAG_FIX_CHIMERA;
 	g.min_varLOD = 40; g.k = 11; g.min_baseQ = 13; g.max_depth = 256;
-	while ((c = getopt(argc, argv, "Q:eFMq:k:b:l:D:")) >= 0) {
+	while ((c = getopt(argc, argv, "Q:eFq:k:b:l:D:")) >= 0) {
 		switch (c) {
 			case 'D': g.max_depth = atoi(optarg); break;
 			case 'q': g.min_varLOD = atoi(optarg); break;
 			case 'Q': g.min_baseQ = atoi(optarg); break;
 			case 'k': g.k = atoi(optarg); break;
 			case 'F': g.flag &= ~FLAG_FIX_CHIMERA; break;
-			case 'M': g.flag &= ~FLAG_MASK_POOR; break;
 			case 'e': g.flag |= FLAG_LIST_EXCL; break;
 			case 'b': g.pre = strdup(optarg); break;
 			case 'l': fn_list = strdup(optarg); break;
@@ -595,7 +525,6 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "         -Q INT    min base quality to call SNP [%d]\n", g.min_baseQ);
 		fprintf(stderr, "         -l FILE   list of sites to phase [null]\n");
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
-		fprintf(stderr, "         -M        do not mask poorly phased regions\n");
 		fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
 		fprintf(stderr, "\n");
 		return 1;
