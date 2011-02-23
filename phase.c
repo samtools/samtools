@@ -25,7 +25,7 @@ typedef struct {
 	int vpos_shift;
 	bamFile fp;
 	char *pre;
-	bamFile out[4];
+	bamFile out[3];
 	// alignment queue
 	int n, m;
 	bam1_t **b;
@@ -321,9 +321,14 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 			frag_t *f = &kh_val(hash, k);
 			if (f->phased && f->flip) which = 2;
 			else if (f->phased == 0) which = 3;
-			else which = f->phase;
+			else { // phased and not flipped
+				char c = 'Y';
+				which = f->phase;
+				bam_aux_append(b, "ZP", 'A', 1, (uint8_t*)&c);
+			}
 			if (which < 2 && is_flip) which = 1 - which; // increase the randomness
 		}
+		if (which == 3) which = (drand48() < 0.5);
 		bam_write1(g->out[which], b);
 		bam_destroy1(b);
 		g->b[i] = 0;
@@ -548,8 +553,7 @@ int main_phase(int argc, char *argv[])
 		strcpy(s, g.pre); strcat(s, ".0.bam"); g.out[0] = bam_open(s, "w");
 		strcpy(s, g.pre); strcat(s, ".1.bam"); g.out[1] = bam_open(s, "w");
 		strcpy(s, g.pre); strcat(s, ".chimera.bam"); g.out[2] = bam_open(s, "w");
-		strcpy(s, g.pre); strcat(s, ".unphased.bam"); g.out[3] = bam_open(s, "w");
-		for (c = 0; c <= 3; ++c) bam_header_write(g.out[c], h);
+		for (c = 0; c <= 2; ++c) bam_header_write(g.out[c], h);
 		free(s);
 	}
 
@@ -652,7 +656,7 @@ int main_phase(int argc, char *argv[])
 	errmod_destroy(em);
 	free(bases);
 	if (g.pre) {
-		for (c = 0; c <= 3; ++c) bam_close(g.out[c]);
+		for (c = 0; c <= 2; ++c) bam_close(g.out[c]);
 		free(g.pre); free(g.b);
 	}
 	return 0;
