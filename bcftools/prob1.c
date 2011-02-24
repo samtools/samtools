@@ -365,7 +365,7 @@ long double bcf_p1_cal_g3(bcf_p1aux_t *p1a, double g[3])
 	return pd;
 }
 
-int bcf_p1_cal(bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
+int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 {
 	int i, k;
 	long double sum = 0.;
