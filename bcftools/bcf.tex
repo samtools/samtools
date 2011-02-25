@@ -48,7 +48,9 @@
 {\tt PL} & {\tt uint8\_t[n*G]} & {Phred-scaled likelihood of data}\\
 {\tt PS} & {\tt uint32\_t[n]} & {Phase set}\\
 %{\tt SP} & {\tt uint8\_t[n]} & {Strand bias P-value (bcftools only)}\\
-\emph{string} & {\tt int32\_t+char*} & {\tt NULL} padded concatenated strings (int equals to the length) \\
+\emph{Integer} & {\tt int32\_t[n*X]} & {Fix-sized custom Integer; $X$ can be $1$, $A$ or $G$.}\\
+\emph{Numeric} & {\tt double[n*X]} & {Fix-sized custom Numeric; $X$ can be $1$, $A$ or $G$.}\\
+\emph{String} & {\tt int32\_t+char*} & {\tt NULL} padded concatenated strings (int equals to the length) \\
 \hline
 \end{tabular}
 \end{center}
