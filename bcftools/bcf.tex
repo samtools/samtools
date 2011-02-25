@@ -37,28 +37,38 @@
 \hline
 \multicolumn{1}{l}{\bf Field} & \multicolumn{1}{l}{\bf Type} & \multicolumn{1}{l}{\bf Description} \\\hline
 {\tt DP} & {\tt uint16\_t[n]} & Read depth \\
-{\tt GL} & {\tt float[n*x]} & Log10 likelihood of data; $x=\frac{m(m+1)}{2}$, $m=\#\{alleles\}$\\
-{\tt GT} & {\tt uint8\_t[n]} & {\tt phase\char60\char60 6 | allele1\char60\char60 3 | allele2} \\
+{\tt GL} & {\tt float[n*G]} & Log10 likelihood of data; $G=\frac{A(A+1)}{2}$, $A=\#\{alleles\}$\\
+{\tt GT} & {\tt uint8\_t[n]} & {\tt haploid\char60\char60 7 | phased\char60\char60 6 | allele1\char60\char60 3 | allele2} \\
+{\tt \_GT} & {\tt uint8\_t+uint8\_t[n*P]} & {Generic GT; ploidy $P$ equals the first integer} \\
 {\tt GQ} & {\tt uint8\_t[n]} & {Genotype quality}\\
 {\tt HQ} & {\tt uint8\_t[n*2]} & {Haplotype quality}\\
-{\tt PL} & {\tt uint8\_t[n*x]} & {Phred-scaled likelihood of data}\\
-{\tt SP} & {\tt uint8\_t[n]} & {Strand bias P-value (bcftools only)}\\
-\emph{misc} & {\tt int32\_t+char*} & {\tt NULL} padded concatenated strings (integer equal to the length) \\
+{\tt \_HQ} & {\tt uint8\_t+uint8\_t[n*2*P]} & {Generic HQ}\\
+{\tt IBD} & {\tt uint32\_t[n*2]} & {IBD}\\
+{\tt \_IBD} & {\tt uint8\_t+uint32\_t[n*2*P]} & {Generic IBD}\\
+{\tt PL} & {\tt uint8\_t[n*G]} & {Phred-scaled likelihood of data}\\
+{\tt PS} & {\tt uint32\_t[n]} & {Phase set}\\
+%{\tt SP} & {\tt uint8\_t[n]} & {Strand bias P-value (bcftools only)}\\
+\emph{string} & {\tt int32\_t+char*} & {\tt NULL} padded concatenated strings (int equals to the length) \\
 \hline
 \end{tabular}
 \end{center}
 
 \begin{itemize}
 \item The file is {\tt BGZF} compressed.
-\item All integers are little-endian.
+\item All multi-byte numbers are little-endian.
 \item In a string, a missing value `.' is an empty C string ``{\tt
     \char92 0}'' (not ``{\tt .\char92 0}'')
 \item For {\tt GL} and {\tt PL}, likelihoods of genotypes appear in the
   order of alleles in {\tt REF} and then {\tt ALT}. For example, if {\tt
     REF=C}, {\tt ALT=T,A}, likelihoods appear in the order of {\tt
-    CC,CT,CA,TT,TA,AA}.
-\item {\tt GL} is an extension to and is backward compatible with the
-  {\tt GL} genotype field in {\tt VCFv4.0}.
+    CC,CT,TT,CA,TA,AA} (NB: the ordering is different from the one in the original
+	BCF proposal).
+\item Predefined {\tt FORMAT} fields can be missing from VCF headers, but custom {\tt FORMAT} fields
+	are required to be explicitly defined in the headers.
+\item A {\tt FORMAT} field with its name starting with `{\tt \_}' gives an alternative
+	binary representation of the corresponding VCF field. The alternative representation
+	is used when the default representation is unable to keep the genotype information,
+	for example, when the ploidy is over 2 or there are more than 8 alleles.
 \end{itemize}
 
 \end{document}
