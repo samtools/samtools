@@ -96,7 +96,7 @@ static int usage()
 	fprintf(stderr, "         merge       merge sorted alignments\n");
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
 	fprintf(stderr, "         reheader    replace BAM header\n");
-	fprintf(stderr, "         targetcut   cut contiguously covered regions (for fosmid pools)\n");
+	fprintf(stderr, "         targetcut   cut fosmid regions (for fosmid pool only)\n");
 	fprintf(stderr, "         phase       phase heterozygotes\n");
 	fprintf(stderr, "\n");
 #ifdef _WIN32

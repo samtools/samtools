@@ -535,9 +535,9 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "         -b STR    prefix of BAMs to output [null]\n");
 		fprintf(stderr, "         -q INT    min variant phred-LOD to call SNP [%d]\n", g.min_varLOD);
 		fprintf(stderr, "         -Q INT    min base quality to call SNP [%d]\n", g.min_baseQ);
-		fprintf(stderr, "         -l FILE   list of sites to phase [null]\n");
+//		fprintf(stderr, "         -l FILE   list of sites to phase [null]\n");
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
-		fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
+//		fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}
