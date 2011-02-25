@@ -144,8 +144,8 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		x = call->n_alleles * (call->n_alleles + 1) / 2;
 		// get the possible genotypes
 		for (i = z = 0; i < call->n_alleles; ++i)
-			for (j = i; j < call->n_alleles; ++j)
-				g[z++] = call->a[i] * 5 + call->a[j];
+			for (j = 0; j <= i; ++j)
+				g[z++] = call->a[j] * 5 + call->a[i];
 		for (i = 0; i < n; ++i) {
 			uint8_t *PL = call->PL + x * i;
 			const bcf_callret1_t *r = calls + i;

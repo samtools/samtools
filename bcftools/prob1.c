@@ -168,18 +168,16 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 
 static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 {
-	int i, j, k;
+	int i, j;
 	long *p, tmp;
 	p = alloca(b->n_alleles * sizeof(long));
 	memset(p, 0, sizeof(long) * b->n_alleles);
 	for (j = 0; j < ma->n; ++j) {
 		const uint8_t *pi = ma->PL + j * ma->PL_len;
 		double *pdg = ma->pdg + j * 3;
-		pdg[0] = ma->q2p[pi[b->n_alleles]]; pdg[1] = ma->q2p[pi[1]]; pdg[2] = ma->q2p[pi[0]];
-		for (i = k = 0; i < b->n_alleles; ++i) {
-			p[i] += (int)pi[k];
-			k += b->n_alleles - i;
-		}
+		pdg[0] = ma->q2p[pi[2]]; pdg[1] = ma->q2p[pi[1]]; pdg[2] = ma->q2p[pi[0]];
+		for (i = 0; i < b->n_alleles; ++i)
+			p[i] += (int)pi[(i+1)*(i+2)/2-1];
 	}
 	for (i = 0; i < b->n_alleles; ++i) p[i] = p[i]<<4 | i;
 	for (i = 1; i < b->n_alleles; ++i) // insertion sort
