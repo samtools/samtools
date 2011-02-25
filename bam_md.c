@@ -315,7 +315,8 @@ int bam_fillmd(int argc, char *argv[])
 		fprintf(stderr, "         -b       compressed BAM output\n");
 		fprintf(stderr, "         -S       the input is SAM with header\n");
 		fprintf(stderr, "         -A       modify the quality string\n");
-		fprintf(stderr, "         -r       read-independent local realignment\n\n");
+		fprintf(stderr, "         -r       compute the BQ tag (without -A) or cap baseQ by BAQ (with -A)\n");
+		fprintf(stderr, "         -E       extended BAQ for better sensitivity but lower specificity\n\n");
 		return 1;
 	}
 	fp = samopen(argv[optind], mode_r, 0);

@@ -7,7 +7,8 @@ LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 			$(KNETFILE_O) bam_sort.o sam_header.o bam_reheader.o kprobaln.o
 AOBJS=		bam_tview.o bam_maqcns.o bam_plcmd.o sam_view.o	\
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
-			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o
+			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
+			cut_target.o phase.o
 PROG=		samtools
 INCLUDES=	-I.
 SUBDIRS=	. bcftools misc
@@ -66,6 +67,7 @@ bcf.o:bcftools/bcf.h
 bam2bcf.o:bam2bcf.h errmod.h bcftools/bcf.h
 bam2bcf_indel.o:bam2bcf.h
 errmod.o:errmod.h
+phase.o:bam.h khash.h ksort.h
 
 faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h

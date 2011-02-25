@@ -934,6 +934,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -A          use anomalous read pairs in SNP/INDEL calling\n");
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");
+		fprintf(stderr, "         -E          extended BAQ for higher sensitivity but lower specificity\n");
 		fprintf(stderr, "         -B          disable BAQ computation\n");
 		fprintf(stderr, "         -D          output per-sample DP\n");
 		fprintf(stderr, "         -S          output per-sample SP (strand bias P-value, slow)\n");
