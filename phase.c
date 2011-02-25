@@ -533,8 +533,9 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "Usage:   samtools phase [options] <in.bam>\n\n");
 		fprintf(stderr, "Options: -k INT    block length [%d]\n", g.k);
 		fprintf(stderr, "         -b STR    prefix of BAMs to output [null]\n");
-		fprintf(stderr, "         -q INT    min variant phred-LOD to call SNP [%d]\n", g.min_varLOD);
-		fprintf(stderr, "         -Q INT    min base quality to call SNP [%d]\n", g.min_baseQ);
+		fprintf(stderr, "         -q INT    min het phred-LOD [%d]\n", g.min_varLOD);
+		fprintf(stderr, "         -Q INT    min base quality in het calling [%d]\n", g.min_baseQ);
+		fprintf(stderr, "         -D INT    max read depth [%d]\n", g.max_depth);
 //		fprintf(stderr, "         -l FILE   list of sites to phase [null]\n");
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
 //		fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
@@ -562,6 +563,20 @@ int main_phase(int argc, char *argv[])
 	seqs = kh_init(64);
 	em = errmod_init(1. - 0.83);
 	bases = calloc(g.max_depth, 2);
+	printf("CC\n");
+	printf("CC\tDescriptions:\nCC\n");
+	printf("CC\t  CC      comments\n");
+	printf("CC\t  PS      start of a phase set\n");
+	printf("CC\t  FL      filtered region\n");
+	printf("CC\t  M[012]  markers; 0 for singletons, 1 for phased and 2 for filtered\n");
+	printf("CC\t  EV      supporting reads; SAM format\n");
+	printf("CC\t  //      end of a phase set\nCC\n");
+	printf("CC\tFormats of PS, FL and M[012] lines (1-based coordinates):\nCC\n");
+	printf("CC\t  PS  chr  phaseSetStart  phaseSetEnd\n");
+	printf("CC\t  FL  chr  filterStart    filterEnd\n");
+	printf("CC\t  M?  chr  PS  pos  allele0  allele1  hetIndex  #supports0  #errors0  #supp1  #err1\n");
+	printf("CC\nCC\n");
+	fflush(stdout);
 	while ((plp = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
 		int i, k, c, tmp, dophase = 1, in_set = 0;
 		float q[16];

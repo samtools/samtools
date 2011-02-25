@@ -137,7 +137,7 @@ viewing the same reference sequence.
 
 .TP
 .B mpileup
-samtools mpileup [-Bug] [-C capQcoef] [-r reg] [-f in.fa] [-l list] [-M capMapQ] [-Q minBaseQ] [-q minMapQ] in.bam [in2.bam [...]]
+samtools mpileup [-EBug] [-C capQcoef] [-r reg] [-f in.fa] [-l list] [-M capMapQ] [-Q minBaseQ] [-q minMapQ] in.bam [in2.bam [...]]
 
 Generate BCF or pileup for one or multiple BAM files. Alignment records
 are grouped by sample identifiers in @RG header lines. If sample
@@ -163,6 +163,10 @@ functionality; if enabled, the recommended value for BWA is 50. [0]
 Phred-scaled gap extension sequencing error probability. Reducing
 .I INT
 leads to longer indels. [20]
+.TP
+.B -E
+Extended BAQ computation. This option helps sensitivity especially for MNPs, but may hurt
+specificity a little bit.
 .TP
 .BI -f \ FILE
 The reference file [null]
@@ -355,7 +359,7 @@ Treat paired-end reads and single-end reads.
 
 .TP
 .B calmd
-samtools calmd [-eubSr] [-C capQcoef] <aln.bam> <ref.fasta>
+samtools calmd [-EeubSr] [-C capQcoef] <aln.bam> <ref.fasta>
 
 Generate the MD tag. If the MD tag is already present, this command will
 give a warning if the MD tag generated is different from the existing
@@ -388,7 +392,55 @@ Coefficient to cap mapping quality of poorly mapped reads. See the
 command for details. [0]
 .TP
 .B -r
-Compute the BQ tag without changing the base quality.
+Compute the BQ tag (without -A) or cap base quality by BAQ (with -A).
+.TP
+.B -E
+Extended BAQ calculation. This option trades specificity for sensitivity, though the
+effect is minor.
+.RE
+
+.TP
+.B targetcut
+samtools targetcut [-Q minBaseQ] [-i inPenalty] [-0 em0] [-1 em1] [-2 em2] [-f ref] <in.bam>
+
+This command identifies target regions by examining the continuity of read depth, computes
+haploid consensus sequences of targets and outputs a SAM with each sequence corresponding
+to a target. When option
+.B -f
+is in use, BAQ will be applied. This command is
+.B only
+designed for cutting fosmid clones from fosmid pool sequencing [Ref. Kitzman et al. (2010)].
+.RE
+
+.TP
+.B phase
+samtools phase [-F] [-k len] [-b prefix] [-q minLOD] [-Q minBaseQ] <in.bam>
+
+Call and phase heterozygous SNPs.
+.B OPTIONS:
+.RS
+.TP 8
+.BI -b \ STR
+Prefix of BAM output. When this option is in use, phase-0 reads will be saved in file
+.BR STR .0.bam
+and phase-1 reads in
+.BR STR .1.bam.
+Phase unknown reads will be randomly allocated to one of the two files. Chimeric reads
+with switch errors will be saved in
+.BR STR .chimeric.bam.
+[null]
+.TP
+.B -F
+Do not attempt to fix chimeric reads.
+.TP
+.BI -k \ INT
+Maximum length for local phasing. [13]
+.TP
+.BI -q \ INT
+Minimum Phred-scaled LOD to call a heterozygote. [40]
+.TP
+.BI -Q \ INT
+Minimum base quality to be used in het calling. [13]
 .RE
 
 .TP
