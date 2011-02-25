@@ -63,8 +63,9 @@ int bcf_str2id_add(void *_hash, const char *str)
 int bcf_shrink_alt(bcf1_t *b, int n)
 {
 	char *p;
-	int i, j, k, *z, n_smpl = b->n_smpl;
+	int i, j, k, n_smpl = b->n_smpl;
 	if (b->n_alleles <= n) return -1;
+	// update ALT
 	if (n > 1) {
 		for (p = b->alt, k = 1; *p; ++p)
 			if (*p == ',' && ++k == n) break;
@@ -73,10 +74,7 @@ int bcf_shrink_alt(bcf1_t *b, int n)
 	++p;
 	memmove(p, b->flt, b->str + b->l_str - b->flt);
 	b->l_str -= b->flt - p;
-	z = alloca(sizeof(int) / 2 * n * (n+1));
-	for (i = k = 0; i < n; ++i)
-		for (j = 0; j < n - i; ++j)
-			z[k++] = i * b->n_alleles + j;
+	// update PL
 	for (i = 0; i < b->n_gi; ++i) {
 		bcf_ginfo_t *g = b->gi + i;
 		if (g->fmt == bcf_str2int("PL", 2)) {
@@ -85,7 +83,7 @@ int bcf_shrink_alt(bcf1_t *b, int n)
 			g->len = n * (n + 1) / 2;
 			for (l = k = 0; l < n_smpl; ++l) {
 				uint8_t *dl = d + l * x;
-				for (j = 0; j < g->len; ++j) d[k++] = dl[z[j]];
+				for (j = 0; j < g->len; ++j) d[k++] = dl[j];
 			}
 		} // FIXME: to add GL
 	}
@@ -157,7 +155,8 @@ int bcf_anno_max(bcf1_t *b)
 {
 	int k, max_gq, max_sp, n_het;
 	kstring_t str;
-	uint8_t *gt, *gq, *sp;
+	uint8_t *gt, *gq;
+	int32_t *sp;
 	max_gq = max_sp = n_het = 0;
 	gt = locate_field(b, "GT", 2);
 	if (gt == 0) return -1;

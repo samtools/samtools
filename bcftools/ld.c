@@ -70,7 +70,7 @@ double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 		for (i = 0; i < n_smpl; ++i) {
 			const uint8_t *pi = PL[j] + i * PL_len[j];
 			double *p = pdg[j] + i * 3;
-			p[0] = g_q2p[pi[b[j]->n_alleles]]; p[1] = g_q2p[pi[1]]; p[2] = g_q2p[pi[0]];
+			p[0] = g_q2p[pi[2]]; p[1] = g_q2p[pi[1]]; p[2] = g_q2p[pi[0]];
 		}
 	}
 	// iteration

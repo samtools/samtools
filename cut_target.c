@@ -46,6 +46,8 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
 		b = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos)];
 		if (b > 3) continue;
 		q = baseQ < p->b->core.qual? baseQ : p->b->core.qual;
+		if (q < 4) q = 4;
+		if (q > 63) q = 63;
 		g->bases[k++] = q<<5 | bam1_strand(p->b)<<4 | b;
 	}
 	if (k == 0) return 0;
