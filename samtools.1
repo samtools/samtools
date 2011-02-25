@@ -682,6 +682,20 @@ mismatches. Applying this option usually helps
 but may not other mappers.
 
 .IP o 2
+Generate the consensus sequence for one diploid individual:
+
+  samtools mpileup -uf ref.fa aln.bam | bcftools view -cg - | vcfutils.pl vcf2fq > cns.fq
+
+.IP o 2
+Phase one individual:
+
+  samtools calmd -AEur aln.bam ref.fa | samtools phase -b prefix - > phase.out
+
+The
+.B calmd
+command is used to reduce false heterozygotes around INDELs.
+
+.IP o 2
 Call SNPs and short indels for multiple diploid individuals:
 
   samtools mpileup -P ILLUMINA -ugf ref.fa *.bam | bcftools view -bcvg - > var.raw.bcf
