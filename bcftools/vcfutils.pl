@@ -512,7 +512,7 @@ Options: -d INT    minimum depth          [$opts{d}]
 	  $q = chr($q <= 126? $q : 126);
 	  $seq .= $b;
 	  $qual .= $q;
-	} else { # an INDEL
+	} elsif ($t[4] ne '.') { # an INDEL
 	  push(@gaps, [$t[1], length($t[3])]);
 	}
 	$last_pos = $t[1];
