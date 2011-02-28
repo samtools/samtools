@@ -177,7 +177,7 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 			f->phase = c[0] > c[1]? 0 : 1;
 			f->in = c[f->phase]; f->out = c[1 - f->phase];
 			f->phased = f->in == f->out? 0 : 1;
-			f->ambig = (f->in && f->out && && f->out < 3 && f->in <= f->out + 1)? 1 : 0;
+			f->ambig = (f->in && f->out && f->out < 3 && f->in <= f->out + 1)? 1 : 0;
 			// fix chimera
 			f->flip = 0;
 			if (flip && c[0] >= 3 && c[1] >= 3) {
