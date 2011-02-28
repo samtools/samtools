@@ -420,9 +420,11 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				indelQ2 = tmp > 111? 0 : (int)((1. - tmp/111.) * indelQ2 + .499);
 				// pick the smaller between indelQ1 and indelQ2
 				indelQ = indelQ1 < indelQ2? indelQ1 : indelQ2;
+				if (indelQ > 255) indelQ = 255;
+				if (seqQ > 255) seqQ = 255;
 				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ; // use 22 bits in total
 				sumq[sc[0]&0x3f] += indelQ < seqQ? indelQ : seqQ;
-//				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d q=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ);
+//				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d indelQ=%d seqQ=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ, seqQ);
 			}
 		}
 		// determine bca->indel_types[] and bca->inscns
