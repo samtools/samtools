@@ -8,10 +8,6 @@
 #include "knetfile.h"
 #endif
 
-#ifndef PACKAGE_VERSION
-#define PACKAGE_VERSION "0.1.12-11 (r921:118)"
-#endif
-
 int bam_taf2baf(int argc, char *argv[]);
 int bam_pileup(int argc, char *argv[]);
 int bam_mpileup(int argc, char *argv[]);
@@ -77,7 +73,7 @@ static int usage()
 {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Program: samtools (Tools for alignments in the SAM format)\n");
-	fprintf(stderr, "Version: %s\n\n", PACKAGE_VERSION);
+	fprintf(stderr, "Version: %s\n\n", BAM_VERSION);
 	fprintf(stderr, "Usage:   samtools <command> [options]\n\n");
 	fprintf(stderr, "Command: view        SAM<->BAM conversion\n");
 	fprintf(stderr, "         sort        sort alignment file\n");

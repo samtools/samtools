@@ -35,6 +35,7 @@ typedef struct {
 	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
 	int vpos, beg, end;
 	uint32_t vlen:16, single:1, flip:1, phase:1, phased:1;
+	uint32_t in:16, out:16; // in-phase and out-phase
 } frag_t, *frag_p;
 
 #define rseq_lt(a,b) ((a)->vpos < (b)->vpos)
@@ -174,7 +175,8 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 				++c[f->seq[i] == path[f->vpos + i] + 1? 0 : 1];
 			}
 			f->phase = c[0] > c[1]? 0 : 1;
-			f->phased = c[0] == c[1]? 0 : 1;
+			f->in = c[f->phase]; f->out = c[1 - f->phase];
+			if (f->in && f->out && f->in <= f->out + 1) f->phased = 0;
 			// fix chimera
 			f->flip = 0;
 			if (flip && c[0] >= 3 && c[1] >= 3) {
@@ -320,7 +322,7 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 		else {
 			frag_t *f = &kh_val(hash, k);
 			if (f->phased && f->flip) which = 2;
-			else if (f->phased == 0) which = 3;
+			else if (f->phased == 0) which = 2;
 			else { // phased and not flipped
 				char c = 'Y';
 				which = f->phase;
@@ -395,7 +397,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 		int8_t c[2];
 		c[0] = (cns[i]&0xffff)>>2 == 0? 4 : (cns[i]&3);
 		c[1] = (cns[i]>>16&0xffff)>>2 == 0? 4 : (cns[i]>>16&3);
-		printf("M%d\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", sitemask[i]+1, chr, (int)(cns[0]>>32), (int)(cns[i]>>32) + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]],
+		printf("M%d\t%s\t%d\t%d\t%c\t%c\t%d\t%d\t%d\t%d\t%d\n", sitemask[i]+1, chr, (int)(cns[0]>>32) + 1, (int)(cns[i]>>32) + 1, "ACGTX"[c[path[i]]], "ACGTX"[c[1-path[i]]],
 			i + g->vpos_shift + 1, (int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
 	}
 	free(path); free(pcnt); free(regmask); free(sitemask);
@@ -413,7 +415,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 			if (f->seq[j] == 0) putchar('N');
 			else putchar("ACGT"[f->seq[j] == 1? (c&3) : (c>>16&3)]);
 		}
-		printf("\t*\tYP:i:%d\tYF:i:%d\n", f->phase, f->flip);
+		printf("\t*\tYP:i:%d\tYF:i:%d\tYI:i:%d\tYO:i:%d\tYS:i:%d\n", f->phase, f->flip, f->in, f->out, f->beg+1);
 	}
 	free(seqs);
 	printf("//\n");
@@ -445,6 +447,7 @@ static int readaln(void *data, bam1_t *b)
 	phaseg_t *g = (phaseg_t*)data;
 	int ret;
 	ret = bam_read1(g->fp, b);
+	if (ret < 0) return ret;
 	if (!(b->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FQCFAIL|BAM_FDUP)) && g->pre) {
 		if (g->n == g->m) {
 			g->m = g->m? g->m<<1 : 16;
@@ -515,7 +518,7 @@ int main_phase(int argc, char *argv[])
 
 	memset(&g, 0, sizeof(phaseg_t));
 	g.flag = FLAG_FIX_CHIMERA;
-	g.min_varLOD = 40; g.k = 13; g.min_baseQ = 13; g.max_depth = 256;
+	g.min_varLOD = 37; g.k = 13; g.min_baseQ = 13; g.max_depth = 256;
 	while ((c = getopt(argc, argv, "Q:eFq:k:b:l:D:")) >= 0) {
 		switch (c) {
 			case 'D': g.max_depth = atoi(optarg); break;
