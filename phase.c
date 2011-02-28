@@ -34,7 +34,7 @@ typedef struct {
 typedef struct {
 	int8_t seq[MAX_VARS]; // TODO: change to dynamic memory allocation!
 	int vpos, beg, end;
-	uint32_t vlen:16, single:1, flip:1, phase:1, phased:1;
+	uint32_t vlen:16, single:1, flip:1, phase:1, phased:1, ambig:1;
 	uint32_t in:16, out:16; // in-phase and out-phase
 } frag_t, *frag_p;
 
@@ -176,7 +176,8 @@ static uint64_t *fragphase(int vpos, const int8_t *path, nseq_t *hash, int flip)
 			}
 			f->phase = c[0] > c[1]? 0 : 1;
 			f->in = c[f->phase]; f->out = c[1 - f->phase];
-			if (f->in && f->out && f->in <= f->out + 1) f->phased = 0;
+			f->phased = f->in == f->out? 0 : 1;
+			f->ambig = (f->in && f->out && f->in <= f->out + 1)? 1 : 0;
 			// fix chimera
 			f->flip = 0;
 			if (flip && c[0] >= 3 && c[1] >= 3) {
@@ -321,8 +322,9 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 		if (k == kh_end(hash)) which = 3;
 		else {
 			frag_t *f = &kh_val(hash, k);
-			if (f->phased && f->flip) which = 2;
-			else if (f->phased == 0) which = 2;
+			if (f->ambig) which = 2;
+			else if (f->phased && f->flip) which = 2;
+			else if (f->phased == 0) which = 3;
 			else { // phased and not flipped
 				char c = 'Y';
 				which = f->phase;
@@ -652,7 +654,7 @@ int main_phase(int argc, char *argv[])
 				memset(f->seq, 0, MAX_VARS);
 				f->beg = p->b->core.pos;
 				f->end = bam_calend(&p->b->core, bam1_cigar(p->b));
-				f->vpos = vpos, f->vlen = 1, f->seq[0] = c, f->single = f->phased = f->flip = 0;
+				f->vpos = vpos, f->vlen = 1, f->seq[0] = c, f->single = f->phased = f->flip = f->ambig = 0;
 			}
 		}
 		if (dophase) {
