@@ -201,7 +201,7 @@ Note: This command discards indels. Output: QUAL #non-indel #SNPs #transitions #
 	  my @x;
 	  $x[0] = sprintf("%.4f", $c[1]-$c[2]? $c[2] / ($c[1] - $c[2]) : 100);
 	  $x[1] = sprintf("%.4f", $hsize? $c[3] / $hsize : 0);
-	  $x[2] = sprintf("%.4f", $c[1] ? $c[3] / $c[1] : 0);
+	  $x[2] = sprintf("%.4f", $c[3] / $c[1]);
 	  my $a = $c[1] - $lc[1];
 	  my $b = $c[2] - $lc[2];
 	  $x[3] = sprintf("%.4f", $a-$b? $b / ($a-$b) : 100);
@@ -512,7 +512,7 @@ Options: -d INT    minimum depth          [$opts{d}]
 	  $q = chr($q <= 126? $q : 126);
 	  $seq .= $b;
 	  $qual .= $q;
-	} else { # an INDEL
+	} elsif ($t[4] ne '.') { # an INDEL
 	  push(@gaps, [$t[1], length($t[3])]);
 	}
 	$last_pos = $t[1];
