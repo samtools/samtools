@@ -445,6 +445,7 @@ static int readaln(void *data, bam1_t *b)
 	phaseg_t *g = (phaseg_t*)data;
 	int ret;
 	ret = bam_read1(g->fp, b);
+	if (ret < 0) return ret;
 	if (!(b->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FQCFAIL|BAM_FDUP)) && g->pre) {
 		if (g->n == g->m) {
 			g->m = g->m? g->m<<1 : 16;
