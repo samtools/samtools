@@ -1,4 +1,176 @@
 ------------------------------------------------------------------------
+r925 | lh3lh3 | 2011-02-28 15:45:17 -0500 (Mon, 28 Feb 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/phase.c
+
+minor changes to a heuristic rule
+
+------------------------------------------------------------------------
+r924 | lh3lh3 | 2011-02-28 15:24:04 -0500 (Mon, 28 Feb 2011) | 4 lines
+Changed paths:
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bcftools/vcfutils.pl
+   M /trunk/samtools/phase.c
+
+ * 0.1.12-r924:126
+ * fixed a bug in phase (due to recent changes)
+ * fixed a bug in vcf2fq
+
+------------------------------------------------------------------------
+r923 | lh3lh3 | 2011-02-28 12:57:39 -0500 (Mon, 28 Feb 2011) | 5 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam.h
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/phase.c
+
+ * put version number in bam.h
+ * write version to BCF
+ * in phase, change the default -q to 37
+ * output a little more information during phasing
+
+------------------------------------------------------------------------
+r922 | lh3lh3 | 2011-02-25 16:40:09 -0500 (Fri, 25 Feb 2011) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bamtk.c
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/bcf.tex
+   M /trunk/samtools/bcftools/bcf2qcall.c
+   M /trunk/samtools/bcftools/bcfutils.c
+   M /trunk/samtools/bcftools/ld.c
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/vcf.c
+   M /trunk/samtools/cut_target.c
+
+ * change the order of PL/GL according to the latest VCF spec
+ * change the type of SP to int32_t
+
+------------------------------------------------------------------------
+r921 | lh3lh3 | 2011-02-25 14:40:56 -0500 (Fri, 25 Feb 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.tex
+
+update the BCF spec
+
+------------------------------------------------------------------------
+r920 | lh3lh3 | 2011-02-25 00:59:27 -0500 (Fri, 25 Feb 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/Makefile
+   M /trunk/samtools/bam_md.c
+   M /trunk/samtools/bam_plcmd.c
+   M /trunk/samtools/bam_sort.c
+   M /trunk/samtools/bamtk.c
+   A /trunk/samtools/cut_target.c
+   M /trunk/samtools/errmod.h
+   M /trunk/samtools/faidx.c
+   M /trunk/samtools/khash.h
+   M /trunk/samtools/kstring.c
+   M /trunk/samtools/kstring.h
+   A /trunk/samtools/phase.c
+   M /trunk/samtools/samtools.1
+
+added the phase command
+
+------------------------------------------------------------------------
+r918 | lh3lh3 | 2011-02-24 10:05:54 -0500 (Thu, 24 Feb 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/prob1.c
+   M /trunk/samtools/bcftools/prob1.h
+
+added "const" to bcf_p1_cal()
+
+------------------------------------------------------------------------
+r917 | lh3lh3 | 2011-02-24 09:36:30 -0500 (Thu, 24 Feb 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/bam.c
+
+more meaningful BAM truncation message
+
+------------------------------------------------------------------------
+r916 | lh3lh3 | 2011-02-24 09:35:06 -0500 (Thu, 24 Feb 2011) | 3 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.c
+   M /trunk/samtools/bcftools/vcf.c
+
+ * automatically fix errors in GL
+ * output unrecognized FORMAT as "."
+
+------------------------------------------------------------------------
+r913 | lh3lh3 | 2011-02-10 22:59:47 -0500 (Thu, 10 Feb 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/bcf.h
+   M /trunk/samtools/bcftools/call1.c
+   M /trunk/samtools/bcftools/vcf.c
+
+finished VCF->BCF conversion
+
+------------------------------------------------------------------------
+r910 | petulda | 2011-02-03 03:13:48 -0500 (Thu, 03 Feb 2011) | 1 line
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+Prevent division by zero
+------------------------------------------------------------------------
+r909 | lh3lh3 | 2011-02-02 11:29:20 -0500 (Wed, 02 Feb 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/call1.c
+
+fixed a typo in the VCF header
+
+------------------------------------------------------------------------
+r908 | lh3lh3 | 2011-02-02 11:28:24 -0500 (Wed, 02 Feb 2011) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf.c
+   M /trunk/samtools/bam_index.c
+
+ * fixed an out-of-boundary bug
+ * improved sorting order checking in index
+
+------------------------------------------------------------------------
+r907 | lh3lh3 | 2011-01-29 22:59:20 -0500 (Sat, 29 Jan 2011) | 4 lines
+Changed paths:
+   M /trunk/samtools/INSTALL
+   M /trunk/samtools/bam_tview.c
+   M /trunk/samtools/knetfile.c
+
+ * avoid a segfault when network connect fails
+ * update INSTALL
+ * fixed a bug in tview on big-endian by Nathan Weeks
+
+------------------------------------------------------------------------
+r903 | lh3lh3 | 2011-01-27 14:50:02 -0500 (Thu, 27 Jan 2011) | 3 lines
+Changed paths:
+   M /trunk/samtools/bam2bcf_indel.c
+   M /trunk/samtools/bam_md.c
+
+ * fixed a rare memory issue in bam_md.c
+ * fixed a bug in indel calling related to unmapped and refskip reads
+
+------------------------------------------------------------------------
+r902 | lh3lh3 | 2011-01-23 21:46:18 -0500 (Sun, 23 Jan 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/bcftools/fet.c
+
+fixed two minor bugs in Fisher's exact test
+
+------------------------------------------------------------------------
+r899 | petulda | 2011-01-19 09:28:02 -0500 (Wed, 19 Jan 2011) | 1 line
+Changed paths:
+   M /trunk/samtools/bcftools/vcfutils.pl
+
+Skip sites with unknown ref
+------------------------------------------------------------------------
+r898 | lh3lh3 | 2011-01-15 12:56:05 -0500 (Sat, 15 Jan 2011) | 2 lines
+Changed paths:
+   M /trunk/samtools/ChangeLog
+   M /trunk/samtools/bam_maqcns.c
+   M /trunk/samtools/bam_md.c
+
+move bam_nt16_nt4_table[] from bam_maqcns.c to bam_md.c
+
+------------------------------------------------------------------------
 r896 | lh3lh3 | 2011-01-06 10:52:15 -0500 (Thu, 06 Jan 2011) | 3 lines
 Changed paths:
    M /trunk/samtools/bam_plcmd.c
