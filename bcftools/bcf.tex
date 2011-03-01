@@ -38,7 +38,7 @@
 \multicolumn{1}{l}{\bf Field} & \multicolumn{1}{l}{\bf Type} & \multicolumn{1}{l}{\bf Description} \\\hline
 {\tt DP} & {\tt uint16\_t[n]} & Read depth \\
 {\tt GL} & {\tt float[n*G]} & Log10 likelihood of data; $G=\frac{A(A+1)}{2}$, $A=\#\{alleles\}$\\
-{\tt GT} & {\tt uint8\_t[n]} & {\tt haploid\char60\char60 7 | phased\char60\char60 6 | allele1\char60\char60 3 | allele2} \\
+{\tt GT} & {\tt uint8\_t[n]} & {\tt missing\char60\char60 7 | phased\char60\char60 6 | allele1\char60\char60 3 | allele2} \\
 {\tt \_GT} & {\tt uint8\_t+uint8\_t[n*P]} & {Generic GT; the first int equals the max ploidy $P$} \\
 {\tt GQ} & {\tt uint8\_t[n]} & {Genotype quality}\\
 {\tt HQ} & {\tt uint8\_t[n*2]} & {Haplotype quality}\\
