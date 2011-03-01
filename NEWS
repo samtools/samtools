@@ -1,5 +1,5 @@
-Beta release 0.1.13 (28 February, 2011)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Beta release 0.1.13 (1 March, 2011)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The most important though largely invisible modification is the change of the
 order of genotypes in the PL VCF/BCF tag. This is to conform the upcoming VCF
@@ -11,16 +11,14 @@ version number.
 Single Individual Haplotyping (SIH) is added as an experimental feature. It
 originally aims to produce haploid consensus from fosmid pool sequencing, but
 also works with short-read data. For short reads, phased blocks are usually too
-short to be useful in most applications, but phasing can be powerful for ruling
-out some SNPs close to INDELs and some of clustered spurious SNPs between copies
-of CNVs. On one data set, phasing based SNP calling is better in terms of both
-sensitivity and specificity than the standard methods.
+short to be useful in many applications, but they can help to rule out part of
+SNPs close to INDELs or between copies of CNVs.
 
 
 Other notable changes in samtools:
 
- * Construct per-sample consensus to reduced the effect of nearby SNPs in INDEL
-   calling. This may reduce the power, but improves specificity.
+ * Construct per-sample consensus to reduce the effect of nearby SNPs in INDEL
+   calling. This reduces the power but improves specificity.
 
  * Improved sorting order checking in indexing. Now indexing is the preferred way
    to check if a BAM is sorted.
@@ -31,7 +29,7 @@ Other notable changes in samtools:
 
  * Added `mpileup -A' to allow to use reads in anomalous pairs in SNP calling.
 
- * Added `mpileup -m' to allow fine control of INDEL candidates.
+ * Added `mpileup -m' to allow fine control of the collection of INDEL candidates.
 
  * Added `mpileup -S' to compute per-sample strand bias P-value.
 
@@ -40,7 +38,7 @@ Other notable changes in samtools:
  * Fixed segfault in indel calling related to unmapped and refskip reads.
 
  * Fixed an integer overflow in INDEL calling. This bug produces wrong INDEL
-   genotypes for longer INDELs, typically over 10bp.
+   genotypes for longer short INDELs, typically over 10bp.
 
  * Fixed a bug in tview on big-endian machines.
 
@@ -50,6 +48,7 @@ Other notable changes in samtools:
 
  * Fixed a compiling error when the knetfile library is not used. Fixed a
    library compiling error due to the lack of bam_nt16_nt4_table[] table.
+   Suppress a compiling warning related to the latest zlib.
 
 
 Other notable changes in bcftools:
@@ -76,7 +75,7 @@ Other notable changes in bcftools:
  * Fixed a minor bug in Fisher's exact test; the results are rarely changed.
 
 
-(0.1.13: 28 February 2011, r926+130)
+(0.1.13: 1 March 2011, r926:134)
 
 
 

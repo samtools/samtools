@@ -68,6 +68,7 @@ bam2bcf.o:bam2bcf.h errmod.h bcftools/bcf.h
 bam2bcf_indel.o:bam2bcf.h
 errmod.o:errmod.h
 phase.o:bam.h khash.h ksort.h
+bamtk.o:bam.h
 
 faidx.o:faidx.h razf.h khash.h
 faidx_main.o:faidx.h razf.h
