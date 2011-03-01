@@ -322,7 +322,7 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 		if (k == kh_end(hash)) which = 3;
 		else {
 			frag_t *f = &kh_val(hash, k);
-			if (f->ambig) which = 2;
+			if (f->ambig) which = 3;
 			else if (f->phased && f->flip) which = 2;
 			else if (f->phased == 0) which = 3;
 			else { // phased and not flipped
