@@ -414,11 +414,14 @@ designed for cutting fosmid clones from fosmid pool sequencing [Ref. Kitzman et 
 
 .TP
 .B phase
-samtools phase [-F] [-k len] [-b prefix] [-q minLOD] [-Q minBaseQ] <in.bam>
+samtools phase [-AF] [-k len] [-b prefix] [-q minLOD] [-Q minBaseQ] <in.bam>
 
 Call and phase heterozygous SNPs.
 .B OPTIONS:
 .RS
+.TP 8
+.B -A
+Drop reads with ambiguous phase.
 .TP 8
 .BI -b \ STR
 Prefix of BAM output. When this option is in use, phase-0 reads will be saved in file

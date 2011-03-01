@@ -11,9 +11,10 @@ version number.
 Single Individual Haplotyping (SIH) is added as an experimental feature. It
 originally aims to produce haploid consensus from fosmid pool sequencing, but
 also works with short-read data. For short reads, phased blocks are usually too
-short to be useful in many applications, but phasing can be helpful to rule out
-some SNPs close to INDELs and some of clustered spurious SNPs between copies of
-duplications.
+short to be useful in most applications, but phasing can be powerful for ruling
+out some SNPs close to INDELs and some of clustered spurious SNPs between copies
+of CNVs. On one data set, phasing based SNP calling is better in terms of both
+sensitivity and specificity than the standard methods.
 
 
 Other notable changes in samtools:

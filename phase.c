@@ -17,6 +17,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define FLAG_FIX_CHIMERA 0x1
 #define FLAG_LIST_EXCL   0x4
+#define FLAG_DROP_AMBI   0x8
 
 typedef struct {
 	// configurations, initialized in the main function
@@ -308,7 +309,8 @@ static int clean_seqs(int vpos, nseq_t *hash)
 
 static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 {
-	int i, is_flip;
+	int i, is_flip, drop_ambi;
+	drop_ambi = g->flag & FLAG_DROP_AMBI;
 	is_flip = (drand48() < 0.5);
 	for (i = 0; i < g->n; ++i) {
 		int end, which;
@@ -322,7 +324,7 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 		if (k == kh_end(hash)) which = 3;
 		else {
 			frag_t *f = &kh_val(hash, k);
-			if (f->ambig) which = 3;
+			if (f->ambig) which = drop_ambi? 2 : 3;
 			else if (f->phased && f->flip) which = 2;
 			else if (f->phased == 0) which = 3;
 			else { // phased and not flipped
@@ -521,7 +523,7 @@ int main_phase(int argc, char *argv[])
 	memset(&g, 0, sizeof(phaseg_t));
 	g.flag = FLAG_FIX_CHIMERA;
 	g.min_varLOD = 37; g.k = 13; g.min_baseQ = 13; g.max_depth = 256;
-	while ((c = getopt(argc, argv, "Q:eFq:k:b:l:D:")) >= 0) {
+	while ((c = getopt(argc, argv, "Q:eFq:k:b:l:D:A:")) >= 0) {
 		switch (c) {
 			case 'D': g.max_depth = atoi(optarg); break;
 			case 'q': g.min_varLOD = atoi(optarg); break;
@@ -529,6 +531,7 @@ int main_phase(int argc, char *argv[])
 			case 'k': g.k = atoi(optarg); break;
 			case 'F': g.flag &= ~FLAG_FIX_CHIMERA; break;
 			case 'e': g.flag |= FLAG_LIST_EXCL; break;
+			case 'A': g.flag |= FLAG_DROP_AMBI; break;
 			case 'b': g.pre = strdup(optarg); break;
 			case 'l': fn_list = strdup(optarg); break;
 		}
@@ -543,6 +546,7 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "         -D INT    max read depth [%d]\n", g.max_depth);
 //		fprintf(stderr, "         -l FILE   list of sites to phase [null]\n");
 		fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
+		fprintf(stderr, "         -A        drop reads with ambiguous phase\n");
 //		fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
 		fprintf(stderr, "\n");
 		return 1;
