@@ -13,8 +13,7 @@ originally aims to produce haploid consensus from fosmid pool sequencing, but
 also works with short-read data. For short reads, phased blocks are usually too
 short to be useful in most applications, but phasing can be powerful for ruling
 out some SNPs close to INDELs and some of clustered spurious SNPs between copies
-of CNVs. On one data set, phasing based SNP calling is better in terms of both
-sensitivity and specificity than the standard methods.
+of CNVs.
 
 
 Other notable changes in samtools:
@@ -40,7 +39,7 @@ Other notable changes in samtools:
  * Fixed segfault in indel calling related to unmapped and refskip reads.
 
  * Fixed an integer overflow in INDEL calling. This bug produces wrong INDEL
-   genotypes for longer INDELs, typically over 10bp.
+   genotypes for longer short INDELs, typically over 10bp.
 
  * Fixed a bug in tview on big-endian machines.
 
