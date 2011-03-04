@@ -31,6 +31,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist;
 	char *fn_list, *prior_file, **subsam, *fn_dict;
+	uint8_t *ploidy;
 	double theta, pref, indel_frac;
 } viewconf_t;
 
@@ -298,7 +299,6 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
-	vc.n_sub = 0; vc.subsam = 0; vc.sublist = 0;
 	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:IMs:D:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
@@ -321,7 +321,10 @@ int bcfview(int argc, char *argv[])
 		case 'i': vc.indel_frac = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
-		case 's': vc.subsam = read_samples(optarg, &vc.n_sub); break;
+		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
+			vc.ploidy = calloc(vc.n_sub + 1, 1);
+			for (tid = 0; tid < vc.n_sub; ++tid) vc.ploidy[tid] = vc.subsam[tid][strlen(vc.subsam[tid]) + 1];
+			break;
 		case 'P':
 			if (strcmp(optarg, "full") == 0) vc.prior_type = MC_PTYPE_FULL;
 			else if (strcmp(optarg, "cond2") == 0) vc.prior_type = MC_PTYPE_COND2;
@@ -383,7 +386,7 @@ int bcfview(int argc, char *argv[])
 		vcf_hdr_write(bout, hout);
 	}
 	if (vc.flag & VC_CALL) {
-		p1 = bcf_p1_init(hout->n_smpl);
+		p1 = bcf_p1_init(hout->n_smpl, vc.ploidy);
 		if (vc.prior_file) {
 			if (bcf_p1_read_prior(p1, vc.prior_file) < 0) {
 				fprintf(stderr, "[%s] fail to read the prior AFS.\n", __func__);
@@ -484,6 +487,7 @@ int bcfview(int argc, char *argv[])
 	if (hash) kh_destroy(set64, hash);
 	if (vc.fn_list) free(vc.fn_list);
 	if (vc.fn_dict) free(vc.fn_dict);
+	if (vc.ploidy) free(vc.ploidy);
 	if (vc.n_sub) {
 		int i;
 		for (i = 0; i < vc.n_sub; ++i) free(vc.subsam[i]);

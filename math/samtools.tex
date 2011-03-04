@@ -435,15 +435,19 @@ and
 Numerical computation of Eq.~(\ref{equ:zcal}) may lead to floating point
 underflow for large $n$. To avoid this, let
 $y_{jk}=z_{jk}/\binom{M_j}{k}$, where
-$M_j=\sum_{i=0}^jm_i$. Eq.~(\ref{equ:zcal}) becomes
+$M_j=\sum_{i=1}^jm_i$. Eq.~(\ref{equ:zcal}) becomes
 $$
-y_{jk}=\left(\prod_{l=0}^{m_j-1}\frac{k-l}{M_{j-1}-l}\right)\cdot\sum_{g_j=0}^{m_j}\left(\prod_{l=g_j}^{m_j-1}\frac{M_{j-1}-k+l+1}{k-l}\right)\cdot y_{j-1,k-g_j}\cdot\binom{m_j}{g_j}P(D_j|g_j)
+y_{jk}=\left(\prod_{l=0}^{m_j-1}\frac{k-l}{M_{j}-l}\right)\cdot\sum_{g_j=0}^{m_j}\left(\prod_{l=g_j}^{m_j-1}\frac{M_{j-1}-k+l+1}{k-l}\right)\cdot y_{j-1,k-g_j}\cdot\binom{m_j}{g_j}P(D_j|g_j)
 $$
-In case of diploid samples,
+In case of diploid samples:
 \begin{eqnarray*}
 y_{jk}&=&\frac{1}{2j(2j-1)}\Big[(2j-k)(2j-k-1)\cdot y_{j-1,k}P(D_j|\langle aa\rangle)+2k(2j-k)\cdot y_{j-1,k-1}P(D_j|\langle Aa\rangle)\\
 &&+k(k-1)\cdot y_{j-1,k-2}P(D_j|\langle AA\rangle)\Big]
 \end{eqnarray*}
+For haploid samples,
+\[
+y_{jk}=\frac{1}{M_{j}}\Big[(M_{j-1}-k+1)\cdot y_{j-1,k}P(D_j|a)+k\cdot y_{j-1,k-1}P(D_j|A)\Big]
+\]
 However, this is not good enough. $y_{jk}$ still decreases exponentially
 with increasing $j$. To solve this issue, we rescale $y_{jk}$ for each
 $j$. Define
