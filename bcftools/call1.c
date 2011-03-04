@@ -214,11 +214,24 @@ static char **read_samples(const char *fn, int *_n)
 	if (fp == 0) return 0; // fail to open file
 	ks = ks_init(fp);
 	while (ks_getuntil(ks, 0, &s, &dret) >= 0) {
+		int l;
 		if (max == n) {
 			max = max? max<<1 : 4;
 			sam = realloc(sam, sizeof(void*)*max);
 		}
-		sam[n++] = strdup(s.s);
+		l = s.l;
+		sam[n] = malloc(s.l + 2);
+		strcpy(sam[n], s.s);
+		sam[n][l+1] = 2; // by default, diploid
+		if (dret != '\n') {
+			if (ks_getuntil(ks, 0, &s, &dret) >= 0) { // read ploidy, 1 or 2
+				int x = (int)s.s[0] - '0';
+				if (x == 1 || x == 2) sam[n][l+1] = x;
+				else fprintf(stderr, "(%s) ploidy can only be 1 or 2; assume diploid\n", __func__);
+			}
+			if (dret != '\n') ks_getuntil(ks, '\n', &s, &dret);
+		}
+		++n;
 	}
 	ks_destroy(ks);
 	gzclose(fp);
