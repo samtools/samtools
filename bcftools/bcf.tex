@@ -33,13 +33,14 @@
 \end{center}
 
 \begin{center}
-\begin{tabular}{cll}
+\begin{tabular}{clp{9cm}}
 \hline
 \multicolumn{1}{l}{\bf Field} & \multicolumn{1}{l}{\bf Type} & \multicolumn{1}{l}{\bf Description} \\\hline
 {\tt DP} & {\tt uint16\_t[n]} & Read depth \\
 {\tt GL} & {\tt float[n*G]} & Log10 likelihood of data; $G=\frac{A(A+1)}{2}$, $A=\#\{alleles\}$\\
 {\tt GT} & {\tt uint8\_t[n]} & {\tt missing\char60\char60 7 | phased\char60\char60 6 | allele1\char60\char60 3 | allele2} \\
-{\tt \_GT} & {\tt uint8\_t+uint8\_t[n*P]} & {Generic GT; the first int equals the max ploidy $P$} \\
+{\tt \_GT} & {\tt uint8\_t+uint8\_t[n*P]} & {Generic GT; the first int equals the max ploidy $P$. If the highest bit is set,
+	the allele is not present (e.g. due to different ploidy between samples).} \\
 {\tt GQ} & {\tt uint8\_t[n]} & {Genotype quality}\\
 {\tt HQ} & {\tt uint8\_t[n*2]} & {Haplotype quality}\\
 {\tt \_HQ} & {\tt uint8\_t+uint8\_t[n*P]} & {Generic HQ}\\
@@ -67,10 +68,10 @@
 	BCF proposal).
 \item Predefined {\tt FORMAT} fields can be missing from VCF headers, but custom {\tt FORMAT} fields
 	are required to be explicitly defined in the headers.
-\item A {\tt FORMAT} field with its name starting with `{\tt \_}' gives an alternative
-	binary representation of the corresponding VCF field. The alternative representation
-	is used when the default representation is unable to keep the genotype information,
-	for example, when the ploidy is over 2 or there are more than 8 alleles.
+\item A {\tt FORMAT} field with its name starting with `{\tt \_}' is specific to BCF only.
+	It gives an alternative binary representation of the corresponding VCF field, in case
+	the default representation is unable to keep the genotype information,
+	for example, when the ploidy is not 2 or there are more than 8 alleles.
 \end{itemize}
 
 \end{document}
