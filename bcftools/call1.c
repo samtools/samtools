@@ -19,7 +19,6 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_VARONLY 16
 #define VC_VCFIN   32
 #define VC_UNCOMP  64
-#define VC_HWE     128
 #define VC_KEEPALT 256
 #define VC_ACGT_ONLY 512
 #define VC_QCALL   1024
@@ -66,23 +65,6 @@ khash_t(set64) *bcf_load_pos(const char *fn, bcf_hdr_t *_h)
 	gzclose(fp);
 	free(str->s); free(str);
 	return hash;
-}
-
-static double test_hwe(const double g[3])
-{
-	extern double kf_gammaq(double p, double x);
-	double fexp, chi2, f[3], n;
-	int i;
-	n = g[0] + g[1] + g[2];
-	fexp = (2. * g[2] + g[1]) / (2. * n);
-	if (fexp > 1. - 1e-10) fexp = 1. - 1e-10;
-	if (fexp < 1e-10) fexp = 1e-10;
-	f[0] = n * (1. - fexp) * (1. - fexp);
-	f[1] = n * 2. * fexp * (1. - fexp);
-	f[2] = n * fexp * fexp;
-	for (i = 0, chi2 = 0.; i < 3; ++i)
-		chi2 += (g[i] - f[i]) * (g[i] - f[i]) / f[i];
-	return kf_gammaq(.5, chi2 / 2.);
 }
 
 typedef struct {
@@ -152,10 +134,9 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 {
 	kstring_t s;
 	int is_var = (pr->p_ref < pref);
-	double p_hwe, r = is_var? pr->p_ref : pr->p_var, fq;
+	double r = is_var? pr->p_ref : pr->p_var, fq;
 	anno16_t a;
 
-	p_hwe = pr->g[0] >= 0.? test_hwe(pr->g) : 1.0; // only do HWE g[] is calculated
 	test16(b, &a);
 	rm_info(b, "I16=");
 
@@ -175,8 +156,6 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%g,%g,%g,%g", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
 		ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	}
-	if (pr->g[0] >= 0. && p_hwe <= .2)
-		ksprintf(&s, ";GC=%.2f,%.2f,%.2f;HWE=%.3f", pr->g[2], pr->g[1], pr->g[0], p_hwe);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
@@ -312,7 +291,6 @@ int bcfview(int argc, char *argv[])
 		case 'c': vc.flag |= VC_CALL; break;
 		case 'v': vc.flag |= VC_VARONLY | VC_CALL; break;
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
-		case 'H': vc.flag |= VC_HWE; break;
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
 		case 'I': vc.flag |= VC_NO_INDEL; break;
 		case 'M': vc.flag |= VC_ANNO_MAX; break;
@@ -450,7 +428,6 @@ int bcfview(int argc, char *argv[])
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
 			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
-			if (vc.flag&VC_HWE) bcf_p1_cal_g3(p1, pr.g);
 			if (n_processed % 100000 == 0) {
 				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
 				bcf_p1_dump_afs(p1);
