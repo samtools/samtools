@@ -302,6 +302,7 @@ int bcfview(int argc, char *argv[])
 		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
 			vc.ploidy = calloc(vc.n_sub + 1, 1);
 			for (tid = 0; tid < vc.n_sub; ++tid) vc.ploidy[tid] = vc.subsam[tid][strlen(vc.subsam[tid]) + 1];
+			tid = -1;
 			break;
 		case 'P':
 			if (strcmp(optarg, "full") == 0) vc.prior_type = MC_PTYPE_FULL;

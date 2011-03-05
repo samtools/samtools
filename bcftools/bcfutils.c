@@ -223,7 +223,7 @@ int bcf_subsam(int n_smpl, int *list, bcf1_t *b) // list MUST BE sorted
 	for (j = 0; j < b->n_gi; ++j) {
 		bcf_ginfo_t *gi = b->gi + j;
 		for (i = 0; i < n_smpl; ++i)
-			memcpy((uint8_t*)gi->data + i * gi->len, (uint8_t*)gi->data + list[i] * gi->len, gi->len);
+			if (i != list[i]) memcpy((uint8_t*)gi->data + i * gi->len, (uint8_t*)gi->data + list[i] * gi->len, gi->len);
 	}
 	b->n_smpl = n_smpl;
 	return 0;

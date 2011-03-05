@@ -136,6 +136,10 @@ bcf_p1aux_t *bcf_p1_init(int n, uint8_t *ploidy)
 		ma->ploidy = malloc(n);
 		memcpy(ma->ploidy, ploidy, n);
 		for (i = 0, ma->M = 0; i < n; ++i) ma->M += ploidy[i];
+		if (ma->M == 2 * n) {
+			free(ma->ploidy);
+			ma->ploidy = 0;
+		}
 	}
 	ma->q2p = calloc(256, sizeof(double));
 	ma->pdg = calloc(3 * ma->n, sizeof(double));
