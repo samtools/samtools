@@ -226,13 +226,11 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 	ploidy = ma->ploidy? ma->ploidy[k] : 2;
 	if (ploidy == 2) {
 		f3[0] = (1.-f0)*(1.-f0); f3[1] = 2.*f0*(1.-f0); f3[2] = f0*f0;
-		for (i = 0, sum = 0.; i < 3; ++i)
-			sum += (g[i] = pdg[i] * f3[i]);
 	} else {
-		f3[0] = 1. - f0; f3[1] = f0;
-		for (i = 0, sum = 0.; i < 2; ++i)
-			sum += (g[i] = pdg[i*2] * f3[i]); // skip pdg[1]
+		f3[0] = 1. - f0; f3[1] = 0; f3[2] = f0;
 	}
+	for (i = 0, sum = 0.; i < 3; ++i)
+		sum += (g[i] = pdg[i] * f3[i]);
 	for (i = 0, max = -1., max_i = 0; i <= ploidy; ++i) {
 		g[i] /= sum;
 		if (g[i] > max) max = g[i], max_i = i;
