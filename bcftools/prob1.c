@@ -39,6 +39,7 @@ struct __bcf_p1aux_t {
 	double *phi, *phi_indel;
 	double *z, *zswap; // aux for afs
 	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
+	double **hg; // hypergeometric distribution
 	double t, t1, t2;
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
 	const uint8_t *PL; // point to PL
@@ -173,6 +174,11 @@ int bcf_p1_set_n1(bcf_p1aux_t *b, int n1)
 void bcf_p1_destroy(bcf_p1aux_t *ma)
 {
 	if (ma) {
+		int k;
+		if (ma->hg && ma->n1 > 0) {
+			for (k = 0; k <= 2*ma->n1; ++k) free(ma->hg[k]);
+			free(ma->hg);
+		}
 		free(ma->ploidy); free(ma->q2p); free(ma->pdg);
 		free(ma->phi); free(ma->phi_indel); free(ma->phi1); free(ma->phi2);
 		free(ma->z); free(ma->zswap); free(ma->z1); free(ma->z2);
@@ -231,7 +237,7 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 	}
 	for (i = 0, sum = 0.; i < 3; ++i)
 		sum += (g[i] = pdg[i] * f3[i]);
-	for (i = 0, max = -1., max_i = 0; i <= ploidy; ++i) {
+	for (i = 0, max = -1., max_i = 0; i < 3; ++i) {
 		g[i] /= sum;
 		if (g[i] > max) max = g[i], max_i = i;
 	}
@@ -345,6 +351,74 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 		x = expl(ma->t - (ma->t1 + ma->t2));
 		for (k = 0; k <= ma->M; ++k) ma->z[k] *= x;
 	} else mc_cal_y_core(ma, 0);
+}
+
+#define CONTRAST_TINY 1e-30
+
+static void contrast2(bcf_p1aux_t *p1, double ret[3])
+{
+	int k, k1, k2, k10, k20, n1, n2;
+	double sum;
+	// get n1 and n2
+	n1 = p1->n1; n2 = p1->n - p1->n1;
+	if (n1 <= 0 || n2 <= 0) return;
+	if (p1->hg == 0) { // initialize the hypergeometric distribution
+		/* NB: the hg matrix may take a lot of memory when there are many samples. There is a way
+		   to avoid precomputing this matrix, but it is slower and quite intricate. The following
+		   computation in this block can be accelerated with a similar strategy, but perhaps this
+		   is not a serious concern for now. */
+		double tmp = lgamma(2*(n1+n2)+1) - (lgamma(2*n1+1) + lgamma(2*n2+1));
+		p1->hg = calloc(2*n1+1, sizeof(void*));
+		for (k1 = 0; k1 <= 2*n1; ++k1) {
+			p1->hg[k1] = calloc(2*n2+1, sizeof(double));
+			for (k2 = 0; k2 <= 2*n2; ++k2)
+				p1->hg[k1][k2] = exp(lgamma(k1+k2+1) + lgamma(p1->M-k1-k2+1) - (lgamma(k1+1) + lgamma(k2+1) + lgamma(2*n1-k1+1) + lgamma(2*n2-k2+1) + tmp));
+		}
+	}
+	{ // compute sum1 and sum2
+		long double suml = 0;
+		for (k = 0; k <= p1->M; ++k) suml += p1->phi[k] * p1->z[k];
+		sum = suml;
+	}
+	{ // get the most likely k1 and k2
+		double max;
+		int max_k;
+		for (k = 0, max = 0, max_k = -1; k <= 2*n1; ++k) {
+			double x = p1->phi1[k] * p1->z1[k];
+			if (x > max) max = x, max_k = k;
+		}
+		k10 = max_k;
+		for (k = 0, max = 0, max_k = -1; k <= 2*n2; ++k) {
+			double x = p1->phi2[k] * p1->z2[k];
+			if (x > max) max = x, max_k = k;
+		}
+		k20 = max_k;
+	}
+	{
+		double x[3];
+		x[0] = x[1] = x[2] = 0;
+		for (k1 = k10; k1 >= 0; --k1) {
+			for (k2 = k20; k2 >= 0; --k2) {
+				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
+				if (p < CONTRAST_TINY) break;
+				if (k1/2./n1 < k2/2./n2) x[0] += p;
+				else if (k1/2./n1 < k2/2./n2) x[1] += p;
+				else x[2] += p;
+			}
+		}
+		ret[0] = x[0]; ret[1] = x[1]; ret[2] = x[2];
+		x[0] = x[1] = x[2] = 0;
+		for (k1 = k10 + 1; k1 <= 2*n1; ++k1) {
+			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
+				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
+				if (p < CONTRAST_TINY) break;
+				if (k1/2./n1 < k2/2./n2) x[0] += p;
+				else if (k1/2./n1 < k2/2./n2) x[1] += p;
+				else x[2] += p;
+			}
+		}
+		ret[0] += x[0]; ret[1] += x[1]; ret[2] += x[2];
+	}
 }
 
 static void contrast(bcf_p1aux_t *ma, double pc[4]) // mc_cal_y() must be called before hand
