@@ -134,7 +134,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 {
 	kstring_t s;
 	int is_var = (pr->p_ref < pref);
-	double r = is_var? pr->p_ref : pr->p_var, fq;
+	double fq, r = is_var? pr->p_ref : pr->p_var;
 	anno16_t a;
 
 	test16(b, &a);
@@ -152,8 +152,17 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	if (fq < -999) fq = -999;
 	if (fq > 999) fq = 999;
 	ksprintf(&s, ";FQ=%.3g", fq);
+	if (pr->cmp[0] >= 0.) {
+		int i, q[3];
+		for (i = 1; i < 3; ++i) {
+			double x = pr->cmp[i] + pr->cmp[0]/2.;
+			q[i] = x == 0? 255 : -4.343 * log(x);
+			if (q[i] > 255) q[i] = 255;
+		}
+		ksprintf(&s, ";PC2=%d,%d", q[1], q[2]);
+		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
+	}
 	if (a.is_tested) {
-		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%g,%g,%g,%g", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
 		ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	}
 	kputc('\0', &s);

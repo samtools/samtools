@@ -401,9 +401,9 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 			for (k2 = k20; k2 >= 0; --k2) {
 				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
 				if (p < CONTRAST_TINY) break;
-				if (k1/2./n1 < k2/2./n2) x[0] += p;
-				else if (k1/2./n1 < k2/2./n2) x[1] += p;
-				else x[2] += p;
+				if (k1/2./n1 < k2/2./n2) x[1] += p;
+				else if (k1/2./n1 < k2/2./n2) x[2] += p;
+				else x[0] += p;
 			}
 		}
 		ret[0] = x[0]; ret[1] = x[1]; ret[2] = x[2];
@@ -412,35 +412,13 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
 				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
 				if (p < CONTRAST_TINY) break;
-				if (k1/2./n1 < k2/2./n2) x[0] += p;
-				else if (k1/2./n1 < k2/2./n2) x[1] += p;
-				else x[2] += p;
+				if (k1/2./n1 < k2/2./n2) x[1] += p;
+				else if (k1/2./n1 < k2/2./n2) x[2] += p;
+				else x[0] += p;
 			}
 		}
 		ret[0] += x[0]; ret[1] += x[1]; ret[2] += x[2];
 	}
-}
-
-static void contrast(bcf_p1aux_t *ma, double pc[4]) // mc_cal_y() must be called before hand
-{
-	int k, n1 = ma->n1, n2 = ma->n - ma->n1;
-	long double sum1, sum2;
-	pc[0] = pc[1] = pc[2] = pc[3] = -1.;
-	if (n1 <= 0 || n2 <= 0) return;
-	for (k = 0, sum1 = 0.; k <= 2*n1; ++k) sum1 += ma->phi1[k] * ma->z1[k];
-	for (k = 0, sum2 = 0.; k <= 2*n2; ++k) sum2 += ma->phi2[k] * ma->z2[k];
-	pc[2] = ma->phi1[2*n1] * ma->z1[2*n1] / sum1;
-	pc[3] = ma->phi2[2*n2] * ma->z2[2*n2] / sum2;
-	for (k = 2; k < 4; ++k) {
-		pc[k] = pc[k] > .5? -(-4.343 * log(1. - pc[k] + TINY) + .499) : -4.343 * log(pc[k] + TINY) + .499;
-		pc[k] = (int)pc[k];
-		if (pc[k] > 99) pc[k] = 99;
-		if (pc[k] < -99) pc[k] = -99;
-	}
-	pc[0] = ma->phi2[2*n2] * ma->z2[2*n2] / sum2 * (1. - ma->phi1[2*n1] * ma->z1[2*n1] / sum1);
-	pc[1] = ma->phi1[2*n1] * ma->z1[2*n1] / sum1 * (1. - ma->phi2[2*n2] * ma->z2[2*n2] / sum2);
-	pc[0] = pc[0] == 1.? 99 : (int)(-4.343 * log(1. - pc[0]) + .499);
-	pc[1] = pc[1] == 1.? 99 : (int)(-4.343 * log(1. - pc[1]) + .499);
 }
 
 static double mc_cal_afs(bcf_p1aux_t *ma, double *p_ref_folded, double *p_var_folded)
@@ -524,7 +502,8 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 		rst->cil = (double)(ma->M - h) / ma->M; rst->cih = (double)(ma->M - l) / ma->M;
 	}
 	rst->g[0] = rst->g[1] = rst->g[2] = -1.;
-	contrast(ma, rst->pc);
+	rst->cmp[0] = rst->cmp[1] = rst->cmp[2] = -1.0;
+	if (rst->p_var > 0.1) contrast2(ma, rst->cmp); // skip contrast2() if the locus is a strong non-variant
 	return 0;
 }
 
