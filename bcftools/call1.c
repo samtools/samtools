@@ -19,7 +19,6 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_VARONLY 16
 #define VC_VCFIN   32
 #define VC_UNCOMP  64
-#define VC_HWE     128
 #define VC_KEEPALT 256
 #define VC_ACGT_ONLY 512
 #define VC_QCALL   1024
@@ -31,6 +30,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist;
 	char *fn_list, *prior_file, **subsam, *fn_dict;
+	uint8_t *ploidy;
 	double theta, pref, indel_frac;
 } viewconf_t;
 
@@ -65,23 +65,6 @@ khash_t(set64) *bcf_load_pos(const char *fn, bcf_hdr_t *_h)
 	gzclose(fp);
 	free(str->s); free(str);
 	return hash;
-}
-
-static double test_hwe(const double g[3])
-{
-	extern double kf_gammaq(double p, double x);
-	double fexp, chi2, f[3], n;
-	int i;
-	n = g[0] + g[1] + g[2];
-	fexp = (2. * g[2] + g[1]) / (2. * n);
-	if (fexp > 1. - 1e-10) fexp = 1. - 1e-10;
-	if (fexp < 1e-10) fexp = 1e-10;
-	f[0] = n * (1. - fexp) * (1. - fexp);
-	f[1] = n * 2. * fexp * (1. - fexp);
-	f[2] = n * fexp * fexp;
-	for (i = 0, chi2 = 0.; i < 3; ++i)
-		chi2 += (g[i] - f[i]) * (g[i] - f[i]) / f[i];
-	return kf_gammaq(.5, chi2 / 2.);
 }
 
 typedef struct {
@@ -151,10 +134,9 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 {
 	kstring_t s;
 	int is_var = (pr->p_ref < pref);
-	double p_hwe, r = is_var? pr->p_ref : pr->p_var, fq;
+	double r = is_var? pr->p_ref : pr->p_var, fq;
 	anno16_t a;
 
-	p_hwe = pr->g[0] >= 0.? test_hwe(pr->g) : 1.0; // only do HWE g[] is calculated
 	test16(b, &a);
 	rm_info(b, "I16=");
 
@@ -174,8 +156,6 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%g,%g,%g,%g", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
 		ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	}
-	if (pr->g[0] >= 0. && p_hwe <= .2)
-		ksprintf(&s, ";GC=%.2f,%.2f,%.2f;HWE=%.3f", pr->g[2], pr->g[1], pr->g[0], p_hwe);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
@@ -214,11 +194,24 @@ static char **read_samples(const char *fn, int *_n)
 	if (fp == 0) return 0; // fail to open file
 	ks = ks_init(fp);
 	while (ks_getuntil(ks, 0, &s, &dret) >= 0) {
+		int l;
 		if (max == n) {
 			max = max? max<<1 : 4;
 			sam = realloc(sam, sizeof(void*)*max);
 		}
-		sam[n++] = strdup(s.s);
+		l = s.l;
+		sam[n] = malloc(s.l + 2);
+		strcpy(sam[n], s.s);
+		sam[n][l+1] = 2; // by default, diploid
+		if (dret != '\n') {
+			if (ks_getuntil(ks, 0, &s, &dret) >= 0) { // read ploidy, 1 or 2
+				int x = (int)s.s[0] - '0';
+				if (x == 1 || x == 2) sam[n][l+1] = x;
+				else fprintf(stderr, "(%s) ploidy can only be 1 or 2; assume diploid\n", __func__);
+			}
+			if (dret != '\n') ks_getuntil(ks, '\n', &s, &dret);
+		}
+		++n;
 	}
 	ks_destroy(ks);
 	gzclose(fp);
@@ -285,7 +278,6 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
-	vc.n_sub = 0; vc.subsam = 0; vc.sublist = 0;
 	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:IMs:D:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
@@ -299,7 +291,6 @@ int bcfview(int argc, char *argv[])
 		case 'c': vc.flag |= VC_CALL; break;
 		case 'v': vc.flag |= VC_VARONLY | VC_CALL; break;
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
-		case 'H': vc.flag |= VC_HWE; break;
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
 		case 'I': vc.flag |= VC_NO_INDEL; break;
 		case 'M': vc.flag |= VC_ANNO_MAX; break;
@@ -308,7 +299,11 @@ int bcfview(int argc, char *argv[])
 		case 'i': vc.indel_frac = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
-		case 's': vc.subsam = read_samples(optarg, &vc.n_sub); break;
+		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
+			vc.ploidy = calloc(vc.n_sub + 1, 1);
+			for (tid = 0; tid < vc.n_sub; ++tid) vc.ploidy[tid] = vc.subsam[tid][strlen(vc.subsam[tid]) + 1];
+			tid = -1;
+			break;
 		case 'P':
 			if (strcmp(optarg, "full") == 0) vc.prior_type = MC_PTYPE_FULL;
 			else if (strcmp(optarg, "cond2") == 0) vc.prior_type = MC_PTYPE_COND2;
@@ -370,7 +365,7 @@ int bcfview(int argc, char *argv[])
 		vcf_hdr_write(bout, hout);
 	}
 	if (vc.flag & VC_CALL) {
-		p1 = bcf_p1_init(hout->n_smpl);
+		p1 = bcf_p1_init(hout->n_smpl, vc.ploidy);
 		if (vc.prior_file) {
 			if (bcf_p1_read_prior(p1, vc.prior_file) < 0) {
 				fprintf(stderr, "[%s] fail to read the prior AFS.\n", __func__);
@@ -434,7 +429,6 @@ int bcfview(int argc, char *argv[])
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
 			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
-			if (vc.flag&VC_HWE) bcf_p1_cal_g3(p1, pr.g);
 			if (n_processed % 100000 == 0) {
 				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
 				bcf_p1_dump_afs(p1);
@@ -471,6 +465,7 @@ int bcfview(int argc, char *argv[])
 	if (hash) kh_destroy(set64, hash);
 	if (vc.fn_list) free(vc.fn_list);
 	if (vc.fn_dict) free(vc.fn_dict);
+	if (vc.ploidy) free(vc.ploidy);
 	if (vc.n_sub) {
 		int i;
 		for (i = 0; i < vc.n_sub; ++i) free(vc.subsam[i]);
