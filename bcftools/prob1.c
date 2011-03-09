@@ -355,11 +355,6 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 
 #define CONTRAST_TINY 1e-30
 
-static inline double lbinom(int n, int k)
-{
-	return lgamma(n+1) - lgamma(n-k+1) - lgamma(k+1);
-}
-
 static void contrast2(bcf_p1aux_t *p1, double ret[3])
 {
 	int k, k1, k2, k10, k20, n1, n2;
@@ -379,16 +374,6 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 			for (k2 = 0; k2 <= 2*n2; ++k2)
 				p1->hg[k1][k2] = exp(lgamma(k1+k2+1) + lgamma(p1->M-k1-k2+1) - (lgamma(k1+1) + lgamma(k2+1) + lgamma(2*n1-k1+1) + lgamma(2*n2-k2+1) + tmp));
 		}
-	}
-	{
-		double *y = calloc(p1->M+1, sizeof(double));
-		double x = exp(p1->t1 + p1->t2 - p1->t);
-		for (k1 = 0; k1 <= 2*n1; ++k1)
-			for (k2 = 0; k2 <= 2*n2; ++k2)
-				y[k1+k2] += p1->z1[k1] * p1->z2[k2] * exp(lbinom(2*n1, k1) + lbinom(2*n2, k2) - lbinom(p1->M, k1+k2));
-		for (k = 0; k <= p1->M; ++k)
-			printf("%g %g %g\n", p1->z[k], y[k], x);
-		free(y);
 	}
 	{ // compute sum1 and sum2
 		long double suml = 0;
@@ -410,6 +395,8 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 		k20 = max_k;
 	}
 	{ // We can do the following with one nested loop, but that is an O(N^2) thing. The following code block is much faster for large N.
+		/* NB: I am confused. I think there should be a exp(p1->t1 + p1->t2 - p1->t) scaling factor when computing the joint
+		   probability P(k',k"|D,Phi), but the following is normalized to 1 without the factor. Anyway... */
 		double x[3];
 		x[0] = x[1] = x[2] = 0;
 		for (k1 = k10; k1 >= 0; --k1) {
