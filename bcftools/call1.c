@@ -156,7 +156,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 		int i, q[3];
 		for (i = 1; i < 3; ++i) {
 			double x = pr->cmp[i] + pr->cmp[0]/2.;
-			q[i] = x == 0? 255 : -4.343 * log(x);
+			q[i] = x == 0? 255 : (int)(-4.343 * log(x) + .499);
 			if (q[i] > 255) q[i] = 255;
 		}
 		ksprintf(&s, ";PC2=%d,%d", q[1], q[2]);

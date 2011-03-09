@@ -252,7 +252,7 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 
 static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 {
-	double *z[2], *tmp, *pdg;
+	double *z[2], *tmp, *pdg, last_t;
 	int _j, last_min, last_max;
 	assert(beg == 0 || ma->M == ma->n*2);
 	z[0] = ma->z;
@@ -264,24 +264,22 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 	last_min = last_max = 0;
 	ma->t = 0.;
 	if (ma->M == ma->n * 2) {
+		int M = 0;
 		for (_j = beg; _j < ma->n; ++_j) {
-			int k, j = _j - beg, _min = last_min, _max = last_max;
+			int k, j = _j - beg, _min = last_min, _max = last_max, M0;
 			double p[3], sum;
+			M0 = M; M += 2;
 			pdg = ma->pdg + _j * 3;
 			p[0] = pdg[0]; p[1] = 2. * pdg[1]; p[2] = pdg[2];
 			for (; _min < _max && z[0][_min] < TINY; ++_min) z[0][_min] = z[1][_min] = 0.;
 			for (; _max > _min && z[0][_max] < TINY; --_max) z[0][_max] = z[1][_max] = 0.;
 			_max += 2;
-			if (_min == 0) 
-				k = 0, z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k];
-			if (_min <= 1)
-				k = 1, z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k] + k*(2*j+2-k) * p[1] * z[0][k-1];
+			if (_min == 0) k = 0, z[1][k] = (M0-k+1) * (M0-k+2) * p[0] * z[0][k];
+			if (_min <= 1) k = 1, z[1][k] = (M0-k+1) * (M0-k+2) * p[0] * z[0][k] + k*(M0-k+2) * p[1] * z[0][k-1];
 			for (k = _min < 2? 2 : _min; k <= _max; ++k)
-				z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k]
-					+ k*(2*j+2-k) * p[1] * z[0][k-1]
-					+ k*(k-1)* p[2] * z[0][k-2];
+				z[1][k] = (M0-k+1)*(M0-k+2) * p[0] * z[0][k] + k*(M0-k+2) * p[1] * z[0][k-1] + k*(k-1)* p[2] * z[0][k-2];
 			for (k = _min, sum = 0.; k <= _max; ++k) sum += z[1][k];
-			ma->t += log(sum / ((2. * j + 2) * (2. * j + 1)));
+			ma->t += log(sum / (M * (M - 1.)));
 			for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 			if (_min >= 1) z[1][_min-1] = 0.;
 			if (_min >= 2) z[1][_min-2] = 0.;
@@ -293,6 +291,8 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 			tmp = z[0]; z[0] = z[1]; z[1] = tmp;
 			last_min = _min; last_max = _max;
 		}
+		//for (_j = 0; _j < last_min; ++_j) z[0][_j] = 0.; // TODO: are these necessary?
+		//for (_j = last_max + 1; _j < ma->M; ++_j) z[0][_j] = 0.;
 	} else { // this block is very similar to the block above; these two might be merged in future
 		int j, M = 0;
 		for (j = 0; j < ma->n; ++j) {
@@ -355,6 +355,11 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 
 #define CONTRAST_TINY 1e-30
 
+static inline double lbinom(int n, int k)
+{
+	return lgamma(n+1) - lgamma(n-k+1) - lgamma(k+1);
+}
+
 static void contrast2(bcf_p1aux_t *p1, double ret[3])
 {
 	int k, k1, k2, k10, k20, n1, n2;
@@ -374,6 +379,16 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 			for (k2 = 0; k2 <= 2*n2; ++k2)
 				p1->hg[k1][k2] = exp(lgamma(k1+k2+1) + lgamma(p1->M-k1-k2+1) - (lgamma(k1+1) + lgamma(k2+1) + lgamma(2*n1-k1+1) + lgamma(2*n2-k2+1) + tmp));
 		}
+	}
+	{
+		double *y = calloc(p1->M+1, sizeof(double));
+		double x = exp(p1->t1 + p1->t2 - p1->t);
+		for (k1 = 0; k1 <= 2*n1; ++k1)
+			for (k2 = 0; k2 <= 2*n2; ++k2)
+				y[k1+k2] += p1->z1[k1] * p1->z2[k2] * exp(lbinom(2*n1, k1) + lbinom(2*n2, k2) - lbinom(p1->M, k1+k2));
+		for (k = 0; k <= p1->M; ++k)
+			printf("%g %g %g\n", p1->z[k], y[k], x);
+		free(y);
 	}
 	{ // compute sum1 and sum2
 		long double suml = 0;
