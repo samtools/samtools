@@ -153,14 +153,15 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	if (fq > 999) fq = 999;
 	ksprintf(&s, ";FQ=%.3g", fq);
 	if (pr->cmp[0] >= 0.) {
-		int i, q[3];
+		int i, q[3], pq;
 		for (i = 1; i < 3; ++i) {
 			double x = pr->cmp[i] + pr->cmp[0]/2.;
 			q[i] = x == 0? 255 : (int)(-4.343 * log(x) + .499);
 			if (q[i] > 255) q[i] = 255;
 		}
-		ksprintf(&s, ";PC2=%d,%d", q[1], q[2]);
-		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
+		pq = (int)(-4.343 * log(pr->p_chi2) + .499);
+		ksprintf(&s, ";QCHI2=%d;PC2=%d,%d", pq, q[1], q[2]);
+//		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}
 	if (a.is_tested) {
 		ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);

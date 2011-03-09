@@ -355,13 +355,35 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 
 #define CONTRAST_TINY 1e-30
 
-static void contrast2(bcf_p1aux_t *p1, double ret[3])
+extern double kf_gammaq(double s, double z); // incomplete gamma function for chi^2 test
+
+static inline double chi2_test(int a, int b, int c, int d)
+{
+	double x, z;
+	x = (double)(a+b) * (c+d) * (b+d) * (a+c);
+	if (x == 0.) return 0;
+	z = a * d - b * c;
+	return kf_gammaq(.5, .5 * z * z * (a+b+c+d) / x);
+}
+
+// chi2=(a+b+c+d)(ad-bc)^2/[(a+b)(c+d)(a+c)(b+d)]
+static inline double contrast2_aux(const bcf_p1aux_t *p1, double sum, int n1, int n2, int k1, int k2, double x[3])
+{
+	double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
+	if (p < CONTRAST_TINY) return -1;
+	if (.5*k1/n1 < .5*k2/n2) x[1] += p;
+	else if (.5*k1/n1 > .5*k2/n2) x[2] += p;
+	else x[0] += p;
+	return p * chi2_test(k1, k2, (n1<<1) - k1, (n2<<1) - k2);
+}
+
+static double contrast2(bcf_p1aux_t *p1, double ret[3])
 {
 	int k, k1, k2, k10, k20, n1, n2;
 	double sum;
 	// get n1 and n2
 	n1 = p1->n1; n2 = p1->n - p1->n1;
-	if (n1 <= 0 || n2 <= 0) return;
+	if (n1 <= 0 || n2 <= 0) return 0.;
 	if (p1->hg == 0) { // initialize the hypergeometric distribution
 		/* NB: the hg matrix may take a lot of memory when there are many samples. There is a way
 		   to avoid precomputing this matrix, but it is slower and quite intricate. The following
@@ -395,43 +417,33 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 		k20 = max_k;
 	}
 	{ // We can do the following with one nested loop, but that is an O(N^2) thing. The following code block is much faster for large N.
-		double x[3];
+		double x[3], y;
+		long double z = 0.;
 		x[0] = x[1] = x[2] = 0;
 		for (k1 = k10; k1 >= 0; --k1) {
 			for (k2 = k20; k2 >= 0; --k2) {
-				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
-				if (p < CONTRAST_TINY) break;
-				if (k1/2./n1 < k2/2./n2) x[1] += p;
-				else if (k1/2./n1 < k2/2./n2) x[2] += p;
-				else x[0] += p;
+				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				else z += y;
 			}
 			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
-				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
-				if (p < CONTRAST_TINY) break;
-				if (k1/2./n1 < k2/2./n2) x[1] += p;
-				else if (k1/2./n1 < k2/2./n2) x[2] += p;
-				else x[0] += p;
+				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				else z += y;
 			}
 		}
 		ret[0] = x[0]; ret[1] = x[1]; ret[2] = x[2];
 		x[0] = x[1] = x[2] = 0;
 		for (k1 = k10 + 1; k1 <= 2*n1; ++k1) {
 			for (k2 = k20; k2 >= 0; --k2) {
-				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
-				if (p < CONTRAST_TINY) break;
-				if (k1/2./n1 < k2/2./n2) x[1] += p;
-				else if (k1/2./n1 < k2/2./n2) x[2] += p;
-				else x[0] += p;
+				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				else z += y;
 			}
 			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
-				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
-				if (p < CONTRAST_TINY) break;
-				if (k1/2./n1 < k2/2./n2) x[1] += p;
-				else if (k1/2./n1 < k2/2./n2) x[2] += p;
-				else x[0] += p;
+				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				else z += y;
 			}
 		}
 		ret[0] += x[0]; ret[1] += x[1]; ret[2] += x[2];
+		return (double)z;
 	}
 }
 
@@ -516,8 +528,9 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 		rst->cil = (double)(ma->M - h) / ma->M; rst->cih = (double)(ma->M - l) / ma->M;
 	}
 	rst->g[0] = rst->g[1] = rst->g[2] = -1.;
-	rst->cmp[0] = rst->cmp[1] = rst->cmp[2] = -1.0;
-	if (rst->p_var > 0.1) contrast2(ma, rst->cmp); // skip contrast2() if the locus is a strong non-variant
+	rst->cmp[0] = rst->cmp[1] = rst->cmp[2] = rst->p_chi2 = -1.0;
+	if (rst->p_var > 0.1) // skip contrast2() if the locus is a strong non-variant
+		rst->p_chi2 = contrast2(ma, rst->cmp);
 	return 0;
 }
 
