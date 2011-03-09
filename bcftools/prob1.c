@@ -252,7 +252,7 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 
 static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 {
-	double *z[2], *tmp, *pdg, last_t;
+	double *z[2], *tmp, *pdg;
 	int _j, last_min, last_max;
 	assert(beg == 0 || ma->M == ma->n*2);
 	z[0] = ma->z;
