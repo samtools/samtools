@@ -395,8 +395,6 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 		k20 = max_k;
 	}
 	{ // We can do the following with one nested loop, but that is an O(N^2) thing. The following code block is much faster for large N.
-		/* NB: I am confused. I think there should be a exp(p1->t1 + p1->t2 - p1->t) scaling factor when computing the joint
-		   probability P(k',k"|D,Phi), but the following is normalized to 1 without the factor. Anyway... */
 		double x[3];
 		x[0] = x[1] = x[2] = 0;
 		for (k1 = k10; k1 >= 0; --k1) {
