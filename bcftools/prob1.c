@@ -409,7 +409,7 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 		}
 		k20 = max_k;
 	}
-	{
+	{ // We can do the following with one nested loop, but that is an O(N^2) thing. The following code block is much faster for large N.
 		double x[3];
 		x[0] = x[1] = x[2] = 0;
 		for (k1 = k10; k1 >= 0; --k1) {
@@ -420,10 +420,24 @@ static void contrast2(bcf_p1aux_t *p1, double ret[3])
 				else if (k1/2./n1 < k2/2./n2) x[2] += p;
 				else x[0] += p;
 			}
+			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
+				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
+				if (p < CONTRAST_TINY) break;
+				if (k1/2./n1 < k2/2./n2) x[1] += p;
+				else if (k1/2./n1 < k2/2./n2) x[2] += p;
+				else x[0] += p;
+			}
 		}
 		ret[0] = x[0]; ret[1] = x[1]; ret[2] = x[2];
 		x[0] = x[1] = x[2] = 0;
 		for (k1 = k10 + 1; k1 <= 2*n1; ++k1) {
+			for (k2 = k20; k2 >= 0; --k2) {
+				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
+				if (p < CONTRAST_TINY) break;
+				if (k1/2./n1 < k2/2./n2) x[1] += p;
+				else if (k1/2./n1 < k2/2./n2) x[2] += p;
+				else x[0] += p;
+			}
 			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
 				double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
 				if (p < CONTRAST_TINY) break;
