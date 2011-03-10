@@ -161,7 +161,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 			if (q[i] > 255) q[i] = 255;
 		}
 		pq = (int)(-4.343 * log(pr->p_chi2) + .499);
-		ksprintf(&s, ";QCHI2=%d;PC2=%d,%d", pq, q[1], q[2]);
+		ksprintf(&s, ";QCHI2=%d;PCHI2=%.3g;PC2=%d,%d", pq, q[1], q[2], pr->p_chi2);
 //		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}
 	if (a.is_tested) {
