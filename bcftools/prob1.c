@@ -361,7 +361,7 @@ static inline double chi2_test(int a, int b, int c, int d)
 {
 	double x, z;
 	x = (double)(a+b) * (c+d) * (b+d) * (a+c);
-	if (x == 0.) return 0;
+	if (x == 0.) return 1;
 	z = a * d - b * c;
 	return kf_gammaq(.5, .5 * z * z * (a+b+c+d) / x);
 }
