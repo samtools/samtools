@@ -141,6 +141,33 @@ int bcf_fix_gt(bcf1_t *b)
 	return 0;
 }
 
+int bcf_fix_pl(bcf1_t *b)
+{
+	int i;
+	uint32_t tmp;
+	uint8_t *PL, *swap;
+	bcf_ginfo_t *gi;
+	// pinpoint PL
+	tmp = bcf_str2int("PL", 2);
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == tmp) break;
+	if (i == b->n_gi) return 0;
+	// prepare
+	gi = b->gi + i;
+	PL = (uint8_t*)gi->data;
+	swap = alloca(gi->len);
+	// loop through individuals
+	for (i = 0; i < b->n_smpl; ++i) {
+		int k, l, x;
+		uint8_t *PLi = PL + i * gi->len;
+		memcpy(swap, PLi, gi->len);
+		for (k = x = 0; k < b->n_alleles; ++k)
+			for (l = k; l < b->n_alleles; ++l)
+				PLi[l*(l+1)/2 + k] = swap[x++];
+	}
+	return 0;
+}
+
 static void *locate_field(const bcf1_t *b, const char *fmt, int l)
 {
 	int i;
