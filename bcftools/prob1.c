@@ -444,13 +444,10 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 		}
 		ret[0] += x[0]; ret[1] += x[1]; ret[2] += x[2];
 		if (ret[0] + ret[1] + ret[2] < 0.99) { // in case of bad things happened
-			ret[0] = ret[1] = ret[2] = 0.;
-			for (k1 = 0, z = 0.; k1 <= 2*n1; ++k1) {
-				for (k2 = 0; k2 <= 2*n2; ++k2) {
-					if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
-					else z += y;
-				}
-			}
+			ret[0] = ret[1] = ret[2] = 0;
+			for (k1 = 0, z = 0.; k1 <= 2*n1; ++k1)
+				for (k2 = 0; k2 <= 2*n2; ++k2)
+					if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, ret)) >= 0) z += y;
 		}
 		return (double)z;
 	}
