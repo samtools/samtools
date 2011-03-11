@@ -403,13 +403,18 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 		sum = suml;
 	}
 	{ // get the mean k1 and k2
-		double mean;
-		for (k = 0, mean = 0.; k <= 2*n1; ++k)
-			mean += p1->phi1[k] * p1->z1[k];
-		k10 = (int)(mean + .499);
-		for (k = 0, mean = 0.; k <= 2*n2; ++k)
-			mean += p1->phi2[k] * p1->z2[k];
-		k20 = (int)(mean + .499);
+		double max;
+		int max_k;
+		for (k = 0, max = 0, max_k = -1; k <= 2*n1; ++k) {
+			double x = p1->phi1[k] * p1->z1[k];
+			if (x > max) max = x, max_k = k;
+		}
+		k10 = max_k;
+		for (k = 0, max = 0, max_k = -1; k <= 2*n2; ++k) {
+			double x = p1->phi2[k] * p1->z2[k];
+			if (x > max) max = x, max_k = k;
+		}
+		k20 = max_k;
 	}
 	{ // We can do the following with one nested loop, but that is an O(N^2) thing. The following code block is much faster for large N.
 		double x[3], y;
@@ -438,7 +443,7 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 			}
 		}
 		ret[0] += x[0]; ret[1] += x[1]; ret[2] += x[2];
-		if (ret[0] + ret[1] + ret[2] < 0.97) { // in case of bad things happened
+		if (ret[0] + ret[1] + ret[2] < 0.99) { // in case of bad things happened
 			ret[0] = ret[1] = ret[2] = 0.;
 			for (k1 = 0, z = 0.; k1 <= 2*n1; ++k1) {
 				for (k2 = 0; k2 <= 2*n2; ++k2) {
