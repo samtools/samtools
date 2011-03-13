@@ -215,6 +215,31 @@ int bcf_anno_max(bcf1_t *b)
 	return 0;
 }
 
+// FIXME: only data are shuffled; the header is NOT
+int bcf_shuffle(bcf1_t *b, int seed)
+{
+	int i, j, *a;
+	if (seed > 0) srand48(seed);
+	a = malloc(b->n_smpl * sizeof(int));
+	for (i = 0; i < b->n_smpl; ++i) a[i] = i;
+	for (i = b->n_smpl; i > 1; --i) {
+		int tmp;
+		j = (int)(drand48() * i);
+		tmp = a[j]; a[j] = a[i-1]; a[i-1] = tmp;
+	}
+	for (j = 0; j < b->n_gi; ++j) {
+		bcf_ginfo_t *gi = b->gi + j;
+		uint8_t *swap, *data = (uint8_t*)gi->data;
+		swap = malloc(gi->len * b->n_smpl);
+		for (i = 0; i < b->n_smpl; ++i)
+			memcpy(swap + gi->len * a[i], data + gi->len * i, gi->len);
+		free(gi->data);
+		gi->data = swap;
+	}
+	free(a);
+	return 0;
+}
+
 bcf_hdr_t *bcf_hdr_subsam(const bcf_hdr_t *h0, int n, char *const* samples, int *list)
 {
 	int i, ret, j;

@@ -29,7 +29,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_FIX_PL   32768
 
 typedef struct {
-	int flag, prior_type, n1, n_sub, *sublist;
+	int flag, prior_type, n1, n_sub, *sublist, perm_seed;
 	char *fn_list, *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
 	double theta, pref, indel_frac;
@@ -134,11 +134,11 @@ static void rm_info(bcf1_t *b, const char *key)
 static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
 {
 	kstring_t s;
-	int is_var = (pr->p_ref < pref);
+	int has_I16, is_var = (pr->p_ref < pref);
 	double fq, r = is_var? pr->p_ref : pr->p_var;
 	anno16_t a;
 
-	test16(b, &a);
+	has_I16 = test16(b, &a) >= 0? 1 : 0;
 	rm_info(b, "I16=");
 
 	memset(&s, 0, sizeof(kstring_t));
@@ -148,7 +148,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	if (b->info[0]) kputc(';', &s);
 //	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
 	ksprintf(&s, "AF1=%.4g;CI95=%.4g,%.4g", 1.-pr->f_em, pr->cil, pr->cih);
-	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
 	if (fq > 999) fq = 999;
@@ -164,9 +164,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 		ksprintf(&s, ";QCHI2=%d;PCHI2=%.3g;PC2=%d,%d", pq, q[1], q[2], pr->p_chi2);
 //		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}
-	if (a.is_tested) {
-		ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
-	}
+	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
@@ -275,6 +273,7 @@ int bcfview(int argc, char *argv[])
 	extern void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x);
 	extern int bcf_fix_gt(bcf1_t *b);
 	extern int bcf_anno_max(bcf1_t *b);
+	extern int bcf_shuffle(bcf1_t *b, int seed);
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
 	int c;
@@ -288,8 +287,8 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
-	while ((c = getopt(argc, argv, "FN1:l:cHAGvbSuP:t:p:QgLi:IMs:D:")) >= 0) {
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.perm_seed = -1;
+	while ((c = getopt(argc, argv, "FN1:l:cHAGvbSuP:t:p:QgLi:IMs:D:U:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
@@ -311,6 +310,7 @@ int bcfview(int argc, char *argv[])
 		case 'i': vc.indel_frac = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
+		case 'U': vc.perm_seed = atoi(optarg); break;
 		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
 			vc.ploidy = calloc(vc.n_sub + 1, 1);
 			for (tid = 0; tid < vc.n_sub; ++tid) vc.ploidy[tid] = vc.subsam[tid][strlen(vc.subsam[tid]) + 1];
@@ -412,6 +412,7 @@ int bcfview(int argc, char *argv[])
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel;
 		if (vc.n_sub) bcf_subsam(vc.n_sub, vc.sublist, b);
+		if (vc.perm_seed) bcf_shuffle(b, vc.perm_seed);
 		if (vc.flag & VC_FIX_PL) bcf_fix_pl(b);
 		is_indel = bcf_is_indel(b);
 		if ((vc.flag & VC_NO_INDEL) && is_indel) continue;
