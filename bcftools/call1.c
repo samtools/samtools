@@ -6,12 +6,15 @@
 #include "bcf.h"
 #include "prob1.h"
 #include "kstring.h"
+#include "time.h"
 
 #include "khash.h"
 KHASH_SET_INIT_INT64(set64)
 
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
+
+#define VC_MIN_PERM_P 0.01
 
 #define VC_NO_GENO 2
 #define VC_BCFOUT  4
@@ -29,7 +32,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_FIX_PL   32768
 
 typedef struct {
-	int flag, prior_type, n1, n_sub, *sublist, perm_seed;
+	int flag, prior_type, n1, n_sub, *sublist, n_perm;
 	char *fn_list, *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
 	double theta, pref, indel_frac;
@@ -276,7 +279,7 @@ int bcfview(int argc, char *argv[])
 	extern int bcf_shuffle(bcf1_t *b, int seed);
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
-	int c;
+	int c, *seeds = 0;
 	uint64_t n_processed = 0;
 	viewconf_t vc;
 	bcf_p1aux_t *p1 = 0;
@@ -287,7 +290,7 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.perm_seed = -1;
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0;
 	while ((c = getopt(argc, argv, "FN1:l:cHAGvbSuP:t:p:QgLi:IMs:D:U:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
@@ -310,7 +313,7 @@ int bcfview(int argc, char *argv[])
 		case 'i': vc.indel_frac = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
-		case 'U': vc.perm_seed = atoi(optarg); break;
+		case 'U': vc.n_perm = atoi(optarg); break;
 		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
 			vc.ploidy = calloc(vc.n_sub + 1, 1);
 			for (tid = 0; tid < vc.n_sub; ++tid) vc.ploidy[tid] = vc.subsam[tid][strlen(vc.subsam[tid]) + 1];
@@ -356,6 +359,12 @@ int bcfview(int argc, char *argv[])
 	if ((vc.flag & VC_VCFIN) && (vc.flag & VC_BCFOUT) && vc.fn_dict == 0) {
 		fprintf(stderr, "[%s] For VCF->BCF conversion please specify the sequence dictionary with -D\n", __func__);
 		return 1;
+	}
+	if (vc.n1 <= 0) vc.n_perm = 0; // TODO: give a warning here!
+	if (vc.n_perm > 0) {
+		seeds = malloc(vc.n_perm * sizeof(int));
+		srand48(time(0));
+		for (c = 0; c < vc.n_perm; ++c) seeds[c] = lrand48();
 	}
 	b = calloc(1, sizeof(bcf1_t));
 	blast = calloc(1, sizeof(bcf1_t));
@@ -412,7 +421,6 @@ int bcfview(int argc, char *argv[])
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel;
 		if (vc.n_sub) bcf_subsam(vc.n_sub, vc.sublist, b);
-		if (vc.perm_seed) bcf_shuffle(b, vc.perm_seed);
 		if (vc.flag & VC_FIX_PL) bcf_fix_pl(b);
 		is_indel = bcf_is_indel(b);
 		if ((vc.flag & VC_NO_INDEL) && is_indel) continue;
@@ -449,6 +457,21 @@ int bcfview(int argc, char *argv[])
 				bcf_p1_dump_afs(p1);
 			}
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
+			if (vc.n_perm && vc.n1 > 0) {
+				if (pr.p_chi2 < VC_MIN_PERM_P) { // permutation test
+					bcf_p1rst_t r;
+					int i;
+					double cmp[3], sum;
+					cmp[0] = cmp[1] = cmp[2] = 0.;
+					for (i = 0; i < vc.n_perm; ++i) {
+						bcf_shuffle(b, seeds[i]);
+						bcf_p1_cal(b, p1, &r);
+						cmp[0] += r.cmp[0]; cmp[1] += r.cmp[1]; cmp[2] += r.cmp[2];
+					}
+					sum = cmp[0] + cmp[1] + cmp[2]; // in principle, this should equal vc.n_perm
+					for (i = 0; i < 3; ++i) pr.cmp[i] = cmp[i] / sum;
+				} else pr.cmp[0] = pr.cmp[1] = pr.cmp[2] = 1. / 3.;
+			}
 			update_bcf1(hout->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
 		if (vc.flag & VC_ADJLD) { // compute LD
@@ -486,6 +509,7 @@ int bcfview(int argc, char *argv[])
 		for (i = 0; i < vc.n_sub; ++i) free(vc.subsam[i]);
 		free(vc.subsam); free(vc.sublist);
 	}
+	if (seeds) free(seeds);
 	if (p1) bcf_p1_destroy(p1);
 	return 0;
 }
