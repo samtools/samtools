@@ -487,6 +487,7 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	int i, k;
 	long double sum = 0.;
 	ma->is_indel = bcf_is_indel(b);
+	rst->perm_rank = -1;
 	// set PL and PL_len
 	for (i = 0; i < b->n_gi; ++i) {
 		if (b->gi[i].fmt == bcf_str2int("PL", 2)) {

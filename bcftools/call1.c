@@ -164,6 +164,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 			if (q[i] > 255) q[i] = 255;
 		}
 		pq = (int)(-4.343 * log(pr->p_chi2) + .499);
+		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
 		ksprintf(&s, ";QCHI2=%d;PCHI2=%.3g;PC2=%d,%d", pq, q[1], q[2], pr->p_chi2);
 //		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}
@@ -457,20 +458,15 @@ int bcfview(int argc, char *argv[])
 				bcf_p1_dump_afs(p1);
 			}
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
-			if (vc.n_perm && vc.n1 > 0) {
-				if (pr.p_chi2 < VC_MIN_PERM_P) { // permutation test
-					bcf_p1rst_t r;
-					int i;
-					double cmp[3], sum;
-					cmp[0] = cmp[1] = cmp[2] = 0.;
-					for (i = 0; i < vc.n_perm; ++i) {
-						bcf_shuffle(b, seeds[i]);
-						bcf_p1_cal(b, p1, &r);
-						cmp[0] += r.cmp[0]; cmp[1] += r.cmp[1]; cmp[2] += r.cmp[2];
-					}
-					sum = cmp[0] + cmp[1] + cmp[2]; // in principle, this should equal vc.n_perm
-					for (i = 0; i < 3; ++i) pr.cmp[i] = cmp[i] / sum;
-				} else pr.cmp[0] = pr.cmp[1] = pr.cmp[2] = 1. / 3.;
+			if (vc.n_perm && vc.n1 > 0 && pr.p_chi2 < VC_MIN_PERM_P) { // permutation test
+				bcf_p1rst_t r;
+				int i, n = 0;
+				for (i = 0; i < vc.n_perm; ++i) {
+					bcf_shuffle(b, seeds[i]);
+					bcf_p1_cal(b, p1, &r);
+					if (pr.p_chi2 >= r.p_chi2) ++n;
+				}
+				pr.perm_rank = n;
 			}
 			update_bcf1(hout->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
