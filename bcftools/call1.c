@@ -243,7 +243,7 @@ static void write_header(bcf_hdr_t *h)
 	if (!strstr(str.s, "##INFO=<ID=MQ,"))
 		kputs("##INFO=<ID=MQ,Number=1,Type=Integer,Description=\"Root-mean-square mapping quality of covering reads\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=FQ,"))
-		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability that sample chromosomes are not all the same\">\n", &str);
+		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability of all samples being the same\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AF1,"))
 		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the site allele frequency of the first ALT allele\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=CI95,"))
@@ -259,7 +259,7 @@ static void write_header(bcf_hdr_t *h)
     if (!strstr(str.s, "##INFO=<ID=QCHI2,"))
         kputs("##INFO=<ID=QCHI2,Number=1,Type=Integer,Description=\"Phred scaled PCHI2.\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=RP,"))
-        kputs("##INFO=<ID=RP,Number=1,Type=Integer,Description=\"# permutations showing a smaller PCHI2.\">\n", &str);
+        kputs("##INFO=<ID=RP,Number=1,Type=Integer,Description=\"# permutations yielding a smaller PCHI2.\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GT,"))
         kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GQ,"))
