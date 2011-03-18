@@ -236,6 +236,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -H       print header only (no alignments)\n");
 	fprintf(stderr, "         -S       input is SAM\n");
 	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
+	fprintf(stderr, "         -1       fast compression (force -b)\n");
 	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
 	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -c       print only the count of matching records\n");
