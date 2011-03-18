@@ -26,7 +26,6 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <zlib.h>
 #ifdef _USE_KNETFILE
 #include "knetfile.h"
@@ -37,7 +36,7 @@
 typedef struct {
     int file_descriptor;
     char open_mode;  // 'r' or 'w'
-    bool owned_file, is_uncompressed;
+    int16_t owned_file, compress_level;
 #ifdef _USE_KNETFILE
 	union {
 		knetFile *fpr;

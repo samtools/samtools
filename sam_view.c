@@ -82,7 +82,7 @@ static int usage(int is_long_help);
 
 int main_samview(int argc, char *argv[])
 {
-	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, is_uncompressed = 0, is_bamout = 0, slx2sngr = 0, is_count = 0;
+	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, compress_level = -1, is_bamout = 0, slx2sngr = 0, is_count = 0;
 	int of_type = BAM_OFDEC, is_long_help = 0;
 	int count = 0;
 	samfile_t *in = 0, *out = 0;
@@ -90,7 +90,7 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbct:hHo:q:f:F:ul:r:xX?T:CR:")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbct:h1Ho:q:f:F:ul:r:xX?T:CR:")) >= 0) {
 		switch (c) {
 		case 'c': is_count = 1; break;
 		case 'C': slx2sngr = 1; break;
@@ -103,7 +103,8 @@ int main_samview(int argc, char *argv[])
 		case 'f': g_flag_on = strtol(optarg, 0, 0); break;
 		case 'F': g_flag_off = strtol(optarg, 0, 0); break;
 		case 'q': g_min_mapQ = atoi(optarg); break;
-		case 'u': is_uncompressed = 1; break;
+		case 'u': compress_level = 0; break;
+		case '1': compress_level = 1; break;
 		case 'l': g_library = strdup(optarg); break;
 		case 'r': g_rg = strdup(optarg); break;
 		case 'R': fn_rg = strdup(optarg); break;
@@ -114,7 +115,7 @@ int main_samview(int argc, char *argv[])
 		default: return usage(is_long_help);
 		}
 	}
-	if (is_uncompressed) is_bamout = 1;
+	if (compress_level >= 0) is_bamout = 1;
 	if (is_header_only) is_header = 1;
 	if (is_bamout) strcat(out_mode, "b");
 	else {
@@ -123,7 +124,11 @@ int main_samview(int argc, char *argv[])
 	}
 	if (is_bamin) strcat(in_mode, "b");
 	if (is_header) strcat(out_mode, "h");
-	if (is_uncompressed) strcat(out_mode, "u");
+	if (compress_level >= 0) {
+		char tmp[2];
+		tmp[0] = compress_level + '0'; tmp[1] = '\0';
+		strcat(out_mode, tmp);
+	}
 	if (argc == optind) return usage(is_long_help); // potential memory leak...
 
 	// read the list of read groups

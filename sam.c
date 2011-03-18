@@ -40,9 +40,9 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 {
 	samfile_t *fp;
 	fp = (samfile_t*)calloc(1, sizeof(samfile_t));
-	if (mode[0] == 'r') { // read
+	if (strchr(mode, 'r')) { // read
 		fp->type |= TYPE_READ;
-		if (mode[1] == 'b') { // binary
+		if (strchr(mode, 'b')) { // binary
 			fp->type |= TYPE_BAM;
 			fp->x.bam = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
 			if (fp->x.bam == 0) goto open_err_ret;
@@ -63,11 +63,15 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 					fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
 			} else fprintf(stderr, "[samopen] SAM header is present: %d sequences.\n", fp->header->n_targets);
 		}
-	} else if (mode[0] == 'w') { // write
+	} else if (strchr(mode, 'w')) { // write
 		fp->header = bam_header_dup((const bam_header_t*)aux);
-		if (mode[1] == 'b') { // binary
+		if (strchr(mode, 'b')) { // binary
 			char bmode[3];
-			bmode[0] = 'w'; bmode[1] = strstr(mode, "u")? 'u' : 0; bmode[2] = 0;
+			int i, compress_level = -1;
+			for (i = 0; mode[i]; ++i) if (mode[i] >= '0' && mode[i] <= '9') break;
+			if (mode[i]) compress_level = mode[i] - '0';
+			if (strchr(mode, 'u')) compress_level = 0;
+			bmode[0] = 'w'; bmode[1] = compress_level < 0? 0 : compress_level + '0'; bmode[2] = 0;
 			fp->type |= TYPE_BAM;
 			fp->x.bam = strcmp(fn, "-")? bam_open(fn, bmode) : bam_dopen(fileno(stdout), bmode);
 			if (fp->x.bam == 0) goto open_err_ret;
@@ -76,11 +80,11 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 			// open file
 			fp->x.tamw = strcmp(fn, "-")? fopen(fn, "w") : stdout;
 			if (fp->x.tamr == 0) goto open_err_ret;
-			if (strstr(mode, "X")) fp->type |= BAM_OFSTR<<2;
-			else if (strstr(mode, "x")) fp->type |= BAM_OFHEX<<2;
+			if (strchr(mode, 'X')) fp->type |= BAM_OFSTR<<2;
+			else if (strchr(mode, 'x')) fp->type |= BAM_OFHEX<<2;
 			else fp->type |= BAM_OFDEC<<2;
 			// write header
-			if (strstr(mode, "h")) {
+			if (strchr(mode, 'h')) {
 				int i;
 				bam_header_t *alt;
 				// parse the header text 
