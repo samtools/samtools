@@ -7,10 +7,10 @@ struct __bcf_p1aux_t;
 typedef struct __bcf_p1aux_t bcf_p1aux_t;
 
 typedef struct {
-	int rank0;
+	int rank0, perm_rank; // NB: perm_rank is always set to -1 by bcf_p1_cal()
 	double f_em, f_exp, f_flat, p_ref_folded, p_ref, p_var_folded, p_var;
 	double cil, cih;
-	double pc[4];
+	double cmp[3], p_chi2; // used by contrast2()
 	double g[3];
 } bcf_p1rst_t;
 

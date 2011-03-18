@@ -141,6 +141,33 @@ int bcf_fix_gt(bcf1_t *b)
 	return 0;
 }
 
+int bcf_fix_pl(bcf1_t *b)
+{
+	int i;
+	uint32_t tmp;
+	uint8_t *PL, *swap;
+	bcf_ginfo_t *gi;
+	// pinpoint PL
+	tmp = bcf_str2int("PL", 2);
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == tmp) break;
+	if (i == b->n_gi) return 0;
+	// prepare
+	gi = b->gi + i;
+	PL = (uint8_t*)gi->data;
+	swap = alloca(gi->len);
+	// loop through individuals
+	for (i = 0; i < b->n_smpl; ++i) {
+		int k, l, x;
+		uint8_t *PLi = PL + i * gi->len;
+		memcpy(swap, PLi, gi->len);
+		for (k = x = 0; k < b->n_alleles; ++k)
+			for (l = k; l < b->n_alleles; ++l)
+				PLi[l*(l+1)/2 + k] = swap[x++];
+	}
+	return 0;
+}
+
 static void *locate_field(const bcf1_t *b, const char *fmt, int l)
 {
 	int i;
@@ -188,6 +215,31 @@ int bcf_anno_max(bcf1_t *b)
 	return 0;
 }
 
+// FIXME: only data are shuffled; the header is NOT
+int bcf_shuffle(bcf1_t *b, int seed)
+{
+	int i, j, *a;
+	if (seed > 0) srand48(seed);
+	a = malloc(b->n_smpl * sizeof(int));
+	for (i = 0; i < b->n_smpl; ++i) a[i] = i;
+	for (i = b->n_smpl; i > 1; --i) {
+		int tmp;
+		j = (int)(drand48() * i);
+		tmp = a[j]; a[j] = a[i-1]; a[i-1] = tmp;
+	}
+	for (j = 0; j < b->n_gi; ++j) {
+		bcf_ginfo_t *gi = b->gi + j;
+		uint8_t *swap, *data = (uint8_t*)gi->data;
+		swap = malloc(gi->len * b->n_smpl);
+		for (i = 0; i < b->n_smpl; ++i)
+			memcpy(swap + gi->len * a[i], data + gi->len * i, gi->len);
+		free(gi->data);
+		gi->data = swap;
+	}
+	free(a);
+	return 0;
+}
+
 bcf_hdr_t *bcf_hdr_subsam(const bcf_hdr_t *h0, int n, char *const* samples, int *list)
 {
 	int i, ret, j;
@@ -197,12 +249,15 @@ bcf_hdr_t *bcf_hdr_subsam(const bcf_hdr_t *h0, int n, char *const* samples, int 
 	kstring_t s;
 	s.l = s.m = 0; s.s = 0;
 	hash = kh_init(str2id);
-	for (i = 0; i < n; ++i)
-		k = kh_put(str2id, hash, samples[i], &ret);
-	for (i = j = 0; i < h0->n_smpl; ++i) {
-		if (kh_get(str2id, hash, h0->sns[i]) != kh_end(hash)) {
-			list[j++] = i;
-			kputs(h0->sns[i], &s); kputc('\0', &s);
+	for (i = 0; i < h0->n_smpl; ++i) {
+		k = kh_put(str2id, hash, h0->sns[i], &ret);
+		kh_val(hash, k) = i;
+	}
+	for (i = j = 0; i < n; ++i) {
+		k = kh_get(str2id, hash, samples[i]);
+		if (k != kh_end(hash)) {
+			list[j++] = kh_val(hash, k);
+			kputs(samples[i], &s); kputc('\0', &s);
 		}
 	}
 	if (j < n) fprintf(stderr, "<%s> %d samples in the list but not in BCF.", __func__, n - j);
@@ -217,13 +272,17 @@ bcf_hdr_t *bcf_hdr_subsam(const bcf_hdr_t *h0, int n, char *const* samples, int 
 	return h;
 }
 
-int bcf_subsam(int n_smpl, int *list, bcf1_t *b) // list MUST BE sorted
+int bcf_subsam(int n_smpl, int *list, bcf1_t *b)
 {
 	int i, j;
 	for (j = 0; j < b->n_gi; ++j) {
 		bcf_ginfo_t *gi = b->gi + j;
+		uint8_t *swap;
+		swap = malloc(gi->len * b->n_smpl);
 		for (i = 0; i < n_smpl; ++i)
-			if (i != list[i]) memcpy((uint8_t*)gi->data + i * gi->len, (uint8_t*)gi->data + list[i] * gi->len, gi->len);
+			memcpy(swap + i * gi->len, (uint8_t*)gi->data + list[i] * gi->len, gi->len);
+		free(gi->data);
+		gi->data = swap;
 	}
 	b->n_smpl = n_smpl;
 	return 0;

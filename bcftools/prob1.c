@@ -39,6 +39,7 @@ struct __bcf_p1aux_t {
 	double *phi, *phi_indel;
 	double *z, *zswap; // aux for afs
 	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
+	double **hg; // hypergeometric distribution
 	double t, t1, t2;
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
 	const uint8_t *PL; // point to PL
@@ -173,6 +174,11 @@ int bcf_p1_set_n1(bcf_p1aux_t *b, int n1)
 void bcf_p1_destroy(bcf_p1aux_t *ma)
 {
 	if (ma) {
+		int k;
+		if (ma->hg && ma->n1 > 0) {
+			for (k = 0; k <= 2*ma->n1; ++k) free(ma->hg[k]);
+			free(ma->hg);
+		}
 		free(ma->ploidy); free(ma->q2p); free(ma->pdg);
 		free(ma->phi); free(ma->phi_indel); free(ma->phi1); free(ma->phi2);
 		free(ma->z); free(ma->zswap); free(ma->z1); free(ma->z2);
@@ -231,7 +237,7 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 	}
 	for (i = 0, sum = 0.; i < 3; ++i)
 		sum += (g[i] = pdg[i] * f3[i]);
-	for (i = 0, max = -1., max_i = 0; i <= ploidy; ++i) {
+	for (i = 0, max = -1., max_i = 0; i < 3; ++i) {
 		g[i] /= sum;
 		if (g[i] > max) max = g[i], max_i = i;
 	}
@@ -258,24 +264,22 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 	last_min = last_max = 0;
 	ma->t = 0.;
 	if (ma->M == ma->n * 2) {
+		int M = 0;
 		for (_j = beg; _j < ma->n; ++_j) {
-			int k, j = _j - beg, _min = last_min, _max = last_max;
+			int k, j = _j - beg, _min = last_min, _max = last_max, M0;
 			double p[3], sum;
+			M0 = M; M += 2;
 			pdg = ma->pdg + _j * 3;
 			p[0] = pdg[0]; p[1] = 2. * pdg[1]; p[2] = pdg[2];
 			for (; _min < _max && z[0][_min] < TINY; ++_min) z[0][_min] = z[1][_min] = 0.;
 			for (; _max > _min && z[0][_max] < TINY; --_max) z[0][_max] = z[1][_max] = 0.;
 			_max += 2;
-			if (_min == 0) 
-				k = 0, z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k];
-			if (_min <= 1)
-				k = 1, z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k] + k*(2*j+2-k) * p[1] * z[0][k-1];
+			if (_min == 0) k = 0, z[1][k] = (M0-k+1) * (M0-k+2) * p[0] * z[0][k];
+			if (_min <= 1) k = 1, z[1][k] = (M0-k+1) * (M0-k+2) * p[0] * z[0][k] + k*(M0-k+2) * p[1] * z[0][k-1];
 			for (k = _min < 2? 2 : _min; k <= _max; ++k)
-				z[1][k] = (2*j+2-k)*(2*j-k+1) * p[0] * z[0][k]
-					+ k*(2*j+2-k) * p[1] * z[0][k-1]
-					+ k*(k-1)* p[2] * z[0][k-2];
+				z[1][k] = (M0-k+1)*(M0-k+2) * p[0] * z[0][k] + k*(M0-k+2) * p[1] * z[0][k-1] + k*(k-1)* p[2] * z[0][k-2];
 			for (k = _min, sum = 0.; k <= _max; ++k) sum += z[1][k];
-			ma->t += log(sum / ((2. * j + 2) * (2. * j + 1)));
+			ma->t += log(sum / (M * (M - 1.)));
 			for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 			if (_min >= 1) z[1][_min-1] = 0.;
 			if (_min >= 2) z[1][_min-2] = 0.;
@@ -287,6 +291,8 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 			tmp = z[0]; z[0] = z[1]; z[1] = tmp;
 			last_min = _min; last_max = _max;
 		}
+		//for (_j = 0; _j < last_min; ++_j) z[0][_j] = 0.; // TODO: are these necessary?
+		//for (_j = last_max + 1; _j < ma->M; ++_j) z[0][_j] = 0.;
 	} else { // this block is very similar to the block above; these two might be merged in future
 		int j, M = 0;
 		for (j = 0; j < ma->n; ++j) {
@@ -347,26 +353,104 @@ static void mc_cal_y(bcf_p1aux_t *ma)
 	} else mc_cal_y_core(ma, 0);
 }
 
-static void contrast(bcf_p1aux_t *ma, double pc[4]) // mc_cal_y() must be called before hand
+#define CONTRAST_TINY 1e-30
+
+extern double kf_gammaq(double s, double z); // incomplete gamma function for chi^2 test
+
+static inline double chi2_test(int a, int b, int c, int d)
 {
-	int k, n1 = ma->n1, n2 = ma->n - ma->n1;
-	long double sum1, sum2;
-	pc[0] = pc[1] = pc[2] = pc[3] = -1.;
-	if (n1 <= 0 || n2 <= 0) return;
-	for (k = 0, sum1 = 0.; k <= 2*n1; ++k) sum1 += ma->phi1[k] * ma->z1[k];
-	for (k = 0, sum2 = 0.; k <= 2*n2; ++k) sum2 += ma->phi2[k] * ma->z2[k];
-	pc[2] = ma->phi1[2*n1] * ma->z1[2*n1] / sum1;
-	pc[3] = ma->phi2[2*n2] * ma->z2[2*n2] / sum2;
-	for (k = 2; k < 4; ++k) {
-		pc[k] = pc[k] > .5? -(-4.343 * log(1. - pc[k] + TINY) + .499) : -4.343 * log(pc[k] + TINY) + .499;
-		pc[k] = (int)pc[k];
-		if (pc[k] > 99) pc[k] = 99;
-		if (pc[k] < -99) pc[k] = -99;
+	double x, z;
+	x = (double)(a+b) * (c+d) * (b+d) * (a+c);
+	if (x == 0.) return 1;
+	z = a * d - b * c;
+	return kf_gammaq(.5, .5 * z * z * (a+b+c+d) / x);
+}
+
+// chi2=(a+b+c+d)(ad-bc)^2/[(a+b)(c+d)(a+c)(b+d)]
+static inline double contrast2_aux(const bcf_p1aux_t *p1, double sum, int n1, int n2, int k1, int k2, double x[3])
+{
+	double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
+	if (p < CONTRAST_TINY) return -1;
+	if (.5*k1/n1 < .5*k2/n2) x[1] += p;
+	else if (.5*k1/n1 > .5*k2/n2) x[2] += p;
+	else x[0] += p;
+	return p * chi2_test(k1, k2, (n1<<1) - k1, (n2<<1) - k2);
+}
+
+static double contrast2(bcf_p1aux_t *p1, double ret[3])
+{
+	int k, k1, k2, k10, k20, n1, n2;
+	double sum;
+	// get n1 and n2
+	n1 = p1->n1; n2 = p1->n - p1->n1;
+	if (n1 <= 0 || n2 <= 0) return 0.;
+	if (p1->hg == 0) { // initialize the hypergeometric distribution
+		/* NB: the hg matrix may take a lot of memory when there are many samples. There is a way
+		   to avoid precomputing this matrix, but it is slower and quite intricate. The following
+		   computation in this block can be accelerated with a similar strategy, but perhaps this
+		   is not a serious concern for now. */
+		double tmp = lgamma(2*(n1+n2)+1) - (lgamma(2*n1+1) + lgamma(2*n2+1));
+		p1->hg = calloc(2*n1+1, sizeof(void*));
+		for (k1 = 0; k1 <= 2*n1; ++k1) {
+			p1->hg[k1] = calloc(2*n2+1, sizeof(double));
+			for (k2 = 0; k2 <= 2*n2; ++k2)
+				p1->hg[k1][k2] = exp(lgamma(k1+k2+1) + lgamma(p1->M-k1-k2+1) - (lgamma(k1+1) + lgamma(k2+1) + lgamma(2*n1-k1+1) + lgamma(2*n2-k2+1) + tmp));
+		}
 	}
-	pc[0] = ma->phi2[2*n2] * ma->z2[2*n2] / sum2 * (1. - ma->phi1[2*n1] * ma->z1[2*n1] / sum1);
-	pc[1] = ma->phi1[2*n1] * ma->z1[2*n1] / sum1 * (1. - ma->phi2[2*n2] * ma->z2[2*n2] / sum2);
-	pc[0] = pc[0] == 1.? 99 : (int)(-4.343 * log(1. - pc[0]) + .499);
-	pc[1] = pc[1] == 1.? 99 : (int)(-4.343 * log(1. - pc[1]) + .499);
+	{ // compute sum1 and sum2
+		long double suml = 0;
+		for (k = 0; k <= p1->M; ++k) suml += p1->phi[k] * p1->z[k];
+		sum = suml;
+	}
+	{ // get the mean k1 and k2
+		double max;
+		int max_k;
+		for (k = 0, max = 0, max_k = -1; k <= 2*n1; ++k) {
+			double x = p1->phi1[k] * p1->z1[k];
+			if (x > max) max = x, max_k = k;
+		}
+		k10 = max_k;
+		for (k = 0, max = 0, max_k = -1; k <= 2*n2; ++k) {
+			double x = p1->phi2[k] * p1->z2[k];
+			if (x > max) max = x, max_k = k;
+		}
+		k20 = max_k;
+	}
+	{ // We can do the following with one nested loop, but that is an O(N^2) thing. The following code block is much faster for large N.
+		double x[3], y;
+		long double z = 0.;
+		x[0] = x[1] = x[2] = 0;
+		for (k1 = k10; k1 >= 0; --k1) {
+			for (k2 = k20; k2 >= 0; --k2) {
+				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				else z += y;
+			}
+			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
+				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				else z += y;
+			}
+		}
+		ret[0] = x[0]; ret[1] = x[1]; ret[2] = x[2];
+		x[0] = x[1] = x[2] = 0;
+		for (k1 = k10 + 1; k1 <= 2*n1; ++k1) {
+			for (k2 = k20; k2 >= 0; --k2) {
+				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				else z += y;
+			}
+			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
+				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				else z += y;
+			}
+		}
+		ret[0] += x[0]; ret[1] += x[1]; ret[2] += x[2];
+		if (ret[0] + ret[1] + ret[2] < 0.99) { // in case of bad things happened
+			ret[0] = ret[1] = ret[2] = 0;
+			for (k1 = 0, z = 0.; k1 <= 2*n1; ++k1)
+				for (k2 = 0; k2 <= 2*n2; ++k2)
+					if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, ret)) >= 0) z += y;
+		}
+		return (double)z;
+	}
 }
 
 static double mc_cal_afs(bcf_p1aux_t *ma, double *p_ref_folded, double *p_var_folded)
@@ -403,6 +487,7 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	int i, k;
 	long double sum = 0.;
 	ma->is_indel = bcf_is_indel(b);
+	rst->perm_rank = -1;
 	// set PL and PL_len
 	for (i = 0; i < b->n_gi; ++i) {
 		if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
@@ -450,7 +535,9 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 		rst->cil = (double)(ma->M - h) / ma->M; rst->cih = (double)(ma->M - l) / ma->M;
 	}
 	rst->g[0] = rst->g[1] = rst->g[2] = -1.;
-	contrast(ma, rst->pc);
+	rst->cmp[0] = rst->cmp[1] = rst->cmp[2] = rst->p_chi2 = -1.0;
+	if (rst->p_var > 0.1) // skip contrast2() if the locus is a strong non-variant
+		rst->p_chi2 = contrast2(ma, rst->cmp);
 	return 0;
 }
 

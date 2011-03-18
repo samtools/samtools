@@ -298,14 +298,19 @@ KSORT_INIT(sort, bam1_p, bam1_lt)
 
 static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam_header_t *h, int is_stdout)
 {
-	char *name;
+	char *name, mode[3];
 	int i;
 	bamFile fp;
 	ks_mergesort(sort, k, buf, 0);
 	name = (char*)calloc(strlen(prefix) + 20, 1);
-	if (n >= 0) sprintf(name, "%s.%.4d.bam", prefix, n);
-	else sprintf(name, "%s.bam", prefix);
-	fp = is_stdout? bam_dopen(fileno(stdout), "w") : bam_open(name, "w");
+	if (n >= 0) {
+		sprintf(name, "%s.%.4d.bam", prefix, n);
+		strcpy(mode, "w1");
+	} else {
+		sprintf(name, "%s.bam", prefix);
+		strcpy(mode, "w");
+	}
+	fp = is_stdout? bam_dopen(fileno(stdout), mode) : bam_open(name, mode);
 	if (fp == 0) {
 		fprintf(stderr, "[sort_blocks] fail to create file %s.\n", name);
 		free(name);

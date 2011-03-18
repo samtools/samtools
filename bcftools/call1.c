@@ -6,6 +6,7 @@
 #include "bcf.h"
 #include "prob1.h"
 #include "kstring.h"
+#include "time.h"
 
 #include "khash.h"
 KHASH_SET_INIT_INT64(set64)
@@ -26,12 +27,13 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_ADJLD   4096
 #define VC_NO_INDEL 8192
 #define VC_ANNO_MAX 16384
+#define VC_FIX_PL   32768
 
 typedef struct {
-	int flag, prior_type, n1, n_sub, *sublist;
+	int flag, prior_type, n1, n_sub, *sublist, n_perm;
 	char *fn_list, *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
-	double theta, pref, indel_frac;
+	double theta, pref, indel_frac, min_perm_p;
 } viewconf_t;
 
 khash_t(set64) *bcf_load_pos(const char *fn, bcf_hdr_t *_h)
@@ -133,11 +135,11 @@ static void rm_info(bcf1_t *b, const char *key)
 static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
 {
 	kstring_t s;
-	int is_var = (pr->p_ref < pref);
-	double r = is_var? pr->p_ref : pr->p_var, fq;
+	int has_I16, is_var = (pr->p_ref < pref);
+	double fq, r = is_var? pr->p_ref : pr->p_var;
 	anno16_t a;
 
-	test16(b, &a);
+	has_I16 = test16(b, &a) >= 0? 1 : 0;
 	rm_info(b, "I16=");
 
 	memset(&s, 0, sizeof(kstring_t));
@@ -147,15 +149,24 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	if (b->info[0]) kputc(';', &s);
 //	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
 	ksprintf(&s, "AF1=%.4g;CI95=%.4g,%.4g", 1.-pr->f_em, pr->cil, pr->cih);
-	ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
 	if (fq > 999) fq = 999;
 	ksprintf(&s, ";FQ=%.3g", fq);
-	if (a.is_tested) {
-		if (pr->pc[0] >= 0.) ksprintf(&s, ";PC4=%g,%g,%g,%g", pr->pc[0], pr->pc[1], pr->pc[2], pr->pc[3]);
-		ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+	if (pr->cmp[0] >= 0.) {
+		int i, q[3], pq;
+		for (i = 1; i < 3; ++i) {
+			double x = pr->cmp[i] + pr->cmp[0]/2.;
+			q[i] = x == 0? 255 : (int)(-4.343 * log(x) + .499);
+			if (q[i] > 255) q[i] = 255;
+		}
+		pq = (int)(-4.343 * log(pr->p_chi2) + .499);
+		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
+		ksprintf(&s, ";QCHI2=%d;PCHI2=%.3g;PC2=%d,%d", pq, q[1], q[2], pr->p_chi2);
+//		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}
+	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	kputc('\0', &s);
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
@@ -232,7 +243,7 @@ static void write_header(bcf_hdr_t *h)
 	if (!strstr(str.s, "##INFO=<ID=MQ,"))
 		kputs("##INFO=<ID=MQ,Number=1,Type=Integer,Description=\"Root-mean-square mapping quality of covering reads\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=FQ,"))
-		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability that sample chromosomes are not all the same\">\n", &str);
+		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability of all samples being the same\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AF1,"))
 		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the site allele frequency of the first ALT allele\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=CI95,"))
@@ -241,7 +252,15 @@ static void write_header(bcf_hdr_t *h)
 		kputs("##INFO=<ID=PV4,Number=4,Type=Float,Description=\"P-values for strand bias, baseQ bias, mapQ bias and tail distance bias\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=INDEL,"))
         kputs("##INFO=<ID=INDEL,Number=0,Type=Flag,Description=\"Indicates that the variant is an INDEL.\">\n", &str);
-    if (!strstr(str.s, "##INFO=<ID=GT,"))
+    if (!strstr(str.s, "##INFO=<ID=PC2,"))
+        kputs("##INFO=<ID=PC2,Number=2,Type=Integer,Description=\"Phred probability of the nonRef allele frequency in group1 samples being larger (,smaller) than in group2.\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=PCHI2,"))
+        kputs("##INFO=<ID=PCHI2,Number=1,Type=Float,Description=\"Posterior weighted chi^2 P-value for testing the association between group1 and group2 samples.\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=QCHI2,"))
+        kputs("##INFO=<ID=QCHI2,Number=1,Type=Integer,Description=\"Phred scaled PCHI2.\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=RP,"))
+        kputs("##INFO=<ID=RP,Number=1,Type=Integer,Description=\"# permutations yielding a smaller PCHI2.\">\n", &str);
+    if (!strstr(str.s, "##FORMAT=<ID=GT,"))
         kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GQ,"))
         kputs("##FORMAT=<ID=GQ,Number=1,Type=Integer,Description=\"Genotype Quality\">\n", &str);
@@ -264,9 +283,10 @@ int bcfview(int argc, char *argv[])
 	extern void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x);
 	extern int bcf_fix_gt(bcf1_t *b);
 	extern int bcf_anno_max(bcf1_t *b);
+	extern int bcf_shuffle(bcf1_t *b, int seed);
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
-	int c;
+	int c, *seeds = 0;
 	uint64_t n_processed = 0;
 	viewconf_t vc;
 	bcf_p1aux_t *p1 = 0;
@@ -277,12 +297,13 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.;
-	while ((c = getopt(argc, argv, "N1:l:cHAGvbSuP:t:p:QgLi:IMs:D:")) >= 0) {
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01;
+	while ((c = getopt(argc, argv, "FN1:l:cHAGvbSuP:t:p:QgLi:IMs:D:U:X:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.fn_list = strdup(optarg); break;
 		case 'D': vc.fn_dict = strdup(optarg); break;
+		case 'F': vc.flag |= VC_FIX_PL; break;
 		case 'N': vc.flag |= VC_ACGT_ONLY; break;
 		case 'G': vc.flag |= VC_NO_GENO; break;
 		case 'A': vc.flag |= VC_KEEPALT; break;
@@ -299,6 +320,8 @@ int bcfview(int argc, char *argv[])
 		case 'i': vc.indel_frac = atof(optarg); break;
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
+		case 'U': vc.n_perm = atoi(optarg); break;
+		case 'X': vc.min_perm_p = atof(optarg); break;
 		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
 			vc.ploidy = calloc(vc.n_sub + 1, 1);
 			for (tid = 0; tid < vc.n_sub; ++tid) vc.ploidy[tid] = vc.subsam[tid][strlen(vc.subsam[tid]) + 1];
@@ -323,19 +346,21 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "         -S        input is VCF\n");
 		fprintf(stderr, "         -A        keep all possible alternate alleles at variant sites\n");
 		fprintf(stderr, "         -G        suppress all individual genotype information\n");
-		fprintf(stderr, "         -H        perform Hardy-Weinberg test (slower)\n");
 		fprintf(stderr, "         -N        skip sites where REF is not A/C/G/T\n");
 		fprintf(stderr, "         -Q        output the QCALL likelihood format\n");
 		fprintf(stderr, "         -L        calculate LD for adjacent sites\n");
 		fprintf(stderr, "         -I        skip indels\n");
+		fprintf(stderr, "         -F        PL generated by r921 or before\n");
 		fprintf(stderr, "         -D FILE   sequence dictionary for VCF->BCF conversion [null]\n");
-		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
 		fprintf(stderr, "         -l FILE   list of sites to output [all sites]\n");
 		fprintf(stderr, "         -t FLOAT  scaled substitution mutation rate [%.4g]\n", vc.theta);
 		fprintf(stderr, "         -i FLOAT  indel-to-substitution ratio [%.4g]\n", vc.indel_frac);
 		fprintf(stderr, "         -p FLOAT  variant if P(ref|D)<FLOAT [%.3g]\n", vc.pref);
 		fprintf(stderr, "         -P STR    type of prior: full, cond2, flat [full]\n");
 		fprintf(stderr, "         -s FILE   list of samples to use [all samples]\n");
+		fprintf(stderr, "         -1 INT    number of group-1 samples [0]\n");
+		fprintf(stderr, "         -U INT    number of permutations for association testing (effective with -1) [0]\n");
+		fprintf(stderr, "         -X FLOAT  only perform permutations for P(chi^2)<FLOAT [%g]\n", vc.min_perm_p);
 		fprintf(stderr, "\n");
 		return 1;
 	}
@@ -343,6 +368,12 @@ int bcfview(int argc, char *argv[])
 	if ((vc.flag & VC_VCFIN) && (vc.flag & VC_BCFOUT) && vc.fn_dict == 0) {
 		fprintf(stderr, "[%s] For VCF->BCF conversion please specify the sequence dictionary with -D\n", __func__);
 		return 1;
+	}
+	if (vc.n1 <= 0) vc.n_perm = 0; // TODO: give a warning here!
+	if (vc.n_perm > 0) {
+		seeds = malloc(vc.n_perm * sizeof(int));
+		srand48(time(0));
+		for (c = 0; c < vc.n_perm; ++c) seeds[c] = lrand48();
 	}
 	b = calloc(1, sizeof(bcf1_t));
 	blast = calloc(1, sizeof(bcf1_t));
@@ -399,6 +430,7 @@ int bcfview(int argc, char *argv[])
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel;
 		if (vc.n_sub) bcf_subsam(vc.n_sub, vc.sublist, b);
+		if (vc.flag & VC_FIX_PL) bcf_fix_pl(b);
 		is_indel = bcf_is_indel(b);
 		if ((vc.flag & VC_NO_INDEL) && is_indel) continue;
 		if ((vc.flag & VC_ACGT_ONLY) && !is_indel) {
@@ -434,6 +466,16 @@ int bcfview(int argc, char *argv[])
 				bcf_p1_dump_afs(p1);
 			}
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
+			if (vc.n_perm && vc.n1 > 0 && pr.p_chi2 < vc.min_perm_p) { // permutation test
+				bcf_p1rst_t r;
+				int i, n = 0;
+				for (i = 0; i < vc.n_perm; ++i) {
+					bcf_shuffle(b, seeds[i]);
+					bcf_p1_cal(b, p1, &r);
+					if (pr.p_chi2 >= r.p_chi2) ++n;
+				}
+				pr.perm_rank = n;
+			}
 			update_bcf1(hout->n_smpl, b, p1, &pr, vc.pref, vc.flag);
 		}
 		if (vc.flag & VC_ADJLD) { // compute LD
@@ -471,6 +513,7 @@ int bcfview(int argc, char *argv[])
 		for (i = 0; i < vc.n_sub; ++i) free(vc.subsam[i]);
 		free(vc.subsam); free(vc.sublist);
 	}
+	if (seeds) free(seeds);
 	if (p1) bcf_p1_destroy(p1);
 	return 0;
 }

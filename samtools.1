@@ -1,4 +1,4 @@
-.TH samtools 1 "1 March 2011" "samtools-0.1.13" "Bioinformatics tools"
+.TH samtools 1 "16 March 2011" "samtools-0.1.14" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -145,7 +145,10 @@ identifiers are absent, each input file is regarded as one sample.
 
 .B OPTIONS:
 .RS
-.TP 8
+.TP 10
+.B -A
+Do not skip anomalous read pairs in variant calling.
+.TP
 .B -B
 Disable probabilistic realignment for the computation of base alignment
 quality (BAQ). BAQ is the Phred-scaled probability of a read base being
@@ -158,6 +161,14 @@ excessive mismatches. Given a read with a phred-scaled probability q of
 being generated from the mapped position, the new mapping quality is
 about sqrt((INT-q)/INT)*INT. A zero value disables this
 functionality; if enabled, the recommended value for BWA is 50. [0]
+.TP
+.BI -d \ INT
+At a position, read maximally
+.I INT
+reads per input BAM. [250]
+.TP
+.B -D
+Output per-sample read depth
 .TP
 .BI -e \ INT
 Phred-scaled gap extension sequencing error probability. Reducing
@@ -184,8 +195,16 @@ is modeled as
 .IR INT * s / l .
 [100]
 .TP
+.B -I
+Do not perform INDEL calling
+.TP
 .BI -l \ FILE
 File containing a list of sites where pileup or BCF is outputted [null]
+.TP
+.BI -L \ INT
+Skip INDEL calling if the average per-sample depth is above
+.IR INT .
+[250]
 .TP
 .BI -o \ INT
 Phred-scaled gap open sequencing error probability. Reducing
@@ -209,6 +228,9 @@ Minimum base quality for a base to be considered [13]
 Only generate pileup in region
 .I STR
 [all sites]
+.TP
+.B -S
+Output per-sample Phred-scaled strand bias P-value
 .TP
 .B -u
 Similar to

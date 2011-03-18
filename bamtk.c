@@ -25,6 +25,7 @@ int main_import(int argc, char *argv[]);
 int main_reheader(int argc, char *argv[]);
 int main_cut_target(int argc, char *argv[]);
 int main_phase(int argc, char *argv[]);
+int main_cat(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 int glf3_view_main(int argc, char *argv[]);
@@ -92,6 +93,7 @@ static int usage()
 	fprintf(stderr, "         merge       merge sorted alignments\n");
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
 	fprintf(stderr, "         reheader    replace BAM header\n");
+	fprintf(stderr, "         cat         concatenate BAMs\n");
 	fprintf(stderr, "         targetcut   cut fosmid regions (for fosmid pool only)\n");
 	fprintf(stderr, "         phase       phase heterozygotes\n");
 	fprintf(stderr, "\n");
@@ -131,6 +133,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "calmd") == 0) return bam_fillmd(argc-1, argv+1);
 	else if (strcmp(argv[1], "fillmd") == 0) return bam_fillmd(argc-1, argv+1);
 	else if (strcmp(argv[1], "reheader") == 0) return main_reheader(argc-1, argv+1);
+	else if (strcmp(argv[1], "cat") == 0) return main_cat(argc-1, argv+1);
 	else if (strcmp(argv[1], "targetcut") == 0) return main_cut_target(argc-1, argv+1);
 	else if (strcmp(argv[1], "phase") == 0) return main_phase(argc-1, argv+1);
 #if _CURSES_LIB != 0

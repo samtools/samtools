@@ -536,7 +536,7 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_EXT_BAQ 0x800
 
 typedef struct {
-	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth;
+	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth;
 	int openQ, extQ, tandemQ, min_support; // for indels
 	double min_frac; // for indels
 	char *reg, *fn_pos, *pl_list;
@@ -617,7 +617,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
 	extern void bcf_call_del_rghash(void *rghash);
 	mplp_aux_t **data;
-	int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid, max_depth;
+	int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid, max_depth, max_indel_depth;
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
@@ -722,6 +722,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		max_depth = 8000 / sm->n;
 		fprintf(stderr, "<%s> Set max per-sample depth to %d\n", __func__, max_depth);
 	}
+	max_indel_depth = conf->max_indel_depth * sm->n;
 	bam_mplp_set_maxcnt(iter, max_depth);
 	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
 		if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
@@ -737,8 +738,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			ref_tid = tid;
 		}
 		if (conf->flag & MPLP_GLF) {
-			int _ref0, ref16;
+			int total_depth, _ref0, ref16;
 			bcf1_t *b = calloc(1, sizeof(bcf1_t));
+			for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
 			group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp);
 			_ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
 			ref16 = bam_nt16_table[_ref0];
@@ -750,7 +752,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
 			// call indels
-			if (!(conf->flag&MPLP_NO_INDEL) && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
+			if (!(conf->flag&MPLP_NO_INDEL) && total_depth < max_indel_depth && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
 				for (i = 0; i < gplp.n; ++i)
 					bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], -1, bca, bcr + i);
 				if (bcf_call_combine(gplp.n, bcr, -1, &bc) >= 0) {
@@ -866,11 +868,11 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_mq = 60;
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
-	mplp.max_depth = 250;
+	mplp.max_depth = 250; mplp.max_indel_depth = 250;
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:b:P:o:e:h:Im:F:EG:")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -900,6 +902,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'A': use_orphan = 1; break;
 		case 'F': mplp.min_frac = atof(optarg); break;
 		case 'm': mplp.min_support = atoi(optarg); break;
+		case 'L': mplp.max_indel_depth = atoi(optarg); break;
 		case 'G': {
 				FILE *fp_rg;
 				char buf[1024];
@@ -924,7 +927,8 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -M INT      cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "         -Q INT      min base quality [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "         -q INT      filter out alignment with MQ smaller than INT [%d]\n", mplp.min_mq);
-		fprintf(stderr, "         -d INT      max per-sample depth [%d]\n", mplp.max_depth);
+		fprintf(stderr, "         -d INT      max per-BAM depth [%d]\n", mplp.max_depth);
+		fprintf(stderr, "         -L INT      max per-sample depth for INDEL calling [%d]\n", mplp.max_indel_depth);
 		fprintf(stderr, "         -P STR      comma separated list of platforms for indels [all]\n");
 		fprintf(stderr, "         -o INT      Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
 		fprintf(stderr, "         -e INT      Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
