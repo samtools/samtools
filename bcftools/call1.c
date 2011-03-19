@@ -429,6 +429,7 @@ int bcfview(int argc, char *argv[])
 	}
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel;
+		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if (vc.n_sub) bcf_subsam(vc.n_sub, vc.sublist, b);
 		if (vc.flag & VC_FIX_PL) bcf_fix_pl(b);
 		is_indel = bcf_is_indel(b);
