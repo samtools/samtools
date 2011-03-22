@@ -250,6 +250,16 @@ This command is much faster than replacing the header with a
 BAM->SAM->BAM conversion.
 
 .TP
+.B cat
+samtools cat [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [ ... ]
+
+Concatenate BAMs. The sequence dictionary of each input BAM must be identical,
+although this command does not check this. This command uses a similar trick
+to
+.B reheader
+which enables fast BAM concatenation.
+
+.TP
 .B sort
 samtools sort [-no] [-m maxMem] <in.bam> <out.prefix>
 

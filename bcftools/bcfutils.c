@@ -168,6 +168,27 @@ int bcf_fix_pl(bcf1_t *b)
 	return 0;
 }
 
+int bcf_smpl_covered(const bcf1_t *b)
+{
+	int i, j, n = 0;
+	uint32_t tmp;
+	bcf_ginfo_t *gi;
+	// pinpoint PL
+	tmp = bcf_str2int("PL", 2);
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == tmp) break;
+	if (i == b->n_gi) return 0;
+	// count how many samples having PL!=[0..0]
+	gi = b->gi + i;
+	for (i = 0; i < b->n_smpl; ++i) {
+		uint8_t *PLi = ((uint8_t*)gi->data) + i * gi->len;
+		for (j = 0; j < gi->len; ++j)
+			if (PLi[j]) break;
+		if (j < gi->len) ++n;
+	}
+	return n;
+}
+
 static void *locate_field(const bcf1_t *b, const char *fmt, int l)
 {
 	int i;

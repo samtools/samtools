@@ -534,6 +534,7 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_FMT_SP 0x200
 #define MPLP_NO_INDEL 0x400
 #define MPLP_EXT_BAQ 0x800
+#define MPLP_ILLUMINA13 0x1000
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth;
@@ -574,6 +575,12 @@ static int mplp_func(void *data, bam1_t *b)
 			uint8_t *rg = bam_aux_get(b, "RG");
 			skip = (rg && bcf_str2id(ma->conf->rghash, (const char*)(rg+1)) >= 0);
 			if (skip) continue;
+		}
+		if (ma->conf->flag & MPLP_ILLUMINA13) {
+			int i;
+			uint8_t *qual = bam1_qual(b);
+			for (i = 0; i < b->core.l_qseq; ++i)
+				qual[i] = qual[i] > 31? qual[i] - 31 : 0;
 		}
 		has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
 		skip = 0;
@@ -872,7 +879,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -891,6 +898,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'S': mplp.flag |= MPLP_FMT_SP; break;
 		case 'I': mplp.flag |= MPLP_NO_INDEL; break;
 		case 'E': mplp.flag |= MPLP_EXT_BAQ; break;
+		case '6': mplp.flag |= MPLP_ILLUMINA13; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
@@ -936,6 +944,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "         -m INT      minimum gapped reads for indel candidates [%d]\n", mplp.min_support);
 		fprintf(stderr, "         -F FLOAT    minimum fraction of gapped reads for candidates [%g]\n", mplp.min_frac);
 		fprintf(stderr, "         -G FILE     exclude read groups listed in FILE [null]\n");
+		fprintf(stderr, "         -6          quality is in the Illumina-1.3+ encoding\n");
 		fprintf(stderr, "         -A          use anomalous read pairs in SNP/INDEL calling\n");
 		fprintf(stderr, "         -g          generate BCF output\n");
 		fprintf(stderr, "         -u          do not compress BCF output\n");

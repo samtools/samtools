@@ -37,6 +37,8 @@ estimating site allele frequencies and allele frequency spectrums.
 .IR prior ]
 .RB [ \-1
 .IR nGroup1 ]
+.RB [ \-d
+.IR minFrac ]
 .RB [ \-U
 .IR nPerm ]
 .RB [ \-X
@@ -77,8 +79,10 @@ Skip sites where the REF field is not A/C/G/T
 Output the QCALL likelihood format
 .TP
 .BI -s \ FILE
-List of samples to use. In the output, the ordering of samples will be identical
-to the one in
+List of samples to use. The first column in the input gives the sample names
+and the second gives the ploidy, which can only be 1 or 2. When the 2nd column
+is absent, the sample ploidy is assumed to be 2. In the output, the ordering of
+samples will be identical to the one in
 .IR FILE .
 [null]
 .TP
@@ -92,6 +96,11 @@ Uncompressed BCF output (force -b).
 .TP 10
 .B -c
 Call variants.
+.TP
+.BI -d \ FLOAT
+When
+.B -v
+is in use, skip loci where the fraction of samples covered by reads is below FLOAT. [0]
 .TP
 .B -g
 Call per-sample genotypes at variant sites (force -c)
