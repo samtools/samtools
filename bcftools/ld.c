@@ -125,6 +125,7 @@ int bcf_main_pwld(int argc, char *argv[])
 	}
 	bcf_destroy(b0);
 	// compute pair-wise r^2
+	printf("%d\n", n); // the number of loci
 	for (i = 0; i < n; ++i) {
 		printf("%s:%d", h->ns[b[i]->tid], b[i]->pos + 1);
 		for (j = 0; j < i; ++j) {
