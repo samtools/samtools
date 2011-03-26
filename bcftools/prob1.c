@@ -448,6 +448,8 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 			for (k1 = 0, z = 0.; k1 <= 2*n1; ++k1)
 				for (k2 = 0; k2 <= 2*n2; ++k2)
 					if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, ret)) >= 0) z += y;
+			if (ret[0] + ret[1] + ret[2] < 0.99) // It seems that this may be caused by floating point errors. I do not really understand why...
+				z = 1.0, ret[0] = ret[1] = ret[2] = 1./3;
 		}
 		return (double)z;
 	}
