@@ -609,7 +609,11 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 			q = bam_aux_get(p->b, "RG");
 			if (q) id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
 			if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
-			assert(id >= 0 && id < m->n);
+			if (id < 0 || id >= m->n) {
+				assert(q); // otherwise a bug
+				fprintf(stderr, "[%s] Read group %s used in file %s but not defined in the header.\n", (char*)q+1, fn[i]);
+				exit(1);
+			}
 			if (m->n_plp[id] == m->m_plp[id]) {
 				m->m_plp[id] = m->m_plp[id]? m->m_plp[id]<<1 : 8;
 				m->plp[id] = realloc(m->plp[id], sizeof(bam_pileup1_t) * m->m_plp[id]);

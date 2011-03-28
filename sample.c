@@ -74,7 +74,8 @@ int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
 		p = q > r? q : r;
 		++n;
 	}
-	if (n == 0) add_pair(sm, sm2id, fn, fn);
+//	if (n == 0) add_pair(sm, sm2id, fn, fn);
+	add_pair(sm, sm2id, fn, fn);
 	free(buf.s);
 	return 0;
 }
