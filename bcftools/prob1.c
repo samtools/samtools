@@ -209,18 +209,18 @@ static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 	return i;
 }
 // f0 is the reference allele frequency
-static double mc_freq_iter(double f0, const bcf_p1aux_t *ma)
+static double mc_freq_iter(double f0, const bcf_p1aux_t *ma, int beg, int end)
 {
 	double f, f3[3];
 	int i;
 	f3[0] = (1.-f0)*(1.-f0); f3[1] = 2.*f0*(1.-f0); f3[2] = f0*f0;
-	for (i = 0, f = 0.; i < ma->n; ++i) {
+	for (i = beg, f = 0.; i < end; ++i) {
 		double *pdg;
 		pdg = ma->pdg + i * 3;
 		f += (pdg[1] * f3[1] + 2. * pdg[2] * f3[2])
 			/ (pdg[0] * f3[0] + pdg[1] * f3[1] + pdg[2] * f3[2]);
 	}
-	f /= ma->n * 2.;
+	f /= (end - beg) * 2.;
 	return f;
 }
 
@@ -448,6 +448,8 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 			for (k1 = 0, z = 0.; k1 <= 2*n1; ++k1)
 				for (k2 = 0; k2 <= 2*n2; ++k2)
 					if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, ret)) >= 0) z += y;
+			if (ret[0] + ret[1] + ret[2] < 0.99) // It seems that this may be caused by floating point errors. I do not really understand why...
+				z = 1.0, ret[0] = ret[1] = ret[2] = 1./3;
 		}
 		return (double)z;
 	}
@@ -516,9 +518,19 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	{ // calculate f_em
 		double flast = rst->f_flat;
 		for (i = 0; i < MC_MAX_EM_ITER; ++i) {
-			rst->f_em = mc_freq_iter(flast, ma);
+			rst->f_em = mc_freq_iter(flast, ma, 0, ma->n);
 			if (fabs(rst->f_em - flast) < MC_EM_EPS) break;
 			flast = rst->f_em;
+		}
+		if (ma->n1 > 0 && ma->n1 < ma->n) {
+			for (k = 0; k < 2; ++k) {
+				flast = rst->f_em;
+				for (i = 0; i < MC_MAX_EM_ITER; ++i) {
+					rst->f_em2[k] = k? mc_freq_iter(flast, ma, ma->n1, ma->n) : mc_freq_iter(flast, ma, 0, ma->n1);
+					if (fabs(rst->f_em2[k] - flast) < MC_EM_EPS) break;
+					flast = rst->f_em2[k];
+				}
+			}
 		}
 	}
 	{ // estimate equal-tail credible interval (95% level)

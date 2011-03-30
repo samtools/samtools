@@ -536,19 +536,23 @@ int bam_pileup(int argc, char *argv[])
 #define MPLP_EXT_BAQ 0x800
 #define MPLP_ILLUMINA13 0x1000
 
+void *bed_read(const char *fn);
+void bed_destroy(void *_h);
+int bed_overlap(const void *_h, const char *chr, int beg, int end);
+
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth;
 	int openQ, extQ, tandemQ, min_support; // for indels
 	double min_frac; // for indels
-	char *reg, *fn_pos, *pl_list;
+	char *reg, *pl_list;
 	faidx_t *fai;
-	kh_64_t *hash;
-	void *rghash;
+	void *bed, *rghash;
 } mplp_conf_t;
 
 typedef struct {
 	bamFile fp;
 	bam_iter_t iter;
+	bam_header_t *h;
 	int ref_id;
 	char *ref;
 	const mplp_conf_t *conf;
@@ -571,6 +575,14 @@ static int mplp_func(void *data, bam1_t *b)
 		int has_ref;
 		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
 		if (ret < 0) break;
+		if (b->core.tid < 0 || (b->core.flag&BAM_FUNMAP)) { // exclude unmapped reads
+			skip = 1;
+			continue;
+		}
+		if (ma->conf->bed) { // test overlap
+			skip = !bed_overlap(ma->conf->bed, ma->h->target_name[b->core.tid], b->core.pos, bam_calend(&b->core, bam1_cigar(b)));
+			if (skip) continue;
+		}
 		if (ma->conf->rghash) { // exclude read groups
 			uint8_t *rg = bam_aux_get(b, "RG");
 			skip = (rg && bcf_str2id(ma->conf->rghash, (const char*)(rg+1)) >= 0);
@@ -589,7 +601,7 @@ static int mplp_func(void *data, bam1_t *b)
 			int q = bam_cap_mapQ(b, ma->ref, ma->conf->capQ_thres);
 			if (q < 0) skip = 1;
 			else if (b->core.qual > q) b->core.qual = q;
-		} else if (b->core.flag&BAM_FUNMAP) skip = 1;
+		}
 		else if (b->core.qual < ma->conf->min_mq) skip = 1; 
 		else if ((ma->conf->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) skip = 1;
 	} while (skip);
@@ -609,7 +621,11 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 			q = bam_aux_get(p->b, "RG");
 			if (q) id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
 			if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
-			assert(id >= 0 && id < m->n);
+			if (id < 0 || id >= m->n) {
+				assert(q); // otherwise a bug
+				fprintf(stderr, "[%s] Read group %s used in file %s but not defined in the header.\n", __func__, (char*)q+1, fn[i]);
+				exit(1);
+			}
 			if (m->n_plp[id] == m->m_plp[id]) {
 				m->m_plp[id] = m->m_plp[id]? m->m_plp[id]<<1 : 8;
 				m->plp[id] = realloc(m->plp[id], sizeof(bam_pileup1_t) * m->m_plp[id]);
@@ -629,7 +645,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
 	char *ref;
-	khash_t(64) *hash = 0;
 	void *rghash = 0;
 
 	bcf_callaux_t *bca = 0;
@@ -657,6 +672,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		data[i]->fp = strcmp(fn[i], "-") == 0? bam_dopen(fileno(stdin), "r") : bam_open(fn[i], "r");
 		data[i]->conf = conf;
 		h_tmp = bam_header_read(data[i]->fp);
+		data[i]->h = i? h : h_tmp; // for i==0, "h" has not been set yet
 		bam_smpl_add(sm, fn[i], h_tmp->text);
 		rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
 		if (conf->reg) {
@@ -687,7 +703,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	gplp.plp = calloc(sm->n, sizeof(void*));
 
 	fprintf(stderr, "[%s] %d samples in %d input files\n", __func__, sm->n, n);
-	if (conf->fn_pos) hash = load_pos(conf->fn_pos, h);
 	// write the VCF header
 	if (conf->flag & MPLP_GLF) {
 		kstring_t s;
@@ -733,11 +748,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bam_mplp_set_maxcnt(iter, max_depth);
 	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
 		if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
-		if (hash) {
-			khint_t k;
-			k = kh_get(64, hash, (uint64_t)tid<<32 | pos);
-			if (k == kh_end(hash)) continue;
-		}
+		if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
 		if (tid != ref_tid) {
 			free(ref); ref = 0;
 			if (conf->fai) ref = fai_fetch(conf->fai, h->target_name[tid], &ref_len);
@@ -797,12 +808,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	for (i = 0; i < gplp.n; ++i) free(gplp.plp[i]);
 	free(gplp.plp); free(gplp.n_plp); free(gplp.m_plp);
 	bcf_call_del_rghash(rghash);
-	if (hash) { // free the hash table
-		khint_t k;
-		for (k = kh_begin(hash); k < kh_end(hash); ++k)
-			if (kh_exist(hash, k)) free(kh_val(hash, k));
-		kh_destroy(64, hash);
-	}
 	bcf_hdr_destroy(bh); bcf_call_destroy(bca); free(bc.PL); free(bcr);
 	bam_mplp_destroy(iter);
 	bam_header_destroy(h);
@@ -887,7 +892,7 @@ int bam_mpileup(int argc, char *argv[])
 			break;
 		case 'd': mplp.max_depth = atoi(optarg); break;
 		case 'r': mplp.reg = strdup(optarg); break;
-		case 'l': mplp.fn_pos = strdup(optarg); break;
+		case 'l': mplp.bed = bed_read(optarg); break;
 		case 'P': mplp.pl_list = strdup(optarg); break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
@@ -966,5 +971,6 @@ int bam_mpileup(int argc, char *argv[])
 	if (mplp.rghash) bcf_str2id_thorough_destroy(mplp.rghash);
 	free(mplp.reg); free(mplp.pl_list);
 	if (mplp.fai) fai_destroy(mplp.fai);
+	if (mplp.bed) bed_destroy(mplp.bed);
 	return 0;
 }

@@ -70,6 +70,7 @@ static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
 
 #define MERGE_RG     1
 #define MERGE_UNCOMP 2
+#define MERGE_LEVEL1 4
 
 /*!
   @abstract    Merge multiple sorted BAM.
@@ -207,11 +208,9 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 		}
 		else h->pos = HEAP_EMPTY;
 	}
-	if (flag & MERGE_UNCOMP) {
-		fpout = strcmp(out, "-")? bam_open(out, "wu") : bam_dopen(fileno(stdout), "wu");
-	} else {
-		fpout = strcmp(out, "-")? bam_open(out, "w") : bam_dopen(fileno(stdout), "w");
-	}
+	if (flag & MERGE_UNCOMP) fpout = strcmp(out, "-")? bam_open(out, "wu") : bam_dopen(fileno(stdout), "wu");
+	else if (flag & MERGE_LEVEL1) fpout = strcmp(out, "-")? bam_open(out, "w1") : bam_dopen(fileno(stdout), "w1");
+	else fpout = strcmp(out, "-")? bam_open(out, "w") : bam_dopen(fileno(stdout), "w");
 	if (fpout == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
 		return -1;
@@ -257,11 +256,12 @@ int bam_merge(int argc, char *argv[])
 	int c, is_by_qname = 0, flag = 0, ret = 0;
 	char *fn_headers = NULL, *reg = 0;
 
-	while ((c = getopt(argc, argv, "h:nruR:")) >= 0) {
+	while ((c = getopt(argc, argv, "h:nru1R:")) >= 0) {
 		switch (c) {
 		case 'r': flag |= MERGE_RG; break;
 		case 'h': fn_headers = strdup(optarg); break;
 		case 'n': is_by_qname = 1; break;
+		case '1': flag |= MERGE_LEVEL1; break;
 		case 'u': flag |= MERGE_UNCOMP; break;
 		case 'R': reg = strdup(optarg); break;
 		}
@@ -272,6 +272,7 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "Options: -n       sort by read names\n");
 		fprintf(stderr, "         -r       attach RG tag (inferred from file names)\n");
 		fprintf(stderr, "         -u       uncompressed BAM output\n");
+		fprintf(stderr, "         -1       compress level 1\n");
 		fprintf(stderr, "         -R STR   merge file in the specified region STR [all]\n");
 		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n\n");
 		fprintf(stderr, "Note: Samtools' merge does not reconstruct the @RG dictionary in the header. Users\n");
