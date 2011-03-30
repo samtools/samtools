@@ -8,9 +8,6 @@
 #include "kstring.h"
 #include "time.h"
 
-#include "khash.h"
-KHASH_SET_INIT_INT64(set64)
-
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
@@ -31,43 +28,15 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist, n_perm;
-	char *fn_list, *prior_file, **subsam, *fn_dict;
+	char *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
 	double theta, pref, indel_frac, min_perm_p, min_smpl_frac;
+	void *bed;
 } viewconf_t;
 
-khash_t(set64) *bcf_load_pos(const char *fn, bcf_hdr_t *_h)
-{
-	void *str2id;
-	gzFile fp;
-	kstream_t *ks;
-	int ret, dret, lineno = 1;
-	kstring_t *str;
-	khash_t(set64) *hash = 0;
-
-	hash = kh_init(set64);
-	str2id = bcf_build_refhash(_h);
-	str = calloc(1, sizeof(kstring_t));
-	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
-	ks = ks_init(fp);
-	while (ks_getuntil(ks, 0, str, &dret) >= 0) {
-		int tid = bcf_str2id(str2id, str->s);
-		if (tid >= 0 && dret != '\n') {
-			if (ks_getuntil(ks, 0, str, &dret) >= 0) {
-				uint64_t x = (uint64_t)tid<<32 | (atoi(str->s) - 1);
-				kh_put(set64, hash, x, &ret);
-			} else break;
-		} else fprintf(stderr, "[%s] %s is not a reference name (line %d).\n", __func__, str->s, lineno);
-		if (dret != '\n') while ((dret = ks_getc(ks)) > 0 && dret != '\n');
-		if (dret < 0) break;
-		++lineno;
-	}
-	bcf_str2id_destroy(str2id);
-	ks_destroy(ks);
-	gzclose(fp);
-	free(str->s); free(str);
-	return hash;
-}
+void *bed_read(const char *fn);
+void bed_destroy(void *_h);
+int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
 typedef struct {
 	double p[4];
@@ -294,7 +263,6 @@ int bcfview(int argc, char *argv[])
 	bcf_hdr_t *hin, *hout;
 	int tid, begin, end;
 	char moder[4], modew[4];
-	khash_t(set64) *hash = 0;
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
@@ -302,7 +270,7 @@ int bcfview(int argc, char *argv[])
 	while ((c = getopt(argc, argv, "FN1:l:cHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
-		case 'l': vc.fn_list = strdup(optarg); break;
+		case 'l': vc.bed = bed_read(optarg); break;
 		case 'D': vc.fn_dict = strdup(optarg); break;
 		case 'F': vc.flag |= VC_FIX_PL; break;
 		case 'N': vc.flag |= VC_ACGT_ONLY; break;
@@ -412,7 +380,6 @@ int bcfview(int argc, char *argv[])
 		}
 		if (vc.indel_frac > 0.) bcf_p1_indel_prior(p1, vc.indel_frac); // otherwise use the default indel_frac
 	}
-	if (vc.fn_list) hash = bcf_load_pos(vc.fn_list, hin);
 	if (optind + 1 < argc && !(vc.flag&VC_VCFIN)) {
 		void *str2id = bcf_build_refhash(hout);
 		if (bcf_parse_region(str2id, argv[optind+1], &tid, &begin, &end) >= 0) {
@@ -448,13 +415,7 @@ int bcfview(int argc, char *argv[])
 			x = toupper(b->ref[0]);
 			if (x != 'A' && x != 'C' && x != 'G' && x != 'T') continue;
 		}
-		if (hash) {
-			uint64_t x = (uint64_t)b->tid<<32 | b->pos;
-			khint_t k = kh_get(set64, hash, x);
-			if (kh_size(hash) == 0) break;
-			if (k == kh_end(hash)) continue;
-			kh_del(set64, hash, k);
-		}
+		if (vc.bed && !bed_overlap(vc.bed, hin->ns[b->tid], b->pos, b->pos + strlen(b->ref))) continue;
 		if (tid >= 0) {
 			int l = strlen(b->ref);
 			l = b->pos + (l > 0? l : 1);
@@ -513,8 +474,6 @@ int bcfview(int argc, char *argv[])
 	bcf_hdr_destroy(hin);
 	bcf_destroy(b); bcf_destroy(blast);
 	vcf_close(bp); vcf_close(bout);
-	if (hash) kh_destroy(set64, hash);
-	if (vc.fn_list) free(vc.fn_list);
 	if (vc.fn_dict) free(vc.fn_dict);
 	if (vc.ploidy) free(vc.ploidy);
 	if (vc.n_sub) {
@@ -522,6 +481,7 @@ int bcfview(int argc, char *argv[])
 		for (i = 0; i < vc.n_sub; ++i) free(vc.subsam[i]);
 		free(vc.subsam); free(vc.sublist);
 	}
+	if (vc.bed) bed_destroy(vc.bed);
 	if (seeds) free(seeds);
 	if (p1) bcf_p1_destroy(p1);
 	return 0;
