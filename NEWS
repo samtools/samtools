@@ -27,7 +27,7 @@ Other notable changes:
  * Dropped HWE test. This feature has never been implemented properly. An EM
    should be much better. To be implemented in future.
 
- * Added `cat' command to samtools. This command concatenate BAMs with
+ * Added the `cat' command to samtools. This command concatenate BAMs with
    identical sequence dictionaries in an efficient way. Modified from bam_cat.c
    written by Chris Saunders.
 
