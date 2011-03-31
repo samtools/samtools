@@ -111,6 +111,32 @@ report_error(BGZF* fp, const char* message) {
     fp->error = message;
 }
 
+int bgzf_check_bgzf(const char *fn)
+{
+    BGZF *fp;
+    uint8_t buf[10],magic[10]="\037\213\010\4\0\0\0\0\0\377";
+    int n;
+
+    if ((fp = bgzf_open(fn, "r")) == 0) 
+    {
+        fprintf(stderr, "[bgzf_check_bgzf] failed to open the file: %s\n",fn);
+        return -1;
+    }
+
+#ifdef _USE_KNETFILE
+    n = knet_read(fp->x.fpr, buf, 10);
+#else
+    n = fread(buf, 1, 10, fp->file);
+#endif
+    bgzf_close(fp);
+
+    if ( n!=10 ) 
+        return -1;
+
+    if ( !memcmp(magic, buf, 10) ) return 1;
+    return 0;
+}
+
 static BGZF *bgzf_read_init()
 {
 	BGZF *fp;

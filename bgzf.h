@@ -128,6 +128,7 @@ int bgzf_check_EOF(BGZF *fp);
 int bgzf_read_block(BGZF* fp);
 int bgzf_flush(BGZF* fp);
 int bgzf_flush_try(BGZF *fp, int size);
+int bgzf_check_bgzf(const char *fn);
 
 #ifdef __cplusplus
 }
