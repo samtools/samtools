@@ -26,6 +26,7 @@ int main_reheader(int argc, char *argv[]);
 int main_cut_target(int argc, char *argv[]);
 int main_phase(int argc, char *argv[]);
 int main_cat(int argc, char *argv[]);
+int main_depth(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 int glf3_view_main(int argc, char *argv[]);
@@ -80,6 +81,7 @@ static int usage()
 	fprintf(stderr, "         sort        sort alignment file\n");
 	fprintf(stderr, "         pileup      generate pileup output\n");
 	fprintf(stderr, "         mpileup     multi-way pileup\n");
+	fprintf(stderr, "         depth       compute the depth\n");
 	fprintf(stderr, "         faidx       index/extract FASTA\n");
 #if _CURSES_LIB != 0
 	fprintf(stderr, "         tview       text alignment viewer\n");
@@ -136,6 +138,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "cat") == 0) return main_cat(argc-1, argv+1);
 	else if (strcmp(argv[1], "targetcut") == 0) return main_cut_target(argc-1, argv+1);
 	else if (strcmp(argv[1], "phase") == 0) return main_phase(argc-1, argv+1);
+	else if (strcmp(argv[1], "depth") == 0) return main_depth(argc-1, argv+1);
 #if _CURSES_LIB != 0
 	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif
