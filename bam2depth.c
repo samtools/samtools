@@ -2,7 +2,7 @@
  * simutaneously, to achieve random access and to use the BED interface.
  * To compile this program separately, you may:
  *
- *   gcc -g -O2 -Wall -D_MAIN_BAM2DEPTH bam2depth.c -L. -lbam -lz
+ *   gcc -g -O2 -Wall -o bam2depth -D_MAIN_BAM2DEPTH bam2depth.c -L. -lbam -lz
  */
 #include <stdlib.h>
 #include <string.h>
