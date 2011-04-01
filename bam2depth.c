@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
 int main_depth(int argc, char *argv[])
 #endif
 {
-	int i, n, tid, beg, end, pos, *n_plp;
+	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0;
 	const bam_pileup1_t **plp;
 	char *reg = 0; // specified region
 	void *bed = 0; // BED data structure
@@ -41,14 +41,15 @@ int main_depth(int argc, char *argv[])
 	bam_mplp_t mplp;
 
 	// parse the command line
-	while ((n = getopt(argc, argv, "r:b:")) >= 0) {
+	while ((n = getopt(argc, argv, "r:b:q:")) >= 0) {
 		switch (n) {
 			case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
 			case 'b': bed = bed_read(optarg); break; // BED or position list file can be parsed now
+			case 'q': baseQ = atoi(optarg); break;   // base quality threshold
 		}
 	}
 	if (optind == argc) {
-		fprintf(stderr, "Usage: bam2depth [-r reg] [-b in.bed] <in1.bam> [...]\n");
+		fprintf(stderr, "Usage: bam2depth [-r reg] [-q baseQthres] [-b in.bed] <in1.bam> [...]\n");
 		return 1;
 	}
 
@@ -75,16 +76,18 @@ int main_depth(int argc, char *argv[])
 	// the core multi-pileup loop
 	mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
 	n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
-	plp = calloc(n, sizeof(void*)); // plp[i] points to the array of covering reads internal in mplp
+	plp = calloc(n, sizeof(void*)); // plp[i] points to the array of covering reads (internal in mplp)
 	while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0) { // come to the next covered position
 		if (pos < beg || pos >= end) continue; // out of range; skip
 		if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue; // not in BED; skip
 		printf("%s\t%d", h->target_name[tid], pos+1);
 		for (i = 0; i < n; ++i) {
 			int j, m = 0;
-			const bam_pileup1_t *p = plp[i];
-			for (j = 0; j < n_plp[i]; ++j) // this loop counts #reads having deletions or refskip at tid:pos
-				if (p->is_del || p->is_refskip) ++m;
+			for (j = 0; j < n_plp[i]; ++j) {
+				const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
+				if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
+				else if (bam1_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
+			}
 			printf("\t%d", n_plp[i] - m);
 		}
 		putchar('\n');
