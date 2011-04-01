@@ -2,7 +2,7 @@
  * simutaneously, to achieve random access and to use the BED interface.
  * To compile this program separately, you may:
  *
- *   gcc -g -O2 -Wall -D_MAIN_BAM2BED bam2depth.c -L. -lbam -lz
+ *   gcc -g -O2 -Wall -D_MAIN_BAM2DEPTH bam2depth.c -L. -lbam -lz
  */
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +26,7 @@ static int read_bam(void *data, bam1_t *b)
 	return aux->iter? bam_iter_read(aux->fp, aux->iter, b) : bam_read1(aux->fp, b);
 }
 
-#ifdef _MAIN_BAM2BED
+#ifdef _MAIN_BAM2DEPTH
 int main(int argc, char *argv[])
 #else
 int main_depth(int argc, char *argv[])
@@ -83,7 +83,7 @@ int main_depth(int argc, char *argv[])
 		for (i = 0; i < n; ++i) {
 			int j, m = 0;
 			const bam_pileup1_t *p = plp[i];
-			for (j = 0; j < n_plp[i]; ++j) // this loop counts #reads having deletions of refskip at tid:pos
+			for (j = 0; j < n_plp[i]; ++j) // this loop counts #reads having deletions or refskip at tid:pos
 				if (p->is_del || p->is_refskip) ++m;
 			printf("\t%d", n_plp[i] - m);
 		}
