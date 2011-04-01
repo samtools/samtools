@@ -62,6 +62,7 @@ print('%!PS-Adobe-3.0 EPSF-3.0');
 print('%%' .. string.format('BoundingBox: -%d -%d %.3f %.3f\n', 10*scale, scale, (n+1)*scale, (n+1)*scale));
 print(string.format('%.3f setlinewidth', scale));
 print(string.format('/plot { setgray moveto 0 %d rlineto } def', scale));
+print(string.format('/plothalf { setgray moveto 0 %.2f rlineto } def', scale/2));
 eps.func();
 eps.font('Helvetica', scale-1);
 
@@ -75,5 +76,8 @@ for l in fp:lines() do
 		end
 	end
 	i = i + 1;
+end
+for j = 1, 21 do
+	print(string.format('%.2f %.2f %.2f plothalf stroke', -8*scale, (j-1) * scale/2, 1.-(j-1)/20));
 end
 print('showpage');
