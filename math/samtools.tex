@@ -564,12 +564,11 @@ the standard 1-degree $\chi^2$ used in GWAS.
 
 \section{EM estimate of site statistics}
 
-\subsection{Estimating site allele frequency}
+\subsection{Estimating site allele frequency assuming HWE}
 Here we aim to find $\phi$ that maximises $\Pr\{\vec{D}|\phi\}$. We have:
 $$\log \Pr\{\vec{D},\vec{G}=\vec{g}|\phi\}=\log\prod_iP(D_i|g_i)P(g_i|\phi)=C+\sum_i\log P(g_i|\phi)$$
 Given an estimate $\phi_t$ at the $t$-th iteration, the $Q(\phi|\phi_t)$
-function of EM is\footnote{We assume Hardy-Weinberg equilibrium (HWE) in the
-  derivation.}:
+function of EM is:
 \begin{eqnarray*}
   Q(\phi|\phi_t)&=&\sum_{\vec{g}}\Pr\{\vec{G}=\vec{g}|\vec{D},\phi_t\}\log \Pr\{\vec{D},\vec{G}=\vec{g}|\phi\}\\
   &=&C+\sum_{\vec{g_i}}\prod_i\Pr\{G_i=g_i|D_i,\phi_t\}\sum_j\log P(g_j|\phi)\\
@@ -588,7 +587,7 @@ which is the EM estimate at the $(t+1)$-th iteration and also the
 expected reference allele frequency.
 
 \subsection{Estimating genotype frequency}
-In the previous section, we estimate the site allele frequency assuming HWE.
+In the previous section, we estimate the site allele frequency assuming Hardy-Weinberg equilibrium (HWE).
 We can actually relax this assumption when all samples have the sample diploidy.
 Let $m=m_1=\cdots=m_n$ and $\vec{\phi}=\{\phi_0,\phi_1,\ldots,\phi_m\}$ be the vector of
 genotype frequency satisfying $\sum_g\phi_g=1$. It is easy to compute the $Q$-function:
