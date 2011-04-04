@@ -80,7 +80,7 @@ int main_depth(int argc, char *argv[])
 	while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0) { // come to the next covered position
 		if (pos < beg || pos >= end) continue; // out of range; skip
 		if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue; // not in BED; skip
-		printf("%s\t%d", h->target_name[tid], pos+1);
+		fputs(h->target_name[tid], stdout); printf("\t%d", pos+1);
 		for (i = 0; i < n; ++i) {
 			int j, m = 0;
 			for (j = 0; j < n_plp[i]; ++j) {
