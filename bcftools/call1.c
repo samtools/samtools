@@ -117,7 +117,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
 //	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
-	ksprintf(&s, "AF1=%.4g;CI95=%.4g,%.4g", 1.-pr->f_em, pr->cil, pr->cih);
+	ksprintf(&s, "AF1=%.4g;CI95=%.4g,%.4g;G3=%.4g,%.4g,%.4g", 1.-pr->f_em, pr->cil, pr->cih, pr->g[2], pr->g[1], pr->g[0]);
 	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;

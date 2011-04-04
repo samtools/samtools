@@ -10,7 +10,7 @@
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define MC_MAX_EM_ITER 16
-#define MC_EM_EPS 1e-4
+#define MC_EM_EPS 1e-5
 #define MC_DEF_INDEL 0.15
 
 unsigned char seq_nt4_table[256] = {
@@ -222,6 +222,24 @@ static double mc_freq_iter(double f0, const bcf_p1aux_t *ma, int beg, int end)
 	}
 	f /= (end - beg) * 2.;
 	return f;
+}
+
+static double mc_gtfreq_iter(double g[3], const bcf_p1aux_t *ma, int beg, int end)
+{
+	double err, gg[3];
+	int i;
+	gg[0] = gg[1] = gg[2] = 0.;
+	for (i = beg; i < end; ++i) {
+		double *pdg, sum, tmp[3];
+		pdg = ma->pdg + i * 3;
+		tmp[0] = pdg[0] * g[0]; tmp[1] = pdg[1] * g[1]; tmp[2] = pdg[2] * g[2];
+		sum = (tmp[0] + tmp[1] + tmp[2]) * (end - beg);
+		gg[0] += tmp[0] / sum; gg[1] += tmp[1] / sum; gg[2] += tmp[2] / sum;
+	}
+	err = fabs(gg[0] - g[0]) > fabs(gg[1] - g[1])? fabs(gg[0] - g[0]) : fabs(gg[1] - g[1]);
+	err = err > fabs(gg[2] - g[2])? err : fabs(gg[2] - g[2]);
+	g[0] = gg[0]; g[1] = gg[1]; g[2] = gg[2];
+	return err;
 }
 
 int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
@@ -533,6 +551,13 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 			}
 		}
 	}
+	{ // compute g[3]
+		rst->g[0] = (1. - rst->f_em) * (1. - rst->f_em);
+		rst->g[1] = 2. * rst->f_em * (1. - rst->f_em);
+		rst->g[2] = rst->f_em * rst->f_em;
+		for (i = 0; i < MC_MAX_EM_ITER; ++i)
+			if (mc_gtfreq_iter(rst->g, ma, 0, ma->n) < MC_EM_EPS) break;
+	}
 	{ // estimate equal-tail credible interval (95% level)
 		int l, h;
 		double p;
@@ -546,7 +571,6 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 		h = i;
 		rst->cil = (double)(ma->M - h) / ma->M; rst->cih = (double)(ma->M - l) / ma->M;
 	}
-	rst->g[0] = rst->g[1] = rst->g[2] = -1.;
 	rst->cmp[0] = rst->cmp[1] = rst->cmp[2] = rst->p_chi2 = -1.0;
 	if (rst->p_var > 0.1) // skip contrast2() if the locus is a strong non-variant
 		rst->p_chi2 = contrast2(ma, rst->cmp);
