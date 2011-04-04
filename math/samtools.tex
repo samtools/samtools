@@ -504,30 +504,7 @@ $$
 \phi'_k=\frac{1}{M+1}
 $$
 
-\subsection{Estimating site allele frequency}
-Here we aim to find $\phi$ that maximises $\Pr\{\vec{D}|\phi\}$. We have:
-$$\log \Pr\{\vec{D},\vec{G}=\vec{g}|\phi\}=\log\prod_iP(D_i|g_i)P(g_i|\phi)=C+\sum_i\log P(g_i|\phi)$$
-Given an estimate $\phi_t$ at the $t$-th iteration, the $Q(\phi|\phi_t)$
-function of EM is\footnote{We assume Hardy-Weinberg equilibrium in the
-  derivation.}:
-\begin{eqnarray*}
-  Q(\phi|\phi_t)&=&\sum_{\vec{g}}\Pr\{\vec{G}=\vec{g}|\vec{D},\phi_t\}\log \Pr\{\vec{D},\vec{G}=\vec{g}|\phi\}\\
-  &=&C+\sum_{\vec{g_i}}\prod_i\Pr\{G_i=g_i|D_i,\phi_t\}\sum_j\log P(g_j|\phi)\\
-  &=&C+\sum_{i=1}^n\sum_{g_i=0}^{m_i}\Pr\{G_i=g_i|D_i,\phi_t\}\log P(g_i|\phi)\\
-  &=&C+\sum_i\sum_{g_i}\Pr\{G_i=g_i|D_i,\phi_t\}\log_i \binom{m_i}{g_i}\phi^{g_i}(1-\phi)^{m_i-g_i}\\
-  &=&C'+\sum_i\sum_{g_i}\Pr\{G_i=g_i|D_i,\phi_t\}\Big[g_i\log\phi+(m_i-g_i)\log(1-\phi)\Big]\\
-\end{eqnarray*}
-Requiring $\partial_{\phi}Q\Big|_{\phi=\phi_{t+1}}=0$ gives:
-$$\frac{1}{\phi_{t+1}(1-\phi_{t+1})}\sum_i\sum_{g_i}\Pr\{G_i=g_i|D_i,\phi_t\}(g_i-m_i\phi_{t+1})=0$$
-Thus
-\begin{equation}\label{equ:freq1}
-\phi_{t+1}=\frac{1}{\sum_jm_j}\sum_i\sum_{g_i}g_i\Pr\{G_i=g_i|D_i,\phi_t\}
-=\frac{1}{M}\sum_i\frac{\sum_{g_i}g_iP(D_i|g_i)P(g_i|\phi_t)}{\sum_{g_i}P(D_i|g_i)P(g_i|\phi_t)}
-\end{equation}
-which is the EM estimate at the $(t+1)$-th iteration and also the
-expected reference allele frequency.
-
-\subsection{Joint distribution of allele counts for 2 samples}
+\subsection{Joint distribution of allele counts for 2 groups of samples}
 Suppose at a locus we have two data sets $\vec{D}'$ and $\vec{D}''$,
 with $n'$ samples $m'$ haplotypes and $n''$ samples and $m''$
 haplotypes, respectively. Let $n=n'+n''$ and $m=m'+m''$ and
@@ -570,7 +547,62 @@ $$
 $$
 This derivation can be extended to arbitrary number of data sets.
 
-\subsection{Estimating 2-locus haplotype frequency}
+To test the association between the two groups of samples, we may use
+the following statistics:
+\[
+P=\sum_{k',k''}\Pr\{X'=k',X''=k''|\vec{D},\Phi\}\cdot P(\chi^2(k',n'-k',k'',n''-k'')|1)
+\]
+where $\chi^2(n_{11},n_{12},n_{21},n_{22})$ gives the $\chi^2$ statistics of
+a 2-by-2 contingency table and $P(\chi^2|1)$ computes the $P$-value of an 1-degree
+$\chi^2$ statistics. Theoretically speaking, the equation above is not correct.
+As a result, the $P$-value computed this way tends to underestimate the significance
+on real data. Nonetheless, the relative value is still useful and this statistics
+has a nice feature that when the data has little ambiguity, it approaches
+the standard 1-degree $\chi^2$ used in GWAS.
+
+
+
+\section{EM estimate of site statistics}
+
+\subsection{Estimating site allele frequency}
+Here we aim to find $\phi$ that maximises $\Pr\{\vec{D}|\phi\}$. We have:
+$$\log \Pr\{\vec{D},\vec{G}=\vec{g}|\phi\}=\log\prod_iP(D_i|g_i)P(g_i|\phi)=C+\sum_i\log P(g_i|\phi)$$
+Given an estimate $\phi_t$ at the $t$-th iteration, the $Q(\phi|\phi_t)$
+function of EM is\footnote{We assume Hardy-Weinberg equilibrium (HWE) in the
+  derivation.}:
+\begin{eqnarray*}
+  Q(\phi|\phi_t)&=&\sum_{\vec{g}}\Pr\{\vec{G}=\vec{g}|\vec{D},\phi_t\}\log \Pr\{\vec{D},\vec{G}=\vec{g}|\phi\}\\
+  &=&C+\sum_{\vec{g_i}}\prod_i\Pr\{G_i=g_i|D_i,\phi_t\}\sum_j\log P(g_j|\phi)\\
+  &=&C+\sum_{i=1}^n\sum_{g_i=0}^{m_i}\Pr\{G_i=g_i|D_i,\phi_t\}\log P(g_i|\phi)\\
+  &=&C+\sum_i\sum_{g_i}\Pr\{G_i=g_i|D_i,\phi_t\}\log_i \binom{m_i}{g_i}\phi^{g_i}(1-\phi)^{m_i-g_i}\\
+  &=&C'+\sum_i\sum_{g_i}\Pr\{G_i=g_i|D_i,\phi_t\}\Big[g_i\log\phi+(m_i-g_i)\log(1-\phi)\Big]\\
+\end{eqnarray*}
+Requiring $\partial_{\phi}Q\Big|_{\phi=\phi_{t+1}}=0$ gives:
+$$\frac{1}{\phi_{t+1}(1-\phi_{t+1})}\sum_i\sum_{g_i}\Pr\{G_i=g_i|D_i,\phi_t\}(g_i-m_i\phi_{t+1})=0$$
+Thus
+\begin{equation}\label{equ:freq1}
+\phi_{t+1}=\frac{1}{\sum_jm_j}\sum_i\sum_{g_i}g_i\Pr\{G_i=g_i|D_i,\phi_t\}
+=\frac{1}{M}\sum_i\frac{\sum_{g_i}g_iP(D_i|g_i)P(g_i|\phi_t)}{\sum_{g_i}P(D_i|g_i)P(g_i|\phi_t)}
+\end{equation}
+which is the EM estimate at the $(t+1)$-th iteration and also the
+expected reference allele frequency.
+
+\subsection{Estimating genotype frequency}
+In the previous section, we estimate the site allele frequency assuming HWE.
+We can actually relax this assumption when all samples have the sample diploidy.
+Let $m=m_1=\cdots=m_n$ and $\vec{\phi}=\{\phi_0,\phi_1,\ldots,\phi_m\}$ be the vector of
+genotype frequency satisfying $\sum_g\phi_g=1$. It is easy to compute the $Q$-function:
+$$
+Q(\vec{\phi}|\vec{\phi}^{(t)})=C+\sum_{i=1}^n\sum_{g=0}^m\Pr\{G_i=g|D_i,\vec{\phi}^{(t)}\}\log\phi_g
+$$
+Requiring $\partial_{\phi_g}\big[Q(\vec{\phi}|\vec{\phi}^{(t)})-\lambda\sum_{g'}\phi_{g'}\big]\Big|_{\phi_g=\phi_g^{(t+1)}}$=0 gives $\lambda=n$
+and thus
+$$
+\phi_g^{(t+1)}=\frac{1}{n}\sum_{i=1}^n\Pr\{G_i=g|D_i,\vec{\phi}^{(t)}\}=\frac{1}{n}\sum_{i=1}^n\frac{P(D_i|g)\phi_g^{(t)}}{\sum_{g'}P(D_i|g')\phi_{g'}^{(t)}}
+$$
+Obviously, $\sum_g\phi_g^{(t+1)}=1$ as it should be. This estimate is useful to test HWE.
+
+\subsection{Estimating two-locus LD}
 In this section, we only consider diploid samples
 (i.e. $m_1=\cdots=m_n=2$). Let ${\bf D}=(\vec{D},\vec{D}')$ be the data
 at two loci, respectively; and $H_i$ and $H^{\dag}_i$ be the two
@@ -597,7 +629,9 @@ Solving $\partial_{\phi_k}Q-\lambda=0$ gives
 &=&\frac{\phi^{(t)}_k}{2n}\sum_{i=1}^n\frac{\sum_{h}\phi^{(t)}_h\big[P(D_i|{\cal G}_{hk})P(D'_i|{\cal G}'_{hk})+P(D_i|{\cal G}_{kh})P(D'_i|{\cal G}'_{kh})\big]}{\sum_{k',h}\phi^{(t)}_{k'}\phi^{(t)}_hP(D_i|{\cal G}_{hk'})P(D'_i|{\cal G}'_{hk'})}
 \end{eqnarray*}
 
-\section{An alternative model}
+
+
+\section{An alternative model assuming HWE}
 In Section~\ref{sec:afs}, $\phi_k$ in $\Phi=\{\phi_k\}$ is interpreted
 as the probability of seeing exactly $k$ alleles from $M$
 chromosomes. Under this model, the prior of a genotype configuration is
