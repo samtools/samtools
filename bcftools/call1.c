@@ -38,6 +38,23 @@ void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
+static double test_hwe(const double g[3])
+{
+	extern double kf_gammaq(double p, double x);
+	double fexp, chi2, f[3], n;
+	int i;
+	n = g[0] + g[1] + g[2];
+	fexp = (2. * g[2] + g[1]) / (2. * n);
+	if (fexp > 1. - 1e-10) fexp = 1. - 1e-10;
+	if (fexp < 1e-10) fexp = 1e-10;
+	f[0] = n * (1. - fexp) * (1. - fexp);
+	f[1] = n * 2. * fexp * (1. - fexp);
+	f[2] = n * fexp * fexp;
+	for (i = 0, chi2 = 0.; i < 3; ++i)
+		chi2 += (g[i] - f[i]) * (g[i] - f[i]) / f[i];
+	return kf_gammaq(.5, chi2 / 2.);
+}
+
 typedef struct {
 	double p[4];
 	int mq, depth, is_tested, d[4];
@@ -118,6 +135,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	if (b->info[0]) kputc(';', &s);
 //	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
 	ksprintf(&s, "AF1=%.4g;CI95=%.4g,%.4g;G3=%.4g,%.4g,%.4g", 1.-pr->f_em, pr->cil, pr->cih, pr->g[2], pr->g[1], pr->g[0]);
+	if (n_smpl > 5) ksprintf(&s, ";HWE=%.4g", test_hwe(pr->g));
 	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
@@ -216,6 +234,10 @@ static void write_header(bcf_hdr_t *h)
 		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability of all samples being the same\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AF1,"))
 		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the site allele frequency of the first ALT allele\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=G3,"))
+		kputs("##INFO=<ID=G3,Number=3,Type=Float,Description=\"ML estimate of genotype frequencies\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=HWE,"))
+		kputs("##INFO=<ID=HWE,Number=1,Type=Float,Description=\"Chi^2 based HWE test P-value based on G3\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=CI95,"))
 		kputs("##INFO=<ID=CI95,Number=2,Type=Float,Description=\"Equal-tail Bayesian credible interval of the site allele frequency at the 95% level\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=PV4,"))
