@@ -742,7 +742,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		fprintf(stderr, "(%s) Max depth is above 1M. Potential memory hog!\n", __func__);
 	if (max_depth * sm->n < 8000) {
 		max_depth = 8000 / sm->n;
-		fprintf(stderr, "<%s> Set max per-sample depth to %d\n", __func__, max_depth);
+		fprintf(stderr, "<%s> Set max per-file depth to %d\n", __func__, max_depth);
 	}
 	max_indel_depth = conf->max_indel_depth * sm->n;
 	bam_mplp_set_maxcnt(iter, max_depth);
