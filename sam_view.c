@@ -6,6 +6,7 @@
 #include "sam_header.h"
 #include "sam.h"
 #include "faidx.h"
+#include "kstring.h"
 #include "khash.h"
 KHASH_SET_INIT_STR(rg)
 
@@ -66,6 +67,37 @@ static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 		return (p && strcmp(p, g_library) == 0)? 0 : 1;
 	}
 	return 0;
+}
+
+static char *drop_rg(char *hdtxt, rghash_t h, int *len)
+{
+	char *p = hdtxt, *q, *r, *s;
+	kstring_t str;
+	memset(&str, 0, sizeof(kstring_t));
+	while (1) {
+		int toprint = 0;
+		q = strchr(p, '\n');
+		if (q == 0) q = p + strlen(p);
+		if (q - p < 3) break; // the line is too short; then stop
+		if (strncmp(p, "@RG\t", 4) == 0) {
+			int c;
+			khint_t k;
+			if ((r = strstr(p, "\tID:")) != 0) {
+				r += 4;
+				for (s = r; *s != '\0' && *s != '\n' && *s != '\t'; ++s);
+				c = *s; *s = '\0';
+				k = kh_get(rg, h, r);
+				*s = c;
+				if (k != kh_end(h)) toprint = 1;
+			}
+		} else toprint = 1;
+		if (toprint) {
+			kputsn(p, q - p, &str); kputc('\n', &str);
+		}
+		p = q + 1;
+	}
+	*len = str.l;
+	return str.s;
 }
 
 // callback function for bam_fetch() that prints nonskipped records
@@ -163,6 +195,14 @@ int main_samview(int argc, char *argv[])
 		fprintf(stderr, "[main_samview] fail to read the header from \"%s\".\n", argv[optind]);
 		ret = 1;
 		goto view_end;
+	}
+	if (g_rghash) { // FIXME: I do not know what "bam_header_t::n_text" is for...
+		char *tmp;
+		int l;
+		tmp = drop_rg(in->header->text, g_rghash, &l);
+		free(in->header->text);
+		in->header->text = tmp;
+		in->header->l_text = l;
 	}
 	if (!is_count && (out = samopen(fn_out? fn_out : "-", out_mode, in->header)) == 0) {
 		fprintf(stderr, "[main_samview] fail to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
