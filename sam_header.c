@@ -572,7 +572,7 @@ void *sam_header_parse2(const char *headerText)
     while ( (text=nextline(&buf, &nbuf, text)) )
     {
         hline = sam_header_line_parse(buf);
-        if ( hline && tovalidate && sam_header_line_validate(hline) )
+        if ( hline && (!tovalidate || sam_header_line_validate(hline)) )
             // With too many (~250,000) reference sequences the header parsing was too slow with list_append.
             hlines = list_append_to_end(hlines, hline);
         else
