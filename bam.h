@@ -40,7 +40,7 @@
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "0.1.14 (r933:176)"
+#define BAM_VERSION "0.1.14 (r947:199)"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -263,6 +263,12 @@ typedef struct __bam_iter_t *bam_iter_t;
   bam_header_init().
  */
 extern int bam_is_be;
+
+/*!
+  @abstract Verbose level between 0 and 3; 0 is supposed to disable all
+  debugging information, though this may not have been implemented.
+ */
+extern int bam_verbose;
 
 /*! @abstract Table for converting a nucleotide character to the 4-bit encoding. */
 extern unsigned char bam_nt16_table[256];

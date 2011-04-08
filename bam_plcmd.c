@@ -623,7 +623,7 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 			if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
 			if (id < 0 || id >= m->n) {
 				assert(q); // otherwise a bug
-				fprintf(stderr, "[%s] Read group %s used in file %s but not defined in the header.\n", __func__, (char*)q+1, fn[i]);
+				fprintf(stderr, "[%s] Read group %s used in file %s but absent from the header or an alignment missing read group.\n", __func__, (char*)q+1, fn[i]);
 				exit(1);
 			}
 			if (m->n_plp[id] == m->m_plp[id]) {
@@ -742,7 +742,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		fprintf(stderr, "(%s) Max depth is above 1M. Potential memory hog!\n", __func__);
 	if (max_depth * sm->n < 8000) {
 		max_depth = 8000 / sm->n;
-		fprintf(stderr, "<%s> Set max per-sample depth to %d\n", __func__, max_depth);
+		fprintf(stderr, "<%s> Set max per-file depth to %d\n", __func__, max_depth);
 	}
 	max_indel_depth = conf->max_indel_depth * sm->n;
 	bam_mplp_set_maxcnt(iter, max_depth);

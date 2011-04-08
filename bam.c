@@ -7,7 +7,7 @@
 #include "kstring.h"
 #include "sam_header.h"
 
-int bam_is_be = 0;
+int bam_is_be = 0, bam_verbose = 2;
 char *bam_flag2char_table = "pPuUrR12sfd\0\0\0\0\0";
 
 /**************************
