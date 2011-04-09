@@ -60,7 +60,7 @@ int bam_flagstat(int argc, char *argv[])
 	header = bam_header_read(fp);
 	s = bam_flagstat_core(fp);
 	printf("%lld + %lld in total (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
-	printf("%lld + %lld duplicates\n", s->n_dup[0], s->n_reads[1]);
+	printf("%lld + %lld duplicates\n", s->n_dup[0], s->n_dup[1]);
 	printf("%lld + %lld mapped (%.2f%%:%.2f%%)\n", s->n_mapped[0], s->n_mapped[1], (float)s->n_mapped[0] / s->n_reads[0] * 100.0, (float)s->n_mapped[1] / s->n_reads[1] * 100.0);
 	printf("%lld + %lld paired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);
 	printf("%lld + %lld read1\n", s->n_read1[0], s->n_read1[1]);
