@@ -33,14 +33,14 @@
 
   BAM library provides I/O and various operations on manipulating files
   in the BAM (Binary Alignment/Mapping) or SAM (Sequence Alignment/Map)
-  format. It now supports importing from or exporting to TAM, sorting,
+  format. It now supports importing from or exporting to SAM, sorting,
   merging, generating pileup, and quickly retrieval of reads overlapped
   with a specified region.
 
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "0.1.14 (r947:199)"
+#define BAM_VERSION "0.1.15 (r949:203)"
 
 #include <stdint.h>
 #include <stdlib.h>

@@ -1,3 +1,36 @@
+Beta Release 0.1.15 (10 April, 2011)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Noteable changes:
+
+ * Allow to perform variant calling or to extract information in multiple
+   regions specified by a BED file (`samtools mpileup -l', `samtools view -L'
+   and `bcftools view -l').
+
+ * Added the `depth' command to samtools to compute the per-base depth with a
+   simpler interface. File `bam2depth.c', which implements this command, is the
+   recommended example on how to use the mpileup APIs.
+
+ * Estimate genotype frequencies with ML; perform chi^2 based Hardy-Weinberg
+   test using this estimate.
+
+ * For `samtools view', when `-R' is specified, drop read groups in the header
+   that are not contained in the specified file.
+
+ * For `samtools flagstat', separate QC-pass and QC-fail reads.
+
+ * Improved the command line help of `samtools mpileup' and `bcftools view'.
+
+ * Use a global variable to control the verbose level of samtools stderr
+   output. Nonetheless, it has not been full utilized.
+
+ * Fixed an issue in association test which may report false associations,
+   possibly due to floating point underflow.
+
+(0.1.15: 10 April 2011, r949:203)
+
+
+
 Beta release 0.1.14 (21 March, 2011)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
