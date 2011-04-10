@@ -51,6 +51,7 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Command: view      print, extract, convert and call SNPs from BCF\n");
 		fprintf(stderr, "         index     index BCF\n");
 		fprintf(stderr, "         cat       concatenate BCFs\n");
+		fprintf(stderr, "         ld        compute all-pair r^2\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}
