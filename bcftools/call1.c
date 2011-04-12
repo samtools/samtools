@@ -145,15 +145,14 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	if (fq > 999) fq = 999;
 	ksprintf(&s, ";FQ=%.3g", fq);
 	if (pr->cmp[0] >= 0.) { // two sample groups
-		int i, q[3], pq;
+		int i, q[3];
 		for (i = 1; i < 3; ++i) {
 			double x = pr->cmp[i] + pr->cmp[0]/2.;
 			q[i] = x == 0? 255 : (int)(-4.343 * log(x) + .499);
 			if (q[i] > 255) q[i] = 255;
 		}
-		pq = (int)(-4.343 * log(pr->p_chi2) + .499);
 		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
-		ksprintf(&s, ";QCHI2=%d;PCHI2=%.3g;PC2=%d,%d", pq, q[1], q[2], pr->p_chi2);
+		ksprintf(&s, ";PLRT=%.3g;PCHI2=%.3g;PC2=%d,%d", pr->lrt, q[1], q[2], pr->p_chi2);
 		ksprintf(&s, ";AF2=%.4g,%.4g", 1.-pr->f_em2[0], 1.-pr->f_em2[1]);
 //		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}

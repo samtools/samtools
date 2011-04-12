@@ -40,6 +40,7 @@ struct __bcf_p1aux_t {
 	double *z, *zswap; // aux for afs
 	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
 	double **hg; // hypergeometric distribution
+	double *lf; // log factorial
 	double t, t1, t2;
 	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
 	const uint8_t *PL; // point to PL
@@ -154,8 +155,10 @@ bcf_p1aux_t *bcf_p1_init(int n, uint8_t *ploidy)
 	ma->z2 = calloc(ma->M + 1, sizeof(double));
 	ma->afs = calloc(ma->M + 1, sizeof(double));
 	ma->afs1 = calloc(ma->M + 1, sizeof(double));
+	ma->lf = calloc(ma->M + 1, sizeof(double));
 	for (i = 0; i < 256; ++i)
 		ma->q2p[i] = pow(10., -i / 10.);
+	for (i = 0; i <= ma->M; ++i) ma->lf[i] = lgamma(i + 1);
 	bcf_p1_init_prior(ma, MC_PTYPE_FULL, 1e-3); // the simplest prior
 	return ma;
 }
@@ -175,6 +178,7 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 {
 	if (ma) {
 		int k;
+		free(ma->lf);
 		if (ma->hg && ma->n1 > 0) {
 			for (k = 0; k <= 2*ma->n1; ++k) free(ma->hg[k]);
 			free(ma->hg);
@@ -385,20 +389,25 @@ static inline double chi2_test(int a, int b, int c, int d)
 }
 
 // chi2=(a+b+c+d)(ad-bc)^2/[(a+b)(c+d)(a+c)(b+d)]
-static inline double contrast2_aux(const bcf_p1aux_t *p1, double sum, int n1, int n2, int k1, int k2, double x[3])
+static inline double contrast2_aux(const bcf_p1aux_t *p1, double sum, int k1, int k2, double x[3], double lp[3][2], long double L[2])
 {
 	double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
+	int n1 = p1->n1, n2 = p1->n - p1->n1;
 	if (p < CONTRAST_TINY) return -1;
+	L[1] += p * exp((p1->lf[2*n1] - p1->lf[2*n1-k1] - p1->lf[k1] + k1 * lp[1][0] + (2*n1-k1) * lp[1][1])
+				  + (p1->lf[2*n2] - p1->lf[2*n2-k2] - p1->lf[k2] + k2 * lp[2][0] + (2*n2-k2) * lp[2][1]));
+	L[0] += p * exp((p1->lf[2*n1] - p1->lf[2*n1-k1] - p1->lf[k1] + k1 * lp[0][0] + (2*n1-k1) * lp[0][1])
+				  + (p1->lf[2*n2] - p1->lf[2*n2-k2] - p1->lf[k2] + k2 * lp[0][0] + (2*n2-k2) * lp[0][1]));
 	if (.5*k1/n1 < .5*k2/n2) x[1] += p;
 	else if (.5*k1/n1 > .5*k2/n2) x[2] += p;
 	else x[0] += p;
 	return p * chi2_test(k1, k2, (n1<<1) - k1, (n2<<1) - k2);
 }
 
-static double contrast2(bcf_p1aux_t *p1, double ret[3])
+static double contrast2(bcf_p1aux_t *p1, double ret[3], double *lrt)
 {
 	int k, k1, k2, k10, k20, n1, n2;
-	double sum;
+	double sum, lp[3][2];
 	// get n1 and n2
 	n1 = p1->n1; n2 = p1->n - p1->n1;
 	if (n1 <= 0 || n2 <= 0) return 0.;
@@ -415,12 +424,12 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 				p1->hg[k1][k2] = exp(lgamma(k1+k2+1) + lgamma(p1->M-k1-k2+1) - (lgamma(k1+1) + lgamma(k2+1) + lgamma(2*n1-k1+1) + lgamma(2*n2-k2+1) + tmp));
 		}
 	}
-	{ // compute sum1 and sum2
+	{ // compute
 		long double suml = 0;
 		for (k = 0; k <= p1->M; ++k) suml += p1->phi[k] * p1->z[k];
 		sum = suml;
 	}
-	{ // get the mean k1 and k2
+	{ // get the max k1 and k2
 		double max;
 		int max_k;
 		for (k = 0, max = 0, max_k = -1; k <= 2*n1; ++k) {
@@ -434,17 +443,37 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 		}
 		k20 = max_k;
 	}
+	{ // compute mean k1 and k2
+		double s, m;
+		for (k = 0, m = s = 0.; k <= 2*p1->n; ++k) {
+			double x = p1->phi[k] * p1->z[k];
+			s += x; m += k * x;
+		}
+		lp[0][0] = log(m/s/(2*p1->n)); lp[0][1] = log(1. - m/s/(2*p1->n));
+		for (k = 0, m = s = 0.; k <= 2*n1; ++k) {
+			double x = p1->phi1[k] * p1->z1[k];
+			s += x; m += k * x;
+		}
+		lp[1][0] = log(m/s/(2*n1)); lp[1][1] = log(1. - m/s/(2*n1));
+//		printf("%lf\t", 1 - m/s/(2*n1));
+		for (k = 0, m = s = 0.; k <= 2*n2; ++k) {
+			double x = p1->phi2[k] * p1->z2[k];
+			s += x; m += k * x;
+		}
+		lp[2][0] = log(m/s/(2*n2)); lp[2][1] = log(1. - m/s/(2*n2));
+//		printf("%lf\n", 1 - m/s/(2*n2));
+	}
 	{ // We can do the following with one nested loop, but that is an O(N^2) thing. The following code block is much faster for large N.
 		double x[3], y;
-		long double z = 0.;
-		x[0] = x[1] = x[2] = 0;
+		long double z = 0., L[2];
+		x[0] = x[1] = x[2] = 0; L[0] = L[1] = 0;
 		for (k1 = k10; k1 >= 0; --k1) {
 			for (k2 = k20; k2 >= 0; --k2) {
-				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				if ((y = contrast2_aux(p1, sum, k1, k2, x, lp, L)) < 0) break;
 				else z += y;
 			}
 			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
-				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				if ((y = contrast2_aux(p1, sum, k1, k2, x, lp, L)) < 0) break;
 				else z += y;
 			}
 		}
@@ -452,23 +481,24 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 		x[0] = x[1] = x[2] = 0;
 		for (k1 = k10 + 1; k1 <= 2*n1; ++k1) {
 			for (k2 = k20; k2 >= 0; --k2) {
-				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				if ((y = contrast2_aux(p1, sum, k1, k2, x, lp, L)) < 0) break;
 				else z += y;
 			}
 			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
-				if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, x)) < 0) break;
+				if ((y = contrast2_aux(p1, sum, k1, k2, x, lp, L)) < 0) break;
 				else z += y;
 			}
 		}
 		ret[0] += x[0]; ret[1] += x[1]; ret[2] += x[2];
-		if (ret[0] + ret[1] + ret[2] < 0.99) { // in case of bad things happened
-			ret[0] = ret[1] = ret[2] = 0;
+		if (ret[0] + ret[1] + ret[2] < 0.95) { // in case of bad things happened
+			ret[0] = ret[1] = ret[2] = 0; L[0] = L[1] = 0;
 			for (k1 = 0, z = 0.; k1 <= 2*n1; ++k1)
 				for (k2 = 0; k2 <= 2*n2; ++k2)
-					if ((y = contrast2_aux(p1, sum, n1, n2, k1, k2, ret)) >= 0) z += y;
-			if (ret[0] + ret[1] + ret[2] < 0.99) // It seems that this may be caused by floating point errors. I do not really understand why...
+					if ((y = contrast2_aux(p1, sum, k1, k2, ret, lp, L)) >= 0) z += y;
+			if (ret[0] + ret[1] + ret[2] < 0.95) // It seems that this may be caused by floating point errors. I do not really understand why...
 				z = 1.0, ret[0] = ret[1] = ret[2] = 1./3;
 		}
+		*lrt = kf_gammaq(.5, log(L[1] / L[0]));
 		return (double)z;
 	}
 }
@@ -573,7 +603,7 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	}
 	rst->cmp[0] = rst->cmp[1] = rst->cmp[2] = rst->p_chi2 = -1.0;
 	if (rst->p_var > 0.1) // skip contrast2() if the locus is a strong non-variant
-		rst->p_chi2 = contrast2(ma, rst->cmp);
+		rst->p_chi2 = contrast2(ma, rst->cmp, &rst->lrt);
 	return 0;
 }
 
