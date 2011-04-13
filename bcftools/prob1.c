@@ -532,6 +532,25 @@ static double mc_cal_afs(bcf_p1aux_t *ma, double *p_ref_folded, double *p_var_fo
 	return sum / ma->M;
 }
 
+static double cal_lrt_em(bcf_p1aux_t *p1, double f[3])
+{
+	double f3[3][3];
+	long double lrt = 1.;
+	int i;
+	for (i = 0; i < 3; ++i) f3[i][0] = (1-f[i])*(1-f[i]), f3[i][1] = 2*f[i]*(1-f[i]), f3[i][2] = f[i]*f[i];
+	for (i = 0; i < p1->n1; ++i) {
+		double *pdg = p1->pdg + i * 3;
+		lrt *= (pdg[0] * f3[1][0] + pdg[1] * f3[1][1] + pdg[2] * f3[1][2])
+			/ (pdg[0] * f3[0][0] + pdg[1] * f3[0][1] + pdg[2] * f3[0][2]);
+	}
+	for (; i < p1->n; ++i) {
+		double *pdg = p1->pdg + i * 3;
+		lrt *= (pdg[0] * f3[2][0] + pdg[1] * f3[2][1] + pdg[2] * f3[2][2])
+			/ (pdg[0] * f3[0][0] + pdg[1] * f3[0][1] + pdg[2] * f3[0][2]);
+	}
+	return kf_gammaq(.5, log(lrt));
+}
+
 int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 {
 	int i, k;
@@ -564,7 +583,7 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 	}
 	rst->f_flat /= ma->M;
 	{ // calculate f_em
-		double flast = rst->f_flat;
+		double flast = rst->f_flat, f[3];
 		for (i = 0; i < MC_MAX_EM_ITER; ++i) {
 			rst->f_em = mc_freq_iter(flast, ma, 0, ma->n);
 			if (fabs(rst->f_em - flast) < MC_EM_EPS) break;
@@ -579,6 +598,8 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 					flast = rst->f_em2[k];
 				}
 			}
+			f[0] = rst->f_em, f[1] = rst->f_em2[0], f[2] = rst->f_em2[1];
+			rst->lrt_em = cal_lrt_em(ma, f);
 		}
 	}
 	{ // compute g[3]
