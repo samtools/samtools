@@ -269,7 +269,7 @@ static void write_header(bcf_hdr_t *h)
 	h->l_txt = str.l + 1; h->txt = str.s;
 }
 
-double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4]);
+double bcf_pair_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4]);
 
 int bcfview(int argc, char *argv[])
 {
@@ -477,7 +477,7 @@ int bcfview(int argc, char *argv[])
 		}
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;
-			if ((r2 = bcf_ld_freq(blast, b, f)) >= 0) {
+			if ((r2 = bcf_pair_freq(blast, b, f)) >= 0) {
 				kstring_t s;
 				s.m = s.l = 0; s.s = 0;
 				if (*b->info) kputc(';', &s);

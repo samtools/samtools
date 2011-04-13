@@ -35,7 +35,7 @@ static int freq_iter(int n, double *pdg[2], double f[4])
 	return 0;
 }
 
-double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
+double bcf_pair_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 {
 	const bcf1_t *b[2];
 	uint8_t *PL[2];
@@ -97,47 +97,4 @@ double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 		if (isnan(r)) r = -1.;
 	}
 	return r;
-}
-
-int bcf_main_pwld(int argc, char *argv[])
-{
-	bcf_t *fp;
-	bcf_hdr_t *h;
-	bcf1_t **b, *b0;
-	int i, j, m, n;
-	double f[4];
-	if (argc == 1) {
-		fprintf(stderr, "Usage: bcftools pwld <in.bcf>\n");
-		return 1;
-	}
-	fp = bcf_open(argv[1], "rb");
-	h = bcf_hdr_read(fp);
-	// read the entire BCF
-	m = n = 0; b = 0;
-	b0 = calloc(1, sizeof(bcf1_t));
-	while (bcf_read(fp, h, b0) >= 0) {
-		if (m == n) {
-			m = m? m<<1 : 16;
-			b = realloc(b, sizeof(void*) * m);
-		}
-		b[n] = calloc(1, sizeof(bcf1_t));
-		bcf_cpy(b[n++], b0);
-	}
-	bcf_destroy(b0);
-	// compute pair-wise r^2
-	printf("%d\n", n); // the number of loci
-	for (i = 0; i < n; ++i) {
-		printf("%s:%d", h->ns[b[i]->tid], b[i]->pos + 1);
-		for (j = 0; j < i; ++j) {
-			double r = bcf_ld_freq(b[i], b[j], f);
-			printf("\t%.3f", r*r);
-		}
-		printf("\t1.000\n");
-	}
-	// free
-	for (i = 0; i < n; ++i) bcf_destroy(b[i]);
-	free(b);
-	bcf_hdr_destroy(h);
-	bcf_close(fp);
-	return 0;
 }
