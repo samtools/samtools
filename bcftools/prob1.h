@@ -11,7 +11,6 @@ typedef struct {
 	double f_exp, f_flat, p_ref_folded, p_ref, p_var_folded, p_var;
 	double cil, cih;
 	double cmp[3], p_chi2; // used by contrast2()
-	double g[3];
 } bcf_p1rst_t;
 
 #define MC_PTYPE_FULL  1

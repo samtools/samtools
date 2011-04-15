@@ -25,6 +25,8 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_NO_INDEL 8192
 #define VC_ANNO_MAX 16384
 #define VC_FIX_PL   32768
+#define VC_CONTRAST 0x10000
+#define VC_EM       0x20000
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist, n_perm;
@@ -37,23 +39,6 @@ typedef struct {
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
-
-static double test_hwe(const double g[3])
-{
-	extern double kf_gammaq(double p, double x);
-	double fexp, chi2, f[3], n;
-	int i;
-	n = g[0] + g[1] + g[2];
-	fexp = (2. * g[2] + g[1]) / (2. * n);
-	if (fexp > 1. - 1e-10) fexp = 1. - 1e-10;
-	if (fexp < 1e-10) fexp = 1e-10;
-	f[0] = n * (1. - fexp) * (1. - fexp);
-	f[1] = n * 2. * fexp * (1. - fexp);
-	f[2] = n * fexp * fexp;
-	for (i = 0, chi2 = 0.; i < 3; ++i)
-		chi2 += (g[i] - f[i]) * (g[i] - f[i]) / f[i];
-	return kf_gammaq(.5, chi2 / 2.);
-}
 
 typedef struct {
 	double p[4];
@@ -118,7 +103,7 @@ static void rm_info(bcf1_t *b, const char *key)
 	bcf_sync(b);
 }
 
-static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
+static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
 {
 	kstring_t s;
 	int has_I16, is_var = (pr->p_ref < pref);
@@ -133,12 +118,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
-//	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
 	ksprintf(&s, "CI95=%.4g,%.4g", pr->cil, pr->cih);
-	if (n_smpl > 5) {
-		double hwe = test_hwe(pr->g);
-		if (hwe < 0.1) ksprintf(&s, ";HWE=%.4g", hwe);
-	}
 	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
@@ -290,7 +270,7 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0;
-	while ((c = getopt(argc, argv, "FN1:l:cHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
+	while ((c = getopt(argc, argv, "FN1:l:cCeHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -302,6 +282,8 @@ int bcfview(int argc, char *argv[])
 		case 'b': vc.flag |= VC_BCFOUT; break;
 		case 'S': vc.flag |= VC_VCFIN; break;
 		case 'c': vc.flag |= VC_CALL; break;
+		case 'C': vc.flag |= VC_CONTRAST; break;
+		case 'e': vc.flag |= VC_EM; break;
 		case 'v': vc.flag |= VC_VARONLY | VC_CALL; break;
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
@@ -345,8 +327,9 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -S        input is VCF\n");
 		fprintf(stderr, "       -u        uncompressed BCF output (force -b)\n");
 		fprintf(stderr, "\nConsensus/variant calling options:\n\n");
-		fprintf(stderr, "       -c        SNP calling\n");
+		fprintf(stderr, "       -c        SNP calling (force -e)\n");
 		fprintf(stderr, "       -d FLOAT  skip loci where less than FLOAT fraction of samples covered [0]\n");
+		fprintf(stderr, "       -e        likelihood based analyses\n");
 		fprintf(stderr, "       -g        call genotypes at variant sites (force -c)\n");
 		fprintf(stderr, "       -i FLOAT  indel-to-substitution ratio [%.4g]\n", vc.indel_frac);
 		fprintf(stderr, "       -I        skip indels\n");
@@ -356,6 +339,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -v        output potential variant sites only (force -c)\n");
 		fprintf(stderr, "\nContrast calling and association test options:\n\n");
 		fprintf(stderr, "       -1 INT    number of group-1 samples [0]\n");
+		fprintf(stderr, "       -C        apply contrast (slow)\n");
 		fprintf(stderr, "       -U INT    number of permutations for association testing (effective with -1) [0]\n");
 		fprintf(stderr, "       -X FLOAT  only perform permutations for P(chi^2)<FLOAT [%g]\n", vc.min_perm_p);
 		fprintf(stderr, "\n");
@@ -393,6 +377,7 @@ int bcfview(int argc, char *argv[])
 		vcf_hdr_write(bout, hout);
 	}
 	if (vc.flag & VC_CALL) {
+		vc.flag |= VC_EM;
 		p1 = bcf_p1_init(hout->n_smpl, vc.ploidy);
 		if (vc.prior_file) {
 			if (bcf_p1_read_prior(p1, vc.prior_file) < 0) {
@@ -400,7 +385,7 @@ int bcfview(int argc, char *argv[])
 				return 1;
 			}
 		} else bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
-		if (vc.n1 > 0) {
+		if (vc.n1 > 0 && (vc.flag & VC_CONTRAST)) {
 			bcf_p1_set_n1(p1, vc.n1);
 			bcf_p1_init_subprior(p1, vc.prior_type, vc.theta);
 		}
@@ -453,8 +438,10 @@ int bcfview(int argc, char *argv[])
 			bcf_2qcall(hout, b);
 			continue;
 		}
-		double xx[10];
-		bcf_em1(b, vc.n1, 0xff, xx);
+		if (vc.flag & VC_EM) {
+			double em[10];
+			bcf_em1(b, vc.n1, 0xff, em);
+		}
 		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
@@ -474,7 +461,7 @@ int bcfview(int argc, char *argv[])
 				}
 				pr.perm_rank = n;
 			}
-			update_bcf1(hout->n_smpl, b, p1, &pr, vc.pref, vc.flag);
+			update_bcf1(b, p1, &pr, vc.pref, vc.flag);
 		}
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;

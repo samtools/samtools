@@ -131,6 +131,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 	int i, n, n2;
 	if (b->n_alleles < 2) return -1; // one allele only
 	// initialization
+	if (n1 < 0 || n1 > b->n_smpl) n1 = 0;
 	n = b->n_smpl; n2 = n - n1;
 	pdg = get_pdg3(b);
 	for (i = 0; i < 9; ++i) x[9] = -1.;
