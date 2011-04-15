@@ -103,22 +103,39 @@ static void rm_info(bcf1_t *b, const char *key)
 	bcf_sync(b);
 }
 
-static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
+static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[9])
 {
 	kstring_t s;
-	int has_I16, is_var = (pr->p_ref < pref);
-	double fq, r = is_var? pr->p_ref : pr->p_var;
+	int has_I16, is_var;
+	double fq, r;
 	anno16_t a;
-
-	has_I16 = test16(b, &a) >= 0? 1 : 0;
-	rm_info(b, "I16=");
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
 	kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
-	ksprintf(&s, "CI95=%.4g,%.4g", pr->cil, pr->cih);
+	{ // print EM
+		if (em[0] >= 0) ksprintf(&s, "AF1=%4g", 1 - em[0]);
+		//if (em[1] >= 0 && em[2] >= 0 && em[3] >= 0) ksprintf(&s, ";G3=%.4g,%.4g,%.4g", em[1], em[2], em[3]);
+		if (em[4] >= 0 && em[4] <= 0.05) ksprintf(&s, ";HWE=%.3g", em[4]);
+		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, ";AF2=%.4g,%.4g", 1 - em[5], 1 - em[6]);
+		if (em[7] >= 0) ksprintf(&s, ";LRT=%.3g", em[7]);
+	}
+	if (pr == 0) { // if pr is unset, return
+		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
+		free(b->str);
+		b->m_str = s.m; b->l_str = s.l; b->str = s.s;
+		bcf_sync(b);
+		return 1;
+	}
+
+	is_var = (pr->p_ref < pref);
+	r = is_var? pr->p_ref : pr->p_var;
+	has_I16 = test16(b, &a) >= 0? 1 : 0;
+	rm_info(b, "I16=");
+
+	ksprintf(&s, ";CI95=%.4g,%.4g", pr->cil, pr->cih); // FIXME: when EM is not used, ";" should be omitted!
 	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
@@ -133,7 +150,6 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 		}
 		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
 		ksprintf(&s, ";PCHI2=%.3g;PC2=%d,%d", q[1], q[2], pr->p_chi2);
-//		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}
 	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	kputc('\0', &s);
@@ -339,13 +355,15 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -v        output potential variant sites only (force -c)\n");
 		fprintf(stderr, "\nContrast calling and association test options:\n\n");
 		fprintf(stderr, "       -1 INT    number of group-1 samples [0]\n");
-		fprintf(stderr, "       -C        apply contrast (slow)\n");
+		fprintf(stderr, "       -C        apply contrast (slow; force -c)\n");
 		fprintf(stderr, "       -U INT    number of permutations for association testing (effective with -1) [0]\n");
 		fprintf(stderr, "       -X FLOAT  only perform permutations for P(chi^2)<FLOAT [%g]\n", vc.min_perm_p);
 		fprintf(stderr, "\n");
 		return 1;
 	}
 
+	if (vc.flag & VC_CONTRAST) vc.flag |= VC_CALL;
+	if (vc.flag & VC_CALL) vc.flag |= VC_EM;
 	if ((vc.flag & VC_VCFIN) && (vc.flag & VC_BCFOUT) && vc.fn_dict == 0) {
 		fprintf(stderr, "[%s] For VCF->BCF conversion please specify the sequence dictionary with -D\n", __func__);
 		return 1;
@@ -377,7 +395,6 @@ int bcfview(int argc, char *argv[])
 		vcf_hdr_write(bout, hout);
 	}
 	if (vc.flag & VC_CALL) {
-		vc.flag |= VC_EM;
 		p1 = bcf_p1_init(hout->n_smpl, vc.ploidy);
 		if (vc.prior_file) {
 			if (bcf_p1_read_prior(p1, vc.prior_file) < 0) {
@@ -410,6 +427,7 @@ int bcfview(int argc, char *argv[])
 	}
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel;
+		double em[9];
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {
 			extern int bcf_smpl_covered(const bcf1_t *b);
@@ -438,9 +456,10 @@ int bcfview(int argc, char *argv[])
 			bcf_2qcall(hout, b);
 			continue;
 		}
-		if (vc.flag & VC_EM) {
-			double em[10];
-			bcf_em1(b, vc.n1, 0xff, em);
+		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0xff, em);
+		else {
+			int i;
+			for (i = 0; i < 9; ++i) em[i] = -1.;
 		}
 		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_CALL) { // call variants
@@ -461,8 +480,8 @@ int bcfview(int argc, char *argv[])
 				}
 				pr.perm_rank = n;
 			}
-			update_bcf1(b, p1, &pr, vc.pref, vc.flag);
-		}
+			update_bcf1(b, p1, &pr, vc.pref, vc.flag, em);
+		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em);
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;
 			if ((r2 = bcf_pair_freq(blast, b, f)) >= 0) {
