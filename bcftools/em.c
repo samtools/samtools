@@ -134,7 +134,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 	if (n1 < 0 || n1 > b->n_smpl) n1 = 0;
 	n = b->n_smpl; n2 = n - n1;
 	pdg = get_pdg3(b);
-	for (i = 0; i < 9; ++i) x[9] = -1.;
+	for (i = 0; i < 9; ++i) x[i] = -1.;
 	{ // estimate the allele frequency; we estimate frequency first because I believe EM should converge faster
 		if ((x[0] = est_freq(n, pdg)) < 0.) {
 			free(pdg);
