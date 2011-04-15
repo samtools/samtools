@@ -468,13 +468,20 @@ int bcfview(int argc, char *argv[])
 				bcf_p1_dump_afs(p1);
 			}
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
-			if (vc.n_perm && vc.n1 > 0 && pr.p_chi2 < vc.min_perm_p) { // permutation test; FIXME: to explore if LRT is enough
+			if (vc.n_perm && vc.n1 > 0 && pr.p_chi2 < vc.min_perm_p) { // permutation test
 				bcf_p1rst_t r;
 				int i, n = 0;
 				for (i = 0; i < vc.n_perm; ++i) {
+#ifdef BCF_PERM_LRT // LRT based permutation is much faster but less robust to artifacts
+					double x[9];
+					bcf_shuffle(b, seeds[i]);
+					bcf_em1(b, vc.n1, 1<<7, x);
+					if (x[7] < em[7]) ++n;
+#else
 					bcf_shuffle(b, seeds[i]);
 					bcf_p1_cal(b, 1, p1, &r);
 					if (pr.p_chi2 >= r.p_chi2) ++n;
+#endif
 				}
 				pr.perm_rank = n;
 			}

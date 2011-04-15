@@ -174,6 +174,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 	if (b->n_alleles < 2) return -1; // one allele only
 	// initialization
 	if (n1 < 0 || n1 > b->n_smpl) n1 = 0;
+	if (flag & 1<<7) flag |= 7<<5; // compute group freq if LRT is required
 	n = b->n_smpl; n2 = n - n1;
 	pdg = get_pdg3(b);
 	for (i = 0; i < 9; ++i) x[i] = -1.;
