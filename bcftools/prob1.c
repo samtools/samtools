@@ -356,7 +356,7 @@ static inline double chi2_test(int a, int b, int c, int d)
 }
 
 // chi2=(a+b+c+d)(ad-bc)^2/[(a+b)(c+d)(a+c)(b+d)]
-static inline double contrast2_aux(const bcf_p1aux_t *p1, double sum, int k1, int k2, double x[3], double lp[3][2])
+static inline double contrast2_aux(const bcf_p1aux_t *p1, double sum, int k1, int k2, double x[3])
 {
 	double p = p1->phi[k1+k2] * p1->z1[k1] * p1->z2[k2] / sum * p1->hg[k1][k2];
 	int n1 = p1->n1, n2 = p1->n - p1->n1;
@@ -370,7 +370,7 @@ static inline double contrast2_aux(const bcf_p1aux_t *p1, double sum, int k1, in
 static double contrast2(bcf_p1aux_t *p1, double ret[3])
 {
 	int k, k1, k2, k10, k20, n1, n2;
-	double sum, lp[3][2];
+	double sum;
 	// get n1 and n2
 	n1 = p1->n1; n2 = p1->n - p1->n1;
 	if (n1 <= 0 || n2 <= 0) return 0.;
@@ -406,37 +406,17 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 		}
 		k20 = max_k;
 	}
-	{ // compute mean k1 and k2
-		double s, m;
-		for (k = 0, m = s = 0.; k <= 2*p1->n; ++k) {
-			double x = p1->phi[k] * p1->z[k];
-			s += x; m += k * x;
-		}
-		lp[0][0] = log(m/s/(2*p1->n)); lp[0][1] = log(1. - m/s/(2*p1->n));
-		for (k = 0, m = s = 0.; k <= 2*n1; ++k) {
-			double x = p1->phi1[k] * p1->z1[k];
-			s += x; m += k * x;
-		}
-		lp[1][0] = log(m/s/(2*n1)); lp[1][1] = log(1. - m/s/(2*n1));
-//		printf("%lf\t", 1 - m/s/(2*n1));
-		for (k = 0, m = s = 0.; k <= 2*n2; ++k) {
-			double x = p1->phi2[k] * p1->z2[k];
-			s += x; m += k * x;
-		}
-		lp[2][0] = log(m/s/(2*n2)); lp[2][1] = log(1. - m/s/(2*n2));
-//		printf("%lf\n", 1 - m/s/(2*n2));
-	}
 	{ // We can do the following with one nested loop, but that is an O(N^2) thing. The following code block is much faster for large N.
 		double x[3], y;
 		long double z = 0., L[2];
 		x[0] = x[1] = x[2] = 0; L[0] = L[1] = 0;
 		for (k1 = k10; k1 >= 0; --k1) {
 			for (k2 = k20; k2 >= 0; --k2) {
-				if ((y = contrast2_aux(p1, sum, k1, k2, x, lp)) < 0) break;
+				if ((y = contrast2_aux(p1, sum, k1, k2, x)) < 0) break;
 				else z += y;
 			}
 			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
-				if ((y = contrast2_aux(p1, sum, k1, k2, x, lp)) < 0) break;
+				if ((y = contrast2_aux(p1, sum, k1, k2, x)) < 0) break;
 				else z += y;
 			}
 		}
@@ -444,11 +424,11 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 		x[0] = x[1] = x[2] = 0;
 		for (k1 = k10 + 1; k1 <= 2*n1; ++k1) {
 			for (k2 = k20; k2 >= 0; --k2) {
-				if ((y = contrast2_aux(p1, sum, k1, k2, x, lp)) < 0) break;
+				if ((y = contrast2_aux(p1, sum, k1, k2, x)) < 0) break;
 				else z += y;
 			}
 			for (k2 = k20 + 1; k2 <= 2*n2; ++k2) {
-				if ((y = contrast2_aux(p1, sum, k1, k2, x, lp)) < 0) break;
+				if ((y = contrast2_aux(p1, sum, k1, k2, x)) < 0) break;
 				else z += y;
 			}
 		}
@@ -457,7 +437,7 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 			ret[0] = ret[1] = ret[2] = 0; L[0] = L[1] = 0;
 			for (k1 = 0, z = 0.; k1 <= 2*n1; ++k1)
 				for (k2 = 0; k2 <= 2*n2; ++k2)
-					if ((y = contrast2_aux(p1, sum, k1, k2, ret, lp)) >= 0) z += y;
+					if ((y = contrast2_aux(p1, sum, k1, k2, ret)) >= 0) z += y;
 			if (ret[0] + ret[1] + ret[2] < 0.95) // It seems that this may be caused by floating point errors. I do not really understand why...
 				z = 1.0, ret[0] = ret[1] = ret[2] = 1./3;
 		}
