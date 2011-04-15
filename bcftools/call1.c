@@ -152,7 +152,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 			if (q[i] > 255) q[i] = 255;
 		}
 		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
-		ksprintf(&s, ";PLRT=%.3g;PCHI2=%.3g;PC2=%d,%d", pr->lrt, q[1], q[2], pr->p_chi2);
+		ksprintf(&s, ";PCHI2=%.3g;PC2=%d,%d", q[1], q[2], pr->p_chi2);
 		ksprintf(&s, ";AF2=%.4g,%.4g", 1.-pr->f_em2[0], 1.-pr->f_em2[1]);
 //		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}
