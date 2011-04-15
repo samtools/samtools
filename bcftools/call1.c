@@ -25,35 +25,19 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_NO_INDEL 8192
 #define VC_ANNO_MAX 16384
 #define VC_FIX_PL   32768
+#define VC_EM       0x10000
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist, n_perm;
 	char *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
-	double theta, pref, indel_frac, min_perm_p, min_smpl_frac;
+	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt;
 	void *bed;
 } viewconf_t;
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
-
-static double test_hwe(const double g[3])
-{
-	extern double kf_gammaq(double p, double x);
-	double fexp, chi2, f[3], n;
-	int i;
-	n = g[0] + g[1] + g[2];
-	fexp = (2. * g[2] + g[1]) / (2. * n);
-	if (fexp > 1. - 1e-10) fexp = 1. - 1e-10;
-	if (fexp < 1e-10) fexp = 1e-10;
-	f[0] = n * (1. - fexp) * (1. - fexp);
-	f[1] = n * 2. * fexp * (1. - fexp);
-	f[2] = n * fexp * fexp;
-	for (i = 0, chi2 = 0.; i < 3; ++i)
-		chi2 += (g[i] - f[i]) * (g[i] - f[i]) / f[i];
-	return kf_gammaq(.5, chi2 / 2.);
-}
 
 typedef struct {
 	double p[4];
@@ -118,44 +102,53 @@ static void rm_info(bcf1_t *b, const char *key)
 	bcf_sync(b);
 }
 
-static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag)
+static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[9])
 {
 	kstring_t s;
-	int has_I16, is_var = (pr->p_ref < pref);
-	double fq, r = is_var? pr->p_ref : pr->p_var;
+	int has_I16, is_var;
+	double fq, r;
 	anno16_t a;
 
 	has_I16 = test16(b, &a) >= 0? 1 : 0;
-	rm_info(b, "I16=");
+	rm_info(b, "I16="); // FIXME: probably this function has a bug. If I move it below, I16 will not be removed!
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
 	kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
-//	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
-	ksprintf(&s, "AF1=%.4g;CI95=%.4g,%.4g;G3=%.4g,%.4g,%.4g", 1.-pr->f_em, pr->cil, pr->cih, pr->g[2], pr->g[1], pr->g[0]);
-	if (n_smpl > 5) {
-		double hwe = test_hwe(pr->g);
-		if (hwe < 0.1) ksprintf(&s, ";HWE=%.4g", hwe);
+	{ // print EM
+		if (em[0] >= 0) ksprintf(&s, "AF1=%.4g", 1 - em[0]);
+		if (em[4] >= 0 && em[4] <= 0.05) ksprintf(&s, ";G3=%.4g,%.4g,%.4g;HWE=%.3g", em[3], em[2], em[1], em[4]);
+		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, ";AF2=%.4g,%.4g", 1 - em[5], 1 - em[6]);
+		if (em[7] >= 0) ksprintf(&s, ";LRT=%.3g", em[7]);
 	}
+	if (pr == 0) { // if pr is unset, return
+		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
+		free(b->str);
+		b->m_str = s.m; b->l_str = s.l; b->str = s.s;
+		bcf_sync(b);
+		return 1;
+	}
+
+	is_var = (pr->p_ref < pref);
+	r = is_var? pr->p_ref : pr->p_var;
+
+	ksprintf(&s, ";CI95=%.4g,%.4g", pr->cil, pr->cih); // FIXME: when EM is not used, ";" should be omitted!
 	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
 	if (fq > 999) fq = 999;
 	ksprintf(&s, ";FQ=%.3g", fq);
 	if (pr->cmp[0] >= 0.) { // two sample groups
-		int i, q[3], pq;
+		int i, q[3];
 		for (i = 1; i < 3; ++i) {
 			double x = pr->cmp[i] + pr->cmp[0]/2.;
 			q[i] = x == 0? 255 : (int)(-4.343 * log(x) + .499);
 			if (q[i] > 255) q[i] = 255;
 		}
-		pq = (int)(-4.343 * log(pr->p_chi2) + .499);
 		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
-		ksprintf(&s, ";QCHI2=%d;PCHI2=%.3g;PC2=%d,%d", pq, q[1], q[2], pr->p_chi2);
-		ksprintf(&s, ";AF2=%.4g,%.4g", 1.-pr->f_em2[0], 1.-pr->f_em2[1]);
-//		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
+		ksprintf(&s, ";PCHI2=%.3g;PC2=%d,%d", q[1], q[2], pr->p_chi2);
 	}
 	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	kputc('\0', &s);
@@ -175,7 +168,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 		b->m_str = s.m; b->l_str = s.l; b->str = s.s;
 		bcf_sync(b);
 		for (i = 0; i < b->n_smpl; ++i) {
-			x = bcf_p1_call_gt(pa, pr->f_em, i);
+			x = bcf_p1_call_gt(pa, pr->f_exp, i);
 			((uint8_t*)b->gi[old_n_gi].data)[i] = (x&3) == 0? 1<<3|1 : (x&3) == 1? 1 : 0;
 			((uint8_t*)b->gi[old_n_gi+1].data)[i] = x>>2;
 		}
@@ -270,7 +263,7 @@ static void write_header(bcf_hdr_t *h)
 	h->l_txt = str.l + 1; h->txt = str.s;
 }
 
-double bcf_ld_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4]);
+double bcf_pair_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4]);
 
 int bcfview(int argc, char *argv[])
 {
@@ -291,8 +284,8 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0;
-	while ((c = getopt(argc, argv, "FN1:l:cHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 0.01;
+	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -304,6 +297,7 @@ int bcfview(int argc, char *argv[])
 		case 'b': vc.flag |= VC_BCFOUT; break;
 		case 'S': vc.flag |= VC_VCFIN; break;
 		case 'c': vc.flag |= VC_CALL; break;
+		case 'e': vc.flag |= VC_EM; break;
 		case 'v': vc.flag |= VC_VARONLY | VC_CALL; break;
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
@@ -315,6 +309,7 @@ int bcfview(int argc, char *argv[])
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
 		case 'U': vc.n_perm = atoi(optarg); break;
+		case 'C': vc.min_lrt = atof(optarg); break;
 		case 'X': vc.min_perm_p = atof(optarg); break;
 		case 'd': vc.min_smpl_frac = atof(optarg); break;
 		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
@@ -347,8 +342,9 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -S        input is VCF\n");
 		fprintf(stderr, "       -u        uncompressed BCF output (force -b)\n");
 		fprintf(stderr, "\nConsensus/variant calling options:\n\n");
-		fprintf(stderr, "       -c        SNP calling\n");
+		fprintf(stderr, "       -c        SNP calling (force -e)\n");
 		fprintf(stderr, "       -d FLOAT  skip loci where less than FLOAT fraction of samples covered [0]\n");
+		fprintf(stderr, "       -e        likelihood based analyses\n");
 		fprintf(stderr, "       -g        call genotypes at variant sites (force -c)\n");
 		fprintf(stderr, "       -i FLOAT  indel-to-substitution ratio [%.4g]\n", vc.indel_frac);
 		fprintf(stderr, "       -I        skip indels\n");
@@ -358,12 +354,14 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -v        output potential variant sites only (force -c)\n");
 		fprintf(stderr, "\nContrast calling and association test options:\n\n");
 		fprintf(stderr, "       -1 INT    number of group-1 samples [0]\n");
+		fprintf(stderr, "       -C FLOAT  posterior constrast for LRT<FLOAT and P(ref|D)<0.5 [%g]\n", vc.min_lrt);
 		fprintf(stderr, "       -U INT    number of permutations for association testing (effective with -1) [0]\n");
 		fprintf(stderr, "       -X FLOAT  only perform permutations for P(chi^2)<FLOAT [%g]\n", vc.min_perm_p);
 		fprintf(stderr, "\n");
 		return 1;
 	}
 
+	if (vc.flag & VC_CALL) vc.flag |= VC_EM;
 	if ((vc.flag & VC_VCFIN) && (vc.flag & VC_BCFOUT) && vc.fn_dict == 0) {
 		fprintf(stderr, "[%s] For VCF->BCF conversion please specify the sequence dictionary with -D\n", __func__);
 		return 1;
@@ -402,7 +400,7 @@ int bcfview(int argc, char *argv[])
 				return 1;
 			}
 		} else bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
-		if (vc.n1 > 0) {
+		if (vc.n1 > 0 && vc.min_lrt > 0.) { // set n1
 			bcf_p1_set_n1(p1, vc.n1);
 			bcf_p1_init_subprior(p1, vc.prior_type, vc.theta);
 		}
@@ -427,6 +425,7 @@ int bcfview(int argc, char *argv[])
 	}
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel;
+		double em[9];
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {
 			extern int bcf_smpl_covered(const bcf1_t *b);
@@ -455,10 +454,15 @@ int bcfview(int argc, char *argv[])
 			bcf_2qcall(hout, b);
 			continue;
 		}
+		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0xff, em);
+		else {
+			int i;
+			for (i = 0; i < 9; ++i) em[i] = -1.;
+		}
 		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
-			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
+			bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
 			if (n_processed % 100000 == 0) {
 				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
 				bcf_p1_dump_afs(p1);
@@ -468,17 +472,24 @@ int bcfview(int argc, char *argv[])
 				bcf_p1rst_t r;
 				int i, n = 0;
 				for (i = 0; i < vc.n_perm; ++i) {
+#ifdef BCF_PERM_LRT // LRT based permutation is much faster but less robust to artifacts
+					double x[9];
 					bcf_shuffle(b, seeds[i]);
-					bcf_p1_cal(b, p1, &r);
+					bcf_em1(b, vc.n1, 1<<7, x);
+					if (x[7] < em[7]) ++n;
+#else
+					bcf_shuffle(b, seeds[i]);
+					bcf_p1_cal(b, 1, p1, &r);
 					if (pr.p_chi2 >= r.p_chi2) ++n;
+#endif
 				}
 				pr.perm_rank = n;
 			}
-			update_bcf1(hout->n_smpl, b, p1, &pr, vc.pref, vc.flag);
-		}
+			update_bcf1(b, p1, &pr, vc.pref, vc.flag, em);
+		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em);
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;
-			if ((r2 = bcf_ld_freq(blast, b, f)) >= 0) {
+			if ((r2 = bcf_pair_freq(blast, b, f)) >= 0) {
 				kstring_t s;
 				s.m = s.l = 0; s.s = 0;
 				if (*b->info) kputc(';', &s);
