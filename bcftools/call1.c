@@ -25,14 +25,13 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_NO_INDEL 8192
 #define VC_ANNO_MAX 16384
 #define VC_FIX_PL   32768
-#define VC_CONTRAST 0x10000
-#define VC_EM       0x20000
+#define VC_EM       0x10000
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist, n_perm;
 	char *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
-	double theta, pref, indel_frac, min_perm_p, min_smpl_frac;
+	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt;
 	void *bed;
 } viewconf_t;
 
@@ -285,8 +284,8 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0;
-	while ((c = getopt(argc, argv, "FN1:l:cCeHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 0.01;
+	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -298,7 +297,6 @@ int bcfview(int argc, char *argv[])
 		case 'b': vc.flag |= VC_BCFOUT; break;
 		case 'S': vc.flag |= VC_VCFIN; break;
 		case 'c': vc.flag |= VC_CALL; break;
-		case 'C': vc.flag |= VC_CONTRAST; break;
 		case 'e': vc.flag |= VC_EM; break;
 		case 'v': vc.flag |= VC_VARONLY | VC_CALL; break;
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
@@ -311,6 +309,7 @@ int bcfview(int argc, char *argv[])
 		case 'Q': vc.flag |= VC_QCALL; break;
 		case 'L': vc.flag |= VC_ADJLD; break;
 		case 'U': vc.n_perm = atoi(optarg); break;
+		case 'C': vc.min_lrt = atof(optarg); break;
 		case 'X': vc.min_perm_p = atof(optarg); break;
 		case 'd': vc.min_smpl_frac = atof(optarg); break;
 		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
@@ -355,14 +354,13 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -v        output potential variant sites only (force -c)\n");
 		fprintf(stderr, "\nContrast calling and association test options:\n\n");
 		fprintf(stderr, "       -1 INT    number of group-1 samples [0]\n");
-		fprintf(stderr, "       -C        apply contrast (slow; force -c)\n");
+		fprintf(stderr, "       -C FLOAT  posterior constrast for LRT<FLOAT and P(ref|D)<0.5 [%g]\n", vc.min_lrt);
 		fprintf(stderr, "       -U INT    number of permutations for association testing (effective with -1) [0]\n");
 		fprintf(stderr, "       -X FLOAT  only perform permutations for P(chi^2)<FLOAT [%g]\n", vc.min_perm_p);
 		fprintf(stderr, "\n");
 		return 1;
 	}
 
-	if (vc.flag & VC_CONTRAST) vc.flag |= VC_CALL;
 	if (vc.flag & VC_CALL) vc.flag |= VC_EM;
 	if ((vc.flag & VC_VCFIN) && (vc.flag & VC_BCFOUT) && vc.fn_dict == 0) {
 		fprintf(stderr, "[%s] For VCF->BCF conversion please specify the sequence dictionary with -D\n", __func__);
@@ -402,7 +400,7 @@ int bcfview(int argc, char *argv[])
 				return 1;
 			}
 		} else bcf_p1_init_prior(p1, vc.prior_type, vc.theta);
-		if (vc.n1 > 0 && (vc.flag & VC_CONTRAST)) {
+		if (vc.n1 > 0 && vc.min_lrt > 0.) { // set n1
 			bcf_p1_set_n1(p1, vc.n1);
 			bcf_p1_init_subprior(p1, vc.prior_type, vc.theta);
 		}
@@ -464,18 +462,18 @@ int bcfview(int argc, char *argv[])
 		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
-			bcf_p1_cal(b, p1, &pr); // pr.g[3] is not calculated here
+			bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
 			if (n_processed % 100000 == 0) {
 				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
 				bcf_p1_dump_afs(p1);
 			}
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
-			if (vc.n_perm && vc.n1 > 0 && pr.p_chi2 < vc.min_perm_p) { // permutation test
+			if (vc.n_perm && vc.n1 > 0 && pr.p_chi2 < vc.min_perm_p) { // permutation test; FIXME: to explore if LRT is enough
 				bcf_p1rst_t r;
 				int i, n = 0;
 				for (i = 0; i < vc.n_perm; ++i) {
 					bcf_shuffle(b, seeds[i]);
-					bcf_p1_cal(b, p1, &r);
+					bcf_p1_cal(b, 1, p1, &r);
 					if (pr.p_chi2 >= r.p_chi2) ++n;
 				}
 				pr.perm_rank = n;

@@ -494,7 +494,7 @@ static double mc_cal_afs(bcf_p1aux_t *ma, double *p_ref_folded, double *p_var_fo
 	return sum / ma->M;
 }
 
-int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
+int bcf_p1_cal(const bcf1_t *b, int do_contrast, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 {
 	int i, k;
 	long double sum = 0.;
@@ -539,7 +539,7 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 		rst->cil = (double)(ma->M - h) / ma->M; rst->cih = (double)(ma->M - l) / ma->M;
 	}
 	rst->cmp[0] = rst->cmp[1] = rst->cmp[2] = rst->p_chi2 = -1.0;
-	if (rst->p_var > 0.1) // skip contrast2() if the locus is a strong non-variant
+	if (do_contrast && rst->p_var > 0.5) // skip contrast2() if the locus is a strong non-variant
 		rst->p_chi2 = contrast2(ma, rst->cmp);
 	return 0;
 }
