@@ -134,7 +134,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 	kputs(b->info, &s);
 	if (b->info[0]) kputc(';', &s);
 //	ksprintf(&s, "AF1=%.4lg;AFE=%.4lg;CI95=%.4lg,%.4lg", 1.-pr->f_em, 1.-pr->f_exp, pr->cil, pr->cih);
-	ksprintf(&s, "AF1=%.4g;CI95=%.4g,%.4g;G3=%.4g,%.4g,%.4g", 1.-pr->f_em, pr->cil, pr->cih, pr->g[2], pr->g[1], pr->g[0]);
+	ksprintf(&s, "CI95=%.4g,%.4g", pr->cil, pr->cih);
 	if (n_smpl > 5) {
 		double hwe = test_hwe(pr->g);
 		if (hwe < 0.1) ksprintf(&s, ";HWE=%.4g", hwe);
@@ -153,7 +153,6 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 		}
 		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
 		ksprintf(&s, ";PCHI2=%.3g;PC2=%d,%d", q[1], q[2], pr->p_chi2);
-		ksprintf(&s, ";AF2=%.4g,%.4g", 1.-pr->f_em2[0], 1.-pr->f_em2[1]);
 //		ksprintf(&s, ",%g,%g,%g", pr->cmp[0], pr->cmp[1], pr->cmp[2]);
 	}
 	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
@@ -174,7 +173,7 @@ static int update_bcf1(int n_smpl, bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p
 		b->m_str = s.m; b->l_str = s.l; b->str = s.s;
 		bcf_sync(b);
 		for (i = 0; i < b->n_smpl; ++i) {
-			x = bcf_p1_call_gt(pa, pr->f_em, i);
+			x = bcf_p1_call_gt(pa, pr->f_exp, i);
 			((uint8_t*)b->gi[old_n_gi].data)[i] = (x&3) == 0? 1<<3|1 : (x&3) == 1? 1 : 0;
 			((uint8_t*)b->gi[old_n_gi+1].data)[i] = x>>2;
 		}

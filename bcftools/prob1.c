@@ -212,39 +212,6 @@ static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 		if ((p[i]&0xf) == 0) break;
 	return i;
 }
-// f0 is the reference allele frequency
-static double mc_freq_iter(double f0, const bcf_p1aux_t *ma, int beg, int end)
-{
-	double f, f3[3];
-	int i;
-	f3[0] = (1.-f0)*(1.-f0); f3[1] = 2.*f0*(1.-f0); f3[2] = f0*f0;
-	for (i = beg, f = 0.; i < end; ++i) {
-		double *pdg;
-		pdg = ma->pdg + i * 3;
-		f += (pdg[1] * f3[1] + 2. * pdg[2] * f3[2])
-			/ (pdg[0] * f3[0] + pdg[1] * f3[1] + pdg[2] * f3[2]);
-	}
-	f /= (end - beg) * 2.;
-	return f;
-}
-
-static double mc_gtfreq_iter(double g[3], const bcf_p1aux_t *ma, int beg, int end)
-{
-	double err, gg[3];
-	int i;
-	gg[0] = gg[1] = gg[2] = 0.;
-	for (i = beg; i < end; ++i) {
-		double *pdg, sum, tmp[3];
-		pdg = ma->pdg + i * 3;
-		tmp[0] = pdg[0] * g[0]; tmp[1] = pdg[1] * g[1]; tmp[2] = pdg[2] * g[2];
-		sum = (tmp[0] + tmp[1] + tmp[2]) * (end - beg);
-		gg[0] += tmp[0] / sum; gg[1] += tmp[1] / sum; gg[2] += tmp[2] / sum;
-	}
-	err = fabs(gg[0] - g[0]) > fabs(gg[1] - g[1])? fabs(gg[0] - g[0]) : fabs(gg[1] - g[1]);
-	err = err > fabs(gg[2] - g[2])? err : fabs(gg[2] - g[2]);
-	g[0] = gg[0]; g[1] = gg[1]; g[2] = gg[2];
-	return err;
-}
 
 int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 {
@@ -527,25 +494,6 @@ static double mc_cal_afs(bcf_p1aux_t *ma, double *p_ref_folded, double *p_var_fo
 	return sum / ma->M;
 }
 
-static double cal_lrt_em(bcf_p1aux_t *p1, double f[3])
-{
-	double f3[3][3];
-	long double lrt = 1.;
-	int i;
-	for (i = 0; i < 3; ++i) f3[i][0] = (1-f[i])*(1-f[i]), f3[i][1] = 2*f[i]*(1-f[i]), f3[i][2] = f[i]*f[i];
-	for (i = 0; i < p1->n1; ++i) {
-		double *pdg = p1->pdg + i * 3;
-		lrt *= (pdg[0] * f3[1][0] + pdg[1] * f3[1][1] + pdg[2] * f3[1][2])
-			/ (pdg[0] * f3[0][0] + pdg[1] * f3[0][1] + pdg[2] * f3[0][2]);
-	}
-	for (; i < p1->n; ++i) {
-		double *pdg = p1->pdg + i * 3;
-		lrt *= (pdg[0] * f3[2][0] + pdg[1] * f3[2][1] + pdg[2] * f3[2][2])
-			/ (pdg[0] * f3[0][0] + pdg[1] * f3[0][1] + pdg[2] * f3[0][2]);
-	}
-	return kf_gammaq(.5, log(lrt));
-}
-
 int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 {
 	int i, k;
@@ -577,33 +525,6 @@ int bcf_p1_cal(const bcf1_t *b, bcf_p1aux_t *ma, bcf_p1rst_t *rst)
 		rst->f_flat += k * p;
 	}
 	rst->f_flat /= ma->M;
-	{ // calculate f_em
-		double flast = rst->f_flat, f[3];
-		for (i = 0; i < MC_MAX_EM_ITER; ++i) {
-			rst->f_em = mc_freq_iter(flast, ma, 0, ma->n);
-			if (fabs(rst->f_em - flast) < MC_EM_EPS) break;
-			flast = rst->f_em;
-		}
-		if (ma->n1 > 0 && ma->n1 < ma->n) {
-			for (k = 0; k < 2; ++k) {
-				flast = rst->f_em;
-				for (i = 0; i < MC_MAX_EM_ITER; ++i) {
-					rst->f_em2[k] = k? mc_freq_iter(flast, ma, ma->n1, ma->n) : mc_freq_iter(flast, ma, 0, ma->n1);
-					if (fabs(rst->f_em2[k] - flast) < MC_EM_EPS) break;
-					flast = rst->f_em2[k];
-				}
-			}
-			f[0] = rst->f_em, f[1] = rst->f_em2[0], f[2] = rst->f_em2[1];
-			rst->lrt_em = cal_lrt_em(ma, f);
-		}
-	}
-	{ // compute g[3]
-		rst->g[0] = (1. - rst->f_em) * (1. - rst->f_em);
-		rst->g[1] = 2. * rst->f_em * (1. - rst->f_em);
-		rst->g[2] = rst->f_em * rst->f_em;
-		for (i = 0; i < MC_MAX_EM_ITER; ++i)
-			if (mc_gtfreq_iter(rst->g, ma, 0, ma->n) < MC_EM_EPS) break;
-	}
 	{ // estimate equal-tail credible interval (95% level)
 		int l, h;
 		double p;

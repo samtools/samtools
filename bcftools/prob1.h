@@ -8,10 +8,9 @@ typedef struct __bcf_p1aux_t bcf_p1aux_t;
 
 typedef struct {
 	int rank0, perm_rank; // NB: perm_rank is always set to -1 by bcf_p1_cal()
-	double f_em, f_exp, f_flat, p_ref_folded, p_ref, p_var_folded, p_var;
-	double lrt_em, hwe_em;
+	double f_exp, f_flat, p_ref_folded, p_ref, p_var_folded, p_var;
 	double cil, cih;
-	double cmp[3], p_chi2, f_em2[2]; // used by contrast2()
+	double cmp[3], p_chi2; // used by contrast2()
 	double g[3];
 } bcf_p1rst_t;
 
@@ -33,6 +32,8 @@ extern "C" {
 	int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn);
 	int bcf_p1_set_n1(bcf_p1aux_t *b, int n1);
 	void bcf_p1_set_folded(bcf_p1aux_t *p1a); // only effective when set_n1() is not called
+
+	int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9]);
 
 #ifdef __cplusplus
 }
