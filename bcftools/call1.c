@@ -109,6 +109,9 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	double fq, r;
 	anno16_t a;
 
+	has_I16 = test16(b, &a) >= 0? 1 : 0;
+	rm_info(b, "I16="); // FIXME: probably this function has a bug. If I move it below, I16 will not be removed!
+
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
 	kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
@@ -131,8 +134,6 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 
 	is_var = (pr->p_ref < pref);
 	r = is_var? pr->p_ref : pr->p_var;
-	has_I16 = test16(b, &a) >= 0? 1 : 0;
-	rm_info(b, "I16=");
 
 	ksprintf(&s, ";CI95=%.4g,%.4g", pr->cil, pr->cih); // FIXME: when EM is not used, ";" should be omitted!
 	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
