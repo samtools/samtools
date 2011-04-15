@@ -175,6 +175,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 	// initialization
 	if (n1 < 0 || n1 > b->n_smpl) n1 = 0;
 	if (flag & 1<<7) flag |= 7<<5; // compute group freq if LRT is required
+	if (flag & 0xf<<1) flag |= 0xf<<1;
 	n = b->n_smpl; n2 = n - n1;
 	pdg = get_pdg3(b);
 	for (i = 0; i < 9; ++i) x[i] = -1.;
@@ -185,7 +186,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 		}
 		x[0] = freqml(x[0], 0, n, pdg);
 	}
-	if (flag & (0xff<<1|1<<8)) { // estimate the genotype frequency and test HWE
+	if (flag & (0xf<<1|1<<8)) { // estimate the genotype frequency and test HWE
 		double *g = x + 1, f3[3], r;
 		f3[0] = g[0] = (1 - x[0]) * (1 - x[0]);
 		f3[1] = g[1] = 2 * x[0] * (1 - x[0]);
