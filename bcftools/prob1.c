@@ -488,6 +488,7 @@ int bcf_p1_cal(const bcf1_t *b, int do_contrast, bcf_p1aux_t *ma, bcf_p1rst_t *r
 			break;
 		}
 	}
+	if (i == b->n_gi) return -1; // no PL
 	if (b->n_alleles < 2) return -1; // FIXME: find a better solution
 	// 
 	rst->rank0 = cal_pdg(b, ma);
