@@ -2,11 +2,13 @@
 #include <string.h>
 #include <math.h>
 #include "bcf.h"
+#include "kmin.h"
 
 static double g_q2p[256];
 
 #define ITER_MAX 50
-#define ITER_EPS 1e-5
+#define ITER_TRY 10
+#define EPS 1e-5
 
 extern double kf_gammaq(double, double);
 
@@ -63,12 +65,33 @@ static double est_freq(int n, const double *pdg)
 /*
 	Single-locus EM
  */
+
+typedef struct {
+	int beg, end;
+	const double *pdg;
+} minaux1_t;
+
+static double prob1(double f, void *data)
+{
+	minaux1_t *a = (minaux1_t*)data;
+	double p = 1., l = 0., f3[3];
+	int i;
+//	printf("%lg\n", f);
+	if (f < 0 || f > 1) return 1e300;
+	f3[0] = (1.-f)*(1.-f); f3[1] = 2.*f*(1.-f); f3[2] = f*f;
+	for (i = a->beg; i < a->end; ++i) {
+		const double *pdg = a->pdg + i * 3;
+		p *= pdg[0] * f3[0] + pdg[1] * f3[1] + pdg[2] * f3[2];
+		if (p < 1e-200) l -= log(p), p = 1.;
+	}
+	return l - log(p);
+}
+
 // one EM iteration for allele frequency estimate
 static double freq_iter(double *f, const double *_pdg, int beg, int end)
 {
 	double f0 = *f, f3[3], err;
 	int i;
-//	printf("%lg\n", *f);
 	f3[0] = (1.-f0)*(1.-f0); f3[1] = 2.*f0*(1.-f0); f3[2] = f0*f0;
 	for (i = beg, f0 = 0.; i < end; ++i) {
 		const double *pdg = _pdg + i * 3;
@@ -79,6 +102,25 @@ static double freq_iter(double *f, const double *_pdg, int beg, int end)
 	err = fabs(f0 - *f);
 	*f = f0;
 	return err;
+}
+
+/* The following function combines EM and Brent's method. When the signal from
+ * the data is strong, EM is faster but sometimes, EM may converge very slowly.
+ * When this happens, we switch to Brent's method. The idea is learned from
+ * Rasmus Nielsen.
+ */
+static double freqml(double f0, int beg, int end, const double *pdg)
+{
+	int i;
+	double f;
+	for (i = 0, f = f0; i < ITER_TRY; ++i)
+		if (freq_iter(&f, pdg, beg, end) < EPS) break;
+	if (i == ITER_TRY) { // haven't converged yet; try Brent's method
+		minaux1_t a;
+		a.beg = beg; a.end = end; a.pdg = pdg;
+		kmin_brent(prob1, f0 == f? .5*f0 : f0, f, (void*)&a, EPS, &f);
+	}
+	return f;
 }
 
 // one EM iteration for genotype frequency estimate
@@ -135,13 +177,12 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 	n = b->n_smpl; n2 = n - n1;
 	pdg = get_pdg3(b);
 	for (i = 0; i < 9; ++i) x[i] = -1.;
-	{ // estimate the allele frequency; we estimate frequency first because I believe EM should converge faster
+	{
 		if ((x[0] = est_freq(n, pdg)) < 0.) {
 			free(pdg);
 			return -1; // no data
 		}
-		for (i = 0; i < ITER_MAX; ++i)
-			if (freq_iter(&x[0], pdg, 0, n) < ITER_EPS) break;
+		x[0] = freqml(x[0], 0, n, pdg);
 	}
 	if (flag & (0xff<<1|1<<8)) { // estimate the genotype frequency and test HWE
 		double *g = x + 1, f3[3], r;
@@ -149,7 +190,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 		f3[1] = g[1] = 2 * x[0] * (1 - x[0]);
 		f3[2] = g[2] = x[0] * x[0];
 		for (i = 0; i < ITER_MAX; ++i)
-			if (g3_iter(g, pdg, 0, n) < ITER_EPS) break;
+			if (g3_iter(g, pdg, 0, n) < EPS) break;
 		// Hardy-Weinberg equilibrium (HWE)
 		for (i = 0, r = 1.; i < n; ++i) {
 			double *p = pdg + i * 3;
@@ -158,11 +199,8 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 		x[4] = kf_gammaq(.5, log(r));
 	}
 	if ((flag & 7<<5) && n1 > 0 && n1 < n) { // group frequency
-		x[5] = x[6] = x[0];
-		for (i = 0; i < ITER_MAX; ++i)
-			if (freq_iter(&x[5], pdg, 0, n1) < ITER_EPS) break;
-		for (i = 0; i < ITER_MAX; ++i)
-			if (freq_iter(&x[6], pdg, n1, n) < ITER_EPS) break;
+		x[5] = freqml(x[0], 0, n1, pdg);
+		x[6] = freqml(x[0], n1, n, pdg);
 	}
 	if ((flag & 1<<7) && n1 > 0 && n1 < n) { // 1-degree P-value
 		double f[3], f3[3][3];
@@ -175,9 +213,9 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 		double g[3][3];
 		for (i = 0; i < 3; ++i) memcpy(g[i], x + 1, 3 * sizeof(double));
 		for (i = 0; i < ITER_MAX; ++i)
-			if (g3_iter(g[1], pdg, 0, n1) < ITER_EPS) break;
+			if (g3_iter(g[1], pdg, 0, n1) < EPS) break;
 		for (i = 0; i < ITER_MAX; ++i)
-			if (g3_iter(g[2], pdg, n1, n) < ITER_EPS) break;
+			if (g3_iter(g[2], pdg, n1, n) < EPS) break;
 		x[8] = kf_gammaq(1., log(lk_ratio_test(n, n1, pdg, g)));
 	}
 	// free
@@ -247,7 +285,7 @@ double bcf_pair_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 			double x = fabs(f[i] - flast[i]);
 			if (x > eps) eps = x;
 		}
-		if (eps < ITER_EPS) break;
+		if (eps < EPS) break;
 	}
 	// free
 	free(pdg[0]); free(pdg[1]);
