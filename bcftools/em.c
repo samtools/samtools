@@ -196,6 +196,7 @@ static int pair_freq_iter(int n, double *pdg[2], double f[4])
 {
 	double ff[4];
 	int i, k, h;
+//	printf("%lf,%lf,%lf,%lf\n", f[0], f[1], f[2], f[3]);
 	memset(ff, 0, 4 * sizeof(double));
 	for (i = 0; i < n; ++i) {
 		double *p[2], sum, tmp;
@@ -219,7 +220,7 @@ double bcf_pair_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 {
 	const bcf1_t *b[2];
 	int i, j, n_smpl;
-	double *pdg[2], flast[4], r;
+	double *pdg[2], flast[4], r, f0[2];
 	// initialize others
 	if (b0->n_smpl != b1->n_smpl) return -1; // different number of samples
 	n_smpl = b0->n_smpl;
@@ -231,8 +232,12 @@ double bcf_pair_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 		free(pdg[0]); free(pdg[1]);
 		return -1;
 	}
+	// set the initial value
+	f0[0] = est_freq(n_smpl, pdg[0]);
+	f0[1] = est_freq(n_smpl, pdg[1]);
+	f[0] = (1 - f0[0]) * (1 - f0[1]); f[3] = f0[0] * f0[1];
+	f[1] = (1 - f0[0]) * f0[1]; f[2] = f0[0] * (1 - f0[1]);
 	// iteration
-	f[0] = f[1] = f[2] = f[3] = 0.25; // FIXME: use the strategy in bcf_em1()!!!
 	for (j = 0; j < ITER_MAX; ++j) {
 		double eps = 0;
 		memcpy(flast, f, 4 * sizeof(double));
@@ -251,7 +256,7 @@ double bcf_pair_freq(const bcf1_t *b0, const bcf1_t *b1, double f[4])
 		p[1] = f[0] + f[2]; q[1] = 1 - p[1];
 		D = f[0] * f[3] - f[1] * f[2];
 		r = sqrt(D * D / (p[0] * p[1] * q[0] * q[1]));
-		// fprintf(stderr, "R(%lf,%lf,%lf,%lf)=%lf\n", f[0], f[1], f[2], f[3], r2);
+//		printf("R(%lf,%lf,%lf,%lf)=%lf\n", f[0], f[1], f[2], f[3], r);
 		if (isnan(r)) r = -1.;
 	}
 	return r;
