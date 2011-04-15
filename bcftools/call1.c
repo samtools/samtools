@@ -455,7 +455,7 @@ int bcfview(int argc, char *argv[])
 			continue;
 		}
 		double xx[10];
-		bcf_em1(b, 0, 0, xx);
+		bcf_em1(b, vc.n1, 0xff, xx);
 		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
