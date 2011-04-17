@@ -103,8 +103,14 @@ int bcf_sync(bcf1_t *b)
 	ks_tokaux_t aux;
 	// set ref, alt, flt, info, fmt
 	b->ref = b->alt = b->flt = b->info = b->fmt = 0;
-	for (p = b->str, n = 0; p < b->str + b->l_str; ++p)
-		if (*p == 0 && p+1 != b->str + b->l_str) tmp[n++] = p + 1;
+	for (p = b->str, n = 0; p < b->str + b->l_str; ++p) {
+		if (*p == 0 && p+1 != b->str + b->l_str) {
+			if (n == 5) {
+				++n;
+				break;
+			} else tmp[n++] = p + 1;
+		}
+	}
 	if (n != 5) {
 		fprintf(stderr, "[%s] incorrect number of fields (%d != 5) at %d:%d\n", __func__, n, b->tid, b->pos);
 		return -1;

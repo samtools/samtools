@@ -284,7 +284,7 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 0.01;
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1;
 	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
@@ -462,7 +462,7 @@ int bcfview(int argc, char *argv[])
 		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
-			bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
+			int calret = bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
 			if (n_processed % 100000 == 0) {
 				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
 				bcf_p1_dump_afs(p1);
@@ -485,7 +485,7 @@ int bcfview(int argc, char *argv[])
 				}
 				pr.perm_rank = n;
 			}
-			update_bcf1(b, p1, &pr, vc.pref, vc.flag, em);
+			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em);
 		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em);
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;

@@ -76,7 +76,7 @@ static double prob1(double f, void *data)
 	minaux1_t *a = (minaux1_t*)data;
 	double p = 1., l = 0., f3[3];
 	int i;
-//	printf("%lg\n", f);
+//	printf("brent %lg\n", f);
 	if (f < 0 || f > 1) return 1e300;
 	f3[0] = (1.-f)*(1.-f); f3[1] = 2.*f*(1.-f); f3[2] = f*f;
 	for (i = a->beg; i < a->end; ++i) {
@@ -92,6 +92,7 @@ static double freq_iter(double *f, const double *_pdg, int beg, int end)
 {
 	double f0 = *f, f3[3], err;
 	int i;
+//	printf("em %lg\n", *f);
 	f3[0] = (1.-f0)*(1.-f0); f3[1] = 2.*f0*(1.-f0); f3[2] = f0*f0;
 	for (i = beg, f0 = 0.; i < end; ++i) {
 		const double *pdg = _pdg + i * 3;
@@ -178,6 +179,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 	if (flag & 0xf<<1) flag |= 0xf<<1;
 	n = b->n_smpl; n2 = n - n1;
 	pdg = get_pdg3(b);
+	if (pdg == 0) return -1;
 	for (i = 0; i < 9; ++i) x[i] = -1.;
 	{
 		if ((x[0] = est_freq(n, pdg)) < 0.) {
