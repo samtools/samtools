@@ -284,7 +284,7 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 0.01;
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1;
 	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
