@@ -4,6 +4,9 @@
 #include <stdio.h>
 #include <zlib.h>
 
+#include "ksort.h"
+KSORT_INIT_GENERIC(uint64_t)
+
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 8192)
 
@@ -53,6 +56,7 @@ void bed_index(void *_h)
 		if (kh_exist(h, k)) {
 			bed_reglist_t *p = &kh_val(h, k);
 			if (p->idx) free(p->idx);
+			ks_introsort(uint64_t, p->n, p->a);
 			p->idx = bed_index_core(p->n, p->a, &p->m);
 		}
 	}
