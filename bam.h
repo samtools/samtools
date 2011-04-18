@@ -746,4 +746,13 @@ static inline bam1_t *bam_dup1(const bam1_t *src)
 	return b;
 }
 
+static inline int bam_aux_type2size(int x)
+{
+	if (x == 'C' || x == 'c' || x == 'A') return 1;
+	else if (x == 'S' || x == 's') return 2;
+	else if (x == 'I' || x == 'i' || x == 'f') return 4;
+	else return 0;
+}
+
+
 #endif

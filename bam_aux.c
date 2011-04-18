@@ -26,14 +26,12 @@ uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2])
 }
 
 #define __skip_tag(s) do { \
-		int type = toupper(*(s));										\
-		++(s);															\
-		if (type == 'C' || type == 'A') ++(s);							\
-		else if (type == 'S') (s) += 2;									\
-		else if (type == 'I' || type == 'F') (s) += 4;					\
-		else if (type == 'D') (s) += 8;									\
-		else if (type == 'Z' || type == 'H') { while (*(s)) ++(s); ++(s); } \
-	} while (0)
+		int type = toupper(*(s)); \
+		++(s); \
+		if (type == 'Z' || type == 'H') { while (*(s)) ++(s); ++(s); } \
+		else if (type == 'B') (s) += 5 + bam_aux_type2size(*(s)) * (*(int32_t*)((s)+1)); \
+		else (s) += bam_aux_type2size(type); \
+	} while(0)
 
 uint8_t *bam_aux_get(const bam1_t *b, const char tag[2])
 {
