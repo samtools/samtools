@@ -38,7 +38,7 @@ const char *o_sq_tags[] = {"AS","M5","UR","SP",NULL};
 const char *r_sq_tags[] = {"SN","LN",NULL};
 const char *u_sq_tags[] = {"SN",NULL};
 
-const char *o_rg_tags[] = {"LB","DS","PU","PI","CN","DT","PL",NULL};
+const char *o_rg_tags[] = {"CN","DS","DT","FO","KS","LB","PG","PI","PL","PU","SM",NULL};
 const char *r_rg_tags[] = {"ID",NULL};
 const char *u_rg_tags[] = {"ID",NULL};
 
