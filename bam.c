@@ -304,21 +304,19 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 		else if (type == 'Z' || type == 'H') { kputc(type, &str); kputc(':', &str); while (*s) kputc(*s++, &str); ++s; }
 		else if (type == 'B') {
 			uint8_t sub_type = *(s++);
-			int32_t length;
-			memcpy(&length, s, 4);
+			int32_t n;
+			memcpy(&n, s, 4);
 			s += 4; // no point to the start of the array
-			kputc(type, &str);
-			kputc(':', &str);
-			kputc(sub_type, &str);
-			for (i = 0; i < length; ++i) {
+			kputc(type, &str); kputc(':', &str); kputc(sub_type, &str); // write the typing
+			for (i = 0; i < n; ++i) {
 				kputc(',', &str);
-				if ('c' == sub_type || 'c' == sub_type) { kputw(((int8_t*)s)[i], &str); ++s; }
-				else if ('C' == sub_type) { kputw(((uint8_t*)s)[i], &str); ++s; }
-				else if ('s' == sub_type) { kputw(((int16_t*)s)[i], &str); s += 2; }
-				else if ('S' == sub_type) { kputw(((uint16_t*)s)[i], &str); s += 2; }
-				else if ('i' == sub_type) { kputw(((int32_t*)s)[i], &str); s += 4; }
-				else if ('I' == sub_type) { kputuw(((uint32_t*)s)[i], &str); s += 4; }
-				else if ('f' == sub_type) { ksprintf(&str, "%g", ((float*)s)[i]); s += 4; }
+				if ('c' == sub_type || 'c' == sub_type) { kputw(*(int8_t*)s, &str); ++s; }
+				else if ('C' == sub_type) { kputw(*(uint8_t*)s, &str); ++s; }
+				else if ('s' == sub_type) { kputw(*(int16_t*)s, &str); s += 2; }
+				else if ('S' == sub_type) { kputw(*(uint16_t*)s, &str); s += 2; }
+				else if ('i' == sub_type) { kputw(*(int32_t*)s, &str); s += 4; }
+				else if ('I' == sub_type) { kputuw(*(uint32_t*)s, &str); s += 4; }
+				else if ('f' == sub_type) { ksprintf(&str, "%g", *(float*)s); s += 4; }
 			}
 		}
 	}

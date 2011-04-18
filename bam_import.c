@@ -236,11 +236,10 @@ bam_header_t *sam_header_read(tamFile fp)
 
 int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 {
-	int ret, doff, doff0, dret, z = 0, Bmax = 0;;
+	int ret, doff, doff0, dret, z = 0;
 	bam1_core_t *c = &b->core;
 	kstring_t *str = fp->str;
 	kstream_t *ks = fp->ks;
-	uint64_t *B = 0;
 
 	if (fp->is_first) {
 		fp->is_first = 0;
@@ -429,40 +428,32 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				s[str->l - 5] = 0;
 				doff += size;
 			} else if (type == 'B') {
-				int32_t n = 0, Bsize, k = 0;
+				int32_t n = 0, Bsize, k = 0, size;
 				char *p;
 				if (str->l < 8) parse_error(fp->n_lines, "too few values in aux type B");
 				Bsize = bam_aux_type2size(str->s[5]); // the size of each element
 				for (p = (char*)str->s + 6; *p; ++p) // count the number of elements in the array
-					if (*p == ',') break;
+					if (*p == ',') ++n;
 				p = str->s + 7; // now p points to the first number in the array
-				if (Bsize * n > Bmax) { // the B array is not big enough
-					Bmax = Bsize * n;
-					kroundup32(Bmax);
-					B = (uint64_t*)realloc(B, Bmax); // we use a new array here to avoid unaligned memory access
-				}
-				if (str->s[5] == 'c')      while (p < str->s + str->l) ((int8_t*)B)[k++]   = (int8_t)strtol(p, &p, 0),   ++p;
-				else if (str->s[5] == 'C') while (p < str->s + str->l) ((uint8_t*)B)[k++]  = (uint8_t)strtol(p, &p, 0),  ++p;
-				else if (str->s[5] == 's') while (p < str->s + str->l) ((int16_t*)B)[k++]  = (int16_t)strtol(p, &p, 0),  ++p;
-				else if (str->s[5] == 'S') while (p < str->s + str->l) ((uint16_t*)B)[k++] = (uint16_t)strtol(p, &p, 0), ++p;
-				else if (str->s[5] == 'i') while (p < str->s + str->l) ((int32_t*)B)[k++]  = (int32_t)strtol(p, &p, 0),  ++p;
-				else if (str->s[5] == 'I') while (p < str->s + str->l) ((uint32_t*)B)[k++] = (uint32_t)strtol(p, &p, 0), ++p;
-				else if (str->s[5] == 'f') while (p < str->s + str->l) ((float*)B)[k++]    = (float)strtof(p, &p),       ++p;
-				else parse_error(fp->n_lines, "unrecognized array type");
-				// copy the B array to the alignment
-				s = alloc_data(b, doff + 6 * Bsize * n) + doff;
+				size = 6 + Bsize * n; // total number of bytes allocated to this tag
+				s = alloc_data(b, doff + 6 * Bsize * n) + doff; // allocate memory
 				*s++ = 'B'; *s++ = str->s[5];
-				memcpy(s, &n, 4);
-				memcpy(s + 4, B, Bsize * n);
-				s += 4 + Bsize * n;
-				doff += 6 + Bsize * n;
+				memcpy(s, &n, 4); s += 4; // write the number of elements
+				if (str->s[5] == 'c')      while (p < str->s + str->l) ((int8_t*)s)[k++]   = (int8_t)strtol(p, &p, 0),   ++p;
+				else if (str->s[5] == 'C') while (p < str->s + str->l) ((uint8_t*)s)[k++]  = (uint8_t)strtol(p, &p, 0),  ++p;
+				else if (str->s[5] == 's') while (p < str->s + str->l) ((int16_t*)s)[k++]  = (int16_t)strtol(p, &p, 0),  ++p; // FIXME: avoid unaligned memory
+				else if (str->s[5] == 'S') while (p < str->s + str->l) ((uint16_t*)s)[k++] = (uint16_t)strtol(p, &p, 0), ++p;
+				else if (str->s[5] == 'i') while (p < str->s + str->l) ((int32_t*)s)[k++]  = (int32_t)strtol(p, &p, 0),  ++p;
+				else if (str->s[5] == 'I') while (p < str->s + str->l) ((uint32_t*)s)[k++] = (uint32_t)strtol(p, &p, 0), ++p;
+				else if (str->s[5] == 'f') while (p < str->s + str->l) ((float*)s)[k++]    = (float)strtof(p, &p),       ++p;
+				else parse_error(fp->n_lines, "unrecognized array type");
+				s += Bsize * n; doff += size;
 			} else parse_error(fp->n_lines, "unrecognized type");
 			if (dret == '\n' || dret == '\r') break;
 		}
 	}
 	b->l_aux = doff - doff0;
 	b->data_len = doff;
-	free(B);
 	return z;
 }
 
