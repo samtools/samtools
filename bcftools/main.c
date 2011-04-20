@@ -106,7 +106,7 @@ int bcf_main_ldpair(int argc, char *argv[])
 			r *= r;
 			printf("%s\t%d\t%s\t%d\t%.4g\t%.4g\t%.4g\t%.4g\t%.4g\n", h->ns[tid0], pos0+1, h->ns[tid1], pos1+1,
 				r, f[0], f[1], f[2], f[3]);
-		} else fprintf(stderr, "[%s] Parse error at line %d.\n", __func__, lineno);
+		} //else fprintf(stderr, "[%s] Parse error at line %d.\n", __func__, lineno);
 	}
 	bcf_destroy(b0); bcf_destroy(b1);
 	bcf_idx_destroy(idx);
