@@ -204,7 +204,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 		h->i = i;
 		h->b = (bam1_t*)calloc(1, sizeof(bam1_t));
 		if (bam_iter_read(fp[i], iter[i], h->b) >= 0) {
-			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)h->b->core.pos<<1 | bam1_strand(h->b);
+			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam1_strand(h->b);
 			h->idx = idx++;
 		}
 		else h->pos = HEAP_EMPTY;
@@ -229,7 +229,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 		}
 		bam_write1_core(fpout, &b->core, b->data_len, b->data);
 		if ((j = bam_iter_read(fp[heap->i], iter[heap->i], b)) >= 0) {
-			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)b->core.pos<<1 | bam1_strand(b);
+			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam1_strand(b);
 			heap->idx = idx++;
 		} else if (j == -1) {
 			heap->pos = HEAP_EMPTY;
@@ -303,8 +303,8 @@ static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
 	if (g_is_by_qname) {
 		int t = strnum_cmp(bam1_qname(a), bam1_qname(b));
-		return (t < 0 || (t == 0 && (((uint64_t)a->core.tid<<32|a->core.pos) < ((uint64_t)b->core.tid<<32|b->core.pos))));
-	} else return (((uint64_t)a->core.tid<<32|a->core.pos) < ((uint64_t)b->core.tid<<32|b->core.pos));
+		return (t < 0 || (t == 0 && (((uint64_t)a->core.tid<<32|(a->core.pos+1)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)))));
+	} else return (((uint64_t)a->core.tid<<32|(a->core.pos+1)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)));
 }
 KSORT_INIT(sort, bam1_p, bam1_lt)
 
