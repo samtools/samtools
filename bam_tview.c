@@ -19,9 +19,10 @@
 #include <ctype.h>
 #include <assert.h>
 #include <string.h>
+#include <math.h>
 #include "bam.h"
 #include "faidx.h"
-#include "bam_maqcns.h"
+#include "bam2bcf.h"
 
 char bam_aux_getCEi(bam1_t *b, int i);
 char bam_aux_getCSi(bam1_t *b, int i);
@@ -50,7 +51,7 @@ typedef struct {
 	bamFile fp;
 	int curr_tid, left_pos;
 	faidx_t *fai;
-	bam_maqcns_t *bmc;
+	bcf_callaux_t *bca;
 
 	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip, show_name;
 	char *ref;
@@ -58,6 +59,7 @@ typedef struct {
 
 int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
 {
+	extern unsigned char bam_nt16_table[256];
 	tview_t *tv = (tview_t*)data;
 	int i, j, c, rb, attr, max_ins = 0;
 	uint32_t call = 0;
@@ -70,11 +72,26 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 		mvaddch(1, tv->ccol++, c);
 	}
 	if (pos%10 == 0 && tv->mcol - tv->ccol >= 10) mvprintw(0, tv->ccol, "%-d", pos+1);
-	// print consensus
-	call = bam_maqcns_call(n, pl, tv->bmc);
+	{ // call consensus
+		bcf_callret1_t bcr;
+		int qsum[4], a1, a2, tmp;
+		double p[3], prior = 30;
+		bcf_call_glfgen(n, pl, bam_nt16_table[rb], tv->bca, &bcr);
+		for (i = 0; i < 4; ++i) qsum[i] = bcr.qsum[i]<<2 | i;
+		for (i = 1; i < 4; ++i) // insertion sort
+			for (j = i; j > 0 && qsum[j] > qsum[j-1]; --j)
+				tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
+		a1 = qsum[0]&3; a2 = qsum[1]&3;
+		p[0] = bcr.p[a1*5+a1]; p[1] = bcr.p[a1*5+a2] + prior; p[2] = bcr.p[a2*5+a2];
+		if ("ACGT"[a1] != toupper(rb)) p[0] += prior + 3;
+		if ("ACGT"[a2] != toupper(rb)) p[2] += prior + 3;
+		if (p[0] < p[1] && p[0] < p[2]) call = (1<<a1)<<16 | (int)((p[1]<p[2]?p[1]:p[2]) - p[0] + .499);
+		else if (p[2] < p[1] && p[2] < p[0]) call = (1<<a2)<<16 | (int)((p[0]<p[1]?p[0]:p[1]) - p[2] + .499);
+		else call = (1<<a1|1<<a2)<<16 | (int)((p[0]<p[2]?p[0]:p[2]) - p[1] + .499);
+	}
 	attr = A_UNDERLINE;
-	c = ",ACMGRSVTWYHKDBN"[call>>28&0xf];
-	i = (call>>8&0xff)/10+1;
+	c = ",ACMGRSVTWYHKDBN"[call>>16&0xf];
+	i = (call&0xffff)/10+1;
 	if (i > 4) i = 4;
 	attr |= COLOR_PAIR(i);
 	if (c == toupper(rb)) c = '.';
@@ -191,9 +208,8 @@ tview_t *tv_init(const char *fn, const char *fn_fa)
 	if (tv->idx == 0) exit(1);
 	tv->lplbuf = bam_lplbuf_init(tv_pl_func, tv);
 	if (fn_fa) tv->fai = fai_load(fn_fa);
-	tv->bmc = bam_maqcns_init();
+	tv->bca = bcf_call_init(0.83, 13);
 	tv->ins = 1;
-	bam_maqcns_prepare(tv->bmc);
 
 	initscr();
 	keypad(stdscr, TRUE);
@@ -224,7 +240,7 @@ void tv_destroy(tview_t *tv)
 	endwin();
 
 	bam_lplbuf_destroy(tv->lplbuf);
-	bam_maqcns_destroy(tv->bmc);
+	bcf_call_destroy(tv->bca);
 	bam_index_destroy(tv->idx);
 	if (tv->fai) fai_destroy(tv->fai);
 	free(tv->ref);
