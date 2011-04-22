@@ -40,7 +40,7 @@
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "0.1.15 (r949:203)"
+#define BAM_VERSION "0.1.16 (r963:234)"
 
 #include <stdint.h>
 #include <stdlib.h>
