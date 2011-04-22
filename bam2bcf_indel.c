@@ -3,11 +3,13 @@
 #include <string.h>
 #include "bam.h"
 #include "bam2bcf.h"
-#include "ksort.h"
 #include "kaln.h"
 #include "kprobaln.h"
 #include "khash.h"
 KHASH_SET_INIT_STR(rg)
+
+#include "ksort.h"
+KSORT_INIT_GENERIC(uint32_t)
 
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
@@ -110,7 +112,6 @@ static inline int est_indelreg(int pos, const char *ref, int l, char *ins4)
 int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
 					  const void *rghash)
 {
-	extern void ks_introsort_uint32_t(int, uint32_t*);
 	int i, s, j, k, t, n_types, *types, max_rd_len, left, right, max_ins, *score1, *score2, max_ref2;
 	int N, K, l_run, ref_type, n_alt;
 	char *inscns = 0, *ref2, *query, **ref_sample;
