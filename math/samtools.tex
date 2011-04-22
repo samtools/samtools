@@ -737,14 +737,21 @@ P(D|0)=\prod_{j=1}^l\epsilon_j\prod_{j=l+1}^k(1-\epsilon_j)=\left(1-\sum_{j=l+1}
 P(D|m)=\left(1-\sum_{j=1}^l\epsilon_j+o(\epsilon^2)\right)\prod_{j=l+1}^k\epsilon_j
 \end{equation}
 For $0<g<m$:
-\begin{eqnarray}
+\begin{eqnarray}\label{eq:gd}
 P(D|g)&=&\sum_{a_1=0}^1\cdots\sum_{a_k=0}^1\Pr\{D|B_1=a_1,\ldots,B_k=a_k\}\Pr\{B_1=a_1,\ldots,B_k=a_k|g\}\\\nonumber
 &=&\sum_{\vec{a}}\left(\frac{g}{m}\right)^{\sum_j a_j}\left(1-\frac{g}{m}\right)^{k-\sum_j a_j}\cdot\prod_j p_j(a_j)\\\nonumber
 &=&\left(1-\frac{g}{m}\right)^k\prod_j\sum_{a=0}^1 p_j(a)\left(\frac{g}{m-g}\right)^a\\\nonumber
 &=&\left(1-\frac{g}{m}\right)^k\prod_{j=1}^l\left(\epsilon_j+\frac{g}{m-g}(1-\epsilon_j)\right)\prod_{j=l+1}^k\left(1-\epsilon_j+\frac{\epsilon_jg}{m-g}\right)\\\nonumber
 &=&\left(1-\frac{g}{m}\right)^k\left\{\left(\frac{g}{m-g}\right)^l+\left(1-\frac{g}{m-g}\right)\left(\sum_{j=1}^l\epsilon_j-\sum_{j=l+1}^k\epsilon_j\right)+o(\epsilon^2)\right\}
 \end{eqnarray}
-In the bracket, the first term explains the deviation between $l/k$ and
+where $a=\sum_j a_j$ and
+$$
+p_j(a)=\left\{\begin{array}{ll}
+\epsilon_j & \mbox{$a=1$}\\
+1-\epsilon_j & \mbox{$a=0$}\\
+\end{array}\right.
+$$
+In the bracket of Eq.~\ref{eq:gd}, the first term explains the deviation between $l/k$ and
 $g/m$ by imperfect sampling, while the second term explains the
 deviation by sequencing errors. The second term can be ignored when $k$
 is small but may play a major role when $k$ is large. In particular, for
