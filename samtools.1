@@ -1,4 +1,4 @@
-.TH samtools 1 "16 March 2011" "samtools-0.1.14" "Bioinformatics tools"
+.TH samtools 1 "21 April 2011" "samtools-0.1.16" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -285,7 +285,7 @@ Approximately the maximum required memory. [500000000]
 
 .TP
 .B merge
-samtools merge [-nur] [-h inh.sam] [-R reg] <out.bam> <in1.bam> <in2.bam> [...]
+samtools merge [-nur1f] [-h inh.sam] [-R reg] <out.bam> <in1.bam> <in2.bam> [...]
 
 Merge multiple sorted alignments.
 The header reference lists of all the input BAM files, and the @SQ headers of
@@ -302,6 +302,12 @@ and the headers of other files will be ignored.
 .B OPTIONS:
 .RS
 .TP 8
+.B -1
+Use zlib compression level 1 to comrpess the output
+.TP
+.B -f
+Force to overwrite the output file if present.
+.TP 8
 .BI -h \ FILE
 Use the lines of
 .I FILE
@@ -313,16 +319,17 @@ replacing any header lines that would otherwise be copied from
 is actually in SAM format, though any alignment records it may contain
 are ignored.)
 .TP
-.BI -R \ STR
-Merge files in the specified region indicated by
-.I STR
-.TP
-.B -r
-Attach an RG tag to each alignment. The tag value is inferred from file names.
-.TP
 .B -n
 The input alignments are sorted by read names rather than by chromosomal
 coordinates
+.TP
+.BI -R \ STR
+Merge files in the specified region indicated by
+.I STR
+[null]
+.TP
+.B -r
+Attach an RG tag to each alignment. The tag value is inferred from file names.
 .TP
 .B -u
 Uncompressed BAM output

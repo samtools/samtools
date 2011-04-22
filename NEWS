@@ -1,3 +1,40 @@
+Beta Release 0.1.16 (21 April, 2011)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes in samtools:
+
+ * Support the new SAM/BAM type `B' in the latest SAM spec v1.4.
+
+ * When the output file of `samtools merge' exists, do not overwrite it unless
+   a new command-line option `-f' is applied.
+
+ * Bugfix: BED support is not working when the input BED is not sorted.
+
+ * Bugfix: some reads without coordinates but given on the reverse strand are
+   lost in merging.
+
+Notable changes in bcftools:
+
+ * Code cleanup: separated max-likelihood inference and Bayesian inference.
+
+ * Test Hardy-Weinberg equilibrium with a likelihood-ratio test.
+
+ * Provided another association test P-value by likelihood-ratio test.
+
+ * Use Brent's method to estimate the site allele frequency when EM converges
+   slowly. The resulting ML estimate of allele frequnecy is more accurate.
+
+ * Added the `ldpair' command, which computes r^2 between SNP pairs given in
+   an input file.
+
+Also, the `pileup' command, which has been deprecated by `mpileup' since
+version 0.1.10, will be dropped in the next release. The old `pileup' command
+is substandard and causing a lot of confusion.
+
+(0.1.16: 21 April 2011, r963:234)
+
+
+
 Beta Release 0.1.15 (10 April, 2011)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

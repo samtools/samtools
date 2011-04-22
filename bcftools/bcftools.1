@@ -95,12 +95,17 @@ Uncompressed BCF output (force -b).
 .B Consensus/Variant Calling Options:
 .TP 10
 .B -c
-Call variants.
+Call variants using Bayesian inference. This option automatically invokes option
+.BR -e .
 .TP
 .BI -d \ FLOAT
 When
 .B -v
 is in use, skip loci where the fraction of samples covered by reads is below FLOAT. [0]
+.TP
+.B -e
+Perform max-likelihood inference only, including estimating the site allele frequency,
+testing Hardy-Weinberg equlibrium and testing associations with LRT.
 .TP
 .B -g
 Call per-sample genotypes at variant sites (force -c)
