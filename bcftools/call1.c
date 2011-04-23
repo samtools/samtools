@@ -148,7 +148,7 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 			if (q[i] > 255) q[i] = 255;
 		}
 		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
-		ksprintf(&s, ";PCHI2=%.3g;PC2=%d,%d", q[1], q[2], pr->p_chi2);
+		ksprintf(&s, ";LRT2=%.4g;PCHI2=%.3g;PC2=%d,%d", pr->lrt, q[1], q[2], pr->p_chi2);
 	}
 	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	kputc('\0', &s);

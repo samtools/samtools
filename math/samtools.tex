@@ -610,10 +610,10 @@ representing one of the four possible haplotypes at the 2 loci. We write
 ${\bf H}=\overrightarrow{(H_i,H^{\dag}_i)}$ as a haplotype configuration of the
 samples. Define
 $$
-\mathcal{G}_{hk}=\lfloor h/2\rfloor+\lfloor k/2\rfloor
+\mathcal{G}_{hk}=\mathcal{G}_{kh}=\lfloor h/2\rfloor+\lfloor k/2\rfloor
 $$
 $$
-\mathcal{G}'_{hk}=(h\mod 2)+(k\mod 2)
+\mathcal{G}'_{hk}=\mathcal{G}'_{kh}=(h\mod 2)+(k\mod 2)
 $$
 which calculate the genotype of each locus, respectively.
 \begin{eqnarray*}
@@ -625,7 +625,8 @@ which calculate the genotype of each locus, respectively.
 Solving $\partial_{\phi_k}Q-\lambda=0$ gives
 \begin{eqnarray*}
 \phi_k&=&\frac{1}{2n}\sum_i\sum_h\left(\Pr\{H_i=h,H^{\dag}_i=k|{\bf D},\vec{\phi}^{(t)}\}+\Pr\{H_i=k,H^{\dag}_i=h|{\bf D},\vec{\phi}^{(t)}\}\right)\\
-&=&\frac{\phi^{(t)}_k}{2n}\sum_{i=1}^n\frac{\sum_{h}\phi^{(t)}_h\big[P(D_i|{\cal G}_{hk})P(D'_i|{\cal G}'_{hk})+P(D_i|{\cal G}_{kh})P(D'_i|{\cal G}'_{kh})\big]}{\sum_{k',h}\phi^{(t)}_{k'}\phi^{(t)}_hP(D_i|{\cal G}_{hk'})P(D'_i|{\cal G}'_{hk'})}
+&=&\frac{\phi^{(t)}_k}{2n}\sum_{i=1}^n\frac{\sum_{h}\phi^{(t)}_h\big[P(D_i|{\cal G}_{hk})P(D'_i|{\cal G}'_{hk})+P(D_i|{\cal G}_{kh})P(D'_i|{\cal G}'_{kh})\big]}{\sum_{k',h}\phi^{(t)}_{k'}\phi^{(t)}_hP(D_i|{\cal G}_{hk'})P(D'_i|{\cal G}'_{hk'})}\\
+&=&\frac{\phi^{(t)}_k}{n}\sum_{i=1}^n\frac{\sum_{h}\phi^{(t)}_hP(D_i|{\cal G}_{hk})P(D'_i|{\cal G}'_{hk})}{\sum_{k',h}\phi^{(t)}_{k'}\phi^{(t)}_hP(D_i|{\cal G}_{hk'})P(D'_i|{\cal G}'_{hk'})}
 \end{eqnarray*}
 
 

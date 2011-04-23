@@ -10,7 +10,7 @@ typedef struct {
 	int rank0, perm_rank; // NB: perm_rank is always set to -1 by bcf_p1_cal()
 	double f_exp, f_flat, p_ref_folded, p_ref, p_var_folded, p_var;
 	double cil, cih;
-	double cmp[3], p_chi2; // used by contrast2()
+	double cmp[3], p_chi2, lrt; // used by contrast2()
 } bcf_p1rst_t;
 
 #define MC_PTYPE_FULL  1
