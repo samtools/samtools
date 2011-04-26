@@ -454,12 +454,12 @@ int bcfview(int argc, char *argv[])
 			bcf_2qcall(hout, b);
 			continue;
 		}
+		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0xff, em);
 		else {
 			int i;
 			for (i = 0; i < 9; ++i) em[i] = -1.;
 		}
-		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
 		if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
 			int calret = bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);

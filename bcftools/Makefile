@@ -28,7 +28,7 @@ all:$(PROG)
 lib:libbcf.a
 
 libbcf.a:$(LOBJS)
-		$(AR) -cru $@ $(LOBJS)
+		$(AR) -csru $@ $(LOBJS)
 
 bcftools:lib $(AOBJS)
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf -lm -lz
