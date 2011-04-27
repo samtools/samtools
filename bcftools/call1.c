@@ -134,7 +134,8 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	is_var = (pr->p_ref < pref);
 	r = is_var? pr->p_ref : pr->p_var;
 
-	ksprintf(&s, ";CI95=%.4g,%.4g", pr->cil, pr->cih); // FIXME: when EM is not used, ";" should be omitted!
+//	ksprintf(&s, ";CI95=%.4g,%.4g", pr->cil, pr->cih); // FIXME: when EM is not used, ";" should be omitted!
+	ksprintf(&s, ";AC1=%d", pr->ac);
 	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
@@ -229,13 +230,15 @@ static void write_header(bcf_hdr_t *h)
 	if (!strstr(str.s, "##INFO=<ID=FQ,"))
 		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability of all samples being the same\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AF1,"))
-		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the site allele frequency of the first ALT allele\">\n", &str);
+		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the first ALT allele frequency (assuming HWE)\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=AC1,"))
+		kputs("##INFO=<ID=AC1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the first ALT allele count (no HWE assumption)\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=G3,"))
 		kputs("##INFO=<ID=G3,Number=3,Type=Float,Description=\"ML estimate of genotype frequencies\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=HWE,"))
 		kputs("##INFO=<ID=HWE,Number=1,Type=Float,Description=\"Chi^2 based HWE test P-value based on G3\">\n", &str);
-	if (!strstr(str.s, "##INFO=<ID=CI95,"))
-		kputs("##INFO=<ID=CI95,Number=2,Type=Float,Description=\"Equal-tail Bayesian credible interval of the site allele frequency at the 95% level\">\n", &str);
+//	if (!strstr(str.s, "##INFO=<ID=CI95,"))
+//		kputs("##INFO=<ID=CI95,Number=2,Type=Float,Description=\"Equal-tail Bayesian credible interval of the site allele frequency at the 95% level\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=PV4,"))
 		kputs("##INFO=<ID=PV4,Number=4,Type=Float,Description=\"P-values for strand bias, baseQ bias, mapQ bias and tail distance bias\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=INDEL,"))
@@ -454,7 +457,7 @@ int bcfview(int argc, char *argv[])
 			bcf_2qcall(hout, b);
 			continue;
 		}
-		if (vc.flag & (VC_CALL|VC_ADJLD)) bcf_gl2pl(b);
+		if (vc.flag & (VC_CALL|VC_ADJLD|VC_EM)) bcf_gl2pl(b);
 		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0xff, em);
 		else {
 			int i;

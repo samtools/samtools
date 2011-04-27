@@ -86,7 +86,7 @@ sub fillac {
 	  print;
 	} else {
 	  my @t = split;
-	  my @c = (0);
+	  my @c = (0, 0);
 	  my $n = 0;
 	  my $s = -1;
 	  @_ = split(":", $t[8]);

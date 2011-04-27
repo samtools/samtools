@@ -497,6 +497,13 @@ int bcf_p1_cal(const bcf1_t *b, int do_contrast, bcf_p1aux_t *ma, bcf_p1rst_t *r
 	for (k = 0, sum = 0.; k < ma->M; ++k)
 		sum += ma->afs1[k];
 	rst->p_var = (double)sum;
+	{ // compute the allele count
+		double max = -1;
+		rst->ac = -1;
+		for (k = 0; k <= ma->M; ++k)
+			if (max < ma->z[k]) max = ma->z[k], rst->ac = k;
+		rst->ac = ma->M - rst->ac;
+	}
 	// calculate f_flat and f_em
 	for (k = 0, sum = 0.; k <= ma->M; ++k)
 		sum += (long double)ma->z[k];
