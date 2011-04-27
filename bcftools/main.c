@@ -166,6 +166,8 @@ int main(int argc, char *argv[])
 {
 	if (argc == 1) {
 		fprintf(stderr, "\n");
+		fprintf(stderr, "Program: bcftools (Tools for data in the VCF/BCF formats)\n");
+		fprintf(stderr, "Version: %s\n\n", BCF_VERSION);
 		fprintf(stderr, "Usage:   bcftools <command> <arguments>\n\n");
 		fprintf(stderr, "Command: view      print, extract, convert and call SNPs from BCF\n");
 		fprintf(stderr, "         index     index BCF\n");
