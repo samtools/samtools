@@ -160,6 +160,109 @@ function math.igamma(s, z, complement)
 	end
 end
 
+function math.brent(func, a, b, tol)
+	local gold1, gold2, tiny, max_iter = 1.6180339887, 0.3819660113, 1e-20, 100
+
+	local fa, fb = func(a, data), func(b, data)
+	if fb > fa then -- swap, such that f(a) > f(b)
+		a, b, fa, fb = b, a, fb, fa
+	end
+	local c = b + gold1 * (b - a)
+	local fc = func(c) -- golden section extrapolation
+	while fb > fc do
+		local bound = b + 100.0 * (c - b) -- the farthest point where we want to go
+		local r = (b - a) * (fb - fc)
+		local q = (b - c) * (fb - fa)
+		if math.abs(q - r) < tiny then -- avoid 0 denominator
+			tmp = q > r and tiny or 0.0 - tiny
+		else tmp = q - r end
+		u = b - ((b - c) * q - (b - a) * r) / (2.0 * tmp) -- u is the parabolic extrapolation point
+		if (b > u and u > c) or (b < u and u < c) then -- u lies between b and c
+			fu = func(u)
+			if fu < fc then -- (b,u,c) bracket the minimum
+				a, b, fa, fb = b, u, fb, fu
+				break
+			elseif fu > fb then -- (a,b,u) bracket the minimum
+				c, fc = u, fu
+				break
+			end
+			u = c + gold1 * (c - b)
+			fu = func(u) -- golden section extrapolation
+		elseif (c > u and u > bound) or (c < u and u < bound) then -- u lies between c and bound
+			fu = func(u)
+			if fu < fc then -- fb > fc > fu
+				b, c, u = c, u, c + gold1 * (c - b)
+				fb, fc, fu = fc, fu, func(u)
+			else -- (b,c,u) bracket the minimum
+				a, b, c = b, c, u
+				fa, fb, fc = fb, fc, fu
+				break
+			end
+		elseif (u > bound and bound > c) or (u < bound and bound < c) then -- u goes beyond the bound
+			u = bound
+			fu = func(u)
+		else -- u goes the other way around, use golden section extrapolation
+			u = c + gold1 * (c - b)
+			fu = func(u)
+		end
+		a, b, c = b, c, u
+		fa, fb, fc = fb, fc, fu
+	end
+	if a > c then a, c = c, a end -- swap
+
+	-- now, a<b<c, fa>fb and fb<fc, move on to Brent's algorithm
+	local e, d = 0, 0
+	local w, v, fw, fv
+	w, v = b, b
+	fw, fv = fb, fb
+	for iter = 1, max_iter do
+		local mid = 0.5 * (a + c)
+		local tol1 = tol * math.abs(b) + tiny
+		local tol2 = 2.0 * tol1
+		if math.abs(b - mid) <= tol2 - 0.5 * (c - a) then return fb, b end -- found
+		if math.abs(e) > tol1 then
+			-- related to parabolic interpolation
+			local r = (b - w) * (fb - fv)
+			local q = (b - v) * (fb - fw)
+			local p = (b - v) * q - (b - w) * r
+			q = 2.0 * (q - r)
+			if q > 0.0 then p = 0.0 - p
+			else q = 0.0 - q end
+			eold, e = e, d
+			if math.abs(p) >= math.abs(0.5 * q * eold) or p <= q * (a - b) or p >= q * (c - b) then
+				e = b >= mid and a - b or c - b
+				d = gold2 * e
+			else
+				d, u = p / q, b + d -- actual parabolic interpolation happens here
+				if u - a < tol2 or c - u < tol2 then
+					d = mid > b and tol1 or 0.0 - tol1
+				end
+			end
+		else -- golden section interpolation
+			e = b >= min and a - b or c - b
+			d = gold2 * e
+		end
+		u = fabs(d) >= tol1 and b + d or b + (d > 0.0 and tol1 or -tol1);
+		fu = func(u)
+		if fu <= fb then -- u is the minimum point so far
+			if u >= b then a = b
+			else c = b end
+			v, w, b = w, b, u
+			fv, fw, fb = fw, fb, fu
+		else -- adjust (a,c) and (u,v,w)
+			if u < b then a = u
+			else c = u end
+			if fu <= fw or w == b then
+				v, w = w, u
+				fv, fw = fw, fu
+			elseif fu <= fv or v == b or v == w then
+				v, fv = u, fu;
+			end
+		end
+	end
+	return fb, b
+end
+
 matrix = {}
 
 -- Description: chi^2 test for contingency tables
@@ -193,6 +296,107 @@ end
 ---------------------------------
 -- END: routines from klib.lua --
 ---------------------------------
+
+
+--------------------------
+-- BEGIN: misc routines --
+--------------------------
+
+-- precompute an array for PL->probability conversion
+-- @param m maximum PL
+function algo_init_q2p(m)
+	local q2p = {}
+	for i = 0, m do
+		q2p[i] = math.pow(10, -i / 10)
+	end
+	return q2p
+end
+
+-- given the haplotype frequency, compute r^2
+-- @param f 4 haplotype frequencies; f[] is 0-indexed.
+-- @return r^2
+function algo_r2(f)
+	local p = { f[0] + f[1], f[0] + f[2] }
+	local D = f[0] * f[3] - f[1] * f[2]
+	return (p[1] == 0 or p[2] == 0 or 1-p[1] == 0 or 1-p[2] == 0) and 0 or D * D  / (p[1] * p[2] * (1 - p[1]) * (1 - p[2]))
+end
+
+-- parse a VCF line to get PL
+-- @param q2p is computed by algo_init_q2p()
+function text_parse_pl(t, q2p, parse_GT)
+	parse_GT = parse_GT == nil and true or false
+	local ht, gt, pl = {}, {}, {}
+	local s, j0 = t[9]:split(':'), 0
+	for j = 1, #s do
+		if s[j] == 'PL' then j0 = j break end
+	end
+	local has_GT = (s[1] == 'GT' and parse_GT) and true or false
+	for i = 10, #t do
+		if j0 > 0 then
+			local s = t[i]:split(':')
+			local a, b = 1, s[j0]:find(',')
+			pl[#pl+1] = q2p[tonumber(s[j0]:sub(a, b - 1))]
+			a, b = b + 1, s[j0]:find(',', b + 1)
+			pl[#pl+1] = q2p[tonumber(s[j0]:sub(a, b - 1))]
+			a, b = b + 1, s[j0]:find(',', b + 1)
+			pl[#pl+1] = q2p[tonumber(s[j0]:sub(a, (b and b - 1) or nil))]
+		end
+		if has_GT then
+			if t[i]:sub(1, 1) ~= '.' then
+				local g = tonumber(t[i]:sub(1, 1)) + tonumber(t[i]:sub(3, 3));
+				gt[#gt+1] = 1e-6; gt[#gt+1] = 1e-6; gt[#gt+1] = 1e-6
+				gt[#gt - 2 + g] = 1
+				ht[#ht+1] = tonumber(t[i]:sub(1, 1)); ht[#ht+1] = tonumber(t[i]:sub(3, 3));
+			else
+				gt[#gt+1] = 1; gt[#gt+1] = 1; gt[#gt+1] = 1
+				ht[#ht+1] = -1; ht[#ht+1] = -1;
+			end
+		end
+--		print(t[i], pl[#pl-2], pl[#pl-1], pl[#pl], gt[#gt-2], gt[#gt-1], gt[#gt])
+	end
+	if #pl == 0 then pl = nil end
+	local x = has_GT and { t[1], t[2], ht, gt, pl } or { t[1], t[2], nil, nil, pl }
+	return x
+end
+
+-- Infer haplotype frequency
+-- @param pdg  genotype likelihoods P(D|g) generated by text_parse_pl(). pdg[] is 1-indexed.
+-- @param eps  precision [1e-5]
+-- @return 2-locus haplotype frequencies, 0-indexed array
+function algo_hapfreq2(pdg, eps)
+	eps = eps or 1e-5
+	local n, f = #pdg[1] / 3, {[0]=0.25, 0.25, 0.25, 0.25}
+	for iter = 1, 100 do
+		local F = {[0]=0, 0, 0, 0}
+		for i = 0, n - 1 do
+			local p1, p2 = {[0]=pdg[1][i*3+1], pdg[1][i*3+2], pdg[1][i*3+3]}, {[0]=pdg[2][i*3+1], pdg[2][i*3+2], pdg[2][i*3+3]}
+			local u = { [0]=
+				f[0] * (f[0] * p1[0] * p2[0] + f[1] * p1[0] * p2[1] + f[2] * p1[1] * p2[0] + f[3] * p1[1] * p2[1]),
+				f[1] * (f[0] * p1[0] * p2[1] + f[1] * p1[0] * p2[2] + f[2] * p1[1] * p2[1] + f[3] * p1[1] * p2[2]),
+				f[2] * (f[0] * p1[1] * p2[0] + f[1] * p1[1] * p2[1] + f[2] * p1[2] * p2[0] + f[3] * p1[2] * p2[1]),
+				f[3] * (f[0] * p1[1] * p2[1] + f[1] * p1[1] * p2[2] + f[2] * p1[2] * p2[1] + f[3] * p1[2] * p2[2])
+			}
+			local s = u[0] + u[1] + u[2] + u[3]
+			s = 1 / (s * n)
+			F[0] = F[0] + u[0] * s
+			F[1] = F[1] + u[1] * s
+			F[2] = F[2] + u[2] * s
+			F[3] = F[3] + u[3] * s
+		end
+		local e = 0
+		for k = 0, 3 do
+			e = math.abs(f[k] - F[k]) > e and math.abs(f[k] - F[k]) or e
+		end
+		for k = 0, 3 do f[k] = F[k] end
+		if e < eps then break end
+--		print(f[0], f[1], f[2], f[3])
+	end
+	return f
+end
+
+------------------------
+-- END: misc routines --
+------------------------
 
 
 ---------------------
@@ -250,8 +454,7 @@ function cmd_bgl2vcf()
 	local fpp = io.xopen(arg[1]);
 	local fpg = io.xopen(arg[2]);
 	for lg in fpg:lines() do
-		local lp = fpp:read()
-		local tp, tg, a = lp:split('%s'), lg:split('%s', 4), {}
+		local tp, tg, a = lp:read():split('%s'), lg:split('%s', 4), {}
 		if tp[1] == 'I' then
 			for i = 3, #tp, 2 do a[#a+1] = tp[i] end
 			print('#CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO', 'FORMAT', table.concat(a, '\t'))
@@ -402,6 +605,62 @@ function cmd_vcf2chi2()
 	fp:close()
 end
 
+-- CMD: compute r^2
+function cmd_r2()
+	local w, is_ht, is_gt = 1, false, false
+	for o, a in os.getopt(arg, 'w:hg') do
+		if o == 'w' then w = tonumber(a)
+		elseif o == 'h' then is_ht, is_gt = true, true
+		elseif o == 'g' then is_gt = true
+		end
+	end
+	if #arg == 0 then
+		print("Usage: vcfutils.lua r2 [-hg] [-w 1] <in.vcf>")
+		os.exit(1)
+	end
+	local stack, fp, q2p = {}, io.xopen(arg[1]), algo_init_q2p(1023)
+	for l in fp:lines() do
+		if l:sub(1, 1) ~= '#' then
+			local t = l:split('\t')
+			local x = text_parse_pl(t, q2p)
+			if #t[5] == 1 and t[5] ~= '.' then -- biallelic
+				local r2 = {}
+				for k = 1, w do
+					if is_gt == false then -- use PL
+						if stack[k] then
+							local pdg = { stack[k][5], x[5] }
+							r2[#r2+1] = algo_r2(algo_hapfreq2(pdg))
+						else r2[#r2+1] = 0 end
+					elseif is_ht == false then -- use unphased GT
+						if stack[k] then
+							local pdg = { stack[k][4], x[4] }
+							r2[#r2+1] = algo_r2(algo_hapfreq2(pdg))
+						else r2[#r2+1] = 0 end
+					else -- use phased GT
+						if stack[k] then
+							local f, ht = { [0]=0, 0, 0, 0 }, { stack[k][3], x[3] }
+							for i = 1, #ht[1] do
+								local j = ht[1][i] * 2 + ht[2][i]
+								f[j] = f[j] + 1
+							end
+							local sum = f[0] + f[1] + f[2] + f[3]
+							for k = 0, 3 do f[k] = f[k] / sum end
+							r2[#r2+1] = algo_r2(f)
+						else r2[#r2+1] = 0 end
+					end
+				end
+				for k = 1, #r2 do
+					r2[k] = string.format('%.3f', r2[k])
+				end
+				print(x[1], x[2], table.concat(r2, '\t'))
+				if #stack == w then table.remove(stack, 1) end
+				stack[#stack+1] = x
+			end
+		end
+	end
+	fp:close()
+end
+
 -------------------
 -- END: commands --
 -------------------
@@ -414,6 +673,7 @@ end
 if #arg == 0 then
 	print("\nUsage:   vcfutils.lua <command> <arguments>\n")
 	print("Command: freq        count biallelic alleles in each population")
+	print("         r2          compute r^2")
 	print("         vcf2chi2    compute 1-degree chi-square between two groups of samples")
 	print("         vcf2bgl     convert PL annotated VCF to Beagle input")
 	print("         bgl2vcf     convert Beagle input to VCF")
@@ -426,6 +686,7 @@ table.remove(arg, 1)
 if cmd == 'vcf2bgl' then cmd_vcf2bgl()
 elseif cmd == 'bgl2vcf' then cmd_bgl2vcf()
 elseif cmd == 'freq' then cmd_freq()
+elseif cmd == 'r2' then cmd_r2()
 elseif cmd == 'vcf2chi2' then cmd_vcf2chi2()
 else
 	print('ERROR: unknown command "' .. cmd .. '"')
