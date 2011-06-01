@@ -454,7 +454,7 @@ function cmd_bgl2vcf()
 	local fpp = io.xopen(arg[1]);
 	local fpg = io.xopen(arg[2]);
 	for lg in fpg:lines() do
-		local tp, tg, a = lp:read():split('%s'), lg:split('%s', 4), {}
+		local tp, tg, a = fpp:read():split('%s'), lg:split('%s', 4), {}
 		if tp[1] == 'I' then
 			for i = 3, #tp, 2 do a[#a+1] = tp[i] end
 			print('#CHROM', 'POS', 'ID', 'REF', 'ALT', 'QUAL', 'FILTER', 'INFO', 'FORMAT', table.concat(a, '\t'))
