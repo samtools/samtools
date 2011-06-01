@@ -516,11 +516,11 @@ int bcf_p1_cal(const bcf1_t *b, int do_contrast, bcf_p1aux_t *ma, bcf_p1rst_t *r
 	{ // estimate equal-tail credible interval (95% level)
 		int l, h;
 		double p;
-		for (i = 0, p = 0.; i < ma->M; ++i)
+		for (i = 0, p = 0.; i <= ma->M; ++i)
 			if (p + ma->afs1[i] > 0.025) break;
 			else p += ma->afs1[i];
 		l = i;
-		for (i = ma->M-1, p = 0.; i >= 0; --i)
+		for (i = ma->M, p = 0.; i >= 0; --i)
 			if (p + ma->afs1[i] > 0.025) break;
 			else p += ma->afs1[i];
 		h = i;
@@ -528,11 +528,11 @@ int bcf_p1_cal(const bcf1_t *b, int do_contrast, bcf_p1aux_t *ma, bcf_p1rst_t *r
 	}
 	if (ma->n1 > 0) { // compute LRT
 		double max0, max1, max2;
-		for (k = 0, max0 = -1; k < ma->M; ++k)
+		for (k = 0, max0 = -1; k <= ma->M; ++k)
 			if (max0 < ma->z[k]) max0 = ma->z[k];
-		for (k = 0, max1 = -1; k < ma->n1 * 2; ++k)
+		for (k = 0, max1 = -1; k <= ma->n1 * 2; ++k)
 			if (max1 < ma->z1[k]) max1 = ma->z1[k];
-		for (k = 0, max2 = -1; k < ma->M - ma->n1 * 2; ++k)
+		for (k = 0, max2 = -1; k <= ma->M - ma->n1 * 2; ++k)
 			if (max2 < ma->z2[k]) max2 = ma->z2[k];
 		rst->lrt = log(max1 * max2 / max0);
 		rst->lrt = rst->lrt < 0? 1 : kf_gammaq(.5, rst->lrt);
