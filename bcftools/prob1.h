@@ -33,7 +33,7 @@ extern "C" {
 	int bcf_p1_set_n1(bcf_p1aux_t *b, int n1);
 	void bcf_p1_set_folded(bcf_p1aux_t *p1a); // only effective when set_n1() is not called
 
-	int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9]);
+	int bcf_em1(const bcf1_t *b, int n1, int flag, double x[10]);
 
 #ifdef __cplusplus
 }

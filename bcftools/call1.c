@@ -102,7 +102,7 @@ static void rm_info(bcf1_t *b, const char *key)
 	bcf_sync(b);
 }
 
-static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[9])
+static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10])
 {
 	kstring_t s;
 	int has_I16, is_var;
@@ -122,7 +122,8 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 		if (em[4] >= 0 && em[4] <= 0.05) ksprintf(&s, ";G3=%.4g,%.4g,%.4g;HWE=%.3g", em[3], em[2], em[1], em[4]);
 		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, ";AF2=%.4g,%.4g", 1 - em[5], 1 - em[6]);
 		if (em[7] >= 0) ksprintf(&s, ";LRT=%.3g", em[7]);
-		if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
+		//if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
+		if (em[9] >= 0) ksprintf(&s, ";LRT1=%.3g", em[9]);
 	}
 	if (pr == 0) { // if pr is unset, return
 		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
@@ -430,7 +431,7 @@ int bcfview(int argc, char *argv[])
 	}
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel;
-		double em[9];
+		double em[10];
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {
 			extern int bcf_smpl_covered(const bcf1_t *b);
@@ -478,7 +479,7 @@ int bcfview(int argc, char *argv[])
 				int i, n = 0;
 				for (i = 0; i < vc.n_perm; ++i) {
 #ifdef BCF_PERM_LRT // LRT based permutation is much faster but less robust to artifacts
-					double x[9];
+					double x[10];
 					bcf_shuffle(b, seeds[i]);
 					bcf_em1(b, vc.n1, 1<<7, x);
 					if (x[7] < em[7]) ++n;

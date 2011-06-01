@@ -168,7 +168,8 @@ static double lk_ratio_test(int n, int n1, const double *pdg, double f3[3][3])
 // x[5..6]: group1 freq, group2 freq
 // x[7]: 1-degree P-value
 // x[8]: 2-degree P-value
-int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
+// x[9]: 1-degree P-value with freq estimated from genotypes
+int bcf_em1(const bcf1_t *b, int n1, int flag, double x[10])
 {
 	double *pdg;
 	int i, n, n2;
@@ -180,7 +181,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 	n = b->n_smpl; n2 = n - n1;
 	pdg = get_pdg3(b);
 	if (pdg == 0) return -1;
-	for (i = 0; i < 9; ++i) x[i] = -1.; // set to negative
+	for (i = 0; i < 10; ++i) x[i] = -1.; // set to negative
 	{
 		if ((x[0] = est_freq(n, pdg)) < 0.) {
 			free(pdg);
@@ -188,7 +189,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 		}
 		x[0] = freqml(x[0], 0, n, pdg);
 	}
-	if (flag & (0xf<<1|1<<8)) { // estimate the genotype frequency and test HWE
+	if (flag & (0xf<<1|3<<8)) { // estimate the genotype frequency and test HWE
 		double *g = x + 1, f3[3], r;
 		f3[0] = g[0] = (1 - x[0]) * (1 - x[0]);
 		f3[1] = g[1] = 2 * x[0] * (1 - x[0]);
@@ -213,14 +214,16 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 			f3[i][0] = (1-f[i])*(1-f[i]), f3[i][1] = 2*f[i]*(1-f[i]), f3[i][2] = f[i]*f[i];
 		x[7] = kf_gammaq(.5, log(lk_ratio_test(n, n1, pdg, f3)));
 	}
-	if ((flag & 1<<8) && n1 > 0 && n1 < n) { // 2-degree P-value
-		double g[3][3];
+	if ((flag & 3<<8) && n1 > 0 && n1 < n) { // 2-degree P-value
+		double g[3][3], tmp;
 		for (i = 0; i < 3; ++i) memcpy(g[i], x + 1, 3 * sizeof(double));
 		for (i = 0; i < ITER_MAX; ++i)
 			if (g3_iter(g[1], pdg, 0, n1) < EPS) break;
 		for (i = 0; i < ITER_MAX; ++i)
 			if (g3_iter(g[2], pdg, n1, n) < EPS) break;
-		x[8] = kf_gammaq(1., log(lk_ratio_test(n, n1, pdg, g)));
+		tmp = log(lk_ratio_test(n, n1, pdg, g));
+		x[8] = kf_gammaq(1., tmp);
+		x[9] = kf_gammaq(.5, tmp);
 	}
 	// free
 	free(pdg);
