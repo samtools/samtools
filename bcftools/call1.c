@@ -122,6 +122,7 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 		if (em[4] >= 0 && em[4] <= 0.05) ksprintf(&s, ";G3=%.4g,%.4g,%.4g;HWE=%.3g", em[3], em[2], em[1], em[4]);
 		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, ";AF2=%.4g,%.4g", 1 - em[5], 1 - em[6]);
 		if (em[7] >= 0) ksprintf(&s, ";LRT=%.3g", em[7]);
+		if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
 	}
 	if (pr == 0) { // if pr is unset, return
 		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
@@ -149,7 +150,8 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 			if (q[i] > 255) q[i] = 255;
 		}
 		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
-		ksprintf(&s, ";LRT2=%.4g;PCHI2=%.3g;PC2=%d,%d", pr->lrt, q[1], q[2], pr->p_chi2);
+		// ksprintf(&s, ";LRT3=%.3g", pr->lrt);
+		ksprintf(&s, ";PCHI2=%.3g;PC2=%d,%d", q[1], q[2], pr->p_chi2);
 	}
 	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	kputc('\0', &s);
@@ -458,7 +460,7 @@ int bcfview(int argc, char *argv[])
 			continue;
 		}
 		if (vc.flag & (VC_CALL|VC_ADJLD|VC_EM)) bcf_gl2pl(b);
-		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0xff, em);
+		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0x1ff, em);
 		else {
 			int i;
 			for (i = 0; i < 9; ++i) em[i] = -1.;

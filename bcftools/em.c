@@ -180,7 +180,7 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9])
 	n = b->n_smpl; n2 = n - n1;
 	pdg = get_pdg3(b);
 	if (pdg == 0) return -1;
-	for (i = 0; i < 9; ++i) x[i] = -1.;
+	for (i = 0; i < 9; ++i) x[i] = -1.; // set to negative
 	{
 		if ((x[0] = est_freq(n, pdg)) < 0.) {
 			free(pdg);
