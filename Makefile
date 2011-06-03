@@ -38,7 +38,7 @@ all:$(PROG)
 lib:libbam.a
 
 libbam.a:$(LOBJS)
-		$(AR) -cru $@ $(LOBJS)
+		$(AR) -csru $@ $(LOBJS)
 
 samtools:lib-recur $(AOBJS)
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) -Lbcftools $(LIBPATH) libbam.a -lbcf $(LIBCURSES) -lm -lz

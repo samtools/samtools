@@ -287,7 +287,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
 		if (tid != ref_tid) {
 			free(ref); ref = 0;
-			if (conf->fai) ref = fai_fetch(conf->fai, h->target_name[tid], &ref_len);
+			if (conf->fai) ref = faidx_fetch_seq(conf->fai, h->target_name[tid], 0, 0x7fffffff, &ref_len);
 			for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid;
 			ref_tid = tid;
 		}

@@ -87,47 +87,56 @@ int32_t bam_get_tid(const bam_header_t *header, const char *seq_name)
 	return k == kh_end(h)? -1 : kh_value(h, k);
 }
 
-int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end)
+int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *beg, int *end)
 {
-	char *s, *p;
-	int i, l, k;
+	char *s;
+	int i, l, k, name_end;
 	khiter_t iter;
 	khash_t(s) *h;
 
 	bam_init_header_hash(header);
 	h = (khash_t(s)*)header->hash;
 
-	l = strlen(str);
-	p = s = (char*)malloc(l+1);
-	/* squeeze out "," */
-	for (i = k = 0; i != l; ++i)
-		if (str[i] != ',' && !isspace(str[i])) s[k++] = str[i];
-	s[k] = 0;
-	for (i = 0; i != k; ++i) if (s[i] == ':') break;
-	s[i] = 0;
-	iter = kh_get(s, h, s); /* get the ref_id */
-	if (iter == kh_end(h)) { // name not found
-		*ref_id = -1; free(s);
-		return -1;
-	}
-	*ref_id = kh_value(h, iter);
-	if (i == k) { /* dump the whole sequence */
-		*begin = 0; *end = 1<<29; free(s);
-		return 0;
-	}
-	for (p = s + i + 1; i != k; ++i) if (s[i] == '-') break;
-	*begin = atoi(p);
-	if (i < k) {
-		p = s + i + 1;
-		*end = atoi(p);
-	} else *end = 1<<29;
-	if (*begin > 0) --*begin;
+	*ref_id = *beg = *end = -1;
+	name_end = l = strlen(str);
+	s = (char*)malloc(l+1);
+	// remove space
+	for (i = k = 0; i < l; ++i)
+		if (!isspace(str[i])) s[k++] = str[i];
+	s[k] = 0; l = k;
+	// determine the sequence name
+	for (i = l - 1; i >= 0; --i) if (s[i] == ':') break; // look for colon from the end
+	if (i >= 0) name_end = i;
+	if (name_end < l) { // check if this is really the end
+		int n_hyphen = 0;
+		for (i = name_end + 1; i < l; ++i) {
+			if (s[i] == '-') ++n_hyphen;
+			else if (!isdigit(s[i]) && s[i] != ',') break;
+		}
+		if (i < l || n_hyphen > 1) name_end = l; // malformated region string; then take str as the name
+		s[name_end] = 0;
+		iter = kh_get(s, h, s);
+		if (iter == kh_end(h)) { // cannot find the sequence name
+			iter = kh_get(s, h, str); // try str as the name
+			if (iter == kh_end(h)) {
+				if (bam_verbose >= 2) fprintf(stderr, "[%s] fail to determine the sequence name.\n", __func__);
+				free(s); return -1;
+			} else s[name_end] = ':', name_end = l;
+		}
+	} else iter = kh_get(s, h, str);
+	*ref_id = kh_val(h, iter);
+	// parse the interval
+	if (name_end < l) {
+		for (i = k = name_end + 1; i < l; ++i)
+			if (s[i] != ',') s[k++] = s[i];
+		s[k] = 0;
+		*beg = atoi(s + name_end + 1);
+		for (i = name_end + 1; i != k; ++i) if (s[i] == '-') break;
+		*end = i < k? atoi(s + i + 1) : 1<<29;
+		if (*beg > 0) --*beg;
+	} else *beg = 0, *end = 1<<29;
 	free(s);
-	if (*begin > *end) {
-		fprintf(stderr, "[bam_parse_region] invalid region.\n");
-		return -1;
-	}
-	return 0;
+	return *beg <= *end? 0 : -1;
 }
 
 int32_t bam_aux2i(const uint8_t *s)

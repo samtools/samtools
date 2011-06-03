@@ -172,17 +172,21 @@ bam_index_t *bam_index_core(bamFile fp)
 
 	save_bin = save_tid = last_tid = last_bin = 0xffffffffu;
 	save_off = last_off = bam_tell(fp); last_coor = 0xffffffffu;
-    n_mapped = n_unmapped = n_no_coor = off_end = 0;
+	n_mapped = n_unmapped = n_no_coor = off_end = 0;
 	off_beg = off_end = bam_tell(fp);
 	while ((ret = bam_read1(fp, b)) >= 0) {
 		if (c->tid < 0) ++n_no_coor;
-		if (last_tid != c->tid) { // change of chromosomes
+		if (last_tid < c->tid) { // change of chromosomes
 			last_tid = c->tid;
 			last_bin = 0xffffffffu;
+		} else if (last_tid > c->tid) {
+			fprintf(stderr, "[bam_index_core] the alignment is not sorted (%s): %d-th chr > %d-th chr\n",
+					bam1_qname(b), last_tid+1, c->tid+1);
+			return NULL;
 		} else if (last_coor > c->pos) {
 			fprintf(stderr, "[bam_index_core] the alignment is not sorted (%s): %u > %u in %d-th chr\n",
 					bam1_qname(b), last_coor, c->pos, c->tid+1);
-			exit(1);
+			return NULL;
 		}
 		if (c->tid >= 0) insert_offset2(&idx->index2[b->core.tid], b, last_off);
 		if (c->bin != last_bin) { // then possibly write the binning index
@@ -203,7 +207,7 @@ bam_index_t *bam_index_core(bamFile fp)
 		if (bam_tell(fp) <= last_off) {
 			fprintf(stderr, "[bam_index_core] bug in BGZF/RAZF: %llx < %llx\n",
 					(unsigned long long)bam_tell(fp), (unsigned long long)last_off);
-			exit(1);
+			return NULL;
 		}
 		if (c->flag & BAM_FUNMAP) ++n_unmapped;
 		else ++n_mapped;
@@ -222,7 +226,7 @@ bam_index_t *bam_index_core(bamFile fp)
 			++n_no_coor;
 			if (c->tid >= 0 && n_no_coor) {
 				fprintf(stderr, "[bam_index_core] the alignment is not sorted: reads without coordinates prior to reads with coordinates.\n");
-				exit(1);
+				return NULL;
 			}
 		}
 	}
@@ -473,6 +477,10 @@ int bam_index_build2(const char *fn, const char *_fnidx)
 	}
 	idx = bam_index_core(fp);
 	bam_close(fp);
+	if(idx == 0) {
+		fprintf(stderr, "[bam_index_build2] fail to index the BAM file.\n");
+		return -1;
+	}
 	if (_fnidx == 0) {
 		fnidx = (char*)calloc(strlen(fn) + 5, 1);
 		strcpy(fnidx, fn); strcat(fnidx, ".bai");

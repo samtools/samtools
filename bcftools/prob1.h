@@ -8,9 +8,10 @@ typedef struct __bcf_p1aux_t bcf_p1aux_t;
 
 typedef struct {
 	int rank0, perm_rank; // NB: perm_rank is always set to -1 by bcf_p1_cal()
+	int ac; // ML alternative allele count
 	double f_exp, f_flat, p_ref_folded, p_ref, p_var_folded, p_var;
 	double cil, cih;
-	double cmp[3], p_chi2; // used by contrast2()
+	double cmp[3], p_chi2, lrt; // used by contrast2()
 } bcf_p1rst_t;
 
 #define MC_PTYPE_FULL  1
@@ -32,7 +33,7 @@ extern "C" {
 	int bcf_p1_set_n1(bcf_p1aux_t *b, int n1);
 	void bcf_p1_set_folded(bcf_p1aux_t *p1a); // only effective when set_n1() is not called
 
-	int bcf_em1(const bcf1_t *b, int n1, int flag, double x[9]);
+	int bcf_em1(const bcf1_t *b, int n1, int flag, double x[10]);
 
 #ifdef __cplusplus
 }

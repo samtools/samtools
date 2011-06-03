@@ -445,7 +445,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				else if (str->s[5] == 'S') while (p < str->s + str->l) ((uint16_t*)s)[k++] = (uint16_t)strtol(p, &p, 0), ++p;
 				else if (str->s[5] == 'i') while (p < str->s + str->l) ((int32_t*)s)[k++]  = (int32_t)strtol(p, &p, 0),  ++p;
 				else if (str->s[5] == 'I') while (p < str->s + str->l) ((uint32_t*)s)[k++] = (uint32_t)strtol(p, &p, 0), ++p;
-				else if (str->s[5] == 'f') while (p < str->s + str->l) ((float*)s)[k++]    = (float)strtof(p, &p),       ++p;
+				else if (str->s[5] == 'f') while (p < str->s + str->l) ((float*)s)[k++]    = (float)strtod(p, &p),       ++p;
 				else parse_error(fp->n_lines, "unrecognized array type");
 				s += Bsize * n; doff += size;
 			} else parse_error(fp->n_lines, "unrecognized type");
