@@ -179,7 +179,7 @@ bam_index_t *bam_index_core(bamFile fp)
 		if (last_tid < c->tid) { // change of chromosomes
 			last_tid = c->tid;
 			last_bin = 0xffffffffu;
-		} else if (last_tid > c->tid) {
+		} else if ((uint32_t)last_tid > (uint32_t)c->tid) {
 			fprintf(stderr, "[bam_index_core] the alignment is not sorted (%s): %d-th chr > %d-th chr\n",
 					bam1_qname(b), last_tid+1, c->tid+1);
 			return NULL;
