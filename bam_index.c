@@ -183,7 +183,7 @@ bam_index_t *bam_index_core(bamFile fp)
 			fprintf(stderr, "[bam_index_core] the alignment is not sorted (%s): %d-th chr > %d-th chr\n",
 					bam1_qname(b), last_tid+1, c->tid+1);
 			return NULL;
-		} else if (last_coor > c->pos) {
+		} else if ((int32_t)c->tid >= 0 && last_coor > c->pos) {
 			fprintf(stderr, "[bam_index_core] the alignment is not sorted (%s): %u > %u in %d-th chr\n",
 					bam1_qname(b), last_coor, c->pos, c->tid+1);
 			return NULL;

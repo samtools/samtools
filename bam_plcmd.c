@@ -71,6 +71,7 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_NO_INDEL 0x400
 #define MPLP_EXT_BAQ 0x800
 #define MPLP_ILLUMINA13 0x1000
+#define MPLP_IGNORE_RG 0x2000
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -145,7 +146,7 @@ static int mplp_func(void *data, bam1_t *b)
 }
 
 static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
-					   int n, char *const*fn, int *n_plp, const bam_pileup1_t **plp)
+					   int n, char *const*fn, int *n_plp, const bam_pileup1_t **plp, int ignore_rg)
 {
 	int i, j;
 	memset(m->n_plp, 0, m->n * sizeof(int));
@@ -154,7 +155,7 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 			const bam_pileup1_t *p = plp[i] + j;
 			uint8_t *q;
 			int id = -1;
-			q = bam_aux_get(p->b, "RG");
+			q = ignore_rg? 0 : bam_aux_get(p->b, "RG");
 			if (q) id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
 			if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
 			if (id < 0 || id >= m->n) {
@@ -209,7 +210,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		data[i]->conf = conf;
 		h_tmp = bam_header_read(data[i]->fp);
 		data[i]->h = i? h : h_tmp; // for i==0, "h" has not been set yet
-		bam_smpl_add(sm, fn[i], h_tmp->text);
+		bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
 		rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
 		if (conf->reg) {
 			int beg, end;
@@ -295,7 +296,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			int total_depth, _ref0, ref16;
 			bcf1_t *b = calloc(1, sizeof(bcf1_t));
 			for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
-			group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp);
+			group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp, conf->flag & MPLP_IGNORE_RG);
 			_ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
 			ref16 = bam_nt16_table[_ref0];
 			for (i = 0; i < gplp.n; ++i)
@@ -434,12 +435,12 @@ int bam_mpileup(int argc, char *argv[])
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'B': mplp.flag &= ~MPLP_REALN; break;
-		case 'R': mplp.flag |= MPLP_REALN; break;
 		case 'D': mplp.flag |= MPLP_FMT_DP; break;
 		case 'S': mplp.flag |= MPLP_FMT_SP; break;
 		case 'I': mplp.flag |= MPLP_NO_INDEL; break;
 		case 'E': mplp.flag |= MPLP_EXT_BAQ; break;
 		case '6': mplp.flag |= MPLP_ILLUMINA13; break;
+		case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
@@ -481,6 +482,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -l FILE      list of positions (chr pos) or regions (BED) [null]\n");
 		fprintf(stderr, "       -M INT       cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "       -r STR       region in which pileup is generated [null]\n");
+		fprintf(stderr, "       -R           ignore RG tags\n");
 		fprintf(stderr, "       -q INT       skip alignments with mapQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "       -Q INT       skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "\nOutput options:\n\n");
