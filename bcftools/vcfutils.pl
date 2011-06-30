@@ -506,7 +506,7 @@ Options: -d INT    minimum depth          [$opts{d}]
 	  my ($b, $q);
 	  $q = $1 if ($t[7] =~ /FQ=(-?[\d\.]+)/);
 	  if ($q < 0) {
-		$_ = $1 if ($t[7] =~ /AF1=([\d\.]+)/);
+		$_ = ($t[7] =~ /AF1=([\d\.]+)/)? $1 : 0;
 		$b = ($_ < .5 || $alt eq '.')? $ref : $alt;
 		$q = -$q;
 	  } else {
