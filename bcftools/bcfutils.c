@@ -309,3 +309,55 @@ int bcf_subsam(int n_smpl, int *list, bcf1_t *b)
 	b->n_smpl = n_smpl;
 	return 0;
 }
+
+static int8_t nt4_table[128] = {
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4 /*'-'*/, 4, 4,
+	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  3, 4, 4, 4, -1, 4, 4, 4,  4, 4, 4, 4, 
+	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
+	4, 4, 4, 4,  3, 4, 4, 4, -1, 4, 4, 4,  4, 4, 4, 4
+};
+
+int bcf_gl10(const bcf1_t *b, uint8_t *gl)
+{
+	int a[4], k, l, map[4], k1, j, i;
+	const bcf_ginfo_t *PL;
+	char *s;
+	if (b->ref[1] != 0 || b->n_alleles > 4) return -1; // ref is not a single base or >4 alleles
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == bcf_str2int("PL", 2)) break;
+	if (i == b->n_gi) return -1; // no PL
+	PL = b->gi + i;
+	a[0] = nt4_table[(int)b->ref[0]];
+	if (a[0] > 3 || a[0] < 0) return -1; // ref is not A/C/G/T
+	a[1] = a[2] = a[3] = -2; // -1 has a special meaning
+	if (b->alt[0] == 0) return -1; // no alternate allele
+	map[0] = map[1] = map[2] = map[3] = -2;
+	map[a[0]] = 0;
+	for (k = 0, s = b->alt, k1 = -1; k < 3 && *s; ++k, s += 2) {
+		if (s[1] != ',' && s[1] != 0) return -1; // ALT is not single base
+		a[k+1] = nt4_table[(int)*s];
+		if (a[k+1] >= 0) map[a[k+1]] = k+1;
+		else k1 = k + 1;
+		if (s[1] == 0) break; // the end of the ALT string
+	}
+	for (k = 0; k < 4; ++k)
+		if (map[k] < 0) map[k] = k1;
+	for (i = 0; i < b->n_smpl; ++i) {
+		const uint8_t *p = PL->data + i * PL->len; // the PL for the i-th individual
+		uint8_t *g = gl + 10 * i;
+		for (j = 0; j < PL->len; ++j)
+			if (p[j]) break;
+		for (k = j = 0; k < 4; ++k) {
+			for (l = k; l < 4; ++l) {
+				int t, x = map[k], y = map[l];
+				if (x > y) t = x, x = y, y = t; // make sure x is the smaller
+				g[j++] = p[y * (y+1) / 2 + x];
+			}
+		}
+	}
+	return 0;
+}
