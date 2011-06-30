@@ -29,6 +29,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist, n_perm;
+	uint32_t *trio_aux;
 	char *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
 	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt;
@@ -102,7 +103,7 @@ static void rm_info(bcf1_t *b, const char *key)
 	bcf_sync(b);
 }
 
-static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10])
+static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10], int trio_llr, int trio_gt)
 {
 	kstring_t s;
 	int has_I16, is_var;
@@ -125,6 +126,7 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 		if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
 		//if (em[9] >= 0) ksprintf(&s, ";LRT1=%.3g", em[9]);
 	}
+	if (trio_llr > 0) ksprintf(&s, ";TLR=%d;TGT=%c%c%c", trio_llr, trio_gt&0xff, trio_gt>>8&0xff, trio_gt>>16&0xff);
 	if (pr == 0) { // if pr is unset, return
 		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
 		free(b->str);
@@ -278,6 +280,9 @@ int bcfview(int argc, char *argv[])
 	extern int bcf_fix_gt(bcf1_t *b);
 	extern int bcf_anno_max(bcf1_t *b);
 	extern int bcf_shuffle(bcf1_t *b, int seed);
+	extern uint32_t *bcf_trio_prep(int is_x, int is_son);
+	extern int bcf_trio_call(uint32_t *prep, const bcf1_t *b, int *llr, int *gt);
+
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
 	int c, *seeds = 0;
@@ -291,7 +296,7 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1;
-	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:")) >= 0) {
+	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -322,6 +327,15 @@ int bcfview(int argc, char *argv[])
 			vc.ploidy = calloc(vc.n_sub + 1, 1);
 			for (tid = 0; tid < vc.n_sub; ++tid) vc.ploidy[tid] = vc.subsam[tid][strlen(vc.subsam[tid]) + 1];
 			tid = -1;
+			break;
+		case 'T':
+			if (strcmp(optarg, "trioauto") == 0) vc.trio_aux = bcf_trio_prep(0, 0);
+			else if (strcmp(optarg, "trioxd") == 0) vc.trio_aux = bcf_trio_prep(1, 0);
+			else if (strcmp(optarg, "trioxs") == 0) vc.trio_aux = bcf_trio_prep(1, 1);
+			else {
+				fprintf(stderr, "[%s] Option '-T' can only take value trioauto, trioxd or trioxs.\n", __func__);
+				return 1;
+			}
 			break;
 		case 'P':
 			if (strcmp(optarg, "full") == 0) vc.prior_type = MC_PTYPE_FULL;
@@ -430,7 +444,7 @@ int bcfview(int argc, char *argv[])
 		}
 	}
 	while (vcf_read(bp, hin, b) > 0) {
-		int is_indel;
+		int is_indel, trio_llr = -1, trio_gt = -1;
 		double em[10];
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {
@@ -460,6 +474,8 @@ int bcfview(int argc, char *argv[])
 			bcf_2qcall(hout, b);
 			continue;
 		}
+		if (vc.trio_aux) // do trio calling
+			bcf_trio_call(vc.trio_aux, b, &trio_llr, &trio_gt);
 		if (vc.flag & (VC_CALL|VC_ADJLD|VC_EM)) bcf_gl2pl(b);
 		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0x1ff, em);
 		else {
@@ -491,8 +507,8 @@ int bcfview(int argc, char *argv[])
 				}
 				pr.perm_rank = n;
 			}
-			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em);
-		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em);
+			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em, trio_llr, trio_gt);
+		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em, trio_llr, trio_gt);
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;
 			if ((r2 = bcf_pair_freq(blast, b, f)) >= 0) {
@@ -521,6 +537,7 @@ int bcfview(int argc, char *argv[])
 	vcf_close(bp); vcf_close(bout);
 	if (vc.fn_dict) free(vc.fn_dict);
 	if (vc.ploidy) free(vc.ploidy);
+	if (vc.trio_aux) free(vc.trio_aux);
 	if (vc.n_sub) {
 		int i;
 		for (i = 0; i < vc.n_sub; ++i) free(vc.subsam[i]);
