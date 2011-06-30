@@ -25,7 +25,7 @@ uint32_t *bcf_trio_prep(int is_x, int is_son)
 		} else {
 			for (j = 0; j < 10; ++j) // mother
 				for (k = 0; k < 10; ++k) // child
-					if ((map[i]&map[k]) && (map[j]&map[k]))
+					if ((map[i]&map[k]) && (map[j]&map[k]) && ((map[i]|map[j])&map[k]) == map[k])
 						ret[n++] = j<<16 | i<<8 | k;
 		}
 	}
@@ -68,7 +68,7 @@ int bcf_trio_call(const uint32_t *prep, const bcf1_t *b, int *llr, int *gt)
 			gtf |= map[min_k]<<(j*8);
 			minf += min;
 		}
-		*llr = minf - minc; *gt = gtf;
+		*llr = minc - minf; *gt = gtf;
 	} else *llr = 0, *gt = -1;
 	return 0;
 }
