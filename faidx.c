@@ -7,7 +7,8 @@
 #include "khash.h"
 
 typedef struct {
-	uint64_t len:32, line_len:16, line_blen:16;
+	int32_t line_len, line_blen;
+	int64_t len;
 	uint64_t offset;
 } faidx1_t;
 KHASH_MAP_INIT_STR(s, faidx1_t)
@@ -64,10 +65,11 @@ faidx_t *fai_build_core(RAZF *rz)
 {
 	char c, *name;
 	int l_name, m_name, ret;
-	int len, line_len, line_blen, state;
+	int line_len, line_blen, state;
 	int l1, l2;
 	faidx_t *idx;
 	uint64_t offset;
+	int64_t len;
 
 	idx = (faidx_t*)calloc(1, sizeof(faidx_t));
 	idx->hash = kh_init(s);
@@ -119,11 +121,6 @@ faidx_t *fai_build_core(RAZF *rz)
 				return 0;
 			}
 			++l1; len += l2;
-			if (l2 >= 0x10000) {
-				fprintf(stderr, "[fai_build_core] line length exceeds 65535 in sequence '%s'.\n", name);
-				free(name); fai_destroy(idx);
-				return 0;
-			}
 			if (state == 1) line_len = l1, line_blen = l2, state = 0;
 			else if (state == 0) {
 				if (l1 != line_len || l2 != line_blen) state = 2;
