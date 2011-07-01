@@ -242,6 +242,10 @@ static void write_header(bcf_hdr_t *h)
 		kputs("##INFO=<ID=G3,Number=3,Type=Float,Description=\"ML estimate of genotype frequencies\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=HWE,"))
 		kputs("##INFO=<ID=HWE,Number=1,Type=Float,Description=\"Chi^2 based HWE test P-value based on G3\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=TLR,"))
+		kputs("##INFO=<ID=TLR,Number=1,Type=Integer,Description=\"Log ratio of genotype likelihoods with and without the trio constraint\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=TGT,"))
+		kputs("##INFO=<ID=TGT,Number=1,Type=String,Description=\"The most probable genotypes of the 3 family members in a trio\">\n", &str);
 //	if (!strstr(str.s, "##INFO=<ID=CI95,"))
 //		kputs("##INFO=<ID=CI95,Number=2,Type=Float,Description=\"Equal-tail Bayesian credible interval of the site allele frequency at the 95% level\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=PV4,"))
@@ -371,6 +375,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -p FLOAT  variant if P(ref|D)<FLOAT [%.3g]\n", vc.pref);
 		fprintf(stderr, "       -P STR    type of prior: full, cond2, flat [full]\n");
 		fprintf(stderr, "       -t FLOAT  scaled substitution mutation rate [%.4g]\n", vc.theta);
+		fprintf(stderr, "       -T STR    trio calling STR can be: trioauto, trioxd and trioxs (see manual) [null]\n");
 		fprintf(stderr, "       -v        output potential variant sites only (force -c)\n");
 		fprintf(stderr, "\nContrast calling and association test options:\n\n");
 		fprintf(stderr, "       -1 INT    number of group-1 samples [0]\n");

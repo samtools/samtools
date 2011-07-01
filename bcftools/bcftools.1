@@ -1,4 +1,4 @@
-.TH bcftools 1 "16 March 2011" "bcftools" "Bioinformatics tools"
+.TH bcftools 1 "1 July 2011" "bcftools" "Bioinformatics tools"
 .SH NAME
 .PP
 bcftools - Utilities for the Binary Call Format (BCF) and VCF.
@@ -43,6 +43,8 @@ estimating site allele frequencies and allele frequency spectrums.
 .IR nPerm ]
 .RB [ \-X
 .IR permThres ]
+.RB [ \-T
+.IR trioType ]
 .I in.bcf
 .RI [ region ]
 
@@ -126,6 +128,18 @@ run.
 .TP
 .BI -t \ FLOAT
 Scaled muttion rate for variant calling [0.001]
+.TP
+.BI -T \ STR
+Enable trio calling. When this option is in use, option
+.B -s
+is usually needed to be applied to configure the trio members and their ordering.
+In the file supplied to the option
+.BR -s ,
+the first sample must be the child, the second the father and the third the mother.
+The valid values of
+.I STR
+are `trioauto', `trioxd' and `trioxs', where `trioxd' (`trioxs') specifies that the input
+is from the X chromosome non-PAR regions and the child is a female (male). [null]
 .TP
 .B -v
 Output variant sites only (force -c)
