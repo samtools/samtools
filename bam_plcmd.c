@@ -72,6 +72,7 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_EXT_BAQ 0x800
 #define MPLP_ILLUMINA13 0x1000
 #define MPLP_IGNORE_RG 0x2000
+#define MPLP_PRINT_POS 0x4000
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -323,8 +324,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			for (i = 0; i < n; ++i) {
 				int j;
 				printf("\t%d\t", n_plp[i]);
-				if (n_plp[i] == 0) printf("*\t*");
-				else {
+				if (n_plp[i] == 0) {
+					printf("*\t*"); // FIXME: printf() is very slow...
+					if (conf->flag & MPLP_PRINT_POS) printf("\t*");
+				} else {
 					for (j = 0; j < n_plp[i]; ++j)
 						pileup_seq(plp[i] + j, pos, ref_len, ref);
 					putchar('\t');
@@ -333,6 +336,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 						int c = bam1_qual(p->b)[p->qpos] + 33;
 						if (c > 126) c = 126;
 						putchar(c);
+					}
+					if (conf->flag & MPLP_PRINT_POS) {
+						putchar('\t');
+						for (j = 0; j < n_plp[i]; ++j) {
+							if (j > 0) putchar(',');
+							printf("%d", plp[i][j].qpos + 1);
+						}
 					}
 				}
 			}
@@ -414,6 +424,7 @@ int bam_mpileup(int argc, char *argv[])
     int nfiles = 0, use_orphan = 0;
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
+	#define MPLP_PRINT_POS 0x4000
 	mplp.max_mq = 60;
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
@@ -421,7 +432,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6O")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -441,6 +452,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'E': mplp.flag |= MPLP_EXT_BAQ; break;
 		case '6': mplp.flag |= MPLP_ILLUMINA13; break;
 		case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
+		case 'O': mplp.flag |= MPLP_PRINT_POS; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
