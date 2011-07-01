@@ -103,7 +103,7 @@ static void rm_info(bcf1_t *b, const char *key)
 	bcf_sync(b);
 }
 
-static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10], int trio_llr, int trio_gt)
+static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10], int trio_llr, int64_t trio_gt)
 {
 	kstring_t s;
 	int has_I16, is_var;
@@ -126,7 +126,9 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 		if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
 		//if (em[9] >= 0) ksprintf(&s, ";LRT1=%.3g", em[9]);
 	}
-	if (trio_llr > 0) ksprintf(&s, ";TLR=%d;TGT=%c%c%c", trio_llr, trio_gt&0xff, trio_gt>>8&0xff, trio_gt>>16&0xff);
+	if (trio_llr > 0)
+		ksprintf(&s, ";TLR=%d;TGT=%c%c%c;TGTC=%c%c%c", trio_llr, trio_gt&0xff, trio_gt>>8&0xff, trio_gt>>16&0xff,
+			     trio_gt>>32&0xff, trio_gt>>40&0xff, trio_gt>>48&0xff);
 	if (pr == 0) { // if pr is unset, return
 		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
 		free(b->str);
@@ -245,7 +247,9 @@ static void write_header(bcf_hdr_t *h)
 	if (!strstr(str.s, "##INFO=<ID=TLR,"))
 		kputs("##INFO=<ID=TLR,Number=1,Type=Integer,Description=\"Log ratio of genotype likelihoods with and without the trio constraint\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=TGT,"))
-		kputs("##INFO=<ID=TGT,Number=1,Type=String,Description=\"The most probable genotypes of the 3 family members in a trio\">\n", &str);
+		kputs("##INFO=<ID=TGT,Number=1,Type=String,Description=\"The most probable unconstrained genotypes of the 3 family members in a trio\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=TCGT,"))
+		kputs("##INFO=<ID=TGT,Number=1,Type=String,Description=\"The most probable constrained genotypes of the 3 family members in a trio\">\n", &str);
 //	if (!strstr(str.s, "##INFO=<ID=CI95,"))
 //		kputs("##INFO=<ID=CI95,Number=2,Type=Float,Description=\"Equal-tail Bayesian credible interval of the site allele frequency at the 95% level\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=PV4,"))
@@ -285,7 +289,7 @@ int bcfview(int argc, char *argv[])
 	extern int bcf_anno_max(bcf1_t *b);
 	extern int bcf_shuffle(bcf1_t *b, int seed);
 	extern uint32_t *bcf_trio_prep(int is_x, int is_son);
-	extern int bcf_trio_call(uint32_t *prep, const bcf1_t *b, int *llr, int *gt);
+	extern int bcf_trio_call(uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt);
 
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
@@ -449,7 +453,8 @@ int bcfview(int argc, char *argv[])
 		}
 	}
 	while (vcf_read(bp, hin, b) > 0) {
-		int is_indel, trio_llr = -1, trio_gt = -1;
+		int is_indel, trio_llr = -1;
+		int64_t trio_gt = -1;
 		double em[10];
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {

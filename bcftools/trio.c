@@ -33,7 +33,7 @@ uint32_t *bcf_trio_prep(int is_x, int is_son)
 	return ret;
 }
 
-int bcf_trio_call(const uint32_t *prep, const bcf1_t *b, int *llr, int *gt)
+int bcf_trio_call(const uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt)
 {
 	int i, j, k;
 	const bcf_ginfo_t *PL;
@@ -53,22 +53,23 @@ int bcf_trio_call(const uint32_t *prep, const bcf1_t *b, int *llr, int *gt)
 		if (((uint8_t*)PL->data)[(i+j) * PL->len] != 0) break;
 	if (j < 3) { // we need to go through the complex procedure
 		uint8_t *g[3];
-		int minc = 1<<30, minf = 0, gtf = 0;
+		int minc = 1<<30, minc_j = -1, minf = 0, gtf = 0, gtc = 0;
 		g[0] = gl10;
 		g[1] = gl10 + 10;
 		g[2] = gl10 + 20;
-		for (j = 1; j <= (int)prep[0]; ++j) {
+		for (j = 1; j <= (int)prep[0]; ++j) { // compute LK with constraint
 			int sum = g[0][prep[j]&0xff] + g[1][prep[j]>>8&0xff] + g[2][prep[j]>>16&0xff];
-			minc = minc < sum? minc : sum;
+			if (sum < minc) minc = sum, minc_j = j;
 		}
-		for (j = 0; j < 3; ++j) {
+		gtc |= map[prep[minc_j]&0xff]; gtc |= map[prep[minc_j]>>8&0xff]<<8; gtc |= map[prep[minc_j]>>16]<<16;
+		for (j = 0; j < 3; ++j) { // compute LK without constraint
 			int min = 1<<30, min_k = -1;
 			for (k = 0; k < 10; ++k)
 				if (g[j][k] < min) min = g[j][k], min_k = k;
 			gtf |= map[min_k]<<(j*8);
 			minf += min;
 		}
-		*llr = minc - minf; *gt = gtf;
+		*llr = minc - minf; *gt = (int64_t)gtc<<32 | gtf;
 	} else *llr = 0, *gt = -1;
 	return 0;
 }
