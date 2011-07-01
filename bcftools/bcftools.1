@@ -190,7 +190,6 @@ l | l | l .
 Tag	Format	Description
 _
 AF1	double	Max-likelihood estimate of the site allele frequency (AF) of the first ALT allele
-CI95	double[2]	Equal-tail Bayesian credible interval of AF at the 95% level
 DP	int	Raw read depth (without quality filtering)
 DP4	int[4]	# high-quality reference forward bases, ref reverse, alternate for and alt rev bases
 FQ	int	Consensus quality. Positive: sample genotypes different; negative: otherwise
@@ -200,4 +199,7 @@ PCHI2	double	Posterior weighted chi^2 P-value between group1 and group2 samples
 PV4	double[4]	P-value for strand bias, baseQ bias, mapQ bias and tail distance bias
 QCHI2	int	Phred-scaled PCHI2
 RP	int	# permutations yielding a smaller PCHI2
+TGT	string	Most probable genotype configuration without the trio constraint
+TGTC	string	Most probable configuration with the trio constraint
+TLR	int	Phred log ratio of genotype likelihoods with and without the trio constraint
 .TE
