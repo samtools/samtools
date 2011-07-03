@@ -343,7 +343,7 @@ int main_bam2fq(int argc, char *argv[])
 		fprintf(stderr, "Usage: samtools bam2fq <in.bam>\n");
 		return 1;
 	}
-	fp = bam_open(argv[1], "r");
+	fp = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
 	if (fp == 0) return 1;
 	h = bam_header_read(fp);
 	b = bam_init1();

@@ -50,7 +50,7 @@ int bcf_trio_call(const uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt)
 		for (j = i; j < 4; ++j)
 			map[k++] = seq_nt16rev[1<<i|1<<j];
 	for (j = 0; j < 3; ++j) // check if ref hom is the most probable in all members
-		if (((uint8_t*)PL->data)[(i+j) * PL->len] != 0) break;
+		if (((uint8_t*)PL->data)[j * PL->len] != 0) break;
 	if (j < 3) { // we need to go through the complex procedure
 		uint8_t *g[3];
 		int minc = 1<<30, minc_j = -1, minf = 0, gtf = 0, gtc = 0;
@@ -72,4 +72,32 @@ int bcf_trio_call(const uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt)
 		*llr = minc - minf; *gt = (int64_t)gtc<<32 | gtf;
 	} else *llr = 0, *gt = -1;
 	return 0;
+}
+
+int bcf_pair_call(const bcf1_t *b)
+{
+	int i, j, k;
+	const bcf_ginfo_t *PL;
+	if (b->n_smpl != 2) return -1; // not a pair
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == bcf_str2int("PL", 2)) break;
+	if (i == b->n_gi) return -1; // no PL
+	PL = b->gi + i;
+	for (j = 0; j < 2; ++j) // check if ref hom is the most probable in all members
+		if (((uint8_t*)PL->data)[j * PL->len] != 0) break;
+	if (j < 2) { // we need to go through the complex procedure
+		uint8_t *g[2];
+		int minc = 1<<30, minf = 0;
+		g[0] = PL->data;
+		g[1] = (uint8_t*)PL->data + PL->len;
+		for (j = 0; j < PL->len; ++j) // compute LK with constraint
+			minc = minc < g[0][j] + g[1][j]? minc : g[0][j] + g[1][j];
+		for (j = 0; j < 2; ++j) { // compute LK without constraint
+			int min = 1<<30;
+			for (k = 0; k < PL->len; ++k)
+				min = min < g[j][k]? min : g[j][k];
+			minf += min;
+		}
+		return minc - minf;
+	} else return 0;
 }
