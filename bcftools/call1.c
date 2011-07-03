@@ -26,6 +26,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_ANNO_MAX 16384
 #define VC_FIX_PL   32768
 #define VC_EM       0x10000
+#define VC_PAIRCALL 0x20000
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist, n_perm;
@@ -103,7 +104,7 @@ static void rm_info(bcf1_t *b, const char *key)
 	bcf_sync(b);
 }
 
-static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10], int trio_llr, int64_t trio_gt)
+static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10], int cons_llr, int64_t cons_gt)
 {
 	kstring_t s;
 	int has_I16, is_var;
@@ -126,9 +127,12 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 		if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
 		//if (em[9] >= 0) ksprintf(&s, ";LRT1=%.3g", em[9]);
 	}
-	if (trio_llr > 0)
-		ksprintf(&s, ";TLR=%d;TGT=%c%c%c;TGTC=%c%c%c", trio_llr, trio_gt&0xff, trio_gt>>8&0xff, trio_gt>>16&0xff,
-			     trio_gt>>32&0xff, trio_gt>>40&0xff, trio_gt>>48&0xff);
+	if (cons_llr > 0) {
+		ksprintf(&s, ";CLR=%d", cons_llr);
+		if (cons_gt > 0)
+			ksprintf(&s, ";UGT=%c%c%c;CGT=%c%c%c", cons_gt&0xff, cons_gt>>8&0xff, cons_gt>>16&0xff,
+				     cons_gt>>32&0xff, cons_gt>>40&0xff, cons_gt>>48&0xff);
+	}
 	if (pr == 0) { // if pr is unset, return
 		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
 		free(b->str);
@@ -244,12 +248,12 @@ static void write_header(bcf_hdr_t *h)
 		kputs("##INFO=<ID=G3,Number=3,Type=Float,Description=\"ML estimate of genotype frequencies\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=HWE,"))
 		kputs("##INFO=<ID=HWE,Number=1,Type=Float,Description=\"Chi^2 based HWE test P-value based on G3\">\n", &str);
-	if (!strstr(str.s, "##INFO=<ID=TLR,"))
-		kputs("##INFO=<ID=TLR,Number=1,Type=Integer,Description=\"Log ratio of genotype likelihoods with and without the trio constraint\">\n", &str);
-	if (!strstr(str.s, "##INFO=<ID=TGT,"))
-		kputs("##INFO=<ID=TGT,Number=1,Type=String,Description=\"The most probable unconstrained genotypes of the 3 family members in a trio\">\n", &str);
-	if (!strstr(str.s, "##INFO=<ID=TCGT,"))
-		kputs("##INFO=<ID=TGT,Number=1,Type=String,Description=\"The most probable constrained genotypes of the 3 family members in a trio\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=CLR,"))
+		kputs("##INFO=<ID=CLR,Number=1,Type=Integer,Description=\"Log ratio of genotype likelihoods with and without the constraint\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=UGT,"))
+		kputs("##INFO=<ID=UGT,Number=1,Type=String,Description=\"The most probable unconstrained genotype configuration in the trio\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=CGT,"))
+		kputs("##INFO=<ID=CGT,Number=1,Type=String,Description=\"The most probable constrained genotype configuration in the trio\">\n", &str);
 //	if (!strstr(str.s, "##INFO=<ID=CI95,"))
 //		kputs("##INFO=<ID=CI95,Number=2,Type=Float,Description=\"Equal-tail Bayesian credible interval of the site allele frequency at the 95% level\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=PV4,"))
@@ -290,6 +294,7 @@ int bcfview(int argc, char *argv[])
 	extern int bcf_shuffle(bcf1_t *b, int seed);
 	extern uint32_t *bcf_trio_prep(int is_x, int is_son);
 	extern int bcf_trio_call(uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt);
+	extern int bcf_pair_call(const bcf1_t *b);
 
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
@@ -340,6 +345,7 @@ int bcfview(int argc, char *argv[])
 			if (strcmp(optarg, "trioauto") == 0) vc.trio_aux = bcf_trio_prep(0, 0);
 			else if (strcmp(optarg, "trioxd") == 0) vc.trio_aux = bcf_trio_prep(1, 0);
 			else if (strcmp(optarg, "trioxs") == 0) vc.trio_aux = bcf_trio_prep(1, 1);
+			else if (strcmp(optarg, "pair") == 0) vc.flag |= VC_PAIRCALL;
 			else {
 				fprintf(stderr, "[%s] Option '-T' can only take value trioauto, trioxd or trioxs.\n", __func__);
 				return 1;
@@ -379,7 +385,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -p FLOAT  variant if P(ref|D)<FLOAT [%.3g]\n", vc.pref);
 		fprintf(stderr, "       -P STR    type of prior: full, cond2, flat [full]\n");
 		fprintf(stderr, "       -t FLOAT  scaled substitution mutation rate [%.4g]\n", vc.theta);
-		fprintf(stderr, "       -T STR    trio calling STR can be: trioauto, trioxd and trioxs (see manual) [null]\n");
+		fprintf(stderr, "       -T STR    constrained calling; STR can be: pair, trioauto, trioxd and trioxs (see manual) [null]\n");
 		fprintf(stderr, "       -v        output potential variant sites only (force -c)\n");
 		fprintf(stderr, "\nContrast calling and association test options:\n\n");
 		fprintf(stderr, "       -1 INT    number of group-1 samples [0]\n");
@@ -453,8 +459,8 @@ int bcfview(int argc, char *argv[])
 		}
 	}
 	while (vcf_read(bp, hin, b) > 0) {
-		int is_indel, trio_llr = -1;
-		int64_t trio_gt = -1;
+		int is_indel, cons_llr = -1;
+		int64_t cons_gt = -1;
 		double em[10];
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {
@@ -485,7 +491,9 @@ int bcfview(int argc, char *argv[])
 			continue;
 		}
 		if (vc.trio_aux) // do trio calling
-			bcf_trio_call(vc.trio_aux, b, &trio_llr, &trio_gt);
+			bcf_trio_call(vc.trio_aux, b, &cons_llr, &cons_gt);
+		else if (vc.flag & VC_PAIRCALL)
+			cons_llr = bcf_pair_call(b);
 		if (vc.flag & (VC_CALL|VC_ADJLD|VC_EM)) bcf_gl2pl(b);
 		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0x1ff, em);
 		else {
@@ -517,8 +525,8 @@ int bcfview(int argc, char *argv[])
 				}
 				pr.perm_rank = n;
 			}
-			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em, trio_llr, trio_gt);
-		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em, trio_llr, trio_gt);
+			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em, cons_llr, cons_gt);
+		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em, cons_llr, cons_gt);
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;
 			if ((r2 = bcf_pair_freq(blast, b, f)) >= 0) {
