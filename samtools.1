@@ -145,7 +145,25 @@ viewing the same reference sequence.
 
 .TP
 .B mpileup
-samtools mpileup [-EBug] [-C capQcoef] [-r reg] [-f in.fa] [-l list] [-M capMapQ] [-Q minBaseQ] [-q minMapQ] in.bam [in2.bam [...]]
+.B samtools mpileup
+.RB [ \-EBug ]
+.RB [ \-C
+.IR capQcoef ]
+.RB [ \-r
+.IR reg ]
+.RB [ \-f
+.IR in.fa ]
+.RB [ \-l
+.IR list ]
+.RB [ \-M
+.IR capMapQ ]
+.RB [ \-Q
+.IR minBaseQ ]
+.RB [ \-q
+.IR minMapQ ]
+.I in.bam
+.RI [ in2.bam
+.RI [ ... ]]
 
 Generate BCF or pileup for one or multiple BAM files. Alignment records
 are grouped by sample identifiers in @RG header lines. If sample
@@ -172,9 +190,11 @@ symbol `^' marks the start of a read. The ASCII of the character
 following `^' minus 33 gives the mapping quality. A symbol `$' marks the
 end of a read segment.
 
-.B OPTIONS:
+.B Input Options:
 .RS
 .TP 10
+.B -6
+Assume the quality is in the Illumina 1.3+ encoding.
 .B -A
 Do not skip anomalous read pairs in variant calling.
 .TP
@@ -183,6 +203,9 @@ Disable probabilistic realignment for the computation of base alignment
 quality (BAQ). BAQ is the Phred-scaled probability of a read base being
 misaligned. Applying this option greatly helps to reduce false SNPs
 caused by misalignments.
+.TP
+.BI -b \ FILE
+List of input BAM files, one file per line [null]
 .TP
 .BI -C \ INT
 Coefficient for downgrading mapping quality for reads containing
@@ -196,23 +219,56 @@ At a position, read maximally
 .I INT
 reads per input BAM. [250]
 .TP
-.B -D
-Output per-sample read depth
-.TP
-.BI -e \ INT
-Phred-scaled gap extension sequencing error probability. Reducing
-.I INT
-leads to longer indels. [20]
-.TP
 .B -E
 Extended BAQ computation. This option helps sensitivity especially for MNPs, but may hurt
 specificity a little bit.
 .TP
 .BI -f \ FILE
-The reference file [null]
+The
+.BR faidx -indexed
+reference file in the FASTA format. The file can be optionally compressed by
+.BR razip .
+[null]
+.TP
+.BI -l \ FILE
+BED or position list file containing a list of regions or sites where pileup or BCF should be generated [null]
+.TP
+.BI -q \ INT
+Minimum mapping quality for an alignment to be used [0]
+.TP
+.BI -Q \ INT
+Minimum base quality for a base to be considered [13]
+.TP
+.BI -r \ STR
+Only generate pileup in region
+.I STR
+[all sites]
+.TP
+.B Output Options:
+
+.TP
+.B -D
+Output per-sample read depth
 .TP
 .B -g
 Compute genotype likelihoods and output them in the binary call format (BCF).
+.TP
+.B -S
+Output per-sample Phred-scaled strand bias P-value
+.TP
+.B -u
+Similar to
+.B -g
+except that the output is uncompressed BCF, which is preferred for piping.
+
+.TP
+.B Options for Genotype Likelihood Computation (for -g or -u):
+
+.TP
+.BI -e \ INT
+Phred-scaled gap extension sequencing error probability. Reducing
+.I INT
+leads to longer indels. [20]
 .TP
 .BI -h \ INT
 Coefficient for modeling homopolymer errors. Given an
@@ -226,9 +282,6 @@ is modeled as
 .TP
 .B -I
 Do not perform INDEL calling
-.TP
-.BI -l \ FILE
-File containing a list of sites where pileup or BCF is outputted [null]
 .TP
 .BI -L \ INT
 Skip INDEL calling if the average per-sample depth is above
@@ -246,25 +299,6 @@ Comma dilimited list of platforms (determined by
 from which indel candidates are obtained. It is recommended to collect
 indel candidates from sequencing technologies that have low indel error
 rate such as ILLUMINA. [all]
-.TP
-.BI -q \ INT
-Minimum mapping quality for an alignment to be used [0]
-.TP
-.BI -Q \ INT
-Minimum base quality for a base to be considered [13]
-.TP
-.BI -r \ STR
-Only generate pileup in region
-.I STR
-[all sites]
-.TP
-.B -S
-Output per-sample Phred-scaled strand bias P-value
-.TP
-.B -u
-Similar to
-.B -g
-except that the output is uncompressed BCF, which is preferred for piping.
 .RE
 
 .TP
