@@ -27,6 +27,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_FIX_PL   32768
 #define VC_EM       0x10000
 #define VC_PAIRCALL 0x20000
+#define VC_QCNT     0x40000
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist, n_perm;
@@ -295,11 +296,12 @@ int bcfview(int argc, char *argv[])
 	extern uint32_t *bcf_trio_prep(int is_x, int is_son);
 	extern int bcf_trio_call(uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt);
 	extern int bcf_pair_call(const bcf1_t *b);
+	extern int bcf_min_diff(const bcf1_t *b);
 
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
 	int c, *seeds = 0;
-	uint64_t n_processed = 0;
+	uint64_t n_processed = 0, qcnt[256];
 	viewconf_t vc;
 	bcf_p1aux_t *p1 = 0;
 	bcf_hdr_t *hin, *hout;
@@ -309,7 +311,8 @@ int bcfview(int argc, char *argv[])
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1;
-	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:")) >= 0) {
+	memset(qcnt, 0, 8 * 256);
+	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Y")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -327,6 +330,7 @@ int bcfview(int argc, char *argv[])
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
 		case 'I': vc.flag |= VC_NO_INDEL; break;
 		case 'M': vc.flag |= VC_ANNO_MAX; break;
+		case 'Y': vc.flag |= VC_QCNT; break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'i': vc.indel_frac = atof(optarg); break;
@@ -486,6 +490,11 @@ int bcfview(int argc, char *argv[])
 			if (!(l > begin && end > b->pos)) continue;
 		}
 		++n_processed;
+		if (vc.flag & VC_QCNT) { // summarize the difference
+			int x = bcf_min_diff(b);
+			if (x > 255) x = 255;
+			if (x >= 0) ++qcnt[x];
+		}
 		if (vc.flag & VC_QCALL) { // output QCALL format; STOP here
 			bcf_2qcall(hout, b);
 			continue;
@@ -562,6 +571,9 @@ int bcfview(int argc, char *argv[])
 		free(vc.subsam); free(vc.sublist);
 	}
 	if (vc.bed) bed_destroy(vc.bed);
+	if (vc.flag & VC_QCNT)
+		for (c = 0; c < 256; ++c)
+			fprintf(stderr, "QT\t%d\t%lld\n", c, (long long)qcnt[c]);
 	if (seeds) free(seeds);
 	if (p1) bcf_p1_destroy(p1);
 	return 0;
