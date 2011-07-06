@@ -176,7 +176,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	off_beg = off_end = bam_tell(fp);
 	while ((ret = bam_read1(fp, b)) >= 0) {
 		if (c->tid < 0) ++n_no_coor;
-		if (last_tid < c->tid) { // change of chromosomes
+		if (last_tid < c->tid || (last_tid >= 0 && c->tid < 0)) { // change of chromosomes
 			last_tid = c->tid;
 			last_bin = 0xffffffffu;
 		} else if ((uint32_t)last_tid > (uint32_t)c->tid) {
