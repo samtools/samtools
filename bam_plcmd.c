@@ -73,6 +73,7 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_ILLUMINA13 0x1000
 #define MPLP_IGNORE_RG 0x2000
 #define MPLP_PRINT_POS 0x4000
+#define MPLP_PRINT_MAPQ 0x8000
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -340,11 +341,19 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 						if (c > 126) c = 126;
 						putchar(c);
 					}
+					if (conf->flag & MPLP_PRINT_MAPQ) {
+						putchar('\t');
+						for (j = 0; j < n_plp[i]; ++j) {
+							int c = plp[i][j].b->core.qual + 33;
+							if (c > 126) c = 126;
+							putchar(c);
+						}
+					}
 					if (conf->flag & MPLP_PRINT_POS) {
 						putchar('\t');
 						for (j = 0; j < n_plp[i]; ++j) {
 							if (j > 0) putchar(',');
-							printf("%d", plp[i][j].qpos + 1);
+							printf("%d", plp[i][j].qpos + 1); // FIXME: printf() is very slow...
 						}
 					}
 				}
@@ -435,7 +444,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6O")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6Os")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -455,6 +464,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'E': mplp.flag |= MPLP_EXT_BAQ; break;
 		case '6': mplp.flag |= MPLP_ILLUMINA13; break;
 		case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
+		case 's': mplp.flag |= MPLP_PRINT_MAPQ; break;
 		case 'O': mplp.flag |= MPLP_PRINT_POS; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
@@ -490,6 +500,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -A           count anomalous read pairs\n");
 		fprintf(stderr, "       -B           disable BAQ computation\n");
 		fprintf(stderr, "       -b FILE      list of input BAM files [null]\n");
+		fprintf(stderr, "       -C INT       parameter for adjusting mapQ; 0 to disable [0]\n");
 		fprintf(stderr, "       -d INT       max per-BAM depth to avoid excessive memory usage [%d]\n", mplp.max_depth);
 		fprintf(stderr, "       -E           extended BAQ for higher sensitivity but lower specificity\n");
 		fprintf(stderr, "       -f FILE      faidx indexed reference sequence file [null]\n");
@@ -503,6 +514,8 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "\nOutput options:\n\n");
 		fprintf(stderr, "       -D           output per-sample DP in BCF (require -g/-u)\n");
 		fprintf(stderr, "       -g           generate BCF output (genotype likelihoods)\n");
+		fprintf(stderr, "       -O           output base positions on reads (disabled by -g/-u)\n");
+		fprintf(stderr, "       -s           output mapping quality (disabled by -g/-u)\n");
 		fprintf(stderr, "       -S           output per-sample strand bias P-value in BCF (require -g/-u)\n");
 		fprintf(stderr, "       -u           generate uncompress BCF output\n");
 		fprintf(stderr, "\nSNP/INDEL genotype likelihoods options (effective with `-g' or `-u'):\n\n");
