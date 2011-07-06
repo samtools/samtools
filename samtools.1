@@ -1,4 +1,4 @@
-.TH samtools 1 "21 April 2011" "samtools-0.1.16" "Bioinformatics tools"
+.TH samtools 1 "05 July 2011" "samtools-0.1.17" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -715,7 +715,7 @@ have identical samples appearing in the same order.
 .RE
 .SH SAM FORMAT
 
-SAM is TAB-delimited. Apart from the header lines, which are started
+Sequence Alignment/Map (SAM) format is TAB-delimited. Apart from the header lines, which are started
 with the `@' symbol, each alignment line consists of:
 
 .TS
@@ -724,7 +724,7 @@ cb | cb | cb
 n | l | l .
 Col	Field	Description
 _
-1	QNAME	Query (pair) NAME
+1	QNAME	Query template/pair NAME
 2	FLAG	bitwise FLAG
 3	RNAME	Reference sequence NAME
 4	POS	1-based leftmost POSition/coordinate of clipped sequence
@@ -732,10 +732,10 @@ _
 6	CIAGR	extended CIGAR string
 7	MRNM	Mate Reference sequence NaMe (`=' if same as RNAME)
 8	MPOS	1-based Mate POSistion
-9	ISIZE	Inferred insert SIZE
+9	TLEN	inferred Template LENgth (insert size)
 10	SEQ	query SEQuence on the same strand as the reference
 11	QUAL	query QUALity (ASCII-33 gives the Phred base quality)
-12	OPT	variable OPTional fields in the format TAG:VTYPE:VALUE
+12+	OPT	variable OPTional fields in the format TAG:VTYPE:VALUE
 .TE
 
 .PP
@@ -760,7 +760,33 @@ _
 0x0400	d	the read is either a PCR or an optical duplicate
 .TE
 
+where the second column gives the string representation of the FLAG field.
+
 .SH VCF FORMAT
+
+The Variant Call Format (VCF) is a TAB-delimited format with each data line consists of the following fields:
+.TS
+center box;
+cb | cb | cb
+n | l | l .
+Col	Field	Description
+_
+1	CHROM	CHROMosome name
+2	POS	the left-most POSition of the variant
+3	ID	unique variant IDentifier
+4	REF	the REFerence allele
+5	ALT	the ALTernate allele(s), separated by comma
+6	QUAL	variant/reference QUALity
+7	FILTER	FILTers applied
+8	INFO	INFOrmation related to the variant, separated by semi-colon
+9	FORMAT	FORMAT of the genotype fields, separated by colon (optional)
+10+	SAMPLE	SAMPLE genotypes and per-sample information (optional)
+.TE
+
+.PP
+The following table gives the
+.B INFO
+tags used by samtools and bcftools.
 
 .TS
 center box;
