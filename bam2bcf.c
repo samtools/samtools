@@ -236,7 +236,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	memcpy(b->gi[0].data, bc->PL, b->gi[0].len * bc->n);
 	if (bcr) {
 		uint16_t *dp = (uint16_t*)b->gi[1].data;
-		uint8_t *sp = is_SP? b->gi[2].data : 0;
+		int32_t *sp = is_SP? b->gi[2].data : 0;
 		for (i = 0; i < bc->n; ++i) {
 			bcf_callret1_t *p = bcr + i;
 			dp[i] = p->depth < 0xffff? p->depth : 0xffff;

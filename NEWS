@@ -1,3 +1,47 @@
+Beta Release 0.1.17 (6 July, 2011)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+With the maturity of `mpileup' and the lack of update in the `pileup' command,
+the `pileup' command is now formally dropped. Most of the pileup functionality,
+such as outputting mapping quality and read positions, have been added
+`mpileup'.
+
+Since this release, `bcftools view' is able to perform contrast SNP calling
+(option -T) for discovering de novo and/or somatic mutations between a pair of
+samples or in a family trio. Potential mutations are scored by a log likelihood
+ratio, which is very simple in math, but should be comparable to more
+sophisticated methods. Note that getting the score is only the very first step.
+A lot more need to be done to reduce systematical errors due to mapping and
+reference errors and structural variations.
+
+Other notable changes in samtools:
+
+ * Improved sorting order checking during indexing.
+
+ * Improved region parsing. Colons in reference sequence names are parsed
+   properly.
+
+ * Fixed an issue where mpileup does not apply BAQ for the first few reads when
+   a region is specified.
+
+ * Fixed an issue where `faidx' does not work with FASTA files with long lines.
+
+ * Bugfix: wrong SP genotype information in the BCF output.
+
+Other notable changes in bcftools:
+
+ * Output the ML esitmate of the allele count.
+
+ * Added the HWE plus F<0 filter to varFilter. For multiple samples, it
+   effectively filters false heterozygous calls around centromeres.
+
+ * For association mapping, perform both 1-degree and 2-degree test. The
+   2-degree test is conservative but more robust to HWE violation.
+
+(0.1.17: 6 July 2011, r973:277)
+
+
+
 Beta Release 0.1.16 (21 April, 2011)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

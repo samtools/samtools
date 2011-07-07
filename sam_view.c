@@ -22,29 +22,11 @@ typedef khash_t(rg) *rghash_t;
 static rghash_t g_rghash = 0;
 static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0;
 static char *g_library, *g_rg;
-static int g_sol2sanger_tbl[128];
 static void *g_bed;
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
-
-static void sol2sanger(bam1_t *b)
-{
-	int l;
-	uint8_t *qual = bam1_qual(b);
-	if (g_sol2sanger_tbl[30] == 0) {
-		for (l = 0; l != 128; ++l) {
-			g_sol2sanger_tbl[l] = (int)(10.0 * log(1.0 + pow(10.0, (l - 64 + 33) / 10.0)) / log(10.0) + .499);
-			if (g_sol2sanger_tbl[l] >= 93) g_sol2sanger_tbl[l] = 93;
-		}
-	}
-	for (l = 0; l < b->core.l_qseq; ++l) {
-		int q = qual[l];
-		if (q > 127) q = 127;
-		qual[l] = g_sol2sanger_tbl[q];
-	}
-}
 
 static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 {
@@ -121,7 +103,7 @@ static int usage(int is_long_help);
 
 int main_samview(int argc, char *argv[])
 {
-	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, compress_level = -1, is_bamout = 0, slx2sngr = 0, is_count = 0;
+	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, compress_level = -1, is_bamout = 0, is_count = 0;
 	int of_type = BAM_OFDEC, is_long_help = 0;
 	int count = 0;
 	samfile_t *in = 0, *out = 0;
@@ -129,10 +111,9 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbct:h1Ho:q:f:F:ul:r:xX?T:CR:L:")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbct:h1Ho:q:f:F:ul:r:xX?T:R:L:")) >= 0) {
 		switch (c) {
 		case 'c': is_count = 1; break;
-		case 'C': slx2sngr = 1; break;
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
 		case 't': fn_list = strdup(optarg); is_bamin = 0; break;
@@ -216,7 +197,6 @@ int main_samview(int argc, char *argv[])
 		int r;
 		while ((r = samread(in, b)) >= 0) { // read one alignment from `in'
 			if (!__g_skip_aln(in->header, b)) {
-				if (slx2sngr) sol2sanger(b);
 				if (!is_count) samwrite(out, b); // write the alignment to `out'
 				count++;
 			}
@@ -348,4 +328,70 @@ int main_import(int argc, char *argv[])
 	ret = main_samview(argc2, argv2);
 	free(argv2);
 	return ret;
+}
+
+int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 9, 14, 1, 6, 5, 13, 3, 11, 7, 15 };
+
+int main_bam2fq(int argc, char *argv[])
+{
+	bamFile fp;
+	bam_header_t *h;
+	bam1_t *b;
+	int8_t *buf;
+	int max_buf;
+	if (argc == 1) {
+		fprintf(stderr, "Usage: samtools bam2fq <in.bam>\n");
+		return 1;
+	}
+	fp = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
+	if (fp == 0) return 1;
+	h = bam_header_read(fp);
+	b = bam_init1();
+	buf = 0;
+	max_buf = 0;
+	while (bam_read1(fp, b) >= 0) {
+		int i, qlen = b->core.l_qseq;
+		uint8_t *seq;
+		putchar('@'); fputs(bam1_qname(b), stdout);
+		if ((b->core.flag & 0x40) && !(b->core.flag & 0x80)) puts("/1");
+		else if ((b->core.flag & 0x80) && !(b->core.flag & 0x40)) puts("/2");
+		else putchar('\n');
+		if (max_buf < qlen + 1) {
+			max_buf = qlen + 1;
+			kroundup32(max_buf);
+			buf = realloc(buf, max_buf);
+		}
+		buf[qlen] = 0;
+		seq = bam1_seq(b);
+		for (i = 0; i < qlen; ++i)
+			buf[i] = bam1_seqi(seq, i);
+		if (b->core.flag & 16) { // reverse complement
+			for (i = 0; i < qlen>>1; ++i) {
+				int8_t t = seq_comp_table[buf[qlen - 1 - i]];
+				buf[qlen - 1 - i] = seq_comp_table[buf[i]];
+				buf[i] = t;
+			}
+			if (qlen&1) buf[i] = seq_comp_table[buf[i]];
+		}
+		for (i = 0; i < qlen; ++i)
+			buf[i] = bam_nt16_rev_table[buf[i]];
+		puts((char*)buf);
+		puts("+");
+		seq = bam1_qual(b);
+		for (i = 0; i < qlen; ++i)
+			buf[i] = 33 + seq[i];
+		if (b->core.flag & 16) { // reverse
+			for (i = 0; i < qlen>>1; ++i) {
+				int8_t t = buf[qlen - 1 - i];
+				buf[qlen - 1 - i] = buf[i];
+				buf[i] = t;
+			}
+		}
+		puts((char*)buf);
+	}
+	free(buf);
+	bam_destroy1(b);
+	bam_header_destroy(h);
+	bam_close(fp);
+	return 0;
 }

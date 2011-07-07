@@ -168,6 +168,12 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		if (n_types == 1 || (double)n_alt / n_tot < bca->min_frac || n_alt < bca->min_support) { // then skip
 			free(aux); return -1;
 		}
+		if (n_types >= 64) {
+			free(aux);
+			if (bam_verbose >= 2) 
+				fprintf(stderr, "[%s] excessive INDEL alleles at position %d. Skip the position.\n", __func__, pos + 1);
+			return -1;
+		}
 		types = (int*)calloc(n_types, sizeof(int));
 		t = 0;
 		types[t++] = aux[0] - MINUS_CONST; 
@@ -178,7 +184,6 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		for (t = 0; t < n_types; ++t)
 			if (types[t] == 0) break;
 		ref_type = t; // the index of the reference type (0)
-		assert(n_types < 64);
 	}
 	{ // calculate left and right boundary
 		left = pos > INDEL_WINDOW_SIZE? pos - INDEL_WINDOW_SIZE : 0;

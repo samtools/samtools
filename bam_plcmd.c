@@ -71,6 +71,9 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_NO_INDEL 0x400
 #define MPLP_EXT_BAQ 0x800
 #define MPLP_ILLUMINA13 0x1000
+#define MPLP_IGNORE_RG 0x2000
+#define MPLP_PRINT_POS 0x4000
+#define MPLP_PRINT_MAPQ 0x8000
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -145,7 +148,7 @@ static int mplp_func(void *data, bam1_t *b)
 }
 
 static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
-					   int n, char *const*fn, int *n_plp, const bam_pileup1_t **plp)
+					   int n, char *const*fn, int *n_plp, const bam_pileup1_t **plp, int ignore_rg)
 {
 	int i, j;
 	memset(m->n_plp, 0, m->n * sizeof(int));
@@ -154,7 +157,7 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 			const bam_pileup1_t *p = plp[i] + j;
 			uint8_t *q;
 			int id = -1;
-			q = bam_aux_get(p->b, "RG");
+			q = ignore_rg? 0 : bam_aux_get(p->b, "RG");
 			if (q) id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
 			if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
 			if (id < 0 || id >= m->n) {
@@ -176,7 +179,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
 	extern void bcf_call_del_rghash(void *rghash);
 	mplp_aux_t **data;
-	int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid, max_depth, max_indel_depth;
+	int i, tid, pos, *n_plp, tid0 = -1, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid, max_depth, max_indel_depth;
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
@@ -209,7 +212,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		data[i]->conf = conf;
 		h_tmp = bam_header_read(data[i]->fp);
 		data[i]->h = i? h : h_tmp; // for i==0, "h" has not been set yet
-		bam_smpl_add(sm, fn[i], h_tmp->text);
+		bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
 		rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
 		if (conf->reg) {
 			int beg, end;
@@ -223,7 +226,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				fprintf(stderr, "[%s] malformatted region or wrong seqname for %d-th input.\n", __func__, i+1);
 				exit(1);
 			}
-			if (i == 0) beg0 = beg, end0 = end;
+			if (i == 0) tid0 = tid, beg0 = beg, end0 = end;
 			data[i]->iter = bam_iter_query(idx, tid, beg, end);
 			bam_index_destroy(idx);
 		}
@@ -271,7 +274,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bca->min_frac = conf->min_frac;
 		bca->min_support = conf->min_support;
 	}
-	ref_tid = -1; ref = 0;
+	if (tid0 >= 0 && conf->fai) { // region is set
+		ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
+		for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
+	} else ref_tid = -1, ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
 	max_depth = conf->max_depth;
 	if (max_depth * sm->n > 1<<20)
@@ -295,7 +301,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			int total_depth, _ref0, ref16;
 			bcf1_t *b = calloc(1, sizeof(bcf1_t));
 			for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
-			group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp);
+			group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp, conf->flag & MPLP_IGNORE_RG);
 			_ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
 			ref16 = bam_nt16_table[_ref0];
 			for (i = 0; i < gplp.n; ++i)
@@ -322,8 +328,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			for (i = 0; i < n; ++i) {
 				int j;
 				printf("\t%d\t", n_plp[i]);
-				if (n_plp[i] == 0) printf("*\t*");
-				else {
+				if (n_plp[i] == 0) {
+					printf("*\t*"); // FIXME: printf() is very slow...
+					if (conf->flag & MPLP_PRINT_POS) printf("\t*");
+				} else {
 					for (j = 0; j < n_plp[i]; ++j)
 						pileup_seq(plp[i] + j, pos, ref_len, ref);
 					putchar('\t');
@@ -332,6 +340,21 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 						int c = bam1_qual(p->b)[p->qpos] + 33;
 						if (c > 126) c = 126;
 						putchar(c);
+					}
+					if (conf->flag & MPLP_PRINT_MAPQ) {
+						putchar('\t');
+						for (j = 0; j < n_plp[i]; ++j) {
+							int c = plp[i][j].b->core.qual + 33;
+							if (c > 126) c = 126;
+							putchar(c);
+						}
+					}
+					if (conf->flag & MPLP_PRINT_POS) {
+						putchar('\t');
+						for (j = 0; j < n_plp[i]; ++j) {
+							if (j > 0) putchar(',');
+							printf("%d", plp[i][j].qpos + 1); // FIXME: printf() is very slow...
+						}
 					}
 				}
 			}
@@ -413,6 +436,7 @@ int bam_mpileup(int argc, char *argv[])
     int nfiles = 0, use_orphan = 0;
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
+	#define MPLP_PRINT_POS 0x4000
 	mplp.max_mq = 60;
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
@@ -420,7 +444,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6Os")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -434,12 +458,14 @@ int bam_mpileup(int argc, char *argv[])
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'B': mplp.flag &= ~MPLP_REALN; break;
-		case 'R': mplp.flag |= MPLP_REALN; break;
 		case 'D': mplp.flag |= MPLP_FMT_DP; break;
 		case 'S': mplp.flag |= MPLP_FMT_SP; break;
 		case 'I': mplp.flag |= MPLP_NO_INDEL; break;
 		case 'E': mplp.flag |= MPLP_EXT_BAQ; break;
 		case '6': mplp.flag |= MPLP_ILLUMINA13; break;
+		case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
+		case 's': mplp.flag |= MPLP_PRINT_MAPQ; break;
+		case 'O': mplp.flag |= MPLP_PRINT_POS; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
 		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
@@ -474,6 +500,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -A           count anomalous read pairs\n");
 		fprintf(stderr, "       -B           disable BAQ computation\n");
 		fprintf(stderr, "       -b FILE      list of input BAM files [null]\n");
+		fprintf(stderr, "       -C INT       parameter for adjusting mapQ; 0 to disable [0]\n");
 		fprintf(stderr, "       -d INT       max per-BAM depth to avoid excessive memory usage [%d]\n", mplp.max_depth);
 		fprintf(stderr, "       -E           extended BAQ for higher sensitivity but lower specificity\n");
 		fprintf(stderr, "       -f FILE      faidx indexed reference sequence file [null]\n");
@@ -481,11 +508,14 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -l FILE      list of positions (chr pos) or regions (BED) [null]\n");
 		fprintf(stderr, "       -M INT       cap mapping quality at INT [%d]\n", mplp.max_mq);
 		fprintf(stderr, "       -r STR       region in which pileup is generated [null]\n");
+		fprintf(stderr, "       -R           ignore RG tags\n");
 		fprintf(stderr, "       -q INT       skip alignments with mapQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "       -Q INT       skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "\nOutput options:\n\n");
 		fprintf(stderr, "       -D           output per-sample DP in BCF (require -g/-u)\n");
 		fprintf(stderr, "       -g           generate BCF output (genotype likelihoods)\n");
+		fprintf(stderr, "       -O           output base positions on reads (disabled by -g/-u)\n");
+		fprintf(stderr, "       -s           output mapping quality (disabled by -g/-u)\n");
 		fprintf(stderr, "       -S           output per-sample strand bias P-value in BCF (require -g/-u)\n");
 		fprintf(stderr, "       -u           generate uncompress BCF output\n");
 		fprintf(stderr, "\nSNP/INDEL genotype likelihoods options (effective with `-g' or `-u'):\n\n");

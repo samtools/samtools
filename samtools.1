@@ -1,7 +1,9 @@
-.TH samtools 1 "21 April 2011" "samtools-0.1.16" "Bioinformatics tools"
+.TH samtools 1 "05 July 2011" "samtools-0.1.17" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
+
+bcftools - Utilities for the Binary Call Format (BCF) and VCF
 .SH SYNOPSIS
 .PP
 samtools view -bt ref_list.txt -o aln.bam aln.sam.gz
@@ -23,6 +25,12 @@ samtools pileup -vcf ref.fasta aln.sorted.bam
 samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools tview aln.sorted.bam ref.fasta
+.PP
+bcftools index in.bcf
+.PP
+bcftools view in.bcf chr2:100-200 > out.vcf
+.PP
+bcftools view -vc in.bcf > out.vcf 2> out.afs
 
 .SH DESCRIPTION
 .PP
@@ -43,7 +51,7 @@ Samtools checks the current working directory for the index file and
 will download the index upon absence. Samtools does not retrieve the
 entire alignment file unless it is asked to do so.
 
-.SH COMMANDS AND OPTIONS
+.SH SAMTOOLS COMMANDS AND OPTIONS
 
 .TP 10
 .B view
@@ -137,15 +145,56 @@ viewing the same reference sequence.
 
 .TP
 .B mpileup
-samtools mpileup [-EBug] [-C capQcoef] [-r reg] [-f in.fa] [-l list] [-M capMapQ] [-Q minBaseQ] [-q minMapQ] in.bam [in2.bam [...]]
+.B samtools mpileup
+.RB [ \-EBug ]
+.RB [ \-C
+.IR capQcoef ]
+.RB [ \-r
+.IR reg ]
+.RB [ \-f
+.IR in.fa ]
+.RB [ \-l
+.IR list ]
+.RB [ \-M
+.IR capMapQ ]
+.RB [ \-Q
+.IR minBaseQ ]
+.RB [ \-q
+.IR minMapQ ]
+.I in.bam
+.RI [ in2.bam
+.RI [ ... ]]
 
 Generate BCF or pileup for one or multiple BAM files. Alignment records
 are grouped by sample identifiers in @RG header lines. If sample
 identifiers are absent, each input file is regarded as one sample.
 
-.B OPTIONS:
+In the pileup format (without
+.BR -u or -g ),
+each
+line represents a genomic position, consisting of chromosome name,
+coordinate, reference base, read bases, read qualities and alignment
+mapping qualities. Information on match, mismatch, indel, strand,
+mapping quality and start and end of a read are all encoded at the read
+base column. At this column, a dot stands for a match to the reference
+base on the forward strand, a comma for a match on the reverse strand,
+a '>' or '<' for a reference skip, `ACGTN' for a mismatch on the forward
+strand and `acgtn' for a mismatch on the reverse strand. A pattern
+`\\+[0-9]+[ACGTNacgtn]+' indicates there is an insertion between this
+reference position and the next reference position. The length of the
+insertion is given by the integer in the pattern, followed by the
+inserted sequence. Similarly, a pattern `-[0-9]+[ACGTNacgtn]+'
+represents a deletion from the reference. The deleted bases will be
+presented as `*' in the following lines. Also at the read base column, a
+symbol `^' marks the start of a read. The ASCII of the character
+following `^' minus 33 gives the mapping quality. A symbol `$' marks the
+end of a read segment.
+
+.B Input Options:
 .RS
 .TP 10
+.B -6
+Assume the quality is in the Illumina 1.3+ encoding.
 .B -A
 Do not skip anomalous read pairs in variant calling.
 .TP
@@ -154,6 +203,9 @@ Disable probabilistic realignment for the computation of base alignment
 quality (BAQ). BAQ is the Phred-scaled probability of a read base being
 misaligned. Applying this option greatly helps to reduce false SNPs
 caused by misalignments.
+.TP
+.BI -b \ FILE
+List of input BAM files, one file per line [null]
 .TP
 .BI -C \ INT
 Coefficient for downgrading mapping quality for reads containing
@@ -167,23 +219,56 @@ At a position, read maximally
 .I INT
 reads per input BAM. [250]
 .TP
-.B -D
-Output per-sample read depth
-.TP
-.BI -e \ INT
-Phred-scaled gap extension sequencing error probability. Reducing
-.I INT
-leads to longer indels. [20]
-.TP
 .B -E
 Extended BAQ computation. This option helps sensitivity especially for MNPs, but may hurt
 specificity a little bit.
 .TP
 .BI -f \ FILE
-The reference file [null]
+The
+.BR faidx -indexed
+reference file in the FASTA format. The file can be optionally compressed by
+.BR razip .
+[null]
+.TP
+.BI -l \ FILE
+BED or position list file containing a list of regions or sites where pileup or BCF should be generated [null]
+.TP
+.BI -q \ INT
+Minimum mapping quality for an alignment to be used [0]
+.TP
+.BI -Q \ INT
+Minimum base quality for a base to be considered [13]
+.TP
+.BI -r \ STR
+Only generate pileup in region
+.I STR
+[all sites]
+.TP
+.B Output Options:
+
+.TP
+.B -D
+Output per-sample read depth
 .TP
 .B -g
 Compute genotype likelihoods and output them in the binary call format (BCF).
+.TP
+.B -S
+Output per-sample Phred-scaled strand bias P-value
+.TP
+.B -u
+Similar to
+.B -g
+except that the output is uncompressed BCF, which is preferred for piping.
+
+.TP
+.B Options for Genotype Likelihood Computation (for -g or -u):
+
+.TP
+.BI -e \ INT
+Phred-scaled gap extension sequencing error probability. Reducing
+.I INT
+leads to longer indels. [20]
 .TP
 .BI -h \ INT
 Coefficient for modeling homopolymer errors. Given an
@@ -197,9 +282,6 @@ is modeled as
 .TP
 .B -I
 Do not perform INDEL calling
-.TP
-.BI -l \ FILE
-File containing a list of sites where pileup or BCF is outputted [null]
 .TP
 .BI -L \ INT
 Skip INDEL calling if the average per-sample depth is above
@@ -217,25 +299,6 @@ Comma dilimited list of platforms (determined by
 from which indel candidates are obtained. It is recommended to collect
 indel candidates from sequencing technologies that have low indel error
 rate such as ILLUMINA. [all]
-.TP
-.BI -q \ INT
-Minimum mapping quality for an alignment to be used [0]
-.TP
-.BI -Q \ INT
-Minimum base quality for a base to be considered [13]
-.TP
-.BI -r \ STR
-Only generate pileup in region
-.I STR
-[all sites]
-.TP
-.B -S
-Output per-sample Phred-scaled strand bias P-value
-.TP
-.B -u
-Similar to
-.B -g
-except that the output is uncompressed BCF, which is preferred for piping.
 .RE
 
 .TP
@@ -485,139 +548,174 @@ Minimum Phred-scaled LOD to call a heterozygote. [40]
 Minimum base quality to be used in het calling. [13]
 .RE
 
-.TP
-.B pileup
-samtools pileup [-2sSBicv] [-f in.ref.fasta] [-t in.ref_list] [-l
-in.site_list] [-C capMapQ] [-M maxMapQ] [-T theta] [-N nHap] [-r
-pairDiffRate] [-m mask] [-d maxIndelDepth] [-G indelPrior]
-<in.bam>|<in.sam>
+.SH BCFTOOLS COMMANDS AND OPTIONS
 
-Print the alignment in the pileup format. In the pileup format, each
-line represents a genomic position, consisting of chromosome name,
-coordinate, reference base, read bases, read qualities and alignment
-mapping qualities. Information on match, mismatch, indel, strand,
-mapping quality and start and end of a read are all encoded at the read
-base column. At this column, a dot stands for a match to the reference
-base on the forward strand, a comma for a match on the reverse strand,
-a '>' or '<' for a reference skip, `ACGTN' for a mismatch on the forward
-strand and `acgtn' for a mismatch on the reverse strand. A pattern
-`\\+[0-9]+[ACGTNacgtn]+' indicates there is an insertion between this
-reference position and the next reference position. The length of the
-insertion is given by the integer in the pattern, followed by the
-inserted sequence. Similarly, a pattern `-[0-9]+[ACGTNacgtn]+'
-represents a deletion from the reference. The deleted bases will be
-presented as `*' in the following lines. Also at the read base column, a
-symbol `^' marks the start of a read. The ASCII of the character
-following `^' minus 33 gives the mapping quality. A symbol `$' marks the
-end of a read segment.
-
-If option
-.B -c
-is applied, the consensus base, Phred-scaled consensus quality, SNP
-quality (i.e. the Phred-scaled probability of the consensus being
-identical to the reference) and root mean square (RMS) mapping quality
-of the reads covering the site will be inserted between the `reference
-base' and the `read bases' columns. An indel occupies an additional
-line. Each indel line consists of chromosome name, coordinate, a star,
-the genotype, consensus quality, SNP quality, RMS mapping quality, #
-covering reads, the first alllele, the second allele, # reads supporting
-the first allele, # reads supporting the second allele and # reads
-containing indels different from the top two alleles.
-
-.B NOTE:
-Since 0.1.10, the `pileup' command is deprecated by `mpileup'.
-
-.B OPTIONS:
-.RS
 .TP 10
-.B -B
-Disable the BAQ computation. See the
-.B mpileup
-command for details.
+.B view
+.B bcftools view
+.RB [ \-AbFGNQSucgv ]
+.RB [ \-D
+.IR seqDict ]
+.RB [ \-l
+.IR listLoci ]
+.RB [ \-s
+.IR listSample ]
+.RB [ \-i
+.IR gapSNPratio ]
+.RB [ \-t
+.IR mutRate ]
+.RB [ \-p
+.IR varThres ]
+.RB [ \-P
+.IR prior ]
+.RB [ \-1
+.IR nGroup1 ]
+.RB [ \-d
+.IR minFrac ]
+.RB [ \-U
+.IR nPerm ]
+.RB [ \-X
+.IR permThres ]
+.RB [ \-T
+.IR trioType ]
+.I in.bcf
+.RI [ region ]
+
+Convert between BCF and VCF, call variant candidates and estimate allele
+frequencies.
+
+.RS
 .TP
-.B -c
-Call the consensus sequence. Options
-.BR -T ", " -N ", " -I " and " -r
-are only effective when
-.BR -c " or " -g
-is in use.
+.B Input/Output Options:
+.TP 10
+.B -A
+Retain all possible alternate alleles at variant sites. By default, the view
+command discards unlikely alleles.
+.TP 10
+.B -b
+Output in the BCF format. The default is VCF.
 .TP
-.BI -C \ INT
-Coefficient for downgrading the mapping quality of poorly mapped
-reads. See the
-.B mpileup
-command for details. [0]
+.BI -D \ FILE
+Sequence dictionary (list of chromosome names) for VCF->BCF conversion [null]
 .TP
-.BI -d \ INT
-Use the first
-.I NUM
-reads in the pileup for indel calling for speed up. Zero for unlimited. [1024]
+.B -F
+Indicate PL is generated by r921 or before (ordering is different).
 .TP
-.BI -f \ FILE
-The reference sequence in the FASTA format. Index file
-.I FILE.fai
-will be created if
-absent.
-.TP
-.B -g
-Generate genotype likelihood in the binary GLFv3 format. This option
-suppresses -c, -i and -s. This option is deprecated by the
-.B mpileup
-command.
-.TP
-.B -i
-Only output pileup lines containing indels.
-.TP
-.BI -I \ INT
-Phred probability of an indel in sequencing/prep. [40]
+.B -G
+Suppress all individual genotype information.
 .TP
 .BI -l \ FILE
-List of sites at which pileup is output. This file is space
-delimited. The first two columns are required to be chromosome and
-1-based coordinate. Additional columns are ignored. It is
-recommended to use option
+List of sites at which information are outputted [all sites]
 .TP
-.BI -m \ INT
-Filter reads with flag containing bits in
-.I INT
-[1796]
+.B -N
+Skip sites where the REF field is not A/C/G/T
 .TP
-.BI -M \ INT
-Cap mapping quality at INT [60]
+.B -Q
+Output the QCALL likelihood format
 .TP
-.BI -N \ INT
-Number of haplotypes in the sample (>=2) [2]
-.TP
-.BI -r \ FLOAT
-Expected fraction of differences between a pair of haplotypes [0.001]
-.TP
-.B -s
-Print the mapping quality as the last column. This option makes the
-output easier to parse, although this format is not space efficient.
+.BI -s \ FILE
+List of samples to use. The first column in the input gives the sample names
+and the second gives the ploidy, which can only be 1 or 2. When the 2nd column
+is absent, the sample ploidy is assumed to be 2. In the output, the ordering of
+samples will be identical to the one in
+.IR FILE .
+[null]
 .TP
 .B -S
-The input file is in SAM.
+The input is VCF instead of BCF.
 .TP
-.BI -t \ FILE
-List of reference names ane sequence lengths, in the format described
-for the
-.B import
-command. If this option is present, samtools assumes the input
-.I <in.alignment>
-is in SAM format; otherwise it assumes in BAM format.
+.B -u
+Uncompressed BCF output (force -b).
+.TP
+.B Consensus/Variant Calling Options:
+.TP 10
+.B -c
+Call variants using Bayesian inference. This option automatically invokes option
+.BR -e .
+.TP
+.BI -d \ FLOAT
+When
+.B -v
+is in use, skip loci where the fraction of samples covered by reads is below FLOAT. [0]
+.TP
+.B -e
+Perform max-likelihood inference only, including estimating the site allele frequency,
+testing Hardy-Weinberg equlibrium and testing associations with LRT.
+.TP
+.B -g
+Call per-sample genotypes at variant sites (force -c)
+.TP
+.BI -i \ FLOAT
+Ratio of INDEL-to-SNP mutation rate [0.15]
+.TP
+.BI -p \ FLOAT
+A site is considered to be a variant if P(ref|D)<FLOAT [0.5]
+.TP
+.BI -P \ STR
+Prior or initial allele frequency spectrum. If STR can be
+.IR full ,
+.IR cond2 ,
+.I flat
+or the file consisting of error output from a previous variant calling
+run.
+.TP
+.BI -t \ FLOAT
+Scaled muttion rate for variant calling [0.001]
+.TP
+.BI -T \ STR
+Enable pair/trio calling. For trio calling, option
 .B -s
-together with
-.B -l
-as in the default format we may not know the mapping quality.
+is usually needed to be applied to configure the trio members and their ordering.
+In the file supplied to the option
+.BR -s ,
+the first sample must be the child, the second the father and the third the mother.
+The valid values of
+.I STR
+are `pair', `trioauto', `trioxd' and `trioxs', where `pair' calls differences between two input samples, and `trioxd' (`trioxs') specifies that the input
+is from the X chromosome non-PAR regions and the child is a female (male). [null]
 .TP
-.BI -T \ FLOAT
-The theta parameter (error dependency coefficient) in the maq consensus
-calling model [0.85]
+.B -v
+Output variant sites only (force -c)
+.TP
+.B Contrast Calling and Association Test Options:
+.TP
+.BI -1 \ INT
+Number of group-1 samples. This option is used for dividing the samples into
+two groups for contrast SNP calling or association test.
+When this option is in use, the following VCF INFO will be outputted:
+PC2, PCHI2 and QCHI2. [0]
+.TP
+.BI -U \ INT
+Number of permutations for association test (effective only with
+.BR -1 )
+[0]
+.TP
+.BI -X \ FLOAT
+Only perform permutations for P(chi^2)<FLOAT (effective only with
+.BR -U )
+[0.01]
 .RE
 
+.TP
+.B index
+.B bcftools index
+.I in.bcf
+
+Index sorted BCF for random access.
+.RE
+
+.TP
+.B cat
+.B bcftools cat
+.I in1.bcf
+.RI [ "in2.bcf " [ ... "]]]"
+
+Concatenate BCF files. The input files are required to be sorted and
+have identical samples appearing in the same order.
+.RE
 .SH SAM FORMAT
 
-SAM is TAB-delimited. Apart from the header lines, which are started
+Sequence Alignment/Map (SAM) format is TAB-delimited. Apart from the header lines, which are started
 with the `@' symbol, each alignment line consists of:
 
 .TS
@@ -626,7 +724,7 @@ cb | cb | cb
 n | l | l .
 Col	Field	Description
 _
-1	QNAME	Query (pair) NAME
+1	QNAME	Query template/pair NAME
 2	FLAG	bitwise FLAG
 3	RNAME	Reference sequence NAME
 4	POS	1-based leftmost POSition/coordinate of clipped sequence
@@ -634,10 +732,10 @@ _
 6	CIAGR	extended CIGAR string
 7	MRNM	Mate Reference sequence NaMe (`=' if same as RNAME)
 8	MPOS	1-based Mate POSistion
-9	ISIZE	Inferred insert SIZE
+9	TLEN	inferred Template LENgth (insert size)
 10	SEQ	query SEQuence on the same strand as the reference
 11	QUAL	query QUALity (ASCII-33 gives the Phred base quality)
-12	OPT	variable OPTional fields in the format TAG:VTYPE:VALUE
+12+	OPT	variable OPTional fields in the format TAG:VTYPE:VALUE
 .TE
 
 .PP
@@ -660,6 +758,55 @@ _
 0x0100	s	the alignment is not primary
 0x0200	f	the read fails platform/vendor quality checks
 0x0400	d	the read is either a PCR or an optical duplicate
+.TE
+
+where the second column gives the string representation of the FLAG field.
+
+.SH VCF FORMAT
+
+The Variant Call Format (VCF) is a TAB-delimited format with each data line consists of the following fields:
+.TS
+center box;
+cb | cb | cb
+n | l | l .
+Col	Field	Description
+_
+1	CHROM	CHROMosome name
+2	POS	the left-most POSition of the variant
+3	ID	unique variant IDentifier
+4	REF	the REFerence allele
+5	ALT	the ALTernate allele(s), separated by comma
+6	QUAL	variant/reference QUALity
+7	FILTER	FILTers applied
+8	INFO	INFOrmation related to the variant, separated by semi-colon
+9	FORMAT	FORMAT of the genotype fields, separated by colon (optional)
+10+	SAMPLE	SAMPLE genotypes and per-sample information (optional)
+.TE
+
+.PP
+The following table gives the
+.B INFO
+tags used by samtools and bcftools.
+
+.TS
+center box;
+cb | cb | cb
+l | l | l .
+Tag	Format	Description
+_
+AF1	double	Max-likelihood estimate of the site allele frequency (AF) of the first ALT allele
+DP	int	Raw read depth (without quality filtering)
+DP4	int[4]	# high-quality reference forward bases, ref reverse, alternate for and alt rev bases
+FQ	int	Consensus quality. Positive: sample genotypes different; negative: otherwise
+MQ	int	Root-Mean-Square mapping quality of covering reads
+PC2	int[2]	Phred probability of AF in group1 samples being larger (,smaller) than in group2
+PCHI2	double	Posterior weighted chi^2 P-value between group1 and group2 samples
+PV4	double[4]	P-value for strand bias, baseQ bias, mapQ bias and tail distance bias
+QCHI2	int	Phred-scaled PCHI2
+RP	int	# permutations yielding a smaller PCHI2
+CLR	int	Phred log ratio of genotype likelihoods with and without the trio/pair constraint
+UGT	string	Most probable genotype configuration without the trio constraint
+CGT	string	Most probable configuration with the trio constraint
 .TE
 
 .SH EXAMPLES
@@ -706,7 +853,7 @@ will be attached
 .IR RG:Z:454 .
 
 .IP o 2
-Call SNPs and short indels for one diploid individual:
+Call SNPs and short INDELs for one diploid individual:
 
   samtools mpileup -ugf ref.fa aln.bam | bcftools view -bvcg - > var.raw.bcf
   bcftools view var.raw.bcf | vcfutils.pl varFilter -D 100 > var.flt.vcf
@@ -727,6 +874,35 @@ but may not other mappers.
 Generate the consensus sequence for one diploid individual:
 
   samtools mpileup -uf ref.fa aln.bam | bcftools view -cg - | vcfutils.pl vcf2fq > cns.fq
+
+.IP o 2
+Call somatic mutations from a pair of samples:
+
+  samtools mpileup -DSuf ref.fa aln.bam | bcftools view -bvcgT pair - > var.bcf
+
+In the output INFO field,
+.I CLR
+gives the Phred-log ratio between the likelihood by treating the
+two samples independently, and the likelihood by requiring the genotype to be identical.
+This
+.I CLR
+is effectively a score measuring the confidence of somatic calls. The higher the better.
+
+.IP o 2
+Call de novo and somatic mutations from a family trio:
+
+  samtools mpileup -DSuf ref.fa aln.bam | bcftools view -bvcgT pair -s samples.txt - > var.bcf
+
+File
+.I samples.txt
+should consist of three lines specifying the member and order of samples (in the order of child-father-mother).
+Similarly,
+.I CLR
+gives the Phred-log likelihood ratio with and without the trio constraint.
+.I UGT
+shows the most likely genotype configuration without the trio constraint, and
+.I CGT
+gives the most likely genotype configuration satisfying the trio constraint.
 
 .IP o 2
 Phase one individual:
@@ -798,12 +974,6 @@ Apply if it helps.
 .PP
 .IP o 2
 Unaligned words used in bam_import.c, bam_endian.h, bam.c and bam_aux.c.
-.IP o 2
-In merging, the input files are required to have the same number of
-reference sequences. The requirement can be relaxed. In addition,
-merging does not reconstruct the header dictionaries
-automatically. Endusers have to provide the correct header. Picard is
-better at merging.
 .IP o 2
 Samtools paired-end rmdup does not work for unpaired reads (e.g. orphan
 reads or ends mapped to different chromosomes). If this is a concern,

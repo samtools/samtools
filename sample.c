@@ -55,6 +55,10 @@ int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
 	kstring_t buf;
 	int n = 0;
 	khash_t(sm) *sm2id = (khash_t(sm)*)sm->sm2id;
+	if (txt == 0) {
+		add_pair(sm, sm2id, fn, fn);
+		return 0;
+	}
 	memset(&buf, 0, sizeof(kstring_t));
 	while ((q = strstr(p, "@RG")) != 0) {
 		p = q + 3;
