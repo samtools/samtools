@@ -179,7 +179,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
 	extern void bcf_call_del_rghash(void *rghash);
 	mplp_aux_t **data;
-	int i, tid, pos, *n_plp, tid0 = -1, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid, max_depth, max_indel_depth;
+	int i, tid, pos, *n_plp, tid0 = -1, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid = -1, max_depth, max_indel_depth;
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
 	bam_header_t *h = 0;
@@ -276,6 +276,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	}
 	if (tid0 >= 0 && conf->fai) { // region is set
 		ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
+		ref_tid = tid0;
 		for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
 	} else ref_tid = -1, ref = 0;
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
