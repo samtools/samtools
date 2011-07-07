@@ -94,6 +94,10 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "phase") == 0) return main_phase(argc-1, argv+1);
 	else if (strcmp(argv[1], "depth") == 0) return main_depth(argc-1, argv+1);
 	else if (strcmp(argv[1], "bam2fq") == 0) return main_bam2fq(argc-1, argv+1);
+	else if (strcmp(argv[1], "pileup") == 0) {
+		fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
+		return 1;
+	}
 #if _CURSES_LIB != 0
 	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif
