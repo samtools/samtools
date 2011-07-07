@@ -495,7 +495,7 @@ int bcfview(int argc, char *argv[])
 			if (!(l > begin && end > b->pos)) continue;
 		}
 		++n_processed;
-		if (vc.flag & VC_QCNT) { // summarize the difference
+		if ((vc.flag & VC_QCNT) && !is_indel) { // summarize the difference
 			int x = bcf_min_diff(b);
 			if (x > 255) x = 255;
 			if (x >= 0) ++qcnt[x];
