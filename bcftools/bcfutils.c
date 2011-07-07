@@ -5,6 +5,11 @@
 #include "khash.h"
 KHASH_MAP_INIT_STR(str2id, int)
 
+#ifdef _WIN32
+#define srand48(x) srand(x)
+#define drand48() ((double)rand() / RAND_MAX)
+#endif
+
 // FIXME: valgrind report a memory leak in this function. Probably it does not get deallocated...
 void *bcf_build_refhash(bcf_hdr_t *h)
 {
