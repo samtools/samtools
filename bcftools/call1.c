@@ -10,7 +10,7 @@
 
 #ifdef _WIN32
 #define srand48(x) srand(x)
-#define drand48() ((double)rand() / RAND_MAX)
+#define lrand48() rand()
 #endif
 
 #include "kseq.h"
