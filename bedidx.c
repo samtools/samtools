@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <zlib.h>
 
+#ifdef _WIN32
+#define drand48() ((double)rand() / RAND_MAX)
+#endif
+
 #include "ksort.h"
 KSORT_INIT_GENERIC(uint64_t)
 

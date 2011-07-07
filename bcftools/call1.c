@@ -8,6 +8,11 @@
 #include "kstring.h"
 #include "time.h"
 
+#ifdef _WIN32
+#define srand48(x) srand(x)
+#define lrand48() rand()
+#endif
+
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 

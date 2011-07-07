@@ -60,6 +60,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#define drand48() ((double)rand() / RAND_MAX)
+#endif
+
 typedef struct {
 	void *left, *right;
 	int depth;
