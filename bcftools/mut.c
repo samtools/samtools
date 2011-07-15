@@ -33,6 +33,7 @@ uint32_t *bcf_trio_prep(int is_x, int is_son)
 	return ret;
 }
 
+
 int bcf_trio_call(const uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt)
 {
 	int i, j, k;
@@ -44,7 +45,9 @@ int bcf_trio_call(const uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt)
 		if (b->gi[i].fmt == bcf_str2int("PL", 2)) break;
 	if (i == b->n_gi) return -1; // no PL
 	gl10 = alloca(10 * b->n_smpl);
-	if (bcf_gl10(b, gl10) < 0) return -1;
+	if (bcf_gl10(b, gl10) < 0) {
+		if (bcf_gl10_indel(b, gl10) < 0) return -1;
+	}
 	PL = b->gi + i;
 	for (i = 0, k = 0; i < 4; ++i)
 		for (j = i; j < 4; ++j)

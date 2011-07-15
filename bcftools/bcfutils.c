@@ -354,13 +354,35 @@ int bcf_gl10(const bcf1_t *b, uint8_t *gl)
 	for (i = 0; i < b->n_smpl; ++i) {
 		const uint8_t *p = PL->data + i * PL->len; // the PL for the i-th individual
 		uint8_t *g = gl + 10 * i;
-		for (j = 0; j < PL->len; ++j)
-			if (p[j]) break;
 		for (k = j = 0; k < 4; ++k) {
 			for (l = k; l < 4; ++l) {
 				int t, x = map[k], y = map[l];
 				if (x > y) t = x, x = y, y = t; // make sure x is the smaller
 				g[j++] = p[y * (y+1) / 2 + x];
+			}
+		}
+	}
+	return 0;
+}
+
+int bcf_gl10_indel(const bcf1_t *b, uint8_t *gl)
+{
+	int k, l, j, i;
+	const bcf_ginfo_t *PL;
+	if (b->alt[0] == 0) return -1; // no alternate allele
+	for (i = 0; i < b->n_gi; ++i)
+		if (b->gi[i].fmt == bcf_str2int("PL", 2)) break;
+	if (i == b->n_gi) return -1; // no PL
+	PL = b->gi + i;
+	for (i = 0; i < b->n_smpl; ++i) {
+		const uint8_t *p = PL->data + i * PL->len; // the PL for the i-th individual
+		uint8_t *g = gl + 10 * i;
+		for (k = j = 0; k < 4; ++k) {
+			for (l = k; l < 4; ++l) {
+				int t, x = k, y = l;
+				if (x > y) t = x, x = y, y = t; // make sure x is the smaller
+				x = y * (y+1) / 2 + x;
+				g[j++] = x < PL->len? p[x] : 255;
 			}
 		}
 	}

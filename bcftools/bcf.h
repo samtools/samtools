@@ -28,7 +28,7 @@
 #ifndef BCF_H
 #define BCF_H
 
-#define BCF_VERSION "0.1.17 (r973:277)"
+#define BCF_VERSION "0.1.17-dev (r973:277)"
 
 #include <stdint.h>
 #include <zlib.h>
@@ -154,6 +154,8 @@ extern "C" {
 	int bcf_fix_pl(bcf1_t *b);
 	// convert PL to GLF-like 10-likelihood GL
 	int bcf_gl10(const bcf1_t *b, uint8_t *gl);
+	// convert up to 4 INDEL alleles to GLF-like 10-likelihood GL
+	int bcf_gl10_indel(const bcf1_t *b, uint8_t *gl);
 
 	// string hash table
 	void *bcf_build_refhash(bcf_hdr_t *h);
