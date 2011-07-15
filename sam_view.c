@@ -19,8 +19,10 @@ typedef struct {
 
 typedef khash_t(rg) *rghash_t;
 
+// FIXME: we'd better use no global variables...
 static rghash_t g_rghash = 0;
 static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0;
+static float g_subsam = 2.;
 static char *g_library, *g_rg;
 static void *g_bed;
 
@@ -34,6 +36,10 @@ static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
 		return 1;
 	if (g_bed && b->core.tid >= 0 && !bed_overlap(g_bed, h->target_name[b->core.tid], b->core.pos, bam_calend(&b->core, bam1_cigar(b))))
 		return 1;
+	if (g_subsam > 0. && g_subsam < 1.) {
+		uint32_t k = __ac_X31_hash_string(bam1_qname(b));
+		if (k%1024 / 1024.0 >= g_subsam) return 1;
+	}
 	if (g_rg || g_rghash) {
 		uint8_t *s = bam_aux_get(b, "RG");
 		if (s) {
@@ -111,8 +117,9 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbct:h1Ho:q:f:F:ul:r:xX?T:R:L:")) >= 0) {
+	while ((c = getopt(argc, argv, "Sbct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:")) >= 0) {
 		switch (c) {
+		case 's': g_subsam = atof(optarg); break;
 		case 'c': is_count = 1; break;
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
@@ -279,6 +286,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -q INT   minimum mapping quality [0]\n");
 	fprintf(stderr, "         -l STR   only output reads in library STR [null]\n");
 	fprintf(stderr, "         -r STR   only output reads in read group STR [null]\n");
+	fprintf(stderr, "         -s FLOAT fraction of templates (read paris) to subsample [1]\n");
 	fprintf(stderr, "         -?       longer help\n");
 	fprintf(stderr, "\n");
 	if (is_long_help)
