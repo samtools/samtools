@@ -131,7 +131,6 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, ";AF2=%.4g,%.4g", 1 - em[5], 1 - em[6]);
 		if (em[7] >= 0) ksprintf(&s, ";LRT=%.3g", em[7]);
 		if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
-		//if (em[9] >= 0) ksprintf(&s, ";LRT1=%.3g", em[9]);
 	}
 	if (cons_llr > 0) {
 		ksprintf(&s, ";CLR=%d", cons_llr);
