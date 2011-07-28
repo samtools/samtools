@@ -274,6 +274,8 @@ static void write_header(bcf_hdr_t *h)
         kputs("##INFO=<ID=QCHI2,Number=1,Type=Integer,Description=\"Phred scaled PCHI2.\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=RP,"))
         kputs("##INFO=<ID=PR,Number=1,Type=Integer,Description=\"# permutations yielding a smaller PCHI2.\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=VDB,"))
+        kputs("##INFO=<ID=VDB,Number=1,Type=Float,Description=\"Variant Distance Bias\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GT,"))
         kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GQ,"))
@@ -285,7 +287,7 @@ static void write_header(bcf_hdr_t *h)
 	if (!strstr(str.s, "##FORMAT=<ID=SP,"))
 		kputs("##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=PL,"))
-		kputs("##FORMAT=<ID=PL,Number=-1,Type=Integer,Description=\"List of Phred-scaled genotype likelihoods, number of values is (#ALT+1)*(#ALT+2)/2\">\n", &str);
+		kputs("##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"List of Phred-scaled genotype likelihoods\">\n", &str);
 	h->l_txt = str.l + 1; h->txt = str.s;
 }
 

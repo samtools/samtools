@@ -39,6 +39,7 @@ void bcf_call_destroy(bcf_callaux_t *bca)
  * negative if we are looking at an indel. */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
+    static int *var_pos = NULL, nvar_pos = 0;
 	int i, n, ref4, is_indel, ori_depth = 0;
 	memset(r, 0, sizeof(bcf_callret1_t));
 	if (ref_base >= 0) {
@@ -94,7 +95,90 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 	r->depth = n; r->ori_depth = ori_depth;
 	// glfgen
 	errmod_cal(bca->e, n, 5, bca->bases, r->p);
+
+    // Calculate the Variant Distance Bias (make it optional?)
+    if ( nvar_pos < _n ) {
+        nvar_pos = _n;
+        var_pos = realloc(var_pos,sizeof(int)*nvar_pos);
+    }
+    int alt_dp=0, read_len=0;
+    for (i=0; i<_n; i++) {
+        const bam_pileup1_t *p = pl + i;
+        if ( bam1_seqi(bam1_seq(p->b),p->qpos) == ref_base ) 
+            continue;
+
+        var_pos[alt_dp] = p->qpos;
+        if ( (bam1_cigar(p->b)[0]&BAM_CIGAR_MASK)==4 )
+            var_pos[alt_dp] -= bam1_cigar(p->b)[0]>>BAM_CIGAR_SHIFT;
+
+        alt_dp++;
+        read_len += p->b->core.l_qseq;
+    }
+    float mvd=0;
+    int j;
+    n=0;
+    for (i=0; i<alt_dp; i++) {
+        for (j=0; j<i; j++) {
+            mvd += abs(var_pos[i] - var_pos[j]);
+            n++;
+        }
+    }
+    r->mvd[0] = n ? mvd/n : 0;
+    r->mvd[1] = alt_dp;
+    r->mvd[2] = alt_dp ? read_len/alt_dp : 0;
+
 	return r->depth;
+}
+
+
+void calc_vdb(int n, const bcf_callret1_t *calls, bcf_call_t *call)
+{
+    // Variant distance bias. Samples merged by means of DP-weighted average.
+
+    float weight=0, tot_prob=0;
+
+    int i;
+    for (i=0; i<n; i++)
+    {
+        int mvd      = calls[i].mvd[0];
+        int dp       = calls[i].mvd[1];
+        int read_len = calls[i].mvd[2];
+
+        if ( dp<2 ) continue;
+
+        float prob = 0;
+        if ( dp==2 )
+        {
+            // Exact formula
+            prob = (mvd==0) ? 1.0/read_len : (read_len-mvd)*2.0/read_len/read_len;
+        }
+        else if ( dp==3 )
+        {
+            // Sin, quite accurate approximation
+            float mu = read_len/2.9;
+            prob = mvd>2*mu ? 0 : sin(mvd*3.14/2/mu) / (4*mu/3.14);
+        }
+        else
+        {
+            // Scaled gaussian curve, crude approximation, but behaves well. Using fixed depth for bigger depths.
+            if ( dp>5 )
+                dp = 5;
+            float sigma2 = (read_len/1.9/(dp+1)) * (read_len/1.9/(dp+1));
+            float norm   = 1.125*sqrt(2*3.14*sigma2);
+            float mu     = read_len/2.9;
+            if ( mvd < mu )
+                prob = exp(-(mvd-mu)*(mvd-mu)/2/sigma2)/norm;
+            else
+                prob = exp(-(mvd-mu)*(mvd-mu)/3.125/sigma2)/norm;
+        }
+
+        //fprintf(stderr,"dp=%d mvd=%d read_len=%d -> prob=%f\n", dp,mvd,read_len,prob);
+        tot_prob += prob*dp;
+        weight += dp;
+    }
+    tot_prob = weight ? tot_prob/weight : 1; 
+    //fprintf(stderr,"prob=%f\n", tot_prob);
+    call->vdb = tot_prob;
 }
 
 int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call)
@@ -170,6 +254,9 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 		call->ori_depth += calls[i].ori_depth;
 		for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
 	}
+
+    calc_vdb(n, calls, call);
+
 	return 0;
 }
 
@@ -223,6 +310,10 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		if (i) kputc(',', &s);
 		kputw(bc->anno[i], &s);
 	}
+    if ( bc->vdb!=1 )
+    {
+        ksprintf(&s, ";VDB=%.4f", bc->vdb);
+    }
 	kputc('\0', &s);
 	// FMT
 	kputs("PL", &s);
