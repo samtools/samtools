@@ -26,6 +26,7 @@ typedef struct {
 	int depth, ori_depth, qsum[4];
 	int anno[16];
 	float p[25];
+    int mvd[3]; // mean variant distance, number of variant reads, average read length
 } bcf_callret1_t;
 
 typedef struct {
@@ -33,6 +34,7 @@ typedef struct {
 	int n, n_alleles, shift, ori_ref, unseen;
 	int anno[16], depth, ori_depth;
 	uint8_t *PL;
+    float vdb; // variant distance bias
 } bcf_call_t;
 
 #ifdef __cplusplus

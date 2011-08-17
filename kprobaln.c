@@ -161,7 +161,7 @@ int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_quer
 		double p = 1., Pr1 = 0.;
 		for (i = 0; i <= l_query + 1; ++i) {
 			p *= s[i];
-			if (p < 1e-100) Pr += -4.343 * log(p), p = 1.;
+			if (p < 1e-100) Pr1 += -4.343 * log(p), p = 1.;
 		}
 		Pr1 += -4.343 * log(p * l_ref * l_query);
 		Pr = (int)(Pr1 + .499);

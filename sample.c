@@ -52,7 +52,7 @@ static void add_pair(bam_sample_t *sm, khash_t(sm) *sm2id, const char *key, cons
 int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
 {
 	const char *p = txt, *q, *r;
-	kstring_t buf;
+	kstring_t buf, first_sm;
 	int n = 0;
 	khash_t(sm) *sm2id = (khash_t(sm)*)sm->sm2id;
 	if (txt == 0) {
@@ -60,6 +60,7 @@ int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
 		return 0;
 	}
 	memset(&buf, 0, sizeof(kstring_t));
+    memset(&first_sm, 0, sizeof(kstring_t));
 	while ((q = strstr(p, "@RG")) != 0) {
 		p = q + 3;
 		r = q = 0;
@@ -73,12 +74,21 @@ int bam_smpl_add(bam_sample_t *sm, const char *fn, const char *txt)
 			oq = *u; or = *v; *u = *v = '\0';
 			buf.l = 0; kputs(fn, &buf); kputc('/', &buf); kputs(q, &buf);
 			add_pair(sm, sm2id, buf.s, r);
+            if ( !first_sm.s )
+                kputs(r,&first_sm); 
 			*u = oq; *v = or;
 		} else break;
 		p = q > r? q : r;
 		++n;
 	}
 	if (n == 0) add_pair(sm, sm2id, fn, fn);
+    // If there is only one RG tag present in the header and reads are not annotated, don't refuse to work but
+    //  use the tag instead.
+    else if ( n==1 && first_sm.s )
+        add_pair(sm,sm2id,fn,first_sm.s);
+    if ( first_sm.s )
+        free(first_sm.s);
+
 //	add_pair(sm, sm2id, fn, fn);
 	free(buf.s);
 	return 0;

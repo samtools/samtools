@@ -168,7 +168,6 @@ static double lk_ratio_test(int n, int n1, const double *pdg, double f3[3][3])
 // x[5..6]: group1 freq, group2 freq
 // x[7]: 1-degree P-value
 // x[8]: 2-degree P-value
-// x[9]: 1-degree P-value with freq estimated from genotypes
 int bcf_em1(const bcf1_t *b, int n1, int flag, double x[10])
 {
 	double *pdg;
@@ -208,11 +207,13 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[10])
 		x[6] = freqml(x[0], n1, n, pdg);
 	}
 	if ((flag & 1<<7) && n1 > 0 && n1 < n) { // 1-degree P-value
-		double f[3], f3[3][3];
+		double f[3], f3[3][3], tmp;
 		f[0] = x[0]; f[1] = x[5]; f[2] = x[6];
 		for (i = 0; i < 3; ++i)
 			f3[i][0] = (1-f[i])*(1-f[i]), f3[i][1] = 2*f[i]*(1-f[i]), f3[i][2] = f[i]*f[i];
-		x[7] = kf_gammaq(.5, log(lk_ratio_test(n, n1, pdg, f3)));
+		tmp = log(lk_ratio_test(n, n1, pdg, f3));
+		if (tmp < 0) tmp = 0;
+		x[7] = kf_gammaq(.5, tmp);
 	}
 	if ((flag & 3<<8) && n1 > 0 && n1 < n) { // 2-degree P-value
 		double g[3][3], tmp;
@@ -222,8 +223,8 @@ int bcf_em1(const bcf1_t *b, int n1, int flag, double x[10])
 		for (i = 0; i < ITER_MAX; ++i)
 			if (g3_iter(g[2], pdg, n1, n) < EPS) break;
 		tmp = log(lk_ratio_test(n, n1, pdg, g));
+		if (tmp < 0) tmp = 0;
 		x[8] = kf_gammaq(1., tmp);
-		x[9] = kf_gammaq(.5, tmp);
 	}
 	// free
 	free(pdg);
