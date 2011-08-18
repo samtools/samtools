@@ -292,7 +292,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		z += str->l + 1;
 		if (str->s[0] != '*') {
 			for (s = str->s; *s; ++s) {
-				if (isalpha(*s)) ++c->n_cigar;
+				if ((isalpha(*s)) || (*s=='=')) ++c->n_cigar;
 				else if (!isdigit(*s)) parse_error(fp->n_lines, "invalid CIGAR character");
 			}
 			b->data = alloc_data(b, doff + c->n_cigar * 4);
