@@ -14,7 +14,7 @@
 #include "kseq.h"
 #include "khash.h"
 
-KSTREAM_INIT(gzFile, gzread, 8192)
+KSTREAM_INIT(gzFile, gzread, 16384)
 KHASH_MAP_INIT_STR(ref, uint64_t)
 
 void bam_init_header_hash(bam_header_t *header);
