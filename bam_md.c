@@ -9,40 +9,46 @@
 #include "kaln.h"
 #include "kprobaln.h"
 
+#define USE_EQUAL 1
+#define DROP_TAG  2
+#define BIN_QUAL  4
+#define UPDATE_NM 8
+#define UPDATE_MD 16
+#define HASH_QNM  32
+
 char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
-void bam_fillmd1_core(bam1_t *b, char *ref, int is_equal, int max_nm)
+int bam_aux_drop_other(bam1_t *b, uint8_t *s);
+
+void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
 {
 	uint8_t *seq = bam1_seq(b);
 	uint32_t *cigar = bam1_cigar(b);
 	bam1_core_t *c = &b->core;
 	int i, x, y, u = 0;
 	kstring_t *str;
-	uint8_t *old_md, *old_nm;
 	int32_t old_nm_i = -1, nm = 0;
 
 	str = (kstring_t*)calloc(1, sizeof(kstring_t));
 	for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 		int j, l = cigar[i]>>4, op = cigar[i]&0xf;
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			for (j = 0; j < l; ++j) {
 				int z = y + j;
 				int c1 = bam1_seqi(seq, z), c2 = bam_nt16_table[(int)ref[x+j]];
 				if (ref[x+j] == 0) break; // out of boundary
 				if ((c1 == c2 && c1 != 15 && c2 != 15) || c1 == 0) { // a match
-					if (is_equal) seq[z/2] &= (z&1)? 0xf0 : 0x0f;
+					if (flag&USE_EQUAL) seq[z/2] &= (z&1)? 0xf0 : 0x0f;
 					++u;
 				} else {
-					ksprintf(str, "%d", u);
-					kputc(ref[x+j], str);
+					kputw(u, str); kputc(ref[x+j], str);
 					u = 0; ++nm;
 				}
 			}
 			if (j < l) break;
 			x += l; y += l;
 		} else if (op == BAM_CDEL) {
-			ksprintf(str, "%d", u);
-			kputc('^', str);
+			kputw(u, str); kputc('^', str);
 			for (j = 0; j < l; ++j) {
 				if (ref[x+j] == 0) break;
 				kputc(ref[x+j], str);
@@ -57,12 +63,12 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int is_equal, int max_nm)
 			x += l;
 		}
 	}
-	ksprintf(str, "%d", u);
+	kputw(u, str);
 	// apply max_nm
 	if (max_nm > 0 && nm >= max_nm) {
 		for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 			int j, l = cigar[i]>>4, op = cigar[i]&0xf;
-			if (op == BAM_CMATCH) {
+			if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 				for (j = 0; j < l; ++j) {
 					int z = y + j;
 					int c1 = bam1_seqi(seq, z), c2 = bam_nt16_table[(int)ref[x+j]];
@@ -79,38 +85,54 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int is_equal, int max_nm)
 		}
 	}
 	// update NM
-	old_nm = bam_aux_get(b, "NM");
-	if (c->flag & BAM_FUNMAP) return;
-	if (old_nm) old_nm_i = bam_aux2i(old_nm);
-	if (!old_nm) bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
-	else if (nm != old_nm_i) {
-		fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d -> %d\n", bam1_qname(b), old_nm_i, nm);
-		bam_aux_del(b, old_nm);
-		bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
+	if (flag & UPDATE_NM) {
+		uint8_t *old_nm = bam_aux_get(b, "NM");
+		if (c->flag & BAM_FUNMAP) return;
+		if (old_nm) old_nm_i = bam_aux2i(old_nm);
+		if (!old_nm) bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
+		else if (nm != old_nm_i) {
+			fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d -> %d\n", bam1_qname(b), old_nm_i, nm);
+			bam_aux_del(b, old_nm);
+			bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
+		}
 	}
 	// update MD
-	old_md = bam_aux_get(b, "MD");
-	if (!old_md) bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
-	else {
-		int is_diff = 0;
-		if (strlen((char*)old_md+1) == str->l) {
-			for (i = 0; i < str->l; ++i)
-				if (toupper(old_md[i+1]) != toupper(str->s[i]))
-					break;
-			if (i < str->l) is_diff = 1;
-		} else is_diff = 1;
-		if (is_diff) {
-			fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam1_qname(b), old_md+1, str->s);
-			bam_aux_del(b, old_md);
-			bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+	if (flag & UPDATE_MD) {
+		uint8_t *old_md = bam_aux_get(b, "MD");
+		if (c->flag & BAM_FUNMAP) return;
+		if (!old_md) bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+		else {
+			int is_diff = 0;
+			if (strlen((char*)old_md+1) == str->l) {
+				for (i = 0; i < str->l; ++i)
+					if (toupper(old_md[i+1]) != toupper(str->s[i]))
+						break;
+				if (i < str->l) is_diff = 1;
+			} else is_diff = 1;
+			if (is_diff) {
+				fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam1_qname(b), old_md+1, str->s);
+				bam_aux_del(b, old_md);
+				bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+			}
 		}
+	}
+	// drop all tags but RG
+	if (flag&DROP_TAG) {
+		uint8_t *q = bam_aux_get(b, "RG");
+		bam_aux_drop_other(b, q);
+	}
+	// reduce the resolution of base quality
+	if (flag&BIN_QUAL) {
+		uint8_t *qual = bam1_qual(b);
+		for (i = 0; i < b->core.l_qseq; ++i)
+			if (qual[i] >= 3) qual[i] = qual[i]/10*10 + 7;
 	}
 	free(str->s); free(str);
 }
 
-void bam_fillmd1(bam1_t *b, char *ref, int is_equal)
+void bam_fillmd1(bam1_t *b, char *ref, int flag)
 {
-	bam_fillmd1_core(b, ref, is_equal, 0);
+	bam_fillmd1_core(b, ref, flag, 0);
 }
 
 int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
@@ -124,7 +146,7 @@ int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
 	mm = q = len = clip_l = clip_q = 0;
 	for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 		int j, l = cigar[i]>>4, op = cigar[i]&0xf;
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			for (j = 0; j < l; ++j) {
 				int z = y + j;
 				int c1 = bam1_seqi(seq, z), c2 = bam_nt16_table[(int)ref[x+j]];
@@ -197,7 +219,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 	for (k = 0; k < c->n_cigar; ++k) {
 		int op, l;
 		op = cigar[k]&0xf; l = cigar[k]>>4;
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			if (yb < 0) yb = y;
 			if (xb < 0) xb = x;
 			ye = y + l; xe = x + l;
@@ -233,7 +255,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 		if (!extend_baq) { // in this block, bq[] is capped by base quality qual[]
 			for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
 				int op = cigar[k]&0xf, l = cigar[k]>>4;
-				if (op == BAM_CMATCH) {
+				if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 					for (i = y; i < y + l; ++i) {
 						if ((state[i]&3) != 0 || state[i]>>2 != x - xb + (i - y)) bq[i] = 0;
 						else bq[i] = bq[i] < q[i]? bq[i] : q[i];
@@ -248,7 +270,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 			left = calloc(c->l_qseq, 1); rght = calloc(c->l_qseq, 1);
 			for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
 				int op = cigar[k]&0xf, l = cigar[k]>>4;
-				if (op == BAM_CMATCH) {
+				if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 					for (i = y; i < y + l; ++i)
 						bq[i] = ((state[i]&3) != 0 || state[i]>>2 != x - xb + (i - y))? 0 : q[i];
 					for (left[y] = bq[y], i = y + 1; i < y + l; ++i)
@@ -280,19 +302,24 @@ int bam_prob_realn(bam1_t *b, const char *ref)
 
 int bam_fillmd(int argc, char *argv[])
 {
-	int c, is_equal, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm, is_realn, capQ, baq_flag;
+	int c, flt_flag, tid = -2, ret, len, is_bam_out, is_sam_in, is_uncompressed, max_nm, is_realn, capQ, baq_flag;
 	samfile_t *fp, *fpout = 0;
 	faidx_t *fai;
 	char *ref = 0, mode_w[8], mode_r[8];
 	bam1_t *b;
 
-	is_equal = is_bam_out = is_sam_in = is_uncompressed = is_realn = max_nm = capQ = baq_flag = 0;
+	flt_flag = UPDATE_NM | UPDATE_MD;
+	is_bam_out = is_sam_in = is_uncompressed = is_realn = max_nm = capQ = baq_flag = 0;
 	mode_w[0] = mode_r[0] = 0;
 	strcpy(mode_r, "r"); strcpy(mode_w, "w");
-	while ((c = getopt(argc, argv, "EreubSC:n:A")) >= 0) {
+	while ((c = getopt(argc, argv, "EqreuNhbSC:n:Ad")) >= 0) {
 		switch (c) {
 		case 'r': is_realn = 1; break;
-		case 'e': is_equal = 1; break;
+		case 'e': flt_flag |= USE_EQUAL; break;
+		case 'd': flt_flag |= DROP_TAG; break;
+		case 'q': flt_flag |= BIN_QUAL; break;
+		case 'h': flt_flag |= HASH_QNM; break;
+		case 'N': flt_flag &= ~(UPDATE_MD|UPDATE_NM); break;
 		case 'b': is_bam_out = 1; break;
 		case 'u': is_uncompressed = is_bam_out = 1; break;
 		case 'S': is_sam_in = 1; break;
@@ -344,7 +371,7 @@ int bam_fillmd(int argc, char *argv[])
 				int q = bam_cap_mapQ(b, ref, capQ);
 				if (b->core.qual > q) b->core.qual = q;
 			}
-			if (ref) bam_fillmd1_core(b, ref, is_equal, max_nm);
+			if (ref) bam_fillmd1_core(b, ref, flt_flag, max_nm);
 		}
 		samwrite(fpout, b);
 	}

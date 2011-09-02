@@ -14,7 +14,7 @@
 #include "kseq.h"
 #include "khash.h"
 
-KSTREAM_INIT(gzFile, gzread, 8192)
+KSTREAM_INIT(gzFile, gzread, 16384)
 KHASH_MAP_INIT_STR(ref, uint64_t)
 
 void bam_init_header_hash(bam_header_t *header);
@@ -292,20 +292,22 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		z += str->l + 1;
 		if (str->s[0] != '*') {
 			for (s = str->s; *s; ++s) {
-				if (isalpha(*s)) ++c->n_cigar;
+				if ((isalpha(*s)) || (*s=='=')) ++c->n_cigar;
 				else if (!isdigit(*s)) parse_error(fp->n_lines, "invalid CIGAR character");
 			}
 			b->data = alloc_data(b, doff + c->n_cigar * 4);
 			for (i = 0, s = str->s; i != c->n_cigar; ++i) {
 				x = strtol(s, &t, 10);
 				op = toupper(*t);
-				if (op == 'M' || op == '=' || op == 'X') op = BAM_CMATCH;
+				if (op == 'M') op = BAM_CMATCH;
 				else if (op == 'I') op = BAM_CINS;
 				else if (op == 'D') op = BAM_CDEL;
 				else if (op == 'N') op = BAM_CREF_SKIP;
 				else if (op == 'S') op = BAM_CSOFT_CLIP;
 				else if (op == 'H') op = BAM_CHARD_CLIP;
 				else if (op == 'P') op = BAM_CPAD;
+				else if (op == '=') op = BAM_CEQUAL;
+				else if (op == 'X') op = BAM_CDIFF;
 				else parse_error(fp->n_lines, "invalid CIGAR operation");
 				s = t + 1;
 				bam1_cigar(b)[i] = x << BAM_CIGAR_SHIFT | op;
@@ -337,8 +339,11 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		z += str->l + 1;
 		if (strcmp(str->s, "*")) {
 			c->l_qseq = strlen(str->s);
-			if (c->n_cigar && c->l_qseq != (int32_t)bam_cigar2qlen(c, bam1_cigar(b)))
-				parse_error(fp->n_lines, "CIGAR and sequence length are inconsistent");
+			if (c->n_cigar && c->l_qseq != (int32_t)bam_cigar2qlen(c, bam1_cigar(b))) {
+			  fprintf(stderr, "Line %ld, sequence length %i vs %i from CIGAR\n",
+				  (long)fp->n_lines, c->l_qseq, (int32_t)bam_cigar2qlen(c, bam1_cigar(b)));
+			  parse_error(fp->n_lines, "CIGAR and sequence length are inconsistent");
+			}
 			p = (uint8_t*)alloc_data(b, doff + c->l_qseq + (c->l_qseq+1)/2) + doff;
 			memset(p, 0, (c->l_qseq+1)/2);
 			for (i = 0; i < c->l_qseq; ++i)
