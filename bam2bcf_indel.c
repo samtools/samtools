@@ -66,7 +66,7 @@ static int tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, 
 	for (k = 0; k < c->n_cigar; ++k) {
 		int op = cigar[k] & BAM_CIGAR_MASK;
 		int l = cigar[k] >> BAM_CIGAR_SHIFT;
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			if (c->pos > tpos) return y;
 			if (x + l > tpos) {
 				*_tpos = tpos;
