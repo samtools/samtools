@@ -66,7 +66,7 @@ static int tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, 
 	for (k = 0; k < c->n_cigar; ++k) {
 		int op = cigar[k] & BAM_CIGAR_MASK;
 		int l = cigar[k] >> BAM_CIGAR_SHIFT;
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			if (c->pos > tpos) return y;
 			if (x + l > tpos) {
 				*_tpos = tpos;
@@ -222,7 +222,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				for (k = 0; k < b->core.n_cigar; ++k) {
 					int op = cigar[k]&0xf;
 					int j, l = cigar[k]>>4;
-					if (op == BAM_CMATCH) {
+					if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 						for (j = 0; j < l; ++j)
 							if (x + j >= left && x + j < right)
 								cns[x+j-left] += (bam1_seqi(seq, y+j) == ref0[x+j-left])? 1 : 0x10000;

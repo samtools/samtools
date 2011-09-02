@@ -32,7 +32,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
 	str = (kstring_t*)calloc(1, sizeof(kstring_t));
 	for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 		int j, l = cigar[i]>>4, op = cigar[i]&0xf;
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			for (j = 0; j < l; ++j) {
 				int z = y + j;
 				int c1 = bam1_seqi(seq, z), c2 = bam_nt16_table[(int)ref[x+j]];
@@ -68,7 +68,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
 	if (max_nm > 0 && nm >= max_nm) {
 		for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 			int j, l = cigar[i]>>4, op = cigar[i]&0xf;
-			if (op == BAM_CMATCH) {
+			if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 				for (j = 0; j < l; ++j) {
 					int z = y + j;
 					int c1 = bam1_seqi(seq, z), c2 = bam_nt16_table[(int)ref[x+j]];
@@ -146,7 +146,7 @@ int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
 	mm = q = len = clip_l = clip_q = 0;
 	for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
 		int j, l = cigar[i]>>4, op = cigar[i]&0xf;
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			for (j = 0; j < l; ++j) {
 				int z = y + j;
 				int c1 = bam1_seqi(seq, z), c2 = bam_nt16_table[(int)ref[x+j]];
@@ -219,7 +219,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 	for (k = 0; k < c->n_cigar; ++k) {
 		int op, l;
 		op = cigar[k]&0xf; l = cigar[k]>>4;
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			if (yb < 0) yb = y;
 			if (xb < 0) xb = x;
 			ye = y + l; xe = x + l;
@@ -255,7 +255,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 		if (!extend_baq) { // in this block, bq[] is capped by base quality qual[]
 			for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
 				int op = cigar[k]&0xf, l = cigar[k]>>4;
-				if (op == BAM_CMATCH) {
+				if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 					for (i = y; i < y + l; ++i) {
 						if ((state[i]&3) != 0 || state[i]>>2 != x - xb + (i - y)) bq[i] = 0;
 						else bq[i] = bq[i] < q[i]? bq[i] : q[i];
@@ -270,7 +270,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 			left = calloc(c->l_qseq, 1); rght = calloc(c->l_qseq, 1);
 			for (k = 0, x = c->pos, y = 0; k < c->n_cigar; ++k) {
 				int op = cigar[k]&0xf, l = cigar[k]>>4;
-				if (op == BAM_CMATCH) {
+				if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 					for (i = y; i < y + l; ++i)
 						bq[i] = ((state[i]&3) != 0 || state[i]>>2 != x - xb + (i - y))? 0 : q[i];
 					for (left[y] = bq[y], i = y + 1; i < y + l; ++i)

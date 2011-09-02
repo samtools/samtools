@@ -78,12 +78,12 @@ static inline int resolve_cigar2(bam_pileup1_t *p, uint32_t pos, cstate_t *s)
 	if (s->k == -1) { // never processed
 		is_head = 1;
 		if (c->n_cigar == 1) { // just one operation, save a loop
-			if (_cop(cigar[0]) == BAM_CMATCH) s->k = 0, s->x = c->pos, s->y = 0;
+		  if (_cop(cigar[0]) == BAM_CMATCH || _cop(cigar[0]) == BAM_CEQUAL || _cop(cigar[0]) == BAM_CDIFF) s->k = 0, s->x = c->pos, s->y = 0;
 		} else { // find the first match or deletion
 			for (k = 0, s->x = c->pos, s->y = 0; k < c->n_cigar; ++k) {
 				int op = _cop(cigar[k]);
 				int l = _cln(cigar[k]);
-				if (op == BAM_CMATCH || op == BAM_CDEL) break;
+				if (op == BAM_CMATCH || op == BAM_CDEL || op == BAM_CEQUAL || op == BAM_CDIFF) break;
 				else if (op == BAM_CREF_SKIP) s->x += l;
 				else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) s->y += l;
 			}
@@ -95,16 +95,16 @@ static inline int resolve_cigar2(bam_pileup1_t *p, uint32_t pos, cstate_t *s)
 		if (pos - s->x >= l) { // jump to the next operation
 			assert(s->k < c->n_cigar); // otherwise a bug: this function should not be called in this case
 			op = _cop(cigar[s->k+1]);
-			if (op == BAM_CMATCH || op == BAM_CDEL || op == BAM_CREF_SKIP) { // jump to the next without a loop
-				if (_cop(cigar[s->k]) == BAM_CMATCH) s->y += l;
+			if (op == BAM_CMATCH || op == BAM_CDEL || op == BAM_CREF_SKIP || op == BAM_CEQUAL || op == BAM_CDIFF) { // jump to the next without a loop
+			  if (_cop(cigar[s->k]) == BAM_CMATCH|| _cop(cigar[s->k]) == BAM_CEQUAL || _cop(cigar[s->k]) == BAM_CDIFF) s->y += l;
 				s->x += l;
 				++s->k;
-			} else { // find the next M/D/N
-				if (_cop(cigar[s->k]) == BAM_CMATCH) s->y += l;
+			} else { // find the next M/D/N/=/X
+			  if (_cop(cigar[s->k]) == BAM_CMATCH|| _cop(cigar[s->k]) == BAM_CEQUAL || _cop(cigar[s->k]) == BAM_CDIFF) s->y += l;
 				s->x += l;
 				for (k = s->k + 1; k < c->n_cigar; ++k) {
 					op = _cop(cigar[k]), l = _cln(cigar[k]);
-					if (op == BAM_CMATCH || op == BAM_CDEL || op == BAM_CREF_SKIP) break;
+					if (op == BAM_CMATCH || op == BAM_CDEL || op == BAM_CREF_SKIP || op == BAM_CEQUAL || op == BAM_CDIFF) break;
 					else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) s->y += l;
 				}
 				s->k = k;
@@ -126,12 +126,12 @@ static inline int resolve_cigar2(bam_pileup1_t *p, uint32_t pos, cstate_t *s)
 				for (k = s->k + 2; k < c->n_cigar; ++k) {
 					op2 = _cop(cigar[k]); l2 = _cln(cigar[k]);
 					if (op2 == BAM_CINS) l3 += l2;
-					else if (op2 == BAM_CDEL || op2 == BAM_CMATCH || op2 == BAM_CREF_SKIP) break;
+					else if (op2 == BAM_CDEL || op2 == BAM_CMATCH || op2 == BAM_CREF_SKIP || op2 == BAM_CEQUAL || op2 == BAM_CDIFF) break;
 				}
 				if (l3 > 0) p->indel = l3;
 			}
 		}
-		if (op == BAM_CMATCH) {
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
 			p->qpos = s->y + (pos - s->x);
 		} else if (op == BAM_CDEL || op == BAM_CREF_SKIP) {
 			p->is_del = 1; p->qpos = s->y; // FIXME: distinguish D and N!!!!!

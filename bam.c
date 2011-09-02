@@ -32,7 +32,7 @@ int32_t bam_cigar2qlen(const bam1_core_t *c, const uint32_t *cigar)
 	int32_t l = 0;
 	for (k = 0; k < c->n_cigar; ++k) {
 		int op = cigar[k] & BAM_CIGAR_MASK;
-		if (op == BAM_CMATCH || op == BAM_CINS || op == BAM_CSOFT_CLIP)
+		if (op == BAM_CMATCH || op == BAM_CINS || op == BAM_CSOFT_CLIP || op == BAM_CEQUAL || op == BAM_CDIFF)
 			l += cigar[k] >> BAM_CIGAR_SHIFT;
 	}
 	return l;
@@ -268,7 +268,7 @@ char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of)
 	else {
 		for (i = 0; i < c->n_cigar; ++i) {
 			kputw(bam1_cigar(b)[i]>>BAM_CIGAR_SHIFT, &str);
-			kputc("MIDNSHP"[bam1_cigar(b)[i]&BAM_CIGAR_MASK], &str);
+			kputc("MIDNSHP=X"[bam1_cigar(b)[i]&BAM_CIGAR_MASK], &str);
 		}
 	}
 	kputc('\t', &str);
