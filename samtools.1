@@ -1,4 +1,4 @@
-.TH samtools 1 "05 July 2011" "samtools-0.1.17" "Bioinformatics tools"
+.TH samtools 1 "2 September 2011" "samtools-0.1.18" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -69,7 +69,7 @@ format: `chr2' (the whole chr2), `chr2:1000000' (region starting from
 
 .B OPTIONS:
 .RS
-.TP 8
+.TP 10
 .B -b
 Output in the BAM format.
 .TP
@@ -102,6 +102,10 @@ Only output reads in read group STR [null]
 Output reads in read groups listed in
 .I FILE
 [null]
+.TP
+.BI -s \ FLOAT
+Fraction of templates/pairs to subsample; the integer part is treated as the
+seed for the random number generator [-1]
 .TP
 .B -S
 Input is in SAM. If @SQ header lines are absent, the

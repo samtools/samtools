@@ -1,3 +1,30 @@
+Beta Release 0.1.18 (2 September, 2011)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes in samtools:
+
+ * Support the new =/X CIGAR operators (by Peter Cock).
+
+ * Allow to subsample BAM while keeping the pairing intact (view -s).
+
+ * Implemented variant distance bias as a new filter (by Petr Danecek).
+
+ * Bugfix: huge memory usage during indexing
+
+ * Bugfix: use of uninitialized variable in mpileup (rare)
+
+ * Bugfix: wrong BAQ probability (rare)
+
+Notable changes in bcftools:
+
+ * Support indel in the contrast caller.
+
+ * Bugfix: LRT2=nan in rare cases
+
+(0.1.18: 2 September 2011, r982:295)
+
+
+
 Beta Release 0.1.17 (6 July, 2011)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
