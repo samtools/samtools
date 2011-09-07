@@ -154,6 +154,12 @@ typedef struct {
 /*! @abstract CIGAR: X = mismatch */
 #define BAM_CDIFF        8
 
+#define BAM_CIGAR_STR "MIDNSHP=X"
+
+#define bam_cigar_op(c) ((c)&BAM_CIGAR_MASK)
+#define bam_cigar_oplen(c) ((c)>>BAM_CIGAR_SHIFT)
+#define bam_cigar_opchr(c) (BAM_CIGAR_STR[bam_cigar_op(c)])
+
 /*! @typedef
   @abstract Structure for core alignment information.
   @field  tid     chromosome ID, defined by bam_header_t
