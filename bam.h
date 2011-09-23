@@ -159,6 +159,7 @@ typedef struct {
 #define bam_cigar_op(c) ((c)&BAM_CIGAR_MASK)
 #define bam_cigar_oplen(c) ((c)>>BAM_CIGAR_SHIFT)
 #define bam_cigar_opchr(c) (BAM_CIGAR_STR[bam_cigar_op(c)])
+#define bam_cigar_gen(o, l) ((o)<<BAM_CIGAR_SHIFT|(l))
 
 /*! @typedef
   @abstract Structure for core alignment information.
