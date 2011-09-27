@@ -109,7 +109,7 @@ int main_pad2unpad(int argc, char *argv[])
 {
 	bamFile in, out;
 	if (argc == 1) {
-		fprintf(stderr, "Usage: samtools pad2unpad <in.bam>\n");
+		fprintf(stderr, "Usage: samtools depad <in.bam>\n");
 		return 1;
 	}
 	in = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
