@@ -89,7 +89,7 @@ typedef struct {
 	char **target_name;
 	uint32_t *target_len;
 	void *dict, *hash, *rg2lib;
-	size_t l_text, n_text;
+	uint32_t l_text, n_text;
 	char *text;
 } bam_header_t;
 
