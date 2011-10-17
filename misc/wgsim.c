@@ -40,7 +40,7 @@
 #include "htslib/kseq.h"
 KSEQ_INIT(gzFile, gzread)
 
-#define PACKAGE_VERSION "0.3.0"
+#define PACKAGE_VERSION "0.3.0-r10"
 
 const uint8_t nst_nt4_table[256] = {
     4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,
@@ -99,7 +99,7 @@ static double ERR_RATE = 0.02;
 static double MUT_RATE = 0.001;
 static double INDEL_FRAC = 0.15;
 static double INDEL_EXTEND = 0.3;
-static double MAX_N_RATIO = 0.1;
+static double MAX_N_RATIO = 0.05;
 
 void wgsim_mut_diref(const kseq_t *ks, int is_hap, mutseq_t *hap1, mutseq_t *hap2)
 {
@@ -395,6 +395,7 @@ static int simu_usage(void)
     fprintf(stderr, "         -R FLOAT      fraction of indels [%.2f]\n", INDEL_FRAC);
     fprintf(stderr, "         -X FLOAT      probability an indel is extended [%.2f]\n", INDEL_EXTEND);
     fprintf(stderr, "         -S INT        seed for random generator [0, use the current time]\n");
+    fprintf(stderr, "         -A FLOAT      discard if the fraction of ambiguous bases higher than FLOAT [%.2f]\n", MAX_N_RATIO);
     fprintf(stderr, "         -h            haplotype mode\n");
     fprintf(stderr, "\n");
     return 1;
@@ -409,7 +410,7 @@ int main(int argc, char *argv[])
 
     N = 1000000; dist = 500; std_dev = 50;
     size_l = size_r = 70;
-    while ((c = getopt(argc, argv, "e:d:s:N:1:2:r:R:hX:S:")) >= 0) {
+    while ((c = getopt(argc, argv, "e:d:s:N:1:2:r:R:hX:S:A:")) >= 0) {
         switch (c) {
         case 'd': dist = atoi(optarg); break;
         case 's': std_dev = atoi(optarg); break;
@@ -420,6 +421,7 @@ int main(int argc, char *argv[])
         case 'r': MUT_RATE = atof(optarg); break;
         case 'R': INDEL_FRAC = atof(optarg); break;
         case 'X': INDEL_EXTEND = atof(optarg); break;
+	case 'A': MAX_N_RATIO = atof(optarg); break;
         case 'S': seed = atoi(optarg); break;
         case 'h': is_hap = 1; break;
         }
