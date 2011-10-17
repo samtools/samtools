@@ -40,7 +40,7 @@
 #include "htslib/kseq.h"
 KSEQ_INIT(gzFile, gzread)
 
-#define PACKAGE_VERSION "0.3.0-r12"
+#define PACKAGE_VERSION "0.3.0-r13"
 
 const uint8_t nst_nt4_table[256] = {
     4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,
@@ -158,21 +158,25 @@ void wgsim_mut_diref(const kseq_t *ks, int is_hap, mutseq_t *hap1, mutseq_t *hap
 }
 void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, mutseq_t *hap2)
 {
-    int i;
+    int i, j = 0; // j keeps the end of the last deletion
     for (i = 0; i != ks->seq.l; ++i) {
         int c[3];
         c[0] = nst_nt4_table[(int)ks->seq.s[i]];
         c[1] = hap1->s[i]; c[2] = hap2->s[i];
         if (c[0] >= 4) continue;
         if ((c[1] & mutmsk) != NOCHANGE || (c[2] & mutmsk) != NOCHANGE) {
-            printf("%s\t%d\t", name, i+1);
             if (c[1] == c[2]) { // hom
                 if ((c[1]&mutmsk) == SUBSTITUTE) { // substitution
-                    printf("%c\t%c\t-\n", "ACGTN"[c[0]], "ACGTN"[c[1]&0xf]);
+                    printf("%s\t%d\t%c\t%c\t-\n", name, i+1, "ACGTN"[c[0]], "ACGTN"[c[1]&0xf]);
                 } else if ((c[1]&mutmsk) == DELETE) { // del
-                    printf("%c\t-\t-\n", "ACGTN"[c[0]]);
-                } else if (((c[1] & mutmsk) >> 12) <= 4) { // ins
-                    printf("-\t");
+                    if (i >= j) {
+                        printf("%s\t%d\t", name, i+1);
+                        for (j = i; j < ks->seq.l && hap1->s[j] == hap2->s[j] && (hap1->s[j]&mutmsk) == DELETE; ++j)
+                            putchar("ACGTN"[nst_nt4_table[(int)ks->seq.s[j]]]);
+                        printf("\t-\t-\n");
+                    }
+               } else if (((c[1] & mutmsk) >> 12) <= 4) { // ins
+                    printf("%s\t%d\t-\t", name, i+1);
                     int n = (c[1]&mutmsk) >> 12, ins = c[1] >> 4;
                     while (n > 0) {
                         putchar("ACGTN"[ins & 0x3]);
@@ -180,16 +184,26 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                         n--;
                     }
                     printf("\t-\n");
-                }  else assert(0);
+                } // else: deleted base in a long deletion
             } else { // het
                 if ((c[1]&mutmsk) == SUBSTITUTE || (c[2]&mutmsk) == SUBSTITUTE) { // substitution
-                    printf("%c\t%c\t+\n", "ACGTN"[c[0]], "XACMGRSVTWYHKDBN"[1<<(c[1]&0x3)|1<<(c[2]&0x3)]);
+                    printf("%s\t%d\t%c\t%c\t+\n", name, i+1, "ACGTN"[c[0]], "XACMGRSVTWYHKDBN"[1<<(c[1]&0x3)|1<<(c[2]&0x3)]);
                 } else if ((c[1]&mutmsk) == DELETE) {
-                    printf("%c\t-\t+\n", "ACGTN"[c[0]]);
+                    if (i >= j) {
+                        printf("%s\t%d\t", name, i+1);
+                        for (j = i; j < ks->seq.l && hap1->s[j] != hap2->s[j] && (hap1->s[j]&mutmsk) == DELETE; ++j)
+                            putchar("ACGTN"[nst_nt4_table[(int)ks->seq.s[j]]]);
+                        printf("\t-\t-\n");
+                    }
                 } else if ((c[2]&mutmsk) == DELETE) {
-                    printf("%c\t-\t+\n", "ACGTN"[c[0]]);
+                    if (i >= j) {
+                        printf("%s\t%d\t", name, i+1);
+                        for (j = i; j < ks->seq.l && hap1->s[j] != hap2->s[j] && (hap2->s[j]&mutmsk) == DELETE; ++j)
+                            putchar("ACGTN"[nst_nt4_table[(int)ks->seq.s[j]]]);
+                        printf("\t-\t-\n");
+                    }
                 } else if (((c[1] & mutmsk) >> 12) <= 4 && ((c[1] & mutmsk) >> 12) > 0) { // ins1
-                    printf("-\t");
+                    printf("%s\t%d\t-\t", name, i+1);
                     int n = (c[1]&mutmsk) >> 12, ins = c[1] >> 4;
                     while (n > 0) {
                         putchar("ACGTN"[ins & 0x3]);
@@ -198,7 +212,7 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                     }
                     printf("\t+\n");
                 } else if (((c[2] & mutmsk) >> 12) <= 4 || ((c[2] & mutmsk) >> 12) > 0) { // ins2
-                    printf("-\t");
+                    printf("%s\t%d\t-\t", name, i+1);
                     int n = (c[2]&mutmsk) >> 12, ins = c[2] >> 4;
                     while (n > 0) {
                         putchar("ACGTN"[ins & 0x3]);
@@ -206,7 +220,7 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                         n--;
                     }
                     printf("\t+\n");
-                } else assert(0);
+                } // else: deleted base in a long deletion
             }
         }
     }
@@ -433,7 +447,9 @@ int main(int argc, char *argv[])
         fprintf(stderr, "[wgsim] file open error\n");
         return 1;
     }
-    srand48(seed > 0? seed : time(0));
+    if (seed <= 0) seed = time(0)&0x7fffffff;
+    fprintf(stderr, "[wgsim] seed = %d\n", seed);
+    srand48(seed);
     wgsim_core(fpout1, fpout2, argv[optind], is_hap, N, dist, std_dev, size_l, size_r);
 
     fclose(fpout1); fclose(fpout2);
