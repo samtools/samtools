@@ -40,7 +40,7 @@
 #include "htslib/kseq.h"
 KSEQ_INIT(gzFile, gzread)
 
-#define PACKAGE_VERSION "0.3.0-r10"
+#define PACKAGE_VERSION "0.3.0-r12"
 
 const uint8_t nst_nt4_table[256] = {
     4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,
@@ -171,7 +171,7 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                     printf("%c\t%c\t-\n", "ACGTN"[c[0]], "ACGTN"[c[1]&0xf]);
                 } else if ((c[1]&mutmsk) == DELETE) { // del
                     printf("%c\t-\t-\n", "ACGTN"[c[0]]);
-                } else if (((c[1] & mutmsk) >> 12) <= 5) { // ins
+                } else if (((c[1] & mutmsk) >> 12) <= 4) { // ins
                     printf("-\t");
                     int n = (c[1]&mutmsk) >> 12, ins = c[1] >> 4;
                     while (n > 0) {
@@ -188,7 +188,7 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                     printf("%c\t-\t+\n", "ACGTN"[c[0]]);
                 } else if ((c[2]&mutmsk) == DELETE) {
                     printf("%c\t-\t+\n", "ACGTN"[c[0]]);
-                } else if (((c[1] & mutmsk) >> 12) <= 4) { // ins1
+                } else if (((c[1] & mutmsk) >> 12) <= 4 && ((c[1] & mutmsk) >> 12) > 0) { // ins1
                     printf("-\t");
                     int n = (c[1]&mutmsk) >> 12, ins = c[1] >> 4;
                     while (n > 0) {
@@ -197,7 +197,7 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                         n--;
                     }
                     printf("\t+\n");
-                } else if (((c[2] & mutmsk) >> 12) <= 5) { // ins2
+                } else if (((c[2] & mutmsk) >> 12) <= 4 || ((c[2] & mutmsk) >> 12) > 0) { // ins2
                     printf("-\t");
                     int n = (c[2]&mutmsk) >> 12, ins = c[2] >> 4;
                     while (n > 0) {
