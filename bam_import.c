@@ -183,7 +183,7 @@ static inline void append_text(bam_header_t *header, kstring_t *str)
     // Sanity check
     if ( header->l_text+str->l+1 >= header->n_text )
     {
-        fprintf(stderr,"append_text FIXME: %ld>=%ld, x=%ld,y=%ld\n",  header->l_text+str->l+1,header->n_text,x,y);
+        fprintf(stderr,"append_text FIXME: %ld>=%ld, x=%ld,y=%ld\n",  header->l_text+str->l+1,(long)header->n_text,x,y);
         abort();
     }
 	strncpy(header->text + header->l_text, str->s, str->l+1); // we cannot use strcpy() here.
