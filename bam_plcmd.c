@@ -327,20 +327,29 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		} else {
 			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
 			for (i = 0; i < n; ++i) {
-				int j;
-				printf("\t%d\t", n_plp[i]);
+				int j, cnt;
+				for (j = cnt = 0; j < n_plp[i]; ++j) {
+					const bam_pileup1_t *p = plp[i] + j;
+					if (bam1_qual(p->b)[p->qpos] >= conf->min_baseQ) ++cnt;
+				}
+				printf("\t%d\t", cnt);
 				if (n_plp[i] == 0) {
 					printf("*\t*"); // FIXME: printf() is very slow...
 					if (conf->flag & MPLP_PRINT_POS) printf("\t*");
 				} else {
-					for (j = 0; j < n_plp[i]; ++j)
-						pileup_seq(plp[i] + j, pos, ref_len, ref);
+					for (j = 0; j < n_plp[i]; ++j) {
+						const bam_pileup1_t *p = plp[i] + j;
+						if (bam1_qual(p->b)[p->qpos] >= conf->min_baseQ)
+							pileup_seq(plp[i] + j, pos, ref_len, ref);
+					}
 					putchar('\t');
 					for (j = 0; j < n_plp[i]; ++j) {
 						const bam_pileup1_t *p = plp[i] + j;
-						int c = bam1_qual(p->b)[p->qpos] + 33;
-						if (c > 126) c = 126;
-						putchar(c);
+						int c = bam1_qual(p->b)[p->qpos];
+						if (c >= conf->min_baseQ) {
+							c = c + 33 < 126? c + 33 : 126;
+							putchar(c);
+						}
 					}
 					if (conf->flag & MPLP_PRINT_MAPQ) {
 						putchar('\t');
@@ -444,7 +453,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_depth = 250; mplp.max_indel_depth = 250;
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
-	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
+	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_EXT_BAQ;
 	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6Os")) >= 0) {
 		switch (c) {
 		case 'f':
@@ -503,7 +512,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -b FILE      list of input BAM files [null]\n");
 		fprintf(stderr, "       -C INT       parameter for adjusting mapQ; 0 to disable [0]\n");
 		fprintf(stderr, "       -d INT       max per-BAM depth to avoid excessive memory usage [%d]\n", mplp.max_depth);
-		fprintf(stderr, "       -E           extended BAQ for higher sensitivity but lower specificity\n");
+//		fprintf(stderr, "       -E           extended BAQ for higher sensitivity but lower specificity\n");
 		fprintf(stderr, "       -f FILE      faidx indexed reference sequence file [null]\n");
 		fprintf(stderr, "       -G FILE      exclude read groups listed in FILE [null]\n");
 		fprintf(stderr, "       -l FILE      list of positions (chr pos) or regions (BED) [null]\n");
