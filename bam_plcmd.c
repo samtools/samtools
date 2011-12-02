@@ -541,6 +541,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
 	}
+	bam_no_B = 1;
     if (file_list) {
         if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
         mpileup(&mplp,nfiles,fn);
