@@ -56,7 +56,7 @@ static int usage()
 	fprintf(stderr, "         cat         concatenate BAMs\n");
 	fprintf(stderr, "         targetcut   cut fosmid regions (for fosmid pool only)\n");
 	fprintf(stderr, "         phase       phase heterozygotes\n");
-	fprintf(stderr, "         depad       convert padded BAM to unpadded BAM\n");
+//	fprintf(stderr, "         depad       convert padded BAM to unpadded BAM\n"); // not stable
 	fprintf(stderr, "\n");
 #ifdef _WIN32
 	fprintf(stderr, "\
