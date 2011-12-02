@@ -462,6 +462,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	}
 	b->l_aux = doff - doff0;
 	b->data_len = doff;
+	if (bam_no_B) bam_remove_B(b);
 	return z;
 }
 

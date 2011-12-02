@@ -118,7 +118,7 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:")) >= 0) {
 		switch (c) {
 		case 's': g_subsam = atof(optarg); break;
 		case 'c': is_count = 1; break;
@@ -141,6 +141,7 @@ int main_samview(int argc, char *argv[])
 		case 'X': of_type = BAM_OFSTR; break;
 		case '?': is_long_help = 1; break;
 		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
+		case 'B': bam_no_B = 1; break;
 		default: return usage(is_long_help);
 		}
 	}
@@ -277,6 +278,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
 	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -c       print only the count of matching records\n");
+	fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
 	fprintf(stderr, "         -L FILE  output alignments overlapping the input BED FILE [null]\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");

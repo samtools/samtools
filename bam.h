@@ -288,7 +288,7 @@ extern int bam_is_be;
  */
 extern int bam_verbose;
 
-extern int bam_drop_B;
+extern int bam_no_B;
 
 /*! @abstract Table for converting a nucleotide character to the 4-bit encoding. */
 extern unsigned char bam_nt16_table[256];

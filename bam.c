@@ -7,7 +7,7 @@
 #include "kstring.h"
 #include "sam_header.h"
 
-int bam_is_be = 0, bam_verbose = 2, bam_drop_B = 0;
+int bam_is_be = 0, bam_verbose = 2, bam_no_B = 0;
 char *bam_flag2char_table = "pPuUrR12sfd\0\0\0\0\0";
 
 /**************************
@@ -204,6 +204,7 @@ int bam_read1(bamFile fp, bam1_t *b)
 	if (bam_read(fp, b->data, b->data_len) != b->data_len) return -4;
 	b->l_aux = b->data_len - c->n_cigar * 4 - c->l_qname - c->l_qseq - (c->l_qseq+1)/2;
 	if (bam_is_be) swap_endian_data(c, b->data_len, b->data);
+	if (bam_no_B) bam_remove_B(b);
 	return 4 + block_len;
 }
 
@@ -366,7 +367,7 @@ const char *bam_get_library(bam_header_t *h, const bam1_t *b)
 
 int bam_remove_B(bam1_t *b)
 {
-	int i, j, old_j, k, l;
+	int i, j, old_j, k, l, ins_B = 0;
 	uint32_t *cigar, *new_cigar;
 	uint8_t *seq, *qual, *p;
 	// test if removal is necessary
@@ -375,14 +376,15 @@ int bam_remove_B(bam1_t *b)
 	for (k = 0; k < b->core.n_cigar; ++k)
 		if (bam_cigar_op(cigar[k]) == BAM_CBACK) break;
 	if (k == b->core.n_cigar) return 0; // no 'B'
-	if (bam_cigar_op(cigar[0]) == BAM_CBACK) return -1; // cannot remove
+	if (bam_cigar_op(cigar[0]) == BAM_CBACK) goto rmB_err; // cannot be removed
 	// allocate memory for the new CIGAR
 	if (b->data_len + (b->core.n_cigar + 1) * 4 > b->m_data) { // not enough memory
 		b->m_data = b->data_len + b->core.n_cigar * 4;
 		kroundup32(b->m_data);
 		b->data = (uint8_t*)realloc(b->data, b->m_data);
+		cigar = bam1_cigar(b); // after realloc, cigar may be changed
 	}
-	new_cigar = (uint32_t*)(b->data + (b->m_data - b->core.n_cigar * 4));
+	new_cigar = (uint32_t*)(b->data + (b->m_data - b->core.n_cigar * 4)); // from the end of b->data
 	// the core loop
 	seq = bam1_seq(b); qual = bam1_qual(b);
 	i = j = 0; old_j = -1;
@@ -391,7 +393,7 @@ int bam_remove_B(bam1_t *b)
 		int len = bam_cigar_oplen(cigar[k]);
 		if (op == BAM_CBACK) {
 			int t, u = 0, v = 0;
-			for (t = l; t >= 0; --t) { // look back
+			for (t = l - 1; t >= 0; --t) { // look back
 				int op0  = bam_cigar_op(new_cigar[t]);
 				int len0 = bam_cigar_oplen(new_cigar[t]);
 				if (bam_cigar_type(op0)&2) {
@@ -400,26 +402,39 @@ int bam_remove_B(bam1_t *b)
 				}
 				if (bam_cigar_type(op0)&1) v += len0;
 			}
-			if (t < 0) return -2; // a long backward operation
+			if (t < 0) goto rmB_err; // a long backward operation
 			old_j = j;
 			j = old_j - v - ((bam_cigar_type(bam_cigar_op(new_cigar[t]))&1)? len - u : 0);
 			new_cigar[t] -= (len - u) << BAM_CIGAR_SHIFT; // FIXME: use bam_cigar_gen()
-			l = t;
+			if (new_cigar[t] == 0 && t >= 1 && bam_cigar_op(new_cigar[t-1]) == BAM_CINS) ins_B = 1;
+			l = t + 1;
 		} else {
+			if (ins_B && op == BAM_CINS) goto rmB_err; // FIXME: this can be resolved; just a bit complicated
+			ins_B = 0;
 			new_cigar[l++] = cigar[k];
 			if (bam_cigar_type(op)&1) { // consume the query
 				if (i != j) { // no need to copy if i == j
 					int u;
-					for (u = 0; u < len; ++u) {
-						int c = bam1_seqi(seq, i + u);
-						bam1_seq_seti(seq, j + u, c);
-						qual[j + u] = qual[i + u];
-					}
+					for (u = 0; u < len; ++u)
+						if (j + u >= old_j || qual[j + u] < qual[i + u]) {
+							int c = bam1_seqi(seq, i + u);
+							bam1_seq_seti(seq, j + u, c);
+							qual[j + u] = qual[i + u];
+						}
 				}
 				i += len, j += len;
 			}
 		}
 	}
+	// merge adjacent operations if possible
+	for (k = 1; k < l; ++k)
+		if (bam_cigar_op(new_cigar[k]) == bam_cigar_op(new_cigar[k-1]))
+			new_cigar[k] += new_cigar[k-1] >> BAM_CIGAR_SHIFT << BAM_CIGAR_SHIFT, new_cigar[k-1] &= 0xf;
+	// kill zero length operations
+	for (k = i = 0; k < l; ++k)
+		if (new_cigar[k] >> BAM_CIGAR_SHIFT)
+			new_cigar[i++] = new_cigar[k];
+	l = i;
 	// update b
 	memcpy(cigar, new_cigar, l * 4);
 	i = (j + 1) >> 1;
@@ -431,4 +446,8 @@ int bam_remove_B(bam1_t *b)
 	b->core.l_qseq = j;
 	b->data_len = p - b->data;
 	return 0;
+
+rmB_err:
+	b->core.flag |= BAM_FUNMAP;
+	return -1;
 }
