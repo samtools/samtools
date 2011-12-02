@@ -367,11 +367,11 @@ const char *bam_get_library(bam_header_t *h, const bam1_t *b)
 
 int bam_remove_B(bam1_t *b)
 {
-	int i, j, old_j, k, l, ins_B = 0;
+	int i, j, end_j, k, l, no_qual;
 	uint32_t *cigar, *new_cigar;
 	uint8_t *seq, *qual, *p;
 	// test if removal is necessary
-	if (b->core.flag & BAM_FUNMAP) return 0; // unmapped
+	if (b->core.flag & BAM_FUNMAP) return 0; // unmapped; do nothing
 	cigar = bam1_cigar(b);
 	for (k = 0; k < b->core.n_cigar; ++k)
 		if (bam_cigar_op(cigar[k]) == BAM_CBACK) break;
@@ -387,45 +387,64 @@ int bam_remove_B(bam1_t *b)
 	new_cigar = (uint32_t*)(b->data + (b->m_data - b->core.n_cigar * 4)); // from the end of b->data
 	// the core loop
 	seq = bam1_seq(b); qual = bam1_qual(b);
-	i = j = 0; old_j = -1;
+	no_qual = (qual[0] == 0xff); // test whether base quality is available
+	i = j = 0; end_j = -1;
 	for (k = l = 0; k < b->core.n_cigar; ++k) {
 		int op  = bam_cigar_op(cigar[k]);
 		int len = bam_cigar_oplen(cigar[k]);
-		if (op == BAM_CBACK) {
+		if (op == BAM_CBACK) { // the backward operation
 			int t, u = 0, v = 0;
+			if (k == b->core.n_cigar - 1) break; // ignore 'B' at the end of CIGAR
 			for (t = l - 1; t >= 0; --t) { // look back
 				int op0  = bam_cigar_op(new_cigar[t]);
 				int len0 = bam_cigar_oplen(new_cigar[t]);
-				if (bam_cigar_type(op0)&2) {
+				if (bam_cigar_type(op0)&2) { // consume the reference
 					if (u + len0 >= len) break;
 					u += len0;
 				}
-				if (bam_cigar_type(op0)&1) v += len0;
+				if (bam_cigar_type(op0)&1) v += len0; // consume the query
 			}
 			if (t < 0) goto rmB_err; // a long backward operation
-			old_j = j;
-			j = old_j - v - ((bam_cigar_type(bam_cigar_op(new_cigar[t]))&1)? len - u : 0);
+			end_j = j;
+			j = end_j - v - ((bam_cigar_type(bam_cigar_op(new_cigar[t]))&1)? len - u : 0);
 			new_cigar[t] -= (len - u) << BAM_CIGAR_SHIFT; // FIXME: use bam_cigar_gen()
-			if (new_cigar[t] == 0 && t >= 1 && bam_cigar_op(new_cigar[t-1]) == BAM_CINS) ins_B = 1;
+			if (bam_cigar_oplen(new_cigar[t]) == 0 && t >= 1) --t; // squeeze out the zero-length operation
+			if (bam_cigar_op(cigar[k+1]) == BAM_CINS) { // the next operation is I, move back further
+				int len0, len1;
+				if (bam_cigar_op(new_cigar[t]) != BAM_CINS) goto rmB_err; // inconsistent CIGAR
+				len1 = bam_cigar_oplen(cigar[k+1]);
+				len0 = bam_cigar_oplen(new_cigar[t]);
+				if (len1 > len0) goto rmB_err; // CIGAR like: 3M1I1M1B2I10M; cannot be resolved
+				new_cigar[t] -= len1 << BAM_CIGAR_SHIFT; // FIXME: use bam_cigar_gen()
+				j -= len1;
+			}
 			l = t + 1;
-		} else {
-			if (ins_B && op == BAM_CINS) goto rmB_err; // FIXME: this can be resolved; just a bit complicated
-			ins_B = 0;
+		} else { // other CIGAR operations
 			new_cigar[l++] = cigar[k];
 			if (bam_cigar_type(op)&1) { // consume the query
 				if (i != j) { // no need to copy if i == j
-					int u;
-					for (u = 0; u < len; ++u)
-						if (j + u >= old_j || qual[j + u] < qual[i + u]) {
-							int c = bam1_seqi(seq, i + u);
-							bam1_seq_seti(seq, j + u, c);
-							qual[j + u] = qual[i + u];
+					int u, c, c0;
+					for (u = 0; u < len; ++u) { // construct the consensus
+						c = bam1_seqi(seq, i+u);
+						if (j + u < end_j) { // in an overlap
+							c0 = bam1_seqi(seq, j+u);
+							if (c != c0) { // a mismatch; choose the better base
+								if (qual[j+u] < qual[i+u]) { // the base in the 2nd segment is better
+									bam1_seq_seti(seq, j+u, c);
+									qual[j+u] = qual[i+u] - qual[j+u];
+								} else qual[j+u] -= qual[i+u]; // the 1st is better; reduce base quality
+							} else qual[j+u] = qual[j+u] > qual[i+u]? qual[j+u] : qual[i+u];
+						} else { // not in an overlap; copy over
+							bam1_seq_seti(seq, j+u, c);
+							qual[j+u] = qual[i+u];
 						}
+					}
 				}
 				i += len, j += len;
 			}
 		}
 	}
+	if (no_qual) qual[0] = 0xff; // in very rare cases, this may be modified
 	// merge adjacent operations if possible
 	for (k = 1; k < l; ++k)
 		if (bam_cigar_op(new_cigar[k]) == bam_cigar_op(new_cigar[k-1]))
@@ -436,15 +455,13 @@ int bam_remove_B(bam1_t *b)
 			new_cigar[i++] = new_cigar[k];
 	l = i;
 	// update b
-	memcpy(cigar, new_cigar, l * 4);
-	i = (j + 1) >> 1;
+	memcpy(cigar, new_cigar, l * 4); // set CIGAR
 	p = b->data + b->core.l_qname + l * 4;
-	memmove(p, seq, i); p += i;
-	memmove(p, qual, j); p += j;
-	memmove(p, bam1_aux(b), b->l_aux); p += b->l_aux;
-	b->core.n_cigar = l;
-	b->core.l_qseq = j;
-	b->data_len = p - b->data;
+	memmove(p, seq, (j+1)>>1); p += (j+1)>>1; // set SEQ
+	memmove(p, qual, j); p += j; // set QUAL
+	memmove(p, bam1_aux(b), b->l_aux); p += b->l_aux; // set optional fields
+	b->core.n_cigar = l, b->core.l_qseq = j; // update CIGAR length and query length
+	b->data_len = p - b->data; // update record length
 	return 0;
 
 rmB_err:
