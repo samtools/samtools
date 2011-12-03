@@ -16,12 +16,26 @@ char *bam_flag2char_table = "pPuUrR12sfd\0\0\0\0\0";
 
 uint32_t bam_calend(const bam1_core_t *c, const uint32_t *cigar)
 {
-	uint32_t k, end;
-	end = c->pos;
+	int k, end = c->pos;
 	for (k = 0; k < c->n_cigar; ++k) {
-		int op = bam_cigar_op(cigar[k]);
-		if (bam_cigar_type(op)&2) end += bam_cigar_oplen(cigar[k]);
-		else if (op == BAM_CBACK) end -= bam_cigar_oplen(cigar[k]);
+		int op  = bam_cigar_op(cigar[k]);
+		int len = bam_cigar_oplen(cigar[k]);
+		if (op == BAM_CBACK) { // move backward
+			int l, u, v;
+			if (k == c->n_cigar - 1) break; // skip trailing 'B'
+			for (l = k - 1, u = v = 0; l >= 0; --l) {
+				int op1  = bam_cigar_op(cigar[l]);
+				int len1 = bam_cigar_oplen(cigar[l]);
+				if (bam_cigar_type(op1)&1) { // consume query
+					if (u + len1 >= len) { // stop
+						if (bam_cigar_type(op1)&2) v += len - u;
+						break;
+					} else u += len1;
+				}
+				if (bam_cigar_type(op1)&2) v += len1;
+			}
+			end = l < 0? c->pos : end - v;
+		} else if (bam_cigar_type(op)&2) end += bam_cigar_oplen(cigar[k]);
 	}
 	return end;
 }
@@ -393,32 +407,22 @@ int bam_remove_B(bam1_t *b)
 		int op  = bam_cigar_op(cigar[k]);
 		int len = bam_cigar_oplen(cigar[k]);
 		if (op == BAM_CBACK) { // the backward operation
-			int t, u = 0, v = 0;
+			int t, u;
 			if (k == b->core.n_cigar - 1) break; // ignore 'B' at the end of CIGAR
-			for (t = l - 1; t >= 0; --t) { // look back
-				int op0  = bam_cigar_op(new_cigar[t]);
-				int len0 = bam_cigar_oplen(new_cigar[t]);
-				if (bam_cigar_type(op0)&2) { // consume the reference
-					if (u + len0 >= len) break;
-					u += len0;
+			if (len > j) goto rmB_err; // an excessively long backward
+			for (t = l - 1, u = 0; t >= 0; --t) { // look back
+				int op1  = bam_cigar_op(new_cigar[t]);
+				int len1 = bam_cigar_oplen(new_cigar[t]);
+				if (bam_cigar_type(op1)&1) { // consume the query
+					if (u + len1 >= len) { // stop
+						new_cigar[t] -= (len - u) << BAM_CIGAR_SHIFT;
+						break;
+					} else u += len1;
 				}
-				if (bam_cigar_type(op0)&1) v += len0; // consume the query
 			}
-			if (t < 0) goto rmB_err; // a long backward operation
-			end_j = j;
-			j = end_j - v - ((bam_cigar_type(bam_cigar_op(new_cigar[t]))&1)? len - u : 0);
-			new_cigar[t] -= (len - u) << BAM_CIGAR_SHIFT; // FIXME: use bam_cigar_gen()
-			if (bam_cigar_oplen(new_cigar[t]) == 0 && t >= 1) --t; // squeeze out the zero-length operation
-			if (bam_cigar_op(cigar[k+1]) == BAM_CINS) { // the next operation is I, move back further
-				int len0, len1;
-				if (bam_cigar_op(new_cigar[t]) != BAM_CINS) goto rmB_err; // inconsistent CIGAR
-				len1 = bam_cigar_oplen(cigar[k+1]);
-				len0 = bam_cigar_oplen(new_cigar[t]);
-				if (len1 > len0) goto rmB_err; // CIGAR like: 3M1I1M1B2I10M; cannot be resolved
-				new_cigar[t] -= len1 << BAM_CIGAR_SHIFT; // FIXME: use bam_cigar_gen()
-				j -= len1;
-			}
+			if (bam_cigar_oplen(new_cigar[t]) == 0) --t; // squeeze out the zero-length operation
 			l = t + 1;
+			end_j = j; j -= len;
 		} else { // other CIGAR operations
 			new_cigar[l++] = cigar[k];
 			if (bam_cigar_type(op)&1) { // consume the query

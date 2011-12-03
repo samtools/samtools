@@ -316,7 +316,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				cigar[i] = bam_cigar_gen(x, op);
 			}
 			if (*s) parse_error(fp->n_lines, "unmatched CIGAR operation");
-			c->bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
+			c->bin = bam_reg2bin(c->pos, bam_calend(c, cigar));
 			doff += c->n_cigar * 4;
 		} else {
 			if (!(c->flag&BAM_FUNMAP)) {
