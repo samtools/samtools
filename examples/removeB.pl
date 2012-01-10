@@ -10,9 +10,9 @@ use warnings;
 # a) compute the length of the reference sequence contained in an alignment;
 # b) collapse backward overlaps and generate consensus sequence and quality
 #
-# During consensus construction, if two bases from two overlapping segments agree,
+# During the consensus construction, if two bases from two overlapping segments agree,
 # the base quality is taken as the higher one of the two; if the two bases disagree,
-# the base is set to the base of higher quality and the quality set to the difference
+# the base is set to the one of higher quality and the quality set to the difference
 # between the two qualities.
 #
 # There are several special cases or errors:
@@ -20,7 +20,7 @@ use warnings;
 # a) If a backward operation goes beyond the beginning of SEQ, the read is regarded to
 #    be unmapped.
 # b) If the CIGARs of two segments in an overlap are inconsistent (e.g. 10M3B1M1I8M)
-#    the consensus CIGAR is taken as the one from the latter one.
+#    the consensus CIGAR is taken as the one from the latter.
 # c) If three or more segments overlap, the consensus SEQ/QUAL will be computed firstly
 #    for the first two overlapping segments, and then between the two-segment consensus
 #    and the 3rd segment and so on. The consensus CIGAR is always taken from the last one.
