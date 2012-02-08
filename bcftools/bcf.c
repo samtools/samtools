@@ -140,7 +140,7 @@ int bcf_sync(bcf1_t *b)
 	for (i = 0; i < b->n_gi; ++i) {
 		if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
 			b->gi[i].len = b->n_alleles * (b->n_alleles + 1) / 2;
-		} else if (b->gi[i].fmt == bcf_str2int("DP", 2) || b->gi[i].fmt == bcf_str2int("HQ", 2)) {
+		} else if (b->gi[i].fmt == bcf_str2int("DP", 2) || b->gi[i].fmt == bcf_str2int("HQ", 2) || b->gi[i].fmt == bcf_str2int("DV", 2)) {
 			b->gi[i].len = 2;
 		} else if (b->gi[i].fmt == bcf_str2int("GQ", 2) || b->gi[i].fmt == bcf_str2int("GT", 2)) {
 			b->gi[i].len = 1;
@@ -244,7 +244,7 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 					if (k > 0) kputc(',', s);
 					kputw(d[k], s);
 				}
-			} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
+			} else if (b->gi[i].fmt == bcf_str2int("DP", 2) || b->gi[i].fmt == bcf_str2int("DV", 2)) {
 				kputw(((uint16_t*)b->gi[i].data)[j], s);
 			} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
 				kputw(((uint8_t*)b->gi[i].data)[j], s);

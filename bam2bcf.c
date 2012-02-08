@@ -55,7 +55,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 	}
 	// fill the bases array
 	memset(r, 0, sizeof(bcf_callret1_t));
-	for (i = n = 0; i < _n; ++i) {
+	for (i = n = r->n_supp = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
 		int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
 		// set base
@@ -78,6 +78,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 			b = p->aux>>16&0x3f;
 			is_diff = (b != 0);
 		}
+		if (is_diff) ++r->n_supp;
 		bca->bases[n++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
 		// collect annotations
 		if (b < 4) r->qsum[b] += q;
@@ -260,7 +261,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	return 0;
 }
 
-int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int is_SP,
+int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int fmt_flag,
 				 const bcf_callaux_t *bca, const char *ref)
 {
 	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
@@ -310,28 +311,29 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		if (i) kputc(',', &s);
 		kputw(bc->anno[i], &s);
 	}
-    if ( bc->vdb!=1 )
-    {
+    if (bc->vdb != 1)
         ksprintf(&s, ";VDB=%.4f", bc->vdb);
-    }
 	kputc('\0', &s);
 	// FMT
 	kputs("PL", &s);
-	if (bcr) {
-		kputs(":DP", &s);
-		if (is_SP) kputs(":SP", &s);
+	if (bcr && fmt_flag) {
+		if (fmt_flag & B2B_FMT_DP) kputs(":DP", &s);
+		if (fmt_flag & B2B_FMT_DV) kputs(":DV", &s);
+		if (fmt_flag & B2B_FMT_SP) kputs(":SP", &s);
 	}
 	kputc('\0', &s);
 	b->m_str = s.m; b->str = s.s; b->l_str = s.l;
 	bcf_sync(b);
 	memcpy(b->gi[0].data, bc->PL, b->gi[0].len * bc->n);
-	if (bcr) {
-		uint16_t *dp = (uint16_t*)b->gi[1].data;
-		int32_t *sp = is_SP? b->gi[2].data : 0;
+	if (bcr && fmt_flag) {
+		uint16_t *dp = (fmt_flag & B2B_FMT_DP)? b->gi[1].data : 0;
+		uint16_t *dv = (fmt_flag & B2B_FMT_DV)? b->gi[1 + ((fmt_flag & B2B_FMT_DP) != 0)].data : 0;
+		int32_t  *sp = (fmt_flag & B2B_FMT_DV)? b->gi[1 + ((fmt_flag & B2B_FMT_DP) != 0) + ((fmt_flag & B2B_FMT_DV) != 0)].data : 0;
 		for (i = 0; i < bc->n; ++i) {
 			bcf_callret1_t *p = bcr + i;
-			dp[i] = p->depth < 0xffff? p->depth : 0xffff;
-			if (is_SP) {
+			if (dp) dp[i] = p->depth  < 0xffff? p->depth  : 0xffff;
+			if (dv) dv[i] = p->n_supp < 0xffff? p->n_supp : 0xffff;
+			if (sp) {
 				if (p->anno[0] + p->anno[1] < 2 || p->anno[2] + p->anno[3] < 2
 					|| p->anno[0] + p->anno[2] < 2 || p->anno[1] + p->anno[3] < 2)
 				{
