@@ -186,7 +186,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 						((uint8_t*)b->gi[i].data)[k-9] = 0;
 					} else if (b->gi[i].fmt == bcf_str2int("SP", 2)) {
 						((int32_t*)b->gi[i].data)[k-9] = 0;
-					} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
+					} else if (b->gi[i].fmt == bcf_str2int("DP", 2) || b->gi[i].fmt == bcf_str2int("DV", 2)) {
 						((uint16_t*)b->gi[i].data)[k-9] = 0;
 					} else if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
 						int y = b->n_alleles * (b->n_alleles + 1) / 2;
@@ -210,7 +210,7 @@ int vcf_read(bcf_t *bp, bcf_hdr_t *h, bcf1_t *b)
 					int x = strtol(q, &q, 10);
 					if (x > 0xffff) x = 0xffff;
 					((uint32_t*)b->gi[i].data)[k-9] = x;
-				} else if (b->gi[i].fmt == bcf_str2int("DP", 2)) {
+				} else if (b->gi[i].fmt == bcf_str2int("DP", 2) || b->gi[i].fmt == bcf_str2int("DV", 2)) {
 					int x = strtol(q, &q, 10);
 					if (x > 0xffff) x = 0xffff;
 					((uint16_t*)b->gi[i].data)[k-9] = x;

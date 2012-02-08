@@ -34,7 +34,7 @@ void bam_mating_core(bamFile in, bamFile out)
 {
 	bam_header_t *header;
 	bam1_t *b[2];
-	int curr, has_prev, pre_end, cur_end;
+	int curr, has_prev, pre_end = 0, cur_end;
 	kstring_t str;
 
 	str.l = str.m = 0; str.s = 0;

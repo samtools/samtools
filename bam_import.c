@@ -183,7 +183,7 @@ static inline void append_text(bam_header_t *header, kstring_t *str)
     // Sanity check
     if ( header->l_text+str->l+1 >= header->n_text )
     {
-        fprintf(stderr,"append_text FIXME: %ld>=%ld, x=%ld,y=%ld\n",  header->l_text+str->l+1,header->n_text,x,y);
+        fprintf(stderr,"append_text FIXME: %ld>=%ld, x=%ld,y=%ld\n",  header->l_text+str->l+1,(long)header->n_text,x,y);
         abort();
     }
 	strncpy(header->text + header->l_text, str->s, str->l+1); // we cannot use strcpy() here.
@@ -291,11 +291,13 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -3;
 		z += str->l + 1;
 		if (str->s[0] != '*') {
+			uint32_t *cigar;
 			for (s = str->s; *s; ++s) {
 				if ((isalpha(*s)) || (*s=='=')) ++c->n_cigar;
 				else if (!isdigit(*s)) parse_error(fp->n_lines, "invalid CIGAR character");
 			}
 			b->data = alloc_data(b, doff + c->n_cigar * 4);
+			cigar = bam1_cigar(b);
 			for (i = 0, s = str->s; i != c->n_cigar; ++i) {
 				x = strtol(s, &t, 10);
 				op = toupper(*t);
@@ -308,12 +310,13 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				else if (op == 'P') op = BAM_CPAD;
 				else if (op == '=') op = BAM_CEQUAL;
 				else if (op == 'X') op = BAM_CDIFF;
+				else if (op == 'B') op = BAM_CBACK;
 				else parse_error(fp->n_lines, "invalid CIGAR operation");
 				s = t + 1;
-				bam1_cigar(b)[i] = x << BAM_CIGAR_SHIFT | op;
+				cigar[i] = bam_cigar_gen(x, op);
 			}
 			if (*s) parse_error(fp->n_lines, "unmatched CIGAR operation");
-			c->bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
+			c->bin = bam_reg2bin(c->pos, bam_calend(c, cigar));
 			doff += c->n_cigar * 4;
 		} else {
 			if (!(c->flag&BAM_FUNMAP)) {
@@ -340,9 +343,9 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		if (strcmp(str->s, "*")) {
 			c->l_qseq = strlen(str->s);
 			if (c->n_cigar && c->l_qseq != (int32_t)bam_cigar2qlen(c, bam1_cigar(b))) {
-			  fprintf(stderr, "Line %ld, sequence length %i vs %i from CIGAR\n",
-				  (long)fp->n_lines, c->l_qseq, (int32_t)bam_cigar2qlen(c, bam1_cigar(b)));
-			  parse_error(fp->n_lines, "CIGAR and sequence length are inconsistent");
+				fprintf(stderr, "Line %ld, sequence length %i vs %i from CIGAR\n",
+						(long)fp->n_lines, c->l_qseq, (int32_t)bam_cigar2qlen(c, bam1_cigar(b)));
+				parse_error(fp->n_lines, "CIGAR and sequence length are inconsistent");
 			}
 			p = (uint8_t*)alloc_data(b, doff + c->l_qseq + (c->l_qseq+1)/2) + doff;
 			memset(p, 0, (c->l_qseq+1)/2);
@@ -459,6 +462,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 	}
 	b->l_aux = doff - doff0;
 	b->data_len = doff;
+	if (bam_no_B) bam_remove_B(b);
 	return z;
 }
 

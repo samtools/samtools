@@ -21,7 +21,7 @@ typedef khash_t(rg) *rghash_t;
 
 // FIXME: we'd better use no global variables...
 static rghash_t g_rghash = 0;
-static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0;
+static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0, g_qual_scale = 0;
 static float g_subsam = -1;
 static char *g_library, *g_rg;
 static void *g_bed;
@@ -30,8 +30,16 @@ void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
-static inline int __g_skip_aln(const bam_header_t *h, const bam1_t *b)
+static int process_aln(const bam_header_t *h, bam1_t *b)
 {
+	if (g_qual_scale > 1) {
+		int i;
+		uint8_t *qual = bam1_qual(b);
+		for (i = 0; i < b->core.l_qseq; ++i) {
+			int c = qual[i] * g_qual_scale;
+			qual[i] = c < 93? c : 93;
+		}
+	}
 	if (b->core.qual < g_min_mapQ || ((b->core.flag & g_flag_on) != g_flag_on) || (b->core.flag & g_flag_off))
 		return 1;
 	if (g_bed && b->core.tid >= 0 && !bed_overlap(g_bed, h->target_name[b->core.tid], b->core.pos, bam_calend(&b->core, bam1_cigar(b))))
@@ -92,7 +100,7 @@ static char *drop_rg(char *hdtxt, rghash_t h, int *len)
 // callback function for bam_fetch() that prints nonskipped records
 static int view_func(const bam1_t *b, void *data)
 {
-	if (!__g_skip_aln(((samfile_t*)data)->header, b))
+	if (!process_aln(((samfile_t*)data)->header, (bam1_t*)b))
 		samwrite((samfile_t*)data, b);
 	return 0;
 }
@@ -100,7 +108,7 @@ static int view_func(const bam1_t *b, void *data)
 // callback function for bam_fetch() that counts nonskipped records
 static int count_func(const bam1_t *b, void *data)
 {
-	if (!__g_skip_aln(((count_func_data_t*)data)->header, b)) {
+	if (!process_aln(((count_func_data_t*)data)->header, (bam1_t*)b)) {
 		(*((count_func_data_t*)data)->count)++;
 	}
 	return 0;
@@ -118,7 +126,7 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sbct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:")) >= 0) {
 		switch (c) {
 		case 's': g_subsam = atof(optarg); break;
 		case 'c': is_count = 1; break;
@@ -141,6 +149,8 @@ int main_samview(int argc, char *argv[])
 		case 'X': of_type = BAM_OFSTR; break;
 		case '?': is_long_help = 1; break;
 		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
+		case 'B': bam_no_B = 1; break;
+		case 'Q': g_qual_scale = atoi(optarg); break;
 		default: return usage(is_long_help);
 		}
 	}
@@ -204,7 +214,7 @@ int main_samview(int argc, char *argv[])
 		bam1_t *b = bam_init1();
 		int r;
 		while ((r = samread(in, b)) >= 0) { // read one alignment from `in'
-			if (!__g_skip_aln(in->header, b)) {
+			if (!process_aln(in->header, b)) {
 				if (!is_count) samwrite(out, b); // write the alignment to `out'
 				count++;
 			}
@@ -277,6 +287,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
 	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -c       print only the count of matching records\n");
+	fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
 	fprintf(stderr, "         -L FILE  output alignments overlapping the input BED FILE [null]\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");

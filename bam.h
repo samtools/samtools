@@ -40,7 +40,7 @@
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "0.1.18 (r982:295)"
+#define BAM_VERSION "0.1.18-dev (r982:310)"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -89,7 +89,7 @@ typedef struct {
 	char **target_name;
 	uint32_t *target_len;
 	void *dict, *hash, *rg2lib;
-	size_t l_text, n_text;
+	uint32_t l_text, n_text;
 	char *text;
 } bam_header_t;
 
@@ -150,16 +150,19 @@ typedef struct {
 /*! @abstract CIGAR: P = padding */
 #define BAM_CPAD        6
 /*! @abstract CIGAR: equals = match */
-#define BAM_CEQUAL        7
+#define BAM_CEQUAL      7
 /*! @abstract CIGAR: X = mismatch */
-#define BAM_CDIFF        8
+#define BAM_CDIFF       8
+#define BAM_CBACK       9
 
-#define BAM_CIGAR_STR "MIDNSHP=X"
+#define BAM_CIGAR_STR  "MIDNSHP=XB"
+#define BAM_CIGAR_TYPE 0x3C1A7
 
 #define bam_cigar_op(c) ((c)&BAM_CIGAR_MASK)
 #define bam_cigar_oplen(c) ((c)>>BAM_CIGAR_SHIFT)
 #define bam_cigar_opchr(c) (BAM_CIGAR_STR[bam_cigar_op(c)])
-#define bam_cigar_gen(o, l) ((o)<<BAM_CIGAR_SHIFT|(l))
+#define bam_cigar_gen(l, o) ((l)<<BAM_CIGAR_SHIFT|(o))
+#define bam_cigar_type(o) (BAM_CIGAR_TYPE>>((o)<<1)&3) // bit 1: consume query; bit 2: consume reference
 
 /*! @typedef
   @abstract Structure for core alignment information.
@@ -252,7 +255,10 @@ typedef struct __bam_iter_t *bam_iter_t;
   @param  i  The i-th position, 0-based
   @return    4-bit integer representing the base.
  */
-#define bam1_seqi(s, i) ((s)[(i)/2] >> 4*(1-(i)%2) & 0xf)
+//#define bam1_seqi(s, i) ((s)[(i)/2] >> 4*(1-(i)%2) & 0xf)
+#define bam1_seqi(s, i) ((s)[(i)>>1] >> ((~(i)&1)<<2) & 0xf)
+
+#define bam1_seq_seti(s, i, c) ( (s)[(i)>>1] = ((s)[(i)>>1] & 0xf<<(((i)&1)<<2)) | (c)<<((~(i)&1)<<2) )
 
 /*! @function
   @abstract  Get query sequence and quality
@@ -281,6 +287,8 @@ extern int bam_is_be;
   debugging information, though this may not have been implemented.
  */
 extern int bam_verbose;
+
+extern int bam_no_B;
 
 /*! @abstract Table for converting a nucleotide character to the 4-bit encoding. */
 extern unsigned char bam_nt16_table[256];
@@ -426,6 +434,8 @@ extern "C" {
 	  endianness.
 	 */
 	int bam_read1(bamFile fp, bam1_t *b);
+
+	int bam_remove_B(bam1_t *b);
 
 	/*!
 	  @abstract Write an alignment to BAM.
