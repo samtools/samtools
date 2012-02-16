@@ -96,7 +96,7 @@ static void radix_sort (int *source, int N)
 
   free (temp);
 }
-
+/*
 static int check_order (int *data, int N)
 {
   // only signal errors if any (should not be)
@@ -109,3 +109,4 @@ static int check_order (int *data, int N)
 
   return -1;
 }
+*/

@@ -16,7 +16,6 @@ int bam_sort(int argc, char *argv[]);
 int bam_tview_main(int argc, char *argv[]);
 int bam_mating(int argc, char *argv[]);
 int bam_rmdup(int argc, char *argv[]);
-int bam_sample(int argc, char *argv[]);
 int bam_flagstat(int argc, char *argv[]);
 int bam_fillmd(int argc, char *argv[]);
 int bam_idxstats(int argc, char *argv[]);
@@ -54,7 +53,6 @@ static int usage()
 	fprintf(stderr, "         calmd       recalculate MD/NM tags and '=' bases\n");
 	fprintf(stderr, "         merge       merge sorted alignments\n");
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
-	fprintf(stderr, "         sample      sub-sample reads\n");
 	fprintf(stderr, "         reheader    replace BAM header\n");
 	fprintf(stderr, "         qa          quality control\n");
 	fprintf(stderr, "         cat         concatenate BAMs\n");
@@ -91,7 +89,6 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "faidx") == 0) return faidx_main(argc-1, argv+1);
 	else if (strcmp(argv[1], "fixmate") == 0) return bam_mating(argc-1, argv+1);
 	else if (strcmp(argv[1], "rmdup") == 0) return bam_rmdup(argc-1, argv+1);
-	else if (strcmp(argv[1], "sample") == 0) return bam_sample(argc-1, argv+1);
 	else if (strcmp(argv[1], "flagstat") == 0) return bam_flagstat(argc-1, argv+1);
 	else if (strcmp(argv[1], "calmd") == 0) return bam_fillmd(argc-1, argv+1);
 	else if (strcmp(argv[1], "fillmd") == 0) return bam_fillmd(argc-1, argv+1);

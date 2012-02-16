@@ -227,7 +227,7 @@ int main_qa(int argc, char *argv[])
     //Print header for next table in output file
     fprintf(outputFile,"\nCov*X\tPercentage\tNr. of bases\n");
 
-    printf("Total genome lenght %ld \n", totalGenomeLength);
+    printf("Total genome lenght %ld \n", (long)totalGenomeLength);
     //Compute procentages of genome cover!
     int i = 0;
     for (; i <= userOpt.maxCoverage; ++i) {
@@ -241,7 +241,7 @@ int main_qa(int argc, char *argv[])
         for (; x <= userOpt.maxCoverage; ++x)
             coverage += coverageHist[x];
         printf("%3.2f of genome has been covered at least %dX \n", (double)(100*coverage)/totalGenomeLength, i);
-        fprintf(outputFile,"%d\t%3.5f\t%ld\n",i, (double)(100*coverage)/totalGenomeLength, coverageHist[i]);
+        fprintf(outputFile,"%d\t%3.5f\t%ld\n",i, (double)(100*coverage)/totalGenomeLength, (long)coverageHist[i]);
       }
     }
 
