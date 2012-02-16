@@ -22,7 +22,7 @@ static inline int is_mapped(const bam1_core_t *core)
 static int print_usage()
 {
   fprintf(stderr, "\n");
-  fprintf(stderr, "Usage:   samtools qa [options] <in.bam> <output.out>\n");
+  fprintf(stderr, "Usage:   samtools qa [options] <in.bam>\n");
   fprintf(stderr, "Options: -a            Don't print alternate assemblies to the output file (for human genome)\n");
   fprintf(stderr, "         -m            Also compute median coverage\n");
   fprintf(stderr, "         -c [INT]      Maximum coverage to consider in histogram [30]\n");
@@ -57,9 +57,6 @@ static void compute_print_cov(FILE* outputFile, Options userOpt, int* data, char
     radix_sort(data, chrSize);
 
   //Printout avarage coverage over this chrom
-  printf("Average coverage over %s : %3.2f\n", name, (double)covSum / chrSize);
-  if (userOpt.doMedian)
-    printf("Median coverage over %s : %d\n", name, data[chrSize/2]);
   if (userOpt.printAll == 1) {
     if (userOpt.doMedian)
       fprintf(outputFile, "%s\t%d\t%3.5f\t%d\n", name, chrSize, (double)covSum / chrSize, data[chrSize/2]);
@@ -96,7 +93,7 @@ int main_qa(int argc, char *argv[])
     }
   }
 
-  if (argc-optind != 2) {
+  if (argc-optind != 1) {
     print_usage();
     return 1;
   }
@@ -106,10 +103,7 @@ int main_qa(int argc, char *argv[])
     fprintf(stderr, "qaCompute: Fail to open BAM file %s\n", argv[1]);
     return 1;
   }
-  if ((outputFile = fopen(argv[optind+1], "wt")) == 0) {
-    fprintf(stderr, "qaCompute: Filed to create output file %s\n", argv[2]);
-    return 1;
-  }
+  outputFile = stdout;
 
 
     //Initialize bam entity
@@ -150,7 +144,6 @@ int main_qa(int argc, char *argv[])
 
       if (core == NULL) {
     //There is something wrong with the read/file
-    printf("Input file is corrupt!");
     //Leak everything and exit!
     return -1;
       }
@@ -170,14 +163,12 @@ int main_qa(int argc, char *argv[])
       //Get length of next section
           chrSize = head->target_len[core->tid];
           totalGenomeLength += chrSize;
-          printf("Computing %s of size %d... \n",head->target_name[core->tid],chrSize);
 
       //Done with current section.
       //Allocate memory
       entireChr = (int*)realloc(entireChr, (chrSize+1)*sizeof(int));
 
       if (entireChr == NULL) {
-        printf("Allocation failed! \n");
         return -1;
       }
       memset(entireChr, 0, (chrSize+1)*sizeof(int));
@@ -222,25 +213,20 @@ int main_qa(int argc, char *argv[])
     bam_destroy1(b);
     free(entireChr);
 
-    printf("\n Duplicates:%d \n", duplicates);
-
     //Print header for next table in output file
     fprintf(outputFile,"\nCov*X\tPercentage\tNr. of bases\n");
 
-    printf("Total genome lenght %ld \n", (long)totalGenomeLength);
     //Compute procentages of genome cover!
     int i = 0;
     for (; i <= userOpt.maxCoverage; ++i) {
       if (i == 0) {
         //Non-covered!
-        printf("%3.2f of genome has not been covered\n", (double)(100*coverageHist[i])/totalGenomeLength);
       } else {
         int64_t coverage = 0;
         //All that has been covered i, had been covered i+1, i+2 and so on times. Thus, do this addition
         int x = i;
         for (; x <= userOpt.maxCoverage; ++x)
             coverage += coverageHist[x];
-        printf("%3.2f of genome has been covered at least %dX \n", (double)(100*coverage)/totalGenomeLength, i);
         fprintf(outputFile,"%d\t%3.5f\t%ld\n",i, (double)(100*coverage)/totalGenomeLength, (long)coverageHist[i]);
       }
     }
@@ -258,9 +244,6 @@ int main_qa(int argc, char *argv[])
     double procOfProperPaires = (double)(100*(double)totalProperPaires/2)/nrOfPaires;
     fprintf(outputFile,"Number of proper paired reads: %d\n", totalProperPaires);
     fprintf(outputFile,"Percentage of proper pairs: %3.5f\n", procOfProperPaires);
-
-    printf("Out of %d reads, you have %3.5f unmapped reads\n and %3.5f zero quality mappings\n", totalNumberOfReads ,procentageOfUnmapped, procentageOfZeroQuality);
-
 
     free(coverageHist);
 
