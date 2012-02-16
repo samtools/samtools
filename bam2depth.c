@@ -74,7 +74,7 @@ int main_depth(int argc, char *argv[])
 		}
 	}
 	if (optind == argc) {
-		fprintf(stderr, "Usage: bam2depth [-r reg] [-q baseQthres] [-Q mapQthres] [-b in.bed] [-c] <in1.bam> [...]\n");
+		fprintf(stderr, "Usage: depth [-r reg] [-q baseQthres] [-Q mapQthres] [-b in.bed] [-c [-B binSize]] <in1.bam> [...]\n");
 		return 1;
 	}
 
