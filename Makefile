@@ -1,5 +1,6 @@
-CC=			gcc
-CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
+CC?=			gcc
+CFLAGS?=		-g -Wall -O2 -march=nocona -pipe
+LDFLAGS?=		-Wl,-O1,-as-needed -Wl,-rpath,\$$ORIGIN/../lib
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
 KNETFILE_O=	knetfile.o
 LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
@@ -16,6 +17,7 @@ LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
 
 .SUFFIXES:.c .o
+.PHONY: all lib
 
 .c.o:
 		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
@@ -41,7 +43,7 @@ libbam.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 samtools:lib-recur $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) -Lbcftools $(LIBPATH) libbam.a -lbcf $(LIBCURSES) -lm -lz
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) -Lbcftools $(LIBPATH) libbam.a -lbcf $(LIBCURSES) -lm -lz
 
 razip:razip.o razf.o $(KNETFILE_O)
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o $(KNETFILE_O) -lz
