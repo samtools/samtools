@@ -4,10 +4,11 @@ The official SAMtools repository can be found at: http://samtools.sourceforge.ne
 ## Major fixes:
     - added "samtools sample" command, to sample reads from a SAM/BAM file at a given frequency.
     - added "samtools qa" command, to compute the mean and median coverage, as well a histogram 
-	from 1 to N (defined by param) containing the number of bases covered a maximum of 1X, 2X...NX. 
-	Furthermore, "other" information is also available in the output file, namely:
+    from 1 to N (defined by param) containing the number of bases covered a maximum of 1X, 2X...NX. 
+    Furthermore, "other" information is also available in the output file, namely:
         - Total number of reads
-        - Total number of duplicates found and ignored (duplicates are "found" based on the sam flag and are ignored in the counting of coverage)
+        - Total number of duplicates found and ignored (duplicates are "found" based on the sam flag 
+        and are ignored in the counting of coverage)
         - Percentage of unmapped reads
         - Percentage of zero quality mappings
         - Number of proper paired reads (based on sam flag of proper pairs)
