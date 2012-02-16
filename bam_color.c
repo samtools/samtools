@@ -19,8 +19,14 @@ char bam_aux_getCSi(bam1_t *b, int i)
 
 	cs = bam_aux2Z(c);
 	// adjust for strandedness and leading adaptor
-	if(bam1_strand(b)) i = strlen(cs) - 1 - i;
-	else i++;
+	if(bam1_strand(b)) {
+	    i = strlen(cs) - 1 - i;
+	    // adjust for leading hard clip
+	    uint32_t cigar = bam1_cigar(b)[0];
+	    if((cigar & BAM_CIGAR_MASK) == BAM_CHARD_CLIP) {
+		i -= cigar >> BAM_CIGAR_SHIFT;
+	    }
+	} else { i++; }
 	return cs[i];
 }
 
@@ -42,7 +48,14 @@ char bam_aux_getCQi(bam1_t *b, int i)
 
 	cq = bam_aux2Z(c);
 	// adjust for strandedness
-	if(bam1_strand(b)) i = strlen(cq) - 1 - i;
+	if(bam1_strand(b)) {
+	    i = strlen(cq) - 1 - i;
+	    // adjust for leading hard clip
+	    uint32_t cigar = bam1_cigar(b)[0];
+	    if((cigar & BAM_CIGAR_MASK) == BAM_CHARD_CLIP) {
+		i -= (cigar >> BAM_CIGAR_SHIFT);
+	    }
+	}
 	return cq[i];
 }
 
@@ -98,6 +111,11 @@ char bam_aux_getCEi(bam1_t *b, int i)
 	// adjust for strandedness and leading adaptor
 	if(bam1_strand(b)) { //reverse strand
 		cs_i = strlen(cs) - 1 - i;
+		// adjust for leading hard clip
+		uint32_t cigar = bam1_cigar(b)[0];
+		if((cigar & BAM_CIGAR_MASK) == BAM_CHARD_CLIP) {
+			cs_i -= cigar >> BAM_CIGAR_SHIFT;
+		}
 		// get current color
 		cur_color = cs[cs_i];
 		// get previous base.  Note: must rc adaptor
