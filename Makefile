@@ -1,6 +1,6 @@
 CC?=			gcc
 CFLAGS?=		-g -Wall -O2 -march=nocona -pipe
-LDFLAGS?=		-Wl,-O1,-as-needed -Wl,-rpath,\$$ORIGIN/../lib
+LDFLAGS?=		-Wl,-rpath,\$$ORIGIN/../lib
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
 KNETFILE_O=	knetfile.o
 LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
