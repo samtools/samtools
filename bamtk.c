@@ -54,6 +54,7 @@ static int usage()
 	fprintf(stderr, "         calmd       recalculate MD/NM tags and '=' bases\n");
 	fprintf(stderr, "         merge       merge sorted alignments\n");
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
+	fprintf(stderr, "         sample      sub-sample reads\n");
 	fprintf(stderr, "         reheader    replace BAM header\n");
 	fprintf(stderr, "         qa          quality control\n");
 	fprintf(stderr, "         cat         concatenate BAMs\n");
