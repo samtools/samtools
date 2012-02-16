@@ -328,7 +328,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	if (bcr && fmt_flag) {
 		uint16_t *dp = (fmt_flag & B2B_FMT_DP)? b->gi[1].data : 0;
 		uint16_t *dv = (fmt_flag & B2B_FMT_DV)? b->gi[1 + ((fmt_flag & B2B_FMT_DP) != 0)].data : 0;
-		int32_t  *sp = (fmt_flag & B2B_FMT_DV)? b->gi[1 + ((fmt_flag & B2B_FMT_DP) != 0) + ((fmt_flag & B2B_FMT_DV) != 0)].data : 0;
+		int32_t  *sp = (fmt_flag & B2B_FMT_SP)? b->gi[1 + ((fmt_flag & B2B_FMT_DP) != 0) + ((fmt_flag & B2B_FMT_DV) != 0)].data : 0;
 		for (i = 0; i < bc->n; ++i) {
 			bcf_callret1_t *p = bcr + i;
 			if (dp) dp[i] = p->depth  < 0xffff? p->depth  : 0xffff;

@@ -33,6 +33,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define VC_EM       0x10000
 #define VC_PAIRCALL 0x20000
 #define VC_QCNT     0x40000
+#define VC_INDEL_ONLY 0x80000
 
 typedef struct {
 	int flag, prior_type, n1, n_sub, *sublist, n_perm;
@@ -283,6 +284,8 @@ static void write_header(bcf_hdr_t *h)
         kputs("##FORMAT=<ID=GL,Number=3,Type=Float,Description=\"Likelihoods for RR,RA,AA genotypes (R=ref,A=alt)\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=DP,"))
 		kputs("##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"# high-quality bases\">\n", &str);
+	if (!strstr(str.s, "##FORMAT=<ID=DV,"))
+		kputs("##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"# high-quality non-reference bases\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=SP,"))
 		kputs("##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=PL,"))
@@ -318,7 +321,7 @@ int bcfview(int argc, char *argv[])
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1;
 	memset(qcnt, 0, 8 * 256);
-	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Y")) >= 0) {
+	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Yw")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -335,6 +338,7 @@ int bcfview(int argc, char *argv[])
 		case 'u': vc.flag |= VC_UNCOMP | VC_BCFOUT; break;
 		case 'g': vc.flag |= VC_CALL_GT | VC_CALL; break;
 		case 'I': vc.flag |= VC_NO_INDEL; break;
+		case 'w': vc.flag |= VC_INDEL_ONLY; break;
 		case 'M': vc.flag |= VC_ANNO_MAX; break;
 		case 'Y': vc.flag |= VC_QCNT; break;
 		case 't': vc.theta = atof(optarg); break;
@@ -482,6 +486,7 @@ int bcfview(int argc, char *argv[])
 		if (vc.flag & VC_FIX_PL) bcf_fix_pl(b);
 		is_indel = bcf_is_indel(b);
 		if ((vc.flag & VC_NO_INDEL) && is_indel) continue;
+		if ((vc.flag & VC_INDEL_ONLY) && !is_indel) continue;
 		if ((vc.flag & VC_ACGT_ONLY) && !is_indel) {
 			int x;
 			if (b->ref[0] == 0 || b->ref[1] != 0) continue;
