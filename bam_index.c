@@ -159,9 +159,14 @@ bam_index_t *bam_index_core(bamFile fp)
 	bam1_core_t *c;
 	uint64_t save_off, last_off, n_mapped, n_unmapped, off_beg, off_end, n_no_coor;
 
+	h = bam_header_read(fp);
+	if(h == 0) {
+	    fprintf(stderr, "[bam_index_core] Invalid BAM header.");
+	    return NULL;
+	}
+
 	idx = (bam_index_t*)calloc(1, sizeof(bam_index_t));
 	b = (bam1_t*)calloc(1, sizeof(bam1_t));
-	h = bam_header_read(fp);
 	c = &b->core;
 
 	idx->n = h->n_targets;

@@ -29,35 +29,57 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
 	return ret;
 }
 
+typedef struct {
+    int32_t bin;
+    int32_t bin_idx;
+    int32_t tid;
+    int32_t bin_size;
+} circos_t;
+
+static void circos_print(circos_t *circos, bam_header_t *h)
+{
+  if (circos->tid < 0 || 0 == circos->bin) return;
+  // NB: this could be faster with custom routines
+  fputs(h->target_name[circos->tid], stdout); 
+  printf("\t%d\t%d\t%f\n", 
+         (circos->bin_idx * circos->bin_size) + 1,
+         (circos->bin_idx + 1) * circos->bin_size,
+         circos->bin / (double)circos->bin_size);
+}
+
 #ifdef _MAIN_BAM2DEPTH
 int main(int argc, char *argv[])
 #else
 int main_depth(int argc, char *argv[])
 #endif
 {
-	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0;
+	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, use_circos=0;
 	const bam_pileup1_t **plp;
 	char *reg = 0; // specified region
 	void *bed = 0; // BED data structure
 	bam_header_t *h = 0; // BAM header of the 1st input
 	aux_t **data;
 	bam_mplp_t mplp;
+        circos_t circos; circos.bin_size = 10000;
 
 	// parse the command line
-	while ((n = getopt(argc, argv, "r:b:q:Q:")) >= 0) {
+	while ((n = getopt(argc, argv, "r:b:q:Q:cB:")) >= 0) {
 		switch (n) {
 			case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
 			case 'b': bed = bed_read(optarg); break; // BED or position list file can be parsed now
 			case 'q': baseQ = atoi(optarg); break;   // base quality threshold
 			case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
+			case 'c': use_circos = 1; break; // circos output
+                        case 'B': circos.bin_size = atoi(optarg); break; // circos bin size
 		}
 	}
 	if (optind == argc) {
-		fprintf(stderr, "Usage: bam2depth [-r reg] [-q baseQthres] [-Q mapQthres] [-b in.bed] <in1.bam> [...]\n");
+		fprintf(stderr, "Usage: depth [-r reg] [-q baseQthres] [-Q mapQthres] [-b in.bed] [-c [-B binSize]] <in1.bam> [...]\n");
 		return 1;
 	}
 
 	// initialize the auxiliary data structures
+        if (use_circos) circos.bin = circos.bin_idx = 0; circos.tid = -1;
 	n = argc - optind; // the number of BAMs on the command line
 	data = calloc(n, sizeof(void*)); // data[i] for the i-th input
 	beg = 0; end = 1<<30; tid = -1;  // set the default region
@@ -83,22 +105,39 @@ int main_depth(int argc, char *argv[])
 	n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
 	plp = calloc(n, sizeof(void*)); // plp[i] points to the array of covering reads (internal in mplp)
 	while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0) { // come to the next covered position
+                int32_t cov = 0;
 		if (pos < beg || pos >= end) continue; // out of range; skip
 		if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue; // not in BED; skip
-		fputs(h->target_name[tid], stdout); printf("\t%d", pos+1); // a customized printf() would be faster
-		for (i = 0; i < n; ++i) { // base level filters have to go here
-			int j, m = 0;
-			for (j = 0; j < n_plp[i]; ++j) {
-				const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
-				if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
-				else if (bam1_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
-			}
-			printf("\t%d", n_plp[i] - m); // this the depth to output
-		}
-		putchar('\n');
+                if (0 == use_circos) { fputs(h->target_name[tid], stdout); printf("\t%d", pos+1); } // a customized printf() would be faster
+                for (i = 0; i < n; ++i) { // base level filters have to go here
+                    int j, m = 0;
+                    for (j = 0; j < n_plp[i]; ++j) {
+                        const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
+                        if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
+                        else if (bam1_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
+                    }
+                    if (0 == use_circos) printf("\t%d", n_plp[i] - m); // this the depth to output
+                    else cov += (n_plp[i] - m);
+                }
+                if (0 == use_circos) putchar('\n');
+                else {
+                    pos++; // make one-based
+                    int32_t bin_idx = ((pos - (pos % circos.bin_size)) / circos.bin_size);
+                    if (tid == circos.tid && bin_idx == circos.bin_idx) {
+                        circos.bin += cov; // this is the depth to output
+                    }
+                    else {
+                        circos_print(&circos, h); // print
+                        // update
+                        circos.bin = cov; // this is the depth to output
+                        circos.bin_idx = bin_idx;
+                        circos.tid = tid;
+                    }
+                }
 	}
 	free(n_plp); free(plp);
 	bam_mplp_destroy(mplp);
+        if (1 == use_circos) circos_print(&circos, h); // print
 
 	bam_header_destroy(h);
 	for (i = 0; i < n; ++i) {
