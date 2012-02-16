@@ -418,6 +418,31 @@ void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t m
 	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0);
 }
 
+
+size_t bam_sort_get_max_mem(char *max_mem_string)
+{
+	char c;
+	size_t max_mem;
+	size_t multiplier=1;
+	c=max_mem_string[strlen(max_mem_string)-1];
+	switch(c) {
+	case 'G':
+		multiplier*=1024;
+	case 'M':
+		multiplier*=1024;
+	case 'K':
+		multiplier*=1024;
+	case 'B':
+		max_mem_string[strlen(max_mem_string)-1]='\0';
+		break;
+	default:
+		break;
+	}
+	max_mem = multiplier * atol(max_mem_string);
+	// max_mem should be checked that it was not zero after atol!
+	return max_mem;
+}
+
 int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 500000000;
@@ -426,7 +451,7 @@ int bam_sort(int argc, char *argv[])
 		switch (c) {
 		case 'o': is_stdout = 1; break;
 		case 'n': is_by_qname = 1; break;
-		case 'm': max_mem = atol(optarg); break;
+		case 'm': max_mem = bam_sort_get_max_mem(optarg); break;
 		}
 	}
 	if (optind + 2 > argc) {
