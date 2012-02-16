@@ -79,7 +79,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 		} else { // text
 			// open file
 			fp->x.tamw = strcmp(fn, "-")? fopen(fn, "w") : stdout;
-			if (fp->x.tamr == 0) goto open_err_ret;
+			if (fp->x.tamw == 0) goto open_err_ret;
 			if (strchr(mode, 'X')) fp->type |= BAM_OFSTR<<2;
 			else if (strchr(mode, 'x')) fp->type |= BAM_OFHEX<<2;
 			else fp->type |= BAM_OFDEC<<2;
