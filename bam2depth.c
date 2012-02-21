@@ -42,8 +42,8 @@ static void circos_print(circos_t *circos, bam_header_t *h)
   // NB: this could be faster with custom routines
   fputs(h->target_name[circos->tid], stdout); 
   printf("\t%d\t%d\t%f\n", 
-         (circos->bin_idx * circos->bin_size) + 1,
-         (circos->bin_idx + 1) * circos->bin_size,
+         (circos->bin_idx * circos->bin_size),
+         (circos->bin_idx + 1) * circos->bin_size - 1,
          circos->bin / (double)circos->bin_size);
 }
 
