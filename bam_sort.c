@@ -343,8 +343,8 @@ static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam
   @param  is_by_qname whether to sort by query name
   @param  fn       name of the file to be sorted
   @param  prefix   prefix of the output and the temporary files; upon
-	                   sucessess, prefix.bam will be written.
-  @param  max_mem  approxiate maximum memory (very inaccurate)
+	                   successes, prefix.bam will be written.
+  @param  max_mem  approximate maximum memory (very inaccurate)
 
   @discussion It may create multiple temporary subalignment files
   and then merge them by calling bam_merge_core(). This function is
