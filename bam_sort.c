@@ -5,6 +5,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#ifdef HAVE_LIBPTHREAD
+#include <pthread.h>
+#endif
 #include "bam.h"
 #include "ksort.h"
 
@@ -308,12 +311,232 @@ static inline int bam1_lt(const bam1_p a, const bam1_p b)
 }
 KSORT_INIT(sort, bam1_p, bam1_lt)
 
-static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam_header_t *h, int is_stdout)
+static void
+sort_aux_core(int k, bam1_p *buf, int sort_type)
+{
+  switch(sort_type) {
+    case 0:
+	ks_mergesort(sort, k, buf, 0);
+        break;
+    case 1:
+        ks_introsort(sort, k, buf);
+        break;
+    case 2:
+        ks_combsort(sort, k, buf);
+        break;
+    case 3:
+    default:
+        ks_heapmake(sort, k, buf);
+        ks_heapsort(sort, k, buf);
+        break;
+  }
+}
+
+#ifdef HAVE_LIBPTHREAD
+typedef struct {
+    int k;
+    bam1_p *buf;
+    int sort_type;
+    int tid;
+} sort_aux_t;
+
+void *
+sort_aux_thread_worker(void *arg)
+{
+  sort_aux_t *data = (sort_aux_t*)arg;
+
+  sort_aux_core(data->k, data->buf, data->sort_type);
+
+  return arg;
+}
+
+typedef struct {
+    bam1_p *buf;
+    int n1;
+    int n2;
+    bam1_p *tmp;
+    int tid;
+} merge_aux_t;
+
+static void
+merge_aux_core(bam1_p *buf, int n1, int n2, bam1_p *tmp)
+{
+  int i, j, k;
+
+  // copy into tmp
+  for(i=0;i<n1+n2;i++) {
+      tmp[i] = buf[i];
+      buf[i] = NULL;
+  }
+  i = j = k = 0;
+  while(i < n1 && j < n2) {
+      if(bam1_lt(tmp[i], tmp[n1+j])) {
+          buf[k] = tmp[i];
+          tmp[i] = NULL;
+          i++;
+      }
+      else {
+          buf[k] = tmp[n1+j];
+          tmp[n1+j] = NULL;
+          j++;
+      }
+      k++;
+  }
+  while(i < n1) {
+      buf[k] = tmp[i];
+      tmp[i] = NULL;
+      i++;
+      k++;
+  }
+  while(j < n2) {
+      buf[k] = tmp[n1+j];
+      tmp[n1+j] = NULL;
+      j++;
+      k++;
+  }
+}
+
+void *
+merge_aux_thread_worker(void *arg)
+{
+  merge_aux_t *data = (merge_aux_t*)arg;
+
+  merge_aux_core(data->buf, data->n1, data->n2, data->tmp);
+
+  return arg;
+}
+
+static void
+merge_aux(int k, bam1_p *buf, int num_threads, int by)
+{
+  bam1_p *buf2 = NULL;
+  pthread_attr_t attr;
+  pthread_t *threads = NULL;
+  merge_aux_t *thread_data = NULL;
+  int i, j;
+  
+  buf2 = malloc(k * sizeof(bam1_p));
+  
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+  while(1 < num_threads) {
+  
+      threads = calloc(num_threads/2, sizeof(pthread_t));
+      thread_data = calloc(num_threads/2, sizeof(merge_aux_t));
+
+      // create threads
+      int low, mid, high;
+      for(i=j=0;i<num_threads;i+=2,j++) {
+          low = i * by;
+          mid = low+by-1;
+          high = mid + by;
+          if(k < high) high = k - 1;
+         
+          thread_data[j].buf = buf + low;
+          thread_data[j].tmp = buf2 + low;
+          thread_data[j].n1 = mid - low + 1;
+          thread_data[j].n2 = high - mid;
+          thread_data[j].tid = j;
+          
+          if(0 != pthread_create(&threads[j], &attr, merge_aux_thread_worker, &thread_data[j])) {
+              fprintf(stderr, "[sort] failed to create threads");
+              exit(1);
+          }
+      }
+
+      // join threads
+      for(i=j=0;i<num_threads;i+=2,j++) {
+          if(0 != pthread_join(threads[j], NULL)) {
+              fprintf(stderr, "[sort] failed to join threads");
+              exit(1);
+          }
+      }
+      
+      free(threads);
+      free(thread_data);
+
+      num_threads = (num_threads + 1) / 2;
+      by += by;
+  }
+
+  free(buf2);
+}
+
+static void
+sort_aux(int k, bam1_p *buf, int sort_type, int num_threads, int by)
+{
+  int i, low, high;
+  pthread_attr_t attr;
+  pthread_t *threads = NULL;
+  sort_aux_t *thread_data=NULL;
+
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+  threads = calloc(num_threads, sizeof(pthread_t));
+  thread_data = calloc(num_threads, sizeof(sort_aux_t));
+
+  // create threads
+  low = 0; high = by-1;
+  for(i=0;i<num_threads;i++, low+=by, high+=by) {
+      if(k < high) high = k-1;
+      thread_data[i].k = high - low + 1;
+      thread_data[i].buf = buf + low;
+      thread_data[i].sort_type = sort_type;
+      thread_data[i].tid = i;
+      if(0 != pthread_create(&threads[i], &attr, sort_aux_thread_worker, &thread_data[i])) {
+          fprintf(stderr, "[sort] failed to create threads");
+          exit(1);
+      }
+  }
+
+  // join threads
+  for(i=0;i<num_threads;i++) {
+      if(0 != pthread_join(threads[i], NULL)) {
+          fprintf(stderr, "[sort] failed to join threads");
+          exit(1);
+      }
+  }
+  
+  free(threads);
+  free(thread_data);
+}
+#endif
+
+static void
+sort_buf(int k, bam1_p *buf, int sort_type, int num_threads)
+{
+#ifndef HAVE_LIBPTHREAD
+  sort_aux_core(k, buf, sort_type);
+#else
+  int by;
+
+  by = (k / num_threads) + (k & 1);
+
+  if(num_threads <= 1 || by < 1000) {
+      sort_aux_core(k, buf, sort_type);
+      return;
+  }
+
+  // sort each block
+  sort_aux(k, buf, sort_type, num_threads, by);
+
+  // merge the recursively
+  merge_aux(k, buf, num_threads, by);
+  
+#endif
+}
+
+static void 
+sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam_header_t *h, int is_stdout,
+            int sort_type, int num_threads)
 {
 	char *name, mode[3];
 	int i;
 	bamFile fp;
-	ks_mergesort(sort, k, buf, 0);
+        sort_buf(k, buf, sort_type, num_threads);
+        //ks_mergesort(sort, k, buf, 0);
 	name = (char*)calloc(strlen(prefix) + 20, 1);
 	if (n >= 0) {
 		sprintf(name, "%s.%.4d.bam", prefix, n);
@@ -331,8 +554,8 @@ static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam
 	}
 	free(name);
 	bam_header_write(fp, h);
-	for (i = 0; i < k; ++i)
-		bam_write1_core(fp, &buf[i]->core, buf[i]->data_len, buf[i]->data);
+        for (i = 0; i < k; ++i)
+          bam_write1_core(fp, &buf[i]->core, buf[i]->data_len, buf[i]->data);
 	bam_close(fp);
 }
 
@@ -350,13 +573,24 @@ static void sort_blocks(int n, int k, bam1_p *buf, const char *prefix, const bam
   and then merge them by calling bam_merge_core(). This function is
   NOT thread safe.
  */
-void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t max_mem, int is_stdout)
+void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t max_mem, int is_stdout,
+                       int sort_type, int num_threads)
 {
 	int n, ret, k, i;
 	size_t mem;
 	bam_header_t *header;
 	bamFile fp;
 	bam1_t *b, **buf;
+        size_t sort_mem, merge_mem;
+
+        if(num_threads <= 1) {
+            sort_mem = max_mem;
+            merge_mem = 0;
+        }
+        else {
+            sort_mem = (max_mem * BAM_CORE_SIZE) / (BAM_CORE_SIZE + sizeof(bam1_p));
+            merge_mem = (max_mem * sizeof(bam1_p)) / (BAM_CORE_SIZE + sizeof(bam1_p));
+        }
 
 	g_is_by_qname = is_by_qname;
 	n = k = 0; mem = 0;
@@ -366,7 +600,8 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		return;
 	}
 	header = bam_header_read(fp);
-	buf = (bam1_t**)calloc(max_mem / BAM_CORE_SIZE, sizeof(bam1_t*));
+
+	buf = (bam1_t**)calloc(sort_mem / BAM_CORE_SIZE, sizeof(bam1_t*));
 	// write sub files
 	for (;;) {
 		if (buf[k] == 0) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));
@@ -374,18 +609,18 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		if ((ret = bam_read1(fp, b)) < 0) break;
 		mem += ret;
 		++k;
-		if (mem >= max_mem) {
-			sort_blocks(n++, k, buf, prefix, header, 0);
+		if (mem >= sort_mem) {
+			sort_blocks(n++, k, buf, prefix, header, 0, sort_type, num_threads);
 			mem = 0; k = 0;
 		}
 	}
 	if (ret != -1)
 		fprintf(stderr, "[bam_sort_core] truncated file. Continue anyway.\n");
-	if (n == 0) sort_blocks(-1, k, buf, prefix, header, is_stdout);
+	if (n == 0) sort_blocks(-1, k, buf, prefix, header, is_stdout, sort_type, num_threads);
 	else { // then merge
 		char **fns, *fnout;
 		fprintf(stderr, "[bam_sort_core] merging from %d files...\n", n+1);
-		sort_blocks(n++, k, buf, prefix, header, 0);
+		sort_blocks(n++, k, buf, prefix, header, 0, sort_type, num_threads);
 		fnout = (char*)calloc(strlen(prefix) + 20, 1);
 		if (is_stdout) sprintf(fnout, "-");
 		else sprintf(fnout, "%s.bam", prefix);
@@ -402,7 +637,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		}
 		free(fns);
 	}
-	for (k = 0; k < max_mem / BAM_CORE_SIZE; ++k) {
+	for (k = 0; k < sort_mem / BAM_CORE_SIZE; ++k) {
 		if (buf[k]) {
 			free(buf[k]->data);
 			free(buf[k]);
@@ -415,7 +650,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 
 void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
 {
-	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0);
+	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0, 0, 1);
 }
 
 
@@ -447,17 +682,20 @@ int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 500000000;
 	int c, is_by_qname = 0, is_stdout = 0;
-	while ((c = getopt(argc, argv, "nom:")) >= 0) {
+        int sort_type = 1, num_threads = 1;
+	while ((c = getopt(argc, argv, "nom:s:t:")) >= 0) {
 		switch (c) {
 		case 'o': is_stdout = 1; break;
 		case 'n': is_by_qname = 1; break;
 		case 'm': max_mem = bam_sort_get_max_mem(optarg); break;
+                case 's': sort_type = atoi(optarg); break;
+                case 't': num_threads = atoi(optarg); break;
 		}
 	}
 	if (optind + 2 > argc) {
-		fprintf(stderr, "Usage: samtools sort [-on] [-m <maxMem>] <in.bam> <out.prefix>\n");
+		fprintf(stderr, "Usage: samtools sort [-on] [-m <maxMem>] [-s <sortType>] [-t <numThreads>] <in.bam> <out.prefix>\n");
 		return 1;
 	}
-	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout);
+	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, sort_type, num_threads);
 	return 0;
 }
