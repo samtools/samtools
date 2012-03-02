@@ -693,7 +693,18 @@ int bam_sort(int argc, char *argv[])
 		}
 	}
 	if (optind + 2 > argc) {
-		fprintf(stderr, "Usage: samtools sort [-on] [-m <maxMem>] [-s <sortType>] [-t <numThreads>] <in.bam> <out.prefix>\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Usage:   samtools sort [-on] [-m <maxMem>] [-s <sortType>] [-t <numThreads>] <in.bam> <out.prefix>\n");
+		fprintf(stderr, "Options: -n       sort by read names\n");
+		fprintf(stderr, "         -o       output to stdout\n");
+		fprintf(stderr, "         -m       maximum memory (ex. 200M, 4G)\n");
+		fprintf(stderr, "         -s       sorting algorithm type:\n");
+		fprintf(stderr, "                    0: mergesort\n");
+		fprintf(stderr, "                    1: introsort\n");
+		fprintf(stderr, "                    2: combsort\n");
+		fprintf(stderr, "                    3: heapsort\n");
+		fprintf(stderr, "         -t       number of threads within the sort\n");
+		fprintf(stderr, "\n");
 		return 1;
 	}
 	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, sort_type, num_threads);
