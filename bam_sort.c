@@ -683,13 +683,14 @@ int bam_sort(int argc, char *argv[])
 	size_t max_mem = 500000000;
 	int c, is_by_qname = 0, is_stdout = 0;
         int sort_type = 1, num_threads = 1;
-	while ((c = getopt(argc, argv, "nom:s:t:")) >= 0) {
+	//while ((c = getopt(argc, argv, "nom:s:t:")) >= 0) {
+	while ((c = getopt(argc, argv, "nom:s:")) >= 0) {
 		switch (c) {
 		case 'o': is_stdout = 1; break;
 		case 'n': is_by_qname = 1; break;
 		case 'm': max_mem = bam_sort_get_max_mem(optarg); break;
                 case 's': sort_type = atoi(optarg); break;
-                case 't': num_threads = atoi(optarg); break;
+                //case 't': num_threads = atoi(optarg); break;
 		}
 	}
 	if (optind + 2 > argc) {
@@ -703,7 +704,7 @@ int bam_sort(int argc, char *argv[])
 		fprintf(stderr, "                    1: introsort\n");
 		fprintf(stderr, "                    2: combsort\n");
 		fprintf(stderr, "                    3: heapsort\n");
-		fprintf(stderr, "         -t       number of threads within the sort\n");
+		//fprintf(stderr, "         -t       number of threads within the sort\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}
