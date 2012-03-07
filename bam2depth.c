@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
 int main_depth(int argc, char *argv[])
 #endif
 {
-	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, use_circos=0;
+	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, use_circos=0, max_depth=-1;
 	const bam_pileup1_t **plp;
 	char *reg = 0; // specified region
 	void *bed = 0; // BED data structure
@@ -63,13 +63,14 @@ int main_depth(int argc, char *argv[])
         circos_t circos; circos.bin_size = 10000;
 
 	// parse the command line
-	while ((n = getopt(argc, argv, "r:b:q:Q:cB:")) >= 0) {
+	while ((n = getopt(argc, argv, "r:b:q:Q:cB:m:")) >= 0) {
 		switch (n) {
 			case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
 			case 'b': bed = bed_read(optarg); break; // BED or position list file can be parsed now
 			case 'q': baseQ = atoi(optarg); break;   // base quality threshold
 			case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
 			case 'c': use_circos = 1; break; // circos output
+                        case 'm': max_depth = atoi(optarg); break; // max depth
                         case 'B': circos.bin_size = atoi(optarg); break; // circos bin size
 		}
 	}
@@ -102,6 +103,7 @@ int main_depth(int argc, char *argv[])
 
 	// the core multi-pileup loop
 	mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
+        if(0 < max_depth) bam_mplp_set_maxcnt(mplp, max_depth); // set the maximum depth
 	n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
 	plp = calloc(n, sizeof(void*)); // plp[i] points to the array of covering reads (internal in mplp)
 	while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0) { // come to the next covered position
