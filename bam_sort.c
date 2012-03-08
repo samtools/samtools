@@ -682,7 +682,7 @@ int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 500000000;
 	int c, is_by_qname = 0, is_stdout = 0;
-        int sort_type = 1, num_threads = 1;
+        int sort_type = 0, num_threads = 1;
 	//while ((c = getopt(argc, argv, "nom:s:t:")) >= 0) {
 	while ((c = getopt(argc, argv, "nom:s:")) >= 0) {
 		switch (c) {
