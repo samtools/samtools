@@ -112,7 +112,8 @@ static inline int kputw(int c, kstring_t *s)
 	char buf[16];
 	int l, x;
 	if (c == 0) return kputc('0', s);
-	for (l = 0, x = c < 0? -c : c; x > 0; x /= 10) buf[l++] = x%10 + '0';
+        if(c < 0) for (l = 0, x = c; x < 0; x /= 10) buf[l++] = '0' - (x%10);
+        else for (l = 0, x = c; x > 0; x /= 10) buf[l++] = x%10 + '0';
 	if (c < 0) buf[l++] = '-';
 	if (s->l + l + 1 >= s->m) {
 		s->m = s->l + l + 2;

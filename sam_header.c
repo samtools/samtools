@@ -434,8 +434,14 @@ static int sam_header_line_validate(HeaderLine *hline)
         tag = tags->data;
         if ( !tag_exists(tag->key,required_tags[itype]) && !tag_exists(tag->key,optional_tags[itype]) )
         {
-            debug("Unknown tag [%c%c] for [%c%c].\n", tag->key[0],tag->key[1], hline->type[0],hline->type[1]);
-            return 0;
+            // Lower case tags are user-defined values.
+            if( !(islower(tag->key[0]) || islower(tag->key[1])) )
+            {
+                // Neither is lower case, but tag was not recognized.
+                debug("Unknown tag [%c%c] for [%c%c].\n", tag->key[0],tag->key[1], hline->type[0],hline->type[1]);
+                // return 0; // Even unknown tags are allowed - for forward compatibility with new attributes
+            }
+            // else - allow user defined tag
         }
         tags = tags->next;
     }

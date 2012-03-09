@@ -114,7 +114,6 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 				if (!p->is_del) {
 					if (tv->base_for == TV_BASE_COLOR_SPACE && 
 							(c = bam_aux_getCSi(p->b, p->qpos))) {
-						c = bam_aux_getCSi(p->b, p->qpos);
 						// assume that if we found one color, we will be able to get the color error
 						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos)) c = bam1_strand(p->b)? ',' : '.';
 					} else {
@@ -304,7 +303,7 @@ static void tv_win_goto(tview_t *tv, int *tid, int *pos)
 		int c = wgetch(tv->wgoto);
 		wrefresh(tv->wgoto);
 		if (c == KEY_BACKSPACE || c == '\010' || c == '\177') {
-			--l;
+			if(l > 0) --l;
 		} else if (c == KEY_ENTER || c == '\012' || c == '\015') {
 			int _tid = -1, _beg, _end;
 			if (str[0] == '=') {
