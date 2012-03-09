@@ -1,0 +1,63 @@
+CC=			gcc.exe
+AR=			ar.exe
+CFLAGS=		-g -Wall -O2
+DFLAGS=		-D_USE_KNETFILE -D_CURSES_LIB=2
+KNETFILE_O=	knetfile.o
+LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
+			bam_pileup.o bam_lpileup.o bam_md.o razf.o faidx.o \
+			$(KNETFILE_O) bam_sort.o sam_header.o bam_reheader.o kprobaln.o bedidx.o
+AOBJS=		bam_tview.o bam_plcmd.o sam_view.o \
+			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
+			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
+			cut_target.o phase.o bam_cat.o bam2depth.o
+BCFOBJS=	bcftools/bcf.o bcftools/fet.o bcftools/bcf2qcall.o bcftools/bcfutils.o \
+			bcftools/call1.o bcftools/index.o bcftools/kfunc.o bcftools/em.o \
+			bcftools/kmin.o bcftools/prob1.o bcftools/vcf.o bcftools/mut.o
+PROG=		samtools.exe bcftools.exe
+INCLUDES=	-I. -Iwin32
+SUBDIRS=	.
+LIBPATH=
+
+.SUFFIXES:.c .o
+
+.c.o:
+		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
+
+all:$(PROG)
+
+.PHONY:all lib clean cleanlocal
+.PHONY:all-recur lib-recur clean-recur cleanlocal-recur install-recur
+
+lib:libbam.a
+
+libbam.a:$(LOBJS)
+		$(AR) -cru $@ $(LOBJS)
+
+samtools.exe:$(AOBJS) libbam.a $(BCFOBJS)
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(BCFOBJS) $(LIBPATH) -lm -L. -lbam -Lwin32 -lz -lcurses -lws2_32
+
+bcftools.exe:$(BCFOBJS) bcftools/main.o kstring.o bgzf.o knetfile.o bedidx.o
+		$(CC) $(CFLAGS) -o $@ $(BCFOBJS) bcftools/main.o kstring.o bgzf.o knetfile.o bedidx.o -lm -Lwin32 -lz -lws2_32
+
+razip.o:razf.h
+bam.o:bam.h razf.h bam_endian.h kstring.h sam_header.h
+sam.o:sam.h bam.h
+bam_import.o:bam.h kseq.h khash.h razf.h
+bam_pileup.o:bam.h razf.h ksort.h
+bam_plcmd.o:bam.h faidx.h bcftools/bcf.h bam2bcf.h
+bam_index.o:bam.h khash.h ksort.h razf.h bam_endian.h
+bam_lpileup.o:bam.h ksort.h
+bam_tview.o:bam.h faidx.h
+bam_sort.o:bam.h ksort.h razf.h
+bam_md.o:bam.h faidx.h
+sam_header.o:sam_header.h khash.h
+bcf.o:bcftools/bcf.h
+bam2bcf.o:bam2bcf.h errmod.h bcftools/bcf.h
+bam2bcf_indel.o:bam2bcf.h
+errmod.o:errmod.h
+
+faidx.o:faidx.h razf.h khash.h
+faidx_main.o:faidx.h razf.h
+
+clean:
+		rm -fr gmon.out *.o a.out *.exe *.dSYM razip bgzip $(PROG) *~ *.a *.so.* *.so *.dylib

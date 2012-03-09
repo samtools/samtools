@@ -319,7 +319,6 @@ static void tv_win_goto(tview_t *tv, int *tid, int *pos)
 					return;
 				}
 			}
-			//fprintf(stderr, "Invalid position: %s [%d]\n", str, _tid);
 		} else if (isgraph(c)) {
 			if (l < TV_MAX_GOTO) str[l++] = c;
 		} else if (c == '\027') l = 0;
