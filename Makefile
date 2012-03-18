@@ -51,7 +51,7 @@ razip:razip.o razf.o $(KNETFILE_O)
 bgzip:bgzip.o bgzf.o $(KNETFILE_O)
 		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o $(KNETFILE_O) -lz -lpthread
 
-bgzf.o:bgzf.h
+bgzf.o:bgzf.c bgzf.h
 		$(CC) -c $(CFLAGS) $(DFLAGS) -DBGZF_CACHE $(INCLUDES) bgzf.c -o $@
 
 razip.o:razf.h

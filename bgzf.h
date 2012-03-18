@@ -190,6 +190,13 @@ extern "C" {
 	 */
 	int bgzf_read_block(BGZF *fp);
 
+	/**
+	 * Enable multi-threading (only effective on writing)
+	 *
+	 * @param fp          BGZF file handler; must be opened for writing
+	 * @param n_threads   #threads used for writing
+	 * @param n_sub_blks  #blocks processed by each thread; a value 64-256 is recommended
+	 */
 	int bgzf_mt(BGZF *fp, int n_threads, int n_sub_blks);
 
 #ifdef __cplusplus
