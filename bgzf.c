@@ -267,7 +267,7 @@ static int load_block_from_cache(BGZF *fp, int64_t block_address)
 	if (fp->block_length != 0) fp->block_offset = 0;
 	fp->block_address = block_address;
 	fp->block_length = p->size;
-	memcpy(fp->uncompressed_block, p->block, BGZF_BLOCK_SIZE);
+	memcpy(fp->uncompressed_block, p->block, BGZF_MAX_BLOCK_SIZE);
 	_bgzf_seek((_bgzf_file_t)fp->fp, p->end_offset, SEEK_SET);
 	return p->size;
 }
@@ -278,8 +278,8 @@ static void cache_block(BGZF *fp, int size)
 	khint_t k;
 	cache_t *p;
 	khash_t(cache) *h = (khash_t(cache)*)fp->cache;
-	if (BGZF_BLOCK_SIZE >= fp->cache_size) return;
-	if ((kh_size(h) + 1) * BGZF_BLOCK_SIZE > fp->cache_size) {
+	if (BGZF_MAX_BLOCK_SIZE >= fp->cache_size) return;
+	if ((kh_size(h) + 1) * BGZF_MAX_BLOCK_SIZE > fp->cache_size) {
 		/* A better way would be to remove the oldest block in the
 		 * cache, but here we remove a random one for simplicity. This
 		 * should not have a big impact on performance. */
@@ -295,8 +295,8 @@ static void cache_block(BGZF *fp, int size)
 	p = &kh_val(h, k);
 	p->size = fp->block_length;
 	p->end_offset = fp->block_address + size;
-	p->block = malloc(BGZF_BLOCK_SIZE);
-	memcpy(kh_val(h, k).block, fp->uncompressed_block, BGZF_BLOCK_SIZE);
+	p->block = malloc(BGZF_MAX_BLOCK_SIZE);
+	memcpy(kh_val(h, k).block, fp->uncompressed_block, BGZF_MAX_BLOCK_SIZE);
 }
 #else
 static void free_cache(BGZF *fp) {}

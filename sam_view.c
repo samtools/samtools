@@ -209,7 +209,7 @@ int main_samview(int argc, char *argv[])
 		ret = 1;
 		goto view_end;
 	}
-	if (n_threads > 1) samthreads(out, n_threads, 16); 
+	if (n_threads > 1) samthreads(out, n_threads, 256); 
 	if (is_header_only) goto view_end; // no need to print alignments
 
 	if (argc == optind + 1) { // convert/print the entire file
