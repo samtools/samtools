@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include "knetfile.h"
 #include "bcf.h"
 
 #include "kseq.h"
@@ -29,12 +30,12 @@ int bcf_cat(int n, char * const *fn)
 		if (i == 0) bcf_hdr_write(out, h);
 		bcf_hdr_destroy(h);
 #ifdef _USE_KNETFILE
-		fstat(knet_fileno(in->fp->x.fpr), &s);
+		fstat(knet_fileno((knetFile*)in->fp->fp), &s);
 		end = s.st_size - 28;
-		while (knet_tell(in->fp->x.fpr) < end) {
-			int size = knet_tell(in->fp->x.fpr) + BUF_SIZE < end? BUF_SIZE : end - knet_tell(in->fp->x.fpr);
-			knet_read(in->fp->x.fpr, buf, size);
-			fwrite(buf, 1, size, out->fp->x.fpw);
+		while (knet_tell((knetFile*)in->fp->fp) < end) {
+			int size = knet_tell((knetFile*)in->fp->fp) + BUF_SIZE < end? BUF_SIZE : end - knet_tell((knetFile*)in->fp->fp);
+			knet_read(in->fp->fp, buf, size);
+			fwrite(buf, 1, size, out->fp->fp);
 		}
 #else
 		abort(); // FIXME: not implemented
