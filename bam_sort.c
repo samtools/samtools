@@ -486,7 +486,7 @@ void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t m
 
 int bam_sort(int argc, char *argv[])
 {
-	size_t max_mem = 1<<29; // 512MB
+	size_t max_mem = 768<<20; // 512MB
 	int c, is_by_qname = 0, is_stdout = 0, n_threads = 0;
 	while ((c = getopt(argc, argv, "nom:@:")) >= 0) {
 		switch (c) {
