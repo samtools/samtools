@@ -41,14 +41,14 @@
 #define BGZF_ERR_MISUSE 8
 
 typedef struct {
-	int errcode:30, is_write:2;
-	int compress_level, n_threads;
+	int errcode:16, is_write:2, compress_level:14;
 	int cache_size;
     int block_length, block_offset;
     int64_t block_address;
     void *uncompressed_block, *compressed_block;
 	void *cache; // a pointer to a hash table
 	void *fp; // actual file handler; FILE* on writing; FILE* or knetFile* on reading
+	void *mt; // only used for multi-threading
 } BGZF;
 
 #ifndef KSTRING_T
@@ -189,6 +189,8 @@ extern "C" {
 	 * Read the next BGZF block.
 	 */
 	int bgzf_read_block(BGZF *fp);
+
+	void bgzf_mt(BGZF *fp, int n_threads, int n_sub_blks);
 
 #ifdef __cplusplus
 }
