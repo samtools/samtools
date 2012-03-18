@@ -290,6 +290,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -c       print only the count of matching records\n");
 	fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
+	fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
 	fprintf(stderr, "         -L FILE  output alignments overlapping the input BED FILE [null]\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");

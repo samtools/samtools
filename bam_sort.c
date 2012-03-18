@@ -89,8 +89,7 @@ static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-int bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn,
-					int flag, const char *reg)
+int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads)
 {
 	bamFile fpout, *fp;
 	heap1_t *heap;
@@ -222,6 +221,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 	}
 	bam_header_write(fpout, hout);
 	bam_header_destroy(hout);
+	if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
 
 	ks_heapmake(heap, n, heap);
 	while (heap->pos != HEAP_EMPTY) {
@@ -256,12 +256,17 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 	return 0;
 }
 
+int bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg)
+{
+	return bam_merge_core2(by_qname, out, headers, n, fn, flag, reg, 0);
+}
+
 int bam_merge(int argc, char *argv[])
 {
-	int c, is_by_qname = 0, flag = 0, ret = 0;
+	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0;
 	char *fn_headers = NULL, *reg = 0;
 
-	while ((c = getopt(argc, argv, "h:nru1R:f")) >= 0) {
+	while ((c = getopt(argc, argv, "h:nru1R:f@:")) >= 0) {
 		switch (c) {
 		case 'r': flag |= MERGE_RG; break;
 		case 'f': flag |= MERGE_FORCE; break;
@@ -270,6 +275,7 @@ int bam_merge(int argc, char *argv[])
 		case '1': flag |= MERGE_LEVEL1; break;
 		case 'u': flag |= MERGE_UNCOMP; break;
 		case 'R': reg = strdup(optarg); break;
+		case '@': n_threads = atoi(optarg); break;
 		}
 	}
 	if (optind + 2 >= argc) {
@@ -280,6 +286,7 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "         -u       uncompressed BAM output\n");
 		fprintf(stderr, "         -f       overwrite the output BAM if exist\n");
 		fprintf(stderr, "         -1       compress level 1\n");
+		fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
 		fprintf(stderr, "         -R STR   merge file in the specified region STR [all]\n");
 		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n\n");
 		fprintf(stderr, "Note: Samtools' merge does not reconstruct the @RG dictionary in the header. Users\n");
@@ -295,7 +302,7 @@ int bam_merge(int argc, char *argv[])
 			return 1;
 		}
 	}
-	if (bam_merge_core(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1, flag, reg) < 0) ret = 1;
+	if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1, flag, reg, n_threads) < 0) ret = 1;
 	free(reg);
 	free(fn_headers);
 	return ret;
