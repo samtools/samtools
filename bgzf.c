@@ -219,7 +219,7 @@ static int inflate_block(BGZF* fp, int block_length)
 	zs.next_in = fp->compressed_block + 18;
 	zs.avail_in = block_length - 16;
 	zs.next_out = fp->uncompressed_block;
-	zs.avail_out = BGZF_BLOCK_SIZE;
+	zs.avail_out = BGZF_MAX_BLOCK_SIZE;
 
 	if (inflateInit2(&zs, -15) != Z_OK) {
 		fp->errcode |= BGZF_ERR_ZLIB;
@@ -310,7 +310,7 @@ int bgzf_read_block(BGZF *fp)
 	int count, size = 0, block_length, remaining;
 	int64_t block_address;
 	block_address = _bgzf_tell((_bgzf_file_t)fp->fp);
-	if (load_block_from_cache(fp, block_address)) return 0;
+	if (fp->cache_size && load_block_from_cache(fp, block_address)) return 0;
 	count = _bgzf_read(fp->fp, header, sizeof(header));
 	if (count == 0) { // no data read
 		fp->block_length = 0;
@@ -385,14 +385,15 @@ typedef struct mtaux_t {
 	worker_t *w;
 } mtaux_t;
 
-void bgzf_mt(BGZF *fp, int n_threads, int n_sub_blks)
+int bgzf_mt(BGZF *fp, int n_threads, int n_sub_blks)
 {
 	int i;
 	mtaux_t *mt;
-	if (!fp->is_write || fp->mt || n_threads <= 1) return;
+	if (!fp->is_write || fp->mt || n_threads <= 1) return -1;
 	mt = calloc(1, sizeof(mtaux_t));
 	mt->n_threads = n_threads;
 	mt->n_blks = n_threads * n_sub_blks;
+	mt->len = calloc(mt->n_blks, sizeof(int));
 	mt->blk = calloc(mt->n_blks, sizeof(void*));
 	for (i = 0; i < mt->n_blks; ++i)
 		mt->blk[i] = malloc(BGZF_MAX_BLOCK_SIZE);
@@ -407,6 +408,7 @@ void bgzf_mt(BGZF *fp, int n_threads, int n_sub_blks)
 	pthread_attr_init(&mt->attr);
 	pthread_attr_setdetachstate(&mt->attr, PTHREAD_CREATE_JOINABLE);
 	fp->mt = mt;
+	return 0;
 }
 
 static void mt_destroy(mtaux_t *mt)
@@ -433,11 +435,21 @@ static void *mt_worker(void *data)
 	return 0;
 }
 
+static void mt_queue(BGZF *fp)
+{
+	mtaux_t *mt = (mtaux_t*)fp->mt;
+	assert(mt->curr < mt->n_blks); // guaranteed by the caller
+	memcpy(mt->blk[mt->curr], fp->uncompressed_block, fp->block_offset);
+	mt->len[mt->curr] = fp->block_offset;
+	fp->block_offset = 0;
+	++mt->curr;
+}
+
 static int mt_flush(BGZF *fp)
 {
 	int i;
 	mtaux_t *mt = (mtaux_t*)fp->mt;
-	if (mt->curr == 0) return 0;
+	if (fp->block_offset) mt_queue(fp); // guaranteed that assertion does not fail
 	for (i = 0; i < mt->n_threads; ++i) pthread_create(&mt->tid[i], &mt->attr, mt_worker, &mt->w[i]);
 	for (i = 0; i < mt->n_threads; ++i) {
 		pthread_join(mt->tid[i], 0);
@@ -450,14 +462,13 @@ static int mt_flush(BGZF *fp)
 	return 0;
 }
 
-static int mt_push_blk(BGZF *fp)
+static int mt_lazy_flush(BGZF *fp)
 {
 	mtaux_t *mt = (mtaux_t*)fp->mt;
-	memcpy(mt->blk[mt->curr], fp->uncompressed_block, fp->block_offset);
-	mt->len[mt->curr] = fp->block_offset;
-	fp->block_offset = 0;
-	if (++mt->curr == mt->n_blks) mt_flush(fp);
-	return 0;
+	mt_queue(fp);
+	if (mt->curr == mt->n_blks)
+		return mt_flush(fp);
+	return -1;
 }
 
 static ssize_t mt_write(BGZF *fp, const void *data, ssize_t length)
@@ -468,7 +479,7 @@ static ssize_t mt_write(BGZF *fp, const void *data, ssize_t length)
 		int copy_length = BGZF_BLOCK_SIZE - fp->block_offset < rest? BGZF_BLOCK_SIZE - fp->block_offset : rest;
 		memcpy(fp->uncompressed_block + fp->block_offset, input, copy_length);
 		fp->block_offset += copy_length; input += copy_length; rest -= copy_length;
-		if (fp->block_offset == BGZF_BLOCK_SIZE) mt_push_blk(fp);
+		if (fp->block_offset == BGZF_BLOCK_SIZE) mt_lazy_flush(fp);
 	}
 	return length - rest;
 }
@@ -495,7 +506,7 @@ int bgzf_flush(BGZF *fp)
 int bgzf_flush_try(BGZF *fp, ssize_t size)
 {
 	if (fp->block_offset + size > BGZF_BLOCK_SIZE) {
-		if (fp->mt) return mt_push_blk(fp);
+		if (fp->mt) return mt_lazy_flush(fp);
 		else return bgzf_flush(fp);
 	}
 	return -1;

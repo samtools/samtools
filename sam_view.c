@@ -119,14 +119,14 @@ static int usage(int is_long_help);
 int main_samview(int argc, char *argv[])
 {
 	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, compress_level = -1, is_bamout = 0, is_count = 0;
-	int of_type = BAM_OFDEC, is_long_help = 0;
+	int of_type = BAM_OFDEC, is_long_help = 0, n_threads = 0;
 	int count = 0;
 	samfile_t *in = 0, *out = 0;
 	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:")) >= 0) {
 		switch (c) {
 		case 's': g_subsam = atof(optarg); break;
 		case 'c': is_count = 1; break;
@@ -151,6 +151,7 @@ int main_samview(int argc, char *argv[])
 		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
 		case 'B': bam_no_B = 1; break;
 		case 'Q': g_qual_scale = atoi(optarg); break;
+		case '@': n_threads = strtol(optarg, 0, 0); break;
 		default: return usage(is_long_help);
 		}
 	}
@@ -208,6 +209,7 @@ int main_samview(int argc, char *argv[])
 		ret = 1;
 		goto view_end;
 	}
+	if (n_threads > 1) samthreads(out, n_threads, 16); 
 	if (is_header_only) goto view_end; // no need to print alignments
 
 	if (argc == optind + 1) { // convert/print the entire file

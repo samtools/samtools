@@ -36,6 +36,13 @@ static void append_header_text(bam_header_t *header, char* text, int len)
 	header->text[header->l_text] = 0;
 }
 
+int samthreads(samfile_t *fp, int n_threads, int n_sub_blks)
+{
+	if (!(fp->type&1) || (fp->type&2)) return -1;
+	bgzf_mt(fp->x.bam, n_threads, n_sub_blks);
+	return 0;
+}
+
 samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 {
 	samfile_t *fp;

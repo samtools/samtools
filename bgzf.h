@@ -1,7 +1,7 @@
 /* The MIT License
 
    Copyright (c) 2008 Broad Institute / Massachusetts Institute of Technology
-                 2011 Attractive Chaos <attractor@live.co.uk>
+                 2011, 2012 Attractive Chaos <attractor@live.co.uk>
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,7 @@
 #include <stdio.h>
 #include <zlib.h>
 
-#define BGZF_BLOCK_SIZE     0xff00
+#define BGZF_BLOCK_SIZE     0xff00 // make sure compressBound(BGZF_BLOCK_SIZE) < BGZF_MAX_BLOCK_SIZE
 #define BGZF_MAX_BLOCK_SIZE 0x10000
 
 #define BGZF_ERR_ZLIB   1
@@ -190,7 +190,7 @@ extern "C" {
 	 */
 	int bgzf_read_block(BGZF *fp);
 
-	void bgzf_mt(BGZF *fp, int n_threads, int n_sub_blks);
+	int bgzf_mt(BGZF *fp, int n_threads, int n_sub_blks);
 
 #ifdef __cplusplus
 }

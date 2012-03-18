@@ -31,7 +31,7 @@ libbcf.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 bcftools:lib $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf -lm -lz
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf -lm -lz -lpthread
 
 bcf.o:bcf.h
 vcf.o:bcf.h
