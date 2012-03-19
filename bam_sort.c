@@ -50,7 +50,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 		int t;
 		if (a.b == 0 || b.b == 0) return a.b == 0? 1 : 0;
 		t = strnum_cmp(bam1_qname(a.b), bam1_qname(b.b));
-		return (t > 0 || (t == 0 && __pos_cmp(a, b)));
+		return (t > 0 || (t == 0 && (a.b->core.flag&0xc0) > (b.b->core.flag&0xc0)));
 	} else return __pos_cmp(a, b);
 }
 
@@ -320,7 +320,7 @@ static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
 	if (g_is_by_qname) {
 		int t = strnum_cmp(bam1_qname(a), bam1_qname(b));
-		return (t < 0 || (t == 0 && (((uint64_t)a->core.tid<<32|(a->core.pos+1)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)))));
+		return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
 	} else return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam1_strand(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam1_strand(b)));
 }
 KSORT_INIT(sort, bam1_p, bam1_lt)
