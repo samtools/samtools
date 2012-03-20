@@ -367,12 +367,14 @@ int main_bam2fq(int argc, char *argv[])
 	bam_header_t *h;
 	bam1_t *b;
 	int8_t *buf;
-	int max_buf;
+	int max_buf, c, no12 = 0;
+	while ((c = getopt(argc, argv, "n")) > 0)
+		if (c == 'n') no12 = 1;
 	if (argc == 1) {
 		fprintf(stderr, "Usage: samtools bam2fq <in.bam>\n");
 		return 1;
 	}
-	fp = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
+	fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	if (fp == 0) return 1;
 	h = bam_header_read(fp);
 	b = bam_init1();
@@ -382,9 +384,12 @@ int main_bam2fq(int argc, char *argv[])
 		int i, qlen = b->core.l_qseq;
 		uint8_t *seq;
 		putchar('@'); fputs(bam1_qname(b), stdout);
-		if ((b->core.flag & 0x40) && !(b->core.flag & 0x80)) puts("/1");
-		else if ((b->core.flag & 0x80) && !(b->core.flag & 0x40)) puts("/2");
-		else putchar('\n');
+		if (no12) putchar('\n');
+		else {
+			if ((b->core.flag & 0x40) && !(b->core.flag & 0x80)) puts("/1");
+			else if ((b->core.flag & 0x80) && !(b->core.flag & 0x40)) puts("/2");
+			else putchar('\n');
+		}
 		if (max_buf < qlen + 1) {
 			max_buf = qlen + 1;
 			kroundup32(max_buf);
