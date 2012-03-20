@@ -22,7 +22,8 @@ typedef khash_t(rg) *rghash_t;
 // FIXME: we'd better use no global variables...
 static rghash_t g_rghash = 0;
 static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0, g_qual_scale = 0;
-static float g_subsam = -1;
+static uint32_t g_subsam_seed = 0;
+static double g_subsam_frac = -1.;
 static char *g_library, *g_rg;
 static void *g_bed;
 
@@ -44,10 +45,9 @@ static int process_aln(const bam_header_t *h, bam1_t *b)
 		return 1;
 	if (g_bed && b->core.tid >= 0 && !bed_overlap(g_bed, h->target_name[b->core.tid], b->core.pos, bam_calend(&b->core, bam1_cigar(b))))
 		return 1;
-	if (g_subsam > 0.) {
-		int x = (int)(g_subsam + .499);
-		uint32_t k = __ac_X31_hash_string(bam1_qname(b)) + x;
-		if (k%1024 / 1024.0 >= g_subsam - x) return 1;
+	if (g_subsam_frac > 0.) {
+		uint32_t k = __ac_X31_hash_string(bam1_qname(b)) + g_subsam_seed;
+		if ((double)(k&0xffffff) / 0x1000000 >= g_subsam_frac) return 1;
 	}
 	if (g_rg || g_rghash) {
 		uint8_t *s = bam_aux_get(b, "RG");
@@ -122,13 +122,19 @@ int main_samview(int argc, char *argv[])
 	int of_type = BAM_OFDEC, is_long_help = 0;
 	int count = 0;
 	samfile_t *in = 0, *out = 0;
-	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0;
+	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0, *q;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
 	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:")) >= 0) {
 		switch (c) {
-		case 's': g_subsam = atof(optarg); break;
+		case 's':
+			if ((g_subsam_seed = strtol(optarg, &q, 10)) != 0) {
+				srand(g_subsam_seed);
+				g_subsam_seed = rand();
+			}
+			g_subsam_frac = strtod(q, &q);
+			break;
 		case 'c': is_count = 1; break;
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
