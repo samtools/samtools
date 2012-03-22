@@ -288,6 +288,7 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "         -u       uncompressed BAM output\n");
 		fprintf(stderr, "         -f       overwrite the output BAM if exist\n");
 		fprintf(stderr, "         -1       compress level 1\n");
+		fprintf(stderr, "         -l INT   compression level, from 0 to 9 [-1]\n");
 		fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
 		fprintf(stderr, "         -R STR   merge file in the specified region STR [all]\n");
 		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n\n");
@@ -406,7 +407,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
  */
 void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t _max_mem, int is_stdout, int n_threads, int level)
 {
-	int ret, i, extra_mem, n_files = 0;
+	int ret, i, n_files = 0;
 	size_t mem, max_k, k, max_mem;
 	bam_header_t *header;
 	bamFile fp;
@@ -414,7 +415,6 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	char *fnout = 0;
 
 	if (n_threads < 2) n_threads = 1;
-	extra_mem = sizeof(void*) + sizeof(void*) + (sizeof(bam1_t) - sizeof(bam1_core_t));
 	g_is_by_qname = is_by_qname;
 	max_k = k = 0; mem = 0;
 	max_mem = _max_mem * n_threads;
@@ -436,7 +436,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		if (buf[k] == 0) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));
 		b = buf[k];
 		if ((ret = bam_read1(fp, b)) < 0) break;
-		mem += ret + extra_mem;
+		mem += sizeof(bam1_t) + b->m_data + sizeof(void*) + sizeof(void*); // two sizeof(void*) for the data allocated to pointer arrays
 		++k;
 		if (mem >= max_mem) {
 			n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
@@ -510,7 +510,14 @@ int bam_sort(int argc, char *argv[])
 		}
 	}
 	if (optind + 2 > argc) {
-		fprintf(stderr, "Usage: samtools sort [-on] [-m maxMem=1G] <in.bam> <out.prefix>\n");
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Usage:   samtools sort [options] <in.bam> <out.prefix>\n\n");
+		fprintf(stderr, "Options: -n        sort by read name\n");
+		fprintf(stderr, "         -o        final output to stdout\n");
+		fprintf(stderr, "         -l INT    compression level, from 0 to 9 [-1]\n");
+		fprintf(stderr, "         -@ INT    number of sorting and compression threads [1]\n");
+		fprintf(stderr, "         -m INT    max memory per thread; suffix K/M/G recognized [768M]\n");
+		fprintf(stderr, "\n");
 		return 1;
 	}
 	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, n_threads, level);
