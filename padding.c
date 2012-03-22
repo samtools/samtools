@@ -37,14 +37,16 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 		int op, ol;
 		op = bam_cigar_op(cigar[k]);
 		ol = bam_cigar_oplen(cigar[k]);
-		assert(op == BAM_CMATCH || op == BAM_CDEL || op == BAM_CSOFT_CLIP);
 		if (op == BAM_CMATCH) {
 			for (i = 0; i < ol; ++i) s->s[s->l++] = bam1_seqi(seq, j);
 			++j;
 		} else if (op == BAM_CSOFT_CLIP) {
 			j += ol;
-		} else {
+		} else if (op == BAM_CDEL) {
 			for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
+                } else {
+			fprintf(stderr, "[unpad_seq] Didn't expect CIGAR op %c in %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
+                        assert(-1);
 		}
 	}
 }
