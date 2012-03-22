@@ -45,7 +45,7 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 		} else if (op == BAM_CDEL) {
 			for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
                 } else {
-			fprintf(stderr, "[unpad_seq] Didn't expect CIGAR op %c in %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
+			fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
                         assert(-1);
 		}
 	}
@@ -56,6 +56,7 @@ int bam_pad2unpad(bamFile in, bamFile out)
 	bam_header_t *h;
 	bam1_t *b;
 	kstring_t r, q;
+        int r_tid = -1;
 	uint32_t *cigar2 = 0;
 	int n2 = 0, m2 = 0, *posmap = 0;
 
@@ -68,6 +69,10 @@ int bam_pad2unpad(bamFile in, bamFile out)
 		n2 = 0;
 		if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam1_qname(b), h->target_name[b->core.tid]) == 0) {
 			int i, k;
+			/*
+			fprintf(stderr, "[depad] Found embedded reference %s\n", bam1_qname(b));
+			*/
+			r_tid = b->core.tid;
 			unpad_seq(b, &r);
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(b->core.l_qseq, BAM_CMATCH));
 			replace_cigar(b, n2, cigar2);
@@ -76,8 +81,15 @@ int bam_pad2unpad(bamFile in, bamFile out)
 				posmap[i] = k; // note that a read should NOT start at a padding
 				if (r.s[i]) ++k;
 			}
-		} else {
+		} else if (b->core.n_cigar > 0) {
 			int i, k, op;
+			if (b->core.tid < 0) {
+				fprintf(stderr, "[depad] ERROR: Read %s has CIGAR but no RNAME\n", bam1_qname(b));
+				return -1;
+			} else if (b->core.tid != r_tid) {
+				fprintf(stderr, "[depad] ERROR: Missing %s embedded reference sequence\n", h->target_name[b->core.tid]);
+				return -1;
+			}
 			unpad_seq(b, &q);
 			if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[0]);
 			for (i = 0, k = b->core.pos; i < q.l; ++i, ++k)
@@ -110,13 +122,14 @@ int bam_pad2unpad(bamFile in, bamFile out)
 int main_pad2unpad(int argc, char *argv[])
 {
 	bamFile in, out;
+        int result=0;
 	if (argc == 1) {
 		fprintf(stderr, "Usage: samtools depad <in.bam>\n");
 		return 1;
 	}
 	in = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
 	out = bam_dopen(fileno(stdout), "w");
-	bam_pad2unpad(in, out);
+	result = bam_pad2unpad(in, out);
 	bam_close(in); bam_close(out);
-	return 0;
+	return result;
 }
