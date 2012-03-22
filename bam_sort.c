@@ -319,6 +319,40 @@ int bam_merge(int argc, char *argv[])
 
 typedef bam1_t *bam1_p;
 
+static int change_SO(bam_header_t *h, const char *so)
+{
+	char *p, *q, *beg = 0, *end = 0, *newtext;
+	if (h->l_text > 3) {
+		if (strncmp(h->text, "@HD", 3) == 0) {
+			if ((p = strchr(h->text, '\n')) == 0) return -1;
+			*p = '\0';
+			if ((q = strstr(h->text, "\tSO:")) != 0) {
+				*p = '\n'; // change back
+				if (strncmp(q + 4, so, p - q - 4) != 0) {
+					beg = q;
+					for (q += 4; *q != '\n' && *q != '\t'; ++q);
+					end = q;
+				} else return 0; // no need to change
+			} else beg = end = p, *p = '\n';
+		}
+	}
+	if (beg == 0) { // no @HD
+		h->l_text += strlen(so) + 15;
+		newtext = malloc(h->l_text + 1);
+		sprintf(newtext, "@HD\tVN:1.3\tSO:%s\n", so);
+		strcat(newtext, h->text);
+	} else { // has @HD but different or no SO
+		h->l_text = (beg - h->text) + (4 + strlen(so)) + (h->text + h->l_text - end);
+		newtext = malloc(h->l_text + 1);
+		strncpy(newtext, h->text, beg - h->text);
+		sprintf(newtext + (beg - h->text), "\tSO:%s", so);
+		strcat(newtext, end);
+	}
+	free(h->text);
+	h->text = newtext;
+	return 0;
+}
+
 static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
 	if (g_is_by_qname) {
@@ -425,6 +459,8 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		return;
 	}
 	header = bam_header_read(fp);
+	if (is_by_qname) change_SO(header, "queryname");
+	else change_SO(header, "coordinate");
 	// write sub files
 	for (;;) {
 		if (k == max_k) {
