@@ -42,10 +42,10 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 			++j;
 		} else if (op == BAM_CSOFT_CLIP) {
 			j += ol;
-		} else if (op == BAM_CDEL) {
+		} else if (op == BAM_CDEL || op == BAM_CPAD) {
 			for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
                 } else {
-			fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
+			fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in embedded reference %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
                         assert(-1);
 		}
 	}
