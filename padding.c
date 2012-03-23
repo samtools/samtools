@@ -45,7 +45,7 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 		} else if (op == BAM_CDEL || op == BAM_CPAD) {
 			for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
                 } else {
-			fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in embedded reference %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
+			fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in read %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
                         assert(-1);
 		}
 	}
@@ -79,7 +79,7 @@ int bam_pad2unpad(bamFile in, bamFile out)
 			replace_cigar(b, n2, cigar2);
 			posmap = realloc(posmap, r.m * sizeof(int));
 			for (i = k = 0; i < r.l; ++i) {
-				posmap[i] = k; // note that a read should NOT start at a padding
+				posmap[i] = k;
 				if (r.s[i]) ++k;
 			}
 		} else if (b->core.n_cigar > 0) {
@@ -93,8 +93,10 @@ int bam_pad2unpad(bamFile in, bamFile out)
 			}
 			unpad_seq(b, &q);
 			if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[0]);
+			/* Determine CIGAR operator for each base in the aligned read */
 			for (i = 0, k = b->core.pos; i < q.l; ++i, ++k)
 				q.s[i] = q.s[i]? (r.s[k]? BAM_CMATCH : BAM_CINS) : (r.s[k]? BAM_CDEL : BAM_CPAD);
+			/* Count consecutive CIGAR operators to turn into a CIGAR string */
 			for (i = k = 1, op = q.s[0]; i < q.l; ++i) {
 				if (op != q.s[i]) {
 					write_cigar(cigar2, n2, m2, bam_cigar_gen(k, op));
@@ -103,6 +105,7 @@ int bam_pad2unpad(bamFile in, bamFile out)
 			}
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(k, op));
 			if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-1]);
+			/* Remove redundant P operators between M operators, e.g. 5M2P10M -> 15M */
 			for (i = 2; i < n2; ++i)
 				if (bam_cigar_op(cigar2[i]) == BAM_CMATCH && bam_cigar_op(cigar2[i-1]) == BAM_CPAD && bam_cigar_op(cigar2[i-2]) == BAM_CMATCH)
 					cigar2[i] += cigar2[i-2], cigar2[i-2] = cigar2[i-1] = 0;
