@@ -61,6 +61,7 @@ int bam_pad2unpad(bamFile in, bamFile out)
 	int n2 = 0, m2 = 0, *posmap = 0;
 
 	h = bam_header_read(in);
+	/* TODO - The reference sequence lengths in the BAM + SAM headers should be updated */
 	bam_header_write(out, h);
 	b = bam_init1();
 	r.l = r.m = q.l = q.m = 0; r.s = q.s = 0;
