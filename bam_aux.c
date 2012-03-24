@@ -205,6 +205,59 @@ char *bam_aux2Z(const uint8_t *s)
 	else return 0;
 }
 
+static inline void *bam_auxB2_helper(const uint8_t *s, int32_t *l, char type)
+{
+  void *p = NULL;
+  size_t size;
+  if(s == NULL) return NULL;
+  if('B' != *s) return NULL;
+  s++;
+  if(type != *s) return NULL;
+  size = bam_aux_type2size(type);
+  s++;
+  *l = (*(int32_t*)(s));
+  s += 4;
+  p = malloc(size * (*l));
+  if(NULL == p) return 0;
+  memcpy(p, s, size * (*l));
+  return p;
+}
+
+int8_t *bam_auxB2c(const uint8_t *s, int32_t *l)
+{
+  return (int8_t*)bam_auxB2_helper(s, l, 'c');
+}
+
+uint8_t *bam_auxB2C(const uint8_t *s, int32_t *l)
+{
+  return (uint8_t*)bam_auxB2_helper(s, l, 'C');
+}
+
+int16_t *bam_auxB2s(const uint8_t *s, int32_t *l)
+{
+  return (int16_t*)bam_auxB2_helper(s, l, 's');
+}
+
+uint16_t *bam_auxB2S(const uint8_t *s, int32_t *l)
+{
+  return (uint16_t*)bam_auxB2_helper(s, l, 'S');
+}
+
+int32_t *bam_auxB2i(const uint8_t *s, int32_t *l)
+{
+  return (int32_t*)bam_auxB2_helper(s, l, 'i');
+}
+
+uint32_t *bam_auxB2I(const uint8_t *s, int32_t *l)
+{
+  return (uint32_t*)bam_auxB2_helper(s, l, 'I');
+}
+
+float *bam_auxB2f(const uint8_t *s, int32_t *l)
+{
+  return (float*)bam_auxB2_helper(s, l, 'f');
+}
+
 #ifdef _WIN32
 double drand48()
 {
