@@ -96,7 +96,9 @@ int bam_pad2unpad(bamFile in, bamFile out)
 			if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[0]);
 			if (bam_cigar_op(cigar[0]) == BAM_CHARD_CLIP) {
 				write_cigar(cigar2, n2, m2, cigar[0]);
-				if (bam_cigar_op(cigar[1]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[1]);
+				if (b->core.n_cigar > 2 && bam_cigar_op(cigar[1]) == BAM_CSOFT_CLIP) {
+					write_cigar(cigar2, n2, m2, cigar[1]);
+				}
 			}
 			/* Include any pads if starts with an insert */
 			for (k = 0; k+1 < b->core.pos && !r.s[b->core.pos - k - 1]; ++k);
@@ -113,6 +115,12 @@ int bam_pad2unpad(bamFile in, bamFile out)
 			}
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(k, op));
 			if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-1]);
+                        if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CHARD_CLIP) {
+				if (b->core.n_cigar > 2 && bam_cigar_op(cigar[b->core.n_cigar-2]) == BAM_CSOFT_CLIP) {
+					write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-2]);
+			  	}
+				write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-1]);
+			}
 			/* Remove redundant P operators between M operators, e.g. 5M2P10M -> 15M */
 			for (i = 2; i < n2; ++i)
 				if (bam_cigar_op(cigar2[i]) == BAM_CMATCH && bam_cigar_op(cigar2[i-1]) == BAM_CPAD && bam_cigar_op(cigar2[i-2]) == BAM_CMATCH)
