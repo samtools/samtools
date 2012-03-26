@@ -92,6 +92,9 @@ int bam_pad2unpad(bamFile in, bamFile out)
 			}
 			unpad_seq(b, &q);
 			if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[0]);
+			/* Include any pads if starts with an insert */
+			for (k = 0; k+1 < b->core.pos && !r.s[b->core.pos - k - 1]; ++k);
+			if (k) write_cigar(cigar2, n2, m2, bam_cigar_gen(k, BAM_CPAD));
 			/* Determine CIGAR operator for each base in the aligned read */
 			for (i = 0, k = b->core.pos; i < q.l; ++i, ++k)
 				q.s[i] = q.s[i]? (r.s[k]? BAM_CMATCH : BAM_CINS) : (r.s[k]? BAM_CDEL : BAM_CPAD);
