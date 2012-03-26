@@ -41,6 +41,8 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 			for (i = 0; i < ol; ++i, ++j) s->s[s->l++] = bam1_seqi(seq, j);
 		} else if (op == BAM_CSOFT_CLIP) {
 			j += ol;
+		} else if (op == BAM_CHARD_CLIP) {
+			/* do nothing */
 		} else if (op == BAM_CDEL || op == BAM_CPAD) {
 			for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
                 } else {
