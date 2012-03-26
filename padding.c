@@ -76,6 +76,10 @@ int bam_pad2unpad(bamFile in, bamFile out)
 			*/
 			r_tid = b->core.tid;
 			unpad_seq(b, &r);
+			if (h->target_len[r_tid] != r.l) {
+				fprintf(stderr, "[depad] ERROR: (Padded) length of %s is %i in BAM header, but %i in embedded reference\n", bam1_qname(b), h->target_len[r_tid], r.l);
+				return -1;
+			}
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(b->core.l_qseq, BAM_CMATCH));
 			replace_cigar(b, n2, cigar2);
 			posmap = realloc(posmap, r.m * sizeof(int));
