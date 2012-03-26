@@ -38,8 +38,7 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 		op = bam_cigar_op(cigar[k]);
 		ol = bam_cigar_oplen(cigar[k]);
 		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
-			for (i = 0; i < ol; ++i) s->s[s->l++] = bam1_seqi(seq, j);
-			++j;
+			for (i = 0; i < ol; ++i, ++j) s->s[s->l++] = bam1_seqi(seq, j);
 		} else if (op == BAM_CSOFT_CLIP) {
 			j += ol;
 		} else if (op == BAM_CDEL || op == BAM_CPAD) {
