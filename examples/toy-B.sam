@@ -1,0 +1,7 @@
+@SQ	SN:ref	LN:45
+a1	0	ref	2	30	4M1B4M	*	0	0	GCATTGTT	???CB???	XX:Z:cns_qual
+a2	0	ref	2	30	4M1B4M	*	0	0	GCATTGTT	???BC???	XX:Z:cns_qual
+a3	0	ref	2	30	4M1B4M	*	0	0	GCAATGTT	???DC???	XX:Z:cns_qual
+b1	0	ref	2	30	3M1D1M2B1M1D2M	*	0	0	GCAGAGT	???CB??	XX:Z:del1
+c1	0	ref	2	30	2M1I2M4B1M1I3M	*	0	0	GCAATCAATG	*	XX:Z:ins1
+c2	0	ref	2	30	2M1I2M3B1I3M	*	0	0	GCAATAATG	*	XX:Z:ins2

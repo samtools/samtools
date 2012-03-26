@@ -26,6 +26,7 @@ int main_cut_target(int argc, char *argv[]);
 int main_phase(int argc, char *argv[]);
 int main_cat(int argc, char *argv[]);
 int main_depth(int argc, char *argv[]);
+int main_qa(int argc, char* argv[]);
 int main_bam2fq(int argc, char *argv[]);
 int main_pad2unpad(int argc, char *argv[]);
 
@@ -53,6 +54,7 @@ static int usage()
 	fprintf(stderr, "         merge       merge sorted alignments\n");
 	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
 	fprintf(stderr, "         reheader    replace BAM header\n");
+	fprintf(stderr, "         qa          quality control\n");
 	fprintf(stderr, "         cat         concatenate BAMs\n");
 	fprintf(stderr, "         targetcut   cut fosmid regions (for fosmid pool only)\n");
 	fprintf(stderr, "         phase       phase heterozygotes\n");
@@ -105,6 +107,7 @@ int main(int argc, char *argv[])
 #if _CURSES_LIB != 0
 	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif
+	else if (strcmp(argv[1], "qa") == 0) return main_qa(argc-1, argv+1);
 	else {
 		fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
 		return 1;
