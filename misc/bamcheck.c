@@ -12,7 +12,7 @@
             considered, even small overlap is good enough to include the read in the stats.
 */
 
-#define BAMCHECK_VERSION "2012-03-22"
+#define BAMCHECK_VERSION "2012-03-29"
 
 #define _ISOC99_SOURCE
 #define _GNU_SOURCE
@@ -1240,7 +1240,7 @@ int main(int argc, char *argv[])
         {
             if ( stats->regions )
             {
-                if ( bam_line->core.tid >= stats->nregions ) continue;
+                if ( bam_line->core.tid >= stats->nregions || bam_line->core.tid<0 ) continue;
                 if ( !stats->is_sorted ) error("The BAM must be sorted in order for -t to work.\n");
 
                 regions_t *reg = &stats->regions[bam_line->core.tid];

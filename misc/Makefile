@@ -30,6 +30,9 @@ lib:
 bamcheck:bamcheck.o
 		$(CC) $(CFLAGS) -o $@ bamcheck.o -lm -lz -L.. -lbam
 
+bamcheck.o:bamcheck.c ../faidx.h ../khash.h ../sam.h ../razf.h
+		$(CC) $(CFLAGS) -c -I.. -o $@ bamcheck.c
+
 ace2sam:ace2sam.o
 		$(CC) $(CFLAGS) -o $@ ace2sam.o -lz
 
