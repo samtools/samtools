@@ -136,7 +136,7 @@ int bam_pad2unpad(bamFile in, bamFile out)
 					pre_op = bam_cigar_op(cigar2[i-2]);
 					post_op = bam_cigar_op(cigar2[i]);
 					/* Note don't need to check for X/= as code above will use M only */
-					if ((pre_op == BAM_CMATCH || pre_op == BAM_CDIFF) && (post_op == BAM_CMATCH || post_op == BAM_CDIFF)) {
+					if ((pre_op == BAM_CMATCH || pre_op == BAM_CDEL) && (post_op == BAM_CMATCH || post_op == BAM_CDEL)) {
 						/* This is a redundant P operator */
 						cigar2[i-1] = 0; // i.e. 0M
 						/* If had same operator either side, combine them in post_op */
