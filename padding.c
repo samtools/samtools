@@ -104,16 +104,15 @@ int bam_pad2unpad(bamFile in, bamFile out)
 				if (b->core.n_cigar > 2 && bam_cigar_op(cigar[1]) == BAM_CSOFT_CLIP) {
 					write_cigar(cigar2, n2, m2, cigar[1]);
 				}
-			} else {
-	  			/* Insert a dummy 0M entry to let use remove superfluous leading P ops */
-				write_cigar(cigar2, n2, m2, 0);
 			}
-			/* Include any pads if starts with an insert */
-			for (k = 0; k+1 < b->core.pos && !r.s[b->core.pos - k - 1]; ++k);
-			if (k) write_cigar(cigar2, n2, m2, bam_cigar_gen(k, BAM_CPAD));
 			/* Determine CIGAR operator for each base in the aligned read */
 			for (i = 0, k = b->core.pos; i < q.l; ++i, ++k)
 				q.s[i] = q.s[i]? (r.s[k]? BAM_CMATCH : BAM_CINS) : (r.s[k]? BAM_CDEL : BAM_CPAD);
+			/* Include any pads if starts with an insert */
+			if (q.s[0] == BAM_CINS) {
+				for (k = 0; k+1 < b->core.pos && !r.s[b->core.pos - k - 1]; ++k);
+				if (k) write_cigar(cigar2, n2, m2, bam_cigar_gen(k, BAM_CPAD));
+			}
 			/* Count consecutive CIGAR operators to turn into a CIGAR string */
 			for (i = k = 1, op = q.s[0]; i < q.l; ++i) {
 				if (op != q.s[i]) {
@@ -131,14 +130,13 @@ int bam_pad2unpad(bamFile in, bamFile out)
 				write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-1]);
 			}
 			/* Remove redundant P operators between M/X/=/D operators, e.g. 5M2P10M -> 15M */
-			/* or right at the start before M/X/=/D */
 			int pre_op, post_op;
 			for (i = 2; i < n2; ++i)
 				if (bam_cigar_op(cigar2[i-1]) == BAM_CPAD) {
 					pre_op = bam_cigar_op(cigar2[i-2]);
 					post_op = bam_cigar_op(cigar2[i]);
 					/* Note don't need to check for X/= as code above will use M only */
-					if ((pre_op == BAM_CMATCH || pre_op == BAM_CDIFF || pre_op == BAM_CSOFT_CLIP || pre_op == BAM_CHARD_CLIP) || (post_op == BAM_CMATCH || post_op == BAM_CDIFF)) {
+					if ((pre_op == BAM_CMATCH || pre_op == BAM_CDIFF) || (post_op == BAM_CMATCH || post_op == BAM_CDIFF)) {
 						/* This is a redundant P operator */
 						cigar2[i-1] = 0; // i.e. 0M
 						/* If had same operator either side, combine them in post_op */
