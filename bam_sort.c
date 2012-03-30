@@ -472,6 +472,11 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		if (buf[k] == 0) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));
 		b = buf[k];
 		if ((ret = bam_read1(fp, b)) < 0) break;
+		if (b->data_len < b->m_data>>2) { // shrink
+			b->m_data = b->data_len;
+			kroundup32(b->m_data);
+			b->data = realloc(b->data, b->m_data);
+		}
 		mem += sizeof(bam1_t) + b->m_data + sizeof(void*) + sizeof(void*); // two sizeof(void*) for the data allocated to pointer arrays
 		++k;
 		if (mem >= max_mem) {
