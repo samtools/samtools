@@ -97,12 +97,16 @@ int bam_pad2unpad(bamFile in, bamFile out)
 				return -1;
 			}
 			unpad_seq(b, &q);
-			if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[0]);
-			if (bam_cigar_op(cigar[0]) == BAM_CHARD_CLIP) {
+			if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) {
+				write_cigar(cigar2, n2, m2, cigar[0]);
+			} else if (bam_cigar_op(cigar[0]) == BAM_CHARD_CLIP) {
 				write_cigar(cigar2, n2, m2, cigar[0]);
 				if (b->core.n_cigar > 2 && bam_cigar_op(cigar[1]) == BAM_CSOFT_CLIP) {
 					write_cigar(cigar2, n2, m2, cigar[1]);
 				}
+			} else {
+	  			/* Insert a dummy 0M entry to let use remove superfluous leading P ops */
+				write_cigar(cigar2, n2, m2, 0);
 			}
 			/* Include any pads if starts with an insert */
 			for (k = 0; k+1 < b->core.pos && !r.s[b->core.pos - k - 1]; ++k);
@@ -118,17 +122,34 @@ int bam_pad2unpad(bamFile in, bamFile out)
 				} else ++k;
 			}
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(k, op));
-			if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CSOFT_CLIP) write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-1]);
-                        if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CHARD_CLIP) {
+			if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CSOFT_CLIP) {
+				write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-1]);
+                        } else if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CHARD_CLIP) {
 				if (b->core.n_cigar > 2 && bam_cigar_op(cigar[b->core.n_cigar-2]) == BAM_CSOFT_CLIP) {
 					write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-2]);
 			  	}
 				write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-1]);
 			}
-			/* Remove redundant P operators between M operators, e.g. 5M2P10M -> 15M */
+			/* Remove redundant P operators between M/X/=/D operators, e.g. 5M2P10M -> 15M */
+			/* or right at the start before M/X/=/D */
+			int pre_op, post_op;
 			for (i = 2; i < n2; ++i)
-				if (bam_cigar_op(cigar2[i]) == BAM_CMATCH && bam_cigar_op(cigar2[i-1]) == BAM_CPAD && bam_cigar_op(cigar2[i-2]) == BAM_CMATCH)
-					cigar2[i] += cigar2[i-2], cigar2[i-2] = cigar2[i-1] = 0;
+				if (bam_cigar_op(cigar2[i-1]) == BAM_CPAD) {
+					pre_op = bam_cigar_op(cigar2[i-2]);
+					post_op = bam_cigar_op(cigar2[i]);
+					/* Note don't need to check for X/= as code above will use M only */
+					if ((pre_op == BAM_CMATCH || pre_op == BAM_CDIFF || pre_op == BAM_CSOFT_CLIP || pre_op == BAM_CHARD_CLIP) || (post_op == BAM_CMATCH || post_op == BAM_CDIFF)) {
+						/* This is a redundant P operator */
+						cigar2[i-1] = 0; // i.e. 0M
+						/* If had same operator either side, combine them in post_op */
+						if (pre_op == post_op) {
+							/* If CIGAR M, could treat as simple integers since BAM_CMATCH is zero*/
+							cigar2[i] = bam_cigar_gen(bam_cigar_oplen(cigar2[i-2]) + bam_cigar_oplen(cigar2[i]), post_op);
+							cigar2[i-2] = 0; // i.e. 0M
+						}
+					}
+				}
+			/* Remove the zero'd operators (0M) */
 			for (i = k = 0; i < n2; ++i)
 				if (cigar2[i]) cigar2[k++] = cigar2[i];
 			n2 = k;
