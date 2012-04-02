@@ -30,9 +30,21 @@ static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
 static void unpad_seq(bam1_t *b, kstring_t *s)
 {
 	int k, j, i;
+	int length;
 	uint32_t *cigar = bam1_cigar(b);
 	uint8_t *seq = bam1_seq(b);
-	ks_resize(s, b->core.l_qseq);
+	// b->core.l_qseq gives length of the SEQ entry (including soft clips, S)
+	// We need the padded length after alignment from the CIGAR (excluding
+	// soft clips S, but including pads)
+	length = 0;
+	for (k = 0; k < b->core.n_cigar; ++k) {
+		int op, ol;
+		op= bam_cigar_op(cigar[k]);
+		ol = bam_cigar_oplen(cigar[k]);
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF || op == BAM_CDEL || op == BAM_CPAD)
+			length += ol;
+	}
+	ks_resize(s, length);
 	for (k = 0, s->l = 0, j = 0; k < b->core.n_cigar; ++k) {
 		int op, ol;
 		op = bam_cigar_op(cigar[k]);
@@ -50,6 +62,7 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
                         assert(-1);
 		}
 	}
+	assert(length == s->l);
 }
 
 int bam_pad2unpad(bamFile in, bamFile out)
