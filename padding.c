@@ -35,13 +35,13 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 	uint8_t *seq = bam1_seq(b);
 	// b->core.l_qseq gives length of the SEQ entry (including soft clips, S)
 	// We need the padded length after alignment from the CIGAR (excluding
-	// soft clips S, but including pads)
+	// soft clips S, but including pads from CIGAR D operations)
 	length = 0;
 	for (k = 0; k < b->core.n_cigar; ++k) {
 		int op, ol;
 		op= bam_cigar_op(cigar[k]);
 		ol = bam_cigar_oplen(cigar[k]);
-		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF || op == BAM_CDEL || op == BAM_CPAD)
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF || op == BAM_CDEL)
 			length += ol;
 	}
 	ks_resize(s, length);
@@ -55,7 +55,7 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 			j += ol;
 		} else if (op == BAM_CHARD_CLIP) {
 			/* do nothing */
-		} else if (op == BAM_CDEL || op == BAM_CPAD) {
+		} else if (op == BAM_CDEL) {
 			for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
                 } else {
 			fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in read %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
