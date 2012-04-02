@@ -181,6 +181,7 @@ int main_pad2unpad(int argc, char *argv[])
         int result=0;
 	if (argc == 1) {
 		fprintf(stderr, "Usage: samtools depad <in.bam>\n");
+		fprintf(stderr, "\nRequires embedded reference sequences (before the reads for that reference).\n");
 		return 1;
 	}
 	in = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
