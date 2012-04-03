@@ -175,18 +175,45 @@ int bam_pad2unpad(bamFile in, bamFile out)
 	return 0;
 }
 
+static int usage(int is_long_help);
+
 int main_pad2unpad(int argc, char *argv[])
 {
 	bamFile in, out;
+	int is_long_help = 1;
         int result=0;
 	if (argc == 1) {
-		fprintf(stderr, "Usage: samtools depad <in.bam>\n");
-		fprintf(stderr, "\nRequires embedded reference sequences (before the reads for that reference).\n");
-		return 1;
+		return usage(is_long_help);
 	}
 	in = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
 	out = bam_dopen(fileno(stdout), "w");
 	result = bam_pad2unpad(in, out);
 	bam_close(in); bam_close(out);
 	return result;
+}
+
+static int usage(int is_long_help)
+{
+	fprintf(stderr, "\n");
+	fprintf(stderr, "Usage:   samtools depad <in.bam>\n\n");
+	fprintf(stderr, "Currently there are no optional arguments.\n");
+	//TODO - These are the arguments I think make sense to support:
+	//fprintf(stderr, "Usage:   samtools depad [options] <in.bam>|<in.sam>\n\n");
+	//fprintf(stderr, "Options: -b       output BAM\n");
+	//fprintf(stderr, "         -S       input is SAM\n");
+	//fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
+	//fprintf(stderr, "         -1       fast compression (force -b)\n");
+	//fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
+	//fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
+	//fprintf(stderr, "         -o FILE  output file name [stdout]\n");
+	//fprintf(stderr, "         -?       longer help\n");
+	fprintf(stderr, "\n");
+	if (is_long_help)
+		fprintf(stderr, "Notes:\n\
+\n\
+  1. Requires embedded reference sequences (before the reads for that reference).\n\
+\n\
+  2. The input padded alignment read's CIGAR strings must not use P or I operators.\n\
+\n");
+        return 1;
 }
