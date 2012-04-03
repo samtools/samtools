@@ -77,6 +77,8 @@ int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_quer
 	const uint8_t *ref, *query;
 	int bw, bw2, i, k, is_diff = 0, is_backward = 1, Pr;
 
+    if ( l_ref<=0 || l_query<=0 ) return 0; // FIXME: this may not be an ideal fix, just prevents sefgault
+
 	/*** initialization ***/
 	is_backward = state && q? 1 : 0;
 	ref = _ref - 1; query = _query - 1; // change to 1-based coordinate
@@ -87,7 +89,7 @@ int kpa_glocal(const uint8_t *_ref, int l_ref, const uint8_t *_query, int l_quer
 	// allocate the forward and backward matrices f[][] and b[][] and the scaling array s[]
 	f = calloc(l_query+1, sizeof(void*));
 	if (is_backward) b = calloc(l_query+1, sizeof(void*));
-	for (i = 0; i <= l_query; ++i) {
+	for (i = 0; i <= l_query; ++i) {    // FIXME: this will lead in segfault for l_query==0
 		f[i] = calloc(bw2 * 3 + 6, sizeof(double)); // FIXME: this is over-allocated for very short seqs
 		if (is_backward) b[i] = calloc(bw2 * 3 + 6, sizeof(double));
 	}
