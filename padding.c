@@ -1,5 +1,6 @@
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 #include "kstring.h"
 #include "bam.h"
 
@@ -180,11 +181,18 @@ static int usage(int is_long_help);
 int main_pad2unpad(int argc, char *argv[])
 {
 	bamFile in, out;
-	int is_long_help = 1;
+	int c, is_long_help = 0;
         int result=0;
-	if (argc == 1) {
-		return usage(is_long_help);
-	}
+
+	/* parse command-line options */
+	while ((c = getopt(argc, argv, "?")) >= 0) {
+		switch (c) {
+		case '?': is_long_help = 1; break;
+		default: return usage(is_long_help);
+		}
+        }
+	if (argc == optind) return usage(is_long_help);
+
 	in = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
 	out = bam_dopen(fileno(stdout), "w");
 	result = bam_pad2unpad(in, out);
@@ -196,7 +204,7 @@ static int usage(int is_long_help)
 {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Usage:   samtools depad <in.bam>\n\n");
-	fprintf(stderr, "Currently there are no optional arguments.\n");
+	fprintf(stderr, "Options: -?       longer help\n");
 	//TODO - These are the arguments I think make sense to support:
 	//fprintf(stderr, "Usage:   samtools depad [options] <in.bam>|<in.sam>\n\n");
 	//fprintf(stderr, "Options: -b       output BAM\n");
