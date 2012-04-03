@@ -186,18 +186,19 @@ int main_pad2unpad(int argc, char *argv[])
 {
 	samfile_t *in = 0, *out = 0;
 	int c, is_bamin = 1, compress_level = -1, is_bamout = 1, is_long_help = 0;
-	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0;
+	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0;
         int ret=0;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "Sso:u1?")) >= 0) {
+	while ((c = getopt(argc, argv, "Sso:u1T:?")) >= 0) {
 		switch (c) {
 		case 'S': is_bamin = 0; break;
 		case 's': assert(compress_level == -1); is_bamout = 0; break;
 		case 'o': fn_out = strdup(optarg); break;
 		case 'u': assert(is_bamout == 1); compress_level = 0; break;
 		case '1': assert(is_bamout == 1); compress_level = 1; break;
+		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
                 case '?': is_long_help = 1; break;
 		default: return usage(is_long_help);
 		}
@@ -212,6 +213,9 @@ int main_pad2unpad(int argc, char *argv[])
 		tmp[0] = compress_level + '0'; tmp[1] = '\0';
 		strcat(out_mode, tmp);
 	}
+
+	// Load FASTA reference (also needed for SAM -> BAM if missing header)
+	if (fn_ref) fn_list = samfaipath(fn_ref);
 
 	// open file handlers
 	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
@@ -250,16 +254,15 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -S       input is SAM (default is BAM)\n");
 	fprintf(stderr, "         -u       uncompressed BAM output (can't use with -s)\n");
 	fprintf(stderr, "         -1       fast compression BAM output (can't use with -s)\n");
-        //TODO - These are the arguments I think make sense to support:
-	//fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
-	//fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
+	fprintf(stderr, "         -T FILE  reference sequence file [null]\n");
 	fprintf(stderr, "         -o FILE  output file name [stdout]\n");
 	fprintf(stderr, "         -?       longer help\n");
 	fprintf(stderr, "\n");
 	if (is_long_help)
 		fprintf(stderr, "Notes:\n\
 \n\
-  1. Requires embedded reference sequences (before the reads for that reference).\n\
+  1. Requires embedded reference sequences (before the reads for that reference),\n\
+     with the future aim to also support a FASTA padded reference sequence file.\n\
 \n\
   2. The input padded alignment read's CIGAR strings must not use P or I operators.\n\
 \n");
