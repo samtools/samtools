@@ -2,6 +2,8 @@
 #include <assert.h>
 #include <unistd.h>
 #include "kstring.h"
+#include "sam_header.h"
+#include "sam.h"
 #include "bam.h"
 
 static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
@@ -66,21 +68,20 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 	assert(length == s->l);
 }
 
-int bam_pad2unpad(bamFile in, bamFile out)
+int bam_pad2unpad(samfile_t *in, samfile_t *out)
 {
 	bam_header_t *h;
 	bam1_t *b;
 	kstring_t r, q;
-        int r_tid = -1;
+	int r_tid = -1;
 	uint32_t *cigar2 = 0;
-	int n2 = 0, m2 = 0, *posmap = 0;
+	int ret = 0, n2 = 0, m2 = 0, *posmap = 0;
 
-	h = bam_header_read(in);
-	/* TODO - The reference sequence lengths in the BAM + SAM headers should be updated */
-	bam_header_write(out, h);
 	b = bam_init1();
 	r.l = r.m = q.l = q.m = 0; r.s = q.s = 0;
-	while (bam_read1(in, b) >= 0) {
+	int read_ret;
+	h = in->header;
+	while ((read_ret = samread(in, b)) >= 0) { // read one alignment from `in'
 		uint32_t *cigar = bam1_cigar(b);
 		n2 = 0;
 		if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam1_qname(b), h->target_name[b->core.tid]) == 0) {
@@ -168,53 +169,92 @@ int bam_pad2unpad(bamFile in, bamFile out)
 			replace_cigar(b, n2, cigar2);
 			b->core.pos = posmap[b->core.pos];
 		}
-		bam_write1(out, b);
+		samwrite(out, b);
+	}
+	if (read_ret < -1) {
+		fprintf(stderr, "[depad] truncated file.\n");
+		ret = 1;
 	}
 	free(r.s); free(q.s); free(posmap);
 	bam_destroy1(b);
-	bam_header_destroy(h);
-	return 0;
+	return ret;
 }
 
 static int usage(int is_long_help);
 
 int main_pad2unpad(int argc, char *argv[])
 {
-	bamFile in, out;
-	int c, is_long_help = 0;
-        int result=0;
+	samfile_t *in = 0, *out = 0;
+	int c, is_bamin = 1, compress_level = -1, is_bamout = 1, is_long_help = 0;
+	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0;
+        int ret=0;
 
 	/* parse command-line options */
-	while ((c = getopt(argc, argv, "?")) >= 0) {
+	strcpy(in_mode, "r"); strcpy(out_mode, "w");
+	while ((c = getopt(argc, argv, "Sso:u1?")) >= 0) {
 		switch (c) {
-		case '?': is_long_help = 1; break;
+		case 'S': is_bamin = 0; break;
+		case 's': assert(compress_level == -1); is_bamout = 0; break;
+		case 'o': fn_out = strdup(optarg); break;
+		case 'u': assert(is_bamout == 1); compress_level = 0; break;
+		case '1': assert(is_bamout == 1); compress_level = 1; break;
+                case '?': is_long_help = 1; break;
 		default: return usage(is_long_help);
 		}
         }
 	if (argc == optind) return usage(is_long_help);
 
-	in = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
-	out = bam_dopen(fileno(stdout), "w");
-	result = bam_pad2unpad(in, out);
-	bam_close(in); bam_close(out);
-	return result;
+	if (is_bamin) strcat(in_mode, "b");
+	if (is_bamout) strcat(out_mode, "b");
+	strcat(out_mode, "h");
+	if (compress_level >= 0) {
+		char tmp[2];
+		tmp[0] = compress_level + '0'; tmp[1] = '\0';
+		strcat(out_mode, tmp);
+	}
+
+	// open file handlers
+	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
+		fprintf(stderr, "[depad] fail to open \"%s\" for reading.\n", argv[optind]);
+		ret = 1;
+		goto depad_end;
+	}
+	if (in->header == 0) {
+		fprintf(stderr, "[depad] fail to read the header from \"%s\".\n", argv[optind]);
+		ret = 1;
+		goto depad_end;
+	}
+	/* TODO - The reference sequence lengths in the BAM + SAM headers should be updated */
+	if ((out = samopen(fn_out? fn_out : "-", out_mode, in->header)) == 0) {
+		fprintf(stderr, "[depad] fail to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
+		ret = 1;
+		goto depad_end;
+	}
+
+	// Do the depad
+	ret = bam_pad2unpad(in, out);
+
+depad_end:
+	// close files, free and return
+	free(fn_list); free(fn_out);
+	samclose(in);
+	samclose(out);
+	return ret;
 }
 
 static int usage(int is_long_help)
 {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Usage:   samtools depad <in.bam>\n\n");
-	fprintf(stderr, "Options: -?       longer help\n");
-	//TODO - These are the arguments I think make sense to support:
-	//fprintf(stderr, "Usage:   samtools depad [options] <in.bam>|<in.sam>\n\n");
-	//fprintf(stderr, "Options: -b       output BAM\n");
-	//fprintf(stderr, "         -S       input is SAM\n");
-	//fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
-	//fprintf(stderr, "         -1       fast compression (force -b)\n");
+	fprintf(stderr, "Options: -s       output is SAM (default is BAM)\n");
+	fprintf(stderr, "         -S       input is SAM (default is BAM)\n");
+	fprintf(stderr, "         -u       uncompressed BAM output (can't use with -s)\n");
+	fprintf(stderr, "         -1       fast compression BAM output (can't use with -s)\n");
+        //TODO - These are the arguments I think make sense to support:
 	//fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
 	//fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
-	//fprintf(stderr, "         -o FILE  output file name [stdout]\n");
-	//fprintf(stderr, "         -?       longer help\n");
+	fprintf(stderr, "         -o FILE  output file name [stdout]\n");
+	fprintf(stderr, "         -?       longer help\n");
 	fprintf(stderr, "\n");
 	if (is_long_help)
 		fprintf(stderr, "Notes:\n\
