@@ -5,6 +5,7 @@
 #include "sam_header.h"
 #include "sam.h"
 #include "bam.h"
+#include "faidx.h"
 
 static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
 {
@@ -68,7 +69,7 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 	assert(length == s->l);
 }
 
-int bam_pad2unpad(samfile_t *in, samfile_t *out)
+int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 {
 	bam_header_t *h;
 	bam1_t *b;
@@ -185,6 +186,7 @@ static int usage(int is_long_help);
 int main_pad2unpad(int argc, char *argv[])
 {
 	samfile_t *in = 0, *out = 0;
+	faidx_t *fai;
 	int c, is_bamin = 1, compress_level = -1, is_bamout = 1, is_long_help = 0;
 	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0;
         int ret=0;
@@ -215,8 +217,10 @@ int main_pad2unpad(int argc, char *argv[])
 	}
 
 	// Load FASTA reference (also needed for SAM -> BAM if missing header)
-	if (fn_ref) fn_list = samfaipath(fn_ref);
-
+	if (fn_ref) {
+		fn_list = samfaipath(fn_ref);
+		fai = fai_load(fn_ref);
+	}
 	// open file handlers
 	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
 		fprintf(stderr, "[depad] fail to open \"%s\" for reading.\n", argv[optind]);
@@ -236,13 +240,14 @@ int main_pad2unpad(int argc, char *argv[])
 	}
 
 	// Do the depad
-	ret = bam_pad2unpad(in, out);
+	ret = bam_pad2unpad(in, out, fai);
 
 depad_end:
 	// close files, free and return
 	free(fn_list); free(fn_out);
 	samclose(in);
 	samclose(out);
+	fai_destroy(fai);
 	return ret;
 }
 
