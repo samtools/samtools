@@ -12,10 +12,9 @@
             considered, even small overlap is good enough to include the read in the stats.
 */
 
-#define BAMCHECK_VERSION "2012-03-29"
+#define BAMCHECK_VERSION "2012-04-04"
 
 #define _ISOC99_SOURCE
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -982,6 +981,40 @@ void output_stats(stats_t *stats)
 
 void bam_init_header_hash(bam_header_t *header);
 
+size_t getline(char **line, size_t *n, FILE *fp)
+{
+    if (line == NULL || n == NULL || fp == NULL)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    if (*n==0 || !*line)
+    {
+        *line = NULL;
+        *n = 0;
+    }
+
+    size_t nread=0;
+    int c;
+    while ((c=getc(fp))!= EOF && c!='\n')
+    {
+        if ( ++nread>=*n )
+        {
+            *n += 255;
+            *line = realloc(*line, sizeof(char)*(*n));
+        }
+        (*line)[nread-1] = c;
+    }
+    if ( nread>=*n )
+    {
+        *n += 255;
+        *line = realloc(*line, sizeof(char)*(*n));
+    }
+    (*line)[nread] = 0;
+    return nread>0 ? nread : -1;
+
+}
+
 void init_regions(stats_t *stats, char *file)
 {
     khiter_t iter;
@@ -1004,7 +1037,7 @@ void init_regions(stats_t *stats, char *file)
 
         int i = 0;
         while ( i<nread && !isspace(line[i]) ) i++;
-        if ( i>=nread ) error("Could not parse the file: %s\n", file);
+        if ( i>=nread ) error("Could not parse the file: %s [%s]\n", file,line);
         line[i] = 0;
 
         iter = kh_get(str, header_hash, line);
