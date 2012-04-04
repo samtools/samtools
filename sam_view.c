@@ -21,8 +21,9 @@ typedef khash_t(rg) *rghash_t;
 
 // FIXME: we'd better use no global variables...
 static rghash_t g_rghash = 0;
-static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0, g_qual_scale = 0;
-static float g_subsam = -1;
+static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0, g_qual_scale = 0, g_min_qlen = 0;
+static uint32_t g_subsam_seed = 0;
+static double g_subsam_frac = -1.;
 static char *g_library, *g_rg;
 static void *g_bed;
 
@@ -40,14 +41,21 @@ static int process_aln(const bam_header_t *h, bam1_t *b)
 			qual[i] = c < 93? c : 93;
 		}
 	}
+	if (g_min_qlen > 0) {
+		int k, qlen = 0;
+		uint32_t *cigar = bam1_cigar(b);
+		for (k = 0; k < b->core.n_cigar; ++k)
+			if ((bam_cigar_type(bam_cigar_op(cigar[k]))&1) || bam_cigar_op(cigar[k]) == BAM_CHARD_CLIP)
+				qlen += bam_cigar_oplen(cigar[k]);
+		if (qlen < g_min_qlen) return 1;
+	}
 	if (b->core.qual < g_min_mapQ || ((b->core.flag & g_flag_on) != g_flag_on) || (b->core.flag & g_flag_off))
 		return 1;
 	if (g_bed && b->core.tid >= 0 && !bed_overlap(g_bed, h->target_name[b->core.tid], b->core.pos, bam_calend(&b->core, bam1_cigar(b))))
 		return 1;
-	if (g_subsam > 0.) {
-		int x = (int)(g_subsam + .499);
-		uint32_t k = __ac_X31_hash_string(bam1_qname(b)) + x;
-		if (k%1024 / 1024.0 >= g_subsam - x) return 1;
+	if (g_subsam_frac > 0.) {
+		uint32_t k = __ac_X31_hash_string(bam1_qname(b)) + g_subsam_seed;
+		if ((double)(k&0xffffff) / 0x1000000 >= g_subsam_frac) return 1;
 	}
 	if (g_rg || g_rghash) {
 		uint8_t *s = bam_aux_get(b, "RG");
@@ -119,16 +127,23 @@ static int usage(int is_long_help);
 int main_samview(int argc, char *argv[])
 {
 	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, compress_level = -1, is_bamout = 0, is_count = 0;
-	int of_type = BAM_OFDEC, is_long_help = 0;
+	int of_type = BAM_OFDEC, is_long_help = 0, n_threads = 0;
 	int count = 0;
 	samfile_t *in = 0, *out = 0;
-	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0;
+	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0, *q;
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
 		switch (c) {
-		case 's': g_subsam = atof(optarg); break;
+		case 's':
+			if ((g_subsam_seed = strtol(optarg, &q, 10)) != 0) {
+				srand(g_subsam_seed);
+				g_subsam_seed = rand();
+			}
+			g_subsam_frac = strtod(q, &q);
+			break;
+		case 'm': g_min_qlen = atoi(optarg); break;
 		case 'c': is_count = 1; break;
 		case 'S': is_bamin = 0; break;
 		case 'b': is_bamout = 1; break;
@@ -151,6 +166,7 @@ int main_samview(int argc, char *argv[])
 		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
 		case 'B': bam_no_B = 1; break;
 		case 'Q': g_qual_scale = atoi(optarg); break;
+		case '@': n_threads = strtol(optarg, 0, 0); break;
 		default: return usage(is_long_help);
 		}
 	}
@@ -208,6 +224,7 @@ int main_samview(int argc, char *argv[])
 		ret = 1;
 		goto view_end;
 	}
+	if (n_threads > 1) samthreads(out, n_threads, 256); 
 	if (is_header_only) goto view_end; // no need to print alignments
 
 	if (argc == optind + 1) { // convert/print the entire file
@@ -288,6 +305,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -c       print only the count of matching records\n");
 	fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
+	fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
 	fprintf(stderr, "         -L FILE  output alignments overlapping the input BED FILE [null]\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
@@ -358,12 +376,14 @@ int main_bam2fq(int argc, char *argv[])
 	bam_header_t *h;
 	bam1_t *b;
 	int8_t *buf;
-	int max_buf;
+	int max_buf, c, no12 = 0;
+	while ((c = getopt(argc, argv, "n")) > 0)
+		if (c == 'n') no12 = 1;
 	if (argc == 1) {
 		fprintf(stderr, "Usage: samtools bam2fq <in.bam>\n");
 		return 1;
 	}
-	fp = strcmp(argv[1], "-")? bam_open(argv[1], "r") : bam_dopen(fileno(stdin), "r");
+	fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	if (fp == 0) return 1;
 	h = bam_header_read(fp);
 	b = bam_init1();
@@ -373,9 +393,12 @@ int main_bam2fq(int argc, char *argv[])
 		int i, qlen = b->core.l_qseq;
 		uint8_t *seq;
 		putchar('@'); fputs(bam1_qname(b), stdout);
-		if ((b->core.flag & 0x40) && !(b->core.flag & 0x80)) puts("/1");
-		else if ((b->core.flag & 0x80) && !(b->core.flag & 0x40)) puts("/2");
-		else putchar('\n');
+		if (no12) putchar('\n');
+		else {
+			if ((b->core.flag & 0x40) && !(b->core.flag & 0x80)) puts("/1");
+			else if ((b->core.flag & 0x80) && !(b->core.flag & 0x40)) puts("/2");
+			else putchar('\n');
+		}
 		if (max_buf < qlen + 1) {
 			max_buf = qlen + 1;
 			kroundup32(max_buf);

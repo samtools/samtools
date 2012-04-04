@@ -90,6 +90,7 @@ extern "C" {
 	int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *data);
 
 	char *samfaipath(const char *fn_ref);
+	int samthreads(samfile_t *fp, int n_threads, int n_sub_blks);
 
 #ifdef __cplusplus
 }

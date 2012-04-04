@@ -43,13 +43,16 @@ libbam.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 samtools:lib-recur $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(LIBCURSES) -lm -lz
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(LIBCURSES) -lm -lz -lpthread
 
 razip:razip.o razf.o $(KNETFILE_O)
 		$(CC) $(CFLAGS) -o $@ razf.o razip.o $(KNETFILE_O) -lz
 
 bgzip:bgzip.o bgzf.o $(KNETFILE_O)
-		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o $(KNETFILE_O) -lz
+		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o $(KNETFILE_O) -lz -lpthread
+
+bgzf.o:bgzf.c bgzf.h
+		$(CC) -c $(CFLAGS) $(DFLAGS) -DBGZF_CACHE $(INCLUDES) bgzf.c -o $@
 
 razip.o:razf.h
 bam.o:bam.h razf.h bam_endian.h kstring.h sam_header.h

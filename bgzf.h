@@ -1,6 +1,7 @@
 /* The MIT License
 
    Copyright (c) 2008 Broad Institute / Massachusetts Institute of Technology
+                 2011, 2012 Attractive Chaos <attractor@live.co.uk>
 
    Permission is hereby granted, free of charge, to any person obtaining a copy
    of this software and associated documentation files (the "Software"), to deal
@@ -21,137 +22,186 @@
    THE SOFTWARE.
 */
 
+/* The BGZF library was originally written by Bob Handsaker from the Broad
+ * Institute. It was later improved by the SAMtools developers. */
+
 #ifndef __BGZF_H
 #define __BGZF_H
 
 #include <stdint.h>
 #include <stdio.h>
 #include <zlib.h>
-#ifdef _USE_KNETFILE
-#include "knetfile.h"
-#endif
+#include <sys/types.h>
 
-//typedef int8_t bool;
+#define BGZF_BLOCK_SIZE     0xff00 // make sure compressBound(BGZF_BLOCK_SIZE) < BGZF_MAX_BLOCK_SIZE
+#define BGZF_MAX_BLOCK_SIZE 0x10000
+
+#define BGZF_ERR_ZLIB   1
+#define BGZF_ERR_HEADER 2
+#define BGZF_ERR_IO     4
+#define BGZF_ERR_MISUSE 8
 
 typedef struct {
-    int file_descriptor;
-    char open_mode;  // 'r' or 'w'
-    int16_t owned_file, compress_level;
-#ifdef _USE_KNETFILE
-	union {
-		knetFile *fpr;
-		FILE *fpw;
-	} x;
-#else
-    FILE* file;
-#endif
-    int uncompressed_block_size;
-    int compressed_block_size;
-    void* uncompressed_block;
-    void* compressed_block;
-    int64_t block_address;
-    int block_length;
-    int block_offset;
+	int errcode:16, is_write:2, compress_level:14;
 	int cache_size;
-    const char* error;
+    int block_length, block_offset;
+    int64_t block_address;
+    void *uncompressed_block, *compressed_block;
 	void *cache; // a pointer to a hash table
+	void *fp; // actual file handler; FILE* on writing; FILE* or knetFile* on reading
+	void *mt; // only used for multi-threading
 } BGZF;
+
+#ifndef KSTRING_T
+#define KSTRING_T kstring_t
+typedef struct __kstring_t {
+	size_t l, m;
+	char *s;
+} kstring_t;
+#endif
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/*
- * Open an existing file descriptor for reading or writing.
- * Mode must be either "r" or "w".
- * A subsequent bgzf_close will not close the file descriptor.
- * Returns null on error.
- */
-BGZF* bgzf_fdopen(int fd, const char* __restrict mode);
+	/******************
+	 * Basic routines *
+	 ******************/
 
-/*
- * Open the specified file for reading or writing.
- * Mode must be either "r" or "w".
- * Returns null on error.
- */
-BGZF* bgzf_open(const char* path, const char* __restrict mode);
+	/**
+	 * Open an existing file descriptor for reading or writing.
+	 *
+	 * @param fd    file descriptor
+	 * @param mode  mode matching /[rwu0-9]+/: 'r' for reading, 'w' for writing and a digit specifies
+	 *              the zlib compression level; if both 'r' and 'w' are present, 'w' is ignored.
+	 * @return      BGZF file handler; 0 on error
+	 */
+	BGZF* bgzf_dopen(int fd, const char *mode);
 
-/*
- * Close the BGZ file and free all associated resources.
- * Does not close the underlying file descriptor if created with bgzf_fdopen.
- * Returns zero on success, -1 on error.
- */
-int bgzf_close(BGZF* fp);
+	#define bgzf_fdopen(fd, mode) bgzf_dopen((fd), (mode)) // for backward compatibility
 
-/*
- * Read up to length bytes from the file storing into data.
- * Returns the number of bytes actually read.
- * Returns zero on end of file.
- * Returns -1 on error.
- */
-int bgzf_read(BGZF* fp, void* data, int length);
+	/**
+	 * Open the specified file for reading or writing.
+	 */
+	BGZF* bgzf_open(const char* path, const char *mode);
 
-/*
- * Write length bytes from data to the file.
- * Returns the number of bytes written.
- * Returns -1 on error.
- */
-int bgzf_write(BGZF* fp, const void* data, int length);
+	/**
+	 * Close the BGZF and free all associated resources.
+	 *
+	 * @param fp    BGZF file handler
+	 * @return      0 on success and -1 on error
+	 */
+	int bgzf_close(BGZF *fp);
 
-/*
- * Return a virtual file pointer to the current location in the file.
- * No interpetation of the value should be made, other than a subsequent
- * call to bgzf_seek can be used to position the file at the same point.
- * Return value is non-negative on success.
- * Returns -1 on error.
- */
-#define bgzf_tell(fp) ((fp->block_address << 16) | (fp->block_offset & 0xFFFF))
+	/**
+	 * Read up to _length_ bytes from the file storing into _data_.
+	 *
+	 * @param fp     BGZF file handler
+	 * @param data   data array to read into
+	 * @param length size of data to read
+	 * @return       number of bytes actually read; 0 on end-of-file and -1 on error
+	 */
+	ssize_t bgzf_read(BGZF *fp, void *data, ssize_t length);
 
-/*
- * Set the file to read from the location specified by pos, which must
- * be a value previously returned by bgzf_tell for this file (but not
- * necessarily one returned by this file handle).
- * The where argument must be SEEK_SET.
- * Seeking on a file opened for write is not supported.
- * Returns zero on success, -1 on error.
- */
-int64_t bgzf_seek(BGZF* fp, int64_t pos, int where);
+	/**
+	 * Write _length_ bytes from _data_ to the file.
+	 *
+	 * @param fp     BGZF file handler
+	 * @param data   data array to write
+	 * @param length size of data to write
+	 * @return       number of bytes actually written; -1 on error
+	 */
+	ssize_t bgzf_write(BGZF *fp, const void *data, ssize_t length);
 
-/*
- * Set the cache size. Zero to disable. By default, caching is
- * disabled. The recommended cache size for frequent random access is
- * about 8M bytes.
- */
-void bgzf_set_cache_size(BGZF *fp, int cache_size);
+	/**
+	 * Write the data in the buffer to the file.
+	 */
+	int bgzf_flush(BGZF *fp);
 
-int bgzf_check_EOF(BGZF *fp);
-int bgzf_read_block(BGZF* fp);
-int bgzf_flush(BGZF* fp);
-int bgzf_flush_try(BGZF *fp, int size);
-int bgzf_check_bgzf(const char *fn);
+	/**
+	 * Return a virtual file pointer to the current location in the file.
+	 * No interpetation of the value should be made, other than a subsequent
+	 * call to bgzf_seek can be used to position the file at the same point.
+	 * Return value is non-negative on success.
+	 */
+	#define bgzf_tell(fp) ((fp->block_address << 16) | (fp->block_offset & 0xFFFF))
+
+	/**
+	 * Set the file to read from the location specified by _pos_.
+	 *
+	 * @param fp     BGZF file handler
+	 * @param pos    virtual file offset returned by bgzf_tell()
+	 * @param whence must be SEEK_SET
+	 * @return       0 on success and -1 on error
+	 */
+	int64_t bgzf_seek(BGZF *fp, int64_t pos, int whence);
+
+	/**
+	 * Check if the BGZF end-of-file (EOF) marker is present
+	 *
+	 * @param fp    BGZF file handler opened for reading
+	 * @return      1 if EOF is present; 0 if not or on I/O error
+	 */
+	int bgzf_check_EOF(BGZF *fp);
+
+	/**
+	 * Check if a file is in the BGZF format
+	 *
+	 * @param fn    file name
+	 * @return      1 if _fn_ is BGZF; 0 if not or on I/O error
+	 */
+	 int bgzf_is_bgzf(const char *fn);
+
+	/*********************
+	 * Advanced routines *
+	 *********************/
+
+	/**
+	 * Set the cache size. Only effective when compiled with -DBGZF_CACHE.
+	 *
+	 * @param fp    BGZF file handler
+	 * @param size  size of cache in bytes; 0 to disable caching (default)
+	 */
+	void bgzf_set_cache_size(BGZF *fp, int size);
+
+	/**
+	 * Flush the file if the remaining buffer size is smaller than _size_ 
+	 */
+	int bgzf_flush_try(BGZF *fp, ssize_t size);
+
+	/**
+	 * Read one byte from a BGZF file. It is faster than bgzf_read()
+	 * @param fp     BGZF file handler
+	 * @return       byte read; -1 on end-of-file or error
+	 */
+	int bgzf_getc(BGZF *fp);
+
+	/**
+	 * Read one line from a BGZF file. It is faster than bgzf_getc()
+	 *
+	 * @param fp     BGZF file handler
+	 * @param delim  delimitor
+	 * @param str    string to write to; must be initialized
+	 * @return       length of the string; 0 on end-of-file; negative on error
+	 */
+	int bgzf_getline(BGZF *fp, int delim, kstring_t *str);
+
+	/**
+	 * Read the next BGZF block.
+	 */
+	int bgzf_read_block(BGZF *fp);
+
+	/**
+	 * Enable multi-threading (only effective on writing)
+	 *
+	 * @param fp          BGZF file handler; must be opened for writing
+	 * @param n_threads   #threads used for writing
+	 * @param n_sub_blks  #blocks processed by each thread; a value 64-256 is recommended
+	 */
+	int bgzf_mt(BGZF *fp, int n_threads, int n_sub_blks);
 
 #ifdef __cplusplus
 }
 #endif
-
-static inline int bgzf_getc(BGZF *fp)
-{
-	int c;
-	if (fp->block_offset >= fp->block_length) {
-		if (bgzf_read_block(fp) != 0) return -2; /* error */
-		if (fp->block_length == 0) return -1; /* end-of-file */
-	}
-	c = ((unsigned char*)fp->uncompressed_block)[fp->block_offset++];
-    if (fp->block_offset == fp->block_length) {
-#ifdef _USE_KNETFILE
-        fp->block_address = knet_tell(fp->x.fpr);
-#else
-        fp->block_address = ftello(fp->file);
-#endif
-        fp->block_offset = 0;
-        fp->block_length = 0;
-    }
-	return c;
-}
 
 #endif

@@ -59,6 +59,7 @@ all:bam_cat
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "knetfile.h"
 #include "bgzf.h"
 #include "bam.h"
 
@@ -97,7 +98,7 @@ int bam_cat(int nfn, char * const *fn, const bam_header_t *h, const char* outbam
             fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
             return -1;
         }
-        if (in->open_mode != 'r') return -1;
+        if (in->is_write) return -1;
         
         old = bam_header_read(in);
 		if (h == 0 && i == 0) bam_header_write(fp, old);
@@ -109,10 +110,10 @@ int bam_cat(int nfn, char * const *fn, const bam_header_t *h, const char* outbam
         
         j=0;
 #ifdef _USE_KNETFILE
-        fp_file=fp->x.fpw;
-        while ((len = knet_read(in->x.fpr, buf, BUF_SIZE)) > 0) {
+        fp_file = fp->fp;
+        while ((len = knet_read(in->fp, buf, BUF_SIZE)) > 0) {
 #else  
-        fp_file=fp->file;
+        fp_file = fp->fp;
         while (!feof(in->file) && (len = fread(buf, 1, BUF_SIZE, in->file)) > 0) {
 #endif
             if(len<es){
