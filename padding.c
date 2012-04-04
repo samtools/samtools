@@ -69,6 +69,52 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 	assert(length == s->l);
 }
 
+int load_unpadded_ref(faidx_t *fai, char *ref_name, int ref_len, kstring_t *seq)
+{
+	char base;
+	char *fai_ref = 0;
+	int fai_ref_len = 0, k;
+
+	fai_ref = fai_fetch(fai, ref_name, &fai_ref_len);
+	if (fai_ref_len != ref_len) {
+		fprintf(stderr, "[depad] ERROR: FASTA sequence %s length %i, expected %i\n", ref_name, fai_ref_len, ref_len);
+		free(fai_ref);
+		return -1;
+	}
+	ks_resize(seq, ref_len);
+	seq->l = 0;
+	for (k = 0; k < ref_len; ++k) {
+		base = fai_ref[k];
+		if (base == '-' || base == '*') {
+			// Map gaps to null to match unpad_seq function
+			seq->s[seq->l++] = 0;
+		} else {
+			// Want to map IUPAC bases to upper case, and reject other chars
+			int i = bam_nt16_table[(int)base];
+			if (i == 0 || i==16) { // Equals maps to 0, anything unexpected to 16
+				fprintf(stderr, "[depad] ERROR: Invalid character %c (ASCII %i) in FASTA sequence %s\n", base, (int)base, ref_name);
+				free(fai_ref);
+				return -1;
+			}
+			seq->s[seq->l++] = bam_nt16_rev_table[i];
+		}
+	}
+	assert(ref_len == seq->l);
+	free(fai_ref);
+	return 0;
+}
+
+inline int * update_posmap(int *posmap, kstring_t ref)
+{
+	int i, k;
+	posmap = realloc(posmap, ref.m * sizeof(int));
+	for (i = k = 0; i < ref.l; ++i) {
+		posmap[i] = k;
+		if (ref.s[i]) ++k;
+	}
+	return posmap;
+}
+
 int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 {
 	bam_header_t *h;
@@ -86,10 +132,8 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 		uint32_t *cigar = bam1_cigar(b);
 		n2 = 0;
 		if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam1_qname(b), h->target_name[b->core.tid]) == 0) {
-			int i, k;
-			/*
-			fprintf(stderr, "[depad] Found embedded reference %s\n", bam1_qname(b));
-			*/
+			// fprintf(stderr, "[depad] Found embedded reference %s\n", bam1_qname(b));
+			// TODO - Check this embedded reference matches the FASTA file (if given)
 			r_tid = b->core.tid;
 			unpad_seq(b, &r);
 			if (h->target_len[r_tid] != r.l) {
@@ -98,18 +142,28 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 			}
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(b->core.l_qseq, BAM_CMATCH));
 			replace_cigar(b, n2, cigar2);
+			posmap = update_posmap(posmap, r);
+			/*
 			posmap = realloc(posmap, r.m * sizeof(int));
 			for (i = k = 0; i < r.l; ++i) {
 				posmap[i] = k;
 				if (r.s[i]) ++k;
 			}
+			*/
 		} else if (b->core.n_cigar > 0) {
 			int i, k, op;
 			if (b->core.tid < 0) {
 				fprintf(stderr, "[depad] ERROR: Read %s has CIGAR but no RNAME\n", bam1_qname(b));
 				return -1;
-			} else if (b->core.tid != r_tid) {
-				fprintf(stderr, "[depad] ERROR: Missing %s embedded reference sequence\n", h->target_name[b->core.tid]);
+			} else if (b->core.tid == r_tid) {
+				; // good case, reference available
+			} else if (fai) {
+				if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) return -1;
+				posmap = update_posmap(posmap, r);
+				r_tid = b->core.tid;
+				// fprintf(stderr, "[depad] Loaded %s from FASTA file\n", h->target_name[b->core.tid]);
+			} else {				
+				fprintf(stderr, "[depad] ERROR: Missing %s embedded reference sequence (and no FASTA file)\n", h->target_name[b->core.tid]);
 				return -1;
 			}
 			unpad_seq(b, &q);
@@ -186,7 +240,7 @@ static int usage(int is_long_help);
 int main_pad2unpad(int argc, char *argv[])
 {
 	samfile_t *in = 0, *out = 0;
-	faidx_t *fai;
+	faidx_t *fai = 0;
 	int c, is_bamin = 1, compress_level = -1, is_bamout = 1, is_long_help = 0;
 	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0;
         int ret=0;
