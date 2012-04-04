@@ -89,14 +89,13 @@ int load_unpadded_ref(faidx_t *fai, char *ref_name, int ref_len, kstring_t *seq)
 			// Map gaps to null to match unpad_seq function
 			seq->s[seq->l++] = 0;
 		} else {
-			// Want to map IUPAC bases to upper case, and reject other chars
 			int i = bam_nt16_table[(int)base];
 			if (i == 0 || i==16) { // Equals maps to 0, anything unexpected to 16
 				fprintf(stderr, "[depad] ERROR: Invalid character %c (ASCII %i) in FASTA sequence %s\n", base, (int)base, ref_name);
 				free(fai_ref);
 				return -1;
 			}
-			seq->s[seq->l++] = bam_nt16_rev_table[i];
+			seq->s[seq->l++] = i;
 		}
 	}
 	assert(ref_len == seq->l);
@@ -133,23 +132,31 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 		n2 = 0;
 		if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam1_qname(b), h->target_name[b->core.tid]) == 0) {
 			// fprintf(stderr, "[depad] Found embedded reference %s\n", bam1_qname(b));
-			// TODO - Check this embedded reference matches the FASTA file (if given)
 			r_tid = b->core.tid;
 			unpad_seq(b, &r);
 			if (h->target_len[r_tid] != r.l) {
 				fprintf(stderr, "[depad] ERROR: (Padded) length of %s is %i in BAM header, but %ld in embedded reference\n", bam1_qname(b), h->target_len[r_tid], r.l);
 				return -1;
 			}
+			if (fai) {
+				// Check the embedded reference matches the FASTA file
+				if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &q)) return -1;
+				assert(r.l == q.l);
+				int i;
+				for (i = 0; i < r.l; ++i) {
+					if (r.s[i] != q.s[i]) {
+						// Show gaps as ASCII 45
+						fprintf(stderr, "[depad] ERROR: Embedded sequence and reference FASTA don't match for %s base %i, '%c' vs '%c'\n",
+							h->target_name[b->core.tid], i+1,
+							r.s[i] ? bam_nt16_rev_table[r.s[i]] : 45,
+							q.s[i] ? bam_nt16_rev_table[q.s[i]] : 45);
+						return -1;
+					}
+				}
+			}
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(b->core.l_qseq, BAM_CMATCH));
 			replace_cigar(b, n2, cigar2);
 			posmap = update_posmap(posmap, r);
-			/*
-			posmap = realloc(posmap, r.m * sizeof(int));
-			for (i = k = 0; i < r.l; ++i) {
-				posmap[i] = k;
-				if (r.s[i]) ++k;
-			}
-			*/
 		} else if (b->core.n_cigar > 0) {
 			int i, k, op;
 			if (b->core.tid < 0) {
