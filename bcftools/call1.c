@@ -285,7 +285,7 @@ static void write_header(bcf_hdr_t *h)
 	if (!strstr(str.s, "##FORMAT=<ID=DP,"))
 		kputs("##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"# high-quality bases\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=DV,"))
-		kputs("##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"# high-quality non-reference bases\">\n", &str);
+		kputs("##FORMAT=<ID=DV,Number=1,Type=Integer,Description=\"# high-quality non-reference bases\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=SP,"))
 		kputs("##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">\n", &str);
 	if (!strstr(str.s, "##FORMAT=<ID=PL,"))
