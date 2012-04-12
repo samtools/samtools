@@ -281,8 +281,9 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
 
         if ( cig==1 )
         {
-            int idx = is_fwd ? icycle : read_len-icycle-1;
-            if ( idx >= stats->nbases ) error("FIXME: %d vs %d\n", idx,stats->nbases);
+            int idx = is_fwd ? icycle : read_len-icycle;
+            if ( idx<0 ) error("FIXME: read_len=%d vs icycle=%d\n", read_len,icycle);
+            if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d\n", idx,stats->nbases);
             stats->ins_cycles[idx]++;
             icycle += ncig;
             if ( ncig<=stats->nindels )
@@ -291,7 +292,8 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
         }
         if ( cig==2 )
         {
-            int idx = is_fwd ? icycle : read_len-icycle-1;
+            int idx = is_fwd ? icycle-1 : read_len-icycle-1;
+            if ( idx<0 ) continue;  // discard meaningless deletions
             if ( idx >= stats->nbases ) error("FIXME: %d vs %d\n", idx,stats->nbases);
             stats->del_cycles[idx]++;
             if ( ncig<=stats->nindels )
@@ -514,15 +516,15 @@ void realloc_buffers(stats_t *stats, int seq_len)
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
     memset(stats->deletions + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
 
-    stats->ins_cycles = realloc(stats->ins_cycles, n*sizeof(uint64_t));
+    stats->ins_cycles = realloc(stats->ins_cycles, (n+1)*sizeof(uint64_t));
     if ( !stats->ins_cycles )
-        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
-    memset(stats->ins_cycles + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,(n+1)*sizeof(uint64_t));
+    memset(stats->ins_cycles + stats->nbases + 1, 0, (n+1-stats->nbases)*sizeof(uint64_t));
 
-    stats->del_cycles = realloc(stats->del_cycles, n*sizeof(uint64_t));
+    stats->del_cycles = realloc(stats->del_cycles, (n+1)*sizeof(uint64_t));
     if ( !stats->del_cycles )
-        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
-    memset(stats->del_cycles + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,(n+1)*sizeof(uint64_t));
+    memset(stats->del_cycles + stats->nbases + 1, 0, (n+1-stats->nbases)*sizeof(uint64_t));
 
     stats->nbases = n;
 
@@ -931,7 +933,7 @@ void output_stats(stats_t *stats)
     }
 
     printf("# Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions, number of deletions\n");
-    for (ilen=0; ilen<stats->nbases; ilen++)
+    for (ilen=0; ilen<=stats->nbases; ilen++)
     {
         if ( stats->ins_cycles[ilen]>0 || stats->del_cycles[ilen]>0 )
             printf("IC\t%d\t%ld\t%ld\n", ilen+1, (long)stats->ins_cycles[ilen], (long)stats->del_cycles[ilen]);
@@ -1243,8 +1245,8 @@ int main(int argc, char *argv[])
     stats->read_lengths  = calloc(stats->nbases,sizeof(uint64_t));
     stats->insertions    = calloc(stats->nbases,sizeof(uint64_t));
     stats->deletions     = calloc(stats->nbases,sizeof(uint64_t));
-    stats->ins_cycles    = calloc(stats->nbases,sizeof(uint64_t));
-    stats->del_cycles    = calloc(stats->nbases,sizeof(uint64_t));
+    stats->ins_cycles    = calloc(stats->nbases+1,sizeof(uint64_t));
+    stats->del_cycles    = calloc(stats->nbases+1,sizeof(uint64_t));
     if ( targets )
         init_regions(stats, targets);
 
