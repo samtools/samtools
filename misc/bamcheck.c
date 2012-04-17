@@ -983,7 +983,7 @@ void output_stats(stats_t *stats)
 
 void bam_init_header_hash(bam_header_t *header);
 
-size_t getline(char **line, size_t *n, FILE *fp)
+size_t mygetline(char **line, size_t *n, FILE *fp)
 {
     if (line == NULL || n == NULL || fp == NULL)
     {
@@ -1033,7 +1033,7 @@ void init_regions(stats_t *stats, char *file)
     ssize_t nread;
     int warned = 0;
     int prev_tid=-1, prev_pos=-1;
-    while ((nread = getline(&line, &len, fp)) != -1) 
+    while ((nread = mygetline(&line, &len, fp)) != -1) 
     {
         if ( line[0] == '#' ) continue;
 
