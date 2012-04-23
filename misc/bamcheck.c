@@ -8,11 +8,14 @@
         - coverage distribution ignores softclips and deletions
         - some stats require sorted BAMs
         - GC content graph can have an untidy, step-like pattern when BAM contains multiple read lengths.
-        - The whole reads are used with -t, no splicing is done, no indels or soft clips are 
-            considered, even small overlap is good enough to include the read in the stats.
+        - 'bases mapped' (stats->nbases_mapped) is calculated from read lengths given by BAM (core.l_qseq)
+        - With the -t option, the whole reads are used. Except for the number of mapped bases (cigar)
+            counts, no splicing is done, no indels or soft clips are considered, even small overlap is
+            good enough to include the read in the stats.
+
 */
 
-#define BAMCHECK_VERSION "2012-04-04"
+#define BAMCHECK_VERSION "2012-04-23"
 
 #define _ISOC99_SOURCE
 #include <stdio.h>
@@ -145,7 +148,7 @@ typedef struct
     int filter_readlen;
 
     // Target regions
-    int nregions;
+    int nregions, reg_from,reg_to;
     regions_t *regions;
 
     // Auxiliary data
@@ -158,6 +161,9 @@ typedef struct
 stats_t;
 
 void error(const char *format, ...);
+void bam_init_header_hash(bam_header_t *header);
+int is_in_regions(bam1_t *bam_line, stats_t *stats);
+
 
 // Coverage distribution methods
 inline int coverage_idx(int min, int max, int n, int step, int depth)
@@ -545,6 +551,9 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     if ( stats->rmdup && IS_DUP(bam_line) )
         return;
 
+    if ( !is_in_regions(bam_line,stats) )
+        return;
+
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
     if ( stats->filter_readlen!=-1 && seq_len!=stats->filter_readlen ) return;
@@ -666,19 +675,47 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             stats->nmismatches += bam_aux2i(nm);
 
         // Number of mapped bases from cigar 
+        // Conversion from uint32_t to MIDNSHP
+        //  012-4--
+        //  MIDNSHP
         if ( bam_line->core.n_cigar == 0) 
             error("FIXME: mapped read with no cigar?\n");
-        int readlen = seq_len;
-        for (i=0; i<bam_line->core.n_cigar; i++) 
+        int readlen=seq_len;
+        if ( stats->regions )
         {
-            // Conversion from uint32_t to MIDNSHP
-            //  01--4--
-            //  MIDNSHP
-            if ( (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==0 || (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==1 )
-                stats->nbases_mapped_cigar += bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
-
-            if ( (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==2 )
-                readlen += bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
+            // Count only on-target bases
+            int iref = bam_line->core.pos + 1;
+            for (i=0; i<bam_line->core.n_cigar; i++)
+            {
+                int cig  = bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK;
+                int ncig = bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
+                if ( cig==2 ) readlen += ncig;
+                else if ( cig==0 ) 
+                {
+                    if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
+                    else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
+                    if ( ncig<0 ) ncig = 0;
+                    stats->nbases_mapped_cigar += ncig;
+                    iref += bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
+                }
+                else if ( cig==1 )
+                {
+                    iref += ncig;
+                    if ( iref>=stats->reg_from && iref<=stats->reg_to )
+                        stats->nbases_mapped_cigar += ncig;
+                }
+            }
+        }
+        else
+        {
+            // Count the whole read
+            for (i=0; i<bam_line->core.n_cigar; i++) 
+            {
+                if ( (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==0 || (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==1 )
+                    stats->nbases_mapped_cigar += bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
+                if ( (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==2 )
+                    readlen += bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
+            }
         }
         stats->nbases_mapped += seq_len;
 
@@ -981,8 +1018,6 @@ void output_stats(stats_t *stats)
     }
 }
 
-void bam_init_header_hash(bam_header_t *header);
-
 size_t mygetline(char **line, size_t *n, FILE *fp)
 {
     if (line == NULL || n == NULL || fp == NULL)
@@ -1101,6 +1136,35 @@ static int fetch_read(const bam1_t *bam_line, void *data)
     return 1;
 }
 
+void reset_regions(stats_t *stats)
+{
+    int i;
+    for (i=0; i<stats->nregions; i++)
+        stats->regions[i].cpos = 0;
+}
+
+int is_in_regions(bam1_t *bam_line, stats_t *stats)
+{
+    if ( !stats->regions ) return 1;
+
+    if ( bam_line->core.tid >= stats->nregions || bam_line->core.tid<0 ) return 0;
+    if ( !stats->is_sorted ) error("The BAM must be sorted in order for -t to work.\n");
+
+    regions_t *reg = &stats->regions[bam_line->core.tid];
+    if ( reg->cpos==reg->npos ) return 0;       // done for this chr
+
+    // Find a matching interval or skip this read. No splicing of reads is done, no indels or soft clips considered, 
+    //  even small overlap is enough to include the read in the stats.
+    int i = reg->cpos;
+    while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
+    if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
+    if ( bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) return 0;
+    reg->cpos = i;
+    stats->reg_from = reg->pos[i].from;
+    stats->reg_to   = reg->pos[i].to;
+
+    return 1;
+}
 
 void error(const char *format, ...)
 {
@@ -1264,6 +1328,7 @@ int main(int argc, char *argv[])
             int tid, beg, end;
             bam_parse_region(stats->sam->header, argv[i], &tid, &beg, &end);
             if ( tid < 0 ) continue;
+            reset_regions(stats);
             bam_fetch(stats->sam->x.bam, bam_idx, tid, beg, end, stats, fetch_read);
         }
         bam_index_destroy(bam_idx);
@@ -1272,25 +1337,7 @@ int main(int argc, char *argv[])
     {
         // Stream through the entire BAM ignoring off-target regions if -t is given
         while (samread(sam,bam_line) >= 0) 
-        {
-            if ( stats->regions )
-            {
-                if ( bam_line->core.tid >= stats->nregions || bam_line->core.tid<0 ) continue;
-                if ( !stats->is_sorted ) error("The BAM must be sorted in order for -t to work.\n");
-
-                regions_t *reg = &stats->regions[bam_line->core.tid];
-                if ( reg->cpos==reg->npos ) continue;       // done for this chr
-
-                // Find a matching interval or skip this read. No splicing of reads is done, no indels or soft clips considered, 
-                //  even small overlap is enough to include the read in the stats.
-                int i = reg->cpos;
-                while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
-                if ( i>=reg->npos ) { reg->cpos = reg->npos; continue; }
-                if ( bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) continue;
-                reg->cpos = i;
-            }
             collect_stats(bam_line,stats);
-        }
     }
     round_buffer_flush(stats,-1);
 
