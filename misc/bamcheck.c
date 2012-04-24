@@ -15,7 +15,7 @@
 
 */
 
-#define BAMCHECK_VERSION "2012-04-23"
+#define BAMCHECK_VERSION "2012-04-24"
 
 #define _ISOC99_SOURCE
 #include <stdio.h>
@@ -1082,7 +1082,7 @@ void init_regions(stats_t *stats, char *file)
         if ( iter == kh_end(header_hash) )
         {
             if ( !warned )
-                fprintf(stderr,"Warning: Some sequences not present in the BAM (%s)\n", line);
+                fprintf(stderr,"Warning: Some sequences not present in the BAM, e.g. \"%s\". This message is printed only once.\n", line);
             warned = 1;
             continue;
         }
@@ -1116,6 +1116,7 @@ void init_regions(stats_t *stats, char *file)
         stats->regions[tid].npos++;
     }
     if (line) free(line);
+    if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
     fclose(fp);
 }
 
