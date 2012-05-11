@@ -401,7 +401,7 @@ static int worker_aux(worker_t *w)
 	w->errcode = 0;
 	for (i = w->i; i < w->mt->curr; i += w->mt->n_threads) {
 		int clen = BGZF_MAX_BLOCK_SIZE;
-			if (bgzf_compress(w->buf, &clen, w->mt->blk[i], w->mt->len[i], w->fp->compress_level) != 0)
+		if (bgzf_compress(w->buf, &clen, w->mt->blk[i], w->mt->len[i], w->fp->compress_level) != 0)
 			w->errcode |= BGZF_ERR_ZLIB;
 		memcpy(w->mt->blk[i], w->buf, clen);
 		w->mt->len[i] = clen;
@@ -502,7 +502,7 @@ static int mt_flush(BGZF *fp)
 static int mt_lazy_flush(BGZF *fp)
 {
 	mtaux_t *mt = (mtaux_t*)fp->mt;
-	mt_queue(fp);
+	if (fp->block_offset) mt_queue(fp);
 	if (mt->curr == mt->n_blks)
 		return mt_flush(fp);
 	return -1;
