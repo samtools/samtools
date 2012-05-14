@@ -284,18 +284,18 @@ int main_pad2unpad(int argc, char *argv[])
 	}
 	// open file handlers
 	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
-		fprintf(stderr, "[depad] fail to open \"%s\" for reading.\n", argv[optind]);
+		fprintf(stderr, "[depad] failed to open \"%s\" for reading.\n", argv[optind]);
 		ret = 1;
 		goto depad_end;
 	}
 	if (in->header == 0) {
-		fprintf(stderr, "[depad] fail to read the header from \"%s\".\n", argv[optind]);
+		fprintf(stderr, "[depad] failed to read the header from \"%s\".\n", argv[optind]);
 		ret = 1;
 		goto depad_end;
 	}
 	/* TODO - The reference sequence lengths in the BAM + SAM headers should be updated */
 	if ((out = samopen(fn_out? fn_out : "-", out_mode, in->header)) == 0) {
-		fprintf(stderr, "[depad] fail to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
+		fprintf(stderr, "[depad] failed to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
 		ret = 1;
 		goto depad_end;
 	}
