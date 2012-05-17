@@ -6,7 +6,7 @@
 #include "sam.h"
 #include "ksort.h"
 
-#define DEF_CLEVEL 3
+#define DEF_CLEVEL 1
 
 static inline unsigned hash_Wang(unsigned key)
 {
