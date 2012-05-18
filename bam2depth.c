@@ -13,7 +13,7 @@
 typedef struct {     // auxiliary data structure
 	bamFile fp;      // the file handler
 	bam_iter_t iter; // NULL if a region not specified
-	int min_mapQ;    // mapQ filter
+	int min_mapQ, min_len; // mapQ filter; length filter
 } aux_t;
 
 void *bed_read(const char *fn); // read a BED or position list file
@@ -25,7 +25,10 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
 {
 	aux_t *aux = (aux_t*)data; // data in fact is a pointer to an auxiliary structure
 	int ret = aux->iter? bam_iter_read(aux->fp, aux->iter, b) : bam_read1(aux->fp, b);
-	if ((int)b->core.qual < aux->min_mapQ) b->core.flag |= BAM_FUNMAP;
+	if (!(b->core.flag&BAM_FUNMAP)) {
+		if ((int)b->core.qual < aux->min_mapQ) b->core.flag |= BAM_FUNMAP;
+		else if (aux->min_len && bam_cigar2qlen(&b->core, bam1_cigar(b)) < aux->min_len) b->core.flag |= BAM_FUNMAP;
+	}
 	return ret;
 }
 
@@ -35,7 +38,7 @@ int main(int argc, char *argv[])
 int main_depth(int argc, char *argv[])
 #endif
 {
-	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0;
+	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0;
 	const bam_pileup1_t **plp;
 	char *reg = 0; // specified region
 	void *bed = 0; // BED data structure
@@ -44,8 +47,9 @@ int main_depth(int argc, char *argv[])
 	bam_mplp_t mplp;
 
 	// parse the command line
-	while ((n = getopt(argc, argv, "r:b:q:Q:")) >= 0) {
+	while ((n = getopt(argc, argv, "r:b:q:Q:l:")) >= 0) {
 		switch (n) {
+			case 'l': min_len = atoi(optarg); break; // minimum query length
 			case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
 			case 'b': bed = bed_read(optarg); break; // BED or position list file can be parsed now
 			case 'q': baseQ = atoi(optarg); break;   // base quality threshold
@@ -53,7 +57,7 @@ int main_depth(int argc, char *argv[])
 		}
 	}
 	if (optind == argc) {
-		fprintf(stderr, "Usage: bam2depth [-r reg] [-q baseQthres] [-Q mapQthres] [-b in.bed] <in1.bam> [...]\n");
+		fprintf(stderr, "Usage: bam2depth [-r reg] [-q baseQthres] [-Q mapQthres] [-l minQLen] [-b in.bed] <in1.bam> [...]\n");
 		return 1;
 	}
 
@@ -66,6 +70,7 @@ int main_depth(int argc, char *argv[])
 		data[i] = calloc(1, sizeof(aux_t));
 		data[i]->fp = bam_open(argv[optind+i], "r"); // open BAM
 		data[i]->min_mapQ = mapQ;                    // set the mapQ filter
+		data[i]->min_len  = min_len;                 // set the qlen filter
 		htmp = bam_header_read(data[i]->fp);         // read the BAM header
 		if (i == 0) {
 			h = htmp; // keep the header of the 1st BAM
