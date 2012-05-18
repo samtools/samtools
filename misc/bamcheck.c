@@ -84,7 +84,6 @@ typedef struct
 {
     // Parameters
     int trim_qual;      // bwa trim quality
-    int rmdup;          // Exclude reads marked as duplicates from the stats
 
     // Dimensions of the quality histogram holder (quals_1st,quals_2nd), GC content holder (gc_1st,gc_2nd),
     //  insert size histogram holder
@@ -101,7 +100,7 @@ typedef struct
     uint64_t *acgt_cycles;
     uint64_t *read_lengths;
     uint64_t *insertions, *deletions;
-    uint64_t *ins_cycles, *del_cycles;
+    uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
 
     // The extremes encountered
     int max_len;            // Maximum read length
@@ -152,6 +151,7 @@ typedef struct
     regions_t *regions;
 
     // Auxiliary data
+    int flag_require, flag_filter;
     double sum_qual;            // For calculating average quality value 
     samfile_t *sam;             // Unused
     faidx_t *fai;               // Reference sequence for GC-depth graph
@@ -274,6 +274,7 @@ int bwa_trim_read(int trim_qual, uint8_t *quals, int len, int reverse)
 void count_indels(stats_t *stats,bam1_t *bam_line) 
 {
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
+    int is_1st = IS_READ1(bam_line) ? 1 : 0;
     int icig;
     int icycle = 0;
     int read_len = bam_line->core.l_qseq;
@@ -290,7 +291,10 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
             int idx = is_fwd ? icycle : read_len-icycle;
             if ( idx<0 ) error("FIXME: read_len=%d vs icycle=%d\n", read_len,icycle);
             if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d\n", idx,stats->nbases);
-            stats->ins_cycles[idx]++;
+            if ( is_1st ) 
+                stats->ins_cycles_1st[idx]++;
+            else
+                stats->ins_cycles_2nd[idx]++;
             icycle += ncig;
             if ( ncig<=stats->nindels )
                 stats->insertions[ncig-1]++;
@@ -301,7 +305,10 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
             int idx = is_fwd ? icycle-1 : read_len-icycle-1;
             if ( idx<0 ) continue;  // discard meaningless deletions
             if ( idx >= stats->nbases ) error("FIXME: %d vs %d\n", idx,stats->nbases);
-            stats->del_cycles[idx]++;
+            if ( is_1st )
+                stats->del_cycles_1st[idx]++;
+            else
+                stats->del_cycles_2nd[idx]++;
             if ( ncig<=stats->nindels )
                 stats->deletions[ncig-1]++;
             continue;
@@ -522,15 +529,25 @@ void realloc_buffers(stats_t *stats, int seq_len)
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
     memset(stats->deletions + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
 
-    stats->ins_cycles = realloc(stats->ins_cycles, (n+1)*sizeof(uint64_t));
-    if ( !stats->ins_cycles )
+    stats->ins_cycles_1st = realloc(stats->ins_cycles_1st, (n+1)*sizeof(uint64_t));
+    if ( !stats->ins_cycles_1st )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,(n+1)*sizeof(uint64_t));
-    memset(stats->ins_cycles + stats->nbases + 1, 0, (n+1-stats->nbases)*sizeof(uint64_t));
+    memset(stats->ins_cycles_1st + stats->nbases + 1, 0, (n+1-stats->nbases)*sizeof(uint64_t));
 
-    stats->del_cycles = realloc(stats->del_cycles, (n+1)*sizeof(uint64_t));
-    if ( !stats->del_cycles )
+    stats->ins_cycles_2nd = realloc(stats->ins_cycles_2nd, (n+1)*sizeof(uint64_t));
+    if ( !stats->ins_cycles_2nd )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,(n+1)*sizeof(uint64_t));
-    memset(stats->del_cycles + stats->nbases + 1, 0, (n+1-stats->nbases)*sizeof(uint64_t));
+    memset(stats->ins_cycles_2nd + stats->nbases + 1, 0, (n+1-stats->nbases)*sizeof(uint64_t));
+
+    stats->del_cycles_1st = realloc(stats->del_cycles_1st, (n+1)*sizeof(uint64_t));
+    if ( !stats->del_cycles_1st )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,(n+1)*sizeof(uint64_t));
+    memset(stats->del_cycles_1st + stats->nbases + 1, 0, (n+1-stats->nbases)*sizeof(uint64_t));
+
+    stats->del_cycles_2nd = realloc(stats->del_cycles_2nd, (n+1)*sizeof(uint64_t));
+    if ( !stats->del_cycles_2nd )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,(n+1)*sizeof(uint64_t));
+    memset(stats->del_cycles_2nd + stats->nbases + 1, 0, (n+1-stats->nbases)*sizeof(uint64_t));
 
     stats->nbases = n;
 
@@ -548,7 +565,9 @@ void realloc_buffers(stats_t *stats, int seq_len)
 
 void collect_stats(bam1_t *bam_line, stats_t *stats)
 {
-    if ( stats->rmdup && IS_DUP(bam_line) )
+    if ( stats->flag_require && (bam_line->core.flag & stats->flag_require)!=stats->flag_require )
+        return;
+    if ( stats->flag_filter && (bam_line->core.flag & stats->flag_filter) )
         return;
 
     if ( !is_in_regions(bam_line,stats) )
@@ -969,11 +988,11 @@ void output_stats(stats_t *stats)
             printf("ID\t%d\t%ld\t%ld\n", ilen+1, (long)stats->insertions[ilen], (long)stats->deletions[ilen]);
     }
 
-    printf("# Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions, number of deletions\n");
+    printf("# Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions (fwd), .. (rev) , number of deletions (fwd), .. (rev)\n");
     for (ilen=0; ilen<=stats->nbases; ilen++)
     {
-        if ( stats->ins_cycles[ilen]>0 || stats->del_cycles[ilen]>0 )
-            printf("IC\t%d\t%ld\t%ld\n", ilen+1, (long)stats->ins_cycles[ilen], (long)stats->del_cycles[ilen]);
+        if ( stats->ins_cycles_1st[ilen]>0 || stats->ins_cycles_2nd[ilen]>0 || stats->del_cycles_1st[ilen]>0 || stats->del_cycles_2nd[ilen]>0 )
+            printf("IC\t%d\t%ld\t%ld\t%ld\t%ld\n", ilen+1, (long)stats->ins_cycles_1st[ilen], (long)stats->ins_cycles_2nd[ilen], (long)stats->del_cycles_1st[ilen], (long)stats->del_cycles_2nd[ilen]);
     }
 
     printf("# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.\n");
@@ -1178,6 +1197,8 @@ void error(const char *format, ...)
         printf("Options:\n");
         printf("    -c, --coverage <int>,<int>,<int>    Coverage distribution min,max,step [1,1000,1]\n");
         printf("    -d, --remove-dups                   Exlude from statistics reads marked as duplicates\n");
+        printf("    -f, --required-flag <int>           Required flag, 0 for unset [0]\n");
+        printf("    -F, --filtering-flag <int>          Filtering flag, 0 for unset [0]\n");
         printf("    -h, --help                          This help message\n");
         printf("    -i, --insert-size <int>             Maximum insert size [8000]\n");
         printf("    -l, --read-length <int>             Include in the statistics only reads with the given read length []\n");
@@ -1241,14 +1262,18 @@ int main(int argc, char *argv[])
         {"most-inserts",0,0,'m'},
         {"trim-quality",0,0,'q'},
         {"target-regions",0,0,'t'},
+        {"required-flag",0,0,'f'},
+        {"filtering-flag",0,0,'F'},
         {0,0,0,0}
     };
     int opt;
-    while ( (opt=getopt_long(argc,argv,"?hdsr:c:l:i:t:m:q:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsr:c:l:i:t:m:q:f:F:",loptions,NULL))>0 )
     {
         switch (opt)
         {
-            case 'd': stats->rmdup=1; break;
+            case 'f': stats->flag_require=strtol(optarg,0,0); break;
+            case 'F': stats->flag_filter=strtol(optarg,0,0); break;
+            case 'd': stats->flag_filter|=BAM_FDUP; break;
             case 's': strcpy(in_mode, "r"); break;
             case 'r': stats->fai = fai_load(optarg); 
                       if (stats->fai==0) 
@@ -1296,22 +1321,24 @@ int main(int argc, char *argv[])
     stats->sam = sam;
     bam1_t *bam_line = bam_init1();
     // .. arrays
-    stats->quals_1st     = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
-    stats->quals_2nd     = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
-    stats->gc_1st        = calloc(stats->ngc,sizeof(uint64_t));
-    stats->gc_2nd        = calloc(stats->ngc,sizeof(uint64_t));
-    stats->isize_inward  = calloc(stats->nisize,sizeof(uint64_t));
-    stats->isize_outward = calloc(stats->nisize,sizeof(uint64_t));
-    stats->isize_other   = calloc(stats->nisize,sizeof(uint64_t));
-    stats->gcd           = calloc(stats->ngcd,sizeof(gc_depth_t));
-    stats->rseq_buf      = calloc(stats->nref_seq,sizeof(uint8_t));
-    stats->mpc_buf       = stats->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
-    stats->acgt_cycles   = calloc(4*stats->nbases,sizeof(uint64_t));
-    stats->read_lengths  = calloc(stats->nbases,sizeof(uint64_t));
-    stats->insertions    = calloc(stats->nbases,sizeof(uint64_t));
-    stats->deletions     = calloc(stats->nbases,sizeof(uint64_t));
-    stats->ins_cycles    = calloc(stats->nbases+1,sizeof(uint64_t));
-    stats->del_cycles    = calloc(stats->nbases+1,sizeof(uint64_t));
+    stats->quals_1st      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
+    stats->quals_2nd      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
+    stats->gc_1st         = calloc(stats->ngc,sizeof(uint64_t));
+    stats->gc_2nd         = calloc(stats->ngc,sizeof(uint64_t));
+    stats->isize_inward   = calloc(stats->nisize,sizeof(uint64_t));
+    stats->isize_outward  = calloc(stats->nisize,sizeof(uint64_t));
+    stats->isize_other    = calloc(stats->nisize,sizeof(uint64_t));
+    stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
+    stats->rseq_buf       = calloc(stats->nref_seq,sizeof(uint8_t));
+    stats->mpc_buf        = stats->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
+    stats->acgt_cycles    = calloc(4*stats->nbases,sizeof(uint64_t));
+    stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
+    stats->insertions     = calloc(stats->nbases,sizeof(uint64_t));
+    stats->deletions      = calloc(stats->nbases,sizeof(uint64_t));
+    stats->ins_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
+    stats->ins_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
+    stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
+    stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
     if ( targets )
         init_regions(stats, targets);
 
@@ -1358,8 +1385,10 @@ int main(int argc, char *argv[])
     free(stats->read_lengths);
     free(stats->insertions);
     free(stats->deletions);
-    free(stats->ins_cycles);
-    free(stats->del_cycles);
+    free(stats->ins_cycles_1st);
+    free(stats->ins_cycles_2nd);
+    free(stats->del_cycles_1st);
+    free(stats->del_cycles_2nd);
     destroy_regions(stats);
     free(stats);
 

@@ -803,14 +803,17 @@ sub plot_indel_cycles
         set style line 1 linetype 1  linecolor rgb "red"
         set style line 2 linetype 2  linecolor rgb "black"
         set style line 3 linetype 3  linecolor rgb "green"
+        set style line 4 linetype 4  linecolor rgb "blue"
         set style increment user
         set ylabel "Indel count" 
         set xlabel "Read Cycle"
         set title "$$args{title}"
-        plot '-' w l ti 'Insertions', '' w l ti 'Deletions'
+        plot '-' w l ti 'Insertions (fwd)', '' w l ti 'Insertions (rev)', '' w l ti 'Deletions (fwd)', '' w l ti 'Deletions (rev)'
     ];
     for my $len (@{$$opts{dat}{IC}}) { print $fh "$$len[0]\t$$len[1]\n"; } print $fh "end\n";
     for my $len (@{$$opts{dat}{IC}}) { print $fh "$$len[0]\t$$len[2]\n"; } print $fh "end\n";
+    for my $len (@{$$opts{dat}{IC}}) { print $fh "$$len[0]\t$$len[3]\n"; } print $fh "end\n";
+    for my $len (@{$$opts{dat}{IC}}) { print $fh "$$len[0]\t$$len[4]\n"; } print $fh "end\n";
     close($fh);
     plot($$args{gp});
 }
