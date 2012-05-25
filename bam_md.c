@@ -188,7 +188,7 @@ int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
 
 int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 {
-	int k, i, bw, x, y, yb, ye, xb, xe, apply_baq = flag&1, extend_baq = flag>>1&1;
+	int k, i, bw, x, y, yb, ye, xb, xe, apply_baq = flag&1, extend_baq = flag>>1&1, redo_baq = flag&4;
 	uint32_t *cigar = bam1_cigar(b);
 	bam1_core_t *c = &b->core;
 	kpa_par_t conf = kpa_par_def;
@@ -197,6 +197,11 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 	// test if BQ or ZQ is present
 	if ((bq = bam_aux_get(b, "BQ")) != 0) ++bq;
 	if ((zq = bam_aux_get(b, "ZQ")) != 0 && *zq == 'Z') ++zq;
+	if (bq && redo_baq)
+	{
+	    bam_aux_del(b, bq-1);
+	    bq = 0;
+	}
 	if (bq && zq) { // remove the ZQ tag
 		bam_aux_del(b, zq-1);
 		zq = 0;

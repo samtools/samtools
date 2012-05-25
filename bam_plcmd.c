@@ -67,7 +67,7 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_NO_ORPHAN 0x40
 #define MPLP_REALN   0x80
 #define MPLP_NO_INDEL 0x400
-#define MPLP_EXT_BAQ 0x800
+#define MPLP_REDO_BAQ 0x800
 #define MPLP_ILLUMINA13 0x1000
 #define MPLP_IGNORE_RG 0x2000
 #define MPLP_PRINT_POS 0x4000
@@ -133,7 +133,7 @@ static int mplp_func(void *data, bam1_t *b)
 		}
 		has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
 		skip = 0;
-		if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ma->ref, (ma->conf->flag & MPLP_EXT_BAQ)? 3 : 1);
+		if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ma->ref, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
 		if (has_ref && ma->conf->capQ_thres > 10) {
 			int q = bam_cap_mapQ(b, ma->ref, ma->conf->capQ_thres);
 			if (q < 0) skip = 1;
@@ -448,7 +448,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_depth = 250; mplp.max_indel_depth = 250;
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
-	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_EXT_BAQ;
+	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
 	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6OsV")) >= 0) {
 		switch (c) {
 		case 'f':
@@ -467,7 +467,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'S': mplp.fmt_flag |= B2B_FMT_SP; break;
 		case 'V': mplp.fmt_flag |= B2B_FMT_DV; break;
 		case 'I': mplp.flag |= MPLP_NO_INDEL; break;
-		case 'E': mplp.flag |= MPLP_EXT_BAQ; break;
+		case 'E': mplp.flag |= MPLP_REDO_BAQ; break;
 		case '6': mplp.flag |= MPLP_ILLUMINA13; break;
 		case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
 		case 's': mplp.flag |= MPLP_PRINT_MAPQ; break;
@@ -508,7 +508,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -b FILE      list of input BAM files [null]\n");
 		fprintf(stderr, "       -C INT       parameter for adjusting mapQ; 0 to disable [0]\n");
 		fprintf(stderr, "       -d INT       max per-BAM depth to avoid excessive memory usage [%d]\n", mplp.max_depth);
-//		fprintf(stderr, "       -E           extended BAQ for higher sensitivity but lower specificity\n");
+		fprintf(stderr, "       -E           recalculate extended BAQ on the fly thus ignoring existing BQs\n");
 		fprintf(stderr, "       -f FILE      faidx indexed reference sequence file [null]\n");
 		fprintf(stderr, "       -G FILE      exclude read groups listed in FILE [null]\n");
 		fprintf(stderr, "       -l FILE      list of positions (chr pos) or regions (BED) [null]\n");
