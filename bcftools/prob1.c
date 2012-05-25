@@ -193,24 +193,21 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 
 static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 {
-	int i, j;
-	long *p, tmp;
-	p = alloca(b->n_alleles * sizeof(long));
-	memset(p, 0, sizeof(long) * b->n_alleles);
+	int i, j, imax=0;
 	for (j = 0; j < ma->n; ++j) {
 		const uint8_t *pi = ma->PL + j * ma->PL_len;
 		double *pdg = ma->pdg + j * 3;
 		pdg[0] = ma->q2p[pi[2]]; pdg[1] = ma->q2p[pi[1]]; pdg[2] = ma->q2p[pi[0]];
-		for (i = 0; i < b->n_alleles; ++i)
-			p[i] += (int)pi[(i+1)*(i+2)/2-1];
+        int ib,ia=0,n=(b->n_alleles+1)*b->n_alleles/2;
+        for (i=0; i<n;) {
+            for (ib=0; ib<=ia; ib++) {
+                if ( pi[i]==0 && ia>imax ) imax=ia;
+                i++;
+            }
+            ia++;
+        }
 	}
-	for (i = 0; i < b->n_alleles; ++i) p[i] = p[i]<<4 | i;
-	for (i = 1; i < b->n_alleles; ++i) // insertion sort
-		for (j = i; j > 0 && p[j] < p[j-1]; --j)
-			tmp = p[j], p[j] = p[j-1], p[j-1] = tmp;
-	for (i = b->n_alleles - 1; i >= 0; --i)
-		if ((p[i]&0xf) == 0) break;
-	return i;
+	return imax;
 }
 
 int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)

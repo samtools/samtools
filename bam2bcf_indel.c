@@ -161,6 +161,11 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				if (j > max_rd_len) max_rd_len = j;
 			}
 		}
+        // To prevent long stretches of N's to be mistaken for indels (sometimes thousands of bases),
+        //  check the number of N's in the sequence. TODO: this may not be the best place and the best way of doing it
+        int nN=0; for (i=0; i<max_rd_len && ref[i]; i++) if ( ref[i]=='N' ) nN++;
+        if ( nN*2>i ) return -1;
+
 		ks_introsort(uint32_t, m, aux);
 		// squeeze out identical types
 		for (i = 1, n_types = 1; i < m; ++i)
