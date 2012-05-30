@@ -193,21 +193,50 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 
 static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 {
-	int i, j, imax=0;
+	int i, j;
+    int n = (b->n_alleles+1)*b->n_alleles/2;
+    double *lk = alloca(n * sizeof(long));
+    memset(lk, 0, sizeof(double) * n);
 	for (j = 0; j < ma->n; ++j) {
 		const uint8_t *pi = ma->PL + j * ma->PL_len;
 		double *pdg = ma->pdg + j * 3;
 		pdg[0] = ma->q2p[pi[2]]; pdg[1] = ma->q2p[pi[1]]; pdg[2] = ma->q2p[pi[0]];
-        int ib,ia=0,n=(b->n_alleles+1)*b->n_alleles/2;
-        for (i=0; i<n;) {
-            for (ib=0; ib<=ia; ib++) {
-                if ( pi[i]==0 && ia>imax ) imax=ia;
-                i++;
-            }
-            ia++;
-        }
-	}
-	return imax;
+        for (i=0; i<n; i++) lk[i] += pi[i];
+    }
+
+    double norm=lk[0]; 
+    for (i=1; i<n; i++) if (lk[i]<norm) norm=lk[i];
+    #if DBG
+    for (i=0,j=0; i<b->n_alleles; i++)
+    {
+        int k; for (k=0; k<=i; k++) printf("%.0f\t", lk[j++]);
+        printf("\n");
+    }
+    #endif
+    for (i=0; i<n; i++) lk[i] = pow(10,-0.1*(lk[i]-norm));
+
+    // Find out the most likely alleles. In contrast to the original version,
+    //  ALT alleles may not be printed when they are more likely than REF but
+    //  significantly less likely than the most likely ALT. The only criterion
+    //  is the LK ratio now. To obtain behaviour similar to the original one,
+    //  use the pref variant below.
+    double pmax=0; //,pref=0;
+    n = ma->is_indel ? b->n_alleles : b->n_alleles-1;
+    for (i=0; i<n; i++)
+    {
+        double pr=0;
+        int k=i*(i+1)/2;
+        for (j=0; j<=i; j++) { pr+=lk[k]; k++; }
+        for (j=i+1; j<b->n_alleles; j++) { k=j*(j+1)/2+i; pr+=lk[k]; }
+        #if DBG
+        printf("%d\t%e\n", i,pr);
+        #endif
+        if (pmax<pr) pmax=pr;
+        // if (i==0) pref=pr;
+        // if (pr<pref && pr/pmax < 1e-4) break;
+        if (pr/pmax < 1e-4) break;   // Assuming the alleles are sorted by the lk
+    }
+	return i-1;
 }
 
 int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
