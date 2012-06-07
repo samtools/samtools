@@ -23,6 +23,7 @@
 #include "bam.h"
 #include "faidx.h"
 #include "bam2bcf.h"
+#include "sam_header.h"
 
 char bam_aux_getCEi(bam1_t *b, int i);
 char bam_aux_getCSi(bam1_t *b, int i);
@@ -55,6 +56,8 @@ typedef struct {
 
 	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip, show_name;
 	char *ref;
+    char *sample;   //TODO: multiple samples and read groups
+    void *rg2sm;
 } tview_t;
 
 int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
@@ -195,7 +198,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 	return 0;
 }
 
-tview_t *tv_init(const char *fn, const char *fn_fa)
+tview_t *tv_init(const char *fn, const char *fn_fa, char *samples)
 {
 	tview_t *tv = (tview_t*)calloc(1, sizeof(tview_t));
 	tv->is_dot = 1;
@@ -209,6 +212,13 @@ tview_t *tv_init(const char *fn, const char *fn_fa)
 	if (fn_fa) tv->fai = fai_load(fn_fa);
 	tv->bca = bcf_call_init(0.83, 13);
 	tv->ins = 1;
+
+    if ( samples ) 
+    {
+        tv->sample = samples;
+        tv->header->dict = sam_header_parse2(tv->header->text);
+        tv->rg2sm = sam_header2tbl(tv->header->dict, "RG", "ID", "SM");
+    }
 
 	initscr();
 	keypad(stdscr, TRUE);
@@ -251,6 +261,14 @@ void tv_destroy(tview_t *tv)
 int tv_fetch_func(const bam1_t *b, void *data)
 {
 	tview_t *tv = (tview_t*)data;
+    if ( tv->sample )
+    {
+        const uint8_t *rg = bam_aux_get(b, "RG");
+        if ( !rg ) return 0; 
+        const char *sm = sam_tbl_get(tv->rg2sm, (const char*)(rg + 1));
+        if ( !sm ) return 0;
+        if ( strcmp(sm,tv->sample) ) return 0;
+    }
 	if (tv->no_skip) {
 		uint32_t *cigar = bam1_cigar(b); // this is cheating...
 		int i;
@@ -415,14 +433,40 @@ end_loop:
 	return;
 }
 
+void error(const char *format, ...)
+{
+    if ( !format )
+    {
+        fprintf(stderr, "\n");
+        fprintf(stderr, "Usage: bamtk tview [options] <aln.bam> [ref.fasta]\n");
+        fprintf(stderr, "Options:\n");
+        fprintf(stderr, "   -s STR      display only reads from this sample\n");
+        fprintf(stderr, "\n\n");
+    }
+    else
+    {
+        va_list ap;
+        va_start(ap, format);
+        vfprintf(stderr, format, ap);
+        va_end(ap);
+    }
+    exit(-1);
+}
+
+
 int bam_tview_main(int argc, char *argv[])
 {
 	tview_t *tv;
-	if (argc == 1) {
-		fprintf(stderr, "Usage: bamtk tview <aln.bam> [ref.fasta]\n");
-		return 1;
-	}
-	tv = tv_init(argv[1], (argc == 2)? 0 : argv[2]);
+    char *samples=NULL;
+    int c;
+    while ((c = getopt(argc, argv, "s:")) >= 0) {
+        switch (c) {
+            case 's': samples=optarg; break;
+            default: error(NULL);
+        }
+    }
+	if (argc==optind) error(NULL);
+	tv = tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
 	tv_draw_aln(tv, 0, 0);
 	tv_loop(tv);
 	tv_destroy(tv);
