@@ -261,7 +261,7 @@ int main_pad2unpad(int argc, char *argv[])
 		case 'o': fn_out = strdup(optarg); break;
 		case 'u': assert(is_bamout == 1); compress_level = 0; break;
 		case '1': assert(is_bamout == 1); compress_level = 1; break;
-		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
+		case 'T': fn_ref = strdup(optarg); break;
                 case '?': is_long_help = 1; break;
 		default: return usage(is_long_help);
 		}
