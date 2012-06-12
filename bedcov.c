@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "kstring.h"
 #include "bgzf.h"
 #include "bam.h"
