@@ -164,7 +164,6 @@ static inline uint8_t *alloc_data(bam1_t *b, int size)
 static inline void parse_error(int64_t n_lines, const char * __restrict msg)
 {
 	fprintf(stderr, "Parse error at line %lld: %s\n", (long long)n_lines, msg);
-	abort();
 }
 static inline void append_text(bam_header_t *header, kstring_t *str)
 {
@@ -250,7 +249,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 			if (ret >= 0) z += str->l + 1;
 		} while (ret == 0);
 	}
-	if (ret < 0) return -1;
+	if (ret < 0) return BAM_EOF_ERROR;
 	++fp->n_lines;
 	doff = 0;
 
@@ -263,6 +262,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		long flag;
 		char *s;
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1;
+		// FIXME: ret not used. Could 'return BAM_FLAG_R_ERROR'?
 		flag = strtol((char*)str->s, &s, 0);
 		if (*s) { // not the end of the string
 			flag = 0;
@@ -276,25 +276,28 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		if (c->tid < 0 && strcmp(str->s, "*")) {
 			if (header->n_targets == 0) {
 				fprintf(stderr, "[sam_read1] missing header? Abort!\n");
-				exit(1);
+				return BAM_NBLK1_R_ERROR&BAM_PARSE_ERROR;
 			} else fprintf(stderr, "[sam_read1] reference '%s' is recognized as '*'.\n", str->s);
 		}
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->pos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1; c->qual = isdigit(str->s[0])? atoi(str->s) : 0;
-		if (ret < 0) return -2;
+		if (ret < 0) return BAM_NBLK1_R_ERROR;
 	}
 	{ // cigar
 		char *s, *t;
 		int i, op;
 		long x;
 		c->n_cigar = 0;
-		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -3;
+		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return BAM_CIGAR_R_ERROR;
 		z += str->l + 1;
 		if (str->s[0] != '*') {
 			uint32_t *cigar;
 			for (s = str->s; *s; ++s) {
 				if ((isalpha(*s)) || (*s=='=')) ++c->n_cigar;
-				else if (!isdigit(*s)) parse_error(fp->n_lines, "invalid CIGAR character");
+				else if (!isdigit(*s)) {
+					parse_error(fp->n_lines, "invalid CIGAR character");
+					return BAM_CIGAR_R_ERROR&BAM_PARSE_ERROR;
+				}
 			}
 			b->data = alloc_data(b, doff + c->n_cigar * 4);
 			cigar = bam1_cigar(b);
@@ -311,11 +314,17 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				else if (op == '=') op = BAM_CEQUAL;
 				else if (op == 'X') op = BAM_CDIFF;
 				else if (op == 'B') op = BAM_CBACK;
-				else parse_error(fp->n_lines, "invalid CIGAR operation");
+				else {
+					parse_error(fp->n_lines, "invalid CIGAR operation");
+					return BAM_CIGAR_R_ERROR&BAM_PARSE_ERROR;
+				}
 				s = t + 1;
 				cigar[i] = bam_cigar_gen(x, op);
 			}
-			if (*s) parse_error(fp->n_lines, "unmatched CIGAR operation");
+			if (*s) {
+				parse_error(fp->n_lines, "unmatched CIGAR operation");
+				return BAM_CIGAR_R_ERROR&BAM_PARSE_ERROR;
+			}
 			c->bin = bam_reg2bin(c->pos, bam_calend(c, cigar));
 			doff += c->n_cigar * 4;
 		} else {
@@ -333,12 +342,12 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		c->mpos = isdigit(str->s[0])? atoi(str->s) - 1 : -1;
 		ret = ks_getuntil(ks, KS_SEP_TAB, str, &dret); z += str->l + 1;
 		c->isize = (str->s[0] == '-' || isdigit(str->s[0]))? atoi(str->s) : 0;
-		if (ret < 0) return -4;
+		if (ret < 0) return BAM_NBLK2_R_ERROR;
 	}
 	{ // seq and qual
 		int i;
 		uint8_t *p = 0;
-		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -5; // seq
+		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return BAM_SEQ_R_ERROR; // seq
 		z += str->l + 1;
 		if (strcmp(str->s, "*")) {
 			c->l_qseq = strlen(str->s);
@@ -346,16 +355,19 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				fprintf(stderr, "Line %ld, sequence length %i vs %i from CIGAR\n",
 						(long)fp->n_lines, c->l_qseq, (int32_t)bam_cigar2qlen(c, bam1_cigar(b)));
 				parse_error(fp->n_lines, "CIGAR and sequence length are inconsistent");
+				return BAM_CIGAR_SEQ_ERROR&BAM_PARSE_ERROR;
 			}
 			p = (uint8_t*)alloc_data(b, doff + c->l_qseq + (c->l_qseq+1)/2) + doff;
 			memset(p, 0, (c->l_qseq+1)/2);
 			for (i = 0; i < c->l_qseq; ++i)
 				p[i/2] |= bam_nt16_table[(int)str->s[i]] << 4*(1-i%2);
 		} else c->l_qseq = 0;
-		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return -6; // qual
+		if (ks_getuntil(ks, KS_SEP_TAB, str, &dret) < 0) return BAM_QUAL_R_ERROR; // qual
 		z += str->l + 1;
-		if (strcmp(str->s, "*") && c->l_qseq != strlen(str->s))
+		if (strcmp(str->s, "*") && c->l_qseq != strlen(str->s)) {
 			parse_error(fp->n_lines, "sequence and quality are inconsistent");
+			return BAM_SEQ_QUAL_ERROR&BAM_PARSE_ERROR;
+		}
 		p += (c->l_qseq+1)/2;
 		if (strcmp(str->s, "*") == 0) for (i = 0; i < c->l_qseq; ++i) p[i] = 0xff;
 		else for (i = 0; i < c->l_qseq; ++i) p[i] = str->s[i] - 33;
@@ -366,8 +378,10 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		while (ks_getuntil(ks, KS_SEP_TAB, str, &dret) >= 0) {
 			uint8_t *s, type, key[2];
 			z += str->l + 1;
-			if (str->l < 6 || str->s[2] != ':' || str->s[4] != ':')
+			if (str->l < 6 || str->s[2] != ':' || str->s[4] != ':') {
 				parse_error(fp->n_lines, "missing colon in auxiliary data");
+				return BAM_AUX_R_ERROR&BAM_PARSE_ERROR;
+			}
 			key[0] = str->s[0]; key[1] = str->s[1];
 			type = str->s[3];
 			s = alloc_data(b, doff + 3) + doff;
@@ -423,11 +437,16 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				int size = 1 + (str->l - 5) + 1;
 				if (type == 'H') { // check whether the hex string is valid
 					int i;
-					if ((str->l - 5) % 2 == 1) parse_error(fp->n_lines, "length of the hex string not even");
+					if ((str->l - 5) % 2 == 1) {
+						parse_error(fp->n_lines, "length of the hex string not even");
+						return BAM_AUX_R_ERROR&BAM_PARSE_ERROR;
+					}
 					for (i = 0; i < str->l - 5; ++i) {
 						int c = toupper(str->s[5 + i]);
-						if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F')))
+						if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'))) {
 							parse_error(fp->n_lines, "invalid hex character");
+							return BAM_AUX_R_ERROR&BAM_PARSE_ERROR;
+						}
 					}
 				}
 				s = alloc_data(b, doff + size) + doff;
@@ -438,7 +457,10 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 			} else if (type == 'B') {
 				int32_t n = 0, Bsize, k = 0, size;
 				char *p;
-				if (str->l < 8) parse_error(fp->n_lines, "too few values in aux type B");
+				if (str->l < 8) {
+					parse_error(fp->n_lines, "too few values in aux type B");
+					return BAM_AUX_R_ERROR&BAM_PARSE_ERROR;
+				}
 				Bsize = bam_aux_type2size(str->s[5]); // the size of each element
 				for (p = (char*)str->s + 6; *p; ++p) // count the number of elements in the array
 					if (*p == ',') ++n;
@@ -454,9 +476,15 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 				else if (str->s[5] == 'i') while (p < str->s + str->l) ((int32_t*)s)[k++]  = (int32_t)strtol(p, &p, 0),  ++p;
 				else if (str->s[5] == 'I') while (p < str->s + str->l) ((uint32_t*)s)[k++] = (uint32_t)strtol(p, &p, 0), ++p;
 				else if (str->s[5] == 'f') while (p < str->s + str->l) ((float*)s)[k++]    = (float)strtod(p, &p),       ++p;
-				else parse_error(fp->n_lines, "unrecognized array type");
+				else {
+					parse_error(fp->n_lines, "unrecognized array type");
+					return BAM_AUX_R_ERROR&BAM_PARSE_ERROR;
+				}
 				s += Bsize * n; doff += size;
-			} else parse_error(fp->n_lines, "unrecognized type");
+			} else {
+				parse_error(fp->n_lines, "unrecognized type");
+				return BAM_AUX_R_ERROR&BAM_PARSE_ERROR;
+			}
 			if (dret == '\n' || dret == '\r') break;
 		}
 	}
