@@ -3,9 +3,6 @@
 #include "faidx.h"
 #include "sam.h"
 
-#define TYPE_BAM  1
-#define TYPE_READ 2
-
 bam_header_t *bam_header_dup(const bam_header_t *h0)
 {
 	bam_header_t *h;

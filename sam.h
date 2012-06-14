@@ -1,6 +1,9 @@
 #ifndef BAM_SAM_H
 #define BAM_SAM_H
 
+#define TYPE_BAM  1
+#define TYPE_READ 2
+
 #include "bam.h"
 
 /*!
