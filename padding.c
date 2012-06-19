@@ -170,7 +170,7 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 			r_tid = b->core.tid;
 			unpad_seq(b, &r);
 			if (h->target_len[r_tid] != r.l) {
-				fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %i in BAM header, but %id in embedded reference\n", bam1_qname(b), h->target_len[r_tid], r.l);
+				fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %d in BAM header, but %ld in embedded reference\n", bam1_qname(b), h->target_len[r_tid], r.l);
 				return -1;
 			}
 			if (fai) {
@@ -186,8 +186,8 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 						// Show gaps as ASCII 45
 						fprintf(stderr, "[depad] ERROR: Embedded sequence and reference FASTA don't match for %s base %i, '%c' vs '%c'\n",
 							h->target_name[b->core.tid], i+1,
-							r.s[i] ? bam_nt16_rev_table[r.s[i]] : 45,
-							q.s[i] ? bam_nt16_rev_table[q.s[i]] : 45);
+							r.s[i] ? bam_nt16_rev_table[(int)r.s[i]] : 45,
+							q.s[i] ? bam_nt16_rev_table[(int)q.s[i]] : 45);
 						return -1;
 					}
 				}
