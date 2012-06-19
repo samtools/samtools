@@ -295,10 +295,48 @@ bam_header_t * fix_header(bam_header_t *old, faidx_t *fai)
 			fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %i\n", old->target_name[i], old->target_len[i]);
 		} else {
 			header->target_len[i] = unpadded_len;
-			fprintf(stderr, "[depad] Recalculating '%s' length %i -> %i\n", old->target_name[i], old->target_len[i], header->target_len[i]);
+			//fprintf(stderr, "[depad] Recalculating '%s' length %i -> %i\n", old->target_name[i], old->target_len[i], header->target_len[i]);
 		}
 	}
-	/* TODO - Correct the @SQ reference lengths from padded to unpadded */
+	/* Duplicating the header allocated new buffer for header string */
+	/* After modifying the @SQ lines it will only get smaller, since */
+	/* the LN entries will be the same or shorter, and we'll remove */
+	/* any MD entries (MD5 checksums). */
+	assert(strlen(old->text) == strlen(header->text));
+	assert (0==strcmp(old->text, header->text));
+	const char *text;
+	text = old->text;
+	header->text[0] = '\0'; /* Resuse the allocated buffer */
+	char * newtext = header->text;
+	char * end=NULL;
+	while (text[0]=='@') {
+		end = strchr(text, '\n');
+		assert(end != 0);
+		if (text[1]=='S' && text[2]=='Q' && text[3]=='\t') {
+			/* TODO - edit the @SQ line here to remove MD and fix LN. */
+			/* For now just remove the @SQ line, and samtools will */
+			/* automatically generate a minimal replacement with LN. */
+			/* However, that discards any other tags like AS, SP, UR. */
+			//fprintf(stderr, "[depad] Removing @SQ line\n");
+		} else {
+			/* Copy this line to the new header */
+			strncat(newtext, text, end - text + 1);
+		}
+		text = end + 1;
+	}
+	assert (text[0]=='\0');
+	/* Check we didn't overflow the buffer */
+	assert (strlen(header->text) <= strlen(old->text));
+	if (strlen(header->text) < header->l_text) {
+		//fprintf(stderr, "[depad] Reallocating header buffer\n");
+		assert (newtext == header->text);
+		newtext = calloc(strlen(header->text) + 1, 1);
+		strcpy(newtext, header->text);
+		free(header->text);
+		header->text = newtext;
+		header->l_text = strlen(newtext);
+	}
+	//fprintf(stderr, "[depad] Here is the new header (pending @SQ lines),\n\n%s\n(end)\n", header->text);
 	return header;
 }
 
