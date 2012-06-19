@@ -337,6 +337,11 @@ char *fai_fetch(const faidx_t *fai, const char *str, int *len)
 			} else s[name_end] = ':', name_end = l;
 		}
 	} else iter = kh_get(s, h, str);
+	if(iter == kh_end(h)) {
+		fprintf(stderr, "[fai_fetch] Warning - Reference %s not found in FASTA file, returning empty sequence\n", str);
+		free(s);
+		return 0;
+	};
 	val = kh_value(h, iter);
 	// parse the interval
 	if (name_end < l) {
