@@ -271,6 +271,31 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 			n2 = k;
 			replace_cigar(b, n2, cigar2);
 			b->core.pos = posmap[b->core.pos];
+			if (b->core.mpos < 0) {
+				/* Nice case, no mate to worry about*/
+			} else if (b->core.mtid == b->core.tid) {
+				/* Nice case, same reference */
+				b->core.mpos = posmap[b->core.mpos];
+			} else {
+				/* Nasty case, Must load alternative posmap */
+				if (!fai) {
+					fprintf(stderr, "[depad] ERROR: Needed reference %s sequence for mate (and no FASTA file)\n", h->target_name[b->core.mtid]);
+					return -1;
+				}
+				/* Temporarily load the other reference sequence */
+				if (load_unpadded_ref(fai, h->target_name[b->core.mtid], h->target_len[b->core.mtid], &r)) {
+					fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.mtid]);
+					return -1;
+				}
+				posmap = update_posmap(posmap, r);
+				b->core.mpos = posmap[b->core.mpos];
+				/* Restore the reference and posmap*/
+				if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
+					fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
+					return -1;
+				}
+				posmap = update_posmap(posmap, r);
+			}
 		}
 		samwrite(out, b);
 	}
