@@ -355,7 +355,7 @@ bam_header_t * fix_header(bam_header_t *old, faidx_t *fai)
 	if (strlen(header->text) < header->l_text) {
 		//fprintf(stderr, "[depad] Reallocating header buffer\n");
 		assert (newtext == header->text);
-		newtext = calloc(strlen(header->text) + 1, 1);
+		newtext = malloc(strlen(header->text) + 1);
 		strcpy(newtext, header->text);
 		free(header->text);
 		header->text = newtext;
@@ -439,11 +439,11 @@ int main_pad2unpad(int argc, char *argv[])
 
 depad_end:
 	// close files, free and return
-	free(fn_list); free(fn_out);
-        if (h != in->header) bam_header_destroy(h);
+	if (fai) fai_destroy(fai);
+	if (h != in->header) bam_header_destroy(h);
 	samclose(in);
 	samclose(out);
-	fai_destroy(fai);
+	free(fn_list); free(fn_out);
 	return ret;
 }
 
