@@ -237,6 +237,7 @@ int main_samview(int argc, char *argv[])
 			}
 		}
 		if (r < -1) {
+			if (~(r|BAM_PARSE_ERROR)) abort();
 			fprintf(stderr, "[main_samview] truncated file.\n");
 			ret = 1;
 		}
