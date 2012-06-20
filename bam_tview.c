@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <string.h>
 #include <math.h>
+#include <unistd.h>
 #include "bam.h"
 #include "faidx.h"
 #include "bam2bcf.h"
