@@ -44,14 +44,16 @@ extern "C" {
 	  @param fn SAM/BAM file name; "-" is recognized as stdin (for
 	  reading) or stdout (for writing).
 
-	  @param mode open mode /[rw](b?)(u?)(h?)([xX]?)/: 'r' for reading,
+	  @param mode open mode /[rw](b?)([0-9]?)(u?)(h?)([xX]?)/: 'r' for reading,
 	  'w' for writing, 'b' for BAM I/O, 'u' for uncompressed BAM output,
 	  'h' for outputing header in SAM, 'x' for HEX flag and 'X' for
-	  string flag. If 'b' present, it must immediately follow 'r' or
-	  'w'. Valid modes are "r", "w", "wh", "wx", "whx", "wX", "whX",
-	  "rb", "wb" and "wbu" exclusively.
+	  string flag. A digit indicates the level of compression according to the
+	  scheme of gzdopen ('0' = no compression - '9' = maximum compression,
+	  default is no compression).
+	  Valid modes are "r", "w", "wh", "wx", "whx", "wX", "whX", "rb", "wb",
+	  "wbu" and /wb[0-9]/ exclusively.
 
-	  @param aux auxiliary data; if mode[0]=='w', aux points to
+	  @param aux auxiliary data; if strchr(mode, 'w') != 0, aux points to
 	  bam_header_t; if strcmp(mode, "rb")!=0 and @SQ header lines in SAM
 	  are absent, aux points the file name of the list of the reference;
 	  aux is not used otherwise. If @SQ header lines are present in SAM,
@@ -60,6 +62,17 @@ extern "C" {
 	  @return       SAM/BAM file handler
 	 */
 	samfile_t *samopen(const char *fn, const char *mode, const void *aux);
+
+	/*!
+	  @abstract     Open a SAM/BAM file identified by file descriptor
+
+	  @param fd SAM/BAM file descriptor.
+
+	  @discussion Notes:
+
+	  Other parameters as for samopen.
+	 */
+	samfile_t *samdopen(int fd, const char *mode, const void *aux);
 
 	/*!
 	  @abstract     Close a SAM/BAM handler

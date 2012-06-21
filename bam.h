@@ -331,6 +331,13 @@ extern "C" {
 	tamFile sam_open(const char *fn);
 
 	/*!
+	  @abstract   Open a SAM file for reading, either uncompressed or compressed by gzip/zlib.
+	  @param  fd  SAM file descriptor
+	  @return     SAM file handler
+	 */
+	tamFile sam_dopen(int fd);
+
+	/*!
 	  @abstract   Close a SAM file handler
 	  @param  fp  SAM file handler
 	 */

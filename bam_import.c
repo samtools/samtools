@@ -506,6 +506,18 @@ tamFile sam_open(const char *fn)
 	return fp;
 }
 
+tamFile sam_dopen(int fd)
+{
+	tamFile fp;
+	gzFile gzfp = gzdopen(fd, "rb");
+	if (gzfp == 0) return 0;
+	fp = (tamFile)calloc(1, sizeof(struct __tamFile_t));
+	fp->str = (kstring_t*)calloc(1, sizeof(kstring_t));
+	fp->fp = gzfp;
+	fp->ks = ks_init(fp->fp);
+	return fp;
+}
+
 void sam_close(tamFile fp)
 {
 	if (fp) {
