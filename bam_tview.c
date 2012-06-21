@@ -440,7 +440,8 @@ void error(const char *format, ...)
         fprintf(stderr, "\n");
         fprintf(stderr, "Usage: bamtk tview [options] <aln.bam> [ref.fasta]\n");
         fprintf(stderr, "Options:\n");
-        fprintf(stderr, "   -s STR      display only reads from this sample\n");
+        fprintf(stderr, "   -p chr:pos      go directly to this position\n");
+        fprintf(stderr, "   -s STR          display only reads from this sample\n");
         fprintf(stderr, "\n\n");
     }
     else
@@ -457,17 +458,24 @@ void error(const char *format, ...)
 int bam_tview_main(int argc, char *argv[])
 {
 	tview_t *tv;
-    char *samples=NULL;
+    char *samples=NULL, *position=NULL;
     int c;
-    while ((c = getopt(argc, argv, "s:")) >= 0) {
+    while ((c = getopt(argc, argv, "s:p:")) >= 0) {
         switch (c) {
             case 's': samples=optarg; break;
+            case 'p': position=optarg; break;
             default: error(NULL);
         }
     }
 	if (argc==optind) error(NULL);
 	tv = tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
-	tv_draw_aln(tv, 0, 0);
+    if ( position )
+    {
+        int _tid = -1, _beg, _end;
+        bam_parse_region(tv->header, position, &_tid, &_beg, &_end);
+        if (_tid >= 0) { tv->curr_tid = _tid; tv->left_pos = _beg; }
+    }
+	tv_draw_aln(tv, tv->curr_tid, tv->left_pos);
 	tv_loop(tv);
 	tv_destroy(tv);
 	return 0;
