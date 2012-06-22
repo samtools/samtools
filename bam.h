@@ -164,6 +164,19 @@ typedef struct {
 #define bam_cigar_gen(l, o) ((l)<<BAM_CIGAR_SHIFT|(o))
 #define bam_cigar_type(o) (BAM_CIGAR_TYPE>>((o)<<1)&3) // bit 1: consume query; bit 2: consume reference
 
+#define BAM_PARSE_ERROR ~0x100 // ~ret & 0x100 indicates parse error condition
+#define BAM_EOF_ERROR       -1
+#define BAM_NBLK1_R_ERROR   -2
+#define BAM_CIGAR_R_ERROR   -3
+#define BAM_NBLK2_R_ERROR   -4
+#define BAM_SEQ_R_ERROR     -5
+#define BAM_QUAL_R_ERROR    -6
+#define BAM_CIGAR_SEQ_ERROR -7
+#define BAM_SEQ_QUAL_ERROR  -8
+#define BAM_AUX_R_ERROR     -9
+#define BAM_FLAG_R_ERROR   -10 // not currently used - see FIXME in bam_import.c#L265
+
+
 /*! @typedef
   @abstract Structure for core alignment information.
   @field  tid     chromosome ID, defined by bam_header_t
@@ -316,6 +329,13 @@ extern "C" {
 	  @return     SAM file handler
 	 */
 	tamFile sam_open(const char *fn);
+
+	/*!
+	  @abstract   Open a SAM file for reading, either uncompressed or compressed by gzip/zlib.
+	  @param  fd  SAM file descriptor
+	  @return     SAM file handler
+	 */
+	tamFile sam_dopen(int fd);
 
 	/*!
 	  @abstract   Close a SAM file handler

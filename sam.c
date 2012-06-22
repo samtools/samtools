@@ -3,9 +3,6 @@
 #include "faidx.h"
 #include "sam.h"
 
-#define TYPE_BAM  1
-#define TYPE_READ 2
-
 bam_header_t *bam_header_dup(const bam_header_t *h0)
 {
 	bam_header_t *h;
@@ -38,12 +35,29 @@ static void append_header_text(bam_header_t *header, char* text, int len)
 
 int samthreads(samfile_t *fp, int n_threads, int n_sub_blks)
 {
-	if (!(fp->type&1) || (fp->type&2)) return -1;
+	if (!(fp->type&TYPE_BAM) || (fp->type&TYPE_READ)) return -1;
 	bgzf_mt(fp->x.bam, n_threads, n_sub_blks);
 	return 0;
 }
 
 samfile_t *samopen(const char *fn, const char *mode, const void *aux)
+{
+	FILE *f;
+	if (strchr(mode, 'r')) {
+		if (!strcmp(fn , "-"))
+			return samdopen(STDIN_FILENO, mode, aux);
+		f = fopen(fn, "r");
+	} else if (strchr(mode, 'w')) {
+		if (!strcmp(fn , "-"))
+			return samdopen(STDOUT_FILENO, mode, aux);
+		f = fopen(fn, "w");
+	} else return 0;
+	int fd = dup(fileno(f));
+	fclose(f);
+	return samdopen(fd, mode, aux);
+}
+
+samfile_t *samdopen(int fd, const char *mode, const void *aux)
 {
 	samfile_t *fp;
 	fp = (samfile_t*)calloc(1, sizeof(samfile_t));
@@ -51,11 +65,11 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 		fp->type |= TYPE_READ;
 		if (strchr(mode, 'b')) { // binary
 			fp->type |= TYPE_BAM;
-			fp->x.bam = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
+			fp->x.bam = bam_dopen(fd, "r");
 			if (fp->x.bam == 0) goto open_err_ret;
 			fp->header = bam_header_read(fp->x.bam);
 		} else { // text
-			fp->x.tamr = sam_open(fn);
+			fp->x.tamr = sam_dopen(fd);
 			if (fp->x.tamr == 0) goto open_err_ret;
 			fp->header = sam_header_read(fp->x.tamr);
 			if (fp->header->n_targets == 0) { // no @SQ fields
@@ -80,12 +94,12 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 			if (strchr(mode, 'u')) compress_level = 0;
 			bmode[0] = 'w'; bmode[1] = compress_level < 0? 0 : compress_level + '0'; bmode[2] = 0;
 			fp->type |= TYPE_BAM;
-			fp->x.bam = strcmp(fn, "-")? bam_open(fn, bmode) : bam_dopen(fileno(stdout), bmode);
+			fp->x.bam = bam_dopen(fd, bmode);
 			if (fp->x.bam == 0) goto open_err_ret;
 			bam_header_write(fp->x.bam, fp->header);
 		} else { // text
 			// open file
-			fp->x.tamw = strcmp(fn, "-")? fopen(fn, "w") : stdout;
+			fp->x.tamw = fdopen(fd, "w");
 			if (fp->x.tamw == 0) goto open_err_ret;
 			if (strchr(mode, 'X')) fp->type |= BAM_OFSTR<<2;
 			else if (strchr(mode, 'x')) fp->type |= BAM_OFHEX<<2;
