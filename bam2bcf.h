@@ -16,6 +16,7 @@ typedef struct __bcf_callaux_t {
 	int openQ, extQ, tandemQ; // for indels
 	int min_support; // for collecting indel candidates
 	double min_frac; // for collecting indel candidates
+    int per_sample_flt; // indel filtering strategy
 	// for internal uses
 	int max_bases;
 	int indel_types[4];

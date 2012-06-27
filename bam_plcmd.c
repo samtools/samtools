@@ -72,6 +72,7 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_IGNORE_RG 0x2000
 #define MPLP_PRINT_POS 0x4000
 #define MPLP_PRINT_MAPQ 0x8000
+#define MPLP_PER_SAMPLE 0x10000
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -271,6 +272,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bca->openQ = conf->openQ, bca->extQ = conf->extQ, bca->tandemQ = conf->tandemQ;
 		bca->min_frac = conf->min_frac;
 		bca->min_support = conf->min_support;
+        bca->per_sample_flt = conf->flag & MPLP_PER_SAMPLE;
 	}
 	if (tid0 >= 0 && conf->fai) { // region is set
 		ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
@@ -449,7 +451,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6OsV")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
@@ -459,6 +461,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.bed = bed_read(optarg); break;
 		case 'P': mplp.pl_list = strdup(optarg); break;
+		case 'p': mplp.flag |= MPLP_PER_SAMPLE; break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
@@ -532,6 +535,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -L INT       max per-sample depth for INDEL calling [%d]\n", mplp.max_indel_depth);
 		fprintf(stderr, "       -m INT       minimum gapped reads for indel candidates [%d]\n", mplp.min_support);
 		fprintf(stderr, "       -o INT       Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
+		fprintf(stderr, "       -p           apply -m and -F per-sample to increase sensitivity\n");
 		fprintf(stderr, "       -P STR       comma separated list of platforms for indels [all]\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");

@@ -26,6 +26,7 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 	bca->e = errmod_init(1. - theta);
 	bca->min_frac = 0.002;
 	bca->min_support = 1;
+    bca->per_sample_flt = 0;
 	return bca;
 }
 
@@ -54,7 +55,6 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
 	}
 	// fill the bases array
-	memset(r, 0, sizeof(bcf_callret1_t));
 	for (i = n = r->n_supp = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
 		int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
