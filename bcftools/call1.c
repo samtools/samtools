@@ -40,7 +40,7 @@ typedef struct {
 	uint32_t *trio_aux;
 	char *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
-	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt;
+	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt, min_ma_lrt;
 	void *bed;
 } viewconf_t;
 
@@ -319,9 +319,9 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1;
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1; vc.min_ma_lrt = -1;
 	memset(qcnt, 0, 8 * 256);
-	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Yw")) >= 0) {
+	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Ywm:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -341,6 +341,7 @@ int bcfview(int argc, char *argv[])
 		case 'w': vc.flag |= VC_INDEL_ONLY; break;
 		case 'M': vc.flag |= VC_ANNO_MAX; break;
 		case 'Y': vc.flag |= VC_QCNT; break;
+        case 'm': vc.min_ma_lrt = atof(optarg); break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'i': vc.indel_frac = atof(optarg); break;
@@ -396,6 +397,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -g        call genotypes at variant sites (force -c)\n");
 		fprintf(stderr, "       -i FLOAT  indel-to-substitution ratio [%.4g]\n", vc.indel_frac);
 		fprintf(stderr, "       -I        skip indels\n");
+		fprintf(stderr, "       -m FLOAT  alternative model for multiallelic and rare-variant calling, include if P(chi^2)>=FLOAT\n");
 		fprintf(stderr, "       -p FLOAT  variant if P(ref|D)<FLOAT [%.3g]\n", vc.pref);
 		fprintf(stderr, "       -P STR    type of prior: full, cond2, flat [full]\n");
 		fprintf(stderr, "       -t FLOAT  scaled substitution mutation rate [%.4g]\n", vc.theta);
@@ -520,7 +522,13 @@ int bcfview(int argc, char *argv[])
 			int i;
 			for (i = 0; i < 9; ++i) em[i] = -1.;
 		}
-		if (vc.flag & VC_CALL) { // call variants
+        bcf_p1_set_ploidy(b, p1); // could be improved: do this per site to allow pseudo-autosomal regions
+        if ( !(vc.flag&VC_KEEPALT) && vc.flag&VC_CALL && vc.min_ma_lrt>=0 )
+        {
+            int gts = call_multiallelic_gt(b,p1,vc.min_ma_lrt);
+            if ( gts==0 && vc.flag & VC_VARONLY ) continue;
+        }
+		else if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
 			int calret = bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
 			if (n_processed % 100000 == 0) {

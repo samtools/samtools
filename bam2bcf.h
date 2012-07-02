@@ -36,6 +36,7 @@ typedef struct {
 
 typedef struct {
 	int a[5]; // alleles: ref, alt, alt2, alt3
+    float qsum[4];
 	int n, n_alleles, shift, ori_ref, unseen;
 	int n_supp; // number of supporting non-reference reads
 	int anno[16], depth, ori_depth;

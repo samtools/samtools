@@ -73,6 +73,7 @@ typedef struct {
 	bcf_ginfo_t *gi; // array of geno fields
 	int n_alleles, n_smpl; // number of alleles and samples
 	// derived info: ref, alt, flt, info, fmt (<-str), n_gi (<-fmt), n_alleles (<-alt), n_smpl (<-bcf_hdr_t::n_smpl)
+    uint8_t *ploidy;    // ploidy of all samples; if NULL, ploidy of 2 is assumed.
 } bcf1_t;
 
 typedef struct {
@@ -142,6 +143,8 @@ extern "C" {
 
 	// keep the first n alleles and discard the rest
 	int bcf_shrink_alt(bcf1_t *b, int n);
+    // keep the masked alleles and discard the rest
+	void bcf_fit_alt(bcf1_t *b, int mask);
 	// convert GL to PL
 	int bcf_gl2pl(bcf1_t *b);
 	// if the site is an indel

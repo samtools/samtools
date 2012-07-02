@@ -1,5 +1,6 @@
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 #include "bcf.h"
 #include "kstring.h"
 #include "khash.h"
@@ -64,6 +65,121 @@ int bcf_str2id_add(void *_hash, const char *str)
 	if (ret == 0) return kh_val(hash, k);
 	kh_val(hash, k) = kh_size(hash) - 1;
 	return kh_val(hash, k);
+}
+
+void bcf_fit_alt(bcf1_t *b, int mask)
+{
+    mask |= 1; // REF must be always present
+
+    int i,j,nals=0;
+    for (i=0; i<sizeof(int); i++)
+        if ( mask&1<<i) nals++;
+    
+    if ( b->n_alleles <= nals ) return;
+
+#if DBG
+    printf("fit_alt: %s, %s, mask=%d, nals=%d: ", b->ref, b->alt, mask, nals);
+    for (i=0; i<sizeof(int); i++)
+        if ( mask&1<<i) printf(" %d", i);
+    printf("\n");
+#endif
+    // update ALT, in principle any of the alleles can be removed
+    char *p;
+    if ( nals>1 ) 
+    {
+        char *dst, *src;
+        int n=0, nalts=nals-1;
+        for (src=dst=p=b->alt, i=1; *p; p++)
+        {
+            if ( *p!=',' ) continue;
+
+            if ( mask&1<<i )
+            {
+                n++;
+                if ( src!=dst )
+                {
+                    memmove(dst,src,p-src);
+                    dst += p-src;
+                }
+                else dst = p;
+                if ( n<nalts ) { *dst=','; dst++; }
+            }
+            i++;
+
+            if ( n>=nalts ) { *dst=0; break; }
+            src = p+1;
+        }
+        if ( n<nalts )
+        {
+            memmove(dst,src,p-src);
+            dst += p-src;
+            *dst = 0;
+        }
+        p = dst;
+    }
+    else p = b->alt, *p = '\0';
+#if DBG
+    printf("fit_alt: %s, mask=%d\n", b->alt, mask);
+#endif
+    p++;
+    memmove(p, b->flt, b->str + b->l_str - b->flt);
+    b->l_str -= b->flt - p;
+
+    // update PL and GT
+    int ipl=-1, igt=-1;
+    for (i = 0; i < b->n_gi; ++i) 
+    {
+        bcf_ginfo_t *g = b->gi + i;
+        if (g->fmt == bcf_str2int("PL", 2)) ipl = i;
+        if (g->fmt == bcf_str2int("GT", 2)) igt = i;
+    }
+
+    // .. create mapping between old and new indexes
+    int npl = nals * (nals+1) / 2;
+    int *map = malloc(sizeof(int)*(npl>b->n_alleles ? npl : b->n_alleles));
+    int kori=0,knew=0;
+    for (i=0; i<b->n_alleles; i++)
+    {
+        for (j=0; j<=i; j++)
+        {
+            int skip=0;
+            if ( i && !(mask&1<<i) ) skip=1;
+            if ( j && !(mask&1<<j) ) skip=1;
+            if ( !skip ) { map[knew++] = kori; }
+            kori++;
+        }
+    }
+    // .. apply to all samples
+    int n_smpl = b->n_smpl;
+    for (i = 0; i < b->n_gi; ++i) 
+    {
+        bcf_ginfo_t *g = b->gi + i;
+        if (g->fmt == bcf_str2int("PL", 2)) 
+        {
+            g->len = npl;
+            uint8_t *d = (uint8_t*)g->data;
+            int ismpl, npl_ori = b->n_alleles * (b->n_alleles + 1) / 2;
+            for (knew=ismpl=0; ismpl<n_smpl; ismpl++)
+            {
+                uint8_t *dl = d + ismpl * npl_ori;
+                for (j=0; j<npl; j++) d[knew++] = dl[map[j]];
+            }
+        } // FIXME: to add GL
+    }
+    // update GTs
+    map[0] = 0;
+    for (i=1, knew=0; i<b->n_alleles; i++)
+        map[i] = mask&1<<i ? ++knew : -1;
+    for (i=0; i<n_smpl; i++)
+    {
+        uint8_t gt = ((uint8_t*)b->gi[igt].data)[i];
+        int a1 = (gt>>3)&7;
+        int a2 = gt&7;
+        assert( map[a1]>=0 && map[a2]>=0 );
+        ((uint8_t*)b->gi[igt].data)[i] = ((1<<7|1<<6)&gt) | map[a1]<<3 | map[a2];
+    }
+    free(map);
+    b->n_alleles = nals;
 }
 
 int bcf_shrink_alt(bcf1_t *b, int n)

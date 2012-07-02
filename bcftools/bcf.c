@@ -240,31 +240,24 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
         }
     }
 	for (j = 0; j < h->n_smpl; ++j) {
-
-        // Determine GT with maximum PL (multiple ALT sites only)
-        int imax=-1;
-        if ( iPL!=-1 ) {
-            uint8_t *d = (uint8_t*)b->gi[iPL].data + j * x;
-            int k,identical=1;
-            imax=0;
-            for (k=1; k<x; k++)
-            {
-                if ( identical && d[k]!=d[k-1] ) identical = 0;
-                if ( d[k]<d[imax] ) imax = k;
-            }
-            // If all lks are identical, leave GT untouched
-            if ( identical ) imax = -1;
-        }
+        int ploidy = b->ploidy ? b->ploidy[j] : 2;
 		kputc('\t', s);
 		for (i = 0; i < b->n_gi; ++i) {
 			if (i) kputc(':', s);
 			if (b->gi[i].fmt == bcf_str2int("PL", 2)) {
 				uint8_t *d = (uint8_t*)b->gi[i].data + j * x;
 				int k;
-				for (k = 0; k < x; ++k) {
-					if (k > 0) kputc(',', s);
-					kputw(d[k], s);
-				}
+                if ( ploidy==1 )
+                    for (k=0; k<b->n_alleles; k++)
+                    {
+                        if (k>0) kputc(',', s);
+                        kputw(d[(k+1)*(k+2)/2-1], s);
+                    }
+                else
+                    for (k = 0; k < x; ++k) {
+                        if (k > 0) kputc(',', s);
+                        kputw(d[k], s);
+                    }
 			} else if (b->gi[i].fmt == bcf_str2int("DP", 2) || b->gi[i].fmt == bcf_str2int("DV", 2)) {
 				kputw(((uint16_t*)b->gi[i].data)[j], s);
 			} else if (b->gi[i].fmt == bcf_str2int("GQ", 2)) {
@@ -273,28 +266,22 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 				kputw(((int32_t*)b->gi[i].data)[j], s);
 			} else if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
                 int y = ((uint8_t*)b->gi[i].data)[j];
-                if ( y>>7&1 )
-                    kputsn("./.", 3, s);
-                else if ( imax==-1 )
+                if ( ploidy==1 )
                 {
-                    kputc('0' + (y>>3&7), s);
-                    kputc("/|"[y>>6&1], s);
-                    kputc('0' + (y&7), s);
+                    if ( y>>7&1 )
+                        kputsn(".", 3, s);
+                    else 
+                        kputc('0' + (y>>3&7), s);
                 }
                 else
                 {
-                    // Arguably, the while loop will be faster than two sqrts
-                    int n = 0;
-                    int row = 1;
-                    while ( n<imax )
-                    {
-                        row++;
-                        n += row;
+                    if ( y>>7&1 )
+                        kputsn("./.", 3, s);
+                    else { 
+                        kputc('0' + (y>>3&7), s);
+                        kputc("/|"[y>>6&1], s);
+                        kputc('0' + (y&7), s);
                     }
-                    row--;
-                    kputw(imax-n+row, s);
-                    kputc("/|"[y>>6&1], s);
-                    kputw(row, s);
                 }
 			} else if (b->gi[i].fmt == bcf_str2int("GL", 2)) {
 				float *d = (float*)b->gi[i].data + j * x;

@@ -195,6 +195,8 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	for (i = 0; i < n; ++i)
 		for (j = 0; j < 4; ++j)
 			qsum[j] += calls[i].qsum[j];
+    int qsum_tot=0;
+    for (j=0; j<4; j++) qsum_tot += qsum[j];
 	for (j = 0; j < 4; ++j) qsum[j] = qsum[j] << 2 | j;
 	// find the top 2 alleles
 	for (i = 1; i < 4; ++i) // insertion sort
@@ -206,9 +208,15 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	call->a[0] = ref4;
 	for (i = 3, j = 1; i >= 0; --i) {
 		if ((qsum[i]&3) != ref4) {
-			if (qsum[i]>>2 != 0) call->a[j++] = qsum[i]&3;
+			if (qsum[i]>>2 != 0) 
+            {
+                call->qsum[j] = (float)(qsum[i]>>2)/qsum_tot;
+                call->a[j++]  = qsum[i]&3;
+            }
 			else break;
 		}
+        else 
+            call->qsum[0] = (float)(qsum[i]>>2)/qsum_tot;
 	}
 	if (ref_base >= 0) { // for SNPs, find the "unseen" base
 		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
@@ -311,6 +319,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		if (i) kputc(',', &s);
 		kputw(bc->anno[i], &s);
 	}
+    ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
     if (bc->vdb != 1)
         ksprintf(&s, ";VDB=%.4f", bc->vdb);
 	kputc('\0', &s);
