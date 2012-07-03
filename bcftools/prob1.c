@@ -215,7 +215,12 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
 
     if ( nals==1 ) return 1;
 
-    if ( nals>4 ) { fprintf(stderr,"too many alts: %d\n", nals); exit(1); }
+    if ( nals>4 )
+    {
+        if ( *b->ref=='N' ) return 0;
+        fprintf(stderr,"Not ready for this, more than 4 alleles at %d: %s, %s\n", b->pos+1, b->ref,b->alt); 
+        exit(1);
+    }
 
     // set PL and PL_len
     uint8_t *pl = NULL;
@@ -329,6 +334,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
                 if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib|1<<ic; }
                 else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib|1<<ic; }
                 lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
+        //printf("    %f\n", lk_sum);
             }
         }
     }
@@ -342,27 +348,16 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
         max_als = max_als2;
     }
 
-    // Get the BCF record ready for output
+    // Get the BCF record ready for GT and GQ
     kstring_t s;
-    memset(&s, 0, sizeof(kstring_t));
-    kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
-    kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
-    kputs(b->info, &s); if (b->info[0]) kputc(';', &s); kputc('\0', &s);
-    kputs(b->fmt, &s); kputc('\0', &s);
-    free(b->str);
-    b->m_str = s.m; b->l_str = s.l; b->str = s.s;
-    b->qual = -4.343*(log(1-exp(max_lk-lk_sum)));
-    if ( b->qual>999 ) b->qual = 999;
-    //bcf_sync(b);
-
-    int x, old_n_gi = b->n_gi;
+    int old_n_gi = b->n_gi;
     s.m = b->m_str; s.l = b->l_str - 1; s.s = b->str;
     kputs(":GT:GQ", &s); kputc('\0', &s);
     b->m_str = s.m; b->l_str = s.l; b->str = s.s;
     bcf_sync(b);
 
-    // Call GT
-    int isample, gts=0;
+    // Call GTs
+    int isample, gts=0, ac[4] = {0,0,0,0};
     for (isample = 0; isample < b->n_smpl; isample++) 
     {
         int ploidy = b->ploidy ? b->ploidy[isample] : 2;
@@ -396,16 +391,58 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
         lk = -log(1-lk/lk_sum)/0.2302585;
         if ( idp>=0 && ((uint16_t*)b->gi[idp].data)[isample]==0 ) 
         {
-            als |= 1<<7;
-            lk = 0;
+            ((uint8_t*)b->gi[old_n_gi].data)[isample]   = als | 1<<7;
+            ((uint8_t*)b->gi[old_n_gi+1].data)[isample] = 0;
+            continue;
         }
-        ((uint8_t*)b->gi[old_n_gi].data)[isample] = als;
+        ((uint8_t*)b->gi[old_n_gi].data)[isample]   = als;
         ((uint8_t*)b->gi[old_n_gi+1].data)[isample] = lk<100 ? (int)lk : 99;
 
-        gts |= (als>>3&7) | (als&7);
+        gts |= 1<<(als>>3&7) | 1<<(als&7);
+        ac[ als>>3&7 ]++;
+        ac[ als&7 ]++;
     }
     bcf_fit_alt(b,max_als);
+
+    // prepare ref, alt, filter, info, format
+    memset(&s, 0, sizeof(kstring_t)); kputc('\0', &s); 
+    kputs(b->ref, &s); kputc('\0', &s);
+    kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
+    {
+        kstring_t info; memset(&info, 0, sizeof(kstring_t));
+        int an=0, nalts=0;
+        for (i=0; i<nals; i++)
+        {
+            an += ac[i];
+            if ( i>0 && ac[i] ) nalts++;
+        }
+        ksprintf(&info, "AN=%d;", an);
+        if ( nalts )
+        {
+            kputs("AC=", &info);
+            for (i=1; i<nals; i++)
+            {
+                if ( !(gts&1<<i) ) continue;
+                nalts--;
+                ksprintf(&info,"%d", ac[i]);
+                if ( nalts>0 ) kputc(',', &info);
+            }
+            kputc(';', &info);
+        }
+        kputs(b->info, &info); 
+        info.l -= remove_tag(info.s, "I16=", ';');
+        info.l -= remove_tag(info.s, "QS=", ';');
+        kputc('\0', &info);
+        kputs(info.s, &s); kputc('\0', &s);
+        free(info.s);
+    }
+    kputs(b->fmt, &s); kputc('\0', &s);
+    free(b->str);
+    b->m_str = s.m; b->l_str = s.l; b->str = s.s;
+    b->qual = -4.343*(log(1-exp(max_lk-lk_sum)));
+    if ( b->qual>999 ) b->qual = 999;
     bcf_sync(b);
+
 
     free(pdg);
     return gts;

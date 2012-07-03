@@ -323,6 +323,31 @@ int bcf_append_info(bcf1_t *b, const char *info, int l)
 	return 0;
 }
 
+int remove_tag(char *str, char *tag, char delim)
+{
+    char *tmp = str, *p;
+    int len_diff = 0, ori_len = strlen(str);
+    while ( *tmp && (p = strstr(tmp,tag)) )
+    {
+        if ( p>str )
+        {
+            if ( *(p-1)!=delim ) { tmp=p+1; continue; } // shared substring
+            p--;
+        }
+        char *q=p+1;
+        while ( *q && *q!=delim ) q++;
+        if ( p==str && *q ) q++;
+        len_diff += q-p;
+        if ( ! *q ) { *p = 0; break; }
+        else
+            memmove(p,q,ori_len-(int)(q-p)+1);
+    }
+    if ( len_diff==ori_len )
+        str[0]='.', str[1]=0, len_diff--;
+
+    return len_diff;
+}
+
 int bcf_cpy(bcf1_t *r, const bcf1_t *b)
 {
 	char *t1 = r->str;

@@ -250,6 +250,12 @@ static void write_header(bcf_hdr_t *h)
 		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the first ALT allele frequency (assuming HWE)\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AC1,"))
 		kputs("##INFO=<ID=AC1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the first ALT allele count (no HWE assumption)\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=AN,"))
+		kputs("##INFO=<ID=AN,Number=1,Type=Integer,Description=\"Total number of alleles in called genotypes\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=IS,"))
+		kputs("##INFO=<ID=IS,Number=2,Type=Float,Description=\"Maximum number of reads supporting an indel and fraction of indel reads\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=AC,"))
+		kputs("##INFO=<ID=AC,Number=A,Type=Integer,Description=\"Allele count in genotypes for each ALT allele, in the same order as listed\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=G3,"))
 		kputs("##INFO=<ID=G3,Number=3,Type=Float,Description=\"ML estimate of genotype frequencies\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=HWE,"))
@@ -526,7 +532,7 @@ int bcfview(int argc, char *argv[])
         if ( !(vc.flag&VC_KEEPALT) && vc.flag&VC_CALL && vc.min_ma_lrt>=0 )
         {
             int gts = call_multiallelic_gt(b,p1,vc.min_ma_lrt);
-            if ( gts==0 && vc.flag & VC_VARONLY ) continue;
+            if ( gts<=1 && vc.flag & VC_VARONLY ) continue;
         }
 		else if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;

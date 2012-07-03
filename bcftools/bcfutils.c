@@ -77,12 +77,6 @@ void bcf_fit_alt(bcf1_t *b, int mask)
     
     if ( b->n_alleles <= nals ) return;
 
-#if DBG
-    printf("fit_alt: %s, %s, mask=%d, nals=%d: ", b->ref, b->alt, mask, nals);
-    for (i=0; i<sizeof(int); i++)
-        if ( mask&1<<i) printf(" %d", i);
-    printf("\n");
-#endif
     // update ALT, in principle any of the alleles can be removed
     char *p;
     if ( nals>1 ) 
@@ -118,9 +112,6 @@ void bcf_fit_alt(bcf1_t *b, int mask)
         p = dst;
     }
     else p = b->alt, *p = '\0';
-#if DBG
-    printf("fit_alt: %s, mask=%d\n", b->alt, mask);
-#endif
     p++;
     memmove(p, b->flt, b->str + b->l_str - b->flt);
     b->l_str -= b->flt - p;
@@ -180,6 +171,7 @@ void bcf_fit_alt(bcf1_t *b, int mask)
     }
     free(map);
     b->n_alleles = nals;
+    bcf_sync(b);
 }
 
 int bcf_shrink_alt(bcf1_t *b, int n)

@@ -123,6 +123,8 @@ extern "C" {
 	char *bcf_fmt(const bcf_hdr_t *h, bcf1_t *b);
 	// append more info
 	int bcf_append_info(bcf1_t *b, const char *info, int l);
+    // remove tag
+    int remove_tag(char *string, char *tag, char delim);
 	// copy
 	int bcf_cpy(bcf1_t *r, const bcf1_t *b);
 
