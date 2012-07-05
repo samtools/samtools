@@ -201,6 +201,7 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 }
 
 extern double kf_gammap(double s, double z);
+int test16(bcf1_t *b, anno16_t *a);
 
 int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
 {
@@ -222,7 +223,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
         exit(1);
     }
 
-    // set PL and PL_len
+    // find PL and DP FORMAT indexes
     uint8_t *pl = NULL;
     int npl = 0, idp=-1;
     int i;
@@ -237,16 +238,20 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
     }
     if ( !pl ) return -1;
 
+    assert(ma->q2p[0] == 1);
+
+    // Init P(D|G)
     int npdg = nals*(nals+1)/2;
-    float *pdg,*_pdg;
-    _pdg = pdg = malloc(sizeof(float)*ma->n*npdg);
+    double *pdg,*_pdg;
+    _pdg = pdg = malloc(sizeof(double)*ma->n*npdg);
     for (i=0; i<ma->n; i++)
     {
         int j; 
-        float sum = 0;
+        double sum = 0;
         for (j=0; j<npdg; j++)
         {
-            _pdg[j] = pow(10,-0.1*pl[j]);
+            //_pdg[j] = pow(10,-0.1*pl[j]); 
+            _pdg[j] = ma->q2p[pl[j]];
             sum += _pdg[j];
         }
         if ( sum )
@@ -256,89 +261,94 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
     }
 
     if ((p = strstr(b->info, "QS=")) == 0) { fprintf(stderr,"INFO/QS is required with -m, exiting\n"); exit(1); }
-    float qsum[4];
-    if ( sscanf(p+3,"%f,%f,%f,%f",&qsum[0],&qsum[1],&qsum[2],&qsum[3])!=4 ) { fprintf(stderr,"Could not parse %s\n",p); exit(1); }
+    double qsum[4];
+    if ( sscanf(p+3,"%lf,%lf,%lf,%lf",&qsum[0],&qsum[1],&qsum[2],&qsum[3])!=4 ) { fprintf(stderr,"Could not parse %s\n",p); exit(1); }
 
-    
+
+    // Calculate the most likely combination of alleles
     int ia,ib,ic, max_als=0, max_als2=0;
-    float max_lk = INT_MIN, max_lk2 = INT_MIN, lk_sum = INT_MIN;
+    double ref_lk = 0, max_lk = INT_MIN, max_lk2 = INT_MIN, lk_sum = INT_MIN;
     for (ia=0; ia<nals; ia++)
     {
-        //if ( ia && qsum[ia]==0 ) continue;
-        float lk_tot = 0;
+        double lk_tot = 0;
         int iaa = (ia+1)*(ia+2)/2-1;
         int isample;
         for (isample=0; isample<ma->n; isample++)
         {
-            float *p = pdg + isample*npdg;
-            assert( log(p[iaa]) <= 0 );
+            double *p = pdg + isample*npdg;
+            // assert( log(p[iaa]) <= 0 );
             lk_tot += log(p[iaa]);
         }
+        if ( ia==0 ) ref_lk = lk_tot;
         if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia; }
         else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia; }
         lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
     }
-    for (ia=0; ia<nals; ia++)
+    if ( nals>1 )
     {
-        if ( qsum[ia]==0 ) continue;
-        //if ( ia && qsum[ia]==0 ) continue;
-        for (ib=0; ib<ia; ib++)
+        for (ia=0; ia<nals; ia++)
         {
-            if ( qsum[ib]==0 ) continue;
-            //if ( ib && qsum[ib]==0 ) continue;
-            //if ( qsum[ia]+qsum[ib]==0 ) continue;
-            float lk_tot = 0;
-            float fa  = qsum[ia]/(qsum[ia]+qsum[ib]);
-            float fb  = qsum[ib]/(qsum[ia]+qsum[ib]);
-            float fab = 2*fa*fb; fa *= fa; fb *= fb;
-            int isample, iaa = (ia+1)*(ia+2)/2-1, ibb = (ib+1)*(ib+2)/2-1, iab = iaa - ia + ib;
-            for (isample=0; isample<ma->n; isample++)
+            if ( qsum[ia]==0 ) continue;
+            int iaa = (ia+1)*(ia+2)/2-1;
+            for (ib=0; ib<ia; ib++)
             {
-                if ( b->ploidy && b->ploidy[isample]==1 ) continue;
-                float *p = pdg + isample*npdg;
-                assert( log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]) <= 0 );
-                lk_tot += log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]);
-            }
-            if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib; }
-            else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib; }
-            lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
-        }
-    }
-    for (ia=0; ia<nals; ia++)
-    {
-        if ( qsum[ia]==0 ) continue;
-        //if ( ia && qsum[ia]==0 ) continue;
-        for (ib=0; ib<ia; ib++)
-        {
-            if ( qsum[ib]==0 ) continue;
-            //if ( ib && qsum[ib]==0 ) continue;
-            for (ic=0; ic<ib; ic++)
-            {
-                if ( qsum[ic]==0 ) continue;
-                //if ( ic && qsum[ic]==0 ) continue;
-                //if ( qsum[ia]+qsum[ib]+qsum[ic]==0 ) continue;
-                float lk_tot = 0;
-                float fa  = qsum[ia]/(qsum[ia]+qsum[ib]+qsum[ic]);
-                float fb  = qsum[ib]/(qsum[ia]+qsum[ib]+qsum[ic]);
-                float fc  = qsum[ic]/(qsum[ia]+qsum[ib]+qsum[ic]);
-                float fab = 2*fa*fb, fac = 2*fa*fc, fbc = 2*fb*fc; fa *= fa; fb *= fb; fc *= fc;
-                int isample, iaa = (ia+1)*(ia+2)/2-1, ibb = (ib+1)*(ib+2)/2-1, icc = (ic+1)*(ic+2)/2-1;
-                int iab = iaa - ia + ib, iac = iaa - ia + ic, ibc = ibb - ib + ic;
+                if ( qsum[ib]==0 ) continue;
+                double lk_tot = 0;
+                double fa  = qsum[ia]/(qsum[ia]+qsum[ib]);
+                double fb  = qsum[ib]/(qsum[ia]+qsum[ib]);
+                double fab = 2*fa*fb; fa *= fa; fb *= fb;
+                int isample, ibb = (ib+1)*(ib+2)/2-1, iab = iaa - ia + ib;
                 for (isample=0; isample<ma->n; isample++)
                 {
                     if ( b->ploidy && b->ploidy[isample]==1 ) continue;
-                    float *p = pdg + isample*npdg;
-                    assert( log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]) <= 0 );
-                    lk_tot += log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]);
+                    double *p = pdg + isample*npdg;
+                    //assert( log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]) <= 0 );
+                    lk_tot += log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]);
                 }
-                if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib|1<<ic; }
-                else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib|1<<ic; }
+                if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib; }
+                else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib; }
                 lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
-        //printf("    %f\n", lk_sum);
+            }
+        }
+    }
+    if ( nals>2 )
+    {
+        for (ia=0; ia<nals; ia++)
+        {
+            if ( qsum[ia]==0 ) continue;
+            int iaa = (ia+1)*(ia+2)/2-1;
+            for (ib=0; ib<ia; ib++)
+            {
+                if ( qsum[ib]==0 ) continue;
+                int ibb = (ib+1)*(ib+2)/2-1; 
+                int iab = iaa - ia + ib;
+                for (ic=0; ic<ib; ic++)
+                {
+                    if ( qsum[ic]==0 ) continue;
+                    double lk_tot = 0;
+                    double fa  = qsum[ia]/(qsum[ia]+qsum[ib]+qsum[ic]);
+                    double fb  = qsum[ib]/(qsum[ia]+qsum[ib]+qsum[ic]);
+                    double fc  = qsum[ic]/(qsum[ia]+qsum[ib]+qsum[ic]);
+                    double fab = 2*fa*fb, fac = 2*fa*fc, fbc = 2*fb*fc; fa *= fa; fb *= fb; fc *= fc;
+                    int isample, icc = (ic+1)*(ic+2)/2-1;
+                    int iac = iaa - ia + ic, ibc = ibb - ib + ic;
+                    for (isample=0; isample<ma->n; isample++)
+                    {
+                        if ( b->ploidy && b->ploidy[isample]==1 ) continue;
+                        double *p = pdg + isample*npdg;
+                        //assert( log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]) <= 0 );
+                        lk_tot += log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]);
+                    }
+                    if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib|1<<ic; }
+                    else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib|1<<ic; }
+                    lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
+                }
             }
         }
     }
 
+
+    // Should we add another allele, does it increase the likelihood significantly?
     int n1=0, n2=0;
     for (i=0; i<nals; i++) if ( max_als&1<<i) n1++;
     for (i=0; i<nals; i++) if ( max_als2&1<<i) n2++;
@@ -361,14 +371,14 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
     for (isample = 0; isample < b->n_smpl; isample++) 
     {
         int ploidy = b->ploidy ? b->ploidy[isample] : 2;
-        float *p = pdg + isample*npdg;
+        double *p = pdg + isample*npdg;
         int ia, als = 0;
-        float lk = INT_MIN, lk_sum=0;
+        double lk = 0, lk_sum=0;
         for (ia=0; ia<nals; ia++)
         {
             if ( !(max_als&1<<ia) ) continue;
             int iaa = (ia+1)*(ia+2)/2-1;
-            float _lk = p[iaa]*qsum[ia]*qsum[ia];
+            double _lk = p[iaa]*qsum[ia]*qsum[ia];
             if ( _lk > lk ) { lk = _lk; als = ia<<3 | ia; }
             lk_sum += _lk;
         }
@@ -382,7 +392,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
                 {
                     if ( !(max_als&1<<ib) ) continue;
                     int iab = iaa - ia + ib;
-                    float _lk = 2*qsum[ia]*qsum[ib]*p[iab];
+                    double _lk = 2*qsum[ia]*qsum[ib]*p[iab];
                     if ( _lk > lk ) { lk = _lk; als = ib<<3 | ia; }
                     lk_sum += _lk;
                 }
@@ -404,42 +414,47 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
     }
     bcf_fit_alt(b,max_als);
 
-    // prepare ref, alt, filter, info, format
+
+    // Prepare BCF for output: ref, alt, filter, info, format
     memset(&s, 0, sizeof(kstring_t)); kputc('\0', &s); 
     kputs(b->ref, &s); kputc('\0', &s);
     kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
     {
-        kstring_t info; memset(&info, 0, sizeof(kstring_t));
         int an=0, nalts=0;
         for (i=0; i<nals; i++)
         {
             an += ac[i];
             if ( i>0 && ac[i] ) nalts++;
         }
-        ksprintf(&info, "AN=%d;", an);
+        ksprintf(&s, "AN=%d;", an);
         if ( nalts )
         {
-            kputs("AC=", &info);
+            kputs("AC=", &s);
             for (i=1; i<nals; i++)
             {
                 if ( !(gts&1<<i) ) continue;
                 nalts--;
-                ksprintf(&info,"%d", ac[i]);
-                if ( nalts>0 ) kputc(',', &info);
+                ksprintf(&s,"%d", ac[i]);
+                if ( nalts>0 ) kputc(',', &s);
             }
-            kputc(';', &info);
+            kputc(';', &s);
         }
-        kputs(b->info, &info); 
-        info.l -= remove_tag(info.s, "I16=", ';');
-        info.l -= remove_tag(info.s, "QS=", ';');
-        kputc('\0', &info);
-        kputs(info.s, &s); kputc('\0', &s);
-        free(info.s);
+        kputs(b->info, &s); 
+        anno16_t a;
+        int has_I16 = test16(b, &a) >= 0? 1 : 0;
+        if (has_I16 )
+        {
+            if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+            ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+        }
+        rm_info(&s, "I16=");
+        rm_info(&s, "QS=");
+        kputc('\0', &s);
     }
     kputs(b->fmt, &s); kputc('\0', &s);
     free(b->str);
     b->m_str = s.m; b->l_str = s.l; b->str = s.s;
-    b->qual = -4.343*(log(1-exp(max_lk-lk_sum)));
+    b->qual = gts>1 ? -4.343*(ref_lk - lk_sum) : -4.343*(max_lk - lk_sum);
     if ( b->qual>999 ) b->qual = 999;
     bcf_sync(b);
 

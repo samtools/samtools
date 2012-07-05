@@ -14,6 +14,11 @@ typedef struct {
 	double cmp[3], p_chi2, lrt; // used by contrast2()
 } bcf_p1rst_t;
 
+typedef struct {
+    double p[4];
+    int mq, depth, is_tested, d[4];
+} anno16_t;
+
 #define MC_PTYPE_FULL  1
 #define MC_PTYPE_COND2 2
 #define MC_PTYPE_FLAT  3

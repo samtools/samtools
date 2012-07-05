@@ -323,7 +323,7 @@ int bcf_append_info(bcf1_t *b, const char *info, int l)
 	return 0;
 }
 
-int remove_tag(char *str, char *tag, char delim)
+int remove_tag(char *str, const char *tag, char delim)
 {
     char *tmp = str, *p;
     int len_diff = 0, ori_len = strlen(str);
@@ -336,16 +336,35 @@ int remove_tag(char *str, char *tag, char delim)
         }
         char *q=p+1;
         while ( *q && *q!=delim ) q++;
-        if ( p==str && *q ) q++;
+        if ( p==str && *q ) q++;        // the tag is first, don't move the delim char
         len_diff += q-p;
-        if ( ! *q ) { *p = 0; break; }
+        if ( ! *q ) { *p = 0; break; }  // the tag was last, no delim follows
         else
-            memmove(p,q,ori_len-(int)(q-p)+1);
+            memmove(p,q,ori_len-(int)(p-str)-(int)(q-p)-1);  // *q==delim
     }
     if ( len_diff==ori_len )
         str[0]='.', str[1]=0, len_diff--;
 
     return len_diff;
+}
+
+
+void rm_info(kstring_t *s, const char *key)
+{
+    char *p = s->s; 
+    int n = 0;
+    while ( n<4 )
+    {
+        if ( !*p ) n++;
+        p++;
+    }
+    char *q = p+1; 
+    while ( *q && q-s->s<s->l ) q++;
+
+    int nrm = remove_tag(p, key, ';');
+    if ( nrm )
+        memmove(q-nrm, q, s->s+s->l-q+1);
+    s->l -= nrm;
 }
 
 int bcf_cpy(bcf1_t *r, const bcf1_t *b)

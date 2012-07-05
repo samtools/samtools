@@ -124,7 +124,9 @@ extern "C" {
 	// append more info
 	int bcf_append_info(bcf1_t *b, const char *info, int l);
     // remove tag
-    int remove_tag(char *string, char *tag, char delim);
+    int remove_tag(char *string, const char *tag, char delim);
+    // remove info tag, string is the kstring holder of bcf1_t.str
+    void rm_info(kstring_t *string, const char *key);
 	// copy
 	int bcf_cpy(bcf1_t *r, const bcf1_t *b);
 

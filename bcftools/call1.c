@@ -48,11 +48,6 @@ void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
-typedef struct {
-	double p[4];
-	int mq, depth, is_tested, d[4];
-} anno16_t;
-
 static double ttest(int n1, int n2, int a[4])
 {
 	extern double kf_betai(double a, double b, double x);
@@ -83,7 +78,7 @@ static int test16_core(int anno[16], anno16_t *a)
 	return 0;
 }
 
-static int test16(bcf1_t *b, anno16_t *a)
+int test16(bcf1_t *b, anno16_t *a)
 {
 	char *p;
 	int i, anno[16];
@@ -100,17 +95,6 @@ static int test16(bcf1_t *b, anno16_t *a)
 	return test16_core(anno, a);
 }
 
-static void rm_info(bcf1_t *b, const char *key)
-{
-	char *p, *q;
-	if ((p = strstr(b->info, key)) == 0) return;
-	for (q = p; *q && *q != ';'; ++q);
-	if (p > b->info && *(p-1) == ';') --p;
-	memmove(p, q, b->l_str - (q - b->str));
-	b->l_str -= q - p;
-	bcf_sync(b);
-}
-
 static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10], int cons_llr, int64_t cons_gt)
 {
 	kstring_t s;
@@ -119,7 +103,7 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	anno16_t a;
 
 	has_I16 = test16(b, &a) >= 0? 1 : 0;
-	rm_info(b, "I16="); // FIXME: probably this function has a bug. If I move it below, I16 will not be removed!
+	//rm_info(b, "I16="); // FIXME: probably this function has a bug. If I move it below, I16 will not be removed!
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
@@ -170,6 +154,8 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	}
 	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	kputc('\0', &s);
+    rm_info(&s, "QS=");
+    rm_info(&s, "I16=");
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
 	b->m_str = s.m; b->l_str = s.l; b->str = s.s;
@@ -528,9 +514,9 @@ int bcfview(int argc, char *argv[])
 			int i;
 			for (i = 0; i < 9; ++i) em[i] = -1.;
 		}
-        bcf_p1_set_ploidy(b, p1); // could be improved: do this per site to allow pseudo-autosomal regions
         if ( !(vc.flag&VC_KEEPALT) && vc.flag&VC_CALL && vc.min_ma_lrt>=0 )
         {
+            bcf_p1_set_ploidy(b, p1); // could be improved: do this per site to allow pseudo-autosomal regions
             int gts = call_multiallelic_gt(b,p1,vc.min_ma_lrt);
             if ( gts<=1 && vc.flag & VC_VARONLY ) continue;
         }
