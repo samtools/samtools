@@ -669,6 +669,36 @@ char **sam_header2list(const void *_dict, char type[2], char key_tag[2], int *_n
     return ret;
 }
 
+void *sam_header2key_val(void *iter, const char type[2], const char key_tag[2], const char value_tag[2], const char **_key, const char **_value)
+{
+    list_t *l = iter;
+    if ( !l ) return NULL;
+
+    while (l)
+    {
+        HeaderLine *hline = l->data;
+        if ( hline->type[0]!=type[0] || hline->type[1]!=type[1] )
+        {
+            l = l->next;
+            continue;
+        }
+
+        HeaderTag *key, *value;
+        key   = header_line_has_tag(hline,key_tag);
+        value = header_line_has_tag(hline,value_tag);
+        if ( !key && !value ) 
+        {
+            l = l->next;
+            continue;
+        }
+
+        *_key = key->value;
+        *_value = value->value;
+        return l->next;
+    }
+    return l;
+}
+
 const char *sam_tbl_get(void *h, const char *key)
 {
 	khash_t(str) *tbl = (khash_t(str)*)h;

@@ -447,9 +447,9 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
             if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
             ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
         }
+        kputc('\0', &s);
         rm_info(&s, "I16=");
         rm_info(&s, "QS=");
-        kputc('\0', &s);
     }
     kputs(b->fmt, &s); kputc('\0', &s);
     free(b->str);

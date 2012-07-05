@@ -340,7 +340,7 @@ int remove_tag(char *str, const char *tag, char delim)
         len_diff += q-p;
         if ( ! *q ) { *p = 0; break; }  // the tag was last, no delim follows
         else
-            memmove(p,q,ori_len-(int)(p-str)-(int)(q-p)-1);  // *q==delim
+            memmove(p,q,ori_len-(int)(p-str)-(int)(q-p));  // *q==delim
     }
     if ( len_diff==ori_len )
         str[0]='.', str[1]=0, len_diff--;

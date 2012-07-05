@@ -29,6 +29,7 @@
 #include "faidx.h"
 #include "khash.h"
 #include "sam.h"
+#include "sam_header.h"
 #include "razf.h"
 
 #define BWA_MIN_RDLEN 35
@@ -47,13 +48,14 @@ typedef struct
     uint64_t offset;
 } 
 faidx1_t;
-KHASH_MAP_INIT_STR(s, faidx1_t)
-KHASH_MAP_INIT_STR(str, int)
+KHASH_MAP_INIT_STR(kh_faidx, faidx1_t)
+KHASH_MAP_INIT_STR(kh_bam_tid, int)
+KHASH_MAP_INIT_STR(kh_rg, const char *)
 struct __faidx_t {
     RAZF *rz;
     int n, m;
     char **name;
-    khash_t(s) *hash;
+    khash_t(kh_faidx) *hash;
 };
 
 typedef struct
@@ -152,10 +154,11 @@ typedef struct
 
     // Auxiliary data
     int flag_require, flag_filter;
-    double sum_qual;            // For calculating average quality value 
-    samfile_t *sam;             // Unused
-    faidx_t *fai;               // Reference sequence for GC-depth graph
-    int argc;                   // Command line arguments to be printed on the output
+    double sum_qual;                // For calculating average quality value 
+    samfile_t *sam;             
+    khash_t(kh_rg) *rg_hash;        // Read groups to include, the array is null-terminated
+    faidx_t *fai;                   // Reference sequence for GC-depth graph
+    int argc;                       // Command line arguments to be printed on the output
     char **argv;
 }
 stats_t;
@@ -406,7 +409,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
 
 void read_ref_seq(stats_t *stats,int32_t tid,int32_t pos)
 {
-    khash_t(s) *h;
+    khash_t(kh_faidx) *h;
     khiter_t iter;
     faidx1_t val;
     char *chr, c;
@@ -416,7 +419,7 @@ void read_ref_seq(stats_t *stats,int32_t tid,int32_t pos)
     chr = stats->sam->header->target_name[tid];
 
     // ID of the sequence name
-    iter = kh_get(s, h, chr);
+    iter = kh_get(kh_faidx, h, chr);
     if (iter == kh_end(h)) 
         error("No such reference sequence [%s]?\n", chr);
     val = kh_value(h, iter);
@@ -565,6 +568,13 @@ void realloc_buffers(stats_t *stats, int seq_len)
 
 void collect_stats(bam1_t *bam_line, stats_t *stats)
 {
+    if ( stats->rg_hash )
+    {
+        const uint8_t *rg = bam_aux_get(bam_line, "RG");
+        if ( !rg ) return; 
+        khiter_t k = kh_get(kh_rg, stats->rg_hash, (const char*)(rg + 1));
+        if ( k == kh_end(stats->rg_hash) ) return;
+    }
     if ( stats->flag_require && (bam_line->core.flag & stats->flag_require)!=stats->flag_require )
         return;
     if ( stats->flag_filter && (bam_line->core.flag & stats->flag_filter) )
@@ -1074,10 +1084,10 @@ size_t mygetline(char **line, size_t *n, FILE *fp)
 void init_regions(stats_t *stats, char *file)
 {
     khiter_t iter;
-    khash_t(str) *header_hash;
+    khash_t(kh_bam_tid) *header_hash;
 
     bam_init_header_hash(stats->sam->header);
-    header_hash = (khash_t(str)*)stats->sam->header->hash;
+    header_hash = (khash_t(kh_bam_tid)*)stats->sam->header->hash;
 
     FILE *fp = fopen(file,"r");
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
@@ -1096,7 +1106,7 @@ void init_regions(stats_t *stats, char *file)
         if ( i>=nread ) error("Could not parse the file: %s [%s]\n", file,line);
         line[i] = 0;
 
-        iter = kh_get(str, header_hash, line);
+        iter = kh_get(kh_bam_tid, header_hash, line);
         int tid = kh_val(header_hash, iter);
         if ( iter == kh_end(header_hash) )
         {
@@ -1186,6 +1196,32 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     return 1;
 }
 
+void init_group_id(stats_t *stats, char *id)
+{
+    if ( !stats->sam->header->dict )
+        stats->sam->header->dict = sam_header_parse2(stats->sam->header->text);
+    void *iter = stats->sam->header->dict;
+    const char *key, *val;
+    int n = 0;
+    stats->rg_hash = kh_init(kh_rg);
+    while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val)) )
+    {
+        if ( !strcmp(id,key) || (val && !strcmp(id,val)) )
+        {
+            khiter_t k = kh_get(kh_rg, stats->rg_hash, key);
+            if ( k != kh_end(stats->rg_hash) ) 
+                fprintf(stderr, "[init_group_id] The group ID not unique: \"%s\"\n", key);
+            int ret;
+            k = kh_put(kh_rg, stats->rg_hash, key, &ret);
+            kh_value(stats->rg_hash, k) = val;
+            n++;
+        }
+    }
+    if ( !n )
+        error("The sample or read group \"%s\" not present.\n", id);
+}
+
+
 void error(const char *format, ...)
 {
     if ( !format )
@@ -1201,6 +1237,7 @@ void error(const char *format, ...)
         printf("    -F, --filtering-flag <int>          Filtering flag, 0 for unset [0]\n");
         printf("    -h, --help                          This help message\n");
         printf("    -i, --insert-size <int>             Maximum insert size [8000]\n");
+        printf("    -I, --id <string>                   Include only listed read group or sample name\n");
         printf("    -l, --read-length <int>             Include in the statistics only reads with the given read length []\n");
         printf("    -m, --most-inserts <float>          Report only the main part of inserts [0.99]\n");
         printf("    -q, --trim-quality <int>            The BWA trimming parameter [0]\n");
@@ -1223,6 +1260,7 @@ int main(int argc, char *argv[])
 {
     char *targets = NULL;
     char *bam_fname = NULL;
+    char *group_id = NULL;
     samfile_t *sam = NULL;
     char in_mode[5];
 
@@ -1264,10 +1302,11 @@ int main(int argc, char *argv[])
         {"target-regions",0,0,'t'},
         {"required-flag",0,0,'f'},
         {"filtering-flag",0,0,'F'},
+        {"id",0,0,'I'},
         {0,0,0,0}
     };
     int opt;
-    while ( (opt=getopt_long(argc,argv,"?hdsr:c:l:i:t:m:q:f:F:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsr:c:l:i:t:m:q:f:F:I:",loptions,NULL))>0 )
     {
         switch (opt)
         {
@@ -1287,6 +1326,7 @@ int main(int argc, char *argv[])
             case 'm': stats->isize_main_bulk = atof(optarg); break;
             case 'q': stats->trim_qual = atoi(optarg); break;
             case 't': targets = optarg; break;
+            case 'I': group_id = optarg; break;
             case '?': 
             case 'h': error(NULL);
             default: error("Unknown argument: %s\n", optarg);
@@ -1319,6 +1359,7 @@ int main(int argc, char *argv[])
     if ((sam = samopen(bam_fname, in_mode, NULL)) == 0) 
         error("Failed to open: %s\n", bam_fname);
     stats->sam = sam;
+    if ( group_id ) init_group_id(stats, group_id);
     bam1_t *bam_line = bam_init1();
     // .. arrays
     stats->quals_1st      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
@@ -1391,6 +1432,7 @@ int main(int argc, char *argv[])
     free(stats->del_cycles_2nd);
     destroy_regions(stats);
     free(stats);
+    if ( stats->rg_hash ) kh_destroy(kh_rg, stats->rg_hash);
 
 	return 0;
 }
