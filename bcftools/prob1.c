@@ -401,7 +401,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
         lk = -log(1-lk/lk_sum)/0.2302585;
         if ( idp>=0 && ((uint16_t*)b->gi[idp].data)[isample]==0 ) 
         {
-            ((uint8_t*)b->gi[old_n_gi].data)[isample]   = als | 1<<7;
+            ((uint8_t*)b->gi[old_n_gi].data)[isample]   = 1<<7;
             ((uint8_t*)b->gi[old_n_gi+1].data)[isample] = 0;
             continue;
         }

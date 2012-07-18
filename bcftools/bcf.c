@@ -269,7 +269,7 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
                 if ( ploidy==1 )
                 {
                     if ( y>>7&1 )
-                        kputsn(".", 3, s);
+                        kputc('.', s);
                     else 
                         kputc('0' + (y>>3&7), s);
                 }
