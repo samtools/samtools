@@ -87,9 +87,9 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		if (min_dist > p->qpos) min_dist = p->qpos;
 		if (min_dist > CAP_DIST) min_dist = CAP_DIST;
 		r->anno[1<<2|is_diff<<1|0] += baseQ;
-		r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;
+		r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;	// FIXME: signed int is not enough for thousands of samples
 		r->anno[2<<2|is_diff<<1|0] += mapQ;
-		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;
+		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;		// FIXME: signed int is not enough for thousands of samples
 		r->anno[3<<2|is_diff<<1|0] += min_dist;
 		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
 	}

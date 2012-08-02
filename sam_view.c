@@ -14,7 +14,7 @@ KHASH_SET_INIT_STR(rg)
 // data passed to the bam_fetch callback is encapsulated in this struct.
 typedef struct {
 	bam_header_t *header;
-	int *count;
+	int64_t *count;  // int does overflow for very big BAMs
 } count_func_data_t;
 
 typedef khash_t(rg) *rghash_t;
@@ -128,7 +128,7 @@ int main_samview(int argc, char *argv[])
 {
 	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, compress_level = -1, is_bamout = 0, is_count = 0;
 	int of_type = BAM_OFDEC, is_long_help = 0, n_threads = 0;
-	int count = 0;
+	int64_t count = 0;
 	samfile_t *in = 0, *out = 0;
 	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0, *q;
 
@@ -274,7 +274,7 @@ int main_samview(int argc, char *argv[])
 
 view_end:
 	if (is_count && ret == 0) {
-		printf("%d\n", count);
+		printf("%ld\n", count); // compilers on some platforms may complain about printing int64_t with %ld
 	}
 	// close files, free and return
 	free(fn_list); free(fn_ref); free(fn_out); free(g_library); free(g_rg); free(fn_rg);
