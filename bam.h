@@ -40,7 +40,7 @@
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "0.1.18-r579"
+#define BAM_VERSION "0.1.18-r580"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -773,7 +773,7 @@ static inline int bam_aux_type2size(int x)
 {
 	if (x == 'C' || x == 'c' || x == 'A') return 1;
 	else if (x == 'S' || x == 's') return 2;
-	else if (x == 'I' || x == 'i' || x == 'f') return 4;
+	else if (x == 'I' || x == 'i' || x == 'f' || x == 'F') return 4;
 	else return 0;
 }
 
