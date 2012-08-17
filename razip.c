@@ -48,6 +48,7 @@ static int write_open(const char *fn, int is_forced)
 int main(int argc, char **argv)
 {
 	int c, compress, pstdout, is_forced;
+	size_t count;
 	RAZF *rz;
 	void *buffer;
 	long start, end, size;
@@ -92,7 +93,7 @@ int main(int argc, char **argv)
 		} else return razf_main_usage();
 		rz = razf_dopen(f_dst, "w");
 		buffer = malloc(WINDOW_SIZE);
-		while((c = read(f_src, buffer, WINDOW_SIZE)) > 0) razf_write(rz, buffer, c);
+		while((count = read(f_src, buffer, WINDOW_SIZE)) > 0) razf_write(rz, buffer, count);
 		razf_close(rz); // f_dst will be closed here
 		if (argc > optind && !pstdout) unlink(argv[optind]);
 		free(buffer);
@@ -124,11 +125,11 @@ int main(int argc, char **argv)
 			buffer = malloc(WINDOW_SIZE);
 			razf_seek(rz, start, SEEK_SET);
 			while(1){
-				if(end < 0) c = razf_read(rz, buffer, WINDOW_SIZE);
-				else c = razf_read(rz, buffer, (end - start > WINDOW_SIZE)? WINDOW_SIZE:(end - start));
-				if(c <= 0) break;
-				start += c;
-				write(f_dst, buffer, c);
+				if(end < 0) count = razf_read(rz, buffer, WINDOW_SIZE);
+				else count = razf_read(rz, buffer, (end - start > WINDOW_SIZE)? WINDOW_SIZE:(end - start));
+				if(count <= 0) break;
+				start += count;
+				if (write(f_dst, buffer, count) < 0 ) break;
 				if(end >= 0 && start >= end) break;
 			}
 			free(buffer);
