@@ -48,7 +48,7 @@ static int write_open(const char *fn, int is_forced)
 int main(int argc, char **argv)
 {
 	int c, compress, pstdout, is_forced;
-	size_t count;
+	ssize_t count;
 	RAZF *rz;
 	void *buffer;
 	long start, end, size;
