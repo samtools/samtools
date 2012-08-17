@@ -5,7 +5,7 @@
 #include "errmod.h"
 #include "faidx.h"
 
-#define ERR_DEP 0.83f
+static const double ERR_DEP=0.83;
 
 typedef struct {
 	int e[2][3], p[2][2];
@@ -161,7 +161,7 @@ int main_cut_target(int argc, char *argv[])
 	l = max_l = 0; cns = 0;
 	g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	g.h = bam_header_read(g.fp);
-	g.em = errmod_init(1 - ERR_DEP);
+	g.em = errmod_init(1. - ERR_DEP);
 	plp = bam_plp_init(read_aln, &g);
 	while ((p = bam_plp_auto(plp, &tid, &pos, &n)) != 0) {
 		if (tid < 0) break;

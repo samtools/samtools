@@ -8,12 +8,10 @@
 
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
-#define CALL_ETA 0.03f
-#define CALL_MAX 256
-#define CALL_DEFTHETA 0.83f
-#define DEF_MAPQ 20
+static const double CALL_DEFTHETA = 0.83;
+static const int DEF_MAPQ = 20;
 
-#define CAP_DIST 25
+static const int CAP_DIST = 25;
 
 bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 {

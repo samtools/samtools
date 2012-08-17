@@ -16,7 +16,7 @@
 #define UPDATE_MD 16
 #define HASH_QNM  32
 
-char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
+const char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
