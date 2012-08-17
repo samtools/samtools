@@ -500,7 +500,7 @@ knetFile *knet_dopen(int fd, const char *mode)
 	return fp;
 }
 
-off_t knet_read(knetFile *fp, void *buf, off_t len)
+ssize_t knet_read(knetFile *fp, void *buf, size_t len)
 {
 	off_t l = 0;
 	if (fp->fd == -1) return 0;
@@ -514,7 +514,7 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 			khttp_connect_file(fp);
 	}
 	if (fp->type == KNF_TYPE_LOCAL) { // on Windows, the following block is necessary; not on UNIX
-		off_t rest = len, curr;
+		size_t rest = len, curr;
 		while (rest) {
 			do {
 				curr = read(fp->fd, buf + l, rest);
@@ -528,13 +528,13 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 	return l;
 }
 
-off_t knet_seek(knetFile *fp, int64_t off, int whence)
+off64_t knet_seek(knetFile *fp, off64_t off, int whence)
 {
 	if (whence == SEEK_SET && off == fp->offset) return 0;
 	if (fp->type == KNF_TYPE_LOCAL) {
 		/* Be aware that lseek() returns the offset after seeking,
 		 * while fseek() returns zero on success. */
-		off_t offset = lseek(fp->fd, off, whence);
+		off64_t offset = lseek64(fp->fd, off, whence);
 		if (offset == -1) {
             // Be silent, it is OK for knet_seek to fail when the file is streamed
             // fprintf(stderr,"[knet_seek] %s\n", strerror(errno));
