@@ -10,7 +10,7 @@ typedef struct {
 	struct __errmod_coef_t *coef;
 } errmod_t;
 
-errmod_t *errmod_init(float depcorr);
+errmod_t *errmod_init(double depcorr);
 void errmod_destroy(errmod_t *em);
 
 /*

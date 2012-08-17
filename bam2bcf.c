@@ -9,9 +9,7 @@
 
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
-#define CALL_ETA 0.03f
-#define CALL_MAX 256
-#define CALL_DEFTHETA 0.83f
+#define CALL_DEFTHETA 0.83
 #define DEF_MAPQ 20
 
 #define CAP_DIST 25
