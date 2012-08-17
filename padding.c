@@ -166,7 +166,7 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 		uint32_t *cigar = bam1_cigar(b);
 		n2 = 0;
 		if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam1_qname(b), h->target_name[b->core.tid]) == 0) {
-			// fprintf(stderr, "[depad] Found embedded reference %s\n", bam1_qname(b));
+			// fprintf(stderr, "[depad] Found embedded reference '%s'\n", bam1_qname(b));
 			r_tid = b->core.tid;
 			unpad_seq(b, &r);
 			if (h->target_len[r_tid] != r.l) {
@@ -202,6 +202,7 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 				return -1;
 			} else if (b->core.tid == r_tid) {
 				; // good case, reference available
+				//fprintf(stderr, "[depad] Have ref '%s' for read '%s'\n", h->target_name[b->core.tid], bam1_qname(b));
 			} else if (fai) {
 				if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
 					fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
@@ -271,6 +272,38 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 			n2 = k;
 			replace_cigar(b, n2, cigar2);
 			b->core.pos = posmap[b->core.pos];
+			if (b->core.mtid < 0 || b->core.mpos < 0) {
+				/* Nice case, no mate to worry about*/
+				// fprintf(stderr, "[depad] Read '%s' mate not mapped\n", bam1_qname(b));
+				/* TODO - Warning if FLAG says mate should be mapped? */
+				/* Clean up funny input where mate position is given but mate reference is missing: */
+				b->core.mtid = -1;
+				b->core.mpos = -1;
+			} else if (b->core.mtid == b->core.tid) {
+				/* Nice case, same reference */
+				// fprintf(stderr, "[depad] Read '%s' mate mapped to same ref\n", bam1_qname(b));
+				b->core.mpos = posmap[b->core.mpos];
+			} else {
+				/* Nasty case, Must load alternative posmap */
+				// fprintf(stderr, "[depad] Loading reference '%s' temporarily\n", h->target_name[b->core.mtid]);
+				if (!fai) {
+					fprintf(stderr, "[depad] ERROR: Needed reference %s sequence for mate (and no FASTA file)\n", h->target_name[b->core.mtid]);
+					return -1;
+				}
+				/* Temporarily load the other reference sequence */
+				if (load_unpadded_ref(fai, h->target_name[b->core.mtid], h->target_len[b->core.mtid], &r)) {
+					fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.mtid]);
+					return -1;
+				}
+				posmap = update_posmap(posmap, r);
+				b->core.mpos = posmap[b->core.mpos];
+				/* Restore the reference and posmap*/
+				if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
+					fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
+					return -1;
+				}
+				posmap = update_posmap(posmap, r);
+			}
 		}
 		samwrite(out, b);
 	}
@@ -330,7 +363,7 @@ bam_header_t * fix_header(bam_header_t *old, faidx_t *fai)
 	if (strlen(header->text) < header->l_text) {
 		//fprintf(stderr, "[depad] Reallocating header buffer\n");
 		assert (newtext == header->text);
-		newtext = calloc(strlen(header->text) + 1, 1);
+		newtext = malloc(strlen(header->text) + 1);
 		strcpy(newtext, header->text);
 		free(header->text);
 		header->text = newtext;
@@ -414,11 +447,11 @@ int main_pad2unpad(int argc, char *argv[])
 
 depad_end:
 	// close files, free and return
-	free(fn_list); free(fn_out);
-        if (h != in->header) bam_header_destroy(h);
+	if (fai) fai_destroy(fai);
+	if (h != in->header) bam_header_destroy(h);
 	samclose(in);
 	samclose(out);
-	fai_destroy(fai);
+	free(fn_list); free(fn_out);
 	return ret;
 }
 
