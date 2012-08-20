@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <assert.h>
+#include <float.h>
 #include "bam.h"
 #include "kstring.h"
 #include "bam2bcf.h"
@@ -75,6 +76,14 @@ void bcf_call_destroy(bcf_callaux_t *bca)
         which are carried over via bcf_call_combine and bcf_call2bcf to the output BCF as the QS annotation.
         Later it's used for multiallelic calling by bcftools -m
     - ref_base is the 4-bit representation of the reference base. It is negative if we are looking at an indel. 
+ */
+/* 
+ * This function is called once for each sample.
+ * _n is number of pilesups pl contributing reads to this sample
+ * pl is pointer to array of _n pileups (one pileup per read)
+ * ref_base is the 4-bit representation of the reference base. It is negative if we are looking at an indel.
+ * bca is the settings to perform calls across all samples
+ * r is the returned value of the call
  */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
@@ -301,6 +310,16 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
  *  @ref_base:  the reference base
  *  @call:      filled with the annotations
  */
+/*
+ * Combines calls across the various samples being studied
+ * 1. For each allele at each base across all samples the quality is summed so you end up with a set of quality sums for each allele present
+ * 2. The quality sums are sorted.
+ * 3. Using the sorted quality sums we now create the allele ordering array A\subN. This is done by doing the following:
+ *   a) If the reference allele is known it always comes first, otherwise N comes first.
+ *   b) Then the rest of the alleles are output in descending order of quality sum (which we already know the qsum array was sorted).  Any allelles with qsum 0 will be excluded.
+ * 4. Using the allele ordering array we create the genotype ordering array.  In the worst case with an unknown reference this will be:  A0/A0 A1/A0 A1/A1 A2/A0 A2/A1 A2/A2 A3/A0 A3/A1 A3/A2 A3/A3 A4/A0 A4/A1 A4/A2 A4/A3 A4/A4
+ * 5. The genotype ordering array is then used to extract data from the error model 5*5 matrix and is used to produce a Phread likelihood array for each sample.
+ */
 int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int ref_base /*4-bit*/, bcf_call_t *call)
 {
 	int ref4, i, j, qsum[4];
@@ -310,10 +329,12 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		if (ref4 > 4) ref4 = 4;
 	} else call->ori_ref = -1, ref4 = 0;
 	// calculate qsum
+	// this is done by calculating combined qsum across all samples
 	memset(qsum, 0, 4 * sizeof(int));
 	for (i = 0; i < n; ++i)
 		for (j = 0; j < 4; ++j)
 			qsum[j] += calls[i].qsum[j];
+	// then encoding the base in the first two bits
     int qsum_tot=0;
     for (j=0; j<4; j++) { qsum_tot += qsum[j]; call->qsum[j] = 0; }
 	for (j = 0; j < 4; ++j) qsum[j] = qsum[j] << 2 | j;
@@ -321,7 +342,10 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 	for (i = 1; i < 4; ++i) // insertion sort
 		for (j = i; j > 0 && qsum[j] < qsum[j-1]; --j)
 			tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
-	// set the reference allele and alternative allele(s)
+	////////////////////////////////////////////////////////
+	// set the reference allele and alternative allele(s) //
+	////////////////////////////////////////////////////////
+	// Clear the allele list
 	for (i = 0; i < 5; ++i) call->a[i] = -1;
 	call->unseen = -1;
 	call->a[0] = ref4;
@@ -345,7 +369,12 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		call->n_alleles = j;
 		if (call->n_alleles == 1) return -1; // no reliable supporting read. stop doing anything
 	}
-	// set the PL array
+	/*
+	 * Set the phread likelihood array (call->PL)
+	 * This array is 15 entries long for each sample because that is size of an upper or lower triangle of a worst case 5x5 matrix of
+	 * possible genotypes. This worst case matrix will occur when all 4 possible alleles are present and the reference allele is unknown.
+	 * The sides of the matrix will correspond to the reference allele (if known) followed by the alleles present in descending order of quality sum
+	 */
 	if (call->n < n) {
 		call->n = n;
 		call->PL = realloc(call->PL, 15 * n);
@@ -355,15 +384,20 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		double sum_min = 0.;
 		x = call->n_alleles * (call->n_alleles + 1) / 2;
 		// get the possible genotypes
-		for (i = z = 0; i < call->n_alleles; ++i)
-			for (j = 0; j <= i; ++j)
+		// this is done by creating an ordered list of locations g for call (allele a, allele b) in the genotype likelihood matrix
+		for (i = z = 0; i < call->n_alleles; ++i) {
+			for (j = 0; j <= i; ++j) {
 				g[z++] = call->a[j] * 5 + call->a[i];
+			}
+		}
+		// for each sample calculate the PL
 		for (i = 0; i < n; ++i) {
 			uint8_t *PL = call->PL + x * i;
 			const bcf_callret1_t *r = calls + i;
-			float min = 1e37;
-			for (j = 0; j < x; ++j)
+			float min = FLT_MAX;
+			for (j = 0; j < x; ++j) {
 				if (min > r->p[g[j]]) min = r->p[g[j]];
+			}
 			sum_min += min;
 			for (j = 0; j < x; ++j) {
 				int y;

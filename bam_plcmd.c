@@ -181,6 +181,12 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
 	}
 }
 
+/*
+ * Performs pileup
+ * @param conf configuration for this pileup
+ * @param n number of files specified in fn
+ * @param fn filenames
+ */
 static int mpileup(mplp_conf_t *conf, int n, char **fn)
 {
 	extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
@@ -189,17 +195,17 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	int i, tid, pos, *n_plp, tid0 = -1, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid = -1, max_depth, max_indel_depth;
 	const bam_pileup1_t **plp;
 	bam_mplp_t iter;
-	bam_header_t *h = 0;
+	bam_header_t *h = NULL; /* header of first file in input list */
 	char *ref;
-	void *rghash = 0;
+	void *rghash = NULL;
 
-	bcf_callaux_t *bca = 0;
-	bcf_callret1_t *bcr = 0;
+	bcf_callaux_t *bca = NULL;
+	bcf_callret1_t *bcr = NULL;
 	bcf_call_t bc;
-	bcf_t *bp = 0;
-	bcf_hdr_t *bh = 0;
+	bcf_t *bp = NULL;
+	bcf_hdr_t *bh = NULL;
 
-	bam_sample_t *sm = 0;
+	bam_sample_t *sm = NULL;
 	kstring_t buf;
 	mplp_pileup_t gplp;
 
@@ -216,7 +222,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         exit(1);
     }
 
-	// read the header and initialize data
+	// read the header of each file in the list and initialize data
 	for (i = 0; i < n; ++i) {
 		bam_header_t *h_tmp;
 		data[i] = calloc(1, sizeof(mplp_aux_t));
@@ -251,12 +257,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			data[i]->iter = bam_iter_query(idx, tid, beg, end);
 			bam_index_destroy(idx);
 		}
-		if (i == 0) h = h_tmp;
+		if (i == 0) h = h_tmp; /* save the header of first file in list */
 		else {
 			// FIXME: to check consistency
 			bam_header_destroy(h_tmp);
 		}
 	}
+	// allocate data storage proportionate to number of samples being studied sm->n
 	gplp.n = sm->n;
 	gplp.n_plp = calloc(sm->n, sizeof(int));
 	gplp.m_plp = calloc(sm->n, sizeof(int));
@@ -319,6 +326,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		ref_tid = tid0;
 		for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
 	} else ref_tid = -1, ref = 0;
+
+	// begin pileup
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
 	max_depth = conf->max_depth;
 	if (max_depth * sm->n > 1<<20)
@@ -410,6 +419,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		}
 	}
 
+	// clean up
 	bcf_close(bp);
 	bam_smpl_destroy(sm); free(buf.s);
 	for (i = 0; i < gplp.n; ++i) free(gplp.plp[i]);

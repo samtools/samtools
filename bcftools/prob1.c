@@ -32,7 +32,7 @@ struct __bcf_p1aux_t {
 	double **hg; // hypergeometric distribution
 	double *lf; // log factorial
 	double t, t1, t2;
-	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
+	double *afs, *afs1; // afs: accumulative allele frequency spectrum (AFS); afs1: site posterior distribution
 	const uint8_t *PL; // point to PL
 	int PL_len;
 };
@@ -653,19 +653,24 @@ static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 }
 
 
+/* f0 is minor allele fraction */
 int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 {
 	double sum, g[3];
 	double max, f3[3], *pdg = ma->pdg + k * 3;
 	int q, i, max_i, ploidy;
+	/* determine ploidy */
 	ploidy = ma->ploidy? ma->ploidy[k] : 2;
 	if (ploidy == 2) {
+	/* given allele frequency we can determine how many of each
+	 * genotype we have by HWE p=1-q PP=p^2 PQ&QP=2*p*q QQ=q^2 */
 		f3[0] = (1.-f0)*(1.-f0); f3[1] = 2.*f0*(1.-f0); f3[2] = f0*f0;
 	} else {
 		f3[0] = 1. - f0; f3[1] = 0; f3[2] = f0;
 	}
 	for (i = 0, sum = 0.; i < 3; ++i)
 		sum += (g[i] = pdg[i] * f3[i]);
+	/* normalise g and then determine max */
 	for (i = 0, max = -1., max_i = 0; i < 3; ++i) {
 		g[i] /= sum;
 		if (g[i] > max) max = g[i], max_i = i;
