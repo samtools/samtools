@@ -563,17 +563,17 @@ int razf_get_data_size(RAZF *rz, int64_t *u_size, int64_t *c_size){
 }
 
 static ssize_t _razf_read(RAZF* rz, void *data, size_t size){
-	ssize_t fileret;
 	int ret, tin;
 	if(rz->z_eof || rz->z_err) return 0;
 	if (rz->file_type == FILE_TYPE_PLAIN) {
+		ssize_t fileret;
 #ifdef _USE_KNETFILE
 		fileret = knet_read(rz->x.fpr, data, size);
 #else
 		fileret = read(rz->filedes, data, size);
 #endif        
 		if (fileret == 0) rz->z_eof = 1;
-		return ret;
+		return fileret;
 	}
 	rz->stream->avail_out = size;
 	rz->stream->next_out  = data;
