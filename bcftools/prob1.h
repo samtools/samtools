@@ -28,7 +28,7 @@ typedef struct {
 extern "C" {
 #endif
 
-	bcf_p1aux_t *bcf_p1_init(int n, uint8_t *ploidy);
+	bcf_p1aux_t *bcf_p1_init(int n_smpl, uint8_t *ploidy);
 	void bcf_p1_init_prior(bcf_p1aux_t *ma, int type, double theta);
 	void bcf_p1_init_subprior(bcf_p1aux_t *ma, int type, double theta);
 	void bcf_p1_destroy(bcf_p1aux_t *ma);
