@@ -349,6 +349,7 @@ sub plot_qualities
                 set size 0.4,0.8
                 unset ytics
                 set y2tics mirror
+				set yrange [0:$yrange]
                 unset ylabel
                 set xlabel "Cycle (rev reads)"
                 set label "$$args{title}" at screen 0.5,0.95 center
@@ -662,7 +663,8 @@ sub plot_coverage
 
     my @vals;
     for my $cov (@{$$opts{dat}{COV}}) { push @vals,$$cov[2]; }
-    my $p99 = percentile(99.8,@vals);
+    my $i = percentile(99.8,@vals);
+    my $p99 = $$opts{dat}{COV}[$i][1];
 
     my $args = get_defaults($opts,"$$opts{prefix}coverage.png");
     my $fh = $$args{fh};
