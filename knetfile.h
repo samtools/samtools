@@ -39,11 +39,6 @@ typedef struct knetFile_s {
 #define knet_tell(fp) ((fp)->offset)
 #define knet_fileno(fp) ((fp)->fd)
 
-#if defined(__FreeBSD__) || defined(__APPLE__) // In BSD all off_t are 64 bits
-typedef off_t off64_t;
-#define lseek64(fd, offset, whence) lseek(fd, offset, whence)
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -70,7 +65,7 @@ extern "C" {
 	  This routine only sets ->offset and ->is_ready=0. It does not
 	  communicate with the FTP server.
 	 */
-	off64_t knet_seek(knetFile *fp, off64_t off, int whence);
+	off_t knet_seek(knetFile *fp, off_t off, int whence);
 	int knet_close(knetFile *fp);
 
 #ifdef __cplusplus
