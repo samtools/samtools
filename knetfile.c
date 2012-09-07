@@ -514,7 +514,8 @@ ssize_t knet_read(knetFile *fp, void *buf, size_t len)
 			khttp_connect_file(fp);
 	}
 	if (fp->type == KNF_TYPE_LOCAL) { // on Windows, the following block is necessary; not on UNIX
-		size_t rest = len, curr;
+		size_t rest = len;
+		ssize_t curr;
 		while (rest) {
 			do {
 				curr = read(fp->fd, buf + l, rest);
