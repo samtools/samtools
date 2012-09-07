@@ -101,7 +101,7 @@ extern "C" {
 	 * @param length size of data to read
 	 * @return       number of bytes actually read; 0 on end-of-file and -1 on error
 	 */
-	ssize_t bgzf_read(BGZF *fp, void *data, ssize_t length);
+	ssize_t bgzf_read(BGZF *fp, void *data, size_t length);
 
 	/**
 	 * Write _length_ bytes from _data_ to the file.
@@ -111,7 +111,7 @@ extern "C" {
 	 * @param length size of data to write
 	 * @return       number of bytes actually written; -1 on error
 	 */
-	ssize_t bgzf_write(BGZF *fp, const void *data, ssize_t length);
+	ssize_t bgzf_write(BGZF *fp, const void *data, size_t length);
 
 	/**
 	 * Write the data in the buffer to the file.

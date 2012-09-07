@@ -21,7 +21,7 @@ void bam_init_header_hash(bam_header_t *header);
 void bam_destroy_header_hash(bam_header_t *header);
 int32_t bam_get_tid(const bam_header_t *header, const char *seq_name);
 
-unsigned char bam_nt16_table[256] = {
+const unsigned char bam_nt16_table[256] = {
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15,
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15,
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15,
@@ -40,7 +40,7 @@ unsigned char bam_nt16_table[256] = {
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15
 };
 
-unsigned short bam_char2flag_table[256] = {
+static const unsigned short bam_char2flag_table[256] = {
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
@@ -59,7 +59,7 @@ unsigned short bam_char2flag_table[256] = {
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0
 };
 
-char *bam_nt16_rev_table = "=ACMGRSVTWYHKDBN";
+const char *bam_nt16_rev_table = "=ACMGRSVTWYHKDBN";
 
 struct __tamFile_t {
 	gzFile fp;

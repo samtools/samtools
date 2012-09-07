@@ -63,6 +63,7 @@ typedef struct {
 	// derived info: fmt, len (<-bcf1_t::fmt)
 } bcf_ginfo_t;
 
+/* BCF record structure */
 typedef struct {
 	int32_t tid, pos; // refID and 0-based position
 	int32_t l_str, m_str; // length and the allocated size of ->str

@@ -59,13 +59,13 @@ extern "C" {
 	  If ->is_ready==0, this routine updates ->fd; otherwise, it simply
 	  reads from ->fd.
 	 */
-	off_t knet_read(knetFile *fp, void *buf, off_t len);
+	ssize_t knet_read(knetFile *fp, void *buf, size_t len);
 
 	/*
 	  This routine only sets ->offset and ->is_ready=0. It does not
 	  communicate with the FTP server.
 	 */
-	off_t knet_seek(knetFile *fp, int64_t off, int whence);
+	off_t knet_seek(knetFile *fp, off_t off, int whence);
 	int knet_close(knetFile *fp);
 
 #ifdef __cplusplus

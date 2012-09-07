@@ -66,18 +66,23 @@ void bcf_hdr_destroy(bcf_hdr_t *h)
 	free(h);
 }
 
-static inline char **cnt_null(int l, char *str, int *_n)
+/*
+ * Takes in a NULL delimited list of strings and returns the number of values in list and an array of pointers to each string in the list
+ */
+static inline char **count_null(int len, char *str, int *_n)
 {
 	int n = 0;
 	char *p, **list;
 	*_n = 0;
-	if (l == 0 || str == 0) return 0;
-	for (p = str; p != str + l; ++p)
+	if (len == 0 || str == 0) return 0;
+	// Walk through the string and count number of NULL separators between strings in list and put in _n for return
+	for (p = str; p != str + len; ++p)
 		if (*p == 0) ++n;
 	*_n = n;
-	list = calloc(n, sizeof(void*));
+	// Now create a list of pointers to each individual string in our list
+	list = calloc(n, sizeof(char*));
 	list[0] = str;
-	for (p = str, n = 1; p < str + l - 1; ++p)
+	for (p = str, n = 1; p < str + len - 1; ++p)
 		if (*p == 0) list[n++] = p + 1;
 	return list;
 }
@@ -87,9 +92,9 @@ int bcf_hdr_sync(bcf_hdr_t *b)
 	if (b == 0) return -1;
 	if (b->ns) free(b->ns);
 	if (b->sns) free(b->sns);
-	if (b->l_nm) b->ns = cnt_null(b->l_nm, b->name, &b->n_ref);
+	if (b->l_nm) b->ns = count_null(b->l_nm, b->name, &b->n_ref);
 	else b->ns = 0, b->n_ref = 0;
-	b->sns = cnt_null(b->l_smpl, b->sname, &b->n_smpl);
+	b->sns = count_null(b->l_smpl, b->sname, &b->n_smpl);
 	return 0;
 }
 
@@ -230,31 +235,32 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 	}
 	x = b->n_alleles * (b->n_alleles + 1) / 2;
 	if (b->n_gi == 0) return;
-    int iPL = -1;
-    if ( b->n_alleles > 2 ) {
-        for (i=0; i<b->n_gi; i++) {
-            if ( b->gi[i].fmt == bcf_str2int("PL", 2) ) {
-                iPL = i;
-                break;
-            }
-        }
-    }
+	int iPL = -1;
+	if ( b->n_alleles > 2 ) {
+		for (i=0; i<b->n_gi; i++) {
+			if ( b->gi[i].fmt == bcf_str2int("PL", 2) ) {
+				iPL = i;
+				break;
+			}
+		}
+	}
 	for (j = 0; j < h->n_smpl; ++j) {
 
-        // Determine GT with maximum PL (multiple ALT sites only)
-        int imax=-1;
-        if ( iPL!=-1 ) {
-            uint8_t *d = (uint8_t*)b->gi[iPL].data + j * x;
-            int k,identical=1;
-            imax=0;
-            for (k=1; k<x; k++)
-            {
-                if ( identical && d[k]!=d[k-1] ) identical = 0;
-                if ( d[k]<d[imax] ) imax = k;
-            }
-            // If all lks are identical, leave GT untouched
-            if ( identical ) imax = -1;
-        }
+		// Determine GT with maximum PL (multiple ALT sites only)
+		int imax=-1;
+		if ( iPL!=-1 ) {
+			uint8_t *d = (uint8_t*)b->gi[iPL].data + j * x;
+			int k;
+			int identical = 1;
+			imax=0;
+			for (k=1; k<x; k++)
+			{
+				if ( identical && d[k]!=d[k-1] ) identical = 0;
+				if ( d[k]<d[imax] ) imax = k;
+			}
+			// If all lks are identical, leave GT untouched
+			if ( identical ) imax = -1;
+		}
 		kputc('\t', s);
 		for (i = 0; i < b->n_gi; ++i) {
 			if (i) kputc(':', s);
@@ -272,30 +278,30 @@ void bcf_fmt_core(const bcf_hdr_t *h, bcf1_t *b, kstring_t *s)
 			} else if (b->gi[i].fmt == bcf_str2int("SP", 2)) {
 				kputw(((int32_t*)b->gi[i].data)[j], s);
 			} else if (b->gi[i].fmt == bcf_str2int("GT", 2)) {
-                int y = ((uint8_t*)b->gi[i].data)[j];
-                if ( y>>7&1 )
-                    kputsn("./.", 3, s);
-                else if ( imax==-1 )
-                {
-                    kputc('0' + (y>>3&7), s);
-                    kputc("/|"[y>>6&1], s);
-                    kputc('0' + (y&7), s);
-                }
-                else
-                {
-                    // Arguably, the while loop will be faster than two sqrts
-                    int n = 0;
-                    int row = 1;
-                    while ( n<imax )
-                    {
-                        row++;
-                        n += row;
-                    }
-                    row--;
-                    kputw(imax-n+row, s);
-                    kputc("/|"[y>>6&1], s);
-                    kputw(row, s);
-                }
+				int y = ((uint8_t*)b->gi[i].data)[j];
+				if ( y>>7&1 )
+					kputsn("./.", 3, s);
+				else if ( imax==-1 )
+				{
+					kputc('0' + (y>>3&7), s);
+					kputc("/|"[y>>6&1], s);
+					kputc('0' + (y&7), s);
+				}
+				else
+				{
+					// Arguably, the while loop will be faster than two sqrts
+					int n = 0;
+					int row = 1;
+					while ( n<imax )
+					{
+						row++;
+						n += row;
+					}
+					row--;
+					kputw(imax-n+row, s);
+					kputc("/|"[y>>6&1], s);
+					kputw(row, s);
+				}
 			} else if (b->gi[i].fmt == bcf_str2int("GL", 2)) {
 				float *d = (float*)b->gi[i].data + j * x;
 				int k;

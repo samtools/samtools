@@ -11,8 +11,8 @@ KHASH_SET_INIT_STR(rg)
 #include "ksort.h"
 KSORT_INIT_GENERIC(uint32_t)
 
-#define MINUS_CONST 0x10000000
-#define INDEL_WINDOW_SIZE 50
+static const uint32_t MINUS_CONST = 0x10000000;
+static const int INDEL_WINDOW_SIZE = 50;
 
 void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
 {

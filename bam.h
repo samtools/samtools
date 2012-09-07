@@ -292,12 +292,12 @@ extern int bam_verbose;
 extern int bam_no_B;
 
 /*! @abstract Table for converting a nucleotide character to the 4-bit encoding. */
-extern unsigned char bam_nt16_table[256];
+extern const unsigned char bam_nt16_table[256];
 
 /*! @abstract Table for converting a 4-bit encoded nucleotide to a letter. */
-extern char *bam_nt16_rev_table;
+extern const char *bam_nt16_rev_table;
 
-extern char bam_nt16_nt4_table[];
+extern const char bam_nt16_nt4_table[];
 
 #ifdef __cplusplus
 extern "C" {

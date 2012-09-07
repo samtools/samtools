@@ -218,7 +218,7 @@ static char **read_samples(const char *fn, int *_n)
 		sam[n][l+1] = 2; // by default, diploid
 		if (dret != '\n') {
 			if (ks_getuntil(ks, 0, &s, &dret) >= 0) { // read ploidy, 1 or 2
-				int x = (int)s.s[0] - '0';
+				int x = (int)s.s[0] - '0'; // Convert ASCII digit to decimal
 				if (x == 1 || x == 2) sam[n][l+1] = x;
 				else fprintf(stderr, "(%s) ploidy can only be 1 or 2; assume diploid\n", __func__);
 			}

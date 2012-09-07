@@ -55,7 +55,7 @@ static errmod_coef_t *cal_coef(double depcorr, double eta)
 	return ec;
 }
 
-errmod_t *errmod_init(float depcorr)
+errmod_t *errmod_init(double depcorr)
 {
 	errmod_t *em;
 	em = (errmod_t*)calloc(1, sizeof(errmod_t));

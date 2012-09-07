@@ -13,7 +13,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define MC_EM_EPS 1e-5
 #define MC_DEF_INDEL 0.15
 
-unsigned char seq_nt4_table[256] = {
+static const unsigned char seq_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4 /*'-'*/, 4, 4,
@@ -33,10 +33,14 @@ unsigned char seq_nt4_table[256] = {
 };
 
 struct __bcf_p1aux_t {
-	int n, M, n1, is_indel;
+	int n; // Number of samples
+	int M; // Sum of ploidy across all samples (n*2 if all samples are diploid)
+	int n1;
+	int is_indel;
 	uint8_t *ploidy; // haploid or diploid ONLY
 	double *q2p, *pdg; // pdg -> P(D|g)
-	double *phi, *phi_indel;
+	double *phi;
+	double *phi_indel;
 	double *z, *zswap; // aux for afs
 	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
 	double **hg; // hypergeometric distribution
@@ -127,18 +131,20 @@ int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn)
 	return 0;
 }
 
-bcf_p1aux_t *bcf_p1_init(int n, uint8_t *ploidy)
+/* Initialise a bcf_p1aux_t */
+bcf_p1aux_t *bcf_p1_init(const int n_smpl, uint8_t *ploidy)
 {
 	bcf_p1aux_t *ma;
 	int i;
 	ma = calloc(1, sizeof(bcf_p1aux_t));
 	ma->n1 = -1;
-	ma->n = n; ma->M = 2 * n;
+	ma->n = n_smpl;
+	ma->M = 2 * n_smpl;
 	if (ploidy) {
-		ma->ploidy = malloc(n);
-		memcpy(ma->ploidy, ploidy, n);
-		for (i = 0, ma->M = 0; i < n; ++i) ma->M += ploidy[i];
-		if (ma->M == 2 * n) {
+		ma->ploidy = malloc(n_smpl);
+		memcpy(ma->ploidy, ploidy, n_smpl);
+		for (i = 0, ma->M = 0; i < n_smpl; ++i) ma->M += ploidy[i];
+		if (ma->M == 2 * n_smpl) {
 			free(ma->ploidy);
 			ma->ploidy = 0;
 		}
@@ -191,21 +197,27 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 	}
 }
 
+/* Calculate P(D|g) */
 static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 {
 	int i, j;
-    int n = (b->n_alleles+1)*b->n_alleles/2;
-    double *lk = alloca(n * sizeof(long));
-    memset(lk, 0, sizeof(double) * n);
+    int n_genotypes = (b->n_alleles+1)*b->n_alleles/2; // Number of Genotypes represented by Phread likelihoods PL
+    double *lk = alloca(n_genotypes * sizeof(long));
+    memset(lk, 0, sizeof(double) * n_genotypes);
+	
+	// Set P(D|g) for each sample and sum phread likelihoods across all samples to create lk
 	for (j = 0; j < ma->n; ++j) {
+		// Fetch the PL array for the sample
 		const uint8_t *pi = ma->PL + j * ma->PL_len;
+		// Fetch the P(D|g) array for the sample
 		double *pdg = ma->pdg + j * 3;
 		pdg[0] = ma->q2p[pi[2]]; pdg[1] = ma->q2p[pi[1]]; pdg[2] = ma->q2p[pi[0]];
-        for (i=0; i<n; i++) lk[i] += pi[i];
+        for (i=0; i<n_genotypes; i++) lk[i] += pi[i];
     }
 
+	// Normalise lk and convert from phread scaled number to real number
     double norm=lk[0]; 
-    for (i=1; i<n; i++) if (lk[i]<norm) norm=lk[i];
+    for (i=1; i<n_genotypes; i++) if (lk[i]<norm) norm=lk[i];
     #if DBG
     for (i=0,j=0; i<b->n_alleles; i++)
     {
@@ -213,7 +225,7 @@ static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
         printf("\n");
     }
     #endif
-    for (i=0; i<n; i++) lk[i] = pow(10,-0.1*(lk[i]-norm));
+    for (i=0; i<n_genotypes; i++) lk[i] = pow(10,-0.1*(lk[i]-norm));
 
     // Find out the most likely alleles. In contrast to the original version,
     //  ALT alleles may not be printed when they are more likely than REF but
@@ -221,8 +233,8 @@ static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
     //  is the LK ratio now. To obtain behaviour similar to the original one,
     //  use the pref variant below.
     double pmax=0; //,pref=0;
-    n = ma->is_indel ? b->n_alleles : b->n_alleles-1;
-    for (i=0; i<n; i++)
+    int n_alleles = ma->is_indel ? b->n_alleles : b->n_alleles-1;
+    for (i=0; i<n_alleles; i++)
     {
         double pr=0;
         int k=i*(i+1)/2;
