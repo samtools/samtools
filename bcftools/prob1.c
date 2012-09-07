@@ -13,33 +13,14 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define MC_EM_EPS 1e-5
 #define MC_DEF_INDEL 0.15
 
-static const unsigned char seq_nt4_table[256] = {
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4 /*'-'*/, 4, 4,
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4
-};
-
 struct __bcf_p1aux_t {
 	int n; // Number of samples
-	int M; // Sum of ploidy across all samples (n*2 if all samples are diploid)
+	int M; // Total number of chromosomes across all samples (n*2 if all samples are diploid)
 	int n1;
 	int is_indel;
 	uint8_t *ploidy; // haploid or diploid ONLY
-	double *q2p, *pdg; // pdg -> P(D|g)
-	double *phi;
+	double *q2p, *pdg; // q2p maps from phread scaled to real likelihood, pdg -> P(D|g)
+	double *phi; // Probability of seeing k reference alleles
 	double *phi_indel;
 	double *z, *zswap; // aux for afs
 	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
@@ -275,8 +256,8 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 	return q<<2|max_i;
 }
 
-#define TINY 1e-20
-
+// If likelihoods fall below this they get squashed to 0
+static const double TINY = 1e-20;
 static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 {
 	double *z[2], *tmp, *pdg;
@@ -296,6 +277,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 			int k, j = _j - beg, _min = last_min, _max = last_max, M0;
 			double p[3], sum;
 			M0 = M; M += 2;
+			// Fetch P(D|g) for this sample
 			pdg = ma->pdg + _j * 3;
 			p[0] = pdg[0]; p[1] = 2. * pdg[1]; p[2] = pdg[2];
 			for (; _min < _max && z[0][_min] < TINY; ++_min) z[0][_min] = z[1][_min] = 0.;
@@ -310,6 +292,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 			for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 			if (_min >= 1) z[1][_min-1] = 0.;
 			if (_min >= 2) z[1][_min-2] = 0.;
+			// If we are not on the last sample
 			if (j < ma->n - 1) z[1][_max+1] = z[1][_max+2] = 0.;
 			if (_j == ma->n1 - 1) { // set pop1; ma->n1==-1 when unset
 				ma->t1 = ma->t;
@@ -325,6 +308,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 		for (j = 0; j < ma->n; ++j) {
 			int k, M0, _min = last_min, _max = last_max;
 			double p[3], sum;
+			// Fetch P(D|g) for this sample
 			pdg = ma->pdg + j * 3;
 			for (; _min < _max && z[0][_min] < TINY; ++_min) z[0][_min] = z[1][_min] = 0.;
 			for (; _max > _min && z[0][_max] < TINY; --_max) z[0][_max] = z[1][_max] = 0.;
@@ -340,6 +324,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 				ma->t += log(sum / M);
 				for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 				if (_min >= 1) z[1][_min-1] = 0.;
+				// If we are not on the last sample
 				if (j < ma->n - 1) z[1][_max+1] = 0.;
 			} else if (ma->ploidy[j] == 2) {
 				p[0] = pdg[0]; p[1] = 2 * pdg[1]; p[2] = pdg[2];
@@ -353,6 +338,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 				for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 				if (_min >= 1) z[1][_min-1] = 0.;
 				if (_min >= 2) z[1][_min-2] = 0.;
+				// If we are not on the last sample
 				if (j < ma->n - 1) z[1][_max+1] = z[1][_max+2] = 0.;
 			}
 			tmp = z[0]; z[0] = z[1]; z[1] = tmp;
@@ -491,6 +477,7 @@ static double mc_cal_afs(bcf_p1aux_t *ma, double *p_ref_folded, double *p_var_fo
 	memset(ma->afs1, 0, sizeof(double) * (ma->M + 1));
 	mc_cal_y(ma);
 	// compute AFS
+	// MP15: is this using equation 20 from doi:10.1093/bioinformatics/btr509?
 	for (k = 0, sum = 0.; k <= ma->M; ++k)
 		sum += (long double)phi[k] * ma->z[k];
 	for (k = 0; k <= ma->M; ++k) {
