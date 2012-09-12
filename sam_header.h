@@ -10,6 +10,13 @@ extern "C" {
 	void sam_header_free(void *header);
 	char *sam_header_write(const void *headerDict);   // returns a newly allocated string
 
+    /*
+        // Usage example 
+        const char *key, *val; 
+        void *iter = sam_header_parse2(bam->header->text);
+        while ( iter = sam_header_key_val(iter, "RG","ID","SM" &key,&val) ) printf("%s\t%s\n", key,val);
+    */
+    void *sam_header2key_val(void *iter, const char type[2], const char key_tag[2], const char value_tag[2], const char **key, const char **value);
 	char **sam_header2list(const void *_dict, char type[2], char key_tag[2], int *_n);
 
 	void *sam_header2tbl(const void *dict, char type[2], char key_tag[2], char value_tag[2]);

@@ -26,6 +26,7 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 	bca->e = errmod_init(1. - theta);
 	bca->min_frac = 0.002;
 	bca->min_support = 1;
+    bca->per_sample_flt = 0;
 	return bca;
 }
 
@@ -54,7 +55,6 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
 	}
 	// fill the bases array
-	memset(r, 0, sizeof(bcf_callret1_t));
 	for (i = n = r->n_supp = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
 		int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
@@ -87,9 +87,9 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		if (min_dist > p->qpos) min_dist = p->qpos;
 		if (min_dist > CAP_DIST) min_dist = CAP_DIST;
 		r->anno[1<<2|is_diff<<1|0] += baseQ;
-		r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;
+		r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;	// FIXME: signed int is not enough for thousands of samples
 		r->anno[2<<2|is_diff<<1|0] += mapQ;
-		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;
+		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;		// FIXME: signed int is not enough for thousands of samples
 		r->anno[3<<2|is_diff<<1|0] += min_dist;
 		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
 	}
@@ -195,6 +195,8 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	for (i = 0; i < n; ++i)
 		for (j = 0; j < 4; ++j)
 			qsum[j] += calls[i].qsum[j];
+    int qsum_tot=0;
+    for (j=0; j<4; j++) { qsum_tot += qsum[j]; call->qsum[j] = 0; }
 	for (j = 0; j < 4; ++j) qsum[j] = qsum[j] << 2 | j;
 	// find the top 2 alleles
 	for (i = 1; i < 4; ++i) // insertion sort
@@ -206,9 +208,15 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/,
 	call->a[0] = ref4;
 	for (i = 3, j = 1; i >= 0; --i) {
 		if ((qsum[i]&3) != ref4) {
-			if (qsum[i]>>2 != 0) call->a[j++] = qsum[i]&3;
+			if (qsum[i]>>2 != 0) 
+            {
+                if ( j<4 ) call->qsum[j] = (float)(qsum[i]>>2)/qsum_tot; // ref N can make j>=4
+                call->a[j++]  = qsum[i]&3;
+            }
 			else break;
 		}
+        else 
+            call->qsum[0] = (float)(qsum[i]>>2)/qsum_tot;
 	}
 	if (ref_base >= 0) { // for SNPs, find the "unseen" base
 		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
@@ -305,12 +313,13 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	}
 	kputc('\0', &s);
 	// INFO
-	if (bc->ori_ref < 0) kputs("INDEL;", &s);
+	if (bc->ori_ref < 0) ksprintf(&s,"INDEL;IS=%d,%f;", bca->max_support, bca->max_frac);
 	kputs("DP=", &s); kputw(bc->ori_depth, &s); kputs(";I16=", &s);
 	for (i = 0; i < 16; ++i) {
 		if (i) kputc(',', &s);
 		kputw(bc->anno[i], &s);
 	}
+    ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
     if (bc->vdb != 1)
         ksprintf(&s, ";VDB=%.4f", bc->vdb);
 	kputc('\0', &s);

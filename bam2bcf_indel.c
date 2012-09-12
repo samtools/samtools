@@ -142,37 +142,48 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	if (s == n) return -1; // there is no indel at this position.
 	for (s = N = 0; s < n; ++s) N += n_plp[s]; // N is the total number of reads
 	{ // find out how many types of indels are present
-		int m, n_alt = 0, n_tot = 0;
+        bca->max_support = bca->max_frac = 0;
+		int m, n_alt = 0, n_tot = 0, indel_support_ok = 0;
 		uint32_t *aux;
 		aux = calloc(N + 1, 4);
 		m = max_rd_len = 0;
 		aux[m++] = MINUS_CONST; // zero indel is always a type
 		for (s = 0; s < n; ++s) {
+            int na = 0, nt = 0; 
 			for (i = 0; i < n_plp[s]; ++i) {
 				const bam_pileup1_t *p = plp[s] + i;
 				if (rghash == 0 || p->aux == 0) {
-					++n_tot;
+					++nt;
 					if (p->indel != 0) {
-						++n_alt;
+						++na;
 						aux[m++] = MINUS_CONST + p->indel;
 					}
 				}
 				j = bam_cigar2qlen(&p->b->core, bam1_cigar(p->b));
 				if (j > max_rd_len) max_rd_len = j;
 			}
+            float frac = (float)na/nt;
+            if ( !indel_support_ok && na >= bca->min_support && frac >= bca->min_frac )
+                indel_support_ok = 1;
+            if ( na > bca->max_support && frac > 0 ) bca->max_support = na, bca->max_frac = frac;
+            n_alt += na; 
+            n_tot += nt;
 		}
         // To prevent long stretches of N's to be mistaken for indels (sometimes thousands of bases),
         //  check the number of N's in the sequence and skip places where half or more reference bases are Ns.
         int nN=0; for (i=pos; i-pos<max_rd_len && ref[i]; i++) if ( ref[i]=='N' ) nN++;
-        if ( nN*2>i ) return -1;
+        if ( nN*2>i ) { free(aux); return -1; }
 
 		ks_introsort(uint32_t, m, aux);
 		// squeeze out identical types
 		for (i = 1, n_types = 1; i < m; ++i)
 			if (aux[i] != aux[i-1]) ++n_types;
-		if (n_types == 1 || (double)n_alt / n_tot < bca->min_frac || n_alt < bca->min_support) { // then skip
-			free(aux); return -1;
-		}
+        // Taking totals makes it hard to call rare indels
+        if ( !bca->per_sample_flt )
+            indel_support_ok = ( (float)n_alt / n_tot < bca->min_frac || n_alt < bca->min_support ) ? 0 : 1;
+        if ( n_types == 1 || !indel_support_ok ) { // then skip
+            free(aux); return -1;
+        }
 		if (n_types >= 64) {
 			free(aux);
 			if (bam_verbose >= 2) 

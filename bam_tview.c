@@ -25,6 +25,9 @@
 #include "faidx.h"
 #include "bam2bcf.h"
 #include "sam_header.h"
+#include "khash.h"
+
+KHASH_MAP_INIT_STR(kh_rg, const char *)
 
 char bam_aux_getCEi(bam1_t *b, int i);
 char bam_aux_getCSi(bam1_t *b, int i);
@@ -57,8 +60,7 @@ typedef struct {
 
 	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip, show_name;
 	char *ref;
-    char *sample;   //TODO: multiple samples and read groups
-    void *rg2sm;
+    khash_t(kh_rg) *rg_hash;
 } tview_t;
 
 int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
@@ -216,9 +218,28 @@ tview_t *tv_init(const char *fn, const char *fn_fa, char *samples)
 
     if ( samples ) 
     {
-        tv->sample = samples;
-        tv->header->dict = sam_header_parse2(tv->header->text);
-        tv->rg2sm = sam_header2tbl(tv->header->dict, "RG", "ID", "SM");
+        if ( !tv->header->dict ) tv->header->dict = sam_header_parse2(tv->header->text);
+        void *iter = tv->header->dict;
+        const char *key, *val;
+        int n = 0;
+        tv->rg_hash = kh_init(kh_rg);
+        while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val)) )
+        {
+            if ( !strcmp(samples,key) || (val && !strcmp(samples,val)) )
+            {
+                khiter_t k = kh_get(kh_rg, tv->rg_hash, key);
+                if ( k != kh_end(tv->rg_hash) ) continue;
+                int ret;
+                k = kh_put(kh_rg, tv->rg_hash, key, &ret);
+                kh_value(tv->rg_hash, k) = val;
+                n++;
+            }
+        }
+        if ( !n )
+        {
+            fprintf(stderr,"The sample or read group \"%s\" not present.\n", samples);
+            exit(-1);
+        }
     }
 
 	initscr();
@@ -262,13 +283,12 @@ void tv_destroy(tview_t *tv)
 int tv_fetch_func(const bam1_t *b, void *data)
 {
 	tview_t *tv = (tview_t*)data;
-    if ( tv->sample )
+    if ( tv->rg_hash )
     {
         const uint8_t *rg = bam_aux_get(b, "RG");
         if ( !rg ) return 0; 
-        const char *sm = sam_tbl_get(tv->rg2sm, (const char*)(rg + 1));
-        if ( !sm ) return 0;
-        if ( strcmp(sm,tv->sample) ) return 0;
+        khiter_t k = kh_get(kh_rg, tv->rg_hash, (const char*)(rg + 1));
+        if ( k == kh_end(tv->rg_hash) ) return 0;
     }
 	if (tv->no_skip) {
 		uint32_t *cigar = bam1_cigar(b); // this is cheating...
@@ -442,7 +462,7 @@ void error(const char *format, ...)
         fprintf(stderr, "Usage: bamtk tview [options] <aln.bam> [ref.fasta]\n");
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "   -p chr:pos      go directly to this position\n");
-        fprintf(stderr, "   -s STR          display only reads from this sample\n");
+        fprintf(stderr, "   -s STR          display only reads from this sample or grou\n");
         fprintf(stderr, "\n\n");
     }
     else

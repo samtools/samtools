@@ -4,7 +4,9 @@
 #include <stdio.h>
 #include <errno.h>
 #include <assert.h>
+#include <limits.h>
 #include "prob1.h"
+#include "kstring.h"
 
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
@@ -174,6 +176,13 @@ int bcf_p1_set_n1(bcf_p1aux_t *b, int n1)
 	return 0;
 }
 
+void bcf_p1_set_ploidy(bcf1_t *b, bcf_p1aux_t *ma)
+{
+    // bcf_p1aux_t fields are not visible outside of prob1.c, hence this wrapper.
+    // Ideally, this should set ploidy per site to allow pseudo-autosomal regions
+    b->ploidy = ma->ploidy;
+}
+
 void bcf_p1_destroy(bcf_p1aux_t *ma)
 {
 	if (ma) {
@@ -191,53 +200,291 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 	}
 }
 
+extern double kf_gammap(double s, double z);
+int test16(bcf1_t *b, anno16_t *a);
+
+int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
+{
+    int nals = 1;
+    char *p;
+    for (p=b->alt; *p; p++)
+    {
+        if ( *p=='X' || p[0]=='.' ) break;
+        if ( p[0]==',' ) nals++;
+    }
+    if ( b->alt[0] && !*p ) nals++;
+
+    if ( nals==1 ) return 1;
+
+    if ( nals>4 )
+    {
+        if ( *b->ref=='N' ) return 0;
+        fprintf(stderr,"Not ready for this, more than 4 alleles at %d: %s, %s\n", b->pos+1, b->ref,b->alt); 
+        exit(1);
+    }
+
+    // find PL and DP FORMAT indexes
+    uint8_t *pl = NULL;
+    int npl = 0, idp=-1;
+    int i;
+    for (i = 0; i < b->n_gi; ++i) 
+    {
+        if (b->gi[i].fmt == bcf_str2int("PL", 2)) 
+        {
+            pl  = (uint8_t*)b->gi[i].data;
+            npl = b->gi[i].len;
+        }
+        if (b->gi[i].fmt == bcf_str2int("DP", 2))  idp=i;
+    }
+    if ( !pl ) return -1;
+
+    assert(ma->q2p[0] == 1);
+
+    // Init P(D|G)
+    int npdg = nals*(nals+1)/2;
+    double *pdg,*_pdg;
+    _pdg = pdg = malloc(sizeof(double)*ma->n*npdg);
+    for (i=0; i<ma->n; i++)
+    {
+        int j; 
+        double sum = 0;
+        for (j=0; j<npdg; j++)
+        {
+            //_pdg[j] = pow(10,-0.1*pl[j]); 
+            _pdg[j] = ma->q2p[pl[j]];
+            sum += _pdg[j];
+        }
+        if ( sum )
+            for (j=0; j<npdg; j++) _pdg[j] /= sum;
+        _pdg += npdg;
+        pl += npl;
+    }
+
+    if ((p = strstr(b->info, "QS=")) == 0) { fprintf(stderr,"INFO/QS is required with -m, exiting\n"); exit(1); }
+    double qsum[4];
+    if ( sscanf(p+3,"%lf,%lf,%lf,%lf",&qsum[0],&qsum[1],&qsum[2],&qsum[3])!=4 ) { fprintf(stderr,"Could not parse %s\n",p); exit(1); }
+
+
+    // Calculate the most likely combination of alleles
+    int ia,ib,ic, max_als=0, max_als2=0;
+    double ref_lk = 0, max_lk = INT_MIN, max_lk2 = INT_MIN, lk_sum = INT_MIN;
+    for (ia=0; ia<nals; ia++)
+    {
+        double lk_tot = 0;
+        int iaa = (ia+1)*(ia+2)/2-1;
+        int isample;
+        for (isample=0; isample<ma->n; isample++)
+        {
+            double *p = pdg + isample*npdg;
+            // assert( log(p[iaa]) <= 0 );
+            lk_tot += log(p[iaa]);
+        }
+        if ( ia==0 ) ref_lk = lk_tot;
+        if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia; }
+        else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia; }
+        lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
+    }
+    if ( nals>1 )
+    {
+        for (ia=0; ia<nals; ia++)
+        {
+            if ( qsum[ia]==0 ) continue;
+            int iaa = (ia+1)*(ia+2)/2-1;
+            for (ib=0; ib<ia; ib++)
+            {
+                if ( qsum[ib]==0 ) continue;
+                double lk_tot = 0;
+                double fa  = qsum[ia]/(qsum[ia]+qsum[ib]);
+                double fb  = qsum[ib]/(qsum[ia]+qsum[ib]);
+                double fab = 2*fa*fb; fa *= fa; fb *= fb;
+                int isample, ibb = (ib+1)*(ib+2)/2-1, iab = iaa - ia + ib;
+                for (isample=0; isample<ma->n; isample++)
+                {
+                    if ( b->ploidy && b->ploidy[isample]==1 ) continue;
+                    double *p = pdg + isample*npdg;
+                    //assert( log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]) <= 0 );
+                    lk_tot += log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]);
+                }
+                if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib; }
+                else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib; }
+                lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
+            }
+        }
+    }
+    if ( nals>2 )
+    {
+        for (ia=0; ia<nals; ia++)
+        {
+            if ( qsum[ia]==0 ) continue;
+            int iaa = (ia+1)*(ia+2)/2-1;
+            for (ib=0; ib<ia; ib++)
+            {
+                if ( qsum[ib]==0 ) continue;
+                int ibb = (ib+1)*(ib+2)/2-1; 
+                int iab = iaa - ia + ib;
+                for (ic=0; ic<ib; ic++)
+                {
+                    if ( qsum[ic]==0 ) continue;
+                    double lk_tot = 0;
+                    double fa  = qsum[ia]/(qsum[ia]+qsum[ib]+qsum[ic]);
+                    double fb  = qsum[ib]/(qsum[ia]+qsum[ib]+qsum[ic]);
+                    double fc  = qsum[ic]/(qsum[ia]+qsum[ib]+qsum[ic]);
+                    double fab = 2*fa*fb, fac = 2*fa*fc, fbc = 2*fb*fc; fa *= fa; fb *= fb; fc *= fc;
+                    int isample, icc = (ic+1)*(ic+2)/2-1;
+                    int iac = iaa - ia + ic, ibc = ibb - ib + ic;
+                    for (isample=0; isample<ma->n; isample++)
+                    {
+                        if ( b->ploidy && b->ploidy[isample]==1 ) continue;
+                        double *p = pdg + isample*npdg;
+                        //assert( log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]) <= 0 );
+                        lk_tot += log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]);
+                    }
+                    if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib|1<<ic; }
+                    else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib|1<<ic; }
+                    lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
+                }
+            }
+        }
+    }
+
+
+    // Should we add another allele, does it increase the likelihood significantly?
+    int n1=0, n2=0;
+    for (i=0; i<nals; i++) if ( max_als&1<<i) n1++;
+    for (i=0; i<nals; i++) if ( max_als2&1<<i) n2++;
+    if ( n2<n1 && kf_gammap(1,2.0*(max_lk-max_lk2))<threshold )
+    {
+        max_lk = max_lk2;
+        max_als = max_als2;
+    }
+
+    // Get the BCF record ready for GT and GQ
+    kstring_t s;
+    int old_n_gi = b->n_gi;
+    s.m = b->m_str; s.l = b->l_str - 1; s.s = b->str;
+    kputs(":GT:GQ", &s); kputc('\0', &s);
+    b->m_str = s.m; b->l_str = s.l; b->str = s.s;
+    bcf_sync(b);
+
+    // Call GTs
+    int isample, gts=0, ac[4] = {0,0,0,0};
+    for (isample = 0; isample < b->n_smpl; isample++) 
+    {
+        int ploidy = b->ploidy ? b->ploidy[isample] : 2;
+        double *p = pdg + isample*npdg;
+        int ia, als = 0;
+        double lk = 0, lk_sum=0;
+        for (ia=0; ia<nals; ia++)
+        {
+            if ( !(max_als&1<<ia) ) continue;
+            int iaa = (ia+1)*(ia+2)/2-1;
+            double _lk = p[iaa]*qsum[ia]*qsum[ia];
+            if ( _lk > lk ) { lk = _lk; als = ia<<3 | ia; }
+            lk_sum += _lk;
+        }
+        if ( ploidy==2 ) 
+        {
+            for (ia=0; ia<nals; ia++)
+            {
+                if ( !(max_als&1<<ia) ) continue;
+                int iaa = (ia+1)*(ia+2)/2-1;
+                for (ib=0; ib<ia; ib++)
+                {
+                    if ( !(max_als&1<<ib) ) continue;
+                    int iab = iaa - ia + ib;
+                    double _lk = 2*qsum[ia]*qsum[ib]*p[iab];
+                    if ( _lk > lk ) { lk = _lk; als = ib<<3 | ia; }
+                    lk_sum += _lk;
+                }
+            }
+        }
+        lk = -log(1-lk/lk_sum)/0.2302585;
+        if ( idp>=0 && ((uint16_t*)b->gi[idp].data)[isample]==0 ) 
+        {
+            ((uint8_t*)b->gi[old_n_gi].data)[isample]   = 1<<7;
+            ((uint8_t*)b->gi[old_n_gi+1].data)[isample] = 0;
+            continue;
+        }
+        ((uint8_t*)b->gi[old_n_gi].data)[isample]   = als;
+        ((uint8_t*)b->gi[old_n_gi+1].data)[isample] = lk<100 ? (int)lk : 99;
+
+        gts |= 1<<(als>>3&7) | 1<<(als&7);
+        ac[ als>>3&7 ]++;
+        ac[ als&7 ]++;
+    }
+    bcf_fit_alt(b,max_als);
+
+
+    // Prepare BCF for output: ref, alt, filter, info, format
+    memset(&s, 0, sizeof(kstring_t)); kputc('\0', &s); 
+    kputs(b->ref, &s); kputc('\0', &s);
+    kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
+    {
+        int an=0, nalts=0;
+        for (i=0; i<nals; i++)
+        {
+            an += ac[i];
+            if ( i>0 && ac[i] ) nalts++;
+        }
+        ksprintf(&s, "AN=%d;", an);
+        if ( nalts )
+        {
+            kputs("AC=", &s);
+            for (i=1; i<nals; i++)
+            {
+                if ( !(gts&1<<i) ) continue;
+                nalts--;
+                ksprintf(&s,"%d", ac[i]);
+                if ( nalts>0 ) kputc(',', &s);
+            }
+            kputc(';', &s);
+        }
+        kputs(b->info, &s); 
+        anno16_t a;
+        int has_I16 = test16(b, &a) >= 0? 1 : 0;
+        if (has_I16 )
+        {
+            if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+            ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+        }
+        kputc('\0', &s);
+        rm_info(&s, "I16=");
+        rm_info(&s, "QS=");
+    }
+    kputs(b->fmt, &s); kputc('\0', &s);
+    free(b->str);
+    b->m_str = s.m; b->l_str = s.l; b->str = s.s;
+    b->qual = gts>1 ? -4.343*(ref_lk - lk_sum) : -4.343*(max_lk - lk_sum);
+    if ( b->qual>999 ) b->qual = 999;
+    bcf_sync(b);
+
+
+    free(pdg);
+    return gts;
+}
+
 static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 {
-	int i, j;
-    int n = (b->n_alleles+1)*b->n_alleles/2;
-    double *lk = alloca(n * sizeof(long));
-    memset(lk, 0, sizeof(double) * n);
-	for (j = 0; j < ma->n; ++j) {
-		const uint8_t *pi = ma->PL + j * ma->PL_len;
-		double *pdg = ma->pdg + j * 3;
-		pdg[0] = ma->q2p[pi[2]]; pdg[1] = ma->q2p[pi[1]]; pdg[2] = ma->q2p[pi[0]];
-        for (i=0; i<n; i++) lk[i] += pi[i];
+    int i, j;
+    long *p, tmp;
+    p = alloca(b->n_alleles * sizeof(long));
+    memset(p, 0, sizeof(long) * b->n_alleles);
+    for (j = 0; j < ma->n; ++j) {
+        const uint8_t *pi = ma->PL + j * ma->PL_len;
+        double *pdg = ma->pdg + j * 3;
+        pdg[0] = ma->q2p[pi[2]]; pdg[1] = ma->q2p[pi[1]]; pdg[2] = ma->q2p[pi[0]];
+        for (i = 0; i < b->n_alleles; ++i)
+            p[i] += (int)pi[(i+1)*(i+2)/2-1];
     }
-
-    double norm=lk[0]; 
-    for (i=1; i<n; i++) if (lk[i]<norm) norm=lk[i];
-    #if DBG
-    for (i=0,j=0; i<b->n_alleles; i++)
-    {
-        int k; for (k=0; k<=i; k++) printf("%.0f\t", lk[j++]);
-        printf("\n");
-    }
-    #endif
-    for (i=0; i<n; i++) lk[i] = pow(10,-0.1*(lk[i]-norm));
-
-    // Find out the most likely alleles. In contrast to the original version,
-    //  ALT alleles may not be printed when they are more likely than REF but
-    //  significantly less likely than the most likely ALT. The only criterion
-    //  is the LK ratio now. To obtain behaviour similar to the original one,
-    //  use the pref variant below.
-    double pmax=0; //,pref=0;
-    n = ma->is_indel ? b->n_alleles : b->n_alleles-1;
-    for (i=0; i<n; i++)
-    {
-        double pr=0;
-        int k=i*(i+1)/2;
-        for (j=0; j<=i; j++) { pr+=lk[k]; k++; }
-        for (j=i+1; j<b->n_alleles; j++) { k=j*(j+1)/2+i; pr+=lk[k]; }
-        #if DBG
-        printf("%d\t%e\n", i,pr);
-        #endif
-        if (pmax<pr) pmax=pr;
-        // if (i==0) pref=pr;
-        // if (pr<pref && pr/pmax < 1e-4) break;
-        if (pr/pmax < 1e-4) break;   // Assuming the alleles are sorted by the lk
-    }
-	return i-1;
+    for (i = 0; i < b->n_alleles; ++i) p[i] = p[i]<<4 | i;
+    for (i = 1; i < b->n_alleles; ++i) // insertion sort
+        for (j = i; j > 0 && p[j] < p[j-1]; --j)
+            tmp = p[j], p[j] = p[j-1], p[j-1] = tmp;
+    for (i = b->n_alleles - 1; i >= 0; --i)
+        if ((p[i]&0xf) == 0) break;
+    return i;
 }
+
 
 int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 {

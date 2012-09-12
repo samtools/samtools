@@ -40,18 +40,13 @@ typedef struct {
 	uint32_t *trio_aux;
 	char *prior_file, **subsam, *fn_dict;
 	uint8_t *ploidy;
-	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt;
+	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt, min_ma_lrt;
 	void *bed;
 } viewconf_t;
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
-
-typedef struct {
-	double p[4];
-	int mq, depth, is_tested, d[4];
-} anno16_t;
 
 static double ttest(int n1, int n2, int a[4])
 {
@@ -83,7 +78,7 @@ static int test16_core(int anno[16], anno16_t *a)
 	return 0;
 }
 
-static int test16(bcf1_t *b, anno16_t *a)
+int test16(bcf1_t *b, anno16_t *a)
 {
 	char *p;
 	int i, anno[16];
@@ -100,17 +95,6 @@ static int test16(bcf1_t *b, anno16_t *a)
 	return test16_core(anno, a);
 }
 
-static void rm_info(bcf1_t *b, const char *key)
-{
-	char *p, *q;
-	if ((p = strstr(b->info, key)) == 0) return;
-	for (q = p; *q && *q != ';'; ++q);
-	if (p > b->info && *(p-1) == ';') --p;
-	memmove(p, q, b->l_str - (q - b->str));
-	b->l_str -= q - p;
-	bcf_sync(b);
-}
-
 static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, double pref, int flag, double em[10], int cons_llr, int64_t cons_gt)
 {
 	kstring_t s;
@@ -119,7 +103,7 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	anno16_t a;
 
 	has_I16 = test16(b, &a) >= 0? 1 : 0;
-	rm_info(b, "I16="); // FIXME: probably this function has a bug. If I move it below, I16 will not be removed!
+	//rm_info(b, "I16="); // FIXME: probably this function has a bug. If I move it below, I16 will not be removed!
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
@@ -170,6 +154,8 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	}
 	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
 	kputc('\0', &s);
+    rm_info(&s, "QS=");
+    rm_info(&s, "I16=");
 	kputs(b->fmt, &s); kputc('\0', &s);
 	free(b->str);
 	b->m_str = s.m; b->l_str = s.l; b->str = s.s;
@@ -250,6 +236,12 @@ static void write_header(bcf_hdr_t *h)
 		kputs("##INFO=<ID=AF1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the first ALT allele frequency (assuming HWE)\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AC1,"))
 		kputs("##INFO=<ID=AC1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the first ALT allele count (no HWE assumption)\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=AN,"))
+		kputs("##INFO=<ID=AN,Number=1,Type=Integer,Description=\"Total number of alleles in called genotypes\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=IS,"))
+		kputs("##INFO=<ID=IS,Number=2,Type=Float,Description=\"Maximum number of reads supporting an indel and fraction of indel reads\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=AC,"))
+		kputs("##INFO=<ID=AC,Number=A,Type=Integer,Description=\"Allele count in genotypes for each ALT allele, in the same order as listed\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=G3,"))
 		kputs("##INFO=<ID=G3,Number=3,Type=Float,Description=\"ML estimate of genotype frequencies\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=HWE,"))
@@ -319,9 +311,9 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
-	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1;
+	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1; vc.min_ma_lrt = -1;
 	memset(qcnt, 0, 8 * 256);
-	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Yw")) >= 0) {
+	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Ywm:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -341,6 +333,7 @@ int bcfview(int argc, char *argv[])
 		case 'w': vc.flag |= VC_INDEL_ONLY; break;
 		case 'M': vc.flag |= VC_ANNO_MAX; break;
 		case 'Y': vc.flag |= VC_QCNT; break;
+        case 'm': vc.min_ma_lrt = atof(optarg); break;
 		case 't': vc.theta = atof(optarg); break;
 		case 'p': vc.pref = atof(optarg); break;
 		case 'i': vc.indel_frac = atof(optarg); break;
@@ -396,6 +389,7 @@ int bcfview(int argc, char *argv[])
 		fprintf(stderr, "       -g        call genotypes at variant sites (force -c)\n");
 		fprintf(stderr, "       -i FLOAT  indel-to-substitution ratio [%.4g]\n", vc.indel_frac);
 		fprintf(stderr, "       -I        skip indels\n");
+		fprintf(stderr, "       -m FLOAT  alternative model for multiallelic and rare-variant calling, include if P(chi^2)>=FLOAT\n");
 		fprintf(stderr, "       -p FLOAT  variant if P(ref|D)<FLOAT [%.3g]\n", vc.pref);
 		fprintf(stderr, "       -P STR    type of prior: full, cond2, flat [full]\n");
 		fprintf(stderr, "       -t FLOAT  scaled substitution mutation rate [%.4g]\n", vc.theta);
@@ -520,7 +514,13 @@ int bcfview(int argc, char *argv[])
 			int i;
 			for (i = 0; i < 9; ++i) em[i] = -1.;
 		}
-		if (vc.flag & VC_CALL) { // call variants
+        if ( !(vc.flag&VC_KEEPALT) && vc.flag&VC_CALL && vc.min_ma_lrt>=0 )
+        {
+            bcf_p1_set_ploidy(b, p1); // could be improved: do this per site to allow pseudo-autosomal regions
+            int gts = call_multiallelic_gt(b,p1,vc.min_ma_lrt);
+            if ( gts<=1 && vc.flag & VC_VARONLY ) continue;
+        }
+		else if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
 			int calret = bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
 			if (n_processed % 100000 == 0) {

@@ -293,7 +293,7 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
 
         if ( cig==1 )
         {
-            int idx = is_fwd ? icycle : read_len-icycle;
+            int idx = is_fwd ? icycle : read_len-icycle-ncig;
             if ( idx<0 ) 
                 error("FIXME: read_len=%d vs icycle=%d\n", read_len,icycle);
             if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d, %s:%d %s\n", idx,stats->nbases, stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam1_qname(bam_line));
@@ -1043,6 +1043,8 @@ void output_stats(stats_t *stats)
     printf("# Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions (fwd), .. (rev) , number of deletions (fwd), .. (rev)\n");
     for (ilen=0; ilen<=stats->nbases; ilen++)
     {
+        // For deletions we print the index of the cycle before the deleted base (1-based) and for insertions
+        //  the index of the cycle of the first inserted base (also 1-based)
         if ( stats->ins_cycles_1st[ilen]>0 || stats->ins_cycles_2nd[ilen]>0 || stats->del_cycles_1st[ilen]>0 || stats->del_cycles_2nd[ilen]>0 )
             printf("IC\t%d\t%ld\t%ld\t%ld\t%ld\n", ilen+1, (long)stats->ins_cycles_1st[ilen], (long)stats->ins_cycles_2nd[ilen], (long)stats->del_cycles_1st[ilen], (long)stats->del_cycles_2nd[ilen]);
     }

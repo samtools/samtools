@@ -14,6 +14,11 @@ typedef struct {
 	double cmp[3], p_chi2, lrt; // used by contrast2()
 } bcf_p1rst_t;
 
+typedef struct {
+    double p[4];
+    int mq, depth, is_tested, d[4];
+} anno16_t;
+
 #define MC_PTYPE_FULL  1
 #define MC_PTYPE_COND2 2
 #define MC_PTYPE_FLAT  3
@@ -26,7 +31,9 @@ extern "C" {
 	void bcf_p1_init_prior(bcf_p1aux_t *ma, int type, double theta);
 	void bcf_p1_init_subprior(bcf_p1aux_t *ma, int type, double theta);
 	void bcf_p1_destroy(bcf_p1aux_t *ma);
+    void bcf_p1_set_ploidy(bcf1_t *b, bcf_p1aux_t *ma);
 	int bcf_p1_cal(const bcf1_t *b, int do_contrast, bcf_p1aux_t *ma, bcf_p1rst_t *rst);
+    int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold);
 	int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k);
 	void bcf_p1_dump_afs(bcf_p1aux_t *ma);
 	int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn);
