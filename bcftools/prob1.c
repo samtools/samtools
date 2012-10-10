@@ -300,10 +300,12 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
                 int isample, ibb = (ib+1)*(ib+2)/2-1, iab = iaa - ia + ib;
                 for (isample=0; isample<ma->n; isample++)
                 {
-                    if ( b->ploidy && b->ploidy[isample]==1 ) continue;
                     double *p = pdg + isample*npdg;
                     //assert( log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]) <= 0 );
-                    lk_tot += log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]);
+                    if ( b->ploidy && b->ploidy[isample]==1 )
+                        lk_tot +=  log(fa*p[iaa] + fb*p[ibb]);
+                    else 
+                        lk_tot +=  log(fa*p[iaa] + fb*p[ibb] + fab*p[iab]);
                 }
                 if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib; }
                 else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib; }
@@ -334,10 +336,12 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
                     int iac = iaa - ia + ic, ibc = ibb - ib + ic;
                     for (isample=0; isample<ma->n; isample++)
                     {
-                        if ( b->ploidy && b->ploidy[isample]==1 ) continue;
                         double *p = pdg + isample*npdg;
                         //assert( log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]) <= 0 );
-                        lk_tot += log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]);
+                        if ( b->ploidy && b->ploidy[isample]==1 ) 
+                            lk_tot += log(fa*p[iaa] + fb*p[ibb] + fc*p[icc]);
+                        else
+                            lk_tot += log(fa*p[iaa] + fb*p[ibb] + fc*p[icc] + fab*p[iab] + fac*p[iac] + fbc*p[ibc]);
                     }
                     if ( max_lk<lk_tot ) { max_lk2 = max_lk; max_als2 = max_als; max_lk = lk_tot; max_als = 1<<ia|1<<ib|1<<ic; }
                     else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia|1<<ib|1<<ic; }
@@ -346,7 +350,6 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
             }
         }
     }
-
 
     // Should we add another allele, does it increase the likelihood significantly?
     int n1=0, n2=0;

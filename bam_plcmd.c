@@ -208,6 +208,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bam_header_t *h_tmp;
 		data[i] = calloc(1, sizeof(mplp_aux_t));
 		data[i]->fp = strcmp(fn[i], "-") == 0? bam_dopen(fileno(stdin), "r") : bam_open(fn[i], "r");
+        if ( !data[i]->fp )
+        {
+            fprintf(stderr, "[%s] failed to open %d-th input.\n", __func__, i+1);
+            exit(1);
+        }
 		data[i]->conf = conf;
 		h_tmp = bam_header_read(data[i]->fp);
 		data[i]->h = i? h : h_tmp; // for i==0, "h" has not been set yet
