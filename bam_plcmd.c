@@ -210,7 +210,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		data[i]->fp = strcmp(fn[i], "-") == 0? bam_dopen(fileno(stdin), "r") : bam_open(fn[i], "r");
         if ( !data[i]->fp )
         {
-            fprintf(stderr, "[%s] failed to open %d-th input.\n", __func__, i+1);
+            fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
             exit(1);
         }
 		data[i]->conf = conf;
@@ -223,11 +223,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bam_index_t *idx;
 			idx = bam_index_load(fn[i]);
 			if (idx == 0) {
-				fprintf(stderr, "[%s] fail to load index for %d-th input.\n", __func__, i+1);
+				fprintf(stderr, "[%s] fail to load index for %s\n", __func__, fn[i]);
 				exit(1);
 			}
 			if (bam_parse_region(h_tmp, conf->reg, &tid, &beg, &end) < 0) {
-				fprintf(stderr, "[%s] malformatted region or wrong seqname for %d-th input.\n", __func__, i+1);
+				fprintf(stderr, "[%s] malformatted region or wrong seqname for %s\n", __func__, fn[i]);
 				exit(1);
 			}
 			if (i == 0) tid0 = tid, beg0 = beg, end0 = end;
