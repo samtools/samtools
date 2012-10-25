@@ -47,18 +47,14 @@ void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 	curr = 0; has_prev = 0;
 	while (bam_read1(in, b[curr]) >= 0) {
 		bam1_t *cur = b[curr], *pre = b[1-curr];
-		if (cur->core.tid < 0) 
-        {
-            if ( !remove_reads ) bam_write1(out, cur);
-            continue;
-        }
+		if (cur->core.tid < 0 && remove_reads) continue;
 		cur_end = bam_calend(&cur->core, bam1_cigar(cur));
 		if (cur_end > (int)header->target_len[cur->core.tid]) cur->core.flag |= BAM_FUNMAP;
 		if (cur->core.flag & BAM_FSECONDARY) 
-        {
-            if ( !remove_reads ) bam_write1(out, cur);
-            continue; // skip secondary alignments
-        }
+		{
+			if ( !remove_reads ) bam_write1(out, cur);
+			continue; // skip secondary alignments
+		}
 		if (has_prev) {
 			if (strcmp(bam1_qname(cur), bam1_qname(pre)) == 0) { // identical pair name
 				cur->core.mtid = pre->core.tid; cur->core.mpos = pre->core.pos;
@@ -77,6 +73,17 @@ void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 				else pre->core.flag &= ~BAM_FMREVERSE;
 				if (cur->core.flag & BAM_FUNMAP) { pre->core.flag |= BAM_FMUNMAP; pre->core.flag &= ~BAM_FPROPER_PAIR; }
 				if (pre->core.flag & BAM_FUNMAP) { cur->core.flag |= BAM_FMUNMAP; cur->core.flag &= ~BAM_FPROPER_PAIR; }
+				if ((cur->core.flag & BAM_FUNMAP) && !(pre->core.flag & BAM_FUNMAP)) {
+					// Set unmapped read's RNAME and POS to those of its mapped mate
+					// (recommended best practice, ensures if coord sort will be together)
+					cur->core.tid = pre->core.tid;
+					cur->core.pos = pre->core.pos;
+				}
+				if ((pre->core.flag & BAM_FUNMAP) && !(cur->core.flag & BAM_FUNMAP)) {
+					// Set unmapped read's RNAME and POS to those of its mapped mate
+					pre->core.tid = cur->core.tid;
+					pre->core.pos = cur->core.pos;
+				}
 				bam_template_cigar(pre, cur, &str);
 				bam_write1(out, pre);
 				bam_write1(out, cur);
