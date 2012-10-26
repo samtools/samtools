@@ -63,6 +63,18 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 
 	str.l = str.m = 0; str.s = 0;
 	header = bam_header_read(in);
+	// Accept unknown, unsorted, or queryname sort order, but error on coordinate sorted.
+	if ((header->l_text > 3) && (strncmp(header->text, "@HD", 3) == 0)) {
+		char *p, *q;
+		p = strstr(header->text, "\tSO:coordinate");
+		q = strchr(header->text, '\n');
+		// Looking for SO:coordinate within the @HD line only
+		// (e.g. must ignore in a @CO comment line later in header)
+		if ((p != 0) && (p < q)) {
+			fprintf(stderr, "[bam_mating_core] ERROR: Coordinate sorted, require grouped/sorted by queryname.\n");
+			exit(1);
+		}
+	}
 	bam_header_write(out, header);
 
 	b[0] = bam_init1();
@@ -135,10 +147,13 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 
 void usage()
 {
-    fprintf(stderr,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n");
-    fprintf(stderr,"Options:\n");
-    fprintf(stderr,"       -r    remove unmapped reads and secondary alignments\n");
-    exit(1);
+	fprintf(stderr,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
+	fprintf(stderr,"Options:\n");
+	fprintf(stderr,"       -r    remove unmapped reads and secondary alignments\n\n");
+	fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
+	fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
+	fprintf(stderr,"input is not accepted.\n");
+	exit(1);
 }
 
 int bam_mating(int argc, char *argv[])
