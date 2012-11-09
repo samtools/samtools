@@ -515,9 +515,9 @@ void realloc_gcd_buffer(stats_t *stats, int seq_len)
 
     int n = 1 + stats->gcd_ref_size / (stats->gcd_bin_size - seq_len);
     if ( n <= stats->igcd )
-        error("Uh: n=%d igcd=%d\n", n,stats->igcd );
+        error("The --GC-depth bin size is too small or reference genome too big; please decrease the bin size or increase the reference length\n");
         
-    if ( n >= stats->ngcd )
+    if ( n > stats->ngcd )
     {
         stats->gcd = realloc(stats->gcd, n*sizeof(gc_depth_t));
         if ( !stats->gcd )
@@ -1279,7 +1279,7 @@ void error(const char *format, ...)
         printf("    -d, --remove-dups                   Exlude from statistics reads marked as duplicates\n");
         printf("    -f, --required-flag <int>           Required flag, 0 for unset [0]\n");
         printf("    -F, --filtering-flag <int>          Filtering flag, 0 for unset [0]\n");
-        printf("        --GC-depth <float,float>        Bin size for GC-depth graph and the maximum reference length [2e4,6e9]\n");
+        printf("        --GC-depth <float,float>        Bin size for GC-depth graph and the maximum reference length [2e4,4.2e9]\n");
         printf("    -h, --help                          This help message\n");
         printf("    -i, --insert-size <int>             Maximum insert size [8000]\n");
         printf("    -I, --id <string>                   Include only listed read group or sample name\n");
@@ -1318,7 +1318,7 @@ int main(int argc, char *argv[])
     stats->max_qual  = 40;
     stats->isize_main_bulk = 0.99;   // There are always outliers at the far end
     stats->gcd_bin_size = 20e3;
-    stats->gcd_ref_size = 3e9;
+    stats->gcd_ref_size = 4.2e9;
     stats->rseq_pos     = -1;
     stats->tid = stats->gcd_pos = stats->igcd = -1;
     stats->is_sorted = 1;
