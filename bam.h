@@ -242,6 +242,7 @@ typedef struct __bam_iter_t *bam_iter_t;
   recommended to use bam1_seqi() macro to get the base.
  */
 #define bam1_seq(b) ((b)->data + (b)->core.n_cigar*4 + (b)->core.l_qname)
+#define bam_get_seq(b) bam1_seq(b)
 
 /*! @function
   @abstract  Get query quality
@@ -249,6 +250,7 @@ typedef struct __bam_iter_t *bam_iter_t;
   @return    pointer to quality string
  */
 #define bam1_qual(b) ((b)->data + (b)->core.n_cigar*4 + (b)->core.l_qname + (((b)->core.l_qseq + 1)>>1))
+#define bam_get_qual(b) bam1_qual(b)
 
 /*! @function
   @abstract  Get a base on read

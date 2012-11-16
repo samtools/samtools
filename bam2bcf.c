@@ -11,11 +11,12 @@ extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 #define CALL_ETA 0.03f
 #define CALL_MAX 256
 #define CALL_DEFTHETA 0.83f
+#define CALL_DEFTHETA_INDEL 0.33f
 #define DEF_MAPQ 20
 
 #define CAP_DIST 25
 
-bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
+bcf_callaux_t *bcf_call_init(double theta, double theta_indel, int min_baseQ)
 {
 	bcf_callaux_t *bca;
 	if (theta <= 0.) theta = CALL_DEFTHETA;
@@ -24,6 +25,7 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 	bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 100;
 	bca->min_baseQ = min_baseQ;
 	bca->e = errmod_init(1. - theta);
+	bca->e_indel = errmod_init(theta_indel <= 0? 1. - CALL_DEFTHETA_INDEL : 1 - theta_indel);
 	bca->min_frac = 0.002;
 	bca->min_support = 1;
 	return bca;
@@ -32,7 +34,7 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 void bcf_call_destroy(bcf_callaux_t *bca)
 {
 	if (bca == 0) return;
-	errmod_destroy(bca->e);
+	errmod_destroy(bca->e); errmod_destroy(bca->e_indel);
 	free(bca->bases); free(bca->inscns); free(bca);
 }
 /* ref_base is the 4-bit representation of the reference base. It is
@@ -95,7 +97,8 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 	}
 	r->depth = n; r->ori_depth = ori_depth;
 	// glfgen
-	errmod_cal(bca->e, n, 5, bca->bases, r->p);
+	if (is_indel) errmod_cal(bca->e_indel, n, 5, bca->bases, r->p);
+	else errmod_cal(bca->e, n, 5, bca->bases, r->p);
 
     // Calculate the Variant Distance Bias (make it optional?)
     if ( nvar_pos < _n ) {

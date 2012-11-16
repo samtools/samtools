@@ -433,6 +433,17 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 				indelQ = indelQ1 < indelQ2? indelQ1 : indelQ2;
 				if (indelQ > 255) indelQ = 255;
 				if (seqQ > 255) seqQ = 255;
+				if (bca->flow_mode) {
+					if (p->qpos < p->b->core.l_qseq - 2) {
+						int c, min, i;
+						uint8_t *seq = bam_get_seq(p->b);
+						uint8_t *qual = bam_get_qual(p->b);
+						c = bam1_seqi(seq, p->qpos + 1); min = qual[p->qpos + 1];
+						for (i = p->qpos + 2; i < p->b->core.l_qseq && bam1_seqi(seq, i) == c; ++i)
+							if (min > qual[i]) min = qual[i];
+						seqQ = min;
+					} else seqQ = 0;
+				}
 				p->aux = (sc[0]&0x3f)<<16 | seqQ<<8 | indelQ; // use 22 bits in total
 				sumq[sc[0]&0x3f] += indelQ < seqQ? indelQ : seqQ;
 //				fprintf(stderr, "pos=%d read=%d:%d name=%s call=%d indelQ=%d seqQ=%d\n", pos, s, i, bam1_qname(p->b), types[sc[0]&0x3f], indelQ, seqQ);

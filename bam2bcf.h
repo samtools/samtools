@@ -16,13 +16,14 @@ typedef struct __bcf_callaux_t {
 	int openQ, extQ, tandemQ; // for indels
 	int min_support; // for collecting indel candidates
 	double min_frac; // for collecting indel candidates
+	int flow_mode;
 	// for internal uses
 	int max_bases;
 	int indel_types[4];
 	int maxins, indelreg;
 	char *inscns;
 	uint16_t *bases;
-	errmod_t *e;
+	errmod_t *e, *e_indel;
 	void *rghash;
 } bcf_callaux_t;
 
@@ -46,7 +47,7 @@ typedef struct {
 extern "C" {
 #endif
 
-	bcf_callaux_t *bcf_call_init(double theta, int min_baseQ);
+	bcf_callaux_t *bcf_call_init(double theta, double theta_indel, int min_baseQ);
 	void bcf_call_destroy(bcf_callaux_t *bca);
 	int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r);
 	int bcf_call_combine(int n, const bcf_callret1_t *calls, int ref_base /*4-bit*/, bcf_call_t *call);

@@ -72,6 +72,7 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_IGNORE_RG 0x2000
 #define MPLP_PRINT_POS 0x4000
 #define MPLP_PRINT_MAPQ 0x8000
+#define MPLP_FLOW 0x10000
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -265,12 +266,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		free(s.s);
 		bcf_hdr_sync(bh);
 		bcf_hdr_write(bp, bh);
-		bca = bcf_call_init(-1., conf->min_baseQ);
+		bca = bcf_call_init(-1., -1., conf->min_baseQ);
 		bcr = calloc(sm->n, sizeof(bcf_callret1_t));
 		bca->rghash = rghash;
 		bca->openQ = conf->openQ, bca->extQ = conf->extQ, bca->tandemQ = conf->tandemQ;
 		bca->min_frac = conf->min_frac;
 		bca->min_support = conf->min_support;
+		bca->flow_mode = (conf->flag&MPLP_FLOW)? 1 : 0;
 	}
 	if (tid0 >= 0 && conf->fai) { // region is set
 		ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
@@ -449,12 +451,13 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6OsV")) >= 0) {
+	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:o:e:h:Im:F:EG:6OsVH")) >= 0) {
 		switch (c) {
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
 			break;
+		case 'H': mplp.flag |= MPLP_FLOW; break;
 		case 'd': mplp.max_depth = atoi(optarg); break;
 		case 'r': mplp.reg = strdup(optarg); break;
 		case 'l': mplp.bed = bed_read(optarg); break;
@@ -498,6 +501,10 @@ int bam_mpileup(int argc, char *argv[])
 		}
 	}
 	if (use_orphan) mplp.flag &= ~MPLP_NO_ORPHAN;
+	if (mplp.flag & MPLP_FLOW) {
+		mplp.flag &= ~MPLP_REALN;
+		if (mplp.min_support < 2) mplp.min_support = 2;
+	}
 	if (argc == 1) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage: samtools mpileup [options] in1.bam [in2.bam [...]]\n\n");
@@ -525,6 +532,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -S           output per-sample strand bias P-value in BCF (require -g/-u)\n");
 		fprintf(stderr, "       -u           generate uncompress BCF output\n");
 		fprintf(stderr, "\nSNP/INDEL genotype likelihoods options (effective with `-g' or `-u'):\n\n");
+		fprintf(stderr, "       -H           flow mode (forcing -Bm2; disabling -e and -h)\n");
 		fprintf(stderr, "       -e INT       Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
 		fprintf(stderr, "       -F FLOAT     minimum fraction of gapped reads for candidates [%g]\n", mplp.min_frac);
 		fprintf(stderr, "       -h INT       coefficient for homopolymer errors [%d]\n", mplp.tandemQ);
