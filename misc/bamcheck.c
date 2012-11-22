@@ -1322,7 +1322,8 @@ int main(int argc, char *argv[])
     stats->gcd_bin_size = 20e3;
     stats->gcd_ref_size = 4.2e9;
     stats->rseq_pos     = -1;
-    stats->tid = stats->gcd_pos = stats->igcd = -1;
+    stats->tid = stats->gcd_pos = -1;
+    stats->igcd = 0;
     stats->is_sorted = 1;
     stats->cov_min  = 1;
     stats->cov_max  = 1000;
