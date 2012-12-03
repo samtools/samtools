@@ -4,6 +4,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/stat.h>
 #include "sam.h"
 #include "faidx.h"
 #include "kstring.h"
@@ -396,21 +397,15 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 static int read_file_list(const char *file_list,int *n,char **argv[])
 {
     char buf[MAX_PATH_LEN];
-    int len, nfiles;
-    char **files;
+    int len, nfiles = 0;
+    char **files = NULL;
+    struct stat sb;
+
+    *n = 0;
+    *argv = NULL;
 
     FILE *fh = fopen(file_list,"r");
     if ( !fh )
-    {
-        fprintf(stderr,"%s: %s\n", file_list,strerror(errno));
-        return 1;
-    }
-
-    // Speed is not an issue here, determine the number of files by reading the file twice
-    nfiles = 0;
-    while ( fgets(buf,MAX_PATH_LEN,fh) ) nfiles++;
-
-    if ( fseek(fh, 0L, SEEK_SET) )
     {
         fprintf(stderr,"%s: %s\n", file_list,strerror(errno));
         return 1;
@@ -420,14 +415,29 @@ static int read_file_list(const char *file_list,int *n,char **argv[])
     nfiles = 0;
     while ( fgets(buf,MAX_PATH_LEN,fh) ) 
     {
+        // allow empty lines and trailing spaces
         len = strlen(buf);
         while ( len>0 && isspace(buf[len-1]) ) len--;
         if ( !len ) continue;
 
-        files[nfiles] = malloc(sizeof(char)*(len+1)); 
-        strncpy(files[nfiles],buf,len);
-        files[nfiles][len] = 0;
+        // check sanity of the file list
+        buf[len] = 0;
+        if (stat(buf, &sb) != 0)
+        {
+            // no such file, check if it is safe to print its name
+            int i, safe_to_print = 1;
+            for (i=0; i<len; i++)
+                if (!isprint(buf[i])) { safe_to_print = 0; break; } 
+            if ( safe_to_print )
+                fprintf(stderr,"The file list \"%s\" appears broken, could not locate: %s\n", file_list,buf);
+            else
+                fprintf(stderr,"Does the file \"%s\" really contain a list of files and do all exist?\n", file_list);
+            return 1;
+        }
+
         nfiles++;
+        files = realloc(files,nfiles*sizeof(char*));
+        files[nfiles-1] = strdup(buf);
     }
     fclose(fh);
     if ( !nfiles )
