@@ -120,6 +120,7 @@ typedef struct
     uint64_t nreads_unmapped;
     uint64_t nreads_unpaired;
     uint64_t nreads_paired;
+    uint64_t nreads_anomalous;
     uint64_t nreads_mq0;
     uint64_t nbases_mapped;
     uint64_t nbases_mapped_cigar;
@@ -702,42 +703,48 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
         count_indels(stats,bam_line);
 
-        // The insert size is tricky, because for long inserts the libraries are
-        // prepared differently and the pairs point in other direction. BWA does
-        // not set the paired flag for them.  Similar thing is true also for 454
-        // reads. Therefore, do the insert size stats for all mapped reads.
-        int32_t isize = bam_line->core.isize;
-        if ( isize<0 ) isize = -isize;
-        if ( IS_PAIRED(bam_line) )
+        if ( !IS_PAIRED(bam_line) )
+            stats->nreads_unpaired++;
+        else 
         {
             stats->nreads_paired++;
+
+            if ( bam_line->core.tid!=bam_line->core.mtid )
+                stats->nreads_anomalous++;
+
+            // The insert size is tricky, because for long inserts the libraries are
+            // prepared differently and the pairs point in other direction. BWA does
+            // not set the paired flag for them.  Similar thing is true also for 454
+            // reads. Mates mapped to different chromosomes have isize==0.
+            int32_t isize = bam_line->core.isize;
+            if ( isize<0 ) isize = -isize;
             if ( isize >= stats->nisize )
-                isize=stats->nisize-1;
-
-            int pos_fst = bam_line->core.mpos - bam_line->core.pos;
-            int is_fst  = IS_READ1(bam_line) ? 1 : -1;
-            int is_fwd  = IS_REVERSE(bam_line) ? -1 : 1;
-            int is_mfwd = IS_MATE_REVERSE(bam_line) ? -1 : 1;
-
-            if ( is_fwd*is_mfwd>0 )
-                stats->isize_other[isize]++;
-            else if ( is_fst*pos_fst>0 )
+                isize = stats->nisize-1;
+            if ( isize>0 || bam_line->core.tid==bam_line->core.mtid )
             {
-                if ( is_fst*is_fwd>0 )
-                    stats->isize_inward[isize]++;
-                else
-                    stats->isize_outward[isize]++;
-            }
-            else if ( is_fst*pos_fst<0 )
-            {
-                if ( is_fst*is_fwd>0 )
-                    stats->isize_outward[isize]++;
-                else
-                    stats->isize_inward[isize]++;
+                int pos_fst = bam_line->core.mpos - bam_line->core.pos;
+                int is_fst  = IS_READ1(bam_line) ? 1 : -1;
+                int is_fwd  = IS_REVERSE(bam_line) ? -1 : 1;
+                int is_mfwd = IS_MATE_REVERSE(bam_line) ? -1 : 1;
+
+                if ( is_fwd*is_mfwd>0 )
+                    stats->isize_other[isize]++;
+                else if ( is_fst*pos_fst>0 )
+                {
+                    if ( is_fst*is_fwd>0 )
+                        stats->isize_inward[isize]++;
+                    else
+                        stats->isize_outward[isize]++;
+                }
+                else if ( is_fst*pos_fst<0 )
+                {
+                    if ( is_fst*is_fwd>0 )
+                        stats->isize_outward[isize]++;
+                    else
+                        stats->isize_inward[isize]++;
+                }
             }
         }
-        else
-            stats->nreads_unpaired++;
 
         // Number of mismatches 
         uint8_t *nm = bam_aux_get(bam_line,"NM");
@@ -955,6 +962,7 @@ void output_stats(stats_t *stats)
     printf("SN\tinward oriented pairs:\t%ld\n", (long)nisize_inward);
     printf("SN\toutward oriented pairs:\t%ld\n", (long)nisize_outward);
     printf("SN\tpairs with other orientation:\t%ld\n", (long)nisize_other);
+    printf("SN\tpairs on different chromosomes:\t%ld\n", (long)stats->nreads_anomalous/2);
 
     int ibase,iqual;
     if ( stats->max_len<stats->nbases ) stats->max_len++;
