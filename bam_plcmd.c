@@ -523,7 +523,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -6           assume the quality is in the Illumina-1.3+ encoding\n");
 		fprintf(stderr, "       -A           count anomalous read pairs\n");
 		fprintf(stderr, "       -B           disable BAQ computation\n");
-		fprintf(stderr, "       -b FILE      list of input BAM files [null]\n");
+		fprintf(stderr, "       -b FILE      list of input BAM filenames, one per line [null]\n");
 		fprintf(stderr, "       -C INT       parameter for adjusting mapQ; 0 to disable [0]\n");
 		fprintf(stderr, "       -d INT       max per-BAM depth to avoid excessive memory usage [%d]\n", mplp.max_depth);
 		fprintf(stderr, "       -E           recalculate extended BAQ on the fly thus ignoring existing BQs\n");
