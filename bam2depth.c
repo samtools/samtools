@@ -32,37 +32,58 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
 	return ret;
 }
 
+int read_file_list(const char *file_list,int *n,char **argv[]);
+
 #ifdef _MAIN_BAM2DEPTH
 int main(int argc, char *argv[])
 #else
 int main_depth(int argc, char *argv[])
 #endif
 {
-	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0;
+	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, nfiles;
 	const bam_pileup1_t **plp;
 	char *reg = 0; // specified region
 	void *bed = 0; // BED data structure
+    char *file_list = NULL, **fn = NULL;
 	bam_header_t *h = 0; // BAM header of the 1st input
 	aux_t **data;
 	bam_mplp_t mplp;
 
 	// parse the command line
-	while ((n = getopt(argc, argv, "r:b:q:Q:l:")) >= 0) {
+	while ((n = getopt(argc, argv, "r:b:q:Q:l:f:")) >= 0) {
 		switch (n) {
 			case 'l': min_len = atoi(optarg); break; // minimum query length
 			case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
 			case 'b': bed = bed_read(optarg); break; // BED or position list file can be parsed now
 			case 'q': baseQ = atoi(optarg); break;   // base quality threshold
 			case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
+			case 'f': file_list = optarg; break;
 		}
 	}
-	if (optind == argc) {
-		fprintf(stderr, "Usage: bam2depth [-r reg] [-q baseQthres] [-Q mapQthres] [-l minQLen] [-b in.bed] <in1.bam> [...]\n");
+	if (optind == argc && !file_list) {
+        fprintf(stderr, "\n");
+        fprintf(stderr, "Usage: samtools depth [options] in1.bam [in2.bam [...]]\n");
+        fprintf(stderr, "Options:\n");
+        fprintf(stderr, "   -b <bed>            list of positions or regions\n");
+        fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
+        fprintf(stderr, "   -l <int>            minQLen\n");
+        fprintf(stderr, "   -q <int>            base quality threshold\n");
+        fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
+        fprintf(stderr, "   -r <chr:from-to>    region\n");
+        fprintf(stderr, "\n");
 		return 1;
 	}
 
 	// initialize the auxiliary data structures
-	n = argc - optind; // the number of BAMs on the command line
+    if (file_list) 
+    {
+        if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
+        n = nfiles;
+        argv = fn;
+        optind = 0;
+    }
+    else
+        n = argc - optind; // the number of BAMs on the command line
 	data = calloc(n, sizeof(void*)); // data[i] for the i-th input
 	beg = 0; end = 1<<30; tid = -1;  // set the default region
 	for (i = 0; i < n; ++i) {
@@ -113,5 +134,10 @@ int main_depth(int argc, char *argv[])
 	}
 	free(data); free(reg);
 	if (bed) bed_destroy(bed);
+    if ( file_list )
+    {
+        for (i=0; i<n; i++) free(fn[i]);
+        free(fn);
+    }
 	return 0;
 }
