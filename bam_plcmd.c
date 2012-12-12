@@ -5,6 +5,7 @@
 #include <string.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <getopt.h>
 #include "sam.h"
 #include "faidx.h"
 #include "kstring.h"
@@ -81,6 +82,7 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
 typedef struct {
 	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, fmt_flag;
+    int rflag_require, rflag_filter;
 	int openQ, extQ, tandemQ, min_support; // for indels
 	double min_frac; // for indels
 	char *reg, *pl_list;
@@ -118,6 +120,8 @@ static int mplp_func(void *data, bam1_t *b)
 			skip = 1;
 			continue;
 		}
+        if (ma->conf->rflag_require && !(ma->conf->rflag_require&b->core.flag)) { skip = 1; continue; }
+        if (ma->conf->rflag_filter && ma->conf->rflag_filter&b->core.flag) { skip = 1; continue; }
 		if (ma->conf->bed) { // test overlap
 			skip = !bed_overlap(ma->conf->bed, ma->h->target_name[b->core.tid], b->core.pos, bam_calend(&b->core, bam1_cigar(b)));
 			if (skip) continue;
@@ -394,7 +398,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 }
 
 #define MAX_PATH_LEN 1024
-static int read_file_list(const char *file_list,int *n,char **argv[])
+int read_file_list(const char *file_list,int *n,char **argv[])
 {
     char buf[MAX_PATH_LEN];
     int len, nfiles = 0;
@@ -466,8 +470,16 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
-	while ((c = getopt(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV")) >= 0) {
+    static struct option lopts[] = 
+    {
+        {"rf",1,0,1},   // require flag
+        {"ff",1,0,2},   // filter flag
+        {0,0,0,0}
+    };
+	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV1:2:",lopts,NULL)) >= 0) {
 		switch (c) {
+        case  1 : mplp.rflag_require = strtol(optarg,0,0); break;
+        case  2 : mplp.rflag_filter  = strtol(optarg,0,0); break;
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
@@ -535,6 +547,8 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -R           ignore RG tags\n");
 		fprintf(stderr, "       -q INT       skip alignments with mapQ smaller than INT [%d]\n", mplp.min_mq);
 		fprintf(stderr, "       -Q INT       skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp.min_baseQ);
+		fprintf(stderr, "       --rf INT     required flags: skip reads with mask bits unset []\n");
+		fprintf(stderr, "       --ff INT     filter flags: skip reads with mask bits set []\n");
 		fprintf(stderr, "\nOutput options:\n\n");
 		fprintf(stderr, "       -D           output per-sample DP in BCF (require -g/-u)\n");
 		fprintf(stderr, "       -g           generate BCF output (genotype likelihoods)\n");
