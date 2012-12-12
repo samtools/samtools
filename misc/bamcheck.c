@@ -126,6 +126,7 @@ typedef struct
     uint64_t nbases_mapped_cigar;
     uint64_t nbases_trimmed;  // bwa trimmed bases
     uint64_t nmismatches;
+    uint64_t nreads_QCfailed, nreads_secondary;
 
     // GC-depth related data
     uint32_t ngcd, igcd;        // The maximum number of GC depth bins and index of the current bin
@@ -621,13 +622,17 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         return;
     if ( stats->flag_filter && (bam_line->core.flag & stats->flag_filter) )
         return;
-
     if ( !is_in_regions(bam_line,stats) )
         return;
+    if ( stats->filter_readlen!=-1 && bam_line->core.l_qseq!=stats->filter_readlen ) 
+        return;
+
+    if ( bam_line->core.flag & BAM_FQCFAIL ) stats->nreads_QCfailed++;
+    if ( bam_line->core.flag & BAM_FSECONDARY ) stats->nreads_secondary++;
 
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
-    if ( stats->filter_readlen!=-1 && seq_len!=stats->filter_readlen ) return;
+
     if ( seq_len >= stats->nbases )
         realloc_buffers(stats,seq_len);
     if ( stats->max_len<seq_len )
@@ -946,6 +951,8 @@ void output_stats(stats_t *stats)
     printf("SN\treads paired:\t%ld\n", (long)stats->nreads_paired);
     printf("SN\treads duplicated:\t%ld\n", (long)stats->nreads_dup);
     printf("SN\treads MQ0:\t%ld\n", (long)stats->nreads_mq0);
+    printf("SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
+    printf("SN\tnon-primary alignments:\t%ld\n", (long)stats->nreads_secondary);
     printf("SN\ttotal length:\t%ld\n", (long)stats->total_len);
     printf("SN\tbases mapped:\t%ld\n", (long)stats->nbases_mapped);
     printf("SN\tbases mapped (cigar):\t%ld\n", (long)stats->nbases_mapped_cigar);
