@@ -116,6 +116,7 @@ typedef struct
     uint64_t total_len_dup;
     uint64_t nreads_1st;
     uint64_t nreads_2nd;
+    uint64_t nreads_filtered;
     uint64_t nreads_dup;
     uint64_t nreads_unmapped;
     uint64_t nreads_unpaired;
@@ -619,9 +620,15 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         if ( k == kh_end(stats->rg_hash) ) return;
     }
     if ( stats->flag_require && (bam_line->core.flag & stats->flag_require)!=stats->flag_require )
+    {
+        stats->nreads_filtered++;
         return;
+    }
     if ( stats->flag_filter && (bam_line->core.flag & stats->flag_filter) )
+    {
+        stats->nreads_filtered++;
         return;
+    }
     if ( !is_in_regions(bam_line,stats) )
         return;
     if ( stats->filter_readlen!=-1 && bam_line->core.l_qseq!=stats->filter_readlen ) 
@@ -940,6 +947,8 @@ void output_stats(stats_t *stats)
         printf(" %s",stats->argv[i]);
     printf("\n");
     printf("# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.\n");
+    printf("SN\traw total sequences:\t%ld\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd));
+    printf("SN\tfiltered sequences:\t%ld\n", (long)stats->nreads_filtered);
     printf("SN\tsequences:\t%ld\n", (long)(stats->nreads_1st+stats->nreads_2nd));
     printf("SN\tis paired:\t%d\n", stats->nreads_1st&&stats->nreads_2nd ? 1 : 0);
     printf("SN\tis sorted:\t%d\n", stats->is_sorted ? 1 : 0);
