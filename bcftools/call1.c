@@ -298,6 +298,9 @@ int bcfview(int argc, char *argv[])
 	extern int bcf_trio_call(uint32_t *prep, const bcf1_t *b, int *llr, int64_t *gt);
 	extern int bcf_pair_call(const bcf1_t *b);
 	extern int bcf_min_diff(const bcf1_t *b);
+	extern int bcf_p1_get_M(bcf_p1aux_t *b);
+
+	extern gzFile bcf_p1_fp_lk;
 
 	bcf_t *bp, *bout = 0;
 	bcf1_t *b, *blast;
@@ -313,7 +316,7 @@ int bcfview(int argc, char *argv[])
 	memset(&vc, 0, sizeof(viewconf_t));
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1; vc.min_ma_lrt = -1;
 	memset(qcnt, 0, 8 * 256);
-	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Ywm:")) >= 0) {
+	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Ywm:K:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
 		case 'l': vc.bed = bed_read(optarg); break;
@@ -343,6 +346,7 @@ int bcfview(int argc, char *argv[])
 		case 'C': vc.min_lrt = atof(optarg); break;
 		case 'X': vc.min_perm_p = atof(optarg); break;
 		case 'd': vc.min_smpl_frac = atof(optarg); break;
+		case 'K': bcf_p1_fp_lk = gzopen(optarg, "w"); break;
 		case 's': vc.subsam = read_samples(optarg, &vc.n_sub);
 			vc.ploidy = calloc(vc.n_sub + 1, 1);
 			for (tid = 0; tid < vc.n_sub; ++tid) vc.ploidy[tid] = vc.subsam[tid][strlen(vc.subsam[tid]) + 1];
@@ -466,6 +470,10 @@ int bcfview(int argc, char *argv[])
 			}
 		}
 	}
+	if (bcf_p1_fp_lk && p1) {
+		int32_t M = bcf_p1_get_M(p1);
+		gzwrite(bcf_p1_fp_lk, &M, 4);
+	}
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel, cons_llr = -1;
 		int64_t cons_gt = -1;
@@ -514,7 +522,7 @@ int bcfview(int argc, char *argv[])
 			int i;
 			for (i = 0; i < 9; ++i) em[i] = -1.;
 		}
-        if ( !(vc.flag&VC_KEEPALT) && vc.flag&VC_CALL && vc.min_ma_lrt>=0 )
+        if ( !(vc.flag&VC_KEEPALT) && (vc.flag&VC_CALL) && vc.min_ma_lrt>=0 )
         {
             bcf_p1_set_ploidy(b, p1); // could be improved: do this per site to allow pseudo-autosomal regions
             int gts = call_multiallelic_gt(b,p1,vc.min_ma_lrt);
@@ -522,7 +530,11 @@ int bcfview(int argc, char *argv[])
         }
 		else if (vc.flag & VC_CALL) { // call variants
 			bcf_p1rst_t pr;
-			int calret = bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
+			int calret;
+			gzwrite(bcf_p1_fp_lk, &b->tid, 4);
+			gzwrite(bcf_p1_fp_lk, &b->pos, 4);
+			gzwrite(bcf_p1_fp_lk, &em[0], sizeof(double));
+			calret = bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
 			if (n_processed % 100000 == 0) {
 				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
 				bcf_p1_dump_afs(p1);
@@ -567,6 +579,8 @@ int bcfview(int argc, char *argv[])
 		} else bcf_fix_gt(b);
 		vcf_write(bout, hout, b);
 	}
+
+	if (bcf_p1_fp_lk) gzclose(bcf_p1_fp_lk);
 	if (vc.prior_file) free(vc.prior_file);
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);
 	if (hin != hout) bcf_hdr_destroy(hout);
