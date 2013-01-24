@@ -9,7 +9,8 @@ LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 AOBJS=		bam_tview.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
-			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o
+			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
+			bam_tview_curses.o
 PROG=		samtools
 INCLUDES=	-I.
 SUBDIRS=	. bcftools misc
@@ -46,10 +47,10 @@ samtools:lib-recur $(AOBJS)
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(LIBCURSES) -lm -lz -lpthread
 
 razip:razip.o razf.o $(KNETFILE_O)
-		$(CC) $(CFLAGS) -o $@ razf.o razip.o $(KNETFILE_O) -lz
+		$(CC) $(CFLAGS) -o $@ $^ -lz
 
 bgzip:bgzip.o bgzf.o $(KNETFILE_O)
-		$(CC) $(CFLAGS) -o $@ bgzf.o bgzip.o $(KNETFILE_O) -lz -lpthread
+		$(CC) $(CFLAGS) -o $@ $^ -lz -lpthread
 
 bgzf.o:bgzf.c bgzf.h
 		$(CC) -c $(CFLAGS) $(DFLAGS) -DBGZF_CACHE $(INCLUDES) bgzf.c -o $@
@@ -62,7 +63,8 @@ bam_pileup.o:bam.h razf.h ksort.h
 bam_plcmd.o:bam.h faidx.h bcftools/bcf.h bam2bcf.h
 bam_index.o:bam.h khash.h ksort.h razf.h bam_endian.h
 bam_lpileup.o:bam.h ksort.h
-bam_tview.o:bam.h faidx.h
+bam_tview.o:bam.h faidx.h bam_tview.h
+bam_tview_curses.o:bam.h faidx.h bam_tview.h bam_tview_curses.h
 bam_sort.o:bam.h ksort.h razf.h
 bam_md.o:bam.h faidx.h
 sam_header.o:sam_header.h khash.h
