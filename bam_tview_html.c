@@ -154,17 +154,16 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
 		if(x== 0 || ptr->screen[y][x].attributes != ptr->screen[y][x-1].attributes)
 	    		{
 	    		int css=0;
-
+			fprintf(ptr->out,"<span");
 	    		while(css<32)
 	    			{
 	    			//if(y>1) fprintf(stderr,"css=%d pow2=%d vs %d\n",css,(1 << (css)),ptr->screen[y][x].attributes);
 	    			if(( (ptr->screen[y][x].attributes) & (1 << (css)))!=0)
 	    				{
 	    				
-	    				fprintf(ptr->out," class='tviewc%s%d",
+	    				fprintf(ptr->out," class='tviewc%s%d'",
 	    					(( (ptr->screen[y][x].attributes) & (1 << (UNDERLINE_FLAG)) )!=0?"u":""),
 	    					css);
-	    				fputs("'",ptr->out);
 	    				break;
 	    				}
 	    			++css;
