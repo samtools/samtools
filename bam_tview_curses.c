@@ -1,9 +1,9 @@
 #include "bam_tview_curses.h"
 
 
+#define FROM_TV(ptr) ((curses_tview_t*)ptr)
 
-
-static void curses_tv_destroy(tview_t* base)
+static void curses_destroy(tview_t* base)
 	{
 	curses_tview_t* tv=(curses_tview_t*)base;
 
@@ -27,22 +27,37 @@ static void curses_tv_destroy(tview_t* base)
 
 static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...)
 	{
+	unsigned int size=tv->mcol+2;
+	char* str=malloc(size);
+	va_list argptr;
+  	va_start(argptr, fmt);
+	vsnprintf(str,size, fmt, argptr);
+	va_end(argptr);
+	mvprintw(y,x,str);
+	free(str);
 	}
+
 static void curses_mvaddch(struct AbstractTview* tv,int y,int x,int ch)
-    	{
-    	}
+	{
+	mvaddch(y,x,ch);
+	}
+    	
 static void curses_attron(struct AbstractTview* tv,int flag)
     {
+    attron(flag);
     }
 static void curses_attroff(struct AbstractTview* tv,int flag)
     {
+    attroff(flag);
     }
 static void curses_clear(struct AbstractTview* tv)
     {
+    clear();
     }
     
 static int curses_colorpair(struct AbstractTview* tv,int flag)
     {
+    return COLOR_PAIR(flag);
     }
 
 
@@ -268,7 +283,7 @@ int bam_tview_main(int argc, char *argv[])
     }
 	tv_draw_aln(tv, tv->curr_tid, tv->left_pos);
 	tv_loop(CTV);
-	tv->destroy(tv);
-	free(tv);
+	tv->my_destroy(tv);
+	
 	return 0;
 }

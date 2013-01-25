@@ -29,7 +29,7 @@ typedef struct AbstractTview {
 	char *ref;
     khash_t(kh_rg) *rg_hash;
     /* callbacks */
-    void (*destroy)(struct AbstractTview* );
+    void (*my_destroy)(struct AbstractTview* );
     void (*my_mvprintw)(struct AbstractTview* ,int,int,const char*,...);
     void (*my_mvaddch)(struct AbstractTview*,int,int,int);
     void (*my_attron)(struct AbstractTview*,int);
