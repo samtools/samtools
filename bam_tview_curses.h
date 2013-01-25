@@ -5,7 +5,7 @@
 #include "bam_tview.h"
 
 typedef struct CursesTview {
-	struct AbstractTview* view;
+	tview_t view;
 	WINDOW *wgoto, *whelp;
 	} curses_tview_t;
 

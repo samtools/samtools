@@ -8,7 +8,7 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
 	tv->mrow = 24; tv->mcol = 80;
 	tv->color_for = TV_COLOR_MAPQ;
 	tv->is_dot = 1;
-	fprintf(stderr,"Opening '%s'\n",fn);
+	
 	tv->fp = bam_open(fn, "r");
 	if(tv->fp==0)
 		{
@@ -17,7 +17,7 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
 		}
 	bgzf_set_cache_size(tv->fp, 8 * 1024 *1024);
 	assert(tv->fp);
-	fprintf(stderr,"Opening header '%s'\n",fn);
+	
 	tv->header = bam_header_read(tv->fp);
 	if(tv->header==0)
 		{
@@ -25,7 +25,11 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
             	exit(EXIT_FAILURE);
 		}
 	tv->idx = bam_index_load(fn);
-	if (tv->idx == 0) exit(1);
+	if (tv->idx == 0)
+		{
+		fprintf(stderr,"Cannot read index for '%s'.\n", fn);
+		exit(EXIT_FAILURE);
+		}
 	tv->lplbuf = bam_lplbuf_init(tv_pl_func, tv);
 	if (fn_fa) tv->fai = fai_load(fn_fa);
 	tv->bca = bcf_call_init(0.83, 13);

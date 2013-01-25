@@ -16,6 +16,40 @@ static void curses_tv_destroy(tview_t* base)
 	free(tv);
 	}
 
+/*
+ void (*my_mvprintw)(struct AbstractTview* ,int,int,const char*,...);
+    void (*my_)(struct AbstractTview*,int,int,int);
+    void (*my_attron)(struct AbstractTview*,int);
+    void (*my_attroff)(struct AbstractTview*,int);
+    void (*my_clear)(struct AbstractTview*);
+    int (*my_colorpair)(struct AbstractTview*,int);
+*/
+
+static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...)
+	{
+	}
+static void curses_mvaddch(struct AbstractTview* tv,int y,int x,int ch)
+    	{
+    	}
+static void curses_attron(struct AbstractTview* tv,int flag)
+    {
+    }
+static void curses_attroff(struct AbstractTview* tv,int flag)
+    {
+    }
+static void curses_clear(struct AbstractTview* tv)
+    {
+    }
+    
+static int curses_colorpair(struct AbstractTview* tv,int flag)
+    {
+    }
+
+
+#define SET_CALLBACK(fun) base->my_##fun=curses_##fun;
+
+
+
 curses_tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
 	{
 	curses_tview_t *tv = (curses_tview_t*)calloc(1, sizeof(curses_tview_t));
@@ -28,7 +62,13 @@ curses_tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *sa
 	
 	base_tv_init(base,fn,fn_fa,samples);
 	/* initialize callbacks */
-	base->destroy=curses_tv_destroy;
+	SET_CALLBACK(destroy);
+	SET_CALLBACK(mvprintw);
+	SET_CALLBACK(mvaddch);
+	SET_CALLBACK(attron);
+	SET_CALLBACK(attroff);
+	SET_CALLBACK(clear);
+	SET_CALLBACK(colorpair);
 	
 	initscr();
 	keypad(stdscr, TRUE);
