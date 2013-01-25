@@ -10,7 +10,7 @@ AOBJS=		bam_tview.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-			bam_tview_curses.o
+			bam_tview_curses.o bam_tview_html.o
 PROG=		samtools
 INCLUDES=	-I.
 SUBDIRS=	. bcftools misc
@@ -64,7 +64,8 @@ bam_plcmd.o:bam.h faidx.h bcftools/bcf.h bam2bcf.h
 bam_index.o:bam.h khash.h ksort.h razf.h bam_endian.h
 bam_lpileup.o:bam.h ksort.h
 bam_tview.o:bam.h faidx.h bam_tview.h
-bam_tview_curses.o:bam.h faidx.h bam_tview.h bam_tview_curses.h
+bam_tview_curses.o:bam.h faidx.h bam_tview.h
+bam_tview_html.o:bam.h faidx.h bam_tview.h
 bam_sort.o:bam.h ksort.h razf.h
 bam_md.o:bam.h faidx.h
 sam_header.o:sam_header.h khash.h

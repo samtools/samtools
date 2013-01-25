@@ -1,4 +1,12 @@
-#include "bam_tview_curses.h"
+#include <curses.h>
+#include "bam_tview.h"
+
+typedef struct CursesTview {
+	tview_t view;
+	WINDOW *wgoto, *whelp;
+	} curses_tview_t;
+
+
 
 
 #define FROM_TV(ptr) ((curses_tview_t*)ptr)
@@ -29,6 +37,7 @@ static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fm
 	{
 	unsigned int size=tv->mcol+2;
 	char* str=malloc(size);
+	if(str==0) exit(EXIT_FAILURE);
 	va_list argptr;
   	va_start(argptr, fmt);
 	vsnprintf(str,size, fmt, argptr);
@@ -60,53 +69,11 @@ static int curses_colorpair(struct AbstractTview* tv,int flag)
     return COLOR_PAIR(flag);
     }
 
+static int curses_drawaln(struct AbstractTview* tv, int tid, int pos)
+    {
+    return base_draw_aln(tv,  tid, pos);
+    }
 
-#define SET_CALLBACK(fun) base->my_##fun=curses_##fun;
-
-
-
-curses_tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
-	{
-	curses_tview_t *tv = (curses_tview_t*)calloc(1, sizeof(curses_tview_t));
-	tview_t* base=(tview_t*)tv;
-	if(tv==0)
-		{
-		fprintf(stderr,"Calloc failed\n");
-		return 0;
-		}
-	
-	base_tv_init(base,fn,fn_fa,samples);
-	/* initialize callbacks */
-	SET_CALLBACK(destroy);
-	SET_CALLBACK(mvprintw);
-	SET_CALLBACK(mvaddch);
-	SET_CALLBACK(attron);
-	SET_CALLBACK(attroff);
-	SET_CALLBACK(clear);
-	SET_CALLBACK(colorpair);
-	
-	initscr();
-	keypad(stdscr, TRUE);
-	clear();
-	noecho();
-	cbreak();
-	
-	getmaxyx(stdscr, base->mrow, base->mcol);
-	tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
-	tv->whelp = newwin(29, 40, 5, 5);
-	
-	start_color();
-	init_pair(1, COLOR_BLUE, COLOR_BLACK);
-	init_pair(2, COLOR_GREEN, COLOR_BLACK);
-	init_pair(3, COLOR_YELLOW, COLOR_BLACK);
-	init_pair(4, COLOR_WHITE, COLOR_BLACK);
-	init_pair(5, COLOR_GREEN, COLOR_BLACK);
-	init_pair(6, COLOR_CYAN, COLOR_BLACK);
-	init_pair(7, COLOR_YELLOW, COLOR_BLACK);
-	init_pair(8, COLOR_RED, COLOR_BLACK);
-	init_pair(9, COLOR_BLUE, COLOR_BLACK);
-	return tv;
-	}
 
 
 static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos)
@@ -185,10 +152,15 @@ static void tv_win_help(curses_tview_t *tv) {
 	wgetch(win);
 }
 
-void tv_loop(curses_tview_t *CTV)
-{
+static int curses_underline(tview_t* tv)
+	{
+	return A_UNDERLINE;
+	}
+	
+static int curses_loop(tview_t* tv)
+	{
 	int tid, pos;
-	tview_t* tv=(tview_t*)CTV;
+	curses_tview_t *CTV=(curses_tview_t *)tv;
 	tid = tv->curr_tid; pos = tv->left_pos;
 	while (1) {
 		int c = getch();
@@ -231,59 +203,63 @@ void tv_loop(curses_tview_t *CTV)
 		}
 		if (pos < 0) pos = 0;
 		if (tv->row_shift < 0) tv->row_shift = 0;
-		tv_draw_aln(tv, tid, pos);
+		tv->my_drawaln(tv, tid, pos);
 	}
 end_loop:
-	return;
-}
-
-void error(const char *format, ...)
-{
-    if ( !format )
-    {
-        fprintf(stderr, "\n");
-        fprintf(stderr, "Usage: bamtk tview [options] <aln.bam> [ref.fasta]\n");
-        fprintf(stderr, "Options:\n");
-        fprintf(stderr, "   -p chr:pos      go directly to this position\n");
-        fprintf(stderr, "   -s STR          display only reads from this sample or grou\n");
-        fprintf(stderr, "\n\n");
-    }
-    else
-    {
-        va_list ap;
-        va_start(ap, format);
-        vfprintf(stderr, format, ap);
-        va_end(ap);
-    }
-    exit(-1);
-}
-
-
-int bam_tview_main(int argc, char *argv[])
-{
-	curses_tview_t *CTV;
-	tview_t* tv=NULL;
-    char *samples=NULL, *position=NULL;
-    int c;
-    while ((c = getopt(argc, argv, "s:p:")) >= 0) {
-        switch (c) {
-            case 's': samples=optarg; break;
-            case 'p': position=optarg; break;
-            default: error(NULL);
-        }
-    }
-	if (argc==optind) error(NULL);
-	CTV = curses_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
-	tv=(tview_t*)CTV;
-    if ( position )
-    {
-        int _tid = -1, _beg, _end;
-        bam_parse_region(tv->header, position, &_tid, &_beg, &_end);
-        if (_tid >= 0) { tv->curr_tid = _tid; tv->left_pos = _beg; }
-    }
-	tv_draw_aln(tv, tv->curr_tid, tv->left_pos);
-	tv_loop(CTV);
-	tv->my_destroy(tv);
-	
 	return 0;
 }
+
+
+
+
+tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
+	{
+	curses_tview_t *tv = (curses_tview_t*)calloc(1, sizeof(curses_tview_t));
+	tview_t* base=(tview_t*)tv;
+	if(tv==0)
+		{
+		fprintf(stderr,"Calloc failed\n");
+		return 0;
+		}
+	
+	base_tv_init(base,fn,fn_fa,samples);
+	/* initialize callbacks */
+#define SET_CALLBACK(fun) base->my_##fun=curses_##fun;
+	SET_CALLBACK(destroy);
+	SET_CALLBACK(mvprintw);
+	SET_CALLBACK(mvaddch);
+	SET_CALLBACK(attron);
+	SET_CALLBACK(attroff);
+	SET_CALLBACK(clear);
+	SET_CALLBACK(colorpair);
+	SET_CALLBACK(drawaln);
+	SET_CALLBACK(loop);
+	SET_CALLBACK(underline);
+#undef SET_CALLBACK
+
+	initscr();
+	keypad(stdscr, TRUE);
+	clear();
+	noecho();
+	cbreak();
+	
+	getmaxyx(stdscr, base->mrow, base->mcol);
+	tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
+	tv->whelp = newwin(29, 40, 5, 5);
+	
+	start_color();
+	init_pair(1, COLOR_BLUE, COLOR_BLACK);
+	init_pair(2, COLOR_GREEN, COLOR_BLACK);
+	init_pair(3, COLOR_YELLOW, COLOR_BLACK);
+	init_pair(4, COLOR_WHITE, COLOR_BLACK);
+	init_pair(5, COLOR_GREEN, COLOR_BLACK);
+	init_pair(6, COLOR_CYAN, COLOR_BLACK);
+	init_pair(7, COLOR_YELLOW, COLOR_BLACK);
+	init_pair(8, COLOR_RED, COLOR_BLACK);
+	init_pair(9, COLOR_BLUE, COLOR_BLACK);
+	return base;
+	}
+
+
+
+	

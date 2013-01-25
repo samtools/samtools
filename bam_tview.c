@@ -109,7 +109,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 		else if (p[2] < p[1] && p[2] < p[0]) call = (1<<a2)<<16 | (int)((p[0]<p[1]?p[0]:p[1]) - p[2] + .499);
 		else call = (1<<a1|1<<a2)<<16 | (int)((p[0]<p[2]?p[0]:p[2]) - p[1] + .499);
 	}
-	attr = BAM_TVIEW_UNDERLINE;
+	attr = tv->my_underline(tv);
 	c = ",ACMGRSVTWYHKDBN"[call>>16&0xf];
 	i = (call&0xffff)/10+1;
 	if (i > 4) i = 4;
@@ -167,18 +167,18 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 				int x;
 				attr = 0;
 				if (((p->b->core.flag&BAM_FPAIRED) && !(p->b->core.flag&BAM_FPROPER_PAIR))
-						|| (p->b->core.flag & BAM_FSECONDARY)) attr |= BAM_TVIEW_UNDERLINE;
+						|| (p->b->core.flag & BAM_FSECONDARY)) attr |= tv->my_underline(tv);
 				if (tv->color_for == TV_COLOR_BASEQ) {
 					x = bam1_qual(p->b)[p->qpos]/10 + 1;
 					if (x > 4) x = 4;
-					attr |= COLOR_PAIR(x);
+					attr |= tv->my_colorpair(tv,x);
 				} else if (tv->color_for == TV_COLOR_MAPQ) {
 					x = p->b->core.qual/10 + 1;
 					if (x > 4) x = 4;
-					attr |= COLOR_PAIR(x);
+					attr |= tv->my_colorpair(tv,x);
 				} else if (tv->color_for == TV_COLOR_NUCL) {
 					x = bam_nt16_nt4_table[bam1_seqi(bam1_seq(p->b), p->qpos)] + 5;
-					attr |= COLOR_PAIR(x);
+					attr |= tv->my_colorpair(tv,x);
 				} else if(tv->color_for == TV_COLOR_COL) {
 					x = 0;
 					switch(bam_aux_getCSi(p->b, p->qpos)) {
@@ -190,13 +190,13 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 						default: x = bam_nt16_nt4_table[bam1_seqi(bam1_seq(p->b), p->qpos)]; break;
 					}
 					x+=5;
-					attr |= COLOR_PAIR(x);
+					attr |= tv->my_colorpair(tv,x);
 				} else if(tv->color_for == TV_COLOR_COLQ) {
 					x = bam_aux_getCQi(p->b, p->qpos);
 					if(0 == x) x = bam1_qual(p->b)[p->qpos];
 					x = x/10 + 1;
 					if (x > 4) x = 4;
-					attr |= COLOR_PAIR(x);
+					attr |= tv->my_colorpair(tv,x);
 				}
 				tv->my_attron(tv,attr);
 				tv->my_mvaddch(tv,row, tv->ccol, bam1_strand(p->b)? tolower(c) : toupper(c));
@@ -205,7 +205,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 		}
 		c = j? '*' : rb;
 		if (c == '*') {
-			attr = COLOR_PAIR(8);
+			attr = tv->my_colorpair(tv,8);
 			tv->my_attron(tv,attr);
 			tv->my_mvaddch(tv,1, tv->ccol++, c);
 			tv->my_attroff(tv,attr);
@@ -240,7 +240,7 @@ int tv_fetch_func(const bam1_t *b, void *data)
 	return 0;
 }
 
-int tv_draw_aln(tview_t *tv, int tid, int pos)
+int base_draw_aln(tview_t *tv, int tid, int pos)
 	{
 	assert(tv!=NULL);
 	// reset
@@ -274,3 +274,89 @@ int tv_draw_aln(tview_t *tv, int tid, int pos)
 	return 0;
 }
 
+
+
+
+static void error(const char *format, ...)
+{
+    if ( !format )
+    {
+        fprintf(stderr, "\n");
+        fprintf(stderr, "Usage: bamtk tview [options] <aln.bam> [ref.fasta]\n");
+        fprintf(stderr, "Options:\n");
+        fprintf(stderr, "   -p chr:pos      go directly to this position\n");
+        fprintf(stderr, "   -s STR          display only reads from this sample or group\n");
+        fprintf(stderr, "   -d display      (H)tml or (C)urses or (T)ext \n");
+        fprintf(stderr, "\n\n");
+    }
+    else
+    {
+        va_list ap;
+        va_start(ap, format);
+        vfprintf(stderr, format, ap);
+        va_end(ap);
+    }
+    exit(-1);
+}
+
+enum dipsay_mode {display_ncurses,display_html,display_text};
+extern tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples);
+extern tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples);
+int bam_tview_main(int argc, char *argv[])
+	{
+	int view_mode=display_ncurses;
+	tview_t* tv=NULL;
+    char *samples=NULL, *position=NULL;
+    int c;
+    while ((c = getopt(argc, argv, "s:p:d:")) >= 0) {
+        switch (c) {
+            case 's': samples=optarg; break;
+            case 'p': position=optarg; break;
+            case 'd':
+            	{
+            	switch(optarg[0])
+            		{
+            		case 'H': case 'h': view_mode=display_html;break;
+            		case 'T': case 't': view_mode=display_text;break;
+            		case 'C': case 'c': view_mode=display_ncurses;break;
+			default: view_mode=display_ncurses;break;
+			}
+            	break;
+            	}
+            default: error(NULL);
+        }
+    }
+	if (argc==optind) error(NULL);
+	
+	switch(view_mode)
+		{
+		case display_ncurses:
+			{
+			tv = curses_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+			break;
+			}
+		case display_text:
+		case display_html:
+			{
+			tv = html_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+			break;
+			}
+		}
+	if(tv==NULL)
+		{
+		error("cannot create view");
+		return EXIT_FAILURE;
+		}
+	
+	if ( position )
+	   	 {
+		int _tid = -1, _beg, _end;
+		bam_parse_region(tv->header, position, &_tid, &_beg, &_end);
+		if (_tid >= 0) { tv->curr_tid = _tid; tv->left_pos = _beg; }
+	    	}
+	tv->my_drawaln(tv, tv->curr_tid, tv->left_pos);
+	tv->my_loop(tv);
+	tv->my_destroy(tv);
+	
+	return EXIT_SUCCESS;
+	}

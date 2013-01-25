@@ -6,6 +6,7 @@
 #include <string.h>
 #include <math.h>
 #include <unistd.h>
+#include <stdarg.h>
 #include "bam.h"
 #include "faidx.h"
 #include "bam2bcf.h"
@@ -36,6 +37,9 @@ typedef struct AbstractTview {
     void (*my_attroff)(struct AbstractTview*,int);
     void (*my_clear)(struct AbstractTview*);
     int (*my_colorpair)(struct AbstractTview*,int);
+    int (*my_drawaln)(struct AbstractTview*,int,int);
+    int (*my_loop)(struct AbstractTview*);
+    int (*my_underline)(struct AbstractTview*);
 } tview_t;
 
 
@@ -59,13 +63,13 @@ char bam_aux_getCQi(bam1_t *b, int i);
 int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data);
 int base_tv_init(tview_t*,const char *fn, const char *fn_fa, const char *samples);
 void base_tv_destroy(tview_t*);
+int base_draw_aln(tview_t *tv, int tid, int pos);
 
-int tv_draw_aln(tview_t *tv, int tid, int pos);
-
-
-enum {
-	BAM_TVIEW_UNDERLINE
-	};
+typedef struct Tixel
+	{
+	int ch;
+	int attributes;
+	}tixel_t;
 
 #endif
 
