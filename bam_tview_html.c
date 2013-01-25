@@ -1,4 +1,7 @@
+#include <unistd.h>
 #include "bam_tview.h"
+
+#define UNDERLINE_FLAG 10
 
 typedef struct HtmlTview {
 	tview_t view;
@@ -72,13 +75,15 @@ static void html_mvaddch(struct AbstractTview* tv,int y,int x,int ch)
 static void html_attron(struct AbstractTview* tv,int flag)
     {
     html_tview_t* ptr=FROM_TV(tv);
-    ptr->attributes |= 1 << flag;
+    ptr->attributes |=  flag;
+
+
     }
    
 static void html_attroff(struct AbstractTview* tv,int flag)
     {
     html_tview_t* ptr=FROM_TV(tv);
-    ptr->attributes &= ~(1 << flag);
+    ptr->attributes &= ~(flag);
     }
     
 static void html_clear(struct AbstractTview* tv)
@@ -97,7 +102,7 @@ static void html_clear(struct AbstractTview* tv)
     
 static int html_colorpair(struct AbstractTview* tv,int flag)
     {
-    return flag;
+    return (1 << (flag));
     }
 
 static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
@@ -107,9 +112,16 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
     html_clear(tv);
     base_draw_aln(tv,  tid, pos);
     fputs("<html><head>",ptr->out);
-    
+    fprintf(ptr->out,"<title>%s:%d</title>",
+    	tv->header->target_name[tid],
+    	pos+1
+    	);
     //style
-    fputs("<style type='text/css'>",ptr->out);
+   
+    fputs("<style type='text/css'>\n",ptr->out);
+    fputs(".tviewbody { margin:5px; background-color:white;text-align:center;}\n",ptr->out);
+    fputs(".tviewtitle {text-align:center;}\n",ptr->out);
+    fputs(".tviewpre { margin:5px; background-color:white;}\n",ptr->out);
     #define CSS(id,col) fprintf(ptr->out,".tviewc%d {color:%s;}\n.tviewcu%d {color:%s;text-decoration:underline;}\n",id,col,id,col);
         CSS(0, "black");
     	CSS(1, "blue");
@@ -125,7 +137,13 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
     fputs("</style>",ptr->out);
     
     fputs("</head><body>",ptr->out);
-    fputs("<pre class='tview'>\n",ptr->out);
+    
+      fprintf(ptr->out,"<div class='tviewbody'><div class='tviewtitle'>%s:%d</div>",
+    	tv->header->target_name[tid],
+    	pos+1
+    	);
+    
+    fputs("<pre class='tviewpre'>",ptr->out);
     for(y=0;y< ptr->row_count;++y)
     	{
     	
@@ -133,21 +151,27 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
 	    	{
 	    	
 		
-		if(x== 0 || ptr->screen[y][x].attributes!=ptr->screen[y][x-1].attributes)
+		if(x== 0 || ptr->screen[y][x].attributes != ptr->screen[y][x-1].attributes)
 	    		{
 	    		int css=0;
-	    		fputs("<span class='",ptr->out);
-	    		while(css<10)
+
+	    		while(css<32)
 	    			{
-	    			if((ptr->screen[y][x].attributes & (1 << css))!=0)
+	    			//if(y>1) fprintf(stderr,"css=%d pow2=%d vs %d\n",css,(1 << (css)),ptr->screen[y][x].attributes);
+	    			if(( (ptr->screen[y][x].attributes) & (1 << (css)))!=0)
 	    				{
+	    				
+	    				fprintf(ptr->out," class='tviewc%s%d",
+	    					(( (ptr->screen[y][x].attributes) & (1 << (UNDERLINE_FLAG)) )!=0?"u":""),
+	    					css);
+	    				fputs("'",ptr->out);
 	    				break;
 	    				}
 	    			++css;
 	    			}
-	    		if(css>=10) css=0;
-	    		fprintf(ptr->out,"tviewc%d",css);
-	    		fputs("'>",ptr->out);
+
+
+	    		fputs(">",ptr->out);
 	    		}
 		
 		int ch=ptr->screen[y][x].ch;
@@ -167,23 +191,79 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
 	    	}
     	if(y+1 < ptr->row_count) fputs("<br/>",ptr->out);
     	}
-    fputs("</pre></body></html>",ptr->out);
+    fputs("</pre></div></body></html>",ptr->out);
     return 0;
     }
+
+
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
+#define ANSI_COLOR_YELLOW "\x1b[33m"
+#define ANSI_COLOR_BLUE "\x1b[34m"
+#define ANSI_COLOR_MAGENTA "\x1b[35m"
+#define ANSI_COLOR_CYAN "\x1b[36m"
+#define ANSI_COLOR_BLACK "\x1b[0m"
+#define ANSI_COLOR_RESET ANSI_COLOR_BLACK
+
+#define ANSI_UNDERLINE_SET "\033[4m"
+#define ANSI_UNDERLINE_UNSET "\033[0m"
 
 static int text_drawaln(struct AbstractTview* tv, int tid, int pos)
     {
     int y,x;
     html_tview_t* ptr=FROM_TV(tv);
     html_clear(tv);
-    base_draw_aln(tv,  tid, pos);
+    base_draw_aln(tv,  tid, pos); 
+    int is_term= isatty(fileno(ptr->out));
+    
     for(y=0;y< ptr->row_count;++y)
     	{
     	for(x=0;x< tv->mcol;++x)
 	    	{
+	    	if(is_term)
+	    		{
+	    		int css=0;
+	    		while(css<32)
+	    			{
+	    			if(( (ptr->screen[y][x].attributes) & (1 << (css)))!=0)
+	    				{
+	    				break;
+	    				}
+	    			++css;
+	    			}
+    			switch(css)
+    				{
+    				//CSS(0, "black");
+			    	case 1: fputs(ANSI_COLOR_BLUE,ptr->out); break;
+				case 2: fputs(ANSI_COLOR_GREEN,ptr->out); break;
+				case 3: fputs(ANSI_COLOR_YELLOW,ptr->out); break;
+				//CSS(4, "black");
+				case 5: fputs(ANSI_COLOR_GREEN,ptr->out); break;
+				case 6: fputs(ANSI_COLOR_CYAN,ptr->out); break;
+				case 7: fputs(ANSI_COLOR_YELLOW,ptr->out); break;
+				case 8: fputs(ANSI_COLOR_RED,ptr->out); break;
+				case 9: fputs(ANSI_COLOR_BLUE,ptr->out); break;
+				default:break;
+    				}
+    			if(( (ptr->screen[y][x].attributes) & (1 << (UNDERLINE_FLAG)))!=0)
+    				{
+    				fputs(ANSI_UNDERLINE_SET,ptr->out);
+    				}
+    			
+	    		}
+	    	
+	    	
 	    	int ch=ptr->screen[y][x].ch;
 
 	    	fputc(ch,ptr->out);
+	    	if(is_term)
+	    		{
+	    		fputs(ANSI_COLOR_RESET,ptr->out);
+	    		if(( (ptr->screen[y][x].attributes) & (1 << (UNDERLINE_FLAG)))!=0)
+    				{
+    				fputs(ANSI_UNDERLINE_UNSET,ptr->out);
+    				}
+	    		}
 	    	}
     	fputc('\n',ptr->out);
     	}
@@ -199,7 +279,7 @@ static int html_loop(tview_t* tv)
 
 static int html_underline(tview_t* tv)
 	{
-	return 11;	
+	return (1 << UNDERLINE_FLAG);	
 	}
 
 /*

@@ -302,6 +302,7 @@ static void error(const char *format, ...)
 enum dipsay_mode {display_ncurses,display_html,display_text};
 extern tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples);
 extern tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples);
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples);
 int bam_tview_main(int argc, char *argv[])
 	{
 	int view_mode=display_ncurses;
@@ -336,6 +337,10 @@ int bam_tview_main(int argc, char *argv[])
 			break;
 			}
 		case display_text:
+			{
+			tv = text_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+			break;
+			}
 		case display_html:
 			{
 			tv = html_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
