@@ -134,7 +134,7 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:p:m:")) >= 0) {
 		switch (c) {
 		case 's':
 			if ((g_subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -166,7 +166,7 @@ int main_samview(int argc, char *argv[])
 		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
 		case 'B': bam_no_B = 1; break;
 		case 'Q': g_qual_scale = atoi(optarg); break;
-		case '@': n_threads = strtol(optarg, 0, 0); break;
+		case 'p': n_threads = strtol(optarg, 0, 0); break;
 		default: return usage(is_long_help);
 		}
 	}
@@ -305,7 +305,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -c       print only the count of matching records\n");
 	fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
-	fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
+	fprintf(stderr, "         -p INT   number of BAM compression threads [0]\n");
 	fprintf(stderr, "         -L FILE  output alignments overlapping the input BED FILE [null]\n");
 	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
 	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
