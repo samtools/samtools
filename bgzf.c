@@ -72,7 +72,6 @@ typedef FILE *_bgzf_file_t;
  +---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+---+
 */
 static const uint8_t g_magic[19] = "\037\213\010\4\0\0\0\0\0\377\6\0\102\103\2\0\0\0";
-// TODO: DON't FORGET TO CLEAN UP
 
 #ifdef BGZF_CACHE
 typedef struct {

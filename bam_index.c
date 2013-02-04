@@ -529,7 +529,7 @@ int bam_index(int argc, char *argv[])
 		fprintf(stderr, "Options: -d INT   specify I/O buffer size in kB\n\n");
 		return 1;
 	}
-	if (argc >= 3) bam_index_build2(argv[optind], argv[optind + 1]);
+	if (argc > optind + 1) bam_index_build2(argv[optind], argv[optind + 1]);
 	else bam_index_build(argv[optind]);
 	return 0;
 }

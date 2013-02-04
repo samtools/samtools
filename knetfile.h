@@ -23,8 +23,7 @@
 #define KNF_TYPE_HTTP  3
 
 typedef struct knetFile_s {
-	int type;
-	int fd;
+	int type, fd;
 	FILE *fp;
 	char *buffer;
 	int64_t offset;

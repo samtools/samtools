@@ -485,6 +485,7 @@ knetFile *knet_open(const char *fn, const char *mode)
 		fp = (knetFile*)calloc(1, sizeof(knetFile));
 		fp->type = KNF_TYPE_LOCAL;
 		fp->fp = fpf;
+		fp->fd = -1;
 		fp->ctrl_fd = -1;
 		if (g_block_size > 0) {
 			fp->buffer = malloc(g_block_size * 1024);
@@ -507,6 +508,7 @@ knetFile *knet_dopen(int fd, const char *mode)
 	knetFile *fp = (knetFile*)calloc(1, sizeof(knetFile));
 	fp->type = KNF_TYPE_LOCAL;
 	fp->fp = fdopen(fd, mode);
+	fp->fd = -1;
 	return fp;
 }
 
