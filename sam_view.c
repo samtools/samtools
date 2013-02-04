@@ -8,6 +8,7 @@
 #include "faidx.h"
 #include "kstring.h"
 #include "khash.h"
+#include "globals.h"
 KHASH_SET_INIT_STR(rg)
 
 // When counting records instead of printing them,
@@ -134,7 +135,7 @@ int main_samview(int argc, char *argv[])
 
 	/* parse command-line options */
 	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:d:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
 		switch (c) {
 		case 's':
 			if ((g_subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -167,6 +168,7 @@ int main_samview(int argc, char *argv[])
 		case 'B': bam_no_B = 1; break;
 		case 'Q': g_qual_scale = atoi(optarg); break;
 		case '@': n_threads = strtol(optarg, 0, 0); break;
+		case 'd': g_block_size = strtol(optarg, 0, 0); break;
 		default: return usage(is_long_help);
 		}
 	}
@@ -317,6 +319,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -l STR   only output reads in library STR [null]\n");
 	fprintf(stderr, "         -r STR   only output reads in read group STR [null]\n");
 	fprintf(stderr, "         -s FLOAT fraction of templates to subsample; integer part as seed [-1]\n");
+	fprintf(stderr, "         -d INT   specify I/O buffer size in kB\n");
 	fprintf(stderr, "         -?       longer help\n");
 	fprintf(stderr, "\n");
 	if (is_long_help)

@@ -7,6 +7,7 @@
 #ifdef _USE_KNETFILE
 #include "knetfile.h"
 #endif
+#include "globals.h"
 
 /*!
   @header
@@ -496,10 +497,17 @@ int bam_index_build2(const char *fn, const char *_fnidx)
 		free(fnidx);
 		return -1;
 	}
+	char *buffer = 0;
+	if (g_block_size > 0) {
+		buffer = malloc(g_block_size * 1024);
+		setvbuf(fpidx, buffer, _IOFBF, g_block_size * 1024);
+	}
 	bam_index_save(idx, fpidx);
 	bam_index_destroy(idx);
 	fclose(fpidx);
 	free(fnidx);
+	if (buffer)
+		free(buffer);
 	return 0;
 }
 
@@ -510,12 +518,19 @@ int bam_index_build(const char *fn)
 
 int bam_index(int argc, char *argv[])
 {
+	int c;
+	while ((c = getopt(argc, argv, "d:")) >= 0) {
+		switch (c) {
+		case 'd': g_block_size = atoi(optarg); break;
+		}
+	}
 	if (argc < 2) {
-		fprintf(stderr, "Usage: samtools index <in.bam> [out.index]\n");
+		fprintf(stderr, "Usage: samtools index [options] <in.bam> [out.index]\n");
+		fprintf(stderr, "Options: -d INT   specify I/O buffer size in kB\n\n");
 		return 1;
 	}
-	if (argc >= 3) bam_index_build2(argv[1], argv[2]);
-	else bam_index_build(argv[1]);
+	if (argc >= 3) bam_index_build2(argv[optind], argv[optind + 1]);
+	else bam_index_build(argv[optind]);
 	return 0;
 }
 

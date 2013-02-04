@@ -2,6 +2,7 @@
 #define BAM_SAM_H
 
 #include "bam.h"
+#include "globals.h"
 
 /*!
   @header
@@ -20,6 +21,7 @@
   @field  tamr  SAM file handler for reading; valid if type == 2
   @field  tamw  SAM file handler for writing; valid if type == 0
   @field  header  header struct
+  @field  buffer  a larger buffer for the file, if desired (to reduce number read/write syscalls)
  */
 typedef struct {
 	int type;
@@ -29,6 +31,7 @@ typedef struct {
 		FILE *tamw;
 	} x;
 	bam_header_t *header;
+	char* buffer;
 } samfile_t;
 
 #ifdef __cplusplus

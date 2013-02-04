@@ -1,6 +1,7 @@
 #ifndef KNETFILE_H
 #define KNETFILE_H
 
+#include <stdio.h>
 #include <stdint.h>
 #include <fcntl.h>
 
@@ -22,7 +23,10 @@
 #define KNF_TYPE_HTTP  3
 
 typedef struct knetFile_s {
-	int type, fd;
+	int type;
+	int fd;
+	FILE *fp;
+	char *buffer;
 	int64_t offset;
 	char *host, *port;
 
