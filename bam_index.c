@@ -519,14 +519,14 @@ int bam_index_build(const char *fn)
 int bam_index(int argc, char *argv[])
 {
 	int c;
-	while ((c = getopt(argc, argv, "d:")) >= 0) {
+	while ((c = getopt(argc, argv, "z:")) >= 0) {
 		switch (c) {
-		case 'd': g_block_size = atoi(optarg); break;
+		case 'z': g_block_size = atoi(optarg); break;
 		}
 	}
 	if (argc < 2) {
 		fprintf(stderr, "Usage: samtools index [options] <in.bam> [out.index]\n");
-		fprintf(stderr, "Options: -d INT   specify I/O buffer size in kB\n\n");
+		fprintf(stderr, "Options: -z INT   specify I/O buffer size in kB\n\n");
 		return 1;
 	}
 	if (argc > optind + 1) bam_index_build2(argv[optind], argv[optind + 1]);
