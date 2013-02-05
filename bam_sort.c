@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include "bam.h"
 #include "ksort.h"
+#include "globals.h"
 
 static int g_is_by_qname = 0;
 
@@ -267,7 +268,7 @@ int bam_merge(int argc, char *argv[])
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
 	char *fn_headers = NULL, *reg = 0;
 
-	while ((c = getopt(argc, argv, "h:nru1R:f@:l:")) >= 0) {
+	while ((c = getopt(argc, argv, "h:nru1R:f@:l:z:")) >= 0) {
 		switch (c) {
 		case 'r': flag |= MERGE_RG; break;
 		case 'f': flag |= MERGE_FORCE; break;
@@ -278,6 +279,7 @@ int bam_merge(int argc, char *argv[])
 		case 'R': reg = strdup(optarg); break;
 		case 'l': level = atoi(optarg); break;
 		case '@': n_threads = atoi(optarg); break;
+		case 'z': g_block_size = atoi(optarg); break;
 		}
 	}
 	if (optind + 2 >= argc) {
@@ -291,7 +293,8 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "         -l INT   compression level, from 0 to 9 [-1]\n");
 		fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
 		fprintf(stderr, "         -R STR   merge file in the specified region STR [all]\n");
-		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n\n");
+		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
+		fprintf(stderr, "         -z INT   specify I/O buffer size in kB\n\n");
 		fprintf(stderr, "Note: Samtools' merge does not reconstruct the @RG dictionary in the header. Users\n");
 		fprintf(stderr, "      must provide the correct header with -h, or uses Picard which properly maintains\n");
 		fprintf(stderr, "      the header dictionary in merging.\n\n");
@@ -534,7 +537,7 @@ int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 768<<20; // 512MB
 	int c, is_by_qname = 0, is_stdout = 0, n_threads = 0, level = -1;
-	while ((c = getopt(argc, argv, "nom:@:l:")) >= 0) {
+	while ((c = getopt(argc, argv, "nom:@:l:z:")) >= 0) {
 		switch (c) {
 		case 'o': is_stdout = 1; break;
 		case 'n': is_by_qname = 1; break;
@@ -548,6 +551,7 @@ int bam_sort(int argc, char *argv[])
 			}
 		case '@': n_threads = atoi(optarg); break;
 		case 'l': level = atoi(optarg); break;
+		case 'z': g_block_size = atoi(optarg); break;
 		}
 	}
 	if (optind + 2 > argc) {
@@ -558,6 +562,7 @@ int bam_sort(int argc, char *argv[])
 		fprintf(stderr, "         -l INT    compression level, from 0 to 9 [-1]\n");
 		fprintf(stderr, "         -@ INT    number of sorting and compression threads [1]\n");
 		fprintf(stderr, "         -m INT    max memory per thread; suffix K/M/G recognized [768M]\n");
+		fprintf(stderr, "         -z INT    specify I/O buffer size in kB\n\n");
 		fprintf(stderr, "\n");
 		return 1;
 	}

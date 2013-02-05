@@ -43,6 +43,8 @@
 #include <sys/socket.h>
 #endif
 
+#include "globals.h"
+
 #include "knetfile.h"
 
 /* In winsock.h, the type of a socket is SOCKET, which is: "typedef
@@ -472,20 +474,29 @@ knetFile *knet_open(const char *fn, const char *mode)
 		/* In windows, O_BINARY is necessary. In Linux/Mac, O_BINARY may
 		 * be undefined on some systems, although it is defined on my
 		 * Mac and the Linux I have tested on. */
-		int fd = open(fn, O_RDONLY | O_BINARY);
+		FILE *fpf = fopen(fn, "rb");
 #else		
-		int fd = open(fn, O_RDONLY);
+		FILE *fpf = fopen(fn, "r");
 #endif
-		if (fd == -1) {
+		if (!fpf) {
 			perror("open");
 			return 0;
 		}
 		fp = (knetFile*)calloc(1, sizeof(knetFile));
 		fp->type = KNF_TYPE_LOCAL;
-		fp->fd = fd;
+		fp->fp = fpf;
+		fp->fd = -1;
 		fp->ctrl_fd = -1;
+		if (g_block_size > 0) {
+			fp->buffer = malloc(g_block_size << 10);
+			setvbuf(fp->fp, fp->buffer, _IOFBF, g_block_size << 10);
+		}
 	}
-	if (fp && fp->fd == -1) {
+	if (fp && fp->type != KNF_TYPE_LOCAL && fp->fd == -1) {
+		knet_close(fp);
+		return 0;
+	}
+	if (fp && fp->type == KNF_TYPE_LOCAL && !fp->fp) {
 		knet_close(fp);
 		return 0;
 	}
@@ -496,14 +507,19 @@ knetFile *knet_dopen(int fd, const char *mode)
 {
 	knetFile *fp = (knetFile*)calloc(1, sizeof(knetFile));
 	fp->type = KNF_TYPE_LOCAL;
-	fp->fd = fd;
+	fp->fp = fdopen(fd, mode);
+	fp->fd = -1;
 	return fp;
 }
 
 off_t knet_read(knetFile *fp, void *buf, off_t len)
 {
 	off_t l = 0;
-	if (fp->fd == -1) return 0;
+	if (fp->type == KNF_TYPE_LOCAL) {
+		if (!fp->fp) return 0;
+	} else {
+		if (fp->fd == -1) return 0;
+	}
 	if (fp->type == KNF_TYPE_FTP) {
 		if (fp->is_ready == 0) {
 			if (!fp->no_reconnect) kftp_reconnect(fp);
@@ -517,7 +533,7 @@ off_t knet_read(knetFile *fp, void *buf, off_t len)
 		off_t rest = len, curr;
 		while (rest) {
 			do {
-				curr = read(fp->fd, buf + l, rest);
+				curr = fread(buf + l, 1, rest, fp->fp);
 			} while (curr < 0 && EINTR == errno);
 			if (curr < 0) return -1;
 			if (curr == 0) break;
@@ -534,7 +550,7 @@ off_t knet_seek(knetFile *fp, int64_t off, int whence)
 	if (fp->type == KNF_TYPE_LOCAL) {
 		/* Be aware that lseek() returns the offset after seeking,
 		 * while fseek() returns zero on success. */
-		off_t offset = lseek(fp->fd, off, whence);
+		off_t offset = fseek(fp->fp, off, whence);
 		if (offset == -1) {
             // Be silent, it is OK for knet_seek to fail when the file is streamed
             // fprintf(stderr,"[knet_seek] %s\n", strerror(errno));
@@ -577,15 +593,22 @@ int knet_close(knetFile *fp)
 {
 	if (fp == 0) return 0;
 	if (fp->ctrl_fd != -1) netclose(fp->ctrl_fd); // FTP specific
-	if (fp->fd != -1) {
-		/* On Linux/Mac, netclose() is an alias of close(), but on
-		 * Windows, it is an alias of closesocket(). */
-		if (fp->type == KNF_TYPE_LOCAL) close(fp->fd);
-		else netclose(fp->fd);
+	if (fp->type == KNF_TYPE_LOCAL) {
+		if (fp->fp) {
+			fclose(fp->fp);
+		}
+	} else {
+		if (fp->fd != -1) {
+			/* On Linux/Mac, netclose() is an alias of close(), but on
+			* Windows, it is an alias of closesocket(). */
+			netclose(fp->fd);
+		}
 	}
 	free(fp->host); free(fp->port);
 	free(fp->response); free(fp->retr); // FTP specific
 	free(fp->path); free(fp->http_host); // HTTP specific
+	if (fp->buffer)
+		free(fp->buffer);
 	free(fp);
 	return 0;
 }

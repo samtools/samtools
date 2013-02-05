@@ -30,6 +30,7 @@
 #include <pthread.h>
 #include <sys/types.h>
 #include "bgzf.h"
+#include "globals.h"
 
 #ifdef _USE_KNETFILE
 #include "knetfile.h"
@@ -108,6 +109,7 @@ static BGZF *bgzf_read_init()
 	fp->is_write = 0;
 	fp->uncompressed_block = malloc(BGZF_MAX_BLOCK_SIZE);
 	fp->compressed_block = malloc(BGZF_MAX_BLOCK_SIZE);
+	fp->buffer = 0;
 #ifdef BGZF_CACHE
 	fp->cache = kh_init(cache);
 #endif
@@ -121,6 +123,7 @@ static BGZF *bgzf_write_init(int compress_level) // compress_level==-1 for the d
 	fp->is_write = 1;
 	fp->uncompressed_block = malloc(BGZF_MAX_BLOCK_SIZE);
 	fp->compressed_block = malloc(BGZF_MAX_BLOCK_SIZE);
+	fp->buffer = 0;
 	fp->compress_level = compress_level < 0? Z_DEFAULT_COMPRESSION : compress_level; // Z_DEFAULT_COMPRESSION==-1
 	if (fp->compress_level > 9) fp->compress_level = Z_DEFAULT_COMPRESSION;
 	return fp;
@@ -150,6 +153,11 @@ BGZF *bgzf_open(const char *path, const char *mode)
 		if ((fpw = fopen(path, "w")) == 0) return 0;
 		fp = bgzf_write_init(mode2level(mode));
 		fp->fp = fpw;
+		if (g_block_size > 0)
+		{
+			fp->buffer = malloc(g_block_size << 10);
+			setvbuf(fp->fp, fp->buffer, _IOFBF, g_block_size << 10);
+		}
 	}
 	return fp;
 }
@@ -586,6 +594,8 @@ int bgzf_close(BGZF* fp)
 	if (ret != 0) return -1;
 	free(fp->uncompressed_block);
 	free(fp->compressed_block);
+	if (fp->buffer)
+		free(fp->buffer);
 	free_cache(fp);
 	free(fp);
 	return 0;

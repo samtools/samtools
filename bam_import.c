@@ -13,6 +13,7 @@
 #include "sam_header.h"
 #include "kseq.h"
 #include "khash.h"
+#include "globals.h"
 
 KSTREAM_INIT(gzFile, gzread, 16384)
 KHASH_MAP_INIT_STR(ref, uint64_t)
@@ -74,6 +75,8 @@ char **__bam_get_lines(const char *fn, int *_n) // for bam_plcmd.c only
 	char **list = 0, *s;
 	int n = 0, dret, m = 0;
 	gzFile fp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
+	if (g_block_size > 0)
+		gzbuffer(fp, g_block_size << 10);
 	kstream_t *ks;
 	kstring_t *str;
 	str = (kstring_t*)calloc(1, sizeof(kstring_t));
@@ -125,6 +128,8 @@ bam_header_t *sam_header_read2(const char *fn)
 	if (fn == 0) return 0;
 	fp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
 	if (fp == 0) return 0;
+	if (g_block_size > 0)
+		gzbuffer(fp, g_block_size << 10);
 	hash = kh_init(ref);
 	ks = ks_init(fp);
 	str = (kstring_t*)calloc(1, sizeof(kstring_t));
@@ -471,6 +476,8 @@ tamFile sam_open(const char *fn)
 	tamFile fp;
 	gzFile gzfp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "rb") : gzopen(fn, "rb");
 	if (gzfp == 0) return 0;
+	if (g_block_size > 0)
+		gzbuffer(gzfp, g_block_size << 10);
 	fp = (tamFile)calloc(1, sizeof(struct __tamFile_t));
 	fp->str = (kstring_t*)calloc(1, sizeof(kstring_t));
 	fp->fp = gzfp;

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <zlib.h>
+#include "globals.h"
 
 #ifdef _WIN32
 #define drand48() ((double)rand() / RAND_MAX)
@@ -106,6 +107,8 @@ void *bed_read(const char *fn)
 	// read the list
 	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
 	if (fp == 0) return 0;
+	if (g_block_size > 0)
+		gzbuffer(fp, g_block_size << 10);
 	str = calloc(1, sizeof(kstring_t));
 	ks = ks_init(fp);
 	while (ks_getuntil(ks, 0, str, &dret) >= 0) { // read the chr name

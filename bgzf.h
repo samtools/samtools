@@ -50,6 +50,7 @@ typedef struct {
 	void *cache; // a pointer to a hash table
 	void *fp; // actual file handler; FILE* on writing; FILE* or knetFile* on reading
 	void *mt; // only used for multi-threading
+	char *buffer;
 } BGZF;
 
 #ifndef KSTRING_T

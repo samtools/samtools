@@ -6,6 +6,7 @@
 #include <zlib.h>
 #include "bam.h"
 #include "errmod.h"
+#include "globals.h"
 
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
@@ -473,6 +474,8 @@ static khash_t(set64) *loadpos(const char *fn, bam_header_t *h)
 	hash = kh_init(set64);
 	str = calloc(1, sizeof(kstring_t));
 	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
+	if (g_block_size > 0)
+		gzbuffer(fp, g_block_size << 10);
 	ks = ks_init(fp);
 	while (ks_getuntil(ks, 0, str, &dret) >= 0) {
 		int tid = bam_get_tid(h, str->s);

@@ -7,6 +7,7 @@
 #include "kstring.h"
 #include "bgzf.h"
 #include "bam.h"
+#include "globals.h"
 
 #include "kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
@@ -67,6 +68,8 @@ int main_bedcov(int argc, char *argv[])
 	cnt = calloc(n, 8);
 
 	fp = gzopen(argv[optind], "rb");
+	if (g_block_size > 0)
+		gzbuffer(fp, g_block_size << 10);
 	ks = ks_init(fp);
 	n_plp = calloc(n, sizeof(int));
 	plp = calloc(n, sizeof(void*));

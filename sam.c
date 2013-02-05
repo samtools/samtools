@@ -2,6 +2,7 @@
 #include <unistd.h>
 #include "faidx.h"
 #include "sam.h"
+#include "globals.h"
 
 #define TYPE_BAM  1
 #define TYPE_READ 2
@@ -112,6 +113,16 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 			}
 		}
 	}
+	if (g_block_size > 0) {
+		if (fp->type & TYPE_BAM) {
+			fp->buffer = malloc(g_block_size << 10);
+			setvbuf(fp->x.bam->fp, fp->buffer, _IOFBF, g_block_size << 10);
+		} else if (fp->type & TYPE_READ) {
+		} else {
+			fp->buffer = malloc(g_block_size << 10);
+			setvbuf(fp->x.tamw, fp->buffer, _IOFBF, g_block_size << 10);
+		}
+	}
 	return fp;
 
 open_err_ret:
@@ -126,6 +137,8 @@ void samclose(samfile_t *fp)
 	if (fp->type & TYPE_BAM) bam_close(fp->x.bam);
 	else if (fp->type & TYPE_READ) sam_close(fp->x.tamr);
 	else fclose(fp->x.tamw);
+	if (fp->buffer)
+		free(fp->buffer);
 	free(fp);
 }
 
