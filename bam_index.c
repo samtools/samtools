@@ -499,8 +499,8 @@ int bam_index_build2(const char *fn, const char *_fnidx)
 	}
 	char *buffer = 0;
 	if (g_block_size > 0) {
-		buffer = malloc(g_block_size * 1024);
-		setvbuf(fpidx, buffer, _IOFBF, g_block_size * 1024);
+		buffer = malloc(g_block_size << 10);
+		setvbuf(fpidx, buffer, _IOFBF, g_block_size << 10);
 	}
 	bam_index_save(idx, fpidx);
 	bam_index_destroy(idx);

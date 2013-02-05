@@ -108,7 +108,7 @@ void *bed_read(const char *fn)
 	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
 	if (fp == 0) return 0;
 	if (g_block_size > 0)
-		gzbuffer(fp, g_block_size * 1024);
+		gzbuffer(fp, g_block_size << 10);
 	str = calloc(1, sizeof(kstring_t));
 	ks = ks_init(fp);
 	while (ks_getuntil(ks, 0, str, &dret) >= 0) { // read the chr name

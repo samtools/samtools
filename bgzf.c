@@ -155,8 +155,8 @@ BGZF *bgzf_open(const char *path, const char *mode)
 		fp->fp = fpw;
 		if (g_block_size > 0)
 		{
-			fp->buffer = malloc(g_block_size * 1024);
-			setvbuf(fp->fp, fp->buffer, _IOFBF, g_block_size * 1024);
+			fp->buffer = malloc(g_block_size << 10);
+			setvbuf(fp->fp, fp->buffer, _IOFBF, g_block_size << 10);
 		}
 	}
 	return fp;

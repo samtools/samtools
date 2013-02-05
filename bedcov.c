@@ -69,7 +69,7 @@ int main_bedcov(int argc, char *argv[])
 
 	fp = gzopen(argv[optind], "rb");
 	if (g_block_size > 0)
-		gzbuffer(fp, g_block_size * 1024);
+		gzbuffer(fp, g_block_size << 10);
 	ks = ks_init(fp);
 	n_plp = calloc(n, sizeof(int));
 	plp = calloc(n, sizeof(void*));

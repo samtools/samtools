@@ -113,19 +113,14 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 			}
 		}
 	}
-	if (g_block_size > 0)
-	{
+	if (g_block_size > 0) {
 		if (fp->type & TYPE_BAM) {
-			fp->buffer = malloc(g_block_size * 1024);
-			setvbuf(fp->x.bam->fp, fp->buffer, _IOFBF, g_block_size * 1024);
-		}
-		else if (fp->type & TYPE_READ)
-		{
-		}
-		else
-		{
-			fp->buffer = malloc(g_block_size * 1024);
-			setvbuf(fp->x.tamw, fp->buffer, _IOFBF, g_block_size * 1024);
+			fp->buffer = malloc(g_block_size << 10);
+			setvbuf(fp->x.bam->fp, fp->buffer, _IOFBF, g_block_size << 10);
+		} else if (fp->type & TYPE_READ) {
+		} else {
+			fp->buffer = malloc(g_block_size << 10);
+			setvbuf(fp->x.tamw, fp->buffer, _IOFBF, g_block_size << 10);
 		}
 	}
 	return fp;

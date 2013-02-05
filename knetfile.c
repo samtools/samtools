@@ -488,8 +488,8 @@ knetFile *knet_open(const char *fn, const char *mode)
 		fp->fd = -1;
 		fp->ctrl_fd = -1;
 		if (g_block_size > 0) {
-			fp->buffer = malloc(g_block_size * 1024);
-			setvbuf(fp->fp, fp->buffer, _IOFBF, g_block_size * 1024);
+			fp->buffer = malloc(g_block_size << 10);
+			setvbuf(fp->fp, fp->buffer, _IOFBF, g_block_size << 10);
 		}
 	}
 	if (fp && fp->type != KNF_TYPE_LOCAL && fp->fd == -1) {
