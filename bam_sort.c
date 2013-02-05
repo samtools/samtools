@@ -143,8 +143,6 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			// FIXME: possible memory leak
 			return -1;
 		}
-		if (g_block_size > 0)
-			gzbuffer(fp[i], g_block_size << 10);
 
 		hin = bam_header_read(fp[i]);
 		if (i == 0) { // the first BAM
@@ -382,8 +380,6 @@ static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf
 	bamFile fp;
 	fp = strcmp(fn, "-")? bam_open(fn, mode) : bam_dopen(fileno(stdout), mode);
 	if (fp == 0) return;
-	if (g_block_size > 0)
-		gzbuffer(fp, g_block_size << 10);
 	bam_header_write(fp, h);
 	if (n_threads > 1) bgzf_mt(fp, n_threads, 256);
 	for (i = 0; i < l; ++i)
@@ -466,8 +462,6 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
 		return;
 	}
-	if (g_block_size > 0)
-		gzbuffer(fp, g_block_size << 10);
 	header = bam_header_read(fp);
 	if (is_by_qname) change_SO(header, "queryname");
 	else change_SO(header, "coordinate");
