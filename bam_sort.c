@@ -143,7 +143,6 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			// FIXME: possible memory leak
 			return -1;
 		}
-
 		hin = bam_header_read(fp[i]);
 		if (i == 0) { // the first BAM
 			hout = hin;
