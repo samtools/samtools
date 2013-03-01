@@ -436,7 +436,7 @@ int bcfview(int argc, char *argv[])
 			vc.sublist = calloc(vc.n_sub, sizeof(int));
 			hout = bcf_hdr_subsam(hin, vc.n_sub, vc.subsam, vc.sublist);
 		}
-		if (vc.flag & VC_CALL) write_header(hout);
+		write_header(hout); // always print the header
 		vcf_hdr_write(bout, hout);
 	}
 	if (vc.flag & VC_CALL) {
