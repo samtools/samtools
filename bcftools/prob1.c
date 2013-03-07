@@ -203,7 +203,124 @@ void bcf_p1_destroy(bcf_p1aux_t *ma)
 extern double kf_gammap(double s, double z);
 int test16(bcf1_t *b, anno16_t *a);
 
-int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
+// Wigginton 2005, PMID: 15789306
+// written by Jan Wigginton
+double calc_hwe(int obs_hom1, int obs_hom2, int obs_hets)
+{
+    if (obs_hom1 + obs_hom2 + obs_hets == 0 ) return 1;
+
+    assert(obs_hom1 >= 0 && obs_hom2 >= 0 && obs_hets >= 0);
+
+    int obs_homc = obs_hom1 < obs_hom2 ? obs_hom2 : obs_hom1;
+    int obs_homr = obs_hom1 < obs_hom2 ? obs_hom1 : obs_hom2;
+
+    int rare_copies = 2 * obs_homr + obs_hets;
+    int genotypes   = obs_hets + obs_homc + obs_homr;
+
+    double *het_probs = (double*) calloc(rare_copies+1, sizeof(double));
+
+    /* start at midpoint */
+    int mid = rare_copies * (2 * genotypes - rare_copies) / (2 * genotypes);
+
+    /* check to ensure that midpoint and rare alleles have same parity */
+    if ((rare_copies & 1) ^ (mid & 1)) mid++;
+
+    int curr_hets = mid;
+    int curr_homr = (rare_copies - mid) / 2;
+    int curr_homc = genotypes - curr_hets - curr_homr;
+
+    het_probs[mid] = 1.0;
+    double sum = het_probs[mid];
+    for (curr_hets = mid; curr_hets > 1; curr_hets -= 2)
+    {
+        het_probs[curr_hets - 2] = het_probs[curr_hets] * curr_hets * (curr_hets - 1.0) / (4.0 * (curr_homr + 1.0) * (curr_homc + 1.0));
+        sum += het_probs[curr_hets - 2];
+
+        /* 2 fewer heterozygotes for next iteration -> add one rare, one common homozygote */
+        curr_homr++;
+        curr_homc++;
+    }
+
+    curr_hets = mid;
+    curr_homr = (rare_copies - mid) / 2;
+    curr_homc = genotypes - curr_hets - curr_homr;
+    for (curr_hets = mid; curr_hets <= rare_copies - 2; curr_hets += 2)
+    {
+        het_probs[curr_hets + 2] = het_probs[curr_hets] * 4.0 * curr_homr * curr_homc /((curr_hets + 2.0) * (curr_hets + 1.0));
+        sum += het_probs[curr_hets + 2];
+
+        /* add 2 heterozygotes for next iteration -> subtract one rare, one common homozygote */
+        curr_homr--;
+        curr_homc--;
+    }
+    int i;
+    for (i = 0; i <= rare_copies; i++) het_probs[i] /= sum;
+
+    /*  p-value calculation for p_hwe  */
+    double p_hwe = 0.0;
+    for (i = 0; i <= rare_copies; i++)
+    {
+        if (het_probs[i] > het_probs[obs_hets])
+            continue;
+        p_hwe += het_probs[i];
+    }
+
+    p_hwe = p_hwe > 1.0 ? 1.0 : p_hwe;
+    free(het_probs);
+    return p_hwe;
+
+}
+
+
+static void _bcf1_set_ref(bcf1_t *b, int idp)
+{
+    kstring_t s;
+    int old_n_gi = b->n_gi;
+    s.m = b->m_str; s.l = b->l_str - 1; s.s = b->str;
+    kputs(":GT", &s); kputc('\0', &s);
+    b->m_str = s.m; b->l_str = s.l; b->str = s.s;
+    bcf_sync(b);
+
+    // Call GTs
+    int isample, an = 0;
+    for (isample = 0; isample < b->n_smpl; isample++) 
+    {
+        if ( idp>=0 && ((uint16_t*)b->gi[idp].data)[isample]==0 )
+            ((uint8_t*)b->gi[old_n_gi].data)[isample] = 1<<7;
+        else
+        {
+            ((uint8_t*)b->gi[old_n_gi].data)[isample] = 0;
+            an += b->ploidy ? b->ploidy[isample] : 2;
+        }
+    }
+    bcf_fit_alt(b,1);
+    b->qual = 999;
+
+    // Prepare BCF for output: ref, alt, filter, info, format
+    memset(&s, 0, sizeof(kstring_t)); kputc('\0', &s); 
+    kputs(b->ref, &s); kputc('\0', &s);
+    kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
+    {
+        ksprintf(&s, "AN=%d;", an);
+        kputs(b->info, &s); 
+        anno16_t a;
+        int has_I16 = test16(b, &a) >= 0? 1 : 0;
+        if (has_I16 )
+        {
+            if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+            ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+        }
+        kputc('\0', &s);
+        rm_info(&s, "I16=");
+        rm_info(&s, "QS=");
+    }
+    kputs(b->fmt, &s); kputc('\0', &s);
+    free(b->str);
+    b->m_str = s.m; b->l_str = s.l; b->str = s.s;
+    bcf_sync(b);
+}
+
+int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_only)
 {
     int nals = 1;
     char *p;
@@ -214,8 +331,6 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
     }
     if ( b->alt[0] && !*p ) nals++;
 
-    if ( nals==1 ) return 1;
-
     if ( nals>4 )
     {
         if ( *b->ref=='N' ) return 0;
@@ -223,10 +338,9 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
         exit(1);
     }
 
-    // find PL and DP FORMAT indexes
+    // find PL, DV and DP FORMAT indexes
     uint8_t *pl = NULL;
-    int npl = 0, idp=-1;
-    int i;
+    int i, npl = 0, idp = -1, idv = -1;
     for (i = 0; i < b->n_gi; ++i) 
     {
         if (b->gi[i].fmt == bcf_str2int("PL", 2)) 
@@ -234,7 +348,13 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
             pl  = (uint8_t*)b->gi[i].data;
             npl = b->gi[i].len;
         }
-        if (b->gi[i].fmt == bcf_str2int("DP", 2))  idp=i;
+        else if (b->gi[i].fmt == bcf_str2int("DP", 2))  idp=i;
+        else if (b->gi[i].fmt == bcf_str2int("DV", 2))  idv=i;
+    }
+    if ( nals==1 ) 
+    {
+        if ( !var_only ) _bcf1_set_ref(b, idp);
+        return 1;
     }
     if ( !pl ) return -1;
 
@@ -265,9 +385,9 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
     if ( sscanf(p+3,"%lf,%lf,%lf,%lf",&qsum[0],&qsum[1],&qsum[2],&qsum[3])!=4 ) { fprintf(stderr,"Could not parse %s\n",p); exit(1); }
 
 
-    // Calculate the most likely combination of alleles
+    // Calculate the most likely combination of alleles, remembering the most and second most likely set
     int ia,ib,ic, max_als=0, max_als2=0;
-    double ref_lk = 0, max_lk = INT_MIN, max_lk2 = INT_MIN, lk_sum = INT_MIN;
+    double ref_lk = 0, max_lk = INT_MIN, max_lk2 = INT_MIN, lk_sum = INT_MIN, lk_sums[3];
     for (ia=0; ia<nals; ia++)
     {
         double lk_tot = 0;
@@ -284,6 +404,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
         else if ( max_lk2<lk_tot ) { max_lk2 = lk_tot; max_als2 = 1<<ia; }
         lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
     }
+    lk_sums[0] = lk_sum;
     if ( nals>1 )
     {
         for (ia=0; ia<nals; ia++)
@@ -312,6 +433,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
                 lk_sum = lk_tot>lk_sum ? lk_tot + log(1+exp(lk_sum-lk_tot)) : lk_sum + log(1+exp(lk_tot-lk_sum));
             }
         }
+        lk_sums[1] = lk_sum;
     }
     if ( nals>2 )
     {
@@ -349,6 +471,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
                 }
             }
         }
+        lk_sums[2] = lk_sum;
     }
 
     // Should we add another allele, does it increase the likelihood significantly?
@@ -357,9 +480,12 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
     for (i=0; i<nals; i++) if ( max_als2&1<<i) n2++;
     if ( n2<n1 && kf_gammap(1,2.0*(max_lk-max_lk2))<threshold )
     {
-        max_lk = max_lk2;
+        // the threshold not exceeded, use the second most likely set with fewer alleles
+        max_lk  = max_lk2;
         max_als = max_als2;
+        n1 = n2;
     }
+    lk_sum = lk_sums[n1-1];
 
     // Get the BCF record ready for GT and GQ
     kstring_t s;
@@ -371,19 +497,20 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
 
     // Call GTs
     int isample, gts=0, ac[4] = {0,0,0,0};
+    int nRR = 0, nAA = 0, nRA = 0, max_dv = 0, dp_nref = 0;
     for (isample = 0; isample < b->n_smpl; isample++) 
     {
         int ploidy = b->ploidy ? b->ploidy[isample] : 2;
         double *p = pdg + isample*npdg;
         int ia, als = 0;
-        double lk = 0, lk_sum=0;
+        double lk = 0, lk_s = 0;
         for (ia=0; ia<nals; ia++)
         {
             if ( !(max_als&1<<ia) ) continue;
             int iaa = (ia+1)*(ia+2)/2-1;
             double _lk = p[iaa]*qsum[ia]*qsum[ia];
             if ( _lk > lk ) { lk = _lk; als = ia<<3 | ia; }
-            lk_sum += _lk;
+            lk_s += _lk;
         }
         if ( ploidy==2 ) 
         {
@@ -397,26 +524,48 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
                     int iab = iaa - ia + ib;
                     double _lk = 2*qsum[ia]*qsum[ib]*p[iab];
                     if ( _lk > lk ) { lk = _lk; als = ib<<3 | ia; }
-                    lk_sum += _lk;
+                    lk_s += _lk;
                 }
             }
         }
-        lk = -log(1-lk/lk_sum)/0.2302585;
-        if ( idp>=0 && ((uint16_t*)b->gi[idp].data)[isample]==0 ) 
+        lk = -log(1-lk/lk_s)/0.2302585;
+        int dp = 0;
+        if ( idp>=0 && (dp=((uint16_t*)b->gi[idp].data)[isample])==0 )
         {
+            // no coverage
             ((uint8_t*)b->gi[old_n_gi].data)[isample]   = 1<<7;
             ((uint8_t*)b->gi[old_n_gi+1].data)[isample] = 0;
             continue;
         }
+        if ( lk>99 ) lk = 99;
         ((uint8_t*)b->gi[old_n_gi].data)[isample]   = als;
-        ((uint8_t*)b->gi[old_n_gi+1].data)[isample] = lk<100 ? (int)lk : 99;
+        ((uint8_t*)b->gi[old_n_gi+1].data)[isample] = (int)lk;
+
+        // For MDV annotation
+        int dv;
+        if ( als && idv>=0 && (dv=((uint16_t*)b->gi[idv].data)[isample]) )
+        {
+            if ( max_dv < dv ) max_dv = dv;
+            dp_nref += dp;
+        }
+
+        // For HWE annotation; multiple ALT alleles treated as one
+        if ( !als ) nRR++;
+        else if ( !(als>>3&7) || !(als&7) ) nRA++;
+        else nAA++;
 
         gts |= 1<<(als>>3&7) | 1<<(als&7);
         ac[ als>>3&7 ]++;
         ac[ als&7 ]++;
     }
+    free(pdg);
     bcf_fit_alt(b,max_als);
 
+    // The VCF spec is ambiguous about QUAL: is it the probability of anything else
+    //  (that is QUAL(non-ref) = P(ref)+P(any non-ref other than ALT)) or is it
+    //  QUAL(non-ref)=P(ref) and QUAL(ref)=1-P(ref)? Assuming the latter.
+    b->qual = gts>1 ? -4.343*(ref_lk - lk_sum) : -4.343*log(1-exp(ref_lk - lk_sum));
+    if ( b->qual>999 ) b->qual = 999;
 
     // Prepare BCF for output: ref, alt, filter, info, format
     memset(&s, 0, sizeof(kstring_t)); kputc('\0', &s); 
@@ -449,6 +598,14 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
         {
             if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
             ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+            ksprintf(&s, ";QBD=%e", b->qual/(a.d[0] + a.d[1] + a.d[2] + a.d[3]));
+            if ( dp_nref ) ksprintf(&s, ";QBDNR=%e", b->qual/dp_nref);
+            if ( max_dv ) ksprintf(&s, ";MDV=%d", max_dv);
+        }
+        if ( nAA+nRA )
+        {
+            double hwe = calc_hwe(nAA, nRR, nRA);
+            ksprintf(&s, ";HWE=%e", hwe);
         }
         kputc('\0', &s);
         rm_info(&s, "I16=");
@@ -457,12 +614,8 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold)
     kputs(b->fmt, &s); kputc('\0', &s);
     free(b->str);
     b->m_str = s.m; b->l_str = s.l; b->str = s.s;
-    b->qual = gts>1 ? -4.343*(ref_lk - lk_sum) : -4.343*(max_lk - lk_sum);
-    if ( b->qual>999 ) b->qual = 999;
     bcf_sync(b);
 
-
-    free(pdg);
     return gts;
 }
 

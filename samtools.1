@@ -30,7 +30,7 @@ bcftools index in.bcf
 .PP
 bcftools view in.bcf chr2:100-200 > out.vcf
 .PP
-bcftools view -vc in.bcf > out.vcf 2> out.afs
+bcftools view -Nvm0.99 in.bcf > out.vcf 2> out.afs
 
 .SH DESCRIPTION
 .PP
@@ -140,17 +140,38 @@ to another samtools command.
 
 .TP
 .B tview
-samtools tview <in.sorted.bam> [ref.fasta]
+samtools tview 
+.RB [ \-p 
+.IR chr:pos ]
+.RB [ \-s 
+.IR STR ]
+.RB [ \-d 
+.IR display ] 
+.RI <in.sorted.bam> 
+.RI [ref.fasta]
 
 Text alignment viewer (based on the ncurses library). In the viewer,
 press `?' for help and press `g' to check the alignment start from a
 region in the format like `chr10:10,000,000' or `=10,000,000' when
 viewing the same reference sequence.
 
+.B Options:
+.RS
+.TP 14
+.BI -d \ display
+Output as (H)tml or (C)urses or (T)ext
+.TP
+.BI -p \ chr:pos
+Go directly to this position
+.TP
+.BI -s \ STR
+Display only reads from this sample or read group
+.RE
+
 .TP
 .B mpileup
-.B samtools mpileup
-.RB [ \-EBug ]
+samtools mpileup
+.RB [ \-EBugp ]
 .RB [ \-C
 .IR capQcoef ]
 .RB [ \-r
@@ -296,6 +317,10 @@ Skip INDEL calling if the average per-sample depth is above
 Phred-scaled gap open sequencing error probability. Reducing
 .I INT
 leads to more indel calls. [40]
+.TP
+.BI -p
+Apply -m and -F thresholds per sample to increase sensitivity of calling.
+By default both options are applied to reads pooled from all samples.
 .TP
 .BI -P \ STR
 Comma dilimited list of platforms (determined by
@@ -570,6 +595,8 @@ Minimum base quality to be used in het calling. [13]
 .IR mutRate ]
 .RB [ \-p
 .IR varThres ]
+.RB [ \-m
+.IR varThres ]
 .RB [ \-P
 .IR prior ]
 .RB [ \-1
@@ -651,6 +678,12 @@ Call per-sample genotypes at variant sites (force -c)
 .TP
 .BI -i \ FLOAT
 Ratio of INDEL-to-SNP mutation rate [0.15]
+.TP
+.BI -m \ FLOAT
+New model for improved multiallelic and rare-variant calling. Another
+ALT allele is accepted if P(chi^2) of LRT exceeds the FLOAT threshold. The 
+parameter seems robust and the actual value usually does not affect the results
+much; a good value to use is 0.99. This is the recommended calling method. [0]
 .TP
 .BI -p \ FLOAT
 A site is considered to be a variant if P(ref|D)<FLOAT [0.5]
@@ -811,6 +844,9 @@ RP	int	# permutations yielding a smaller PCHI2
 CLR	int	Phred log ratio of genotype likelihoods with and without the trio/pair constraint
 UGT	string	Most probable genotype configuration without the trio constraint
 CGT	string	Most probable configuration with the trio constraint
+VDB	float	Tests variant positions within reads. Intended for filtering RNA-seq artifacts around splice sites
+RPB	float	Mann-Whitney rank-sum test for tail distance bias
+HWE	float	Hardy-Weinberg equilibrium test, Wigginton et al., PMID: 15789306
 .TE
 
 .SH EXAMPLES

@@ -190,7 +190,27 @@ static char **read_samples(const char *fn, int *_n)
 	*_n = 0;
 	s.l = s.m = 0; s.s = 0;
 	fp = gzopen(fn, "r");
-	if (fp == 0) return 0; // fail to open file
+	if (fp == 0) 
+    {
+        // interpret as sample names, not as a file name
+        const char *t = fn, *p = t;
+        while (*t)
+        {
+            t++;
+            if ( *t==',' || !*t )
+            { 
+                sam = realloc(sam, sizeof(void*)*(n+1));
+                sam[n] = (char*) malloc(sizeof(char)*(t-p+2));
+                memcpy(sam[n], p, t-p);
+                sam[n][t-p]   = 0;
+                sam[n][t-p+1] = 2;    // assume diploid
+                p = t+1;
+                n++; 
+            }
+        }
+        *_n = n;
+        return sam; // fail to open file
+    }
 	ks = ks_init(fp);
 	while (ks_getuntil(ks, 0, &s, &dret) >= 0) {
 		int l;
@@ -266,8 +286,16 @@ static void write_header(bcf_hdr_t *h)
         kputs("##INFO=<ID=QCHI2,Number=1,Type=Integer,Description=\"Phred scaled PCHI2.\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=RP,"))
         kputs("##INFO=<ID=PR,Number=1,Type=Integer,Description=\"# permutations yielding a smaller PCHI2.\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=QBD,"))
+        kputs("##INFO=<ID=QBD,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#reads\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=QBDNR,"))
+        kputs("##INFO=<ID=QBDNR,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#nref-reads\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=RPB,"))
+        kputs("##INFO=<ID=RPB,Number=1,Type=Float,Description=\"Read Position Bias\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=MDV,"))
+        kputs("##INFO=<ID=MDV,Number=1,Type=Integer,Description=\"Maximum number of high-quality nonRef reads in samples\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=VDB,"))
-        kputs("##INFO=<ID=VDB,Number=1,Type=Float,Description=\"Variant Distance Bias\">\n", &str);
+        kputs("##INFO=<ID=VDB,Number=1,Type=Float,Description=\"Variant Distance Bias (v2) for filtering splice-site artefacts in RNA-seq data. Note: this version may be broken.\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GT,"))
         kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GQ,"))
@@ -517,7 +545,7 @@ int bcfview(int argc, char *argv[])
         if ( !(vc.flag&VC_KEEPALT) && vc.flag&VC_CALL && vc.min_ma_lrt>=0 )
         {
             bcf_p1_set_ploidy(b, p1); // could be improved: do this per site to allow pseudo-autosomal regions
-            int gts = call_multiallelic_gt(b,p1,vc.min_ma_lrt);
+            int gts = call_multiallelic_gt(b, p1, vc.min_ma_lrt, vc.flag&VC_VARONLY);
             if ( gts<=1 && vc.flag & VC_VARONLY ) continue;
         }
 		else if (vc.flag & VC_CALL) { // call variants

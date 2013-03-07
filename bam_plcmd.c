@@ -312,7 +312,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			ref16 = bam_nt16_table[_ref0];
 			for (i = 0; i < gplp.n; ++i)
 				bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], ref16, bca, bcr + i);
-			bcf_call_combine(gplp.n, bcr, ref16, &bc);
+			bcf_call_combine(gplp.n, bcr, bca, ref16, &bc);
 			bcf_call2bcf(tid, pos, &bc, b, bcr, conf->fmt_flag, 0, 0);
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
@@ -320,7 +320,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			if (!(conf->flag&MPLP_NO_INDEL) && total_depth < max_indel_depth && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
 				for (i = 0; i < gplp.n; ++i)
 					bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], -1, bca, bcr + i);
-				if (bcf_call_combine(gplp.n, bcr, -1, &bc) >= 0) {
+				if (bcf_call_combine(gplp.n, bcr, bca, -1, &bc) >= 0) {
 					b = calloc(1, sizeof(bcf1_t));
 					bcf_call2bcf(tid, pos, &bc, b, bcr, conf->fmt_flag, bca, ref);
 					bcf_write(bp, bh, b);

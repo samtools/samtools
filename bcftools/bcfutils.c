@@ -74,7 +74,6 @@ void bcf_fit_alt(bcf1_t *b, int mask)
     int i,j,nals=0;
     for (i=0; i<sizeof(int); i++)
         if ( mask&1<<i) nals++;
-    
     if ( b->n_alleles <= nals ) return;
 
     // update ALT, in principle any of the alleles can be removed
@@ -241,7 +240,7 @@ int bcf_fix_gt(bcf1_t *b)
 	bcf_ginfo_t gt;
 	// check the presence of the GT FMT
 	if ((s = strstr(b->fmt, ":GT")) == 0) return 0; // no GT or GT is already the first
-	if (s[3] != '\0' && s[3] != ':') return 0; // :GTX in fact
+	assert(s[3] == '\0' || s[3] == ':'); // :GTX in fact
 	tmp = bcf_str2int("GT", 2);
 	for (i = 0; i < b->n_gi; ++i)
 		if (b->gi[i].fmt == tmp) break;
@@ -250,7 +249,10 @@ int bcf_fix_gt(bcf1_t *b)
 	// move GT to the first
 	for (; i > 0; --i) b->gi[i] = b->gi[i-1];
 	b->gi[0] = gt;
-	memmove(b->fmt + 3, b->fmt, s + 1 - b->fmt);
+    if ( s[3]==0 )
+        memmove(b->fmt + 3, b->fmt, s - b->fmt);        // :GT
+    else
+        memmove(b->fmt + 3, b->fmt, s - b->fmt + 1);    // :GT:
 	b->fmt[0] = 'G'; b->fmt[1] = 'T'; b->fmt[2] = ':';
 	return 0;
 }
@@ -395,7 +397,11 @@ bcf_hdr_t *bcf_hdr_subsam(const bcf_hdr_t *h0, int n, char *const* samples, int 
 			kputs(samples[i], &s); kputc('\0', &s);
 		}
 	}
-	if (j < n) fprintf(stderr, "<%s> %d samples in the list but not in BCF.", __func__, n - j);
+	if (j < n) 
+    {
+        fprintf(stderr, "<%s> %d samples in the list but not in BCF.", __func__, n - j);
+        exit(1);
+    }
 	kh_destroy(str2id, hash);
 	h = calloc(1, sizeof(bcf_hdr_t));
 	*h = *h0;
