@@ -138,7 +138,7 @@ int get_unpadded_len(faidx_t *fai, char *ref_name, int padded_len)
 	return bases;
 }
 
-inline int * update_posmap(int *posmap, kstring_t ref)
+int * update_posmap(int *posmap, kstring_t ref)
 {
 	int i, k;
 	posmap = realloc(posmap, ref.m * sizeof(int));
