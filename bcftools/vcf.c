@@ -30,7 +30,12 @@ bcf_hdr_t *vcf_hdr_read(bcf_t *bp)
 	memset(&smpl, 0, sizeof(kstring_t));
 	while (ks_getuntil(v->ks, '\n', &v->line, &dret) >= 0) {
 		if (v->line.l < 2) continue;
-		if (v->line.s[0] != '#') return 0; // no sample line
+		if (v->line.s[0] != '#') {
+            free(meta.s);
+            free(smpl.s);
+            free(h);
+            return 0; // no sample line
+        }
 		if (v->line.s[0] == '#' && v->line.s[1] == '#') {
 			kputsn(v->line.s, v->line.l, &meta); kputc('\n', &meta);
 		} else if (v->line.s[0] == '#') {

@@ -366,6 +366,7 @@ static HeaderLine *sam_header_line_parse(const char *headerLine)
     while (*to && *to=='\t') to++;
     if ( to-from != 1 ) {
         debug("[sam_header_line_parse] multiple tabs on line [%s] (%d)\n", headerLine,(int)(to-from));
+        free(hline);
 		return 0;
 	}
     from = to;

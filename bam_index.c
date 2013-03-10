@@ -464,6 +464,7 @@ bam_index_t *bam_index_load(const char *fn)
 		strcat(strcpy(fnidx, fn), ".bai");
 		fprintf(stderr, "[bam_index_load] attempting to download the remote index file.\n");
 		download_from_remote(fnidx);
+        free(fnidx);
 		idx = bam_index_load_local(fn);
 	}
 	if (idx == 0) fprintf(stderr, "[bam_index_load] fail to load BAM index.\n");
@@ -494,6 +495,7 @@ int bam_index_build2(const char *fn, const char *_fnidx)
 	if (fpidx == 0) {
 		fprintf(stderr, "[bam_index_build2] fail to create the index file.\n");
 		free(fnidx);
+        bam_index_destroy(idx);
 		return -1;
 	}
 	bam_index_save(idx, fpidx);
