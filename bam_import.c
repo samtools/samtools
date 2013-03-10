@@ -201,7 +201,7 @@ int sam_header_parse(bam_header_t *h)
 	if (h->dict == 0) h->dict = sam_header_parse2(h->text);
 	tmp = sam_header2list(h->dict, "SQ", "SN", &h->n_targets);
 	if (h->n_targets == 0) return 0;
-	h->target_name = calloc(h->n_targets, sizeof(void*));
+	h->target_name = calloc(h->n_targets, sizeof(char*));
 	for (i = 0; i < h->n_targets; ++i)
 		h->target_name[i] = strdup(tmp[i]);
 	free(tmp);

@@ -52,7 +52,7 @@ static inline void fai_insert_index(faidx_t *idx, const char *name, int len, int
 	faidx1_t t;
 	if (idx->n == idx->m) {
 		idx->m = idx->m? idx->m<<1 : 16;
-		idx->name = (char**)realloc(idx->name, sizeof(void*) * idx->m);
+		idx->name = (char**)realloc(idx->name, sizeof(char*) * idx->m);
 	}
 	idx->name[idx->n] = strdup(name);
 	k = kh_put(s, idx->hash, idx->name[idx->n], &ret);

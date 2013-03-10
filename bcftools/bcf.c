@@ -75,7 +75,7 @@ static inline char **cnt_null(int l, char *str, int *_n)
 	for (p = str; p != str + l; ++p)
 		if (*p == 0) ++n;
 	*_n = n;
-	list = calloc(n, sizeof(void*));
+	list = calloc(n, sizeof(char*));
 	list[0] = str;
 	for (p = str, n = 1; p < str + l - 1; ++p)
 		if (*p == 0) list[n++] = p + 1;

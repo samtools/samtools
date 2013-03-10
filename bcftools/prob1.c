@@ -663,7 +663,7 @@ static double contrast2(bcf_p1aux_t *p1, double ret[3])
 		   computation in this block can be accelerated with a similar strategy, but perhaps this
 		   is not a serious concern for now. */
 		double tmp = lgamma(2*(n1+n2)+1) - (lgamma(2*n1+1) + lgamma(2*n2+1));
-		p1->hg = calloc(2*n1+1, sizeof(void*));
+		p1->hg = calloc(2*n1+1, sizeof(double*));
 		for (k1 = 0; k1 <= 2*n1; ++k1) {
 			p1->hg[k1] = calloc(2*n2+1, sizeof(double));
 			for (k2 = 0; k2 <= 2*n2; ++k2)

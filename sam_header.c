@@ -660,7 +660,7 @@ char **sam_header2list(const void *_dict, char type[2], char key_tag[2], int *_n
 
 		if (n == max) {
 			max = max? max<<1 : 4;
-			ret = realloc(ret, max * sizeof(void*));
+			ret = realloc(ret, max * sizeof(char*));
 		}
 		ret[n++] = key->value;
 

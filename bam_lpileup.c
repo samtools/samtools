@@ -121,7 +121,7 @@ static int tview_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl
 		if (tv->n_nodes + 1 > tv->m_aux) { // enlarge
 			tv->m_aux = tv->n_nodes + 1;
 			kroundup32(tv->m_aux);
-			tv->aux = (freenode_t**)realloc(tv->aux, sizeof(void*) * tv->m_aux);
+			tv->aux = (freenode_t**)realloc(tv->aux, sizeof(freenode_t*) * tv->m_aux);
 		}
 		for (p = tv->head, i = l = 0; p->next;) {
 			if (p->level > max_level) { // then discard this entry

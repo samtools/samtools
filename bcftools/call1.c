@@ -196,7 +196,7 @@ static char **read_samples(const char *fn, int *_n)
 		int l;
 		if (max == n) {
 			max = max? max<<1 : 4;
-			sam = realloc(sam, sizeof(void*)*max);
+			sam = realloc(sam, sizeof(char*)*max);
 		}
 		l = s.l;
 		sam[n] = malloc(s.l + 2);

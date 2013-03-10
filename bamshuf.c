@@ -59,8 +59,8 @@ static void bamshuf(const char *fn, int n_files, const char *pre, int clevel, in
 	fp = strcmp(fn, "-")? bgzf_open(fn, "r") : bgzf_dopen(fileno(stdin), "r");
 	assert(fp);
 	h = bam_hdr_read(fp);
-	fnt = (char**)calloc(n_files, sizeof(void*));
-	fpt = (BGZF**)calloc(n_files, sizeof(void*));
+	fnt = (char**)calloc(n_files, sizeof(char*));
+	fpt = (BGZF**)calloc(n_files, sizeof(BGZF*));
 	cnt = (int64_t*)calloc(n_files, 8);
 	l = strlen(pre);
 	for (i = 0; i < n_files; ++i) {
