@@ -31,7 +31,7 @@ typedef struct __bcf_callaux_t {
 
 typedef struct {
 	int depth, n_supp, ori_depth, qsum[4];
-	int anno[16];
+	unsigned int anno[16];
 	float p[25];
 } bcf_callret1_t;
 
@@ -40,10 +40,11 @@ typedef struct {
     float qsum[4];
 	int n, n_alleles, shift, ori_ref, unseen;
 	int n_supp; // number of supporting non-reference reads
-	int anno[16], depth, ori_depth;
+	unsigned int anno[16], depth, ori_depth;
 	uint8_t *PL;
     float vdb; // variant distance bias
     float read_pos_bias;
+    struct { float avg, var; int dp; } read_pos;
 } bcf_call_t;
 
 #ifdef __cplusplus

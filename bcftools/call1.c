@@ -290,6 +290,8 @@ static void write_header(bcf_hdr_t *h)
         kputs("##INFO=<ID=QBD,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#reads\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=QBDNR,"))
         kputs("##INFO=<ID=QBDNR,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#nref-reads\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=RPS,"))
+        kputs("##INFO=<ID=RPS,Number=3,Type=Float,Description=\"Read Position Stats: depth, average, stddev\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=RPB,"))
         kputs("##INFO=<ID=RPB,Number=1,Type=Float,Description=\"Read Position Bias\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=MDV,"))

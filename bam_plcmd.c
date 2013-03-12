@@ -215,6 +215,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         }
 		data[i]->conf = conf;
 		h_tmp = bam_header_read(data[i]->fp);
+        if ( !h_tmp ) {
+            fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
+            exit(1);
+        }
 		data[i]->h = i? h : h_tmp; // for i==0, "h" has not been set yet
 		bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
 		rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);

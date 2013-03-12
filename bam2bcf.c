@@ -28,11 +28,14 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 	bca->min_frac = 0.002;
 	bca->min_support = 1;
     bca->per_sample_flt = 0;
-	return bca;
+    bca->npos = 100;
+    bca->ref_pos = calloc(bca->npos, sizeof(int));
+    bca->alt_pos = calloc(bca->npos, sizeof(int));
+ 	return bca;
 }
 
 
-int dist_from_end(const bam_pileup1_t *p)
+static int get_position(const bam_pileup1_t *p, int *len)
 {
     int icig, n_tot_bases = 0, iread = 0, edist = p->qpos + 1;
     for (icig=0; icig<p->b->core.n_cigar; icig++) 
@@ -58,9 +61,7 @@ int dist_from_end(const bam_pileup1_t *p)
             if ( iread<=p->qpos ) edist -= ncig;
         }
     }
-    // distance from either end
-    if ( edist > n_tot_bases/2. ) edist = n_tot_bases - edist + 1;
-    if ( edist<0 ) { fprintf(stderr,"uh: %d %d -> %d (%d)\n", p->qpos,n_tot_bases,edist,p->b->core.pos+1); exit(1); }
+    *len = n_tot_bases;
     return edist;
 }
 
@@ -89,7 +90,6 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
 	}
 	// fill the bases array
-    bca->read_len = 0;
 	for (i = n = r->n_supp = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
 		int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
@@ -122,32 +122,20 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		if (min_dist > p->qpos) min_dist = p->qpos;
 		if (min_dist > CAP_DIST) min_dist = CAP_DIST;
 		r->anno[1<<2|is_diff<<1|0] += baseQ;
-		r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;	// FIXME: signed int is not enough for thousands of samples
+		r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;
 		r->anno[2<<2|is_diff<<1|0] += mapQ;
-		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;		// FIXME: signed int is not enough for thousands of samples
+		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;
 		r->anno[3<<2|is_diff<<1|0] += min_dist;
 		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
 
         // collect read positions for ReadPosBias
-        int epos = dist_from_end(p);
-        int npos = p->b->core.l_qseq;
-        if ( bca->npos < npos )
-        {
-            bca->ref_pos = realloc(bca->ref_pos, sizeof(int)*npos);
-            bca->alt_pos = realloc(bca->alt_pos, sizeof(int)*npos);
-            int j;
-            for (j=bca->npos; j<npos; j++) bca->ref_pos[j] = 0;
-            for (j=bca->npos; j<npos; j++) bca->alt_pos[j] = 0;
-            bca->npos = npos;
-        }
+        int len, pos = get_position(p, &len);
+        int epos = (double)pos/len * bca->npos;
         if ( bam1_seqi(bam1_seq(p->b),p->qpos) == ref_base )
             bca->ref_pos[epos]++;
         else
             bca->alt_pos[epos]++;
-        bca->read_len += npos;
-        //fprintf(stderr,"qpos=%d  epos=%d  fwd=%d  var=%d  len=%d  %s\n", p->qpos, epos, p->b->core.flag&BAM_FREVERSE ? 0 : 1, bam1_seqi(bam1_seq(p->b),p->qpos) == ref_base ? 1 : 0, p->b->core.l_qseq, bam1_qname(p->b));
 	}
-    if ( n ) bca->read_len /= n;
 	r->depth = n; r->ori_depth = ori_depth;
 	// glfgen
 	errmod_cal(bca->e, n, 5, bca->bases, r->p);
@@ -170,9 +158,18 @@ void calc_ReadPosBias(bcf_callaux_t *bca, bcf_call_t *call)
         nref += bca->ref_pos[i];
         nalt += bca->alt_pos[i];
         U += nref*bca->alt_pos[i];
+    }
+    double var = 0, avg = (double)(nref+nalt)/bca->npos;
+    for (i=0; i<bca->npos; i++) 
+    {
+        double ediff = bca->ref_pos[i] + bca->alt_pos[i] - avg;
+        var += ediff*ediff;
         bca->ref_pos[i] = 0;
         bca->alt_pos[i] = 0;
     }
+    call->read_pos.avg = avg;
+    call->read_pos.var = sqrt(var/bca->npos);
+    call->read_pos.dp  = nref+nalt;
     if ( !nref || !nalt )
     {
         call->read_pos_bias = -1;
@@ -230,7 +227,7 @@ float mean_diff_to_prob(float mdiff, int dp, int readlen)
     float m, v;
     if ( dp>=24 )
     {
-        m = (int)readlen/8.;
+        m = readlen/8.;
         if (dp>100) dp = 100;
         v = 1.476/(0.182*pow(dp,0.514));
         v = v*(readlen/100.);
@@ -239,7 +236,7 @@ float mean_diff_to_prob(float mdiff, int dp, int readlen)
     {
         m = mv[dp][0];
         v = mv[dp][1];
-        m = (int)m*readlen/100.;
+        m = m*readlen/100.;
         v = v*readlen/100.;
         v *= 1.2;   // allow more variability
     }
@@ -253,10 +250,11 @@ void calc_vdb(bcf_callaux_t *bca, bcf_call_t *call)
     for (i=0; i<bca->npos; i++)
     {
         if ( !bca->alt_pos[i] ) continue;
-        dp += bca->alt_pos[i]; 
-        mean_pos += bca->alt_pos[i]*i;
+        dp += bca->alt_pos[i];
+        int j = i<bca->npos/2 ? i : bca->npos - i;
+        mean_pos += bca->alt_pos[i]*j;
     }
-    if ( !dp )
+    if ( dp<2 )
     {
         call->vdb = -1;
         return;
@@ -265,10 +263,11 @@ void calc_vdb(bcf_callaux_t *bca, bcf_call_t *call)
     for (i=0; i<bca->npos; i++)
     {
         if ( !bca->alt_pos[i] ) continue;
-        mean_diff += bca->alt_pos[i] * fabs(i - mean_pos);
+        int j = i<bca->npos/2 ? i : bca->npos - i;
+        mean_diff += bca->alt_pos[i] * fabs(j - mean_pos);
     }
     mean_diff /= dp;
-    call->vdb = mean_diff_to_prob(mean_diff, dp, bca->read_len);
+    call->vdb = mean_diff_to_prob(mean_diff, dp, bca->npos);
 }
 
 /**
@@ -417,11 +416,12 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		if (i) kputc(',', &s);
 		kputw(bc->anno[i], &s);
 	}
+    ksprintf(&s,";RPS=%d,%f,%f", bc->read_pos.dp,bc->read_pos.avg,bc->read_pos.var);
     ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
     if (bc->vdb != -1)
-        ksprintf(&s, ";VDB=%.4f", bc->vdb);
+        ksprintf(&s, ";VDB=%e", bc->vdb);
     if (bc->read_pos_bias != -1 )
-        ksprintf(&s, ";RPB=%.4f", bc->read_pos_bias);
+        ksprintf(&s, ";RPB=%e", bc->read_pos_bias);
 	kputc('\0', &s);
 	// FMT
 	kputs("PL", &s);

@@ -109,6 +109,9 @@ static inline int est_indelreg(int pos, const char *ref, int l, char *ins4)
 	return max_i - pos;
 }
 
+/*
+ *  @n:  number of samples
+ */
 int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
 					  const void *rghash)
 {
