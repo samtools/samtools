@@ -141,6 +141,10 @@ int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *be
 			} else s[name_end] = ':', name_end = l;
 		}
 	} else iter = kh_get(s, h, str);
+        if (iter == kh_end(h)) {
+          free(s); 
+          return -1;
+        }
 	*ref_id = kh_val(h, iter);
 	// parse the interval
 	if (name_end < l) {

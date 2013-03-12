@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <assert.h>
 #include <limits.h>
+#include <zlib.h>
 #include "prob1.h"
 #include "kstring.h"
 
@@ -14,6 +15,8 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 #define MC_MAX_EM_ITER 16
 #define MC_EM_EPS 1e-5
 #define MC_DEF_INDEL 0.15
+
+gzFile bcf_p1_fp_lk;
 
 unsigned char seq_nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
@@ -164,6 +167,8 @@ bcf_p1aux_t *bcf_p1_init(int n, uint8_t *ploidy)
 	bcf_p1_init_prior(ma, MC_PTYPE_FULL, 1e-3); // the simplest prior
 	return ma;
 }
+
+int bcf_p1_get_M(bcf_p1aux_t *b) { return b->M; }
 
 int bcf_p1_set_n1(bcf_p1aux_t *b, int n1)
 {
@@ -751,6 +756,8 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 		}
 	}
 	if (z[0] != ma->z) memcpy(ma->z, z[0], sizeof(double) * (ma->M + 1));
+	if (bcf_p1_fp_lk)
+		gzwrite(bcf_p1_fp_lk, ma->z, sizeof(double) * (ma->M + 1));
 }
 
 static void mc_cal_y(bcf_p1aux_t *ma)

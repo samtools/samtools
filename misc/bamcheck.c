@@ -116,15 +116,18 @@ typedef struct
     uint64_t total_len_dup;
     uint64_t nreads_1st;
     uint64_t nreads_2nd;
+    uint64_t nreads_filtered;
     uint64_t nreads_dup;
     uint64_t nreads_unmapped;
     uint64_t nreads_unpaired;
     uint64_t nreads_paired;
+    uint64_t nreads_anomalous;
     uint64_t nreads_mq0;
     uint64_t nbases_mapped;
     uint64_t nbases_mapped_cigar;
     uint64_t nbases_trimmed;  // bwa trimmed bases
     uint64_t nmismatches;
+    uint64_t nreads_QCfailed, nreads_secondary;
 
     // GC-depth related data
     uint32_t ngcd, igcd;        // The maximum number of GC depth bins and index of the current bin
@@ -395,7 +398,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
             {
                 uint8_t qual = quals[iread] + 1;
                 if ( qual>=stats->nquals )
-                    error("TODO: quality too high %d>=%d\n", quals[iread],stats->nquals);
+                    error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals, stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam1_qname(bam_line));
 
                 int idx = is_fwd ? icycle : read_len-icycle-1;
                 if ( idx>stats->max_len )
@@ -515,9 +518,9 @@ void realloc_gcd_buffer(stats_t *stats, int seq_len)
 
     int n = 1 + stats->gcd_ref_size / (stats->gcd_bin_size - seq_len);
     if ( n <= stats->igcd )
-        error("Uh: n=%d igcd=%d\n", n,stats->igcd );
+        error("The --GC-depth bin size is too small or reference genome too big; please decrease the bin size or increase the reference length\n");
         
-    if ( n >= stats->ngcd )
+    if ( n > stats->ngcd )
     {
         stats->gcd = realloc(stats->gcd, n*sizeof(gc_depth_t));
         if ( !stats->gcd )
@@ -617,16 +620,26 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         if ( k == kh_end(stats->rg_hash) ) return;
     }
     if ( stats->flag_require && (bam_line->core.flag & stats->flag_require)!=stats->flag_require )
+    {
+        stats->nreads_filtered++;
         return;
+    }
     if ( stats->flag_filter && (bam_line->core.flag & stats->flag_filter) )
+    {
+        stats->nreads_filtered++;
         return;
-
+    }
     if ( !is_in_regions(bam_line,stats) )
         return;
+    if ( stats->filter_readlen!=-1 && bam_line->core.l_qseq!=stats->filter_readlen ) 
+        return;
+
+    if ( bam_line->core.flag & BAM_FQCFAIL ) stats->nreads_QCfailed++;
+    if ( bam_line->core.flag & BAM_FSECONDARY ) stats->nreads_secondary++;
 
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
-    if ( stats->filter_readlen!=-1 && seq_len!=stats->filter_readlen ) return;
+
     if ( seq_len >= stats->nbases )
         realloc_buffers(stats,seq_len);
     if ( stats->max_len<seq_len )
@@ -684,7 +697,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     {
         uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
         if ( qual>=stats->nquals )
-            error("TODO: quality too high %d>=%d\n", quals[i],stats->nquals);
+            error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam1_qname(bam_line));
         if ( qual>stats->max_qual )
             stats->max_qual = qual;
 
@@ -702,42 +715,48 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
         count_indels(stats,bam_line);
 
-        // The insert size is tricky, because for long inserts the libraries are
-        // prepared differently and the pairs point in other direction. BWA does
-        // not set the paired flag for them.  Similar thing is true also for 454
-        // reads. Therefore, do the insert size stats for all mapped reads.
-        int32_t isize = bam_line->core.isize;
-        if ( isize<0 ) isize = -isize;
-        if ( IS_PAIRED(bam_line) && isize!=0 )
+        if ( !IS_PAIRED(bam_line) )
+            stats->nreads_unpaired++;
+        else 
         {
             stats->nreads_paired++;
+
+            if ( bam_line->core.tid!=bam_line->core.mtid )
+                stats->nreads_anomalous++;
+
+            // The insert size is tricky, because for long inserts the libraries are
+            // prepared differently and the pairs point in other direction. BWA does
+            // not set the paired flag for them.  Similar thing is true also for 454
+            // reads. Mates mapped to different chromosomes have isize==0.
+            int32_t isize = bam_line->core.isize;
+            if ( isize<0 ) isize = -isize;
             if ( isize >= stats->nisize )
-                isize=stats->nisize-1;
-
-            int pos_fst = bam_line->core.mpos - bam_line->core.pos;
-            int is_fst  = IS_READ1(bam_line) ? 1 : -1;
-            int is_fwd  = IS_REVERSE(bam_line) ? -1 : 1;
-            int is_mfwd = IS_MATE_REVERSE(bam_line) ? -1 : 1;
-
-            if ( is_fwd*is_mfwd>0 )
-                stats->isize_other[isize]++;
-            else if ( is_fst*pos_fst>0 )
+                isize = stats->nisize-1;
+            if ( isize>0 || bam_line->core.tid==bam_line->core.mtid )
             {
-                if ( is_fst*is_fwd>0 )
-                    stats->isize_inward[isize]++;
-                else
-                    stats->isize_outward[isize]++;
-            }
-            else if ( is_fst*pos_fst<0 )
-            {
-                if ( is_fst*is_fwd>0 )
-                    stats->isize_outward[isize]++;
-                else
-                    stats->isize_inward[isize]++;
+                int pos_fst = bam_line->core.mpos - bam_line->core.pos;
+                int is_fst  = IS_READ1(bam_line) ? 1 : -1;
+                int is_fwd  = IS_REVERSE(bam_line) ? -1 : 1;
+                int is_mfwd = IS_MATE_REVERSE(bam_line) ? -1 : 1;
+
+                if ( is_fwd*is_mfwd>0 )
+                    stats->isize_other[isize]++;
+                else if ( is_fst*pos_fst>0 )
+                {
+                    if ( is_fst*is_fwd>0 )
+                        stats->isize_inward[isize]++;
+                    else
+                        stats->isize_outward[isize]++;
+                }
+                else if ( is_fst*pos_fst<0 )
+                {
+                    if ( is_fst*is_fwd>0 )
+                        stats->isize_outward[isize]++;
+                    else
+                        stats->isize_inward[isize]++;
+                }
             }
         }
-        else
-            stats->nreads_unpaired++;
 
         // Number of mismatches 
         uint8_t *nm = bam_aux_get(bam_line,"NM");
@@ -889,7 +908,7 @@ void output_stats(stats_t *stats)
     // Calculate average insert size and standard deviation (from the main bulk data only)
     int isize, ibulk=0;
     uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0;
-    for (isize=1; isize<stats->nisize; isize++)
+    for (isize=0; isize<stats->nisize; isize++)
     {
         // Each pair was counted twice
         stats->isize_inward[isize] *= 0.5;
@@ -903,7 +922,7 @@ void output_stats(stats_t *stats)
     }
 
     double bulk=0, avg_isize=0, sd_isize=0;
-    for (isize=1; isize<stats->nisize; isize++)
+    for (isize=0; isize<stats->nisize; isize++)
     {
         bulk += stats->isize_inward[isize] + stats->isize_outward[isize] + stats->isize_other[isize];
         avg_isize += isize * (stats->isize_inward[isize] + stats->isize_outward[isize] + stats->isize_other[isize]);
@@ -928,6 +947,8 @@ void output_stats(stats_t *stats)
         printf(" %s",stats->argv[i]);
     printf("\n");
     printf("# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.\n");
+    printf("SN\traw total sequences:\t%ld\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd));
+    printf("SN\tfiltered sequences:\t%ld\n", (long)stats->nreads_filtered);
     printf("SN\tsequences:\t%ld\n", (long)(stats->nreads_1st+stats->nreads_2nd));
     printf("SN\tis paired:\t%d\n", stats->nreads_1st&&stats->nreads_2nd ? 1 : 0);
     printf("SN\tis sorted:\t%d\n", stats->is_sorted ? 1 : 0);
@@ -939,6 +960,8 @@ void output_stats(stats_t *stats)
     printf("SN\treads paired:\t%ld\n", (long)stats->nreads_paired);
     printf("SN\treads duplicated:\t%ld\n", (long)stats->nreads_dup);
     printf("SN\treads MQ0:\t%ld\n", (long)stats->nreads_mq0);
+    printf("SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
+    printf("SN\tnon-primary alignments:\t%ld\n", (long)stats->nreads_secondary);
     printf("SN\ttotal length:\t%ld\n", (long)stats->total_len);
     printf("SN\tbases mapped:\t%ld\n", (long)stats->nbases_mapped);
     printf("SN\tbases mapped (cigar):\t%ld\n", (long)stats->nbases_mapped_cigar);
@@ -955,6 +978,7 @@ void output_stats(stats_t *stats)
     printf("SN\tinward oriented pairs:\t%ld\n", (long)nisize_inward);
     printf("SN\toutward oriented pairs:\t%ld\n", (long)nisize_outward);
     printf("SN\tpairs with other orientation:\t%ld\n", (long)nisize_other);
+    printf("SN\tpairs on different chromosomes:\t%ld\n", (long)stats->nreads_anomalous/2);
 
     int ibase,iqual;
     if ( stats->max_len<stats->nbases ) stats->max_len++;
@@ -1021,7 +1045,7 @@ void output_stats(stats_t *stats)
         printf("GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase,100.*ptr[0]/sum,100.*ptr[1]/sum,100.*ptr[2]/sum,100.*ptr[3]/sum);
     }
     printf("# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
-    for (isize=1; isize<ibulk; isize++)
+    for (isize=0; isize<ibulk; isize++)
         printf("IS\t%d\t%ld\t%ld\t%ld\t%ld\n", isize, (long)(stats->isize_inward[isize]+stats->isize_outward[isize]+stats->isize_other[isize]),
             (long)stats->isize_inward[isize], (long)stats->isize_outward[isize], (long)stats->isize_other[isize]);
 
@@ -1050,12 +1074,14 @@ void output_stats(stats_t *stats)
     }
 
     printf("# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.\n");
-    printf("COV\t[<%d]\t%d\t%ld\n",stats->cov_min,stats->cov_min-1, (long)stats->cov[0]);
+    if  ( stats->cov[0] )
+        printf("COV\t[<%d]\t%d\t%ld\n",stats->cov_min,stats->cov_min-1, (long)stats->cov[0]);
     int icov;
     for (icov=1; icov<stats->ncov-1; icov++)
-        printf("COV\t[%d-%d]\t%d\t%ld\n",stats->cov_min + (icov-1)*stats->cov_step, stats->cov_min + icov*stats->cov_step-1,stats->cov_min + icov*stats->cov_step-1, (long)stats->cov[icov]);
-    printf("COV\t[%d<]\t%d\t%ld\n",stats->cov_min + (stats->ncov-2)*stats->cov_step-1,stats->cov_min + (stats->ncov-2)*stats->cov_step-1, (long)stats->cov[stats->ncov-1]);
-
+        if ( stats->cov[icov] )
+            printf("COV\t[%d-%d]\t%d\t%ld\n",stats->cov_min + (icov-1)*stats->cov_step, stats->cov_min + icov*stats->cov_step-1,stats->cov_min + icov*stats->cov_step-1, (long)stats->cov[icov]);
+    if ( stats->cov[stats->ncov-1] )
+        printf("COV\t[%d<]\t%d\t%ld\n",stats->cov_min + (stats->ncov-2)*stats->cov_step-1,stats->cov_min + (stats->ncov-2)*stats->cov_step-1, (long)stats->cov[stats->ncov-1]);
 
     // Calculate average GC content, then sort by GC and depth
     printf("# GC-depth. Use `grep ^GCD | cut -f 2-` to extract this part. The columns are: GC%%, unique sequence percentiles, 10th, 25th, 50th, 75th and 90th depth percentile\n");
@@ -1279,7 +1305,7 @@ void error(const char *format, ...)
         printf("    -d, --remove-dups                   Exlude from statistics reads marked as duplicates\n");
         printf("    -f, --required-flag <int>           Required flag, 0 for unset [0]\n");
         printf("    -F, --filtering-flag <int>          Filtering flag, 0 for unset [0]\n");
-        printf("        --GC-depth <float,float>        Bin size for GC-depth graph and the maximum reference length [2e4,6e9]\n");
+        printf("        --GC-depth <float,float>        Bin size for GC-depth graph and the maximum reference length [2e4,4.2e9]\n");
         printf("    -h, --help                          This help message\n");
         printf("    -i, --insert-size <int>             Maximum insert size [8000]\n");
         printf("    -I, --id <string>                   Include only listed read group or sample name\n");
@@ -1311,16 +1337,17 @@ int main(int argc, char *argv[])
 
     stats_t *stats = calloc(1,sizeof(stats_t));
     stats->ngc    = 200;
-    stats->nquals = 95;
+    stats->nquals = 256;
     stats->nbases = 300;
     stats->nisize = 8000;
     stats->max_len   = 30;
     stats->max_qual  = 40;
     stats->isize_main_bulk = 0.99;   // There are always outliers at the far end
     stats->gcd_bin_size = 20e3;
-    stats->gcd_ref_size = 3e9;
+    stats->gcd_ref_size = 4.2e9;
     stats->rseq_pos     = -1;
-    stats->tid = stats->gcd_pos = stats->igcd = -1;
+    stats->tid = stats->gcd_pos = -1;
+    stats->igcd = 0;
     stats->is_sorted = 1;
     stats->cov_min  = 1;
     stats->cov_max  = 1000;

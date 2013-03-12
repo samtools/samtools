@@ -353,7 +353,7 @@ which enables fast BAM concatenation.
 
 .TP
 .B sort
-samtools sort [-no] [-m maxMem] <in.bam> <out.prefix>
+samtools sort [-nof] [-m maxMem] <in.bam> <out.prefix>
 
 Sort alignments by leftmost coordinates. File
 .I <out.prefix>.bam
@@ -370,6 +370,13 @@ Output the final alignment to the standard output.
 .TP
 .B -n
 Sort by read names rather than by chromosomal coordinates
+.TP
+.B -f
+Use
+.I <out.prefix>
+as the full output path and do not append
+.I .bam
+suffix.
 .TP
 .BI -m \ INT
 Approximately the maximum required memory. [500000000]

@@ -434,12 +434,13 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
   @param  prefix   prefix of the output and the temporary files; upon
 	                   sucessess, prefix.bam will be written.
   @param  max_mem  approxiate maximum memory (very inaccurate)
+  @param full_path the given output path is the full path and not just the prefix
 
   @discussion It may create multiple temporary subalignment files
   and then merge them by calling bam_merge_core(). This function is
   NOT thread safe.
  */
-void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t _max_mem, int is_stdout, int n_threads, int level)
+void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t _max_mem, int is_stdout, int n_threads, int level, int full_path)
 {
 	int ret, i, n_files = 0;
 	size_t mem, max_k, k, max_mem;
@@ -447,6 +448,8 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	bamFile fp;
 	bam1_t *b, **buf;
 	char *fnout = 0;
+	char const *suffix = ".bam";
+	if (full_path) suffix += 4;
 
 	if (n_threads < 2) n_threads = 1;
 	g_is_by_qname = is_by_qname;
@@ -489,7 +492,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	// output file name
 	fnout = calloc(strlen(prefix) + 20, 1);
 	if (is_stdout) sprintf(fnout, "-");
-	else sprintf(fnout, "%s.bam", prefix);
+	else sprintf(fnout, "%s%s", prefix, suffix);
 	// write the final output
 	if (n_files == 0) { // a single block
 		char mode[8];
@@ -504,7 +507,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		fns = (char**)calloc(n_files, sizeof(char*));
 		for (i = 0; i < n_files; ++i) {
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
-			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
+			sprintf(fns[i], "%s.%.4d%s", prefix, i, suffix);
 		}
 		bam_merge_core2(is_by_qname, fnout, 0, n_files, fns, 0, 0, n_threads, level);
 		for (i = 0; i < n_files; ++i) {
@@ -527,15 +530,16 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 
 void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
 {
-	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0, 0, -1);
+	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0, 0, -1, 0);
 }
 
 int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 768<<20; // 512MB
-	int c, is_by_qname = 0, is_stdout = 0, n_threads = 0, level = -1;
-	while ((c = getopt(argc, argv, "nom:@:l:")) >= 0) {
+	int c, is_by_qname = 0, is_stdout = 0, n_threads = 0, level = -1, full_path = 0;
+	while ((c = getopt(argc, argv, "fnom:@:l:")) >= 0) {
 		switch (c) {
+		case 'f': full_path = 1; break;
 		case 'o': is_stdout = 1; break;
 		case 'n': is_by_qname = 1; break;
 		case 'm': {
@@ -554,6 +558,7 @@ int bam_sort(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools sort [options] <in.bam> <out.prefix>\n\n");
 		fprintf(stderr, "Options: -n        sort by read name\n");
+		fprintf(stderr, "         -f        use <out.prefix> as full file name instead of prefix\n");
 		fprintf(stderr, "         -o        final output to stdout\n");
 		fprintf(stderr, "         -l INT    compression level, from 0 to 9 [-1]\n");
 		fprintf(stderr, "         -@ INT    number of sorting and compression threads [1]\n");
@@ -561,6 +566,6 @@ int bam_sort(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		return 1;
 	}
-	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, n_threads, level);
+	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, n_threads, level, full_path);
 	return 0;
 }
