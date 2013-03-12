@@ -319,7 +319,7 @@ int bcfview(int argc, char *argv[])
 	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Ywm:K:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
-		case 'l': vc.bed = bed_read(optarg); if (!vc.bed) fprintf(stderr,"Could not read \"%s\"\n", optarg); return 1; break;
+		case 'l': vc.bed = bed_read(optarg); if (!vc.bed) { fprintf(stderr,"Could not read \"%s\"\n", optarg); return 1; } break;
 		case 'D': vc.fn_dict = strdup(optarg); break;
 		case 'F': vc.flag |= VC_FIX_PL; break;
 		case 'N': vc.flag |= VC_ACGT_ONLY; break;
