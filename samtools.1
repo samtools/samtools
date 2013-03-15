@@ -1,4 +1,4 @@
-.TH samtools 1 "2 September 2011" "samtools-0.1.18" "Bioinformatics tools"
+.TH samtools 1 "15 March 2013" "samtools-0.1.19" "Bioinformatics tools"
 .SH NAME
 .PP
 samtools - Utilities for the Sequence Alignment/Map (SAM) format
@@ -981,6 +981,25 @@ tag set to
 Collecting indel candidates from reads sequenced by an indel-prone
 technology may affect the performance of indel calling.
 
+Note that there is a new calling model which can be invoked by
+
+    bcftools view -m0.99  ...
+
+which fixes some severe limitations of the default method.
+
+For filtering, best results seem to be achieved by first applying the
+.IR SnpGap
+filter and then applying some machine learning approach
+
+    vcf-annotate -f SnpGap=n
+    vcf filter ...
+
+Both can be found in the 
+.B vcftools
+and
+.B htslib
+package (links below).
+
 .IP o 2
 Derive the allele frequency spectrum (AFS) on a list of sites from multiple individuals:
 
@@ -1039,3 +1058,9 @@ specification.
 .SH SEE ALSO
 .PP
 Samtools website: <http://samtools.sourceforge.net>
+.br
+Samtools latest source: <https://github.com/samtools/samtools>
+.br
+VCFtools website with stable link to VCF specification: <http://vcftools.sourceforge.net>
+.br
+HTSlib website: <https://github.com/samtools/htslib>
