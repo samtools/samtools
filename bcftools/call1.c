@@ -288,10 +288,8 @@ static void write_header(bcf_hdr_t *h)
         kputs("##INFO=<ID=PR,Number=1,Type=Integer,Description=\"# permutations yielding a smaller PCHI2.\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=QBD,"))
         kputs("##INFO=<ID=QBD,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#reads\">\n", &str);
-    if (!strstr(str.s, "##INFO=<ID=QBDNR,"))
-        kputs("##INFO=<ID=QBDNR,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#nref-reads\">\n", &str);
-    if (!strstr(str.s, "##INFO=<ID=RPS,"))
-        kputs("##INFO=<ID=RPS,Number=3,Type=Float,Description=\"Read Position Stats: depth, average, stddev\">\n", &str);
+    //if (!strstr(str.s, "##INFO=<ID=RPS,"))
+    //    kputs("##INFO=<ID=RPS,Number=3,Type=Float,Description=\"Read Position Stats: depth, average, stddev\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=RPB,"))
         kputs("##INFO=<ID=RPB,Number=1,Type=Float,Description=\"Read Position Bias\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=MDV,"))
@@ -349,7 +347,7 @@ int bcfview(int argc, char *argv[])
 	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Ywm:K:")) >= 0) {
 		switch (c) {
 		case '1': vc.n1 = atoi(optarg); break;
-		case 'l': vc.bed = bed_read(optarg); if (!vc.bed) fprintf(stderr,"Could not read \"%s\"\n", optarg); return 1; break;
+		case 'l': vc.bed = bed_read(optarg); if (!vc.bed) { fprintf(stderr,"Could not read \"%s\"\n", optarg); return 1; } break;
 		case 'D': vc.fn_dict = strdup(optarg); break;
 		case 'F': vc.flag |= VC_FIX_PL; break;
 		case 'N': vc.flag |= VC_ACGT_ONLY; break;

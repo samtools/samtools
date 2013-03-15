@@ -130,7 +130,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 
         // collect read positions for ReadPosBias
         int len, pos = get_position(p, &len);
-        int epos = (double)pos/len * bca->npos;
+        int epos = (double)pos/(len+1) * bca->npos;
         if ( bam1_seqi(bam1_seq(p->b),p->qpos) == ref_base )
             bca->ref_pos[epos]++;
         else
@@ -158,7 +158,11 @@ void calc_ReadPosBias(bcf_callaux_t *bca, bcf_call_t *call)
         nref += bca->ref_pos[i];
         nalt += bca->alt_pos[i];
         U += nref*bca->alt_pos[i];
+        bca->ref_pos[i] = 0;
+        bca->alt_pos[i] = 0;
     }
+#if 0
+//todo
     double var = 0, avg = (double)(nref+nalt)/bca->npos;
     for (i=0; i<bca->npos; i++) 
     {
@@ -170,6 +174,7 @@ void calc_ReadPosBias(bcf_callaux_t *bca, bcf_call_t *call)
     call->read_pos.avg = avg;
     call->read_pos.var = sqrt(var/bca->npos);
     call->read_pos.dp  = nref+nalt;
+#endif
     if ( !nref || !nalt )
     {
         call->read_pos_bias = -1;
@@ -416,7 +421,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		if (i) kputc(',', &s);
 		kputw(bc->anno[i], &s);
 	}
-    ksprintf(&s,";RPS=%d,%f,%f", bc->read_pos.dp,bc->read_pos.avg,bc->read_pos.var);
+    //ksprintf(&s,";RPS=%d,%f,%f", bc->read_pos.dp,bc->read_pos.avg,bc->read_pos.var);
     ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
     if (bc->vdb != -1)
         ksprintf(&s, ";VDB=%e", bc->vdb);

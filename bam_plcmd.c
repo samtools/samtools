@@ -9,6 +9,7 @@
 #include "sam.h"
 #include "faidx.h"
 #include "kstring.h"
+#include "sam_header.h"
 
 static inline int printw(int c, FILE *fp)
 {
@@ -85,7 +86,7 @@ typedef struct {
     int rflag_require, rflag_filter;
 	int openQ, extQ, tandemQ, min_support; // for indels
 	double min_frac; // for indels
-	char *reg, *pl_list;
+	char *reg, *pl_list, *fai_fname;
 	faidx_t *fai;
 	void *bed, *rghash;
 } mplp_conf_t;
@@ -275,9 +276,24 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bh->l_smpl = s.l;
 		bh->sname = malloc(s.l);
 		memcpy(bh->sname, s.s, s.l);
-		bh->txt = malloc(strlen(BAM_VERSION) + 64);
-		bh->l_txt = 1 + sprintf(bh->txt, "##samtoolsVersion=%s\n", BAM_VERSION);
-		free(s.s);
+        s.l = 0;
+        ksprintf(&s, "##samtoolsVersion=%s\n", BAM_VERSION);
+        if (conf->fai_fname) ksprintf(&s, "##reference=file://%s\n", conf->fai_fname);
+        h->dict = sam_header_parse2(h->text);
+        int nseq;
+        const char *tags[] = {"SN","LN","UR","M5",NULL};
+        char **tbl = sam_header2tbl_n(h->dict, "SQ", tags, &nseq);
+        for (i=0; i<nseq; i++)
+        {
+            ksprintf(&s, "##contig=<ID=%s", tbl[4*i]);
+            if ( tbl[4*i+1] ) ksprintf(&s, ",length=%s", tbl[4*i+1]);
+            if ( tbl[4*i+2] ) ksprintf(&s, ",URL=%s", tbl[4*i+2]);
+            if ( tbl[4*i+3] ) ksprintf(&s, ",md5=%s", tbl[4*i+3]);
+            kputs(">\n", &s);
+        }
+        if (tbl) free(tbl);
+		bh->txt = s.s;
+		bh->l_txt = 1 + s.l;
 		bcf_hdr_sync(bh);
 		bcf_hdr_write(bp, bh);
 		bca = bcf_call_init(-1., conf->min_baseQ);
@@ -487,6 +503,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
+            mplp.fai_fname = optarg;
 			break;
 		case 'd': mplp.max_depth = atoi(optarg); break;
 		case 'r': mplp.reg = strdup(optarg); break;

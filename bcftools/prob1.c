@@ -502,7 +502,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
 
     // Call GTs
     int isample, gts=0, ac[4] = {0,0,0,0};
-    int nRR = 0, nAA = 0, nRA = 0, max_dv = 0, dp_nref = 0;
+    int nRR = 0, nAA = 0, nRA = 0, max_dv = 0;
     for (isample = 0; isample < b->n_smpl; isample++) 
     {
         int ploidy = b->ploidy ? b->ploidy[isample] : 2;
@@ -551,7 +551,6 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         if ( als && idv>=0 && (dv=((uint16_t*)b->gi[idv].data)[isample]) )
         {
             if ( max_dv < dv ) max_dv = dv;
-            dp_nref += dp;
         }
 
         // For HWE annotation; multiple ALT alleles treated as one
@@ -604,7 +603,6 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
             if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
             ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
             ksprintf(&s, ";QBD=%e", b->qual/(a.d[0] + a.d[1] + a.d[2] + a.d[3]));
-            if ( dp_nref ) ksprintf(&s, ";QBDNR=%e", b->qual/dp_nref);
             if ( max_dv ) ksprintf(&s, ";MDV=%d", max_dv);
         }
         if ( nAA+nRA )
