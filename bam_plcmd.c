@@ -9,6 +9,7 @@
 #include "sam.h"
 #include "faidx.h"
 #include "kstring.h"
+#include "sam_header.h"
 
 static inline int printw(int c, FILE *fp)
 {
@@ -85,7 +86,7 @@ typedef struct {
     int rflag_require, rflag_filter;
 	int openQ, extQ, tandemQ, min_support; // for indels
 	double min_frac; // for indels
-	char *reg, *pl_list;
+	char *reg, *pl_list, *fai_fname;
 	faidx_t *fai;
 	void *bed, *rghash;
 } mplp_conf_t;
@@ -220,6 +221,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         }
 		data[i]->conf = conf;
 		h_tmp = bam_header_read(data[i]->fp);
+        if ( !h_tmp ) {
+            fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
+            exit(1);
+        }
 		data[i]->h = i? h : h_tmp; // for i==0, "h" has not been set yet
 		bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
 		rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
@@ -271,9 +276,24 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bh->l_smpl = s.l;
 		bh->sname = malloc(s.l);
 		memcpy(bh->sname, s.s, s.l);
-		bh->txt = malloc(strlen(BAM_VERSION) + 64);
-		bh->l_txt = 1 + sprintf(bh->txt, "##samtoolsVersion=%s\n", BAM_VERSION);
-		free(s.s);
+        s.l = 0;
+        ksprintf(&s, "##samtoolsVersion=%s\n", BAM_VERSION);
+        if (conf->fai_fname) ksprintf(&s, "##reference=file://%s\n", conf->fai_fname);
+        h->dict = sam_header_parse2(h->text);
+        int nseq;
+        const char *tags[] = {"SN","LN","UR","M5",NULL};
+        char **tbl = sam_header2tbl_n(h->dict, "SQ", tags, &nseq);
+        for (i=0; i<nseq; i++)
+        {
+            ksprintf(&s, "##contig=<ID=%s", tbl[4*i]);
+            if ( tbl[4*i+1] ) ksprintf(&s, ",length=%s", tbl[4*i+1]);
+            if ( tbl[4*i+2] ) ksprintf(&s, ",URL=%s", tbl[4*i+2]);
+            if ( tbl[4*i+3] ) ksprintf(&s, ",md5=%s", tbl[4*i+3]);
+            kputs(">\n", &s);
+        }
+        if (tbl) free(tbl);
+		bh->txt = s.s;
+		bh->l_txt = 1 + s.l;
 		bcf_hdr_sync(bh);
 		bcf_hdr_write(bp, bh);
 		bca = bcf_call_init(-1., conf->min_baseQ);
@@ -317,7 +337,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			ref16 = bam_nt16_table[_ref0];
 			for (i = 0; i < gplp.n; ++i)
 				bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], ref16, bca, bcr + i);
-			bcf_call_combine(gplp.n, bcr, ref16, &bc);
+			bcf_call_combine(gplp.n, bcr, bca, ref16, &bc);
 			bcf_call2bcf(tid, pos, &bc, b, bcr, conf->fmt_flag, 0, 0);
 			bcf_write(bp, bh, b);
 			bcf_destroy(b);
@@ -325,7 +345,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			if (!(conf->flag&MPLP_NO_INDEL) && total_depth < max_indel_depth && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) {
 				for (i = 0; i < gplp.n; ++i)
 					bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], -1, bca, bcr + i);
-				if (bcf_call_combine(gplp.n, bcr, -1, &bc) >= 0) {
+				if (bcf_call_combine(gplp.n, bcr, bca, -1, &bc) >= 0) {
 					b = calloc(1, sizeof(bcf1_t));
 					bcf_call2bcf(tid, pos, &bc, b, bcr, conf->fmt_flag, bca, ref);
 					bcf_write(bp, bh, b);
@@ -483,6 +503,7 @@ int bam_mpileup(int argc, char *argv[])
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
+            mplp.fai_fname = optarg;
 			break;
 		case 'd': mplp.max_depth = atoi(optarg); break;
 		case 'r': mplp.reg = strdup(optarg); break;

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <math.h>
+#include <inttypes.h>
 #include "sam_header.h"
 #include "sam.h"
 #include "faidx.h"
@@ -273,9 +274,9 @@ int main_samview(int argc, char *argv[])
 	}
 
 view_end:
-	if (is_count && ret == 0) {
-		printf("%ld\n", count); // compilers on some platforms may complain about printing int64_t with %ld
-	}
+	if (is_count && ret == 0) 
+		printf("%" PRId64 "\n", count);
+
 	// close files, free and return
 	free(fn_list); free(fn_ref); free(fn_out); free(g_library); free(g_rg); free(fn_rg);
 	if (g_bed) bed_destroy(g_bed);

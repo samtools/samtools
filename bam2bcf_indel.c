@@ -109,6 +109,9 @@ static inline int est_indelreg(int pos, const char *ref, int l, char *ins4)
 	return max_i - pos;
 }
 
+/*
+ *  @n:  number of samples
+ */
 int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
 					  const void *rghash)
 {
@@ -215,6 +218,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 	 * reduces the power because sometimes, substitutions caused by
 	 * indels are not distinguishable from true mutations. Multiple
 	 * sequence realignment helps to increase the power.
+     *
+     * Masks mismatches present in at least 70% of the reads with 'N'.
 	 */
 	{ // construct per-sample consensus
 		int L = right - left + 1, max_i, max2_i;
@@ -258,7 +263,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 			if ((double)(max2&0xffff) / ((max2&0xffff) + (max2>>16)) >= 0.7) max2_i = -1;
 			if (max_i >= 0) r[max_i] = 15;
 			if (max2_i >= 0) r[max2_i] = 15;
-//			for (i = 0; i < right - left; ++i) fputc("=ACMGRSVTWYHKDBN"[(int)r[i]], stderr); fputc('\n', stderr);
+			//for (i = 0; i < right - left; ++i) fputc("=ACMGRSVTWYHKDBN"[(int)r[i]], stderr); fputc('\n', stderr);
 		}
 		free(ref0); free(cns);
 	}
@@ -275,9 +280,9 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		}
 	}
 	// construct the consensus sequence
-	max_ins = types[n_types - 1]; // max_ins is at least 0
+	max_ins = types[n_types - 1];   // max_ins is at least 0
 	if (max_ins > 0) {
-		int *inscns_aux = calloc(4 * n_types * max_ins, sizeof(int));
+		int *inscns_aux = calloc(5 * n_types * max_ins, sizeof(int));
 		// count the number of occurrences of each base at each position for each type of insertion
 		for (t = 0; t < n_types; ++t) {
 			if (types[t] > 0) {
@@ -288,7 +293,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 							uint8_t *seq = bam1_seq(p->b);
 							for (k = 1; k <= p->indel; ++k) {
 								int c = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos + k)];
-								if (c < 4) ++inscns_aux[(t*max_ins+(k-1))*4 + c];
+                                assert(c<5);
+								++inscns_aux[(t*max_ins+(k-1))*5 + c];
 							}
 						}
 					}
@@ -299,11 +305,12 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		inscns = calloc(n_types * max_ins, 1);
 		for (t = 0; t < n_types; ++t) {
 			for (j = 0; j < types[t]; ++j) {
-				int max = 0, max_k = -1, *ia = &inscns_aux[(t*max_ins+j)*4];
-				for (k = 0; k < 4; ++k)
+				int max = 0, max_k = -1, *ia = &inscns_aux[(t*max_ins+j)*5];
+				for (k = 0; k < 5; ++k)
 					if (ia[k] > max)
 						max = ia[k], max_k = k;
 				inscns[t*max_ins + j] = max? max_k : 4;
+                if ( max_k==4 ) { types[t] = 0; break; } // discard insertions which contain N's
 			}
 		}
 		free(inscns_aux);

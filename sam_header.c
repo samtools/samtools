@@ -770,4 +770,41 @@ void *sam_header_merge(int n, const void **_dicts)
     return out_dict;
 }
 
+char **sam_header2tbl_n(const void *dict, const char type[2], const char *tags[], int *n)
+{
+    int nout = 0;
+    char **out = NULL;
+
+    *n = 0;
+    list_t *l = (list_t *)dict;
+    if ( !l ) return NULL;
+
+    int i, ntags = 0;
+    while ( tags[ntags] ) ntags++;
+
+    while (l)
+    {
+        HeaderLine *hline = l->data;
+        if ( hline->type[0]!=type[0] || hline->type[1]!=type[1] )
+        {
+            l = l->next;
+            continue;
+        }
+        out = (char**) realloc(out, sizeof(char*)*(nout+1)*ntags);
+        for (i=0; i<ntags; i++)
+        {
+            HeaderTag *key = header_line_has_tag(hline, tags[i]);
+            if ( !key ) 
+            {
+                out[nout*ntags+i] = NULL;
+                continue;
+            }
+            out[nout*ntags+i] = key->value;
+        }
+        nout++;
+        l = l->next;
+    }
+    *n = nout;
+    return out;
+}
 
