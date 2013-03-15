@@ -1,3 +1,33 @@
+Beta Release 0.1.19 (15 March, 2013)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes in samtools and bcftools:
+
+ * The latest source code and development moved to github,
+    http://github.com/samtools/samtools
+
+ * Many important bugfixes and contributions by many people. Thanks to all!
+
+ * Performance improvements (multi-threading)
+
+ * Important changes in calling, see
+    - samtools mpileup -p
+    - bcftools view -m
+ 
+ * New annotations useful for filtering (RPB, HWE, QBD, MDV)
+
+ * New tools, bamcheck and plot-bamcheck
+
+ * New features in samtools tview 
+ 
+ * And much more..
+
+For a detailed list of commits, please see
+http://github.com/samtools/samtools/commits/master
+
+(0.1.19: 15 March 2013, commit 96b5f2294ac0054230e88913c4983d548069ea4e)
+
+
 Beta Release 0.1.18 (2 September, 2011)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
