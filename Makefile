@@ -1,5 +1,11 @@
+# The default version string in bam.h and bcftools/bcf.h can be overriden directly
+#   make VERSION="-DVERSION='\\\"my-version\\\"'"
+# or using the git-stamp rule
+#   make git-stamp
+VERSION=
+
 CC=			gcc
-CFLAGS=		-g -Wall -O2
+CFLAGS=		-g -Wall $(VERSION) -O2
 #LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
 KNETFILE_O=	knetfile.o
@@ -16,6 +22,7 @@ INCLUDES=	-I.
 SUBDIRS=	. bcftools misc
 LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
+
 
 .SUFFIXES:.c .o
 .PHONY: all lib
@@ -34,6 +41,9 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		done;
 
 all:$(PROG)
+
+git-stamp:
+		make VERSION="-DVERSION='\\\"`git describe --always --dirty`\\\"'"
 
 .PHONY:all lib clean cleanlocal
 .PHONY:all-recur lib-recur clean-recur cleanlocal-recur install-recur

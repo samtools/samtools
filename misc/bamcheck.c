@@ -963,8 +963,8 @@ void output_stats(stats_t *stats)
     printf("SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
     printf("SN\tnon-primary alignments:\t%ld\n", (long)stats->nreads_secondary);
     printf("SN\ttotal length:\t%ld\n", (long)stats->total_len);
-    printf("SN\tbases mapped:\t%ld\n", (long)stats->nbases_mapped);
-    printf("SN\tbases mapped (cigar):\t%ld\n", (long)stats->nbases_mapped_cigar);
+    printf("SN\tbases mapped:\t%ld\n", (long)stats->nbases_mapped);                 // the length of the whole read goes here, including soft-clips etc.
+    printf("SN\tbases mapped (cigar):\t%ld\n", (long)stats->nbases_mapped_cigar);   // only matched and inserted bases are counted here
     printf("SN\tbases trimmed:\t%ld\n", (long)stats->nbases_trimmed);
     printf("SN\tbases duplicated:\t%ld\n", (long)stats->total_len_dup);
     printf("SN\tmismatches:\t%ld\n", (long)stats->nmismatches);

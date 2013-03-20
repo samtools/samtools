@@ -28,7 +28,11 @@
 #ifndef BCF_H
 #define BCF_H
 
-#define BCF_VERSION "0.1.19-96b5f2294a"
+#ifndef VERSION
+#define BCF_VERSION "0.1.19+"
+#else
+#define BCF_VERSION VERSION
+#endif
 
 #include <stdint.h>
 #include <zlib.h>

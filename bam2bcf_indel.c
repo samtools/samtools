@@ -175,7 +175,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
         // To prevent long stretches of N's to be mistaken for indels (sometimes thousands of bases),
         //  check the number of N's in the sequence and skip places where half or more reference bases are Ns.
         int nN=0; for (i=pos; i-pos<max_rd_len && ref[i]; i++) if ( ref[i]=='N' ) nN++;
-        if ( nN*2>i ) { free(aux); return -1; }
+        if ( nN*2>(i-pos) ) { free(aux); return -1; }
 
 		ks_introsort(uint32_t, m, aux);
 		// squeeze out identical types
