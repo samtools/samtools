@@ -204,9 +204,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	memset(&gplp, 0, sizeof(mplp_pileup_t));
 	memset(&buf, 0, sizeof(kstring_t));
 	memset(&bc, 0, sizeof(bcf_call_t));
-	data = calloc(n, sizeof(void*));
-	plp = calloc(n, sizeof(void*));
-	n_plp = calloc(n, sizeof(int*));
+	data = calloc(n, sizeof(mplp_aux_t*));
+	plp = calloc(n, sizeof(bam_pileup1_t*));
+	n_plp = calloc(n, sizeof(int));
 	sm = bam_smpl_init();
 
     if (n == 0) {
@@ -258,7 +258,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	gplp.n = sm->n;
 	gplp.n_plp = calloc(sm->n, sizeof(int));
 	gplp.m_plp = calloc(sm->n, sizeof(int));
-	gplp.plp = calloc(sm->n, sizeof(void*));
+	gplp.plp = calloc(sm->n, sizeof(bam_pileup1_t*));
 
 	fprintf(stderr, "[%s] %d samples in %d input files\n", __func__, sm->n, n);
 	// write the VCF header

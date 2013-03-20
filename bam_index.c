@@ -171,7 +171,7 @@ bam_index_t *bam_index_core(bamFile fp)
 
 	idx->n = h->n_targets;
 	bam_header_destroy(h);
-	idx->index = (khash_t(i)**)calloc(idx->n, sizeof(void*));
+	idx->index = (khash_t(i)**)calloc(idx->n, sizeof(khash_t(i)*));
 	for (i = 0; i < idx->n; ++i) idx->index[i] = kh_init(i);
 	idx->index2 = (bam_lidx_t*)calloc(idx->n, sizeof(bam_lidx_t));
 
@@ -341,7 +341,7 @@ static bam_index_t *bam_index_load_core(FILE *fp)
 	idx = (bam_index_t*)calloc(1, sizeof(bam_index_t));	
 	fread(&idx->n, 4, 1, fp);
 	if (bam_is_be) bam_swap_endian_4p(&idx->n);
-	idx->index = (khash_t(i)**)calloc(idx->n, sizeof(void*));
+	idx->index = (khash_t(i)**)calloc(idx->n, sizeof(khash_t(i)*));
 	idx->index2 = (bam_lidx_t*)calloc(idx->n, sizeof(bam_lidx_t));
 	for (i = 0; i < idx->n; ++i) {
 		khash_t(i) *index;

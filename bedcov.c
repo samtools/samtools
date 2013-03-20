@@ -49,8 +49,8 @@ int main_bedcov(int argc, char *argv[])
 	}
 	memset(&str, 0, sizeof(kstring_t));
 	n = argc - optind - 1;
-	aux = calloc(n, sizeof(void*));
-	idx = calloc(n, sizeof(void*));
+	aux = calloc(n, sizeof(aux_t*));
+	idx = calloc(n, sizeof(bam_index_t*));
 	for (i = 0; i < n; ++i) {
 		aux[i] = calloc(1, sizeof(aux_t));
 		aux[i]->min_mapQ = min_mapQ;
@@ -69,7 +69,7 @@ int main_bedcov(int argc, char *argv[])
 	fp = gzopen(argv[optind], "rb");
 	ks = ks_init(fp);
 	n_plp = calloc(n, sizeof(int));
-	plp = calloc(n, sizeof(void*));
+	plp = calloc(n, sizeof(bam_pileup1_t*));
 	while (ks_getuntil(ks, KS_SEP_LINE, &str, &dret) >= 0) {
 		char *p, *q;
 		int tid, beg, end, pos;

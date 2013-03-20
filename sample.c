@@ -40,7 +40,7 @@ static void add_pair(bam_sample_t *sm, khash_t(sm) *sm2id, const char *key, cons
 	if (k_sm == kh_end(sm2id)) { // absent
 		if (sm->n == sm->m) {
 			sm->m = sm->m? sm->m<<1 : 1;
-			sm->smpl = realloc(sm->smpl, sizeof(void*) * sm->m);
+			sm->smpl = realloc(sm->smpl, sizeof(char*) * sm->m);
 		}
 		sm->smpl[sm->n] = strdup(val);
 		k_sm = kh_put(sm, sm2id, sm->smpl[sm->n], &ret);

@@ -81,7 +81,7 @@ static inline int is_big_endian(){
 static void add_zindex(RAZF *rz, int64_t in, int64_t out){
 	if(rz->index->size == rz->index->cap){
 		rz->index->cap = rz->index->cap * 1.5 + 2;
-		rz->index->cell_offsets = realloc(rz->index->cell_offsets, sizeof(int) * rz->index->cap);
+		rz->index->cell_offsets = realloc(rz->index->cell_offsets, sizeof(uint32_t) * rz->index->cap);
 		rz->index->bin_offsets  = realloc(rz->index->bin_offsets, sizeof(int64_t) * (rz->index->cap/RZ_BIN_SIZE + 1));
 	}
 	if(rz->index->size % RZ_BIN_SIZE == 0) rz->index->bin_offsets[rz->index->size / RZ_BIN_SIZE] = out;
@@ -132,7 +132,7 @@ static void load_zindex(RAZF *rz, int fd){
 #else
 	read(fd, rz->index->bin_offsets, sizeof(int64_t) * v32);
 #endif
-	rz->index->cell_offsets = malloc(sizeof(int) * rz->index->size);
+	rz->index->cell_offsets = malloc(sizeof(uint32_t) * rz->index->size);
 #ifdef _USE_KNETFILE
 	knet_read(fp, rz->index->cell_offsets, sizeof(int) * rz->index->size);
 #else

@@ -225,7 +225,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 		int L = right - left + 1, max_i, max2_i;
 		uint32_t *cns, max, max2;
 		char *ref0, *r;
-		ref_sample = calloc(n, sizeof(void*));
+		ref_sample = calloc(n, sizeof(char*));
 		cns = calloc(L, 4);
 		ref0 = calloc(L, 1);
 		for (i = 0; i < right - left; ++i)
