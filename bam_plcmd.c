@@ -209,6 +209,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	n_plp = calloc(n, sizeof(int*));
 	sm = bam_smpl_init();
 
+    if (n == 0) {
+        fprintf(stderr,"[%s] no input file/data given\n", __func__);
+        exit(1);
+    }
+
 	// read the header and initialize data
 	for (i = 0; i < n; ++i) {
 		bam_header_t *h_tmp;
