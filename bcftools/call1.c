@@ -258,8 +258,10 @@ static void write_header(bcf_hdr_t *h)
 		kputs("##INFO=<ID=AC1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the first ALT allele count (no HWE assumption)\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AN,"))
 		kputs("##INFO=<ID=AN,Number=1,Type=Integer,Description=\"Total number of alleles in called genotypes\">\n", &str);
-	if (!strstr(str.s, "##INFO=<ID=IS,"))
-		kputs("##INFO=<ID=IS,Number=2,Type=Float,Description=\"Maximum number of reads supporting an indel and fraction of indel reads\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=IDV,"))
+		kputs("##INFO=<ID=IDV,Number=1,Type=Integer,Description=\"Maximum number of reads supporting an indel\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=IMF,"))
+		kputs("##INFO=<ID=IMF,Number=1,Type=Float,Description=\"Maximum fraction of reads supporting an indel\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AC,"))
 		kputs("##INFO=<ID=AC,Number=A,Type=Integer,Description=\"Allele count in genotypes for each ALT allele, in the same order as listed\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=G3,"))

@@ -415,7 +415,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	}
 	kputc('\0', &s);
 	// INFO
-	if (bc->ori_ref < 0) ksprintf(&s,"INDEL;IS=%d,%f;", bca->max_support, bca->max_frac);
+	if (bc->ori_ref < 0) ksprintf(&s,"INDEL;IDV=%d;IMF=%f;", bca->max_support, bca->max_frac);
 	kputs("DP=", &s); kputw(bc->ori_depth, &s); kputs(";I16=", &s);
 	for (i = 0; i < 16; ++i) {
 		if (i) kputc(',', &s);
