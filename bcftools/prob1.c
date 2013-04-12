@@ -385,7 +385,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         pl += npl;
     }
 
-    if ((p = strstr(b->info, "QS=")) == 0) { fprintf(stderr,"INFO/QS is required with -m, exiting\n"); exit(1); }
+    if ((p = strstr(b->info, "QS=")) == 0) { fprintf(stderr,"INFO/QS is required with -m, exiting at tid=%d pos=%d\n", b->tid,b->pos+1); exit(1); }
     double qsum[4];
     if ( sscanf(p+3,"%lf,%lf,%lf,%lf",&qsum[0],&qsum[1],&qsum[2],&qsum[3])!=4 ) { fprintf(stderr,"Could not parse %s\n",p); exit(1); }
 
