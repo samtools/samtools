@@ -72,8 +72,14 @@ void bcf_call_destroy(bcf_callaux_t *bca)
     if (bca->npos) { free(bca->ref_pos); free(bca->alt_pos); bca->npos = 0; }
 	free(bca->bases); free(bca->inscns); free(bca);
 }
-/* ref_base is the 4-bit representation of the reference base. It is
- * negative if we are looking at an indel. */
+
+/*
+    Notes: 
+    - Called from bam_plcmd.c by mpileup. Amongst other things, sets the bcf_callret1_t.qsum frequencies
+        which are carried over via bcf_call_combine and bcf_call2bcf to the output BCF as the QS annotation.
+        Later it's used for multiallelic calling by bcftools -m
+    - ref_base is the 4-bit representation of the reference base. It is negative if we are looking at an indel. 
+ */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
 	int i, n, ref4, is_indel, ori_depth = 0;

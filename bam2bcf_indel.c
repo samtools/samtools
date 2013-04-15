@@ -110,7 +110,13 @@ static inline int est_indelreg(int pos, const char *ref, int l, char *ins4)
 }
 
 /*
- *  @n:  number of samples
+    notes:
+        - n .. number of samples
+        - the routine sets bam_pileup1_t.aux of each read as follows:
+            - 6: unused
+            - 6: the call; index to bcf_callaux_t.indel_types   .. (aux>>16)&0x3f
+            - 8: estimated sequence quality                     .. (aux>>8)&0xff
+            - 8: indel quality                                  .. aux&0xff
  */
 int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
 					  const void *rghash)
