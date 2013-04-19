@@ -195,7 +195,6 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(b->core.l_qseq, BAM_CMATCH));
 			replace_cigar(b, n2, cigar2);
 			posmap = update_posmap(posmap, r);
-			b->core.bin = bam_reg2bin(0, bam_calend(&b->core, bam1_cigar(b)));
 		} else if (b->core.n_cigar > 0) {
 			int i, k, op;
 			if (b->core.tid < 0) {
@@ -272,41 +271,43 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 				if (cigar2[i]) cigar2[k++] = cigar2[i];
 			n2 = k;
 			replace_cigar(b, n2, cigar2);
-			b->core.pos = posmap[b->core.pos];
-			b->core.bin = bam_reg2bin(b->core.pos, bam_calend(&b->core.pos, bam1_cigar(b)));
-			if (b->core.mtid < 0 || b->core.mpos < 0) {
-				/* Nice case, no mate to worry about*/
-				// fprintf(stderr, "[depad] Read '%s' mate not mapped\n", bam1_qname(b));
-				/* TODO - Warning if FLAG says mate should be mapped? */
-				/* Clean up funny input where mate position is given but mate reference is missing: */
-				b->core.mtid = -1;
-				b->core.mpos = -1;
-			} else if (b->core.mtid == b->core.tid) {
-				/* Nice case, same reference */
-				// fprintf(stderr, "[depad] Read '%s' mate mapped to same ref\n", bam1_qname(b));
-				b->core.mpos = posmap[b->core.mpos];
-			} else {
-				/* Nasty case, Must load alternative posmap */
-				// fprintf(stderr, "[depad] Loading reference '%s' temporarily\n", h->target_name[b->core.mtid]);
-				if (!fai) {
-					fprintf(stderr, "[depad] ERROR: Needed reference %s sequence for mate (and no FASTA file)\n", h->target_name[b->core.mtid]);
-					return -1;
-				}
-				/* Temporarily load the other reference sequence */
-				if (load_unpadded_ref(fai, h->target_name[b->core.mtid], h->target_len[b->core.mtid], &r)) {
-					fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.mtid]);
-					return -1;
-				}
-				posmap = update_posmap(posmap, r);
-				b->core.mpos = posmap[b->core.mpos];
-				/* Restore the reference and posmap*/
-				if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
-					fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
-					return -1;
-				}
-				posmap = update_posmap(posmap, r);
-			}
 		}
+		/* Even unmapped reads can have a POS value, e.g. if their mate was mapped */
+		if (b->core.pos != -1) b->core.pos = posmap[b->core.pos];
+		if (b->core.mtid < 0 || b->core.mpos < 0) {
+			/* Nice case, no mate to worry about*/
+			// fprintf(stderr, "[depad] Read '%s' mate not mapped\n", bam1_qname(b));
+			/* TODO - Warning if FLAG says mate should be mapped? */
+			/* Clean up funny input where mate position is given but mate reference is missing: */
+			b->core.mtid = -1;
+			b->core.mpos = -1;
+		} else if (b->core.mtid == b->core.tid) {
+			/* Nice case, same reference */
+			// fprintf(stderr, "[depad] Read '%s' mate mapped to same ref\n", bam1_qname(b));
+			b->core.mpos = posmap[b->core.mpos];
+		} else {
+			/* Nasty case, Must load alternative posmap */
+			// fprintf(stderr, "[depad] Loading reference '%s' temporarily\n", h->target_name[b->core.mtid]);
+			if (!fai) {
+				fprintf(stderr, "[depad] ERROR: Needed reference %s sequence for mate (and no FASTA file)\n", h->target_name[b->core.mtid]);
+				return -1;
+			}
+			/* Temporarily load the other reference sequence */
+			if (load_unpadded_ref(fai, h->target_name[b->core.mtid], h->target_len[b->core.mtid], &r)) {
+				fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.mtid]);
+				return -1;
+			}
+			posmap = update_posmap(posmap, r);
+			b->core.mpos = posmap[b->core.mpos];
+			/* Restore the reference and posmap*/
+			if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
+				fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
+				return -1;
+			}
+			posmap = update_posmap(posmap, r);
+		}
+		/* Most reads will have been moved so safest to always recalculate the BIN value */
+		b->core.bin = bam_reg2bin(b->core.pos, bam_calend(&b->core, bam1_cigar(b)));
 		samwrite(out, b);
 	}
 	if (read_ret < -1) {
