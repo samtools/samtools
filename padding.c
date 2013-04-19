@@ -195,6 +195,7 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 			write_cigar(cigar2, n2, m2, bam_cigar_gen(b->core.l_qseq, BAM_CMATCH));
 			replace_cigar(b, n2, cigar2);
 			posmap = update_posmap(posmap, r);
+			b->core.bin = bam_reg2bin(0, bam_calend(&b->core, bam1_cigar(b)));
 		} else if (b->core.n_cigar > 0) {
 			int i, k, op;
 			if (b->core.tid < 0) {
@@ -272,6 +273,7 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 			n2 = k;
 			replace_cigar(b, n2, cigar2);
 			b->core.pos = posmap[b->core.pos];
+			b->core.bin = bam_reg2bin(b->core.pos, bam_calend(&b->core.pos, bam1_cigar(b)));
 			if (b->core.mtid < 0 || b->core.mpos < 0) {
 				/* Nice case, no mate to worry about*/
 				// fprintf(stderr, "[depad] Read '%s' mate not mapped\n", bam1_qname(b));
