@@ -196,8 +196,8 @@ bam_index_t *bam_index_core(bamFile fp)
 		if (c->tid >= 0) {
 			recalculated_bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
 			if (c->bin != recalculated_bin) {
-				fprintf(stderr, "[bam_index_core] read '%s' mapped at POS %d has BIN %d but should be %d\n",
-					bam1_qname(b), c->pos + 1, c->bin, recalculated_bin);
+				fprintf(stderr, "[bam_index_core] read '%s' mapped at POS %d to %d has BIN %d but should be %d\n",
+					bam1_qname(b), c->pos + 1, bam_calend(c, bam1_cigar(b)), c->bin, recalculated_bin);
 				fprintf(stderr, "[bam_index_core] Fix it by using BAM->SAM->BAM to force a recalculation of the BIN field\n");
 				return NULL;
 			}
