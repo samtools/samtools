@@ -193,7 +193,11 @@ bam_index_t *bam_index_core(bamFile fp)
 			return NULL;
 		}
 		if (c->tid >= 0) {
-			recalculated_bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
+			if (c->n_cigar) {
+				recalculated_bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
+			} else {
+				recalculated_bin = bam_reg2bin(c->pos, c->pos + 1);
+			}
 			if (c->bin != recalculated_bin) {
 				fprintf(stderr, "[bam_index_core] read '%s' mapped to '%s' at POS %d to %d has BIN %d but should be %d\n",
 					bam1_qname(b), h->target_name[c->tid], c->pos + 1, bam_calend(c, bam1_cigar(b)), c->bin, recalculated_bin);
