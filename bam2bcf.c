@@ -157,30 +157,19 @@ double mann_whitney_1947(int n, int m, int U)
 
 void calc_ReadPosBias(bcf_callaux_t *bca, bcf_call_t *call)
 {
-    int i, nref = 0, nalt = 0;
+    call->read_pos_test = 0;
+    int i, nref = 0, nalt = 0, ntot = call->anno[0] + call->anno[1] + call->anno[2] + call->anno[3];
     unsigned long int U = 0;
     for (i=0; i<bca->npos; i++) 
     {
         nref += bca->ref_pos[i];
         nalt += bca->alt_pos[i];
         U += nref*bca->alt_pos[i];
+        call->read_pos_test += (bca->ref_pos[i] + bca->alt_pos[i] - 0.01*ntot)*(bca->ref_pos[i] + bca->alt_pos[i] - 0.01*ntot)/(0.01*ntot);
         bca->ref_pos[i] = 0;
         bca->alt_pos[i] = 0;
     }
-#if 0
-//todo
-    double var = 0, avg = (double)(nref+nalt)/bca->npos;
-    for (i=0; i<bca->npos; i++) 
-    {
-        double ediff = bca->ref_pos[i] + bca->alt_pos[i] - avg;
-        var += ediff*ediff;
-        bca->ref_pos[i] = 0;
-        bca->alt_pos[i] = 0;
-    }
-    call->read_pos.avg = avg;
-    call->read_pos.var = sqrt(var/bca->npos);
-    call->read_pos.dp  = nref+nalt;
-#endif
+
     if ( !nref || !nalt )
     {
         call->read_pos_bias = -1;
@@ -281,6 +270,34 @@ void calc_vdb(bcf_callaux_t *bca, bcf_call_t *call)
     call->vdb = mean_diff_to_prob(mean_diff, dp, bca->npos);
 }
 
+void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
+{
+    call->seg_bias = HUGE_VAL;
+    if ( !bcr ) return;
+
+    int nr     = call->anno[2] + call->anno[3]; // number of observed non-reference reads
+    int avg_dp = (call->anno[0] + call->anno[1] + nr) / call->n;    // average depth
+    double M   = (double)nr / avg_dp;   // an approximate number of variant alleles in the population
+    if ( M>call->n ) M = call->n;
+    double f = M / 2. / call->n;        // allele frequency
+    double p = nr / call->n;            // number of variant reads per sample expected if variant not real (poisson)
+    double q = nr / M;                  // number of variant reads per sample expected if variant is real (poisson)
+    double sum = 0;
+
+    int i;
+    for (i=0; i<call->n; i++)
+    {
+        int oi = bcr[i].anno[2] + bcr[i].anno[3];
+        if ( !oi )
+            sum += log(2*f*(1-f)*pow(q,oi)*exp(-q) + f*f*pow(2*q,oi)*exp(-2*q)) - log(pow(p,oi)) - p;
+        else
+            sum += log(2*f*(1-f)*exp(-q) + f*f*exp(-2*q) + (1-f)*(1-f)) - p;
+    }
+
+    //fprintf(stderr,"%d %d %d %d .. %e\n", call->anno[0],call->anno[1],call->anno[2],call->anno[3], sum);
+    call->seg_bias = sum;
+}
+
 /**
  *  bcf_call_combine() - sets the PL array and VDB, RPB annotations, finds the top two alleles
  *  @n:         number of samples
@@ -373,6 +390,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 
     calc_vdb(bca, call);
     calc_ReadPosBias(bca, call);
+    calc_SegBias(calls, call);
 
 	return 0;
 }
@@ -427,12 +445,15 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		if (i) kputc(',', &s);
 		kputw(bc->anno[i], &s);
 	}
-    //ksprintf(&s,";RPS=%d,%f,%f", bc->read_pos.dp,bc->read_pos.avg,bc->read_pos.var);
     ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
+    if (bc->read_pos_test >=0 )
+        ksprintf(&s,";RPT=%f", bc->read_pos_test);
     if (bc->vdb != -1)
         ksprintf(&s, ";VDB=%e", bc->vdb);
     if (bc->read_pos_bias != -1 )
         ksprintf(&s, ";RPB=%e", bc->read_pos_bias);
+    if (bc->seg_bias != HUGE_VAL )
+        ksprintf(&s, ";SGB=%e", bc->seg_bias);
 	kputc('\0', &s);
 	// FMT
 	kputs("PL", &s);

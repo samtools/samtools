@@ -77,6 +77,11 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_PRINT_MAPQ 0x8000
 #define MPLP_PER_SAMPLE 0x10000
 
+// Dictionary of overlapping reads
+#include "khash.h"
+KHASH_MAP_INIT_STR(olap_hash, bam1_t *)
+typedef khash_t(olap_hash) olap_hash_t;
+
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
@@ -98,6 +103,7 @@ typedef struct {
 	int ref_id;
 	char *ref;
 	const mplp_conf_t *conf;
+    olap_hash_t *overlaps;
 } mplp_aux_t;
 
 typedef struct {
@@ -105,6 +111,85 @@ typedef struct {
 	int *n_plp, *m_plp;
 	bam_pileup1_t **plp;
 } mplp_pileup_t;
+
+static void debug_cigar(bam1_t *b)
+{
+    int i;
+    for (i=0; i<b->core.n_cigar; i++)
+    {
+        int cig  = bam1_cigar(b)[i] & BAM_CIGAR_MASK;
+        int ncig = bam1_cigar(b)[i] >> BAM_CIGAR_SHIFT;
+        fprintf(stderr,"%d%c", ncig,BAM_CIGAR_STR[cig]);
+    }
+    fprintf(stderr,"\n");
+}
+
+static void soft_clip_overlap(bam1_t *a, bam1_t *b)
+{
+    int icig;
+    int32_t pos = a->core.pos;
+    for (icig=0; icig<a->core.n_cigar; icig++) 
+    {
+        int cig  = bam1_cigar(a)[icig] & BAM_CIGAR_MASK;
+        int ncig = bam1_cigar(a)[icig] >> BAM_CIGAR_SHIFT;
+        if ( cig==BAM_CINS || cig==BAM_CSOFT_CLIP || cig==BAM_CHARD_CLIP ) continue;
+        if ( cig==BAM_CMATCH || cig==BAM_CDEL ) 
+        {
+            pos += ncig;
+            continue;
+        }
+        // ignoring other events for now
+        abort();
+    }
+    int nclip = pos - b->core.pos, nclipped = 0;
+    if ( nclip<=0 ) return;
+    for (icig=0; icig<b->core.n_cigar; icig++)
+    {
+        int cig  = bam1_cigar(b)[icig] & BAM_CIGAR_MASK;
+        int ncig = bam1_cigar(b)[icig] >> BAM_CIGAR_SHIFT;
+        if ( cig==BAM_CMATCH || cig==BAM_CINS || cig==BAM_CSOFT_CLIP )
+        {
+            nclipped += ncig;
+            if ( nclipped >= nclip ) break;
+        }
+        else if ( cig==BAM_CDEL ) continue;
+        else abort();
+    }
+    int n_cigar = nclipped > nclip ? (b->core.n_cigar-icig)+1 : b->core.n_cigar-icig;
+    if ( n_cigar <= b->core.n_cigar )
+    {
+        int i = 0, j=icig;
+        bam1_cigar(b)[i++] = nclip<<BAM_CIGAR_SHIFT | BAM_CSOFT_CLIP;
+        if ( nclipped > nclip ) bam1_cigar(b)[i++] = (nclipped-nclip)<<4 | bam1_cigar(b)[j++];
+        if ( n_cigar < b->core.n_cigar )
+        {
+            for (; j<b->core.n_cigar; j++)
+                bam1_cigar(b)[i++] = bam1_cigar(b)[j];
+            memmove(b->data + b->core.l_qname + n_cigar, b->data + b->core.l_qname + b->core.n_cigar, b->data_len - b->core.l_qname - b->core.n_cigar);
+            b->core.n_cigar = n_cigar;
+            b->data_len -= b->core.n_cigar - n_cigar;
+        }
+    }
+    else
+    {
+        // increment the data buffer
+        if ( b->m_data < b->data_len + n_cigar - b->core.n_cigar ) 
+        {
+            b->m_data = b->data_len + n_cigar - b->core.n_cigar;
+            kroundup32(b->m_data);
+            b->data = (uint8_t*)realloc(b->data, b->m_data);
+        }
+        memmove(b->data + b->core.l_qname + n_cigar, b->data + b->core.l_qname + b->core.n_cigar, b->data_len - b->core.l_qname - b->core.n_cigar);
+        int i = n_cigar - 1, j = b->core.n_cigar - 1;
+        for (; j>icig; j--)
+            bam1_cigar(b)[i--] = bam1_cigar(b)[j];
+        if ( i>0 ) 
+            bam1_cigar(b)[i--] = (nclipped-nclip)<<BAM_CIGAR_SHIFT | (bam1_cigar(b)[j--] & BAM_CIGAR_MASK);
+        bam1_cigar(b)[i] = nclip<<BAM_CIGAR_SHIFT | BAM_CSOFT_CLIP;
+        b->core.n_cigar = n_cigar;
+        b->data_len += n_cigar - b->core.n_cigar;
+    }
+}
 
 static int mplp_func(void *data, bam1_t *b)
 {
@@ -149,7 +234,48 @@ static int mplp_func(void *data, bam1_t *b)
 		else if (b->core.qual < ma->conf->min_mq) skip = 1; 
 		else if ((ma->conf->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) skip = 1;
 	} while (skip);
+
+    // Fix overlapping reads. Ideally, the overlapping bases of the lower MQ
+    // read should be clipped, but this requires messing with result of
+    // resolve_cigar2 and plp internals when the first mate has lower MQ. Or,
+    // one could fake base qualities to effectively ignore the unwanted bases.
+    // Here we simply soft-clip the overlapping part of the second read mate.
+    if ( ret>=0 && fabs(b->core.isize) < 2*b->core.l_qseq )
+    {
+        int ret;
+        khiter_t kitr = kh_get(olap_hash, ma->overlaps, bam1_qname(b));
+        if ( kitr==kh_end(ma->overlaps) )
+        {
+            kitr = kh_put(olap_hash, ma->overlaps, strdup(bam1_qname(b)), &ret);
+            kh_value(ma->overlaps, kitr) = bam_dup1(b);
+        }
+        else
+        {
+            //fprintf(stderr,"%d %d, isize=%d\t%s\n",kh_value(ma->overlaps, kitr)->core.pos+1,  b->core.pos+1, b->core.isize, bam1_qname(b));
+            //debug_cigar(b);
+            soft_clip_overlap(kh_value(ma->overlaps, kitr), b);
+            //debug_cigar(b);
+            //fprintf(stderr,"\n");
+
+            free((char*) kh_key(ma->overlaps, kitr));
+            bam_destroy1(kh_value(ma->overlaps, kitr));
+            kh_del(olap_hash, ma->overlaps, kitr);
+        }
+    }
 	return ret;
+}
+
+static int mplp_func_clean(void *data, bam1_t *b)
+{
+    mplp_aux_t *ma = (mplp_aux_t*)data;
+    khiter_t kitr = kh_get(olap_hash, ma->overlaps, bam1_qname(b));
+    if ( kitr!=kh_end(ma->overlaps) )
+    {
+        free((char*) kh_key(ma->overlaps, kitr));
+        bam_destroy1(kh_value(ma->overlaps, kitr));
+        kh_del(olap_hash, ma->overlaps, kitr);
+    }
+    return 0;
 }
 
 static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
@@ -218,6 +344,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	for (i = 0; i < n; ++i) {
 		bam_header_t *h_tmp;
 		data[i] = calloc(1, sizeof(mplp_aux_t));
+        data[i]->overlaps = kh_init(olap_hash);  // hash for fixing overlapping reads
 		data[i]->fp = strcmp(fn[i], "-") == 0? bam_dopen(fileno(stdin), "r") : bam_open(fn[i], "r");
         if ( !data[i]->fp )
         {
@@ -314,7 +441,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		ref_tid = tid0;
 		for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
 	} else ref_tid = -1, ref = 0;
-	iter = bam_mplp_init(n, mplp_func, (void**)data);
+	iter = bam_mplp_init2(n, mplp_func, mplp_func_clean, (void**)data);
 	max_depth = conf->max_depth;
 	if (max_depth * sm->n > 1<<20)
 		fprintf(stderr, "(%s) Max depth is above 1M. Potential memory hog!\n", __func__);
@@ -414,6 +541,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	bam_mplp_destroy(iter);
 	bam_header_destroy(h);
 	for (i = 0; i < n; ++i) {
+        kh_destroy(olap_hash, data[i]->overlaps);
 		bam_close(data[i]->fp);
 		if (data[i]->iter) bam_iter_destroy(data[i]->iter);
 		free(data[i]);

@@ -357,7 +357,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
         if ( cig==4 )
         {
             icycle += ncig;
-            // Soft-clips are present in the sequence, but the position of the read marks a start of non-clipped sequence
+            // Soft-clips are present in the sequence, but the position of the read marks a start of the sequence after clipping
             //   iref += ncig;
             iread  += ncig;
             continue;

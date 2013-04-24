@@ -156,11 +156,11 @@ struct __bam_plp_t {
 	bam_pileup1_t *plp;
 	// for the "auto" interface only
 	bam1_t *b;
-	bam_plp_auto_f func;
+	bam_plp_auto_f func_read, func_clean;
 	void *data;
 };
 
-bam_plp_t bam_plp_init(bam_plp_auto_f func, void *data)
+bam_plp_t bam_plp_init2(bam_plp_auto_f func_read, bam_plp_auto_f func_clean, void *data)
 {
 	bam_plp_t iter;
 	iter = calloc(1, sizeof(struct __bam_plp_t));
@@ -170,10 +170,11 @@ bam_plp_t bam_plp_init(bam_plp_auto_f func, void *data)
 	iter->max_tid = iter->max_pos = -1;
 	iter->flag_mask = BAM_DEF_MASK;
 	iter->maxcnt = 8000;
-	if (func) {
-		iter->func = func;
-		iter->data = data;
-		iter->b = bam_init1();
+	if (func_read) {
+		iter->func_read = func_read;
+		iter->func_clean   = func_clean;
+		iter->data        = data;
+		iter->b           = bam_init1();
 	}
 	return iter;
 }
@@ -202,6 +203,7 @@ const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_
 		iter->dummy->next = iter->head;
 		for (p = iter->head, q = iter->dummy; p->next; q = p, p = p->next) {
 			if (p->b.core.tid < iter->tid || (p->b.core.tid == iter->tid && p->end <= iter->pos)) { // then remove
+                if ( iter->func_clean ) iter->func_clean(iter->data, &p->b);
 				q->next = p->next; mp_free(iter->mp, p); p = q;
 			} else if (p->b.core.tid == iter->tid && p->beg <= iter->pos) { // here: p->end > pos; then add to pileup
 				if (n_plp == iter->max_plp) { // then double the capacity
@@ -239,9 +241,21 @@ int bam_plp_push(bam_plp_t iter, const bam1_t *b)
 {
 	if (iter->error) return -1;
 	if (b) {
-		if (b->core.tid < 0) return 0;
-		if (b->core.flag & iter->flag_mask) return 0;
-		if (iter->tid == b->core.tid && iter->pos == b->core.pos && iter->mp->cnt > iter->maxcnt) return 0;
+		if (b->core.tid < 0) 
+        {
+            if ( iter->func_clean ) iter->func_clean(iter->data, (bam1_t *)b);
+            return 0;
+        }
+		if (b->core.flag & iter->flag_mask) 
+        {
+            if ( iter->func_clean ) iter->func_clean(iter->data, (bam1_t *)b);
+            return 0;
+        }
+		if (iter->tid == b->core.tid && iter->pos == b->core.pos && iter->mp->cnt > iter->maxcnt) 
+        {
+            if ( iter->func_clean ) iter->func_clean(iter->data, (bam1_t *)b);
+            return 0;
+        }
 		bam_copy1(&iter->tail->b, b);
 		iter->tail->beg = b->core.pos; iter->tail->end = bam_calend(&b->core, bam1_cigar(b));
 		iter->tail->s = g_cstate_null; iter->tail->s.end = iter->tail->end - 1; // initialize cstate_t
@@ -267,12 +281,12 @@ int bam_plp_push(bam_plp_t iter, const bam1_t *b)
 const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp)
 {
 	const bam_pileup1_t *plp;
-	if (iter->func == 0 || iter->error) { *_n_plp = -1; return 0; }
+	if (iter->func_read == 0 || iter->error) { *_n_plp = -1; return 0; }
 	if ((plp = bam_plp_next(iter, _tid, _pos, _n_plp)) != 0) return plp;
 	else { // no pileup line can be obtained; read alignments
 		*_n_plp = 0;
 		if (iter->is_eof) return 0;
-		while (iter->func(iter->data, iter->b) >= 0) {
+		while (iter->func_read(iter->data, iter->b) >= 0) {
 			if (bam_plp_push(iter, iter->b) < 0) {
 				*_n_plp = -1;
 				return 0;
@@ -293,6 +307,7 @@ void bam_plp_reset(bam_plp_t iter)
 	iter->tid = iter->pos = 0;
 	iter->is_eof = 0;
 	for (p = iter->head; p->next;) {
+        if ( iter->func_clean ) iter->func_clean(iter->data, &p->b);
 		q = p->next;
 		mp_free(iter->mp, p);
 		p = q;
@@ -379,7 +394,7 @@ struct __bam_mplp_t {
 	const bam_pileup1_t **plp;
 };
 
-bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func, void **data)
+bam_mplp_t bam_mplp_init2(int n, bam_plp_auto_f func_read, bam_plp_auto_f func_clean, void **data)
 {
 	int i;
 	bam_mplp_t iter;
@@ -391,7 +406,7 @@ bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func, void **data)
 	iter->n = n;
 	iter->min = (uint64_t)-1;
 	for (i = 0; i < n; ++i) {
-		iter->iter[i] = bam_plp_init(func, data[i]);
+		iter->iter[i] = bam_plp_init2(func_read, func_clean, data[i]);
 		iter->pos[i] = iter->min;
 	}
 	return iter;

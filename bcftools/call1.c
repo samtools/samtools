@@ -290,14 +290,16 @@ static void write_header(bcf_hdr_t *h)
         kputs("##INFO=<ID=PR,Number=1,Type=Integer,Description=\"# permutations yielding a smaller PCHI2.\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=QBD,"))
         kputs("##INFO=<ID=QBD,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#reads\">\n", &str);
-    //if (!strstr(str.s, "##INFO=<ID=RPS,"))
-    //    kputs("##INFO=<ID=RPS,Number=3,Type=Float,Description=\"Read Position Stats: depth, average, stddev\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=RPT,"))
+        kputs("##INFO=<ID=RPS,Number=1,Type=Float,Description=\"Read Position Test\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=RPB,"))
         kputs("##INFO=<ID=RPB,Number=1,Type=Float,Description=\"Read Position Bias\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=MDV,"))
         kputs("##INFO=<ID=MDV,Number=1,Type=Integer,Description=\"Maximum number of high-quality nonRef reads in samples\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=VDB,"))
         kputs("##INFO=<ID=VDB,Number=1,Type=Float,Description=\"Variant Distance Bias (v2) for filtering splice-site artefacts in RNA-seq data. Note: this version may be broken.\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=SGB,"))
+        kputs("##INFO=<ID=SGB,Number=1,Type=Float,Description=\"Segregation based metric.\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GT,"))
         kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GQ,"))

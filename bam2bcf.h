@@ -31,6 +31,15 @@ typedef struct __bcf_callaux_t {
 
 typedef struct {
 	int depth, n_supp, ori_depth, qsum[4];
+    // The fields are:
+    //      depth fwd   .. ref (0) and non-ref (2)
+    //      depth rev   .. ref (1) and non-ref (3)
+    //      baseQ       .. ref (4) and non-ref (6)
+    //      baseQ^2     .. ref (5) and non-ref (7)
+    //      mapQ        .. ref (8) and non-ref (10)
+    //      mapQ^2      .. ref (9) and non-ref (11)
+    //      minDist     .. ref (12) and non-ref (14)
+    //      minDist^2   .. ref (13) and non-ref (15)
 	unsigned int anno[16];
 	float p[25];
 } bcf_callret1_t;
@@ -43,8 +52,8 @@ typedef struct {
 	unsigned int anno[16], depth, ori_depth;
 	uint8_t *PL;
     float vdb; // variant distance bias
-    float read_pos_bias;
-    struct { float avg, var; int dp; } read_pos;
+    float read_pos_bias, read_pos_test;
+    float seg_bias;
 } bcf_call_t;
 
 #ifdef __cplusplus
