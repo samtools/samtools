@@ -538,8 +538,7 @@ extern "C" {
 	struct __bam_plp_t;
 	typedef struct __bam_plp_t *bam_plp_t;
 
-	#define bam_plp_init(func, data) bam_plp_init2(func, NULL, data)
-	bam_plp_t bam_plp_init2(bam_plp_auto_f func_read, bam_plp_auto_f func_clean, void *data);
+	bam_plp_t bam_plp_init(bam_plp_auto_f read, void *data);
 	int bam_plp_push(bam_plp_t iter, const bam1_t *b);
 	const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
 	const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
@@ -551,8 +550,7 @@ extern "C" {
 	struct __bam_mplp_t;
 	typedef struct __bam_mplp_t *bam_mplp_t;
 
-	#define bam_mplp_init(n, func, data) bam_mplp_init2(n, func, NULL, data)
-	bam_mplp_t bam_mplp_init2(int n, bam_plp_auto_f func_read, bam_plp_auto_f func_clean,  void **data);
+	bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func,  void **data);
 	void bam_mplp_destroy(bam_mplp_t iter);
 	void bam_mplp_set_maxcnt(bam_mplp_t iter, int maxcnt);
 	int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_pileup1_t **plp);
