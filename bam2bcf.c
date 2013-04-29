@@ -40,23 +40,21 @@ static int get_position(const bam_pileup1_t *p, int *len)
     int icig, n_tot_bases = 0, iread = 0, edist = p->qpos + 1;
     for (icig=0; icig<p->b->core.n_cigar; icig++) 
     {
-        // Conversion from uint32_t to MIDNSHP
-        //  0123456
-        //  MIDNSHP
         int cig  = bam1_cigar(p->b)[icig] & BAM_CIGAR_MASK;
         int ncig = bam1_cigar(p->b)[icig] >> BAM_CIGAR_SHIFT;
-        if ( cig==0 )
+        if ( cig==BAM_CMATCH )
         {
             n_tot_bases += ncig;
             iread += ncig;
         }
-        else if ( cig==1 )
+        else if ( cig==BAM_CINS )
         {
             n_tot_bases += ncig;
             iread += ncig;
         }
-        else if ( cig==4 )
+        else if ( cig==BAM_CSOFT_CLIP )
         {
+            // position with respect to the aligned part of the read
             iread += ncig;
             if ( iread<=p->qpos ) edist -= ncig;
         }

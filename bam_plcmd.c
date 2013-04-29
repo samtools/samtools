@@ -89,6 +89,8 @@ typedef struct {
 	char *reg, *pl_list, *fai_fname;
 	faidx_t *fai;
 	void *bed, *rghash;
+    int argc;
+    char **argv;
 } mplp_conf_t;
 
 typedef struct {
@@ -283,6 +285,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		memcpy(bh->sname, s.s, s.l);
         s.l = 0;
         ksprintf(&s, "##samtoolsVersion=%s\n", BAM_VERSION);
+        ksprintf(&s, "##samtoolsCommand=%s", conf->argv[0]);
+        for (i=1; i<conf->argc; i++) ksprintf(&s, " %s", conf->argv[i]);
+        kputc('\n', &s);
         if (conf->fai_fname) ksprintf(&s, "##reference=file://%s\n", conf->fai_fname);
         h->dict = sam_header_parse2(h->text);
         int nseq;
@@ -495,6 +500,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
+    mplp.argc = argc; mplp.argv = argv;
     static struct option lopts[] = 
     {
         {"rf",1,0,1},   // require flag

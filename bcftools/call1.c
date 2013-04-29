@@ -42,6 +42,8 @@ typedef struct {
 	uint8_t *ploidy;
 	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt, min_ma_lrt;
 	void *bed;
+    int argc;
+    char **argv;
 } viewconf_t;
 
 void *bed_read(const char *fn);
@@ -239,11 +241,15 @@ static char **read_samples(const char *fn, int *_n)
 	return sam;
 }
 
-static void write_header(bcf_hdr_t *h)
+static void write_header(viewconf_t *conf, bcf_hdr_t *h)
 {
 	kstring_t str;
 	str.l = h->l_txt? h->l_txt - 1 : 0;
 	str.m = str.l + 1; str.s = h->txt;
+    int i;
+    ksprintf(&str, "##bcftoolsCommand=%s", conf->argv[0]);
+    for (i=1; i<conf->argc; i++) ksprintf(&str, " %s", conf->argv[i]);
+    kputc('\n', &str);
 	if (!strstr(str.s, "##INFO=<ID=DP,"))
 		kputs("##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Raw read depth\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=DP4,"))
@@ -346,6 +352,7 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
+    vc.argc = argc; vc.argv = argv;
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1; vc.min_ma_lrt = -1;
 	memset(qcnt, 0, 8 * 256);
 	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Ywm:K:")) >= 0) {
@@ -468,7 +475,7 @@ int bcfview(int argc, char *argv[])
 			vc.sublist = calloc(vc.n_sub, sizeof(int));
 			hout = bcf_hdr_subsam(hin, vc.n_sub, vc.subsam, vc.sublist);
 		}
-		write_header(hout); // always print the header
+		write_header(&vc, hout); // always print the header
 		vcf_hdr_write(bout, hout);
 	}
 	if (vc.flag & VC_CALL) {

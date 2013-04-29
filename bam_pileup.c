@@ -137,6 +137,7 @@ static inline int resolve_cigar2(bam_pileup1_t *p, uint32_t pos, cstate_t *s)
 			p->is_refskip = (op == BAM_CREF_SKIP);
 		} // cannot be other operations; otherwise a bug
 		p->is_head = (pos == c->pos); p->is_tail = (pos == s->end);
+
 	}
 	return 1;
 }
@@ -198,6 +199,7 @@ void bam_plp_destroy(bam_plp_t iter)
 	free(iter);
 }
 
+#if SOFT_CLIP_OVERLAPS
 static void debug_cigar(bam1_t *b)
 {
     int i;
@@ -268,16 +270,100 @@ static void soft_clip_overlap(bam1_t *a, bam1_t *b)
         }
     }
 }
+#endif
+
+/**
+ *  cigar_iref2iseq() - 
+ *  @pos:         iref_pos - b->core.pos
+ *  @cigar:       pointer to current position in the cigar string (rw)
+ *  @cigar_max:   pointer just beyond the last cigar
+ *  @icig:        position in the current cigar (rw)
+ *  @iseq:        position in the sequence (rw)
+ *
+ *  Returns cigar type on success or -1 when there is no more
+ *  cigar to process or the requested position is not covered.
+ */
+static inline int cigar_iref2iseq_set(int pos, uint32_t **cigar, uint32_t *cigar_max, int *icig, int *iseq)
+{
+    if ( pos < 0 ) return -1;
+    *icig = 0;
+    *iseq = 0;
+    while ( *cigar<cigar_max && pos>=0 )
+    {
+        int cig  = (**cigar) & BAM_CIGAR_MASK;
+        int ncig = (**cigar) >> BAM_CIGAR_SHIFT;
+
+        if ( cig==BAM_CSOFT_CLIP ) { (*cigar)++; *iseq += ncig; *icig = 0; continue; }
+        if ( cig==BAM_CHARD_CLIP ) { (*cigar)++; *icig = 0; continue; }
+        if ( cig==BAM_CMATCH ) 
+        { 
+            pos -= ncig; 
+            if ( pos < 0 ) { *icig = ncig + pos; *iseq += *icig; return BAM_CMATCH; }
+            (*cigar)++; *iseq += ncig; *icig = 0;
+            continue;
+        }
+        if ( cig==BAM_CINS ) { (*cigar)++; *iseq += ncig; *icig = 0; continue; }
+        if ( cig==BAM_CDEL ) 
+        {
+            pos -= ncig;
+            if ( pos < 0 ) { *icig = ncig + pos; return BAM_CDEL; }
+            (*cigar)++; *icig = 0;
+            continue;
+        }
+    }
+    *iseq = -1;
+    return -1;
+}
+static inline int cigar_iref2iseq_next(uint32_t **cigar, uint32_t *cigar_max, int *icig, int *iseq)
+{
+    while ( *cigar < cigar_max )
+    {
+        int cig  = (**cigar) & BAM_CIGAR_MASK;
+        int ncig = (**cigar) >> BAM_CIGAR_SHIFT;
+
+        if ( *icig >= ncig ) { *icig = 0;  (*cigar)++; continue; }
+
+        if ( cig==BAM_CSOFT_CLIP ) { (*cigar)++; *iseq += ncig; *icig = 0; continue; }
+        if ( cig==BAM_CHARD_CLIP ) { (*cigar)++; *icig = 0; continue; }
+        if ( cig==BAM_CMATCH ) { (*iseq)++; (*icig)++; return BAM_CMATCH; }
+        if ( cig==BAM_CINS ) { (*iseq)++; (*icig)++; return BAM_CINS; }
+        if ( cig==BAM_CDEL ) { (*icig)++; return BAM_CDEL; }
+    }
+    *iseq = -1;
+    return -1;
+}
+
+static void tweak_overlap_quality(bam1_t *a, bam1_t *b)
+{
+    uint32_t *a_cigar = bam1_cigar(a), *a_cigar_max = a_cigar + a->core.n_cigar;
+    uint32_t *b_cigar = bam1_cigar(b), *b_cigar_max = b_cigar + b->core.n_cigar;
+    int a_icig = 0, a_iseq = 0;
+    int b_icig = 0, b_iseq = 0;
+    uint8_t *a_qual = bam1_qual(a), *b_qual = bam1_qual(b);
+    uint8_t *a_seq = bam1_seq(a), *b_seq = bam1_seq(b);
+    
+    int a_ret = cigar_iref2iseq_set(b->core.pos - a->core.pos, &a_cigar, a_cigar_max, &a_icig, &a_iseq);
+    if ( a_ret<0 ) return;
+    int b_ret = cigar_iref2iseq_set(b->core.pos - b->core.pos, &b_cigar, b_cigar_max, &b_icig, &b_iseq);
+    if ( b_ret<0 ) return;
+
+    a_icig--; a_iseq--;
+    b_icig--; b_iseq--;
+    while ( (a_ret=cigar_iref2iseq_next(&a_cigar, a_cigar_max, &a_icig, &a_iseq))>=0 )
+    {
+        if ( (b_ret=cigar_iref2iseq_next(&b_cigar, b_cigar_max, &b_icig, &b_iseq)) < 0 ) return;
+        if ( a_ret!=BAM_CMATCH || b_ret!=BAM_CMATCH ) continue;
+        if ( a_seq[a_iseq] != b_seq[b_iseq] )
+        {
+            if ( a_qual[a_iseq] < b_qual[b_iseq] ) a_qual[a_iseq] = 0;
+            else b_qual[b_iseq] = 0;
+        }
+    }
+}
 
 
-#include "faidx.h"
-
-// Fix overlapping reads, ideally by softclipping of the lower-quality read.
-// However, this is not always possible (or easy to do), because soft-clipping
-// of the beggining changes the position which would break ordering. Therefore
-// we always clip the ends of the first reads.  
-// One could also fake base qualities to effectively ignore the unwanted bases,
-// but that's a bit hacky.
+// Fix overlapping reads. Simple soft-clipping did not give good results.
+// Lowering qualities of unwanted bases is more selective and works better.
 //
 static void overlap_push(bam_plp_t iter, lbnode_t *node)
 {
@@ -294,14 +380,10 @@ static void overlap_push(bam_plp_t iter, lbnode_t *node)
     else
     {
         lbnode_t *a = kh_value(iter->overlaps, kitr);
-        //debug_cigar(&a->b);
-        soft_clip_overlap(&a->b, &node->b);
-        //debug_cigar(&a->b);
-        //fprintf(stderr,"\t%d vs %d %s\n", a->b.core.pos+1, node->b.core.pos+1, bam1_qname(&node->b));
+        tweak_overlap_quality(&a->b, &node->b);
         kh_del(olap_hash, iter->overlaps, kitr);
         assert(a->end-1 == a->s.end);
         a->end = bam_calend(&a->b.core, bam1_cigar(&a->b));
-        a->s     = g_cstate_null;
         a->s.end = a->end - 1;
     }
 }
