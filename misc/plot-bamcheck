@@ -9,6 +9,8 @@ use Carp;
 
 my $opts = parse_params();
 parse_bamcheck($opts);
+if ( @{$$opts{bamcheck}} > 1 ) { merge_bamcheck($opts); exit; }
+
 plot_qualities($opts);
 plot_acgt_cycles($opts);
 plot_gc($opts);
@@ -32,6 +34,7 @@ sub error
         "       plot-bamcheck -p outdir/ file.bam.bc\n",
         "Options:\n",
         "   -k, --keep-files                    Do not remove temporary files.\n",
+        "   -m, --merge                         Merge multiple bamcheck files and output to STDOUT.\n",
         "   -p, --prefix <path>                 The output files prefix, add a slash to create new directory.\n",
         "   -r, --ref-stats <file.fa.gc>        Optional reference stats file with expected GC content (created with -s).\n",
         "   -s, --do-ref-stats <file.fa>        Calculate reference sequence GC for later use with -r\n",
@@ -44,23 +47,150 @@ sub error
 sub parse_params
 {
     $0 =~ s{^.+/}{};
-    my $opts = { args=>join(' ',$0,@ARGV) };
+    my $opts = 
+    {
+        args => join(' ',$0,@ARGV),
+
+        # for file version sanity check
+        sections =>
+        [
+            { 
+                id=>'SN',
+                header=>
+                    "# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.\n",
+            },
+            { 
+                id=>'FFQ',
+                header=>
+                    "# First Fragment Qualitites. Use `grep ^FFQ | cut -f 2-` to extract this part.\n" .
+                    "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n",
+            },
+            { 
+                id=>'LFQ',
+                header=>
+                    "# Last Fragment Qualitites. Use `grep ^LFQ | cut -f 2-` to extract this part.\n" .
+                    "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n",
+            },
+            { 
+                id=>'MPC',
+                header=>
+                    "# Mismatches per cycle and quality. Use `grep ^MPC | cut -f 2-` to extract this part.\n" .
+                    "# Columns correspond to qualities, rows to cycles. First column is the cycle number, second\n" .
+                    "# is the number of N's and the rest is the number of mismatches\n",
+            },
+            { 
+                id=>'GCF',
+                header=>"# GC Content of first fragments. Use `grep ^GCF | cut -f 2-` to extract this part.\n",
+            },
+            { 
+                id=>'GCL',
+                header=>"# GC Content of last fragments. Use `grep ^GCL | cut -f 2-` to extract this part.\n",
+            },
+            { 
+                id=>'GCC',
+                header=>"# ACGT content per cycle. Use `grep ^GCC | cut -f 2-` to extract this part. The columns are: cycle, and A,C,G,T counts [\%]\n",
+            },
+            { 
+                id=>'IS',
+                header=>"# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: pairs total, inward oriented pairs, outward oriented pairs, other pairs\n",
+            },
+            { 
+                id=>'RL',
+                header=>"# Read lengths. Use `grep ^RL | cut -f 2-` to extract this part. The columns are: read length, count\n",
+            },
+            { 
+                id=>'ID',
+                header=>"# Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions\n",
+            },
+            { 
+                id=>'IC',
+                header=>"# Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions (fwd), .. (rev) , number of deletions (fwd), .. (rev)\n",
+            },
+            { 
+                id=>'COV',
+                header=>"# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.\n",
+            },
+            { 
+                id=>'GCD',
+                header=>"# GC-depth. Use `grep ^GCD | cut -f 2-` to extract this part. The columns are: GC%, unique sequence percentiles, 10th, 25th, 50th, 75th and 90th depth percentile\n",
+            },
+        ],
+
+        # for merging
+        merge_keys =>
+        {
+            'sum' => 
+            [
+                'raw total sequences:',
+                'filtered sequences:',
+                'sequences:',
+                '1st fragments:',
+                'last fragments:',
+                'reads mapped:',
+                'reads unmapped:',
+                'reads unpaired:',
+                'reads paired:',
+                'reads duplicated:',
+                'reads MQ0:',
+                'reads QC failed:',
+                'non-primary alignments:',
+                'total length:',
+                'bases mapped:',
+                'bases mapped (cigar):',
+                'bases trimmed:',
+                'bases duplicated:',
+                'mismatches:',
+                'inward oriented pairs:',
+                'outward oriented pairs:',
+                'pairs with other orientation:',
+                'pairs on different chromosomes:',
+            ],
+            'min' => 
+            [
+                'is paired:',
+                'is sorted:',
+            ],
+            'max' => 
+            [
+                'maximum length:',
+            ],
+        },
+    };
+    for my $key (keys %{$$opts{merge_keys}})
+    {
+        for my $val (@{$$opts{merge_keys}{$key}}) { $$opts{hmerge}{$val} = $key; }
+    }
     while (defined(my $arg=shift(@ARGV)))
     {
         if ( $arg eq '-k' || $arg eq '--keep-files' ) { $$opts{keep_files}=1; next; }
+        if ( $arg eq '-m' || $arg eq '--merge' ) { $$opts{merge}=1; next; }
         if ( $arg eq '-r' || $arg eq '--ref-stats' ) { $$opts{ref_stats}=shift(@ARGV); next; }
         if ( $arg eq '-s' || $arg eq '--do-ref-stats' ) { $$opts{do_ref_stats}=shift(@ARGV); next; }
         if ( $arg eq '-t' || $arg eq '--targets' ) { $$opts{targets}=shift(@ARGV); next; }
         if ( $arg eq '-p' || $arg eq '--prefix' ) { $$opts{prefix}=shift(@ARGV); next; }
         if ( $arg eq '-?' || $arg eq '-h' || $arg eq '--help' ) { error(); }
-        if ( -e $arg ) { $$opts{bamcheck}=$arg; next; }
+        if ( -e $arg ) { push @{$$opts{bamcheck}},$arg; next; }
         error("Unknown parameter or non-existent file \"$arg\". Run -h for help.\n");
     }
     if ( exists($$opts{do_ref_stats }) ) { do_ref_stats($opts); exit; }
     if ( !exists($$opts{bamcheck}) ) { error("No bamcheck file?\n") }
-    if ( !exists($$opts{prefix}) ) { error("Expected -p parameter.\n") }
-    if ( $$opts{prefix}=~m{/$} ) { `mkdir -p $$opts{prefix}`; }
-    elsif ( !($$opts{prefix}=~/-$/) ) { $$opts{prefix} .= '-'; }
+
+    if ( !exists($$opts{prefix}) )
+    {
+        if ( !$$opts{merge} ) { error("Expected -p parameter.\n") }
+        $$opts{prefix} = './';
+    }
+    elsif ( $$opts{merge} ) { error("Only one of -p or -m should be given.\n"); }
+    if ( $$opts{merge} )
+    {
+        if ( @{$$opts{bamcheck}} < 2 ) { error("Nothing to merge\n") }
+    }
+    else 
+    { 
+        if ( !exists($$opts{prefix}) ) { error("Expected -p parameter.\n") }
+        if ( $$opts{prefix}=~m{/$} ) { `mkdir -p $$opts{prefix}`; }
+        elsif ( !($$opts{prefix}=~/-$/) ) { $$opts{prefix} .= '-'; }
+    }
     return $opts;
 }
 
@@ -153,13 +283,15 @@ sub plot
 }
 
 
-sub parse_bamcheck
+sub parse_bamcheck1
 {
-    my ($opts) = @_;
-    open(my $fh,'<',$$opts{bamcheck}) or error("$$opts{bamcheck}: $!");
+    my ($opts, $i) = @_;
+    my $file = $$opts{bamcheck}[$i];
+    print STDERR "Parsing bamcheck output: $file\n" unless !$$opts{verbose};
+    open(my $fh,'<',$file) or error("$file: $!");
     my $line = <$fh>;
-    if ( !($line=~/^# This file was produced by bamcheck (\S+)/) ) { error("Sanity check failed: was this file generated by bamcheck?"); }
-    $$opts{dat}{version} = $1;
+    if ( !($line=~/^# This file was produced by (?:plot-)?bamcheck/) ) { error("Sanity check failed: was this file generated by bamcheck or plot-bamcheck?"); }
+    my %dat;
     while ($line=<$fh>)
     {
         if ( $line=~/^#/ ) { next; }
@@ -167,32 +299,190 @@ sub parse_bamcheck
         chomp($items[-1]);
         if ( $items[0] eq 'SN' )
         {
-            $$opts{dat}{$items[1]} = splice(@items,2);
+            $dat{SN}{$items[1]} = $items[2];
             next;
         }
-        push @{$$opts{dat}{$items[0]}}, [splice(@items,1)];
+        push @{$dat{$items[0]}}, [splice(@items,1)];
     }
     close($fh);
 
     # Check sanity
-    if ( !exists($$opts{dat}{'sequences:'}) or !$$opts{dat}{'sequences:'} )
+    if ( !exists($dat{'SN'}{'sequences:'}) or !$dat{'SN'}{'sequences:'} )
     {
         error("Sanity check failed: no sequences found by bamcheck??\n");
     }
+    my $nseq_new = $dat{'SN'}{'sequences:'};
+    my $nseq_ori = exists($$opts{dat}{'SN'}) ? $$opts{dat}{'SN'}{'sequences:'} : 0;
+
+    my %add = map { $_ => 1 } (qw(FFQ LFQ MPC GCF GCL IS ID IC RL));
+    for my $a (keys %dat)
+    {
+        if ( !exists($$opts{dat}{$a}) ) { $$opts{dat}{$a} = $dat{$a}; next; } # first bamcheck file
+        if ( $a eq 'SN' )
+        {
+            for my $b (keys %{$dat{$a}})
+            {
+                if ( exists($$opts{hmerge}{$b}) )
+                {
+                    if ( $$opts{hmerge}{$b} eq 'sum' ) { $$opts{dat}{$a}{$b} += $dat{$a}{$b}; next; }
+                    if ( $$opts{hmerge}{$b} eq 'min' ) { $$opts{dat}{$a}{$b} = $$opts{dat}{$a}{$b} < $dat{$a}{$b} ? $$opts{dat}{$a}{$b} : $dat{$a}{$b}; }
+                    if ( $$opts{hmerge}{$b} eq 'max' ) { $$opts{dat}{$a}{$b} = $$opts{dat}{$a}{$b} > $dat{$a}{$b} ? $$opts{dat}{$a}{$b} : $dat{$a}{$b}; }
+                }
+            }
+            next;
+        }
+        if ( $add{$a} ) { add_to_matrix($$opts{dat}{$a}, $dat{$a}, 0); next; }
+        if ( $a eq 'COV' ) { merge_coverage($$opts{dat}{$a}, $dat{$a}); next; }
+        if ( $a eq 'GCC' ) { merge_gcc($nseq_ori, $$opts{dat}{$a}, $nseq_new, $dat{$a}); next; }
+        if ( $a eq 'GCD' ) { merge_gcd(); next; }
+        error("not processed: $a\n");
+    }
+    if ( $i==0 ) { return; }
+
+    $$opts{dat}{SN}{'error rate:'} = sprintf "%e", get_value($opts,'SN','mismatches:') / get_value($opts,'SN','bases mapped (cigar):');
+    update_average_length($opts);
+    update_average_quality($opts);
+    update_average_isize($opts);
 }
 
-sub older_than
+sub parse_bamcheck
 {
-    my ($opts,$version) = @_;
-    my ($year,$month,$day) = split(/-/,$version);
-    $version = $$opts{dat}{version};
-    if ( !($version=~/\((\d+)-(\d+)-(\d+)\)$/) ) { return 1; }
-    if ( $1<$year ) { return 1; }
-    elsif ( $1>$year ) { return 0; }
-    if ( $2<$month ) { return 1; }
-    elsif ( $2>$month ) { return 0; }
-    if ( $3<$day ) { return 1; }
-    return 0;
+    my ($opts) = @_;
+    for (my $i=0; $i<@{$$opts{bamcheck}}; $i++) { parse_bamcheck1($opts,$i); }
+
+    # Determine the default title, for now use the first BAM name:
+    #       5446_6/5446_6.bam.bc.gp -> 5446_6
+    #       test.aaa.png -> test.aaa
+    if ( !($$opts{bamcheck}[0]=~m{([^/]+?)(?:\.bam)?(?:\.bc)?$}i) ) { error("FIXME: Could not determine the title from [$$opts{bamcheck}[0]]\n"); }
+    $$opts{title} = $1;
+}
+
+sub add_to_matrix
+{
+    my ($dst,$src,$key) = @_;
+    my $id = 0;
+    my $is = 0;
+    while ($is<@$src)
+    {
+        while ( $id<@$dst && $$src[$is][$key] > $$dst[$id][$key] ) { $id++; }
+        if ( $id<@$dst && $$src[$is][$key] == $$dst[$id][$key] ) 
+        { 
+            for (my $j=0; $j<@{$$src[$is]}; $j++)
+            { 
+                if ( $j==$key ) { next; }
+                $$dst[$id][$j] += $$src[$is][$j]; 
+            }
+        }
+        else { splice(@$dst,$id,0,$$src[$is]); }
+        $is++;
+    }
+}
+
+sub rebin_values
+{
+    my ($vals,$bin_size,$col) = @_;
+    error("pd3\@sanger todo: rebin_values\n");
+}
+
+
+sub merge_coverage
+{
+    my ($dst,$src) = @_;
+    if ( !($$dst[0][0]=~/^\[(\d+)-(\d+)\]$/) ) { error("Could not determine bin size in COV: $$dst[0][0]\n"); }
+    my $dst_bin = $2 - $1 + 1;
+    if ( !($$src[0][0]=~/^\[(\d+)-(\d+)\]$/) ) { error("Could not determine bin size in COV: $$src[0][0]\n"); }
+    my $src_bin = $2 - $1 + 1;
+    my (@dst, @src);
+    for my $row (@$dst) { splice(@$row,0,1); push @dst,$row; }
+    for my $row (@$src) { splice(@$row,0,1); push @src,$row; }
+    my $dst_out  = pop(@dst);
+    my $src_out  = pop(@src);
+    my $bin_size = $dst_bin;
+    if ( $src_bin > $dst_bin ) { my $vals = rebin_values(\@dst,$src_bin,0); @dst = @$vals; $bin_size = $src_bin; }
+    elsif ( $src_bin < $dst_bin ) { my $vals = rebin_values(\@src, $dst_bin, 0); @src = @$vals; }
+    add_to_matrix(\@dst, \@src, 0);
+    for my $row (@dst) { unshift(@$row, sprintf("[%d-%d]", $$row[0],$$row[0]+$bin_size-1)); }
+    push @dst, [sprintf("[%d<]", $dst[-1][1]), $dst[-1][1], $$dst_out[1]+$$src_out[1] ];
+    @$dst = @dst;
+}
+
+sub merge_gcc
+{
+    my ($ndst,$dst,$nsrc,$src) = @_;
+    if ( @$dst != @$src ) { error("todo: improve me\n"); }
+    for (my $i=0; $i<@$dst; $i++)
+    {
+        if ( $$dst[$i][0] ne $$src[$i][0] ) { error("todo: improve me\n"); }
+        for (my $j=1; $j<@{$$dst[$i]}; $j++)
+        {
+            $$dst[$i][$j] = ($$dst[$i][$j]*$ndst + $$src[$i][$j]*$nsrc) / ($ndst + $nsrc);
+        }
+    }
+}
+
+sub merge_gcd
+{
+    # todo
+}
+
+sub get_value
+{
+    my ($opts, $id, $key) = @_;
+    if ( !exists($$opts{dat}{$id}) ) { return undef; }
+    if ( !exists($$opts{dat}{$id}{$key}) ) { return undef}
+    return $$opts{dat}{$id}{$key};
+}
+
+sub get_values
+{
+    my ($opts, $id) = @_;
+    if ( !exists($$opts{dat}{$id}) ) { return (); }
+    # todo: add version sanity check here
+    return (@{$$opts{dat}{$id}});
+}
+
+sub update_average_length
+{
+    my ($opts) = @_;
+    my @vals = get_values($opts,'RL');
+    my $sum = 0;
+    my $avg = 0;
+    for my $val (@vals) { $sum += $$val[1]; }
+    for my $val (@vals) { $avg += $$val[0]*$$val[1] / $sum; }
+    $$opts{dat}{SN}{'average length:'} = sprintf "%.1f", $avg;
+}
+
+sub update_average_quality
+{
+    my ($opts) = @_;
+    my @vals;
+    push @vals, get_values($opts, 'FFQ'), get_values($opts,'LFQ');
+
+    my $qsum = 0;
+    for my $row (@vals)
+    {
+        for (my $i=1; $i<@$row; $i++) { $qsum += $$row[$i] }
+    }
+    my $qavg = 0;
+    for my $row (@vals)
+    {
+        for (my $i=1; $i<@$row; $i++) { $qavg += ($i-1)*$$row[$i] / $qsum; }
+    }
+    $$opts{dat}{SN}{'average quality:'} = sprintf "%.1f", $qavg;
+}
+
+sub update_average_isize
+{
+    my ($opts) = @_;
+    my @vals = get_values($opts, 'IS');
+    my $sum = 0;
+    for my $row (@vals) { $sum += $$row[1]; }
+    my $avg = 0;
+    for my $row (@vals) { $avg += $$row[0]*$$row[1] / $sum; }
+    my $dev = 0;
+    for my $row (@vals) { $dev += ($avg - $$row[0])*($avg - $$row[0]) * $$row[1] / $sum; }
+    $$opts{dat}{SN}{'insert size average:'} = sprintf "%.1f", $avg;
+    $$opts{dat}{SN}{'insert size standard deviation:'} = sprintf "%.1f", sqrt($dev);
 }
 
 sub get_defaults
@@ -206,11 +496,7 @@ sub get_defaults
     $gp_file =~ s{\.[^.]+$}{.gp};
     if ( !($gp_file=~/.gp$/) ) { $gp_file .= '.gp'; }
 
-    # Determine the default title:
-    #       5446_6/5446_6.bam.bc.gp -> 5446_6
-    #       test.aaa.png -> test.aaa
-    if ( !($$opts{bamcheck}=~m{([^/]+?)(?:\.bam)?(?:\.bc)?$}i) ) { error("FIXME: Could not determine the title from [$img_fname]\n"); }
-    my $title = $1;
+    my $title = $$opts{title};
 
     my $dir = $gp_file;
     $dir =~ s{/[^/]+$}{};
@@ -252,10 +538,11 @@ sub plot_qualities
 {
     my ($opts) = @_;
 
-    if ( !exists($$opts{dat}{FFQ}) or !@{$$opts{dat}{FFQ}} ) { return; }
+    my @ffq = get_values($opts, 'FFQ');
+    if ( !@ffq ) { return; }
 
-    my $yrange = @{$$opts{dat}{FFQ}[0]} > 50 ? @{$$opts{dat}{FFQ}[0]} : 50;
-    my $is_paired = $$opts{dat}{'is paired:'};
+    my $yrange = @{$ffq[0]} > 50 ? @{$ffq[0]} : 50;
+    my $is_paired = get_value($opts,'SN','is paired:');
     
     # Average quality per cycle, forward and reverse reads in one plot 
     my $args = get_defaults($opts,"$$opts{prefix}quals.png");
@@ -274,7 +561,7 @@ sub plot_qualities
     my (@lp75,@lp50,@lmean);
     my ($fmax,$fmax_qual,$fmax_cycle);
     my ($lmax,$lmax_qual,$lmax_cycle);
-    for my $cycle (@{$$opts{dat}{FFQ}})
+    for my $cycle (@ffq)
     {
         my $sum=0; my $n=0; 
         for (my $iqual=1; $iqual<@$cycle; $iqual++) 
@@ -293,9 +580,11 @@ sub plot_qualities
         printf $fh $fmean[-1];
     }
     print $fh "end\n";
+    my @lfq = ();
     if ( $is_paired )
     {
-        for my $cycle (@{$$opts{dat}{LFQ}})
+        @lfq = get_values($opts, 'LFQ');
+        for my $cycle (@lfq)
         {
             my $sum=0; my $n=0; 
             for (my $iqual=1; $iqual<@$cycle; $iqual++) 
@@ -367,8 +656,8 @@ sub plot_qualities
     # Quality distribution per cycle, the distribution is for each cycle plotted as a separate curve
     $args = get_defaults($opts,"$$opts{prefix}quals3.png",wh=>'600,600');
     $fh = $$args{fh};
-    my $nquals = @{$$opts{dat}{FFQ}[0]}-1;
-    my $ncycles = @{$$opts{dat}{FFQ}};
+    my $nquals = @{$ffq[0]}-1;
+    my $ncycles = @ffq;
     print $fh qq[
             $$args{terminal}
             set output "$$args{img}"
@@ -390,7 +679,7 @@ sub plot_qualities
     my @plots;
     for (my $i=0; $i<$ncycles; $i++) { push @plots, q['-' using 1:2 with lines t ''] }
     print $fh "plot ", join(",", @plots), "\n";
-    for my $cycle (@{$$opts{dat}{FFQ}})
+    for my $cycle (@ffq)
     {
         for (my $iqual=1; $iqual<$nquals; $iqual++) { print $fh "$iqual\t$$cycle[$iqual]\n"; }
         print $fh "end\n";
@@ -409,7 +698,7 @@ sub plot_qualities
                 set ylabel "Frequency (rev reads)" 
             ];
         print $fh "plot ", join(",", @plots), "\n";
-        for my $cycle (@{$$opts{dat}{LFQ}})
+        for my $cycle (@lfq)
         {
             for (my $iqual=1; $iqual<$nquals; $iqual++) 
             { 
@@ -427,7 +716,7 @@ sub plot_qualities
     $fh = $$args{fh};
     my $max = defined $lmax && $lmax > $fmax ? $lmax : $fmax;
     my @ytics;
-    for my $cycle (@{$$opts{dat}{FFQ}}) { if ( $$cycle[0]%10==0 ) { push @ytics,qq["$$cycle[0]" $$cycle[0]]; } }
+    for my $cycle (@ffq) { if ( $$cycle[0]%10==0 ) { push @ytics,qq["$$cycle[0]" $$cycle[0]]; } }
     my $ytics = join(',', @ytics);
     print $fh qq[
             $$args{terminal}
@@ -455,14 +744,14 @@ sub plot_qualities
             set title "$$args{title}"
             splot '-' matrix with image
         ];
-    for my $cycle (@{$$opts{dat}{FFQ}})
+    for my $cycle (@ffq)
     {
         for (my $iqual=1; $iqual<@$cycle; $iqual++) { print $fh "\t$$cycle[$iqual]"; }
         print $fh "\n";
     }
     print $fh "end\nend\n";
     @ytics = ();
-    for my $cycle (@{$$opts{dat}{LFQ}}) { if ( $$cycle[0]%10==0 ) { push @ytics,qq["$$cycle[0]" $$cycle[0]]; } }
+    for my $cycle (@lfq) { if ( $$cycle[0]%10==0 ) { push @ytics,qq["$$cycle[0]" $$cycle[0]]; } }
     $ytics = join(',', @ytics);
     print $fh qq[
             set origin 0,0.03
@@ -478,7 +767,7 @@ sub plot_qualities
             set cblabel "Number of bases"
             splot '-' matrix with image
         ];
-    for my $cycle (@{$$opts{dat}{LFQ}})
+    for my $cycle (@lfq)
     {
         for (my $iqual=1; $iqual<@$cycle; $iqual++) { print $fh "\t$$cycle[$iqual]"; }
         print $fh "\n";
@@ -493,7 +782,8 @@ sub plot_acgt_cycles
 {
     my ($opts) = @_;
 
-    if ( !exists($$opts{dat}{GCC}) or !@{$$opts{dat}{GCC}} ) { return; }
+    my @gcc = get_values($opts, 'GCC');
+    if ( !@gcc ) { return; }
 
     my $args = get_defaults($opts,"$$opts{prefix}acgt-cycles.png");
     my $fh = $$args{fh};
@@ -514,7 +804,7 @@ sub plot_acgt_cycles
         ];
     for my $base (1..4)
     {
-        for my $cycle (@{$$opts{dat}{GCC}})
+        for my $cycle (@gcc)
         {
             print $fh $$cycle[0]+1,"\t",$$cycle[$base],"\n";
         }
@@ -529,12 +819,14 @@ sub plot_gc
 {
     my ($opts) = @_;
 
-    my $is_paired = $$opts{dat}{'is paired:'};
+    my $is_paired = get_value($opts,'SN','is paired:');
     my $args = get_defaults($opts,"$$opts{prefix}gc-content.png");
     my $fh = $$args{fh};
     my ($gcl_max,$gcf_max,$lmax,$fmax);
-    for my $gc (@{$$opts{dat}{GCF}}) { if ( !defined $gcf_max or $gcf_max<$$gc[1] ) { $gcf_max=$$gc[1]; $fmax=$$gc[0]; } }
-    for my $gc (@{$$opts{dat}{GCL}}) { if ( !defined $gcl_max or $gcl_max<$$gc[1] ) { $gcl_max=$$gc[1]; $lmax=$$gc[0]; } }
+    my @gcf = get_values($opts, 'GCF');
+    my @gcl = get_values($opts, 'GCL');
+    for my $gc (@gcf) { if ( !defined $gcf_max or $gcf_max<$$gc[1] ) { $gcf_max=$$gc[1]; $fmax=$$gc[0]; } }
+    for my $gc (@gcl) { if ( !defined $gcl_max or $gcl_max<$$gc[1] ) { $gcl_max=$$gc[1]; $lmax=$$gc[0]; } }
     my $gcmax = $is_paired && $gcl_max > $gcf_max ? $lmax : $fmax;
     print $fh qq[
             $$args{terminal}
@@ -558,11 +850,11 @@ sub plot_gc
         close($ref);
         print $fh "end\n";
     }
-    for my $cycle (@{$$opts{dat}{GCF}}) { printf $fh "%d\t%f\n", $$cycle[0],$$cycle[1]/$gcf_max; }
+    for my $cycle (@gcf) { printf $fh "%d\t%f\n", $$cycle[0],$$cycle[1]/$gcf_max; }
     print $fh "end\n";
     if ( $is_paired )
     {
-        for my $cycle (@{$$opts{dat}{GCL}}) { printf $fh "%d\t%f\n", $$cycle[0],$$cycle[1]/$gcl_max; }
+        for my $cycle (@gcl) { printf $fh "%d\t%f\n", $$cycle[0],$$cycle[1]/$gcl_max; }
         print $fh "end\n";
     }
     close($fh);
@@ -574,11 +866,12 @@ sub plot_gc_depth
 {
     my ($opts) = @_;
 
-    if ( !exists($$opts{dat}{GCD}) or !@{$$opts{dat}{GCD}} ) { return; }
+    my @gcd = get_values($opts,'GCD');
+    if ( !@gcd ) { return; }
 
     # Find unique sequence percentiles for 30,40, and 50% GC content, just to draw x2tics.
     my @tics = ( {gc=>30},{gc=>40},{gc=>50} );
-    for my $gc (@{$$opts{dat}{GCD}})
+    for my $gc (@gcd)
     {
         for my $tic (@tics)
         {
@@ -609,9 +902,9 @@ sub plot_gc_depth
                  '-' using 1:2:3 with filledcurve lt 1 lc rgb "#bbdeff" t '25-75th percentile' , \\
                  '-' using 1:2 with lines lc rgb "#0084ff" t 'Median'
         ];
-    for my $gc (@{$$opts{dat}{GCD}}) { print $fh "$$gc[1]\t$$gc[2]\t$$gc[6]\n"; } print $fh "end\n";
-    for my $gc (@{$$opts{dat}{GCD}}) { print $fh "$$gc[1]\t$$gc[3]\t$$gc[5]\n"; } print $fh "end\n";
-    for my $gc (@{$$opts{dat}{GCD}}) { print $fh "$$gc[1]\t$$gc[4]\n"; } print $fh "end\n";
+    for my $gc (@gcd) { print $fh "$$gc[1]\t$$gc[2]\t$$gc[6]\n"; } print $fh "end\n";
+    for my $gc (@gcd) { print $fh "$$gc[1]\t$$gc[3]\t$$gc[5]\n"; } print $fh "end\n";
+    for my $gc (@gcd) { print $fh "$$gc[1]\t$$gc[4]\n"; } print $fh "end\n";
     close($fh);
     plot($$args{gp});
 }
@@ -621,10 +914,12 @@ sub plot_isize
 {
     my ($opts) = @_;
 
-    if ( !$$opts{dat}{'is paired:'} or !exists($$opts{dat}{IS}) or !@{$$opts{dat}{IS}} ) { return; }
+    my $is_paired = get_value($opts,'SN','is paired:');
+    my @isizes = get_values($opts, 'IS');
+    if ( !$is_paired or !@isizes ) { return; }
 
     my ($isize_max,$isize_cnt);
-    for my $isize (@{$$opts{dat}{IS}})
+    for my $isize (@isizes)
     {
         if ( !defined $isize_max or $isize_cnt<$$isize[1] ) { $isize_cnt=$$isize[1]; $isize_max=$$isize[0]; }
     }
@@ -646,10 +941,10 @@ sub plot_isize
                 '-' with lines title 'Outward', \\
                 '-' with lines title 'Other'
         ];
-    for my $isize (@{$$opts{dat}{IS}}) { print $fh "$$isize[0]\t$$isize[1]\n"; } print $fh "end\n";
-    for my $isize (@{$$opts{dat}{IS}}) { print $fh "$$isize[0]\t$$isize[2]\n"; } print $fh "end\n";
-    for my $isize (@{$$opts{dat}{IS}}) { print $fh "$$isize[0]\t$$isize[3]\n"; } print $fh "end\n";
-    for my $isize (@{$$opts{dat}{IS}}) { print $fh "$$isize[0]\t$$isize[4]\n"; } print $fh "end\n";
+    for my $isize (@isizes) { print $fh "$$isize[0]\t$$isize[1]\n"; } print $fh "end\n";
+    for my $isize (@isizes) { print $fh "$$isize[0]\t$$isize[2]\n"; } print $fh "end\n";
+    for my $isize (@isizes) { print $fh "$$isize[0]\t$$isize[3]\n"; } print $fh "end\n";
+    for my $isize (@isizes) { print $fh "$$isize[0]\t$$isize[4]\n"; } print $fh "end\n";
     close($fh);
     plot($$args{gp});
 }
@@ -659,12 +954,13 @@ sub plot_coverage
 {
     my ($opts) = @_;
 
-    if ( !exists($$opts{dat}{COV}) or !@{$$opts{dat}{COV}} ) { return; }
+    my @cov = get_values($opts, 'COV');
+    if ( !@cov ) { return; }
 
     my @vals;
-    for my $cov (@{$$opts{dat}{COV}}) { push @vals,$$cov[2]; }
+    for my $cov (@cov) { push @vals,$$cov[2]; }
     my $i = percentile(99.8,@vals);
-    my $p99 = $$opts{dat}{COV}[$i][1];
+    my $p99 = $cov[$i][1];
 
     my $args = get_defaults($opts,"$$opts{prefix}coverage.png");
     my $fh = $$args{fh};
@@ -679,7 +975,7 @@ sub plot_coverage
             set xrange [:$p99]
             plot '-' with lines notitle
         ];
-    for my $cov (@{$$opts{dat}{COV}}) 
+    for my $cov (@cov) 
     { 
         if ( $$cov[2]==0 ) { next; }
         print $fh "$$cov[1]\t$$cov[2]\n"; 
@@ -694,11 +990,11 @@ sub plot_mismatches_per_cycle
 {
     my ($opts) = @_;
 
-    if ( !exists($$opts{dat}{MPC}) or !@{$$opts{dat}{MPC}} ) { return; }
-    if ( older_than($opts,'2012-02-06') ) { plot_mismatches_per_cycle_old($opts); }
+    my @mpc = get_values($opts, 'MPC');
+    if ( !@mpc ) { return; }
 
-    my $nquals = @{$$opts{dat}{MPC}[0]} - 2;
-    my $ncycles = @{$$opts{dat}{MPC}};
+    my $nquals = @{$mpc[0]} - 2;
+    my $ncycles = @mpc;
     my ($style,$with);
     if ( $ncycles>100 ) { $style = ''; $with = 'w l'; }
     else { $style = 'set style data histogram; set style histogram rowstacked'; $with = ''; }
@@ -728,31 +1024,31 @@ sub plot_mismatches_per_cycle
                  '-' $with ti '10>=Q', \\
                  '-' $with ti "N's"
         ];
-    for my $cycle (@{$$opts{dat}{MPC}}) 
+    for my $cycle (@mpc) 
     { 
         my $sum; for my $idx (31..$#$cycle) { $sum += $$cycle[$idx]; } 
         print $fh "$sum\n"; 
     }
     print $fh "end\n";
-    for my $cycle (@{$$opts{dat}{MPC}}) 
+    for my $cycle (@mpc) 
     { 
         my $sum; for my $idx (22..31) { $sum += $$cycle[$idx]; } 
         print $fh "$sum\n"; 
     }
     print $fh "end\n";
-    for my $cycle (@{$$opts{dat}{MPC}}) 
+    for my $cycle (@mpc) 
     { 
         my $sum; for my $idx (12..21) { $sum += $$cycle[$idx]; } 
         print $fh "$sum\n"; 
     }
     print $fh "end\n";
-    for my $cycle (@{$$opts{dat}{MPC}}) 
+    for my $cycle (@mpc) 
     { 
         my $sum; for my $idx (2..11) { $sum += $$cycle[$idx]; } 
         print $fh "$sum\n"; 
     }
     print $fh "end\n";
-    for my $cycle (@{$$opts{dat}{MPC}}) { print $fh "$$cycle[1]\n"; }
+    for my $cycle (@mpc) { print $fh "$$cycle[1]\n"; }
     print $fh "end\n";
     close($fh);
     plot($$args{gp});
@@ -762,7 +1058,8 @@ sub plot_indel_dist
 {
     my ($opts) = @_;
 
-    if ( !exists($$opts{dat}{ID}) or !@{$$opts{dat}{ID}} ) { return; }
+    my @indels = get_values($opts, 'ID');
+    if ( !@indels ) { return; }
 
     my $args = get_defaults($opts,"$$opts{prefix}indel-dist.png");
     my $fh = $$args{fh};
@@ -783,9 +1080,9 @@ sub plot_indel_dist
         set title "$$args{title}"
         plot '-' w l ti 'Insertions', '-' w l ti 'Deletions', '-' axes x1y2 w l ti "Ins/Dels ratio"
     ];
-    for my $len (@{$$opts{dat}{ID}}) { print $fh "$$len[0]\t$$len[1]\n"; } print $fh "end\n";
-    for my $len (@{$$opts{dat}{ID}}) { print $fh "$$len[0]\t$$len[2]\n"; } print $fh "end\n";
-    for my $len (@{$$opts{dat}{ID}}) { printf $fh "%d\t%f\n", $$len[0],$$len[2]?$$len[1]/$$len[2]:0; } print $fh "end\n";
+    for my $len (@indels) { print $fh "$$len[0]\t$$len[1]\n"; } print $fh "end\n";
+    for my $len (@indels) { print $fh "$$len[0]\t$$len[2]\n"; } print $fh "end\n";
+    for my $len (@indels) { printf $fh "%d\t%f\n", $$len[0],$$len[2]?$$len[1]/$$len[2]:0; } print $fh "end\n";
     close($fh);
     plot($$args{gp});
 }
@@ -794,7 +1091,8 @@ sub plot_indel_cycles
 {
     my ($opts) = @_;
 
-    if ( !exists($$opts{dat}{IC}) or !@{$$opts{dat}{IC}} ) { return; }
+    my @indels = get_values($opts, 'IC');
+    if ( !@indels ) { return; }
 
     my $args = get_defaults($opts,"$$opts{prefix}indel-cycles.png");
     my $fh = $$args{fh};
@@ -812,71 +1110,65 @@ sub plot_indel_cycles
         set title "$$args{title}"
         plot '-' w l ti 'Insertions (fwd)', '' w l ti 'Insertions (rev)', '' w l ti 'Deletions (fwd)', '' w l ti 'Deletions (rev)'
     ];
-    for my $len (@{$$opts{dat}{IC}}) { print $fh "$$len[0]\t$$len[1]\n"; } print $fh "end\n";
-    for my $len (@{$$opts{dat}{IC}}) { print $fh "$$len[0]\t$$len[2]\n"; } print $fh "end\n";
-    for my $len (@{$$opts{dat}{IC}}) { print $fh "$$len[0]\t$$len[3]\n"; } print $fh "end\n";
-    for my $len (@{$$opts{dat}{IC}}) { print $fh "$$len[0]\t$$len[4]\n"; } print $fh "end\n";
+    for my $len (@indels) { print $fh "$$len[0]\t$$len[1]\n"; } print $fh "end\n";
+    for my $len (@indels) { print $fh "$$len[0]\t$$len[2]\n"; } print $fh "end\n";
+    for my $len (@indels) { print $fh "$$len[0]\t$$len[3]\n"; } print $fh "end\n";
+    for my $len (@indels) { print $fh "$$len[0]\t$$len[4]\n"; } print $fh "end\n";
     close($fh);
     plot($$args{gp});
 }
 
 
-
-
-
-
-
-sub has_values
-{
-    my ($opts,@tags) = @_;
-    for my $tag (@tags)
-    {
-        my (@lines) = `cat $$opts{bamcheck} | grep ^$tag | wc -l`;
-        chomp($lines[0]);
-        if ( $lines[0]<2 ) { return 0; }
-    }
-    return 1;
-}
-
-sub plot_mismatches_per_cycle_old
+sub merge_bamcheck
 {
     my ($opts) = @_;
+    my $fh = *STDOUT;
+    if ( !$$opts{merge} ) 
+    { 
+        open($fh,'>',"$$opts{prefix}merge.bchk") or error("$$opts{prefix}merge.bchk: $!\n");
+    }
 
-    my $args = get_defaults($opts,"$$opts{prefix}mism-per-cycle.png");
-    my ($nquals)  = `grep ^MPC $$opts{bamcheck} | awk '\$2==1' | sed 's,\\t,\\n,g' | wc -l`;
-    my ($ncycles) = `grep ^MPC $$opts{bamcheck} | wc -l`;
-    chomp($nquals);
-    chomp($ncycles);
-    $nquals--;
-    $ncycles--;
-    my @gr0_15  = (2..17);
-    my @gr16_30 = (18..32);
-    my @gr31_n  = (33..$nquals);
-    my $gr0_15  = '$'. join('+$',@gr0_15); 
-    my $gr16_30 = '$'. join('+$',@gr16_30); 
-    my $gr31_n  = '$'. join('+$',@gr31_n); 
+    print $fh "# This file was produced by plot-bamcheck, the command line was:\n#   $$opts{args}\n#\n";
 
-    open(my $fh,'>',$$args{gp}) or error("$$args{gp}: $!");
-    print $fh q[
-        set terminal png size 600,400 truecolor font "DejaVuSansMono,9"
-        set output "] . $$args{img} . q["
-        
-        set key left top
-        set style data histogram
-        set style histogram rowstacked
+    for my $sec (@{$$opts{sections}})
+    {
+        my $sid = $$sec{id};
+        if ( !exists($$opts{dat}{$sid}) ) { next; }
 
-        set grid back lc rgb "#aaaaaa"
-        set ylabel "Number of mismatches" 
-        set xlabel "Read Cycle"
-        set style fill solid border -1
-        set title "] . $$args{title} . qq["
-        set xrange [-1:$ncycles]
-        
-        plot '< grep ^MPC $$opts{bamcheck} | cut -f 2-' using ($gr31_n) ti 'Base Quality>30', '' using ($gr16_30) ti '30>=Q>15', '' using ($gr0_15) ti '15>=Q'
-    ];
-    close($fh);
+        print $fh $$sec{header};
+        if ( ref($$opts{dat}{$sid}) eq 'HASH' )
+        {
+            for my $key (keys %{$$opts{dat}{$sid}})
+            {
+                print "$sid\t$key\t$$opts{dat}{$sid}{$key}\n";
+            }
+            next;
+        }
 
-    plot($$args{gp});
+        if ( ref($$opts{dat}{$sid}) eq 'ARRAY' )
+        {
+            for my $rec (@{$$opts{dat}{$sid}})
+            {
+                print $fh "$sid\t", join("\t",@$rec), "\n";
+            }
+        }
+
+        #
+        #   if ( $sid eq 'ID' )
+        #   {
+        #       print $fh "# $$opts{id2sec}{SN}{header}\n$$opts{id2sec}{SN}{exp}";
+        #       # output summary numbers here
+        #       for my $id (keys %{$$opts{dat}})
+        #       {
+        #           if ( exists($$opts{exp}{$id}) ) { next; }
+        #           for my $key (keys %{$$opts{dat}{$id}})
+        #           {
+        #               print $fh "SN\t$id\t$key\t$$opts{dat}{$id}{$key}\n";
+        #           }
+        #       }
+        #   }
+    }
+
 }
 
 
