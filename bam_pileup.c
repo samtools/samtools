@@ -353,7 +353,7 @@ static void tweak_overlap_quality(bam1_t *a, bam1_t *b)
     {
         if ( (b_ret=cigar_iref2iseq_next(&b_cigar, b_cigar_max, &b_icig, &b_iseq)) < 0 ) return;
         if ( a_ret!=BAM_CMATCH || b_ret!=BAM_CMATCH ) continue;
-        if ( a_seq[a_iseq] != b_seq[b_iseq] )
+        if ( bam1_seqi(a_seq,a_iseq) != bam1_seqi(b_seq,b_iseq) )
         {
             if ( a_qual[a_iseq] < b_qual[b_iseq] ) a_qual[a_iseq] = 0;
             else b_qual[b_iseq] = 0;
