@@ -28,7 +28,7 @@ typedef struct {
 	int n11, n1_, n_1, n;
 	double p;
 } hgacc_t;
-
+#include <stdio.h>
 // incremental version of hypergenometric distribution
 static double hypergeo_acc(int n11, int n1_, int n_1, int n, hgacc_t *aux)
 {
@@ -51,6 +51,7 @@ static double hypergeo_acc(int n11, int n1_, int n_1, int n, hgacc_t *aux)
 		}
 		aux->n11 = n11;
 	}
+fprintf(stderr,"(%d %d %d %d)\n", aux->n11,aux->n1_,aux->n_1,aux->n);
 	aux->p = hypergeo(aux->n11, aux->n1_, aux->n_1, aux->n);
 	return aux->p;
 }
@@ -72,7 +73,10 @@ double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double
 	// left tail
 	p = hypergeo_acc(min, 0, 0, 0, &aux);
 	for (left = 0., i = min + 1; p < 0.99999999 * q; ++i) // loop until underflow
+    {
+fprintf(stderr,"p=%e  q=%e  diff=%e  i=%d left=%e  (%d %d %d %d)\n", p,q,p-0.99999999 * q,i,left, n11,n12,n21,n22);
 		left += p, p = hypergeo_acc(i, 0, 0, 0, &aux);
+    }
 	--i;
 	if (p < 1.00000001 * q) left += p;
 	else --i;

@@ -52,7 +52,7 @@ typedef struct {
 	unsigned int anno[16], depth, ori_depth;
 	uint8_t *PL;
     float vdb; // variant distance bias
-    float read_pos_bias, read_pos_test;
+    float read_pos_bias;
     float seg_bias;
 } bcf_call_t;
 

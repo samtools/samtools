@@ -273,7 +273,6 @@ double calc_hwe(int obs_hom1, int obs_hom2, int obs_hets)
     p_hwe = p_hwe > 1.0 ? 1.0 : p_hwe;
     free(het_probs);
     return p_hwe;
-
 }
 
 
@@ -600,10 +599,22 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         int has_I16 = test16(b, &a) >= 0? 1 : 0;
         if (has_I16 )
         {
-            if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+            if ( a.is_tested) 
+            {
+                ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+                ksprintf(&s, ";EDB=%e", a.edb);
+                ksprintf(&s, ";BQB=%e", a.bqb);
+                ksprintf(&s, ";MQB=%e", a.mqb);
+            }
+            else
+                ksprintf(&s, ";PV4=1,1,1,1;EDB=0;BQB=0;MQB=0");
             ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
             ksprintf(&s, ";QBD=%e", b->qual/(a.d[0] + a.d[1] + a.d[2] + a.d[3]));
             if ( max_dv ) ksprintf(&s, ";MDV=%d", max_dv);
+
+            float strand_bias = a.d[0] < a.d[1] ? (1.0+a.d[0])/(1.0+a.d[1]) : (1.0+a.d[1])/(1.0+a.d[0]);
+            strand_bias *= a.d[2] < a.d[3] ? (1.0+a.d[2])/(1.0+a.d[3]) : (1.0+a.d[3])/(1.0+a.d[2]);
+            ksprintf(&s, ";SB=%f", strand_bias);
         }
         if ( nAA+nRA )
         {

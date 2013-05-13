@@ -16,6 +16,7 @@ typedef struct {
 
 typedef struct {
     double p[4];
+    double edb, mqb, bqb;   // end distance bias, mapQ bias, baseQ bias
     int mq, depth, is_tested, d[4];
 } anno16_t;
 

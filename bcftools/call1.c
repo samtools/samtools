@@ -63,6 +63,21 @@ static double ttest(int n1, int n2, int a[4])
 	return t < 0.? 1. : .5 * kf_betai(.5*v, .5, v/(v+t*t));
 }
 
+static double ttest2(int n1, int n2, int a[4])
+{
+	if (n1 == 0 || n2 == 0 || n1 + n2 < 3) return 0.0;
+	double u1 = (double)a[0] / n1; 
+    double u2 = (double)a[2] / n2;
+//fprintf(stderr,"%e %e -- -- %d %d (%d %d %d %d)\n", u1,u2,n1,n2, a[0],a[1],a[2],a[3]);
+    if ( u1==u2 ) return 0.0;
+    double v1 = (double)a[1] / n1 - u1*u1;
+    double v2 = (double)a[3] / n2 - u2*u2;
+//fprintf(stderr,"%e %e %e %e %d %d (%d %d %d %d)\n", u1,u2,v1,v2,n1,n2, a[0],a[1],a[2],a[3]);
+    if ( !v1 && !v2 ) return -1e3;   // arbitrary negative value
+    double t  = (u1 - u2) / sqrt( v1/n1 + v2/n2 );
+    return t;
+}
+
 static int test16_core(int anno[16], anno16_t *a)
 {
 	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
@@ -77,6 +92,9 @@ static int test16_core(int anno[16], anno16_t *a)
 	kt_fisher_exact(anno[0], anno[1], anno[2], anno[3], &left, &right, &a->p[0]);
 	for (i = 1; i < 4; ++i)
 		a->p[i] = ttest(anno[0] + anno[1], anno[2] + anno[3], anno+4*i);
+    a->bqb = ttest2(anno[0] + anno[1], anno[2] + anno[3], anno+4*1);
+    a->mqb = ttest2(anno[0] + anno[1], anno[2] + anno[3], anno+4*2);
+    a->edb = ttest2(anno[0] + anno[1], anno[2] + anno[3], anno+4*3);
 	return 0;
 }
 
@@ -296,8 +314,14 @@ static void write_header(viewconf_t *conf, bcf_hdr_t *h)
         kputs("##INFO=<ID=PR,Number=1,Type=Integer,Description=\"# permutations yielding a smaller PCHI2.\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=QBD,"))
         kputs("##INFO=<ID=QBD,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#reads\">\n", &str);
-    if (!strstr(str.s, "##INFO=<ID=RPT,"))
-        kputs("##INFO=<ID=RPS,Number=1,Type=Float,Description=\"Read Position Test\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=SB,"))
+        kputs("##INFO=<ID=SB,Number=1,Type=Float,Description=\"Strand Bias\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=EDB,"))
+        kputs("##INFO=<ID=EDB,Number=1,Type=Float,Description=\"End Distance Bias (tt2)\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=MQB,"))
+        kputs("##INFO=<ID=MQB,Number=1,Type=Float,Description=\"Mapping Quality Bias (tt2)\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=BQB,"))
+        kputs("##INFO=<ID=BQB,Number=1,Type=Float,Description=\"Base Quality Bias (tt2)\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=RPB,"))
         kputs("##INFO=<ID=RPB,Number=1,Type=Float,Description=\"Read Position Bias\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=MDV,"))
@@ -574,10 +598,13 @@ int bcfview(int argc, char *argv[])
 			gzwrite(bcf_p1_fp_lk, &b->pos, 4);
 			gzwrite(bcf_p1_fp_lk, &em[0], sizeof(double));
 			calret = bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
+#if BCF_DUMP_AFS
+            // Do not print AFS by default. If anyone needs this, please make the output optional
 			if (n_processed % 100000 == 0) {
 				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
 				bcf_p1_dump_afs(p1);
 			}
+#endif
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
 			if (vc.n_perm && vc.n1 > 0 && pr.p_chi2 < vc.min_perm_p) { // permutation test
 				bcf_p1rst_t r;
@@ -621,7 +648,9 @@ int bcfview(int argc, char *argv[])
 
 	if (bcf_p1_fp_lk) gzclose(bcf_p1_fp_lk);
 	if (vc.prior_file) free(vc.prior_file);
+#if BCF_DUMP_AFS
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);
+#endif
 	if (hin != hout) bcf_hdr_destroy(hout);
 	bcf_hdr_destroy(hin);
 	bcf_destroy(b); bcf_destroy(blast);

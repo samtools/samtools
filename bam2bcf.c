@@ -155,22 +155,21 @@ double mann_whitney_1947(int n, int m, int U)
 
 void calc_ReadPosBias(bcf_callaux_t *bca, bcf_call_t *call)
 {
-    call->read_pos_test = 0;
-    int i, nref = 0, nalt = 0, ntot = call->anno[0] + call->anno[1] + call->anno[2] + call->anno[3];
+    int i, nref = 0, nalt = 0;
     unsigned long int U = 0;
     for (i=0; i<bca->npos; i++) 
     {
         nref += bca->ref_pos[i];
         nalt += bca->alt_pos[i];
         U += nref*bca->alt_pos[i];
-        call->read_pos_test += (bca->ref_pos[i] + bca->alt_pos[i] - 0.01*ntot)*(bca->ref_pos[i] + bca->alt_pos[i] - 0.01*ntot)/(0.01*ntot);
         bca->ref_pos[i] = 0;
         bca->alt_pos[i] = 0;
     }
 
     if ( !nref || !nalt )
     {
-        call->read_pos_bias = -1;
+        // Missing values are hard to interpret by downstream filtering, therefore output unbiased result
+        call->read_pos_bias = 0;
         return;
     }
 
@@ -444,8 +443,6 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 		kputw(bc->anno[i], &s);
 	}
     ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
-    if (bc->read_pos_test >=0 )
-        ksprintf(&s,";RPT=%f", bc->read_pos_test);
     if (bc->vdb != -1)
         ksprintf(&s, ";VDB=%e", bc->vdb);
     if (bc->read_pos_bias != -1 )
