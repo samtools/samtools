@@ -154,7 +154,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	bam_header_t *h;
 	int i, ret;
 	bam_index_t *idx;
-	uint32_t last_bin, save_bin;
+	uint32_t last_bin, save_bin, recalculated_bin;
 	int32_t last_coor, last_tid, save_tid;
 	bam1_core_t *c;
 	uint64_t save_off, last_off, n_mapped, n_unmapped, off_beg, off_end, n_no_coor;
@@ -170,7 +170,6 @@ bam_index_t *bam_index_core(bamFile fp)
 	c = &b->core;
 
 	idx->n = h->n_targets;
-	bam_header_destroy(h);
 	idx->index = (khash_t(i)**)calloc(idx->n, sizeof(void*));
 	for (i = 0; i < idx->n; ++i) idx->index[i] = kh_init(i);
 	idx->index2 = (bam_lidx_t*)calloc(idx->n, sizeof(bam_lidx_t));
@@ -192,6 +191,19 @@ bam_index_t *bam_index_core(bamFile fp)
 			fprintf(stderr, "[bam_index_core] the alignment is not sorted (%s): %u > %u in %d-th chr\n",
 					bam1_qname(b), last_coor, c->pos, c->tid+1);
 			return NULL;
+		}
+		if (c->tid >= 0) {
+			if (c->n_cigar) {
+				recalculated_bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
+			} else {
+				recalculated_bin = bam_reg2bin(c->pos, c->pos + 1);
+			}
+			if (c->bin != recalculated_bin) {
+				fprintf(stderr, "[bam_index_core] read '%s' mapped to '%s' at POS %d to %d has BIN %d but should be %d\n",
+					bam1_qname(b), h->target_name[c->tid], c->pos + 1, bam_calend(c, bam1_cigar(b)), c->bin, recalculated_bin);
+				fprintf(stderr, "[bam_index_core] Fix it by using BAM->SAM->BAM to force a recalculation of the BIN field\n");
+				return NULL;
+			}
 		}
 		if (c->tid >= 0 && !(c->flag & BAM_FUNMAP)) insert_offset2(&idx->index2[b->core.tid], b, last_off);
 		if (c->bin != last_bin) { // then possibly write the binning index
@@ -219,6 +231,7 @@ bam_index_t *bam_index_core(bamFile fp)
 		last_off = bam_tell(fp);
 		last_coor = b->core.pos;
 	}
+        bam_header_destroy(h);
 	if (save_tid >= 0) {
 		insert_offset(idx->index[save_tid], save_bin, save_off, bam_tell(fp));
 		insert_offset(idx->index[save_tid], BAM_MAX_BIN, off_beg, bam_tell(fp));
