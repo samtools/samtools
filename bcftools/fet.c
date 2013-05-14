@@ -28,7 +28,7 @@ typedef struct {
 	int n11, n1_, n_1, n;
 	double p;
 } hgacc_t;
-#include <stdio.h>
+
 // incremental version of hypergenometric distribution
 static double hypergeo_acc(int n11, int n1_, int n_1, int n, hgacc_t *aux)
 {
@@ -51,7 +51,6 @@ static double hypergeo_acc(int n11, int n1_, int n_1, int n, hgacc_t *aux)
 		}
 		aux->n11 = n11;
 	}
-fprintf(stderr,"(%d %d %d %d)\n", aux->n11,aux->n1_,aux->n_1,aux->n);
 	aux->p = hypergeo(aux->n11, aux->n1_, aux->n_1, aux->n);
 	return aux->p;
 }
@@ -65,24 +64,21 @@ double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double
 
 	n1_ = n11 + n12; n_1 = n11 + n21; n = n11 + n12 + n21 + n22; // calculate n1_, n_1 and n
 	max = (n_1 < n1_) ? n_1 : n1_; // max n11, for right tail
-	min = n1_ + n_1 - n;
+	min = n1_ + n_1 - n;    // not sure why n11-n22 is used instead of min(n_1,n1_)
 	if (min < 0) min = 0; // min n11, for left tail
 	*two = *_left = *_right = 1.;
 	if (min == max) return 1.; // no need to do test
 	q = hypergeo_acc(n11, n1_, n_1, n, &aux); // the probability of the current table
 	// left tail
 	p = hypergeo_acc(min, 0, 0, 0, &aux);
-	for (left = 0., i = min + 1; p < 0.99999999 * q; ++i) // loop until underflow
-    {
-fprintf(stderr,"p=%e  q=%e  diff=%e  i=%d left=%e  (%d %d %d %d)\n", p,q,p-0.99999999 * q,i,left, n11,n12,n21,n22);
+	for (left = 0., i = min + 1; p < 0.99999999 * q && p>0; ++i) // loop until underflow
 		left += p, p = hypergeo_acc(i, 0, 0, 0, &aux);
-    }
 	--i;
 	if (p < 1.00000001 * q) left += p;
 	else --i;
 	// right tail
 	p = hypergeo_acc(max, 0, 0, 0, &aux);
-	for (right = 0., j = max - 1; p < 0.99999999 * q; --j) // loop until underflow
+	for (right = 0., j = max - 1; p < 0.99999999 * q && p>0; --j) // loop until underflow
 		right += p, p = hypergeo_acc(j, 0, 0, 0, &aux);
 	++j;
 	if (p < 1.00000001 * q) right += p;

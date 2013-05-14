@@ -489,6 +489,11 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         max_als = max_als2;
         n1 = n2;
     }
+    if ( n1<2 )
+    {
+        if ( !var_only ) _bcf1_set_ref(b, idp);
+        return 1;
+    }
     lk_sum = lk_sums[n1-1];
 
     // Get the BCF record ready for GT and GQ

@@ -199,79 +199,6 @@ void bam_plp_destroy(bam_plp_t iter)
 	free(iter);
 }
 
-#if SOFT_CLIP_OVERLAPS
-static void debug_cigar(bam1_t *b)
-{
-    int i;
-    for (i=0; i<b->core.n_cigar; i++)
-    {
-        int cig  = bam1_cigar(b)[i] & BAM_CIGAR_MASK;
-        int ncig = bam1_cigar(b)[i] >> BAM_CIGAR_SHIFT;
-        fprintf(stderr,"%d%c", ncig,BAM_CIGAR_STR[cig]);
-    }
-    fprintf(stderr,"\n");
-}
-
-static void soft_clip_overlap(bam1_t *a, bam1_t *b)
-{
-    int icig;
-    int32_t pos = a->core.pos;
-    for (icig=0; icig<a->core.n_cigar; icig++) 
-    {
-        int cig  = bam1_cigar(a)[icig] & BAM_CIGAR_MASK;
-        int ncig = bam1_cigar(a)[icig] >> BAM_CIGAR_SHIFT;
-        if ( cig==BAM_CINS || cig==BAM_CSOFT_CLIP || cig==BAM_CHARD_CLIP ) continue;
-        if ( cig==BAM_CMATCH || cig==BAM_CDEL ) 
-        {
-            pos += ncig;
-            if ( pos > b->core.pos ) break;
-        }
-        else abort();    // ignoring other events for now
-    }
-    if ( pos <= b->core.pos ) return;   // no overlap
-
-    int n_split = (bam1_cigar(a)[icig] >> BAM_CIGAR_SHIFT) - (pos - b->core.pos);
-    assert(n_split>=0);
-    if ( !n_split )
-    {
-        // no splitting needed, change everything to S (todo: check that multiple S's are OK)
-        for (; icig<a->core.n_cigar; icig++)
-        {
-            int cig = bam1_cigar(a)[icig] & BAM_CIGAR_MASK;
-            if ( cig==BAM_CMATCH || cig==BAM_CINS ) 
-                bam1_cigar(a)[icig] = (bam1_cigar(a)[icig] & ~BAM_CIGAR_MASK) | BAM_CSOFT_CLIP;
-            else if ( cig==BAM_CDEL )
-                bam1_cigar(a)[icig] = (bam1_cigar(a)[icig] & ~BAM_CIGAR_MASK) | BAM_CHARD_CLIP;
-        }
-    }
-    else
-    {
-        // need to split the cigar, expand the bam1 data line and make space for the new item
-        if ( a->m_data < a->data_len + 4 )
-        {
-            a->m_data = a->data_len + 4;
-            kroundup32(a->m_data);
-            a->data = (uint8_t*)realloc(a->data, a->m_data);
-        }
-        memmove(a->data + a->core.l_qname + (icig+2)*4, a->data + a->core.l_qname + (icig+1)*4, a->data_len - a->core.l_qname - (icig+1)*4);
-        int cig  = bam1_cigar(a)[icig] & BAM_CIGAR_MASK;
-        int ncig = bam1_cigar(a)[icig] >> BAM_CIGAR_SHIFT;
-        bam1_cigar(a)[icig++] = n_split << BAM_CIGAR_SHIFT | cig;
-        bam1_cigar(a)[icig++] = (ncig - n_split) << BAM_CIGAR_SHIFT | (cig==BAM_CMATCH ? BAM_CSOFT_CLIP : BAM_CHARD_CLIP);
-        a->core.n_cigar++;
-        a->data_len += 4;
-        for (; icig<a->core.n_cigar; icig++)
-        {
-            int cig = bam1_cigar(a)[icig] & BAM_CIGAR_MASK;
-            if ( cig==BAM_CMATCH || cig==BAM_CINS )
-                bam1_cigar(a)[icig] = (bam1_cigar(a)[icig] & ~BAM_CIGAR_MASK) | BAM_CSOFT_CLIP;
-            else if ( cig==BAM_CDEL )
-                bam1_cigar(a)[icig] = (bam1_cigar(a)[icig] & ~BAM_CIGAR_MASK) | BAM_CHARD_CLIP;
-        }
-    }
-}
-#endif
-
 /**
  *  cigar_iref2iseq() - 
  *  @pos:         iref_pos - b->core.pos
@@ -391,7 +318,6 @@ static void tweak_overlap_quality(bam1_t *a, bam1_t *b)
     }
 }
 
-#if 0
 // Fix overlapping reads. Simple soft-clipping did not give good results.
 // Lowering qualities of unwanted bases is more selective and works better.
 //
@@ -434,9 +360,6 @@ static void overlap_remove(bam_plp_t iter, const bam1_t *b)
             if ( kh_exist(iter->overlaps, kitr) ) kh_del(olap_hash, iter->overlaps, kitr);
     }
 }
-#endif
-static inline void overlap_push(bam_plp_t iter, lbnode_t *node) {}
-static inline void overlap_remove(bam_plp_t iter, const bam1_t *b) {}
 
 const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp)
 {
