@@ -302,7 +302,6 @@ static void tweak_overlap_quality(bam1_t *a, bam1_t *b)
         if ( a_ret!=BAM_CMATCH || b_ret!=BAM_CMATCH ) continue;
         if ( bam1_seqi(a_seq,a_iseq) != bam1_seqi(b_seq,b_iseq) )
         {
-            //fprintf(stderr,"%s  %d:%d,%d %d:%d .. %d vs %d [%d vs %d]  %c %c\n", bam1_qname(b), a->core.pos+1,a_iseq,a_icig, b->core.pos+1,b_iseq, a_qsum,b_qsum,a_qual[a_iseq],b_qual[b_iseq], bam_nt16_rev_table[bam1_seqi(a_seq,a_iseq)],bam_nt16_rev_table[bam1_seqi(b_seq,b_iseq)]);
             a_qual[a_iseq] = 3*nmism<a_qual[a_iseq] ? a_qual[a_iseq] - 3*nmism : 0; // penalize multiple mismatches in overlaps
             b_qual[b_iseq] = 3*nmism<b_qual[b_iseq] ? b_qual[b_iseq] - 3*nmism : 0; 
             if ( a_qsum==b_qsum )
@@ -320,9 +319,13 @@ static void tweak_overlap_quality(bam1_t *a, bam1_t *b)
 
 // Fix overlapping reads. Simple soft-clipping did not give good results.
 // Lowering qualities of unwanted bases is more selective and works better.
+// It also does not seem enough to only remove the base with lower quality.
 //
 static void overlap_push(bam_plp_t iter, lbnode_t *node)
 {
+    // mapped mates and paired reads only
+    if ( node->b.core.flag&BAM_FMUNMAP || !(node->b.core.flag&BAM_FPROPER_PAIR) ) return;
+
     // no overlap possible, unless some wild cigar
     if ( abs(node->b.core.isize) >= 2*node->b.core.l_qseq ) return;
 
