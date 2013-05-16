@@ -622,7 +622,7 @@ static ssize_t _razf_read(RAZF* rz, void *data, size_t size){
 
 ssize_t razf_read(RAZF *rz, void *data, size_t size){
 	size_t ori_size;
-        int i;
+	int i;
 	ori_size = size;
 	while(size > 0){
 		if(rz->buf_len){
