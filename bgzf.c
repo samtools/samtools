@@ -339,7 +339,7 @@ int bgzf_read_block(BGZF *fp)
 	return 0;
 }
 
-ssize_t bgzf_read(BGZF *fp, void *data, ssize_t length)
+ssize_t bgzf_read(BGZF *fp, void *data, size_t length)
 {
 	ssize_t bytes_read = 0;
 	uint8_t *output = data;
@@ -508,7 +508,7 @@ static int mt_lazy_flush(BGZF *fp)
 	return -1;
 }
 
-static ssize_t mt_write(BGZF *fp, const void *data, ssize_t length)
+static ssize_t mt_write(BGZF *fp, const void *data, size_t length)
 {
 	const uint8_t *input = data;
 	ssize_t rest = length;
@@ -549,7 +549,7 @@ int bgzf_flush_try(BGZF *fp, ssize_t size)
 	return -1;
 }
 
-ssize_t bgzf_write(BGZF *fp, const void *data, ssize_t length)
+ssize_t bgzf_write(BGZF *fp, const void *data, size_t length)
 {
 	const uint8_t *input = data;
 	int block_length = BGZF_BLOCK_SIZE, bytes_written = 0;

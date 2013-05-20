@@ -66,15 +66,20 @@ void bcf_hdr_destroy(bcf_hdr_t *h)
 	free(h);
 }
 
+/*
+ * Takes in a NULL delimited list of strings and returns the number of values in list and an array of pointers to each string in the list
+ */
 static inline char **cnt_null(int l, char *str, int *_n)
 {
 	int n = 0;
 	char *p, **list;
 	*_n = 0;
 	if (l == 0 || str == 0) return 0;
+	// Walk through the string and count number of NULL separators between strings in list and put in _n for return
 	for (p = str; p != str + l; ++p)
 		if (*p == 0) ++n;
 	*_n = n;
+	// Now create a list of pointers to each individual string in our list
 	list = calloc(n, sizeof(void*));
 	list[0] = str;
 	for (p = str, n = 1; p < str + l - 1; ++p)

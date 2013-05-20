@@ -16,7 +16,7 @@ towards the end of reads, which is usually an indication of
 misalignment.
 
 Site allele frequency is estimated in two ways. In the first way, the
-frequency is esimated as \argmax_f P(D|f) under the assumption of
+frequency is estimated as \argmax_f P(D|f) under the assumption of
 HWE. Prior AFS is not used. In the second way, the frequency is
 estimated as the posterior expectation of allele counts \sum_k
 kP(k|D,F), dividied by the total number of haplotypes. HWE is not
@@ -34,3 +34,4 @@ The estimate allele frequency spectrum is printed to stderr per 64k
 sites. The estimate is in fact only the first round of a EM
 procedure. The second model (not the model for HWE testing) is used to
 estimate the AFS.
+

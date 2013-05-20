@@ -265,7 +265,7 @@ static void razf_end_flush(RAZF *rz){
 	}
 }
 
-static void _razf_buffered_write(RAZF *rz, const void *data, int size){
+static void _razf_buffered_write(RAZF *rz, const void *data, size_t size){
 	int i, n;
 	while(1){
 		if(rz->buf_len == RZ_BUFFER_SIZE){
@@ -286,7 +286,7 @@ static void _razf_buffered_write(RAZF *rz, const void *data, int size){
 	}
 }
 
-int razf_write(RAZF* rz, const void *data, int size){
+ssize_t razf_write(RAZF* rz, const void *data, size_t size){
 	int ori_size, n;
 	int64_t next_block;
 	ori_size = size;
@@ -562,17 +562,18 @@ int razf_get_data_size(RAZF *rz, int64_t *u_size, int64_t *c_size){
 	}
 }
 
-static int _razf_read(RAZF* rz, void *data, int size){
+static ssize_t _razf_read(RAZF* rz, void *data, size_t size){
 	int ret, tin;
 	if(rz->z_eof || rz->z_err) return 0;
 	if (rz->file_type == FILE_TYPE_PLAIN) {
+		ssize_t fileret;
 #ifdef _USE_KNETFILE
-		ret = knet_read(rz->x.fpr, data, size);
+		fileret = knet_read(rz->x.fpr, data, size);
 #else
-		ret = read(rz->filedes, data, size);
+		fileret = read(rz->filedes, data, size);
 #endif        
-		if (ret == 0) rz->z_eof = 1;
-		return ret;
+		if (fileret == 0) rz->z_eof = 1;
+		return fileret;
 	}
 	rz->stream->avail_out = size;
 	rz->stream->next_out  = data;
@@ -619,8 +620,9 @@ static int _razf_read(RAZF* rz, void *data, int size){
 	return size - rz->stream->avail_out;
 }
 
-int razf_read(RAZF *rz, void *data, int size){
-	int ori_size, i;
+ssize_t razf_read(RAZF *rz, void *data, size_t size){
+	size_t ori_size;
+	int i;
 	ori_size = size;
 	while(size > 0){
 		if(rz->buf_len){
