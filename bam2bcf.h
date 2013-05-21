@@ -30,7 +30,7 @@ typedef struct __bcf_callaux_t {
 } bcf_callaux_t;
 
 typedef struct {
-	int depth, n_supp, ori_depth, qsum[4];
+	unsigned int depth, n_supp, ori_depth, qsum[4], mq0;
     // The fields are:
     //      depth fwd   .. ref (0) and non-ref (2)
     //      depth rev   .. ref (1) and non-ref (3)
@@ -40,7 +40,10 @@ typedef struct {
     //      mapQ^2      .. ref (9) and non-ref (11)
     //      minDist     .. ref (12) and non-ref (14)
     //      minDist^2   .. ref (13) and non-ref (15)
-	unsigned int anno[16];
+    // Note that this probably needs a more thorough fix: int types in
+    // bcf_call_t do overflow with high-coverage data, such as exomes, and
+    // BCFv2 supports only floats which may not suffice.
+	double anno[16];
 	float p[25];
 } bcf_callret1_t;
 
@@ -49,7 +52,8 @@ typedef struct {
     float qsum[4];
 	int n, n_alleles, shift, ori_ref, unseen;
 	int n_supp; // number of supporting non-reference reads
-	unsigned int anno[16], depth, ori_depth;
+	double anno[16];
+    unsigned int depth, ori_depth, mq0;
 	uint8_t *PL;
     float vdb; // variant distance bias
     float read_pos_bias;

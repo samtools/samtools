@@ -23,14 +23,14 @@ static int8_t nt4_table[256] = {
 	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4
 };
 
-static int read_I16(bcf1_t *b, int anno[16])
+static int read_I16(bcf1_t *b, double anno[16])
 {
 	char *p;
 	int i;
 	if ((p = strstr(b->info, "I16=")) == 0) return -1;
 	p += 4;
 	for (i = 0; i < 16; ++i) {
-		anno[i] = strtol(p, &p, 10);
+		anno[i] = strtod(p, &p);
 		if (anno[i] == 0 && (errno == EINVAL || errno == ERANGE)) return -2;
 		++p;
 	}
@@ -39,7 +39,8 @@ static int read_I16(bcf1_t *b, int anno[16])
 
 int bcf_2qcall(bcf_hdr_t *h, bcf1_t *b)
 {
-	int a[4], k, g[10], l, map[4], k1, j, i, i0, anno[16], dp, mq, d_rest;
+	int a[4], k, g[10], l, map[4], k1, j, i, i0, dp, mq, d_rest;
+    double anno[16]; 
 	char *s;
 	if (b->ref[1] != 0 || b->n_alleles > 4) return -1; // ref is not a single base
 	for (i = 0; i < b->n_gi; ++i)

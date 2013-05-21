@@ -107,11 +107,12 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		// set base
 		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
 		++ori_depth;
+		mapQ  = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
+        if ( !mapQ ) r->mq0++;
 		baseQ = q = is_indel? p->aux&0xff : (int)bam1_qual(p->b)[p->qpos]; // base/indel quality
 		seqQ = is_indel? (p->aux>>8&0xff) : 99;
 		if (q < bca->min_baseQ) continue;
 		if (q > seqQ) q = seqQ;
-		mapQ = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
 		mapQ = mapQ < bca->capQ? mapQ : bca->capQ;
 		if (q > mapQ) q = mapQ;
 		if (q > 63) q = 63;
@@ -309,16 +310,24 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
  *  @bca:       auxiliary data structure for holding temporary values
  *  @ref_base:  the reference base
  *  @call:      filled with the annotations
- */
-/*
- * Combines calls across the various samples being studied
- * 1. For each allele at each base across all samples the quality is summed so you end up with a set of quality sums for each allele present
- * 2. The quality sums are sorted.
- * 3. Using the sorted quality sums we now create the allele ordering array A\subN. This is done by doing the following:
- *   a) If the reference allele is known it always comes first, otherwise N comes first.
- *   b) Then the rest of the alleles are output in descending order of quality sum (which we already know the qsum array was sorted).  Any allelles with qsum 0 will be excluded.
- * 4. Using the allele ordering array we create the genotype ordering array.  In the worst case with an unknown reference this will be:  A0/A0 A1/A0 A1/A1 A2/A0 A2/A1 A2/A2 A3/A0 A3/A1 A3/A2 A3/A3 A4/A0 A4/A1 A4/A2 A4/A3 A4/A4
- * 5. The genotype ordering array is then used to extract data from the error model 5*5 matrix and is used to produce a Phread likelihood array for each sample.
+ *
+ *  Combines calls across the various samples being studied
+ *  1. For each allele at each base across all samples the quality is summed so
+ *     you end up with a set of quality sums for each allele present 2. The quality
+ *     sums are sorted.
+ *  3. Using the sorted quality sums we now create the allele ordering array
+ *     A\subN. This is done by doing the following: 
+ *     a) If the reference allele is known it always comes first, otherwise N
+ *        comes first.  
+ *     b) Then the rest of the alleles are output in descending order of quality
+ *        sum (which we already know the qsum array was sorted).  Any allelles with
+ *        qsum 0 will be excluded.
+ *  4. Using the allele ordering array we create the genotype ordering array.
+ *     In the worst case with an unknown reference this will be:  A0/A0 A1/A0 A1/A1
+ *     A2/A0 A2/A1 A2/A2 A3/A0 A3/A1 A3/A2 A3/A3 A4/A0 A4/A1 A4/A2 A4/A3 A4/A4 
+ *  5. The genotype ordering array is then used to extract data from the error
+ *     model 5*5 matrix and is used to produce a Phread likelihood array for each
+ *     sample.
  */
 int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int ref_base /*4-bit*/, bcf_call_t *call)
 {
@@ -342,9 +351,10 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 	for (i = 1; i < 4; ++i) // insertion sort
 		for (j = i; j > 0 && qsum[j] < qsum[j-1]; --j)
 			tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
-	////////////////////////////////////////////////////////
-	// set the reference allele and alternative allele(s) //
-	////////////////////////////////////////////////////////
+
+
+	// Set the reference allele and alternative allele(s)
+
 	// Clear the allele list
 	for (i = 0; i < 5; ++i) call->a[i] = -1;
 	call->unseen = -1;
@@ -370,10 +380,13 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		if (call->n_alleles == 1) return -1; // no reliable supporting read. stop doing anything
 	}
 	/*
-	 * Set the phread likelihood array (call->PL)
-	 * This array is 15 entries long for each sample because that is size of an upper or lower triangle of a worst case 5x5 matrix of
-	 * possible genotypes. This worst case matrix will occur when all 4 possible alleles are present and the reference allele is unknown.
-	 * The sides of the matrix will correspond to the reference allele (if known) followed by the alleles present in descending order of quality sum
+     * Set the phread likelihood array (call->PL) This array is 15 entries long
+     * for each sample because that is size of an upper or lower triangle of a
+     * worst case 5x5 matrix of possible genotypes. This worst case matrix will
+     * occur when all 4 possible alleles are present and the reference allele
+     * is unknown.  The sides of the matrix will correspond to the reference
+     * allele (if known) followed by the alleles present in descending order of
+     * quality sum
 	 */
 	if (call->n < n) {
 		call->n = n;
@@ -410,10 +423,11 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		call->shift = (int)(sum_min + .499);
 	}
 	// combine annotations
-	memset(call->anno, 0, 16 * sizeof(int));
+	memset(call->anno, 0, 16 * sizeof(double));
 	for (i = call->depth = call->ori_depth = 0, tmp = 0; i < n; ++i) {
 		call->depth += calls[i].depth;
 		call->ori_depth += calls[i].ori_depth;
+        call->mq0 += calls[i].mq0;
 		for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
 	}
 
@@ -472,7 +486,8 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	kputs("DP=", &s); kputw(bc->ori_depth, &s); kputs(";I16=", &s);
 	for (i = 0; i < 16; ++i) {
 		if (i) kputc(',', &s);
-		kputw(bc->anno[i], &s);
+        ksprintf(&s,"%.0f",bc->anno[i]);
+		//kputw(bc->anno[i], &s);
 	}
     ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
     if (bc->vdb != -1)
@@ -481,6 +496,7 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
         ksprintf(&s, ";RPB=%e", bc->read_pos_bias);
     if (bc->seg_bias != HUGE_VAL )
         ksprintf(&s, ";SGB=%e", bc->seg_bias);
+    kputs(";MQ0=", &s); kputw(bc->mq0, &s);
 	kputc('\0', &s);
 	// FMT
 	kputs("PL", &s);

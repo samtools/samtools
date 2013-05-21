@@ -50,7 +50,7 @@ void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
-static double ttest(int n1, int n2, int a[4])
+static double ttest(int n1, int n2, double a[4])
 {
 	extern double kf_betai(double a, double b, double x);
 	double t, v, u1, u2;
@@ -63,7 +63,7 @@ static double ttest(int n1, int n2, int a[4])
 	return t < 0.? 1. : .5 * kf_betai(.5*v, .5, v/(v+t*t));
 }
 
-static double ttest2(int n1, int n2, int a[4])
+static double ttest2(int n1, int n2, double a[4])
 {
 	if (n1 == 0 || n2 == 0 || n1 + n2 < 3) return 0.0;
 	double u1 = (double)a[0] / n1; 
@@ -78,7 +78,7 @@ static double ttest2(int n1, int n2, int a[4])
     return t;
 }
 
-static int test16_core(int anno[16], anno16_t *a)
+static int test16_core(double anno[16], anno16_t *a)
 {
 	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
 	double left, right;
@@ -101,14 +101,15 @@ static int test16_core(int anno[16], anno16_t *a)
 int test16(bcf1_t *b, anno16_t *a)
 {
 	char *p;
-	int i, anno[16];
+	int i;
+    double anno[16];
 	a->p[0] = a->p[1] = a->p[2] = a->p[3] = 1.;
 	a->d[0] = a->d[1] = a->d[2] = a->d[3] = 0.;
 	a->mq = a->depth = a->is_tested = 0;
 	if ((p = strstr(b->info, "I16=")) == 0) return -1;
 	p += 4;
 	for (i = 0; i < 16; ++i) {
-		errno = 0; anno[i] = strtol(p, &p, 10);
+		errno = 0; anno[i] = strtod(p, &p);
 		if (anno[i] == 0 && (errno == EINVAL || errno == ERANGE)) return -2;
 		++p;
 	}
@@ -123,7 +124,6 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	anno16_t a;
 
 	has_I16 = test16(b, &a) >= 0? 1 : 0;
-	//rm_info(b, "I16="); // FIXME: probably this function has a bug. If I move it below, I16 will not be removed!
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
@@ -274,6 +274,8 @@ static void write_header(viewconf_t *conf, bcf_hdr_t *h)
 		kputs("##INFO=<ID=DP4,Number=4,Type=Integer,Description=\"# high-quality ref-forward bases, ref-reverse, alt-forward and alt-reverse bases\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=MQ,"))
 		kputs("##INFO=<ID=MQ,Number=1,Type=Integer,Description=\"Root-mean-square mapping quality of covering reads\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=MQ0,"))
+		kputs("##INFO=<ID=MQ0,Number=1,Type=Integer,Description=\"Number of reads with zero mapping quality\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=FQ,"))
 		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability of all samples being the same\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AF1,"))
