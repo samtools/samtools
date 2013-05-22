@@ -554,7 +554,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         ac[ als&7 ]++;
     }
     free(pdg);
-    bcf_fit_alt(b,max_als);
+    bcf_fit_alt(b,gts);
 
     // The VCF spec is ambiguous about QUAL: is it the probability of anything else
     //  (that is QUAL(non-ref) = P(ref)+P(any non-ref other than ALT)) or is it
