@@ -59,7 +59,6 @@ static double ttest(int n1, int n2, double a[4])
 	if (u1 <= u2) return 1.;
 	t = (u1 - u2) / sqrt(((a[1] - n1 * u1 * u1) + (a[3] - n2 * u2 * u2)) / (n1 + n2 - 2) * (1./n1 + 1./n2));
 	v = n1 + n2 - 2;
-//	printf("%d,%d,%d,%d,%lf,%lf,%lf\n", a[0], a[1], a[2], a[3], t, u1, u2);
 	return t < 0.? 1. : .5 * kf_betai(.5*v, .5, v/(v+t*t));
 }
 
@@ -68,11 +67,9 @@ static double ttest2(int n1, int n2, double a[4])
 	if (n1 == 0 || n2 == 0 || n1 + n2 < 3) return 0.0;
 	double u1 = (double)a[0] / n1; 
     double u2 = (double)a[2] / n2;
-//fprintf(stderr,"%e %e -- -- %d %d (%d %d %d %d)\n", u1,u2,n1,n2, a[0],a[1],a[2],a[3]);
     if ( u1==u2 ) return 0.0;
     double v1 = (double)a[1] / n1 - u1*u1;
     double v2 = (double)a[3] / n2 - u2*u2;
-//fprintf(stderr,"%e %e %e %e %d %d (%d %d %d %d)\n", u1,u2,v1,v2,n1,n2, a[0],a[1],a[2],a[3]);
     if ( !v1 && !v2 ) return -1e3;   // arbitrary negative value
     double t  = (u1 - u2) / sqrt( v1/n1 + v2/n2 );
     return t;
@@ -84,7 +81,7 @@ static int test16_core(double anno[16], anno16_t *a)
 	double left, right;
 	int i;
 	a->p[0] = a->p[1] = a->p[2] = a->p[3] = 1.;
-	memcpy(a->d, anno, 4 * sizeof(int));
+    for (i=0; i<4; i++) a->d[i] = anno[i];
 	a->depth = anno[0] + anno[1] + anno[2] + anno[3];
 	a->is_tested = (anno[0] + anno[1] > 0 && anno[2] + anno[3] > 0);
 	if (a->depth == 0) return -1;
@@ -129,21 +126,22 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
 	kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
-	if (b->info[0]) kputc(';', &s);
+    if ( b->info[0] ) kputc(';', &s);
 	{ // print EM
-		if (em[0] >= 0) ksprintf(&s, "AF1=%.4g", 1 - em[0]);
-		if (em[4] >= 0 && em[4] <= 0.05) ksprintf(&s, ";G3=%.4g,%.4g,%.4g;HWE=%.3g", em[3], em[2], em[1], em[4]);
-		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, ";AF2=%.4g,%.4g", 1 - em[5], 1 - em[6]);
-		if (em[7] >= 0) ksprintf(&s, ";LRT=%.3g", em[7]);
-		if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
+		if (em[0] >= 0) ksprintf(&s, "AF1=%.4g;", 1 - em[0]);
+		if (em[4] >= 0 && em[4] <= 0.05) ksprintf(&s, "G3=%.4g,%.4g,%.4g;HWE=%.3g;", em[3], em[2], em[1], em[4]);
+		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, "AF2=%.4g,%.4g;", 1 - em[5], 1 - em[6]);
+		if (em[7] >= 0) ksprintf(&s, "LRT=%.3g;", em[7]);
+		if (em[8] >= 0) ksprintf(&s, "LRT2=%.3g;", em[8]);
 	}
 	if (cons_llr > 0) {
-		ksprintf(&s, ";CLR=%d", cons_llr);
+		ksprintf(&s, "CLR=%d;", cons_llr);
 		if (cons_gt > 0)
-			ksprintf(&s, ";UGT=%c%c%c;CGT=%c%c%c", cons_gt&0xff, cons_gt>>8&0xff, cons_gt>>16&0xff,
+			ksprintf(&s, "UGT=%c%c%c;CGT=%c%c%c;", cons_gt&0xff, cons_gt>>8&0xff, cons_gt>>16&0xff,
 				     cons_gt>>32&0xff, cons_gt>>40&0xff, cons_gt>>48&0xff);
 	}
 	if (pr == 0) { // if pr is unset, return
+        if ( s.s[s.l-1]==';' ) s.s[--s.l] = 0;  // remove the superfluous semicolon
 		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
 		free(b->str);
 		b->m_str = s.m; b->l_str = s.l; b->str = s.s;
@@ -154,13 +152,13 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	is_var = (pr->p_ref < pref);
 	r = is_var? pr->p_ref : pr->p_var;
 
-//	ksprintf(&s, ";CI95=%.4g,%.4g", pr->cil, pr->cih); // FIXME: when EM is not used, ";" should be omitted!
-	ksprintf(&s, ";AC1=%d", pr->ac);
-	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+//	ksprintf(&s, "CI95=%.4g,%.4g;", pr->cil, pr->cih);
+	ksprintf(&s, "AC1=%d;", pr->ac);
+	if (has_I16) ksprintf(&s, "DP4=%d,%d,%d,%d;MQ=%d;", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
 	if (fq > 999) fq = 999;
-	ksprintf(&s, ";FQ=%.3g", fq);
+	ksprintf(&s, "FQ=%.3g;", fq);
 	if (pr->cmp[0] >= 0.) { // two sample groups
 		int i, q[3];
 		for (i = 1; i < 3; ++i) {
@@ -168,11 +166,12 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 			q[i] = x == 0? 255 : (int)(-4.343 * log(x) + .499);
 			if (q[i] > 255) q[i] = 255;
 		}
-		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
-		// ksprintf(&s, ";LRT3=%.3g", pr->lrt);
-		ksprintf(&s, ";PCHI2=%.3g;PC2=%d,%d", q[1], q[2], pr->p_chi2);
+		if (pr->perm_rank >= 0) ksprintf(&s, "PR=%d;", pr->perm_rank);
+		// ksprintf(&s, "LRT3=%.3g;", pr->lrt);
+		ksprintf(&s, "PCHI2=%.3g;PC2=%d,%d;", q[1], q[2], pr->p_chi2);
 	}
-	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+	if (has_I16 && a.is_tested) ksprintf(&s, "PV4=%.2g,%.2g,%.2g,%.2g;", a.p[0], a.p[1], a.p[2], a.p[3]);
+    if ( s.s[s.l-1]==';' ) s.s[--s.l] = 0;  // remove the superfluous semicolon
 	kputc('\0', &s);
     rm_info(&s, "QS=");
     rm_info(&s, "I16=");

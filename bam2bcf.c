@@ -280,7 +280,9 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
     call->seg_bias = HUGE_VAL;
     if ( !bcr ) return;
 
-    int nr     = call->anno[2] + call->anno[3]; // number of observed non-reference reads
+    int nr = call->anno[2] + call->anno[3]; // number of observed non-reference reads
+    if ( !nr ) return;
+
     int avg_dp = (call->anno[0] + call->anno[1] + nr) / call->n;    // average depth
     double M   = (double)nr / avg_dp;   // an approximate number of variant alleles in the population
     if ( M>call->n ) M = call->n;
@@ -299,7 +301,7 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
             sum += log(2*f*(1-f)*exp(-q) + f*f*exp(-2*q) + (1-f)*(1-f)) - p;
     }
 
-    //fprintf(stderr,"%d %d %d %d .. %e\n", call->anno[0],call->anno[1],call->anno[2],call->anno[3], sum);
+    // fprintf(stderr,"%.0f %.0f %.0f %.0f .. %e  (f=%e p=%e q=%e nr=%d)\n", call->anno[0],call->anno[1],call->anno[2],call->anno[3], sum,f,p,q, nr);
     call->seg_bias = sum;
 }
 
@@ -369,7 +371,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 			else break;
 		}
         else 
-            call->qsum[0] = (float)(qsum[i]>>2)/qsum_tot;
+            call->qsum[0] = qsum_tot ? (float)(qsum[i]>>2)/qsum_tot : 0;
 	}
 	if (ref_base >= 0) { // for SNPs, find the "unseen" base
 		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
