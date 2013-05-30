@@ -59,7 +59,7 @@ static const unsigned short bam_char2flag_table[256] = {
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0
 };
 
-const char *bam_nt16_rev_table = "=ACMGRSVTWYHKDBN";
+const char bam_nt16_rev_table[] = "=ACMGRSVTWYHKDBN";
 
 struct __tamFile_t {
 	gzFile fp;
