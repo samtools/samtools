@@ -426,7 +426,10 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 	}
 	// combine annotations
 	memset(call->anno, 0, 16 * sizeof(double));
-	for (i = call->depth = call->ori_depth = 0, tmp = 0; i < n; ++i) {
+    call->ori_depth = 0;
+    call->depth     = 0;
+    call->mq0       = 0;
+	for (i = 0; i < n; ++i) {
 		call->depth += calls[i].depth;
 		call->ori_depth += calls[i].ori_depth;
         call->mq0 += calls[i].mq0;
