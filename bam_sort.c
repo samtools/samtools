@@ -44,6 +44,7 @@ typedef struct {
 
 #define __pos_cmp(a, b) ((a).pos > (b).pos || ((a).pos == (b).pos && ((a).i > (b).i || ((a).i == (b).i && (a).idx > (b).idx))))
 
+// Function to compare reads in the heap and determine which one is < the other
 static inline int heap_lt(const heap1_t a, const heap1_t b)
 {
 	if (g_is_by_qname) {
@@ -73,8 +74,8 @@ static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
 }
 
 #define MERGE_RG     1
-#define MERGE_UNCOMP 2
-#define MERGE_LEVEL1 4
+#define MERGE_UNCOMP 2 // Generate uncompressed BAM
+#define MERGE_LEVEL1 4 // Compress the BAM at level 1 (fast) mode
 #define MERGE_FORCE  8
 
 /*!
@@ -100,6 +101,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	char **RG = 0, mode[8];
 	bam_iter_t *iter = 0;
 
+    // Is there a specified pre-prepared header to use for output?
 	if (headers) {
 		tamFile fpheaders = sam_open(headers);
 		if (fpheaders == 0) {
@@ -188,6 +190,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		bam_header_destroy(hheaders);
 	}
 
+    // If we're only merging a specified region move our iters to start at that point
 	if (reg) {
 		int tid, beg, end;
 		if (bam_parse_region(hout, reg, &tid, &beg, &end) < 0) {
@@ -202,6 +205,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		}
 	}
 
+    // Load the first read from each file into the heap
 	for (i = 0; i < n; ++i) {
 		heap1_t *h = heap + i;
 		h->i = i;
@@ -212,6 +216,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		}
 		else h->pos = HEAP_EMPTY;
 	}
+    // Open output file and write header
 	if (flag & MERGE_UNCOMP) level = 0;
 	else if (flag & MERGE_LEVEL1) level = 1;
 	strcpy(mode, "w");
@@ -224,6 +229,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	bam_header_destroy(hout);
 	if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
 
+    // Begin the actual merge
 	ks_heapmake(heap, n, heap);
 	while (heap->pos != HEAP_EMPTY) {
 		bam1_t *b = heap->b;
@@ -244,6 +250,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		ks_heapadjust(heap, 0, n, heap);
 	}
 
+    // Clean up and close
 	if (flag & MERGE_RG) {
 		for (i = 0; i != n; ++i) free(RG[i]);
 		free(RG); free(RG_len);
@@ -353,6 +360,7 @@ static int change_SO(bam_header_t *h, const char *so)
 	return 0;
 }
 
+// Function to compare reads and determine which one is < the other
 static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
 	if (g_is_by_qname) {
