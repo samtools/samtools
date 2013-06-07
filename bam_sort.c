@@ -86,7 +86,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 {
 	if (g_is_by_qname) {
 		int t;
-		if (a.b == 0 || b.b == 0) return a.b == 0? 1 : 0;
+		if (a.b == NULL || b.b == NULL) return a.b == NULL? 1 : 0;
 		t = strnum_cmp(bam1_qname(a.b), bam1_qname(b.b));
 		return (t > 0 || (t == 0 && (a.b->core.flag&0xc0) > (b.b->core.flag&0xc0)));
 	} else return __pos_cmp(a, b);
@@ -562,7 +562,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	// Is there a specified pre-prepared header to use for output?
 	if (headers) {
 		tamFile fpheaders = sam_open(headers);
-		if (fpheaders == 0) {
+		if (fpheaders == NULL) {
 			const char *message = strerror(errno);
 			fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", headers, message);
 			return -1;
@@ -717,7 +717,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 int bam_merge(int argc, char *argv[])
 {
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
-	char *fn_headers = NULL, *reg = 0;
+	char *fn_headers = NULL, *reg = NULL;
 	long random_seed = (long)time(NULL);
 
 	while ((c = getopt(argc, argv, "h:nru1R:f@:l:cps:")) >= 0) {
@@ -778,7 +778,7 @@ typedef bam1_t *bam1_p;
 
 static int change_SO(bam_header_t *h, const char *so)
 {
-	char *p, *q, *beg = 0, *end = 0, *newtext;
+	char *p, *q, *beg = NULL, *end = NULL, *newtext;
 	if (h->l_text > 3) {
 		if (strncmp(h->text, "@HD", 3) == 0) {
 			if ((p = strchr(h->text, '\n')) == 0) return -1;
@@ -793,7 +793,7 @@ static int change_SO(bam_header_t *h, const char *so)
 			} else beg = end = p, *p = '\n';
 		}
 	}
-	if (beg == 0) { // no @HD
+	if (beg == NULL) { // no @HD
 		h->l_text += strlen(so) + 15;
 		newtext = (char*)malloc(h->l_text + 1);
 		sprintf(newtext, "@HD\tVN:1.3\tSO:%s\n", so);
@@ -833,7 +833,7 @@ static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf
 	size_t i;
 	bamFile fp;
 	fp = strcmp(fn, "-")? bam_open(fn, mode) : bam_dopen(fileno(stdout), mode);
-	if (fp == 0) return;
+	if (fp == NULL) return;
 	bam_header_write(fp, h);
 	if (n_threads > 1) bgzf_mt(fp, n_threads, 256);
 	for (i = 0; i < l; ++i)
@@ -912,7 +912,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 	max_mem = _max_mem * n_threads;
 	buf = NULL;
 	fp = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
-	if (fp == 0) {
+	if (fp == NULL) {
 		fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
 		return -1;
 	}
@@ -927,7 +927,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 			buf = (bam1_t**)realloc(buf, max_k * sizeof(bam1_t*));
 			memset(buf + old_max, 0, sizeof(bam1_t*) * (max_k - old_max));
 		}
-		if (buf[k] == 0) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));
+		if (buf[k] == NULL) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));
 		b = buf[k];
 		if ((ret = bam_read1(fp, b)) < 0) break;
 		if (b->data_len < b->m_data>>2) { // shrink
