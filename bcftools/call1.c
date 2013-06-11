@@ -264,6 +264,7 @@ static void write_header(viewconf_t *conf, bcf_hdr_t *h)
 	str.l = h->l_txt? h->l_txt - 1 : 0;
 	str.m = str.l + 1; str.s = h->txt;
     int i;
+    ksprintf(&str, "##bcftoolsVersion=%s\n", BCF_VERSION);
     ksprintf(&str, "##bcftoolsCommand=%s", conf->argv[0]);
     for (i=1; i<conf->argc; i++) ksprintf(&str, " %s", conf->argv[i]);
     kputc('\n', &str);
@@ -539,9 +540,9 @@ int bcfview(int argc, char *argv[])
 		gzwrite(bcf_p1_fp_lk, &M, 4);
 	}
 	while (vcf_read(bp, hin, b) > 0) {
-		int is_indel, cons_llr = -1;
-		int64_t cons_gt = -1;
+		int is_indel;
 		double em[10];
+        p1->cons_llr = p1->cons_gt = -1;
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {
 			extern int bcf_smpl_covered(const bcf1_t *b);
@@ -577,9 +578,9 @@ int bcfview(int argc, char *argv[])
 			continue;
 		}
 		if (vc.trio_aux) // do trio calling
-			bcf_trio_call(vc.trio_aux, b, &cons_llr, &cons_gt);
+			bcf_trio_call(vc.trio_aux, b, &p1->cons_llr, &p1->cons_gt);
 		else if (vc.flag & VC_PAIRCALL)
-			cons_llr = bcf_pair_call(b);
+			p1->cons_llr = bcf_pair_call(b);
 		if (vc.flag & (VC_CALL|VC_ADJLD|VC_EM)) bcf_gl2pl(b);
 		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0x1ff, em);
 		else {
@@ -624,8 +625,8 @@ int bcfview(int argc, char *argv[])
 				}
 				pr.perm_rank = n;
 			}
-			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em, cons_llr, cons_gt);
-		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em, cons_llr, cons_gt);
+			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em, p1->cons_llr, p1->cons_gt);
+		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em, p1->cons_llr, p1->cons_gt);
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;
 			if ((r2 = bcf_pair_freq(blast, b, f)) >= 0) {

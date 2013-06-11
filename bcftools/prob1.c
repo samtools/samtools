@@ -18,25 +18,6 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 gzFile bcf_p1_fp_lk;
 
-struct __bcf_p1aux_t {
-	int n; // Number of samples
-	int M; // Total number of chromosomes across all samples (n*2 if all samples are diploid)
-	int n1;
-	int is_indel;
-	uint8_t *ploidy; // haploid or diploid ONLY
-	double *q2p, *pdg; // q2p maps from phread scaled to real likelihood, pdg -> P(D|g)
-	double *phi; // Probability of seeing k reference alleles
-	double *phi_indel;
-	double *z, *zswap; // aux for afs
-	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
-	double **hg; // hypergeometric distribution
-	double *lf; // log factorial
-	double t, t1, t2;
-	double *afs, *afs1; // afs: accumulative allele frequency spectrum (AFS); afs1: site posterior distribution
-	const uint8_t *PL; // point to PL
-	int PL_len;
-};
-
 void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x)
 {
 	int i;
@@ -262,8 +243,16 @@ double calc_hwe(int obs_hom1, int obs_hom2, int obs_hets)
     return p_hwe;
 }
 
+static void _set_clr(bcf_p1aux_t *ma, kstring_t *str)
+{
+    ksprintf(str, ";CLR=%d", ma->cons_llr);
+    if ( ma->cons_gt > 0 )
+        ksprintf(str, ";UGT=%c%c%c;CGT=%c%c%c", 
+            ma->cons_gt&0xff, ma->cons_gt>>8&0xff, ma->cons_gt>>16&0xff,
+            ma->cons_gt>>32&0xff, ma->cons_gt>>40&0xff, ma->cons_gt>>48&0xff);
+}
 
-static void _bcf1_set_ref(bcf1_t *b, int idp)
+static void _bcf1_set_ref(bcf1_t *b, bcf_p1aux_t *ma, int idp)
 {
     kstring_t s;
     int old_n_gi = b->n_gi;
@@ -301,6 +290,7 @@ static void _bcf1_set_ref(bcf1_t *b, int idp)
             if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
             ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
         }
+        if ( ma->cons_llr>0 ) _set_clr(ma, &s);
         kputc('\0', &s);
         rm_info(&s, "I16=");
         rm_info(&s, "QS=");
@@ -344,7 +334,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
     }
     if ( nals==1 ) 
     {
-        if ( !var_only ) _bcf1_set_ref(b, idp);
+        if ( !var_only ) _bcf1_set_ref(b, ma, idp);
         return 1;
     }
     if ( !pl ) return -1;
@@ -478,7 +468,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
     }
     if ( max_als==1 )   // ref-only call
     {
-        if ( !var_only ) _bcf1_set_ref(b, idp);
+        if ( !var_only ) _bcf1_set_ref(b, ma, idp);
         free(pdg);
         return 1;
     }
@@ -614,6 +604,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
             double hwe = calc_hwe(nAA, nRR, nRA);
             ksprintf(&s, ";HWE=%e", hwe);
         }
+        if ( ma->cons_llr>0 ) _set_clr(ma, &s);
         kputc('\0', &s);
         rm_info(&s, "I16=");
         rm_info(&s, "QS=");
