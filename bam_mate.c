@@ -30,6 +30,15 @@ void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 	bam_aux_append(b1, "CT", 'Z', str->l+1, (uint8_t*)str->s); 
 }
 
+/*
+ * What this program is supposed to do:
+ * Fill in mate coordinates, ISIZE and mate related flags from a name-sorted alignment.
+ * Observations:
+ * This currently looks like it won't work with:
+ * -Unmapped reads and their mate pair
+ * -BAMs containing reads with more than 2 segments
+ */
+
 // currently, this function ONLY works if each read has one hit
 void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 {
@@ -53,6 +62,7 @@ void bam_mating_core(bamFile in, bamFile out, int remove_reads)
             continue;
         }
 		cur_end = bam_calend(&cur->core, bam1_cigar(cur));
+		// Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
 		if (cur_end > (int)header->target_len[cur->core.tid]) cur->core.flag |= BAM_FUNMAP;
 		if (cur->core.flag & BAM_FSECONDARY) 
         {
@@ -71,6 +81,7 @@ void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 					pre5 = (pre->core.flag&BAM_FREVERSE)? pre_end : pre->core.pos;
 					cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
 				} else cur->core.isize = pre->core.isize = 0;
+				// copy flags
 				if (pre->core.flag&BAM_FREVERSE) cur->core.flag |= BAM_FMREVERSE;
 				else cur->core.flag &= ~BAM_FMREVERSE;
 				if (cur->core.flag&BAM_FREVERSE) pre->core.flag |= BAM_FMREVERSE;
