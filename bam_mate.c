@@ -10,7 +10,7 @@ void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 	int i, end;
 	uint32_t *cigar;
 	str->l = 0;
-	if (b1->core.tid != b2->core.tid || b1->core.tid < 0) return; // coordinateless or not on the same chr; skip
+	if (b1->core.tid != b2->core.tid || b1->core.tid < 0  || b2->core.tid < 0 || b1->core.pos == 0 || b2->core.pos == 0 || b1->core.flag&BAM_FUNMAP || b2->core.flag&BAM_FUNMAP) return; // coordinateless or not on the same chr; skip
 	if (b1->core.pos > b2->core.pos) swap = b1, b1 = b2, b2 = swap; // make sure b1 has a smaller coordinate
 	kputc((b1->core.flag & BAM_FREAD1)? '1' : '2', str); // segment index
 	kputc((b1->core.flag & BAM_FREVERSE)? 'R' : 'F', str); // strand
@@ -70,42 +70,56 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 	curr = 0; has_prev = 0;
 	while (bam_read1(in, b[curr]) >= 0) {
 		bam1_t *cur = b[curr], *pre = b[1-curr];
-		if (cur->core.tid < 0) 
-        {
-            if ( !remove_reads ) bam_write1(out, cur);
-            continue;
-        }
-		cur_end = bam_calend(&cur->core, bam1_cigar(cur));
-		// Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
-		if (cur_end > (int)header->target_len[cur->core.tid]) cur->core.flag |= BAM_FUNMAP;
-		if (cur->core.flag & BAM_FSECONDARY) 
+		if (cur->core.flag & BAM_FSECONDARY)
         {
             if ( !remove_reads ) bam_write1(out, cur);
             continue; // skip secondary alignments
         }
-		if (has_prev) {
+		if (cur->core.tid < 0 || cur->core.pos == 0 || cur->core.flag&BAM_FUNMAP) // If unmapped
+        {
+			cur->core.flag |= BAM_FUNMAP;
+			cur->core.tid = -1;
+			cur->core.pos = 0;
+        }
+		else { // If mapped
+			cur_end = bam_calend(&cur->core, bam1_cigar(cur));
+
+			// Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
+			if (cur_end > (int)header->target_len[cur->core.tid]) cur->core.flag |= BAM_FUNMAP;
+		}
+		if (has_prev) { // do we have a pair of reads to examine?
 			if (strcmp(bam1_qname(cur), bam1_qname(pre)) == 0) { // identical pair name
+				// First sync mate information
 				cur->core.mtid = pre->core.tid; cur->core.mpos = pre->core.pos;
 				pre->core.mtid = cur->core.tid; pre->core.mpos = cur->core.pos;
+				sync_mate_flags(pre, cur);
+
 				if (pre->core.tid == cur->core.tid && !(cur->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))
-					&& !(pre->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))) // set TLEN/ISIZE
+					&& !(pre->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))) // if safe set TLEN/ISIZE
 				{
 					uint32_t cur5, pre5;
 					cur5 = (cur->core.flag&BAM_FREVERSE)? cur_end : cur->core.pos;
 					pre5 = (pre->core.flag&BAM_FREVERSE)? pre_end : pre->core.pos;
 					cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
 				} else cur->core.isize = pre->core.isize = 0;
-				sync_mate_flags(pre, cur);
 				bam_template_cigar(pre, cur, &str);
-				bam_write1(out, pre);
-				bam_write1(out, cur);
-				has_prev = 0;
-			} else { // unpaired or singleton
-				pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
-				if (pre->core.flag & BAM_FPAIRED) {
-					pre->core.flag |= BAM_FMUNMAP;
-					pre->core.flag &= ~BAM_FMREVERSE & ~BAM_FPROPER_PAIR;
+				// TODO: Add code to check if read is in a proper pair and set/clear BAM_FPROPER_PAIR
+				
+				// Write out result
+				if ( !remove_reads ) {
+					bam_write1(out, pre);
+					bam_write1(out, cur);
+				} else {
+					// If we have to remove reads make sure we do it in a way that doesn't create orphans with bad flags
+					if(pre->core.flag&BAM_FUNMAP) cur->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+					if(cur->core.flag&BAM_FUNMAP) pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+					if(! pre->core.flag&BAM_FUNMAP) bam_write1(out, pre);
+					if(! cur->core.flag&BAM_FUNMAP) bam_write1(out, cur);
 				}
+				has_prev = 0;
+			} else { // unpaired?  clear bad info and write it out
+				pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
+				pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
 				bam_write1(out, pre);
 			}
 		} else has_prev = 1;
