@@ -39,8 +39,22 @@ void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * -BAMs containing reads with more than 2 segments
  */
 
+static void sync_mate_flags_inner(bam1_t* src, bam1_t* dest)
+{
+	if (src->core.flag&BAM_FREVERSE) dest->core.flag |= BAM_FMREVERSE;
+	else dest->core.flag &= ~BAM_FMREVERSE;
+	if (src->core.flag & BAM_FUNMAP) { dest->core.flag |= BAM_FMUNMAP; dest->core.flag &= ~BAM_FPROPER_PAIR; }
+}
+
+// copy flags
+static void sync_mate_flags(bam1_t* a, bam1_t* b)
+{
+	sync_mate_flags_inner(a,b);
+	sync_mate_flags_inner(b,a);
+}
+
 // currently, this function ONLY works if each read has one hit
-void bam_mating_core(bamFile in, bamFile out, int remove_reads)
+static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 {
 	bam_header_t *header;
 	bam1_t *b[2];
@@ -81,13 +95,7 @@ void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 					pre5 = (pre->core.flag&BAM_FREVERSE)? pre_end : pre->core.pos;
 					cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
 				} else cur->core.isize = pre->core.isize = 0;
-				// copy flags
-				if (pre->core.flag&BAM_FREVERSE) cur->core.flag |= BAM_FMREVERSE;
-				else cur->core.flag &= ~BAM_FMREVERSE;
-				if (cur->core.flag&BAM_FREVERSE) pre->core.flag |= BAM_FMREVERSE;
-				else pre->core.flag &= ~BAM_FMREVERSE;
-				if (cur->core.flag & BAM_FUNMAP) { pre->core.flag |= BAM_FMUNMAP; pre->core.flag &= ~BAM_FPROPER_PAIR; }
-				if (pre->core.flag & BAM_FUNMAP) { cur->core.flag |= BAM_FMUNMAP; cur->core.flag &= ~BAM_FPROPER_PAIR; }
+				sync_mate_flags(pre, cur);
 				bam_template_cigar(pre, cur, &str);
 				bam_write1(out, pre);
 				bam_write1(out, cur);
