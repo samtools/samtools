@@ -542,7 +542,7 @@ int bcfview(int argc, char *argv[])
 	while (vcf_read(bp, hin, b) > 0) {
 		int is_indel;
 		double em[10];
-        p1->cons_llr = p1->cons_gt = -1;
+        if ( p1 ) p1->cons_llr = p1->cons_gt = -1;
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {
 			extern int bcf_smpl_covered(const bcf1_t *b);
