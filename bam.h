@@ -686,6 +686,13 @@ extern "C" {
 	double bam_aux2d(const uint8_t *s);
 	char bam_aux2A(const uint8_t *s);
 	char *bam_aux2Z(const uint8_t *s);
+        int8_t *bam_auxB2c(const uint8_t *s, int32_t *l);
+        uint8_t *bam_auxB2C(const uint8_t *s, int32_t *l);
+        int16_t *bam_auxB2s(const uint8_t *s, int32_t *l);
+        uint16_t *bam_auxB2S(const uint8_t *s, int32_t *l);
+        int32_t *bam_auxB2i(const uint8_t *s, int32_t *l);
+        uint32_t *bam_auxB2I(const uint8_t *s, int32_t *l);
+        float *bam_auxB2f(const uint8_t *s, int32_t *l);
 
 	int bam_aux_del(bam1_t *b, uint8_t *s);
 	void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
