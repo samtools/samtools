@@ -71,14 +71,14 @@ double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double
 	q = hypergeo_acc(n11, n1_, n_1, n, &aux); // the probability of the current table
 	// left tail
 	p = hypergeo_acc(min, 0, 0, 0, &aux);
-	for (left = 0., i = min + 1; p < 0.99999999 * q && p>0; ++i) // loop until underflow
+	for (left = 0., i = min + 1; p < 0.99999999 * q && i<=max; ++i) // loop until underflow
 		left += p, p = hypergeo_acc(i, 0, 0, 0, &aux);
 	--i;
 	if (p < 1.00000001 * q) left += p;
 	else --i;
 	// right tail
 	p = hypergeo_acc(max, 0, 0, 0, &aux);
-	for (right = 0., j = max - 1; p < 0.99999999 * q && p>0; --j) // loop until underflow
+	for (right = 0., j = max - 1; p < 0.99999999 * q && j>=0; --j) // loop until underflow
 		right += p, p = hypergeo_acc(j, 0, 0, 0, &aux);
 	++j;
 	if (p < 1.00000001 * q) right += p;
