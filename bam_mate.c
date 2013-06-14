@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -39,18 +40,77 @@ void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * -BAMs containing reads with more than 2 segments
  */
 
-static void sync_mate_flags_inner(bam1_t* src, bam1_t* dest)
+/*
+ * How we handle input
+ *
+ * secondary reads:
+ * write to output unchanged
+ * all reads:
+ * if pos == 0, tid == -1 set UNMAPPED flag
+ * single reads:
+ * if pos == 0, tid == -1, or UNMAPPED then set UNMAPPED, pos = 0, tid = -1
+ * clear flags (PAIRED, MREVERSE, PROPER_PAIR)
+ * set mpos = 0, mtid = -1 and isize = 0
+ * paired reads:
+ * sync mate flags (MREVERSE, MUNMAPPED), mpos, mtid
+ * calculate CT and apply to lowest positioned read
+ */
+
+static void sync_unmapped_pos_inner(bam1_t* src, bam1_t* dest) {
+	if ((dest->core.flag & BAM_FUNMAP) && !(src->core.flag & BAM_FUNMAP)) {
+		// Set unmapped read's RNAME and POS to those of its mapped mate
+		// (recommended best practice, ensures if coord sort will be together)
+		dest->core.tid = src->core.tid;
+		dest->core.pos = src->core.pos;
+	}	
+}
+
+static void sync_mate_inner(bam1_t* src, bam1_t* dest)
 {
-	if (src->core.flag&BAM_FREVERSE) dest->core.flag |= BAM_FMREVERSE;
-	else dest->core.flag &= ~BAM_FMREVERSE;
-	if (src->core.flag & BAM_FUNMAP) { dest->core.flag |= BAM_FMUNMAP; dest->core.flag &= ~BAM_FPROPER_PAIR; }
+	// sync mate pos information
+	dest->core.mtid = src->core.tid; dest->core.mpos = src->core.pos;
+	// sync flag info
+	if (src->core.flag&BAM_FREVERSE)
+			dest->core.flag |= BAM_FMREVERSE;
+		else
+			dest->core.flag &= ~BAM_FMREVERSE;
+	if (src->core.flag & BAM_FUNMAP) {
+		dest->core.flag |= BAM_FMUNMAP;
+	}
+}
+
+// Is it plausible that these reads are properly paired?
+// Can't really give definitive answer without checking isize
+static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
+{
+	if ((a->core.flag & BAM_FUNMAP) || (b->core.flag & BAM_FUNMAP)) return false;
+	assert(a->core.tid > 0); // This should never happen if FUNMAP is set correctly
+	
+	if (a->core.tid != b->core.tid) return false;
+	
+	bam1_t* first = a;
+	bam1_t* second = b;
+	if (a->core.pos > b->core.pos) {
+		first = b;
+		second = a;
+	} else {
+		first = a;
+		second = b;
+	}
+	
+	if (!(first->core.flag&BAM_FREVERSE) && (second->core.flag&BAM_FREVERSE))
+		return true;
+	else
+		return false;
 }
 
 // copy flags
-static void sync_mate_flags(bam1_t* a, bam1_t* b)
+static void sync_mate(bam1_t* a, bam1_t* b)
 {
-	sync_mate_flags_inner(a,b);
-	sync_mate_flags_inner(b,a);
+	sync_unmapped_pos_inner(a,b);
+	sync_unmapped_pos_inner(b,a);
+	sync_mate_inner(a,b);
+	sync_mate_inner(b,a);
 }
 
 // currently, this function ONLY works if each read has one hit
@@ -87,13 +147,12 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
             if ( !remove_reads ) bam_write1(out, cur);
             continue; // skip secondary alignments
         }
-		if (cur->core.tid < 0 || cur->core.pos == 0 || cur->core.flag&BAM_FUNMAP) // If unmapped
+		if (cur->core.tid < 0 || cur->core.pos == 0) // If unmapped set the flag
         {
 			cur->core.flag |= BAM_FUNMAP;
-			cur->core.tid = -1;
-			cur->core.pos = 0;
         }
-		else { // If mapped
+		if (cur->core.flag&BAM_FUNMAP) // If mapped calculate end
+		{
 			cur_end = bam_calend(&cur->core, bam1_cigar(cur));
 
 			// Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
@@ -101,10 +160,7 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 		}
 		if (has_prev) { // do we have a pair of reads to examine?
 			if (strcmp(bam1_qname(cur), bam1_qname(pre)) == 0) { // identical pair name
-				// First sync mate information
-				cur->core.mtid = pre->core.tid; cur->core.mpos = pre->core.pos;
-				pre->core.mtid = cur->core.tid; pre->core.mpos = cur->core.pos;
-				sync_mate_flags(pre, cur);
+				sync_mate(pre, cur);
 
 				if (pre->core.tid == cur->core.tid && !(cur->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))
 					&& !(pre->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))) // if safe set TLEN/ISIZE
@@ -115,7 +171,11 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 					cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
 				} else cur->core.isize = pre->core.isize = 0;
 				bam_template_cigar(pre, cur, &str);
-				// TODO: Add code to check if read is in a proper pair and set/clear BAM_FPROPER_PAIR
+				// TODO: Add code to properly check if read is in a proper pair based on ISIZE distribution
+				if (!plausibly_properly_paired(pre,cur)) {
+					pre->core.flag &= ~BAM_FPROPER_PAIR;
+					cur->core.flag &= ~BAM_FPROPER_PAIR;
+				}
 				
 				// Write out result
 				if ( !remove_reads ) {
@@ -130,6 +190,11 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 				}
 				has_prev = 0;
 			} else { // unpaired?  clear bad info and write it out
+				if (cur->core.tid < 0 || cur->core.pos == 0 || cur->core.flag&BAM_FUNMAP) { // If unmapped
+					cur->core.flag |= BAM_FUNMAP;
+					cur->core.tid = -1;
+					cur->core.pos = 0;
+				}
 				pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
 				pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
 				bam_write1(out, pre);
