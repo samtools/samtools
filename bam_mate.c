@@ -166,6 +166,8 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 		}
 		if (has_prev) { // do we have a pair of reads to examine?
 			if (strcmp(bam1_qname(cur), bam1_qname(pre)) == 0) { // identical pair name
+				pre->core.flag |= BAM_FPAIRED;
+				cur->core.flag |= BAM_FPAIRED;
 				sync_mate(pre, cur);
 
 				if (pre->core.tid == cur->core.tid && !(cur->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))
