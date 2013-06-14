@@ -193,8 +193,8 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 					// If we have to remove reads make sure we do it in a way that doesn't create orphans with bad flags
 					if(pre->core.flag&BAM_FUNMAP) cur->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
 					if(cur->core.flag&BAM_FUNMAP) pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-					if(! pre->core.flag&BAM_FUNMAP) bam_write1(out, pre);
-					if(! cur->core.flag&BAM_FUNMAP) bam_write1(out, cur);
+					if(!(pre->core.flag&BAM_FUNMAP)) bam_write1(out, pre);
+					if(!(cur->core.flag&BAM_FUNMAP)) bam_write1(out, cur);
 				}
 				has_prev = 0;
 			} else { // unpaired?  clear bad info and write it out
