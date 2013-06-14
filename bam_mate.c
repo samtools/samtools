@@ -12,7 +12,7 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 	int i, end;
 	uint32_t *cigar;
 	str->l = 0;
-	if (b1->core.tid != b2->core.tid || b1->core.tid < 0  || b2->core.tid < 0 || b1->core.pos == 0 || b2->core.pos == 0 || b1->core.flag&BAM_FUNMAP || b2->core.flag&BAM_FUNMAP) return; // coordinateless or not on the same chr; skip
+	if (b1->core.tid != b2->core.tid || b1->core.tid < 0 || b1->core.pos == 0 || b2->core.pos == 0 || b1->core.flag&BAM_FUNMAP || b2->core.flag&BAM_FUNMAP) return; // coordinateless or not on the same chr; skip
 	if (b1->core.pos > b2->core.pos) swap = b1, b1 = b2, b2 = swap; // make sure b1 has a smaller coordinate
 	kputc((b1->core.flag & BAM_FREAD1)? '1' : '2', str); // segment index
 	kputc((b1->core.flag & BAM_FREVERSE)? 'R' : 'F', str); // strand
@@ -90,7 +90,7 @@ static void sync_mate_inner(bam1_t* src, bam1_t* dest)
 static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
 {
 	if ((a->core.flag & BAM_FUNMAP) || (b->core.flag & BAM_FUNMAP)) return false;
-	assert(a->core.tid > 0); // This should never happen if FUNMAP is set correctly
+	assert(a->core.tid >= 0); // This should never happen if FUNMAP is set correctly
 	
 	if (a->core.tid != b->core.tid) return false;
 	
