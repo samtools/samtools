@@ -6,7 +6,7 @@
 #include "htslib/kstring.h"
 #include "bam.h"
 
-void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
+static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 {
 	bam1_t *swap;
 	int i, end;
@@ -45,16 +45,21 @@ void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * How we handle input
  *
  * secondary reads:
- * write to output unchanged
+ * -write to output unchanged
  * all reads:
- * if pos == 0, tid == -1 set UNMAPPED flag
+ * -if pos == 0, tid == -1 set UNMAPPED flag
  * single reads:
- * if pos == 0, tid == -1, or UNMAPPED then set UNMAPPED, pos = 0, tid = -1
- * clear flags (PAIRED, MREVERSE, PROPER_PAIR)
- * set mpos = 0, mtid = -1 and isize = 0
+ * -if pos == 0, tid == -1, or UNMAPPED then set UNMAPPED, pos = 0, tid = -1
+ * -clear flags (PAIRED, MREVERSE, PROPER_PAIR)
+ * -set mpos = 0, mtid = -1 and isize = 0
+ * -write to output
  * paired reads:
- * sync mate flags (MREVERSE, MUNMAPPED), mpos, mtid
- * calculate CT and apply to lowest positioned read
+ * -if read is unmapped and mate is not, set pos and tid to equal that of mate
+ * -sync mate flags (MREVERSE, MUNMAPPED), mpos, mtid
+ * -recalculate ISIZE if possible, otherwise set it to 0
+ * -optionally clear PROPER_PAIR flag from reads where mapping or orientation indicate this is not possible
+ * -calculate CT and apply to lowest positioned read
+ * -write to output
  */
 
 static void sync_unmapped_pos_inner(bam1_t* src, bam1_t* dest) {
@@ -198,7 +203,7 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 				}
 				pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
 				pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-				bam_write1(out, pre);
+				if ( !remove_reads || !(pre->core.flag&BAM_FUNMAP) ) bam_write1(out, pre);
 			}
 		} else has_prev = 1;
 		curr = 1 - curr;
@@ -216,7 +221,7 @@ void usage()
 	fprintf(stderr,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
 	fprintf(stderr,"Options:\n");
 	fprintf(stderr,"       -r    remove unmapped reads and secondary alignments\n");
-	fprintf(stderr,"       -p    disable proper pair check\n\n");
+	fprintf(stderr,"       -p    disable FR proper pair check\n\n");
 	fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
 	fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
 	fprintf(stderr,"input is not accepted.\n");
