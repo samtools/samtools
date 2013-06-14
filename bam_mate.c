@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -114,7 +115,7 @@ static void sync_mate(bam1_t* a, bam1_t* b)
 }
 
 // currently, this function ONLY works if each read has one hit
-static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
+static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int proper_pair_check)
 {
 	bam_header_t *header;
 	bam1_t *b[2];
@@ -143,14 +144,14 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 	while (bam_read1(in, b[curr]) >= 0) {
 		bam1_t *cur = b[curr], *pre = b[1-curr];
 		if (cur->core.flag & BAM_FSECONDARY)
-        {
-            if ( !remove_reads ) bam_write1(out, cur);
-            continue; // skip secondary alignments
-        }
+		{
+			if ( !remove_reads ) bam_write1(out, cur);
+			continue; // skip secondary alignments
+		}
 		if (cur->core.tid < 0 || cur->core.pos == 0) // If unmapped set the flag
-        {
+		{
 			cur->core.flag |= BAM_FUNMAP;
-        }
+		}
 		if (cur->core.flag&BAM_FUNMAP) // If mapped calculate end
 		{
 			cur_end = bam_calend(&cur->core, bam1_cigar(cur));
@@ -172,7 +173,7 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads)
 				} else cur->core.isize = pre->core.isize = 0;
 				bam_template_cigar(pre, cur, &str);
 				// TODO: Add code to properly check if read is in a proper pair based on ISIZE distribution
-				if (!plausibly_properly_paired(pre,cur)) {
+				if (proper_pair_check && !plausibly_properly_paired(pre,cur)) {
 					pre->core.flag &= ~BAM_FPROPER_PAIR;
 					cur->core.flag &= ~BAM_FPROPER_PAIR;
 				}
@@ -214,7 +215,8 @@ void usage()
 {
 	fprintf(stderr,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
 	fprintf(stderr,"Options:\n");
-	fprintf(stderr,"       -r    remove unmapped reads and secondary alignments\n\n");
+	fprintf(stderr,"       -r    remove unmapped reads and secondary alignments\n");
+	fprintf(stderr,"       -p    disable proper pair check\n\n");
 	fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
 	fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
 	fprintf(stderr,"input is not accepted.\n");
@@ -224,16 +226,17 @@ void usage()
 int bam_mating(int argc, char *argv[])
 {
 	bamFile in, out;
-    int c, remove_reads=0;
-    while ((c = getopt(argc, argv, "r")) >= 0) {
-        switch (c) {
-            case 'r': remove_reads=1; break;
-        }
-    }
-    if (optind+1 >= argc) usage();
+	int c, remove_reads = 0, proper_pair_check = 1;
+	while ((c = getopt(argc, argv, "rp")) >= 0) {
+		switch (c) {
+			case 'r': remove_reads = 1; break;
+			case 'p': proper_pair_check = 0; break;
+		}
+	}
+	if (optind+1 >= argc) usage();
 	in = (strcmp(argv[optind], "-") == 0)? bam_dopen(fileno(stdin), "r") : bam_open(argv[optind], "r");
-    out = (strcmp(argv[optind+1], "-") == 0)? bam_dopen(fileno(stdout), "w") : bam_open(argv[optind+1], "w");
-	bam_mating_core(in, out, remove_reads);
+	out = (strcmp(argv[optind+1], "-") == 0)? bam_dopen(fileno(stdout), "w") : bam_open(argv[optind+1], "w");
+	bam_mating_core(in, out, remove_reads, proper_pair_check);
 	bam_close(in); bam_close(out);
 	return 0;
 }
