@@ -198,10 +198,10 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 				}
 				has_prev = 0;
 			} else { // unpaired?  clear bad info and write it out
-				if (cur->core.tid < 0 || cur->core.pos == 0 || cur->core.flag&BAM_FUNMAP) { // If unmapped
-					cur->core.flag |= BAM_FUNMAP;
-					cur->core.tid = -1;
-					cur->core.pos = 0;
+				if (pre->core.tid < 0 || pre->core.pos == 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
+					pre->core.flag |= BAM_FUNMAP;
+					pre->core.tid = -1;
+					pre->core.pos = 0;
 				}
 				pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
 				pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
@@ -211,7 +211,18 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 		curr = 1 - curr;
 		pre_end = cur_end;
 	}
-	if (has_prev) bam_write1(out, b[1-curr]);
+	if (has_prev && !remove_reads) { // If we still have a BAM in the buffer it must be unpaired
+		bam1_t *pre = b[1-curr];
+		if (pre->core.tid < 0 || pre->core.pos == 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
+			pre->core.flag |= BAM_FUNMAP;
+			pre->core.tid = -1;
+			pre->core.pos = 0;
+		}
+		pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
+		pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+
+		bam_write1(out, pre);
+	}
 	bam_header_destroy(header);
 	bam_destroy1(b[0]);
 	bam_destroy1(b[1]);
