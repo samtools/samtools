@@ -1,7 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "bam.h"
 
 void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)

@@ -3,7 +3,7 @@ CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_USE_KNETFILE
 LOBJS=		bcf.o vcf.o bcfutils.o prob1.o em.o kfunc.o kmin.o index.o fet.o mut.o bcf2qcall.o
 OMISC=		..
-AOBJS=		call1.o main.o $(OMISC)/kstring.o $(OMISC)/bgzf.o $(OMISC)/knetfile.o $(OMISC)/bedidx.o
+AOBJS=		call1.o main.o $(OMISC)/bgzf.o $(OMISC)/bedidx.o
 PROG=		bcftools
 INCLUDES=	
 SUBDIRS=	.
@@ -11,7 +11,7 @@ SUBDIRS=	.
 .SUFFIXES:.c .o
 
 .c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) -I.. $(INCLUDES) $< -o $@
+		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES:-I.%=-I../.%) $< -o $@
 
 all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		@target=`echo $@ | sed s/-recur//`; \
@@ -30,8 +30,8 @@ lib:libbcf.a
 libbcf.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
-bcftools:lib $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf -lm -lz -lpthread
+bcftools:lib $(AOBJS) ../$(HTSLIB)
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf ../$(HTSLIB) -lm -lz -lpthread
 
 bcf.o:bcf.h
 vcf.o:bcf.h

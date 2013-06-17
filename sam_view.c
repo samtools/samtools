@@ -7,8 +7,8 @@
 #include "sam_header.h"
 #include "sam.h"
 #include "faidx.h"
-#include "kstring.h"
-#include "khash.h"
+#include "htslib/kstring.h"
+#include "htslib/khash.h"
 KHASH_SET_INIT_STR(rg)
 
 // When counting records instead of printing them,

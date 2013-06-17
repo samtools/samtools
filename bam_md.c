@@ -5,7 +5,7 @@
 #include <math.h>
 #include "faidx.h"
 #include "sam.h"
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "kaln.h"
 #include "kprobaln.h"
 

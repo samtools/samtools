@@ -5,7 +5,7 @@
 #include "bam.h"
 
 #ifdef _USE_KNETFILE
-#include "knetfile.h"
+#include "htslib/knetfile.h"
 #endif
 
 int bam_taf2baf(int argc, char *argv[]);

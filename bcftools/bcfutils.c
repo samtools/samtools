@@ -2,8 +2,8 @@
 #include <math.h>
 #include <assert.h>
 #include "bcf.h"
-#include "kstring.h"
-#include "khash.h"
+#include "htslib/kstring.h"
+#include "htslib/khash.h"
 KHASH_MAP_INIT_STR(str2id, int)
 
 #ifdef _WIN32

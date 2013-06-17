@@ -4,21 +4,24 @@
 #   make git-stamp
 VERSION=
 
+# Adjust $(HTSDIR) to point to your top-level htslib directory
+HTSDIR = ../htslib
+HTSLIB = $(HTSDIR)/htslib/libhts.a
+
 CC=			gcc
 CFLAGS=		-g -Wall $(VERSION) -O2
 #LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
-KNETFILE_O=	knetfile.o
-LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
+LOBJS=		bgzf.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 			bam_pileup.o bam_lpileup.o bam_md.o razf.o faidx.o bedidx.o \
-			$(KNETFILE_O) bam_sort.o sam_header.o bam_reheader.o kprobaln.o bam_cat.o
+			bam_sort.o sam_header.o bam_reheader.o kprobaln.o bam_cat.o
 AOBJS=		bam_tview.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
 			bam_tview_curses.o bam_tview_html.o
 PROG=		samtools
-INCLUDES=	-I.
+INCLUDES=	-I. -I$(HTSDIR)
 SUBDIRS=	. bcftools misc
 LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
@@ -36,6 +39,7 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
 			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
+				HTSDIR="$(HTSDIR)" HTSLIB="$(HTSLIB)" \
 				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
@@ -53,40 +57,40 @@ lib:libbam.a
 libbam.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
-samtools:lib-recur $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(LIBCURSES) -lm -lz -lpthread
+samtools:lib-recur $(AOBJS) $(HTSLIB)
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(HTSLIB) $(LIBCURSES) -lm -lz -lpthread
 
-razip:razip.o razf.o $(KNETFILE_O)
-		$(CC) $(CFLAGS) -o $@ $^ -lz
+razip:razip.o razf.o $(HTSLIB)
+		$(CC) $(CFLAGS) -o $@ razip.o razf.o $(HTSLIB) -lz
 
-bgzip:bgzip.o bgzf.o $(KNETFILE_O)
-		$(CC) $(CFLAGS) -o $@ $^ -lz -lpthread
+bgzip:bgzip.o bgzf.o $(HTSLIB)
+		$(CC) $(CFLAGS) -o $@ bgzip.o bgzf.o $(HTSLIB) -lz -lpthread
 
 bgzf.o:bgzf.c bgzf.h
 		$(CC) -c $(CFLAGS) $(DFLAGS) -DBGZF_CACHE $(INCLUDES) bgzf.c -o $@
 
 razip.o:razf.h
-bam.o:bam.h razf.h bam_endian.h kstring.h sam_header.h
+bam.o:bam.h razf.h bam_endian.h $(HTSDIR)/htslib/kstring.h sam_header.h
 sam.o:sam.h bam.h
-bam_import.o:bam.h kseq.h khash.h razf.h
-bam_pileup.o:bam.h razf.h ksort.h
+bam_import.o:bam.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h razf.h
+bam_pileup.o:bam.h razf.h $(HTSDIR)/htslib/ksort.h
 bam_plcmd.o:bam.h faidx.h bcftools/bcf.h bam2bcf.h
-bam_index.o:bam.h khash.h ksort.h razf.h bam_endian.h
-bam_lpileup.o:bam.h ksort.h
+bam_index.o:bam.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h razf.h bam_endian.h
+bam_lpileup.o:bam.h $(HTSDIR)/htslib/ksort.h
 bam_tview.o:bam.h faidx.h bam_tview.h
 bam_tview_curses.o:bam.h faidx.h bam_tview.h
 bam_tview_html.o:bam.h faidx.h bam_tview.h
-bam_sort.o:bam.h ksort.h razf.h
+bam_sort.o:bam.h $(HTSDIR)/htslib/ksort.h razf.h
 bam_md.o:bam.h faidx.h
-sam_header.o:sam_header.h khash.h
+sam_header.o:sam_header.h $(HTSDIR)/htslib/khash.h
 bcf.o:bcftools/bcf.h
 bam2bcf.o:bam2bcf.h errmod.h bcftools/bcf.h
 bam2bcf_indel.o:bam2bcf.h
 errmod.o:errmod.h
-phase.o:bam.h khash.h ksort.h
+phase.o:bam.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 bamtk.o:bam.h
 
-faidx.o:faidx.h razf.h khash.h
+faidx.o:faidx.h razf.h $(HTSDIR)/htslib/khash.h
 faidx_main.o:faidx.h razf.h
 
 

@@ -1,11 +1,11 @@
 #include <ctype.h>
 #include <assert.h>
 #include "bam.h"
-#include "khash.h"
-#include "ksort.h"
+#include "htslib/khash.h"
+#include "htslib/ksort.h"
 #include "bam_endian.h"
 #ifdef _USE_KNETFILE
-#include "knetfile.h"
+#include "htslib/knetfile.h"
 #endif
 
 /*!

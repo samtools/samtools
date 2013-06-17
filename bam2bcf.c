@@ -3,7 +3,7 @@
 #include <assert.h>
 #include <float.h>
 #include "bam.h"
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "bam2bcf.h"
 #include "errmod.h"
 #include "bcftools/bcf.h"

@@ -1,6 +1,6 @@
 #include <math.h>
 #include "errmod.h"
-#include "ksort.h"
+#include "htslib/ksort.h"
 KSORT_INIT_GENERIC(uint16_t)
 
 /* table of constants generated for given depcorr and eta */

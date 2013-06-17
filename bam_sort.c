@@ -6,7 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "bam.h"
-#include "ksort.h"
+#include "htslib/ksort.h"
 
 static int g_is_by_qname = 0;
 

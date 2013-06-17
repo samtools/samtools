@@ -7,9 +7,9 @@
 #include <limits.h>
 #include <zlib.h>
 #include "prob1.h"
-#include "kstring.h"
+#include "htslib/kstring.h"
 
-#include "kseq.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define MC_MAX_EM_ITER 16

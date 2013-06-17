@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "knetfile.h"
+#include "htslib/knetfile.h"
 #include "bcf.h"
 
-#include "kseq.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 0x10000)
 
 int bcfview(int argc, char *argv[]);

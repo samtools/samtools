@@ -5,10 +5,10 @@
 #include "bam2bcf.h"
 #include "kaln.h"
 #include "kprobaln.h"
-#include "khash.h"
+#include "htslib/khash.h"
 KHASH_SET_INIT_STR(rg)
 
-#include "ksort.h"
+#include "htslib/ksort.h"
 KSORT_INIT_GENERIC(uint32_t)
 
 #define MINUS_CONST 0x10000000

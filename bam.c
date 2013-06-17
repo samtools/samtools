@@ -4,7 +4,7 @@
 #include <assert.h>
 #include "bam.h"
 #include "bam_endian.h"
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "sam_header.h"
 
 int bam_is_be = 0, bam_verbose = 2, bam_no_B = 0;

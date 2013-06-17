@@ -3,8 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "bcf.h"
-#include "kstring.h"
-#include "kseq.h"
+#include "htslib/kstring.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 4096)
 
 typedef struct {

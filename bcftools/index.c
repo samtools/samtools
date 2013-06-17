@@ -2,10 +2,10 @@
 #include <ctype.h>
 #include <sys/stat.h>
 #include "bam_endian.h"
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "bcf.h"
 #ifdef _USE_KNETFILE
-#include "knetfile.h"
+#include "htslib/knetfile.h"
 #endif
 
 #define TAD_LIDX_SHIFT 13

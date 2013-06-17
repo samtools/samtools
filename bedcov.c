@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "bgzf.h"
 #include "bam.h"
 
-#include "kseq.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {

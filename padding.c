@@ -1,7 +1,7 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "sam_header.h"
 #include "sam.h"
 #include "bam.h"

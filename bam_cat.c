@@ -59,7 +59,7 @@ all:bam_cat
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "knetfile.h"
+#include "htslib/knetfile.h"
 #include "bgzf.h"
 #include "bam.h"
 

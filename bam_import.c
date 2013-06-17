@@ -8,11 +8,11 @@
 #ifdef _WIN32
 #include <fcntl.h>
 #endif
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "bam.h"
 #include "sam_header.h"
-#include "kseq.h"
-#include "khash.h"
+#include "htslib/kseq.h"
+#include "htslib/khash.h"
 
 KSTREAM_INIT(gzFile, gzread, 16384)
 KHASH_MAP_INIT_STR(ref, uint64_t)

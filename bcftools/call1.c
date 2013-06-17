@@ -5,7 +5,7 @@
 #include <errno.h>
 #include "bcf.h"
 #include "prob1.h"
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "time.h"
 
 #ifdef _WIN32
@@ -13,7 +13,7 @@
 #define lrand48() rand()
 #endif
 
-#include "kseq.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define VC_NO_GENO 2

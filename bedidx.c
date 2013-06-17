@@ -8,10 +8,10 @@
 #define drand48() ((double)rand() / RAND_MAX)
 #endif
 
-#include "ksort.h"
+#include "htslib/ksort.h"
 KSORT_INIT_GENERIC(uint64_t)
 
-#include "kseq.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 8192)
 
 typedef struct {
@@ -20,7 +20,7 @@ typedef struct {
 	int *idx;
 } bed_reglist_t;
 
-#include "khash.h"
+#include "htslib/khash.h"
 KHASH_MAP_INIT_STR(reg, bed_reglist_t)
 
 #define LIDX_SHIFT 13

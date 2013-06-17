@@ -1,7 +1,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdio.h>
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "bcf.h"
 
 bcf_t *bcf_open(const char *fn, const char *mode)

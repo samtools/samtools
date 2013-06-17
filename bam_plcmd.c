@@ -8,7 +8,7 @@
 #include <getopt.h>
 #include "sam.h"
 #include "faidx.h"
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "sam_header.h"
 
 static inline int printw(int c, FILE *fp)

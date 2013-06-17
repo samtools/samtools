@@ -7,7 +7,7 @@
 #include "bam.h"
 #include "errmod.h"
 
-#include "kseq.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define MAX_VARS 256
@@ -41,13 +41,13 @@ typedef struct {
 
 #define rseq_lt(a,b) ((a)->vpos < (b)->vpos)
 
-#include "khash.h"
+#include "htslib/khash.h"
 KHASH_SET_INIT_INT64(set64)
 KHASH_MAP_INIT_INT64(64, frag_t)
 
 typedef khash_t(64) nseq_t;
 
-#include "ksort.h"
+#include "htslib/ksort.h"
 KSORT_INIT(rseq, frag_p, rseq_lt)
 
 static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };

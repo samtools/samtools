@@ -11,7 +11,7 @@
 #include "faidx.h"
 #include "bam2bcf.h"
 #include "sam_header.h"
-#include "khash.h"
+#include "htslib/khash.h"
 
 KHASH_MAP_INIT_STR(kh_rg, const char *)
 

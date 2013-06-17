@@ -150,7 +150,7 @@ static inline int resolve_cigar2(bam_pileup1_t *p, uint32_t pos, cstate_t *s)
  *******************/
 
 // Dictionary of overlapping reads
-#include "khash.h"
+#include "htslib/khash.h"
 KHASH_MAP_INIT_STR(olap_hash, lbnode_t *)
 typedef khash_t(olap_hash) olap_hash_t;
 

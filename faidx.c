@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "faidx.h"
-#include "khash.h"
+#include "htslib/khash.h"
 
 typedef struct {
 	int32_t line_len, line_blen;
@@ -31,7 +31,7 @@ extern int fseeko(FILE *stream, off_t offset, int whence);
 #define razf_tell(fp) ftello(fp)
 #endif
 #ifdef _USE_KNETFILE
-#include "knetfile.h"
+#include "htslib/knetfile.h"
 #endif
 
 struct __faidx_t {

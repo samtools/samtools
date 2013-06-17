@@ -1,6 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "knetfile.h"
+#include "htslib/knetfile.h"
 #include "bgzf.h"
 #include "bam.h"
 

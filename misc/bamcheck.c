@@ -28,7 +28,7 @@
 #include <errno.h>
 #include <assert.h>
 #include "faidx.h"
-#include "khash.h"
+#include "htslib/khash.h"
 #include "sam.h"
 #include "sam_header.h"
 #include "razf.h"
