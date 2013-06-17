@@ -7,7 +7,7 @@
 #include <sys/stat.h>
 #include <getopt.h>
 #include "sam.h"
-#include "faidx.h"
+#include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "sam_header.h"
 

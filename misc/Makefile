@@ -30,7 +30,7 @@ lib:
 bamcheck:bamcheck.o ../$(HTSLIB)
 		$(CC) $(CFLAGS) -o $@ bamcheck.o -L.. -lm -lbam ../$(HTSLIB) -lpthread -lz
 
-bamcheck.o:bamcheck.c ../faidx.h ../$(HTSDIR)/htslib/khash.h ../sam.h ../razf.h
+bamcheck.o:bamcheck.c ../$(HTSDIR)/htslib/faidx.h ../$(HTSDIR)/htslib/khash.h ../sam.h ../$(HTSDIR)/htslib/razf.h
 
 ace2sam:ace2sam.o
 		$(CC) $(CFLAGS) -o $@ ace2sam.o -lz

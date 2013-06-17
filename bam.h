@@ -53,7 +53,7 @@
 
 #ifndef BAM_LITE
 #define BAM_VIRTUAL_OFFSET16
-#include "bgzf.h"
+#include "htslib/bgzf.h"
 /*! @abstract BAM file handler */
 typedef BGZF *bamFile;
 #define bam_open(fn, mode) bgzf_open(fn, mode)

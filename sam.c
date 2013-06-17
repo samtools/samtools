@@ -1,6 +1,6 @@
 #include <string.h>
 #include <unistd.h>
-#include "faidx.h"
+#include "htslib/faidx.h"
 #include "sam.h"
 
 #define TYPE_BAM  1

@@ -29,7 +29,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/stat.h>
-#include "bgzf.h"
+#include "htslib/bgzf.h"
 
 static const int WINDOW_SIZE = 64 * 1024;
 

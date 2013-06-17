@@ -6,7 +6,7 @@
 #include <inttypes.h>
 #include "sam_header.h"
 #include "sam.h"
-#include "faidx.h"
+#include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "htslib/khash.h"
 KHASH_SET_INIT_STR(rg)

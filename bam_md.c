@@ -3,7 +3,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
-#include "faidx.h"
+#include "htslib/faidx.h"
 #include "sam.h"
 #include "htslib/kstring.h"
 #include "kaln.h"

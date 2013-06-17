@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
-#include "razf.h"
+#include "htslib/razf.h"
 
 #define WINDOW_SIZE 4096
 

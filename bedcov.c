@@ -5,7 +5,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "htslib/kstring.h"
-#include "bgzf.h"
+#include "htslib/bgzf.h"
 #include "bam.h"
 
 #include "htslib/kseq.h"

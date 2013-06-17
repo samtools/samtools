@@ -3,7 +3,7 @@
 #include <string.h>
 #include "bam.h"
 #include "errmod.h"
-#include "faidx.h"
+#include "htslib/faidx.h"
 
 #define ERR_DEP 0.83
 

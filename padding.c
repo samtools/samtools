@@ -5,7 +5,7 @@
 #include "sam_header.h"
 #include "sam.h"
 #include "bam.h"
-#include "faidx.h"
+#include "htslib/faidx.h"
 
 bam_header_t *bam_header_dup(const bam_header_t *h0); /*in sam.c*/
 

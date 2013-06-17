@@ -60,7 +60,7 @@ all:bam_cat
 #include <unistd.h>
 
 #include "htslib/knetfile.h"
-#include "bgzf.h"
+#include "htslib/bgzf.h"
 #include "bam.h"
 
 #define BUF_SIZE 0x10000

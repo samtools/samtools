@@ -27,11 +27,11 @@
 #include <getopt.h>
 #include <errno.h>
 #include <assert.h>
-#include "faidx.h"
+#include "htslib/faidx.h"
 #include "htslib/khash.h"
 #include "sam.h"
 #include "sam_header.h"
-#include "razf.h"
+#include "htslib/razf.h"
 
 #define BWA_MIN_RDLEN 35
 #define IS_PAIRED(bam) ((bam)->core.flag&BAM_FPAIRED && !((bam)->core.flag&BAM_FUNMAP) && !((bam)->core.flag&BAM_FMUNMAP))

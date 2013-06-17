@@ -38,7 +38,7 @@
 #include <zlib.h>
 
 #ifndef BCF_LITE
-#include "bgzf.h"
+#include "htslib/bgzf.h"
 typedef BGZF *bcfFile;
 #else
 typedef gzFile bcfFile;
