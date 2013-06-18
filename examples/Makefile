@@ -40,7 +40,7 @@ ex1.bcf:ex1.bam ex1.fa.fai
 		(cd ..; make libbam.a)
 
 calDepth:calDepth.c ../libbam.a ../$(HTSLIB)
-		gcc -g -Wall -O2 -I.. calDepth.c -o $@ -L.. -lbam ../$(HTSLIB) -lm -lz
+		gcc -g -Wall -O2 $(INCLUDES:-I.%=-I../.%) calDepth.c -o $@ -L.. -lbam ../$(HTSLIB) -lm -lz
 
 clean:
 		rm -fr *.bam *.bai *.glf* *.fai *.pileup* *~ calDepth *.dSYM ex1*.rg ex1.bcf
