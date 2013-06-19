@@ -7,6 +7,9 @@
 #include <unistd.h>
 #include "bam.h"
 #include "htslib/ksort.h"
+#include "htslib/khash.h"
+
+KHASH_MAP_INIT_STR(c2c, char*)
 
 static int g_is_by_qname = 0;
 
@@ -73,10 +76,63 @@ static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
 	temps = h1->text, h1->text = h2->text, h2->text = temps;
 }
 
-#define MERGE_RG     1
+typedef struct {
+	int* tid_trans;
+	kh_c2c_t* rg_trans;
+	kh_c2c_t* pg_trans;
+} trans_tbl_t;
+
+void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl)
+{
+	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
+	tbl->rg_trans = kh_init(c2c);
+	tbl->pg_trans = kh_init(c2c);
+}
+
+void bam_translate(bam1_t* b, trans_tbl_t* trans_tbl)
+{
+	b->core.tid = trans_tbl->tid_trans[b->core.tid];
+	b->core.mtid = trans_tbl->tid_trans[b->core.mtid];
+	uint8_t *rg = bam_aux_get(b, "RG");
+	if (rg) {
+		char* decoded_rg = bam_aux2Z(rg);
+		khiter_t k = kh_get(c2c, trans_tbl->rg_trans, decoded_rg);
+		if (k == kh_end(trans_tbl->rg_trans)) abort();
+		char* translate_rg = kh_value(trans_tbl->rg_trans,k);
+		bam_aux_del(b, rg);
+		bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1, (uint8_t*)translate_rg);
+	}
+
+	uint8_t *pg = bam_aux_get(b, "PG");
+	if (pg) {
+		char* decoded_pg = bam_aux2Z(pg);
+		khiter_t k = kh_get(c2c, trans_tbl->pg_trans, decoded_pg);
+		if (k == kh_end(trans_tbl->pg_trans)) abort();
+		char* translate_pg = kh_value(trans_tbl->pg_trans,k);
+		bam_aux_del(b, pg);
+		bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1, (uint8_t*)translate_pg);
+	}
+}
+
+
+#define MERGE_RG     1 // Attach RG tag based on filename
 #define MERGE_UNCOMP 2 // Generate uncompressed BAM
 #define MERGE_LEVEL1 4 // Compress the BAM at level 1 (fast) mode
 #define MERGE_FORCE  8
+
+/*
+ * How merging is handled
+ *
+ * if a hheader is defined use that for output header
+ * otherwise take the first header from the first file
+ * 
+ * Now go through each file and create a translation table for that file for:
+ * -RG
+ * -tid
+ * -PG tags
+ *
+ * Then when reading a record from a bam translate the read before stashing it in the hash.
+ */
 
 /*!
   @abstract    Merge multiple sorted BAM.
@@ -94,12 +150,13 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 {
 	bamFile fpout, *fp;
 	heap1_t *heap;
-	bam_header_t *hout = 0;
+	bam_header_t *hout = NULL;
 	bam_header_t *hheaders = NULL;
-	int i, j, *RG_len = 0;
+	int i, j, *RG_len = NULL;
 	uint64_t idx = 0;
-	char **RG = 0, mode[8];
-	bam_iter_t *iter = 0;
+	char **RG = NULL, mode[8];
+	bam_iter_t *iter = NULL;
+	trans_tbl_t *trans_tbl = NULL;
 
     // Is there a specified pre-prepared header to use for output?
 	if (headers) {
@@ -117,7 +174,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	fp = (bamFile*)calloc(n, sizeof(bamFile));
 	heap = (heap1_t*)calloc(n, sizeof(heap1_t));
 	iter = (bam_iter_t*)calloc(n, sizeof(bam_iter_t));
-	// prepare RG tag
+	trans_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
+	// prepare RG tag from file names
 	if (flag & MERGE_RG) {
 		RG = (char**)calloc(n, sizeof(char*));
 		RG_len = (int*)calloc(n, sizeof(int));
@@ -132,8 +190,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			strncpy(RG[i], s + j, l);
 		}
 	}
-	// read the first
-	for (i = 0; i != n; ++i) {
+	// open and read the header from each file
+	for (i = 0; i < n; ++i) {
 		bam_header_t *hin;
 		fp[i] = bam_open(fn[i], "r");
 		if (fp[i] == 0) {
@@ -145,6 +203,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			return -1;
 		}
 		hin = bam_header_read(fp[i]);
+		trans_tbl_init(hout, hin, trans_tbl+i);
+#if 0 // to be replaced by trans table?
 		if (i == 0) { // the first BAM
 			hout = hin;
 		} else { // validate multiple baf
@@ -168,8 +228,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 
 			bam_header_destroy(hin);
 		}
+#endif
 	}
-
+#if 0 // to be replaced by trans table?
 	if (hheaders) {
 		// If the text headers to be swapped in include any @SQ headers,
 		// check that they are consistent with the existing binary list
@@ -189,6 +250,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		swap_header_text(hout, hheaders);
 		bam_header_destroy(hheaders);
 	}
+#endif
 
     // If we're only merging a specified region move our iters to start at that point
 	if (reg) {
@@ -213,8 +275,13 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		if (bam_iter_read(fp[i], iter[i], h->b) >= 0) {
 			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam1_strand(h->b);
 			h->idx = idx++;
+			bam_translate(h->b, trans_tbl + i);
 		}
-		else h->pos = HEAP_EMPTY;
+		else {
+			h->pos = HEAP_EMPTY;
+			free(heap->b);
+			heap->b = NULL;
+		}
 	}
     // Open output file and write header
 	if (flag & MERGE_UNCOMP) level = 0;
@@ -242,10 +309,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		if ((j = bam_iter_read(fp[heap->i], iter[heap->i], b)) >= 0) {
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam1_strand(b);
 			heap->idx = idx++;
+			bam_translate(b, trans_tbl + heap->i);
 		} else if (j == -1) {
 			heap->pos = HEAP_EMPTY;
 			free(heap->b->data); free(heap->b);
-			heap->b = 0;
+			heap->b = NULL;
 		} else fprintf(stderr, "[bam_merge_core] '%s' is truncated. Continue anyway.\n", fn[heap->i]);
 		ks_heapadjust(heap, 0, n, heap);
 	}
