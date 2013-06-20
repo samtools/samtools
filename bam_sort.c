@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <regex.h>
 #include <unistd.h>
 #include "bam.h"
 #include "htslib/ksort.h"
@@ -87,6 +88,7 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
 	tbl->rg_trans = kh_init(c2c);
 	tbl->pg_trans = kh_init(c2c);
+	if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
 	
 	// Naive way of doing this but meh
 	// Search 'out' for entries in 'translate' and map them
@@ -115,23 +117,65 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 	}
 	
 	// grep @RG id's
-//	foreach rg id in translate
-//		if (trans_rg_id is in out->rglist->id) {
-//			add random id to trans_rg_id_out
-//			grep line with regex '^@RG.*\tID:%s(\t.*$|$)', trans_rg_id
-//			from translate->text
-//			replace ID with trans_rg_id_out
-//			and append it to out->text
-//			kh_append(c2c, tbl->rg_trans, trans_rg_id, trans_rg_id_out);
-//		} else {
-//			Add 1-1 mapping
-//			grep line with regex '^@RG.*\tID:%s(\t.*$|$)', trans_rg_id
-//			from translate->text
-//			and append it to out->text
-//		}
+	regex_t rg_id;
+	regmatch_t* matches = calloc(2, sizeof(regmatch_t));
+	if (matches == NULL) { perror("out of memory"); exit(-1); }
+	regcomp(&rg_id, "^@RG.*\tID:([A-Za-z0-9]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
+	char* text = translate->text;
+	while(1) { //	foreach rg id in translate's header
+		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
+		char* match_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
+		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+		// is our matched ID in our translation list already
+		khiter_t k = kh_get(c2c, tbl->rg_trans, match_id);
+		char* transformed_id = NULL;
+		if (k == kh_end(tbl->rg_trans)) {
+			// Not in there so can add it as 1-1 mapping
+			transformed_id = match_id;
+		} else {
+			// It's in there so we need to transform it by appending random number to id
+			if (asprintf(&transformed_id, "%s-%l",match_id, lrand48()) != 0) { perror("out of memory"); exit(-1); }
+		}
+		kh_put(c2c, tbl->rg_trans, match_id, transformed_id); // TODO: check this function call syntax
+		// TODO: append it to out->text with ID replaced with tranformed_id
+		if (match_id != transformed_id) free(transformed_id);
+		free(match_id);
+		free(match_line);
+		text += matches[0].rm_eo;
+	}
+	regfree(&rg_id);
 	
 	// Do same for PG id's
-	// Except translate PP's on the fly (in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
+	regex_t pg_id;
+	regcomp(&pg_id, "^@PG.*\tID:([A-Za-z0-9]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
+	text = translate->text;
+	while(1) { //	foreach pg id in translate's header
+		if (regexec(&pg_id, text, 2, matches, 0) != 0) break;
+		char* match_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
+		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+		// is our matched ID in our translation list already
+		khiter_t k = kh_get(c2c, tbl->pg_trans, match_id);
+		char* transformed_id = NULL;
+		if (k == kh_end(tbl->pg_trans)) {
+			// Not in there so can add it as 1-1 mapping
+			transformed_id = match_id;
+		} else {
+			// It's in there so we need to transform it by appending random number to id
+			if (asprintf(&transformed_id, "%s-%l",match_id, lrand48()) != 0) { perror("out of memory"); exit(-1); }
+		}
+		kh_put(c2c, tbl->pg_trans, match_id, transformed_id); // TODO: check this function call syntax
+		// TODO: append it to linked list for PP processing
+		if (match_id != transformed_id) free(transformed_id);
+		free(match_id);
+		free(match_line);
+		text += matches[0].rm_eo;
+	}
+	regfree(&rg_id);
+	// TODO: need to translate PP's on the fly (in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
+	// for each line {
+	// with ID replaced with tranformed_id and PP's transformed using the translation table
+	// }
+	free(matches);
 }
 
 void bam_translate(bam1_t* b, trans_tbl_t* trans_tbl)

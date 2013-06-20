@@ -6,7 +6,7 @@ CC       = gcc
 CPPFLAGS = $(DFLAGS) $(INCLUDES)
 CFLAGS   = -g -Wall -O2
 LDFLAGS  =
-DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
+DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1 -D_GNU_SOURCE
 LOBJS=		bam_aux.o bam.o bam_import.o sam.o \
 			sam_header.o
 AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
