@@ -108,9 +108,26 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 			out->target_name[out->n_targets-1] = strdup(translate->target_name[i]);
 			out->target_len = (uint32_t*)realloc(out->target_len, sizeof(uint32_t)*out->n_targets);
 			out->target_len[out->n_targets-1] = translate->target_len[i];
-			// Todo grep line with regex '^@SQ.*\tID:%s(\t.*$|$)', translate->target_name[i]
+			// grep line with regex '^@SQ.*\tID:%s(\t.*$|$)', translate->target_name[i]
 			// from translate->text
+			regex_t sq_id;
+			regmatch_t* matches = calloc(2, sizeof(regmatch_t));
+			if (matches == NULL) { perror("out of memory"); exit(-1); }
+			char* seq_regex = NULL;
+			asprintf(&seq_regex, "^@SQ.*\tID:%s(\t.*$|$)",translate->target_name[i]);
+			regcomp(&sq_id, seq_regex, REG_EXTENDED|REG_NEWLINE);
+			if (regexec(&sq_id, out->text, 1, matches, 0) != 0)
+			{
+				fprintf(stderr, "[trans_tbl_init] @SQ ID (%s) found in binary header but not text header.\n",translate->target_name[i]);
+				exit(-1);
+			}
+			char* match_line = strndup(out->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
+			
 			// and append it to out->text
+			char* newtext = strcat(out->text,match_line);
+			free(out->text);
+			out->text = newtext;
+			free(match_line);
 		} else {
 			tbl->tid_trans[i] = tid;
 		}
@@ -134,10 +151,10 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 			transformed_id = match_id;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			if (asprintf(&transformed_id, "%s-%l",match_id, lrand48()) != 0) { perror("out of memory"); exit(-1); }
+			if (asprintf(&transformed_id, "%s-%ld",match_id, lrand48()) != 0) { perror("out of memory"); exit(-1); }
 		}
 		kh_put(c2c, tbl->rg_trans, match_id, transformed_id); // TODO: check this function call syntax
-		// TODO: append it to out->text with ID replaced with tranformed_id
+		// TODO: append it to out->text with ID replaced with transformed_id
 		if (match_id != transformed_id) free(transformed_id);
 		free(match_id);
 		free(match_line);
@@ -161,7 +178,7 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 			transformed_id = match_id;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			if (asprintf(&transformed_id, "%s-%l",match_id, lrand48()) != 0) { perror("out of memory"); exit(-1); }
+			if (asprintf(&transformed_id, "%s-%ld",match_id, lrand48()) != 0) { perror("out of memory"); exit(-1); }
 		}
 		kh_put(c2c, tbl->pg_trans, match_id, transformed_id); // TODO: check this function call syntax
 		// TODO: append it to linked list for PP processing
