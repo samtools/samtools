@@ -87,6 +87,51 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
 	tbl->rg_trans = kh_init(c2c);
 	tbl->pg_trans = kh_init(c2c);
+	
+	// Naive way of doing this but meh
+	// Search 'out' for entries in 'translate' and map them
+	// Append missing entries to out
+	int i, j;
+	for (i = 0; i < translate->n_targets; ++i) {
+		int tid = -1;
+		for (j = 0; j < out->n_targets; j++) {
+			if (!strcmp(translate->target_name[i],out->target_name[j])) {
+				tid = j;
+				break;
+			}
+		}
+		if (tid == -1) {
+			tbl->tid_trans[i] = out->n_targets++;
+			out->target_name = (char**)realloc(out->target_name, sizeof(char*)*out->n_targets);
+			out->target_name[out->n_targets-1] = strdup(translate->target_name[i]);
+			out->target_len = (uint32_t*)realloc(out->target_len, sizeof(uint32_t)*out->n_targets);
+			out->target_len[out->n_targets-1] = translate->target_len[i];
+			// Todo grep line with regex '^@SQ.*\tID:%s(\t.*$|$)', translate->target_name[i]
+			// from translate->text
+			// and append it to out->text
+		} else {
+			tbl->tid_trans[i] = tid;
+		}
+	}
+	
+	// grep @RG id's
+//	foreach rg id in translate
+//		if (trans_rg_id is in out->rglist->id) {
+//			add random id to trans_rg_id_out
+//			grep line with regex '^@RG.*\tID:%s(\t.*$|$)', trans_rg_id
+//			from translate->text
+//			replace ID with trans_rg_id_out
+//			and append it to out->text
+//			kh_append(c2c, tbl->rg_trans, trans_rg_id, trans_rg_id_out);
+//		} else {
+//			Add 1-1 mapping
+//			grep line with regex '^@RG.*\tID:%s(\t.*$|$)', trans_rg_id
+//			from translate->text
+//			and append it to out->text
+//		}
+	
+	// Do same for PG id's
+	// Except translate PP's on the fly (in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
 }
 
 void bam_translate(bam1_t* b, trans_tbl_t* trans_tbl)
