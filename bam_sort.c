@@ -77,13 +77,13 @@ static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
 	temps = h1->text, h1->text = h2->text, h2->text = temps;
 }
 
-typedef struct {
+typedef struct trans_tbl {
 	int* tid_trans;
 	kh_c2c_t* rg_trans;
 	kh_c2c_t* pg_trans;
 } trans_tbl_t;
 
-void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl)
+static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl)
 {
 	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
 	tbl->rg_trans = kh_init(c2c);
@@ -91,18 +91,17 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 	if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
 	
 	// Naive way of doing this but meh
-	// Search 'out' for entries in 'translate' and map them
-	// Append missing entries to out
 	int i, j;
 	for (i = 0; i < translate->n_targets; ++i) {
 		int tid = -1;
+		// Search 'out' for entries in 'translate' and map them
 		for (j = 0; j < out->n_targets; j++) {
 			if (!strcmp(translate->target_name[i],out->target_name[j])) {
 				tid = j;
 				break;
 			}
 		}
-		if (tid == -1) {
+		if (tid == -1) { // Append missing entries to out
 			tbl->tid_trans[i] = out->n_targets++;
 			out->target_name = (char**)realloc(out->target_name, sizeof(char*)*out->n_targets);
 			out->target_name[out->n_targets-1] = strdup(translate->target_name[i]);
@@ -116,15 +115,16 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 			char* seq_regex = NULL;
 			asprintf(&seq_regex, "^@SQ.*\tID:%s(\t.*$|$)",translate->target_name[i]);
 			regcomp(&sq_id, seq_regex, REG_EXTENDED|REG_NEWLINE);
-			if (regexec(&sq_id, out->text, 1, matches, 0) != 0)
+			if (regexec(&sq_id, translate->text, 1, matches, 0) != 0)
 			{
 				fprintf(stderr, "[trans_tbl_init] @SQ ID (%s) found in binary header but not text header.\n",translate->target_name[i]);
 				exit(-1);
 			}
-			char* match_line = strndup(out->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
+			char* match_line = strndup(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 			
 			// and append it to out->text
-			char* newtext = strcat(out->text,match_line);
+			char* newtext = NULL;
+			asprintf(&newtext, "%s\n%s",out->text,match_line);
 			free(out->text);
 			out->text = newtext;
 			free(match_line);
@@ -195,16 +195,16 @@ void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl
 	free(matches);
 }
 
-void bam_translate(bam1_t* b, trans_tbl_t* trans_tbl)
+static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 {
-	b->core.tid = trans_tbl->tid_trans[b->core.tid];
-	b->core.mtid = trans_tbl->tid_trans[b->core.mtid];
+	b->core.tid = tbl->tid_trans[b->core.tid];
+	b->core.mtid = tbl->tid_trans[b->core.mtid];
 	uint8_t *rg = bam_aux_get(b, "RG");
 	if (rg) {
 		char* decoded_rg = bam_aux2Z(rg);
-		khiter_t k = kh_get(c2c, trans_tbl->rg_trans, decoded_rg);
-		if (k == kh_end(trans_tbl->rg_trans)) abort();
-		char* translate_rg = kh_value(trans_tbl->rg_trans,k);
+		khiter_t k = kh_get(c2c, tbl->rg_trans, decoded_rg);
+		if (k == kh_end(tbl->rg_trans)) abort();
+		char* translate_rg = kh_value(tbl->rg_trans,k);
 		bam_aux_del(b, rg);
 		bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1, (uint8_t*)translate_rg);
 	}
@@ -212,9 +212,9 @@ void bam_translate(bam1_t* b, trans_tbl_t* trans_tbl)
 	uint8_t *pg = bam_aux_get(b, "PG");
 	if (pg) {
 		char* decoded_pg = bam_aux2Z(pg);
-		khiter_t k = kh_get(c2c, trans_tbl->pg_trans, decoded_pg);
-		if (k == kh_end(trans_tbl->pg_trans)) abort();
-		char* translate_pg = kh_value(trans_tbl->pg_trans,k);
+		khiter_t k = kh_get(c2c, tbl->pg_trans, decoded_pg);
+		if (k == kh_end(tbl->pg_trans)) abort();
+		char* translate_pg = kh_value(tbl->pg_trans,k);
 		bam_aux_del(b, pg);
 		bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1, (uint8_t*)translate_pg);
 	}
@@ -262,7 +262,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	uint64_t idx = 0;
 	char **RG = NULL, mode[8];
 	bam_iter_t *iter = NULL;
-	trans_tbl_t *trans_tbl = NULL;
+	trans_tbl_t *translation_tbl = NULL;
 
     // Is there a specified pre-prepared header to use for output?
 	if (headers) {
@@ -280,7 +280,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	fp = (bamFile*)calloc(n, sizeof(bamFile));
 	heap = (heap1_t*)calloc(n, sizeof(heap1_t));
 	iter = (bam_iter_t*)calloc(n, sizeof(bam_iter_t));
-	trans_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
+	translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
 	// prepare RG tag from file names
 	if (flag & MERGE_RG) {
 		RG = (char**)calloc(n, sizeof(char*));
@@ -309,7 +309,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			return -1;
 		}
 		hin = bam_header_read(fp[i]);
-		trans_tbl_init(hout, hin, trans_tbl+i);
+		trans_tbl_init(hout, hin, translation_tbl+i);
 #if 0 // to be replaced by trans table?
 		if (i == 0) { // the first BAM
 			hout = hin;
@@ -381,7 +381,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		if (bam_iter_read(fp[i], iter[i], h->b) >= 0) {
 			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam1_strand(h->b);
 			h->idx = idx++;
-			bam_translate(h->b, trans_tbl + i);
+			bam_translate(h->b, translation_tbl + i);
 		}
 		else {
 			h->pos = HEAP_EMPTY;
@@ -415,7 +415,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		if ((j = bam_iter_read(fp[heap->i], iter[heap->i], b)) >= 0) {
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam1_strand(b);
 			heap->idx = idx++;
-			bam_translate(b, trans_tbl + heap->i);
+			bam_translate(b, translation_tbl + heap->i);
 		} else if (j == -1) {
 			heap->pos = HEAP_EMPTY;
 			free(heap->b->data); free(heap->b);
