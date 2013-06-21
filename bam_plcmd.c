@@ -119,6 +119,7 @@ static int mplp_func(void *data, bam1_t *b)
 		int has_ref;
 		ret = ma->iter? bam_iter_read(ma->fp, ma->iter, b) : bam_read1(ma->fp, b);
 		if (ret < 0) break;
+		bam_remove_B(b);
 		if (b->core.tid < 0 || (b->core.flag&BAM_FUNMAP)) { // exclude unmapped reads
 			skip = 1;
 			continue;
@@ -612,7 +613,6 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
 	}
-	bam_no_B = 1;
     if (file_list) {
         if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
         mpileup(&mplp,nfiles,fn);
