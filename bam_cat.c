@@ -93,7 +93,7 @@ int bam_cat(int nfn, char * const *fn, const bam_header_t *h, const char* outbam
         bam_header_t *old;
         int len,j;
         
-        in = strcmp(fn[i], "-")? bam_open(fn[i], "r") : bam_dopen(fileno(stdin), "r");
+        in = strcmp(fn[i], "-")? bgzf_open(fn[i], "r") : bgzf_fdopen(fileno(stdin), "r");
         if (in == 0) {
             fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
             return -1;

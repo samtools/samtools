@@ -51,7 +51,7 @@ int main_reheader(int argc, char *argv[])
 		h = sam_header_read(fph);
 		sam_close(fph);
 	}
-	in = strcmp(argv[2], "-")? bam_open(argv[2], "r") : bam_dopen(fileno(stdin), "r");
+	in = strcmp(argv[2], "-")? bgzf_open(argv[2], "r") : bgzf_fdopen(fileno(stdin), "r");
 	if (in == 0) {
 		fprintf(stderr, "[%s] fail to open file %s.\n", __func__, argv[2]);
 		return 1;
