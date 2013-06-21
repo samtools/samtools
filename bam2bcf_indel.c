@@ -14,6 +14,8 @@ KSORT_INIT_GENERIC(uint32_t)
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
 
+extern const char bam_nt16_nt4_table[];
+
 void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
 {
 	const char *s, *p, *q, *r, *t;

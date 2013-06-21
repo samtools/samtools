@@ -50,7 +50,7 @@ typedef khash_t(64) nseq_t;
 #include "htslib/ksort.h"
 KSORT_INIT(rseq, frag_p, rseq_lt)
 
-static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
+extern const char bam_nt16_nt4_table[];
 
 static inline uint64_t X31_hash_string(const char *s)
 {
@@ -639,7 +639,7 @@ int main_phase(int argc, char *argv[])
 			if (p->is_del || p->is_refskip) continue;
 			if (p->b->core.qual == 0) continue;
 			// get the base code
-			c = nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
+			c = bam_nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
 			if (c == (cns[vpos]&3)) c = 1;
 			else if (c == (cns[vpos]>>16&3)) c = 2;
 			else c = 0;

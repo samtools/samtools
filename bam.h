@@ -301,8 +301,6 @@ extern const unsigned char bam_nt16_table[256];
 /*! @abstract Table for converting a 4-bit encoded nucleotide to a letter. */
 extern const char bam_nt16_rev_table[];
 
-extern const char bam_nt16_nt4_table[];
-
 #ifdef __cplusplus
 extern "C" {
 #endif

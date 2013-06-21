@@ -9,6 +9,7 @@
 #include "bcftools/bcf.h"
 
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
+extern const char bam_nt16_nt4_table[];
 
 #define CALL_DEFTHETA 0.83
 #define DEF_MAPQ 20

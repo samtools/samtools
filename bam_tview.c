@@ -79,7 +79,7 @@ void base_tv_destroy(tview_t* tv)
 
 int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
 {
-	extern unsigned const char bam_nt16_table[256];
+	extern const char bam_nt16_nt4_table[];
 	tview_t *tv = (tview_t*)data;
 	int i, j, c, rb, attr, max_ins = 0;
 	uint32_t call = 0;
