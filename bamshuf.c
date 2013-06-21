@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "sam.h"
+#include "htslib/sam.h"
 #include "htslib/ksort.h"
 
 #define DEF_CLEVEL 1

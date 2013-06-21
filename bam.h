@@ -781,17 +781,4 @@ static inline int bam_aux_type2size(int x)
 	else return 0;
 }
 
-/*********************************
- *** Compatibility with htslib ***
- *********************************/
-
-typedef bam_header_t bam_hdr_t;
-
-#define bam_get_qname(b) bam1_qname(b)
-#define bam_get_cigar(b) bam1_cigar(b)
-
-#define bam_hdr_read(fp) bam_header_read(fp)
-#define bam_hdr_write(fp, h) bam_header_write(fp, h)
-#define bam_hdr_destroy(fp) bam_header_destroy(fp)
-
 #endif
