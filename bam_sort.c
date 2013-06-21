@@ -9,8 +9,12 @@
 #include "bam.h"
 #include "htslib/ksort.h"
 #include "htslib/khash.h"
+#include "htslib/klist.h"
 
 KHASH_MAP_INIT_STR(c2c, char*)
+
+#define __free_char(p) free(p)
+KLIST_INIT(hdrln, char*, __free_char)
 
 static int g_is_by_qname = 0;
 
@@ -120,8 +124,10 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 				fprintf(stderr, "[trans_tbl_init] @SQ ID (%s) found in binary header but not text header.\n",translate->target_name[i]);
 				exit(-1);
 			}
-			char* match_line = strndup(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
+			regfree(&sq_id);
 			
+			// Produce our output line
+			char* match_line = strndup(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 			// and append it to out->text
 			char* newtext = NULL;
 			asprintf(&newtext, "%s\n%s",out->text,match_line);
@@ -143,19 +149,47 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
 		char* match_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
-		// is our matched ID in our translation list already
-		khiter_t k = kh_get(c2c, tbl->rg_trans, match_id);
+		
+		// is our matched ID in our output list already
+		regex_t rg_id_search;
+		regmatch_t* matches_search = (regmatch_t*)calloc(1, sizeof(regmatch_t));
+		if (matches_search == NULL) { perror("out of memory"); exit(-1); }
+		char* rg_regex = NULL;
+		asprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)",match_id);
+		regcomp(&rg_id_search, rg_regex, REG_EXTENDED|REG_NEWLINE);
 		char* transformed_id = NULL;
-		if (k == kh_end(tbl->rg_trans)) {
+		if (regexec(&rg_id_search, out->text, 1, matches_search, 0) != 0) {
 			// Not in there so can add it as 1-1 mapping
 			transformed_id = match_id;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			if (asprintf(&transformed_id, "%s-%ld",match_id, lrand48()) != 0) { perror("out of memory"); exit(-1); }
+			if (asprintf(&transformed_id, "%s-%ld",match_id, lrand48()) == -1) { perror("out of memory"); exit(-1); }
 		}
-		kh_put(c2c, tbl->rg_trans, match_id, transformed_id); // TODO: check this function call syntax
-		// TODO: append it to out->text with ID replaced with transformed_id
-		if (match_id != transformed_id) free(transformed_id);
+		regfree(&rg_id_search);
+
+		// Insert it into our translation map
+		int in_there = 0;
+		khiter_t iter = kh_put(c2c, tbl->rg_trans, transformed_id, &in_there);
+		kh_value(tbl->rg_trans,iter) = transformed_id;
+		// take matched line and replace ID with transformed_id
+		char* transformed_line = NULL;
+		if (match_id != transformed_id) {
+			char *fmt = NULL;
+			asprintf(&fmt, "%%.%ds%%s%%.%ds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&transformed_line,fmt,match_line,transformed_id,text+matches[1].rm_eo);
+			free(fmt);
+			free(transformed_id);
+		} else {
+			transformed_line = match_line;
+		}
+		
+		// and append it to out->text
+		char* newtext = NULL;
+		asprintf(&newtext, "%s\n%s",out->text,transformed_line);
+		free(out->text);
+		out->text = newtext;
+		
+		if (transformed_line != match_line) free(transformed_line);
 		free(match_id);
 		free(match_line);
 		text += matches[0].rm_eo;
@@ -170,18 +204,41 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		if (regexec(&pg_id, text, 2, matches, 0) != 0) break;
 		char* match_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
-		// is our matched ID in our translation list already
-		khiter_t k = kh_get(c2c, tbl->pg_trans, match_id);
+
+		// is our matched ID in our output list already
+		regex_t pg_id_search;
+		regmatch_t* matches_search = (regmatch_t*)calloc(1, sizeof(regmatch_t));
+		if (matches_search == NULL) { perror("out of memory"); exit(-1); }
+		char* pg_regex = NULL;
+		asprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)",match_id);
+		regcomp(&pg_id_search, pg_regex, REG_EXTENDED|REG_NEWLINE);
 		char* transformed_id = NULL;
-		if (k == kh_end(tbl->pg_trans)) {
+		if (regexec(&pg_id_search, out->text, 1, matches_search, 0) != 0) {
 			// Not in there so can add it as 1-1 mapping
 			transformed_id = match_id;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			if (asprintf(&transformed_id, "%s-%ld",match_id, lrand48()) != 0) { perror("out of memory"); exit(-1); }
+			if (asprintf(&transformed_id, "%s-%ld",match_id, lrand48()) == -1) { perror("out of memory"); exit(-1); }
 		}
-		kh_put(c2c, tbl->pg_trans, match_id, transformed_id); // TODO: check this function call syntax
-		// TODO: append it to linked list for PP processing
+		regfree(&pg_id_search);
+		
+		// Insert it into our translation map
+		int in_there = 0;
+		khiter_t iter = kh_put(c2c, tbl->pg_trans, transformed_id, &in_there);
+		kh_value(tbl->pg_trans,iter) = transformed_id;
+		// take matched line and replace ID with transformed_id
+		char* transformed_line = NULL;
+		if (match_id != transformed_id) {
+			char *fmt = NULL;
+			asprintf(&fmt, "%%.%ds%%s%%.%ds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&transformed_line,fmt,match_line,transformed_id,text+matches[1].rm_eo);
+			free(fmt);
+			free(transformed_id);
+		} else {
+			transformed_line = match_line;
+		}
+
+		// TODO: append line to linked list for PP processing
 		if (match_id != transformed_id) free(transformed_id);
 		free(match_id);
 		free(match_line);
