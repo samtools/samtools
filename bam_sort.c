@@ -200,6 +200,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	regex_t pg_id;
 	regcomp(&pg_id, "^@PG.*\tID:([A-Za-z0-9]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 	text = translate->text;
+	klist_t(hdrln) *pg_list = kl_init(hdrln);
 	while(1) { //	foreach pg id in translate's header
 		if (regexec(&pg_id, text, 2, matches, 0) != 0) break;
 		char* match_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
@@ -238,17 +239,32 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			transformed_line = match_line;
 		}
 
-		// TODO: append line to linked list for PP processing
+		// append line to linked list for PP processing
+		char** ln = kl_pushp(hdrln, pg_list);
+		*ln = transformed_line;
+		if (match_line != transformed_line) free(transformed_line);
 		if (match_id != transformed_id) free(transformed_id);
 		free(match_id);
 		free(match_line);
 		text += matches[0].rm_eo;
 	}
 	regfree(&rg_id);
+	// TODO: amend hdrln list to contain tuple of untransformed ID, transformed ID and transformed line
 	// TODO: need to translate PP's on the fly (in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
 	// for each line {
 	// with ID replaced with tranformed_id and PP's transformed using the translation table
 	// }
+	kliter_t(hdrln) *iter = kl_begin(pg_list);
+	while (iter != kl_end(pg_list)) {
+		char* data = kl_val(iter);
+		// Find PG tag
+		// Replace
+		// and append it to out->text
+		iter = kl_next(iter);
+	}
+	
+	kl_destroy(hdrln,pg_list);
+	
 	free(matches);
 }
 
