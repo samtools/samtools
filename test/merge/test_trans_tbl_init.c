@@ -138,6 +138,42 @@ void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
+
+void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
+	bam_header_t* out;
+	bam_header_t* translate;
+	
+	translate = bam_header_init();
+	translate->text = strdup(
+							 "@HD\tVN:1.4\tSO:unknown\n"
+							 "@SQ\tID:donkey\tLN:133\n"
+							 "@SQ\tID:fish\tLN:133\n"
+							 "@RG\tID:fish\tPU:trans\n"
+                                                         "@PG\tXX:dummy\tID:fish\tDS:trans\n"
+							 );
+	translate->n_targets = 2;
+	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
+	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
+	translate->target_name[0] = strdup("donkey");
+	translate->target_len[0] = 133;
+	translate->target_name[1] = strdup("fish");
+	translate->target_len[1] = 133;
+	out = bam_header_init();
+	out->text = strdup(
+					   "@HD\tVN:1.4\tSO:unknown\n"
+					   "@SQ\tID:fish\tLN:133\tSP:frog\n"
+					   "@RG\tID:fish\tPU:out\n"
+					   );
+	out->n_targets = 1;
+	out->target_name = (char**)calloc(1, sizeof(char*));
+	out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
+	out->target_name[0] = strdup("fish");
+	out->target_len[0] = 133;
+	
+	*translate_in = translate;
+	*out_in = out;
+}
+
 int main(int argc, char**argv)
 {
 	bam_header_t* out;
@@ -227,6 +263,27 @@ int main(int argc, char**argv)
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
 	printf("END test 4\n");
+
+	// test
+	printf("BEGIN test 5\n");
+	// reinit
+	trans_tbl_t tbl_5;
+	setup_test_5(&translate,&out);
+	printf("translate\n");
+	dump_header(translate);
+	printf("out\n");
+	dump_header(out);
+	printf("RUN test 5\n");
+	trans_tbl_init(out, translate, &tbl_4);
+	printf("END RUN test 5\n");
+	printf("translate\n");
+	dump_header(translate);
+	printf("out\n");
+	dump_header(out);
+	// teardown
+	bam_header_destroy(translate);
+	bam_header_destroy(out);
+	printf("END test 5\n");
 
 	return 0;
 }
