@@ -189,9 +189,9 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		free(out->text);
 		out->text = newtext;
 		
-		if (transformed_line != match_line) free(transformed_line);
-		free(match_id);
-		free(match_line);
+		if (transformed_line != match_line) { free(transformed_line); transformed_line = NULL; }
+		free(match_id); match_id = NULL;
+		free(match_line); match_line = NULL;
 		text += matches[0].rm_eo;
 	}
 	regfree(&rg_id);
@@ -260,10 +260,11 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		// Find PG tag
 		// Replace
 		// and append it to out->text
+		printf("TRACE (PG OUT): %s\n", data);
 		iter = kl_next(iter);
 	}
 	
-	kl_destroy(hdrln,pg_list);
+	//kl_destroy(hdrln,pg_list); fixme this is deallocating memory not allocated??
 	
 	free(matches);
 }
