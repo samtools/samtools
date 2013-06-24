@@ -303,6 +303,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	kl_destroy(hdrln,pg_list);
 	
 	free(matches);
+	out->l_text = strlen(out->text);
 }
 
 static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
@@ -367,7 +368,6 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	bamFile fpout, *fp;
 	heap1_t *heap;
 	bam_header_t *hout = NULL;
-	bam_header_t *hheaders = NULL;
 	int i, j, *RG_len = NULL;
 	uint64_t idx = 0;
 	char **RG = NULL, mode[8];
@@ -382,7 +382,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", headers, message);
 			return -1;
 		}
-		hheaders = sam_header_read(fpheaders);
+		hout = sam_header_read(fpheaders);
 		sam_close(fpheaders);
 	}
 
@@ -419,54 +419,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			return -1;
 		}
 		hin = bam_header_read(fp[i]);
+		if (hout == NULL) hout = hin;
 		trans_tbl_init(hout, hin, translation_tbl+i);
-#if 0 // to be replaced by trans table?
-		if (i == 0) { // the first BAM
-			hout = hin;
-		} else { // validate multiple baf
-			int min_n_targets = hout->n_targets;
-			if (hin->n_targets < min_n_targets) min_n_targets = hin->n_targets;
-
-			for (j = 0; j < min_n_targets; ++j)
-				if (strcmp(hout->target_name[j], hin->target_name[j]) != 0) {
-					fprintf(stderr, "[bam_merge_core] different target sequence name: '%s' != '%s' in file '%s'\n",
-							hout->target_name[j], hin->target_name[j], fn[i]);
-					return -1;
-				}
-
-			// If this input file has additional target reference sequences,
-			// add them to the headers to be output
-			if (hin->n_targets > hout->n_targets) {
-				swap_header_targets(hout, hin);
-				// FIXME Possibly we should also create @SQ text headers
-				// for the newly added reference sequences
-			}
-
-			bam_header_destroy(hin);
-		}
-#endif
 	}
-#if 0 // to be replaced by trans table?
-	if (hheaders) {
-		// If the text headers to be swapped in include any @SQ headers,
-		// check that they are consistent with the existing binary list
-		// of reference information.
-		if (hheaders->n_targets > 0) {
-			if (hout->n_targets != hheaders->n_targets) {
-				fprintf(stderr, "[bam_merge_core] number of @SQ headers in '%s' differs from number of target sequences\n", headers);
-				if (!reg) return -1;
-			}
-			for (j = 0; j < hout->n_targets; ++j)
-				if (strcmp(hout->target_name[j], hheaders->target_name[j]) != 0) {
-					fprintf(stderr, "[bam_merge_core] @SQ header '%s' in '%s' differs from target sequence\n", hheaders->target_name[j], headers);
-					if (!reg) return -1;
-				}
-		}
-
-		swap_header_text(hout, hheaders);
-		bam_header_destroy(hheaders);
-	}
-#endif
 
     // If we're only merging a specified region move our iters to start at that point
 	if (reg) {
@@ -540,6 +495,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		free(RG); free(RG_len);
 	}
 	for (i = 0; i != n; ++i) {
+		trans_tbl_destroy(translation_tbl + i);
 		bam_iter_destroy(iter[i]);
 		bam_close(fp[i]);
 	}
