@@ -11,9 +11,9 @@
 #include "htslib/khash.h"
 #include "htslib/klist.h"
 
-KHASH_MAP_INIT_STR(c2c, char*)
+KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
 
-#define __free_char(p) free(p)
+#define __free_char(p)
 KLIST_INIT(hdrln, char*, __free_char)
 
 static int g_is_by_qname = 0;
@@ -87,6 +87,26 @@ typedef struct trans_tbl {
 	kh_c2c_t* pg_trans;
 } trans_tbl_t;
 
+static void trans_tbl_destroy(trans_tbl_t *tbl) {
+	free(tbl->tid_trans);
+	khiter_t iter;
+	for (iter = kh_begin(tbl->rg_trans); iter != kh_end(tbl->rg_trans); ++iter) {
+		if (kh_exist(tbl->rg_trans, iter)) {
+			free(kh_value(tbl->rg_trans, iter));
+			free(kh_key(tbl->rg_trans, iter));
+		}
+	}
+	for (iter = kh_begin(tbl->pg_trans); iter != kh_end(tbl->pg_trans); ++iter) {
+		if (kh_exist(tbl->pg_trans, iter)) {
+			free(kh_value(tbl->pg_trans, iter));
+			free(kh_key(tbl->pg_trans, iter));
+		}
+	}
+		
+	kh_destroy(c2c,tbl->rg_trans);
+	kh_destroy(c2c,tbl->pg_trans);
+}
+
 static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl)
 {
 	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
@@ -119,6 +139,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			char* seq_regex = NULL;
 			asprintf(&seq_regex, "^@SQ.*\tID:%s(\t.*$|$)",translate->target_name[i]);
 			regcomp(&sq_id, seq_regex, REG_EXTENDED|REG_NEWLINE);
+			free(seq_regex);
 			if (regexec(&sq_id, translate->text, 1, matches, 0) != 0)
 			{
 				fprintf(stderr, "[trans_tbl_init] @SQ ID (%s) found in binary header but not text header.\n",translate->target_name[i]);
@@ -134,6 +155,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			free(out->text);
 			out->text = newtext;
 			free(match_line);
+			free(matches);
 		} else {
 			tbl->tid_trans[i] = tid;
 		}
@@ -147,18 +169,16 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	char* text = translate->text;
 	while(1) { //	foreach rg id in translate's header
 		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
-		char* match_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
 		
 		// is our matched ID in our output list already
 		regex_t rg_id_search;
-		regmatch_t* matches_search = (regmatch_t*)calloc(1, sizeof(regmatch_t));
-		if (matches_search == NULL) { perror("out of memory"); exit(-1); }
 		char* rg_regex = NULL;
 		asprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)",match_id);
-		regcomp(&rg_id_search, rg_regex, REG_EXTENDED|REG_NEWLINE);
+		regcomp(&rg_id_search, rg_regex, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
+		free(rg_regex);
 		char* transformed_id = NULL;
-		if (regexec(&rg_id_search, out->text, 1, matches_search, 0) != 0) {
+		if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0) {
 			// Not in there so can add it as 1-1 mapping
 			transformed_id = match_id;
 		} else {
@@ -169,18 +189,18 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 
 		// Insert it into our translation map
 		int in_there = 0;
-		khiter_t iter = kh_put(c2c, tbl->rg_trans, transformed_id, &in_there);
-		kh_value(tbl->rg_trans,iter) = transformed_id;
+		khiter_t iter = kh_put(c2c, tbl->rg_trans, strdup(match_id), &in_there);
+		kh_value(tbl->rg_trans,iter) = strdup(transformed_id);
 		// take matched line and replace ID with transformed_id
 		char* transformed_line = NULL;
 		if (match_id != transformed_id) {
 			char *fmt = NULL;
 			asprintf(&fmt, "%%.%ds%%s%%.%ds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
-			asprintf(&transformed_line,fmt,match_line,transformed_id,text+matches[1].rm_eo);
+			asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo);
 			free(fmt);
 			free(transformed_id);
 		} else {
-			transformed_line = match_line;
+			transformed_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		}
 		
 		// and append it to out->text
@@ -189,9 +209,8 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		free(out->text);
 		out->text = newtext;
 		
-		if (transformed_line != match_line) { free(transformed_line); transformed_line = NULL; }
+		free(transformed_line);
 		free(match_id); match_id = NULL;
-		free(match_line); match_line = NULL;
 		text += matches[0].rm_eo;
 	}
 	regfree(&rg_id);
@@ -203,18 +222,16 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	klist_t(hdrln) *pg_list = kl_init(hdrln);
 	while(1) { //	foreach pg id in translate's header
 		if (regexec(&pg_id, text, 2, matches, 0) != 0) break;
-		char* match_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
 
 		// is our matched ID in our output list already
 		regex_t pg_id_search;
-		regmatch_t* matches_search = (regmatch_t*)calloc(1, sizeof(regmatch_t));
-		if (matches_search == NULL) { perror("out of memory"); exit(-1); }
 		char* pg_regex = NULL;
 		asprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)",match_id);
-		regcomp(&pg_id_search, pg_regex, REG_EXTENDED|REG_NEWLINE);
+		regcomp(&pg_id_search, pg_regex, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
+		free(pg_regex);
 		char* transformed_id = NULL;
-		if (regexec(&pg_id_search, out->text, 1, matches_search, 0) != 0) {
+		if (regexec(&pg_id_search, out->text, 0, NULL, 0) != 0) {
 			// Not in there so can add it as 1-1 mapping
 			transformed_id = match_id;
 		} else {
@@ -225,46 +242,65 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		
 		// Insert it into our translation map
 		int in_there = 0;
-		khiter_t iter = kh_put(c2c, tbl->pg_trans, transformed_id, &in_there);
-		kh_value(tbl->pg_trans,iter) = transformed_id;
+		khiter_t iter = kh_put(c2c, tbl->pg_trans, strdup(match_id), &in_there);
+		kh_value(tbl->pg_trans,iter) = strdup(transformed_id);
 		// take matched line and replace ID with transformed_id
 		char* transformed_line = NULL;
 		if (match_id != transformed_id) {
 			char *fmt = NULL;
 			asprintf(&fmt, "%%.%ds%%s%%.%ds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
-			asprintf(&transformed_line,fmt,match_line,transformed_id,text+matches[1].rm_eo);
+			asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo);
 			free(fmt);
 			free(transformed_id);
 		} else {
-			transformed_line = match_line;
+			transformed_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		}
 
 		// append line to linked list for PP processing
 		char** ln = kl_pushp(hdrln, pg_list);
-		*ln = transformed_line;
-		if (match_line != transformed_line) free(transformed_line);
-		if (match_id != transformed_id) free(transformed_id);
+		*ln = strdup(transformed_line);  // Give linked list it's own copy
+		free(transformed_line);
 		free(match_id);
-		free(match_line);
 		text += matches[0].rm_eo;
 	}
-	regfree(&rg_id);
-	// TODO: amend hdrln list to contain tuple of untransformed ID, transformed ID and transformed line
-	// TODO: need to translate PP's on the fly (in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
+	regfree(&pg_id);
+	// need to translate PP's on the fly (in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
 	// for each line {
 	// with ID replaced with tranformed_id and PP's transformed using the translation table
 	// }
+	regex_t pg_pp;
+	regcomp(&pg_pp, "^@PG.*\tPP:([A-Za-z0-9]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 	kliter_t(hdrln) *iter = kl_begin(pg_list);
 	while (iter != kl_end(pg_list)) {
 		char* data = kl_val(iter);
-		// Find PG tag
-		// Replace
+
+		char *transformed_line = NULL;
+		// Find PP tag
+		if (regexec(&pg_pp, data, 2, matches, 0) == 0) {
+			// Lookup in hash table
+			char* pp_id = strndup(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+
+			khiter_t k = kh_get(c2c, tbl->pg_trans, pp_id);
+			free(pp_id);
+			char* transformed_id = kh_value(tbl->pg_trans,k);
+			// Replace
+			char *fmt = NULL;
+			asprintf(&fmt, "%%.%ds%%s%%.%ds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo);
+			free(fmt);
+		} else { transformed_line = data; }
 		// and append it to out->text
-		printf("TRACE (PG OUT): %s\n", data);
+		char* newtext = NULL;
+		asprintf(&newtext, "%s\n%s",out->text,transformed_line);
+		free(out->text);
+		out->text = newtext;
+		if (transformed_line != data) { free(transformed_line); transformed_line = NULL; }
+		free(data);
 		iter = kl_next(iter);
 	}
+	regfree(&pg_pp);
 	
-	//kl_destroy(hdrln,pg_list); fixme this is deallocating memory not allocated??
+	kl_destroy(hdrln,pg_list);
 	
 	free(matches);
 }
