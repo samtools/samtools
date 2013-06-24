@@ -297,6 +297,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         for (i=1; i<conf->argc; i++) ksprintf(&s, " %s", conf->argv[i]);
         kputc('\n', &s);
         if (conf->fai_fname) ksprintf(&s, "##reference=file://%s\n", conf->fai_fname);
+#if 0
         h->dict = sam_header_parse2(h->text);
         int nseq;
         const char *tags[] = {"SN","LN","UR","M5",NULL};
@@ -310,6 +311,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             kputs(">\n", &s);
         }
         if (tbl) free(tbl);
+#else
+		ksprintf(&s, "# ##contig= not yet implemented as it involves htslib header parsing\n");
+#endif
 		bh->txt = s.s;
 		bh->l_txt = 1 + s.l;
 		bcf_hdr_sync(bh);

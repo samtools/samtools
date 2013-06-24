@@ -37,6 +37,7 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
 
     if ( samples ) 
     {
+#if 0
         if ( !tv->header->dict ) tv->header->dict = sam_header_parse2(tv->header->text);
         void *iter = tv->header->dict;
         const char *key, *val;
@@ -59,6 +60,10 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
             fprintf(stderr,"The sample or read group \"%s\" not present.\n", samples);
             exit(EXIT_FAILURE);
         }
+#else
+		fprintf(stderr, "Samtools-htslib: base_tv_init() header parsing not yet implemented\n");
+		abort();
+#endif
     }
 
 	return 0;

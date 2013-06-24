@@ -1153,6 +1153,7 @@ size_t mygetline(char **line, size_t *n, FILE *fp)
 
 void init_regions(stats_t *stats, char *file)
 {
+#if 0
     khiter_t iter;
     khash_t(kh_bam_tid) *header_hash;
 
@@ -1217,6 +1218,10 @@ void init_regions(stats_t *stats, char *file)
     if (line) free(line);
     if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
     fclose(fp);
+#else
+	fprintf(stderr, "Samtools-htslib: init_regions() header parsing not yet implemented\n");
+	abort();
+#endif
 }
 
 void destroy_regions(stats_t *stats)
@@ -1268,6 +1273,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
 
 void init_group_id(stats_t *stats, char *id)
 {
+#if 0
     if ( !stats->sam->header->dict )
         stats->sam->header->dict = sam_header_parse2(stats->sam->header->text);
     void *iter = stats->sam->header->dict;
@@ -1289,6 +1295,10 @@ void init_group_id(stats_t *stats, char *id)
     }
     if ( !n )
         error("The sample or read group \"%s\" not present.\n", id);
+#else
+	fprintf(stderr, "Samtools-htslib: init_group_id() header parsing not yet implemented\n");
+	abort();
+#endif
 }
 
 
