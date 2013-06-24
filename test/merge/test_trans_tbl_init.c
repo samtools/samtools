@@ -149,7 +149,8 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 							 "@SQ\tID:donkey\tLN:133\n"
 							 "@SQ\tID:fish\tLN:133\n"
 							 "@RG\tID:fish\tPU:trans\n"
-                                                         "@PG\tXX:dummy\tID:fish\tDS:trans\n"
+							 "@PG\tXX:dummy\tID:fish\tDS:trans\n"
+							 "@PG\tPP:fish\tID:hook\tDS:trans\n"
 							 );
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
@@ -163,6 +164,8 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 					   "@HD\tVN:1.4\tSO:unknown\n"
 					   "@SQ\tID:fish\tLN:133\tSP:frog\n"
 					   "@RG\tID:fish\tPU:out\n"
+					   "@PG\tXX:dummyx\tID:fish\tDS:out\n"
+					   "@PG\tPP:fish\tID:hook\tDS:out\n"
 					   );
 	out->n_targets = 1;
 	out->target_name = (char**)calloc(1, sizeof(char*));
@@ -198,6 +201,7 @@ int main(int argc, char**argv)
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
+	trans_tbl_destroy(&tbl);
 	printf("END test 1\n");
 
 	// test
@@ -219,8 +223,8 @@ int main(int argc, char**argv)
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
+	trans_tbl_destroy(&tbl_2);
 	printf("END test 2\n");
-
 
 	// test
 	printf("BEGIN test 3\n");
@@ -241,6 +245,7 @@ int main(int argc, char**argv)
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
+	trans_tbl_destroy(&tbl_3);
 	printf("END test 3\n");
 
 	// test
@@ -262,6 +267,7 @@ int main(int argc, char**argv)
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
+	trans_tbl_destroy(&tbl_4);
 	printf("END test 4\n");
 
 	// test
@@ -274,7 +280,7 @@ int main(int argc, char**argv)
 	printf("out\n");
 	dump_header(out);
 	printf("RUN test 5\n");
-	trans_tbl_init(out, translate, &tbl_4);
+	trans_tbl_init(out, translate, &tbl_5);
 	printf("END RUN test 5\n");
 	printf("translate\n");
 	dump_header(translate);
@@ -283,6 +289,7 @@ int main(int argc, char**argv)
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
+	trans_tbl_destroy(&tbl_5);
 	printf("END test 5\n");
 
 	return 0;
