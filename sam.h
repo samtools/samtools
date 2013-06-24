@@ -1,6 +1,7 @@
 #ifndef BAM_SAM_H
 #define BAM_SAM_H
 
+#include "htslib/sam.h"
 #include "bam.h"
 
 /*!
@@ -22,13 +23,9 @@
   @field  header  header struct
  */
 typedef struct {
-	int type;
-	union {
-		tamFile tamr;
-		bamFile bam;
-		FILE *tamw;
-	} x;
-	bam_header_t *header;
+	samFile *file;
+	struct { BGZF *bam; } x;  // Hack so that fp->x.bam still works
+	bam_hdr_t *header;
 } samfile_t;
 
 #ifdef __cplusplus
@@ -70,7 +67,7 @@ extern "C" {
 	  @param  b     alignment
 	  @return       bytes read
 	 */
-	int samread(samfile_t *fp, bam1_t *b);
+	static inline int samread(samfile_t *fp, bam1_t *b) { return sam_read1(fp->file, fp->header, b); }
 
 	/*!
 	  @abstract     Write one alignment
@@ -78,7 +75,7 @@ extern "C" {
 	  @param  b     alignment
 	  @return       bytes written
 	 */
-	int samwrite(samfile_t *fp, const bam1_t *b);
+	static inline int samwrite(samfile_t *fp, const bam1_t *b) { return sam_write1(fp->file, fp->header, b); }
 
 	/*!
 	  @abstract     Get the pileup for a whole alignment file

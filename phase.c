@@ -507,7 +507,6 @@ static int gl2cns(float q[16])
 
 int main_phase(int argc, char *argv[])
 {
-	extern void bam_init_header_hash(bam_header_t *header);
 	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
@@ -554,7 +553,6 @@ int main_phase(int argc, char *argv[])
 	g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	h = bam_header_read(g.fp);
 	if (fn_list) { // read the list of sites to phase
-		bam_init_header_hash(h);
 		set = loadpos(fn_list, h);
 		free(fn_list);
 	} else g.flag &= ~FLAG_LIST_EXCL;

@@ -13,9 +13,9 @@ CFLAGS=		-g -Wall $(VERSION) -O2
 #LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
 LOBJS=		bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
-			bam_pileup.o bam_lpileup.o bam_md.o bedidx.o \
-			bam_sort.o sam_header.o bam_reheader.o kprobaln.o bam_cat.o
+			bam_pileup.o bam_lpileup.o sam_header.o
 AOBJS=		bam_tview.o bam_plcmd.o sam_view.o \
+			bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o kprobaln.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \

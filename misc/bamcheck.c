@@ -169,7 +169,6 @@ typedef struct
 stats_t;
 
 void error(const char *format, ...);
-void bam_init_header_hash(bam_header_t *header);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
 
 
@@ -1157,7 +1156,6 @@ void init_regions(stats_t *stats, char *file)
     khiter_t iter;
     khash_t(kh_bam_tid) *header_hash;
 
-    bam_init_header_hash(stats->sam->header);
     header_hash = (khash_t(kh_bam_tid)*)stats->sam->header->hash;
 
     FILE *fp = fopen(file,"r");

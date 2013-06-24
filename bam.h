@@ -41,7 +41,7 @@
  */
 
 #ifndef VERSION
-#define BAM_VERSION "0.1.19+"
+#define BAM_VERSION "0.2.0+"
 #else
 #define BAM_VERSION VERSION
 #endif
@@ -51,28 +51,14 @@
 #include <string.h>
 #include <stdio.h>
 
-#ifndef BAM_LITE
-#define BAM_VIRTUAL_OFFSET16
 #include "htslib/bgzf.h"
+#include "htslib/sam.h"
+
 /*! @abstract BAM file handler */
 typedef BGZF *bamFile;
 #define bam_open(fn, mode) bgzf_open(fn, mode)
 #define bam_dopen(fd, mode) bgzf_fdopen(fd, mode)
 #define bam_close(fp) bgzf_close(fp)
-#define bam_read(fp, buf, size) bgzf_read(fp, buf, size)
-#define bam_write(fp, buf, size) bgzf_write(fp, buf, size)
-#define bam_tell(fp) bgzf_tell(fp)
-#define bam_seek(fp, pos, dir) bgzf_seek(fp, pos, dir)
-#else
-#define BAM_TRUE_OFFSET
-#include <zlib.h>
-typedef gzFile bamFile;
-#define bam_open(fn, mode) gzopen(fn, mode)
-#define bam_dopen(fd, mode) gzdopen(fd, mode)
-#define bam_close(fp) gzclose(fp)
-#define bam_read(fp, buf, size) gzread(fp, buf, size)
-/* no bam_write/bam_tell/bam_seek() here */
-#endif
 
 /*! @typedef
   @abstract Structure for the alignment header.
@@ -88,85 +74,15 @@ typedef gzFile bamFile;
   @discussion Field hash points to null by default. It is a private
   member.
  */
-typedef struct {
-	int32_t n_targets;
-	char **target_name;
-	uint32_t *target_len;
-	void *dict, *hash, *rg2lib;
-	uint32_t l_text, n_text;
-	char *text;
-} bam_header_t;
+typedef bam_hdr_t bam_header_t;
 
-/*! @abstract the read is paired in sequencing, no matter whether it is mapped in a pair */
-#define BAM_FPAIRED        1
-/*! @abstract the read is mapped in a proper pair */
-#define BAM_FPROPER_PAIR   2
-/*! @abstract the read itself is unmapped; conflictive with BAM_FPROPER_PAIR */
-#define BAM_FUNMAP         4
-/*! @abstract the mate is unmapped */
-#define BAM_FMUNMAP        8
-/*! @abstract the read is mapped to the reverse strand */
-#define BAM_FREVERSE      16
-/*! @abstract the mate is mapped to the reverse strand */
-#define BAM_FMREVERSE     32
-/*! @abstract this is read1 */
-#define BAM_FREAD1        64
-/*! @abstract this is read2 */
-#define BAM_FREAD2       128
-/*! @abstract not primary alignment */
-#define BAM_FSECONDARY   256
-/*! @abstract QC failure */
-#define BAM_FQCFAIL      512
-/*! @abstract optical or PCR duplicate */
-#define BAM_FDUP        1024
-
+// TODO This flag-formatting functionality does not currently exist in htslib
 #define BAM_OFDEC          0
 #define BAM_OFHEX          1
 #define BAM_OFSTR          2
 
 /*! @abstract defautl mask for pileup */
 #define BAM_DEF_MASK (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP)
-
-#define BAM_CORE_SIZE   sizeof(bam1_core_t)
-
-/**
- * Describing how CIGAR operation/length is packed in a 32-bit integer.
- */
-#define BAM_CIGAR_SHIFT 4
-#define BAM_CIGAR_MASK  ((1 << BAM_CIGAR_SHIFT) - 1)
-
-/*
-  CIGAR operations.
- */
-/*! @abstract CIGAR: M = match or mismatch*/
-#define BAM_CMATCH      0
-/*! @abstract CIGAR: I = insertion to the reference */
-#define BAM_CINS        1
-/*! @abstract CIGAR: D = deletion from the reference */
-#define BAM_CDEL        2
-/*! @abstract CIGAR: N = skip on the reference (e.g. spliced alignment) */
-#define BAM_CREF_SKIP   3
-/*! @abstract CIGAR: S = clip on the read with clipped sequence
-  present in qseq */
-#define BAM_CSOFT_CLIP  4
-/*! @abstract CIGAR: H = clip on the read with clipped sequence trimmed off */
-#define BAM_CHARD_CLIP  5
-/*! @abstract CIGAR: P = padding */
-#define BAM_CPAD        6
-/*! @abstract CIGAR: equals = match */
-#define BAM_CEQUAL      7
-/*! @abstract CIGAR: X = mismatch */
-#define BAM_CDIFF       8
-#define BAM_CBACK       9
-
-#define BAM_CIGAR_STR  "MIDNSHP=XB"
-#define BAM_CIGAR_TYPE 0x3C1A7
-
-#define bam_cigar_op(c) ((c)&BAM_CIGAR_MASK)
-#define bam_cigar_oplen(c) ((c)>>BAM_CIGAR_SHIFT)
-#define bam_cigar_opchr(c) (BAM_CIGAR_STR[bam_cigar_op(c)])
-#define bam_cigar_gen(l, o) ((l)<<BAM_CIGAR_SHIFT|(o))
-#define bam_cigar_type(o) (BAM_CIGAR_TYPE>>((o)<<1)&3) // bit 1: consume query; bit 2: consume reference
 
 /*! @typedef
   @abstract Structure for core alignment information.
@@ -179,16 +95,7 @@ typedef struct {
   @field  n_cigar number of CIGAR operations
   @field  l_qseq  length of the query sequence (read)
  */
-typedef struct {
-	int32_t tid;
-	int32_t pos;
-	uint32_t bin:16, qual:8, l_qname:8;
-	uint32_t flag:16, n_cigar:16;
-	int32_t l_qseq;
-	int32_t mtid;
-	int32_t mpos;
-	int32_t isize;
-} bam1_core_t;
+// typedef struct { ... } bam1_core_t;
 
 /*! @typedef
   @abstract Structure for one alignment.
@@ -206,16 +113,17 @@ typedef struct {
    3. cigar data is encoded 4 bytes per CIGAR operation.
    4. seq is nybble-encoded according to bam_nt16_table.
  */
-typedef struct {
-	bam1_core_t core;
-	int l_aux, data_len, m_data;
-	uint8_t *data;
-} bam1_t;
+// typedef struct { ... } bam1_t;
+// NOTE htslib version doesn't have l_aux; use bam_get_l_aux(b) instead
+#ifndef SAMTOOLS_HTSLIB_SUPPRESS_HACKS
+// NOTE htslib also renames data_len to l_data; this macro may help or hinder
+#define data_len l_data
+#endif
 
-typedef struct __bam_iter_t *bam_iter_t;
+typedef hts_itr_t *bam_iter_t;
 
-#define bam1_strand(b) (((b)->core.flag&BAM_FREVERSE) != 0)
-#define bam1_mstrand(b) (((b)->core.flag&BAM_FMREVERSE) != 0)
+#define bam1_strand(b) (bam_is_rev((b)))
+#define bam1_mstrand(b) (bam_is_mrev((b)))
 
 /*! @function
   @abstract  Get the CIGAR array
@@ -226,14 +134,14 @@ typedef struct __bam_iter_t *bam_iter_t;
   lower 4 bits gives a CIGAR operation and the higher 28 bits keep the
   length of a CIGAR.
  */
-#define bam1_cigar(b) ((uint32_t*)((b)->data + (b)->core.l_qname))
+#define bam1_cigar(b) (bam_get_cigar((b)))
 
 /*! @function
   @abstract  Get the name of the query
   @param  b  pointer to an alignment
   @return    pointer to the name string, null terminated
  */
-#define bam1_qname(b) ((char*)((b)->data))
+#define bam1_qname(b) (bam_get_qname((b)))
 
 /*! @function
   @abstract  Get query sequence
@@ -245,14 +153,14 @@ typedef struct __bam_iter_t *bam_iter_t;
   at the higher 4 bits having smaller coordinate on the read. It is
   recommended to use bam1_seqi() macro to get the base.
  */
-#define bam1_seq(b) ((b)->data + (b)->core.n_cigar*4 + (b)->core.l_qname)
+#define bam1_seq(b) (bam_get_seq((b)))
 
 /*! @function
   @abstract  Get query quality
   @param  b  pointer to an alignment
   @return    pointer to quality string
  */
-#define bam1_qual(b) ((b)->data + (b)->core.n_cigar*4 + (b)->core.l_qname + (((b)->core.l_qseq + 1)>>1))
+#define bam1_qual(b) (bam_get_qual((b)))
 
 /*! @function
   @abstract  Get a base on read
@@ -260,46 +168,26 @@ typedef struct __bam_iter_t *bam_iter_t;
   @param  i  The i-th position, 0-based
   @return    4-bit integer representing the base.
  */
-//#define bam1_seqi(s, i) ((s)[(i)/2] >> 4*(1-(i)%2) & 0xf)
-#define bam1_seqi(s, i) ((s)[(i)>>1] >> ((~(i)&1)<<2) & 0xf)
-
-#define bam1_seq_seti(s, i, c) ( (s)[(i)>>1] = ((s)[(i)>>1] & 0xf<<(((i)&1)<<2)) | (c)<<((~(i)&1)<<2) )
+#define bam1_seqi(s, i) (bam_seqi((s), (i)))
 
 /*! @function
   @abstract  Get query sequence and quality
   @param  b  pointer to an alignment
   @return    pointer to the concatenated auxiliary data
  */
-#define bam1_aux(b) ((b)->data + (b)->core.n_cigar*4 + (b)->core.l_qname + (b)->core.l_qseq + ((b)->core.l_qseq + 1)/2)
-
-#ifndef kroundup32
-/*! @function
-  @abstract  Round an integer to the next closest power-2 integer.
-  @param  x  integer to be rounded (in place)
-  @discussion x will be modified.
- */
-#define kroundup32(x) (--(x), (x)|=(x)>>1, (x)|=(x)>>2, (x)|=(x)>>4, (x)|=(x)>>8, (x)|=(x)>>16, ++(x))
-#endif
-
-/*!
-  @abstract Whether the machine is big-endian; modified only in
-  bam_header_init().
- */
-extern int bam_is_be;
+#define bam1_aux(b) (bam_get_aux((b)))
 
 /*!
   @abstract Verbose level between 0 and 3; 0 is supposed to disable all
   debugging information, though this may not have been implemented.
  */
-extern int bam_verbose;
-
-extern int bam_no_B;
+#define bam_verbose hts_verbose
 
 /*! @abstract Table for converting a nucleotide character to the 4-bit encoding. */
-extern const unsigned char bam_nt16_table[256];
+#define bam_nt16_table seq_nt16_table
 
 /*! @abstract Table for converting a 4-bit encoded nucleotide to a letter. */
-extern const char bam_nt16_rev_table[];
+#define bam_nt16_rev_table seq_nt16_str
 
 #ifdef __cplusplus
 extern "C" {
@@ -310,20 +198,22 @@ extern "C" {
 	 *********************/
 
 	/*! @abstract TAM file handler */
-	typedef struct __tamFile_t *tamFile;
+	typedef samFile *tamFile;
 
 	/*!
 	  @abstract   Open a SAM file for reading, either uncompressed or compressed by gzip/zlib.
 	  @param  fn  SAM file name
 	  @return     SAM file handler
 	 */
-	tamFile sam_open(const char *fn);
+	static inline tamFile samtools_sam_open(const char *fn) { return sam_open(fn, "r", NULL); }
+	#undef  sam_open
+	#define sam_open samtools_sam_open
 
 	/*!
 	  @abstract   Close a SAM file handler
 	  @param  fp  SAM file handler
 	 */
-	void sam_close(tamFile fp);
+	// void sam_close(tamFile fp);
 
 	/*!
 	  @abstract      Read one alignment from a SAM file handler
@@ -332,7 +222,7 @@ extern "C" {
 	  @param  b      read alignment; all members in b will be updated
 	  @return        0 if successful; otherwise negative
 	 */
-	int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b);
+	// int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b);
 
 	/*!
 	  @abstract       Read header information from a TAB-delimited list file.
@@ -349,41 +239,10 @@ extern "C" {
 	  @param  fp      SAM file handler
 	  @return         pointer to header struct; 0 if no @SQ lines available
 	 */
-	bam_header_t *sam_header_read(tamFile fp);
+	static inline bam_header_t *sam_header_read(tamFile fp) { return sam_hdr_read(fp); }
 
-	/*!
-	  @abstract       Parse @SQ lines a update a header struct
-	  @param  h       pointer to the header struct to be updated
-	  @return         number of target sequences
-
-	  @discussion bam_header_t::{n_targets,target_len,target_name} will
-	  be destroyed in the first place.
-	 */
-	int sam_header_parse(bam_header_t *h);
-	int32_t bam_get_tid(const bam_header_t *header, const char *seq_name);
-
-	/*!
-	  @abstract       Parse @RG lines a update a header struct
-	  @param  h       pointer to the header struct to be updated
-	  @return         number of @RG lines
-
-	  @discussion bam_header_t::rg2lib will be destroyed in the first
-	  place.
-	 */
-	int sam_header_parse_rg(bam_header_t *h);
-
-#define sam_write1(header, b) bam_view1(header, b)
-
-
-	/********************************
-	 * APIs for string dictionaries *
-	 ********************************/
-
-	int bam_strmap_put(void *strmap, const char *rg, const char *lib);
-	const char *bam_strmap_get(const void *strmap, const char *rg);
-	void *bam_strmap_dup(const void*);
-	void *bam_strmap_init();
-	void bam_strmap_destroy(void *strmap);
+	// Note the distressing cast -- bam_name2id is not thread-safe
+	static inline int32_t bam_get_tid(const bam_header_t *header, const char *seq_name) { return bam_name2id((bam_header_t *)header, seq_name); }
 
 
 	/*********************
@@ -393,17 +252,14 @@ extern "C" {
 	/*!
 	  @abstract Initialize a header structure.
 	  @return   the pointer to the header structure
-
-	  @discussion This function also modifies the global variable
-	  bam_is_be.
 	 */
-	bam_header_t *bam_header_init();
+	static inline bam_header_t *bam_header_init() { return bam_hdr_init(); }
 
 	/*!
 	  @abstract        Destroy a header structure.
 	  @param  header  pointer to the header
 	 */
-	void bam_header_destroy(bam_header_t *header);
+	static inline void bam_header_destroy(bam_header_t *header) { bam_hdr_destroy(header); }
 
 	/*!
 	  @abstract   Read a header structure from BAM.
@@ -414,7 +270,7 @@ extern "C" {
 	  beginning of the file. Upon success, the position indicator will
 	  be set at the start of the first alignment.
 	 */
-	bam_header_t *bam_header_read(bamFile fp);
+	static inline bam_header_t *bam_header_read(bamFile fp) { return bam_hdr_read(fp); }
 
 	/*!
 	  @abstract      Write a header structure to BAM.
@@ -422,7 +278,7 @@ extern "C" {
 	  @param  header pointer to the header structure
 	  @return        always 0 currently
 	 */
-	int bam_header_write(bamFile fp, const bam_header_t *header);
+	static inline int bam_header_write(bamFile fp, const bam_header_t *header) { return bam_hdr_write(fp, header); }
 
 	/*!
 	  @abstract   Read an alignment from BAM.
@@ -436,47 +292,28 @@ extern "C" {
 	  alignment. This function is not affected by the machine
 	  endianness.
 	 */
-	int bam_read1(bamFile fp, bam1_t *b);
+	// int bam_read1(bamFile fp, bam1_t *b);
 
 	int bam_remove_B(bam1_t *b);
-
-	/*!
-	  @abstract Write an alignment to BAM.
-	  @param  fp       BAM file handler
-	  @param  c        pointer to the bam1_core_t structure
-	  @param  data_len total length of variable size data related to
-	                   the alignment
-	  @param  data     pointer to the concatenated data
-	  @return          number of bytes written to the file
-
-	  @discussion This function is not affected by the machine
-	  endianness.
-	 */
-	int bam_write1_core(bamFile fp, const bam1_core_t *c, int data_len, uint8_t *data);
 
 	/*!
 	  @abstract   Write an alignment to BAM.
 	  @param  fp  BAM file handler
 	  @param  b   alignment to write
 	  @return     number of bytes written to the file
-
-	  @abstract It is equivalent to:
-	    bam_write1_core(fp, &b->core, b->data_len, b->data)
 	 */
-	int bam_write1(bamFile fp, const bam1_t *b);
+	// int bam_write1(bamFile fp, const bam1_t *b);
 
 	/*! @function
 	  @abstract  Initiate a pointer to bam1_t struct
 	 */
-#define bam_init1() ((bam1_t*)calloc(1, sizeof(bam1_t)))
+//#define bam_init1()
 
 	/*! @function
 	  @abstract  Free the memory allocated for an alignment.
 	  @param  b  pointer to an alignment
 	 */
-#define bam_destroy1(b) do {					\
-		if (b) { free((b)->data); free(b); }	\
-	} while (0)
+//#define bam_destroy1(b)
 
 	/*!
 	  @abstract       Format a BAM record in the SAM format
@@ -485,8 +322,6 @@ extern "C" {
 	  @return         a pointer to the SAM string
 	 */
 	char *bam_format1(const bam_header_t *header, const bam1_t *b);
-
-	char *bam_format1_core(const bam_header_t *header, const bam1_t *b, int of);
 
 	/*!
 	  @abstract       Check whether a BAM record is plausibly valid
@@ -503,6 +338,7 @@ extern "C" {
 	 */
 	int bam_validate1(const bam_header_t *header, const bam1_t *b);
 
+	// TODO Parses headers, so not yet implemented in terms of htslib
 	const char *bam_get_library(bam_header_t *header, const bam1_t *b);
 
 
@@ -524,34 +360,27 @@ extern "C" {
 	  implementation of alignment viewers, but calculating this has some
 	  overhead.
 	 */
-	typedef struct {
-		bam1_t *b;
-		int32_t qpos;
-		int indel, level;
-		uint32_t is_del:1, is_head:1, is_tail:1, is_refskip:1, aux:28;
-	} bam_pileup1_t;
+	// typedef struct { ... } bam_pileup1_t;
 
-	typedef int (*bam_plp_auto_f)(void *data, bam1_t *b);
+	// typedef int (*bam_plp_auto_f)(void *data, bam1_t *b);
 
-	struct __bam_plp_t;
-	typedef struct __bam_plp_t *bam_plp_t;
+	// typedef struct incomplete *bam_plp_t;
 
-	bam_plp_t bam_plp_init(bam_plp_auto_f read, void *data);
-	int bam_plp_push(bam_plp_t iter, const bam1_t *b);
-	const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
-	const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
-	void bam_plp_set_mask(bam_plp_t iter, int mask);
-	void bam_plp_set_maxcnt(bam_plp_t iter, int maxcnt);
-	void bam_plp_reset(bam_plp_t iter);
-	void bam_plp_destroy(bam_plp_t iter);
+	// bam_plp_t bam_plp_init(bam_plp_auto_f read, void *data);
+	// int bam_plp_push(bam_plp_t iter, const bam1_t *b);
+	// const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
+	// const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
+	// void bam_plp_set_mask(bam_plp_t iter, int mask);
+	// void bam_plp_set_maxcnt(bam_plp_t iter, int maxcnt);
+	// void bam_plp_reset(bam_plp_t iter);
+	// void bam_plp_destroy(bam_plp_t iter);
 
-	struct __bam_mplp_t;
-	typedef struct __bam_mplp_t *bam_mplp_t;
+	// typedef struct incomplete *bam_mplp_t;
 
-	bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func,  void **data);
-	void bam_mplp_destroy(bam_mplp_t iter);
-	void bam_mplp_set_maxcnt(bam_mplp_t iter, int maxcnt);
-	int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_pileup1_t **plp);
+	// bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func,  void **data);
+	// void bam_mplp_destroy(bam_mplp_t iter);
+	// void bam_mplp_set_maxcnt(bam_mplp_t iter, int maxcnt);
+	// int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_pileup1_t **plp);
 
 	/*! @typedef
 	  @abstract    Type of function to be called by bam_plbuf_push().
@@ -597,8 +426,7 @@ extern "C" {
 	 * BAM indexing APIs *
 	 *********************/
 
-	struct __bam_index_t;
-	typedef struct __bam_index_t bam_index_t;
+	typedef hts_idx_t bam_index_t;
 
 	/*!
 	  @abstract   Build index for a BAM file.
@@ -606,20 +434,22 @@ extern "C" {
 	  @param  fn  name of the BAM file
 	  @return     always 0 currently
 	 */
-	int bam_index_build(const char *fn);
+	static inline int samtools_bam_index_build(const char *fn) { return bam_index_build(fn, 0); }
+	#undef  bam_index_build
+	#define bam_index_build samtools_bam_index_build
 
 	/*!
 	  @abstract   Load index from file "fn.bai".
 	  @param  fn  name of the BAM file (NOT the index file)
 	  @return     pointer to the index structure
 	 */
-	bam_index_t *bam_index_load(const char *fn);
+	// bam_index_t *bam_index_load(const char *fn);
 
 	/*!
 	  @abstract    Destroy an index structure.
 	  @param  idx  pointer to the index structure
 	 */
-	void bam_index_destroy(bam_index_t *idx);
+	static inline void bam_index_destroy(bam_index_t *idx) { hts_idx_destroy(idx); }
 
 	/*! @typedef
 	  @abstract      Type of function to be called by bam_fetch().
@@ -645,9 +475,9 @@ extern "C" {
 	 */
 	int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func);
 
-	bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end);
-	int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b);
-	void bam_iter_destroy(bam_iter_t iter);
+	static inline bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end) { return bam_itr_queryi(idx, tid, beg, end); }
+	static inline int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b) { return bam_itr_next(fp, iter, b); }
+	static inline void bam_iter_destroy(bam_iter_t iter) { bam_itr_destroy(iter); }
 
 	/*!
 	  @abstract       Parse a region in the format: "chr2:100,000-200,000".
@@ -677,17 +507,17 @@ extern "C" {
 	  @discussion  Use bam_aux2?() series to convert the returned data to
 	  the corresponding type.
 	*/
-	uint8_t *bam_aux_get(const bam1_t *b, const char tag[2]);
+	// uint8_t *bam_aux_get(const bam1_t *b, const char tag[2]);
 
-	int32_t bam_aux2i(const uint8_t *s);
-	float bam_aux2f(const uint8_t *s);
-	double bam_aux2d(const uint8_t *s);
-	char bam_aux2A(const uint8_t *s);
-	char *bam_aux2Z(const uint8_t *s);
+	// int32_t bam_aux2i(const uint8_t *s);
+	// float bam_aux2f(const uint8_t *s);
+	#define bam_aux2d(s) (bam_aux2f((s)))
+	// char bam_aux2A(const uint8_t *s);
+	// char *bam_aux2Z(const uint8_t *s);
 
-	int bam_aux_del(bam1_t *b, uint8_t *s);
-	void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
-	uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]); // an alias of bam_aux_get()
+	// int bam_aux_del(bam1_t *b, uint8_t *s);
+	// void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
+	static inline uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]) { return bam_aux_get(b, tag); } // an alias of bam_aux_get()
 
 
 	/*****************
@@ -702,7 +532,7 @@ extern "C" {
 	  @param  cigar  the corresponding CIGAR array (from bam1_t::cigar)
 	  @return        the rightmost coordinate, 0-based
 	*/
-	uint32_t bam_calend(const bam1_core_t *c, const uint32_t *cigar);
+	static inline uint32_t bam_calend(const bam1_core_t *c, const uint32_t *cigar) { return c->pos + (c->n_cigar? bam_cigar2rlen(c->n_cigar, cigar) : 1); }
 
 	/*!
 	  @abstract      Calculate the length of the query sequence from CIGAR.
@@ -710,7 +540,9 @@ extern "C" {
 	  @param  cigar  the corresponding CIGAR array (from bam1_t::cigar)
 	  @return        length of the query sequence
 	*/
-	int32_t bam_cigar2qlen(const bam1_core_t *c, const uint32_t *cigar);
+	static inline int32_t samtools_bam_cigar2qlen(const bam1_core_t *c, const uint32_t *cigar) { return bam_cigar2qlen(c->n_cigar, cigar); }
+	#undef  bam_cigar2qlen
+	#define bam_cigar2qlen samtools_bam_cigar2qlen
 
 #ifdef __cplusplus
 }
@@ -724,13 +556,7 @@ extern "C" {
  */
 static inline int bam_reg2bin(uint32_t beg, uint32_t end)
 {
-	--end;
-	if (beg>>14 == end>>14) return 4681 + (beg>>14);
-	if (beg>>17 == end>>17) return  585 + (beg>>17);
-	if (beg>>20 == end>>20) return   73 + (beg>>20);
-	if (beg>>23 == end>>23) return    9 + (beg>>23);
-	if (beg>>26 == end>>26) return    1 + (beg>>26);
-	return 0;
+	return hts_reg2bin(beg, end, 14, 5);
 }
 
 /*!
@@ -739,21 +565,7 @@ static inline int bam_reg2bin(uint32_t beg, uint32_t end)
   @param  bsrc  source alignment struct
   @return       pointer to the destination alignment struct
  */
-static inline bam1_t *bam_copy1(bam1_t *bdst, const bam1_t *bsrc)
-{
-	uint8_t *data = bdst->data;
-	int m_data = bdst->m_data;   // backup data and m_data
-	if (m_data < bsrc->data_len) { // double the capacity
-		m_data = bsrc->data_len; kroundup32(m_data);
-		data = (uint8_t*)realloc(data, m_data);
-	}
-	memcpy(data, bsrc->data, bsrc->data_len); // copy var-len data
-	*bdst = *bsrc; // copy the rest
-	// restore the backup
-	bdst->m_data = m_data;
-	bdst->data = data;
-	return bdst;
-}
+// bam1_t *bam_copy1(bam1_t *bdst, const bam1_t *bsrc)
 
 /*!
   @abstract     Duplicate an alignment
@@ -762,21 +574,7 @@ static inline bam1_t *bam_copy1(bam1_t *bdst, const bam1_t *bsrc)
  */
 static inline bam1_t *bam_dup1(const bam1_t *src)
 {
-	bam1_t *b;
-	b = bam_init1();
-	*b = *src;
-	b->m_data = b->data_len;
-	b->data = (uint8_t*)calloc(b->data_len, 1);
-	memcpy(b->data, src->data, b->data_len);
-	return b;
-}
-
-static inline int bam_aux_type2size(int x)
-{
-	if (x == 'C' || x == 'c' || x == 'A') return 1;
-	else if (x == 'S' || x == 's') return 2;
-	else if (x == 'I' || x == 'i' || x == 'f' || x == 'F') return 4;
-	else return 0;
+	return bam_copy1(bam_init1(), src);
 }
 
 #endif
