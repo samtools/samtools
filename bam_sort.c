@@ -91,12 +91,33 @@ static void trans_tbl_destroy(trans_tbl_t *tbl) {
 	kh_destroy(c2c,tbl->pg_trans);
 }
 
+static inline void append_header( char** out_text_in, int32_t* out_len_in, const char* append_text, const int32_t append_len)
+{
+	char* out_text = *out_text_in;
+	int32_t out_len = *out_len_in;
+
+	char* newtext = (char*) malloc(out_len+1+append_len);
+	memcpy((void*)newtext, out_text, out_len);
+	newtext[out_len] = '\n';
+	memcpy((void*)newtext+out_len+1,append_text,append_len);
+	out_len += 1+append_len;
+	free(out_text);
+	out_text = newtext;
+	
+	*out_text_in = out_text;
+	*out_len_in = out_len;
+}
+
 static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl)
 {
 	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
 	tbl->rg_trans = kh_init(c2c);
 	tbl->pg_trans = kh_init(c2c);
 	if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
+	
+	int32_t out_len = out->l_text;
+	while (out_len > 0 && out->text[out_len-1] == '\n') {--out_len; } // strip trailing \n's
+	char* out_text = strndup(out->text, out_len); // no guarantee that this is null terminated, must rely on length
 	
 	// Naive way of doing this but meh
 	int i, j;
@@ -131,14 +152,12 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			}
 			regfree(&sq_id);
 			
-			// Produce our output line
-			char* match_line = strndup(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
-			// and append it to out->text
-			char* newtext = NULL;
-			asprintf(&newtext, "%s\n%s",out->text,match_line);
-			free(out->text);
-			out->text = newtext;
-			free(match_line);
+			// Produce our output line and append it to out_text
+			char* append_text = strndup(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
+			int32_t append_len = strlen(append_text);
+			append_header(&out_text, &out_len, append_text, append_len);
+			
+			free(append_text);
 			free(matches);
 		} else {
 			tbl->tid_trans[i] = tid;
@@ -187,11 +206,9 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			transformed_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		}
 		
-		// and append it to out->text
-		char* newtext = NULL;
-		asprintf(&newtext, "%s\n%s",out->text,transformed_line);
-		free(out->text);
-		out->text = newtext;
+		// Produce our output line and append it to out_text
+		int32_t append_len = strlen(transformed_line);
+		append_header(&out_text, &out_len, transformed_line, append_len);
 		
 		free(transformed_line);
 		free(match_id); match_id = NULL;
@@ -273,11 +290,10 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo);
 			free(fmt);
 		} else { transformed_line = data; }
-		// and append it to out->text
-		char* newtext = NULL;
-		asprintf(&newtext, "%s\n%s",out->text,transformed_line);
-		free(out->text);
-		out->text = newtext;
+		// Produce our output line and append it to out_text
+		int32_t append_len = strlen(transformed_line);
+		append_header(&out_text, &out_len, transformed_line, append_len);
+
 		if (transformed_line != data) { free(transformed_line); transformed_line = NULL; }
 		free(data);
 		iter = kl_next(iter);
@@ -287,31 +303,49 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	kl_destroy(hdrln,pg_list);
 	
 	free(matches);
-	out->l_text = strlen(out->text);
+	
+	// Add trailing \n and write back to header
+	out->text = (char*) malloc(out_len+1);
+	memcpy((void*)out->text, out_text, out_len);
+	out->text[out_len] = '\n';
+	out->l_text = out_len + 1;
+	free(out_text);
 }
 
 static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 {
-	b->core.tid = tbl->tid_trans[b->core.tid];
-	b->core.mtid = tbl->tid_trans[b->core.mtid];
+	// Update target id if not unmapped tid
+	if ( b->core.tid > 0 ) { b->core.tid = tbl->tid_trans[b->core.tid]; }
+	if ( b->core.mtid > 0 ) { b->core.mtid = tbl->tid_trans[b->core.mtid]; }
+
+	// If we have a RG update it
 	uint8_t *rg = bam_aux_get(b, "RG");
 	if (rg) {
 		char* decoded_rg = bam_aux2Z(rg);
 		khiter_t k = kh_get(c2c, tbl->rg_trans, decoded_rg);
-		if (k == kh_end(tbl->rg_trans)) abort();
-		char* translate_rg = kh_value(tbl->rg_trans,k);
-		bam_aux_del(b, rg);
-		bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1, (uint8_t*)translate_rg);
+		if (k != kh_end(tbl->rg_trans)) {
+			char* translate_rg = kh_value(tbl->rg_trans,k);
+			bam_aux_del(b, rg);
+			bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1, (uint8_t*)translate_rg);
+		} else {
+			fprintf(stderr, "[bam_translate] RG tag \"%s\" on read \"%s\" encountered with no corresponding entry in header, tag lost\n",decoded_rg, bam1_qname(b));
+			bam_aux_del(b, rg);
+		}
 	}
 
+	// If we have a PG update it
 	uint8_t *pg = bam_aux_get(b, "PG");
 	if (pg) {
 		char* decoded_pg = bam_aux2Z(pg);
 		khiter_t k = kh_get(c2c, tbl->pg_trans, decoded_pg);
-		if (k == kh_end(tbl->pg_trans)) abort();
-		char* translate_pg = kh_value(tbl->pg_trans,k);
-		bam_aux_del(b, pg);
-		bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1, (uint8_t*)translate_pg);
+		if (k != kh_end(tbl->pg_trans)) {
+			char* translate_pg = kh_value(tbl->pg_trans,k);
+			bam_aux_del(b, pg);
+			bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1, (uint8_t*)translate_pg);
+		} else {
+			fprintf(stderr, "[bam_translate] PG tag \"%s\" on read \"%s\" encountered with no corresponding entry in header, tag lost\n",decoded_pg, bam1_qname(b));
+			bam_aux_del(b, pg);
+		}
 	}
 }
 
