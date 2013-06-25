@@ -392,7 +392,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	bam_iter_t *iter = NULL;
 	trans_tbl_t *translation_tbl = NULL;
 
-    // Is there a specified pre-prepared header to use for output?
+	// Is there a specified pre-prepared header to use for output?
 	if (headers) {
 		tamFile fpheaders = sam_open(headers);
 		if (fpheaders == 0) {
@@ -441,7 +441,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		trans_tbl_init(hout, hin, translation_tbl+i);
 	}
 
-    // If we're only merging a specified region move our iters to start at that point
+	// If we're only merging a specified region move our iters to start at that point
 	if (reg) {
 		int tid, beg, end;
 		if (bam_parse_region(hout, reg, &tid, &beg, &end) < 0) {
@@ -456,7 +456,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		}
 	}
 
-    // Load the first read from each file into the heap
+	// Load the first read from each file into the heap
 	for (i = 0; i < n; ++i) {
 		heap1_t *h = heap + i;
 		h->i = i;
@@ -472,7 +472,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			heap->b = NULL;
 		}
 	}
-    // Open output file and write header
+	// Open output file and write header
 	if (flag & MERGE_UNCOMP) level = 0;
 	else if (flag & MERGE_LEVEL1) level = 1;
 	strcpy(mode, "w");
@@ -485,7 +485,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	bam_header_destroy(hout);
 	if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
 
-    // Begin the actual merge
+	// Begin the actual merge
 	ks_heapmake(heap, n, heap);
 	while (heap->pos != HEAP_EMPTY) {
 		bam1_t *b = heap->b;
@@ -507,7 +507,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		ks_heapadjust(heap, 0, n, heap);
 	}
 
-    // Clean up and close
+	// Clean up and close
 	if (flag & MERGE_RG) {
 		for (i = 0; i != n; ++i) free(RG[i]);
 		free(RG); free(RG_len);
