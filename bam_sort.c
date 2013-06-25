@@ -65,22 +65,6 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 
 KSORT_INIT(heap, heap1_t, heap_lt)
 
-static void swap_header_targets(bam_header_t *h1, bam_header_t *h2)
-{
-	bam_header_t t;
-	t.n_targets = h1->n_targets, h1->n_targets = h2->n_targets, h2->n_targets = t.n_targets;
-	t.target_name = h1->target_name, h1->target_name = h2->target_name, h2->target_name = t.target_name;
-	t.target_len = h1->target_len, h1->target_len = h2->target_len, h2->target_len = t.target_len;
-}
-
-static void swap_header_text(bam_header_t *h1, bam_header_t *h2)
-{
-	int tempi;
-	char *temps;
-	tempi = h1->l_text, h1->l_text = h2->l_text, h2->l_text = tempi;
-	temps = h1->text, h1->text = h2->text, h2->text = temps;
-}
-
 typedef struct trans_tbl {
 	int* tid_trans;
 	kh_c2c_t* rg_trans;
@@ -195,7 +179,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		char* transformed_line = NULL;
 		if (match_id != transformed_id) {
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%ds%%s%%.%ds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&fmt, "%%.%jds%%s%%.%jds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
 			asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo);
 			free(fmt);
 			free(transformed_id);
@@ -248,7 +232,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		char* transformed_line = NULL;
 		if (match_id != transformed_id) {
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%ds%%s%%.%ds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&fmt, "%%.%jds%%s%%.%jds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
 			asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo);
 			free(fmt);
 			free(transformed_id);
@@ -285,7 +269,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			char* transformed_id = kh_value(tbl->pg_trans,k);
 			// Replace
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%ds%%s%%.%ds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&fmt, "%%.%jds%%s%%.%jds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
 			asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo);
 			free(fmt);
 		} else { transformed_line = data; }
