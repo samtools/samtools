@@ -115,6 +115,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	tbl->pg_trans = kh_init(c2c);
 	if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
 	
+	// TODO: rewrite this using kstring
 	int32_t out_len = out->l_text;
 	while (out_len > 0 && out->text[out_len-1] == '\n') {--out_len; } // strip trailing \n's
 	char* out_text = strndup(out->text, out_len); // no guarantee that this is null terminated, must rely on length
@@ -198,7 +199,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		char* transformed_line = NULL;
 		if (match_id != transformed_id) {
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%jds%%s%%.%jds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo));
 			asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo);
 			free(fmt);
 			free(transformed_id);
@@ -249,7 +250,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		char* transformed_line = NULL;
 		if (match_id != transformed_id) {
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%jds%%s%%.%jds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo));
 			asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo);
 			free(fmt);
 			free(transformed_id);
@@ -265,7 +266,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		text += matches[0].rm_eo;
 	}
 	regfree(&pg_id);
-	// need to translate PP's on the fly (in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
+	// need to translate PP's on the fly in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
 	// for each line {
 	// with ID replaced with tranformed_id and PP's transformed using the translation table
 	// }
@@ -286,7 +287,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			char* transformed_id = kh_value(tbl->pg_trans,k);
 			// Replace
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%jds%%s%%.%jds",matches[1].rm_so-matches[0].rm_so,matches[0].rm_eo-matches[1].rm_eo);
+			asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo));
 			asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo);
 			free(fmt);
 		} else { transformed_line = data; }
