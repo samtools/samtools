@@ -1,3 +1,19 @@
+// Copyright (c) 2009-2013 Genome Research Limited.
+//
+// This file is part of samtools.
+//
+// samtools is free software: you can redistribute it and/or modify it under the
+// terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version.
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY
+// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+// PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// this program. If not, see L<http://www.gnu.org/licenses/>.
+
 #include <assert.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -6,6 +22,10 @@
 #include "htslib/kstring.h"
 #include "bam.h"
 
+/*
+ * This function calculates CT tag for two bams, it assumes they are from the same template and
+ * writes the tag to the first read in position terms.
+ */
 static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 {
 	bam1_t *swap;
@@ -33,27 +53,21 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 }
 
 /*
- * What this program is supposed to do:
+ * What This Program is Supposed To Do:
  * Fill in mate coordinates, ISIZE and mate related flags from a name-sorted alignment.
- * Observations:
- * This currently looks like it won't work with:
- * -Unmapped reads and their mate pair
- * -BAMs containing reads with more than 2 segments
- */
-
-/*
- * How we handle input
  *
- * secondary reads:
+ * How We Handle Input
+ *
+ * Secondary Reads:
  * -write to output unchanged
- * all reads:
+ * All Reads:
  * -if pos == 0, tid == -1 set UNMAPPED flag
- * single reads:
+ * single Reads:
  * -if pos == 0, tid == -1, or UNMAPPED then set UNMAPPED, pos = 0, tid = -1
  * -clear flags (PAIRED, MREVERSE, PROPER_PAIR)
  * -set mpos = 0, mtid = -1 and isize = 0
  * -write to output
- * paired reads:
+ * Paired Reads:
  * -if read is unmapped and mate is not, set pos and tid to equal that of mate
  * -sync mate flags (MREVERSE, MUNMAPPED), mpos, mtid
  * -recalculate ISIZE if possible, otherwise set it to 0
