@@ -39,9 +39,19 @@ void dump_read(bam1_t* b) {
 	}
 
 	if (b->l_aux) {
-		int i;
-		for (i = 0; i < b->l_aux; ++i) {
-			bam1_aux(b);
+		int i = 0;
+		uint8_t* aux = bam1_aux(b);
+
+		while (i < b->l_aux) {
+			printf("%.2s:%c:",aux+i,*(aux+i+2));
+			i += 2;
+			switch (*(aux+i)) {
+				case 'Z':
+					while (*(aux+1+i) != '\0') { putc(*(aux+1+i), stdout); ++i; }
+					break;
+			}
+			putc('\n',stdout);
+			++i;++i;
 		}
 	}
 	printf("\n");
@@ -93,26 +103,316 @@ void setup_test_1(bam1_t** b_in, trans_tbl_t* tbl) {
 	*b_in = b;
 }
 
+void setup_test_2(bam1_t** b_in, trans_tbl_t* tbl) {
+	bam1_t* b;
+	
+	b = bam_init1();
+	trans_tbl_test_init(tbl, 4);
+	
+	tbl->tid_trans[0] = 5;
+	tbl->tid_trans[1] = 6;
+	tbl->tid_trans[2] = 7;
+	tbl->tid_trans[3] = 8;
+	int in_there = 0;
+	khiter_t iter = kh_put(c2c, tbl->rg_trans, strdup("hello"), &in_there);
+	kh_value(tbl->rg_trans, iter) = strdup("goodbye");
+	
+	b->core.tid = 0;
+	b->core.pos = 1334;
+	b->core.bin = 0;
+	b->core.qual = 10;
+	b->core.l_qname = 10;
+	b->core.flag = 0;
+	b->core.n_cigar = 1;
+	b->core.l_qseq = 10;
+	b->core.mtid = -1;
+	b->core.mpos = 0;
+	b->core.isize = -1;
+	size_t data_len = 10 + 4 + 5 + 10 + 9;
+	b->data = (uint8_t*)malloc(data_len);
+	memcpy(b->data,
+		   "123456789\0" // q_name
+		   "\x00\x00\x00\xA0" // cigar
+		   "\x00\x00\x00\x00\x00" // qseq
+		   "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" // qual
+		   "RGZhello\0" // aux
+		   , data_len
+		   );
+	b->l_aux = 9;
+	b->m_data = b->data_len = data_len;
+	
+	*b_in = b;
+}
+
+void setup_test_3(bam1_t** b_in, trans_tbl_t* tbl) {
+	bam1_t* b;
+	
+	b = bam_init1();
+	trans_tbl_test_init(tbl, 4);
+	
+	tbl->tid_trans[0] = 5;
+	tbl->tid_trans[1] = 6;
+	tbl->tid_trans[2] = 7;
+	tbl->tid_trans[3] = 8;
+	int in_there = 0;
+	khiter_t iter = kh_put(c2c, tbl->pg_trans, strdup("hello"), &in_there);
+	kh_value(tbl->pg_trans,iter) = strdup("goodbye");
+
+	
+	b->core.tid = 0;
+	b->core.pos = 1334;
+	b->core.bin = 0;
+	b->core.qual = 10;
+	b->core.l_qname = 10;
+	b->core.flag = 0;
+	b->core.n_cigar = 1;
+	b->core.l_qseq = 10;
+	b->core.mtid = -1;
+	b->core.mpos = 0;
+	b->core.isize = -1;
+	size_t data_len = 10 + 4 + 5 + 10 + 9;
+	b->data = (uint8_t*)malloc(data_len);
+	memcpy(b->data,
+		   "123456789\0" // q_name
+		   "\x00\x00\x00\xA0" // cigar
+		   "\x00\x00\x00\x00\x00" // qseq
+		   "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" // qual
+		   "PGZhello\0" // aux
+		   , data_len
+		   );
+	b->l_aux = 9;
+	b->m_data = b->data_len = data_len;
+	
+	*b_in = b;
+}
+
+void setup_test_4(bam1_t** b_in, trans_tbl_t* tbl) {
+	bam1_t* b;
+	
+	b = bam_init1();
+	trans_tbl_test_init(tbl, 4);
+	
+	tbl->tid_trans[0] = 5;
+	tbl->tid_trans[1] = 6;
+	tbl->tid_trans[2] = 7;
+	tbl->tid_trans[3] = 8;
+	
+	b->core.tid = 0;
+	b->core.pos = 1334;
+	b->core.bin = 0;
+	b->core.qual = 10;
+	b->core.l_qname = 10;
+	b->core.flag = 0;
+	b->core.n_cigar = 1;
+	b->core.l_qseq = 10;
+	b->core.mtid = -1;
+	b->core.mpos = 0;
+	b->core.isize = -1;
+	size_t data_len = 10 + 4 + 5 + 10 + 9;
+	b->data = (uint8_t*)malloc(data_len);
+	memcpy(b->data,
+		   "123456789\0" // q_name
+		   "\x00\x00\x00\xA0" // cigar
+		   "\x00\x00\x00\x00\x00" // qseq
+		   "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" // qual
+		   "RGZhello\0" // aux
+		   , data_len
+		   );
+	b->l_aux = 9;
+	b->m_data = b->data_len = data_len;
+	
+	*b_in = b;
+}
+
+void setup_test_5(bam1_t** b_in, trans_tbl_t* tbl) {
+	bam1_t* b;
+	
+	b = bam_init1();
+	trans_tbl_test_init(tbl, 4);
+	
+	tbl->tid_trans[0] = 5;
+	tbl->tid_trans[1] = 6;
+	tbl->tid_trans[2] = 7;
+	tbl->tid_trans[3] = 8;
+	
+	
+	b->core.tid = 0;
+	b->core.pos = 1334;
+	b->core.bin = 0;
+	b->core.qual = 10;
+	b->core.l_qname = 10;
+	b->core.flag = 0;
+	b->core.n_cigar = 1;
+	b->core.l_qseq = 10;
+	b->core.mtid = -1;
+	b->core.mpos = 0;
+	b->core.isize = -1;
+	size_t data_len = 10 + 4 + 5 + 10 + 9;
+	b->data = (uint8_t*)malloc(data_len);
+	memcpy(b->data,
+		   "123456789\0" // q_name
+		   "\x00\x00\x00\xA0" // cigar
+		   "\x00\x00\x00\x00\x00" // qseq
+		   "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" // qual
+		   "PGZhello\0" // aux
+		   , data_len
+		   );
+	b->l_aux = 9;
+	b->m_data = b->data_len = data_len;
+	
+	*b_in = b;
+}
+
+void setup_test_6(bam1_t** b_in, trans_tbl_t* tbl) {
+	bam1_t* b;
+	
+	b = bam_init1();
+	trans_tbl_test_init(tbl, 4);
+	
+	tbl->tid_trans[0] = 5;
+	tbl->tid_trans[1] = 6;
+	tbl->tid_trans[2] = 7;
+	tbl->tid_trans[3] = 8;
+	int in_there = 0;
+	khiter_t iter_rg = kh_put(c2c, tbl->rg_trans, strdup("hello"), &in_there);
+	kh_value(tbl->rg_trans, iter_rg) = strdup("goodbye");
+	khiter_t iter_pg = kh_put(c2c, tbl->pg_trans, strdup("quail"), &in_there);
+	kh_value(tbl->pg_trans, iter_pg) = strdup("bird");
+
+	
+	b->core.tid = 0;
+	b->core.pos = 1334;
+	b->core.bin = 0;
+	b->core.qual = 10;
+	b->core.l_qname = 10;
+	b->core.flag = 0;
+	b->core.n_cigar = 1;
+	b->core.l_qseq = 10;
+	b->core.mtid = -1;
+	b->core.mpos = 0;
+	b->core.isize = -1;
+	size_t data_len = 10 + 4 + 5 + 10 + 18;
+	b->data = (uint8_t*)malloc(data_len);
+	memcpy(b->data,
+		   "123456789\0" // q_name
+		   "\x00\x00\x00\xA0" // cigar
+		   "\x00\x00\x00\x00\x00" // qseq
+		   "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" // qual
+		   "RGZhello\0PGZquail\0" // aux
+		   , data_len
+		   );
+	b->l_aux = 18;
+	b->m_data = b->data_len = data_len;
+	
+	*b_in = b;
+}
+
+
 int main(int argc, char**argv)
 {
 	bam1_t* b;
 
-	printf("BEGIN test 1\n");
+	printf("BEGIN test 1\n");  // TID test
 	// setup
-	trans_tbl_t tbl;
-	setup_test_1(&b,&tbl);
+	trans_tbl_t tbl1;
+	setup_test_1(&b,&tbl1);
 	// test
 	printf("b\n");
 	dump_read(b);
 	printf("RUN test 1\n");
-	bam_translate(b, &tbl);
+	bam_translate(b, &tbl1);
 	printf("END RUN test 1\n");
 	printf("b\n");
 	dump_read(b);
 	// teardown
 	bam_destroy1(b);
-	trans_tbl_destroy(&tbl);
+	trans_tbl_destroy(&tbl1);
 	printf("END test 1\n");
+
+	printf("BEGIN test 2\n");  // RG test
+	// setup
+	trans_tbl_t tbl2;
+	setup_test_2(&b,&tbl2);
+	// test
+	printf("b\n");
+	dump_read(b);
+	printf("RUN test 2\n");
+	bam_translate(b, &tbl2);
+	printf("END RUN test 2\n");
+	printf("b\n");
+	dump_read(b);
+	// teardown
+	bam_destroy1(b);
+	trans_tbl_destroy(&tbl2);
+	printf("END test 2\n");
+	
+	printf("BEGIN test 3\n");  // PG test
+	// setup
+	trans_tbl_t tbl3;
+	setup_test_3(&b,&tbl3);
+	// test
+	printf("b\n");
+	dump_read(b);
+	printf("RUN test 3\n");
+	bam_translate(b, &tbl3);
+	printf("END RUN test 3\n");
+	printf("b\n");
+	dump_read(b);
+	// teardown
+	bam_destroy1(b);
+	trans_tbl_destroy(&tbl3);
+	printf("END test 3\n");
+
+	printf("BEGIN test 4\n");  // RG test non existant
+	// setup
+	trans_tbl_t tbl4;
+	setup_test_4(&b,&tbl4);
+	// test
+	printf("b\n");
+	dump_read(b);
+	printf("RUN test 4\n");
+	bam_translate(b, &tbl4);
+	printf("END RUN test 4\n");
+	printf("b\n");
+	dump_read(b);
+	// teardown
+	bam_destroy1(b);
+	trans_tbl_destroy(&tbl4);
+	printf("END test 4\n");
+	
+	printf("BEGIN test 5\n");  // PG test non existant
+	// setup
+	trans_tbl_t tbl5;
+	setup_test_5(&b,&tbl5);
+	// test
+	printf("b\n");
+	dump_read(b);
+	printf("RUN test 5\n");
+	bam_translate(b, &tbl5);
+	printf("END RUN test 5\n");
+	printf("b\n");
+	dump_read(b);
+	// teardown
+	bam_destroy1(b);
+	trans_tbl_destroy(&tbl5);
+	printf("END test 5\n");
+	
+	printf("BEGIN test 6\n");  // RG and PG test
+	// setup
+	trans_tbl_t tbl6;
+	setup_test_6(&b,&tbl6);
+	// test
+	printf("b\n");
+	dump_read(b);
+	printf("RUN test 6\n");
+	bam_translate(b, &tbl6);
+	printf("END RUN test 6\n");
+	printf("b\n");
+	dump_read(b);
+	// teardown
+	bam_destroy1(b);
+	trans_tbl_destroy(&tbl6);
+	printf("END test 6\n");
 
 	return 0;
 }
