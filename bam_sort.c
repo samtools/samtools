@@ -316,8 +316,8 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 {
 	// Update target id if not unmapped tid
-	if ( b->core.tid > 0 ) { b->core.tid = tbl->tid_trans[b->core.tid]; }
-	if ( b->core.mtid > 0 ) { b->core.mtid = tbl->tid_trans[b->core.mtid]; }
+	if ( b->core.tid >= 0 ) { b->core.tid = tbl->tid_trans[b->core.tid]; }
+	if ( b->core.mtid >= 0 ) { b->core.mtid = tbl->tid_trans[b->core.mtid]; }
 
 	// If we have a RG update it
 	uint8_t *rg = bam_aux_get(b, "RG");
