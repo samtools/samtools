@@ -192,7 +192,7 @@ int main(int argc, char**argv)
 	printf("out\n");
 	dump_header(out);
 	printf("RUN test 1\n");
-	trans_tbl_init(out, translate, &tbl);
+	trans_tbl_init(out, translate, &tbl, false, false);
 	printf("END RUN test 1\n");
 	printf("translate\n");
 	dump_header(translate);
@@ -214,7 +214,7 @@ int main(int argc, char**argv)
 	printf("out\n");
 	dump_header(out);
 	printf("RUN test 2\n");
-	trans_tbl_init(out, translate, &tbl_2);
+	trans_tbl_init(out, translate, &tbl_2, false, false);
 	printf("END RUN test 2\n");
 	printf("translate\n");
 	dump_header(translate);
@@ -236,7 +236,7 @@ int main(int argc, char**argv)
 	printf("out\n");
 	dump_header(out);
 	printf("RUN test 3\n");
-	trans_tbl_init(out, translate, &tbl_3);
+	trans_tbl_init(out, translate, &tbl_3, false, false);
 	printf("END RUN test 3\n");
 	printf("translate\n");
 	dump_header(translate);
@@ -258,7 +258,7 @@ int main(int argc, char**argv)
 	printf("out\n");
 	dump_header(out);
 	printf("RUN test 4\n");
-	trans_tbl_init(out, translate, &tbl_4);
+	trans_tbl_init(out, translate, &tbl_4, false, false);
 	printf("END RUN test 4\n");
 	printf("translate\n");
 	dump_header(translate);
@@ -280,7 +280,7 @@ int main(int argc, char**argv)
 	printf("out\n");
 	dump_header(out);
 	printf("RUN test 5\n");
-	trans_tbl_init(out, translate, &tbl_5);
+	trans_tbl_init(out, translate, &tbl_5, false, false);
 	printf("END RUN test 5\n");
 	printf("translate\n");
 	dump_header(translate);

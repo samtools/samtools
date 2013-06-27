@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <ctype.h>
 #include <assert.h>
@@ -99,7 +100,7 @@ static inline void append_header( char** out_text_in, int32_t* out_len_in, const
 	char* newtext = (char*) malloc(out_len+1+append_len);
 	memcpy((void*)newtext, out_text, out_len);
 	newtext[out_len] = '\n';
-	memcpy((void*)newtext+out_len+1,append_text,append_len);
+	memcpy((void*)(newtext+out_len+1),append_text,append_len);
 	out_len += 1+append_len;
 	free(out_text);
 	out_text = newtext;
@@ -108,7 +109,7 @@ static inline void append_header( char** out_text_in, int32_t* out_len_in, const
 	*out_len_in = out_len;
 }
 
-static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl)
+static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
 {
 	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
 	tbl->rg_trans = kh_init(c2c);
@@ -140,7 +141,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			// grep line with regex '^@SQ.*\tID:%s(\t.*$|$)', translate->target_name[i]
 			// from translate->text
 			regex_t sq_id;
-			regmatch_t* matches = calloc(2, sizeof(regmatch_t));
+			regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
 			if (matches == NULL) { perror("out of memory"); exit(-1); }
 			char* seq_regex = NULL;
 			asprintf(&seq_regex, "^@SQ.*\tID:%s(\t.*$|$)",translate->target_name[i]);
@@ -167,7 +168,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	
 	// grep @RG id's
 	regex_t rg_id;
-	regmatch_t* matches = calloc(2, sizeof(regmatch_t));
+	regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
 	if (matches == NULL) { perror("out of memory"); exit(-1); }
 	regcomp(&rg_id, "^@RG.*\tID:([A-Za-z0-9]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 	char* text = translate->text;
@@ -182,7 +183,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		regcomp(&rg_id_search, rg_regex, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
 		free(rg_regex);
 		char* transformed_id = NULL;
-		if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0) {
+		if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0  || merge_rg) {
 			// Not in there so can add it as 1-1 mapping
 			transformed_id = match_id;
 		} else {
@@ -207,13 +208,15 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			transformed_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		}
 		
-		// Produce our output line and append it to out_text
-		int32_t append_len = strlen(transformed_line);
-		append_header(&out_text, &out_len, transformed_line, append_len);
-		
+		if (!(transformed_id == match_id && merge_rg)) {
+			// Produce our output line and append it to out_text
+			int32_t append_len = strlen(transformed_line);
+			append_header(&out_text, &out_len, transformed_line, append_len);
+		}
+
 		free(transformed_line);
 		free(match_id); match_id = NULL;
-		text += matches[0].rm_eo;
+		text += matches[0].rm_eo; // next!
 	}
 	regfree(&rg_id);
 	
@@ -233,7 +236,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		regcomp(&pg_id_search, pg_regex, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
 		free(pg_regex);
 		char* transformed_id = NULL;
-		if (regexec(&pg_id_search, out->text, 0, NULL, 0) != 0) {
+		if (regexec(&pg_id_search, out->text, 0, NULL, 0) != 0 || merge_pg) {
 			// Not in there so can add it as 1-1 mapping
 			transformed_id = match_id;
 		} else {
@@ -258,12 +261,14 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			transformed_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		}
 
-		// append line to linked list for PP processing
-		char** ln = kl_pushp(hdrln, pg_list);
-		*ln = strdup(transformed_line);  // Give linked list it's own copy
+		if (!(transformed_id == match_id && merge_rg)) {
+			// append line to linked list for PP processing
+			char** ln = kl_pushp(hdrln, pg_list);
+			*ln = strdup(transformed_line);  // Give linked list it's own copy
+		}
 		free(transformed_line);
 		free(match_id);
-		text += matches[0].rm_eo;
+		text += matches[0].rm_eo; // next!
 	}
 	regfree(&pg_id);
 	// need to translate PP's on the fly in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
@@ -420,7 +425,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			if (l > 4 && strcmp(s + l - 4, ".bam") == 0) l -= 4;
 			for (j = l - 1; j >= 0; --j) if (s[j] == '/') break;
 			++j; l -= j;
-			RG[i] = calloc(l + 1, 1);
+			RG[i] = (char*)calloc(l + 1, 1);
 			RG_len[i] = l;
 			strncpy(RG[i], s + j, l);
 		}
@@ -439,7 +444,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		}
 		hin = bam_header_read(fp[i]);
 		if (hout == NULL) hout = hin;
-		trans_tbl_init(hout, hin, translation_tbl+i);
+		trans_tbl_init(hout, hin, translation_tbl+i, false, false);
 	}
 
 	// If we're only merging a specified region move our iters to start at that point
@@ -604,12 +609,12 @@ static int change_SO(bam_header_t *h, const char *so)
 	}
 	if (beg == 0) { // no @HD
 		h->l_text += strlen(so) + 15;
-		newtext = malloc(h->l_text + 1);
+		newtext = (char*)malloc(h->l_text + 1);
 		sprintf(newtext, "@HD\tVN:1.3\tSO:%s\n", so);
 		strcat(newtext, h->text);
 	} else { // has @HD but different or no SO
 		h->l_text = (beg - h->text) + (4 + strlen(so)) + (h->text + h->l_text - end);
-		newtext = malloc(h->l_text + 1);
+		newtext = (char*)malloc(h->l_text + 1);
 		strncpy(newtext, h->text, beg - h->text);
 		sprintf(newtext + (beg - h->text), "\tSO:%s", so);
 		strcat(newtext, end);
@@ -675,8 +680,8 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 	if (k < n_threads * 64) n_threads = 1; // use a single thread if we only sort a small batch of records
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-	w = calloc(n_threads, sizeof(worker_t));
-	tid = calloc(n_threads, sizeof(pthread_t));
+	w = (worker_t*)calloc(n_threads, sizeof(worker_t));
+	tid = (pthread_t*)calloc(n_threads, sizeof(pthread_t));
 	b = buf; rest = k;
 	for (i = 0; i < n_threads; ++i) {
 		w[i].buf_len = rest / (n_threads - i);
@@ -719,7 +724,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 	g_is_by_qname = is_by_qname;
 	max_k = k = 0; mem = 0;
 	max_mem = _max_mem * n_threads;
-	buf = 0;
+	buf = NULL;
 	fp = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
 	if (fp == 0) {
 		fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
@@ -733,8 +738,8 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 		if (k == max_k) {
 			size_t old_max = max_k;
 			max_k = max_k? max_k<<1 : 0x10000;
-			buf = realloc(buf, max_k * sizeof(bam1_t*));
-			memset(buf + old_max, 0, sizeof(void*) * (max_k - old_max));
+			buf = (bam1_t**)realloc(buf, max_k * sizeof(bam1_t*));
+			memset(buf + old_max, 0, sizeof(bam1_t*) * (max_k - old_max));
 		}
 		if (buf[k] == 0) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));
 		b = buf[k];
@@ -742,7 +747,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 		if (b->data_len < b->m_data>>2) { // shrink
 			b->m_data = b->data_len;
 			kroundup32(b->m_data);
-			b->data = realloc(b->data, b->m_data);
+			b->data = (uint8_t*)realloc(b->data, b->m_data);
 		}
 		mem += sizeof(bam1_t) + b->m_data + sizeof(void*) + sizeof(void*); // two sizeof(void*) for the data allocated to pointer arrays
 		++k;
