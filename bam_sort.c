@@ -314,6 +314,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	free(matches);
 	
 	// Add trailing \n and write back to header
+	free(out->text);
 	out->text = (char*) malloc(out_len+1);
 	memcpy((void*)out->text, out_text, out_len);
 	out->text[out_len] = '\n';
@@ -362,7 +363,7 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 #define MERGE_RG          1 // Attach RG tag based on filename
 #define MERGE_UNCOMP      2 // Generate uncompressed BAM
 #define MERGE_LEVEL1      4 // Compress the BAM at level 1 (fast) mode
-#define MERGE_FORCE       8
+#define MERGE_FORCE       8 // Overwrite output BAM if it exists
 #define MERGE_COMBINE_RG 16 // Combine RG tags frather than redefining them
 #define MERGE_COMBINE_PG 32 // Combine PG tags frather than redefining them
 
