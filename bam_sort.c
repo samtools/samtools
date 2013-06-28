@@ -111,6 +111,9 @@ static inline void append_header( char** out_text_in, int32_t* out_len_in, const
 
 static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
 {
+	// No need to translate header into itself
+	if (out == translate) { merge_rg = merge_pg = true; }
+	
 	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
 	tbl->rg_trans = kh_init(c2c);
 	tbl->pg_trans = kh_init(c2c);
