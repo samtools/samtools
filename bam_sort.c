@@ -370,15 +370,22 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 /*
  * How merging is handled
  *
- * if a hheader is defined use that for output header
- * otherwise take the first header from the first file
+ * If a hheader is defined use we will use that as our output header
+ * otherwise we use the first header from the first input file.
  * 
  * Now go through each file and create a translation table for that file for:
  * -RG
  * -tid
  * -PG tags
  *
- * Then when reading a record from a bam translate the read before stashing it in the hash.
+ * Then whenever we read a record from a bam we translate that read before
+ * stashing it in the hash.
+ *
+ * In the actual merge, a read is read from each input file, translated and
+ * stashed in the hash. This assumes that all input files are sorted in the
+ * same way.  Next we just extract the next position ordered read from the
+ * hash, and replace it if there are still reads left in it's source input
+ * file. Finally we write our chosen read it to the output file.
  */
 
 /*!
