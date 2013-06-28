@@ -356,10 +356,12 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 }
 
 
-#define MERGE_RG     1 // Attach RG tag based on filename
-#define MERGE_UNCOMP 2 // Generate uncompressed BAM
-#define MERGE_LEVEL1 4 // Compress the BAM at level 1 (fast) mode
-#define MERGE_FORCE  8
+#define MERGE_RG          1 // Attach RG tag based on filename
+#define MERGE_UNCOMP      2 // Generate uncompressed BAM
+#define MERGE_LEVEL1      4 // Compress the BAM at level 1 (fast) mode
+#define MERGE_FORCE       8
+#define MERGE_COMBINE_RG 16 // Combine RG tags frather than redefining them
+#define MERGE_COMBINE_PG 32 // Combine PG tags frather than redefining them
 
 /*
  * How merging is handled
@@ -444,7 +446,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		}
 		hin = bam_header_read(fp[i]);
 		if (hout == NULL) hout = hin;
-		trans_tbl_init(hout, hin, translation_tbl+i, false, false);
+		trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
 	}
 
 	// If we're only merging a specified region move our iters to start at that point
@@ -538,7 +540,7 @@ int bam_merge(int argc, char *argv[])
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
 	char *fn_headers = NULL, *reg = 0;
 
-	while ((c = getopt(argc, argv, "h:nru1R:f@:l:")) >= 0) {
+	while ((c = getopt(argc, argv, "h:nru1R:f@:l:cp")) >= 0) {
 		switch (c) {
 		case 'r': flag |= MERGE_RG; break;
 		case 'f': flag |= MERGE_FORCE; break;
@@ -549,6 +551,8 @@ int bam_merge(int argc, char *argv[])
 		case 'R': reg = strdup(optarg); break;
 		case 'l': level = atoi(optarg); break;
 		case '@': n_threads = atoi(optarg); break;
+		case 'c': flag |= MERGE_COMBINE_RG; break;
+		case 'p': flag |= MERGE_COMBINE_PG; break;
 		}
 	}
 	if (optind + 2 >= argc) {
@@ -562,10 +566,9 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "         -l INT   compression level, from 0 to 9 [-1]\n");
 		fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
 		fprintf(stderr, "         -R STR   merge file in the specified region STR [all]\n");
-		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n\n");
-		fprintf(stderr, "Note: Samtools' merge does not reconstruct the @RG dictionary in the header. Users\n");
-		fprintf(stderr, "      must provide the correct header with -h, or uses Picard which properly maintains\n");
-		fprintf(stderr, "      the header dictionary in merging.\n\n");
+		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
+		fprintf(stderr, "         -c       combine RG tags with colliding IDs rather than amending them\n");
+		fprintf(stderr, "         -p       combine PG tags with colliding IDs rather than amending them\n\n");
 		return 1;
 	}
 	if (!(flag & MERGE_FORCE) && strcmp(argv[optind], "-")) {
