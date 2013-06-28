@@ -7,7 +7,10 @@ void dump_header(bam_header_t* hdr) {
 		printf("->target_name[%d]:(%s)\n",i,hdr->target_name[i]);
 		printf("->target_len[%d]:(%d)\n",i,hdr->target_len[i]);
 	}
-	printf("->text:(%s)\n", hdr->text);
+	
+	printf("->text:(");
+	fwrite((void*)hdr->text, (size_t) hdr->l_text, 1, stdout);
+	printf(")\n");
 }
 
 void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
@@ -15,20 +18,22 @@ void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* translate;
 
 	translate = bam_header_init();
-	translate->text = strdup(
-							 "@HD\tVN:1.4\tSO:unknown\n"
-							 "@SQ\tID:fish\tLN:133\t"
-							 );
+	const char* text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:fish\tLN:133\t";
+	translate->text = strdup(text);
+	translate->l_text = strlen(text);
 	translate->n_targets = 1;
 	translate->target_name = (char**)calloc(1, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
 	translate->target_name[0] = strdup("fish");
 	translate->target_len[0] = 133;
 	out = bam_header_init();
-	out->text = strdup(
-					   "@HD\tVN:1.4\tSO:unknown\n"
-					   "@SQ\tID:fish\tLN:133\tSP:frog"
-					   );
+	const char* out_text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:fish\tLN:133\tSP:frog";
+	out->text = strdup(out_text);
+	out->l_text = strlen(out_text);
 	out->n_targets = 1;
 	out->target_name = (char**)calloc(1, sizeof(char*));
 	out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
@@ -44,11 +49,12 @@ void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* translate;
 
 	translate = bam_header_init();
-	translate->text = strdup(
-							 "@HD\tVN:1.4\tSO:unknown\n"
-							 "@SQ\tID:donkey\tLN:133\n"
-							 "@SQ\tID:fish\tLN:133"
-							 );
+	const char* text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:donkey\tLN:133\n"
+		"@SQ\tID:fish\tLN:133";
+	translate->text = strdup(text);
+	translate->l_text = strlen(text);
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
@@ -57,10 +63,11 @@ void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_name[1] = strdup("fish");
 	translate->target_len[1] = 133;
 	out = bam_header_init();
-	out->text = strdup(
-					   "@HD\tVN:1.4\tSO:unknown\n"
-					   "@SQ\tID:fish\tLN:133\tSP:frog"
-					   );
+	const char* out_text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:fish\tLN:133\tSP:frog";
+	out->text = strdup(out_text);
+	out->l_text = strlen(out_text);
 	out->n_targets = 1;
 	out->target_name = (char**)calloc(1, sizeof(char*));
 	out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
@@ -76,12 +83,13 @@ void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* translate;
 	
 	translate = bam_header_init();
-	translate->text = strdup(
-							 "@HD\tVN:1.4\tSO:unknown\n"
-							 "@SQ\tID:donkey\tLN:133\n"
-							 "@SQ\tID:fish\tLN:133\n"
-							 "@RG\tID:fish\tPU:trans\n"
-							 );
+	const char* text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:donkey\tLN:133\n"
+		"@SQ\tID:fish\tLN:133\n"
+		"@RG\tID:fish\tPU:trans\n";
+	translate->text = strdup(text);
+	translate->l_text = strlen(text);
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
@@ -90,10 +98,11 @@ void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_name[1] = strdup("fish");
 	translate->target_len[1] = 133;
 	out = bam_header_init();
-	out->text = strdup(
-					   "@HD\tVN:1.4\tSO:unknown\n"
-					   "@SQ\tID:fish\tLN:133\tSP:frog"
-					   );
+	const char* out_text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:fish\tLN:133\tSP:frog";
+	out->text = strdup(out_text);
+	out->l_text = strlen(out_text);
 	out->n_targets = 1;
 	out->target_name = (char**)calloc(1, sizeof(char*));
 	out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
@@ -109,12 +118,13 @@ void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* translate;
 	
 	translate = bam_header_init();
-	translate->text = strdup(
-							 "@HD\tVN:1.4\tSO:unknown\n"
-							 "@SQ\tID:donkey\tLN:133\n"
-							 "@SQ\tID:fish\tLN:133\n"
-							 "@RG\tID:fish\tPU:trans\n"
-							 );
+	const char* text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:donkey\tLN:133\n"
+		"@SQ\tID:fish\tLN:133\n"
+		"@RG\tID:fish\tPU:trans\n";
+	translate->text = strdup(text);
+	translate->l_text = strlen(text);
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
@@ -123,11 +133,12 @@ void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_name[1] = strdup("fish");
 	translate->target_len[1] = 133;
 	out = bam_header_init();
-	out->text = strdup(
-					   "@HD\tVN:1.4\tSO:unknown\n"
-					   "@SQ\tID:fish\tLN:133\tSP:frog\n"
-					   "@RG\tID:fish\tPU:out\n"
-					   );
+	const char* out_text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:fish\tLN:133\tSP:frog\n"
+		"@RG\tID:fish\tPU:out\n";
+	out->text = strdup(out_text);
+	out->l_text = strlen(out_text);
 	out->n_targets = 1;
 	out->target_name = (char**)calloc(1, sizeof(char*));
 	out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
@@ -144,14 +155,15 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* translate;
 	
 	translate = bam_header_init();
-	translate->text = strdup(
-							 "@HD\tVN:1.4\tSO:unknown\n"
-							 "@SQ\tID:donkey\tLN:133\n"
-							 "@SQ\tID:fish\tLN:133\n"
-							 "@RG\tID:fish\tPU:trans\n"
-							 "@PG\tXX:dummy\tID:fish\tDS:trans\n"
-							 "@PG\tPP:fish\tID:hook\tDS:trans\n"
-							 );
+	const char* text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:donkey\tLN:133\n"
+		"@SQ\tID:fish\tLN:133\n"
+		"@RG\tID:fish\tPU:trans\n"
+		"@PG\tXX:dummy\tID:fish\tDS:trans\n"
+		"@PG\tPP:fish\tID:hook\tDS:trans\n";
+	translate->text = strdup(text);
+	translate->l_text = strlen(text);
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
@@ -160,13 +172,14 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_name[1] = strdup("fish");
 	translate->target_len[1] = 133;
 	out = bam_header_init();
-	out->text = strdup(
-					   "@HD\tVN:1.4\tSO:unknown\n"
-					   "@SQ\tID:fish\tLN:133\tSP:frog\n"
-					   "@RG\tID:fish\tPU:out\n"
-					   "@PG\tXX:dummyx\tID:fish\tDS:out\n"
-					   "@PG\tPP:fish\tID:hook\tDS:out\n"
-					   );
+	const char* out_text =
+		"@HD\tVN:1.4\tSO:unknown\n"
+		"@SQ\tID:fish\tLN:133\tSP:frog\n"
+		"@RG\tID:fish\tPU:out\n"
+		"@PG\tXX:dummyx\tID:fish\tDS:out\n"
+		"@PG\tPP:fish\tID:hook\tDS:out\n";
+	out->text = strdup(out_text);
+	out->l_text = strlen(out_text);
 	out->n_targets = 1;
 	out->target_name = (char**)calloc(1, sizeof(char*));
 	out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
