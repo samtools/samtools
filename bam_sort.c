@@ -70,6 +70,7 @@ typedef struct trans_tbl {
 	int* tid_trans;
 	kh_c2c_t* rg_trans;
 	kh_c2c_t* pg_trans;
+	bool lost_coord_sort;
 } trans_tbl_t;
 
 static void trans_tbl_destroy(trans_tbl_t *tbl) {
@@ -125,7 +126,8 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	char* out_text = strndup(out->text, out_len); // no guarantee that this is null terminated, must rely on length
 	
 	// Naive way of doing this but meh
-	int i, j;
+	int i, j, min_tid = -1;
+	tbl->lost_coord_sort = false;
 	for (i = 0; i < translate->n_targets; ++i) {
 		int tid = -1;
 		// Search 'out' for entries in 'translate' and map them
@@ -166,6 +168,11 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			free(matches);
 		} else {
 			tbl->tid_trans[i] = tid;
+		}
+		if (tbl->tid_trans[i] <= min_tid) {
+			min_tid = tbl->tid_trans[i];
+		} else {
+			tbl->lost_coord_sort = true;
 		}
 	}
 	
@@ -447,7 +454,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	for (i = 0; i < n; ++i) {
 		bam_header_t *hin;
 		fp[i] = bam_open(fn[i], "r");
-		if (fp[i] == 0) {
+		if (fp[i] == NULL) {
 			int j;
 			fprintf(stderr, "[bam_merge_core] fail to open file %s\n", fn[i]);
 			for (j = 0; j < i; ++j) bam_close(fp[j]);
@@ -458,6 +465,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		hin = bam_header_read(fp[i]);
 		if (hout == NULL) hout = hin;
 		trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
+		if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
+			fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
+		}
 	}
 
 	// If we're only merging a specified region move our iters to start at that point
