@@ -5,4 +5,4 @@ compiler:
   - clang
   - gcc
 
-script: make CC=$(CC)
+script: make CC=$CC
