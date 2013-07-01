@@ -12,6 +12,25 @@
 #include "htslib/khash.h"
 #include "htslib/klist.h"
 
+#if !defined(__DARWIN_C_LEVEL) || __DARWIN_C_LEVEL < 900000L
+#define NEED_MEMSET_PATTERN4
+#endif
+
+#ifdef NEED_MEMSET_PATTERN4
+void memset_pattern4(void *target, const void *pattern, size_t size) {
+	uint32_t* target_iter = target;
+	size_t loops = size/4;
+	size_t i;
+	for (i = 0; i < loops; ++i) {
+		memcpy(target_iter, pattern, 4);
+		++target_iter;
+	}
+	if (size%4 != 0)
+		memcpy(target_iter, pattern, size%4);
+}
+#endif
+
+
 KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
 
 #define __free_char(p)
@@ -67,6 +86,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 KSORT_INIT(heap, heap1_t, heap_lt)
 
 typedef struct trans_tbl {
+	int32_t n_targets;
 	int* tid_trans;
 	kh_c2c_t* rg_trans;
 	kh_c2c_t* pg_trans;
@@ -115,6 +135,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	// No need to translate header into itself
 	if (out == translate) { merge_rg = merge_pg = true; }
 	
+	tbl->n_targets = translate->n_targets;
 	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
 	tbl->rg_trans = kh_init(c2c);
 	tbl->pg_trans = kh_init(c2c);
@@ -472,6 +493,19 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 
 	// If we're only merging a specified region move our iters to start at that point
 	if (reg) {
+		// Create reverse translation table for tids
+		int* rtrans = (int*)malloc(sizeof(int32_t)*n*hout->n_targets);
+		const int32_t NOTID = -1;
+		memset_pattern4((void*)rtrans, &NOTID, n*hout->n_targets);
+		for (i = 0; i < n; ++i) {
+			int j;
+			for (j = 0; j < (translation_tbl+i)->n_targets; ++j) {
+				if ((translation_tbl+i)->tid_trans[j] != -1) {
+					rtrans[i *n + (translation_tbl+i)->tid_trans[j]] = j;
+				}
+			}
+		}
+		
 		int tid, beg, end;
 		if (bam_parse_region(hout, reg, &tid, &beg, &end) < 0) {
 			fprintf(stderr, "[%s] Malformated region string or undefined reference name\n", __func__);
@@ -480,9 +514,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		for (i = 0; i < n; ++i) {
 			bam_index_t *idx;
 			idx = bam_index_load(fn[i]);
-			iter[i] = bam_iter_query(idx, tid, beg, end);
+			// (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
+			iter[i] = bam_iter_query(idx, rtrans[i*n+tid], beg, end);
 			bam_index_destroy(idx);
 		}
+		free(rtrans);
 	}
 
 	// Load the first read from each file into the heap
@@ -491,9 +527,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		h->i = i;
 		h->b = (bam1_t*)calloc(1, sizeof(bam1_t));
 		if (bam_iter_read(fp[i], iter[i], h->b) >= 0) {
+			bam_translate(h->b, translation_tbl + i);
 			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam1_strand(h->b);
 			h->idx = idx++;
-			bam_translate(h->b, translation_tbl + i);
 		}
 		else {
 			h->pos = HEAP_EMPTY;
