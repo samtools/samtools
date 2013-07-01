@@ -3,3 +3,12 @@
 *.a
 *.dSYM
 .DS_Store
+/bcftools/bcftools
+/misc/ace2sam
+/misc/bamcheck
+/misc/maq2sam-long
+/misc/maq2sam-short
+/misc/md5fa
+/misc/md5sum-lite
+/misc/wgsim
+/samtools
