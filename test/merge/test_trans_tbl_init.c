@@ -13,23 +13,24 @@ void dump_header(bam_header_t* hdr) {
 	printf(")\n");
 }
 
+static const char test_1_trans_text[] =
+"@HD\tVN:1.4\tSO:unknown\n"
+"@SQ\tID:fish\tLN:133\n";
+
 void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
 	bam_header_t* translate;
 
 	translate = bam_header_init();
-	const char* text =
-		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:fish\tLN:133\t";
-	translate->text = strdup(text);
-	translate->l_text = strlen(text);
+	translate->text = strdup(test_1_trans_text);
+	translate->l_text = strlen(test_1_trans_text);
 	translate->n_targets = 1;
 	translate->target_name = (char**)calloc(1, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
 	translate->target_name[0] = strdup("fish");
 	translate->target_len[0] = 133;
 	out = bam_header_init();
-	const char* out_text =
+	const char out_text[] =
 		"@HD\tVN:1.4\tSO:unknown\n"
 		"@SQ\tID:fish\tLN:133\tSP:frog";
 	out->text = strdup(out_text);
@@ -44,17 +45,42 @@ void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
+bool check_test_1(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+	// Check input is unchanged
+	if (
+		strncmp(test_1_trans_text, translate->text, translate->l_text)
+		|| translate->l_text != strlen( test_1_trans_text)
+		|| translate->n_targets != 1
+		) return false;
+	
+	// Check output header
+	const char out_regex[] =
+	"^@HD\tVN:1.4\tSO:unknown\n"
+	"@SQ\tID:fish\tLN:133\tSP:frog\n$";
+	
+	regex_t check_regex;
+	regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
+	
+	if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 1 ) return false;
+	
+	// Check output tbl
+	if (tbl[0].n_targets != 1 || tbl[0].tid_trans[0] != 0) return false;
+	
+	return true;
+}
+
+static const char test_2_trans_text[] =
+"@HD\tVN:1.4\tSO:unknown\n"
+"@SQ\tID:donkey\tLN:133\n"
+"@SQ\tID:fish\tLN:133";
+
 void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
 	bam_header_t* translate;
 
 	translate = bam_header_init();
-	const char* text =
-		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:donkey\tLN:133\n"
-		"@SQ\tID:fish\tLN:133";
-	translate->text = strdup(text);
-	translate->l_text = strlen(text);
+	translate->text = strdup(test_2_trans_text);
+	translate->l_text = strlen(test_2_trans_text);
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
@@ -76,6 +102,31 @@ void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
 	
 	*translate_in = translate;
 	*out_in = out;
+}
+
+bool check_test_2(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+	// Check input is unchanged
+	if (
+		strncmp(test_2_trans_text, translate->text, translate->l_text)
+		|| translate->l_text != strlen(test_2_trans_text)
+		|| translate->n_targets != 2
+		) return false;
+
+	// Check output header
+	const char out_regex[] =
+	"^@HD\tVN:1.4\tSO:unknown\n"
+	"@SQ\tID:fish\tLN:133\tSP:frog\n"
+	"@SQ\tID:donkey\tLN:133\n$";
+	
+	regex_t check_regex;
+	regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
+	
+	if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 2 ) return false;
+
+	// Check output tbl
+	if (tbl[0].n_targets != 2 || tbl[0].tid_trans[0] != 1 || tbl[0].tid_trans[1] != 0) return false;
+	
+	return true;
 }
 
 void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
@@ -113,6 +164,11 @@ void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
+bool check_test_3(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+	return true;
+}
+
+
 void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
 	bam_header_t* translate;
@@ -149,6 +205,9 @@ void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
+bool check_test_4(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+	return true;
+}
 
 void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
@@ -190,120 +249,166 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
+bool check_test_5(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+	return true;
+}
+
+
 int main(int argc, char**argv)
 {
+	const int NUM_TESTS = 5;
+	int verbose = 0;
+	int success = 0;
+	int failure = 0;
+	int getopt_char;
+	while ((getopt_char = getopt(argc, argv, "v")) != -1) {
+		switch (getopt_char) {
+			case 'v':
+				verbose = 1;
+				break;
+			default:
+				break;
+		}
+	}
+
 	bam_header_t* out;
 	bam_header_t* translate;
-
-	printf("BEGIN test 1\n");
+	
+	if (verbose) printf("BEGIN test 1\n");
 	// setup
-	trans_tbl_t tbl;
+	trans_tbl_t tbl_1;
 	setup_test_1(&translate,&out);
 	// test
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
-	printf("RUN test 1\n");
-	trans_tbl_init(out, translate, &tbl, false, false);
-	printf("END RUN test 1\n");
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
+	if (verbose) {
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+		printf("RUN test 1\n");
+	}
+	trans_tbl_init(out, translate, &tbl_1, false, false);
+	if (verbose) {
+		printf("END RUN test 1\n");
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+	}
+	if (check_test_1(translate, out, &tbl_1)) { ++success; } else {	++failure; }
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
-	trans_tbl_destroy(&tbl);
-	printf("END test 1\n");
-
+	trans_tbl_destroy(&tbl_1);
+	if (verbose) printf("END test 1\n");
+	
 	// test
-	printf("BEGIN test 2\n");
+	if (verbose) printf("BEGIN test 2\n");
 	// reinit
 	trans_tbl_t tbl_2;
 	setup_test_2(&translate,&out);
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
-	printf("RUN test 2\n");
+	if (verbose) {
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+		printf("RUN test 2\n");
+	}
 	trans_tbl_init(out, translate, &tbl_2, false, false);
-	printf("END RUN test 2\n");
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
+	if (verbose) {
+		printf("END RUN test 2\n");
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+	}
+	if (check_test_2(translate, out, &tbl_2)) { ++success; } else {	++failure; }
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
 	trans_tbl_destroy(&tbl_2);
-	printf("END test 2\n");
-
+	if (verbose) printf("END test 2\n");
+	
 	// test
-	printf("BEGIN test 3\n");
+	if (verbose) printf("BEGIN test 3\n");
 	// reinit
 	trans_tbl_t tbl_3;
 	setup_test_3(&translate,&out);
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
-	printf("RUN test 3\n");
+	if (verbose) {
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+		printf("RUN test 3\n");
+	}
 	trans_tbl_init(out, translate, &tbl_3, false, false);
-	printf("END RUN test 3\n");
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
+	if (verbose) {
+		printf("END RUN test 3\n");
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+	}
+	if (check_test_3(translate, out, &tbl_3)) { ++success; } else {	++failure; }
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
 	trans_tbl_destroy(&tbl_3);
-	printf("END test 3\n");
-
+	if (verbose) printf("END test 3\n");
+	
 	// test
-	printf("BEGIN test 4\n");
+	if (verbose) printf("BEGIN test 4\n");
 	// reinit
 	trans_tbl_t tbl_4;
 	setup_test_4(&translate,&out);
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
-	printf("RUN test 4\n");
+	if (verbose) {
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+		printf("RUN test 4\n");
+	}
 	trans_tbl_init(out, translate, &tbl_4, false, false);
-	printf("END RUN test 4\n");
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
+	if (verbose) {
+		printf("END RUN test 4\n");
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+	}
+	if (check_test_4(translate, out, &tbl_4)) { ++success; } else {	++failure; }
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
 	trans_tbl_destroy(&tbl_4);
-	printf("END test 4\n");
-
+	if (verbose) printf("END test 4\n");
+	
 	// test
-	printf("BEGIN test 5\n");
+	if (verbose) printf("BEGIN test 5\n");
 	// reinit
 	trans_tbl_t tbl_5;
 	setup_test_5(&translate,&out);
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
-	printf("RUN test 5\n");
+	if (verbose) {
+		
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+	}
+	if (verbose) printf("RUN test 5\n");
 	trans_tbl_init(out, translate, &tbl_5, false, false);
-	printf("END RUN test 5\n");
-	printf("translate\n");
-	dump_header(translate);
-	printf("out\n");
-	dump_header(out);
+	if (verbose) {
+		printf("END RUN test 5\n");
+		printf("translate\n");
+		dump_header(translate);
+		printf("out\n");
+		dump_header(out);
+	}
+	if (check_test_5(translate, out, &tbl_5)) { ++success; } else {	++failure; }
 	// teardown
 	bam_header_destroy(translate);
 	bam_header_destroy(out);
 	trans_tbl_destroy(&tbl_5);
-	printf("END test 5\n");
-
-	return 0;
+	if (verbose) printf("END test 5\n");
+	
+	if (success == NUM_TESTS) return 0; else return 1;
 }

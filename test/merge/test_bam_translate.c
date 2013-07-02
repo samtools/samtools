@@ -1,4 +1,5 @@
 #include "../../bam_sort.c"
+#include <fcntl.h>
 
 void dump_read(bam1_t* b) {
 	printf("->core.tid:(%d)\n", b->core.tid);
@@ -310,109 +311,166 @@ void setup_test_6(bam1_t** b_in, trans_tbl_t* tbl) {
 
 int main(int argc, char**argv)
 {
+	const int NUM_TESTS = 5;
+	int verbose = 0;
+	int success = 0;
+	int failure = 0;
+	int getopt_char;
+	while ((getopt_char = getopt(argc, argv, "v")) != -1) {
+		switch (getopt_char) {
+			case 'v':
+				verbose = 1;
+				break;
+			default:
+				break;
+		}
+	}
+
 	bam1_t* b;
 
-	printf("BEGIN test 1\n");  // TID test
+	if (verbose) printf("BEGIN test 1\n");  // TID test
 	// setup
 	trans_tbl_t tbl1;
 	setup_test_1(&b,&tbl1);
 	// test
-	printf("b\n");
-	dump_read(b);
-	printf("RUN test 1\n");
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+		printf("RUN test 1\n");
+	}
+
+	int restore_stderr = dup(2); // Save stderr
+	int null_fd = open("/dev/null", O_WRONLY); // TODO: replace this with routine someone to stash output for checking
 	bam_translate(b, &tbl1);
-	printf("END RUN test 1\n");
-	printf("b\n");
-	dump_read(b);
+	dup2(restore_stderr, 2);
+
+	if (verbose) {
+		printf("END RUN test 1\n");
+		printf("b\n");
+		dump_read(b);
+	}
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl1);
-	printf("END test 1\n");
-
-	printf("BEGIN test 2\n");  // RG test
+	if (verbose) printf("END test 1\n");
+	
+	if (verbose) printf("BEGIN test 2\n");  // RG test
 	// setup
 	trans_tbl_t tbl2;
 	setup_test_2(&b,&tbl2);
 	// test
-	printf("b\n");
-	dump_read(b);
-	printf("RUN test 2\n");
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+		printf("RUN test 2\n");
+	}
+	dup2(null_fd, 2);
 	bam_translate(b, &tbl2);
-	printf("END RUN test 2\n");
-	printf("b\n");
-	dump_read(b);
+	dup2(restore_stderr, 2);
+	if (verbose) {
+		printf("END RUN test 2\n");
+		printf("b\n");
+		dump_read(b);
+	}
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl2);
-	printf("END test 2\n");
+	if (verbose) printf("END test 2\n");
 	
-	printf("BEGIN test 3\n");  // PG test
+	if (verbose) printf("BEGIN test 3\n");  // PG test
 	// setup
 	trans_tbl_t tbl3;
 	setup_test_3(&b,&tbl3);
 	// test
-	printf("b\n");
-	dump_read(b);
-	printf("RUN test 3\n");
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+		printf("RUN test 3\n");
+	}
+	dup2(null_fd, 2);
 	bam_translate(b, &tbl3);
-	printf("END RUN test 3\n");
-	printf("b\n");
-	dump_read(b);
+	dup2(restore_stderr, 2);
+	if (verbose) {
+		printf("END RUN test 3\n");
+		printf("b\n");
+		dump_read(b);
+	}
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl3);
-	printf("END test 3\n");
-
-	printf("BEGIN test 4\n");  // RG test non existant
+	if (verbose) printf("END test 3\n");
+	
+	if (verbose) printf("BEGIN test 4\n");  // RG test non existant
 	// setup
 	trans_tbl_t tbl4;
 	setup_test_4(&b,&tbl4);
 	// test
-	printf("b\n");
-	dump_read(b);
-	printf("RUN test 4\n");
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+		printf("RUN test 4\n");
+	}
+	dup2(null_fd, 2);
 	bam_translate(b, &tbl4);
-	printf("END RUN test 4\n");
-	printf("b\n");
-	dump_read(b);
+	dup2(restore_stderr, 2);
+	if (verbose) {
+		printf("END RUN test 4\n");
+		printf("b\n");
+		dump_read(b);
+	}
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl4);
-	printf("END test 4\n");
+	if (verbose) printf("END test 4\n");
 	
-	printf("BEGIN test 5\n");  // PG test non existant
+	if (verbose) printf("BEGIN test 5\n");  // PG test non existant
 	// setup
 	trans_tbl_t tbl5;
 	setup_test_5(&b,&tbl5);
 	// test
-	printf("b\n");
-	dump_read(b);
-	printf("RUN test 5\n");
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+		printf("RUN test 5\n");
+	}
+	dup2(null_fd, 2);
 	bam_translate(b, &tbl5);
-	printf("END RUN test 5\n");
-	printf("b\n");
-	dump_read(b);
+	dup2(restore_stderr, 2);
+	if (verbose) {
+		printf("END RUN test 5\n");
+		printf("b\n");
+		dump_read(b);
+	}
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl5);
-	printf("END test 5\n");
+	if (verbose) printf("END test 5\n");
 	
-	printf("BEGIN test 6\n");  // RG and PG test
+	if (verbose) printf("BEGIN test 6\n");  // RG and PG test
 	// setup
 	trans_tbl_t tbl6;
 	setup_test_6(&b,&tbl6);
 	// test
-	printf("b\n");
-	dump_read(b);
-	printf("RUN test 6\n");
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+		printf("RUN test 6\n");
+	}
+	dup2(null_fd, 2);
 	bam_translate(b, &tbl6);
-	printf("END RUN test 6\n");
-	printf("b\n");
-	dump_read(b);
+	dup2(restore_stderr, 2);
+	if (verbose) {
+		printf("END RUN test 6\n");
+		printf("b\n");
+		dump_read(b);
+	}
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl6);
-	printf("END test 6\n");
+	if (verbose) printf("END test 6\n");
+
+	close(null_fd);
+	close(restore_stderr);
 
 	return 0;
 }
