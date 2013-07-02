@@ -387,6 +387,23 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 	}
 }
 
+int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
+{
+	// Create reverse translation table for tids
+	int* rtrans = (int*)malloc(sizeof(int32_t)*n*n_targets);
+	const int32_t NOTID = -1;
+	memset_pattern4((void*)rtrans, &NOTID, n*n_targets);
+	int i;
+	for (i = 0; i < n; ++i) {
+		int j;
+		for (j = 0; j < (translation_tbl+i)->n_targets; ++j) {
+			if ((translation_tbl+i)->tid_trans[j] != -1) {
+				rtrans[i *n + (translation_tbl+i)->tid_trans[j]] = j;
+			}
+		}
+	}
+	return rtrans;
+}
 
 #define MERGE_RG          1 // Attach RG tag based on filename
 #define MERGE_UNCOMP      2 // Generate uncompressed BAM
@@ -493,18 +510,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 
 	// If we're only merging a specified region move our iters to start at that point
 	if (reg) {
-		// Create reverse translation table for tids
-		int* rtrans = (int*)malloc(sizeof(int32_t)*n*hout->n_targets);
-		const int32_t NOTID = -1;
-		memset_pattern4((void*)rtrans, &NOTID, n*hout->n_targets);
-		for (i = 0; i < n; ++i) {
-			int j;
-			for (j = 0; j < (translation_tbl+i)->n_targets; ++j) {
-				if ((translation_tbl+i)->tid_trans[j] != -1) {
-					rtrans[i *n + (translation_tbl+i)->tid_trans[j]] = j;
-				}
-			}
-		}
+		int* rtrans = rtrans_build(n, hout->n_targets, translation_tbl);
 		
 		int tid, beg, end;
 		if (bam_parse_region(hout, reg, &tid, &beg, &end) < 0) {
