@@ -165,19 +165,19 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			out->target_name[out->n_targets-1] = strdup(translate->target_name[i]);
 			out->target_len = (uint32_t*)realloc(out->target_len, sizeof(uint32_t)*out->n_targets);
 			out->target_len[out->n_targets-1] = translate->target_len[i];
-			// grep line with regex '^@SQ.*\tID:%s(\t.*$|$)', translate->target_name[i]
+			// grep line with regex '^@SQ.*\tSN:%s(\t.*$|$)', translate->target_name[i]
 			// from translate->text
 			regex_t sq_id;
 			regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
 			if (matches == NULL) { perror("out of memory"); exit(-1); }
 			char* seq_regex = NULL;
-			asprintf(&seq_regex, "^@SQ.*\tID:%s(\t.*$|$)",translate->target_name[i]);
+			asprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)",translate->target_name[i]);
 			regcomp(&sq_id, seq_regex, REG_EXTENDED|REG_NEWLINE);
 			free(seq_regex);
 			if (regexec(&sq_id, translate->text, 1, matches, 0) != 0)
 			{
-				fprintf(stderr, "[trans_tbl_init] @SQ ID (%s) found in binary header but not text header.\n",translate->target_name[i]);
-				exit(-1);
+				fprintf(stderr, "[trans_tbl_init] @SQ SN (%s) found in binary header but not text header.\n",translate->target_name[i]);
+				exit(1);
 			}
 			regfree(&sq_id);
 			

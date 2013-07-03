@@ -568,10 +568,9 @@ int main(int argc, char**argv)
 	fclose(check);
 	close(restore_stderr);
 	
-	if (NUM_TESTS == success)
+	if (NUM_TESTS == success) {
 		return 0;
-	else
-	{
+	} else {
 		fprintf(stderr, "%d failures %d successes\n", failure, success);
 		return 1;
 	}

@@ -15,7 +15,7 @@ void dump_header(bam_header_t* hdr) {
 
 static const char test_1_trans_text[] =
 "@HD\tVN:1.4\tSO:unknown\n"
-"@SQ\tID:fish\tLN:133\n";
+"@SQ\tSN:fish\tLN:133\n";
 
 void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
@@ -32,7 +32,7 @@ void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
 	out = bam_header_init();
 	const char out_text[] =
 		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:fish\tLN:133\tSP:frog";
+		"@SQ\tSN:fish\tLN:133\tSP:frog";
 	out->text = strdup(out_text);
 	out->l_text = strlen(out_text);
 	out->n_targets = 1;
@@ -56,7 +56,7 @@ bool check_test_1(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) 
 	// Check output header
 	const char out_regex[] =
 	"^@HD\tVN:1.4\tSO:unknown\n"
-	"@SQ\tID:fish\tLN:133\tSP:frog\n$";
+	"@SQ\tSN:fish\tLN:133\tSP:frog\n$";
 	
 	regex_t check_regex;
 	regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
@@ -64,15 +64,15 @@ bool check_test_1(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) 
 	if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 1 ) return false;
 	
 	// Check output tbl
-	if (tbl[0].n_targets != 1 || tbl[0].tid_trans[0] != 0) return false;
+	if (tbl[0].n_targets != 1 || tbl[0].tid_trans[0] != 0 || tbl[0].lost_coord_sort) return false;
 	
 	return true;
 }
 
 static const char test_2_trans_text[] =
 "@HD\tVN:1.4\tSO:unknown\n"
-"@SQ\tID:donkey\tLN:133\n"
-"@SQ\tID:fish\tLN:133";
+"@SQ\tSN:donkey\tLN:133\n"
+"@SQ\tSN:fish\tLN:133";
 
 void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
@@ -91,7 +91,7 @@ void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
 	out = bam_header_init();
 	const char* out_text =
 		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:fish\tLN:133\tSP:frog";
+		"@SQ\tSN:fish\tLN:133\tSP:frog";
 	out->text = strdup(out_text);
 	out->l_text = strlen(out_text);
 	out->n_targets = 1;
@@ -115,8 +115,8 @@ bool check_test_2(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) 
 	// Check output header
 	const char out_regex[] =
 	"^@HD\tVN:1.4\tSO:unknown\n"
-	"@SQ\tID:fish\tLN:133\tSP:frog\n"
-	"@SQ\tID:donkey\tLN:133\n$";
+	"@SQ\tSN:fish\tLN:133\tSP:frog\n"
+	"@SQ\tSN:donkey\tLN:133\n$";
 	
 	regex_t check_regex;
 	regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
@@ -129,18 +129,19 @@ bool check_test_2(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) 
 	return true;
 }
 
+static const char test_3_trans_text[] =
+"@HD\tVN:1.4\tSO:unknown\n"
+"@SQ\tSN:donkey\tLN:133\n"
+"@SQ\tSN:fish\tLN:133\n"
+"@RG\tID:fish\tPU:trans\n";
+
 void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
 	bam_header_t* translate;
 	
 	translate = bam_header_init();
-	const char* text =
-		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:donkey\tLN:133\n"
-		"@SQ\tID:fish\tLN:133\n"
-		"@RG\tID:fish\tPU:trans\n";
-	translate->text = strdup(text);
-	translate->l_text = strlen(text);
+	translate->text = strdup(test_3_trans_text);
+	translate->l_text = strlen(test_3_trans_text);
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
@@ -151,7 +152,7 @@ void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
 	out = bam_header_init();
 	const char* out_text =
 		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:fish\tLN:133\tSP:frog";
+		"@SQ\tSN:fish\tLN:133\tSP:frog";
 	out->text = strdup(out_text);
 	out->l_text = strlen(out_text);
 	out->n_targets = 1;
@@ -165,22 +166,28 @@ void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
 }
 
 bool check_test_3(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+	// Check input is unchanged
+	if (
+		strncmp(test_3_trans_text, translate->text, translate->l_text)
+		|| translate->l_text != strlen(test_3_trans_text)
+		|| translate->n_targets != 2
+		) return false;
 	return true;
 }
 
+static const char test_4_trans_text[] =
+"@HD\tVN:1.4\tSO:unknown\n"
+"@SQ\tSN:donkey\tLN:133\n"
+"@SQ\tSN:fish\tLN:133\n"
+"@RG\tID:fish\tPU:trans\n";
 
 void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
 	bam_header_t* translate;
 	
 	translate = bam_header_init();
-	const char* text =
-		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:donkey\tLN:133\n"
-		"@SQ\tID:fish\tLN:133\n"
-		"@RG\tID:fish\tPU:trans\n";
-	translate->text = strdup(text);
-	translate->l_text = strlen(text);
+	translate->text = strdup(test_4_trans_text);
+	translate->l_text = strlen(test_4_trans_text);
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
@@ -191,7 +198,7 @@ void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	out = bam_header_init();
 	const char* out_text =
 		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:fish\tLN:133\tSP:frog\n"
+		"@SQ\tSN:fish\tLN:133\tSP:frog\n"
 		"@RG\tID:fish\tPU:out\n";
 	out->text = strdup(out_text);
 	out->l_text = strlen(out_text);
@@ -206,23 +213,30 @@ void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 }
 
 bool check_test_4(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+	// Check input is unchanged
+	if (
+		strncmp(test_4_trans_text, translate->text, translate->l_text)
+		|| translate->l_text != strlen(test_4_trans_text)
+		|| translate->n_targets != 2
+		) return false;
 	return true;
 }
+
+static const char test_5_trans_text[] =
+"@HD\tVN:1.4\tSO:unknown\n"
+"@SQ\tSN:donkey\tLN:133\n"
+"@SQ\tSN:fish\tLN:133\n"
+"@RG\tID:fish\tPU:trans\n"
+"@PG\tXX:dummy\tID:fish\tDS:trans\n"
+"@PG\tPP:fish\tID:hook\tDS:trans\n";
 
 void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 	bam_header_t* out;
 	bam_header_t* translate;
 	
 	translate = bam_header_init();
-	const char* text =
-		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:donkey\tLN:133\n"
-		"@SQ\tID:fish\tLN:133\n"
-		"@RG\tID:fish\tPU:trans\n"
-		"@PG\tXX:dummy\tID:fish\tDS:trans\n"
-		"@PG\tPP:fish\tID:hook\tDS:trans\n";
-	translate->text = strdup(text);
-	translate->l_text = strlen(text);
+	translate->text = strdup(test_5_trans_text);
+	translate->l_text = strlen(test_5_trans_text);
 	translate->n_targets = 2;
 	translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
 	translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
@@ -233,7 +247,7 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 	out = bam_header_init();
 	const char* out_text =
 		"@HD\tVN:1.4\tSO:unknown\n"
-		"@SQ\tID:fish\tLN:133\tSP:frog\n"
+		"@SQ\tSN:fish\tLN:133\tSP:frog\n"
 		"@RG\tID:fish\tPU:out\n"
 		"@PG\tXX:dummyx\tID:fish\tDS:out\n"
 		"@PG\tPP:fish\tID:hook\tDS:out\n";
@@ -250,6 +264,12 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 }
 
 bool check_test_5(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+	// Check input is unchanged
+	if (
+		strncmp(test_5_trans_text, translate->text, translate->l_text)
+		|| translate->l_text != strlen(test_5_trans_text)
+		|| translate->n_targets != 2
+		) return false;
 	return true;
 }
 
@@ -271,6 +291,10 @@ int main(int argc, char**argv)
 		}
 	}
 
+	// Set the seed to a fixed value so that calls to lrand48 within functions return predictable values
+	const long GIMMICK_SEED = 0x1234abcd330e;
+	srand48(GIMMICK_SEED);
+
 	bam_header_t* out;
 	bam_header_t* translate;
 	
@@ -284,11 +308,11 @@ int main(int argc, char**argv)
 		dump_header(translate);
 		printf("out\n");
 		dump_header(out);
-		printf("RUN test 1\n");
 	}
+	if (verbose) printf("RUN test 1\n");
 	trans_tbl_init(out, translate, &tbl_1, false, false);
+	if (verbose) printf("END RUN test 1\n");
 	if (verbose) {
-		printf("END RUN test 1\n");
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -311,11 +335,11 @@ int main(int argc, char**argv)
 		dump_header(translate);
 		printf("out\n");
 		dump_header(out);
-		printf("RUN test 2\n");
 	}
+	if (verbose) printf("RUN test 2\n");
 	trans_tbl_init(out, translate, &tbl_2, false, false);
+	if (verbose) printf("END RUN test 2\n");
 	if (verbose) {
-		printf("END RUN test 2\n");
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -338,11 +362,11 @@ int main(int argc, char**argv)
 		dump_header(translate);
 		printf("out\n");
 		dump_header(out);
-		printf("RUN test 3\n");
 	}
+	if (verbose) printf("RUN test 3\n");
 	trans_tbl_init(out, translate, &tbl_3, false, false);
+	if (verbose) printf("END RUN test 3\n");
 	if (verbose) {
-		printf("END RUN test 3\n");
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -365,11 +389,11 @@ int main(int argc, char**argv)
 		dump_header(translate);
 		printf("out\n");
 		dump_header(out);
-		printf("RUN test 4\n");
 	}
+	if (verbose) printf("RUN test 4\n");
 	trans_tbl_init(out, translate, &tbl_4, false, false);
+	if (verbose) printf("END RUN test 4\n");
 	if (verbose) {
-		printf("END RUN test 4\n");
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -396,8 +420,8 @@ int main(int argc, char**argv)
 	}
 	if (verbose) printf("RUN test 5\n");
 	trans_tbl_init(out, translate, &tbl_5, false, false);
+	if (verbose) printf("END RUN test 5\n");
 	if (verbose) {
-		printf("END RUN test 5\n");
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -410,5 +434,10 @@ int main(int argc, char**argv)
 	trans_tbl_destroy(&tbl_5);
 	if (verbose) printf("END test 5\n");
 	
-	if (success == NUM_TESTS) return 0; else return 1;
+	if (success == NUM_TESTS) {
+		return 0;
+	} else {
+		fprintf(stderr, "%d failures %d successes\n", failure, success);
+		return 1;
+	}
 }
