@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <regex.h>
+#include <time.h>
 #include <unistd.h>
 #include "bam.h"
 #include "htslib/ksort.h"
@@ -219,7 +220,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			transformed_id = match_id;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			if (asprintf(&transformed_id, "%s-%ld",match_id, lrand48()) == -1) { perror("out of memory"); exit(-1); }
+			if (asprintf(&transformed_id, "%s-%0lX",match_id, lrand48()) == -1) { perror("out of memory"); exit(-1); }
 		}
 		regfree(&rg_id_search);
 
@@ -272,7 +273,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			transformed_id = match_id;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			if (asprintf(&transformed_id, "%s-%ld",match_id, lrand48()) == -1) { perror("out of memory"); exit(-1); }
+			if (asprintf(&transformed_id, "%s-%0lX",match_id, lrand48()) == -1) { perror("out of memory"); exit(-1); }
 		}
 		regfree(&pg_id_search);
 		
@@ -602,8 +603,9 @@ int bam_merge(int argc, char *argv[])
 {
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
 	char *fn_headers = NULL, *reg = 0;
+	long random_seed = (long)time(NULL);
 
-	while ((c = getopt(argc, argv, "h:nru1R:f@:l:cp")) >= 0) {
+	while ((c = getopt(argc, argv, "h:nru1R:f@:l:cps:")) >= 0) {
 		switch (c) {
 		case 'r': flag |= MERGE_RG; break;
 		case 'f': flag |= MERGE_FORCE; break;
@@ -616,8 +618,10 @@ int bam_merge(int argc, char *argv[])
 		case '@': n_threads = atoi(optarg); break;
 		case 'c': flag |= MERGE_COMBINE_RG; break;
 		case 'p': flag |= MERGE_COMBINE_PG; break;
+		case 's': random_seed = atol(optarg); break;
 		}
 	}
+	srand48(random_seed);
 	if (optind + 2 >= argc) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools merge [-nr] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
@@ -631,7 +635,8 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "         -R STR   merge file in the specified region STR [all]\n");
 		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
 		fprintf(stderr, "         -c       combine RG tags with colliding IDs rather than amending them\n");
-		fprintf(stderr, "         -p       combine PG tags with colliding IDs rather than amending them\n\n");
+		fprintf(stderr, "         -p       combine PG tags with colliding IDs rather than amending them\n");
+		fprintf(stderr, "         -s VALUE override random seed\n\n");
 		return 1;
 	}
 	if (!(flag & MERGE_FORCE) && strcmp(argv[optind], "-")) {
