@@ -1,5 +1,5 @@
 all:
-test: test_trans_tbl_init test_bam_translate
+test: test_trans_tbl_init test_bam_translate test_rtrans_build
 	./test_trans_tbl_init
 	./test_bam_translate
 
@@ -9,5 +9,8 @@ test_trans_tbl_init:
 test_bam_translate:
 	gcc -g -O0 -o test_bam_translate test_bam_translate.c ../../libbam.a -lz
 
+test_rtrans_build:
+	gcc -g -O0 -o test_rtrans_build test_rtrans_build.c ../../libbam.a -lz
+
 clean:
-	rm -f test_trans_tbl_init test_bam_translate
+	rm -f test_trans_tbl_init test_bam_translate test_rtrans_build
