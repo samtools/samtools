@@ -1,5 +1,6 @@
 #include "../../bam_sort.c"
 #include <fcntl.h>
+#include <poll.h>
 
 void dump_read(bam1_t* b) {
 	printf("->core.tid:(%d)\n", b->core.tid);
@@ -311,10 +312,12 @@ void setup_test_6(bam1_t** b_in, trans_tbl_t* tbl) {
 
 int main(int argc, char**argv)
 {
-	const int NUM_TESTS = 5;
+	// test state
+	const int NUM_TESTS = 6;
 	int verbose = 0;
 	int success = 0;
 	int failure = 0;
+
 	int getopt_char;
 	while ((getopt_char = getopt(argc, argv, "v")) != -1) {
 		switch (getopt_char) {
@@ -328,50 +331,84 @@ int main(int argc, char**argv)
 
 	bam1_t* b;
 
-	if (verbose) printf("BEGIN test 1\n");  // TID test
+	// Setup stderr redirect
+	size_t len;
+	char* res;
+	int restore_stderr = dup(STDERR_FILENO); // Save stderr
+	char* template = strdup("test_bam_trans_XXXXXXX");
+	int null_fd = mkstemp(template);
+	unlink(template);
+	FILE* check = fdopen(null_fd, "w+");
+	
 	// setup
+	if (verbose) printf("BEGIN test 1\n");  // TID test
 	trans_tbl_t tbl1;
 	setup_test_1(&b,&tbl1);
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+	}
+	if (verbose) printf("RUN test 1\n");
+
 	// test
-	if (verbose) {
-		printf("b\n");
-		dump_read(b);
-		printf("RUN test 1\n");
-	}
-
-	int restore_stderr = dup(2); // Save stderr
-	int null_fd = open("/dev/null", O_WRONLY); // TODO: replace this with routine someone to stash output for checking
+	dup2(null_fd, STDERR_FILENO); // Redirect stderr to pipe
 	bam_translate(b, &tbl1);
-	dup2(restore_stderr, 2);
+	dup2(restore_stderr, STDERR_FILENO);
 
+	if (verbose) printf("END RUN test 1\n");
 	if (verbose) {
-		printf("END RUN test 1\n");
 		printf("b\n");
 		dump_read(b);
 	}
+
+	// check result
+	len = 0;
+	rewind(check);
+	res = fgetln(check,&len);
+	if (feof(check) || (res && !strcmp("",res))) {
+		++success;
+	} else {
+		++failure;
+	}
+	rewind(check);
+	
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl1);
 	if (verbose) printf("END test 1\n");
 	
-	if (verbose) printf("BEGIN test 2\n");  // RG test
 	// setup
+	if (verbose) printf("BEGIN test 2\n");  // RG test
 	trans_tbl_t tbl2;
 	setup_test_2(&b,&tbl2);
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+	}
+	if (verbose) printf("RUN test 2\n");
+	
 	// test
-	if (verbose) {
-		printf("b\n");
-		dump_read(b);
-		printf("RUN test 2\n");
-	}
-	dup2(null_fd, 2);
+	dup2(null_fd, STDERR_FILENO);
 	bam_translate(b, &tbl2);
-	dup2(restore_stderr, 2);
+	dup2(restore_stderr, STDERR_FILENO);
+
+	if (verbose) printf("END RUN test 2\n");
 	if (verbose) {
-		printf("END RUN test 2\n");
 		printf("b\n");
 		dump_read(b);
 	}
+
+	// check result
+	len = 0;
+	rewind(check);
+	res = fgetln(check,&len);
+	if (feof(check) || (res && !strcmp("",res))) {
+		++success;
+	} else {
+		++failure;
+	}
+	rewind(check);
+	
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl2);
@@ -381,20 +418,33 @@ int main(int argc, char**argv)
 	// setup
 	trans_tbl_t tbl3;
 	setup_test_3(&b,&tbl3);
-	// test
 	if (verbose) {
 		printf("b\n");
 		dump_read(b);
-		printf("RUN test 3\n");
 	}
+	if (verbose) printf("RUN test 3\n");
+
+	// test
 	dup2(null_fd, 2);
 	bam_translate(b, &tbl3);
 	dup2(restore_stderr, 2);
+	if (verbose) printf("END RUN test 3\n");
 	if (verbose) {
-		printf("END RUN test 3\n");
 		printf("b\n");
 		dump_read(b);
 	}
+
+	// check result
+	len = 0;
+	rewind(check);
+	res = fgetln(check,&len);
+	if (feof(check) || (res && !strcmp("",res))) {
+		++success;
+	} else {
+		++failure;
+	}
+	rewind(check);
+	
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl3);
@@ -404,20 +454,33 @@ int main(int argc, char**argv)
 	// setup
 	trans_tbl_t tbl4;
 	setup_test_4(&b,&tbl4);
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+	}
+	if (verbose) printf("RUN test 4\n");
+	
 	// test
-	if (verbose) {
-		printf("b\n");
-		dump_read(b);
-		printf("RUN test 4\n");
-	}
-	dup2(null_fd, 2);
+	dup2(null_fd, STDERR_FILENO);
 	bam_translate(b, &tbl4);
-	dup2(restore_stderr, 2);
+	dup2(restore_stderr, STDERR_FILENO);
+	
+	if (verbose) printf("END RUN test 4\n");
 	if (verbose) {
-		printf("END RUN test 4\n");
 		printf("b\n");
 		dump_read(b);
 	}
+	// check result
+	len = 0;
+	rewind(check);
+	res = fgetln(check,&len);
+	if (res && !strcmp("[bam_translate] RG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+		++success;
+	} else {
+		++failure;
+	}
+	rewind(check);
+	
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl4);
@@ -427,20 +490,33 @@ int main(int argc, char**argv)
 	// setup
 	trans_tbl_t tbl5;
 	setup_test_5(&b,&tbl5);
-	// test
 	if (verbose) {
 		printf("b\n");
 		dump_read(b);
 		printf("RUN test 5\n");
 	}
-	dup2(null_fd, 2);
+	// test
+	dup2(null_fd, STDERR_FILENO);
 	bam_translate(b, &tbl5);
-	dup2(restore_stderr, 2);
+	dup2(restore_stderr, STDERR_FILENO);
+
+	if (verbose) printf("END RUN test 5\n");
 	if (verbose) {
-		printf("END RUN test 5\n");
 		printf("b\n");
 		dump_read(b);
 	}
+
+	// check result
+	len = 0;
+	rewind(check);
+	res = fgetln(check,&len);
+	if (res && !strcmp("[bam_translate] PG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+		++success;
+	} else {
+		++failure;
+	}
+	rewind(check);
+
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl5);
@@ -450,27 +526,53 @@ int main(int argc, char**argv)
 	// setup
 	trans_tbl_t tbl6;
 	setup_test_6(&b,&tbl6);
+	if (verbose) {
+		printf("b\n");
+		dump_read(b);
+	}
+	if (verbose) printf("RUN test 6\n");
+
 	// test
-	if (verbose) {
-		printf("b\n");
-		dump_read(b);
-		printf("RUN test 6\n");
-	}
-	dup2(null_fd, 2);
+	dup2(null_fd, STDERR_FILENO);
 	bam_translate(b, &tbl6);
-	dup2(restore_stderr, 2);
+	dup2(restore_stderr, STDERR_FILENO);
+
+	if (verbose) printf("END RUN test 6\n");
 	if (verbose) {
-		printf("END RUN test 6\n");
 		printf("b\n");
 		dump_read(b);
 	}
+	
+	// check result
+	len = 0;
+	rewind(check);
+	res = fgetln(check,&len);
+	if (res && !strcmp("[bam_translate] PG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+		res = fgetln(check,&len);
+		if (feof(check) || (res && !strcmp("",res))) {
+			++success;
+		} else {
+			++failure;
+		}
+	} else {
+		++failure;
+	}
+	rewind(check);
+
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl6);
 	if (verbose) printf("END test 6\n");
 
-	close(null_fd);
+	// Cleanup
+	fclose(check);
 	close(restore_stderr);
-
-	return 0;
+	
+	if (NUM_TESTS == success)
+		return 0;
+	else
+	{
+		fprintf(stderr, "%d failures %d successes\n", failure, success);
+		return 1;
+	}
 }

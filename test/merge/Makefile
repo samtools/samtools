@@ -1,3 +1,4 @@
+all:
 test: test_trans_tbl_init test_bam_translate
 	./test_trans_tbl_init
 	./test_bam_translate
