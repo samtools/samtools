@@ -191,7 +191,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		} else {
 			tbl->tid_trans[i] = tid;
 		}
-		if (tbl->tid_trans[i] <= min_tid) {
+		if (tbl->tid_trans[i] > min_tid) {
 			min_tid = tbl->tid_trans[i];
 		} else {
 			tbl->lost_coord_sort = true;
