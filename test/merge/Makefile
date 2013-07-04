@@ -2,14 +2,15 @@ all:
 test: test_trans_tbl_init test_bam_translate test_rtrans_build
 	./test_trans_tbl_init
 	./test_bam_translate
+	./test_rtrans_build
 
-test_trans_tbl_init:
+test_trans_tbl_init: test_trans_tbl_init.c
 	gcc -g -O0 -o test_trans_tbl_init test_trans_tbl_init.c ../../libbam.a -lz
 
-test_bam_translate:
+test_bam_translate: test_bam_translate.c
 	gcc -g -O0 -o test_bam_translate test_bam_translate.c ../../libbam.a -lz
 
-test_rtrans_build:
+test_rtrans_build: test_rtrans_build.c
 	gcc -g -O0 -o test_rtrans_build test_rtrans_build.c ../../libbam.a -lz
 
 clean:
