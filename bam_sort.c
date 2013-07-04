@@ -463,7 +463,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	int i, j, *RG_len = NULL;
 	uint64_t idx = 0;
 	char **RG = NULL, mode[8];
-	hts_itr_t *iter = NULL;
+	hts_itr_t **iter = NULL;
 	trans_tbl_t *translation_tbl = NULL;
 
 	// Is there a specified pre-prepared header to use for output?
