@@ -12,6 +12,7 @@
 #include "htslib/ksort.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
+#include "htslib/sam.h"
 
 #if !defined(__DARWIN_C_LEVEL) || __DARWIN_C_LEVEL < 900000L
 #define NEED_MEMSET_PATTERN4
@@ -30,6 +31,13 @@ void memset_pattern4(void *target, const void *pattern, size_t size) {
 		memcpy(target_iter, pattern, size%4);
 }
 #endif
+
+static hts_itr_t* bam_itr_finish()
+{
+	hts_itr_t* iter = (hts_itr_t*)calloc(1, sizeof(hts_itr_t));
+	iter->finished = 1;
+	return iter;
+}
 
 
 KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
@@ -392,7 +400,7 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 {
 	// Create reverse translation table for tids
 	int* rtrans = (int*)malloc(sizeof(int32_t)*n*n_targets);
-	const int32_t NOTID = -1;
+	const int32_t NOTID = INT32_MIN;
 	memset_pattern4((void*)rtrans, &NOTID, sizeof(int32_t)*n*n_targets);
 	int i;
 	for (i = 0; i < n; ++i) {
@@ -455,7 +463,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	int i, j, *RG_len = NULL;
 	uint64_t idx = 0;
 	char **RG = NULL, mode[8];
-	bam_iter_t *iter = NULL;
+	hts_itr_t *iter = NULL;
 	trans_tbl_t *translation_tbl = NULL;
 
 	// Is there a specified pre-prepared header to use for output?
@@ -473,7 +481,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	g_is_by_qname = by_qname;
 	fp = (bamFile*)calloc(n, sizeof(bamFile));
 	heap = (heap1_t*)calloc(n, sizeof(heap1_t));
-	iter = (bam_iter_t*)calloc(n, sizeof(bam_iter_t));
+	iter = (hts_itr_t**)calloc(n, sizeof(hts_itr_t*));
 	translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
 	// prepare RG tag from file names
 	if (flag & MERGE_RG) {
@@ -520,12 +528,15 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			return -1;
 		}
 		for (i = 0; i < n; ++i) {
-			bam_index_t *idx;
-			idx = bam_index_load(fn[i]);
+			hts_idx_t *idx = bam_index_load(fn[i]);
 			// (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
 			int mapped_tid = rtrans[i*hout->n_targets+tid];
-			iter[i] = bam_iter_query(idx, mapped_tid, beg, end);
-			bam_index_destroy(idx);
+			if (mapped_tid != INT32_MIN) {
+				iter[i] = bam_itr_queryi(idx, mapped_tid, beg, end);
+			} else {
+				iter[i] = bam_itr_finish();
+			}
+			hts_idx_destroy(idx);
 		}
 		free(rtrans);
 	}
@@ -535,7 +546,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		heap1_t *h = heap + i;
 		h->i = i;
 		h->b = (bam1_t*)calloc(1, sizeof(bam1_t));
-		if (bam_iter_read(fp[i], iter[i], h->b) >= 0) {
+		if (bam_itr_next(fp[i], iter[i], h->b) >= 0) {
 			bam_translate(h->b, translation_tbl + i);
 			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam1_strand(h->b);
 			h->idx = idx++;
@@ -568,7 +579,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
 		}
 		bam_write1(fpout, b);
-		if ((j = bam_iter_read(fp[heap->i], iter[heap->i], b)) >= 0) {
+		if ((j = bam_itr_next(fp[heap->i], iter[heap->i], b)) >= 0) {
 			bam_translate(b, translation_tbl + heap->i);
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam1_strand(b);
 			heap->idx = idx++;
