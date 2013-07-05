@@ -29,7 +29,7 @@ void dump_read(bam1_t* b) {
 		printf("qseq:");
 		int i;
 		for (i = 0; i < b->core.l_qseq; ++i) {
-			printf("%c",bam_nt16_rev_table[bam_nt16_nt4_table[bam1_seqi(bam1_seq(b),i)]]);
+			printf("%c",bam_nt16_rev_table[bam_nt16_table[bam1_seqi(bam1_seq(b),i)]]);
 		}
 		printf("\n");
 		printf("qual:");
@@ -40,11 +40,11 @@ void dump_read(bam1_t* b) {
 
 	}
 
-	if (b->l_aux) {
+	if (bam_get_l_aux(b)) {
 		int i = 0;
 		uint8_t* aux = bam1_aux(b);
 
-		while (i < b->l_aux) {
+		while (i < bam_get_l_aux(b)) {
 			printf("%.2s:%c:",aux+i,*(aux+i+2));
 			i += 2;
 			switch (*(aux+i)) {
@@ -99,7 +99,6 @@ void setup_test_1(bam1_t** b_in, trans_tbl_t* tbl) {
 					 "" // aux
 		   , data_len
 					 );
-	b->l_aux = 0;
 	b->m_data = b->data_len = data_len;
 	
 	*b_in = b;
@@ -140,7 +139,6 @@ void setup_test_2(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "RGZhello\0" // aux
 		   , data_len
 		   );
-	b->l_aux = 9;
 	b->m_data = b->data_len = data_len;
 	
 	*b_in = b;
@@ -182,7 +180,6 @@ void setup_test_3(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "PGZhello\0" // aux
 		   , data_len
 		   );
-	b->l_aux = 9;
 	b->m_data = b->data_len = data_len;
 	
 	*b_in = b;
@@ -220,7 +217,6 @@ void setup_test_4(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "RGZhello\0" // aux
 		   , data_len
 		   );
-	b->l_aux = 9;
 	b->m_data = b->data_len = data_len;
 	
 	*b_in = b;
@@ -259,7 +255,6 @@ void setup_test_5(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "PGZhello\0" // aux
 		   , data_len
 		   );
-	b->l_aux = 9;
 	b->m_data = b->data_len = data_len;
 	
 	*b_in = b;
@@ -303,7 +298,6 @@ void setup_test_6(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "RGZhello\0PGZquail\0" // aux
 		   , data_len
 		   );
-	b->l_aux = 18;
 	b->m_data = b->data_len = data_len;
 	
 	*b_in = b;
