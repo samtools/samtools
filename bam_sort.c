@@ -443,11 +443,13 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	
 	// Add trailing \n and write back to header
 	free(out->text);
-	out->text = (char*) malloc(out_len+1);
+	out->text = (char*) malloc(out_len+1+1);
 	memcpy((void*)out->text, out_text, out_len);
 	out->text[out_len] = '\n';
+	out->text[out_len+1] = '\0';
 	out->l_text = out_len + 1;
 	free(out_text);
+	pretty_header(&out->text,out->l_text);
 }
 
 static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
@@ -630,6 +632,16 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			hts_idx_destroy(idx);
 		}
 		free(rtrans);
+	} else {
+		for (i = 0; i < n; ++i) {
+			hts_idx_t *idx = bam_index_load(fn[i]);
+			iter[i] = hts_itr_query(idx, HTS_IDX_START, 0, 0);
+			if (iter[i] == NULL) {
+				fprintf(stderr, "[%s] Ack ack ack! iter is null %d\n", __func__,i);
+				return -1;
+			}
+			hts_idx_destroy(idx);
+		}
 	}
 
 	// Load the first read from each file into the heap
