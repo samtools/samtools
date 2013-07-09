@@ -63,7 +63,7 @@ static int strnum_cmp(const char *_a, const char *_b)
 	return *pa? 1 : *pb? -1 : 0;
 }
 
-#define HEAP_EMPTY 0xffffffffffffffffull
+#define HEAP_EMPTY UINT64_MAX
 
 typedef struct {
 	int i;
@@ -393,16 +393,17 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 	// Create reverse translation table for tids
 	int* rtrans = (int*)malloc(sizeof(int32_t)*n*n_targets);
 	const int32_t NOTID = -1;
-	memset_pattern4((void*)rtrans, &NOTID, n*n_targets);
+	memset_pattern4((void*)rtrans, &NOTID, sizeof(int32_t)*n*n_targets);
 	int i;
 	for (i = 0; i < n; ++i) {
 		int j;
 		for (j = 0; j < (translation_tbl+i)->n_targets; ++j) {
 			if ((translation_tbl+i)->tid_trans[j] != -1) {
-				rtrans[i *n + (translation_tbl+i)->tid_trans[j]] = j;
+				rtrans[i*n_targets + (translation_tbl+i)->tid_trans[j]] = j;
 			}
 		}
 	}
+
 	return rtrans;
 }
 
@@ -522,7 +523,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			bam_index_t *idx;
 			idx = bam_index_load(fn[i]);
 			// (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
-			iter[i] = bam_iter_query(idx, rtrans[i*n+tid], beg, end);
+			int mapped_tid = rtrans[i*hout->n_targets+tid];
+			iter[i] = bam_iter_query(idx, mapped_tid, beg, end);
 			bam_index_destroy(idx);
 		}
 		free(rtrans);
@@ -540,10 +542,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		}
 		else {
 			h->pos = HEAP_EMPTY;
-			free(heap->b);
-			heap->b = NULL;
 		}
 	}
+
 	// Open output file and write header
 	if (flag & MERGE_UNCOMP) level = 0;
 	else if (flag & MERGE_LEVEL1) level = 1;
@@ -568,9 +569,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		}
 		bam_write1(fpout, b);
 		if ((j = bam_iter_read(fp[heap->i], iter[heap->i], b)) >= 0) {
+			bam_translate(b, translation_tbl + heap->i);
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam1_strand(b);
 			heap->idx = idx++;
-			bam_translate(b, translation_tbl + heap->i);
 		} else if (j == -1) {
 			heap->pos = HEAP_EMPTY;
 			free(heap->b->data); free(heap->b);
