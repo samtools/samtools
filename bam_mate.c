@@ -171,7 +171,7 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 		{
 			cur->core.flag |= BAM_FUNMAP;
 		}
-		if (cur->core.flag&BAM_FUNMAP != 0) // If mapped calculate end
+		if ((cur->core.flag&BAM_FUNMAP) != 0) // If mapped calculate end
 		{
 			cur_end = bam_calend(&cur->core, bam1_cigar(cur));
 
