@@ -324,6 +324,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             exit(1);
         }
 
+        // BCF header creation
         bcf_hdr = bcf_hdr_init("w");
         kstring_t str = {0,0,0};
 
@@ -343,6 +344,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_append(bcf_hdr, str.s);
         }
 
+        // Translate BAM @SQ tags to BCF ##contig tags
         // todo: use/write new BAM header manipulation routines, fill also UR, M5
         for (i=0; i<h->n_targets; i++)
         {
@@ -389,7 +391,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
         bcf_hdr_add_sample(bcf_hdr, NULL);
         bcf_hdr_write(bcf_fp, bcf_hdr);
+        // End of BCF header creation
 
+        // Initialise the calling algorithm
         bca = bcf_call_init(-1., conf->min_baseQ);
         bcr = calloc(sm->n, sizeof(bcf_callret1_t));
         bca->rghash = rghash;
@@ -430,7 +434,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
     } else ref_tid = -1, ref = 0;
 
-    // begin pileup
+    // init pileup
     iter = bam_mplp_init(n, mplp_func, (void**)data);
     if ( conf->flag & MPLP_SMART_OVERLAPS ) bam_mplp_init_overlaps(iter);
     max_depth = conf->max_depth;
@@ -444,6 +448,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     bam_mplp_set_maxcnt(iter, max_depth);
     bcf1_t *bcf_rec = bcf_init1();
     int ret;
+    // begin pileup
     while ( (ret=bam_mplp_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
         if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
