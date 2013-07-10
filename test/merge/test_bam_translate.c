@@ -326,12 +326,13 @@ int main(int argc, char**argv)
 	bam1_t* b;
 
 	// Setup stderr redirect
-	size_t len;
-	char* res;
+	size_t len = 0;
+	char* res = NULL;
 	int restore_stderr = dup(STDERR_FILENO); // Save stderr
 	char* template = strdup("test_bam_trans_XXXXXXX");
 	int null_fd = mkstemp(template);
 	unlink(template);
+	free(template);
 	FILE* check = fdopen(null_fd, "w+");
 	
 	// setup
@@ -566,6 +567,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("END test 6\n");
 
 	// Cleanup
+	free(res);
 	fclose(check);
 	close(restore_stderr);
 	
