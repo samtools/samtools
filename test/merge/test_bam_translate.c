@@ -358,11 +358,12 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	rewind(check);
-	res = fgetln(check,&len);
+	getline(&res, &len, check);
 	if (feof(check) || (res && !strcmp("",res))) {
 		++success;
 	} else {
 		++failure;
+		if (verbose) printf("FAIL test 1\n");
 	}
 	rewind(check);
 	
@@ -395,11 +396,12 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	rewind(check);
-	res = fgetln(check,&len);
+	getline(&res, &len, check);
 	if (feof(check) || (res && !strcmp("",res))) {
 		++success;
 	} else {
 		++failure;
+		if (verbose) printf("FAIL test 2\n");
 	}
 	rewind(check);
 	
@@ -431,11 +433,12 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	rewind(check);
-	res = fgetln(check,&len);
+	getline(&res, &len, check);
 	if (feof(check) || (res && !strcmp("",res))) {
 		++success;
 	} else {
 		++failure;
+		if (verbose) printf("FAIL test 3\n");
 	}
 	rewind(check);
 	
@@ -467,11 +470,12 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	rewind(check);
-	res = fgetln(check,&len);
+	getline(&res, &len, check);
 	if (res && !strcmp("[bam_translate] RG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
 		++success;
 	} else {
 		++failure;
+		if (verbose) printf("FAIL test 4\n");
 	}
 	rewind(check);
 	
@@ -503,11 +507,12 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	rewind(check);
-	res = fgetln(check,&len);
+	getline(&res, &len, check);
 	if (res && !strcmp("[bam_translate] PG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
 		++success;
 	} else {
 		++failure;
+		if (verbose) printf("FAIL test 5\n");
 	}
 	rewind(check);
 
@@ -540,16 +545,18 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	rewind(check);
-	res = fgetln(check,&len);
+	getline(&res, &len, check);
 	if (res && !strcmp("[bam_translate] PG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
-		res = fgetln(check,&len);
+		getline(&res, &len, check);
 		if (feof(check) || (res && !strcmp("",res))) {
 			++success;
 		} else {
 			++failure;
+			if (verbose) printf("FAIL test 6 - route a\n");
 		}
 	} else {
 		++failure;
+		if (verbose) printf("FAIL test 6 - route b\n");
 	}
 	rewind(check);
 
