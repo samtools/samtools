@@ -301,7 +301,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	regex_t rg_id;
 	regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
 	if (matches == NULL) { perror("out of memory"); exit(-1); }
-	regcomp(&rg_id, "^@RG.*\tID:([A-Za-z0-9]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
+	regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 	char* text = translate->text;
 	while(1) { //	foreach rg id in translate's header
 		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
@@ -353,7 +353,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	
 	// Do same for PG id's
 	regex_t pg_id;
-	regcomp(&pg_id, "^@PG.*\tID:([A-Za-z0-9]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
+	regcomp(&pg_id, "^@PG.*\tID:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 	text = translate->text;
 	klist_t(hdrln) *pg_list = kl_init(hdrln);
 	while(1) { //	foreach pg id in translate's header
@@ -407,7 +407,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	// with ID replaced with tranformed_id and PP's transformed using the translation table
 	// }
 	regex_t pg_pp;
-	regcomp(&pg_pp, "^@PG.*\tPP:([A-Za-z0-9]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
+	regcomp(&pg_pp, "^@PG.*\tPP:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 	kliter_t(hdrln) *iter = kl_begin(pg_list);
 	while (iter != kl_end(pg_list)) {
 		char* data = kl_val(iter);
