@@ -1,6 +1,5 @@
 #include "../../bam_sort.c"
 #include <fcntl.h>
-#include <poll.h>
 
 void dump_read(bam1_t* b) {
 	printf("->core.tid:(%d)\n", b->core.tid);
@@ -207,14 +206,14 @@ void setup_test_4(bam1_t** b_in, trans_tbl_t* tbl) {
 	b->core.mtid = -1;
 	b->core.mpos = 0;
 	b->core.isize = -1;
-	size_t data_len = 10 + 4 + 5 + 10 + 9;
+	size_t data_len = 10 + 4 + 5 + 10 + 12;
 	b->data = (uint8_t*)malloc(data_len);
 	memcpy(b->data,
 		   "123456789\0" // q_name
 		   "\x00\x00\x00\xA0" // cigar
 		   "\x00\x00\x00\x00\x00" // qseq
 		   "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" // qual
-		   "RGZhello\0" // aux
+		   "RGZrg4hello\0" // aux
 		   , data_len
 		   );
 	b->m_data = b->data_len = data_len;
@@ -245,14 +244,14 @@ void setup_test_5(bam1_t** b_in, trans_tbl_t* tbl) {
 	b->core.mtid = -1;
 	b->core.mpos = 0;
 	b->core.isize = -1;
-	size_t data_len = 10 + 4 + 5 + 10 + 9;
+	size_t data_len = 10 + 4 + 5 + 10 + 12;
 	b->data = (uint8_t*)malloc(data_len);
 	memcpy(b->data,
 		   "123456789\0" // q_name
 		   "\x00\x00\x00\xA0" // cigar
 		   "\x00\x00\x00\x00\x00" // qseq
 		   "\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF" // qual
-		   "PGZhello\0" // aux
+		   "PGZpg5hello\0" // aux
 		   , data_len
 		   );
 	b->m_data = b->data_len = data_len;
@@ -472,7 +471,7 @@ int main(int argc, char**argv)
 	len = 0;
 	rewind(check);
 	getline(&res, &len, check);
-	if (res && !strcmp("[bam_translate] RG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+	if (res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
 		++success;
 	} else {
 		++failure;
@@ -509,7 +508,7 @@ int main(int argc, char**argv)
 	len = 0;
 	rewind(check);
 	getline(&res, &len, check);
-	if (res && !strcmp("[bam_translate] PG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+	if (res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
 		++success;
 	} else {
 		++failure;
