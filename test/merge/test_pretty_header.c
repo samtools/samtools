@@ -28,7 +28,7 @@ int main(int argc, char**argv)
 	while ((getopt_char = getopt(argc, argv, "v")) != -1) {
 		switch (getopt_char) {
 			case 'v':
-				verbose = 1;
+				++verbose;
 				break;
 			default:
 				break;
@@ -40,13 +40,13 @@ int main(int argc, char**argv)
 	char* input;
 	setup_test_1(&input);
 	// test
-	if (verbose) {
+	if (verbose > 1) {
 		printf("input:\n%s",input);
 	}
 	if (verbose) printf("RUN test 1\n");
 	pretty_header(&input, strlen(input));
 	if (verbose) printf("END RUN test 1\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("input:\n%s",input);
 	}
 	if (check_test_1(input)) { ++success; } else { ++failure; }

@@ -284,7 +284,7 @@ int main(int argc, char**argv)
 	while ((getopt_char = getopt(argc, argv, "v")) != -1) {
 		switch (getopt_char) {
 			case 'v':
-				verbose = 1;
+				++verbose;
 				break;
 			default:
 				break;
@@ -303,7 +303,7 @@ int main(int argc, char**argv)
 	trans_tbl_t tbl_1;
 	setup_test_1(&translate,&out);
 	// test
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -312,7 +312,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 1\n");
 	trans_tbl_init(out, translate, &tbl_1, false, false);
 	if (verbose) printf("END RUN test 1\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -330,7 +330,7 @@ int main(int argc, char**argv)
 	// reinit
 	trans_tbl_t tbl_2;
 	setup_test_2(&translate,&out);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -339,7 +339,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 2\n");
 	trans_tbl_init(out, translate, &tbl_2, false, false);
 	if (verbose) printf("END RUN test 2\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -357,7 +357,7 @@ int main(int argc, char**argv)
 	// reinit
 	trans_tbl_t tbl_3;
 	setup_test_3(&translate,&out);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -366,7 +366,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 3\n");
 	trans_tbl_init(out, translate, &tbl_3, false, false);
 	if (verbose) printf("END RUN test 3\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -384,7 +384,7 @@ int main(int argc, char**argv)
 	// reinit
 	trans_tbl_t tbl_4;
 	setup_test_4(&translate,&out);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -393,7 +393,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 4\n");
 	trans_tbl_init(out, translate, &tbl_4, false, false);
 	if (verbose) printf("END RUN test 4\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");
@@ -411,7 +411,7 @@ int main(int argc, char**argv)
 	// reinit
 	trans_tbl_t tbl_5;
 	setup_test_5(&translate,&out);
-	if (verbose) {
+	if (verbose > 1) {
 		
 		printf("translate\n");
 		dump_header(translate);
@@ -421,7 +421,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 5\n");
 	trans_tbl_init(out, translate, &tbl_5, false, false);
 	if (verbose) printf("END RUN test 5\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("translate\n");
 		dump_header(translate);
 		printf("out\n");

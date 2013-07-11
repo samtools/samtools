@@ -1,5 +1,6 @@
 #include "../../bam_sort.c"
 #include <fcntl.h>
+#include <unistd.h>
 
 void dump_read(bam1_t* b) {
 	printf("->core.tid:(%d)\n", b->core.tid);
@@ -315,7 +316,7 @@ int main(int argc, char**argv)
 	while ((getopt_char = getopt(argc, argv, "v")) != -1) {
 		switch (getopt_char) {
 			case 'v':
-				verbose = 1;
+				++verbose;
 				break;
 			default:
 				break;
@@ -338,7 +339,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("BEGIN test 1\n");  // TID test
 	trans_tbl_t tbl1;
 	setup_test_1(&b,&tbl1);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
@@ -350,7 +351,7 @@ int main(int argc, char**argv)
 	dup2(restore_stderr, STDERR_FILENO);
 
 	if (verbose) printf("END RUN test 1\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
@@ -365,7 +366,6 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 1\n");
 	}
-	rewind(check);
 	
 	// teardown
 	bam_destroy1(b);
@@ -373,22 +373,24 @@ int main(int argc, char**argv)
 	if (verbose) printf("END test 1\n");
 	
 	// setup
-	if (verbose) printf("BEGIN test 2\n");  // RG test
+	if (verbose) printf("BEGIN test 2\n");  // RG exists and translate test
 	trans_tbl_t tbl2;
 	setup_test_2(&b,&tbl2);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
 	if (verbose) printf("RUN test 2\n");
 	
 	// test
+	ftruncate(null_fd, 0);
+	rewind(check);
 	dup2(null_fd, STDERR_FILENO);
 	bam_translate(b, &tbl2);
 	dup2(restore_stderr, STDERR_FILENO);
 
 	if (verbose) printf("END RUN test 2\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
@@ -403,29 +405,30 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 2\n");
 	}
-	rewind(check);
 	
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl2);
 	if (verbose) printf("END test 2\n");
 	
-	if (verbose) printf("BEGIN test 3\n");  // PG test
+	if (verbose) printf("BEGIN test 3\n");  // PG exists and translate  test
 	// setup
 	trans_tbl_t tbl3;
 	setup_test_3(&b,&tbl3);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
 	if (verbose) printf("RUN test 3\n");
 
 	// test
+	ftruncate(null_fd, 0);
+	rewind(check);
 	dup2(null_fd, 2);
 	bam_translate(b, &tbl3);
 	dup2(restore_stderr, 2);
 	if (verbose) printf("END RUN test 3\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
@@ -440,30 +443,31 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 3\n");
 	}
-	rewind(check);
 	
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl3);
 	if (verbose) printf("END test 3\n");
 	
-	if (verbose) printf("BEGIN test 4\n");  // RG test non existant
+	if (verbose) printf("BEGIN test 4\n");  // RG test non-existent
 	// setup
 	trans_tbl_t tbl4;
 	setup_test_4(&b,&tbl4);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
 	if (verbose) printf("RUN test 4\n");
 	
 	// test
+	ftruncate(null_fd, 0);
+	rewind(check);
 	dup2(null_fd, STDERR_FILENO);
 	bam_translate(b, &tbl4);
 	dup2(restore_stderr, STDERR_FILENO);
 	
 	if (verbose) printf("END RUN test 4\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
@@ -477,29 +481,30 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 4\n");
 	}
-	rewind(check);
 	
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl4);
 	if (verbose) printf("END test 4\n");
 	
-	if (verbose) printf("BEGIN test 5\n");  // PG test non existant
+	if (verbose) printf("BEGIN test 5\n");  // PG test non-existent
 	// setup
 	trans_tbl_t tbl5;
 	setup_test_5(&b,&tbl5);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 		printf("RUN test 5\n");
 	}
 	// test
+	ftruncate(null_fd, 0);
+	rewind(check);
 	dup2(null_fd, STDERR_FILENO);
 	bam_translate(b, &tbl5);
 	dup2(restore_stderr, STDERR_FILENO);
 
 	if (verbose) printf("END RUN test 5\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
@@ -514,30 +519,31 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 5\n");
 	}
-	rewind(check);
 
 	// teardown
 	bam_destroy1(b);
 	trans_tbl_destroy(&tbl5);
 	if (verbose) printf("END test 5\n");
 	
-	if (verbose) printf("BEGIN test 6\n");  // RG and PG test
+	if (verbose) printf("BEGIN test 6\n");  // RG and PG exists and translate test
 	// setup
 	trans_tbl_t tbl6;
 	setup_test_6(&b,&tbl6);
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
 	if (verbose) printf("RUN test 6\n");
 
 	// test
+	ftruncate(null_fd, 0);
+	rewind(check);
 	dup2(null_fd, STDERR_FILENO);
 	bam_translate(b, &tbl6);
 	dup2(restore_stderr, STDERR_FILENO);
 
 	if (verbose) printf("END RUN test 6\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("b\n");
 		dump_read(b);
 	}
@@ -546,19 +552,12 @@ int main(int argc, char**argv)
 	len = 0;
 	rewind(check);
 	getline(&res, &len, check);
-	if (res && !strcmp("[bam_translate] PG tag \"hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
-		getline(&res, &len, check);
-		if (feof(check) || (res && !strcmp("",res))) {
-			++success;
-		} else {
-			++failure;
-			if (verbose) printf("FAIL test 6 - route a\n");
-		}
+	if (feof(check) || (res && !strcmp("",res))) {
+		++success;
 	} else {
 		++failure;
-		if (verbose) printf("FAIL test 6 - route b\n");
+		if (verbose) printf("FAIL test 6\n");
 	}
-	rewind(check);
 
 	// teardown
 	bam_destroy1(b);

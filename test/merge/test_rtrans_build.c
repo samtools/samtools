@@ -46,7 +46,7 @@ int main(int argc, char**argv)
 	while ((getopt_char = getopt(argc, argv, "v")) != -1) {
 		switch (getopt_char) {
 			case 'v':
-				verbose = 1;
+				++verbose;
 				break;
 			default:
 				break;
@@ -63,17 +63,22 @@ int main(int argc, char**argv)
 	int* rtrans_1 = NULL;
 	setup_test_1(&tbl_1[0]);
 	// test
-	if (verbose) {
+	if (verbose > 1) {
 		// dump_trans_tid
 	}
 	if (verbose) printf("RUN test 1\n");
 	rtrans_1 = rtrans_build(n_1, n_targets_1, &tbl_1[0]);
 	if (verbose) printf("END RUN test 1\n");
-	if (verbose) {
+	if (verbose > 1) {
 		printf("rtrans\n");
 		dump_rtrans(rtrans_1, n_1, n_targets_1);
 	}
-	if (check_test_1(&tbl_1[0], rtrans_1)) { ++success; } else { ++failure; }
+	if (check_test_1(&tbl_1[0], rtrans_1)) {
+		++success;
+	} else {
+		++failure;
+		if (verbose) printf("FAIL test 1\n");
+	}
 	// teardown
 	trans_tbl_destroy(&tbl_1[0]);
 	free(rtrans_1);
