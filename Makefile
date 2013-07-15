@@ -4,9 +4,12 @@
 #   make git-stamp
 VERSION=
 
+all: samtools bgzip razip
+
 # Adjust $(HTSDIR) to point to your top-level htslib directory
 HTSDIR = ../htslib
-HTSLIB = $(HTSDIR)/htslib/libhts.a
+include $(HTSDIR)/htslib.mk
+HTSLIB = $(HTSDIR)/libhts.a
 
 CC=			gcc
 CFLAGS=		-g -Wall $(VERSION) -O2
@@ -66,27 +69,51 @@ razip:razip.o $(HTSLIB)
 bgzip:bgzip.o $(HTSLIB)
 		$(CC) $(CFLAGS) -o $@ bgzip.o $(HTSLIB) -lz -lpthread
 
-razip.o:$(HTSDIR)/htslib/razf.h
-bam.o:bam.h bam_endian.h $(HTSDIR)/htslib/kstring.h sam_header.h
-sam.o:sam.h bam.h
-bam_import.o:bam.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
-bam_pileup.o:bam.h $(HTSDIR)/htslib/ksort.h
-bam_plcmd.o:bam.h $(HTSDIR)/htslib/faidx.h bcftools/bcf.h bam2bcf.h
-bam_index.o:bam.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h bam_endian.h
-bam_lpileup.o:bam.h $(HTSDIR)/htslib/ksort.h
-bam_tview.o:bam.h $(HTSDIR)/htslib/faidx.h bam_tview.h
-bam_tview_curses.o:bam.h $(HTSDIR)/htslib/faidx.h bam_tview.h
-bam_tview_html.o:bam.h $(HTSDIR)/htslib/faidx.h bam_tview.h
-bam_sort.o:bam.h $(HTSDIR)/htslib/ksort.h
-bam_md.o:bam.h $(HTSDIR)/htslib/faidx.h
-sam_header.o:sam_header.h $(HTSDIR)/htslib/khash.h
-bcf.o:bcftools/bcf.h
-bam2bcf.o:bam2bcf.h errmod.h bcftools/bcf.h
-bam2bcf_indel.o:bam2bcf.h
-errmod.o:errmod.h
-phase.o:bam.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
-bamtk.o:bam.h
+bam_h = bam.h $(htslib_bgzf_h) $(htslib_sam_h)
+bam2bcf_h = bam2bcf.h errmod.h bcftools/bcf.h
+bam_tview_h = bam_tview.h $(bam_h) $(htslib_faidx_h) $(bam2bcf_h) sam_header.h $(HTSDIR)/htslib/khash.h
+bcftools_bcf_h = bcftools/bcf.h $(htslib_bgzf_h)
+sam_h = sam.h $(htslib_sam_h) $(bam_h)
+sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 
+bam.o: bam.c $(bam_h) sam_header.h
+bam2bcf.o: bam2bcf.c
+bam2bcf_indel.o: bam2bcf_indel.c
+bam2depth.o: bam2depth.c
+bam_aux.o: bam_aux.c
+bam_cat.o: bam_cat.c $(HTSDIR)/htslib/knetfile.h $(htslib_bgzf_h) $(bam_h)
+bam_color.o: bam_color.c $(bam_h)
+bam_import.o: bam_import.c $(bam_h) $(HTSDIR)/htslib/kseq.h
+bam_index.o: bam_index.c $(bam_h)
+bam_lpileup.o: bam_lpileup.c $(bam_h) $(HTSDIR)/htslib/ksort.h
+bam_mate.o: bam_mate.c $(bam_h)
+bam_md.o: bam_md.c $(htslib_faidx_h) $(sam_h) kaln.h kprobaln.h
+bam_pileup.o: bam_pileup.c $(sam_h)
+bam_plcmd.o: bam_plcmd.c $(sam_h) $(htslib_faidx_h) sam_header.h $(bam2bcf_h) $(sample_h)
+bam_reheader.o: bam_reheader.c $(HTSDIR)/htslib/knetfile.h $(htslib_bgzf_h) $(bam_h)
+bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
+bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
+bam_sort.o: bam_sort.c $(bam_h) $(HTSDIR)/htslib/ksort.h
+bam_stat.o: bam_stat.c $(bam_h)
+bam_tview.o: bam_tview.c $(bam_tview_h)
+bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
+bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
+bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h
+bamtk.o: bamtk.c $(bam_h) $(HTSDIR)/htslib/knetfile.h
+bedcov.o: bedcov.c $(htslib_bgzf_h) $(bam_h) $(HTSDIR)/htslib/kseq.h
+bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
+bgzip.o: bgzip.c $(htslib_bgzf_h)
+cut_target.o: cut_target.c $(bam_h) errmod.h $(htslib_faidx_h)
+errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
+kaln.o: kaln.c kaln.h
+kprobaln.o: kprobaln.c kprobaln.h
+padding.o: padding.c sam_header.h $(sam_h) $(bam_h) $(htslib_faidx_h)
+phase.o: phase.c $(bam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
+razip.o: razip.c $(htslib_razf_h)
+sam.o: sam.c $(htslib_faidx_h) $(sam_h)
+sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h
+sam_view.o: sam_view.c sam_header.h $(sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/khash.h
+sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
 
 
 libbam.1.dylib-local:$(LOBJS)
@@ -107,4 +134,4 @@ dylib:
 cleanlocal:
 		rm -fr gmon.out *.o a.out *.exe *.dSYM razip bgzip $(PROG) *~ *.a *.so.* *.so *.dylib
 
-clean:cleanlocal-recur
+clean:cleanlocal-recur clean-htslib

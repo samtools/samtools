@@ -4,6 +4,7 @@
 *.dSYM
 .DS_Store
 /bcftools/bcftools
+/bgzip
 /misc/ace2sam
 /misc/bamcheck
 /misc/maq2sam-long
@@ -11,4 +12,5 @@
 /misc/md5fa
 /misc/md5sum-lite
 /misc/wgsim
+/razip
 /samtools
