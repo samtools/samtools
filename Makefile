@@ -22,7 +22,7 @@ AOBJS=		bam_index.o bam_tview.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-			bam_tview_curses.o bam_tview_html.o
+			bam_tview_curses.o bam_tview_html.o faidx.o
 PROG=		samtools
 INCLUDES=	-I. -I$(HTSDIR)
 SUBDIRS=	. bcftools misc
@@ -31,7 +31,7 @@ LIBCURSES=	-lcurses # -lXCurses
 
 
 .SUFFIXES:.c .o
-.PHONY: all lib
+.PHONY: all lib test
 
 .c.o:
 		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
@@ -48,6 +48,9 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		done;
 
 all:$(PROG)
+
+test:
+		test/test.pl
 
 git-stamp:
 		make VERSION="-DVERSION='\\\"`git describe --always --dirty`\\\"'"
