@@ -181,9 +181,11 @@ int main(int argc, char **argv)
 
         buffer = malloc(BGZF_BLOCK_SIZE);
         bgzf_index_build_init(fp);
-        while ( bgzf_read(fp, buffer, BGZF_BLOCK_SIZE)>0 ) ;
+        int ret;
+        while ( (ret=bgzf_read(fp, buffer, BGZF_BLOCK_SIZE))>0 ) ;
         free(buffer);
-
+        if ( ret<0 ) error("Is the file gzipped or bgzipped? The latter is required for indexing.\n");
+ 
         if ( index_fname )
             bgzf_index_dump(fp, index_fname, NULL);
         else 

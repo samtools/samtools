@@ -264,6 +264,11 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
 		sprintf(str, "%s:%d-%d", tv->header->target_name[tv->curr_tid], tv->left_pos + 1, tv->left_pos + tv->mcol);
 		tv->ref = fai_fetch(tv->fai, str, &tv->l_ref);
 		free(str);
+        if ( !tv->ref ) 
+        {
+            fprintf(stderr,"Could not read the reference sequence. Is it seekable (plain text or compressed + .gzi indexed with bgzip)?\n");
+            abort();
+        }
 	}
 	// draw aln
 	bam_lplbuf_reset(tv->lplbuf);
