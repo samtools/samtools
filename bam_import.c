@@ -15,7 +15,7 @@ bam_header_t *sam_header_read2(const char *fn)
 	gzFile fp;
 	kstream_t *ks;
 	kstring_t *str;
-	kstring_t samstr;
+	kstring_t samstr = { 0, 0, NULL };
 	if (fn == 0) return 0;
 	fp = (strcmp(fn, "-") == 0)? gzdopen(fileno(stdin), "r") : gzopen(fn, "r");
 	if (fp == 0) return 0;
@@ -32,7 +32,7 @@ bam_header_t *sam_header_read2(const char *fn)
 	ks_destroy(ks);
 	gzclose(fp);
 	free(str->s); free(str);
-	header = sam_hdr_parse(samstr.l, samstr.s);
+	header = sam_hdr_parse(samstr.l, samstr.s? samstr.s : "");
 	free(samstr.s);
 	fprintf(stderr, "[sam_header_read2] %d sequences loaded.\n", n_targets);
 	return header;
