@@ -32,7 +32,7 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 	int i, end;
 	uint32_t *cigar;
 	str->l = 0;
-	if (b1->core.tid != b2->core.tid || b1->core.tid < 0 || b1->core.pos == 0 || b2->core.pos == 0 || b1->core.flag&BAM_FUNMAP || b2->core.flag&BAM_FUNMAP) return; // coordinateless or not on the same chr; skip
+	if (b1->core.tid != b2->core.tid || b1->core.tid < 0 || b1->core.pos < 0 || b2->core.pos < 0 || b1->core.flag&BAM_FUNMAP || b2->core.flag&BAM_FUNMAP) return; // coordinateless or not on the same chr; skip
 	if (b1->core.pos > b2->core.pos) swap = b1, b1 = b2, b2 = swap; // make sure b1 has a smaller coordinate
 	kputc((b1->core.flag & BAM_FREAD1)? '1' : '2', str); // segment index
 	kputc((b1->core.flag & BAM_FREVERSE)? 'R' : 'F', str); // strand
@@ -61,11 +61,11 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * Secondary Reads:
  * -write to output unchanged
  * All Reads:
- * -if pos == 0, tid == -1 set UNMAPPED flag
+ * -if pos == 0 (1 based), tid == -1 set UNMAPPED flag
  * single Reads:
- * -if pos == 0, tid == -1, or UNMAPPED then set UNMAPPED, pos = 0, tid = -1
+ * -if pos == 0 (1 based), tid == -1, or UNMAPPED then set UNMAPPED, pos = 0, tid = -1
  * -clear flags (PAIRED, MREVERSE, PROPER_PAIR)
- * -set mpos = 0, mtid = -1 and isize = 0
+ * -set mpos = 0 (1 based), mtid = -1 and isize = 0
  * -write to output
  * Paired Reads:
  * -if read is unmapped and mate is not, set pos and tid to equal that of mate
@@ -167,7 +167,7 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 			if ( !remove_reads ) bam_write1(out, cur);
 			continue; // skip secondary alignments
 		}
-		if (cur->core.tid < 0 || cur->core.pos == 0) // If unmapped set the flag
+		if (cur->core.tid < 0 || cur->core.pos < 0) // If unmapped set the flag
 		{
 			cur->core.flag |= BAM_FUNMAP;
 		}
@@ -212,10 +212,10 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 				}
 				has_prev = 0;
 			} else { // unpaired?  clear bad info and write it out
-				if (pre->core.tid < 0 || pre->core.pos == 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
+				if (pre->core.tid < 0 || pre->core.pos < 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
 					pre->core.flag |= BAM_FUNMAP;
 					pre->core.tid = -1;
-					pre->core.pos = 0;
+					pre->core.pos = -1;
 				}
 				pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
 				pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
@@ -227,10 +227,10 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 	}
 	if (has_prev && !remove_reads) { // If we still have a BAM in the buffer it must be unpaired
 		bam1_t *pre = b[1-curr];
-		if (pre->core.tid < 0 || pre->core.pos == 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
+		if (pre->core.tid < 0 || pre->core.pos < 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
 			pre->core.flag |= BAM_FUNMAP;
 			pre->core.tid = -1;
-			pre->core.pos = 0;
+			pre->core.pos = -1;
 		}
 		pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
 		pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
