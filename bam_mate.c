@@ -138,7 +138,7 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 {
 	bam_header_t *header;
 	bam1_t *b[2];
-	int curr, has_prev, pre_end = 0, cur_end;
+	int curr, has_prev, pre_end = 0, cur_end = 0;
 	kstring_t str;
 
 	str.l = str.m = 0; str.s = 0;
@@ -171,7 +171,7 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 		{
 			cur->core.flag |= BAM_FUNMAP;
 		}
-		if ((cur->core.flag&BAM_FUNMAP) != 0) // If mapped calculate end
+		if ((cur->core.flag&BAM_FUNMAP) == 0) // If mapped calculate end
 		{
 			cur_end = bam_calend(&cur->core, bam1_cigar(cur));
 
