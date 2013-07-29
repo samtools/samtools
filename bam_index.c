@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <assert.h>
+#include <inttypes.h>
 #include "bam.h"
 #include "khash.h"
 #include "ksort.h"
@@ -157,7 +158,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	uint32_t last_bin, save_bin, recalculated_bin;
 	int32_t last_coor, last_tid, save_tid;
 	bam1_core_t *c;
-	uint64_t save_off, last_off, n_mapped, n_unmapped, off_beg, off_end, n_no_coor;
+	uint64_t save_off, last_off, n_mapped, n_unmapped, n_wrong_bin, off_beg, off_end, n_no_coor;
 
 	h = bam_header_read(fp);
 	if(h == 0) {
@@ -176,7 +177,7 @@ bam_index_t *bam_index_core(bamFile fp)
 
 	save_bin = save_tid = last_tid = last_bin = 0xffffffffu;
 	save_off = last_off = bam_tell(fp); last_coor = 0xffffffffu;
-	n_mapped = n_unmapped = n_no_coor = off_end = 0;
+	n_mapped = n_unmapped = n_wrong_bin = n_no_coor = off_end = 0;
 	off_beg = off_end = bam_tell(fp);
 	while ((ret = bam_read1(fp, b)) >= 0) {
 		if (c->tid < 0) ++n_no_coor;
@@ -199,10 +200,10 @@ bam_index_t *bam_index_core(bamFile fp)
 				recalculated_bin = bam_reg2bin(c->pos, c->pos + 1);
 			}
 			if (c->bin != recalculated_bin) {
-				fprintf(stderr, "[bam_index_core] read '%s' mapped to '%s' at POS %d to %d has BIN %d but should be %d\n",
+				n_wrong_bin++;
+				if (n_wrong_bin <= 10) fprintf(stderr, "[bam_index_core] read '%s' mapped to '%s' at POS %d to %d has BIN %d but should be %d\n",
 					bam1_qname(b), h->target_name[c->tid], c->pos + 1, bam_calend(c, bam1_cigar(b)), c->bin, recalculated_bin);
-				fprintf(stderr, "[bam_index_core] Fix it by using BAM->SAM->BAM to force a recalculation of the BIN field\n");
-				return NULL;
+				c->bin = recalculated_bin;
 			}
 		}
 		if (c->tid >= 0 && !(c->flag & BAM_FUNMAP)) insert_offset2(&idx->index2[b->core.tid], b, last_off);
@@ -251,6 +252,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	if (ret < -1) fprintf(stderr, "[bam_index_core] truncated file? Continue anyway. (%d)\n", ret);
 	free(b->data); free(b);
 	idx->n_no_coor = n_no_coor;
+	if (n_wrong_bin > 0) fprintf(stderr, "[bam_index_core] In total, there are %"PRIu64" reads with incorrect BIN fields\n[bam_index_core] Fix this by converting BAM->SAM->BAM to force BIN recalculation\n", n_wrong_bin);
 	return idx;
 }
 
