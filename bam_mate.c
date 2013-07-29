@@ -124,6 +124,19 @@ static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
 		return false;
 }
 
+static void sync_mq(bam1_t* src, bam1_t* dest)
+{
+	if ( (src->core.flag & BAM_FUNMAP) == 0 ) { // If mapped
+		uint32_t mq = src->core.qual;
+		uint8_t* data;
+		if ((data = bam_aux_get(dest,"MQ")) != NULL) {
+			bam_aux_del(dest, data);
+		}
+		
+		bam_aux_append(dest, "MQ", 'i', sizeof(uint32_t), (uint8_t*)&mq);
+	}
+}
+
 // copy flags
 static void sync_mate(bam1_t* a, bam1_t* b)
 {
@@ -131,6 +144,8 @@ static void sync_mate(bam1_t* a, bam1_t* b)
 	sync_unmapped_pos_inner(b,a);
 	sync_mate_inner(a,b);
 	sync_mate_inner(b,a);
+	sync_mq(a,b);
+	sync_mq(b,a);
 }
 
 // currently, this function ONLY works if each read has one hit
