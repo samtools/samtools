@@ -322,7 +322,16 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bca->per_sample_flt = conf->flag & MPLP_PER_SAMPLE;
 	}
 	if (tid0 >= 0 && conf->fai) { // region is set
-		ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
+		if(conf->flag&MPLP_REALN){
+            ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
+        }
+        else{
+            int end1=end0;
+            if (end0==1u<<29) {//region is not given, working in pipe mode.
+                end1=0x7fffffff;
+            }
+            ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], beg0, end1, &ref_len);
+        }
 		ref_tid = tid0;
 		for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
 	} else ref_tid = -1, ref = 0;
@@ -338,6 +347,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	}
 	max_indel_depth = conf->max_indel_depth * sm->n;
 	bam_mplp_set_maxcnt(iter, max_depth);
+    int pp=0;
 	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
 		if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
 		if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
@@ -372,7 +382,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				}
 			}
 		} else {
-			printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
+			if(conf->flag&MPLP_REALN || !(tid0 >= 0 && conf->fai)){
+                printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
+            }
+            else{//-B is given, && region is given
+                printf("%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && (pos-beg0) < ref_len)? ref[pp] : 'N');
+            }
 			for (i = 0; i < n; ++i) {
 				int j, cnt;
 				for (j = cnt = 0; j < n_plp[i]; ++j) {
@@ -387,7 +402,15 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 					for (j = 0; j < n_plp[i]; ++j) {
 						const bam_pileup1_t *p = plp[i] + j;
 						if (bam1_qual(p->b)[p->qpos] >= conf->min_baseQ)
-							pileup_seq(plp[i] + j, pos, ref_len, ref);
+                        {
+                            if(conf->flag&MPLP_REALN || !(tid0 >= 0 && conf->fai)){
+                                pileup_seq(plp[i] + j, pos, ref_len, ref);
+                            }
+                            else
+                            {
+                                pileup_seq(plp[i] + j, pp, ref_len, ref);
+                            }
+                        }
 					}
 					putchar('\t');
 					for (j = 0; j < n_plp[i]; ++j) {
@@ -417,6 +440,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			}
 			putchar('\n');
 		}
+        pp++;
 	}
 
 	// clean up
