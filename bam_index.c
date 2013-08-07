@@ -194,15 +194,12 @@ bam_index_t *bam_index_core(bamFile fp)
 			return NULL;
 		}
 		if (c->tid >= 0) {
-			if (c->n_cigar) {
-				recalculated_bin = bam_reg2bin(c->pos, bam_calend(c, bam1_cigar(b)));
-			} else {
-				recalculated_bin = bam_reg2bin(c->pos, c->pos + 1);
-			}
+			int32_t endpos = (!(c->flag & BAM_FUNMAP) && c->n_cigar)? bam_calend(c, bam1_cigar(b)) : c->pos + 1;
+			recalculated_bin = bam_reg2bin(c->pos, endpos);
 			if (c->bin != recalculated_bin) {
 				n_wrong_bin++;
 				if (n_wrong_bin <= 10) fprintf(stderr, "[bam_index_core] read '%s' mapped to '%s' at POS %d to %d has BIN %d but should be %d\n",
-					bam1_qname(b), h->target_name[c->tid], c->pos + 1, bam_calend(c, bam1_cigar(b)), c->bin, recalculated_bin);
+					bam1_qname(b), h->target_name[c->tid], c->pos + 1, endpos, c->bin, recalculated_bin);
 				c->bin = recalculated_bin;
 			}
 		}
