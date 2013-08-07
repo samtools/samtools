@@ -200,22 +200,25 @@ void bam_plp_destroy(bam_plp_t iter)
 }
 
 /**
- *  cigar_iref2iseq() - 
- *  @pos:         iref_pos - b->core.pos
+ *  cigar_iref2iseq_set()  - converts between reference sequence and the read sequence coordinates to obtain first CMATCH
+ *  cigar_iref2iseq_next()
  *  @cigar:       pointer to current position in the cigar string (rw)
  *  @cigar_max:   pointer just beyond the last cigar
  *  @icig:        position in the current cigar (rw)
  *  @iseq:        position in the sequence (rw)
+ *  @iref:        position with respect to the start of the read (iref_pos - b->core.pos) (rw)
  *
- *  Returns cigar type on success or -1 when there is no more
+ *  Returns BAM_CMATCH or -1 when there is no more
  *  cigar to process or the requested position is not covered.
  */
-static inline int cigar_iref2iseq_set(int pos, uint32_t **cigar, uint32_t *cigar_max, int *icig, int *iseq)
+static inline int cigar_iref2iseq_set(uint32_t **cigar, uint32_t *cigar_max, int *icig, int *iseq, int *iref)
 {
+    int pos = *iref;
     if ( pos < 0 ) return -1;
     *icig = 0;
     *iseq = 0;
-    while ( *cigar<cigar_max && pos>=0 )
+    *iref = 0;
+    while ( *cigar<cigar_max )
     {
         int cig  = (**cigar) & BAM_CIGAR_MASK;
         int ncig = (**cigar) >> BAM_CIGAR_SHIFT;
@@ -225,38 +228,42 @@ static inline int cigar_iref2iseq_set(int pos, uint32_t **cigar, uint32_t *cigar
         if ( cig==BAM_CMATCH ) 
         { 
             pos -= ncig; 
-            if ( pos < 0 ) { *icig = ncig + pos; *iseq += *icig; return BAM_CMATCH; }
-            (*cigar)++; *iseq += ncig; *icig = 0;
+            if ( pos < 0 ) { *icig = ncig + pos; *iseq += *icig; *iref += *icig; return BAM_CMATCH; }
+            (*cigar)++; *iseq += ncig; *icig = 0; *iref += ncig;
             continue;
         }
         if ( cig==BAM_CINS ) { (*cigar)++; *iseq += ncig; *icig = 0; continue; }
         if ( cig==BAM_CDEL ) 
         {
             pos -= ncig;
-            if ( pos < 0 ) { *icig = ncig + pos; return BAM_CDEL; }
-            (*cigar)++; *icig = 0;
+            if ( pos<0 ) pos = 0;
+            (*cigar)++; *icig = 0; *iref += ncig;
             continue;
         }
     }
     *iseq = -1;
     return -1;
 }
-static inline int cigar_iref2iseq_next(uint32_t **cigar, uint32_t *cigar_max, int *icig, int *iseq)
+static inline int cigar_iref2iseq_next(uint32_t **cigar, uint32_t *cigar_max, int *icig, int *iseq, int *iref)
 {
     while ( *cigar < cigar_max )
     {
         int cig  = (**cigar) & BAM_CIGAR_MASK;
         int ncig = (**cigar) >> BAM_CIGAR_SHIFT;
 
-        if ( *icig >= ncig - 1 ) { *icig = 0;  (*cigar)++; continue; }
-
+        if ( cig==BAM_CMATCH ) 
+        {
+            if ( *icig >= ncig - 1 ) { *icig = 0;  (*cigar)++; continue; }
+            (*iseq)++; (*icig)++; (*iref)++; 
+            return BAM_CMATCH; 
+        }
+        if ( cig==BAM_CDEL ) { (*cigar)++; (*iref) += ncig; *icig = 0; continue; }
+        if ( cig==BAM_CINS ) { (*cigar)++; *iseq += ncig; *icig = 0; continue; }
         if ( cig==BAM_CSOFT_CLIP ) { (*cigar)++; *iseq += ncig; *icig = 0; continue; }
         if ( cig==BAM_CHARD_CLIP ) { (*cigar)++; *icig = 0; continue; }
-        if ( cig==BAM_CMATCH ) { (*iseq)++; (*icig)++; return BAM_CMATCH; }
-        if ( cig==BAM_CINS ) { (*iseq)++; (*icig)++; return BAM_CINS; }
-        if ( cig==BAM_CDEL ) { (*icig)++; return BAM_CDEL; }
     }
     *iseq = -1;
+    *iref = -1; 
     return -1;
 }
 
@@ -268,51 +275,48 @@ static void tweak_overlap_quality(bam1_t *a, bam1_t *b)
     int b_icig = 0, b_iseq = 0;
     uint8_t *a_qual = bam1_qual(a), *b_qual = bam1_qual(b);
     uint8_t *a_seq = bam1_seq(a), *b_seq = bam1_seq(b);
-    
-    int a_ret = cigar_iref2iseq_set(b->core.pos - a->core.pos, &a_cigar, a_cigar_max, &a_icig, &a_iseq);
-    if ( a_ret<0 ) return;
-    int b_ret = cigar_iref2iseq_set(b->core.pos - b->core.pos, &b_cigar, b_cigar_max, &b_icig, &b_iseq);
-    if ( b_ret<0 ) return;
-    a_icig--; a_iseq--;
-    b_icig--; b_iseq--;
 
-    int a_qsum = 0, b_qsum = 0, nmism = 0;
-    while ( (a_ret=cigar_iref2iseq_next(&a_cigar, a_cigar_max, &a_icig, &a_iseq))>=0 )
+    int iref   = b->core.pos;
+    int a_iref = iref - a->core.pos;
+    int b_iref = iref - b->core.pos;
+    int a_ret = cigar_iref2iseq_set(&a_cigar, a_cigar_max, &a_icig, &a_iseq, &a_iref);
+    if ( a_ret<0 ) return;
+    int b_ret = cigar_iref2iseq_set(&b_cigar, b_cigar_max, &b_icig, &b_iseq, &b_iref);
+    if ( b_ret<0 ) return;
+
+    while ( 1 )
     {
-        if ( (b_ret=cigar_iref2iseq_next(&b_cigar, b_cigar_max, &b_icig, &b_iseq)) < 0 ) break;
-        if ( a_ret!=BAM_CMATCH || b_ret!=BAM_CMATCH ) continue;
-        if ( bam1_seqi(a_seq,a_iseq) != bam1_seqi(b_seq,b_iseq) )
+        // Increment reference position
+        while ( a_iref>=0 && a_iref < iref - a->core.pos ) 
+            a_ret = cigar_iref2iseq_next(&a_cigar, a_cigar_max, &a_icig, &a_iseq, &a_iref);
+        if ( a_ret<0 ) break;   // done
+        if ( iref < a_iref + a->core.pos ) iref = a_iref + a->core.pos;
+
+        while ( b_iref>=0 && b_iref < iref - b->core.pos ) 
+            b_ret = cigar_iref2iseq_next(&b_cigar, b_cigar_max, &b_icig, &b_iseq, &b_iref);
+        if ( b_ret<0 ) break;   // done
+        if ( iref < b_iref + b->core.pos ) iref = b_iref + b->core.pos;
+
+        iref++;
+        if ( a_iref+a->core.pos != b_iref+b->core.pos ) continue;   // only CMATCH positions, don't know what to do with indels
+
+        if ( bam1_seqi(a_seq,a_iseq) == bam1_seqi(b_seq,b_iseq) ) 
         {
-            nmism++;
-            a_qsum += a_qual[a_iseq];
-            b_qsum += b_qual[b_iseq];
+            a_qual[a_iseq] = 200;   // we are very confident about this base
+            a_qual[b_iseq] = 0;
         }
-    }
-    if ( !nmism ) return;   // no mismatches found
-    
-    a_cigar = bam1_cigar(a);
-    b_cigar = bam1_cigar(b);
-    a_ret = cigar_iref2iseq_set(b->core.pos - a->core.pos, &a_cigar, a_cigar_max, &a_icig, &a_iseq);
-    b_ret = cigar_iref2iseq_set(b->core.pos - b->core.pos, &b_cigar, b_cigar_max, &b_icig, &b_iseq);
-    a_icig--; a_iseq--;
-    b_icig--; b_iseq--;
-    while ( (a_ret=cigar_iref2iseq_next(&a_cigar, a_cigar_max, &a_icig, &a_iseq))>=0 )
-    {
-        if ( (b_ret=cigar_iref2iseq_next(&b_cigar, b_cigar_max, &b_icig, &b_iseq)) < 0 ) return;
-        if ( a_ret!=BAM_CMATCH || b_ret!=BAM_CMATCH ) continue;
-        if ( bam1_seqi(a_seq,a_iseq) != bam1_seqi(b_seq,b_iseq) )
+        else
         {
-            a_qual[a_iseq] = 3*nmism<a_qual[a_iseq] ? a_qual[a_iseq] - 3*nmism : 0; // penalize multiple mismatches in overlaps
-            b_qual[b_iseq] = 3*nmism<b_qual[b_iseq] ? b_qual[b_iseq] - 3*nmism : 0; 
-            if ( a_qsum==b_qsum )
+            if ( a_qual[a_iseq] >= b_qual[b_iseq] )
             {
-                if ( a_qual[a_iseq] < b_qual[b_iseq] ) a_qual[a_iseq] = 0;
-                else if ( a_qual[a_iseq] > b_qual[b_iseq] ) b_qual[b_iseq] = 0;
-                else a_qual[a_iseq] = b_qual[b_iseq] = 0;
+                a_qual[a_iseq] = 0.8 * a_qual[a_iseq];  // not so confident about a_qual anymore
+                b_qual[b_iseq] = 0;
             }
-            else if ( a_qsum < b_qsum ) a_qual[a_iseq] = 0;
-            else if ( a_qsum > b_qsum ) b_qual[b_iseq] = 0;
-            else a_qual[a_iseq] = b_qual[b_iseq] = 0;
+            else
+            {
+                b_qual[b_iseq] = 0.8 * b_qual[b_iseq];
+                a_qual[a_iseq] = 0;
+            }
         }
     }
 }
@@ -323,6 +327,8 @@ static void tweak_overlap_quality(bam1_t *a, bam1_t *b)
 //
 static void overlap_push(bam_plp_t iter, lbnode_t *node)
 {
+    return; // more thorough testing needed
+
     // mapped mates and paired reads only
     if ( node->b.core.flag&BAM_FMUNMAP || !(node->b.core.flag&BAM_FPROPER_PAIR) ) return;
 
@@ -349,6 +355,8 @@ static void overlap_push(bam_plp_t iter, lbnode_t *node)
 
 static void overlap_remove(bam_plp_t iter, const bam1_t *b)
 {
+    return; // more thorough testing needed
+
     khiter_t kitr;
     if ( b )
     {
