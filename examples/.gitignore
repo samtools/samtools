@@ -1,0 +1,8 @@
+*.bam
+*.bai
+*.fai
+*.glf*
+*.pileup*
+calDepth
+ex1*.rg
+ex1.bcf
