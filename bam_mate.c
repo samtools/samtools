@@ -281,8 +281,8 @@ int bam_mating(int argc, char *argv[])
 		}
 	}
 	if (optind+1 >= argc) usage();
-	in = (strcmp(argv[optind], "-") == 0)? bam_dopen(fileno(stdin), "r") : bam_open(argv[optind], "r");
-	out = (strcmp(argv[optind+1], "-") == 0)? bam_dopen(fileno(stdout), "w") : bam_open(argv[optind+1], "w");
+	in = (strcmp(argv[optind], "-") == 0)? bam_dopen(STDIN_FILENO, "r") : bam_open(argv[optind], "r");
+	out = (strcmp(argv[optind+1], "-") == 0)? bam_dopen(STDOUT_FILENO, "w") : bam_open(argv[optind+1], "w");
 	bam_mating_core(in, out, remove_reads, proper_pair_check);
 	bam_close(in); bam_close(out);
 	return 0;
