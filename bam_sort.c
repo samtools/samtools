@@ -435,12 +435,13 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 	                   sucessess, prefix.bam will be written.
   @param  max_mem  approxiate maximum memory (very inaccurate)
   @param full_path the given output path is the full path and not just the prefix
+  @return 0 for successful sorting, negative on errors
 
   @discussion It may create multiple temporary subalignment files
   and then merge them by calling bam_merge_core(). This function is
   NOT thread safe.
  */
-void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t _max_mem, int is_stdout, int n_threads, int level, int full_path)
+int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t _max_mem, int is_stdout, int n_threads, int level, int full_path)
 {
 	int ret, i, n_files = 0;
 	size_t mem, max_k, k, max_mem;
@@ -459,7 +460,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	fp = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
 	if (fp == 0) {
 		fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
-		return;
+		return -1;
 	}
 	header = bam_header_read(fp);
 	if (is_by_qname) change_SO(header, "queryname");
@@ -509,7 +510,11 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
 			sprintf(fns[i], "%s.%.4d%s", prefix, i, suffix);
 		}
-		bam_merge_core2(is_by_qname, fnout, 0, n_files, fns, 0, 0, n_threads, level);
+		if (bam_merge_core2(is_by_qname, fnout, 0, n_files, fns, 0, 0, n_threads, level) < 0) {
+			// Propagate bam_merge_core2() failure; it has already emitted a
+			// message explaining the failure, so no further message is needed.
+			return -1;
+		}
 		for (i = 0; i < n_files; ++i) {
 			unlink(fns[i]);
 			free(fns[i]);
@@ -526,17 +531,18 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	free(buf);
 	bam_header_destroy(header);
 	bam_close(fp);
+	return 0;
 }
 
-void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
+int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
 {
-	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0, 0, -1, 0);
+	return bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0, 0, -1, 0);
 }
 
 int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 768<<20; // 512MB
-	int c, is_by_qname = 0, is_stdout = 0, n_threads = 0, level = -1, full_path = 0;
+	int c, is_by_qname = 0, is_stdout = 0, ret = 0, n_threads = 0, level = -1, full_path = 0;
 	while ((c = getopt(argc, argv, "fnom:@:l:")) >= 0) {
 		switch (c) {
 		case 'f': full_path = 1; break;
@@ -566,6 +572,6 @@ int bam_sort(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		return 1;
 	}
-	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, n_threads, level, full_path);
-	return 0;
+	if (bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, n_threads, level, full_path) < 0) ret = 1;
+	return ret;
 }
