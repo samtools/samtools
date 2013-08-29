@@ -21,7 +21,7 @@ PROG=		samtools
 INCLUDES=	-I.
 SUBDIRS=	. bcftools misc
 LIBPATH=
-LIBCURSES=	-lcurses # -lXCurses
+LIBCURSES=	-lcurses -ltinfo # -lXCurses
 
 
 .SUFFIXES:.c .o
