@@ -49,6 +49,7 @@ void samclose(samfile_t *fp)
 	}
 }
 
+#if 0
 int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)
 {
 	bam_plbuf_t *buf;
@@ -64,6 +65,7 @@ int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)
 	bam_destroy1(b);
 	return 0;
 }
+#endif
 
 char *samfaipath(const char *fn_ref)
 {

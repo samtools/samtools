@@ -4,7 +4,8 @@
 #   make git-stamp
 VERSION=
 
-all: samtools bgzip razip
+PROG=samtools bgzip razip
+all:$(PROG)
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
 HTSDIR = ../htslib
@@ -16,16 +17,16 @@ CFLAGS=		-g -Wall $(VERSION) -O2
 #LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
 LOBJS=		bam_aux.o bam.o bam_import.o sam.o \
-			bam_pileup.o bam_lpileup.o sam_header.o
-AOBJS=		bam_index.o bam_tview.o bam_plcmd.o sam_view.o \
+			sam_header.o
+AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
 			bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o kprobaln.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-			bam_tview_curses.o bam_tview_html.o faidx.o
-PROG=		samtools
+            faidx.o
+			#tview todo: bam_tview.o bam_tview_curses.o bam_tview_html.o
 INCLUDES=	-I. -I$(HTSDIR)
-SUBDIRS=	. bcftools misc
+SUBDIRS=	. misc
 LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
 
@@ -47,8 +48,6 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 			cd $$wdir; \
 		done;
 
-all:$(PROG)
-
 test:
 		test/test.pl
 
@@ -64,7 +63,7 @@ libbam.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 samtools:lib-recur $(AOBJS) $(HTSLIB)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(HTSLIB) $(LIBCURSES) -lm -lz -lpthread
+		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a $(LIBPATH) $(HTSLIB) $(LIBCURSES) -lm -lz -lpthread
 
 razip:razip.o $(HTSLIB)
 		$(CC) $(CFLAGS) -o $@ razip.o $(HTSLIB) -lz
@@ -73,15 +72,14 @@ bgzip:bgzip.o $(HTSLIB)
 		$(CC) $(CFLAGS) -o $@ bgzip.o $(HTSLIB) -lz -lpthread
 
 bam_h = bam.h $(htslib_bgzf_h) $(htslib_sam_h)
-bam2bcf_h = bam2bcf.h errmod.h bcftools/bcf.h
+bam2bcf_h = bam2bcf.h errmod.h
 bam_tview_h = bam_tview.h $(bam_h) $(htslib_faidx_h) $(bam2bcf_h) sam_header.h $(HTSDIR)/htslib/khash.h
-bcftools_bcf_h = bcftools/bcf.h $(htslib_bgzf_h)
 sam_h = sam.h $(htslib_sam_h) $(bam_h)
 sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 
 bam.o: bam.c $(bam_h) sam_header.h
-bam2bcf.o: bam2bcf.c
-bam2bcf_indel.o: bam2bcf_indel.c
+bam2bcf.o: bam2bcf.c bam2bcf.h $(HTSDIR)/htslib/kfunc.h
+bam2bcf_indel.o: bam2bcf_indel.c bam2bcf.h
 bam2depth.o: bam2depth.c
 bam_aux.o: bam_aux.c
 bam_cat.o: bam_cat.c $(HTSDIR)/htslib/knetfile.h $(htslib_bgzf_h) $(bam_h)

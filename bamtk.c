@@ -109,7 +109,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 #if _CURSES_LIB != 0
-	else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
+	//else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
 #endif
 	else {
 		fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);

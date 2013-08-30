@@ -10,8 +10,9 @@ use File::Temp qw/ tempfile tempdir /;
 
 my $opts = parse_params();
 
-#test_bgzip($opts);
+test_bgzip($opts);
 test_faidx($opts);
+test_mpileup($opts);
 
 print "\nNumber of tests:\n";
 printf "    total   .. %d\n", $$opts{nok}+$$opts{nfailed};
@@ -48,12 +49,22 @@ sub parse_params
             'h|?|help' => \$help
             );
     if ( !$ret or $help ) { error(); }
-    $$opts{tmp} = $$opts{keep_files} ? $$opts{keep_files} : tempdir(CLEANUP=>1);
-    if ( $$opts{keep_files} ) { cmd("mkdir -p $$opts{keep_files}"); }
+    $$opts{tmp}  = $$opts{keep_files} ? $$opts{keep_files} : tempdir(CLEANUP=>1);
     $$opts{path} = $FindBin::RealBin;
     $$opts{bin}  = $FindBin::RealBin;
     $$opts{bin}  =~ s{/test/?$}{};
+    if ( $$opts{keep_files} ) { cmd("mkdir -p $$opts{keep_files}"); }
+    else 
+    { 
+        $SIG{TERM} = $SIG{INT} = sub { clean_files($opts); }; 
+    }
     return $opts;
+}
+sub clean_files
+{
+    my ($opts) = @_;
+    print STDERR "Signal caught, cleaning and exiting...\n";
+    `rm -rf $$opts{tmp}`;
 }
 sub _cmd
 {
@@ -295,4 +306,27 @@ sub test_faidx
     }
 }
 
+sub test_mpileup
+{
+    my ($opts,%args) = @_;
+
+    my @bams = ('mpileup.1.bam','mpileup.2.bam','mpileup.3.bam');
+    my $ref  = 'mpileup.ref.fa';
+
+    # make a local copy, index the bams and the reference
+    open(my $fh,'>',"$$opts{tmp}/mpileup.list") or error("$$opts{tmp}/mpileup.list: $!");
+    for my $bam (@bams)
+    {
+        cmd("cp $$opts{path}/dat/$bam $$opts{tmp}/$bam");
+        cmd("$$opts{bin}/samtools index $$opts{tmp}/$bam");
+        print $fh "$$opts{tmp}/$bam\n";
+    }
+    close($fh);
+    cmd("cp $$opts{path}/dat/$ref $$opts{tmp}/$ref");
+    cmd("$$opts{bin}/bgzip -fi $$opts{tmp}/$ref");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/$ref.gz");
+
+    # print "$$opts{bin}samtools mpileup -gb $$opts{tmp}/mpileup.list -f $$opts{tmp}/$args{ref}.gz > $$opts{tmp}/mpileup.bcf\n";
+    test_cmd($opts,out=>'dat/mpileup.out.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
+}
 
