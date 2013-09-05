@@ -42,8 +42,8 @@ static int bgzip_main_usage()
 	fprintf(stderr, "         -d        decompress\n");
 	fprintf(stderr, "         -f        overwrite files without asking\n");
 	fprintf(stderr, "         -I FILE   name of the index file [file.gz.gzi]\n");
-	fprintf(stderr, "         -i        create BGZF index\n");
-	fprintf(stderr, "         -r        reindex bgzipped file\n");
+	fprintf(stderr, "         -i        compress and create BGZF index\n");
+	fprintf(stderr, "         -r        (re)index bgzipped file\n");
 	fprintf(stderr, "         -b INT    decompress at virtual (uncompressed) file pointer INT (0 based)\n");
 	fprintf(stderr, "         -s INT    decompress INT bytes in the uncompressed file\n");
 	fprintf(stderr, "         -h        give this help\n");
@@ -92,17 +92,18 @@ int main(int argc, char **argv)
     char *index_fname = NULL;
 
 	compress = 1; pstdout = 0; start = 0; size = -1; end = -1; is_forced = 0;
-	while((c  = getopt(argc, argv, "cdhfb:s:iI:r")) >= 0){
+	while((c  = getopt(argc, argv, "cdh?fb:s:iI:r")) >= 0){
 		switch(c){
-		case 'h': return bgzip_main_usage();
 		case 'd': compress = 0; break;
 		case 'c': pstdout = 1; break;
-		case 'b': start = atol(optarg); compress = 0; break;
-		case 's': size = atol(optarg); break;
+		case 'b': start = atol(optarg); compress = 0; pstdout = 1; break;
+		case 's': size = atol(optarg); pstdout = 1; break;
 		case 'f': is_forced = 1; break;
         case 'i': index = 1; break;
         case 'I': index_fname = optarg; break;
         case 'r': reindex = 1; compress = 0; break;
+		case 'h': 
+        case '?': return bgzip_main_usage();
 		}
 	}
 	if (size >= 0) end = start + size;
