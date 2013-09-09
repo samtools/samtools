@@ -14,12 +14,18 @@ static inline void *khash_str2int_init()
     return kh_init(str2int);
 }
 
+/*
+ *  Destroy the hash structure, but not the keys
+ */ 
 static inline void khash_str2int_destroy(void *_hash)
 {
     khash_t(str2int) *hash = (khash_t(str2int)*)_hash;
     if (hash) kh_destroy(str2int, hash); // Note that strings are not freed.
 }
 
+/*
+ *  Destroys both the hash structure and the keys
+ */ 
 static inline void khash_str2int_destroy_free(void *_hash)
 {
     khash_t(str2int) *hash = (khash_t(str2int)*)_hash;
@@ -28,6 +34,17 @@ static inline void khash_str2int_destroy_free(void *_hash)
     for (k = 0; k < kh_end(hash); ++k)
         if (kh_exist(hash, k)) free((char*)kh_key(hash, k));
     kh_destroy(str2int, hash);
+}
+
+/*
+ *  Returns 1 if key exists or 0 if not
+ */
+static inline int khash_str2int_has_key(void *_hash, const char *str)
+{
+    khash_t(str2int) *hash = (khash_t(str2int)*)_hash;
+    khint_t k = kh_get(str2int, hash, str);
+    if ( k == kh_end(hash) ) return 0;
+    return 1;
 }
 
 /*

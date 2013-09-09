@@ -1,10 +1,5 @@
-# The default version string in bam.h and bcftools/bcf.h can be overriden directly
-#   make VERSION="-DVERSION='\\\"my-version\\\"'"
-# or using the git-stamp rule
-#   make git-stamp
-VERSION=
 
-PROG=samtools bgzip razip
+PROG=samtools bgzip
 all:$(PROG)
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
@@ -23,8 +18,8 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-            faidx.o
-			#tview todo: bam_tview.o bam_tview_curses.o bam_tview_html.o
+            faidx.o stats.o 
+            # tview todo: bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
 INCLUDES=	-I. -I$(HTSDIR)
 SUBDIRS=	. misc
 LIBPATH=
@@ -51,11 +46,24 @@ all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 test:
 		test/test.pl
 
-git-stamp:
-		make VERSION="-DVERSION='\\\"`git describe --always --dirty`\\\"'"
-
 .PHONY:all lib clean cleanlocal
 .PHONY:all-recur lib-recur clean-recur cleanlocal-recur install-recur
+
+# See htslib/Makefile
+PACKAGE_VERSION  = 0.0.1
+LIBHTS_SOVERSION = 0
+NUMERIC_VERSION  = $(PACKAGE_VERSION)
+ifneq "$(wildcard .git)" ""
+original_version := $(PACKAGE_VERSION)
+PACKAGE_VERSION := $(shell git describe --always --dirty)
+ifneq "$(subst ..,.,$(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(PACKAGE_VERSION))))))))))))" "."
+empty :=
+NUMERIC_VERSION := $(subst $(empty) ,.,$(wordlist 1,2,$(subst ., ,$(original_version))) 255)
+endif
+version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(shell cat version.h)),,force))
+endif
+version.h:
+	echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@
 
 lib:libbam.a
 
@@ -64,9 +72,6 @@ libbam.a:$(LOBJS)
 
 samtools:lib-recur $(AOBJS) $(HTSLIB)
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a $(LIBPATH) $(HTSLIB) $(LIBCURSES) -lm -lz -lpthread
-
-razip:razip.o $(HTSLIB)
-		$(CC) $(CFLAGS) -o $@ razip.o $(HTSLIB) -lz
 
 bgzip:bgzip.o $(HTSLIB)
 		$(CC) $(CFLAGS) -o $@ bgzip.o $(HTSLIB) -lz -lpthread
@@ -100,7 +105,7 @@ bam_tview.o: bam_tview.c $(bam_tview_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
 bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h
-bamtk.o: bamtk.c $(bam_h) $(HTSDIR)/htslib/knetfile.h
+bamtk.o: bamtk.c $(bam_h) $(HTSDIR)/htslib/knetfile.h version.h samtools.h
 bedcov.o: bedcov.c $(htslib_bgzf_h) $(bam_h) $(HTSDIR)/htslib/kseq.h
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
 bgzip.o: bgzip.c $(htslib_bgzf_h)
@@ -115,7 +120,7 @@ sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h
 sam_view.o: sam_view.c sam_header.h $(sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/khash.h
 sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
-
+stats.o: sam.c $(bam_h) $(HTSDIR)/htslib/khash.h $(htslib_faidx_h)
 
 libbam.1.dylib-local:$(LOBJS)
 		libtool -dynamic $(LOBJS) -o libbam.1.dylib -lc -lz
