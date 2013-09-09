@@ -36,6 +36,8 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
     bca->alt_mq  = malloc(bca->nqual*sizeof(int));
     bca->ref_bq  = malloc(bca->nqual*sizeof(int));
     bca->alt_bq  = malloc(bca->nqual*sizeof(int));
+    bca->fwd_mqs = malloc(bca->nqual*sizeof(int));
+    bca->rev_mqs = malloc(bca->nqual*sizeof(int));
  	return bca;
 }
 
@@ -44,7 +46,9 @@ void bcf_call_destroy(bcf_callaux_t *bca)
 	if (bca == 0) return;
 	errmod_destroy(bca->e);
     if (bca->npos) { free(bca->ref_pos); free(bca->alt_pos); bca->npos = 0; }
-    if (bca->nqual) { free(bca->ref_mq); free(bca->alt_mq); free(bca->ref_bq); free(bca->alt_bq); bca->nqual = 0; }
+    free(bca->ref_mq); free(bca->alt_mq); free(bca->ref_bq); free(bca->alt_bq); 
+    free(bca->fwd_mqs); free(bca->rev_mqs);
+    bca->nqual = 0;
 	free(bca->bases); free(bca->inscns); free(bca);
 }
 
@@ -84,6 +88,8 @@ void bcf_callaux_clean(bcf_callaux_t *bca)
     memset(bca->alt_mq,0,sizeof(int)*bca->nqual);
     memset(bca->ref_bq,0,sizeof(int)*bca->nqual);
     memset(bca->alt_bq,0,sizeof(int)*bca->nqual);
+    memset(bca->fwd_mqs,0,sizeof(int)*bca->nqual);
+    memset(bca->rev_mqs,0,sizeof(int)*bca->nqual);
 }
 
 /*
@@ -163,6 +169,8 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
         int epos = (double)pos/(len+1) * bca->npos;
         int ibq  = baseQ/60. * bca->nqual;
         int imq  = mapQ/60. * bca->nqual;
+        if ( bam_is_rev(p->b) ) bca->rev_mqs[imq]++;
+        else bca->fwd_mqs[imq]++;
         if ( bam_seqi(bam_get_seq(p->b),p->qpos) == ref_base )
         {
             bca->ref_pos[epos]++;
@@ -312,7 +320,6 @@ double calc_mwu_bias(int *a, int *b, int n)
 
     double mean = ((double)na*nb)*0.5;
     double var2 = ((double)na*nb)*(na+nb+1)/12.0;
-
     if ( na==2 || nb==2 )
     {
         // Linear approximation
@@ -500,8 +507,9 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     // calc_chisq_bias("XBQ", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_bq, bca->alt_bq, bca->nqual);
 
     call->mwu_pos = calc_mwu_bias(bca->ref_pos, bca->alt_pos, bca->npos);
-    call->mwu_mq  = calc_mwu_bias(bca->ref_mq, bca->alt_mq, bca->nqual);
-    call->mwu_bq  = calc_mwu_bias(bca->ref_bq, bca->alt_bq, bca->nqual);
+    call->mwu_mq  = calc_mwu_bias(bca->ref_mq,  bca->alt_mq,  bca->nqual);
+    call->mwu_bq  = calc_mwu_bias(bca->ref_bq,  bca->alt_bq,  bca->nqual);
+    call->mwu_mqs = calc_mwu_bias(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
 
     call->vdb = calc_vdb(bca->alt_pos, bca->npos);
 
@@ -583,9 +591,12 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
         bcf1_update_info_float(hdr, rec, "RPB", &bc->mwu_pos, 1);
     if ( bc->mwu_mq != HUGE_VAL )
         bcf1_update_info_float(hdr, rec, "MQB", &bc->mwu_mq, 1);
+    if ( bc->mwu_mqs != HUGE_VAL )
+        bcf1_update_info_float(hdr, rec, "MQSB", &bc->mwu_mqs, 1);
     if ( bc->mwu_bq != HUGE_VAL )
         bcf1_update_info_float(hdr, rec, "BQB", &bc->mwu_bq, 1);
-    bcf1_update_info_int32(hdr, rec, "MQ0", &bc->mq0, 1);
+    tmpf[0] = bc->ori_depth ? (double)bc->mq0/bc->ori_depth : 0;
+    bcf1_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
 
 	// FORMAT
     rec->n_sample = bc->n;

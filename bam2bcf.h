@@ -17,7 +17,7 @@ typedef struct __bcf_callaux_t {
 	int min_support, max_support; // for collecting indel candidates
 	double min_frac, max_frac; // for collecting indel candidates
     int per_sample_flt; // indel filtering strategy
-    int *ref_pos, *alt_pos, npos, *ref_mq, *alt_mq, *ref_bq, *alt_bq, nqual; // for bias tests
+    int *ref_pos, *alt_pos, npos, *ref_mq, *alt_mq, *ref_bq, *alt_bq, *fwd_mqs, *rev_mqs, nqual; // for bias tests
 	// for internal uses
 	int max_bases;
 	int indel_types[4];
@@ -59,7 +59,7 @@ typedef struct {
     unsigned int depth, ori_depth, mq0;
 	uint32_t *PL, *DP, *DV;
     float vdb; // variant distance bias
-    float mwu_pos, mwu_mq, mwu_bq;
+    float mwu_pos, mwu_mq, mwu_bq, mwu_mqs;
     float seg_bias;
     kstring_t tmp;
 } bcf_call_t;
