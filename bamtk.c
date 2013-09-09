@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <fcntl.h>
 #include "bam.h"
+#include "samtools.h"
 
 #ifdef _USE_KNETFILE
 #include "htslib/knetfile.h"
@@ -30,38 +31,60 @@ int main_bam2fq(int argc, char *argv[]);
 int main_pad2unpad(int argc, char *argv[]);
 int main_bedcov(int argc, char *argv[]);
 int main_bamshuf(int argc, char *argv[]);
+int main_stats(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 
+char *samtools_version_string = NULL;
+
+char *samtools_version(void)
+{
+    if ( !samtools_version_string )
+    {
+        int len = strlen(hts_version()) + strlen(SAMTOOLS_VERSION) + 2;
+        samtools_version_string = (char*) malloc(len);
+        snprintf(samtools_version_string,len,"%s:%s", SAMTOOLS_VERSION,hts_version());
+    }
+    return samtools_version_string;
+}
+
+
 static int usage()
 {
+    /* Please improve the grouping */
+
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Program: samtools (Tools for alignments in the SAM format)\n");
-	fprintf(stderr, "Version: %s\n\n", BAM_VERSION);
+	fprintf(stderr, "Version: %s\n\n", samtools_version());
 	fprintf(stderr, "Usage:   samtools <command> [options]\n\n");
-	fprintf(stderr, "Command: view        SAM<->BAM conversion\n");
-	fprintf(stderr, "         sort        sort alignment file\n");
-	fprintf(stderr, "         mpileup     multi-way pileup\n");
-	fprintf(stderr, "         depth       compute the depth\n");
+	fprintf(stderr, "Commands:\n");
+	fprintf(stderr, "  -- indexing\n");
 	fprintf(stderr, "         faidx       index/extract FASTA\n");
-#if _CURSES_LIB != 0
-	fprintf(stderr, "         tview       text alignment viewer\n");
-#endif
 	fprintf(stderr, "         index       index alignment\n");
-	fprintf(stderr, "         idxstats    BAM index stats (r595 or later)\n");
-	fprintf(stderr, "         fixmate     fix mate information\n");
-	fprintf(stderr, "         flagstat    simple stats\n");
+	fprintf(stderr, "  -- editing\n");
 	fprintf(stderr, "         calmd       recalculate MD/NM tags and '=' bases\n");
-	fprintf(stderr, "         merge       merge sorted alignments\n");
-	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
+	fprintf(stderr, "         fixmate     fix mate information\n");
 	fprintf(stderr, "         reheader    replace BAM header\n");
-	fprintf(stderr, "         cat         concatenate BAMs\n");
-	fprintf(stderr, "         bedcov      read depth per BED region\n");
+	fprintf(stderr, "         rmdup       remove PCR duplicates\n");
 	fprintf(stderr, "         targetcut   cut fosmid regions (for fosmid pool only)\n");
-	fprintf(stderr, "         phase       phase heterozygotes\n");
+	fprintf(stderr, "  -- file operations\n");
 	fprintf(stderr, "         bamshuf     shuffle and group alignments by name\n");
-//	fprintf(stderr, "         depad       convert padded BAM to unpadded BAM\n"); // not stable
+	fprintf(stderr, "         cat         concatenate BAMs\n");
+	fprintf(stderr, "         merge       merge sorted alignments\n");
+	fprintf(stderr, "         mpileup     multi-way pileup\n");
+	fprintf(stderr, "         sort        sort alignment file\n");
+	fprintf(stderr, "  -- stats\n");
+	fprintf(stderr, "         bedcov      read depth per BED region\n");
+	fprintf(stderr, "         depth       compute the depth\n");
+	fprintf(stderr, "         flagstat    simple stats\n");
+	fprintf(stderr, "         idxstats    BAM index stats\n");
+	fprintf(stderr, "         phase       phase heterozygotes\n");
+	fprintf(stderr, "         stats       generate stats (former bamcheck)\n");
+	fprintf(stderr, "  -- viewing\n");
+	fprintf(stderr, "         tview       text alignment viewer (todo)\n");
+	fprintf(stderr, "         view        SAM<->BAM conversion\n");
 	fprintf(stderr, "\n");
+//	fprintf(stderr, "         depad       convert padded BAM to unpadded BAM\n"); // not stable
 #ifdef _WIN32
 	fprintf(stderr, "\
 Note: The Windows version of SAMtools is mainly designed for read-only\n\
@@ -81,39 +104,43 @@ int main(int argc, char *argv[])
 #endif
 #endif
 	if (argc < 2) return usage();
-	if (strcmp(argv[1], "view") == 0) return main_samview(argc-1, argv+1);
-	else if (strcmp(argv[1], "import") == 0) return main_import(argc-1, argv+1);
-	else if (strcmp(argv[1], "mpileup") == 0) return bam_mpileup(argc-1, argv+1);
-	else if (strcmp(argv[1], "merge") == 0) return bam_merge(argc-1, argv+1);
-	else if (strcmp(argv[1], "sort") == 0) return bam_sort(argc-1, argv+1);
-	else if (strcmp(argv[1], "index") == 0) return bam_index(argc-1, argv+1);
-	else if (strcmp(argv[1], "idxstats") == 0) return bam_idxstats(argc-1, argv+1);
-	else if (strcmp(argv[1], "faidx") == 0) return faidx_main(argc-1, argv+1);
-	else if (strcmp(argv[1], "fixmate") == 0) return bam_mating(argc-1, argv+1);
-	else if (strcmp(argv[1], "rmdup") == 0) return bam_rmdup(argc-1, argv+1);
-	else if (strcmp(argv[1], "flagstat") == 0) return bam_flagstat(argc-1, argv+1);
-	else if (strcmp(argv[1], "calmd") == 0) return bam_fillmd(argc-1, argv+1);
-	else if (strcmp(argv[1], "fillmd") == 0) return bam_fillmd(argc-1, argv+1);
-	else if (strcmp(argv[1], "reheader") == 0) return main_reheader(argc-1, argv+1);
-	else if (strcmp(argv[1], "cat") == 0) return main_cat(argc-1, argv+1);
-	else if (strcmp(argv[1], "targetcut") == 0) return main_cut_target(argc-1, argv+1);
-	else if (strcmp(argv[1], "phase") == 0) return main_phase(argc-1, argv+1);
-	else if (strcmp(argv[1], "depth") == 0) return main_depth(argc-1, argv+1);
-	else if (strcmp(argv[1], "bam2fq") == 0) return main_bam2fq(argc-1, argv+1);
-	else if (strcmp(argv[1], "pad2unpad") == 0) return main_pad2unpad(argc-1, argv+1);
-	else if (strcmp(argv[1], "depad") == 0) return main_pad2unpad(argc-1, argv+1);
-	else if (strcmp(argv[1], "bedcov") == 0) return main_bedcov(argc-1, argv+1);
-	else if (strcmp(argv[1], "bamshuf") == 0) return main_bamshuf(argc-1, argv+1);
+
+    int ret = 0;
+	if (strcmp(argv[1], "view") == 0)           ret = main_samview(argc-1, argv+1);
+	else if (strcmp(argv[1], "import") == 0)    ret = main_import(argc-1, argv+1);
+	else if (strcmp(argv[1], "mpileup") == 0)   ret = bam_mpileup(argc-1, argv+1);
+	else if (strcmp(argv[1], "merge") == 0)     ret = bam_merge(argc-1, argv+1);
+	else if (strcmp(argv[1], "sort") == 0)      ret = bam_sort(argc-1, argv+1);
+	else if (strcmp(argv[1], "index") == 0)     ret = bam_index(argc-1, argv+1);
+	else if (strcmp(argv[1], "idxstats") == 0)  ret = bam_idxstats(argc-1, argv+1);
+	else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
+	else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
+	else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
+	else if (strcmp(argv[1], "flagstat") == 0)  ret = bam_flagstat(argc-1, argv+1);
+	else if (strcmp(argv[1], "calmd") == 0)     ret = bam_fillmd(argc-1, argv+1);
+	else if (strcmp(argv[1], "fillmd") == 0)    ret = bam_fillmd(argc-1, argv+1);
+	else if (strcmp(argv[1], "reheader") == 0)  ret = main_reheader(argc-1, argv+1);
+	else if (strcmp(argv[1], "cat") == 0)       ret = main_cat(argc-1, argv+1);
+	else if (strcmp(argv[1], "targetcut") == 0) ret = main_cut_target(argc-1, argv+1);
+	else if (strcmp(argv[1], "phase") == 0)     ret = main_phase(argc-1, argv+1);
+	else if (strcmp(argv[1], "depth") == 0)     ret = main_depth(argc-1, argv+1);
+	else if (strcmp(argv[1], "bam2fq") == 0)    ret = main_bam2fq(argc-1, argv+1);
+	else if (strcmp(argv[1], "pad2unpad") == 0) ret = main_pad2unpad(argc-1, argv+1);
+	else if (strcmp(argv[1], "depad") == 0)     ret = main_pad2unpad(argc-1, argv+1);
+	else if (strcmp(argv[1], "bedcov") == 0)    ret = main_bedcov(argc-1, argv+1);
+	else if (strcmp(argv[1], "bamshuf") == 0)   ret = main_bamshuf(argc-1, argv+1);
+	else if (strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
 	else if (strcmp(argv[1], "pileup") == 0) {
 		fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
 		return 1;
 	}
 #if _CURSES_LIB != 0
-	//else if (strcmp(argv[1], "tview") == 0) return bam_tview_main(argc-1, argv+1);
+	//else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
 #endif
 	else {
 		fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
 		return 1;
 	}
-	return 0;	
+    free(samtools_version_string);
+	return ret;	
 }
