@@ -20,11 +20,11 @@ typedef struct __bcf_callaux_t {
     int *ref_pos, *alt_pos, npos, *ref_mq, *alt_mq, *ref_bq, *alt_bq, *fwd_mqs, *rev_mqs, nqual; // for bias tests
 	// for internal uses
 	int max_bases;
-	int indel_types[4];
+	int indel_types[4];     // indel lengths
 	int maxins, indelreg;
     int read_len;
 	char *inscns;
-	uint16_t *bases;
+	uint16_t *bases;        // 5bit: unused, 6:quality, 1:is_rev, 4:2-bit base or indel allele (index to bcf_callaux_t.indel_types)
 	errmod_t *e;
 	void *rghash;
 } bcf_callaux_t;
@@ -45,7 +45,7 @@ typedef struct {
     // bcf_call_t do overflow with high-coverage data, such as exomes, and
     // BCFv2 supports only floats which may not suffice.
 	double anno[16];
-	float p[25];
+	float p[25];        // phred-scaled likelihood of each genotype
 } bcf_callret1_t;
 
 typedef struct {
@@ -60,6 +60,7 @@ typedef struct {
 	uint32_t *PL, *DP, *DV;
     float vdb; // variant distance bias
     float mwu_pos, mwu_mq, mwu_bq, mwu_mqs;
+    float mwu_pos_cdf, mwu_mq_cdf, mwu_bq_cdf, mwu_mqs_cdf;
     float seg_bias;
     kstring_t tmp;
 } bcf_call_t;

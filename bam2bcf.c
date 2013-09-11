@@ -186,7 +186,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 	}
 	r->depth = n; r->ori_depth = ori_depth;
 	// glfgen
-	errmod_cal(bca->e, n, 5, bca->bases, r->p);
+	errmod_cal(bca->e, n, 5, bca->bases, r->p); // calculate PL of each genotype
 	return r->depth;
 }
 
@@ -305,6 +305,47 @@ double mann_whitney_1947(int n, int m, int U)
     if (n==0||m==0) return U==0 ? 1 : 0;
     return (double)n/(n+m)*mann_whitney_1947(n-1,m,U-m) + (double)m/(n+m)*mann_whitney_1947(n,m-1,U);
 }
+
+double mann_whitney_1947_cdf(int n, int m, int U)
+{
+    int i, sum = 0;
+    for (i=0; i<=U; i++) 
+        sum += mann_whitney_1947(n,m,U);
+    return sum;
+}
+
+double calc_mwu_bias_cdf(int *a, int *b, int n)
+{
+    int na = 0, nb = 0, i;
+    double U = 0;
+    for (i=0; i<n; i++) 
+    {
+        na += a[i];
+        U  += a[i] * (nb + b[i]*0.5);
+        nb += b[i];
+    }
+    if ( !na || !nb ) return HUGE_VAL;
+
+    // Always work with the smaller U
+    double U_min = ((double)na * nb) - U;
+    if ( U < U_min ) U_min = U;
+
+    if ( na==1 ) return 2.0 * U_min / nb;
+    if ( nb==1 ) return 2.0 * U_min / na;
+
+    // Normal approximation, very good for na>=8 && nb>=8 and reasonable if na<8 or nb<8
+    if ( na>=8 || nb>=8 )
+    {
+        double mean = ((double)na*nb)*0.5;
+        double var2 = ((double)na*nb)*(na+nb+1)/12.0;
+        double z = (U_min - mean)/sqrt(2*var2);   // z is N(0,1)
+        return 2.0 - kf_erfc(z);  // which is 1 + erf(z)
+    }
+
+    // Exact calculation
+    return 2*mann_whitney_1947_cdf(na,nb,U_min);
+}
+
 double calc_mwu_bias(int *a, int *b, int n)
 {
     int na = 0, nb = 0, i;
@@ -511,6 +552,11 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     call->mwu_bq  = calc_mwu_bias(bca->ref_bq,  bca->alt_bq,  bca->nqual);
     call->mwu_mqs = calc_mwu_bias(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
 
+    call->mwu_pos_cdf = calc_mwu_bias_cdf(bca->ref_pos, bca->alt_pos, bca->npos);
+    call->mwu_mq_cdf  = calc_mwu_bias_cdf(bca->ref_mq,  bca->alt_mq,  bca->nqual);
+    call->mwu_bq_cdf  = calc_mwu_bias_cdf(bca->ref_bq,  bca->alt_bq,  bca->nqual);
+    call->mwu_mqs_cdf = calc_mwu_bias_cdf(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
+
     call->vdb = calc_vdb(bca->alt_pos, bca->npos);
 
 	return 0;
@@ -583,18 +629,16 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
         if ( bc->qsum[i]!=0 ) break;
     bcf1_update_info_float(hdr, rec, "QS", bc->qsum, i+1);
 
-    if ( bc->vdb != HUGE_VAL ) 
-        bcf1_update_info_float(hdr, rec, "VDB", &bc->vdb, 1);
-    if ( bc->seg_bias != HUGE_VAL )
-        bcf1_update_info_float(hdr, rec, "SGB", &bc->seg_bias, 1);
-    if ( bc->mwu_pos != HUGE_VAL )
-        bcf1_update_info_float(hdr, rec, "RPB", &bc->mwu_pos, 1);
-    if ( bc->mwu_mq != HUGE_VAL )
-        bcf1_update_info_float(hdr, rec, "MQB", &bc->mwu_mq, 1);
-    if ( bc->mwu_mqs != HUGE_VAL )
-        bcf1_update_info_float(hdr, rec, "MQSB", &bc->mwu_mqs, 1);
-    if ( bc->mwu_bq != HUGE_VAL )
-        bcf1_update_info_float(hdr, rec, "BQB", &bc->mwu_bq, 1);
+    if ( bc->vdb != HUGE_VAL )      bcf1_update_info_float(hdr, rec, "VDB", &bc->vdb, 1);
+    if ( bc->seg_bias != HUGE_VAL ) bcf1_update_info_float(hdr, rec, "SGB", &bc->seg_bias, 1);
+    if ( bc->mwu_pos != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "RPB", &bc->mwu_pos, 1);
+    if ( bc->mwu_mq != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "MQB", &bc->mwu_mq, 1);
+    if ( bc->mwu_mqs != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "MQSB", &bc->mwu_mqs, 1);
+    if ( bc->mwu_bq != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "BQB", &bc->mwu_bq, 1);
+    if ( bc->mwu_pos_cdf != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "RPB2", &bc->mwu_pos_cdf, 1);
+    if ( bc->mwu_mq_cdf != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "MQB2", &bc->mwu_mq_cdf, 1);
+    if ( bc->mwu_mqs_cdf != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "MQSB2", &bc->mwu_mqs_cdf, 1);
+    if ( bc->mwu_bq_cdf != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "BQB2", &bc->mwu_bq_cdf, 1);
     tmpf[0] = bc->ori_depth ? (double)bc->mq0/bc->ori_depth : 0;
     bcf1_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
 
