@@ -330,8 +330,8 @@ double calc_mwu_bias_cdf(int *a, int *b, int n)
     double U_min = ((double)na * nb) - U;
     if ( U < U_min ) U_min = U;
 
-    if ( na==1 ) return 2.0 * U_min / nb;
-    if ( nb==1 ) return 2.0 * U_min / na;
+    if ( na==1 ) return 2.0 * (floor(U_min)+1) / (nb+1);
+    if ( nb==1 ) return 2.0 * (floor(U_min)+1) / (na+1);
 
     // Normal approximation, very good for na>=8 && nb>=8 and reasonable if na<8 or nb<8
     if ( na>=8 || nb>=8 )
