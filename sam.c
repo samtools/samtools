@@ -18,7 +18,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 
 	samfile_t *fp = malloc(sizeof (samfile_t));
 	fp->file = hts_fp;
-	fp->x.bam = hts_fp->fp;
+	fp->x.bam = hts_fp->fp.bgzf;
 	if (strchr(mode, 'r')) {
 		fp->header = sam_hdr_read(fp->file);  // samclose() will free this
 		if (fp->header->n_targets == 0) { // no @SQ fields

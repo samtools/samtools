@@ -10,7 +10,7 @@ HTSLIB = $(HTSDIR)/libhts.a
 CC=			gcc
 CFLAGS=		-g -Wall $(VERSION) -O2
 #LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
-DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
+DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
 LOBJS=		bam_aux.o bam.o bam_import.o sam.o \
 			sam_header.o
 AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
@@ -89,7 +89,7 @@ bam2bcf.o: bam2bcf.c bam2bcf.h $(HTSDIR)/htslib/kfunc.h
 bam2bcf_indel.o: bam2bcf_indel.c bam2bcf.h
 bam2depth.o: bam2depth.c
 bam_aux.o: bam_aux.c
-bam_cat.o: bam_cat.c $(HTSDIR)/htslib/knetfile.h $(htslib_bgzf_h) $(bam_h)
+bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(bam_h)
 bam_color.o: bam_color.c $(bam_h)
 bam_import.o: bam_import.c $(HTSDIR)/htslib/kstring.h $(bam_h) $(HTSDIR)/htslib/kseq.h
 bam_index.o: bam_index.c $(bam_h)
@@ -98,7 +98,7 @@ bam_mate.o: bam_mate.c $(bam_h)
 bam_md.o: bam_md.c $(htslib_faidx_h) $(sam_h) kaln.h kprobaln.h
 bam_pileup.o: bam_pileup.c $(sam_h)
 bam_plcmd.o: bam_plcmd.c $(sam_h) $(htslib_faidx_h) sam_header.h $(bam2bcf_h) $(sample_h)
-bam_reheader.o: bam_reheader.c $(HTSDIR)/htslib/knetfile.h $(htslib_bgzf_h) $(bam_h)
+bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(bam_h)
 bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
 bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
 bam_sort.o: bam_sort.c $(bam_h) $(HTSDIR)/htslib/ksort.h
@@ -107,7 +107,7 @@ bam_tview.o: bam_tview.c $(bam_tview_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
 bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h
-bamtk.o: bamtk.c $(bam_h) $(HTSDIR)/htslib/knetfile.h version.h samtools.h
+bamtk.o: bamtk.c $(bam_h) version.h samtools.h
 bedcov.o: bedcov.c $(htslib_bgzf_h) $(bam_h) $(HTSDIR)/htslib/kseq.h
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
 bgzip.o: bgzip.c $(htslib_bgzf_h)
