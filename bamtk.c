@@ -5,10 +5,6 @@
 #include "bam.h"
 #include "samtools.h"
 
-#ifdef _USE_KNETFILE
-#include "htslib/knetfile.h"
-#endif
-
 int bam_taf2baf(int argc, char *argv[]);
 int bam_mpileup(int argc, char *argv[]);
 int bam_merge(int argc, char *argv[]);
@@ -99,9 +95,6 @@ int main(int argc, char *argv[])
 #ifdef _WIN32
 	setmode(fileno(stdout), O_BINARY);
 	setmode(fileno(stdin),  O_BINARY);
-#ifdef _USE_KNETFILE
-	knet_win32_init();
-#endif
 #endif
 	if (argc < 2) return usage();
 

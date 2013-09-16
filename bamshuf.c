@@ -4,6 +4,7 @@
 #include <string.h>
 #include <assert.h>
 #include "htslib/sam.h"
+#include "htslib/bgzf.h"
 #include "htslib/ksort.h"
 
 #define DEF_CLEVEL 1

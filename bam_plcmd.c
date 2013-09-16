@@ -155,7 +155,7 @@ static int mplp_func(void *data, bam1_t *b)
 	int ret, skip = 0;
 	do {
 		int has_ref;
-		ret = ma->iter? bam_itr_next((BGZF*)ma->fp->fp, ma->iter, b) : sam_read1(ma->fp, ma->h, b);
+		ret = ma->iter? bam_itr_next(ma->fp, ma->iter, b) : sam_read1(ma->fp, ma->h, b);
 		if (ret < 0) break;
         // The 'B' cigar operation is not part of the specification, considering as obsolete.
 		//  bam_remove_B(b);

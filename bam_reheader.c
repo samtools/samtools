@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "htslib/knetfile.h"
 #include "htslib/bgzf.h"
 #include "bam.h"
 
@@ -21,13 +20,8 @@ int bam_reheader(BGZF *in, const bam_header_t *h, int fd)
 		bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset);
 		bgzf_flush(fp);
 	}
-#ifdef _USE_KNETFILE
-	while ((len = knet_read(in->fp, buf, BUF_SIZE)) > 0)
-		fwrite(buf, 1, len, fp->fp);
-#else
-	while (!feof(in->file) && (len = fread(buf, 1, BUF_SIZE, in->file)) > 0)
-		fwrite(buf, 1, len, fp->file);
-#endif
+	while ((len = bgzf_raw_read(in, buf, BUF_SIZE)) > 0)
+		bgzf_raw_write(fp, buf, len);
 	free(buf);
 	fp->block_offset = in->block_offset = 0;
 	bgzf_close(fp);
