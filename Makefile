@@ -4,10 +4,11 @@
 #   make git-stamp
 VERSION=
 
-CC=			gcc
-CFLAGS=		-g -Wall $(VERSION) -O2
-#LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
-DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
+CC?=			gcc
+CFLAGS?=		-g -Wall -O2
+CFLAGS+=		$(VERSION)
+#LDFLAGS+=		-Wl,-rpath,\$$ORIGIN/../lib
+CPPFLAGS+=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_USE_KNETFILE -D_CURSES_LIB=1
 KNETFILE_O=	knetfile.o
 LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 			bam_pileup.o bam_lpileup.o bam_md.o razf.o faidx.o bedidx.o \
@@ -28,14 +29,14 @@ LIBCURSES=	-lcurses # -lXCurses
 .PHONY: all lib
 
 .c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
+		$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
 all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		@target=`echo $@ | sed s/-recur//`; \
 		wdir=`pwd`; \
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
-			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
+			$(MAKE) CC="$(CC)" CPPFLAGS="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" \
 				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
@@ -54,16 +55,16 @@ libbam.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 samtools:lib-recur $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(LIBCURSES) -lm -lz -lpthread
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(AOBJS) libbam.a -Lbcftools -lbcf $(LIBPATH) $(LIBCURSES) -lm -lz -lpthread
 
 razip:razip.o razf.o $(KNETFILE_O)
-		$(CC) $(CFLAGS) -o $@ $^ -lz
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lz
 
 bgzip:bgzip.o bgzf.o $(KNETFILE_O)
-		$(CC) $(CFLAGS) -o $@ $^ -lz -lpthread
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lz -lpthread
 
 bgzf.o:bgzf.c bgzf.h
-		$(CC) -c $(CFLAGS) $(DFLAGS) -DBGZF_CACHE $(INCLUDES) bgzf.c -o $@
+		$(CC) -c $(CFLAGS) $(CPPFLAGS) -DBGZF_CACHE $(INCLUDES) bgzf.c -o $@
 
 razip.o:razf.h
 bam.o:bam.h razf.h bam_endian.h kstring.h sam_header.h
@@ -94,7 +95,7 @@ libbam.1.dylib-local:$(LOBJS)
 		libtool -dynamic $(LOBJS) -o libbam.1.dylib -lc -lz
 
 libbam.so.1-local:$(LOBJS)
-		$(CC) -shared -Wl,-soname,libbam.so -o libbam.so.1 $(LOBJS) -lc -lz
+		$(CC) $(LDFLAGS) -shared -Wl,-soname,libbam.so -o libbam.so.1 $(LOBJS) -lc -lz
 
 dylib:
 		@$(MAKE) cleanlocal; \
