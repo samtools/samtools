@@ -308,9 +308,10 @@ double mann_whitney_1947(int n, int m, int U)
 
 double mann_whitney_1947_cdf(int n, int m, int U)
 {
-    int i, sum = 0;
+    int i;
+    double sum = 0;
     for (i=0; i<=U; i++) 
-        sum += mann_whitney_1947(n,m,U);
+        sum += mann_whitney_1947(n,m,i);
     return sum;
 }
 
@@ -343,7 +344,8 @@ double calc_mwu_bias_cdf(int *a, int *b, int n)
     }
 
     // Exact calculation
-    return 2*mann_whitney_1947_cdf(na,nb,U_min);
+    double pval = 2*mann_whitney_1947_cdf(na,nb,U_min);
+    return pval>1 ? 1 : 0;
 }
 
 double calc_mwu_bias(int *a, int *b, int n)
