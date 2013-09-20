@@ -345,7 +345,7 @@ double calc_mwu_bias_cdf(int *a, int *b, int n)
 
     // Exact calculation
     double pval = 2*mann_whitney_1947_cdf(na,nb,U_min);
-    return pval>1 ? 1 : 0;
+    return pval>1 ? 1 : pval;
 }
 
 double calc_mwu_bias(int *a, int *b, int n)
