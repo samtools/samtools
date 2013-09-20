@@ -1,8 +1,8 @@
-CC=			gcc
-CXX=		g++
-CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
-CXXFLAGS=	$(CFLAGS)
-DFLAGS=		-D_FILE_OFFSET_BITS=64
+CC?=			gcc
+CXX?=		g++
+CFLAGS?=		-g -Wall -O2 #-m64 #-arch ppc
+CXXFLAGS?=	$(CFLAGS)
+CPPFLAGS+=		-D_FILE_OFFSET_BITS=64
 OBJS=		
 PROG=		md5sum-lite md5fa maq2sam-short maq2sam-long ace2sam wgsim bamcheck
 INCLUDES=	-I..
@@ -11,7 +11,7 @@ SUBDIRS=	.
 .SUFFIXES:.c .o
 
 .c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
+		$(CC) -c $(CFLAGS) $(CPPFLAGS) $(INCLUDES) $< -o $@
 
 all:$(PROG)
 
@@ -20,7 +20,7 @@ lib-recur all-recur clean-recur cleanlocal-recur install-recur:
 		wdir=`pwd`; \
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
-			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
+			$(MAKE) CC="$(CC)" CPPFLAGS="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" \
 				INCLUDES="$(INCLUDES)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
@@ -28,31 +28,31 @@ lib-recur all-recur clean-recur cleanlocal-recur install-recur:
 lib:
 
 bamcheck:bamcheck.o
-		$(CC) $(CFLAGS) -o $@ bamcheck.o -L.. -lm -lbam -lpthread -lz
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ bamcheck.o -L.. -lm -lbam -lpthread -lz
 
 bamcheck.o:bamcheck.c ../faidx.h ../khash.h ../sam.h ../razf.h
 		$(CC) $(CFLAGS) -c -I.. -o $@ bamcheck.c
 
 ace2sam:ace2sam.o
-		$(CC) $(CFLAGS) -o $@ ace2sam.o -lz
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ ace2sam.o -lz
 
 wgsim:wgsim.o
-		$(CC) $(CFLAGS) -o $@ wgsim.o -lm -lz
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ wgsim.o -lm -lz
 
 md5fa:md5.o md5fa.o md5.h ../kseq.h
-		$(CC) $(CFLAGS) -o $@ md5.o md5fa.o -lz
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ md5.o md5fa.o -lz
 
 md5sum-lite:md5sum-lite.o
-		$(CC) $(CFLAGS) -o $@ md5sum-lite.o
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ md5sum-lite.o
 
 md5sum-lite.o:md5.c md5.h
 		$(CC) -c $(CFLAGS) -DMD5SUM_MAIN -o $@ md5.c
 
 maq2sam-short:maq2sam.c
-		$(CC) $(CFLAGS) -o $@ maq2sam.c -lz
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ maq2sam.c -lz
 
 maq2sam-long:maq2sam.c
-		$(CC) $(CFLAGS) -DMAQ_LONGREADS -o $@ maq2sam.c -lz
+		$(CC) $(CFLAGS) -DMAQ_LONGREADS $(LDFLAGS) -o $@ maq2sam.c -lz
 
 md5fa.o:md5.h md5fa.c
 		$(CC) $(CFLAGS) -c -I.. -o $@ md5fa.c

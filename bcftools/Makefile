@@ -1,6 +1,6 @@
-CC=			gcc
-CFLAGS=		-g -Wall -O2 #-m64 #-arch ppc
-DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_USE_KNETFILE
+CC?=			gcc
+CFLAGS?=		-g -Wall -O2 #-m64 #-arch ppc
+CPPFLAGS+=		-D_FILE_OFFSET_BITS=64 -D_USE_KNETFILE
 LOBJS=		bcf.o vcf.o bcfutils.o prob1.o em.o kfunc.o kmin.o index.o fet.o mut.o bcf2qcall.o
 OMISC=		..
 AOBJS=		call1.o main.o $(OMISC)/kstring.o $(OMISC)/bgzf.o $(OMISC)/knetfile.o $(OMISC)/bedidx.o
@@ -11,14 +11,14 @@ SUBDIRS=	.
 .SUFFIXES:.c .o
 
 .c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) -I.. $(INCLUDES) $< -o $@
+		$(CC) -c $(CFLAGS) $(CPPFLAGS) -I.. $(INCLUDES) $< -o $@
 
 all-recur lib-recur clean-recur cleanlocal-recur install-recur:
 		@target=`echo $@ | sed s/-recur//`; \
 		wdir=`pwd`; \
 		list='$(SUBDIRS)'; for subdir in $$list; do \
 			cd $$subdir; \
-			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
+			$(MAKE) CC="$(CC)" CPPFLAGS="$(CPPFLAGS)" CFLAGS="$(CFLAGS)" \
 				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
 			cd $$wdir; \
 		done;
@@ -31,7 +31,7 @@ libbcf.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
 bcftools:lib $(AOBJS)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf -lm -lz -lpthread
+		$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(AOBJS) -L. $(LIBPATH) -lbcf -lm -lz -lpthread
 
 bcf.o:bcf.h
 vcf.o:bcf.h
