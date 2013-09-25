@@ -323,7 +323,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_hdr_append(bcf_hdr, str.s);
 
         str.l = 0;
-        ksprintf(&str, "##samtoolsCommand=samtools");
+        ksprintf(&str, "##samtoolsCommand=samtools mpileup");
         for (i=1; i<conf->argc; i++) ksprintf(&str, " %s", conf->argv[i]);
         kputc('\n', &str);
         bcf_hdr_append(bcf_hdr, str.s);
