@@ -1,7 +1,7 @@
 #ifndef BAM_SAMPLE_H
 #define BAM_SAMPLE_H
 
-#include "kstring.h"
+#include "htslib/kstring.h"
 
 typedef struct {
 	int n, m;

@@ -9,7 +9,7 @@ typedef struct {
 	long cnt[4]; // short:ins, short:del, long:ins, long:del
 } rgcnt_t;
 
-#include "khash.h"
+#include "htslib/khash.h"
 KHASH_MAP_INIT_STR(rgcnt, rgcnt_t)
 
 #define MAX_LEN 127

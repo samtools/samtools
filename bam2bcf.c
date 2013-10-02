@@ -2,13 +2,14 @@
 #include <stdint.h>
 #include <assert.h>
 #include <float.h>
-#include "bam.h"
-#include "kstring.h"
+#include <htslib/sam.h>
+#include <htslib/kstring.h>
+#include <htslib/kfunc.h>
 #include "bam2bcf.h"
 #include "errmod.h"
-#include "bcftools/bcf.h"
 
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
+extern const char bam_nt16_nt4_table[];
 
 #define CALL_DEFTHETA 0.83
 #define DEF_MAPQ 20
@@ -28,19 +29,37 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 	bca->min_support = 1;
     bca->per_sample_flt = 0;
     bca->npos = 100;
-    bca->ref_pos = calloc(bca->npos, sizeof(int));
-    bca->alt_pos = calloc(bca->npos, sizeof(int));
+    bca->ref_pos = malloc(bca->npos*sizeof(int));
+    bca->alt_pos = malloc(bca->npos*sizeof(int));
+    bca->nqual = 60;
+    bca->ref_mq  = malloc(bca->nqual*sizeof(int));
+    bca->alt_mq  = malloc(bca->nqual*sizeof(int));
+    bca->ref_bq  = malloc(bca->nqual*sizeof(int));
+    bca->alt_bq  = malloc(bca->nqual*sizeof(int));
+    bca->fwd_mqs = malloc(bca->nqual*sizeof(int));
+    bca->rev_mqs = malloc(bca->nqual*sizeof(int));
  	return bca;
 }
 
+void bcf_call_destroy(bcf_callaux_t *bca)
+{
+	if (bca == 0) return;
+	errmod_destroy(bca->e);
+    if (bca->npos) { free(bca->ref_pos); free(bca->alt_pos); bca->npos = 0; }
+    free(bca->ref_mq); free(bca->alt_mq); free(bca->ref_bq); free(bca->alt_bq); 
+    free(bca->fwd_mqs); free(bca->rev_mqs);
+    bca->nqual = 0;
+	free(bca->bases); free(bca->inscns); free(bca);
+}
 
+// position in the sequence with respect to the aligned part of the read
 static int get_position(const bam_pileup1_t *p, int *len)
 {
     int icig, n_tot_bases = 0, iread = 0, edist = p->qpos + 1;
     for (icig=0; icig<p->b->core.n_cigar; icig++) 
     {
-        int cig  = bam1_cigar(p->b)[icig] & BAM_CIGAR_MASK;
-        int ncig = bam1_cigar(p->b)[icig] >> BAM_CIGAR_SHIFT;
+        int cig  = bam_get_cigar(p->b)[icig] & BAM_CIGAR_MASK;
+        int ncig = bam_get_cigar(p->b)[icig] >> BAM_CIGAR_SHIFT;
         if ( cig==BAM_CMATCH )
         {
             n_tot_bases += ncig;
@@ -53,7 +72,6 @@ static int get_position(const bam_pileup1_t *p, int *len)
         }
         else if ( cig==BAM_CSOFT_CLIP )
         {
-            // position with respect to the aligned part of the read
             iread += ncig;
             if ( iread<=p->qpos ) edist -= ncig;
         }
@@ -62,12 +80,16 @@ static int get_position(const bam_pileup1_t *p, int *len)
     return edist;
 }
 
-void bcf_call_destroy(bcf_callaux_t *bca)
+void bcf_callaux_clean(bcf_callaux_t *bca)
 {
-	if (bca == 0) return;
-	errmod_destroy(bca->e);
-    if (bca->npos) { free(bca->ref_pos); free(bca->alt_pos); bca->npos = 0; }
-	free(bca->bases); free(bca->inscns); free(bca);
+    memset(bca->ref_pos,0,sizeof(int)*bca->npos);
+    memset(bca->alt_pos,0,sizeof(int)*bca->npos);
+    memset(bca->ref_mq,0,sizeof(int)*bca->nqual);
+    memset(bca->alt_mq,0,sizeof(int)*bca->nqual);
+    memset(bca->ref_bq,0,sizeof(int)*bca->nqual);
+    memset(bca->alt_bq,0,sizeof(int)*bca->nqual);
+    memset(bca->fwd_mqs,0,sizeof(int)*bca->nqual);
+    memset(bca->rev_mqs,0,sizeof(int)*bca->nqual);
 }
 
 /*
@@ -109,7 +131,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		++ori_depth;
 		mapQ  = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
         if ( !mapQ ) r->mq0++;
-		baseQ = q = is_indel? p->aux&0xff : (int)bam1_qual(p->b)[p->qpos]; // base/indel quality
+		baseQ = q = is_indel? p->aux&0xff : (int)bam_get_qual(p->b)[p->qpos]; // base/indel quality
 		seqQ = is_indel? (p->aux>>8&0xff) : 99;
 		if (q < bca->min_baseQ) continue;
 		if (q > seqQ) q = seqQ;
@@ -118,7 +140,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		if (q > 63) q = 63;
 		if (q < 4) q = 4;
 		if (!is_indel) {
-			b = bam1_seqi(bam1_seq(p->b), p->qpos); // base
+			b = bam_seqi(bam_get_seq(p->b), p->qpos); // base
 			b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
 			is_diff = (ref4 < 4 && b == ref4)? 0 : 1;
 		} else {
@@ -126,10 +148,10 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 			is_diff = (b != 0);
 		}
 		if (is_diff) ++r->n_supp;
-		bca->bases[n++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
+		bca->bases[n++] = q<<5 | (int)bam_is_rev(p->b)<<4 | b;
 		// collect annotations
 		if (b < 4) r->qsum[b] += q;
-		++r->anno[0<<2|is_diff<<1|bam1_strand(p->b)];
+		++r->anno[0<<2|is_diff<<1|bam_is_rev(p->b)];
 		min_dist = p->b->core.l_qseq - 1 - p->qpos;
 		if (min_dist > p->qpos) min_dist = p->qpos;
 		if (min_dist > CAP_DIST) min_dist = CAP_DIST;
@@ -140,18 +162,141 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		r->anno[3<<2|is_diff<<1|0] += min_dist;
 		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
 
-        // collect read positions for ReadPosBias
+        // collect for bias tests
+        if ( baseQ > 59 ) baseQ = 59;
+        if ( mapQ > 59 ) mapQ = 59;
         int len, pos = get_position(p, &len);
         int epos = (double)pos/(len+1) * bca->npos;
-        if ( bam1_seqi(bam1_seq(p->b),p->qpos) == ref_base )
+        int ibq  = baseQ/60. * bca->nqual;
+        int imq  = mapQ/60. * bca->nqual;
+        if ( bam_is_rev(p->b) ) bca->rev_mqs[imq]++;
+        else bca->fwd_mqs[imq]++;
+        if ( bam_seqi(bam_get_seq(p->b),p->qpos) == ref_base )
+        {
             bca->ref_pos[epos]++;
+            bca->ref_bq[ibq]++;
+            bca->ref_mq[imq]++;
+        }
         else
+        {
             bca->alt_pos[epos]++;
+            bca->alt_bq[ibq]++;
+            bca->alt_mq[imq]++;
+        }
 	}
 	r->depth = n; r->ori_depth = ori_depth;
 	// glfgen
-	errmod_cal(bca->e, n, 5, bca->bases, r->p);
+	errmod_cal(bca->e, n, 5, bca->bases, r->p); // calculate PL of each genotype
 	return r->depth;
+}
+
+
+/*
+ *  calc_vdb() - returns value between zero (most biased) and one (no bias)
+ *               on success, or HUGE_VAL when VDB cannot be calculated because
+ *               of insufficient depth (<2x)
+ *
+ *  Variant Distance Bias tests if the variant bases are positioned within the
+ *  reads with sufficient randomness. Unlike other tests, it looks only at
+ *  variant reads and therefore gives different kind of information than Read
+ *  Position Bias for instance. VDB was developed for detecting artefacts in
+ *  RNA-seq calls where reads from spliced transcripts span splice site
+ *  boundaries.  The current implementation differs somewhat from the original
+ *  version described in supplementary material of PMID:22524474, but the idea
+ *  remains the same. (Here the random variable tested is the average distance
+ *  from the averaged position, not the average pairwise distance.)
+ *
+ *  For coverage of 2x, the calculation is exact but is approximated for the
+ *  rest. The result is most accurate between 4-200x. For 3x or >200x, the
+ *  reported values are slightly more favourable than those of a true random
+ *  distribution.
+ */
+double calc_vdb(int *pos, int npos)
+{
+    // Note well: the parameters were obtained by fitting to simulated data of
+    // 100bp reads. This assumes rescaling to 100bp in bcf_call_glfgen().
+    const int readlen = 100;
+    assert( npos==readlen );
+
+    #define nparam 15
+    const float param[nparam][3] = { {3,0.079,18}, {4,0.09,19.8}, {5,0.1,20.5}, {6,0.11,21.5},
+        {7,0.125,21.6}, {8,0.135,22}, {9,0.14,22.2}, {10,0.153,22.3}, {15,0.19,22.8},
+        {20,0.22,23.2}, {30,0.26,23.4}, {40,0.29,23.5}, {50,0.35,23.65}, {100,0.5,23.7},
+        {200,0.7,23.7} };
+
+    int i, dp = 0;
+    float mean_pos = 0, mean_diff = 0;
+    for (i=0; i<npos; i++)
+    {
+        if ( !pos[i] ) continue;
+        dp += pos[i];
+        mean_pos += pos[i]*i;
+    }
+    if ( dp<2 ) return HUGE_VAL;     // one or zero reads can be placed anywhere
+
+    mean_pos /= dp;
+    for (i=0; i<npos; i++)
+    {
+        if ( !pos[i] ) continue;
+        mean_diff += pos[i] * fabs(i - mean_pos);
+    }
+    mean_diff /= dp;
+
+    int ipos = mean_diff;   // tuned for float-to-int implicit conversion
+    if ( dp==2 )
+        return (2*readlen-2*(ipos+1)-1)*(ipos+1)/(readlen-1)/(readlen*0.5);
+
+    if ( dp>=200 ) 
+        i = nparam; // shortcut for big depths
+    else 
+    {
+        for (i=0; i<nparam; i++)
+            if ( param[i][0]>=dp ) break;
+    }
+    float pshift, pscale;
+    if ( i==nparam )
+    {
+        // the depth is too high, go with 200x
+        pscale = param[nparam-1][1];
+        pshift = param[nparam-1][2];
+    }
+    else if ( i>0 && param[i][0]!=dp )
+    {
+        // linear interpolation of parameters
+        pscale = (param[i-1][1] + param[i][1])*0.5;
+        pshift = (param[i-1][2] + param[i][2])*0.5;
+    }
+    else
+    {
+        pscale = param[i][1];
+        pshift = param[i][2];
+    }
+    return 0.5*kf_erfc(-(mean_diff-pshift)*pscale);
+}
+
+double calc_chisq_bias(int *a, int *b, int n)
+{
+    int na = 0, nb = 0, i, ndf = n;
+    for (i=0; i<n; i++) na += a[i];
+    for (i=0; i<n; i++) nb += b[i];
+    if ( !na || !nb ) return HUGE_VAL;
+
+    double chisq = 0;
+    for (i=0; i<n; i++)
+    {
+        if ( !a[i] && !b[i] ) ndf--;
+        else 
+        {
+            double tmp = a[i] - b[i];
+            chisq += tmp*tmp/(a[i]+b[i]);
+        }
+    }
+    /*
+        kf_gammq: incomplete gamma function Q(a,x) = 1 - P(a,x) = Gamma(a,x)/Gamma(a)
+        1 if the distributions are identical, 0 if very different
+    */
+    double prob = kf_gammaq(0.5*ndf, 0.5*chisq);
+    return prob;
 }
 
 double mann_whitney_1947(int n, int m, int U)
@@ -161,118 +306,76 @@ double mann_whitney_1947(int n, int m, int U)
     return (double)n/(n+m)*mann_whitney_1947(n-1,m,U-m) + (double)m/(n+m)*mann_whitney_1947(n,m-1,U);
 }
 
-void calc_ReadPosBias(bcf_callaux_t *bca, bcf_call_t *call)
+double mann_whitney_1947_cdf(int n, int m, int U)
 {
-    int i, nref = 0, nalt = 0;
-    unsigned long int U = 0;
-    for (i=0; i<bca->npos; i++) 
-    {
-        nref += bca->ref_pos[i];
-        nalt += bca->alt_pos[i];
-        U += nref*bca->alt_pos[i];
-        bca->ref_pos[i] = 0;
-        bca->alt_pos[i] = 0;
-    }
-
-    if ( !nref || !nalt )
-    {
-        // Missing values are hard to interpret by downstream filtering, therefore output unbiased result
-        call->read_pos_bias = 0;
-        return;
-    }
-
-    if ( nref>=8 || nalt>=8 )
-    {
-        // normal approximation
-        double mean = ((double)nref*nalt+1.0)/2.0;
-        double var2 = (double)nref*nalt*(nref+nalt+1.0)/12.0;
-        double z    = (U-mean)/sqrt(var2);
-        call->read_pos_bias = z;
-        //fprintf(stderr,"nref=%d  nalt=%d  U=%ld  mean=%e  var=%e  zval=%e\n", nref,nalt,U,mean,sqrt(var2),call->read_pos_bias);
-    }
-    else
-    {
-        double p = mann_whitney_1947(nalt,nref,U);
-        // biased form claimed by GATK to behave better empirically
-        // double var2 = (1.0+1.0/(nref+nalt+1.0))*(double)nref*nalt*(nref+nalt+1.0)/12.0;
-        double var2 = (double)nref*nalt*(nref+nalt+1.0)/12.0;
-        double z;
-        if ( p >= 1./sqrt(var2*2*M_PI) ) z = 0;   // equal to mean
-        else
-        {
-            if ( U >= nref*nalt/2. ) z = sqrt(-2*log(sqrt(var2*2*M_PI)*p));
-            else z = -sqrt(-2*log(sqrt(var2*2*M_PI)*p));
-        }
-        call->read_pos_bias = z;
-        //fprintf(stderr,"nref=%d  nalt=%d  U=%ld  p=%e var2=%e  zval=%e\n", nref,nalt,U, p,var2,call->read_pos_bias);
-    }
+    int i;
+    double sum = 0;
+    for (i=0; i<=U; i++) 
+        sum += mann_whitney_1947(n,m,i);
+    return sum;
 }
 
-float mean_diff_to_prob(float mdiff, int dp, int readlen)
+double calc_mwu_bias_cdf(int *a, int *b, int n)
 {
-    if ( dp==2 )
+    int na = 0, nb = 0, i;
+    double U = 0;
+    for (i=0; i<n; i++) 
     {
-        if ( mdiff==0 )
-            return (2.0*readlen + 4.0*(readlen-1.0))/((float)readlen*readlen);
-        else
-            return 8.0*(readlen - 4.0*mdiff)/((float)readlen*readlen);
+        na += a[i];
+        U  += a[i] * (nb + b[i]*0.5);
+        nb += b[i];
+    }
+    if ( !na || !nb ) return HUGE_VAL;
+
+    // Always work with the smaller U
+    double U_min = ((double)na * nb) - U;
+    if ( U < U_min ) U_min = U;
+
+    if ( na==1 ) return 2.0 * (floor(U_min)+1) / (nb+1);
+    if ( nb==1 ) return 2.0 * (floor(U_min)+1) / (na+1);
+
+    // Normal approximation, very good for na>=8 && nb>=8 and reasonable if na<8 or nb<8
+    if ( na>=8 || nb>=8 )
+    {
+        double mean = ((double)na*nb)*0.5;
+        double var2 = ((double)na*nb)*(na+nb+1)/12.0;
+        double z = (U_min - mean)/sqrt(2*var2);   // z is N(0,1)
+        return 2.0 - kf_erfc(z);  // which is 1 + erf(z)
     }
 
-    // This is crude empirical approximation and is not very accurate for
-    // shorter read lengths (<100bp). There certainly is a room for
-    // improvement.
-    const float mv[24][2] = { {0,0}, {0,0}, {0,0},
-        { 9.108, 4.934}, { 9.999, 3.991}, {10.273, 3.485}, {10.579, 3.160},
-        {10.828, 2.889}, {11.014, 2.703}, {11.028, 2.546}, {11.244, 2.391},
-        {11.231, 2.320}, {11.323, 2.138}, {11.403, 2.123}, {11.394, 1.994},
-        {11.451, 1.928}, {11.445, 1.862}, {11.516, 1.815}, {11.560, 1.761},
-        {11.544, 1.728}, {11.605, 1.674}, {11.592, 1.652}, {11.674, 1.613},
-        {11.641, 1.570} };
-
-    float m, v;
-    if ( dp>=24 )
-    {
-        m = readlen/8.;
-        if (dp>100) dp = 100;
-        v = 1.476/(0.182*pow(dp,0.514));
-        v = v*(readlen/100.);
-    }
-    else
-    {
-        m = mv[dp][0];
-        v = mv[dp][1];
-        m = m*readlen/100.;
-        v = v*readlen/100.;
-        v *= 1.2;   // allow more variability
-    }
-    return 1.0/(v*sqrt(2*M_PI)) * exp(-0.5*((mdiff-m)/v)*((mdiff-m)/v));
+    // Exact calculation
+    double pval = 2*mann_whitney_1947_cdf(na,nb,U_min);
+    return pval>1 ? 1 : pval;
 }
 
-void calc_vdb(bcf_callaux_t *bca, bcf_call_t *call)
+double calc_mwu_bias(int *a, int *b, int n)
 {
-    int i, dp = 0;
-    float mean_pos = 0, mean_diff = 0;
-    for (i=0; i<bca->npos; i++)
+    int na = 0, nb = 0, i;
+    double U = 0;
+    for (i=0; i<n; i++) 
     {
-        if ( !bca->alt_pos[i] ) continue;
-        dp += bca->alt_pos[i];
-        int j = i<bca->npos/2 ? i : bca->npos - i;
-        mean_pos += bca->alt_pos[i]*j;
+        na += a[i];
+        U  += a[i] * (nb + b[i]*0.5);
+        nb += b[i];
     }
-    if ( dp<2 )
+    if ( !na || !nb ) return HUGE_VAL;
+    if ( na==1 || nb==1 ) return 1.0;       // Flat probability, all U values are equally likely
+
+    double mean = ((double)na*nb)*0.5;
+    double var2 = ((double)na*nb)*(na+nb+1)/12.0;
+    if ( na==2 || nb==2 )
     {
-        call->vdb = -1;
-        return;
+        // Linear approximation
+        return U>mean ? (2.0*mean-U)/mean : U/mean;
     }
-    mean_pos /= dp;
-    for (i=0; i<bca->npos; i++)
+    if ( na>=8 || nb>=8 )
     {
-        if ( !bca->alt_pos[i] ) continue;
-        int j = i<bca->npos/2 ? i : bca->npos - i;
-        mean_diff += bca->alt_pos[i] * fabs(j - mean_pos);
+        // Normal approximation, very good for na>=8 && nb>=8 and reasonable if na<8 or nb<8
+        return exp(-0.5*(U-mean)*(U-mean)/var2);
     }
-    mean_diff /= dp;
-    call->vdb = mean_diff_to_prob(mean_diff, dp, bca->npos);
+
+    // Exact calculation
+    return mann_whitney_1947(na,nb,U) * sqrt(2*M_PI*var2);
 }
 
 void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
@@ -361,6 +464,8 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 	for (i = 0; i < 5; ++i) call->a[i] = -1;
 	call->unseen = -1;
 	call->a[0] = ref4;
+
+    // Set values for the QS tag
 	for (i = 3, j = 1; i >= 0; --i) {
 		if ((qsum[i]&3) != ref4) {
 			if (qsum[i]>>2 != 0) 
@@ -390,10 +495,6 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
      * allele (if known) followed by the alleles present in descending order of
      * quality sum
 	 */
-	if (call->n < n) {
-		call->n = n;
-		call->PL = realloc(call->PL, 15 * n);
-	}
 	{
 		int x, g[15], z;
 		double sum_min = 0.;
@@ -406,21 +507,27 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 			}
 		}
 		// for each sample calculate the PL
-		for (i = 0; i < n; ++i) {
-			uint8_t *PL = call->PL + x * i;
+		for (i = 0; i < n; ++i) 
+        {
+			uint32_t *PL = call->PL + x * i;
 			const bcf_callret1_t *r = calls + i;
-			float min = FLT_MAX;
-			for (j = 0; j < x; ++j) {
-				if (min > r->p[g[j]]) min = r->p[g[j]];
-			}
-			sum_min += min;
-			for (j = 0; j < x; ++j) {
-				int y;
-				y = (int)(r->p[g[j]] - min + .499);
-				if (y > 255) y = 255;
-				PL[j] = y;
-			}
-		}
+            float min = FLT_MAX;
+            for (j = 0; j < x; ++j) {
+                if (min > r->p[g[j]]) min = r->p[g[j]];
+            }
+            sum_min += min;
+            for (j = 0; j < x; ++j) {
+                int y;
+                y = (int)(r->p[g[j]] - min + .499);
+                if (y > 255) y = 255;
+                PL[j] = y;
+            }
+        }
+        if ( call->DP )
+            for (i=0; i<n; i++) call->DP[i] = calls[i].depth;
+        if ( call->DV ) 
+            for (i=0; i<n; i++) call->DV[i] = calls[i].n_supp;
+
 //		if (ref_base < 0) fprintf(stderr, "%d,%d,%f,%d\n", call->n_alleles, x, sum_min, call->unseen);
 		call->shift = (int)(sum_min + .499);
 	}
@@ -436,107 +543,114 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
 	}
 
-    calc_vdb(bca, call);
-    calc_ReadPosBias(bca, call);
     calc_SegBias(calls, call);
+
+    // calc_chisq_bias("XPOS", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_pos, bca->alt_pos, bca->npos);
+    // calc_chisq_bias("XMQ", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_mq, bca->alt_mq, bca->nqual);
+    // calc_chisq_bias("XBQ", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_bq, bca->alt_bq, bca->nqual);
+
+    call->mwu_pos = calc_mwu_bias(bca->ref_pos, bca->alt_pos, bca->npos);
+    call->mwu_mq  = calc_mwu_bias(bca->ref_mq,  bca->alt_mq,  bca->nqual);
+    call->mwu_bq  = calc_mwu_bias(bca->ref_bq,  bca->alt_bq,  bca->nqual);
+    call->mwu_mqs = calc_mwu_bias(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
+
+    call->mwu_pos_cdf = calc_mwu_bias_cdf(bca->ref_pos, bca->alt_pos, bca->npos);
+    call->mwu_mq_cdf  = calc_mwu_bias_cdf(bca->ref_mq,  bca->alt_mq,  bca->nqual);
+    call->mwu_bq_cdf  = calc_mwu_bias_cdf(bca->ref_bq,  bca->alt_bq,  bca->nqual);
+    call->mwu_mqs_cdf = calc_mwu_bias_cdf(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
+
+    call->vdb = calc_vdb(bca->alt_pos, bca->npos);
 
 	return 0;
 }
 
-int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int fmt_flag,
-				 const bcf_callaux_t *bca, const char *ref)
+int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag, const bcf_callaux_t *bca, const char *ref)
 {
 	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
-	kstring_t s;
-	int i, j;
-	b->n_smpl = bc->n;
-	b->tid = tid; b->pos = pos; b->qual = 0;
-	s.s = b->str; s.m = b->m_str; s.l = 0;
-	kputc('\0', &s);
-	if (bc->ori_ref < 0) { // an indel
-		// write REF
-		kputc(ref[pos], &s);
-		for (j = 0; j < bca->indelreg; ++j) kputc(ref[pos+1+j], &s);
-		kputc('\0', &s);
-		// write ALT
-		kputc(ref[pos], &s);
-		for (i = 1; i < 4; ++i) {
+	int i, j, nals = 1;
+
+    bcf_hdr_t *hdr = bc->bcf_hdr;
+    rec->rid  = bc->tid;
+    rec->pos  = bc->pos;
+    rec->qual = 0;
+
+	bc->tmp.l = 0;
+	if (bc->ori_ref < 0)    // indel
+    {
+		// REF
+		kputc(ref[bc->pos], &bc->tmp); 
+		for (j = 0; j < bca->indelreg; ++j) kputc(ref[bc->pos+1+j], &bc->tmp);
+
+		// ALT
+		for (i=1; i<4; i++) 
+        {
 			if (bc->a[i] < 0) break;
-			if (i > 1) {
-				kputc(',', &s); kputc(ref[pos], &s);
-			}
+            kputc(',', &bc->tmp); kputc(ref[bc->pos], &bc->tmp);
+
 			if (bca->indel_types[bc->a[i]] < 0) { // deletion
 				for (j = -bca->indel_types[bc->a[i]]; j < bca->indelreg; ++j)
-					kputc(ref[pos+1+j], &s);
+					kputc(ref[bc->pos+1+j], &bc->tmp);
 			} else { // insertion; cannot be a reference unless a bug
 				char *inscns = &bca->inscns[bc->a[i] * bca->maxins];
 				for (j = 0; j < bca->indel_types[bc->a[i]]; ++j)
-					kputc("ACGTN"[(int)inscns[j]], &s);
-				for (j = 0; j < bca->indelreg; ++j) kputc(ref[pos+1+j], &s);
+					kputc("ACGTN"[(int)inscns[j]], &bc->tmp);
+				for (j = 0; j < bca->indelreg; ++j) kputc(ref[bc->pos+1+j], &bc->tmp);
 			}
+            nals++;
 		}
-		kputc('\0', &s);
-	} else { // a SNP
-		kputc("ACGTN"[bc->ori_ref], &s); kputc('\0', &s);
-		for (i = 1; i < 5; ++i) {
+	} 
+    else    // SNP
+    {
+		kputc("ACGTN"[bc->ori_ref], &bc->tmp);
+		for (i=1; i<5; i++) 
+        {
 			if (bc->a[i] < 0) break;
-			if (i > 1) kputc(',', &s);
-			kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &s);
+			kputc(',', &bc->tmp);
+			kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &bc->tmp);
+            nals++;
 		}
-		kputc('\0', &s);
 	}
-	kputc('\0', &s);
+    bcf1_update_alleles_str(hdr, rec, bc->tmp.s);
+
+    bc->tmp.l = 0;
+
 	// INFO
-	if (bc->ori_ref < 0) ksprintf(&s,"INDEL;IDV=%d;IMF=%f;", bca->max_support, bca->max_frac);
-	kputs("DP=", &s); kputw(bc->ori_depth, &s); kputs(";I16=", &s);
-	for (i = 0; i < 16; ++i) {
-		if (i) kputc(',', &s);
-        ksprintf(&s,"%.0f",bc->anno[i]);
-		//kputw(bc->anno[i], &s);
-	}
-    ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
-    if (bc->vdb != -1)
-        ksprintf(&s, ";VDB=%e", bc->vdb);
-    if (bc->read_pos_bias != -1 )
-        ksprintf(&s, ";RPB=%e", bc->read_pos_bias);
-    if (bc->seg_bias != HUGE_VAL )
-        ksprintf(&s, ";SGB=%e", bc->seg_bias);
-    kputs(";MQ0=", &s); kputw(bc->mq0, &s);
-	kputc('\0', &s);
-	// FMT
-	kputs("PL", &s);
-	if (bcr && fmt_flag) {
-		if (fmt_flag & B2B_FMT_DP) kputs(":DP", &s);
-		if (fmt_flag & B2B_FMT_DV) kputs(":DV", &s);
-		if (fmt_flag & B2B_FMT_SP) kputs(":SP", &s);
-	}
-	kputc('\0', &s);
-	b->m_str = s.m; b->str = s.s; b->l_str = s.l;
-	bcf_sync(b);
-	memcpy(b->gi[0].data, bc->PL, b->gi[0].len * bc->n);
-	if (bcr && fmt_flag) {
-		uint16_t *dp = (fmt_flag & B2B_FMT_DP)? b->gi[1].data : 0;
-		uint16_t *dv = (fmt_flag & B2B_FMT_DV)? b->gi[1 + ((fmt_flag & B2B_FMT_DP) != 0)].data : 0;
-		int32_t  *sp = (fmt_flag & B2B_FMT_SP)? b->gi[1 + ((fmt_flag & B2B_FMT_DP) != 0) + ((fmt_flag & B2B_FMT_DV) != 0)].data : 0;
-		for (i = 0; i < bc->n; ++i) {
-			bcf_callret1_t *p = bcr + i;
-			if (dp) dp[i] = p->depth  < 0xffff? p->depth  : 0xffff;
-			if (dv) dv[i] = p->n_supp < 0xffff? p->n_supp : 0xffff;
-			if (sp) {
-				if (p->anno[0] + p->anno[1] < 2 || p->anno[2] + p->anno[3] < 2
-					|| p->anno[0] + p->anno[2] < 2 || p->anno[1] + p->anno[3] < 2)
-				{
-					sp[i] = 0;
-				} else {
-					double left, right, two;
-					int x;
-					kt_fisher_exact(p->anno[0], p->anno[1], p->anno[2], p->anno[3], &left, &right, &two);
-					x = (int)(-4.343 * log(two) + .499);
-					if (x > 255) x = 255;
-					sp[i] = x;
-				}
-			}
-		}
-	}
+	if (bc->ori_ref < 0) 
+    {
+        bcf1_update_info_flag(hdr, rec, "INDEL", NULL, 1);
+        bcf1_update_info_int32(hdr, rec, "IDV", (int*)&bca->max_support, 1);
+        bcf1_update_info_float(hdr, rec, "IMF", (float*)&bca->max_frac, 1);
+    }
+    bcf1_update_info_int32(hdr, rec, "DP", &bc->ori_depth, 1);
+
+    float tmpf[16];
+    for (i=0; i<16; i++) tmpf[i] = bc->anno[i];
+    bcf1_update_info_float(hdr, rec, "I16", tmpf, 16);
+
+    for (i=3; i>0; i--)
+        if ( bc->qsum[i]!=0 ) break;
+    bcf1_update_info_float(hdr, rec, "QS", bc->qsum, i+1);
+
+    if ( bc->vdb != HUGE_VAL )      bcf1_update_info_float(hdr, rec, "VDB", &bc->vdb, 1);
+    if ( bc->seg_bias != HUGE_VAL ) bcf1_update_info_float(hdr, rec, "SGB", &bc->seg_bias, 1);
+    if ( bc->mwu_pos != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "RPB", &bc->mwu_pos, 1);
+    if ( bc->mwu_mq != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "MQB", &bc->mwu_mq, 1);
+    if ( bc->mwu_mqs != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "MQSB", &bc->mwu_mqs, 1);
+    if ( bc->mwu_bq != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "BQB", &bc->mwu_bq, 1);
+    if ( bc->mwu_pos_cdf != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "RPB2", &bc->mwu_pos_cdf, 1);
+    if ( bc->mwu_mq_cdf != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "MQB2", &bc->mwu_mq_cdf, 1);
+    if ( bc->mwu_mqs_cdf != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "MQSB2", &bc->mwu_mqs_cdf, 1);
+    if ( bc->mwu_bq_cdf != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "BQB2", &bc->mwu_bq_cdf, 1);
+    tmpf[0] = bc->ori_depth ? (double)bc->mq0/bc->ori_depth : 0;
+    bcf1_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
+
+	// FORMAT
+    rec->n_sample = bc->n;
+    bcf1_update_format_int32(hdr, rec, "PL", bc->PL, nals*(nals+1)/2 * rec->n_sample);
+    if (bc->DP) bcf1_update_format_int32(hdr, rec, "DP", bc->DP, rec->n_sample);
+    if (bc->DV) bcf1_update_format_int32(hdr, rec, "DV", bc->DV, rec->n_sample);
+    // todo: SP, per-sample strand-bias?
+
+    bcf1_sync(rec);
 	return 0;
 }

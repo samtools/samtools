@@ -1,11 +1,11 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
-#include "kstring.h"
+#include "htslib/kstring.h"
 #include "sam_header.h"
 #include "sam.h"
 #include "bam.h"
-#include "faidx.h"
+#include "htslib/faidx.h"
 
 bam_header_t *bam_header_dup(const bam_header_t *h0); /*in sam.c*/
 
@@ -321,6 +321,7 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 
 bam_header_t * fix_header(bam_header_t *old, faidx_t *fai)
 {
+#if 0
 	int i = 0, unpadded_len = 0;
 	bam_header_t *header = 0 ;
 
@@ -374,6 +375,10 @@ bam_header_t * fix_header(bam_header_t *old, faidx_t *fai)
 	}
 	//fprintf(stderr, "[depad] Here is the new header (pending @SQ lines),\n\n%s\n(end)\n", header->text);
 	return header;
+#else
+	fprintf(stderr, "Samtools-htslib: fix_header() header parsing not yet implemented\n");
+	abort();
+#endif
 }
 
 static int usage(int is_long_help);

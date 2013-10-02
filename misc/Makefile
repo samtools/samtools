@@ -11,7 +11,7 @@ SUBDIRS=	.
 .SUFFIXES:.c .o
 
 .c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
+		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES:-I.%=-I../.%) $< -o $@
 
 all:$(PROG)
 
@@ -27,11 +27,10 @@ lib-recur all-recur clean-recur cleanlocal-recur install-recur:
 
 lib:
 
-bamcheck:bamcheck.o
-		$(CC) $(CFLAGS) -o $@ bamcheck.o -L.. -lm -lbam -lpthread -lz
+bamcheck:bamcheck.o ../$(HTSLIB)
+		$(CC) $(CFLAGS) -o $@ bamcheck.o -L.. -lm -lbam ../$(HTSLIB) -lpthread -lz
 
-bamcheck.o:bamcheck.c ../faidx.h ../khash.h ../sam.h ../razf.h
-		$(CC) $(CFLAGS) -c -I.. -o $@ bamcheck.c
+bamcheck.o:bamcheck.c ../$(HTSDIR)/htslib/faidx.h ../$(HTSDIR)/htslib/khash.h ../sam.h ../$(HTSDIR)/htslib/razf.h
 
 ace2sam:ace2sam.o
 		$(CC) $(CFLAGS) -o $@ ace2sam.o -lz
@@ -39,7 +38,7 @@ ace2sam:ace2sam.o
 wgsim:wgsim.o
 		$(CC) $(CFLAGS) -o $@ wgsim.o -lm -lz
 
-md5fa:md5.o md5fa.o md5.h ../kseq.h
+md5fa:md5.o md5fa.o md5.h
 		$(CC) $(CFLAGS) -o $@ md5.o md5fa.o -lz
 
 md5sum-lite:md5sum-lite.o
@@ -54,14 +53,9 @@ maq2sam-short:maq2sam.c
 maq2sam-long:maq2sam.c
 		$(CC) $(CFLAGS) -DMAQ_LONGREADS -o $@ maq2sam.c -lz
 
-md5fa.o:md5.h md5fa.c
-		$(CC) $(CFLAGS) -c -I.. -o $@ md5fa.c
-
-wgsim.o:wgsim.c ../kseq.h
-		$(CC) $(CFLAGS) -c -I.. -o $@ wgsim.c
-
-ace2sam.o:ace2sam.c ../kstring.h ../kseq.h
-		$(CC) $(CFLAGS) -c -I.. -o $@ ace2sam.c
+md5fa.o:md5fa.c md5.h ../$(HTSDIR)/htslib/kseq.h
+wgsim.o:wgsim.c ../$(HTSDIR)/htslib/kseq.h
+ace2sam.o:ace2sam.c ../$(HTSDIR)/htslib/kstring.h ../$(HTSDIR)/htslib/kseq.h
 
 cleanlocal:
 		rm -fr gmon.out *.o a.out *.exe *.dSYM $(PROG) *~ *.a

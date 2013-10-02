@@ -5,4 +5,6 @@ compiler:
   - clang
   - gcc
 
-script: make CC=$CC
+install: git clone --depth=5 --branch=develop git://github.com/samtools/htslib.git
+
+script: make CC=$CC HTSDIR=./htslib

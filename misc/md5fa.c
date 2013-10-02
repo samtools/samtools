@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <zlib.h>
 #include "md5.h"
-#include "kseq.h"
+#include "htslib/kseq.h"
 
 #define HEX_STR "0123456789abcdef"
 

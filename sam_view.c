@@ -6,9 +6,9 @@
 #include <inttypes.h>
 #include "sam_header.h"
 #include "sam.h"
-#include "faidx.h"
-#include "kstring.h"
-#include "khash.h"
+#include "htslib/faidx.h"
+#include "htslib/kstring.h"
+#include "htslib/khash.h"
 KHASH_SET_INIT_STR(rg)
 
 // When counting records instead of printing them,
@@ -22,7 +22,7 @@ typedef khash_t(rg) *rghash_t;
 
 // FIXME: we'd better use no global variables...
 static rghash_t g_rghash = 0;
-static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0, g_qual_scale = 0, g_min_qlen = 0;
+static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0, g_qual_scale = 0, g_min_qlen = 0, g_remove_B = 0;
 static uint32_t g_subsam_seed = 0;
 static double g_subsam_frac = -1.;
 static char *g_library, *g_rg;
@@ -34,6 +34,7 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
 static int process_aln(const bam_header_t *h, bam1_t *b)
 {
+	if (g_remove_B) bam_remove_B(b);
 	if (g_qual_scale > 1) {
 		int i;
 		uint8_t *qual = bam1_qual(b);
@@ -165,7 +166,7 @@ int main_samview(int argc, char *argv[])
 		case 'X': of_type = BAM_OFSTR; break;
 		case '?': is_long_help = 1; break;
 		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
-		case 'B': bam_no_B = 1; break;
+		case 'B': g_remove_B = 1; break;
 		case 'Q': g_qual_scale = atoi(optarg); break;
 		case '@': n_threads = strtol(optarg, 0, 0); break;
 		default: return usage(is_long_help);
