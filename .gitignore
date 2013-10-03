@@ -1,12 +1,11 @@
 *.o
-.*.swp
-*.a
 *.dSYM
-.DS_Store
-/bcftools/bcftools
+/version.h
+
+lib*.a
+
 /bgzip
 /misc/ace2sam
-/misc/bamcheck
 /misc/maq2sam-long
 /misc/maq2sam-short
 /misc/md5fa
@@ -14,3 +13,5 @@
 /misc/wgsim
 /razip
 /samtools
+
+/TAGS

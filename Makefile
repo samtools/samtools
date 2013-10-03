@@ -1,11 +1,6 @@
-
-PROG=samtools bgzip
-all:$(PROG)
-
-# Adjust $(HTSDIR) to point to your top-level htslib directory
-HTSDIR = ../htslib
-include $(HTSDIR)/htslib.mk
-HTSLIB = $(HTSDIR)/libhts.a
+# Makefile for samtools, utilities for the Sequence Alignment/Map format.
+#
+#    Copyright (C) 2008-2013 Genome Research Ltd.
 
 CC=			gcc
 CFLAGS=		-g -Wall $(VERSION) -O2
@@ -21,35 +16,36 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
             faidx.o stats.o 
             # tview todo: bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
 INCLUDES=	-I. -I$(HTSDIR)
-SUBDIRS=	. misc
 LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
 
 
+PROGRAMS = samtools bgzip
+
+MISC_PROGRAMS = \
+	misc/ace2sam misc/maq2sam-long misc/maq2sam-short \
+	misc/md5fa misc/md5sum-lite misc/wgsim
+
+all: $(PROGRAMS) $(MISC_PROGRAMS)
+
+
+# Adjust $(HTSDIR) to point to your top-level htslib directory
+HTSDIR = ../htslib
+include $(HTSDIR)/htslib.mk
+HTSLIB = $(HTSDIR)/libhts.a
+
+
 .SUFFIXES:.c .o
-.PHONY: all lib test force
 
 force:
 
 .c.o:
 		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
 
-all-recur lib-recur clean-recur cleanlocal-recur install-recur:
-		@target=`echo $@ | sed s/-recur//`; \
-		wdir=`pwd`; \
-		list='$(SUBDIRS)'; for subdir in $$list; do \
-			cd $$subdir; \
-			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				HTSDIR="$(HTSDIR)" HTSLIB="$(HTSLIB)" \
-				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
-			cd $$wdir; \
-		done;
 
 test:
 		test/test.pl
 
-.PHONY:all lib clean cleanlocal
-.PHONY:all-recur lib-recur clean-recur cleanlocal-recur install-recur
 
 # See htslib/Makefile
 PACKAGE_VERSION  = 0.0.1
@@ -72,7 +68,7 @@ lib:libbam.a
 libbam.a:$(LOBJS)
 		$(AR) -csru $@ $(LOBJS)
 
-samtools:lib-recur $(AOBJS) $(HTSLIB)
+samtools: $(AOBJS) libbam.a $(HTSLIB)
 		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a $(LIBPATH) $(HTSLIB) $(LIBCURSES) -lm -lz -lpthread
 
 bgzip:bgzip.o $(HTSLIB)
@@ -124,22 +120,47 @@ sam_view.o: sam_view.c sam_header.h $(sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/
 sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
 stats.o: sam.c $(bam_h) $(HTSDIR)/htslib/khash.h $(htslib_faidx_h)
 
-libbam.1.dylib-local:$(LOBJS)
-		libtool -dynamic $(LOBJS) -o libbam.1.dylib -lc -lz
 
-libbam.so.1-local:$(LOBJS)
-		$(CC) -shared -Wl,-soname,libbam.so -o libbam.so.1 $(LOBJS) -lc -lz
+# misc programs
 
-dylib:
-		@$(MAKE) cleanlocal; \
-		case `uname` in \
-			Linux) $(MAKE) CFLAGS="$(CFLAGS) -fPIC" libbam.so.1-local;; \
-			Darwin) $(MAKE) CFLAGS="$(CFLAGS) -fPIC" libbam.1.dylib-local;; \
-			*) echo 'Unknown OS';; \
-		esac
+misc/ace2sam: misc/ace2sam.o
+	$(CC) $(LDFLAGS) -o $@ misc/ace2sam.o $(LDLIBS) -lz
+
+misc/maq2sam-short: misc/maq2sam-short.o
+	$(CC) $(LDFLAGS) -o $@ misc/maq2sam-short.o $(LDLIBS) -lz
+
+misc/maq2sam-long: misc/maq2sam-long.o
+	$(CC) $(LDFLAGS) -o $@ misc/maq2sam-long.o $(LDLIBS) -lz
+
+misc/md5fa: misc/md5fa.o misc/md5.o
+	$(CC) $(LDFLAGS) -o $@ misc/md5fa.o misc/md5.o $(LDLIBS) -lz
+
+misc/md5sum-lite: misc/md5sum-lite.o
+	$(CC) $(LDFLAGS) -o $@ misc/md5sum-lite.o $(LDLIBS)
+
+misc/wgsim: misc/wgsim.o
+	$(CC) $(LDFLAGS) -o $@ misc/wgsim.o $(LDLIBS) -lm -lz
+
+misc/ace2sam.o: misc/ace2sam.c $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kseq.h
+misc/md5.o: misc/md5.c misc/md5.h
+misc/md5fa.o: misc/md5fa.c misc/md5.h $(HTSDIR)/htslib/kseq.h
+misc/wgsim.o: misc/wgsim.c $(HTSDIR)/htslib/kseq.h
+
+misc/maq2sam-short.o: misc/maq2sam.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ misc/maq2sam.c
+
+misc/maq2sam-long.o: misc/maq2sam.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -DMAQ_LONGREADS -c -o $@ misc/maq2sam.c
+
+misc/md5sum-lite.o: misc/md5.c misc/md5.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -DMD5SUM_MAIN -c -o $@ misc/md5.c
 
 
-cleanlocal:
-		rm -fr gmon.out *.o a.out *.exe *.dSYM razip bgzip $(PROG) *~ *.a *.so.* *.so *.dylib
+mostlyclean:
+	-rm -f *.o misc/*.o version.h
 
-clean:cleanlocal-recur clean-htslib
+clean: mostlyclean clean-htslib
+	-rm -f $(PROGRAMS) libbam.a $(MISC_PROGRAMS)
+
+
+.PHONY: all clean force lib mostlyclean test
