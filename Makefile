@@ -2,9 +2,10 @@
 #
 #    Copyright (C) 2008-2013 Genome Research Ltd.
 
-CC=			gcc
-CFLAGS=		-g -Wall $(VERSION) -O2
-#LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
+CC       = gcc
+CPPFLAGS = $(DFLAGS) $(INCLUDES)
+CFLAGS   = -g -Wall -O2
+LDFLAGS  =
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
 LOBJS=		bam_aux.o bam.o bam_import.o sam.o \
 			sam_header.o
@@ -16,7 +17,6 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
             faidx.o stats.o 
             # tview todo: bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
 INCLUDES=	-I. -I$(HTSDIR)
-LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
 
 
@@ -35,44 +35,44 @@ include $(HTSDIR)/htslib.mk
 HTSLIB = $(HTSDIR)/libhts.a
 
 
-.SUFFIXES:.c .o
+PACKAGE_VERSION  = 0.2.0
 
-force:
-
-.c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
-
-
-test:
-		test/test.pl
-
-
-# See htslib/Makefile
-PACKAGE_VERSION  = 0.0.1
-LIBHTS_SOVERSION = 0
-NUMERIC_VERSION  = $(PACKAGE_VERSION)
+# If building from a Git repository, replace $(PACKAGE_VERSION) with the Git
+# description of the working tree: either a release tag with the same value
+# as $(PACKAGE_VERSION) above, or an exact description likely based on a tag.
+# $(shell), :=, etc are GNU Make-specific.  If you don't have GNU Make,
+# comment out this conditional.
 ifneq "$(wildcard .git)" ""
-original_version := $(PACKAGE_VERSION)
 PACKAGE_VERSION := $(shell git describe --always --dirty)
-ifneq "$(subst ..,.,$(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(PACKAGE_VERSION))))))))))))" "."
-empty :=
-NUMERIC_VERSION := $(subst $(empty) ,.,$(wordlist 1,2,$(subst ., ,$(original_version))) 255)
-endif
+
+# Force version.h to be remade if $(PACKAGE_VERSION) has changed.
 version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(shell cat version.h)),,force))
 endif
+
+# If you don't have GNU Make but are building from a Git repository, you may
+# wish to replace this with a rule that always rebuilds version.h:
+# version.h: force
+#	echo '#define SAMTOOLS_VERSION "`git describe --always --dirty`"' > $@
 version.h:
 	echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@
+
+
+.SUFFIXES: .c .o
+
+.c.o:
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
 
 lib:libbam.a
 
 libbam.a:$(LOBJS)
-		$(AR) -csru $@ $(LOBJS)
+	$(AR) -csru $@ $(LOBJS)
 
 samtools: $(AOBJS) libbam.a $(HTSLIB)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a $(LIBPATH) $(HTSLIB) $(LIBCURSES) -lm -lz -lpthread
+	$(CC) -pthread $(LDFLAGS) -o $@ $(AOBJS) libbam.a $(HTSLIB) $(LDLIBS) $(LIBCURSES) -lm -lz
 
-bgzip:bgzip.o $(HTSLIB)
-		$(CC) $(CFLAGS) -o $@ bgzip.o $(HTSLIB) -lz -lpthread
+bgzip: bgzip.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ bgzip.o $(HTSLIB) -lz
 
 bam_h = bam.h $(htslib_bgzf_h) $(htslib_sam_h)
 bam2bcf_h = bam2bcf.h errmod.h
@@ -121,6 +121,12 @@ sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
 stats.o: sam.c $(bam_h) $(HTSDIR)/htslib/khash.h $(htslib_faidx_h)
 
 
+# test programs
+
+check test:
+	test/test.pl
+
+
 # misc programs
 
 misc/ace2sam: misc/ace2sam.o
@@ -162,5 +168,15 @@ mostlyclean:
 clean: mostlyclean clean-htslib
 	-rm -f $(PROGRAMS) libbam.a $(MISC_PROGRAMS)
 
+distclean: clean
+	-rm -f TAGS
 
-.PHONY: all clean force lib mostlyclean test
+
+tags:
+	ctags -f TAGS *.[ch] misc/*.[ch]
+
+
+force:
+
+
+.PHONY: all check clean distclean force lib mostlyclean tags test
