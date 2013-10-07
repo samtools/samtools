@@ -303,6 +303,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	if (matches == NULL) { perror("out of memory"); exit(-1); }
 	regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 	char* text = translate->text;
+	klist_t(hdrln) *rg_list = kl_init(hdrln);
 	while(1) { //	foreach rg id in translate's header
 		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
 		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
@@ -340,9 +341,9 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 		}
 		
 		if (!(transformed_id == match_id && merge_rg)) {
-			// Produce our output line and append it to out_text
-			int32_t append_len = strlen(transformed_line);
-			append_header(&out_text, &out_len, transformed_line, append_len);
+			// append line to linked list for PG processing
+			char** ln = kl_pushp(hdrln, rg_list);
+			*ln = strdup(transformed_line);  // Give linked list it's own copy
 		}
 
 		free(transformed_line);
@@ -392,7 +393,7 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 			transformed_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
 		}
 
-		if (!(transformed_id == match_id && merge_rg)) {
+		if (!(transformed_id == match_id && merge_pg)) {
 			// append line to linked list for PP processing
 			char** ln = kl_pushp(hdrln, pg_list);
 			*ln = strdup(transformed_line);  // Give linked list it's own copy
@@ -437,10 +438,40 @@ static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl
 	}
 	regfree(&pg_pp);
 	
+	// Need to also translate @RG PG's on the fly too
+	regex_t rg_pg;
+	regcomp(&rg_pg, "^@RG.*\tPG:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
+	kliter_t(hdrln) *rg_iter = kl_begin(rg_list);
+	while (rg_iter != kl_end(rg_list)) {
+		char* data = kl_val(rg_iter);
+		
+		char* transformed_line = NULL;
+		// Find PG tag
+		if (regexec(&rg_pg, data, 2, matches, 0) == 0) {
+			// Lookup in hash table
+			char* pg_id = strndup(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+			
+			khiter_t k = kh_get(c2c, tbl->pg_trans, pg_id);
+			free(pg_id);
+			char* transformed_id = kh_value(tbl->pg_trans,k);
+			// Replace
+			char *fmt = NULL;
+			asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo));
+			asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo);
+			free(fmt);
+		} else { transformed_line = data; }
+		// Produce our output line and append it to out_text
+		int32_t append_len = strlen(transformed_line);
+		append_header(&out_text, &out_len, transformed_line, append_len);
+		
+		if (transformed_line != data) { free(transformed_line); transformed_line = NULL; }
+		free(data);
+		rg_iter = kl_next(rg_iter);
+	}
+
 	kl_destroy(hdrln,pg_list);
-	
 	free(matches);
-	
+
 	// Add trailing \n and write back to header
 	free(out->text);
 	out->text = (char*) malloc(out_len+1+1);
