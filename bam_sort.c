@@ -666,9 +666,13 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	} else {
 		for (i = 0; i < n; ++i) {
 			hts_idx_t *idx = bam_index_load(fn[i]);
+			if (idx == NULL) {
+				fprintf(stderr, "[%s] Could not load index for %s.\n", __func__, fn[i]);
+				return -1;
+			}
 			iter[i] = hts_itr_query(idx, HTS_IDX_START, 0, 0);
 			if (iter[i] == NULL) {
-				fprintf(stderr, "[%s] Ack ack ack! iter is null %d\n", __func__,i);
+				fprintf(stderr, "[%s] Ack ack ack! iter is null %d\n", __func__, i);
 				return -1;
 			}
 			hts_idx_destroy(idx);
