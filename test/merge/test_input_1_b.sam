@@ -3,8 +3,9 @@
 @SQ	SN:ref1	LN:45
 @SQ	SN:ref2	LN:40
 @SQ	SN:ref3	LN:4
-@RG	ID:fish
-@RG	ID:cow	PU:13_&^&&*(:332
+@PG	ID:llama
+@RG	ID:fish PG:llama
+@RG	ID:cow	PU:13_&^&&*(:332	PG:donkey
 @RG	PU:*9u8jkjjkjd:	ID:colt
 @PG	ID:bull	PP:donkey
 @PG	ID:donkey

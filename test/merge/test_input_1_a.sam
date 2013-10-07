@@ -3,11 +3,13 @@
 @SQ	SN:ref1	LN:45
 @SQ	SN:ref2	LN:40
 @SQ	SN:ref3	LN:4
-@RG	ID:fish
+@RG	ID:fish	PG:donkey
 @RG	ID:cow	PU:13_&^&&*(:332
 @RG	PU:*9u8jkjjkjd:	ID:colt
 @PG	ID:bull	PP:donkey
 @PG	ID:donkey
+@PG	ID:moose
+@PG	PP:moose	ID:cow
 @CO	
 r000	99	insert	50	30	10M	=	80	30	ATTTAGCTAC	AAAAAAAAAA	RG:Z:cow	PG:Z:bull
 r000	211	insert	80	30	10M	=	50	-30	CCCAATCATT	AAAAAAAAAA	RG:Z:cow	PG:Z:bull
