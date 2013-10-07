@@ -581,7 +581,7 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
  */
 int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads, int level)
 {
-	bamFile fpout, *fp;
+	samFile *fpout, **fp;
 	heap1_t *heap;
 	bam_header_t *hout = NULL;
 	int i, j, *RG_len = NULL;
@@ -598,12 +598,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", headers, message);
 			return -1;
 		}
-		hout = sam_header_read(fpheaders);
+		hout = sam_hdr_read(fpheaders);
 		sam_close(fpheaders);
 	}
 
 	g_is_by_qname = by_qname;
-	fp = (bamFile*)calloc(n, sizeof(bamFile));
+	fp = (samFile**)calloc(n, sizeof(samFile));
 	heap = (heap1_t*)calloc(n, sizeof(heap1_t));
 	iter = (hts_itr_t**)calloc(n, sizeof(hts_itr_t*));
 	translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
@@ -625,16 +625,16 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	// open and read the header from each file
 	for (i = 0; i < n; ++i) {
 		bam_header_t *hin;
-		fp[i] = bam_open(fn[i], "r");
+		fp[i] = sam_open(fn[i]);
 		if (fp[i] == NULL) {
 			int j;
 			fprintf(stderr, "[bam_merge_core] fail to open file %s\n", fn[i]);
-			for (j = 0; j < i; ++j) bam_close(fp[j]);
+			for (j = 0; j < i; ++j) sam_close(fp[j]);
 			free(fp); free(heap);
 			// FIXME: possible memory leak
 			return -1;
 		}
-		hin = bam_header_read(fp[i]);
+		hin = sam_hdr_read(fp[i]);
 		if (hout == NULL) hout = hin;
 		trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
 		if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
@@ -699,13 +699,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	else if (flag & MERGE_LEVEL1) level = 1;
 	strcpy(mode, "w");
 	if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
-	if ((fpout = strcmp(out, "-")? bam_open(out, "w") : bam_dopen(fileno(stdout), "w")) == 0) {
+	if ((fpout = sam_open(out)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
 		return -1;
 	}
-	bam_header_write(fpout, hout);
-	bam_header_destroy(hout);
-	if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
+	sam_hdr_write(fpout, hout);
+	if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout->fp.bgzf, n_threads, 256);
 
 	// Begin the actual merge
 	ks_heapmake(heap, n, heap);
@@ -716,7 +715,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			if (rg) bam_aux_del(b, rg);
 			bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
 		}
-		bam_write1(fpout, b);
+		sam_write1(fpout, hout, b);
 		if ((j = bam_itr_next(fp[heap->i], iter[heap->i], b)) >= 0) {
 			bam_translate(b, translation_tbl + heap->i);
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam1_strand(b);
@@ -737,9 +736,10 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	for (i = 0; i != n; ++i) {
 		trans_tbl_destroy(translation_tbl + i);
 		bam_iter_destroy(iter[i]);
-		bam_close(fp[i]);
+		sam_close(fp[i]);
 	}
-	bam_close(fpout);
+	bam_header_destroy(hout);
+	sam_close(fpout);
 	free(fp); free(heap); free(iter);
 	return 0;
 }
