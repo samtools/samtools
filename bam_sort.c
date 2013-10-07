@@ -8,11 +8,11 @@
 #include <regex.h>
 #include <time.h>
 #include <unistd.h>
-#include "bam.h"
 #include "htslib/ksort.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
 #include "htslib/sam.h"
+#include "htslib/bgzf.h"
 
 #if !defined(__DARWIN_C_LEVEL) || __DARWIN_C_LEVEL < 900000L
 #define NEED_MEMSET_PATTERN4
@@ -39,6 +39,7 @@ static hts_itr_t* bam_itr_finish()
 	return iter;
 }
 
+int bam_parse_region(bam_hdr_t *header, const char *str, int *ref_id, int *beg, int *end);
 
 KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
 
@@ -87,7 +88,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 	if (g_is_by_qname) {
 		int t;
 		if (a.b == NULL || b.b == NULL) return a.b == NULL? 1 : 0;
-		t = strnum_cmp(bam1_qname(a.b), bam1_qname(b.b));
+		t = strnum_cmp(bam_get_qname(a.b), bam_get_qname(b.b));
 		return (t > 0 || (t == 0 && (a.b->core.flag&0xc0) > (b.b->core.flag&0xc0)));
 	} else return __pos_cmp(a, b);
 }
@@ -230,7 +231,7 @@ static inline void append_header( char** out_text_in, int32_t* out_len_in, const
 	*out_len_in = out_len;
 }
 
-static void trans_tbl_init(bam_header_t* out, bam_header_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
 {
 	// No need to translate header into itself
 	if (out == translate) { merge_rg = merge_pg = true; }
@@ -499,7 +500,7 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 			bam_aux_del(b, rg);
 			bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1, (uint8_t*)translate_rg);
 		} else {
-			fprintf(stderr, "[bam_translate] RG tag \"%s\" on read \"%s\" encountered with no corresponding entry in header, tag lost\n",decoded_rg, bam1_qname(b));
+			fprintf(stderr, "[bam_translate] RG tag \"%s\" on read \"%s\" encountered with no corresponding entry in header, tag lost\n",decoded_rg, bam_get_qname(b));
 			bam_aux_del(b, rg);
 		}
 	}
@@ -514,7 +515,7 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
 			bam_aux_del(b, pg);
 			bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1, (uint8_t*)translate_pg);
 		} else {
-			fprintf(stderr, "[bam_translate] PG tag \"%s\" on read \"%s\" encountered with no corresponding entry in header, tag lost\n",decoded_pg, bam1_qname(b));
+			fprintf(stderr, "[bam_translate] PG tag \"%s\" on read \"%s\" encountered with no corresponding entry in header, tag lost\n",decoded_pg, bam_get_qname(b));
 			bam_aux_del(b, pg);
 		}
 	}
@@ -583,7 +584,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 {
 	samFile *fpout, **fp;
 	heap1_t *heap;
-	bam_header_t *hout = NULL;
+	bam_hdr_t *hout = NULL;
 	int i, j, *RG_len = NULL;
 	uint64_t idx = 0;
 	char **RG = NULL, mode[8];
@@ -592,7 +593,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 
 	// Is there a specified pre-prepared header to use for output?
 	if (headers) {
-		tamFile fpheaders = sam_open(headers);
+		samFile* fpheaders = sam_open(headers, "r");
 		if (fpheaders == NULL) {
 			const char *message = strerror(errno);
 			fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", headers, message);
@@ -624,8 +625,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	}
 	// open and read the header from each file
 	for (i = 0; i < n; ++i) {
-		bam_header_t *hin;
-		fp[i] = sam_open(fn[i]);
+		bam_hdr_t *hin;
+		fp[i] = sam_open(fn[i], "r");
 		if (fp[i] == NULL) {
 			int j;
 			fprintf(stderr, "[bam_merge_core] fail to open file %s\n", fn[i]);
@@ -686,7 +687,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		h->b = (bam1_t*)calloc(1, sizeof(bam1_t));
 		if (bam_itr_next(fp[i], iter[i], h->b) >= 0) {
 			bam_translate(h->b, translation_tbl + i);
-			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam1_strand(h->b);
+			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam_is_rev(h->b);
 			h->idx = idx++;
 		}
 		else {
@@ -699,7 +700,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	else if (flag & MERGE_LEVEL1) level = 1;
 	strcpy(mode, "w");
 	if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
-	if ((fpout = sam_open(out)) == 0) {
+	if ((fpout = sam_open(out, "w")) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
 		return -1;
 	}
@@ -718,7 +719,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		sam_write1(fpout, hout, b);
 		if ((j = bam_itr_next(fp[heap->i], iter[heap->i], b)) >= 0) {
 			bam_translate(b, translation_tbl + heap->i);
-			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam1_strand(b);
+			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
 			heap->idx = idx++;
 		} else if (j == -1) {
 			heap->pos = HEAP_EMPTY;
@@ -735,10 +736,10 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	}
 	for (i = 0; i != n; ++i) {
 		trans_tbl_destroy(translation_tbl + i);
-		bam_iter_destroy(iter[i]);
+		bam_itr_destroy(iter[i]);
 		sam_close(fp[i]);
 	}
-	bam_header_destroy(hout);
+	bam_hdr_destroy(hout);
 	sam_close(fpout);
 	free(fp); free(heap); free(iter);
 	return 0;
@@ -811,7 +812,7 @@ int bam_merge(int argc, char *argv[])
 
 typedef bam1_t *bam1_p;
 
-static int change_SO(bam_header_t *h, const char *so)
+static int change_SO(bam_hdr_t *h, const char *so)
 {
 	char *p, *q, *beg = NULL, *end = NULL, *newtext;
 	if (h->l_text > 3) {
@@ -849,9 +850,9 @@ static int change_SO(bam_header_t *h, const char *so)
 static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
 	if (g_is_by_qname) {
-		int t = strnum_cmp(bam1_qname(a), bam1_qname(b));
+		int t = strnum_cmp(bam_get_qname(a), bam_get_qname(b));
 		return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
-	} else return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam1_strand(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam1_strand(b)));
+	} else return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
 }
 KSORT_INIT(sort, bam1_p, bam1_lt)
 
@@ -859,21 +860,21 @@ typedef struct {
 	size_t buf_len;
 	const char *prefix;
 	bam1_p *buf;
-	const bam_header_t *h;
+	const bam_hdr_t *h;
 	int index;
 } worker_t;
 
-static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_header_t *h, int n_threads)
+static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_hdr_t *h, int n_threads)
 {
 	size_t i;
-	bamFile fp;
-	fp = strcmp(fn, "-")? bam_open(fn, mode) : bam_dopen(fileno(stdout), mode);
+	samFile* fp;
+	fp = sam_open(fn, mode);
 	if (fp == NULL) return;
-	bam_header_write(fp, h);
-	if (n_threads > 1) bgzf_mt(fp, n_threads, 256);
+	sam_hdr_write(fp, h);
+	if (n_threads > 1) bgzf_mt(fp->fp.bgzf, n_threads, 256);
 	for (i = 0; i < l; ++i)
-		bam_write1(fp, buf[i]);
-	bam_close(fp);
+		sam_write1(fp, h, buf[i]);
+	sam_close(fp);
 }
 
 static void *worker(void *data)
@@ -888,7 +889,7 @@ static void *worker(void *data)
 	return 0;
 }
 
-static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, const bam_header_t *h, int n_threads)
+static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, const bam_hdr_t *h, int n_threads)
 {
 	int i;
 	size_t rest;
@@ -937,8 +938,8 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 {
 	int ret, i, n_files = 0;
 	size_t mem, max_k, k, max_mem;
-	bam_header_t *header;
-	bamFile fp;
+	bam_hdr_t *header;
+	samFile *fp;
 	bam1_t *b, **buf;
 
 	if (n_threads < 2) n_threads = 1;
@@ -946,12 +947,12 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 	max_k = k = 0; mem = 0;
 	max_mem = _max_mem * n_threads;
 	buf = NULL;
-	fp = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
+	fp = sam_open(fn, "r");
 	if (fp == NULL) {
 		fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
 		return -1;
 	}
-	header = bam_header_read(fp);
+	header = sam_hdr_read(fp);
 	if (is_by_qname) change_SO(header, "queryname");
 	else change_SO(header, "coordinate");
 	// write sub files
@@ -964,9 +965,9 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 		}
 		if (buf[k] == NULL) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));
 		b = buf[k];
-		if ((ret = bam_read1(fp, b)) < 0) break;
-		if (b->data_len < b->m_data>>2) { // shrink
-			b->m_data = b->data_len;
+		if ((ret = sam_read1(fp, header, b)) < 0) break;
+		if (b->l_data < b->m_data>>2) { // shrink
+			b->m_data = b->l_data;
 			kroundup32(b->m_data);
 			b->data = (uint8_t*)realloc(b->data, b->m_data);
 		}
@@ -1013,8 +1014,8 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 		free(buf[k]);
 	}
 	free(buf);
-	bam_header_destroy(header);
-	bam_close(fp);
+	bam_hdr_destroy(header);
+	sam_close(fp);
 	return 0;
 }
 
