@@ -145,7 +145,6 @@ typedef struct
     faidx_t *fai;                   // Reference sequence for GC-depth graph
     int argc;                       // Command line arguments to be printed on the output
     char **argv;
-uint64_t *nmq;
 }
 stats_t;
 
@@ -316,7 +315,6 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
     uint8_t *read  = bam1_seq(bam_line);
     uint8_t *quals = bam1_qual(bam_line);
     uint64_t *mpc_buf = stats->mpc_buf;
-int nmsm = 0;
     for (icig=0; icig<bam_line->core.n_cigar; icig++) 
     {
         // Conversion from uint32_t to MIDNSHP
@@ -389,7 +387,6 @@ int nmsm = 0;
                 if ( idx>=stats->nquals*stats->nbases )
                     error("FIXME: mpc_buf overflow\n");
                 mpc_buf[idx]++;
-nmsm++;            
             }
 
             iref++;
@@ -397,8 +394,6 @@ nmsm++;
             icycle++;
         }
     }
-assert(nmsm<200);
-stats->nmq[bam_line->core.qual*200+nmsm]++;
 }
 
 void read_ref_seq(stats_t *stats, int32_t tid, int32_t pos)
@@ -1070,16 +1065,6 @@ void output_stats(stats_t *stats)
               );
         igcd += nbins;
     }
-{
-int i,j;
-for (i=0;i<255; i++)
-{
-    printf("NMQ");
-    for (j=0; j<200; j++)
-        printf("\t%ld", stats->nmq[i*200+j]);
-    printf("\n");
-}
-}
 }
 
 size_t mygetline(char **line, size_t *n, FILE *fp)
@@ -1433,7 +1418,6 @@ int main_stats(int argc, char *argv[])
     stats->ins_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
     stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
     stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
-stats->nmq = calloc(200*255,sizeof(uint64_t));
     realloc_rseq_buffer(stats);
     if ( targets )
         init_regions(stats, targets);
@@ -1466,7 +1450,6 @@ stats->nmq = calloc(200*255,sizeof(uint64_t));
     round_buffer_flush(stats,-1);
 
     output_stats(stats);
-free(stats->nmq);
     bam_destroy1(bam_line);
     samclose(stats->sam);
     if (stats->fai) fai_destroy(stats->fai);
