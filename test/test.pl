@@ -327,7 +327,7 @@ sub test_mpileup
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/$ref.gz");
 
     # print "$$opts{bin}samtools mpileup -gb $$opts{tmp}/mpileup.list -f $$opts{tmp}/$args{ref}.gz > $$opts{tmp}/mpileup.bcf\n";
-    test_cmd($opts,out=>'dat/mpileup.out.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
-    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600");
+    test_cmd($opts,out=>'dat/mpileup.out.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150 2>/dev/null");
+    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600 2>/dev/null| grep -v ^##samtools | grep -v ^##ref");
 }
 

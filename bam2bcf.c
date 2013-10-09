@@ -343,10 +343,13 @@ double calc_mwu_bias_cdf(int *a, int *b, int n)
     if ( na>=8 || nb>=8 )
     {
         double mean = ((double)na*nb)*0.5;
-        double N = na+nb;
-        double var2 = (N*N-1)*N-ties;
-        if ( var2==0 ) return 1.0;
-        var2 *= ((double)na*nb)/N/(N-1)/12.0;
+        // Correction for ties:
+        //      double N = na+nb;
+        //      double var2 = (N*N-1)*N-ties;
+        //      if ( var2==0 ) return 1.0;
+        //      var2 *= ((double)na*nb)/N/(N-1)/12.0; 
+        // No correction for ties:
+        double var2 = ((double)na*nb)*(na+nb+1)/12.0;
         double z = (U_min - mean)/sqrt(2*var2);   // z is N(0,1)
         return 2.0 - kf_erfc(z);  // which is 1 + erf(z)
     }
@@ -380,10 +383,13 @@ double calc_mwu_bias(int *a, int *b, int n)
         // Linear approximation
         return U>mean ? (2.0*mean-U)/mean : U/mean;
     }
-    double N = na+nb;
-    double var2 = (N*N-1)*N-ties;
-    if ( var2==0 ) return 1.0;
-    var2 *= ((double)na*nb)/N/(N-1)/12.0;
+    // Correction for ties:
+    //      double N = na+nb;
+    //      double var2 = (N*N-1)*N-ties;
+    //      if ( var2==0 ) return 1.0;
+    //      var2 *= ((double)na*nb)/N/(N-1)/12.0;
+    // No correction for ties:
+    double var2 = ((double)na*nb)*(na+nb+1)/12.0;
     if ( na>=8 || nb>=8 )
     {
         // Normal approximation, very good for na>=8 && nb>=8 and reasonable if na<8 or nb<8
@@ -626,47 +632,46 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
             nals++;
 		}
 	}
-    bcf1_update_alleles_str(hdr, rec, bc->tmp.s);
+    bcf_update_alleles_str(hdr, rec, bc->tmp.s);
 
     bc->tmp.l = 0;
 
 	// INFO
 	if (bc->ori_ref < 0) 
     {
-        bcf1_update_info_flag(hdr, rec, "INDEL", NULL, 1);
-        bcf1_update_info_int32(hdr, rec, "IDV", (int*)&bca->max_support, 1);
-        bcf1_update_info_float(hdr, rec, "IMF", (float*)&bca->max_frac, 1);
+        bcf_update_info_flag(hdr, rec, "INDEL", NULL, 1);
+        bcf_update_info_int32(hdr, rec, "IDV", (int*)&bca->max_support, 1);
+        bcf_update_info_float(hdr, rec, "IMF", (float*)&bca->max_frac, 1);
     }
-    bcf1_update_info_int32(hdr, rec, "DP", &bc->ori_depth, 1);
+    bcf_update_info_int32(hdr, rec, "DP", &bc->ori_depth, 1);
 
     float tmpf[16];
     for (i=0; i<16; i++) tmpf[i] = bc->anno[i];
-    bcf1_update_info_float(hdr, rec, "I16", tmpf, 16);
+    bcf_update_info_float(hdr, rec, "I16", tmpf, 16);
 
     for (i=3; i>0; i--)
         if ( bc->qsum[i]!=0 ) break;
-    bcf1_update_info_float(hdr, rec, "QS", bc->qsum, i+1);
+    bcf_update_info_float(hdr, rec, "QS", bc->qsum, i+1);
 
-    if ( bc->vdb != HUGE_VAL )      bcf1_update_info_float(hdr, rec, "VDB", &bc->vdb, 1);
-    if ( bc->seg_bias != HUGE_VAL ) bcf1_update_info_float(hdr, rec, "SGB", &bc->seg_bias, 1);
-    if ( bc->mwu_pos != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "RPB", &bc->mwu_pos, 1);
-    if ( bc->mwu_mq != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "MQB", &bc->mwu_mq, 1);
-    if ( bc->mwu_mqs != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "MQSB", &bc->mwu_mqs, 1);
-    if ( bc->mwu_bq != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "BQB", &bc->mwu_bq, 1);
-    if ( bc->mwu_pos_cdf != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "RPB2", &bc->mwu_pos_cdf, 1);
-    if ( bc->mwu_mq_cdf != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "MQB2", &bc->mwu_mq_cdf, 1);
-    if ( bc->mwu_mqs_cdf != HUGE_VAL )  bcf1_update_info_float(hdr, rec, "MQSB2", &bc->mwu_mqs_cdf, 1);
-    if ( bc->mwu_bq_cdf != HUGE_VAL )   bcf1_update_info_float(hdr, rec, "BQB2", &bc->mwu_bq_cdf, 1);
+    if ( bc->vdb != HUGE_VAL )      bcf_update_info_float(hdr, rec, "VDB", &bc->vdb, 1);
+    if ( bc->seg_bias != HUGE_VAL ) bcf_update_info_float(hdr, rec, "SGB", &bc->seg_bias, 1);
+    if ( bc->mwu_pos != HUGE_VAL )  bcf_update_info_float(hdr, rec, "RPB", &bc->mwu_pos, 1);
+    if ( bc->mwu_mq != HUGE_VAL )   bcf_update_info_float(hdr, rec, "MQB", &bc->mwu_mq, 1);
+    if ( bc->mwu_mqs != HUGE_VAL )  bcf_update_info_float(hdr, rec, "MQSB", &bc->mwu_mqs, 1);
+    if ( bc->mwu_bq != HUGE_VAL )   bcf_update_info_float(hdr, rec, "BQB", &bc->mwu_bq, 1);
+    if ( bc->mwu_pos_cdf != HUGE_VAL )  bcf_update_info_float(hdr, rec, "RPB2", &bc->mwu_pos_cdf, 1);
+    if ( bc->mwu_mq_cdf != HUGE_VAL )   bcf_update_info_float(hdr, rec, "MQB2", &bc->mwu_mq_cdf, 1);
+    if ( bc->mwu_mqs_cdf != HUGE_VAL )  bcf_update_info_float(hdr, rec, "MQSB2", &bc->mwu_mqs_cdf, 1);
+    if ( bc->mwu_bq_cdf != HUGE_VAL )   bcf_update_info_float(hdr, rec, "BQB2", &bc->mwu_bq_cdf, 1);
     tmpf[0] = bc->ori_depth ? (double)bc->mq0/bc->ori_depth : 0;
-    bcf1_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
+    bcf_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
 
 	// FORMAT
     rec->n_sample = bc->n;
-    bcf1_update_format_int32(hdr, rec, "PL", bc->PL, nals*(nals+1)/2 * rec->n_sample);
-    if (bc->DP) bcf1_update_format_int32(hdr, rec, "DP", bc->DP, rec->n_sample);
-    if (bc->DV) bcf1_update_format_int32(hdr, rec, "DV", bc->DV, rec->n_sample);
+    bcf_update_format_int32(hdr, rec, "PL", bc->PL, nals*(nals+1)/2 * rec->n_sample);
+    if (bc->DP) bcf_update_format_int32(hdr, rec, "DP", bc->DP, rec->n_sample);
+    if (bc->DV) bcf_update_format_int32(hdr, rec, "DV", bc->DV, rec->n_sample);
     // todo: SP, per-sample strand-bias?
 
-    bcf1_sync(rec);
 	return 0;
 }
