@@ -368,7 +368,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
 
         bcf_hdr_fmt_text(bcf_hdr);
-        vcf_hdr_write(bcf_fp, bcf_hdr);
+        bcf_hdr_write(bcf_fp, bcf_hdr);
 
 		bca = bcf_call_init(-1., conf->min_baseQ);
 		bcr = calloc(sm->n, sizeof(bcf_callret1_t));
@@ -424,7 +424,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_call_combine(gplp.n, bcr, bca, ref16, &bc);
 			bcf_clear1(bcf_rec);
 			bcf_call2bcf(&bc, bcf_rec, bcr, conf->fmt_flag, 0, 0);
-			vcf_write1(bcf_fp, bcf_hdr, bcf_rec);
+			bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
 			// call indels
 			if (!(conf->flag&MPLP_NO_INDEL) && total_depth < max_indel_depth && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) 
             {
@@ -434,7 +434,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				if (bcf_call_combine(gplp.n, bcr, bca, -1, &bc) >= 0) {
 					bcf_clear1(bcf_rec);
 					bcf_call2bcf(&bc, bcf_rec, bcr, conf->fmt_flag, bca, ref);
-					vcf_write1(bcf_fp, bcf_hdr, bcf_rec);
+					bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
 				}
 			}
 		} else {
