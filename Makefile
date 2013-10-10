@@ -1,15 +1,11 @@
+# Makefile for samtools, utilities for the Sequence Alignment/Map format.
+#
+#    Copyright (C) 2008-2013 Genome Research Ltd.
 
-PROG=samtools bgzip
-all:$(PROG)
-
-# Adjust $(HTSDIR) to point to your top-level htslib directory
-HTSDIR = ../htslib
-include $(HTSDIR)/htslib.mk
-HTSLIB = $(HTSDIR)/libhts.a
-
-CC=			gcc
-CFLAGS=		-g -Wall $(VERSION) -O2
-#LDFLAGS=		-Wl,-rpath,\$$ORIGIN/../lib
+CC       = gcc
+CPPFLAGS = $(DFLAGS) $(INCLUDES)
+CFLAGS   = -g -Wall -O2
+LDFLAGS  =
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
 LOBJS=		bam_aux.o bam.o bam_import.o sam.o \
 			sam_header.o
@@ -21,62 +17,62 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
             faidx.o stats.o 
             # tview todo: bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
 INCLUDES=	-I. -I$(HTSDIR)
-SUBDIRS=	. misc
-LIBPATH=
 LIBCURSES=	-lcurses # -lXCurses
 
 
-.SUFFIXES:.c .o
-.PHONY: all lib test force
+PROGRAMS = samtools bgzip
 
-force:
+MISC_PROGRAMS = \
+	misc/ace2sam misc/maq2sam-long misc/maq2sam-short \
+	misc/md5fa misc/md5sum-lite misc/wgsim
 
-.c.o:
-		$(CC) -c $(CFLAGS) $(DFLAGS) $(INCLUDES) $< -o $@
+all: $(PROGRAMS) $(MISC_PROGRAMS)
 
-all-recur lib-recur clean-recur cleanlocal-recur install-recur:
-		@target=`echo $@ | sed s/-recur//`; \
-		wdir=`pwd`; \
-		list='$(SUBDIRS)'; for subdir in $$list; do \
-			cd $$subdir; \
-			$(MAKE) CC="$(CC)" DFLAGS="$(DFLAGS)" CFLAGS="$(CFLAGS)" \
-				HTSDIR="$(HTSDIR)" HTSLIB="$(HTSLIB)" \
-				INCLUDES="$(INCLUDES)" LIBPATH="$(LIBPATH)" $$target || exit 1; \
-			cd $$wdir; \
-		done;
 
-test:
-		test/test.pl
+# Adjust $(HTSDIR) to point to your top-level htslib directory
+HTSDIR = ../htslib
+include $(HTSDIR)/htslib.mk
+HTSLIB = $(HTSDIR)/libhts.a
 
-.PHONY:all lib clean cleanlocal
-.PHONY:all-recur lib-recur clean-recur cleanlocal-recur install-recur
 
-# See htslib/Makefile
-PACKAGE_VERSION  = 0.0.1
-LIBHTS_SOVERSION = 0
-NUMERIC_VERSION  = $(PACKAGE_VERSION)
+PACKAGE_VERSION  = 0.2.0
+
+# If building from a Git repository, replace $(PACKAGE_VERSION) with the Git
+# description of the working tree: either a release tag with the same value
+# as $(PACKAGE_VERSION) above, or an exact description likely based on a tag.
+# $(shell), :=, etc are GNU Make-specific.  If you don't have GNU Make,
+# comment out this conditional.
 ifneq "$(wildcard .git)" ""
-original_version := $(PACKAGE_VERSION)
 PACKAGE_VERSION := $(shell git describe --always --dirty)
-ifneq "$(subst ..,.,$(subst 0,,$(subst 1,,$(subst 2,,$(subst 3,,$(subst 4,,$(subst 5,,$(subst 6,,$(subst 7,,$(subst 8,,$(subst 9,,$(PACKAGE_VERSION))))))))))))" "."
-empty :=
-NUMERIC_VERSION := $(subst $(empty) ,.,$(wordlist 1,2,$(subst ., ,$(original_version))) 255)
-endif
+
+# Force version.h to be remade if $(PACKAGE_VERSION) has changed.
 version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(shell cat version.h)),,force))
 endif
+
+# If you don't have GNU Make but are building from a Git repository, you may
+# wish to replace this with a rule that always rebuilds version.h:
+# version.h: force
+#	echo '#define SAMTOOLS_VERSION "`git describe --always --dirty`"' > $@
 version.h:
 	echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@
+
+
+.SUFFIXES: .c .o
+
+.c.o:
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ $<
+
 
 lib:libbam.a
 
 libbam.a:$(LOBJS)
-		$(AR) -csru $@ $(LOBJS)
+	$(AR) -csru $@ $(LOBJS)
 
-samtools:lib-recur $(AOBJS) $(HTSLIB)
-		$(CC) $(CFLAGS) -o $@ $(AOBJS) $(LDFLAGS) libbam.a $(LIBPATH) $(HTSLIB) $(LIBCURSES) -lm -lz -lpthread
+samtools: $(AOBJS) libbam.a $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ $(AOBJS) libbam.a $(HTSLIB) $(LDLIBS) $(LIBCURSES) -lm -lz
 
-bgzip:bgzip.o $(HTSLIB)
-		$(CC) $(CFLAGS) -o $@ bgzip.o $(HTSLIB) -lz -lpthread
+bgzip: bgzip.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ bgzip.o $(HTSLIB) -lz
 
 bam_h = bam.h $(htslib_bgzf_h) $(htslib_sam_h)
 bam2bcf_h = bam2bcf.h errmod.h
@@ -117,29 +113,69 @@ kaln.o: kaln.c kaln.h
 kprobaln.o: kprobaln.c kprobaln.h
 padding.o: padding.c sam_header.h $(sam_h) $(bam_h) $(htslib_faidx_h)
 phase.o: phase.c $(bam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
-razip.o: razip.c $(htslib_razf_h)
 sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h
 sam_view.o: sam_view.c sam_header.h $(sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/khash.h
 sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
-stats.o: sam.c $(bam_h) $(HTSDIR)/htslib/khash.h $(htslib_faidx_h)
-
-libbam.1.dylib-local:$(LOBJS)
-		libtool -dynamic $(LOBJS) -o libbam.1.dylib -lc -lz
-
-libbam.so.1-local:$(LOBJS)
-		$(CC) -shared -Wl,-soname,libbam.so -o libbam.so.1 $(LOBJS) -lc -lz
-
-dylib:
-		@$(MAKE) cleanlocal; \
-		case `uname` in \
-			Linux) $(MAKE) CFLAGS="$(CFLAGS) -fPIC" libbam.so.1-local;; \
-			Darwin) $(MAKE) CFLAGS="$(CFLAGS) -fPIC" libbam.1.dylib-local;; \
-			*) echo 'Unknown OS';; \
-		esac
+stats.o: stats.c $(bam_h) $(HTSDIR)/htslib/khash.h $(htslib_faidx_h)
 
 
-cleanlocal:
-		rm -fr gmon.out *.o a.out *.exe *.dSYM razip bgzip $(PROG) *~ *.a *.so.* *.so *.dylib
+# test programs
 
-clean:cleanlocal-recur clean-htslib
+check test:
+	test/test.pl
+
+
+# misc programs
+
+misc/ace2sam: misc/ace2sam.o
+	$(CC) $(LDFLAGS) -o $@ misc/ace2sam.o $(LDLIBS) -lz
+
+misc/maq2sam-short: misc/maq2sam-short.o
+	$(CC) $(LDFLAGS) -o $@ misc/maq2sam-short.o $(LDLIBS) -lz
+
+misc/maq2sam-long: misc/maq2sam-long.o
+	$(CC) $(LDFLAGS) -o $@ misc/maq2sam-long.o $(LDLIBS) -lz
+
+misc/md5fa: misc/md5fa.o misc/md5.o
+	$(CC) $(LDFLAGS) -o $@ misc/md5fa.o misc/md5.o $(LDLIBS) -lz
+
+misc/md5sum-lite: misc/md5sum-lite.o
+	$(CC) $(LDFLAGS) -o $@ misc/md5sum-lite.o $(LDLIBS)
+
+misc/wgsim: misc/wgsim.o
+	$(CC) $(LDFLAGS) -o $@ misc/wgsim.o $(LDLIBS) -lm -lz
+
+misc/ace2sam.o: misc/ace2sam.c $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kseq.h
+misc/md5.o: misc/md5.c misc/md5.h
+misc/md5fa.o: misc/md5fa.c misc/md5.h $(HTSDIR)/htslib/kseq.h
+misc/wgsim.o: misc/wgsim.c $(HTSDIR)/htslib/kseq.h
+
+misc/maq2sam-short.o: misc/maq2sam.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ misc/maq2sam.c
+
+misc/maq2sam-long.o: misc/maq2sam.c
+	$(CC) $(CFLAGS) $(CPPFLAGS) -DMAQ_LONGREADS -c -o $@ misc/maq2sam.c
+
+misc/md5sum-lite.o: misc/md5.c misc/md5.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -DMD5SUM_MAIN -c -o $@ misc/md5.c
+
+
+mostlyclean:
+	-rm -f *.o misc/*.o version.h
+
+clean: mostlyclean clean-htslib
+	-rm -f $(PROGRAMS) libbam.a $(MISC_PROGRAMS)
+
+distclean: clean
+	-rm -f TAGS
+
+
+tags:
+	ctags -f TAGS *.[ch] misc/*.[ch]
+
+
+force:
+
+
+.PHONY: all check clean distclean force lib mostlyclean tags test
