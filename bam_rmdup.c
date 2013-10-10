@@ -7,7 +7,7 @@
 
 typedef bam1_t *bam1_p;
 
-#include "khash.h"
+#include "htslib/khash.h"
 KHASH_SET_INIT_STR(name)
 KHASH_MAP_INIT_INT64(pos, bam1_p)
 

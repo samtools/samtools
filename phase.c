@@ -7,7 +7,7 @@
 #include "bam.h"
 #include "errmod.h"
 
-#include "kseq.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define MAX_VARS 256
@@ -41,16 +41,16 @@ typedef struct {
 
 #define rseq_lt(a,b) ((a)->vpos < (b)->vpos)
 
-#include "khash.h"
+#include "htslib/khash.h"
 KHASH_SET_INIT_INT64(set64)
 KHASH_MAP_INIT_INT64(64, frag_t)
 
 typedef khash_t(64) nseq_t;
 
-#include "ksort.h"
+#include "htslib/ksort.h"
 KSORT_INIT(rseq, frag_p, rseq_lt)
 
-static char nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
+extern const char bam_nt16_nt4_table[];
 
 static inline uint64_t X31_hash_string(const char *s)
 {
@@ -507,7 +507,6 @@ static int gl2cns(float q[16])
 
 int main_phase(int argc, char *argv[])
 {
-	extern void bam_init_header_hash(bam_header_t *header);
 	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
@@ -554,7 +553,6 @@ int main_phase(int argc, char *argv[])
 	g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
 	h = bam_header_read(g.fp);
 	if (fn_list) { // read the list of sites to phase
-		bam_init_header_hash(h);
 		set = loadpos(fn_list, h);
 		free(fn_list);
 	} else g.flag &= ~FLAG_LIST_EXCL;
@@ -639,7 +637,7 @@ int main_phase(int argc, char *argv[])
 			if (p->is_del || p->is_refskip) continue;
 			if (p->b->core.qual == 0) continue;
 			// get the base code
-			c = nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
+			c = bam_nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
 			if (c == (cns[vpos]&3)) c = 1;
 			else if (c == (cns[vpos]>>16&3)) c = 2;
 			else c = 0;

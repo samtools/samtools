@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include "bam.h"
-#include "ksort.h"
+#include "htslib/ksort.h"
 
 #define TV_GAP 2
 

@@ -28,8 +28,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <zlib.h>
-#include "kstring.h"
-#include "kseq.h"
+#include "htslib/kstring.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 #define N_TMPSTR 5

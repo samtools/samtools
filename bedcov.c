@@ -4,11 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "kstring.h"
-#include "bgzf.h"
+#include "htslib/kstring.h"
+#include "htslib/bgzf.h"
 #include "bam.h"
 
-#include "kseq.h"
+#include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
@@ -27,7 +27,6 @@ static int read_bam(void *data, bam1_t *b)
 
 int main_bedcov(int argc, char *argv[])
 {
-	extern void bam_init_header_hash(bam_header_t*);
 	gzFile fp;
 	kstring_t str;
 	kstream_t *ks;
@@ -63,7 +62,6 @@ int main_bedcov(int argc, char *argv[])
 		bgzf_set_cache_size(aux[i]->fp, 20);
 		if (i == 0) h = bam_header_read(aux[0]->fp);
 	}
-	bam_init_header_hash(h);
 	cnt = calloc(n, 8);
 
 	fp = gzopen(argv[optind], "rb");

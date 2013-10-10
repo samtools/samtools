@@ -6,7 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "bam.h"
-#include "ksort.h"
+#include "htslib/ksort.h"
 
 static int g_is_by_qname = 0;
 
@@ -232,7 +232,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			if (rg) bam_aux_del(b, rg);
 			bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
 		}
-		bam_write1_core(fpout, &b->core, b->data_len, b->data);
+		bam_write1(fpout, b);
 		if ((j = bam_iter_read(fp[heap->i], iter[heap->i], b)) >= 0) {
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam1_strand(b);
 			heap->idx = idx++;
@@ -379,7 +379,7 @@ static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf
 	bam_header_write(fp, h);
 	if (n_threads > 1) bgzf_mt(fp, n_threads, 256);
 	for (i = 0; i < l; ++i)
-		bam_write1_core(fp, &buf[i]->core, buf[i]->data_len, buf[i]->data);
+		bam_write1(fp, buf[i]);
 	bam_close(fp);
 }
 

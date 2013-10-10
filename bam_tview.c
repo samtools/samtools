@@ -37,6 +37,7 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
 
     if ( samples ) 
     {
+#if 0
         if ( !tv->header->dict ) tv->header->dict = sam_header_parse2(tv->header->text);
         void *iter = tv->header->dict;
         const char *key, *val;
@@ -59,6 +60,10 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
             fprintf(stderr,"The sample or read group \"%s\" not present.\n", samples);
             exit(EXIT_FAILURE);
         }
+#else
+		fprintf(stderr, "Samtools-htslib: base_tv_init() header parsing not yet implemented\n");
+		abort();
+#endif
     }
 
 	return 0;
@@ -79,7 +84,7 @@ void base_tv_destroy(tview_t* tv)
 
 int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
 {
-	extern unsigned const char bam_nt16_table[256];
+	extern const char bam_nt16_nt4_table[];
 	tview_t *tv = (tview_t*)data;
 	int i, j, c, rb, attr, max_ins = 0;
 	uint32_t call = 0;
@@ -259,6 +264,11 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
 		sprintf(str, "%s:%d-%d", tv->header->target_name[tv->curr_tid], tv->left_pos + 1, tv->left_pos + tv->mcol);
 		tv->ref = fai_fetch(tv->fai, str, &tv->l_ref);
 		free(str);
+        if ( !tv->ref ) 
+        {
+            fprintf(stderr,"Could not read the reference sequence. Is it seekable (plain text or compressed + .gzi indexed with bgzip)?\n");
+            abort();
+        }
 	}
 	// draw aln
 	bam_lplbuf_reset(tv->lplbuf);

@@ -5,14 +5,16 @@
 #include "bam2bcf.h"
 #include "kaln.h"
 #include "kprobaln.h"
-#include "khash.h"
+#include "htslib/khash.h"
 KHASH_SET_INIT_STR(rg)
 
-#include "ksort.h"
+#include "htslib/ksort.h"
 KSORT_INIT_GENERIC(uint32_t)
 
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
+
+extern const char bam_nt16_nt4_table[];
 
 void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
 {
@@ -491,7 +493,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
 					if (x == bca->indel_types[j]) break;
 				p->aux = j<<16 | (j == 4? 0 : (p->aux&0xffff));
 				if ((p->aux>>16&0x3f) > 0) ++n_alt;
-//				fprintf(stderr, "X pos=%d read=%d:%d name=%s call=%d type=%d q=%d seqQ=%d\n", pos, s, i, bam1_qname(p->b), p->aux>>16&63, bca->indel_types[p->aux>>16&63], p->aux&0xff, p->aux>>8&0xff);
+				//fprintf(stderr, "X pos=%d read=%d:%d name=%s call=%d type=%d seqQ=%d indelQ=%d\n", pos, s, i, bam1_qname(p->b), (p->aux>>16)&0x3f, bca->indel_types[(p->aux>>16)&0x3f], (p->aux>>8)&0xff, p->aux&0xff);
 			}
 		}		
 	}
