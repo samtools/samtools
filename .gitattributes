@@ -1,0 +1,5 @@
+# Ensure BAM files are left as binary.  To display changes in them by
+# converting to SAM, add to your configuration (perhaps with --global):
+#
+#	git config diff.bam.textconv "samtools view"
+*.bam	-text diff=bam
