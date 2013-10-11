@@ -890,7 +890,7 @@ void output_stats(stats_t *stats)
     sd_isize = sqrt(sd_isize);
 
 
-    printf("# This file was produced by samtools stats (%s) and can be plotted using plot-bamstats\n", samtools_version());
+    printf("# This file was produced by samtools stats (%s:%s) and can be plotted using plot-bamstats\n", samtools_version(), hts_version());
     printf("# The command line was:  %s",stats->argv[0]);
     int i;
     for (i=1; i<stats->argc; i++)
@@ -1255,7 +1255,6 @@ void error(const char *format, ...)
 {
     if ( !format )
     {
-        printf("Version: %s\n", samtools_version());
         printf("About: The program collects statistics from BAM files. The output can be visualized using plot-bamstats.\n");
         printf("Usage: samtools stats [OPTIONS] file.bam\n");
         printf("       samtools stats [OPTIONS] file.bam chr:from-to\n");

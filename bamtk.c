@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include "bam.h"
 #include "samtools.h"
+#include "version.h"
 
 int bam_taf2baf(int argc, char *argv[]);
 int bam_mpileup(int argc, char *argv[]);
@@ -31,17 +32,9 @@ int main_stats(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 
-char *samtools_version_string = NULL;
-
-char *samtools_version(void)
+const char *samtools_version()
 {
-    if ( !samtools_version_string )
-    {
-        int len = strlen(hts_version()) + strlen(SAMTOOLS_VERSION) + 2;
-        samtools_version_string = (char*) malloc(len);
-        snprintf(samtools_version_string,len,"%s:%s", SAMTOOLS_VERSION,hts_version());
-    }
-    return samtools_version_string;
+	return SAMTOOLS_VERSION;
 }
 
 
@@ -51,7 +44,7 @@ static int usage()
 
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Program: samtools (Tools for alignments in the SAM format)\n");
-	fprintf(stderr, "Version: %s\n\n", samtools_version());
+	fprintf(stderr, "Version: %s (using htslib %s)\n\n", samtools_version(), hts_version());
 	fprintf(stderr, "Usage:   samtools <command> [options]\n\n");
 	fprintf(stderr, "Commands:\n");
 	fprintf(stderr, "  -- indexing\n");
@@ -98,6 +91,16 @@ int main(int argc, char *argv[])
 #endif
 	if (argc < 2) return usage();
 
+	if (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
+		if (argc == 2) { usage(); return 0; }
+
+		// Otherwise change "samtools help COMMAND [...]" to "samtools COMMAND";
+		// main_xyz() functions by convention display the subcommand's usage
+		// when invoked without any arguments.
+		argv++;
+		argc = 2;
+	}
+
     int ret = 0;
 	if (strcmp(argv[1], "view") == 0)           ret = main_samview(argc-1, argv+1);
 	else if (strcmp(argv[1], "import") == 0)    ret = main_import(argc-1, argv+1);
@@ -130,10 +133,19 @@ int main(int argc, char *argv[])
 #if _CURSES_LIB != 0
 	//else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
 #endif
+	else if (strcmp(argv[1], "--version") == 0) {
+		printf(
+"samtools %s\n"
+"Using htslib %s\n"
+"Copyright (C) 2013 Genome Research Ltd.\n",
+		       samtools_version(), hts_version());
+	}
+	else if (strcmp(argv[1], "--version-only") == 0) {
+		printf("%s+htslib-%s\n", samtools_version(), hts_version());
+	}
 	else {
 		fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
 		return 1;
 	}
-    free(samtools_version_string);
 	return ret;	
 }
