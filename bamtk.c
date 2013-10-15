@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 #if _CURSES_LIB != 0
-	//else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
+	else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
 #endif
 	else if (strcmp(argv[1], "--version") == 0) {
 		printf(

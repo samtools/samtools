@@ -20,7 +20,9 @@
 
 #ifdef _HAVE_CURSES
 
+/* utility stuff */
 
+int bam_parse_region(bam_hdr_t *header, const char *str, int *ref_id, int *begin, int *end);
 
 typedef struct CursesTview {
 	tview_t view;

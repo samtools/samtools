@@ -22,8 +22,54 @@
  * THE SOFTWARE.
  */
 
+#include <regex.h>
 #include <assert.h>
 #include "bam_tview.h"
+#include <htslib/faidx.h>
+#include <htslib/sam.h>
+#include <htslib/bgzf.h>
+
+/* utility stuff */
+
+int bam_parse_region(bam_hdr_t *header, const char *str, int *ref_id, int *begin, int *end);
+
+/*! @typedef
+ @abstract      Type of function to be called by sam_fetch().
+ @param  b     the alignment
+ @param  data  user provided data
+ */
+typedef int (*sam_fetch_f)(const bam1_t *b, void *data);
+
+int sam_fetch(samFile *fp, const hts_idx_t *idx, int tid, int beg, int end, void *data, sam_fetch_f func)
+{
+	int ret;
+	hts_itr_t* iter;
+	bam1_t* b = bam_init1();
+	iter = hts_itr_query(idx, tid, beg, end);
+	while ((ret = bam_itr_next(fp, iter, b)) >= 0) func(b, data);
+	bam_itr_destroy(iter);
+	bam_destroy1(b);
+	return (ret == -1)? 0 : ret;
+}
+
+
+
+khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
+{
+	khash_t(kh_rg)* rg_hash = kh_init(kh_rg);
+	// given sample id return all the RD ID's
+	const char rg_regex[] = "^@RG\t(.*\t)?ID:([A-Z";
+	
+	regex_t rg_id;
+	regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
+	if (matches == NULL) { perror("out of memory"); exit(-1); }
+	regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
+	char* text = header;
+	while(1) { //	foreach rg id in  header
+		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
+	}
+	return rg_hash;
+}
 
 int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *samples)
 {
@@ -33,23 +79,23 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *sam
 	tv->color_for = TV_COLOR_MAPQ;
 	tv->is_dot = 1;
 	
-	tv->fp = bam_open(fn, "r");
-	if(tv->fp==0)
+	tv->fp = sam_open(fn, "r");
+	if(tv->fp == NULL)
 	{
-		fprintf(stderr,"bam_open %s. %s\n", fn,fn_fa);
+		fprintf(stderr,"sam_open %s. %s\n", fn,fn_fa);
 		exit(EXIT_FAILURE);
 	}
-	bgzf_set_cache_size(tv->fp, 8 * 1024 *1024);
+	bgzf_set_cache_size(tv->fp->fp.bgzf, 8 * 1024 *1024);
 	assert(tv->fp);
 	
-	tv->header = bam_header_read(tv->fp);
-	if(tv->header==0)
+	tv->header = sam_hdr_read(tv->fp);
+	if(tv->header == NULL)
 	{
 		fprintf(stderr,"Cannot read '%s'.\n", fn);
 		exit(EXIT_FAILURE);
 	}
 	tv->idx = bam_index_load(fn);
-	if (tv->idx == 0)
+	if (tv->idx == NULL)
 	{
 		fprintf(stderr,"Cannot read index for '%s'.\n", fn);
 		exit(EXIT_FAILURE);
@@ -59,11 +105,10 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *sam
 	tv->bca = bcf_call_init(0.83, 13);
 	tv->ins = 1;
 	
+	// If the user has asked for specific samples find out create a list of readgroups make up these samples
 	if ( samples )
 	{
 #if 0
-		if ( !tv->header->dict ) tv->header->dict = sam_header_parse2(tv->header->text);
-		void *iter = tv->header->dict;
 		const char *key, *val;
 		int n = 0;
 		tv->rg_hash = kh_init(kh_rg); // Init the list of rg's
@@ -84,9 +129,6 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *sam
 			fprintf(stderr,"The sample or read group \"%s\" not present.\n", samples);
 			exit(EXIT_FAILURE);
 		}
-#else
-		fprintf(stderr, "Samtools-htslib: base_tv_init() header parsing not yet implemented\n");
-		abort();
 #endif
 	}
 	
@@ -98,11 +140,11 @@ void base_tv_destroy(tview_t* tv)
 {
 	bam_lplbuf_destroy(tv->lplbuf);
 	bcf_call_destroy(tv->bca);
-	bam_index_destroy(tv->idx);
+	hts_idx_destroy(tv->idx);
 	if (tv->fai) fai_destroy(tv->fai);
 	free(tv->ref);
-	bam_header_destroy(tv->header);
-	bam_close(tv->fp);
+	bam_hdr_destroy(tv->header);
+	sam_close(tv->fp);
 }
 
 
@@ -125,8 +167,8 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 		bcf_callret1_t bcr;
 		int qsum[4], a1, a2, tmp;
 		double p[3], prior = 30;
-		bcf_call_glfgen(n, pl, bam_nt16_table[rb], tv->bca, &bcr);
-		for (i = 0; i < 4; ++i) qsum[i] = bcr.qsum[i]<<2 | i;
+		bcf_call_glfgen(n, pl, seq_nt16_table[rb], tv->bca, &bcr);
+		for (i = 0; i < 4; ++i) qsum[i] = ((int)bcr.qsum[i])<<2 | i;
 		for (i = 1; i < 4; ++i) // insertion sort
 			for (j = i; j > 0 && qsum[j] > qsum[j-1]; --j)
 				tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
@@ -164,31 +206,31 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 					if (tv->base_for == TV_BASE_COLOR_SPACE && 
 							(c = bam_aux_getCSi(p->b, p->qpos))) {
 						// assume that if we found one color, we will be able to get the color error
-						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos)) c = bam1_strand(p->b)? ',' : '.';
+						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos)) c = bam_is_rev(p->b)? ',' : '.';
 					} else {
 						if (tv->show_name) {
-							char *name = bam1_qname(p->b);
+							char *name = bam_get_qname(p->b);
 							c = (p->qpos + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos];
 						} else {
-							c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos)];
-							if (tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+							c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos)];
+							if (tv->is_dot && toupper(c) == toupper(rb)) c = bam_is_rev(p->b)? ',' : '.';
 						}
 					}
-				} else c = p->is_refskip? (bam1_strand(p->b)? '<' : '>') : '*';
+				} else c = p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : '*';
 			} else { // padding
 				if (j > p->indel) c = '*';
 				else { // insertion
 					if (tv->base_for ==  TV_BASE_NUCL) {
 						if (tv->show_name) {
-							char *name = bam1_qname(p->b);
+							char *name = bam_get_qname(p->b);
 							c = (p->qpos + j + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos + j];
 						} else {
-							c = bam_nt16_rev_table[bam1_seqi(bam1_seq(p->b), p->qpos + j)];
-							if (j == 0 && tv->is_dot && toupper(c) == toupper(rb)) c = bam1_strand(p->b)? ',' : '.';
+							c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos + j)];
+							if (j == 0 && tv->is_dot && toupper(c) == toupper(rb)) c = bam_is_rev(p->b)? ',' : '.';
 						}
 					} else {
 						c = bam_aux_getCSi(p->b, p->qpos + j);
-						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos + j)) c = bam1_strand(p->b)? ',' : '.';
+						if (tv->is_dot && '-' == bam_aux_getCEi(p->b, p->qpos + j)) c = bam_is_rev(p->b)? ',' : '.';
 					}
 				}
 			}
@@ -198,7 +240,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 				if (((p->b->core.flag&BAM_FPAIRED) && !(p->b->core.flag&BAM_FPROPER_PAIR))
 						|| (p->b->core.flag & BAM_FSECONDARY)) attr |= tv->my_underline(tv);
 				if (tv->color_for == TV_COLOR_BASEQ) {
-					x = bam1_qual(p->b)[p->qpos]/10 + 1;
+					x = bam_get_qual(p->b)[p->qpos]/10 + 1;
 					if (x > 4) x = 4;
 					attr |= tv->my_colorpair(tv,x);
 				} else if (tv->color_for == TV_COLOR_MAPQ) {
@@ -206,7 +248,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 					if (x > 4) x = 4;
 					attr |= tv->my_colorpair(tv,x);
 				} else if (tv->color_for == TV_COLOR_NUCL) {
-					x = bam_nt16_nt4_table[bam1_seqi(bam1_seq(p->b), p->qpos)] + 5;
+					x = bam_nt16_nt4_table[bam_seqi(bam_get_seq(p->b), p->qpos)] + 5;
 					attr |= tv->my_colorpair(tv,x);
 				} else if(tv->color_for == TV_COLOR_COL) {
 					x = 0;
@@ -216,19 +258,19 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 						case '2': x = 2; break;
 						case '3': x = 3; break;
 						case '4': x = 4; break;
-						default: x = bam_nt16_nt4_table[bam1_seqi(bam1_seq(p->b), p->qpos)]; break;
+						default: x = bam_nt16_nt4_table[bam_seqi(bam_get_seq(p->b), p->qpos)]; break;
 					}
 					x+=5;
 					attr |= tv->my_colorpair(tv,x);
 				} else if(tv->color_for == TV_COLOR_COLQ) {
 					x = bam_aux_getCQi(p->b, p->qpos);
-					if(0 == x) x = bam1_qual(p->b)[p->qpos];
+					if(0 == x) x = bam_get_qual(p->b)[p->qpos];
 					x = x/10 + 1;
 					if (x > 4) x = 4;
 					attr |= tv->my_colorpair(tv,x);
 				}
 				tv->my_attron(tv,attr);
-				tv->my_mvaddch(tv,row, tv->ccol, bam1_strand(p->b)? tolower(c) : toupper(c));
+				tv->my_mvaddch(tv,row, tv->ccol, bam_is_rev(p->b)? tolower(c) : toupper(c));
 				tv->my_attroff(tv,attr);
 			}
 		}
@@ -259,7 +301,7 @@ int tv_fetch_func(const bam1_t *b, void *data)
 		if ( k == kh_end(tv->rg_hash) ) return 0; // if RG tag is not in list of allowed tags exclude read
 	}
 	if (tv->no_skip) {
-		uint32_t *cigar = bam1_cigar(b); // this is cheating...
+		uint32_t *cigar = bam_get_cigar(b); // this is cheating...
 		int i;
 		for (i = 0; i <b->core.n_cigar; ++i) {
 			if ((cigar[i]&0xf) == BAM_CREF_SKIP)
@@ -297,7 +339,7 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
 	}
 	// draw aln
 	bam_lplbuf_reset(tv->lplbuf);
-	bam_fetch(tv->fp, tv->idx, tv->curr_tid, tv->left_pos, tv->left_pos + tv->mcol, tv, tv_fetch_func);
+	sam_fetch(tv->fp, tv->idx, tv->curr_tid, tv->left_pos, tv->left_pos + tv->mcol, tv, tv_fetch_func);
 	bam_lplbuf_push(0, tv->lplbuf);
 
 	while (tv->ccol < tv->mcol) {
