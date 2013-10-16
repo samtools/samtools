@@ -25,7 +25,7 @@
 #include <assert.h>
 #include "bam_tview.h"
 
-int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samples)
+int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *samples)
 {
 	assert(tv!=NULL);
 	assert(fn!=NULL);
@@ -66,7 +66,7 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
 		void *iter = tv->header->dict;
 		const char *key, *val;
 		int n = 0;
-		tv->rg_hash = kh_init(kh_rg);
+		tv->rg_hash = kh_init(kh_rg); // Init the list of rg's
 		while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val)) )
 		{
 			if ( !strcmp(samples,key) || (val && !strcmp(samples,val)) )
@@ -74,7 +74,7 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
 				khiter_t k = kh_get(kh_rg, tv->rg_hash, key);
 				if ( k != kh_end(tv->rg_hash) ) continue;
 				int ret;
-				k = kh_put(kh_rg, tv->rg_hash, key, &ret);
+				k = kh_put(kh_rg, tv->rg_hash, key, &ret); // Add the RG to the list
 				kh_value(tv->rg_hash, k) = val;
 				n++;
 			}
@@ -113,7 +113,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 	int i, j, c, rb, attr, max_ins = 0;
 	uint32_t call = 0;
 	if (pos < tv->left_pos || tv->ccol > tv->mcol) return 0; // out of screen
-	// print referece
+	// print reference
 	rb = (tv->ref && pos - tv->left_pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N';
 	for (i = tv->last_pos + 1; i < pos; ++i) {
 		if (i%10 == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-d", i+1);
@@ -250,12 +250,13 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 int tv_fetch_func(const bam1_t *b, void *data)
 {
 	tview_t *tv = (tview_t*)data;
+	/* If we are restricted to specific readgroups check RG is in the list */
 	if ( tv->rg_hash )
 	{
 		const uint8_t *rg = bam_aux_get(b, "RG");
-		if ( !rg ) return 0;
+		if ( !rg ) return 0; // If we don't have an RG tag exclude read
 		khiter_t k = kh_get(kh_rg, tv->rg_hash, (const char*)(rg + 1));
-		if ( k == kh_end(tv->rg_hash) ) return 0;
+		if ( k == kh_end(tv->rg_hash) ) return 0; // if RG tag is not in list of allowed tags exclude read
 	}
 	if (tv->no_skip) {
 		uint32_t *cigar = bam1_cigar(b); // this is cheating...
