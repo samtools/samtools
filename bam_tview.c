@@ -1,8 +1,32 @@
+/*
+ * The MIT License
+ *
+ * Copyright (c) 2008-2013 Genome Research Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 #include <assert.h>
 #include "bam_tview.h"
 
 int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samples)
-	{
+{
 	assert(tv!=NULL);
 	assert(fn!=NULL);
 	tv->mrow = 24; tv->mcol = 80;
@@ -11,67 +35,67 @@ int base_tv_init(tview_t* tv,const char *fn, const char *fn_fa, const char *samp
 	
 	tv->fp = bam_open(fn, "r");
 	if(tv->fp==0)
-		{
+	{
 		fprintf(stderr,"bam_open %s. %s\n", fn,fn_fa);
-            	exit(EXIT_FAILURE);
-		}
+		exit(EXIT_FAILURE);
+	}
 	bgzf_set_cache_size(tv->fp, 8 * 1024 *1024);
 	assert(tv->fp);
 	
 	tv->header = bam_header_read(tv->fp);
 	if(tv->header==0)
-		{
+	{
 		fprintf(stderr,"Cannot read '%s'.\n", fn);
-            	exit(EXIT_FAILURE);
-		}
+		exit(EXIT_FAILURE);
+	}
 	tv->idx = bam_index_load(fn);
 	if (tv->idx == 0)
-		{
+	{
 		fprintf(stderr,"Cannot read index for '%s'.\n", fn);
 		exit(EXIT_FAILURE);
-		}
+	}
 	tv->lplbuf = bam_lplbuf_init(tv_pl_func, tv);
 	if (fn_fa) tv->fai = fai_load(fn_fa);
 	tv->bca = bcf_call_init(0.83, 13);
 	tv->ins = 1;
-
-    if ( samples ) 
-    {
+	
+	if ( samples )
+	{
 #if 0
-        if ( !tv->header->dict ) tv->header->dict = sam_header_parse2(tv->header->text);
-        void *iter = tv->header->dict;
-        const char *key, *val;
-        int n = 0;
-        tv->rg_hash = kh_init(kh_rg);
-        while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val)) )
-        {
-            if ( !strcmp(samples,key) || (val && !strcmp(samples,val)) )
-            {
-                khiter_t k = kh_get(kh_rg, tv->rg_hash, key);
-                if ( k != kh_end(tv->rg_hash) ) continue;
-                int ret;
-                k = kh_put(kh_rg, tv->rg_hash, key, &ret);
-                kh_value(tv->rg_hash, k) = val;
-                n++;
-            }
-        }
-        if ( !n )
-        {
-            fprintf(stderr,"The sample or read group \"%s\" not present.\n", samples);
-            exit(EXIT_FAILURE);
-        }
+		if ( !tv->header->dict ) tv->header->dict = sam_header_parse2(tv->header->text);
+		void *iter = tv->header->dict;
+		const char *key, *val;
+		int n = 0;
+		tv->rg_hash = kh_init(kh_rg);
+		while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val)) )
+		{
+			if ( !strcmp(samples,key) || (val && !strcmp(samples,val)) )
+			{
+				khiter_t k = kh_get(kh_rg, tv->rg_hash, key);
+				if ( k != kh_end(tv->rg_hash) ) continue;
+				int ret;
+				k = kh_put(kh_rg, tv->rg_hash, key, &ret);
+				kh_value(tv->rg_hash, k) = val;
+				n++;
+			}
+		}
+		if ( !n )
+		{
+			fprintf(stderr,"The sample or read group \"%s\" not present.\n", samples);
+			exit(EXIT_FAILURE);
+		}
 #else
 		fprintf(stderr, "Samtools-htslib: base_tv_init() header parsing not yet implemented\n");
 		abort();
 #endif
-    }
-
-	return 0;
 	}
+	
+	return 0;
+}
 
 
 void base_tv_destroy(tview_t* tv)
-	{
+{
 	bam_lplbuf_destroy(tv->lplbuf);
 	bcf_call_destroy(tv->bca);
 	bam_index_destroy(tv->idx);
@@ -79,7 +103,7 @@ void base_tv_destroy(tview_t* tv)
 	free(tv->ref);
 	bam_header_destroy(tv->header);
 	bam_close(tv->fp);
-	}
+}
 
 
 int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
@@ -226,13 +250,13 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 int tv_fetch_func(const bam1_t *b, void *data)
 {
 	tview_t *tv = (tview_t*)data;
-    if ( tv->rg_hash )
-    {
-        const uint8_t *rg = bam_aux_get(b, "RG");
-        if ( !rg ) return 0; 
-        khiter_t k = kh_get(kh_rg, tv->rg_hash, (const char*)(rg + 1));
-        if ( k == kh_end(tv->rg_hash) ) return 0;
-    }
+	if ( tv->rg_hash )
+	{
+		const uint8_t *rg = bam_aux_get(b, "RG");
+		if ( !rg ) return 0;
+		khiter_t k = kh_get(kh_rg, tv->rg_hash, (const char*)(rg + 1));
+		if ( k == kh_end(tv->rg_hash) ) return 0;
+	}
 	if (tv->no_skip) {
 		uint32_t *cigar = bam1_cigar(b); // this is cheating...
 		int i;
@@ -246,7 +270,7 @@ int tv_fetch_func(const bam1_t *b, void *data)
 }
 
 int base_draw_aln(tview_t *tv, int tid, int pos)
-	{
+{
 	assert(tv!=NULL);
 	// reset
 	tv->my_clear(tv);
@@ -264,11 +288,11 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
 		sprintf(str, "%s:%d-%d", tv->header->target_name[tv->curr_tid], tv->left_pos + 1, tv->left_pos + tv->mcol);
 		tv->ref = fai_fetch(tv->fai, str, &tv->l_ref);
 		free(str);
-        if ( !tv->ref ) 
-        {
-            fprintf(stderr,"Could not read the reference sequence. Is it seekable (plain text or compressed + .gzi indexed with bgzip)?\n");
-            abort();
-        }
+		if ( !tv->ref )
+		{
+			fprintf(stderr,"Could not read the reference sequence. Is it seekable (plain text or compressed + .gzi indexed with bgzip)?\n");
+			abort();
+		}
 	}
 	// draw aln
 	bam_lplbuf_reset(tv->lplbuf);
@@ -289,24 +313,24 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
 
 static void error(const char *format, ...)
 {
-    if ( !format )
-    {
-        fprintf(stderr, "\n");
-        fprintf(stderr, "Usage: bamtk tview [options] <aln.bam> [ref.fasta]\n");
-        fprintf(stderr, "Options:\n");
-        fprintf(stderr, "   -d display      output as (H)tml or (C)urses or (T)ext \n");
-        fprintf(stderr, "   -p chr:pos      go directly to this position\n");
-        fprintf(stderr, "   -s STR          display only reads from this sample or group\n");
-        fprintf(stderr, "\n\n");
-    }
-    else
-    {
-        va_list ap;
-        va_start(ap, format);
-        vfprintf(stderr, format, ap);
-        va_end(ap);
-    }
-    exit(-1);
+	if ( !format )
+	{
+		fprintf(stderr, "\n");
+		fprintf(stderr, "Usage: bamtk tview [options] <aln.bam> [ref.fasta]\n");
+		fprintf(stderr, "Options:\n");
+		fprintf(stderr, "   -d display      output as (H)tml or (C)urses or (T)ext \n");
+		fprintf(stderr, "   -p chr:pos      go directly to this position\n");
+		fprintf(stderr, "   -s STR          display only reads from this sample or group\n");
+		fprintf(stderr, "\n\n");
+	}
+	else
+	{
+		va_list ap;
+		va_start(ap, format);
+		vfprintf(stderr, format, ap);
+		va_end(ap);
+	}
+	exit(-1);
 }
 
 enum dipsay_mode {display_ncurses,display_html,display_text};
@@ -315,33 +339,33 @@ extern tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samp
 extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples);
 
 int bam_tview_main(int argc, char *argv[])
-	{
+{
 	int view_mode=display_ncurses;
 	tview_t* tv=NULL;
-    char *samples=NULL, *position=NULL;
-    int c;
-    while ((c = getopt(argc, argv, "s:p:d:")) >= 0) {
-        switch (c) {
-            case 's': samples=optarg; break;
-            case 'p': position=optarg; break;
-            case 'd':
-            	{
-            	switch(optarg[0])
-            		{
-            		case 'H': case 'h': view_mode=display_html;break;
-            		case 'T': case 't': view_mode=display_text;break;
-            		case 'C': case 'c': view_mode=display_ncurses;break;
-			default: view_mode=display_ncurses;break;
+	char *samples=NULL, *position=NULL;
+	int c;
+	while ((c = getopt(argc, argv, "s:p:d:")) >= 0) {
+		switch (c) {
+			case 's': samples=optarg; break;
+			case 'p': position=optarg; break;
+			case 'd':
+			{
+				switch(optarg[0])
+				{
+					case 'H': case 'h': view_mode=display_html;break;
+					case 'T': case 't': view_mode=display_text;break;
+					case 'C': case 'c': view_mode=display_ncurses;break;
+					default: view_mode=display_ncurses;break;
+				}
+				break;
 			}
-            	break;
-            	}
-            default: error(NULL);
-        }
-    }
+			default: error(NULL);
+		}
+	}
 	if (argc==optind) error(NULL);
 	
 	switch(view_mode)
-		{
+	{
 		case display_ncurses:
 			{
 			tv = curses_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
@@ -357,22 +381,22 @@ int bam_tview_main(int argc, char *argv[])
 			tv = html_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
 			break;
 			}
-		}
+	}
 	if(tv==NULL)
-		{
+	{
 		error("cannot create view");
 		return EXIT_FAILURE;
-		}
+	}
 	
 	if ( position )
-	   	 {
+	{
 		int _tid = -1, _beg, _end;
 		bam_parse_region(tv->header, position, &_tid, &_beg, &_end);
 		if (_tid >= 0) { tv->curr_tid = _tid; tv->left_pos = _beg; }
-	    	}
+	}
 	tv->my_drawaln(tv, tv->curr_tid, tv->left_pos);
 	tv->my_loop(tv);
 	tv->my_destroy(tv);
 	
 	return EXIT_SUCCESS;
-	}
+}
