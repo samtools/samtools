@@ -621,7 +621,7 @@ int bam_mpileup(int argc, char *argv[])
                   // In the original version the whole BAM was streamed which is inefficient
                   //  with few BED intervals and big BAMs. Todo: devise a heuristic to determine 
                   //  best strategy, that is streaming or jumping.
-                  mplp.bed = bed_read(optarg); break;
+                  mplp.bed = bed_read(optarg); if (!mplp.bed) { fprintf(stderr,"Could not read file \"%s\"\n", optarg); exit(1); } break;
 		case 'P': mplp.pl_list = strdup(optarg); break;
 		case 'p': mplp.flag |= MPLP_PER_SAMPLE; break;
 		case 'g': mplp.flag |= MPLP_GLF; break;
