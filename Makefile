@@ -39,9 +39,10 @@ BUILT_MISC_PROGRAMS = \
 MISC_PROGRAMS = \
 	$(BUILT_MISC_PROGRAMS) \
 	misc/blast2sam.pl misc/bowtie2sam.pl misc/export2sam.pl \
-	misc/interpolate_sam.pl misc/novo2sam.pl misc/psl2sam.pl \
+	misc/interpolate_sam.pl misc/novo2sam.pl \
+	misc/plot-bamstats misc/psl2sam.pl \
 	misc/sam2vcf.pl misc/samtools.pl misc/soap2sam.pl \
-	misc/wgsim_eval.pl misc/zoom2sam.pl
+	misc/varfilter.py misc/wgsim_eval.pl misc/zoom2sam.pl
 
 
 all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
