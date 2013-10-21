@@ -19,14 +19,32 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
 INCLUDES=	-I. -I$(HTSDIR)
 LIBCURSES=	-lcurses # -lXCurses
 
+prefix      = /usr/local
+exec_prefix = $(prefix)
+bindir      = $(exec_prefix)/bin
+mandir      = $(prefix)/share/man
+man1dir     = $(mandir)/man1
+
+INSTALL = install -p
+INSTALL_PROGRAM = $(INSTALL)
+INSTALL_DATA    = $(INSTALL) -m 644
+
 
 PROGRAMS = samtools bgzip
 
-MISC_PROGRAMS = \
+BUILT_MISC_PROGRAMS = \
 	misc/ace2sam misc/maq2sam-long misc/maq2sam-short \
 	misc/md5fa misc/md5sum-lite misc/wgsim
 
-all: $(PROGRAMS) $(MISC_PROGRAMS)
+MISC_PROGRAMS = \
+	$(BUILT_MISC_PROGRAMS) \
+	misc/blast2sam.pl misc/bowtie2sam.pl misc/export2sam.pl \
+	misc/interpolate_sam.pl misc/novo2sam.pl misc/psl2sam.pl \
+	misc/sam2vcf.pl misc/samtools.pl misc/soap2sam.pl \
+	misc/wgsim_eval.pl misc/zoom2sam.pl
+
+
+all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
@@ -161,11 +179,17 @@ misc/md5sum-lite.o: misc/md5.c misc/md5.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -DMD5SUM_MAIN -c -o $@ misc/md5.c
 
 
+install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
+	mkdir -p $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
+	$(INSTALL_PROGRAM) $(PROGRAMS) $(MISC_PROGRAMS) $(DESTDIR)$(bindir)
+	$(INSTALL_DATA) samtools.1 $(DESTDIR)$(man1dir)
+
+
 mostlyclean:
 	-rm -f *.o misc/*.o version.h
 
 clean: mostlyclean clean-htslib
-	-rm -f $(PROGRAMS) libbam.a $(MISC_PROGRAMS)
+	-rm -f $(PROGRAMS) libbam.a $(BUILT_MISC_PROGRAMS)
 
 distclean: clean
 	-rm -f TAGS
@@ -178,4 +202,4 @@ tags:
 force:
 
 
-.PHONY: all check clean distclean force lib mostlyclean tags test
+.PHONY: all check clean distclean force install lib mostlyclean tags test
