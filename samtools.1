@@ -47,10 +47,10 @@ entire alignment file unless it is asked to do so.
 
 .TP 10
 .B view
-samtools view [-bchuHS] [-t in.refList] [-o output] [-f reqFlag] [-F
+samtools view [-bCchuH] [-t in.refList] [-o output] [-f reqFlag] [-F
 skipFlag] [-q minMapQ] [-l library] [-r readGroup] [-R rgFile] <in.bam>|<in.sam> [region1 [...]]
 
-Extract/print all or sub alignments in SAM or BAM format. If no region
+Extract/print all or sub alignments in SAM, BAM, or CRAM format. If no region
 is specified, all the alignments will be printed; otherwise only
 alignments overlapping the specified regions will be output. An
 alignment may be given multiple times if it is overlapping several
@@ -59,11 +59,22 @@ format: `chr2' (the whole chr2), `chr2:1000000' (region starting from
 1,000,000bp) or `chr2:1,000,000-2,000,000' (region between 1,000,000 and
 2,000,000bp including the end points). The coordinate is 1-based.
 
+If input is from a SAM file that contains no
+.B @SQ
+header lines, either the
+.B `-t'
+or the
+.B `-T'
+option is required.
+
 .B OPTIONS:
 .RS
 .TP 10
 .B -b
 Output in the BAM format.
+.TP
+.B -C
+Output in the CRAM format.
 .TP
 .BI -f \ INT
 Only output alignments with all bits in INT present in the FLAG
@@ -100,9 +111,10 @@ Fraction of templates/pairs to subsample; the integer part is treated as the
 seed for the random number generator [-1]
 .TP
 .B -S
-Input is in SAM. If @SQ header lines are absent, the
-.B `-t'
-option is required.
+Ignored for compatibility with previous samtools versions.
+Previously this option was required if input was in SAM format, but now the
+correct format is automatically detected by examining the first few characters
+of input.
 .TP
 .B -c
 Instead of printing the alignments, only count them and print the

@@ -128,15 +128,15 @@ static int usage(int is_long_help);
 
 int main_samview(int argc, char *argv[])
 {
-	int c, is_header = 0, is_header_only = 0, is_bamin = 1, ret = 0, compress_level = -1, is_bamout = 0, is_count = 0;
-	int of_type = BAM_OFDEC, is_long_help = 0, n_threads = 0;
+	int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
+	int is_long_help = 0, n_threads = 0;
 	int64_t count = 0;
 	samfile_t *in = 0, *out = 0;
-	char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0, *q;
+	char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0, *q;
 
 	/* parse command-line options */
-	strcpy(in_mode, "r"); strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
+	strcpy(out_mode, "w");
+	while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
 		switch (c) {
 		case 's':
 			if ((g_subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -147,9 +147,10 @@ int main_samview(int argc, char *argv[])
 			break;
 		case 'm': g_min_qlen = atoi(optarg); break;
 		case 'c': is_count = 1; break;
-		case 'S': is_bamin = 0; break;
-		case 'b': is_bamout = 1; break;
-		case 't': fn_list = strdup(optarg); is_bamin = 0; break;
+		case 'S': break;
+		case 'b': out_format = "b"; break;
+		case 'C': out_format = "c"; break;
+		case 't': fn_list = strdup(optarg); break;
 		case 'h': is_header = 1; break;
 		case 'H': is_header_only = 1; break;
 		case 'o': fn_out = strdup(optarg); break;
@@ -162,24 +163,19 @@ int main_samview(int argc, char *argv[])
 		case 'L': g_bed = bed_read(optarg); break;
 		case 'r': g_rg = strdup(optarg); break;
 		case 'R': fn_rg = strdup(optarg); break;
-		case 'x': of_type = BAM_OFHEX; break;
-		case 'X': of_type = BAM_OFSTR; break;
+		case 'x': out_format = "x"; break;
+		case 'X': out_format = "X"; break;
 		case '?': is_long_help = 1; break;
-		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
+		case 'T': fn_ref = strdup(optarg); break;
 		case 'B': g_remove_B = 1; break;
 		case 'Q': g_qual_scale = atoi(optarg); break;
 		case '@': n_threads = strtol(optarg, 0, 0); break;
 		default: return usage(is_long_help);
 		}
 	}
-	if (compress_level >= 0) is_bamout = 1;
+	if (compress_level >= 0) out_format = "b";
 	if (is_header_only) is_header = 1;
-	if (is_bamout) strcat(out_mode, "b");
-	else {
-		if (of_type == BAM_OFHEX) strcat(out_mode, "x");
-		else if (of_type == BAM_OFSTR) strcat(out_mode, "X");
-	}
-	if (is_bamin) strcat(in_mode, "b");
+	strcat(out_mode, out_format);
 	if (is_header) strcat(out_mode, "h");
 	if (compress_level >= 0) {
 		char tmp[2];
@@ -203,7 +199,7 @@ int main_samview(int argc, char *argv[])
 	// generate the fn_list if necessary
 	if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
 	// open file handlers
-	if ((in = samopen(argv[optind], in_mode, fn_list)) == 0) {
+	if ((in = samopen(argv[optind], "r", fn_list)) == 0) {
 		fprintf(stderr, "[main_samview] fail to open \"%s\" for reading.\n", argv[optind]);
 		ret = 1;
 		goto view_end;
@@ -245,8 +241,7 @@ int main_samview(int argc, char *argv[])
 		bam_destroy1(b);
 	} else { // retrieve alignments in specified regions
 		int i;
-		bam_index_t *idx = 0;
-		if (is_bamin) idx = bam_index_load(argv[optind]); // load BAM index
+		bam_index_t *idx = bam_index_load(argv[optind]); // load BAM index
 		if (idx == 0) { // index is unavailable
 			fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM files.\n");
 			ret = 1;
@@ -298,9 +293,10 @@ static int usage(int is_long_help)
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Usage:   samtools view [options] <in.bam>|<in.sam> [region1 [...]]\n\n");
 	fprintf(stderr, "Options: -b       output BAM\n");
+	fprintf(stderr, "         -C       output CRAM\n");
 	fprintf(stderr, "         -h       print header for the SAM output\n");
 	fprintf(stderr, "         -H       print header only (no alignments)\n");
-	fprintf(stderr, "         -S       input is SAM\n");
+	fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
 	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
 	fprintf(stderr, "         -1       fast compression (force -b)\n");
 	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
