@@ -13,7 +13,7 @@ int samthreads(samfile_t *fp, int n_threads, int n_sub_blks)
 samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 {
 	// hts_open() is really sam_open(), except for #define games
-	samFile *hts_fp = hts_open(fn, mode, aux);
+	samFile *hts_fp = hts_open(fn, mode, strchr(mode, 'r')? aux : NULL);
 	if (hts_fp == NULL)  return NULL;
 
 	samfile_t *fp = malloc(sizeof (samfile_t));
@@ -34,7 +34,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 	}
 	else {
 		fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it
-		if (fp->file->is_bin || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
+		if (fp->file->is_bin || fp->file->is_cram || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
 	}
 
 	return fp;
