@@ -366,7 +366,7 @@ int main_import(int argc, char *argv[])
 	return ret;
 }
 
-int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 9, 14, 1, 6, 5, 13, 3, 11, 7, 15 };
+int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 
 int main_bam2fq(int argc, char *argv[])
 {
