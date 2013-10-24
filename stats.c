@@ -153,7 +153,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats);
 
 
 // Coverage distribution methods
-inline int coverage_idx(int min, int max, int n, int step, int depth)
+static inline int coverage_idx(int min, int max, int n, int step, int depth)
 {
     if ( depth < min )
         return 0;
@@ -164,7 +164,7 @@ inline int coverage_idx(int min, int max, int n, int step, int depth)
     return 1 + (depth - min) / step;
 }
 
-inline int round_buffer_lidx2ridx(int offset, int size, int64_t refpos, int64_t pos)
+static inline int round_buffer_lidx2ridx(int offset, int size, int64_t refpos, int64_t pos)
 {
     return (offset + (pos-refpos) % size) % size;
 }
