@@ -1,18 +1,27 @@
-// Copyright (c) 2009-2013 Genome Research Limited.
-//
-// This file is part of samtools.
-//
-// samtools is free software: you can redistribute it and/or modify it under the
-// terms of the GNU General Public License as published by the Free Software
-// Foundation, either version 3 of the License, or (at your option) any later
-// version.
-//
-// This program is distributed in the hope that it will be useful, but WITHOUT ANY
-// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-// PARTICULAR PURPOSE. See the GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License along with
-// this program. If not, see L<http://www.gnu.org/licenses/>.
+/*
+ * The MIT License
+ *
+ * Copyright (c) 2009-2013 Genome Research Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
 
 #include <assert.h>
 #include <stdbool.h>
@@ -20,7 +29,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "htslib/kstring.h"
-#include "bam.h"
+#include "htslib/sam.h"
 
 /*
  * This function calculates CT tag for two bams, it assumes they are from the same template and
@@ -36,16 +45,16 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 	if (b1->core.pos > b2->core.pos) swap = b1, b1 = b2, b2 = swap; // make sure b1 has a smaller coordinate
 	kputc((b1->core.flag & BAM_FREAD1)? '1' : '2', str); // segment index
 	kputc((b1->core.flag & BAM_FREVERSE)? 'R' : 'F', str); // strand
-	for (i = 0, cigar = bam1_cigar(b1); i < b1->core.n_cigar; ++i) {
+	for (i = 0, cigar = bam_get_cigar(b1); i < b1->core.n_cigar; ++i) {
 		kputw(bam_cigar_oplen(cigar[i]), str);
 		kputc(bam_cigar_opchr(cigar[i]), str);
 	}
-	end = bam_calend(&b1->core, cigar);
+	end = bam_endpos(b1);
 	kputw(b2->core.pos - end, str);
 	kputc('T', str);
 	kputc((b2->core.flag & BAM_FREAD1)? '1' : '2', str); // segment index
 	kputc((b2->core.flag & BAM_FREVERSE)? 'R' : 'F', str); // strand
-	for (i = 0, cigar = bam1_cigar(b2); i < b2->core.n_cigar; ++i) {
+	for (i = 0, cigar = bam_get_cigar(b2); i < b2->core.n_cigar; ++i) {
 		kputw(bam_cigar_oplen(cigar[i]), str);
 		kputc(bam_cigar_opchr(cigar[i]), str);
 	}
@@ -64,16 +73,20 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * -if pos == 0 (1 based), tid == -1 set UNMAPPED flag
  * single Reads:
  * -if pos == 0 (1 based), tid == -1, or UNMAPPED then set UNMAPPED, pos = 0, tid = -1
- * -clear flags (PAIRED, MREVERSE, PROPER_PAIR)
+ * -clear bad flags (PAIRED, MREVERSE, PROPER_PAIR)
  * -set mpos = 0 (1 based), mtid = -1 and isize = 0
  * -write to output
  * Paired Reads:
  * -if read is unmapped and mate is not, set pos and tid to equal that of mate
  * -sync mate flags (MREVERSE, MUNMAPPED), mpos, mtid
  * -recalculate ISIZE if possible, otherwise set it to 0
- * -optionally clear PROPER_PAIR flag from reads where mapping or orientation indicate this is not possible
+ * -optionally clear PROPER_PAIR flag from reads where mapping or orientation indicate this is not possible (Illumina orientation only)
  * -calculate CT and apply to lowest positioned read
  * -write to output
+ * Limitations
+ * -Does not handle tandem reads
+ * -Does not handle new FSUPPLEMENTARY yet (need to check what to do with these I suspect just pass through unchanged)
+ * -CT definition appears to be something else in spec, this was in here before I started tampering with it, anyone know what is going on here?
  */
 
 static void sync_unmapped_pos_inner(bam1_t* src, bam1_t* dest) {
@@ -149,15 +162,15 @@ static void sync_mate(bam1_t* a, bam1_t* b)
 }
 
 // currently, this function ONLY works if each read has one hit
-static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int proper_pair_check)
+static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int proper_pair_check)
 {
-	bam_header_t *header;
+	bam_hdr_t *header;
 	bam1_t *b[2];
 	int curr, has_prev, pre_end = 0, cur_end = 0;
 	kstring_t str;
 
 	str.l = str.m = 0; str.s = 0;
-	header = bam_header_read(in);
+	header = sam_hdr_read(in);
 	// Accept unknown, unsorted, or queryname sort order, but error on coordinate sorted.
 	if ((header->l_text > 3) && (strncmp(header->text, "@HD", 3) == 0)) {
 		char *p, *q;
@@ -170,16 +183,16 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 			exit(1);
 		}
 	}
-	bam_header_write(out, header);
+	sam_hdr_write(out, header);
 
 	b[0] = bam_init1();
 	b[1] = bam_init1();
 	curr = 0; has_prev = 0;
-	while (bam_read1(in, b[curr]) >= 0) {
+	while (sam_read1(in, header, b[curr]) >= 0) {
 		bam1_t *cur = b[curr], *pre = b[1-curr];
 		if (cur->core.flag & BAM_FSECONDARY)
 		{
-			if ( !remove_reads ) bam_write1(out, cur);
+			if ( !remove_reads ) sam_write1(out, header, cur);
 			continue; // skip secondary alignments
 		}
 		if (cur->core.tid < 0 || cur->core.pos < 0) // If unmapped set the flag
@@ -188,13 +201,13 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 		}
 		if ((cur->core.flag&BAM_FUNMAP) == 0) // If mapped calculate end
 		{
-			cur_end = bam_calend(&cur->core, bam1_cigar(cur));
+			cur_end = bam_endpos(cur);
 
 			// Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
 			if (cur_end > (int)header->target_len[cur->core.tid]) cur->core.flag |= BAM_FUNMAP;
 		}
 		if (has_prev) { // do we have a pair of reads to examine?
-			if (strcmp(bam1_qname(cur), bam1_qname(pre)) == 0) { // identical pair name
+			if (strcmp(bam_get_qname(cur), bam_get_qname(pre)) == 0) { // identical pair name
 				pre->core.flag |= BAM_FPAIRED;
 				cur->core.flag |= BAM_FPAIRED;
 				sync_mate(pre, cur);
@@ -216,14 +229,14 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 				
 				// Write out result
 				if ( !remove_reads ) {
-					bam_write1(out, pre);
-					bam_write1(out, cur);
+					sam_write1(out, header, pre);
+					sam_write1(out, header, cur);
 				} else {
 					// If we have to remove reads make sure we do it in a way that doesn't create orphans with bad flags
 					if(pre->core.flag&BAM_FUNMAP) cur->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
 					if(cur->core.flag&BAM_FUNMAP) pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-					if(!(pre->core.flag&BAM_FUNMAP)) bam_write1(out, pre);
-					if(!(cur->core.flag&BAM_FUNMAP)) bam_write1(out, cur);
+					if(!(pre->core.flag&BAM_FUNMAP)) sam_write1(out, header, pre);
+					if(!(cur->core.flag&BAM_FUNMAP)) sam_write1(out, header, cur);
 				}
 				has_prev = 0;
 			} else { // unpaired?  clear bad info and write it out
@@ -234,7 +247,7 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 				}
 				pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
 				pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-				if ( !remove_reads || !(pre->core.flag&BAM_FUNMAP) ) bam_write1(out, pre);
+				if ( !remove_reads || !(pre->core.flag&BAM_FUNMAP) ) sam_write1(out, header, pre);
 			}
 		} else has_prev = 1;
 		curr = 1 - curr;
@@ -250,9 +263,9 @@ static void bam_mating_core(bamFile in, bamFile out, int remove_reads, int prope
 		pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
 		pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
 
-		bam_write1(out, pre);
+		sam_write1(out, header, pre);
 	}
-	bam_header_destroy(header);
+	bam_hdr_destroy(header);
 	bam_destroy1(b[0]);
 	bam_destroy1(b[1]);
 	free(str.s);
@@ -272,7 +285,7 @@ void usage()
 
 int bam_mating(int argc, char *argv[])
 {
-	bamFile in, out;
+	samFile *in, *out;
 	int c, remove_reads = 0, proper_pair_check = 1;
 	while ((c = getopt(argc, argv, "rp")) >= 0) {
 		switch (c) {
@@ -281,10 +294,10 @@ int bam_mating(int argc, char *argv[])
 		}
 	}
 	if (optind+1 >= argc) usage();
-	in = (strcmp(argv[optind], "-") == 0)? bam_dopen(STDIN_FILENO, "r") : bam_open(argv[optind], "r");
-	out = (strcmp(argv[optind+1], "-") == 0)? bam_dopen(STDOUT_FILENO, "w") : bam_open(argv[optind+1], "w");
+	in = sam_open(argv[optind], "r");
+	out = sam_open(argv[optind+1], "w");
 	bam_mating_core(in, out, remove_reads, proper_pair_check);
-	bam_close(in); bam_close(out);
+	sam_close(in); sam_close(out);
 	return 0;
 }
 
