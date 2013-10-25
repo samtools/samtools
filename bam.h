@@ -171,7 +171,7 @@ typedef hts_itr_t *bam_iter_t;
 #define bam1_seqi(s, i) (bam_seqi((s), (i)))
 
 /*! @function
-  @abstract  Get query sequence and quality
+  @abstract  Get auxiliary data
   @param  b  pointer to an alignment
   @return    pointer to the concatenated auxiliary data
  */
