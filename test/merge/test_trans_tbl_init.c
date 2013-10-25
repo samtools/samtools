@@ -1,6 +1,6 @@
 #include "../../bam_sort.c"
 
-void dump_header(bam_header_t* hdr) {
+void dump_header(bam_hdr_t* hdr) {
 	printf("->n_targets:(%d)\n", hdr->n_targets);
 	int i;
 	for (i = 0; i < hdr->n_targets; ++i) {
@@ -17,11 +17,11 @@ static const char test_1_trans_text[] =
 "@HD\tVN:1.4\tSO:unknown\n"
 "@SQ\tSN:fish\tLN:133\n";
 
-void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
-	bam_header_t* out;
-	bam_header_t* translate;
+void setup_test_1(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+	bam_hdr_t* out;
+	bam_hdr_t* translate;
 
-	translate = bam_header_init();
+	translate = bam_hdr_init();
 	translate->text = strdup(test_1_trans_text);
 	translate->l_text = strlen(test_1_trans_text);
 	translate->n_targets = 1;
@@ -29,7 +29,7 @@ void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
 	translate->target_name[0] = strdup("fish");
 	translate->target_len[0] = 133;
-	out = bam_header_init();
+	out = bam_hdr_init();
 	const char out_text[] =
 		"@HD\tVN:1.4\tSO:unknown\n"
 		"@SQ\tSN:fish\tLN:133\tSP:frog";
@@ -45,7 +45,7 @@ void setup_test_1(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
-bool check_test_1(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 	// Check input is unchanged
 	if (
 		strncmp(test_1_trans_text, translate->text, translate->l_text)
@@ -74,11 +74,11 @@ static const char test_2_trans_text[] =
 "@SQ\tSN:donkey\tLN:133\n"
 "@SQ\tSN:fish\tLN:133";
 
-void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
-	bam_header_t* out;
-	bam_header_t* translate;
+void setup_test_2(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+	bam_hdr_t* out;
+	bam_hdr_t* translate;
 
-	translate = bam_header_init();
+	translate = bam_hdr_init();
 	translate->text = strdup(test_2_trans_text);
 	translate->l_text = strlen(test_2_trans_text);
 	translate->n_targets = 2;
@@ -88,7 +88,7 @@ void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_len[0] = 133;
 	translate->target_name[1] = strdup("fish");
 	translate->target_len[1] = 133;
-	out = bam_header_init();
+	out = bam_hdr_init();
 	const char* out_text =
 		"@HD\tVN:1.4\tSO:unknown\n"
 		"@SQ\tSN:fish\tLN:133\tSP:frog";
@@ -104,7 +104,7 @@ void setup_test_2(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
-bool check_test_2(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+bool check_test_2(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 	// Check input is unchanged
 	if (
 		strncmp(test_2_trans_text, translate->text, translate->l_text)
@@ -135,11 +135,11 @@ static const char test_3_trans_text[] =
 "@SQ\tSN:fish\tLN:133\n"
 "@RG\tID:fish\tPU:trans\n";
 
-void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
-	bam_header_t* out;
-	bam_header_t* translate;
+void setup_test_3(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+	bam_hdr_t* out;
+	bam_hdr_t* translate;
 	
-	translate = bam_header_init();
+	translate = bam_hdr_init();
 	translate->text = strdup(test_3_trans_text);
 	translate->l_text = strlen(test_3_trans_text);
 	translate->n_targets = 2;
@@ -149,7 +149,7 @@ void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_len[0] = 133;
 	translate->target_name[1] = strdup("fish");
 	translate->target_len[1] = 133;
-	out = bam_header_init();
+	out = bam_hdr_init();
 	const char* out_text =
 		"@HD\tVN:1.4\tSO:unknown\n"
 		"@SQ\tSN:fish\tLN:133\tSP:frog";
@@ -165,7 +165,7 @@ void setup_test_3(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
-bool check_test_3(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+bool check_test_3(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 	// Check input is unchanged
 	if (
 		strncmp(test_3_trans_text, translate->text, translate->l_text)
@@ -181,11 +181,11 @@ static const char test_4_trans_text[] =
 "@SQ\tSN:fish\tLN:133\n"
 "@RG\tID:fish\tPU:trans\n";
 
-void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
-	bam_header_t* out;
-	bam_header_t* translate;
+void setup_test_4(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+	bam_hdr_t* out;
+	bam_hdr_t* translate;
 	
-	translate = bam_header_init();
+	translate = bam_hdr_init();
 	translate->text = strdup(test_4_trans_text);
 	translate->l_text = strlen(test_4_trans_text);
 	translate->n_targets = 2;
@@ -195,7 +195,7 @@ void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_len[0] = 133;
 	translate->target_name[1] = strdup("fish");
 	translate->target_len[1] = 133;
-	out = bam_header_init();
+	out = bam_hdr_init();
 	const char* out_text =
 		"@HD\tVN:1.4\tSO:unknown\n"
 		"@SQ\tSN:fish\tLN:133\tSP:frog\n"
@@ -212,7 +212,7 @@ void setup_test_4(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
-bool check_test_4(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+bool check_test_4(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 	// Check input is unchanged
 	if (
 		strncmp(test_4_trans_text, translate->text, translate->l_text)
@@ -230,11 +230,11 @@ static const char test_5_trans_text[] =
 "@PG\tXX:dummy\tID:fish\tDS:trans\n"
 "@PG\tPP:fish\tID:hook\tDS:trans\n";
 
-void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
-	bam_header_t* out;
-	bam_header_t* translate;
+void setup_test_5(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+	bam_hdr_t* out;
+	bam_hdr_t* translate;
 	
-	translate = bam_header_init();
+	translate = bam_hdr_init();
 	translate->text = strdup(test_5_trans_text);
 	translate->l_text = strlen(test_5_trans_text);
 	translate->n_targets = 2;
@@ -244,7 +244,7 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 	translate->target_len[0] = 133;
 	translate->target_name[1] = strdup("fish");
 	translate->target_len[1] = 133;
-	out = bam_header_init();
+	out = bam_hdr_init();
 	const char* out_text =
 		"@HD\tVN:1.4\tSO:unknown\n"
 		"@SQ\tSN:fish\tLN:133\tSP:frog\n"
@@ -263,7 +263,7 @@ void setup_test_5(bam_header_t** translate_in, bam_header_t** out_in) {
 	*out_in = out;
 }
 
-bool check_test_5(bam_header_t* translate, bam_header_t* out, trans_tbl_t* tbl) {
+bool check_test_5(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 	// Check input is unchanged
 	if (
 		strncmp(test_5_trans_text, translate->text, translate->l_text)
@@ -295,8 +295,8 @@ int main(int argc, char**argv)
 	const long GIMMICK_SEED = 0x1234abcd330e;
 	srand48(GIMMICK_SEED);
 
-	bam_header_t* out;
-	bam_header_t* translate;
+	bam_hdr_t* out;
+	bam_hdr_t* translate;
 	
 	if (verbose) printf("BEGIN test 1\n");
 	// setup
@@ -320,8 +320,8 @@ int main(int argc, char**argv)
 	}
 	if (check_test_1(translate, out, &tbl_1)) { ++success; } else {	++failure; }
 	// teardown
-	bam_header_destroy(translate);
-	bam_header_destroy(out);
+	bam_hdr_destroy(translate);
+	bam_hdr_destroy(out);
 	trans_tbl_destroy(&tbl_1);
 	if (verbose) printf("END test 1\n");
 	
@@ -347,8 +347,8 @@ int main(int argc, char**argv)
 	}
 	if (check_test_2(translate, out, &tbl_2)) { ++success; } else {	++failure; }
 	// teardown
-	bam_header_destroy(translate);
-	bam_header_destroy(out);
+	bam_hdr_destroy(translate);
+	bam_hdr_destroy(out);
 	trans_tbl_destroy(&tbl_2);
 	if (verbose) printf("END test 2\n");
 	
@@ -374,8 +374,8 @@ int main(int argc, char**argv)
 	}
 	if (check_test_3(translate, out, &tbl_3)) { ++success; } else {	++failure; }
 	// teardown
-	bam_header_destroy(translate);
-	bam_header_destroy(out);
+	bam_hdr_destroy(translate);
+	bam_hdr_destroy(out);
 	trans_tbl_destroy(&tbl_3);
 	if (verbose) printf("END test 3\n");
 	
@@ -401,8 +401,8 @@ int main(int argc, char**argv)
 	}
 	if (check_test_4(translate, out, &tbl_4)) { ++success; } else {	++failure; }
 	// teardown
-	bam_header_destroy(translate);
-	bam_header_destroy(out);
+	bam_hdr_destroy(translate);
+	bam_hdr_destroy(out);
 	trans_tbl_destroy(&tbl_4);
 	if (verbose) printf("END test 4\n");
 	
@@ -429,8 +429,8 @@ int main(int argc, char**argv)
 	}
 	if (check_test_5(translate, out, &tbl_5)) { ++success; } else {	++failure; }
 	// teardown
-	bam_header_destroy(translate);
-	bam_header_destroy(out);
+	bam_hdr_destroy(translate);
+	bam_hdr_destroy(out);
 	trans_tbl_destroy(&tbl_5);
 	if (verbose) printf("END test 5\n");
 	

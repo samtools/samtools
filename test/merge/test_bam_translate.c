@@ -17,24 +17,24 @@ void dump_read(bam1_t* b) {
 	if (b->data) {
 		printf("->data:");
 		int i;
-		for (i = 0; i < b->data_len; ++i) {
+		for (i = 0; i < b->l_data; ++i) {
 			printf("%x ", b->data[i]);
 		}
 		printf("\n");
 	}
 	if (b->core.l_qname) {
-		printf("qname: %s\n",bam1_qname(b));
+		printf("qname: %s\n",bam_get_qname(b));
 	}
 	if (b->core.l_qseq) {
 		printf("qseq:");
 		int i;
 		for (i = 0; i < b->core.l_qseq; ++i) {
-			printf("%c",bam_nt16_rev_table[bam_nt16_table[bam1_seqi(bam1_seq(b),i)]]);
+			printf("%c",seq_nt16_str[seq_nt16_table[bam_seqi(bam_get_seq(b),i)]]);
 		}
 		printf("\n");
 		printf("qual:");
 		for (i = 0; i < b->core.l_qseq; ++i) {
-			printf("%c",bam1_qual(b)[i]);
+			printf("%c",bam_get_qual(b)[i]);
 		}
 		printf("\n");
 
@@ -42,7 +42,7 @@ void dump_read(bam1_t* b) {
 
 	if (bam_get_l_aux(b)) {
 		int i = 0;
-		uint8_t* aux = bam1_aux(b);
+		uint8_t* aux = bam_get_aux(b);
 
 		while (i < bam_get_l_aux(b)) {
 			printf("%.2s:%c:",aux+i,*(aux+i+2));
@@ -99,7 +99,7 @@ void setup_test_1(bam1_t** b_in, trans_tbl_t* tbl) {
 					 "" // aux
 		   , data_len
 					 );
-	b->m_data = b->data_len = data_len;
+	b->m_data = b->l_data = data_len;
 	
 	*b_in = b;
 }
@@ -139,7 +139,7 @@ void setup_test_2(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "RGZhello\0" // aux
 		   , data_len
 		   );
-	b->m_data = b->data_len = data_len;
+	b->m_data = b->l_data = data_len;
 	
 	*b_in = b;
 }
@@ -180,7 +180,7 @@ void setup_test_3(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "PGZhello\0" // aux
 		   , data_len
 		   );
-	b->m_data = b->data_len = data_len;
+	b->m_data = b->l_data = data_len;
 	
 	*b_in = b;
 }
@@ -217,7 +217,7 @@ void setup_test_4(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "RGZrg4hello\0" // aux
 		   , data_len
 		   );
-	b->m_data = b->data_len = data_len;
+	b->m_data = b->l_data = data_len;
 	
 	*b_in = b;
 }
@@ -255,7 +255,7 @@ void setup_test_5(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "PGZpg5hello\0" // aux
 		   , data_len
 		   );
-	b->m_data = b->data_len = data_len;
+	b->m_data = b->l_data = data_len;
 	
 	*b_in = b;
 }
@@ -298,7 +298,7 @@ void setup_test_6(bam1_t** b_in, trans_tbl_t* tbl) {
 		   "RGZhello\0PGZquail\0" // aux
 		   , data_len
 		   );
-	b->m_data = b->data_len = data_len;
+	b->m_data = b->l_data = data_len;
 	
 	*b_in = b;
 }
