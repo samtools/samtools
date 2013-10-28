@@ -205,7 +205,7 @@ extern "C" {
 	  @param  fn  SAM file name
 	  @return     SAM file handler
 	 */
-	static inline tamFile samtools_sam_open(const char *fn) { return sam_open(fn, "r", NULL); }
+	static inline tamFile samtools_sam_open(const char *fn) { return sam_open(fn, "r"); }
 	#undef  sam_open
 	#define sam_open samtools_sam_open
 

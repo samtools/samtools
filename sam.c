@@ -13,24 +13,17 @@ int samthreads(samfile_t *fp, int n_threads, int n_sub_blks)
 samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 {
 	// hts_open() is really sam_open(), except for #define games
-	samFile *hts_fp = hts_open(fn, mode, strchr(mode, 'r')? aux : NULL);
+	samFile *hts_fp = hts_open(fn, mode);
 	if (hts_fp == NULL)  return NULL;
 
 	samfile_t *fp = malloc(sizeof (samfile_t));
 	fp->file = hts_fp;
 	fp->x.bam = hts_fp->fp.bgzf;
 	if (strchr(mode, 'r')) {
+		if (aux) hts_set_fai_filename(fp->file, aux);
 		fp->header = sam_hdr_read(fp->file);  // samclose() will free this
-		if (fp->header->n_targets == 0) { // no @SQ fields
-			if (aux) { // check if aux is present
-				bam_header_t *textheader = fp->header;
-				fp->header = sam_header_read2((const char*)aux);
-				// FIXME should merge in any non-@SQ headers from textheader
-				bam_header_destroy(textheader);
-			}
-			if (fp->header->n_targets == 0 && bam_verbose >= 1)
-				fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
-		}
+		if (fp->header->n_targets == 0 && bam_verbose >= 1)
+			fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
 	}
 	else {
 		fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it

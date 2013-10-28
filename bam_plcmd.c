@@ -266,7 +266,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	for (i = 0; i < n; ++i) {
 		bam_hdr_t *h_tmp;
 		data[i] = calloc(1, sizeof(mplp_aux_t));
-		data[i]->fp = sam_open(fn[i], "rb", conf->fai_fname);
+		data[i]->fp = sam_open(fn[i], "rb");
+		hts_set_fai_filename(data[i]->fp, conf->fai_fname);
         if ( !data[i]->fp )
         {
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
@@ -312,9 +313,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	if (conf->flag & MPLP_GLF) 
     {
         if ( conf->flag & MPLP_VCF )
-            bcf_fp = (conf->flag&MPLP_NO_COMP) ? hts_open("-","wu",0) : hts_open("-","wz",0);   // uncompressed VCF or compressed VCF
+            bcf_fp = (conf->flag&MPLP_NO_COMP) ? hts_open("-","wu") : hts_open("-","wz");   // uncompressed VCF or compressed VCF
         else
-            bcf_fp = (conf->flag&MPLP_NO_COMP) ? hts_open("-","wub",0) : hts_open("-","wb",0);  // uncompressed BCF or compressed BCF
+            bcf_fp = (conf->flag&MPLP_NO_COMP) ? hts_open("-","wub") : hts_open("-","wb");  // uncompressed BCF or compressed BCF
 
 		bcf_hdr = bcf_hdr_init("w"); 
         kstring_t str = {0,0,0};
