@@ -114,6 +114,7 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #define MPLP_PRINT_POS  (1<<9)
 #define MPLP_PRINT_MAPQ (1<<10)
 #define MPLP_PER_SAMPLE (1<<11)
+#define MPLP_SMART_OVERLAPS (1<<12)
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -369,7 +370,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
 
         bcf_hdr_fmt_text(bcf_hdr);
-        bcf_hdr_write(bcf_fp, bcf_hdr);
+//        bcf_hdr_write(bcf_fp, bcf_hdr);
 
 		bca = bcf_call_init(-1., conf->min_baseQ);
 		bcr = calloc(sm->n, sizeof(bcf_callret1_t));
@@ -393,6 +394,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
 	// begin pileup
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
+    if ( conf->flag & MPLP_SMART_OVERLAPS ) bam_mplp_init_overlaps(iter);
 	max_depth = conf->max_depth;
 	if (max_depth * sm->n > 1<<20)
 		fprintf(stderr, "(%s) Max depth is above 1M. Potential memory hog!\n", __func__);
@@ -425,7 +427,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_call_combine(gplp.n, bcr, bca, ref16, &bc);
 			bcf_clear1(bcf_rec);
 			bcf_call2bcf(&bc, bcf_rec, bcr, conf->fmt_flag, 0, 0);
-			bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
+//			bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
 			// call indels
 			if (!(conf->flag&MPLP_NO_INDEL) && total_depth < max_indel_depth && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) 
             {
@@ -435,7 +437,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				if (bcf_call_combine(gplp.n, bcr, bca, -1, &bc) >= 0) {
 					bcf_clear1(bcf_rec);
 					bcf_call2bcf(&bc, bcf_rec, bcr, conf->fmt_flag, bca, ref);
-					bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
+//					bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
 				}
 			}
 		} else {
@@ -586,7 +588,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.max_depth = 250; mplp.max_indel_depth = 250;
 	mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
 	mplp.min_frac = 0.002; mplp.min_support = 1;
-	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN;
+	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_SMART_OVERLAPS;
     mplp.argc = argc; mplp.argv = argv;
     static struct option lopts[] = 
     {
@@ -594,8 +596,9 @@ int bam_mpileup(int argc, char *argv[])
         {"ff",1,0,2},   // filter flag
         {0,0,0,0}
     };
-	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV1:2:v",lopts,NULL)) >= 0) {
+	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV1:2:vx",lopts,NULL)) >= 0) {
 		switch (c) {
+        case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 : mplp.rflag_require = strtol(optarg,0,0); break;
         case  2 : mplp.rflag_filter  = strtol(optarg,0,0); break;
 		case 'f':
@@ -673,6 +676,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -Q INT       skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp.min_baseQ);
 		fprintf(stderr, "       --rf INT     required flags: skip reads with mask bits unset []\n");
 		fprintf(stderr, "       --ff INT     filter flags: skip reads with mask bits set []\n");
+		fprintf(stderr, "       -x           disable read-pair overlap detection\n");
 		fprintf(stderr, "\nOutput options:\n\n");
 		fprintf(stderr, "       -D/V         output per-sample DP/DV in BCF (requires -g/-v)\n");
 		fprintf(stderr, "       -g/v         generate BCF/VCF output (genotype likelihoods)\n");
