@@ -58,7 +58,7 @@ static int write_open(const char *fn, int is_forced)
 	if (!is_forced) {
 		if ((fd = open(fn, O_WRONLY | O_CREAT | O_TRUNC | O_EXCL, 0666)) < 0 && errno == EEXIST) {
 			fprintf(stderr, "[bgzip] %s already exists; do you wish to overwrite (y or n)? ", fn);
-			scanf("%c", &c);
+			if ( scanf("%c", &c) != 1 ) c = 'n';
 			if (c != 'Y' && c != 'y') {
 				fprintf(stderr, "[bgzip] not overwritten\n");
 				exit(1);
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
             if (c == 0) break;
             if (c < 0) error("Could not read %d bytes: Error %d\n", (end - start > WINDOW_SIZE)? WINDOW_SIZE:(end - start), fp->errcode);
             start += c;
-            write(f_dst, buffer, c);
+            if ( write(f_dst, buffer, c) != c ) error("Could not write %d bytes\n", c);
             if (end >= 0 && start >= end) break;
         }
         free(buffer);
