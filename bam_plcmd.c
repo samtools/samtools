@@ -106,7 +106,7 @@ typedef struct {
 	bam_pileup1_t **plp;
 } mplp_pileup_t;
 
-static int mplp_func(void *data, bam1_t *b)
+int mplp_func(void *data, bam1_t *b)
 {
 	extern int bam_realn(bam1_t *b, const char *ref);
 	extern int bam_prob_realn_core(bam1_t *b, const char *ref, int);
