@@ -405,7 +405,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 	max_indel_depth = conf->max_indel_depth * sm->n;
 	bam_mplp_set_maxcnt(iter, max_depth);
     bcf1_t *bcf_rec = bcf_init1();
-	while (bam_mplp_auto(iter, &tid, &pos, n_plp, plp) > 0) {
+    int ret;
+	while ( (ret=bam_mplp_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
 		if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
 		if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
 		if (tid != ref_tid) {
@@ -513,7 +514,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		free(data[i]);
 	}
 	free(data); free(plp); free(ref); free(n_plp);
-	return 0;
+	return ret;
 }
 
 #define MAX_PATH_LEN 1024
@@ -698,15 +699,18 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
 		return 1;
 	}
+    int ret;
     if (file_list) {
         if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
-        mpileup(&mplp,nfiles,fn);
+        ret = mpileup(&mplp,nfiles,fn);
         for (c=0; c<nfiles; c++) free(fn[c]);
         free(fn);
-    } else mpileup(&mplp, argc - optind, argv + optind);
+    } 
+    else 
+        ret = mpileup(&mplp, argc - optind, argv + optind);
 	if (mplp.rghash) khash_str2int_destroy_free(mplp.rghash);
 	free(mplp.reg); free(mplp.pl_list);
 	if (mplp.fai) fai_destroy(mplp.fai);
 	if (mplp.bed) bed_destroy(mplp.bed);
-	return 0;
+	return ret;
 }
