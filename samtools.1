@@ -471,10 +471,20 @@ format.
 
 .TP
 .B fixmate
-samtools fixmate <in.nameSrt.bam> <out.bam>
+samtools fixmate [-rp] <in.nameSrt.bam> <out.bam>
 
 Fill in mate coordinates, ISIZE and mate related flags from a
 name-sorted alignment.
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -r
+Remove secondary and unmapped reads.
+.TP 8
+.B -p
+Disable FR proper pair check.
+.RE
 
 .TP
 .B rmdup
@@ -559,6 +569,7 @@ designed for cutting fosmid clones from fosmid pool sequencing [Ref. Kitzman et 
 samtools phase [-AF] [-k len] [-b prefix] [-q minLOD] [-Q minBaseQ] <in.bam>
 
 Call and phase heterozygous SNPs.
+
 .B OPTIONS:
 .RS
 .TP 8
