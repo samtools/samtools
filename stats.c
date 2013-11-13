@@ -399,7 +399,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
 void read_ref_seq(stats_t *stats, int32_t tid, int32_t pos)
 {
     int i, fai_ref_len;
-    char *fai_ref = faidx_fetch_seq(stats->fai, stats->sam->header->target_name[tid], pos, pos+stats->mrseq_buf, &fai_ref_len);
+    char *fai_ref = faidx_fetch_seq(stats->fai, stats->sam->header->target_name[tid], pos, pos+stats->mrseq_buf-1, &fai_ref_len);
     
     uint8_t *ptr = stats->rseq_buf;
     for (i=0; i<fai_ref_len; i++)
@@ -433,7 +433,9 @@ float fai_gc_content(stats_t *stats, int pos, int len)
 {
     uint32_t gc,count,c;
     int i = pos - stats->rseq_pos, ito = i + len;
-    assert( i>=0 && ito<=stats->nrseq_buf );
+    assert( i>=0 );
+
+    if (  ito >= stats->nrseq_buf ) ito = stats->nrseq_buf - 1;
 
     // Count GC content
     gc = count = 0;
