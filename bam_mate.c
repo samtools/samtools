@@ -58,7 +58,7 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 		kputw(bam_cigar_oplen(cigar[i]), str);
 		kputc(bam_cigar_opchr(cigar[i]), str);
 	}
-	bam_aux_append(b1, "CT", 'Z', str->l+1, (uint8_t*)str->s); 
+	bam_aux_append(b1, "ct", 'Z', str->l+1, (uint8_t*)str->s); 
 }
 
 /*
