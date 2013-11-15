@@ -435,7 +435,7 @@ float fai_gc_content(stats_t *stats, int pos, int len)
     int i = pos - stats->rseq_pos, ito = i + len;
     assert( i>=0 );
 
-    if (  ito >= stats->nrseq_buf ) ito = stats->nrseq_buf - 1;
+    if (  ito > stats->nrseq_buf ) ito = stats->nrseq_buf;
 
     // Count GC content
     gc = count = 0;
