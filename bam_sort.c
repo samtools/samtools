@@ -750,13 +750,16 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 	return bam_merge_core2(by_qname, out, headers, n, fn, flag, reg, 0, -1);
 }
 
+int read_file_list(const char *file_list,int *n,char **argv[]);
+
 int bam_merge(int argc, char *argv[])
 {
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
 	char *fn_headers = NULL, *reg = NULL;
+	const char *file_list = NULL;
 	long random_seed = (long)time(NULL);
 
-	while ((c = getopt(argc, argv, "h:nru1R:f@:l:cps:")) >= 0) {
+	while ((c = getopt(argc, argv, "h:nru1R:f@:l:cps:b:")) >= 0) {
 		switch (c) {
 		case 'r': flag |= MERGE_RG; break;
 		case 'f': flag |= MERGE_FORCE; break;
@@ -770,6 +773,7 @@ int bam_merge(int argc, char *argv[])
 		case 'c': flag |= MERGE_COMBINE_RG; break;
 		case 'p': flag |= MERGE_COMBINE_PG; break;
 		case 's': random_seed = atol(optarg); break;
+		case 'b': file_list = optarg; break;
 		}
 	}
 	srand48(random_seed);
@@ -787,7 +791,8 @@ int bam_merge(int argc, char *argv[])
 		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
 		fprintf(stderr, "         -c       combine RG tags with colliding IDs rather than amending them\n");
 		fprintf(stderr, "         -p       combine PG tags with colliding IDs rather than amending them\n");
-		fprintf(stderr, "         -s VALUE override random seed\n\n");
+		fprintf(stderr, "         -s VALUE override random seed\n");
+		fprintf(stderr, "         -b FILE  list of input BAM filenames, one per line [null]\n\n");
 		return 1;
 	}
 	if (!(flag & MERGE_FORCE) && strcmp(argv[optind], "-")) {
@@ -798,7 +803,20 @@ int bam_merge(int argc, char *argv[])
 			return 1;
 		}
 	}
-	if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, argc - optind - 1, argv + optind + 1, flag, reg, n_threads, level) < 0) ret = 1;
+	int nfiles = 0;
+	char** fn = NULL;
+	if (file_list) {
+		// do something
+		if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
+
+	} else {
+		// otherwise get list of files to merge from command line
+		nfiles = argc - optind - 1;
+		fn = argv + optind + 1;
+	}
+	if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, nfiles, fn, flag, reg, n_threads, level) < 0) ret = 1;
+	for (c=0; c<nfiles; c++) free(fn[c]);
+    free(fn);
 	free(reg);
 	free(fn_headers);
 	return ret;
