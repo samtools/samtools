@@ -11,6 +11,7 @@
 #include <htslib/kstring.h>
 #include "khash_utils.h"
 #include "sam_header.h"
+#include "samtools.h"
 
 /*!  
   // Put this in htslib?
