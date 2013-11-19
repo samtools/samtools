@@ -409,24 +409,27 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
     if ( !nr ) return;
 
     int avg_dp = (call->anno[0] + call->anno[1] + nr) / call->n;    // average depth
-    double M   = (double)nr / avg_dp;   // an approximate number of variant alleles in the population
-    if ( M>call->n ) M = call->n;
+    double M   = round((double)nr / avg_dp);   // an approximate number of variants samples in the population
+    if ( M>call->n ) M = call->n;       // clamp M at the number of samples
+    else if ( M==0 ) M = 1;
     double f = M / 2. / call->n;        // allele frequency
-    double p = nr / call->n;            // number of variant reads per sample expected if variant not real (poisson)
-    double q = nr / M;                  // number of variant reads per sample expected if variant is real (poisson)
+    double p = (double) nr / call->n;   // number of variant reads per sample expected if variant not real (poisson)
+    double q = (double) nr / M;         // number of variant reads per sample expected if variant is real (poisson)
     double sum = 0;
 
+    //fprintf(stderr,"M=%.1f  p=%e q=%e f=%f  dp=%d\n",M,p,q,f,avg_dp);
     int i;
     for (i=0; i<call->n; i++)
     {
         int oi = bcr[i].anno[2] + bcr[i].anno[3];
-        if ( !oi )
-            sum += log(2*f*(1-f)*pow(q,oi)*exp(-q) + f*f*pow(2*q,oi)*exp(-2*q)) - log(pow(p,oi)) - p;
+        double tmp;
+        if ( oi )
+            tmp = log(f) + oi*log(q/p) - q + log(2*(1-f) + f*pow(2,oi)*exp(-q)) + p;
         else
-            sum += log(2*f*(1-f)*exp(-q) + f*f*exp(-2*q) + (1-f)*(1-f)) - p;
+            tmp = log(2*f*(1-f)*exp(-q) + f*f*exp(-2*q) + (1-f)*(1-f)) + p;
+        sum += tmp;
+        // fprintf(stderr,"oi=%d %e\n", oi,tmp);
     }
-
-    // fprintf(stderr,"%.0f %.0f %.0f %.0f .. %e  (f=%e p=%e q=%e nr=%d)\n", call->anno[0],call->anno[1],call->anno[2],call->anno[3], sum,f,p,q, nr);
     call->seg_bias = sum;
 }
 

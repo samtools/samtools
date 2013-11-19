@@ -321,7 +321,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bcf_hdr = bcf_hdr_init("w"); 
         kstring_t str = {0,0,0};
 
-        ksprintf(&str, "##samtoolsVersion=WithHTSLib-0.0.0\n");
+        ksprintf(&str, "##samtoolsVersion=%s+htslib-%s\n",samtools_version(),hts_version());
         bcf_hdr_append(bcf_hdr, str.s);
 
         str.l = 0;
