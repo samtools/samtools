@@ -58,16 +58,21 @@ khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
 {
 	khash_t(kh_rg)* rg_hash = kh_init(kh_rg);
 	// given sample id return all the RD ID's
-	const char rg_regex[] = "^@RG\t(.*\t)?ID:([A-Z";
+	const char rg_regex[] = "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)";
 	
 	regex_t rg_id;
 	regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
 	if (matches == NULL) { perror("out of memory"); exit(-1); }
-	regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-	char* text = header;
-	while(1) { //	foreach rg id in  header
-		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
+	regcomp(&rg_id, rg_regex, REG_EXTENDED|REG_NEWLINE);
+	char* text = strdup(header);
+	char* end = text + strlen(header);
+	char* tofree = text;
+	while (end > text && regexec(&rg_id, text, 2, matches, 0) == 0) { //	foreach rg id in  header
+		int ret;
+		kh_put(kh_rg, rg_hash, strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so), &ret); // Add the RG to the list
+		text += matches[0].rm_eo + 1; // Move search pointer forward
 	}
+	free(tofree);
 	return rg_hash;
 }
 
@@ -108,28 +113,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *sam
 	// If the user has asked for specific samples find out create a list of readgroups make up these samples
 	if ( samples )
 	{
-#if 0
-		const char *key, *val;
-		int n = 0;
-		tv->rg_hash = kh_init(kh_rg); // Init the list of rg's
-		while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val)) )
-		{
-			if ( !strcmp(samples,key) || (val && !strcmp(samples,val)) )
-			{
-				khiter_t k = kh_get(kh_rg, tv->rg_hash, key);
-				if ( k != kh_end(tv->rg_hash) ) continue;
-				int ret;
-				k = kh_put(kh_rg, tv->rg_hash, key, &ret); // Add the RG to the list
-				kh_value(tv->rg_hash, k) = val;
-				n++;
-			}
-		}
-		if ( !n )
-		{
-			fprintf(stderr,"The sample or read group \"%s\" not present.\n", samples);
-			exit(EXIT_FAILURE);
-		}
-#endif
+		tv->rg_hash = get_rg_sample(tv->header->text, samples); // Init the list of rg's
 	}
 	
 	return 0;
