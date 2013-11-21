@@ -1470,8 +1470,8 @@ int main_stats(int argc, char *argv[])
     free(stats->del_cycles_1st);
     free(stats->del_cycles_2nd);
     destroy_regions(stats);
-    free(stats);
     if ( stats->rg_hash ) khash_str2int_destroy(stats->rg_hash);
+    free(stats);
 
     return 0;
 }
