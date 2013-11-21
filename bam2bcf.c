@@ -400,6 +400,14 @@ double calc_mwu_bias(int *a, int *b, int n)
     return mann_whitney_1947(na,nb,U) * sqrt(2*M_PI*var2);
 }
 
+static inline double logsumexp2(double a, double b)
+{
+    if ( a>b )
+        return log(1 + exp(b-a)) + a;
+    else
+        return log(1 + exp(a-b)) + b;
+}
+
 void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
 {
     call->seg_bias = HUGE_VAL;
@@ -416,15 +424,20 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
     double p = (double) nr / call->n;   // number of variant reads per sample expected if variant not real (poisson)
     double q = (double) nr / M;         // number of variant reads per sample expected if variant is real (poisson)
     double sum = 0;
+    const double log2 = log(2.0);
 
-    //fprintf(stderr,"M=%.1f  p=%e q=%e f=%f  dp=%d\n",M,p,q,f,avg_dp);
+    // fprintf(stderr,"M=%.1f  p=%e q=%e f=%f  dp=%d\n",M,p,q,f,avg_dp);
     int i;
     for (i=0; i<call->n; i++)
     {
-        int oi = bcr[i].anno[2] + bcr[i].anno[3];
+        int oi = bcr[i].anno[2] + bcr[i].anno[3];       // observed number of non-ref reads
         double tmp;
         if ( oi )
-            tmp = log(f) + oi*log(q/p) - q + log(2*(1-f) + f*pow(2,oi)*exp(-q)) + p;
+        {
+            // tmp = log(f) + oi*log(q/p) - q + log(2*(1-f) + f*pow(2,oi)*exp(-q)) + p; // this can under/overflow
+            tmp = logsumexp2(log(2*(1-f)), log(f) + oi*log2 - q);
+            tmp += log(f) + oi*log(q/p) - q + p;
+        }
         else
             tmp = log(2*f*(1-f)*exp(-q) + f*f*exp(-2*q) + (1-f)*(1-f)) + p;
         sum += tmp;
