@@ -166,7 +166,6 @@ static int mplp_func(void *data, bam1_t *b)
 			continue;
 		}
         if (ma->conf->rflag_require && !(ma->conf->rflag_require&b->core.flag)) { skip = 1; continue; }
-        if (ma->conf->rflag_filter && ma->conf->rflag_filter&b->core.flag) { skip = 1; continue; }
 		if (ma->conf->bed) { // test overlap
 			skip = !bed_overlap(ma->conf->bed, ma->h->target_name[b->core.tid], b->core.pos, bam_calend(&b->core, bam_get_cigar(b)));
 			if (skip) continue;
@@ -395,6 +394,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
 	// begin pileup
 	iter = bam_mplp_init(n, mplp_func, (void**)data);
+    if ( conf->rflag_filter ) bam_mplp_set_mask(iter, conf->rflag_filter);
     if ( conf->flag & MPLP_SMART_OVERLAPS ) bam_mplp_init_overlaps(iter);
 	max_depth = conf->max_depth;
 	if (max_depth * sm->n > 1<<20)
