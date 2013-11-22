@@ -117,7 +117,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	iter = (bam_iter_t*)calloc(n, sizeof(bam_iter_t));
 	// prepare RG tag
 	if (flag & MERGE_RG) {
-		RG = (char**)calloc(n, sizeof(void*));
+		RG = (char**)calloc(n, sizeof(char*));
 		RG_len = (int*)calloc(n, sizeof(int));
 		for (i = 0; i != n; ++i) {
 			int l = strlen(fn[i]);
@@ -466,7 +466,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 		if (k == max_k) {
 			size_t old_max = max_k;
 			max_k = max_k? max_k<<1 : 0x10000;
-			buf = realloc(buf, max_k * sizeof(void*));
+			buf = realloc(buf, max_k * sizeof(bam1_t*));
 			memset(buf + old_max, 0, sizeof(void*) * (max_k - old_max));
 		}
 		if (buf[k] == 0) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));

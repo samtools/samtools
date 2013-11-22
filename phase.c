@@ -87,7 +87,7 @@ static int **count_all(int l, int vpos, nseq_t *hash)
 	int i, j, **cnt;
 	uint8_t *seq;
 	seq = calloc(l, 1);
-	cnt = calloc(vpos, sizeof(void*));
+	cnt = calloc(vpos, sizeof(int*));
 	for (i = 0; i < vpos; ++i) cnt[i] = calloc(1<<l, sizeof(int));
 	for (k = 0; k < kh_end(hash); ++k) {
 		if (kh_exist(hash, k)) {
@@ -116,7 +116,7 @@ static int8_t *dynaprog(int l, int vpos, int **w)
 	uint32_t x, z = 1u<<(l-1), mask = (1u<<l) - 1;
 	f[0] = calloc(z, sizeof(int));
 	f[1] = calloc(z, sizeof(int));
-	b = calloc(vpos, sizeof(void*));
+	b = calloc(vpos, sizeof(int8_t*));
 	prev = f[0]; curr = f[1];
 	// fill the backtrack matrix
 	for (i = 0; i < vpos; ++i) {
@@ -405,7 +405,7 @@ static int phase(phaseg_t *g, const char *chr, int vpos, uint64_t *cns, nseq_t *
 			i + g->vpos_shift + 1, (int)(x&0xffff), (int)(x>>16&0xffff), (int)(x>>32&0xffff), (int)(x>>48&0xffff));
 	}
 	free(path); free(pcnt); free(regmask); free(sitemask);
-	seqs = calloc(n_seqs, sizeof(void*));
+	seqs = calloc(n_seqs, sizeof(frag_t*));
 	for (k = 0, i = 0; k < kh_end(hash); ++k) 
 		if (kh_exist(hash, k) && kh_val(hash, k).vpos < vpos && !kh_val(hash, k).single)
 			seqs[i++] = &kh_val(hash, k);
@@ -455,7 +455,7 @@ static int readaln(void *data, bam1_t *b)
 	if (!(b->core.flag & (BAM_FUNMAP|BAM_FSECONDARY|BAM_FQCFAIL|BAM_FDUP)) && g->pre) {
 		if (g->n == g->m) {
 			g->m = g->m? g->m<<1 : 16;
-			g->b = realloc(g->b, g->m * sizeof(void*));
+			g->b = realloc(g->b, g->m * sizeof(bam1_t*));
 		}
 		g->b[g->n++] = bam_dup1(b);
 	}
