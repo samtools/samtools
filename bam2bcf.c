@@ -417,7 +417,7 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
     if ( !nr ) return;
 
     int avg_dp = (call->anno[0] + call->anno[1] + nr) / call->n;    // average depth
-    double M   = round((double)nr / avg_dp);   // an approximate number of variants samples in the population
+    double M   = floor((double)nr / avg_dp + 0.5);   // an approximate number of variants samples in the population
     if ( M>call->n ) M = call->n;       // clamp M at the number of samples
     else if ( M==0 ) M = 1;
     double f = M / 2. / call->n;        // allele frequency
