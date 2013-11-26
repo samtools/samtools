@@ -52,7 +52,7 @@ typedef struct {
     int tid, pos;
     bcf_hdr_t *bcf_hdr;
 	int a[5]; // alleles: ref, alt, alt2, alt3
-    float qsum[4];  // for the QS tag, scaled to 1
+    float qsum[5];  // for the QS tag, scaled to 1
 	int n, n_alleles, shift, ori_ref, unseen;
 	int n_supp; // number of supporting non-reference reads
 	double anno[16];
