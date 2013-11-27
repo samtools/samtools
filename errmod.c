@@ -109,7 +109,6 @@ int errmod_cal(const errmod_t *em, int n, int m, uint16_t *bases, float *q)
 	// The total count of each base observed per strand
 	int w[32];
 
-	if (m > m) return -1; // FIXME: This looks like a typo?
         /* zero out q */
 	memset(q, 0, m * m * sizeof(float));
 	if (n == 0) return 0;
