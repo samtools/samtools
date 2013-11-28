@@ -592,6 +592,7 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.min_frac = 0.002; mplp.min_support = 1;
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_SMART_OVERLAPS;
     mplp.argc = argc; mplp.argv = argv;
+    mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
     static struct option lopts[] = 
     {
         {"rf",1,0,1},   // require flag
@@ -601,8 +602,14 @@ int bam_mpileup(int argc, char *argv[])
 	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV1:2:vx",lopts,NULL)) >= 0) {
 		switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
-        case  1 : mplp.rflag_require = strtol(optarg,0,0); break;
-        case  2 : mplp.rflag_filter  = strtol(optarg,0,0); break;
+        case  1 : 
+            mplp.rflag_require = bam_str2flag(optarg); 
+            if ( mplp.rflag_require<0 ) { fprintf(stderr,"Could not parse --rf %s\n", optarg); return 1; }
+            break;
+        case  2 : 
+            mplp.rflag_filter = bam_str2flag(optarg); 
+            if ( mplp.rflag_filter<0 ) { fprintf(stderr,"Could not parse --ff %s\n", optarg); return 1; }
+            break;
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
@@ -657,47 +664,51 @@ int bam_mpileup(int argc, char *argv[])
 		}
 	}
 	if (use_orphan) mplp.flag &= ~MPLP_NO_ORPHAN;
-	if (argc == 1) {
+	if (argc == 1) 
+    {
+        char *tmp_require = bam_flag2str(mplp.rflag_require);
+        char *tmp_filter  = bam_flag2str(mplp.rflag_filter);
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage: samtools mpileup [options] in1.bam [in2.bam [...]]\n\n");
 		fprintf(stderr, "Input options:\n\n");
-		fprintf(stderr, "       -6           assume the quality is in the Illumina-1.3+ encoding\n");
-		fprintf(stderr, "       -A           count anomalous read pairs\n");
-		fprintf(stderr, "       -B           disable BAQ computation\n");
-		fprintf(stderr, "       -b FILE      list of input BAM filenames, one per line [null]\n");
-		fprintf(stderr, "       -C INT       parameter for adjusting mapQ; 0 to disable [0]\n");
-		fprintf(stderr, "       -d INT       max per-BAM depth to avoid excessive memory usage [%d]\n", mplp.max_depth);
-		fprintf(stderr, "       -E           recalculate extended BAQ on the fly thus ignoring existing BQs\n");
-		fprintf(stderr, "       -f FILE      faidx indexed reference sequence file [null]\n");
-		fprintf(stderr, "       -G FILE      exclude read groups listed in FILE [null]\n");
-		fprintf(stderr, "       -l FILE      list of positions (chr pos) or regions (BED) [null]\n");
-		fprintf(stderr, "       -M INT       cap mapping quality at INT [%d]\n", mplp.max_mq);
-		fprintf(stderr, "       -r STR       region in which pileup is generated [null]\n");
-		fprintf(stderr, "       -R           ignore RG tags\n");
-		fprintf(stderr, "       -q INT       skip alignments with mapQ smaller than INT [%d]\n", mplp.min_mq);
-		fprintf(stderr, "       -Q INT       skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp.min_baseQ);
-		fprintf(stderr, "       --rf INT     required flags: skip reads with mask bits unset []\n");
-		fprintf(stderr, "       --ff INT     filter flags: skip reads with mask bits set []\n");
-		fprintf(stderr, "       -x           disable read-pair overlap detection\n");
+		fprintf(stderr, "       -6              assume the quality is in the Illumina-1.3+ encoding\n");
+		fprintf(stderr, "       -A              count anomalous read pairs\n");
+		fprintf(stderr, "       -B              disable BAQ computation\n");
+		fprintf(stderr, "       -b FILE         list of input BAM filenames, one per line [null]\n");
+		fprintf(stderr, "       -C INT          parameter for adjusting mapQ; 0 to disable [0]\n");
+		fprintf(stderr, "       -d INT          max per-BAM depth to avoid excessive memory usage [%d]\n", mplp.max_depth);
+		fprintf(stderr, "       -E              recalculate extended BAQ on the fly thus ignoring existing BQs\n");
+		fprintf(stderr, "       -f FILE         faidx indexed reference sequence file [null]\n");
+		fprintf(stderr, "       -G FILE         exclude read groups listed in FILE [null]\n");
+		fprintf(stderr, "       -l FILE         list of positions (chr pos) or regions (BED) [null]\n");
+		fprintf(stderr, "       -M INT          cap mapping quality at INT [%d]\n", mplp.max_mq);
+		fprintf(stderr, "       -r STR          region in which pileup is generated [null]\n");
+		fprintf(stderr, "       -R              ignore RG tags\n");
+		fprintf(stderr, "       -q INT          skip alignments with mapQ smaller than INT [%d]\n", mplp.min_mq);
+		fprintf(stderr, "       -Q INT          skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp.min_baseQ);
+		fprintf(stderr, "       --rf STR|INT    required flags: skip reads with mask bits unset [%s]\n", tmp_require);
+		fprintf(stderr, "       --ff STR|INT    filter flags: skip reads with mask bits set [%s]\n", tmp_filter);
+		fprintf(stderr, "       -x              disable read-pair overlap detection\n");
 		fprintf(stderr, "\nOutput options:\n\n");
-		fprintf(stderr, "       -D/V         output per-sample DP/DV in BCF (requires -g/-v)\n");
-		fprintf(stderr, "       -g/v         generate BCF/VCF output (genotype likelihoods)\n");
-		fprintf(stderr, "       -O           output base positions on reads (disabled by -g/-u)\n");
-		fprintf(stderr, "       -s           output mapping quality (disabled by -g/-u)\n");
-		fprintf(stderr, "       -S           output per-sample strand bias P-value in BCF (require -g/-u)\n");
-		fprintf(stderr, "       -u           generate uncompressed BCF/VCF output\n");
+		fprintf(stderr, "       -D/V            output per-sample DP/DV in BCF (requires -g/-v)\n");
+		fprintf(stderr, "       -g/v            generate BCF/VCF output (genotype likelihoods)\n");
+		fprintf(stderr, "       -O              output base positions on reads (disabled by -g/-u)\n");
+		fprintf(stderr, "       -s              output mapping quality (disabled by -g/-u)\n");
+		fprintf(stderr, "       -S              output per-sample strand bias P-value in BCF (require -g/-u)\n");
+		fprintf(stderr, "       -u              generate uncompressed BCF/VCF output\n");
 		fprintf(stderr, "\nSNP/INDEL genotype likelihoods options (effective with `-g' or `-u'):\n\n");
-		fprintf(stderr, "       -e INT       Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
-		fprintf(stderr, "       -F FLOAT     minimum fraction of gapped reads for candidates [%g]\n", mplp.min_frac);
-		fprintf(stderr, "       -h INT       coefficient for homopolymer errors [%d]\n", mplp.tandemQ);
-		fprintf(stderr, "       -I           do not perform indel calling\n");
-		fprintf(stderr, "       -L INT       max per-sample depth for INDEL calling [%d]\n", mplp.max_indel_depth);
-		fprintf(stderr, "       -m INT       minimum gapped reads for indel candidates [%d]\n", mplp.min_support);
-		fprintf(stderr, "       -o INT       Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
-		fprintf(stderr, "       -p           apply -m and -F per-sample to increase sensitivity\n");
-		fprintf(stderr, "       -P STR       comma separated list of platforms for indels [all]\n");
+		fprintf(stderr, "       -e INT          Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
+		fprintf(stderr, "       -F FLOAT        minimum fraction of gapped reads for candidates [%g]\n", mplp.min_frac);
+		fprintf(stderr, "       -h INT          coefficient for homopolymer errors [%d]\n", mplp.tandemQ);
+		fprintf(stderr, "       -I              do not perform indel calling\n");
+		fprintf(stderr, "       -L INT          max per-sample depth for INDEL calling [%d]\n", mplp.max_indel_depth);
+		fprintf(stderr, "       -m INT          minimum gapped reads for indel candidates [%d]\n", mplp.min_support);
+		fprintf(stderr, "       -o INT          Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
+		fprintf(stderr, "       -p              apply -m and -F per-sample to increase sensitivity\n");
+		fprintf(stderr, "       -P STR          comma separated list of platforms for indels [all]\n");
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
+        free(tmp_require); free(tmp_filter);
 		return 1;
 	}
     int ret;

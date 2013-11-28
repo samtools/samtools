@@ -121,21 +121,27 @@ static int read_aln(void *data, bam1_t *b)
 	extern int bam_prob_realn_core(bam1_t *b, const char *ref, int flag);
 	ct_t *g = (ct_t*)data;
 	int ret, len;
-	ret = bam_read1(g->fp, b);
-	if (ret >= 0 && g->fai && b->core.tid >= 0 && (b->core.flag&4) == 0) {
-		if (b->core.tid != g->tid) { // then load the sequence
-			free(g->ref);
-			g->ref = fai_fetch(g->fai, g->h->target_name[b->core.tid], &len);
-			g->tid = b->core.tid;
-		}
-		bam_prob_realn_core(b, g->ref, 1<<1|1);
-	}
+    while (1)
+    {
+        ret = bam_read1(g->fp, b);
+        if ( ret<0 ) break;
+        if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
+        if ( g->fai && b->core.tid >= 0 ) {
+            if (b->core.tid != g->tid) { // then load the sequence
+                free(g->ref);
+                g->ref = fai_fetch(g->fai, g->h->target_name[b->core.tid], &len);
+                g->tid = b->core.tid;
+            }
+            bam_prob_realn_core(b, g->ref, 1<<1|1);
+        }
+        break;
+    }
 	return ret;
 }
 
 int main_cut_target(int argc, char *argv[])
 {
-	int c, tid, pos, n, lasttid = -1, lastpos = -1, l, max_l;
+	int c, tid, pos, n, lasttid = -1, l, max_l;
 	const bam_pileup1_t *p;
 	bam_plp_t plp;
 	uint16_t *cns;
@@ -178,7 +184,6 @@ int main_cut_target(int argc, char *argv[])
 			lasttid = tid;
 		}
 		cns[pos] = gencns(&g, n, p);
-		lastpos = pos;
 	}
 	process_cns(g.h, lasttid, l, cns);
 	free(cns);

@@ -19,9 +19,16 @@ typedef struct {
 
 static int read_bam(void *data, bam1_t *b)
 {
-	aux_t *aux = (aux_t*)data;
-	int ret = bam_iter_read(aux->fp, aux->iter, b);
-	if ((int)b->core.qual < aux->min_mapQ) b->core.flag |= BAM_FUNMAP;
+	aux_t *aux = (aux_t*)data; // data in fact is a pointer to an auxiliary structure
+    int ret;
+    while (1)
+    {
+        ret = aux->iter? bam_iter_read(aux->fp, aux->iter, b) : bam_read1(aux->fp, b);
+        if ( ret<0 ) break;
+        if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
+        if ( (int)b->core.qual < aux->min_mapQ ) continue;
+        break;
+    }
 	return ret;
 }
 

@@ -24,11 +24,16 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end); // test if c
 static int read_bam(void *data, bam1_t *b) // read level filters better go here to avoid pileup
 {
 	aux_t *aux = (aux_t*)data; // data in fact is a pointer to an auxiliary structure
-	int ret = aux->iter? bam_iter_read(aux->fp, aux->iter, b) : bam_read1(aux->fp, b);
-	if (!(b->core.flag&BAM_FUNMAP)) {
-		if ((int)b->core.qual < aux->min_mapQ) b->core.flag |= BAM_FUNMAP;
-		else if (aux->min_len && bam_cigar2qlen(&b->core, bam1_cigar(b)) < aux->min_len) b->core.flag |= BAM_FUNMAP;
-	}
+    int ret;
+    while (1)
+    {
+        ret = aux->iter? bam_iter_read(aux->fp, aux->iter, b) : bam_read1(aux->fp, b);
+        if ( ret<0 ) break;
+        if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
+        if ( (int)b->core.qual < aux->min_mapQ ) continue;
+        if ( aux->min_len && bam_cigar2qlen(&b->core, bam1_cigar(b)) < aux->min_len ) continue;
+        break;
+    }
 	return ret;
 }
 
