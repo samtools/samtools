@@ -14,7 +14,7 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-            faidx.o stats.o 
+            faidx.o stats.o bam_flags.o
             # tview todo: bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
 INCLUDES=	-I. -I$(HTSDIR)
 LIBCURSES=	-lcurses # -lXCurses
@@ -121,6 +121,7 @@ bam_stat.o: bam_stat.c $(bam_h)
 bam_tview.o: bam_tview.c $(bam_tview_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
+bam_flags.o: bam_flags.c $(sam_h)
 bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h
 bamtk.o: bamtk.c $(bam_h) version.h samtools.h
 bedcov.o: bedcov.c $(htslib_bgzf_h) $(bam_h) $(HTSDIR)/htslib/kseq.h

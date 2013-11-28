@@ -138,7 +138,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		mapQ = mapQ < bca->capQ? mapQ : bca->capQ;
 		if (q > mapQ) q = mapQ;
 		if (q > 63) q = 63;
-		if (q < 4) q = 4;
+		if (q < 4) q = 4;       // MQ=0 reads count as BQ=4
 		if (!is_indel) {
 			b = bam_seqi(bam_get_seq(p->b), p->qpos); // base
 			b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
@@ -474,47 +474,47 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
  */
 int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int ref_base /*4-bit*/, bcf_call_t *call)
 {
-	int ref4, i, j, qsum[4];
+	int ref4, i, j;
+    unsigned int qsum[5] = {0,0,0,0,0};
 	int64_t tmp;
 	if (ref_base >= 0) {
 		call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
 		if (ref4 > 4) ref4 = 4;
 	} else call->ori_ref = -1, ref4 = 0;
-	// calculate qsum
-	// this is done by calculating combined qsum across all samples
-	memset(qsum, 0, 4 * sizeof(int));
+	// calculate qsum, this is done by calculating combined qsum across all samples
 	for (i = 0; i < n; ++i)
 		for (j = 0; j < 4; ++j)
 			qsum[j] += calls[i].qsum[j];
 	// then encoding the base in the first two bits
     int qsum_tot=0;
     for (j=0; j<4; j++) { qsum_tot += qsum[j]; call->qsum[j] = 0; }
-	for (j = 0; j < 4; ++j) qsum[j] = qsum[j] << 2 | j;
+	for (j=0; j<4; j++) 
+    { 
+        assert( !(qsum[j]>>(sizeof(unsigned int)*8-2)) );   // if qsum is too big, insert sort will break
+        qsum[j] = qsum[j] << 2 | j; 
+    }
 	// find the top 2 alleles
-	for (i = 1; i < 4; ++i) // insertion sort
+	for (i = 1; i < 4; ++i) // insertion sort, ascending
 		for (j = i; j > 0 && qsum[j] < qsum[j-1]; --j)
 			tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
 
-
 	// Set the reference allele and alternative allele(s)
 
-	// Clear the allele list
+	// Set the alleles and QS values
 	for (i = 0; i < 5; ++i) call->a[i] = -1;
+	for (i = 0; i < 5; ++i) call->qsum[i] = 0;
 	call->unseen = -1;
 	call->a[0] = ref4;
-
-    // Set values for the QS tag
-	for (i = 3, j = 1; i >= 0; --i) {
-		if ((qsum[i]&3) != ref4) {
-			if (qsum[i]>>2 != 0) 
-            {
-                if ( j<4 ) call->qsum[j] = (float)(qsum[i]>>2)/qsum_tot; // ref N can make j>=4
-                call->a[j++]  = qsum[i]&3;
-            }
-			else break;
+	for (i = 3, j = 1; i >= 0; --i) // i: alleles sorted by QS; j, a[j]: output allele ordering
+    {
+		if ((qsum[i]&3) == ref4) 
+            call->qsum[0] = qsum_tot ? (float)(qsum[i]>>2)/qsum_tot : 0;    // REF's qsum
+        else
+        {
+			if ( !(qsum[i]>>2) ) break; // qsum is 0, this allele is not seen in the pileup
+            call->qsum[j] = (float)(qsum[i]>>2)/qsum_tot;
+            call->a[j++]  = qsum[i]&3;
 		}
-        else 
-            call->qsum[0] = qsum_tot ? (float)(qsum[i]>>2)/qsum_tot : 0;
 	}
 	if (ref_base >= 0) { // for SNPs, find the "unseen" base
 		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
@@ -592,10 +592,12 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     call->mwu_bq  = calc_mwu_bias(bca->ref_bq,  bca->alt_bq,  bca->nqual);
     call->mwu_mqs = calc_mwu_bias(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
 
+#if CDF_MWU_TESTS
     call->mwu_pos_cdf = calc_mwu_bias_cdf(bca->ref_pos, bca->alt_pos, bca->npos);
     call->mwu_mq_cdf  = calc_mwu_bias_cdf(bca->ref_mq,  bca->alt_mq,  bca->nqual);
     call->mwu_bq_cdf  = calc_mwu_bias_cdf(bca->ref_bq,  bca->alt_bq,  bca->nqual);
     call->mwu_mqs_cdf = calc_mwu_bias_cdf(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
+#endif
 
     call->vdb = calc_vdb(bca->alt_pos, bca->npos);
 
@@ -665,7 +667,7 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     for (i=0; i<16; i++) tmpf[i] = bc->anno[i];
     bcf_update_info_float(hdr, rec, "I16", tmpf, 16);
 
-    for (i=3; i>0; i--)
+    for (i=4; i>0; i--)
         if ( bc->qsum[i]!=0 ) break;
     bcf_update_info_float(hdr, rec, "QS", bc->qsum, i+1);
 
@@ -675,10 +677,12 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     if ( bc->mwu_mq != HUGE_VAL )   bcf_update_info_float(hdr, rec, "MQB", &bc->mwu_mq, 1);
     if ( bc->mwu_mqs != HUGE_VAL )  bcf_update_info_float(hdr, rec, "MQSB", &bc->mwu_mqs, 1);
     if ( bc->mwu_bq != HUGE_VAL )   bcf_update_info_float(hdr, rec, "BQB", &bc->mwu_bq, 1);
+#if CDF_MWU_TESTS
     if ( bc->mwu_pos_cdf != HUGE_VAL )  bcf_update_info_float(hdr, rec, "RPB2", &bc->mwu_pos_cdf, 1);
     if ( bc->mwu_mq_cdf != HUGE_VAL )   bcf_update_info_float(hdr, rec, "MQB2", &bc->mwu_mq_cdf, 1);
     if ( bc->mwu_mqs_cdf != HUGE_VAL )  bcf_update_info_float(hdr, rec, "MQSB2", &bc->mwu_mqs_cdf, 1);
     if ( bc->mwu_bq_cdf != HUGE_VAL )   bcf_update_info_float(hdr, rec, "BQB2", &bc->mwu_bq_cdf, 1);
+#endif
     tmpf[0] = bc->ori_depth ? (double)bc->mq0/bc->ori_depth : 0;
     bcf_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
 
