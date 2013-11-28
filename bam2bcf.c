@@ -592,10 +592,12 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     call->mwu_bq  = calc_mwu_bias(bca->ref_bq,  bca->alt_bq,  bca->nqual);
     call->mwu_mqs = calc_mwu_bias(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
 
+#if CDF_MWU_TESTS
     call->mwu_pos_cdf = calc_mwu_bias_cdf(bca->ref_pos, bca->alt_pos, bca->npos);
     call->mwu_mq_cdf  = calc_mwu_bias_cdf(bca->ref_mq,  bca->alt_mq,  bca->nqual);
     call->mwu_bq_cdf  = calc_mwu_bias_cdf(bca->ref_bq,  bca->alt_bq,  bca->nqual);
     call->mwu_mqs_cdf = calc_mwu_bias_cdf(bca->fwd_mqs, bca->rev_mqs, bca->nqual);
+#endif
 
     call->vdb = calc_vdb(bca->alt_pos, bca->npos);
 
@@ -675,10 +677,12 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     if ( bc->mwu_mq != HUGE_VAL )   bcf_update_info_float(hdr, rec, "MQB", &bc->mwu_mq, 1);
     if ( bc->mwu_mqs != HUGE_VAL )  bcf_update_info_float(hdr, rec, "MQSB", &bc->mwu_mqs, 1);
     if ( bc->mwu_bq != HUGE_VAL )   bcf_update_info_float(hdr, rec, "BQB", &bc->mwu_bq, 1);
+#if CDF_MWU_TESTS
     if ( bc->mwu_pos_cdf != HUGE_VAL )  bcf_update_info_float(hdr, rec, "RPB2", &bc->mwu_pos_cdf, 1);
     if ( bc->mwu_mq_cdf != HUGE_VAL )   bcf_update_info_float(hdr, rec, "MQB2", &bc->mwu_mq_cdf, 1);
     if ( bc->mwu_mqs_cdf != HUGE_VAL )  bcf_update_info_float(hdr, rec, "MQSB2", &bc->mwu_mqs_cdf, 1);
     if ( bc->mwu_bq_cdf != HUGE_VAL )   bcf_update_info_float(hdr, rec, "BQB2", &bc->mwu_bq_cdf, 1);
+#endif
     tmpf[0] = bc->ori_depth ? (double)bc->mq0/bc->ori_depth : 0;
     bcf_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
 
