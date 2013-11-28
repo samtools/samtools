@@ -39,11 +39,7 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
 
 int read_file_list(const char *file_list,int *n,char **argv[]);
 
-#ifdef _MAIN_BAM2DEPTH
-int main(int argc, char *argv[])
-#else
 int main_depth(int argc, char *argv[])
-#endif
 {
 	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, nfiles;
 	const bam_pileup1_t **plp;
@@ -146,3 +142,10 @@ int main_depth(int argc, char *argv[])
     }
 	return 0;
 }
+
+#ifdef _MAIN_BAM2DEPTH
+int main(int argc, char *argv[])
+{
+	return main_depth(argc, argv);
+}
+#endif
