@@ -869,7 +869,7 @@ sub plot_gc_depth
     my ($opts) = @_;
 
     my @gcd = get_values($opts,'GCD');
-    if ( !@gcd ) { return; }
+    if ( @gcd <= 1 ) { return; }
 
     # Find unique sequence percentiles for 30,40, and 50% GC content, just to draw x2tics.
     my @tics = ( {gc=>30},{gc=>40},{gc=>50} );
