@@ -700,7 +700,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	else if (flag & MERGE_LEVEL1) level = 1;
 	strcpy(mode, "w");
 	if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
-	if ((fpout = sam_open(out, "w")) == 0) {
+	if ((fpout = sam_open(out, mode)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
 		return -1;
 	}
