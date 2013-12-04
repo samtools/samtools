@@ -306,12 +306,24 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
     }
 }
 
+int unclipped_length(bam1_t *bam_line)
+{
+    int icig, read_len = bam_line->core.l_qseq;
+    for (icig=0; icig<bam_line->core.n_cigar; icig++)
+    {
+        int cig = bam1_cigar(bam_line)[icig] & BAM_CIGAR_MASK;
+        if ( cig==BAM_CHARD_CLIP )
+            read_len += bam1_cigar(bam_line)[icig] >> BAM_CIGAR_SHIFT;
+    }
+    return read_len;
+}
+
 void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line) 
 {
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
     int icig,iread=0,icycle=0;
     int iref = bam_line->core.pos - stats->rseq_pos;
-    int read_len   = bam_line->core.l_qseq;
+    int read_len   = unclipped_length(bam_line); 
     uint8_t *read  = bam1_seq(bam_line);
     uint8_t *quals = bam1_qual(bam_line);
     uint64_t *mpc_buf = stats->mpc_buf;
@@ -322,18 +334,18 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
         //  MIDNSHP
         int cig  = bam1_cigar(bam_line)[icig] & BAM_CIGAR_MASK;
         int ncig = bam1_cigar(bam_line)[icig] >> BAM_CIGAR_SHIFT;
-        if ( cig==1 )
+        if ( cig==BAM_CINS )
         {
             iread  += ncig;
             icycle += ncig;
             continue;
         }
-        if ( cig==2 )
+        if ( cig==BAM_CDEL )
         {
             iref += ncig;
             continue;
         }
-        if ( cig==4 )
+        if ( cig==BAM_CSOFT_CLIP )
         {
             icycle += ncig;
             // Soft-clips are present in the sequence, but the position of the read marks a start of the sequence after clipping
@@ -341,15 +353,15 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
             iread  += ncig;
             continue;
         }
-        if ( cig==5 )
+        if ( cig==BAM_CHARD_CLIP )
         {
             icycle += ncig;
             continue;
         }
         // Ignore H and N CIGARs. The letter are inserted e.g. by TopHat and often require very large
         //  chunk of refseq in memory. Not very frequent and not noticable in the stats.
-        if ( cig==3 || cig==5 ) continue;
-        if ( cig!=0 )
+        if ( cig==BAM_CREF_SKIP || cig==BAM_CHARD_CLIP ) continue;
+        if ( cig!=BAM_CMATCH )
             error("TODO: cigar %d, %s:%d %s\n", cig,stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam1_qname(bam_line));
        
         if ( ncig+iref > stats->nrseq_buf )
@@ -599,7 +611,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
     stats->read_lengths[seq_len]++;
 
-    // Count GC and ACGT per cycle
+    // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
     uint8_t base, *seq  = bam1_seq(bam_line);
     int gc_count  = 0;
     int i;
@@ -644,7 +656,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     if ( stats->trim_qual>0 ) 
         stats->nbases_trimmed += bwa_trim_read(stats->trim_qual, bam_quals, seq_len, reverse);
 
-    // Quality histogram and average quality
+    // Quality histogram and average quality. Clipping is neglected.
     for (i=0; i<seq_len; i++)
     {
         uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
