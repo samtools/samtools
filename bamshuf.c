@@ -129,7 +129,7 @@ int main_bamshuf(int argc, char *argv[])
 	}
 	if (is_un) clevel = 0;
 	if (optind + 2 > argc) {
-		fprintf(stderr, "\nUsage:   bamshuf [-Ou] [-n nFiles] [-c cLevel] <in.bam> <out.prefix>\n\n");
+		fprintf(stderr, "\nUsage:   samtools bamshuf [-Ou] [-n nFiles] [-c cLevel] <in.bam> <out.prefix>\n\n");
 		fprintf(stderr, "Options: -O      output to stdout\n");
 		fprintf(stderr, "         -u      uncompressed BAM output\n");
 		fprintf(stderr, "         -l INT  compression level [%d]\n", DEF_CLEVEL);

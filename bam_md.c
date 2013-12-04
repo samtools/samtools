@@ -341,7 +341,7 @@ int bam_fillmd(int argc, char *argv[])
 	if (is_uncompressed) strcat(mode_w, "u");
 	if (optind + 1 >= argc) {
 		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:   samtools fillmd [-eubrS] <aln.bam> <ref.fasta>\n\n");
+		fprintf(stderr, "Usage:   samtools calmd [-eubrS] <aln.bam> <ref.fasta>\n\n");
 		fprintf(stderr, "Options: -e       change identical bases to '='\n");
 		fprintf(stderr, "         -u       uncompressed BAM output (for piping)\n");
 		fprintf(stderr, "         -b       compressed BAM output\n");

@@ -19,7 +19,7 @@ static void error(const char *format, ...)
     else
     {
         fprintf(stderr, "\n");
-        fprintf(stderr, "Usage:   faidx <file.fa|file.fa.gz> [<reg> [...]]\n");
+        fprintf(stderr, "Usage:   samtools faidx <file.fa|file.fa.gz> [<reg> [...]]\n");
         fprintf(stderr, "\n");
     }
     exit(-1);

@@ -19,11 +19,12 @@ int bam_index(int argc, char *argv[])
 
 int bam_idxstats(int argc, char *argv[])
 {
-#if 0
 	bam_index_t *idx;
 	bam_header_t *header;
 	bamFile fp;
+#if 0
 	int i;
+#endif
 	if (argc < 2) {
 		fprintf(stderr, "Usage: samtools idxstats <in.bam>\n");
 		return 1;
@@ -34,6 +35,7 @@ int bam_idxstats(int argc, char *argv[])
 	bam_close(fp);
 	idx = bam_index_load(argv[1]);
 	if (idx == 0) { fprintf(stderr, "[%s] fail to load the index.\n", __func__); return 1; }
+#if 0
 	for (i = 0; i < idx->n; ++i) {
 		khint_t k;
 		khash_t(i) *h = idx->index[i];

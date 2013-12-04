@@ -73,7 +73,7 @@ static void usage(FILE *fp)
 "         stats       generate stats (former bamcheck)\n"
 "  -- viewing\n"
 "         flags       explain BAM flags\n"
-"         tview       text alignment viewer\n"
+//"         tview       text alignment viewer\n"
 "         view        SAM<->BAM conversion\n"
 //"         depad       convert padded BAM to unpadded BAM\n" // not stable
 "\n");
