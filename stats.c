@@ -150,6 +150,7 @@ stats_t;
 
 void error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
+void realloc_buffers(stats_t *stats, int seq_len);
 
 
 // Coverage distribution methods
@@ -320,10 +321,11 @@ int unclipped_length(bam1_t *bam_line)
 
 void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line) 
 {
+    int read_len = unclipped_length(bam_line); 
+    if ( read_len >= stats->nbases ) realloc_buffers(stats,read_len);
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
     int icig,iread=0,icycle=0;
     int iref = bam_line->core.pos - stats->rseq_pos;
-    int read_len   = unclipped_length(bam_line); 
     uint8_t *read  = bam1_seq(bam_line);
     uint8_t *quals = bam1_qual(bam_line);
     uint64_t *mpc_buf = stats->mpc_buf;
