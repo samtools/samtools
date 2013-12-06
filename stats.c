@@ -27,7 +27,7 @@
 #include <htslib/faidx.h>
 #include "sam.h"            // have to keep local version because of sam header parsing. todo: migrate to htslib
 #include "sam_header.h"     //
-#include "khash_utils.h"
+#include <htslib/khash_str2int.h>
 #include "samtools.h"
 
 #define BWA_MIN_RDLEN 35
