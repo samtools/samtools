@@ -9,7 +9,7 @@
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
 #include <htslib/kstring.h>
-#include "khash_utils.h"
+#include <htslib/khash_str2int.h>
 #include "sam_header.h"
 #include "samtools.h"
 
