@@ -371,8 +371,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
 		for (i=0; i<sm->n; i++)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
-
-        bcf_hdr_fmt_text(bcf_hdr);
         bcf_hdr_write(bcf_fp, bcf_hdr);
 
 		bca = bcf_call_init(-1., conf->min_baseQ);
