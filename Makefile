@@ -135,7 +135,7 @@ padding.o: padding.c sam_header.h $(sam_h) $(bam_h) $(htslib_faidx_h)
 phase.o: phase.c $(bam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h
-sam_view.o: sam_view.c sam_header.h $(sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/khash.h
+sam_view.o: sam_view.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash.h
 sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
 stats.o: stats.c $(sam_h) sam_header.h samtools.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/khash_str2int.h $(htslib_faidx_h)
 
