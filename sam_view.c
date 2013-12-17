@@ -1,3 +1,28 @@
+/*
+ * The MIT License
+ *
+ * Copyright (c) 2009-2013 Genome Research Ltd.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ */
+
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -28,6 +53,7 @@ void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
+// Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const bam_hdr_t *h, bam1_t *b)
 {
 	if (g_remove_B) bam_remove_B(b);
@@ -384,8 +410,8 @@ int main_bam2fq(int argc, char *argv[])
 		putchar('@'); fputs(bam_get_qname(b), stdout);
 		if (no12) putchar('\n');
 		else {
-			if ((b->core.flag & 0x40) && !(b->core.flag & 0x80)) puts("/1");
-			else if ((b->core.flag & 0x80) && !(b->core.flag & 0x40)) puts("/2");
+			if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) puts("/1");
+			else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) puts("/2");
 			else putchar('\n');
 		}
 		if (max_buf < qlen + 1) {
@@ -397,7 +423,7 @@ int main_bam2fq(int argc, char *argv[])
 		seq = bam_get_seq(b);
 		for (i = 0; i < qlen; ++i)
 			buf[i] = bam_seqi(seq, i);
-		if (b->core.flag & 16) { // reverse complement
+		if (b->core.flag & BAM_FREVERSE) { // reverse complement
 			for (i = 0; i < qlen>>1; ++i) {
 				int8_t t = seq_comp_table[buf[qlen - 1 - i]];
 				buf[qlen - 1 - i] = seq_comp_table[buf[i]];
@@ -412,7 +438,7 @@ int main_bam2fq(int argc, char *argv[])
 		seq = bam_get_qual(b);
 		for (i = 0; i < qlen; ++i)
 			buf[i] = 33 + seq[i];
-		if (b->core.flag & 16) { // reverse
+		if (b->core.flag & BAM_FREVERSE) { // reverse
 			for (i = 0; i < qlen>>1; ++i) {
 				int8_t t = buf[qlen - 1 - i];
 				buf[qlen - 1 - i] = buf[i];
