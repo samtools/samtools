@@ -26,6 +26,8 @@ typedef struct samview_settings {
 	char* library;
 	char* rg;
 	void* bed;
+	size_t remove_aux_len;
+	char** remove_aux;
 } samview_settings_t;
 
 
@@ -78,6 +80,15 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
 	if (settings->library) {
 		const char *p = bam_get_library((bam_hdr_t*)h, b);
 		return (p && strcmp(p, settings->library) == 0)? 0 : 1;
+	}
+	if (settings->remove_aux_len) {
+		size_t i;
+		for (i = 0; i < settings->remove_aux_len; ++i) {
+			uint8_t *s = bam_aux_get(b, settings->remove_aux[i]);
+			if (s) {
+				bam_aux_del(b, s);
+			}
+		}
 	}
 	return 0;
 }
@@ -140,8 +151,9 @@ int main_samview(int argc, char *argv[])
 	};
 
 	/* parse command-line options */
+	/* TODO: convert this to getopt_long we're running out of letters */
 	strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:Q:@:m:x:")) >= 0) {
 		switch (c) {
 		case 's':
 			if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -168,13 +180,25 @@ int main_samview(int argc, char *argv[])
 		case 'L': settings.bed = bed_read(optarg); break;
 		case 'r': settings.rg = strdup(optarg); break;
 		case 'R': fn_rg = strdup(optarg); break;
-		case 'x': out_format = "x"; break;
-		case 'X': out_format = "X"; break;
+				/* REMOVED as htslib doesn't support this
+		//case 'x': out_format = "x"; break;
+		//case 'X': out_format = "X"; break;
+				 */
 		case '?': is_long_help = 1; break;
 		case 'T': fn_ref = strdup(optarg); break;
 		case 'B': settings.remove_B = 1; break;
 		case 'Q': settings.qual_scale = atoi(optarg); break;
 		case '@': n_threads = strtol(optarg, 0, 0); break;
+		case 'x':
+			{
+				if (strlen(optarg) != 2) {
+					fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
+					return usage(is_long_help);
+				}
+				settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
+				settings.remove_aux[settings.remove_aux_len-1] = optarg;
+			}
+			break;
 		default: return usage(is_long_help);
 		}
 	}
@@ -298,6 +322,9 @@ view_end:
 			if (kh_exist(settings.rghash, k)) free((char*)kh_key(settings.rghash, k));
 		kh_destroy(rg, settings.rghash);
 	}
+	if (settings.remove_aux_len) {
+		free(settings.remove_aux);
+	}
 	sam_close(in);
 	if (!is_count)
 		sam_close(out);
@@ -315,8 +342,6 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
 	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
 	fprintf(stderr, "         -1       fast compression (force -b)\n");
-	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
-	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -c       print only the count of matching records\n");
 	fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
 	fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
@@ -331,6 +356,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -l STR   only output reads in library STR [null]\n");
 	fprintf(stderr, "         -r STR   only output reads in read group STR [null]\n");
 	fprintf(stderr, "         -s FLOAT fraction of templates to subsample; integer part as seed [-1]\n");
+	fprintf(stderr, "         -x STR   read tag to strip (repeatable) [null]\n");
 	fprintf(stderr, "         -?       longer help\n");
 	fprintf(stderr, "\n");
 	if (is_long_help)
