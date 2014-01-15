@@ -190,7 +190,7 @@ static int mplp_func(void *data, bam1_t *b)
 			if (q < 0) skip = 1;
 			else if (b->core.qual > q) b->core.qual = q;
 		}
-		else if (b->core.qual < ma->conf->min_mq) skip = 1; 
+		if (b->core.qual < ma->conf->min_mq) skip = 1; 
 		else if ((ma->conf->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) skip = 1;
 	} while (skip);
 	return ret;
