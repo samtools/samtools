@@ -472,7 +472,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 					if (conf->flag & MPLP_PRINT_MAPQ) {
 						putchar('\t');
 						for (j = 0; j < n_plp[i]; ++j) {
-							int c = plp[i][j].b->core.qual + 33;
+                            const bam_pileup1_t *p = plp[i] + j;
+                            int c = bam_get_qual(p->b)[p->qpos];
+                            if ( c < conf->min_baseQ ) continue;
+							c = plp[i][j].b->core.qual + 33;
 							if (c > 126) c = 126;
 							putchar(c);
 						}
