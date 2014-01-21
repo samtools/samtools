@@ -250,7 +250,7 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 			if (ret >= 0) z += str->l + 1;
 		} while (ret == 0);
 	}
-	if (ret < 0) return -1;
+	if (ret <= 0) return -1;
 	++fp->n_lines;
 	doff = 0;
 
