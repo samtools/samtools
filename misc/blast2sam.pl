@@ -4,14 +4,17 @@ use strict;
 use warnings;
 use Getopt::Std;
 
+my $dummy_score;
+
 &blast2sam;
 
 sub blast2sam {
   my %opts = ();
-  getopts('s', \%opts);
+  getopts('sd', \%opts);
   die("Usage: blast2sam.pl <in.blastn>\n") if (-t STDIN && @ARGV == 0);
   my ($qlen, $slen, $q, $s, $qbeg, $qend, @sam, @cigar, @cmaux, $show_seq);
   $show_seq = defined($opts{s});
+  $dummy_score = defined($opts{d});
   @sam = (); @sam[0,4,6..8,10] = ('', 255, '*', 0, 0, '*');
   while (<>) {
     if (@cigar && (/^Query=/ || /Score =.*bits.*Expect/ || /^>\S+/)) { # print
@@ -21,13 +24,13 @@ sub blast2sam {
     if (/^Query=\s(\S+)/) {
       $sam[2] = undef; 
       $sam[0] = $1;
-      if ($sam[0] =~/\-$/) { # Need to append next line
-       chop($sam[0]);
-       my $next_line = <>;
-       if ($next_line=~/^(\S+)/) {
+      #if ($sam[0] =~/\-$/ || $sam[0] =~/\/$/) { # Need to append next line
+      #chop($sam[0]);
+      my $next_line = <>;
+      if ($next_line=~/^(\S+)$/) {
         $sam[0] .= $1;
-       }
       }
+      
     } elsif (/(\S+)\s+total letters/) {
       $qlen = $1; $qlen =~ s/,//g;
     } elsif (/^>(\S+)/) {
@@ -77,7 +80,14 @@ sub blast_print_sam {
     $sam->[9] = reverse($sam->[9]);
     $sam->[9] =~ tr/atgcrymkswATGCRYMKSW/tacgyrkmswTACGYRKMSW/;
   }
-  $sam->[9] = '*' if (!$sam->[9]);
+  if ($sam->[9]) {
+    if ($dummy_score) {
+      $sam->[10] = "";
+      map {$sam->[10].="I"} (1..length($sam->[9]));
+    }
+  } else { 
+    $sam->[9] = '*';
+  }
   $sam->[5] = join('', @$cigar);
   print join("\t", @$sam), "\n";
 }
@@ -100,3 +110,48 @@ sub aln2cm {
     }
   }
 }
+
+=head2 SYNOPSIS
+
+blast2sam.pl is a script for parsing output of NCBI's blastn output (default format) into sam format
+
+=over
+
+blast2sam.pl out.blast > out.blast.sam
+
+=back
+
+=head2 OPTIONS
+
+The script has some (hopefully) useful options for tweaking the output sam
+
+B<-s> Print out sequence of the query. 
+
+Note that the current implementation prints out 
+the sequence of aligned query which may be trimmed or otherwise 
+different from the sequence of raw read in the input fastq. The CIGAR string
+is also calculated for this query sequence, not the original read
+
+B<-d> Dummy base quality score will be printed as field #11 in sam file. 
+
+Blast output does not have base quality information for a read, so this option allows 
+to have some fake value instead, may help when using sam file with some programs. Hardcoded
+to be a string of 'I' that corresponds to Phred score 40 according to Sanger format
+
+Using both options:
+
+=over
+
+blast2sam.pl -sd out.blast > out.blast.sam
+
+=back
+
+Note that there is no header generated, so you will need to run
+
+=over
+
+samtools -hT your_ref.fasta your_file.sam > your_file_with_header.sam
+
+=back
+
+=cut
