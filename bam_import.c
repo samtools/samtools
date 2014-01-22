@@ -230,7 +230,7 @@ bam_header_t *sam_header_read(tamFile fp)
 	}
 	sam_header_parse(header);
 	bam_init_header_hash(header);
-	fp->is_first = 1;
+	fp->is_first = (ret >= 0);
 	return header;
 }
 
