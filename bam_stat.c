@@ -1,3 +1,10 @@
+/**
+
+History:
+* Pierre Lindenbaum @yokofakun: added multiple file, format, streaming
+* original file by Heng Li & al.
+
+*/
 #include <unistd.h>
 #include <errno.h>
 #include <assert.h>
@@ -12,15 +19,16 @@ typedef struct {
 
 typedef struct bamStatApp
 	{
-	FILE* out;
-	char* filename;
-	bamFile fpin;
-	bamFile fpout;
+	FILE* report_out;/* report out */
+	char* filename;/* bam name */
+	bamFile fpin;/* input bam*/
+	bamFile fpout;/* output bam */
 	bam_flagstat_t *stats;
-	int number_printed;
-	void (*my_init)( struct bamStatApp* );
-	void (*my_print)( struct bamStatApp*);
-	void (*my_finish)( struct bamStatApp* );
+	int number_printed;/* number of files reported so far */
+	int qual;/* min qual for diffhigh */
+	void (*my_init)( struct bamStatApp* );/* calmback start report */
+	void (*my_print)( struct bamStatApp*);/* callback print report */
+	void (*my_finish)( struct bamStatApp* ); /* callback end report */
 	} BamStatApp;
 
 
@@ -53,7 +61,7 @@ static bam_flagstat_t *bam_flagstat_core(BamStatApp* app)
 				if ((c)->mtid != (c)->tid)
 					{
 					++(s)->n_diffchr[w];
-					if ((c)->qual >= 5) ++(s)->n_diffhigh[w];
+					if ((c)->qual >= app->qual ) ++(s)->n_diffhigh[w];
 					}														
 				}															
 			}																
@@ -69,7 +77,7 @@ static bam_flagstat_t *bam_flagstat_core(BamStatApp* app)
 
 static void print_bam_flagstat_t(BamStatApp* app)
 	{
-	FILE* out =app->out;
+	FILE* out =app->report_out;
 	const bam_flagstat_t *s=app->stats;
 	if(app->number_printed>0) fprintf(out,"\n\n");
 	fprintf(out,"File: %s\n",app->filename);
@@ -100,111 +108,80 @@ static void scan(BamStatApp* app)
 	bam_header_destroy(header);
 	}
 
+/* callback for text ouput header/footer */
 static void do_nothing( BamStatApp* app)
 	{
 	}
 
+/* callbacks for JSON */
 static void json_init( BamStatApp* app)
 	{
-	fputc('[',app->out);
+	fputc('[',app->report_out);
 	}
 
 static void json_finish( BamStatApp* app)
 	{
-	fputc(']',app->out);
-	fputc('\n',app->out);
+	fputs("]\n",app->report_out);
 	}
-
+#define JSONPROP(pname,att) fprintf(out,",\"%s\":{\"pass\":%lld,\"fail\":%lld}",pname,s->att[0], s->att[1])
 static void json_print(BamStatApp* app)
 	{
-	FILE* out =app->out;
+	FILE* out =app->report_out;
 	const bam_flagstat_t *s=app->stats;
 	if(app->number_printed>0) fputc(',',out);
 	
-	fprintf(out,"{\"file\":\"%s\" ",app->filename);
-	fprintf(out,",\"total\":{\"pass\":%lld,\"fail\":%lld}", s->n_reads[0], s->n_reads[1]);
-	fprintf(out,",\"duplicates\":{\"pass\":%lld,\"fail\":%lld}", s->n_dup[0], s->n_dup[1]);
-
-
-	fprintf(out,",\"mapped\":{\"percent_pass\":%.2f,\"pass\":%lld,\"percent_fail\":%.2f,\"fail\":%lld}",
-		(s->n_reads[0]==0?0.0f:(float)s->n_mapped[0] / s->n_reads[0] * 100.0),
-		s->n_mapped[0],
-		(s->n_reads[1]==0?0.0f:(float)s->n_mapped[1] / s->n_reads[1] * 100.0),
-		s->n_mapped[1]
-		);
-		
-	fprintf(out,",\"paired\":{\"pass\":%lld,\"fail\":%lld}", s->n_pair_all[0], s->n_pair_all[1]);
-	fprintf(out,",\"read1\":{\"pass\":%lld,\"fail\":%lld}", s->n_read1[0], s->n_read1[1]);
-	fprintf(out,",\"read2\":{\"pass\":%lld,\"fail\":%lld}", s->n_read2[0], s->n_read2[1]);
-
-	fprintf(out,",\"properly-paired\":{\"percent_pass\":%.2f,\"pass\":%lld,\"percent_fail\":%.2f,\"fail\":%lld}",
-		(s->n_pair_all[0]==0?0.0f:(float)s->n_pair_good[0] / s->n_pair_all[0] * 100.0),
-		s->n_pair_good[0],
-		(s->n_pair_all[1]==0?0.0f:(float)s->n_pair_good[1] / s->n_pair_all[1] * 100.0),
-		s->n_pair_good[1]
-		);
-	fprintf(out,",\"pair_map\":{\"pass\":%lld,\"fail\":%lld}", s->n_pair_map[0], s->n_pair_map[1]);
-	
-	fprintf(out,",\"singleton\":{\"percent_pass\":%.2f,\"pass\":%lld,\"percent_fail\":%.2f,\"fail\":%lld}",
-		(s->n_pair_all[0]==0?0.0f:(float)s->n_sgltn[0] / s->n_pair_all[0] * 100.0),
-		s->n_sgltn[0],
-		(s->n_pair_all[1]==0?0.0f:(float)s->n_sgltn[1] / s->n_pair_all[1] * 100.0),
-		s->n_sgltn[1]
-		);
-	fprintf(out,",\"diffchr\":{\"pass\":%lld,\"fail\":%lld}", s->n_diffchr[0], s->n_diffchr[1]);
-	fprintf(out,",\"diffchrhigh\":{\"pass\":%lld,\"fail\":%lld}", s->n_diffhigh[0], s->n_diffhigh[1]);
+	fprintf(out,"{\"file\":\"%s\"",app->filename);
+	JSONPROP("total",n_reads);
+	JSONPROP("duplicates", n_dup);
+	JSONPROP("mapped", n_mapped);
+	JSONPROP("paired",n_pair_all);
+	JSONPROP("read1", n_read1);
+	JSONPROP("read2", n_read2);
+	JSONPROP("properly-paired", n_pair_good);
+	JSONPROP("pair_map",  n_pair_map);
+	JSONPROP("singleton", n_sgltn );
+	JSONPROP("diffchr",  n_diffchr);
+	JSONPROP("diffchrhigh", n_diffhigh);
 
 	fprintf(out,"}");
 	}
+#undef JSONPROP
 
-
+/* callback for xml */
 static void xml_init( BamStatApp* app)
 	{
-	fputs("<flagstat>",app->out);
+	fputs("<array xmlns=\"http://www.ibm.com/xmlns/prod/2009/jsonx\">",app->report_out);
 	}
 
+#define XMLPROP(pname,att) fprintf(out,"<object name=\"%s\"><number name=\"pass\">%lld</number><number name=\"fail\">%lld</number></object>",pname,s->att[0], s->att[1])
 static void xml_print(BamStatApp* app)
 	{
-	FILE* out =app->out;
+	FILE* out =app->report_out;
 	const bam_flagstat_t *s=app->stats;
 
-	fprintf(out,"<input file=\"%s\">",app->filename);
-	fprintf(out,"<property key=\"total\"><pass>%lld</pass><fail>%lld</fail></property>", s->n_reads[0], s->n_reads[1]);
-	fprintf(out,"<property key=\"duplicates\"><pass>%lld</pass><fail>%lld</fail></property>", s->n_dup[0], s->n_dup[1]);
-	fprintf(out,"<property key=\"mapped\"><pass percent=\"%.2f\">%lld</pass><fail percent=\"%.2f\">%lld</fail></property>",
-		(s->n_reads[0]==0?0.0f:(float)s->n_mapped[0] / s->n_reads[0] * 100.0),
-		s->n_mapped[0],
-		(s->n_reads[1]==0?0.0f:(float)s->n_mapped[1] / s->n_reads[1] * 100.0),
-		s->n_mapped[1]
-		);
-	fprintf(out,"<property key=\"paired\"><pass>%lld</pass><fail>%lld</fail></property>", s->n_pair_all[0], s->n_pair_all[1]);
-	fprintf(out,"<property key=\"read1\"><pass>%lld</pass><fail>%lld</fail></property>", s->n_read1[0], s->n_read1[1]);
-	fprintf(out,"<property key=\"read2\"><pass>%lld</pass><fail>%lld</fail></property>", s->n_read2[0], s->n_read2[1]);
-
-	fprintf(out,"<property key=\"properly-paired\"><pass percent=\"%.2f\">%lld</pass><fail percent=\"%.2f\">%lld</fail></property>",
-		(s->n_pair_all[0]==0?0.0f:(float)s->n_pair_good[0] / s->n_pair_all[0] * 100.0),
-		s->n_pair_good[0],
-		(s->n_pair_all[1]==0?0.0f:(float)s->n_pair_good[1] / s->n_pair_all[1] * 100.0),
-		s->n_pair_good[1]
-		);
-	fprintf(out,"<property key=\"pair_map\"><pass>%lld</pass><fail>%lld</fail></property>", s->n_pair_map[0], s->n_pair_map[1]);
+	fprintf(out,"<object><string name=\"file\">%s</string>",app->filename);
 	
-	fprintf(out,"<property key=\"singleton\"><pass percent=\"%.2f\">%lld</pass><fail percent=\"%.2f\">%lld</fail></property>",
-		(s->n_pair_all[0]==0?0.0f:(float)s->n_sgltn[0] / s->n_pair_all[0] * 100.0),
-		s->n_sgltn[0],
-		(s->n_pair_all[1]==0?0.0f:(float)s->n_sgltn[1] / s->n_pair_all[1] * 100.0),
-		s->n_sgltn[1]
-		);
-	fprintf(out,"<property key=\"diffchr\"><pass>%lld</pass><fail>%lld</fail></property>", s->n_diffchr[0], s->n_diffchr[1]);
-	fprintf(out,"<property key=\"diffchrhigh\"><pass>%lld</pass><fail>%lld</fail></property>", s->n_diffhigh[0], s->n_diffhigh[1]);
+	XMLPROP("total",n_reads);
+	XMLPROP("duplicates", n_dup);
+	XMLPROP("mapped", n_mapped);
+	XMLPROP("paired",n_pair_all);
+	XMLPROP("read1", n_read1);
+	XMLPROP("read2", n_read2);
+	XMLPROP("properly-paired", n_pair_good);
+	XMLPROP("pair_map",  n_pair_map);
+	XMLPROP("singleton", n_sgltn );
+	XMLPROP("diffchr",  n_diffchr);
+	XMLPROP("diffchrhigh", n_diffhigh);
 
-	fprintf(out,"</input>\n");
+	fprintf(out,"</object>");
 	}
+#undef XMLPROP
 
 static void xml_finish( BamStatApp* app)
 	{
-	fputs("</flagstat>\n",app->out);
+	fputs("</array>\n",app->report_out);
 	}
+
 
 int bam_flagstat(int argc, char *argv[])
 	{
@@ -215,11 +192,14 @@ int bam_flagstat(int argc, char *argv[])
 	app.my_init=do_nothing;
 	app.my_print=print_bam_flagstat_t;
 	app.my_finish=do_nothing;
-	app.out=stdout;
+	app.report_out=stdout;
+	app.qual=5;
 	int streaming=0;
-	while ((c = getopt(argc, argv, "o:sf:")) >= 0) {
+	
+	while ((c = getopt(argc, argv, "o:sf:q:")) >= 0) {
 		switch (c)
 			{
+			case 'q': app.qual=atoi(optarg); break;
 			case 'o': filenameout=optarg; break;
 			case 's': streaming=1;break;
 			case 'f':
@@ -266,14 +246,15 @@ int bam_flagstat(int argc, char *argv[])
 		fprintf(stderr, " -o (filename) save report to file:\n");
 		fprintf(stderr, " -s write input to stdout (-o required)\n");
 		fprintf(stderr, " -f (format) (j)son (x)ml. default: text\n");
+		fprintf(stderr, " -q (int) quality for diff-chr (5)\n");
 		return 1;
 		}
 	
 	/* open report file */
 	if(filenameout!=NULL)
 		{
-		app.out=fopen(filenameout,"w");
-		if(app.out==NULL)
+		app.report_out=fopen(filenameout,"w");
+		if(app.report_out==NULL)
 			{
 			fprintf(stderr,"Cannot open \"%s\" : %s\n",filenameout,strerror(errno));
 			return EXIT_FAILURE;
@@ -362,7 +343,7 @@ int bam_flagstat(int argc, char *argv[])
 	/* close report */
 	if(filenameout!=NULL)
 		{
-		fclose(app.out);
+		fclose(app.report_out);
 		}
 	return 0;
 	}
