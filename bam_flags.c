@@ -14,7 +14,7 @@ static void usage(void)
     fprintf(stderr, "Usage: samtools flags [INT|STR]\n");
     fprintf(stderr, "Flags:\n");
     fprintf(stderr, "\t0x%x\tPAIRED        .. paired-end (or multiple-segment) sequencing technology\n", BAM_FPAIRED);
-    fprintf(stderr, "\t0x%x\tPROPER_PAIR   .. each segment properly aligned according to the alig\n", BAM_FPROPER_PAIR);
+    fprintf(stderr, "\t0x%x\tPROPER_PAIR   .. each segment properly aligned according to the aligner\n", BAM_FPROPER_PAIR);
     fprintf(stderr, "\t0x%x\tUNMAP         .. segment unmapped\n", BAM_FUNMAP);
     fprintf(stderr, "\t0x%x\tMUNMAP        .. next segment in the template unmapped\n", BAM_FMUNMAP);
     fprintf(stderr, "\t0x%x\tREVERSE       .. SEQ is reverse complemented\n", BAM_FREVERSE);

@@ -190,7 +190,7 @@ static int mplp_func(void *data, bam1_t *b)
 			if (q < 0) skip = 1;
 			else if (b->core.qual > q) b->core.qual = q;
 		}
-		else if (b->core.qual < ma->conf->min_mq) skip = 1; 
+		if (b->core.qual < ma->conf->min_mq) skip = 1; 
 		else if ((ma->conf->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) skip = 1;
 	} while (skip);
 	return ret;
@@ -472,7 +472,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 					if (conf->flag & MPLP_PRINT_MAPQ) {
 						putchar('\t');
 						for (j = 0; j < n_plp[i]; ++j) {
-							int c = plp[i][j].b->core.qual + 33;
+                            const bam_pileup1_t *p = plp[i] + j;
+                            int c = bam_get_qual(p->b)[p->qpos];
+                            if ( c < conf->min_baseQ ) continue;
+							c = plp[i][j].b->core.qual + 33;
 							if (c > 126) c = 126;
 							putchar(c);
 						}
