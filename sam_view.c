@@ -140,7 +140,7 @@ int main_samview(int argc, char *argv[])
 		case 'u': compress_level = 0; break;
 		case '1': compress_level = 1; break;
 		case 'l': g_library = strdup(optarg); break;
-		case 'L': g_bed = bed_read(optarg); break;
+		case 'L': g_bed = bed_read(optarg); if (!g_bed) { fprintf(stderr,"Could not read file \"%s\"\n", optarg); exit(1); } break;
 		case 'r': g_rg = strdup(optarg); break;
 		case 'R': fn_rg = strdup(optarg); break;
 		case 'x': out_format = "x"; break;
