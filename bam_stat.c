@@ -113,75 +113,6 @@ static void do_nothing( BamStatApp* app)
 	{
 	}
 
-/* callbacks for JSON */
-static void json_init( BamStatApp* app)
-	{
-	fputc('[',app->report_out);
-	}
-
-static void json_finish( BamStatApp* app)
-	{
-	fputs("]\n",app->report_out);
-	}
-#define JSONPROP(pname,att) fprintf(out,",\"%s\":{\"pass\":%lld,\"fail\":%lld}",pname,s->att[0], s->att[1])
-static void json_print(BamStatApp* app)
-	{
-	FILE* out =app->report_out;
-	const bam_flagstat_t *s=app->stats;
-	if(app->number_printed>0) fputc(',',out);
-	
-	fprintf(out,"{\"file\":\"%s\"",app->filename);
-	JSONPROP("total",n_reads);
-	JSONPROP("duplicates", n_dup);
-	JSONPROP("mapped", n_mapped);
-	JSONPROP("paired",n_pair_all);
-	JSONPROP("read1", n_read1);
-	JSONPROP("read2", n_read2);
-	JSONPROP("properly-paired", n_pair_good);
-	JSONPROP("pair_map",  n_pair_map);
-	JSONPROP("singleton", n_sgltn );
-	JSONPROP("diffchr",  n_diffchr);
-	JSONPROP("diffchrhigh", n_diffhigh);
-
-	fprintf(out,"}");
-	}
-#undef JSONPROP
-
-/* callback for xml */
-static void xml_init( BamStatApp* app)
-	{
-	fputs("<array xmlns=\"http://www.ibm.com/xmlns/prod/2009/jsonx\">",app->report_out);
-	}
-
-#define XMLPROP(pname,att) fprintf(out,"<object name=\"%s\"><number name=\"pass\">%lld</number><number name=\"fail\">%lld</number></object>",pname,s->att[0], s->att[1])
-static void xml_print(BamStatApp* app)
-	{
-	FILE* out =app->report_out;
-	const bam_flagstat_t *s=app->stats;
-
-	fprintf(out,"<object><string name=\"file\">%s</string>",app->filename);
-	
-	XMLPROP("total",n_reads);
-	XMLPROP("duplicates", n_dup);
-	XMLPROP("mapped", n_mapped);
-	XMLPROP("paired",n_pair_all);
-	XMLPROP("read1", n_read1);
-	XMLPROP("read2", n_read2);
-	XMLPROP("properly-paired", n_pair_good);
-	XMLPROP("pair_map",  n_pair_map);
-	XMLPROP("singleton", n_sgltn );
-	XMLPROP("diffchr",  n_diffchr);
-	XMLPROP("diffchrhigh", n_diffhigh);
-
-	fprintf(out,"</object>");
-	}
-#undef XMLPROP
-
-static void xml_finish( BamStatApp* app)
-	{
-	fputs("</array>\n",app->report_out);
-	}
-
 
 int bam_flagstat(int argc, char *argv[])
 	{
@@ -196,40 +127,12 @@ int bam_flagstat(int argc, char *argv[])
 	app.qual=5;
 	int streaming=0;
 	
-	while ((c = getopt(argc, argv, "o:sf:q:")) >= 0) {
+	while ((c = getopt(argc, argv, "o:sq:")) >= 0) {
 		switch (c)
 			{
 			case 'q': app.qual=atoi(optarg); break;
 			case 'o': filenameout=optarg; break;
 			case 's': streaming=1;break;
-			case 'f':
-				{
-				switch(optarg[0])
-					{
-					case 'j':case 'J':
-						{
-						app.my_init=json_init;
-						app.my_print=json_print;
-						app.my_finish=json_finish;
-						break;
-						}
-					case 'x':case 'X':
-						{
-						app.my_init=xml_init;
-						app.my_print=xml_print;
-						app.my_finish=xml_finish;
-						break;
-						}
-					default:
-						{
-						app.my_init=do_nothing;
-						app.my_print=print_bam_flagstat_t;
-						app.my_finish=do_nothing;
-						break;
-						}
-					}
-				break;
-				}
 			case ':': fputs("argument missing\n",stderr); return EXIT_FAILURE;
 			case '?': fputs("unknown argument.\n",stderr); return EXIT_FAILURE;
 			}
@@ -245,8 +148,7 @@ int bam_flagstat(int argc, char *argv[])
 		fprintf(stderr, "Options:\n");
 		fprintf(stderr, " -o (filename) save report to file:\n");
 		fprintf(stderr, " -s write input to stdout (-o required)\n");
-		fprintf(stderr, " -f (format) (j)son (x)ml. default: text\n");
-		fprintf(stderr, " -q (int) quality for diff-chr (5)\n");
+		fprintf(stderr, " -q (int) quality for diff-chr (%d)\n",app.qual);
 		return 1;
 		}
 	
