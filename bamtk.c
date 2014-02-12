@@ -74,7 +74,7 @@ static void usage(FILE *fp)
 "  -- viewing\n"
 "         flags       explain BAM flags\n"
 //"         tview       text alignment viewer\n"
-"         view        SAM<->BAM conversion\n"
+"         view        SAM<->BAM<->CRAM conversion\n"
 //"         depad       convert padded BAM to unpadded BAM\n" // not stable
 "\n");
 #ifdef _WIN32
@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
 		printf(
 "samtools %s\n"
 "Using htslib %s\n"
-"Copyright (C) 2013 Genome Research Ltd.\n",
+"Copyright (C) 2014 Genome Research Ltd.\n",
 		       samtools_version(), hts_version());
 	}
 	else if (strcmp(argv[1], "--version-only") == 0) {

@@ -476,7 +476,7 @@ extern "C" {
 	int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func);
 
 	static inline bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end) { return bam_itr_queryi(idx, tid, beg, end); }
-	static inline int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b) { return iter? hts_itr_next(fp, iter, b, (hts_readrec_f)(bam_readrec), 0) : bam_read1(fp, b); }
+	static inline int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b) { return iter? hts_itr_next(fp, iter, b, 0) : bam_read1(fp, b); }
 	static inline void bam_iter_destroy(bam_iter_t iter) { bam_itr_destroy(iter); }
 
 	/*!

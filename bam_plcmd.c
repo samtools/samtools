@@ -157,7 +157,7 @@ static int mplp_func(void *data, bam1_t *b)
 	int ret, skip = 0;
 	do {
 		int has_ref;
-		ret = ma->iter? bam_itr_next(ma->fp, ma->iter, b) : sam_read1(ma->fp, ma->h, b);
+		ret = ma->iter? sam_itr_next(ma->fp, ma->iter, b) : sam_read1(ma->fp, ma->h, b);
 		if (ret < 0) break;
         // The 'B' cigar operation is not part of the specification, considering as obsolete.
 		//  bam_remove_B(b);
@@ -286,12 +286,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         // Collect read group IDs with PL (platform) listed in pl_list (note: fragile, strstr search)
 		rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
 		if (conf->reg) {
-			hts_idx_t *idx = bam_index_load(fn[i]);
+			hts_idx_t *idx = sam_index_load(data[i]->fp, fn[i]);
 			if (idx == 0) {
 				fprintf(stderr, "[%s] fail to load index for %s\n", __func__, fn[i]);
 				exit(1);
 			}
-            if ( (data[i]->iter=bam_itr_querys(idx, data[i]->h, conf->reg)) == 0) {
+            if ( (data[i]->iter=sam_itr_querys(idx, data[i]->h, conf->reg)) == 0) {
                 fprintf(stderr, "[E::%s] fail to parse region '%s'\n", __func__, conf->reg);
                 exit(1);
             }

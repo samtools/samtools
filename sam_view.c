@@ -228,22 +228,22 @@ int main_samview(int argc, char *argv[])
 	} else { // retrieve alignments in specified regions
 		int i;
 		bam1_t *b;
-		hts_idx_t *idx = bam_index_load(argv[optind]); // load BAM index
+		hts_idx_t *idx = sam_index_load(in, argv[optind]); // load index
 		if (idx == 0) { // index is unavailable
-			fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM files.\n");
+			fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
 			ret = 1;
 			goto view_end;
 		}
 		b = bam_init1();
 		for (i = optind + 1; i < argc; ++i) {
 			int result;
-			hts_itr_t *iter = bam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
+			hts_itr_t *iter = sam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
 			if (iter == NULL) { // reference name is not found
 				fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
 				continue;
 			}
 			// fetch alignments
-			while ((result = bam_itr_next(in, iter, b)) >= 0) {
+			while ((result = sam_itr_next(in, iter, b)) >= 0) {
 				if (!process_aln(header, b)) {
 					if (!is_count) sam_write1(out, header, b); // write the alignment to `out'
 					count++;
