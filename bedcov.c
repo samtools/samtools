@@ -5,15 +5,15 @@
 #include <string.h>
 #include <unistd.h>
 #include "htslib/kstring.h"
-#include "htslib/bgzf.h"
-#include "bam.h"
+#include "htslib/sam.h"
 
 #include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
-	bamFile fp;
-	bam_iter_t iter;
+	htsFile *fp;
+	bam_hdr_t *header;
+	hts_itr_t *iter;
 	int min_mapQ;
 } aux_t;
 
@@ -23,7 +23,7 @@ static int read_bam(void *data, bam1_t *b)
     int ret;
     while (1)
     {
-        ret = aux->iter? bam_iter_read(aux->fp, aux->iter, b) : bam_read1(aux->fp, b);
+        ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->header, b);
         if ( ret<0 ) break;
         if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
         if ( (int)b->core.qual < aux->min_mapQ ) continue;
@@ -37,8 +37,7 @@ int main_bedcov(int argc, char *argv[])
 	gzFile fp;
 	kstring_t str;
 	kstream_t *ks;
-	bam_index_t **idx;
-	bam_header_t *h = 0;
+	hts_idx_t **idx;
 	aux_t **aux;
 	int *n_plp, dret, i, n, c, min_mapQ = 0;
 	int64_t *cnt;
@@ -56,18 +55,18 @@ int main_bedcov(int argc, char *argv[])
 	memset(&str, 0, sizeof(kstring_t));
 	n = argc - optind - 1;
 	aux = calloc(n, sizeof(aux_t*));
-	idx = calloc(n, sizeof(bam_index_t*));
+	idx = calloc(n, sizeof(hts_idx_t*));
 	for (i = 0; i < n; ++i) {
 		aux[i] = calloc(1, sizeof(aux_t));
 		aux[i]->min_mapQ = min_mapQ;
-		aux[i]->fp = bam_open(argv[i+optind+1], "r");
-		idx[i] = bam_index_load(argv[i+optind+1]);
+		aux[i]->fp = sam_open(argv[i+optind+1], "r");
+		idx[i] = sam_index_load(aux[i]->fp, argv[i+optind+1]);
 		if (aux[i]->fp == 0 || idx[i] == 0) {
 			fprintf(stderr, "ERROR: fail to open index BAM file '%s'\n", argv[i+optind+1]);
 			return 2;
 		}
-		bgzf_set_cache_size(aux[i]->fp, 20);
-		if (i == 0) h = bam_header_read(aux[0]->fp);
+		// TODO bgzf_set_cache_size(aux[i]->fp, 20);
+		aux[i]->header = sam_hdr_read(aux[i]->fp);
 	}
 	cnt = calloc(n, 8);
 
@@ -82,7 +81,7 @@ int main_bedcov(int argc, char *argv[])
 
 		for (p = q = str.s; *p && *p != '\t'; ++p);
 		if (*p != '\t') goto bed_error;
-		*p = 0; tid = bam_get_tid(h, q); *p = '\t';
+		*p = 0; tid = bam_name2id(aux[0]->header, q); *p = '\t';
 		if (tid < 0) goto bed_error;
 		for (q = p = p + 1; isdigit(*p); ++p);
 		if (*p != '\t') goto bed_error;
@@ -94,8 +93,8 @@ int main_bedcov(int argc, char *argv[])
 		} else goto bed_error;
 
 		for (i = 0; i < n; ++i) {
-			if (aux[i]->iter) bam_iter_destroy(aux[i]->iter);
-			aux[i]->iter = bam_iter_query(idx[i], tid, beg, end);
+			if (aux[i]->iter) hts_itr_destroy(aux[i]->iter);
+			aux[i]->iter = sam_itr_queryi(idx[i], tid, beg, end);
 		}
 		mplp = bam_mplp_init(n, read_bam, (void**)aux);
 		bam_mplp_set_maxcnt(mplp, 64000);
@@ -120,12 +119,12 @@ bed_error:
 
 	free(cnt);
 	for (i = 0; i < n; ++i) {
-		if (aux[i]->iter) bam_iter_destroy(aux[i]->iter);
-		bam_index_destroy(idx[i]);
-		bam_close(aux[i]->fp);
+		if (aux[i]->iter) hts_itr_destroy(aux[i]->iter);
+		hts_idx_destroy(idx[i]);
+		bam_hdr_destroy(aux[i]->header);
+		sam_close(aux[i]->fp);
 		free(aux[i]);
 	}
-	bam_header_destroy(h);
 	free(aux); free(idx);
 	free(str.s);
 	return 0;
