@@ -3,7 +3,7 @@ samtools
 
 This is the official development repository for samtools.
 
-The original samtools package has been splitted into three separate 
+The original samtools package has been split into three separate 
 but tightly coordinated projects:
 - htslib:   C-library for handling high-throughput sequencing data
 - samtools: mpileup and other tools for handling SAM, BAM, CRAM
