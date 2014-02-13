@@ -31,8 +31,10 @@ void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
 		if (p && q && (t == 0 || (p < t && q < t))) { // ID and PL are both present
 			int lp, lq;
 			char *x;
-			for (r = p; *r && *r != '\t' && *r != '\n'; ++r); lp = r - p;
-			for (r = q; *r && *r != '\t' && *r != '\n'; ++r); lq = r - q;
+			for (r = p; *r && *r != '\t' && *r != '\n'; ++r) { }
+			lp = r - p;
+			for (r = q; *r && *r != '\t' && *r != '\n'; ++r) { }
+			lq = r - q;
 			x = calloc((lp > lq? lp : lq) + 1, 1);
 			for (r = q; *r && *r != '\t' && *r != '\n'; ++r) x[r-q] = *r;
 			if (strstr(list, x)) { // insert ID to the hash table
