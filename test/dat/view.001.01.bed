@@ -22,6 +22,6 @@
 browser position ref1:1-56
 browser hide all
 track name="my track" description="A track line" visibility=2 colorByStrand="255,0,0 0,0,255"
-ref1	5    11
-ref1	39   45	somewhere	500	+	39	41	127,127,0	2	2,2	0,4
+ref1	10	24	somewhere	500	+	10	24	127,127,0	2	2,2	10,22
+ref1	44	45
 ref2	16

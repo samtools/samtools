@@ -587,7 +587,7 @@ sub run_view_test
 	    passed($opts, $args{msg});
 	}
     }
-    print "\tFailed command:\n\t@cmd\n" if ($res);
+    print "\tFailed command:\n\t@cmd\n\n" if ($res);
 }
 
 sub sam_compare
@@ -1033,6 +1033,10 @@ sub test_view
     cmd("'$$opts{bin}/samtools' index '$bam_with_ur_out'");
     cmd("'$$opts{bin}/samtools' index '$cram_with_ur_out'");
 
+    my $bed1 = "$$opts{path}/dat/view.001.01.bed";
+    my $bed2 = "$$opts{path}/dat/view.001.02.bed";
+    my $bed1reg = [['ref1', 11, 24], ['ref1', 45, 45], ['ref2', 17, 17]];
+
     my @region_tests = (
 	['reg1', { region => [['ref1']] }, [], ['ref1']],
 	['reg2', { region => [['ref1', 15]] }, [], ['ref1:15']],
@@ -1045,12 +1049,40 @@ sub test_view
 	 [], ['ref1:15-45', 'ref2:16-31']],
 	['reg7', { region => [['ref1', 15, 15], ['ref1', 45, 45]] },
 	 [], ['ref1:15-15', 'ref1:45-45']],
+	# Regions combined with other filters.
 	['reg8', { region => [['ref1']], flags_required => 128 },
 	 ['-f', 128], ['ref1']],
 	['reg9', { region => [['ref1', 15, 45]], min_map_qual => 50 },
 	 ['-q', 50], ['ref1:15-45']],
 	['reg10', { region => [['ref1', 15, 45]], read_groups => { grp2 => 1 }},
 	 ['-r', 'grp2'], ['ref1:15-45']],
+
+	# Regions from BED files.  Regions here need to be kept in synch.
+	# with the .bed files in test/dat.  Note also that BED counts from
+	# base 0 and ends ranges one past the last base.
+	# $bed1reg is defined above as it's used a lot of times.
+
+	['bed1', { region => $bed1reg }, ['-L', $bed1], []],
+	['bed2', { region => [['ref1', 6, 20]] }, ['-L', $bed2], []],
+
+	# BED file plus region specification.
+
+	['bed1r1', { region => [['ref1', 11, 16]] },
+	 ['-L', $bed1], ['ref1:11-16']],
+	['bed1r2', { region => [['ref2', 17, 17]] }, ['-L', $bed1], ['ref2']],
+
+	# BED file plus other filters
+
+	['bed1f1', { region => $bed1reg, read_groups => { grp1 => 1} },
+	 ['-L', $bed1, '-r', 'grp1'], []],
+	['bed1f2', { region => $bed1reg, flags_required => 128 },
+	 ['-L', $bed1, '-f', 128], []],
+	['bed1f3', { region => $bed1reg, min_map_qual => 5 },
+	 ['-L', $bed1, '-q', 5], []],
+
+	# BED file, region and filters
+	['bed1f1', { region => [['ref1', 11, 16]], read_groups => { grp1 => 1}},
+	 ['-L', $bed1, '-r', 'grp1'], ['ref1:11-16']],
 	);
     foreach my $rt (@region_tests) {
 	my $sam_file = "$$opts{tmp}/view.001.$$rt[0].sam";
@@ -1071,6 +1103,7 @@ sub test_view
 			  out => sprintf("%s.test%02d.sam", $out, $test),
 			  redirect => 1,
 			  compare_count => $sam_file);
+	    $test++;
 	}
     }
 }
