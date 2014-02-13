@@ -14,7 +14,7 @@ typedef struct {
 		++(s)->n_reads[w];												\
 		if ((c)->flag & BAM_FPAIRED) {									\
 			++(s)->n_pair_all[w];										\
-			if ((c)->flag & BAM_FPROPER_PAIR) ++(s)->n_pair_good[w];	\
+			if (((c)->flag & BAM_FPROPER_PAIR) && !((c)->flag & BAM_FUNMAP) ) ++(s)->n_pair_good[w];	\
 			if ((c)->flag & BAM_FREAD1) ++(s)->n_read1[w];				\
 			if ((c)->flag & BAM_FREAD2) ++(s)->n_read2[w];				\
 			if (((c)->flag & BAM_FMUNMAP) && !((c)->flag & BAM_FUNMAP)) ++(s)->n_sgltn[w];	\
