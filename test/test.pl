@@ -1027,8 +1027,8 @@ sub test_view
     }
 
     # Region query tests
-    my @region_inputs = ([BAM  => $bam_with_ur_out],);
-		#	[CRAM => $cram_with_ur_out]);
+    my @region_inputs = ([BAM  => $bam_with_ur_out],
+			 [CRAM => $cram_with_ur_out]);
     # First try indexing
     cmd("'$$opts{bin}/samtools' index '$bam_with_ur_out'");
     cmd("'$$opts{bin}/samtools' index '$cram_with_ur_out'");
