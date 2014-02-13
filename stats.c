@@ -31,7 +31,10 @@
 #include "samtools.h"
 
 #define BWA_MIN_RDLEN 35
-#define IS_PAIRED(bam) ((bam)->core.flag&BAM_FPAIRED && !((bam)->core.flag&BAM_FUNMAP) && !((bam)->core.flag&BAM_FMUNMAP))
+// From the spec
+// If 0x4 is set, no assumptions can be made about RNAME, POS, CIGAR, MAPQ, bits 0x2, 0x10, 0x100 and 0x800, and the bit 0x20 of the previous read in the template.
+#define IS_PAIRED(bam) (((bam)->core.flag&BAM_FPAIRED) && !((bam)->core.flag&BAM_FUNMAP) && !((bam)->core.flag&BAM_FMUNMAP))
+#define IS_PROPERLYPAIRED(bam) (((bam)->core.flag&(BAM_FPAIRED|BAM_FPROPER_PAIR)) == (BAM_FPAIRED|BAM_FPROPER_PAIR) && !((bam)->core.flag&BAM_FUNMAP))
 #define IS_UNMAPPED(bam) ((bam)->core.flag&BAM_FUNMAP)
 #define IS_REVERSE(bam) ((bam)->core.flag&BAM_FREVERSE)
 #define IS_MATE_REVERSE(bam) ((bam)->core.flag&BAM_FMREVERSE)
@@ -101,6 +104,7 @@ typedef struct
     uint64_t nreads_unmapped;
     uint64_t nreads_unpaired;
     uint64_t nreads_paired;
+    uint64_t nreads_properly_paired;
     uint64_t nreads_anomalous;
     uint64_t nreads_mq0;
     uint64_t nbases_mapped;
@@ -687,6 +691,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         {
             stats->nreads_paired++;
 
+            if (IS_PROPERLYPAIRED(bam_line)) stats->nreads_properly_paired++;
+
             if ( bam_line->core.tid!=bam_line->core.mtid )
                 stats->nreads_anomalous++;
 
@@ -924,6 +930,7 @@ void output_stats(stats_t *stats)
     printf("SN\treads unmapped:\t%ld\n", (long)stats->nreads_unmapped);
     printf("SN\treads unpaired:\t%ld\n", (long)stats->nreads_unpaired);
     printf("SN\treads paired:\t%ld\n", (long)stats->nreads_paired);
+    printf("SN\treads properly paired:\t%ld\n", (long)stats->nreads_properly_paired);
     printf("SN\treads duplicated:\t%ld\n", (long)stats->nreads_dup);
     printf("SN\treads MQ0:\t%ld\n", (long)stats->nreads_mq0);
     printf("SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
