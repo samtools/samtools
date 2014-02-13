@@ -23,6 +23,8 @@ samtools pileup -vcf ref.fasta aln.sorted.bam
 samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools tview aln.sorted.bam ref.fasta
+.PP
+samtools flags PAIRED,UNMAP,MUNMAP
 
 .SH DESCRIPTION
 .PP
@@ -599,6 +601,30 @@ Minimum Phred-scaled LOD to call a heterozygote. [40]
 .BI -Q \ INT
 Minimum base quality to be used in het calling. [13]
 .RE
+
+.TP
+.B flags
+samtools flags INT|STR[,...]
+
+Convert between textual and numeric flag representation.
+
+.B FLAGS:
+.TS
+tab(%);
+l l l .
+0x1 % PAIRED % .. paired-end (or multiple-segment) sequencing technology
+0x2 % PROPER_PAIR % .. each segment properly aligned according to the aligner
+0x4 % UNMAP % .. segment unmapped
+0x8 % MUNMAP % .. next segment in the template unmapped
+0x10 % REVERSE % .. SEQ is reverse complemented
+0x20 % MREVERSE % .. SEQ of the next segment in the template is reversed
+0x40 % READ1 % .. the first segment in the template
+0x80 % READ2 % .. the last segment in the template
+0x100 % SECONDARY % .. secondary alignment
+0x200 % QCFAIL % .. not passing quality controls
+0x400 % DUP % .. PCR or optical duplicate
+0x800 % SUPPLEMENTARY % .. supplementary alignment
+.TE
 
 .TP
 .BR help ,\  --help
