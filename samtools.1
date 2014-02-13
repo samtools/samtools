@@ -140,7 +140,7 @@ file.
 .TP
 .B -u
 Output uncompressed BAM. This option saves time spent on
-compression/decomprssion and is thus preferred when the output is piped
+compression/decompression and is thus preferred when the output is piped
 to another samtools command.
 .RE
 
@@ -330,7 +330,7 @@ Apply -m and -F thresholds per sample to increase sensitivity of calling.
 By default both options are applied to reads pooled from all samples.
 .TP
 .BI -P \ STR
-Comma dilimited list of platforms (determined by
+Comma-delimited list of platforms (determined by
 .BR @RG-PL )
 from which indel candidates are obtained. It is recommended to collect
 indel candidates from sequencing technologies that have low indel error
@@ -409,7 +409,7 @@ and the headers of other files will be ignored.
 .RS
 .TP 8
 .B -1
-Use zlib compression level 1 to comrpess the output
+Use zlib compression level 1 to compress the output.
 .TP
 .B -f
 Force to overwrite the output file if present.
@@ -453,7 +453,7 @@ will be created.
 .B idxstats
 samtools idxstats <aln.bam>
 
-Retrieve and print stats in the index file. The output is TAB delimited
+Retrieve and print stats in the index file. The output is TAB-delimited
 with each line consisting of reference sequence name, sequence length, #
 mapped reads and # unmapped reads.
 
@@ -466,7 +466,7 @@ indexed reference sequence. If no region is specified,
 .B faidx
 will index the file and create
 .I <ref.fasta>.fai
-on the disk. If regions are speficified, the subsequences will be
+on the disk. If regions are specified, the subsequences will be
 retrieved and printed to stdout in the FASTA format. The input file can
 be compressed in the
 .B RAZF
@@ -505,7 +505,7 @@ chromosomes or orphan reads).
 .RS
 .TP 8
 .B -s
-Remove duplicate for single-end reads. By default, the command works for
+Remove duplicates for single-end reads. By default, the command works for
 paired-end reads only.
 .TP 8
 .B -S
@@ -783,7 +783,7 @@ Unaligned words used in bam_import.c, bam_endian.h, bam.c and bam_aux.c.
 .IP o 2
 Samtools paired-end rmdup does not work for unpaired reads (e.g. orphan
 reads or ends mapped to different chromosomes). If this is a concern,
-please use Picard's MarkDuplicate which correctly handles these cases,
+please use Picard's MarkDuplicates which correctly handles these cases,
 although a little slower.
 
 .SH AUTHOR
