@@ -311,27 +311,45 @@ sub test_mpileup
 {
     my ($opts,%args) = @_;
 
-    my @bams = ('mpileup.1.bam','mpileup.2.bam','mpileup.3.bam');
-    my $ref  = 'mpileup.ref.fa';
+    my @files = ('mpileup.1','mpileup.2','mpileup.3');
+    my $ref   = 'mpileup.ref.fa';
 
-    # make a local copy, index the bams and the reference
-    open(my $fh,'>',"$$opts{tmp}/mpileup.list") or error("$$opts{tmp}/mpileup.list: $!");
-    for my $bam (@bams)
+    # temporary hack: annotate SAMs with absolute reference path, otherwise SAM to CRAM conversion is not working
+    for my $file (@files)
     {
-        cmd("cp $$opts{path}/dat/$bam $$opts{tmp}/$bam");
-        cmd("$$opts{bin}/samtools index $$opts{tmp}/$bam");
-        print $fh "$$opts{tmp}/$bam\n";
+        open(my $fh,'>',"$$opts{tmp}/$file.sam") or error("$$opts{tmp}/$file.sam");
+        print $fh join("\t", qw(@HD VN:1.0 SO:coordinate)), "\n";
+        print $fh join("\t", qw(@SQ SN:17 LN:81195210 M5:a9a06ca09c111789d92723fbf39820f6 AS:NCBI37 SP:Human), "UR:$$opts{path}/dat/$ref"), "\n";
+        close($fh) or error("close failed: $$opts{tmp}/$file.sam");
+        cmd("cat $$opts{path}/dat/$file.sam >> $$opts{tmp}/$file.sam");
     }
-    close($fh);
+
+    # make a local copy, create bams, index the bams and the reference
+    open(my $fh1,'>',"$$opts{tmp}/mpileup.bam.list") or error("$$opts{tmp}/mpileup.bam.list: $!");
+    open(my $fh2,'>',"$$opts{tmp}/mpileup.cram.list") or error("$$opts{tmp}/mpileup.cram.list: $!");
+    for my $file (@files)
+    {
+        cmd("$$opts{bin}/samtools view -b $$opts{tmp}/$file.sam > $$opts{tmp}/$file.bam");
+        cmd("$$opts{bin}/samtools view -C $$opts{tmp}/$file.sam > $$opts{tmp}/$file.cram");
+        cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.bam");
+        cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.cram");
+        print $fh1 "$$opts{tmp}/$file.bam\n";
+        print $fh2 "$$opts{tmp}/$file.cram\n";
+    }
+    close($fh1);
+    close($fh2);
     cmd("cp $$opts{path}/dat/$ref $$opts{tmp}/$ref");
     cmd("$$opts{bin}/bgzip -fi $$opts{tmp}/$ref");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/$ref.gz");
 
     # print "$$opts{bin}samtools mpileup -gb $$opts{tmp}/mpileup.list -f $$opts{tmp}/$args{ref}.gz > $$opts{tmp}/mpileup.bcf\n";
-    test_cmd($opts,out=>'dat/mpileup.out.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150 2>/dev/null");
-    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600 2>/dev/null| grep -v ^##samtools | grep -v ^##ref");
+    test_cmd($opts,out=>'dat/mpileup.out.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150 2>/dev/null");
+    test_cmd($opts,out=>'dat/mpileup.out.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150 2>/dev/null");
+    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600 2>/dev/null| grep -v ^##samtools | grep -v ^##ref");
+    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600 2>/dev/null| grep -v ^##samtools | grep -v ^##ref");
     # test that filter mask replaces (not just adds to) default mask
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam 2>/dev/null | grep -v mpileup");
+    test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram 2>/dev/null | grep -v mpileup");
 }
 
 sub test_usage
