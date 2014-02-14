@@ -1,0 +1,39 @@
+@HD	VN:1.4	SO:coordinate
+@RG	ID:grp1	DS:Group 1	LB:Library 1	SM:Sample
+@PG	ID:prog1	PN:emacs	CL:emacs	VN:23.1.1
+@CO	The MIT License
+@CO	
+@CO	Copyright (c) 2014 Genome Research Ltd.
+@CO	
+@CO	Permission is hereby granted, free of charge, to any person obtaining a copy
+@CO	of this software and associated documentation files (the "Software"), to deal
+@CO	in the Software without restriction, including without limitation the rights
+@CO	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+@CO	copies of the Software, and to permit persons to whom the Software is
+@CO	furnished to do so, subject to the following conditions:
+@CO	
+@CO	The above copyright notice and this permission notice shall be included in
+@CO	all copies or substantial portions of the Software.
+@CO	
+@CO	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+@CO	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+@CO	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+@CO	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+@CO	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+@CO	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+@CO	THE SOFTWARE.
+@CO	
+@CO	Test file for the -B option. Only very basic tests here.  The full
+@CO	B operator semantics are currently not well defined so it's not
+@CO	possible to say what should happen in certain cases.
+@CO	For a long discussion of B operators, see
+@CO	https://sourceforge.net/p/samtools/mailman/message/28463294/
+@CO	 
+@SQ	SN:ref1	LN:56	M5:08c04d512d4797d9ba2a156c1daba468
+ref1_grp1_p001	0	ref1	1	0	10M5B10M	=	25	34	CGAGCTCGGTACGGTACCCG	AAAAAAAAAABBBBBBBBBB	RG:Z:grp1
+ref1_grp1_p002	0	ref1	1	0	10M5B10M	=	25	34	CGAGCTCGGTACGGTACCCG	BBBBBBBBBBAAAAAAAAAA	RG:Z:grp1
+ref1_grp1_p003	0	ref1	1	0	10M5B10M	=	25	34	CGAGCTCGGTACGGTACCCG	0000000000AAAAAAAAAA	RG:Z:grp1
+ref1_grp1_p004	0	ref1	1	0	10M5B10M	=	25	34	CGAGCTCGGTACGGTACCCG	AAAAAAAAAA0000000000	RG:Z:grp1
+ref1_grp1_p005	0	ref1	2	0	1M2B1M	=	25	34	GC	AA	RG:Z:grp1
+ref1_grp1_p006	0	ref1	2	0	1M1I1M2B1I1M	=	25	34	GTATA	000AA	RG:Z:grp1
+ref1_grp1_p007	0	ref1	3	0	1M1D1M2B1M1D1M	=	25	34	AGAG	0000	RG:Z:grp1

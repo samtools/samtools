@@ -492,6 +492,8 @@ sub filter_sam
 
     my $no_body   = exists($args->{no_body});
     my $no_header = exists($args->{no_header});
+    my $no_m5     = exists($args->{no_m5});
+    my $no_sq     = exists($args->{no_sq});
     my $min_map_qual   = $args->{min_map_qual} || 0;
     my $flags_required = $args->{flags_required} || 0;
     my $flags_rejected = $args->{flags_rejected} || 0;
@@ -510,6 +512,10 @@ sub filter_sam
 		my ($id) = /\tID:([^\t]+)/;
 		my ($lib) = /\tLB:([^\t]+)/;
 		if (exists($libraries->{$lib})) { $read_groups->{$id} = 1; }
+	    }
+	    next if ($no_sq && /^\@SQ/);
+	    if ($no_m5 && /^\@SQ/) {
+		s/\tM5:[^\t\n]+//;
 	    }
 	    print $sam_out $_ || die "Error writing to $out : $!\n";
 	} else {
@@ -1106,4 +1112,52 @@ sub test_view
 	    $test++;
 	}
     }
+
+    # -T / -t options
+    my $sam_no_sq = "$$opts{tmp}/view.001.no_sq.sam";
+    filter_sam($sam_no_ur, $sam_no_sq, {no_sq => 1});
+    my $sam_no_m5 = "$$opts{tmp}/view.001.no_m5.sam";
+    filter_sam($sam_no_ur, $sam_no_m5, {no_m5 => 1});
+    
+    my $ref_file = "$$opts{path}/dat/view.001.fa";
+    my $ref_idx  = "$$opts{path}/dat/view.001.fa.fai";
+
+    # Test SAM output
+    foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
+	run_view_test($opts,
+		      msg => "$test: Add \@SQ with $topt->[0] (SAM output)",
+		      args => ['-h', @$topt, $sam_no_sq],
+		      out => sprintf("%s.test%02d.sam", $out, $test),
+		      compare => $sam_no_m5);
+	$test++;
+    }
+
+    # Test BAM output.
+    foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
+	my $bam = sprintf("%s.test%02d.bam", $out, $test);
+	run_view_test($opts,
+		      msg => "$test: Add \@SQ with $topt->[0] (BAM output)",
+		      args => ['-b', @$topt, $sam_no_sq],
+		      out => $bam);
+	$test++;
+	run_view_test($opts,
+		      msg => "$test: BAM -> SAM and compare",
+		      args => ['-h', $bam],
+		      out => sprintf("%s.test%02d.sam", $out, $test),
+		      compare => $sam_no_m5);
+	$test++;
+    }
+
+    # Don't bother testing CRAM for the moment
+
+    # CIGAR B-operator removal tests.
+    my $b_op_sam      = "$$opts{path}/dat/view.003.sam";
+    my $b_op_expected = "$$opts{path}/dat/view.003.expected.sam";
+    run_view_test($opts,
+		  msg => "$test: CIGAR B-operator removal",
+		  args => ['-h', '-B', $b_op_sam],
+		  out => sprintf("%s.test%02d.sam", $out, $test),
+		  compare => $b_op_expected);
+    $test++;
+    
 }
