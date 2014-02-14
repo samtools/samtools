@@ -658,8 +658,8 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
 	if (bc->ori_ref < 0) 
     {
         bcf_update_info_flag(hdr, rec, "INDEL", NULL, 1);
-        bcf_update_info_int32(hdr, rec, "IDV", (int*)&bca->max_support, 1);
-        bcf_update_info_float(hdr, rec, "IMF", (float*)&bca->max_frac, 1);
+        bcf_update_info_int32(hdr, rec, "IDV", &bca->max_support, 1);
+        bcf_update_info_float(hdr, rec, "IMF", &bca->max_frac, 1);
     }
     bcf_update_info_int32(hdr, rec, "DP", &bc->ori_depth, 1);
 
@@ -683,7 +683,7 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     if ( bc->mwu_mqs_cdf != HUGE_VAL )  bcf_update_info_float(hdr, rec, "MQSB2", &bc->mwu_mqs_cdf, 1);
     if ( bc->mwu_bq_cdf != HUGE_VAL )   bcf_update_info_float(hdr, rec, "BQB2", &bc->mwu_bq_cdf, 1);
 #endif
-    tmpf[0] = bc->ori_depth ? (double)bc->mq0/bc->ori_depth : 0;
+    tmpf[0] = bc->ori_depth ? (float)bc->mq0/bc->ori_depth : 0;
     bcf_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
 
 	// FORMAT
