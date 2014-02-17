@@ -14,8 +14,8 @@
 typedef struct __bcf_callaux_t {
 	int capQ, min_baseQ;
 	int openQ, extQ, tandemQ; // for indels
-	int min_support, max_support; // for collecting indel candidates
-	double min_frac, max_frac; // for collecting indel candidates
+	uint32_t min_support, max_support; // for collecting indel candidates
+	float min_frac, max_frac; // for collecting indel candidates
     int per_sample_flt; // indel filtering strategy
     int *ref_pos, *alt_pos, npos, *ref_mq, *alt_mq, *ref_bq, *alt_bq, *fwd_mqs, *rev_mqs, nqual; // for bias tests
 	// for internal uses
@@ -30,7 +30,8 @@ typedef struct __bcf_callaux_t {
 } bcf_callaux_t;
 
 typedef struct {
-	unsigned int depth, n_supp, ori_depth, mq0;
+    uint32_t ori_depth;
+	unsigned int depth, n_supp, mq0;
     float qsum[4];
     // The fields are:
     //      depth fwd   .. ref (0) and non-ref (2)

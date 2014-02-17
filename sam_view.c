@@ -12,13 +12,24 @@ KHASH_SET_INIT_STR(rg)
 
 typedef khash_t(rg) *rghash_t;
 
-// FIXME: we'd better use no global variables...
-static rghash_t g_rghash = 0;
-static int g_min_mapQ = 0, g_flag_on = 0, g_flag_off = 0, g_qual_scale = 0, g_min_qlen = 0, g_remove_B = 0;
-static uint32_t g_subsam_seed = 0;
-static double g_subsam_frac = -1.;
-static char *g_library, *g_rg;
-static void *g_bed;
+// This structure contains the settings for a samview run
+typedef struct samview_settings {
+	rghash_t rghash;
+	int min_mapQ;
+	int flag_on;
+	int flag_off;
+	int qual_scale;
+	int min_qlen;
+	int remove_B;
+	uint32_t subsam_seed;
+	double subsam_frac;
+	char* library;
+	char* rg;
+	void* bed;
+	size_t remove_aux_len;
+	char** remove_aux;
+} samview_settings_t;
+
 
 // TODO Add declarations of these to a viable htslib or samtools header
 extern const char *bam_get_library(bam_hdr_t *header, const bam1_t *b);
@@ -28,46 +39,56 @@ void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
-static int process_aln(const bam_hdr_t *h, bam1_t *b)
+// Returns 0 to indicate read should be output 1 otherwise
+static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
 {
-	if (g_remove_B) bam_remove_B(b);
-	if (g_qual_scale > 1) {
+	if (settings->remove_B) bam_remove_B(b);
+	if (settings->qual_scale > 1) {
 		int i;
 		uint8_t *qual = bam_get_qual(b);
 		for (i = 0; i < b->core.l_qseq; ++i) {
-			int c = qual[i] * g_qual_scale;
+			int c = qual[i] * settings->qual_scale;
 			qual[i] = c < 93? c : 93;
 		}
 	}
-	if (g_min_qlen > 0) {
+	if (settings->min_qlen > 0) {
 		int k, qlen = 0;
 		uint32_t *cigar = bam_get_cigar(b);
 		for (k = 0; k < b->core.n_cigar; ++k)
 			if ((bam_cigar_type(bam_cigar_op(cigar[k]))&1) || bam_cigar_op(cigar[k]) == BAM_CHARD_CLIP)
 				qlen += bam_cigar_oplen(cigar[k]);
-		if (qlen < g_min_qlen) return 1;
+		if (qlen < settings->min_qlen) return 1;
 	}
-	if (b->core.qual < g_min_mapQ || ((b->core.flag & g_flag_on) != g_flag_on) || (b->core.flag & g_flag_off))
+	if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off))
 		return 1;
-	if (g_bed && b->core.tid >= 0 && !bed_overlap(g_bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b)))
+	if (settings->bed && b->core.tid >= 0 && !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b)))
 		return 1;
-	if (g_subsam_frac > 0.) {
-		uint32_t k = __ac_X31_hash_string(bam_get_qname(b)) + g_subsam_seed;
-		if ((double)(k&0xffffff) / 0x1000000 >= g_subsam_frac) return 1;
+	if (settings->subsam_frac > 0.) {
+		uint32_t k = __ac_X31_hash_string(bam_get_qname(b)) + settings->subsam_seed;
+		if ((double)(k&0xffffff) / 0x1000000 >= settings->subsam_frac) return 1;
 	}
-	if (g_rg || g_rghash) {
+	if (settings->rg || settings->rghash) {
 		uint8_t *s = bam_aux_get(b, "RG");
 		if (s) {
-			if (g_rg) return (strcmp(g_rg, (char*)(s + 1)) == 0)? 0 : 1;
-			if (g_rghash) {
-				khint_t k = kh_get(rg, g_rghash, (char*)(s + 1));
-				return (k != kh_end(g_rghash))? 0 : 1;
+			if (settings->rg) return (strcmp(settings->rg, (char*)(s + 1)) == 0)? 0 : 1;
+			if (settings->rghash) {
+				khint_t k = kh_get(rg, settings->rghash, (char*)(s + 1));
+				return (k != kh_end(settings->rghash))? 0 : 1;
 			}
 		}
 	}
-	if (g_library) {
+	if (settings->library) {
 		const char *p = bam_get_library((bam_hdr_t*)h, b);
-		return (p && strcmp(p, g_library) == 0)? 0 : 1;
+		return (p && strcmp(p, settings->library) == 0)? 0 : 1;
+	}
+	if (settings->remove_aux_len) {
+		size_t i;
+		for (i = 0; i < settings->remove_aux_len; ++i) {
+			uint8_t *s = bam_aux_get(b, settings->remove_aux[i]);
+			if (s) {
+				bam_aux_del(b, s);
+			}
+		}
 	}
 	return 0;
 }
@@ -113,19 +134,35 @@ int main_samview(int argc, char *argv[])
 	samFile *in = 0, *out = 0;
 	bam_hdr_t *header;
 	char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0, *q;
+	
+	samview_settings_t settings = {
+		.rghash = NULL,
+		.min_mapQ = 0,
+		.flag_on = 0,
+		.flag_off = 0,
+		.qual_scale = 0,
+		.min_qlen = 0,
+		.remove_B = 0,
+		.subsam_seed = 0,
+		.subsam_frac = -1.,
+		.library = NULL,
+		.rg = NULL,
+		.bed = NULL,
+	};
 
 	/* parse command-line options */
+	/* TODO: convert this to getopt_long we're running out of letters */
 	strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:Q:@:m:x:")) >= 0) {
 		switch (c) {
 		case 's':
-			if ((g_subsam_seed = strtol(optarg, &q, 10)) != 0) {
-				srand(g_subsam_seed);
-				g_subsam_seed = rand();
+			if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
+				srand(settings.subsam_seed);
+				settings.subsam_seed = rand();
 			}
-			g_subsam_frac = strtod(q, &q);
+			settings.subsam_frac = strtod(q, &q);
 			break;
-		case 'm': g_min_qlen = atoi(optarg); break;
+		case 'm': settings.min_qlen = atoi(optarg); break;
 		case 'c': is_count = 1; break;
 		case 'S': break;
 		case 'b': out_format = "b"; break;
@@ -134,22 +171,34 @@ int main_samview(int argc, char *argv[])
 		case 'h': is_header = 1; break;
 		case 'H': is_header_only = 1; break;
 		case 'o': fn_out = strdup(optarg); break;
-		case 'f': g_flag_on |= strtol(optarg, 0, 0); break;
-		case 'F': g_flag_off |= strtol(optarg, 0, 0); break;
-		case 'q': g_min_mapQ = atoi(optarg); break;
+		case 'f': settings.flag_on |= strtol(optarg, 0, 0); break;
+		case 'F': settings.flag_off |= strtol(optarg, 0, 0); break;
+		case 'q': settings.min_mapQ = atoi(optarg); break;
 		case 'u': compress_level = 0; break;
 		case '1': compress_level = 1; break;
-		case 'l': g_library = strdup(optarg); break;
-		case 'L': g_bed = bed_read(optarg); break;
-		case 'r': g_rg = strdup(optarg); break;
+		case 'l': settings.library = strdup(optarg); break;
+		case 'L': settings.bed = bed_read(optarg); break;
+		case 'r': settings.rg = strdup(optarg); break;
 		case 'R': fn_rg = strdup(optarg); break;
-		case 'x': out_format = "x"; break;
-		case 'X': out_format = "X"; break;
+				/* REMOVED as htslib doesn't support this
+		//case 'x': out_format = "x"; break;
+		//case 'X': out_format = "X"; break;
+				 */
 		case '?': is_long_help = 1; break;
 		case 'T': fn_ref = strdup(optarg); break;
-		case 'B': g_remove_B = 1; break;
-		case 'Q': g_qual_scale = atoi(optarg); break;
+		case 'B': settings.remove_B = 1; break;
+		case 'Q': settings.qual_scale = atoi(optarg); break;
 		case '@': n_threads = strtol(optarg, 0, 0); break;
+		case 'x':
+			{
+				if (strlen(optarg) != 2) {
+					fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
+					return usage(is_long_help);
+				}
+				settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
+				settings.remove_aux[settings.remove_aux_len-1] = optarg;
+			}
+			break;
 		default: return usage(is_long_help);
 		}
 	}
@@ -168,10 +217,10 @@ int main_samview(int argc, char *argv[])
 		FILE *fp_rg;
 		char buf[1024];
 		int ret;
-		g_rghash = kh_init(rg);
+		settings.rghash = kh_init(rg);
 		fp_rg = fopen(fn_rg, "r");
 		while (!feof(fp_rg) && fscanf(fp_rg, "%s", buf) > 0) // this is not a good style, but bear me...
-			kh_put(rg, g_rghash, strdup(buf), &ret); // we'd better check duplicates...
+			kh_put(rg, settings.rghash, strdup(buf), &ret); // we'd better check duplicates...
 		fclose(fp_rg);
 	}
 
@@ -189,10 +238,10 @@ int main_samview(int argc, char *argv[])
 		ret = 1;
 		goto view_end;
 	}
-	if (g_rghash) { // FIXME: I do not know what "bam_header_t::n_text" is for...
+	if (settings.rghash) { // FIXME: I do not know what "bam_header_t::n_text" is for...
 		char *tmp;
 		int l;
-		tmp = drop_rg(header->text, g_rghash, &l);
+		tmp = drop_rg(header->text, settings.rghash, &l);
 		free(header->text);
 		header->text = tmp;
 		header->l_text = l;
@@ -215,7 +264,7 @@ int main_samview(int argc, char *argv[])
 		bam1_t *b = bam_init1();
 		int r;
 		while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
-			if (!process_aln(header, b)) {
+			if (!process_aln(header, b, &settings)) {
 				if (!is_count) sam_write1(out, header, b); // write the alignment to `out'
 				count++;
 			}
@@ -244,7 +293,7 @@ int main_samview(int argc, char *argv[])
 			}
 			// fetch alignments
 			while ((result = sam_itr_next(in, iter, b)) >= 0) {
-				if (!process_aln(header, b)) {
+				if (!process_aln(header, b, &settings)) {
 					if (!is_count) sam_write1(out, header, b); // write the alignment to `out'
 					count++;
 				}
@@ -265,13 +314,16 @@ view_end:
 		printf("%" PRId64 "\n", count);
 
 	// close files, free and return
-	free(fn_list); free(fn_ref); free(fn_out); free(g_library); free(g_rg); free(fn_rg);
-	if (g_bed) bed_destroy(g_bed);
-	if (g_rghash) {
+	free(fn_list); free(fn_ref); free(fn_out); free(settings.library); free(settings.rg); free(fn_rg);
+	if (settings.bed) bed_destroy(settings.bed);
+	if (settings.rghash) {
 		khint_t k;
-		for (k = 0; k < kh_end(g_rghash); ++k)
-			if (kh_exist(g_rghash, k)) free((char*)kh_key(g_rghash, k));
-		kh_destroy(rg, g_rghash);
+		for (k = 0; k < kh_end(settings.rghash); ++k)
+			if (kh_exist(settings.rghash, k)) free((char*)kh_key(settings.rghash, k));
+		kh_destroy(rg, settings.rghash);
+	}
+	if (settings.remove_aux_len) {
+		free(settings.remove_aux);
 	}
 	sam_close(in);
 	if (!is_count)
@@ -290,8 +342,6 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
 	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
 	fprintf(stderr, "         -1       fast compression (force -b)\n");
-	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
-	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
 	fprintf(stderr, "         -c       print only the count of matching records\n");
 	fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
 	fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
@@ -306,6 +356,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -l STR   only output reads in library STR [null]\n");
 	fprintf(stderr, "         -r STR   only output reads in read group STR [null]\n");
 	fprintf(stderr, "         -s FLOAT fraction of templates to subsample; integer part as seed [-1]\n");
+	fprintf(stderr, "         -x STR   read tag to strip (repeatable) [null]\n");
 	fprintf(stderr, "         -?       longer help\n");
 	fprintf(stderr, "\n");
 	if (is_long_help)
@@ -384,8 +435,8 @@ int main_bam2fq(int argc, char *argv[])
 		putchar('@'); fputs(bam_get_qname(b), stdout);
 		if (no12) putchar('\n');
 		else {
-			if ((b->core.flag & 0x40) && !(b->core.flag & 0x80)) puts("/1");
-			else if ((b->core.flag & 0x80) && !(b->core.flag & 0x40)) puts("/2");
+			if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) puts("/1");
+			else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) puts("/2");
 			else putchar('\n');
 		}
 		if (max_buf < qlen + 1) {
@@ -397,7 +448,7 @@ int main_bam2fq(int argc, char *argv[])
 		seq = bam_get_seq(b);
 		for (i = 0; i < qlen; ++i)
 			buf[i] = bam_seqi(seq, i);
-		if (b->core.flag & 16) { // reverse complement
+		if (b->core.flag & BAM_FREVERSE) { // reverse complement
 			for (i = 0; i < qlen>>1; ++i) {
 				int8_t t = seq_comp_table[buf[qlen - 1 - i]];
 				buf[qlen - 1 - i] = seq_comp_table[buf[i]];
@@ -412,7 +463,7 @@ int main_bam2fq(int argc, char *argv[])
 		seq = bam_get_qual(b);
 		for (i = 0; i < qlen; ++i)
 			buf[i] = 33 + seq[i];
-		if (b->core.flag & 16) { // reverse
+		if (b->core.flag & BAM_FREVERSE) { // reverse
 			for (i = 0; i < qlen>>1; ++i) {
 				int8_t t = buf[qlen - 1 - i];
 				buf[qlen - 1 - i] = buf[i];
