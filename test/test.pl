@@ -558,6 +558,9 @@ sub run_view_test
     my ($opts, %args) = @_;
 
     printf "\t%-60s", $args{msg};
+
+    local $ENV{REF_PATH} =  $args{ref_path} if ($args{ref_path});
+
     my @cmd = ("$$opts{bin}/samtools", 'view');
     if ($args{out} && !$args{redirect}) { push(@cmd, '-o', $args{out}); }
     if ($args{args}) { push(@cmd, @{$args{args}}); }
@@ -761,6 +764,8 @@ sub test_view
 
     my $test_name = "test_view";
     print "$test_name:\n";
+
+    my $ref_path = "$$opts{path}/dat/cram_md5/%s";
     
     my $sam_no_ur   = "$$opts{path}/dat/view.001.sam";
     my $sam_with_ur = "$$opts{tmp}/view.001.sam";
@@ -818,6 +823,15 @@ sub test_view
 		  compare_sam => $sam_with_ur);
     $test++;
 
+    # SAM -> CRAM -> SAM with M5 tags
+    run_view_test($opts,
+		  msg => "$test: SAM -> CRAM -> SAM (M5 header tags)",
+		  args => ['-C', $sam_no_ur],
+		  out => sprintf("%s.test%02d.cram", $out, $test),
+		  compare_sam => $sam_no_ur,
+		  ref_path => $ref_path);
+    $test++;
+
     # SAM -> BAM -> CRAM -> SAM with UR tags
     my $cram_from_bam = sprintf("%s.test%02d.cram", $out, $test);
     run_view_test($opts,
@@ -827,6 +841,23 @@ sub test_view
 		  compare_sam => $sam_with_ur);
     $test++;
 
+    # SAM -> BAM -> CRAM -> SAM with M5 tags
+    my $bam_no_ur = sprintf("%s.test%02d.bam", $out, $test);
+    run_view_test($opts,
+		  msg => "$test: SAM -> BAM (M5 header tags)",
+		  args => ['-b', $sam_no_ur],
+		  out => $bam_no_ur,
+		  compare_sam => $sam_no_ur);
+    $test++;
+    my $cram_no_ur = sprintf("%s.test%02d.cram", $out, $test);
+    run_view_test($opts,
+		  msg => "$test: SAM -> BAM -> CRAM -> SAM (M5 header tags)",
+		  args => ['-C', $bam_no_ur],
+		  out => $cram_no_ur,
+		  compare_sam => $sam_no_ur,
+		  ref_path => $ref_path);
+    $test++;
+
     # SAM -> BAM -> CRAM -> BAM -> SAM with UR tags
     my $bam_from_cram = sprintf("%s.test%02d.bam", $out, $test);
     run_view_test($opts,
@@ -834,6 +865,15 @@ sub test_view
 		  args => ['-b', $cram_from_bam],
 		  out => $bam_from_cram,
 		  compare_sam => $sam_with_ur);
+    $test++;
+
+    # SAM -> BAM -> CRAM -> BAM -> SAM with M5 tags
+    run_view_test($opts,
+		  msg => "$test: CRAM -> BAM with M5",
+		  args => ['-b', $cram_no_ur],
+		  out => sprintf("%s.test%02d.bam", $out, $test),
+		  compare_sam => $sam_no_ur,
+		  ref_path => $ref_path);
     $test++;
 
     # Write to stdout
