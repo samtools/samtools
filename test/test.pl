@@ -578,6 +578,18 @@ sub run_view_test
     my $reaped = waitpid($pid, 0);
     my $res = $reaped == $pid && $? == 0 ? 0 : 1;
     
+    if (!$res && $args{compare_sam} && $args{out}) {
+	# Convert output back to sam and compare
+	my $sam_out = "$args{out}.sam";
+	my @cmd2 = ("$$opts{bin}/samtools",
+		    'view', '-h', '-o', $sam_out, $args{out});
+	push(@cmd, '&&', @cmd2); # For the 'Failed command' message below
+	$res = system(@cmd2) == 0 ? 0 : 1;
+	# Hack $args so the comparison gets done
+	$args{compare} = $args{compare_sam};
+	$args{out}     = $sam_out;
+    }
+
     if ($res) {
 	failed($opts, $args{msg});
     } else {
@@ -761,15 +773,10 @@ sub test_view
     # SAM -> BAM -> SAM
     my $bam_with_ur_out = sprintf("%s.test%02d.bam", $out, $test);
     run_view_test($opts,
-		  msg => "$test: SAM -> BAM",
+		  msg => "$test: SAM -> BAM -> SAM",
 		  args => ['-b', $sam_with_ur],
-		  out => $bam_with_ur_out);
-    $test++;
-    run_view_test($opts,
-		  msg => "$test: BAM -> SAM and compare",
-		  args => ['-h', $bam_with_ur_out],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
-		  compare => $sam_with_ur);
+		  out => $bam_with_ur_out,
+		  compare_sam => $sam_with_ur);
     $test++;
 
     # SAM -> uncompressed BAM -> SAM
@@ -805,29 +812,19 @@ sub test_view
     # SAM -> CRAM -> SAM with UR tags
     my $cram_with_ur_out = sprintf("%s.test%02d.cram", $out, $test);
     run_view_test($opts,
-		  msg => "$test: SAM -> CRAM",
+		  msg => "$test: SAM -> CRAM -> SAM (UR header tags)",
 		  args => ['-C', $sam_with_ur],
-		  out => $cram_with_ur_out);
-    $test++;
-    run_view_test($opts,
-		  msg => "$test: CRAM -> SAM and compare",
-		  args => ['-h', $cram_with_ur_out],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
-		  compare => $sam_with_ur);
+		  out => $cram_with_ur_out,
+		  compare_sam => $sam_with_ur);
     $test++;
 
     # SAM -> BAM -> CRAM -> SAM with UR tags
     my $cram_from_bam = sprintf("%s.test%02d.cram", $out, $test);
     run_view_test($opts,
-		  msg => "$test: BAM -> CRAM with UR",
+		  msg => "$test: BAM -> CRAM with UR -> SAM",
 		  args => ['-C', $bam_with_ur_out],
-		  out => $cram_from_bam);
-    $test++;
-    run_view_test($opts,
-		  msg => "$test: CRAM -> SAM with UR and compare",
-		  args => ['-h', $cram_from_bam],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
-		  compare => $sam_with_ur);
+		  out => $cram_from_bam,
+		  compare_sam => $sam_with_ur);
     $test++;
 
     # SAM -> BAM -> CRAM -> BAM -> SAM with UR tags
@@ -835,13 +832,8 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: CRAM -> BAM with UR",
 		  args => ['-b', $cram_from_bam],
-		  out => $bam_from_cram);
-    $test++;
-    run_view_test($opts,
-		  msg => "$test: BAM -> SAM and compare",
-		  args => ['-h', $bam_from_cram],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
-		  compare => $sam_with_ur);
+		  out => $bam_from_cram,
+		  compare_sam => $sam_with_ur);
     $test++;
 
     # Write to stdout
@@ -864,14 +856,8 @@ sub test_view
 		  msg => "$test: SAM -> CRAM via stdout",
 		  args => ['-C', $sam_with_ur],
 		  out => $cram_via_stdout,
-		  redirect => 1);
-    $test++;
-    run_view_test($opts,
-		  msg => "$test: CRAM -> SAM via stdout and compare",
-		  args => ['-h', $cram_via_stdout],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
 		  redirect => 1,
-		  compare => $sam_with_ur);
+		  compare_sam => $sam_with_ur);
     $test++;
 
     # Read from stdin
@@ -1039,15 +1025,17 @@ sub test_view
 
     my $bam_with_ur_out2 = sprintf("%s.test%02d.bam", $out, $test);
     run_view_test($opts,
-		  msg => "$test: 1bp reads file SAM -> BAM",
+		  msg => "$test: 1bp reads file SAM -> BAM -> SAM",
 		  args => ['-b', $sam_with_ur2],
-		  out => $bam_with_ur_out2);
+		  out => $bam_with_ur_out2,
+		  compare_sam => $sam_with_ur2);
     $test++;
     my $cram_with_ur_out2 = sprintf("%s.test%02d.cram", $out, $test);
     run_view_test($opts,
-		  msg => "$test: 1bp reads file SAM -> CRAM",
+		  msg => "$test: 1bp reads file SAM -> CRAM -> SAM",
 		  args => ['-C', $sam_with_ur2],
-		  out => $cram_with_ur_out2);
+		  out => $cram_with_ur_out2,
+		  compare_sam => $sam_with_ur2);
 
     my @region_sams   = ($sam_with_ur2, $sam_with_ur);
     my @region_inputs = ([BAM  => [$bam_with_ur_out2, $bam_with_ur_out]],
@@ -1183,13 +1171,8 @@ sub test_view
 	run_view_test($opts,
 		      msg => "$test: Add \@SQ with $topt->[0] (BAM output)",
 		      args => ['-b', @$topt, $sam_no_sq],
-		      out => $bam);
-	$test++;
-	run_view_test($opts,
-		      msg => "$test: BAM -> SAM and compare",
-		      args => ['-h', $bam],
-		      out => sprintf("%s.test%02d.sam", $out, $test),
-		      compare => $sam_no_m5);
+		      out => $bam,
+		      compare_sam => $sam_no_m5);
 	$test++;
     }
 
