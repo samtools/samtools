@@ -987,43 +987,6 @@ sub test_view
 		  out => sprintf("%s.test%02d.body", $out, $test),
 		  compare => $sam_body);
     $test++;
-
-    # -x / -X options
-    my $sam_hexflag = "$$opts{tmp}/view.001.hexflag.sam";
-    my $sam_strflag = "$$opts{tmp}/view.001.strflag.sam";
-    convert_flags($sam_with_ur, $sam_hexflag, 'h');
-    convert_flags($sam_with_ur, $sam_strflag, 's');
-
-    run_view_test($opts,
-		  msg => "$test: -x hex flags option (SAM input)",
-		  args => ['-h', '-x', $sam_with_ur],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
-		  compare => $sam_hexflag);
-    $test++;
-    run_view_test($opts,
-		  msg => "$test: -X string flags option (SAM input)",
-		  args => ['-h', '-X', $sam_with_ur],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
-		  compare => $sam_strflag);
-    $test++;
-
-    # -x / -X without headers
-    my $sam_hexflag_body = "$$opts{tmp}/view.001.hexflag.body.sam";
-    my $sam_strflag_body = "$$opts{tmp}/view.001.strflag.body.sam";
-    filter_sam($sam_hexflag, $sam_hexflag_body, {no_header => 1});
-    filter_sam($sam_strflag, $sam_strflag_body, {no_header => 1});
-    run_view_test($opts,
-		  msg => "$test: -x hex flags option, no headers (SAM input)",
-		  args => ['-x', $sam_with_ur],
-		  out => sprintf("%s.test%02d.body", $out, $test),
-		  compare => $sam_hexflag_body);
-    $test++;
-    run_view_test($opts,
-		  msg => "$test: -X string flags option, no headers (SAM input)",
-		  args => ['-X', $sam_with_ur],
-		  out => sprintf("%s.test%02d.body", $out, $test),
-		  compare => $sam_strflag_body);
-    $test++;
     
     # Filter and counting tests.
     
