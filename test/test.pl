@@ -1033,79 +1033,124 @@ sub test_view
     }
 
     # Region query tests
-    my @region_inputs = ([BAM  => $bam_with_ur_out],
-			 [CRAM => $cram_with_ur_out]);
-    # First try indexing
+    my $sam_no_ur2 = "$$opts{path}/dat/view.002.sam";
+    my $sam_with_ur2 = "$$opts{tmp}/view.002.sam";
+    add_ur_tags($sam_no_ur2, $sam_with_ur2, "$$opts{path}/dat/view.002.fa");
+
+    my $bam_with_ur_out2 = sprintf("%s.test%02d.bam", $out, $test);
+    run_view_test($opts,
+		  msg => "$test: 1bp reads file SAM -> BAM",
+		  args => ['-b', $sam_with_ur2],
+		  out => $bam_with_ur_out2);
+    $test++;
+    my $cram_with_ur_out2 = sprintf("%s.test%02d.cram", $out, $test);
+    run_view_test($opts,
+		  msg => "$test: 1bp reads file SAM -> CRAM",
+		  args => ['-C', $sam_with_ur2],
+		  out => $cram_with_ur_out2);
+
+    my @region_sams   = ($sam_with_ur2, $sam_with_ur);
+    my @region_inputs = ([BAM  => [$bam_with_ur_out2, $bam_with_ur_out]],
+			 [CRAM => [$cram_with_ur_out2, $cram_with_ur_out]]);
+    # Add indicies
     cmd("'$$opts{bin}/samtools' index '$bam_with_ur_out'");
     cmd("'$$opts{bin}/samtools' index '$cram_with_ur_out'");
+    cmd("'$$opts{bin}/samtools' index '$bam_with_ur_out2'");
+    cmd("'$$opts{bin}/samtools' index '$cram_with_ur_out2'");
 
     my $bed1 = "$$opts{path}/dat/view.001.01.bed";
     my $bed2 = "$$opts{path}/dat/view.001.02.bed";
+    my $bed3 = "$$opts{path}/dat/view.002.01.bed";
+    my $bed4 = "$$opts{path}/dat/view.002.02.bed";
     my $bed1reg = [['ref1', 11, 24], ['ref1', 45, 45], ['ref2', 17, 17]];
 
     my @region_tests = (
-	['reg1', { region => [['ref1']] }, [], ['ref1']],
-	['reg2', { region => [['ref1', 15]] }, [], ['ref1:15']],
-	['reg3', { region => [['ref1', 15, 45]] }, [], ['ref1:15-45']],
-	['reg4', { region => [['ref1', 15, 45], ['ref2']] },
+	['1bp_reg1', 0, { region => [['Z']]}, [], ['Z']],
+	['1bp_reg2', 0, { region => [['Z', 30]]}, [], ['Z:30']],
+	['1bp_reg3', 0, { region => [['Z', 20, 40]]}, [], ['Z:20-40']],
+	['reg1', 1, { region => [['ref1']] }, [], ['ref1']],
+	['reg2', 1, { region => [['ref1', 15]] }, [], ['ref1:15']],
+	['reg3', 1, { region => [['ref1', 15, 45]] }, [], ['ref1:15-45']],
+	['reg4', 1, { region => [['ref1', 15, 45], ['ref2']] },
 	 [], ['ref1:15-45', 'ref2']],
-	['reg5', { region => [['ref1', 15, 45], ['ref2', 16]] },
+	['reg5', 1, { region => [['ref1', 15, 45], ['ref2', 16]] },
 	 [], ['ref1:15-45', 'ref2:16']],
-	['reg6', { region => [['ref1', 15, 45], ['ref2', 16, 31]] },
+	['reg6', 1, { region => [['ref1', 15, 45], ['ref2', 16, 31]] },
 	 [], ['ref1:15-45', 'ref2:16-31']],
-	['reg7', { region => [['ref1', 15, 15], ['ref1', 45, 45]] },
+	['reg7', 1, { region => [['ref1', 15, 15], ['ref1', 45, 45]] },
 	 [], ['ref1:15-15', 'ref1:45-45']],
 	# Regions combined with other filters.
-	['reg8', { region => [['ref1']], flags_required => 128 },
+	['reg8', 1, { region => [['ref1']], flags_required => 128 },
 	 ['-f', 128], ['ref1']],
-	['reg9', { region => [['ref1', 15, 45]], min_map_qual => 50 },
+	['reg9', 1, { region => [['ref1', 15, 45]], min_map_qual => 50 },
 	 ['-q', 50], ['ref1:15-45']],
-	['reg10', { region => [['ref1', 15, 45]], read_groups => { grp2 => 1 }},
+	['reg10', 1,
+	 { region => [['ref1', 15, 45]], read_groups => { grp2 => 1 }},
 	 ['-r', 'grp2'], ['ref1:15-45']],
 
 	# Regions from BED files.  Regions here need to be kept in synch.
-	# with the .bed files in test/dat.  Note also that BED counts from
-	# base 0 and ends ranges one past the last base.
+	# with the .bed files in test/dat.  Note that BED counts from
+	# base 0 and ends ranges one past the last base.  Note also that
+	# samtools also understands a two-column format that describes a
+	# single point, and in that case the position is 1-based.  And
+	# even better, you can mix the two in the same file.  Confusing? Yes.
+	#
 	# $bed1reg is defined above as it's used a lot of times.
 
-	['bed1', { region => $bed1reg }, ['-L', $bed1], []],
-	['bed2', { region => [['ref1', 6, 20]] }, ['-L', $bed2], []],
+	['1bp_bed3', 0, { region => [['Z', 20, 40]]}, ['-L', $bed3], []],
+	['1bp_bed4', 0,
+	 { region => [['Z', 10, 15], ['Z', 20, 20], ['Z', 25, 30],
+		      ['Z', 35, 35], ['Z', 40, 50]]}, ['-L', $bed4], []],
+	['bed1', 1, { region => $bed1reg }, ['-L', $bed1], []],
+	['bed2', 1, { region => [['ref1', 6, 20]] }, ['-L', $bed2], []],
 
 	# BED file plus region specification.
 
-	['bed1r1', { region => [['ref1', 11, 16]] },
+	['1bp_bed3r1', 0, { region => [['Z', 20, 40]]},
+	 ['-L', $bed3], ['Z']],
+	['1bp_bed3r2', 0, { region => [['Z', 30, 40]]},
+	 ['-L', $bed3], ['Z:30']],
+	['1bp_bed3r3', 0, { region => [['Z', 20, 30]]},
+	 ['-L', $bed3], ['Z:10-30']],
+	['1bp_bed3r4', 0, { region => [['Z', 25, 35]]},
+	 ['-L', $bed3], ['Z:25-35']],
+	['bed1r1', 1, { region => [['ref1', 11, 16]] },
 	 ['-L', $bed1], ['ref1:11-16']],
-	['bed1r2', { region => [['ref2', 17, 17]] }, ['-L', $bed1], ['ref2']],
+	['bed1r2', 1,
+	 { region => [['ref2', 17, 17]] }, ['-L', $bed1], ['ref2']],
 
 	# BED file plus other filters
 
-	['bed1f1', { region => $bed1reg, read_groups => { grp1 => 1} },
+	['bed1f1', 1, { region => $bed1reg, read_groups => { grp1 => 1} },
 	 ['-L', $bed1, '-r', 'grp1'], []],
-	['bed1f2', { region => $bed1reg, flags_required => 128 },
+	['bed1f2', 1, { region => $bed1reg, flags_required => 128 },
 	 ['-L', $bed1, '-f', 128], []],
-	['bed1f3', { region => $bed1reg, min_map_qual => 5 },
+	['bed1f3', 1, { region => $bed1reg, min_map_qual => 5 },
 	 ['-L', $bed1, '-q', 5], []],
 
 	# BED file, region and filters
-	['bed1f1', { region => [['ref1', 11, 16]], read_groups => { grp1 => 1}},
+	['bed1f1', 1,
+	 { region => [['ref1', 11, 16]], read_groups => { grp1 => 1}},
 	 ['-L', $bed1, '-r', 'grp1'], ['ref1:11-16']],
 	);
     foreach my $rt (@region_tests) {
-	my $sam_file = "$$opts{tmp}/view.001.$$rt[0].sam";
-	filter_sam($sam_with_ur, $sam_file, $$rt[1]);
+	my $input_sam = $region_sams[$$rt[1]];
+	my $sam_file = "$$opts{tmp}/view.$$rt[0].sam";
+	filter_sam($input_sam, $sam_file, $$rt[2]);
 
 	foreach my $ip (@region_inputs) {
+	    my $input_file = $$ip[1]->[$$rt[1]];
 	    # Region test
 	    run_view_test($opts,
-			  msg => "$test: Region @{$$rt[2]} @{$$rt[3]} ($$ip[0] input)",
-			  args => ['-h', @{$$rt[2]}, $$ip[1], @{$$rt[3]}],
+			  msg => "$test: Region @{$$rt[3]} @{$$rt[4]} ($$ip[0] input)",
+			  args => ['-h', @{$$rt[3]}, $input_file, @{$$rt[4]}],
 			  out => sprintf("%s.test%02d.sam", $out, $test),
 			  compare => $sam_file);
 	    $test++;
 	    # Count test
 	    run_view_test($opts,
-			  msg => "$test: Count @{$$rt[2]} @{$$rt[3]} ($$ip[0] input)",
-			  args => ['-c', @{$$rt[2]}, $$ip[1], @{$$rt[3]}],
+			  msg => "$test: Count @{$$rt[3]} @{$$rt[4]} ($$ip[0] input)",
+			  args => ['-c', @{$$rt[3]}, $input_file, @{$$rt[4]}],
 			  out => sprintf("%s.test%02d.sam", $out, $test),
 			  redirect => 1,
 			  compare_count => $sam_file);
