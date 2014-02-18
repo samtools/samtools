@@ -494,6 +494,7 @@ sub filter_sam
     open(my $sam_in, '<', $in) || die "Couldn't open $in : $!\n";
     open(my $sam_out, '>', $out) || die "Couldn't open $out for writing : $!\n";
     while (<$sam_in>) {
+	chomp;
 	if (/^@/) {
 	    next if ($no_header);
 	    if ($libraries && /^\@RG/) {
@@ -505,7 +506,7 @@ sub filter_sam
 	    if ($no_m5 && /^\@SQ/) {
 		s/\tM5:[^\t\n]+//;
 	    }
-	    print $sam_out $_ || die "Error writing to $out : $!\n";
+	    print $sam_out "$_\n" || die "Error writing to $out : $!\n";
 	} else {
 	    next if ($no_body);
 	    if ($body_filter) {
@@ -544,7 +545,7 @@ sub filter_sam
 		    if ($stripped) { $_ = join("\t", @sam); }
 		}
 	    }
-	    print $sam_out $_ || die "Error writing to $out : $!\n";
+	    print $sam_out "$_\n" || die "Error writing to $out : $!\n";
 	}
     }
     close($sam_in) || die "Error reading $in : $!\n";
@@ -986,20 +987,33 @@ sub test_view
 
 
     my @filter_tests = (
+	# Flags
 	['req128', {flags_required => 128}, ['-f', 128]],
 	['rej128', {flags_rejected => 128}, ['-F', 128]],
 	['rej128req2', { flags_rejected => 128, flags_required => 2 },
 	 ['-F', 128, '-f', 2]],
+	# Read groups
 	['rg_grp2', { read_groups => { grp2 => 1 }}, ['-r', 'grp2']],
 	['rg_fogn', { read_groups => { grp1 => 1, grp3 => 1 }}, ['-R', $fogn]],
 	['rg_both', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
 	 ['-R', $fogn, '-r', 'grp2']],
 	['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
 	 ['-r', 'grp2', '-R', $fogn]],
+	# Libraries
 	['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2']],
+	# Mapping qualities
 	['mq50',  { min_map_qual => 50 },  ['-q', 50]],
 	['mq99',  { min_map_qual => 99 },  ['-q', 99]],
 	['mq100', { min_map_qual => 100 }, ['-q', 100]],
+	# Tag stripping
+	['tags1', { strip_tags => { fa => 1 } }, ['-x', 'fa']],
+	['tags2', { strip_tags => { fa => 1, ha => 1 } },
+	 ['-x', 'fa', '-x', 'ha']],
+	# Tag strip plus read group
+	['tags_rg1', { strip_tags => { fa => 1 }, read_groups => { grp2 => 1 }},
+	 ['-x', 'fa', '-r', 'grp2']],
+	['tags_rg2', { strip_tags => { RG => 1 }, read_groups => { grp2 => 1 }},
+	 ['-x', 'RG', '-r', 'grp2']],
 	);
 
     my @filter_inputs = ([SAM  => $sam_with_ur],
@@ -1199,8 +1213,5 @@ sub test_view
 		  args => ['-h', '-B', $b_op_sam],
 		  out => sprintf("%s.test%02d.sam", $out, $test),
 		  compare => $b_op_expected);
-    $test++;
-    
-    # New -x tag stripping option
-    
+    $test++;    
 }
