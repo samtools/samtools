@@ -461,37 +461,6 @@ sub add_ur_tags
     close($sam_out) || die "Error writing to $out : $!\n";    
 }
 
-sub convert_flags
-{
-    my ($in, $out, $style) = @_;
-
-    my @letters = qw(p P u U r R 1 2 s f d);
-
-    open(my $sam_in, '<', $in) || die "Couldn't open $in : $!\n";
-    open(my $sam_out, '>', $out) || die "Couldn't open $out for writing : $!\n";
-    while (<$sam_in>) {
-	if (/^@/) {
-	    print $sam_out $_ || die "Error writing to $out : $!\n";
-	} else {
-	    chomp;
-	    my @sam = split(/\t/, $_);
-	    if ($style eq 'h') {
-		$sam[1] = sprintf("0x%x", $sam[1]);
-	    } else {
-		my $str;
-		for (my $i = 0; $i < @letters; $i++) {
-		    if ($sam[1] & (1 << $i)) { $str .= $letters[$i]; }
-		}
-		$sam[1] = $str;
-	    }
-	    print $sam_out join("\t", @sam), "\n"
-		|| die "Error writing to $out : $!\n";
-	}
-    }
-    close($sam_in) || die "Error reading $in : $!\n";
-    close($sam_out) || die "Error writing to $out : $!\n";
-}
-
 sub reflen
 {
     my ($cigar) = @_;
@@ -518,8 +487,9 @@ sub filter_sam
     my $read_groups    = $args->{read_groups};
     my $libraries      = $args->{libraries};
     my $region         = $args->{region};
+    my $strip_tags     = $args->{strip_tags};
     my $body_filter = ($flags_required || $flags_rejected || $read_groups
-		       || $min_map_qual || $region);
+		       || $min_map_qual || $region || $strip_tags);
 
     open(my $sam_in, '<', $in) || die "Couldn't open $in : $!\n";
     open(my $sam_out, '>', $out) || die "Couldn't open $out for writing : $!\n";
@@ -562,6 +532,16 @@ sub filter_sam
 			last;
 		    }
 		    next if (!$in_range);
+		}
+		if ($strip_tags) {
+		    my $stripped = 0;
+		    for (my $i = $#sam; $i >= 11; --$i) {
+			if (exists($strip_tags->{substr($sam[$i], 0, 2)})) {
+			    $stripped = 1;
+			    splice(@sam, $i, 1);
+			}
+		    }
+		    if ($stripped) { $_ = join("\t", @sam); }
 		}
 	    }
 	    print $sam_out $_ || die "Error writing to $out : $!\n";
@@ -685,7 +665,15 @@ sub sam_compare
     }
 
     while ($l1 && $l2) {
-	last if ($l1 ne $l2);
+	chomp($l1);
+	chomp($l2);
+	my @sam1 = split(/\t/, $l1);
+	my @sam2 = split(/\t/, $l2);
+	my @tags1 = sort(splice(@sam1, 11));
+	my @tags2 = sort(splice(@sam2, 11));
+	if (join("\t", @sam1, @tags1) ne join("\t", @sam2, @tags2)) {
+	    last;
+	}
 	$l1 = <$f1>;
 	$l2 = <$f2>;
 	$lno1++;
@@ -696,7 +684,7 @@ sub sam_compare
     close($f2) || die "Error reading $sam2: $!\n";
 
     if ($l1 || $l2) {
-	print "\n\tSAM files differ at $sam1:$lno1 / $sam2:$lno2\n";
+	print "\n\tSAM files differ at $sam1 : $lno1 / $sam2 : $lno2\n";
 	failed($opts, $msg);
 	return 1;
     } else {
@@ -1004,6 +992,10 @@ sub test_view
 	 ['-F', 128, '-f', 2]],
 	['rg_grp2', { read_groups => { grp2 => 1 }}, ['-r', 'grp2']],
 	['rg_fogn', { read_groups => { grp1 => 1, grp3 => 1 }}, ['-R', $fogn]],
+	['rg_both', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
+	 ['-R', $fogn, '-r', 'grp2']],
+	['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
+	 ['-r', 'grp2', '-R', $fogn]],
 	['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2']],
 	['mq50',  { min_map_qual => 50 },  ['-q', 50]],
 	['mq99',  { min_map_qual => 99 },  ['-q', 99]],
@@ -1208,5 +1200,7 @@ sub test_view
 		  out => sprintf("%s.test%02d.sam", $out, $test),
 		  compare => $b_op_expected);
     $test++;
+    
+    # New -x tag stripping option
     
 }
