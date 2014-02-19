@@ -33,7 +33,7 @@ int bam_aux_drop_other(bam1_t *b, uint8_t *s)
 	return 0;
 }
 
-int bam_parse_region(bam_hdr_t *header, const char *str, int *ref_id, int *beg, int *end)
+int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *beg, int *end)
 {
 	const char *name_lim = hts_parse_reg(str, beg, end);
 	char *name = malloc(name_lim - str + 1);

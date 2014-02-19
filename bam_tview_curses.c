@@ -20,6 +20,8 @@
 
 #ifdef _HAVE_CURSES
 
+
+
 typedef struct CursesTview {
 	tview_t view;
 	WINDOW *wgoto, *whelp;

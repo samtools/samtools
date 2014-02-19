@@ -399,6 +399,7 @@ extern "C" {
 		void *data;
 	} bam_plbuf_t;
 
+	void bam_plbuf_set_mask(bam_plbuf_t *buf, int mask);
 	void bam_plbuf_reset(bam_plbuf_t *buf);
 	bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data);
 	void bam_plbuf_destroy(bam_plbuf_t *buf);
@@ -488,7 +489,7 @@ extern "C" {
 	  @param  end     the returned end coordinate
 	  @return         0 on success; -1 on failure
 	 */
-	int bam_parse_region(bam_hdr_t *header, const char *str, int *ref_id, int *begin, int *end);
+	int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
 
 
 	/**************************

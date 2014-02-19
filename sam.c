@@ -50,7 +50,7 @@ int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)
 	bam1_t *b;
 	b = bam_init1();
 	buf = bam_plbuf_init(func, func_data);
-	//bam_plbuf_set_mask(buf, mask);
+	bam_plbuf_set_mask(buf, mask);
 	while ((ret = samread(fp, b)) >= 0)
 		bam_plbuf_push(b, buf);
 	bam_plbuf_push(0, buf);
