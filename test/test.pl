@@ -473,6 +473,18 @@ sub reflen
     return $len;
 }
 
+sub querylen
+{
+    my ($cigar) = @_;
+    
+    my $len = 0;
+    my %m = ( M => 1, I => 1, S => 1, '=' => 1, X => 1 );
+    while ($cigar =~ /(\d+)([MIDNSHP=X])/g) {
+	if (exists($m{$2})) { $len += $1; }
+    }
+    return $len;
+}
+
 sub filter_sam
 {
     my ($in, $out, $args) = @_;
@@ -488,8 +500,12 @@ sub filter_sam
     my $libraries      = $args->{libraries};
     my $region         = $args->{region};
     my $strip_tags     = $args->{strip_tags};
+    my $min_qlen       = $args->{min_qlen} || 0;
+    my $qual_scale     = $args->{qual_scale} || 0;
+    if ($qual_scale && $qual_scale > 93) { $qual_scale = 93; }
     my $body_filter = ($flags_required || $flags_rejected || $read_groups
-		       || $min_map_qual || $region || $strip_tags);
+		       || $min_map_qual || $region || $strip_tags || $min_qlen
+		       || $qual_scale);
 
     open(my $sam_in, '<', $in) || die "Couldn't open $in : $!\n";
     open(my $sam_out, '>', $out) || die "Couldn't open $out for writing : $!\n";
@@ -533,6 +549,17 @@ sub filter_sam
 			last;
 		    }
 		    next if (!$in_range);
+		}
+		if ($min_qlen > 0) {
+		    next if (querylen($sam[5]) < $min_qlen);
+		}
+		if ($qual_scale > 1) {
+		    $sam[10] = join('', map {
+		    	my $i = (ord($_) - 33) * $qual_scale;
+		    	if ($i > 93) { $i = 93; }
+		    	chr($i + 33);
+		    		    } split(//, $sam[10]));
+		    $_ = join("\t", @sam);
 		}
 		if ($strip_tags) {
 		    my $stripped = 0;
@@ -1014,6 +1041,14 @@ sub test_view
 	 ['-x', 'fa', '-r', 'grp2']],
 	['tags_rg2', { strip_tags => { RG => 1 }, read_groups => { grp2 => 1 }},
 	 ['-x', 'RG', '-r', 'grp2']],
+	# Minimum query length
+	['qlen10', { min_qlen => 10 }, ['-m', 10]],
+	['qlen11', { min_qlen => 11 }, ['-m', 11]],
+	['qlen15', { min_qlen => 15 }, ['-m', 15]],
+	['qlen16', { min_qlen => 16 }, ['-m', 16]],
+	# Quality scale
+	['qscale2', { qual_scale => 2 }, ['-Q', 2]],
+	['qscale_maxint', { qual_scale => 2147483647 }, ['-Q', 2147483647]],
 	);
 
     my @filter_inputs = ([SAM  => $sam_with_ur],
