@@ -1,8 +1,9 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
-#include "bam.h"
-#include "htslib/ksort.h"
+#include "bam_plbuf.h"
+#include "bam_lpileup.h"
+#include <htslib/ksort.h>
 
 #define TV_GAP 2
 
