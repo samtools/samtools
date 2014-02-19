@@ -29,10 +29,6 @@
 #include <htslib/sam.h>
 #include <htslib/bgzf.h>
 
-/* utility stuff */
-
-int bam_parse_region(bam_hdr_t *header, const char *str, int *ref_id, int *begin, int *end);
-
 /*! @typedef
  @abstract      Type of function to be called by sam_fetch().
  @param  b     the alignment
@@ -417,9 +413,10 @@ int bam_tview_main(int argc, char *argv[])
 	
 	if ( position )
 	{
-		int _tid = -1, _beg, _end;
-		bam_parse_region(tv->header, position, &_tid, &_beg, &_end);
-		if (_tid >= 0) { tv->curr_tid = _tid; tv->left_pos = _beg; }
+		int tid, beg, end;
+		*(char *)hts_parse_reg(position, &beg, &end) = '\0';
+		tid = bam_name2id(tv->header, position);
+		if (tid >= 0) { tv->curr_tid = tid; tv->left_pos = beg; }
 	}
 	tv->my_drawaln(tv, tv->curr_tid, tv->left_pos);
 	tv->my_loop(tv);
