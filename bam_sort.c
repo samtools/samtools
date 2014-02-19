@@ -653,11 +653,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			return -1;
 		}
 		for (i = 0; i < n; ++i) {
-			hts_idx_t *idx = bam_index_load(fn[i]);
+			hts_idx_t *idx = sam_index_load(fp[i], fn[i]);
 			// (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
 			int mapped_tid = rtrans[i*hout->n_targets+tid];
 			if (mapped_tid != INT32_MIN) {
-				iter[i] = bam_itr_queryi(idx, mapped_tid, beg, end);
+				iter[i] = sam_itr_queryi(idx, mapped_tid, beg, end);
 			} else {
 				iter[i] = bam_itr_finish();
 			}
@@ -666,12 +666,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		free(rtrans);
 	} else {
 		for (i = 0; i < n; ++i) {
-			hts_idx_t *idx = bam_index_load(fn[i]);
+			hts_idx_t *idx = sam_index_load(fp[i], fn[i]);
 			if (idx == NULL) {
 				fprintf(stderr, "[%s] Could not load index for %s.\n", __func__, fn[i]);
 				return -1;
 			}
-			iter[i] = hts_itr_query(idx, HTS_IDX_START, 0, 0);
+			iter[i] = sam_itr_queryi(idx, HTS_IDX_START, 0, 0);
 			if (iter[i] == NULL) {
 				fprintf(stderr, "[%s] Ack ack ack! iter is null %d\n", __func__, i);
 				return -1;
@@ -685,7 +685,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		heap1_t *h = heap + i;
 		h->i = i;
 		h->b = (bam1_t*)calloc(1, sizeof(bam1_t));
-		if (bam_itr_next(fp[i], iter[i], h->b) >= 0) {
+		if (sam_itr_next(fp[i], iter[i], h->b) >= 0) {
 			bam_translate(h->b, translation_tbl + i);
 			h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam_is_rev(h->b);
 			h->idx = idx++;
@@ -717,7 +717,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
 		}
 		sam_write1(fpout, hout, b);
-		if ((j = bam_itr_next(fp[heap->i], iter[heap->i], b)) >= 0) {
+		if ((j = sam_itr_next(fp[heap->i], iter[heap->i], b)) >= 0) {
 			bam_translate(b, translation_tbl + heap->i);
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
 			heap->idx = idx++;
@@ -736,7 +736,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	}
 	for (i = 0; i != n; ++i) {
 		trans_tbl_destroy(translation_tbl + i);
-		bam_itr_destroy(iter[i]);
+		hts_itr_destroy(iter[i]);
 		sam_close(fp[i]);
 	}
 	bam_hdr_destroy(hout);
