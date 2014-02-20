@@ -807,10 +807,10 @@ sub test_view
 
     my $test = 1;
 
-    my $out = "$$opts{tmp}/view_out.001";
+    my $out = "$$opts{tmp}/view";
 
     # SAM -> BAM -> SAM
-    my $bam_with_ur_out = sprintf("%s.test%02d.bam", $out, $test);
+    my $bam_with_ur_out = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
 		  msg => "$test: SAM -> BAM -> SAM",
 		  args => ['-b', $sam_with_ur],
@@ -819,7 +819,7 @@ sub test_view
     $test++;
 
     # SAM -> uncompressed BAM -> SAM
-    my $uncomp_bam = sprintf("%s.test%02d.bam", $out, $test);
+    my $uncomp_bam = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
 		  msg => "$test: SAM -> uncompressed BAM",
 		  args => ['-u', $sam_with_ur],
@@ -829,12 +829,12 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: uncompressed BAM -> SAM and compare",
 		  args => ['-h', $uncomp_bam],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
+		  out => sprintf("%s.test%03d.sam", $out, $test),
 		  compare => $sam_with_ur);
     $test++;
 
     # SAM -> fast compressed BAM -> SAM
-    my $fastcomp_bam = sprintf("%s.test%02d.bam", $out, $test);
+    my $fastcomp_bam = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
 		  msg => "$test: SAM -> fast compressed BAM",
 		  args => ['-1', $sam_with_ur],
@@ -844,12 +844,12 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: fast compressed BAM -> SAM and compare",
 		  args => ['-h', $fastcomp_bam],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
+		  out => sprintf("%s.test%03d.sam", $out, $test),
 		  compare => $sam_with_ur);
     $test++;
 
     # SAM -> CRAM -> SAM with UR tags
-    my $cram_with_ur_out = sprintf("%s.test%02d.cram", $out, $test);
+    my $cram_with_ur_out = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
 		  msg => "$test: SAM -> CRAM -> SAM (UR header tags)",
 		  args => ['-C', $sam_with_ur],
@@ -861,13 +861,13 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: SAM -> CRAM -> SAM (M5 header tags)",
 		  args => ['-C', $sam_no_ur],
-		  out => sprintf("%s.test%02d.cram", $out, $test),
+		  out => sprintf("%s.test%03d.cram", $out, $test),
 		  compare_sam => $sam_no_ur,
 		  ref_path => $ref_path);
     $test++;
 
     # SAM -> BAM -> CRAM -> SAM with UR tags
-    my $cram_from_bam = sprintf("%s.test%02d.cram", $out, $test);
+    my $cram_from_bam = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
 		  msg => "$test: BAM -> CRAM with UR -> SAM",
 		  args => ['-C', $bam_with_ur_out],
@@ -876,14 +876,14 @@ sub test_view
     $test++;
 
     # SAM -> BAM -> CRAM -> SAM with M5 tags
-    my $bam_no_ur = sprintf("%s.test%02d.bam", $out, $test);
+    my $bam_no_ur = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
 		  msg => "$test: SAM -> BAM (M5 header tags)",
 		  args => ['-b', $sam_no_ur],
 		  out => $bam_no_ur,
 		  compare_sam => $sam_no_ur);
     $test++;
-    my $cram_no_ur = sprintf("%s.test%02d.cram", $out, $test);
+    my $cram_no_ur = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
 		  msg => "$test: SAM -> BAM -> CRAM -> SAM (M5 header tags)",
 		  args => ['-C', $bam_no_ur],
@@ -893,7 +893,7 @@ sub test_view
     $test++;
 
     # SAM -> BAM -> CRAM -> BAM -> SAM with UR tags
-    my $bam_from_cram = sprintf("%s.test%02d.bam", $out, $test);
+    my $bam_from_cram = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
 		  msg => "$test: CRAM -> BAM with UR",
 		  args => ['-b', $cram_from_bam],
@@ -905,7 +905,7 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: CRAM -> BAM with M5",
 		  args => ['-b', $cram_no_ur],
-		  out => sprintf("%s.test%02d.bam", $out, $test),
+		  out => sprintf("%s.test%03d.bam", $out, $test),
 		  compare_sam => $sam_no_ur,
 		  ref_path => $ref_path);
     $test++;
@@ -914,18 +914,18 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: SAM -> SAM via stdout",
 		  args => ['-h', $sam_with_ur],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
+		  out => sprintf("%s.test%03d.sam", $out, $test),
 		  redirect => 1,
 		  compare => $sam_with_ur);
     $test++;
     run_view_test($opts,
 		  msg => "$test: SAM -> BAM via stdout",
 		  args => ['-b', $sam_with_ur],
-		  out => sprintf("%s.test%02d.bam", $out, $test),
+		  out => sprintf("%s.test%03d.bam", $out, $test),
 		  redirect => 1,
 		  compare_bam => $bam_with_ur_out);
     $test++;
-    my $cram_via_stdout = sprintf("%s.test%02d.cram", $out, $test);
+    my $cram_via_stdout = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
 		  msg => "$test: SAM -> CRAM via stdout",
 		  args => ['-C', $sam_with_ur],
@@ -938,21 +938,21 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: SAM from stdin -> SAM",
 		  args => ['-h', '-'],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
+		  out => sprintf("%s.test%03d.sam", $out, $test),
 		  stdin => $sam_with_ur,
 		  compare => $sam_with_ur);
     $test++;
     run_view_test($opts,
 		  msg => "$test: BAM from stdin -> SAM",
 		  args => ['-h', '-'],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
+		  out => sprintf("%s.test%03d.sam", $out, $test),
 		  stdin => $bam_with_ur_out,
 		  compare => $sam_with_ur);
     $test++;
     run_view_test($opts,
 		  msg => "$test: CRAM from stdin -> SAM",
 		  args => ['-h', '-'],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
+		  out => sprintf("%s.test%03d.sam", $out, $test),
 		  stdin => $cram_with_ur_out,
 		  compare => $sam_with_ur);
     $test++;
@@ -965,19 +965,19 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: samtools view -H (SAM input)",
 		  args => ['-H', $sam_with_ur],
-		  out => sprintf("%s.test%02d.header", $out, $test),
+		  out => sprintf("%s.test%03d.header", $out, $test),
 		  compare => $sam_header);
     $test++;
     run_view_test($opts,
 		  msg => "$test: samtools view -H (BAM input)",
 		  args => ['-H', $bam_with_ur_out],
-		  out => sprintf("%s.test%02d.header", $out, $test),
+		  out => sprintf("%s.test%03d.header", $out, $test),
 		  compare => $sam_header);
     $test++;
     run_view_test($opts,
 		  msg => "$test: samtools view -H (CRAM input)",
 		  args => ['-H', $cram_with_ur_out],
-		  out => sprintf("%s.test%02d.header", $out, $test),
+		  out => sprintf("%s.test%03d.header", $out, $test),
 		  compare => $sam_header);
     $test++;
     
@@ -988,19 +988,19 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: No headers (SAM input)",
 		  args => [$sam_with_ur],
-		  out => sprintf("%s.test%02d.body", $out, $test),
+		  out => sprintf("%s.test%03d.body", $out, $test),
 		  compare => $sam_body);
     $test++;
     run_view_test($opts,
 		  msg => "$test: No headers (BAM input)",
 		  args => [$bam_with_ur_out],
-		  out => sprintf("%s.test%02d.body", $out, $test),
+		  out => sprintf("%s.test%03d.body", $out, $test),
 		  compare => $sam_body);
     $test++;
     run_view_test($opts,
 		  msg => "$test: No headers (CRAM input)",
 		  args => [$cram_with_ur_out],
-		  out => sprintf("%s.test%02d.body", $out, $test),
+		  out => sprintf("%s.test%03d.body", $out, $test),
 		  compare => $sam_body);
     $test++;
     
@@ -1065,7 +1065,7 @@ sub test_view
 	    run_view_test($opts,
 			  msg => "$test: Filter @{$$filter[2]} ($$ip[0] input)",
 			  args => ['-h', @{$$filter[2]}, $$ip[1]],
-			  out => sprintf("%s.test%02d.sam", $out, $test),
+			  out => sprintf("%s.test%03d.sam", $out, $test),
 			  compare => $sam_file);
 	    $test++;
 	    
@@ -1073,7 +1073,7 @@ sub test_view
 	    run_view_test($opts,
 			  msg => "$test: Count @{$$filter[2]} ($$ip[0] input)",
 			  args => ['-c', @{$$filter[2]}, $$ip[1]],
-			  out => sprintf("%s.test%02d.sam", $out, $test),
+			  out => sprintf("%s.test%03d.count", $out, $test),
 			  redirect => 1,
 			  compare_count => $sam_file);
 	    $test++;
@@ -1085,14 +1085,14 @@ sub test_view
     my $sam_with_ur2 = "$$opts{tmp}/view.002.sam";
     add_ur_tags($sam_no_ur2, $sam_with_ur2, "$$opts{path}/dat/view.002.fa");
 
-    my $bam_with_ur_out2 = sprintf("%s.test%02d.bam", $out, $test);
+    my $bam_with_ur_out2 = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
 		  msg => "$test: 1bp reads file SAM -> BAM -> SAM",
 		  args => ['-b', $sam_with_ur2],
 		  out => $bam_with_ur_out2,
 		  compare_sam => $sam_with_ur2);
     $test++;
-    my $cram_with_ur_out2 = sprintf("%s.test%02d.cram", $out, $test);
+    my $cram_with_ur_out2 = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
 		  msg => "$test: 1bp reads file SAM -> CRAM -> SAM",
 		  args => ['-C', $sam_with_ur2],
@@ -1194,14 +1194,14 @@ sub test_view
 	    run_view_test($opts,
 			  msg => "$test: Region @{$$rt[3]} @{$$rt[4]} ($$ip[0] input)",
 			  args => ['-h', @{$$rt[3]}, $input_file, @{$$rt[4]}],
-			  out => sprintf("%s.test%02d.sam", $out, $test),
+			  out => sprintf("%s.test%03d.sam", $out, $test),
 			  compare => $sam_file);
 	    $test++;
 	    # Count test
 	    run_view_test($opts,
 			  msg => "$test: Count @{$$rt[3]} @{$$rt[4]} ($$ip[0] input)",
 			  args => ['-c', @{$$rt[3]}, $input_file, @{$$rt[4]}],
-			  out => sprintf("%s.test%02d.sam", $out, $test),
+			  out => sprintf("%s.test%03d.count", $out, $test),
 			  redirect => 1,
 			  compare_count => $sam_file);
 	    $test++;
@@ -1222,14 +1222,14 @@ sub test_view
 	run_view_test($opts,
 		      msg => "$test: Add \@SQ with $topt->[0] (SAM output)",
 		      args => ['-h', @$topt, $sam_no_sq],
-		      out => sprintf("%s.test%02d.sam", $out, $test),
+		      out => sprintf("%s.test%03d.sam", $out, $test),
 		      compare => $sam_no_m5);
 	$test++;
     }
 
     # Test BAM output.
     foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
-	my $bam = sprintf("%s.test%02d.bam", $out, $test);
+	my $bam = sprintf("%s.test%03d.bam", $out, $test);
 	run_view_test($opts,
 		      msg => "$test: Add \@SQ with $topt->[0] (BAM output)",
 		      args => ['-b', @$topt, $sam_no_sq],
@@ -1246,7 +1246,7 @@ sub test_view
     run_view_test($opts,
 		  msg => "$test: CIGAR B-operator removal",
 		  args => ['-h', '-B', $b_op_sam],
-		  out => sprintf("%s.test%02d.sam", $out, $test),
+		  out => sprintf("%s.test%03d.sam", $out, $test),
 		  compare => $b_op_expected);
     $test++;    
 }
