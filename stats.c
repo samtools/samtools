@@ -33,7 +33,7 @@
 #define BWA_MIN_RDLEN 35
 // From the spec
 // If 0x4 is set, no assumptions can be made about RNAME, POS, CIGAR, MAPQ, bits 0x2, 0x10, 0x100 and 0x800, and the bit 0x20 of the previous read in the template.
-#define IS_PAIRED(bam) (((bam)->core.flag&BAM_FPAIRED) && !((bam)->core.flag&BAM_FUNMAP) && !((bam)->core.flag&BAM_FMUNMAP))
+#define IS_PAIRED_AND_MAPPED(bam) (((bam)->core.flag&BAM_FPAIRED) && !((bam)->core.flag&BAM_FUNMAP) && !((bam)->core.flag&BAM_FMUNMAP))
 #define IS_PROPERLYPAIRED(bam) (((bam)->core.flag&(BAM_FPAIRED|BAM_FPROPER_PAIR)) == (BAM_FPAIRED|BAM_FPROPER_PAIR) && !((bam)->core.flag&BAM_FUNMAP))
 #define IS_UNMAPPED(bam) ((bam)->core.flag&BAM_FUNMAP)
 #define IS_REVERSE(bam) ((bam)->core.flag&BAM_FREVERSE)
@@ -102,9 +102,10 @@ typedef struct
     uint64_t nreads_filtered;
     uint64_t nreads_dup;
     uint64_t nreads_unmapped;
-    uint64_t nreads_unpaired;
-    uint64_t nreads_paired;
+    uint64_t nreads_single_mapped;
+    uint64_t nreads_paired_and_mapped;
     uint64_t nreads_properly_paired;
+    uint64_t nreads_paired_tech;
     uint64_t nreads_anomalous;
     uint64_t nreads_mq0;
     uint64_t nbases_mapped;
@@ -606,6 +607,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
     if ( bam_line->core.flag & BAM_FQCFAIL ) stats->nreads_QCfailed++;
     if ( bam_line->core.flag & BAM_FSECONDARY ) stats->nreads_secondary++;
+    if ( bam_line->core.flag & BAM_FPAIRED ) stats->nreads_paired_tech++;
 
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
@@ -685,11 +687,11 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
         count_indels(stats,bam_line);
 
-        if ( !IS_PAIRED(bam_line) )
-            stats->nreads_unpaired++;
+        if ( !IS_PAIRED_AND_MAPPED(bam_line) )
+            stats->nreads_single_mapped++;
         else 
         {
-            stats->nreads_paired++;
+            stats->nreads_paired_and_mapped++;
 
             if (IS_PROPERLYPAIRED(bam_line)) stats->nreads_properly_paired++;
 
@@ -919,29 +921,28 @@ void output_stats(stats_t *stats)
         printf(" %s",stats->argv[i]);
     printf("\n");
     printf("# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.\n");
-    printf("SN\traw total sequences:\t%ld\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd));
+    printf("SN\traw total sequences:\t%ld\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd));  // not counting excluded seqs (and none of the below)
     printf("SN\tfiltered sequences:\t%ld\n", (long)stats->nreads_filtered);
     printf("SN\tsequences:\t%ld\n", (long)(stats->nreads_1st+stats->nreads_2nd));
-    printf("SN\tis paired:\t%d\n", stats->nreads_1st&&stats->nreads_2nd ? 1 : 0);
     printf("SN\tis sorted:\t%d\n", stats->is_sorted ? 1 : 0);
     printf("SN\t1st fragments:\t%ld\n", (long)stats->nreads_1st);
     printf("SN\tlast fragments:\t%ld\n", (long)stats->nreads_2nd);
-    printf("SN\treads mapped:\t%ld\n", (long)(stats->nreads_paired+stats->nreads_unpaired));
+    printf("SN\treads mapped:\t%ld\n", (long)(stats->nreads_paired_and_mapped+stats->nreads_single_mapped));
+    printf("SN\treads mapped and paired:\t%ld\t# paired-end technology bit set + both mates mapped\n", (long)stats->nreads_paired_and_mapped);
     printf("SN\treads unmapped:\t%ld\n", (long)stats->nreads_unmapped);
-    printf("SN\treads unpaired:\t%ld\n", (long)stats->nreads_unpaired);
-    printf("SN\treads paired:\t%ld\n", (long)stats->nreads_paired);
-    printf("SN\treads properly paired:\t%ld\n", (long)stats->nreads_properly_paired);
-    printf("SN\treads duplicated:\t%ld\n", (long)stats->nreads_dup);
-    printf("SN\treads MQ0:\t%ld\n", (long)stats->nreads_mq0);
+    printf("SN\treads properly paired:\t%ld\t# proper-pair bit set\n", (long)stats->nreads_properly_paired);
+    printf("SN\treads paired:\t%ld\t# paired-end technology bit set\n", (long)stats->nreads_paired_tech);
+    printf("SN\treads duplicated:\t%ld\t# PCR or optical duplicate bit set\n", (long)stats->nreads_dup);
+    printf("SN\treads MQ0:\t%ld\t$ mapped and MQ=0\n", (long)stats->nreads_mq0);
     printf("SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
     printf("SN\tnon-primary alignments:\t%ld\n", (long)stats->nreads_secondary);
-    printf("SN\ttotal length:\t%ld\n", (long)stats->total_len);
-    printf("SN\tbases mapped:\t%ld\n", (long)stats->nbases_mapped);                 // the length of the whole read goes here, including soft-clips etc.
-    printf("SN\tbases mapped (cigar):\t%ld\n", (long)stats->nbases_mapped_cigar);   // only matched and inserted bases are counted here
+    printf("SN\ttotal length:\t%ld\t# ignores clipping\n", (long)stats->total_len);
+    printf("SN\tbases mapped:\t%ld\t# ignores clipping\n", (long)stats->nbases_mapped);                 // the length of the whole read goes here, including soft-clips etc.
+    printf("SN\tbases mapped (cigar):\t%ld\t# more accurate\n", (long)stats->nbases_mapped_cigar);   // only matched and inserted bases are counted here
     printf("SN\tbases trimmed:\t%ld\n", (long)stats->nbases_trimmed);
     printf("SN\tbases duplicated:\t%ld\n", (long)stats->total_len_dup);
-    printf("SN\tmismatches:\t%ld\n", (long)stats->nmismatches);
-    printf("SN\terror rate:\t%e\n", (float)stats->nmismatches/stats->nbases_mapped_cigar);
+    printf("SN\tmismatches:\t%ld\t# from NM fields\n", (long)stats->nmismatches);
+    printf("SN\terror rate:\t%e\t# mismatches / bases mapped (cigar)\n", (float)stats->nmismatches/stats->nbases_mapped_cigar);
     float avg_read_length = (stats->nreads_1st+stats->nreads_2nd)?stats->total_len/(stats->nreads_1st+stats->nreads_2nd):0;
     printf("SN\taverage length:\t%.0f\n", avg_read_length);
     printf("SN\tmaximum length:\t%d\n", stats->max_len);
