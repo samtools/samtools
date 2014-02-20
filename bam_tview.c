@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2008-2013 Genome Research Ltd.
+ * Copyright (c) 2008-2014 Genome Research Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -41,9 +41,9 @@ int sam_fetch(samFile *fp, const hts_idx_t *idx, int tid, int beg, int end, void
 	int ret;
 	hts_itr_t* iter;
 	bam1_t* b = bam_init1();
-	iter = hts_itr_query(idx, tid, beg, end);
-	while ((ret = bam_itr_next(fp, iter, b)) >= 0) func(b, data);
-	bam_itr_destroy(iter);
+	iter = sam_itr_queryi(idx, tid, beg, end);
+	while ((ret = sam_itr_next(fp, iter, b)) >= 0) func(b, data);
+	hts_itr_destroy(iter);
 	bam_destroy1(b);
 	return (ret == -1)? 0 : ret;
 }
@@ -86,7 +86,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *sam
 		fprintf(stderr,"sam_open %s. %s\n", fn,fn_fa);
 		exit(EXIT_FAILURE);
 	}
-	bgzf_set_cache_size(tv->fp->fp.bgzf, 8 * 1024 *1024);
+	// TODO bgzf_set_cache_size(tv->fp->fp.bgzf, 8 * 1024 *1024);
 	assert(tv->fp);
 	
 	tv->header = sam_hdr_read(tv->fp);
@@ -95,7 +95,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *sam
 		fprintf(stderr,"Cannot read '%s'.\n", fn);
 		exit(EXIT_FAILURE);
 	}
-	tv->idx = bam_index_load(fn);
+	tv->idx = sam_index_load(tv->fp, fn);
 	if (tv->idx == NULL)
 	{
 		fprintf(stderr,"Cannot read index for '%s'.\n", fn);
