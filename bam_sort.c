@@ -1,3 +1,5 @@
+#define _GNU_SOURCE /* for asprintf() */
+
 #include <stdbool.h>
 #include <stdlib.h>
 #include <ctype.h>

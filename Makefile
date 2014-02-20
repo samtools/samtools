@@ -6,7 +6,7 @@ CC       = gcc
 CPPFLAGS = $(DFLAGS) $(INCLUDES)
 CFLAGS   = -g -Wall -O2
 LDFLAGS  =
-DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1 -D_GNU_SOURCE
+DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
 LOBJS=		bam_aux.o bam.o bam_import.o sam.o \
 			sam_header.o
 AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
@@ -116,7 +116,7 @@ bam_plcmd.o: bam_plcmd.c $(sam_h) $(htslib_faidx_h) sam_header.h $(bam2bcf_h) $(
 bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(bam_h)
 bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
 bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
-bam_sort.o: bam_sort.c $(bam_h) $(HTSDIR)/htslib/ksort.h
+bam_sort.o: bam_sort.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h $(htslib_sam_h) $(htslib_bgzf_h)
 bam_stat.o: bam_stat.c $(bam_h)
 bam_tview.o: bam_tview.c $(bam_tview_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
