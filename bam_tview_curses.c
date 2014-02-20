@@ -105,6 +105,7 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos)
 	wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
 	mvwprintw(tv->wgoto, 1, 2, "Goto: ");
 	for (;;) {
+		int invalid = 0;
 		int c = wgetch(tv->wgoto);
 		wrefresh(tv->wgoto);
 		if (c == KEY_BACKSPACE || c == '\010' || c == '\177') {
@@ -118,18 +119,27 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos)
 					return;
 				}
 			} else {
-				bam_parse_region(base->header, str, &_tid, &_beg, &_end);
+				char *name_lim = (char *) hts_parse_reg(str, &_beg, &_end);
+				char name_terminator = *name_lim;
+				*name_lim = '\0';
+				_tid = bam_name2id(base->header, str);
+				*name_lim = name_terminator;
+
 				if (_tid >= 0) {
 					*tid = _tid; *pos = _beg;
 					return;
 				}
 			}
+
+			// If we get here, the region string is invalid
+			invalid = 1;
 		} else if (isgraph(c)) {
 			if (l < TV_MAX_GOTO) str[l++] = c;
 		} else if (c == '\027') l = 0;
 		else if (c == '\033') return;
 		str[l] = '\0';
 		for (i = 0; i < TV_MAX_GOTO; ++i) mvwaddch(tv->wgoto, 1, 8 + i, ' ');
+		if (invalid) mvwprintw(tv->wgoto, 1, TV_MAX_GOTO - 1, "[Invalid]");
 		mvwprintw(tv->wgoto, 1, 8, "%s", str);
 	}
 }

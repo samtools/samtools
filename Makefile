@@ -14,8 +14,8 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-            faidx.o stats.o bam_flags.o
-            # tview todo: bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
+			faidx.o stats.o bam_flags.o bam_plbuf.o \
+			bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
 INCLUDES=	-I. -I$(HTSDIR)
 LIBCURSES=	-lcurses # -lXCurses
 
@@ -95,7 +95,9 @@ bgzip: bgzip.o $(HTSLIB)
 
 bam_h = bam.h $(htslib_bgzf_h) $(htslib_sam_h)
 bam2bcf_h = bam2bcf.h errmod.h
-bam_tview_h = bam_tview.h $(bam_h) $(htslib_faidx_h) $(bam2bcf_h) sam_header.h $(HTSDIR)/htslib/khash.h
+bam_lpileup_h = bam_lpileup.h $(htslib_sam_h)
+bam_plbuf_h = bam_plbuf.h $(htslib_sam_h)
+bam_tview_h = bam_tview.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(bam2bcf_h) $(HTSDIR)/htslib/khash.h $(bam_lpileup_h)
 sam_h = sam.h $(htslib_sam_h) $(bam_h)
 sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 
@@ -108,17 +110,18 @@ bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(bam_h)
 bam_color.o: bam_color.c $(bam_h)
 bam_import.o: bam_import.c $(HTSDIR)/htslib/kstring.h $(bam_h) $(HTSDIR)/htslib/kseq.h
 bam_index.o: bam_index.c $(bam_h)
-bam_lpileup.o: bam_lpileup.c $(bam_h) $(HTSDIR)/htslib/ksort.h
+bam_lpileup.o: bam_lpileup.c $(bam_plbuf_h) $(bam_lpileup_h) $(HTSDIR)/htslib/ksort.h
 bam_mate.o: bam_mate.c $(bam_h)
 bam_md.o: bam_md.c $(htslib_faidx_h) $(sam_h) kaln.h kprobaln.h
 bam_pileup.o: bam_pileup.c $(sam_h)
+bam_plbuf.o: bam_plbuf.c $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(bam2bcf_h) $(sample_h)
 bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(bam_h)
 bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
 bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
 bam_sort.o: bam_sort.c $(bam_h) $(HTSDIR)/htslib/ksort.h
 bam_stat.o: bam_stat.c $(bam_h)
-bam_tview.o: bam_tview.c $(bam_tview_h)
+bam_tview.o: bam_tview.c $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
 bam_flags.o: bam_flags.c $(sam_h)

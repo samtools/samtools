@@ -73,7 +73,7 @@ static void usage(FILE *fp)
 "         stats       generate stats (former bamcheck)\n"
 "  -- viewing\n"
 "         flags       explain BAM flags\n"
-//"         tview       text alignment viewer\n"
+"         tview       text alignment viewer\n"
 "         view        SAM<->BAM<->CRAM conversion\n"
 //"         depad       convert padded BAM to unpadded BAM\n" // not stable
 "\n");
@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
 		return 1;
 	}
 #if _CURSES_LIB != 0
-	//else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
+	else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
 #endif
 	else if (strcmp(argv[1], "--version") == 0) {
 		printf(
