@@ -397,7 +397,7 @@ int main_import(int argc, char *argv[])
 	int argc2, ret;
 	char **argv2;
 	if (argc != 4) {
-		fprintf(stderr, "Usage: bamtk import <in.ref_list> <in.sam> <out.bam>\n");
+		fprintf(stderr, "Usage: samtools import <in.ref_list> <in.sam> <out.bam>\n");
 		return 1;
 	}
 	argc2 = 6;

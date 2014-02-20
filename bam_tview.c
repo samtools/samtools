@@ -339,12 +339,12 @@ static void error(const char *format, ...)
 	if ( !format )
 	{
 		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage: bamtk tview [options] <aln.bam> [ref.fasta]\n");
+		fprintf(stderr, "Usage: samtools tview [options] <aln.bam> [ref.fasta]\n");
 		fprintf(stderr, "Options:\n");
 		fprintf(stderr, "   -d display      output as (H)tml or (C)urses or (T)ext \n");
 		fprintf(stderr, "   -p chr:pos      go directly to this position\n");
 		fprintf(stderr, "   -s STR          display only reads from this sample or group\n");
-		fprintf(stderr, "\n\n");
+		fprintf(stderr, "\n");
 	}
 	else
 	{
