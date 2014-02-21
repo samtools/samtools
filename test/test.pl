@@ -609,11 +609,23 @@ sub run_view_test
     
     if (!$res && $args{compare_sam} && $args{out}) {
 	# Convert output back to sam and compare
-	my $sam_out = "$args{out}.sam";
-	my @cmd2 = ("$$opts{bin}/samtools",
-		    'view', '-h', '-o', $sam_out, $args{out});
+	my $sam_name = "$args{out}.sam";
+	my @cmd2 = ("$$opts{bin}/samtools", 'view', '-h');
+	if (!$args{pipe}) {
+	    push(@cmd2, '-o', $sam_name);
+	}
+	push(@cmd2, $args{out});
+
 	push(@cmd, '&&', @cmd2); # For the 'Failed command' message below
-	$res = system(@cmd2) == 0 ? 0 : 1;
+
+	my $sam_out;
+	if (!$args{pipe}) {
+	    $sam_out = $sam_name;
+	    $res = system(@cmd2) == 0 ? 0 : 1;
+	} else {
+	    open($sam_out, '-|', @cmd2)
+		|| die "Couldn't open pipe from @cmd2: $!\n";
+	}
 	# Hack $args so the comparison gets done
 	$args{compare} = $args{compare_sam};
 	$args{out}     = $sam_out;
@@ -637,11 +649,60 @@ sub run_view_test
     print "\tFailed command:\n\t@cmd\n\n" if ($res);
 }
 
+sub run_view_subsample_test
+{
+    my ($opts, %args) = @_;
+
+    printf "\t%s ", $args{msg};
+
+    my @counts;
+    my $res = 0;
+    for (my $try = 0; $res == 0 && $try < $args{trials}; $try++) {
+	my %reads;
+	my @cmd = ("$$opts{bin}/samtools", 'view',
+		   '-s', $try + $args{frac}, $args{input});
+	open(my $samp, '-|', @cmd) || die "Couldn't open pipe from @cmd: $!\n";
+	while (<$samp>) {
+	    my ($name) = split(/\t/);
+	    $reads{$name}++;
+	}
+	close($samp) || die "Error running @cmd\n";
+	my $count = 0;
+	while (my ($name, $num) = each %reads) {
+	    if ($num != 2) {
+		print "\n\tGot one of read $name, expected two.\n";
+		$res = 1;
+		last;
+	    }
+	    $count += $num;
+	}
+	print ".";
+	push(@counts, $count);
+    }
+    if (0 == @counts) {
+	print "samtools view -s returned no counts\n";
+	$res = 1;
+    }
+
+    @counts = sort { $a <=> $b } @counts;
+    if ($counts[0] < $args{min} || $counts[-1] > $args{max}) {
+	printf("\n\tOutput out of range: target (%d..%d) got (%d..%d)\n",
+	       $args{min}, $args{max}, $counts[0], $counts[-1]);
+	$res = 1;
+    }
+
+    if (!$res) {
+	passed($opts, $args{msg});
+	return;
+    }
+    failed($opts, $args{msg});
+}
+
 sub sam_compare
 {
     my ($opts, $msg, $sam1, $sam2) = @_;
 
-    unless (-e $sam1 && -e $sam2) {
+    unless ((ref($sam1) || -e $sam1) && -e $sam2) {
 	failed($opts, $msg);
 	return 1;
     }
@@ -652,7 +713,12 @@ sub sam_compare
     my ($lno1, $lno2) = (0, 0);
     my ($l1, $l2, $ht1, $ht2);
 
-    open(my $f1, '<', $sam1) || die "Couldn't open $sam1: $!\n";
+    my $f1;
+    if (ref($sam1)) {
+	$f1 = $sam1;
+    } else {
+	open($f1, '<', $sam1) || die "Couldn't open $sam1: $!\n";
+    }
     while ($l1 = <$f1>) {
 	$lno1++;
 	if (($ht1) = $l1 =~ /^(@\S+)/) {
@@ -662,7 +728,13 @@ sub sam_compare
 	}
     }
 
-    open(my $f2, '<', $sam2) || die "Couldn't open $sam2: $!\n";
+    my $f2;
+    if ($sam2 =~ /\.gz$/) {
+	my @cmd = ("$$opts{bin}/bgzip", '-c', '-d', $sam2);
+	open($f2, '-|', @cmd) || die "Couldn't open pipe to @cmd: $!\n";
+    } else {
+	open($f2, '<', $sam2) || die "Couldn't open $sam2: $!\n";
+    }
     while ($l2 = <$f2>) {
 	$lno2++;
 	if (($ht2) = $l2 =~ /^(@\S+)/) {
@@ -677,14 +749,28 @@ sub sam_compare
 	my $same = $h2 && @$h1 == @$h2;
 	if ($same) {
 	    for (my $i = 0; $i < @$h1; $i++) {
-		if ($h1->[$i] ne $h2->[$i]) {
-		    $same = 0;
-		    last;
+		next if ($h1->[$i] eq $h2->[$i]);
+
+		# Hack to deal with CRAM adding M5 tags
+		if ($ht eq '@SQ' && $h1->[$i] =~ /\tM5/ && $h2->[$i] !~ /\tM5/){
+		    $h1->[$i] =~ s/\tM5:[0-9a-f]+//;
+		    next if ($h1->[$i] eq $h2->[$i]);
 		}
+		
+		$same = 0;
+		last;
 	    }
 	}
 	if (!$same) {
 	    print "\n\tHeader type $ht differs.\n";
+	    print "\t$sam1 has:\n";
+	    foreach my $t (@{$hdr1{$ht}}) {
+		print "\t$t\n";
+	    }
+	    print "\t$sam2 has:\n";
+	    foreach my $t (@{$hdr2{$ht}}) {
+		print "\t$t\n";
+	    }
 	    failed($opts, $msg);
 	    close($f1);
 	    close($f2);
@@ -792,6 +878,96 @@ sub count_compare
     }
 }
 
+sub gen_pair
+{
+    my ($reads, $seq, $qual, $pos1, $size, $rnum) = @_;
+
+    my $l1 = int(rand(50) + 75);
+    my $l2 = int(rand(50) + 75);
+    my $pos2 = $pos1 + int(rand(50) + 275);
+    if ($pos2 + $l2 > $size) { return; }
+    my $orient = int(rand(2));
+    my $name = "ERR123456.${rnum}";
+
+    my $rd1 = sprintf("%s\t%d\tref1\t%d\t40\t%dM\t=\t%d\t%d\t%s\t%s\tRG:Z:g1",
+		      $name, $orient ? 99 : 163, $pos1 + 1, $l1, $pos2 + 1,
+		      $pos2 + $l2 - $pos1, substr($$seq, $pos1, $l1),
+		      substr($$qual, $pos1, $l1));
+    my $rd2 = sprintf("%s\t%d\tref1\t%d\t40\t%dM\t=\t%d\t%d\t%s\t%s\tRG:Z:g1",
+		      $name, $orient ? 147 : 83, $pos2 + 1, $l2, $pos1 + 1,
+		      -($pos2 + $l2 - $pos1), substr($$seq, $pos2, $l2),
+		      substr($$qual, $pos2, $l2));
+    push(@{$reads->{$pos1}}, $rd1);
+    push(@{$reads->{$pos2}}, $rd2);
+}
+
+sub gen_file
+{
+    my ($opts, $prefix, $size) = @_;
+
+    local $| = 1;
+
+    print "\tGenerating test data file ";
+    my $dot_interval = $size / 10;
+
+    my $seq  = "!" x $size;
+    my $qual = $seq;
+
+    my $next_dot = $dot_interval;
+    for (my $b = 0; $b < $size; $b++) {
+	if ($b == $next_dot) {
+	    print ".";
+	    $next_dot += $dot_interval;
+	}
+	substr($seq, $b, 1) = (qw(A C G T))[int(rand(4))];
+	substr($qual, $b, 1) = chr(33 + int(rand(40)));
+    }
+    my $fasta = "$prefix.fa";
+    open(my $fa, '>', $fasta) || die "Couldn't open $fasta for writing : $!\n";
+    print $fa ">ref1\n";
+    for (my $i = 0; $i < $size; $i += 60) {
+	print $fa substr($seq, $i, 60), "\n";
+    }
+    close($fa) || die "Error writing to $fasta : $!\n";
+
+    my $fai = "$prefix.fa.fai";
+    open($fa, '>', $fai) || die "Couldn't open $fai for writing : $!\n";
+    print $fa "ref1\t$size\t6\t60\t61\n";
+    close($fa) || die "Error writing to $fai : $!\n";
+
+    my $sam = "$prefix.sam.gz";
+    my $pid = open(my $s, '|-');
+    unless (defined($pid)) { die "Couldn't fork : $!\n"; }
+    unless ($pid) {
+	open(STDOUT, '>', $sam) || die "Couldn't redirect STDOUT to $sam: $!\n";
+	exec("$$opts{bin}/bgzip", '-c') || die "Couldn't exec bgzip : $!\n";
+    }
+    print $s "\@HD\tVN:1.4\tSO:coordinate\n";
+    print $s "\@RG\tID:g1\tDS:Group 1\tLB:Lib1\tSM:Sample1\n";
+    print $s "\@SQ\tSN:ref1\tLN:$size\tUR:$fasta\n";
+    my %read_store;
+    my $rnum = 0;
+    $next_dot = $dot_interval;
+    for (my $i = 0; $i < $size; $i++) {
+	if ($i == $next_dot) {
+	    print ".";
+	    $next_dot += $dot_interval;
+	}
+	if ($i % 20 == 0) {
+	    gen_pair(\%read_store, \$seq, \$qual, $i, $size, ++$rnum);
+	}
+	if (exists($read_store{$i})) {
+	    foreach my $read (@{$read_store{$i}}) {
+		print $s $read, "\n";
+	    }
+	    delete($read_store{$i});
+	}
+    }
+    close($s) || die "Error running bgzip -c > $sam : $!\n";
+    print " done\n";
+    return ($sam, $rnum * 2);
+}
+
 sub test_view
 {
     my ($opts) = @_;
@@ -804,6 +980,9 @@ sub test_view
     my $sam_no_ur   = "$$opts{path}/dat/view.001.sam";
     my $sam_with_ur = "$$opts{tmp}/view.001.sam";
     add_ur_tags($sam_no_ur, $sam_with_ur, "$$opts{path}/dat/view.001.fa");
+
+    my ($big_sam, $big_sam_count)
+	= gen_file($opts, "$$opts{tmp}/view.big", 1000000);
 
     my $test = 1;
 
@@ -1249,4 +1428,60 @@ sub test_view
 		  out => sprintf("%s.test%03d.sam", $out, $test),
 		  compare => $b_op_expected);
     $test++;    
+
+    # Threads
+    # big SAM -> BAM
+    my $big_bam = sprintf("%s.test%03d.bam", $out, $test);
+    run_view_test($opts,
+		  msg => "$test: Big SAM -> BAM",
+		  args => ['-b', $big_sam],
+		  out => $big_bam);
+    $test++;
+
+    foreach my $threads (2, 4) {
+	run_view_test($opts,
+		      msg => "$test: Big SAM -> BAM ($threads threads)",
+		      args => ['-b', $big_sam, '-@', $threads],
+		      out => sprintf("%s.test%03d.bam", $out, $test),
+		      compare_bam => $big_bam);
+	$test++;
+    }
+
+    # big SAM -> CRAM
+    my $big_cram = sprintf("%s.test%03d.cram", $out, $test);
+    run_view_test($opts,
+		  msg => "$test: Big SAM -> CRAM",
+		  args => ['-C', $big_sam],
+		  out => $big_cram,
+		  compare_sam => $big_sam,
+		  pipe => 1);
+    $test++;
+
+    foreach my $threads (2, 4) {
+	run_view_test($opts,
+		      msg => "$test: Big SAM -> CRAM ($threads threads)",
+		      args => ['-b', $big_sam, '-@', $threads],
+		      out => sprintf("%s.test%03d.cram", $out, $test),
+		      compare_sam => $big_sam,
+		      pipe => 1);
+	$test++;
+    }
+
+
+    # Subsampling (-s) option.  This is random so accept if within +/- 5%
+    # of the expected number of reads.
+
+    foreach my $ip ([SAM => $big_sam], [BAM => $big_bam], [CRAM => $big_cram]) {
+	foreach my $frac (0.2, 0.5, 0.8) {
+
+	    run_view_subsample_test($opts,
+				    msg => "$test: Subsample $frac ($ip->[0] input)",
+				    frac => $frac,
+				    input => $ip->[1],
+				    trials => 10,
+				    min => $big_sam_count * $frac * 0.95,
+				    max => $big_sam_count * $frac * 1.05);
+	    $test++;
+	}
+    }
 }
