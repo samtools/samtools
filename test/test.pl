@@ -504,8 +504,9 @@ sub filter_sam
     my $qual_scale     = $args->{qual_scale} || 0;
     if ($qual_scale && $qual_scale > 93) { $qual_scale = 93; }
     my $body_filter = ($flags_required || $flags_rejected || $read_groups
-		       || $min_map_qual || $region || $strip_tags || $min_qlen
-		       || $qual_scale);
+		       || $min_map_qual || $libraries || $region
+		       || $strip_tags || $min_qlen || $qual_scale);
+    my $lib_read_groups = $libraries ? {} : undef;
 
     open(my $sam_in, '<', $in) || die "Couldn't open $in : $!\n";
     open(my $sam_out, '>', $out) || die "Couldn't open $out for writing : $!\n";
@@ -516,7 +517,13 @@ sub filter_sam
 	    if ($libraries && /^\@RG/) {
 		my ($id) = /\tID:([^\t]+)/;
 		my ($lib) = /\tLB:([^\t]+)/;
-		if (exists($libraries->{$lib})) { $read_groups->{$id} = 1; }
+		if (exists($libraries->{$lib})) { 
+		    $lib_read_groups->{$id} = 1;
+		}
+	    }
+	    if ($read_groups && /^\@RG/) {
+		my ($id) = /\tID:([^\t]+)/;
+		next if (!exists($read_groups->{$id}));
 	    }
 	    next if ($no_sq && /^\@SQ/);
 	    if ($no_m5 && /^\@SQ/) {
@@ -531,12 +538,14 @@ sub filter_sam
 			 && ($sam[1] & $flags_required) != $flags_required);
 		next if ($flags_rejected && ($sam[1] & $flags_rejected) != 0);
 		next if ($min_map_qual && $sam[4] < $min_map_qual);
-		if ($read_groups) {
+		if ($read_groups || $lib_read_groups) {
 		    my $group = '';
 		    for my $i (11 .. $#sam) {
 			last if (($group) = $sam[$i] =~ /^RG:Z:(.*)/);
 		    }
-		    next unless (exists($read_groups->{$group}));
+		    next if ($read_groups && !exists($read_groups->{$group}));
+		    next if ($lib_read_groups
+			     && !exists($lib_read_groups->{$group}));
 		}
 		if ($region) {
 		    my $in_range = 0;
