@@ -342,7 +342,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 1\n");
 
 	// test
-	freopen(tempfname, "w", stderr); // Redirect stderr to pipe
+	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
 	bam_translate(b, &tbl1);
 	fclose(stderr);
 
@@ -355,8 +355,8 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	check = fopen(tempfname, "r");
-	getline(&res, &len, check);
-	if (feof(check) || (res && !strcmp("",res))) {
+	if ( (getline(&res, &len, check) == -1 ) &&
+		(feof(check) || (res && !strcmp("",res))) ) {
 		++success;
 	} else {
 		++failure;
@@ -380,7 +380,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 2\n");
 	
 	// test
-	freopen(tempfname, "w", stderr);
+	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
 	bam_translate(b, &tbl2);
 	fclose(stderr);
 
@@ -393,8 +393,8 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	check = fopen(tempfname, "r");
-	getline(&res, &len, check);
-	if (feof(check) || (res && !strcmp("",res))) {
+	if ( (getline(&res, &len, check) == -1 ) &&
+		(feof(check) || (res && !strcmp("",res))) ) {
 		++success;
 	} else {
 		++failure;
@@ -418,7 +418,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 3\n");
 
 	// test
-	freopen(tempfname, "w", stderr);
+	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
 	bam_translate(b, &tbl3);
 	fclose(stderr);
 
@@ -431,8 +431,8 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	check = fopen(tempfname, "r");
-	getline(&res, &len, check);
-	if (feof(check) || (res && !strcmp("",res))) {
+	if ( (getline(&res, &len, check) == -1 ) &&
+		(feof(check) || (res && !strcmp("",res)))) {
 		++success;
 	} else {
 		++failure;
@@ -456,7 +456,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 4\n");
 	
 	// test
-	freopen(tempfname, "w", stderr);
+	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
 	bam_translate(b, &tbl4);
 	fclose(stderr);
 	
@@ -468,8 +468,8 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	check = fopen(tempfname, "r");
-	getline(&res, &len, check);
-	if (res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+	if ( (getline(&res, &len, check) != -1 ) &&
+		res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
 		++success;
 	} else {
 		++failure;
@@ -492,7 +492,7 @@ int main(int argc, char**argv)
 		printf("RUN test 5\n");
 	}
 	// test
-	freopen(tempfname, "w", stderr);
+	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
 	bam_translate(b, &tbl5);
 	fclose(stderr);
 
@@ -505,8 +505,8 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	check = fopen(tempfname, "r");
-	getline(&res, &len, check);
-	if (res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+	if ( (getline(&res, &len, check) != -1 ) &&
+		res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
 		++success;
 	} else {
 		++failure;
@@ -530,7 +530,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 6\n");
 
 	// test
-	freopen(tempfname, "w", stderr);
+	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
 	bam_translate(b, &tbl6);
 	fclose(stderr);
 
@@ -543,8 +543,8 @@ int main(int argc, char**argv)
 	// check result
 	len = 0;
 	check = fopen(tempfname, "r");
-	getline(&res, &len, check);
-	if (feof(check) || (res && !strcmp("",res))) {
+	if ( (getline(&res, &len, check) == -1 ) &&
+		(feof(check) || (res && !strcmp("",res))) ) {
 		++success;
 	} else {
 		++failure;
