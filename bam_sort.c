@@ -264,7 +264,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
 			if (matches == NULL) { perror("out of memory"); exit(-1); }
 			char* seq_regex = NULL;
-			asprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)",translate->target_name[i]);
+			if (asprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)",translate->target_name[i]) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for regex string.\n"); exit(1); }
 			regcomp(&sq_id, seq_regex, REG_EXTENDED|REG_NEWLINE);
 			free(seq_regex);
 			if (regexec(&sq_id, translate->text, 1, matches, 0) != 0)
@@ -305,7 +305,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		// is our matched ID in our output list already
 		regex_t rg_id_search;
 		char* rg_regex = NULL;
-		asprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)",match_id);
+		if (asprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)",match_id) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for regex string.\n"); exit(1); }
+
 		regcomp(&rg_id_search, rg_regex, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
 		free(rg_regex);
 		char* transformed_id = NULL;
@@ -326,8 +327,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		char* transformed_line = NULL;
 		if (match_id != transformed_id) {
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo));
-			asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo);
+			if (asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo)) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for format string.\n"); exit(1); }
+			if (asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for output header.\n"); exit(1); }
 			free(fmt);
 			free(transformed_id);
 		} else {
@@ -358,7 +359,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		// is our matched ID in our output list already
 		regex_t pg_id_search;
 		char* pg_regex = NULL;
-		asprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)",match_id);
+		if (asprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)",match_id) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for regex string.\n"); exit(1); }
 		regcomp(&pg_id_search, pg_regex, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
 		free(pg_regex);
 		char* transformed_id = NULL;
@@ -379,8 +380,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		char* transformed_line = NULL;
 		if (match_id != transformed_id) {
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo));
-			asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo);
+			if (asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo)) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for format string.\n"); exit(1); }
+			if (asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for output header.\n"); exit(1); }
 			free(fmt);
 			free(transformed_id);
 		} else {
@@ -418,8 +419,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			char* transformed_id = kh_value(tbl->pg_trans,k);
 			// Replace
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo));
-			asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo);
+			if (asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo)) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for format string.\n"); exit(1); }
+			if (asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for output header.\n"); exit(1); }
 			free(fmt);
 		} else { transformed_line = data; }
 		// Produce our output line and append it to out_text
@@ -450,8 +451,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			char* transformed_id = kh_value(tbl->pg_trans,k);
 			// Replace
 			char *fmt = NULL;
-			asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo));
-			asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo);
+			if (asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo)) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for format string.\n"); exit(1); }
+			if (asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for output header.\n"); exit(1); }
 			free(fmt);
 		} else { transformed_line = data; }
 		// Produce our output line and append it to out_text
@@ -803,6 +804,7 @@ int bam_merge(int argc, char *argv[])
 	int nfiles = 0;
 	char** fn = NULL;
 	if (file_list) {
+		// load the list of files to read
 		fn = hts_readlines(file_list, &nfiles);
 		if (fn == NULL) {
 			fprintf(stderr, "[%s] Invalid file list \"%s\"\n", __func__, file_list);
