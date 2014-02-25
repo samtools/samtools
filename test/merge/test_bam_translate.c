@@ -1,5 +1,4 @@
 #include "../../bam_sort.c"
-#include <fcntl.h>
 #include <unistd.h>
 
 void dump_read(bam1_t* b) {
@@ -328,12 +327,9 @@ int main(int argc, char**argv)
 	// Setup stderr redirect
 	size_t len = 0;
 	char* res = NULL;
-	int restore_stderr = dup(STDERR_FILENO); // Save stderr
-	char* template = strdup("test_bam_trans_XXXXXXX");
-	int null_fd = mkstemp(template);
-	unlink(template);
-	free(template);
-	FILE* check = fdopen(null_fd, "w+");
+	FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
+	char* tempfname = (optind < argc)? argv[optind] : "test_bam_translate.tmp";
+	FILE* check = NULL;
 	
 	// setup
 	if (verbose) printf("BEGIN test 1\n");  // TID test
@@ -346,9 +342,9 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 1\n");
 
 	// test
-	dup2(null_fd, STDERR_FILENO); // Redirect stderr to pipe
+	freopen(tempfname, "w", stderr); // Redirect stderr to pipe
 	bam_translate(b, &tbl1);
-	dup2(restore_stderr, STDERR_FILENO);
+	fclose(stderr);
 
 	if (verbose) printf("END RUN test 1\n");
 	if (verbose > 1) {
@@ -358,7 +354,7 @@ int main(int argc, char**argv)
 
 	// check result
 	len = 0;
-	rewind(check);
+	check = fopen(tempfname, "r");
 	getline(&res, &len, check);
 	if (feof(check) || (res && !strcmp("",res))) {
 		++success;
@@ -366,6 +362,7 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 1\n");
 	}
+	fclose(check);
 	
 	// teardown
 	bam_destroy1(b);
@@ -383,11 +380,9 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 2\n");
 	
 	// test
-	ftruncate(null_fd, 0);
-	rewind(check);
-	dup2(null_fd, STDERR_FILENO);
+	freopen(tempfname, "w", stderr);
 	bam_translate(b, &tbl2);
-	dup2(restore_stderr, STDERR_FILENO);
+	fclose(stderr);
 
 	if (verbose) printf("END RUN test 2\n");
 	if (verbose > 1) {
@@ -397,7 +392,7 @@ int main(int argc, char**argv)
 
 	// check result
 	len = 0;
-	rewind(check);
+	check = fopen(tempfname, "r");
 	getline(&res, &len, check);
 	if (feof(check) || (res && !strcmp("",res))) {
 		++success;
@@ -405,6 +400,7 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 2\n");
 	}
+	fclose(check);
 	
 	// teardown
 	bam_destroy1(b);
@@ -422,11 +418,10 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 3\n");
 
 	// test
-	ftruncate(null_fd, 0);
-	rewind(check);
-	dup2(null_fd, 2);
+	freopen(tempfname, "w", stderr);
 	bam_translate(b, &tbl3);
-	dup2(restore_stderr, 2);
+	fclose(stderr);
+
 	if (verbose) printf("END RUN test 3\n");
 	if (verbose > 1) {
 		printf("b\n");
@@ -435,7 +430,7 @@ int main(int argc, char**argv)
 
 	// check result
 	len = 0;
-	rewind(check);
+	check = fopen(tempfname, "r");
 	getline(&res, &len, check);
 	if (feof(check) || (res && !strcmp("",res))) {
 		++success;
@@ -443,6 +438,7 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 3\n");
 	}
+	fclose(check);
 	
 	// teardown
 	bam_destroy1(b);
@@ -460,11 +456,9 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 4\n");
 	
 	// test
-	ftruncate(null_fd, 0);
-	rewind(check);
-	dup2(null_fd, STDERR_FILENO);
+	freopen(tempfname, "w", stderr);
 	bam_translate(b, &tbl4);
-	dup2(restore_stderr, STDERR_FILENO);
+	fclose(stderr);
 	
 	if (verbose) printf("END RUN test 4\n");
 	if (verbose > 1) {
@@ -473,7 +467,7 @@ int main(int argc, char**argv)
 	}
 	// check result
 	len = 0;
-	rewind(check);
+	check = fopen(tempfname, "r");
 	getline(&res, &len, check);
 	if (res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
 		++success;
@@ -481,6 +475,7 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 4\n");
 	}
+	fclose(check);
 	
 	// teardown
 	bam_destroy1(b);
@@ -497,11 +492,9 @@ int main(int argc, char**argv)
 		printf("RUN test 5\n");
 	}
 	// test
-	ftruncate(null_fd, 0);
-	rewind(check);
-	dup2(null_fd, STDERR_FILENO);
+	freopen(tempfname, "w", stderr);
 	bam_translate(b, &tbl5);
-	dup2(restore_stderr, STDERR_FILENO);
+	fclose(stderr);
 
 	if (verbose) printf("END RUN test 5\n");
 	if (verbose > 1) {
@@ -511,7 +504,7 @@ int main(int argc, char**argv)
 
 	// check result
 	len = 0;
-	rewind(check);
+	check = fopen(tempfname, "r");
 	getline(&res, &len, check);
 	if (res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
 		++success;
@@ -519,6 +512,7 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 5\n");
 	}
+	fclose(check);
 
 	// teardown
 	bam_destroy1(b);
@@ -536,11 +530,9 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 6\n");
 
 	// test
-	ftruncate(null_fd, 0);
-	rewind(check);
-	dup2(null_fd, STDERR_FILENO);
+	freopen(tempfname, "w", stderr);
 	bam_translate(b, &tbl6);
-	dup2(restore_stderr, STDERR_FILENO);
+	fclose(stderr);
 
 	if (verbose) printf("END RUN test 6\n");
 	if (verbose > 1) {
@@ -550,7 +542,7 @@ int main(int argc, char**argv)
 	
 	// check result
 	len = 0;
-	rewind(check);
+	check = fopen(tempfname, "r");
 	getline(&res, &len, check);
 	if (feof(check) || (res && !strcmp("",res))) {
 		++success;
@@ -558,6 +550,7 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) printf("FAIL test 6\n");
 	}
+	fclose(check);
 
 	// teardown
 	bam_destroy1(b);
@@ -566,13 +559,12 @@ int main(int argc, char**argv)
 
 	// Cleanup
 	free(res);
-	fclose(check);
-	close(restore_stderr);
-	
+	remove(tempfname);
+
 	if (NUM_TESTS == success) {
 		return 0;
 	} else {
-		fprintf(stderr, "%d failures %d successes\n", failure, success);
+		fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
 		return 1;
 	}
 }
