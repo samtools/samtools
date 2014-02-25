@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2013 Genome Research Ltd.
+#    Copyright (C) 2008-2014 Genome Research Ltd.
 
 CC       = gcc
 CPPFLAGS = $(DFLAGS) $(INCLUDES)
@@ -44,8 +44,13 @@ MISC_PROGRAMS = \
 	misc/sam2vcf.pl misc/samtools.pl misc/soap2sam.pl \
 	misc/varfilter.py misc/wgsim_eval.pl misc/zoom2sam.pl
 
+BUILT_TEST_PROGRAMS = \
+	test/merge/test_bam_translate \
+	test/merge/test_pretty_header \
+	test/merge/test_rtrans_build \
+	test/merge/test_trans_tbl_init
 
-all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
+all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
@@ -142,8 +147,30 @@ stats.o: stats.c $(sam_h) sam_header.h samtools.h $(HTSDIR)/htslib/khash.h $(HTS
 
 # test programs
 
-check test:
+check test: samtools bgzip $(BUILT_TEST_PROGRAMS)
 	test/test.pl
+	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
+	test/merge/test_pretty_header
+	test/merge/test_rtrans_build
+	test/merge/test_trans_tbl_init
+
+
+test/merge/test_bam_translate: test/merge/test_bam_translate.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o $(HTSLIB) $(LDLIBS) -lz
+
+test/merge/test_pretty_header: test/merge/test_pretty_header.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_pretty_header.o $(HTSLIB) $(LDLIBS) -lz
+
+test/merge/test_rtrans_build: test/merge/test_rtrans_build.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o $(HTSLIB) $(LDLIBS) -lz
+
+test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o $(HTSLIB) $(LDLIBS) -lz
+
+test/merge/test_bam_translate.o: test/merge/test_bam_translate.c bam_sort.o
+test/merge/test_pretty_header.o: test/merge/test_pretty_header.c bam_sort.o
+test/merge/test_rtrans_build.o: test/merge/test_rtrans_build.c bam_sort.o
+test/merge/test_trans_tbl_init.o: test/merge/test_trans_tbl_init.c bam_sort.o
 
 
 # misc programs
@@ -188,10 +215,10 @@ install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 
 
 mostlyclean:
-	-rm -f *.o misc/*.o version.h
+	-rm -f *.o misc/*.o test/*/*.o version.h
 
 clean: mostlyclean clean-htslib
-	-rm -f $(PROGRAMS) libbam.a $(BUILT_MISC_PROGRAMS)
+	-rm -f $(PROGRAMS) libbam.a $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
 distclean: clean
 	-rm -f TAGS
