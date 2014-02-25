@@ -44,8 +44,13 @@ MISC_PROGRAMS = \
 	misc/sam2vcf.pl misc/samtools.pl misc/soap2sam.pl \
 	misc/varfilter.py misc/wgsim_eval.pl misc/zoom2sam.pl
 
+BUILT_TEST_PROGRAMS = \
+	test/merge/test_bam_translate \
+	test/merge/test_pretty_header \
+	test/merge/test_rtrans_build \
+	test/merge/test_trans_tbl_init
 
-all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
+all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
@@ -119,7 +124,7 @@ bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstr
 bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(bam_h)
 bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
 bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
-bam_sort.o: bam_sort.c $(bam_h) $(HTSDIR)/htslib/ksort.h
+bam_sort.o: bam_sort.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h $(htslib_sam_h) $(htslib_bgzf_h)
 bam_stat.o: bam_stat.c $(bam_h)
 bam_tview.o: bam_tview.c $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
@@ -145,8 +150,30 @@ stats.o: stats.c $(sam_h) sam_header.h samtools.h $(HTSDIR)/htslib/khash.h $(HTS
 
 # test programs
 
-check test:
+check test: samtools bgzip $(BUILT_TEST_PROGRAMS)
 	test/test.pl
+	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
+	test/merge/test_pretty_header
+	test/merge/test_rtrans_build
+	test/merge/test_trans_tbl_init
+
+
+test/merge/test_bam_translate: test/merge/test_bam_translate.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o $(HTSLIB) $(LDLIBS) -lz
+
+test/merge/test_pretty_header: test/merge/test_pretty_header.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_pretty_header.o $(HTSLIB) $(LDLIBS) -lz
+
+test/merge/test_rtrans_build: test/merge/test_rtrans_build.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o $(HTSLIB) $(LDLIBS) -lz
+
+test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o $(HTSLIB) $(LDLIBS) -lz
+
+test/merge/test_bam_translate.o: test/merge/test_bam_translate.c bam_sort.o
+test/merge/test_pretty_header.o: test/merge/test_pretty_header.c bam_sort.o
+test/merge/test_rtrans_build.o: test/merge/test_rtrans_build.c bam_sort.o
+test/merge/test_trans_tbl_init.o: test/merge/test_trans_tbl_init.c bam_sort.o
 
 
 # misc programs
@@ -191,10 +218,10 @@ install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 
 
 mostlyclean:
-	-rm -f *.o misc/*.o version.h
+	-rm -f *.o misc/*.o test/*/*.o version.h
 
 clean: mostlyclean clean-htslib
-	-rm -f $(PROGRAMS) libbam.a $(BUILT_MISC_PROGRAMS)
+	-rm -f $(PROGRAMS) libbam.a $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
 distclean: clean
 	-rm -f TAGS
