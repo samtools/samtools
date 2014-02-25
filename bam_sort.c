@@ -34,15 +34,6 @@ void memset_pattern4(void *target, const void *pattern, size_t size) {
 }
 #endif
 
-static hts_itr_t* bam_itr_finish()
-{
-	hts_itr_t* iter = (hts_itr_t*)calloc(1, sizeof(hts_itr_t));
-	iter->finished = 1;
-	return iter;
-}
-
-int bam_parse_region(bam_hdr_t *header, const char *str, int *ref_id, int *beg, int *end);
-
 KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
 
 #define __free_char(p)
@@ -650,7 +641,13 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		int* rtrans = rtrans_build(n, hout->n_targets, translation_tbl);
 		
 		int tid, beg, end;
-		if (bam_parse_region(hout, reg, &tid, &beg, &end) < 0) {
+		const char *name_lim = hts_parse_reg(reg, &beg, &end);
+		char *name = malloc(name_lim - reg + 1);
+		memcpy(name, reg, name_lim - reg);
+		name[name_lim - reg] = '\0';
+		tid = bam_name2id(hout, name);
+		free(name);
+		if (tid < 0) {
 			fprintf(stderr, "[%s] Malformated region string or undefined reference name\n", __func__);
 			return -1;
 		}
@@ -661,7 +658,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			if (mapped_tid != INT32_MIN) {
 				iter[i] = sam_itr_queryi(idx, mapped_tid, beg, end);
 			} else {
-				iter[i] = bam_itr_finish();
+				iter[i] = sam_itr_queryi(idx, HTS_IDX_NONE, 0, 0);
 			}
 			hts_idx_destroy(idx);
 		}
@@ -752,8 +749,6 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 	return bam_merge_core2(by_qname, out, headers, n, fn, flag, reg, 0, -1);
 }
 
-int read_file_list(const char *file_list,int *n,char **argv[]);
-
 int bam_merge(int argc, char *argv[])
 {
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
@@ -808,9 +803,11 @@ int bam_merge(int argc, char *argv[])
 	int nfiles = 0;
 	char** fn = NULL;
 	if (file_list) {
-		// do something
-		if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
-
+		fn = hts_readlines(file_list, &nfiles);
+		if (fn == NULL) {
+			fprintf(stderr, "[%s] Invalid file list \"%s\"\n", __func__, file_list);
+			return 1;
+		}
 	} else {
 		// otherwise get list of files to merge from command line
 		nfiles = argc - optind - 1;
