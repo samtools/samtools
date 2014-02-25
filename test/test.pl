@@ -744,22 +744,21 @@ sub run_view_test
 	$args{out}     = $sam_out;
     }
 
-    if ($res) {
-	failed($opts, $args{msg});
-    } else {
+    if (!$res) {
 	if ($args{compare} && $args{out}) {
-	    $res = sam_compare($opts, $args{msg}, $args{out}, $args{compare});
+	    $res = sam_compare($opts, $args{out}, $args{compare});
 	} elsif ($args{compare_bam} && $args{out}) {
-	    $res = bam_compare($opts, $args{msg},
-			       $args{out}, $args{compare_bam});
+	    $res = bam_compare($args{out}, $args{compare_bam});
 	} elsif ($args{compare_count}) {
-	    $res = count_compare($opts, $args{msg},
-				 $args{out}, $args{compare_count});
-	} else {
-	    passed($opts, $args{msg});
+	    $res = count_compare($args{out}, $args{compare_count});
 	}
     }
-    print "\tFailed command:\n\t@cmd\n\n" if ($res);
+    if ($res) {
+	print "\tFailed command:\n\t@cmd\n\n";
+	failed($opts, $args{msg});
+    } else {
+	passed($opts, $args{msg});
+    }
 }
 
 # Runs a test of the samtools view -s subsampling option.
@@ -829,11 +828,9 @@ sub run_view_subsample_test
 
 # Compare two SAM files.  Headers are collated by type to allow for reordering
 # although all headers of a particular type should be in the same order.
-# Optional tags on alignment lines can also be reordered.  Calls passed()
-# if the files are the same, otherwise failed().
+# Optional tags on alignment lines can also be reordered.
 #
 # $opts is the global settings hash
-# $msg is passed to the passed() or failed() functions.
 # $sam1 is the first SAM file
 # $sam2 is the second SAM file.
 #
@@ -847,10 +844,15 @@ sub run_view_subsample_test
 
 sub sam_compare
 {
-    my ($opts, $msg, $sam1, $sam2) = @_;
+    my ($opts, $sam1, $sam2) = @_;
 
-    unless ((ref($sam1) || -e $sam1) && -e $sam2) {
-	failed($opts, $msg);
+    unless (-e $sam2) {
+	print "\n\tMissing SAM file $sam2.\n";
+	return 1;
+    }
+
+    unless ((ref($sam1) || -e $sam1)) {
+	print "\n\tMissing SAM file $sam1.\n";
 	return 1;
     }
 
@@ -918,7 +920,6 @@ sub sam_compare
 	    foreach my $t (@{$hdr2{$ht}}) {
 		print "\t$t\n";
 	    }
-	    failed($opts, $msg);
 	    close($f1);
 	    close($f2);
 	    return 1;
@@ -946,21 +947,16 @@ sub sam_compare
 
     if ($l1 || $l2) {
 	print "\n\tSAM files differ at $sam1 : $lno1 / $sam2 : $lno2\n";
-	failed($opts, $msg);
 	return 1;
-    } else {
-	passed($opts, $msg);
-	return 0;
     }
+
+    return 0;
 }
 
 # Compare two BAM files.  This is done by uncompressing them and performing
 # a binary comparison.  Used to check that (for example) the uncompressed and
-# compressed versions are the same.  Calls passed() or failed() based on
-# the comparison results.
+# compressed versions are the same.
 #
-# $opts is the global settings hash
-# $msg is passed to the passed() or failed() functions.
 # $bam1 is the first BAM file
 # $bam2 is the second BAM file.
 #
@@ -968,7 +964,7 @@ sub sam_compare
 
 sub bam_compare
 {
-    my ($opts, $msg, $bam1, $bam2) = @_;
+    my ($bam1, $bam2) = @_;
 
     my $buffer1;
     my $buffer2;
@@ -994,21 +990,16 @@ sub bam_compare
     close($b2) || die "Error running gunzip -c $bam2\n";
     if ($fail) {
 	print "\n\tBAM files $bam1 and $bam2 differ.\n";
-	failed($opts, $msg);
 	return 1;
-    } else {
-	passed($opts, $msg);
-	return 0;
     }
+
+    return 0;
 }
 
 # Compare two counts to see if they are the same.  The first is in a file
 # created by, for example, 'samtools view -c'.  The second can either be
-# a number, or the name of a file to read.  passed() and failed() are
-# called if the counts were the same or different respectively.
+# a number, or the name of a file to read.
 #
-# $opts is the global settings hash
-# $msg is passed to the passed() or failed() functions.
 # $count1 is the first file containing a count
 # $count2 is either a number or the second file containing a count
 #
@@ -1016,7 +1007,7 @@ sub bam_compare
 
 sub count_compare
 {
-    my ($opts, $msg, $count1, $count2) = @_;
+    my ($count1, $count2) = @_;
     
     open(my $c1, '<', $count1) || die "Couldn't open $count1 : $!\n";
     my $number1 = <$c1>;
@@ -1025,7 +1016,6 @@ sub count_compare
 
     unless ($number1 =~ /^\d+$/) {
 	print "\n\tExpected a number in $count1 but got '$number1'\n";
-	failed($opts, $msg);
 	return 1;
     }
 
@@ -1041,12 +1031,10 @@ sub count_compare
     }
     if ($number1 != $number2) {
 	print "\n\tIncorrect count: Got $number1; expected $number2.\n";
-	failed($opts, $msg);
 	return 1;
-    } else {
-	passed($opts, $msg);
-	return 0;
     }
+
+    return 0;
 }
 
 # Generate a pair of reads, for use in gen_file.
