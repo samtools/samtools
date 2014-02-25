@@ -2,32 +2,35 @@
 #define BAM_TVIEW_H
 
 #include <ctype.h>
-#include <assert.h>
 #include <string.h>
 #include <math.h>
 #include <unistd.h>
 #include <stdarg.h>
-#include "bam.h"
-#include "htslib/faidx.h"
+#include <htslib/sam.h>
 #include "bam2bcf.h"
-#include "sam_header.h"
-#include "htslib/khash.h"
+#include <htslib/khash.h>
+#include <htslib/hts.h>
+#include <htslib/faidx.h>
+#include "bam_lpileup.h"
+
 
 KHASH_MAP_INIT_STR(kh_rg, const char *)
 
+/* Holds state of Tview */
 typedef struct AbstractTview {
 	int mrow, mcol;
 	
-	bam_index_t *idx;
-	bam_lplbuf_t *lplbuf;
-	bam_header_t *header;
-	bamFile fp;
+	hts_idx_t* idx;
+	bam_lplbuf_t* lplbuf;
+	bam_hdr_t* header;
+	samFile* fp;
 	int curr_tid, left_pos;
-	faidx_t *fai;
-	bcf_callaux_t *bca;
+	faidx_t* fai;
+	bcf_callaux_t* bca;
 
 	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip, show_name;
 	char *ref;
+	/* maps @RG ID => SM (sample), in practice only used to determine whether a particular RG is in the list of allowed ones */
     khash_t(kh_rg) *rg_hash;
     /* callbacks */
     void (*my_destroy)(struct AbstractTview* );
