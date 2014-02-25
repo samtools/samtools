@@ -748,7 +748,7 @@ sub run_view_test
 	if ($args{compare} && $args{out}) {
 	    $res = sam_compare($opts, $args{out}, $args{compare});
 	} elsif ($args{compare_bam} && $args{out}) {
-	    $res = bam_compare($args{out}, $args{compare_bam});
+	    $res = bam_compare($opts, $args{out}, $args{compare_bam});
 	} elsif ($args{compare_count}) {
 	    $res = count_compare($args{out}, $args{compare_count});
 	}
@@ -826,6 +826,31 @@ sub run_view_subsample_test
     failed($opts, $args{msg});
 }
 
+# Open a pipe from bgzip to decompress a gzipped file.  bgzip is annoying
+# as it checks the suffix of the file it is decompressing even when
+# writing to STDOUT.  Hence we get it to read from a redirected STDIN
+# instead so it doesn't care about the filename any more.
+#
+# $opts is the global settings hash
+# $in is the compressed file to read
+# 
+# Returns a file handle reference to the pipe from bgzip.
+
+sub open_bgunzip
+{
+    my ($opts, $in) = @_;
+
+    my @cmd = ("$$opts{bin}/bgzip", '-c', '-d');
+    my $bgzip;
+    my $pid = open($bgzip, '-|');
+    unless (defined($pid)) { die "Couldn't fork: $!\n"; }
+    unless ($pid) {
+	open(STDIN, '<', $in) || die "Couldn't redirect STDIN: $!\n";
+	exec(@cmd) || die "Couldn't exec @cmd: $!\n";
+    }
+    return $bgzip;
+}
+
 # Compare two SAM files.  Headers are collated by type to allow for reordering
 # although all headers of a particular type should be in the same order.
 # Optional tags on alignment lines can also be reordered.
@@ -879,8 +904,7 @@ sub sam_compare
 
     my $f2;
     if ($sam2 =~ /\.gz$/) {
-	my @cmd = ("$$opts{bin}/bgzip", '-c', '-d', $sam2);
-	open($f2, '-|', @cmd) || die "Couldn't open pipe to @cmd: $!\n";
+	$f2 = open_bgunzip($opts, $sam2);
     } else {
 	open($f2, '<', $sam2) || die "Couldn't open $sam2: $!\n";
     }
@@ -957,6 +981,7 @@ sub sam_compare
 # a binary comparison.  Used to check that (for example) the uncompressed and
 # compressed versions are the same.
 #
+# $opts is the global settings hash
 # $bam1 is the first BAM file
 # $bam2 is the second BAM file.
 #
@@ -964,7 +989,7 @@ sub sam_compare
 
 sub bam_compare
 {
-    my ($bam1, $bam2) = @_;
+    my ($opts, $bam1, $bam2) = @_;
 
     my $buffer1;
     my $buffer2;
@@ -972,10 +997,8 @@ sub bam_compare
     my $bytes2;
     my $fail = 0;
 
-    open(my $b1, '-|', 'gunzip', '-c', $bam1)
-	|| die "Couldn't open pipe to gunzip -c -d $bam1 : $!\n";
-    open(my $b2, '-|', 'gunzip', '-c', $bam2)
-	|| die "Couldn't open pipe to gunzip -c $bam2 : $!\n";
+    my $b1 = open_bgunzip($opts, $bam1);
+    my $b2 = open_bgunzip($opts, $bam2);
     do {
 	$bytes1 = read($b1, $buffer1, 65536);
 	$bytes2 = read($b2, $buffer2, 65536);
@@ -986,8 +1009,8 @@ sub bam_compare
 	    last;
 	}
     } while ($bytes1 && $bytes2);
-    close($b1) || die "Error running gunzip -c $bam1\n";
-    close($b2) || die "Error running gunzip -c $bam2\n";
+    close($b1) || die "Error running bgzip -c -d $bam1\n";
+    close($b2) || die "Error running bgzip -c -d $bam2\n";
     if ($fail) {
 	print "\n\tBAM files $bam1 and $bam2 differ.\n";
 	return 1;
