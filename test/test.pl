@@ -441,6 +441,15 @@ sub test_usage_subcommand
     passed($opts,$test);
 }
 
+# Add UR tags to @SQ lines in a SAM file.
+# UR points to a local file.  As this could be anywhere, it is not possible
+# to put UR tags into the test SAM files that are checked in to version
+# control.  Instead this is used to add them when running the tests.
+#
+# $in  is the SAM file to read.
+# $out is the SAM file to write.
+# $fasta_location is the filename to put in the UR tag.
+
 sub add_ur_tags
 {
     my ($in, $out, $fasta_location) = @_;
@@ -461,6 +470,10 @@ sub add_ur_tags
     close($sam_out) || die "Error writing to $out : $!\n";    
 }
 
+# Calculates the number of reference bases consumed by a CIGAR string.
+# $cigar is the CIGAR string.
+# returns the number of reference bases.
+
 sub reflen
 {
     my ($cigar) = @_;
@@ -473,6 +486,10 @@ sub reflen
     return $len;
 }
 
+# Calculates the number of query bases consumed by a CIGAR string.
+# $cigar is the CIGAR string.
+# returns the number of query bases.
+
 sub querylen
 {
     my ($cigar) = @_;
@@ -484,6 +501,63 @@ sub querylen
     }
     return $len;
 }
+
+# Filter SAM files.
+# This is used to convert a test SAM file into one that has been modified
+# in a number of ways.  This is then used to compare with the output of
+# samtools view, to see if they are the same.
+#
+# $in  is the SAM file to read.
+# $out is the SAM file to write.
+# $args is a hash ref indicating which filters to apply:
+#   $args->{no_body}        outputs only the header (-H option)
+#   $args->{no_header}      outputs only the alignments (no -h)
+#   $args->{no_m5}          removes M5: tags from header @SQ lines
+#   $args->{no_sq}          removes all @SQ lines from the header
+#   $args->{min_map_qual}   minimum mapping quality it output (-q option)
+#   $args->{flags_required} bits which must be set in flags (-f option)
+#   $args->{flags_rejected} bits which must not be set in flags (-F option)
+#   $args->{read_groups}    hash of read groups to output (-r or -R)
+#   $args->{libraries}      hash of libraries to output (-l)
+#   $args->{region}         region list to output (-L and region list)
+#   $args->{strip_tags}     hash of tags to strip from alignments (-x)
+#   $args->{min_qlen}       minimum query length to output (-m)
+#   $args->{qual_scale}     scale quality values (-Q)
+#
+# The region list is a reference to an array of region definitions.  Each
+# region definition is itself a reference to an array with between one and
+# three elements - reference, start position and end position.  The positions
+# are inclusive and count from base 1.
+#
+# *  If one element is present, then all the reads aligned to the given
+#    reference are output.
+# *  If two elements are present, then all the reads on the given reference
+#    that end on or after the start position are output.
+# *  If three elements are present, then all the reads on the given reference
+#    that end on or after the start position and start on or before the
+#    end position are output.
+#
+# N.B. The region list is just a simple filter, so does not work in
+# exactly the same way as samtools view which treats the regions as index
+# queries.  This means samtools view will output the same alignment more than
+# once if given overlapping regions, while filter_sam will not.  It will
+# work in a similar manner to samtools for BED file input though as samtools
+# implements BED file regions as a filter rather than a range request.
+#
+# The BED file support in samtools view is a bit complicated as it actually
+# allows two different formats, which can both be mixed in the same file.
+#
+# The standard BED format has three or more whitespace-separated elements
+# on each line, the first three corresponding to reference name, start
+# and end positions.  Unlike samtools, BED counts bases from zero, and the
+# end position is exclusive, i.e. the base after the desired range.
+# To convert BED format to a range definition:
+# ref S E        becomes:   ['ref', S + 1, E] 
+#
+# The other format has only two elements (not legal in a normal BED file).
+# They define a reference and a single base position.  Unfortunately this
+# format counts from base one.  To convert this to a filter_sam range:
+# ref P          becomes:   ['ref', P, P]
 
 sub filter_sam
 {
@@ -588,6 +662,36 @@ sub filter_sam
     close($sam_out) || die "Error writing to $out : $!\n";    
 }
 
+# Run a samtools view test.  As well as running samtools view, various
+# options are available to compare the output with a known version.
+# This will call passed() or failed() depending on the outcome of the test.
+#
+# $opts is the global settings hash
+# %args is a list of key => value pairs giving options for run_view_test.
+# The options for running samtools view are:
+#  msg         => Message describing the test.
+#  args        => array ref of arguments to add to the samtools view command
+#                 Does not include the output file, which is in $args{out}
+#  stdin       => Redirect STDIN to a pipe running "cat $args{stdin}"
+#                 Otherwise the input file is included in $args{args}
+#  out         => Name of the output file to make.
+#  redirect    => If set, redirect STDOUT, otherwise use "-o $args{out}"
+#  ref_path    => Setting for the REF_PATH environment variable
+#
+# One of the compare* options can be used to compare to an existing file:
+#  compare     => Compare $args{out} with $args{compare} using sam_compare()
+#  compare_sam => As compare, but run "samtools view -h $args{out}" first to
+#                 convert an alternate format to SAM.  The resulting SAM file
+#                 is saved to "$args{out}.sam" unless $args{pipe} is set.
+#  pipe        => When used with compare_sam, the "samtools view -h" is read
+#                 from a pipe instead of being stored in a file.  This can
+#                 be used to avoid making very big SAM files for some tests.
+#  compare_bam => Compare $args{out} with $args{compare_bam} using bam_compare()
+#                 This is a binary comparison of the gunzipped BAM files.
+#  compare_count => Compare count stored in $args{out} and $args{count_compare}
+#                   The latter can either be a number, or a file containing a
+#                   number.
+
 sub run_view_test
 {
     my ($opts, %args) = @_;
@@ -658,6 +762,22 @@ sub run_view_test
     print "\tFailed command:\n\t@cmd\n\n" if ($res);
 }
 
+# Runs a test of the samtools view -s subsampling option.
+# The subsampling is pseudo-random, so multiple tests are run with different
+# seeds, and the resulting read counts are tested against an acceptable
+# range.  As the input file is paired, this also checks that both reads from
+# each pair get returned.
+#
+# $opts is the global settings hash
+# %args is a list of key => value pairs giving options
+# The options are:
+#  msg    => Message describing the test.
+#  trials => The number of trials to run.  The trial number is used as the seed.
+#  input  => The input file to read.
+#  frac   => The fraction of reads to return (must be < 1).
+#  min    => The minimum acceptable read count
+#  max    => The maximum acceptable read count
+
 sub run_view_subsample_test
 {
     my ($opts, %args) = @_;
@@ -706,6 +826,24 @@ sub run_view_subsample_test
     }
     failed($opts, $args{msg});
 }
+
+# Compare two SAM files.  Headers are collated by type to allow for reordering
+# although all headers of a particular type should be in the same order.
+# Optional tags on alignment lines can also be reordered.  Calls passed()
+# if the files are the same, otherwise failed().
+#
+# $opts is the global settings hash
+# $msg is passed to the passed() or failed() functions.
+# $sam1 is the first SAM file
+# $sam2 is the second SAM file.
+#
+# Returns 0 if the files were the same, 1 if different.
+#
+# If $sam1 is a reference, it is assumed to be a pipe from which the data
+# should be read.  The pipe will be closed after being read.  Otherwise it
+# is treated as a filename.
+#
+# If $sam2 ends in '.gz' it is uncompressed with bgzip.
 
 sub sam_compare
 {
@@ -816,6 +954,18 @@ sub sam_compare
     }
 }
 
+# Compare two BAM files.  This is done by uncompressing them and performing
+# a binary comparison.  Used to check that (for example) the uncompressed and
+# compressed versions are the same.  Calls passed() or failed() based on
+# the comparison results.
+#
+# $opts is the global settings hash
+# $msg is passed to the passed() or failed() functions.
+# $bam1 is the first BAM file
+# $bam2 is the second BAM file.
+#
+# Returns 0 if the files are the same, 1 if they are different.
+
 sub bam_compare
 {
     my ($opts, $msg, $bam1, $bam2) = @_;
@@ -827,7 +977,7 @@ sub bam_compare
     my $fail = 0;
 
     open(my $b1, '-|', 'gunzip', '-c', $bam1)
-	|| die "Couldn't open pipe to gunzip -c $bam1 : $!\n";
+	|| die "Couldn't open pipe to gunzip -c -d $bam1 : $!\n";
     open(my $b2, '-|', 'gunzip', '-c', $bam2)
 	|| die "Couldn't open pipe to gunzip -c $bam2 : $!\n";
     do {
@@ -851,6 +1001,18 @@ sub bam_compare
 	return 0;
     }
 }
+
+# Compare two counts to see if they are the same.  The first is in a file
+# created by, for example, 'samtools view -c'.  The second can either be
+# a number, or the name of a file to read.  passed() and failed() are
+# called if the counts were the same or different respectively.
+#
+# $opts is the global settings hash
+# $msg is passed to the passed() or failed() functions.
+# $count1 is the first file containing a count
+# $count2 is either a number or the second file containing a count
+#
+# Returns 0 if the counts were the same, 1 if they differ.
 
 sub count_compare
 {
@@ -887,6 +1049,15 @@ sub count_compare
     }
 }
 
+# Generate a pair of reads, for use in gen_file.
+#
+# $reads is a hash that the reads are put into.
+# $seq is the sequence (passed by reference for speed)
+# $qual is the quality (passed by reference for speed)
+# $pos1 is the position of the leftmost read.
+# $size is the length of $$seq
+# $rnum is the read number, used to generate the read name.
+
 sub gen_pair
 {
     my ($reads, $seq, $qual, $pos1, $size, $rnum) = @_;
@@ -909,6 +1080,19 @@ sub gen_pair
     push(@{$reads->{$pos1}}, $rd1);
     push(@{$reads->{$pos2}}, $rd2);
 }
+
+# Randomly generate a test SAM file.  Used to create the big SAM file for
+# testing the -s and -@ options of samtools view.  As well as the SAM file
+# it writes a fasta file with the reference sequence in it and a .fai file
+# which is an index of the fasta file.  Both of these are used for CRAM.
+# The SAM file is compressed with bgzf to keep the size down.
+# 
+# $opts is the global setting hash.
+# $prefix is the prefix for the generated file names.
+# $size is the length of the random reference sequence.
+#
+# Returns a list containing the name of the SAM file and the read count.
+
 
 sub gen_file
 {
@@ -977,6 +1161,8 @@ sub gen_file
     return ($sam, $rnum * 2);
 }
 
+# Run samtools view tests.
+
 sub test_view
 {
     my ($opts) = @_;
@@ -986,9 +1172,13 @@ sub test_view
 
     my $ref_path = "$$opts{path}/dat/cram_md5/%s";
     
+    # Add @SQ UR: tags to the stored test file.
+
     my $sam_no_ur   = "$$opts{path}/dat/view.001.sam";
     my $sam_with_ur = "$$opts{tmp}/view.001.sam";
     add_ur_tags($sam_no_ur, $sam_with_ur, "$$opts{path}/dat/view.001.fa");
+
+    # Generate a big SAM file for use later.
 
     my ($big_sam, $big_sam_count)
 	= gen_file($opts, "$$opts{tmp}/view.big", 1000000);
