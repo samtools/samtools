@@ -15,6 +15,7 @@ test_faidx($opts);
 test_mpileup($opts);
 test_usage($opts, cmd=>'samtools');
 test_view($opts);
+test_cat($opts);
 
 print "\nNumber of tests:\n";
 printf "    total   .. %d\n", $$opts{nok}+$$opts{nfailed};
@@ -662,14 +663,16 @@ sub filter_sam
     close($sam_out) || die "Error writing to $out : $!\n";    
 }
 
-# Run a samtools view test.  As well as running samtools view, various
-# options are available to compare the output with a known version.
+# Run a samtools subcommand test.  As well as running samtools, various
+# options are available to compare the output with a known version.  The
+# default subcommand run is 'view', unless overridden by the 'cmd' argument.
 # This will call passed() or failed() depending on the outcome of the test.
 #
 # $opts is the global settings hash
 # %args is a list of key => value pairs giving options for run_view_test.
 # The options for running samtools view are:
 #  msg         => Message describing the test.
+#  cmd         => samtools subcommand to run (default is view)
 #  args        => array ref of arguments to add to the samtools view command
 #                 Does not include the output file, which is in $args{out}
 #  stdin       => Redirect STDIN to a pipe running "cat $args{stdin}"
@@ -700,7 +703,7 @@ sub run_view_test
 
     local $ENV{REF_PATH} =  $args{ref_path} if ($args{ref_path});
 
-    my @cmd = ("$$opts{bin}/samtools", 'view');
+    my @cmd = ("$$opts{bin}/samtools", $args{cmd} ? $args{cmd} : 'view');
     if ($args{out} && !$args{redirect}) { push(@cmd, '-o', $args{out}); }
     if ($args{args}) { push(@cmd, @{$args{args}}); }
     
@@ -1694,4 +1697,119 @@ sub test_view
 	    $test++;
 	}
     }
+}
+
+# cat SAM files in the same way as samtools cat does with BAMs
+#
+# $sam_out is the name of the output file
+# $sam_in is the name of the input file.  More than one of these can be
+#   passed in.  The header is taken from the first file.
+
+sub cat_sams
+{
+    my $sam_out = shift(@_);
+    my $first = 1;
+    
+    open(my $out, '>', $sam_out)
+	|| die "Couldn't open $sam_out for writing: $!\n";
+
+    while (my $sam_in = shift(@_)) {
+	my $in;
+	if ($sam_in =~ /\.gz$/) {
+	    $in = open_bgunzip($opts, $sam_in);
+	} else {
+	    open($in, '<', $sam_in) || die "Couldn't open $sam_in : $!\n";
+	}
+	while (<$in>) {
+	    next if (/^@/ && !$first);
+	    print $out $_ || die "Error writing to $sam_out : $!\n";
+	}
+	close($in) || die "Error reading $sam_in : $!\n";
+	$first = 0;
+    }
+    close($out) || die "Error writing to $sam_out : $!\n";
+}
+
+# Test samtools cat.
+
+sub test_cat
+{
+    my ($opts) = @_;
+
+    my $test_name = "test_cat";
+    print "$test_name:\n";
+
+    my @sams;
+    my @bams;
+    my @bgbams;
+    my $nfiles = 4;
+    my $test = 1;
+    my $out = "$$opts{tmp}/cat";
+
+    # Generate some files big enough to include a few bgzf blocks
+    for (my $i = 0; $i < $nfiles; $i++) {
+	($sams[$i]) = gen_file($opts, sprintf("%s.%d", $out, $i + 1), 10000);
+	
+	# Convert to BAM
+	$bams[$i] = sprintf("%s.%d.bam", $out, $i + 1);
+	run_view_test($opts,
+		      msg =>  sprintf("Generate BAM file #%d", $i + 1),
+		      args => ['-b', $sams[$i]],
+		      out => $bams[$i],
+		      compare_sam => $sams[$i],
+		      pipe => 1);
+
+	# Recompress with bgzip to alter the location of the bgzf boundaries.
+	$bgbams[$i] = sprintf("%s.%d.bgzip.bam", $out, $i + 1);
+	cmd("'$$opts{bin}/bgzip' -c -d < '$bams[$i]' | '$$opts{bin}/bgzip' -c > '$bgbams[$i]'");
+    }
+
+    # Make a concatenated SAM file to compare
+    my $catsam1 = "$out.all1.sam";
+    cat_sams($catsam1, @sams);
+
+    foreach my $redirect (0, 1) {
+	my $to_stdout = $redirect ? ' to stdout' : '';
+
+	# Basic test
+	run_view_test($opts,
+		      msg =>  "$test: cat BAM files$to_stdout",
+		      cmd => 'cat',
+		      args => [@bams],
+		      out => sprintf("%s.test%03d.bam", $out, $test),
+		      redirect => $redirect,
+		      compare_sam => $catsam1);
+	$test++;
+
+	# Test BAM files recompressed with bgzip
+	run_view_test($opts,
+		      msg =>  "$test: cat recompressed BAM files$to_stdout",
+		      cmd => 'cat',
+		      args => [@bgbams],
+		      out => sprintf("%s.test%03d.bam", $out, $test),
+		      redirect => $redirect,
+		      compare_sam => $catsam1);
+	$test++;
+    }
+
+    # Test reheader option
+    my $header  = "$$opts{path}/dat/cat.hdr";
+    my $catsam2 = "$out.all2.sam";
+    cat_sams($catsam2, $header, @sams);
+
+    run_view_test($opts,
+		  msg =>  "$test: cat BAM files with new header",
+		  cmd => 'cat',
+		  args => ['-h', $header, @bams],
+		  out => sprintf("%s.test%03d.bam", $out, $test),
+		  compare_sam => $catsam2);
+    $test++;
+
+    run_view_test($opts,
+		  msg =>  "$test: cat recompressed BAM files with new header",
+		  cmd => 'cat',
+		  args => ['-h', $header, @bgbams],
+		  out => sprintf("%s.test%03d.bam", $out, $test),
+		  compare_sam => $catsam2);
+    $test++;
 }
