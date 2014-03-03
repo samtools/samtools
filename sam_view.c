@@ -187,7 +187,11 @@ int main_samview(int argc, char *argv[])
 		case '?': is_long_help = 1; break;
 		case 'T': fn_ref = strdup(optarg); break;
 		case 'B': settings.remove_B = 1; break;
-		case 'Q': settings.qual_scale = atoi(optarg); break;
+		case 'Q':
+			settings.qual_scale = atoi(optarg);
+			if (settings.qual_scale <  0) settings.qual_scale =  0;
+			if (settings.qual_scale > 93) settings.qual_scale = 93;
+ 			break;
 		case '@': n_threads = strtol(optarg, 0, 0); break;
 		case 'x':
 			{
