@@ -177,7 +177,12 @@ int main_samview(int argc, char *argv[])
 		case 'u': compress_level = 0; break;
 		case '1': compress_level = 1; break;
 		case 'l': settings.library = strdup(optarg); break;
-		case 'L': settings.bed = bed_read(optarg); break;
+		case 'L':
+			if (NULL == (settings.bed = bed_read(optarg))) {
+				ret = 1;
+				goto view_end;
+			}
+			break;
 		case 'r': settings.rg = strdup(optarg); break;
 		case 'R': fn_rg = strdup(optarg); break;
 				/* REMOVED as htslib doesn't support this
@@ -325,8 +330,8 @@ view_end:
 	if (settings.remove_aux_len) {
 		free(settings.remove_aux);
 	}
-	sam_close(in);
-	if (!is_count)
+	if (NULL != in) sam_close(in);
+	if (!is_count && NULL != out)
 		sam_close(out);
 	return ret;
 }
