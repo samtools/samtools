@@ -239,10 +239,16 @@ int main_samview(int argc, char *argv[])
 		case 'l': settings.library = strdup(optarg); break;
 		case 'L': settings.bed = bed_read(optarg); break;
 		case 'r':
-			if (0 != add_read_group_single(&settings, optarg)) goto view_end;
+			if (0 != add_read_group_single(&settings, optarg)) {
+				ret = 1;
+				goto view_end;
+			}
 			break;
 		case 'R':
-			if (0 != add_read_groups_file(&settings, optarg)) goto view_end;
+			if (0 != add_read_groups_file(&settings, optarg)) {
+				ret = 1;
+				goto view_end;
+			}
 			break;
 				/* REMOVED as htslib doesn't support this
 		//case 'x': out_format = "x"; break;
@@ -377,8 +383,8 @@ view_end:
 	if (settings.remove_aux_len) {
 		free(settings.remove_aux);
 	}
-	sam_close(in);
-	if (!is_count)
+	if (NULL != in) sam_close(in);
+	if (!is_count && NULL != out)
 		sam_close(out);
 	return ret;
 }
