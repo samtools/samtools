@@ -61,7 +61,7 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
 	}
 	if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off))
 		return 1;
-	if (settings->bed && b->core.tid >= 0 && !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b)))
+	if (settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
 		return 1;
 	if (settings->subsam_frac > 0.) {
 		uint32_t k = __ac_X31_hash_string(bam_get_qname(b)) + settings->subsam_seed;
