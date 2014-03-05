@@ -16,6 +16,7 @@ test_mpileup($opts);
 test_usage($opts, cmd=>'samtools');
 test_view($opts);
 test_cat($opts);
+test_bam2fq($opts);
 
 print "\nNumber of tests:\n";
 printf "    total   .. %d\n", $$opts{nok}+$$opts{nfailed};
@@ -694,6 +695,9 @@ sub filter_sam
 #  compare_count => Compare count stored in $args{out} and $args{count_compare}
 #                   The latter can either be a number, or a file containing a
 #                   number.
+#  compare_text => Compare $args{out} with $args{compare_text} using
+#                  text_compare().  This is an exact line-by-line comparison.
+
 
 sub run_view_test
 {
@@ -754,6 +758,8 @@ sub run_view_test
 	    $res = bam_compare($opts, $args{out}, $args{compare_bam});
 	} elsif ($args{compare_count}) {
 	    $res = count_compare($args{out}, $args{compare_count});
+	} elsif ($args{compare_text}) {
+	    $res = text_compare($args{out}, $args{compare_text});
 	}
     }
     if ($res) {
@@ -1020,6 +1026,41 @@ sub bam_compare
     }
 
     return 0;
+}
+
+# Compare two text files.
+# 
+# $txt1 is the first file
+# $txt2 is the second file.
+#
+# Returns 0 if the files are the same, 1 if they are different.
+
+sub text_compare
+{
+    my ($txt1, $txt2) = @_;
+
+    open(my $t1, '<', $txt1) || die "Couldn't open $txt1 : $!\n";
+    open(my $t2, '<', $txt2) || die "Couldn't open $txt2 : $!\n";
+    my $line = 0;
+    my $diff = 0;
+    while (!$diff) {
+	$line++;
+	my $l1 = <$t1>;
+	my $l2 = <$t2>;
+	last if (!defined($l1) && !defined($l2));
+	if (($l1 || '') ne ($l2 || '')) {
+	    $diff = 1;
+	    if (defined($l1)) { chomp($l1); }
+	    if (defined($l2)) { chomp($l2); }
+	    print "\n\tFiles differ at line $line:\n";
+	    print "\t$txt1 ", defined($l1) ? " : $l1\n" : "End of file\n";
+	    print "\t$txt2 ", defined($l2) ? " : $l2\n" : "End of file\n";
+	}
+    }
+    close($t1) || die "Error reading $t1 : $!\n";
+    close($t2) || die "Error reading $t2 : $!\n";
+
+    return $diff;
 }
 
 # Compare two counts to see if they are the same.  The first is in a file
@@ -1812,4 +1853,81 @@ sub test_cat
 		  out => sprintf("%s.test%03d.bam", $out, $test),
 		  compare_sam => $catsam2);
     $test++;
+}
+
+sub sam2fq
+{
+    my ($sam_in, $fq_out, $suffixes) = @_;
+
+    open(my $in, '<', $sam_in) || die "Couldn't open $sam_in : $!\n";
+    open(my $out, '>', $fq_out)
+	|| die "Couldn't open $fq_out for writing : $!\n";
+    while (<$in>) {
+	next if (/^@/);
+	my @s = split(/\t/, $_);
+	my $dirn = ($s[1] & 0xc0) >> 6;
+	my $suff = $suffixes ? ('', '/1', '/2', '')[$dirn] : '';
+	if (($s[1] & 0x10) != 0) { # reverse complement
+	    $s[9] =~ tr/ACGTMRWSYKVHDBN/TGCAKYWSRMBDHVN/;
+	    $s[9] = reverse($s[9]);
+	    $s[10] = reverse($s[10]);
+	}
+	print $out "\@$s[0]$suff\n$s[9]\n+\n$s[10]\n";
+    }
+    close($out) || die "Error writing $fq_out : $!\n";
+    close($in) || die "Error reading $sam_in : $!\n";
+}
+
+sub test_bam2fq
+{
+    my ($opts) = @_;
+
+    my $test_name = "test_bam2fq";
+    print "$test_name:\n";
+
+    my $out = "$$opts{tmp}/bam2fq";
+
+    my $sam = "$$opts{path}/dat/bam2fq.001.sam";
+    my $bam = "$out.001.bam";
+    my $cram = "$out.001.cram";
+    my $fqsuffix   = "$out.001.fq";
+    my $fqnosuffix = "$out.001.nosuff.fq";
+
+    sam2fq($sam, $fqsuffix,   1);
+    sam2fq($sam, $fqnosuffix, 0);
+
+    # Make a BAM file with the test data
+    run_view_test($opts,
+		  msg =>  "Generate BAM file",
+		  args => ['-b', $sam],
+		  out => $bam,
+		  compare_sam => $sam,
+		  pipe => 1);
+
+    # Make a CRAM file with the test data
+    run_view_test($opts,
+		  msg =>  "Generate CRAM file",
+		  args => ['-C', $sam],
+		  out => $cram,
+		  ref_path => "$$opts{path}/dat/cram_md5",
+		  compare_sam => $sam,
+		  pipe => 1);
+
+    my $test = 1;
+    my @inputs = ([SAM => $sam], [BAM => $bam], [CRAM => $cram]);
+    foreach my $input (@inputs) {
+	foreach my $nosuffix (0, 1) {
+	    my @n = $nosuffix ? ('-n') : ();
+	    
+	    run_view_test($opts,
+			  msg => "$test: bam2fq @n ($input->[0] input)",
+			  cmd => 'bam2fq',
+			  args => [@n, $input->[1]],
+			  out => sprintf("%s.test%03d.fq", $out, $test),
+			  ref_path => "$$opts{path}/dat/cram_md5",
+			  redirect => 1,
+			  compare_text => $nosuffix ? $fqnosuffix : $fqsuffix);
+	    $test++;
+	}
+    }
 }
