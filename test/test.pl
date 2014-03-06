@@ -17,6 +17,7 @@ test_usage($opts, cmd=>'samtools');
 test_view($opts);
 test_cat($opts);
 test_bam2fq($opts);
+test_depad($opts);
 
 print "\nNumber of tests:\n";
 printf "    total   .. %d\n", $$opts{nok}+$$opts{nfailed};
@@ -1928,6 +1929,67 @@ sub test_bam2fq
 			  redirect => 1,
 			  compare_text => $nosuffix ? $fqnosuffix : $fqsuffix);
 	    $test++;
+	}
+    }
+}
+
+sub test_depad
+{
+    my ($opts) = @_;
+
+    my $test_name = "test_depad";
+    print "$test_name:\n";
+
+    my $pad_sam   = "$$opts{path}/dat/depad.001p.sam";
+    my $unpad_sam = "$$opts{path}/dat/depad.001u.sam";
+    my $ref       = "$$opts{path}/dat/depad.001.fa";
+
+    my $out = "$$opts{tmp}/depad";
+    my $pad_bam = "$out.001p.bam";
+    my $pad_cram = "$out.001p.cram";
+
+    # Make a BAM file with the test data
+    run_view_test($opts,
+		  msg =>  "Generate BAM file",
+		  args => ['-b', $pad_sam],
+		  out => $pad_bam,
+		  compare_sam => $pad_sam);
+    
+    # Don't try CRAM for now as it loses the CIGAR string from the embedded
+    # reference.
+
+    # # Make a CRAM file with the test data
+    # run_view_test($opts,
+    # 		  msg =>  "Generate CRAM file",
+    # 		  args => ['-C', $pad_sam],
+    # 		  out => $pad_cram,
+    # 		  ref_path => "$$opts{path}/dat/cram_md5",
+    # 		  compare_sam => $pad_sam);
+
+    my $test = 1;
+#    my @inputs = ([SAM => $pad_sam], [BAM => $pad_bam], [CRAM => $pad_cram]);
+    my @inputs = ([SAM => $pad_sam], [BAM => $pad_bam]);
+    my @formats = (['', 'bam'], ['-s', 'sam'], ['-u', 'uncomp.bam'],
+		   ['-1', 'fast.bam']);
+    foreach my $input (@inputs) {
+	foreach my $format (@formats) {
+	    # Only test -T option for now due to problems with reformatting
+	    # the @SQ lines in the headers with embedded references.
+	    foreach my $use_t (1) {
+		my @args = $use_t ? ('-T', $ref) : ();
+		if ($format->[0]) { push(@args, $format->[0]); }
+		push(@args, $input->[1]);
+		my $compare = $format->[1] eq 'sam' ? 'compare' : 'compare_sam';
+		run_view_test($opts,
+			      msg => "depad $format->[0] ($input->[0] input)",
+			      cmd => 'depad',
+			      args => \@args,
+			      out => sprintf("%s.test%03d.%s",
+					     $out, $test, $format->[1]),
+			      ref_path => "$$opts{path}/dat/cram_md5",
+			      redirect => 1,
+			      $compare => $unpad_sam);
+	    }
 	}
     }
 }
