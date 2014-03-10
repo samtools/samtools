@@ -1,5 +1,17 @@
 #include "../../bam_sort.c"
+#include <stdio.h>
+#include <string.h>
+#include <errno.h>
 #include <unistd.h>
+
+void xfreopen(const char *path, const char *mode, FILE *stream)
+{
+	if (freopen(path, mode, stream) == NULL) {
+		fprintf(stderr, "test_bam_translate: error reopening %s: %s\n",
+				path, strerror(errno));
+		exit(2);
+	}
+}
 
 void dump_read(bam1_t* b) {
 	printf("->core.tid:(%d)\n", b->core.tid);
@@ -342,7 +354,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 1\n");
 
 	// test
-	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
+	xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
 	bam_translate(b, &tbl1);
 	fclose(stderr);
 
@@ -380,7 +392,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 2\n");
 	
 	// test
-	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
+	xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
 	bam_translate(b, &tbl2);
 	fclose(stderr);
 
@@ -418,7 +430,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 3\n");
 
 	// test
-	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
+	xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
 	bam_translate(b, &tbl3);
 	fclose(stderr);
 
@@ -456,7 +468,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 4\n");
 	
 	// test
-	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
+	xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
 	bam_translate(b, &tbl4);
 	fclose(stderr);
 	
@@ -492,7 +504,7 @@ int main(int argc, char**argv)
 		printf("RUN test 5\n");
 	}
 	// test
-	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
+	xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
 	bam_translate(b, &tbl5);
 	fclose(stderr);
 
@@ -530,7 +542,7 @@ int main(int argc, char**argv)
 	if (verbose) printf("RUN test 6\n");
 
 	// test
-	if (freopen(tempfname, "w", stderr) == NULL) { perror("error redirecting stderrr to pipe\n"); return -1; } // Redirect stderr to pipe
+	xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
 	bam_translate(b, &tbl6);
 	fclose(stderr);
 
