@@ -80,7 +80,7 @@ int main(int argc, char **argv)
 			if(pstdout){
 				f_dst = fileno(stdout);
 			} else {
-				char *name = malloc(sizeof(strlen(argv[optind]) + 5));
+				char *name = malloc(strlen(argv[optind]) + 5);
 				strcpy(name, argv[optind]);
 				strcat(name, ".rz");
 				f_dst = write_open(name, is_forced);
