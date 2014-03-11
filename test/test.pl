@@ -20,12 +20,17 @@ test_bam2fq($opts);
 test_depad($opts);
 
 print "\nNumber of tests:\n";
-printf "    total   .. %d\n", $$opts{nok}+$$opts{nfailed};
-printf "    passed  .. %d\n", $$opts{nok};
-printf "    failed  .. %d\n", $$opts{nfailed};
+printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
+printf "    passed           .. %d\n", $$opts{nok};
+printf "    failed           .. %d\n", $$opts{nfailed};
+printf "    expected failure .. %d\n", $$opts{nxfail};
+printf "    unexpected pass  .. %d\n", $$opts{nxpass};
 print "\n";
 
-exit ($$opts{nfailed} > 0);
+# Exit non-zero if there is a failure or an unexpected pass.  In the case
+# of an unexpected pass, the test script itself is at fault and should
+# be updated to expect a pass instead of failure.
+exit ($$opts{nfailed} > 0 || $$opts{nxpass} > 0);
 
 #--------------------
 
@@ -45,7 +50,7 @@ sub error
 }
 sub parse_params
 {
-    my $opts = { keep_files=>0, nok=>0, nfailed=>0 };
+    my $opts = { keep_files=>0, nok=>0, nfailed=>0, nxfail => 0, nxpass => 0 };
     my $help;
     Getopt::Long::Configure('bundling');
     my $ret = GetOptions (
@@ -169,6 +174,19 @@ sub passed
     my ($opts,$test) = @_;
     $$opts{nok}++;
     print ".. ok\n\n";
+}
+sub xfail
+{
+    my ($opts,$test,$reason) = @_;
+    $$opts{nxfail}++;
+    if ( defined $reason ) { print "\n\t$reason"; }
+    print "\n.. expected failure\n\n";
+}
+sub xpass
+{
+    my ($opts,$test) = @_;
+    $$opts{nxpass}++;
+    print ".. unexpected pass\n\n";
 }
 sub is_file_newer
 {
@@ -682,6 +700,7 @@ sub filter_sam
 #  out         => Name of the output file to make.
 #  redirect    => If set, redirect STDOUT, otherwise use "-o $args{out}"
 #  ref_path    => Setting for the REF_PATH environment variable
+#  expect_fail => Expected failure, convert failed to xfail and passed to xpass
 #
 # One of the compare* options can be used to compare to an existing file:
 #  compare     => Compare $args{out} with $args{compare} using sam_compare()
@@ -698,7 +717,6 @@ sub filter_sam
 #                   number.
 #  compare_text => Compare $args{out} with $args{compare_text} using
 #                  text_compare().  This is an exact line-by-line comparison.
-
 
 sub run_view_test
 {
@@ -765,9 +783,17 @@ sub run_view_test
     }
     if ($res) {
 	print "\tFailed command:\n\t@cmd\n\n";
-	failed($opts, $args{msg});
+	if (!$args{expect_fail}) {
+	    failed($opts, $args{msg});
+	} else {
+	    xfail($opts, $args{msg});
+	}
     } else {
-	passed($opts, $args{msg});
+	if (!$args{expect_fail}) {
+	    passed($opts, $args{msg});
+	} else {
+	    xpass($opts, $args{msg});
+	}
     }
 }
 
@@ -1448,41 +1474,43 @@ sub test_view
 
 
     my @filter_tests = (
+	# [test_name, {filter_sam options}, [samtools options], expect_fail]
 	# Flags
-	['req128', {flags_required => 128}, ['-f', 128]],
-	['rej128', {flags_rejected => 128}, ['-F', 128]],
+	['req128', {flags_required => 128}, ['-f', 128], 0],
+	['rej128', {flags_rejected => 128}, ['-F', 128], 0],
 	['rej128req2', { flags_rejected => 128, flags_required => 2 },
-	 ['-F', 128, '-f', 2]],
+	 ['-F', 128, '-f', 2], 0],
 	# Read groups
-	['rg_grp2', { read_groups => { grp2 => 1 }}, ['-r', 'grp2']],
-	['rg_fogn', { read_groups => { grp1 => 1, grp3 => 1 }}, ['-R', $fogn]],
+	['rg_grp2', { read_groups => { grp2 => 1 }}, ['-r', 'grp2'], 0],
+	['rg_fogn', { read_groups => { grp1 => 1, grp3 => 1 }},
+	 ['-R', $fogn], 0],
 	['rg_both', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
-	 ['-R', $fogn, '-r', 'grp2']],
+	 ['-R', $fogn, '-r', 'grp2'], 0],
 	['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
-	 ['-r', 'grp2', '-R', $fogn]],
+	 ['-r', 'grp2', '-R', $fogn], 0],
 	# Libraries
-	['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2']],
+	['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 1],
 	# Mapping qualities
-	['mq50',  { min_map_qual => 50 },  ['-q', 50]],
-	['mq99',  { min_map_qual => 99 },  ['-q', 99]],
-	['mq100', { min_map_qual => 100 }, ['-q', 100]],
+	['mq50',  { min_map_qual => 50 },  ['-q', 50], 0],
+	['mq99',  { min_map_qual => 99 },  ['-q', 99], 0],
+	['mq100', { min_map_qual => 100 }, ['-q', 100], 0],
 	# Tag stripping
-	['tags1', { strip_tags => { fa => 1 } }, ['-x', 'fa']],
+	['tags1', { strip_tags => { fa => 1 } }, ['-x', 'fa'], 0],
 	['tags2', { strip_tags => { fa => 1, ha => 1 } },
-	 ['-x', 'fa', '-x', 'ha']],
+	 ['-x', 'fa', '-x', 'ha'], 0],
 	# Tag strip plus read group
 	['tags_rg1', { strip_tags => { fa => 1 }, read_groups => { grp2 => 1 }},
-	 ['-x', 'fa', '-r', 'grp2']],
+	 ['-x', 'fa', '-r', 'grp2'], 0],
 	['tags_rg2', { strip_tags => { RG => 1 }, read_groups => { grp2 => 1 }},
-	 ['-x', 'RG', '-r', 'grp2']],
+	 ['-x', 'RG', '-r', 'grp2'], 0],
 	# Minimum query length
-	['qlen10', { min_qlen => 10 }, ['-m', 10]],
-	['qlen11', { min_qlen => 11 }, ['-m', 11]],
-	['qlen15', { min_qlen => 15 }, ['-m', 15]],
-	['qlen16', { min_qlen => 16 }, ['-m', 16]],
+	['qlen10', { min_qlen => 10 }, ['-m', 10], 0],
+	['qlen11', { min_qlen => 11 }, ['-m', 11], 0],
+	['qlen15', { min_qlen => 15 }, ['-m', 15], 0],
+	['qlen16', { min_qlen => 16 }, ['-m', 16], 0],
 	# Quality scale
-	['qscale2', { qual_scale => 2 }, ['-Q', 2]],
-	['qscale_maxint', { qual_scale => 2147483647 }, ['-Q', 2147483647]],
+	['qscale2', { qual_scale => 2 }, ['-Q', 2], 0],
+	['qscale_maxint', { qual_scale => 2147483647 }, ['-Q', 2147483647], 0],
 	);
 
     my @filter_inputs = ([SAM  => $sam_with_ur],
@@ -1500,7 +1528,8 @@ sub test_view
 			  msg => "$test: Filter @{$$filter[2]} ($$ip[0] input)",
 			  args => ['-h', @{$$filter[2]}, $$ip[1]],
 			  out => sprintf("%s.test%03d.sam", $out, $test),
-			  compare => $sam_file);
+			  compare => $sam_file,
+			  expect_fail => $$filter[3]);
 	    $test++;
 	    
 	    # Count test
@@ -1509,7 +1538,8 @@ sub test_view
 			  args => ['-c', @{$$filter[2]}, $$ip[1]],
 			  out => sprintf("%s.test%03d.count", $out, $test),
 			  redirect => 1,
-			  compare_count => $sam_file);
+			  compare_count => $sam_file,
+			  expect_fail => $$filter[3]);
 	    $test++;
 	}
     }
@@ -1988,7 +2018,8 @@ sub test_depad
 					     $out, $test, $format->[1]),
 			      ref_path => "$$opts{path}/dat/cram_md5",
 			      redirect => 1,
-			      $compare => $unpad_sam);
+			      $compare => $unpad_sam,
+			      expect_fail => 1);
 	    }
 	}
     }
