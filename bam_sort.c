@@ -1,5 +1,3 @@
-#define _GNU_SOURCE /* for asprintf() */
-
 #include <stdbool.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -13,6 +11,7 @@
 #include "htslib/ksort.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
+#include "htslib/kstring.h"
 #include "htslib/sam.h"
 #include "htslib/bgzf.h"
 
@@ -207,23 +206,6 @@ static void pretty_header(char** text_in_out, int32_t text_len)
 	*text_in_out = output;
 }
 
-static inline void append_header( char** out_text_in, int32_t* out_len_in, const char* append_text, const int32_t append_len)
-{
-	char* out_text = *out_text_in;
-	int32_t out_len = *out_len_in;
-
-	char* newtext = (char*) malloc(out_len+1+append_len);
-	memcpy((void*)newtext, out_text, out_len);
-	newtext[out_len] = '\n';
-	memcpy((void*)(newtext+out_len+1),append_text,append_len);
-	out_len += 1+append_len;
-	free(out_text);
-	out_text = newtext;
-	
-	*out_text_in = out_text;
-	*out_len_in = out_len;
-}
-
 static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
 {
 	// No need to translate header into itself
@@ -235,10 +217,10 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	tbl->pg_trans = kh_init(c2c);
 	if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
 	
-	// TODO: rewrite this using kstring
 	int32_t out_len = out->l_text;
 	while (out_len > 0 && out->text[out_len-1] == '\n') {--out_len; } // strip trailing \n's
-	char* out_text = strndup(out->text, out_len); // no guarantee that this is null terminated, must rely on length
+	kstring_t out_text = { 0, 0, NULL };
+	kputsn(out->text, out_len, &out_text);
 	
 	// Naive way of doing this but meh
 	int i, j, min_tid = -1;
@@ -263,10 +245,10 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			regex_t sq_id;
 			regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
 			if (matches == NULL) { perror("out of memory"); exit(-1); }
-			char* seq_regex = NULL;
-			if (asprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)",translate->target_name[i]) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for regex string.\n"); exit(1); }
-			regcomp(&sq_id, seq_regex, REG_EXTENDED|REG_NEWLINE);
-			free(seq_regex);
+			kstring_t seq_regex = { 0, 0, NULL };
+			ksprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)", translate->target_name[i]);
+			regcomp(&sq_id, seq_regex.s, REG_EXTENDED|REG_NEWLINE);
+			free(seq_regex.s);
 			if (regexec(&sq_id, translate->text, 1, matches, 0) != 0)
 			{
 				fprintf(stderr, "[trans_tbl_init] @SQ SN (%s) found in binary header but not text header.\n",translate->target_name[i]);
@@ -275,11 +257,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			regfree(&sq_id);
 			
 			// Produce our output line and append it to out_text
-			char* append_text = strndup(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
-			int32_t append_len = strlen(append_text);
-			append_header(&out_text, &out_len, append_text, append_len);
+			kputc('\n', &out_text);
+			kputsn(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &out_text);
 			
-			free(append_text);
 			free(matches);
 		} else {
 			tbl->tid_trans[i] = tid;
@@ -300,48 +280,49 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	klist_t(hdrln) *rg_list = kl_init(hdrln);
 	while(1) { //	foreach rg id in translate's header
 		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
+		// matches[0] is the whole @RG line; matches[1] is the ID field value
 		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
 		
 		// is our matched ID in our output list already
 		regex_t rg_id_search;
-		char* rg_regex = NULL;
-		if (asprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)",match_id) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for regex string.\n"); exit(1); }
-
-		regcomp(&rg_id_search, rg_regex, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
-		free(rg_regex);
-		char* transformed_id = NULL;
+		kstring_t rg_regex = { 0, 0, NULL };
+		ksprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)", match_id);
+		regcomp(&rg_id_search, rg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
+		free(rg_regex.s);
+		kstring_t transformed_id = { 0, 0, NULL };
+		bool transformed_equals_match;
 		if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0  || merge_rg) {
 			// Not in there so can add it as 1-1 mapping
-			transformed_id = match_id;
+			kputs(match_id, &transformed_id);
+			transformed_equals_match = true;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			if (asprintf(&transformed_id, "%s-%0lX",match_id, lrand48()) == -1) { perror("out of memory"); exit(-1); }
+			ksprintf(&transformed_id, "%s-%0lX", match_id, lrand48());
+			transformed_equals_match = false;
 		}
 		regfree(&rg_id_search);
 
 		// Insert it into our translation map
 		int in_there = 0;
 		khiter_t iter = kh_put(c2c, tbl->rg_trans, strdup(match_id), &in_there);
-		kh_value(tbl->rg_trans,iter) = strdup(transformed_id);
+		kh_value(tbl->rg_trans,iter) = transformed_id.s;
 		// take matched line and replace ID with transformed_id
-		char* transformed_line = NULL;
-		if (match_id != transformed_id) {
-			char *fmt = NULL;
-			if (asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo)) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for format string.\n"); exit(1); }
-			if (asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for output header.\n"); exit(1); }
-			free(fmt);
-			free(transformed_id);
+		kstring_t transformed_line = { 0, 0, NULL };
+		if (transformed_equals_match) {
+			kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
 		} else {
-			transformed_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
+			kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+			kputs(transformed_id.s, &transformed_line);
+			kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
 		}
 		
-		if (!(transformed_id == match_id && merge_rg)) {
+		if (!(transformed_equals_match && merge_rg)) {
 			// append line to linked list for PG processing
 			char** ln = kl_pushp(hdrln, rg_list);
-			*ln = strdup(transformed_line);  // Give linked list it's own copy
+			*ln = transformed_line.s;  // Give away to linked list
 		}
+		else free(transformed_line.s); // ...otherwise free tmp string
 
-		free(transformed_line);
 		free(match_id); match_id = NULL;
 		text += matches[0].rm_eo; // next!
 	}
@@ -358,42 +339,43 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 
 		// is our matched ID in our output list already
 		regex_t pg_id_search;
-		char* pg_regex = NULL;
-		if (asprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)",match_id) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for regex string.\n"); exit(1); }
-		regcomp(&pg_id_search, pg_regex, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
-		free(pg_regex);
-		char* transformed_id = NULL;
+		kstring_t pg_regex = { 0, 0, NULL };
+		ksprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)", match_id);
+		regcomp(&pg_id_search, pg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
+		free(pg_regex.s);
+		kstring_t transformed_id = { 0, 0, NULL };
+		bool transformed_equals_match;
 		if (regexec(&pg_id_search, out->text, 0, NULL, 0) != 0 || merge_pg) {
 			// Not in there so can add it as 1-1 mapping
-			transformed_id = match_id;
+			kputs(match_id, &transformed_id);
+			transformed_equals_match = true;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			if (asprintf(&transformed_id, "%s-%0lX",match_id, lrand48()) == -1) { perror("out of memory"); exit(-1); }
+			ksprintf(&transformed_id, "%s-%0lX", match_id, lrand48());
+			transformed_equals_match = false;
 		}
 		regfree(&pg_id_search);
 		
 		// Insert it into our translation map
 		int in_there = 0;
 		khiter_t iter = kh_put(c2c, tbl->pg_trans, strdup(match_id), &in_there);
-		kh_value(tbl->pg_trans,iter) = strdup(transformed_id);
+		kh_value(tbl->pg_trans,iter) = transformed_id.s;
 		// take matched line and replace ID with transformed_id
-		char* transformed_line = NULL;
-		if (match_id != transformed_id) {
-			char *fmt = NULL;
-			if (asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo)) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for format string.\n"); exit(1); }
-			if (asprintf(&transformed_line,fmt,text+matches[0].rm_so,transformed_id,text+matches[1].rm_eo) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for output header.\n"); exit(1); }
-			free(fmt);
-			free(transformed_id);
+		kstring_t transformed_line = { 0, 0, NULL };
+		if (transformed_equals_match) {
+			kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
 		} else {
-			transformed_line = strndup(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so);
+			kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+			kputs(transformed_id.s, &transformed_line);
+			kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
 		}
 
-		if (!(transformed_id == match_id && merge_pg)) {
+		if (!(transformed_equals_match && merge_pg)) {
 			// append line to linked list for PP processing
 			char** ln = kl_pushp(hdrln, pg_list);
-			*ln = strdup(transformed_line);  // Give linked list it's own copy
+			*ln = transformed_line.s;  // Give away to linked list
 		}
-		free(transformed_line);
+		else free(transformed_line.s);  // ...otherwise free tmp string
 		free(match_id);
 		text += matches[0].rm_eo; // next!
 	}
@@ -408,7 +390,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	while (iter != kl_end(pg_list)) {
 		char* data = kl_val(iter);
 
-		char *transformed_line = NULL;
+		kstring_t transformed_line = { 0, 0, NULL };
 		// Find PP tag
 		if (regexec(&pg_pp, data, 2, matches, 0) == 0) {
 			// Lookup in hash table
@@ -418,16 +400,15 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			free(pp_id);
 			char* transformed_id = kh_value(tbl->pg_trans,k);
 			// Replace
-			char *fmt = NULL;
-			if (asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo)) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for format string.\n"); exit(1); }
-			if (asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for output header.\n"); exit(1); }
-			free(fmt);
-		} else { transformed_line = data; }
+			kputsn(data, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+			kputs(transformed_id, &transformed_line);
+			kputsn(data+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+		} else { kputs(data, &transformed_line); }
 		// Produce our output line and append it to out_text
-		int32_t append_len = strlen(transformed_line);
-		append_header(&out_text, &out_len, transformed_line, append_len);
+		kputc('\n', &out_text);
+		kputsn(transformed_line.s, transformed_line.l, &out_text);
 
-		if (transformed_line != data) { free(transformed_line); transformed_line = NULL; }
+		free(transformed_line.s);
 		free(data);
 		iter = kl_next(iter);
 	}
@@ -440,7 +421,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	while (rg_iter != kl_end(rg_list)) {
 		char* data = kl_val(rg_iter);
 		
-		char* transformed_line = NULL;
+		kstring_t transformed_line = { 0, 0, NULL };
 		// Find PG tag
 		if (regexec(&rg_pg, data, 2, matches, 0) == 0) {
 			// Lookup in hash table
@@ -450,16 +431,15 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			free(pg_id);
 			char* transformed_id = kh_value(tbl->pg_trans,k);
 			// Replace
-			char *fmt = NULL;
-			if (asprintf(&fmt, "%%.%jds%%s%%.%jds", (intmax_t)(matches[1].rm_so-matches[0].rm_so), (intmax_t)(matches[0].rm_eo-matches[1].rm_eo)) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for format string.\n"); exit(1); }
-			if (asprintf(&transformed_line,fmt,data,transformed_id,data+matches[1].rm_eo) == -1) { fprintf(stderr, "[trans_tbl_init] cannot allocate memory for output header.\n"); exit(1); }
-			free(fmt);
-		} else { transformed_line = data; }
+			kputsn(data, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+			kputs(transformed_id, &transformed_line);
+			kputsn(data+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+		} else { kputs(data, &transformed_line); }
 		// Produce our output line and append it to out_text
-		int32_t append_len = strlen(transformed_line);
-		append_header(&out_text, &out_len, transformed_line, append_len);
+		kputc('\n', &out_text);
+		kputsn(transformed_line.s, transformed_line.l, &out_text);
 		
-		if (transformed_line != data) { free(transformed_line); transformed_line = NULL; }
+		free(transformed_line.s);
 		free(data);
 		rg_iter = kl_next(rg_iter);
 	}
@@ -469,12 +449,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 
 	// Add trailing \n and write back to header
 	free(out->text);
-	out->text = (char*) malloc(out_len+1+1);
-	memcpy((void*)out->text, out_text, out_len);
-	out->text[out_len] = '\n';
-	out->text[out_len+1] = '\0';
-	out->l_text = out_len + 1;
-	free(out_text);
+	kputc('\n', &out_text);
+	out->text = out_text.s;
+	out->l_text = out_text.l;
 	pretty_header(&out->text,out->l_text);
 }
 
