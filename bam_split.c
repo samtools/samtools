@@ -37,6 +37,8 @@
 #include <unistd.h>
 #include <regex.h>
 #include <htslib/khash.h>
+#include <htslib/kstring.h>
+
 
 KHASH_MAP_INIT_STR(c2i, int)
 
@@ -44,7 +46,7 @@ struct parsed_opts {
 	char* merged_output_name;
 	char* unaccounted_header_name;
 	char* unaccounted_name;
-	char* output_prefix;
+	char* output_format_string;
 	bool verbose;
 };
 
@@ -72,29 +74,48 @@ static void usage(bool error)
 	FILE* write_to = error ? stderr : stdout;
 	fprintf(write_to,
 			"samtools split\n\n"
-			"usage: samtools split [-v] <merged.bam> <unaccounted.bam>[:<unaccounted_header.sam>] <prefix>\n"
+			"usage: samtools split [-v] [-f <format string>] [-u <unaccounted.bam>[:<unaccounted_header.sam>]] <merged.bam>\n\n"
 			"Where:\n"
-			"<merged.bam> is your file to separate out into individual read groups."
-			"<unaccounted.bam> is where to put reads without a read group tag.\n"
-			"<:unaccounted_header.sam> is an optional header for <unaccounted.bam>.\n"
-			"-v    verbose output.\n"
+			"<merged.bam> is your file to separate out into individual read groups.\n"
+			"Options:\n"
+			"\t-v                 verbose output.\n"
+			"\t-f STRING          output filename format string: [\"%%*_%%#.bam\")]\n"
+			"\t  %%%%    %%\n"
+			"\t  %%*    basename\n"
+			"\t  %%#    @RG index\n"
+			"\t  %%!    @RG ID\n"
+			"\t-u FILE1[:FILE2]   put reads where no RG tag is set or the RG tag is unrecognised in FILE1 and optionally override the header with FILE2.\n"
 			);
 }
 
 // Takes the command line options and turns them into something we can understand
 static parsed_opts_t* parse_args(int argc, char** argv)
 {
-	const char* optstring = "v";
+	if (argc == 1) { usage(false); return NULL; }
+
+	const char* optstring = "vf:u:";
 	
-	parsed_opts_t* retval = malloc(sizeof(parsed_opts_t));
-	if (! retval ) return NULL;
+	parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
+	if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
 	
 	int opt;
 	while ((opt = getopt(argc, argv, optstring)) != -1) {
 		switch (opt) {
+		case 'f':
+			retval->output_format_string = strdup(optarg);
+			if (! retval->output_format_string ) { perror("cannot allocate output format string memory"); return NULL; }
+			break;
 		case 'v':
 			retval->verbose = true;
 			break;
+		case 'u':
+		{
+			char* sep = strdup(optarg);
+			if (!sep ) { perror("cannot allocate string memory"); return NULL; }
+			retval->unaccounted_name = strsep(&sep, ":");
+			retval->unaccounted_header_name = sep;
+			break;
+		}
 		default:
 			usage(false);
 			free(retval);
@@ -102,19 +123,57 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 		}
 	}
 	
-	if (argc < 3) {
+	if (retval->output_format_string == NULL) retval->output_format_string = strdup("%*_%#.bam");
+
+	argc -= optind;
+	argv += optind;
+
+	if (argc != 1) {
+		fprintf(stderr, "Invalid number of arguments: %d\n", argc);
 		usage(true);
 		free(retval);
 		return NULL;
 	}
 
-	retval->merged_output_name = strdup(argv[1]);
-	char* sep = strdup(argv[2]);
-	retval->unaccounted_name = strsep(&sep, ":");
-	retval->unaccounted_header_name = sep;
-	retval->output_prefix = strdup(argv[3]);
+	retval->merged_output_name = strdup(argv[0]);
+	if (! retval->merged_output_name ) { perror("cannot allocate string memory"); return NULL; }
 
 	return retval;
+}
+
+// Expands a output filename format string
+static char* expand_format_string(const char* format_string, const char* basename, const char* rg_id, const int rg_idx)
+{
+	kstring_t str = { 0, 0, NULL };
+	const char* pointer = format_string;
+	const char* next;
+	while ((next = strchr(pointer, '%')) != NULL) {
+		kputsn(pointer, next-pointer, &str);
+		++next;
+		switch (*next) {
+			case '%':
+				kputc('%', &str);
+				break;
+			case '*':
+				kputs(basename, &str);
+				break;
+			case '#':
+				kputl(rg_idx, &str);
+				break;
+			case '!':
+				kputs(rg_id, &str);
+				break;
+			case '\0':
+				// Error is: fprintf(stderr, "bad format string, trailing %%\n");
+				return NULL;
+			default:
+				// Error is: fprintf(stderr, "bad format string, unknown format specifier\n");
+				return NULL;
+		}
+		pointer = next + 1;
+	}
+	kputs(pointer, &str);
+	return ks_str(&str);
 }
 
 // Parse the header, count the number of RG tags and return a list of their names
@@ -186,10 +245,58 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 	return true;
 }
 
+// Filters a header of @RG lines where ID != id_keep
+// TODO: strip @PG's descended from other RGs and their descendants
+static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep)
+{
+	kstring_t str = {0, 0, NULL};
+
+	regex_t rg_finder;
+
+	if (regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE) != 0) {
+		return false;
+	}
+
+	// regex vars
+	char* header = hdr->text;
+	regmatch_t* matches = (regmatch_t*)calloc(sizeof(regmatch_t),2);
+	int error;
+
+	while ((error = regexec(&rg_finder, header, 2, matches, 0)) == 0) {
+		kputsn(header, matches[0].rm_so, &str); // copy header up until the found RG line
+
+		char* found_id = strndup(header+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so); // extract ID
+		// if it matches keep keep it, else we can just ignore it
+		if (!strcmp(found_id, id_keep)) {
+			kputsn(header+matches[0].rm_so, (matches[0].rm_eo+1)-matches[0].rm_so, &str);
+		}
+		free(found_id);
+		// move pointer forward
+		header += matches[0].rm_eo+1;
+	}
+	// cleanup
+	free(matches);
+	regfree(&rg_finder);
+	// Did we leave loop because of an error?
+	if (error != REG_NOMATCH) {
+		return false;
+	}
+
+	// Write remainder of string
+	kputs(header, &str);
+
+	// Modify header
+	hdr->l_text = ks_len(&str);
+	free(hdr->text);
+	hdr->text = ks_release(&str);
+	
+	return true;
+}
+
 // Set the initial state
 static state_t* init(parsed_opts_t* opts)
 {
-	state_t* retval = malloc(sizeof(state_t));
+	state_t* retval = calloc(sizeof(state_t), 1);
 	if (!retval) {
 		fprintf(stderr, "Out of memory");
 		return NULL;
@@ -197,27 +304,30 @@ static state_t* init(parsed_opts_t* opts)
 
 	retval->merged_input_file = sam_open(opts->merged_output_name, "rb");
 	if (!retval->merged_input_file) {
-		fprintf(stderr, "Could not open header file (%s)", opts->merged_output_name);
+		fprintf(stderr, "Could not open input file (%s)\n", opts->merged_output_name);
 		return NULL;
 	}
 	retval->merged_input_header = sam_hdr_read(retval->merged_input_file);
-	if (opts->unaccounted_header_name) {
-		samFile* hdr_load = sam_open(opts->unaccounted_header_name, "r");
-		if (!hdr_load) {
-			fprintf(stderr, "Could not open unaccounted header file (%s)", opts->unaccounted_header_name);
+	
+	if (opts->unaccounted_name) {
+		if (opts->unaccounted_header_name) {
+			samFile* hdr_load = sam_open(opts->unaccounted_header_name, "r");
+			if (!hdr_load) {
+				fprintf(stderr, "Could not open unaccounted header file (%s)\n", opts->unaccounted_header_name);
+				return NULL;
+			}
+			retval->unaccounted_header = sam_hdr_read(hdr_load);
+			sam_close(hdr_load);
+		} else {
+			retval->unaccounted_header = bam_hdr_dup(retval->merged_input_header);
+		}
+
+		retval->unaccounted_file = sam_open(opts->unaccounted_name, "wb");
+		if (retval->unaccounted_file == NULL) {
+			fprintf(stderr, "Could not open unaccounted output file: %s\n", opts->unaccounted_name);
+			cleanup_state(retval);
 			return NULL;
 		}
-		retval->unaccounted_header = sam_hdr_read(hdr_load);
-		sam_close(hdr_load);
-	} else {
-		retval->unaccounted_header = bam_hdr_dup(retval->merged_input_header);
-	}
-
-	retval->unaccounted_file = sam_open(opts->unaccounted_name, "wb");
-	if (retval->unaccounted_file == NULL) {
-		fprintf(stderr, "Could not open unaccounted output file: %s\r\n", opts->unaccounted_name);
-		cleanup_state(retval);
-		return NULL;
 	}
 
 	// Open output files for RGs
@@ -235,10 +345,12 @@ static state_t* init(parsed_opts_t* opts)
 	size_t i;
 	for (i = 0; i < retval->output_count; i++) {
 		char* output_filename = NULL;
-		if (asprintf( &output_filename, "%s%s.bam",opts->output_prefix,retval->rg_id[i]) == -1) {
-			fprintf(stderr, "Could not allocate memory for output filename string.\r\n");
+		
+		if ( ( output_filename = expand_format_string(opts->output_format_string, opts->merged_output_name, retval->rg_id[i], i) ) == NULL) {
+			fprintf(stderr, "Error expanding output filename format string.\r\n");
 			return NULL;
 		}
+
 		retval->rg_output_file[i] = sam_open(output_filename, "wb");
 		if (retval->rg_output_file[i] == NULL) {
 			fprintf(stderr, "Could not open output file: %s\r\n", output_filename);
@@ -251,7 +363,12 @@ static state_t* init(parsed_opts_t* opts)
 		kh_val(retval->rg_hash,iter) = i;
 
 		free(output_filename);
+		// Set and edit header
 		retval->rg_output_header[i] = bam_hdr_dup(retval->merged_input_header);
+		if ( !filter_header_rg(retval->rg_output_header[i], retval->rg_id[i]) ) {
+			fprintf(stderr, "Could not rewrite header for file: %s\r\n", output_filename);
+			return NULL;
+		}
 	}
 
 	return retval;
@@ -259,14 +376,14 @@ static state_t* init(parsed_opts_t* opts)
 
 static bool split(state_t* state)
 {
-	if (sam_hdr_write(state->unaccounted_file, state->unaccounted_header) != 0) {
-		fprintf(stderr, "Could not write output file header");
+	if (state->unaccounted_file && sam_hdr_write(state->unaccounted_file, state->unaccounted_header) != 0) {
+		fprintf(stderr, "Could not write output file header\n");
 		return false;
 	}
 	size_t i;
 	for (i = 0; i < state->output_count; i++) {
 		if (sam_hdr_write(state->rg_output_file[i], state->rg_output_header[i]) != 0) {
-			fprintf(stderr, "Could not write output file header");
+			fprintf(stderr, "Could not write output file header\n");
 			return false;
 		}
 	}
@@ -296,8 +413,18 @@ static bool split(state_t* state)
 			int i = kh_val(state->rg_hash,iter);
 			sam_write1(state->rg_output_file[i], state->rg_output_header[i], file_read);
 		} else {
-			// otherwise write to the unaccounted bam
-			sam_write1(state->unaccounted_file, state->unaccounted_header, file_read);
+			// otherwise write to the unaccounted bam if there is one or fail
+			if (state->unaccounted_file == NULL) {
+				if (tag) {
+					fprintf(stderr, "Read \"%s\" with unaccounted for tag \"%s\".\n", bam_get_qname(file_read), bam_aux2Z(tag));
+				} else {
+					fprintf(stderr, "Read \"%s\" has no RG tag.\n", bam_get_qname(file_read));
+				}
+				bam_destroy1(file_read);
+				return false;
+			} else {
+				sam_write1(state->unaccounted_file, state->unaccounted_header, file_read);
+			}
 		}
 
 		// Replace written read with the next one to process
@@ -313,7 +440,7 @@ static bool split(state_t* state)
 
 static void cleanup_state(state_t* status)
 {
-	sam_close(status->unaccounted_file);
+	if (status->unaccounted_file) sam_close(status->unaccounted_file);
 	sam_close(status->merged_input_file);
 	size_t i;
 	for (i = 0; i < status->output_count; i++) {
@@ -331,7 +458,7 @@ static void cleanup_opts(parsed_opts_t* opts)
 	free(opts->merged_output_name);
 	free(opts->unaccounted_header_name);
 	free(opts->unaccounted_name);
-	free(opts->output_prefix);
+	free(opts->output_format_string);
 }
 
 int main_split(int argc, char** argv)
