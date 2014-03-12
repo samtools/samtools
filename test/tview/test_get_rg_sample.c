@@ -8,7 +8,7 @@ const char header_1[] =
 
 void setup_test_1(char** header)
 {
-	*header = strndup(header_1, sizeof(header_1));
+	*header = strdup(header_1);
 }
 
 khash_t(kh_rg)* run_test_1(char* header)

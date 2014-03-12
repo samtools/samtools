@@ -65,7 +65,8 @@ khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
 	char* tofree = text;
 	while (end > text && regexec(&rg_id, text, 2, matches, 0) == 0) { //	foreach rg id in  header
 		int ret;
-		kh_put(kh_rg, rg_hash, strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so), &ret); // Add the RG to the list
+		text[matches[1].rm_eo] = '\0';
+		kh_put(kh_rg, rg_hash, strdup(text+matches[1].rm_so), &ret); // Add the RG to the list
 		text += matches[0].rm_eo + 1; // Move search pointer forward
 	}
 	free(tofree);

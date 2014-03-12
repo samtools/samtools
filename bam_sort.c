@@ -281,49 +281,50 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	while(1) { //	foreach rg id in translate's header
 		if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
 		// matches[0] is the whole @RG line; matches[1] is the ID field value
-		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+		kstring_t match_id = { 0, 0, NULL };
+		kputsn(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &match_id);
 		
 		// is our matched ID in our output list already
 		regex_t rg_id_search;
 		kstring_t rg_regex = { 0, 0, NULL };
-		ksprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)", match_id);
+		ksprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)", match_id.s);
 		regcomp(&rg_id_search, rg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
 		free(rg_regex.s);
 		kstring_t transformed_id = { 0, 0, NULL };
 		bool transformed_equals_match;
 		if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0  || merge_rg) {
 			// Not in there so can add it as 1-1 mapping
-			kputs(match_id, &transformed_id);
+			kputs(match_id.s, &transformed_id);
 			transformed_equals_match = true;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			ksprintf(&transformed_id, "%s-%0lX", match_id, lrand48());
+			ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
 			transformed_equals_match = false;
 		}
 		regfree(&rg_id_search);
 
 		// Insert it into our translation map
 		int in_there = 0;
-		khiter_t iter = kh_put(c2c, tbl->rg_trans, strdup(match_id), &in_there);
-		kh_value(tbl->rg_trans,iter) = transformed_id.s;
+		khiter_t iter = kh_put(c2c, tbl->rg_trans, ks_release(&match_id), &in_there);
+		char *transformed_id_s = ks_release(&transformed_id);
+		kh_value(tbl->rg_trans,iter) = transformed_id_s;
 		// take matched line and replace ID with transformed_id
 		kstring_t transformed_line = { 0, 0, NULL };
 		if (transformed_equals_match) {
 			kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
 		} else {
 			kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-			kputs(transformed_id.s, &transformed_line);
+			kputs(transformed_id_s, &transformed_line);
 			kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
 		}
 		
 		if (!(transformed_equals_match && merge_rg)) {
 			// append line to linked list for PG processing
 			char** ln = kl_pushp(hdrln, rg_list);
-			*ln = transformed_line.s;  // Give away to linked list
+			*ln = ks_release(&transformed_line);  // Give away to linked list
 		}
-		else free(transformed_line.s); // ...otherwise free tmp string
+		else free(transformed_line.s);
 
-		free(match_id); match_id = NULL;
 		text += matches[0].rm_eo; // next!
 	}
 	regfree(&rg_id);
@@ -335,48 +336,49 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	klist_t(hdrln) *pg_list = kl_init(hdrln);
 	while(1) { //	foreach pg id in translate's header
 		if (regexec(&pg_id, text, 2, matches, 0) != 0) break;
-		char* match_id = strndup(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+		kstring_t match_id = { 0, 0, NULL };
+		kputsn(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &match_id);
 
 		// is our matched ID in our output list already
 		regex_t pg_id_search;
 		kstring_t pg_regex = { 0, 0, NULL };
-		ksprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)", match_id);
+		ksprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)", match_id.s);
 		regcomp(&pg_id_search, pg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
 		free(pg_regex.s);
 		kstring_t transformed_id = { 0, 0, NULL };
 		bool transformed_equals_match;
 		if (regexec(&pg_id_search, out->text, 0, NULL, 0) != 0 || merge_pg) {
 			// Not in there so can add it as 1-1 mapping
-			kputs(match_id, &transformed_id);
+			kputs(match_id.s, &transformed_id);
 			transformed_equals_match = true;
 		} else {
 			// It's in there so we need to transform it by appending random number to id
-			ksprintf(&transformed_id, "%s-%0lX", match_id, lrand48());
+			ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
 			transformed_equals_match = false;
 		}
 		regfree(&pg_id_search);
 		
 		// Insert it into our translation map
 		int in_there = 0;
-		khiter_t iter = kh_put(c2c, tbl->pg_trans, strdup(match_id), &in_there);
-		kh_value(tbl->pg_trans,iter) = transformed_id.s;
+		khiter_t iter = kh_put(c2c, tbl->pg_trans, ks_release(&match_id), &in_there);
+		char *transformed_id_s = ks_release(&transformed_id);
+		kh_value(tbl->pg_trans,iter) = transformed_id_s;
 		// take matched line and replace ID with transformed_id
 		kstring_t transformed_line = { 0, 0, NULL };
 		if (transformed_equals_match) {
 			kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
 		} else {
 			kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-			kputs(transformed_id.s, &transformed_line);
+			kputs(transformed_id_s, &transformed_line);
 			kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
 		}
 
 		if (!(transformed_equals_match && merge_pg)) {
 			// append line to linked list for PP processing
 			char** ln = kl_pushp(hdrln, pg_list);
-			*ln = transformed_line.s;  // Give away to linked list
+			*ln = ks_release(&transformed_line);  // Give away to linked list
 		}
-		else free(transformed_line.s);  // ...otherwise free tmp string
-		free(match_id);
+		else free(transformed_line.s);
 		text += matches[0].rm_eo; // next!
 	}
 	regfree(&pg_id);
@@ -394,10 +396,11 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		// Find PP tag
 		if (regexec(&pg_pp, data, 2, matches, 0) == 0) {
 			// Lookup in hash table
-			char* pp_id = strndup(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+			kstring_t pp_id = { 0, 0, NULL };
+			kputsn(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &pp_id);
 
-			khiter_t k = kh_get(c2c, tbl->pg_trans, pp_id);
-			free(pp_id);
+			khiter_t k = kh_get(c2c, tbl->pg_trans, pp_id.s);
+			free(pp_id.s);
 			char* transformed_id = kh_value(tbl->pg_trans,k);
 			// Replace
 			kputsn(data, matches[1].rm_so-matches[0].rm_so, &transformed_line);
@@ -425,10 +428,11 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		// Find PG tag
 		if (regexec(&rg_pg, data, 2, matches, 0) == 0) {
 			// Lookup in hash table
-			char* pg_id = strndup(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+			kstring_t pg_id = { 0, 0, NULL };
+			kputsn(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &pg_id);
 			
-			khiter_t k = kh_get(c2c, tbl->pg_trans, pg_id);
-			free(pg_id);
+			khiter_t k = kh_get(c2c, tbl->pg_trans, pg_id.s);
+			free(pg_id.s);
 			char* transformed_id = kh_value(tbl->pg_trans,k);
 			// Replace
 			kputsn(data, matches[1].rm_so-matches[0].rm_so, &transformed_line);
@@ -450,8 +454,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	// Add trailing \n and write back to header
 	free(out->text);
 	kputc('\n', &out_text);
-	out->text = out_text.s;
 	out->l_text = out_text.l;
+	out->text = ks_release(&out_text);
 	pretty_header(&out->text,out->l_text);
 }
 
