@@ -1,17 +1,9 @@
 #include "../../bam_sort.c"
+#include "../test.h"
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
-
-void xfreopen(const char *path, const char *mode, FILE *stream)
-{
-	if (freopen(path, mode, stream) == NULL) {
-		fprintf(stderr, "test_bam_translate: error reopening %s: %s\n",
-				path, strerror(errno));
-		exit(2);
-	}
-}
 
 void dump_read(bam1_t* b) {
 	printf("->core.tid:(%d)\n", b->core.tid);
