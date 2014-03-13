@@ -30,14 +30,6 @@
 #include "../test.h"
 #include <unistd.h>
 
-void dump_hdr(const bam_hdr_t* hdr)
-{
-	printf("n_targets: %d\n", hdr->n_targets);
-	printf("ignore_sam_err: %d\n", hdr->ignore_sam_err);
-	printf("l_text: %u\n", hdr->l_text);
-	printf("text: \"%s\"", hdr->text);
-}
-
 void setup_test_1(bam_hdr_t** hdr_in)
 {
 	*hdr_in = bam_hdr_init();

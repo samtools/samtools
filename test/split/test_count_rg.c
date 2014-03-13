@@ -30,11 +30,6 @@
 #include "../test.h"
 #include <unistd.h>
 
-void dump_hdr(const bam_hdr_t* hdr)
-{
-	
-}
-
 void setup_test_1(bam_hdr_t** hdr_in)
 {
 	*hdr_in = bam_hdr_init();
