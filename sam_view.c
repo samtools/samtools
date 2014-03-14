@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <math.h>
 #include <inttypes.h>
+#include <errno.h>
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
@@ -24,7 +25,6 @@ typedef struct samview_settings {
 	uint32_t subsam_seed;
 	double subsam_frac;
 	char* library;
-	char* rg;
 	void* bed;
 	size_t remove_aux_len;
 	char** remove_aux;
@@ -67,19 +67,16 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
 		uint32_t k = __ac_X31_hash_string(bam_get_qname(b)) + settings->subsam_seed;
 		if ((double)(k&0xffffff) / 0x1000000 >= settings->subsam_frac) return 1;
 	}
-	if (settings->rg || settings->rghash) {
+	if (settings->rghash) {
 		uint8_t *s = bam_aux_get(b, "RG");
 		if (s) {
-			if (settings->rg) return (strcmp(settings->rg, (char*)(s + 1)) == 0)? 0 : 1;
-			if (settings->rghash) {
-				khint_t k = kh_get(rg, settings->rghash, (char*)(s + 1));
-				return (k != kh_end(settings->rghash))? 0 : 1;
-			}
+			khint_t k = kh_get(rg, settings->rghash, (char*)(s + 1));
+			if (k == kh_end(settings->rghash)) return 1;
 		}
 	}
 	if (settings->library) {
 		const char *p = bam_get_library((bam_hdr_t*)h, b);
-		return (p && strcmp(p, settings->library) == 0)? 0 : 1;
+		if (p && strcmp(p, settings->library) != 0) return 1;
 	}
 	if (settings->remove_aux_len) {
 		size_t i;
@@ -126,6 +123,70 @@ static char *drop_rg(char *hdtxt, rghash_t h, int *len)
 
 static int usage(int is_long_help);
 
+static int add_read_group_single(samview_settings_t *settings, char *name)
+{
+	char *d = strdup(name);
+	int ret = 0;
+
+	if (NULL == d) goto err;
+
+	if (NULL == settings->rghash) {
+		settings->rghash = kh_init(rg);
+		if (NULL == settings->rghash) goto err;
+	}
+
+	kh_put(rg, settings->rghash, d, &ret);
+	if (ret == -1) goto err;
+	if (ret ==  0) free(d); /* Duplicate */
+	return 0;
+
+ err:
+	fprintf(stderr,
+			"[main_samview] Couldn't add \"%s\" to read group list: %s\n",
+			name, strerror(errno));
+	if (NULL != d) free(d);
+	return -1;
+}
+
+static int add_read_groups_file(samview_settings_t *settings, char *fn)
+{
+	FILE *fp;
+	char buf[1024];
+	int ret = 0;
+	if (NULL == settings->rghash) {
+		settings->rghash = kh_init(rg);
+		if (NULL == settings->rghash) {
+			perror(NULL);
+			return -1;
+		}
+	}
+
+	fp = fopen(fn, "r");
+	if (NULL == fp) {
+		fprintf(stderr,
+				"[main_samview] failed to open \"%s\" for reading: %s\n",
+				fn, strerror(errno));
+		return -1;
+	}
+
+	while (ret != -1 && !feof(fp) && fscanf(fp, "%1023s", buf) > 0) {
+		char *d = strdup(buf);
+		if (NULL != d) {
+			kh_put(rg, settings->rghash, d, &ret);
+			if (ret == 0) free(d); /* Duplicate */
+		} else {
+			ret = -1;
+		}
+	}
+	if (ferror(fp)) ret = -1;
+	if (ret == -1) {
+		fprintf(stderr, "[main_samview] failed to read \"%s\" : %s\n",
+				fn, strerror(errno));
+	}
+	fclose(fp);
+	return -1 != ret ? 0 : -1;
+}
+
 int main_samview(int argc, char *argv[])
 {
 	int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
@@ -133,7 +194,7 @@ int main_samview(int argc, char *argv[])
 	int64_t count = 0;
 	samFile *in = 0, *out = 0;
 	bam_hdr_t *header;
-	char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *fn_rg = 0, *q;
+	char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q;
 	
 	samview_settings_t settings = {
 		.rghash = NULL,
@@ -146,7 +207,6 @@ int main_samview(int argc, char *argv[])
 		.subsam_seed = 0,
 		.subsam_frac = -1.,
 		.library = NULL,
-		.rg = NULL,
 		.bed = NULL,
 	};
 
@@ -178,8 +238,18 @@ int main_samview(int argc, char *argv[])
 		case '1': compress_level = 1; break;
 		case 'l': settings.library = strdup(optarg); break;
 		case 'L': settings.bed = bed_read(optarg); break;
-		case 'r': settings.rg = strdup(optarg); break;
-		case 'R': fn_rg = strdup(optarg); break;
+		case 'r':
+			if (0 != add_read_group_single(&settings, optarg)) {
+				ret = 1;
+				goto view_end;
+			}
+			break;
+		case 'R':
+			if (0 != add_read_groups_file(&settings, optarg)) {
+				ret = 1;
+				goto view_end;
+			}
+			break;
 				/* REMOVED as htslib doesn't support this
 		//case 'x': out_format = "x"; break;
 		//case 'X': out_format = "X"; break;
@@ -215,18 +285,6 @@ int main_samview(int argc, char *argv[])
 		strcat(out_mode, tmp);
 	}
 	if (argc == optind) return usage(is_long_help); // potential memory leak...
-
-	// read the list of read groups
-	if (fn_rg) {
-		FILE *fp_rg;
-		char buf[1024];
-		int ret;
-		settings.rghash = kh_init(rg);
-		fp_rg = fopen(fn_rg, "r");
-		while (!feof(fp_rg) && fscanf(fp_rg, "%s", buf) > 0) // this is not a good style, but bear me...
-			kh_put(rg, settings.rghash, strdup(buf), &ret); // we'd better check duplicates...
-		fclose(fp_rg);
-	}
 
 	// generate the fn_list if necessary
 	if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
@@ -318,7 +376,7 @@ view_end:
 		printf("%" PRId64 "\n", count);
 
 	// close files, free and return
-	free(fn_list); free(fn_ref); free(fn_out); free(settings.library); free(settings.rg); free(fn_rg);
+	free(fn_list); free(fn_ref); free(fn_out); free(settings.library);
 	if (settings.bed) bed_destroy(settings.bed);
 	if (settings.rghash) {
 		khint_t k;
@@ -329,8 +387,8 @@ view_end:
 	if (settings.remove_aux_len) {
 		free(settings.remove_aux);
 	}
-	sam_close(in);
-	if (!is_count)
+	if (NULL != in) sam_close(in);
+	if (!is_count && NULL != out)
 		sam_close(out);
 	return ret;
 }
