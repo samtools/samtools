@@ -128,11 +128,11 @@ static int add_read_group_single(samview_settings_t *settings, char *name)
 	char *d = strdup(name);
 	int ret = 0;
 
-	if (NULL == d) goto err;
+	if (d == NULL) goto err;
 
-	if (NULL == settings->rghash) {
+	if (settings->rghash == NULL) {
 		settings->rghash = kh_init(rg);
-		if (NULL == settings->rghash) goto err;
+		if (settings->rghash == NULL) goto err;
 	}
 
 	kh_put(rg, settings->rghash, d, &ret);
@@ -144,7 +144,7 @@ static int add_read_group_single(samview_settings_t *settings, char *name)
 	fprintf(stderr,
 			"[main_samview] Couldn't add \"%s\" to read group list: %s\n",
 			name, strerror(errno));
-	if (NULL != d) free(d);
+	free(d);
 	return -1;
 }
 
@@ -153,16 +153,16 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
 	FILE *fp;
 	char buf[1024];
 	int ret = 0;
-	if (NULL == settings->rghash) {
+	if (settings->rghash == NULL) {
 		settings->rghash = kh_init(rg);
-		if (NULL == settings->rghash) {
+		if (settings->rghash == NULL) {
 			perror(NULL);
 			return -1;
 		}
 	}
 
 	fp = fopen(fn, "r");
-	if (NULL == fp) {
+	if (fp == NULL) {
 		fprintf(stderr,
 				"[main_samview] failed to open \"%s\" for reading: %s\n",
 				fn, strerror(errno));
@@ -171,7 +171,7 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
 
 	while (ret != -1 && !feof(fp) && fscanf(fp, "%1023s", buf) > 0) {
 		char *d = strdup(buf);
-		if (NULL != d) {
+		if (d != NULL) {
 			kh_put(rg, settings->rghash, d, &ret);
 			if (ret == 0) free(d); /* Duplicate */
 		} else {
@@ -184,7 +184,7 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
 				fn, strerror(errno));
 	}
 	fclose(fp);
-	return -1 != ret ? 0 : -1;
+	return (ret != -1) ? 0 : -1;
 }
 
 int main_samview(int argc, char *argv[])
@@ -239,13 +239,13 @@ int main_samview(int argc, char *argv[])
 		case 'l': settings.library = strdup(optarg); break;
 		case 'L': settings.bed = bed_read(optarg); break;
 		case 'r':
-			if (0 != add_read_group_single(&settings, optarg)) {
+			if (add_read_group_single(&settings, optarg) != 0) {
 				ret = 1;
 				goto view_end;
 			}
 			break;
 		case 'R':
-			if (0 != add_read_groups_file(&settings, optarg)) {
+			if (add_read_groups_file(&settings, optarg) != 0) {
 				ret = 1;
 				goto view_end;
 			}
@@ -383,9 +383,8 @@ view_end:
 	if (settings.remove_aux_len) {
 		free(settings.remove_aux);
 	}
-	if (NULL != in) sam_close(in);
-	if (!is_count && NULL != out)
-		sam_close(out);
+	if (in) sam_close(in);
+	if (out) sam_close(out);
 	return ret;
 }
 
