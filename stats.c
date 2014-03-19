@@ -25,8 +25,9 @@
 #include <errno.h>
 #include <assert.h>
 #include <htslib/faidx.h>
-#include "sam.h"            // have to keep local version because of sam header parsing. todo: migrate to htslib
-#include "sam_header.h"     //
+#include <htslib/sam.h>
+#include <htslib/hts.h>
+#include "sam_header.h"
 #include <htslib/khash_str2int.h>
 #include "samtools.h"
 
@@ -145,7 +146,8 @@ typedef struct
     // Auxiliary data
     int flag_require, flag_filter;
     double sum_qual;                // For calculating average quality value 
-    samfile_t *sam;             
+    samFile* sam;
+    bam_hdr_t* sam_header;
     void *rg_hash;                  // Read groups to include, the array is null-terminated
     faidx_t *fai;                   // Reference sequence for GC-depth graph
     int argc;                       // Command line arguments to be printed on the output
@@ -276,15 +278,15 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
         // Conversion from uint32_t to MIDNSHP
         //  0123456
         //  MIDNSHP
-        int cig  = bam1_cigar(bam_line)[icig] & BAM_CIGAR_MASK;
-        int ncig = bam1_cigar(bam_line)[icig] >> BAM_CIGAR_SHIFT;
+        int cig  = bam_cigar_op(bam_get_cigar(bam_line)[icig]);
+        int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[icig]);
 
         if ( cig==1 )
         {
             int idx = is_fwd ? icycle : read_len-icycle-ncig;
             if ( idx<0 ) 
                 error("FIXME: read_len=%d vs icycle=%d\n", read_len,icycle);
-            if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d, %s:%d %s\n", idx,stats->nbases, stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam1_qname(bam_line));
+            if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d, %s:%d %s\n", idx,stats->nbases, stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
             if ( is_1st ) 
                 stats->ins_cycles_1st[idx]++;
             else
@@ -317,9 +319,9 @@ int unclipped_length(bam1_t *bam_line)
     int icig, read_len = bam_line->core.l_qseq;
     for (icig=0; icig<bam_line->core.n_cigar; icig++)
     {
-        int cig = bam1_cigar(bam_line)[icig] & BAM_CIGAR_MASK;
+        int cig = bam_cigar_op(bam_get_cigar(bam_line)[icig]);
         if ( cig==BAM_CHARD_CLIP )
-            read_len += bam1_cigar(bam_line)[icig] >> BAM_CIGAR_SHIFT;
+            read_len += bam_cigar_oplen(bam_get_cigar(bam_line)[icig]);
     }
     return read_len;
 }
@@ -331,16 +333,16 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
     int icig,iread=0,icycle=0;
     int iref = bam_line->core.pos - stats->rseq_pos;
-    uint8_t *read  = bam1_seq(bam_line);
-    uint8_t *quals = bam1_qual(bam_line);
+    uint8_t *read  = bam_get_seq(bam_line);
+    uint8_t *quals = bam_get_qual(bam_line);
     uint64_t *mpc_buf = stats->mpc_buf;
     for (icig=0; icig<bam_line->core.n_cigar; icig++) 
     {
         // Conversion from uint32_t to MIDNSHP
         //  0123456
         //  MIDNSHP
-        int cig  = bam1_cigar(bam_line)[icig] & BAM_CIGAR_MASK;
-        int ncig = bam1_cigar(bam_line)[icig] >> BAM_CIGAR_SHIFT;
+        int cig  = bam_cigar_op(bam_get_cigar(bam_line)[icig]);
+        int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[icig]);
         if ( cig==BAM_CINS )
         {
             iread  += ncig;
@@ -369,15 +371,15 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
         //  chunk of refseq in memory. Not very frequent and not noticable in the stats.
         if ( cig==BAM_CREF_SKIP || cig==BAM_CHARD_CLIP ) continue;
         if ( cig!=BAM_CMATCH )
-            error("TODO: cigar %d, %s:%d %s\n", cig,stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam1_qname(bam_line));
+            error("TODO: cigar %d, %s:%d %s\n", cig,stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
        
         if ( ncig+iref > stats->nrseq_buf )
-            error("FIXME: %d+%d > %d, %s, %s:%d\n",ncig,iref,stats->nrseq_buf, bam1_qname(bam_line),stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1);
+            error("FIXME: %d+%d > %d, %s, %s:%d\n",ncig,iref,stats->nrseq_buf, bam_get_qname(bam_line),stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1);
 
         int im;
         for (im=0; im<ncig; im++)
         {
-            uint8_t cread = bam1_seqi(read,iread);
+            uint8_t cread = bam_seqi(read,iread);
             uint8_t cref  = stats->rseq_buf[iref];
 
             // ---------------15
@@ -396,7 +398,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
             {
                 uint8_t qual = quals[iread] + 1;
                 if ( qual>=stats->nquals )
-                    error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals, stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam1_qname(bam_line));
+                    error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals, stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
 
                 int idx = is_fwd ? icycle : read_len-icycle-1;
                 if ( idx>stats->max_len )
@@ -418,7 +420,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
 void read_ref_seq(stats_t *stats, int32_t tid, int32_t pos)
 {
     int i, fai_ref_len;
-    char *fai_ref = faidx_fetch_seq(stats->fai, stats->sam->header->target_name[tid], pos, pos+stats->mrseq_buf-1, &fai_ref_len);
+    char *fai_ref = faidx_fetch_seq(stats->fai, stats->sam_header->target_name[tid], pos, pos+stats->mrseq_buf-1, &fai_ref_len);
     
     uint8_t *ptr = stats->rseq_buf;
     for (i=0; i<fai_ref_len; i++)
@@ -620,7 +622,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     stats->read_lengths[seq_len]++;
 
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
-    uint8_t base, *seq  = bam1_seq(bam_line);
+    uint8_t base, *seq  = bam_get_seq(bam_line);
     int gc_count  = 0;
     int i;
     int reverse = IS_REVERSE(bam_line);
@@ -630,7 +632,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         //      -12-4---8-------
         //      =ACMGRSVTWYHKDBN
         //       01 2   3
-        base = bam1_seqi(seq,i);
+        base = bam_seqi(seq,i);
         base /= 2;
         if ( base==1 || base==2 ) gc_count++;
         else if ( base>2 ) base=3;
@@ -646,7 +648,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     //  trim low quality bases from end the same way BWA does, 
     //  fill GC histogram
     uint64_t *quals;
-    uint8_t *bam_quals = bam1_qual(bam_line);
+    uint8_t *bam_quals = bam_get_qual(bam_line);
     if ( bam_line->core.flag&BAM_FREAD2 )
     {
         quals  = stats->quals_2nd;
@@ -669,7 +671,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     {
         uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
         if ( qual>=stats->nquals )
-            error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->sam->header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam1_qname(bam_line));
+            error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
         if ( qual>stats->max_qual )
             stats->max_qual = qual;
 
@@ -750,8 +752,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             int iref = bam_line->core.pos + 1;
             for (i=0; i<bam_line->core.n_cigar; i++)
             {
-                int cig  = bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK;
-                int ncig = bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
+                int cig  = bam_cigar_op(bam_get_cigar(bam_line)[i]);
+                int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
                 if ( cig==2 ) readlen += ncig;
                 else if ( cig==0 ) 
                 {
@@ -759,7 +761,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                     else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
                     if ( ncig<0 ) ncig = 0;
                     stats->nbases_mapped_cigar += ncig;
-                    iref += bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
+                    iref += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
                 }
                 else if ( cig==1 )
                 {
@@ -774,10 +776,10 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             // Count the whole read
             for (i=0; i<bam_line->core.n_cigar; i++) 
             {
-                if ( (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==0 || (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==1 )
-                    stats->nbases_mapped_cigar += bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
-                if ( (bam1_cigar(bam_line)[i]&BAM_CIGAR_MASK)==2 )
-                    readlen += bam1_cigar(bam_line)[i]>>BAM_CIGAR_SHIFT;
+                if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==0 || bam_cigar_op(bam_get_cigar(bam_line)[i])==1 )
+                    stats->nbases_mapped_cigar += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
+                if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==2 )
+                    readlen += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
             }
         }
         stats->nbases_mapped += seq_len;
@@ -1131,7 +1133,7 @@ void init_regions(stats_t *stats, char *file)
     khiter_t iter;
     khash_t(kh_bam_tid) *header_hash;
 
-    header_hash = (khash_t(kh_bam_tid)*)stats->sam->header->hash;
+    header_hash = (khash_t(kh_bam_tid)*)stats->sam_header->hash;
 
     FILE *fp = fopen(file,"r");
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
@@ -1208,12 +1210,6 @@ void destroy_regions(stats_t *stats)
     if ( stats->regions ) free(stats->regions);
 }
 
-static int fetch_read(const bam1_t *bam_line, void *data)
-{
-    collect_stats((bam1_t*)bam_line,(stats_t*)data);
-    return 1;
-}
-
 void reset_regions(stats_t *stats)
 {
     int i;
@@ -1247,9 +1243,9 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
 void init_group_id(stats_t *stats, char *id)
 {
 #if 0
-    if ( !stats->sam->header->dict )
-        stats->sam->header->dict = sam_header_parse2(stats->sam->header->text);
-    void *iter = stats->sam->header->dict;
+    if ( !stats->sam_header->dict )
+        stats->sam_header->dict = sam_header_parse2(stats->sam_header->text);
+    void *iter = stats->sam_header->dict;
     const char *key, *val;
     int n = 0;
     stats->rg_hash = khash_str2int_init();
@@ -1309,12 +1305,36 @@ void error(const char *format, ...)
     exit(-1);
 }
 
+void cleanup_stats(stats_t* stats)
+{
+    sam_close(stats->sam);
+    if (stats->fai) fai_destroy(stats->fai);
+    free(stats->cov_rbuf.buffer); free(stats->cov);
+    free(stats->quals_1st); free(stats->quals_2nd);
+    free(stats->gc_1st); free(stats->gc_2nd);
+    free(stats->isize_inward); free(stats->isize_outward); free(stats->isize_other);
+    free(stats->gcd);
+    free(stats->rseq_buf);
+    free(stats->mpc_buf);
+    free(stats->acgt_cycles);
+    free(stats->read_lengths);
+    free(stats->insertions);
+    free(stats->deletions);
+    free(stats->ins_cycles_1st);
+    free(stats->ins_cycles_2nd);
+    free(stats->del_cycles_1st);
+    free(stats->del_cycles_2nd);
+    destroy_regions(stats);
+    if ( stats->rg_hash ) khash_str2int_destroy(stats->rg_hash);
+    free(stats);
+}
+
 int main_stats(int argc, char *argv[])
 {
     char *targets = NULL;
     char *bam_fname = NULL;
     char *group_id = NULL;
-    samfile_t *sam = NULL;
+    samFile* sam = NULL;
     char in_mode[5];
 
     stats_t *stats = calloc(1,sizeof(stats_t));
@@ -1418,9 +1438,10 @@ int main_stats(int argc, char *argv[])
     stats->cov_rbuf.size = stats->nbases*5;
     stats->cov_rbuf.buffer = calloc(sizeof(int32_t),stats->cov_rbuf.size);
     // .. bam
-    if ((sam = samopen(bam_fname, in_mode, NULL)) == 0) 
+    if ((sam = sam_open(bam_fname, in_mode)) == 0)
         error("Failed to open: %s\n", bam_fname);
     stats->sam = sam;
+    stats->sam_header = sam_hdr_read(sam);
     if ( group_id ) init_group_id(stats, group_id);
     bam1_t *bam_line = bam_init1();
     // .. arrays
@@ -1449,51 +1470,34 @@ int main_stats(int argc, char *argv[])
     if ( optind<argc )
     {
         // Collect stats in selected regions only
-        bam_index_t *bam_idx = bam_index_load(bam_fname);
+        hts_idx_t *bam_idx = bam_index_load(bam_fname);
         if (bam_idx == 0)
             error("Random alignment retrieval only works for indexed BAM files.\n");
 
         int i;
         for (i=optind; i<argc; i++) 
         {
-            int tid, beg, end;
-            bam_parse_region(stats->sam->header, argv[i], &tid, &beg, &end);
-            if ( tid < 0 ) continue;
             reset_regions(stats);
-            bam_fetch(stats->sam->x.bam, bam_idx, tid, beg, end, stats, fetch_read);
+            hts_itr_t* iter = bam_itr_querys(bam_idx, stats->sam_header, argv[i]);
+            while (sam_itr_next(sam, iter, bam_line) >= 0) {
+                collect_stats(bam_line,stats);
+            }
+            bam_itr_destroy(iter);
         }
-        bam_index_destroy(bam_idx);
+        hts_idx_destroy(bam_idx);
     }
     else
     {
         // Stream through the entire BAM ignoring off-target regions if -t is given
-        while (samread(sam,bam_line) >= 0) 
+        while (sam_read1(sam, stats->sam_header, bam_line) >= 0)
             collect_stats(bam_line,stats);
     }
     round_buffer_flush(stats,-1);
 
     output_stats(stats);
     bam_destroy1(bam_line);
-    samclose(stats->sam);
-    if (stats->fai) fai_destroy(stats->fai);
-    free(stats->cov_rbuf.buffer); free(stats->cov);
-    free(stats->quals_1st); free(stats->quals_2nd); 
-    free(stats->gc_1st); free(stats->gc_2nd);
-    free(stats->isize_inward); free(stats->isize_outward); free(stats->isize_other);
-    free(stats->gcd);
-    free(stats->rseq_buf);
-    free(stats->mpc_buf);
-    free(stats->acgt_cycles);
-    free(stats->read_lengths);
-    free(stats->insertions);
-    free(stats->deletions);
-    free(stats->ins_cycles_1st);
-    free(stats->ins_cycles_2nd);
-    free(stats->del_cycles_1st);
-    free(stats->del_cycles_2nd);
-    destroy_regions(stats);
-    if ( stats->rg_hash ) khash_str2int_destroy(stats->rg_hash);
-    free(stats);
+	
+    cleanup_stats(stats);
 
     return 0;
 }
