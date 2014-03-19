@@ -417,6 +417,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 				printf("\t%d\t", cnt);
 				if (n_plp[i] == 0) {
 					printf("*\t*"); // FIXME: printf() is very slow...
+					if (conf->flag & MPLP_PRINT_MAPQ) printf("\t*");
 					if (conf->flag & MPLP_PRINT_POS) printf("\t*");
 				} else {
 					for (j = 0; j < n_plp[i]; ++j) {
