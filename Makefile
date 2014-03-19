@@ -6,6 +6,7 @@ CC       = gcc
 CPPFLAGS = $(DFLAGS) $(INCLUDES)
 CFLAGS   = -g -Wall -O2
 LDFLAGS  =
+LDLIBS   =
 DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
 LOBJS=		bam_aux.o bam.o bam_import.o sam.o \
 			sam_header.o
@@ -220,11 +221,13 @@ install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 mostlyclean:
 	-rm -f *.o misc/*.o test/*/*.o version.h
 
-clean: mostlyclean clean-htslib
+clean: mostlyclean
 	-rm -f $(PROGRAMS) libbam.a $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
 distclean: clean
 	-rm -f TAGS
+
+clean-all: clean clean-htslib
 
 
 tags:
@@ -234,4 +237,5 @@ tags:
 force:
 
 
-.PHONY: all check clean distclean force install lib mostlyclean tags test
+.PHONY: all check clean clean-all distclean force install
+.PHONY: lib mostlyclean tags test
