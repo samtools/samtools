@@ -15,6 +15,7 @@
 
 */
 
+#include <unistd.h> // for isatty()
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -1280,7 +1281,7 @@ void error(const char *format, ...)
         printf("       samtools stats [OPTIONS] file.bam chr:from-to\n");
         printf("Options:\n");
         printf("    -c, --coverage <int>,<int>,<int>    Coverage distribution min,max,step [1,1000,1]\n");
-        printf("    -d, --remove-dups                   Exlude from statistics reads marked as duplicates\n");
+        printf("    -d, --remove-dups                   Exclude from statistics reads marked as duplicates\n");
         printf("    -f, --required-flag <int>           Required flag, 0 for unset [0]\n");
         printf("    -F, --filtering-flag <int>          Filtering flag, 0 for unset [0]\n");
         printf("        --GC-depth <float,float>        Bin size for GC-depth graph and the maximum reference length [2e4,4.2e9]\n");
@@ -1292,7 +1293,7 @@ void error(const char *format, ...)
         printf("    -q, --trim-quality <int>            The BWA trimming parameter [0]\n");
         printf("    -r, --ref-seq <file>                Reference sequence (required for GC-depth and mismatches-per-cycle calculation).\n");
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
-        printf("    -s, --sam                           Input is SAM\n");
+        printf("    -s, --sam                           Input is SAM (usually auto-detected now).\n");
         printf("\n");
     }
     else
@@ -1419,7 +1420,7 @@ int main_stats(int argc, char *argv[])
 
     if ( !bam_fname )
     {
-        if ( isatty(fileno((FILE *)stdin)) )
+        if ( isatty(STDIN_FILENO) )
             error(NULL);
         bam_fname = "-";
     }
