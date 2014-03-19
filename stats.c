@@ -15,6 +15,7 @@
 
 */
 
+#include <unistd.h> // for isatty()
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -1419,7 +1420,7 @@ int main_stats(int argc, char *argv[])
 
     if ( !bam_fname )
     {
-        if ( isatty(fileno((FILE *)stdin)) )
+        if ( isatty(STDIN_FILENO) )
             error(NULL);
         bam_fname = "-";
     }
