@@ -14,6 +14,7 @@ test_bgzip($opts);
 test_faidx($opts);
 test_mpileup($opts);
 test_usage($opts, cmd=>'samtools');
+test_stats($opts);
 
 print "\nNumber of tests:\n";
 printf "    total   .. %d\n", $$opts{nok}+$$opts{nfailed};
@@ -94,6 +95,9 @@ sub cmd
     if ( $ret ) { error("The command failed [$ret]: $cmd\n", $out); }
     return $out;
 }
+# test harness for a command
+# %args out=> expected output
+#       cmd=> command to test
 sub test_cmd
 {
     my ($opts,%args) = @_;
@@ -438,4 +442,14 @@ sub test_usage_subcommand
     if ( !($usage =~ m/$command[[:space:]]+$subcommand/) ) { failed($opts,$test,"usage did not mention $command $subcommand"); return; } 
     
     passed($opts,$test);
+}
+
+sub test_stats
+{
+    my ($opts,%args) = @_;
+
+    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+3");
+    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+3");
+    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+3");
+    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+3");
 }
