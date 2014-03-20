@@ -101,9 +101,10 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end)
 }
 
 /* "BED" file reader, which actually reads two different formats.
+
    BED files contain between three and nine fields per line, of which
    only the first three (reference, start, end) are of interest to us.
-   BED counts positions from base 0, and the end it the base after the
+   BED counts positions from base 0, and the end is the base after the
    region of interest.  While not properly documented in the specification,
    it is also possible to have 'browser' and 'track' lines in BED files that
    do not follow the standard format and should be ignored.  Examination
@@ -116,12 +117,14 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end)
    The alternative format was originally for reading positions in VCF
    format.  This expects two columns, which indicate the reference and
    a position.  The position corresponds to a single base, and unlike
-   BED counts from 1.  The format is chosen based on if one or two
+   BED counts from 1.
+
+   Which format is in use is determined based on whether one or two
    numbers can be decoded on the line.  As this choice is made line-by-line
    in this implementation, it is possible (but probably a bad idea) to mix
    both formats in the same file.  If trying to read a VCF file by this
    method, it would be important to ensure that the third column (ID) does
-   not contain any entries that start with a number, to avoid the line
+   not contain any entries that start with a digit, to avoid the line
    erroneously being parsed as a BED file entry.
 
    The BED specification is at http://www.genome.ucsc.edu/FAQ/FAQformat.html
@@ -135,18 +138,16 @@ void *bed_read(const char *fn)
 	kstream_t *ks = NULL;
 	int dret;
 	unsigned int line = 0;
-	kstring_t *str;
+	kstring_t str = { 0, 0, NULL };
 
 	if (NULL == h) return NULL;
 	// read the list
 	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
 	if (fp == 0) return 0;
-	str = calloc(1, sizeof(kstring_t));
-	if (NULL == str) goto fail;
 	ks = ks_init(fp);
 	if (NULL == ks) goto fail;  // In case ks_init ever gets error checking...
-	while (ks_getuntil(ks, KS_SEP_LINE, str, &dret) > 0) { // read a line
-		char *ref = str->s, *ref_end;
+	while (ks_getuntil(ks, KS_SEP_LINE, &str, &dret) > 0) { // read a line
+		char *ref = str.s, *ref_end;
 		unsigned int beg = 0, end = 0;
 		int num = 0;
 		khint_t k;
@@ -204,18 +205,15 @@ void *bed_read(const char *fn)
 
 	ks_destroy(ks);
 	gzclose(fp);
-	free(str->s); free(str);
+	free(str.s);
 	bed_index(h);
 	return h;
  fail:
 	fprintf(stderr, "[bed_read] Error reading %s : %s\n", fn, strerror(errno));
  fail_no_msg:
-	if (NULL != ks) ks_destroy(ks);
-	if (NULL != fp) gzclose(fp);
-	if (NULL != str) {
-		free(str->s);
-		free(str);
-	}
+	if (ks) ks_destroy(ks);
+	if (fp) gzclose(fp);
+	free(str.s);
 	bed_destroy(h);
 	return NULL;
 }
