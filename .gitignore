@@ -1,5 +1,6 @@
 *.o
 *.dSYM
+*~
 /version.h
 
 lib*.a
@@ -15,3 +16,5 @@ lib*.a
 /samtools
 
 /TAGS
+
+core
