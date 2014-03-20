@@ -31,6 +31,8 @@
 #include "sam_header.h"
 #include <htslib/khash_str2int.h>
 #include "samtools.h"
+#include <htslib/khash.h>
+#include "stats_isize.h"
 
 #define BWA_MIN_RDLEN 35
 // From the spec
@@ -77,18 +79,18 @@ typedef struct
     //  insert size histogram holder
     int nquals;         // The number of quality bins 
     int nbases;         // The maximum sequence length the allocated array can hold
-    int nisize;         // The maximum insert size that the allocated array can hold
+    int nisize;         // The maximum insert size that the allocated array can hold - 0 indicates no limit
     int ngc;            // The size of gc_1st and gc_2nd
     int nindels;        // The maximum indel length for indel distribution
 
     // Arrays for the histogram data
     uint64_t *quals_1st, *quals_2nd;
     uint64_t *gc_1st, *gc_2nd;
-    uint64_t *isize_inward, *isize_outward, *isize_other;
     uint64_t *acgt_cycles;
     uint64_t *read_lengths;
     uint64_t *insertions, *deletions;
     uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
+    isize_t *isize;
 
     // The extremes encountered
     int max_len;            // Maximum read length
@@ -707,7 +709,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             // reads. Mates mapped to different chromosomes have isize==0.
             int32_t isize = bam_line->core.isize;
             if ( isize<0 ) isize = -isize;
-            if ( isize >= stats->nisize )
+            if ( stats->nisize > 0 && isize >= stats->nisize )
                 isize = stats->nisize-1;
             if ( isize>0 || bam_line->core.tid==bam_line->core.mtid )
             {
@@ -717,20 +719,20 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                 int is_mfwd = IS_MATE_REVERSE(bam_line) ? -1 : 1;
 
                 if ( is_fwd*is_mfwd>0 )
-                    stats->isize_other[isize]++;
+                    stats->isize->inc_other(stats->isize->data, isize);
                 else if ( is_fst*pos_fst>0 )
                 {
                     if ( is_fst*is_fwd>0 )
-                        stats->isize_inward[isize]++;
+                        stats->isize->inc_inward(stats->isize->data, isize);
                     else
-                        stats->isize_outward[isize]++;
+                        stats->isize->inc_outward(stats->isize->data, isize);
                 }
                 else if ( is_fst*pos_fst<0 )
                 {
                     if ( is_fst*is_fwd>0 )
-                        stats->isize_outward[isize]++;
+                        stats->isize->inc_outward(stats->isize->data, isize);
                     else
-                        stats->isize_inward[isize]++;
+                        stats->isize->inc_inward(stats->isize->data, isize);
                 }
             }
         }
@@ -880,29 +882,29 @@ float gcd_percentile(gc_depth_t *gcd, int N, int p)
     return gcd[k-1].depth + d*(gcd[k].depth - gcd[k-1].depth);
 }
 
-void output_stats(stats_t *stats)
+void output_stats(stats_t *stats, int sparse)
 {
     // Calculate average insert size and standard deviation (from the main bulk data only)
     int isize, ibulk=0;
     uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0;
-    for (isize=0; isize<stats->nisize; isize++)
+    for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
     {
         // Each pair was counted twice
-        stats->isize_inward[isize] *= 0.5;
-        stats->isize_outward[isize] *= 0.5;
-        stats->isize_other[isize] *= 0.5;
+        stats->isize->set_inward(stats->isize->data, isize, stats->isize->inward(stats->isize->data, isize) * 0.5);
+        stats->isize->set_outward(stats->isize->data, isize, stats->isize->outward(stats->isize->data, isize) * 0.5);
+        stats->isize->set_other(stats->isize->data, isize, stats->isize->other(stats->isize->data, isize) * 0.5);
 
-        nisize_inward += stats->isize_inward[isize];
-        nisize_outward += stats->isize_outward[isize];
-        nisize_other += stats->isize_other[isize];
-        nisize += stats->isize_inward[isize] + stats->isize_outward[isize] + stats->isize_other[isize];
+        nisize_inward += stats->isize->inward(stats->isize->data, isize);
+        nisize_outward += stats->isize->outward(stats->isize->data, isize);
+        nisize_other += stats->isize->other(stats->isize->data, isize);
+        nisize += stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
     }
 
     double bulk=0, avg_isize=0, sd_isize=0;
-    for (isize=0; isize<stats->nisize; isize++)
+    for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
     {
-        bulk += stats->isize_inward[isize] + stats->isize_outward[isize] + stats->isize_other[isize];
-        avg_isize += isize * (stats->isize_inward[isize] + stats->isize_outward[isize] + stats->isize_other[isize]);
+        bulk += stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
+        avg_isize += isize * (stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize));
 
         if ( bulk/nisize > stats->isize_main_bulk )
         {
@@ -913,7 +915,7 @@ void output_stats(stats_t *stats)
     }
     avg_isize /= nisize ? nisize : 1;
     for (isize=1; isize<ibulk; isize++)
-        sd_isize += (stats->isize_inward[isize] + stats->isize_outward[isize] + stats->isize_other[isize]) * (isize-avg_isize)*(isize-avg_isize) / nisize;
+        sd_isize += (stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) +stats->isize->other(stats->isize->data, isize)) * (isize-avg_isize)*(isize-avg_isize) / nisize;
     sd_isize = sqrt(sd_isize);
 
 
@@ -1022,9 +1024,15 @@ void output_stats(stats_t *stats)
         printf("GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,100.*ptr[0]/sum,100.*ptr[1]/sum,100.*ptr[2]/sum,100.*ptr[3]/sum);
     }
     printf("# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
-    for (isize=0; isize<ibulk; isize++)
-        printf("IS\t%d\t%ld\t%ld\t%ld\t%ld\n", isize, (long)(stats->isize_inward[isize]+stats->isize_outward[isize]+stats->isize_other[isize]),
-            (long)stats->isize_inward[isize], (long)stats->isize_outward[isize], (long)stats->isize_other[isize]);
+    for (isize=0; isize<ibulk; isize++) {
+        long in = (long)(stats->isize->inward(stats->isize->data, isize));
+        long out = (long)(stats->isize->outward(stats->isize->data, isize));
+        long other = (long)(stats->isize->other(stats->isize->data, isize));
+        if (!sparse || in + out + other > 0) {
+            printf("IS\t%d\t%ld\t%ld\t%ld\t%ld\n", isize,  in+out+other,
+                in , out, other);
+        }
+    }
 
     printf("# Read lengths. Use `grep ^RL | cut -f 2-` to extract this part. The columns are: read length, count\n");
     int ilen;
@@ -1294,6 +1302,7 @@ void error(const char *format, ...)
         printf("    -r, --ref-seq <file>                Reference sequence (required for GC-depth and mismatches-per-cycle calculation).\n");
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -s, --sam                           Input is SAM (usually auto-detected now).\n");
+        printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         printf("\n");
     }
     else
@@ -1313,7 +1322,8 @@ void cleanup_stats(stats_t* stats)
     free(stats->cov_rbuf.buffer); free(stats->cov);
     free(stats->quals_1st); free(stats->quals_2nd);
     free(stats->gc_1st); free(stats->gc_2nd);
-    free(stats->isize_inward); free(stats->isize_outward); free(stats->isize_other);
+    stats->isize->isize_free(stats->isize->data);
+    free(stats->isize);
     free(stats->gcd);
     free(stats->rseq_buf);
     free(stats->mpc_buf);
@@ -1337,6 +1347,7 @@ int main_stats(int argc, char *argv[])
     char *group_id = NULL;
     samFile* sam = NULL;
     char in_mode[5];
+    int sparse = 0;
 
     stats_t *stats = calloc(1,sizeof(stats_t));
     stats->ngc    = 200;
@@ -1378,10 +1389,11 @@ int main_stats(int argc, char *argv[])
         {"filtering-flag",0,0,'F'},
         {"id",1,0,'I'},
         {"GC-depth",1,0,1},
+        {"sparse",0,0,'x'},
         {0,0,0,0}
     };
     int opt;
-    while ( (opt=getopt_long(argc,argv,"?hdsr:c:l:i:t:m:q:f:F:I:1:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:",loptions,NULL))>0 )
     {
         switch (opt)
         {
@@ -1410,6 +1422,7 @@ int main_stats(int argc, char *argv[])
             case 'q': stats->trim_qual = atoi(optarg); break;
             case 't': targets = optarg; break;
             case 'I': group_id = optarg; break;
+            case 'x': sparse = 1; break;
             case '?': 
             case 'h': error(NULL);
             default: error("Unknown argument: %s\n", optarg);
@@ -1450,9 +1463,7 @@ int main_stats(int argc, char *argv[])
     stats->quals_2nd      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
     stats->gc_1st         = calloc(stats->ngc,sizeof(uint64_t));
     stats->gc_2nd         = calloc(stats->ngc,sizeof(uint64_t));
-    stats->isize_inward   = calloc(stats->nisize,sizeof(uint64_t));
-    stats->isize_outward  = calloc(stats->nisize,sizeof(uint64_t));
-    stats->isize_other    = calloc(stats->nisize,sizeof(uint64_t));
+    stats->isize          = init_isize_t(stats->nisize);
     stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
     stats->mpc_buf        = stats->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
     stats->acgt_cycles    = calloc(4*stats->nbases,sizeof(uint64_t));
@@ -1495,13 +1506,10 @@ int main_stats(int argc, char *argv[])
     }
     round_buffer_flush(stats,-1);
 
-    output_stats(stats);
+    output_stats(stats, sparse);
     bam_destroy1(bam_line);
 	
     cleanup_stats(stats);
 
     return 0;
 }
-
-
-

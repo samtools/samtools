@@ -15,7 +15,7 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-			faidx.o stats.o bam_flags.o bam_plbuf.o \
+			faidx.o stats.o stats_isize.o bam_flags.o bam_plbuf.o \
 			bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
 INCLUDES=	-I. -I$(HTSDIR)
 LIBCURSES=	-lcurses # -lXCurses
@@ -146,7 +146,8 @@ sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h
 sam_view.o: sam_view.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash.h
 sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
-stats.o: stats.c $(sam_h) sam_header.h samtools.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/khash_str2int.h $(htslib_faidx_h)
+stats_isize.o: stats_isize.c stats_isize.h $(HTSDIR)/htslib/khash.h
+stats.o: stats.c $(sam_h) sam_header.h samtools.h stats_isize.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/khash_str2int.h $(htslib_faidx_h)
 
 
 # test programs
