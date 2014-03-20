@@ -142,6 +142,15 @@ file.
 Output uncompressed BAM. This option saves time spent on
 compression/decompression and is thus preferred when the output is piped
 to another samtools command.
+.TP
+.BI "-U " FILE
+Write reads that are
+.I not
+selected by the various filter options to
+.IR FILE .
+When this option is used, all reads (or all reads intersecting the
+.I regions
+specified) are written to either the output file or this file, but never both.
 .RE
 
 .TP
