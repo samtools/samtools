@@ -192,9 +192,9 @@ int main_samview(int argc, char *argv[])
 	int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
 	int is_long_help = 0, n_threads = 0;
 	int64_t count = 0;
-	samFile *in = 0, *out = 0;
+	samFile *in = 0, *out = 0, *un_out=0;
 	bam_hdr_t *header;
-	char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q;
+	char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
 	
 	samview_settings_t settings = {
 		.rghash = NULL,
@@ -213,7 +213,7 @@ int main_samview(int argc, char *argv[])
 	/* parse command-line options */
 	/* TODO: convert this to getopt_long we're running out of letters */
 	strcpy(out_mode, "w");
-	while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:Q:@:m:x:")) >= 0) {
+	while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:Q:@:m:x:U:")) >= 0) {
 		switch (c) {
 		case 's':
 			if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -231,6 +231,7 @@ int main_samview(int argc, char *argv[])
 		case 'h': is_header = 1; break;
 		case 'H': is_header_only = 1; break;
 		case 'o': fn_out = strdup(optarg); break;
+		case 'U': fn_un_out = strdup(optarg); break;
 		case 'f': settings.flag_on |= strtol(optarg, 0, 0); break;
 		case 'F': settings.flag_off |= strtol(optarg, 0, 0); break;
 		case 'q': settings.min_mapQ = atoi(optarg); break;
@@ -315,6 +316,14 @@ int main_samview(int argc, char *argv[])
 			goto view_end;
 		}
 		if (*out_format || is_header) sam_hdr_write(out, header);
+        if (fn_un_out) {
+            if ((un_out = sam_open(fn_un_out, out_mode)) == 0) {
+                fprintf(stderr, "[main_samview] fail to open \"%s\" for writing.\n", fn_un_out);
+                ret = 1;
+                goto view_end;
+            }
+            if (*out_format || is_header) sam_hdr_write(un_out, header);
+        }
 	}
 #if 0
 	// TODO Add function for setting I/O threading to htslib API
@@ -329,7 +338,9 @@ int main_samview(int argc, char *argv[])
 			if (!process_aln(header, b, &settings)) {
 				if (!is_count) sam_write1(out, header, b); // write the alignment to `out'
 				count++;
-			}
+			} else {
+				if (un_out) sam_write1(un_out, header, b); // write the alignment to `out'
+            }
 		}
 		if (r < -1) {
 			fprintf(stderr, "[main_samview] truncated file.\n");
@@ -358,7 +369,9 @@ int main_samview(int argc, char *argv[])
 				if (!process_aln(header, b, &settings)) {
 					if (!is_count) sam_write1(out, header, b); // write the alignment to `out'
 					count++;
-				}
+				} else {
+                    if (un_out) sam_write1(un_out, header, b); // write the alignment to `out'
+                }
 			}
 			hts_itr_destroy(iter);
 			if (result < -1) {
@@ -376,7 +389,7 @@ view_end:
 		printf("%" PRId64 "\n", count);
 
 	// close files, free and return
-	free(fn_list); free(fn_ref); free(fn_out); free(settings.library);
+	free(fn_list); free(fn_ref); free(fn_out); free(settings.library);  free(fn_un_out);
 	if (settings.bed) bed_destroy(settings.bed);
 	if (settings.rghash) {
 		khint_t k;
@@ -389,6 +402,7 @@ view_end:
 	}
 	if (in) sam_close(in);
 	if (out) sam_close(out);
+	if (un_out) sam_close(un_out);
 	return ret;
 }
 
@@ -418,6 +432,7 @@ static int usage(int is_long_help)
 	fprintf(stderr, "         -r STR   only output reads in read group STR [null]\n");
 	fprintf(stderr, "         -s FLOAT fraction of templates to subsample; integer part as seed [-1]\n");
 	fprintf(stderr, "         -x STR   read tag to strip (repeatable) [null]\n");
+	fprintf(stderr, "         -U FILE  unselected read output file name [null]\n");
 	fprintf(stderr, "         -?       longer help\n");
 	fprintf(stderr, "\n");
 	if (is_long_help)
