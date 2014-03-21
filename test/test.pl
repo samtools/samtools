@@ -107,6 +107,7 @@ sub cmd
 # test harness for a command
 # %args out=> expected output
 #       cmd=> command to test
+#       expect_fail=> as per passed()/failed()
 sub test_cmd
 {
     my ($opts,%args) = @_;
@@ -122,7 +123,7 @@ sub test_cmd
     print "\t$args{cmd}\n";
 
     my ($ret,$out) = _cmd("$args{cmd} 2>&1");
-    if ( $ret ) { failed($opts,$test); return; }
+    if ( $ret ) { failed($opts,%args,msg=>$test); return; }
     if ( $$opts{redo_outputs} && -e "$$opts{path}/$args{out}" )
     {
         rename("$$opts{path}/$args{out}","$$opts{path}/$args{out}.old");
@@ -145,7 +146,7 @@ sub test_cmd
         $exp = join('',@exp);
         close($fh);
     }
-    elsif ( !$$opts{redo_outputs} ) { failed($opts,$test,"$$opts{path}/$args{out}: $!"); return; }
+    elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$args{out}: $!"); return; }
 
     if ( $exp ne $out ) 
     { 
@@ -160,38 +161,32 @@ sub test_cmd
         }
         else
         {
-            failed($opts,$test,"The outputs differ:\n\t\t$$opts{path}/$args{out}\n\t\t$$opts{path}/$args{out}.new"); 
+            failed($opts,%args,msg=>$test,reason=>"The outputs differ:\n\t\t$$opts{path}/$args{out}\n\t\t$$opts{path}/$args{out}.new"); 
         }
         return; 
     }
-    passed($opts,$test);
+    passed($opts,%args,msg=>$test);
 }
+
+# Record the success or failure of a test.  $opts is the global settings hash;
+# %args is a list of key => value pairs that may include:
+#  msg         => Message describing the test (currently unused)
+#  reason      => Description of why the test failed (only for failed())
+#  expect_fail => If set, records failed as xfail and passed as xpass
 sub failed
 {
-    my ($opts,$test,$reason) = @_;
-    $$opts{nfailed}++;
-    if ( defined $reason ) { print "\n\t$reason"; }
-    print "\n.. failed ...\n\n";
+    my ($opts, %args) = @_;
+    if (exists $args{reason}) { print "\n\t$args{reason}"; }
+    if (!$args{expect_fail}) { $$opts{nfailed}++; print "\n.. failed ...\n\n"; }
+    else { $$opts{nxfail}++; print "\n.. expected failure\n\n"; }
 }
 sub passed
 {
-    my ($opts,$test) = @_;
-    $$opts{nok}++;
-    print ".. ok\n\n";
+    my ($opts, %args) = @_;
+    if (!$args{expect_fail}) { $$opts{nok}++; print ".. ok\n\n"; }
+    else { $$opts{nxpass}++; print ".. unexpected pass\n\n"; }
 }
-sub xfail
-{
-    my ($opts,$test,$reason) = @_;
-    $$opts{nxfail}++;
-    if ( defined $reason ) { print "\n\t$reason"; }
-    print "\n.. expected failure\n\n";
-}
-sub xpass
-{
-    my ($opts,$test) = @_;
-    $$opts{nxpass}++;
-    print ".. unexpected pass\n\n";
-}
+
 sub is_file_newer
 {
     my ($afile,$bfile) = @_;
@@ -228,20 +223,20 @@ sub test_bgzip
     $test = "$$opts{bin}/bgzip -c -b 65272 -s 5 $$opts{tmp}/bgzip.dat.gz";
     print "$test\n";
     $out = cmd($test);
-    if ( $out ne '65272' ) { failed($opts,$test,"Expected \"65272\" got \"$out\"\n"); } 
-    else { passed($opts,$test); }
+    if ( $out ne '65272' ) { failed($opts,msg=>$test,reason=>"Expected \"65272\" got \"$out\"\n"); } 
+    else { passed($opts,msg=>$test); }
 
     $test = "$$opts{bin}/bgzip -c -b 979200 -s 6 $$opts{tmp}/bgzip.dat.gz";
     print "$test\n";
     $out = cmd($test);
-    if ( $out ne '979200' ) { failed($opts,$test,"Expected \"979200\" got \"$out\"\n"); } 
-    else { passed($opts,$test); }
+    if ( $out ne '979200' ) { failed($opts,msg=>$test,reason=>"Expected \"979200\" got \"$out\"\n"); } 
+    else { passed($opts,msg=>$test); }
 
     $test = "$$opts{bin}/bgzip -c -b 652804 -s 6 $$opts{tmp}/bgzip.dat.gz";
     print "$test\n";
     $out = cmd($test);
-    if ( $out ne '652804' ) { failed($opts,$test,"Expected \"652804\" got \"$out\"\n"); } 
-    else { passed($opts,$test); }
+    if ( $out ne '652804' ) { failed($opts,msg=>$test,reason=>"Expected \"652804\" got \"$out\"\n"); } 
+    else { passed($opts,msg=>$test); }
 }
 
 
@@ -327,8 +322,8 @@ sub test_faidx
             my $xreg = $reg;
             $xreg =~ s/^[^:]*://;
             $xreg =~ s/-.*$//;
-            if ( $num ne $xreg ) { failed($opts,$test,"Expected \"". faidx_num_to_seq($xreg) ."\" got \"$seq\"\n"); } 
-            else { passed($opts,$test); }
+            if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". faidx_num_to_seq($xreg) ."\" got \"$seq\"\n"); } 
+            else { passed($opts,msg=>$test); }
         }
     }
 }
@@ -389,7 +384,7 @@ sub test_usage
     my $command = $args{cmd};
     my $commandpath = $$opts{bin}."/".$command;
     my ($ret,$out) = _cmd("$commandpath 2>&1");
-    if ( $out =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,$test,"could not run $commandpath: $out"); return; }
+    if ( $out =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath: $out"); return; }
 
     my @sections = ($out =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
     
@@ -414,16 +409,16 @@ sub test_usage
 	}
     }
     
-    if ( !$have_usage ) { failed($opts,$test,"did not have Usage:"); return; }
-    if ( !$have_version ) { failed($opts,$test,"did not have Version:"); return; }
-    if ( !$have_subcommands ) { failed($opts,$test,"did not have Commands:"); return; }
+    if ( !$have_usage ) { failed($opts,msg=>$test,reason=>"did not have Usage:"); return; }
+    if ( !$have_version ) { failed($opts,msg=>$test,reason=>"did not have Version:"); return; }
+    if ( !$have_subcommands ) { failed($opts,msg=>$test,reason=>"did not have Commands:"); return; }
 
-    if ( !($usage =~ m/$command/) ) { failed($opts,$test,"usage did not mention $command"); return; } 
+    if ( !($usage =~ m/$command/) ) { failed($opts,msg=>$test,reason=>"usage did not mention $command"); return; } 
     
-    if ( scalar(@subcommands) < 1 ) { failed($opts,$test,"could not parse subcommands"); return; }
+    if ( scalar(@subcommands) < 1 ) { failed($opts,msg=>$test,reason=>"could not parse subcommands"); return; }
     print "\t$command has subcommands: ".join(", ", @subcommands)."\n";
 
-    passed($opts,$test);
+    passed($opts,msg=>$test);
     
     # now test subcommand usage as well
     foreach my $subcommand (@subcommands) {
@@ -443,9 +438,9 @@ sub test_usage_subcommand
     my $subcommand = $args{subcmd};
     my $commandpath = $$opts{bin}."/".$command;
     my ($ret,$out) = _cmd("$commandpath $subcommand 2>&1");
-    if ( $out =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,$test,"could not run $commandpath $subcommand: $out"); return; }
+    if ( $out =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath $subcommand: $out"); return; }
 
-    if ( $out =~ m/not.*implemented/is ) { passed($opts,$test,"subcommand indicates it is not implemented"); return; }
+    if ( $out =~ m/not.*implemented/is ) { failed($opts,msg=>$test,reason=>"subcommand indicates it is not implemented",expected_fail=>1); return; }
 
     my @sections = ($out =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
     
@@ -459,11 +454,11 @@ sub test_usage_subcommand
 	}
     }
     
-    if ( !$have_usage ) { failed($opts,$test,"did not have Usage:"); return; }
+    if ( !$have_usage ) { failed($opts,msg=>$test,reason=>"did not have Usage:"); return; }
 
-    if ( !($usage =~ m/$command[[:space:]]+$subcommand/) ) { failed($opts,$test,"usage did not mention $command $subcommand"); return; } 
+    if ( !($usage =~ m/$command[[:space:]]+$subcommand/) ) { failed($opts,msg=>$test,reason=>"usage did not mention $command $subcommand"); return; } 
     
-    passed($opts,$test);
+    passed($opts,msg=>$test);
 }
 
 # Add UR tags to @SQ lines in a SAM file.
@@ -787,17 +782,9 @@ sub run_view_test
     }
     if ($res) {
 	print "\tFailed command:\n\t@cmd\n\n";
-	if (!$args{expect_fail}) {
-	    failed($opts, $args{msg});
-	} else {
-	    xfail($opts, $args{msg});
-	}
+	failed($opts, %args);
     } else {
-	if (!$args{expect_fail}) {
-	    passed($opts, $args{msg});
-	} else {
-	    xpass($opts, $args{msg});
-	}
+	passed($opts, %args);
     }
 }
 
@@ -860,10 +847,10 @@ sub run_view_subsample_test
     }
 
     if (!$res) {
-	passed($opts, $args{msg});
+	passed($opts, %args);
 	return;
     }
-    failed($opts, $args{msg});
+    failed($opts, %args);
 }
 
 # Open a pipe from bgzip to decompress a gzipped file.  bgzip is annoying
@@ -2034,7 +2021,7 @@ sub test_stats
     my ($opts,%args) = @_;
 
     test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+3");
-    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+3");
-    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+3");
-    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+3");
+    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+3",expect_fail=>1);
+    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+3",expect_fail=>1);
+    test_cmd($opts,out=>'stat/1-4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+3",expect_fail=>1);
 }
