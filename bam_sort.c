@@ -679,7 +679,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	// Open output file and write header
 	if (flag & MERGE_UNCOMP) level = 0;
 	else if (flag & MERGE_LEVEL1) level = 1;
-	strcpy(mode, "w");
+	strcpy(mode, "wb");
 	if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
 	if ((fpout = sam_open(out, mode)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
@@ -756,7 +756,7 @@ int bam_merge(int argc, char *argv[])
 		}
 	}
 	srand48(random_seed);
-	if (optind + 2 >= argc) {
+	if (optind>=argc || (!file_list && optind + 2 >= argc)) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools merge [-nr] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
 		fprintf(stderr, "Options: -n       sort by read names\n");
@@ -797,8 +797,11 @@ int bam_merge(int argc, char *argv[])
 		fn = argv + optind + 1;
 	}
 	if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, nfiles, fn, flag, reg, n_threads, level) < 0) ret = 1;
-	for (c=0; c<nfiles; c++) free(fn[c]);
-    free(fn);
+	if ( file_list ) 
+    {
+        for (c=0; c<nfiles; c++) free(fn[c]);
+        free(fn);
+    }
 	free(reg);
 	free(fn_headers);
 	return ret;
@@ -884,7 +887,7 @@ static void *worker(void *data)
 	ks_mergesort(sort, w->buf_len, w->buf, 0);
 	name = (char*)calloc(strlen(w->prefix) + 20, 1);
 	sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-	write_buffer(name, "w1", w->buf_len, w->buf, w->h, 0);
+	write_buffer(name, "wb1", w->buf_len, w->buf, w->h, 0);
 	free(name);
 	return 0;
 }
@@ -995,6 +998,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 		for (i = 0; i < n_files; ++i) {
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
 			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
+            bam_index_build(fns[i],0);    // index the newly created blocks
 		}
 		if (bam_merge_core2(is_by_qname, fnout, 0, n_files, fns, 0, 0, n_threads, level) < 0) {
 			// Propagate bam_merge_core2() failure; it has already emitted a
@@ -1002,6 +1006,10 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 			return -1;
 		}
 		for (i = 0; i < n_files; ++i) {
+            kstring_t str = {0,0,0};
+            ksprintf(&str,"%s.bai",fns[i]);
+            unlink(str.s);
+            free(str.s);
 			unlink(fns[i]);
 			free(fns[i]);
 		}
