@@ -499,10 +499,15 @@ int main_bam2fq(int argc, char *argv[])
 	bam1_t *b;
 	int8_t *buf;
 	int max_buf, c, no12 = 0;
-	while ((c = getopt(argc, argv, "n")) > 0)
+	while ((c = getopt(argc, argv, "n")) > 0) {
 		if (c == 'n') no12 = 1;
+	}
 	if (argc == 1) {
-		fprintf(stderr, "Usage: samtools bam2fq <in.bam>\n");
+		fprintf(stderr,
+				"Usage:   samtools bam2fq <in.bam>\n\n"
+				"Options: -n    don't add /1 nor /2 to indicate whether read is from beginning or\n"
+				"               end of template\n"
+				);
 		return 1;
 	}
 	fp = sam_open(argv[optind], "r");
