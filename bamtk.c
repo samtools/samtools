@@ -64,6 +64,7 @@ static void usage(FILE *fp)
 "         merge       merge sorted alignments\n"
 "         mpileup     multi-way pileup\n"
 "         sort        sort alignment file\n"
+"         bam2fq      converts a BAM to a FASTQ\n"
 "  -- stats\n"
 "         bedcov      read depth per BED region\n"
 "         depth       compute the depth\n"
