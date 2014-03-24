@@ -16,7 +16,8 @@ AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
 			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
 			faidx.o stats.o bam_flags.o bam_plbuf.o \
-			bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
+			bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
+			bam_split.o
 INCLUDES=	-I. -I$(HTSDIR)
 LIBCURSES=	-lcurses # -lXCurses
 
@@ -49,7 +50,11 @@ BUILT_TEST_PROGRAMS = \
 	test/merge/test_bam_translate \
 	test/merge/test_pretty_header \
 	test/merge/test_rtrans_build \
-	test/merge/test_trans_tbl_init
+	test/merge/test_trans_tbl_init \
+	test/split/test_count_rg \
+	test/split/test_expand_format_string \
+	test/split/test_filter_header_rg \
+	test/split/test_parse_args
 
 all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
@@ -157,25 +162,45 @@ check test: samtools bgzip $(BUILT_TEST_PROGRAMS)
 	test/merge/test_pretty_header
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
+	test/split/test_count_rg
+	test/split/test_expand_format_string
+	test/split/test_filter_header_rg
+	test/split/test_parse_args
 
 
-test/merge/test_bam_translate: test/merge/test_bam_translate.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o $(HTSLIB) $(LDLIBS) -lz
+test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o $(HTSLIB) $(LDLIBS) -lz
 
-test/merge/test_pretty_header: test/merge/test_pretty_header.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_pretty_header.o $(HTSLIB) $(LDLIBS) -lz
+test/merge/test_pretty_header: test/merge/test_pretty_header.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_pretty_header.o test/test.o $(HTSLIB) $(LDLIBS) -lz
 
-test/merge/test_rtrans_build: test/merge/test_rtrans_build.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o $(HTSLIB) $(LDLIBS) -lz
+test/merge/test_rtrans_build: test/merge/test_rtrans_build.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o test/test.o $(HTSLIB) $(LDLIBS) -lz
 
-test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o $(HTSLIB) $(LDLIBS) -lz
+test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o test/test.o $(HTSLIB) $(LDLIBS) -lz
+
+test/split/test_count_rg: test/split/test_count_rg.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o $(HTSLIB) $(LDLIBS) -lz
+
+test/split/test_expand_format_string: test/split/test_expand_format_string.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_expand_format_string.o test/test.o $(HTSLIB) $(LDLIBS) -lz
+
+test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_filter_header_rg.o test/test.o $(HTSLIB) $(LDLIBS) -lz
+
+test/split/test_parse_args: test/split/test_parse_args.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o $(HTSLIB) $(LDLIBS) -lz
 
 test/merge/test_bam_translate.o: test/merge/test_bam_translate.c bam_sort.o
 test/merge/test_pretty_header.o: test/merge/test_pretty_header.c bam_sort.o
 test/merge/test_rtrans_build.o: test/merge/test_rtrans_build.c bam_sort.o
 test/merge/test_trans_tbl_init.o: test/merge/test_trans_tbl_init.c bam_sort.o
-
+test/split/test_count_rg.o: test/split/test_count_rg.c bam_split.o
+test/split/test_expand_format_string.o: test/split/test_expand_format_string.c bam_split.o
+test/split/test_filter_header_rg.o: test/split/test_filter_header_rg.c bam_split.o
+test/split/test_parse_args.o: test/split/test_parse_args.c bam_split.o
+test/test.o:  test/test.c
 
 # misc programs
 
