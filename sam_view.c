@@ -193,7 +193,7 @@ int main_samview(int argc, char *argv[])
 	int is_long_help = 0, n_threads = 0;
 	int64_t count = 0;
 	samFile *in = 0, *out = 0, *un_out=0;
-	bam_hdr_t *header;
+	bam_hdr_t *header = NULL;
 	char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
 	
 	samview_settings_t settings = {
@@ -395,6 +395,7 @@ view_end:
 
 	// close files, free and return
 	free(fn_list); free(fn_ref); free(fn_out); free(settings.library);  free(fn_un_out);
+    if ( header ) bam_hdr_destroy(header); 
 	if (settings.bed) bed_destroy(settings.bed);
 	if (settings.rghash) {
 		khint_t k;
