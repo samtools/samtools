@@ -128,8 +128,9 @@ sub parse_params
                 '1st fragments:',
                 'last fragments:',
                 'reads mapped:',
+                'reads mapped and paired:',
                 'reads unmapped:',
-                'reads unpaired:',
+                'reads properly paired:',
                 'reads paired:',
                 'reads duplicated:',
                 'reads MQ0:',
@@ -148,7 +149,6 @@ sub parse_params
             ],
             'min' => 
             [
-                'is paired:',
                 'is sorted:',
             ],
             'max' => 
@@ -544,7 +544,7 @@ sub plot_qualities
     if ( !@ffq ) { return; }
 
     my $yrange = @{$ffq[0]} > 50 ? @{$ffq[0]} : 50;
-    my $is_paired = get_value($opts,'SN','is paired:');
+    my $is_paired = get_value($opts,'SN','reads properly paired:');
     
     # Average quality per cycle, forward and reverse reads in one plot 
     my $args = get_defaults($opts,"$$opts{prefix}quals.png");
@@ -712,7 +712,6 @@ sub plot_qualities
     close($fh);
     plot($$args{gp});
 
-
     # Heatmap qualitites
     $args = get_defaults($opts,"$$opts{prefix}quals-hm.png", wh=>'600,500');
     $fh = $$args{fh};
@@ -821,7 +820,7 @@ sub plot_gc
 {
     my ($opts) = @_;
 
-    my $is_paired = get_value($opts,'SN','is paired:');
+    my $is_paired = get_value($opts,'SN','reads properly paired:');
     my $args = get_defaults($opts,"$$opts{prefix}gc-content.png");
     my $fh = $$args{fh};
     my ($gcl_max,$gcf_max,$lmax,$fmax);
@@ -916,7 +915,7 @@ sub plot_isize
 {
     my ($opts) = @_;
 
-    my $is_paired = get_value($opts,'SN','is paired:');
+    my $is_paired = get_value($opts,'SN','reads properly paired:');
     my @isizes = get_values($opts, 'IS');
     if ( !$is_paired or !@isizes ) { return; }
 
