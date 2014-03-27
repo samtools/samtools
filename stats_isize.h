@@ -40,7 +40,6 @@ typedef struct
     uint64_t (*inward)(isize_data_t, int);
     uint64_t (*outward)(isize_data_t, int);
     uint64_t (*other)(isize_data_t, int);
-    uint64_t (*total)(isize_data_t, int);
 
     // Set the number of inserts of a given size
     void (*set_inward)(isize_data_t, int, uint64_t);

@@ -53,7 +53,6 @@ static uint64_t sparse_other_f(isize_data_t data, int at) {
         return 0;
     }
 }
-static uint64_t sparse_total_f(isize_data_t data, int a) { return sparse_in_f(data, a) + sparse_out_f(data, a) + sparse_other_f(data, a); }
 
 static void sparse_set_f(isize_data_t data, int at, isize_insert_t field, uint64_t value) {
     isize_sparse_data_t *a = data.sparse;
@@ -113,7 +112,6 @@ static int sparse_nitems(isize_data_t data) {
 static uint64_t dense_in_f(isize_data_t data, int at) { return data.dense->isize_inward[at]; }
 static uint64_t dense_out_f(isize_data_t data, int at) { return data.dense->isize_outward[at]; }
 static uint64_t dense_other_f(isize_data_t data, int at) { return data.dense->isize_other[at]; }
-static uint64_t dense_total_f(isize_data_t data, int a) { return dense_in_f(data, a) + dense_out_f(data, a) + dense_other_f(data, a); }
 
 static void dense_set_in_f(isize_data_t data, int at, uint64_t value) { data.dense->isize_inward[at] = value; }
 static void dense_set_out_f(isize_data_t data, int at, uint64_t value) { data.dense->isize_outward[at] = value; }
