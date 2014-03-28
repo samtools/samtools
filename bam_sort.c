@@ -673,7 +673,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	// Open output file and write header
 	if (flag & MERGE_UNCOMP) level = 0;
 	else if (flag & MERGE_LEVEL1) level = 1;
-	strcpy(mode, "w");
+	strcpy(mode, "wb");
 	if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
 	if ((fpout = sam_open(out, mode)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
@@ -750,7 +750,7 @@ int bam_merge(int argc, char *argv[])
 		}
 	}
 	srand48(random_seed);
-	if (optind + 2 >= argc) {
+	if (optind>=argc || (!file_list && optind + 2 >= argc)) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools merge [-nr] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
 		fprintf(stderr, "Options: -n       sort by read names\n");
@@ -880,7 +880,7 @@ static void *worker(void *data)
 	ks_mergesort(sort, w->buf_len, w->buf, 0);
 	name = (char*)calloc(strlen(w->prefix) + 20, 1);
 	sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-	write_buffer(name, "w1", w->buf_len, w->buf, w->h, 0);
+	write_buffer(name, "wb1", w->buf_len, w->buf, w->h, 0);
 	free(name);
 	return 0;
 }
