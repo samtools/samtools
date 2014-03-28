@@ -219,7 +219,10 @@ install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 	$(INSTALL_DATA) samtools.1 $(DESTDIR)$(man1dir)
 
 
-mostlyclean:
+testclean:
+	-rm -f test/*.new test/*/*.new
+
+mostlyclean: testclean
 	-rm -f *.o misc/*.o test/*/*.o version.h
 
 clean: mostlyclean
@@ -239,4 +242,4 @@ force:
 
 
 .PHONY: all check clean clean-all distclean force install
-.PHONY: lib mostlyclean tags test
+.PHONY: lib mostlyclean tags test testclean
