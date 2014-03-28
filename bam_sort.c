@@ -647,17 +647,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		free(rtrans);
 	} else {
 		for (i = 0; i < n; ++i) {
-			hts_idx_t *idx = sam_index_load(fp[i], fn[i]);
-			if (idx == NULL) {
-				fprintf(stderr, "[%s] Could not load index for %s.\n", __func__, fn[i]);
-				return -1;
-			}
-			iter[i] = sam_itr_queryi(idx, HTS_IDX_START, 0, 0);
+			iter[i] = sam_itr_queryi(NULL, HTS_IDX_REST, 0, 0);
 			if (iter[i] == NULL) {
-				fprintf(stderr, "[%s] Ack ack ack! iter is null %d\n", __func__, i);
+				fprintf(stderr, "[%s] Memory allocation failed\n", __func__);
 				return -1;
 			}
-			hts_idx_destroy(idx);
 		}
 	}
 
@@ -782,23 +776,25 @@ int bam_merge(int argc, char *argv[])
 			return 1;
 		}
 	}
-	int nfiles = 0;
-	char** fn = NULL;
+
 	if (file_list) {
 		// load the list of files to read
-		fn = hts_readlines(file_list, &nfiles);
-		if (fn == NULL) {
+		int i, nfiles;
+		char **fn = hts_readlines(file_list, &nfiles);
+		if (fn) {
+			if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, nfiles, fn, flag, reg, n_threads, level) < 0) ret = 1;
+
+			for (i=0; i<nfiles; i++) free(fn[i]);
+			free(fn);
+		}
+		else {
 			fprintf(stderr, "[%s] Invalid file list \"%s\"\n", __func__, file_list);
-			return 1;
+			ret = 1;
 		}
 	} else {
 		// otherwise get list of files to merge from command line
-		nfiles = argc - optind - 1;
-		fn = argv + optind + 1;
+		if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, argc - (optind+1), argv + (optind+1), flag, reg, n_threads, level) < 0) ret = 1;
 	}
-	if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, nfiles, fn, flag, reg, n_threads, level) < 0) ret = 1;
-	for (c=0; c<nfiles; c++) free(fn[c]);
-    free(fn);
 	free(reg);
 	free(fn_headers);
 	return ret;
