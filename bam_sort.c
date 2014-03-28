@@ -126,11 +126,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
 	regmatch_t matches[1];
 	if (regcomp( &hd_regex, "^@HD.*$", REG_EXTENDED|REG_NEWLINE ))
 		abort();
-	{
-		if (regexec( &hd_regex, *text_in_out, 1, &matches[0], 0 ) != 0) {
-			fprintf(stderr, "[pretty_header] invalid header no @HD found\n");
-			exit(1);
-		}
+	if (regexec( &hd_regex, *text_in_out, 1, &matches[0], 0 ) == 0) {
 		size_t match_size = matches[0].rm_eo - matches[0].rm_so;
 		memcpy(output_pointer, *text_in_out+matches[0].rm_so, match_size);
 		output_pointer[match_size] = '\n';
