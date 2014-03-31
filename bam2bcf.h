@@ -5,6 +5,17 @@
 #include <htslib/vcf.h>
 #include "errmod.h"
 
+/**
+ *  A simplified version of Mann-Whitney U-test is calculated
+ *  by default (no CDF) because it is faster and seems to work
+ *  better in machine learning filtering. When enabled by setting
+ *  CDF_MWU_TESTS, additional annotations will appear on mpileup's
+ *  output (RPB2 in addition to RPB, etc.).
+ */
+#ifndef CDF_MWU_TESTS
+#define CDF_MWU_TESTS 0
+#endif
+
 #define B2B_INDEL_NULL 10000
 
 #define B2B_FMT_DP 0x1
@@ -61,7 +72,9 @@ typedef struct {
 	uint32_t *PL, *DP, *DV;
     float vdb; // variant distance bias
     float mwu_pos, mwu_mq, mwu_bq, mwu_mqs;
+#if CDF_MWU_TESTS
     float mwu_pos_cdf, mwu_mq_cdf, mwu_bq_cdf, mwu_mqs_cdf;
+#endif
     float seg_bias;
     kstring_t tmp;
 } bcf_call_t;

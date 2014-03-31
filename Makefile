@@ -100,7 +100,7 @@ bgzip: bgzip.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ bgzip.o $(HTSLIB) -lz
 
 bam_h = bam.h $(htslib_bgzf_h) $(htslib_sam_h)
-bam2bcf_h = bam2bcf.h errmod.h
+bam2bcf_h = bam2bcf.h $(htslib_vcf_h) errmod.h
 bam_lpileup_h = bam_lpileup.h $(htslib_sam_h)
 bam_plbuf_h = bam_plbuf.h $(htslib_sam_h)
 bam_tview_h = bam_tview.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(bam2bcf_h) $(HTSDIR)/htslib/khash.h $(bam_lpileup_h)
@@ -108,7 +108,7 @@ sam_h = sam.h $(htslib_sam_h) $(bam_h)
 sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 
 bam.o: bam.c $(bam_h) sam_header.h
-bam2bcf.o: bam2bcf.c bam2bcf.h $(HTSDIR)/htslib/kfunc.h
+bam2bcf.o: bam2bcf.c $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kfunc.h $(bam2bcf_h) errmod.h
 bam2bcf_indel.o: bam2bcf_indel.c bam2bcf.h
 bam2depth.o: bam2depth.c $(bam_h) samtools.h
 bam_aux.o: bam_aux.c
