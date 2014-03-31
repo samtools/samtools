@@ -2,6 +2,9 @@
 #include <unistd.h>
 #include <assert.h>
 #include <fcntl.h>
+#include <stdarg.h>
+#include <string.h>
+#include <errno.h>
 #include "bam.h"
 #include "samtools.h"
 #include "version.h"
@@ -36,6 +39,27 @@ int faidx_main(int argc, char *argv[]);
 const char *samtools_version()
 {
 	return SAMTOOLS_VERSION;
+}
+
+void print_error(const char *format, ...)
+{
+	va_list args;
+	va_start(args, format);
+	fprintf(stderr, "samtools: ");
+	vfprintf(stderr, format, args);
+	fprintf(stderr, "\n");
+	va_end(args);
+}
+
+void print_error_errno(const char *format, ...)
+{
+	int err = errno;
+	va_list args;
+	va_start(args, format);
+	fprintf(stderr, "samtools: ");
+	vfprintf(stderr, format, args);
+	fprintf(stderr, ": %s\n", strerror(err));
+	va_end(args);
 }
 
 static void usage(FILE *fp)

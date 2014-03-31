@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "bam.h"
+#include "samtools.h"
 
 typedef struct {     // auxiliary data structure
 	bamFile fp;      // the file handler
@@ -55,7 +56,10 @@ int main_depth(int argc, char *argv[])
 		switch (n) {
 			case 'l': min_len = atoi(optarg); break; // minimum query length
 			case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
-			case 'b': bed = bed_read(optarg); if (!bed) { fprintf(stderr,"Could not read file \"%s\"\n", optarg); exit(1); } break; // BED or position list file can be parsed now
+			case 'b':
+				bed = bed_read(optarg); // BED or position list file can be parsed now
+				if (!bed) { print_error_errno("Could not read file \"%s\"", optarg); return 1; }
+				break;
 			case 'q': baseQ = atoi(optarg); break;   // base quality threshold
 			case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
 			case 'f': file_list = optarg; break;

@@ -102,7 +102,7 @@ sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 bam.o: bam.c $(bam_h) sam_header.h
 bam2bcf.o: bam2bcf.c bam2bcf.h $(HTSDIR)/htslib/kfunc.h
 bam2bcf_indel.o: bam2bcf_indel.c bam2bcf.h
-bam2depth.o: bam2depth.c
+bam2depth.o: bam2depth.c $(bam_h) samtools.h
 bam_aux.o: bam_aux.c
 bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(bam_h)
 bam_color.o: bam_color.c $(bam_h)
