@@ -1,7 +1,5 @@
-#ifndef __SAMTOOLS_H__
-#define __SAMTOOLS_H__
-
-#include <stdarg.h>
+#ifndef SAMTOOLS_H
+#define SAMTOOLS_H
 
 /** 
  *  A simplified version of Mann-Whitney U-test is calculated
@@ -13,6 +11,5 @@
 #define CDF_MWU_TESTS 0
 
 const char *samtools_version(void);
-void error(const char *format, ...);
 
 #endif
