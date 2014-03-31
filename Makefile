@@ -110,7 +110,7 @@ sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 bam.o: bam.c $(bam_h) sam_header.h
 bam2bcf.o: bam2bcf.c bam2bcf.h $(HTSDIR)/htslib/kfunc.h
 bam2bcf_indel.o: bam2bcf_indel.c bam2bcf.h
-bam2depth.o: bam2depth.c
+bam2depth.o: bam2depth.c $(bam_h) samtools.h
 bam_aux.o: bam_aux.c
 bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(bam_h)
 bam_color.o: bam_color.c $(bam_h)
@@ -144,7 +144,7 @@ padding.o: padding.c sam_header.h $(sam_h) $(bam_h) $(htslib_faidx_h)
 phase.o: phase.c $(bam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h
-sam_view.o: sam_view.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash.h
+sam_view.o: sam_view.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash.h samtools.h
 sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
 stats_isize.o: stats_isize.c stats_isize.h $(HTSDIR)/htslib/khash.h
 stats.o: stats.c $(sam_h) sam_header.h samtools.h stats_isize.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/khash_str2int.h $(htslib_faidx_h)

@@ -9,6 +9,7 @@
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "htslib/khash.h"
+#include "samtools.h"
 KHASH_SET_INIT_STR(rg)
 
 typedef khash_t(rg) *rghash_t;
@@ -240,6 +241,7 @@ int main_samview(int argc, char *argv[])
 		case 'l': settings.library = strdup(optarg); break;
 		case 'L':
 			if ((settings.bed = bed_read(optarg)) == NULL) {
+				print_error_errno("Could not read file \"%s\"", optarg);
 				ret = 1;
 				goto view_end;
 			}

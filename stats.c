@@ -158,7 +158,7 @@ typedef struct
 }
 stats_t;
 
-void error(const char *format, ...);
+static void error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
 void realloc_buffers(stats_t *stats, int seq_len);
 
@@ -1280,7 +1280,7 @@ void init_group_id(stats_t *stats, char *id)
 }
 
 
-void error(const char *format, ...)
+static void error(const char *format, ...)
 {
     if ( !format )
     {
