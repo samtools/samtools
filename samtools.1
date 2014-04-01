@@ -400,7 +400,7 @@ Approximately the maximum required memory. [500000000]
 
 .TP
 .B merge
-samtools merge [-nur1f] [-h inh.sam] [-R reg] <out.bam> <in1.bam> <in2.bam> [...]
+samtools merge [-nur1f] [-b list] [-h inh.sam] [-R reg] <out.bam> <in1.bam> <in2.bam> [...]
 
 Merge multiple sorted alignments.
 The header reference lists of all the input BAM files, and the @SQ headers of
@@ -421,7 +421,7 @@ and the headers of other files will be ignored.
 Use zlib compression level 1 to compress the output.
 .TP
 .B -b \ FILE
-List of input BAM files, one file per line
+List of input BAM files, one file per line.
 .TP
 .B -f
 Force to overwrite the output file if present.
