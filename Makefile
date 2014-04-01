@@ -158,6 +158,7 @@ check test: samtools bgzip $(BUILT_TEST_PROGRAMS)
 	test/merge/test_pretty_header
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
+	cd test/mpileup; ./regression.sh
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o $(HTSLIB)
