@@ -749,7 +749,7 @@ int bam_merge(int argc, char *argv[])
 	if (optind>=argc || (!file_list && optind + 2 >= argc)) {
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage:   samtools merge [-nr] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
-		fprintf(stderr, "         samtools merge [-nr] [-h inh.sam] -b list <out.bam>\n\n");
+		fprintf(stderr, "         samtools merge [-nr] [-h inh.sam] -b <list> <out.bam>\n\n");
 		fprintf(stderr, "Options: -n       sort by read names\n");
 		fprintf(stderr, "         -r       attach RG tag (inferred from file names)\n");
 		fprintf(stderr, "         -u       uncompressed BAM output\n");
