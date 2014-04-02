@@ -38,7 +38,7 @@ void setup_test_1(int* argc, char*** argv)
 }
 
 bool check_test_1(const parsed_opts_t* opts) {
-	if ( opts->merged_output_name != NULL
+	if ( opts->merged_input_name != NULL
 		|| opts->unaccounted_header_name != NULL
 		|| opts->unaccounted_name != NULL
 		|| strcmp(opts->output_format_string,"%*_%#.bam")
@@ -56,8 +56,8 @@ void setup_test_2(int* argc, char*** argv)
 }
 
 bool check_test_2(const parsed_opts_t* opts) {
-	if ( opts->merged_output_name == NULL
-		|| strcmp(opts->merged_output_name, "merged.bam")
+	if ( opts->merged_input_name == NULL
+		|| strcmp(opts->merged_input_name, "merged.bam")
 		|| opts->unaccounted_header_name != NULL
 		|| opts->unaccounted_name != NULL
 		|| strcmp(opts->output_format_string,"%*_%#.bam")

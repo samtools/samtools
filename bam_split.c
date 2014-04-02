@@ -25,8 +25,6 @@
 
 /* Contact: Martin Pollard <mp15@sanger.ac.uk> */
 
-#define _GNU_SOURCE
-
 #include <htslib/sam.h>
 #include <string.h>
 #include <stdio.h>
@@ -43,7 +41,7 @@
 KHASH_MAP_INIT_STR(c2i, int)
 
 struct parsed_opts {
-	char* merged_output_name;
+	char* merged_input_name;
 	char* unaccounted_header_name;
 	char* unaccounted_name;
 	char* output_format_string;
@@ -73,8 +71,7 @@ static void usage(bool error)
 {
 	FILE* write_to = error ? stderr : stdout;
 	fprintf(write_to,
-			"samtools split\n\n"
-			"usage: samtools split [-v] [-f <format string>] [-u <unaccounted.bam>[:<unaccounted_header.sam>]] <merged.bam>\n\n"
+			"Usage: samtools split [-v] [-f <format string>] [-u <unaccounted.bam>[:<unaccounted_header.sam>]] <merged.bam>\n\n"
 			"Where:\n"
 			"<merged.bam> is your file to separate out into individual read groups.\n"
 			"Options:\n"
@@ -135,8 +132,8 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 		return NULL;
 	}
 
-	retval->merged_output_name = strdup(argv[0]);
-	if (! retval->merged_output_name ) { perror("cannot allocate string memory"); return NULL; }
+	retval->merged_input_name = strdup(argv[0]);
+	if (! retval->merged_input_name ) { perror("cannot allocate string memory"); return NULL; }
 
 	return retval;
 }
@@ -302,9 +299,9 @@ static state_t* init(parsed_opts_t* opts)
 		return NULL;
 	}
 
-	retval->merged_input_file = sam_open(opts->merged_output_name, "rb");
+	retval->merged_input_file = sam_open(opts->merged_input_name, "rb");
 	if (!retval->merged_input_file) {
-		fprintf(stderr, "Could not open input file (%s)\n", opts->merged_output_name);
+		fprintf(stderr, "Could not open input file (%s)\n", opts->merged_input_name);
 		return NULL;
 	}
 	retval->merged_input_header = sam_hdr_read(retval->merged_input_file);
@@ -342,11 +339,21 @@ static state_t* init(parsed_opts_t* opts)
 		free(retval);
 		return NULL;
 	}
+
+	char* dirsep = strrchr(opts->merged_input_name, '/');
+	char* input_base_name = strdup(dirsep? dirsep+1 : opts->merged_input_name);
+	if (!input_base_name) {
+		fprintf(stderr, "Out of memory\n");
+		return NULL;
+	}
+	char* extension = strrchr(input_base_name, '.');
+	if (extension) *extension = '\0';
+
 	size_t i;
 	for (i = 0; i < retval->output_count; i++) {
 		char* output_filename = NULL;
 		
-		if ( ( output_filename = expand_format_string(opts->output_format_string, opts->merged_output_name, retval->rg_id[i], i) ) == NULL) {
+		if ( ( output_filename = expand_format_string(opts->output_format_string, input_base_name, retval->rg_id[i], i) ) == NULL) {
 			fprintf(stderr, "Error expanding output filename format string.\r\n");
 			return NULL;
 		}
@@ -370,6 +377,8 @@ static state_t* init(parsed_opts_t* opts)
 			return NULL;
 		}
 	}
+
+	free(input_base_name);
 
 	return retval;
 }
@@ -455,7 +464,7 @@ static void cleanup_state(state_t* status)
 
 static void cleanup_opts(parsed_opts_t* opts)
 {
-	free(opts->merged_output_name);
+	free(opts->merged_input_name);
 	free(opts->unaccounted_header_name);
 	free(opts->unaccounted_name);
 	free(opts->output_format_string);

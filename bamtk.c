@@ -65,7 +65,7 @@ static void usage(FILE *fp)
 "         merge       merge sorted alignments\n"
 "         mpileup     multi-way pileup\n"
 "         sort        sort alignment file\n"
-"         split       splits a file by readgroup\n"
+"         split       splits a file by read group\n"
 "  -- stats\n"
 "         bedcov      read depth per BED region\n"
 "         depth       compute the depth\n"
