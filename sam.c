@@ -42,7 +42,6 @@ void samclose(samfile_t *fp)
 	}
 }
 
-#if 0
 int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)
 {
 	bam_plbuf_t *buf;
@@ -50,15 +49,18 @@ int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)
 	bam1_t *b;
 	b = bam_init1();
 	buf = bam_plbuf_init(func, func_data);
-	bam_plbuf_set_mask(buf, mask);
-	while ((ret = samread(fp, b)) >= 0)
+	if (mask < 0) mask = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
+	else mask |= BAM_FUNMAP;
+	while ((ret = samread(fp, b)) >= 0) {
+		// bam_plp_push() itself now filters out unmapped reads only
+		if (b->core.flag & mask) b->core.flag |= BAM_FUNMAP;
 		bam_plbuf_push(b, buf);
+	}
 	bam_plbuf_push(0, buf);
 	bam_plbuf_destroy(buf);
 	bam_destroy1(b);
 	return 0;
 }
-#endif
 
 char *samfaipath(const char *fn_ref)
 {

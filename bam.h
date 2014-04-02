@@ -59,6 +59,8 @@ typedef BGZF *bamFile;
 #define bam_open(fn, mode) bgzf_open(fn, mode)
 #define bam_dopen(fd, mode) bgzf_fdopen(fd, mode)
 #define bam_close(fp) bgzf_close(fp)
+#define bam_tell(fp) bgzf_tell(fp)
+#define bam_seek(fp, pos, dir) bgzf_seek(fp, pos, dir)
 
 /*! @typedef
   @abstract Structure for the alignment header.
@@ -323,6 +325,9 @@ extern "C" {
 	 */
 	char *bam_format1(const bam_header_t *header, const bam1_t *b);
 
+	/*! @abstract     Formats a BAM record and writes it and \n to stdout */
+	void bam_view1(const bam_header_t *header, const bam1_t *b);
+
 	/*!
 	  @abstract       Check whether a BAM record is plausibly valid
 	  @param  header  associated header structure, or NULL if unavailable
@@ -370,7 +375,6 @@ extern "C" {
 	// int bam_plp_push(bam_plp_t iter, const bam1_t *b);
 	// const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
 	// const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
-	// void bam_plp_set_mask(bam_plp_t iter, int mask);
 	// void bam_plp_set_maxcnt(bam_plp_t iter, int maxcnt);
 	// void bam_plp_reset(bam_plp_t iter);
 	// void bam_plp_destroy(bam_plp_t iter);
@@ -399,7 +403,6 @@ extern "C" {
 		void *data;
 	} bam_plbuf_t;
 
-	void bam_plbuf_set_mask(bam_plbuf_t *buf, int mask);
 	void bam_plbuf_reset(bam_plbuf_t *buf);
 	bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data);
 	void bam_plbuf_destroy(bam_plbuf_t *buf);
