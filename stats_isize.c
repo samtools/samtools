@@ -108,7 +108,7 @@ static void sparse_isize_free(isize_data_t data) {
 
 static int sparse_nitems(isize_data_t data) {
     isize_sparse_data_t *a = data.sparse;
-    return a->max;
+    return a->max + 1;
 }
 
 static uint64_t dense_in_f(isize_data_t data, int at) { return data.dense->isize_inward[at]; }

@@ -11,7 +11,7 @@ SN	reads unmapped:	0
 SN	reads properly paired:	2	# proper-pair bit set
 SN	reads paired:	2	# paired-end technology bit set
 SN	reads duplicated:	0	# PCR or optical duplicate bit set
-SN	reads MQ0:	0	$ mapped and MQ=0
+SN	reads MQ0:	0	# mapped and MQ=0
 SN	reads QC failed:	0
 SN	non-primary alignments:	0
 SN	total length:	70	# ignores clipping

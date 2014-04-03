@@ -11,7 +11,7 @@ SN	reads unmapped:	0
 SN	reads properly paired:	2	# proper-pair bit set
 SN	reads paired:	2	# paired-end technology bit set
 SN	reads duplicated:	0	# PCR or optical duplicate bit set
-SN	reads MQ0:	0	$ mapped and MQ=0
+SN	reads MQ0:	0	# mapped and MQ=0
 SN	reads QC failed:	0
 SN	non-primary alignments:	0
 SN	total length:	70	# ignores clipping
@@ -188,6 +188,107 @@ GCC	33	0.00	0.00	50.00	50.00
 GCC	34	100.00	0.00	0.00	0.00
 GCC	35	0.00	0.00	50.00	50.00
 # Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: pairs total, inward oriented pairs, outward oriented pairs, other pairs
+IS	0	0	0	0	0
+IS	1	0	0	0	0
+IS	2	0	0	0	0
+IS	3	0	0	0	0
+IS	4	0	0	0	0
+IS	5	0	0	0	0
+IS	6	0	0	0	0
+IS	7	0	0	0	0
+IS	8	0	0	0	0
+IS	9	0	0	0	0
+IS	10	0	0	0	0
+IS	11	0	0	0	0
+IS	12	0	0	0	0
+IS	13	0	0	0	0
+IS	14	0	0	0	0
+IS	15	0	0	0	0
+IS	16	0	0	0	0
+IS	17	0	0	0	0
+IS	18	0	0	0	0
+IS	19	0	0	0	0
+IS	20	0	0	0	0
+IS	21	0	0	0	0
+IS	22	0	0	0	0
+IS	23	0	0	0	0
+IS	24	0	0	0	0
+IS	25	0	0	0	0
+IS	26	0	0	0	0
+IS	27	0	0	0	0
+IS	28	0	0	0	0
+IS	29	0	0	0	0
+IS	30	0	0	0	0
+IS	31	0	0	0	0
+IS	32	0	0	0	0
+IS	33	0	0	0	0
+IS	34	0	0	0	0
+IS	35	0	0	0	0
+IS	36	0	0	0	0
+IS	37	0	0	0	0
+IS	38	0	0	0	0
+IS	39	0	0	0	0
+IS	40	0	0	0	0
+IS	41	0	0	0	0
+IS	42	0	0	0	0
+IS	43	0	0	0	0
+IS	44	0	0	0	0
+IS	45	0	0	0	0
+IS	46	0	0	0	0
+IS	47	0	0	0	0
+IS	48	0	0	0	0
+IS	49	0	0	0	0
+IS	50	0	0	0	0
+IS	51	0	0	0	0
+IS	52	0	0	0	0
+IS	53	0	0	0	0
+IS	54	0	0	0	0
+IS	55	0	0	0	0
+IS	56	0	0	0	0
+IS	57	0	0	0	0
+IS	58	0	0	0	0
+IS	59	0	0	0	0
+IS	60	0	0	0	0
+IS	61	0	0	0	0
+IS	62	0	0	0	0
+IS	63	0	0	0	0
+IS	64	0	0	0	0
+IS	65	0	0	0	0
+IS	66	0	0	0	0
+IS	67	0	0	0	0
+IS	68	0	0	0	0
+IS	69	0	0	0	0
+IS	70	0	0	0	0
+IS	71	0	0	0	0
+IS	72	0	0	0	0
+IS	73	0	0	0	0
+IS	74	0	0	0	0
+IS	75	0	0	0	0
+IS	76	0	0	0	0
+IS	77	0	0	0	0
+IS	78	0	0	0	0
+IS	79	0	0	0	0
+IS	80	0	0	0	0
+IS	81	0	0	0	0
+IS	82	0	0	0	0
+IS	83	0	0	0	0
+IS	84	0	0	0	0
+IS	85	0	0	0	0
+IS	86	0	0	0	0
+IS	87	0	0	0	0
+IS	88	0	0	0	0
+IS	89	0	0	0	0
+IS	90	0	0	0	0
+IS	91	0	0	0	0
+IS	92	0	0	0	0
+IS	93	0	0	0	0
+IS	94	0	0	0	0
+IS	95	0	0	0	0
+IS	96	0	0	0	0
+IS	97	0	0	0	0
+IS	98	0	0	0	0
+IS	99	0	0	0	0
+IS	100	1	1	0	0
 # Read lengths. Use `grep ^RL | cut -f 2-` to extract this part. The columns are: read length, count
 RL	35	2
 # Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions
