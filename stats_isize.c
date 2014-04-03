@@ -79,7 +79,6 @@ static void sparse_set_f(isize_data_t data, int at, isize_insert_t field, uint64
     } else {
         return;
     }
-
     if (field == IN) {
         rec->isize_inward = value;
     } else if (field == OUT) {
@@ -100,6 +99,9 @@ static void sparse_inc_other_f(isize_data_t data, int at) { sparse_set_other_f(d
 
 static void sparse_isize_free(isize_data_t data) {
     isize_sparse_data_t *a = data.sparse;
+    khint_t k;
+    for (k = 0; k < kh_end(a->array); ++k)
+        if (kh_exist(a->array, k)) free(kh_val(a->array, k));
     kh_destroy(m32, a->array);
     free(a);
 }
