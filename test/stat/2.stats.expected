@@ -20,7 +20,7 @@ SN	bases mapped (cigar):	0	# more accurate
 SN	bases trimmed:	0
 SN	bases duplicated:	0
 SN	mismatches:	0	# from NM fields
-SN	error rate:	-nan	# mismatches / bases mapped (cigar)
+SN	error rate:	0.000000e+00	# mismatches / bases mapped (cigar)
 SN	average length:	35
 SN	maximum length:	35
 SN	average quality:	255.0

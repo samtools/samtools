@@ -941,7 +941,7 @@ void output_stats(stats_t *stats, int sparse)
     printf("SN\tbases trimmed:\t%ld\n", (long)stats->nbases_trimmed);
     printf("SN\tbases duplicated:\t%ld\n", (long)stats->total_len_dup);
     printf("SN\tmismatches:\t%ld\t# from NM fields\n", (long)stats->nmismatches);
-    printf("SN\terror rate:\t%e\t# mismatches / bases mapped (cigar)\n", (float)stats->nmismatches/stats->nbases_mapped_cigar);
+    printf("SN\terror rate:\t%e\t# mismatches / bases mapped (cigar)\n", stats->nbases_mapped_cigar ? (float)stats->nmismatches/stats->nbases_mapped_cigar : 0);
     float avg_read_length = (stats->nreads_1st+stats->nreads_2nd)?stats->total_len/(stats->nreads_1st+stats->nreads_2nd):0;
     printf("SN\taverage length:\t%.0f\n", avg_read_length);
     printf("SN\tmaximum length:\t%d\n", stats->max_len);
