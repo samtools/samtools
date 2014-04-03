@@ -60,21 +60,27 @@ static int get_position(const bam_pileup1_t *p, int *len)
     {
         int cig  = bam_get_cigar(p->b)[icig] & BAM_CIGAR_MASK;
         int ncig = bam_get_cigar(p->b)[icig] >> BAM_CIGAR_SHIFT;
-        if ( cig==BAM_CMATCH )
+        if ( cig==BAM_CMATCH || cig==BAM_CEQUAL || cig==BAM_CDIFF )
         {
             n_tot_bases += ncig;
             iread += ncig;
+            continue;
         }
-        else if ( cig==BAM_CINS )
+        if ( cig==BAM_CINS )
         {
             n_tot_bases += ncig;
             iread += ncig;
+            continue;
         }
-        else if ( cig==BAM_CSOFT_CLIP )
+        if ( cig==BAM_CSOFT_CLIP )
         {
             iread += ncig;
             if ( iread<=p->qpos ) edist -= ncig;
+            continue;
         }
+        if ( cig==BAM_CDEL ) continue;
+        fprintf(stderr,"todo: cigar %d\n", cig);
+        assert(0);
     }
     *len = n_tot_bases;
     return edist;
