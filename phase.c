@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <math.h>
 #include <zlib.h>
-#include "bam.h"
+#include "htslib/sam.h"
 #include "errmod.h"
 
 #include "htslib/kseq.h"
@@ -24,9 +24,11 @@ typedef struct {
 	int flag, k, min_baseQ, min_varLOD, max_depth;
 	// other global variables
 	int vpos_shift;
-	bamFile fp;
+	samFile* fp;
+	bam_hdr_t* fp_hdr;
 	char *pre;
-	bamFile out[3];
+	samFile* out[3];
+	bam_hdr_t* out_hdr[3];
 	// alignment queue
 	int n, m;
 	bam1_t **b;
@@ -317,8 +319,8 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 		uint64_t key;
 		khint_t k;
 		bam1_t *b = g->b[i];
-		key = X31_hash_string(bam1_qname(b));
-		end = bam_calend(&b->core, bam1_cigar(b));
+		key = X31_hash_string(bam_get_qname(b));
+		end = bam_endpos(b);
 		if (end > min_pos) break;
 		k = kh_get(64, hash, key);
 		if (k == kh_end(hash)) which = 3;
@@ -335,7 +337,7 @@ static void dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
 			if (which < 2 && is_flip) which = 1 - which; // increase the randomness
 		}
 		if (which == 3) which = (drand48() < 0.5);
-		bam_write1(g->out[which], b);
+		sam_write1(g->out[which], g->out_hdr[which], b);
 		bam_destroy1(b);
 		g->b[i] = 0;
 	}
@@ -452,7 +454,7 @@ static int readaln(void *data, bam1_t *b)
 	int ret;
     while (1)
     {
-        ret = bam_read1(g->fp, b);
+        ret = sam_read1(g->fp, g->fp_hdr, b);
         if (ret < 0) break;
         if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
         if ( g->pre ) {
@@ -467,7 +469,7 @@ static int readaln(void *data, bam1_t *b)
 	return ret;
 }
 
-static khash_t(set64) *loadpos(const char *fn, bam_header_t *h)
+static khash_t(set64) *loadpos(const char *fn, bam_hdr_t *h)
 {
 	gzFile fp;
 	kstream_t *ks;
@@ -480,7 +482,7 @@ static khash_t(set64) *loadpos(const char *fn, bam_header_t *h)
 	fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
 	ks = ks_init(fp);
 	while (ks_getuntil(ks, 0, str, &dret) >= 0) {
-		int tid = bam_get_tid(h, str->s);
+		int tid = bam_name2id(h, str->s);
 		if (tid >= 0 && dret != '\n') {
 			if (ks_getuntil(ks, 0, str, &dret) >= 0) {
 				uint64_t x = (uint64_t)tid<<32 | (atoi(str->s) - 1);
@@ -515,7 +517,6 @@ int main_phase(int argc, char *argv[])
 	int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
 	const bam_pileup1_t *plp;
 	bam_plp_t iter;
-	bam_header_t *h;
 	nseq_t *seqs;
 	uint64_t *cns = 0;
 	phaseg_t g;
@@ -555,18 +556,21 @@ int main_phase(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		return 1;
 	}
-	g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
-	h = bam_header_read(g.fp);
+	g.fp = sam_open(argv[optind], "r");
+	g.fp_hdr = sam_hdr_read(g.fp);
 	if (fn_list) { // read the list of sites to phase
-		set = loadpos(fn_list, h);
+		set = loadpos(fn_list, g.fp_hdr);
 		free(fn_list);
 	} else g.flag &= ~FLAG_LIST_EXCL;
 	if (g.pre) { // open BAMs to write
-		char *s = malloc(strlen(g.pre) + 20);
-		strcpy(s, g.pre); strcat(s, ".0.bam"); g.out[0] = bam_open(s, "w");
-		strcpy(s, g.pre); strcat(s, ".1.bam"); g.out[1] = bam_open(s, "w");
-		strcpy(s, g.pre); strcat(s, ".chimera.bam"); g.out[2] = bam_open(s, "w");
-		for (c = 0; c <= 2; ++c) bam_header_write(g.out[c], h);
+		char *s = (char*)malloc(strlen(g.pre) + 20);
+		strcpy(s, g.pre); strcat(s, ".0.bam"); g.out[0] = sam_open(s, "wb");
+		strcpy(s, g.pre); strcat(s, ".1.bam"); g.out[1] = sam_open(s, "wb");
+		strcpy(s, g.pre); strcat(s, ".chimera.bam"); g.out[2] = sam_open(s, "wb");
+		for (c = 0; c <= 2; ++c) {
+			g.out_hdr[c] = bam_hdr_dup(g.fp_hdr);
+			sam_hdr_write(g.out[c], g.out_hdr[c]);
+		}
 		free(s);
 	}
 
@@ -597,7 +601,7 @@ int main_phase(int argc, char *argv[])
 			g.vpos_shift = 0;
 			if (lasttid >= 0) {
 				seqs = shrink_hash(seqs);
-				phase(&g, h->target_name[lasttid], vpos, cns, seqs);
+				phase(&g, g.fp_hdr->target_name[lasttid], vpos, cns, seqs);
 				update_vpos(0x7fffffff, seqs);
 			}
 			lasttid = tid;
@@ -611,15 +615,15 @@ int main_phase(int argc, char *argv[])
 			uint8_t *seq;
 			int q, baseQ, b;
 			if (p->is_del || p->is_refskip) continue;
-			baseQ = bam1_qual(p->b)[p->qpos];
+			baseQ = bam_get_qual(p->b)[p->qpos];
 			if (baseQ < g.min_baseQ) continue;
-			seq = bam1_seq(p->b);
-			b = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos)];
+			seq = bam_get_seq(p->b);
+			b = bam_nt16_nt4_table[bam_seqi(seq, p->qpos)];
 			if (b > 3) continue;
 			q = baseQ < p->b->core.qual? baseQ : p->b->core.qual;
 			if (q < 4) q = 4;
 			if (q > 63) q = 63;
-			bases[k++] = q<<5 | (int)bam1_strand(p->b)<<4 | b;
+			bases[k++] = q<<5 | (int)bam_is_rev(p->b)<<4 | b;
 		}
 		if (k == 0) continue;
 		errmod_cal(em, k, 4, bases, q); // compute genotype likelihood
@@ -637,53 +641,56 @@ int main_phase(int argc, char *argv[])
 			const bam_pileup1_t *p = plp + i;
 			uint64_t key;
 			khint_t k;
-			uint8_t *seq = bam1_seq(p->b);
+			uint8_t *seq = bam_get_seq(p->b);
 			frag_t *f;
 			if (p->is_del || p->is_refskip) continue;
 			if (p->b->core.qual == 0) continue;
 			// get the base code
-			c = bam_nt16_nt4_table[(int)bam1_seqi(seq, p->qpos)];
+			c = bam_nt16_nt4_table[(int)bam_seqi(seq, p->qpos)];
 			if (c == (cns[vpos]&3)) c = 1;
 			else if (c == (cns[vpos]>>16&3)) c = 2;
 			else c = 0;
 			// write to seqs
-			key = X31_hash_string(bam1_qname(p->b));
+			key = X31_hash_string(bam_get_qname(p->b));
 			k = kh_put(64, seqs, key, &tmp);
 			f = &kh_val(seqs, k);
 			if (tmp == 0) { // present in the hash table
 				if (vpos - f->vpos + 1 < MAX_VARS) {
 					f->vlen = vpos - f->vpos + 1;
 					f->seq[f->vlen-1] = c;
-					f->end = bam_calend(&p->b->core, bam1_cigar(p->b));
+					f->end = bam_endpos(p->b);
 				}
 				dophase = 0;
 			} else { // absent
 				memset(f->seq, 0, MAX_VARS);
 				f->beg = p->b->core.pos;
-				f->end = bam_calend(&p->b->core, bam1_cigar(p->b));
+				f->end = bam_endpos(p->b);
 				f->vpos = vpos, f->vlen = 1, f->seq[0] = c, f->single = f->phased = f->flip = f->ambig = 0;
 			}
 		}
 		if (dophase) {
 			seqs = shrink_hash(seqs);
-			phase(&g, h->target_name[tid], vpos, cns, seqs);
+			phase(&g, g.fp_hdr->target_name[tid], vpos, cns, seqs);
 			update_vpos(vpos, seqs);
 			cns[0] = cns[vpos];
 			vpos = 0;
 		}
 		++vpos;
 	}
-	if (tid >= 0) phase(&g, h->target_name[tid], vpos, cns, seqs);
-	bam_header_destroy(h);
+	if (tid >= 0) phase(&g, g.fp_hdr->target_name[tid], vpos, cns, seqs);
+	bam_hdr_destroy(g.fp_hdr);
 	bam_plp_destroy(iter);
-	bam_close(g.fp);
+	sam_close(g.fp);
 	kh_destroy(64, seqs);
 	kh_destroy(set64, set);
 	free(cns);
 	errmod_destroy(em);
 	free(bases);
 	if (g.pre) {
-		for (c = 0; c <= 2; ++c) bam_close(g.out[c]);
+		for (c = 0; c <= 2; ++c) {
+			sam_close(g.out[c]);
+			bam_hdr_destroy(g.out_hdr[c]);
+		}
 		free(g.pre); free(g.b);
 	}
 	return 0;
