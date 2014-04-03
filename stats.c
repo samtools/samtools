@@ -12,6 +12,7 @@
         - With the -t option, the whole reads are used. Except for the number of mapped bases (cigar)
             counts, no splicing is done, no indels or soft clips are considered, even small overlap is
             good enough to include the read in the stats.
+        - GC content of reads not calculated for "=" sequences
 
 */
 
@@ -278,13 +279,10 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
     int read_len = bam_line->core.l_qseq;
     for (icig=0; icig<bam_line->core.n_cigar; icig++) 
     {
-        // Conversion from uint32_t to MIDNSHP
-        //  0123456
-        //  MIDNSHP
         int cig  = bam_cigar_op(bam_get_cigar(bam_line)[icig]);
         int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[icig]);
 
-        if ( cig==1 )
+        if ( cig==BAM_CINS )
         {
             int idx = is_fwd ? icycle : read_len-icycle-ncig;
             if ( idx<0 ) 
@@ -299,7 +297,7 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
                 stats->insertions[ncig-1]++;
             continue;
         }
-        if ( cig==2 )
+        if ( cig==BAM_CDEL )
         {
             int idx = is_fwd ? icycle-1 : read_len-icycle-1;
             if ( idx<0 ) continue;  // discard meaningless deletions
@@ -312,7 +310,7 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
                 stats->deletions[ncig-1]++;
             continue;
         }
-        if ( cig!=3 && cig!=5 )
+        if ( cig!=BAM_CREF_SKIP && cig!=BAM_CHARD_CLIP )
             icycle += ncig;
     }
 }
@@ -341,9 +339,6 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
     uint64_t *mpc_buf = stats->mpc_buf;
     for (icig=0; icig<bam_line->core.n_cigar; icig++) 
     {
-        // Conversion from uint32_t to MIDNSHP
-        //  0123456
-        //  MIDNSHP
         int cig  = bam_cigar_op(bam_get_cigar(bam_line)[icig]);
         int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[icig]);
         if ( cig==BAM_CINS )
@@ -373,7 +368,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
         // Ignore H and N CIGARs. The letter are inserted e.g. by TopHat and often require very large
         //  chunk of refseq in memory. Not very frequent and not noticable in the stats.
         if ( cig==BAM_CREF_SKIP || cig==BAM_CHARD_CLIP ) continue;
-        if ( cig!=BAM_CMATCH )
+        if ( cig!=BAM_CMATCH && cig!=BAM_CEQUAL && cig!=BAM_CDIFF ) // not relying on precalculated diffs
             error("TODO: cigar %d, %s:%d %s\n", cig,stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
        
         if ( ncig+iref > stats->nrseq_buf )
@@ -424,6 +419,7 @@ void read_ref_seq(stats_t *stats, int32_t tid, int32_t pos)
 {
     int i, fai_ref_len;
     char *fai_ref = faidx_fetch_seq(stats->fai, stats->sam_header->target_name[tid], pos, pos+stats->mrseq_buf-1, &fai_ref_len);
+    if ( fai_ref_len<0 ) error("Failed to fetch the sequence \"%s\"\n", stats->sam_header->target_name[tid]);
     
     uint8_t *ptr = stats->rseq_buf;
     for (i=0; i<fai_ref_len; i++)
@@ -632,10 +628,11 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     for (i=0; i<seq_len; i++)
     {
         // Conversion from uint8_t coding to ACGT
-        //      -12-4---8-------
+        //      -12-4---8------5
         //      =ACMGRSVTWYHKDBN
         //       01 2   3
         base = bam_seqi(seq,i);
+        if ( base==0 ) break;   // not ready for "=" sequences
         base /= 2;
         if ( base==1 || base==2 ) gc_count++;
         else if ( base>2 ) base=3;
@@ -743,9 +740,6 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             stats->nmismatches += bam_aux2i(nm);
 
         // Number of mapped bases from cigar 
-        // Conversion from uint32_t to MIDNSHP
-        //  012-4--
-        //  MIDNSHP
         if ( bam_line->core.n_cigar == 0) 
             error("FIXME: mapped read with no cigar?\n");
         int readlen=seq_len;
@@ -757,8 +751,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             {
                 int cig  = bam_cigar_op(bam_get_cigar(bam_line)[i]);
                 int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
-                if ( cig==2 ) readlen += ncig;
-                else if ( cig==0 ) 
+                if ( cig==BAM_CDEL ) readlen += ncig;
+                else if ( cig==BAM_CMATCH ) 
                 {
                     if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
                     else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
@@ -766,7 +760,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                     stats->nbases_mapped_cigar += ncig;
                     iref += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
                 }
-                else if ( cig==1 )
+                else if ( cig==BAM_CINS )
                 {
                     iref += ncig;
                     if ( iref>=stats->reg_from && iref<=stats->reg_to )
@@ -779,9 +773,9 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             // Count the whole read
             for (i=0; i<bam_line->core.n_cigar; i++) 
             {
-                if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==0 || bam_cigar_op(bam_get_cigar(bam_line)[i])==1 )
+                if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CMATCH || bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CINS )
                     stats->nbases_mapped_cigar += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
-                if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==2 )
+                if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CDEL )
                     readlen += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
             }
         }
@@ -938,7 +932,7 @@ void output_stats(stats_t *stats, int sparse)
     printf("SN\treads properly paired:\t%ld\t# proper-pair bit set\n", (long)stats->nreads_properly_paired);
     printf("SN\treads paired:\t%ld\t# paired-end technology bit set\n", (long)stats->nreads_paired_tech);
     printf("SN\treads duplicated:\t%ld\t# PCR or optical duplicate bit set\n", (long)stats->nreads_dup);
-    printf("SN\treads MQ0:\t%ld\t$ mapped and MQ=0\n", (long)stats->nreads_mq0);
+    printf("SN\treads MQ0:\t%ld\t# mapped and MQ=0\n", (long)stats->nreads_mq0);
     printf("SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
     printf("SN\tnon-primary alignments:\t%ld\n", (long)stats->nreads_secondary);
     printf("SN\ttotal length:\t%ld\t# ignores clipping\n", (long)stats->total_len);
@@ -1508,6 +1502,7 @@ int main_stats(int argc, char *argv[])
 
     output_stats(stats, sparse);
     bam_destroy1(bam_line);
+    bam_hdr_destroy(stats->sam_header);
 	
     cleanup_stats(stats);
 
