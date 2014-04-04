@@ -141,7 +141,7 @@ errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
 kaln.o: kaln.c kaln.h
 kprobaln.o: kprobaln.c kprobaln.h
 padding.o: padding.c sam_header.h $(sam_h) $(bam_h) $(htslib_faidx_h)
-phase.o: phase.c $(bam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
+phase.o: phase.c $(htslib_sam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h
 sam_view.o: sam_view.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash.h samtools.h
