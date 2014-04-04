@@ -575,9 +575,6 @@ static inline int bam_reg2bin(uint32_t beg, uint32_t end)
   @param  src   source alignment struct
   @return       pointer to the destination alignment struct
  */
-static inline bam1_t *bam_dup1(const bam1_t *src)
-{
-	return bam_copy1(bam_init1(), src);
-}
+// bam1_t *bam_dup1(const bam1_t *src)
 
 #endif
