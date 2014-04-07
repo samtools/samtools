@@ -447,9 +447,14 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 					}
 					if (conf->flag & MPLP_PRINT_POS) {
 						putchar('\t');
+						int is_first = 1;
 						for (j = 0; j < n_plp[i]; ++j) {
-							if (j > 0) putchar(',');
+							const bam_pileup1_t *p = plp[i] + j;
+							int c = bam_get_qual(p->b)[p->qpos];
+							if ( c < conf->min_baseQ ) continue;
+							if (is_first == 0) putchar(',');
 							printf("%d", plp[i][j].qpos + 1); // FIXME: printf() is very slow...
+							is_first = 0;
 						}
 					}
 				}
