@@ -115,6 +115,7 @@ static void trans_tbl_destroy(trans_tbl_t *tbl) {
 	kh_destroy(c2c,tbl->pg_trans);
 }
 
+// Takes in existing header and rewrites it in the usual order HD, SQ, RG, PG CO, other
 static void pretty_header(char** text_in_out, int32_t text_len)
 {
 	char* output, *output_pointer;
@@ -199,6 +200,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
 		fprintf(stderr, "[pretty_header] invalid header\n");
 		exit(1);
 	}
+	free(*text_in_out);
 	*text_in_out = output;
 }
 
@@ -443,8 +445,10 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		free(data);
 		rg_iter = kl_next(rg_iter);
 	}
-
+	
+	regfree(&rg_pg);
 	kl_destroy(hdrln,pg_list);
+	kl_destroy(hdrln,rg_list);
 	free(matches);
 
 	// Add trailing \n and write back to header
@@ -609,6 +613,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		hin = sam_hdr_read(fp[i]);
 		if (hout == NULL) hout = hin;
 		trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
+		if (hin != hout) bam_hdr_destroy(hin);
 		if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
 			fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
 		}
@@ -705,14 +710,14 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		for (i = 0; i != n; ++i) free(RG[i]);
 		free(RG); free(RG_len);
 	}
-	for (i = 0; i != n; ++i) {
+	for (i = 0; i < n; ++i) {
 		trans_tbl_destroy(translation_tbl + i);
 		hts_itr_destroy(iter[i]);
 		sam_close(fp[i]);
 	}
 	bam_hdr_destroy(hout);
 	sam_close(fpout);
-	free(fp); free(heap); free(iter);
+	free(translation_tbl); free(fp); free(heap); free(iter);
 	return 0;
 }
 
