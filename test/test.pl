@@ -19,6 +19,7 @@ test_cat($opts);
 test_bam2fq($opts);
 test_depad($opts);
 test_stats($opts);
+test_merge($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -491,8 +492,8 @@ sub test_usage_subcommand
     my $commandpath = $$opts{bin}."/".$command;
     my ($ret,$out,$err) = _cmd("$commandpath $subcommand");
 
-    #stats produces usage on stdout as it should
-    $err = $out if ( $subcommand eq 'stats' || $subcommand eq 'split' );
+    # these commands produces usage on stdout as it should
+    $err = $out if ( $subcommand eq 'stats' || $subcommand eq 'split' || $subcommand eq 'merge' );
 
     if ( $err =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath $subcommand: $out"); return; }
 
@@ -2083,4 +2084,25 @@ sub test_stats
     test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+3");
     test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n+3");
     test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n+3");
+}
+
+sub test_merge
+{
+    my ($opts,%args) = @_;
+	
+    # Note the use of -s 1 to fix the random seed in place
+	
+    # Merge 1 - Sadly iterator API doesn't work with SAM files, expected fail
+    test_cmd($opts,out=>'merge/1.merge.expected',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/merge/test_input_1_a.sam $$opts{path}/merge/test_input_1_b.sam $$opts{path}/merge/test_input_1_c.sam", expect_fail=>1);
+    # Merge 2 - Standard 3 file BAM merge all files presented on the command line
+    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/merge/test_input_1_a.bam $$opts{path}/merge/test_input_1_b.bam $$opts{path}/merge/test_input_1_c.bam");
+    # Merge 3 - Standard 3 file BAM merge 2 files in fofn 1 on command line
+	open(my $fofn, "$$opts{path}/merge/test_3.fofn");
+	my ($tmpfile_fh, $tmpfile_filename) = tempfile(UNLINK => 1);
+
+	while (<$fofn>) {
+		print $tmpfile_fh "$$opts{path}/$_";
+	}
+	close($tmpfile_fh);
+    test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge -s 1 -b $tmpfile_filename - $$opts{path}/merge/test_input_1_a.bam");
 }
