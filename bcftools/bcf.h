@@ -175,7 +175,7 @@ extern "C" {
 	void bcf_str2id_thorough_destroy(void *_hash);
 	int bcf_str2id_add(void *_hash, const char *str);
 	int bcf_str2id(void *_hash, const char *str);
-	void *bcf_str2id_init();
+	void *bcf_str2id_init(void);
 
 	// indexing related functions
 	int bcf_idx_build(const char *fn);

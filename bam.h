@@ -384,7 +384,7 @@ extern "C" {
 	int bam_strmap_put(void *strmap, const char *rg, const char *lib);
 	const char *bam_strmap_get(const void *strmap, const char *rg);
 	void *bam_strmap_dup(const void*);
-	void *bam_strmap_init();
+	void *bam_strmap_init(void);
 	void bam_strmap_destroy(void *strmap);
 
 
@@ -399,7 +399,7 @@ extern "C" {
 	  @discussion This function also modifies the global variable
 	  bam_is_be.
 	 */
-	bam_header_t *bam_header_init();
+	bam_header_t *bam_header_init(void);
 
 	/*!
 	  @abstract        Destroy a header structure.
