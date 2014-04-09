@@ -63,7 +63,7 @@ const uint8_t nst_nt4_table[256] = {
 
 /* Simple normal random number generator, copied from genran.c */
 
-double ran_normal()
+double ran_normal(void)
 { 
 	static int iset = 0; 
 	static double gset; 
@@ -358,7 +358,7 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
 	free(tmp_seq[0]); free(tmp_seq[1]);
 }
 
-static int simu_usage()
+static int simu_usage(void)
 {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Program: wgsim (short read simulator)\n");

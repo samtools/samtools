@@ -21,7 +21,7 @@ typedef struct {
 	freenode_t **buf;
 } mempool_t;
 
-static mempool_t *mp_init()
+static mempool_t *mp_init(void)
 {
 	return (mempool_t*)calloc(1, sizeof(mempool_t));
 }

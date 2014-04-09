@@ -1,7 +1,7 @@
 /*
  * The MIT License
  *
- * Copyright (c) 2009-2013 Genome Research Ltd.
+ * Copyright (c) 2009-2014 Genome Research Ltd.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -271,7 +271,7 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
 	free(str.s);
 }
 
-void usage()
+void usage(void)
 {
 	fprintf(stderr,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
 	fprintf(stderr,"Options:\n");

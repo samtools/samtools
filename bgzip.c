@@ -34,7 +34,7 @@
 
 static const int WINDOW_SIZE = 64 * 1024;
 
-static int bgzip_main_usage()
+static int bgzip_main_usage(void)
 {
 	fprintf(stderr, "\n");
 	fprintf(stderr, "Usage:   bgzip [options] [file] ...\n\n");

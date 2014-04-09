@@ -45,7 +45,7 @@ typedef struct
 	maqmap1_t *mapped_reads;
 } maqmap_t;
 
-maqmap_t *maq_new_maqmap()
+maqmap_t *maq_new_maqmap(void)
 {
 	maqmap_t *mm = (maqmap_t*)calloc(1, sizeof(maqmap_t));
 	mm->format = MAQMAP_FORMAT_NEW;

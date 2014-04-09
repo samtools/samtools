@@ -255,7 +255,7 @@ extern "C" {
 	  @abstract Initialize a header structure.
 	  @return   the pointer to the header structure
 	 */
-	static inline bam_header_t *bam_header_init() { return bam_hdr_init(); }
+	static inline bam_header_t *bam_header_init(void) { return bam_hdr_init(); }
 
 	/*!
 	  @abstract        Destroy a header structure.
