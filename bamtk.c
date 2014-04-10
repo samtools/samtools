@@ -33,6 +33,7 @@ int main_bedcov(int argc, char *argv[]);
 int main_bamshuf(int argc, char *argv[]);
 int main_stats(int argc, char *argv[]);
 int main_flags(int argc, char *argv[]);
+int main_split(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 
@@ -88,6 +89,7 @@ static void usage(FILE *fp)
 "         merge       merge sorted alignments\n"
 "         mpileup     multi-way pileup\n"
 "         sort        sort alignment file\n"
+"         split       splits a file by read group\n"
 "  -- stats\n"
 "         bedcov      read depth per BED region\n"
 "         depth       compute the depth\n"
@@ -154,6 +156,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "bamshuf") == 0)   ret = main_bamshuf(argc-1, argv+1);
 	else if (strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
 	else if (strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
+	else if (strcmp(argv[1], "split") == 0)     ret = main_split(argc-1, argv+1);
 	else if (strcmp(argv[1], "pileup") == 0) {
 		fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
 		return 1;
