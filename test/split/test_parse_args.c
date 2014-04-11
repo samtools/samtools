@@ -212,7 +212,6 @@ int main(int argc, char**argv)
 	remove(tempfname_stdout);
 	remove(tempfname_stderr);
 	fclose(orig_stdout);
-	fclose(orig_stderr);
 	
 	if (NUM_TESTS == success) {
 		return 0;
