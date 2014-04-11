@@ -144,6 +144,7 @@ int main(int argc, char**argv)
 	fclose(check_stdout);
 	
 	// teardown
+	if (result_1 != NULL) cleanup_opts(result_1);
 	free(result_1);
 	int i = 0;
 	for (i = 0; i < argc_1; ++i) {
@@ -194,6 +195,7 @@ int main(int argc, char**argv)
 	fclose(check_stderr);
 	
 	// teardown
+	if (result_2 != NULL) cleanup_opts(result_2);
 	free(result_2);
 	int j = 0;
 	for (j = 0; j < argc_2; ++j) {
