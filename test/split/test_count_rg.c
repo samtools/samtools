@@ -108,6 +108,11 @@ int main(int argc, char**argv)
 	fclose(check);
 	
 	// teardown
+	int i;
+	for (i = 0; i < count; i++){
+		free(output[i]);
+	}
+	free(output);
 	bam_hdr_destroy(hdr1);
 	if (verbose) printf("END test 1\n");
 
