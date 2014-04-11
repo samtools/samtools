@@ -558,7 +558,6 @@ int main(int argc, char**argv)
 	// Cleanup
 	free(res);
 	remove(tempfname);
-	fclose(orig_stderr);
 
 	if (NUM_TESTS == success) {
 		return 0;
