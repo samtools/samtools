@@ -127,10 +127,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len_stdout = 0;
-	len_stderr = 0;
-	res_stdout = NULL;
-	res_stderr = NULL;
 	check_stdout = fopen(tempfname_stdout, "r");
 	check_stderr = fopen(tempfname_stderr, "r");
 	if ( !result_1
@@ -180,10 +176,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len_stdout = 0;
-	len_stderr = 0;
-	res_stdout = NULL;
-	res_stderr = NULL;
 	check_stdout = fopen(tempfname_stdout, "r");
 	check_stderr = fopen(tempfname_stderr, "r");
 	if ( result_2
@@ -197,6 +189,7 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) fprintf(orig_stdout, "FAIL test 2\n");
 	}
+	fclose(check_stdout);
 	fclose(check_stderr);
 	
 	// teardown
@@ -214,6 +207,8 @@ int main(int argc, char**argv)
 	free(res_stderr);
 	remove(tempfname_stdout);
 	remove(tempfname_stderr);
+	fclose(orig_stdout);
+	fclose(orig_stderr);
 	
 	if (NUM_TESTS == success) {
 		return 0;
