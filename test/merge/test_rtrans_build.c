@@ -81,6 +81,7 @@ int main(int argc, char**argv)
 	}
 	// teardown
 	trans_tbl_destroy(&tbl_1[0]);
+	trans_tbl_destroy(&tbl_1[1]);
 	free(rtrans_1);
 	if (verbose) printf("END test 1\n");
 	
