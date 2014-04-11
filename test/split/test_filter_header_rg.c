@@ -129,7 +129,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( result_1
 		&& check_test_1(hdr1)
@@ -168,7 +167,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( result_2
 		&& check_test_2(hdr2)
