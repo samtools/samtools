@@ -595,8 +595,8 @@ int bam_mpileup(int argc, char *argv[])
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
     static struct option lopts[] = 
     {
-        {"include",1,0,1},
-        {"exclude",1,0,2},
+        {"incl-flags",1,0,1},
+        {"excl-flags",1,0,2},
         {"illumina1.3+",0,0,6},
         {"count-orphans",1,0,'A'},
         {"bam-list",1,0,'b'},
@@ -616,7 +616,7 @@ int bam_mpileup(int argc, char *argv[])
         {"VCF",0,0,'v'},
         {"output-BP",0,0,'O'},
         {"output-MQ",0,0,'s'},
-        {"tags",1,0,'t'},
+        {"format-tags",1,0,'t'},
         {"uncompressed",0,0,'u'},
         {"ext-prob",1,0,'e'},
         {"gap-frac",1,0,'F'},
@@ -704,8 +704,8 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		fprintf(stderr, "Usage: samtools mpileup [options] in1.bam [in2.bam [...]]\n\n");
 		fprintf(stderr, "Input options:\n\n");
-		fprintf(stderr, "   -1, --inc-flags <STR|INT>  required flags: skip reads with mask bits unset [%s]\n", tmp_require);
-		fprintf(stderr, "   -2, --exc-flags <STR|INT>  filter flags: skip reads with mask bits set [%s]\n", tmp_filter);
+		fprintf(stderr, "   -1, --incl-flags <STR|INT> required flags: skip reads with mask bits unset [%s]\n", tmp_require);
+		fprintf(stderr, "   -2, --excl-flags <STR|INT> filter flags: skip reads with mask bits set [%s]\n", tmp_filter);
 		fprintf(stderr, "   -6, --illumina1.3+         quality is in the Illumina-1.3+ encoding\n");
 		fprintf(stderr, "   -A, --count-orphans        do not discard anomalous read pairs\n");
 		fprintf(stderr, "   -b, --bam-list <FILE>      list of input BAM filenames, one per line [null]\n");
