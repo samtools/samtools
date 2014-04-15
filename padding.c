@@ -37,6 +37,7 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 {
 	int k, j, i;
 	int length;
+	int cigar_n_warning = 0; /* Make this a global and limit to one CIGAR N warning? */
 	uint32_t *cigar = bam1_cigar(b);
 	uint8_t *seq = bam1_seq(b);
 	// b->core.l_qseq gives length of the SEQ entry (including soft clips, S)
@@ -47,7 +48,7 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 		int op, ol;
 		op= bam_cigar_op(cigar[k]);
 		ol = bam_cigar_oplen(cigar[k]);
-		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF || op == BAM_CDEL)
+		if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF || op == BAM_CDEL || op == BAM_CREF_SKIP)
 			length += ol;
 	}
 	ks_resize(s, length);
@@ -63,6 +64,13 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
 			/* do nothing */
 		} else if (op == BAM_CDEL) {
 			for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
+		} else if (op == BAM_CREF_SKIP) {
+			/* Treat CIGAR N as D (not ideal, but better than ignoring it) */
+			for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
+			if (0 == cigar_n_warning) {
+				cigar_n_warning = -1;
+				fprintf(stderr, "[depad] WARNING: CIGAR op N treated as op D in read %s\n", bam1_qname(b));
+			}
                 } else {
 			fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in read %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
                         assert(-1);
