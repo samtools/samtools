@@ -129,7 +129,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
 	}
 	// fill the bases array
-	for (i = n = r->n_supp = 0; i < _n; ++i) {
+	for (i = n = 0; i < _n; ++i) {
 		const bam_pileup1_t *p = pl + i;
 		int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
 		// set base
@@ -153,7 +153,6 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 			b = p->aux>>16&0x3f;
 			is_diff = (b != 0);
 		}
-		if (is_diff) ++r->n_supp;
 		bca->bases[n++] = q<<5 | (int)bam_is_rev(p->b)<<4 | b;
 		// collect annotations
 		if (b < 4) r->qsum[b] += q;
@@ -190,10 +189,10 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
             bca->alt_mq[imq]++;
         }
 	}
-	r->depth = n; r->ori_depth = ori_depth;
+	r->ori_depth = ori_depth;
 	// glfgen
 	errmod_cal(bca->e, n, 5, bca->bases, r->p); // calculate PL of each genotype
-	return r->depth;
+	return n;
 }
 
 
@@ -553,7 +552,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		// for each sample calculate the PL
 		for (i = 0; i < n; ++i) 
         {
-			uint32_t *PL = call->PL + x * i;
+			int32_t *PL = call->PL + x * i;
 			const bcf_callret1_t *r = calls + i;
             float min = FLT_MAX;
             for (j = 0; j < x; ++j) {
@@ -567,10 +566,16 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
                 PL[j] = y;
             }
         }
-        if ( call->DP )
-            for (i=0; i<n; i++) call->DP[i] = calls[i].depth;
-        if ( call->DV ) 
-            for (i=0; i<n; i++) call->DV[i] = calls[i].n_supp;
+        if ( call->DP4 )
+        {
+            for (i=0; i<n; i++) 
+            {
+                call->DP4[4*i]   = calls[i].anno[0];
+                call->DP4[4*i+1] = calls[i].anno[1];
+                call->DP4[4*i+2] = calls[i].anno[2];
+                call->DP4[4*i+3] = calls[i].anno[3];
+            }
+        }
 
 //		if (ref_base < 0) fprintf(stderr, "%d,%d,%f,%d\n", call->n_alleles, x, sum_min, call->unseen);
 		call->shift = (int)(sum_min + .499);
@@ -581,7 +586,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     call->depth     = 0;
     call->mq0       = 0;
 	for (i = 0; i < n; ++i) {
-		call->depth += calls[i].depth;
+		call->depth += calls[i].anno[0] + calls[i].anno[1] + calls[i].anno[2] + calls[i].anno[3];
 		call->ori_depth += calls[i].ori_depth;
         call->mq0 += calls[i].mq0;
 		for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
@@ -695,9 +700,41 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
 	// FORMAT
     rec->n_sample = bc->n;
     bcf_update_format_int32(hdr, rec, "PL", bc->PL, nals*(nals+1)/2 * rec->n_sample);
-    if (bc->DP) bcf_update_format_int32(hdr, rec, "DP", bc->DP, rec->n_sample);
-    if (bc->DV) bcf_update_format_int32(hdr, rec, "DV", bc->DV, rec->n_sample);
-    // todo: SP, per-sample strand-bias?
+    if ( fmt_flag&B2B_FMT_DP ) 
+    {
+        int32_t *ptr = (int32_t*) bc->fmt_arr;
+        for (i=0; i<bc->n; i++)
+            ptr[i] = bc->DP4[4*i] + bc->DP4[4*i+1] + bc->DP4[4*i+2] + bc->DP4[4*i+3];
+        bcf_update_format_int32(hdr, rec, "DP", bc->fmt_arr, rec->n_sample);
+    }
+    if ( fmt_flag&B2B_FMT_DV )
+    {
+        int32_t *ptr = (int32_t*) bc->fmt_arr;
+        for (i=0; i<bc->n; i++)
+            ptr[i] = bc->DP4[4*i+2] + bc->DP4[4*i+3];
+        bcf_update_format_int32(hdr, rec, "DV", bc->fmt_arr, rec->n_sample);
+    }
+    if ( fmt_flag&B2B_FMT_SP )
+    {
+        int32_t *ptr = (int32_t*) bc->fmt_arr;
+        for (i=0; i<bc->n; i++)
+        {
+            int fwd_ref = bc->DP4[4*i], rev_ref =  bc->DP4[4*i+1], fwd_alt = bc->DP4[4*i+2], rev_alt = bc->DP4[4*i+3];
+            if ( fwd_ref+rev_ref<2 || fwd_alt+rev_alt<2 || fwd_ref+fwd_alt<2 || rev_ref+rev_alt<2 )
+                ptr[i] = 0;
+            else
+            {
+                double left, right, two;
+                kt_fisher_exact(fwd_ref, rev_ref, fwd_alt, rev_alt, &left, &right, &two);
+                int32_t x = (int)(-4.343 * log(two) + .499);
+                if (x > 255) x = 255;
+                ptr[i] = x;
+            }
+        }
+        bcf_update_format_int32(hdr, rec, "SP", bc->fmt_arr, rec->n_sample);
+    }
+    if ( fmt_flag&B2B_FMT_DP4 )
+        bcf_update_format_int32(hdr, rec, "DP4", bc->DP4, rec->n_sample*4);
 
 	return 0;
 }

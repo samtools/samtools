@@ -18,9 +18,10 @@
 
 #define B2B_INDEL_NULL 10000
 
-#define B2B_FMT_DP 0x1
-#define B2B_FMT_SP 0x2
-#define B2B_FMT_DV 0x4
+#define B2B_FMT_DP  0x1
+#define B2B_FMT_SP  0x2
+#define B2B_FMT_DV  0x4
+#define B2B_FMT_DP4 0x8
 
 typedef struct __bcf_callaux_t {
 	int capQ, min_baseQ;
@@ -42,7 +43,7 @@ typedef struct __bcf_callaux_t {
 
 typedef struct {
     uint32_t ori_depth;
-	unsigned int depth, n_supp, mq0;
+	unsigned int mq0;
     float qsum[4];
     // The fields are:
     //      depth fwd   .. ref (0) and non-ref (2)
@@ -69,7 +70,8 @@ typedef struct {
 	int n_supp; // number of supporting non-reference reads
 	double anno[16];
     unsigned int depth, ori_depth, mq0;
-	uint32_t *PL, *DP, *DV;
+	int32_t *PL, *DP4;
+    uint8_t *fmt_arr;
     float vdb; // variant distance bias
     float mwu_pos, mwu_mq, mwu_bq, mwu_mqs;
 #if CDF_MWU_TESTS
