@@ -730,7 +730,7 @@ static void usage(bool error)
 {
 	FILE* to = error ? stderr : stdout;
 	
-	fprintf(to, "Usage:   samtools merge [-nr] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
+	fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
 	fprintf(to, "Options: -n       sort by read names\n");
 	fprintf(to, "         -r       attach RG tag (inferred from file names)\n");
 	fprintf(to, "         -u       uncompressed BAM output\n");
