@@ -37,6 +37,21 @@ KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
 #define __free_char(p)
 KLIST_INIT(hdrln, char*, __free_char)
 
+typedef struct trans_tbl {
+	int32_t n_targets;
+	int* tid_trans;
+	kh_c2c_t* rg_trans;
+	kh_c2c_t* pg_trans;
+	bool lost_coord_sort;
+} trans_tbl_t;
+
+static void trans_tid(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, kstring_t *out_text);
+static void trans_rg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, regmatch_t* matches, kstring_t *out_text);
+static void trans_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_pg, regmatch_t* matches, kstring_t *out_text);
+static void trans_pg_pp(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, klist_t(hdrln) *pg_list, regmatch_t* matches, kstring_t *out_text);
+static void trans_rg_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, klist_t(hdrln) *rg_list, regmatch_t* matches, kstring_t *out_text);
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg);
+
 static int g_is_by_qname = 0;
 
 static int strnum_cmp(const char *_a, const char *_b)
@@ -85,14 +100,6 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 }
 
 KSORT_INIT(heap, heap1_t, heap_lt)
-
-typedef struct trans_tbl {
-	int32_t n_targets;
-	int* tid_trans;
-	kh_c2c_t* rg_trans;
-	kh_c2c_t* pg_trans;
-	bool lost_coord_sort;
-} trans_tbl_t;
 
 static void trans_tbl_destroy(trans_tbl_t *tbl) {
 	free(tbl->tid_trans);
@@ -203,22 +210,8 @@ static void pretty_header(char** text_in_out, int32_t text_len)
 	*text_in_out = output;
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
+static void trans_tid(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, kstring_t *out_text)
 {
-	// No need to translate header into itself
-	if (out == translate) { merge_rg = merge_pg = true; }
-	
-	tbl->n_targets = translate->n_targets;
-	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
-	tbl->rg_trans = kh_init(c2c);
-	tbl->pg_trans = kh_init(c2c);
-	if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
-	
-	int32_t out_len = out->l_text;
-	while (out_len > 0 && out->text[out_len-1] == '\n') {--out_len; } // strip trailing \n's
-	kstring_t out_text = { 0, 0, NULL };
-	kputsn(out->text, out_len, &out_text);
-	
 	// Naive way of doing this but meh
 	int i, j, min_tid = -1;
 	tbl->lost_coord_sort = false;
@@ -254,8 +247,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			regfree(&sq_id);
 			
 			// Produce our output line and append it to out_text
-			kputc('\n', &out_text);
-			kputsn(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &out_text);
+			kputc('\n', out_text);
+			kputsn(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, out_text);
 			
 			free(matches);
 		} else {
@@ -267,11 +260,12 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			tbl->lost_coord_sort = true;
 		}
 	}
-	
+}
+
+static void trans_rg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, regmatch_t* matches, kstring_t *out_text)
+{
 	// grep @RG id's
 	regex_t rg_id;
-	regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-	if (matches == NULL) { perror("out of memory"); exit(-1); }
 	regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 	char* text = translate->text;
 	klist_t(hdrln) *rg_list = kl_init(hdrln);
@@ -325,11 +319,17 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		text += matches[0].rm_eo; // next!
 	}
 	regfree(&rg_id);
-	
+
+	trans_rg_pg(out, translate, tbl, rg_list, matches, out_text);
+	kl_destroy(hdrln,rg_list);
+}
+
+static void trans_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_pg, regmatch_t* matches, kstring_t *out_text)
+{
 	// Do same for PG id's
 	regex_t pg_id;
 	regcomp(&pg_id, "^@PG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-	text = translate->text;
+	char* text = translate->text;
 	klist_t(hdrln) *pg_list = kl_init(hdrln);
 	while(1) { //	foreach pg id in translate's header
 		if (regexec(&pg_id, text, 2, matches, 0) != 0) break;
@@ -379,6 +379,13 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 		text += matches[0].rm_eo; // next!
 	}
 	regfree(&pg_id);
+
+	trans_pg_pp(out, translate, tbl, pg_list, matches, out_text);
+	kl_destroy(hdrln,pg_list);
+}
+
+static void trans_pg_pp(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, klist_t(hdrln) *pg_list, regmatch_t* matches, kstring_t *out_text)
+{
 	// need to translate PP's on the fly in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
 	// for each line {
 	// with ID replaced with tranformed_id and PP's transformed using the translation table
@@ -405,15 +412,18 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			kputsn(data+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
 		} else { kputs(data, &transformed_line); }
 		// Produce our output line and append it to out_text
-		kputc('\n', &out_text);
-		kputsn(transformed_line.s, transformed_line.l, &out_text);
+		kputc('\n', out_text);
+		kputsn(transformed_line.s, transformed_line.l, out_text);
 
 		free(transformed_line.s);
 		free(data);
 		iter = kl_next(iter);
 	}
 	regfree(&pg_pp);
-	
+}
+
+static void trans_rg_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, klist_t(hdrln) *rg_list, regmatch_t* matches, kstring_t *out_text)
+{
 	// Need to also translate @RG PG's on the fly too
 	regex_t rg_pg;
 	regcomp(&rg_pg, "^@RG.*\tPG:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
@@ -437,8 +447,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 			kputsn(data+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
 		} else { kputs(data, &transformed_line); }
 		// Produce our output line and append it to out_text
-		kputc('\n', &out_text);
-		kputsn(transformed_line.s, transformed_line.l, &out_text);
+		kputc('\n', out_text);
+		kputsn(transformed_line.s, transformed_line.l, out_text);
 		
 		free(transformed_line.s);
 		free(data);
@@ -446,8 +456,33 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	}
 	
 	regfree(&rg_pg);
-	kl_destroy(hdrln,pg_list);
-	kl_destroy(hdrln,rg_list);
+}
+
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
+{
+	// No need to translate header into itself
+	if (out == translate) { merge_rg = merge_pg = true; }
+	
+	tbl->n_targets = translate->n_targets;
+	tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
+	tbl->rg_trans = kh_init(c2c);
+	tbl->pg_trans = kh_init(c2c);
+	if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
+	
+	int32_t out_len = out->l_text;
+	while (out_len > 0 && out->text[out_len-1] == '\n') {--out_len; } // strip trailing \n's
+	kstring_t out_text = { 0, 0, NULL };
+	kputsn(out->text, out_len, &out_text);
+	
+	trans_tid(out, translate, tbl, &out_text);
+
+	regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
+	if (matches == NULL) { perror("out of memory"); exit(-1); }
+
+	trans_rg(out, translate, tbl, merge_rg, matches, &out_text);
+
+	trans_pg(out, translate, tbl, merge_pg, matches, &out_text);
+
 	free(matches);
 
 	// Add trailing \n and write back to header
@@ -617,6 +652,10 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
 		}
 	}
+
+	//BAIL FOR PROFILING
+	printf("exiting for profiling");
+	exit(0);
 
 	// If we're only merging a specified region move our iters to start at that point
 	if (reg) {
