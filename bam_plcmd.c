@@ -595,8 +595,9 @@ int bam_mpileup(int argc, char *argv[])
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
     static struct option lopts[] = 
     {
-        {"incl-flags",1,0,1},
-        {"excl-flags",1,0,2},
+        {"rf",1,0,'1'},
+        {"incl-flags",1,0,'1'},
+        {"excl-flags",1,0,'2'},
         {"illumina1.3+",0,0,6},
         {"count-orphans",1,0,'A'},
         {"bam-list",1,0,'b'},
@@ -632,11 +633,11 @@ int bam_mpileup(int argc, char *argv[])
 	while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:Bd:L:b:P:po:e:h:Im:F:EG:6Os1:2:vxt:",lopts,NULL)) >= 0) {
 		switch (c) {
             case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
-            case  1 : 
+            case '1': 
                       mplp.rflag_require = bam_str2flag(optarg); 
                       if ( mplp.rflag_require<0 ) { fprintf(stderr,"Could not parse --rf %s\n", optarg); return 1; }
                       break;
-            case  2 : 
+            case '2': 
                       mplp.rflag_filter = bam_str2flag(optarg); 
                       if ( mplp.rflag_filter<0 ) { fprintf(stderr,"Could not parse --ff %s\n", optarg); return 1; }
                       break;
