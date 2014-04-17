@@ -596,6 +596,7 @@ int bam_mpileup(int argc, char *argv[])
     static struct option lopts[] = 
     {
         {"rf",1,0,'1'},
+        {"ff",1,0,'1'},
         {"incl-flags",1,0,'1'},
         {"excl-flags",1,0,'2'},
         {"illumina1.3+",0,0,6},
