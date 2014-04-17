@@ -67,7 +67,7 @@ static inline void pileup_seq(const bam_pileup1_t *p, int pos, int ref_len, cons
 #include "bam2bcf.h"
 #include "sample.h"
 
-#define MPLP_GLF        1
+#define MPLP_BCF        1
 #define MPLP_VCF        (1<<1)
 #define MPLP_NO_COMP    (1<<2)
 #define MPLP_NO_ORPHAN  (1<<3)
@@ -155,7 +155,7 @@ static int mplp_func(void *data, bam1_t *b)
 			else if (b->core.qual > q) b->core.qual = q;
 		}
 		if (b->core.qual < ma->conf->min_mq) skip = 1; 
-		else if ((ma->conf->flag&MPLP_NO_ORPHAN) && (b->core.flag&1) && !(b->core.flag&2)) skip = 1;
+		else if ((ma->conf->flag&MPLP_NO_ORPHAN) && (b->core.flag&BAM_FPAIRED) && !(b->core.flag&BAM_FPROPER_PAIR)) skip = 1;
 	} while (skip);
 	return ret;
 }
@@ -276,7 +276,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
 	fprintf(stderr, "[%s] %d samples in %d input files\n", __func__, sm->n, n);
 	// write the VCF header
-	if (conf->flag & MPLP_GLF) 
+	if (conf->flag & MPLP_BCF) 
     {
         if ( conf->flag & MPLP_VCF )
             bcf_fp = (conf->flag&MPLP_NO_COMP) ? hts_open("-","wu") : hts_open("-","wz");   // uncompressed VCF or compressed VCF
@@ -330,8 +330,14 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=I16,Number=16,Type=Float,Description=\"Auxiliary tag used for calling, see description of bcf_callret1_t in bam2bcf.h\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=QS,Number=.,Type=Float,Description=\"Auxiliary tag used for calling\">");
         bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=PL,Number=G,Type=Integer,Description=\"List of Phred-scaled genotype likelihoods\">");
-        bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of high-quality bases\">");
-        bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DV,Number=1,Type=Integer,Description=\"Number of high-quality non-reference bases\">");
+        if ( conf->fmt_flag&B2B_FMT_DP )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of high-quality bases\">");
+        if ( conf->fmt_flag&B2B_FMT_DV )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DV,Number=1,Type=Integer,Description=\"Number of high-quality non-reference bases\">");
+        if ( conf->fmt_flag&B2B_FMT_DP4 )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP4,Number=4,Type=Integer,Description=\"Number of high-quality ref-fwd, ref-reverse, alt-fwd and alt-reverse bases\">");
+        if ( conf->fmt_flag&B2B_FMT_SP )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">");
 
 		for (i=0; i<sm->n; i++)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
@@ -348,8 +354,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bc.bcf_hdr = bcf_hdr;
 		bc.n = sm->n;
 		bc.PL = malloc(15 * sm->n * sizeof(*bc.PL));
-        if (conf->fmt_flag & B2B_FMT_DP) bc.DP = malloc(sm->n * sizeof(*bc.DP));
-        if (conf->fmt_flag & B2B_FMT_DV) bc.DV = malloc(sm->n * sizeof(*bc.DV));
+        if (conf->fmt_flag)
+        {
+            assert( sizeof(float)==sizeof(int32_t) );
+            bc.DP4 = malloc(sm->n * sizeof(int32_t) * 4);
+            bc.fmt_arr = malloc(sm->n * sizeof(float)); // all fmt_flag fields
+        }
 	}
 	if (tid0 >= 0 && conf->fai) { // region is set
 		ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
@@ -380,7 +390,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid;
 			ref_tid = tid;
 		}
-		if (conf->flag & MPLP_GLF) {
+		if (conf->flag & MPLP_BCF) {
 			int total_depth, _ref0, ref16;
 			for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
 			group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp, conf->flag & MPLP_IGNORE_RG);
@@ -394,7 +404,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			bcf_clear1(bcf_rec);
 			bcf_call2bcf(&bc, bcf_rec, bcr, conf->fmt_flag, 0, 0);
 			bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
-			// call indels
+			// call indels; todo: subsampling with total_depth>max_indel_depth instead of ignoring?
 			if (!(conf->flag&MPLP_NO_INDEL) && total_depth < max_indel_depth && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) 
             {
                 bcf_callaux_clean(bca);
@@ -467,8 +477,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_hdr_destroy(bcf_hdr);
         bcf_call_destroy(bca);
         free(bc.PL);
-        free(bc.DP);
-        free(bc.DV);
+        free(bc.DP4);
+        free(bc.fmt_arr);
         free(bcr);
     }
 	bam_smpl_destroy(sm); free(buf.s);
@@ -544,6 +554,29 @@ int read_file_list(const char *file_list,int *n,char **argv[])
 }
 #undef MAX_PATH_LEN
 
+int parse_format_flag(const char *str)
+{
+    int flag = 0;
+    const char *ss = str;
+    while ( *ss )
+    {
+        const char *se = ss;
+        while ( *se && *se!=',' ) se++;
+        if ( !strncasecmp(ss,"DP",se-ss) ) flag |= B2B_FMT_DP;
+        else if ( !strncasecmp(ss,"DP4",se-ss) ) flag |= B2B_FMT_DP4;
+        else if ( !strncasecmp(ss,"DV",se-ss) ) flag |= B2B_FMT_DV;
+        else if ( !strncasecmp(ss,"SP",se-ss) ) flag |= B2B_FMT_SP;
+        else 
+        {
+            fprintf(stderr,"Could not parse \"%s\"\n", str);
+            exit(1);
+        }
+        if ( !*se ) break;
+        ss = se + 1;
+    }
+    return flag;
+}
+
 int bam_mpileup(int argc, char *argv[])
 {
 	int c;
@@ -567,7 +600,7 @@ int bam_mpileup(int argc, char *argv[])
         {"ff",1,0,2},   // filter flag
         {0,0,0,0}
     };
-	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV1:2:vx",lopts,NULL)) >= 0) {
+	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV1:2:vxt:",lopts,NULL)) >= 0) {
 		switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 : 
@@ -594,9 +627,9 @@ int bam_mpileup(int argc, char *argv[])
                   break;
 		case 'P': mplp.pl_list = strdup(optarg); break;
 		case 'p': mplp.flag |= MPLP_PER_SAMPLE; break;
-		case 'g': mplp.flag |= MPLP_GLF; break;
-		case 'v': mplp.flag |= MPLP_GLF | MPLP_VCF; break;
-		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_GLF; break;
+		case 'g': mplp.flag |= MPLP_BCF; break;
+		case 'v': mplp.flag |= MPLP_BCF | MPLP_VCF; break;
+		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_BCF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'B': mplp.flag &= ~MPLP_REALN; break;
 		case 'D': mplp.fmt_flag |= B2B_FMT_DP; break;
@@ -631,6 +664,7 @@ int bam_mpileup(int argc, char *argv[])
 				fclose(fp_rg);
 			}
 			break;
+		case 't': mplp.fmt_flag |= parse_format_flag(optarg); break;
 		}
 	}
 	if (use_orphan) mplp.flag &= ~MPLP_NO_ORPHAN;
@@ -665,6 +699,7 @@ int bam_mpileup(int argc, char *argv[])
 		fprintf(stderr, "       -O              output base positions on reads (disabled by -g/-u)\n");
 		fprintf(stderr, "       -s              output mapping quality (disabled by -g/-u)\n");
 		fprintf(stderr, "       -S              output per-sample strand bias P-value in BCF (require -g/-u)\n");
+		fprintf(stderr, "       -t LIST         optional per-sample tags to output: DP,DV,DP4,SP []\n");
 		fprintf(stderr, "       -u              generate uncompressed BCF/VCF output\n");
 		fprintf(stderr, "\nSNP/INDEL genotype likelihoods options (effective with `-g' or `-u'):\n\n");
 		fprintf(stderr, "       -e INT          Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
