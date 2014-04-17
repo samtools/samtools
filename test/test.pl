@@ -1939,7 +1939,7 @@ sub test_bam2fq
     my @inputs = ([SAM => $sam], [BAM => $bam], [CRAM => $cram]);
     foreach my $input (@inputs) {
 	foreach my $nosuffix (0, 1) {
-	    my @n = $nosuffix ? ('-n') : ();
+	    my @n = $nosuffix ? () : ('-a');
 	    
 	    run_view_test($opts,
 			  msg => "$test: bam2fq @n ($input->[0] input)",
