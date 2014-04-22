@@ -1,7 +1,13 @@
+#include <stdio.h>
 #include <math.h>
-#include "sam.h"
-#include "htslib/khash.h"
-#include "htslib/klist.h"
+#include <stdbool.h>
+#include <inttypes.h>
+#include <htslib/sam.h>
+#include <htslib/khash.h>
+#include <htslib/klist.h>
+
+// HTSification HACK
+extern const char *bam_get_library(bam_hdr_t *header, const bam1_t *b);
 
 #define QUEUE_CLEAR_SIZE 0x100000
 #define MAX_POS 0x7fffffff
@@ -43,7 +49,7 @@ static lib_aux_t *get_aux(khash_t(lib) *aux, const char *lib)
 static inline int sum_qual(const bam1_t *b)
 {
 	int i, q;
-	uint8_t *qual = bam1_qual(b);
+	uint8_t *qual = bam_get_qual(b);
 	for (i = q = 0; i < b->core.l_qseq; ++i) q += qual[i];
 	return q;
 }
@@ -66,7 +72,7 @@ static void clear_besthash(besthash_t *h, int32_t pos)
 			kh_del(best, h, k);
 }
 
-static void dump_alignment(samfile_t *out, queue_t *queue, int32_t pos, khash_t(lib) *h)
+static void dump_alignment(samFile* out, const bam_hdr_t* hdr, queue_t *queue, int32_t pos, khash_t(lib) *h)
 {
 	if (queue->size > QUEUE_CLEAR_SIZE || pos == MAX_POS) {
 		khint_t k;
@@ -75,13 +81,13 @@ static void dump_alignment(samfile_t *out, queue_t *queue, int32_t pos, khash_t(
 			if (queue->head == queue->tail) break;
 			q = &kl_val(queue->head);
 			if (q->discarded) {
-				q->b->data_len = 0;
+				q->b->l_data = 0;
 				kl_shift(q, queue, 0);
 				continue;
 			}
 			if ((q->b->core.flag&BAM_FREVERSE) && q->endpos > pos) break;
-			samwrite(out, q->b);
-			q->b->data_len = 0;
+			sam_write1(out, hdr, q->b);
+			q->b->l_data = 0;
 			kl_shift(q, queue, 0);
 		}
 		for (k = kh_begin(h); k != kh_end(h); ++k) {
@@ -93,7 +99,7 @@ static void dump_alignment(samfile_t *out, queue_t *queue, int32_t pos, khash_t(
 	}
 }
 
-void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se)
+void bam_rmdupse_core(samFile* in, samFile* out, bam_hdr_t* hdr, bool force_se)
 {
 	bam1_t *b;
 	queue_t *queue;
@@ -104,15 +110,15 @@ void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se)
 	aux = kh_init(lib);
 	b = bam_init1();
 	queue = kl_init(q);
-	while (samread(in, b) >= 0) {
+	while (sam_read1(in, hdr, b) >= 0) {
 		bam1_core_t *c = &b->core;
-		int endpos = bam_calend(c, bam1_cigar(b));
+		int endpos = bam_endpos(b);
 		int score = sum_qual(b);
 		
 		if (last_tid != c->tid) {
-			if (last_tid >= 0) dump_alignment(out, queue, MAX_POS, aux);
+			if (last_tid >= 0) dump_alignment(out, hdr, queue, MAX_POS, aux);
 			last_tid = c->tid;
-		} else dump_alignment(out, queue, c->pos, aux);
+		} else dump_alignment(out, hdr, queue, c->pos, aux);
 		if ((c->flag&BAM_FUNMAP) || ((c->flag&BAM_FPAIRED) && !force_se)) {
 			push_queue(queue, b, endpos, score);
 		} else {
@@ -121,7 +127,7 @@ void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se)
 			besthash_t *h;
 			uint32_t key;
 			int ret;
-			lib = bam_get_library(in->header, b);
+			lib = bam_get_library(hdr, b);
 			q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
 			++q->n_checked;
 			h = (c->flag&BAM_FREVERSE)? q->rght : q->left;
@@ -142,13 +148,13 @@ void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se)
 			} else kh_val(h, k) = push_queue(queue, b, endpos, score);
 		}
 	}
-	dump_alignment(out, queue, MAX_POS, aux);
+	dump_alignment(out, hdr, queue, MAX_POS, aux);
 
 	for (k = kh_begin(aux); k != kh_end(aux); ++k) {
 		if (kh_exist(aux, k)) {
 			lib_aux_t *q = &kh_val(aux, k);
-			fprintf(stderr, "[bam_rmdupse_core] %lld / %lld = %.4lf in library '%s'\n", (long long)q->n_removed,
-					(long long)q->n_checked, (double)q->n_removed/q->n_checked, kh_key(aux, k));
+			fprintf(stderr, "[bam_rmdupse_core] %" PRId64 " / %" PRId64 " = %.4lf in library '%s'\n", q->n_removed,
+					q->n_checked, (double)q->n_removed/q->n_checked, kh_key(aux, k));
 			kh_destroy(best, q->left); kh_destroy(best, q->rght);
 			free((char*)kh_key(aux, k));
 		}

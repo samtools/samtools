@@ -1,13 +1,18 @@
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 #include <zlib.h>
 #include <unistd.h>
-#include "sam.h"
+#include <inttypes.h>
+#include <htslib/sam.h>
+#include <htslib/khash.h>
+
+// HTSification HACK
+extern const char *bam_get_library(bam_hdr_t *header, const bam1_t *b);
 
 typedef bam1_t *bam1_p;
 
-#include "htslib/khash.h"
 KHASH_SET_INIT_STR(name)
 KHASH_MAP_INIT_INT64(pos, bam1_p)
 
@@ -33,11 +38,11 @@ static inline void stack_insert(tmp_stack_t *stack, bam1_t *b)
 	stack->a[stack->n++] = b;
 }
 
-static inline void dump_best(tmp_stack_t *stack, samfile_t *out)
+static inline void dump_best(tmp_stack_t *stack, samFile* out, const bam_hdr_t *h)
 {
 	int i;
 	for (i = 0; i != stack->n; ++i) {
-		samwrite(out, stack->a[i]);
+		sam_write1(out, h, stack->a[i]);
 		bam_destroy1(stack->a[i]);
 	}
 	stack->n = 0;
@@ -82,12 +87,12 @@ static void clear_best(khash_t(lib) *aux, int max)
 static inline int sum_qual(const bam1_t *b)
 {
 	int i, q;
-	uint8_t *qual = bam1_qual(b);
+	uint8_t *qual = bam_get_qual(b);
 	for (i = q = 0; i < b->core.l_qseq; ++i) q += qual[i];
 	return q;
 }
 
-void bam_rmdup_core(samfile_t *in, samfile_t *out)
+void bam_rmdup_core(samFile* in, samFile* out, bam_hdr_t *h)
 {
 	bam1_t *b;
 	int last_tid = -1, last_pos = -1;
@@ -102,10 +107,10 @@ void bam_rmdup_core(samfile_t *in, samfile_t *out)
 	memset(&stack, 0, sizeof(tmp_stack_t));
 
 	kh_resize(name, del_set, 4 * BUFFER_SIZE);
-	while (samread(in, b) >= 0) {
+	while (sam_read1(in, h, b) >= 0) {
 		bam1_core_t *c = &b->core;
 		if (c->tid != last_tid || last_pos != c->pos) {
-			dump_best(&stack, out); // write the result
+			dump_best(&stack, out, h); // write the result
 			clear_best(aux, BUFFER_SIZE);
 			if (c->tid != last_tid) {
 				clear_best(aux, 0);
@@ -114,22 +119,22 @@ void bam_rmdup_core(samfile_t *in, samfile_t *out)
 					clear_del_set(del_set);
 				}
 				if ((int)c->tid == -1) { // append unmapped reads
-					samwrite(out, b);
-					while (samread(in, b) >= 0) samwrite(out, b);
+					sam_write1(out, h, b);
+					while (sam_read1(in, h, b) >= 0) sam_write1(out, h, b);
 					break;
 				}
 				last_tid = c->tid;
-				fprintf(stderr, "[bam_rmdup_core] processing reference %s...\n", in->header->target_name[c->tid]);
+				fprintf(stderr, "[bam_rmdup_core] processing reference %s...\n", h->target_name[c->tid]);
 			}
 		}
 		if (!(c->flag&BAM_FPAIRED) || (c->flag&(BAM_FUNMAP|BAM_FMUNMAP)) || (c->mtid >= 0 && c->tid != c->mtid)) {
-			samwrite(out, b);
+			sam_write1(out, h, b);
 		} else if (c->isize > 0) { // paired, head
 			uint64_t key = (uint64_t)c->pos<<32 | c->isize;
 			const char *lib;
 			lib_aux_t *q;
 			int ret;
-			lib = bam_get_library(in->header, b);
+			lib = bam_get_library(h, b);
 			q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
 			++q->n_checked;
 			k = kh_put(pos, q->best_hash, key, &ret);
@@ -137,21 +142,21 @@ void bam_rmdup_core(samfile_t *in, samfile_t *out)
 				bam1_t *p = kh_val(q->best_hash, k);
 				++q->n_removed;
 				if (sum_qual(p) < sum_qual(b)) { // the current alignment is better; this can be accelerated in principle
-					kh_put(name, del_set, strdup(bam1_qname(p)), &ret); // p will be removed
+					kh_put(name, del_set, strdup(bam_get_qname(p)), &ret); // p will be removed
 					bam_copy1(p, b); // replaced as b
-				} else kh_put(name, del_set, strdup(bam1_qname(b)), &ret); // b will be removed
+				} else kh_put(name, del_set, strdup(bam_get_qname(b)), &ret); // b will be removed
 				if (ret == 0)
-					fprintf(stderr, "[bam_rmdup_core] inconsistent BAM file for pair '%s'. Continue anyway.\n", bam1_qname(b));
+					fprintf(stderr, "[bam_rmdup_core] inconsistent BAM file for pair '%s'. Continue anyway.\n", bam_get_qname(b));
 			} else { // not found in best_hash
 				kh_val(q->best_hash, k) = bam_dup1(b);
 				stack_insert(&stack, kh_val(q->best_hash, k));
 			}
 		} else { // paired, tail
-			k = kh_get(name, del_set, bam1_qname(b));
+			k = kh_get(name, del_set, bam_get_qname(b));
 			if (k != kh_end(del_set)) {
 				free((char*)kh_key(del_set, k));
 				kh_del(name, del_set, k);
-			} else samwrite(out, b);
+			} else sam_write1(out, h, b);
 		}
 		last_pos = c->pos;
 	}
@@ -159,9 +164,9 @@ void bam_rmdup_core(samfile_t *in, samfile_t *out)
 	for (k = kh_begin(aux); k != kh_end(aux); ++k) {
 		if (kh_exist(aux, k)) {
 			lib_aux_t *q = &kh_val(aux, k);			
-			dump_best(&stack, out);
-			fprintf(stderr, "[bam_rmdup_core] %lld / %lld = %.4lf in library '%s'\n", (long long)q->n_removed,
-					(long long)q->n_checked, (double)q->n_removed/q->n_checked, kh_key(aux, k));
+			dump_best(&stack, out, h);
+			fprintf(stderr, "[bam_rmdup_core] %" PRId64 " / %" PRId64 " = %.4lf in library '%s'\n", q->n_removed,
+					q->n_checked, (double)q->n_removed/q->n_checked, kh_key(aux, k));
 			kh_destroy(pos, q->best_hash);
 			free((char*)kh_key(aux, k));
 		}
@@ -174,16 +179,16 @@ void bam_rmdup_core(samfile_t *in, samfile_t *out)
 	bam_destroy1(b);
 }
 
-void bam_rmdupse_core(samfile_t *in, samfile_t *out, int force_se);
+void bam_rmdupse_core(samFile* in, samFile* out, bam_hdr_t *h, bool force_se);
 
 int bam_rmdup(int argc, char *argv[])
 {
-	int c, is_se = 0, force_se = 0;
-	samfile_t *in, *out;
+	int c;
+	bool is_se = false, force_se = false;
 	while ((c = getopt(argc, argv, "sS")) >= 0) {
 		switch (c) {
-		case 's': is_se = 1; break;
-		case 'S': force_se = is_se = 1; break;
+		case 's': is_se = true; break;
+		case 'S': force_se = is_se = true; break;
 		}
 	}
 	if (optind + 2 > argc) {
@@ -193,14 +198,16 @@ int bam_rmdup(int argc, char *argv[])
 		fprintf(stderr, "        -S    treat PE reads as SE in rmdup (force -s)\n\n");
 		return 1;
 	}
-	in = samopen(argv[optind], "rb", 0);
-	out = samopen(argv[optind+1], "wb", in->header);
+	samFile* in = sam_open(argv[optind], "rb");
+	samFile* out = sam_open(argv[optind+1], "wb");
 	if (in == 0 || out == 0) {
 		fprintf(stderr, "[bam_rmdup] fail to read/write input files\n");
 		return 1;
 	}
-	if (is_se) bam_rmdupse_core(in, out, force_se);
-	else bam_rmdup_core(in, out);
-	samclose(in); samclose(out);
+	bam_hdr_t* h = sam_hdr_read(in);
+	if (is_se) bam_rmdupse_core(in, out, h, force_se);
+	else bam_rmdup_core(in, out, h);
+	sam_close(in); sam_close(out);
+	bam_hdr_destroy(h);
 	return 0;
 }
