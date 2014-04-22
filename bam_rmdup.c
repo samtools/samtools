@@ -181,27 +181,51 @@ void bam_rmdup_core(samFile* in, samFile* out, bam_hdr_t *h)
 
 void bam_rmdupse_core(samFile* in, samFile* out, bam_hdr_t *h, bool force_se);
 
+static void usage(bool error)
+{
+	FILE* out = error ? stderr : stdout;
+
+	fprintf(out,
+			"Usage:  samtools rmdup [-sS] <input.srt.bam> <output.bam>\n\n"
+			"Option: -s    rmdup for SE reads\n"
+			"        -S    treat PE reads as SE in rmdup (force -s)\n\n");
+
+}
+
 int bam_rmdup(int argc, char *argv[])
 {
 	int c;
 	bool is_se = false, force_se = false;
-	while ((c = getopt(argc, argv, "sS")) >= 0) {
+	if (argc == 1) {
+		usage(false);
+		return 0;
+	}
+	while ((c = getopt(argc, argv, "sSh")) >= 0) {
 		switch (c) {
-		case 's': is_se = true; break;
-		case 'S': force_se = is_se = true; break;
+			case 's':
+				is_se = true;
+				break;
+			case 'S':
+				force_se = is_se = true;
+				break;
+			case 'h':
+				usage(false);
+				return 0;
+			case '?':
+			default:
+				usage(true);
+				return 1;
 		}
 	}
-	if (optind + 2 > argc) {
-		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:  samtools rmdup [-sS] <input.srt.bam> <output.bam>\n\n");
-		fprintf(stderr, "Option: -s    rmdup for SE reads\n");
-		fprintf(stderr, "        -S    treat PE reads as SE in rmdup (force -s)\n\n");
+	if (argc-optind != 2) {
+		fprintf(stderr, "[bam_rmdup] Invalid number of arguments.\n\n");
+		usage(true);
 		return 1;
 	}
 	samFile* in = sam_open(argv[optind], "rb");
 	samFile* out = sam_open(argv[optind+1], "wb");
-	if (in == 0 || out == 0) {
-		fprintf(stderr, "[bam_rmdup] fail to read/write input files\n");
+	if (in == NULL || out == NULL) {
+		fprintf(stderr, "[bam_rmdup] Failed to read/write input files.\n");
 		return 1;
 	}
 	bam_hdr_t* h = sam_hdr_read(in);
