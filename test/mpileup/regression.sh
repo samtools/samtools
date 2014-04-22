@@ -1,5 +1,7 @@
+#!/bin/sh
+
 # allow cmd|md5sum to set $? to 1 if cmd fails but md5sum works
-set -o pipefail
+set +o | grep pipefail >/dev/null && set -o pipefail
 
 # Executes a single test and compares against the expected output
 run_test() {
@@ -67,7 +69,7 @@ regtest() {
 	    o=$1;shift
 	    cmd=${@+"$@"}
 
-	    if [ "$p" == "INIT" ]
+	    if [ "$p" = "INIT" ]
 	    then
 		eval ${@+"$@"} 2>/dev/null > /dev/null
 		continue
