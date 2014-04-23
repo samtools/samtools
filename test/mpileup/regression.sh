@@ -15,6 +15,8 @@ run_test() {
     if [ $? != 0 ]
     then
 	echo "Error running $@"
+	mv _out FAIL-$e.${test_iter}
+	return 0
     elif cmp -s _out expected/$e
     then
 	if [ "$p" != "P" ]
@@ -28,6 +30,7 @@ run_test() {
 	    return 0
 	else
 	    nepass=`expr $nepass + 1`
+	    rm _out
 	    return 1
 	fi
     else
@@ -37,6 +40,7 @@ run_test() {
 	    echo "EXPECTED FAIL: Task failed, but expected to fail;"
 	    echo "when running $@"
 	    nefail=`expr $nefail + 1`
+	    rm _out
 	    return 1
 	else
 	    echo ""
@@ -71,7 +75,8 @@ regtest() {
 
 	    if [ "$p" = "INIT" ]
 	    then
-		eval ${@+"$@"} 2>/dev/null > /dev/null
+		#echo "p=$p cmd=$@"
+		eval ${@+"$@"} > /dev/null || return 1
 		continue
 	    fi
 
