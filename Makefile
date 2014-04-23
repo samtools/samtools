@@ -221,7 +221,8 @@ install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 
 
 testclean:
-	-rm -f test/*.new test/*/*.new
+	-rm -f test/*.new test/*.tmp test/*/*.new test/*/*.tmp
+	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out
 
 mostlyclean: testclean
 	-rm -f *.o misc/*.o test/*/*.o version.h

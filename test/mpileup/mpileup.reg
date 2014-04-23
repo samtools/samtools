@@ -46,7 +46,7 @@ P 12.out $samtools mpileup -Q0 -x -f c1.fa c1#ID2.bam
 # Test basic pileup options
 P 13.out $samtools mpileup -x mpileup.1.$fmt
 P 14.out $samtools mpileup -x mpileup.[123].$fmt
-P 15.out ls -1 mpileup.[123].$fmt > _; $samtools mpileup -x -b _
+P 15.out ls -1 mpileup.[123].$fmt > 15.list.tmp; $samtools mpileup -x -b 15.list.tmp
 P 16.out $samtools mpileup -x -f mpileup.ref.fa mpileup.1.$fmt
 P 17.out $samtools mpileup -x -B -f mpileup.ref.fa mpileup.1.$fmt
 P 18.out $samtools mpileup -x -B -f mpileup.ref.fa mpileup.1.$fmt 
@@ -82,7 +82,7 @@ P 33.out $samtools mpileup    -x -f mpileup.ref.fa mpileup-E.bam
 P 34.out $samtools mpileup -E -x -f mpileup.ref.fa mpileup-E.bam
 
 # -G for excluding RG. All bar one:
-P 35.out $samtools view mpileup.1.bam|sed -n 's/.*RG:Z://;s/[^A-Z0-9].*//p'|sort -u |grep -v ERR013140 > _;$samtools mpileup -G _ mpileup.1.bam 
+P 35.out $samtools view mpileup.1.bam|sed -n 's/.*RG:Z://;s/[^A-Z0-9].*//p'|sort -u |grep -v ERR013140 > 35.rg.tmp;$samtools mpileup -G 35.rg.tmp mpileup.1.bam
 
 # Region based options
 # SAM indices don't exist (no tabix support due to header?)
