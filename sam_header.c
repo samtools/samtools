@@ -713,7 +713,7 @@ void *sam_header2key_val(void *iter, const char type[2], const char key_tag[2], 
         HeaderTag *key, *value;
         key   = header_line_has_tag(hline,key_tag);
         value = header_line_has_tag(hline,value_tag);
-        if ( !key && !value )
+        if ( !key || !value ) 
         {
             l = l->next;
             continue;
