@@ -7,9 +7,7 @@
 #include <inttypes.h>
 #include <htslib/sam.h>
 #include <htslib/khash.h>
-
-// HTSification HACK
-extern const char *bam_get_library(bam_hdr_t *header, const bam1_t *b);
+#include "hdr_idx_priv.h"
 
 typedef bam1_t *bam1_p;
 
@@ -29,6 +27,7 @@ typedef struct {
 	bam1_t **a;
 } tmp_stack_t;
 
+// Adds a read to the stack
 static inline void stack_insert(tmp_stack_t *stack, bam1_t *b)
 {
 	if (stack->n == stack->max) {
@@ -38,6 +37,7 @@ static inline void stack_insert(tmp_stack_t *stack, bam1_t *b)
 	stack->a[stack->n++] = b;
 }
 
+// Writes out all reads in the stack to file out and deallocates the memory they're using
 static inline void dump_best(tmp_stack_t *stack, samFile* out, const bam_hdr_t *h)
 {
 	int i;
@@ -48,6 +48,7 @@ static inline void dump_best(tmp_stack_t *stack, samFile* out, const bam_hdr_t *
 	stack->n = 0;
 }
 
+// Deallocate memory used by inside of kh del_set
 static void clear_del_set(khash_t(name) *del_set)
 {
 	khint_t k;
@@ -57,6 +58,7 @@ static void clear_del_set(khash_t(name) *del_set)
 	kh_clear(name, del_set);
 }
 
+// Given hash aux, and lib find lib in hash and return lib_aux_t that corresponds to it
 static lib_aux_t *get_aux(khash_t(lib) *aux, const char *lib)
 {
 	khint_t k = kh_get(lib, aux, lib);
@@ -84,6 +86,7 @@ static void clear_best(khash_t(lib) *aux, int max)
 	}
 }
 
+// Returns total of all quality values in read
 static inline int sum_qual(const bam1_t *b)
 {
 	int i, q;
@@ -91,6 +94,7 @@ static inline int sum_qual(const bam1_t *b)
 	for (i = q = 0; i < b->core.l_qseq; ++i) q += qual[i];
 	return q;
 }
+
 
 void bam_rmdup_core(samFile* in, samFile* out, bam_hdr_t *h)
 {
@@ -100,6 +104,7 @@ void bam_rmdup_core(samFile* in, samFile* out, bam_hdr_t *h)
 	khint_t k;
 	khash_t(lib) *aux;
 	khash_t(name) *del_set;
+	library_index_t* li = bam_library_index_init(h);
 	
 	aux = kh_init(lib);
 	del_set = kh_init(name);
@@ -109,13 +114,14 @@ void bam_rmdup_core(samFile* in, samFile* out, bam_hdr_t *h)
 	kh_resize(name, del_set, 4 * BUFFER_SIZE);
 	while (sam_read1(in, h, b) >= 0) {
 		bam1_core_t *c = &b->core;
+		// If we are
 		if (c->tid != last_tid || last_pos != c->pos) {
 			dump_best(&stack, out, h); // write the result
 			clear_best(aux, BUFFER_SIZE);
 			if (c->tid != last_tid) {
 				clear_best(aux, 0);
 				if (kh_size(del_set)) { // check
-					fprintf(stderr, "[bam_rmdup_core] %llu unmatched pairs\n", (long long)kh_size(del_set));
+					fprintf(stderr, "[bam_rmdup_core] %"PRIu32" unmatched pairs\n", kh_size(del_set));
 					clear_del_set(del_set);
 				}
 				if ((int)c->tid == -1) { // append unmapped reads
@@ -134,7 +140,7 @@ void bam_rmdup_core(samFile* in, samFile* out, bam_hdr_t *h)
 			const char *lib;
 			lib_aux_t *q;
 			int ret;
-			lib = bam_get_library(h, b);
+			lib = bam_search_library_index(li, b);
 			q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
 			++q->n_checked;
 			k = kh_put(pos, q->best_hash, key, &ret);
@@ -172,6 +178,7 @@ void bam_rmdup_core(samFile* in, samFile* out, bam_hdr_t *h)
 		}
 	}
 	kh_destroy(lib, aux);
+	bam_library_index_destroy(li);
 
 	clear_del_set(del_set);
 	kh_destroy(name, del_set);
