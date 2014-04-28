@@ -289,18 +289,39 @@ Only generate pileup in region
 
 .TP
 .B -D
-Output per-sample read depth
+Output per-sample read depth [DEPRECATED - use
+.B -t DP
+instead]
 .TP
 .B -g
 Compute genotype likelihoods and output them in the binary call format (BCF).
 .TP
 .B -S
-Output per-sample Phred-scaled strand bias P-value
+Output per-sample Phred-scaled strand bias P-value [DEPRECATED - use
+.B -t SP
+instead]
+.TP
+.BI -t \ LIST
+Comma-separated list of per-sample tags to output:
+.B DP
+(Number of high-quality bases), 
+.B DV
+(Number of high-quality non-reference bases), 
+.B DP4
+(Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases), 
+.B SP
+(Phred-scaled strand bias P-value)
+[null]
 .TP
 .B -u
 Similar to
 .B -g
 except that the output is uncompressed BCF, which is preferred for piping.
+.TP
+.B -V
+Output per-sample number of non-reference reads [DEPRECATED - use
+.B -t DV
+instead]
 
 .TP
 .B Options for Genotype Likelihood Computation (for -g or -u):
