@@ -622,9 +622,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -s, --output-MQ         output mapping quality\n"
 "\n"
 "Output options for genotype likelihoods (when -g/-v is used):\n"
-"  -D/-V                   output per-sample DP/DV in BCF\n"
 "  -g/-v, --BCF/--VCF      generate genotype likelihoods (BCF/VCF output format)\n"
-"  -S                      output per-sample strand bias P-value in BCF\n"
 "  -t, --format-tags LIST  optional per-sample tags to output: DP,DV,DP4,SP []\n"
 "  -u, --uncompressed      generate uncompressed BCF/VCF output\n"
 "\n"
@@ -738,9 +736,9 @@ int bam_mpileup(int argc, char *argv[])
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_BCF; break;
 		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'B': mplp.flag &= ~MPLP_REALN; break;
-		case 'D': mplp.fmt_flag |= B2B_FMT_DP; break;
-		case 'S': mplp.fmt_flag |= B2B_FMT_SP; break;
-		case 'V': mplp.fmt_flag |= B2B_FMT_DV; break;
+		case 'D': mplp.fmt_flag |= B2B_FMT_DP; fprintf(stderr, "[warning] samtools mpileup option `-D` is functional, but deprecated. Please switch to `-t DP` in future.\n"); break;
+		case 'S': mplp.fmt_flag |= B2B_FMT_SP; fprintf(stderr, "[warning] samtools mpileup option `-S` is functional, but deprecated. Please switch to `-t SP` in future.\n"); break;
+		case 'V': mplp.fmt_flag |= B2B_FMT_DV; fprintf(stderr, "[warning] samtools mpileup option `-V` is functional, but deprecated. Please switch to `-t DV` in future.\n"); break;
 		case 'I': mplp.flag |= MPLP_NO_INDEL; break;
 		case 'E': mplp.flag |= MPLP_REDO_BAQ; break;
 		case '6': mplp.flag |= MPLP_ILLUMINA13; break;
