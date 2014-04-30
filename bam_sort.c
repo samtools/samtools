@@ -13,7 +13,6 @@
 #include "htslib/klist.h"
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
-#include "htslib/bgzf.h"
 
 #if !defined(__DARWIN_C_LEVEL) || __DARWIN_C_LEVEL < 900000L
 #define NEED_MEMSET_PATTERN4
@@ -681,7 +680,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 		return -1;
 	}
 	sam_hdr_write(fpout, hout);
-	if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout->fp.bgzf, n_threads, 256);
+	if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
 
 	// Begin the actual merge
 	ks_heapmake(heap, n, heap);
@@ -868,7 +867,7 @@ static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf
 	fp = sam_open(fn, mode);
 	if (fp == NULL) return;
 	sam_hdr_write(fp, h);
-	if (n_threads > 1) bgzf_mt(fp->fp.bgzf, n_threads, 256);
+	if (n_threads > 1) hts_set_threads(fp, n_threads);
 	for (i = 0; i < l; ++i)
 		sam_write1(fp, h, buf[i]);
 	sam_close(fp);
