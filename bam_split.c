@@ -162,9 +162,11 @@ static char* expand_format_string(const char* format_string, const char* basenam
 				break;
 			case '\0':
 				// Error is: fprintf(stderr, "bad format string, trailing %%\n");
+				free(ks_str(&str));
 				return NULL;
 			default:
 				// Error is: fprintf(stderr, "bad format string, unknown format specifier\n");
+				free(ks_str(&str));
 				return NULL;
 		}
 		pointer = next + 1;
@@ -302,6 +304,7 @@ static state_t* init(parsed_opts_t* opts)
 	retval->merged_input_file = sam_open(opts->merged_input_name, "rb");
 	if (!retval->merged_input_file) {
 		fprintf(stderr, "Could not open input file (%s)\n", opts->merged_input_name);
+		free(retval);
 		return NULL;
 	}
 	retval->merged_input_header = sam_hdr_read(retval->merged_input_file);
@@ -311,6 +314,7 @@ static state_t* init(parsed_opts_t* opts)
 			samFile* hdr_load = sam_open(opts->unaccounted_header_name, "r");
 			if (!hdr_load) {
 				fprintf(stderr, "Could not open unaccounted header file (%s)\n", opts->unaccounted_header_name);
+				cleanup_state(retval);
 				return NULL;
 			}
 			retval->unaccounted_header = sam_hdr_read(hdr_load);
@@ -336,7 +340,7 @@ static state_t* init(parsed_opts_t* opts)
 	retval->rg_hash = kh_init_c2i();
 	if (!retval->rg_output_file || !retval->rg_output_header) {
 		fprintf(stderr, "Could not allocate memory for output file array. Out of memory?");
-		free(retval);
+		cleanup_state(retval);
 		return NULL;
 	}
 
@@ -344,6 +348,7 @@ static state_t* init(parsed_opts_t* opts)
 	char* input_base_name = strdup(dirsep? dirsep+1 : opts->merged_input_name);
 	if (!input_base_name) {
 		fprintf(stderr, "Out of memory\n");
+		cleanup_state(retval);
 		return NULL;
 	}
 	char* extension = strrchr(input_base_name, '.');
@@ -355,12 +360,16 @@ static state_t* init(parsed_opts_t* opts)
 		
 		if ( ( output_filename = expand_format_string(opts->output_format_string, input_base_name, retval->rg_id[i], i) ) == NULL) {
 			fprintf(stderr, "Error expanding output filename format string.\r\n");
+			cleanup_state(retval);
+			free(input_base_name);
 			return NULL;
 		}
 
 		retval->rg_output_file[i] = sam_open(output_filename, "wb");
 		if (retval->rg_output_file[i] == NULL) {
 			fprintf(stderr, "Could not open output file: %s\r\n", output_filename);
+			cleanup_state(retval);
+			free(input_base_name);
 			return NULL;
 		}
 
@@ -369,13 +378,16 @@ static state_t* init(parsed_opts_t* opts)
 		khiter_t iter = kh_put_c2i(retval->rg_hash, retval->rg_id[i], &ret);
 		kh_val(retval->rg_hash,iter) = i;
 
-		free(output_filename);
 		// Set and edit header
 		retval->rg_output_header[i] = bam_hdr_dup(retval->merged_input_header);
 		if ( !filter_header_rg(retval->rg_output_header[i], retval->rg_id[i]) ) {
 			fprintf(stderr, "Could not rewrite header for file: %s\r\n", output_filename);
+			cleanup_state(retval);
+			free(output_filename);
+			free(input_base_name);
 			return NULL;
 		}
+		free(output_filename);
 	}
 
 	free(input_base_name);
@@ -449,38 +461,47 @@ static bool split(state_t* state)
 
 static void cleanup_state(state_t* status)
 {
+	if (!status) return;
+	if (status->unaccounted_header) bam_hdr_destroy(status->unaccounted_header);
 	if (status->unaccounted_file) sam_close(status->unaccounted_file);
 	sam_close(status->merged_input_file);
 	size_t i;
 	for (i = 0; i < status->output_count; i++) {
 		bam_hdr_destroy(status->rg_output_header[i]);
 		sam_close(status->rg_output_file[i]);
+		free(status->rg_id[i]);
 	}
 	bam_hdr_destroy(status->merged_input_header);
 	free(status->rg_output_header);
 	free(status->rg_output_file);
 	kh_destroy_c2i(status->rg_hash);
+	free(status->rg_id);
+	free(status);
 }
 
 static void cleanup_opts(parsed_opts_t* opts)
 {
+	if (!opts) return;
 	free(opts->merged_input_name);
 	free(opts->unaccounted_header_name);
 	free(opts->unaccounted_name);
 	free(opts->output_format_string);
+	free(opts);
 }
 
 int main_split(int argc, char** argv)
 {
+	int ret = 1;
 	parsed_opts_t* opts = parse_args(argc, argv);
-	if (!opts ) return 1;
+	if (!opts ) goto cleanup_opts;
 	state_t* status = init(opts);
-	if (!status) return 1;
+	if (!status) goto cleanup_opts;
 
-	if (!split(status)) return 1;
+	if (split(status)) ret = 0;
 
 	cleanup_state(status);
+cleanup_opts:
 	cleanup_opts(opts);
-	
-	return 0;
+
+	return ret;
 }
