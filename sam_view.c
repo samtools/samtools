@@ -188,6 +188,30 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
 	return (ret != -1) ? 0 : -1;
 }
 
+static inline int check_sam_write1(samFile *fp, const bam_hdr_t *h, const bam1_t *b, const char *fname, int *retp)
+{
+	int r = sam_write1(fp, h, b);
+	if (r >= 0) return r;
+
+	if (fname) print_error_errno("writing to \"%s\" failed", fname);
+	else print_error_errno("writing to standard output failed");
+
+	*retp = EXIT_FAILURE;
+	return r;
+}
+
+static void check_sam_close(samFile *fp, const char *fname, const char *null_fname, int *retp)
+{
+	int r = sam_close(fp);
+	if (r >= 0) return;
+
+	// TODO Need error infrastructure so we can print a message instead of r
+	if (fname) print_error("error closing \"%s\": %d", fname, r);
+	else print_error("error closing %s: %d", null_fname, r);
+
+	*retp = EXIT_FAILURE;
+}
+
 int main_samview(int argc, char *argv[])
 {
 	int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
@@ -340,10 +364,10 @@ int main_samview(int argc, char *argv[])
 		int r;
 		while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
 			if (!process_aln(header, b, &settings)) {
-				if (!is_count) sam_write1(out, header, b); // write the alignment to `out'
+				if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
 				count++;
 			} else {
-				if (un_out) sam_write1(un_out, header, b); // write the alignment to `out'
+				if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
             }
 		}
 		if (r < -1) {
@@ -371,10 +395,10 @@ int main_samview(int argc, char *argv[])
 			// fetch alignments
 			while ((result = sam_itr_next(in, iter, b)) >= 0) {
 				if (!process_aln(header, b, &settings)) {
-					if (!is_count) sam_write1(out, header, b); // write the alignment to `out'
+					if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
 					count++;
 				} else {
-                    if (un_out) sam_write1(un_out, header, b); // write the alignment to `out'
+                    if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                 }
 			}
 			hts_itr_destroy(iter);
@@ -393,6 +417,10 @@ view_end:
 		printf("%" PRId64 "\n", count);
 
 	// close files, free and return
+	if (in) check_sam_close(in, argv[optind], "standard input", &ret);
+	if (out) check_sam_close(out, fn_out, "standard output", &ret);
+	if (un_out) check_sam_close(un_out, fn_un_out, "file", &ret);
+
 	free(fn_list); free(fn_ref); free(fn_out); free(settings.library);  free(fn_un_out);
     if ( header ) bam_hdr_destroy(header); 
 	if (settings.bed) bed_destroy(settings.bed);
@@ -405,9 +433,6 @@ view_end:
 	if (settings.remove_aux_len) {
 		free(settings.remove_aux);
 	}
-	if (in) sam_close(in);
-	if (out) sam_close(out);
-	if (un_out) sam_close(un_out);
 	return ret;
 }
 
@@ -498,6 +523,7 @@ int main_bam2fq(int argc, char *argv[])
 	bam1_t *b;
 	int8_t *buf;
 	int max_buf, c, no12 = 0;
+	int status = EXIT_SUCCESS;
 	while ((c = getopt(argc, argv, "n")) > 0)
 		if (c == 'n') no12 = 1;
 	if (argc == 1) {
@@ -556,6 +582,6 @@ int main_bam2fq(int argc, char *argv[])
 	free(buf);
 	bam_destroy1(b);
 	bam_hdr_destroy(h);
-	sam_close(fp);
-	return 0;
+	check_sam_close(fp, argv[optind], "file", &status);
+	return status;
 }
