@@ -34,6 +34,7 @@ int main_bamshuf(int argc, char *argv[]);
 int main_stats(int argc, char *argv[]);
 int main_flags(int argc, char *argv[]);
 int main_split(int argc, char *argv[]);
+int main_mkdup(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 
@@ -158,6 +159,7 @@ int main(int argc, char *argv[])
 	else if (strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
 	else if (strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
 	else if (strcmp(argv[1], "split") == 0)     ret = main_split(argc-1, argv+1);
+	else if (strcmp(argv[1], "mkdup") == 0)     ret = main_mkdup(argc-1, argv+1);
 	else if (strcmp(argv[1], "pileup") == 0) {
 		fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
 		return 1;
