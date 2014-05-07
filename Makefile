@@ -162,6 +162,7 @@ check test: samtools bgzip $(BUILT_TEST_PROGRAMS)
 	test/merge/test_pretty_header
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
+	if [ -n "$$REF_PATH" ]; then cd test/mpileup && ./regression.sh; fi
 	test/split/test_count_rg
 	test/split/test_expand_format_string
 	test/split/test_filter_header_rg
@@ -247,7 +248,8 @@ install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 
 
 testclean:
-	-rm -f test/*.new test/*/*.new
+	-rm -f test/*.new test/*.tmp test/*/*.new test/*/*.tmp
+	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out
 
 mostlyclean: testclean
 	-rm -f *.o misc/*.o test/*/*.o version.h
