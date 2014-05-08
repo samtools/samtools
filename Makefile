@@ -31,7 +31,7 @@ INSTALL_PROGRAM = $(INSTALL)
 INSTALL_DATA    = $(INSTALL) -m 644
 
 
-PROGRAMS = samtools bgzip
+PROGRAMS = samtools
 
 BUILT_MISC_PROGRAMS = \
 	misc/ace2sam misc/maq2sam-long misc/maq2sam-short \
@@ -62,6 +62,7 @@ all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 HTSDIR = ../htslib
 include $(HTSDIR)/htslib.mk
 HTSLIB = $(HTSDIR)/libhts.a
+BGZIP  = $(HTSDIR)/bgzip
 
 
 PACKAGE_VERSION  = 0.2.0
@@ -100,9 +101,6 @@ libbam.a:$(LOBJS)
 samtools: $(AOBJS) libbam.a $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ $(AOBJS) libbam.a $(HTSLIB) $(LDLIBS) $(LIBCURSES) -lm -lz
 
-bgzip: bgzip.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ bgzip.o $(HTSLIB) -lz
-
 bam_h = bam.h $(htslib_bgzf_h) $(htslib_sam_h)
 bam2bcf_h = bam2bcf.h $(htslib_vcf_h) errmod.h
 bam_lpileup_h = bam_lpileup.h $(htslib_sam_h)
@@ -139,7 +137,6 @@ bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h
 bamtk.o: bamtk.c $(bam_h) version.h samtools.h
 bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(HTSDIR)/htslib/kseq.h
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
-bgzip.o: bgzip.c $(htslib_bgzf_h)
 cut_target.o: cut_target.c $(bam_h) errmod.h $(htslib_faidx_h)
 errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
 kaln.o: kaln.c kaln.h
@@ -156,8 +153,8 @@ stats.o: stats.c $(sam_h) sam_header.h samtools.h stats_isize.h $(HTSDIR)/htslib
 
 # test programs
 
-check test: samtools bgzip $(BUILT_TEST_PROGRAMS)
-	test/test.pl
+check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
+	test/test.pl --exec bgzip=$(BGZIP)
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
 	test/merge/test_pretty_header
 	test/merge/test_rtrans_build

@@ -43,6 +43,7 @@ sub error
         "About: samtools/htslib consistency test script\n",
         "Usage: test.pl [OPTIONS]\n",
         "Options:\n",
+        "   -e, --exec <tool>=[<path>]      Path to use for specified tool executable.\n",
         "   -r, --redo-outputs              Recreate expected output files.\n",
         "   -t, --temp-dir <path>           When given, temporary files will not be removed.\n",
         "   -h, -?, --help                  This help message.\n",
@@ -51,10 +52,11 @@ sub error
 }
 sub parse_params
 {
-    my $opts = { keep_files=>0, nok=>0, nfailed=>0, nxfail => 0, nxpass => 0 };
+    my $opts = { bgzip=>"bgzip", keep_files=>0, nok=>0, nfailed=>0, nxfail => 0, nxpass => 0 };
     my $help;
     Getopt::Long::Configure('bundling');
     my $ret = GetOptions (
+            'e|exec=s' => sub { my ($tool, $path) = split /=/, $_[1]; $$opts{$tool} = $path if $path },
             't|temp-dir:s' => \$$opts{keep_files}, 
             'r|redo-outputs' => \$$opts{redo_outputs}, 
             'h|?|help' => \$help
@@ -215,24 +217,24 @@ sub test_bgzip
         print $fh $out;
     }
     close($fh);
-    cmd("cat $$opts{tmp}/bgzip.dat | $$opts{bin}/bgzip -ci -I$$opts{tmp}/bgzip.dat.gz.gzi > $$opts{tmp}/bgzip.dat.gz");
+    cmd("cat $$opts{tmp}/bgzip.dat | $$opts{bgzip} -ci -I$$opts{tmp}/bgzip.dat.gz.gzi > $$opts{tmp}/bgzip.dat.gz");
 
     # Run tests
     my ($test,$out);
 
-    $test = "$$opts{bin}/bgzip -c -b 65272 -s 5 $$opts{tmp}/bgzip.dat.gz";
+    $test = "$$opts{bgzip} -c -b 65272 -s 5 $$opts{tmp}/bgzip.dat.gz";
     print "$test\n";
     $out = cmd($test);
     if ( $out ne '65272' ) { failed($opts,msg=>$test,reason=>"Expected \"65272\" got \"$out\"\n"); } 
     else { passed($opts,msg=>$test); }
 
-    $test = "$$opts{bin}/bgzip -c -b 979200 -s 6 $$opts{tmp}/bgzip.dat.gz";
+    $test = "$$opts{bgzip} -c -b 979200 -s 6 $$opts{tmp}/bgzip.dat.gz";
     print "$test\n";
     $out = cmd($test);
     if ( $out ne '979200' ) { failed($opts,msg=>$test,reason=>"Expected \"979200\" got \"$out\"\n"); } 
     else { passed($opts,msg=>$test); }
 
-    $test = "$$opts{bin}/bgzip -c -b 652804 -s 6 $$opts{tmp}/bgzip.dat.gz";
+    $test = "$$opts{bgzip} -c -b 652804 -s 6 $$opts{tmp}/bgzip.dat.gz";
     print "$test\n";
     $out = cmd($test);
     if ( $out ne '652804' ) { failed($opts,msg=>$test,reason=>"Expected \"652804\" got \"$out\"\n"); } 
@@ -306,7 +308,7 @@ sub test_faidx
 
     # Run tests: index and retrieval from plain text and compressed files
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa");
-    cmd("cat $$opts{tmp}/faidx.fa | $$opts{bin}/bgzip -ci -I $$opts{tmp}/faidx.fa.gz.gzi > $$opts{tmp}/faidx.fa.gz");
+    cmd("cat $$opts{tmp}/faidx.fa | $$opts{bgzip} -ci -I $$opts{tmp}/faidx.fa.gz.gzi > $$opts{tmp}/faidx.fa.gz");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa.gz");
 
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
@@ -360,7 +362,7 @@ sub test_mpileup
     close($fh1);
     close($fh2);
     cmd("cp $$opts{path}/dat/$ref $$opts{tmp}/$ref");
-    cmd("$$opts{bin}/bgzip -fi $$opts{tmp}/$ref");
+    cmd("$$opts{bgzip} -fi $$opts{tmp}/$ref");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/$ref.gz");
 
     # print "$$opts{bin}samtools mpileup -gb $$opts{tmp}/mpileup.list -f $$opts{tmp}/$args{ref}.gz > $$opts{tmp}/mpileup.bcf\n";
@@ -867,7 +869,7 @@ sub open_bgunzip
 {
     my ($opts, $in) = @_;
 
-    my @cmd = ("$$opts{bin}/bgzip", '-c', '-d');
+    my @cmd = ("$$opts{bgzip}", '-c', '-d');
     my $bgzip;
     my $pid = open($bgzip, '-|');
     unless (defined($pid)) { die "Couldn't fork: $!\n"; }
@@ -1206,7 +1208,7 @@ sub gen_file
     unless (defined($pid)) { die "Couldn't fork : $!\n"; }
     unless ($pid) {
 	open(STDOUT, '>', $sam) || die "Couldn't redirect STDOUT to $sam: $!\n";
-	exec("$$opts{bin}/bgzip", '-c') || die "Couldn't exec bgzip : $!\n";
+	exec("$$opts{bgzip}", '-c') || die "Couldn't exec bgzip : $!\n";
     }
     print $s "\@HD\tVN:1.4\tSO:coordinate\n";
     print $s "\@RG\tID:g1\tDS:Group 1\tLB:Lib1\tSM:Sample1\n";
@@ -1825,7 +1827,7 @@ sub test_cat
 
 	# Recompress with bgzip to alter the location of the bgzf boundaries.
 	$bgbams[$i] = sprintf("%s.%d.bgzip.bam", $out, $i + 1);
-	cmd("'$$opts{bin}/bgzip' -c -d < '$bams[$i]' | '$$opts{bin}/bgzip' -c > '$bgbams[$i]'");
+	cmd("'$$opts{bgzip}' -c -d < '$bams[$i]' | '$$opts{bgzip}' -c > '$bgbams[$i]'");
     }
 
     # Make a concatenated SAM file to compare
