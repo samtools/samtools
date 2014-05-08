@@ -725,12 +725,39 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 	return bam_merge_core2(by_qname, out, headers, n, fn, flag, reg, 0, -1);
 }
 
+static void usage(bool error)
+{
+	FILE* to = error ? stderr : stdout;
+	
+	fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
+	fprintf(to, "Options: -n       sort by read names\n");
+	fprintf(to, "         -r       attach RG tag (inferred from file names)\n");
+	fprintf(to, "         -u       uncompressed BAM output\n");
+	fprintf(to, "         -f       overwrite the output BAM if exist\n");
+	fprintf(to, "         -1       compress level 1\n");
+	fprintf(to, "         -l INT   compression level, from 0 to 9 [-1]\n");
+	fprintf(to, "         -@ INT   number of BAM compression threads [0]\n");
+	fprintf(to, "         -R STR   merge file in the specified region STR [all]\n");
+	fprintf(to, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
+	fprintf(to, "         -c       combine RG tags with colliding IDs rather than amending them\n");
+	fprintf(to, "         -p       combine PG tags with colliding IDs rather than amending them\n");
+	fprintf(to, "         -s VALUE override random seed\n");
+	fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n\n");
+}
+
 int bam_merge(int argc, char *argv[])
 {
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
 	char *fn_headers = NULL, *reg = NULL;
 	const char *file_list = NULL;
 	long random_seed = (long)time(NULL);
+	char** fn = NULL;
+	int fn_size = 0;
+	
+	if (argc == 1) {
+		usage(false);
+		return 0;
+	}
 
 	while ((c = getopt(argc, argv, "h:nru1R:f@:l:cps:b:")) >= 0) {
 		switch (c) {
@@ -746,28 +773,32 @@ int bam_merge(int argc, char *argv[])
 		case 'c': flag |= MERGE_COMBINE_RG; break;
 		case 'p': flag |= MERGE_COMBINE_PG; break;
 		case 's': random_seed = atol(optarg); break;
-		case 'b': file_list = optarg; break;
+		case 'b': {
+			// load the list of files to read
+			int nfiles;
+			char **fn_read = hts_readlines(optarg, &nfiles);
+			if (fn_read) {
+				// Append to end of array
+				fn = realloc(fn, (fn_size+nfiles) * sizeof(char*));
+				if (fn == NULL) { ret = 1; goto end; }
+				memcpy(fn+fn_size, fn_read, nfiles * sizeof(char*));
+				fn_size += nfiles;
+			}
+			else {
+				fprintf(stderr, "[%s] Invalid file list \"%s\"\n", __func__, file_list);
+				ret = 1;
+			}
+			break;
+		}
 		}
 	}
-	srand48(random_seed);
-	if (optind>=argc || (!file_list && optind + 2 >= argc)) {
-		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:   samtools merge [-nr] [-h inh.sam] <out.bam> <in1.bam> <in2.bam> [...]\n\n");
-		fprintf(stderr, "Options: -n       sort by read names\n");
-		fprintf(stderr, "         -r       attach RG tag (inferred from file names)\n");
-		fprintf(stderr, "         -u       uncompressed BAM output\n");
-		fprintf(stderr, "         -f       overwrite the output BAM if exist\n");
-		fprintf(stderr, "         -1       compress level 1\n");
-		fprintf(stderr, "         -l INT   compression level, from 0 to 9 [-1]\n");
-		fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
-		fprintf(stderr, "         -R STR   merge file in the specified region STR [all]\n");
-		fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
-		fprintf(stderr, "         -c       combine RG tags with colliding IDs rather than amending them\n");
-		fprintf(stderr, "         -p       combine PG tags with colliding IDs rather than amending them\n");
-		fprintf(stderr, "         -s VALUE override random seed\n");
-		fprintf(stderr, "         -b FILE  list of input BAM filenames, one per line [null]\n\n");
+	if ( argc - optind < 1 ) {
+		fprintf(stderr, "You must at least specify the output file.\n");
+		usage(true);
 		return 1;
 	}
+	
+	srand48(random_seed);
 	if (!(flag & MERGE_FORCE) && strcmp(argv[optind], "-")) {
 		FILE *fp = fopen(argv[optind], "rb");
 		if (fp != NULL) {
@@ -777,23 +808,24 @@ int bam_merge(int argc, char *argv[])
 		}
 	}
 
-	if (file_list) {
-		// load the list of files to read
-		int i, nfiles;
-		char **fn = hts_readlines(file_list, &nfiles);
-		if (fn) {
-			if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, nfiles, fn, flag, reg, n_threads, level) < 0) ret = 1;
-
-			for (i=0; i<nfiles; i++) free(fn[i]);
-			free(fn);
-		}
-		else {
-			fprintf(stderr, "[%s] Invalid file list \"%s\"\n", __func__, file_list);
-			ret = 1;
-		}
-	} else {
-		// otherwise get list of files to merge from command line
-		if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, argc - (optind+1), argv + (optind+1), flag, reg, n_threads, level) < 0) ret = 1;
+	int nargcfiles = argc - (optind+1);
+	if (nargcfiles > 0) {
+		// Add argc files to end of array
+		fn = realloc(fn, (fn_size+nargcfiles) * sizeof(char*));
+		if (fn == NULL) { ret = 1; goto end; }
+		memcpy(fn+fn_size, argv + (optind+1), nargcfiles * sizeof(char*));
+	}
+	if (fn_size+nargcfiles < 2) {
+		fprintf(stderr, "You must specify at least 2 input files.\n");
+		usage(true);
+		return 1;
+	}
+	if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, level) < 0) ret = 1;
+end:
+	if (fn_size > 0) {
+		int i;
+		for (i=0; i<fn_size; i++) free(fn[i]);
+		free(fn);
 	}
 	free(reg);
 	free(fn_headers);
