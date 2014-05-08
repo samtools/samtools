@@ -491,8 +491,8 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		for (j = 0; j < 4; ++j)
 			qsum[j] += calls[i].qsum[j];
 	// then encoding the base in the first two bits
-    int qsum_tot=0;
-    for (j=0; j<4; j++) { qsum_tot += qsum[j]; call->qsum[j] = 0; }
+    call->qsum_tot=0;
+    for (j=0; j<4; j++) { call->qsum_tot += qsum[j]; call->qsum[j] = 0; }
 	for (j=0; j<4; j++) 
     { 
         assert( !(qsum[j]>>(sizeof(unsigned int)*8-2)) );   // if qsum is too big, insert sort will break
@@ -513,11 +513,11 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 	for (i = 3, j = 1; i >= 0; --i) // i: alleles sorted by QS; j, a[j]: output allele ordering
     {
 		if ((qsum[i]&3) == ref4) 
-            call->qsum[0] = qsum_tot ? (float)(qsum[i]>>2)/qsum_tot : 0;    // REF's qsum
+            call->qsum[0] = call->qsum_tot ? (float)(qsum[i]>>2)/call->qsum_tot : 0;    // REF's qsum
         else
         {
 			if ( !(qsum[i]>>2) ) break; // qsum is 0, this allele is not seen in the pileup
-            call->qsum[j] = (float)(qsum[i]>>2)/qsum_tot;
+            call->qsum[j] = (float)(qsum[i]>>2)/call->qsum_tot;
             call->a[j++]  = qsum[i]&3;
 		}
 	}
@@ -678,9 +678,8 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     for (i=0; i<16; i++) tmpf[i] = bc->anno[i];
     bcf_update_info_float(hdr, rec, "I16", tmpf, 16);
 
-    for (i=4; i>0; i--)
-        if ( bc->qsum[i]!=0 ) break;
-    bcf_update_info_float(hdr, rec, "QS", bc->qsum, i+1);
+    for (i=0; i<5; i++) bc->qsum[i] *= bc->qsum_tot;
+    bcf_update_info_float(hdr, rec, "QS", bc->qsum, nals);
 
     if ( bc->vdb != HUGE_VAL )      bcf_update_info_float(hdr, rec, "VDB", &bc->vdb, 1);
     if ( bc->seg_bias != HUGE_VAL ) bcf_update_info_float(hdr, rec, "SGB", &bc->seg_bias, 1);
