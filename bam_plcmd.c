@@ -602,14 +602,14 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -f, --fasta-ref FILE    faidx indexed reference sequence file\n"
 "  -G, --exclude-RG FILE   exclude read groups listed in FILE\n"
 "  -l, --positions FILE    skip unlisted positions (chr pos) or regions (BED)\n"
-"  -M INT                  cap mapping quality at INT [%d]\n", mplp->max_mq);
+"  -M INT                  cap mapping quality at INT [%d] (not functional)\n", mplp->max_mq);
 	fprintf(fp,
-"  -r, --region REG        region in which pileup is generated\n"
-"  -R, --ignore-RG         ignore RG tags (one BAM = one sample)\n"
 "  -q, --min-MQ INT        skip alignments with mapQ smaller than INT [%d]\n", mplp->min_mq);
 	fprintf(fp,
 "  -Q, --min-BQ INT        skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp->min_baseQ);
 	fprintf(fp,
+"  -r, --region REG        region in which pileup is generated\n"
+"  -R, --ignore-RG         ignore RG tags (one BAM = one sample)\n"
 "  --rf, --incl-flags STR|INT  required flags: skip reads with mask bits unset [%s]\n", tmp_require);
 	fprintf(fp,
 "  --ff, --excl-flags STR|INT  filter flags: skip reads with mask bits set\n"
@@ -622,9 +622,10 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -s, --output-MQ         output mapping quality\n"
 "\n"
 "Output options for genotype likelihoods (when -g/-v is used):\n"
-"  -g/-v, --BCF/--VCF      generate genotype likelihoods (BCF/VCF output format)\n"
+"  -g, --BCF               generate genotype likelihoods in BCF format\n"
 "  -t, --format-tags LIST  optional per-sample tags to output: DP,DV,DP4,SP []\n"
-"  -u, --uncompressed      generate uncompressed BCF/VCF output\n"
+"  -u, --uncompressed      generate uncompressed VCF/BCF output\n"
+"  -v, --VCF               generate genotype likelihoods in VCF format\n"
 "\n"
 "SNP/INDEL genotype likelihoods options (effective with -g/-v):\n"
 "  -e, --ext-prob INT      Phred-scaled gap extension seq error probability [%d]\n", mplp->extQ);
@@ -704,7 +705,7 @@ int bam_mpileup(int argc, char *argv[])
         {"platforms",1,0,'P'},
         {0,0,0,0}
     };
-	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:",lopts,NULL)) >= 0) {
+	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:",lopts,NULL)) >= 0) {
 		switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 : 
@@ -734,7 +735,6 @@ int bam_mpileup(int argc, char *argv[])
 		case 'g': mplp.flag |= MPLP_BCF; break;
 		case 'v': mplp.flag |= MPLP_BCF | MPLP_VCF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_BCF; break;
-		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'B': mplp.flag &= ~MPLP_REALN; break;
 		case 'D': mplp.fmt_flag |= B2B_FMT_DP; fprintf(stderr, "[warning] samtools mpileup option `-D` is functional, but deprecated. Please switch to `-t DP` in future.\n"); break;
 		case 'S': mplp.fmt_flag |= B2B_FMT_SP; fprintf(stderr, "[warning] samtools mpileup option `-S` is functional, but deprecated. Please switch to `-t SP` in future.\n"); break;
