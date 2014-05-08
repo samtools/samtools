@@ -162,17 +162,17 @@ static char* expand_format_string(const char* format_string, const char* basenam
 				break;
 			case '\0':
 				// Error is: fprintf(stderr, "bad format string, trailing %%\n");
-				free(ks_str(&str));
+				free(str.s);
 				return NULL;
 			default:
 				// Error is: fprintf(stderr, "bad format string, unknown format specifier\n");
-				free(ks_str(&str));
+				free(str.s);
 				return NULL;
 		}
 		pointer = next + 1;
 	}
 	kputs(pointer, &str);
-	return ks_str(&str);
+	return ks_release(&str);
 }
 
 // Parse the header, count the number of RG tags and return a list of their names
@@ -183,15 +183,13 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 		*output_name = NULL;
 		return true;
 	}
-	char* input = strndup(hdr->text, hdr->l_text);
-	if ( input == NULL ) {
-		return false;
-	}
+	kstring_t input = { 0, 0, NULL };
+	kputsn(hdr->text, hdr->l_text, &input);
 	
 	//////////////////////////////////////////
 	// First stage count number of @RG tags //
 	//////////////////////////////////////////
-	char* pointer = input;
+	char* pointer = ks_str(&input);
 	size_t n_rg = 0;
 	// Guard against rare case where @RG is first header line
 	// This shouldn't happen but could where @HD is omitted
@@ -213,16 +211,18 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 	
 	regex_t rg_finder;
 	if (regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE) != 0) {
-		free(input);
+		free(input.s);
 		free(names);
 		return false;
 	}
 	regmatch_t* matches = (regmatch_t*)calloc(sizeof(regmatch_t),2);
 	int error;
-	char* begin = input;
+	char* begin = ks_str(&input);
 
 	while ((error = regexec(&rg_finder, begin, 2, matches, 0)) == 0) {
-		names[next++] = strndup(begin+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so);
+		kstring_t str = { 0, 0, NULL };
+		kputsn(begin+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &str);
+		names[next++] = ks_release(&str);
 		begin += matches[0].rm_eo;
 	}
 
@@ -231,7 +231,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 		regfree(&rg_finder);
 		free(matches);
 		free(names);
-		free(input);
+		free(input.s);
 		return false;
 	}
 	free(matches);
@@ -240,7 +240,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 	*count = n_rg;
 	*output_name = names;
 	regfree(&rg_finder);
-	free(input);
+	free(input.s);
 	return true;
 }
 
@@ -259,21 +259,23 @@ static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep)
 	// regex vars
 	char* header = hdr->text;
 	regmatch_t* matches = (regmatch_t*)calloc(sizeof(regmatch_t),2);
+	kstring_t found_id = { 0, 0, NULL };
 	int error;
 
 	while ((error = regexec(&rg_finder, header, 2, matches, 0)) == 0) {
 		kputsn(header, matches[0].rm_so, &str); // copy header up until the found RG line
 
-		char* found_id = strndup(header+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so); // extract ID
+		found_id.l = 0;
+		kputsn(header+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &found_id); // extract ID
 		// if it matches keep keep it, else we can just ignore it
-		if (!strcmp(found_id, id_keep)) {
+		if (strcmp(ks_str(&found_id), id_keep) == 0) {
 			kputsn(header+matches[0].rm_so, (matches[0].rm_eo+1)-matches[0].rm_so, &str);
 		}
-		free(found_id);
 		// move pointer forward
 		header += matches[0].rm_eo+1;
 	}
 	// cleanup
+	free(found_id.s);
 	free(matches);
 	regfree(&rg_finder);
 	// Did we leave loop because of an error?
