@@ -18,8 +18,6 @@ samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
 samtools faidx ref.fasta
 .PP
-samtools pileup -vcf ref.fasta aln.sorted.bam
-.PP
 samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools tview aln.sorted.bam ref.fasta
