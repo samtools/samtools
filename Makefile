@@ -249,7 +249,7 @@ testclean:
 	-cd test/mpileup && rm -f FAIL-*.out* PASS-*.out* anomalous.[bc]*am indels.[bc]*am mpileup.*.[cs]*am mpileup.*.crai overlap50.[bc]*am expected/1.out
 
 mostlyclean: testclean
-	-rm -f *.o misc/*.o test/*/*.o version.h
+	-rm -f *.o misc/*.o test/*.o test/*/*.o version.h
 
 clean: mostlyclean
 	-rm -f $(PROGRAMS) libbam.a $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
