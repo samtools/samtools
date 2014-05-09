@@ -667,43 +667,43 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_SMART_OVERLAPS;
     mplp.argc = argc; mplp.argv = argv;
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
-    static struct option lopts[] = 
+    static const struct option lopts[] =
     {
-        {"rf",1,0,1},   // require flag
-        {"ff",1,0,2},   // filter flag
-        {"incl-flags",1,0,1},
-        {"excl-flags",1,0,2},
-        {"illumina1.3+",0,0,6},
-        {"count-orphans",0,0,'A'},
-        {"bam-list",1,0,'b'},
-        {"no-BAQ",0,0,'B'},
-        {"adjust-MQ",1,0,'C'},
-        {"max-depth",1,0,'d'},
-        {"redo-BAQ",0,0,'E'},
-        {"fasta-ref",1,0,'f'},
-        {"exclude-RG",1,0,'G'},
-        {"positions",1,0,'l'},
-        {"region",1,0,'r'},
-        {"ignore-RG",0,0,'R'},
-        {"min-MQ",1,0,'q'},
-        {"min-BQ",1,0,'Q'},
-        {"ignore-overlaps",0,0,'x'},
-        {"BCF",0,0,'g'},
-        {"VCF",0,0,'v'},
-        {"output-BP",0,0,'O'},
-        {"output-MQ",0,0,'s'},
-        {"format-tags",1,0,'t'},
-        {"uncompressed",0,0,'u'},
-        {"ext-prob",1,0,'e'},
-        {"gap-frac",1,0,'F'},
-        {"tandem-qual",1,0,'h'},
-        {"skip-indels",0,0,'I'},
-        {"max-idepth",1,0,'L'},
-        {"min-ireads ",1,0,'m'},
-        {"open-prob",1,0,'o'},
-        {"per-sample-mF",0,0,'p'},
-        {"platforms",1,0,'P'},
-        {0,0,0,0}
+        {"rf", required_argument, NULL, 1},   // require flag
+        {"ff", required_argument, NULL, 2},   // filter flag
+        {"incl-flags", required_argument, NULL, 1},
+        {"excl-flags", required_argument, NULL, 2},
+        {"illumina1.3+", no_argument, NULL, '6'},
+        {"count-orphans", no_argument, NULL, 'A'},
+        {"bam-list", required_argument, NULL, 'b'},
+        {"no-BAQ", no_argument, NULL, 'B'},
+        {"adjust-MQ", required_argument, NULL, 'C'},
+        {"max-depth", required_argument, NULL, 'd'},
+        {"redo-BAQ", no_argument, NULL, 'E'},
+        {"fasta-ref", required_argument, NULL, 'f'},
+        {"exclude-RG", required_argument, NULL, 'G'},
+        {"positions", required_argument, NULL, 'l'},
+        {"region", required_argument, NULL, 'r'},
+        {"ignore-RG", no_argument, NULL, 'R'},
+        {"min-MQ", required_argument, NULL, 'q'},
+        {"min-BQ", required_argument, NULL, 'Q'},
+        {"ignore-overlaps", no_argument, NULL, 'x'},
+        {"BCF", no_argument, NULL, 'g'},
+        {"VCF", no_argument, NULL, 'v'},
+        {"output-BP", no_argument, NULL, 'O'},
+        {"output-MQ", no_argument, NULL, 's'},
+        {"format-tags", required_argument, NULL, 't'},
+        {"uncompressed", no_argument, NULL, 'u'},
+        {"ext-prob", required_argument, NULL, 'e'},
+        {"gap-frac", required_argument, NULL, 'F'},
+        {"tandem-qual", required_argument, NULL, 'h'},
+        {"skip-indels", no_argument, NULL, 'I'},
+        {"max-idepth", required_argument, NULL, 'L'},
+        {"min-ireads ", required_argument, NULL, 'm'},
+        {"open-prob", required_argument, NULL, 'o'},
+        {"per-sample-mF", no_argument, NULL, 'p'},
+        {"platforms", required_argument, NULL, 'P'},
+        {NULL, 0, NULL, 0}
     };
 	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:",lopts,NULL)) >= 0) {
 		switch (c) {
