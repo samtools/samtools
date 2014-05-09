@@ -1367,24 +1367,24 @@ int main_stats(int argc, char *argv[])
 
     strcpy(in_mode, "rb");
 
-    static struct option loptions[] = 
+    static const struct option loptions[] =
     {
-        {"help",0,0,'h'},
-        {"remove-dups",0,0,'d'},
-        {"sam",0,0,'s'},
-        {"ref-seq",1,0,'r'},
-        {"coverage",1,0,'c'},
-        {"read-length",1,0,'l'},
-        {"insert-size",1,0,'i'},
-        {"most-inserts",1,0,'m'},
-        {"trim-quality",1,0,'q'},
-        {"target-regions",1,0,'t'},
-        {"required-flag",1,0,'f'},
-        {"filtering-flag",1,0,'F'},
-        {"id",1,0,'I'},
-        {"GC-depth",1,0,1},
-        {"sparse",0,0,'x'},
-        {0,0,0,0}
+        {"help", no_argument, NULL, 'h'},
+        {"remove-dups", no_argument, NULL, 'd'},
+        {"sam", no_argument, NULL, 's'},
+        {"ref-seq", required_argument, NULL, 'r'},
+        {"coverage", required_argument, NULL, 'c'},
+        {"read-length", required_argument, NULL, 'l'},
+        {"insert-size", required_argument, NULL, 'i'},
+        {"most-inserts", required_argument, NULL, 'm'},
+        {"trim-quality", required_argument, NULL, 'q'},
+        {"target-regions", required_argument, NULL, 't'},
+        {"required-flag", required_argument, NULL, 'f'},
+        {"filtering-flag", required_argument, NULL, 'F'},
+        {"id", required_argument, NULL, 'I'},
+        {"GC-depth", required_argument, NULL, 1},
+        {"sparse", no_argument, NULL, 'x'},
+        {NULL, 0, NULL, 0}
     };
     int opt;
     while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:",loptions,NULL))>0 )
