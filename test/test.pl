@@ -19,6 +19,7 @@ test_cat($opts);
 test_bam2fq($opts);
 test_depad($opts);
 test_stats($opts);
+test_merge($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -84,26 +85,32 @@ sub _cmd
     my ($cmd) = @_;
     my $kid_io;
     my @out;
+	my @err;
+	my ($err_fh, $err_filename) = tempfile(UNLINK => 1);
+
     my $pid = open($kid_io, "-|");
     if ( !defined $pid ) { error("Cannot fork: $!"); }
-    if ($pid) 
+    if ($pid)
     {
         # parent
         @out = <$kid_io>;
         close($kid_io);
-    } 
+		my $child_retval = $?;
+		@err = <$err_fh>;
+		close ($err_fh);
+		return ($child_retval, join('',@out), join('',@err));
+    }
     else 
     {      
         # child
-        exec('/bin/bash', '-o','pipefail','-c', $cmd) or error("Cannot execute the command [/bin/sh -o pipefail -c $cmd]: $!");
+        exec('/bin/bash', '-o','pipefail','-c', "($cmd) 2> $err_filename") or error("Cannot execute the command [/bin/sh -o pipefail -c $cmd]: $!");
     }
-    return ($? >> 8, join('',@out));
 }
 sub cmd
 {
     my ($cmd) = @_;
-    my ($ret,$out) = _cmd($cmd);
-    if ( $ret ) { error("The command failed [$ret]: $cmd\n", $out); }
+    my ($ret,$out,$err) = _cmd($cmd);
+    if ( $ret ) { error("The command failed [$ret]: $cmd\n", "out:$out\n", "err:$err\n"); }
     return $out;
 }
 # test harness for a command
@@ -124,7 +131,7 @@ sub test_cmd
     print "$test:\n";
     print "\t$args{cmd}\n";
 
-    my ($ret,$out) = _cmd("$args{cmd} 2>&1");
+    my ($ret,$out,$err) = _cmd("$args{cmd}");
     if ( $ret ) { failed($opts,%args,msg=>$test); return; }
     if ( $$opts{redo_outputs} && -e "$$opts{path}/$args{out}" )
     {
@@ -141,6 +148,23 @@ sub test_cmd
             print "\t  new .. $$opts{path}/$args{out}\n";
         }
     }
+	if ( $$opts{redo_outputs} && -e "$$opts{path}/$args{err}" )
+    {
+        rename("$$opts{path}/$args{err}","$$opts{path}/$args{err}.old");
+        open(my $fh,'>',"$$opts{path}/$args{err}") or error("$$opts{path}/$args{err}: $!");
+        print $fh $err;
+        close($fh);
+        my ($ret,$out) = _cmd("diff -q $$opts{path}/$args{err} $$opts{path}/$args{err}.old");
+        if ( !$ret && $err eq '' ) { unlink("$$opts{path}/$args{err}.old"); }
+        else
+        {
+            print "\tthe expected stderr output changed, saving:\n";
+            print "\t  old .. $$opts{path}/$args{err}.old\n";
+            print "\t  new .. $$opts{path}/$args{err}\n";
+        }
+    }
+
+	# check stdout
     my $exp = '';
     if ( open(my $fh,'<',"$$opts{path}/$args{out}") )
     {
@@ -163,10 +187,39 @@ sub test_cmd
         }
         else
         {
-            failed($opts,%args,msg=>$test,reason=>"The outputs differ:\n\t\t$$opts{path}/$args{out}\n\t\t$$opts{path}/$args{out}.new"); 
+            failed($opts,%args,msg=>$test,reason=>"The outputs stdout differ:\n\t\t$$opts{path}/$args{out}\n\t\t$$opts{path}/$args{out}.new");
         }
         return; 
     }
+	# check stderr
+	if ( exists($args{err}) ) {
+		my $exp_err = '';
+		if ( open(my $fh,'<',"$$opts{path}/$args{err}") )
+		{
+			my @exp = <$fh>;
+			$exp_err = join('',@exp);
+			close($fh);
+		}
+		elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$args{err}: $!"); return; }
+
+		if ( $exp_err ne $err )
+		{
+			open(my $fh,'>',"$$opts{path}/$args{err}.new") or error("$$opts{path}/$args{err}.new");
+			print $fh $out;
+			close($fh);
+			if ( !-e "$$opts{path}/$args{err}" )
+			{
+				rename("$$opts{path}/$args{err}.new","$$opts{path}/$args{err}") or error("rename $$opts{path}/$args{err}.new $$opts{path}/$args{err}: $!");
+				print "\tthe file with expected output does not exist, creating new one:\n";
+				print "\t\t$$opts{path}/$args{err}\n";
+			}
+			else
+			{
+				failed($opts,%args,msg=>$test,reason=>"The outputs stderr differ:\n\t\t$$opts{path}/$args{err}\n\t\t$$opts{path}/$args{err}.new");
+			}
+			return;
+		}
+	}
     passed($opts,%args,msg=>$test);
 }
 
@@ -205,7 +258,7 @@ sub test_bgzip
 {
     my ($opts,%args) = @_;
 
-    # Create test data: The beggining of each line gives the 0-based offset (including '\n's)
+    # Create test data: The beginning of each line gives the 0-based offset (including '\n's)
     #
     open(my $fh,'>',"$$opts{tmp}/bgzip.dat") or error("$$opts{tmp}/bgzip.dat: $!");
     my $ntot = 1_000_000;
@@ -366,13 +419,13 @@ sub test_mpileup
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/$ref.gz");
 
     # print "$$opts{bin}samtools mpileup -gb $$opts{tmp}/mpileup.list -f $$opts{tmp}/$args{ref}.gz > $$opts{tmp}/mpileup.bcf\n";
-    test_cmd($opts,out=>'dat/mpileup.out.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150 2>/dev/null");
-    test_cmd($opts,out=>'dat/mpileup.out.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150 2>/dev/null");
-    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600 2>/dev/null| grep -v ^##samtools | grep -v ^##ref");
-    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600 2>/dev/null| grep -v ^##samtools | grep -v ^##ref");
+    test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
+    test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
+    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
+    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
     # test that filter mask replaces (not just adds to) default mask
-    test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam 2>/dev/null | grep -v mpileup");
-    test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram 2>/dev/null | grep -v mpileup");
+    test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam | grep -v mpileup");
+    test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram | grep -v mpileup");
 }
 
 sub test_usage
@@ -385,10 +438,10 @@ sub test_usage
     
     my $command = $args{cmd};
     my $commandpath = $$opts{bin}."/".$command;
-    my ($ret,$out) = _cmd("$commandpath 2>&1");
-    if ( $out =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath: $out"); return; }
+    my ($ret,$out,$err) = _cmd("$commandpath");
+    if ( $err =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath: $out"); return; }
 
-    my @sections = ($out =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
+    my @sections = ($err =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
     
     my $have_usage = 0;
     my $have_version = 0;
@@ -439,28 +492,33 @@ sub test_usage_subcommand
     my $command = $args{cmd};
     my $subcommand = $args{subcmd};
     my $commandpath = $$opts{bin}."/".$command;
-    my ($ret,$out) = _cmd("$commandpath $subcommand 2>&1");
-    if ( $out =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath $subcommand: $out"); return; }
+    my ($ret,$out,$err) = _cmd("$commandpath $subcommand");
 
-    if ( $out =~ m/not.*implemented/is ) { failed($opts,msg=>$test,reason=>"subcommand indicates it is not implemented",expected_fail=>1); return; }
+    # these commands produces usage on stdout as it should
+    $err = $out if ( $subcommand eq 'stats' || $subcommand eq 'split' || $subcommand eq 'merge' );
 
-    my @sections = ($out =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
+    if ( $err =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath $subcommand: $out"); return; }
+
+    if ( $err =~ m/not.*implemented/is ) { failed($opts,msg=>$test,reason=>"subcommand indicates it is not implemented",expected_fail=>1); return; }
+	
+    my @sections = ($err =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
     
     my $have_usage = 0;
     my $usage = "";
     foreach my $section (@sections) {
-	if ( $section =~ m/^usage/i ) {
-	    $have_usage = 1;
-	    $section =~ s/^[[:word:]]+[[:punct:]]?[[:space:]]*//;
-	    $usage = $section;
-	}
+        if ( $section =~ m/^usage/i ) {
+            $have_usage = 1;
+            $section =~ s/^[[:word:]]+[[:punct:]]?[[:space:]]*//;
+            $usage = $section;
+        }
     }
     
-    if ( !$have_usage ) { failed($opts,msg=>$test,reason=>"did not have Usage:"); return; }
+	my $fail = 0;
+    if ( !$have_usage ) { failed($opts,msg=>$test,reason=>"did not have Usage:"); $fail = 1; }
 
-    if ( !($usage =~ m/$command[[:space:]]+$subcommand/) ) { failed($opts,msg=>$test,reason=>"usage did not mention $command $subcommand"); return; } 
+    if ( !($usage =~ m/$command[[:space:]]+$subcommand/) ) { failed($opts,msg=>$test,reason=>"usage did not mention $command $subcommand"); $fail = 1; }
     
-    passed($opts,msg=>$test);
+    passed($opts,msg=>$test) if $fail == 0;
 }
 
 # Add UR tags to @SQ lines in a SAM file.
@@ -2029,4 +2087,25 @@ sub test_stats
     test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+3");
     test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n+3");
     test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n+3");
+}
+
+sub test_merge
+{
+    my ($opts,%args) = @_;
+	
+    # Note the use of -s 1 to fix the random seed in place
+	
+    # Merge 1 - Sadly iterator API doesn't work with SAM files, expected fail
+    test_cmd($opts,out=>'merge/1.merge.expected',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/merge/test_input_1_a.sam $$opts{path}/merge/test_input_1_b.sam $$opts{path}/merge/test_input_1_c.sam", expect_fail=>1);
+    # Merge 2 - Standard 3 file BAM merge all files presented on the command line
+    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/merge/test_input_1_a.bam $$opts{path}/merge/test_input_1_b.bam $$opts{path}/merge/test_input_1_c.bam");
+    # Merge 3 - Standard 3 file BAM merge 2 files in fofn 1 on command line
+	open(my $fofn, "$$opts{path}/merge/test_3.fofn");
+	my ($tmpfile_fh, $tmpfile_filename) = tempfile(UNLINK => 1);
+
+	while (<$fofn>) {
+		print $tmpfile_fh "$$opts{path}/$_";
+	}
+	close($tmpfile_fh);
+    test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge -s 1 -b $tmpfile_filename - $$opts{path}/merge/test_input_1_a.bam");
 }
