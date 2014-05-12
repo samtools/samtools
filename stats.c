@@ -47,6 +47,10 @@
 #define IS_READ2(bam) ((bam)->core.flag&BAM_FREAD2)
 #define IS_DUP(bam) ((bam)->core.flag&BAM_FDUP)
 
+// The GC-depth graph works as follows: split the reference sequence into
+// segments and calculate GC content and depth in each bin. Then sort 
+// these segments by their GC and plot the depth distribution by means
+// of 10th, 25th, etc. depth percentiles.
 typedef struct
 {
     float gc;
@@ -123,7 +127,6 @@ typedef struct
     uint32_t ngcd, igcd;        // The maximum number of GC depth bins and index of the current bin
     gc_depth_t *gcd;            // The GC-depth bins holder
     int gcd_bin_size;           // The size of GC-depth bin
-    uint32_t gcd_ref_size;      // The approximate size of the genome
     int32_t tid, gcd_pos;       // Position of the current bin
     int32_t pos;                // Position of the last read
 
@@ -486,22 +489,7 @@ void realloc_rseq_buffer(stats_t *stats)
 
 void realloc_gcd_buffer(stats_t *stats, int seq_len)
 {
-    if ( seq_len >= stats->gcd_bin_size )
-        error("The --GC-depth bin size (%d) is set too low for the read length %d\n", stats->gcd_bin_size, seq_len);
-
-    int n = 1 + stats->gcd_ref_size / (stats->gcd_bin_size - seq_len);
-    if ( n <= stats->igcd )
-        error("The --GC-depth bin size is too small or reference genome too big; please decrease the bin size or increase the reference length\n");
-        
-    if ( n > stats->ngcd )
-    {
-        stats->gcd = realloc(stats->gcd, n*sizeof(gc_depth_t));
-        if ( !stats->gcd )
-            error("Could not realloc GCD buffer, too many chromosomes or the genome too long?? [%u %u]\n", stats->ngcd,n);
-        memset(&(stats->gcd[stats->ngcd]),0,(n-stats->ngcd)*sizeof(gc_depth_t));
-        stats->ngcd = n;
-    }
-
+    hts_expand0(gc_depth_t,stats->igcd,stats->ngcd,stats->gcd);
     realloc_rseq_buffer(stats);
 }
 
@@ -1286,7 +1274,7 @@ static void error(const char *format, ...)
         printf("    -d, --remove-dups                   Exclude from statistics reads marked as duplicates\n");
         printf("    -f, --required-flag <int>           Required flag, 0 for unset [0]\n");
         printf("    -F, --filtering-flag <int>          Filtering flag, 0 for unset [0]\n");
-        printf("        --GC-depth <float,float>        Bin size for GC-depth graph and the maximum reference length [2e4,4.2e9]\n");
+        printf("        --GC-depth <float>              the size of GC-depth bins (decreasing bin size increases memory requirement) [2e4]\n");
         printf("    -h, --help                          This help message\n");
         printf("    -i, --insert-size <int>             Maximum insert size [8000]\n");
         printf("    -I, --id <string>                   Include only listed read group or sample name\n");
@@ -1352,7 +1340,6 @@ int main_stats(int argc, char *argv[])
     stats->max_qual  = 40;
     stats->isize_main_bulk = 0.99;   // There are always outliers at the far end
     stats->gcd_bin_size = 20e3;
-    stats->gcd_ref_size = 4.2e9;
     stats->rseq_pos     = -1;
     stats->tid = stats->gcd_pos = -1;
     stats->igcd = 0;
@@ -1399,14 +1386,7 @@ int main_stats(int argc, char *argv[])
                       if (stats->fai==0) 
                           error("Could not load faidx: %s\n", optarg); 
                       break;
-            case  1 : {
-                        float flen,fbin;
-                        if ( sscanf(optarg,"%f,%f",&fbin,&flen)!= 2 ) 
-                            error("Unable to parse --GC-depth %s\n", optarg); 
-                        stats->gcd_bin_size = fbin;
-                        stats->gcd_ref_size = flen;
-                      }
-                      break;
+            case  1 : stats->gcd_bin_size = atof(optarg); break;
             case 'c': if ( sscanf(optarg,"%d,%d,%d",&stats->cov_min,&stats->cov_max,&stats->cov_step)!= 3 ) 
                           error("Unable to parse -c %s\n", optarg); 
                       break;
