@@ -92,6 +92,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 	if (argc == 1) { usage(stdout); return NULL; }
 
 	const char* optstring = "vf:u:";
+	char* delim;
 	
 	parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
 	if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
@@ -107,13 +108,14 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 			retval->verbose = true;
 			break;
 		case 'u':
-		{
-			char* sep = strdup(optarg);
-			if (!sep ) { perror("cannot allocate string memory"); return NULL; }
-			retval->unaccounted_name = strsep(&sep, ":");
-			retval->unaccounted_header_name = sep;
+			retval->unaccounted_name = strdup(optarg);
+			if (! retval->unaccounted_name ) { perror("cannot allocate string memory"); return NULL; }
+			if ((delim = strchr(retval->unaccounted_name, ':')) != NULL) {
+				*delim = '\0';
+				retval->unaccounted_header_name = strdup(delim+1);
+				if (! retval->unaccounted_header_name ) { perror("cannot allocate string memory"); return NULL; }
+			}
 			break;
-		}
 		default:
 			usage(stdout);
 			free(retval);
