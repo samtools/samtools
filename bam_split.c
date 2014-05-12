@@ -67,28 +67,29 @@ typedef struct state state_t;
 static void cleanup_state(state_t* status);
 static void cleanup_opts(parsed_opts_t* opts);
 
-static void usage(bool error)
+static void usage(FILE *write_to)
 {
-	FILE* write_to = error ? stderr : stdout;
 	fprintf(write_to,
-			"Usage: samtools split [-v] [-f <format string>] [-u <unaccounted.bam>[:<unaccounted_header.sam>]] <merged.bam>\n\n"
-			"Where:\n"
-			"<merged.bam> is your file to separate out into individual read groups.\n"
-			"Options:\n"
-			"\t-v                 verbose output.\n"
-			"\t-f STRING          output filename format string: [\"%%*_%%#.bam\")]\n"
-			"\t  %%%%    %%\n"
-			"\t  %%*    basename\n"
-			"\t  %%#    @RG index\n"
-			"\t  %%!    @RG ID\n"
-			"\t-u FILE1[:FILE2]   put reads where no RG tag is set or the RG tag is unrecognised in FILE1 and optionally override the header with FILE2.\n"
-			);
+"Usage: samtools split [-u <unaccounted.bam>[:<unaccounted_header.sam>]]\n"
+"                      [-f <format_string>] [-v] <merged.bam>\n"
+"Options:\n"
+"  -f STRING       output filename format string [\"%%*_%%#.bam\"]\n"
+"  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
+"  -u FILE1:FILE2  ...and override the header with FILE2\n"
+"  -v              verbose output\n"
+"\n"
+"Format string expansions:\n"
+"  %%%%     %%\n"
+"  %%*     basename\n"
+"  %%#     @RG index\n"
+"  %%!     @RG ID\n"
+	  );
 }
 
 // Takes the command line options and turns them into something we can understand
 static parsed_opts_t* parse_args(int argc, char** argv)
 {
-	if (argc == 1) { usage(false); return NULL; }
+	if (argc == 1) { usage(stdout); return NULL; }
 
 	const char* optstring = "vf:u:";
 	
@@ -114,7 +115,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 			break;
 		}
 		default:
-			usage(false);
+			usage(stdout);
 			free(retval);
 			return NULL;
 		}
@@ -127,7 +128,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 
 	if (argc != 1) {
 		fprintf(stderr, "Invalid number of arguments: %d\n", argc);
-		usage(true);
+		usage(stderr);
 		free(retval);
 		return NULL;
 	}
