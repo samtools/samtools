@@ -726,10 +726,8 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 	return bam_merge_core2(by_qname, out, headers, n, fn, flag, reg, 0, -1);
 }
 
-static void usage(bool error)
+static void merge_usage(FILE *to)
 {
-	FILE* to = error ? stderr : stdout;
-	
 	fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
 	fprintf(to, "Options: -n       sort by read names\n");
 	fprintf(to, "         -r       attach RG tag (inferred from file names)\n");
@@ -756,7 +754,7 @@ int bam_merge(int argc, char *argv[])
 	int fn_size = 0;
 	
 	if (argc == 1) {
-		usage(false);
+		merge_usage(stdout);
 		return 0;
 	}
 
@@ -795,7 +793,7 @@ int bam_merge(int argc, char *argv[])
 	}
 	if ( argc - optind < 1 ) {
 		fprintf(stderr, "You must at least specify the output file.\n");
-		usage(true);
+		merge_usage(stderr);
 		return 1;
 	}
 	
@@ -818,7 +816,7 @@ int bam_merge(int argc, char *argv[])
 	}
 	if (fn_size+nargcfiles < 2) {
 		fprintf(stderr, "You must specify at least 2 input files.\n");
-		usage(true);
+		merge_usage(stderr);
 		return 1;
 	}
 	if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, level) < 0) ret = 1;
