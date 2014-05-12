@@ -96,7 +96,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if (result_1 && count == 1 && !strcmp(output[0], "fish")
 		&& (getline(&res, &len, check) == -1)
@@ -109,6 +108,11 @@ int main(int argc, char**argv)
 	fclose(check);
 	
 	// teardown
+	int i;
+	for (i = 0; i < count; i++){
+		free(output[i]);
+	}
+	free(output);
 	bam_hdr_destroy(hdr1);
 	if (verbose) printf("END test 1\n");
 

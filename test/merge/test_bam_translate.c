@@ -357,7 +357,6 @@ int main(int argc, char**argv)
 	}
 
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) == -1 ) &&
 		(feof(check) || (res && !strcmp("",res))) ) {
@@ -395,7 +394,6 @@ int main(int argc, char**argv)
 	}
 
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) == -1 ) &&
 		(feof(check) || (res && !strcmp("",res))) ) {
@@ -433,7 +431,6 @@ int main(int argc, char**argv)
 	}
 
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) == -1 ) &&
 		(feof(check) || (res && !strcmp("",res)))) {
@@ -470,7 +467,6 @@ int main(int argc, char**argv)
 		dump_read(b);
 	}
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) != -1 ) &&
 		res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
@@ -507,7 +503,6 @@ int main(int argc, char**argv)
 	}
 
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) != -1 ) &&
 		res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
@@ -545,7 +540,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) == -1 ) &&
 		(feof(check) || (res && !strcmp("",res))) ) {
