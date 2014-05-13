@@ -1,6 +1,7 @@
 #include "../../bam_sort.c"
 #include "../test.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -558,12 +559,9 @@ int main(int argc, char**argv)
 	// Cleanup
 	free(res);
 	remove(tempfname);
+	if (failure > 0)
+		fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
 	fclose(orig_stderr);
 
-	if (NUM_TESTS == success) {
-		return 0;
-	} else {
-		fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
-		return 1;
-	}
+	return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
 }
