@@ -28,6 +28,7 @@
 
 #include "../../bam_split.c"
 #include "../test.h"
+#include <stdlib.h>
 #include <unistd.h>
 
 void setup_test_1(int* argc, char*** argv)
@@ -127,10 +128,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len_stdout = 0;
-	len_stderr = 0;
-	res_stdout = NULL;
-	res_stderr = NULL;
 	check_stdout = fopen(tempfname_stdout, "r");
 	check_stderr = fopen(tempfname_stderr, "r");
 	if ( !result_1
@@ -148,6 +145,7 @@ int main(int argc, char**argv)
 	fclose(check_stdout);
 	
 	// teardown
+	cleanup_opts(result_1);
 	int i = 0;
 	for (i = 0; i < argc_1; ++i) {
 		free(argv_1[i]);
@@ -180,10 +178,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len_stdout = 0;
-	len_stderr = 0;
-	res_stdout = NULL;
-	res_stderr = NULL;
 	check_stdout = fopen(tempfname_stdout, "r");
 	check_stderr = fopen(tempfname_stderr, "r");
 	if ( result_2
@@ -197,9 +191,11 @@ int main(int argc, char**argv)
 		++failure;
 		if (verbose) fprintf(orig_stdout, "FAIL test 2\n");
 	}
+	fclose(check_stdout);
 	fclose(check_stderr);
 	
 	// teardown
+	cleanup_opts(result_2);
 	int j = 0;
 	for (j = 0; j < argc_2; ++j) {
 		free(argv_2[j]);
@@ -214,11 +210,10 @@ int main(int argc, char**argv)
 	free(res_stderr);
 	remove(tempfname_stdout);
 	remove(tempfname_stderr);
-	
-	if (NUM_TESTS == success) {
-		return 0;
-	} else {
+	fclose(orig_stdout);
+	if (failure > 0)
 		fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
-		return 1;
-	}
+	fclose(orig_stderr);
+	
+	return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
 }

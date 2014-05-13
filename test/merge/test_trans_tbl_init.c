@@ -63,6 +63,8 @@ bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 	
 	if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 1 ) return false;
 	
+	regfree(&check_regex);
+	
 	// Check output tbl
 	if (tbl[0].n_targets != 1 || tbl[0].tid_trans[0] != 0 || tbl[0].lost_coord_sort) return false;
 	
@@ -122,7 +124,9 @@ bool check_test_2(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 	regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
 	
 	if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 2 ) return false;
-
+	
+	regfree(&check_regex);
+	
 	// Check output tbl
 	if (tbl[0].n_targets != 2 || tbl[0].tid_trans[0] != 1 || tbl[0].tid_trans[1] != 0) return false;
 	

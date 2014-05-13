@@ -28,6 +28,7 @@
 
 #include "../../bam_split.c"
 #include "../test.h"
+#include <stdlib.h>
 #include <unistd.h>
 
 void setup_test_1(bam_hdr_t** hdr_in)
@@ -119,11 +120,9 @@ int main(int argc, char**argv)
 	// Cleanup test harness
 	free(res);
 	remove(tempfname);
-	
-	if (NUM_TESTS == success) {
-		return 0;
-	} else {
+	if (failure > 0)
 		fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
-		return 1;
-	}
+	fclose(orig_stderr);
+
+	return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
 }

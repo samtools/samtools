@@ -1,6 +1,7 @@
 #include "../../bam_sort.c"
 #include "../test.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <unistd.h>
@@ -357,7 +358,6 @@ int main(int argc, char**argv)
 	}
 
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) == -1 ) &&
 		(feof(check) || (res && !strcmp("",res))) ) {
@@ -395,7 +395,6 @@ int main(int argc, char**argv)
 	}
 
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) == -1 ) &&
 		(feof(check) || (res && !strcmp("",res))) ) {
@@ -433,7 +432,6 @@ int main(int argc, char**argv)
 	}
 
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) == -1 ) &&
 		(feof(check) || (res && !strcmp("",res)))) {
@@ -470,7 +468,6 @@ int main(int argc, char**argv)
 		dump_read(b);
 	}
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) != -1 ) &&
 		res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
@@ -507,7 +504,6 @@ int main(int argc, char**argv)
 	}
 
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) != -1 ) &&
 		res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
@@ -545,7 +541,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if ( (getline(&res, &len, check) == -1 ) &&
 		(feof(check) || (res && !strcmp("",res))) ) {
@@ -564,11 +559,9 @@ int main(int argc, char**argv)
 	// Cleanup
 	free(res);
 	remove(tempfname);
-
-	if (NUM_TESTS == success) {
-		return 0;
-	} else {
+	if (failure > 0)
 		fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
-		return 1;
-	}
+	fclose(orig_stderr);
+
+	return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
 }

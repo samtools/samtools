@@ -28,6 +28,7 @@
 
 #include "../../bam_split.c"
 #include "../test.h"
+#include <stdlib.h>
 #include <unistd.h>
 
 void setup_test_1(bam_hdr_t** hdr_in)
@@ -96,7 +97,6 @@ int main(int argc, char**argv)
 	}
 	
 	// check result
-	len = 0;
 	check = fopen(tempfname, "r");
 	if (result_1 && count == 1 && !strcmp(output[0], "fish")
 		&& (getline(&res, &len, check) == -1)
@@ -109,17 +109,20 @@ int main(int argc, char**argv)
 	fclose(check);
 	
 	// teardown
+	int i;
+	for (i = 0; i < count; i++){
+		free(output[i]);
+	}
+	free(output);
 	bam_hdr_destroy(hdr1);
 	if (verbose) printf("END test 1\n");
 
 	// Cleanup
 	free(res);
 	remove(tempfname);
-	
-	if (NUM_TESTS == success) {
-		return 0;
-	} else {
+	if (failure > 0)
 		fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
-		return 1;
-	}
+	fclose(orig_stderr);
+
+	return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
 }
