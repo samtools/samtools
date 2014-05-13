@@ -578,7 +578,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	}
 
 	g_is_by_qname = by_qname;
-	fp = (samFile**)calloc(n, sizeof(samFile));
+	fp = (samFile**)calloc(n, sizeof(samFile*));
 	heap = (heap1_t*)calloc(n, sizeof(heap1_t));
 	iter = (hts_itr_t**)calloc(n, sizeof(hts_itr_t*));
 	translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
