@@ -456,7 +456,7 @@ int main_pad2unpad(int argc, char *argv[])
 depad_end:
 	// close files, free and return
 	if (fai) fai_destroy(fai);
-	if (h != in->header) bam_header_destroy(h);
+	if (in && h != in->header) bam_header_destroy(h);
 	samclose(in);
 	samclose(out);
 	free(fn_list); free(fn_out);
