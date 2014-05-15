@@ -1487,7 +1487,6 @@ sub test_view
     $test++;
     run_view_test($opts,
 		  msg => "$test: samtools view -H (CRAM input)",
-		  expect_fail => 1,
 		  args => ['-H', $cram_with_ur_out],
 		  out => sprintf("%s.test%03d.header", $out, $test),
 		  compare => $sam_header);
