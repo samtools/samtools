@@ -496,10 +496,8 @@ int main_import(int argc, char *argv[])
 
 int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 
-static void bam2fq_usage(bool error)
+static void bam2fq_usage(FILE *to)
 {
-	FILE* to = error ? stderr : stdout;
-
 	fprintf(to, "\nUsage:   samtools bam2fq [-a] [-s <outSE.fq>] <in.bam>\n\n");
 	fprintf(to, "Options: -a        append /1 and /2 to the read name\n");
 	fprintf(to, "         -O        output quality in the OQ tag if present\n");
@@ -509,51 +507,59 @@ static void bam2fq_usage(bool error)
 
 int main_bam2fq(int argc, char *argv[])
 {
+	samFile *fp;
+	bam_hdr_t *h;
+	bam1_t *b;
+	int8_t *buf;
+	size_t max_buf;
+	FILE* fpse;
 	// Parse args
 	char* fnse = NULL;
 	bool has12 = false, use_oq = false;
 	int c;
 	while ((c = getopt(argc, argv, "aOs:")) > 0) {
 		switch (c) {
-			case 'a': has12 = true;
-			case 'O': use_oq = true;
-			case 's': fnse = optarg;
+			case 'a': has12 = true; break;
+			case 'O': use_oq = true; break;
+			case 's': fnse = optarg; break;
+			default: bam2fq_usage(stderr); return 1;
 		}
 	}
 
 	if ((argc - (optind)) == 0) {
-		bam2fq_usage(false);
+		bam2fq_usage(stdout);
 		return 0;
 	}
 	
 	if ((argc - (optind)) != 1) {
 		fprintf(stderr, "Too many arguments.\n");
-		bam2fq_usage(true);
+		bam2fq_usage(stderr);
 		return 1;
 	}
 
-	samFile* fp = sam_open(argv[optind], "r");
+	fp = sam_open(argv[optind], "r");
 	if (fp == NULL) {
-		fprintf(stderr, "Cannot open input file for reading.\n");
+		print_error_errno("Cannot read file \"%s\"", argv[optind]);
 		return 1;
 	}
-	FILE* fpse = NULL;
+	fpse = NULL;
 	if (fnse) {
 		fpse = fopen(fnse,"w");
 		if (fpse == NULL) {
-			fprintf(stderr, "Cannot open singleton file for writing.\n");
+			print_error_errno("Cannot write to singleton file \"%s\"", fnse);
 			return 1;
 		}
 	}
 	 
-	bam_hdr_t* h = sam_hdr_read(fp);
-	bam1_t* b = bam_init1();
-	int8_t* buf = NULL;
-	size_t max_buf = 0;
+	h = sam_hdr_read(fp);
+	b = bam_init1();
+	buf = NULL;
+	max_buf = 0;
 
 	int64_t n_singletons = 0, n_reads = 0;
 	char* previous = NULL;
 	kstring_t linebuf = { 0, 0, NULL };
+	kputsn("", 0, &linebuf);
 
 	while (sam_read1(fp, h, b) >= 0) {
 		if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) continue; // skip secondary and supplementary alignments
@@ -581,12 +587,11 @@ int main_bam2fq(int argc, char *argv[])
 				previous = strdup(bam_get_qname(b));
 			}
 		} else {
-			if (linebuf.s) fputs(linebuf.s, stdout); // Write previous read
+			fputs(linebuf.s, stdout); // Write pending read
 			if (fpse) previous = strdup(bam_get_qname(b));
 		}
-		free(linebuf.s);
-		ks_release(&linebuf);
 
+		linebuf.l = 0;
 		// Write read name
 		kputc(!has_qual? '>' : '@', &linebuf);
 		kputs(bam_get_qname(b), &linebuf);
@@ -644,16 +649,13 @@ int main_bam2fq(int argc, char *argv[])
 			kputc('\n', &linebuf);
 		}
 	}
+
 	if (fpse) {
 		if ( previous ) { // Nothing left to match it's a singleton
 			++n_singletons;
 			fputs(linebuf.s, fpse);  // Write previous read to singletons
-			free(previous);
-			previous = strdup(bam_get_qname(b));
 		} else {
 			fputs(linebuf.s, stdout); // Write previous read
-			free(previous);
-			previous = NULL;
 		}
 
 		fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
@@ -662,6 +664,7 @@ int main_bam2fq(int argc, char *argv[])
 		fputs(linebuf.s, stdout); // Write previous read
 	}
 	free(linebuf.s);
+	free(previous);
 
 	fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
 
