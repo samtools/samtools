@@ -284,6 +284,7 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
     {
         int cig  = bam_cigar_op(bam_get_cigar(bam_line)[icig]);
         int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[icig]);
+        if ( !ncig ) continue;  // curiously, this can happen: 0D
 
         if ( cig==BAM_CINS )
         {
@@ -489,7 +490,7 @@ void realloc_rseq_buffer(stats_t *stats)
 
 void realloc_gcd_buffer(stats_t *stats, int seq_len)
 {
-    hts_expand0(gc_depth_t,stats->igcd,stats->ngcd,stats->gcd);
+    hts_expand0(gc_depth_t,stats->igcd+1,stats->ngcd,stats->gcd);
     realloc_rseq_buffer(stats);
 }
 
@@ -739,6 +740,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             {
                 int cig  = bam_cigar_op(bam_get_cigar(bam_line)[i]);
                 int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
+                if ( !ncig ) continue;  // curiously, this can happen: 0D
                 if ( cig==BAM_CDEL ) readlen += ncig;
                 else if ( cig==BAM_CMATCH ) 
                 {
