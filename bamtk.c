@@ -90,6 +90,7 @@ static void usage(FILE *fp)
 "         mpileup     multi-way pileup\n"
 "         sort        sort alignment file\n"
 "         split       splits a file by read group\n"
+"         bam2fq      converts a BAM to a FASTQ\n"
 "  -- stats\n"
 "         bedcov      read depth per BED region\n"
 "         depth       compute the depth\n"

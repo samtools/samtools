@@ -25,6 +25,8 @@ samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 samtools tview aln.sorted.bam ref.fasta
 .PP
 samtools flags PAIRED,UNMAP,MUNMAP
+.PP
+samtools bam2fq input.bam > output.fastq
 
 .SH DESCRIPTION
 .PP
@@ -637,6 +639,31 @@ l l l .
 0x400 % DUP % .. PCR or optical duplicate
 0x800 % SUPPLEMENTARY % .. supplementary alignment
 .TE
+
+.TP
+.B bam2fq
+samtools bam2fq [-nO] [-s <outSE.fq>] <in.bam>
+
+Converts a bam into FASTQ format.
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -n
+By default, either '/1' or '/2' is added to the end of read names
+where the corresponding BAM_READ1 or BAM_READ2 flag is set.
+Using
+.B -n
+causes read names to be left as they are.
+.TP 8
+.B -O
+Use quality values from OQ tags in preference to standard quality string
+if available.
+.TP 8
+.B -s FILE
+Write singleton reads in FASTQ format to FILE instead of outputting them.
+.RE
+
 
 .TP
 .BR help ,\  --help

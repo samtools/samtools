@@ -5,6 +5,8 @@
 #include <math.h>
 #include <inttypes.h>
 #include <errno.h>
+#include <stdbool.h>
+#include <assert.h>
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
@@ -516,42 +518,125 @@ int main_import(int argc, char *argv[])
 
 int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 
+static void bam2fq_usage(FILE *to)
+{
+	fprintf(to, "\nUsage:   samtools bam2fq [-nO] [-s <outSE.fq>] <in.bam>\n\n");
+	fprintf(to, "Options: -n        don't append /1 and /2 to the read name\n");
+	fprintf(to, "         -O        output quality in the OQ tag if present\n");
+	fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
+	fprintf(to, "\n");
+}
+
 int main_bam2fq(int argc, char *argv[])
 {
 	samFile *fp;
 	bam_hdr_t *h;
 	bam1_t *b;
 	int8_t *buf;
-	int max_buf, c, no12 = 0;
 	int status = EXIT_SUCCESS;
-	while ((c = getopt(argc, argv, "n")) > 0)
-		if (c == 'n') no12 = 1;
-	if (argc == 1) {
-		fprintf(stderr, "Usage: samtools bam2fq <in.bam>\n");
+	size_t max_buf;
+	FILE* fpse;
+	// Parse args
+	char* fnse = NULL;
+	bool has12 = true, use_oq = false;
+	int c;
+	while ((c = getopt(argc, argv, "nOs:")) > 0) {
+		switch (c) {
+			case 'n': has12 = false; break;
+			case 'O': use_oq = true; break;
+			case 's': fnse = optarg; break;
+			default: bam2fq_usage(stderr); return 1;
+		}
+	}
+
+	if ((argc - (optind)) == 0) {
+		bam2fq_usage(stdout);
+		return 0;
+	}
+	
+	if ((argc - (optind)) != 1) {
+		fprintf(stderr, "Too many arguments.\n");
+		bam2fq_usage(stderr);
 		return 1;
 	}
+
 	fp = sam_open(argv[optind], "r");
-	if (fp == 0) return 1;
+	if (fp == NULL) {
+		print_error_errno("Cannot read file \"%s\"", argv[optind]);
+		return 1;
+	}
+	fpse = NULL;
+	if (fnse) {
+		fpse = fopen(fnse,"w");
+		if (fpse == NULL) {
+			print_error_errno("Cannot write to singleton file \"%s\"", fnse);
+			return 1;
+		}
+	}
+	 
 	h = sam_hdr_read(fp);
 	b = bam_init1();
-	buf = 0;
+	buf = NULL;
 	max_buf = 0;
+
+	int64_t n_singletons = 0, n_reads = 0;
+	char* previous = NULL;
+	kstring_t linebuf = { 0, 0, NULL };
+	kputsn("", 0, &linebuf);
+
 	while (sam_read1(fp, h, b) >= 0) {
-		int i, qlen = b->core.l_qseq;
-		uint8_t *seq;
-		putchar('@'); fputs(bam_get_qname(b), stdout);
-		if (no12) putchar('\n');
-		else {
-			if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) puts("/1");
-			else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) puts("/2");
-			else putchar('\n');
+		if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) continue; // skip secondary and supplementary alignments
+		++n_reads;
+
+		int i;
+		int32_t qlen = b->core.l_qseq;
+		assert(qlen >= 0);
+		uint8_t* seq;
+		uint8_t* qual = bam_get_qual(b);
+		const uint8_t *oq = NULL;
+		if (use_oq) oq = bam_aux_get(b, "OQ");
+		bool has_qual = (qual[0] != 0xff || (use_oq && oq)); // test if there is quality
+		
+		// If there was a previous readname
+		if ( fpse && previous ) {
+			if (!strcmp(bam_get_qname(b), previous ) ) {
+				fputs(linebuf.s, stdout); // Write previous read
+				free(previous);
+				previous = NULL;
+			} else { // Doesn't match it's a singleton
+				++n_singletons;
+				fputs(linebuf.s, fpse);  // Write previous read to singletons
+				free(previous);
+				previous = strdup(bam_get_qname(b));
+			}
+		} else {
+			fputs(linebuf.s, stdout); // Write pending read
+			if (fpse) previous = strdup(bam_get_qname(b));
 		}
+
+		linebuf.l = 0;
+		// Write read name
+		kputc(!has_qual? '>' : '@', &linebuf);
+		kputs(bam_get_qname(b), &linebuf);
+		// Add the /1 /2 if requested
+		if (has12) {
+			if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) kputs("/1\n", &linebuf);
+			else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) kputs("/2\n", &linebuf);
+			else kputc('\n', &linebuf);
+		} else {
+			kputc('\n', &linebuf);
+		}
+		
 		if (max_buf < qlen + 1) {
 			max_buf = qlen + 1;
 			kroundup32(max_buf);
 			buf = realloc(buf, max_buf);
+			if (buf == NULL) {
+				fprintf(stderr, "Out of memory");
+				return 1;
+			}
 		}
-		buf[qlen] = 0;
+		buf[qlen] = '\0';
 		seq = bam_get_seq(b);
 		for (i = 0; i < qlen; ++i)
 			buf[i] = bam_seqi(seq, i);
@@ -565,20 +650,47 @@ int main_bam2fq(int argc, char *argv[])
 		}
 		for (i = 0; i < qlen; ++i)
 			buf[i] = seq_nt16_str[buf[i]];
-		puts((char*)buf);
-		puts("+");
-		seq = bam_get_qual(b);
-		for (i = 0; i < qlen; ++i)
-			buf[i] = 33 + seq[i];
-		if (b->core.flag & BAM_FREVERSE) { // reverse
-			for (i = 0; i < qlen>>1; ++i) {
-				int8_t t = buf[qlen - 1 - i];
-				buf[qlen - 1 - i] = buf[i];
-				buf[i] = t;
+		kputs((char*)buf, &linebuf);
+		kputc('\n', &linebuf);
+
+		if (has_qual) {
+			// Write quality
+			kputs("+\n", &linebuf);
+			if (use_oq && oq) memcpy(buf, oq + 1, qlen);
+			else {
+				for (i = 0; i < qlen; ++i)
+					buf[i] = 33 + qual[i];
 			}
+			if (b->core.flag & BAM_FREVERSE) { // reverse
+				for (i = 0; i < qlen>>1; ++i) {
+					int8_t t = buf[qlen - 1 - i];
+					buf[qlen - 1 - i] = buf[i];
+					buf[i] = t;
+				}
+			}
+			kputs((char*)buf, &linebuf);
+			kputc('\n', &linebuf);
 		}
-		puts((char*)buf);
 	}
+
+	if (fpse) {
+		if ( previous ) { // Nothing left to match it's a singleton
+			++n_singletons;
+			fputs(linebuf.s, fpse);  // Write previous read to singletons
+		} else {
+			fputs(linebuf.s, stdout); // Write previous read
+		}
+
+		fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
+		fclose(fpse);
+	} else {
+		fputs(linebuf.s, stdout); // Write previous read
+	}
+	free(linebuf.s);
+	free(previous);
+
+	fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
+
 	free(buf);
 	bam_destroy1(b);
 	bam_hdr_destroy(h);
