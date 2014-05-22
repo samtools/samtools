@@ -494,17 +494,13 @@ sub test_usage_subcommand
     my $commandpath = $$opts{bin}."/".$command;
     my ($ret,$out,$err) = _cmd("$commandpath $subcommand");
 
-    # these commands produces usage on stdout as it should
-    $err = $out if ( $subcommand eq 'stats' || $subcommand eq 'split' || $subcommand eq 'merge' );
-
     if ( $err =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath $subcommand: $out"); return; }
 
-    if ( $err =~ m/not.*implemented/is ) { failed($opts,msg=>$test,reason=>"subcommand indicates it is not implemented",expected_fail=>1); return; }
-	
-    my @sections = ($err =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
-    
+    if ( $err =~ m/not.*implemented/is ) { failed($opts,msg=>$test,reason=>"subcommand indicates it is not implemented",expect_fail=>1); return; }
+
     my $have_usage = 0;
     my $usage = "";
+    my @sections = ($out =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
     foreach my $section (@sections) {
         if ( $section =~ m/^usage/i ) {
             $have_usage = 1;
@@ -512,9 +508,18 @@ sub test_usage_subcommand
             $usage = $section;
         }
     }
+    @sections = ($err =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
+    foreach my $section (@sections) {
+        if ( $section =~ m/^usage/i ) {
+            $have_usage = 2;
+            $section =~ s/^[[:word:]]+[[:punct:]]?[[:space:]]*//;
+            $usage = $section;
+        }
+    }
     
 	my $fail = 0;
     if ( !$have_usage ) { failed($opts,msg=>$test,reason=>"did not have Usage:"); $fail = 1; }
+    elsif ( $have_usage == 2 ) { failed($opts,msg=>$test,reason=>"Usage on stderr rather than stdout",expect_fail=>1); $fail = 1; }
 
     if ( !($usage =~ m/$command[[:space:]]+$subcommand/) ) { failed($opts,msg=>$test,reason=>"usage did not mention $command $subcommand"); $fail = 1; }
     
