@@ -193,8 +193,6 @@ samtools mpileup
 .IR in.fa ]
 .RB [ \-l
 .IR list ]
-.RB [ \-M
-.IR capMapQ ]
 .RB [ \-Q
 .IR minBaseQ ]
 .RB [ \-q
@@ -276,10 +274,6 @@ Exclude reads from readgroups listed in FILE (one @RG-ID per line)
 BED or position list file containing a list of regions or sites where 
 pileup or BCF should be generated. If BED, positions are 0-based 
 half-open [null]
-.TP
-.BI -M \ INT
-Cap mapping quality at INT. WARNING: currently not implemented. 
-TODO: Remove option or implement [60]
 .TP
 .BI -q,\ -min-MQ \ INT
 Minimum mapping quality for an alignment to be used [0]

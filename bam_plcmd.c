@@ -86,7 +86,7 @@ void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
 typedef struct {
-	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, fmt_flag;
+	int min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, fmt_flag;
     int rflag_require, rflag_filter;
 	int openQ, extQ, tandemQ, min_support; // for indels
 	double min_frac; // for indels
@@ -602,8 +602,6 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -f, --fasta-ref FILE    faidx indexed reference sequence file\n"
 "  -G, --exclude-RG FILE   exclude read groups listed in FILE\n"
 "  -l, --positions FILE    skip unlisted positions (chr pos) or regions (BED)\n"
-"  -M INT                  cap mapping quality at INT [%d] (not functional)\n", mplp->max_mq);
-	fprintf(fp,
 "  -q, --min-MQ INT        skip alignments with mapQ smaller than INT [%d]\n", mplp->min_mq);
 	fprintf(fp,
 "  -Q, --min-BQ INT        skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp->min_baseQ);
@@ -658,7 +656,6 @@ int bam_mpileup(int argc, char *argv[])
     int nfiles = 0, use_orphan = 0;
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
-	mplp.max_mq = 60;
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
 	mplp.max_depth = 250; mplp.max_indel_depth = 250;
@@ -705,7 +702,7 @@ int bam_mpileup(int argc, char *argv[])
         {"platforms", required_argument, NULL, 'P'},
         {NULL, 0, NULL, 0}
     };
-	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:",lopts,NULL)) >= 0) {
+	while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:",lopts,NULL)) >= 0) {
 		switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 : 
@@ -746,7 +743,6 @@ int bam_mpileup(int argc, char *argv[])
 		case 's': mplp.flag |= MPLP_PRINT_MAPQ; break;
 		case 'O': mplp.flag |= MPLP_PRINT_POS; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
-		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
 		case 'Q': mplp.min_baseQ = atoi(optarg); break;
         case 'b': file_list = optarg; break;
