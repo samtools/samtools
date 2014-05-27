@@ -674,7 +674,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	if (flag & MERGE_UNCOMP) level = 0;
 	else if (flag & MERGE_LEVEL1) level = 1;
 	strcpy(mode, "wb");
-	if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
+	if (level >= 0) sprintf(mode + 2, "%d", level < 9? level : 9);
 	if ((fpout = sam_open(out, mode)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
 		return -1;
@@ -1008,8 +1008,8 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 	// write the final output
 	if (n_files == 0) { // a single block
 		char mode[8];
-		strcpy(mode, "w");
-		if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
+		strcpy(mode, "wb");
+		if (level >= 0) sprintf(mode + 2, "%d", level < 9? level : 9);
 		ks_mergesort(sort, k, buf, 0);
 		write_buffer(fnout, mode, k, buf, header, n_threads);
 	} else { // then merge
