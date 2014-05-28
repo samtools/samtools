@@ -46,11 +46,11 @@ typedef struct trans_tbl {
 } trans_tbl_t;
 
 static void trans_tid(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, kstring_t *out_text);
-static void trans_rg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, regmatch_t* matches, kstring_t *out_text);
-static void trans_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_pg, regmatch_t* matches, kstring_t *out_text);
+static void trans_rg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, regmatch_t* matches, kstring_t *out_text, int filenum);
+static void trans_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_pg, regmatch_t* matches, kstring_t *out_text, int filenum);
 static void trans_pg_pp(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, klist_t(hdrln) *pg_list, regmatch_t* matches, kstring_t *out_text);
 static void trans_rg_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, klist_t(hdrln) *rg_list, regmatch_t* matches, kstring_t *out_text);
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg);
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, int filenum);
 
 static int g_is_by_qname = 0;
 
@@ -262,7 +262,7 @@ static void trans_tid(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, ks
 	}
 }
 
-static void trans_rg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, regmatch_t* matches, kstring_t *out_text)
+static void trans_rg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, regmatch_t* matches, kstring_t *out_text, int filenum)
 {
 	// grep @RG id's
 	regex_t rg_id;
@@ -288,8 +288,8 @@ static void trans_rg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, boo
 			kputs(match_id.s, &transformed_id);
 			transformed_equals_match = true;
 		} else {
-			// It's in there so we need to transform it by appending random number to id
-			ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
+			// It's in there so we need to transform it by appending filenum to id
+              		ksprintf(&transformed_id, "%s-%d", match_id.s, filenum);
 			transformed_equals_match = false;
 		}
 		regfree(&rg_id_search);
@@ -324,7 +324,7 @@ static void trans_rg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, boo
 	kl_destroy(hdrln,rg_list);
 }
 
-static void trans_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_pg, regmatch_t* matches, kstring_t *out_text)
+static void trans_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_pg, regmatch_t* matches, kstring_t *out_text, int filenum)
 {
 	// Do same for PG id's
 	regex_t pg_id;
@@ -349,8 +349,8 @@ static void trans_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, boo
 			kputs(match_id.s, &transformed_id);
 			transformed_equals_match = true;
 		} else {
-			// It's in there so we need to transform it by appending random number to id
-			ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
+			// It's in there so we need to transform it by appending filenum to id
+              		ksprintf(&transformed_id, "%s-%d", match_id.s, filenum);
 			transformed_equals_match = false;
 		}
 		regfree(&pg_id_search);
@@ -458,7 +458,7 @@ static void trans_rg_pg(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, 
 	regfree(&rg_pg);
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, int filenum)
 {
 	// No need to translate header into itself
 	if (out == translate) { merge_rg = merge_pg = true; }
@@ -479,9 +479,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
 	if (matches == NULL) { perror("out of memory"); exit(-1); }
 
-	trans_rg(out, translate, tbl, merge_rg, matches, &out_text);
+	trans_rg(out, translate, tbl, merge_rg, matches, &out_text, filenum);
 
-	trans_pg(out, translate, tbl, merge_pg, matches, &out_text);
+	trans_pg(out, translate, tbl, merge_pg, matches, &out_text, filenum);
 
 	free(matches);
 
@@ -631,9 +631,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			strncpy(RG[i], s + j, l);
 		}
 	}
-	// open and read the header from each file
+	// open all files first before reading headers
 	for (i = 0; i < n; ++i) {
-		bam_hdr_t *hin;
 		fp[i] = sam_open(fn[i], "r");
 		if (fp[i] == NULL) {
 			int j;
@@ -643,16 +642,22 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			// FIXME: possible memory leak
 			return -1;
 		}
+	}
+
+	// read headers from each input file one by one
+	// prepare translation table as we go
+	for (i = 0; i < n; ++i) {
+		bam_hdr_t *hin;
 		hin = sam_hdr_read(fp[i]);
 		if (hout == NULL) hout = hin;
-		trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
+		trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, i);
 		if (hin != hout) bam_hdr_destroy(hin);
 		if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
 			fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
 		}
 	}
 
-	// Transform the header into standard form
+	// Transform the output header into standard form
 	pretty_header(&hout->text,hout->l_text);
 
 	// If we're only merging a specified region move our iters to start at that point
@@ -776,7 +781,6 @@ static void merge_usage(FILE *to)
 	fprintf(to, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
 	fprintf(to, "         -c       combine RG tags with colliding IDs rather than amending them\n");
 	fprintf(to, "         -p       combine PG tags with colliding IDs rather than amending them\n");
-	fprintf(to, "         -s VALUE override random seed\n");
 	fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n\n");
 }
 
@@ -784,7 +788,6 @@ int bam_merge(int argc, char *argv[])
 {
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
 	char *fn_headers = NULL, *reg = NULL;
-	long random_seed = (long)time(NULL);
 	char** fn = NULL;
 	int fn_size = 0;
 	
@@ -806,7 +809,6 @@ int bam_merge(int argc, char *argv[])
 		case '@': n_threads = atoi(optarg); break;
 		case 'c': flag |= MERGE_COMBINE_RG; break;
 		case 'p': flag |= MERGE_COMBINE_PG; break;
-		case 's': random_seed = atol(optarg); break;
 		case 'b': {
 			// load the list of files to read
 			int nfiles;
@@ -832,7 +834,6 @@ int bam_merge(int argc, char *argv[])
 		return 1;
 	}
 	
-	srand48(random_seed);
 	if (!(flag & MERGE_FORCE) && strcmp(argv[optind], "-")) {
 		FILE *fp = fopen(argv[optind], "rb");
 		if (fp != NULL) {
