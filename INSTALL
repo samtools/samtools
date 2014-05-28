@@ -2,9 +2,10 @@ System Requirements
 ===================
 
 SAMtools depends on the zlib library <http://www.zlib.net>. Version 1.2.3+ is
-preferred and with 1.2.3+ you can compile razip and use it to compress a FASTA
-file. SAMtools' faidx is able to index a razip-compressed FASTA file to save
-diskspace. Older zlib also works with SAMtools, but razip cannot be compiled.
+preferred.
+
+SAMtools' faidx is able to index a bgzip-compressed FASTA file to save
+diskspace.
 
 The text-based viewer (tview) requires the GNU ncurses library
 <http://www.gnu.org/software/ncurses/>, which comes with Mac OS X and most of
@@ -20,8 +21,7 @@ as -lnurses. This can be set in Makefile by setting LIBCURSES= -lcurses vs
 Compilation
 ===========
 
-Type `make' to compile samtools. If you have zlib >= 1.2.2.1, you can compile
-razip with `make razip'.
+Type `make' to compile samtools.
 
 
 Installation

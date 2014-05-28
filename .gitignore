@@ -12,7 +12,6 @@ lib*.a
 /misc/md5fa
 /misc/md5sum-lite
 /misc/wgsim
-/razip
 /samtools
 
 /TAGS

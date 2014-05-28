@@ -270,7 +270,7 @@ specificity a little bit.
 The
 .BR faidx -indexed
 reference file in the FASTA format. The file can be optionally compressed by
-.BR razip .
+.BR bgzip .
 [null]
 .TP
 .BI -l \ FILE
@@ -483,7 +483,7 @@ will index the file and create
 on the disk. If regions are specified, the subsequences will be
 retrieved and printed to stdout in the FASTA format. The input file can
 be compressed in the
-.B RAZF
+.B BGZF
 format.
 
 .TP
@@ -828,8 +828,7 @@ although a little slower.
 .SH AUTHOR
 .PP
 Heng Li from the Sanger Institute wrote the C version of samtools. Bob
-Handsaker from the Broad Institute implemented the BGZF library and Jue
-Ruan from Beijing Genomics Institute wrote the RAZF library. John
+Handsaker from the Broad Institute implemented the BGZF library. John
 Marshall and Petr Danecek contribute to the source code and various
 people from the 1000 Genomes Project have contributed to the SAM format
 specification.
