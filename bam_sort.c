@@ -455,7 +455,6 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 	kputc('\n', &out_text);
 	out->l_text = out_text.l;
 	out->text = ks_release(&out_text);
-	pretty_header(&out->text,out->l_text);
 }
 
 static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
@@ -617,6 +616,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 			fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
 		}
 	}
+
+	// Transform the header into standard form
+	pretty_header(&hout->text,hout->l_text);
 
 	// If we're only merging a specified region move our iters to start at that point
 	if (reg) {
