@@ -481,55 +481,58 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
 int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int ref_base /*4-bit*/, bcf_call_t *call)
 {
 	int ref4, i, j;
-    unsigned int qsum[5] = {0,0,0,0,0};
-	int64_t tmp;
+    float qsum[5] = {0,0,0,0,0};
 	if (ref_base >= 0) {
 		call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
 		if (ref4 > 4) ref4 = 4;
 	} else call->ori_ref = -1, ref4 = 0;
-	// calculate qsum, this is done by calculating combined qsum across all samples
+
+    // calculate qsum, this is done by summing normalized qsum across all samples,
+    // to account for differences in coverage
 	for (i = 0; i < n; ++i)
-		for (j = 0; j < 4; ++j)
-			qsum[j] += calls[i].qsum[j];
-	// then encoding the base in the first two bits
-    call->qsum_tot=0;
-    for (j=0; j<4; j++) { call->qsum_tot += qsum[j]; call->qsum[j] = 0; }
-	for (j=0; j<4; j++) 
-    { 
-        assert( !(qsum[j]>>(sizeof(unsigned int)*8-2)) );   // if qsum is too big, insert sort will break
-        qsum[j] = qsum[j] << 2 | j; 
-    }
-	// find the top 2 alleles
-	for (i = 1; i < 4; ++i) // insertion sort, ascending
-		for (j = i; j > 0 && qsum[j] < qsum[j-1]; --j)
-			tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
-
-	// Set the reference allele and alternative allele(s)
-
-	// Set the alleles and QS values
-	for (i = 0; i < 5; ++i) call->a[i] = -1;
-	for (i = 0; i < 5; ++i) call->qsum[i] = 0;
-	call->unseen = -1;
-	call->a[0] = ref4;
-	for (i = 3, j = 1; i >= 0; --i) // i: alleles sorted by QS; j, a[j]: output allele ordering
     {
-		if ((qsum[i]&3) == ref4) 
-            call->qsum[0] = call->qsum_tot ? (float)(qsum[i]>>2)/call->qsum_tot : 0;    // REF's qsum
+        float sum = 0;
+		for (j = 0; j < 4; ++j) sum += calls[i].qsum[j];
+        if ( sum )
+            for (j = 0; j < 4; j++) qsum[j] += calls[i].qsum[j] / sum;
+    }
+
+    // sort qsum in ascending order (insertion sort)
+    float *ptr[5], *tmp;
+    for (i=0; i<5; i++) ptr[i] = &qsum[i];
+    for (i=1; i<4; i++)
+        for (j=i; j>0 && *ptr[j] < *ptr[j-1]; j--)
+            tmp = ptr[j], ptr[j] = ptr[j-1], ptr[j-1] = tmp;
+
+    // Set the reference allele and alternative allele(s)
+    for (i=0; i<5; i++) call->a[i] = -1;
+    for (i=0; i<5; i++) call->qsum[i] = 0;
+    call->unseen = -1;
+    call->a[0] = ref4;
+    for (i=3, j=1; i>=0; i--)   // i: alleles sorted by QS; j, a[j]: output allele ordering
+    {
+        int ipos = ptr[i] - qsum;   // position in sorted qsum array
+        if ( ipos==ref4 )
+            call->qsum[0] = qsum[ipos];    // REF's qsum
         else
         {
-			if ( !(qsum[i]>>2) ) break; // qsum is 0, this allele is not seen in the pileup
-            call->qsum[j] = (float)(qsum[i]>>2)/call->qsum_tot;
-            call->a[j++]  = qsum[i]&3;
-		}
-	}
-	if (ref_base >= 0) { // for SNPs, find the "unseen" base
-		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
-			call->unseen = j, call->a[j++] = qsum[i]&3;
-		call->n_alleles = j;
-	} else {
-		call->n_alleles = j;
-		if (call->n_alleles == 1) return -1; // no reliable supporting read. stop doing anything
-	}
+            if ( !qsum[ipos] ) break;       // qsum is 0, this and consequent alleles are not seen in the pileup
+            call->qsum[j] = qsum[ipos];
+            call->a[j++]  = ipos;
+        }
+    }
+    if (ref_base >= 0) 
+    {
+        // for SNPs, find the "unseen" base
+        if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
+            call->unseen = j, call->a[j++] = ptr[i] - qsum;
+        call->n_alleles = j;
+    }
+    else
+    {
+        call->n_alleles = j;
+        if (call->n_alleles == 1) return -1; // no reliable supporting read. stop doing anything
+    }
 	/*
      * Set the phread likelihood array (call->PL) This array is 15 entries long
      * for each sample because that is size of an upper or lower triangle of a
@@ -678,8 +681,6 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     float tmpf[16];
     for (i=0; i<16; i++) tmpf[i] = bc->anno[i];
     bcf_update_info_float(hdr, rec, "I16", tmpf, 16);
-
-    for (i=0; i<5; i++) bc->qsum[i] *= bc->qsum_tot;
     bcf_update_info_float(hdr, rec, "QS", bc->qsum, nals);
 
     if ( bc->vdb != HUGE_VAL )      bcf_update_info_float(hdr, rec, "VDB", &bc->vdb, 1);
