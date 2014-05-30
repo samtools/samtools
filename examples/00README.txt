@@ -3,8 +3,8 @@ build36. They were exatracted with command:
 
     samtools faidx human_b36.fa 2:2043966-2045540 20:67967-69550
 
-Sequence names were changed manually for simplicity. File ex1.sam
-contains MAQ alignments exatracted with:
+Sequence names were changed manually for simplicity. File ex1.sam.gz
+contains MAQ alignments extracted with:
 
     (samtools view NA18507_maq.bam 2:2044001-2045500;
     samtools view NA18507_maq.bam 20:68001-69500)
@@ -18,9 +18,9 @@ Index the reference FASTA.
     samtools faidx ex1.fa
 
 Convert the (headerless) SAM file to BAM.  Note if we had used
-"samtools view -h" above to create the ex1.sam then we could omit the
+"samtools view -h" above to create the ex1.sam.gz then we could omit the
 "-t ex1.fa.fai" option here.
-    samtools view -S -b -t ex1.fa.fai -o ex1.bam ex1.sam
+    samtools view -S -b -t ex1.fa.fai -o ex1.bam ex1.sam.gz
 
 Build an index for the BAM file:
     samtools index ex1.bam
@@ -35,8 +35,7 @@ View the data in pileup format:
     samtools mpileup -f ex1.fa ex1.bam
 
 Generate an uncompressed VCF file of variants:
-    samtools mpileup -vu -f ex1.fa -t ex1.fa.fai ex1.sam.gz > ex1.vcf
+    samtools mpileup -vu -f ex1.fa ex1.bam > ex1.vcf
 
 Generate a compressed VCF file of variants:
-    samtools mpileup -g -f ex1.fa -t ex1.fa.fai ex1.sam.gz > ex1.bcf
-
+    samtools mpileup -g -f ex1.fa ex1.bam > ex1.bcf
