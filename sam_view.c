@@ -348,6 +348,7 @@ int main_samview(int argc, char *argv[])
 			ret = 1;
 			goto view_end;
 		}
+		if (fn_list) hts_set_fai_filename(out, fn_list);
 		if (*out_format || is_header) sam_hdr_write(out, header);
         if (fn_un_out) {
             if ((un_out = sam_open(fn_un_out, out_mode)) == 0) {
