@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <inttypes.h>
 #include <stdio.h>
+#include "bam_mkdup.h"
 
 /*
  * loop through bam
@@ -46,7 +47,7 @@ typedef struct possig_part {
 	uint32_t pos;
 } possig_part_t;
 
-typedef struct possig {
+struct possig {
 	union {
 		struct {
 			possig_part_t first;
@@ -54,7 +55,7 @@ typedef struct possig {
 		} field;
 		__uint128_t bits;
 	};
-} possig_t;
+};
 
 typedef struct namescore {
 	char* name;
@@ -79,19 +80,6 @@ KHASH_MAP_INIT_STR(name, char)
 
 #define __free_bam1_t(p)
 KLIST_INIT(read, bam1_t*,__free_bam1_t)
-
-typedef struct parsed_opts {
-	char* input_name;
-	char* output_name;
-} parsed_opts_t;
-
-typedef struct state {
-	samFile* fin;
-	samFile* fout;
-	bam_hdr_t* hin;
-	bam_hdr_t* hout;
-} state_t;
-
 
 static inline bool bam_to_possig_part(bam1_t* record, possig_part_t* part)
 {
@@ -144,15 +132,6 @@ static inline bool part_bam_to_possig(possig_part_t* first_pos, bam1_t* second_p
  * end for
  */
 
-static inline bool is_unprocessable( bam1_t* read )
-{
-	// if read is unpaired, unmapped, has unmapped mate, is secondary, qcfail or supplimentary
-	return ((read->core.flag&(BAM_FUNMAP|BAM_FMUNMAP|BAM_FSECONDARY|BAM_FQCFAIL|BAM_FSUPPLEMENTARY)) != 0
-	|| (read->core.flag&BAM_FPAIRED) != BAM_FPAIRED
-	|| read->core.tid == -1
-	|| read->core.pos == -1);
-}
-
 // Returns total of all quality values in read
 static inline int sum_qual(const bam1_t *b)
 {
@@ -163,7 +142,7 @@ static inline int sum_qual(const bam1_t *b)
 }
 
 
-static bool process(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_HACK)
+bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_HACK)
 {
 	khash_t(signame)* ps_hash = kh_init(signame);
 	khash_t(nameqs)* name_hash = kh_init(nameqs);
@@ -256,60 +235,4 @@ static bool process(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_HACK)
 	kh_destroy(nameqs, name_hash);
 
 	return success;
-}
-
-static void usage(FILE* where)
-{
-	fprintf(where, "Usage: samtools mkdup <input.bam> [<output.bam>]\n\n"
-			"Marks duplicates within a coordinate sorted file.\n"
-			"If - is used for input.bam stdin will be used.\n"
-			"If output.bam is not specified stdout will be assumed.\n"
-			);
-}
-
-static bool parse_args( int argc, char** argv, parsed_opts_t* opts )
-{
-	// Check number of input arguments, minimum 1, maximum 2
-	if (argc == 1) { usage(stdout); return false; }
-	if (argc < 2 || argc > 3) { usage(stderr); return false; }
-	
-	opts->input_name = argv[1];
-	if ( argc == 3 ) opts->output_name = argv[2];
-	
-	return true;
-}
-
-static bool init_state(const parsed_opts_t* opts, state_t* state)
-{
-	state->fin = sam_open(opts->input_name, "rb");
-	state->hin = sam_hdr_read(state->fin);
-	
-	state->fout = sam_open(opts->output_name ? opts->output_name : "-", "wb");
-	state->hout = bam_hdr_dup(state->hin);
-	sam_hdr_write(state->fout, state->hout);
-	
-	return true;
-}
-
-static void cleanup_state(state_t* state)
-{
-	sam_close(state->fout);
-	sam_close(state->fin);
-}
-
-int main_mkdup_coord(int argc, char** argv)
-{
-	parsed_opts_t opts = {NULL, NULL};
-	
-	if ( !parse_args(argc, argv, &opts) ) return 1;
-	
-	int ret = 1;
-	state_t state = {NULL, NULL, NULL, NULL};
-	
-	if ( init_state(&opts, &state)) {
-		if (process(&state, opts.input_name)) ret = 0;
-	}
-	cleanup_state(&state);
-
-	return ret;
 }
