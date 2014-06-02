@@ -115,7 +115,7 @@ bam_aux.o: bam_aux.c
 bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(bam_h)
 bam_color.o: bam_color.c $(bam_h)
 bam_import.o: bam_import.c $(HTSDIR)/htslib/kstring.h $(bam_h) $(HTSDIR)/htslib/kseq.h
-bam_index.o: bam_index.c $(bam_h)
+bam_index.o: bam_index.c $(htslib_hts_h) $(htslib_sam_h) $(HTSDIR)/htslib/khash.h
 bam_lpileup.o: bam_lpileup.c $(bam_plbuf_h) $(bam_lpileup_h) $(HTSDIR)/htslib/ksort.h
 bam_mate.o: bam_mate.c $(bam_h)
 bam_md.o: bam_md.c $(htslib_faidx_h) $(sam_h) kaln.h kprobaln.h
