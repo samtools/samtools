@@ -292,10 +292,14 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		z += str->l + 1;
 		if (str->s[0] != '*') {
 			uint32_t *cigar;
+			uint32_t tmp_n_cigar = 0;
 			for (s = str->s; *s; ++s) {
-				if ((isalpha(*s)) || (*s=='=')) ++c->n_cigar;
+				if ((isalpha(*s)) || (*s=='=')) ++tmp_n_cigar;
 				else if (!isdigit(*s)) parse_error(fp->n_lines, "invalid CIGAR character");
 			}
+			// BAM and the samtools struct only allow 16 bits for n_cigar
+			if (tmp_n_cigar >= 65536) parse_error(fp->n_lines, "too many CIGAR operations (limited to 65535)");
+			c->n_cigar = tmp_n_cigar;
 			b->data = alloc_data(b, doff + c->n_cigar * 4);
 			cigar = bam1_cigar(b);
 			for (i = 0, s = str->s; i != c->n_cigar; ++i) {
