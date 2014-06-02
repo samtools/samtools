@@ -1,4 +1,12 @@
-#include "bam.h"
+#include <htslib/hts.h>
+#include <htslib/sam.h>
+#include <htslib/khash.h>
+#include <stdlib.h>
+#include <stdio.h>
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
+
+#define BAM_LIDX_SHIFT    14
 
 int bam_index_build2(const char *fn, const char *_fnidx)
 {
@@ -13,45 +21,39 @@ int bam_index(int argc, char *argv[])
 		return 1;
 	}
 	if (argc >= 3) bam_index_build2(argv[1], argv[2]);
-	else bam_index_build(argv[1]);
+	else bam_index_build(argv[1], BAM_LIDX_SHIFT);
 	return 0;
 }
 
 int bam_idxstats(int argc, char *argv[])
 {
-	bam_index_t *idx;
-	bam_header_t *header;
-	bamFile fp;
-#if 0
-	int i;
-#endif
+	hts_idx_t* idx;
+	bam_hdr_t* header;
+	samFile* fp;
+
 	if (argc < 2) {
 		fprintf(stderr, "Usage: samtools idxstats <in.bam>\n");
 		return 1;
 	}
-	fp = bam_open(argv[1], "r");
-	if (fp == 0) { fprintf(stderr, "[%s] fail to open BAM.\n", __func__); return 1; }
-	header = bam_header_read(fp);
-	bam_close(fp);
-	idx = bam_index_load(argv[1]);
-	if (idx == 0) { fprintf(stderr, "[%s] fail to load the index.\n", __func__); return 1; }
-#if 0
-	for (i = 0; i < idx->n; ++i) {
-		khint_t k;
-		khash_t(i) *h = idx->index[i];
+	fp = sam_open(argv[1], "r");
+	if (fp == NULL) { fprintf(stderr, "[%s] fail to open BAM.\n", __func__); return 1; }
+	header = sam_hdr_read(fp);
+	sam_close(fp);
+	idx = sam_index_load(fp, argv[1]);
+	if (idx == NULL) { fprintf(stderr, "[%s] fail to load the index.\n", __func__); return 1; }
+
+	int i;
+	for (i = 0; i < header->n_targets; ++i) {
+		// Print out contig name and length
 		printf("%s\t%d", header->target_name[i], header->target_len[i]);
-		k = kh_get(i, h, BAM_MAX_BIN);
-		if (k != kh_end(h))
-			printf("\t%llu\t%llu", (long long)kh_val(h, k).list[1].u, (long long)kh_val(h, k).list[1].v);
-		else printf("\t0\t0");
-		putchar('\n');
+		// Now fetch info about it from the meta bin
+		uint64_t u, v;
+		hts_idx_get_stat(idx, i, &u, &v);
+		printf("\t%" PRIu64 "\t%" PRIu64 "\n", u, v);
 	}
-	printf("*\t0\t0\t%llu\n", (long long)idx->n_no_coor);
-	bam_header_destroy(header);
-	bam_index_destroy(idx);
+	// Dump information about unmapped reads
+	printf("*\t0\t0\t%" PRIu64 "\n", hts_idx_get_n_no_coor(idx));
+	bam_hdr_destroy(header);
+	hts_idx_destroy(idx);
 	return 0;
-#else
-	fprintf(stderr, "Samtools-htslib: bam_idxstats() not yet implemented\n");
-	abort();
-#endif
 }
