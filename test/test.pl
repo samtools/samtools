@@ -1733,32 +1733,58 @@ sub test_view
     filter_sam($sam_no_ur, $sam_no_sq, {no_sq => 1});
     my $sam_no_m5 = "$$opts{tmp}/view.001.no_m5.sam";
     filter_sam($sam_no_ur, $sam_no_m5, {no_m5 => 1});
-    
+
+    # We can't make a BAM without @SQ lines.  Instead make one
+    # with no M5/UR in @SQ and see if we can still use it to make CRAM.
+    my $bam_no_m5 = "$$opts{tmp}/view.001.no_sq.bam";
+    run_view_test($opts,
+		  msg => "$test: Make BAM with no M5/UR tags",
+		  args => ['-b', $sam_no_m5],
+		  out => $bam_no_m5,
+		  compare_sam => $sam_no_m5);
+    $test++;
+
     my $ref_file = "$$opts{path}/dat/view.001.fa";
     my $ref_idx  = "$$opts{path}/dat/view.001.fa.fai";
 
     # Test SAM output
-    foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
-	run_view_test($opts,
-		      msg => "$test: Add \@SQ with $topt->[0] (SAM output)",
-		      args => ['-h', @$topt, $sam_no_sq],
-		      out => sprintf("%s.test%03d.sam", $out, $test),
-		      compare => $sam_no_m5);
-	$test++;
+    foreach my $in ([SAM => $sam_no_sq], [BAM => $bam_no_m5]) {
+	foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
+	    run_view_test($opts,
+			  msg => "$test: Add \@SQ with $topt->[0] ($in->[0] -> SAM)",
+			  args => ['-h', @$topt, $in->[1]],
+			  out => sprintf("%s.test%03d.sam", $out, $test),
+			  compare => $sam_no_m5);
+	    $test++;
+	}
     }
 
     # Test BAM output.
-    foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
-	my $bam = sprintf("%s.test%03d.bam", $out, $test);
-	run_view_test($opts,
-		      msg => "$test: Add \@SQ with $topt->[0] (BAM output)",
-		      args => ['-b', @$topt, $sam_no_sq],
-		      out => $bam,
-		      compare_sam => $sam_no_m5);
-	$test++;
+    foreach my $in ([SAM => $sam_no_sq], [BAM => $bam_no_m5]) {
+	foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
+	    my $bam = sprintf("%s.test%03d.bam", $out, $test);
+	    run_view_test($opts,
+			  msg => "$test: Add \@SQ with $topt->[0] ($in->[0] -> BAM)",
+			  args => ['-b', @$topt, $in->[1]],
+			  out => $bam,
+			  compare_sam => $sam_no_m5);
+	    $test++;
+	}
     }
 
-    # Don't bother testing CRAM for the moment
+    # Test CRAM output
+    foreach my $in ([SAM => $sam_no_sq], [BAM => $bam_no_m5]) {
+	foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
+	    my $cram = sprintf("%s.test%03d.cram", $out, $test);
+	    run_view_test($opts,
+			  msg => "$test: Add \@SQ with $topt->[0] ($in->[0] -> CRAM)",
+			  args => ['-C', @$topt, $in->[1]],
+			  out => $cram,
+			  compare_sam => $sam_with_ur);
+	    $test++;
+	}
+    }
+
 
     # CIGAR B-operator removal tests.
     my $b_op_sam      = "$$opts{path}/dat/view.003.sam";
