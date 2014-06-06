@@ -581,11 +581,47 @@ Uncompressed BAM output
 
 .TP
 .B index
-samtools index <aln.bam>
+samtools index
+.RB [ -bc ]
+.RB [ -m
+.IR INT ]
+.IR aln.bam | aln.cram
 
-Index sorted alignment for fast random access. Index file
-.I <aln.bam>.bai
+Index a coordinate-sorted BAM or CRAM file for fast random access.
+This index is needed when
+.I region
+arguments are used to limit
+.B samtools view
+and similar commands to particular regions of interest.
+
+For a CRAM file
+.IR aln.cram ,
+index file
+.IB aln.cram .crai
 will be created.
+For a BAM file
+.IR aln.bam ,
+either
+.IB aln.bam .bai
+or
+.IB aln.bam .csi
+will be created, depending on the index format selected.
+
+.B Options:
+.RS
+.TP 8
+.B -b
+Create a BAI index.
+This is currently the default when no format options are used.
+.TP
+.B -c
+Create a CSI index.
+By default, the minimum interval size for the index is 2^14, which is the same
+as the fixed value used by the BAI format.
+.TP
+.BI "-m " INT
+Create a CSI index, with a minimum interval size of 2^INT.
+.RE
 
 .TP
 .B idxstats
