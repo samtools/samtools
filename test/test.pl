@@ -1207,11 +1207,11 @@ sub gen_pair
     my $orient = int(rand(2));
     my $name = "ERR123456.${rnum}";
 
-    my $rd1 = sprintf("%s\t%d\tref1\t%d\t40\t%dM\t=\t%d\t%d\t%s\t%s\tRG:Z:g1",
+    my $rd1 = sprintf("%s\t%d\tref1\t%d\t40\t%dM\t=\t%d\t%d\t%s\t%s\tNM:i:0\tMD:Z:$l1\tRG:Z:g1",
 		      $name, $orient ? 99 : 163, $pos1 + 1, $l1, $pos2 + 1,
 		      $pos2 + $l2 - $pos1, substr($$seq, $pos1, $l1),
 		      substr($$qual, $pos1, $l1));
-    my $rd2 = sprintf("%s\t%d\tref1\t%d\t40\t%dM\t=\t%d\t%d\t%s\t%s\tRG:Z:g1",
+    my $rd2 = sprintf("%s\t%d\tref1\t%d\t40\t%dM\t=\t%d\t%d\t%s\t%s\tNM:i:0\tMD:Z:$l2\tRG:Z:g1",
 		      $name, $orient ? 147 : 83, $pos2 + 1, $l2, $pos1 + 1,
 		      -($pos2 + $l2 - $pos1), substr($$seq, $pos2, $l2),
 		      substr($$qual, $pos2, $l2));
