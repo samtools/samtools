@@ -545,6 +545,8 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
   @abstract    Merge multiple sorted BAM.
   @param  is_by_qname whether to sort by query name
   @param  out  output BAM file name
+  @param  mode sam_open() mode to be used to create the final output file
+               (overrides level settings from UNCOMP and LEVEL1 flags)
   @param  headers  name of SAM file from which to copy '@' header lines,
                    or NULL to copy them from the first file to be merged
   @param  n    number of files to be merged
@@ -553,14 +555,14 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads, int level)
+int bam_merge_core2(int by_qname, const char *out, const char *mode, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads)
 {
 	samFile *fpout, **fp;
 	heap1_t *heap;
 	bam_hdr_t *hout = NULL;
 	int i, j, *RG_len = NULL;
 	uint64_t idx = 0;
-	char **RG = NULL, mode[8];
+	char **RG = NULL;
 	hts_itr_t **iter = NULL;
 	trans_tbl_t *translation_tbl = NULL;
 
@@ -673,10 +675,6 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	}
 
 	// Open output file and write header
-	if (flag & MERGE_UNCOMP) level = 0;
-	else if (flag & MERGE_LEVEL1) level = 1;
-	strcpy(mode, "wb");
-	if (level >= 0) sprintf(mode + 2, "%d", level < 9? level : 9);
 	if ((fpout = sam_open(out, mode)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
 		return -1;
@@ -724,7 +722,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 
 int bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg)
 {
-	return bam_merge_core2(by_qname, out, headers, n, fn, flag, reg, 0, -1);
+	char mode[12];
+	strcpy(mode, "wb");
+	if (flag & MERGE_UNCOMP) strcat(mode, "0");
+	else if (flag & MERGE_LEVEL1) strcat(mode, "1");
+	return bam_merge_core2(by_qname, out, mode, headers, n, fn, flag, reg, 0);
 }
 
 static void merge_usage(FILE *to)
@@ -748,7 +750,7 @@ static void merge_usage(FILE *to)
 int bam_merge(int argc, char *argv[])
 {
 	int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
-	char *fn_headers = NULL, *reg = NULL;
+	char *fn_headers = NULL, *reg = NULL, mode[12];
 	long random_seed = (long)time(NULL);
 	char** fn = NULL;
 	int fn_size = 0;
@@ -764,8 +766,8 @@ int bam_merge(int argc, char *argv[])
 		case 'f': flag |= MERGE_FORCE; break;
 		case 'h': fn_headers = strdup(optarg); break;
 		case 'n': is_by_qname = 1; break;
-		case '1': flag |= MERGE_LEVEL1; break;
-		case 'u': flag |= MERGE_UNCOMP; break;
+		case '1': flag |= MERGE_LEVEL1; level = 1; break;
+		case 'u': flag |= MERGE_UNCOMP; level = 0; break;
 		case 'R': reg = strdup(optarg); break;
 		case 'l': level = atoi(optarg); break;
 		case '@': n_threads = atoi(optarg); break;
@@ -819,7 +821,9 @@ int bam_merge(int argc, char *argv[])
 		merge_usage(stderr);
 		return 1;
 	}
-	if (bam_merge_core2(is_by_qname, argv[optind], fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, level) < 0) ret = 1;
+	strcpy(mode, "wb");
+	if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
+	if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads) < 0) ret = 1;
 end:
 	if (fn_size > 0) {
 		int i;
@@ -954,6 +958,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
   @param  fn       name of the file to be sorted
   @param  prefix   prefix of the temporary files (prefix.NNNN.bam are written)
   @param  fnout    name of the final output file to be written
+  @param  modeout  sam_open() mode to be used to create the final output file
   @param  max_mem  approxiate maximum memory (very inaccurate)
   @return 0 for successful sorting, negative on errors
 
@@ -961,7 +966,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
   and then merge them by calling bam_merge_core(). This function is
   NOT thread safe.
  */
-int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const char *fnout, size_t _max_mem, int n_threads, int level)
+int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const char *fnout, const char *modeout, size_t _max_mem, int n_threads)
 {
 	int ret, i, n_files = 0;
 	size_t mem, max_k, k, max_mem;
@@ -1009,11 +1014,8 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 		fprintf(stderr, "[bam_sort_core] truncated file. Continue anyway.\n");
 	// write the final output
 	if (n_files == 0) { // a single block
-		char mode[8];
-		strcpy(mode, "wb");
-		if (level >= 0) sprintf(mode + 2, "%d", level < 9? level : 9);
 		ks_mergesort(sort, k, buf, 0);
-		write_buffer(fnout, mode, k, buf, header, n_threads);
+		write_buffer(fnout, modeout, k, buf, header, n_threads);
 	} else { // then merge
 		char **fns;
 		n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
@@ -1023,7 +1025,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
 			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
 		}
-		if (bam_merge_core2(is_by_qname, fnout, 0, n_files, fns, 0, 0, n_threads, level) < 0) {
+		if (bam_merge_core2(is_by_qname, fnout, modeout, 0, n_files, fns, 0, 0, n_threads) < 0) {
 			// Propagate bam_merge_core2() failure; it has already emitted a
 			// message explaining the failure, so no further message is needed.
 			return -1;
@@ -1051,7 +1053,7 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
 	int ret;
 	char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
 	sprintf(fnout, "%s.bam", prefix);
-	ret = bam_sort_core_ext(is_by_qname, fn, prefix, fnout, max_mem, 0, -1);
+	ret = bam_sort_core_ext(is_by_qname, fn, prefix, fnout, "wb", max_mem, 0);
 	free(fnout);
 	return ret;
 }
@@ -1060,7 +1062,7 @@ int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 768<<20; // 512MB
 	int c, is_by_qname = 0, is_stdout = 0, ret = 0, n_threads = 0, level = -1, full_path = 0;
-	char *fnout;
+	char *fnout, modeout[12];
 	while ((c = getopt(argc, argv, "fnom:@:l:")) >= 0) {
 		switch (c) {
 		case 'f': full_path = 1; break;
@@ -1097,7 +1099,10 @@ int bam_sort(int argc, char *argv[])
 		sprintf(fnout, "%s%s", argv[optind+1], full_path? "" : ".bam");
 	}
 
-	if (bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], fnout, max_mem, n_threads, level) < 0) ret = 1;
+	strcpy(modeout, "wb");
+	if (level >= 0) sprintf(strchr(modeout, '\0'), "%d", level < 9? level : 9);
+
+	if (bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], fnout, modeout, max_mem, n_threads) < 0) ret = 1;
 	free(fnout);
 	return ret;
 }
