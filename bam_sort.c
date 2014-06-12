@@ -216,7 +216,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	else if (flag & MERGE_LEVEL1) level = 1;
 	strcpy(mode, "w");
 	if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
-	if ((fpout = strcmp(out, "-")? bam_open(out, "w") : bam_dopen(fileno(stdout), "w")) == 0) {
+	if ((fpout = strcmp(out, "-")? bam_open(out, mode) : bam_dopen(fileno(stdout), mode)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
 		return -1;
 	}
