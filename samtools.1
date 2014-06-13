@@ -6,7 +6,7 @@ samtools - Utilities for the Sequence Alignment/Map (SAM) format
 .PP
 samtools view -bt ref_list.txt -o aln.bam aln.sam.gz
 .PP
-samtools sort aln.bam aln.sorted
+samtools sort -T /tmp/aln.sorted -o aln.sorted.bam aln.bam
 .PP
 samtools index aln.sorted.bam
 .PP
@@ -495,33 +495,123 @@ which enables fast BAM concatenation.
 
 .TP
 .B sort
-samtools sort [-nof] [-m maxMem] <in.bam> <out.prefix>
+.na
+samtools sort
+.RB [ -l
+.IR level ]
+.RB [ -m
+.IR maxMem ]
+.RB [ -o
+.IR out.bam ]
+.RB [ -O
+.IR format ]
+.RB [ -n ]
+.BI "-T " out.prefix
+.RB [ -@
+.IR threads "] [" in.bam ]
+.ad
 
-Sort alignments by leftmost coordinates. File
-.I <out.prefix>.bam
-will be created. This command may also create temporary files
-.I <out.prefix>.%d.bam
-when the whole alignment cannot be fitted into memory (controlled by
-option -m).
+Sort alignments by leftmost coordinates, or by read name when
+.B -n
+is used.
+An appropriate
+.B @HD-SO
+sort order header tag will be added or an existing one updated if necessary.
 
-.B OPTIONS:
+The sorted output is written to standard output by default, or to the
+specified file
+.RI ( out.bam )
+when
+.B -o
+is used.
+This command will also create temporary files
+.IB out.prefix . %d .bam
+as needed when the entire alignment data cannot fit into memory
+(as controlled via the
+.B -m
+option).
+
+.B Options:
 .RS
-.TP 8
+.TP 11
+.BI "-l " INT
+Set the compression level, from 0 to 9, for the final output file.
+If
+.B -l
+is not used, the default compression level will apply.
+.TP
+.BI "-m " INT
+Approximately the maximum required memory per thread, specified either in bytes
+or with a
+.BR K ", " M ", or " G
+suffix.
+[768 MiB]
+.TP
+.B -n
+Sort by read names (i.e., the
+.B QNAME
+field) rather than by chromosomal coordinates.
+.TP
+.BI "-o " FILE
+Write the final sorted output to
+.IR FILE ,
+rather than to standard output.
+.TP
+.BI "-O " FORMAT
+Write the final output as
+.BR sam ", " bam ", or " cram .
+
+By default, samtools tries to select a format based on the
+.B -o
+filename extension; if output is to standard output or no format can be
+deduced,
+.B -O
+must be used.
+.TP
+.BI "-T " PREFIX
+Write temporary files to
+.IB PREFIX . nnnn .bam.
+This option is required.
+.TP
+.BI "-@ " INT
+Set number of sorting and compression threads.
+By default, operation is single-threaded.
+.PP
+For compatibility with existing scripts,
+.B samtools sort
+also accepts the previous less flexible way of specifying the final and
+temporary output filenames:
+.PP
+samtools sort
+.RB [ -nof "] [" -m
+.IR maxMem ]
+.I in.bam out.prefix
+
+The sorted BAM output is written to
+.IB out.prefix .bam
+(or as determined by the
+.B -o
+and
+.B -f
+options below) and any temporary files are written alongside as
+.IB out.prefix . %d .bam.
+
+.TP 5
 .B -o
 Output the final alignment to the standard output.
 .TP
-.B -n
-Sort by read names rather than by chromosomal coordinates
-.TP
 .B -f
 Use
-.I <out.prefix>
+.I out.prefix
 as the full output path and do not append
-.I .bam
+.B .bam
 suffix.
 .TP
-.BI -m \ INT
-Approximately the maximum required memory. [500000000]
+.BR -l ", " -m ", " -n ", " -@
+Accepted with the same meanings as above.
+.PP
+This will eventually be removed; you should move to using the more flexible
+newer style of invocation.
 .RE
 
 .TP

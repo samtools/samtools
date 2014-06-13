@@ -1058,15 +1058,42 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
 	return ret;
 }
 
+static int sort_usage(FILE *fp, int status)
+{
+	fprintf(fp,
+"Usage: samtools sort [options...] [in.bam]\n"
+"Options:\n"
+"  -l INT     Set compression level, from 0 to 9 [-1]\n"
+"  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
+"  -n         Sort by read name\n"
+"  -o FILE    Write final output to FILE rather than standard output\n"
+"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')   (either -O or\n"
+"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam       -T is required)\n"
+"  -@ INT     Set number of sorting and compression threads [1]\n"
+"\n"
+"Legacy usage: samtools sort [options...] <in.bam> <out.prefix>\n"
+"Options:\n"
+"  -f         Use <out.prefix> as full final filename rather than prefix\n"
+"  -o         Write final output to stdout rather than <out.prefix>.bam\n"
+"  -l,m,n,@   Similar to corresponding options above\n");
+	return status;
+}
+
 int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 768<<20; // 512MB
-	int c, is_by_qname = 0, is_stdout = 0, ret = 0, n_threads = 0, level = -1, full_path = 0;
-	char *fnout, modeout[12];
-	while ((c = getopt(argc, argv, "fnom:@:l:")) >= 0) {
+	int c, i, modern, nargs, is_by_qname = 0, is_stdout = 0, ret = EXIT_SUCCESS, n_threads = 0, level = -1, full_path = 0;
+	char *fnout = "-", *fmtout = NULL, modeout[12], *tmpprefix = NULL;
+	kstring_t fnout_buffer = { 0, 0, NULL };
+
+	modern = 0;
+	for (i = 1; i < argc; ++i)
+		if (argv[i][0] == '-' && strpbrk(argv[i], "OT")) { modern = 1; break; }
+
+	while ((c = getopt(argc, argv, modern? "l:m:no:O:T:@:" : "fnom:@:l:")) >= 0) {
 		switch (c) {
 		case 'f': full_path = 1; break;
-		case 'o': is_stdout = 1; break;
+		case 'o': if (modern) fnout = optarg; else is_stdout = 1; break;
 		case 'n': is_by_qname = 1; break;
 		case 'm': {
 				char *q;
@@ -1076,33 +1103,49 @@ int bam_sort(int argc, char *argv[])
 				else if (*q == 'g' || *q == 'G') max_mem <<= 30;
 				break;
 			}
+		case 'O': fmtout = optarg; break;
+		case 'T': tmpprefix = optarg; break;
 		case '@': n_threads = atoi(optarg); break;
 		case 'l': level = atoi(optarg); break;
+		default: return sort_usage(stderr, EXIT_FAILURE);
 		}
 	}
-	if (optind + 2 > argc) {
-		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage:   samtools sort [options] <in.bam> <out.prefix>\n\n");
-		fprintf(stderr, "Options: -n        sort by read name\n");
-		fprintf(stderr, "         -f        use <out.prefix> as full file name instead of prefix\n");
-		fprintf(stderr, "         -o        final output to stdout\n");
-		fprintf(stderr, "         -l INT    compression level, from 0 to 9 [-1]\n");
-		fprintf(stderr, "         -@ INT    number of sorting and compression threads [1]\n");
-		fprintf(stderr, "         -m INT    max memory per thread; suffix K/M/G recognized [768M]\n");
-		fprintf(stderr, "\n");
-		return 1;
+
+	nargs = argc - optind;
+	if (argc == 1)
+		return sort_usage(stdout, EXIT_SUCCESS);
+	else if (modern? (nargs > 1) : (nargs != 2))
+		return sort_usage(stderr, EXIT_FAILURE);
+
+	if (!modern) {
+		fmtout = "bam";
+		if (is_stdout) fnout = "-";
+		else if (full_path) fnout = argv[optind+1];
+		else {
+			ksprintf(&fnout_buffer, "%s.%s", argv[optind+1], fmtout);
+			fnout = fnout_buffer.s;
+		}
+		tmpprefix = argv[optind+1];
 	}
 
-	if (is_stdout) fnout = strdup("-");
-	else {
-		fnout = calloc(strlen(argv[optind+1]) + 4 + 1, 1);
-		sprintf(fnout, "%s%s", argv[optind+1], full_path? "" : ".bam");
+	strcpy(modeout, "w");
+	if (sam_open_mode(&modeout[1], fnout, fmtout) < 0) {
+		if (fmtout) fprintf(stderr, "[bam_sort] can't parse output format \"%s\"\n", fmtout);
+		else fprintf(stderr, "[bam_sort] can't determine output format\n");
+		ret = EXIT_FAILURE;
+		goto sort_end;
 	}
-
-	strcpy(modeout, "wb");
 	if (level >= 0) sprintf(strchr(modeout, '\0'), "%d", level < 9? level : 9);
 
-	if (bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], fnout, modeout, max_mem, n_threads) < 0) ret = 1;
-	free(fnout);
+	if (tmpprefix == NULL) {
+		fprintf(stderr, "[bam_sort] no prefix specified for temporary files (use -T option)\n");
+		ret = EXIT_FAILURE;
+		goto sort_end;
+	}
+
+	if (bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-", tmpprefix, fnout, modeout, max_mem, n_threads) < 0) ret = EXIT_FAILURE;
+
+sort_end:
+	free(fnout_buffer.s);
 	return ret;
 }
