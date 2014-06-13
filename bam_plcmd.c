@@ -86,7 +86,7 @@ void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
 typedef struct {
-	int max_mq, min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, fmt_flag;
+	int min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, fmt_flag;
     int rflag_require, rflag_filter;
 	int openQ, extQ, tandemQ, min_support; // for indels
 	double min_frac; // for indels
@@ -578,6 +578,77 @@ int parse_format_flag(const char *str)
     return flag;
 }
 
+static void print_usage(FILE *fp, const mplp_conf_t *mplp)
+{
+	char *tmp_require = bam_flag2str(mplp->rflag_require);
+	char *tmp_filter  = bam_flag2str(mplp->rflag_filter);
+
+	// Display usage information, formatted for the standard 80 columns.
+	// (The unusual string formatting here aids the readability of this
+	// source code in 80 columns, to the extent that's possible.)
+
+	fprintf(fp,
+"\n"
+"Usage: samtools mpileup [options] in1.bam [in2.bam [...]]\n"
+"\n"
+"Input options:\n"
+"  -6, --illumina1.3+      quality is in the Illumina-1.3+ encoding\n"
+"  -A, --count-orphans     do not discard anomalous read pairs\n"
+"  -b, --bam-list FILE     list of input BAM filenames, one per line\n"
+"  -B, --no-BAQ            disable BAQ (per-Base Alignment Quality)\n"
+"  -C, --adjust-MQ INT     adjust mapping quality; recommended:50, disable:0 [0]\n"
+"  -d, --max-depth INT     max per-BAM depth; avoids excessive memory usage [%d]\n", mplp->max_depth);
+	fprintf(fp,
+"  -E, --redo-BAQ          recalculate BAQ on the fly, ignore existing BQs\n"
+"  -f, --fasta-ref FILE    faidx indexed reference sequence file\n"
+"  -G, --exclude-RG FILE   exclude read groups listed in FILE\n"
+"  -l, --positions FILE    skip unlisted positions (chr pos) or regions (BED)\n"
+"  -q, --min-MQ INT        skip alignments with mapQ smaller than INT [%d]\n", mplp->min_mq);
+	fprintf(fp,
+"  -Q, --min-BQ INT        skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp->min_baseQ);
+	fprintf(fp,
+"  -r, --region REG        region in which pileup is generated\n"
+"  -R, --ignore-RG         ignore RG tags (one BAM = one sample)\n"
+"  --rf, --incl-flags STR|INT  required flags: skip reads with mask bits unset [%s]\n", tmp_require);
+	fprintf(fp,
+"  --ff, --excl-flags STR|INT  filter flags: skip reads with mask bits set\n"
+"                                            [%s]\n", tmp_filter);
+	fprintf(fp,
+"  -x, --ignore-overlaps   disable read-pair overlap detection\n"
+"\n"
+"Output options for mpileup format (without -g/-v):\n"
+"  -O, --output-BP         output base positions on reads\n"
+"  -s, --output-MQ         output mapping quality\n"
+"\n"
+"Output options for genotype likelihoods (when -g/-v is used):\n"
+"  -g, --BCF               generate genotype likelihoods in BCF format\n"
+"  -t, --format-tags LIST  optional per-sample tags to output: DP,DV,DP4,SP []\n"
+"  -u, --uncompressed      generate uncompressed VCF/BCF output\n"
+"  -v, --VCF               generate genotype likelihoods in VCF format\n"
+"\n"
+"SNP/INDEL genotype likelihoods options (effective with -g/-v):\n"
+"  -e, --ext-prob INT      Phred-scaled gap extension seq error probability [%d]\n", mplp->extQ);
+	fprintf(fp,
+"  -F, --gap-frac FLOAT    minimum fraction of gapped reads [%g]\n", mplp->min_frac);
+	fprintf(fp,
+"  -h, --tandem-qual INT   coefficient for homopolymer errors [%d]\n", mplp->tandemQ);
+	fprintf(fp,
+"  -I, --skip-indels       do not perform indel calling\n"
+"  -L, --max-idepth INT    maximum per-sample depth for INDEL calling [%d]\n", mplp->max_indel_depth);
+	fprintf(fp,
+"  -m, --min-ireads INT    minimum number gapped reads for indel candidates [%d]\n", mplp->min_support);
+	fprintf(fp,
+"  -o, --open-prob INT     Phred-scaled gap open seq error probability [%d]\n", mplp->openQ);
+	fprintf(fp,
+"  -p, --per-sample-mF     apply -m and -F per-sample for increased sensitivity\n"
+"  -P, --platforms STR     comma separated list of platforms for indels [all]\n"
+"\n"
+"Notes: Assuming diploid individuals.\n");
+
+	free(tmp_require);
+	free(tmp_filter);
+}
+
 int bam_mpileup(int argc, char *argv[])
 {
 	int c;
@@ -586,7 +657,6 @@ int bam_mpileup(int argc, char *argv[])
     int nfiles = 0, use_orphan = 0;
 	mplp_conf_t mplp;
 	memset(&mplp, 0, sizeof(mplp_conf_t));
-	mplp.max_mq = 60;
 	mplp.min_baseQ = 13;
 	mplp.capQ_thres = 0;
 	mplp.max_depth = 250; mplp.max_indel_depth = 250;
@@ -595,13 +665,57 @@ int bam_mpileup(int argc, char *argv[])
 	mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_SMART_OVERLAPS;
     mplp.argc = argc; mplp.argv = argv;
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
-    static struct option lopts[] = 
+    static const struct option lopts[] =
     {
-        {"rf",1,0,1},   // require flag
-        {"ff",1,0,2},   // filter flag
-        {0,0,0,0}
+        {"rf", required_argument, NULL, 1},   // require flag
+        {"ff", required_argument, NULL, 2},   // filter flag
+        {"incl-flags", required_argument, NULL, 1},
+        {"excl-flags", required_argument, NULL, 2},
+        {"illumina1.3+", no_argument, NULL, '6'},
+        {"count-orphans", no_argument, NULL, 'A'},
+        {"bam-list", required_argument, NULL, 'b'},
+        {"no-BAQ", no_argument, NULL, 'B'},
+        {"no-baq", no_argument, NULL, 'B'},
+        {"adjust-MQ", required_argument, NULL, 'C'},
+        {"adjust-mq", required_argument, NULL, 'C'},
+        {"max-depth", required_argument, NULL, 'd'},
+        {"redo-BAQ", no_argument, NULL, 'E'},
+        {"redo-baq", no_argument, NULL, 'E'},
+        {"fasta-ref", required_argument, NULL, 'f'},
+        {"exclude-RG", required_argument, NULL, 'G'},
+        {"exclude-rg", required_argument, NULL, 'G'},
+        {"positions", required_argument, NULL, 'l'},
+        {"region", required_argument, NULL, 'r'},
+        {"ignore-RG", no_argument, NULL, 'R'},
+        {"ignore-rg", no_argument, NULL, 'R'},
+        {"min-MQ", required_argument, NULL, 'q'},
+        {"min-mq", required_argument, NULL, 'q'},
+        {"min-BQ", required_argument, NULL, 'Q'},
+        {"min-bq", required_argument, NULL, 'Q'},
+        {"ignore-overlaps", no_argument, NULL, 'x'},
+        {"BCF", no_argument, NULL, 'g'},
+        {"bcf", no_argument, NULL, 'g'},
+        {"VCF", no_argument, NULL, 'v'},
+        {"vcf", no_argument, NULL, 'v'},
+        {"output-BP", no_argument, NULL, 'O'},
+        {"output-bp", no_argument, NULL, 'O'},
+        {"output-MQ", no_argument, NULL, 's'},
+        {"output-mq", no_argument, NULL, 's'},
+        {"format-tags", required_argument, NULL, 't'},
+        {"uncompressed", no_argument, NULL, 'u'},
+        {"ext-prob", required_argument, NULL, 'e'},
+        {"gap-frac", required_argument, NULL, 'F'},
+        {"tandem-qual", required_argument, NULL, 'h'},
+        {"skip-indels", no_argument, NULL, 'I'},
+        {"max-idepth", required_argument, NULL, 'L'},
+        {"min-ireads ", required_argument, NULL, 'm'},
+        {"open-prob", required_argument, NULL, 'o'},
+        {"per-sample-mF", no_argument, NULL, 'p'},
+        {"per-sample-mf", no_argument, NULL, 'p'},
+        {"platforms", required_argument, NULL, 'P'},
+        {NULL, 0, NULL, 0}
     };
-	while ((c = getopt_long(argc, argv, "Agf:r:l:M:q:Q:uaRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsV1:2:vxt:",lopts,NULL)) >= 0) {
+	while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:",lopts,NULL)) >= 0) {
 		switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 : 
@@ -631,11 +745,10 @@ int bam_mpileup(int argc, char *argv[])
 		case 'g': mplp.flag |= MPLP_BCF; break;
 		case 'v': mplp.flag |= MPLP_BCF | MPLP_VCF; break;
 		case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_BCF; break;
-		case 'a': mplp.flag |= MPLP_NO_ORPHAN | MPLP_REALN; break;
 		case 'B': mplp.flag &= ~MPLP_REALN; break;
-		case 'D': mplp.fmt_flag |= B2B_FMT_DP; break;
-		case 'S': mplp.fmt_flag |= B2B_FMT_SP; break;
-		case 'V': mplp.fmt_flag |= B2B_FMT_DV; break;
+		case 'D': mplp.fmt_flag |= B2B_FMT_DP; fprintf(stderr, "[warning] samtools mpileup option `-D` is functional, but deprecated. Please switch to `-t DP` in future.\n"); break;
+		case 'S': mplp.fmt_flag |= B2B_FMT_SP; fprintf(stderr, "[warning] samtools mpileup option `-S` is functional, but deprecated. Please switch to `-t SP` in future.\n"); break;
+		case 'V': mplp.fmt_flag |= B2B_FMT_DV; fprintf(stderr, "[warning] samtools mpileup option `-V` is functional, but deprecated. Please switch to `-t DV` in future.\n"); break;
 		case 'I': mplp.flag |= MPLP_NO_INDEL; break;
 		case 'E': mplp.flag |= MPLP_REDO_BAQ; break;
 		case '6': mplp.flag |= MPLP_ILLUMINA13; break;
@@ -643,7 +756,6 @@ int bam_mpileup(int argc, char *argv[])
 		case 's': mplp.flag |= MPLP_PRINT_MAPQ; break;
 		case 'O': mplp.flag |= MPLP_PRINT_POS; break;
 		case 'C': mplp.capQ_thres = atoi(optarg); break;
-		case 'M': mplp.max_mq = atoi(optarg); break;
 		case 'q': mplp.min_mq = atoi(optarg); break;
 		case 'Q': mplp.min_baseQ = atoi(optarg); break;
         case 'b': file_list = optarg; break;
@@ -666,55 +778,20 @@ int bam_mpileup(int argc, char *argv[])
 			}
 			break;
 		case 't': mplp.fmt_flag |= parse_format_flag(optarg); break;
+		default: 
+			fprintf(stderr,"Invalid option: '%c'\n", c);
+			return 1;
 		}
 	}
+    if ( !(mplp.flag&MPLP_REALN) && mplp.flag&MPLP_REDO_BAQ )
+    {
+        fprintf(stderr,"Error: The -B option cannot be combined with -E\n");
+        return 1;
+    }
 	if (use_orphan) mplp.flag &= ~MPLP_NO_ORPHAN;
 	if (argc == 1) 
     {
-        char *tmp_require = bam_flag2str(mplp.rflag_require);
-        char *tmp_filter  = bam_flag2str(mplp.rflag_filter);
-		fprintf(stderr, "\n");
-		fprintf(stderr, "Usage: samtools mpileup [options] in1.bam [in2.bam [...]]\n\n");
-		fprintf(stderr, "Input options:\n\n");
-		fprintf(stderr, "       -6              assume the quality is in the Illumina-1.3+ encoding\n");
-		fprintf(stderr, "       -A              count anomalous read pairs\n");
-		fprintf(stderr, "       -B              disable BAQ computation\n");
-		fprintf(stderr, "       -b FILE         list of input BAM filenames, one per line [null]\n");
-		fprintf(stderr, "       -C INT          parameter for adjusting mapQ; 0 to disable [0]\n");
-		fprintf(stderr, "       -d INT          max per-BAM depth to avoid excessive memory usage [%d]\n", mplp.max_depth);
-		fprintf(stderr, "       -E              recalculate extended BAQ on the fly thus ignoring existing BQs\n");
-		fprintf(stderr, "       -f FILE         faidx indexed reference sequence file [null]\n");
-		fprintf(stderr, "       -G FILE         exclude read groups listed in FILE [null]\n");
-		fprintf(stderr, "       -l FILE         list of positions (chr pos) or regions (BED) [null]\n");
-		fprintf(stderr, "       -M INT          cap mapping quality at INT [%d]\n", mplp.max_mq);
-		fprintf(stderr, "       -r STR          region in which pileup is generated [null]\n");
-		fprintf(stderr, "       -R              ignore RG tags\n");
-		fprintf(stderr, "       -q INT          skip alignments with mapQ smaller than INT [%d]\n", mplp.min_mq);
-		fprintf(stderr, "       -Q INT          skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp.min_baseQ);
-		fprintf(stderr, "       --rf STR|INT    required flags: skip reads with mask bits unset [%s]\n", tmp_require);
-		fprintf(stderr, "       --ff STR|INT    filter flags: skip reads with mask bits set [%s]\n", tmp_filter);
-		fprintf(stderr, "       -x              disable read-pair overlap detection\n");
-		fprintf(stderr, "\nOutput options:\n\n");
-		fprintf(stderr, "       -D/V            output per-sample DP/DV in BCF (requires -g/-v)\n");
-		fprintf(stderr, "       -g/v            generate BCF/VCF output (genotype likelihoods)\n");
-		fprintf(stderr, "       -O              output base positions on reads (disabled by -g/-u)\n");
-		fprintf(stderr, "       -s              output mapping quality (disabled by -g/-u)\n");
-		fprintf(stderr, "       -S              output per-sample strand bias P-value in BCF (require -g/-u)\n");
-		fprintf(stderr, "       -t LIST         optional per-sample tags to output: DP,DV,DP4,SP []\n");
-		fprintf(stderr, "       -u              generate uncompressed BCF/VCF output\n");
-		fprintf(stderr, "\nSNP/INDEL genotype likelihoods options (effective with `-g' or `-u'):\n\n");
-		fprintf(stderr, "       -e INT          Phred-scaled gap extension seq error probability [%d]\n", mplp.extQ);
-		fprintf(stderr, "       -F FLOAT        minimum fraction of gapped reads for candidates [%g]\n", mplp.min_frac);
-		fprintf(stderr, "       -h INT          coefficient for homopolymer errors [%d]\n", mplp.tandemQ);
-		fprintf(stderr, "       -I              do not perform indel calling\n");
-		fprintf(stderr, "       -L INT          max per-sample depth for INDEL calling [%d]\n", mplp.max_indel_depth);
-		fprintf(stderr, "       -m INT          minimum gapped reads for indel candidates [%d]\n", mplp.min_support);
-		fprintf(stderr, "       -o INT          Phred-scaled gap open sequencing error probability [%d]\n", mplp.openQ);
-		fprintf(stderr, "       -p              apply -m and -F per-sample to increase sensitivity\n");
-		fprintf(stderr, "       -P STR          comma separated list of platforms for indels [all]\n");
-		fprintf(stderr, "\n");
-		fprintf(stderr, "Notes: Assuming diploid individuals.\n\n");
-        free(tmp_require); free(tmp_filter);
+		print_usage(stderr, &mplp);
 		return 1;
 	}
     int ret;
