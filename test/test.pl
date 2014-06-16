@@ -390,23 +390,13 @@ sub test_mpileup
     my @files = ('mpileup.1','mpileup.2','mpileup.3');
     my $ref   = 'mpileup.ref.fa';
 
-    # temporary hack: annotate SAMs with absolute reference path, otherwise SAM to CRAM conversion is not working
-    for my $file (@files)
-    {
-        open(my $fh,'>',"$$opts{tmp}/$file.sam") or error("$$opts{tmp}/$file.sam");
-        print $fh join("\t", qw(@HD VN:1.0 SO:coordinate)), "\n";
-        print $fh join("\t", qw(@SQ SN:17 LN:81195210 M5:a9a06ca09c111789d92723fbf39820f6 AS:NCBI37 SP:Human), "UR:$$opts{path}/dat/$ref"), "\n";
-        close($fh) or error("close failed: $$opts{tmp}/$file.sam");
-        cmd("cat $$opts{path}/dat/$file.sam >> $$opts{tmp}/$file.sam");
-    }
-
     # make a local copy, create bams, index the bams and the reference
     open(my $fh1,'>',"$$opts{tmp}/mpileup.bam.list") or error("$$opts{tmp}/mpileup.bam.list: $!");
     open(my $fh2,'>',"$$opts{tmp}/mpileup.cram.list") or error("$$opts{tmp}/mpileup.cram.list: $!");
     for my $file (@files)
     {
-        cmd("$$opts{bin}/samtools view -b $$opts{tmp}/$file.sam > $$opts{tmp}/$file.bam");
-        cmd("$$opts{bin}/samtools view -C $$opts{tmp}/$file.sam > $$opts{tmp}/$file.cram");
+        cmd("$$opts{bin}/samtools view -b $$opts{path}/dat/$file.sam > $$opts{tmp}/$file.bam");
+        cmd("$$opts{bin}/samtools view -C $$opts{path}/dat/$file.sam -T $$opts{path}/dat/mpileup.ref.fa > $$opts{tmp}/$file.cram");
         cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.bam");
         cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.cram");
         print $fh1 "$$opts{tmp}/$file.bam\n";
