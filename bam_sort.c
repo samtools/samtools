@@ -544,14 +544,17 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 /*!
   @abstract    Merge multiple sorted BAM.
   @param  is_by_qname whether to sort by query name
-  @param  out  output BAM file name
-  @param  mode sam_open() mode to be used to create the final output file
-               (overrides level settings from UNCOMP and LEVEL1 flags)
-  @param  headers  name of SAM file from which to copy '@' header lines,
-                   or NULL to copy them from the first file to be merged
-  @param  n    number of files to be merged
-  @param  fn   names of files to be merged
-
+  @param  out         output BAM file name
+  @param  mode        sam_open() mode to be used to create the final output
+                      file (overrides level settings from UNCOMP and LEVEL1
+                      flags)
+  @param  headers     name of SAM file from which to copy '@' header lines,
+                      or NULL to copy them from the first file to be merged
+  @param  n           number of files to be merged
+  @param  fn          names of files to be merged
+  @param  flag        flags that control how the merge is undertaken
+  @param  reg         region to merge
+  @param  n_threads   number of threads to use (passed to htslib
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
@@ -1025,7 +1028,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
 			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
 		}
-		if (bam_merge_core2(is_by_qname, fnout, modeout, 0, n_files, fns, 0, 0, n_threads) < 0) {
+		if (bam_merge_core2(is_by_qname, fnout, modeout, 0, n_files, fns, MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads) < 0) {
 			// Propagate bam_merge_core2() failure; it has already emitted a
 			// message explaining the failure, so no further message is needed.
 			return -1;
