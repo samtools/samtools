@@ -1,3 +1,5 @@
+@HD	VN:1.0	SO:coordinate
+@SQ	SN:17	LN:81195210	M5:a9a06ca09c111789d92723fbf39820f6	AS:NCBI37	SP:Human
 @RG	ID:ERR229776	LB:HG00101_I_bc_pelib_1018	SM:HG00101	PI:510	CN:MPIMG	PL:ILLUMINA	DS:SRP001294
 @PG	ID:bwa_index	PN:bwa	VN:0.5.9-r16	CL:bwa index -a bwtsw $reference_fasta
 @PG	ID:bwa_aln_fastq	PN:bwa	PP:bwa_index	VN:0.5.9-r16	CL:bwa aln -q 15 -f $sai_file $reference_fasta $fastq_file
