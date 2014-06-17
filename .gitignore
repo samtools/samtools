@@ -17,3 +17,5 @@ lib*.a
 /TAGS
 
 core
+
+.DS_Store
