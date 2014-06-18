@@ -104,9 +104,9 @@ static void sync_mate_inner(bam1_t* src, bam1_t* dest)
 	dest->core.mtid = src->core.tid; dest->core.mpos = src->core.pos;
 	// sync flag info
 	if (src->core.flag&BAM_FREVERSE)
-			dest->core.flag |= BAM_FMREVERSE;
-		else
-			dest->core.flag &= ~BAM_FMREVERSE;
+		dest->core.flag |= BAM_FMREVERSE;
+	else
+		dest->core.flag &= ~BAM_FMREVERSE;
 	if (src->core.flag & BAM_FUNMAP) {
 		dest->core.flag |= BAM_FMUNMAP;
 	}
@@ -123,7 +123,9 @@ static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
 	
 	bam1_t* first = a;
 	bam1_t* second = b;
-	if (a->core.pos > b->core.pos) {
+	int32_t a_pos = a->core.flag&BAM_FREVERSE ? bam_endpos(a) : a->core.pos;
+	int32_t b_pos = b->core.flag&BAM_FREVERSE ? bam_endpos(b) : b->core.pos;
+	if (a_pos > b_pos) {
 		first = b;
 		second = a;
 	} else {
@@ -271,32 +273,55 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
 	free(str.s);
 }
 
-void usage(void)
+void usage(FILE* where)
 {
-	fprintf(stderr,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
-	fprintf(stderr,"Options:\n");
-	fprintf(stderr,"       -r    remove unmapped reads and secondary alignments\n");
-	fprintf(stderr,"       -p    disable FR proper pair check\n\n");
+	fprintf(where,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
+	fprintf(where,"Options:\n");
+	fprintf(stderr,"  -r         Remove unmapped reads and secondary alignments\n");
+	fprintf(stderr,"  -p         Disable FR proper pair check\n");
+	fprintf(stderr,"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')\n");
 	fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
 	fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
 	fprintf(stderr,"input is not accepted.\n");
-	exit(1);
 }
 
 int bam_mating(int argc, char *argv[])
 {
 	samFile *in, *out;
 	int c, remove_reads = 0, proper_pair_check = 1;
-	while ((c = getopt(argc, argv, "rp")) >= 0) {
+	char* fmtout = NULL;
+	char modeout[12];
+	// parse args
+	if (argc == 1) { usage(stdout); return 0; }
+	while ((c = getopt(argc, argv, "rpO:")) >= 0) {
 		switch (c) {
 			case 'r': remove_reads = 1; break;
 			case 'p': proper_pair_check = 0; break;
+			case 'O': fmtout = optarg; break;
+			default: usage(stderr); return 1;
 		}
 	}
-	if (optind+1 >= argc) usage();
-	in = sam_open(argv[optind], "r");
-	out = sam_open(argv[optind+1], "wb");
+	if (optind+1 >= argc) { usage(stderr); return 1; }
+	strcpy(modeout, "w");
+	if (sam_open_mode(&modeout[1], argv[optind+1], fmtout) < 0) {
+		if (fmtout) fprintf(stderr, "[bam_mating] cannot parse output format \"%s\"\n", fmtout);
+		else fprintf(stderr, "[bam_mating] cannot determine output format\n");
+		return 1;
+	}
+
+	// init
+	if ((in = sam_open(argv[optind], "r")) == NULL) {
+		fprintf(stderr, "[bam_mating] cannot open input file\n");
+		return 1;
+	}
+	if ((out = sam_open(argv[optind+1], modeout)) == NULL) {
+		fprintf(stderr, "[bam_mating] cannot open output file\n");
+		return 1;
+	}
+
+	// run
 	bam_mating_core(in, out, remove_reads, proper_pair_check);
+	// cleanup
 	sam_close(in); sam_close(out);
 	return 0;
 }

@@ -20,6 +20,7 @@ test_bam2fq($opts);
 test_depad($opts);
 test_stats($opts);
 test_merge($opts);
+test_fixmate($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -2120,12 +2121,22 @@ sub test_merge
     # Merge 2 - Standard 3 file BAM merge all files presented on the command line
     test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/merge/test_input_1_a.bam $$opts{path}/merge/test_input_1_b.bam $$opts{path}/merge/test_input_1_c.bam");
     # Merge 3 - Standard 3 file BAM merge 2 files in fofn 1 on command line
-	open(my $fofn, "$$opts{path}/merge/test_3.fofn");
-	my ($tmpfile_fh, $tmpfile_filename) = tempfile(UNLINK => 1);
+    open(my $fofn, "$$opts{path}/merge/test_3.fofn");
+    my ($tmpfile_fh, $tmpfile_filename) = tempfile(UNLINK => 1);
 
-	while (<$fofn>) {
-		print $tmpfile_fh "$$opts{path}/$_";
-	}
-	close($tmpfile_fh);
+    while (<$fofn>) {
+        print $tmpfile_fh "$$opts{path}/$_";
+    }
+    close($tmpfile_fh);
     test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge -s 1 -b $tmpfile_filename - $$opts{path}/merge/test_input_1_a.bam");
+}
+
+sub test_fixmate
+{
+    my ($opts,%args) = @_;
+
+    test_cmd($opts,out=>'fixmate/1_coord_sort.sam.expected', err=>'fixmate/1_coord_sort.sam.expected.err', cmd=>"$$opts{bin}/samtools fixmate -O sam $$opts{path}/fixmate/1_coord_sort.sam -", expect_fail=>1);
+    test_cmd($opts,out=>'fixmate/2_isize_overflow.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -O sam $$opts{path}/fixmate/2_isize_overflow.sam -");
+    test_cmd($opts,out=>'fixmate/3_reverse_read_pp_lt.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -O sam $$opts{path}/fixmate/3_reverse_read_pp_lt.sam -");
+    test_cmd($opts,out=>'fixmate/4_reverse_read_pp_equal.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -O sam $$opts{path}/fixmate/4_reverse_read_pp_equal.sam -");
 }
