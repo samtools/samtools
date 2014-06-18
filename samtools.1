@@ -427,7 +427,25 @@ Filter flags: skip reads with mask bits set
 .B -x,\ --ignore-overlaps
 Disable read-pair overlap detection.
 .TP
-.B Output Options for mpileup format (options -g or -v set):
+.B Output Options:
+.TP
+.BI "--output " FILE
+Write pileup or VCF/BCF output to
+.IR FILE ,
+rather than the default of standard output.
+.TP
+.B -g,\ --BCF
+Compute genotype likelihoods and output them in the binary call format (BCF).
+As of v1.0, this is BCF2 which is incompatible with the BCF1 format produced
+by previous (0.1.x) versions of samtools.
+.TP
+.B -v,\ --VCF
+Compute genotype likelihoods and output them in the variant call format (VCF).
+Output is bgzip-compressed VCF unless
+.B -u
+option is set.
+.TP
+.B Output Options for mpileup format (without -g or -v):
 .TP
 .B -O, --output-BP
 Output base positions on reads.
@@ -443,10 +461,6 @@ Output mapping quality.
 Output per-sample read depth [DEPRECATED - use
 .B -t DP
 instead]
-.TP
-.B -g,\ --BCF
-Compute genotype likelihoods and output them in the binary call format (BCF). 
-As of v1.0, this is BCF2 which is incompatible with the pre-1.0 BCF1 format.
 .TP
 .B -S
 Output per-sample Phred-scaled strand bias P-value [DEPRECATED - use
@@ -467,12 +481,6 @@ Comma-separated list of per-sample tags to output:
 .TP
 .B -u,\ --uncompressed
 Generate uncompressed VCF/BCF output, which is preferred for piping.
-.TP
-.B -v,\ --VCF
-Compute genotype likelihoods and output them in the variant call 
-format (VCF). Output is bgzip-compressed VCF unless
-.B -u
-option is set.
 .TP
 .B -V
 Output per-sample number of non-reference reads [DEPRECATED - use
