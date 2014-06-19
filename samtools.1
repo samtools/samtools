@@ -429,10 +429,25 @@ Disable read-pair overlap detection.
 .TP
 .B Output Options:
 .TP
-.BI "--output " FILE
+.BI "-o, --output " FILE
 Write pileup or VCF/BCF output to
 .IR FILE ,
 rather than the default of standard output.
+
+(The same short option is used for both
+.B --open-prob
+and
+.BR --output .
+If
+.BR -o 's
+argument contains any non-digit characters other than a leading + or - sign,
+it is interpreted as
+.BR --output .
+Usually the filename extension will take care of this, but to write to an
+entirely numeric filename use
+.B -o ./123
+or
+.BR "--output 123" .)
 .TP
 .B -g,\ --BCF
 Compute genotype likelihoods and output them in the binary call format (BCF).
@@ -526,6 +541,16 @@ Minimum number gapped reads for indel candidates
 Phred-scaled gap open sequencing error probability. Reducing
 .I INT
 leads to more indel calls. [40]
+
+(The same short option is used for both
+.B --open-prob
+and
+.BR --output .
+When
+.BR -o 's
+argument contains only an optional + or - sign followed by the digits 0 to 9,
+it is interpreted as
+.BR --open-prob .)
 .TP
 .B -p, --per-sample-mF
 Apply 

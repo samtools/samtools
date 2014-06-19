@@ -635,7 +635,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -x, --ignore-overlaps   disable read-pair overlap detection\n"
 "\n"
 "Output options:\n"
-"  --output FILE           write output to FILE [standard output]\n"
+"  -o, --output FILE       write output to FILE [standard output]\n"
 "  -g, --BCF               generate genotype likelihoods in BCF format\n"
 "  -v, --VCF               generate genotype likelihoods in VCF format\n"
 "\n"
@@ -694,6 +694,7 @@ int bam_mpileup(int argc, char *argv[])
         {"incl-flags", required_argument, NULL, 1},
         {"excl-flags", required_argument, NULL, 2},
         {"output", required_argument, NULL, 3},
+        {"open-prob", required_argument, NULL, 4},
         {"illumina1.3+", no_argument, NULL, '6'},
         {"count-orphans", no_argument, NULL, 'A'},
         {"bam-list", required_argument, NULL, 'b'},
@@ -732,7 +733,6 @@ int bam_mpileup(int argc, char *argv[])
         {"skip-indels", no_argument, NULL, 'I'},
         {"max-idepth", required_argument, NULL, 'L'},
         {"min-ireads ", required_argument, NULL, 'm'},
-        {"open-prob", required_argument, NULL, 'o'},
         {"per-sample-mF", no_argument, NULL, 'p'},
         {"per-sample-mf", no_argument, NULL, 'p'},
         {"platforms", required_argument, NULL, 'P'},
@@ -750,6 +750,7 @@ int bam_mpileup(int argc, char *argv[])
             if ( mplp.rflag_filter<0 ) { fprintf(stderr,"Could not parse --ff %s\n", optarg); return 1; }
             break;
 		case  3 : mplp.output_fname = optarg; break;
+		case  4 : mplp.openQ = atoi(optarg); break;
 		case 'f':
 			mplp.fai = fai_load(optarg);
 			if (mplp.fai == 0) return 1;
@@ -783,7 +784,14 @@ int bam_mpileup(int argc, char *argv[])
 		case 'q': mplp.min_mq = atoi(optarg); break;
 		case 'Q': mplp.min_baseQ = atoi(optarg); break;
         case 'b': file_list = optarg; break;
-		case 'o': mplp.openQ = atoi(optarg); break;
+		case 'o': {
+				char *end;
+				long value = strtol(optarg, &end, 10);
+				// Distinguish between -o INT and -o FILE (a bit of a hack!)
+				if (*end == '\0') mplp.openQ = value;
+				else mplp.output_fname = optarg;
+			}
+			break;
 		case 'e': mplp.extQ = atoi(optarg); break;
 		case 'h': mplp.tandemQ = atoi(optarg); break;
 		case 'A': use_orphan = 1; break;
