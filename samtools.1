@@ -1071,15 +1071,17 @@ will be attached
 .IR RG:Z:454 .
 
 .IP o 2
-Call SNPs and short INDELs for one diploid individual:
+Call SNPs and short INDELs:
 
-  samtools mpileup -ugf ref.fa aln.bam | bcftools view -bvcg - > var.raw.bcf
-  bcftools view var.raw.bcf | vcfutils.pl varFilter -D 100 > var.flt.vcf
+  samtools mpileup -uf ref.fa aln.bam | bcftools call -mv > var.raw.vcf
+  bcftools filter -s LowQual -e '%QUAL<20 || DP>100' var.raw.vcf  > var.flt.vcf
 
-The
-.B -D
-option of varFilter controls the maximum read depth, which should be
-adjusted to about twice the average read depth.  One may consider to add
+The 
+.B bcftools filter
+command marks low quality sites and sites with the read depth exceeding
+a limit, which should be adjusted to about twice the average read depth 
+(bigger read depths usually indicate problematic regions which are
+often enriched for artefacts).  One may consider to add
 .B -C50
 to
 .B mpileup
@@ -1087,26 +1089,6 @@ if mapping quality is overestimated for reads containing excessive
 mismatches. Applying this option usually helps
 .B BWA-short
 but may not other mappers.
-
-.IP o 2
-Generate the consensus sequence for one diploid individual:
-
-  samtools mpileup -uf ref.fa aln.bam | bcftools view -cg - | vcfutils.pl vcf2fq > cns.fq
-
-.IP o 2
-Phase one individual:
-
-  samtools calmd -AEur aln.bam ref.fa | samtools phase -b prefix - > phase.out
-
-The
-.B calmd
-command is used to reduce false heterozygotes around INDELs.
-
-.IP o 2
-Call SNPs and short indels for multiple diploid individuals:
-
-  samtools mpileup -P ILLUMINA -ugf ref.fa *.bam | bcftools view -bcvg - > var.raw.bcf
-  bcftools view var.raw.bcf | vcfutils.pl varFilter -D 2000 > var.flt.vcf
 
 Individuals are identified from the
 .B SM
@@ -1123,24 +1105,20 @@ tag set to
 Collecting indel candidates from reads sequenced by an indel-prone
 technology may affect the performance of indel calling.
 
-Note that there is a new calling model which can be invoked by
+.IP o 2
+Generate the consensus sequence for one diploid individual:
 
-    bcftools view -m0.99  ...
+  samtools mpileup -uf ref.fa aln.bam | bcftools call -c | vcfutils.pl vcf2fq > cns.fq
 
-which fixes some severe limitations of the default method.
+.IP o 2
+Phase one individual:
 
-For filtering, best results seem to be achieved by first applying the
-.IR SnpGap
-filter and then applying some machine learning approach
+  samtools calmd -AEur aln.bam ref.fa | samtools phase -b prefix - > phase.out
 
-    vcf-annotate -f SnpGap=n
-    vcf filter ...
+The
+.B calmd
+command is used to reduce false heterozygotes around INDELs.
 
-Both can be found in the 
-.B vcftools
-and
-.B htslib
-package (links below).
 
 .IP o 2
 Dump BAQ applied alignment for other SNP callers:
@@ -1187,6 +1165,8 @@ Samtools website: <http://samtools.sourceforge.net>
 .br
 Samtools latest source: <https://github.com/samtools/samtools>
 .br
-VCFtools website with stable link to VCF specification: <http://vcftools.sourceforge.net>
+File format specification of SAM/BAM,CRAM,VCF/BCF: <http://samtools.github.io/hts-specs>
 .br
 HTSlib website: <https://github.com/samtools/htslib>
+.br
+Bcftools website: <http://samtools.github.io/bcftools>
