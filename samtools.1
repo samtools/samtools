@@ -1027,6 +1027,67 @@ the important libraries used by samtools.
 .B --version-only
 Display the full samtools version number in a machine-readable format.
 
+.SH REFERENCE SEQUENCES
+.PP
+The CRAM format requires use of a reference sequence for both reading
+and writing.
+.PP
+When reading a CRAM the \fB@SQ\fR headers are interrogated to identify
+the reference sequence MD5sum (\fBM5:\fR tag) and the local reference
+sequence filename (\fBUR:\fR tag).  Note that \fIhttp://\fR and
+\fIftp://\fR based URLs in the UR: field are not used, but local fasta
+filenames (with or without \fIfile://\fR) can be used.
+.PP
+To create a CRAM the \fB@SQ\fR headers will also be read to identify
+the reference sequences, but M5: and UR: tags may not be present. In
+this case the \fB-T\fR and \fB-t\fR options of samtools view may be
+used to specify the fasta or fasta.fai filenames respectively
+(provided the .fasta.fai file is also backed up by a .fasta file).
+.PP
+The search order to obtain a reference is:
+.IP 1. 3
+Use any local file specified by the command line options (eg -T).
+.IP 2. 3
+Look for MD5 via REF_CACHE environment variable.
+.IP 3. 3
+Look for MD5 in each element of the REF_PATH environment variable.
+.IP 4. 3
+Look for a local file listed in the UR: header tag.
+
+.SH ENVIRONMENT VARIABLES
+.PP
+.TP
+.B REF_PATH
+A colon separated (semi-colon on Windows) list of locations in which
+to look for sequences identified by their MD5sums.  This can be either
+a list of directories or URLs. Note that if a URL is included then the
+colon in http:// and ftp:// and the optional port number will be
+treated as part of the URL and not a PATH field separator.
+
+For URLs, the text \fB%s\fR will be replaced by the MD5sum being
+read. If no REF_PATH has been specified it will default to
+\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR
+
+.TP
+.B REF_CACHE
+This can be defined to a single directory housing a local cache of
+references.  Upon downloading a reference it will be stored in the
+location pointed to by REF_CACHE.  When reading a reference it will be
+looked for in this directory before searching REF_PATH.  To avoid many
+files being stored in the same directory, a pathname may be
+constructed using %\fInum\fRs and %s notation, consuming \fInum\fR
+characters of the MD5sum.  For example
+\fB/local/ref_cache/%2s/%2s/%s\fR will create 2 nested subdirectories
+with the filenames being 28 characters instead of 32.
+
+The REF_CACHE directory will be searched for before attempting to load
+via the REF_PATH search list.
+
+To aid population of the REF_CACHE directory a script
+\fBmisc/seq_ref_populate.pl\fR is provided in the Samtools
+distribution. This takes a fasta file or a directory of fasta files
+and generates the MD5sum named files.
+
 .SH EXAMPLES
 .IP o 2
 Import SAM to BAM when
@@ -1047,6 +1108,11 @@ where
 is generated automatically by the
 .B faidx
 command.
+
+.IP o 2
+Convert a BAM file to a CRAM file using a local reference sequence.
+
+  samtools view -C -T ref.fa aln.bam > aln.cram
 
 .IP o 2
 Attach the
