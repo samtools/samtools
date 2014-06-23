@@ -1078,7 +1078,8 @@ files being stored in the same directory, a pathname may be
 constructed using %\fInum\fRs and %s notation, consuming \fInum\fR
 characters of the MD5sum.  For example
 \fB/local/ref_cache/%2s/%2s/%s\fR will create 2 nested subdirectories
-with the filenames being 28 characters instead of 32.
+with the filenames in the deepest directory being the last 28
+characters of the md5sum.
 
 The REF_CACHE directory will be searched for before attempting to load
 via the REF_PATH search list.
