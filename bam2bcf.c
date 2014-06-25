@@ -97,7 +97,7 @@ void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call)
     memset(bca->alt_bq,0,sizeof(int)*bca->nqual);
     memset(bca->fwd_mqs,0,sizeof(int)*bca->nqual);
     memset(bca->rev_mqs,0,sizeof(int)*bca->nqual);
-    if ( call->DPR ) memset(call->DPR,0,sizeof(int32_t)*call->n*4);
+    if ( call->DPR ) memset(call->DPR,0,sizeof(int32_t)*(call->n+1)*4);
 }
 
 /*
@@ -596,7 +596,6 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
         {
             int32_t tmp[4] = {0,0,0,0}, *dpr = call->DPR + 4, *dpr_out = call->DPR + 4;
             int32_t *dpr_tot = call->DPR;
-            for (j=0; j<call->n_alleles; j++) dpr_tot[j] = 0;
             for (i=0; i<n; i++)
             {
                 for (j=0; j<call->n_alleles; j++)
@@ -690,7 +689,8 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
         {
 			if (bc->a[i] < 0) break;
 			kputc(',', &bc->tmp);
-			kputc(bc->unseen == i? 'X' : "ACGT"[bc->a[i]], &bc->tmp);
+            if ( bc->unseen==i ) kputs("<X>", &bc->tmp);
+            else kputc("ACGT"[bc->a[i]], &bc->tmp);
             nals++;
 		}
 	}

@@ -318,6 +318,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_append(bcf_hdr, str.s);
         }
         free(str.s);
+        bcf_hdr_append(bcf_hdr,"##ALT=<ID=X,Description=\"Represents allele(s) other than observed.\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=INDEL,Number=0,Type=Flag,Description=\"Indicates that the variant is an INDEL.\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=IDV,Number=1,Type=Integer,Description=\"Maximum number of reads supporting an indel\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=IMF,Number=1,Type=Float,Description=\"Maximum fraction of reads supporting an indel\">");
