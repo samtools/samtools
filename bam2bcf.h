@@ -18,10 +18,12 @@
 
 #define B2B_INDEL_NULL 10000
 
-#define B2B_FMT_DP  0x1
-#define B2B_FMT_SP  0x2
-#define B2B_FMT_DV  0x4
-#define B2B_FMT_DP4 0x8
+#define B2B_FMT_DP      (1<<0)
+#define B2B_FMT_SP      (1<<1)
+#define B2B_FMT_DV      (1<<2)
+#define B2B_FMT_DP4     (1<<3)
+#define B2B_FMT_DPR     (1<<4)
+#define B2B_INFO_DPR    (1<<5)
 
 typedef struct __bcf_callaux_t {
 	int capQ, min_baseQ;
@@ -44,6 +46,7 @@ typedef struct __bcf_callaux_t {
 typedef struct {
     uint32_t ori_depth;
 	unsigned int mq0;
+    int32_t *DPR;
     float qsum[4];
     // The fields are:
     //      depth fwd   .. ref (0) and non-ref (2)
@@ -70,7 +73,7 @@ typedef struct {
 	int n_supp; // number of supporting non-reference reads
 	double anno[16];
     unsigned int depth, ori_depth, mq0;
-	int32_t *PL, *DP4;
+	int32_t *PL, *DP4, *DPR;
     uint8_t *fmt_arr;
     float vdb; // variant distance bias
     float mwu_pos, mwu_mq, mwu_bq, mwu_mqs;
@@ -93,7 +96,7 @@ extern "C" {
 					 const bcf_callaux_t *bca, const char *ref);
 	int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
 						  const void *rghash);
-    void bcf_callaux_clean(bcf_callaux_t *bca);
+    void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call);
 
 #ifdef __cplusplus
 }

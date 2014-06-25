@@ -342,6 +342,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP,Number=1,Type=Integer,Description=\"Number of high-quality bases\">");
         if ( conf->fmt_flag&B2B_FMT_DV )
             bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DV,Number=1,Type=Integer,Description=\"Number of high-quality non-reference bases\">");
+        if ( conf->fmt_flag&B2B_FMT_DPR )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DPR,Number=R,Type=Integer,Description=\"Number of high-quality bases observed for each allele\">");
+        if ( conf->fmt_flag&B2B_INFO_DPR )
+            bcf_hdr_append(bcf_hdr,"##INFO=<ID=DPR,Number=R,Type=Integer,Description=\"Number of high-quality bases observed for each allele\">");
         if ( conf->fmt_flag&B2B_FMT_DP4 )
             bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP4,Number=4,Type=Integer,Description=\"Number of high-quality ref-fwd, ref-reverse, alt-fwd and alt-reverse bases\">");
         if ( conf->fmt_flag&B2B_FMT_SP )
@@ -368,6 +372,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             assert( sizeof(float)==sizeof(int32_t) );
             bc.DP4 = malloc(sm->n * sizeof(int32_t) * 4);
             bc.fmt_arr = malloc(sm->n * sizeof(float)); // all fmt_flag fields
+            if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR) )
+            {
+                // first 4 fields for total numbers, the rest per-sample
+                bc.DPR = malloc((sm->n+1)*4*sizeof(int32_t));
+                for (i=0; i<sm->n; i++)
+                    bcr[i].DPR = bc.DPR + (i+1)*4;
+            }
         }
 	}
 	else {
@@ -414,7 +425,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp, conf->flag & MPLP_IGNORE_RG);
 			_ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
 			ref16 = seq_nt16_table[_ref0];
-            bcf_callaux_clean(bca);
+            bcf_callaux_clean(bca, &bc);
 			for (i = 0; i < gplp.n; ++i)
 				bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], ref16, bca, bcr + i);
             bc.tid = tid; bc.pos = pos;
@@ -425,7 +436,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 			// call indels; todo: subsampling with total_depth>max_indel_depth instead of ignoring?
 			if (!(conf->flag&MPLP_NO_INDEL) && total_depth < max_indel_depth && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0) 
             {
-                bcf_callaux_clean(bca);
+                bcf_callaux_clean(bca, &bc);
 				for (i = 0; i < gplp.n; ++i)
 					bcf_call_glfgen(gplp.n_plp[i], gplp.plp[i], -1, bca, bcr + i);
 				if (bcf_call_combine(gplp.n, bcr, bca, -1, &bc) >= 0) {
@@ -496,6 +507,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_call_destroy(bca);
         free(bc.PL);
         free(bc.DP4);
+        free(bc.DPR);
         free(bc.fmt_arr);
         free(bcr);
     }
@@ -585,6 +597,8 @@ int parse_format_flag(const char *str)
         else if ( !strncasecmp(ss,"DP4",se-ss) ) flag |= B2B_FMT_DP4;
         else if ( !strncasecmp(ss,"DV",se-ss) ) flag |= B2B_FMT_DV;
         else if ( !strncasecmp(ss,"SP",se-ss) ) flag |= B2B_FMT_SP;
+        else if ( !strncasecmp(ss,"DPR",se-ss) ) flag |= B2B_FMT_DPR;
+        else if ( !strncasecmp(ss,"INFO/DPR",se-ss) ) flag |= B2B_INFO_DPR;
         else 
         {
             fprintf(stderr,"Could not parse \"%s\"\n", str);
@@ -644,7 +658,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -s, --output-MQ         output mapping quality\n"
 "\n"
 "Output options for genotype likelihoods (when -g/-v is used):\n"
-"  -t, --format-tags LIST  optional per-sample tags to output: DP,DV,DP4,SP []\n"
+"  -t, --output-tags LIST  optional tags to output: DP,DPR,DV,DP4,INFO/DPR,SP []\n"
 "  -u, --uncompressed      generate uncompressed VCF/BCF output\n"
 "\n"
 "SNP/INDEL genotype likelihoods options (effective with -g/-v):\n"
@@ -725,7 +739,7 @@ int bam_mpileup(int argc, char *argv[])
         {"output-bp", no_argument, NULL, 'O'},
         {"output-MQ", no_argument, NULL, 's'},
         {"output-mq", no_argument, NULL, 's'},
-        {"format-tags", required_argument, NULL, 't'},
+        {"output-tags", required_argument, NULL, 't'},
         {"uncompressed", no_argument, NULL, 'u'},
         {"ext-prob", required_argument, NULL, 'e'},
         {"gap-frac", required_argument, NULL, 'F'},

@@ -482,16 +482,20 @@ Output per-sample Phred-scaled strand bias P-value [DEPRECATED - use
 .B -t SP
 instead]
 .TP
-.BI -t,\ --format-tags \ LIST
-Comma-separated list of per-sample tags to output:
+.BI -t,\ --output-tags \ LIST
+Comma-separated list of FORMAT and INFO tags to output (case-insensitive):
 .B DP
-(Number of high-quality bases), 
+(Number of high-quality bases, FORMAT), 
 .B DV
-(Number of high-quality non-reference bases), 
+(Number of high-quality non-reference bases, FORMAT), 
+.B DPR
+(Number of high-quality bases for each observed allele, FORMAT), 
+.B INFO/DPR
+(Number of high-quality bases for each observed allele, INFO), 
 .B DP4
-(Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases), 
+(Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT), 
 .B SP
-(Phred-scaled strand bias P-value)
+(Phred-scaled strand bias P-value, FORMAT)
 [null]
 .TP
 .B -u,\ --uncompressed

@@ -87,7 +87,7 @@ static int get_position(const bam_pileup1_t *p, int *len)
     return edist;
 }
 
-void bcf_callaux_clean(bcf_callaux_t *bca)
+void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call)
 {
     memset(bca->ref_pos,0,sizeof(int)*bca->npos);
     memset(bca->alt_pos,0,sizeof(int)*bca->npos);
@@ -97,6 +97,7 @@ void bcf_callaux_clean(bcf_callaux_t *bca)
     memset(bca->alt_bq,0,sizeof(int)*bca->nqual);
     memset(bca->fwd_mqs,0,sizeof(int)*bca->nqual);
     memset(bca->rev_mqs,0,sizeof(int)*bca->nqual);
+    if ( call->DPR ) memset(call->DPR,0,sizeof(int32_t)*call->n*4);
 }
 
 /*
@@ -117,7 +118,14 @@ void bcf_callaux_clean(bcf_callaux_t *bca)
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
 	int i, n, ref4, is_indel, ori_depth = 0;
-	memset(r, 0, sizeof(bcf_callret1_t));
+
+    // clean from previous run
+    r->ori_depth = 0;
+    r->mq0 = 0;
+    memset(r->qsum,0,sizeof(float)*4);
+    memset(r->anno,0,sizeof(double)*16);
+    memset(r->p,0,sizeof(float)*25);
+
 	if (ref_base >= 0) {
 		ref4 = bam_nt16_nt4_table[ref_base];
 		is_indel = 0;
@@ -156,7 +164,11 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		}
 		bca->bases[n++] = q<<5 | (int)bam_is_rev(p->b)<<4 | b;
 		// collect annotations
-		if (b < 4) r->qsum[b] += q;
+		if (b < 4) 
+        {
+            r->qsum[b] += q;
+            if ( r->DPR ) r->DPR[b]++;
+        }
 		++r->anno[0<<2|is_diff<<1|bam_is_rev(p->b)];
 		min_dist = p->b->core.l_qseq - 1 - p->qpos;
 		if (min_dist > p->qpos) min_dist = p->qpos;
@@ -580,6 +592,23 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
                 call->DP4[4*i+3] = calls[i].anno[3];
             }
         }
+        if ( call->DPR )
+        {
+            int32_t tmp[4] = {0,0,0,0}, *dpr = call->DPR + 4, *dpr_out = call->DPR + 4;
+            int32_t *dpr_tot = call->DPR;
+            for (j=0; j<call->n_alleles; j++) dpr_tot[j] = 0;
+            for (i=0; i<n; i++)
+            {
+                for (j=0; j<call->n_alleles; j++)
+                {
+                    tmp[j] = dpr[ call->a[j] ];
+                    dpr_tot[j] += tmp[j];
+                }
+                for (j=0; j<call->n_alleles; j++) dpr_out[j] = tmp[j];
+                dpr_out += call->n_alleles;
+                dpr += 4;
+            }
+        }
 
 //		if (ref_base < 0) fprintf(stderr, "%d,%d,%f,%d\n", call->n_alleles, x, sum_min, call->unseen);
 		call->shift = (int)(sum_min + .499);
@@ -736,6 +765,10 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     }
     if ( fmt_flag&B2B_FMT_DP4 )
         bcf_update_format_int32(hdr, rec, "DP4", bc->DP4, rec->n_sample*4);
+    if ( fmt_flag&B2B_FMT_DPR )
+        bcf_update_format_int32(hdr, rec, "DPR", bc->DPR+4, rec->n_sample*rec->n_allele);
+    if ( fmt_flag&B2B_INFO_DPR )
+        bcf_update_info_int32(hdr, rec, "DPR", bc->DPR, rec->n_allele);
 
 	return 0;
 }
