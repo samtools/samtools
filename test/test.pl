@@ -206,7 +206,7 @@ sub test_cmd
 		if ( $exp_err ne $err )
 		{
 			open(my $fh,'>',"$$opts{path}/$args{err}.new") or error("$$opts{path}/$args{err}.new");
-			print $fh $out;
+			print $fh $err;
 			close($fh);
 			if ( !-e "$$opts{path}/$args{err}" )
 			{
