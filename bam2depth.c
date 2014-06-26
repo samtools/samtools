@@ -42,7 +42,7 @@ int read_file_list(const char *file_list,int *n,char **argv[]);
 
 int main_depth(int argc, char *argv[])
 {
-	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, nfiles;
+	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, status = EXIT_SUCCESS, nfiles;
 	const bam_pileup1_t **plp;
 	char *reg = 0; // specified region
 	void *bed = 0; // BED data structure
@@ -95,6 +95,11 @@ int main_depth(int argc, char *argv[])
 		bam_header_t *htmp;
 		data[i] = calloc(1, sizeof(aux_t));
 		data[i]->fp = bam_open(argv[optind+i], "r"); // open BAM
+		if (data[i]->fp == NULL) {
+			print_error_errno("Could not open \"%s\"", argv[optind+i]);
+			status = EXIT_FAILURE;
+			goto depth_end;
+		}
 		data[i]->min_mapQ = mapQ;                    // set the mapQ filter
 		data[i]->min_len  = min_len;                 // set the qlen filter
 		htmp = bam_header_read(data[i]->fp);         // read the BAM header
@@ -131,8 +136,9 @@ int main_depth(int argc, char *argv[])
 	free(n_plp); free(plp);
 	bam_mplp_destroy(mplp);
 
+depth_end:
 	bam_header_destroy(h);
-	for (i = 0; i < n; ++i) {
+	for (i = 0; i < n && data[i]; ++i) {
 		bam_close(data[i]->fp);
 		if (data[i]->iter) bam_iter_destroy(data[i]->iter);
 		free(data[i]);
@@ -144,7 +150,7 @@ int main_depth(int argc, char *argv[])
         for (i=0; i<n; i++) free(fn[i]);
         free(fn);
     }
-	return 0;
+	return status;
 }
 
 #ifdef _MAIN_BAM2DEPTH
