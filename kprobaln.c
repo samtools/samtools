@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2003-2006, 2008-2010, by Heng Li <lh3lh3@live.co.uk>
+   Copyright (C) 2003-2006, 2008-2010 by Heng Li <lh3lh3@live.co.uk>
 
    Permission is hereby granted, free of charge, to any person obtaining
    a copy of this software and associated documentation files (the
