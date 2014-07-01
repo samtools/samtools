@@ -2,18 +2,19 @@
  * simutaneously, to achieve random access and to use the BED interface.
  * To compile this program separately, you may:
  *
- *   gcc -g -O2 -Wall -o bam2depth -D_MAIN_BAM2DEPTH bam2depth.c -L. -lbam -lz
+ *   gcc -g -O2 -Wall -o bam2depth -D_MAIN_BAM2DEPTH bam2depth.c -lhts -lz
  */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
-#include "bam.h"
+#include "htslib/sam.h"
 #include "samtools.h"
 
 typedef struct {     // auxiliary data structure
-	bamFile fp;      // the file handler
-	bam_iter_t iter; // NULL if a region not specified
+	samFile *fp;     // the file handle
+	bam_hdr_t *hdr;  // the file header
+	hts_itr_t *iter; // NULL if a region not specified
 	int min_mapQ, min_len; // mapQ filter; length filter
 } aux_t;
 
@@ -28,11 +29,11 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
     int ret;
     while (1)
     {
-        ret = aux->iter? bam_iter_read(aux->fp, aux->iter, b) : bam_read1(aux->fp, b);
+        ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->hdr, b);
         if ( ret<0 ) break;
         if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
         if ( (int)b->core.qual < aux->min_mapQ ) continue;
-        if ( aux->min_len && bam_cigar2qlen(&b->core, bam1_cigar(b)) < aux->min_len ) continue;
+        if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
         break;
     }
 	return ret;
@@ -47,7 +48,7 @@ int main_depth(int argc, char *argv[])
 	char *reg = 0; // specified region
 	void *bed = 0; // BED data structure
     char *file_list = NULL, **fn = NULL;
-	bam_header_t *h = 0; // BAM header of the 1st input
+	bam_hdr_t *h = NULL; // BAM header of the 1st input
 	aux_t **data;
 	bam_mplp_t mplp;
 
@@ -90,11 +91,10 @@ int main_depth(int argc, char *argv[])
     else
         n = argc - optind; // the number of BAMs on the command line
 	data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
-	beg = 0; end = 1<<30; tid = -1;  // set the default region
+	beg = 0; end = 1<<30;  // set the default region
 	for (i = 0; i < n; ++i) {
-		bam_header_t *htmp;
 		data[i] = calloc(1, sizeof(aux_t));
-		data[i]->fp = bam_open(argv[optind+i], "r"); // open BAM
+		data[i]->fp = sam_open(argv[optind+i], "r"); // open BAM
 		if (data[i]->fp == NULL) {
 			print_error_errno("Could not open \"%s\"", argv[optind+i]);
 			status = EXIT_FAILURE;
@@ -102,16 +102,18 @@ int main_depth(int argc, char *argv[])
 		}
 		data[i]->min_mapQ = mapQ;                    // set the mapQ filter
 		data[i]->min_len  = min_len;                 // set the qlen filter
-		htmp = bam_header_read(data[i]->fp);         // read the BAM header
-		if (i == 0) {
-			h = htmp; // keep the header of the 1st BAM
-			if (reg) bam_parse_region(h, reg, &tid, &beg, &end); // also parse the region
-		} else bam_header_destroy(htmp); // if not the 1st BAM, trash the header
-		if (tid >= 0) { // if a region is specified and parsed successfully
-			bam_index_t *idx = bam_index_load(argv[optind+i]);  // load the index
-			data[i]->iter = bam_iter_query(idx, tid, beg, end); // set the iterator
-			bam_index_destroy(idx); // the index is not needed any more; phase out of the memory
+		data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
+		if (reg) { // if a region is specified
+			hts_idx_t *idx = sam_index_load(data[i]->fp, argv[optind+i]);  // load the index
+			data[i]->iter = sam_itr_querys(idx, data[i]->hdr, reg); // set the iterator
+			hts_idx_destroy(idx); // the index is not needed any more; phase out of the memory
 		}
+	}
+
+	h = data[0]->hdr; // easy access to the header of the 1st BAM
+	if (reg) {
+		beg = data[0]->iter->beg; // and to the parsed region coordinates
+		end = data[0]->iter->end;
 	}
 
 	// the core multi-pileup loop
@@ -127,7 +129,7 @@ int main_depth(int argc, char *argv[])
 			for (j = 0; j < n_plp[i]; ++j) {
 				const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
 				if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
-				else if (bam1_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
+				else if (bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
 			}
 			printf("\t%d", n_plp[i] - m); // this the depth to output
 		}
@@ -137,10 +139,10 @@ int main_depth(int argc, char *argv[])
 	bam_mplp_destroy(mplp);
 
 depth_end:
-	bam_header_destroy(h);
 	for (i = 0; i < n && data[i]; ++i) {
-		bam_close(data[i]->fp);
-		if (data[i]->iter) bam_iter_destroy(data[i]->iter);
+		bam_hdr_destroy(data[i]->hdr);
+		sam_close(data[i]->fp);
+		if (data[i]->iter) hts_itr_destroy(data[i]->iter);
 		free(data[i]);
 	}
 	free(data); free(reg);
