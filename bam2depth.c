@@ -105,8 +105,18 @@ int main_depth(int argc, char *argv[])
 		data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
 		if (reg) { // if a region is specified
 			hts_idx_t *idx = sam_index_load(data[i]->fp, argv[optind+i]);  // load the index
+			if (idx == NULL) {
+				print_error("can't load index for \"%s\"", argv[optind+i]);
+				status = EXIT_FAILURE;
+				goto depth_end;
+			}
 			data[i]->iter = sam_itr_querys(idx, data[i]->hdr, reg); // set the iterator
-			hts_idx_destroy(idx); // the index is not needed any more; phase out of the memory
+			hts_idx_destroy(idx); // the index is not needed any more; free the memory
+			if (data[i]->iter == NULL) {
+				print_error("can't parse region \"%s\"", reg);
+				status = EXIT_FAILURE;
+				goto depth_end;
+			}
 		}
 	}
 
