@@ -718,7 +718,9 @@ newer style of invocation.
 .B merge
 samtools merge [-nur1f] [-h inh.sam] [-R reg] [-b <list>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]
 
-Merge multiple sorted alignments.
+Merge multiple sorted alignment files, producing a single sorted output file
+that contains all the input records and maintains the existing sort order.
+
 The header reference lists of all the input BAM files, and the @SQ headers of
 .IR inh.sam ,
 if any, must all refer to the same set of reference sequences.
