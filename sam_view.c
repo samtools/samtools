@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <math.h>
 #include <inttypes.h>
-#include <errno.h>
 #include <stdbool.h>
 #include <assert.h>
 #include "htslib/sam.h"
@@ -144,9 +143,7 @@ static int add_read_group_single(samview_settings_t *settings, char *name)
 	return 0;
 
  err:
-	fprintf(stderr,
-			"[main_samview] Couldn't add \"%s\" to read group list: %s\n",
-			name, strerror(errno));
+	print_error("Couldn't add \"%s\" to read group list: memory exhausted?", name);
 	free(d);
 	return -1;
 }
@@ -166,9 +163,7 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
 
 	fp = fopen(fn, "r");
 	if (fp == NULL) {
-		fprintf(stderr,
-				"[main_samview] failed to open \"%s\" for reading: %s\n",
-				fn, strerror(errno));
+		print_error_errno("failed to open \"%s\" for reading", fn);
 		return -1;
 	}
 
@@ -183,8 +178,7 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
 	}
 	if (ferror(fp)) ret = -1;
 	if (ret == -1) {
-		fprintf(stderr, "[main_samview] failed to read \"%s\" : %s\n",
-				fn, strerror(errno));
+		print_error_errno("failed to read \"%s\"", fn);
 	}
 	fclose(fp);
 	return (ret != -1) ? 0 : -1;
@@ -324,7 +318,7 @@ int main_samview(int argc, char *argv[])
 	if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
 	// open file handlers
 	if ((in = sam_open(argv[optind], "r")) == 0) {
-		fprintf(stderr, "[main_samview] fail to open \"%s\" for reading.\n", argv[optind]);
+		print_error_errno("failed to open \"%s\" for reading", argv[optind]);
 		ret = 1;
 		goto view_end;
 	}
@@ -344,7 +338,7 @@ int main_samview(int argc, char *argv[])
 	}
 	if (!is_count) {
 		if ((out = sam_open(fn_out? fn_out : "-", out_mode)) == 0) {
-			fprintf(stderr, "[main_samview] fail to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
+			print_error_errno("failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
 			ret = 1;
 			goto view_end;
 		}
@@ -352,7 +346,7 @@ int main_samview(int argc, char *argv[])
 		if (*out_format || is_header) sam_hdr_write(out, header);
         if (fn_un_out) {
             if ((un_out = sam_open(fn_un_out, out_mode)) == 0) {
-                fprintf(stderr, "[main_samview] fail to open \"%s\" for writing.\n", fn_un_out);
+                print_error_errno("failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
             }
