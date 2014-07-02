@@ -397,7 +397,7 @@ sub test_mpileup
     for my $file (@files)
     {
         cmd("$$opts{bin}/samtools view -b $$opts{path}/dat/$file.sam > $$opts{tmp}/$file.bam");
-        cmd("$$opts{bin}/samtools view -C -T $$opts{path}/dat/mpileup.ref.fa $$opts{path}/dat/$file.sam > $$opts{tmp}/$file.cram");
+        cmd("$$opts{bin}/samtools view -C $$opts{path}/dat/$file.sam -T $$opts{path}/dat/mpileup.ref.fa > $$opts{tmp}/$file.cram");
         cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.bam");
         cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.cram");
         print $fh1 "$$opts{tmp}/$file.bam\n";
