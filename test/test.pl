@@ -12,6 +12,7 @@ my $opts = parse_params();
 
 test_bgzip($opts);
 test_faidx($opts);
+test_index($opts);
 test_mpileup($opts);
 test_usage($opts, cmd=>'samtools');
 test_view($opts);
@@ -117,8 +118,10 @@ sub cmd
 }
 # test harness for a command
 # %args out=> expected output
+#       err=> expected stderr output (optional)
 #       cmd=> command to test
 #       expect_fail=> as per passed()/failed()
+#       want_fail=> consider passed() if cmd() returns non-zero
 sub test_cmd
 {
     my ($opts,%args) = @_;
@@ -134,7 +137,7 @@ sub test_cmd
     print "\t$args{cmd}\n";
 
     my ($ret,$out,$err) = _cmd("$args{cmd}");
-    if ( $ret ) { failed($opts,%args,msg=>$test); return; }
+    if ( $args{want_fail}? ($ret == 0) : ($ret != 0) ) { failed($opts,%args,msg=>$test); return; }
     if ( $$opts{redo_outputs} && -e "$$opts{path}/$args{out}" )
     {
         rename("$$opts{path}/$args{out}","$$opts{path}/$args{out}.old");
@@ -383,6 +386,16 @@ sub test_faidx
             else { passed($opts,msg=>$test); }
         }
     }
+}
+
+sub test_index
+{
+    my ($opts,%args) = @_;
+    cmd("$$opts{bin}/samtools view -b $$opts{path}/dat/large_chrom.sam > $$opts{tmp}/large_chrom.bam");
+    test_cmd($opts,out=>'dat/empty.expected',err=>'dat/large_chrom_bai_index.err',cmd=>"$$opts{bin}/samtools index $$opts{tmp}/large_chrom.bam",want_fail=>1,expect_fail=>1); # command should fail and give an error message, but isn't at the moment
+    cmd("$$opts{bin}/samtools index -c $$opts{tmp}/large_chrom.bam");
+    test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2",expect_fail=>1); # failing: should be fixed
+    test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2:1-541556283");
 }
 
 sub test_mpileup
