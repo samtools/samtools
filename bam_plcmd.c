@@ -234,12 +234,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 		bam_hdr_t *h_tmp;
 		data[i] = calloc(1, sizeof(mplp_aux_t));
 		data[i]->fp = sam_open(fn[i], "rb");
-		hts_set_fai_filename(data[i]->fp, conf->fai_fname);
         if ( !data[i]->fp )
         {
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
             exit(1);
         }
+		hts_set_fai_filename(data[i]->fp, conf->fai_fname);
 		data[i]->conf = conf;
 		h_tmp = sam_hdr_read(data[i]->fp);
         if ( !h_tmp ) {
