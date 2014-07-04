@@ -80,6 +80,7 @@ static int get_position(const bam_pileup1_t *p, int *len)
         }
         if ( cig==BAM_CDEL ) continue;
         if ( cig==BAM_CHARD_CLIP ) continue;
+        if ( cig==BAM_CPAD ) continue;
         fprintf(stderr,"todo: cigar %d\n", cig);
         assert(0);
     }

@@ -314,7 +314,7 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
                 stats->deletions[ncig-1]++;
             continue;
         }
-        if ( cig!=BAM_CREF_SKIP && cig!=BAM_CHARD_CLIP )
+        if ( cig!=BAM_CREF_SKIP && cig!=BAM_CHARD_CLIP && cig!=BAM_CPAD )
             icycle += ncig;
     }
 }
@@ -371,7 +371,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
         }
         // Ignore H and N CIGARs. The letter are inserted e.g. by TopHat and often require very large
         //  chunk of refseq in memory. Not very frequent and not noticable in the stats.
-        if ( cig==BAM_CREF_SKIP || cig==BAM_CHARD_CLIP ) continue;
+        if ( cig==BAM_CREF_SKIP || cig==BAM_CHARD_CLIP || cig==BAM_CPAD ) continue;
         if ( cig!=BAM_CMATCH && cig!=BAM_CEQUAL && cig!=BAM_CDIFF ) // not relying on precalculated diffs
             error("TODO: cigar %d, %s:%d %s\n", cig,stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
        
