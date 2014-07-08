@@ -595,7 +595,9 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
         }
         if ( call->DPR )
         {
-            int32_t tmp[4] = {0,0,0,0}, *dpr = call->DPR + 4, *dpr_out = call->DPR + 4;
+            assert( call->n_alleles<=5 );   // this is always true for SNPs and so far for indels as well
+
+            int32_t tmp[5] = {0,0,0,0}, *dpr = call->DPR + 5, *dpr_out = call->DPR + 5;
             int32_t *dpr_tot = call->DPR;
             for (i=0; i<n; i++)
             {
@@ -606,7 +608,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
                 }
                 for (j=0; j<call->n_alleles; j++) dpr_out[j] = tmp[j];
                 dpr_out += call->n_alleles;
-                dpr += 4;
+                dpr += 5;
             }
         }
 
@@ -767,7 +769,7 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     if ( fmt_flag&B2B_FMT_DP4 )
         bcf_update_format_int32(hdr, rec, "DP4", bc->DP4, rec->n_sample*4);
     if ( fmt_flag&B2B_FMT_DPR )
-        bcf_update_format_int32(hdr, rec, "DPR", bc->DPR+4, rec->n_sample*rec->n_allele);
+        bcf_update_format_int32(hdr, rec, "DPR", bc->DPR+5, rec->n_sample*rec->n_allele);
     if ( fmt_flag&B2B_INFO_DPR )
         bcf_update_info_int32(hdr, rec, "DPR", bc->DPR, rec->n_allele);
 

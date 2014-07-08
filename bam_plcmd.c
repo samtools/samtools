@@ -375,10 +375,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bc.fmt_arr = malloc(sm->n * sizeof(float)); // all fmt_flag fields
             if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR) )
             {
-                // first 4 fields for total numbers, the rest per-sample
-                bc.DPR = malloc((sm->n+1)*4*sizeof(int32_t));
+                // first 5 fields for total numbers, the rest per-sample
+                bc.DPR = malloc((sm->n+1)*5*sizeof(int32_t));
                 for (i=0; i<sm->n; i++)
-                    bcr[i].DPR = bc.DPR + (i+1)*4;
+                    bcr[i].DPR = bc.DPR + (i+1)*5;
             }
         }
 	}
