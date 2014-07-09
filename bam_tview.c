@@ -146,6 +146,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 	if (pos%10 == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-d", pos+1);
 	{ // call consensus
 		bcf_callret1_t bcr;
+		memset(&bcr, 0, sizeof bcr);
 		int qsum[4], a1, a2, tmp;
 		double p[3], prior = 30;
 		bcf_call_glfgen(n, pl, seq_nt16_table[rb], tv->bca, &bcr);
