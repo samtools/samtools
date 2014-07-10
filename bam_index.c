@@ -63,7 +63,6 @@ int bam_idxstats(int argc, char *argv[])
 	fp = sam_open(argv[1], "r");
 	if (fp == NULL) { fprintf(stderr, "[%s] fail to open BAM.\n", __func__); return 1; }
 	header = sam_hdr_read(fp);
-	sam_close(fp);
 	idx = sam_index_load(fp, argv[1]);
 	if (idx == NULL) { fprintf(stderr, "[%s] fail to load the index.\n", __func__); return 1; }
 
@@ -80,5 +79,6 @@ int bam_idxstats(int argc, char *argv[])
 	printf("*\t0\t0\t%" PRIu64 "\n", hts_idx_get_n_no_coor(idx));
 	bam_hdr_destroy(header);
 	hts_idx_destroy(idx);
+	sam_close(fp);
 	return 0;
 }
