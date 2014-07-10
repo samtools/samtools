@@ -420,6 +420,21 @@ int bam_tview_main(int argc, char *argv[])
 		tid = bam_name2id(tv->header, position);
 		if (tid >= 0) { tv->curr_tid = tid; tv->left_pos = beg; }
 	}
+    else if ( tv->fai )
+    {
+        // find the first sequence present in both BAM and the reference file
+        int i;
+        for (i=0; i<tv->header->n_targets; i++)
+        {
+            if ( faidx_has_seq(tv->fai, tv->header->target_name[i]) ) break;
+        }
+        if ( i==tv->header->n_targets )
+        {
+            fprintf(stderr,"None of the BAM sequence names present in the fasta file\n");
+            exit(EXIT_FAILURE);
+        }
+        tv->curr_tid = i;
+    }
 	tv->my_drawaln(tv, tv->curr_tid, tv->left_pos);
 	tv->my_loop(tv);
 	tv->my_destroy(tv);
