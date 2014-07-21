@@ -895,19 +895,22 @@ typedef struct {
 	bam1_p *buf;
 	const bam_hdr_t *h;
 	int index;
+	int ret_code;
 } worker_t;
 
-static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_hdr_t *h, int n_threads)
+static int write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_hdr_t *h, int n_threads)
 {
 	size_t i;
 	samFile* fp;
 	fp = sam_open(fn, mode);
-	if (fp == NULL) return;
+	if (fp == NULL) return -1;
 	sam_hdr_write(fp, h);
 	if (n_threads > 1) hts_set_threads(fp, n_threads);
-	for (i = 0; i < l; ++i)
-		sam_write1(fp, h, buf[i]);
+	for (i = 0; i < l; ++i) {
+		if(sam_write1(fp, h, buf[i]) < 0) return -1;
+	}
 	sam_close(fp);
+	return 0;
 }
 
 static void *worker(void *data)
@@ -917,8 +920,9 @@ static void *worker(void *data)
 	ks_mergesort(sort, w->buf_len, w->buf, 0);
 	name = (char*)calloc(strlen(w->prefix) + 20, 1);
 	sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-	write_buffer(name, "wb1", w->buf_len, w->buf, w->h, 0);
+	w->ret_code = write_buffer(name, "wb1", w->buf_len, w->buf, w->h, 0);
 	free(name);
+
 	return 0;
 }
 
@@ -930,6 +934,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 	pthread_t *tid;
 	pthread_attr_t attr;
 	worker_t *w;
+	int thread_err = 0;
 
 	if (n_threads < 1) n_threads = 1;
 	if (k < n_threads * 64) n_threads = 1; // use a single thread if we only sort a small batch of records
@@ -944,12 +949,23 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 		w[i].prefix = prefix;
 		w[i].h = h;
 		w[i].index = n_files + i;
+		w[i].ret_code = 0;
 		b += w[i].buf_len; rest -= w[i].buf_len;
 		pthread_create(&tid[i], &attr, worker, &w[i]);
 	}
-	for (i = 0; i < n_threads; ++i) pthread_join(tid[i], 0);
+
+	for (i = 0; i < n_threads; ++i) {
+	    pthread_join(tid[i], 0);
+	    if(w[i].ret_code < 0) {
+	        thread_err = 1;
+	        fprintf(stderr, "[sort_blocks] Thread %d failed to sort block.\n", i);
+	    }
+	}
 	free(tid); free(w);
-	return n_files + n_threads;
+	if(thread_err > 0)
+	    return -1;
+	else
+	    return n_files + n_threads;
 }
 
 /*!
@@ -1009,6 +1025,9 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 		++k;
 		if (mem >= max_mem) {
 			n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
+			// Propagate sort_blocks() failure; it has already emitted a
+			// message explaining the failure, so no further message is needed.
+			if(n_files < 0) return -1;
 			mem = k = 0;
 		}
 	}
@@ -1021,6 +1040,9 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
 	} else { // then merge
 		char **fns;
 		n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
+		// Propagate sort_blocks() failure; it has already emitted a
+		// message explaining the failure, so no further message is needed.
+		if(n_files < 0) return -1;
 		fprintf(stderr, "[bam_sort_core] merging from %d files...\n", n_files);
 		fns = (char**)calloc(n_files, sizeof(char*));
 		for (i = 0; i < n_files; ++i) {
