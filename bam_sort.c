@@ -368,19 +368,24 @@ typedef struct {
 	bam1_p *buf;
 	const bam_header_t *h;
 	int index;
+	int ret_code;
 } worker_t;
 
-static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_header_t *h, int n_threads)
+static int write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_header_t *h, int n_threads)
 {
 	size_t i;
 	bamFile fp;
 	fp = strcmp(fn, "-")? bam_open(fn, mode) : bam_dopen(fileno(stdout), mode);
-	if (fp == 0) return;
+	if (fp == 0) return -1;
 	bam_header_write(fp, h);
 	if (n_threads > 1) bgzf_mt(fp, n_threads, 256);
-	for (i = 0; i < l; ++i)
+	for (i = 0; i < l; ++i) {
 		bam_write1_core(fp, &buf[i]->core, buf[i]->data_len, buf[i]->data);
-	bam_close(fp);
+		if(fp->errcode) return -1;
+	}
+	if(bam_close(fp) < 0) return -1;
+
+	return 0;
 }
 
 static void *worker(void *data)
@@ -390,7 +395,7 @@ static void *worker(void *data)
 	ks_mergesort(sort, w->buf_len, w->buf, 0);
 	name = (char*)calloc(strlen(w->prefix) + 20, 1);
 	sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-	write_buffer(name, "w1", w->buf_len, w->buf, w->h, 0);
+	w->ret_code = write_buffer(name, "w1", w->buf_len, w->buf, w->h, 0);
 	free(name);
 	return 0;
 }
@@ -403,6 +408,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 	pthread_t *tid;
 	pthread_attr_t attr;
 	worker_t *w;
+	int thread_err = 0;
 
 	if (n_threads < 1) n_threads = 1;
 	if (k < n_threads * 64) n_threads = 1; // use a single thread if we only sort a small batch of records
@@ -417,11 +423,19 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 		w[i].prefix = prefix;
 		w[i].h = h;
 		w[i].index = n_files + i;
+		w[i].ret_code = 0;
 		b += w[i].buf_len; rest -= w[i].buf_len;
 		pthread_create(&tid[i], &attr, worker, &w[i]);
 	}
-	for (i = 0; i < n_threads; ++i) pthread_join(tid[i], 0);
+	for (i = 0; i < n_threads; ++i){
+	    pthread_join(tid[i], 0);
+	    if(w[i].ret_code < 0) {
+	        thread_err = 1;
+	        fprintf(stderr, "[sort_blocks] Thread %d failed to sort block.\n", i);
+	    }
+	}
 	free(tid); free(w);
+	if(thread_err) return -1;
 	return n_files + n_threads;
 }
 
@@ -440,7 +454,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
   and then merge them by calling bam_merge_core(). This function is
   NOT thread safe.
  */
-void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t _max_mem, int is_stdout, int n_threads, int level, int full_path)
+int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t _max_mem, int is_stdout, int n_threads, int level, int full_path)
 {
 	int ret, i, n_files = 0;
 	size_t mem, max_k, k, max_mem;
@@ -459,7 +473,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	fp = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
 	if (fp == 0) {
 		fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
-		return;
+		return -1;
 	}
 	header = bam_header_read(fp);
 	if (is_by_qname) change_SO(header, "queryname");
@@ -484,6 +498,9 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		++k;
 		if (mem >= max_mem) {
 			n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
+			// Propagate sort_blocks() failure; it has already emitted a
+			// message explaining the failure, so no further message is needed.
+			if(n_files < 0) return -1;
 			mem = k = 0;
 		}
 	}
@@ -499,10 +516,16 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		strcpy(mode, "w");
 		if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
 		ks_mergesort(sort, k, buf, 0);
-		write_buffer(fnout, mode, k, buf, header, n_threads);
+		if(write_buffer(fnout, mode, k, buf, header, n_threads) < 0) {
+		    fprintf(stderr, "[bam_sort_core] Error writing output file.\n");
+		    return -1;
+		}
 	} else { // then merge
 		char **fns;
 		n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
+		// Propagate sort_blocks() failure; it has already emitted a
+		// message explaining the failure, so no further message is needed.
+		if(n_files < 0) return -1;
 		fprintf(stderr, "[bam_sort_core] merging from %d files...\n", n_files);
 		fns = (char**)calloc(n_files, sizeof(char*));
 		for (i = 0; i < n_files; ++i) {
@@ -526,11 +549,13 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	free(buf);
 	bam_header_destroy(header);
 	bam_close(fp);
+
+	return 0;
 }
 
 void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
 {
-	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0, 0, -1, 0);
+	return bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0, 0, -1, 0);
 }
 
 int bam_sort(int argc, char *argv[])
@@ -566,6 +591,5 @@ int bam_sort(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		return 1;
 	}
-	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, n_threads, level, full_path);
-	return 0;
+	return bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, n_threads, level, full_path);
 }
