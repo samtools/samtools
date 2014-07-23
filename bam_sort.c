@@ -637,6 +637,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
 		free(name);
 		if (tid < 0) {
 			fprintf(stderr, "[%s] Malformated region string or undefined reference name\n", __func__);
+			free(translation_tbl); free(fp); free(heap); free(iter);
 			return -1;
 		}
 		for (i = 0; i < n; ++i) {
@@ -656,6 +657,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
 			iter[i] = sam_itr_queryi(NULL, HTS_IDX_REST, 0, 0);
 			if (iter[i] == NULL) {
 				fprintf(stderr, "[%s] Memory allocation failed\n", __func__);
+				free(translation_tbl); free(fp); free(heap); free(iter);
 				return -1;
 			}
 		}
@@ -679,9 +681,16 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
 	// Open output file and write header
 	if ((fpout = sam_open(out, mode)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
+		free(translation_tbl); free(fp); free(heap); free(iter);
 		return -1;
 	}
-	sam_hdr_write(fpout, hout);
+	if(sam_hdr_write(fpout, hout) < 0) {
+	    const char *message = strerror(errno);
+		fprintf(stderr, "[%s] cannot write to output: %s\n", __func__, message);
+		free(translation_tbl); free(fp); free(heap); free(iter);
+	    sam_close(fpout);
+	    return -1;
+	}
 	if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
 
 	// Begin the actual merge
@@ -693,7 +702,13 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
 			if (rg) bam_aux_del(b, rg);
 			bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
 		}
-		sam_write1(fpout, hout, b);
+		if(sam_write1(fpout, hout, b) < 0) {
+		    const char *message = strerror(errno);
+		    fprintf(stderr, "[%s] cannot write to output: %s\n", __func__, message);
+		    free(translation_tbl); free(fp); free(heap); free(iter);
+		    sam_close(fpout);
+		    return -1;
+		}
 		if ((j = sam_itr_next(fp[heap->i], iter[heap->i], b)) >= 0) {
 			bam_translate(b, translation_tbl + heap->i);
 			heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
@@ -717,7 +732,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
 		sam_close(fp[i]);
 	}
 	bam_hdr_destroy(hout);
-	sam_close(fpout);
+	if (sam_close(fpout) < 0) {
+	    const char *message = strerror(errno);
+		fprintf(stderr, "[%s] cannot write to output: %s\n", __func__, message);
+		free(translation_tbl); free(fp); free(heap); free(iter);
+	    return -1;
+	}
 	free(translation_tbl); free(fp); free(heap); free(iter);
 	return 0;
 }
@@ -904,10 +924,16 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf,
 	samFile* fp;
 	fp = sam_open(fn, mode);
 	if (fp == NULL) return -1;
-	if (sam_hdr_write(fp, h) < 0) return -1;
+	if (sam_hdr_write(fp, h) < 0) {
+	    sam_close(fp);
+	    return -1;
+	}
 	if (n_threads > 1) hts_set_threads(fp, n_threads);
 	for (i = 0; i < l; ++i) {
-		if(sam_write1(fp, h, buf[i]) < 0) return -1;
+		if(sam_write1(fp, h, buf[i]) < 0){
+		    sam_close(fp);
+		    return -1;
+		}
 	}
 	if (sam_close(fp) < 0) return -1;
 	return 0;
@@ -958,7 +984,8 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 	    pthread_join(tid[i], 0);
 	    if(w[i].ret_code < 0) {
 	        thread_err = 1;
-	        fprintf(stderr, "[sort_blocks] Thread %d failed to sort block.\n", i);
+	        const char *message = strerror(errno);
+		    fprintf(stderr, "[%s] Thread %d cannot write to output.  Last recorded error: %s\n", __func__, i, message);
 	    }
 	}
 	free(tid); free(w);
