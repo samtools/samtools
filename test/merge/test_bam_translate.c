@@ -6,63 +6,6 @@
 #include <errno.h>
 #include <unistd.h>
 
-void dump_read(bam1_t* b) {
-	printf("->core.tid:(%d)\n", b->core.tid);
-	printf("->core.pos:(%d)\n", b->core.pos);
-	printf("->core.bin:(%d)\n", b->core.bin);
-	printf("->core.qual:(%d)\n", b->core.qual);
-	printf("->core.l_qname:(%d)\n", b->core.l_qname);
-	printf("->core.flag:(%d)\n", b->core.flag);
-	printf("->core.n_cigar:(%d)\n", b->core.n_cigar);
-	printf("->core.l_qseq:(%d)\n", b->core.l_qseq);
-	printf("->core.mtid:(%d)\n", b->core.mtid);
-	printf("->core.mpos:(%d)\n", b->core.mpos);
-	printf("->core.isize:(%d)\n", b->core.isize);
-	if (b->data) {
-		printf("->data:");
-		int i;
-		for (i = 0; i < b->l_data; ++i) {
-			printf("%x ", b->data[i]);
-		}
-		printf("\n");
-	}
-	if (b->core.l_qname) {
-		printf("qname: %s\n",bam_get_qname(b));
-	}
-	if (b->core.l_qseq) {
-		printf("qseq:");
-		int i;
-		for (i = 0; i < b->core.l_qseq; ++i) {
-			printf("%c",seq_nt16_str[seq_nt16_table[bam_seqi(bam_get_seq(b),i)]]);
-		}
-		printf("\n");
-		printf("qual:");
-		for (i = 0; i < b->core.l_qseq; ++i) {
-			printf("%c",bam_get_qual(b)[i]);
-		}
-		printf("\n");
-
-	}
-
-	if (bam_get_l_aux(b)) {
-		int i = 0;
-		uint8_t* aux = bam_get_aux(b);
-
-		while (i < bam_get_l_aux(b)) {
-			printf("%.2s:%c:",aux+i,*(aux+i+2));
-			i += 2;
-			switch (*(aux+i)) {
-				case 'Z':
-					while (*(aux+1+i) != '\0') { putc(*(aux+1+i), stdout); ++i; }
-					break;
-			}
-			putc('\n',stdout);
-			++i;++i;
-		}
-	}
-	printf("\n");
-}
-
 void trans_tbl_test_init(trans_tbl_t* tbl, int32_t n_targets)
 {
 	tbl->tid_trans = (int*)calloc(n_targets, sizeof(int32_t));
@@ -75,13 +18,12 @@ void setup_test_1(bam1_t** b_in, trans_tbl_t* tbl) {
 
 	b = bam_init1();
 	trans_tbl_test_init(tbl, 4);
-	
+
 	tbl->tid_trans[0] = 5;
 	tbl->tid_trans[1] = 6;
 	tbl->tid_trans[2] = 7;
 	tbl->tid_trans[3] = 8;
-	
-	
+
 	b->core.tid = 0;
 	b->core.pos = 1334;
 	b->core.bin = 0;
@@ -104,16 +46,16 @@ void setup_test_1(bam1_t** b_in, trans_tbl_t* tbl) {
 		   , data_len
 					 );
 	b->m_data = b->l_data = data_len;
-	
+
 	*b_in = b;
 }
 
 void setup_test_2(bam1_t** b_in, trans_tbl_t* tbl) {
 	bam1_t* b;
-	
+
 	b = bam_init1();
 	trans_tbl_test_init(tbl, 4);
-	
+
 	tbl->tid_trans[0] = 5;
 	tbl->tid_trans[1] = 6;
 	tbl->tid_trans[2] = 7;
@@ -121,7 +63,7 @@ void setup_test_2(bam1_t** b_in, trans_tbl_t* tbl) {
 	int in_there = 0;
 	khiter_t iter = kh_put(c2c, tbl->rg_trans, strdup("hello"), &in_there);
 	kh_value(tbl->rg_trans, iter) = strdup("goodbye");
-	
+
 	b->core.tid = 0;
 	b->core.pos = 1334;
 	b->core.bin = 0;
@@ -144,16 +86,16 @@ void setup_test_2(bam1_t** b_in, trans_tbl_t* tbl) {
 		   , data_len
 		   );
 	b->m_data = b->l_data = data_len;
-	
+
 	*b_in = b;
 }
 
 void setup_test_3(bam1_t** b_in, trans_tbl_t* tbl) {
 	bam1_t* b;
-	
+
 	b = bam_init1();
 	trans_tbl_test_init(tbl, 4);
-	
+
 	tbl->tid_trans[0] = 5;
 	tbl->tid_trans[1] = 6;
 	tbl->tid_trans[2] = 7;
@@ -162,7 +104,6 @@ void setup_test_3(bam1_t** b_in, trans_tbl_t* tbl) {
 	khiter_t iter = kh_put(c2c, tbl->pg_trans, strdup("hello"), &in_there);
 	kh_value(tbl->pg_trans,iter) = strdup("goodbye");
 
-	
 	b->core.tid = 0;
 	b->core.pos = 1334;
 	b->core.bin = 0;
