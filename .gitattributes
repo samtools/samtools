@@ -3,3 +3,8 @@
 #
 #	git config diff.bam.textconv "samtools view"
 *.bam	-text diff=bam
+
+# Omit these files from release tarballs.
+.git*           export-ignore
+/.travis.yml    export-ignore
+README.md       export-ignore
