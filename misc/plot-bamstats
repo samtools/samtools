@@ -20,6 +20,7 @@ plot_coverage($opts);
 plot_mismatches_per_cycle($opts);
 plot_indel_dist($opts);
 plot_indel_cycles($opts);
+create_html($opts);
 
 exit;
 
@@ -974,6 +975,7 @@ sub plot_coverage
             $$args{grid}
             set ylabel "Number of mapped bases" 
             set xlabel "Coverage"
+            set log y
             set style fill solid border -1
             set title "$$args{title}"
             set xrange [:$p99]
@@ -1133,7 +1135,6 @@ sub plot_indel_cycles
     plot($$args{gp});
 }
 
-
 sub merge_bamcheck
 {
     my ($opts) = @_;
@@ -1185,5 +1186,169 @@ sub merge_bamcheck
     }
 
 }
+
+sub bignum
+{
+    my ($num) = @_;
+    if ( !defined $num ) { return 0; }
+    my $out = '';
+    my $slen = length($num);
+    for (my $i=0; $i<$slen; $i++)
+    {
+        $out .= substr($num,$i,1);
+        if ( $i+1<$slen && ($slen-$i-1)%3==0 ) { $out .= ','; }
+    }
+    return $out;
+}
+
+sub create_html
+{
+    my ($opts) = @_;
+    my $fname = ($$opts{prefix}=~m{/$}) ? "$$opts{prefix}index.html" : "$$opts{prefix}.html";
+    open(my $fh,'>',$fname) or error("$fname: $!");
+    print $fh q[
+        <html>
+        <head>
+            <style>
+                .thumbnail
+                {
+                    text-decoration:none;
+                    color:black;
+                    font-weight:bold;
+                }
+                .thumbnail span  /*CSS for enlarged image*/
+                { 
+                    visibility: hidden;
+                    position: absolute;
+                    padding: 5px;
+                    border: 1px solid #000;
+                    background-color: #e5e5e5;
+                }
+                .thumbnail:hover span  /*CSS for enlarged image on hover*/
+                {
+                    visibility: visible; 
+                    left: 550px;
+                    top: 10px;
+                }
+                .imgs td
+                {
+                    vertical-align:middle;
+                    padding: 0.5em;
+                    border: 1px solid black;
+                }
+                table.imgs
+                {
+                    border-collapse:collapse;
+                    margin-left:20px;
+                }
+                .nums th 
+                { 
+                    text-align: left; 
+                }
+                table.nums
+                {
+                    margin-top: 1em;
+                    margin-left:20px;
+                    border: 1px dotted #83A4C3;
+                    background-color: #F5F5F5;
+                    padding: 0.5em;
+                }
+                .pad { padding-left:1em; vertical-align:top; }
+                .right { text-align:right; padding-left:1em; }
+            </style>
+        </head>
+        <body>
+            <table class="imgs">
+    ];
+
+    my %imgs = 
+    (
+        'insert-size'    => 'Insert size',
+        'gc-content'     => 'GC content',
+        'acgt-cycles'    => 'Per-base sequence content',
+        'mism-per-cycle' => 'Mismatches per cycle',
+        'quals'          => 'Quality per cycle',
+        'quals2'         => 'Quality per cycle',
+        'quals3'         => 'Quality per cycle',
+        'quals-hm'       => 'Quality per cycle',
+        'indel-cycles'   => 'Indels per cycle',
+        'indel-dist'     => 'Indel lengths',
+        'gc-depth'       => 'Mapped depth vs GC',
+# I think this may be broken: 'coverage'       => '',
+    );
+    my @imgs = (qw(insert-size gc-content acgt-cycles mism-per-cycle quals quals2 quals3 quals-hm indel-cycles indel-dist gc-depth));
+    for (my $i=0; $i<@imgs; $i++)
+    {
+        if ( $i % 3 == 0 ) 
+        { 
+            # new row
+            if ( $i>0 ) { print $fh "</tr>\n"; }
+            print $fh "<tr>"; 
+        }
+        if ( -e "$$opts{prefix}$imgs[$i].png" )
+        {
+            my $desc = $imgs{$imgs[$i]};
+            print $fh qq[<td><a class="thumbnail" href="$imgs[$i].png"><img src="$imgs[$i].png" width="150px"><span>$desc<br><img src="$imgs[$i].png"></span></a>\n];
+        }
+        else { print $fh "<td>\n"; }
+    }
+
+    my $reads_total      = get_value($opts,'SN','raw total sequences:');
+    my $reads_filtered   = get_value($opts,'SN','filtered sequences:');
+    my $percent_filtered = sprintf "(%.1f%%)", $reads_filtered * 100. / $reads_total;
+    my $reads_mapped     = get_value($opts,'SN','reads mapped:');
+    my $percent_mapped   = sprintf "(%.1f%%)", $reads_mapped * 100. / ($reads_total - $reads_filtered);
+    my $reads_dup        = get_value($opts,'SN','reads duplicated:');
+    my $percent_dup      = sprintf "(%.1f%%)", $reads_dup * 100. / ($reads_total - $reads_filtered);
+    my $reads_mq0        = get_value($opts,'SN','reads MQ0:');
+    my $percent_mq0      = sprintf "(%.1f%%)", $reads_mq0 * 100. / $reads_mapped;
+    my $reads_nonprim    = get_value($opts,'SN','non-primary alignments:');
+    my $read_avglen      = get_value($opts,'SN','average length:');
+    my $bases_total      = get_value($opts,'SN','total length:');
+    my $bases_mapped     = get_value($opts,'SN','bases mapped (cigar):');
+    my $bpercent_mapped  = sprintf "(%.1f%%)", $bases_mapped * 100. / $bases_total;
+    my $error_rate       = sprintf "%.2f%%", 100.*get_value($opts,'SN','error rate:');
+
+    $reads_total    = bignum($reads_total);
+    $reads_filtered = bignum($reads_filtered);
+    $reads_mapped   = bignum($reads_mapped);
+    $reads_dup      = bignum($reads_dup);
+    $reads_mq0      = bignum($reads_mq0);
+    $reads_nonprim  = bignum($reads_nonprim);
+    $bases_total    = bignum($bases_total);
+    $bases_mapped   = bignum($bases_mapped);
+
+    print $fh qq[
+        </table>
+
+        <table class="nums">
+            <tr><th>Reads</tr>
+            <tr>
+                <td class="pad"><table>
+                <tr><td>total:       <td class="right"> $reads_total    <td class="right"></tr>
+                <tr><td>filtered:    <td class="right"> $reads_filtered <td class="right"> $percent_filtered</tr>
+                <tr><td>non-primary: <td class="right"> $reads_nonprim  <td class="right"> </tr>
+                <tr><td>duplicated:  <td class="right"> $reads_dup      <td class="right"> $percent_dup</tr>
+                <tr><td>mapped:      <td class="right"> $reads_mapped   <td class="right"> $percent_mapped</tr>
+                <tr><td>zero MQ:     <td class="right"> $reads_mq0      <td class="right"> $percent_mq0</tr>
+                <tr><td>avg read length: <td class="right"> $read_avglen    <td class="right"></tr>
+                </table></tr>
+
+            <tr><th>Bases</tr>
+            <tr>
+                <td class="pad"><table>
+                <tr><td>total:       <td class="right"> $bases_total    <td class="right"> $bpercent_mapped</tr>
+                <tr><td>mapped:      <td class="right"> $bases_mapped   <td class="right"></tr>
+                <tr><td>error rate:      <td class="right"> $error_rate  <td class="right"></tr>
+                </table></tr>
+        </table>
+        
+        </body>
+        </html>
+    ];
+
+    close($fh);
+}
+
 
 
