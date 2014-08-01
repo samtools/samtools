@@ -1274,8 +1274,8 @@ static void error(const char *format, ...)
         printf("Options:\n");
         printf("    -c, --coverage <int>,<int>,<int>    Coverage distribution min,max,step [1,1000,1]\n");
         printf("    -d, --remove-dups                   Exclude from statistics reads marked as duplicates\n");
-        printf("    -f, --required-flag <int>           Required flag, 0 for unset [0]\n");
-        printf("    -F, --filtering-flag <int>          Filtering flag, 0 for unset [0]\n");
+        printf("    -f, --required-flag  <str|int>      Required flag, 0 for unset. See also `samtools flags` [0]\n");
+        printf("    -F, --filtering-flag <str|int>      Filtering flag, 0 for unset. See also `samtools flags` [0]\n");
         printf("        --GC-depth <float>              the size of GC-depth bins (decreasing bin size increases memory requirement) [2e4]\n");
         printf("    -h, --help                          This help message\n");
         printf("    -i, --insert-size <int>             Maximum insert size [8000]\n");
@@ -1380,9 +1380,9 @@ int main_stats(int argc, char *argv[])
     {
         switch (opt)
         {
-            case 'f': stats->flag_require=strtol(optarg,0,0); break;
-            case 'F': stats->flag_filter=strtol(optarg,0,0); break;
-            case 'd': stats->flag_filter|=BAM_FDUP; break;
+            case 'f': stats->flag_require = bam_str2flag(optarg); break;
+            case 'F': stats->flag_filter = bam_str2flag(optarg); break;
+            case 'd': stats->flag_filter |= BAM_FDUP; break;
             case 's': strcpy(in_mode, "r"); break;
             case 'r': stats->fai = fai_load(optarg); 
                       if (stats->fai==0) 
