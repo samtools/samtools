@@ -51,26 +51,26 @@ DEALINGS IN THE SOFTWARE.  */
 #define B2B_INFO_DPR    (1<<5)
 
 typedef struct __bcf_callaux_t {
-	int capQ, min_baseQ;
-	int openQ, extQ, tandemQ; // for indels
-	uint32_t min_support, max_support; // for collecting indel candidates
-	float min_frac, max_frac; // for collecting indel candidates
+    int capQ, min_baseQ;
+    int openQ, extQ, tandemQ; // for indels
+    uint32_t min_support, max_support; // for collecting indel candidates
+    float min_frac, max_frac; // for collecting indel candidates
     int per_sample_flt; // indel filtering strategy
     int *ref_pos, *alt_pos, npos, *ref_mq, *alt_mq, *ref_bq, *alt_bq, *fwd_mqs, *rev_mqs, nqual; // for bias tests
-	// for internal uses
-	int max_bases;
-	int indel_types[4];     // indel lengths
-	int maxins, indelreg;
+    // for internal uses
+    int max_bases;
+    int indel_types[4];     // indel lengths
+    int maxins, indelreg;
     int read_len;
-	char *inscns;
-	uint16_t *bases;        // 5bit: unused, 6:quality, 1:is_rev, 4:2-bit base or indel allele (index to bcf_callaux_t.indel_types)
-	errmod_t *e;
-	void *rghash;
+    char *inscns;
+    uint16_t *bases;        // 5bit: unused, 6:quality, 1:is_rev, 4:2-bit base or indel allele (index to bcf_callaux_t.indel_types)
+    errmod_t *e;
+    void *rghash;
 } bcf_callaux_t;
 
 typedef struct {
     uint32_t ori_depth;
-	unsigned int mq0;
+    unsigned int mq0;
     int32_t *DPR;
     float qsum[4];
     // The fields are:
@@ -85,20 +85,20 @@ typedef struct {
     // Note that this probably needs a more thorough fix: int types in
     // bcf_call_t do overflow with high-coverage data, such as exomes, and
     // BCFv2 supports only floats which may not suffice.
-	double anno[16];
-	float p[25];        // phred-scaled likelihood of each genotype
+    double anno[16];
+    float p[25];        // phred-scaled likelihood of each genotype
 } bcf_callret1_t;
 
 typedef struct {
     int tid, pos;
     bcf_hdr_t *bcf_hdr;
-	int a[5]; // alleles: ref, alt, alt2, alt3
+    int a[5]; // alleles: ref, alt, alt2, alt3
     float qsum[5];  // for the QS tag
-	int n, n_alleles, shift, ori_ref, unseen;
-	int n_supp; // number of supporting non-reference reads
-	double anno[16];
+    int n, n_alleles, shift, ori_ref, unseen;
+    int n_supp; // number of supporting non-reference reads
+    double anno[16];
     unsigned int depth, ori_depth, mq0;
-	int32_t *PL, *DP4, *DPR;
+    int32_t *PL, *DP4, *DPR;
     uint8_t *fmt_arr;
     float vdb; // variant distance bias
     float mwu_pos, mwu_mq, mwu_bq, mwu_mqs;
@@ -113,14 +113,14 @@ typedef struct {
 extern "C" {
 #endif
 
-	bcf_callaux_t *bcf_call_init(double theta, int min_baseQ);
-	void bcf_call_destroy(bcf_callaux_t *bca);
-	int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r);
-	int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int ref_base /*4-bit*/, bcf_call_t *call);
-	int bcf_call2bcf(bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int fmt_flag,
-					 const bcf_callaux_t *bca, const char *ref);
-	int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
-						  const void *rghash);
+    bcf_callaux_t *bcf_call_init(double theta, int min_baseQ);
+    void bcf_call_destroy(bcf_callaux_t *bca);
+    int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r);
+    int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int ref_base /*4-bit*/, bcf_call_t *call);
+    int bcf_call2bcf(bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bcr, int fmt_flag,
+                     const bcf_callaux_t *bca, const char *ref);
+    int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
+                          const void *rghash);
     void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call);
 
 #ifdef __cplusplus

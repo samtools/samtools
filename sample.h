@@ -28,9 +28,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 
 typedef struct {
-	int n, m;
-	char **smpl;
-	void *rg2smid, *sm2id;
+    int n, m;
+    char **smpl;
+    void *rg2smid, *sm2id;
 } bam_sample_t;
 
 bam_sample_t *bam_smpl_init(void);

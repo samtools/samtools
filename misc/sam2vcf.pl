@@ -84,8 +84,8 @@ sub iupac_to_gtype
             'W' => ['A','T'],
             'Y' => ['C','T'],
             );
-    if ( !exists($iupac{$base}) ) 
-    { 
+    if ( !exists($iupac{$base}) )
+    {
         if ( $base ne 'A' && $base ne 'C' && $base ne 'G' && $base ne 'T' ) { error("FIXME: what is this [$base]?\n"); }
         if ( $ref eq $base ) { return ('.','0/0'); }
         return ($base,'1/1');
@@ -100,10 +100,10 @@ sub iupac_to_gtype
 sub parse_indel
 {
     my ($cons) = @_;
-    if ( $cons=~/^-/ ) 
-    { 
+    if ( $cons=~/^-/ )
+    {
         my $len = length($');
-        return "D$len"; 
+        return "D$len";
     }
     elsif ( $cons=~/^\+/ ) { return "I$'"; }
     elsif ( $cons eq '*' ) { return undef; }
@@ -130,7 +130,7 @@ sub do_pileup_to_vcf
     my $keep_ref      = $$opts{keep_ref} ? 1 : 0;
     my $title = exists($$opts{title}) ? $$opts{title} : 'data';
 
-    print $fh_out 
+    print $fh_out
         qq[##fileformat=VCFv3.3\n],
         qq[##INFO=DP,1,Integer,"Total Depth"\n],
         qq[##FORMAT=GT,1,String,"Genotype"\n],
@@ -143,9 +143,9 @@ sub do_pileup_to_vcf
     {
         chomp($line);
         my (@items) = split(/\t/,$line);
-        if ( scalar @items<8 ) 
-        { 
-            error("\nToo few columns, does not look like output of 'samtools pileup -c': $line\n"); 
+        if ( scalar @items<8 )
+        {
+            error("\nToo few columns, does not look like output of 'samtools pileup -c': $line\n");
         }
         my ($chr,$pos,$ref,$cons,$cons_qual,$snp_qual,$rms_qual,$depth,$a1,$a2) = @items;
         $ref  = uc($ref);
@@ -156,14 +156,14 @@ sub do_pileup_to_vcf
         {
             # An indel is involved.
             if ( $ignore_indels )
-            { 
+            {
                 $prev_ref = $ref;
                 $prev_pos = $pos;
                 $prev_chr = $chr;
-                next; 
+                next;
             }
 
-            if (!defined $prev_chr || $chr ne $prev_chr || $pos ne $prev_pos) 
+            if (!defined $prev_chr || $chr ne $prev_chr || $pos ne $prev_pos)
             {
                 if ( !$$opts{refseq} ) { error("Cannot do indels without the reference.\n"); }
                 if ( !$refseq ) { $refseq = Fasta->new(file=>$$opts{refseq}); }
@@ -179,35 +179,35 @@ sub do_pileup_to_vcf
             my $alt1 = parse_indel($al1);
             my $alt2 = parse_indel($al2);
             if ( !$alt1 && !$alt2 ) { error("FIXME: could not parse indel:\n", $line); }
-            if ( !$alt1 ) 
-            { 
-                $alt=$alt2; 
-                $gt='0/1'; 
+            if ( !$alt1 )
+            {
+                $alt=$alt2;
+                $gt='0/1';
             }
-            elsif ( !$alt2 ) 
-            { 
-                $alt=$alt1; 
-                $gt='0/1'; 
+            elsif ( !$alt2 )
+            {
+                $alt=$alt1;
+                $gt='0/1';
             }
             elsif ( $alt1 eq $alt2 )
-            { 
-                $alt="$alt1"; 
-                $gt='1/1'; 
+            {
+                $alt="$alt1";
+                $gt='1/1';
             }
             else
-            { 
-                $alt="$alt1,$alt2"; 
-                $gt='1/2'; 
+            {
+                $alt="$alt1,$alt2";
+                $gt='1/2';
             }
         }
         else
         {
-            if ( $ignore_snps || (!$keep_ref && $ref eq $cons) ) 
-            { 
+            if ( $ignore_snps || (!$keep_ref && $ref eq $cons) )
+            {
                 $prev_ref = $ref;
                 $prev_pos = $pos;
                 $prev_chr = $chr;
-                next; 
+                next;
             }
 
             # SNP

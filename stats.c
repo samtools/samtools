@@ -68,7 +68,7 @@ DEALINGS IN THE SOFTWARE.  */
 #define IS_DUP(bam) ((bam)->core.flag&BAM_FDUP)
 
 // The GC-depth graph works as follows: split the reference sequence into
-// segments and calculate GC content and depth in each bin. Then sort 
+// segments and calculate GC content and depth in each bin. Then sort
 // these segments by their GC and plot the depth distribution by means
 // of 10th, 25th, etc. depth percentiles.
 typedef struct
@@ -79,12 +79,12 @@ typedef struct
 gc_depth_t;
 
 // For coverage distribution, a simple pileup
-typedef struct 
+typedef struct
 {
     int64_t pos;
     int size, start;
     int *buffer;
-} 
+}
 round_buffer_t;
 
 typedef struct { uint32_t from, to; } pos_t;
@@ -102,7 +102,7 @@ typedef struct
 
     // Dimensions of the quality histogram holder (quals_1st,quals_2nd), GC content holder (gc_1st,gc_2nd),
     //  insert size histogram holder
-    int nquals;         // The number of quality bins 
+    int nquals;         // The number of quality bins
     int nbases;         // The maximum sequence length the allocated array can hold
     int nisize;         // The maximum insert size that the allocated array can hold - 0 indicates no limit
     int ngc;            // The size of gc_1st and gc_2nd
@@ -156,7 +156,7 @@ typedef struct
     int cov_min,cov_max,cov_step;   // Minimum, maximum coverage and size of the coverage bins
     round_buffer_t cov_rbuf;        // Pileup round buffer
 
-    // Mismatches by read cycle 
+    // Mismatches by read cycle
     uint8_t *rseq_buf;              // A buffer for reference sequence to check the mismatches against
     int mrseq_buf;                  // The size of the buffer
     int32_t rseq_pos;               // The coordinate of the first base in the buffer
@@ -172,7 +172,7 @@ typedef struct
 
     // Auxiliary data
     int flag_require, flag_filter;
-    double sum_qual;                // For calculating average quality value 
+    double sum_qual;                // For calculating average quality value
     samFile* sam;
     bam_hdr_t* sam_header;
     void *rg_hash;                  // Read groups to include, the array is null-terminated
@@ -208,17 +208,17 @@ void round_buffer_flush(stats_t *stats, int64_t pos)
 {
     int ibuf,idp;
 
-    if ( pos==stats->cov_rbuf.pos ) 
+    if ( pos==stats->cov_rbuf.pos )
         return;
 
     int64_t new_pos = pos;
     if ( pos==-1 || pos - stats->cov_rbuf.pos >= stats->cov_rbuf.size )
     {
-        // Flush the whole buffer, but in sequential order, 
+        // Flush the whole buffer, but in sequential order,
         pos = stats->cov_rbuf.pos + stats->cov_rbuf.size - 1;
     }
 
-    if ( pos < stats->cov_rbuf.pos ) 
+    if ( pos < stats->cov_rbuf.pos )
         error("Expected coordinates in ascending order, got %ld after %ld\n", pos,stats->cov_rbuf.pos);
 
     int ifrom = stats->cov_rbuf.start;
@@ -268,7 +268,7 @@ void round_buffer_insert_read(round_buffer_t *rbuf, int64_t from, int64_t to)
 }
 
 // Calculate the number of bases in the read trimmed by BWA
-int bwa_trim_read(int trim_qual, uint8_t *quals, int len, int reverse) 
+int bwa_trim_read(int trim_qual, uint8_t *quals, int len, int reverse)
 {
     if ( len<BWA_MIN_RDLEN ) return 0;
 
@@ -293,14 +293,14 @@ int bwa_trim_read(int trim_qual, uint8_t *quals, int len, int reverse)
 }
 
 
-void count_indels(stats_t *stats,bam1_t *bam_line) 
+void count_indels(stats_t *stats,bam1_t *bam_line)
 {
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
     int is_1st = IS_READ1(bam_line) ? 1 : 0;
     int icig;
     int icycle = 0;
     int read_len = bam_line->core.l_qseq;
-    for (icig=0; icig<bam_line->core.n_cigar; icig++) 
+    for (icig=0; icig<bam_line->core.n_cigar; icig++)
     {
         int cig  = bam_cigar_op(bam_get_cigar(bam_line)[icig]);
         int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[icig]);
@@ -309,10 +309,10 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
         if ( cig==BAM_CINS )
         {
             int idx = is_fwd ? icycle : read_len-icycle-ncig;
-            if ( idx<0 ) 
+            if ( idx<0 )
                 error("FIXME: read_len=%d vs icycle=%d\n", read_len,icycle);
             if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d, %s:%d %s\n", idx,stats->nbases, stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
-            if ( is_1st ) 
+            if ( is_1st )
                 stats->ins_cycles_1st[idx]++;
             else
                 stats->ins_cycles_2nd[idx]++;
@@ -351,9 +351,9 @@ int unclipped_length(bam1_t *bam_line)
     return read_len;
 }
 
-void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line) 
+void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
 {
-    int read_len = unclipped_length(bam_line); 
+    int read_len = unclipped_length(bam_line);
     if ( read_len >= stats->nbases ) realloc_buffers(stats,read_len);
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
     int icig,iread=0,icycle=0;
@@ -361,7 +361,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
     uint8_t *read  = bam_get_seq(bam_line);
     uint8_t *quals = bam_get_qual(bam_line);
     uint64_t *mpc_buf = stats->mpc_buf;
-    for (icig=0; icig<bam_line->core.n_cigar; icig++) 
+    for (icig=0; icig<bam_line->core.n_cigar; icig++)
     {
         int cig  = bam_cigar_op(bam_get_cigar(bam_line)[icig]);
         int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[icig]);
@@ -394,7 +394,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
         if ( cig==BAM_CREF_SKIP || cig==BAM_CHARD_CLIP || cig==BAM_CPAD ) continue;
         if ( cig!=BAM_CMATCH && cig!=BAM_CEQUAL && cig!=BAM_CDIFF ) // not relying on precalculated diffs
             error("TODO: cigar %d, %s:%d %s\n", cig,stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
-       
+
         if ( ncig+iref > stats->nrseq_buf )
             error("FIXME: %d+%d > %d, %s, %s:%d\n",ncig,iref,stats->nrseq_buf, bam_get_qname(bam_line),stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1);
 
@@ -444,7 +444,7 @@ void read_ref_seq(stats_t *stats, int32_t tid, int32_t pos)
     int i, fai_ref_len;
     char *fai_ref = faidx_fetch_seq(stats->fai, stats->sam_header->target_name[tid], pos, pos+stats->mrseq_buf-1, &fai_ref_len);
     if ( fai_ref_len<0 ) error("Failed to fetch the sequence \"%s\"\n", stats->sam_header->target_name[tid]);
-    
+
     uint8_t *ptr = stats->rseq_buf;
     for (i=0; i<fai_ref_len; i++)
     {
@@ -612,7 +612,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     }
     if ( !is_in_regions(bam_line,stats) )
         return;
-    if ( stats->filter_readlen!=-1 && bam_line->core.l_qseq!=stats->filter_readlen ) 
+    if ( stats->filter_readlen!=-1 && bam_line->core.l_qseq!=stats->filter_readlen )
         return;
 
     if ( bam_line->core.flag & BAM_FQCFAIL ) stats->nreads_QCfailed++;
@@ -645,7 +645,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         base /= 2;
         if ( base==1 || base==2 ) gc_count++;
         else if ( base>2 ) base=3;
-        if ( 4*(reverse ? seq_len-i-1 : i) + base >= stats->nbases*4 ) 
+        if ( 4*(reverse ? seq_len-i-1 : i) + base >= stats->nbases*4 )
             error("FIXME: acgt_cycles\n");
         stats->acgt_cycles[ 4*(reverse ? seq_len-i-1 : i) + base ]++;
     }
@@ -654,7 +654,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     if ( gc_idx_max >= stats->ngc ) gc_idx_max = stats->ngc - 1;
 
     // Determine which array (1st or 2nd read) will these stats go to,
-    //  trim low quality bases from end the same way BWA does, 
+    //  trim low quality bases from end the same way BWA does,
     //  fill GC histogram
     uint64_t *quals;
     uint8_t *bam_quals = bam_get_qual(bam_line);
@@ -672,7 +672,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         for (i=gc_idx_min; i<gc_idx_max; i++)
             stats->gc_1st[i]++;
     }
-    if ( stats->trim_qual>0 ) 
+    if ( stats->trim_qual>0 )
         stats->nbases_trimmed += bwa_trim_read(stats->trim_qual, bam_quals, seq_len, reverse);
 
     // Quality histogram and average quality. Clipping is neglected.
@@ -700,7 +700,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
         if ( !IS_PAIRED_AND_MAPPED(bam_line) )
             stats->nreads_single_mapped++;
-        else 
+        else
         {
             stats->nreads_paired_and_mapped++;
 
@@ -743,13 +743,13 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             }
         }
 
-        // Number of mismatches 
+        // Number of mismatches
         uint8_t *nm = bam_aux_get(bam_line,"NM");
-        if (nm) 
+        if (nm)
             stats->nmismatches += bam_aux2i(nm);
 
-        // Number of mapped bases from cigar 
-        if ( bam_line->core.n_cigar == 0) 
+        // Number of mapped bases from cigar
+        if ( bam_line->core.n_cigar == 0)
             error("FIXME: mapped read with no cigar?\n");
         int readlen=seq_len;
         if ( stats->regions )
@@ -762,7 +762,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                 int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
                 if ( !ncig ) continue;  // curiously, this can happen: 0D
                 if ( cig==BAM_CDEL ) readlen += ncig;
-                else if ( cig==BAM_CMATCH ) 
+                else if ( cig==BAM_CMATCH )
                 {
                     if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
                     else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
@@ -781,7 +781,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         else
         {
             // Count the whole read
-            for (i=0; i<bam_line->core.n_cigar; i++) 
+            for (i=0; i<bam_line->core.n_cigar; i++)
             {
                 if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CMATCH || bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CINS )
                     stats->nbases_mapped_cigar += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
@@ -811,8 +811,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                 // Read goes beyond the end of the rseq buffer
                 else if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+readlen ) { inc_ref=1; inc_gcd=1; }
                 // Read overlaps the next gcd bin
-                else if ( stats->gcd_pos+stats->gcd_bin_size < bam_line->core.pos+readlen ) 
-                { 
+                else if ( stats->gcd_pos+stats->gcd_bin_size < bam_line->core.pos+readlen )
+                {
                     inc_gcd = 1;
                     if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+stats->gcd_bin_size ) inc_ref = 1;
                 }
@@ -877,9 +877,9 @@ float gcd_percentile(gc_depth_t *gcd, int N, int p)
 
     n = p*(N+1)/100;
     k = n;
-    if ( k<=0 ) 
+    if ( k<=0 )
         return gcd[0].depth;
-    if ( k>=N ) 
+    if ( k>=N )
         return gcd[N-1].depth;
 
     d = n - k;
@@ -1080,7 +1080,7 @@ void output_stats(stats_t *stats, int sparse)
         if ( stats->fai )
             stats->gcd[igcd].gc = rint(100. * stats->gcd[igcd].gc);
         else
-            if ( stats->gcd[igcd].depth ) 
+            if ( stats->gcd[igcd].depth )
                 stats->gcd[igcd].gc = rint(100. * stats->gcd[igcd].gc / stats->gcd[igcd].depth);
     }
     qsort(stats->gcd, stats->igcd+1, sizeof(gc_depth_t), gcd_cmp);
@@ -1097,10 +1097,10 @@ void output_stats(stats_t *stats, int sparse)
         }
         printf("GCD\t%.1f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\t%.3f\n", gc, (igcd+nbins+1)*100./(stats->igcd+1),
                 gcd_percentile(&(stats->gcd[igcd]),nbins,10) *avg_read_length/stats->gcd_bin_size,
-                gcd_percentile(&(stats->gcd[igcd]),nbins,25) *avg_read_length/stats->gcd_bin_size, 
-                gcd_percentile(&(stats->gcd[igcd]),nbins,50) *avg_read_length/stats->gcd_bin_size, 
-                gcd_percentile(&(stats->gcd[igcd]),nbins,75) *avg_read_length/stats->gcd_bin_size, 
-                gcd_percentile(&(stats->gcd[igcd]),nbins,90) *avg_read_length/stats->gcd_bin_size 
+                gcd_percentile(&(stats->gcd[igcd]),nbins,25) *avg_read_length/stats->gcd_bin_size,
+                gcd_percentile(&(stats->gcd[igcd]),nbins,50) *avg_read_length/stats->gcd_bin_size,
+                gcd_percentile(&(stats->gcd[igcd]),nbins,75) *avg_read_length/stats->gcd_bin_size,
+                gcd_percentile(&(stats->gcd[igcd]),nbins,90) *avg_read_length/stats->gcd_bin_size
               );
         igcd += nbins;
     }
@@ -1156,7 +1156,7 @@ void init_regions(stats_t *stats, char *file)
     ssize_t nread;
     int warned = 0;
     int prev_tid=-1, prev_pos=-1;
-    while ((nread = mygetline(&line, &len, fp)) != -1) 
+    while ((nread = mygetline(&line, &len, fp)) != -1)
     {
         if ( line[0] == '#' ) continue;
 
@@ -1207,8 +1207,8 @@ void init_regions(stats_t *stats, char *file)
     if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
     fclose(fp);
 #else
-	fprintf(stderr, "Samtools-htslib: init_regions() header parsing not yet implemented\n");
-	abort();
+    fprintf(stderr, "Samtools-htslib: init_regions() header parsing not yet implemented\n");
+    abort();
 #endif
 }
 
@@ -1240,7 +1240,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     regions_t *reg = &stats->regions[bam_line->core.tid];
     if ( reg->cpos==reg->npos ) return 0;       // done for this chr
 
-    // Find a matching interval or skip this read. No splicing of reads is done, no indels or soft clips considered, 
+    // Find a matching interval or skip this read. No splicing of reads is done, no indels or soft clips considered,
     //  even small overlap is enough to include the read in the stats.
     int i = reg->cpos;
     while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
@@ -1267,7 +1267,7 @@ void init_group_id(stats_t *stats, char *id)
         if ( !strcmp(id,key) || (val && !strcmp(id,val)) )
         {
             khiter_t k = kh_get(kh_rg, stats->rg_hash, key);
-            if ( k != kh_end(stats->rg_hash) ) 
+            if ( k != kh_end(stats->rg_hash) )
                 fprintf(stderr, "[init_group_id] The group ID not unique: \"%s\"\n", key);
             int ret;
             k = kh_put(kh_rg, stats->rg_hash, key, &ret);
@@ -1278,8 +1278,8 @@ void init_group_id(stats_t *stats, char *id)
     if ( !n )
         error("The sample or read group \"%s\" not present.\n", id);
 #else
-	fprintf(stderr, "Samtools-htslib: init_group_id() header parsing not yet implemented\n");
-	abort();
+    fprintf(stderr, "Samtools-htslib: init_group_id() header parsing not yet implemented\n");
+    abort();
 #endif
 }
 
@@ -1404,13 +1404,13 @@ int main_stats(int argc, char *argv[])
             case 'F': stats->flag_filter=strtol(optarg,0,0); break;
             case 'd': stats->flag_filter|=BAM_FDUP; break;
             case 's': strcpy(in_mode, "r"); break;
-            case 'r': stats->fai = fai_load(optarg); 
-                      if (stats->fai==0) 
-                          error("Could not load faidx: %s\n", optarg); 
+            case 'r': stats->fai = fai_load(optarg);
+                      if (stats->fai==0)
+                          error("Could not load faidx: %s\n", optarg);
                       break;
             case  1 : stats->gcd_bin_size = atof(optarg); break;
-            case 'c': if ( sscanf(optarg,"%d,%d,%d",&stats->cov_min,&stats->cov_max,&stats->cov_step)!= 3 ) 
-                          error("Unable to parse -c %s\n", optarg); 
+            case 'c': if ( sscanf(optarg,"%d,%d,%d",&stats->cov_min,&stats->cov_max,&stats->cov_step)!= 3 )
+                          error("Unable to parse -c %s\n", optarg);
                       break;
             case 'l': stats->filter_readlen = atoi(optarg); break;
             case 'i': stats->nisize = atoi(optarg); break;
@@ -1419,7 +1419,7 @@ int main_stats(int argc, char *argv[])
             case 't': targets = optarg; break;
             case 'I': group_id = optarg; break;
             case 'x': sparse = 1; break;
-            case '?': 
+            case '?':
             case 'h': error(NULL);
             default: error("Unknown argument: %s\n", optarg);
         }
@@ -1483,7 +1483,7 @@ int main_stats(int argc, char *argv[])
             error("Random alignment retrieval only works for indexed BAM files.\n");
 
         int i;
-        for (i=optind; i<argc; i++) 
+        for (i=optind; i<argc; i++)
         {
             reset_regions(stats);
             hts_itr_t* iter = bam_itr_querys(bam_idx, stats->sam_header, argv[i]);
@@ -1505,7 +1505,7 @@ int main_stats(int argc, char *argv[])
     output_stats(stats, sparse);
     bam_destroy1(bam_line);
     bam_hdr_destroy(stats->sam_header);
-	
+
     cleanup_stats(stats);
 
     return 0;

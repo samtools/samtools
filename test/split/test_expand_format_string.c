@@ -29,96 +29,96 @@ DEALINGS IN THE SOFTWARE.  */
 
 void setup_test_1(bam_hdr_t** hdr_in)
 {
-	*hdr_in = bam_hdr_init();
-	const char *test1 =
-	"@HD\tVN:1.4\n"
-	"@SQ\tSN:blah\n"
-	"@RG\tID:fish\n";
-	(*hdr_in)->text = strdup(test1);
-	(*hdr_in)->l_text = strlen(test1);
+    *hdr_in = bam_hdr_init();
+    const char *test1 =
+    "@HD\tVN:1.4\n"
+    "@SQ\tSN:blah\n"
+    "@RG\tID:fish\n";
+    (*hdr_in)->text = strdup(test1);
+    (*hdr_in)->l_text = strlen(test1);
 }
 
 int main(int argc, char**argv)
 {
-	// test state
-	const int NUM_TESTS = 1;
-	int verbose = 0;
-	int success = 0;
-	int failure = 0;
-	
-	int getopt_char;
-	while ((getopt_char = getopt(argc, argv, "v")) != -1) {
-		switch (getopt_char) {
-			case 'v':
-				++verbose;
-				break;
-			default:
-				printf(
-					   "usage: test_expand_format_string [-v]\n\n"
-					   " -v verbose output\n"
-					   );
-				break;
-		}
-	}
-	
+    // test state
+    const int NUM_TESTS = 1;
+    int verbose = 0;
+    int success = 0;
+    int failure = 0;
 
-	// Setup stderr redirect
-	size_t len = 0;
-	char* res = NULL;
-	FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
-	char* tempfname = (optind < argc)? argv[optind] : "test_expand_format_string.tmp";
-	FILE* check = NULL;
-	
-	// setup
-	if (verbose) printf("BEGIN test 1\n");  // default format string test
-	const char* format_string_1 = "%*_%#.bam";
-	const char* basename_1 = "basename";
-	const char* rg_id_1 = "1#2.3";
-	const int rg_idx_1 = 4;
-	if (verbose > 1) {
-		printf("format_string:%s\n"
-			   "basename:%s\n"
-			   "rg_id:%s\n"
-			   "rg_idx:%d\n", format_string_1, basename_1, rg_id_1, rg_idx_1);
-	}
-	if (verbose) printf("RUN test 1\n");
-	
-	// test
-	xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
-	char* output_1 = expand_format_string(format_string_1, basename_1, rg_id_1, rg_idx_1);
-	fclose(stderr);
-	
-	if (verbose) printf("END RUN test 1\n");
-	if (verbose > 1) {
-		printf("format_string:%s\n"
-			   "basename:%s\n"
-			   "rg_id:%s\n"
-			   "rg_idx:%d\n", format_string_1, basename_1, rg_id_1, rg_idx_1);
-	}
-	
-	// check result
-	len = 0;
-	check = fopen(tempfname, "r");
-	if (output_1 != NULL && !strcmp(output_1, "basename_4.bam")
-		&& (getline(&res, &len, check) == -1)
-		&& (feof(check) || (res && !strcmp("",res)))) {
-		++success;
-	} else {
-		++failure;
-		if (verbose) printf("FAIL test 1\n");
-	}
-	fclose(check);
-	
-	// teardown
-	free(output_1);
-	if (verbose) printf("END test 1\n");
+    int getopt_char;
+    while ((getopt_char = getopt(argc, argv, "v")) != -1) {
+        switch (getopt_char) {
+            case 'v':
+                ++verbose;
+                break;
+            default:
+                printf(
+                       "usage: test_expand_format_string [-v]\n\n"
+                       " -v verbose output\n"
+                       );
+                break;
+        }
+    }
 
-	// Cleanup test harness
-	free(res);
-	remove(tempfname);
-	if (failure > 0)
-		fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
-	fclose(orig_stderr);
 
-	return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
+    // Setup stderr redirect
+    size_t len = 0;
+    char* res = NULL;
+    FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
+    char* tempfname = (optind < argc)? argv[optind] : "test_expand_format_string.tmp";
+    FILE* check = NULL;
+
+    // setup
+    if (verbose) printf("BEGIN test 1\n");  // default format string test
+    const char* format_string_1 = "%*_%#.bam";
+    const char* basename_1 = "basename";
+    const char* rg_id_1 = "1#2.3";
+    const int rg_idx_1 = 4;
+    if (verbose > 1) {
+        printf("format_string:%s\n"
+               "basename:%s\n"
+               "rg_id:%s\n"
+               "rg_idx:%d\n", format_string_1, basename_1, rg_id_1, rg_idx_1);
+    }
+    if (verbose) printf("RUN test 1\n");
+
+    // test
+    xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
+    char* output_1 = expand_format_string(format_string_1, basename_1, rg_id_1, rg_idx_1);
+    fclose(stderr);
+
+    if (verbose) printf("END RUN test 1\n");
+    if (verbose > 1) {
+        printf("format_string:%s\n"
+               "basename:%s\n"
+               "rg_id:%s\n"
+               "rg_idx:%d\n", format_string_1, basename_1, rg_id_1, rg_idx_1);
+    }
+
+    // check result
+    len = 0;
+    check = fopen(tempfname, "r");
+    if (output_1 != NULL && !strcmp(output_1, "basename_4.bam")
+        && (getline(&res, &len, check) == -1)
+        && (feof(check) || (res && !strcmp("",res)))) {
+        ++success;
+    } else {
+        ++failure;
+        if (verbose) printf("FAIL test 1\n");
+    }
+    fclose(check);
+
+    // teardown
+    free(output_1);
+    if (verbose) printf("END test 1\n");
+
+    // Cleanup test harness
+    free(res);
+    remove(tempfname);
+    if (failure > 0)
+        fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
+    fclose(orig_stderr);
+
+    return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
 }

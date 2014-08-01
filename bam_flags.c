@@ -63,6 +63,6 @@ int main_flags(int argc, char *argv[])
         if ( mask<0 ) { fprintf(stderr,"Error: Could not parse \"%s\"\n", argv[1]); usage(); return 1; }
         printf("0x%x\t%d\t%s\n", mask, mask, bam_flag2str(mask));
     }
-	return 0;
+    return 0;
 }
 

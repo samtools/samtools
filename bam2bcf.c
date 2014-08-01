@@ -33,7 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bam2bcf.h"
 #include "errmod.h"
 
-extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
+extern  void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 extern const char bam_nt16_nt4_table[];
 
 #define CALL_DEFTHETA 0.83
@@ -43,15 +43,15 @@ extern const char bam_nt16_nt4_table[];
 
 bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
 {
-	bcf_callaux_t *bca;
-	if (theta <= 0.) theta = CALL_DEFTHETA;
-	bca = calloc(1, sizeof(bcf_callaux_t));
-	bca->capQ = 60;
-	bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 100;
-	bca->min_baseQ = min_baseQ;
-	bca->e = errmod_init(1. - theta);
-	bca->min_frac = 0.002;
-	bca->min_support = 1;
+    bcf_callaux_t *bca;
+    if (theta <= 0.) theta = CALL_DEFTHETA;
+    bca = calloc(1, sizeof(bcf_callaux_t));
+    bca->capQ = 60;
+    bca->openQ = 40; bca->extQ = 20; bca->tandemQ = 100;
+    bca->min_baseQ = min_baseQ;
+    bca->e = errmod_init(1. - theta);
+    bca->min_frac = 0.002;
+    bca->min_support = 1;
     bca->per_sample_flt = 0;
     bca->npos = 100;
     bca->ref_pos = malloc(bca->npos*sizeof(int));
@@ -63,25 +63,25 @@ bcf_callaux_t *bcf_call_init(double theta, int min_baseQ)
     bca->alt_bq  = malloc(bca->nqual*sizeof(int));
     bca->fwd_mqs = malloc(bca->nqual*sizeof(int));
     bca->rev_mqs = malloc(bca->nqual*sizeof(int));
- 	return bca;
+    return bca;
 }
 
 void bcf_call_destroy(bcf_callaux_t *bca)
 {
-	if (bca == 0) return;
-	errmod_destroy(bca->e);
+    if (bca == 0) return;
+    errmod_destroy(bca->e);
     if (bca->npos) { free(bca->ref_pos); free(bca->alt_pos); bca->npos = 0; }
-    free(bca->ref_mq); free(bca->alt_mq); free(bca->ref_bq); free(bca->alt_bq); 
+    free(bca->ref_mq); free(bca->alt_mq); free(bca->ref_bq); free(bca->alt_bq);
     free(bca->fwd_mqs); free(bca->rev_mqs);
     bca->nqual = 0;
-	free(bca->bases); free(bca->inscns); free(bca);
+    free(bca->bases); free(bca->inscns); free(bca);
 }
 
 // position in the sequence with respect to the aligned part of the read
 static int get_position(const bam_pileup1_t *p, int *len)
 {
     int icig, n_tot_bases = 0, iread = 0, edist = p->qpos + 1;
-    for (icig=0; icig<p->b->core.n_cigar; icig++) 
+    for (icig=0; icig<p->b->core.n_cigar; icig++)
     {
         int cig  = bam_get_cigar(p->b)[icig] & BAM_CIGAR_MASK;
         int ncig = bam_get_cigar(p->b)[icig] >> BAM_CIGAR_SHIFT;
@@ -128,13 +128,13 @@ void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call)
 }
 
 /*
-    Notes: 
+    Notes:
     - Called from bam_plcmd.c by mpileup. Amongst other things, sets the bcf_callret1_t.qsum frequencies
         which are carried over via bcf_call_combine and bcf_call2bcf to the output BCF as the QS annotation.
         Later it's used for multiallelic calling by bcftools -m
-    - ref_base is the 4-bit representation of the reference base. It is negative if we are looking at an indel. 
+    - ref_base is the 4-bit representation of the reference base. It is negative if we are looking at an indel.
  */
-/* 
+/*
  * This function is called once for each sample.
  * _n is number of pilesups pl contributing reads to this sample
  * pl is pointer to array of _n pileups (one pileup per read)
@@ -144,7 +144,7 @@ void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call)
  */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
-	int i, n, ref4, is_indel, ori_depth = 0;
+    int i, n, ref4, is_indel, ori_depth = 0;
 
     // clean from previous run
     r->ori_depth = 0;
@@ -153,59 +153,59 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
     memset(r->anno,0,sizeof(double)*16);
     memset(r->p,0,sizeof(float)*25);
 
-	if (ref_base >= 0) {
-		ref4 = bam_nt16_nt4_table[ref_base];
-		is_indel = 0;
-	} else ref4 = 4, is_indel = 1;
-	if (_n == 0) return -1;
-	// enlarge the bases array if necessary
-	if (bca->max_bases < _n) {
-		bca->max_bases = _n;
-		kroundup32(bca->max_bases);
-		bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
-	}
-	// fill the bases array
-	for (i = n = 0; i < _n; ++i) {
-		const bam_pileup1_t *p = pl + i;
-		int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
-		// set base
-		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
-		++ori_depth;
-		mapQ  = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
+    if (ref_base >= 0) {
+        ref4 = bam_nt16_nt4_table[ref_base];
+        is_indel = 0;
+    } else ref4 = 4, is_indel = 1;
+    if (_n == 0) return -1;
+    // enlarge the bases array if necessary
+    if (bca->max_bases < _n) {
+        bca->max_bases = _n;
+        kroundup32(bca->max_bases);
+        bca->bases = (uint16_t*)realloc(bca->bases, 2 * bca->max_bases);
+    }
+    // fill the bases array
+    for (i = n = 0; i < _n; ++i) {
+        const bam_pileup1_t *p = pl + i;
+        int q, b, mapQ, baseQ, is_diff, min_dist, seqQ;
+        // set base
+        if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
+        ++ori_depth;
+        mapQ  = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
         if ( !mapQ ) r->mq0++;
-		baseQ = q = is_indel? p->aux&0xff : (int)bam_get_qual(p->b)[p->qpos]; // base/indel quality
-		seqQ = is_indel? (p->aux>>8&0xff) : 99;
-		if (q < bca->min_baseQ) continue;
-		if (q > seqQ) q = seqQ;
-		mapQ = mapQ < bca->capQ? mapQ : bca->capQ;
-		if (q > mapQ) q = mapQ;
-		if (q > 63) q = 63;
-		if (q < 4) q = 4;       // MQ=0 reads count as BQ=4
-		if (!is_indel) {
-			b = bam_seqi(bam_get_seq(p->b), p->qpos); // base
-			b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
-			is_diff = (ref4 < 4 && b == ref4)? 0 : 1;
-		} else {
-			b = p->aux>>16&0x3f;
-			is_diff = (b != 0);
-		}
-		bca->bases[n++] = q<<5 | (int)bam_is_rev(p->b)<<4 | b;
-		// collect annotations
-		if (b < 4) 
+        baseQ = q = is_indel? p->aux&0xff : (int)bam_get_qual(p->b)[p->qpos]; // base/indel quality
+        seqQ = is_indel? (p->aux>>8&0xff) : 99;
+        if (q < bca->min_baseQ) continue;
+        if (q > seqQ) q = seqQ;
+        mapQ = mapQ < bca->capQ? mapQ : bca->capQ;
+        if (q > mapQ) q = mapQ;
+        if (q > 63) q = 63;
+        if (q < 4) q = 4;       // MQ=0 reads count as BQ=4
+        if (!is_indel) {
+            b = bam_seqi(bam_get_seq(p->b), p->qpos); // base
+            b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
+            is_diff = (ref4 < 4 && b == ref4)? 0 : 1;
+        } else {
+            b = p->aux>>16&0x3f;
+            is_diff = (b != 0);
+        }
+        bca->bases[n++] = q<<5 | (int)bam_is_rev(p->b)<<4 | b;
+        // collect annotations
+        if (b < 4)
         {
             r->qsum[b] += q;
             if ( r->DPR ) r->DPR[b]++;
         }
-		++r->anno[0<<2|is_diff<<1|bam_is_rev(p->b)];
-		min_dist = p->b->core.l_qseq - 1 - p->qpos;
-		if (min_dist > p->qpos) min_dist = p->qpos;
-		if (min_dist > CAP_DIST) min_dist = CAP_DIST;
-		r->anno[1<<2|is_diff<<1|0] += baseQ;
-		r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;
-		r->anno[2<<2|is_diff<<1|0] += mapQ;
-		r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;
-		r->anno[3<<2|is_diff<<1|0] += min_dist;
-		r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
+        ++r->anno[0<<2|is_diff<<1|bam_is_rev(p->b)];
+        min_dist = p->b->core.l_qseq - 1 - p->qpos;
+        if (min_dist > p->qpos) min_dist = p->qpos;
+        if (min_dist > CAP_DIST) min_dist = CAP_DIST;
+        r->anno[1<<2|is_diff<<1|0] += baseQ;
+        r->anno[1<<2|is_diff<<1|1] += baseQ * baseQ;
+        r->anno[2<<2|is_diff<<1|0] += mapQ;
+        r->anno[2<<2|is_diff<<1|1] += mapQ * mapQ;
+        r->anno[3<<2|is_diff<<1|0] += min_dist;
+        r->anno[3<<2|is_diff<<1|1] += min_dist * min_dist;
 
         // collect for bias tests
         if ( baseQ > 59 ) baseQ = 59;
@@ -228,11 +228,11 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
             bca->alt_bq[ibq]++;
             bca->alt_mq[imq]++;
         }
-	}
-	r->ori_depth = ori_depth;
-	// glfgen
-	errmod_cal(bca->e, n, 5, bca->bases, r->p); // calculate PL of each genotype
-	return n;
+    }
+    r->ori_depth = ori_depth;
+    // glfgen
+    errmod_cal(bca->e, n, 5, bca->bases, r->p); // calculate PL of each genotype
+    return n;
 }
 
 
@@ -291,9 +291,9 @@ double calc_vdb(int *pos, int npos)
     if ( dp==2 )
         return (2*readlen-2*(ipos+1)-1)*(ipos+1)/(readlen-1)/(readlen*0.5);
 
-    if ( dp>=200 ) 
+    if ( dp>=200 )
         i = nparam; // shortcut for big depths
-    else 
+    else
     {
         for (i=0; i<nparam; i++)
             if ( param[i][0]>=dp ) break;
@@ -330,7 +330,7 @@ double calc_chisq_bias(int *a, int *b, int n)
     for (i=0; i<n; i++)
     {
         if ( !a[i] && !b[i] ) ndf--;
-        else 
+        else
         {
             double tmp = a[i] - b[i];
             chisq += tmp*tmp/(a[i]+b[i]);
@@ -355,7 +355,7 @@ double mann_whitney_1947_cdf(int n, int m, int U)
 {
     int i;
     double sum = 0;
-    for (i=0; i<=U; i++) 
+    for (i=0; i<=U; i++)
         sum += mann_whitney_1947(n,m,i);
     return sum;
 }
@@ -364,7 +364,7 @@ double calc_mwu_bias_cdf(int *a, int *b, int n)
 {
     int na = 0, nb = 0, i;
     double U = 0, ties = 0;
-    for (i=0; i<n; i++) 
+    for (i=0; i<n; i++)
     {
         na += a[i];
         U  += a[i] * (nb + b[i]*0.5);
@@ -392,7 +392,7 @@ double calc_mwu_bias_cdf(int *a, int *b, int n)
         //      double N = na+nb;
         //      double var2 = (N*N-1)*N-ties;
         //      if ( var2==0 ) return 1.0;
-        //      var2 *= ((double)na*nb)/N/(N-1)/12.0; 
+        //      var2 *= ((double)na*nb)/N/(N-1)/12.0;
         // No correction for ties:
         double var2 = ((double)na*nb)*(na+nb+1)/12.0;
         double z = (U_min - mean)/sqrt(2*var2);   // z is N(0,1)
@@ -408,7 +408,7 @@ double calc_mwu_bias(int *a, int *b, int n)
 {
     int na = 0, nb = 0, i;
     double U = 0, ties = 0;
-    for (i=0; i<n; i++) 
+    for (i=0; i<n; i++)
     {
         na += a[i];
         U  += a[i] * (nb + b[i]*0.5);
@@ -504,34 +504,34 @@ void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
  *     you end up with a set of quality sums for each allele present 2. The quality
  *     sums are sorted.
  *  3. Using the sorted quality sums we now create the allele ordering array
- *     A\subN. This is done by doing the following: 
+ *     A\subN. This is done by doing the following:
  *     a) If the reference allele is known it always comes first, otherwise N
- *        comes first.  
+ *        comes first.
  *     b) Then the rest of the alleles are output in descending order of quality
  *        sum (which we already know the qsum array was sorted).  Any allelles with
  *        qsum 0 will be excluded.
  *  4. Using the allele ordering array we create the genotype ordering array.
  *     In the worst case with an unknown reference this will be:  A0/A0 A1/A0 A1/A1
- *     A2/A0 A2/A1 A2/A2 A3/A0 A3/A1 A3/A2 A3/A3 A4/A0 A4/A1 A4/A2 A4/A3 A4/A4 
+ *     A2/A0 A2/A1 A2/A2 A3/A0 A3/A1 A3/A2 A3/A3 A4/A0 A4/A1 A4/A2 A4/A3 A4/A4
  *  5. The genotype ordering array is then used to extract data from the error
  *     model 5*5 matrix and is used to produce a Phread likelihood array for each
  *     sample.
  */
 int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int ref_base /*4-bit*/, bcf_call_t *call)
 {
-	int ref4, i, j;
+    int ref4, i, j;
     float qsum[5] = {0,0,0,0,0};
-	if (ref_base >= 0) {
-		call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
-		if (ref4 > 4) ref4 = 4;
-	} else call->ori_ref = -1, ref4 = 0;
+    if (ref_base >= 0) {
+        call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
+        if (ref4 > 4) ref4 = 4;
+    } else call->ori_ref = -1, ref4 = 0;
 
     // calculate qsum, this is done by summing normalized qsum across all samples,
     // to account for differences in coverage
-	for (i = 0; i < n; ++i)
+    for (i = 0; i < n; ++i)
     {
         float sum = 0;
-		for (j = 0; j < 4; ++j) sum += calls[i].qsum[j];
+        for (j = 0; j < 4; ++j) sum += calls[i].qsum[j];
         if ( sum )
             for (j = 0; j < 4; j++) qsum[j] += calls[i].qsum[j] / sum;
     }
@@ -560,7 +560,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
             call->a[j++]  = ipos;
         }
     }
-    if (ref_base >= 0) 
+    if (ref_base >= 0)
     {
         // for SNPs, find the "unseen" base
         if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
@@ -572,7 +572,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
         call->n_alleles = j;
         if (call->n_alleles == 1) return -1; // no reliable supporting read. stop doing anything
     }
-	/*
+    /*
      * Set the phread likelihood array (call->PL) This array is 15 entries long
      * for each sample because that is size of an upper or lower triangle of a
      * worst case 5x5 matrix of possible genotypes. This worst case matrix will
@@ -580,23 +580,23 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
      * is unknown.  The sides of the matrix will correspond to the reference
      * allele (if known) followed by the alleles present in descending order of
      * quality sum
-	 */
-	{
-		int x, g[15], z;
-		double sum_min = 0.;
-		x = call->n_alleles * (call->n_alleles + 1) / 2;
-		// get the possible genotypes
-		// this is done by creating an ordered list of locations g for call (allele a, allele b) in the genotype likelihood matrix
-		for (i = z = 0; i < call->n_alleles; ++i) {
-			for (j = 0; j <= i; ++j) {
-				g[z++] = call->a[j] * 5 + call->a[i];
-			}
-		}
-		// for each sample calculate the PL
-		for (i = 0; i < n; ++i) 
+     */
+    {
+        int x, g[15], z;
+        double sum_min = 0.;
+        x = call->n_alleles * (call->n_alleles + 1) / 2;
+        // get the possible genotypes
+        // this is done by creating an ordered list of locations g for call (allele a, allele b) in the genotype likelihood matrix
+        for (i = z = 0; i < call->n_alleles; ++i) {
+            for (j = 0; j <= i; ++j) {
+                g[z++] = call->a[j] * 5 + call->a[i];
+            }
+        }
+        // for each sample calculate the PL
+        for (i = 0; i < n; ++i)
         {
-			int32_t *PL = call->PL + x * i;
-			const bcf_callret1_t *r = calls + i;
+            int32_t *PL = call->PL + x * i;
+            const bcf_callret1_t *r = calls + i;
             float min = FLT_MAX;
             for (j = 0; j < x; ++j) {
                 if (min > r->p[g[j]]) min = r->p[g[j]];
@@ -611,7 +611,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
         }
         if ( call->DP4 )
         {
-            for (i=0; i<n; i++) 
+            for (i=0; i<n; i++)
             {
                 call->DP4[4*i]   = calls[i].anno[0];
                 call->DP4[4*i+1] = calls[i].anno[1];
@@ -638,20 +638,20 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
             }
         }
 
-//		if (ref_base < 0) fprintf(stderr, "%d,%d,%f,%d\n", call->n_alleles, x, sum_min, call->unseen);
-		call->shift = (int)(sum_min + .499);
-	}
-	// combine annotations
-	memset(call->anno, 0, 16 * sizeof(double));
+//      if (ref_base < 0) fprintf(stderr, "%d,%d,%f,%d\n", call->n_alleles, x, sum_min, call->unseen);
+        call->shift = (int)(sum_min + .499);
+    }
+    // combine annotations
+    memset(call->anno, 0, 16 * sizeof(double));
     call->ori_depth = 0;
     call->depth     = 0;
     call->mq0       = 0;
-	for (i = 0; i < n; ++i) {
-		call->depth += calls[i].anno[0] + calls[i].anno[1] + calls[i].anno[2] + calls[i].anno[3];
-		call->ori_depth += calls[i].ori_depth;
+    for (i = 0; i < n; ++i) {
+        call->depth += calls[i].anno[0] + calls[i].anno[1] + calls[i].anno[2] + calls[i].anno[3];
+        call->ori_depth += calls[i].ori_depth;
         call->mq0 += calls[i].mq0;
-		for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
-	}
+        for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
+    }
 
     calc_SegBias(calls, call);
 
@@ -673,62 +673,62 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 
     call->vdb = calc_vdb(bca->alt_pos, bca->npos);
 
-	return 0;
+    return 0;
 }
 
 int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag, const bcf_callaux_t *bca, const char *ref)
 {
-	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
-	int i, j, nals = 1;
+    extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
+    int i, j, nals = 1;
 
     bcf_hdr_t *hdr = bc->bcf_hdr;
     rec->rid  = bc->tid;
     rec->pos  = bc->pos;
     rec->qual = 0;
 
-	bc->tmp.l = 0;
-	if (bc->ori_ref < 0)    // indel
+    bc->tmp.l = 0;
+    if (bc->ori_ref < 0)    // indel
     {
-		// REF
-		kputc(ref[bc->pos], &bc->tmp); 
-		for (j = 0; j < bca->indelreg; ++j) kputc(ref[bc->pos+1+j], &bc->tmp);
+        // REF
+        kputc(ref[bc->pos], &bc->tmp);
+        for (j = 0; j < bca->indelreg; ++j) kputc(ref[bc->pos+1+j], &bc->tmp);
 
-		// ALT
-		for (i=1; i<4; i++) 
+        // ALT
+        for (i=1; i<4; i++)
         {
-			if (bc->a[i] < 0) break;
+            if (bc->a[i] < 0) break;
             kputc(',', &bc->tmp); kputc(ref[bc->pos], &bc->tmp);
 
-			if (bca->indel_types[bc->a[i]] < 0) { // deletion
-				for (j = -bca->indel_types[bc->a[i]]; j < bca->indelreg; ++j)
-					kputc(ref[bc->pos+1+j], &bc->tmp);
-			} else { // insertion; cannot be a reference unless a bug
-				char *inscns = &bca->inscns[bc->a[i] * bca->maxins];
-				for (j = 0; j < bca->indel_types[bc->a[i]]; ++j)
-					kputc("ACGTN"[(int)inscns[j]], &bc->tmp);
-				for (j = 0; j < bca->indelreg; ++j) kputc(ref[bc->pos+1+j], &bc->tmp);
-			}
+            if (bca->indel_types[bc->a[i]] < 0) { // deletion
+                for (j = -bca->indel_types[bc->a[i]]; j < bca->indelreg; ++j)
+                    kputc(ref[bc->pos+1+j], &bc->tmp);
+            } else { // insertion; cannot be a reference unless a bug
+                char *inscns = &bca->inscns[bc->a[i] * bca->maxins];
+                for (j = 0; j < bca->indel_types[bc->a[i]]; ++j)
+                    kputc("ACGTN"[(int)inscns[j]], &bc->tmp);
+                for (j = 0; j < bca->indelreg; ++j) kputc(ref[bc->pos+1+j], &bc->tmp);
+            }
             nals++;
-		}
-	} 
+        }
+    }
     else    // SNP
     {
-		kputc("ACGTN"[bc->ori_ref], &bc->tmp);
-		for (i=1; i<5; i++) 
+        kputc("ACGTN"[bc->ori_ref], &bc->tmp);
+        for (i=1; i<5; i++)
         {
-			if (bc->a[i] < 0) break;
-			kputc(',', &bc->tmp);
+            if (bc->a[i] < 0) break;
+            kputc(',', &bc->tmp);
             if ( bc->unseen==i ) kputs("<X>", &bc->tmp);
             else kputc("ACGT"[bc->a[i]], &bc->tmp);
             nals++;
-		}
-	}
+        }
+    }
     bcf_update_alleles_str(hdr, rec, bc->tmp.s);
 
     bc->tmp.l = 0;
 
-	// INFO
-	if (bc->ori_ref < 0) 
+    // INFO
+    if (bc->ori_ref < 0)
     {
         bcf_update_info_flag(hdr, rec, "INDEL", NULL, 1);
         bcf_update_info_int32(hdr, rec, "IDV", &bca->max_support, 1);
@@ -756,10 +756,10 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     tmpf[0] = bc->ori_depth ? (float)bc->mq0/bc->ori_depth : 0;
     bcf_update_info_float(hdr, rec, "MQ0F", tmpf, 1);
 
-	// FORMAT
+    // FORMAT
     rec->n_sample = bc->n;
     bcf_update_format_int32(hdr, rec, "PL", bc->PL, nals*(nals+1)/2 * rec->n_sample);
-    if ( fmt_flag&B2B_FMT_DP ) 
+    if ( fmt_flag&B2B_FMT_DP )
     {
         int32_t *ptr = (int32_t*) bc->fmt_arr;
         for (i=0; i<bc->n; i++)
@@ -799,5 +799,5 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     if ( fmt_flag&B2B_INFO_DPR )
         bcf_update_info_int32(hdr, rec, "DPR", bc->DPR, rec->n_allele);
 
-	return 0;
+    return 0;
 }

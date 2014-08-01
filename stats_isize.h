@@ -32,9 +32,9 @@ typedef struct
 }
 isize_dense_data_t;
 
-typedef struct 
-{ 
-    uint64_t isize_inward, isize_outward, isize_other; 
+typedef struct
+{
+    uint64_t isize_inward, isize_outward, isize_other;
 }
 isize_sparse_record_t;
 
@@ -56,7 +56,7 @@ typedef union {
 typedef struct
 {
     isize_data_t data;
-    
+
     // Maximum
     int (*nitems)(isize_data_t);
 

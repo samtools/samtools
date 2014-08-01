@@ -21,7 +21,7 @@
 #
 # The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -57,7 +57,7 @@
 # Version: 2.1.0 (21SEP2010)
 #
 #   - Additional export record error checking.
-#   - Convert export records with chromomsome value of "RM" to unmapped 
+#   - Convert export records with chromomsome value of "RM" to unmapped
 #       SAM records.
 #
 # Version: 2.0.0 (15FEB2010)
@@ -152,7 +152,7 @@ use constant {
   EXPORT_CHROM => 10,
   EXPORT_CONTIG => 11,
   EXPORT_POS => 12,
-  EXPORT_STRAND => 13, 
+  EXPORT_STRAND => 13,
   EXPORT_MD => 14,
   EXPORT_SEMAP => 15,
   EXPORT_PEMAP => 16,
@@ -202,7 +202,7 @@ sub export2sam {
   my $print_version = 0;
   my $help = 0;
 
-  my $result = GetOptions( "qlogodds" => \$is_logodds_qvals, 
+  my $result = GetOptions( "qlogodds" => \$is_logodds_qvals,
                            "nofilter" => \$is_nofilter,
                            "read1=s"  => \$read1file,
                            "read2=s"  => \$read2file,
@@ -318,7 +318,7 @@ END
           $isize = $x2 - $x1;
         }
 
-        foreach ([\@s1,\@s2,$isize],[\@s2,\@s1,-$isize]){ 
+        foreach ([\@s1,\@s2,$isize],[\@s2,\@s1,-$isize]){
           my ($sa,$sb,$is) = @{$_};
           if ($sb->[SAM_RNAME] ne '*') {
             $sa->[SAM_MRNM] = ($sb->[SAM_RNAME] eq $sa->[SAM_RNAME]) ? "=" : $sb->[SAM_RNAME];
@@ -328,7 +328,7 @@ END
           } else {
             $sa->[SAM_FLAG] |= 0x8;
           }
-        } 
+        }
       }
     }
     print join("\t", @s1), "\n" if (@s1);
@@ -535,11 +535,11 @@ sub match_desc_frag_length($)
 
 
 # argument holds the command line
-sub write_header($;$;$) 
+sub write_header($;$;$)
 {
-	my ($progname,$version,$cl) = @_;
-	my $complete_header = "";
-	$complete_header .= "\@PG\tID:$progname\tVN:$version\tCL:$cl\n";
+    my ($progname,$version,$cl) = @_;
+    my $complete_header = "";
+    $complete_header .= "\@PG\tID:$progname\tVN:$version\tCL:$cl\n";
 
-	return $complete_header;
+    return $complete_header;
 }

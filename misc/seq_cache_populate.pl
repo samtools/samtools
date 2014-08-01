@@ -55,7 +55,7 @@ my $usage = "Usage: $0 -root <dir> [-subdirs <n>] input1.fasta ...\n       $0 -r
 
 # Deal with options
 GetOptions("root=s" => \$root_dir, "subdirs=s" => \$subdirs,
-	   "find=s" => \$find) || die $usage;
+       "find=s" => \$find) || die $usage;
 
 unless ($root_dir && $subdirs =~ /^\d+$/) { die $usage; }
 if ($subdirs >= 16) {
@@ -77,19 +77,19 @@ if ($find) {
     # fasta file.  Any that are found will be put into the new cache, if
     # they are not already there.
     find({
-	wanted => sub {
-	    find_files($File::Find::name, $root_dir, $dest_re, $max_acc);
-	},
-	no_chdir => 1,
-	 },
-	 $find);
+    wanted => sub {
+        find_files($File::Find::name, $root_dir, $dest_re, $max_acc);
+    },
+    no_chdir => 1,
+     },
+     $find);
 } elsif (@ARGV) {
     # If a list of files was given on the command line, go through them
     # and try to add each one.
     foreach my $name (@ARGV) {
-	open(my $fh, '<', $name) || die "Couldn't open $name: $!\n";
-	process_file($name, $fh, $root_dir, $dest_re, $max_acc);
-	close($fh) || die "Error closing $name: $!\n";
+    open(my $fh, '<', $name) || die "Couldn't open $name: $!\n";
+    process_file($name, $fh, $root_dir, $dest_re, $max_acc);
+    close($fh) || die "Error closing $name: $!\n";
     }
 } else {
     # Otherwise read from STDIN
@@ -153,55 +153,55 @@ sub process_file {
     # Use an eval block so any stray temporary file can be cleaned up before
     # exiting.
     eval {
-	print "Reading $name ...\n";
-	for (;;) { # Error catching form of while (<>) {...}
-	    undef($!);
-	    last if (eof($in_fh)); # Needed if last line isn't terminated
-	    unless (defined($_ = readline($in_fh))) {
-		die "Error reading $name: $!" if $!;
-		last; # EOF
-	    }
+    print "Reading $name ...\n";
+    for (;;) { # Error catching form of while (<>) {...}
+        undef($!);
+        last if (eof($in_fh)); # Needed if last line isn't terminated
+        unless (defined($_ = readline($in_fh))) {
+        die "Error reading $name: $!" if $!;
+        last; # EOF
+        }
 
-	    if (/^>(\S+)/) {
-		# Found a fasta header
-		if ($ctx) { # Finish previous entry, if there is one
-		    finish_entry($id, $ctx, \$acc, $tmpfh, $tmpfile,
-				 $root_dir, $dest_re);
-		    undef($tmpfile);
-		    $acc = '';
-		}
-		$id = $1;
-		$ctx = Digest::MD5->new();
-	    } else {
-		unless ($id) { die "Found sequence with no header\n"; }
-		# Read some sequence
-		chomp;
-		s/\s+//g;
-		if ($_) {
-		    $_ = uc($_);
-		    $acc .= $_;
-		    $ctx->add($_);
+        if (/^>(\S+)/) {
+        # Found a fasta header
+        if ($ctx) { # Finish previous entry, if there is one
+            finish_entry($id, $ctx, \$acc, $tmpfh, $tmpfile,
+                 $root_dir, $dest_re);
+            undef($tmpfile);
+            $acc = '';
+        }
+        $id = $1;
+        $ctx = Digest::MD5->new();
+        } else {
+        unless ($id) { die "Found sequence with no header\n"; }
+        # Read some sequence
+        chomp;
+        s/\s+//g;
+        if ($_) {
+            $_ = uc($_);
+            $acc .= $_;
+            $ctx->add($_);
 
-		    if (length($acc) > $max_acc) {
-			# Spill long sequences out to a temporary file in
-			# $root_dir.
-			unless ($tmpfile) {
-			    ($tmpfh, $tmpfile) = tempfile(DIR => $root_dir,
-							  SUFFIX => '.tmp');
-			}
-			print $tmpfh $acc
-			    || die "Error writing to $tmpfile: $!\n";
-			$acc = '';
-		    }
-		}
-	    }
-	}
-	if ($ctx) {
-	    # Finish off the last entry
-	    finish_entry($id, $ctx, \$acc, $tmpfh, $tmpfile,
-			 $root_dir, $dest_re);
-	    undef($tmpfile);
-	}
+            if (length($acc) > $max_acc) {
+            # Spill long sequences out to a temporary file in
+            # $root_dir.
+            unless ($tmpfile) {
+                ($tmpfh, $tmpfile) = tempfile(DIR => $root_dir,
+                              SUFFIX => '.tmp');
+            }
+            print $tmpfh $acc
+                || die "Error writing to $tmpfile: $!\n";
+            $acc = '';
+            }
+        }
+        }
+    }
+    if ($ctx) {
+        # Finish off the last entry
+        finish_entry($id, $ctx, \$acc, $tmpfh, $tmpfile,
+             $root_dir, $dest_re);
+        undef($tmpfile);
+    }
     };
     my $err = $@;
     if ($tmpfile) { unlink($tmpfile); }
@@ -218,59 +218,59 @@ sub finish_entry {
     # Get the destination directory and filename
     my @segs = $digest =~ /$dest_re/;
     my $dest_dir = (@segs > 1
-		    ? catdir($root_dir, @segs[0..($#segs - 1)])
-		    : $root_dir);
+            ? catdir($root_dir, @segs[0..($#segs - 1)])
+            : $root_dir);
     my $dest = catfile($dest_dir, $segs[-1]);
 
     # Make the destination dir if necessary
     unless (-e $dest_dir) {
-	make_path($dest_dir);
+    make_path($dest_dir);
     }
 
     if (-e $dest) {
-	# If the file is already present, there's nothing to do apart from
-	# remove the temporary file if it was made.
-	print "Already exists: $digest $id\n";
-	if ($tmpfile) {
-	    close($tmpfh) || die "Error closing $tmpfile: $!\n";
-	    unlink($tmpfile) || die "Couldn't remove $tmpfile: $!\n";
-	}
+    # If the file is already present, there's nothing to do apart from
+    # remove the temporary file if it was made.
+    print "Already exists: $digest $id\n";
+    if ($tmpfile) {
+        close($tmpfh) || die "Error closing $tmpfile: $!\n";
+        unlink($tmpfile) || die "Couldn't remove $tmpfile: $!\n";
+    }
     } else {
-	# Need to add the data to the cache.
-	unless ($tmpfile) {
-	    # If the data hasn't been written already, it needs to be done
-	    # now.  Write to a temp file in $dest_dir so if it goes wrong
-	    # we won't leave a file with the right name but half-written
-	    # content.
-	    ($tmpfh, $tmpfile) = tempfile(DIR => $dest_dir,
-					  SUFFIX => '.tmp');
-	}
+    # Need to add the data to the cache.
+    unless ($tmpfile) {
+        # If the data hasn't been written already, it needs to be done
+        # now.  Write to a temp file in $dest_dir so if it goes wrong
+        # we won't leave a file with the right name but half-written
+        # content.
+        ($tmpfh, $tmpfile) = tempfile(DIR => $dest_dir,
+                      SUFFIX => '.tmp');
+    }
 
-	# Assert that the $tmpfile is now set
-	unless ($tmpfile) { die "Error: Didn't make a temp file"; }
+    # Assert that the $tmpfile is now set
+    unless ($tmpfile) { die "Error: Didn't make a temp file"; }
 
-	eval {
-	    # Flush out any remaining data
-	    if ($$acc_ref) {
-		print $tmpfh $$acc_ref || die "Error writing to $tmpfile: $!\n";
-	    }
-	    # Paranoid file close
-	    $tmpfh->flush() || die "Error flushing to $tmpfile: $!\n";
-	    $tmpfh->sync() || die "Error syncing $tmpfile: $!\n";
-	    close($tmpfh) || die "Error writing to $tmpfile: $!\n";
-	};
-	if ($@) {
-	    # Attempt to clean up if writing failed
-	    my $save = $@;
-	    unlink($tmpfile) || warn "Couldn't remove $tmpfile: $!";
-	    die $save;
-	}
+    eval {
+        # Flush out any remaining data
+        if ($$acc_ref) {
+        print $tmpfh $$acc_ref || die "Error writing to $tmpfile: $!\n";
+        }
+        # Paranoid file close
+        $tmpfh->flush() || die "Error flushing to $tmpfile: $!\n";
+        $tmpfh->sync() || die "Error syncing $tmpfile: $!\n";
+        close($tmpfh) || die "Error writing to $tmpfile: $!\n";
+    };
+    if ($@) {
+        # Attempt to clean up if writing failed
+        my $save = $@;
+        unlink($tmpfile) || warn "Couldn't remove $tmpfile: $!";
+        die $save;
+    }
 
-	# Finished writing, and everything is flushed as far as possible
-	# so rename the temp file
-	print "$dest $id\n";
-	rename($tmpfile, $dest)
-	    || die "Error moving $tmpfile to $dest: $!\n";
+    # Finished writing, and everything is flushed as far as possible
+    # so rename the temp file
+    print "$dest $id\n";
+    rename($tmpfile, $dest)
+        || die "Error moving $tmpfile to $dest: $!\n";
     }
 }
 

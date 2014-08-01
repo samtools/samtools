@@ -106,7 +106,7 @@ typedef bam_hdr_t bam_header_t;
   @field  data       all variable-length data, concatenated; structure: qname-cigar-seq-qual-aux
 
   @discussion Notes:
- 
+
    1. qname is zero tailing and core.l_qname includes the tailing '\0'.
    2. l_qseq is calculated from the total length of an alignment block
       on reading or from CIGAR.
@@ -193,357 +193,357 @@ typedef hts_itr_t *bam_iter_t;
 extern "C" {
 #endif
 
-	/*********************
-	 * Low-level SAM I/O *
-	 *********************/
+    /*********************
+     * Low-level SAM I/O *
+     *********************/
 
-	/*! @abstract TAM file handler */
-	typedef samFile *tamFile;
+    /*! @abstract TAM file handler */
+    typedef samFile *tamFile;
 
-	/*!
-	  @abstract   Open a SAM file for reading, either uncompressed or compressed by gzip/zlib.
-	  @param  fn  SAM file name
-	  @return     SAM file handler
-	 */
-	static inline tamFile samtools_sam_open(const char *fn) { return sam_open(fn, "r"); }
-	#undef  sam_open
-	#define sam_open samtools_sam_open
+    /*!
+      @abstract   Open a SAM file for reading, either uncompressed or compressed by gzip/zlib.
+      @param  fn  SAM file name
+      @return     SAM file handler
+     */
+    static inline tamFile samtools_sam_open(const char *fn) { return sam_open(fn, "r"); }
+    #undef  sam_open
+    #define sam_open samtools_sam_open
 
-	/*!
-	  @abstract   Close a SAM file handler
-	  @param  fp  SAM file handler
-	 */
-	// void sam_close(tamFile fp);
+    /*!
+      @abstract   Close a SAM file handler
+      @param  fp  SAM file handler
+     */
+    // void sam_close(tamFile fp);
 
-	/*!
-	  @abstract      Read one alignment from a SAM file handler
-	  @param  fp     SAM file handler
-	  @param  header header information (ordered names of chromosomes)
-	  @param  b      read alignment; all members in b will be updated
-	  @return        0 if successful; otherwise negative
-	 */
-	// int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b);
+    /*!
+      @abstract      Read one alignment from a SAM file handler
+      @param  fp     SAM file handler
+      @param  header header information (ordered names of chromosomes)
+      @param  b      read alignment; all members in b will be updated
+      @return        0 if successful; otherwise negative
+     */
+    // int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b);
 
-	/*!
-	  @abstract       Read header information from a TAB-delimited list file.
-	  @param  fn_list file name for the list
-	  @return         a pointer to the header structure
+    /*!
+      @abstract       Read header information from a TAB-delimited list file.
+      @param  fn_list file name for the list
+      @return         a pointer to the header structure
 
-	  @discussion Each line in this file consists of chromosome name and
-	  the length of chromosome.
-	 */
-	bam_header_t *sam_header_read2(const char *fn_list);
+      @discussion Each line in this file consists of chromosome name and
+      the length of chromosome.
+     */
+    bam_header_t *sam_header_read2(const char *fn_list);
 
-	/*!
-	  @abstract       Read header from a SAM file (if present)
-	  @param  fp      SAM file handler
-	  @return         pointer to header struct; 0 if no @SQ lines available
-	 */
-	static inline bam_header_t *sam_header_read(tamFile fp) { return sam_hdr_read(fp); }
+    /*!
+      @abstract       Read header from a SAM file (if present)
+      @param  fp      SAM file handler
+      @return         pointer to header struct; 0 if no @SQ lines available
+     */
+    static inline bam_header_t *sam_header_read(tamFile fp) { return sam_hdr_read(fp); }
 
-	// Note the distressing cast -- bam_name2id is not thread-safe
-	static inline int32_t bam_get_tid(const bam_header_t *header, const char *seq_name) { return bam_name2id((bam_header_t *)header, seq_name); }
+    // Note the distressing cast -- bam_name2id is not thread-safe
+    static inline int32_t bam_get_tid(const bam_header_t *header, const char *seq_name) { return bam_name2id((bam_header_t *)header, seq_name); }
 
 
-	/*********************
-	 * Low-level BAM I/O *
-	 *********************/
+    /*********************
+     * Low-level BAM I/O *
+     *********************/
 
-	/*!
-	  @abstract Initialize a header structure.
-	  @return   the pointer to the header structure
-	 */
-	static inline bam_header_t *bam_header_init(void) { return bam_hdr_init(); }
+    /*!
+      @abstract Initialize a header structure.
+      @return   the pointer to the header structure
+     */
+    static inline bam_header_t *bam_header_init(void) { return bam_hdr_init(); }
 
-	/*!
-	  @abstract        Destroy a header structure.
-	  @param  header  pointer to the header
-	 */
-	static inline void bam_header_destroy(bam_header_t *header) { bam_hdr_destroy(header); }
+    /*!
+      @abstract        Destroy a header structure.
+      @param  header  pointer to the header
+     */
+    static inline void bam_header_destroy(bam_header_t *header) { bam_hdr_destroy(header); }
 
-	/*!
-	  @abstract   Read a header structure from BAM.
-	  @param  fp  BAM file handler, opened by bam_open()
-	  @return     pointer to the header structure
+    /*!
+      @abstract   Read a header structure from BAM.
+      @param  fp  BAM file handler, opened by bam_open()
+      @return     pointer to the header structure
 
-	  @discussion The file position indicator must be placed at the
-	  beginning of the file. Upon success, the position indicator will
-	  be set at the start of the first alignment.
-	 */
-	static inline bam_header_t *bam_header_read(bamFile fp) { return bam_hdr_read(fp); }
+      @discussion The file position indicator must be placed at the
+      beginning of the file. Upon success, the position indicator will
+      be set at the start of the first alignment.
+     */
+    static inline bam_header_t *bam_header_read(bamFile fp) { return bam_hdr_read(fp); }
 
-	/*!
-	  @abstract      Write a header structure to BAM.
-	  @param  fp     BAM file handler
-	  @param  header pointer to the header structure
-	  @return        always 0 currently
-	 */
-	static inline int bam_header_write(bamFile fp, const bam_header_t *header) { return bam_hdr_write(fp, header); }
+    /*!
+      @abstract      Write a header structure to BAM.
+      @param  fp     BAM file handler
+      @param  header pointer to the header structure
+      @return        always 0 currently
+     */
+    static inline int bam_header_write(bamFile fp, const bam_header_t *header) { return bam_hdr_write(fp, header); }
 
-	/*!
-	  @abstract   Read an alignment from BAM.
-	  @param  fp  BAM file handler
-	  @param  b   read alignment; all members are updated.
-	  @return     number of bytes read from the file
+    /*!
+      @abstract   Read an alignment from BAM.
+      @param  fp  BAM file handler
+      @param  b   read alignment; all members are updated.
+      @return     number of bytes read from the file
 
-	  @discussion The file position indicator must be
-	  placed right before an alignment. Upon success, this function
-	  will set the position indicator to the start of the next
-	  alignment. This function is not affected by the machine
-	  endianness.
-	 */
-	// int bam_read1(bamFile fp, bam1_t *b);
+      @discussion The file position indicator must be
+      placed right before an alignment. Upon success, this function
+      will set the position indicator to the start of the next
+      alignment. This function is not affected by the machine
+      endianness.
+     */
+    // int bam_read1(bamFile fp, bam1_t *b);
 
-	int bam_remove_B(bam1_t *b);
+    int bam_remove_B(bam1_t *b);
 
-	/*!
-	  @abstract   Write an alignment to BAM.
-	  @param  fp  BAM file handler
-	  @param  b   alignment to write
-	  @return     number of bytes written to the file
-	 */
-	// int bam_write1(bamFile fp, const bam1_t *b);
+    /*!
+      @abstract   Write an alignment to BAM.
+      @param  fp  BAM file handler
+      @param  b   alignment to write
+      @return     number of bytes written to the file
+     */
+    // int bam_write1(bamFile fp, const bam1_t *b);
 
-	/*! @function
-	  @abstract  Initiate a pointer to bam1_t struct
-	 */
+    /*! @function
+      @abstract  Initiate a pointer to bam1_t struct
+     */
 //#define bam_init1()
 
-	/*! @function
-	  @abstract  Free the memory allocated for an alignment.
-	  @param  b  pointer to an alignment
-	 */
+    /*! @function
+      @abstract  Free the memory allocated for an alignment.
+      @param  b  pointer to an alignment
+     */
 //#define bam_destroy1(b)
 
-	/*!
-	  @abstract       Format a BAM record in the SAM format
-	  @param  header  pointer to the header structure
-	  @param  b       alignment to print
-	  @return         a pointer to the SAM string
-	 */
-	char *bam_format1(const bam_header_t *header, const bam1_t *b);
+    /*!
+      @abstract       Format a BAM record in the SAM format
+      @param  header  pointer to the header structure
+      @param  b       alignment to print
+      @return         a pointer to the SAM string
+     */
+    char *bam_format1(const bam_header_t *header, const bam1_t *b);
 
-	/*! @abstract     Formats a BAM record and writes it and \n to stdout */
-	void bam_view1(const bam_header_t *header, const bam1_t *b);
+    /*! @abstract     Formats a BAM record and writes it and \n to stdout */
+    void bam_view1(const bam_header_t *header, const bam1_t *b);
 
-	/*!
-	  @abstract       Check whether a BAM record is plausibly valid
-	  @param  header  associated header structure, or NULL if unavailable
-	  @param  b       alignment to validate
-	  @return         0 if the alignment is invalid; non-zero otherwise
+    /*!
+      @abstract       Check whether a BAM record is plausibly valid
+      @param  header  associated header structure, or NULL if unavailable
+      @param  b       alignment to validate
+      @return         0 if the alignment is invalid; non-zero otherwise
 
-	  @discussion  Simple consistency check of some of the fields of the
-	  alignment record.  If the header is provided, several additional checks
-	  are made.  Not all fields are checked, so a non-zero result is not a
-	  guarantee that the record is valid.  However it is usually good enough
-	  to detect when bam_seek() has been called with a virtual file offset
-	  that is not the offset of an alignment record.
-	 */
-	int bam_validate1(const bam_header_t *header, const bam1_t *b);
+      @discussion  Simple consistency check of some of the fields of the
+      alignment record.  If the header is provided, several additional checks
+      are made.  Not all fields are checked, so a non-zero result is not a
+      guarantee that the record is valid.  However it is usually good enough
+      to detect when bam_seek() has been called with a virtual file offset
+      that is not the offset of an alignment record.
+     */
+    int bam_validate1(const bam_header_t *header, const bam1_t *b);
 
-	// TODO Parses headers, so not yet implemented in terms of htslib
-	const char *bam_get_library(bam_header_t *header, const bam1_t *b);
-
-
-	/***************
-	 * pileup APIs *
-	 ***************/
-
-	/*! @typedef
-	  @abstract Structure for one alignment covering the pileup position.
-	  @field  b      pointer to the alignment
-	  @field  qpos   position of the read base at the pileup site, 0-based
-	  @field  indel  indel length; 0 for no indel, positive for ins and negative for del
-	  @field  is_del 1 iff the base on the padded read is a deletion
-	  @field  level  the level of the read in the "viewer" mode
-
-	  @discussion See also bam_plbuf_push() and bam_lplbuf_push(). The
-	  difference between the two functions is that the former does not
-	  set bam_pileup1_t::level, while the later does. Level helps the
-	  implementation of alignment viewers, but calculating this has some
-	  overhead.
-	 */
-	// typedef struct { ... } bam_pileup1_t;
-
-	// typedef int (*bam_plp_auto_f)(void *data, bam1_t *b);
-
-	// typedef struct incomplete *bam_plp_t;
-
-	// bam_plp_t bam_plp_init(bam_plp_auto_f read, void *data);
-	// int bam_plp_push(bam_plp_t iter, const bam1_t *b);
-	// const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
-	// const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
-	// void bam_plp_set_maxcnt(bam_plp_t iter, int maxcnt);
-	// void bam_plp_reset(bam_plp_t iter);
-	// void bam_plp_destroy(bam_plp_t iter);
-
-	// typedef struct incomplete *bam_mplp_t;
-
-	// bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func,  void **data);
-	// void bam_mplp_destroy(bam_mplp_t iter);
-	// void bam_mplp_set_maxcnt(bam_mplp_t iter, int maxcnt);
-	// int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_pileup1_t **plp);
-
-	/*! @typedef
-	  @abstract    Type of function to be called by bam_plbuf_push().
-	  @param  tid  chromosome ID as is defined in the header
-	  @param  pos  start coordinate of the alignment, 0-based
-	  @param  n    number of elements in pl array
-	  @param  pl   array of alignments
-	  @param  data user provided data
-	  @discussion  See also bam_plbuf_push(), bam_plbuf_init() and bam_pileup1_t.
-	 */
-	typedef int (*bam_pileup_f)(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data);
-
-	typedef struct {
-		bam_plp_t iter;
-		bam_pileup_f func;
-		void *data;
-	} bam_plbuf_t;
-
-	void bam_plbuf_reset(bam_plbuf_t *buf);
-	bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data);
-	void bam_plbuf_destroy(bam_plbuf_t *buf);
-	int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf);
-
-	int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data);
-
-	struct __bam_lplbuf_t;
-	typedef struct __bam_lplbuf_t bam_lplbuf_t;
-
-	void bam_lplbuf_reset(bam_lplbuf_t *buf);
-
-	/*! @abstract  bam_plbuf_init() equivalent with level calculated. */
-	bam_lplbuf_t *bam_lplbuf_init(bam_pileup_f func, void *data);
-
-	/*! @abstract  bam_plbuf_destroy() equivalent with level calculated. */
-	void bam_lplbuf_destroy(bam_lplbuf_t *tv);
-
-	/*! @abstract  bam_plbuf_push() equivalent with level calculated. */
-	int bam_lplbuf_push(const bam1_t *b, bam_lplbuf_t *buf);
+    // TODO Parses headers, so not yet implemented in terms of htslib
+    const char *bam_get_library(bam_header_t *header, const bam1_t *b);
 
 
-	/*********************
-	 * BAM indexing APIs *
-	 *********************/
+    /***************
+     * pileup APIs *
+     ***************/
 
-	typedef hts_idx_t bam_index_t;
+    /*! @typedef
+      @abstract Structure for one alignment covering the pileup position.
+      @field  b      pointer to the alignment
+      @field  qpos   position of the read base at the pileup site, 0-based
+      @field  indel  indel length; 0 for no indel, positive for ins and negative for del
+      @field  is_del 1 iff the base on the padded read is a deletion
+      @field  level  the level of the read in the "viewer" mode
 
-	/*!
-	  @abstract   Build index for a BAM file.
-	  @discussion Index file "fn.bai" will be created.
-	  @param  fn  name of the BAM file
-	  @return     always 0 currently
-	 */
-	static inline int samtools_bam_index_build(const char *fn) { return bam_index_build(fn, 0); }
-	#undef  bam_index_build
-	#define bam_index_build samtools_bam_index_build
+      @discussion See also bam_plbuf_push() and bam_lplbuf_push(). The
+      difference between the two functions is that the former does not
+      set bam_pileup1_t::level, while the later does. Level helps the
+      implementation of alignment viewers, but calculating this has some
+      overhead.
+     */
+    // typedef struct { ... } bam_pileup1_t;
 
-	/*!
-	  @abstract   Load index from file "fn.bai".
-	  @param  fn  name of the BAM file (NOT the index file)
-	  @return     pointer to the index structure
-	 */
-	// bam_index_t *bam_index_load(const char *fn);
+    // typedef int (*bam_plp_auto_f)(void *data, bam1_t *b);
 
-	/*!
-	  @abstract    Destroy an index structure.
-	  @param  idx  pointer to the index structure
-	 */
-	static inline void bam_index_destroy(bam_index_t *idx) { hts_idx_destroy(idx); }
+    // typedef struct incomplete *bam_plp_t;
 
-	/*! @typedef
-	  @abstract      Type of function to be called by bam_fetch().
-	  @param  b     the alignment
-	  @param  data  user provided data
-	 */
-	typedef int (*bam_fetch_f)(const bam1_t *b, void *data);
+    // bam_plp_t bam_plp_init(bam_plp_auto_f read, void *data);
+    // int bam_plp_push(bam_plp_t iter, const bam1_t *b);
+    // const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
+    // const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
+    // void bam_plp_set_maxcnt(bam_plp_t iter, int maxcnt);
+    // void bam_plp_reset(bam_plp_t iter);
+    // void bam_plp_destroy(bam_plp_t iter);
 
-	/*!
-	  @abstract Retrieve the alignments that are overlapped with the
-	  specified region.
+    // typedef struct incomplete *bam_mplp_t;
 
-	  @discussion A user defined function will be called for each
-	  retrieved alignment ordered by its start position.
+    // bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func,  void **data);
+    // void bam_mplp_destroy(bam_mplp_t iter);
+    // void bam_mplp_set_maxcnt(bam_mplp_t iter, int maxcnt);
+    // int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_pileup1_t **plp);
 
-	  @param  fp    BAM file handler
-	  @param  idx   pointer to the alignment index
-	  @param  tid   chromosome ID as is defined in the header
-	  @param  beg   start coordinate, 0-based
-	  @param  end   end coordinate, 0-based
-	  @param  data  user provided data (will be transferred to func)
-	  @param  func  user defined function
-	 */
-	int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func);
+    /*! @typedef
+      @abstract    Type of function to be called by bam_plbuf_push().
+      @param  tid  chromosome ID as is defined in the header
+      @param  pos  start coordinate of the alignment, 0-based
+      @param  n    number of elements in pl array
+      @param  pl   array of alignments
+      @param  data user provided data
+      @discussion  See also bam_plbuf_push(), bam_plbuf_init() and bam_pileup1_t.
+     */
+    typedef int (*bam_pileup_f)(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data);
 
-	static inline bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end) { return bam_itr_queryi(idx, tid, beg, end); }
-	static inline int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b) { return iter? hts_itr_next(fp, iter, b, 0) : bam_read1(fp, b); }
-	static inline void bam_iter_destroy(bam_iter_t iter) { bam_itr_destroy(iter); }
+    typedef struct {
+        bam_plp_t iter;
+        bam_pileup_f func;
+        void *data;
+    } bam_plbuf_t;
 
-	/*!
-	  @abstract       Parse a region in the format: "chr2:100,000-200,000".
-	  @discussion     bam_header_t::hash will be initialized if empty.
-	  @param  header  pointer to the header structure
-	  @param  str     string to be parsed
-	  @param  ref_id  the returned chromosome ID
-	  @param  begin   the returned start coordinate
-	  @param  end     the returned end coordinate
-	  @return         0 on success; -1 on failure
-	 */
-	int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
+    void bam_plbuf_reset(bam_plbuf_t *buf);
+    bam_plbuf_t *bam_plbuf_init(bam_pileup_f func, void *data);
+    void bam_plbuf_destroy(bam_plbuf_t *buf);
+    int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf);
 
+    int bam_pileup_file(bamFile fp, int mask, bam_pileup_f func, void *func_data);
 
-	/**************************
-	 * APIs for optional tags *
-	 **************************/
+    struct __bam_lplbuf_t;
+    typedef struct __bam_lplbuf_t bam_lplbuf_t;
 
-	/*!
-	  @abstract       Retrieve data of a tag
-	  @param  b       pointer to an alignment struct
-	  @param  tag     two-character tag to be retrieved
+    void bam_lplbuf_reset(bam_lplbuf_t *buf);
 
-	  @return  pointer to the type and data. The first character is the
-	  type that can be 'iIsScCdfAZH'.
+    /*! @abstract  bam_plbuf_init() equivalent with level calculated. */
+    bam_lplbuf_t *bam_lplbuf_init(bam_pileup_f func, void *data);
 
-	  @discussion  Use bam_aux2?() series to convert the returned data to
-	  the corresponding type.
-	*/
-	// uint8_t *bam_aux_get(const bam1_t *b, const char tag[2]);
+    /*! @abstract  bam_plbuf_destroy() equivalent with level calculated. */
+    void bam_lplbuf_destroy(bam_lplbuf_t *tv);
 
-	// int32_t bam_aux2i(const uint8_t *s);
-	// float bam_aux2f(const uint8_t *s);
-	#define bam_aux2d(s) (bam_aux2f((s)))
-	// char bam_aux2A(const uint8_t *s);
-	// char *bam_aux2Z(const uint8_t *s);
-
-	// int bam_aux_del(bam1_t *b, uint8_t *s);
-	// void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
-	static inline uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]) { return bam_aux_get(b, tag); } // an alias of bam_aux_get()
+    /*! @abstract  bam_plbuf_push() equivalent with level calculated. */
+    int bam_lplbuf_push(const bam1_t *b, bam_lplbuf_t *buf);
 
 
-	/*****************
-	 * Miscellaneous *
-	 *****************/
+    /*********************
+     * BAM indexing APIs *
+     *********************/
 
-	/*!  
-	  @abstract Calculate the rightmost coordinate of an alignment on the
-	  reference genome.
+    typedef hts_idx_t bam_index_t;
 
-	  @param  c      pointer to the bam1_core_t structure
-	  @param  cigar  the corresponding CIGAR array (from bam1_t::cigar)
-	  @return        the rightmost coordinate, 0-based
-	*/
-	static inline uint32_t bam_calend(const bam1_core_t *c, const uint32_t *cigar) { return c->pos + (c->n_cigar? bam_cigar2rlen(c->n_cigar, cigar) : 1); }
+    /*!
+      @abstract   Build index for a BAM file.
+      @discussion Index file "fn.bai" will be created.
+      @param  fn  name of the BAM file
+      @return     always 0 currently
+     */
+    static inline int samtools_bam_index_build(const char *fn) { return bam_index_build(fn, 0); }
+    #undef  bam_index_build
+    #define bam_index_build samtools_bam_index_build
 
-	/*!
-	  @abstract      Calculate the length of the query sequence from CIGAR.
-	  @param  c      pointer to the bam1_core_t structure
-	  @param  cigar  the corresponding CIGAR array (from bam1_t::cigar)
-	  @return        length of the query sequence
-	*/
-	static inline int32_t samtools_bam_cigar2qlen(const bam1_core_t *c, const uint32_t *cigar) { return bam_cigar2qlen(c->n_cigar, cigar); }
-	#undef  bam_cigar2qlen
-	#define bam_cigar2qlen samtools_bam_cigar2qlen
+    /*!
+      @abstract   Load index from file "fn.bai".
+      @param  fn  name of the BAM file (NOT the index file)
+      @return     pointer to the index structure
+     */
+    // bam_index_t *bam_index_load(const char *fn);
+
+    /*!
+      @abstract    Destroy an index structure.
+      @param  idx  pointer to the index structure
+     */
+    static inline void bam_index_destroy(bam_index_t *idx) { hts_idx_destroy(idx); }
+
+    /*! @typedef
+      @abstract      Type of function to be called by bam_fetch().
+      @param  b     the alignment
+      @param  data  user provided data
+     */
+    typedef int (*bam_fetch_f)(const bam1_t *b, void *data);
+
+    /*!
+      @abstract Retrieve the alignments that are overlapped with the
+      specified region.
+
+      @discussion A user defined function will be called for each
+      retrieved alignment ordered by its start position.
+
+      @param  fp    BAM file handler
+      @param  idx   pointer to the alignment index
+      @param  tid   chromosome ID as is defined in the header
+      @param  beg   start coordinate, 0-based
+      @param  end   end coordinate, 0-based
+      @param  data  user provided data (will be transferred to func)
+      @param  func  user defined function
+     */
+    int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func);
+
+    static inline bam_iter_t bam_iter_query(const bam_index_t *idx, int tid, int beg, int end) { return bam_itr_queryi(idx, tid, beg, end); }
+    static inline int bam_iter_read(bamFile fp, bam_iter_t iter, bam1_t *b) { return iter? hts_itr_next(fp, iter, b, 0) : bam_read1(fp, b); }
+    static inline void bam_iter_destroy(bam_iter_t iter) { bam_itr_destroy(iter); }
+
+    /*!
+      @abstract       Parse a region in the format: "chr2:100,000-200,000".
+      @discussion     bam_header_t::hash will be initialized if empty.
+      @param  header  pointer to the header structure
+      @param  str     string to be parsed
+      @param  ref_id  the returned chromosome ID
+      @param  begin   the returned start coordinate
+      @param  end     the returned end coordinate
+      @return         0 on success; -1 on failure
+     */
+    int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *begin, int *end);
+
+
+    /**************************
+     * APIs for optional tags *
+     **************************/
+
+    /*!
+      @abstract       Retrieve data of a tag
+      @param  b       pointer to an alignment struct
+      @param  tag     two-character tag to be retrieved
+
+      @return  pointer to the type and data. The first character is the
+      type that can be 'iIsScCdfAZH'.
+
+      @discussion  Use bam_aux2?() series to convert the returned data to
+      the corresponding type.
+    */
+    // uint8_t *bam_aux_get(const bam1_t *b, const char tag[2]);
+
+    // int32_t bam_aux2i(const uint8_t *s);
+    // float bam_aux2f(const uint8_t *s);
+    #define bam_aux2d(s) (bam_aux2f((s)))
+    // char bam_aux2A(const uint8_t *s);
+    // char *bam_aux2Z(const uint8_t *s);
+
+    // int bam_aux_del(bam1_t *b, uint8_t *s);
+    // void bam_aux_append(bam1_t *b, const char tag[2], char type, int len, uint8_t *data);
+    static inline uint8_t *bam_aux_get_core(bam1_t *b, const char tag[2]) { return bam_aux_get(b, tag); } // an alias of bam_aux_get()
+
+
+    /*****************
+     * Miscellaneous *
+     *****************/
+
+    /*!
+      @abstract Calculate the rightmost coordinate of an alignment on the
+      reference genome.
+
+      @param  c      pointer to the bam1_core_t structure
+      @param  cigar  the corresponding CIGAR array (from bam1_t::cigar)
+      @return        the rightmost coordinate, 0-based
+    */
+    static inline uint32_t bam_calend(const bam1_core_t *c, const uint32_t *cigar) { return c->pos + (c->n_cigar? bam_cigar2rlen(c->n_cigar, cigar) : 1); }
+
+    /*!
+      @abstract      Calculate the length of the query sequence from CIGAR.
+      @param  c      pointer to the bam1_core_t structure
+      @param  cigar  the corresponding CIGAR array (from bam1_t::cigar)
+      @return        length of the query sequence
+    */
+    static inline int32_t samtools_bam_cigar2qlen(const bam1_core_t *c, const uint32_t *cigar) { return bam_cigar2qlen(c->n_cigar, cigar); }
+    #undef  bam_cigar2qlen
+    #define bam_cigar2qlen samtools_bam_cigar2qlen
 
 #ifdef __cplusplus
 }
@@ -557,7 +557,7 @@ extern "C" {
  */
 static inline int bam_reg2bin(uint32_t beg, uint32_t end)
 {
-	return hts_reg2bin(beg, end, 14, 5);
+    return hts_reg2bin(beg, end, 14, 5);
 }
 
 /*!

@@ -34,7 +34,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 static void error(const char *format, ...)
 {
-    if ( format ) 
+    if ( format )
     {
         va_list ap;
         va_start(ap, format);
@@ -58,14 +58,14 @@ int faidx_main(int argc, char *argv[])
     {
         switch(c)
         {
-            case 'h': 
+            case 'h':
             default:
                 error(NULL);
         }
     }
-	if ( argc==optind )
+    if ( argc==optind )
         error(NULL);
-	if ( argc==2 ) 
+    if ( argc==2 )
     {
         fai_build(argv[optind]);
         return 0;
@@ -80,9 +80,9 @@ int faidx_main(int argc, char *argv[])
         int i, j, seq_len;
         char *seq = fai_fetch(fai, argv[optind], &seq_len);
         if ( seq_len < 0 ) error("Failed to fetch sequence in %s\n", argv[optind]);
-        for (i=0; i<seq_len; i+=60) 
+        for (i=0; i<seq_len; i+=60)
         {
-            for (j=0; j<60 && i+j<seq_len; j++) 
+            for (j=0; j<60 && i+j<seq_len; j++)
                 putchar(seq[i+j]);
             putchar('\n');
         }
@@ -90,6 +90,6 @@ int faidx_main(int argc, char *argv[])
     }
     fai_destroy(fai);
 
-	return 0;
+    return 0;
 }
 

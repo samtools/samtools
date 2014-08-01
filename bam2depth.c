@@ -38,10 +38,10 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 
 typedef struct {     // auxiliary data structure
-	samFile *fp;     // the file handle
-	bam_hdr_t *hdr;  // the file header
-	hts_itr_t *iter; // NULL if a region not specified
-	int min_mapQ, min_len; // mapQ filter; length filter
+    samFile *fp;     // the file handle
+    bam_hdr_t *hdr;  // the file header
+    hts_itr_t *iter; // NULL if a region not specified
+    int min_mapQ, min_len; // mapQ filter; length filter
 } aux_t;
 
 void *bed_read(const char *fn); // read a BED or position list file
@@ -51,7 +51,7 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end); // test if c
 // This function reads a BAM alignment from one BAM file.
 static int read_bam(void *data, bam1_t *b) // read level filters better go here to avoid pileup
 {
-	aux_t *aux = (aux_t*)data; // data in fact is a pointer to an auxiliary structure
+    aux_t *aux = (aux_t*)data; // data in fact is a pointer to an auxiliary structure
     int ret;
     while (1)
     {
@@ -62,37 +62,37 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
         if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
         break;
     }
-	return ret;
+    return ret;
 }
 
 int read_file_list(const char *file_list,int *n,char **argv[]);
 
 int main_depth(int argc, char *argv[])
 {
-	int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, status = EXIT_SUCCESS, nfiles;
-	const bam_pileup1_t **plp;
-	char *reg = 0; // specified region
-	void *bed = 0; // BED data structure
+    int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, status = EXIT_SUCCESS, nfiles;
+    const bam_pileup1_t **plp;
+    char *reg = 0; // specified region
+    void *bed = 0; // BED data structure
     char *file_list = NULL, **fn = NULL;
-	bam_hdr_t *h = NULL; // BAM header of the 1st input
-	aux_t **data;
-	bam_mplp_t mplp;
+    bam_hdr_t *h = NULL; // BAM header of the 1st input
+    aux_t **data;
+    bam_mplp_t mplp;
 
-	// parse the command line
-	while ((n = getopt(argc, argv, "r:b:q:Q:l:f:")) >= 0) {
-		switch (n) {
-			case 'l': min_len = atoi(optarg); break; // minimum query length
-			case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
-			case 'b':
-				bed = bed_read(optarg); // BED or position list file can be parsed now
-				if (!bed) { print_error_errno("Could not read file \"%s\"", optarg); return 1; }
-				break;
-			case 'q': baseQ = atoi(optarg); break;   // base quality threshold
-			case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
-			case 'f': file_list = optarg; break;
-		}
-	}
-	if (optind == argc && !file_list) {
+    // parse the command line
+    while ((n = getopt(argc, argv, "r:b:q:Q:l:f:")) >= 0) {
+        switch (n) {
+            case 'l': min_len = atoi(optarg); break; // minimum query length
+            case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
+            case 'b':
+                bed = bed_read(optarg); // BED or position list file can be parsed now
+                if (!bed) { print_error_errno("Could not read file \"%s\"", optarg); return 1; }
+                break;
+            case 'q': baseQ = atoi(optarg); break;   // base quality threshold
+            case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
+            case 'f': file_list = optarg; break;
+        }
+    }
+    if (optind == argc && !file_list) {
         fprintf(stderr, "\n");
         fprintf(stderr, "Usage: samtools depth [options] in1.bam [in2.bam [...]]\n");
         fprintf(stderr, "Options:\n");
@@ -103,11 +103,11 @@ int main_depth(int argc, char *argv[])
         fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
         fprintf(stderr, "   -r <chr:from-to>    region\n");
         fprintf(stderr, "\n");
-		return 1;
-	}
+        return 1;
+    }
 
-	// initialize the auxiliary data structures
-    if (file_list) 
+    // initialize the auxiliary data structures
+    if (file_list)
     {
         if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
         n = nfiles;
@@ -116,84 +116,84 @@ int main_depth(int argc, char *argv[])
     }
     else
         n = argc - optind; // the number of BAMs on the command line
-	data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
-	beg = 0; end = 1<<30;  // set the default region
-	for (i = 0; i < n; ++i) {
-		data[i] = calloc(1, sizeof(aux_t));
-		data[i]->fp = sam_open(argv[optind+i], "r"); // open BAM
-		if (data[i]->fp == NULL) {
-			print_error_errno("Could not open \"%s\"", argv[optind+i]);
-			status = EXIT_FAILURE;
-			goto depth_end;
-		}
-		data[i]->min_mapQ = mapQ;                    // set the mapQ filter
-		data[i]->min_len  = min_len;                 // set the qlen filter
-		data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
-		if (reg) { // if a region is specified
-			hts_idx_t *idx = sam_index_load(data[i]->fp, argv[optind+i]);  // load the index
-			if (idx == NULL) {
-				print_error("can't load index for \"%s\"", argv[optind+i]);
-				status = EXIT_FAILURE;
-				goto depth_end;
-			}
-			data[i]->iter = sam_itr_querys(idx, data[i]->hdr, reg); // set the iterator
-			hts_idx_destroy(idx); // the index is not needed any more; free the memory
-			if (data[i]->iter == NULL) {
-				print_error("can't parse region \"%s\"", reg);
-				status = EXIT_FAILURE;
-				goto depth_end;
-			}
-		}
-	}
+    data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
+    beg = 0; end = 1<<30;  // set the default region
+    for (i = 0; i < n; ++i) {
+        data[i] = calloc(1, sizeof(aux_t));
+        data[i]->fp = sam_open(argv[optind+i], "r"); // open BAM
+        if (data[i]->fp == NULL) {
+            print_error_errno("Could not open \"%s\"", argv[optind+i]);
+            status = EXIT_FAILURE;
+            goto depth_end;
+        }
+        data[i]->min_mapQ = mapQ;                    // set the mapQ filter
+        data[i]->min_len  = min_len;                 // set the qlen filter
+        data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
+        if (reg) { // if a region is specified
+            hts_idx_t *idx = sam_index_load(data[i]->fp, argv[optind+i]);  // load the index
+            if (idx == NULL) {
+                print_error("can't load index for \"%s\"", argv[optind+i]);
+                status = EXIT_FAILURE;
+                goto depth_end;
+            }
+            data[i]->iter = sam_itr_querys(idx, data[i]->hdr, reg); // set the iterator
+            hts_idx_destroy(idx); // the index is not needed any more; free the memory
+            if (data[i]->iter == NULL) {
+                print_error("can't parse region \"%s\"", reg);
+                status = EXIT_FAILURE;
+                goto depth_end;
+            }
+        }
+    }
 
-	h = data[0]->hdr; // easy access to the header of the 1st BAM
-	if (reg) {
-		beg = data[0]->iter->beg; // and to the parsed region coordinates
-		end = data[0]->iter->end;
-	}
+    h = data[0]->hdr; // easy access to the header of the 1st BAM
+    if (reg) {
+        beg = data[0]->iter->beg; // and to the parsed region coordinates
+        end = data[0]->iter->end;
+    }
 
-	// the core multi-pileup loop
-	mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
-	n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
-	plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
-	while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0) { // come to the next covered position
-		if (pos < beg || pos >= end) continue; // out of range; skip
-		if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue; // not in BED; skip
-		fputs(h->target_name[tid], stdout); printf("\t%d", pos+1); // a customized printf() would be faster
-		for (i = 0; i < n; ++i) { // base level filters have to go here
-			int j, m = 0;
-			for (j = 0; j < n_plp[i]; ++j) {
-				const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
-				if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
-				else if (bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
-			}
-			printf("\t%d", n_plp[i] - m); // this the depth to output
-		}
-		putchar('\n');
-	}
-	free(n_plp); free(plp);
-	bam_mplp_destroy(mplp);
+    // the core multi-pileup loop
+    mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
+    n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
+    plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
+    while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0) { // come to the next covered position
+        if (pos < beg || pos >= end) continue; // out of range; skip
+        if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue; // not in BED; skip
+        fputs(h->target_name[tid], stdout); printf("\t%d", pos+1); // a customized printf() would be faster
+        for (i = 0; i < n; ++i) { // base level filters have to go here
+            int j, m = 0;
+            for (j = 0; j < n_plp[i]; ++j) {
+                const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
+                if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
+                else if (bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
+            }
+            printf("\t%d", n_plp[i] - m); // this the depth to output
+        }
+        putchar('\n');
+    }
+    free(n_plp); free(plp);
+    bam_mplp_destroy(mplp);
 
 depth_end:
-	for (i = 0; i < n && data[i]; ++i) {
-		bam_hdr_destroy(data[i]->hdr);
-		sam_close(data[i]->fp);
-		if (data[i]->iter) hts_itr_destroy(data[i]->iter);
-		free(data[i]);
-	}
-	free(data); free(reg);
-	if (bed) bed_destroy(bed);
+    for (i = 0; i < n && data[i]; ++i) {
+        bam_hdr_destroy(data[i]->hdr);
+        sam_close(data[i]->fp);
+        if (data[i]->iter) hts_itr_destroy(data[i]->iter);
+        free(data[i]);
+    }
+    free(data); free(reg);
+    if (bed) bed_destroy(bed);
     if ( file_list )
     {
         for (i=0; i<n; i++) free(fn[i]);
         free(fn);
     }
-	return status;
+    return status;
 }
 
 #ifdef _MAIN_BAM2DEPTH
 int main(int argc, char *argv[])
 {
-	return main_depth(argc, argv);
+    return main_depth(argc, argv);
 }
 #endif

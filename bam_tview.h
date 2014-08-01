@@ -43,19 +43,19 @@ KHASH_MAP_INIT_STR(kh_rg, const char *)
 
 /* Holds state of Tview */
 typedef struct AbstractTview {
-	int mrow, mcol;
-	
-	hts_idx_t* idx;
-	bam_lplbuf_t* lplbuf;
-	bam_hdr_t* header;
-	samFile* fp;
-	int curr_tid, left_pos;
-	faidx_t* fai;
-	bcf_callaux_t* bca;
+    int mrow, mcol;
 
-	int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip, show_name;
-	char *ref;
-	/* maps @RG ID => SM (sample), in practice only used to determine whether a particular RG is in the list of allowed ones */
+    hts_idx_t* idx;
+    bam_lplbuf_t* lplbuf;
+    bam_hdr_t* header;
+    samFile* fp;
+    int curr_tid, left_pos;
+    faidx_t* fai;
+    bcf_callaux_t* bca;
+
+    int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip, show_name;
+    char *ref;
+    /* maps @RG ID => SM (sample), in practice only used to determine whether a particular RG is in the list of allowed ones */
     khash_t(kh_rg) *rg_hash;
     /* callbacks */
     void (*my_destroy)(struct AbstractTview* );
@@ -94,10 +94,10 @@ void base_tv_destroy(tview_t*);
 int base_draw_aln(tview_t *tv, int tid, int pos);
 
 typedef struct Tixel
-	{
-	int ch;
-	int attributes;
-	}tixel_t;
+    {
+    int ch;
+    int attributes;
+    }tixel_t;
 
 #endif
 

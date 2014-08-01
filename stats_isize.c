@@ -86,7 +86,7 @@ static void sparse_set_f(isize_data_t data, int at, isize_insert_t field, uint64
         if (rec != NULL) {
             rec->isize_inward = 0;
             rec->isize_outward = 0;
-            rec->isize_other = 0;     
+            rec->isize_other = 0;
             int stupid = 0;
             khint_t it = kh_put(m32, h, at, & stupid);
             kh_value(h, it) = rec;

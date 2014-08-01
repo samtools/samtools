@@ -26,18 +26,18 @@ CPPFLAGS = $(DFLAGS) $(INCLUDES)
 CFLAGS   = -g -Wall -O2
 LDFLAGS  =
 LDLIBS   =
-DFLAGS=		-D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
-LOBJS=		bam_aux.o bam.o bam_import.o sam.o \
-			sam_header.o bam_plbuf.o
-AOBJS=		bam_index.o bam_plcmd.o sam_view.o \
-			bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o kprobaln.o \
-			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
-			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
-			cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-			faidx.o stats.o stats_isize.o bam_flags.o bam_split.o \
-			bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
-INCLUDES=	-I. -I$(HTSDIR)
-LIBCURSES=	-lcurses # -lXCurses
+DFLAGS=     -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
+LOBJS=      bam_aux.o bam.o bam_import.o sam.o \
+            sam_header.o bam_plbuf.o
+AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
+            bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o kprobaln.o \
+            bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
+            bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
+            cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
+            faidx.o stats.o stats_isize.o bam_flags.o bam_split.o \
+            bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
+INCLUDES=   -I. -I$(HTSDIR)
+LIBCURSES=  -lcurses # -lXCurses
 
 prefix      = /usr/local
 exec_prefix = $(prefix)
