@@ -758,7 +758,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     }
     bam_hdr_destroy(hout);
     sam_close(fpout);
-    fclose(trace_fp);
+    if(trace_file != NULL){
+        fclose(trace_fp);
+    }
     free(translation_tbl); free(fp); free(heap); free(iter);
     return 0;
 }
