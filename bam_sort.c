@@ -789,7 +789,7 @@ static void merge_usage(FILE *to)
     fprintf(to, "         -c       combine RG tags with colliding IDs rather than amending them\n");
     fprintf(to, "         -p       combine PG tags with colliding IDs rather than amending them\n");
     fprintf(to, "         -s VALUE override random seed\n");
-    fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n\n");
+    fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n");
     fprintf(to, "         -t FILE  output list of RG ID and their transformations [null]\n\n");
 }
 
