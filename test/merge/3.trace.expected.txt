@@ -1,0 +1,9 @@
+/dat/test_input_1_b.bam	fish PG:llama	fish PG:llama
+/dat/test_input_1_b.bam	cow	cow
+/dat/test_input_1_b.bam	colt	colt
+/dat/test_input_1_c.bam	fish	fish
+/dat/test_input_1_c.bam	cow	cow-55424A4
+/dat/test_input_1_c.bam	colt	colt-3A2CCEF5
+/dat/test_input_1_a.bam	fish	fish-4861F4EF
+/dat/test_input_1_a.bam	cow	cow-39E5EF
+/dat/test_input_1_a.bam	colt	colt-1802EEEC

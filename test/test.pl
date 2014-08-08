@@ -2164,7 +2164,14 @@ sub test_merge
         print $tmpfile_fh "$$opts{path}/$_";
     }
     close($tmpfile_fh);
-    test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge -s 1 -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam");
+    test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge -s 1 -b $tmpfile_filename -t $$opts{path}/merge/3.trace.txt - $$opts{path}/dat/test_input_1_a.bam");
+
+    # Test RG ID trace output from merge 3
+    # First remove the unknown data path from the start of each output line in trace
+    system("sed -i 's,$$opts{path},,' $$opts{path}/merge/3.trace.txt");
+    test_cmd($opts,out=>'merge/3.trace.expected.txt', cmd=>"cat $$opts{path}/merge/3.trace.txt");
+    system("rm $$opts{path}/merge/3.trace.txt");
+
 }
 
 sub test_fixmate
