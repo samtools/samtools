@@ -776,7 +776,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 
 static void merge_usage(FILE *to)
 {
-    fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] [-t <trace.o>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
+    fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] [-t <trace.txt>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
     fprintf(to, "Options: -n       sort by read names\n");
     fprintf(to, "         -r       attach RG tag (inferred from file names)\n");
     fprintf(to, "         -u       uncompressed BAM output\n");
