@@ -228,7 +228,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     *text_in_out = output;
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, FILE *trace_fp)
 {
     // No need to translate header into itself
     if (out == translate) { merge_rg = merge_pg = true; }
@@ -607,8 +607,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         sam_close(fpheaders);
     }
 
+    FILE *trace_fp = NULL;
     if (trace_file) {
-        FILE *trace_fp = fopen(trace_file, "wb");
+        trace_fp = fopen(trace_file, "wb");
         if (trace_fp == NULL) {
             const char *message = strerror(errno);
             fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", trace_file, message);
@@ -650,7 +651,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
         hin = sam_hdr_read(fp[i]);
         if (hout == NULL) hout = hin;
-        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
+        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, trace_fp);
         if (hin != hout) bam_hdr_destroy(hin);
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
@@ -754,6 +755,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     }
     bam_hdr_destroy(hout);
     sam_close(fpout);
+    fclose(trace_fp);
     free(translation_tbl); free(fp); free(heap); free(iter);
     return 0;
 }
