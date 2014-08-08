@@ -228,7 +228,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     *text_in_out = output;
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, const char *curr_fn, FILE *trace_fp)
 {
     // No need to translate header into itself
     if (out == translate) { merge_rg = merge_pg = true; }
@@ -322,6 +322,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             // It's in there so we need to transform it by appending random number to id
             ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
             transformed_equals_match = false;
+        }
+        if(trace_fp != NULL){
+            fprintf(trace_fp, "%s\t%s\t%s\n", curr_fn, match_id.s, transformed_id.s);
         }
         regfree(&rg_id_search);
 
@@ -579,10 +582,12 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
   @param  flag        flags that control how the merge is undertaken
   @param  reg         region to merge
   @param  n_threads   number of threads to use (passed to htslib)
+  @param  trace_file  path to output a file tracing all input RG ID fields to
+                      their corresponding RG ID output in merged BAM [null]
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-int bam_merge_core2(int by_qname, const char *out, const char *mode, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads)
+int bam_merge_core2(int by_qname, const char *out, const char *mode, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads, const char *trace_file)
 {
     samFile *fpout, **fp;
     heap1_t *heap;
@@ -603,6 +608,16 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
         hout = sam_hdr_read(fpheaders);
         sam_close(fpheaders);
+    }
+
+    FILE *trace_fp = NULL;
+    if (trace_file) {
+        trace_fp = fopen(trace_file, "wb");
+        if (trace_fp == NULL) {
+            const char *message = strerror(errno);
+            fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", trace_file, message);
+            return -1;
+        }
     }
 
     g_is_by_qname = by_qname;
@@ -639,7 +654,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
         hin = sam_hdr_read(fp[i]);
         if (hout == NULL) hout = hin;
-        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
+        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, fn[i], trace_fp);
         if (hin != hout) bam_hdr_destroy(hin);
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
@@ -743,22 +758,25 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     }
     bam_hdr_destroy(hout);
     sam_close(fpout);
+    if(trace_file != NULL){
+        fclose(trace_fp);
+    }
     free(translation_tbl); free(fp); free(heap); free(iter);
     return 0;
 }
 
-int bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg)
+int bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg, const char *trace_file)
 {
     char mode[12];
     strcpy(mode, "wb");
     if (flag & MERGE_UNCOMP) strcat(mode, "0");
     else if (flag & MERGE_LEVEL1) strcat(mode, "1");
-    return bam_merge_core2(by_qname, out, mode, headers, n, fn, flag, reg, 0);
+    return bam_merge_core2(by_qname, out, mode, headers, n, fn, flag, reg, 0, trace_file);
 }
 
 static void merge_usage(FILE *to)
 {
-    fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
+    fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] [-t <trace.o>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
     fprintf(to, "Options: -n       sort by read names\n");
     fprintf(to, "         -r       attach RG tag (inferred from file names)\n");
     fprintf(to, "         -u       uncompressed BAM output\n");
@@ -772,12 +790,13 @@ static void merge_usage(FILE *to)
     fprintf(to, "         -p       combine PG tags with colliding IDs rather than amending them\n");
     fprintf(to, "         -s VALUE override random seed\n");
     fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n\n");
+    fprintf(to, "         -t FILE  output list of RG ID and their transformations [null]\n\n");
 }
 
 int bam_merge(int argc, char *argv[])
 {
     int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
-    char *fn_headers = NULL, *reg = NULL, mode[12];
+    char *fn_headers = NULL, *trace_file = NULL, *reg = NULL, mode[12];
     long random_seed = (long)time(NULL);
     char** fn = NULL;
     int fn_size = 0;
@@ -787,7 +806,7 @@ int bam_merge(int argc, char *argv[])
         return 0;
     }
 
-    while ((c = getopt(argc, argv, "h:nru1R:f@:l:cps:b:")) >= 0) {
+    while ((c = getopt(argc, argv, "h:nru1R:f@:l:cps:b:t:")) >= 0) {
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
@@ -801,6 +820,7 @@ int bam_merge(int argc, char *argv[])
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
         case 's': random_seed = atol(optarg); break;
+        case 't': trace_file = strdup(optarg); break;
         case 'b': {
             // load the list of files to read
             int nfiles;
@@ -850,7 +870,7 @@ int bam_merge(int argc, char *argv[])
     }
     strcpy(mode, "wb");
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
-    if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads) < 0) ret = 1;
+    if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, trace_file) < 0) ret = 1;
 end:
     if (fn_size > 0) {
         int i;
@@ -859,6 +879,7 @@ end:
     }
     free(reg);
     free(fn_headers);
+    free(trace_file);
     return ret;
 }
 
@@ -1052,7 +1073,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
             fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
             sprintf(fns[i], "%s.%.4d.bam", prefix, i);
         }
-        if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns, MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads) < 0) {
+        if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns, MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads, NULL) < 0) {
             // Propagate bam_merge_core2() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             return -1;
