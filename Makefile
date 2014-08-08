@@ -45,9 +45,11 @@ bindir      = $(exec_prefix)/bin
 mandir      = $(prefix)/share/man
 man1dir     = $(mandir)/man1
 
+MKDIR_P = mkdir -p
 INSTALL = install -p
 INSTALL_PROGRAM = $(INSTALL)
 INSTALL_DATA    = $(INSTALL) -m 644
+INSTALL_DIR     = $(MKDIR_P) -m 755
 
 
 PROGRAMS = samtools
@@ -259,7 +261,7 @@ misc/md5sum-lite.o: misc/md5.c misc/md5.h
 
 
 install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
-	mkdir -p $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
+	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
 	$(INSTALL_PROGRAM) $(PROGRAMS) $(MISC_PROGRAMS) $(DESTDIR)$(bindir)
 	$(INSTALL_DATA) samtools.1 $(DESTDIR)$(man1dir)
 
