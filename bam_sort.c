@@ -612,7 +612,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
 
     FILE *trace_fp = NULL;
     if (trace_file) {
-        trace_fp = fopen(trace_file, "wb");
+        trace_fp = fopen(trace_file, "w");
         if (trace_fp == NULL) {
             const char *message = strerror(errno);
             fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", trace_file, message);
