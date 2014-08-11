@@ -131,7 +131,7 @@ sub parse_params
                 'reads mapped:',
                 'reads mapped and paired:',
                 'reads unmapped:',
-                'reads properly paired:',
+                'reads paired:',
                 'reads paired:',
                 'reads duplicated:',
                 'reads MQ0:',
@@ -553,7 +553,7 @@ sub plot_qualities
     if ( !@ffq ) { return; }
 
     my $yrange = @{$ffq[0]} > 50 ? @{$ffq[0]} : 50;
-    my $is_paired = get_value($opts,'SN','reads properly paired:');
+    my $is_paired = get_value($opts,'SN','reads paired:');
     
     # Average quality per cycle, forward and reverse reads in one plot 
     my $args = get_defaults($opts,"$$opts{prefix}quals.png");
@@ -824,7 +824,7 @@ sub plot_gc
 {
     my ($opts) = @_;
 
-    my $is_paired = get_value($opts,'SN','reads properly paired:');
+    my $is_paired = get_value($opts,'SN','reads paired:');
     my $args = get_defaults($opts,"$$opts{prefix}gc-content.png");
     my $fh = $$args{fh};
     my ($gcl_max,$gcf_max,$lmax,$fmax);
@@ -919,7 +919,7 @@ sub plot_isize
 {
     my ($opts) = @_;
 
-    my $is_paired = get_value($opts,'SN','reads properly paired:');
+    my $is_paired = get_value($opts,'SN','reads paired:');
     my @isizes = get_values($opts, 'IS');
     if ( !$is_paired or !@isizes ) { return; }
 
@@ -1100,7 +1100,7 @@ sub plot_indel_cycles
     my @indels = get_values($opts, 'IC');
     if ( !@indels ) { return; }
 
-    my $is_paired = get_value($opts,'SN','reads properly paired:');
+    my $is_paired = get_value($opts,'SN','reads paired:');
 
     my $args = get_defaults($opts,"$$opts{prefix}indel-cycles.png");
     my $fh = $$args{fh};
@@ -1301,7 +1301,7 @@ sub create_html
     my $reads_dup        = get_value($opts,'SN','reads duplicated:');
     my $percent_dup      = sprintf "(%.1f%%)", $reads_dup * 100. / ($reads_total - $reads_filtered);
     my $reads_mq0        = get_value($opts,'SN','reads MQ0:');
-    my $percent_mq0      = sprintf "(%.1f%%)", $reads_mq0 * 100. / $reads_mapped;
+    my $percent_mq0      = sprintf "(%.1f%%)", ($reads_mapped ? $reads_mq0 * 100. / $reads_mapped : 0);
     my $reads_nonprim    = get_value($opts,'SN','non-primary alignments:');
     my $read_avglen      = get_value($opts,'SN','average length:');
     my $bases_total      = get_value($opts,'SN','total length:');
