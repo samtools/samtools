@@ -131,7 +131,7 @@ sub parse_params
                 'reads mapped:',
                 'reads mapped and paired:',
                 'reads unmapped:',
-                'reads paired:',
+                'reads properly paired:',
                 'reads paired:',
                 'reads duplicated:',
                 'reads MQ0:',
@@ -288,7 +288,7 @@ sub open_file
 {
     my ($file) = @_;
     my $fh;
-    if ( $file=~/.gz$/i ) { open($fh, "gunzip -c $file |") or error("gunzip -c $file: $!"); }
+    if ( $file=~/\.gz$/i ) { open($fh, "gunzip -c $file |") or error("gunzip -c $file: $!"); }
     else { open($fh,'<',$file) or error("$file: $!"); }
     return $fh;
 }
@@ -1204,7 +1204,19 @@ sub bignum
 sub create_html
 {
     my ($opts) = @_;
-    my $fname = ($$opts{prefix}=~m{/$}) ? "$$opts{prefix}index.html" : "$$opts{prefix}.html";
+    my ($fname,$prefix);
+    if ( $$opts{prefix}=~m{/$} )
+    {
+        $fname  = "$$opts{prefix}index.html";
+        $prefix = '';
+    }
+    else
+    {
+        $prefix = $$opts{prefix};
+        $prefix =~ s{^.*/}{};
+        $fname = $$opts{prefix};
+        $fname =~ s/-$/.html/;
+    }
     open(my $fh,'>',$fname) or error("$fname: $!");
     print $fh q[
         <html>
@@ -1288,7 +1300,7 @@ sub create_html
         if ( -e "$$opts{prefix}$imgs[$i].png" )
         {
             my $desc = $imgs{$imgs[$i]};
-            print $fh qq[<td><a class="thumbnail" href="$imgs[$i].png"><img src="$imgs[$i].png" width="150px"><span>$desc<br><img src="$imgs[$i].png"></span></a>\n];
+            print $fh qq[<td><a class="thumbnail" href="$prefix$imgs[$i].png"><img src="$prefix$imgs[$i].png" width="150px"><span>$desc<br><img src="$prefix$imgs[$i].png"></span></a>\n];
         }
         else { print $fh "<td>\n"; }
     }
