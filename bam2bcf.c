@@ -1,6 +1,7 @@
 #include <math.h>
 #include <stdint.h>
 #include <assert.h>
+#include <float.h>
 #include "bam.h"
 #include "kstring.h"
 #include "bam2bcf.h"
@@ -9,9 +10,7 @@
 
 extern	void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 
-#define CALL_ETA 0.03f
-#define CALL_MAX 256
-#define CALL_DEFTHETA 0.83f
+#define CALL_DEFTHETA 0.83
 #define DEF_MAPQ 20
 
 #define CAP_DIST 25
@@ -40,23 +39,21 @@ static int get_position(const bam_pileup1_t *p, int *len)
     int icig, n_tot_bases = 0, iread = 0, edist = p->qpos + 1;
     for (icig=0; icig<p->b->core.n_cigar; icig++) 
     {
-        // Conversion from uint32_t to MIDNSHP
-        //  0123456
-        //  MIDNSHP
         int cig  = bam1_cigar(p->b)[icig] & BAM_CIGAR_MASK;
         int ncig = bam1_cigar(p->b)[icig] >> BAM_CIGAR_SHIFT;
-        if ( cig==0 )
+        if ( cig==BAM_CMATCH )
         {
             n_tot_bases += ncig;
             iread += ncig;
         }
-        else if ( cig==1 )
+        else if ( cig==BAM_CINS )
         {
             n_tot_bases += ncig;
             iread += ncig;
         }
-        else if ( cig==4 )
+        else if ( cig==BAM_CSOFT_CLIP )
         {
+            // position with respect to the aligned part of the read
             iread += ncig;
             if ( iread<=p->qpos ) edist -= ncig;
         }
@@ -72,8 +69,22 @@ void bcf_call_destroy(bcf_callaux_t *bca)
     if (bca->npos) { free(bca->ref_pos); free(bca->alt_pos); bca->npos = 0; }
 	free(bca->bases); free(bca->inscns); free(bca);
 }
-/* ref_base is the 4-bit representation of the reference base. It is
- * negative if we are looking at an indel. */
+
+/*
+    Notes: 
+    - Called from bam_plcmd.c by mpileup. Amongst other things, sets the bcf_callret1_t.qsum frequencies
+        which are carried over via bcf_call_combine and bcf_call2bcf to the output BCF as the QS annotation.
+        Later it's used for multiallelic calling by bcftools -m
+    - ref_base is the 4-bit representation of the reference base. It is negative if we are looking at an indel. 
+ */
+/* 
+ * This function is called once for each sample.
+ * _n is number of pilesups pl contributing reads to this sample
+ * pl is pointer to array of _n pileups (one pileup per read)
+ * ref_base is the 4-bit representation of the reference base. It is negative if we are looking at an indel.
+ * bca is the settings to perform calls across all samples
+ * r is the returned value of the call
+ */
 int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t *bca, bcf_callret1_t *r)
 {
 	int i, n, ref4, is_indel, ori_depth = 0;
@@ -96,11 +107,12 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
 		// set base
 		if (p->is_del || p->is_refskip || (p->b->core.flag&BAM_FUNMAP)) continue;
 		++ori_depth;
+		mapQ  = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
+        if ( !mapQ ) r->mq0++;
 		baseQ = q = is_indel? p->aux&0xff : (int)bam1_qual(p->b)[p->qpos]; // base/indel quality
 		seqQ = is_indel? (p->aux>>8&0xff) : 99;
 		if (q < bca->min_baseQ) continue;
 		if (q > seqQ) q = seqQ;
-		mapQ = p->b->core.qual < 255? p->b->core.qual : DEF_MAPQ; // special case for mapQ==255
 		mapQ = mapQ < bca->capQ? mapQ : bca->capQ;
 		if (q > mapQ) q = mapQ;
 		if (q > 63) q = 63;
@@ -161,23 +173,11 @@ void calc_ReadPosBias(bcf_callaux_t *bca, bcf_call_t *call)
         bca->ref_pos[i] = 0;
         bca->alt_pos[i] = 0;
     }
-#if 0
-//todo
-    double var = 0, avg = (double)(nref+nalt)/bca->npos;
-    for (i=0; i<bca->npos; i++) 
-    {
-        double ediff = bca->ref_pos[i] + bca->alt_pos[i] - avg;
-        var += ediff*ediff;
-        bca->ref_pos[i] = 0;
-        bca->alt_pos[i] = 0;
-    }
-    call->read_pos.avg = avg;
-    call->read_pos.var = sqrt(var/bca->npos);
-    call->read_pos.dp  = nref+nalt;
-#endif
+
     if ( !nref || !nalt )
     {
-        call->read_pos_bias = -1;
+        // Missing values are hard to interpret by downstream filtering, therefore output unbiased result
+        call->read_pos_bias = 0;
         return;
     }
 
@@ -275,6 +275,36 @@ void calc_vdb(bcf_callaux_t *bca, bcf_call_t *call)
     call->vdb = mean_diff_to_prob(mean_diff, dp, bca->npos);
 }
 
+void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
+{
+    call->seg_bias = HUGE_VAL;
+    if ( !bcr ) return;
+
+    int nr = call->anno[2] + call->anno[3]; // number of observed non-reference reads
+    if ( !nr ) return;
+
+    int avg_dp = (call->anno[0] + call->anno[1] + nr) / call->n;    // average depth
+    double M   = (double)nr / avg_dp;   // an approximate number of variant alleles in the population
+    if ( M>call->n ) M = call->n;
+    double f = M / 2. / call->n;        // allele frequency
+    double p = nr / call->n;            // number of variant reads per sample expected if variant not real (poisson)
+    double q = nr / M;                  // number of variant reads per sample expected if variant is real (poisson)
+    double sum = 0;
+
+    int i;
+    for (i=0; i<call->n; i++)
+    {
+        int oi = bcr[i].anno[2] + bcr[i].anno[3];
+        if ( !oi )
+            sum += log(2*f*(1-f)*pow(q,oi)*exp(-q) + f*f*pow(2*q,oi)*exp(-2*q)) - log(pow(p,oi)) - p;
+        else
+            sum += log(2*f*(1-f)*exp(-q) + f*f*exp(-2*q) + (1-f)*(1-f)) - p;
+    }
+
+    // fprintf(stderr,"%.0f %.0f %.0f %.0f .. %e  (f=%e p=%e q=%e nr=%d)\n", call->anno[0],call->anno[1],call->anno[2],call->anno[3], sum,f,p,q, nr);
+    call->seg_bias = sum;
+}
+
 /**
  *  bcf_call_combine() - sets the PL array and VDB, RPB annotations, finds the top two alleles
  *  @n:         number of samples
@@ -282,6 +312,24 @@ void calc_vdb(bcf_callaux_t *bca, bcf_call_t *call)
  *  @bca:       auxiliary data structure for holding temporary values
  *  @ref_base:  the reference base
  *  @call:      filled with the annotations
+ *
+ *  Combines calls across the various samples being studied
+ *  1. For each allele at each base across all samples the quality is summed so
+ *     you end up with a set of quality sums for each allele present 2. The quality
+ *     sums are sorted.
+ *  3. Using the sorted quality sums we now create the allele ordering array
+ *     A\subN. This is done by doing the following: 
+ *     a) If the reference allele is known it always comes first, otherwise N
+ *        comes first.  
+ *     b) Then the rest of the alleles are output in descending order of quality
+ *        sum (which we already know the qsum array was sorted).  Any allelles with
+ *        qsum 0 will be excluded.
+ *  4. Using the allele ordering array we create the genotype ordering array.
+ *     In the worst case with an unknown reference this will be:  A0/A0 A1/A0 A1/A1
+ *     A2/A0 A2/A1 A2/A2 A3/A0 A3/A1 A3/A2 A3/A3 A4/A0 A4/A1 A4/A2 A4/A3 A4/A4 
+ *  5. The genotype ordering array is then used to extract data from the error
+ *     model 5*5 matrix and is used to produce a Phread likelihood array for each
+ *     sample.
  */
 int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int ref_base /*4-bit*/, bcf_call_t *call)
 {
@@ -292,10 +340,12 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		if (ref4 > 4) ref4 = 4;
 	} else call->ori_ref = -1, ref4 = 0;
 	// calculate qsum
+	// this is done by calculating combined qsum across all samples
 	memset(qsum, 0, 4 * sizeof(int));
 	for (i = 0; i < n; ++i)
 		for (j = 0; j < 4; ++j)
 			qsum[j] += calls[i].qsum[j];
+	// then encoding the base in the first two bits
     int qsum_tot=0;
     for (j=0; j<4; j++) { qsum_tot += qsum[j]; call->qsum[j] = 0; }
 	for (j = 0; j < 4; ++j) qsum[j] = qsum[j] << 2 | j;
@@ -303,7 +353,11 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 	for (i = 1; i < 4; ++i) // insertion sort
 		for (j = i; j > 0 && qsum[j] < qsum[j-1]; --j)
 			tmp = qsum[j], qsum[j] = qsum[j-1], qsum[j-1] = tmp;
-	// set the reference allele and alternative allele(s)
+
+
+	// Set the reference allele and alternative allele(s)
+
+	// Clear the allele list
 	for (i = 0; i < 5; ++i) call->a[i] = -1;
 	call->unseen = -1;
 	call->a[0] = ref4;
@@ -317,7 +371,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 			else break;
 		}
         else 
-            call->qsum[0] = (float)(qsum[i]>>2)/qsum_tot;
+            call->qsum[0] = qsum_tot ? (float)(qsum[i]>>2)/qsum_tot : 0;
 	}
 	if (ref_base >= 0) { // for SNPs, find the "unseen" base
 		if (((ref4 < 4 && j < 4) || (ref4 == 4 && j < 5)) && i >= 0)
@@ -327,7 +381,15 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		call->n_alleles = j;
 		if (call->n_alleles == 1) return -1; // no reliable supporting read. stop doing anything
 	}
-	// set the PL array
+	/*
+     * Set the phread likelihood array (call->PL) This array is 15 entries long
+     * for each sample because that is size of an upper or lower triangle of a
+     * worst case 5x5 matrix of possible genotypes. This worst case matrix will
+     * occur when all 4 possible alleles are present and the reference allele
+     * is unknown.  The sides of the matrix will correspond to the reference
+     * allele (if known) followed by the alleles present in descending order of
+     * quality sum
+	 */
 	if (call->n < n) {
 		call->n = n;
 		call->PL = realloc(call->PL, 15 * n);
@@ -337,15 +399,20 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		double sum_min = 0.;
 		x = call->n_alleles * (call->n_alleles + 1) / 2;
 		// get the possible genotypes
-		for (i = z = 0; i < call->n_alleles; ++i)
-			for (j = 0; j <= i; ++j)
+		// this is done by creating an ordered list of locations g for call (allele a, allele b) in the genotype likelihood matrix
+		for (i = z = 0; i < call->n_alleles; ++i) {
+			for (j = 0; j <= i; ++j) {
 				g[z++] = call->a[j] * 5 + call->a[i];
+			}
+		}
+		// for each sample calculate the PL
 		for (i = 0; i < n; ++i) {
 			uint8_t *PL = call->PL + x * i;
 			const bcf_callret1_t *r = calls + i;
-			float min = 1e37;
-			for (j = 0; j < x; ++j)
+			float min = FLT_MAX;
+			for (j = 0; j < x; ++j) {
 				if (min > r->p[g[j]]) min = r->p[g[j]];
+			}
 			sum_min += min;
 			for (j = 0; j < x; ++j) {
 				int y;
@@ -358,15 +425,20 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
 		call->shift = (int)(sum_min + .499);
 	}
 	// combine annotations
-	memset(call->anno, 0, 16 * sizeof(int));
-	for (i = call->depth = call->ori_depth = 0, tmp = 0; i < n; ++i) {
+	memset(call->anno, 0, 16 * sizeof(double));
+    call->ori_depth = 0;
+    call->depth     = 0;
+    call->mq0       = 0;
+	for (i = 0; i < n; ++i) {
 		call->depth += calls[i].depth;
 		call->ori_depth += calls[i].ori_depth;
+        call->mq0 += calls[i].mq0;
 		for (j = 0; j < 16; ++j) call->anno[j] += calls[i].anno[j];
 	}
 
     calc_vdb(bca, call);
     calc_ReadPosBias(bca, call);
+    calc_SegBias(calls, call);
 
 	return 0;
 }
@@ -415,18 +487,21 @@ int bcf_call2bcf(int tid, int pos, bcf_call_t *bc, bcf1_t *b, bcf_callret1_t *bc
 	}
 	kputc('\0', &s);
 	// INFO
-	if (bc->ori_ref < 0) ksprintf(&s,"INDEL;IS=%d,%f;", bca->max_support, bca->max_frac);
+	if (bc->ori_ref < 0) ksprintf(&s,"INDEL;IDV=%d;IMF=%f;", bca->max_support, bca->max_frac);
 	kputs("DP=", &s); kputw(bc->ori_depth, &s); kputs(";I16=", &s);
 	for (i = 0; i < 16; ++i) {
 		if (i) kputc(',', &s);
-		kputw(bc->anno[i], &s);
+        ksprintf(&s,"%.0f",bc->anno[i]);
+		//kputw(bc->anno[i], &s);
 	}
-    //ksprintf(&s,";RPS=%d,%f,%f", bc->read_pos.dp,bc->read_pos.avg,bc->read_pos.var);
     ksprintf(&s,";QS=%f,%f,%f,%f", bc->qsum[0],bc->qsum[1],bc->qsum[2],bc->qsum[3]);
     if (bc->vdb != -1)
         ksprintf(&s, ";VDB=%e", bc->vdb);
     if (bc->read_pos_bias != -1 )
         ksprintf(&s, ";RPB=%e", bc->read_pos_bias);
+    if (bc->seg_bias != HUGE_VAL )
+        ksprintf(&s, ";SGB=%e", bc->seg_bias);
+    kputs(";MQ0=", &s); kputw(bc->mq0, &s);
 	kputc('\0', &s);
 	// FMT
 	kputs("PL", &s);

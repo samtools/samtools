@@ -152,8 +152,8 @@ int main_samview(int argc, char *argv[])
 		case 'h': is_header = 1; break;
 		case 'H': is_header_only = 1; break;
 		case 'o': fn_out = strdup(optarg); break;
-		case 'f': g_flag_on = strtol(optarg, 0, 0); break;
-		case 'F': g_flag_off = strtol(optarg, 0, 0); break;
+		case 'f': g_flag_on |= strtol(optarg, 0, 0); break;
+		case 'F': g_flag_off |= strtol(optarg, 0, 0); break;
 		case 'q': g_min_mapQ = atoi(optarg); break;
 		case 'u': compress_level = 0; break;
 		case '1': compress_level = 1; break;

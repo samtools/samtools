@@ -1,5 +1,6 @@
 #include <ctype.h>
 #include <assert.h>
+#include <inttypes.h>
 #include "bam.h"
 #include "khash.h"
 #include "ksort.h"
@@ -154,10 +155,10 @@ bam_index_t *bam_index_core(bamFile fp)
 	bam_header_t *h;
 	int i, ret;
 	bam_index_t *idx;
-	uint32_t last_bin, save_bin;
+	uint32_t last_bin, save_bin, recalculated_bin;
 	int32_t last_coor, last_tid, save_tid;
 	bam1_core_t *c;
-	uint64_t save_off, last_off, n_mapped, n_unmapped, off_beg, off_end, n_no_coor;
+	uint64_t save_off, last_off, n_mapped, n_unmapped, n_wrong_bin, off_beg, off_end, n_no_coor;
 
 	h = bam_header_read(fp);
 	if(h == 0) {
@@ -170,14 +171,13 @@ bam_index_t *bam_index_core(bamFile fp)
 	c = &b->core;
 
 	idx->n = h->n_targets;
-	bam_header_destroy(h);
 	idx->index = (khash_t(i)**)calloc(idx->n, sizeof(void*));
 	for (i = 0; i < idx->n; ++i) idx->index[i] = kh_init(i);
 	idx->index2 = (bam_lidx_t*)calloc(idx->n, sizeof(bam_lidx_t));
 
 	save_bin = save_tid = last_tid = last_bin = 0xffffffffu;
 	save_off = last_off = bam_tell(fp); last_coor = 0xffffffffu;
-	n_mapped = n_unmapped = n_no_coor = off_end = 0;
+	n_mapped = n_unmapped = n_wrong_bin = n_no_coor = off_end = 0;
 	off_beg = off_end = bam_tell(fp);
 	while ((ret = bam_read1(fp, b)) >= 0) {
 		if (c->tid < 0) ++n_no_coor;
@@ -192,6 +192,16 @@ bam_index_t *bam_index_core(bamFile fp)
 			fprintf(stderr, "[bam_index_core] the alignment is not sorted (%s): %u > %u in %d-th chr\n",
 					bam1_qname(b), last_coor, c->pos, c->tid+1);
 			return NULL;
+		}
+		if (c->tid >= 0) {
+			int32_t endpos = (!(c->flag & BAM_FUNMAP) && c->n_cigar)? bam_calend(c, bam1_cigar(b)) : c->pos + 1;
+			recalculated_bin = bam_reg2bin(c->pos, endpos);
+			if (c->bin != recalculated_bin) {
+				n_wrong_bin++;
+				if (n_wrong_bin <= 10) fprintf(stderr, "[bam_index_core] read '%s' mapped to '%s' at POS %d to %d has BIN %d but should be %d\n",
+					bam1_qname(b), h->target_name[c->tid], c->pos + 1, endpos, c->bin, recalculated_bin);
+				c->bin = recalculated_bin;
+			}
 		}
 		if (c->tid >= 0 && !(c->flag & BAM_FUNMAP)) insert_offset2(&idx->index2[b->core.tid], b, last_off);
 		if (c->bin != last_bin) { // then possibly write the binning index
@@ -219,6 +229,7 @@ bam_index_t *bam_index_core(bamFile fp)
 		last_off = bam_tell(fp);
 		last_coor = b->core.pos;
 	}
+        bam_header_destroy(h);
 	if (save_tid >= 0) {
 		insert_offset(idx->index[save_tid], save_bin, save_off, bam_tell(fp));
 		insert_offset(idx->index[save_tid], BAM_MAX_BIN, off_beg, bam_tell(fp));
@@ -238,6 +249,7 @@ bam_index_t *bam_index_core(bamFile fp)
 	if (ret < -1) fprintf(stderr, "[bam_index_core] truncated file? Continue anyway. (%d)\n", ret);
 	free(b->data); free(b);
 	idx->n_no_coor = n_no_coor;
+	if (n_wrong_bin > 0) fprintf(stderr, "[bam_index_core] In total, there are %"PRIu64" reads with incorrect BIN fields\n[bam_index_core] Fix this by converting BAM->SAM->BAM to force BIN recalculation\n", n_wrong_bin);
 	return idx;
 }
 
@@ -335,7 +347,6 @@ static bam_index_t *bam_index_load_core(FILE *fp)
 	fread(magic, 1, 4, fp);
 	if (strncmp(magic, "BAI\1", 4)) {
 		fprintf(stderr, "[bam_index_load] wrong magic number.\n");
-		fclose(fp);
 		return 0;
 	}
 	idx = (bam_index_t*)calloc(1, sizeof(bam_index_t));	

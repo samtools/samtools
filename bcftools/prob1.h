@@ -3,8 +3,26 @@
 
 #include "bcf.h"
 
-struct __bcf_p1aux_t;
-typedef struct __bcf_p1aux_t bcf_p1aux_t;
+typedef struct {
+	int n; // Number of samples
+	int M; // Total number of chromosomes across all samples (n*2 if all samples are diploid)
+	int n1;
+	int is_indel;
+	uint8_t *ploidy; // haploid or diploid ONLY
+	double *q2p, *pdg; // q2p maps from phread scaled to real likelihood, pdg -> P(D|g)
+	double *phi; // Probability of seeing k reference alleles
+	double *phi_indel;
+	double *z, *zswap; // aux for afs
+	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
+	double **hg; // hypergeometric distribution
+	double *lf; // log factorial
+	double t, t1, t2;
+	double *afs, *afs1; // afs: accumulative allele frequency spectrum (AFS); afs1: site posterior distribution
+	const uint8_t *PL; // point to PL
+	int PL_len;
+    int cons_llr;       // pair and trio calling
+    int64_t cons_gt;
+} bcf_p1aux_t;
 
 typedef struct {
 	int rank0, perm_rank; // NB: perm_rank is always set to -1 by bcf_p1_cal()
@@ -16,6 +34,7 @@ typedef struct {
 
 typedef struct {
     double p[4];
+    double edb, mqb, bqb;   // end distance bias, mapQ bias, baseQ bias
     int mq, depth, is_tested, d[4];
 } anno16_t;
 
@@ -27,7 +46,7 @@ typedef struct {
 extern "C" {
 #endif
 
-	bcf_p1aux_t *bcf_p1_init(int n, uint8_t *ploidy);
+	bcf_p1aux_t *bcf_p1_init(int n_smpl, uint8_t *ploidy);
 	void bcf_p1_init_prior(bcf_p1aux_t *ma, int type, double theta);
 	void bcf_p1_init_subprior(bcf_p1aux_t *ma, int type, double theta);
 	void bcf_p1_destroy(bcf_p1aux_t *ma);

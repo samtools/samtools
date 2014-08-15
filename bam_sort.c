@@ -216,7 +216,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *headers, int n, c
 	else if (flag & MERGE_LEVEL1) level = 1;
 	strcpy(mode, "w");
 	if (level >= 0) sprintf(mode + 1, "%d", level < 9? level : 9);
-	if ((fpout = strcmp(out, "-")? bam_open(out, "w") : bam_dopen(fileno(stdout), "w")) == 0) {
+	if ((fpout = strcmp(out, "-")? bam_open(out, mode) : bam_dopen(fileno(stdout), mode)) == 0) {
 		fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
 		return -1;
 	}
@@ -431,25 +431,22 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 
   @param  is_by_qname whether to sort by query name
   @param  fn       name of the file to be sorted
-  @param  prefix   prefix of the output and the temporary files; upon
-	                   sucessess, prefix.bam will be written.
+  @param  prefix   prefix of the temporary files (prefix.NNNN.bam are written)
+  @param  fnout    name of the final output file to be written
   @param  max_mem  approxiate maximum memory (very inaccurate)
-  @param full_path the given output path is the full path and not just the prefix
+  @return 0 for successful sorting, negative on errors
 
   @discussion It may create multiple temporary subalignment files
   and then merge them by calling bam_merge_core(). This function is
   NOT thread safe.
  */
-void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size_t _max_mem, int is_stdout, int n_threads, int level, int full_path)
+int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const char *fnout, size_t _max_mem, int n_threads, int level)
 {
 	int ret, i, n_files = 0;
 	size_t mem, max_k, k, max_mem;
 	bam_header_t *header;
 	bamFile fp;
 	bam1_t *b, **buf;
-	char *fnout = 0;
-	char const *suffix = ".bam";
-	if (full_path) suffix += 4;
 
 	if (n_threads < 2) n_threads = 1;
 	g_is_by_qname = is_by_qname;
@@ -459,7 +456,7 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	fp = strcmp(fn, "-")? bam_open(fn, "r") : bam_dopen(fileno(stdin), "r");
 	if (fp == 0) {
 		fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
-		return;
+		return -1;
 	}
 	header = bam_header_read(fp);
 	if (is_by_qname) change_SO(header, "queryname");
@@ -489,10 +486,6 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	}
 	if (ret != -1)
 		fprintf(stderr, "[bam_sort_core] truncated file. Continue anyway.\n");
-	// output file name
-	fnout = calloc(strlen(prefix) + 20, 1);
-	if (is_stdout) sprintf(fnout, "-");
-	else sprintf(fnout, "%s%s", prefix, suffix);
 	// write the final output
 	if (n_files == 0) { // a single block
 		char mode[8];
@@ -507,16 +500,19 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 		fns = (char**)calloc(n_files, sizeof(char*));
 		for (i = 0; i < n_files; ++i) {
 			fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
-			sprintf(fns[i], "%s.%.4d%s", prefix, i, suffix);
+			sprintf(fns[i], "%s.%.4d.bam", prefix, i);
 		}
-		bam_merge_core2(is_by_qname, fnout, 0, n_files, fns, 0, 0, n_threads, level);
+		if (bam_merge_core2(is_by_qname, fnout, 0, n_files, fns, 0, 0, n_threads, level) < 0) {
+			// Propagate bam_merge_core2() failure; it has already emitted a
+			// message explaining the failure, so no further message is needed.
+			return -1;
+		}
 		for (i = 0; i < n_files; ++i) {
 			unlink(fns[i]);
 			free(fns[i]);
 		}
 		free(fns);
 	}
-	free(fnout);
 	// free
 	for (k = 0; k < max_k; ++k) {
 		if (!buf[k]) continue;
@@ -526,17 +522,24 @@ void bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, size
 	free(buf);
 	bam_header_destroy(header);
 	bam_close(fp);
+	return 0;
 }
 
-void bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
+int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
 {
-	bam_sort_core_ext(is_by_qname, fn, prefix, max_mem, 0, 0, -1, 0);
+	int ret;
+	char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
+	sprintf(fnout, "%s.bam", prefix);
+	ret = bam_sort_core_ext(is_by_qname, fn, prefix, fnout, max_mem, 0, -1);
+	free(fnout);
+	return ret;
 }
 
 int bam_sort(int argc, char *argv[])
 {
 	size_t max_mem = 768<<20; // 512MB
-	int c, is_by_qname = 0, is_stdout = 0, n_threads = 0, level = -1, full_path = 0;
+	int c, is_by_qname = 0, is_stdout = 0, ret = 0, n_threads = 0, level = -1, full_path = 0;
+	char *fnout;
 	while ((c = getopt(argc, argv, "fnom:@:l:")) >= 0) {
 		switch (c) {
 		case 'f': full_path = 1; break;
@@ -566,6 +569,14 @@ int bam_sort(int argc, char *argv[])
 		fprintf(stderr, "\n");
 		return 1;
 	}
-	bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], max_mem, is_stdout, n_threads, level, full_path);
-	return 0;
+
+	if (is_stdout) fnout = strdup("-");
+	else {
+		fnout = calloc(strlen(argv[optind+1]) + 4 + 1, 1);
+		sprintf(fnout, "%s%s", argv[optind+1], full_path? "" : ".bam");
+	}
+
+	if (bam_sort_core_ext(is_by_qname, argv[optind], argv[optind+1], fnout, max_mem, n_threads, level) < 0) ret = 1;
+	free(fnout);
+	return ret;
 }

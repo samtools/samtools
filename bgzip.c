@@ -72,7 +72,7 @@ static int write_open(const char *fn, int is_forced)
 
 static void fail(BGZF* fp)
 {
-    fprintf(stderr, "Error: %s\n", fp->error);
+    fprintf(stderr, "Error: %d\n", fp->errcode);
     exit(1);
 }
 

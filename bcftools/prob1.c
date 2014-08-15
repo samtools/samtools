@@ -18,40 +18,6 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 gzFile bcf_p1_fp_lk;
 
-unsigned char seq_nt4_table[256] = {
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4 /*'-'*/, 4, 4,
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 0, 4, 1,  4, 4, 4, 2,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  3, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4, 
-	4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4
-};
-
-struct __bcf_p1aux_t {
-	int n, M, n1, is_indel;
-	uint8_t *ploidy; // haploid or diploid ONLY
-	double *q2p, *pdg; // pdg -> P(D|g)
-	double *phi, *phi_indel;
-	double *z, *zswap; // aux for afs
-	double *z1, *z2, *phi1, *phi2; // only calculated when n1 is set
-	double **hg; // hypergeometric distribution
-	double *lf; // log factorial
-	double t, t1, t2;
-	double *afs, *afs1; // afs: accumulative AFS; afs1: site posterior distribution
-	const uint8_t *PL; // point to PL
-	int PL_len;
-};
-
 void bcf_p1_indel_prior(bcf_p1aux_t *ma, double x)
 {
 	int i;
@@ -132,18 +98,20 @@ int bcf_p1_read_prior(bcf_p1aux_t *ma, const char *fn)
 	return 0;
 }
 
-bcf_p1aux_t *bcf_p1_init(int n, uint8_t *ploidy)
+/* Initialise a bcf_p1aux_t */
+bcf_p1aux_t *bcf_p1_init(int n_smpl, uint8_t *ploidy)
 {
 	bcf_p1aux_t *ma;
 	int i;
 	ma = calloc(1, sizeof(bcf_p1aux_t));
 	ma->n1 = -1;
-	ma->n = n; ma->M = 2 * n;
+	ma->n = n_smpl;
+	ma->M = 2 * n_smpl;
 	if (ploidy) {
-		ma->ploidy = malloc(n);
-		memcpy(ma->ploidy, ploidy, n);
-		for (i = 0, ma->M = 0; i < n; ++i) ma->M += ploidy[i];
-		if (ma->M == 2 * n) {
+		ma->ploidy = malloc(n_smpl);
+		memcpy(ma->ploidy, ploidy, n_smpl);
+		for (i = 0, ma->M = 0; i < n_smpl; ++i) ma->M += ploidy[i];
+		if (ma->M == 2 * n_smpl) {
 			free(ma->ploidy);
 			ma->ploidy = 0;
 		}
@@ -273,11 +241,18 @@ double calc_hwe(int obs_hom1, int obs_hom2, int obs_hets)
     p_hwe = p_hwe > 1.0 ? 1.0 : p_hwe;
     free(het_probs);
     return p_hwe;
-
 }
 
+static void _set_clr(bcf_p1aux_t *ma, kstring_t *str)
+{
+    ksprintf(str, ";CLR=%d", ma->cons_llr);
+    if ( ma->cons_gt > 0 )
+        ksprintf(str, ";UGT=%c%c%c;CGT=%c%c%c", 
+            ma->cons_gt&0xff, ma->cons_gt>>8&0xff, ma->cons_gt>>16&0xff,
+            ma->cons_gt>>32&0xff, ma->cons_gt>>40&0xff, ma->cons_gt>>48&0xff);
+}
 
-static void _bcf1_set_ref(bcf1_t *b, int idp)
+static void _bcf1_set_ref(bcf1_t *b, bcf_p1aux_t *ma, int idp)
 {
     kstring_t s;
     int old_n_gi = b->n_gi;
@@ -315,6 +290,7 @@ static void _bcf1_set_ref(bcf1_t *b, int idp)
             if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
             ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
         }
+        if ( ma->cons_llr>0 ) _set_clr(ma, &s);
         kputc('\0', &s);
         rm_info(&s, "I16=");
         rm_info(&s, "QS=");
@@ -358,7 +334,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
     }
     if ( nals==1 ) 
     {
-        if ( !var_only ) _bcf1_set_ref(b, idp);
+        if ( !var_only ) _bcf1_set_ref(b, ma, idp);
         return 1;
     }
     if ( !pl ) return -1;
@@ -385,7 +361,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         pl += npl;
     }
 
-    if ((p = strstr(b->info, "QS=")) == 0) { fprintf(stderr,"INFO/QS is required with -m, exiting\n"); exit(1); }
+    if ((p = strstr(b->info, "QS=")) == 0) { fprintf(stderr,"INFO/QS is required with -m, exiting at tid=%d pos=%d\n", b->tid,b->pos+1); exit(1); }
     double qsum[4];
     if ( sscanf(p+3,"%lf,%lf,%lf,%lf",&qsum[0],&qsum[1],&qsum[2],&qsum[3])!=4 ) { fprintf(stderr,"Could not parse %s\n",p); exit(1); }
 
@@ -490,6 +466,12 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         max_als = max_als2;
         n1 = n2;
     }
+    if ( max_als==1 )   // ref-only call
+    {
+        if ( !var_only ) _bcf1_set_ref(b, ma, idp);
+        free(pdg);
+        return 1;
+    }
     lk_sum = lk_sums[n1-1];
 
     // Get the BCF record ready for GT and GQ
@@ -563,7 +545,7 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         ac[ als&7 ]++;
     }
     free(pdg);
-    bcf_fit_alt(b,max_als);
+    bcf_fit_alt(b,gts);
 
     // The VCF spec is ambiguous about QUAL: is it the probability of anything else
     //  (that is QUAL(non-ref) = P(ref)+P(any non-ref other than ALT)) or is it
@@ -600,16 +582,29 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
         int has_I16 = test16(b, &a) >= 0? 1 : 0;
         if (has_I16 )
         {
-            if ( a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+            if ( a.is_tested) 
+            {
+                ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+                ksprintf(&s, ";EDB=%e", a.edb);
+                ksprintf(&s, ";BQB=%e", a.bqb);
+                ksprintf(&s, ";MQB=%e", a.mqb);
+            }
+            else
+                ksprintf(&s, ";PV4=1,1,1,1;EDB=0;BQB=0;MQB=0");
             ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
             ksprintf(&s, ";QBD=%e", b->qual/(a.d[0] + a.d[1] + a.d[2] + a.d[3]));
             if ( max_dv ) ksprintf(&s, ";MDV=%d", max_dv);
+
+            float strand_bias = a.d[0] < a.d[1] ? (1.0+a.d[0])/(1.0+a.d[1]) : (1.0+a.d[1])/(1.0+a.d[0]);
+            strand_bias *= a.d[2] < a.d[3] ? (1.0+a.d[2])/(1.0+a.d[3]) : (1.0+a.d[3])/(1.0+a.d[2]);
+            ksprintf(&s, ";SB=%f", strand_bias);
         }
         if ( nAA+nRA )
         {
             double hwe = calc_hwe(nAA, nRR, nRA);
             ksprintf(&s, ";HWE=%e", hwe);
         }
+        if ( ma->cons_llr>0 ) _set_clr(ma, &s);
         kputc('\0', &s);
         rm_info(&s, "I16=");
         rm_info(&s, "QS=");
@@ -622,14 +617,19 @@ int call_multiallelic_gt(bcf1_t *b, bcf_p1aux_t *ma, double threshold, int var_o
     return gts;
 }
 
+/* Calculate P(D|g) */
 static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 {
     int i, j;
     long *p, tmp;
     p = alloca(b->n_alleles * sizeof(long));
     memset(p, 0, sizeof(long) * b->n_alleles);
+	
+    // Set P(D|g) for each sample and sum phread likelihoods across all samples to create lk
     for (j = 0; j < ma->n; ++j) {
+        // Fetch the PL array for the sample
         const uint8_t *pi = ma->PL + j * ma->PL_len;
+        // Fetch the P(D|g) array for the sample
         double *pdg = ma->pdg + j * 3;
         pdg[0] = ma->q2p[pi[2]]; pdg[1] = ma->q2p[pi[1]]; pdg[2] = ma->q2p[pi[0]];
         for (i = 0; i < b->n_alleles; ++i)
@@ -645,19 +645,24 @@ static int cal_pdg(const bcf1_t *b, bcf_p1aux_t *ma)
 }
 
 
+/* f0 is minor allele fraction */
 int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 {
 	double sum, g[3];
 	double max, f3[3], *pdg = ma->pdg + k * 3;
 	int q, i, max_i, ploidy;
+	/* determine ploidy */
 	ploidy = ma->ploidy? ma->ploidy[k] : 2;
 	if (ploidy == 2) {
+	/* given allele frequency we can determine how many of each
+	 * genotype we have by HWE p=1-q PP=p^2 PQ&QP=2*p*q QQ=q^2 */
 		f3[0] = (1.-f0)*(1.-f0); f3[1] = 2.*f0*(1.-f0); f3[2] = f0*f0;
 	} else {
 		f3[0] = 1. - f0; f3[1] = 0; f3[2] = f0;
 	}
 	for (i = 0, sum = 0.; i < 3; ++i)
 		sum += (g[i] = pdg[i] * f3[i]);
+	/* normalise g and then determine max */
 	for (i = 0, max = -1., max_i = 0; i < 3; ++i) {
 		g[i] /= sum;
 		if (g[i] > max) max = g[i], max_i = i;
@@ -669,8 +674,8 @@ int bcf_p1_call_gt(const bcf_p1aux_t *ma, double f0, int k)
 	return q<<2|max_i;
 }
 
+// If likelihoods fall below this they get squashed to 0
 #define TINY 1e-20
-
 static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 {
 	double *z[2], *tmp, *pdg;
@@ -690,6 +695,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 			int k, j = _j - beg, _min = last_min, _max = last_max, M0;
 			double p[3], sum;
 			M0 = M; M += 2;
+			// Fetch P(D|g) for this sample
 			pdg = ma->pdg + _j * 3;
 			p[0] = pdg[0]; p[1] = 2. * pdg[1]; p[2] = pdg[2];
 			for (; _min < _max && z[0][_min] < TINY; ++_min) z[0][_min] = z[1][_min] = 0.;
@@ -704,6 +710,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 			for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 			if (_min >= 1) z[1][_min-1] = 0.;
 			if (_min >= 2) z[1][_min-2] = 0.;
+			// If we are not on the last sample
 			if (j < ma->n - 1) z[1][_max+1] = z[1][_max+2] = 0.;
 			if (_j == ma->n1 - 1) { // set pop1; ma->n1==-1 when unset
 				ma->t1 = ma->t;
@@ -719,6 +726,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 		for (j = 0; j < ma->n; ++j) {
 			int k, M0, _min = last_min, _max = last_max;
 			double p[3], sum;
+			// Fetch P(D|g) for this sample
 			pdg = ma->pdg + j * 3;
 			for (; _min < _max && z[0][_min] < TINY; ++_min) z[0][_min] = z[1][_min] = 0.;
 			for (; _max > _min && z[0][_max] < TINY; --_max) z[0][_max] = z[1][_max] = 0.;
@@ -734,6 +742,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 				ma->t += log(sum / M);
 				for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 				if (_min >= 1) z[1][_min-1] = 0.;
+				// If we are not on the last sample
 				if (j < ma->n - 1) z[1][_max+1] = 0.;
 			} else if (ma->ploidy[j] == 2) {
 				p[0] = pdg[0]; p[1] = 2 * pdg[1]; p[2] = pdg[2];
@@ -747,6 +756,7 @@ static void mc_cal_y_core(bcf_p1aux_t *ma, int beg)
 				for (k = _min; k <= _max; ++k) z[1][k] /= sum;
 				if (_min >= 1) z[1][_min-1] = 0.;
 				if (_min >= 2) z[1][_min-2] = 0.;
+				// If we are not on the last sample
 				if (j < ma->n - 1) z[1][_max+1] = z[1][_max+2] = 0.;
 			}
 			tmp = z[0]; z[0] = z[1]; z[1] = tmp;
@@ -887,6 +897,7 @@ static double mc_cal_afs(bcf_p1aux_t *ma, double *p_ref_folded, double *p_var_fo
 	memset(ma->afs1, 0, sizeof(double) * (ma->M + 1));
 	mc_cal_y(ma);
 	// compute AFS
+	// MP15: is this using equation 20 from doi:10.1093/bioinformatics/btr509?
 	for (k = 0, sum = 0.; k <= ma->M; ++k)
 		sum += (long double)phi[k] * ma->z[k];
 	for (k = 0; k <= ma->M; ++k) {

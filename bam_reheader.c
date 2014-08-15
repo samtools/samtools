@@ -10,7 +10,7 @@ int bam_reheader(BGZF *in, const bam_header_t *h, int fd)
 {
 	BGZF *fp;
 	bam_header_t *old;
-	int len;
+	ssize_t len;
 	uint8_t *buf;
 	if (in->is_write) return -1;
 	buf = malloc(BUF_SIZE);

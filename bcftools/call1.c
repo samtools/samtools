@@ -42,13 +42,15 @@ typedef struct {
 	uint8_t *ploidy;
 	double theta, pref, indel_frac, min_perm_p, min_smpl_frac, min_lrt, min_ma_lrt;
 	void *bed;
+    int argc;
+    char **argv;
 } viewconf_t;
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
-static double ttest(int n1, int n2, int a[4])
+static double ttest(int n1, int n2, double a[4])
 {
 	extern double kf_betai(double a, double b, double x);
 	double t, v, u1, u2;
@@ -57,17 +59,29 @@ static double ttest(int n1, int n2, int a[4])
 	if (u1 <= u2) return 1.;
 	t = (u1 - u2) / sqrt(((a[1] - n1 * u1 * u1) + (a[3] - n2 * u2 * u2)) / (n1 + n2 - 2) * (1./n1 + 1./n2));
 	v = n1 + n2 - 2;
-//	printf("%d,%d,%d,%d,%lf,%lf,%lf\n", a[0], a[1], a[2], a[3], t, u1, u2);
 	return t < 0.? 1. : .5 * kf_betai(.5*v, .5, v/(v+t*t));
 }
 
-static int test16_core(int anno[16], anno16_t *a)
+static double ttest2(int n1, int n2, double a[4])
+{
+	if (n1 == 0 || n2 == 0 || n1 + n2 < 3) return 0.0;
+	double u1 = (double)a[0] / n1; 
+    double u2 = (double)a[2] / n2;
+    if ( u1==u2 ) return 0.0;
+    double v1 = (double)a[1] / n1 - u1*u1;
+    double v2 = (double)a[3] / n2 - u2*u2;
+    if ( !v1 && !v2 ) return -1e3;   // arbitrary negative value
+    double t  = (u1 - u2) / sqrt( v1/n1 + v2/n2 );
+    return t;
+}
+
+static int test16_core(double anno[16], anno16_t *a)
 {
 	extern double kt_fisher_exact(int n11, int n12, int n21, int n22, double *_left, double *_right, double *two);
 	double left, right;
 	int i;
 	a->p[0] = a->p[1] = a->p[2] = a->p[3] = 1.;
-	memcpy(a->d, anno, 4 * sizeof(int));
+    for (i=0; i<4; i++) a->d[i] = anno[i];
 	a->depth = anno[0] + anno[1] + anno[2] + anno[3];
 	a->is_tested = (anno[0] + anno[1] > 0 && anno[2] + anno[3] > 0);
 	if (a->depth == 0) return -1;
@@ -75,20 +89,24 @@ static int test16_core(int anno[16], anno16_t *a)
 	kt_fisher_exact(anno[0], anno[1], anno[2], anno[3], &left, &right, &a->p[0]);
 	for (i = 1; i < 4; ++i)
 		a->p[i] = ttest(anno[0] + anno[1], anno[2] + anno[3], anno+4*i);
+    a->bqb = ttest2(anno[0] + anno[1], anno[2] + anno[3], anno+4*1);
+    a->mqb = ttest2(anno[0] + anno[1], anno[2] + anno[3], anno+4*2);
+    a->edb = ttest2(anno[0] + anno[1], anno[2] + anno[3], anno+4*3);
 	return 0;
 }
 
 int test16(bcf1_t *b, anno16_t *a)
 {
 	char *p;
-	int i, anno[16];
+	int i;
+    double anno[16];
 	a->p[0] = a->p[1] = a->p[2] = a->p[3] = 1.;
 	a->d[0] = a->d[1] = a->d[2] = a->d[3] = 0.;
 	a->mq = a->depth = a->is_tested = 0;
 	if ((p = strstr(b->info, "I16=")) == 0) return -1;
 	p += 4;
 	for (i = 0; i < 16; ++i) {
-		errno = 0; anno[i] = strtol(p, &p, 10);
+		errno = 0; anno[i] = strtod(p, &p);
 		if (anno[i] == 0 && (errno == EINVAL || errno == ERANGE)) return -2;
 		++p;
 	}
@@ -103,27 +121,27 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	anno16_t a;
 
 	has_I16 = test16(b, &a) >= 0? 1 : 0;
-	//rm_info(b, "I16="); // FIXME: probably this function has a bug. If I move it below, I16 will not be removed!
 
 	memset(&s, 0, sizeof(kstring_t));
 	kputc('\0', &s); kputs(b->ref, &s); kputc('\0', &s);
 	kputs(b->alt, &s); kputc('\0', &s); kputc('\0', &s);
 	kputs(b->info, &s);
-	if (b->info[0]) kputc(';', &s);
+    if ( b->info[0] ) kputc(';', &s);
 	{ // print EM
-		if (em[0] >= 0) ksprintf(&s, "AF1=%.4g", 1 - em[0]);
-		if (em[4] >= 0 && em[4] <= 0.05) ksprintf(&s, ";G3=%.4g,%.4g,%.4g;HWE=%.3g", em[3], em[2], em[1], em[4]);
-		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, ";AF2=%.4g,%.4g", 1 - em[5], 1 - em[6]);
-		if (em[7] >= 0) ksprintf(&s, ";LRT=%.3g", em[7]);
-		if (em[8] >= 0) ksprintf(&s, ";LRT2=%.3g", em[8]);
+		if (em[0] >= 0) ksprintf(&s, "AF1=%.4g;", 1 - em[0]);
+		if (em[4] >= 0 && em[4] <= 0.05) ksprintf(&s, "G3=%.4g,%.4g,%.4g;HWE=%.3g;", em[3], em[2], em[1], em[4]);
+		if (em[5] >= 0 && em[6] >= 0) ksprintf(&s, "AF2=%.4g,%.4g;", 1 - em[5], 1 - em[6]);
+		if (em[7] >= 0) ksprintf(&s, "LRT=%.3g;", em[7]);
+		if (em[8] >= 0) ksprintf(&s, "LRT2=%.3g;", em[8]);
 	}
 	if (cons_llr > 0) {
-		ksprintf(&s, ";CLR=%d", cons_llr);
+		ksprintf(&s, "CLR=%d;", cons_llr);
 		if (cons_gt > 0)
-			ksprintf(&s, ";UGT=%c%c%c;CGT=%c%c%c", cons_gt&0xff, cons_gt>>8&0xff, cons_gt>>16&0xff,
+			ksprintf(&s, "UGT=%c%c%c;CGT=%c%c%c;", cons_gt&0xff, cons_gt>>8&0xff, cons_gt>>16&0xff,
 				     cons_gt>>32&0xff, cons_gt>>40&0xff, cons_gt>>48&0xff);
 	}
 	if (pr == 0) { // if pr is unset, return
+        if ( s.s[s.l-1]==';' ) s.s[--s.l] = 0;  // remove the superfluous semicolon
 		kputc('\0', &s); kputs(b->fmt, &s); kputc('\0', &s);
 		free(b->str);
 		b->m_str = s.m; b->l_str = s.l; b->str = s.s;
@@ -134,13 +152,13 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 	is_var = (pr->p_ref < pref);
 	r = is_var? pr->p_ref : pr->p_var;
 
-//	ksprintf(&s, ";CI95=%.4g,%.4g", pr->cil, pr->cih); // FIXME: when EM is not used, ";" should be omitted!
-	ksprintf(&s, ";AC1=%d", pr->ac);
-	if (has_I16) ksprintf(&s, ";DP4=%d,%d,%d,%d;MQ=%d", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
+//	ksprintf(&s, "CI95=%.4g,%.4g;", pr->cil, pr->cih);
+	ksprintf(&s, "AC1=%d;", pr->ac);
+	if (has_I16) ksprintf(&s, "DP4=%d,%d,%d,%d;MQ=%d;", a.d[0], a.d[1], a.d[2], a.d[3], a.mq);
 	fq = pr->p_ref_folded < 0.5? -4.343 * log(pr->p_ref_folded) : 4.343 * log(pr->p_var_folded);
 	if (fq < -999) fq = -999;
 	if (fq > 999) fq = 999;
-	ksprintf(&s, ";FQ=%.3g", fq);
+	ksprintf(&s, "FQ=%.3g;", fq);
 	if (pr->cmp[0] >= 0.) { // two sample groups
 		int i, q[3];
 		for (i = 1; i < 3; ++i) {
@@ -148,11 +166,12 @@ static int update_bcf1(bcf1_t *b, const bcf_p1aux_t *pa, const bcf_p1rst_t *pr, 
 			q[i] = x == 0? 255 : (int)(-4.343 * log(x) + .499);
 			if (q[i] > 255) q[i] = 255;
 		}
-		if (pr->perm_rank >= 0) ksprintf(&s, ";PR=%d", pr->perm_rank);
-		// ksprintf(&s, ";LRT3=%.3g", pr->lrt);
-		ksprintf(&s, ";PCHI2=%.3g;PC2=%d,%d", q[1], q[2], pr->p_chi2);
+		if (pr->perm_rank >= 0) ksprintf(&s, "PR=%d;", pr->perm_rank);
+		// ksprintf(&s, "LRT3=%.3g;", pr->lrt);
+		ksprintf(&s, "PCHI2=%.3g;PC2=%d,%d;", q[1], q[2], pr->p_chi2);
 	}
-	if (has_I16 && a.is_tested) ksprintf(&s, ";PV4=%.2g,%.2g,%.2g,%.2g", a.p[0], a.p[1], a.p[2], a.p[3]);
+	if (has_I16 && a.is_tested) ksprintf(&s, "PV4=%.2g,%.2g,%.2g,%.2g;", a.p[0], a.p[1], a.p[2], a.p[3]);
+    if ( s.s[s.l-1]==';' ) s.s[--s.l] = 0;  // remove the superfluous semicolon
 	kputc('\0', &s);
     rm_info(&s, "QS=");
     rm_info(&s, "I16=");
@@ -224,7 +243,7 @@ static char **read_samples(const char *fn, int *_n)
 		sam[n][l+1] = 2; // by default, diploid
 		if (dret != '\n') {
 			if (ks_getuntil(ks, 0, &s, &dret) >= 0) { // read ploidy, 1 or 2
-				int x = (int)s.s[0] - '0';
+				int x = (int)s.s[0] - '0'; // Convert ASCII digit to decimal
 				if (x == 1 || x == 2) sam[n][l+1] = x;
 				else fprintf(stderr, "(%s) ploidy can only be 1 or 2; assume diploid\n", __func__);
 			}
@@ -239,17 +258,24 @@ static char **read_samples(const char *fn, int *_n)
 	return sam;
 }
 
-static void write_header(bcf_hdr_t *h)
+static void write_header(viewconf_t *conf, bcf_hdr_t *h)
 {
 	kstring_t str;
 	str.l = h->l_txt? h->l_txt - 1 : 0;
 	str.m = str.l + 1; str.s = h->txt;
+    int i;
+    ksprintf(&str, "##bcftoolsVersion=%s\n", BCF_VERSION);
+    ksprintf(&str, "##bcftoolsCommand=%s", conf->argv[0]);
+    for (i=1; i<conf->argc; i++) ksprintf(&str, " %s", conf->argv[i]);
+    kputc('\n', &str);
 	if (!strstr(str.s, "##INFO=<ID=DP,"))
 		kputs("##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Raw read depth\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=DP4,"))
 		kputs("##INFO=<ID=DP4,Number=4,Type=Integer,Description=\"# high-quality ref-forward bases, ref-reverse, alt-forward and alt-reverse bases\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=MQ,"))
 		kputs("##INFO=<ID=MQ,Number=1,Type=Integer,Description=\"Root-mean-square mapping quality of covering reads\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=MQ0,"))
+		kputs("##INFO=<ID=MQ0,Number=1,Type=Integer,Description=\"Number of reads with zero mapping quality\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=FQ,"))
 		kputs("##INFO=<ID=FQ,Number=1,Type=Float,Description=\"Phred probability of all samples being the same\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AF1,"))
@@ -258,8 +284,10 @@ static void write_header(bcf_hdr_t *h)
 		kputs("##INFO=<ID=AC1,Number=1,Type=Float,Description=\"Max-likelihood estimate of the first ALT allele count (no HWE assumption)\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AN,"))
 		kputs("##INFO=<ID=AN,Number=1,Type=Integer,Description=\"Total number of alleles in called genotypes\">\n", &str);
-	if (!strstr(str.s, "##INFO=<ID=IS,"))
-		kputs("##INFO=<ID=IS,Number=2,Type=Float,Description=\"Maximum number of reads supporting an indel and fraction of indel reads\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=IDV,"))
+		kputs("##INFO=<ID=IDV,Number=1,Type=Integer,Description=\"Maximum number of reads supporting an indel\">\n", &str);
+	if (!strstr(str.s, "##INFO=<ID=IMF,"))
+		kputs("##INFO=<ID=IMF,Number=1,Type=Float,Description=\"Maximum fraction of reads supporting an indel\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=AC,"))
 		kputs("##INFO=<ID=AC,Number=A,Type=Integer,Description=\"Allele count in genotypes for each ALT allele, in the same order as listed\">\n", &str);
 	if (!strstr(str.s, "##INFO=<ID=G3,"))
@@ -288,14 +316,22 @@ static void write_header(bcf_hdr_t *h)
         kputs("##INFO=<ID=PR,Number=1,Type=Integer,Description=\"# permutations yielding a smaller PCHI2.\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=QBD,"))
         kputs("##INFO=<ID=QBD,Number=1,Type=Float,Description=\"Quality by Depth: QUAL/#reads\">\n", &str);
-    //if (!strstr(str.s, "##INFO=<ID=RPS,"))
-    //    kputs("##INFO=<ID=RPS,Number=3,Type=Float,Description=\"Read Position Stats: depth, average, stddev\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=SB,"))
+        kputs("##INFO=<ID=SB,Number=1,Type=Float,Description=\"Strand Bias\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=EDB,"))
+        kputs("##INFO=<ID=EDB,Number=1,Type=Float,Description=\"End Distance Bias (tt2)\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=MQB,"))
+        kputs("##INFO=<ID=MQB,Number=1,Type=Float,Description=\"Mapping Quality Bias (tt2)\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=BQB,"))
+        kputs("##INFO=<ID=BQB,Number=1,Type=Float,Description=\"Base Quality Bias (tt2)\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=RPB,"))
         kputs("##INFO=<ID=RPB,Number=1,Type=Float,Description=\"Read Position Bias\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=MDV,"))
         kputs("##INFO=<ID=MDV,Number=1,Type=Integer,Description=\"Maximum number of high-quality nonRef reads in samples\">\n", &str);
     if (!strstr(str.s, "##INFO=<ID=VDB,"))
         kputs("##INFO=<ID=VDB,Number=1,Type=Float,Description=\"Variant Distance Bias (v2) for filtering splice-site artefacts in RNA-seq data. Note: this version may be broken.\">\n", &str);
+    if (!strstr(str.s, "##INFO=<ID=SGB,"))
+        kputs("##INFO=<ID=SGB,Number=1,Type=Float,Description=\"Segregation based metric.\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GT,"))
         kputs("##FORMAT=<ID=GT,Number=1,Type=String,Description=\"Genotype\">\n", &str);
     if (!strstr(str.s, "##FORMAT=<ID=GQ,"))
@@ -342,6 +378,7 @@ int bcfview(int argc, char *argv[])
 
 	tid = begin = end = -1;
 	memset(&vc, 0, sizeof(viewconf_t));
+    vc.argc = argc; vc.argv = argv;
 	vc.prior_type = vc.n1 = -1; vc.theta = 1e-3; vc.pref = 0.5; vc.indel_frac = -1.; vc.n_perm = 0; vc.min_perm_p = 0.01; vc.min_smpl_frac = 0; vc.min_lrt = 1; vc.min_ma_lrt = -1;
 	memset(qcnt, 0, 8 * 256);
 	while ((c = getopt(argc, argv, "FN1:l:cC:eHAGvbSuP:t:p:QgLi:IMs:D:U:X:d:T:Ywm:K:")) >= 0) {
@@ -464,7 +501,7 @@ int bcfview(int argc, char *argv[])
 			vc.sublist = calloc(vc.n_sub, sizeof(int));
 			hout = bcf_hdr_subsam(hin, vc.n_sub, vc.subsam, vc.sublist);
 		}
-		write_header(hout); // always print the header
+		write_header(&vc, hout); // always print the header
 		vcf_hdr_write(bout, hout);
 	}
 	if (vc.flag & VC_CALL) {
@@ -503,9 +540,9 @@ int bcfview(int argc, char *argv[])
 		gzwrite(bcf_p1_fp_lk, &M, 4);
 	}
 	while (vcf_read(bp, hin, b) > 0) {
-		int is_indel, cons_llr = -1;
-		int64_t cons_gt = -1;
+		int is_indel;
 		double em[10];
+        if ( p1 ) p1->cons_llr = p1->cons_gt = -1;
 		if ((vc.flag & VC_VARONLY) && strcmp(b->alt, "X") == 0) continue;
 		if ((vc.flag & VC_VARONLY) && vc.min_smpl_frac > 0.) {
 			extern int bcf_smpl_covered(const bcf1_t *b);
@@ -541,9 +578,9 @@ int bcfview(int argc, char *argv[])
 			continue;
 		}
 		if (vc.trio_aux) // do trio calling
-			bcf_trio_call(vc.trio_aux, b, &cons_llr, &cons_gt);
+			bcf_trio_call(vc.trio_aux, b, &p1->cons_llr, &p1->cons_gt);
 		else if (vc.flag & VC_PAIRCALL)
-			cons_llr = bcf_pair_call(b);
+			p1->cons_llr = bcf_pair_call(b);
 		if (vc.flag & (VC_CALL|VC_ADJLD|VC_EM)) bcf_gl2pl(b);
 		if (vc.flag & VC_EM) bcf_em1(b, vc.n1, 0x1ff, em);
 		else {
@@ -563,10 +600,13 @@ int bcfview(int argc, char *argv[])
 			gzwrite(bcf_p1_fp_lk, &b->pos, 4);
 			gzwrite(bcf_p1_fp_lk, &em[0], sizeof(double));
 			calret = bcf_p1_cal(b, (em[7] >= 0 && em[7] < vc.min_lrt), p1, &pr);
+#if BCF_DUMP_AFS
+            // Do not print AFS by default. If anyone needs this, please make the output optional
 			if (n_processed % 100000 == 0) {
 				fprintf(stderr, "[%s] %ld sites processed.\n", __func__, (long)n_processed);
 				bcf_p1_dump_afs(p1);
 			}
+#endif
 			if (pr.p_ref >= vc.pref && (vc.flag & VC_VARONLY)) continue;
 			if (vc.n_perm && vc.n1 > 0 && pr.p_chi2 < vc.min_perm_p) { // permutation test
 				bcf_p1rst_t r;
@@ -585,8 +625,8 @@ int bcfview(int argc, char *argv[])
 				}
 				pr.perm_rank = n;
 			}
-			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em, cons_llr, cons_gt);
-		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em, cons_llr, cons_gt);
+			if (calret >= 0) update_bcf1(b, p1, &pr, vc.pref, vc.flag, em, p1->cons_llr, p1->cons_gt);
+		} else if (vc.flag & VC_EM) update_bcf1(b, 0, 0, 0, vc.flag, em, p1->cons_llr, p1->cons_gt);
 		if (vc.flag & VC_ADJLD) { // compute LD
 			double f[4], r2;
 			if ((r2 = bcf_pair_freq(blast, b, f)) >= 0) {
@@ -610,7 +650,9 @@ int bcfview(int argc, char *argv[])
 
 	if (bcf_p1_fp_lk) gzclose(bcf_p1_fp_lk);
 	if (vc.prior_file) free(vc.prior_file);
+#if BCF_DUMP_AFS
 	if (vc.flag & VC_CALL) bcf_p1_dump_afs(p1);
+#endif
 	if (hin != hout) bcf_hdr_destroy(hout);
 	bcf_hdr_destroy(hin);
 	bcf_destroy(b); bcf_destroy(blast);

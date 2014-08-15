@@ -40,7 +40,11 @@
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "0.1.19-96b5f2294a"
+#ifndef VERSION
+#define BAM_VERSION "0.1.20"
+#else
+#define BAM_VERSION VERSION
+#endif
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -292,12 +296,12 @@ extern int bam_verbose;
 extern int bam_no_B;
 
 /*! @abstract Table for converting a nucleotide character to the 4-bit encoding. */
-extern unsigned char bam_nt16_table[256];
+extern const unsigned char bam_nt16_table[256];
 
 /*! @abstract Table for converting a 4-bit encoded nucleotide to a letter. */
-extern char *bam_nt16_rev_table;
+extern const char bam_nt16_rev_table[];
 
-extern char bam_nt16_nt4_table[];
+extern const char bam_nt16_nt4_table[];
 
 #ifdef __cplusplus
 extern "C" {
@@ -380,7 +384,7 @@ extern "C" {
 	int bam_strmap_put(void *strmap, const char *rg, const char *lib);
 	const char *bam_strmap_get(const void *strmap, const char *rg);
 	void *bam_strmap_dup(const void*);
-	void *bam_strmap_init();
+	void *bam_strmap_init(void);
 	void bam_strmap_destroy(void *strmap);
 
 
@@ -395,7 +399,7 @@ extern "C" {
 	  @discussion This function also modifies the global variable
 	  bam_is_be.
 	 */
-	bam_header_t *bam_header_init();
+	bam_header_t *bam_header_init(void);
 
 	/*!
 	  @abstract        Destroy a header structure.
@@ -534,7 +538,7 @@ extern "C" {
 	struct __bam_plp_t;
 	typedef struct __bam_plp_t *bam_plp_t;
 
-	bam_plp_t bam_plp_init(bam_plp_auto_f func, void *data);
+	bam_plp_t bam_plp_init(bam_plp_auto_f read, void *data);
 	int bam_plp_push(bam_plp_t iter, const bam1_t *b);
 	const bam_pileup1_t *bam_plp_next(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
 	const bam_pileup1_t *bam_plp_auto(bam_plp_t iter, int *_tid, int *_pos, int *_n_plp);
@@ -546,7 +550,7 @@ extern "C" {
 	struct __bam_mplp_t;
 	typedef struct __bam_mplp_t *bam_mplp_t;
 
-	bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func, void **data);
+	bam_mplp_t bam_mplp_init(int n, bam_plp_auto_f func,  void **data);
 	void bam_mplp_destroy(bam_mplp_t iter);
 	void bam_mplp_set_maxcnt(bam_mplp_t iter, int maxcnt);
 	int bam_mplp_auto(bam_mplp_t iter, int *_tid, int *_pos, int *n_plp, const bam_pileup1_t **plp);

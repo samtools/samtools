@@ -21,7 +21,7 @@ void bam_init_header_hash(bam_header_t *header);
 void bam_destroy_header_hash(bam_header_t *header);
 int32_t bam_get_tid(const bam_header_t *header, const char *seq_name);
 
-unsigned char bam_nt16_table[256] = {
+const unsigned char bam_nt16_table[256] = {
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15,
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15,
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15,
@@ -40,7 +40,7 @@ unsigned char bam_nt16_table[256] = {
 	15,15,15,15, 15,15,15,15, 15,15,15,15, 15,15,15,15
 };
 
-unsigned short bam_char2flag_table[256] = {
+static const unsigned short bam_char2flag_table[256] = {
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0,
@@ -59,7 +59,7 @@ unsigned short bam_char2flag_table[256] = {
 	0,0,0,0, 0,0,0,0, 0,0,0,0, 0,0,0,0
 };
 
-char *bam_nt16_rev_table = "=ACMGRSVTWYHKDBN";
+const char bam_nt16_rev_table[] = "=ACMGRSVTWYHKDBN";
 
 struct __tamFile_t {
 	gzFile fp;
@@ -230,7 +230,7 @@ bam_header_t *sam_header_read(tamFile fp)
 	}
 	sam_header_parse(header);
 	bam_init_header_hash(header);
-	fp->is_first = 1;
+	fp->is_first = (ret >= 0);
 	return header;
 }
 
@@ -292,10 +292,14 @@ int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b)
 		z += str->l + 1;
 		if (str->s[0] != '*') {
 			uint32_t *cigar;
+			uint32_t tmp_n_cigar = 0;
 			for (s = str->s; *s; ++s) {
-				if ((isalpha(*s)) || (*s=='=')) ++c->n_cigar;
+				if ((isalpha(*s)) || (*s=='=')) ++tmp_n_cigar;
 				else if (!isdigit(*s)) parse_error(fp->n_lines, "invalid CIGAR character");
 			}
+			// BAM and the samtools struct only allow 16 bits for n_cigar
+			if (tmp_n_cigar >= 65536) parse_error(fp->n_lines, "too many CIGAR operations (limited to 65535)");
+			c->n_cigar = tmp_n_cigar;
 			b->data = alloc_data(b, doff + c->n_cigar * 4);
 			cigar = bam1_cigar(b);
 			for (i = 0, s = str->s; i != c->n_cigar; ++i) {

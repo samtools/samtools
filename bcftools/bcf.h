@@ -28,7 +28,11 @@
 #ifndef BCF_H
 #define BCF_H
 
-#define BCF_VERSION "0.1.19-96b5f2294a"
+#ifndef VERSION
+#define BCF_VERSION "0.1.20"
+#else
+#define BCF_VERSION VERSION
+#endif
 
 #include <stdint.h>
 #include <zlib.h>
@@ -63,6 +67,7 @@ typedef struct {
 	// derived info: fmt, len (<-bcf1_t::fmt)
 } bcf_ginfo_t;
 
+/* BCF record structure */
 typedef struct {
 	int32_t tid, pos; // refID and 0-based position
 	int32_t l_str, m_str; // length and the allocated size of ->str
@@ -170,7 +175,7 @@ extern "C" {
 	void bcf_str2id_thorough_destroy(void *_hash);
 	int bcf_str2id_add(void *_hash, const char *str);
 	int bcf_str2id(void *_hash, const char *str);
-	void *bcf_str2id_init();
+	void *bcf_str2id_init(void);
 
 	// indexing related functions
 	int bcf_idx_build(const char *fn);

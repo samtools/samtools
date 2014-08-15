@@ -94,7 +94,7 @@ extern "C" {
 	  @discussion The returned sequence is allocated by malloc family
 	  and should be destroyed by end users by calling free() on it.
 	 */
-	char *faidx_fetch_seq(const faidx_t *fai, char *c_name, int p_beg_i, int p_end_i, int *len);
+	char *faidx_fetch_seq(const faidx_t *fai, const char *c_name, int p_beg_i, int p_end_i, int *len);
 
 #ifdef __cplusplus
 }
