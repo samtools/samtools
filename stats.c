@@ -923,7 +923,7 @@ void output_stats(stats_t *stats, int sparse)
     sd_isize = sqrt(sd_isize);
 
 
-    printf("# This file was produced by samtools stats (%s:%s) and can be plotted using plot-bamstats\n", samtools_version(), hts_version());
+    printf("# This file was produced by samtools stats (%s+htslib-%s) and can be plotted using plot-bamstats\n", samtools_version(), hts_version());
     printf("# The command line was:  %s",stats->argv[0]);
     int i;
     for (i=1; i<stats->argc; i++)
