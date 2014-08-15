@@ -1,8 +1,10 @@
 System Requirements
 ===================
 
-SAMtools depends on the zlib library <http://www.zlib.net>. Version 1.2.3+ is
-preferred.
+Samtools and HTSlib depend on the zlib library <http://zlib.net>.  Building
+them requires zlib development files to be installed on the build machine;
+you may need to ensure a package such as zlib1g-dev (on Debian or Ubuntu Linux)
+or zlib-devel (on RPM/yum-based distributions) is installed.
 
 SAMtools' faidx is able to index a bgzip-compressed FASTA file to save
 diskspace.
@@ -21,13 +23,27 @@ as -lnurses. This can be set in Makefile by setting LIBCURSES= -lcurses vs
 Compilation
 ===========
 
-Type `make' to compile samtools.
+'cd' to the samtools-1.x directory containing the package's source and type
+'make' to compile samtools.
+
+This samtools release contains a copy of HTSlib which will be used to build
+samtools.  If you already have a system-installed HTSlib or another HTSlib
+that you would prefer to build against, you can arrange this by overriding
+$(HTSDIR) by typing 'make HTSDIR=/path/to/htslib-source' -- see the makefile
+for details.
 
 
 Installation
 ============
 
-Copy `samtools', `bcftools/bcftools' and other executables/scripts in `misc' to
-a location you want (e.g. a directory in your $PATH). You may also copy
-`samtools.1' and `bcftools/bcftools.1' to a directory in your $MANPATH such
-that the `man' command may find the manual.
+Type 'make install' to install the samtools executable and various scripts
+and executables from misc/ and a manual page to /usr/local.
+
+Type 'make prefix=/path/to/dir install' to install everything under your
+choice of installation directory.  The install target also understands
+DESTDIR and the other usual installation directory variables.
+
+The bgzip and tabix utilities are provided by HTSlib.  If you have not also
+installed HTSlib separately, you may wish to install these utilities by hand
+by copying samtools-1.x/htslib-1.x/{bgzip,tabix} to the same bin directory
+to which you have installed samtools et al.
