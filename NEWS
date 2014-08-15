@@ -1,3 +1,17 @@
+Beta Release 1.0 (15 August, 2014)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+First release of HTSlib-based samtools.
+
+Numerous changes, notably support for the CRAM sequencing file format.
+
+
+Beta Release 0.1.20 (15 August, 2014)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Final release of standalone samtools.
+
+
 Beta Release 0.1.19 (15 March, 2013)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

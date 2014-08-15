@@ -87,7 +87,7 @@ HTSLIB = $(HTSDIR)/libhts.a
 BGZIP  = $(HTSDIR)/bgzip
 
 
-PACKAGE_VERSION  = 0.2.0
+PACKAGE_VERSION = 1.0
 
 # If building from a Git repository, replace $(PACKAGE_VERSION) with the Git
 # description of the working tree: either a release tag with the same value
