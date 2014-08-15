@@ -1,7 +1,26 @@
 #!/usr/bin/perl -w
-
-# Contact: lh3
-# Version: 0.1.1
+#
+#    Copyright (C) 2009 Genome Research Ltd.
+#
+#    Author: Heng Li <lh3@sanger.ac.uk>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
 
 use strict;
 use warnings;
@@ -14,22 +33,22 @@ sub mating {
   my ($s1, $s2) = @_;
   my $isize = 0;
   if ($s1->[2] ne '*' && $s1->[2] eq $s2->[2]) { # then calculate $isize
-	my $x1 = ($s1->[1] & 0x10)? $s1->[3] + length($s1->[9]) : $s1->[3];
-	my $x2 = ($s2->[1] & 0x10)? $s2->[3] + length($s2->[9]) : $s2->[3];
-	$isize = $x2 - $x1;
+    my $x1 = ($s1->[1] & 0x10)? $s1->[3] + length($s1->[9]) : $s1->[3];
+    my $x2 = ($s2->[1] & 0x10)? $s2->[3] + length($s2->[9]) : $s2->[3];
+    $isize = $x2 - $x1;
   }
   # update mate coordinate
   if ($s2->[2] ne '*') {
-	@$s1[6..8] = (($s2->[2] eq $s1->[2])? "=" : $s2->[2], $s2->[3], $isize);
-	$s1->[1] |= 0x20 if ($s2->[1] & 0x10);
+    @$s1[6..8] = (($s2->[2] eq $s1->[2])? "=" : $s2->[2], $s2->[3], $isize);
+    $s1->[1] |= 0x20 if ($s2->[1] & 0x10);
   } else {
-	$s1->[1] |= 0x8;
+    $s1->[1] |= 0x8;
   }
   if ($s1->[2] ne '*') {
-	@$s2[6..8] = (($s1->[2] eq $s2->[2])? "=" : $s1->[2], $s1->[3], -$isize);
-	$s2->[1] |= 0x20 if ($s1->[1] & 0x10);
+    @$s2[6..8] = (($s1->[2] eq $s2->[2])? "=" : $s1->[2], $s1->[3], -$isize);
+    $s2->[1] |= 0x20 if ($s1->[1] & 0x10);
   } else {
-	$s2->[1] |= 0x8;
+    $s2->[1] |= 0x8;
   }
 }
 
@@ -43,17 +62,17 @@ sub soap2sam {
   my @s2 = ();
   my ($s_last, $s_curr) = (\@s1, \@s2);
   while (<>) {
-	s/[\177-\377]|[\000-\010]|[\012-\040]//g;
-	next if (&soap2sam_aux($_, $s_curr, $is_paired) < 0);
-	if (@$s_last != 0 && $s_last->[0] eq $s_curr->[0]) {
-	  &mating($s_last, $s_curr);
-	  print join("\t", @$s_last), "\n";
-	  print join("\t", @$s_curr), "\n";
-	  @$s_last = (); @$s_curr = ();
-	} else {
-	  print join("\t", @$s_last), "\n" if (@$s_last != 0);
-	  my $s = $s_last; $s_last = $s_curr; $s_curr = $s;
-	}
+    s/[\177-\377]|[\000-\010]|[\012-\040]//g;
+    next if (&soap2sam_aux($_, $s_curr, $is_paired) < 0);
+    if (@$s_last != 0 && $s_last->[0] eq $s_curr->[0]) {
+      &mating($s_last, $s_curr);
+      print join("\t", @$s_last), "\n";
+      print join("\t", @$s_curr), "\n";
+      @$s_last = (); @$s_curr = ();
+    } else {
+      print join("\t", @$s_last), "\n" if (@$s_last != 0);
+      my $s = $s_last; $s_last = $s_curr; $s_curr = $s;
+    }
   }
   print join("\t", @$s_last), "\n" if (@$s_last != 0);
 }
@@ -89,20 +108,20 @@ sub soap2sam_aux {
   push(@$s, "NM:i:$t[9]");
   my $md = '';
   if ($t[9]) {
-	my @x;
-	for (10 .. $#t) {
-	  push(@x, sprintf("%.3d,$1", $2)) if ($t[$_] =~ /^([ACGT])->(\d+)/i);
-	}
-	@x = sort(@x);
-	my $a = 0;
-	for (@x) {
-	  my ($y, $z) = split(",");
-	  $md .= (int($y)-$a) . $z;
-	  $a += $y - $a + 1;
-	}
-	$md .= length($t[1]) - $a;
+    my @x;
+    for (10 .. $#t) {
+      push(@x, sprintf("%.3d,$1", $2)) if ($t[$_] =~ /^([ACGT])->(\d+)/i);
+    }
+    @x = sort(@x);
+    my $a = 0;
+    for (@x) {
+      my ($y, $z) = split(",");
+      $md .= (int($y)-$a) . $z;
+      $a += $y - $a + 1;
+    }
+    $md .= length($t[1]) - $a;
   } else {
-	$md = length($t[1]);
+    $md = length($t[1]);
   }
   push(@$s, "MD:Z:$md");
   return 0;

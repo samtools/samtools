@@ -1,0 +1,11 @@
+FAIL-*.out*
+PASS-*.out*
+*.tmp
+
+anomalous.[bc]*am
+indels.[bc]*am
+mpileup.*.[cs]*am
+mpileup.*.crai
+overlap50.[bc]*am
+
+expected/1.out

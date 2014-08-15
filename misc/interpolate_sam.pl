@@ -1,4 +1,27 @@
 #!/usr/bin/perl
+#
+#    Copyright (C) 2009 Genome Research Ltd.
+#
+#    Author: Heng Li <lh3@sanger.ac.uk>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
+
 use strict;
 
 ###Builds interpolated pileup from SAM file
@@ -19,7 +42,7 @@ use strict;
 my $sam_file = $ARGV[0];
 if(!defined($sam_file)) { die("No sam file defined on arg 1"); }
 unless(-f $sam_file) { die("Sam file does not exist: $sam_file"); }
-open(SAM, $sam_file) || die("Cannot open sam file"); 
+open(SAM, $sam_file) || die("Cannot open sam file");
 
 ##Globals
 my $current_location = ""; ##Current RNAME being processed
@@ -31,8 +54,8 @@ my %close = (); ##Hash of closing positions, when the current_position gets to t
 
 while (my $line = <SAM>) {
     my @tokens = split /\t/, $line;
-    
-    if ($current_location ne $tokens[2]) { ##Start a new sequence region 
+
+    if ($current_location ne $tokens[2]) { ##Start a new sequence region
         for (my $i = $current_position; $i <= $current_size; $i++) { ##Close the previous sequence region
             if (defined($close{$i})) {
                 $open = $open - $close{$i};
@@ -43,22 +66,22 @@ while (my $line = <SAM>) {
         if ($current_location ne "") {
             print "\n";
         }
-        
+
         ##Initiate a new sequence region
-        my @location_tokens = split /:/, $tokens[2]; 
+        my @location_tokens = split /:/, $tokens[2];
         $current_position = 1;
         $current_location = $tokens[2];
         $current_size = $location_tokens[4];
         $open = 0;
-        %close = (); 
+        %close = ();
         print "#" . $tokens[2] . "\n";
-        
+
         ##Print pileup to just before the first read (will be 0)
         for (my $current_position = 1; $current_position < $tokens[3]; $current_position++) {
             print $open . "\n";
         }
         $current_position = $tokens[3];
-        
+
     } else { ##Sequence region already open
         if ($tokens[3] > $current_position) { ##If the new read's position is greater than the current position
                                                 ##cycle through to catch up to the current position
@@ -73,7 +96,7 @@ while (my $line = <SAM>) {
         }
     }
     $open++; ##Increment the number of open reads
-    
+
     if (($tokens[1] & 0x0080 || $tokens[1] & 0x0040) && $tokens[1] & 0x0010 && $tokens[1] & 0x0002) { ##if second read of mate pair, add close condition
         $open--;
         my $parsed_cig = &parseCigar($tokens[5]);
