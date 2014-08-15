@@ -1,7 +1,6 @@
 .TH samtools 1 "10 July 2014" "samtools-0.2.0-rc10" "Bioinformatics tools"
 .SH NAME
-.PP
-samtools - Utilities for the Sequence Alignment/Map (SAM) format
+samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
 .\" Copyright (C) 2008-2011, 2013-2014 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
@@ -303,14 +302,14 @@ of input.
 
 .TP
 .B tview
-samtools tview 
-.RB [ \-p 
+samtools tview
+.RB [ \-p
 .IR chr:pos ]
-.RB [ \-s 
+.RB [ \-s
 .IR STR ]
-.RB [ \-d 
-.IR display ] 
-.RI <in.sorted.bam> 
+.RB [ \-d
+.IR display ]
+.RI <in.sorted.bam>
 .RI [ref.fasta]
 
 Text alignment viewer (based on the ncurses library). In the viewer,
@@ -359,7 +358,7 @@ In the pileup format (without
 .BR -u \ or \ -g ),
 each
 line represents a genomic position, consisting of chromosome name,
-1-based coordinate, reference base, the number of reads covering the site, 
+1-based coordinate, reference base, the number of reads covering the site,
 read bases, base qualities and alignment
 mapping qualities. Information on match, mismatch, indel, strand,
 mapping quality and start and end of a read are all encoded at the read
@@ -421,8 +420,8 @@ reference file in the FASTA format. The file can be optionally compressed by
 Exclude reads from readgroups listed in FILE (one @RG-ID per line)
 .TP
 .BI -l,\ --positions \ FILE
-BED or position list file containing a list of regions or sites where 
-pileup or BCF should be generated. If BED, positions are 0-based 
+BED or position list file containing a list of regions or sites where
+pileup or BCF should be generated. If BED, positions are 0-based
 half-open [null]
 .TP
 .BI -q,\ -min-MQ \ INT
@@ -432,9 +431,9 @@ Minimum mapping quality for an alignment to be used [0]
 Minimum base quality for a base to be considered [13]
 .TP
 .BI -r,\ --region \ STR
-Only generate pileup in region. Requires the BAM files to be indexed. 
-If used in conjunction with -l then considers the intersection of the 
-two requests. 
+Only generate pileup in region. Requires the BAM files to be indexed.
+If used in conjunction with -l then considers the intersection of the
+two requests.
 .I STR
 [all sites]
 .TP
@@ -445,7 +444,7 @@ Ignore RG tags. Treat all reads in one BAM as one sample.
 Required flags: skip reads with mask bits unset [null]
 .TP
 .BI --ff,\ --excl-flags \ STR|INT
-Filter flags: skip reads with mask bits set 
+Filter flags: skip reads with mask bits set
 [UNMAP,SECONDARY,QCFAIL,DUP]
 .TP
 .B -x,\ --ignore-overlaps
@@ -509,15 +508,15 @@ instead]
 .BI -t,\ --output-tags \ LIST
 Comma-separated list of FORMAT and INFO tags to output (case-insensitive):
 .B DP
-(Number of high-quality bases, FORMAT), 
+(Number of high-quality bases, FORMAT),
 .B DV
-(Number of high-quality non-reference bases, FORMAT), 
+(Number of high-quality non-reference bases, FORMAT),
 .B DPR
-(Number of high-quality bases for each observed allele, FORMAT), 
+(Number of high-quality bases for each observed allele, FORMAT),
 .B INFO/DPR
-(Number of high-quality bases for each observed allele, INFO), 
+(Number of high-quality bases for each observed allele, INFO),
 .B DP4
-(Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT), 
+(Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT),
 .B SP
 (Phred-scaled strand bias P-value, FORMAT)
 [null]
@@ -581,7 +580,7 @@ it is interpreted as
 .BR --open-prob .)
 .TP
 .B -p, --per-sample-mF
-Apply 
+Apply
 .B -m
 and
 .B -F
@@ -1170,7 +1169,7 @@ example, in the
 .IR merged.bam ,
 reads from
 .I ga.bam
-will be attached 
+will be attached
 .IR RG:Z:ga ,
 while reads from
 .I 454.bam
@@ -1183,10 +1182,10 @@ Call SNPs and short INDELs:
   samtools mpileup -uf ref.fa aln.bam | bcftools call -mv > var.raw.vcf
   bcftools filter -s LowQual -e '%QUAL<20 || DP>100' var.raw.vcf  > var.flt.vcf
 
-The 
+The
 .B bcftools filter
 command marks low quality sites and sites with the read depth exceeding
-a limit, which should be adjusted to about twice the average read depth 
+a limit, which should be adjusted to about twice the average read depth
 (bigger read depths usually indicate problematic regions which are
 often enriched for artefacts).  One may consider to add
 .B -C50
