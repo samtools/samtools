@@ -400,10 +400,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bc.fmt_arr = malloc(sm->n * sizeof(float)); // all fmt_flag fields
             if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR) )
             {
-                // first 5 fields for total numbers, the rest per-sample
-                bc.DPR = malloc((sm->n+1)*5*sizeof(int32_t));
+                // first B2B_MAX_ALLELES fields for total numbers, the rest per-sample
+                bc.DPR = malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
                 for (i=0; i<sm->n; i++)
-                    bcr[i].DPR = bc.DPR + (i+1)*5;
+                    bcr[i].DPR = bc.DPR + (i+1)*B2B_MAX_ALLELES;
             }
         }
     }
@@ -613,26 +613,24 @@ int read_file_list(const char *file_list,int *n,char **argv[])
 
 int parse_format_flag(const char *str)
 {
-    int flag = 0;
-    const char *ss = str;
-    while ( *ss )
+    int i, flag = 0, n_tags;
+    char **tags = hts_readlist(str, 0, &n_tags);
+    for(i=0; i<n_tags; i++)
     {
-        const char *se = ss;
-        while ( *se && *se!=',' ) se++;
-        if ( !strncasecmp(ss,"DP",se-ss) ) flag |= B2B_FMT_DP;
-        else if ( !strncasecmp(ss,"DP4",se-ss) ) flag |= B2B_FMT_DP4;
-        else if ( !strncasecmp(ss,"DV",se-ss) ) flag |= B2B_FMT_DV;
-        else if ( !strncasecmp(ss,"SP",se-ss) ) flag |= B2B_FMT_SP;
-        else if ( !strncasecmp(ss,"DPR",se-ss) ) flag |= B2B_FMT_DPR;
-        else if ( !strncasecmp(ss,"INFO/DPR",se-ss) ) flag |= B2B_INFO_DPR;
+        int tag_len = strlen(tags[i]);
+        if ( tag_len==2 && !strncasecmp(tags[i],"DP",tag_len) ) flag |= B2B_FMT_DP;
+        else if ( tag_len==2 && !strncasecmp(tags[i],"DV",tag_len) ) flag |= B2B_FMT_DV;
+        else if ( tag_len==2 && !strncasecmp(tags[i],"SP",tag_len) ) flag |= B2B_FMT_SP;
+        else if ( tag_len==3 && !strncasecmp(tags[i],"DP4",tag_len) ) flag |= B2B_FMT_DP4;
+        else if ( tag_len==3 && !strncasecmp(tags[i],"DPR",tag_len) ) flag |= B2B_FMT_DPR;
+        else if ( tag_len==8 && !strncasecmp(tags[i],"INFO/DPR",tag_len) ) flag |= B2B_INFO_DPR;
         else
         {
-            fprintf(stderr,"Could not parse \"%s\"\n", str);
+            fprintf(stderr,"Could not parse tag \"%s\" in \"%s\"\n", tags[i], str);
             exit(1);
         }
-        if ( !*se ) break;
-        ss = se + 1;
     }
+    if (n_tags) free(tags);
     return flag;
 }
 
