@@ -1,4 +1,4 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
 #
 #    Copyright (C) 2009, 2010 Genome Research Ltd.
 #
