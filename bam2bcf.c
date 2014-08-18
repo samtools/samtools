@@ -623,7 +623,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
         {
             assert( call->n_alleles<=B2B_MAX_ALLELES );   // this is always true for SNPs and so far for indels as well
 
-            int32_t tmp[B2B_MAX_ALLELES] = {0,0,0,0,0};   // change this if B2B_MAX_ALLELES changes
+            int32_t tmp[B2B_MAX_ALLELES];
             int32_t *dpr = call->DPR + B2B_MAX_ALLELES, *dpr_out = call->DPR + B2B_MAX_ALLELES;
             int32_t *dpr_tot = call->DPR;
             for (i=0; i<n; i++)
