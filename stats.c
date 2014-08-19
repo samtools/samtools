@@ -46,6 +46,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <getopt.h>
 #include <errno.h>
 #include <assert.h>
+#include <zlib.h>   // for crc32
 #include <htslib/faidx.h>
 #include <htslib/sam.h>
 #include <htslib/hts.h>
@@ -142,6 +143,9 @@ typedef struct
     uint64_t nbases_trimmed;  // bwa trimmed bases
     uint64_t nmismatches;
     uint64_t nreads_QCfailed, nreads_secondary;
+    struct {
+        uint32_t names, reads, quals;
+    } checksum;
 
     // GC-depth related data
     uint32_t ngcd, igcd;        // The maximum number of GC depth bins and index of the current bin
@@ -592,6 +596,23 @@ void realloc_buffers(stats_t *stats, int seq_len)
     realloc_rseq_buffer(stats);
 }
 
+void update_checksum(bam1_t *bam_line, stats_t *stats)
+{
+    uint8_t *name = (uint8_t*) bam_get_qname(bam_line);
+    int len = 0;
+    while ( name[len] ) len++;
+    stats->checksum.names +=  crc32(0L, name, len);
+
+    int seq_len = bam_line->core.l_qseq;
+    if ( !seq_len ) return;
+
+    uint8_t *seq = bam_get_seq(bam_line);
+    stats->checksum.reads += crc32(0L, seq, (seq_len+1)/2);
+
+    uint8_t *qual = bam_get_qual(bam_line);
+    stats->checksum.quals += crc32(0L, qual, (seq_len+1)/2);
+}
+
 void collect_stats(bam1_t *bam_line, stats_t *stats)
 {
     if ( stats->rg_hash )
@@ -618,6 +639,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     if ( bam_line->core.flag & BAM_FQCFAIL ) stats->nreads_QCfailed++;
     if ( bam_line->core.flag & BAM_FSECONDARY ) stats->nreads_secondary++;
     if ( bam_line->core.flag & BAM_FPAIRED ) stats->nreads_paired_tech++;
+
+    update_checksum(bam_line, stats);
 
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
@@ -929,6 +952,9 @@ void output_stats(stats_t *stats, int sparse)
     for (i=1; i<stats->argc; i++)
         printf(" %s",stats->argv[i]);
     printf("\n");
+    printf("# CHK, Checksum\t[2]Read Names\t[3]Sequences\t[4]Qualities\n");
+    printf("# CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)\n");
+    printf("CHK\t%08x\t%08x\t%08x\n", stats->checksum.names,stats->checksum.reads,stats->checksum.quals);
     printf("# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.\n");
     printf("SN\traw total sequences:\t%ld\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd));  // not counting excluded seqs (and none of the below)
     printf("SN\tfiltered sequences:\t%ld\n", (long)stats->nreads_filtered);
