@@ -25,6 +25,14 @@
 # allow cmd|md5sum to set $? to 1 if cmd fails but md5sum works
 set +o | grep pipefail >/dev/null && set -o pipefail
 
+# Use a local MD5 directory, which also has the benefit of overriding the
+# inbuilt REF_PATH removing the external dependency on EBI.
+#
+# Note that these MD5 files are truncated versions of their full sequences;
+# just enough to pass the tests.
+REF_PATH=`pwd`/md5
+export REF_PATH
+
 # Executes a single test and compares against the expected output
 run_test() {
     p=$1; shift

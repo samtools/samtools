@@ -176,16 +176,16 @@ stats.o: stats.c $(sam_h) sam_header.h samtools.h stats_isize.h $(HTSDIR)/htslib
 # test programs
 
 check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
-	test/test.pl --exec bgzip=$(BGZIP)
-	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
-	test/merge/test_pretty_header
-	test/merge/test_rtrans_build
-	test/merge/test_trans_tbl_init
-	if [ -n "$$REF_PATH" ]; then cd test/mpileup && ./regression.sh; fi
-	test/split/test_count_rg
-	test/split/test_expand_format_string
-	test/split/test_filter_header_rg
-	test/split/test_parse_args
+	REF_PATH=/does_not_exist test/test.pl --exec bgzip=$(BGZIP)
+	REF_PATH=/does_not_exist test/merge/test_bam_translate test/merge/test_bam_translate.tmp
+	REF_PATH=/does_not_exist test/merge/test_pretty_header
+	REF_PATH=/does_not_exist test/merge/test_rtrans_build
+	REF_PATH=/does_not_exist test/merge/test_trans_tbl_init
+	cd test/mpileup && ./regression.sh
+	REF_PATH=/does_not_exist test/split/test_count_rg
+	REF_PATH=/does_not_exist test/split/test_expand_format_string
+	REF_PATH=/does_not_exist test/split/test_filter_header_rg
+	REF_PATH=/does_not_exist test/split/test_parse_args
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o $(HTSLIB)
