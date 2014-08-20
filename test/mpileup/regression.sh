@@ -139,11 +139,11 @@ regtest() {
 echo "Samtools mpileup tests:"
 
 samtools="../../samtools"
-bcftools="../../../bcftools/bcftools"
+filter="../vcf-miniview -f"
 regtest mpileup.reg
 
 # samtools="./samtools-0.1.19"
-# bcftools="./bcftools-0.1.19"
+# filter="./bcftools-0.1.19 view - | sed etc"
 # regtest mpileup.reg
 
 exit $?
