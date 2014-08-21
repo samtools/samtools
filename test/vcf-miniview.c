@@ -58,22 +58,6 @@ void erase(kstring_t* str, const char *tag)
     str->l -= end - begin;
 }
 
-void truncate(kstring_t* str, const char *tag)
-{
-    char *begin, *end;
-
-    if ((begin = strstr(str->s+1, tag)) == NULL) return;
-
-    end = begin;
-    while (*end && *end != '\t' && *end != ';') end++;
-
-    begin += strlen(tag);
-    while (isdigit(*begin)) begin++;
-
-    memmove(begin, end, str->l - (end - str->s) + 1);
-    str->l -= end - begin;
-}
-
 int main(int argc, char **argv)
 {
     int optind, hdr_length, filter = 0;
@@ -119,7 +103,6 @@ int main(int argc, char **argv)
             erase(&str, "RPB=");
             erase(&str, "MQ0F=");
             erase(&str, "MQSB=");
-            truncate(&str, "QS=");
         }
         printf("%s", str.s);
     }
