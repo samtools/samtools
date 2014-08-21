@@ -127,6 +127,7 @@ typedef struct {
     hts_itr_t *iter;
     bam_hdr_t *h;
     int ref_id;
+    int ref_len;
     char *ref;
     const mplp_conf_t *conf;
 } mplp_aux_t;
@@ -172,6 +173,11 @@ static int mplp_func(void *data, bam1_t *b)
                 qual[i] = qual[i] > 31? qual[i] - 31 : 0;
         }
         has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
+        if (has_ref && (ma->ref_len <= b->core.pos)) { // exclude reads outside of the reference sequence
+            fprintf(stderr,"[%s] Skipping because %d is outside of %d [ref:%d]\n",__func__,b->core.pos,ma->ref_len,ma->ref_id);
+            skip = 1;
+            continue;
+        }
         skip = 0;
         if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ma->ref, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
         if (has_ref && ma->conf->capQ_thres > 10) {
@@ -419,7 +425,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     if (tid0 >= 0 && conf->fai) { // region is set
         ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
         ref_tid = tid0;
-        for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
+        for (i = 0; i < n; ++i) {
+            data[i]->ref = ref;
+            data[i]->ref_id = tid0;
+            data[i]->ref_len = ref_len;
+        }
     } else ref_tid = -1, ref = 0;
 
     // begin pileup
@@ -442,7 +452,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         if (tid != ref_tid) {
             free(ref); ref = 0;
             if (conf->fai) ref = faidx_fetch_seq(conf->fai, h->target_name[tid], 0, 0x7fffffff, &ref_len);
-            for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid;
+            for (i = 0; i < n; ++i) {
+                data[i]->ref = ref;
+                data[i]->ref_id = tid;
+                data[i]->ref_len = ref_len;
+            }
             ref_tid = tid;
         }
         if (conf->flag & MPLP_BCF) {
