@@ -31,12 +31,17 @@ typedef struct {
     long long n_sgltn[2], n_read1[2], n_read2[2];
     long long n_dup[2];
     long long n_diffchr[2], n_diffhigh[2];
+    long long n_secondary[2], n_supp[2];
 } bam_flagstat_t;
 
 #define flagstat_loop(s, c) do {                                        \
         int w = ((c)->flag & BAM_FQCFAIL)? 1 : 0;                       \
         ++(s)->n_reads[w];                                              \
-        if ((c)->flag & BAM_FPAIRED) {                                  \
+        if ((c)->flag & BAM_FSECONDARY ) {                              \
+            ++(s)->n_secondary[w];                                      \
+        } else if ((c)->flag & BAM_FSUPPLEMENTARY ) {                   \
+            ++(s)->n_supp[w];                                           \
+        } else if ((c)->flag & BAM_FPAIRED) {                           \
             ++(s)->n_pair_all[w];                                       \
             if (((c)->flag & BAM_FPROPER_PAIR) && !((c)->flag & BAM_FUNMAP) ) ++(s)->n_pair_good[w];    \
             if ((c)->flag & BAM_FREAD1) ++(s)->n_read1[w];              \
@@ -84,6 +89,8 @@ int bam_flagstat(int argc, char *argv[])
     header = bam_header_read(fp);
     s = bam_flagstat_core(fp);
     printf("%lld + %lld in total (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
+    printf("%lld + %lld secondary\n", s->n_secondary[0], s->n_secondary[1]); 
+    printf("%lld + %lld supplimentary\n", s->n_supp[0], s->n_supp[1]); 
     printf("%lld + %lld duplicates\n", s->n_dup[0], s->n_dup[1]);
     printf("%lld + %lld mapped (%.2f%%:%.2f%%)\n", s->n_mapped[0], s->n_mapped[1], (float)s->n_mapped[0] / s->n_reads[0] * 100.0, (float)s->n_mapped[1] / s->n_reads[1] * 100.0);
     printf("%lld + %lld paired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);
