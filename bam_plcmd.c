@@ -617,18 +617,18 @@ int parse_format_flag(const char *str)
     char **tags = hts_readlist(str, 0, &n_tags);
     for(i=0; i<n_tags; i++)
     {
-        int tag_len = strlen(tags[i]);
-        if ( tag_len==2 && !strncasecmp(tags[i],"DP",tag_len) ) flag |= B2B_FMT_DP;
-        else if ( tag_len==2 && !strncasecmp(tags[i],"DV",tag_len) ) flag |= B2B_FMT_DV;
-        else if ( tag_len==2 && !strncasecmp(tags[i],"SP",tag_len) ) flag |= B2B_FMT_SP;
-        else if ( tag_len==3 && !strncasecmp(tags[i],"DP4",tag_len) ) flag |= B2B_FMT_DP4;
-        else if ( tag_len==3 && !strncasecmp(tags[i],"DPR",tag_len) ) flag |= B2B_FMT_DPR;
-        else if ( tag_len==8 && !strncasecmp(tags[i],"INFO/DPR",tag_len) ) flag |= B2B_INFO_DPR;
+        if ( !strcasecmp(tags[i],"DP") ) flag |= B2B_FMT_DP;
+        else if ( !strcasecmp(tags[i],"DV") ) flag |= B2B_FMT_DV;
+        else if ( !strcasecmp(tags[i],"SP") ) flag |= B2B_FMT_SP;
+        else if ( !strcasecmp(tags[i],"DP4") ) flag |= B2B_FMT_DP4;
+        else if ( !strcasecmp(tags[i],"DPR") ) flag |= B2B_FMT_DPR;
+        else if ( !strcasecmp(tags[i],"INFO/DPR") ) flag |= B2B_INFO_DPR;
         else
         {
             fprintf(stderr,"Could not parse tag \"%s\" in \"%s\"\n", tags[i], str);
             exit(1);
         }
+        free(tags[i]);
     }
     if (n_tags) free(tags);
     return flag;
