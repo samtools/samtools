@@ -198,6 +198,11 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
             if ( !remove_reads ) sam_write1(out, header, cur);
             continue; // skip secondary alignments
         }
+        if (cur->core.flag & BAM_FSUPPLEMENTARY)
+        {
+            sam_write1(out, header, cur);
+            continue; // skip supplementary alignments
+        }
         if (cur->core.tid < 0 || cur->core.pos < 0) // If unmapped set the flag
         {
             cur->core.flag |= BAM_FUNMAP;
