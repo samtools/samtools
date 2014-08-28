@@ -89,9 +89,9 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
             /* do nothing */
         } else if (op == BAM_CDEL) {
             for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
-                } else {
+        } else {
             fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in read %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
-                        assert(-1);
+            exit(1);
         }
     }
     assert(length == s->l);

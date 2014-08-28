@@ -23,8 +23,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 #include <unistd.h>
-#include <assert.h>
 #include "bam.h"
+#include "samtools.h"
 
 typedef struct {
     long long n_reads[2], n_mapped[2], n_pair_all[2], n_pair_map[2], n_pair_good[2];
@@ -84,8 +84,11 @@ int bam_flagstat(int argc, char *argv[])
         fprintf(stderr, "Usage: samtools flagstat <in.bam>\n");
         return 1;
     }
-    fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
-    assert(fp);
+    fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(STDIN_FILENO, "r");
+    if (fp == NULL) {
+        print_error_errno("Cannot open input file \"%s\"", argv[optind]);
+        return 1;
+    }
     header = bam_header_read(fp);
     s = bam_flagstat_core(fp);
     printf("%lld + %lld in total (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
