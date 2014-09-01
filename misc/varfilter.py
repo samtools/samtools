@@ -1,4 +1,4 @@
-#!/software/bin/python
+#!/usr/bin/env python
 #
 #    Copyright (C) 2009, 2010 Genome Research Ltd.
 #
