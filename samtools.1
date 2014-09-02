@@ -257,7 +257,7 @@ Only output alignments in library
 .TP
 .BI "-m " INT
 Only output alignments with number of CIGAR bases consuming query
-sequence >=
+sequence \(>=
 .I INT
 [0]
 .TP
@@ -449,9 +449,9 @@ Filter flags: skip reads with mask bits set
 .TP
 .B -x,\ --ignore-overlaps
 Disable read-pair overlap detection.
-.TP
+.PP
 .B Output Options:
-.TP
+.TP 10
 .BI "-o, --output " FILE
 Write pileup or VCF/BCF output to
 .IR FILE ,
@@ -482,19 +482,17 @@ Compute genotype likelihoods and output them in the variant call format (VCF).
 Output is bgzip-compressed VCF unless
 .B -u
 option is set.
-.TP
+.PP
 .B Output Options for mpileup format (without -g or -v):
-.TP
+.TP 10
 .B -O, --output-BP
 Output base positions on reads.
 .TP
 .B -s, --output-MQ
 Output mapping quality.
-
-.TP
-
+.PP
 .B Output Options for VCF/BCF format (with -g or -v):
-.TP
+.TP 10
 .B -D
 Output per-sample read depth [DEPRECATED - use
 .B -t DP
@@ -528,11 +526,9 @@ Generate uncompressed VCF/BCF output, which is preferred for piping.
 Output per-sample number of non-reference reads [DEPRECATED - use
 .B -t DV
 instead]
-
-.TP
+.PP
 .B Options for SNP/INDEL Genotype Likelihood Computation (for -g or -v):
-
-.TP
+.TP 10
 .BI -e,\ --ext-prob \ INT
 Phred-scaled gap extension sequencing error probability. Reducing
 .I INT
@@ -604,7 +600,7 @@ Replace the header in
 with the header in
 .I in.header.sam.
 This command is much faster than replacing the header with a
-BAM->SAM->BAM conversion.
+BAM\(->SAM\(->BAM conversion.
 
 .TP
 .B cat
@@ -964,7 +960,6 @@ to a target. When option
 is in use, BAQ will be applied. This command is
 .B only
 designed for cutting fosmid clones from fosmid pool sequencing [Ref. Kitzman et al. (2010)].
-.RE
 
 .TP
 .B phase
@@ -1065,7 +1060,7 @@ the important libraries used by samtools.
 .TP
 .B --version-only
 Display the full samtools version number in a machine-readable format.
-
+.PP
 .SH REFERENCE SEQUENCES
 .PP
 The CRAM format requires use of a reference sequence for both reading
@@ -1092,7 +1087,7 @@ Look for MD5 via REF_CACHE environment variable.
 Look for MD5 in each element of the REF_PATH environment variable.
 .IP 4. 3
 Look for a local file listed in the UR: header tag.
-
+.PP
 .SH ENVIRONMENT VARIABLES
 .PP
 .TP
@@ -1127,7 +1122,7 @@ To aid population of the REF_CACHE directory a script
 \fBmisc/seq_ref_populate.pl\fR is provided in the Samtools
 distribution. This takes a fasta file or a directory of fasta files
 and generates the MD5sum named files.
-
+.PP
 .SH EXAMPLES
 .IP o 2
 Import SAM to BAM when
