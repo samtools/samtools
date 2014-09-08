@@ -112,7 +112,11 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
     // update NM
     if (flag & UPDATE_NM) {
         uint8_t *old_nm = bam_aux_get(b, "NM");
-        if (c->flag & BAM_FUNMAP) return;
+        if (c->flag & BAM_FUNMAP) {
+            free(str->s);
+            free(str);
+            return;
+        }
         if (old_nm) old_nm_i = bam_aux2i(old_nm);
         if (!old_nm) bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
         else if (nm != old_nm_i) {
@@ -124,7 +128,11 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
     // update MD
     if (flag & UPDATE_MD) {
         uint8_t *old_md = bam_aux_get(b, "MD");
-        if (c->flag & BAM_FUNMAP) return;
+        if (c->flag & BAM_FUNMAP) {
+            free(str->s);
+            free(str);
+            return;
+        }
         if (!old_md) bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
         else {
             int is_diff = 0;
