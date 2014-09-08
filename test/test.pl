@@ -636,7 +636,6 @@ sub querylen
 #   $args->{region}         region list to output (-L and region list)
 #   $args->{strip_tags}     hash of tags to strip from alignments (-x)
 #   $args->{min_qlen}       minimum query length to output (-m)
-#   $args->{qual_scale}     scale quality values (-Q)
 #
 # The region list is a reference to an array of region definitions.  Each
 # region definition is itself a reference to an array with between one and
@@ -689,11 +688,9 @@ sub filter_sam
     my $region         = $args->{region};
     my $strip_tags     = $args->{strip_tags};
     my $min_qlen       = $args->{min_qlen} || 0;
-    my $qual_scale     = $args->{qual_scale} || 0;
-    if ($qual_scale && $qual_scale > 93) { $qual_scale = 93; }
     my $body_filter = ($flags_required || $flags_rejected || $read_groups
                        || $min_map_qual || $libraries || $region
-                       || $strip_tags || $min_qlen || $qual_scale);
+                       || $strip_tags || $min_qlen);
     my $lib_read_groups = $libraries ? {} : undef;
 
     open(my $sam_in, '<', $in) || die "Couldn't open $in : $!\n";
@@ -749,14 +746,6 @@ sub filter_sam
                 }
                 if ($min_qlen > 0) {
                     next if (querylen($sam[5]) < $min_qlen);
-                }
-                if ($qual_scale > 1) {
-                    $sam[10] = join('', map {
-                        my $i = (ord($_) - 33) * $qual_scale;
-                        if ($i > 93) { $i = 93; }
-                        chr($i + 33);
-                                    } split(//, $sam[10]));
-                    $_ = join("\t", @sam);
                 }
                 if ($strip_tags) {
                     my $stripped = 0;
@@ -1593,9 +1582,6 @@ sub test_view
         ['qlen11', { min_qlen => 11 }, ['-m', 11], 0],
         ['qlen15', { min_qlen => 15 }, ['-m', 15], 0],
         ['qlen16', { min_qlen => 16 }, ['-m', 16], 0],
-        # Quality scale
-        ['qscale2', { qual_scale => 2 }, ['-Q', 2], 0],
-        ['qscale_maxint', { qual_scale => 2147483647 }, ['-Q', 2147483647], 0],
         );
 
     my @filter_inputs = ([SAM  => $sam_with_ur],

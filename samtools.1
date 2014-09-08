@@ -128,9 +128,8 @@ alignments that match certain criteria.
 The
 .BR -x ,
 .BR -B ,
-.BR -s ,
 and
-.B -Q
+.B -s
 options modify the data which is contained in each alignment.
 
 Finally, the
@@ -288,9 +287,6 @@ Collapse the backward CIGAR operation.
 .BI "-s " FLOAT
 Integer part is used to seed the random number generator [0]. Part after the
 decimal point sets the fraction of templates/pairs to subsample [no subsampling].
-.TP
-.BI "-Q " INT
-Scale quality values in output by INT [1]
 .TP
 .BI "-@ " INT
 Number of BAM compression threads to use in addition to main thread [0].
