@@ -52,7 +52,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
     }
     else {
         fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it
-        if (fp->file->is_bin || fp->file->is_cram || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
+        if (fp->file->is_bin || HTS_FT(fp->file->type)==HTS_FT_CRAM || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
     }
 
     return fp;
