@@ -28,7 +28,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <stdbool.h>
 #include <limits.h>
-#include <assert.h>
 #include <unistd.h>
 #include <regex.h>
 #include <htslib/khash.h>

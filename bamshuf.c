@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "htslib/bgzf.h"
 #include "htslib/ksort.h"
+#include "samtools.h"
 
 #define DEF_CLEVEL 1
 
@@ -72,7 +73,7 @@ static inline int elem_lt(elem_t x, elem_t y)
 
 KSORT_INIT(bamshuf, elem_t, elem_lt)
 
-static void bamshuf(const char *fn, int n_files, const char *pre, int clevel, int is_stdout)
+static int bamshuf(const char *fn, int n_files, const char *pre, int clevel, int is_stdout)
 {
     BGZF *fp, *fpw, **fpt;
     char **fnt, modew[8];
@@ -83,7 +84,11 @@ static void bamshuf(const char *fn, int n_files, const char *pre, int clevel, in
 
     // split
     fp = strcmp(fn, "-")? bgzf_open(fn, "r") : bgzf_dopen(fileno(stdin), "r");
-    assert(fp);
+    if (fp == NULL) {
+        print_error_errno("Cannot open input file \"%s\"", fn);
+        return 1;
+    }
+
     h = bam_hdr_read(fp);
     fnt = (char**)calloc(n_files, sizeof(char*));
     fpt = (BGZF**)calloc(n_files, sizeof(BGZF*));
@@ -93,6 +98,10 @@ static void bamshuf(const char *fn, int n_files, const char *pre, int clevel, in
         fnt[i] = (char*)calloc(l + 10, 1);
         sprintf(fnt[i], "%s.%.4d.bam", pre, i);
         fpt[i] = bgzf_open(fnt[i], "w1");
+        if (fpt[i] == NULL) {
+            print_error_errno("Cannot open intermediate file \"%s\"", fnt[i]);
+            return 1;
+        }
         bam_hdr_write(fpt[i], h);
     }
     b = bam_init1();
@@ -114,6 +123,12 @@ static void bamshuf(const char *fn, int n_files, const char *pre, int clevel, in
         fpw = bgzf_open(fnw, modew);
         free(fnw);
     } else fpw = bgzf_dopen(fileno(stdout), modew); // output to stdout
+    if (fpw == NULL) {
+        if (is_stdout) print_error_errno("Cannot open standard output");
+        else print_error_errno("Cannot open output file \"%s.bam\"", pre);
+        return 1;
+    }
+
     bam_hdr_write(fpw, h);
     bam_hdr_destroy(h);
     for (i = 0; i < n_files; ++i) {
@@ -139,6 +154,7 @@ static void bamshuf(const char *fn, int n_files, const char *pre, int clevel, in
     }
     bgzf_close(fpw);
     free(fnt); free(cnt);
+    return 0;
 }
 
 int main_bamshuf(int argc, char *argv[])
@@ -154,14 +170,14 @@ int main_bamshuf(int argc, char *argv[])
     }
     if (is_un) clevel = 0;
     if (optind + 2 > argc) {
-        fprintf(stderr, "\nUsage:   samtools bamshuf [-Ou] [-n nFiles] [-c cLevel] <in.bam> <out.prefix>\n\n");
-        fprintf(stderr, "Options: -O      output to stdout\n");
-        fprintf(stderr, "         -u      uncompressed BAM output\n");
-        fprintf(stderr, "         -l INT  compression level [%d]\n", DEF_CLEVEL);
-        fprintf(stderr, "         -n INT  number of temporary files [%d]\n", n_files);
-        fprintf(stderr, "\n");
+        fprintf(stderr,
+"Usage:   samtools bamshuf [-Ou] [-n nFiles] [-c cLevel] <in.bam> <out.prefix>\n\n"
+"Options: -O      output to stdout\n"
+"         -u      uncompressed BAM output\n"
+"         -l INT  compression level [%d]\n" // DEF_CLEVEL
+"         -n INT  number of temporary files [%d]\n", // n_files
+                DEF_CLEVEL, n_files);
         return 1;
     }
-    bamshuf(argv[optind], n_files, argv[optind+1], clevel, is_stdout);
-    return 0;
+    return bamshuf(argv[optind], n_files, argv[optind+1], clevel, is_stdout);
 }

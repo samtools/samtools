@@ -26,7 +26,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdbool.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
