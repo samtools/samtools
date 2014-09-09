@@ -41,6 +41,8 @@ samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
 samtools faidx ref.fasta
 .PP
+samtools fixmate in.namesorted.sam out.bam
+.PP
 samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools tview aln.sorted.bam ref.fasta
@@ -869,19 +871,38 @@ format.
 
 .TP
 .B fixmate
-samtools fixmate [-rp] <in.nameSrt.bam> <out.bam>
+.na
+samtools fixmate
+.RB [ -rpc ]
+.RB [ -O
+.IR format ]
+.I in.nameSrt.bam out.bam
+.ad
 
 Fill in mate coordinates, ISIZE and mate related flags from a
 name-sorted alignment.
 
 .B OPTIONS:
 .RS
-.TP 8
+.TP 11
 .B -r
 Remove secondary and unmapped reads.
-.TP 8
+.TP
 .B -p
 Disable FR proper pair check.
+.TP
+.B -c
+Add template cigar ct tag.
+.TP
+.BI "-O " FORMAT
+Write the final output as
+.BR sam ", " bam ", or " cram .
+
+By default, samtools tries to select a format based on the output
+filename extension; if output is to standard output or no format can be
+deduced,
+.B -O
+must be used.
 .RE
 
 .TP

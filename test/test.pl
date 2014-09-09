@@ -2177,6 +2177,8 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/2_isize_overflow.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -O sam $$opts{path}/fixmate/2_isize_overflow.sam -");
     test_cmd($opts,out=>'fixmate/3_reverse_read_pp_lt.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -O sam $$opts{path}/fixmate/3_reverse_read_pp_lt.sam -");
     test_cmd($opts,out=>'fixmate/4_reverse_read_pp_equal.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -O sam $$opts{path}/fixmate/4_reverse_read_pp_equal.sam -");
+    test_cmd($opts,out=>'fixmate/5_ct.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -cO sam $$opts{path}/fixmate/5_ct.sam -");
+    test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
 }
 
 sub test_idxstat

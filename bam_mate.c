@@ -1,4 +1,4 @@
-/*  bam_mate.c -- fixmate subcommand.
+/*  bam_mate.c -- fix mate pairing information and clean up flags.
 
     Copyright (C) 2009, 2011-2014 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
@@ -33,7 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 
 /*
- * This function calculates CT tag for two bams, it assumes they are from the same template and
+ * This function calculates ct tag for two bams, it assumes they are from the same template and
  * writes the tag to the first read in position terms.
  */
 static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
@@ -59,12 +59,18 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
         kputw(bam_cigar_oplen(cigar[i]), str);
         kputc(bam_cigar_opchr(cigar[i]), str);
     }
+
+    uint8_t* data;
+    if ((data = bam_aux_get(b1,"ct")) != NULL) bam_aux_del(b1, data);
+    if ((data = bam_aux_get(b2,"ct")) != NULL) bam_aux_del(b2, data);
+
     bam_aux_append(b1, "ct", 'Z', str->l+1, (uint8_t*)str->s);
 }
 
 /*
  * What This Program is Supposed To Do:
- * Fill in mate coordinates, ISIZE and mate related flags from a name-sorted alignment.
+ * Fill in mate coordinates, ISIZE and mate related flags from a name-sorted
+ * alignment.
  *
  * How We Handle Input
  *
@@ -73,7 +79,8 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * All Reads:
  * -if pos == 0 (1 based), tid == -1 set UNMAPPED flag
  * single Reads:
- * -if pos == 0 (1 based), tid == -1, or UNMAPPED then set UNMAPPED, pos = 0, tid = -1
+ * -if pos == 0 (1 based), tid == -1, or UNMAPPED then set UNMAPPED, pos = 0,
+ *  tid = -1
  * -clear bad flags (PAIRED, MREVERSE, PROPER_PAIR)
  * -set mpos = 0 (1 based), mtid = -1 and isize = 0
  * -write to output
@@ -81,13 +88,16 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * -if read is unmapped and mate is not, set pos and tid to equal that of mate
  * -sync mate flags (MREVERSE, MUNMAPPED), mpos, mtid
  * -recalculate ISIZE if possible, otherwise set it to 0
- * -optionally clear PROPER_PAIR flag from reads where mapping or orientation indicate this is not possible (Illumina orientation only)
- * -calculate CT and apply to lowest positioned read
+ * -optionally clear PROPER_PAIR flag from reads where mapping or orientation
+ *  indicate this is not possible (Illumina orientation only)
+ * -calculate ct and apply to lowest positioned read
  * -write to output
  * Limitations
  * -Does not handle tandem reads
- * -Does not handle new FSUPPLEMENTARY yet (need to check what to do with these I suspect just pass through unchanged)
- * -CT definition appears to be something else in spec, this was in here before I started tampering with it, anyone know what is going on here?
+ * Notes
+ * -CT definition appears to be something else in spec, this was in here before
+ *  I started tampering with it, anyone know what is going on here? To work
+ *  around this I have demoted the CT this tool generates to ct.
  */
 
 static void sync_unmapped_pos_inner(bam1_t* src, bam1_t* dest) {
@@ -165,7 +175,7 @@ static void sync_mate(bam1_t* a, bam1_t* b)
 }
 
 // currently, this function ONLY works if each read has one hit
-static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int proper_pair_check)
+static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int proper_pair_check, int add_ct)
 {
     bam_hdr_t *header;
     bam1_t *b[2];
@@ -201,7 +211,7 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
         if (cur->core.flag & BAM_FSUPPLEMENTARY)
         {
             sam_write1(out, header, cur);
-            continue; // skip supplementary alignments
+            continue; // pass supplementary alignments through unchanged (TODO:make them match read they came from)
         }
         if (cur->core.tid < 0 || cur->core.pos < 0) // If unmapped set the flag
         {
@@ -228,7 +238,7 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
                     pre5 = (pre->core.flag&BAM_FREVERSE)? pre_end : pre->core.pos;
                     cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
                 } else cur->core.isize = pre->core.isize = 0;
-                bam_template_cigar(pre, cur, &str);
+                if (add_ct) bam_template_cigar(pre, cur, &str);
                 // TODO: Add code to properly check if read is in a proper pair based on ISIZE distribution
                 if (proper_pair_check && !plausibly_properly_paired(pre,cur)) {
                     pre->core.flag &= ~BAM_FPROPER_PAIR;
@@ -285,6 +295,7 @@ void usage(FILE* where)
     fprintf(where,"Options:\n");
     fprintf(stderr,"  -r         Remove unmapped reads and secondary alignments\n");
     fprintf(stderr,"  -p         Disable FR proper pair check\n");
+    fprintf(stderr,"  -c         Add template cigar ct tag\n");
     fprintf(stderr,"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')\n");
     fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
     fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
@@ -294,15 +305,16 @@ void usage(FILE* where)
 int bam_mating(int argc, char *argv[])
 {
     samFile *in, *out;
-    int c, remove_reads = 0, proper_pair_check = 1;
+    int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0;
     char* fmtout = NULL;
     char modeout[12];
     // parse args
     if (argc == 1) { usage(stdout); return 0; }
-    while ((c = getopt(argc, argv, "rpO:")) >= 0) {
+    while ((c = getopt(argc, argv, "rpcO:")) >= 0) {
         switch (c) {
             case 'r': remove_reads = 1; break;
             case 'p': proper_pair_check = 0; break;
+            case 'c': add_ct = 1; break;
             case 'O': fmtout = optarg; break;
             default: usage(stderr); return 1;
         }
@@ -326,7 +338,7 @@ int bam_mating(int argc, char *argv[])
     }
 
     // run
-    bam_mating_core(in, out, remove_reads, proper_pair_check);
+    bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct);
     // cleanup
     sam_close(in); sam_close(out);
     return 0;
