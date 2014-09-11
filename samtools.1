@@ -652,7 +652,12 @@ option).
 .RS
 .TP 11
 .BI "-l " INT
-Set the compression level, from 0 to 9, for the final output file.
+Set the desired compression level for the final output file, ranging from 0
+(uncompressed) or 1 (fastest but minimal compression) to 9 (best compression
+but slowest to write), similarly to
+.BR gzip (1)'s
+compression level setting.
+.IP
 If
 .B -l
 is not used, the default compression level will apply.
