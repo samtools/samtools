@@ -119,6 +119,6 @@ int bam_flagstat(int argc, char *argv[])
     printf("%lld + %lld with mate mapped to a different chr (mapQ>=5)\n", s->n_diffhigh[0], s->n_diffhigh[1]);
     free(s);
     bam_hdr_destroy(header);
-    hts_close(fp);
+    sam_close(fp);
     return 0;
 }
