@@ -97,9 +97,14 @@ int bam_flagstat(int argc, char *argv[])
     }
 
     if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS,
-		    SAM_FLAG | SAM_MAPQ | SAM_RNEXT)) {
-	fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
-	return 1;
+                    SAM_FLAG | SAM_MAPQ | SAM_RNEXT)) {
+        fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
+        return 1;
+    }
+
+    if (hts_set_opt(fp, CRAM_OPT_DECODE_MD, 0)) {
+        fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
+        return 1;
     }
 
     header = sam_hdr_read(fp);

@@ -572,6 +572,15 @@ int main_bam2fq(int argc, char *argv[])
         print_error_errno("Cannot read file \"%s\"", argv[optind]);
         return 1;
     }
+    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS,
+                    SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL)) {
+        fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
+        return 1;
+    }
+    if (hts_set_opt(fp, CRAM_OPT_DECODE_MD, 0)) {
+        fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
+        return 1;
+    }
     fpse = NULL;
     if (fnse) {
         fpse = fopen(fnse,"w");

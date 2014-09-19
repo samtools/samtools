@@ -126,6 +126,16 @@ int main_depth(int argc, char *argv[])
             status = EXIT_FAILURE;
             goto depth_end;
         }
+        if (hts_set_opt(data[i]->fp, CRAM_OPT_REQUIRED_FIELDS,
+                        SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | SAM_CIGAR |
+                        SAM_SEQ)) {
+            fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
+            return 1;
+        }
+        if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
+            fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
+            return 1;
+        }
         data[i]->min_mapQ = mapQ;                    // set the mapQ filter
         data[i]->min_len  = min_len;                 // set the qlen filter
         data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
