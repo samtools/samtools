@@ -26,7 +26,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdbool.h>
 #include <stdlib.h>
 #include <ctype.h>
-#include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
@@ -58,6 +57,7 @@ void memset_pattern4(void *target, const void *pattern, size_t size) {
 #endif
 
 KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
+KHASH_MAP_INIT_STR(c2i, int)
 
 #define __free_char(p)
 KLIST_INIT(hdrln, char*, __free_char)
@@ -244,19 +244,21 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     kstring_t out_text = { 0, 0, NULL };
     kputsn(out->text, out_len, &out_text);
 
-    // Naive way of doing this but meh
-    int i, j, min_tid = -1;
+    int i, min_tid = -1;
     tbl->lost_coord_sort = false;
+
+    khash_t(c2i) *out_tid = kh_init(c2i);
+    for (i = 0; i < out->n_targets; ++i) {
+        int ret;
+        khiter_t iter = kh_put(c2i, out_tid, out->target_name[i], &ret);
+        if (ret <= 0) abort();
+        kh_value(out_tid, iter) = i;
+    }
+
     for (i = 0; i < translate->n_targets; ++i) {
-        int tid = -1;
-        // Search 'out' for entries in 'translate' and map them
-        for (j = 0; j < out->n_targets; j++) {
-            if (!strcmp(translate->target_name[i],out->target_name[j])) {
-                tid = j;
-                break;
-            }
-        }
-        if (tid == -1) { // Append missing entries to out
+        khiter_t iter = kh_get(c2i, out_tid, translate->target_name[i]);
+
+        if (iter == kh_end(out_tid)) { // Append missing entries to out
             tbl->tid_trans[i] = out->n_targets++;
             out->target_name = (char**)realloc(out->target_name, sizeof(char*)*out->n_targets);
             out->target_name[out->n_targets-1] = strdup(translate->target_name[i]);
@@ -284,7 +286,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 
             free(matches);
         } else {
-            tbl->tid_trans[i] = tid;
+            tbl->tid_trans[i] = kh_value(out_tid, iter);
         }
         if (tbl->tid_trans[i] > min_tid) {
             min_tid = tbl->tid_trans[i];
@@ -292,6 +294,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             tbl->lost_coord_sort = true;
         }
     }
+    kh_destroy(c2i, out_tid);
 
     // grep @RG id's
     regex_t rg_id;
@@ -1090,7 +1093,7 @@ static int sort_usage(FILE *fp, int status)
     fprintf(fp,
 "Usage: samtools sort [options...] [in.bam]\n"
 "Options:\n"
-"  -l INT     Set compression level, from 0 to 9 [-1]\n"
+"  -l INT     Set compression level, from 0 (uncompressed) to 9 (best)\n"
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -n         Sort by read name\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"

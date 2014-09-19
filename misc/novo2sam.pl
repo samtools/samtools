@@ -1,12 +1,12 @@
-#!/usr/bin/perl -w
+#!/usr/bin/env perl
 
 # Contact: lh3
 # Version: 0.1.3
 
 #Modified by Zayed Albertyn(zayed.albertyn@gmail.com) & Colin Hercus(colin@novocraft.com)
 
-#use strict;
-#use warnings;
+use strict;
+use warnings;
 use Data::Dumper;
 use Getopt::Std;
 

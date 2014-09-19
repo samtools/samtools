@@ -348,7 +348,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=IDV,Number=1,Type=Integer,Description=\"Maximum number of reads supporting an indel\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=IMF,Number=1,Type=Float,Description=\"Maximum fraction of reads supporting an indel\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=DP,Number=1,Type=Integer,Description=\"Raw read depth\">");
-        bcf_hdr_append(bcf_hdr,"##INFO=<ID=VDB,Number=1,Type=Float,Description=\"Variant Distance Bias for filtering splice-site artefacts in RNA-seq data (bigger is better)\",Version=3>");
+        bcf_hdr_append(bcf_hdr,"##INFO=<ID=VDB,Number=1,Type=Float,Description=\"Variant Distance Bias for filtering splice-site artefacts in RNA-seq data (bigger is better)\",Version=\"3\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=RPB,Number=1,Type=Float,Description=\"Mann-Whitney U test of Read Position Bias (bigger is better)\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=MQB,Number=1,Type=Float,Description=\"Mann-Whitney U test of Mapping Quality Bias (bigger is better)\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=BQB,Number=1,Type=Float,Description=\"Mann-Whitney U test of Base Quality Bias (bigger is better)\">");
@@ -400,10 +400,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bc.fmt_arr = malloc(sm->n * sizeof(float)); // all fmt_flag fields
             if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR) )
             {
-                // first 5 fields for total numbers, the rest per-sample
-                bc.DPR = malloc((sm->n+1)*5*sizeof(int32_t));
+                // first B2B_MAX_ALLELES fields for total numbers, the rest per-sample
+                bc.DPR = malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
                 for (i=0; i<sm->n; i++)
-                    bcr[i].DPR = bc.DPR + (i+1)*5;
+                    bcr[i].DPR = bc.DPR + (i+1)*B2B_MAX_ALLELES;
             }
         }
     }
@@ -613,26 +613,24 @@ int read_file_list(const char *file_list,int *n,char **argv[])
 
 int parse_format_flag(const char *str)
 {
-    int flag = 0;
-    const char *ss = str;
-    while ( *ss )
+    int i, flag = 0, n_tags;
+    char **tags = hts_readlist(str, 0, &n_tags);
+    for(i=0; i<n_tags; i++)
     {
-        const char *se = ss;
-        while ( *se && *se!=',' ) se++;
-        if ( !strncasecmp(ss,"DP",se-ss) ) flag |= B2B_FMT_DP;
-        else if ( !strncasecmp(ss,"DP4",se-ss) ) flag |= B2B_FMT_DP4;
-        else if ( !strncasecmp(ss,"DV",se-ss) ) flag |= B2B_FMT_DV;
-        else if ( !strncasecmp(ss,"SP",se-ss) ) flag |= B2B_FMT_SP;
-        else if ( !strncasecmp(ss,"DPR",se-ss) ) flag |= B2B_FMT_DPR;
-        else if ( !strncasecmp(ss,"INFO/DPR",se-ss) ) flag |= B2B_INFO_DPR;
+        if ( !strcasecmp(tags[i],"DP") ) flag |= B2B_FMT_DP;
+        else if ( !strcasecmp(tags[i],"DV") ) flag |= B2B_FMT_DV;
+        else if ( !strcasecmp(tags[i],"SP") ) flag |= B2B_FMT_SP;
+        else if ( !strcasecmp(tags[i],"DP4") ) flag |= B2B_FMT_DP4;
+        else if ( !strcasecmp(tags[i],"DPR") ) flag |= B2B_FMT_DPR;
+        else if ( !strcasecmp(tags[i],"INFO/DPR") ) flag |= B2B_INFO_DPR;
         else
         {
-            fprintf(stderr,"Could not parse \"%s\"\n", str);
+            fprintf(stderr,"Could not parse tag \"%s\" in \"%s\"\n", tags[i], str);
             exit(1);
         }
-        if ( !*se ) break;
-        ss = se + 1;
+        free(tags[i]);
     }
+    if (n_tags) free(tags);
     return flag;
 }
 

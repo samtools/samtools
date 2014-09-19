@@ -89,9 +89,9 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
             /* do nothing */
         } else if (op == BAM_CDEL) {
             for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
-                } else {
+        } else {
             fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in read %s\n", BAM_CIGAR_STR[op], bam1_qname(b));
-                        assert(-1);
+            exit(1);
         }
     }
     assert(length == s->l);
@@ -268,7 +268,7 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
             write_cigar(cigar2, n2, m2, bam_cigar_gen(k, op));
             if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CSOFT_CLIP) {
                 write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-1]);
-                        } else if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CHARD_CLIP) {
+            } else if (bam_cigar_op(cigar[b->core.n_cigar-1]) == BAM_CHARD_CLIP) {
                 if (b->core.n_cigar > 2 && bam_cigar_op(cigar[b->core.n_cigar-2]) == BAM_CSOFT_CLIP) {
                     write_cigar(cigar2, n2, m2, cigar[b->core.n_cigar-2]);
                 }
@@ -412,11 +412,11 @@ static int usage(int is_long_help);
 int main_pad2unpad(int argc, char *argv[])
 {
     samfile_t *in = 0, *out = 0;
-        bam_header_t *h = 0;
+    bam_header_t *h = 0;
     faidx_t *fai = 0;
     int c, is_bamin = 1, compress_level = -1, is_bamout = 1, is_long_help = 0;
     char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0;
-        int ret=0;
+    int ret=0;
 
     /* parse command-line options */
     strcpy(in_mode, "r"); strcpy(out_mode, "w");
@@ -428,10 +428,10 @@ int main_pad2unpad(int argc, char *argv[])
         case 'u': assert(is_bamout == 1); compress_level = 0; break;
         case '1': assert(is_bamout == 1); compress_level = 1; break;
         case 'T': fn_ref = strdup(optarg); break;
-                case '?': is_long_help = 1; break;
+        case '?': is_long_help = 1; break;
         default: return usage(is_long_help);
         }
-        }
+    }
     if (argc == optind) return usage(is_long_help);
 
     if (is_bamin) strcat(in_mode, "b");
@@ -509,5 +509,5 @@ static int usage(int is_long_help)
 \n\
   2. The input padded alignment read's CIGAR strings must not use P or I operators.\n\
 \n");
-        return 1;
+    return 1;
 }

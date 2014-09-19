@@ -1,4 +1,4 @@
-.TH samtools 1 "15 August 2014" "samtools-1.0" "Bioinformatics tools"
+.TH samtools 1 "19 September 2014" "samtools-1.1" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -40,6 +40,8 @@ samtools view aln.sorted.bam chr2:20,100,000-20,200,000
 samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
 samtools faidx ref.fasta
+.PP
+samtools fixmate in.namesorted.sam out.bam
 .PP
 samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
@@ -126,9 +128,8 @@ alignments that match certain criteria.
 The
 .BR -x ,
 .BR -B ,
-.BR -s ,
 and
-.B -Q
+.B -s
 options modify the data which is contained in each alignment.
 
 Finally, the
@@ -257,7 +258,7 @@ Only output alignments in library
 .TP
 .BI "-m " INT
 Only output alignments with number of CIGAR bases consuming query
-sequence >=
+sequence \(>=
 .I INT
 [0]
 .TP
@@ -286,9 +287,6 @@ Collapse the backward CIGAR operation.
 .BI "-s " FLOAT
 Integer part is used to seed the random number generator [0]. Part after the
 decimal point sets the fraction of templates/pairs to subsample [no subsampling].
-.TP
-.BI "-Q " INT
-Scale quality values in output by INT [1]
 .TP
 .BI "-@ " INT
 Number of BAM compression threads to use in addition to main thread [0].
@@ -449,9 +447,9 @@ Filter flags: skip reads with mask bits set
 .TP
 .B -x,\ --ignore-overlaps
 Disable read-pair overlap detection.
-.TP
+.PP
 .B Output Options:
-.TP
+.TP 10
 .BI "-o, --output " FILE
 Write pileup or VCF/BCF output to
 .IR FILE ,
@@ -482,19 +480,17 @@ Compute genotype likelihoods and output them in the variant call format (VCF).
 Output is bgzip-compressed VCF unless
 .B -u
 option is set.
-.TP
+.PP
 .B Output Options for mpileup format (without -g or -v):
-.TP
+.TP 10
 .B -O, --output-BP
 Output base positions on reads.
 .TP
 .B -s, --output-MQ
 Output mapping quality.
-
-.TP
-
+.PP
 .B Output Options for VCF/BCF format (with -g or -v):
-.TP
+.TP 10
 .B -D
 Output per-sample read depth [DEPRECATED - use
 .B -t DP
@@ -528,11 +524,9 @@ Generate uncompressed VCF/BCF output, which is preferred for piping.
 Output per-sample number of non-reference reads [DEPRECATED - use
 .B -t DV
 instead]
-
-.TP
+.PP
 .B Options for SNP/INDEL Genotype Likelihood Computation (for -g or -v):
-
-.TP
+.TP 10
 .BI -e,\ --ext-prob \ INT
 Phred-scaled gap extension sequencing error probability. Reducing
 .I INT
@@ -604,7 +598,7 @@ Replace the header in
 with the header in
 .I in.header.sam.
 This command is much faster than replacing the header with a
-BAM->SAM->BAM conversion.
+BAM\(->SAM\(->BAM conversion.
 
 .TP
 .B cat
@@ -658,7 +652,12 @@ option).
 .RS
 .TP 11
 .BI "-l " INT
-Set the compression level, from 0 to 9, for the final output file.
+Set the desired compression level for the final output file, ranging from 0
+(uncompressed) or 1 (fastest but minimal compression) to 9 (best compression
+but slowest to write), similarly to
+.BR gzip (1)'s
+compression level setting.
+.IP
 If
 .B -l
 is not used, the default compression level will apply.
@@ -873,19 +872,38 @@ format.
 
 .TP
 .B fixmate
-samtools fixmate [-rp] <in.nameSrt.bam> <out.bam>
+.na
+samtools fixmate
+.RB [ -rpc ]
+.RB [ -O
+.IR format ]
+.I in.nameSrt.bam out.bam
+.ad
 
 Fill in mate coordinates, ISIZE and mate related flags from a
 name-sorted alignment.
 
 .B OPTIONS:
 .RS
-.TP 8
+.TP 11
 .B -r
 Remove secondary and unmapped reads.
-.TP 8
+.TP
 .B -p
 Disable FR proper pair check.
+.TP
+.B -c
+Add template cigar ct tag.
+.TP
+.BI "-O " FORMAT
+Write the final output as
+.BR sam ", " bam ", or " cram .
+
+By default, samtools tries to select a format based on the output
+filename extension; if output is to standard output or no format can be
+deduced,
+.B -O
+must be used.
 .RE
 
 .TP
@@ -964,7 +982,6 @@ to a target. When option
 is in use, BAQ will be applied. This command is
 .B only
 designed for cutting fosmid clones from fosmid pool sequencing [Ref. Kitzman et al. (2010)].
-.RE
 
 .TP
 .B phase
@@ -1065,7 +1082,7 @@ the important libraries used by samtools.
 .TP
 .B --version-only
 Display the full samtools version number in a machine-readable format.
-
+.PP
 .SH REFERENCE SEQUENCES
 .PP
 The CRAM format requires use of a reference sequence for both reading
@@ -1092,7 +1109,7 @@ Look for MD5 via REF_CACHE environment variable.
 Look for MD5 in each element of the REF_PATH environment variable.
 .IP 4. 3
 Look for a local file listed in the UR: header tag.
-
+.PP
 .SH ENVIRONMENT VARIABLES
 .PP
 .TP
@@ -1127,7 +1144,7 @@ To aid population of the REF_CACHE directory a script
 \fBmisc/seq_ref_populate.pl\fR is provided in the Samtools
 distribution. This takes a fasta file or a directory of fasta files
 and generates the MD5sum named files.
-
+.PP
 .SH EXAMPLES
 .IP o 2
 Import SAM to BAM when

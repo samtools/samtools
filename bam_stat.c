@@ -1,6 +1,6 @@
 /*  bam_stat.c -- flagstat subcommand.
 
-    Copyright (C) 2009, 2011, 2013 Genome Research Ltd.
+    Copyright (C) 2009, 2011, 2013, 2014 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -23,20 +23,25 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 #include <unistd.h>
-#include <assert.h>
 #include "bam.h"
+#include "samtools.h"
 
 typedef struct {
     long long n_reads[2], n_mapped[2], n_pair_all[2], n_pair_map[2], n_pair_good[2];
     long long n_sgltn[2], n_read1[2], n_read2[2];
     long long n_dup[2];
     long long n_diffchr[2], n_diffhigh[2];
+    long long n_secondary[2], n_supp[2];
 } bam_flagstat_t;
 
 #define flagstat_loop(s, c) do {                                        \
         int w = ((c)->flag & BAM_FQCFAIL)? 1 : 0;                       \
         ++(s)->n_reads[w];                                              \
-        if ((c)->flag & BAM_FPAIRED) {                                  \
+        if ((c)->flag & BAM_FSECONDARY ) {                              \
+            ++(s)->n_secondary[w];                                      \
+        } else if ((c)->flag & BAM_FSUPPLEMENTARY ) {                   \
+            ++(s)->n_supp[w];                                           \
+        } else if ((c)->flag & BAM_FPAIRED) {                           \
             ++(s)->n_pair_all[w];                                       \
             if (((c)->flag & BAM_FPROPER_PAIR) && !((c)->flag & BAM_FUNMAP) ) ++(s)->n_pair_good[w];    \
             if ((c)->flag & BAM_FREAD1) ++(s)->n_read1[w];              \
@@ -79,11 +84,16 @@ int bam_flagstat(int argc, char *argv[])
         fprintf(stderr, "Usage: samtools flagstat <in.bam>\n");
         return 1;
     }
-    fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
-    assert(fp);
+    fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(STDIN_FILENO, "r");
+    if (fp == NULL) {
+        print_error_errno("Cannot open input file \"%s\"", argv[optind]);
+        return 1;
+    }
     header = bam_header_read(fp);
     s = bam_flagstat_core(fp);
     printf("%lld + %lld in total (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
+    printf("%lld + %lld secondary\n", s->n_secondary[0], s->n_secondary[1]);
+    printf("%lld + %lld supplimentary\n", s->n_supp[0], s->n_supp[1]);
     printf("%lld + %lld duplicates\n", s->n_dup[0], s->n_dup[1]);
     printf("%lld + %lld mapped (%.2f%%:%.2f%%)\n", s->n_mapped[0], s->n_mapped[1], (float)s->n_mapped[0] / s->n_reads[0] * 100.0, (float)s->n_mapped[1] / s->n_reads[1] * 100.0);
     printf("%lld + %lld paired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);

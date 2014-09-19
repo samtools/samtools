@@ -75,7 +75,8 @@ BUILT_TEST_PROGRAMS = \
 	test/split/test_count_rg \
 	test/split/test_expand_format_string \
 	test/split/test_filter_header_rg \
-	test/split/test_parse_args
+	test/split/test_parse_args \
+	test/vcf-miniview
 
 all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
@@ -87,7 +88,7 @@ HTSLIB = $(HTSDIR)/libhts.a
 BGZIP  = $(HTSDIR)/bgzip
 
 
-PACKAGE_VERSION = 1.0
+PACKAGE_VERSION = 1.1
 
 # If building from a Git repository, replace $(PACKAGE_VERSION) with the Git
 # description of the working tree: either a release tag with the same value
@@ -150,12 +151,12 @@ bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(bam_h)
 bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
 bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
 bam_sort.o: bam_sort.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h $(HTSDIR)/htslib/kstring.h $(htslib_sam_h)
-bam_stat.o: bam_stat.c $(bam_h)
+bam_stat.o: bam_stat.c $(bam_h) samtools.h
 bam_tview.o: bam_tview.c $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
 bam_flags.o: bam_flags.c $(sam_h)
-bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h
+bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h samtools.h
 bamtk.o: bamtk.c $(bam_h) version.h samtools.h
 bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(HTSDIR)/htslib/kseq.h
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
@@ -175,13 +176,16 @@ stats.o: stats.c $(sam_h) sam_header.h samtools.h stats_isize.h $(HTSDIR)/htslib
 
 # test programs
 
+# For tests that might use it, set $REF_PATH explicitly to use only reference
+# areas within the test suite (or set it to ':' to use no reference areas).
+# (regression.sh sets $REF_PATH to a subdirectory itself.)
 check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
-	test/test.pl --exec bgzip=$(BGZIP)
+	REF_PATH=: test/test.pl --exec bgzip=$(BGZIP)
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
 	test/merge/test_pretty_header
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
-	if [ -n "$$REF_PATH" ]; then cd test/mpileup && ./regression.sh; fi
+	cd test/mpileup && ./regression.sh
 	test/split/test_count_rg
 	test/split/test_expand_format_string
 	test/split/test_filter_header_rg
@@ -212,6 +216,9 @@ test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o
 test/split/test_parse_args: test/split/test_parse_args.o test/test.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o $(HTSLIB) $(LDLIBS) -lz
 
+test/vcf-miniview: test/vcf-miniview.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/vcf-miniview.o $(HTSLIB) $(LDLIBS) -lz
+
 test_test_h = test/test.h $(htslib_sam_h)
 
 test/merge/test_bam_translate.o: test/merge/test_bam_translate.c $(test_test_h) bam_sort.o
@@ -223,6 +230,7 @@ test/split/test_expand_format_string.o: test/split/test_expand_format_string.c b
 test/split/test_filter_header_rg.o: test/split/test_filter_header_rg.c bam_split.o $(test_test_h)
 test/split/test_parse_args.o: test/split/test_parse_args.c bam_split.o $(test_test_h)
 test/test.o: test/test.c $(htslib_sam_h) $(test_test_h)
+test/vcf-miniview.o: test/vcf-miniview.c $(htslib_vcf_h)
 
 
 # misc programs

@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #
 #    Copyright (C) 2009 Genome Research Ltd.
 #
@@ -23,6 +23,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 use strict;
+use warnings;
 
 ###Builds interpolated pileup from SAM file
 ##@description counts bases between paired ends and piles up single end reads.

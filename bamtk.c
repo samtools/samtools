@@ -24,7 +24,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <stdio.h>
 #include <unistd.h>
-#include <assert.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <string.h>

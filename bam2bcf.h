@@ -50,6 +50,8 @@ DEALINGS IN THE SOFTWARE.  */
 #define B2B_FMT_DPR     (1<<4)
 #define B2B_INFO_DPR    (1<<5)
 
+#define B2B_MAX_ALLELES 5
+
 typedef struct __bcf_callaux_t {
     int capQ, min_baseQ;
     int openQ, extQ, tandemQ; // for indels

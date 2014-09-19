@@ -26,7 +26,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
-#include <assert.h>
 #include "bam.h"
 #include "htslib/kstring.h"
 #include "sam_header.h"

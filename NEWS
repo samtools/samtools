@@ -1,3 +1,18 @@
+Beta Release 1.1 (19 September, 2014)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes in samtools:
+
+ * Sorting files with thousands of reference contigs now completes in
+   a reasonable amount of time (#260)
+ * Fixmate and flagstat now consider supplementary reads
+ * Fixmate now only adds a template cigar tag ("ct:Z") when requested
+   via a new -c option, and never adds it repeatedly (#276)
+ * Mpileup DPR annotation fixed (#274)
+ * Checksum added to stats command output
+ * Removed view -Q option
+
+
 Beta Release 1.0 (15 August, 2014)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

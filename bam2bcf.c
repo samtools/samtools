@@ -124,7 +124,7 @@ void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call)
     memset(bca->alt_bq,0,sizeof(int)*bca->nqual);
     memset(bca->fwd_mqs,0,sizeof(int)*bca->nqual);
     memset(bca->rev_mqs,0,sizeof(int)*bca->nqual);
-    if ( call->DPR ) memset(call->DPR,0,sizeof(int32_t)*(call->n+1)*4);
+    if ( call->DPR ) memset(call->DPR,0,sizeof(int32_t)*(call->n+1)*B2B_MAX_ALLELES);
 }
 
 /*
@@ -621,9 +621,10 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
         }
         if ( call->DPR )
         {
-            assert( call->n_alleles<=5 );   // this is always true for SNPs and so far for indels as well
+            assert( call->n_alleles<=B2B_MAX_ALLELES );   // this is always true for SNPs and so far for indels as well
 
-            int32_t tmp[5] = {0,0,0,0}, *dpr = call->DPR + 5, *dpr_out = call->DPR + 5;
+            int32_t tmp[B2B_MAX_ALLELES];
+            int32_t *dpr = call->DPR + B2B_MAX_ALLELES, *dpr_out = call->DPR + B2B_MAX_ALLELES;
             int32_t *dpr_tot = call->DPR;
             for (i=0; i<n; i++)
             {
@@ -634,7 +635,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
                 }
                 for (j=0; j<call->n_alleles; j++) dpr_out[j] = tmp[j];
                 dpr_out += call->n_alleles;
-                dpr += 5;
+                dpr += B2B_MAX_ALLELES;
             }
         }
 
@@ -795,7 +796,7 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     if ( fmt_flag&B2B_FMT_DP4 )
         bcf_update_format_int32(hdr, rec, "DP4", bc->DP4, rec->n_sample*4);
     if ( fmt_flag&B2B_FMT_DPR )
-        bcf_update_format_int32(hdr, rec, "DPR", bc->DPR+5, rec->n_sample*rec->n_allele);
+        bcf_update_format_int32(hdr, rec, "DPR", bc->DPR+B2B_MAX_ALLELES, rec->n_sample*rec->n_allele);
     if ( fmt_flag&B2B_INFO_DPR )
         bcf_update_info_int32(hdr, rec, "DPR", bc->DPR, rec->n_allele);
 
