@@ -465,9 +465,23 @@ sub test_usage
     print "$test:\n";
     print "\t$args{cmd}\n";
 
+    my $tty_input;
+    if (-t) {
+        $args{redirection} = "";  # no redirection necessary
+    }
+    elsif (eval { require IO::Pty }) {
+        $tty_input = new IO::Pty;
+        # ensure stdin is a terminal, so that subcommands display their usage
+        $args{redirection} = "<'" . $tty_input->ttyname . "'";
+    }
+    else {
+        warn "$0: module IO::Pty not found; skipping usage tests\n";
+        return;
+    }
+
     my $command = $args{cmd};
     my $commandpath = $$opts{bin}."/".$command;
-    my ($ret,$out,$err) = _cmd("$commandpath");
+    my ($ret,$out,$err) = _cmd("$commandpath $args{redirection}");
     if ( $err =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath: $out"); return; }
 
     my @sections = ($err =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
@@ -521,7 +535,7 @@ sub test_usage_subcommand
     my $command = $args{cmd};
     my $subcommand = $args{subcmd};
     my $commandpath = $$opts{bin}."/".$command;
-    my ($ret,$out,$err) = _cmd("$commandpath $subcommand");
+    my ($ret,$out,$err) = _cmd("$commandpath $subcommand $args{redirection}");
 
     if ( $err =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath $subcommand: $out"); return; }
 
