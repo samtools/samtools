@@ -510,7 +510,9 @@ static int usage(int is_long_help)
      p=0x1 (paired), P=0x2 (properly paired), u=0x4 (unmapped),\n\
      U=0x8 (mate unmapped), r=0x10 (reverse), R=0x20 (mate reverse)\n\
      1=0x40 (first), 2=0x80 (second), s=0x100 (not primary), \n\
-     f=0x200 (failure), d=0x400 (duplicate), S=0x800 (supllementary).\n\
+     x=0x200 (failure), d=0x400 (duplicate), S=0x800 (supplementary).\n\
+     Also, m=!(0x4) (mapped), M=!(0x8) (mate mapped), f=!(0x10) (forward),\n\
+     F=!(0x20) (mate forward).\n\
      Note that `-X' and '-Y' are samtools-C specific. Picard and older\n\
      samtools do not support string or HEX flags.\n\
 \n");
