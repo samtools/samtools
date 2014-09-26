@@ -227,7 +227,7 @@ static void check_sam_close(samFile *fp, const char *fname, const char *null_fna
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
-    int is_long_help = 0, n_threads = 0;
+    int of_type = BAM_OFDEC, is_long_help = 0, n_threads = 0;
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     bam_hdr_t *header = NULL;
@@ -249,7 +249,7 @@ int main_samview(int argc, char *argv[])
     /* parse command-line options */
     /* TODO: convert this to getopt_long we're running out of letters */
     strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
+    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:XY")) >= 0) {
         switch (c) {
         case 's':
             if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -293,10 +293,8 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
             break;
-                /* REMOVED as htslib doesn't support this
-        //case 'x': out_format = "x"; break;
-        //case 'X': out_format = "X"; break;
-                 */
+        case 'X': of_type = BAM_OFSTR; break;
+        case 'Y': of_type = BAM_OFHEX; break;
         case '?': is_long_help = 1; break;
         case 'T': fn_ref = strdup(optarg); break;
         case 'B': settings.remove_B = 1; break;
@@ -317,6 +315,10 @@ int main_samview(int argc, char *argv[])
     if (compress_level >= 0) out_format = "b";
     if (is_header_only) is_header = 1;
     strcat(out_mode, out_format);
+    if (0 == strlen(out_format)) {
+        if (of_type == BAM_OFHEX) strcat(out_mode, "x");
+        else if (of_type == BAM_OFSTR) strcat(out_mode, "X");
+    }
     if (compress_level >= 0) {
         char tmp[2];
         tmp[0] = compress_level + '0'; tmp[1] = '\0';
@@ -503,6 +505,14 @@ static int usage(int is_long_help)
 \n\
   6. Option `-u' is preferred over `-b' when the output is piped to\n\
      another samtools command.\n\
+\n\
+  7. In a string FLAG, each character represents one bit with\n\
+     p=0x1 (paired), P=0x2 (properly paired), u=0x4 (unmapped),\n\
+     U=0x8 (mate unmapped), r=0x10 (reverse), R=0x20 (mate reverse)\n\
+     1=0x40 (first), 2=0x80 (second), s=0x100 (not primary), \n\
+     f=0x200 (failure), d=0x400 (duplicate), S=0x800 (supllementary).\n\
+     Note that `-X' and '-Y' are samtools-C specific. Picard and older\n\
+     samtools do not support string or HEX flags.\n\
 \n");
     return 1;
 }
