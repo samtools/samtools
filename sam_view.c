@@ -363,7 +363,7 @@ int main_samview(int argc, char *argv[])
             if (*out_format || is_header) sam_hdr_write(un_out, header);
         }
     }
-    if (n_threads > 1) { hts_set_threads(out, n_threads); }
+    if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
 
     if (argc == optind + 1) { // convert/print the entire file
