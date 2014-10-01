@@ -477,7 +477,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 int j, cnt;
                 for (j = cnt = 0; j < n_plp[i]; ++j) {
                     const bam_pileup1_t *p = plp[i] + j;
-                    if (p->qpos < p->b->core.l_qseq && bam_get_qual(p->b)[p->qpos] >= conf->min_baseQ) ++cnt;
+                    int c = p->qpos < p->b->core.l_qseq
+                             ? bam_get_qual(p->b)[p->qpos]
+                             : 0;
+                    if (c >= conf->min_baseQ) ++cnt;
                 }
                 fprintf(pileup_fp, "\t%d\t", cnt);
                 if (n_plp[i] == 0) {
@@ -487,13 +490,18 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 } else {
                     for (j = 0; j < n_plp[i]; ++j) {
                         const bam_pileup1_t *p = plp[i] + j;
-                        if (p->qpos < p->b->core.l_qseq && bam_get_qual(p->b)[p->qpos] >= conf->min_baseQ)
+                        int c = p->qpos < p->b->core.l_qseq
+                            ? bam_get_qual(p->b)[p->qpos]
+                            : 0;
+                        if (c >= conf->min_baseQ)
                             pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref);
                     }
                     putc('\t', pileup_fp);
                     for (j = 0; j < n_plp[i]; ++j) {
                         const bam_pileup1_t *p = plp[i] + j;
-                        int c = p->qpos < p->b->core.l_qseq ? bam_get_qual(p->b)[p->qpos] : -1;
+                        int c = p->qpos < p->b->core.l_qseq
+                            ? bam_get_qual(p->b)[p->qpos]
+                            : 0;
                         if (c >= conf->min_baseQ) {
                             c = c + 33 < 126? c + 33 : 126;
                             putc(c, pileup_fp);
