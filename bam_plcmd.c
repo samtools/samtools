@@ -61,7 +61,9 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
         putc(p->b->core.qual > 93? 126 : p->b->core.qual + 33, fp);
     }
     if (!p->is_del) {
-        int c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos)];
+        int c = p->qpos < p->b->core.l_qseq
+            ? seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos)]
+            : 'N';
         if (ref) {
             int rb = pos < ref_len? ref[pos] : 'N';
             if (c == '=' || seq_nt16_table[c] == seq_nt16_table[rb]) c = bam_is_rev(p->b)? ',' : '.';
