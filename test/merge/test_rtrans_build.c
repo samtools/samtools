@@ -76,7 +76,7 @@ int main(int argc, char**argv)
                 break;
         }
     }
-    const long GIMIC_SEED = 0x1234abcd330e;
+    const long GIMIC_SEED = 0x1234abcd;
     srand48(GIMIC_SEED);
 
     if (verbose) printf("BEGIN test 1\n");
