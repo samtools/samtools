@@ -29,6 +29,7 @@ use FindBin;
 use lib "$FindBin::Bin";
 use Getopt::Long;
 use File::Temp qw/ tempfile tempdir /;
+use IO::Handle;
 
 my $opts = parse_params();
 
@@ -258,15 +259,25 @@ sub test_cmd
 sub failed
 {
     my ($opts, %args) = @_;
-    if (exists $args{reason}) { print "\n\t$args{reason}"; }
-    if (!$args{expect_fail}) { $$opts{nfailed}++; print "\n.. failed ...\n\n"; }
-    else { $$opts{nxfail}++; print "\n.. expected failure\n\n"; }
+    my $reason = exists $args{reason}? "\t$args{reason}\n" : "";
+    if (!$args{expect_fail}) {
+        $$opts{nfailed}++;
+        print "\n"; STDOUT->flush();
+        print STDERR "$reason.. failed ...\n"; STDERR->flush();
+        print "\n";
+    }
+    else { $$opts{nxfail}++; print "\n$reason.. expected failure\n\n"; }
 }
 sub passed
 {
     my ($opts, %args) = @_;
     if (!$args{expect_fail}) { $$opts{nok}++; print ".. ok\n\n"; }
-    else { $$opts{nxpass}++; print ".. unexpected pass\n\n"; }
+    else {
+        $$opts{nxpass}++;
+        STDOUT->flush();
+        print STDERR ".. unexpected pass\n"; STDERR->flush();
+        print "\n";
+    }
 }
 
 sub is_file_newer
