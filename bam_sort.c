@@ -693,7 +693,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     for (i = 0; i < n; ++i) {
         heap1_t *h = heap + i;
         h->i = i;
-        h->b = (bam1_t*)calloc(1, sizeof(bam1_t));
+        h->b = bam_init1();
         if (sam_itr_next(fp[i], iter[i], h->b) >= 0) {
             bam_translate(h->b, translation_tbl + i);
             h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam_is_rev(h->b);
@@ -701,6 +701,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
         else {
             h->pos = HEAP_EMPTY;
+            bam_destroy1(h->b);
+            h->b = NULL;
         }
     }
 
@@ -728,7 +730,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             heap->idx = idx++;
         } else if (j == -1) {
             heap->pos = HEAP_EMPTY;
-            free(heap->b->data); free(heap->b);
+            bam_destroy1(heap->b);
             heap->b = NULL;
         } else fprintf(stderr, "[bam_merge_core] '%s' is truncated. Continue anyway.\n", fn[heap->i]);
         ks_heapadjust(heap, 0, n, heap);
