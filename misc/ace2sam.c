@@ -109,7 +109,8 @@ int main(int argc, char *argv[])
                 if (t[1].s[i] != '*') ++k;
             }
             // write out the SAM header and contig sequences
-            fprintf(stderr, "H @SQ\tSN:%s\tLN:%ld\n", t[0].s, t[is_padded?1:2].l); // The SAM header line
+            fprintf(stderr, "H @SQ\tSN:%s\tLN:%lu\n", // The SAM header line
+		    t[0].s, (unsigned long)t[is_padded?1:2].l);
             cns = &t[is_padded?1:2];
             fprintf(stderr, "S >%s\n", t[0].s);
             for (i = 0; i < cns->l; i += LINE_LEN) {
