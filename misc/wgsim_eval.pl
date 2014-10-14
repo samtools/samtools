@@ -81,7 +81,7 @@ accuracy of aligners.
         my ($q, $is_correct, $chr, $left, $rght) = (int($t[4]/10), 1, $t[2], $t[3], $t[3]);
         $max_q = $q if ($q > $max_q);
         # right coordinate
-        $_ = $t[5]; s/(\d+)[MDN]/$rght+=$1,'x'/eg;
+        $_ = $t[5]; s/(\d+)[MDN=X]/$rght+=$1,'x'/eg;
         --$rght;
         # correct for clipping
         my ($left0, $rght0) = ($left, $rght);
@@ -332,7 +332,7 @@ sub uniqcmp_aux {
         my ($x, $nm) = (0, 0);
         $nm = $1 if (/NM:i:(\d+)/);
         $_ = $t[5];
-        s/(\d+)[MI]/$x+=$1/eg;
+        s/(\d+)[M=XI]/$x+=$1/eg;
         @{$a->{$t[0]}[$which]} = (($t[1]&0x10)? 1 : 0, $t[2], $t[3]-$l, $t[4], "$x:$nm", $x - $b * $nm);
     }
     close($fh);
