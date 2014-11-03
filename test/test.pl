@@ -1826,17 +1826,17 @@ sub test_view
     }
 
     # Test CRAM with explicit -T
-    my $cram_no_ur = sprintf("%s.test%03d.cram", $out, $test);
+    my $cram_no_ur_t = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
                   msg => "$test: Make CRAM with no UR field",
                   args => ['-C', $sam_no_ur],
                   ref_path => "$$opts{path}/dat/cram_md5",
-                  out => $cram_no_ur);
+                  out => $cram_no_ur_t);
     $test++;
 
     run_view_test($opts,
                   msg => "$test: Decoding CRAM with no UR field via -T",
-                  args => ['-T', $ref_file, $cram_no_ur],
+                  args => ['-T', $ref_file, $cram_no_ur_t],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   compare => $sam_no_ur);
     $test++;
