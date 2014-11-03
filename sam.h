@@ -1,6 +1,6 @@
 /*  sam.h -- format-neutral SAM/BAM API.
 
-    Copyright (C) 2009, 2013 Genome Research Ltd.
+    Copyright (C) 2009, 2013, 2014 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -50,6 +50,7 @@ typedef struct {
     samFile *file;
     struct { BGZF *bam; } x;  // Hack so that fp->x.bam still works
     bam_hdr_t *header;
+    short is_write:1;
 } samfile_t;
 
 #ifdef __cplusplus

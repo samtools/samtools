@@ -1825,6 +1825,22 @@ sub test_view
         }
     }
 
+    # Test CRAM with explicit -T
+    my $cram_no_ur = sprintf("%s.test%03d.cram", $out, $test);
+    run_view_test($opts,
+                  msg => "$test: Make CRAM with no UR field",
+                  args => ['-C', $sam_no_ur],
+                  ref_path => "$$opts{path}/dat/cram_md5",
+                  out => $cram_no_ur);
+    $test++;
+
+    run_view_test($opts,
+                  msg => "$test: Decoding CRAM with no UR field via -T",
+                  args => ['-T', $ref_file, $cram_no_ur],
+                  out => sprintf("%s.test%03d.sam", $out, $test),
+                  compare => $sam_no_ur);
+    $test++;
+
 
     # CIGAR B-operator removal tests.
     my $b_op_sam      = "$$opts{path}/dat/view.003.sam";
