@@ -527,10 +527,11 @@ int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 
 
 static void bam2fq_usage(FILE *to)
 {
-    fprintf(to, "\nUsage:   samtools bam2fq [-nO] [-s <outSE.fq>] <in.bam>\n\n");
+    fprintf(to, "\nUsage:   samtools bam2fq [-nOv] [-s <outSE.fq>] <in.bam>\n\n");
     fprintf(to, "Turns an alignment into unaligned reads in FASTQ format.\n\n");
     fprintf(to, "Options: -n        don't append /1 and /2 to the read name\n");
     fprintf(to, "         -O        output quality in the OQ tag if present\n");
+    fprintf(to, "         -v INT    Default quality score if not given in file\n");
     fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
     fprintf(to, "\n");
 }
@@ -544,15 +545,17 @@ int main_bam2fq(int argc, char *argv[])
     int status = EXIT_SUCCESS;
     size_t max_buf;
     FILE* fpse;
+    int def_qual = 1;
     // Parse args
     char* fnse = NULL;
     bool has12 = true, use_oq = false;
     int c;
-    while ((c = getopt(argc, argv, "nOs:")) > 0) {
+    while ((c = getopt(argc, argv, "nOsv:")) > 0) {
         switch (c) {
             case 'n': has12 = false; break;
             case 'O': use_oq = true; break;
             case 's': fnse = optarg; break;
+            case 'v': def_qual = atoi(optarg); break;
             default: bam2fq_usage(stderr); return 1;
         }
     }
@@ -561,6 +564,12 @@ int main_bam2fq(int argc, char *argv[])
         bam2fq_usage(stdout);
         return 0;
     }
+
+    if (def_qual < 0 || 93 < def_qual) {
+        fprintf(stderr, "Invalid -v default quality %i, allowed range 0 to 93\n", def_qual);
+        return 1;
+    }
+    def_qual += 33; // Apply Sanger FASTQ encoding PHRED offset for ASCII code
 
     if ((argc - (optind)) != 1) {
         fprintf(stderr, "Too many arguments.\n");
@@ -679,11 +688,9 @@ int main_bam2fq(int argc, char *argv[])
             kputs((char*)buf, &linebuf);
             kputc('\n', &linebuf);
         } else {
-	    // Write dummy quality scores of PHRED 1 (ASCII 33 + 1 = 34)
-	    // TODO - make this default score into a command line option?
 	    kputs("+\n", &linebuf);
 	    for (i = 0; i < qlen; ++i)
-	        buf[i] = 34;
+	        buf[i] = def_qual;
 	    kputs((char*)buf, &linebuf);
 	    kputc('\n', &linebuf);
         }
