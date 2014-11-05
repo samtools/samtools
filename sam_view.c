@@ -527,12 +527,12 @@ int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 
 
 static void bam2fq_usage(FILE *to)
 {
-    fprintf(to, "\nUsage:   samtools bam2fq [-nOv] [-s <outSE.fq>] <in.bam>\n\n");
+    fprintf(to, "\nUsage:   samtools bam2fq [-nO] [-v quality] [-s <outSE.fq>] <in.bam>\n\n");
     fprintf(to, "Turns an alignment into unaligned reads in FASTQ format.\n\n");
-    fprintf(to, "Options: -n        don't append /1 and /2 to the read name\n");
-    fprintf(to, "         -O        output quality in the OQ tag if present\n");
-    fprintf(to, "         -v INT    Default quality score if not given in file\n");
-    fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
+    fprintf(to, "Options: -n        don't append /1 and /2 to the read name.\n");
+    fprintf(to, "         -O        output quality in the OQ tag if present.\n");
+    fprintf(to, "         -v INT    Default quality score if not given in file (default 1).\n");
+    fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end.]\n");
     fprintf(to, "\n");
 }
 
