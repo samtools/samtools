@@ -528,6 +528,7 @@ int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 
 static void bam2fq_usage(FILE *to)
 {
     fprintf(to, "\nUsage:   samtools bam2fq [-nO] [-s <outSE.fq>] <in.bam>\n\n");
+    fprintf(to, "Turns an alignment into unaligned reads in FASTQ format.\n\n");
     fprintf(to, "Options: -n        don't append /1 and /2 to the read name\n");
     fprintf(to, "         -O        output quality in the OQ tag if present\n");
     fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
@@ -623,7 +624,7 @@ int main_bam2fq(int argc, char *argv[])
 
         linebuf.l = 0;
         // Write read name
-        kputc(!has_qual? '>' : '@', &linebuf);
+        kputc('@', &linebuf);
         kputs(bam_get_qname(b), &linebuf);
         // Add the /1 /2 if requested
         if (has12) {
@@ -677,6 +678,14 @@ int main_bam2fq(int argc, char *argv[])
             }
             kputs((char*)buf, &linebuf);
             kputc('\n', &linebuf);
+        } else {
+	    // Write dummy quality scores of PHRED 1 (ASCII 33 + 1 = 34)
+	    // TODO - make this default score into a command line option?
+	    kputs("+\n", &linebuf);
+	    for (i = 0; i < qlen; ++i)
+	        buf[i] = 34;
+	    kputs((char*)buf, &linebuf);
+	    kputc('\n', &linebuf);
         }
     }
 
