@@ -531,6 +531,9 @@ static void bam2fq_usage(FILE *to)
     fprintf(to, "Options: -n        don't append /1 and /2 to the read name\n");
     fprintf(to, "         -O        output quality in the OQ tag if present\n");
     fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
+    fprintf(to, "         -F FORMAT write the output in FASTQ or FASTA, rather than\n");
+    fprintf(to, "                   the default MIXED output depending on if each read\n");
+    fprintf(to, "                   has quality scores or not.\n");
     fprintf(to, "\n");
 }
 
@@ -543,15 +546,19 @@ int main_bam2fq(int argc, char *argv[])
     int status = EXIT_SUCCESS;
     size_t max_buf;
     FILE* fpse;
+    bool force_fasta = false;
+    bool force_fastq = false;
     // Parse args
     char* fnse = NULL;
+    char* format_str = NULL;
     bool has12 = true, use_oq = false;
     int c;
-    while ((c = getopt(argc, argv, "nOs:")) > 0) {
+    while ((c = getopt(argc, argv, "nOsF:")) > 0) {
         switch (c) {
             case 'n': has12 = false; break;
             case 'O': use_oq = true; break;
             case 's': fnse = optarg; break;
+            case 'F': format_str = optarg; break;
             default: bam2fq_usage(stderr); return 1;
         }
     }
@@ -581,6 +588,21 @@ int main_bam2fq(int argc, char *argv[])
         }
     }
 
+    if (format_str) {
+        if (0 == strcasecmp("fastq", format_str)) {
+            fprintf(stderr, "Forcing FASTQ output.\n");
+            force_fastq = true;
+        } else if (0 == strcasecmp("fasta", format_str)) {
+            fprintf(stderr, "Forcing FASTA output.\n");
+            force_fasta = true;
+        } else if (0 == strcasecmp("mixed", format_str)) {
+            fprintf(stderr, "Forcing mixed FASTA/FASTQ output.\n");
+        } else {
+            print_error("Unrecognised -F argument, use FASTA, FASTQ or MIXED, not: \"%s\"", format_str);
+            return 1;
+        }
+    }
+
     h = sam_hdr_read(fp);
     b = bam_init1();
     buf = NULL;
@@ -601,8 +623,12 @@ int main_bam2fq(int argc, char *argv[])
         uint8_t* seq;
         uint8_t* qual = bam_get_qual(b);
         const uint8_t *oq = NULL;
-        if (use_oq) oq = bam_aux_get(b, "OQ");
-        bool has_qual = (qual[0] != 0xff || (use_oq && oq)); // test if there is quality
+        bool has_qual = false;
+
+        if (!force_fasta) {
+            if (use_oq) oq = bam_aux_get(b, "OQ");
+            has_qual = (qual[0] != 0xff || (use_oq && oq)); // test if there is quality
+        }
 
         // If there was a previous readname
         if ( fpse && previous ) {
@@ -623,7 +649,7 @@ int main_bam2fq(int argc, char *argv[])
 
         linebuf.l = 0;
         // Write read name
-        kputc(!has_qual? '>' : '@', &linebuf);
+        kputc(has_qual || force_fastq ? '@' : '>', &linebuf);
         kputs(bam_get_qname(b), &linebuf);
         // Add the /1 /2 if requested
         if (has12) {
@@ -675,6 +701,14 @@ int main_bam2fq(int argc, char *argv[])
                     buf[i] = t;
                 }
             }
+            kputs((char*)buf, &linebuf);
+            kputc('\n', &linebuf);
+        } else if (force_fastq) {
+            // Write dummy quality scores of PHRED 1 (ASCII 33 + 1 = 34)
+            // TODO - make this default score into a command line option?
+            kputs("+\n", &linebuf);
+            for (i = 0; i < qlen; ++i)
+                buf[i] = 34;
             kputs((char*)buf, &linebuf);
             kputc('\n', &linebuf);
         }
