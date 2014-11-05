@@ -550,7 +550,7 @@ int main_bam2fq(int argc, char *argv[])
     char* fnse = NULL;
     bool has12 = true, use_oq = false;
     int c;
-    while ((c = getopt(argc, argv, "nOsv:")) > 0) {
+    while ((c = getopt(argc, argv, "nOs:v:")) > 0) {
         switch (c) {
             case 'n': has12 = false; break;
             case 'O': use_oq = true; break;
