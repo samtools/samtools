@@ -74,7 +74,7 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  *
  * How We Handle Input
  *
- * Secondary Reads:
+ * Secondary and supplementary Reads:
  * -write to output unchanged
  * All Reads:
  * -if pos == 0 (1 based), tid == -1 set UNMAPPED flag
@@ -94,6 +94,7 @@ static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
  * -write to output
  * Limitations
  * -Does not handle tandem reads
+ * -Should mark supplementary reads the same as primary.
  * Notes
  * -CT definition appears to be something else in spec, this was in here before
  *  I started tampering with it, anyone know what is going on here? To work
