@@ -134,7 +134,7 @@ sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 
 bam.o: bam.c $(bam_h) sam_header.h
 bam2bcf.o: bam2bcf.c $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kfunc.h $(bam2bcf_h) errmod.h
-bam2bcf_indel.o: bam2bcf_indel.c bam2bcf.h
+bam2bcf_indel.o: bam2bcf_indel.c $(htslib_sam_h) $(bam2bcf_h) kaln.h kprobaln.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 bam2depth.o: bam2depth.c $(htslib_sam_h) samtools.h
 bam_aux.o: bam_aux.c
 bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(bam_h)
