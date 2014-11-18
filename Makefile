@@ -32,7 +32,7 @@ LOBJS=      bam_aux.o bam.o bam_import.o sam.o \
 AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o kprobaln.o \
             bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
-            bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
+            bamtk.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
@@ -134,7 +134,7 @@ sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 
 bam.o: bam.c $(bam_h) sam_header.h
 bam2bcf.o: bam2bcf.c $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kfunc.h $(bam2bcf_h) errmod.h
-bam2bcf_indel.o: bam2bcf_indel.c $(htslib_sam_h) $(bam2bcf_h) kaln.h kprobaln.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
+bam2bcf_indel.o: bam2bcf_indel.c $(htslib_sam_h) $(bam2bcf_h) kprobaln.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 bam2depth.o: bam2depth.c $(htslib_sam_h) samtools.h
 bam_aux.o: bam_aux.c
 bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(bam_h)
@@ -143,7 +143,7 @@ bam_import.o: bam_import.c $(HTSDIR)/htslib/kstring.h $(bam_h) $(HTSDIR)/htslib/
 bam_index.o: bam_index.c $(htslib_hts_h) $(htslib_sam_h) $(HTSDIR)/htslib/khash.h
 bam_lpileup.o: bam_lpileup.c $(bam_plbuf_h) $(bam_lpileup_h) $(HTSDIR)/htslib/ksort.h
 bam_mate.o: bam_mate.c $(bam_h)
-bam_md.o: bam_md.c $(htslib_faidx_h) $(sam_h) kaln.h kprobaln.h
+bam_md.o: bam_md.c $(htslib_faidx_h) $(sam_h) kprobaln.h
 bam_pileup.o: bam_pileup.c $(sam_h)
 bam_plbuf.o: bam_plbuf.c $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(bam2bcf_h) $(sample_h)
@@ -162,7 +162,6 @@ bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(HTSDIR)/htslib/k
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
 cut_target.o: cut_target.c $(bam_h) errmod.h $(htslib_faidx_h)
 errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
-kaln.o: kaln.c kaln.h
 kprobaln.o: kprobaln.c kprobaln.h
 padding.o: padding.c sam_header.h $(sam_h) $(bam_h) $(htslib_faidx_h)
 phase.o: phase.c $(htslib_sam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h

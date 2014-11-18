@@ -28,7 +28,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <string.h>
 #include "htslib/sam.h"
 #include "bam2bcf.h"
-#include "kaln.h"
 #include "kprobaln.h"
 #include "htslib/khash.h"
 KHASH_SET_INIT_STR(rg)
