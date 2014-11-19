@@ -98,7 +98,7 @@ int main_depth(int argc, char *argv[])
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "   -b <bed>            list of positions or regions\n");
         fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
-        fprintf(stderr, "   -l <int>            minQLen\n");
+        fprintf(stderr, "   -l <int>            minimum mapped read length (from CIGAR string)\n");
         fprintf(stderr, "   -q <int>            base quality threshold\n");
         fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
         fprintf(stderr, "   -r <chr:from-to>    region\n");
