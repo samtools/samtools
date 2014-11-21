@@ -70,6 +70,7 @@ int read_file_list(const char *file_list,int *n,char **argv[]);
 int main_depth(int argc, char *argv[])
 {
     int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, status = EXIT_SUCCESS, nfiles;
+    int max_depth = 8000;
     const bam_pileup1_t **plp;
     char *reg = 0; // specified region
     void *bed = 0; // BED data structure
@@ -79,7 +80,7 @@ int main_depth(int argc, char *argv[])
     bam_mplp_t mplp;
 
     // parse the command line
-    while ((n = getopt(argc, argv, "r:b:q:Q:l:f:")) >= 0) {
+    while ((n = getopt(argc, argv, "r:b:q:Q:l:f:d:")) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -90,6 +91,10 @@ int main_depth(int argc, char *argv[])
             case 'q': baseQ = atoi(optarg); break;   // base quality threshold
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
             case 'f': file_list = optarg; break;
+            case 'd':
+                if (max_depth <= 0) {fprintf(stderr, "Max depth must be positive.\n"); return 1;}
+                max_depth = atoi(optarg);
+                break;
         }
     }
     if (optind == argc && !file_list) {
@@ -102,14 +107,11 @@ int main_depth(int argc, char *argv[])
         fprintf(stderr, "   -q <int>            base quality threshold\n");
         fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
         fprintf(stderr, "   -r <chr:from-to>    region\n");
+        fprintf(stderr, "   -d, --max-depth INT max per-BAM depth; avoids excessive memory usage [%d]\n", max_depth);
         fprintf(stderr, "\n");
         fprintf(stderr, "The output is a simple tab-separated table with three columns, the\n");
         fprintf(stderr, "the reference name, position, and coverage depth. Note that positions\n");
         fprintf(stderr, "with zero coverage may be omitted.\n");
-        fprintf(stderr, "\n");
-        fprintf(stderr, "WARNING: Internally samtools pileup imposes a maximum coverage depth\n");
-        fprintf(stderr, "of 8000, meaning the depths reported here are limited to approximately\n");
-        fprintf(stderr, "8000 as well.\n");
         fprintf(stderr, "\n");
         return 1;
     }
@@ -162,6 +164,7 @@ int main_depth(int argc, char *argv[])
 
     // the core multi-pileup loop
     mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
+    bam_mplp_set_maxcnt(mplp, max_depth + 10); // slight fuzziness to ensure can reach maximum
     n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
     while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0) { // come to the next covered position
@@ -175,7 +178,10 @@ int main_depth(int argc, char *argv[])
                 if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
                 else if (bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
             }
-            printf("\t%d", n_plp[i] - m); // this the depth to output
+            m = n_plp[i] - m; // the depth to output
+            if (max_depth < m)
+                m = max_depth; // Avoid confusion by hard capping here
+            printf("\t%d", m);
         }
         putchar('\n');
     }
