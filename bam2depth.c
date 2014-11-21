@@ -103,6 +103,14 @@ int main_depth(int argc, char *argv[])
         fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
         fprintf(stderr, "   -r <chr:from-to>    region\n");
         fprintf(stderr, "\n");
+        fprintf(stderr, "The output is a simple tab-separated table with three columns, the\n");
+        fprintf(stderr, "the reference name, position, and coverage depth. Note that positions\n");
+        fprintf(stderr, "with zero coverage may be omitted.\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "WARNING: Internally samtools pileup imposes a maximum coverage depth\n");
+        fprintf(stderr, "of 8000, meaning the depths reported here are limited to approximately\n");
+        fprintf(stderr, "8000 as well.\n");
+        fprintf(stderr, "\n");
         return 1;
     }
 
