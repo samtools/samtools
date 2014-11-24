@@ -1022,12 +1022,12 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
     // write sub files
     for (;;) {
         if (k == max_k) {
-            size_t old_max = max_k;
+            size_t kk, old_max = max_k;
             max_k = max_k? max_k<<1 : 0x10000;
             buf = (bam1_t**)realloc(buf, max_k * sizeof(bam1_t*));
-            memset(buf + old_max, 0, sizeof(bam1_t*) * (max_k - old_max));
+            for (kk = old_max; kk < max_k; ++kk) buf[kk] = NULL;
         }
-        if (buf[k] == NULL) buf[k] = (bam1_t*)calloc(1, sizeof(bam1_t));
+        if (buf[k] == NULL) buf[k] = bam_init1();
         b = buf[k];
         if ((ret = sam_read1(fp, header, b)) < 0) break;
         if (b->l_data < b->m_data>>2) { // shrink
@@ -1069,11 +1069,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
         free(fns);
     }
     // free
-    for (k = 0; k < max_k; ++k) {
-        if (!buf[k]) continue;
-        free(buf[k]->data);
-        free(buf[k]);
-    }
+    for (k = 0; k < max_k; ++k) bam_destroy1(buf[k]);
     free(buf);
     bam_hdr_destroy(header);
     sam_close(fp);
