@@ -230,9 +230,6 @@ static void pretty_header(char** text_in_out, int32_t text_len)
 
 static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
 {
-    // No need to translate header into itself
-    if (out == translate) { merge_rg = merge_pg = true; }
-
     tbl->n_targets = translate->n_targets;
     tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
     tbl->rg_trans = kh_init(c2c);
@@ -594,6 +591,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     uint64_t idx = 0;
     char **RG = NULL;
     hts_itr_t **iter = NULL;
+    bam_hdr_t **hdr = NULL;
     trans_tbl_t *translation_tbl = NULL;
 
     // Is there a specified pre-prepared header to use for output?
@@ -612,6 +610,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     fp = (samFile**)calloc(n, sizeof(samFile*));
     heap = (heap1_t*)calloc(n, sizeof(heap1_t));
     iter = (hts_itr_t**)calloc(n, sizeof(hts_itr_t*));
+    hdr = (bam_hdr_t**)calloc(n, sizeof(bam_hdr_t*));
     translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
     // prepare RG tag from file names
     if (flag & MERGE_RG) {
@@ -641,9 +640,20 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             return -1;
         }
         hin = sam_hdr_read(fp[i]);
-        if (hout == NULL) hout = hin;
-        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
-        if (hin != hout) bam_hdr_destroy(hin);
+        if (hout)
+            trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
+        else {
+            // As yet, no headers to merge into...
+            hout = bam_hdr_dup(hin);
+            // ...so no need to translate header into itself
+            trans_tbl_init(hout, hin, translation_tbl+i, true, true);
+        }
+
+        // TODO sam_itr_next() doesn't yet work for SAM files,
+        // so for those keep the headers around for use with sam_read1()
+        if (hts_get_format(fp[i])->format == sam) hdr[i] = hin;
+        else { bam_hdr_destroy(hin); hdr[i] = NULL; }
+
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
         }
@@ -677,16 +687,22 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
                 iter[i] = sam_itr_queryi(idx, HTS_IDX_NONE, 0, 0);
             }
             hts_idx_destroy(idx);
+            if (iter[i] == NULL) break;
         }
         free(rtrans);
     } else {
         for (i = 0; i < n; ++i) {
-            iter[i] = sam_itr_queryi(NULL, HTS_IDX_REST, 0, 0);
-            if (iter[i] == NULL) {
-                fprintf(stderr, "[%s] Memory allocation failed\n", __func__);
-                return -1;
+            if (hdr[i] == NULL) {
+                iter[i] = sam_itr_queryi(NULL, HTS_IDX_REST, 0, 0);
+                if (iter[i] == NULL) break;
             }
+            else iter[i] = NULL;
         }
+    }
+
+    if (i < n) {
+        fprintf(stderr, "[%s] Memory allocation failed\n", __func__);
+        return -1;
     }
 
     // Load the first read from each file into the heap
@@ -694,7 +710,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         heap1_t *h = heap + i;
         h->i = i;
         h->b = bam_init1();
-        if (sam_itr_next(fp[i], iter[i], h->b) >= 0) {
+        if ((iter[i]? sam_itr_next(fp[i], iter[i], h->b) : sam_read1(fp[i], hdr[i], h->b)) >= 0) {
             bam_translate(h->b, translation_tbl + i);
             h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam_is_rev(h->b);
             h->idx = idx++;
@@ -724,7 +740,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
         }
         sam_write1(fpout, hout, b);
-        if ((j = sam_itr_next(fp[heap->i], iter[heap->i], b)) >= 0) {
+        if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
             bam_translate(b, translation_tbl + heap->i);
             heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
             heap->idx = idx++;
@@ -744,11 +760,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     for (i = 0; i < n; ++i) {
         trans_tbl_destroy(translation_tbl + i);
         hts_itr_destroy(iter[i]);
+        bam_hdr_destroy(hdr[i]);
         sam_close(fp[i]);
     }
     bam_hdr_destroy(hout);
     sam_close(fpout);
-    free(translation_tbl); free(fp); free(heap); free(iter);
+    free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     return 0;
 }
 
