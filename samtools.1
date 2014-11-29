@@ -1073,7 +1073,7 @@ l l l .
 
 .TP
 .B bam2fq
-samtools bam2fq [-nO] [-s <outSE.fq>] <in.bam>
+samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>
 
 Converts a bam into FASTQ format.
 
@@ -1093,6 +1093,9 @@ if available.
 .TP 8
 .B -s FILE
 Write singleton reads in FASTQ format to FILE instead of outputting them.
+.TP 8
+.B -t
+Copy RG, BC and QT tags to the FASTQ header line, if they exist.
 .RE
 
 
