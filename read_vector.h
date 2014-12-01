@@ -25,31 +25,44 @@
 
 /* Contact: Martin Pollard <mp15@sanger.ac.uk> */
 
-#ifndef POS_BUFFER_H
-#define POS_BUFFER_H
+#ifndef READ_VECTOR_H
+#define READ_VECTOR_H
 
-#include "read_vector.h"
+#include <htslib/sam.h>
+
+#include <stdbool.h>
 #include <inttypes.h>
 
-struct pos_buffer;
-typedef struct pos_buffer pos_buffer_t;
+struct read_vector;
+typedef struct read_vector read_vector_t;
 
-// Initialises a new pos buffer
-pos_buffer_t* pos_buffer_init();
-/**
- * Attempt to insert a pair of reads into the pos buffer
- *
- * @param buf the pos buffer
- * @param left leftmost read of pair
- * @param right rightmost read of pair
- * @param score score of pair
- * @param name read name of pair
- * @param curr_tid current tid in bam file
- * @param curr_pos current position in bam file
- * @return name of read to kill, or NULL if it's new insert
- */
-char* pos_buffer_insert(pos_buffer_t* buf, read_vector_t left, read_vector_t right, int score, const char* name, uint32_t curr_tid, uint32_t curr_pos);
-// Frees memory associated with a pos buffer
-void pos_buffer_destroy(pos_buffer_t* target);
+struct read_vector {
+	bool orient:1;
+	uint32_t tid:31;
+	uint32_t pos;
+};
+
+static inline bool bam_to_read_vector(bam1_t* record, read_vector_t* part)
+{
+	if (record->core.tid > INT32_MAX) return false;
+	part->orient = ((record->core.flag&BAM_FREVERSE) == BAM_FREVERSE);
+	part->tid = record->core.tid;
+	return true;
+}
+
+static inline bool read_vector_gt(read_vector_t left, read_vector_t right)
+{
+	if (left.tid > right.tid) {
+		return true;
+	} else if (right.tid > left.tid) {
+		return false;
+	} else {
+		if (left.pos > right.pos) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+}
 
 #endif

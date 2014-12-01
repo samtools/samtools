@@ -26,9 +26,12 @@
 /* Contact: Martin Pollard <mp15@sanger.ac.uk> */
 
 #include "pos_buffer.h"
+#include "read_vector.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
+
+static char* pos_buffer_insert_inner(pos_buffer_t* buf, uint32_t ltid, uint32_t lpos, uint32_t rtid, uint32_t rpos, int score, const char* name);
 
 struct pos_list;
 typedef struct pos_list pos_list_t;
@@ -54,16 +57,16 @@ struct pos_tree {
 	char* name;
 };
 
-static const int POS_BUFFER_LENGTH = 10000;
+#define POS_BUFFER_LENGTH 10000
 struct pos_buffer {
 	uint32_t tid; // rightmost tid
 	uint32_t base_pos; // rightmost pos base
-	pos_list_t* aux; // Overspill here
+	pos_list_t* aux; // Overspill reads here
 	size_t buffer_base; //
 	pos_tree_t* right_most[POS_BUFFER_LENGTH]; // Ring buffer
 };
 
-
+// Deallocate a tree and all subtrees recursively
 static void reap_tree(pos_tree_t* tree)
 {
 	if (tree == NULL) return;
@@ -74,12 +77,14 @@ static void reap_tree(pos_tree_t* tree)
 	free(tree->name);
 }
 
+// Initialise a pos_buffer
 pos_buffer_t* pos_buffer_init()
 {
 	pos_buffer_t* retval = (pos_buffer_t*) calloc(1, sizeof(pos_buffer_t));
 	return retval;
 }
 
+// Free all used memory inside a pos_buffer
 static void pos_buffer_clear(pos_buffer_t* buf)
 {
 	pos_list_t* ptr;
@@ -91,18 +96,20 @@ static void pos_buffer_clear(pos_buffer_t* buf)
 	size_t i;
 	for ( i = 0; i < POS_BUFFER_LENGTH; ++i ) {
 		reap_tree(buf->right_most[i]);
+		free(buf->right_most[i]);
 		buf->right_most[i] = NULL;
 	}
 }
 
+// Free memory associated with a pos_buffer
 void pos_buffer_destroy(pos_buffer_t* target)
 {
 	pos_buffer_clear(target);
 	free(target);
 }
 
-// Call whenever rtid changes
-void pos_buffer_reset(pos_buffer_t* buf)
+// Called whenever rtid changes
+static void pos_buffer_reset(pos_buffer_t* buf)
 {
 	pos_buffer_clear(buf);
 	buf->base_pos = 0;
@@ -116,6 +123,9 @@ static size_t pos_buff_rpos(const pos_buffer_t* buf, uint32_t rpos) {
 	return buffer_offset;
 }
 
+/**
+ * Load any entries in aux which are now within the ring buffer's bounds into the ring buffer
+ */
 static void pos_buffer_load_from_aux(pos_buffer_t* buf)
 {
 	pos_list_t* ptr;
@@ -123,7 +133,7 @@ static void pos_buffer_load_from_aux(pos_buffer_t* buf)
 	for (ptr = buf->aux; ptr != NULL; ptr = buf->aux) {
 		if (buf->base_pos <= ptr->rpos
 			&& ptr->rpos < buf->base_pos + POS_BUFFER_LENGTH ) {
-			pos_buffer_insert(buf, ptr->ltid, ptr->lpos, buf->tid, ptr->rpos, ptr->score, ptr->name); // TODO: implement direct insert
+			pos_buffer_insert_inner(buf, ptr->ltid, ptr->lpos, buf->tid, ptr->rpos, ptr->score, ptr->name); // TODO: implement direct insert
 			*prev = ptr->next;
 			free(ptr->name);
 			free(ptr);
@@ -134,7 +144,10 @@ static void pos_buffer_load_from_aux(pos_buffer_t* buf)
 	
 }
 
-void pos_buffer_advance(pos_buffer_t* buf, uint32_t lpos)
+/**
+ * Advance the pos buffer within a tid
+ */
+static void pos_buffer_advance(pos_buffer_t* buf, uint32_t lpos)
 {
 	if (lpos < buf->base_pos + POS_BUFFER_LENGTH) {
 		// Advance main buffer
@@ -154,6 +167,16 @@ void pos_buffer_advance(pos_buffer_t* buf, uint32_t lpos)
 	pos_buffer_load_from_aux(buf);
 }
 
+/**
+ * Attempt to insert a pair of reads into the pos buffer's stash
+ *
+ * @param buf the pos buffer
+ * @param ltid leftmost target id of pair
+ * @param lpos leftmost position of pair
+ * @param score score of pair
+ * @param name read name of pair
+ * @return name of read to kill, or NULL if it's new insert
+ */
 static char* pos_aux_insert(pos_buffer_t* buf, uint32_t ltid, uint32_t lpos, uint32_t rpos, int score, const char* name)
 {
 	// search to see if entry exists first
@@ -179,6 +202,16 @@ static char* pos_aux_insert(pos_buffer_t* buf, uint32_t ltid, uint32_t lpos, uin
 	return NULL;
 }
 
+/**
+ * Attempt to insert a pair of reads into the pos buffer's tree
+ *
+ * @param tree the tree for this rpos
+ * @param ltid leftmost target id of pair
+ * @param lpos leftmost position of pair
+ * @param score score of pair
+ * @param name read name of pair
+ * @return name of read to kill, or NULL if it's new insert
+ */
 static char* pos_tree_insert(pos_tree_t* tree, uint32_t ltid, uint32_t lpos, int score, const char* name)
 {
 	// search base to see if entry exists first
@@ -193,7 +226,7 @@ static char* pos_tree_insert(pos_tree_t* tree, uint32_t ltid, uint32_t lpos, int
 			if (tree->left != NULL) {
 				return pos_tree_insert(tree->left, ltid, lpos, score, name);
 			} else {
-				pos_tree_t* insert = (pos_tree_t*)malloc(sizeof(pos_list_t));
+				pos_tree_t* insert = (pos_tree_t*)malloc(sizeof(pos_tree_t));
 				insert->ltid = ltid;
 				insert->lpos = lpos;
 				insert->score = score;
@@ -206,7 +239,7 @@ static char* pos_tree_insert(pos_tree_t* tree, uint32_t ltid, uint32_t lpos, int
 			if (tree->right != NULL) {
 				return pos_tree_insert(tree->right, ltid, lpos, score, name);
 			} else {
-				pos_tree_t* insert = (pos_tree_t*)malloc(sizeof(pos_list_t));
+				pos_tree_t* insert = (pos_tree_t*)malloc(sizeof(pos_tree_t));
 				insert->ltid = ltid;
 				insert->lpos = lpos;
 				insert->score = score;
@@ -232,23 +265,23 @@ static char* pos_tree_insert(pos_tree_t* tree, uint32_t ltid, uint32_t lpos, int
  * @param name read name of pair
  * @return name of read to kill, or NULL if it's new insert
  */
-char* pos_buffer_insert(pos_buffer_t* buf, uint32_t ltid, uint32_t lpos, uint32_t rtid, uint32_t rpos, int score, const char* name)
+static char* pos_buffer_insert_inner(pos_buffer_t* buf, uint32_t ltid, uint32_t lpos, uint32_t rtid, uint32_t rpos, int score, const char* name)
 {
-	if (rtid != buf->tid) {
-		pos_buffer_reset(buf);
-		buf->tid = rtid;
-	}
+	// If reads are in coordinate order it should not be possible for rpos to be less than base_pos
 	assert(buf->base_pos <= rpos);
+	
+	// If read pair's right position is past the end of our buffer put it to one side
 	if (rpos > (buf->base_pos + POS_BUFFER_LENGTH)) {
-		// it's outside our buffer
+		// it's outside our buffer, stash it
 		return pos_aux_insert(buf, ltid, lpos, rpos, score, name);
 	} else {
+		// it's within our buffer, see if there's a read pair at the
 		pos_tree_t* tree = buf->right_most[pos_buff_rpos(buf, rpos)];
 		if ( tree != NULL) {
 			return pos_tree_insert(tree, ltid, lpos, score, name);
 		} else {
 			// create new tree
-			pos_tree_t* insert = (pos_tree_t*)malloc(sizeof(pos_list_t));
+			pos_tree_t* insert = (pos_tree_t*)malloc(sizeof(pos_tree_t));
 			insert->ltid = ltid;
 			insert->lpos = lpos;
 			insert->score = score;
@@ -259,4 +292,22 @@ char* pos_buffer_insert(pos_buffer_t* buf, uint32_t ltid, uint32_t lpos, uint32_
 		}
 	}
 	return NULL;
+}
+
+char* pos_buffer_insert(pos_buffer_t* buf, read_vector_t left, read_vector_t right, int score, const char* name, uint32_t curr_tid, uint32_t curr_pos)
+{
+	// If target id is not equal to our current one we need to start from scratch
+	if (curr_tid != buf->tid) {
+		pos_buffer_reset(buf);
+		buf->tid = curr_tid;
+	} else {
+		pos_buffer_advance(buf, curr_pos);
+	}
+	if (read_vector_gt(left, right))
+	{
+		read_vector_t tmp = left;
+		left = right;
+		right = tmp;
+	}
+	return pos_buffer_insert_inner(buf, left.tid, left.pos, right.tid, right.pos, score, name);
 }

@@ -73,6 +73,7 @@ BUILT_TEST_PROGRAMS = \
 	test/merge/test_pretty_header \
 	test/merge/test_rtrans_build \
 	test/merge/test_trans_tbl_init \
+	test/mkdup/test_pos_buffer \
 	test/split/test_count_rg \
 	test/split/test_expand_format_string \
 	test/split/test_filter_header_rg \
@@ -186,6 +187,7 @@ check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 	test/merge/test_pretty_header
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
+	test/mkdup/test_pos_buffer
 	cd test/mpileup && ./regression.sh
 	test/split/test_count_rg
 	test/split/test_expand_format_string
@@ -202,8 +204,11 @@ test/merge/test_pretty_header: test/merge/test_pretty_header.o $(HTSLIB)
 test/merge/test_rtrans_build: test/merge/test_rtrans_build.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o $(HTSLIB) $(LDLIBS) -lz
 
-test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o $(HTSLIB) $(LDLIBS) -lz
+test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o test/test.o $(HTSLIB) $(LDLIBS) -lz
+
+test/mkdup/test_pos_buffer: test/mkdup/test_pos_buffer.o test/test.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/mkdup/test_pos_buffer.o test/test.o $(HTSLIB) $(LDLIBS) -lz
 
 test/split/test_count_rg: test/split/test_count_rg.o test/test.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o $(HTSLIB) $(LDLIBS) -lz
@@ -225,7 +230,8 @@ test_test_h = test/test.h $(htslib_sam_h)
 test/merge/test_bam_translate.o: test/merge/test_bam_translate.c $(test_test_h) bam_sort.o
 test/merge/test_pretty_header.o: test/merge/test_pretty_header.c bam_sort.o
 test/merge/test_rtrans_build.o: test/merge/test_rtrans_build.c bam_sort.o
-test/merge/test_trans_tbl_init.o: test/merge/test_trans_tbl_init.c bam_sort.o
+test/merge/test_trans_tbl_init.o: test/merge/test_trans_tbl_init.c $(test_test_h) bam_sort.o
+test/mkdup/test_pos_buffer.o: test/mkdup/test_pos_buffer.c $(test_test_h) bam_sort.o
 test/split/test_count_rg.o: test/split/test_count_rg.c bam_split.o $(test_test_h)
 test/split/test_expand_format_string.o: test/split/test_expand_format_string.c bam_split.o $(test_test_h)
 test/split/test_filter_header_rg.o: test/split/test_filter_header_rg.c bam_split.o $(test_test_h)

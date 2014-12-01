@@ -30,62 +30,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include <unistd.h>
 
-void dump_read(bam1_t* b) {
-    printf("->core.tid:(%d)\n", b->core.tid);
-    printf("->core.pos:(%d)\n", b->core.pos);
-    printf("->core.bin:(%d)\n", b->core.bin);
-    printf("->core.qual:(%d)\n", b->core.qual);
-    printf("->core.l_qname:(%d)\n", b->core.l_qname);
-    printf("->core.flag:(%d)\n", b->core.flag);
-    printf("->core.n_cigar:(%d)\n", b->core.n_cigar);
-    printf("->core.l_qseq:(%d)\n", b->core.l_qseq);
-    printf("->core.mtid:(%d)\n", b->core.mtid);
-    printf("->core.mpos:(%d)\n", b->core.mpos);
-    printf("->core.isize:(%d)\n", b->core.isize);
-    if (b->data) {
-        printf("->data:");
-        int i;
-        for (i = 0; i < b->l_data; ++i) {
-            printf("%x ", b->data[i]);
-        }
-        printf("\n");
-    }
-    if (b->core.l_qname) {
-        printf("qname: %s\n",bam_get_qname(b));
-    }
-    if (b->core.l_qseq) {
-        printf("qseq:");
-        int i;
-        for (i = 0; i < b->core.l_qseq; ++i) {
-            printf("%c",seq_nt16_str[seq_nt16_table[bam_seqi(bam_get_seq(b),i)]]);
-        }
-        printf("\n");
-        printf("qual:");
-        for (i = 0; i < b->core.l_qseq; ++i) {
-            printf("%c",bam_get_qual(b)[i]);
-        }
-        printf("\n");
-
-    }
-
-    if (bam_get_l_aux(b)) {
-        int i = 0;
-        uint8_t* aux = bam_get_aux(b);
-
-        while (i < bam_get_l_aux(b)) {
-            printf("%.2s:%c:",aux+i,*(aux+i+2));
-            i += 2;
-            switch (*(aux+i)) {
-                case 'Z':
-                    while (*(aux+1+i) != '\0') { putc(*(aux+1+i), stdout); ++i; }
-                    break;
-            }
-            putc('\n',stdout);
-            ++i;++i;
-        }
-    }
-    printf("\n");
-}
 
 void trans_tbl_test_init(trans_tbl_t* tbl, int32_t n_targets)
 {

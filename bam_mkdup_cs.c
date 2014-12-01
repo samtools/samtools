@@ -43,37 +43,13 @@
  *   if it's already in there it's a duplicate so mark it if not insert it
  */
 
-typedef struct possig_part {
-	bool orient:1;
-	uint32_t tid:31;
-	uint32_t pos;
-} possig_part_t;
-
-struct possig {
-	union {
-		struct {
-			possig_part_t first;
-			possig_part_t second;
-		} field;
-		__uint128_t bits;
-	};
-};
-
 typedef struct namescore {
 	char* name;
 	int score;
 } namescore_t;
 
-// FIXME: write an alternative for platforms that don't have a 128 bit intrinsic
-// FIXME: this is the 64bit hash find a good one for 128 bit numbers
-#define possig_hash_func(key) (khint32_t)((key.bits)>>33^(key.bits)^(key.bits)<<11)
-
-#define possig_hash_equal(a, b) ((a.bits) == (b.bits))
-
-KHASH_INIT(signame, possig_t, namescore_t, 1, possig_hash_func, possig_hash_equal)
-
 typedef struct endscore {
-	possig_part_t possig_part;
+	read_vector_t read_vector;
 	int score;
 } endscore_t;
 
@@ -83,42 +59,6 @@ KHASH_MAP_INIT_STR(name, char)
 #define __free_bam1_t(p)
 KLIST_INIT(read, bam1_t*,__free_bam1_t)
 
-static inline bool bam_to_possig_part(bam1_t* record, possig_part_t* part)
-{
-	if (record->core.tid > INT32_MAX) return false;
-	part->orient = ((record->core.flag&BAM_FREVERSE) == BAM_FREVERSE);
-	part->tid = record->core.tid;
-	return true;
-}
-
-static inline bool part_bam_to_possig(possig_part_t* first_pos, bam1_t* second_pos, possig_t* sig)
-{
-	// Get 5 prime coord of each part of reads
-	int32_t spos = (second_pos->core.flag&BAM_FREVERSE) ? bam_endpos(second_pos) : second_pos->core.pos;
-	
-	// Make the position signature with the first coordinate read in the first position
-	if (first_pos->tid == second_pos->core.tid) {
-		if (first_pos->pos < spos) {
-			memcpy(&sig->field.first, first_pos, sizeof(possig_part_t));
-			sig->field.second.pos = spos;
-			return (bam_to_possig_part(second_pos, &sig->field.second));
-		} else {
-			memcpy(&sig->field.second, first_pos, sizeof(possig_part_t));
-			sig->field.first.pos = spos;
-			return (bam_to_possig_part(second_pos, &sig->field.first));
-		}
-	} else {
-		if (first_pos->tid < second_pos->core.tid) {
-			memcpy(&sig->field.first, first_pos, sizeof(possig_part_t));
-			sig->field.second.pos = spos;
-			return (bam_to_possig_part(second_pos, &sig->field.second));
-		} else {
-			memcpy(&sig->field.second, first_pos, sizeof(possig_part_t));
-			sig->field.first.pos = spos;
-			return (bam_to_possig_part(second_pos, &sig->field.first));
-		}
-	}
-}
 
 /*
  * To process reads in one location
@@ -146,7 +86,7 @@ static inline int sum_qual(const bam1_t *b)
 
 bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_HACK)
 {
-	khash_t(signame)* ps_hash = kh_init(signame);
+	pos_buffer_t* buf = pos_buffer_init();
 	khash_t(nameqs)* name_hash = kh_init(nameqs);
 	khash_t(name)* kill_hash = kh_init(name);
 	bam1_t* read_first = bam_init1();
@@ -162,45 +102,27 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
 		// Have we seen the other half of this read?
 		khiter_t k = kh_get(nameqs, name_hash, bam_get_qname(read_first));
 		if ( k != kh_end(name_hash) ) {
-			// It's already there
+			// We have so now we have both parts of read
 			int score = kh_value(name_hash, k).score + sum_qual(read_first);
-			possig_t possig;
-			if (!part_bam_to_possig(&kh_value(name_hash, k).possig_part, read_first, &possig)) {return false;}
-			kh_del(nameqs, name_hash, k);
+			read_vector_t curr;
+			if (!bam_to_read_vector(read_first, &curr)) abort();
 
 			// Have we seen this position pair before?
-			khiter_t kp = kh_get(signame, ps_hash, possig );
-			if ( kp != kh_end(ps_hash) ) {
-				// Already there so get it
-				char* to_kill;
-				int kill_score;
-				++marked;
-				// Does what is in there have a better score than us?
-				if (kh_value(ps_hash, kp).score < score) {
-					// Kill what's already there and replace it
-					to_kill = kh_value(ps_hash, kp).name;
-					kill_score = kh_value(ps_hash, kp).score;
+			char* kill = pos_buffer_insert(buf, kh_value(name_hash, k).read_vector, curr, score, bam_get_qname(read_first), read_first->core.tid, read_first->core.pos);
+			kh_del(nameqs, name_hash, k);
 
-					kh_value(ps_hash, kp).name = strdup(bam_get_qname(read_first));
-					kh_value(ps_hash, kp).score = score;
-				} else {
-					to_kill = strdup(bam_get_qname(read_first));
-					kill_score = score;
-					++killed;
-				}
+			if ( kill != NULL ) {
+				// Already there so get it
+				int kill_score = 1;
+				++marked;
 				// If it's not already in the kill hash kill it
-				khiter_t kill_iter = kh_get(name, kill_hash, to_kill);
+				khiter_t kill_iter = kh_get(name, kill_hash, kill);
 				if (kill_iter == kh_end(kill_hash)) {
 					int dummy;
-					kill_iter = kh_put(name, kill_hash, to_kill, &dummy );
-				} else {free(to_kill);}
+					kill_iter = kh_put(name, kill_hash, kill, &dummy );
+				} else {free(kill);}
 				kh_value(kill_hash, kill_iter) = kill_score;
 			} else {
-				int not_found_p;
-				khiter_t kp = kh_put(signame, ps_hash, possig, &not_found_p );
-				kh_value(ps_hash, kp).name = strdup(bam_get_qname(read_first));
-				kh_value(ps_hash, kp).score = score;
-
 				++distinct_pos;
 			}
 		} else {
@@ -208,8 +130,8 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
 			int not_found;
 			k = kh_put(nameqs, name_hash, strdup(bam_get_qname(read_first)), &not_found );
 			// it's been inserted
-			bam_to_possig_part(read_first, &kh_value(name_hash, k).possig_part);
-			kh_value(name_hash, k).possig_part.pos = (read_first->core.flag&BAM_FREVERSE) ? bam_endpos(read_first) : read_first->core.pos;
+			bam_to_read_vector(read_first, &kh_value(name_hash, k).read_vector);
+			kh_value(name_hash, k).read_vector.pos = (read_first->core.flag&BAM_FREVERSE) ? bam_endpos(read_first) : read_first->core.pos;
 			kh_value(name_hash, k).score = sum_qual(read_first);
 		}
 	}

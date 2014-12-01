@@ -82,6 +82,10 @@ static bool parse_args( int argc, char** argv, parsed_opts_t* opts )
 static bool init_state(const parsed_opts_t* opts, state_t* state)
 {
 	state->fin = sam_open(opts->input_name, "r");
+    if (state->fin == NULL) {
+        fprintf(stderr, "[init_state] Could not open input file.\n");
+		return false;
+    }
 	state->hin = sam_hdr_read(state->fin);
 	
 	if ((state->so = detect_sort_order(state->hin)) == SO_UNKNOWN) {
@@ -90,6 +94,10 @@ static bool init_state(const parsed_opts_t* opts, state_t* state)
 	}
 	
 	state->fout = sam_open(opts->output_name ? opts->output_name : "-", "wb");
+    if (state->fout == NULL) {
+        fprintf(stderr, "[init_state] Could not open output file.\n");
+		return false;
+    }
 	state->hout = bam_hdr_dup(state->hin);
 	if (sam_hdr_write(state->fout, state->hout) < 0) {
 		fprintf(stderr, "[init_state] Unable to write header.\n");
@@ -104,9 +112,9 @@ static bool init_state(const parsed_opts_t* opts, state_t* state)
 static void cleanup_state(state_t* state)
 {
 	if (state) {
-		sam_close(state->fout);
-		sam_close(state->fin);
-		kh_destroy(sig, state->hash);
+		if (state->fout) sam_close(state->fout);
+		if (state->fin) sam_close(state->fin);
+        if (state->hash) kh_destroy(sig, state->hash);
 	}
 }
 

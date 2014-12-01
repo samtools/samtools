@@ -32,6 +32,7 @@
 #include <inttypes.h>
 #include <stdio.h>
 #include "bam_mkdup.h"
+#include "read_vector.h"
 
 
 typedef struct {
@@ -72,17 +73,11 @@ static inline void flush_stack_to_disk(tmp_stack_t *stack, samFile* out, const b
  *   if it's already in there it's a duplicate so mark it if not insert it
  */
 
-typedef struct possig_part {
-	bool orient:1;
-	uint32_t tid:31;
-	uint32_t pos;
-} possig_part_t;
-
 struct possig {
 	union {
 		struct {
-			possig_part_t first;
-			possig_part_t second;
+			read_vector_t first;
+			read_vector_t second;
 		} field;
 		__uint128_t bits;
 	};
@@ -97,14 +92,6 @@ struct possig {
 
 __KHASH_IMPL(sig, , possig_t, char, 1, possig_hash_func, possig_hash_equal)
 
-static inline bool bam_to_possig_part(bam1_t* record, possig_part_t* part)
-{
-	if (record->core.tid > INT32_MAX) return false;
-	part->orient = ((record->core.flag&BAM_FREVERSE) == BAM_FREVERSE);
-	part->tid = record->core.tid;
-	return true;
-}
-
 static inline bool bam_to_possig(bam1_t* first_pos, bam1_t* second_pos, possig_t* sig)
 {
 	// Get 5 prime coord of each part of reads
@@ -116,21 +103,21 @@ static inline bool bam_to_possig(bam1_t* first_pos, bam1_t* second_pos, possig_t
 		if (fpos < spos) {
 			sig->field.first.pos = fpos;
 			sig->field.second.pos = spos;
-			return (bam_to_possig_part(first_pos, &sig->field.first) && bam_to_possig_part(second_pos, &sig->field.second));
+			return (bam_to_read_vector(first_pos, &sig->field.first) && bam_to_read_vector(second_pos, &sig->field.second));
 		} else {
 			sig->field.first.pos = spos;
 			sig->field.second.pos = fpos;
-			return (bam_to_possig_part(second_pos, &sig->field.first) && bam_to_possig_part(first_pos, &sig->field.second));
+			return (bam_to_read_vector(second_pos, &sig->field.first) && bam_to_read_vector(first_pos, &sig->field.second));
 		}
 	} else {
 		if (first_pos->core.tid < second_pos->core.tid) {
 			sig->field.first.pos = fpos;
 			sig->field.second.pos = spos;
-			return (bam_to_possig_part(first_pos, &sig->field.first) && bam_to_possig_part(second_pos, &sig->field.second));
+			return (bam_to_read_vector(first_pos, &sig->field.first) && bam_to_read_vector(second_pos, &sig->field.second));
 		} else {
 			sig->field.first.pos = spos;
 			sig->field.second.pos = fpos;
-			return (bam_to_possig_part(second_pos, &sig->field.first) && bam_to_possig_part(first_pos, &sig->field.second));
+			return (bam_to_read_vector(second_pos, &sig->field.first) && bam_to_read_vector(first_pos, &sig->field.second));
 		}
 	}
 }
