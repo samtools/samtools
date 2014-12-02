@@ -177,8 +177,8 @@ int main_depth(int argc, char *argv[])
 depth_end:
     for (i = 0; i < n && data[i]; ++i) {
         bam_hdr_destroy(data[i]->hdr);
-        sam_close(data[i]->fp);
-        if (data[i]->iter) hts_itr_destroy(data[i]->iter);
+        if (data[i]->fp) sam_close(data[i]->fp);
+        hts_itr_destroy(data[i]->iter);
         free(data[i]);
     }
     free(data); free(reg);
