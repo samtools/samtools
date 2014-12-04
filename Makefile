@@ -31,7 +31,7 @@ LOBJS=      bam_aux.o bam.o bam_import.o sam.o \
             sam_header.o bam_plbuf.o
 AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o kprobaln.o \
-            bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
+            bam_mate.o bam_stat.o bam_color.o \
             bamtk.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o stats.o stats_isize.o bam_flags.o bam_split.o \
@@ -150,8 +150,6 @@ bam_pileup.o: bam_pileup.c $(sam_h)
 bam_plbuf.o: bam_plbuf.c $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(bam2bcf_h) $(sample_h)
 bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(bam_h)
-bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
-bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
 bam_sort.o: bam_sort.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h $(HTSDIR)/htslib/kstring.h $(htslib_sam_h)
 bam_stat.o: bam_stat.c $(bam_h) samtools.h
 bam_tview.o: bam_tview.c $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h)

@@ -275,7 +275,7 @@ static char* pos_buffer_insert_inner(pos_buffer_t* buf, uint32_t ltid, uint32_t 
 		// it's outside our buffer, stash it
 		return pos_aux_insert(buf, ltid, lpos, rpos, score, name);
 	} else {
-		// it's within our buffer, see if there's a read pair at the
+		// it's within our buffer, see if there is a read pair at the point where we expect it
 		pos_tree_t* tree = buf->right_most[pos_buff_rpos(buf, rpos)];
 		if ( tree != NULL) {
 			return pos_tree_insert(tree, ltid, lpos, score, name);
