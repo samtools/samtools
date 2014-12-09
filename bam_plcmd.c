@@ -273,7 +273,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
             exit(1);
         }
-        data[i]->h = i? h : h_tmp; // for i==0, "h" has not been set yet
         bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
         // Collect read group IDs with PL (platform) listed in pl_list (note: fragile, strstr search)
         rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
@@ -283,17 +282,24 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 fprintf(stderr, "[%s] fail to load index for %s\n", __func__, fn[i]);
                 exit(1);
             }
-            if ( (data[i]->iter=sam_itr_querys(idx, data[i]->h, conf->reg)) == 0) {
-                fprintf(stderr, "[E::%s] fail to parse region '%s'\n", __func__, conf->reg);
+            if ( (data[i]->iter=sam_itr_querys(idx, h_tmp, conf->reg)) == 0) {
+                fprintf(stderr, "[E::%s] fail to parse region '%s' with %s\n", __func__, conf->reg, fn[i]);
                 exit(1);
             }
             if (i == 0) tid0 = data[i]->iter->tid, beg0 = data[i]->iter->beg, end0 = data[i]->iter->end;
             hts_idx_destroy(idx);
         }
-        if (i == 0) h = h_tmp; /* save the header of first file in list */
+        else
+            data[i]->iter = NULL;
+
+        if (i == 0) h = data[i]->h = h_tmp; // save the header of the first file
         else {
-            // FIXME: to check consistency
+            // FIXME: check consistency between h and h_tmp
             bam_hdr_destroy(h_tmp);
+
+            // we store only the first file's header; it's (alleged to be)
+            // compatible with the i-th file's target_name lookup needs
+            data[i]->h = h;
         }
     }
     // allocate data storage proportionate to number of samples being studied sm->n
