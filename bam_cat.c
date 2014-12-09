@@ -130,8 +130,10 @@ int main_cat(int argc, char *argv[])
 {
     bam_header_t *h = 0;
     char *outfn = 0;
+    char **infns = NULL; // files to concatenate
+    int infns_size = 0;
     int c, ret;
-    while ((c = getopt(argc, argv, "h:o:")) >= 0) {
+    while ((c = getopt(argc, argv, "h:o:b:")) >= 0) {
         switch (c) {
             case 'h': {
                 tamFile fph = sam_open(optarg);
@@ -144,13 +146,48 @@ int main_cat(int argc, char *argv[])
                 break;
             }
             case 'o': outfn = strdup(optarg); break;
+            case 'b': {
+                // add file names in "optarg" to the list
+                // of files to concatenate
+                int nfns;
+                char **fns_read = hts_readlines(optarg, &nfns);
+                if (fns_read) {
+                    infns = realloc(infns, (infns_size + nfns) * sizeof(char*));
+                    if (infns == NULL) { ret = 1; goto end; }
+                    memcpy(infns+infns_size, fns_read, nfns * sizeof(char*));
+                    infns_size += nfns;
+                }
+                else {
+                    fprintf(stderr, "[%s] Invalid file list \"%s\"\n", __func__, optarg);
+                    ret = 1;
+                }
+
+                break;
+            }
         }
     }
-    if (argc - optind < 2) {
-        fprintf(stderr, "Usage: samtools cat [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [...]\n");
+
+    // Append files specified in argv to the list.
+    int nargv_fns = argc - optind;
+    if (nargv_fns > 0) {
+        infns = realloc(infns, (infns_size + nargv_fns) * sizeof(char*));
+        if (infns == NULL) { ret = 1; goto end; }
+        memcpy(infns+infns_size, argv + optind, nargv_fns * sizeof(char*));
+        infns_size += nargv_fns;
+    }
+
+    // Require at least one input file
+    if (infns_size == 0) {
+        fprintf(stderr, "Usage: samtools cat [-h <header.sam>] [-b <bamlist.fofn>] [-o <out.bam>] <in1.bam> [... <inN.bam>]\n");
+        fprintf(stderr, "Concatenate BAM files, first those in <bamlist.tofn>, then those on the command line.\n\n");
+        fprintf(stderr, "Options: -b FILE  list of input BAM file names, one per line\n");
+        fprintf(stderr, "         -h FILE  copy the header in FILE to <out.bam> [first input BAM]\n");
+        fprintf(stderr, "         -o FILE  output BAM\n");
         return 1;
     }
-    ret = bam_cat(argc - optind, argv + optind, h, outfn? outfn : "-");
+    ret = bam_cat(infns_size, infns, h, outfn? outfn : "-");
+
+end:
     free(outfn);
     return ret;
 }
