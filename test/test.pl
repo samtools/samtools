@@ -427,7 +427,7 @@ sub test_index
     cmd("$$opts{bin}/samtools view -b $$opts{path}/dat/large_chrom.sam > $$opts{tmp}/large_chrom.bam");
     test_cmd($opts,out=>'dat/empty.expected',err=>'dat/large_chrom_bai_index.err',cmd=>"$$opts{bin}/samtools index $$opts{tmp}/large_chrom.bam",want_fail=>1,expect_fail=>1); # command should fail and give an error message, but isn't at the moment
     cmd("$$opts{bin}/samtools index -c $$opts{tmp}/large_chrom.bam");
-    test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2",expect_fail=>1); # failing: should be fixed
+    test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2");
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2:1-541556283");
 }
 
