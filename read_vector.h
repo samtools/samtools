@@ -47,6 +47,7 @@ static inline bool bam_to_read_vector(bam1_t* record, read_vector_t* part)
 	if (record->core.tid > INT32_MAX) return false;
 	part->orient = ((record->core.flag&BAM_FREVERSE) == BAM_FREVERSE);
 	part->tid = record->core.tid;
+    part->pos = record->core.pos;
 	return true;
 }
 

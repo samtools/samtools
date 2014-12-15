@@ -117,7 +117,7 @@ static void pos_buffer_reset(pos_buffer_t* buf)
 }
 
 static size_t pos_buff_rpos(const pos_buffer_t* buf, uint32_t rpos) {
-	assert(buf->base_pos >= rpos);
+	assert(buf->base_pos <= rpos);
 	size_t offset = rpos - buf->base_pos;
 	size_t buffer_offset = (buf->buffer_base + offset) % POS_BUFFER_LENGTH;
 	return buffer_offset;
@@ -155,7 +155,7 @@ static void pos_buffer_advance(pos_buffer_t* buf, uint32_t lpos)
 		buf->base_pos = lpos;
 		size_t i;
 		for ( i = 0; i < advance; ++i ) {
-			size_t j = pos_buff_rpos(buf, i);
+			size_t j = (buf->buffer_base + i) % POS_BUFFER_LENGTH;
 			reap_tree(buf->right_most[j]);
 			buf->right_most[j] = NULL;
 		}
