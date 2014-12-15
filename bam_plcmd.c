@@ -53,7 +53,8 @@ static inline int printw(int c, FILE *fp)
     return 0;
 }
 
-static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref_len, const char *ref)
+static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos,
+                              int ref_len, const char *ref, kstring_t *ks)
 {
     int j;
     if (p->is_head) {
@@ -75,11 +76,10 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
         putc(c, fp);
     } else putc(p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : '*', fp);
     if (p->indel > 0) {
-        putc('+', fp); printw(p->indel, fp);
-        for (j = 1; j <= p->indel; ++j) {
-            int c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos + j)];
-            putc(bam_is_rev(p->b)? tolower(c) : toupper(c), fp);
-        }
+        int len = bam_plp_insertion(p, ks);
+        putc('+', fp); printw(len, fp);
+        for (j = 0; j < len; j++)
+            putc(bam_is_rev(p->b) ? tolower(ks->s[j]) : toupper(ks->s[j]), fp);
     } else if (p->indel < 0) {
         printw(p->indel, fp);
         for (j = 1; j <= -p->indel; ++j) {
@@ -496,14 +496,16 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                     if (conf->flag & MPLP_PRINT_MAPQ) fputs("\t*", pileup_fp);
                     if (conf->flag & MPLP_PRINT_POS) fputs("\t*", pileup_fp);
                 } else {
+                    kstring_t ks = {0,0};
                     for (j = 0; j < n_plp[i]; ++j) {
                         const bam_pileup1_t *p = plp[i] + j;
                         int c = p->qpos < p->b->core.l_qseq
                             ? bam_get_qual(p->b)[p->qpos]
                             : 0;
                         if (c >= conf->min_baseQ)
-                            pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref);
+                            pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref, &ks);
                     }
+                    if (ks.s) free(ks.s);
                     putc('\t', pileup_fp);
                     for (j = 0; j < n_plp[i]; ++j) {
                         const bam_pileup1_t *p = plp[i] + j;
