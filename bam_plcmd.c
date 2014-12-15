@@ -63,7 +63,9 @@ static inline int printw(int c, FILE *fp)
     return 0;
 }
 
-static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref_len, const char *ref, int rev_del)
+static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos,
+                              int ref_len, const char *ref, kstring_t *ks,
+                              int rev_del)
 {
     int j;
     if (p->is_head) {
@@ -84,15 +86,16 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
         }
         putc(c, fp);
     } else putc(p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : ((bam_is_rev(p->b) && rev_del) ? '#' : '*'), fp);
+    int del_len = -p->indel;
     if (p->indel > 0) {
-        putc('+', fp); printw(p->indel, fp);
-        for (j = 1; j <= p->indel; ++j) {
-            int c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos + j)];
-            putc(bam_is_rev(p->b)? tolower(c) : toupper(c), fp);
-        }
-    } else if (p->indel < 0) {
-        printw(p->indel, fp);
-        for (j = 1; j <= -p->indel; ++j) {
+        int len = bam_plp_insertion(p, ks, &del_len);
+        putc('+', fp); printw(len, fp);
+        for (j = 0; j < len; j++)
+            putc(bam_is_rev(p->b) ? tolower(ks->s[j]) : toupper(ks->s[j]), fp);
+    }
+    if (del_len > 0) {
+        printw(-del_len, fp);
+        for (j = 1; j <= del_len; ++j) {
             int c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
             putc(bam_is_rev(p->b)? tolower(c) : toupper(c), fp);
         }
@@ -758,18 +761,20 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                     }
                 } else {
                     int n = 0;
+                    kstring_t ks = {0,0};
                     for (j = 0; j < n_plp[i]; ++j) {
                         const bam_pileup1_t *p = plp[i] + j;
                         int c = p->qpos < p->b->core.l_qseq
                             ? bam_get_qual(p->b)[p->qpos]
                             : 0;
                         if (c >= conf->min_baseQ)
-                            n++, pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref, conf->rev_del);
+                            n++, pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref, &ks, conf->rev_del);
                     }
                     if (!n) putc('*', pileup_fp);
 
                     /* Print base qualities */
                     n = 0;
+                    if (ks.s) free(ks.s);
                     putc('\t', pileup_fp);
                     for (j = 0; j < n_plp[i]; ++j) {
                         const bam_pileup1_t *p = plp[i] + j;

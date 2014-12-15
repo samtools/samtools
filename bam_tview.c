@@ -171,6 +171,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
     tview_t *tv = (tview_t*)data;
     int i, j, c, rb, attr, max_ins = 0;
     uint32_t call = 0;
+    kstring_t ks = {0,0};
     if (pos < tv->left_pos || tv->ccol > tv->mcol) return 0; // out of screen
     // print reference
     rb = (tv->ref && pos - tv->left_pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N';
@@ -211,7 +212,8 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
         // calculate maximum insert
         for (i = 0; i < n; ++i) {
             const bam_pileup1_t *p = pl + i;
-            if (p->indel > 0 && max_ins < p->indel) max_ins = p->indel;
+            int len = bam_plp_insertion(p, &ks, NULL);
+            if (max_ins < len) max_ins = len;
         }
     }
     // core loop
@@ -236,14 +238,16 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
                     }
                 } else c = p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : '*';
             } else { // padding
-                if (j > p->indel) c = '*';
+                int len = bam_plp_insertion(p, &ks, NULL);
+
+                if (j > len) c = '*';
                 else { // insertion
                     if (tv->base_for ==  TV_BASE_NUCL) {
                         if (tv->show_name) {
                             char *name = bam_get_qname(p->b);
                             c = (p->qpos + j + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos + j];
                         } else {
-                            c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos + j)];
+                            c = ks.s[j-1];
                             if (j == 0 && tv->is_dot && toupper(c) == toupper(rb)) c = bam_is_rev(p->b)? ',' : '.';
                         }
                     } else {
@@ -301,6 +305,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
         } else tv->my_mvaddch(tv,1, tv->ccol++, c);
     }
     tv->last_pos = pos;
+    if (ks.s) free(ks.s);
     return 0;
 }
 
