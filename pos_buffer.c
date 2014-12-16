@@ -217,9 +217,13 @@ static char* pos_tree_insert(pos_tree_t* tree, uint32_t ltid, uint32_t lpos, int
 	// search base to see if entry exists first
 	if (tree->ltid == ltid && tree->lpos == lpos) {
 		if ( score > tree->score ) {
-			return strdup(name);
+            // Replace existing name and score
+            char* ret = tree->name;
+            tree->name = strdup(name);
+            tree->score = score;
+			return ret;
 		} else {
-			return strdup(tree->name);
+			return strdup(name);
 		}
 	} else { // Check left and right
 		if ( ltid < tree->ltid || (ltid == tree->ltid && lpos < tree->lpos) ) {
