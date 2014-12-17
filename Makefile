@@ -146,6 +146,9 @@ bam_index.o: bam_index.c $(htslib_hts_h) $(htslib_sam_h) $(HTSDIR)/htslib/khash.
 bam_lpileup.o: bam_lpileup.c $(bam_plbuf_h) $(bam_lpileup_h) $(HTSDIR)/htslib/ksort.h
 bam_mate.o: bam_mate.c $(bam_h)
 bam_md.o: bam_md.c $(htslib_faidx_h) $(sam_h) kprobaln.h
+bam_mkdup.o: bam_mkdup.c bam_mkdup.h $(HTSDIR)/htslib/khash.h $(htslib_sam_h)
+bam_mkdup_cs.o: bam_mkdup_cs.c $(htslib_sam_h) pos_buffer.h read_vector.h bam_mkdup.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
+bam_mkdup_ns.o: bam_mkdup_ns.c $(htslib_sam_h) read_vector.h $(HTSDIR)/htslib/khash.h bam_mkdup.h
 bam_pileup.o: bam_pileup.c $(sam_h)
 bam_plbuf.o: bam_plbuf.c $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(bam2bcf_h) $(sample_h)

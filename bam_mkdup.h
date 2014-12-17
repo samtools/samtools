@@ -28,10 +28,13 @@
 #ifndef BAM_MKDUP_H
 #define BAM_MKDUP_H
 
+#include "read_vector.h"
+
 struct possig;
 typedef struct possig possig_t;
 
 KHASH_DECLARE(sig, possig_t, char)
+KHASH_DECLARE(fragsig, read_vector_t, char)
 
 typedef struct state {
 	samFile* fin;
@@ -39,7 +42,8 @@ typedef struct state {
 	bam_hdr_t* hin;
 	bam_hdr_t* hout;
 	int so;
-	kh_sig_t* hash; // hash of seen positions could replace with bloom filter?
+	kh_sig_t* pairhash; // hash of seen positions could replace with bloom filter?
+	kh_fragsig_t* fraghash; // hash of seen fragment positions could replace with bloom filter?
 } state_t;
 
 bool process_namesorted(const state_t* state);
@@ -47,8 +51,8 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
 
 static inline bool is_unprocessable( bam1_t* read )
 {
-	// if read is unpaired, unmapped, has unmapped mate, is secondary, qcfail or supplimentary
-	return ((read->core.flag&(BAM_FUNMAP|BAM_FMUNMAP|BAM_FSECONDARY|BAM_FQCFAIL|BAM_FSUPPLEMENTARY)) != 0
+	// if read is unpaired, unmapped, is secondary, qcfail or supplimentary
+	return ((read->core.flag&(BAM_FUNMAP|BAM_FSECONDARY|BAM_FQCFAIL|BAM_FSUPPLEMENTARY)) != 0
 			|| (read->core.flag&BAM_FPAIRED) != BAM_FPAIRED
 			|| read->core.tid == -1
 			|| read->core.pos == -1);

@@ -104,8 +104,10 @@ static bool init_state(const parsed_opts_t* opts, state_t* state)
 		return false;
 	}
 	
-	if ( state->so == SO_NAME ) state->hash = kh_init(sig);
-
+	if ( state->so == SO_NAME ) {
+        state->pairhash = kh_init(sig);
+        state->fraghash = kh_init(fragsig);
+    }
 	return true;
 }
 
@@ -114,7 +116,8 @@ static void cleanup_state(state_t* state)
 	if (state) {
 		if (state->fout) sam_close(state->fout);
 		if (state->fin) sam_close(state->fin);
-        if (state->hash) kh_destroy(sig, state->hash);
+        if (state->pairhash) kh_destroy(sig, state->pairhash);
+        if (state->pairhash) kh_destroy(fragsig, state->fraghash);
 	}
 }
 

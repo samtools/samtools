@@ -90,7 +90,13 @@ struct possig {
 
 #define possig_hash_equal(a, b) ((a.bits) == (b.bits))
 
+#define read_vector_hash_func(key) (khint32_t)((*(uint64_t*)(&key))>>33^(*(uint64_t*)(&key))^(*(uint64_t*)(&key))<<11)
+#define read_vector_hash_equal(a, b) (*(uint64_t*)(&a) == *(uint64_t*)(&b))
+
+
+
 __KHASH_IMPL(sig, , possig_t, char, 1, possig_hash_func, possig_hash_equal)
+__KHASH_IMPL(fragsig, , read_vector_t, char, 1, read_vector_hash_func, read_vector_hash_equal)
 
 static inline bool bam_to_possig(bam1_t* first_pos, bam1_t* second_pos, possig_t* sig)
 {
@@ -129,15 +135,34 @@ static bool loop(const state_t* state, bam1_t* first, bam1_t* second, bool* is_d
 	if (!bam_to_possig(first, second, &sig)) { fprintf(stderr, "trace: unlikely tid\n"); return false; }
 	
 	int ret = 0;
-	khiter_t val = kh_put(sig, state->hash, sig, &ret);
+	khiter_t val = kh_put(sig, state->pairhash, sig, &ret);
 	if (ret == 0) {
 		// Already in there ergo I am a duplicate
 		*is_dup = true;
 	} else {
-		kh_value(state->hash, val) = 1;
+		kh_value(state->pairhash, val) = 1;
 		*is_dup = false;
 	}
 	return true;
+}
+
+static bool process_single(const state_t* state, bam1_t* first, bool* is_dup)
+{
+    // bam to read_vector
+	read_vector_t sig;
+	if (!bam_to_read_vector(first, &sig)) { fprintf(stderr, "Unable to convert bam record to read vector\n"); return false; }
+	
+	int ret = 0;
+	khiter_t val = kh_put(fragsig, state->fraghash, sig, &ret);
+	if (ret == 0) {
+		// Already in there ergo I am a duplicate
+		*is_dup = true;
+	} else {
+		kh_value(state->fraghash, val) = 1;
+		*is_dup = false;
+	}
+
+    return true;
 }
 
 /*
@@ -177,8 +202,10 @@ bool process_namesorted(const state_t* state)
 		if (second != NULL) {
 			if (strcmp(bam_get_qname(read),bam_get_qname(second))) {
 				// We've moved on but not found a match to our previous processable read
-				// TODO: process as single read here
-				flush_stack_to_disk(&stack, state->fout, state->hout, false);
+				// TODO: process as single read fragment here
+                bool is_dup;
+                if (!process_single(state, second, &is_dup)) return false;
+				flush_stack_to_disk(&stack, state->fout, state->hout, is_dup);
 				stack_insert(&stack, read);
 				if (unprocessable){
 					second = NULL;
@@ -203,7 +230,7 @@ bool process_namesorted(const state_t* state)
 					}
 					second = NULL;
 					flush_stack_to_disk(&stack, state->fout, state->hout, is_dup);
-					if (x >= 0) { // if our loop did not terminate cause of EOF process as first read
+					if (x >= 0) { // if our loop did not terminate cause of EOF then process new read as first read
 						stack_insert(&stack, read);
 						if (!is_unprocessable(read)) {
 							// put read in second
@@ -228,7 +255,11 @@ bool process_namesorted(const state_t* state)
 		}
 	}
 	// TODO: process as single read here
-	flush_stack_to_disk(&stack, state->fout, state->hout, false);
+    bool is_dup = false;
+    if (second) {
+        if (!process_single(state, second, &is_dup)) return false;
+    }
+	flush_stack_to_disk(&stack, state->fout, state->hout, is_dup);
 	
 	bam_destroy1(read);
 	return success;
