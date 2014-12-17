@@ -293,186 +293,245 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     }
     kh_destroy(c2i, out_tid);
 
-    // grep @RG id's
-    regex_t rg_id;
+    // Init pattern matching structures
     regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
     if (matches == NULL) { perror("out of memory"); exit(-1); }
-    regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-    char* text = translate->text;
-    klist_t(hdrln) *rg_list = kl_init(hdrln);
-    while(1) { //   foreach rg id in translate's header
-        if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
-        // matches[0] is the whole @RG line; matches[1] is the ID field value
-        kstring_t match_id = { 0, 0, NULL };
-        kputsn(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &match_id);
 
-        // is our matched ID in our output list already
-        regex_t rg_id_search;
-        kstring_t rg_regex = { 0, 0, NULL };
-        ksprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)", match_id.s);
-        regcomp(&rg_id_search, rg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
-        free(rg_regex.s);
-        kstring_t transformed_id = { 0, 0, NULL };
-        bool transformed_equals_match;
-        if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0  || merge_rg) {
-            // Not in there so can add it as 1-1 mapping
-            kputs(match_id.s, &transformed_id);
-            transformed_equals_match = true;
-        } else {
-            // It's in there so we need to transform it by appending random number to id
-            ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
-            transformed_equals_match = false;
-        }
-        regfree(&rg_id_search);
+    regex_t re_id;
+    regcomp(&re_id, "^@[P|R]G.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
 
-        // Insert it into our translation map
-        int in_there = 0;
-        khiter_t iter = kh_put(c2c, tbl->rg_trans, ks_release(&match_id), &in_there);
-        char *transformed_id_s = ks_release(&transformed_id);
-        kh_value(tbl->rg_trans,iter) = transformed_id_s;
-        // take matched line and replace ID with transformed_id
-        kstring_t transformed_line = { 0, 0, NULL };
-        if (transformed_equals_match) {
-            kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-        } else {
-            kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-            kputs(transformed_id_s, &transformed_line);
-            kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-        }
-
-        if (!(transformed_equals_match && merge_rg)) {
-            // append line to linked list for PG processing
-            char** ln = kl_pushp(hdrln, rg_list);
-            *ln = ks_release(&transformed_line);  // Give away to linked list
-        }
-        else free(transformed_line.s);
-
-        text += matches[0].rm_eo; // next!
-    }
-    regfree(&rg_id);
-
-    // Do same for PG id's
-    regex_t pg_id;
-    regcomp(&pg_id, "^@PG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-    text = translate->text;
-    klist_t(hdrln) *pg_list = kl_init(hdrln);
-    while(1) { //   foreach pg id in translate's header
-        if (regexec(&pg_id, text, 2, matches, 0) != 0) break;
-        kstring_t match_id = { 0, 0, NULL };
-        kputsn(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &match_id);
-
-        // is our matched ID in our output list already
-        regex_t pg_id_search;
-        kstring_t pg_regex = { 0, 0, NULL };
-        ksprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)", match_id.s);
-        regcomp(&pg_id_search, pg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
-        free(pg_regex.s);
-        kstring_t transformed_id = { 0, 0, NULL };
-        bool transformed_equals_match;
-        if (regexec(&pg_id_search, out->text, 0, NULL, 0) != 0 || merge_pg) {
-            // Not in there so can add it as 1-1 mapping
-            kputs(match_id.s, &transformed_id);
-            transformed_equals_match = true;
-        } else {
-            // It's in there so we need to transform it by appending random number to id
-            ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
-            transformed_equals_match = false;
-        }
-        regfree(&pg_id_search);
-
-        // Insert it into our translation map
-        int in_there = 0;
-        khiter_t iter = kh_put(c2c, tbl->pg_trans, ks_release(&match_id), &in_there);
-        char *transformed_id_s = ks_release(&transformed_id);
-        kh_value(tbl->pg_trans,iter) = transformed_id_s;
-        // take matched line and replace ID with transformed_id
-        kstring_t transformed_line = { 0, 0, NULL };
-        if (transformed_equals_match) {
-            kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-        } else {
-            kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-            kputs(transformed_id_s, &transformed_line);
-            kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-        }
-
-        if (!(transformed_equals_match && merge_pg)) {
-            // append line to linked list for PP processing
-            char** ln = kl_pushp(hdrln, pg_list);
-            *ln = ks_release(&transformed_line);  // Give away to linked list
-        }
-        else free(transformed_line.s);
-        text += matches[0].rm_eo; // next!
-    }
-    regfree(&pg_id);
-    // need to translate PP's on the fly in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
-    // for each line {
-    // with ID replaced with tranformed_id and PP's transformed using the translation table
-    // }
     regex_t pg_pp;
     regcomp(&pg_pp, "^@PG.*\tPP:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-    kliter_t(hdrln) *iter = kl_begin(pg_list);
-    while (iter != kl_end(pg_list)) {
-        char* data = kl_val(iter);
 
-        kstring_t transformed_line = { 0, 0, NULL };
-        // Find PP tag
-        if (regexec(&pg_pp, data, 2, matches, 0) == 0) {
-            // Lookup in hash table
-            kstring_t pp_id = { 0, 0, NULL };
-            kputsn(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &pp_id);
-
-            khiter_t k = kh_get(c2c, tbl->pg_trans, pp_id.s);
-            free(pp_id.s);
-            char* transformed_id = kh_value(tbl->pg_trans,k);
-            // Replace
-            kputsn(data, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-            kputs(transformed_id, &transformed_line);
-            kputsn(data+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-        } else { kputs(data, &transformed_line); }
-        // Produce our output line and append it to out_text
-        kputc('\n', &out_text);
-        kputsn(transformed_line.s, transformed_line.l, &out_text);
-
-        free(transformed_line.s);
-        free(data);
-        iter = kl_next(iter);
-    }
-    regfree(&pg_pp);
-
-    // Need to also translate @RG PG's on the fly too
     regex_t rg_pg;
     regcomp(&rg_pg, "^@RG.*\tPG:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-    kliter_t(hdrln) *rg_iter = kl_begin(rg_list);
-    while (rg_iter != kl_end(rg_list)) {
-        char* data = kl_val(rg_iter);
 
-        kstring_t transformed_line = { 0, 0, NULL };
-        // Find PG tag
-        if (regexec(&rg_pg, data, 2, matches, 0) == 0) {
-            // Lookup in hash table
-            kstring_t pg_id = { 0, 0, NULL };
-            kputsn(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &pg_id);
+    // grep @RG id's
+    struct bam_hdr_rg_entry *curr_rg = NULL;
+    struct bam_hdr_rg_entry *curr_rg_out = NULL;
+    curr_rg = translate->rg;
+    while(curr_rg != NULL){
 
-            khiter_t k = kh_get(c2c, tbl->pg_trans, pg_id.s);
-            free(pg_id.s);
-            char* transformed_id = kh_value(tbl->pg_trans,k);
-            // Replace
-            kputsn(data, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-            kputs(transformed_id, &transformed_line);
-            kputsn(data+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-        } else { kputs(data, &transformed_line); }
-        // Produce our output line and append it to out_text
-        kputc('\n', &out_text);
-        kputsn(transformed_line.s, transformed_line.l, &out_text);
+        // is our matched ID in our output list already
+        bool match_found = false;
+        kstring_t transformed_id = { 0, 0, NULL };
 
-        free(transformed_line.s);
-        free(data);
-        rg_iter = kl_next(rg_iter);
+        curr_rg_out = out->rg;
+        while(curr_rg_out != NULL){
+            if(out == translate){
+                // Don't translate IDs if the header equals itself!
+                break;
+            }
+            if(strcmp(curr_rg->id.s, curr_rg_out->id.s) == 0){
+                // It's in there so we need to transform it by appending random number to id
+                ksprintf(&transformed_id, "%s-%0lX", curr_rg->id.s, lrand48());
+                curr_rg->transformed = 1;
+                match_found = true;
+                break;
+            }
+            curr_rg_out = curr_rg_out->next;
+        }
+        if(match_found == false){
+            // Not in there so can add it as 1-1 mapping
+            kputs(curr_rg->id.s, &transformed_id);
+        }
+
+        // Insert it into our translation map
+        int in_there = 0;
+        khiter_t iter = kh_put(c2c, tbl->rg_trans, curr_rg->id.s, &in_there);
+        kh_value(tbl->rg_trans,iter) = transformed_id.s;
+
+        struct bam_hdr_rg_entry *next = curr_rg->next;
+        if(out != translate){
+            // Detach node from linked list and attach to the RG list in out
+            curr_rg->next = NULL;
+
+            // Apply ID transform...
+            if(curr_rg->transformed != 0){
+                curr_rg->id = transformed_id;
+
+                // Transformation of ID required, update the line with the new ID
+                char* new_text = malloc(sizeof(char*) * (strlen(curr_rg->text) - strlen(curr_rg->id.s) + strlen(transformed_id.s) + 1));
+
+                regexec(&re_id, curr_rg->text, 2, matches, 0);
+                strncpy(new_text, curr_rg->text, matches[1].rm_so);
+                strncpy(new_text+matches[1].rm_so, transformed_id.s, strlen(transformed_id.s));
+                strcpy(new_text+matches[1].rm_so+strlen(transformed_id.s), curr_rg->text+matches[1].rm_eo);
+
+                if(strlen(new_text) > 0){
+                    free(curr_rg->text);
+                    curr_rg->text = new_text;
+                }
+                else{
+                    //TODO This should never happen...
+                    free(new_text);
+                }
+            }
+
+            if(out->rg == NULL){
+                //NOTE It should be remembered that hout = hin on first call
+                //     to trans_tbl_init, out->rg == NULL is thus unlikely
+                out->rg = curr_rg;
+            }
+            else{
+                struct bam_hdr_rg_entry *curr = NULL;
+                curr = out->rg;
+                while(curr->next != NULL){
+                    curr = curr->next;
+                }
+                curr->next = curr_rg;
+            }
+        }
+        // Release ID
+        ks_release(&transformed_id);
+
+        curr_rg = next;
     }
 
+    // Do same for PG id's
+    // TODO A lot of duplicated code here... Very similar to RG handling!
+    struct bam_hdr_pg_entry *curr_pg = NULL;
+    struct bam_hdr_pg_entry *curr_pg_out = NULL;
+    curr_pg = translate->pg;
+    while(curr_pg != NULL){
+
+        // is our matched ID in our output list already
+        bool match_found = false;
+        kstring_t transformed_id = { 0, 0, NULL };
+
+        curr_pg_out = out->pg;
+        while(curr_pg_out != NULL){
+            if(out == translate){
+                // Don't translate IDs if the header equals itself
+                break;
+            }
+            if(strcmp(curr_pg->id.s, curr_pg_out->id.s) == 0){
+                // It's in there so we need to transform it by appending random number to id
+                ksprintf(&transformed_id, "%s-%0lX", curr_pg->id.s, lrand48());
+                curr_pg->transformed = 1;
+                match_found = true;
+                break;
+            }
+            curr_pg_out = curr_pg_out->next;
+        }
+        if(match_found == false){
+            // Not in there so can add it as 1-1 mapping
+            kputs(curr_pg->id.s, &transformed_id);
+        }
+
+        // Insert it into our translation map
+        int in_there = 0;
+        khiter_t iter = kh_put(c2c, tbl->pg_trans, curr_pg->id.s, &in_there);
+        kh_value(tbl->pg_trans,iter) = transformed_id.s;
+
+        struct bam_hdr_pg_entry *next = curr_pg->next;
+        if(out != translate){
+            // Detach node from linked list and attach to the PG list in out
+            curr_pg->next = NULL;
+
+            // Apply ID transform...
+            if(curr_pg->transformed != 0){
+                curr_pg->id = transformed_id;
+
+                // Transformation of ID required, update the line with the new ID
+                char* new_text = malloc(sizeof(char*) * (strlen(curr_pg->text) - strlen(curr_pg->id.s) + strlen(transformed_id.s) + 1));
+
+                regexec(&re_id, curr_pg->text, 2, matches, 0);
+                strncpy(new_text, curr_pg->text, matches[1].rm_so);
+                strncpy(new_text+matches[1].rm_so, transformed_id.s, strlen(transformed_id.s));
+                strcpy(new_text+matches[1].rm_so+strlen(transformed_id.s), curr_pg->text+matches[1].rm_eo);
+
+                if(strlen(new_text) > 0){
+                    free(curr_pg->text);
+                    curr_pg->text = new_text;
+                }
+                else{
+                    //TODO This should never happen...
+                    free(new_text);
+                }
+            }
+
+            if(out->pg == NULL){
+                //NOTE As with the RG processing, hout = hin on first call to
+                //     trans_tbl_init causes out->pg == NULL to be unlikely
+                out->pg = curr_pg;
+            }
+            else{
+                struct bam_hdr_pg_entry *curr = NULL;
+                curr = out->pg;
+                while(curr->next != NULL){
+                    curr = curr->next;
+                }
+                curr->next = curr_pg;
+            }
+        }
+        // Release ID
+        ks_release(&transformed_id);
+
+        curr_pg = next;
+    }
+
+    // Translate PG-PP and RG-PG fields if necessary
+    // Don't do this if the current header to be translated is the "out" header
+    // or we'll end up with multiple entries (they don't need translating anyway)
+    if(out != translate){
+        // need to translate PP's on the fly in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
+        // for each line {
+        // with ID replaced with tranformed_id and PP's transformed using the translation table
+        // }
+        curr_pg = translate->pg;
+        while(curr_pg != NULL){
+            kstring_t transformed_line = { 0, 0, NULL };
+
+            // Find PP tag
+            if(curr_pg->pp != NULL){
+                // Lookup in hash table
+                khiter_t k = kh_get(c2c, tbl->pg_trans, curr_pg->pp);
+                char* transformed_id = kh_value(tbl->pg_trans,k);
+                // Replace
+                regexec(&pg_pp, curr_pg->text, 2, matches, 0);
+                kputsn(curr_pg->text, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+                kputs(transformed_id, &transformed_line);
+                kputsn(curr_pg->text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+
+            } else { kputs(curr_pg->text, &transformed_line); }
+            // Produce our output line and append it to out_text
+            kputc('\n', &out_text);
+            kputsn(transformed_line.s, transformed_line.l, &out_text);
+            free(transformed_line.s);
+
+            curr_pg = curr_pg->next;
+        }
+
+        // Need to also translate @RG PG's on the fly too
+        curr_rg = translate->rg;
+        while(curr_rg != NULL){
+            kstring_t transformed_line = { 0, 0, NULL };
+
+            // Find PG tag
+            if(curr_rg->pg != NULL){
+                // Lookup in hash table
+                khiter_t k = kh_get(c2c, tbl->pg_trans, curr_rg->pg);
+                char* transformed_id = kh_value(tbl->pg_trans,k);
+                // Transformation required, insert the line with the new PG
+                regexec(&rg_pg, curr_rg->text, 2, matches, 0);
+                kputsn(curr_rg->text, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+                kputs(transformed_id, &transformed_line);
+                kputsn(curr_rg->text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+
+            } else { kputs(curr_rg->text, &transformed_line); }
+            // Produce our output line and append it to out_text
+            kputc('\n', &out_text);
+            kputsn(transformed_line.s, transformed_line.l, &out_text);
+            free(transformed_line.s);
+
+            curr_rg = curr_rg->next;
+        }
+    }
+
+    regfree(&pg_pp);
     regfree(&rg_pg);
-    kl_destroy(hdrln,pg_list);
-    kl_destroy(hdrln,rg_list);
+    regfree(&re_id);
     free(matches);
 
     // Add trailing \n and write back to header
@@ -480,6 +539,14 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     kputc('\n', &out_text);
     out->l_text = out_text.l;
     out->text = ks_release(&out_text);
+
+    // If this is not the "out" bam_hdr_t, remove references to PG and RG structures,
+    // they will be freed after on bam_hdr_destroy of "out" after merge
+    if(out != translate){
+        translate->rg = NULL;
+        translate->pg = NULL;
+    }
+
 }
 
 static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
@@ -640,13 +707,14 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             return -1;
         }
         hin = sam_hdr_read(fp[i]);
+
         if (hout)
             trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
         else {
             // As yet, no headers to merge into...
             hout = bam_hdr_dup(hin);
             // ...so no need to translate header into itself
-            trans_tbl_init(hout, hin, translation_tbl+i, true, true);
+            trans_tbl_init(hout, hout, translation_tbl+i, true, true);
         }
 
         // TODO sam_itr_next() doesn't yet work for SAM files,
