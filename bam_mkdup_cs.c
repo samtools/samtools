@@ -43,11 +43,6 @@
  *   if it's already in there it's a duplicate so mark it if not insert it
  */
 
-typedef struct namescore {
-	char* name;
-	int score;
-} namescore_t;
-
 typedef struct endscore {
 	read_vector_t read_vector;
 	int score;
@@ -55,6 +50,17 @@ typedef struct endscore {
 
 KHASH_MAP_INIT_STR(nameqs, endscore_t)
 KHASH_MAP_INIT_STR(name, char)
+
+typedef struct fragname {
+    char* name;
+    int score;
+} fragname_t;
+
+#define read_vector_hash_func(key) (khint32_t)((*(uint64_t*)(&key))>>33^(*(uint64_t*)(&key))^(*(uint64_t*)(&key))<<11)
+#define read_vector_hash_equal(a, b) (*(uint64_t*)(&a) == *(uint64_t*)(&b))
+
+
+KHASH_INIT(fragscore, read_vector_t, fragname_t, 1, read_vector_hash_func, read_vector_hash_equal)
 
 #define __free_bam1_t(p)
 KLIST_INIT(read, bam1_t*,__free_bam1_t)
@@ -82,7 +88,6 @@ static inline int sum_qual(const bam1_t *b)
 	for (i = q = 0; i < b->core.l_qseq; ++i) q += qual[i];
 	return q;
 }
-
 
 bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_HACK)
 {
@@ -136,8 +141,47 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
 		}
 	}
 	bam_destroy1(read_first);
+    
+    // now handle what's left in nameqs which is fragments
+    kh_fragscore_t* bestfrag = kh_init(fragscore);
+    khiter_t k = kh_begin(name_hash);
+    while (k != kh_end(name_hash)) {
+        if (!kh_exist(name_hash, k)) { ++k; continue; }
+        khiter_t val = kh_get(fragscore, bestfrag, kh_value(name_hash, k).read_vector);
+        if (val != kh_end(bestfrag)) {
+            // Already in there somebody is going to die
+            // Do we score better than it?
+            char *kill;
+            if ( kh_value(name_hash, k).score > kh_value(bestfrag, val).score) {
+                kill = strdup(kh_value(bestfrag, val).name);
+            } else {
+                kill = strdup(kh_key(name_hash, k));
+            }
+            // kill the worst scorer
+            int kill_score = 1;
+            ++killed;
+            // If it's not already in the kill hash kill it
+            khiter_t kill_iter = kh_get(name, kill_hash, kill);
+            if (kill_iter == kh_end(kill_hash)) {
+                int dummy;
+                kill_iter = kh_put(name, kill_hash, kill, &dummy );
+            } else {free(kill);}
+            kh_value(kill_hash, kill_iter) = kill_score;
+        } else {
+            int ret = 0;
+            val = kh_put(fragscore, bestfrag, kh_value(name_hash, k).read_vector, &ret);
+            // Not seen this location before so add it to the frag hash
+            kh_value(bestfrag, val).name = strdup(kh_key(name_hash, k));
+            kh_value(bestfrag, val).score = kh_value(name_hash, k).score;
+        }
+
+        ++k;
+    }
+    fragname_t fg;
+    kh_foreach_value(bestfrag, fg, free(fg.name));
+    kh_destroy(fragscore, bestfrag);
 	
-	fprintf(stderr, "distinct_pos: %zu marked: %zu killed: %zu Number to kill size:%d buckets:%d\n", distinct_pos, marked, killed, kh_size(kill_hash), kh_n_buckets(kill_hash));
+	fprintf(stderr, "distinct_pos: %zu marked pairs: %zu marked frags: %zu Number to kill size:%d buckets:%d\n", distinct_pos, marked, killed, kh_size(kill_hash), kh_n_buckets(kill_hash));
 	
 	// 2nd pass
 	// HACK: PUT REWIND API HERE
@@ -155,6 +199,7 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
 		sam_write1(state->fout, state->hout, read);
 	}
 	bam_destroy1(read);
+
 	kh_destroy(name, kill_hash);
 	kh_destroy(nameqs, name_hash);
 

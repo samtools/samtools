@@ -2223,4 +2223,5 @@ sub test_mkdup
     test_cmd($opts,out=>'mkdup/1_test_ends_cs.bam.expected', err=>'mkdup/1_test_ends_cs.bam.expected.err', cmd=>"$$opts{bin}/samtools mkdup $$opts{path}/mkdup/1_test_ends_cs.sam", expect_fail=>0);
     test_cmd($opts,out=>'mkdup/2_test_ends_ns.bam.expected', err=>'mkdup/2_test_ends_ns.bam.expected.err', cmd=>"$$opts{bin}/samtools mkdup $$opts{path}/mkdup/2_test_ends_ns.sam", expect_fail=>0);
     test_cmd($opts,out=>'mkdup/3_frag_ns.bam.expected', err=>'mkdup/3_frag_ns.bam.expected.err', cmd=>"$$opts{bin}/samtools mkdup $$opts{path}/mkdup/3_frag_ns.sam", expect_fail=>0);
+    test_cmd($opts,out=>'mkdup/4_frag_cs.bam.expected', err=>'mkdup/4_frag_cs.bam.expected.err', cmd=>"$$opts{bin}/samtools mkdup $$opts{path}/mkdup/4_frag_cs.sam", expect_fail=>0);
 }
