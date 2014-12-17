@@ -46,6 +46,7 @@ test_stats($opts);
 test_merge($opts);
 test_fixmate($opts);
 test_idxstat($opts);
+test_mkdup($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -2213,4 +2214,12 @@ sub test_idxstat
     my ($opts,%args) = @_;
 
     test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.bam", expect_fail=>0);
+}
+
+sub test_mkdup
+{
+    my ($opts,%args) = @_;
+    
+    test_cmd($opts,out=>'mkdup/1_test_ends_cs.bam.expected', err=>'mkdup/1_test_ends_cs.bam.expected.err', cmd=>"$$opts{bin}/samtools mkdup $$opts{path}/mkdup/1_test_ends_cs.sam", expect_fail=>0);
+    test_cmd($opts,out=>'mkdup/2_test_ends_ns.bam.expected', err=>'mkdup/2_test_ends_ns.bam.expected.err', cmd=>"$$opts{bin}/samtools mkdup $$opts{path}/mkdup/2_test_ends_ns.sam", expect_fail=>0);
 }
