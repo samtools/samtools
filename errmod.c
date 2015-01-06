@@ -134,11 +134,10 @@ int errmod_cal(const errmod_t *em, int n, int m, uint16_t *bases, float *q)
     // The total count of each base observed per strand
     int w[32];
 
-        /* zero out q */
-    memset(q, 0, m * m * sizeof(float));
+    memset(q, 0, m * m * sizeof(float)); // initialise q to 0
     if (n == 0) return 0;
-    // calculate aux.esum and aux.fsum
-    if (n > 255) { // then sample 255 bases
+    // This section randomly downsamples to 255 depth so as not to go beyond our precalculated matrix
+    if (n > 255) { // if we exceed 255 bases observed then shuffle them to sample and only keep the first 255
         ks_shuffle(uint16_t, n, bases);
         n = 255;
     }
