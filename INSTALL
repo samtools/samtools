@@ -16,7 +16,7 @@ you can still compile the rest of SAMtools by manually changing:
 `-D_CURSES_LIB=1' to `-D_CURSES_LIB=0' at the line starting with `DFLAGS=', and
 comment out the line starting with `LIBCURSES='.
 Note that on some systems the library is available as -lcurses while on others
-as -lnurses. This can be set in Makefile by setting LIBCURSES= -lcurses vs
+as -lncurses. This can be set in Makefile by setting LIBCURSES= -lcurses vs
 -lncurses.
 
 
