@@ -92,8 +92,9 @@ static inline int sum_qual(const bam1_t *b)
 bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_HACK)
 {
 	pos_buffer_t* buf = pos_buffer_init();
-	khash_t(nameqs)* name_hash = kh_init(nameqs);
-	khash_t(name)* kill_hash = kh_init(name);
+	khash_t(nameqs)* name_hash = kh_init(nameqs); // Hash of score and positions indexed by name for pairing
+	khash_t(name)* kill_hash = kh_init(name); // Hash of reads to kill by name
+    kh_fragscore_t* bestfrag = kh_init(fragscore); // Best scoring fragment at position
 	bam1_t* read_first = bam_init1();
 	bool success = true;
 	size_t distinct_pos = 0;
@@ -111,6 +112,16 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
 			int score = kh_value(name_hash, k).score + sum_qual(read_first);
 			read_vector_t curr;
 			if (!bam_to_read_vector(read_first, &curr)) abort();
+
+            // put both halves into frag with INT_MAX score to mark non-paired fragments at that position
+            int ret;
+            khiter_t val;
+            val = kh_put(fragscore, bestfrag, kh_value(name_hash, k).read_vector, &ret);
+            kh_value(bestfrag, val).name = NULL; // Don't need to know name
+            kh_value(bestfrag, val).score = INT_MAX; // INT_MAX score
+            val = kh_put(fragscore, bestfrag, curr, &ret);
+            kh_value(bestfrag, val).name = NULL; // Don't need to know name
+            kh_value(bestfrag, val).score = INT_MAX; // INT_MAX score
 
 			// Have we seen this position pair before?
 			char* kill = pos_buffer_insert(buf, kh_value(name_hash, k).read_vector, curr, score, bam_get_qname(read_first), read_first->core.tid, read_first->core.pos);
@@ -143,7 +154,6 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
 	bam_destroy1(read_first);
     
     // now handle what's left in nameqs which is fragments
-    kh_fragscore_t* bestfrag = kh_init(fragscore);
     khiter_t k = kh_begin(name_hash);
     while (k != kh_end(name_hash)) {
         if (!kh_exist(name_hash, k)) { ++k; continue; }
@@ -154,6 +164,9 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
             char *kill;
             if ( kh_value(name_hash, k).score > kh_value(bestfrag, val).score) {
                 kill = strdup(kh_value(bestfrag, val).name);
+                // Update best score in bestfrag
+                kh_value(bestfrag, val).name = strdup(kh_key(name_hash, k));
+                kh_value(bestfrag, val).score = kh_value(name_hash, k).score;
             } else {
                 kill = strdup(kh_key(name_hash, k));
             }
@@ -177,6 +190,7 @@ bool process_coordsorted(/* HACK:const*/ state_t* state, const char* BIG_DIRTY_H
 
         ++k;
     }
+    // Deallocate memory in bestfrag and destroy it
     fragname_t fg;
     kh_foreach_value(bestfrag, fg, free(fg.name));
     kh_destroy(fragscore, bestfrag);
