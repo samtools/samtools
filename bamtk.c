@@ -28,7 +28,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
-#include "bam.h"
+#include "htslib/hts.h"
 #include "samtools.h"
 #include "version.h"
 
