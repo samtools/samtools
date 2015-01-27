@@ -1122,7 +1122,10 @@ treated as part of the URL and not a PATH field separator.
 
 For URLs, the text \fB%s\fR will be replaced by the MD5sum being
 read. If no REF_PATH has been specified it will default to
-\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR
+\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR and if also unset, set
+REF_CACHE to \fb$HOME/.cache/genome-ref/%2s/%2s/%s\fR.  In
+the occurence of $HOME being undefined, the cache will utilise the
+local system temporary directory.
 
 .TP
 .B REF_CACHE

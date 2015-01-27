@@ -310,6 +310,11 @@ using options '-root /tmp/ref_cache -subdirs 2', setting REF_PATH to
 '/tmp/ref_cache/%2s/%2s/%s' should allow samtools to find the references that
 it stored.
 
+Note that if no REF_PATH is specified, htslib will default to
+downloading from the EBI reference server and caching locally to 
+$HOME/.cache/genome-ref/%2s/%2s/%s.  This is functionally equivalent
+to running this tool with '-root $HOME/.cache/genome-ref -subdirs 2'.
+
 =head1 AUTHOR
 
 Rob Davies.
