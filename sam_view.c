@@ -353,14 +353,26 @@ int main_samview(int argc, char *argv[])
             goto view_end;
         }
         if (fn_list) hts_set_fai_filename(out, fn_list);
-        if (*out_format || is_header) sam_hdr_write(out, header);
+        if (*out_format || is_header)  {
+            if (sam_hdr_write(out, header) != 0) {
+                fprintf(stderr, "[main_samview] failed to write the SAM header\n");
+                ret = 1;
+                goto view_end;
+            }
+        }
         if (fn_un_out) {
             if ((un_out = sam_open(fn_un_out, out_mode)) == 0) {
                 print_error_errno("failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
             }
-            if (*out_format || is_header) sam_hdr_write(un_out, header);
+            if (*out_format || is_header) {
+                if (sam_hdr_write(un_out, header) != 0) {
+                    fprintf(stderr, "[main_samview] failed to write the SAM header\n");
+                    ret = 1;
+                    goto view_end;
+                }
+            }
         }
     }
     if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
