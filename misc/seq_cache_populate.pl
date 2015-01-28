@@ -311,9 +311,10 @@ using options '-root /tmp/ref_cache -subdirs 2', setting REF_PATH to
 it stored.
 
 Note that if no REF_PATH is specified, htslib will default to
-downloading from the EBI reference server and caching locally to 
-$HOME/.cache/genome-ref/%2s/%2s/%s.  This is functionally equivalent
-to running this tool with '-root $HOME/.cache/genome-ref -subdirs 2'.
+downloading from the EBI reference server and caching locally (see
+samtools man page for details, defaulting to
+$HOME/.cache/hts-ref/%2s/%2s/%s).  This is functionally equivalent
+to running this tool with '-root $HOME/.cache/hts-ref -subdirs 2'.
 
 =head1 AUTHOR
 
