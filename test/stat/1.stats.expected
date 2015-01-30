@@ -190,7 +190,7 @@ GCC	32	0.00	50.00	50.00	0.00
 GCC	33	50.00	0.00	0.00	50.00
 GCC	34	50.00	0.00	50.00	0.00
 GCC	35	0.00	0.00	50.00	50.00
-# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: pairs total, inward oriented pairs, outward oriented pairs, other pairs
+# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs
 IS	0	0	0	0	0
 IS	1	0	0	0	0
 IS	2	0	0	0	0
