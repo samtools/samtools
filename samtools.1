@@ -1119,10 +1119,15 @@ to look for sequences identified by their MD5sums.  This can be either
 a list of directories or URLs. Note that if a URL is included then the
 colon in http:// and ftp:// and the optional port number will be
 treated as part of the URL and not a PATH field separator.
-
 For URLs, the text \fB%s\fR will be replaced by the MD5sum being
-read. If no REF_PATH has been specified it will default to
-\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR
+read.
+
+If no REF_PATH has been specified it will default to
+\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR and if also unset, set
+REF_CACHE to \fB$XDG_CACHE_HOME/hts-ref/%2s/%2s/%s\fR.  In the
+occurrence of \fB$XDG_CACHE_HOME\fR being undefined, it will use
+\fB$HOME/.cache\fR or a local system temporary directory if no home
+directory is found.
 
 .TP
 .B REF_CACHE
@@ -1138,7 +1143,9 @@ with the filenames in the deepest directory being the last 28
 characters of the md5sum.
 
 The REF_CACHE directory will be searched for before attempting to load
-via the REF_PATH search list.
+via the REF_PATH search list.  If no REF_PATH is defined, both
+REF_PATH and REF_CACHE will be automatically set (see above), but if
+REF_PATH is defined and REF_CACHE not then no local cache is used.
 
 To aid population of the REF_CACHE directory a script
 \fBmisc/seq_ref_populate.pl\fR is provided in the Samtools
