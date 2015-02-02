@@ -355,10 +355,8 @@ int unclipped_length(bam1_t *bam_line)
     return read_len;
 }
 
-void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
+void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
 {
-    int read_len = unclipped_length(bam_line);
-    if ( read_len >= stats->nbases ) realloc_buffers(stats,read_len);
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
     int icig,iread=0,icycle=0;
     int iref = bam_line->core.pos - stats->rseq_pos;
@@ -428,7 +426,7 @@ void count_mismatches_per_cycle(stats_t *stats,bam1_t *bam_line)
 
                 int idx = is_fwd ? icycle : read_len-icycle-1;
                 if ( idx>stats->max_len )
-                    error("mpc: %d>%d\n",idx,stats->max_len);
+                    error("mpc: %d>%d (%s %d %s)\n",idx,stats->max_len,stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
 
                 idx = idx*stats->nquals + qual;
                 if ( idx>=stats->nquals*stats->nbases )
@@ -645,12 +643,13 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
 
-    if ( seq_len >= stats->nbases )
-        realloc_buffers(stats,seq_len);
-    if ( stats->max_len<seq_len )
-        stats->max_len = seq_len;
+    int read_len = unclipped_length(bam_line);
+    if ( read_len >= stats->nbases )
+        realloc_buffers(stats,read_len);
+    if ( stats->max_len<read_len )
+        stats->max_len = read_len;
 
-    stats->read_lengths[seq_len]++;
+    stats->read_lengths[read_len]++;
 
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
     uint8_t base, *seq  = bam_get_seq(bam_line);
@@ -850,7 +849,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                     stats->gcd[ stats->igcd ].gc = fai_gc_content(stats, stats->gcd_pos, stats->gcd_bin_size);
                 }
 
-                count_mismatches_per_cycle(stats,bam_line);
+                count_mismatches_per_cycle(stats,bam_line,read_len);
             }
             // No reference and first pass, new chromosome or sequence going beyond the end of the gcd bin
             else if ( stats->gcd_pos==-1 || stats->tid != bam_line->core.tid || bam_line->core.pos - stats->gcd_pos > stats->gcd_bin_size )
@@ -1053,7 +1052,7 @@ void output_stats(stats_t *stats, int sparse)
         if ( ! sum ) continue;
         printf("GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,100.*ptr[0]/sum,100.*ptr[1]/sum,100.*ptr[2]/sum,100.*ptr[3]/sum);
     }
-    printf("# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
+    printf("# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
         long in = (long)(stats->isize->inward(stats->isize->data, isize));
         long out = (long)(stats->isize->outward(stats->isize->data, isize));

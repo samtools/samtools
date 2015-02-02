@@ -61,7 +61,9 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
         putc(p->b->core.qual > 93? 126 : p->b->core.qual + 33, fp);
     }
     if (!p->is_del) {
-        int c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos)];
+        int c = p->qpos < p->b->core.l_qseq
+            ? seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos)]
+            : 'N';
         if (ref) {
             int rb = pos < ref_len? ref[pos] : 'N';
             if (c == '=' || seq_nt16_table[c] == seq_nt16_table[rb]) c = bam_is_rev(p->b)? ',' : '.';
@@ -264,6 +266,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
             exit(1);
         }
+        if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
+            fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
+            return 1;
+        }
         hts_set_fai_filename(data[i]->fp, conf->fai_fname);
         data[i]->conf = conf;
         h_tmp = sam_hdr_read(data[i]->fp);
@@ -271,7 +277,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
             exit(1);
         }
-        data[i]->h = i? h : h_tmp; // for i==0, "h" has not been set yet
         bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
         // Collect read group IDs with PL (platform) listed in pl_list (note: fragile, strstr search)
         rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
@@ -281,17 +286,24 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 fprintf(stderr, "[%s] fail to load index for %s\n", __func__, fn[i]);
                 exit(1);
             }
-            if ( (data[i]->iter=sam_itr_querys(idx, data[i]->h, conf->reg)) == 0) {
-                fprintf(stderr, "[E::%s] fail to parse region '%s'\n", __func__, conf->reg);
+            if ( (data[i]->iter=sam_itr_querys(idx, h_tmp, conf->reg)) == 0) {
+                fprintf(stderr, "[E::%s] fail to parse region '%s' with %s\n", __func__, conf->reg, fn[i]);
                 exit(1);
             }
             if (i == 0) tid0 = data[i]->iter->tid, beg0 = data[i]->iter->beg, end0 = data[i]->iter->end;
             hts_idx_destroy(idx);
         }
-        if (i == 0) h = h_tmp; /* save the header of first file in list */
+        else
+            data[i]->iter = NULL;
+
+        if (i == 0) h = data[i]->h = h_tmp; // save the header of the first file
         else {
-            // FIXME: to check consistency
+            // FIXME: check consistency between h and h_tmp
             bam_hdr_destroy(h_tmp);
+
+            // we store only the first file's header; it's (alleged to be)
+            // compatible with the i-th file's target_name lookup needs
+            data[i]->h = h;
         }
     }
     // allocate data storage proportionate to number of samples being studied sm->n
@@ -316,6 +328,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             exit(1);
         }
 
+        // BCF header creation
         bcf_hdr = bcf_hdr_init("w");
         kstring_t str = {0,0,0};
 
@@ -335,6 +348,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_append(bcf_hdr, str.s);
         }
 
+        // Translate BAM @SQ tags to BCF ##contig tags
         // todo: use/write new BAM header manipulation routines, fill also UR, M5
         for (i=0; i<h->n_targets; i++)
         {
@@ -381,7 +395,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
         bcf_hdr_add_sample(bcf_hdr, NULL);
         bcf_hdr_write(bcf_fp, bcf_hdr);
+        // End of BCF header creation
 
+        // Initialise the calling algorithm
         bca = bcf_call_init(-1., conf->min_baseQ);
         bcr = calloc(sm->n, sizeof(bcf_callret1_t));
         bca->rghash = rghash;
@@ -422,7 +438,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
     } else ref_tid = -1, ref = 0;
 
-    // begin pileup
+    // init pileup
     iter = bam_mplp_init(n, mplp_func, (void**)data);
     if ( conf->flag & MPLP_SMART_OVERLAPS ) bam_mplp_init_overlaps(iter);
     max_depth = conf->max_depth;
@@ -436,6 +452,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     bam_mplp_set_maxcnt(iter, max_depth);
     bcf1_t *bcf_rec = bcf_init1();
     int ret;
+    // begin pileup
     while ( (ret=bam_mplp_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
         if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
@@ -477,7 +494,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 int j, cnt;
                 for (j = cnt = 0; j < n_plp[i]; ++j) {
                     const bam_pileup1_t *p = plp[i] + j;
-                    if (bam_get_qual(p->b)[p->qpos] >= conf->min_baseQ) ++cnt;
+                    int c = p->qpos < p->b->core.l_qseq
+                             ? bam_get_qual(p->b)[p->qpos]
+                             : 0;
+                    if (c >= conf->min_baseQ) ++cnt;
                 }
                 fprintf(pileup_fp, "\t%d\t", cnt);
                 if (n_plp[i] == 0) {
@@ -487,13 +507,18 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 } else {
                     for (j = 0; j < n_plp[i]; ++j) {
                         const bam_pileup1_t *p = plp[i] + j;
-                        if (bam_get_qual(p->b)[p->qpos] >= conf->min_baseQ)
+                        int c = p->qpos < p->b->core.l_qseq
+                            ? bam_get_qual(p->b)[p->qpos]
+                            : 0;
+                        if (c >= conf->min_baseQ)
                             pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref);
                     }
                     putc('\t', pileup_fp);
                     for (j = 0; j < n_plp[i]; ++j) {
                         const bam_pileup1_t *p = plp[i] + j;
-                        int c = bam_get_qual(p->b)[p->qpos];
+                        int c = p->qpos < p->b->core.l_qseq
+                            ? bam_get_qual(p->b)[p->qpos]
+                            : 0;
                         if (c >= conf->min_baseQ) {
                             c = c + 33 < 126? c + 33 : 126;
                             putc(c, pileup_fp);

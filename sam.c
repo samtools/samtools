@@ -30,7 +30,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 int samthreads(samfile_t *fp, int n_threads, int n_sub_blks)
 {
-    if (!fp->file->is_bin || !fp->file->is_write) return -1;
+    if (hts_get_format(fp->file)->format != bam || !fp->is_write) return -1;
     bgzf_mt(fp->x.bam, n_threads, n_sub_blks);
     return 0;
 }
@@ -47,12 +47,14 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
     if (strchr(mode, 'r')) {
         if (aux) hts_set_fai_filename(fp->file, aux);
         fp->header = sam_hdr_read(fp->file);  // samclose() will free this
+        fp->is_write = 0;
         if (fp->header->n_targets == 0 && bam_verbose >= 1)
             fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
     }
     else {
         fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it
-        if (fp->file->is_bin || fp->file->is_cram || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
+        fp->is_write = 1;
+        if (hts_get_format(fp->file)->format != sam || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
     }
 
     return fp;
@@ -61,7 +63,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 void samclose(samfile_t *fp)
 {
     if (fp) {
-        if (!fp->file->is_write && fp->header) bam_hdr_destroy(fp->header);
+        if (!fp->is_write && fp->header) bam_hdr_destroy(fp->header);
         sam_close(fp->file);
         free(fp);
     }

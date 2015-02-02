@@ -29,6 +29,7 @@ use FindBin;
 use lib "$FindBin::Bin";
 use Getopt::Long;
 use File::Temp qw/ tempfile tempdir /;
+use IO::Handle;
 
 my $opts = parse_params();
 
@@ -258,15 +259,25 @@ sub test_cmd
 sub failed
 {
     my ($opts, %args) = @_;
-    if (exists $args{reason}) { print "\n\t$args{reason}"; }
-    if (!$args{expect_fail}) { $$opts{nfailed}++; print "\n.. failed ...\n\n"; }
-    else { $$opts{nxfail}++; print "\n.. expected failure\n\n"; }
+    my $reason = exists $args{reason}? "\t$args{reason}\n" : "";
+    if (!$args{expect_fail}) {
+        $$opts{nfailed}++;
+        print "\n"; STDOUT->flush();
+        print STDERR "$reason.. failed ...\n"; STDERR->flush();
+        print "\n";
+    }
+    else { $$opts{nxfail}++; print "\n$reason.. expected failure\n\n"; }
 }
 sub passed
 {
     my ($opts, %args) = @_;
     if (!$args{expect_fail}) { $$opts{nok}++; print ".. ok\n\n"; }
-    else { $$opts{nxpass}++; print ".. unexpected pass\n\n"; }
+    else {
+        $$opts{nxpass}++;
+        STDOUT->flush();
+        print STDERR ".. unexpected pass\n"; STDERR->flush();
+        print "\n";
+    }
 }
 
 sub is_file_newer
@@ -416,7 +427,7 @@ sub test_index
     cmd("$$opts{bin}/samtools view -b $$opts{path}/dat/large_chrom.sam > $$opts{tmp}/large_chrom.bam");
     test_cmd($opts,out=>'dat/empty.expected',err=>'dat/large_chrom_bai_index.err',cmd=>"$$opts{bin}/samtools index $$opts{tmp}/large_chrom.bam",want_fail=>1,expect_fail=>1); # command should fail and give an error message, but isn't at the moment
     cmd("$$opts{bin}/samtools index -c $$opts{tmp}/large_chrom.bam");
-    test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2",expect_fail=>1); # failing: should be fixed
+    test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2");
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2:1-541556283");
 }
 
@@ -465,9 +476,23 @@ sub test_usage
     print "$test:\n";
     print "\t$args{cmd}\n";
 
+    my $tty_input;
+    if (-t) {
+        $args{redirection} = "";  # no redirection necessary
+    }
+    elsif (eval { require IO::Pty }) {
+        $tty_input = new IO::Pty;
+        # ensure stdin is a terminal, so that subcommands display their usage
+        $args{redirection} = "<'" . $tty_input->ttyname . "'";
+    }
+    else {
+        warn "$0: module IO::Pty not found; skipping usage tests\n";
+        return;
+    }
+
     my $command = $args{cmd};
     my $commandpath = $$opts{bin}."/".$command;
-    my ($ret,$out,$err) = _cmd("$commandpath");
+    my ($ret,$out,$err) = _cmd("$commandpath $args{redirection}");
     if ( $err =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath: $out"); return; }
 
     my @sections = ($err =~ m/(^[A-Za-z]+.*?)(?:(?=^[A-Za-z]+:)|\z)/msg);
@@ -521,7 +546,7 @@ sub test_usage_subcommand
     my $command = $args{cmd};
     my $subcommand = $args{subcmd};
     my $commandpath = $$opts{bin}."/".$command;
-    my ($ret,$out,$err) = _cmd("$commandpath $subcommand");
+    my ($ret,$out,$err) = _cmd("$commandpath $subcommand $args{redirection}");
 
     if ( $err =~ m/\/bin\/bash.*no.*such/i ) { failed($opts,msg=>$test,reason=>"could not run $commandpath $subcommand: $out"); return; }
 
@@ -1800,6 +1825,22 @@ sub test_view
         }
     }
 
+    # Test CRAM with explicit -T
+    my $cram_no_ur_t = sprintf("%s.test%03d.cram", $out, $test);
+    run_view_test($opts,
+                  msg => "$test: Make CRAM with no UR field",
+                  args => ['-C', $sam_no_ur],
+                  ref_path => "$$opts{path}/dat/cram_md5",
+                  out => $cram_no_ur_t);
+    $test++;
+
+    run_view_test($opts,
+                  msg => "$test: Decoding CRAM with no UR field via -T",
+                  args => ['-T', $ref_file, $cram_no_ur_t],
+                  out => sprintf("%s.test%03d.sam", $out, $test),
+                  compare => $sam_no_ur);
+    $test++;
+
 
     # CIGAR B-operator removal tests.
     my $b_op_sam      = "$$opts{path}/dat/view.003.sam";
@@ -2140,8 +2181,8 @@ sub test_merge
 
     # Note the use of -s 1 to fix the random seed in place
 
-    # Merge 1 - Sadly iterator API doesn't work with SAM files, expected fail
-    test_cmd($opts,out=>'merge/1.merge.expected',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam", expect_fail=>1);
+    # Merge 1 - Standard 3 file SAM merge all presented on the command line
+    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
     # Merge 2 - Standard 3 file BAM merge all files presented on the command line
     test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam");
     # Merge 3 - Standard 3 file BAM merge 2 files in fofn 1 on command line

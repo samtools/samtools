@@ -196,7 +196,7 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
             r_tid = b->core.tid;
             unpad_seq(b, &r);
             if (h->target_len[r_tid] != r.l) {
-                fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %d in BAM header, but %ld in embedded reference\n", bam1_qname(b), h->target_len[r_tid], r.l);
+                fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %u in BAM header, but %llu in embedded reference\n", bam1_qname(b), h->target_len[r_tid], (unsigned long long)(r.l));
                 return -1;
             }
             if (fai) {

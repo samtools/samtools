@@ -113,7 +113,7 @@ sub parse_params
             },
             {
                 id=>'IS',
-                header=>"# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: pairs total, inward oriented pairs, outward oriented pairs, other pairs\n",
+                header=>"# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n",
             },
             {
                 id=>'RL',

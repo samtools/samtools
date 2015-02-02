@@ -320,7 +320,7 @@ int main(int argc, char**argv)
     }
 
     // Set the seed to a fixed value so that calls to lrand48 within functions return predictable values
-    const long GIMMICK_SEED = 0x1234abcd330e;
+    const long GIMMICK_SEED = 0x1234330e;
     srand48(GIMMICK_SEED);
 
     bam_hdr_t* out;

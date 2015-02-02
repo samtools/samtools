@@ -1,4 +1,4 @@
-.TH samtools 1 "19 September 2014" "samtools-1.1" "Bioinformatics tools"
+.TH samtools 1 "2 February 2015" "samtools-1.2" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -301,11 +301,11 @@ of input.
 .TP
 .B tview
 samtools tview
-.RB [ \-p
+.RB [ -p
 .IR chr:pos ]
-.RB [ \-s
+.RB [ -s
 .IR STR ]
-.RB [ \-d
+.RB [ -d
 .IR display ]
 .RI <in.sorted.bam>
 .RI [ref.fasta]
@@ -331,18 +331,18 @@ Display only alignments from this sample or read group
 .TP
 .B mpileup
 samtools mpileup
-.RB [ \-EBugp ]
-.RB [ \-C
+.RB [ -EBugp ]
+.RB [ -C
 .IR capQcoef ]
-.RB [ \-r
+.RB [ -r
 .IR reg ]
-.RB [ \-f
+.RB [ -f
 .IR in.fa ]
-.RB [ \-l
+.RB [ -l
 .IR list ]
-.RB [ \-Q
+.RB [ -Q
 .IR minBaseQ ]
-.RB [ \-q
+.RB [ -q
 .IR minMapQ ]
 .I in.bam
 .RI [ in2.bam
@@ -1119,10 +1119,14 @@ to look for sequences identified by their MD5sums.  This can be either
 a list of directories or URLs. Note that if a URL is included then the
 colon in http:// and ftp:// and the optional port number will be
 treated as part of the URL and not a PATH field separator.
-
 For URLs, the text \fB%s\fR will be replaced by the MD5sum being
-read. If no REF_PATH has been specified it will default to
-\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR
+read.
+
+If no REF_PATH has been specified it will default to
+\fBhttp://www.ebi.ac.uk/ena/cram/md5/%s\fR and if REF_CACHE is also unset,
+it will be set to \fB$XDG_CACHE_HOME/hts-ref/%2s/%2s/%s\fR.
+If \fB$XDG_CACHE_HOME\fR is unset, \fB$HOME/.cache\fR (or a local system
+temporary directory if no home directory is found) will be used similarly.
 
 .TP
 .B REF_CACHE
@@ -1138,7 +1142,9 @@ with the filenames in the deepest directory being the last 28
 characters of the md5sum.
 
 The REF_CACHE directory will be searched for before attempting to load
-via the REF_PATH search list.
+via the REF_PATH search list.  If no REF_PATH is defined, both
+REF_PATH and REF_CACHE will be automatically set (see above), but if
+REF_PATH is defined and REF_CACHE not then no local cache is used.
 
 To aid population of the REF_CACHE directory a script
 \fBmisc/seq_ref_populate.pl\fR is provided in the Samtools

@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2014 Genome Research Ltd.
+    Copyright (C) 2008-2015 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -28,7 +28,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
-#include "bam.h"
+#include "htslib/hts.h"
 #include "samtools.h"
 #include "version.h"
 
@@ -192,7 +192,7 @@ int main(int argc, char *argv[])
         printf(
 "samtools %s\n"
 "Using htslib %s\n"
-"Copyright (C) 2014 Genome Research Ltd.\n",
+"Copyright (C) 2015 Genome Research Ltd.\n",
                samtools_version(), hts_version());
     }
     else if (strcmp(argv[1], "--version-only") == 0) {

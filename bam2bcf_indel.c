@@ -1,7 +1,7 @@
 /*  bam2bcf_indel.c -- indel caller.
 
     Copyright (C) 2010, 2011 Broad Institute.
-    Copyright (C) 2012, 2013 Genome Research Ltd.
+    Copyright (C) 2012-2014 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -26,9 +26,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
-#include "bam.h"
+#include "htslib/sam.h"
 #include "bam2bcf.h"
-#include "kaln.h"
 #include "kprobaln.h"
 #include "htslib/khash.h"
 KHASH_SET_INIT_STR(rg)
@@ -197,7 +196,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                         aux[m++] = MINUS_CONST + p->indel;
                     }
                 }
-                j = bam_cigar2qlen(&p->b->core, bam1_cigar(p->b));
+                j = bam_cigar2qlen(p->b->core.n_cigar, bam_get_cigar(p->b));
                 if (j > max_rd_len) max_rd_len = j;
             }
             float frac = (float)na/nt;
@@ -224,7 +223,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
         }
         if (n_types >= 64) {
             free(aux);
-            if (bam_verbose >= 2)
+            // TODO revisit how/whether to control printing this warning
+            if (hts_verbose >= 2)
                 fprintf(stderr, "[%s] excessive INDEL alleles at position %d. Skip the position.\n", __func__, pos + 1);
             return -1;
         }
@@ -264,7 +264,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
         cns = calloc(L, 4);
         ref0 = calloc(L, 1);
         for (i = 0; i < right - left; ++i)
-            ref0[i] = bam_nt16_table[(int)ref[i+left]];
+            ref0[i] = seq_nt16_table[(int)ref[i+left]];
         for (s = 0; s < n; ++s) {
             r = ref_sample[s] = calloc(L, 1);
             memset(cns, 0, sizeof(int) * L);
@@ -272,8 +272,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
             for (i = 0; i < n_plp[s]; ++i) {
                 bam_pileup1_t *p = plp[s] + i;
                 bam1_t *b = p->b;
-                uint32_t *cigar = bam1_cigar(b);
-                uint8_t *seq = bam1_seq(b);
+                uint32_t *cigar = bam_get_cigar(b);
+                uint8_t *seq = bam_get_seq(b);
                 int x = b->core.pos, y = 0;
                 for (k = 0; k < b->core.n_cigar; ++k) {
                     int op = cigar[k]&0xf;
@@ -281,7 +281,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                     if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
                         for (j = 0; j < l; ++j)
                             if (x + j >= left && x + j < right)
-                                cns[x+j-left] += (bam1_seqi(seq, y+j) == ref0[x+j-left])? 1 : 0x10000;
+                                cns[x+j-left] += (bam_seqi(seq, y+j) == ref0[x+j-left])? 1 : 0x10000;
                         x += l; y += l;
                     } else if (op == BAM_CDEL || op == BAM_CREF_SKIP) x += l;
                     else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
@@ -303,14 +303,14 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
         free(ref0); free(cns);
     }
     { // the length of the homopolymer run around the current position
-        int c = bam_nt16_table[(int)ref[pos + 1]];
+        int c = seq_nt16_table[(int)ref[pos + 1]];
         if (c == 15) l_run = 1;
         else {
             for (i = pos + 2; ref[i]; ++i)
-                if (bam_nt16_table[(int)ref[i]] != c) break;
+                if (seq_nt16_table[(int)ref[i]] != c) break;
             l_run = i;
             for (i = pos; i >= 0; --i)
-                if (bam_nt16_table[(int)ref[i]] != c) break;
+                if (seq_nt16_table[(int)ref[i]] != c) break;
             l_run -= i + 1;
         }
     }
@@ -325,9 +325,9 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                     for (i = 0; i < n_plp[s]; ++i) {
                         bam_pileup1_t *p = plp[s] + i;
                         if (p->indel == types[t]) {
-                            uint8_t *seq = bam1_seq(p->b);
+                            uint8_t *seq = bam_get_seq(p->b);
                             for (k = 1; k <= p->indel; ++k) {
-                                int c = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos + k)];
+                                int c = bam_nt16_nt4_table[bam_seqi(seq, p->qpos + k)];
                                 assert(c<5);
                                 ++inscns_aux[(t*max_ins+(k-1))*5 + c];
                             }
@@ -383,8 +383,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
             for (i = 0; i < n_plp[s]; ++i, ++K) {
                 bam_pileup1_t *p = plp[s] + i;
                 int qbeg, qend, tbeg, tend, sc, kk;
-                uint8_t *seq = bam1_seq(p->b);
-                uint32_t *cigar = bam1_cigar(p->b);
+                uint8_t *seq = bam_get_seq(p->b);
+                uint32_t *cigar = bam_get_cigar(p->b);
                 if (p->b->core.flag&4) continue; // unmapped reads
                 // FIXME: the following loop should be better moved outside; nonetheless, realignment should be much slower anyway.
                 for (kk = 0; kk < p->b->core.n_cigar; ++kk)
@@ -392,17 +392,17 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                 if (kk < p->b->core.n_cigar) continue;
                 // FIXME: the following skips soft clips, but using them may be more sensitive.
                 // determine the start and end of sequences for alignment
-                qbeg = tpos2qpos(&p->b->core, bam1_cigar(p->b), left,  0, &tbeg);
-                qend = tpos2qpos(&p->b->core, bam1_cigar(p->b), right, 1, &tend);
+                qbeg = tpos2qpos(&p->b->core, bam_get_cigar(p->b), left,  0, &tbeg);
+                qend = tpos2qpos(&p->b->core, bam_get_cigar(p->b), right, 1, &tend);
                 if (types[t] < 0) {
                     int l = -types[t];
                     tbeg = tbeg - l > left?  tbeg - l : left;
                 }
                 // write the query sequence
                 for (l = qbeg; l < qend; ++l)
-                    query[l - qbeg] = bam_nt16_nt4_table[bam1_seqi(seq, l)];
+                    query[l - qbeg] = bam_nt16_nt4_table[bam_seqi(seq, l)];
                 { // do realignment; this is the bottleneck
-                    const uint8_t *qual = bam1_qual(p->b), *bq;
+                    const uint8_t *qual = bam_get_qual(p->b), *bq;
                     uint8_t *qq;
                     qq = calloc(qend - qbeg, 1);
                     bq = (uint8_t*)bam_aux_get(p->b, "ZQ");

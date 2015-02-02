@@ -1,3 +1,19 @@
+Beta Release 1.2  (2 February 2015)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Noteworthy changes in samtools:
+
+* Flagstat now works on SAM, BAM, or CRAM files (rather than BAM only)
+* Stats calculates mismatches per cycle for unclipped length
+* Merge can now merge SAM input files
+* CRAM reference files are now cached by default (see HTSlib release
+  notes and samtools(1) man page)
+* Tested against Intel-optimised zlib (https://github.com/jtkukunas/zlib;
+  see README for details)
+* Fixed bugs #302, #309, #318, and #327 and many other improvements
+  and bugs fixed in HTSlib -- see the HTSlib release notes
+
+
 Beta Release 1.1 (19 September, 2014)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

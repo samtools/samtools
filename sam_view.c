@@ -353,17 +353,29 @@ int main_samview(int argc, char *argv[])
             goto view_end;
         }
         if (fn_list) hts_set_fai_filename(out, fn_list);
-        if (*out_format || is_header) sam_hdr_write(out, header);
+        if (*out_format || is_header)  {
+            if (sam_hdr_write(out, header) != 0) {
+                fprintf(stderr, "[main_samview] failed to write the SAM header\n");
+                ret = 1;
+                goto view_end;
+            }
+        }
         if (fn_un_out) {
             if ((un_out = sam_open(fn_un_out, out_mode)) == 0) {
                 print_error_errno("failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
             }
-            if (*out_format || is_header) sam_hdr_write(un_out, header);
+            if (*out_format || is_header) {
+                if (sam_hdr_write(un_out, header) != 0) {
+                    fprintf(stderr, "[main_samview] failed to write the SAM header\n");
+                    ret = 1;
+                    goto view_end;
+                }
+            }
         }
     }
-    if (n_threads > 1) { hts_set_threads(out, n_threads); }
+    if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
 
     if (argc == optind + 1) { // convert/print the entire file
@@ -570,6 +582,15 @@ int main_bam2fq(int argc, char *argv[])
     fp = sam_open(argv[optind], "r");
     if (fp == NULL) {
         print_error_errno("Cannot read file \"%s\"", argv[optind]);
+        return 1;
+    }
+    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS,
+                    SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL)) {
+        fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
+        return 1;
+    }
+    if (hts_set_opt(fp, CRAM_OPT_DECODE_MD, 0)) {
+        fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
         return 1;
     }
     fpse = NULL;
