@@ -473,44 +473,45 @@ view_end:
 
 static int usage(int is_long_help)
 {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Usage:   samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n\n");
-    // output options
-    fprintf(stderr, "Options: -b       output BAM\n");
-    fprintf(stderr, "         -C       output CRAM (requires -T)\n");
-    fprintf(stderr, "         -1       use fast BAM compression (implies -b)\n");
-    fprintf(stderr, "         -u       uncompressed BAM output (implies -b)\n");
-    fprintf(stderr, "         -h       include header in SAM output\n");
-    fprintf(stderr, "         -H       print SAM header only (no alignments)\n");
-    fprintf(stderr, "         -c       print only the count of matching records\n");
-    fprintf(stderr, "         -o FILE  output file name [stdout]\n");
-    fprintf(stderr, "         -U FILE  output reads not selected by filters to FILE [null]\n");
-    // extra input
-    fprintf(stderr, "         -t FILE  FILE listing reference names and lengths (see long help) [null]\n");
-    fprintf(stderr, "         -T FILE  reference sequence FASTA FILE [null]\n");
-    // read filters
-    fprintf(stderr, "         -L FILE  only include reads overlapping this BED FILE [null]\n");
-    fprintf(stderr, "         -r STR   only include reads in read group STR [null]\n");
-    fprintf(stderr, "         -R FILE  only include reads with read group listed in FILE [null]\n");
-    fprintf(stderr, "         -q INT   only include reads with mapping quality >= INT [0]\n");
-    fprintf(stderr, "         -l STR   only include reads in library STR [null]\n");
-    fprintf(stderr, "         -m INT   only include reads with number of CIGAR operations\n");
-    fprintf(stderr, "                  consuming query sequence >= INT [0]\n");
-    fprintf(stderr, "         -f INT   only include reads with all bits set in INT set in FLAG [0]\n");
-    fprintf(stderr, "         -F INT   only include reads with none of the bits set in INT\n");
-    fprintf(stderr, "                  set in FLAG [0]\n");
-    // read processing
-    fprintf(stderr, "         -x STR   read tag to strip (repeatable) [null]\n");
-    fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
-    fprintf(stderr, "         -s FLOAT integer part sets seed of random number generator [0];\n");
-    fprintf(stderr, "                  rest sets fraction of templates to subsample [no subsampling]\n");
-    // general options
-    fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
-    fprintf(stderr, "         -?       print long help, including note about region specification\n");
-    fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
-    fprintf(stderr, "\n");
+    fprintf(stderr,
+"\n"
+"Usage:   samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n\n"
+// output options
+"Options: -b       output BAM\n"
+"         -C       output CRAM (requires -T)\n"
+"         -1       use fast BAM compression (implies -b)\n"
+"         -u       uncompressed BAM output (implies -b)\n"
+"         -h       include header in SAM output\n"
+"         -H       print SAM header only (no alignments)\n"
+"         -c       print only the count of matching records\n"
+"         -o FILE  output file name [stdout]\n"
+"         -U FILE  output reads not selected by filters to FILE [null]\n"
+// extra input
+"         -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
+"         -T FILE  reference sequence FASTA FILE [null]\n"
+// read filters
+"         -L FILE  only include reads overlapping this BED FILE [null]\n"
+"         -r STR   only include reads in read group STR [null]\n"
+"         -R FILE  only include reads with read group listed in FILE [null]\n"
+"         -q INT   only include reads with mapping quality >= INT [0]\n"
+"         -l STR   only include reads in library STR [null]\n"
+"         -m INT   only include reads with number of CIGAR operations\n"
+"                  consuming query sequence >= INT [0]\n"
+"         -f INT   only include reads with all bits set in INT set in FLAG [0]\n"
+"         -F INT   only include reads with none of the bits set in INT\n"
+"                  set in FLAG [0]\n"
+// read processing
+"         -x STR   read tag to strip (repeatable) [null]\n"
+"         -B       collapse the backward CIGAR operation\n"
+"         -s FLOAT integer part sets seed of random number generator [0];\n"
+"                  rest sets fraction of templates to subsample [no subsampling]\n"
+// general options
+"         -@ INT   number of BAM compression threads [0]\n"
+"         -?       print long help, including note about region specification\n"
+"         -S       ignored (input format is auto-detected)\n");
     if (is_long_help)
-        fprintf(stderr, "Notes:\n\
+        fprintf(stderr,
+"\nNotes:\n\
 \n\
   1. This command now auto-detects the input format (BAM/CRAM/SAM).\n\
 \n\
