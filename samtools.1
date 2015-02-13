@@ -1497,6 +1497,25 @@ Specifies the output filename.  By default output is sent to stdout.
 .RE
 
 .TP \"-------- help etc
+.TP 8
+.B -2 FILE
+Write reads with the BAM_READ2 flag set to FILE instead of outputting them.
+.TP 8
+.BI "-f " INT
+Only output alignments with all bits set in
+.I INT
+present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+.TP 8
+.BI "-F " INT
+Do not output alignments with any bits set in
+.I INT
+present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 .BR help ,\  --help
 Display a brief usage message listing the samtools commands available.
 If the name of a command is also given, e.g.,

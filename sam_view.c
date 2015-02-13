@@ -589,13 +589,110 @@ static const char *copied_tags[] = { "RG", "BC", "QT", NULL };
 
 static void bam2fq_usage(FILE *to)
 {
-    fprintf(to, "\nUsage:   samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>\n\n");
-    fprintf(to, "Options: -n        don't append /1 and /2 to the read name\n");
-    fprintf(to, "         -O        output quality in the OQ tag if present\n");
-    fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
-    fprintf(to, "         -t        copy RG, BC and QT tags to the FASTQ header line\n");
+    fprintf(to,
+"Usage:   samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>\n\n"
+"Options: -n        don't append /1 and /2 to the read name\n"
+"         -O        output quality in the OQ tag if present\n"
+"         -s FILE   write singleton reads to FILE [assume single-end]\n"
+"         -t        copy RG, BC and QT tags to the FASTQ header line\n"
+"         -1 FILE   write reads flagged READ1 to FILE\n"
+"         -2 FILE   write reads flagged READ2 to FILE\n"
+"         -f INT    only include reads with all bits set in INT set in FLAG [0]\n"
+"         -F INT    only include reads with none of the bits set in INT\n"
+"                   set in FLAG [0]\n");
     sam_global_opt_help(to, "-.--.");
-    fprintf(to, "\n");
+}
+
+static const int READ_UNKNOWN = 0;
+static const int READ_1 = 1;
+static const int READ_2 = 2;
+
+static int which_readpart(const bam1_t *b)
+{
+    if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) {
+        return READ_1;
+    } else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) {
+        return READ_2;
+    } else {
+        return READ_UNKNOWN;
+    }
+}
+
+static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bool has12, const bool use_oq, const bool copy_tags)
+{
+    int i;
+    int32_t qlen = b->core.l_qseq;
+    assert(qlen >= 0);
+    uint8_t *seq;
+    uint8_t *qual = bam_get_qual(b);
+    const uint8_t *oq = NULL;
+    if (use_oq) oq = bam_aux_get(b, "OQ");
+    bool has_qual = (qual[0] != 0xff || (use_oq && oq)); // test if there is quality
+
+    linebuf->l = 0;
+    // Write read name
+    int readpart = which_readpart(b);
+    kputc(!has_qual? '>' : '@', linebuf);
+    kputs(bam_get_qname(b), linebuf);
+    // Add the /1 /2 if requested
+    if (has12) {
+        if (readpart == READ_1) kputs("/1", linebuf);
+        else if (readpart == READ_2) kputs("/2", linebuf);
+    }
+    if (copy_tags) {
+        kputc('\n', linebuf);
+        for (i = 0; copied_tags[i]; ++i) {
+            uint8_t *s;
+            if ((s = bam_aux_get(b, copied_tags[i])) != 0) {
+                kputc('\t', linebuf);
+                kputsn(copied_tags[i], 2, linebuf);
+                kputsn(":Z:", 3, linebuf);
+                kputs(bam_aux2Z(s), linebuf);
+            }
+        }
+    }
+    kputc('\n', linebuf);
+
+    seq = bam_get_seq(b);
+
+    if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+        for (i = qlen-1; i > -1; --i) {
+            char c = seq_nt16_str[seq_comp_table[bam_seqi(seq,i)]];
+            kputc(c, linebuf);
+        }
+    } else {
+        for (i = 0; i < qlen; ++i) {
+            char c = seq_nt16_str[bam_seqi(seq,i)];
+            kputc(c, linebuf);
+        }
+    }
+    kputc('\n', linebuf);
+
+    if (has_qual) {
+        // Write quality
+        kputs("+\n", linebuf);
+        if (use_oq && oq) {
+            if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+                for (i = qlen-1; i > -1; --i) {
+                    kputc(oq[i], linebuf);
+                }
+            } else {
+                kputs((char*)oq, linebuf);
+            }
+        } else {
+            if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+                for (i = qlen-1; i > -1; --i) {
+                    kputc(33 + qual[i], linebuf);
+                }
+            } else {
+                for (i = 0; i < qlen; ++i) {
+                    kputc(33 + qual[i], linebuf);
+                }
+            }
+        }
+        kputc('\n', linebuf);
+    }
+    return true;
 }
 
 int main_bam2fq(int argc, char *argv[])
@@ -603,29 +700,31 @@ int main_bam2fq(int argc, char *argv[])
     samFile *fp;
     bam_hdr_t *h;
     bam1_t *b;
-    int8_t *buf;
     int status = EXIT_SUCCESS;
-    size_t max_buf;
-    FILE* fpse;
+    FILE *fpse = NULL;
     // Parse args
-    char* fnse = NULL;
+    char *fnse = NULL;
+    char *fnr1 = NULL;
+    char *fnr2 = NULL;
     bool has12 = true, use_oq = false, copy_tags = false;
+    int flag_on = 0, flag_off = 0;
     int c;
-
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
         { NULL, 0, NULL, 0 }
     };
-
-    while ((c = getopt_long(argc, argv, "nOts:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "nOts:1:2:f:F:", lopts, NULL)) > 0) {
         switch (c) {
             case 'n': has12 = false; break;
             case 'O': use_oq = true; break;
             case 's': fnse = optarg; break;
             case 't': copy_tags = true; break;
+            case '1': fnr1 = optarg; break;
+            case '2': fnr2 = optarg; break;
+            case 'f': flag_on |= strtol(optarg, 0, 0); break;
+            case 'F': flag_off |= strtol(optarg, 0, 0); break;
             case '?': bam2fq_usage(stderr); return 1;
-
             default:
                 if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0) {
                     bam2fq_usage(stderr); return 1;
@@ -633,6 +732,8 @@ int main_bam2fq(int argc, char *argv[])
                 break;
         }
     }
+
+    if (fnr1 || fnr2) has12 = false;
 
     if ((argc - (optind)) == 0) {
         bam2fq_usage(stdout);
@@ -673,10 +774,7 @@ int main_bam2fq(int argc, char *argv[])
         bam_hdr_destroy(h);
         return 1;
     }
-    buf = NULL;
-    max_buf = 0;
 
-    fpse = NULL;
     if (fnse) {
         fpse = fopen(fnse,"w");
         if (fpse == NULL) {
@@ -686,108 +784,58 @@ int main_bam2fq(int argc, char *argv[])
         }
     }
 
+    FILE *fpr[] = {stdout, stdout, stdout};
+
+    if (fnr1) {
+        fpr[1] = fopen(fnr1, "w");
+        if (fpr[1] == NULL) {
+            print_error_errno("bam2fq", "Cannot write to r1 file \"%s\"", fnr1);
+            return 1;
+        }
+    }
+
+    if (fnr2) {
+        fpr[2] = fopen(fnr2, "w");
+        if (fpr[2] == NULL) {
+            print_error_errno("bam2fq", "Cannot write to r2 file \"%s\"", fnr2);
+            return 1;
+        }
+    }
+
     int64_t n_singletons = 0, n_reads = 0;
-    char* previous = NULL;
+    char *previous_readname = NULL;
     kstring_t linebuf = { 0, 0, NULL };
     kputsn("", 0, &linebuf);
+    int previous_readpart = READ_UNKNOWN;
     int ret;
 
     while ((ret = sam_read1(fp, h, b)) >= 0) {
-        if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) continue; // skip secondary and supplementary alignments
+        if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
+            || (b->core.flag&flag_on) != flag_on
+            || (b->core.flag&flag_off) != 0) continue;
         ++n_reads;
 
-        int i;
-        int32_t qlen = b->core.l_qseq;
-        assert(qlen >= 0);
-        uint8_t* seq;
-        uint8_t* qual = bam_get_qual(b);
-        const uint8_t *oq = NULL;
-        if (use_oq) oq = bam_aux_get(b, "OQ");
-        bool has_qual = (qual[0] != 0xff || (use_oq && oq)); // test if there is quality
-
         // If there was a previous readname
-        if ( fpse && previous ) {
-            if (!strcmp(bam_get_qname(b), previous ) ) {
-                fputs(linebuf.s, stdout); // Write previous read
-                free(previous);
-                previous = NULL;
+        if ( fpse && previous_readname ) {
+            if (!strcmp(bam_get_qname(b), previous_readname ) ) {
+                fputs(linebuf.s, fpr[previous_readpart]); // Write previous read
+                free(previous_readname);
+                previous_readname = NULL;
+                previous_readpart = READ_UNKNOWN;
             } else { // Doesn't match it's a singleton
                 ++n_singletons;
                 fputs(linebuf.s, fpse);  // Write previous read to singletons
-                free(previous);
-                previous = strdup(bam_get_qname(b));
+                free(previous_readname);
+                previous_readname = strdup(bam_get_qname(b));
+                previous_readpart = which_readpart(b);
             }
         } else {
-            fputs(linebuf.s, stdout); // Write pending read
-            if (fpse) previous = strdup(bam_get_qname(b));
+            fputs(linebuf.s, fpr[previous_readpart]); // Write pending read
+            if (fpse) previous_readname = strdup(bam_get_qname(b));
+                previous_readpart = which_readpart(b);
         }
 
-        linebuf.l = 0;
-        // Write read name
-        kputc(!has_qual? '>' : '@', &linebuf);
-        kputs(bam_get_qname(b), &linebuf);
-        // Add the /1 /2 if requested
-        if (has12) {
-            if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) kputs("/1", &linebuf);
-            else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) kputs("/2", &linebuf);
-        }
-        if (copy_tags) {
-            for (i = 0; copied_tags[i]; ++i) {
-                uint8_t *s;
-                if ((s = bam_aux_get(b, copied_tags[i])) != NULL) {
-                    kputc('\t', &linebuf);
-                    kputsn(copied_tags[i], 2, &linebuf);
-                    kputsn(":Z:", 3, &linebuf);
-                    kputs(bam_aux2Z(s), &linebuf);
-                }
-            }
-        }
-        kputc('\n', &linebuf);
-
-        if (max_buf < qlen + 1) {
-            max_buf = qlen + 1;
-            kroundup32(max_buf);
-            buf = realloc(buf, max_buf);
-            if (buf == NULL) {
-                fprintf(stderr, "Out of memory");
-                return 1;
-            }
-        }
-        buf[qlen] = '\0';
-        seq = bam_get_seq(b);
-        for (i = 0; i < qlen; ++i)
-            buf[i] = bam_seqi(seq, i);
-        if (b->core.flag & BAM_FREVERSE) { // reverse complement
-            for (i = 0; i < qlen>>1; ++i) {
-                int8_t t = seq_comp_table[buf[qlen - 1 - i]];
-                buf[qlen - 1 - i] = seq_comp_table[buf[i]];
-                buf[i] = t;
-            }
-            if (qlen&1) buf[i] = seq_comp_table[buf[i]];
-        }
-        for (i = 0; i < qlen; ++i)
-            buf[i] = seq_nt16_str[buf[i]];
-        kputs((char*)buf, &linebuf);
-        kputc('\n', &linebuf);
-
-        if (has_qual) {
-            // Write quality
-            kputs("+\n", &linebuf);
-            if (use_oq && oq) memcpy(buf, oq + 1, qlen);
-            else {
-                for (i = 0; i < qlen; ++i)
-                    buf[i] = 33 + qual[i];
-            }
-            if (b->core.flag & BAM_FREVERSE) { // reverse
-                for (i = 0; i < qlen>>1; ++i) {
-                    int8_t t = buf[qlen - 1 - i];
-                    buf[qlen - 1 - i] = buf[i];
-                    buf[i] = t;
-                }
-            }
-            kputs((char*)buf, &linebuf);
-            kputc('\n', &linebuf);
-        }
+        if (bam1_to_fq(b, &linebuf, has12, use_oq, copy_tags) == false) return 1;
     }
 
     if (ret < -1) {
@@ -796,27 +844,30 @@ int main_bam2fq(int argc, char *argv[])
     }
 
     if (fpse) {
-        if ( previous ) { // Nothing left to match it's a singleton
+        if ( previous_readname ) { // Nothing left to match it's a singleton
             ++n_singletons;
             fputs(linebuf.s, fpse);  // Write previous read to singletons
         } else {
-            fputs(linebuf.s, stdout); // Write previous read
+            fputs(linebuf.s, fpr[previous_readpart]); // Write previous read
         }
 
         fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
-        fclose(fpse);
     } else {
-        fputs(linebuf.s, stdout); // Write previous read
+        fputs(linebuf.s, fpr[previous_readpart]); // Write previous read
     }
     free(linebuf.s);
-    free(previous);
+    free(previous_readname);
 
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
 
     sam_global_args_free(&ga);
-    free(buf);
     bam_destroy1(b);
     bam_hdr_destroy(h);
     check_sam_close("bam2fq", fp, argv[optind], "file", &status);
+    if (fpse && !fclose(fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", fnse); return 1; }
+    if (fpr[0] != stdout && !fclose(fpr[0])) { print_error_errno("bam2fq", "Error closing r0 file"); return 1; }
+    if (fpr[1] != stdout && !fclose(fpr[1])) { print_error_errno("bam2fq", "Error closing r1 file \"%s\"", fnr1); return 1; }
+    if (fpr[2] != stdout && !fclose(fpr[2])) { print_error_errno("bam2fq", "Error closing r2 file \"%s\"", fnr2); return 1; }
+
     return status;
 }
