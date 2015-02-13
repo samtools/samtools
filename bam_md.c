@@ -77,8 +77,8 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
                 kputc(ref[x+j], str);
             }
             u = 0;
+            x += j; nm += j;
             if (j < l) break;
-            x += l; nm += l;
         } else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) {
             y += l;
             if (op == BAM_CINS) nm += l;
