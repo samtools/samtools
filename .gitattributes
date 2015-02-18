@@ -6,5 +6,5 @@
 
 # Omit these files from release tarballs.
 .git*           export-ignore
-/.travis.yml    export-ignore
+.travis*        export-ignore
 README.md       export-ignore
