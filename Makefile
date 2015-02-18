@@ -243,18 +243,17 @@ misc/maq2sam-short: misc/maq2sam-short.o
 misc/maq2sam-long: misc/maq2sam-long.o
 	$(CC) $(LDFLAGS) -o $@ misc/maq2sam-long.o $(LDLIBS) -lz
 
-misc/md5fa: misc/md5fa.o misc/md5.o
-	$(CC) $(LDFLAGS) -o $@ misc/md5fa.o misc/md5.o $(LDLIBS) -lz
+misc/md5fa: misc/md5fa.o $(HTSLIB)
+	$(CC) $(LDFLAGS) -o $@ misc/md5fa.o $(HTSLIB) $(LDLIBS) -lz
 
-misc/md5sum-lite: misc/md5sum-lite.o
-	$(CC) $(LDFLAGS) -o $@ misc/md5sum-lite.o $(LDLIBS)
+misc/md5sum-lite: misc/md5sum-lite.o $(HTSLIB)
+	$(CC) $(LDFLAGS) -o $@ misc/md5sum-lite.o $(HTSLIB) $(LDLIBS)
 
 misc/wgsim: misc/wgsim.o
 	$(CC) $(LDFLAGS) -o $@ misc/wgsim.o $(LDLIBS) -lm -lz
 
 misc/ace2sam.o: misc/ace2sam.c $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kseq.h
-misc/md5.o: misc/md5.c misc/md5.h
-misc/md5fa.o: misc/md5fa.c misc/md5.h $(HTSDIR)/htslib/kseq.h
+misc/md5fa.o: misc/md5fa.c $(HTSDIR)/htslib/hts.h $(HTSDIR)/htslib/kseq.h
 misc/wgsim.o: misc/wgsim.c $(HTSDIR)/htslib/kseq.h
 
 misc/maq2sam-short.o: misc/maq2sam.c
@@ -263,8 +262,8 @@ misc/maq2sam-short.o: misc/maq2sam.c
 misc/maq2sam-long.o: misc/maq2sam.c
 	$(CC) $(CFLAGS) $(CPPFLAGS) -DMAQ_LONGREADS -c -o $@ misc/maq2sam.c
 
-misc/md5sum-lite.o: misc/md5.c misc/md5.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) -DMD5SUM_MAIN -c -o $@ misc/md5.c
+misc/md5sum-lite.o: misc/md5sum-lite.c $(HTSDIR)/htslib/hts.h
+	$(CC) $(CFLAGS) $(CPPFLAGS) -c -o $@ misc/md5sum-lite.c
 
 
 install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)

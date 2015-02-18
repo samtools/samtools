@@ -24,8 +24,9 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <stdio.h>
 #include <zlib.h>
-#include "md5.h"
+#include <stdint.h>
 #include "htslib/kseq.h"
+#include "htslib/hts.h"
 
 #define HEX_STR "0123456789abcdef"
 
@@ -33,7 +34,7 @@ KSEQ_INIT(gzFile, gzread)
 
 static void md5_one(const char *fn)
 {
-    MD5_CTX md5_one, md5_all;
+    hts_md5_ctx md5_one, md5_all;
     int l, i, k;
     gzFile fp;
     kseq_t *seq;
@@ -46,24 +47,24 @@ static void md5_one(const char *fn)
         exit(1);
     }
 
-    MD5Init(&md5_all);
+    hts_md5_init(&md5_all);
     seq = kseq_init(fp);
     while ((l = kseq_read(seq)) >= 0) {
         for (i = k = 0; i < seq->seq.l; ++i) {
             if (islower(seq->seq.s[i])) seq->seq.s[k++] = toupper(seq->seq.s[i]);
             else if (isupper(seq->seq.s[i])) seq->seq.s[k++] = seq->seq.s[i];
         }
-        MD5Init(&md5_one);
-        MD5Update(&md5_one, (unsigned char*)seq->seq.s, k);
-        MD5Final(digest, &md5_one);
+        hts_md5_init(&md5_one);
+        hts_md5_update(&md5_one, (unsigned char*)seq->seq.s, k);
+        hts_md5_final(digest, &md5_one);
         for (l = 0; l < 16; ++l) {
             printf("%c%c", HEX_STR[digest[l]>>4&0xf], HEX_STR[digest[l]&0xf]);
             unordered[l] ^= digest[l];
         }
         printf("  %s  %s\n", fn, seq->name.s);
-        MD5Update(&md5_all, (unsigned char*)seq->seq.s, k);
+        hts_md5_update(&md5_all, (unsigned char*)seq->seq.s, k);
     }
-    MD5Final(digest, &md5_all);
+    hts_md5_final(digest, &md5_all);
     kseq_destroy(seq);
     for (l = 0; l < 16; ++l)
         printf("%c%c", HEX_STR[digest[l]>>4&0xf], HEX_STR[digest[l]&0xf]);
