@@ -23,19 +23,8 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 #include "../../bam_sort.c"
+#include "../test.h"
 
-void dump_header(bam_hdr_t* hdr) {
-    printf("->n_targets:(%d)\n", hdr->n_targets);
-    int i;
-    for (i = 0; i < hdr->n_targets; ++i) {
-        printf("->target_name[%d]:(%s)\n",i,hdr->target_name[i]);
-        printf("->target_len[%d]:(%d)\n",i,hdr->target_len[i]);
-    }
-
-    printf("->text:(");
-    fwrite((void*)hdr->text, (size_t) hdr->l_text, 1, stdout);
-    printf(")\n");
-}
 
 static const char test_1_trans_text[] =
 "@HD\tVN:1.4\tSO:unknown\n"
@@ -333,18 +322,18 @@ int main(int argc, char**argv)
     // test
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (verbose) printf("RUN test 1\n");
     trans_tbl_init(out, translate, &tbl_1, false, false);
     if (verbose) printf("END RUN test 1\n");
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (check_test_1(translate, out, &tbl_1)) { ++success; } else { ++failure; }
     // teardown
@@ -360,18 +349,18 @@ int main(int argc, char**argv)
     setup_test_2(&translate,&out);
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (verbose) printf("RUN test 2\n");
     trans_tbl_init(out, translate, &tbl_2, false, false);
     if (verbose) printf("END RUN test 2\n");
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (check_test_2(translate, out, &tbl_2)) { ++success; } else { ++failure; }
     // teardown
@@ -387,18 +376,18 @@ int main(int argc, char**argv)
     setup_test_3(&translate,&out);
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (verbose) printf("RUN test 3\n");
     trans_tbl_init(out, translate, &tbl_3, false, false);
     if (verbose) printf("END RUN test 3\n");
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (check_test_3(translate, out, &tbl_3)) { ++success; } else { ++failure; }
     // teardown
@@ -414,18 +403,18 @@ int main(int argc, char**argv)
     setup_test_4(&translate,&out);
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (verbose) printf("RUN test 4\n");
     trans_tbl_init(out, translate, &tbl_4, false, false);
     if (verbose) printf("END RUN test 4\n");
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (check_test_4(translate, out, &tbl_4)) { ++success; } else { ++failure; }
     // teardown
@@ -442,18 +431,18 @@ int main(int argc, char**argv)
     if (verbose > 1) {
 
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (verbose) printf("RUN test 5\n");
     trans_tbl_init(out, translate, &tbl_5, false, false);
     if (verbose) printf("END RUN test 5\n");
     if (verbose > 1) {
         printf("translate\n");
-        dump_header(translate);
+        dump_hdr(translate);
         printf("out\n");
-        dump_header(out);
+        dump_hdr(out);
     }
     if (check_test_5(translate, out, &tbl_5)) { ++success; } else { ++failure; }
     // teardown

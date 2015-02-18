@@ -57,6 +57,7 @@ int main_bamshuf(int argc, char *argv[]);
 int main_stats(int argc, char *argv[]);
 int main_flags(int argc, char *argv[]);
 int main_split(int argc, char *argv[]);
+int main_mkdup(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
 
@@ -104,7 +105,7 @@ static void usage(FILE *fp)
 "         calmd       recalculate MD/NM tags and '=' bases\n"
 "         fixmate     fix mate information\n"
 "         reheader    replace BAM header\n"
-"         rmdup       remove PCR duplicates\n"
+"         mkdup       mark PCR duplicates\n"
 "         targetcut   cut fosmid regions (for fosmid pool only)\n"
 "  -- file operations\n"
 "         bamshuf     shuffle and group alignments by name\n"
@@ -164,7 +165,10 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "idxstats") == 0)  ret = bam_idxstats(argc-1, argv+1);
     else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
     else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
-    else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
+    else if (strcmp(argv[1], "rmdup") == 0) {
+        fprintf(stderr, "[main] The `rmdup' command has been removed. Please use `mkdup' instead.\n");
+        return 1;
+    }
     else if (strcmp(argv[1], "flagstat") == 0)  ret = bam_flagstat(argc-1, argv+1);
     else if (strcmp(argv[1], "calmd") == 0)     ret = bam_fillmd(argc-1, argv+1);
     else if (strcmp(argv[1], "fillmd") == 0)    ret = bam_fillmd(argc-1, argv+1);
@@ -181,6 +185,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
     else if (strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
     else if (strcmp(argv[1], "split") == 0)     ret = main_split(argc-1, argv+1);
+    else if (strcmp(argv[1], "mkdup") == 0)     ret = main_mkdup(argc-1, argv+1);
     else if (strcmp(argv[1], "pileup") == 0) {
         fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
         return 1;
