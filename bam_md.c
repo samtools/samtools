@@ -358,7 +358,7 @@ int bam_fillmd(int argc, char *argv[])
     }
     if (is_bam_out) strcat(mode_w, "b");
     else strcat(mode_w, "h");
-    if (is_uncompressed) strcat(mode_w, "u");
+    if (is_uncompressed) strcat(mode_w, "0");
     if (optind + 1 >= argc) {
         fprintf(stderr, "\n");
         fprintf(stderr, "Usage:   samtools calmd [-eubrS] <aln.bam> <ref.fasta>\n\n");

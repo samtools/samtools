@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013, 2014 Genome Research Ltd.
+#    Copyright (C) 2013-2015 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -45,6 +45,7 @@ test_depad($opts);
 test_stats($opts);
 test_merge($opts);
 test_fixmate($opts);
+test_calmd($opts);
 test_idxstat($opts);
 
 print "\nNumber of tests:\n";
@@ -2206,6 +2207,17 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/4_reverse_read_pp_equal.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -O sam $$opts{path}/fixmate/4_reverse_read_pp_equal.sam -");
     test_cmd($opts,out=>'fixmate/5_ct.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -cO sam $$opts{path}/fixmate/5_ct.sam -");
     test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
+}
+
+sub test_calmd
+{
+    my ($opts, %args) = @_;
+
+    my $test = "$$opts{bin}/samtools calmd -uAr $$opts{path}/dat/mpileup.1.sam $$opts{path}/dat/mpileup.ref.fa";
+    print "$test\n";
+    my $out = cmd($test);
+    if (substr($out, 0, 2) eq "\x1f\x8b") { passed($opts,msg=>$test); }
+    else { failed($opts,msg=>$test,reason=>"Expected BGZF-compressed output"); }
 }
 
 sub test_idxstat
