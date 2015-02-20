@@ -39,8 +39,6 @@ DEALINGS IN THE SOFTWARE.  */
 #define UPDATE_MD 16
 #define HASH_QNM  32
 
-const char bam_nt16_nt4_table[] = { 4, 0, 1, 4, 2, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4 };
-
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
 void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)

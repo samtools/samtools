@@ -38,8 +38,6 @@ KSORT_INIT_GENERIC(uint32_t)
 #define MINUS_CONST 0x10000000
 #define INDEL_WINDOW_SIZE 50
 
-extern const char bam_nt16_nt4_table[];
-
 void *bcf_call_add_rg(void *_hash, const char *hdtext, const char *list)
 {
     const char *s, *p, *q, *r, *t;
@@ -327,7 +325,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                         if (p->indel == types[t]) {
                             uint8_t *seq = bam_get_seq(p->b);
                             for (k = 1; k <= p->indel; ++k) {
-                                int c = bam_nt16_nt4_table[bam_seqi(seq, p->qpos + k)];
+                                int c = seq_nt16_int[bam_seqi(seq, p->qpos + k)];
                                 assert(c<5);
                                 ++inscns_aux[(t*max_ins+(k-1))*5 + c];
                             }
@@ -371,12 +369,12 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
         for (s = K = 0; s < n; ++s) {
             // write ref2
             for (k = 0, j = left; j <= pos; ++j)
-                ref2[k++] = bam_nt16_nt4_table[(int)ref_sample[s][j-left]];
+                ref2[k++] = seq_nt16_int[(int)ref_sample[s][j-left]];
             if (types[t] <= 0) j += -types[t];
             else for (l = 0; l < types[t]; ++l)
                      ref2[k++] = inscns[t*max_ins + l];
             for (; j < right && ref[j]; ++j)
-                ref2[k++] = bam_nt16_nt4_table[(int)ref_sample[s][j-left]];
+                ref2[k++] = seq_nt16_int[(int)ref_sample[s][j-left]];
             for (; k < max_ref2; ++k) ref2[k] = 4;
             if (j < right) right = j;
             // align each read to ref2
@@ -400,7 +398,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                 }
                 // write the query sequence
                 for (l = qbeg; l < qend; ++l)
-                    query[l - qbeg] = bam_nt16_nt4_table[bam_seqi(seq, l)];
+                    query[l - qbeg] = seq_nt16_int[bam_seqi(seq, l)];
                 { // do realignment; this is the bottleneck
                     const uint8_t *qual = bam_get_qual(p->b), *bq;
                     uint8_t *qq;

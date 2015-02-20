@@ -34,7 +34,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "errmod.h"
 
 extern  void ks_introsort_uint32_t(size_t n, uint32_t a[]);
-extern const char bam_nt16_nt4_table[];
 
 #define CALL_DEFTHETA 0.83
 #define DEF_MAPQ 20
@@ -154,7 +153,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
     memset(r->p,0,sizeof(float)*25);
 
     if (ref_base >= 0) {
-        ref4 = bam_nt16_nt4_table[ref_base];
+        ref4 = seq_nt16_int[ref_base];
         is_indel = 0;
     } else ref4 = 4, is_indel = 1;
     if (_n == 0) return -1;
@@ -183,7 +182,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
         if (q < 4) q = 4;       // MQ=0 reads count as BQ=4
         if (!is_indel) {
             b = bam_seqi(bam_get_seq(p->b), p->qpos); // base
-            b = bam_nt16_nt4_table[b? b : ref_base]; // b is the 2-bit base
+            b = seq_nt16_int[b? b : ref_base]; // b is the 2-bit base
             is_diff = (ref4 < 4 && b == ref4)? 0 : 1;
         } else {
             b = p->aux>>16&0x3f;
@@ -522,7 +521,7 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     int ref4, i, j;
     float qsum[5] = {0,0,0,0,0};
     if (ref_base >= 0) {
-        call->ori_ref = ref4 = bam_nt16_nt4_table[ref_base];
+        call->ori_ref = ref4 = seq_nt16_int[ref_base];
         if (ref4 > 4) ref4 = 4;
     } else call->ori_ref = -1, ref4 = 0;
 

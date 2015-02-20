@@ -53,7 +53,6 @@ typedef struct {
 
 static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
 {
-    extern const char bam_nt16_nt4_table[];
     int i, j, ret, tmp, k, sum[4], qual;
     float q[16];
     if (n > g->max_bases) { // enlarge g->bases

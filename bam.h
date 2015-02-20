@@ -185,6 +185,9 @@ typedef hts_itr_t *bam_iter_t;
 /*! @abstract Table for converting a 4-bit encoded nucleotide to a letter. */
 #define bam_nt16_rev_table seq_nt16_str
 
+/*! @abstract Table for converting a 4-bit encoded nucleotide to ~2 bits. */
+#define bam_nt16_nt4_table seq_nt16_int
+
 #ifdef __cplusplus
 extern "C" {
 #endif
