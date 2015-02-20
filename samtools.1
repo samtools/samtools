@@ -931,7 +931,7 @@ Treat paired-end reads and single-end reads.
 
 .TP
 .B calmd
-samtools calmd [-EeubSr] [-C capQcoef] <aln.bam> <ref.fasta>
+samtools calmd [-Eeubr] [-C capQcoef] <aln.bam> <ref.fasta>
 
 Generate the MD tag. If the MD tag is already present, this command will
 give a warning if the MD tag generated is different from the existing
@@ -954,9 +954,6 @@ Output uncompressed BAM
 .TP
 .B -b
 Output compressed BAM
-.TP
-.B -S
-The input is SAM with header lines
 .TP
 .BI -C \ INT
 Coefficient to cap mapping quality of poorly mapped reads. See the
