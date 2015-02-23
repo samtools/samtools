@@ -67,6 +67,7 @@ DEALINGS IN THE SOFTWARE.  */
 #define IS_READ1(bam) ((bam)->core.flag&BAM_FREAD1)
 #define IS_READ2(bam) ((bam)->core.flag&BAM_FREAD2)
 #define IS_DUP(bam) ((bam)->core.flag&BAM_FDUP)
+#define IS_ORIGINAL(bam) (((bam)->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) == 0)
 
 // The GC-depth graph works as follows: split the reference sequence into
 // segments and calculate GC content and depth in each bin. Then sort
@@ -622,51 +623,19 @@ void update_checksum(bam1_t *bam_line, stats_t *stats)
     stats->checksum.quals += crc32(0L, qual, (seq_len+1)/2);
 }
 
-void collect_stats(bam1_t *bam_line, stats_t *stats)
+// These stats should only be calculated for the original reads ignoring
+// supplementary artificial reads otherwise we'll accidentally double count
+void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out)
 {
-    if ( stats->rg_hash )
-    {
-        const uint8_t *rg = bam_aux_get(bam_line, "RG");
-        if ( !rg ) return;  // certain read groups were requested but this record has none
-        if ( !khash_str2int_has_key(stats->rg_hash, (const char*)(rg + 1)) ) return;
-    }
-    if ( stats->flag_require && (bam_line->core.flag & stats->flag_require)!=stats->flag_require )
-    {
-        stats->nreads_filtered++;
-        return;
-    }
-    if ( stats->flag_filter && (bam_line->core.flag & stats->flag_filter) )
-    {
-        stats->nreads_filtered++;
-        return;
-    }
-    if ( !is_in_regions(bam_line,stats) )
-        return;
-    if ( stats->filter_readlen!=-1 && bam_line->core.l_qseq!=stats->filter_readlen )
-        return;
+    int seq_len = bam_line->core.l_qseq;
+    stats->total_len += seq_len; // This ignores clipping so only count primary
 
     if ( bam_line->core.flag & BAM_FQCFAIL ) stats->nreads_QCfailed++;
-    if ( bam_line->core.flag & BAM_FSECONDARY ) stats->nreads_secondary++;
     if ( bam_line->core.flag & BAM_FPAIRED ) stats->nreads_paired_tech++;
 
-    update_checksum(bam_line, stats);
-
-    int seq_len = bam_line->core.l_qseq;
-    if ( !seq_len ) return;
-
-    int read_len = unclipped_length(bam_line);
-    if ( read_len >= stats->nbases )
-        realloc_buffers(stats,read_len);
-    if ( stats->max_len<read_len )
-        stats->max_len = read_len;
-
-    stats->read_lengths[read_len]++;
-
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
-    uint8_t *seq = bam_get_seq(bam_line);
-    int gc_count = 0;
-    int i, read_cycle;
-    int reverse = IS_REVERSE(bam_line);
+    uint8_t base, *seq  = bam_get_seq(bam_line);
+    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line);
     for (i=0; i<seq_len; i++)
     {
         // Read cycle for current index
@@ -716,14 +685,14 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         quals  = stats->quals_2nd;
         stats->nreads_2nd++;
         for (i=gc_idx_min; i<gc_idx_max; i++)
-            stats->gc_2nd[i]++;
+        stats->gc_2nd[i]++;
     }
     else
     {
         quals = stats->quals_1st;
         stats->nreads_1st++;
         for (i=gc_idx_min; i<gc_idx_max; i++)
-            stats->gc_1st[i]++;
+        stats->gc_1st[i]++;
     }
     if ( stats->trim_qual>0 )
         stats->nbases_trimmed += bwa_trim_read(stats->trim_qual, bam_quals, seq_len, reverse);
@@ -733,9 +702,9 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     {
         uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
         if ( qual>=stats->nquals )
-            error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+        error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
         if ( qual>stats->max_qual )
-            stats->max_qual = qual;
+        stats->max_qual = qual;
 
         quals[ i*stats->nquals+qual ]++;
         stats->sum_qual += qual;
@@ -743,16 +712,17 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
     // Look at the flags and increment appropriate counters (mapped, paired, etc)
     if ( IS_UNMAPPED(bam_line) )
+    {
         stats->nreads_unmapped++;
+    }
     else
     {
+        stats->nbases_mapped += seq_len; // This ignores clipping so only count primary
+
         if ( !bam_line->core.qual )
-            stats->nreads_mq0++;
-
-        count_indels(stats,bam_line);
-
+        stats->nreads_mq0++;
         if ( !IS_PAIRED_AND_MAPPED(bam_line) )
-            stats->nreads_single_mapped++;
+        stats->nreads_single_mapped++;
         else
         {
             stats->nreads_paired_and_mapped++;
@@ -760,154 +730,215 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             if (IS_PROPERLYPAIRED(bam_line)) stats->nreads_properly_paired++;
 
             if ( bam_line->core.tid!=bam_line->core.mtid )
-                stats->nreads_anomalous++;
-
-            // The insert size is tricky, because for long inserts the libraries are
-            // prepared differently and the pairs point in other direction. BWA does
-            // not set the paired flag for them.  Similar thing is true also for 454
-            // reads. Mates mapped to different chromosomes have isize==0.
-            int32_t isize = bam_line->core.isize;
-            if ( isize<0 ) isize = -isize;
-            if ( stats->nisize > 0 && isize >= stats->nisize )
-                isize = stats->nisize-1;
-            if ( isize>0 || bam_line->core.tid==bam_line->core.mtid )
-            {
-                int pos_fst = bam_line->core.mpos - bam_line->core.pos;
-                int is_fst  = IS_READ1(bam_line) ? 1 : -1;
-                int is_fwd  = IS_REVERSE(bam_line) ? -1 : 1;
-                int is_mfwd = IS_MATE_REVERSE(bam_line) ? -1 : 1;
-
-                if ( is_fwd*is_mfwd>0 )
-                    stats->isize->inc_other(stats->isize->data, isize);
-                else if ( is_fst*pos_fst>0 )
-                {
-                    if ( is_fst*is_fwd>0 )
-                        stats->isize->inc_inward(stats->isize->data, isize);
-                    else
-                        stats->isize->inc_outward(stats->isize->data, isize);
-                }
-                else if ( is_fst*pos_fst<0 )
-                {
-                    if ( is_fst*is_fwd>0 )
-                        stats->isize->inc_outward(stats->isize->data, isize);
-                    else
-                        stats->isize->inc_inward(stats->isize->data, isize);
-                }
-            }
-        }
-
-        // Number of mismatches
-        uint8_t *nm = bam_aux_get(bam_line,"NM");
-        if (nm)
-            stats->nmismatches += bam_aux2i(nm);
-
-        // Number of mapped bases from cigar
-        if ( bam_line->core.n_cigar == 0)
-            error("FIXME: mapped read with no cigar?\n");
-        int readlen=seq_len;
-        if ( stats->regions )
-        {
-            // Count only on-target bases
-            int iref = bam_line->core.pos + 1;
-            for (i=0; i<bam_line->core.n_cigar; i++)
-            {
-                int cig  = bam_cigar_op(bam_get_cigar(bam_line)[i]);
-                int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
-                if ( !ncig ) continue;  // curiously, this can happen: 0D
-                if ( cig==BAM_CDEL ) readlen += ncig;
-                else if ( cig==BAM_CMATCH )
-                {
-                    if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
-                    else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
-                    if ( ncig<0 ) ncig = 0;
-                    stats->nbases_mapped_cigar += ncig;
-                    iref += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
-                }
-                else if ( cig==BAM_CINS )
-                {
-                    iref += ncig;
-                    if ( iref>=stats->reg_from && iref<=stats->reg_to )
-                        stats->nbases_mapped_cigar += ncig;
-                }
-            }
-        }
-        else
-        {
-            // Count the whole read
-            for (i=0; i<bam_line->core.n_cigar; i++)
-            {
-                if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CMATCH || bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CINS )
-                    stats->nbases_mapped_cigar += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
-                if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CDEL )
-                    readlen += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
-            }
-        }
-        stats->nbases_mapped += seq_len;
-
-        if ( stats->tid==bam_line->core.tid && bam_line->core.pos<stats->pos )
-            stats->is_sorted = 0;
-        stats->pos = bam_line->core.pos;
-
-        if ( stats->is_sorted )
-        {
-            if ( stats->tid==-1 || stats->tid!=bam_line->core.tid )
-                round_buffer_flush(stats,-1);
-
-            // Mismatches per cycle and GC-depth graph. For simplicity, reads overlapping GCD bins
-            //  are not splitted which results in up to seq_len-1 overlaps. The default bin size is
-            //  20kbp, so the effect is negligible.
-            if ( stats->fai )
-            {
-                int inc_ref = 0, inc_gcd = 0;
-                // First pass or new chromosome
-                if ( stats->rseq_pos==-1 || stats->tid != bam_line->core.tid ) { inc_ref=1; inc_gcd=1; }
-                // Read goes beyond the end of the rseq buffer
-                else if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+readlen ) { inc_ref=1; inc_gcd=1; }
-                // Read overlaps the next gcd bin
-                else if ( stats->gcd_pos+stats->gcd_bin_size < bam_line->core.pos+readlen )
-                {
-                    inc_gcd = 1;
-                    if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+stats->gcd_bin_size ) inc_ref = 1;
-                }
-                if ( inc_gcd )
-                {
-                    stats->igcd++;
-                    if ( stats->igcd >= stats->ngcd )
-                        realloc_gcd_buffer(stats, readlen);
-                    if ( inc_ref )
-                        read_ref_seq(stats,bam_line->core.tid,bam_line->core.pos);
-                    stats->gcd_pos = bam_line->core.pos;
-                    stats->gcd[ stats->igcd ].gc = fai_gc_content(stats, stats->gcd_pos, stats->gcd_bin_size);
-                }
-
-                count_mismatches_per_cycle(stats,bam_line,read_len);
-            }
-            // No reference and first pass, new chromosome or sequence going beyond the end of the gcd bin
-            else if ( stats->gcd_pos==-1 || stats->tid != bam_line->core.tid || bam_line->core.pos - stats->gcd_pos > stats->gcd_bin_size )
-            {
-                // First pass or a new chromosome
-                stats->tid     = bam_line->core.tid;
-                stats->gcd_pos = bam_line->core.pos;
-                stats->igcd++;
-                if ( stats->igcd >= stats->ngcd )
-                    realloc_gcd_buffer(stats, readlen);
-            }
-            stats->gcd[ stats->igcd ].depth++;
-            // When no reference sequence is given, approximate the GC from the read (much shorter window, but otherwise OK)
-            if ( !stats->fai )
-                stats->gcd[ stats->igcd ].gc += (float) gc_count / seq_len;
-
-            // Coverage distribution graph
-            round_buffer_flush(stats,bam_line->core.pos);
-            round_buffer_insert_read(&(stats->cov_rbuf),bam_line->core.pos,bam_line->core.pos+seq_len-1);
+            stats->nreads_anomalous++;
         }
     }
+    *gc_count_out = gc_count;
+}
 
-    stats->total_len += seq_len;
+void collect_stats(bam1_t *bam_line, stats_t *stats)
+{
+    if ( stats->rg_hash )
+    {
+        const uint8_t *rg = bam_aux_get(bam_line, "RG");
+        if ( !rg ) return;  // certain read groups were requested but this record has none
+        if ( !khash_str2int_has_key(stats->rg_hash, (const char*)(rg + 1)) ) return;
+    }
+    if ( stats->flag_require && (bam_line->core.flag & stats->flag_require)!=stats->flag_require )
+    {
+        stats->nreads_filtered++;
+        return;
+    }
+    if ( stats->flag_filter && (bam_line->core.flag & stats->flag_filter) )
+    {
+        stats->nreads_filtered++;
+        return;
+    }
+    if ( !is_in_regions(bam_line,stats) )
+        return;
+    if ( stats->filter_readlen!=-1 && bam_line->core.l_qseq!=stats->filter_readlen )
+        return;
+
+    update_checksum(bam_line, stats);
+
+    // Secondary reads don't count for most stats purposes
+    if ( bam_line->core.flag & BAM_FSECONDARY )
+    {
+        stats->nreads_secondary++;
+        return;
+    }
+
+    // If line has no sequence cannot continue
+    int seq_len = bam_line->core.l_qseq;
+    if ( !seq_len ) return;
+
     if ( IS_DUP(bam_line) )
     {
         stats->total_len_dup += seq_len;
         stats->nreads_dup++;
+    }
+
+    int read_len = unclipped_length(bam_line);
+    if ( read_len >= stats->nbases )
+        realloc_buffers(stats,read_len);
+    // Update max_len observed
+    if ( stats->max_len<read_len )
+        stats->max_len = read_len;
+    int i;
+    int gc_count = 0;
+
+    // These stats should only be calculated for the original reads ignoring supplementary artificial reads
+    // otherwise we'll accidentally double count
+    if ( IS_ORIGINAL(bam_line) )
+    {
+        stats->read_lengths[read_len]++;
+        collect_orig_read_stats(bam_line, stats, &gc_count);
+    }
+
+    // Look at the flags and increment appropriate counters (mapped, paired, etc)
+    if ( IS_UNMAPPED(bam_line) ) return;
+
+    count_indels(stats,bam_line);
+
+    if ( IS_PAIRED_AND_MAPPED(bam_line) )
+    {
+        // The insert size is tricky, because for long inserts the libraries are
+        // prepared differently and the pairs point in other direction. BWA does
+        // not set the paired flag for them.  Similar thing is true also for 454
+        // reads. Mates mapped to different chromosomes have isize==0.
+        int32_t isize = bam_line->core.isize;
+        if ( isize<0 ) isize = -isize;
+        if ( stats->nisize > 0 && isize >= stats->nisize )
+            isize = stats->nisize-1;
+        if ( isize>0 || bam_line->core.tid==bam_line->core.mtid )
+        {
+            int pos_fst = bam_line->core.mpos - bam_line->core.pos;
+            int is_fst  = IS_READ1(bam_line) ? 1 : -1;
+            int is_fwd  = IS_REVERSE(bam_line) ? -1 : 1;
+            int is_mfwd = IS_MATE_REVERSE(bam_line) ? -1 : 1;
+
+            if ( is_fwd*is_mfwd>0 )
+                stats->isize->inc_other(stats->isize->data, isize);
+            else if ( is_fst*pos_fst>0 )
+            {
+                if ( is_fst*is_fwd>0 )
+                    stats->isize->inc_inward(stats->isize->data, isize);
+                else
+                    stats->isize->inc_outward(stats->isize->data, isize);
+            }
+            else if ( is_fst*pos_fst<0 )
+            {
+                if ( is_fst*is_fwd>0 )
+                    stats->isize->inc_outward(stats->isize->data, isize);
+                else
+                    stats->isize->inc_inward(stats->isize->data, isize);
+            }
+        }
+    }
+
+    // Number of mismatches
+    uint8_t *nm = bam_aux_get(bam_line,"NM");
+    if (nm)
+        stats->nmismatches += bam_aux2i(nm);
+
+    // Number of mapped bases from cigar
+    if ( bam_line->core.n_cigar == 0)
+        error("FIXME: mapped read with no cigar?\n");
+    int readlen=seq_len;
+    if ( stats->regions )
+    {
+        // Count only on-target bases
+        int iref = bam_line->core.pos + 1;
+        for (i=0; i<bam_line->core.n_cigar; i++)
+        {
+            int cig  = bam_cigar_op(bam_get_cigar(bam_line)[i]);
+            int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
+            if ( !ncig ) continue;  // curiously, this can happen: 0D
+            if ( cig==BAM_CDEL ) readlen += ncig;
+            else if ( cig==BAM_CMATCH )
+            {
+                if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
+                else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
+                if ( ncig<0 ) ncig = 0;
+                stats->nbases_mapped_cigar += ncig;
+                iref += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
+            }
+            else if ( cig==BAM_CINS )
+            {
+                iref += ncig;
+                if ( iref>=stats->reg_from && iref<=stats->reg_to )
+                    stats->nbases_mapped_cigar += ncig;
+            }
+        }
+    }
+    else
+    {
+        // Count the whole read
+        for (i=0; i<bam_line->core.n_cigar; i++)
+        {
+            if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CMATCH || bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CINS )
+                stats->nbases_mapped_cigar += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
+            if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CDEL )
+                readlen += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
+        }
+    }
+
+    if ( stats->tid==bam_line->core.tid && bam_line->core.pos<stats->pos )
+        stats->is_sorted = 0;
+    stats->pos = bam_line->core.pos;
+
+    if ( stats->is_sorted )
+    {
+        if ( stats->tid==-1 || stats->tid!=bam_line->core.tid )
+            round_buffer_flush(stats,-1);
+
+        // Mismatches per cycle and GC-depth graph. For simplicity, reads overlapping GCD bins
+        //  are not splitted which results in up to seq_len-1 overlaps. The default bin size is
+        //  20kbp, so the effect is negligible.
+        if ( stats->fai )
+        {
+            int inc_ref = 0, inc_gcd = 0;
+            // First pass or new chromosome
+            if ( stats->rseq_pos==-1 || stats->tid != bam_line->core.tid ) { inc_ref=1; inc_gcd=1; }
+            // Read goes beyond the end of the rseq buffer
+            else if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+readlen ) { inc_ref=1; inc_gcd=1; }
+            // Read overlaps the next gcd bin
+            else if ( stats->gcd_pos+stats->gcd_bin_size < bam_line->core.pos+readlen )
+            {
+                inc_gcd = 1;
+                if ( stats->rseq_pos+stats->nrseq_buf < bam_line->core.pos+stats->gcd_bin_size ) inc_ref = 1;
+            }
+            if ( inc_gcd )
+            {
+                stats->igcd++;
+                if ( stats->igcd >= stats->ngcd )
+                    realloc_gcd_buffer(stats, readlen);
+                if ( inc_ref )
+                    read_ref_seq(stats,bam_line->core.tid,bam_line->core.pos);
+                stats->gcd_pos = bam_line->core.pos;
+                stats->gcd[ stats->igcd ].gc = fai_gc_content(stats, stats->gcd_pos, stats->gcd_bin_size);
+            }
+
+            count_mismatches_per_cycle(stats,bam_line,read_len);
+        }
+        // No reference and first pass, new chromosome or sequence going beyond the end of the gcd bin
+        else if ( stats->gcd_pos==-1 || stats->tid != bam_line->core.tid || bam_line->core.pos - stats->gcd_pos > stats->gcd_bin_size )
+        {
+            // First pass or a new chromosome
+            stats->tid     = bam_line->core.tid;
+            stats->gcd_pos = bam_line->core.pos;
+            stats->igcd++;
+            if ( stats->igcd >= stats->ngcd )
+                realloc_gcd_buffer(stats, readlen);
+        }
+        stats->gcd[ stats->igcd ].depth++;
+        // When no reference sequence is given, approximate the GC from the read (much shorter window, but otherwise OK)
+        if ( !stats->fai )
+            stats->gcd[ stats->igcd ].gc += (float) gc_count / seq_len;
+
+        // Coverage distribution graph
+        round_buffer_flush(stats,bam_line->core.pos);
+        round_buffer_insert_read(&(stats->cov_rbuf),bam_line->core.pos,bam_line->core.pos+seq_len-1);
     }
 }
 
@@ -1196,7 +1227,7 @@ size_t mygetline(char **line, size_t *n, FILE *fp)
 
 }
 
-void init_regions(stats_t *stats, char *file)
+void init_regions(stats_t *stats, const char *file)
 {
     FILE *fp = fopen(file,"r");
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
@@ -1298,7 +1329,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     return 1;
 }
 
-void init_group_id(stats_t *stats, char *id)
+void init_group_id(stats_t *stats, const char *id)
 {
 #if 0
     if ( !stats->sam_header->dict )
@@ -1361,7 +1392,7 @@ static void error(const char *format, ...)
         vfprintf(stderr, format, ap);
         va_end(ap);
     }
-    exit(-1);
+    exit(1);
 }
 
 void cleanup_stats(stats_t* stats)
@@ -1389,15 +1420,8 @@ void cleanup_stats(stats_t* stats)
     free(stats);
 }
 
-int main_stats(int argc, char *argv[])
+stats_t* stats_init(int argc, char *argv[])
 {
-    char *targets = NULL;
-    char *bam_fname = NULL;
-    char *group_id = NULL;
-    samFile* sam = NULL;
-    char in_mode[5];
-    int sparse = 0;
-
     stats_t *stats = calloc(1,sizeof(stats_t));
     stats->ngc    = 200;
     stats->nquals = 256;
@@ -1419,7 +1443,68 @@ int main_stats(int argc, char *argv[])
     stats->filter_readlen = -1;
     stats->nindels = stats->nbases;
 
-    strcpy(in_mode, "rb");
+    return stats;
+}
+
+void init_stat_structs(stats_t* stats, const char* bam_fname, const char* in_mode, const char* group_id, const char* targets)
+{
+    samFile* sam = NULL;
+
+    // Init structures
+    //  .. coverage bins and round buffer
+    if ( stats->cov_step > stats->cov_max - stats->cov_min + 1 )
+    {
+        stats->cov_step = stats->cov_max - stats->cov_min;
+        if ( stats->cov_step <= 0 )
+            stats->cov_step = 1;
+    }
+    stats->ncov = 3 + (stats->cov_max-stats->cov_min) / stats->cov_step;
+    stats->cov_max = stats->cov_min + ((stats->cov_max-stats->cov_min)/stats->cov_step +1)*stats->cov_step - 1;
+    stats->cov = calloc(sizeof(uint64_t),stats->ncov);
+    stats->cov_rbuf.size = stats->nbases*5;
+    stats->cov_rbuf.buffer = calloc(sizeof(int32_t),stats->cov_rbuf.size);
+
+    // .. bam
+    if ((sam = sam_open(bam_fname, in_mode)) == 0)
+        error("Failed to open: %s\n", bam_fname);
+    stats->sam = sam;
+    stats->sam_header = sam_hdr_read(sam);
+    if (stats->sam_header == NULL)
+        error("Failed to read header for '%s'\n", bam_fname);
+
+    if ( group_id ) init_group_id(stats, group_id);
+    // .. arrays
+    stats->quals_1st      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
+    stats->quals_2nd      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
+    stats->gc_1st         = calloc(stats->ngc,sizeof(uint64_t));
+    stats->gc_2nd         = calloc(stats->ngc,sizeof(uint64_t));
+    stats->isize          = init_isize_t(stats->nisize);
+    stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
+    stats->mpc_buf        = stats->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
+    stats->acgtno_cycles  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
+    stats->insertions     = calloc(stats->nbases,sizeof(uint64_t));
+    stats->deletions      = calloc(stats->nbases,sizeof(uint64_t));
+    stats->ins_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
+    stats->ins_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
+    stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
+    stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
+    realloc_rseq_buffer(stats);
+    if ( targets )
+        init_regions(stats, targets);
+}
+
+int main_stats(int argc, char *argv[])
+{
+    char *targets = NULL;
+    char *bam_fname = NULL;
+    char *group_id = NULL;
+    char in_mode[5];
+    int sparse = 0;
+
+    stats_t *stats = stats_init(argc, argv);
+
+    strcpy(in_mode, "r");
 
     static const struct option loptions[] =
     {
@@ -1479,53 +1564,13 @@ int main_stats(int argc, char *argv[])
         bam_fname = "-";
     }
 
-    // Init structures
-    //  .. coverage bins and round buffer
-    if ( stats->cov_step > stats->cov_max - stats->cov_min + 1 )
-    {
-        stats->cov_step = stats->cov_max - stats->cov_min;
-        if ( stats->cov_step <= 0 )
-            stats->cov_step = 1;
-    }
-    stats->ncov = 3 + (stats->cov_max-stats->cov_min) / stats->cov_step;
-    stats->cov_max = stats->cov_min + ((stats->cov_max-stats->cov_min)/stats->cov_step +1)*stats->cov_step - 1;
-    stats->cov = calloc(sizeof(uint64_t),stats->ncov);
-    stats->cov_rbuf.size = stats->nbases*5;
-    stats->cov_rbuf.buffer = calloc(sizeof(int32_t),stats->cov_rbuf.size);
-    // .. bam
-    if ((sam = sam_open(bam_fname, in_mode)) == 0)
-        error("Failed to open: %s\n", bam_fname);
-    stats->sam = sam;
-
-    stats->sam_header = sam_hdr_read(sam);
-    if (stats->sam_header == NULL)
-        error("Failed to read header for '%s'\n", bam_fname);
-
-    if ( group_id ) init_group_id(stats, group_id);
-    bam1_t *bam_line = bam_init1();
-    // .. arrays
-    stats->quals_1st      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
-    stats->quals_2nd      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
-    stats->gc_1st         = calloc(stats->ngc,sizeof(uint64_t));
-    stats->gc_2nd         = calloc(stats->ngc,sizeof(uint64_t));
-    stats->isize          = init_isize_t(stats->nisize);
-    stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
-    stats->mpc_buf        = stats->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
-    stats->acgtno_cycles  = calloc(stats->nbases,sizeof(acgtno_count_t));
-    stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
-    stats->insertions     = calloc(stats->nbases,sizeof(uint64_t));
-    stats->deletions      = calloc(stats->nbases,sizeof(uint64_t));
-    stats->ins_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
-    stats->ins_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
-    stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
-    stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
-    realloc_rseq_buffer(stats);
-    if ( targets )
-        init_regions(stats, targets);
+    init_stat_structs(stats, bam_fname, in_mode, group_id, targets);
 
     // Collect statistics
+    bam1_t *bam_line = bam_init1();
     if ( optind<argc )
     {
+        // Collect stats in selected regions only
         hts_idx_t *bam_idx = sam_index_load(stats->sam,bam_fname);
         if (bam_idx == 0)
             error("Random alignment retrieval only works for indexed BAM files.\n");
@@ -1535,7 +1580,7 @@ int main_stats(int argc, char *argv[])
         {
             reset_regions(stats);
             hts_itr_t* iter = bam_itr_querys(bam_idx, stats->sam_header, argv[i]);
-            while (sam_itr_next(sam, iter, bam_line) >= 0) {
+            while (sam_itr_next(stats->sam, iter, bam_line) >= 0) {
                 collect_stats(bam_line,stats);
             }
             bam_itr_destroy(iter);
@@ -1545,7 +1590,7 @@ int main_stats(int argc, char *argv[])
     else
     {
         // Stream through the entire BAM ignoring off-target regions if -t is given
-        while (sam_read1(sam, stats->sam_header, bam_line) >= 0)
+        while (sam_read1(stats->sam, stats->sam_header, bam_line) >= 0)
             collect_stats(bam_line,stats);
     }
     round_buffer_flush(stats,-1);
