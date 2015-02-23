@@ -33,7 +33,8 @@ DEALINGS IN THE SOFTWARE.  */
 static void md5_one(const char *fn)
 {
 	unsigned char buf[4096], digest[16];
-	hts_md5_ctx md5;
+        char hex[33];
+	hts_md5_context *md5;
 	int l;
 	FILE *fp;
 
@@ -42,14 +43,17 @@ static void md5_one(const char *fn)
 		fprintf(stderr, "md5sum: %s: No such file or directory\n", fn);
 		exit(1);
 	}
-	hts_md5_init(&md5);
+	if (!(md5 = hts_md5_init())) {
+		fprintf(stderr, "md5sum: %s: Failed to allocate md5 buffer\n", fn);
+                exit(1);
+        }
 	while ((l = fread(buf, 1, 4096, fp)) > 0)
-		hts_md5_update(&md5, buf, l);
-	hts_md5_final(digest, &md5);
+		hts_md5_update(md5, buf, l);
+	hts_md5_final(digest, md5);
 	if (fp != stdin) fclose(fp);
-	for (l = 0; l < 16; ++l)
-		printf("%c%c", HEX_STR[digest[l]>>4&0xf], HEX_STR[digest[l]&0xf]);
-	printf("  %s\n", fn);
+        hts_md5_hex(digest, hex);
+	printf("%s  %s\n", hex, fn);
+        hts_md5_destroy(md5);
 }
 int main(int argc, char *argv[])
 {

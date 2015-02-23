@@ -28,17 +28,16 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kseq.h"
 #include "htslib/hts.h"
 
-#define HEX_STR "0123456789abcdef"
-
 KSEQ_INIT(gzFile, gzread)
 
 static void md5_one(const char *fn)
 {
-    hts_md5_ctx md5_one, md5_all;
+    hts_md5_context *md5_one, *md5_all;
     int l, i, k;
     gzFile fp;
     kseq_t *seq;
     unsigned char unordered[16], digest[16];
+    char hex[33];
 
     for (l = 0; l < 16; ++l) unordered[l] = 0;
     fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
@@ -47,31 +46,39 @@ static void md5_one(const char *fn)
         exit(1);
     }
 
-    hts_md5_init(&md5_all);
+    if (!(md5_all = hts_md5_init()))
+        exit(1);
+
+    if (!(md5_one = hts_md5_init())) {
+        hts_md5_destroy(md5_all);
+        exit(1);
+    }
+
     seq = kseq_init(fp);
     while ((l = kseq_read(seq)) >= 0) {
         for (i = k = 0; i < seq->seq.l; ++i) {
             if (islower(seq->seq.s[i])) seq->seq.s[k++] = toupper(seq->seq.s[i]);
             else if (isupper(seq->seq.s[i])) seq->seq.s[k++] = seq->seq.s[i];
         }
-        hts_md5_init(&md5_one);
-        hts_md5_update(&md5_one, (unsigned char*)seq->seq.s, k);
-        hts_md5_final(digest, &md5_one);
-        for (l = 0; l < 16; ++l) {
-            printf("%c%c", HEX_STR[digest[l]>>4&0xf], HEX_STR[digest[l]&0xf]);
+        hts_md5_reset(md5_one);
+        hts_md5_update(md5_one, (unsigned char*)seq->seq.s, k);
+        hts_md5_final(digest, md5_one);
+        hts_md5_hex(digest, hex);
+        for (l = 0; l < 16; ++l)
             unordered[l] ^= digest[l];
-        }
-        printf("  %s  %s\n", fn, seq->name.s);
-        hts_md5_update(&md5_all, (unsigned char*)seq->seq.s, k);
+        printf("%s  %s  %s\n", hex, fn, seq->name.s);
+        hts_md5_update(md5_all, (unsigned char*)seq->seq.s, k);
     }
-    hts_md5_final(digest, &md5_all);
+    hts_md5_final(digest, md5_all);
     kseq_destroy(seq);
-    for (l = 0; l < 16; ++l)
-        printf("%c%c", HEX_STR[digest[l]>>4&0xf], HEX_STR[digest[l]&0xf]);
-    printf("  %s  >ordered\n", fn);
-    for (l = 0; l < 16; ++l)
-        printf("%c%c", HEX_STR[unordered[l]>>4&0xf], HEX_STR[unordered[l]&0xf]);
-    printf("  %s  >unordered\n", fn);
+
+    hts_md5_hex(digest, hex);
+    printf("%s  %s  >ordered\n", hex, fn);
+    hts_md5_hex(unordered, hex);
+    printf("%s  %s  >unordered\n", hex, fn);
+
+    hts_md5_destroy(md5_all);
+    hts_md5_destroy(md5_one);
 }
 
 int main(int argc, char *argv[])
