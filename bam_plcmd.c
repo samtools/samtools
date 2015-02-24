@@ -268,9 +268,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         }
         if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
             fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
-            return 1;
+            exit(1);
         }
-        hts_set_fai_filename(data[i]->fp, conf->fai_fname);
+        if (hts_set_fai_filename(data[i]->fp, conf->fai_fname) != 0) {
+            fprintf(stderr, "[%s] failed to process %s: %s\n",
+                    __func__, conf->fai_fname, strerror(errno));
+            exit(1);
+        }
         data[i]->conf = conf;
         h_tmp = sam_hdr_read(data[i]->fp);
         if ( !h_tmp ) {

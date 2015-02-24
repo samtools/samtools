@@ -45,7 +45,13 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
     fp->file = hts_fp;
     fp->x.bam = hts_fp->fp.bgzf;
     if (strchr(mode, 'r')) {
-        if (aux) hts_set_fai_filename(fp->file, aux);
+        if (aux) {
+            if (hts_set_fai_filename(fp->file, aux) != 0) {
+                sam_close(hts_fp);
+                free(fp);
+                return NULL;
+            }
+        }
         fp->header = sam_hdr_read(fp->file);  // samclose() will free this
         fp->is_write = 0;
         if (fp->header->n_targets == 0 && bam_verbose >= 1)

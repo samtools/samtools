@@ -332,7 +332,13 @@ int main_samview(int argc, char *argv[])
         ret = 1;
         goto view_end;
     }
-    if (fn_list) hts_set_fai_filename(in, fn_list);
+    if (fn_list) {
+        if (hts_set_fai_filename(in, fn_list) != 0) {
+            fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+            ret = 1;
+            goto view_end;
+        }
+    }
     if ((header = sam_hdr_read(in)) == 0) {
         fprintf(stderr, "[main_samview] fail to read the header from \"%s\".\n", argv[optind]);
         ret = 1;
@@ -352,7 +358,13 @@ int main_samview(int argc, char *argv[])
             ret = 1;
             goto view_end;
         }
-        if (fn_list) hts_set_fai_filename(out, fn_list);
+        if (fn_list) {
+            if (hts_set_fai_filename(out, fn_list) != 0) {
+                fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+                ret = 1;
+                goto view_end;
+            }
+        }
         if (*out_format || is_header)  {
             if (sam_hdr_write(out, header) != 0) {
                 fprintf(stderr, "[main_samview] failed to write the SAM header\n");
