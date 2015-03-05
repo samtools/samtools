@@ -1106,7 +1106,9 @@ sub sam_compare
     close($f2) || die "Error reading $sam2: $!\n";
 
     if ($l1 || $l2) {
-        print "\n\tSAM files differ at $sam1 : $lno1 / $sam2 : $lno2\n";
+        print "\n"; STDOUT->flush();
+        print STDERR "\tSAM files differ at $sam1 line $lno1 / $sam2 line $lno2\n";
+        print STDERR "$l1\n$l2\n";
         return 1;
     }
 
