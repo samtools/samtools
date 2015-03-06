@@ -323,9 +323,14 @@ int bam_mating(int argc, char *argv[])
     if (optind+1 >= argc) { usage(stderr); return 1; }
     strcpy(modeout, "w");
     if (sam_open_mode(&modeout[1], argv[optind+1], fmtout) < 0) {
-        if (fmtout) fprintf(stderr, "[bam_mating] cannot parse output format \"%s\"\n", fmtout);
-        else fprintf(stderr, "[bam_mating] cannot determine output format\n");
-        return 1;
+        if (fmtout) {
+            fprintf(stderr, "[bam_mating] cannot parse output format \"%s\"\n", fmtout);
+            return 1;
+        }
+
+        // Couldn't determine format from the filename; an unrecognised
+        // extension or perhaps "-".  Emit BAM as samtools 0.1.x did.
+        strcat(modeout, "b");
     }
 
     // init
