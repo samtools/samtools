@@ -374,7 +374,7 @@ static int simu_usage(void)
     fprintf(stderr, "         -r FLOAT      rate of mutations [%.4f]\n", MUT_RATE);
     fprintf(stderr, "         -R FLOAT      fraction of indels [%.2f]\n", INDEL_FRAC);
     fprintf(stderr, "         -X FLOAT      probability an indel is extended [%.2f]\n", INDEL_EXTEND);
-    fprintf(stderr, "         -S INT        seed for random generator [-1]\n");
+    fprintf(stderr, "         -S INT        seed for random generator [0, use the current time]\n");
     fprintf(stderr, "         -h            haplotype mode\n");
     fprintf(stderr, "\n");
     return 1;
@@ -385,7 +385,7 @@ int main(int argc, char *argv[])
     int64_t N;
     int dist, std_dev, c, size_l, size_r, is_hap = 0;
     FILE *fpout1, *fpout2;
-    int seed = -1;
+    int seed = 0;
 
     N = 1000000; dist = 500; std_dev = 50;
     size_l = size_r = 70;
