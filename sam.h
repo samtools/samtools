@@ -1,6 +1,6 @@
 /*  sam.h -- format-neutral SAM/BAM API.
 
-    Copyright (C) 2009, 2013, 2014 Genome Research Ltd.
+    Copyright (C) 2009, 2013-2015 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -101,6 +101,30 @@ extern "C" {
       @return       bytes written
      */
     static inline int samwrite(samfile_t *fp, const bam1_t *b) { return sam_write1(fp->file, fp->header, b); }
+
+    /*!
+      @abstract     Load BAM/CRAM index for use with samfetch()
+      @param  fp    file handler
+      @param  fn    name of the BAM or CRAM file (NOT the index file)
+      @return       pointer to the index structure
+     */
+    static inline bam_index_t *samtools_sam_index_load(samfile_t *fp, const char *fn) { return sam_index_load(fp->file, fn); }
+    #undef sam_index_load
+    #define sam_index_load(fp,fn) (samtools_sam_index_load((fp), (fn)))
+
+    /*!
+      @abstract Retrieve the alignments overlapping the specified region.
+      @discussion A user defined function will be called for each
+      retrieved alignment ordered by its start position.
+      @param  fp    file handler
+      @param  idx   index returned by sam_index_load()
+      @param  tid   chromosome ID as is defined in the header
+      @param  beg   start coordinate, 0-based
+      @param  end   end coordinate, 0-based
+      @param  data  user provided data (will be transferred to func)
+      @param  func  user defined function
+     */
+    int samfetch(samfile_t *fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func);
 
     /*!
       @abstract     Get the pileup for a whole alignment file

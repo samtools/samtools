@@ -1,6 +1,6 @@
 /*  sam.c -- format-neutral SAM/BAM API.
 
-    Copyright (C) 2009, 2012-2014 Genome Research Ltd.
+    Copyright (C) 2009, 2012-2015 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -74,6 +74,17 @@ void samclose(samfile_t *fp)
         sam_close(fp->file);
         free(fp);
     }
+}
+
+int samfetch(samfile_t *fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)
+{
+    bam1_t *b = bam_init1();
+    hts_itr_t *iter = sam_itr_queryi(idx, tid, beg, end);
+    int ret;
+    while ((ret = sam_itr_next(fp->file, iter, b)) >= 0) func(b, data);
+    hts_itr_destroy(iter);
+    bam_destroy1(b);
+    return (ret == -1)? 0 : ret;
 }
 
 int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)

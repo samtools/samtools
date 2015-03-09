@@ -30,27 +30,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/sam.h>
 #include <htslib/bgzf.h>
 
-/*! @typedef
- @abstract      Type of function to be called by sam_fetch().
- @param  b     the alignment
- @param  data  user provided data
- */
-typedef int (*sam_fetch_f)(const bam1_t *b, void *data);
-
-int sam_fetch(samFile *fp, const hts_idx_t *idx, int tid, int beg, int end, void *data, sam_fetch_f func)
-{
-    int ret;
-    hts_itr_t* iter;
-    bam1_t* b = bam_init1();
-    iter = sam_itr_queryi(idx, tid, beg, end);
-    while ((ret = sam_itr_next(fp, iter, b)) >= 0) func(b, data);
-    hts_itr_destroy(iter);
-    bam_destroy1(b);
-    return (ret == -1)? 0 : ret;
-}
-
-
-
 khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
 {
     khash_t(kh_rg)* rg_hash = kh_init(kh_rg);
@@ -271,9 +250,8 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
 
 
 
-int tv_fetch_func(const bam1_t *b, void *data)
+static int tv_push_aln(const bam1_t *b, tview_t *tv)
 {
-    tview_t *tv = (tview_t*)data;
     /* If we are restricted to specific readgroups check RG is in the list */
     if ( tv->rg_hash )
     {
@@ -321,7 +299,11 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
     }
     // draw aln
     bam_lplbuf_reset(tv->lplbuf);
-    sam_fetch(tv->fp, tv->idx, tv->curr_tid, tv->left_pos, tv->left_pos + tv->mcol, tv, tv_fetch_func);
+    hts_itr_t *iter = sam_itr_queryi(tv->idx, tv->curr_tid, tv->left_pos, tv->left_pos + tv->mcol);
+    bam1_t *b = bam_init1();
+    while (sam_itr_next(tv->fp, iter, b) >= 0) tv_push_aln(b, tv);
+    bam_destroy1(b);
+    hts_itr_destroy(iter);
     bam_lplbuf_push(0, tv->lplbuf);
 
     while (tv->ccol < tv->mcol) {

@@ -460,7 +460,7 @@ extern "C" {
 
     /*!
       @abstract Retrieve the alignments that are overlapped with the
-      specified region.
+      specified region.  (For BAM files only; see also samfetch() in sam.h.)
 
       @discussion A user defined function will be called for each
       retrieved alignment ordered by its start position.
