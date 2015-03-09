@@ -58,9 +58,10 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
             fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
     }
     else {
+        enum htsExactFormat fmt = hts_get_format(fp->file)->format;
         fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it
         fp->is_write = 1;
-        if (hts_get_format(fp->file)->format != sam || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
+        if (!(fmt == text_format || fmt == sam) || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
     }
 
     return fp;
