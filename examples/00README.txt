@@ -1,5 +1,5 @@
 File ex1.fa contains two sequences cut from the human genome
-build36. They were exatracted with command:
+build36. They were extracted with command:
 
     samtools faidx human_b36.fa 2:2043966-2045540 20:67967-69550
 
