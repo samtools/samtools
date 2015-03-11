@@ -63,7 +63,7 @@ static void md5_one(const char *fn)
         hts_md5_reset(md5_one);
         hts_md5_update(md5_one, (unsigned char*)seq->seq.s, k);
         hts_md5_final(digest, md5_one);
-        hts_md5_hex(digest, hex);
+        hts_md5_hex(hex, digest);
         for (l = 0; l < 16; ++l)
             unordered[l] ^= digest[l];
         printf("%s  %s  %s\n", hex, fn, seq->name.s);
@@ -72,9 +72,9 @@ static void md5_one(const char *fn)
     hts_md5_final(digest, md5_all);
     kseq_destroy(seq);
 
-    hts_md5_hex(digest, hex);
+    hts_md5_hex(hex, digest);
     printf("%s  %s  >ordered\n", hex, fn);
-    hts_md5_hex(unordered, hex);
+    hts_md5_hex(hex, unordered);
     printf("%s  %s  >unordered\n", hex, fn);
 
     hts_md5_destroy(md5_all);
