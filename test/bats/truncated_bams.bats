@@ -18,11 +18,6 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
-@test "samtools view of header only on truncated bam exits with error" {
-  run ${samtools} view -H ${BATS_TMPDIR}/bad_eof.bam
-  [ "$status" -ne 0 ]
-}
-
 @test "samtools index on truncated bam exits with error" {
   run ${samtools} index ${BATS_TMPDIR}/bad_eof.bam
   [ "$status" -ne 0 ]

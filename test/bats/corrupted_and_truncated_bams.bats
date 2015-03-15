@@ -19,11 +19,6 @@ teardown() {
   [ "$status" -ne 0 ]
 }
 
-@test "samtools view of header only on corrupted and truncated bam exits with error" {
-  run ${samtools} view -H ${BATS_TMPDIR}/corrupted_bgzf_crc_bad_eof.bam
-  [ "$status" -ne 0 ]
-}
-
 @test "samtools index on corrupted and truncated bam exits with error" {
   run ${samtools} index ${BATS_TMPDIR}/corrupted_bgzf_crc_bad_eof.bam
   [ "$status" -ne 0 ]
