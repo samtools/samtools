@@ -189,7 +189,7 @@ check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 	test/split/test_expand_format_string
 	test/split/test_filter_header_rg
 	test/split/test_parse_args
-
+	test/bats/bin/bats test/bats
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o $(HTSLIB) $(LDLIBS) -lz
