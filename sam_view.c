@@ -402,7 +402,7 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (r < -1) {
-            fprintf(stderr, "[main_samview] truncated file.\n");
+            fprintf(stderr, "[main_samview] corrupted file.\n");
             ret = 1;
         }
         bam_destroy1(b);
