@@ -32,33 +32,33 @@ DEALINGS IN THE SOFTWARE.  */
 
 static void md5_one(const char *fn)
 {
-	unsigned char buf[4096], digest[16];
-        char hex[33];
-	hts_md5_context *md5;
-	int l;
-	FILE *fp;
+    unsigned char buf[4096], digest[16];
+    char hex[33];
+    hts_md5_context *md5;
+    int l;
+    FILE *fp;
 
-	fp = strcmp(fn, "-")? fopen(fn, "r") : stdin;
-	if (fp == 0) {
-		fprintf(stderr, "md5sum: %s: No such file or directory\n", fn);
-		exit(1);
-	}
-	if (!(md5 = hts_md5_init())) {
-		fprintf(stderr, "md5sum: %s: Failed to allocate md5 buffer\n", fn);
-                exit(1);
-        }
-	while ((l = fread(buf, 1, 4096, fp)) > 0)
-		hts_md5_update(md5, buf, l);
-	hts_md5_final(digest, md5);
-	if (fp != stdin) fclose(fp);
-        hts_md5_hex(digest, hex);
-	printf("%s  %s\n", hex, fn);
-        hts_md5_destroy(md5);
+    fp = strcmp(fn, "-")? fopen(fn, "r") : stdin;
+    if (fp == 0) {
+        fprintf(stderr, "md5sum: %s: No such file or directory\n", fn);
+        exit(1);
+    }
+    if (!(md5 = hts_md5_init())) {
+        fprintf(stderr, "md5sum: %s: Failed to allocate md5 buffer\n", fn);
+        exit(1);
+    }
+    while ((l = fread(buf, 1, 4096, fp)) > 0)
+        hts_md5_update(md5, buf, l);
+    hts_md5_final(digest, md5);
+    if (fp != stdin) fclose(fp);
+    hts_md5_hex(digest, hex);
+    printf("%s  %s\n", hex, fn);
+    hts_md5_destroy(md5);
 }
 int main(int argc, char *argv[])
 {
-	int i;
-	if (argc == 1) md5_one("-");
-	else for (i = 1; i < argc; ++i) md5_one(argv[i]);
-	return 0;
+    int i;
+    if (argc == 1) md5_one("-");
+    else for (i = 1; i < argc; ++i) md5_one(argv[i]);
+    return 0;
 }
