@@ -1167,12 +1167,6 @@ size_t mygetline(char **line, size_t *n, FILE *fp)
 
 void init_regions(stats_t *stats, char *file)
 {
-#if 0
-    khiter_t iter;
-    khash_t(kh_bam_tid) *header_hash;
-
-    header_hash = (khash_t(kh_bam_tid)*)stats->sam_header->hash;
-
     FILE *fp = fopen(file,"r");
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
 
@@ -1190,9 +1184,8 @@ void init_regions(stats_t *stats, char *file)
         if ( i>=nread ) error("Could not parse the file: %s [%s]\n", file,line);
         line[i] = 0;
 
-        iter = kh_get(kh_bam_tid, header_hash, line);
-        int tid = kh_val(header_hash, iter);
-        if ( iter == kh_end(header_hash) )
+        int tid = bam_name2id(stats->sam_header, line);
+        if ( tid < 0 )
         {
             if ( !warned )
                 fprintf(stderr,"Warning: Some sequences not present in the BAM, e.g. \"%s\". This message is printed only once.\n", line);
@@ -1231,10 +1224,6 @@ void init_regions(stats_t *stats, char *file)
     if (line) free(line);
     if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
     fclose(fp);
-#else
-    fprintf(stderr, "Samtools-htslib: init_regions() header parsing not yet implemented\n");
-    abort();
-#endif
 }
 
 void destroy_regions(stats_t *stats)
