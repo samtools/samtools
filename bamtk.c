@@ -59,6 +59,7 @@ int main_flags(int argc, char *argv[]);
 int main_split(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
+int dict_main(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -98,6 +99,7 @@ static void usage(FILE *fp)
 "Usage:   samtools <command> [options]\n\n"
 "Commands:\n"
 "  -- indexing\n"
+"         dict        create a sequence dictionary file\n"
 "         faidx       index/extract FASTA\n"
 "         index       index alignment\n"
 "  -- editing\n"
@@ -163,6 +165,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "index") == 0)     ret = bam_index(argc-1, argv+1);
     else if (strcmp(argv[1], "idxstats") == 0)  ret = bam_idxstats(argc-1, argv+1);
     else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
+    else if (strcmp(argv[1], "dict") == 0)      ret = dict_main(argc-1, argv+1);
     else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
     else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
     else if (strcmp(argv[1], "flagstat") == 0)  ret = bam_flagstat(argc-1, argv+1);

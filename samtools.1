@@ -41,6 +41,8 @@ samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
 samtools faidx ref.fasta
 .PP
+samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
+.PP
 samtools fixmate in.namesorted.sam out.bam
 .PP
 samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
@@ -869,6 +871,36 @@ retrieved and printed to stdout in the FASTA format. The input file can
 be compressed in the
 .B BGZF
 format.
+
+.TP
+.B dict
+samtools dict <ref.fasta|ref.fasta.gz>
+
+Create a sequence dictionary file from a fasta file.
+
+.B OPTIONS:
+.RS
+.TP 11
+.BI -a,\ --assembly \ STR
+Specify the assembly for the AS tag.
+.TP
+.B -H,\ --no-header
+Do not print the @HD header line.
+.TP
+.BI -o,\ --outfile \ FILE
+Output to
+.I FILE
+[stdout].
+.TP
+.BI -s,\ --species \ STR
+Specify the species for the SP tag.
+.TP
+.BI -u,\ --uri \ STR
+Specify the URI for the UR tag. Defaults to
+the absolute path of
+.I ref.fasta
+unless reading from stdin.
+.RE
 
 .TP
 .B fixmate
