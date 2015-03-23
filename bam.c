@@ -61,19 +61,20 @@ int bam_validate1(const bam_header_t *header, const bam1_t *b)
     return 1;
 }
 
-// FIXME: we should also check the LB tag associated with each alignment
 const char *bam_get_library(bam_header_t *h, const bam1_t *b)
 {
-#if 0
-    const uint8_t *rg;
-    if (h->dict == 0) h->dict = sam_header_parse2(h->text);
-    if (h->rg2lib == 0) h->rg2lib = sam_header2tbl(h->dict, "RG", "ID", "LB");
-    rg = bam_aux_get(b, "RG");
-    return (rg == 0)? 0 : sam_tbl_get(h->rg2lib, (const char*)(rg + 1));
-#else
-    fprintf(stderr, "Samtools-htslib-API: bam_get_library() not yet implemented\n");
-    abort();
-#endif
+    const uint8_t *rg = 0;
+    const uint8_t *pLibName, *pDict;
+    if ( b != 0 && h != 0 ) {
+        if ( (rg = bam_aux_get(b, "RG") ) != 0
+        &&   (pDict = sam_header_parse2(h->text)) != 0 ) {
+            pLibName = sam_header2tbl(pDict, "RG", "ID", "LB");
+            if ( pLibName && strlen( (char*)pLibName ) > 0 ) {
+                return sam_tbl_get((void*)pLibName, (const char*)(rg + 1));
+            }
+        }
+    }
+    return 0;
 }
 
 int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)
