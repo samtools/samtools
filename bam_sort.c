@@ -98,14 +98,14 @@ static int strnum_cmp(const char *_a, const char *_b)
 typedef struct {
     int i;
     uint64_t pos, idx;
-	bam1_t b[NUM_BAM_SIMUL];
-	int b_head;
-	int b_tail;
+    bam1_t b[NUM_BAM_SIMUL];
+    int b_head;
+    int b_tail;
     hts_itr_t *iter;
     bam_hdr_t *hdr;
     samFile *fp;
     const char *fn;
-	int empty;
+    int empty;
 } heap1_t;
 
 #define __pos_cmp(a, b) ((a).pos > (b).pos || ((a).pos == (b).pos && ((a).i > (b).i || ((a).i == (b).i && (a).idx > (b).idx))))
@@ -332,10 +332,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             transformed_equals_match = true;
         } else {
             // It's in there so we need to transform it by appending random number to id
-            if(trans != 0)
-	            ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
-    
-			transformed_equals_match = false;
+            if(trans != 0) ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
+
+            transformed_equals_match = false;
         }
         regfree(&rg_id_search);
 
@@ -346,28 +345,27 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         kh_value(tbl->rg_trans,iter) = transformed_id_s;
         // take matched line and replace ID with transformed_id
         kstring_t transformed_line = { 0, 0, NULL };
-		if(trans != 0) {
-			if (transformed_equals_match) {
-				kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-			} else {
-				kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-				kputs(transformed_id_s, &transformed_line);
-				kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-			}
+        if(trans != 0) {
+            if (transformed_equals_match) {
+                kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
+            } else {
+                kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+                kputs(transformed_id_s, &transformed_line);
+                kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+            }
 
-			if (!(transformed_equals_match && merge_rg)) {
-				// append line to linked list for PG processing
-				char** ln = kl_pushp(hdrln, rg_list);
-				*ln = ks_release(&transformed_line);  // Give away to linked list
-			}
-			else free(transformed_line.s);
-		}
-		else {
-			if (transformed_equals_match)
-				kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-			
-			free(transformed_line.s);
-		}
+            if (!(transformed_equals_match && merge_rg)) {
+	    // append line to linked list for PG processing
+                char** ln = kl_pushp(hdrln, rg_list);
+                *ln = ks_release(&transformed_line);  // Give away to linked list
+            }
+            else free(transformed_line.s);
+        }
+        else {
+            if (transformed_equals_match) kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
+
+            free(transformed_line.s);
+        }
 
         text += matches[0].rm_eo; // next!
     }
@@ -397,8 +395,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             transformed_equals_match = true;
         } else {
             // It's in there so we need to transform it by appending random number to id
-            if(trans != 0)
-	            ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
+            if(trans != 0) ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
 
             transformed_equals_match = false;
         }
@@ -411,28 +408,27 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         kh_value(tbl->pg_trans,iter) = transformed_id_s;
         // take matched line and replace ID with transformed_id
         kstring_t transformed_line = { 0, 0, NULL };
-		if(trans != 0) {
-			if (transformed_equals_match) {
-				kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-			} else {
-				kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-				kputs(transformed_id_s, &transformed_line);
-				kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-			}
+        if(trans != 0) {
+            if (transformed_equals_match) {
+                kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
+            } else {
+                kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+                kputs(transformed_id_s, &transformed_line);
+                kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+            }
 
-			if (!(transformed_equals_match && merge_pg)) {
-				// append line to linked list for PP processing
-				char** ln = kl_pushp(hdrln, pg_list);
-				*ln = ks_release(&transformed_line);  // Give away to linked list
-			}
-			else free(transformed_line.s);
-		}
-		else {
-			if (transformed_equals_match)
-				kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-			
-			free(transformed_line.s);
-		}
+            if (!(transformed_equals_match && merge_pg)) {
+            // append line to linked list for PP processing
+                char** ln = kl_pushp(hdrln, pg_list);
+                *ln = ks_release(&transformed_line);  // Give away to linked list
+            }
+            else free(transformed_line.s);
+        }
+        else {
+	    if (transformed_equals_match) kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
+
+            free(transformed_line.s);
+        }
 
         text += matches[0].rm_eo; // next!
     }
@@ -579,61 +575,60 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 #define MERGE_COMBINE_PG 32 // Combine PG tags frather than redefining them
 
 typedef struct {
-	int startIdx;
-	int endIdx;
-	heap1_t *heap;
+    int startIdx;
+    int endIdx;
+    heap1_t *heap;
 } thrStruct_t;
 
 void *bam_multi_read_func(void *arg)
 {
-	thrStruct_t *ts = (thrStruct_t *)arg;
-	heap1_t *heapIn = ts->heap;
-	heap1_t *h;
+    thrStruct_t *ts = (thrStruct_t *)arg;
+    heap1_t *heapIn = ts->heap;
+    heap1_t *h;
     int i, j = 0;
-	int toservice;
-	int toserviceVal;
-	bool done = false;
+    int toservice;
+    int toserviceVal;
+    bool done = false;
 
-	while(!done){
-		done = true;
-		toservice = -1;
-		toserviceVal = 0;
-		for(i = ts->startIdx; i < ts->endIdx; ++i) {
-			h = &heapIn[i];
-			int roomLeft = h->b_head - h->b_tail;
-			if(roomLeft <= 0)
-				roomLeft += NUM_BAM_SIMUL;
+    while(!done){
+        done = true;
+        toservice = -1;
+        toserviceVal = 0;
+        for(i = ts->startIdx; i < ts->endIdx; ++i) {
+            h = &heapIn[i];
+            int roomLeft = h->b_head - h->b_tail;
+            if(roomLeft <= 0) roomLeft += NUM_BAM_SIMUL;
 
-			if(!h->empty){
-				done = false;
-				if(roomLeft > 100 && roomLeft > toserviceVal){
-					toservice = i;
-					toserviceVal = roomLeft;
-					break;
-				}
-			}
-		}
+            if(!h->empty){
+                done = false;
+                if(roomLeft > 100 && roomLeft > toserviceVal){
+                    toservice = i;
+                    toserviceVal = roomLeft;
+                    break;
+                }
+            }
+        }
 
-		if(toservice >= 0){
-			h = &heapIn[toservice];
-		    int added = 0;
-			// fill this input file
-			while(((h->b_tail + 1) % NUM_BAM_SIMUL) != h->b_head && h->pos != HEAP_EMPTY && added++ < 200){
-			    bam1_t *b = &h->b[h->b_tail];
-		        if ((j = (h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b))) >= 0) {
-					h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL; // increment number of reads
-				} else {
-					h->empty = 1;
-					if (j == -1) break;
-					else fprintf(stderr, "[bam_multi_read_func] '%s' is truncated. Continue anyway.\n", h->fn);
-				}
-			}
-		}
-		else if(!done) usleep(WAIT_TIME); // nothing to do
-	}
-	fprintf(stdout, "[bam_multi_read_func] reader thread for reading bam %d to %d exiting\n", ts->startIdx, ts->endIdx - 1);
+        if(toservice >= 0){
+            h = &heapIn[toservice];
+            int added = 0;
+            // fill this input file
+            while(((h->b_tail + 1) % NUM_BAM_SIMUL) != h->b_head && h->pos != HEAP_EMPTY && added++ < 200){
+                bam1_t *b = &h->b[h->b_tail];
+                if ((j = (h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b))) >= 0) {
+                    h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL; // increment number of reads
+                } else {
+                    h->empty = 1;
+                    if (j == -1) break;
+                    else fprintf(stderr, "[bam_multi_read_func] '%s' is truncated. Continue anyway.\n", h->fn);
+                }
+            }
+        }
+        else if(!done) usleep(WAIT_TIME); // nothing to do
+    }
+    fprintf(stdout, "[bam_multi_read_func] reader thread for reading bam %d to %d exiting\n", ts->startIdx, ts->endIdx - 1);
 
-	return NULL;
+    return NULL;
 }
 
 /*
@@ -719,15 +714,16 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     // open and read the header from each file
     for (i = 0; i < n; ++i) {
         bam_hdr_t *hin;
-		heap[i].b_head = 0;
-		heap[i].b_tail = 0;
-		heap[i].empty = 0;
-		heap[i].fn = fn[i];
-		heap[i].fp = sam_open(heap[i].fn, "r");
-		if (heap[i].fp == NULL) {
+        heap[i].b_head = 0;
+        heap[i].b_tail = 0;
+        heap[i].empty = 0;
+        heap[i].fn = fn[i];
+        heap[i].fp = sam_open(heap[i].fn, "r");
+        if (heap[i].fp == NULL) {
             fprintf(stderr, "[bam_merge_core] fail to open file %s\n", fn[i]);
             for (j = 0; j < i; ++j) sam_close(heap[i].fp);
-			free(heap);
+
+            free(heap);
             // FIXME: possible memory leak
             return -1;
         }
@@ -805,9 +801,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
  		bam1_t *b = &h->b[h->b_tail];
         if ((h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b)) >= 0) {
             if(trans != 0)
-				bam_translate(b, translation_tbl + i);
+                bam_translate(b, translation_tbl + i);
 
-			h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL;
+            h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL;
             h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
             h->idx = idx0++;
         }
@@ -826,81 +822,79 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     sam_hdr_write(fpout, hout);
     if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
 
-	BGZF *fpbgzf = fpout->fp.bgzf;
-	fpbgzf->close = 1; // control for non-indexing case
+    BGZF *fpbgzf = fpout->fp.bgzf;
+    fpbgzf->close = 0; // control for non-indexing case
 
-	if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
+    if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
 
-	if (n_readers > 0)
-	{
-		int numRdrThreads = n_readers;
-		if(numRdrThreads > n) numRdrThreads = n;
-		thrstr = (thrStruct_t *)calloc(n_readers, sizeof(thrStruct_t));
-		// spawn threads to handle reading from this file
-	    pthread_t thr;
-		pthread_attr_t attr;
-		pthread_attr_init(&attr);
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (n_readers > 0) {
+        int numRdrThreads = n_readers;
+        if(numRdrThreads > n) numRdrThreads = n;
+        thrstr = (thrStruct_t *)calloc(n_readers, sizeof(thrStruct_t));
+        // spawn threads to handle reading from this file
+        pthread_t thr;
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-		for(i = 0; i < numRdrThreads; ++i){
-			thrstr[i].heap = heap;
-			thrstr[i].startIdx = i * (n / numRdrThreads);
-			thrstr[i].endIdx = (i + 1) * (n / numRdrThreads);
-			if(i == (numRdrThreads - 1))
-				thrstr[i].endIdx = n; // go all the way to the end
-			pthread_create(&thr, &attr, bam_multi_read_func, &thrstr[i]);
-		}
-	}
+        for(i = 0; i < numRdrThreads; ++i){
+            thrstr[i].heap = heap;
+            thrstr[i].startIdx = i * (n / numRdrThreads);
+            thrstr[i].endIdx = (i + 1) * (n / numRdrThreads);
+            if(i == (numRdrThreads - 1)) thrstr[i].endIdx = n; // go all the way to the end
+
+            pthread_create(&thr, &attr, bam_multi_read_func, &thrstr[i]);
+        }
+    }
 
     // Begin the actual merge
-	bool done = false;
-	while (!done) {
-		done = true;
-		uint64_t lowest_pos = HEAP_EMPTY;
-		int lowest_idx = -1;
+    bool done = false;
+    while (!done) {
+        done = true;
+        uint64_t lowest_pos = HEAP_EMPTY;
+        int lowest_idx = -1;
 
-		for (i = 0; i < n; ++i) {
-			heap1_t *h = &heap[i];
-			while(n_readers > 0 && h->b_head == h->b_tail && !h->empty){
-				// wait for the reader to get more into the queue
-				usleep(WAIT_TIME);
-			}
-			if(h->b_head != h->b_tail){
-				done = false;
-				bam1_t *b = &h->b[h->b_head];
-				if(trans != 0)
-					bam_translate(b, translation_tbl + h->i);
+        for (i = 0; i < n; ++i) {
+            heap1_t *h = &heap[i];
+            while(n_readers > 0 && h->b_head == h->b_tail && !h->empty){
+                // wait for the reader to get more into the queue
+                usleep(WAIT_TIME);
+            }
+            if(h->b_head != h->b_tail){
+                done = false;
+                bam1_t *b = &h->b[h->b_head];
+                if(trans != 0) bam_translate(b, translation_tbl + h->i);
 
-				h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
-				if(h->pos < lowest_pos){
-					lowest_pos = h->pos;
-					lowest_idx = i;
-				}
-			}
-		}
-		if(lowest_idx >= 0){
-			heap1_t *h = &heap[lowest_idx];
-			bam1_t *b = &h->b[h->b_head];
-			if (flag & MERGE_RG) {
-				uint8_t *rg = bam_aux_get(b, "RG");
-				if (rg) bam_aux_del(b, rg);
-				bam_aux_append(b, "RG", 'Z', RG_len[h->i] + 1, (uint8_t*)RG[h->i]);
-			}
-			sam_write1(fpout, hout, b);
+                h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
+                if(h->pos < lowest_pos){
+                    lowest_pos = h->pos;
+                    lowest_idx = i;
+                }
+            }
+        }
+        if(lowest_idx >= 0){
+            heap1_t *h = &heap[lowest_idx];
+            bam1_t *b = &h->b[h->b_head];
+            if (flag & MERGE_RG) {
+                uint8_t *rg = bam_aux_get(b, "RG");
+                if (rg) bam_aux_del(b, rg);
+                bam_aux_append(b, "RG", 'Z', RG_len[h->i] + 1, (uint8_t*)RG[h->i]);
+            }
+            sam_write1(fpout, hout, b);
 
-			if(n_readers <= 0){
-				// single thread reading for the next read right now.
-				b = &h->b[h->b_tail];
-		        if ((j = (h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b))) >= 0) {
-					h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL; // increment number of reads
-				} else {
-					h->empty = 1;
-					if (j != -1) fprintf(stderr, "[bam_merge_core] '%s' is truncated. Continue anyway.\n", h->fn);
-				}
-			}
-			h->b_head = (h->b_head + 1) % NUM_BAM_SIMUL; // increment to next read
-		}
-	}
+            if(n_readers <= 0){
+            // single thread reading for the next read right now.
+                b = &h->b[h->b_tail];
+                if ((j = (h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b))) >= 0) {
+                    h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL; // increment number of reads
+                } else {
+                    h->empty = 1;
+                    if (j != -1) fprintf(stderr, "[bam_merge_core] '%s' is truncated. Continue anyway.\n", h->fn);
+                }
+            }
+            h->b_head = (h->b_head + 1) % NUM_BAM_SIMUL; // increment to next read
+        }
+    }
 
     // Clean up and close
     if (flag & MERGE_RG) {
@@ -942,19 +936,19 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
 {
     samFile *fpout;
     heap1_t *heap;
-	thrStruct_t *thrstr = NULL;
+    thrStruct_t *thrstr = NULL;
     bam_hdr_t *hout = NULL;
     int i, j, *RG_len = NULL, min_shift = 14, n_lvls = 5, fmt = HTS_FMT_BAI;
     uint64_t idx0 = 0;
     char **RG = NULL;
     trans_tbl_t *translation_tbl = NULL;
 
-	hts_idx_t *idx;
-	uint64_t last_off;
-	char *fnidx;
-	htsFile *fpidx;
-	int block_offset = 0, address_index = 0, no_address_cushion = 65536;
-	int64_t block_address = 0, data_size = 0, no_address_cushion_value = 4294967296; // 32-bit number associated with no_address_cushion
+    hts_idx_t *idx;
+    uint64_t last_off;
+    char *fnidx;
+    htsFile *fpidx;
+    int block_offset = 0, address_index = 0, no_address_cushion = 65536;
+    int64_t block_address = 0, data_size = 0, no_address_cushion_value = 4294967296; // 32-bit number associated with no_address_cushion
 
     // Is there a specified pre-prepared header to use for output?
     if (headers) {
@@ -987,28 +981,29 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
         }
     }
 
-	// get data size to allocate block address array
-	for (i = 0; i != n; ++i) {
-		FILE *tmp_file;
-		tmp_file = fopen(fn[i], "r");
+    // get data size to allocate block address array
+    for (i = 0; i != n; ++i) {
+        FILE *tmp_file;
+        tmp_file = fopen(fn[i], "r");
 		
-		fseek(tmp_file, 0L, SEEK_END);
-		data_size += ftell(tmp_file);
-		fclose(tmp_file);
-	}
+        fseek(tmp_file, 0L, SEEK_END);
+        data_size += ftell(tmp_file);
+        fclose(tmp_file);
+    }
 
     // open and read the header from each file
     for (i = 0; i < n; ++i) {
         bam_hdr_t *hin;
-		heap[i].b_head = 0;
-		heap[i].b_tail = 0;
-		heap[i].empty = 0;
-		heap[i].fn = fn[i];
-		heap[i].fp = sam_open(heap[i].fn, "r");
-		if (heap[i].fp == NULL) {
+        heap[i].b_head = 0;
+        heap[i].b_tail = 0;
+        heap[i].empty = 0;
+        heap[i].fn = fn[i];
+        heap[i].fp = sam_open(heap[i].fn, "r");
+        if (heap[i].fp == NULL) {
             fprintf(stderr, "[bam_merge_core] fail to open file %s\n", fn[i]);
             for (j = 0; j < i; ++j) sam_close(heap[i].fp);//fp[j]);
-			free(heap);
+
+            free(heap);
             // FIXME: possible memory leak
             return -1;
         }
@@ -1033,8 +1028,8 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
     }
 
     // Transform the header into standard form
-	if(trans != 0)
-		pretty_header(&hout->text,hout->l_text);
+    if(trans != 0)
+        pretty_header(&hout->text,hout->l_text);
 
     // If we're only merging a specified region move our iters to start at that point
     if (reg) {
@@ -1083,12 +1078,12 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
     for (i = 0; i < n; ++i) {
         heap1_t *h = heap + i;
         h->i = i;
- 		bam1_t *b = &h->b[h->b_tail];
+        bam1_t *b = &h->b[h->b_tail];
         if ((h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b)) >= 0) {
-            if(trans != 0)
-				bam_translate(b, translation_tbl + i);
+            if(trans != 0) 
+                bam_translate(b, translation_tbl + i);
 
-			h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL;
+            h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL;
             h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
             h->idx = idx0++;
         }
@@ -1107,147 +1102,148 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
     sam_hdr_write(fpout, hout);
     if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
  
-	BGZF *fpbgzf = fpout->fp.bgzf;
-	block_address = fpbgzf->block_address;
-	block_offset = 0;
-	last_off = ((block_address << 16) | (block_offset & 0xFFFF));
-	fpbgzf->close = 0; // control for indexing case
-	fpbgzf->address_capacity = 4 * data_size / BGZF_BLOCK_SIZE; // assume compressed size if bigger than 25% of original size
-	if(fpbgzf->address_capacity < 1) fpbgzf->address_capacity = 1;
-	fpbgzf->address = (int64_t*)calloc(fpbgzf->address_capacity, sizeof(int64_t));
-	fpbgzf->address[0] = last_off >> 16; // store first address
-	fpbgzf->address_count = 1; // this variable will be increased in bgzf as fpbgzf->address grows
-	block_address = no_address_cushion; // leave some space for n_mapped and n_unmapped insert
-	last_off = ((block_address << 16) | (block_offset & 0xFFFF)); // reset to address indexing value
+    BGZF *fpbgzf = fpout->fp.bgzf;
+    block_address = fpbgzf->block_address;
+    block_offset = 0;
+    last_off = ((block_address << 16) | (block_offset & 0xFFFF));
+    fpbgzf->close = 1; // control for indexing case
+    fpbgzf->address_capacity = 4 * data_size / BGZF_BLOCK_SIZE; // assume compressed size if bigger than 25% of original size
+    if(fpbgzf->address_capacity < 1) fpbgzf->address_capacity = 1;
+    fpbgzf->address = (int64_t*)calloc(fpbgzf->address_capacity, sizeof(int64_t));
+    fpbgzf->address[0] = last_off >> 16; // store first address
+    fpbgzf->address_count = 1; // this variable will be increased in bgzf as fpbgzf->address grows
+    block_address = no_address_cushion; // leave some space for n_mapped and n_unmapped insert
+    last_off = ((block_address << 16) | (block_offset & 0xFFFF)); // reset to address indexing value
     idx = hts_idx_init(hout->n_targets, fmt, last_off, min_shift, n_lvls);
 
-	if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
+    if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
 
-	if (n_readers > 0) {
-		int numRdrThreads = n_readers;
-		if(numRdrThreads > n) numRdrThreads = n;
-		thrstr = (thrStruct_t *)calloc(n_readers, sizeof(thrStruct_t));
-		// spawn threads to handle reading from this file
-	    pthread_t thr;
-		pthread_attr_t attr;
-		pthread_attr_init(&attr);
-		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+    if (n_readers > 0) {
+        int numRdrThreads = n_readers;
+        if(numRdrThreads > n) numRdrThreads = n;
+        thrstr = (thrStruct_t *)calloc(n_readers, sizeof(thrStruct_t));
+        // spawn threads to handle reading from this file
+        pthread_t thr;
+        pthread_attr_t attr;
+        pthread_attr_init(&attr);
+        pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 
-		for(i = 0; i < numRdrThreads; ++i){
-			thrstr[i].heap = heap;
-			thrstr[i].startIdx = i * (n / numRdrThreads);
-			thrstr[i].endIdx = (i + 1) * (n / numRdrThreads);
-			if(i == (numRdrThreads - 1))
-				thrstr[i].endIdx = n; // go all the way to the end
-			pthread_create(&thr, &attr, bam_multi_read_func, &thrstr[i]);
-		}
-	}
+        for(i = 0; i < numRdrThreads; ++i){
+            thrstr[i].heap = heap;
+            thrstr[i].startIdx = i * (n / numRdrThreads);
+            thrstr[i].endIdx = (i + 1) * (n / numRdrThreads);
+            if(i == (numRdrThreads - 1)) thrstr[i].endIdx = n; // go all the way to the end
+
+            pthread_create(&thr, &attr, bam_multi_read_func, &thrstr[i]);
+        }
+    }
 
     // Begin the actual merge
-	bool done = false, first_b = true;
-	int l;
-	bam1_t *previous_b;
-	while (!done) {
-		done = true;
-		uint64_t lowest_pos = HEAP_EMPTY;
-		int lowest_idx = -1;
+    bool done = false, first_b = true;
+    int l;
+    bam1_t *previous_b;
+    while (!done) {
+        done = true;
+        uint64_t lowest_pos = HEAP_EMPTY;
+        int lowest_idx = -1;
 
-		for (i = 0; i < n; ++i) {
-			heap1_t *h = &heap[i];
-			while(n_readers > 0 && h->b_head == h->b_tail && !h->empty){
-				// wait for the reader to get more into the queue
-				usleep(WAIT_TIME);
-			}
-			if(h->b_head != h->b_tail){
-				done = false;
-				bam1_t *b = &h->b[h->b_head];
-				if(trans != 0)
-					bam_translate(b, translation_tbl + h->i);
+        for (i = 0; i < n; ++i) {
+            heap1_t *h = &heap[i];
+            while(n_readers > 0 && h->b_head == h->b_tail && !h->empty){
+                // wait for the reader to get more into the queue
+                usleep(WAIT_TIME);
+            }
+            if(h->b_head != h->b_tail){
+                done = false;
+                bam1_t *b = &h->b[h->b_head];
+                if(trans != 0) bam_translate(b, translation_tbl + h->i);
 
-				h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
-				if(h->pos < lowest_pos){
-					lowest_pos = h->pos;
-					lowest_idx = i;
-				}
-			}
-		}
-		if(lowest_idx >= 0){
-			heap1_t *h = &heap[lowest_idx];
-			bam1_t *b = &h->b[h->b_head];
-			if (flag & MERGE_RG) {
-				uint8_t *rg = bam_aux_get(b, "RG");
-				if (rg) bam_aux_del(b, rg);
-				bam_aux_append(b, "RG", 'Z', RG_len[h->i] + 1, (uint8_t*)RG[h->i]);
-			}
-			sam_write1(fpout, hout, b);
+                h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
+                if(h->pos < lowest_pos){
+                    lowest_pos = h->pos;
+                    lowest_idx = i;
+                }
+            }
+        }
+        if(lowest_idx >= 0){
+            heap1_t *h = &heap[lowest_idx];
+            bam1_t *b = &h->b[h->b_head];
+            if (flag & MERGE_RG) {
+                uint8_t *rg = bam_aux_get(b, "RG");
+                if (rg) bam_aux_del(b, rg);
 
-			// start indexing
-			if(first_b) {
-				block_offset = fpbgzf->block_offset;
-				first_b = false;
-			}
-			else {
-				l = bam_cigar2rlen(previous_b->core.n_cigar, bam_get_cigar(previous_b));
-				if (l == 0) l = 1; // no zero-length records
+                bam_aux_append(b, "RG", 'Z', RG_len[h->i] + 1, (uint8_t*)RG[h->i]);
+            }
+            sam_write1(fpout, hout, b);
 
-				if(block_offset + b->l_data + 36 >= BGZF_BLOCK_SIZE) { // increase address index as crossing block
-					++block_address;
-					block_offset = 0;
-				}
-				last_off = ((block_address << 16) | (block_offset & 0xFFFF));				
-				hts_idx_push(idx, previous_b->core.tid, previous_b->core.pos, previous_b->core.pos + l, last_off, !(previous_b->core.flag&BAM_FUNMAP));
-				block_offset = fpbgzf->block_offset;
-			}
-			previous_b = b;
-			// done indexing
+            // start indexing
+            if(first_b) {
+                block_offset = fpbgzf->block_offset;
+                first_b = false;
+            }
+            else {
+                l = bam_cigar2rlen(previous_b->core.n_cigar, bam_get_cigar(previous_b));
+                if (l == 0) l = 1; // no zero-length records
 
-			if(n_readers <= 0){
-				// single thread reading for the next read right now.
-				b = &h->b[h->b_tail];
-		        if ((j = (h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b))) >= 0) {
-					h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL; // increment number of reads
-				} else {
-					h->empty = 1;
-					if (j != -1) fprintf(stderr, "[bam_merge_core] '%s' is truncated. Continue anyway.\n", h->fn);
-				}
-			}
-			h->b_head = (h->b_head + 1) % NUM_BAM_SIMUL; // increment to next read
-		}
-	}
+                if(block_offset + b->l_data + 36 >= BGZF_BLOCK_SIZE) { // increase address index as crossing block
+                    ++block_address;
+                    block_offset = 0;
+                }
+                last_off = ((block_address << 16) | (block_offset & 0xFFFF));				
+                hts_idx_push(idx, previous_b->core.tid, previous_b->core.pos, previous_b->core.pos + l, last_off, !(previous_b->core.flag&BAM_FUNMAP));
+                block_offset = fpbgzf->block_offset;
+            }
+            previous_b = b;
+            // done indexing
 
-	bgzf_flush(fpbgzf);
+            if(n_readers <= 0){
+                // single thread reading for the next read right now.
+                b = &h->b[h->b_tail];
+                if ((j = (h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b))) >= 0) {
+                    h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL; // increment number of reads
+                } else {
+                    h->empty = 1;
+                    if (j != -1) fprintf(stderr, "[bam_merge_core] '%s' is truncated. Continue anyway.\n", h->fn);
+                }
+            }
+            h->b_head = (h->b_head + 1) % NUM_BAM_SIMUL; // increment to next read
+        }
+    }
 
-	if(block_offset > 0) {
-		++block_address;
-		block_offset = 0;
-	}
-	last_off = ((block_address << 16) | (block_offset & 0xFFFF));
-	l = bam_cigar2rlen(previous_b->core.n_cigar, bam_get_cigar(previous_b));
-	if (l == 0) l = 1; // no zero-length records
-	hts_idx_push(idx, previous_b->core.tid, previous_b->core.pos, previous_b->core.pos + l, last_off, !(previous_b->core.flag&BAM_FUNMAP));
+    bgzf_flush(fpbgzf);
+
+    if(block_offset > 0) {
+        ++block_address;
+        block_offset = 0;
+    }
+    last_off = ((block_address << 16) | (block_offset & 0xFFFF));
+    l = bam_cigar2rlen(previous_b->core.n_cigar, bam_get_cigar(previous_b));
+    if (l == 0) l = 1; // no zero-length records
+    hts_idx_push(idx, previous_b->core.tid, previous_b->core.pos, previous_b->core.pos + l, last_off, !(previous_b->core.flag&BAM_FUNMAP));
 
     // Clean up and close
     if (flag & MERGE_RG) {
         for (i = 0; i != n; ++i) free(RG[i]);
+
         free(RG); free(RG_len);
     }
-	if(thrstr) free(thrstr);
+    if(thrstr) free(thrstr);
 
-	hts_idx_replace_address(idx, no_address_cushion, no_address_cushion_value, fpbgzf->address_capacity, fpbgzf->address);
+    hts_idx_replace_address(idx, no_address_cushion, no_address_cushion_value, fpbgzf->address_capacity, fpbgzf->address);
 
-	hts_idx_finish(idx, bgzf_tell(fpbgzf));
+    hts_idx_finish(idx, bgzf_tell(fpbgzf));
 	
-	if(fn_index) {
-		fnidx = (char*)calloc(strlen(fn_index), 1);
-		strcpy(fnidx, fn_index);
-	}
-	else {
-		fnidx = (char*)calloc(strlen(out), 1);
-		strcpy(fnidx, out); 
-	}
+    if(fn_index) {
+        fnidx = (char*)calloc(strlen(fn_index), 1);
+        strcpy(fnidx, fn_index);
+    }
+    else {
+        fnidx = (char*)calloc(strlen(out), 1);
+        strcpy(fnidx, out); 
+    }
 
-	hts_idx_save(idx, fnidx, HTS_FMT_BAI);
-	hts_idx_destroy(idx);
+    hts_idx_save(idx, fnidx, HTS_FMT_BAI);
+    hts_idx_destroy(idx);
 
     for (i = 0; i < n; ++i) {
         trans_tbl_destroy(translation_tbl + i);
@@ -1288,7 +1284,7 @@ static void merge_usage(FILE *to)
     fprintf(to, "         -s VALUE override random seed\n");
     fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n");
     fprintf(to, "         -t INT   turn on/off transform function [1]\n");
-	fprintf(to, "         -i STR   write indexing file to <STR.bai>\n\n");
+    fprintf(to, "         -i STR   write indexing file to <STR.bai>\n\n");
 }
 
 int bam_merge(int argc, char *argv[])
@@ -1304,7 +1300,7 @@ int bam_merge(int argc, char *argv[])
         return 0;
     }
 
-	while ((c = getopt(argc, argv, "h:i:nru1R:f@:q:t:l:cps:b:")) >= 0) {
+    while ((c = getopt(argc, argv, "h:i:nru1R:f@:q:t:l:cps:b:")) >= 0) {
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
@@ -1316,7 +1312,7 @@ int bam_merge(int argc, char *argv[])
         case 'l': level = atoi(optarg); break;
         case '@': n_threads = atoi(optarg); break;
         case 'q': n_readers = atoi(optarg); break;
-		case 'i': do_index = 1; fn_index = strdup(optarg); break;
+        case 'i': do_index = 1; fn_index = strdup(optarg); break;
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
         case 's': random_seed = atol(optarg); break;
@@ -1370,12 +1366,12 @@ int bam_merge(int argc, char *argv[])
     }
     strcpy(mode, "wb");
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
-	if(do_index == 0) {
-		if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, n_readers, trans) < 0) ret = 1;
-	}
-	else {
-		if (bam_merge_core2i(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, n_readers, trans, fn_index) < 0) ret = 1;
-	}
+    if(do_index == 0) {
+        if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, n_readers, trans) < 0) ret = 1;
+    }
+    else {
+        if (bam_merge_core2i(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, n_readers, trans, fn_index) < 0) ret = 1;
+    }
 end:
     if (fn_size > 0) {
         int i;
@@ -1384,7 +1380,7 @@ end:
     }
     free(reg);
     free(fn_headers);
-	if(fn_index) free(fn_index);
+    if(fn_index) free(fn_index);
     return ret;
 }
 
@@ -1644,7 +1640,7 @@ int bam_sort(int argc, char *argv[])
     for (i = 1; i < argc; ++i)
         if (argv[i][0] == '-' && strpbrk(argv[i], "OT")) { modern = 1; break; }
 
-		while ((c = getopt(argc, argv, modern? "l:m:no:O:T:@:q:t:" : "fnom:@:q:t:l:")) >= 0) {
+    while ((c = getopt(argc, argv, modern? "l:m:no:O:T:@:q:t:" : "fnom:@:q:t:l:")) >= 0) {
         switch (c) {
         case 'f': full_path = 1; break;
         case 'o': if (modern) fnout = optarg; else is_stdout = 1; break;
