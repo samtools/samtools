@@ -240,7 +240,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     *text_in_out = output;
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, int trans)
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
 {
     tbl->n_targets = translate->n_targets;
     tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
@@ -332,8 +332,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             transformed_equals_match = true;
         } else {
             // It's in there so we need to transform it by appending random number to id
-            if(trans != 0) ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
-
+            ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
             transformed_equals_match = false;
         }
         regfree(&rg_id_search);
@@ -345,27 +344,20 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         kh_value(tbl->rg_trans,iter) = transformed_id_s;
         // take matched line and replace ID with transformed_id
         kstring_t transformed_line = { 0, 0, NULL };
-        if(trans != 0) {
-            if (transformed_equals_match) {
-                kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-            } else {
-                kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-                kputs(transformed_id_s, &transformed_line);
-                kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-            }
+        if (transformed_equals_match) {
+            kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
+        } else {
+            kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+            kputs(transformed_id_s, &transformed_line);
+            kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+        }
 
-            if (!(transformed_equals_match && merge_rg)) {
+        if (!(transformed_equals_match && merge_rg)) {
 	    // append line to linked list for PG processing
-                char** ln = kl_pushp(hdrln, rg_list);
-                *ln = ks_release(&transformed_line);  // Give away to linked list
-            }
-            else free(transformed_line.s);
+            char** ln = kl_pushp(hdrln, rg_list);
+            *ln = ks_release(&transformed_line);  // Give away to linked list
         }
-        else {
-            if (transformed_equals_match) kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-
-            free(transformed_line.s);
-        }
+        else free(transformed_line.s);
 
         text += matches[0].rm_eo; // next!
     }
@@ -395,8 +387,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             transformed_equals_match = true;
         } else {
             // It's in there so we need to transform it by appending random number to id
-            if(trans != 0) ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
-
+            ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
             transformed_equals_match = false;
         }
         regfree(&pg_id_search);
@@ -408,27 +399,20 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         kh_value(tbl->pg_trans,iter) = transformed_id_s;
         // take matched line and replace ID with transformed_id
         kstring_t transformed_line = { 0, 0, NULL };
-        if(trans != 0) {
-            if (transformed_equals_match) {
-                kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-            } else {
-                kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-                kputs(transformed_id_s, &transformed_line);
-                kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-            }
-
-            if (!(transformed_equals_match && merge_pg)) {
-            // append line to linked list for PP processing
-                char** ln = kl_pushp(hdrln, pg_list);
-                *ln = ks_release(&transformed_line);  // Give away to linked list
-            }
-            else free(transformed_line.s);
+        if (transformed_equals_match) {
+            kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
+        } else {
+            kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
+            kputs(transformed_id_s, &transformed_line);
+            kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
         }
-        else {
-	    if (transformed_equals_match) kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
 
-            free(transformed_line.s);
+        if (!(transformed_equals_match && merge_pg)) {
+        // append line to linked list for PP processing
+            char** ln = kl_pushp(hdrln, pg_list);
+            *ln = ks_release(&transformed_line);  // Give away to linked list
         }
+        else free(transformed_line.s);
 
         text += matches[0].rm_eo; // next!
     }
@@ -666,11 +650,10 @@ void *bam_multi_read_func(void *arg)
   @param  reg         region to merge
   @param  n_threads   number of threads to use (passed to htslib)
   @param  n_readers   number of additional BAM reader threads
-  @param  trans       turn on/off tranform function
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-int bam_merge_core2(int by_qname, const char *out, const char *mode, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads, int n_readers, int trans)
+int bam_merge_core2(int by_qname, const char *out, const char *mode, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads, int n_readers)
 {
     samFile *fpout;
     heap1_t *heap;
@@ -729,12 +712,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
         hin = sam_hdr_read(heap[i].fp);
         if (hout)
-            trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, trans);
+            trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
         else {
             // As yet, no headers to merge into...
             hout = bam_hdr_dup(hin);
             // ...so no need to translate header into itself
-            trans_tbl_init(hout, hin, translation_tbl+i, true, true, trans);
+            trans_tbl_init(hout, hin, translation_tbl+i, true, true);
         }
 
         // TODO sam_itr_next() doesn't yet work for SAM files,
@@ -748,8 +731,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     }
 
     // Transform the header into standard form
-	if(trans != 0)
-		pretty_header(&hout->text,hout->l_text);
+	pretty_header(&hout->text,hout->l_text);
 
     // If we're only merging a specified region move our iters to start at that point
     if (reg) {
@@ -800,8 +782,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         h->i = i;
  		bam1_t *b = &h->b[h->b_tail];
         if ((h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b)) >= 0) {
-            if(trans != 0)
-                bam_translate(b, translation_tbl + i);
+            bam_translate(b, translation_tbl + i);
 
             h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL;
             h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
@@ -863,7 +844,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             if(h->b_head != h->b_tail){
                 done = false;
                 bam1_t *b = &h->b[h->b_head];
-                if(trans != 0) bam_translate(b, translation_tbl + h->i);
+                bam_translate(b, translation_tbl + h->i);
 
                 h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
                 if(h->pos < lowest_pos){
@@ -927,12 +908,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
   @param  reg         region to merge
   @param  n_threads   number of threads to use (passed to htslib)
   @param  n_readers   number of additional BAM reader threads
-  @param  trans       turn on/off tranform function
   @param  fn_index    names of putput indexing file
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads, int n_readers, int trans, const char *fn_index)
+int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads, int n_readers, const char *fn_index)
 {
     samFile *fpout;
     heap1_t *heap;
@@ -1009,12 +989,12 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
         }
         hin = sam_hdr_read(heap[i].fp);//fp[i]);
         if (hout)
-            trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, trans);
+            trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
         else {
             // As yet, no headers to merge into...
             hout = bam_hdr_dup(hin);
             // ...so no need to translate header into itself
-            trans_tbl_init(hout, hin, translation_tbl+i, true, true, trans);
+            trans_tbl_init(hout, hin, translation_tbl+i, true, true);
         }
 
         // TODO sam_itr_next() doesn't yet work for SAM files,
@@ -1028,8 +1008,7 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
     }
 
     // Transform the header into standard form
-    if(trans != 0)
-        pretty_header(&hout->text,hout->l_text);
+    pretty_header(&hout->text,hout->l_text);
 
     // If we're only merging a specified region move our iters to start at that point
     if (reg) {
@@ -1080,8 +1059,7 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
         h->i = i;
         bam1_t *b = &h->b[h->b_tail];
         if ((h->iter ? sam_itr_next(h->fp, h->iter, b) : sam_read1(h->fp, h->hdr, b)) >= 0) {
-            if(trans != 0) 
-                bam_translate(b, translation_tbl + i);
+            bam_translate(b, translation_tbl + i);
 
             h->b_tail = (h->b_tail + 1) % NUM_BAM_SIMUL;
             h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
@@ -1156,7 +1134,7 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
             if(h->b_head != h->b_tail){
                 done = false;
                 bam1_t *b = &h->b[h->b_head];
-                if(trans != 0) bam_translate(b, translation_tbl + h->i);
+                bam_translate(b, translation_tbl + h->i);
 
                 h->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int32_t)b->core.pos+1)<<1 | bam_is_rev(b);
                 if(h->pos < lowest_pos){
@@ -1263,7 +1241,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
     strcpy(mode, "wb");
     if (flag & MERGE_UNCOMP) strcat(mode, "0");
     else if (flag & MERGE_LEVEL1) strcat(mode, "1");
-    return bam_merge_core2(by_qname, out, mode, headers, n, fn, flag, reg, 0, 0, 1);
+    return bam_merge_core2(by_qname, out, mode, headers, n, fn, flag, reg, 0, 0);
 }
 
 static void merge_usage(FILE *to)
@@ -1283,13 +1261,12 @@ static void merge_usage(FILE *to)
     fprintf(to, "         -p       combine PG tags with colliding IDs rather than amending them\n");
     fprintf(to, "         -s VALUE override random seed\n");
     fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n");
-    fprintf(to, "         -t INT   turn on/off transform function [1]\n");
     fprintf(to, "         -i STR   write indexing file to <STR.bai>\n\n");
 }
 
 int bam_merge(int argc, char *argv[])
 {
-    int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, n_readers = 0, trans = 1, do_index = 0, level = -1;
+    int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, n_readers = 0, do_index = 0, level = -1;
     char *fn_headers = NULL, *reg = NULL, *fn_index = NULL, mode[12];
     long random_seed = (long)time(NULL);
     char** fn = NULL;
@@ -1300,7 +1277,7 @@ int bam_merge(int argc, char *argv[])
         return 0;
     }
 
-    while ((c = getopt(argc, argv, "h:i:nru1R:f@:q:t:l:cps:b:")) >= 0) {
+    while ((c = getopt(argc, argv, "h:i:nru1R:f@:q:l:cps:b:")) >= 0) {
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
@@ -1316,7 +1293,6 @@ int bam_merge(int argc, char *argv[])
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
         case 's': random_seed = atol(optarg); break;
-        case 't': trans = atoi(optarg); break;
         case 'b': {
             // load the list of files to read
             int nfiles;
@@ -1367,10 +1343,10 @@ int bam_merge(int argc, char *argv[])
     strcpy(mode, "wb");
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
     if(do_index == 0) {
-        if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, n_readers, trans) < 0) ret = 1;
+        if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, n_readers) < 0) ret = 1;
     }
     else {
-        if (bam_merge_core2i(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, n_readers, trans, fn_index) < 0) ret = 1;
+        if (bam_merge_core2i(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads, n_readers, fn_index) < 0) ret = 1;
     }
 end:
     if (fn_size > 0) {
@@ -1511,14 +1487,13 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
   @param  max_mem  approxiate maximum memory (very inaccurate)
   @param  n_threads  number of additional BAM compression threads
   @param  n_readers  number of additional BAM reader threads
-  @param  trans    turn on/off transform function in merge
   @return 0 for successful sorting, negative on errors
 
   @discussion It may create multiple temporary subalignment files
   and then merge them by calling bam_merge_core(). This function is
   NOT thread safe.
  */
-int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const char *fnout, const char *modeout, size_t _max_mem, int n_threads, int n_readers, int trans)
+int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const char *fnout, const char *modeout, size_t _max_mem, int n_threads, int n_readers)
 {
     int ret, i, n_files = 0;
     size_t mem, max_k, k, max_mem;
@@ -1577,7 +1552,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
             fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
             sprintf(fns[i], "%s.%.4d.bam", prefix, i);
         }
-        if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns, MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads, n_readers, trans) < 0) {
+        if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns, MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads, n_readers) < 0) {
             // Propagate bam_merge_core2() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             return -1;
@@ -1601,7 +1576,7 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
     int ret;
     char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
     sprintf(fnout, "%s.bam", prefix);
-    ret = bam_sort_core_ext(is_by_qname, fn, prefix, fnout, "wb", max_mem, 0, 0, 1);
+    ret = bam_sort_core_ext(is_by_qname, fn, prefix, fnout, "wb", max_mem, 0, 0);
     free(fnout);
     return ret;
 }
@@ -1619,20 +1594,19 @@ static int sort_usage(FILE *fp, int status)
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam       -T is required)\n"
 "  -@ INT     Set number of additional BAM compression threads [0]\n"
 "  -q INT     Set number of additional BAM reader threads [0]\n"
-"  -t INT     Turn on/off transform function in merge [1]\n"
 "\n"
 "Legacy usage: samtools sort [options...] <in.bam> <out.prefix>\n"
 "Options:\n"
 "  -f         Use <out.prefix> as full final filename rather than prefix\n"
 "  -o         Write final output to stdout rather than <out.prefix>.bam\n"
-"  -l,m,n,@,p,t   Similar to corresponding options above\n");
+"  -l,m,n,@,q   Similar to corresponding options above\n");
     return status;
 }
 
 int bam_sort(int argc, char *argv[])
 {
     size_t max_mem = 768<<20; // 512MB
-    int c, i, modern, nargs, is_by_qname = 0, is_stdout = 0, ret = EXIT_SUCCESS, n_threads = 0, n_readers = 0, trans = 1, level = -1, full_path = 0;
+    int c, i, modern, nargs, is_by_qname = 0, is_stdout = 0, ret = EXIT_SUCCESS, n_threads = 0, n_readers = 0, level = -1, full_path = 0;
     char *fnout = "-", *fmtout = NULL, modeout[12], *tmpprefix = NULL;
     kstring_t fnout_buffer = { 0, 0, NULL };
 
@@ -1640,7 +1614,7 @@ int bam_sort(int argc, char *argv[])
     for (i = 1; i < argc; ++i)
         if (argv[i][0] == '-' && strpbrk(argv[i], "OT")) { modern = 1; break; }
 
-    while ((c = getopt(argc, argv, modern? "l:m:no:O:T:@:q:t:" : "fnom:@:q:t:l:")) >= 0) {
+    while ((c = getopt(argc, argv, modern? "l:m:no:O:T:@:q:" : "fnom:@:q:l:")) >= 0) {
         switch (c) {
         case 'f': full_path = 1; break;
         case 'o': if (modern) fnout = optarg; else is_stdout = 1; break;
@@ -1658,7 +1632,6 @@ int bam_sort(int argc, char *argv[])
         case '@': n_threads = atoi(optarg); break;
         case 'q': n_readers = atoi(optarg); break;
         case 'l': level = atoi(optarg); break;
-        case 't': trans = atoi(optarg); break;
         default: return sort_usage(stderr, EXIT_FAILURE);
         }
     }
@@ -1695,7 +1668,7 @@ int bam_sort(int argc, char *argv[])
         goto sort_end;
     }
 
-    if (bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-", tmpprefix, fnout, modeout, max_mem, n_threads, n_readers, trans) < 0) ret = EXIT_FAILURE;
+    if (bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-", tmpprefix, fnout, modeout, max_mem, n_threads, n_readers) < 0) ret = EXIT_FAILURE;
 
 sort_end:
     free(fnout_buffer.s);
