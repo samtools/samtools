@@ -35,7 +35,7 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
             bamtk.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
-            faidx.o stats.o stats_isize.o bam_flags.o bam_split.o \
+            faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
 
 EXTRA_CPPFLAGS = $(DFLAGS) -I. -I$(HTSDIR)
@@ -163,6 +163,7 @@ bamtk.o: bamtk.c $(htslib_hts_h) version.h samtools.h
 bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(HTSDIR)/htslib/kseq.h
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
 cut_target.o: cut_target.c $(bam_h) errmod.h $(htslib_faidx_h)
+dict.o: dict.c $(htslib_kseq_h) $(htslib_hts_h)
 errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
 kprobaln.o: kprobaln.c kprobaln.h
 padding.o: padding.c sam_header.h $(sam_h) $(bam_h) $(htslib_faidx_h)
