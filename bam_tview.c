@@ -397,7 +397,9 @@ int bam_tview_main(int argc, char *argv[])
     if ( position )
     {
         int tid, beg, end;
-        *(char *)hts_parse_reg(position, &beg, &end) = '\0';
+        char *name_lim = (char *) hts_parse_reg(position, &beg, &end);
+        if (name_lim) *name_lim = '\0';
+        else beg = 0; // region parsing failed, but possibly a seq named "foo:a"
         tid = bam_name2id(tv->header, position);
         if (tid >= 0) { tv->curr_tid = tid; tv->left_pos = beg; }
     }

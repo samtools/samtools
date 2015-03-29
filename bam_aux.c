@@ -24,6 +24,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 #include <ctype.h>
+#include <limits.h>
 #include "bam.h"
 
 static inline int bam_aux_type2size(int x)
@@ -61,11 +62,18 @@ int bam_aux_drop_other(bam1_t *b, uint8_t *s)
 int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *beg, int *end)
 {
     const char *name_lim = hts_parse_reg(str, beg, end);
-    char *name = malloc(name_lim - str + 1);
-    memcpy(name, str, name_lim - str);
-    name[name_lim - str] = '\0';
-    *ref_id = bam_name2id(header, name);
-    free(name);
+    if (name_lim) {
+        char *name = malloc(name_lim - str + 1);
+        memcpy(name, str, name_lim - str);
+        name[name_lim - str] = '\0';
+        *ref_id = bam_name2id(header, name);
+        free(name);
+    }
+    else {
+        // not parsable as a region, but possibly a sequence named "foo:a"
+        *ref_id = bam_name2id(header, str);
+        *beg = 0; *end = INT_MAX;
+    }
     if (*ref_id == -1) return -1;
     return *beg <= *end? 0 : -1;
 }
