@@ -118,6 +118,7 @@ static void usage(FILE *fp)
 "     reheader       replace BAM header\n"
 "     rmdup          remove PCR duplicates\n"
 "     targetcut      cut fosmid regions (for fosmid pool only)\n"
+"     addreplacerg   adds or replaces RG tags\n"
 "\n"
 "  -- File operations\n"
 "     bamshuf        shuffle and group alignments by name\n"
