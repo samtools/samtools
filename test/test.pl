@@ -50,6 +50,8 @@ test_calmd($opts);
 test_idxstat($opts);
 test_quickcheck($opts);
 test_reheader($opts);
+test_addrprg($opts);
+
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -2409,4 +2411,11 @@ sub test_reheader
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'");
+}
+
+sub test_addrprg
+{
+    my ($opts,%args) = @_;
+    
+    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam $$opts{path}/addrprg/1_fixup.sam -", expect_fail=>0);
 }
