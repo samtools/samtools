@@ -1,6 +1,6 @@
 /*  bam_stat.c -- flagstat subcommand.
 
-    Copyright (C) 2009, 2011, 2013, 2014 Genome Research Ltd.
+    Copyright (C) 2009, 2011, 2013-2015 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -29,7 +29,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 
 #include "htslib/sam.h"
-//#include "bam.h"
 #include "samtools.h"
 
 typedef struct {
@@ -81,11 +80,21 @@ bam_flagstat_t *bam_flagstat_core(samFile *fp, bam_hdr_t *h)
         fprintf(stderr, "[bam_flagstat_core] Truncated file? Continue anyway.\n");
     return s;
 }
+
+static const char *percent(char *buffer, long long n, long long total)
+{
+    if (total != 0) sprintf(buffer, "%.2f%%", (float)n / total * 100.0);
+    else strcpy(buffer, "N/A");
+    return buffer;
+}
+
 int bam_flagstat(int argc, char *argv[])
 {
     samFile *fp;
     bam_hdr_t *header;
     bam_flagstat_t *s;
+    char b0[16], b1[16];
+
     if (argc == optind) {
         fprintf(stderr, "Usage: samtools flagstat <in.bam>\n");
         return 1;
@@ -113,13 +122,13 @@ int bam_flagstat(int argc, char *argv[])
     printf("%lld + %lld secondary\n", s->n_secondary[0], s->n_secondary[1]);
     printf("%lld + %lld supplementary\n", s->n_supp[0], s->n_supp[1]);
     printf("%lld + %lld duplicates\n", s->n_dup[0], s->n_dup[1]);
-    printf("%lld + %lld mapped (%.2f%%:%.2f%%)\n", s->n_mapped[0], s->n_mapped[1], (float)s->n_mapped[0] / s->n_reads[0] * 100.0, (float)s->n_mapped[1] / s->n_reads[1] * 100.0);
+    printf("%lld + %lld mapped (%s : %s)\n", s->n_mapped[0], s->n_mapped[1], percent(b0, s->n_mapped[0], s->n_reads[0]), percent(b1, s->n_mapped[1], s->n_reads[1]));
     printf("%lld + %lld paired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);
     printf("%lld + %lld read1\n", s->n_read1[0], s->n_read1[1]);
     printf("%lld + %lld read2\n", s->n_read2[0], s->n_read2[1]);
-    printf("%lld + %lld properly paired (%.2f%%:%.2f%%)\n", s->n_pair_good[0], s->n_pair_good[1], (float)s->n_pair_good[0] / s->n_pair_all[0] * 100.0, (float)s->n_pair_good[1] / s->n_pair_all[1] * 100.0);
+    printf("%lld + %lld properly paired (%s : %s)\n", s->n_pair_good[0], s->n_pair_good[1], percent(b0, s->n_pair_good[0], s->n_pair_all[0]), percent(b1, s->n_pair_good[1], s->n_pair_all[1]));
     printf("%lld + %lld with itself and mate mapped\n", s->n_pair_map[0], s->n_pair_map[1]);
-    printf("%lld + %lld singletons (%.2f%%:%.2f%%)\n", s->n_sgltn[0], s->n_sgltn[1], (float)s->n_sgltn[0] / s->n_pair_all[0] * 100.0, (float)s->n_sgltn[1] / s->n_pair_all[1] * 100.0);
+    printf("%lld + %lld singletons (%s : %s)\n", s->n_sgltn[0], s->n_sgltn[1], percent(b0, s->n_sgltn[0], s->n_pair_all[0]), percent(b1, s->n_sgltn[1], s->n_pair_all[1]));
     printf("%lld + %lld with mate mapped to a different chr\n", s->n_diffchr[0], s->n_diffchr[1]);
     printf("%lld + %lld with mate mapped to a different chr (mapQ>=5)\n", s->n_diffhigh[0], s->n_diffhigh[1]);
     free(s);
