@@ -233,18 +233,59 @@ int main_samview(int argc, char *argv[])
     bam_hdr_t *header = NULL;
     char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
 
-    samview_settings_t settings = {
-        .rghash = NULL,
-        .min_mapQ = 0,
-        .flag_on = 0,
-        .flag_off = 0,
-        .min_qlen = 0,
-        .remove_B = 0,
-        .subsam_seed = 0,
-        .subsam_frac = -1.,
-        .library = NULL,
-        .bed = NULL,
-    };
+	/* parse command-line options */
+	strcpy(in_mode, "r"); strcpy(out_mode, "w");
+	while ((c = getopt(argc, argv, "SbBct:h1Ho:q:f:F:ul:r:xX?T:R:L:s:Q:@:m:")) >= 0) {
+		switch (c) {
+		case 's':
+			if ((g_subsam_seed = strtol(optarg, &q, 10)) != 0) {
+				srand(g_subsam_seed);
+				g_subsam_seed = rand();
+			}
+			g_subsam_frac = strtod(q, &q);
+			break;
+		case 'm': g_min_qlen = atoi(optarg); break;
+		case 'c': is_count = 1; break;
+		case 'S': is_bamin = 0; break;
+		case 'b': is_bamout = 1; break;
+		case 't': fn_list = strdup(optarg); is_bamin = 0; break;
+		case 'h': is_header = 1; break;
+		case 'H': is_header_only = 1; break;
+		case 'o': fn_out = strdup(optarg); break;
+		case 'f': g_flag_on = strtol(optarg, 0, 0); break;
+		case 'F': g_flag_off = strtol(optarg, 0, 0); break;
+		case 'q': g_min_mapQ = atoi(optarg); break;
+		case 'u': compress_level = 0; break;
+		case '1': compress_level = 1; break;
+		case 'l': g_library = strdup(optarg); break;
+		case 'L': g_bed = bed_read(optarg); break;
+		case 'r': g_rg = strdup(optarg); break;
+		case 'R': fn_rg = strdup(optarg); break;
+		case 'x': of_type = BAM_OFHEX; break;
+		case 'X': of_type = BAM_OFSTR; break;
+		case '?': is_long_help = 1; break;
+		case 'T': fn_ref = strdup(optarg); is_bamin = 0; break;
+		case 'B': bam_no_B = 1; break;
+		case 'Q': g_qual_scale = atoi(optarg); break;
+		case '@': n_threads = strtol(optarg, 0, 0); break;
+		default: return usage(is_long_help);
+		}
+	}
+	if (compress_level >= 0) is_bamout = 1;
+	if (is_header_only) is_header = 1;
+	if (is_bamout) strcat(out_mode, "b");
+	else {
+		if (of_type == BAM_OFHEX) strcat(out_mode, "x");
+		else if (of_type == BAM_OFSTR) strcat(out_mode, "X");
+	}
+	if (is_bamin) strcat(in_mode, "b");
+	if (is_header) strcat(out_mode, "h");
+	if (compress_level >= 0) {
+		char tmp[2];
+		tmp[0] = compress_level + '0'; tmp[1] = '\0';
+		strcat(out_mode, tmp);
+	}
+	if (argc == optind) return usage(is_long_help); // potential memory leak...
 
     /* parse command-line options */
     /* TODO: convert this to getopt_long we're running out of letters */
@@ -457,44 +498,34 @@ view_end:
 
 static int usage(int is_long_help)
 {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Usage:   samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n\n");
-    // output options
-    fprintf(stderr, "Options: -b       output BAM\n");
-    fprintf(stderr, "         -C       output CRAM (requires -T)\n");
-    fprintf(stderr, "         -1       use fast BAM compression (implies -b)\n");
-    fprintf(stderr, "         -u       uncompressed BAM output (implies -b)\n");
-    fprintf(stderr, "         -h       include header in SAM output\n");
-    fprintf(stderr, "         -H       print SAM header only (no alignments)\n");
-    fprintf(stderr, "         -c       print only the count of matching records\n");
-    fprintf(stderr, "         -o FILE  output file name [stdout]\n");
-    fprintf(stderr, "         -U FILE  output reads not selected by filters to FILE [null]\n");
-    // extra input
-    fprintf(stderr, "         -t FILE  FILE listing reference names and lengths (see long help) [null]\n");
-    fprintf(stderr, "         -T FILE  reference sequence FASTA FILE [null]\n");
-    // read filters
-    fprintf(stderr, "         -L FILE  only include reads overlapping this BED FILE [null]\n");
-    fprintf(stderr, "         -r STR   only include reads in read group STR [null]\n");
-    fprintf(stderr, "         -R FILE  only include reads with read group listed in FILE [null]\n");
-    fprintf(stderr, "         -q INT   only include reads with mapping quality >= INT [0]\n");
-    fprintf(stderr, "         -l STR   only include reads in library STR [null]\n");
-    fprintf(stderr, "         -m INT   only include reads with number of CIGAR operations\n");
-    fprintf(stderr, "                  consuming query sequence >= INT [0]\n");
-    fprintf(stderr, "         -f INT   only include reads with all bits set in INT set in FLAG [0]\n");
-    fprintf(stderr, "         -F INT   only include reads with none of the bits set in INT\n");
-    fprintf(stderr, "                  set in FLAG [0]\n");
-    // read processing
-    fprintf(stderr, "         -x STR   read tag to strip (repeatable) [null]\n");
-    fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
-    fprintf(stderr, "         -s FLOAT integer part sets seed of random number generator [0];\n");
-    fprintf(stderr, "                  rest sets fraction of templates to subsample [no subsampling]\n");
-    // general options
-    fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
-    fprintf(stderr, "         -?       print long help, including note about region specification\n");
-    fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
-    fprintf(stderr, "\n");
-    if (is_long_help)
-        fprintf(stderr, "Notes:\n\
+	fprintf(stderr, "\n");
+	fprintf(stderr, "Usage:   samtools view [options] <in.bam>|<in.sam> [region1 [...]]\n\n");
+	fprintf(stderr, "Options: -b       output BAM\n");
+	fprintf(stderr, "         -h       print header for the SAM output\n");
+	fprintf(stderr, "         -H       print header only (no alignments)\n");
+	fprintf(stderr, "         -S       input is SAM\n");
+	fprintf(stderr, "         -u       uncompressed BAM output (force -b)\n");
+	fprintf(stderr, "         -1       fast compression (force -b)\n");
+	fprintf(stderr, "         -x       output FLAG in HEX (samtools-C specific)\n");
+	fprintf(stderr, "         -X       output FLAG in string (samtools-C specific)\n");
+	fprintf(stderr, "         -c       print only the count of matching records\n");
+	fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
+	fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
+	fprintf(stderr, "         -L FILE  output alignments overlapping the input BED FILE [null]\n");
+	fprintf(stderr, "         -t FILE  list of reference names and lengths (force -S) [null]\n");
+	fprintf(stderr, "         -T FILE  reference sequence file (force -S) [null]\n");
+	fprintf(stderr, "         -o FILE  output file name [stdout]\n");
+	fprintf(stderr, "         -R FILE  list of read groups to be outputted [null]\n");
+	fprintf(stderr, "         -f INT   required flag, 0 for unset [0]\n");
+	fprintf(stderr, "         -F INT   filtering flag, 0 for unset [0]\n");
+	fprintf(stderr, "         -q INT   minimum mapping quality [0]\n");
+	fprintf(stderr, "         -l STR   only output reads in library STR [null]\n");
+	fprintf(stderr, "         -r STR   only output reads in read group STR [null]\n");
+	fprintf(stderr, "         -s FLOAT fraction of templates to subsample; integer part as seed [-1]\n");
+	fprintf(stderr, "         -?       longer help\n");
+	fprintf(stderr, "\n");
+	if (is_long_help)
+		fprintf(stderr, "Notes:\n\
 \n\
   1. This command now auto-detects the input format (BAM/CRAM/SAM).\n\
 \n\
