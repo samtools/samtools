@@ -1,0 +1,144 @@
+# First field:
+#   INIT = initialisation, not counted in testing
+#   P = expected to pass
+#   F = expected to fail
+
+# Second field:
+#   Filename of expected output
+
+# Third onwards; command to execute. $fmt is replaced by the current file
+# format, ie sam, bam or cram. $samtools is a pointer to the desired
+# samtools binary. This can be useful for testing older versions.
+
+# # Create variant formats
+INIT x $samtools view -C mpileup.1.bam > mpileup.1.cram
+INIT x $samtools view -C mpileup.2.bam > mpileup.2.cram
+INIT x $samtools view -C mpileup.3.bam > mpileup.3.cram
+INIT x $samtools index mpileup.1.cram
+INIT x $samtools index mpileup.2.cram
+INIT x $samtools index mpileup.3.cram
+INIT x $samtools view -h mpileup.1.bam > mpileup.1.sam
+INIT x $samtools view -S -b overlap50.sam > overlap50.bam
+INIT x $samtools view -S -C overlap50.sam > overlap50.cram
+INIT x $samtools view -S -b anomalous.sam > anomalous.bam 
+INIT x $samtools view -S -C anomalous.sam > anomalous.cram 
+INIT x $samtools view -S -b indels.sam > indels.bam  
+INIT x $samtools view -S -C indels.sam > indels.cram 
+INIT x xz -d < expected/1.out.xz > expected/1.out
+
+# Nasty file corner cases
+P 1.out $samtools mpileup -Q0 -x -f ce.fa ce#large_seq.bam 
+P 2.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap.bam
+P 3.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap1.bam
+P 4.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap2.bam
+P 5.out $samtools mpileup -Q0 -x -f c1.fa c1#clip.bam
+P 6.out $samtools mpileup -Q0 -x -f c1.fa c1#pad1.bam
+P 7.out $samtools mpileup -Q0 -x -f c1.fa c1#pad2.bam
+
+# I'm not convinced this case is valid, but I also don't know if it's even
+# possible to encode this data in a pileup format output.
+P 8.out $samtools mpileup -Q0 -x -f c1.fa c1#pad3.bam
+P 9.out $samtools mpileup -Q0 -x -f xx.fa xx#minimal.bam
+P 10.out $samtools mpileup -Q0 -x -f xx.fa xx#triplet.bam
+P 11.out $samtools mpileup -Q0 -x -f c1.fa c1#ID.bam 
+P 12.out $samtools mpileup -Q0 -x -f c1.fa c1#ID2.bam
+
+# Test basic pileup options
+P 13.out $samtools mpileup -x mpileup.1.$fmt
+P 14.out $samtools mpileup -x mpileup.[123].$fmt
+P 15.out ls -1 mpileup.[123].$fmt > 15.list.tmp; $samtools mpileup -x -b 15.list.tmp
+P 16.out $samtools mpileup -x -f mpileup.ref.fa mpileup.1.$fmt
+P 17.out $samtools mpileup -x -B -f mpileup.ref.fa mpileup.1.$fmt
+P 18.out $samtools mpileup -x -B -f mpileup.ref.fa mpileup.1.$fmt 
+P 19.out $samtools mpileup -x -f mpileup.ref.fa mpileup.1.$fmt 
+P 20.out $samtools mpileup -x -6 -f mpileup.ref.fa mpileup.1.$fmt 
+P 21.out $samtools mpileup -x -E -f mpileup.ref.fa mpileup.1.$fmt 
+P 22.out $samtools mpileup -x -R -f mpileup.ref.fa mpileup.1.$fmt 
+
+# -x option
+P 23.out $samtools mpileup    -f mpileup.ref.fa overlap50.$fmt 
+P 24.out $samtools mpileup -x -f mpileup.ref.fa overlap50.$fmt 
+
+# -6 for Illumina format input
+P 25.out $samtools mpileup -x -6 -f mpileup.ref.fa overlapIllumina.bam 
+
+# -A for anomalous read pairs
+P 26.out $samtools mpileup    -x -Q0 anomalous.$fmt
+P 27.out $samtools mpileup -A -x -Q0 anomalous.$fmt
+
+# -B
+P 28.out $samtools mpileup -B -x -Q1 -f mpileup.ref.fa mpileup.1.$fmt 
+
+# -q; filter by mapping quality
+P 29.out $samtools mpileup -q 61 1read.bam
+P 30.out $samtools mpileup -q 60 1read.bam
+
+# -Q filter by base quality
+P 31.out $samtools mpileup -Q 7 1read.bam
+P 32.out $samtools mpileup -Q 8 1read.bam
+
+# -E
+P 33.out $samtools mpileup    -x -f mpileup.ref.fa mpileup-E.bam
+P 34.out $samtools mpileup -E -x -f mpileup.ref.fa mpileup-E.bam
+
+# -G for excluding RG. All bar one:
+P 35.out $samtools view mpileup.1.bam|sed -n 's/.*RG:Z://;s/[^A-Z0-9].*//p'|sort -u |grep -v ERR013140 > 35.rg.tmp;$samtools mpileup -G 35.rg.tmp mpileup.1.bam
+
+# Region based options
+# SAM indices don't exist (no tabix support due to header?)
+# CRAM index currently fails
+P 37.out $samtools mpileup -x -r 17		mpileup.1.$fmt
+P 38.out $samtools mpileup -x -r 17:4000 	mpileup.1.$fmt
+P 39.out $samtools mpileup -x -r 17:4,000-4,010 mpileup.1.$fmt
+P 40.out $samtools mpileup -l regions 		ce#5b.$fmt
+P 41.out $samtools mpileup -l regions -r CHROMOSOME_V:40-60 ce#5b.$fmt
+P 42.out $samtools mpileup -l regions -r CHROMOSOME_I:40-60 ce#5b.$fmt
+
+# --rf and --ff
+P 43.out $samtools view -h -f 16 mpileup.1.bam | $samtools mpileup -x -
+P 44.out $samtools view -h mpileup.1.bam | $samtools mpileup -x --rf 0x10 -
+P 45.out $samtools view -h -F 16 mpileup.1.bam | $samtools mpileup -x -
+P 46.out $samtools view -h mpileup.1.bam | $samtools mpileup -x --ff 0x714 -
+
+# -d; depth
+F 47.out $samtools mpileup -x -d 8500 -B -f mpileup.ref.fa deep.sam|awk '{print $4}'
+
+# BCF output options
+P 48.out $samtools mpileup -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
+P 49.out $samtools mpileup -x -v -f mpileup.ref.fa mpileup.1.$fmt | $filter
+P 50.out $samtools mpileup -D -V -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
+P 51.out $samtools mpileup -S -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
+P 52.out $samtools mpileup -u -x -f mpileup.ref.fa mpileup.1.bam | GREP_OPTIONS= egrep -v '^##samtools'
+
+# # -o/e/h for indel scores
+P 53.out $samtools mpileup -e 1       -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 54.out $samtools mpileup -e 10      -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 55.out $samtools mpileup -h 10      -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 56.out $samtools mpileup -h 90      -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 57.out $samtools mpileup -e 1 -o 10 -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 58.out $samtools mpileup -e 1 -o 40 -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+
+# -F/-m for indel reads; 2 samples {2indel, 1not} + {1indel, 1not}.
+P 59.out $samtools mpileup -x -F 0.60    -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 60.out $samtools mpileup -x -F 0.66    -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 61.out $samtools mpileup -x -m 3       -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 62.out $samtools mpileup -x -m 4       -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 63.out $samtools mpileup -x -p -F 0.66 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 64.out $samtools mpileup -x -p -F 0.67 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 65.out $samtools mpileup -x -p -m 2    -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 66.out $samtools mpileup -x -p -m 3    -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 67.out $samtools mpileup -x -L 3       -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 68.out $samtools mpileup -x -L 2       -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 69.out $samtools mpileup -x -I         -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+
+# -P to select platform. Note the actual indel sequence call is made on the entire set.
+P 70.out $samtools mpileup -x                   -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 71.out $samtools mpileup -x -P ILLUMINA,LS454 -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 72.out $samtools mpileup -x -P ILLUMINA       -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 73.out $samtools mpileup -x -P ILLUMINA       -m 2 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 74.out $samtools mpileup -x -P LS454          -m 2 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 75.out $samtools mpileup -x -P LS454          -m 1 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+
+# Pileup output options; -s/O
+P 76.out $samtools mpileup -Q0 -s -x -f mpileup.ref.fa mpileup.1.bam
+P 77.out $samtools mpileup -Q0 -O -x -f mpileup.ref.fa mpileup.1.bam

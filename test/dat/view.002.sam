@@ -1,0 +1,83 @@
+@HD	VN:1.4	SO:coordinate
+@CO	The MIT License
+@CO	
+@CO	Copyright (c) 2014 Genome Research Ltd.
+@CO	
+@CO	Permission is hereby granted, free of charge, to any person obtaining a copy
+@CO	of this software and associated documentation files (the "Software"), to deal
+@CO	in the Software without restriction, including without limitation the rights
+@CO	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+@CO	copies of the Software, and to permit persons to whom the Software is
+@CO	furnished to do so, subject to the following conditions:
+@CO	
+@CO	The above copyright notice and this permission notice shall be included in
+@CO	all copies or substantial portions of the Software.
+@CO	
+@CO	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+@CO	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+@CO	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+@CO	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+@CO	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+@CO	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+@CO	THE SOFTWARE.
+@SQ	SN:Z	LN:60	M5:be9fbb3457c20e3bbcd7e72f7feddb65
+r001	0	Z	1	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r002	0	Z	2	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r003	0	Z	3	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r004	0	Z	4	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r005	0	Z	5	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r006	0	Z	6	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r007	0	Z	7	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r008	0	Z	8	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r009	0	Z	9	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r010	0	Z	10	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r011	0	Z	11	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r012	0	Z	12	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r013	0	Z	13	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r014	0	Z	14	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r015	0	Z	15	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r016	0	Z	16	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r017	0	Z	17	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r018	0	Z	18	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r019	0	Z	19	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r020	0	Z	20	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r021	0	Z	21	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r022	0	Z	22	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r023	0	Z	23	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r024	0	Z	24	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r025	0	Z	25	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r026	0	Z	26	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r027	0	Z	27	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r028	0	Z	28	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r029	0	Z	29	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r030	0	Z	30	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r031	0	Z	31	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r032	0	Z	32	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r033	0	Z	33	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r034	0	Z	34	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r035	0	Z	35	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r036	0	Z	36	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r037	0	Z	37	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r038	0	Z	38	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r039	0	Z	39	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r040	0	Z	40	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r041	0	Z	41	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r042	0	Z	42	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r043	0	Z	43	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r044	0	Z	44	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r045	0	Z	45	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r046	0	Z	46	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r047	0	Z	47	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r048	0	Z	48	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r049	0	Z	49	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r050	0	Z	50	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r051	0	Z	51	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r052	0	Z	52	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r053	0	Z	53	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r054	0	Z	54	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r055	0	Z	55	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r056	0	Z	56	0	1M	*	0	0	G	A	MD:Z:1	NM:i:0
+r057	0	Z	57	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0
+r058	0	Z	58	0	1M	*	0	0	C	A	MD:Z:1	NM:i:0
+r059	0	Z	59	0	1M	*	0	0	A	A	MD:Z:1	NM:i:0
+r060	0	Z	60	0	1M	*	0	0	T	A	MD:Z:1	NM:i:0

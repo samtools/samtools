@@ -7,14 +7,12 @@ underlying indexable compression format for the BAM format. BGZF does
 not support arithmetic between file offsets.
 
 Jue Ruan for the Beijing Genome Institute designed and implemented the
-RAZF format, an alternative indexable compression format. RAZF supports
-arithmetic between file offsets, at the cost of increased index file
-size and the full compatibility with gzip. RAZF is optional and only
-used in `faidx' for indexing RAZF compressed fasta files.
+RAZF format, an alternative indexable compression format. RAZF is no longer
+used by or provided with SAMtools. Source code remains available in older
+SAMtools 0.1.x releases and from the standalone branch in the repository.
 
 Colin Hercus updated novo2sam.pl to support gapped alignment by
 novoalign.
 
 Petr Danecek contributed the header parsing library sam_header.c and 
-sam2vcf.pl script and added knet support to the RAZF library.
-
+sam2vcf.pl script.

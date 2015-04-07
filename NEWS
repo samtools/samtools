@@ -1,3 +1,78 @@
+Beta Release 1.2  (2 February 2015)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Noteworthy changes in samtools:
+
+* Flagstat now works on SAM, BAM, or CRAM files (rather than BAM only)
+* Stats calculates mismatches per cycle for unclipped length
+* Merge can now merge SAM input files
+* CRAM reference files are now cached by default (see HTSlib release
+  notes and samtools(1) man page)
+* Tested against Intel-optimised zlib (https://github.com/jtkukunas/zlib;
+  see README for details)
+* Fixed bugs #302, #309, #318, and #327 and many other improvements
+  and bugs fixed in HTSlib -- see the HTSlib release notes
+
+
+Beta Release 1.1 (19 September, 2014)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes in samtools:
+
+ * Sorting files with thousands of reference contigs now completes in
+   a reasonable amount of time (#260)
+ * Fixmate and flagstat now consider supplementary reads
+ * Fixmate now only adds a template cigar tag ("ct:Z") when requested
+   via a new -c option, and never adds it repeatedly (#276)
+ * Mpileup DPR annotation fixed (#274)
+ * Checksum added to stats command output
+ * Removed view -Q option
+
+
+Beta Release 1.0 (15 August, 2014)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+First release of HTSlib-based samtools.
+
+Numerous changes, notably support for the CRAM sequencing file format.
+
+
+Beta Release 0.1.20 (15 August, 2014)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Final release of standalone samtools.
+
+
+Beta Release 0.1.19 (15 March, 2013)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Notable changes in samtools and bcftools:
+
+ * The latest source code and development moved to github,
+    http://github.com/samtools/samtools
+
+ * Many important bugfixes and contributions by many people. Thanks to all!
+
+ * Performance improvements (multi-threading)
+
+ * Important changes in calling, see
+    - samtools mpileup -p
+    - bcftools view -m
+ 
+ * New annotations useful for filtering (RPB, HWE, QBD, MDV)
+
+ * New tools, bamcheck and plot-bamcheck
+
+ * New features in samtools tview 
+ 
+ * And much more..
+
+For a detailed list of commits, please see
+http://github.com/samtools/samtools/commits/master
+
+(0.1.19: 15 March 2013, commit 96b5f2294ac0054230e88913c4983d548069ea4e)
+
+
 Beta Release 0.1.18 (2 September, 2011)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

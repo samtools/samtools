@@ -1,0 +1,28 @@
+Samtools implements various utilities for post-processing alignments in the
+SAM, BAM, and CRAM formats, including indexing, variant calling (in conjunction
+with bcftools), and a simple alignment viewer.
+
+See INSTALL for building and installation instructions.
+
+
+Using an optimised zlib library
+===============================
+
+Samtools has been minimally tested against both the Intel-optimised and
+CloudFlare-optimised zlibs and shown to work.
+
+They can be downloaded from:
+
+    https://github.com/jtkukunas/zlib     # Intel
+    https://github.com/cloudflare/zlib    # CloudFlare
+
+Neither Samtools nor HTSlib needs recompiling to use these optimised libraries,
+but the LD_LIBRARY_PATH environment variable should be set to a directory
+containing the libz.so.1 file.
+
+Benchmarks comparing the various zlibs are available at:
+
+    https://www.snellman.net/blog/archive/2014-08-04-comparison-of-intel-and-cloudflare-zlib-patches.html
+
+It is recommended that you perform your own rigorous tests for an entire
+pipeline if you wish to switch to one of the optimised zlib implementations.
