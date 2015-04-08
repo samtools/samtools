@@ -1491,8 +1491,7 @@ int main_stats(int argc, char *argv[])
     // Collect statistics
     if ( optind<argc )
     {
-        // Collect stats in selected regions only
-        hts_idx_t *bam_idx = bam_index_load(bam_fname);
+        hts_idx_t *bam_idx = sam_index_load(stats->sam,bam_fname);
         if (bam_idx == 0)
             error("Random alignment retrieval only works for indexed BAM files.\n");
 
