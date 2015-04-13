@@ -552,13 +552,15 @@ int main_import(int argc, char *argv[])
 }
 
 int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
+static const char *copied_tags[] = { "RG", "BC", "QT", NULL };
 
 static void bam2fq_usage(FILE *to)
 {
-    fprintf(to, "\nUsage:   samtools bam2fq [-nO] [-s <outSE.fq>] <in.bam>\n\n");
+    fprintf(to, "\nUsage:   samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>\n\n");
     fprintf(to, "Options: -n        don't append /1 and /2 to the read name\n");
     fprintf(to, "         -O        output quality in the OQ tag if present\n");
     fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
+    fprintf(to, "         -t        copy RG, BC and QT tags to the FASTQ header line\n");
     fprintf(to, "\n");
 }
 
@@ -573,13 +575,14 @@ int main_bam2fq(int argc, char *argv[])
     FILE* fpse;
     // Parse args
     char* fnse = NULL;
-    bool has12 = true, use_oq = false;
+    bool has12 = true, use_oq = false, copy_tags = false;
     int c;
-    while ((c = getopt(argc, argv, "nOs:")) > 0) {
+    while ((c = getopt(argc, argv, "nOts:")) > 0) {
         switch (c) {
             case 'n': has12 = false; break;
             case 'O': use_oq = true; break;
             case 's': fnse = optarg; break;
+            case 't': copy_tags = true; break;
             default: bam2fq_usage(stderr); return 1;
         }
     }
@@ -664,12 +667,21 @@ int main_bam2fq(int argc, char *argv[])
         kputs(bam_get_qname(b), &linebuf);
         // Add the /1 /2 if requested
         if (has12) {
-            if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) kputs("/1\n", &linebuf);
-            else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) kputs("/2\n", &linebuf);
-            else kputc('\n', &linebuf);
-        } else {
-            kputc('\n', &linebuf);
+            if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) kputs("/1", &linebuf);
+            else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) kputs("/2", &linebuf);
         }
+        if (copy_tags) {
+            for (i = 0; copied_tags[i]; ++i) {
+                uint8_t *s;
+                if ((s = bam_aux_get(b, copied_tags[i])) != NULL) {
+                    kputc('\t', &linebuf);
+                    kputsn(copied_tags[i], 2, &linebuf);
+                    kputsn(":Z:", 3, &linebuf);
+                    kputs(bam_aux2Z(s), &linebuf);
+                }
+            }
+        }
+        kputc('\n', &linebuf);
 
         if (max_buf < qlen + 1) {
             max_buf = qlen + 1;
