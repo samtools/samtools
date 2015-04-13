@@ -806,7 +806,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     BGZF *fpbgzf = fpout->fp.bgzf;
     fpbgzf->close = 0; // control for non-indexing case
 
-    if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
+    if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpbgzf, n_threads, 256);
 
     if (n_readers > 0) {
         int numRdrThreads = n_readers;
@@ -926,8 +926,7 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
     hts_idx_t *idx;
     uint64_t last_off;
     char *fnidx;
-    htsFile *fpidx;
-    int block_offset = 0, address_index = 0, no_address_cushion = 65536;
+    int block_offset = 0, no_address_cushion = 65536;
     int64_t block_address = 0, data_size = 0, no_address_cushion_value = 4294967296; // 32-bit number associated with no_address_cushion
 
     // Is there a specified pre-prepared header to use for output?
@@ -1094,7 +1093,7 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
     last_off = ((block_address << 16) | (block_offset & 0xFFFF)); // reset to address indexing value
     idx = hts_idx_init(hout->n_targets, fmt, last_off, min_shift, n_lvls);
 
-    if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpout, n_threads, 256);
+    if (!(flag & MERGE_UNCOMP)) bgzf_mt(fpbgzf, n_threads, 256);
 
     if (n_readers > 0) {
         int numRdrThreads = n_readers;
@@ -1119,7 +1118,7 @@ int bam_merge_core2i(int by_qname, const char *out, const char *mode, const char
     // Begin the actual merge
     bool done = false, first_b = true;
     int l;
-    bam1_t *previous_b;
+    bam1_t *previous_b = NULL;
     while (!done) {
         done = true;
         uint64_t lowest_pos = HEAP_EMPTY;
