@@ -690,6 +690,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             hts_idx_t *idx = sam_index_load(fp[i], fn[i]);
             // (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
             int mapped_tid = rtrans[i*hout->n_targets+tid];
+            if (idx == NULL) {
+                fprintf(stderr, "[%s] failed to load index for %s.  Random alignment retrieval only works for indexed BAM or CRAM files.\n",
+                        __func__, fn[i]);
+                return -1;
+            }
             if (mapped_tid != INT32_MIN) {
                 iter[i] = sam_itr_queryi(idx, mapped_tid, beg, end);
             } else {
