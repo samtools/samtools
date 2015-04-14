@@ -26,6 +26,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <assert.h>
 #include <ctype.h>
 #include <string.h>
+#include <float.h>
 #include "htslib/sam.h"
 #include "bam2bcf.h"
 #include "kprobaln.h"
@@ -198,7 +199,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                 if (j > max_rd_len) max_rd_len = j;
             }
             float frac = (float)na/nt;
-            if ( !indel_support_ok && na >= bca->min_support && frac >= bca->min_frac )
+            if ( !indel_support_ok && na >= bca->min_support && frac - bca->min_frac >= -FLT_EPSILON )
                 indel_support_ok = 1;
             if ( na > bca->max_support && frac > 0 ) bca->max_support = na, bca->max_frac = frac;
             n_alt += na;
@@ -215,7 +216,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
             if (aux[i] != aux[i-1]) ++n_types;
         // Taking totals makes it hard to call rare indels
         if ( !bca->per_sample_flt )
-            indel_support_ok = ( (float)n_alt / n_tot < bca->min_frac || n_alt < bca->min_support ) ? 0 : 1;
+            indel_support_ok = ( (float)n_alt / n_tot - bca->min_frac < -FLT_EPSILON
+                                 || n_alt < bca->min_support ) ? 0 : 1;
         if ( n_types == 1 || !indel_support_ok ) { // then skip
             free(aux); return -1;
         }
