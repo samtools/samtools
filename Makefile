@@ -187,7 +187,7 @@ check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 	test/merge/test_pretty_header
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
-	cd test/mpileup && ./regression.sh
+	cd test/mpileup && ./regression.sh mpileup.reg
 	test/split/test_count_rg
 	test/split/test_expand_format_string
 	test/split/test_filter_header_rg

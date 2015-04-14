@@ -270,7 +270,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
             exit(1);
         }
-        if (hts_set_fai_filename(data[i]->fp, conf->fai_fname) != 0) {
+        if (conf->fai_fname && hts_set_fai_filename(data[i]->fp, conf->fai_fname) != 0) {
             fprintf(stderr, "[%s] failed to process %s: %s\n",
                     __func__, conf->fai_fname, strerror(errno));
             exit(1);

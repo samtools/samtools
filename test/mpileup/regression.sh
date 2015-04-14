@@ -44,8 +44,9 @@ run_test() {
     #result=`eval valgrind --error-exitcode=1 --leak-check=full ${@+"$@"}`
     if [ $? != 0 ]
     then
-        echo "Error running $@"
+        echo "$e: Error running $@"
         mv _out FAIL-$e.${test_iter}
+        nufail=`expr $nufail + 1`
         return 0
     elif cmp -s _out expected/$e
     then
@@ -143,11 +144,12 @@ regtest() {
     fi
 }
 
-echo "Samtools mpileup tests:"
+echo ""
+echo "=== Testing $@ regressions ==="
 
 samtools="../../samtools"
 filter="../vcf-miniview -f"
-regtest mpileup.reg
+regtest $@
 
 # samtools="./samtools-0.1.19"
 # filter="./bcftools-0.1.19 view - | sed etc"
