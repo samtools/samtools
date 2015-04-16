@@ -71,7 +71,7 @@ int read_file_list(const char *file_list,int *n,char **argv[]);
 int main_depth(int argc, char *argv[])
 {
     int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0;
-    int all = 0, status = EXIT_SUCCESS, nfiles;
+    int all = 0, status = EXIT_SUCCESS, nfiles, max_depth = -1;
     const bam_pileup1_t **plp;
     char *reg = 0; // specified region
     void *bed = 0; // BED data structure
@@ -82,7 +82,7 @@ int main_depth(int argc, char *argv[])
     int last_pos = -1, last_tid = -1;
 
     // parse the command line
-    while ((n = getopt(argc, argv, "r:b:q:Q:l:f:a")) >= 0) {
+    while ((n = getopt(argc, argv, "r:b:q:Q:l:f:am:")) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -94,6 +94,7 @@ int main_depth(int argc, char *argv[])
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
             case 'f': file_list = optarg; break;
             case 'a': all++; break;
+            case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
         }
     }
     if (optind == argc && !file_list) {
@@ -108,6 +109,7 @@ int main_depth(int argc, char *argv[])
         fprintf(stderr, "   -q <int>            base quality threshold\n");
         fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
         fprintf(stderr, "   -r <chr:from-to>    region\n");
+        fprintf(stderr, "   -m <int>            maximum coverage depth [8000]\n");  // the htslib's default
         fprintf(stderr, "\n");
         return 1;
     }
@@ -170,6 +172,8 @@ int main_depth(int argc, char *argv[])
 
     // the core multi-pileup loop
     mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
+    if (0 < max_depth)
+        bam_mplp_set_maxcnt(mplp,max_depth);  // set maximum coverage depth
     n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
     while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0) { // come to the next covered position
