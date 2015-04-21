@@ -56,7 +56,8 @@ typedef struct __bcf_callaux_t {
     int capQ, min_baseQ;
     int openQ, extQ, tandemQ; // for indels
     uint32_t min_support, max_support; // for collecting indel candidates
-    float min_frac, max_frac; // for collecting indel candidates
+    double min_frac; // for collecting indel candidates
+    float max_frac; // for collecting indel candidates
     int per_sample_flt; // indel filtering strategy
     int *ref_pos, *alt_pos, npos, *ref_mq, *alt_mq, *ref_bq, *alt_bq, *fwd_mqs, *rev_mqs, nqual; // for bias tests
     // for internal uses
