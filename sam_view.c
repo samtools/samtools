@@ -618,6 +618,7 @@ static int which_readpart(const bam1_t *b)
     }
 }
 
+// Transform a bam1_t record into a string with the FASTQ representation of it
 static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bool has12, const bool use_oq, const bool copy_tags)
 {
     int i;
@@ -811,11 +812,14 @@ int main_bam2fq(int argc, char *argv[])
 
     while ((ret = sam_read1(fp, h, b)) >= 0) {
         if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
-            || (b->core.flag&flag_on) != flag_on
+            || (b->core.flag&flag_on) != flag_on             // or reads indicated by filter flags
             || (b->core.flag&flag_off) != 0) continue;
         ++n_reads;
 
-        // If there was a previous readname
+        //////////////////////////////////////////////////////////////////
+        // First deal with the previous read, checking if it has a mate //
+        //////////////////////////////////////////////////////////////////
+        // If there was a previous readname and we're tracking singletons
         if ( fpse && previous_readname ) {
             if (!strcmp(bam_get_qname(b), previous_readname ) ) {
                 fputs(linebuf.s, fpr[previous_readpart]); // Write previous read
@@ -834,10 +838,12 @@ int main_bam2fq(int argc, char *argv[])
             if (fpse) previous_readname = strdup(bam_get_qname(b));
                 previous_readpart = which_readpart(b);
         }
-
+        /////////////////////////////////////////
+        // Process read into the output buffer //
+        /////////////////////////////////////////
         if (bam1_to_fq(b, &linebuf, has12, use_oq, copy_tags) == false) return 1;
     }
-
+    // Flush pending output
     if (ret < -1) {
         fprintf(stderr, "[bam2fq] ERROR: failed to decode sequence\n");
         return 1;
