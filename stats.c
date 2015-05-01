@@ -1131,7 +1131,7 @@ void output_stats(stats_t *stats, int sparse)
     }
 }
 
-size_t mygetline(char **line, size_t *n, FILE *fp)
+ssize_t mygetline(char **line, size_t *n, FILE *fp)
 {
     if (line == NULL || n == NULL || fp == NULL)
     {
