@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <regex.h>
 #include <time.h>
 #include <unistd.h>
+#include <getopt.h>
 #include "htslib/ksort.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
@@ -582,7 +583,10 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-int bam_merge_core2(int by_qname, const char *out, const char *mode, const char *headers, int n, char * const *fn, int flag, const char *reg, int n_threads)
+int bam_merge_core2(int by_qname, const char *out, const char *mode,
+                    const char *headers, int n, char * const *fn, int flag,
+                    const char *reg, int n_threads,
+                    hts_opt *in_opts, hts_opt *out_opts)
 {
     samFile *fpout, **fp;
     heap1_t *heap;
@@ -639,6 +643,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             // FIXME: possible memory leak
             return -1;
         }
+        hts_opt_apply(fp[i], in_opts);
         hin = sam_hdr_read(fp[i]);
         if (hout)
             trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
@@ -741,6 +746,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
         return -1;
     }
+    hts_opt_apply(fpout, out_opts);
     sam_hdr_write(fpout, hout);
     if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
 
@@ -783,31 +789,28 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     return 0;
 }
 
-int bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg)
-{
-    char mode[12];
-    strcpy(mode, "wb");
-    if (flag & MERGE_UNCOMP) strcat(mode, "0");
-    else if (flag & MERGE_LEVEL1) strcat(mode, "1");
-    return bam_merge_core2(by_qname, out, mode, headers, n, fn, flag, reg, 0);
-}
-
 static void merge_usage(FILE *to)
 {
     fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
-    fprintf(to, "Options: -n       sort by read names\n");
-    fprintf(to, "         -r       attach RG tag (inferred from file names)\n");
-    fprintf(to, "         -u       uncompressed BAM output\n");
-    fprintf(to, "         -f       overwrite the output BAM if exist\n");
-    fprintf(to, "         -1       compress level 1\n");
-    fprintf(to, "         -l INT   compression level, from 0 to 9 [-1]\n");
-    fprintf(to, "         -@ INT   number of BAM compression threads [0]\n");
-    fprintf(to, "         -R STR   merge file in the specified region STR [all]\n");
-    fprintf(to, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
-    fprintf(to, "         -c       combine RG tags with colliding IDs rather than amending them\n");
-    fprintf(to, "         -p       combine PG tags with colliding IDs rather than amending them\n");
-    fprintf(to, "         -s VALUE override random seed\n");
-    fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n\n");
+    fprintf(to, "Options:\n");
+    fprintf(to, "  -n             sort by read names\n");
+    fprintf(to, "  -r             attach RG tag (inferred from file names)\n");
+    fprintf(to, "  -u             uncompressed BAM output\n");
+    fprintf(to, "  -f             overwrite the output BAM if exist\n");
+    fprintf(to, "  -1             compress level 1\n");
+    fprintf(to, "  -l INT         compression level, from 0 to 9 [-1]\n");
+    fprintf(to, "  -@ INT         number of BAM compression threads [0]\n");
+    fprintf(to, "  -R STR         merge file in the specified region STR [all]\n");
+    fprintf(to, "  -h FILE        copy the header in FILE to <out.bam> [in1.bam]\n");
+    fprintf(to, "  -c             combine RG tags with colliding IDs rather than amending them\n");
+    fprintf(to, "  -p             combine PG tags with colliding IDs rather than amending them\n");
+    fprintf(to, "  -s VALUE       override random seed\n");
+    fprintf(to, "  -b FILE        list of input BAM filenames, one per line [null]\n\n");
+    fprintf(to, "  -O FORMAT, --output-fmt FORMAT\n");
+    fprintf(to, "                 write output as FORMAT ('sam'/'bam'/'cram'\n");
+    fprintf(to, "  --input-fmt-option  OPTION=VALUE\n");
+    fprintf(to, "  --output-fmt-option OPTION=VALUE\n");
+    fprintf(to, "                 control the input or output format via OPTION or OPTION=VALUE\n");
 }
 
 int bam_merge(int argc, char *argv[])
@@ -817,13 +820,41 @@ int bam_merge(int argc, char *argv[])
     long random_seed = (long)time(NULL);
     char** fn = NULL;
     int fn_size = 0;
+    hts_opt *in_opts = NULL, *out_opts = NULL;
+    //char *fmtout="bam";
+    char *fmtout=NULL;
 
     if (argc == 1) {
         merge_usage(stdout);
         return 0;
     }
 
-    while ((c = getopt(argc, argv, "h:nru1R:f@:l:cps:b:")) >= 0) {
+    enum {
+        INPUT_FMT_OPTION = CHAR_MAX+1,
+        OUTPUT_FMT_OPTION,
+    };
+
+    static const struct option lopts[] =
+    {
+        {"input-fmt-option",  required_argument, NULL, INPUT_FMT_OPTION}, 
+        {"output-fmt-option", required_argument, NULL, OUTPUT_FMT_OPTION}, 
+        {"output-fmt",        required_argument, NULL, 'O'}, 
+        {"", no_argument,       NULL, 'n'}, 
+        {"", no_argument,       NULL, 'r'}, 
+        {"", no_argument,       NULL, 'u'}, 
+        {"", no_argument,       NULL, 'f'}, 
+        {"", no_argument,       NULL, '1'}, 
+        {"", required_argument, NULL, '@'}, 
+        {"", required_argument, NULL, 'R'}, 
+        {"", required_argument, NULL, 'h'}, 
+        {"", no_argument,       NULL, 'c'}, 
+        {"", no_argument,       NULL, 'p'}, 
+        {"", required_argument, NULL, 's'}, 
+        {"", required_argument, NULL, 'b'}, 
+        {NULL, 0, NULL, 0}
+    };
+
+    while ((c = getopt_long(argc, argv, "h:nru1R:f@:l:cps:b:O:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
@@ -854,6 +885,20 @@ int bam_merge(int argc, char *argv[])
             }
             break;
         }
+        case INPUT_FMT_OPTION:
+            if (hts_opt_add(&in_opts, optarg))
+                merge_usage(stderr), ret=1;
+            break;
+
+        case OUTPUT_FMT_OPTION:
+            if (hts_opt_add(&out_opts, optarg))
+                merge_usage(stderr), ret=1;
+            break;
+
+        case 'O': fmtout = optarg; break;
+
+        default:
+            return 1;
         }
     }
     if ( argc - optind < 1 ) {
@@ -884,9 +929,19 @@ int bam_merge(int argc, char *argv[])
         merge_usage(stderr);
         return 1;
     }
-    strcpy(mode, "wb");
+    if (strcmp(argv[optind], "-") == 0 && !fmtout)
+        fmtout = "bam";
+    strcpy(mode, "w");
+    if (sam_open_mode(&mode[1], argv[optind], fmtout) < 0) {
+        if (fmtout) fprintf(stderr, "[bam_sort] can't parse output format \"%s\"\n", fmtout);
+        else fprintf(stderr, "[bam_sort] can't determine output format\n");
+        return 1;
+    }
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
-    if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, fn_size+nargcfiles, fn, flag, reg, n_threads) < 0) ret = 1;
+    if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers, 
+                        fn_size+nargcfiles, fn, flag, reg, n_threads,
+                        in_opts, out_opts) < 0)
+    ret = 1;
 end:
     if (fn_size > 0) {
         int i;
@@ -958,12 +1013,13 @@ typedef struct {
     int index;
 } worker_t;
 
-static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_hdr_t *h, int n_threads)
+static void write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_hdr_t *h, int n_threads, hts_opt *opts)
 {
     size_t i;
     samFile* fp;
     fp = sam_open(fn, mode);
     if (fp == NULL) return;
+    hts_opt_apply(fp, opts);
     sam_hdr_write(fp, h);
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i)
@@ -978,7 +1034,17 @@ static void *worker(void *data)
     ks_mergesort(sort, w->buf_len, w->buf, 0);
     name = (char*)calloc(strlen(w->prefix) + 20, 1);
     sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-    write_buffer(name, "wb1", w->buf_len, w->buf, w->h, 0);
+    write_buffer(name, "wb1", w->buf_len, w->buf, w->h, 0, NULL);
+
+// Consider using CRAM temporary files if the final output is CRAM.
+// Typically it is comparable speed while being smaller.
+//    hts_opt opt[2] = {
+//        {"version=3.0", CRAM_OPT_VERSION, {"3.0"}, NULL},
+//        {"no_ref",      CRAM_OPT_NO_REF,  {1},     NULL}
+//    };
+//    opt[0].next = &opt[1];
+//    write_buffer(name, "wc1", w->buf_len, w->buf, w->h, 0, opt);
+
     free(name);
     return 0;
 }
@@ -1026,10 +1092,13 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
   @return 0 for successful sorting, negative on errors
 
   @discussion It may create multiple temporary subalignment files
-  and then merge them by calling bam_merge_core(). This function is
+  and then merge them by calling bam_merge_core2(). This function is
   NOT thread safe.
  */
-int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const char *fnout, const char *modeout, size_t _max_mem, int n_threads)
+int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
+                      const char *fnout, const char *modeout,
+                      size_t _max_mem, int n_threads,
+                      hts_opt *in_opts, hts_opt *out_opts)
 {
     int ret, i, n_files = 0;
     size_t mem, max_k, k, max_mem;
@@ -1047,6 +1116,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
         fprintf(stderr, "[bam_sort_core] fail to open file %s\n", fn);
         return -1;
     }
+    hts_opt_apply(fp, in_opts);
     header = sam_hdr_read(fp);
     if (is_by_qname) change_SO(header, "queryname");
     else change_SO(header, "coordinate");
@@ -1078,7 +1148,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
     // write the final output
     if (n_files == 0) { // a single block
         ks_mergesort(sort, k, buf, 0);
-        write_buffer(fnout, modeout, k, buf, header, n_threads);
+        write_buffer(fnout, modeout, k, buf, header, n_threads, out_opts);
     } else { // then merge
         char **fns;
         n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
@@ -1088,7 +1158,9 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
             fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
             sprintf(fns[i], "%s.%.4d.bam", prefix, i);
         }
-        if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns, MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads) < 0) {
+        if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns,
+                            MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads,
+                            in_opts, out_opts) < 0) {
             // Propagate bam_merge_core2() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             return -1;
@@ -1107,16 +1179,6 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
     return 0;
 }
 
-int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
-{
-    int ret;
-    char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
-    sprintf(fnout, "%s.bam", prefix);
-    ret = bam_sort_core_ext(is_by_qname, fn, prefix, fnout, "wb", max_mem, 0);
-    free(fnout);
-    return ret;
-}
-
 static int sort_usage(FILE *fp, int status)
 {
     fprintf(fp,
@@ -1129,6 +1191,11 @@ static int sort_usage(FILE *fp, int status)
 "  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')   (either -O or\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam       -T is required)\n"
 "  -@ INT     Set number of sorting and compression threads [1]\n"
+"  -O FORMAT, --output-fmt FORMAT\n"
+"             Write output as FORMAT ('sam'/'bam'/'cram'\n"
+"  --input-fmt-option  OPTION=VALUE\n"
+"  --output-fmt-option OPTION=VALUE\n"
+"             Control the input or output format via OPTION or OPTION=VALUE\n"
 "\n"
 "Legacy usage: samtools sort [options...] <in.bam> <out.prefix>\n"
 "Options:\n"
@@ -1144,17 +1211,38 @@ int bam_sort(int argc, char *argv[])
     int c, i, modern, nargs, is_by_qname = 0, is_stdout = 0, ret = EXIT_SUCCESS, n_threads = 0, level = -1, full_path = 0;
     char *fnout = "-", *fmtout = NULL, modeout[12], *tmpprefix = NULL;
     kstring_t fnout_buffer = { 0, 0, NULL };
+    hts_opt *in_opts = NULL, *out_opts = NULL;
 
     modern = 0;
     for (i = 1; i < argc; ++i)
         if (argv[i][0] == '-' && strpbrk(argv[i], "OT")) { modern = 1; break; }
 
-    while ((c = getopt(argc, argv, modern? "l:m:no:O:T:@:" : "fnom:@:l:")) >= 0) {
-        switch (c) {
-        case 'f': full_path = 1; break;
-        case 'o': if (modern) fnout = optarg; else is_stdout = 1; break;
-        case 'n': is_by_qname = 1; break;
-        case 'm': {
+    if (modern) {
+        enum {
+            INPUT_FMT_OPTION = CHAR_MAX+1,
+            OUTPUT_FMT_OPTION,
+        };
+
+        static const struct option lopts[] =
+            {
+                {"input-fmt-option",  required_argument, NULL, INPUT_FMT_OPTION}, 
+                {"output-fmt-option", required_argument, NULL, OUTPUT_FMT_OPTION}, 
+                {"", required_argument, NULL, 'l'}, 
+                {"", required_argument, NULL, 'm'}, 
+                {"", no_argument,       NULL, 'n'}, 
+                {"", required_argument, NULL, 'o'}, 
+                {"output-fmt", required_argument, NULL, 'O'}, 
+                {"", required_argument, NULL, 'T'}, 
+                {"", required_argument, NULL, '@'}, 
+                {NULL, 0, NULL, 0}
+            };
+
+        while ((c = getopt_long(argc, argv, "l:m:no:O:T:@:", lopts, NULL)) >= 0) {
+            switch (c) {
+            case 'f': full_path = 1; break;
+            case 'o': if (modern) fnout = optarg; else is_stdout = 1; break;
+            case 'n': is_by_qname = 1; break;
+            case 'm': {
                 char *q;
                 max_mem = strtol(optarg, &q, 0);
                 if (*q == 'k' || *q == 'K') max_mem <<= 10;
@@ -1162,11 +1250,43 @@ int bam_sort(int argc, char *argv[])
                 else if (*q == 'g' || *q == 'G') max_mem <<= 30;
                 break;
             }
-        case 'O': fmtout = optarg; break;
-        case 'T': tmpprefix = optarg; break;
-        case '@': n_threads = atoi(optarg); break;
-        case 'l': level = atoi(optarg); break;
-        default: return sort_usage(stderr, EXIT_FAILURE);
+            case 'O': fmtout = optarg; break;
+            case 'T': tmpprefix = optarg; break;
+            case '@': n_threads = atoi(optarg); break;
+            case 'l': level = atoi(optarg); break;
+
+            case INPUT_FMT_OPTION:
+                if (hts_opt_add(&in_opts, optarg))
+                    return sort_usage(stderr, EXIT_FAILURE);
+                break;
+
+            case OUTPUT_FMT_OPTION:
+                if (hts_opt_add(&out_opts, optarg))
+                    return sort_usage(stderr, EXIT_FAILURE);
+                break;
+
+
+            default: return sort_usage(stderr, EXIT_FAILURE);
+            }
+        }
+    } else {
+        while ((c = getopt(argc, argv, "fnom:@:l:")) >= 0) {
+            switch (c) {
+            case 'f': full_path = 1; break;
+            case 'o': if (modern) fnout = optarg; else is_stdout = 1; break;
+            case 'n': is_by_qname = 1; break;
+            case 'm': {
+                char *q;
+                max_mem = strtol(optarg, &q, 0);
+                if (*q == 'k' || *q == 'K') max_mem <<= 10;
+                else if (*q == 'm' || *q == 'M') max_mem <<= 20;
+                else if (*q == 'g' || *q == 'G') max_mem <<= 30;
+                break;
+            }
+            case '@': n_threads = atoi(optarg); break;
+            case 'l': level = atoi(optarg); break;
+            default: return sort_usage(stderr, EXIT_FAILURE);
+            }
         }
     }
 
@@ -1202,9 +1322,15 @@ int bam_sort(int argc, char *argv[])
         goto sort_end;
     }
 
-    if (bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-", tmpprefix, fnout, modeout, max_mem, n_threads) < 0) ret = EXIT_FAILURE;
+    if (bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-",
+                          tmpprefix, fnout, modeout, max_mem, n_threads,
+                          in_opts, out_opts) < 0)
+        ret = EXIT_FAILURE;
 
 sort_end:
     free(fnout_buffer.s);
+    hts_opt_free(in_opts);
+    hts_opt_free(out_opts);
+
     return ret;
 }

@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <inttypes.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <getopt.h>
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
@@ -232,6 +233,7 @@ int main_samview(int argc, char *argv[])
     samFile *in = 0, *out = 0, *un_out=0;
     bam_hdr_t *header = NULL;
     char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
+    hts_opt *in_opts = NULL, *out_opts = NULL;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -246,10 +248,51 @@ int main_samview(int argc, char *argv[])
         .bed = NULL,
     };
 
+    enum {
+        INPUT_FMT_OPTION = CHAR_MAX+1,
+        OUTPUT_FMT_OPTION,
+        OUTPUT_FMT,
+    };
+
+    static const struct option lopts[] =
+    {
+        {"input-fmt-option",  required_argument, NULL, INPUT_FMT_OPTION}, 
+        {"output-fmt-option", required_argument, NULL, OUTPUT_FMT_OPTION}, 
+        {"output-fmt",        required_argument, NULL, OUTPUT_FMT}, 
+        {"", no_argument,       NULL, 'S'}, 
+        {"", no_argument,       NULL, 'b'}, 
+        {"", no_argument,       NULL, 'B'}, 
+        {"", no_argument,       NULL, 'c'}, 
+        {"", no_argument,       NULL, 'C'}, 
+        {"", required_argument, NULL, 't'}, 
+        {"", no_argument,       NULL, 'h'}, 
+        {"", no_argument,       NULL, '1'}, 
+        {"", no_argument,       NULL, 'H'}, 
+        {"", required_argument, NULL, 'o'}, 
+        {"", required_argument, NULL, 'q'}, 
+        {"", required_argument, NULL, 'f'}, 
+        {"", required_argument, NULL, 'F'}, 
+        {"", no_argument,       NULL, 'u'}, 
+        {"", required_argument, NULL, 'l'}, 
+        {"", required_argument, NULL, 'r'}, 
+        {"", no_argument,       NULL, '?'}, 
+        {"", required_argument, NULL, 'T'}, 
+        {"", required_argument, NULL, 'R'}, 
+        {"", required_argument, NULL, 'L'}, 
+        {"", required_argument, NULL, 's'}, 
+        {"", required_argument, NULL, '@'}, 
+        {"", required_argument, NULL, 'm'}, 
+        {"", required_argument, NULL, 'x'}, 
+        {"", required_argument, NULL, 'U'}, 
+        {NULL, 0, NULL, 0}
+    };
+
     /* parse command-line options */
     /* TODO: convert this to getopt_long we're running out of letters */
     strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
+    while ((c = getopt_long(argc, argv,
+                            "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:",
+                            lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
             if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -311,10 +354,21 @@ int main_samview(int argc, char *argv[])
                 settings.remove_aux[settings.remove_aux_len-1] = optarg;
             }
             break;
+
+        case INPUT_FMT_OPTION:
+            if (hts_opt_add(&in_opts, optarg))
+                return usage(0);
+            break;
+
+        case OUTPUT_FMT_OPTION:
+            if (hts_opt_add(&out_opts, optarg))
+                return usage(0);
+            break;
+
         default: return usage(is_long_help);
         }
     }
-    if (compress_level >= 0) out_format = "b";
+    if (compress_level >= 0 && !*out_format) out_format = "b";
     if (is_header_only) is_header = 1;
     strcat(out_mode, out_format);
     if (compress_level >= 0) {
@@ -332,6 +386,9 @@ int main_samview(int argc, char *argv[])
         ret = 1;
         goto view_end;
     }
+    hts_opt_apply(in, in_opts);
+    hts_opt_free(in_opts);
+
     if (fn_list) {
         if (hts_set_fai_filename(in, fn_list) != 0) {
             fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
@@ -358,6 +415,7 @@ int main_samview(int argc, char *argv[])
             ret = 1;
             goto view_end;
         }
+        hts_opt_apply(out, out_opts);
         if (fn_list) {
             if (hts_set_fai_filename(out, fn_list) != 0) {
                 fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
@@ -378,6 +436,7 @@ int main_samview(int argc, char *argv[])
                 ret = 1;
                 goto view_end;
             }
+            hts_opt_apply(un_out, out_opts);
             if (*out_format || is_header) {
                 if (sam_hdr_write(un_out, header) != 0) {
                     fprintf(stderr, "[main_samview] failed to write the SAM header\n");
@@ -387,6 +446,7 @@ int main_samview(int argc, char *argv[])
             }
         }
     }
+    hts_opt_free(out_opts);
     if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
 
@@ -476,43 +536,54 @@ static int usage(int is_long_help)
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:   samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n\n");
     // output options
-    fprintf(stderr, "Options: -b       output BAM\n");
-    fprintf(stderr, "         -C       output CRAM (requires -T)\n");
-    fprintf(stderr, "         -1       use fast BAM compression (implies -b)\n");
-    fprintf(stderr, "         -u       uncompressed BAM output (implies -b)\n");
-    fprintf(stderr, "         -h       include header in SAM output\n");
-    fprintf(stderr, "         -H       print SAM header only (no alignments)\n");
-    fprintf(stderr, "         -c       print only the count of matching records\n");
-    fprintf(stderr, "         -o FILE  output file name [stdout]\n");
-    fprintf(stderr, "         -U FILE  output reads not selected by filters to FILE [null]\n");
-    // extra input
-    fprintf(stderr, "         -t FILE  FILE listing reference names and lengths (see long help) [null]\n");
-    fprintf(stderr, "         -T FILE  reference sequence FASTA FILE [null]\n");
-    // read filters
-    fprintf(stderr, "         -L FILE  only include reads overlapping this BED FILE [null]\n");
-    fprintf(stderr, "         -r STR   only include reads in read group STR [null]\n");
-    fprintf(stderr, "         -R FILE  only include reads with read group listed in FILE [null]\n");
-    fprintf(stderr, "         -q INT   only include reads with mapping quality >= INT [0]\n");
-    fprintf(stderr, "         -l STR   only include reads in library STR [null]\n");
-    fprintf(stderr, "         -m INT   only include reads with number of CIGAR operations\n");
-    fprintf(stderr, "                  consuming query sequence >= INT [0]\n");
-    fprintf(stderr, "         -f INT   only include reads with all bits set in INT set in FLAG [0]\n");
-    fprintf(stderr, "         -F INT   only include reads with none of the bits set in INT\n");
-    fprintf(stderr, "                  set in FLAG [0]\n");
-    // read processing
-    fprintf(stderr, "         -x STR   read tag to strip (repeatable) [null]\n");
-    fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
-    fprintf(stderr, "         -s FLOAT integer part sets seed of random number generator [0];\n");
-    fprintf(stderr, "                  rest sets fraction of templates to subsample [no subsampling]\n");
-    // general options
-    fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
-    fprintf(stderr, "         -?       print long help, including note about region specification\n");
-    fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -b           output BAM\n");
+    fprintf(stderr, "  -C           output CRAM (requires -T)\n");
+    fprintf(stderr, "  -1           use fast BAM compression (implies -b)\n");
+    fprintf(stderr, "  -u           uncompressed BAM output (implies -b)\n");
+    fprintf(stderr, "  -h           include header in SAM output\n");
+    fprintf(stderr, "  -H           print SAM header only (no alignments)\n");
+    fprintf(stderr, "  -c           print only the count of matching records\n");
+    fprintf(stderr, "  -o FILE      output file name [stdout]\n");
+    fprintf(stderr, "  -U FILE      output reads not selected by filters to FILE [null]\n");
+    // extra input                  
+    fprintf(stderr, "  -t FILE      FILE listing reference names and lengths (see long help) [null]\n");
+    fprintf(stderr, "  -T FILE      reference sequence FASTA FILE [null]\n");
+    // read filters                 
+    fprintf(stderr, "  -L FILE      only include reads overlapping this BED FILE [null]\n");
+    fprintf(stderr, "  -r STR       only include reads in read group STR [null]\n");
+    fprintf(stderr, "  -R FILE      only include reads with read group listed in FILE [null]\n");
+    fprintf(stderr, "  -q INT       only include reads with mapping quality >= INT [0]\n");
+    fprintf(stderr, "  -l STR       only include reads in library STR [null]\n");
+    fprintf(stderr, "  -m INT       only include reads with number of CIGAR operations\n");
+    fprintf(stderr, "               consuming query sequence >= INT [0]\n");
+    fprintf(stderr, "  -f INT       only include reads with all bits set in INT set in FLAG [0]\n");
+    fprintf(stderr, "  -F INT       only include reads with none of the bits set in INT\n");
+    fprintf(stderr, "               set in FLAG [0]\n");
+    // read processing              
+    fprintf(stderr, "  -x STR       read tag to strip (repeatable) [null]\n");
+    fprintf(stderr, "  -B           collapse the backward CIGAR operation\n");
+    fprintf(stderr, "  -s FLOAT     integer part sets seed of random number generator [0];\n");
+    fprintf(stderr, "               rest sets fraction of templates to subsample [no subsampling]\n");
+    // general options              
+    fprintf(stderr, "  -@ INT       number of BAM compression threads [0]\n");
+    fprintf(stderr, "  -?           print long help, including note about region specification\n");
+    fprintf(stderr, "  -S           ignored (input format is auto-detected)\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "  --input-fmt-option  OPTION=VALUE\n");
+    fprintf(stderr, "  --output-fmt-option OPTION=VALUE\n");
+    fprintf(stderr, "               Specify a single input or output file format option in the form\n");
+    fprintf(stderr, "               of OPTION or OPTION=VALUE.\n");
     fprintf(stderr, "\n");
     if (is_long_help)
         fprintf(stderr, "Notes:\n\
 \n\
   1. This command now auto-detects the input format (BAM/CRAM/SAM).\n\
+     Further control over the CRAM format can be specified by using the\n\
+     --output-fmt-option, e.g. to specify the number of sequences per slice\n\
+     and to use avoid reference based compression:\n\
+     `samtools view -C --output-fmt-option seqs_per_slice=5000 \\\n\
+         --output-fmt-option no_ref -o out.cram in.bam'\n\
 \n\
   2. The file supplied with `-t' is SPACE/TAB delimited with the first\n\
      two fields of each line consisting of the reference name and the\n\
