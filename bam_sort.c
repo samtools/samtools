@@ -139,85 +139,55 @@ static void trans_tbl_destroy(trans_tbl_t *tbl) {
     kh_destroy(c2c,tbl->pg_trans);
 }
 
+// scan text_in, copying all lines beginning with the string header_type to
+// the buffer output_pointer. Return a pointer to the first unused position in
+// output_pointer after the last copied newline.
+static char *copy_headers(char *output_pointer, const char *header_type, char *text_in) {
+    char *begin_pointer;
+    const char *end_pointer = text_in;
+    while ((begin_pointer = strstr(end_pointer, header_type))) {
+        end_pointer = strchr(begin_pointer, '\n');
+        // Copy header line, provided the match was at the start of the line
+        if (begin_pointer == text_in || *(begin_pointer - 1) == '\n') {
+            size_t length = end_pointer - begin_pointer + 1;
+            memcpy(output_pointer, begin_pointer, length);
+            output_pointer += length;
+            *begin_pointer = '#';  // Mark header as copied
+        }
+    }
+    return output_pointer;
+}
+
 // Takes in existing header and rewrites it in the usual order HD, SQ, RG, PG CO, other
 static void pretty_header(char** text_in_out, int32_t text_len)
 {
-    char* output, *output_pointer;
+    char *output, *output_pointer;
     output = output_pointer = (char*)calloc(1,text_len+1);
     output[text_len] = '\0';
 
     // Read @HD and write
-    regex_t hd_regex, sq_regex, pg_regex, rg_regex, co_regex, other_regex;
-    regmatch_t matches[1];
-    if (regcomp( &hd_regex, "^@HD.*$", REG_EXTENDED|REG_NEWLINE ))
-        abort();
-    if (regexec( &hd_regex, *text_in_out, 1, &matches[0], 0 ) == 0) {
-        size_t match_size = matches[0].rm_eo - matches[0].rm_so;
-        memcpy(output_pointer, *text_in_out+matches[0].rm_so, match_size);
-        output_pointer[match_size] = '\n';
-        output_pointer += match_size + 1;
-    }
-    regfree(&hd_regex);
+    output_pointer = copy_headers(output_pointer, "@HD", *text_in_out);
 
     // Read @SQ's and write
-    if (regcomp( &sq_regex, "^@SQ.*$", REG_EXTENDED|REG_NEWLINE )) abort();
-    char* sq_pointer = *text_in_out;
-    while (*text_in_out+text_len > sq_pointer && regexec( &sq_regex, sq_pointer, 1, &matches[0], 0) == 0) {
-        size_t match_size = matches[0].rm_eo - matches[0].rm_so;
-        memcpy(output_pointer, sq_pointer+matches[0].rm_so, match_size);
-        output_pointer[match_size] = '\n';
-        output_pointer += match_size + 1;
-        sq_pointer += matches[0].rm_eo + 1;
-    }
-    regfree(&sq_regex);
+    output_pointer = copy_headers(output_pointer, "@SQ", *text_in_out);
 
     // Read @RG's and write
-    if (regcomp( &rg_regex, "^@RG.*$", REG_EXTENDED|REG_NEWLINE )) abort();
-    char* rg_pointer = *text_in_out;
-    while (*text_in_out+text_len > rg_pointer && regexec( &rg_regex, rg_pointer, 1, &matches[0], 0) == 0) {
-        size_t match_size = matches[0].rm_eo - matches[0].rm_so;
-        memcpy(output_pointer, rg_pointer+matches[0].rm_so, match_size);
-        output_pointer[match_size] = '\n';
-        output_pointer += match_size + 1;
-        rg_pointer += matches[0].rm_eo + 1;
-    }
-    regfree(&rg_regex);
+    output_pointer = copy_headers(output_pointer, "@RG", *text_in_out);
 
     // Read @PG's and write
-    if (regcomp( &pg_regex, "^@PG.*$", REG_EXTENDED|REG_NEWLINE )) abort();
-    char* pg_pointer = *text_in_out;
-    while (*text_in_out+text_len > pg_pointer && regexec( &pg_regex, pg_pointer, 1, &matches[0], 0) == 0) {
-        size_t match_size = matches[0].rm_eo - matches[0].rm_so;
-        memcpy(output_pointer, pg_pointer+matches[0].rm_so, match_size);
-        output_pointer[match_size] = '\n';
-        output_pointer += match_size + 1;
-        pg_pointer += matches[0].rm_eo + 1;
-    }
-    regfree(&pg_regex);
+    output_pointer = copy_headers(output_pointer, "@PG", *text_in_out);
 
-    // Read @CO's and write
-    if (regcomp( &co_regex, "^@CO.*$", REG_EXTENDED|REG_NEWLINE )) abort();
-    char* co_pointer = *text_in_out;
-    while (*text_in_out+text_len > co_pointer && regexec( &co_regex, co_pointer, 1, &matches[0], 0) == 0) {
-        size_t match_size = matches[0].rm_eo - matches[0].rm_so;
-        memcpy(output_pointer, co_pointer+matches[0].rm_so, match_size);
-        output_pointer[match_size] = '\n';
-        output_pointer += match_size + 1;
-        co_pointer += matches[0].rm_eo + 1;
+    // Read any other headers (including @CO) and write
+    char *line, *end_pointer;
+    for (line = *text_in_out; *line; line = end_pointer + 1) {
+        end_pointer = strchr(line, '\n');
+        if (end_pointer == NULL) abort();
+        if (line[0] == '@') {
+            size_t length = end_pointer - line + 1;
+            memcpy(output_pointer, line, length);
+            output_pointer += length;
+        }
     }
-    regfree(&co_regex);
-
-    // Read any other not HD,SQ,RG,PG,CO tags and write
-    if (regcomp( &other_regex, "^@([^HSCPR]|H[^D]|S[^Q]|[PR][^G]|C[^O]).*$", REG_EXTENDED|REG_NEWLINE )) abort();
-    char* other_pointer = *text_in_out;
-    while (*text_in_out+text_len > other_pointer && regexec( &other_regex, other_pointer, 1, &matches[0], 0) == 0) {
-        size_t match_size = matches[0].rm_eo - matches[0].rm_so;
-        memcpy(output_pointer, other_pointer+matches[0].rm_so, match_size);
-        output_pointer[match_size] = '\n';
-        output_pointer += match_size + 1;
-        other_pointer += matches[0].rm_eo + 1;
-    }
-    regfree(&other_regex);
 
     // Safety check, make sure we copied it all, if we didn't something is wrong with the header
     if ( output+text_len != output_pointer ) {
