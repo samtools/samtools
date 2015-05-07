@@ -589,7 +589,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         for (i = 0; i != n; ++i) {
             int l = strlen(fn[i]);
             const char *s = fn[i];
-            if (l > 4 && strcmp(s + l - 4, ".bam") == 0) l -= 4;
+            if (l > 4 && (strcmp(s + l - 4, ".bam") == 0 || strcmp(s + l - 4, ".sam") == 0)) l -= 4;
+            if (l > 5 && strcmp(s + l - 5, ".cram") == 0) l -= 5;
             for (j = l - 1; j >= 0; --j) if (s[j] == '/') break;
             ++j; l -= j;
             RG[i] = (char*)calloc(l + 1, 1);
@@ -764,7 +765,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 
 static void merge_usage(FILE *to)
 {
-    fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> <in2.bam> [<in3.bam> ... <inN.bam>]\n\n");
+    fprintf(to, "Usage:   samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> [<in2.bam> <in3.bam> ... <inN.bam>]\n\n");
     fprintf(to, "Options: -n       sort by read names\n");
     fprintf(to, "         -r       attach RG tag (inferred from file names)\n");
     fprintf(to, "         -u       uncompressed BAM output\n");
@@ -849,8 +850,8 @@ int bam_merge(int argc, char *argv[])
         if (fn == NULL) { ret = 1; goto end; }
         memcpy(fn+fn_size, argv + (optind+1), nargcfiles * sizeof(char*));
     }
-    if (fn_size+nargcfiles < 2) {
-        fprintf(stderr, "You must specify at least 2 input files.\n");
+    if (fn_size+nargcfiles < 1) {
+        fprintf(stderr, "You must specify at least one (and usually two or more) input files.\n");
         merge_usage(stderr);
         return 1;
     }
