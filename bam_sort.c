@@ -198,7 +198,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     *text_in_out = output;
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg)
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool self_trans, bool merge_rg, bool merge_pg)
 {
     tbl->n_targets = translate->n_targets;
     tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
@@ -445,6 +445,20 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     kl_destroy(hdrln,rg_list);
     free(matches);
 
+    if (! self_trans) {
+        // Just append @CO headers without translation
+        const char *line, *end_pointer;
+        for (line = translate->text; *line; line = end_pointer + 1) {
+            end_pointer = strchr(line, '\n');
+            if (strncmp(line, "@CO", 3) == 0) {
+                kputc('\n', &out_text);
+                if (end_pointer) kputsn(line, end_pointer - line, &out_text);
+                else kputs(line, &out_text);
+            }
+            if (end_pointer == NULL) break;
+        }
+    }
+
     // Add trailing \n and write back to header
     free(out->text);
     kputc('\n', &out_text);
@@ -612,12 +626,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
         hin = sam_hdr_read(fp[i]);
         if (hout)
-            trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
+            trans_tbl_init(hout, hin, translation_tbl+i, false, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
         else {
             // As yet, no headers to merge into...
             hout = bam_hdr_dup(hin);
             // ...so no need to translate header into itself
-            trans_tbl_init(hout, hin, translation_tbl+i, true, true);
+            trans_tbl_init(hout, hin, translation_tbl+i, true, true, true);
         }
 
         // TODO sam_itr_next() doesn't yet work for SAM files,

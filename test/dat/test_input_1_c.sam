@@ -7,6 +7,7 @@
 @PG	ID:bull	PP:donkey
 @PG	ID:donkey
 @CO	Do you know?
+@CO	Another comment from test_input_1_c
 r008	163	ref1	7	30	8M4I4M1D3M	=	37	39	TTAGATAAAGAGGATACTG	*	XX:B:S,12561,2,20,112	YY:i:100	RG:Z:colt	PG:Z:donkey
 r009	0	ref1	9	30	1S2I6M1P1I1P1I4M2I	*	0	0	AAAAGATAAGGGATAAA	*	XA:Z:abc	XB:i:-10	RG:Z:colt	PG:Z:donkey
 r010	0	ref1	9	30	5H6M	*	0	0	AGCTAA	*	RG:Z:colt	PG:Z:donkey
