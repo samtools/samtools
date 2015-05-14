@@ -29,7 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <string.h>
 #include <assert.h>
 #include "htslib/sam.h"
-#include "htslib/bgzf.h"
+#include "htslib/hts.h"
 #include "htslib/ksort.h"
 #include "samtools.h"
 
@@ -75,7 +75,7 @@ KSORT_INIT(bamshuf, elem_t, elem_lt)
 
 static int bamshuf(const char *fn, int n_files, const char *pre, int clevel, int is_stdout)
 {
-    BGZF *fp, *fpw, **fpt;
+    samFile *fp, *fpw, **fpt;
     char **fnt, modew[8];
     bam1_t *b;
     int i, l;
@@ -83,76 +83,76 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel, int
     int64_t *cnt;
 
     // split
-    fp = strcmp(fn, "-")? bgzf_open(fn, "r") : bgzf_dopen(fileno(stdin), "r");
+    fp = sam_open(fn, "r");
     if (fp == NULL) {
         print_error_errno("Cannot open input file \"%s\"", fn);
         return 1;
     }
 
-    h = bam_hdr_read(fp);
+    h = sam_hdr_read(fp);
     fnt = (char**)calloc(n_files, sizeof(char*));
-    fpt = (BGZF**)calloc(n_files, sizeof(BGZF*));
+    fpt = (samFile**)calloc(n_files, sizeof(samFile*));
     cnt = (int64_t*)calloc(n_files, 8);
     l = strlen(pre);
     for (i = 0; i < n_files; ++i) {
         fnt[i] = (char*)calloc(l + 10, 1);
         sprintf(fnt[i], "%s.%.4d.bam", pre, i);
-        fpt[i] = bgzf_open(fnt[i], "w1");
+        fpt[i] = sam_open(fnt[i], "wb1");
         if (fpt[i] == NULL) {
             print_error_errno("Cannot open intermediate file \"%s\"", fnt[i]);
             return 1;
         }
-        bam_hdr_write(fpt[i], h);
+        sam_hdr_write(fpt[i], h);
     }
     b = bam_init1();
-    while (bam_read1(fp, b) >= 0) {
+    while (sam_read1(fp, h, b) >= 0) {
         uint32_t x;
         x = hash_X31_Wang(bam_get_qname(b)) % n_files;
-        bam_write1(fpt[x], b);
+        sam_write1(fpt[x], h, b);
         ++cnt[x];
     }
     bam_destroy1(b);
-    for (i = 0; i < n_files; ++i) bgzf_close(fpt[i]);
+    for (i = 0; i < n_files; ++i) sam_close(fpt[i]);
     free(fpt);
-    bgzf_close(fp);
+    sam_close(fp);
     // merge
-    sprintf(modew, "w%d", (clevel >= 0 && clevel <= 9)? clevel : DEF_CLEVEL);
+    sprintf(modew, "wb%d", (clevel >= 0 && clevel <= 9)? clevel : DEF_CLEVEL);
     if (!is_stdout) { // output to a file
         char *fnw = (char*)calloc(l + 5, 1);
         sprintf(fnw, "%s.bam", pre);
-        fpw = bgzf_open(fnw, modew);
+        fpw = sam_open(fnw, modew);
         free(fnw);
-    } else fpw = bgzf_dopen(fileno(stdout), modew); // output to stdout
+    } else fpw = sam_open("-", modew); // output to stdout
     if (fpw == NULL) {
         if (is_stdout) print_error_errno("Cannot open standard output");
         else print_error_errno("Cannot open output file \"%s.bam\"", pre);
         return 1;
     }
 
-    bam_hdr_write(fpw, h);
-    bam_hdr_destroy(h);
+    sam_hdr_write(fpw, h);
     for (i = 0; i < n_files; ++i) {
         int64_t j, c = cnt[i];
         elem_t *a;
-        fp = bgzf_open(fnt[i], "r");
-        bam_hdr_destroy(bam_hdr_read(fp));
+        fp = sam_open(fnt[i], "r");
+        bam_hdr_destroy(sam_hdr_read(fp));
         a = (elem_t*)calloc(c, sizeof(elem_t));
         for (j = 0; j < c; ++j) {
             a[j].b = bam_init1();
-            assert(bam_read1(fp, a[j].b) >= 0);
+            sam_read1(fp, h, a[j].b);
             a[j].key = hash_X31_Wang(bam_get_qname(a[j].b));
         }
-        bgzf_close(fp);
+        sam_close(fp);
         unlink(fnt[i]);
         free(fnt[i]);
         ks_introsort(bamshuf, c, a);
         for (j = 0; j < c; ++j) {
-            bam_write1(fpw, a[j].b);
+            sam_write1(fpw, h, a[j].b);
             bam_destroy1(a[j].b);
         }
         free(a);
     }
-    bgzf_close(fpw);
+    sam_close(fpw);
+    bam_hdr_destroy(h);
     free(fnt); free(cnt);
     return 0;
 }
