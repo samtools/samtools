@@ -37,6 +37,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "htslib/khash.h"
 #include "samtools.h"
+#include "sam_opts.h"
 KHASH_SET_INIT_STR(rg)
 
 typedef khash_t(rg) *rghash_t;
@@ -233,7 +234,7 @@ int main_samview(int argc, char *argv[])
     samFile *in = 0, *out = 0, *un_out=0;
     bam_hdr_t *header = NULL;
     char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
-    hts_opt *in_opts = NULL, *out_opts = NULL;
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -248,47 +249,11 @@ int main_samview(int argc, char *argv[])
         .bed = NULL,
     };
 
-    enum {
-        INPUT_FMT_OPTION = CHAR_MAX+1,
-        OUTPUT_FMT_OPTION,
-        OUTPUT_FMT,
-    };
+    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
 
-    static const struct option lopts[] =
-    {
-        {"input-fmt-option",  required_argument, NULL, INPUT_FMT_OPTION}, 
-        {"output-fmt-option", required_argument, NULL, OUTPUT_FMT_OPTION}, 
-        {"output-fmt",        required_argument, NULL, OUTPUT_FMT}, 
-        {"", no_argument,       NULL, 'S'}, 
-        {"", no_argument,       NULL, 'b'}, 
-        {"", no_argument,       NULL, 'B'}, 
-        {"", no_argument,       NULL, 'c'}, 
-        {"", no_argument,       NULL, 'C'}, 
-        {"", required_argument, NULL, 't'}, 
-        {"", no_argument,       NULL, 'h'}, 
-        {"", no_argument,       NULL, '1'}, 
-        {"", no_argument,       NULL, 'H'}, 
-        {"", required_argument, NULL, 'o'}, 
-        {"", required_argument, NULL, 'q'}, 
-        {"", required_argument, NULL, 'f'}, 
-        {"", required_argument, NULL, 'F'}, 
-        {"", no_argument,       NULL, 'u'}, 
-        {"", required_argument, NULL, 'l'}, 
-        {"", required_argument, NULL, 'r'}, 
-        {"", no_argument,       NULL, '?'}, 
-        {"", required_argument, NULL, 'T'}, 
-        {"", required_argument, NULL, 'R'}, 
-        {"", required_argument, NULL, 'L'}, 
-        {"", required_argument, NULL, 's'}, 
-        {"", required_argument, NULL, '@'}, 
-        {"", required_argument, NULL, 'm'}, 
-        {"", required_argument, NULL, 'x'}, 
-        {"", required_argument, NULL, 'U'}, 
-        {NULL, 0, NULL, 0}
-    };
+    assign_short_opts(lopts, "-.O.-");
 
     /* parse command-line options */
-    /* TODO: convert this to getopt_long we're running out of letters */
     strcpy(out_mode, "w");
     while ((c = getopt_long(argc, argv,
                             "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:",
@@ -355,17 +320,9 @@ int main_samview(int argc, char *argv[])
             }
             break;
 
-        case INPUT_FMT_OPTION:
-            if (hts_opt_add(&in_opts, optarg))
-                return usage(0);
-            break;
-
-        case OUTPUT_FMT_OPTION:
-            if (hts_opt_add(&out_opts, optarg))
-                return usage(0);
-            break;
-
-        default: return usage(is_long_help);
+        default:
+	    if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
+                return usage(is_long_help);
         }
     }
     if (compress_level >= 0 && !*out_format) out_format = "b";
@@ -381,13 +338,11 @@ int main_samview(int argc, char *argv[])
     // generate the fn_list if necessary
     if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
     // open file handlers
-    if ((in = sam_open(argv[optind], "r")) == 0) {
+    if ((in = sam_open_opts(argv[optind], "r", &ga.in)) == 0) {
         print_error_errno("failed to open \"%s\" for reading", argv[optind]);
         ret = 1;
         goto view_end;
     }
-    hts_opt_apply(in, in_opts);
-    hts_opt_free(in_opts);
 
     if (fn_list) {
         if (hts_set_fai_filename(in, fn_list) != 0) {
@@ -410,12 +365,11 @@ int main_samview(int argc, char *argv[])
         header->l_text = l;
     }
     if (!is_count) {
-        if ((out = sam_open(fn_out? fn_out : "-", out_mode)) == 0) {
+        if ((out = sam_open_opts(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
             print_error_errno("failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
             ret = 1;
             goto view_end;
         }
-        hts_opt_apply(out, out_opts);
         if (fn_list) {
             if (hts_set_fai_filename(out, fn_list) != 0) {
                 fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
@@ -423,7 +377,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
-        if (*out_format || is_header)  {
+        if (*out_format || is_header || ga.out.format.compression != no_compression)  {
             if (sam_hdr_write(out, header) != 0) {
                 fprintf(stderr, "[main_samview] failed to write the SAM header\n");
                 ret = 1;
@@ -431,12 +385,11 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (fn_un_out) {
-            if ((un_out = sam_open(fn_un_out, out_mode)) == 0) {
+                if ((un_out = sam_open_opts(fn_un_out, out_mode, &ga.out)) == 0) {
                 print_error_errno("failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
             }
-            hts_opt_apply(un_out, out_opts);
             if (*out_format || is_header) {
                 if (sam_hdr_write(un_out, header) != 0) {
                     fprintf(stderr, "[main_samview] failed to write the SAM header\n");
@@ -446,7 +399,9 @@ int main_samview(int argc, char *argv[])
             }
         }
     }
-    hts_opt_free(out_opts);
+
+    sam_global_args_free(&ga);
+
     if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
 
@@ -570,11 +525,9 @@ static int usage(int is_long_help)
     fprintf(stderr, "  -?           print long help, including note about region specification\n");
     fprintf(stderr, "  -S           ignored (input format is auto-detected)\n");
     fprintf(stderr, "\n");
-    fprintf(stderr, "  --input-fmt-option  OPTION=VALUE\n");
-    fprintf(stderr, "  --output-fmt-option OPTION=VALUE\n");
-    fprintf(stderr, "               Specify a single input or output file format option in the form\n");
-    fprintf(stderr, "               of OPTION or OPTION=VALUE.\n");
-    fprintf(stderr, "\n");
+
+    sam_global_opt_help(stderr, "-.O.-");
+
     if (is_long_help)
         fprintf(stderr, "Notes:\n\
 \n\
@@ -584,6 +537,11 @@ static int usage(int is_long_help)
      and to use avoid reference based compression:\n\
      `samtools view -C --output-fmt-option seqs_per_slice=5000 \\\n\
          --output-fmt-option no_ref -o out.cram in.bam'\n\
+\n\
+     Options can also be specified as a comma separated list within the\n\
+     --output-fmt value too.  For example this is equivalent to the above\n\
+     `samtools view --output-fmt cram,seqs_per_slice=5000,no_ref \\\n\
+         -o out.cram in.bam'\n\
 \n\
   2. The file supplied with `-t' is SPACE/TAB delimited with the first\n\
      two fields of each line consisting of the reference name and the\n\
@@ -633,6 +591,8 @@ static void bam2fq_usage(FILE *to)
     fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
     fprintf(to, "         -t        copy RG, BC and QT tags to the FASTQ header line\n");
     fprintf(to, "\n");
+
+    sam_global_opt_help(to, "-.---");
 }
 
 int main_bam2fq(int argc, char *argv[])
@@ -648,13 +608,23 @@ int main_bam2fq(int argc, char *argv[])
     char* fnse = NULL;
     bool has12 = true, use_oq = false, copy_tags = false;
     int c;
-    while ((c = getopt(argc, argv, "nOts:")) > 0) {
+
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
+    assign_short_opts(lopts, "-.---");
+
+    while ((c = getopt_long(argc, argv, "nOts:", lopts, NULL)) > 0) {
         switch (c) {
             case 'n': has12 = false; break;
             case 'O': use_oq = true; break;
             case 's': fnse = optarg; break;
             case 't': copy_tags = true; break;
-            default: bam2fq_usage(stderr); return 1;
+            case '?': bam2fq_usage(stderr); return 1;
+        
+            default:
+                if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0) {
+                    bam2fq_usage(stderr); return 1;
+                }
         }
     }
 
@@ -669,11 +639,12 @@ int main_bam2fq(int argc, char *argv[])
         return 1;
     }
 
-    fp = sam_open(argv[optind], "r");
+    fp = sam_open_opts(argv[optind], "r", &ga.in);
     if (fp == NULL) {
         print_error_errno("Cannot read file \"%s\"", argv[optind]);
         return 1;
     }
+
     if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS,
                     SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
@@ -818,6 +789,7 @@ int main_bam2fq(int argc, char *argv[])
 
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
 
+    sam_global_args_free(&ga);
     free(buf);
     bam_destroy1(b);
     bam_hdr_destroy(h);
