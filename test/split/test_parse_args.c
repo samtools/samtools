@@ -38,7 +38,7 @@ bool check_test_1(const parsed_opts_t* opts) {
     if ( opts->merged_input_name != NULL
         || opts->unaccounted_header_name != NULL
         || opts->unaccounted_name != NULL
-        || strcmp(opts->output_format_string,"%*_%#.bam")
+        || strcmp(opts->output_format_string,"%*_%#.%f")
         || opts->verbose == true )
         return false;
     return true;
@@ -57,7 +57,7 @@ bool check_test_2(const parsed_opts_t* opts) {
         || strcmp(opts->merged_input_name, "merged.bam")
         || opts->unaccounted_header_name != NULL
         || opts->unaccounted_name != NULL
-        || strcmp(opts->output_format_string,"%*_%#.bam")
+        || strcmp(opts->output_format_string,"%*_%#.%f")
         || opts->verbose == true )
         return false;
     return true;
