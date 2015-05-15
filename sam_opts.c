@@ -81,13 +81,13 @@ int parse_sam_global_opt(int c, char *optarg, struct option *lopt,
 	    r = hts_parse_format(&ga->in, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "input-fmt-option") == 0) {
-	    r = hts_opt_add(ga->in.specific, optarg);
+	    r = hts_opt_add((hts_opt **)&ga->in.specific, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "output-fmt") == 0) {
 	    r = hts_parse_format(&ga->out, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "output-fmt-option") == 0) {
-	    r = hts_opt_add(ga->out.specific, optarg);
+	    r = hts_opt_add((hts_opt **)&ga->out.specific, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "verbose") == 0) {
 	    ga->verbosity++;
