@@ -156,7 +156,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 }
 
 // Expands a output filename format string
-static char* expand_format_string(const char* format_string, const char* basename, const char* rg_id, const int rg_idx, enum htsExactFormat format)
+static char* expand_format_string(const char* format_string, const char* basename, const char* rg_id, const int rg_idx, htsFormat *format)
 {
     kstring_t str = { 0, 0, NULL };
     const char* pointer = format_string;
@@ -179,7 +179,7 @@ static char* expand_format_string(const char* format_string, const char* basenam
                 break;
             case 'f':
                 // Only really need to cope with sam, bam, cram
-                kputs(htsExactFormatString(format), &str);
+                kputs(hts_format_file_extension(format), &str);
                 break;
             case '\0':
                 // Error is: fprintf(stderr, "bad format string, trailing %%\n");
@@ -324,7 +324,7 @@ static state_t* init(parsed_opts_t* opts)
         return NULL;
     }
 
-    retval->merged_input_file = sam_open_opts(opts->merged_input_name, "rb", &opts->ga.in);
+    retval->merged_input_file = sam_open_format(opts->merged_input_name, "rb", &opts->ga.in);
     if (!retval->merged_input_file) {
         fprintf(stderr, "Could not open input file (%s)\n", opts->merged_input_name);
         free(retval);
@@ -334,7 +334,7 @@ static state_t* init(parsed_opts_t* opts)
 
     if (opts->unaccounted_name) {
         if (opts->unaccounted_header_name) {
-            samFile* hdr_load = sam_open_opts(opts->unaccounted_header_name, "r", &opts->ga.in);
+            samFile* hdr_load = sam_open_format(opts->unaccounted_header_name, "r", &opts->ga.in);
             if (!hdr_load) {
                 fprintf(stderr, "Could not open unaccounted header file (%s)\n", opts->unaccounted_header_name);
                 cleanup_state(retval);
@@ -346,7 +346,7 @@ static state_t* init(parsed_opts_t* opts)
             retval->unaccounted_header = bam_hdr_dup(retval->merged_input_header);
         }
 
-        retval->unaccounted_file = sam_open_opts(opts->unaccounted_name, "wb", &opts->ga.out);
+        retval->unaccounted_file = sam_open_format(opts->unaccounted_name, "wb", &opts->ga.out);
         if (retval->unaccounted_file == NULL) {
             fprintf(stderr, "Could not open unaccounted output file: %s\n", opts->unaccounted_name);
             cleanup_state(retval);
@@ -384,7 +384,7 @@ static state_t* init(parsed_opts_t* opts)
         output_filename = expand_format_string(opts->output_format_string,
                                                input_base_name,
                                                retval->rg_id[i], i,
-                                               opts->ga.out.format.format);
+                                               &opts->ga.out);
     
         if ( output_filename == NULL ) {
             fprintf(stderr, "Error expanding output filename format string.\r\n");
@@ -393,7 +393,7 @@ static state_t* init(parsed_opts_t* opts)
             return NULL;
         }
 
-        retval->rg_output_file[i] = sam_open_opts(output_filename, "wb", &opts->ga.out);
+        retval->rg_output_file[i] = sam_open_format(output_filename, "wb", &opts->ga.out);
         if (retval->rg_output_file[i] == NULL) {
             fprintf(stderr, "Could not open output file: %s\r\n", output_filename);
             cleanup_state(retval);

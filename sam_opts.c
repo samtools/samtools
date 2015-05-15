@@ -78,16 +78,16 @@ int parse_sam_global_opt(int c, char *optarg, struct option *lopt,
 	}
 
 	if (strcmp(lopt->name, "input-fmt") == 0) {
-	    r = hts_parse_opt_format(&ga->in, optarg);
+	    r = hts_parse_format(&ga->in, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "input-fmt-option") == 0) {
-	    r = hts_opt_add(&ga->in.opts, optarg);
+	    r = hts_opt_add(ga->in.specific, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "output-fmt") == 0) {
-	    r = hts_parse_opt_format(&ga->out, optarg);
+	    r = hts_parse_format(&ga->out, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "output-fmt-option") == 0) {
-	    r = hts_opt_add(&ga->out.opts, optarg);
+	    r = hts_opt_add(ga->out.specific, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "verbose") == 0) {
 	    ga->verbosity++;
@@ -152,9 +152,9 @@ void sam_global_args_init(sam_global_args *ga) {
 }
 
 void sam_global_args_free(sam_global_args *ga) {
-    if (ga->in.opts)
-	hts_opt_free(ga->in.opts);
+    if (ga->in.specific)
+	hts_opt_free(ga->in.specific);
 
-    if (ga->out.opts)
-	hts_opt_free(ga->out.opts);
+    if (ga->out.specific)
+	hts_opt_free(ga->out.specific);
 }

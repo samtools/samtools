@@ -329,11 +329,11 @@ int bam_mating(int argc, char *argv[])
     if (optind+1 >= argc) { usage(stderr); return 1; }
 
     // init
-    if ((in = sam_open_opts(argv[optind], "rb", &ga.in)) == NULL) {
+    if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {
         fprintf(stderr, "[bam_mating] cannot open input file\n");
         return 1;
     }
-    if ((out = sam_open_opts(argv[optind+1], "wb", &ga.out)) == NULL) {
+    if ((out = sam_open_format(argv[optind+1], "wb", &ga.out)) == NULL) {
         fprintf(stderr, "[bam_mating] cannot open output file\n");
         return 1;
     }

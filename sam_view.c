@@ -338,7 +338,7 @@ int main_samview(int argc, char *argv[])
     // generate the fn_list if necessary
     if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
     // open file handlers
-    if ((in = sam_open_opts(argv[optind], "r", &ga.in)) == 0) {
+    if ((in = sam_open_format(argv[optind], "r", &ga.in)) == 0) {
         print_error_errno("failed to open \"%s\" for reading", argv[optind]);
         ret = 1;
         goto view_end;
@@ -365,7 +365,7 @@ int main_samview(int argc, char *argv[])
         header->l_text = l;
     }
     if (!is_count) {
-        if ((out = sam_open_opts(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
+        if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
             print_error_errno("failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
             ret = 1;
             goto view_end;
@@ -377,7 +377,8 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
-        if (*out_format || is_header || ga.out.format.compression != no_compression)  {
+        if (*out_format || is_header ||
+            (ga.out.format != sam && ga.out.format != unknown_format))  {
             if (sam_hdr_write(out, header) != 0) {
                 fprintf(stderr, "[main_samview] failed to write the SAM header\n");
                 ret = 1;
@@ -385,7 +386,7 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (fn_un_out) {
-                if ((un_out = sam_open_opts(fn_un_out, out_mode, &ga.out)) == 0) {
+                if ((un_out = sam_open_format(fn_un_out, out_mode, &ga.out)) == 0) {
                 print_error_errno("failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
@@ -639,7 +640,7 @@ int main_bam2fq(int argc, char *argv[])
         return 1;
     }
 
-    fp = sam_open_opts(argv[optind], "r", &ga.in);
+    fp = sam_open_format(argv[optind], "r", &ga.in);
     if (fp == NULL) {
         print_error_errno("Cannot read file \"%s\"", argv[optind]);
         return 1;

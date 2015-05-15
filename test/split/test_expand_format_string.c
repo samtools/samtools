@@ -85,7 +85,7 @@ int main(int argc, char**argv)
 
     // test
     xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
-    char* output_1 = expand_format_string(format_string_1, basename_1, rg_id_1, rg_idx_1, bam);
+    char* output_1 = expand_format_string(format_string_1, basename_1, rg_id_1, rg_idx_1, NULL);
     fclose(stderr);
 
     if (verbose) printf("END RUN test 1\n");

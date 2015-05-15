@@ -83,10 +83,9 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     int i, l;
     bam_hdr_t *h;
     int64_t *cnt;
-    enum htsExactFormat fmt;
 
     // split
-    fp = sam_open_opts(fn, "r", &ga->in);
+    fp = sam_open_format(fn, "r", &ga->in);
     if (fp == NULL) {
         print_error_errno("Cannot open input file \"%s\"", fn);
         return 1;
@@ -97,14 +96,11 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     fpt = (samFile**)calloc(n_files, sizeof(samFile*));
     cnt = (int64_t*)calloc(n_files, 8);
     l = strlen(pre);
-    fmt = ga->out.format.format != unknown_format
-        ? ga->out.format.format
-        : bam;
 
     for (i = 0; i < n_files; ++i) {
         fnt[i] = (char*)calloc(l + 10, 1);
-        sprintf(fnt[i], "%s.%.4d.%s", pre, i, htsExactFormatString(fmt));
-        fpt[i] = sam_open_opts(fnt[i], "wb1", &ga->out);
+        sprintf(fnt[i], "%s.%.4d.%s", pre, i, hts_format_file_extension(&ga->out));
+        fpt[i] = sam_open_format(fnt[i], "wb1", &ga->out);
         if (fpt[i] == NULL) {
             print_error_errno("Cannot open intermediate file \"%s\"", fnt[i]);
             return 1;
@@ -128,9 +124,9 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     if (!is_stdout) { // output to a file
         char *fnw = (char*)calloc(l + 5, 1);
         sprintf(fnw, "%s.bam", pre);
-        fpw = sam_open_opts(fnw, modew, &ga->out);
+        fpw = sam_open_format(fnw, modew, &ga->out);
         free(fnw);
-    } else fpw = sam_open_opts("-", modew, &ga->out); // output to stdout
+    } else fpw = sam_open_format("-", modew, &ga->out); // output to stdout
     if (fpw == NULL) {
         if (is_stdout) print_error_errno("Cannot open standard output");
         else print_error_errno("Cannot open output file \"%s.bam\"", pre);
@@ -141,7 +137,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     for (i = 0; i < n_files; ++i) {
         int64_t j, c = cnt[i];
         elem_t *a;
-        fp = sam_open_opts(fnt[i], "r", &ga->in);
+        fp = sam_open_format(fnt[i], "r", &ga->in);
         bam_hdr_destroy(sam_hdr_read(fp));
         a = (elem_t*)calloc(c, sizeof(elem_t));
         for (j = 0; j < c; ++j) {

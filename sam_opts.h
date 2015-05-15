@@ -31,13 +31,13 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/hts.h>
 
 typedef struct sam_global_args {
-    htsFileOpts in;
-    htsFileOpts out;
+    htsFormat in;
+    htsFormat out;
     char *reference; // TO DO
     int verbosity;
 } sam_global_args;
 
-#define SAM_GLOBAL_ARGS_INIT {HTS_FILE_OPTS_INIT, HTS_FILE_OPTS_INIT, NULL, 0}
+#define SAM_GLOBAL_ARGS_INIT {{0},{0}}
 
 enum {
     SAM_OPT_INPUT_FMT = CHAR_MAX+1,
