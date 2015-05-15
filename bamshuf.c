@@ -99,8 +99,8 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
 
     for (i = 0; i < n_files; ++i) {
         fnt[i] = (char*)calloc(l + 10, 1);
-        sprintf(fnt[i], "%s.%.4d.%s", pre, i, hts_format_file_extension(&ga->out));
-        fpt[i] = sam_open_format(fnt[i], "wb1", &ga->out);
+        sprintf(fnt[i], "%s.%.4d.bam", pre, i);
+        fpt[i] = sam_open(fnt[i], "wb1");
         if (fpt[i] == NULL) {
             print_error_errno("Cannot open intermediate file \"%s\"", fnt[i]);
             return 1;
@@ -123,7 +123,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     sprintf(modew, "wb%d", (clevel >= 0 && clevel <= 9)? clevel : DEF_CLEVEL);
     if (!is_stdout) { // output to a file
         char *fnw = (char*)calloc(l + 5, 1);
-        sprintf(fnw, "%s.bam", pre);
+        sprintf(fnw, "%s.%s", pre,  hts_format_file_extension(&ga->out));
         fpw = sam_open_format(fnw, modew, &ga->out);
         free(fnw);
     } else fpw = sam_open_format("-", modew, &ga->out); // output to stdout
