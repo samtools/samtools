@@ -25,6 +25,7 @@ DEALINGS IN THE SOFTWARE.  */
 #ifndef BAM_OPTS_H
 #define BAM_OPTS_H
 
+#include <stdio.h>
 #include <limits.h>
 #include <getopt.h>
 #include <htslib/hts.h>
