@@ -269,6 +269,7 @@ depth_end:
         for (i=0; i<n; i++) free(fn[i]);
         free(fn);
     }
+    sam_global_args_free(&ga);
     return status;
 }
 
