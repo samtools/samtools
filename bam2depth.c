@@ -138,6 +138,7 @@ int main_depth(int argc, char *argv[])
     data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
     beg = 0; end = 1<<30;  // set the default region
     for (i = 0; i < n; ++i) {
+        int rf;
         data[i] = calloc(1, sizeof(aux_t));
         data[i]->fp = sam_open_format(argv[optind+i], "r", &ga.in); // open BAM
         if (data[i]->fp == NULL) {
@@ -145,9 +146,9 @@ int main_depth(int argc, char *argv[])
             status = EXIT_FAILURE;
             goto depth_end;
         }
-        if (hts_set_opt(data[i]->fp, CRAM_OPT_REQUIRED_FIELDS,
-                        SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | SAM_CIGAR |
-                        SAM_SEQ)) {
+        rf = SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | SAM_CIGAR | SAM_SEQ;
+        if (baseQ) rf |= SAM_QUAL;
+        if (hts_set_opt(data[i]->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
             fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
             return 1;
         }
