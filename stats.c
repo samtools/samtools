@@ -1396,6 +1396,7 @@ int main_stats(int argc, char *argv[])
 
     static struct option loptions[] =
     {
+        SAM_GLOBAL_LOPTS,
         {"help", no_argument, NULL, 'h'},
         {"remove-dups", no_argument, NULL, 'd'},
         {"sam", no_argument, NULL, 's'},
@@ -1411,7 +1412,6 @@ int main_stats(int argc, char *argv[])
         {"id", required_argument, NULL, 'I'},
         {"GC-depth", required_argument, NULL, 1},
         {"sparse", no_argument, NULL, 'x'},
-        SAM_GLOBAL_LOPTS,
         {NULL, 0, NULL, 0}
     };
     int opt;

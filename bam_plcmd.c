@@ -760,6 +760,7 @@ int bam_mpileup(int argc, char *argv[])
 
     static struct option lopts[] =
     {
+        SAM_GLOBAL_LOPTS,
         {"rf", required_argument, NULL, 1},   // require flag
         {"ff", required_argument, NULL, 2},   // filter flag
         {"incl-flags", required_argument, NULL, 1},
@@ -807,7 +808,6 @@ int bam_mpileup(int argc, char *argv[])
         {"per-sample-mF", no_argument, NULL, 'p'},
         {"per-sample-mf", no_argument, NULL, 'p'},
         {"platforms", required_argument, NULL, 'P'},
-        SAM_GLOBAL_LOPTS,
         {NULL, 0, NULL, 0}
     };
     assign_short_opts(lopts, "-.--.");

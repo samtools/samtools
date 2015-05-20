@@ -50,6 +50,8 @@ enum {
 
 // Use this within an existing struct option lopts[] = {...}, used where
 // the subcommmand is already using some long options.
+//
+// NOTE: MUST use this as the first thing in struct option lopts[] array.
 #define SAM_GLOBAL_LOPTS \
     {"input-fmt",         required_argument, NULL, SAM_OPT_INPUT_FMT}, \
     {"input-fmt-option",  required_argument, NULL, SAM_OPT_INPUT_FMT_OPTION}, \
