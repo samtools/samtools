@@ -198,7 +198,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     *text_in_out = output;
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool self_trans, bool merge_rg, bool merge_pg)
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, const char* rg_override)
 {
     tbl->n_targets = translate->n_targets;
     tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
@@ -221,7 +221,31 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         if (ret <= 0) abort();
         kh_value(out_tid, iter) = i;
     }
+    
+    // @HD
+    {
+        regex_t hd;
+        regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
+        regmatch_t* matches_2 = (regmatch_t*)calloc(2, sizeof(regmatch_t));
+        if (matches == NULL) { perror("out of memory"); exit(-1); }
+        regcomp(&hd, "^@HD.*", REG_EXTENDED|REG_NEWLINE);
+        if (regexec(&hd, translate->text, 1, matches, 0) != 0)
+        {
+            fprintf(stderr, "No @HD tag found.\n");
+            exit(1);
+        }
+        // Only add @HD tag if not already in output
+        if (regexec(&hd, out->text, 1, matches_2, 0) != 0)
+        {
+            kputsn(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &out_text);
+        } // TODO: handle case when @HD needs merging.
+        regfree(&hd);
+        free(matches_2);
+        free(matches);
+    }
 
+
+    // SQ
     for (i = 0; i < translate->n_targets; ++i) {
         khiter_t iter = kh_get(c2i, out_tid, translate->target_name[i]);
 
@@ -270,7 +294,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
     char* text = translate->text;
     klist_t(hdrln) *rg_list = kl_init(hdrln);
-    while(1) { //   foreach rg id in translate's header
+    bool loop = true;
+    while(loop) { //   foreach rg id in translate's header
         if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
         // matches[0] is the whole @RG line; matches[1] is the ID field value
         kstring_t match_id = { 0, 0, NULL };
@@ -284,16 +309,23 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         free(rg_regex.s);
         kstring_t transformed_id = { 0, 0, NULL };
         bool transformed_equals_match;
-        if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0  || merge_rg) {
-            // Not in there so can add it as 1-1 mapping
-            kputs(match_id.s, &transformed_id);
-            transformed_equals_match = true;
-        } else {
-            // It's in there so we need to transform it by appending random number to id
-            ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
+        if (rg_override) {
+            kputs(rg_override, &transformed_id);
             transformed_equals_match = false;
+            rg_override = NULL;
+            loop = false;
+        } else {
+            if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0  || merge_rg) {
+                // Not in there so can add it as 1-1 mapping
+                kputs(match_id.s, &transformed_id);
+                transformed_equals_match = true;
+            } else {
+                // It's in there so we need to transform it by appending random number to id
+                ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
+                transformed_equals_match = false;
+            }
+            regfree(&rg_id_search);
         }
-        regfree(&rg_id_search);
 
         // Insert it into our translation map
         int in_there = 0;
@@ -320,6 +352,14 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         text += matches[0].rm_eo; // next!
     }
     regfree(&rg_id);
+    
+    // If there are no RG lines in the file and we are overriding add one
+    if (rg_override && kl_begin(rg_list) == NULL) {
+        char* line = NULL;
+        asprintf(&line, "@RG\tID:%s", rg_override);
+        char** ln = kl_pushp(hdrln, rg_list);
+        *ln = line;
+    }
 
     // Do same for PG id's
     regex_t pg_id;
@@ -445,18 +485,16 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     kl_destroy(hdrln,rg_list);
     free(matches);
 
-    if (! self_trans) {
-        // Just append @CO headers without translation
-        const char *line, *end_pointer;
-        for (line = translate->text; *line; line = end_pointer + 1) {
-            end_pointer = strchr(line, '\n');
-            if (strncmp(line, "@CO", 3) == 0) {
-                kputc('\n', &out_text);
-                if (end_pointer) kputsn(line, end_pointer - line, &out_text);
-                else kputs(line, &out_text);
-            }
-            if (end_pointer == NULL) break;
+    // Just append @CO headers without translation
+    const char *line, *end_pointer;
+    for (line = translate->text; *line; line = end_pointer + 1) {
+        end_pointer = strchr(line, '\n');
+        if (strncmp(line, "@CO", 3) == 0) {
+            kputc('\n', &out_text);
+            if (end_pointer) kputsn(line, end_pointer - line, &out_text);
+            else kputs(line, &out_text);
         }
+        if (end_pointer == NULL) break;
     }
 
     // Add trailing \n and write back to header
@@ -588,6 +626,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
         hout = sam_hdr_read(fpheaders);
         sam_close(fpheaders);
+    } else  {
+        hout = bam_hdr_init();
+        hout->text = strdup("");
     }
 
     g_is_by_qname = by_qname;
@@ -596,9 +637,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     iter = (hts_itr_t**)calloc(n, sizeof(hts_itr_t*));
     hdr = (bam_hdr_t**)calloc(n, sizeof(bam_hdr_t*));
     translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
+    RG = (char**)calloc(n, sizeof(char*));
     // prepare RG tag from file names
     if (flag & MERGE_RG) {
-        RG = (char**)calloc(n, sizeof(char*));
         RG_len = (int*)calloc(n, sizeof(int));
         for (i = 0; i != n; ++i) {
             int l = strlen(fn[i]);
@@ -625,14 +666,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             return -1;
         }
         hin = sam_hdr_read(fp[i]);
-        if (hout)
-            trans_tbl_init(hout, hin, translation_tbl+i, false, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG);
-        else {
-            // As yet, no headers to merge into...
-            hout = bam_hdr_dup(hin);
-            // ...so no need to translate header into itself
-            trans_tbl_init(hout, hin, translation_tbl+i, true, true, true);
-        }
+
+        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, RG[i]);
 
         // TODO sam_itr_next() doesn't yet work for SAM files,
         // so for those keep the headers around for use with sam_read1()
@@ -754,7 +789,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     // Clean up and close
     if (flag & MERGE_RG) {
         for (i = 0; i != n; ++i) free(RG[i]);
-        free(RG); free(RG_len);
+        free(RG_len);
     }
     for (i = 0; i < n; ++i) {
         trans_tbl_destroy(translation_tbl + i);
@@ -764,7 +799,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     }
     bam_hdr_destroy(hout);
     sam_close(fpout);
-    free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
+    free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     return 0;
 }
 
@@ -791,7 +826,7 @@ static void merge_usage(FILE *to)
     fprintf(to, "         -h FILE  copy the header in FILE to <out.bam> [in1.bam]\n");
     fprintf(to, "         -c       combine RG tags with colliding IDs rather than amending them\n");
     fprintf(to, "         -p       combine PG tags with colliding IDs rather than amending them\n");
-    fprintf(to, "         -s VALUE override random seed\n");
+    fprintf(to, "         -s VALUE override random seed (defaults to number of seconds since the Epoch)\n");
     fprintf(to, "         -b FILE  list of input BAM filenames, one per line [null]\n\n");
 }
 
