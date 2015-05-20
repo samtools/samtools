@@ -23,6 +23,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "sam_opts.h"
 
@@ -89,9 +90,17 @@ int parse_sam_global_opt(int c, char *optarg, struct option *lopt,
 	} else if (strcmp(lopt->name, "output-fmt-option") == 0) {
 	    r = hts_opt_add((hts_opt **)&ga->out.specific, optarg);
 	    break;
-	} else if (strcmp(lopt->name, "verbose") == 0) {
-	    ga->verbosity++;
+	} else if (strcmp(lopt->name, "reference") == 0) {
+	    char ref[8192];
+	    ref[8191] = 0;
+	    snprintf(ref, 8191, "reference=%s", optarg);
+	    ga->reference = strdup(optarg);
+	    r  = hts_opt_add((hts_opt **)&ga->in.specific, ref);
+	    r |= hts_opt_add((hts_opt **)&ga->out.specific, ref);
 	    break;
+//	} else if (strcmp(lopt->name, "verbose") == 0) {
+//	    ga->verbosity++;
+//	    break;
 	}
     }
 
@@ -138,9 +147,12 @@ void sam_global_opt_help(FILE *fp, char *shortopts) {
 	    fprintf(fp,"output-fmt-option OPT[=VAL]\n"
 		    "               Specify a single output file format option in the form\n"
 		    "               of OPTION or OPTION=VALUE\n");
-	else if (strcmp(lopts[i].name, "verbose") == 0)
-	    fprintf(fp,"verbose\n"
-		    "               Increment level of verbosity\n");
+	else if (strcmp(lopts[i].name, "reference") == 0)
+	    fprintf(fp,"reference FILE\n"
+		    "               Reference sequence FASTA FILE [null]\n");
+//	else if (strcmp(lopts[i].name, "verbose") == 0)
+//	    fprintf(fp,"verbose\n"
+//		    "               Increment level of verbosity\n");
     }
 }
 
@@ -157,4 +169,7 @@ void sam_global_args_free(sam_global_args *ga) {
 
     if (ga->out.specific)
 	hts_opt_free(ga->out.specific);
+
+    if (ga->reference)
+	free(ga->reference);
 }

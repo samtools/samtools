@@ -233,7 +233,7 @@ int main_samview(int argc, char *argv[])
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     bam_hdr_t *header = NULL;
-    char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
+    char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     samview_settings_t settings = {
@@ -251,7 +251,7 @@ int main_samview(int argc, char *argv[])
 
     static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
 
-    assign_short_opts(lopts, "-.O.-");
+    assign_short_opts(lopts, "-.O.T");
 
     /* parse command-line options */
     strcpy(out_mode, "w");
@@ -306,7 +306,7 @@ int main_samview(int argc, char *argv[])
         //case 'X': out_format = "X"; break;
                  */
         case '?': is_long_help = 1; break;
-        case 'T': fn_ref = strdup(optarg); break;
+            //case 'T': fn_ref = strdup(optarg); break;
         case 'B': settings.remove_B = 1; break;
         case '@': n_threads = strtol(optarg, 0, 0); break;
         case 'x':
@@ -336,7 +336,7 @@ int main_samview(int argc, char *argv[])
     if (argc == optind) return usage(is_long_help); // potential memory leak...
 
     // generate the fn_list if necessary
-    if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
+    if (fn_list == 0 && ga.reference) fn_list = samfaipath(ga.reference);
     // open file handlers
     if ((in = sam_open_format(argv[optind], "r", &ga.in)) == 0) {
         print_error_errno("failed to open \"%s\" for reading", argv[optind]);
@@ -400,8 +400,6 @@ int main_samview(int argc, char *argv[])
             }
         }
     }
-
-    sam_global_args_free(&ga);
 
     if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
@@ -472,7 +470,8 @@ view_end:
     if (out) check_sam_close(out, fn_out, "standard output", &ret);
     if (un_out) check_sam_close(un_out, fn_un_out, "file", &ret);
 
-    free(fn_list); free(fn_ref); free(fn_out); free(settings.library);  free(fn_un_out);
+    free(fn_list); free(fn_out); free(settings.library);  free(fn_un_out);
+    sam_global_args_free(&ga);
     if ( header ) bam_hdr_destroy(header);
     if (settings.bed) bed_destroy(settings.bed);
     if (settings.rghash) {
@@ -504,7 +503,6 @@ static int usage(int is_long_help)
     fprintf(stderr, "  -U FILE      output reads not selected by filters to FILE [null]\n");
     // extra input                  
     fprintf(stderr, "  -t FILE      FILE listing reference names and lengths (see long help) [null]\n");
-    fprintf(stderr, "  -T FILE      reference sequence FASTA FILE [null]\n");
     // read filters                 
     fprintf(stderr, "  -L FILE      only include reads overlapping this BED FILE [null]\n");
     fprintf(stderr, "  -r STR       only include reads in read group STR [null]\n");
@@ -527,7 +525,7 @@ static int usage(int is_long_help)
     fprintf(stderr, "  -S           ignored (input format is auto-detected)\n");
     fprintf(stderr, "\n");
 
-    sam_global_opt_help(stderr, "-.O.-");
+    sam_global_opt_help(stderr, "-.O.T");
 
     if (is_long_help)
         fprintf(stderr, "Notes:\n\
@@ -593,7 +591,7 @@ static void bam2fq_usage(FILE *to)
     fprintf(to, "         -t        copy RG, BC and QT tags to the FASTQ header line\n");
     fprintf(to, "\n");
 
-    sam_global_opt_help(to, "-.---");
+    sam_global_opt_help(to, "-.--.");
 }
 
 int main_bam2fq(int argc, char *argv[])
@@ -612,7 +610,7 @@ int main_bam2fq(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-.---");
+    assign_short_opts(lopts, "-.--.");
 
     while ((c = getopt_long(argc, argv, "nOts:", lopts, NULL)) > 0) {
         switch (c) {

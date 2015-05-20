@@ -123,7 +123,10 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     sprintf(modew, "wb%d", (clevel >= 0 && clevel <= 9)? clevel : DEF_CLEVEL);
     if (!is_stdout) { // output to a file
         char *fnw = (char*)calloc(l + 5, 1);
-        sprintf(fnw, "%s.%s", pre,  hts_format_file_extension(&ga->out));
+        if (ga->out.format == unknown_format)
+            sprintf(fnw, "%s.bam", pre); // "wb" above makes BAM the default
+        else
+            sprintf(fnw, "%s.%s", pre,  hts_format_file_extension(&ga->out));
         fpw = sam_open_format(fnw, modew, &ga->out);
         free(fnw);
     } else fpw = sam_open_format("-", modew, &ga->out); // output to stdout
@@ -173,7 +176,7 @@ static int usage(FILE *fp, int n_files) {
             "      -n INT   number of temporary files [%d]\n", // n_files
             DEF_CLEVEL, n_files);
 
-    sam_global_opt_help(fp, "-...-");
+    sam_global_opt_help(fp, "-....");
 
     return 1;
 }
@@ -183,7 +186,7 @@ int main_bamshuf(int argc, char *argv[])
     int c, n_files = 64, clevel = DEF_CLEVEL, is_stdout = 0, is_un = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-...-");
+    assign_short_opts(lopts, "-....");
 
     while ((c = getopt_long(argc, argv, "n:l:uO", lopts, NULL)) >= 0) {
         switch (c) {

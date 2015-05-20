@@ -1322,7 +1322,7 @@ static void error(const char *format, ...)
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -s, --sam                           Input is SAM (usually auto-detected now).\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
-        sam_global_opt_help(stdout, "-.---");
+        sam_global_opt_help(stdout, "-.--.");
         printf("\n");
     }
     else
@@ -1416,7 +1416,7 @@ int main_stats(int argc, char *argv[])
     };
     int opt;
 
-    assign_short_opts(loptions, "-.---");
+    assign_short_opts(loptions, "-.--.");
 
     while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:",loptions,NULL))>0 )
     {

@@ -33,8 +33,8 @@ DEALINGS IN THE SOFTWARE.  */
 typedef struct sam_global_args {
     htsFormat in;
     htsFormat out;
-    char *reference; // TO DO
-    int verbosity;
+    char *reference;
+    //int verbosity;
 } sam_global_args;
 
 #define SAM_GLOBAL_ARGS_INIT {{0},{0}}
@@ -44,7 +44,8 @@ enum {
     SAM_OPT_INPUT_FMT_OPTION,
     SAM_OPT_OUTPUT_FMT,
     SAM_OPT_OUTPUT_FMT_OPTION,
-    SAM_OPT_VERBOSE
+    SAM_OPT_REFERENCE,
+    //SAM_OPT_VERBOSE
 };
 
 // Use this within an existing struct option lopts[] = {...}, used where
@@ -54,7 +55,8 @@ enum {
     {"input-fmt-option",  required_argument, NULL, SAM_OPT_INPUT_FMT_OPTION}, \
     {"output-fmt",        required_argument, NULL, SAM_OPT_OUTPUT_FMT}, \
     {"output-fmt-option", required_argument, NULL, SAM_OPT_OUTPUT_FMT_OPTION}, \
-    {"verbose",           no_argument,       NULL, SAM_OPT_VERBOSE}
+    {"reference",         required_argument, NULL, SAM_OPT_REFERENCE}
+    //{"verbose",           no_argument,       NULL, SAM_OPT_VERBOSE}
 
 // Use this to completely assign all long options, used where the subcommand
 // doesn't have any long options of its own.

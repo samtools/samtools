@@ -37,6 +37,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/khash_str2int.h>
 #include "sam_header.h"
 #include "samtools.h"
+#include "sam_opts.h"
 
 static inline int printw(int c, FILE *fp)
 {
@@ -122,6 +123,7 @@ typedef struct {
     void *bed, *rghash;
     int argc;
     char **argv;
+    sam_global_args ga;
 } mplp_conf_t;
 
 typedef struct {
@@ -260,7 +262,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     for (i = 0; i < n; ++i) {
         bam_hdr_t *h_tmp;
         data[i] = calloc(1, sizeof(mplp_aux_t));
-        data[i]->fp = sam_open(fn[i], "rb");
+        data[i]->fp = sam_open_format(fn[i], "rb", &conf->ga.in);
         if ( !data[i]->fp )
         {
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
@@ -754,7 +756,9 @@ int bam_mpileup(int argc, char *argv[])
     mplp.argc = argc; mplp.argv = argv;
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
     mplp.output_fname = NULL;
-    static const struct option lopts[] =
+    sam_global_args_init(&mplp.ga);
+
+    static struct option lopts[] =
     {
         {"rf", required_argument, NULL, 1},   // require flag
         {"ff", required_argument, NULL, 2},   // filter flag
@@ -803,8 +807,10 @@ int bam_mpileup(int argc, char *argv[])
         {"per-sample-mF", no_argument, NULL, 'p'},
         {"per-sample-mf", no_argument, NULL, 'p'},
         {"platforms", required_argument, NULL, 'P'},
+        SAM_GLOBAL_LOPTS,
         {NULL, 0, NULL, 0}
     };
+    assign_short_opts(lopts, "-.--.");
     while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:",lopts,NULL)) >= 0) {
         switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
@@ -877,7 +883,8 @@ int bam_mpileup(int argc, char *argv[])
             }
             break;
         case 't': mplp.fmt_flag |= parse_format_flag(optarg); break;
-        default:
+        default: if (parse_sam_global_opt(c, optarg, lopts, &mplp.ga) == 0) break;
+        case '?':
             fprintf(stderr,"Invalid option: '%c'\n", c);
             return 1;
         }

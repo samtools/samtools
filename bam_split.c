@@ -62,7 +62,7 @@ struct state {
 
 typedef struct state state_t;
 
-static void cleanup_state(state_t* status);
+static int cleanup_state(state_t* status);
 static void cleanup_opts(parsed_opts_t* opts);
 
 static void usage(FILE *write_to)
@@ -75,7 +75,7 @@ static void usage(FILE *write_to)
 "  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
 "  -u FILE1:FILE2  ...and override the header with FILE2\n"
 "  -v              verbose output\n");
-    sam_global_opt_help(write_to, "-...v");
+    sam_global_opt_help(write_to, "-....");
     fprintf(write_to,
 "\n"
 "Format string expansions:\n"
@@ -97,7 +97,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
     char* delim;
 
     static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-...v");
+    assign_short_opts(lopts, "-....");
 
     parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
@@ -179,7 +179,10 @@ static char* expand_format_string(const char* format_string, const char* basenam
                 break;
             case 'f':
                 // Only really need to cope with sam, bam, cram
-                kputs(hts_format_file_extension(format), &str);
+                if (format->format != unknown_format)
+                    kputs(hts_format_file_extension(format), &str);
+                else
+                    kputs("bam", &str);
                 break;
             case '\0':
                 // Error is: fprintf(stderr, "bad format string, trailing %%\n");
@@ -439,10 +442,15 @@ static bool split(state_t* state)
 
     bam1_t* file_read = bam_init1();
     // Read the first record
-    if (sam_read1(state->merged_input_file, state->merged_input_header, file_read) < 0) {
+    int r;
+    if ((r=sam_read1(state->merged_input_file, state->merged_input_header, file_read)) < 0) {
         // Nothing more to read?  Ignore this file
         bam_destroy1(file_read);
         file_read = NULL;
+        if (r < -1) {
+            fprintf(stderr, "Could not write read sequence\n");
+            return false;
+        }
     }
 
     while (file_read != NULL) {
@@ -460,7 +468,10 @@ static bool split(state_t* state)
         if (iter != kh_end(state->rg_hash)) {
             // if found write to the appropriate untangled bam
             int i = kh_val(state->rg_hash,iter);
-            sam_write1(state->rg_output_file[i], state->rg_output_header[i], file_read);
+            if (sam_write1(state->rg_output_file[i], state->rg_output_header[i], file_read) < 0) {
+                fprintf(stderr, "Could not write sequence\n");
+                return false;
+            }
         } else {
             // otherwise write to the unaccounted bam if there is one or fail
             if (state->unaccounted_file == NULL) {
@@ -472,31 +483,40 @@ static bool split(state_t* state)
                 bam_destroy1(file_read);
                 return false;
             } else {
-                sam_write1(state->unaccounted_file, state->unaccounted_header, file_read);
+                if (sam_write1(state->unaccounted_file, state->unaccounted_header, file_read) < 0) {
+                    fprintf(stderr, "Could not write sequence\n");
+                    return false;
+                }
             }
         }
 
         // Replace written read with the next one to process
-        if (sam_read1(state->merged_input_file, state->merged_input_header, file_read) < 0) {
+        if ((r=sam_read1(state->merged_input_file, state->merged_input_header, file_read)) < 0) {
             // Nothing more to read?  Ignore this file in future
             bam_destroy1(file_read);
             file_read = NULL;
+            if (r < -1) {
+                fprintf(stderr, "Could not write read sequence\n");
+                return false;
+            }
         }
     }
 
     return true;
 }
 
-static void cleanup_state(state_t* status)
+static int cleanup_state(state_t* status)
 {
+    int ret = 0;
+
     if (!status) return;
     if (status->unaccounted_header) bam_hdr_destroy(status->unaccounted_header);
-    if (status->unaccounted_file) sam_close(status->unaccounted_file);
+    if (status->unaccounted_file) ret |= sam_close(status->unaccounted_file);
     sam_close(status->merged_input_file);
     size_t i;
     for (i = 0; i < status->output_count; i++) {
         bam_hdr_destroy(status->rg_output_header[i]);
-        sam_close(status->rg_output_file[i]);
+        ret |= sam_close(status->rg_output_file[i]);
         free(status->rg_id[i]);
     }
     bam_hdr_destroy(status->merged_input_header);
@@ -505,6 +525,8 @@ static void cleanup_state(state_t* status)
     kh_destroy_c2i(status->rg_hash);
     free(status->rg_id);
     free(status);
+
+    return ret;
 }
 
 static void cleanup_opts(parsed_opts_t* opts)
@@ -528,7 +550,7 @@ int main_split(int argc, char** argv)
 
     if (split(status)) ret = 0;
 
-    cleanup_state(status);
+    ret |= (cleanup_state(status) != 0);
 cleanup_opts:
     cleanup_opts(opts);
 

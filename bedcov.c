@@ -72,7 +72,7 @@ int main_bedcov(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-.---");
+    assign_short_opts(lopts, "-.--.");
 
     while ((c = getopt_long(argc, argv, "Q:", lopts, NULL)) >= 0) {
         switch (c) {
@@ -85,7 +85,7 @@ int main_bedcov(int argc, char *argv[])
     if (optind + 2 > argc) {
         fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...]\n\n");
         fprintf(stderr, "  -Q INT       Only count bases of at least INT quality [0]\n");
-        sam_global_opt_help(stderr, "-.---");
+        sam_global_opt_help(stderr, "-.--.");
         return 1;
     }
     memset(&str, 0, sizeof(kstring_t));

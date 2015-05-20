@@ -198,17 +198,17 @@ check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 	test/split/test_parse_args
 
 
-test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o $(HTSLIB) -lz $(LIBS)
+test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/merge/test_pretty_header: test/merge/test_pretty_header.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_pretty_header.o $(HTSLIB) -lz $(LIBS)
+test/merge/test_pretty_header: test/merge/test_pretty_header.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_pretty_header.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/merge/test_rtrans_build: test/merge/test_rtrans_build.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o $(HTSLIB) -lz $(LIBS)
+test/merge/test_rtrans_build: test/merge/test_rtrans_build.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o $(HTSLIB) -lz $(LIBS)
+test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
 test/split/test_count_rg: test/split/test_count_rg.o test/test.o sam_opts.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
@@ -219,7 +219,7 @@ test/split/test_expand_format_string: test/split/test_expand_format_string.o tes
 test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o sam_opts.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_filter_header_rg.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/split/test_parse_args: test/split/test_parse_args.o test/test.o sam_opts.o sam_opts.o $(HTSLIB)
+test/split/test_parse_args: test/split/test_parse_args.o test/test.o sam_opts.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
 test/vcf-miniview: test/vcf-miniview.o $(HTSLIB)

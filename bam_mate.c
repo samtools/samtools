@@ -299,7 +299,7 @@ void usage(FILE* where)
     fprintf(stderr,"  -p           Disable FR proper pair check\n");
     fprintf(stderr,"  -c           Add template cigar ct tag\n");
 
-    sam_global_opt_help(stderr, "-.O.-");
+    sam_global_opt_help(stderr, "-.O..");
 
     fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
     fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
@@ -312,7 +312,7 @@ int bam_mating(int argc, char *argv[])
     int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-.O.-");
+    assign_short_opts(lopts, "-.O..");
 
     // parse args
     if (argc == 1) { usage(stdout); return 0; }

@@ -83,7 +83,7 @@ static int usage() {
     fprintf(stderr, "   -r <chr:from-to>    region\n");
     fprintf(stderr, "\n");
 
-    sam_global_opt_help(stderr, "-.---");
+    sam_global_opt_help(stderr, "-.--.");
 
     return 1;
 }
@@ -103,7 +103,7 @@ int main_depth(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-.---");
+    assign_short_opts(lopts, "-.--.");
 
     // parse the command line
     while ((n = getopt_long(argc, argv, "r:b:q:Q:l:f:a", lopts, NULL)) >= 0) {
