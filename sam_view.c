@@ -646,8 +646,9 @@ int main_bam2fq(int argc, char *argv[])
         return 1;
     }
 
-    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS,
-                    SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL)) {
+    uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
+    if (use_oq) rf |= SAM_AUX;
+    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
         return 1;
     }
@@ -673,8 +674,9 @@ int main_bam2fq(int argc, char *argv[])
     char* previous = NULL;
     kstring_t linebuf = { 0, 0, NULL };
     kputsn("", 0, &linebuf);
+    int ret;
 
-    while (sam_read1(fp, h, b) >= 0) {
+    while ((ret = sam_read1(fp, h, b)) >= 0) {
         if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) continue; // skip secondary and supplementary alignments
         ++n_reads;
 
@@ -770,6 +772,11 @@ int main_bam2fq(int argc, char *argv[])
             kputs((char*)buf, &linebuf);
             kputc('\n', &linebuf);
         }
+    }
+
+    if (ret < -1) {
+        fprintf(stderr, "[bam2fq] ERROR: failed to decode sequence\n");
+        return 1;
     }
 
     if (fpse) {
