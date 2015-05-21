@@ -36,6 +36,11 @@ First release of HTSlib-based samtools.
 
 Numerous changes, notably support for the CRAM sequencing file format.
 
+The faidx command now reads either uncompressed or BGZF-compressed FASTA files
+compressed with bgzip.  In previous samtools-0.1.x versions, faidx could read
+either uncompressed or RAZF-compressed FASTA files, but RAZF and razip are
+superseded by BGZF/bgzip and have been removed from samtools.
+
 
 Beta Release 0.1.20 (15 August, 2014)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

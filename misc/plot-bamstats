@@ -190,7 +190,7 @@ sub parse_params
         if ( $arg eq '-t' || $arg eq '--targets' ) { $$opts{targets}=shift(@ARGV); next; }
         if ( $arg eq '-p' || $arg eq '--prefix' ) { $$opts{prefix}=shift(@ARGV); next; }
         if ( $arg eq '-?' || $arg eq '-h' || $arg eq '--help' ) { error(); }
-        if ( -e $arg ) { push @{$$opts{bamcheck}},$arg; next; }
+        if ( $arg eq '-'  || -e $arg ) { push @{$$opts{bamcheck}},$arg; next; }
         error("Unknown parameter or non-existent file \"$arg\". Run -h for help.\n");
     }
     if ( exists($$opts{do_ref_stats }) ) { do_ref_stats($opts); exit; }
@@ -307,7 +307,8 @@ sub open_file
 {
     my ($file) = @_;
     my $fh;
-    if ( $file=~/\.gz$/i ) { open($fh, "gunzip -c $file |") or error("gunzip -c $file: $!"); }
+    if ( $file eq '-' ) { $fh = *STDIN; }
+    elsif ( $file=~/\.gz$/i ) { open($fh, "gunzip -c $file |") or error("gunzip -c $file: $!"); }
     else { open($fh,'<',$file) or error("$file: $!"); }
     return $fh;
 }
@@ -334,7 +335,7 @@ sub parse_bamcheck1
         }
         push @{$dat{$items[0]}}, [splice(@items,1)];
     }
-    close($fh);
+    close($fh) unless $file eq '-';
 
     # Check sanity
     if ( !exists($dat{'SN'}{'sequences:'}) or !$dat{'SN'}{'sequences:'} )

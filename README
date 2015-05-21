@@ -22,7 +22,7 @@ containing the libz.so.1 file.
 
 Benchmarks comparing the various zlibs are available at:
 
-    https://www.snellman.net/blog/archive/2014-08-04-comparison-of-intel-and-cloudflare-zlib-patches.html
+    http://www.htslib.org/benchmarks/zlib.html
 
 It is recommended that you perform your own rigorous tests for an entire
 pipeline if you wish to switch to one of the optimised zlib implementations.

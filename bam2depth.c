@@ -78,6 +78,7 @@ static int usage() {
     fprintf(stderr, "   -b <bed>            list of positions or regions\n");
     fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
     fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>)\n");
+    fprintf(stderr, "   -m <int>            maximum coverage depth [8000]\n");  // the htslib's default
     fprintf(stderr, "   -q <int>            base quality threshold\n");
     fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
@@ -91,7 +92,7 @@ static int usage() {
 int main_depth(int argc, char *argv[])
 {
     int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0;
-    int all = 0, status = EXIT_SUCCESS, nfiles;
+    int all = 0, status = EXIT_SUCCESS, nfiles, max_depth = -1;
     const bam_pileup1_t **plp;
     char *reg = 0; // specified region
     void *bed = 0; // BED data structure
@@ -106,7 +107,7 @@ int main_depth(int argc, char *argv[])
     assign_short_opts(lopts, "-.--.");
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:q:Q:l:f:a", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:q:Q:l:f:am:", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -118,6 +119,7 @@ int main_depth(int argc, char *argv[])
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
             case 'f': file_list = optarg; break;
             case 'a': all++; break;
+            case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
             default: if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
             case '?': return usage();
         }
@@ -184,6 +186,8 @@ int main_depth(int argc, char *argv[])
 
     // the core multi-pileup loop
     mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
+    if (0 < max_depth)
+        bam_mplp_set_maxcnt(mplp,max_depth);  // set maximum coverage depth
     n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
     while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
