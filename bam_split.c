@@ -509,7 +509,7 @@ static int cleanup_state(state_t* status)
 {
     int ret = 0;
 
-    if (!status) return;
+    if (!status) return 0;
     if (status->unaccounted_header) bam_hdr_destroy(status->unaccounted_header);
     if (status->unaccounted_file) ret |= sam_close(status->unaccounted_file);
     sam_close(status->merged_input_file);
