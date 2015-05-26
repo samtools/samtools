@@ -100,7 +100,7 @@ static int dict_usage(void)
     fprintf(stderr, "Usage:   samtools dict [options] <file.fa|file.fa.gz>\n\n");
     fprintf(stderr, "Options: -a, --assembly STR    assembly\n");
     fprintf(stderr, "         -H, --no-header       do not print @HD line\n");
-    fprintf(stderr, "         -o, --outfile STR     file to write out dict file [stdout]\n");
+    fprintf(stderr, "         -o, --output STR      file to write out dict file [stdout]\n");
     fprintf(stderr, "         -s, --species STR     species\n");
     fprintf(stderr, "         -u, --uri STR         URI [file:///abs/path/to/file.fa]\n");
     fprintf(stderr, "\n");
@@ -119,7 +119,7 @@ int dict_main(int argc, char *argv[])
         {"assembly", required_argument, NULL, 'a'},
         {"species", required_argument, NULL, 's'},
         {"uri", required_argument, NULL, 'u'},
-        {"outfile", required_argument, NULL, 'o'},
+        {"output", required_argument, NULL, 'o'},
         {NULL, 0, NULL, 0}
     };
     int c;

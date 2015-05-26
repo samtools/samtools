@@ -867,10 +867,16 @@ indexed reference sequence. If no region is specified,
 will index the file and create
 .I <ref.fasta>.fai
 on the disk. If regions are specified, the subsequences will be
-retrieved and printed to stdout in the FASTA format. The input file can
-be compressed in the
+retrieved and printed to stdout in the FASTA format.
+
+The input file can be compressed in the
 .B BGZF
 format.
+
+The sequences in the input file should all have different names.
+If they do not, indexing will emit a warning about duplicate sequences and
+retrieval will only produce subsequences from the first sequence with the
+duplicated name.
 
 .TP
 .B dict
@@ -887,7 +893,7 @@ Specify the assembly for the AS tag.
 .B -H,\ --no-header
 Do not print the @HD header line.
 .TP
-.BI -o,\ --outfile \ FILE
+.BI -o,\ --output \ FILE
 Output to
 .I FILE
 [stdout].
