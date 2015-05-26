@@ -696,113 +696,167 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bool has12, co
     return true;
 }
 
-int main_bam2fq(int argc, char *argv[])
-{
+typedef struct bam2fq_opts {
+    char *fnse;
+    char *fnr1;
+    char *fnr2;
+    char *fn_input; // pointer to input filename in argv do not free
+    bool has12, use_oq, copy_tags;
+    int flag_on, flag_off;
+    sam_global_args ga;
+} bam2fq_opts_t;
+
+typedef struct bam2fq_state {
     samFile *fp;
+    FILE *fpse;
+    FILE **fpr;
     bam_hdr_t *h;
-    bam1_t *b;
-    int status = EXIT_SUCCESS;
-    FILE *fpse = NULL;
+    bool has12, use_oq, copy_tags;
+    int flag_on, flag_off;
+} bam2fq_state_t;
+
+// return false if valid
+static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
+{
     // Parse args
-    char *fnse = NULL;
-    char *fnr1 = NULL;
-    char *fnr2 = NULL;
-    bool has12 = true, use_oq = false, copy_tags = false;
-    int flag_on = 0, flag_off = 0;
+    bam2fq_opts_t* opts = calloc(1, sizeof(bam2fq_opts_t));
+    opts->has12 = true;
+
     int c;
-    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    sam_global_args_init(&opts->ga);
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
         { NULL, 0, NULL, 0 }
     };
     while ((c = getopt_long(argc, argv, "nOts:1:2:f:F:", lopts, NULL)) > 0) {
         switch (c) {
-            case 'n': has12 = false; break;
-            case 'O': use_oq = true; break;
-            case 's': fnse = optarg; break;
-            case 't': copy_tags = true; break;
-            case '1': fnr1 = optarg; break;
-            case '2': fnr2 = optarg; break;
-            case 'f': flag_on |= strtol(optarg, 0, 0); break;
-            case 'F': flag_off |= strtol(optarg, 0, 0); break;
-            case '?': bam2fq_usage(stderr); return 1;
+            case 'n': opts->has12 = false; break;
+            case 'O': opts->use_oq = true; break;
+            case 's': opts->fnse = optarg; break;
+            case 't': opts->copy_tags = true; break;
+            case '1': opts->fnr1 = optarg; break;
+            case '2': opts->fnr2 = optarg; break;
+            case 'f': opts->flag_on |= strtol(optarg, 0, 0); break;
+            case 'F': opts->flag_off |= strtol(optarg, 0, 0); break;
+            case '?': bam2fq_usage(stderr); free(opts); return true;
             default:
-                if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0) {
-                    bam2fq_usage(stderr); return 1;
+                if (parse_sam_global_opt(c, optarg, lopts, &opts->ga) != 0) {
+                    bam2fq_usage(stderr); free(opts); return true;
                 }
                 break;
         }
     }
 
-    if (fnr1 || fnr2) has12 = false;
+    if (opts->fnr1 || opts->fnr2) opts->has12 = false;
 
     if ((argc - (optind)) == 0) {
         bam2fq_usage(stdout);
-        return 0;
+        free(opts);
+        return false;
     }
 
     if ((argc - (optind)) != 1) {
         fprintf(stderr, "Too many arguments.\n");
         bam2fq_usage(stderr);
-        return 1;
+        free(opts);
+        return true;
     }
+    opts->fn_input = argv[optind];
+    *opts_out = opts;
+    return false;
+}
 
-    fp = sam_open_format(argv[optind], "r", &ga.in);
-    if (fp == NULL) {
-        print_error_errno("bam2fq", "Cannot read file \"%s\"", argv[optind]);
-        return 1;
+static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
+{
+    bam2fq_state_t* state = calloc(1, sizeof(bam2fq_state_t));
+    state->fpr = malloc(3 * sizeof(FILE*));
+    state->flag_on = opts->flag_on;
+    state->flag_off = opts->flag_off;
+    state->has12 = opts->has12;
+    state->use_oq = opts->use_oq;
+    state->copy_tags = opts->copy_tags;
+
+    state->fp = sam_open(opts->fn_input, "r");
+    if (state->fp == NULL) {
+        print_error_errno("bam2fq","Cannot read file \"%s\"", opts->fn_input);
+        free(state);
+        return true;
     }
-
     uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
-    if (use_oq) rf |= SAM_AUX;
-    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
+    if (opts->use_oq) rf |= SAM_AUX;
+    if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
-        return 1;
+        free(state);
+        return true;
     }
-    if (hts_set_opt(fp, CRAM_OPT_DECODE_MD, 0)) {
+    if (hts_set_opt(state->fp, CRAM_OPT_DECODE_MD, 0)) {
         fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
-        return 1;
+        free(state);
+        return true;
+    }
+    if (opts->fnse) {
+        state->fpse = fopen(opts->fnse,"w");
+        if (state->fpse == NULL) {
+            print_error_errno("bam2fq", "Cannot write to singleton file \"%s\"", opts->fnse);
+            free(state);
+            return true;
+        }
     }
 
-    h = sam_hdr_read(fp);
-    if (h == NULL) {
-        fprintf(stderr, "Failed to read header for \"%s\"\n", argv[optind]);
-        return 1;
+    state->fpr[0] = stdout;
+    state->fpr[1] = stdout;
+    state->fpr[2] = stdout;
+
+    if (opts->fnr1) {
+        state->fpr[1] = fopen(opts->fnr1, "w");
+        if (state->fpr[1] == NULL) {
+            print_error_errno("bam2fq", "Cannot write to r1 file \"%s\"", opts->fnr1);
+            free(state);
+            return true;
+        }
     }
-    b = bam_init1();
+
+    if (opts->fnr2) {
+        state->fpr[2] = fopen(opts->fnr2, "w");
+        if (state->fpr[2] == NULL) {
+            print_error_errno("bam2fq", "Cannot write to r2 file \"%s\"", opts->fnr2);
+            free(state);
+            return true;
+        }
+    }
+
+    state->h = sam_hdr_read(state->fp);
+    if (state->h == NULL) {
+        fprintf(stderr, "Failed to read header for \"%s\"\n", opts->fn_input);
+        free(state);
+        return true;
+    }
+
+    *state_out = state;
+    return false;
+}
+
+bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int* status)
+{
+    bam_hdr_destroy(state->h);
+    check_sam_close("bam2fq", state->fp, opts->fn_input, "file", status);
+    if (state->fpse && !fclose(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); return true; }
+    if (state->fpr[0] != stdout && !fclose(state->fpr[0])) { print_error_errno("bam2fq", "Error closing r0 file"); return true; }
+    if (state->fpr[1] != stdout && !fclose(state->fpr[1])) { print_error_errno("bam2fq", "Error closing r1 file \"%s\"", opts->fnr1); return true; }
+    if (state->fpr[2] != stdout && !fclose(state->fpr[2])) { print_error_errno("bam2fq", "Error closing r2 file \"%s\"", opts->fnr2); return true; }
+    free(state->fpr);
+    free(state);
+    return false;
+}
+
+bool bam2fq_mainloop(bam2fq_state_t *state)
+{
+    // process
+    bam1_t* b = bam_init1();
     if (b == NULL) {
         perror(NULL);
-        bam_hdr_destroy(h);
-        return 1;
+        return true;
     }
-
-    if (fnse) {
-        fpse = fopen(fnse,"w");
-        if (fpse == NULL) {
-            print_error_errno("bam2fq", "Cannot write to singleton file \"%s\"", fnse);
-            bam_hdr_destroy(h);
-            return 1;
-        }
-    }
-
-    FILE *fpr[] = {stdout, stdout, stdout};
-
-    if (fnr1) {
-        fpr[1] = fopen(fnr1, "w");
-        if (fpr[1] == NULL) {
-            print_error_errno("bam2fq", "Cannot write to r1 file \"%s\"", fnr1);
-            return 1;
-        }
-    }
-
-    if (fnr2) {
-        fpr[2] = fopen(fnr2, "w");
-        if (fpr[2] == NULL) {
-            print_error_errno("bam2fq", "Cannot write to r2 file \"%s\"", fnr2);
-            return 1;
-        }
-    }
-
     int64_t n_singletons = 0, n_reads = 0;
     char *previous_readname = NULL;
     kstring_t linebuf = { 0, 0, NULL };
@@ -810,70 +864,80 @@ int main_bam2fq(int argc, char *argv[])
     int previous_readpart = READ_UNKNOWN;
     int ret;
 
-    while ((ret = sam_read1(fp, h, b)) >= 0) {
+    while ((ret = sam_read1(state->fp, state->h, b)) >= 0) {
         if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
-            || (b->core.flag&flag_on) != flag_on             // or reads indicated by filter flags
-            || (b->core.flag&flag_off) != 0) continue;
+            || (b->core.flag&(state->flag_on)) != state->flag_on             // or reads indicated by filter flags
+            || (b->core.flag&(state->flag_off)) != 0) continue;
         ++n_reads;
 
         //////////////////////////////////////////////////////////////////
         // First deal with the previous read, checking if it has a mate //
         //////////////////////////////////////////////////////////////////
         // If there was a previous readname and we're tracking singletons
-        if ( fpse && previous_readname ) {
+        if ( state->fpse && previous_readname ) {
             if (!strcmp(bam_get_qname(b), previous_readname ) ) {
-                fputs(linebuf.s, fpr[previous_readpart]); // Write previous read
+                fputs(linebuf.s, state->fpr[previous_readpart]); // Write previous read
                 free(previous_readname);
                 previous_readname = NULL;
                 previous_readpart = READ_UNKNOWN;
             } else { // Doesn't match it's a singleton
                 ++n_singletons;
-                fputs(linebuf.s, fpse);  // Write previous read to singletons
+                fputs(linebuf.s, state->fpse);  // Write previous read to singletons
                 free(previous_readname);
                 previous_readname = strdup(bam_get_qname(b));
                 previous_readpart = which_readpart(b);
             }
         } else {
-            fputs(linebuf.s, fpr[previous_readpart]); // Write pending read
-            if (fpse) previous_readname = strdup(bam_get_qname(b));
-                previous_readpart = which_readpart(b);
+            fputs(linebuf.s, state->fpr[previous_readpart]); // Write pending read
+            if (state->fpse) previous_readname = strdup(bam_get_qname(b));
+            previous_readpart = which_readpart(b);
         }
         /////////////////////////////////////////
         // Process read into the output buffer //
         /////////////////////////////////////////
-        if (bam1_to_fq(b, &linebuf, has12, use_oq, copy_tags) == false) return 1;
+        if (bam1_to_fq(b, &linebuf, state->has12, state->use_oq, state->copy_tags) == false) return true;
     }
-    // Flush pending output
     if (ret < -1) {
         fprintf(stderr, "[bam2fq] ERROR: failed to decode sequence\n");
-        return 1;
+        return true;
     }
-
-    if (fpse) {
+    // Flush pending output
+    if (state->fpse) {
         if ( previous_readname ) { // Nothing left to match it's a singleton
             ++n_singletons;
-            fputs(linebuf.s, fpse);  // Write previous read to singletons
+            fputs(linebuf.s, state->fpse);  // Write previous read to singletons
         } else {
-            fputs(linebuf.s, fpr[previous_readpart]); // Write previous read
+            fputs(linebuf.s, state->fpr[previous_readpart]); // Write previous read
         }
 
         fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
     } else {
-        fputs(linebuf.s, fpr[previous_readpart]); // Write previous read
+        fputs(linebuf.s, state->fpr[previous_readpart]); // Write previous read
     }
     free(linebuf.s);
     free(previous_readname);
+    bam_destroy1(b);
 
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
+    return false;
+}
 
-    sam_global_args_free(&ga);
-    bam_destroy1(b);
-    bam_hdr_destroy(h);
-    check_sam_close("bam2fq", fp, argv[optind], "file", &status);
-    if (fpse && !fclose(fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", fnse); return 1; }
-    if (fpr[0] != stdout && !fclose(fpr[0])) { print_error_errno("bam2fq", "Error closing r0 file"); return 1; }
-    if (fpr[1] != stdout && !fclose(fpr[1])) { print_error_errno("bam2fq", "Error closing r1 file \"%s\"", fnr1); return 1; }
-    if (fpr[2] != stdout && !fclose(fpr[2])) { print_error_errno("bam2fq", "Error closing r2 file \"%s\"", fnr2); return 1; }
+int main_bam2fq(int argc, char *argv[])
+{
+    int status = EXIT_SUCCESS;
+    bam2fq_opts_t* opts = NULL;
+    bam2fq_state_t* state = NULL;
+
+    bool invalid = parse_opts(argc, argv, &opts);
+    if (invalid || opts == NULL) return invalid ? EXIT_FAILURE : EXIT_SUCCESS;
+
+    if (init_state(opts, &state)) return EXIT_FAILURE;
+
+    if (bam2fq_mainloop(state)) status = EXIT_FAILURE;
+
+    if (destroy_state(opts, state, &status)) return EXIT_FAILURE;
+    sam_global_args_free(&opts->ga);
+    free(opts);
 
     return status;
 }
