@@ -98,6 +98,17 @@ regions_t;
 
 typedef struct
 {
+    uint64_t a;
+    uint64_t c;
+    uint64_t g;
+    uint64_t t;
+    uint64_t n;
+    uint64_t other;
+}
+acgtno_count_t;
+
+typedef struct
+{
     // Parameters
     int trim_qual;      // bwa trim quality
 
@@ -112,7 +123,7 @@ typedef struct
     // Arrays for the histogram data
     uint64_t *quals_1st, *quals_2nd;
     uint64_t *gc_1st, *gc_2nd;
-    uint64_t *acgt_cycles;
+    acgtno_count_t *acgtno_cycles;
     uint64_t *read_lengths;
     uint64_t *insertions, *deletions;
     uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
@@ -538,10 +549,10 @@ void realloc_buffers(stats_t *stats, int seq_len)
         memset(stats->mpc_buf + stats->nbases*stats->nquals, 0, (n-stats->nbases)*stats->nquals*sizeof(uint64_t));
     }
 
-    stats->acgt_cycles = realloc(stats->acgt_cycles, n*4*sizeof(uint64_t));
-    if ( !stats->acgt_cycles )
-        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*4*sizeof(uint64_t));
-    memset(stats->acgt_cycles + stats->nbases*4, 0, (n-stats->nbases)*4*sizeof(uint64_t));
+    stats->acgtno_cycles = realloc(stats->acgtno_cycles, n*sizeof(acgtno_count_t));
+    if ( !stats->acgtno_cycles )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
+    memset(stats->acgtno_cycles + stats->nbases*sizeof(acgtno_count_t), 0, (n-stats->nbases)*sizeof(acgtno_count_t));
 
     stats->read_lengths = realloc(stats->read_lengths, n*sizeof(uint64_t));
     if ( !stats->read_lengths )
@@ -652,24 +663,44 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     stats->read_lengths[read_len]++;
 
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
-    uint8_t base, *seq  = bam_get_seq(bam_line);
-    int gc_count  = 0;
-    int i;
+    uint8_t *seq = bam_get_seq(bam_line);
+    int gc_count = 0;
+    int i, read_cycle;
     int reverse = IS_REVERSE(bam_line);
     for (i=0; i<seq_len; i++)
     {
-        // Conversion from uint8_t coding to ACGT
+        // Read cycle for current index
+        read_cycle = (reverse ? seq_len-i-1 : i);
+
+        // Conversion from uint8_t coding:
         //      -12-4---8------5
         //      =ACMGRSVTWYHKDBN
-        //       01 2   3
-        base = bam_seqi(seq,i);
-        if ( base==0 ) break;   // not ready for "=" sequences
-        base /= 2;
-        if ( base==1 || base==2 ) gc_count++;
-        else if ( base>2 ) base=3;
-        if ( 4*(reverse ? seq_len-i-1 : i) + base >= stats->nbases*4 )
-            error("FIXME: acgt_cycles\n");
-        stats->acgt_cycles[ 4*(reverse ? seq_len-i-1 : i) + base ]++;
+        switch (bam_seqi(seq, i)) {
+        case 1:
+            stats->acgtno_cycles[ read_cycle ].a++;
+            break;
+        case 2:
+            stats->acgtno_cycles[ read_cycle ].c++;
+            gc_count++;
+            break;
+        case 4:
+            stats->acgtno_cycles[ read_cycle ].g++;
+            gc_count++;
+            break;
+        case 8:
+            stats->acgtno_cycles[ read_cycle ].t++;
+            break;
+        case 15:
+            stats->acgtno_cycles[ read_cycle ].n++;
+            break;
+        default:
+            /*
+             * count "=" sequences in "other" along
+             * with MRSVWYHKDB ambiguity codes
+             */
+            stats->acgtno_cycles[ read_cycle ].other++;
+            break;
+        }
     }
     int gc_idx_min = gc_count*(stats->ngc-1)/seq_len;
     int gc_idx_max = (gc_count+1)*(stats->ngc-1)/seq_len;
@@ -1044,13 +1075,13 @@ void output_stats(stats_t *stats, int sparse)
         printf("GCL\t%.2f\t%ld\n", (ibase+ibase_prev)*0.5*100./(stats->ngc-1), (long)stats->gc_2nd[ibase_prev]);
         ibase_prev = ibase;
     }
-    printf("# ACGT content per cycle. Use `grep ^GCC | cut -f 2-` to extract this part. The columns are: cycle, and A,C,G,T counts [%%]\n");
+    printf("# ACGT content per cycle. Use `grep ^GCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
     {
-        uint64_t *ptr = &(stats->acgt_cycles[ibase*4]);
-        uint64_t  sum = ptr[0]+ptr[1]+ptr[2]+ptr[3];
-        if ( ! sum ) continue;
-        printf("GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,100.*ptr[0]/sum,100.*ptr[1]/sum,100.*ptr[2]/sum,100.*ptr[3]/sum);
+        acgtno_count_t *acgtno_count = &(stats->acgtno_cycles[ibase]);
+        uint64_t acgt_sum = acgtno_count->a + acgtno_count->c + acgtno_count->g + acgtno_count->t;
+        if ( ! acgt_sum ) continue;
+        printf("GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1, 100.*acgtno_count->a/acgt_sum, 100.*acgtno_count->c/acgt_sum, 100.*acgtno_count->g/acgt_sum, 100.*acgtno_count->t/acgt_sum, 100.*acgtno_count->n/acgt_sum, 100.*acgtno_count->other/acgt_sum);
     }
     printf("# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
@@ -1345,7 +1376,7 @@ void cleanup_stats(stats_t* stats)
     free(stats->gcd);
     free(stats->rseq_buf);
     free(stats->mpc_buf);
-    free(stats->acgt_cycles);
+    free(stats->acgtno_cycles);
     free(stats->read_lengths);
     free(stats->insertions);
     free(stats->deletions);
@@ -1476,7 +1507,7 @@ int main_stats(int argc, char *argv[])
     stats->isize          = init_isize_t(stats->nisize);
     stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
     stats->mpc_buf        = stats->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
-    stats->acgt_cycles    = calloc(4*stats->nbases,sizeof(uint64_t));
+    stats->acgtno_cycles  = calloc(stats->nbases,sizeof(acgtno_count_t));
     stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
     stats->insertions     = calloc(stats->nbases,sizeof(uint64_t));
     stats->deletions      = calloc(stats->nbases,sizeof(uint64_t));
