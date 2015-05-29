@@ -139,7 +139,7 @@ static char *drop_rg(char *hdtxt, rghash_t h, int *len)
     return str.s;
 }
 
-static int usage(int is_long_help);
+static int usage(FILE *fp, int exit_status, int is_long_help);
 
 static int add_read_group_single(samview_settings_t *settings, char *name)
 {
@@ -231,7 +231,7 @@ int main_samview(int argc, char *argv[])
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     bam_hdr_t *header = NULL;
-    char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
+    char out_mode[5], *out_format = "", *fn_in = 0, *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -305,13 +305,13 @@ int main_samview(int argc, char *argv[])
             {
                 if (strlen(optarg) != 2) {
                     fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
-                    return usage(is_long_help);
+                    return usage(stderr, EXIT_FAILURE, is_long_help);
                 }
                 settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
                 settings.remove_aux[settings.remove_aux_len-1] = optarg;
             }
             break;
-        default: return usage(is_long_help);
+        default: return usage(stderr, EXIT_FAILURE, is_long_help);
         }
     }
     if (compress_level >= 0) out_format = "b";
@@ -322,13 +322,14 @@ int main_samview(int argc, char *argv[])
         tmp[0] = compress_level + '0'; tmp[1] = '\0';
         strcat(out_mode, tmp);
     }
-    if (argc == optind) return usage(is_long_help); // potential memory leak...
+    if (argc == optind && isatty(STDIN_FILENO)) return usage(stdout, EXIT_SUCCESS, is_long_help); // potential memory leak...
 
+    fn_in = (optind < argc)? argv[optind] : "-";
     // generate the fn_list if necessary
     if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
     // open file handlers
-    if ((in = sam_open(argv[optind], "r")) == 0) {
-        print_error_errno("failed to open \"%s\" for reading", argv[optind]);
+    if ((in = sam_open(fn_in, "r")) == 0) {
+        print_error_errno("failed to open \"%s\" for reading", fn_in);
         ret = 1;
         goto view_end;
     }
@@ -340,7 +341,7 @@ int main_samview(int argc, char *argv[])
         }
     }
     if ((header = sam_hdr_read(in)) == 0) {
-        fprintf(stderr, "[main_samview] fail to read the header from \"%s\".\n", argv[optind]);
+        fprintf(stderr, "[main_samview] fail to read the header from \"%s\".\n", fn_in);
         ret = 1;
         goto view_end;
     }
@@ -390,7 +391,7 @@ int main_samview(int argc, char *argv[])
     if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
 
-    if (argc == optind + 1) { // convert/print the entire file
+    if (optind + 1 >= argc) { // convert/print the entire file
         bam1_t *b = bam_init1();
         int r;
         while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
@@ -409,7 +410,7 @@ int main_samview(int argc, char *argv[])
     } else { // retrieve alignments in specified regions
         int i;
         bam1_t *b;
-        hts_idx_t *idx = sam_index_load(in, argv[optind]); // load index
+        hts_idx_t *idx = sam_index_load(in, fn_in); // load index
         if (idx == 0) { // index is unavailable
             fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
             ret = 1;
@@ -452,7 +453,7 @@ view_end:
         printf("%" PRId64 "\n", count);
 
     // close files, free and return
-    if (in) check_sam_close(in, argv[optind], "standard input", &ret);
+    if (in) check_sam_close(in, fn_in, "standard input", &ret);
     if (out) check_sam_close(out, fn_out, "standard output", &ret);
     if (un_out) check_sam_close(un_out, fn_un_out, "file", &ret);
 
@@ -471,9 +472,9 @@ view_end:
     return ret;
 }
 
-static int usage(int is_long_help)
+static int usage(FILE *fp, int exit_status, int is_long_help)
 {
-    fprintf(stderr,
+    fprintf(fp,
 "\n"
 "Usage: samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n"
 "\n"
@@ -512,7 +513,7 @@ static int usage(int is_long_help)
 "  -S       ignored (input format is auto-detected)\n"
 "\n");
     if (is_long_help)
-        fprintf(stderr,
+        fprintf(fp,
 "Notes:\n"
 "\n"
 "  1. This command now auto-detects the input format (BAM/CRAM/SAM).\n"
@@ -535,7 +536,7 @@ static int usage(int is_long_help)
 "  6. Option `-u' is preferred over `-b' when the output is piped to\n"
 "     another samtools command.\n"
 "\n");
-    return 1;
+    return exit_status;
 }
 
 int main_import(int argc, char *argv[])
