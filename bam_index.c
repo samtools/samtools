@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #define BAM_LIDX_SHIFT    14
 
@@ -46,9 +47,10 @@ static void index_usage(FILE *fp)
     fprintf(fp,
 "Usage: samtools index [-bc] [-m INT] <in.bam> [out.index]\n"
 "Options:\n"
-"  -b       Generate BAI-format index for BAM files [default]\n"
-"  -c       Generate CSI-format index for BAM files\n"
-"  -m INT   Set minimum interval size for CSI indices to 2^INT [%d]\n", BAM_LIDX_SHIFT);
+"  -b, --bai       Generate BAI-format index for BAM files [default]\n"
+"  -c, --csi       Generate CSI-format index for BAM files\n"
+"      --csi-v1    Same as --csi, but does not store per-bin record counts\n"
+"  -m, --min INT   Set minimum interval size for CSI indices to 2^INT [%d]\n", BAM_LIDX_SHIFT);
 }
 
 int bam_index(int argc, char *argv[])
@@ -57,11 +59,22 @@ int bam_index(int argc, char *argv[])
     int min_shift = BAM_LIDX_SHIFT;
     int c;
 
-    while ((c = getopt(argc, argv, "bcm:")) >= 0)
+    static struct option loptions[] =
+    {
+        {"csi",0,0,'C'},
+        {"csi-v1",0,0,1},
+        {"bai",0,0,'b'},
+        {"min",0,0,'m'},
+        {0,0,0,0}
+    };
+
+
+    while ((c = getopt_long(argc, argv, "bcm:", loptions, NULL)) >= 0)
         switch (c) {
         case 'b': csi = 0; break;
         case 'c': csi = 1; break;
-        case 'm': csi = 1; min_shift = atoi(optarg); break;
+        case  1 : csi = -1; break;
+        case 'm': if (!csi) csi = 1; min_shift = atoi(optarg); break;
         default:
             index_usage(stderr);
             return 1;
@@ -72,7 +85,7 @@ int bam_index(int argc, char *argv[])
         return 1;
     }
     if (argc - optind > 1) bam_index_build2(argv[optind], argv[optind+1]);
-    else bam_index_build(argv[optind], csi? min_shift : 0);
+    else bam_index_build(argv[optind], csi*min_shift);
     return 0;
 }
 
