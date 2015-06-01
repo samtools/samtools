@@ -2,10 +2,11 @@
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2014 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2015 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
 .\"
 .\" Permission is hereby granted, free of charge, to any person obtaining a
 .\" copy of this software and associated documentation files (the "Software"),
@@ -35,11 +36,23 @@ samtools index aln.sorted.bam
 .PP
 samtools idxstats aln.sorted.bam
 .PP
+samtools flagstat aln.sorted.bam
+.PP
+samtools stats aln.sorted.bam
+.PP
+samtools bedcov aln.sorted.bam
+.PP
+samtools depth aln.sorted.bam
+.PP
 samtools view aln.sorted.bam chr2:20,100,000-20,200,000
 .PP
 samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
 samtools faidx ref.fasta
+.PP
+samtools tview aln.sorted.bam ref.fasta
+.PP
+samtools split merged.bam
 .PP
 samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
 .PP
@@ -47,11 +60,11 @@ samtools fixmate in.namesorted.sam out.bam
 .PP
 samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
-samtools tview aln.sorted.bam ref.fasta
-.PP
 samtools flags PAIRED,UNMAP,MUNMAP
 .PP
 samtools bam2fq input.bam > output.fastq
+.PP
+samtools bamshuf aln.sorted.bam reads.together.bam
 
 .SH DESCRIPTION
 .PP
@@ -74,11 +87,11 @@ entire alignment file unless it is asked to do so.
 
 .SH COMMANDS AND OPTIONS
 
-.TP 10
+.TP 10 \"-------- view
 .B view
 samtools view
 .RI [ options ]
-.IR in.bam | in.sam | in.cram
+.IR in.sam | in.bam | in.cram
 .RI [ region ...]
 
 With no options or regions specified, prints all alignments in the specified
@@ -300,7 +313,7 @@ correct format is automatically detected by examining the first few characters
 of input.
 .RE
 
-.TP
+.TP \"-------- sort
 .B sort
 .na
 samtools sort
@@ -315,7 +328,7 @@ samtools sort
 .RB [ -n ]
 .BI "-T " out.prefix
 .RB [ -@
-.IR threads "] [" in.bam ]
+.IR threads "] [" in.sam | in.bam | in.cram ]
 .ad
 
 Sort alignments by leftmost coordinates, or by read name when
@@ -426,7 +439,7 @@ This will eventually be removed; you should move to using the more flexible
 newer style of invocation.
 .RE
 
-.TP
+.TP \"-------- index
 .B index
 samtools index
 .RB [ -bc ]
@@ -435,6 +448,9 @@ samtools index
 .IR aln.bam | aln.cram
 
 Index a coordinate-sorted BAM or CRAM file for fast random access.
+(Note that this does not work with SAM files even if they are bgzip
+compressed \(em to index such files, use tabix(1) instead.)
+
 This index is needed when
 .I region
 arguments are used to limit
@@ -470,15 +486,211 @@ as the fixed value used by the BAI format.
 Create a CSI index, with a minimum interval size of 2^INT.
 .RE
 
-.TP
+.TP \"-------- idxstats
 .B idxstats
-samtools idxstats <aln.bam>
+samtools idxstats
+.IR in.sam | in.bam | in.cram
 
-Retrieve and print stats in the index file. The output is TAB-delimited
-with each line consisting of reference sequence name, sequence length, #
-mapped reads and # unmapped reads.
+Retrieve and print stats in the index file corresponding to the input file.
+Before calling idxstats, the input BAM file must be indexed by samtools index.
 
+The output is TAB-delimited with each line consisting of reference sequence
+name, sequence length, # mapped reads and # unmapped reads. It is written to
+stdout.
+
+.TP \"-------- flagstat
+.B flagstat
+samtools flagstat
+.IR in.sam | in.bam | in.cram
+
+Does a full pass through the input file to calculate and print statistics
+to stdout.
+
+Provides counts for each of 13 categories based primarily on bit flags in
+the FLAG field. Each category in the output is broken down into QC pass and
+QC fail, which is presented as "#PASS + #FAIL" followed by a description of
+the category.
+
+The first row of output gives the total number of reads that are QC pass and
+fail (according to flag bit 0x200). For example:
+
+  122 + 28 in total (QC-passed reads + QC-failed reads)
+
+Which would indicate that there are a total of 150 reads in the input file,
+122 of which are marked as QC pass and 28 of which are marked as "not passing
+quality controls"
+
+Following this, additional categories are given for reads which are:
+
+.RS 18
 .TP
+secondary
+0x100 bit set
+.TP
+supplementary
+0x800 bit set
+.TP
+duplicates
+0x400 bit set
+.TP
+mapped
+0x4 bit not set
+.TP
+paired in sequencing
+0x1 bit set
+.TP
+read1
+both 0x1 and 0x40 bits set
+.TP
+read2
+both 0x1 and 0x80 bits set
+.TP
+properly paired
+both 0x1 and 0x2 bits set and 0x4 bit not set
+.TP
+with itself and mate mapped
+0x1 bit set and neither 0x4 nor 0x8 bits set
+.TP
+singletons
+both 0x1 and 0x8 bits set and bit 0x4 not set
+.RE
+
+.RS 10
+And finally, two rows are given that additionally filter on the reference
+name (RNAME), mate reference name (MRNM), and mapping quality (MAPQ) fields:
+.RE
+
+.RS 18
+.TP
+with mate mapped to a different chr
+0x1 bit set and neither 0x4 nor 0x8 bits set and MRNM not equal to RNAME
+.TP
+with mate mapped to a different chr (mapQ>=5)
+0x1 bit set and neither 0x4 nor 0x8 bits set
+and MRNM not equal to RNAME and MAPQ >= 5
+.RE
+
+.TP \"-------- stats
+.B stats
+samtools stats
+.RI [ options ]
+.IR in.sam | in.bam | in.cram
+.RI [ region ...]
+
+samtools stats collects statistics from BAM files and outputs in a text format.
+The output can be visualized graphically using plot-bamstats.
+
+.B Options:
+.RS
+.TP 8
+.BI "-c, --coverage " MIN , MAX , STEP
+Set coverage distribution to the specified range (MIN, MAX, STEP all given as integers)
+[1,1000,1]
+.TP
+.B -d, --remove-dups
+Exclude from statistics reads marked as duplicates
+.TP
+.BI "-f, --required-flag "  STR "|" INT
+Required flag, 0 for unset. See also `samtools flags`
+[0]
+.TP
+.BI "-F, --filtering-flag " STR "|" INT
+Filtering flag, 0 for unset. See also `samtools flags`
+[0]
+.TP
+.BI "--GC-depth " FLOAT
+the size of GC-depth bins (decreasing bin size increases memory requirement)
+[2e4]
+.TP
+.B -h, --help
+This help message
+.TP
+.BI "-i, --insert-size " INT
+Maximum insert size
+[8000]
+.TP
+.BI "-I, --id " STR
+Include only listed read group or sample name
+[]
+.TP
+.BI "-l, --read-length " INT
+Include in the statistics only reads with the given read length
+[]
+.TP
+.BI "-m, --most-inserts " FLOAT
+Report only the main part of inserts
+[0.99]
+.TP
+.BI "-q, --trim-quality " INT
+The BWA trimming parameter
+[0]
+.TP
+.BI "-r, --ref-seq " FILE
+Reference sequence (required for GC-depth and mismatches-per-cycle calculation).
+[]
+.TP
+.BI "-t, --target-regions " FILE
+Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.
+[]
+.TP
+.B "-s, --sam"
+Input is SAM (usually auto-detected now).
+.TP
+.B "-x, --sparse"
+Suppress outputting IS rows where there are no insertions.
+.RE
+
+.TP \"-------- bedcov
+.B bedcov
+samtools bedcov
+.IR region.bed " " in1.sam | in1.bam | in1.cram "[...]"
+
+Reports read depth per genomic region, as specified in the supplied BED file.
+
+.TP \"-------- depth
+.B depth
+samtools depth
+.RI [ options ]
+.RI "[" in1.sam | in1.bam | in1.cram " [" in2.sam | in2.bam | in2.cram "] [...]]"
+
+Computes the depth at each position or region.
+
+.B Options:
+.RS
+.TP 8
+.B -a
+Output all positions (including those with zero depth)
+.TP
+.B -a -a, -aa
+Output absolutely all positions, including unused reference sequences
+.TP
+.BI "-b "  FILE
+.RI "Compute depth at list of positions or regions in specified BED " FILE.
+[]
+.TP
+.BI "-f " FILE
+.RI "Use the BAM files specified in the " FILE
+(a file of filenames, one file per line)
+[]
+.TP
+.BI "-l " INT
+.RI "Ignore reads shorter than " INT
+.TP
+.BI "-m " INT
+.RI "Truncate reported depth at a maximum of " INT " reads."
+[8000]
+.TP
+.BI "-q " INT
+.RI "Only count reads with base quality greater than " INT
+.TP
+.BI "-Q " INT
+.RI "Only count reads with mapping quality greater than " INT
+.TP
+.BI "-r " CHR ":" FROM "-" TO
+Only report depth in specified region.
+.RE
+
+.TP \"-------- merge
 .B merge
 samtools merge [-nur1f] [-h inh.sam] [-R reg] [-b <list>] <out.bam> <in1.bam> [<in2.bam> <in3.bam> ... <inN.bam>]
 
@@ -545,7 +757,7 @@ Combine RG tags with colliding IDs rather than adding a suffix to differentiate 
 Combine PG tags with colliding IDs rather than adding a suffix to differentiate them.
 .RE
 
-.TP
+.TP \"-------- faidx
 .B faidx
 samtools faidx <ref.fasta> [region1 [...]]
 
@@ -566,7 +778,7 @@ If they do not, indexing will emit a warning about duplicate sequences and
 retrieval will only produce subsequences from the first sequence with the
 duplicated name.
 
-.TP
+.TP \"-------- tview
 .B tview
 samtools tview
 .RB [ -p
@@ -596,7 +808,41 @@ Go directly to this position
 Display only alignments from this sample or read group
 .RE
 
+.TP \"-------- split
+.B split
+samtools split
+.RI [ options ]
+.IR merged.sam | merged.bam | merged.cram
+
+Splits a file by read group.
+
+.B Options:
+.RS
+.TP 14
+.BI "-u " FILE1
+.RI "Put reads with no RG tag or an unrecognised RG tag into " FILE1
 .TP
+.BI "-u " FILE1 ":" FILE2
+.RI "As above, but assigns an RG tag as given in the header of " FILE2
+.TP
+.BI "-f " STRING
+Output filename format string (see below)
+["%*_%#.bam"]
+.TP
+.B -v
+Verbose output
+.RE
+
+.RS
+.TP 14
+Format string expansions:
+  %%     %
+  %*     basename
+  %#     @RG index
+  %!     @RG ID
+.RE
+
+.TP \"-------- dict
 .B dict
 samtools dict <ref.fasta|ref.fasta.gz>
 
@@ -626,7 +872,7 @@ the absolute path of
 unless reading from stdin.
 .RE
 
-.TP
+.TP \"-------- fixmate
 .B fixmate
 .na
 samtools fixmate
@@ -662,7 +908,7 @@ deduced,
 is selected.
 .RE
 
-.TP
+.TP \"-------- mpileup
 .B mpileup
 samtools mpileup
 .RB [ -EBugp ]
@@ -923,7 +1169,7 @@ indel candidates from sequencing technologies that have low indel error
 rate such as ILLUMINA. [all]
 .RE
 
-.TP
+.TP \"-------- flags
 .B flags
 samtools flags INT|STR[,...]
 
@@ -947,7 +1193,7 @@ l l l .
 0x800 % SUPPLEMENTARY % .. supplementary alignment
 .TE
 
-.TP
+.TP \"-------- bam2fq
 .B bam2fq
 samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>
 
@@ -974,7 +1220,39 @@ Write singleton reads in FASTQ format to FILE instead of outputting them.
 Copy RG, BC and QT tags to the FASTQ header line, if they exist.
 .RE
 
+.TP \"-------- bamshuf
+.B bamshuf
+samtools bamshuf
+.RI [ options ]
+.IR in.sam | in.bam | in.cram " [" out.prefix "]"
+
+Shuffles and groups alignments by name. A faster alternative to a full
+query name sort, bamshuf ensures that reads of the same name are grouped
+together in contiguous groups, but doesn't make any guarantees about the
+order of read names between groups.
+
+The output from this command should be suitable for any operation that
+requires all reads from the same template to be grouped together.
+
+.B Options:
+.RS
+.TP 8
+.B -O
+Output to stdout rather than to files starting with out.prefix
 .TP
+.B -u
+Write uncompressed BAM output
+.TP
+.BI "-l "  INT
+Compression level.
+[1]
+.TP
+.BI "-n " INT
+Number of temporary files to use.
+[64]
+.RE
+
+.TP \"-------- reheader
 .B reheader
 samtools reheader <in.header.sam> <in.bam>
 
@@ -985,7 +1263,7 @@ with the header in
 This command is much faster than replacing the header with a
 BAM\(->SAM\(->BAM conversion.
 
-.TP
+.TP \"-------- cat
 .B cat
 samtools cat [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [ ... ]
 
@@ -995,7 +1273,7 @@ to
 .B reheader
 which enables fast BAM concatenation.
 
-.TP
+.TP \"-------- rmdup
 .B rmdup
 samtools rmdup [-sS] <input.srt.bam> <out.bam>
 
@@ -1018,7 +1296,7 @@ paired-end reads only.
 Treat paired-end reads and single-end reads.
 .RE
 
-.TP
+.TP \"-------- calmd
 .B calmd
 samtools calmd [-Eeubr] [-C capQcoef] <aln.bam> <ref.fasta>
 
@@ -1057,7 +1335,7 @@ Extended BAQ calculation. This option trades specificity for sensitivity, though
 effect is minor.
 .RE
 
-.TP
+.TP \"-------- targetcut
 .B targetcut
 samtools targetcut [-Q minBaseQ] [-i inPenalty] [-0 em0] [-1 em1] [-2 em2] [-f ref] <in.bam>
 
@@ -1069,7 +1347,7 @@ is in use, BAQ will be applied. This command is
 .B only
 designed for cutting fosmid clones from fosmid pool sequencing [Ref. Kitzman et al. (2010)].
 
-.TP
+.TP \"-------- phase
 .B phase
 samtools phase [-AF] [-k len] [-b prefix] [-q minLOD] [-Q minBaseQ] <in.bam>
 
@@ -1105,7 +1383,7 @@ Minimum base quality to be used in het calling. [13]
 .RE
 
 
-.TP
+.TP \"-------- help etc
 .BR help ,\  --help
 Display a brief usage message listing the samtools commands available.
 If the name of a command is also given, e.g.,
@@ -1318,22 +1596,24 @@ although a little slower.
 
 .SH AUTHOR
 .PP
-Heng Li from the Sanger Institute wrote the C version of samtools. Bob
-Handsaker from the Broad Institute implemented the BGZF library. John
-Marshall and Petr Danecek contribute to the source code and various
+Heng Li from the Sanger Institute wrote the original C version of samtools.
+Bob Handsaker from the Broad Institute implemented the BGZF library.
+James Bonfield from the Sanger Institute developed the CRAM implementation.
+John Marshall and Petr Danecek contribute to the source code and various
 people from the 1000 Genomes Project have contributed to the SAM format
 specification.
 
 .SH SEE ALSO
 .IR bcftools (1),
-.IR sam (5)
+.IR sam (5),
+.IR tabix (1)
 .PP
-Samtools website: <http://samtools.sourceforge.net>
-.br
-Samtools latest source: <https://github.com/samtools/samtools>
+Samtools website: <http://www.htslib.org/>
 .br
 File format specification of SAM/BAM,CRAM,VCF/BCF: <http://samtools.github.io/hts-specs>
 .br
-HTSlib website: <https://github.com/samtools/htslib>
+Samtools latest source: <https://github.com/samtools/samtools>
+.br
+HTSlib latest source: <https://github.com/samtools/htslib>
 .br
 Bcftools website: <http://samtools.github.io/bcftools>
