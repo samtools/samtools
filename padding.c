@@ -33,8 +33,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bam.h"
 #include "htslib/faidx.h"
 
-bam_header_t *bam_header_dup(const bam_header_t *h0); /*in sam.c*/
-
 static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
 {
     if (n != b->core.n_cigar) {
@@ -257,9 +255,15 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
             if (q.s[0] == BAM_CINS) {
                 for (k = 0; k+1 < b->core.pos && !r.s[b->core.pos - k - 1]; ++k);
                 if (k) write_cigar(cigar2, n2, m2, bam_cigar_gen(k, BAM_CPAD));
+                k = 0;
+            } else if (q.s[0] == BAM_CPAD) {
+                // Join 'k' CPAD to our first cigar op CPAD too.
+                for (k = 0; k+1 < b->core.pos && !r.s[b->core.pos - k - 1]; ++k);
+            } else {
+                k = 0;
             }
             /* Count consecutive CIGAR operators to turn into a CIGAR string */
-            for (i = k = 1, op = q.s[0]; i < q.l; ++i) {
+            for (i = 1, k++, op = q.s[0]; i < q.l; ++i) {
                 if (op != q.s[i]) {
                     write_cigar(cigar2, n2, m2, bam_cigar_gen(k, op));
                     op = q.s[i]; k = 1;
@@ -347,11 +351,10 @@ int bam_pad2unpad(samfile_t *in, samfile_t *out, faidx_t *fai)
 
 bam_header_t * fix_header(bam_header_t *old, faidx_t *fai)
 {
-#if 0
     int i = 0, unpadded_len = 0;
     bam_header_t *header = 0 ;
 
-    header = bam_header_dup(old);
+    header = bam_hdr_dup(old);
     for (i = 0; i < old->n_targets; ++i) {
         unpadded_len = get_unpadded_len(fai, old->target_name[i], old->target_len[i]);
         if (unpadded_len < 0) {
@@ -401,10 +404,6 @@ bam_header_t * fix_header(bam_header_t *old, faidx_t *fai)
     }
     //fprintf(stderr, "[depad] Here is the new header (pending @SQ lines),\n\n%s\n(end)\n", header->text);
     return header;
-#else
-    fprintf(stderr, "Samtools-htslib: fix_header() header parsing not yet implemented\n");
-    abort();
-#endif
 }
 
 static int usage(int is_long_help);

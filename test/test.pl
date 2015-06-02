@@ -2171,7 +2171,7 @@ sub test_depad
                               ref_path => "$$opts{path}/dat/cram_md5",
                               redirect => 1,
                               $compare => $unpad_sam,
-                              expect_fail => 1);
+                              expect_fail => 0);
             }
         }
     }
