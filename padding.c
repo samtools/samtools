@@ -62,10 +62,12 @@ static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
         _c[_n++] = (_v); \
     } while (0)
 
-static void unpad_seq(bam1_t *b, kstring_t *s)
+static int unpad_seq(bam1_t *b, kstring_t *s)
 {
+    // Returns 0 on success, -1 on an error
     int k, j, i;
     int length;
+    int cigar_n_warning = 0; /* Make this a global and limit to one CIGAR N warning? */
     uint32_t *cigar = bam_get_cigar(b);
     uint8_t *seq = bam_get_seq(b);
 
@@ -86,12 +88,19 @@ static void unpad_seq(bam1_t *b, kstring_t *s)
             /* do nothing */
         } else if (op == BAM_CDEL) {
             for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
+        } else if (op == BAM_CREF_SKIP) {
+            /* Treat CIGAR N as D (not ideal, but better than ignoring it) */
+            for (i = 0; i < ol; ++i) s->s[s->l++] = 0;
+            if (0 == cigar_n_warning) {
+                cigar_n_warning = -1;
+                fprintf(stderr, "[depad] WARNING: CIGAR op N treated as op D in read %s\n", bam_get_qname(b));
+            }
         } else {
             fprintf(stderr, "[depad] ERROR: Didn't expect CIGAR op %c in read %s\n", BAM_CIGAR_STR[op], bam_get_qname(b));
-            exit(1);
+            return -1;
         }
     }
-    assert(length == s->l);
+    return length != s->l;
 }
 
 int load_unpadded_ref(faidx_t *fai, char *ref_name, int ref_len, kstring_t *seq)
@@ -193,7 +202,10 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
         if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam_get_qname(b), h->target_name[b->core.tid]) == 0) {
             // fprintf(stderr, "[depad] Found embedded reference '%s'\n", bam_get_qname(b));
             r_tid = b->core.tid;
-            unpad_seq(b, &r);
+            if (0!=unpad_seq(b, &r)) {
+                fprintf(stderr, "[depad] ERROR: Problem parsing SEQ and/or CIGAR in reference %s\n", bam_get_qname(b));
+                return -1;
+            };
             if (h->target_len[r_tid] != r.l) {
                 fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %u in BAM header, but %llu in embedded reference\n", bam_get_qname(b), h->target_len[r_tid], (unsigned long long)(r.l));
                 return -1;
@@ -240,7 +252,10 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
                 fprintf(stderr, "[depad] ERROR: Missing %s embedded reference sequence (and no FASTA file)\n", h->target_name[b->core.tid]);
                 return -1;
             }
-            unpad_seq(b, &q);
+            if (0!=unpad_seq(b, &q)) {
+                fprintf(stderr, "[depad] ERROR: Problem parsing SEQ and/or CIGAR in read %s\n", bam_get_qname(b));
+                return -1;
+            };
             if (bam_cigar_op(cigar[0]) == BAM_CSOFT_CLIP) {
                 write_cigar(cigar2, n2, m2, cigar[0]);
             } else if (bam_cigar_op(cigar[0]) == BAM_CHARD_CLIP) {
