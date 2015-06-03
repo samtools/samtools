@@ -397,11 +397,54 @@ bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
         end = strchr(text, '\n');
         assert(end != 0);
         if (text[1]=='S' && text[2]=='Q' && text[3]=='\t') {
-            /* TODO - edit the @SQ line here to remove MD and fix LN. */
-            /* For now just remove the @SQ line, and samtools will */
-            /* automatically generate a minimal replacement with LN. */
-            /* However, that discards any other tags like AS, SP, UR. */
-            //fprintf(stderr, "[depad] Removing @SQ line\n");
+            const char *cp = text+3;
+            char *name = strstr(text, "\tSN:");
+            char *name_end;
+            if (!name) {
+                fprintf(stderr, "Unable to find SN: header field\n");
+                return NULL;
+            }
+            name += 4;
+            for (name_end = name; name_end != end && *name_end != '\t'; name_end++);
+            strcat(newtext, "@SQ");
+
+            /* Parse the @SQ lines */
+            while (cp != end) {
+                if (end-cp >= 2 && strncmp(cp, "LN", 2) == 0) {
+                    // Rewrite the length
+                    char len_buf[100];
+                    int tid;
+                    for (tid = 0; tid < header->n_targets; tid++) {
+                        // may want to hash this, but new header API incoming.
+                        if (strncmp(name, header->target_name[tid], name_end - name) == 0) {
+                            sprintf(len_buf, "LN:%d", header->target_len[tid]);
+                            strcat(newtext, len_buf);
+                            break;
+                        }
+                    }
+                    while (cp != end && *cp++ != '\t');
+                    if (cp != end)
+                        strcat(newtext, "\t");
+                } else if (end-cp >= 2 &&
+                           (strncmp(cp, "M5", 2) == 0 ||
+                            strncmp(cp, "UR", 2) == 0)) {
+                    // MD5 changed during depadding; ditch it.
+                    // URLs are also invalid.
+                    while (cp != end && *cp++ != '\t');
+                } else {
+                    // Otherwise copy this sub-field verbatim
+                    const char *cp_start = cp;
+                    while (cp != end && *cp++ != '\t');
+                    strncat(newtext, cp_start, cp-cp_start);
+                }
+            }
+
+            // Add newline, replacing trailing '\t' if last on line was the LN:
+            char *text_end = newtext + strlen(newtext);
+            if (text_end[-1] == '\t')
+                text_end[-1] = '\n';
+            else
+                *text_end++ = '\n', *text_end = '\0';
         } else {
             /* Copy this line to the new header */
             strncat(newtext, text, end - text + 1);
@@ -431,19 +474,21 @@ int main_pad2unpad(int argc, char *argv[])
     samFile *in = 0, *out = 0;
     bam_hdr_t *h = 0, *h_fix = 0;
     faidx_t *fai = 0;
-    int c, is_bamin = 1, compress_level = -1, is_bamout = 1, is_long_help = 0;
-    char in_mode[5], out_mode[5], *fn_out = 0, *fn_list = 0, *fn_ref = 0;
-    int ret=0;
+    int c, is_bamin = 1, compress_level = -1, is_long_help = 0;
+    char in_mode[5], out_mode[6], *fn_out = 0, *fn_list = 0, *fn_ref = 0;
+    int out_format = 'b', ret=0;
 
     /* parse command-line options */
+    /* TODO: add --output-fmt-option long opts once that branch is merged */
     strcpy(in_mode, "r"); strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "Sso:u1T:?")) >= 0) {
+    while ((c = getopt(argc, argv, "SCso:u1T:?")) >= 0) {
         switch (c) {
         case 'S': is_bamin = 0; break;
-        case 's': assert(compress_level == -1); is_bamout = 0; break;
+        case 'C': out_format = 'c';break;
+        case 's': assert(compress_level == -1); out_format = 0; break;
         case 'o': fn_out = strdup(optarg); break;
-        case 'u': assert(is_bamout == 1); compress_level = 0; break;
-        case '1': assert(is_bamout == 1); compress_level = 1; break;
+        case 'u': compress_level = 0; break;
+        case '1': compress_level = 1; break;
         case 'T': fn_ref = strdup(optarg); break;
         case '?': is_long_help = 1; break;
         default: return usage(is_long_help);
@@ -452,7 +497,10 @@ int main_pad2unpad(int argc, char *argv[])
     if (argc == optind) return usage(is_long_help);
 
     if (is_bamin) strcat(in_mode, "b");
-    if (is_bamout) strcat(out_mode, "b");
+    if (out_format) {
+        char o[2] = {out_format, '\0'};
+        strcat(out_mode, o);
+    }
     strcat(out_mode, "h");
     if (compress_level >= 0) {
         char tmp[2];
@@ -492,6 +540,11 @@ int main_pad2unpad(int argc, char *argv[])
         ret = 1;
         goto depad_end;
     }
+
+    // Reference-based CRAM won't work unless we also create a new reference.
+    // We could embed this, but for now we take the easy option.
+    if (out_format == 'c')
+        hts_set_opt(out, CRAM_OPT_NO_REF, 1);
 
     if (sam_hdr_write(out, h_fix) != 0) {
         fprintf(stderr, "[depad] failed to write header.\n");
