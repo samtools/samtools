@@ -147,6 +147,12 @@ int main_depth(int argc, char *argv[])
         data[i]->min_mapQ = mapQ;                    // set the mapQ filter
         data[i]->min_len  = min_len;                 // set the qlen filter
         data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
+        if (data[i]->hdr == NULL) {
+            fprintf(stderr, "Couldn't read header for \"%s\"\n",
+                    argv[optind+i]);
+            status = EXIT_FAILURE;
+            goto depth_end;
+        }
         if (reg) { // if a region is specified
             hts_idx_t *idx = sam_index_load(data[i]->fp, argv[optind+i]);  // load the index
             if (idx == NULL) {

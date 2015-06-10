@@ -185,6 +185,10 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
 
     str.l = str.m = 0; str.s = 0;
     header = sam_hdr_read(in);
+    if (header == NULL) {
+        fprintf(stderr, "[bam_mating_core] ERROR: Couldn't read header\n");
+        exit(1);
+    }
     // Accept unknown, unsorted, or queryname sort order, but error on coordinate sorted.
     if ((header->l_text > 3) && (strncmp(header->text, "@HD", 3) == 0)) {
         char *p, *q;

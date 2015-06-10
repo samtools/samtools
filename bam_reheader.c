@@ -39,6 +39,11 @@ int bam_reheader(BGZF *in, const bam_header_t *h, int fd)
     if (in->is_write) return -1;
     buf = malloc(BUF_SIZE);
     old = bam_header_read(in);
+    if (old == NULL) {
+        fprintf(stderr, "Couldn't read header\n");
+        free(buf);
+        return -1;
+    }
     fp = bgzf_fdopen(fd, "w");
     bam_header_write(fp, h);
     if (in->block_offset < in->block_length) {
@@ -69,6 +74,11 @@ int main_reheader(int argc, char *argv[])
         }
         h = sam_header_read(fph);
         sam_close(fph);
+        if (h == NULL) {
+            fprintf(stderr, "[%s] failed to read the header for '%s'.\n",
+                    __func__, argv[1]);
+            return 1;
+        }
     }
     in = strcmp(argv[2], "-")? bgzf_open(argv[2], "r") : bgzf_fdopen(fileno(stdin), "r");
     if (in == 0) {

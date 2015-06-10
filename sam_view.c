@@ -616,19 +616,30 @@ int main_bam2fq(int argc, char *argv[])
         fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
         return 1;
     }
+
+    h = sam_hdr_read(fp);
+    if (h == NULL) {
+        fprintf(stderr, "Failed to read header for \"%s\"\n", argv[optind]);
+        return 1;
+    }
+    b = bam_init1();
+    if (b == NULL) {
+        perror(NULL);
+        bam_hdr_destroy(h);
+        return 1;
+    }
+    buf = NULL;
+    max_buf = 0;
+
     fpse = NULL;
     if (fnse) {
         fpse = fopen(fnse,"w");
         if (fpse == NULL) {
             print_error_errno("Cannot write to singleton file \"%s\"", fnse);
+            bam_hdr_destroy(h);
             return 1;
         }
     }
-
-    h = sam_hdr_read(fp);
-    b = bam_init1();
-    buf = NULL;
-    max_buf = 0;
 
     int64_t n_singletons = 0, n_reads = 0;
     char* previous = NULL;

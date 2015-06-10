@@ -89,6 +89,11 @@ int bam_idxstats(int argc, char *argv[])
     fp = sam_open(argv[1], "r");
     if (fp == NULL) { fprintf(stderr, "[%s] fail to open BAM.\n", __func__); return 1; }
     header = sam_hdr_read(fp);
+    if (header == NULL) {
+        fprintf(stderr, "[%s] failed to read header for '%s'.\n",
+                __func__, argv[1]);
+        return 1;
+    }
     idx = sam_index_load(fp, argv[1]);
     if (idx == NULL) { fprintf(stderr, "[%s] fail to load the index.\n", __func__); return 1; }
 

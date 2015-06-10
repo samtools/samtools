@@ -625,6 +625,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
         hout = sam_hdr_read(fpheaders);
         sam_close(fpheaders);
+        if (hout == NULL) {
+            fprintf(stderr, "[bam_merge_core] couldn't read headers for '%s'\n",
+                    headers);
+            return -1;
+        }
     } else  {
         hout = bam_hdr_init();
         hout->text = strdup("");
@@ -659,12 +664,26 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         if (fp[i] == NULL) {
             int j;
             fprintf(stderr, "[bam_merge_core] fail to open file %s\n", fn[i]);
-            for (j = 0; j < i; ++j) sam_close(fp[j]);
+            for (j = 0; j < i; ++j) {
+                bam_hdr_destroy(hdr[i]);
+                sam_close(fp[j]);
+            }
             free(fp); free(heap);
             // FIXME: possible memory leak
             return -1;
         }
         hin = sam_hdr_read(fp[i]);
+        if (hin == NULL) {
+            fprintf(stderr, "[bam_merge_core] failed to read header for '%s'\n",
+                    fn[i]);
+            for (j = 0; j < i; ++j) {
+                bam_hdr_destroy(hdr[i]);
+                sam_close(fp[j]);
+            }
+            free(fp); free(heap);
+            // FIXME: possible memory leak
+            return -1;
+        }
 
         trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, RG[i]);
 
@@ -1067,6 +1086,11 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
         return -1;
     }
     header = sam_hdr_read(fp);
+    if (header == NULL) {
+        fprintf(stderr, "[bam_sort_core] failed to read header for '%s'\n", fn);
+        sam_close(fp);
+        return -1;
+    }
     if (is_by_qname) change_SO(header, "queryname");
     else change_SO(header, "coordinate");
     // write sub files

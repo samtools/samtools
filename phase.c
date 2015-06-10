@@ -581,6 +581,10 @@ int main_phase(int argc, char *argv[])
     }
     g.fp = sam_open(argv[optind], "r");
     g.fp_hdr = sam_hdr_read(g.fp);
+    if (g.fp_hdr == NULL) {
+        fprintf(stderr, "Failed to read header for '%s'\n", argv[optind]);
+        return 1;
+    }
     if (fn_list) { // read the list of sites to phase
         set = loadpos(fn_list, g.fp_hdr);
         free(fn_list);

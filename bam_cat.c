@@ -78,6 +78,12 @@ int bam_cat(int nfn, char * const *fn, const bam_header_t *h, const char* outbam
         if (in->is_write) return -1;
 
         old = bam_header_read(in);
+        if (old == NULL) {
+            fprintf(stderr, "[%s] ERROR: couldn't read header for '%s'.\n",
+                    __func__, fn[i]);
+            bgzf_close(in);
+            return -1;
+        }
         if (h == 0 && i == 0) bam_header_write(fp, old);
 
         if (in->block_offset < in->block_length) {
@@ -140,6 +146,12 @@ int main_cat(int argc, char *argv[])
                     return 1;
                 }
                 h = sam_header_read(fph);
+                if (h == NULL) {
+                    fprintf(stderr,
+                            "[%s] ERROR: failed to read the header for '%s'.\n",
+                            __func__, argv[1]);
+                    return 1;
+                }
                 sam_close(fph);
                 break;
             }

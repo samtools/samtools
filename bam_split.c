@@ -309,6 +309,12 @@ static state_t* init(parsed_opts_t* opts)
         return NULL;
     }
     retval->merged_input_header = sam_hdr_read(retval->merged_input_file);
+    if (retval->merged_input_header == NULL) {
+        fprintf(stderr, "Could not read header for file '%s'\n",
+                opts->merged_input_name);
+        cleanup_state(retval);
+        return NULL;
+    }
 
     if (opts->unaccounted_name) {
         if (opts->unaccounted_header_name) {
@@ -319,6 +325,12 @@ static state_t* init(parsed_opts_t* opts)
                 return NULL;
             }
             retval->unaccounted_header = sam_hdr_read(hdr_load);
+            if (retval->unaccounted_header == NULL) {
+                fprintf(stderr, "Could not read header for file '%s'\n",
+                        opts->unaccounted_header_name);
+                cleanup_state(retval);
+                return NULL;
+            }
             sam_close(hdr_load);
         } else {
             retval->unaccounted_header = bam_hdr_dup(retval->merged_input_header);

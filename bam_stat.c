@@ -117,6 +117,10 @@ int bam_flagstat(int argc, char *argv[])
     }
 
     header = sam_hdr_read(fp);
+    if (header == NULL) {
+        fprintf(stderr, "Failed to read header for \"%s\"\n", argv[optind]);
+        return 1;
+    }
     s = bam_flagstat_core(fp, header);
     printf("%lld + %lld in total (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
     printf("%lld + %lld secondary\n", s->n_secondary[0], s->n_secondary[1]);

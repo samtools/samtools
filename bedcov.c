@@ -92,6 +92,11 @@ int main_bedcov(int argc, char *argv[])
         }
         // TODO bgzf_set_cache_size(aux[i]->fp, 20);
         aux[i]->header = sam_hdr_read(aux[i]->fp);
+        if (aux[i]->header == NULL) {
+            fprintf(stderr, "ERROR: failed to read header for '%s'\n",
+                    argv[i+optind+1]);
+            return 2;
+        }
     }
     cnt = calloc(n, 8);
 

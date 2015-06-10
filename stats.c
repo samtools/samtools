@@ -1496,7 +1496,11 @@ int main_stats(int argc, char *argv[])
     if ((sam = sam_open(bam_fname, in_mode)) == 0)
         error("Failed to open: %s\n", bam_fname);
     stats->sam = sam;
+
     stats->sam_header = sam_hdr_read(sam);
+    if (stats->sam_header == NULL)
+        error("Failed to read header for '%s'\n", bam_fname);
+
     if ( group_id ) init_group_id(stats, group_id);
     bam1_t *bam_line = bam_init1();
     // .. arrays
