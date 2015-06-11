@@ -36,7 +36,8 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             bamtk.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
-            bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
+            bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
+            bam_quickcheck.o
 
 EXTRA_CPPFLAGS = $(DFLAGS) -I. -I$(HTSDIR)
 LIBCURSES=  -lcurses # -lXCurses

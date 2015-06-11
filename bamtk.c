@@ -3,6 +3,7 @@
     Copyright (C) 2008-2015 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
+    Author: Joshua C. Randall <jcrandall@alum.mit.edu>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -57,7 +58,7 @@ int main_bamshuf(int argc, char *argv[]);
 int main_stats(int argc, char *argv[]);
 int main_flags(int argc, char *argv[]);
 int main_split(int argc, char *argv[]);
-
+int main_quickcheck(int argc, char *argv[]);
 int faidx_main(int argc, char *argv[]);
 int dict_main(int argc, char *argv[]);
 
@@ -115,6 +116,7 @@ static void usage(FILE *fp)
 "         mpileup     multi-way pileup\n"
 "         sort        sort alignment file\n"
 "         split       splits a file by read group\n"
+"         quickcheck  quickly check if SAM/BAM/CRAM file appears intact\n"
 "         bam2fq      converts a BAM to a FASTQ\n"
 "  -- stats\n"
 "         bedcov      read depth per BED region\n"
@@ -184,6 +186,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
     else if (strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
     else if (strcmp(argv[1], "split") == 0)     ret = main_split(argc-1, argv+1);
+    else if (strcmp(argv[1], "quickcheck") == 0)  ret = main_quickcheck(argc-1, argv+1);
     else if (strcmp(argv[1], "pileup") == 0) {
         fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
         return 1;

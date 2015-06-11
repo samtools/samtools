@@ -54,6 +54,8 @@ samtools tview aln.sorted.bam ref.fasta
 .PP
 samtools split merged.bam
 .PP
+samtools quickcheck merged_0.bam merged_1.bam merged_2.bam
+.PP
 samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
 .PP
 samtools fixmate in.namesorted.sam out.bam
@@ -844,6 +846,36 @@ Format string expansions:
   %*     basename
   %#     @RG index
   %!     @RG ID
+.RE
+
+.TP \"-------- quickcheck
+.B quickcheck
+samtools quickcheck
+.RI [ options ]
+.IR in.sam | in.bam | in.cram
+[ ... ]
+
+Quickly check that input files appear to be intact. Checks that beginning of the
+file contains a valid header (all formats) containing at least one target
+sequence and then seeks to the end of the file and checks that an end-of-file
+(EOF) is present and intact (BAM only).
+
+Data in the middle of the file is not read since that would be much more time
+consuming, so please note that this command will not detect internal corruption,
+but is useful for testing that files are not truncated before performing more
+intensive tasks on them.
+
+This command will exit with a non-zero exit code if any input files don't have a
+valid header or are missing an EOF block. Otherwise it will exit successfully
+(with a zero exit code).
+
+.B Options:
+.RS
+.TP 14
+.B -v
+Verbose output: will additionally print the names of all input files that don't
+pass the check to stdout. Multiple -v options will cause additional messages
+regarding check results to be printed to stderr.
 .RE
 
 .TP \"-------- dict
