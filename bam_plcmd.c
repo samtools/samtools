@@ -162,7 +162,6 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
     if (tid == r->ref_id[0]) {
         *ref = r->ref[0];
         *ref_len = r->ref_len[0];
-        //printf("Return 1st cache %s\n", *ref);
         return 1;
     }
     if (tid == r->ref_id[1]) {
@@ -175,8 +174,6 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
         tc = r->ref[0]; r->ref[0] = r->ref[1]; r->ref[1] = tc;
         *ref = r->ref[0];
         *ref_len = r->ref_len[0];
-        //printf("=>{%d/%p, %d/%p}\n", r->ref_id[0], r->ref[0], r->ref_id[1], r->ref[1]);
-        //printf("Return 2nd cache %p/%s\n", *ref, *ref);
         return 1;
     }
 
@@ -194,7 +191,6 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
                                 0x7fffffff,
                                 &r->ref_len[0]);
 
-    //printf("Fetch ref = %d %s\n", r->ref_id[0], r->ref[0]);
     if (!r->ref) {
         r->ref[0] = NULL;
         r->ref_id[0] = -1;
