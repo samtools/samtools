@@ -27,7 +27,7 @@ INIT x $samtools view -S -C indels.sam > indels.cram
 INIT x xz -d < expected/1.out.xz > expected/1.out
 
 # Nasty file corner cases
-P 1.out $samtools mpileup -Q0 -x -f ce.fa ce#large_seq.bam 
+P 1.out $samtools mpileup -B -Q0 -x -f ce.fa ce#large_seq.bam 
 P 2.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap.bam
 P 3.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap1.bam
 P 4.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap2.bam
