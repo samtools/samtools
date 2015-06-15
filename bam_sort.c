@@ -354,8 +354,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
 
     // If there are no RG lines in the file and we are overriding add one
     if (rg_override && kl_begin(rg_list) == NULL) {
-        char* line = NULL;
-        asprintf(&line, "@RG\tID:%s", rg_override);
+        char* line = (char *) malloc(7 + strlen(rg_override) + 1);
+        sprintf(line, "@RG\tID:%s", rg_override);
         char** ln = kl_pushp(hdrln, rg_list);
         *ln = line;
     }
