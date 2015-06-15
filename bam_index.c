@@ -71,9 +71,9 @@ int bam_index(int argc, char *argv[])
         index_usage(stdout);
         return 1;
     }
-    if (argc - optind > 1) bam_index_build2(argv[optind], argv[optind+1]);
-    else bam_index_build(argv[optind], csi? min_shift : 0);
-    return 0;
+    if (argc - optind > 1) return bam_index_build2(argv[optind], argv[optind+1]);
+    else return bam_index_build(argv[optind], csi? min_shift : 0);
+    return 1;
 }
 
 int bam_idxstats(int argc, char *argv[])
