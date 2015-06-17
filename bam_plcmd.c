@@ -240,12 +240,18 @@ static int mplp_func(void *data, bam1_t *b)
                 qual[i] = qual[i] > 31? qual[i] - 31 : 0;
         }
 
-        if (ma->conf->fai && b->core.tid >= 0)
+        if (ma->conf->fai && b->core.tid >= 0) {
             has_ref = mplp_get_ref(ma, b->core.tid, &ref, &ref_len);
-        else
+            if (has_ref && ref_len <= b->core.pos) { // exclude reads outside of the reference sequence
+                fprintf(stderr,"[%s] Skipping because %d is outside of %d [ref:%d]\n",
+                        __func__, b->core.pos, ref_len, b->core.tid);
+                skip = 1;
+                continue;
+            }
+        } else {
             has_ref = 0;
+        }
 
-        //has_ref = (ma->ref->ref && ma->ref->ref_id == b->core.tid)? 1 : 0;
         skip = 0;
         if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ref, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
         if (has_ref && ma->conf->capQ_thres > 10) {
