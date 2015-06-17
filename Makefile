@@ -166,7 +166,7 @@ cut_target.o: cut_target.c $(bam_h) errmod.h $(htslib_faidx_h)
 dict.o: dict.c $(htslib_kseq_h) $(htslib_hts_h)
 errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
 kprobaln.o: kprobaln.c kprobaln.h
-padding.o: padding.c sam_header.h $(sam_h) $(bam_h) $(htslib_faidx_h)
+padding.o: padding.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(htslib_faidx_h) sam_header.h
 phase.o: phase.c $(htslib_sam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h

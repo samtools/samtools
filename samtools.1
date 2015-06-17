@@ -65,6 +65,8 @@ samtools flags PAIRED,UNMAP,MUNMAP
 samtools bam2fq input.bam > output.fastq
 .PP
 samtools bamshuf aln.sorted.bam reads.together.bam
+.PP
+samtools depad input.bam
 
 .SH DESCRIPTION
 .PP
@@ -1382,6 +1384,50 @@ Minimum Phred-scaled LOD to call a heterozygote. [40]
 Minimum base quality to be used in het calling. [13]
 .RE
 
+.TP \"-------- depad
+.B depad
+samtools depad [-SsCu1] [-T ref.fa] [-o output] <in.bam>
+
+Converts a BAM aligned against a padded reference to a BAM aligned
+against the depadded reference.  The padded reference may contain
+verbatim "*" bases in it, but "*" bases are also counted in the
+reference numbering.  This means that a sequence base-call aligned
+against a reference "*" is considered to be a cigar match ("M" or "X")
+operator (if the base-call is "A", "C", "G" or "T").  After depadding
+the reference "*" bases are deleted and such aligned sequence
+base-calls become insertions.  Similarly transformations apply for
+deletions and padding cigar operations.
+
+.B OPTIONS:
+.RS
+.TP
+.B -S
+Ignored for compatibility with previous samtools versions.
+Previously this option was required if input was in SAM format, but now the
+correct format is automatically detected by examining the first few characters
+of input.
+.TP
+.B -s
+Output in SAM format.  The default is BAM.
+.TP
+.B -C
+Output in CRAM format.  The default is BAM.
+.TP
+.B -u
+Do not compress the output.  Applies to either BAM or CRAM output
+format.
+.TP
+.B -1
+Enable fastest compression level.  Only works for BAM or CRAM output.
+.TP
+.BI "-T " FILE
+Provides the padded reference file.  Note that without this the @SQ
+line lengths will be incorrect, so for most use cases this option will
+be considered as mandatory.
+.TP
+.BI "-o " FILE
+Specifies the output filename.  By default output is sent to stdout.
+.RE
 
 .TP \"-------- help etc
 .BR help ,\  --help
