@@ -1,11 +1,34 @@
+/*  bamtk.c -- main samtools command front-end.
+
+    Copyright (C) 2008-2015 Genome Research Ltd.
+
+    Author: Heng Li <lh3@sanger.ac.uk>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.  */
+
 #include <stdio.h>
 #include <unistd.h>
-#include <assert.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
-#include "bam.h"
+#include "htslib/hts.h"
 #include "samtools.h"
 #include "version.h"
 
@@ -33,47 +56,50 @@ int main_bedcov(int argc, char *argv[]);
 int main_bamshuf(int argc, char *argv[]);
 int main_stats(int argc, char *argv[]);
 int main_flags(int argc, char *argv[]);
+int main_split(int argc, char *argv[]);
 
 int faidx_main(int argc, char *argv[]);
+int dict_main(int argc, char *argv[]);
 
 const char *samtools_version()
 {
-	return SAMTOOLS_VERSION;
+    return SAMTOOLS_VERSION;
 }
 
 void print_error(const char *format, ...)
 {
-	va_list args;
-	va_start(args, format);
-	fprintf(stderr, "samtools: ");
-	vfprintf(stderr, format, args);
-	fprintf(stderr, "\n");
-	va_end(args);
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "samtools: ");
+    vfprintf(stderr, format, args);
+    fprintf(stderr, "\n");
+    va_end(args);
 }
 
 void print_error_errno(const char *format, ...)
 {
-	int err = errno;
-	va_list args;
-	va_start(args, format);
-	fprintf(stderr, "samtools: ");
-	vfprintf(stderr, format, args);
-	fprintf(stderr, ": %s\n", strerror(err));
-	va_end(args);
+    int err = errno;
+    va_list args;
+    va_start(args, format);
+    fprintf(stderr, "samtools: ");
+    vfprintf(stderr, format, args);
+    fprintf(stderr, ": %s\n", strerror(err));
+    va_end(args);
 }
 
 static void usage(FILE *fp)
 {
     /* Please improve the grouping */
 
-	fprintf(fp,
+    fprintf(fp,
 "\n"
 "Program: samtools (Tools for alignments in the SAM format)\n"
 "Version: %s (using htslib %s)\n\n", samtools_version(), hts_version());
-	fprintf(fp,
+    fprintf(fp,
 "Usage:   samtools <command> [options]\n\n"
 "Commands:\n"
 "  -- indexing\n"
+"         dict        create a sequence dictionary file\n"
 "         faidx       index/extract FASTA\n"
 "         index       index alignment\n"
 "  -- editing\n"
@@ -88,6 +114,8 @@ static void usage(FILE *fp)
 "         merge       merge sorted alignments\n"
 "         mpileup     multi-way pileup\n"
 "         sort        sort alignment file\n"
+"         split       splits a file by read group\n"
+"         bam2fq      converts a BAM to a FASTQ\n"
 "  -- stats\n"
 "         bedcov      read depth per BED region\n"
 "         depth       compute the depth\n"
@@ -102,7 +130,7 @@ static void usage(FILE *fp)
 //"         depad       convert padded BAM to unpadded BAM\n" // not stable
 "\n");
 #ifdef _WIN32
-	fprintf(fp,
+    fprintf(fp,
 "\n"
 "Note: The Windows version of SAMtools is mainly designed for read-only\n"
 "      operations, such as viewing the alignments and generating the pileup.\n"
@@ -113,67 +141,69 @@ static void usage(FILE *fp)
 int main(int argc, char *argv[])
 {
 #ifdef _WIN32
-	setmode(fileno(stdout), O_BINARY);
-	setmode(fileno(stdin),  O_BINARY);
+    setmode(fileno(stdout), O_BINARY);
+    setmode(fileno(stdin),  O_BINARY);
 #endif
-	if (argc < 2) { usage(stderr); return 1; }
+    if (argc < 2) { usage(stderr); return 1; }
 
-	if (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
-		if (argc == 2) { usage(stdout); return 0; }
+    if (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "--help") == 0) {
+        if (argc == 2) { usage(stdout); return 0; }
 
-		// Otherwise change "samtools help COMMAND [...]" to "samtools COMMAND";
-		// main_xyz() functions by convention display the subcommand's usage
-		// when invoked without any arguments.
-		argv++;
-		argc = 2;
-	}
+        // Otherwise change "samtools help COMMAND [...]" to "samtools COMMAND";
+        // main_xyz() functions by convention display the subcommand's usage
+        // when invoked without any arguments.
+        argv++;
+        argc = 2;
+    }
 
     int ret = 0;
-	if (strcmp(argv[1], "view") == 0)           ret = main_samview(argc-1, argv+1);
-	else if (strcmp(argv[1], "import") == 0)    ret = main_import(argc-1, argv+1);
-	else if (strcmp(argv[1], "mpileup") == 0)   ret = bam_mpileup(argc-1, argv+1);
-	else if (strcmp(argv[1], "merge") == 0)     ret = bam_merge(argc-1, argv+1);
-	else if (strcmp(argv[1], "sort") == 0)      ret = bam_sort(argc-1, argv+1);
-	else if (strcmp(argv[1], "index") == 0)     ret = bam_index(argc-1, argv+1);
-	else if (strcmp(argv[1], "idxstats") == 0)  ret = bam_idxstats(argc-1, argv+1);
-	else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
-	else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
-	else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
-	else if (strcmp(argv[1], "flagstat") == 0)  ret = bam_flagstat(argc-1, argv+1);
-	else if (strcmp(argv[1], "calmd") == 0)     ret = bam_fillmd(argc-1, argv+1);
-	else if (strcmp(argv[1], "fillmd") == 0)    ret = bam_fillmd(argc-1, argv+1);
-	else if (strcmp(argv[1], "reheader") == 0)  ret = main_reheader(argc-1, argv+1);
-	else if (strcmp(argv[1], "cat") == 0)       ret = main_cat(argc-1, argv+1);
-	else if (strcmp(argv[1], "targetcut") == 0) ret = main_cut_target(argc-1, argv+1);
-	else if (strcmp(argv[1], "phase") == 0)     ret = main_phase(argc-1, argv+1);
-	else if (strcmp(argv[1], "depth") == 0)     ret = main_depth(argc-1, argv+1);
-	else if (strcmp(argv[1], "bam2fq") == 0)    ret = main_bam2fq(argc-1, argv+1);
-	else if (strcmp(argv[1], "pad2unpad") == 0) ret = main_pad2unpad(argc-1, argv+1);
-	else if (strcmp(argv[1], "depad") == 0)     ret = main_pad2unpad(argc-1, argv+1);
-	else if (strcmp(argv[1], "bedcov") == 0)    ret = main_bedcov(argc-1, argv+1);
-	else if (strcmp(argv[1], "bamshuf") == 0)   ret = main_bamshuf(argc-1, argv+1);
-	else if (strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
-	else if (strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
-	else if (strcmp(argv[1], "pileup") == 0) {
-		fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
-		return 1;
-	}
+    if (strcmp(argv[1], "view") == 0)           ret = main_samview(argc-1, argv+1);
+    else if (strcmp(argv[1], "import") == 0)    ret = main_import(argc-1, argv+1);
+    else if (strcmp(argv[1], "mpileup") == 0)   ret = bam_mpileup(argc-1, argv+1);
+    else if (strcmp(argv[1], "merge") == 0)     ret = bam_merge(argc-1, argv+1);
+    else if (strcmp(argv[1], "sort") == 0)      ret = bam_sort(argc-1, argv+1);
+    else if (strcmp(argv[1], "index") == 0)     ret = bam_index(argc-1, argv+1);
+    else if (strcmp(argv[1], "idxstats") == 0)  ret = bam_idxstats(argc-1, argv+1);
+    else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
+    else if (strcmp(argv[1], "dict") == 0)      ret = dict_main(argc-1, argv+1);
+    else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
+    else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
+    else if (strcmp(argv[1], "flagstat") == 0)  ret = bam_flagstat(argc-1, argv+1);
+    else if (strcmp(argv[1], "calmd") == 0)     ret = bam_fillmd(argc-1, argv+1);
+    else if (strcmp(argv[1], "fillmd") == 0)    ret = bam_fillmd(argc-1, argv+1);
+    else if (strcmp(argv[1], "reheader") == 0)  ret = main_reheader(argc-1, argv+1);
+    else if (strcmp(argv[1], "cat") == 0)       ret = main_cat(argc-1, argv+1);
+    else if (strcmp(argv[1], "targetcut") == 0) ret = main_cut_target(argc-1, argv+1);
+    else if (strcmp(argv[1], "phase") == 0)     ret = main_phase(argc-1, argv+1);
+    else if (strcmp(argv[1], "depth") == 0)     ret = main_depth(argc-1, argv+1);
+    else if (strcmp(argv[1], "bam2fq") == 0)    ret = main_bam2fq(argc-1, argv+1);
+    else if (strcmp(argv[1], "pad2unpad") == 0) ret = main_pad2unpad(argc-1, argv+1);
+    else if (strcmp(argv[1], "depad") == 0)     ret = main_pad2unpad(argc-1, argv+1);
+    else if (strcmp(argv[1], "bedcov") == 0)    ret = main_bedcov(argc-1, argv+1);
+    else if (strcmp(argv[1], "bamshuf") == 0)   ret = main_bamshuf(argc-1, argv+1);
+    else if (strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
+    else if (strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
+    else if (strcmp(argv[1], "split") == 0)     ret = main_split(argc-1, argv+1);
+    else if (strcmp(argv[1], "pileup") == 0) {
+        fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
+        return 1;
+    }
 #if _CURSES_LIB != 0
-	else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
+    else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
 #endif
-	else if (strcmp(argv[1], "--version") == 0) {
-		printf(
+    else if (strcmp(argv[1], "--version") == 0) {
+        printf(
 "samtools %s\n"
 "Using htslib %s\n"
-"Copyright (C) 2014 Genome Research Ltd.\n",
-		       samtools_version(), hts_version());
-	}
-	else if (strcmp(argv[1], "--version-only") == 0) {
-		printf("%s+htslib-%s\n", samtools_version(), hts_version());
-	}
-	else {
-		fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
-		return 1;
-	}
-	return ret;	
+"Copyright (C) 2015 Genome Research Ltd.\n",
+               samtools_version(), hts_version());
+    }
+    else if (strcmp(argv[1], "--version-only") == 0) {
+        printf("%s+htslib-%s\n", samtools_version(), hts_version());
+    }
+    else {
+        fprintf(stderr, "[main] unrecognized command '%s'\n", argv[1]);
+        return 1;
+    }
+    return ret;
 }

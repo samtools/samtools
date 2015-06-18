@@ -78,12 +78,12 @@
 @CO	r045           AGAGTACGTA*GACC           10M 1D 4M  (5M 5I 1D 4M)
 @CO	r046           AGAG*ACGTA*GACC           4M 1D 5M 1D 4M (4M 1D 5I 1D 4M)
 @CO	r047           AGAG*A*G*A*GACC           4M 1D 1M 1D 1M 1D 1M 1D 4M (4M 1D 1I 1P 1I 1P 1I 1D 4M)
-@CO	r048	   AGAGTACGtacgacc	     8M 7S       (5M 3I 7S)
-@CO	r049	   AGAGT*CGtacgacc	     5M 1D 2M 7S (5M 1P 2I 7S)
-@CO	r050	   agagtacGTACGACC   	     7S 8M       (7S 2P 3I 5M)
-@CO	r051	   agagtac*TACGACC   	     7S 1D 7M    (7S 1P 2I 5M)
-@CO	r052	   agagtacGT*CGACC   	     7S 2M 1D 5M (7S 2P 2I 1P 5M)
-ref1	516	ref1	1	0	15M5D15M	*	0	0	GGGATCCTCTAGAGTCGACCTGCAGGCATG	*
+@CO	r048           AGAGTACGtacgacc            8M 7S       (5M 3I 7S)
+@CO	r049           AGAGT*CGtacgacc            5M 1D 2M 7S (5M 1P 2I 7S)
+@CO	r050           agagtacGTACGACC            7S 8M       (7S 2P 3I 5M)
+@CO	r051           agagtac*TACGACC            7S 1D 7M    (7S 3P 2I 5M)
+@CO	r052           agagtacGT*CGACC            7S 2M 1D 5M (7S 2P 2I 1P 5M)
+ref1	512	ref1	1	0	15M5D15M	*	0	0	GGGATCCTCTAGAGTCGACCTGCAGGCATG	*
 r001	0	ref1	1	99	15M5D15M	*	0	0	GGGATCCTCTAGAGTCGACCTGCAGGCATG	*
 r002	0	ref1	1	99	16M3D16M	*	0	0	GGGATCCTCTAGAGTAACGACCTGCAGGCATG	*
 r003	0	ref1	1	99	17M1D17M	*	0	0	GGGATCCTCTAGAGTACTACGACCTGCAGGCATG	*
