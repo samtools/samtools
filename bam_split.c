@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <regex.h>
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
+#include "sam_opts.h"
 
 
 KHASH_MAP_INIT_STR(c2i, int)
@@ -42,6 +43,7 @@ struct parsed_opts {
     char* unaccounted_name;
     char* output_format_string;
     bool verbose;
+    sam_global_args ga;
 };
 
 typedef struct parsed_opts parsed_opts_t;
@@ -60,7 +62,7 @@ struct state {
 
 typedef struct state state_t;
 
-static void cleanup_state(state_t* status);
+static int cleanup_state(state_t* status);
 static void cleanup_opts(parsed_opts_t* opts);
 
 static void usage(FILE *write_to)
@@ -69,17 +71,21 @@ static void usage(FILE *write_to)
 "Usage: samtools split [-u <unaccounted.bam>[:<unaccounted_header.sam>]]\n"
 "                      [-f <format_string>] [-v] <merged.bam>\n"
 "Options:\n"
-"  -f STRING       output filename format string [\"%%*_%%#.bam\"]\n"
+"  -f STRING       output filename format string [\"%%*_%%#.%%f\"]\n"
 "  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
 "  -u FILE1:FILE2  ...and override the header with FILE2\n"
-"  -v              verbose output\n"
+"  -v              verbose output\n");
+    sam_global_opt_help(write_to, "-....");
+    fprintf(write_to,
 "\n"
 "Format string expansions:\n"
 "  %%%%     %%\n"
 "  %%*     basename\n"
 "  %%#     @RG index\n"
 "  %%!     @RG ID\n"
+"  %%f     format type\n"
       );
+
 }
 
 // Takes the command line options and turns them into something we can understand
@@ -90,11 +96,16 @@ static parsed_opts_t* parse_args(int argc, char** argv)
     const char* optstring = "vf:u:";
     char* delim;
 
+    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
+    assign_short_opts(lopts, "-....");
+
     parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }
 
+    sam_global_args_init(&retval->ga);
+
     int opt;
-    while ((opt = getopt(argc, argv, optstring)) != -1) {
+    while ((opt = getopt_long(argc, argv, optstring, lopts, NULL)) != -1) {
         switch (opt) {
         case 'f':
             retval->output_format_string = strdup(optarg);
@@ -112,14 +123,21 @@ static parsed_opts_t* parse_args(int argc, char** argv)
                 if (! retval->unaccounted_header_name ) { perror("cannot allocate string memory"); return NULL; }
             }
             break;
-        default:
+
+        case '?':
             usage(stdout);
             free(retval);
             return NULL;
+
+        default:
+            if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) != 0) {
+                usage(stdout);
+                return NULL;
+            }
         }
     }
 
-    if (retval->output_format_string == NULL) retval->output_format_string = strdup("%*_%#.bam");
+    if (retval->output_format_string == NULL) retval->output_format_string = strdup("%*_%#.%f");
 
     argc -= optind;
     argv += optind;
@@ -138,7 +156,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 }
 
 // Expands a output filename format string
-static char* expand_format_string(const char* format_string, const char* basename, const char* rg_id, const int rg_idx)
+static char* expand_format_string(const char* format_string, const char* basename, const char* rg_id, const int rg_idx, htsFormat *format)
 {
     kstring_t str = { 0, 0, NULL };
     const char* pointer = format_string;
@@ -158,6 +176,13 @@ static char* expand_format_string(const char* format_string, const char* basenam
                 break;
             case '!':
                 kputs(rg_id, &str);
+                break;
+            case 'f':
+                // Only really need to cope with sam, bam, cram
+                if (format->format != unknown_format)
+                    kputs(hts_format_file_extension(format), &str);
+                else
+                    kputs("bam", &str);
                 break;
             case '\0':
                 // Error is: fprintf(stderr, "bad format string, trailing %%\n");
@@ -302,7 +327,7 @@ static state_t* init(parsed_opts_t* opts)
         return NULL;
     }
 
-    retval->merged_input_file = sam_open(opts->merged_input_name, "rb");
+    retval->merged_input_file = sam_open_format(opts->merged_input_name, "rb", &opts->ga.in);
     if (!retval->merged_input_file) {
         fprintf(stderr, "Could not open input file (%s)\n", opts->merged_input_name);
         free(retval);
@@ -312,7 +337,7 @@ static state_t* init(parsed_opts_t* opts)
 
     if (opts->unaccounted_name) {
         if (opts->unaccounted_header_name) {
-            samFile* hdr_load = sam_open(opts->unaccounted_header_name, "r");
+            samFile* hdr_load = sam_open_format(opts->unaccounted_header_name, "r", &opts->ga.in);
             if (!hdr_load) {
                 fprintf(stderr, "Could not open unaccounted header file (%s)\n", opts->unaccounted_header_name);
                 cleanup_state(retval);
@@ -324,7 +349,7 @@ static state_t* init(parsed_opts_t* opts)
             retval->unaccounted_header = bam_hdr_dup(retval->merged_input_header);
         }
 
-        retval->unaccounted_file = sam_open(opts->unaccounted_name, "wb");
+        retval->unaccounted_file = sam_open_format(opts->unaccounted_name, "wb", &opts->ga.out);
         if (retval->unaccounted_file == NULL) {
             fprintf(stderr, "Could not open unaccounted output file: %s\n", opts->unaccounted_name);
             cleanup_state(retval);
@@ -359,14 +384,19 @@ static state_t* init(parsed_opts_t* opts)
     for (i = 0; i < retval->output_count; i++) {
         char* output_filename = NULL;
 
-        if ( ( output_filename = expand_format_string(opts->output_format_string, input_base_name, retval->rg_id[i], i) ) == NULL) {
+        output_filename = expand_format_string(opts->output_format_string,
+                                               input_base_name,
+                                               retval->rg_id[i], i,
+                                               &opts->ga.out);
+    
+        if ( output_filename == NULL ) {
             fprintf(stderr, "Error expanding output filename format string.\r\n");
             cleanup_state(retval);
             free(input_base_name);
             return NULL;
         }
 
-        retval->rg_output_file[i] = sam_open(output_filename, "wb");
+        retval->rg_output_file[i] = sam_open_format(output_filename, "wb", &opts->ga.out);
         if (retval->rg_output_file[i] == NULL) {
             fprintf(stderr, "Could not open output file: %s\r\n", output_filename);
             cleanup_state(retval);
@@ -412,10 +442,15 @@ static bool split(state_t* state)
 
     bam1_t* file_read = bam_init1();
     // Read the first record
-    if (sam_read1(state->merged_input_file, state->merged_input_header, file_read) < 0) {
+    int r;
+    if ((r=sam_read1(state->merged_input_file, state->merged_input_header, file_read)) < 0) {
         // Nothing more to read?  Ignore this file
         bam_destroy1(file_read);
         file_read = NULL;
+        if (r < -1) {
+            fprintf(stderr, "Could not write read sequence\n");
+            return false;
+        }
     }
 
     while (file_read != NULL) {
@@ -433,7 +468,10 @@ static bool split(state_t* state)
         if (iter != kh_end(state->rg_hash)) {
             // if found write to the appropriate untangled bam
             int i = kh_val(state->rg_hash,iter);
-            sam_write1(state->rg_output_file[i], state->rg_output_header[i], file_read);
+            if (sam_write1(state->rg_output_file[i], state->rg_output_header[i], file_read) < 0) {
+                fprintf(stderr, "Could not write sequence\n");
+                return false;
+            }
         } else {
             // otherwise write to the unaccounted bam if there is one or fail
             if (state->unaccounted_file == NULL) {
@@ -445,31 +483,40 @@ static bool split(state_t* state)
                 bam_destroy1(file_read);
                 return false;
             } else {
-                sam_write1(state->unaccounted_file, state->unaccounted_header, file_read);
+                if (sam_write1(state->unaccounted_file, state->unaccounted_header, file_read) < 0) {
+                    fprintf(stderr, "Could not write sequence\n");
+                    return false;
+                }
             }
         }
 
         // Replace written read with the next one to process
-        if (sam_read1(state->merged_input_file, state->merged_input_header, file_read) < 0) {
+        if ((r=sam_read1(state->merged_input_file, state->merged_input_header, file_read)) < 0) {
             // Nothing more to read?  Ignore this file in future
             bam_destroy1(file_read);
             file_read = NULL;
+            if (r < -1) {
+                fprintf(stderr, "Could not write read sequence\n");
+                return false;
+            }
         }
     }
 
     return true;
 }
 
-static void cleanup_state(state_t* status)
+static int cleanup_state(state_t* status)
 {
-    if (!status) return;
+    int ret = 0;
+
+    if (!status) return 0;
     if (status->unaccounted_header) bam_hdr_destroy(status->unaccounted_header);
-    if (status->unaccounted_file) sam_close(status->unaccounted_file);
+    if (status->unaccounted_file) ret |= sam_close(status->unaccounted_file);
     sam_close(status->merged_input_file);
     size_t i;
     for (i = 0; i < status->output_count; i++) {
         bam_hdr_destroy(status->rg_output_header[i]);
-        sam_close(status->rg_output_file[i]);
+        ret |= sam_close(status->rg_output_file[i]);
         free(status->rg_id[i]);
     }
     bam_hdr_destroy(status->merged_input_header);
@@ -478,6 +525,8 @@ static void cleanup_state(state_t* status)
     kh_destroy_c2i(status->rg_hash);
     free(status->rg_id);
     free(status);
+
+    return ret;
 }
 
 static void cleanup_opts(parsed_opts_t* opts)
@@ -487,6 +536,7 @@ static void cleanup_opts(parsed_opts_t* opts)
     free(opts->unaccounted_header_name);
     free(opts->unaccounted_name);
     free(opts->output_format_string);
+    sam_global_args_free(&opts->ga);
     free(opts);
 }
 
@@ -500,7 +550,7 @@ int main_split(int argc, char** argv)
 
     if (split(status)) ret = 0;
 
-    cleanup_state(status);
+    ret |= (cleanup_state(status) != 0);
 cleanup_opts:
     cleanup_opts(opts);
 

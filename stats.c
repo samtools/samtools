@@ -55,6 +55,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include <htslib/khash.h>
 #include "stats_isize.h"
+#include "sam_opts.h"
 
 #define BWA_MIN_RDLEN 35
 // From the spec
@@ -1352,6 +1353,7 @@ static void error(const char *format, ...)
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -s, --sam                           Input is SAM (usually auto-detected now).\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
+        sam_global_opt_help(stdout, "-.--.");
         printf("\n");
     }
     else
@@ -1398,6 +1400,8 @@ int main_stats(int argc, char *argv[])
     char in_mode[5];
     int sparse = 0;
 
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+
     stats_t *stats = calloc(1,sizeof(stats_t));
     stats->ngc    = 200;
     stats->nquals = 256;
@@ -1421,8 +1425,9 @@ int main_stats(int argc, char *argv[])
 
     strcpy(in_mode, "rb");
 
-    static const struct option loptions[] =
+    static struct option loptions[] =
     {
+        SAM_GLOBAL_LOPTS,
         {"help", no_argument, NULL, 'h'},
         {"remove-dups", no_argument, NULL, 'd'},
         {"sam", no_argument, NULL, 's'},
@@ -1441,6 +1446,9 @@ int main_stats(int argc, char *argv[])
         {NULL, 0, NULL, 0}
     };
     int opt;
+
+    assign_short_opts(loptions, "-.--.");
+
     while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:",loptions,NULL))>0 )
     {
         switch (opt)
@@ -1466,7 +1474,9 @@ int main_stats(int argc, char *argv[])
             case 'x': sparse = 1; break;
             case '?':
             case 'h': error(NULL);
-            default: error("Unknown argument: %s\n", optarg);
+            default:
+                if (parse_sam_global_opt(opt, optarg, loptions, &ga) == 0) break;
+                else error("Unknown argument: %s\n", optarg);
         }
     }
     if ( optind<argc )
@@ -1493,7 +1503,7 @@ int main_stats(int argc, char *argv[])
     stats->cov_rbuf.size = stats->nbases*5;
     stats->cov_rbuf.buffer = calloc(sizeof(int32_t),stats->cov_rbuf.size);
     // .. bam
-    if ((sam = sam_open(bam_fname, in_mode)) == 0)
+    if ((sam = sam_open_format(bam_fname, in_mode, &ga.in)) == 0)
         error("Failed to open: %s\n", bam_fname);
     stats->sam = sam;
     stats->sam_header = sam_hdr_read(sam);
@@ -1541,14 +1551,21 @@ int main_stats(int argc, char *argv[])
     else
     {
         // Stream through the entire BAM ignoring off-target regions if -t is given
-        while (sam_read1(sam, stats->sam_header, bam_line) >= 0)
+        int ret;
+        while ((ret = sam_read1(sam, stats->sam_header, bam_line)) >= 0)
             collect_stats(bam_line,stats);
+
+        if (ret < -1) {
+            fprintf(stderr, "Failure while decoding file\n");
+            return 1;
+        }
     }
     round_buffer_flush(stats,-1);
 
     output_stats(stats, sparse);
     bam_destroy1(bam_line);
     bam_hdr_destroy(stats->sam_header);
+    sam_global_args_free(&ga);
 
     cleanup_stats(stats);
 

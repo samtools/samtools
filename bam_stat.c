@@ -27,6 +27,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
+#include <getopt.h>
 
 #include "htslib/sam.h"
 #include "samtools.h"
@@ -94,14 +96,39 @@ int bam_flagstat(int argc, char *argv[])
     bam_hdr_t *header;
     bam_flagstat_t *s;
     char b0[16], b1[16];
+    hts_opt *in_opts = NULL;
+    int c;
+
+    enum {
+        INPUT_FMT_OPTION = CHAR_MAX+1,
+        OUTPUT_FMT_OPTION,
+    };
+
+    static const struct option lopts[] = {
+        {"input-fmt-option",  required_argument, NULL, INPUT_FMT_OPTION}, 
+        {NULL, 0, NULL, 0}
+    };
+
+    while ((c = getopt_long(argc, argv, "", lopts, NULL)) >= 0) {
+        switch (c) {
+        case INPUT_FMT_OPTION:
+            if (hts_opt_add(&in_opts, optarg))
+                fprintf(stderr, "Usage: samtools flagstat  [--input-fmt-option OPT=VAL] <in.bam>\n");
+            break;
+        }
+    }
 
     if (argc == optind) {
-        fprintf(stderr, "Usage: samtools flagstat <in.bam>\n");
+        fprintf(stderr, "Usage: samtools flagstat [--input-fmt-option OPT=VAL] <in.bam>\n");
         return 1;
     }
     fp = sam_open(argv[optind], "r");
     if (fp == NULL) {
         print_error_errno("Cannot open input file \"%s\"", argv[optind]);
+        return 1;
+    }
+    if (hts_opt_apply(fp, in_opts)) {
+        fprintf(stderr, "Failed to apply input-fmt-options\n");
         return 1;
     }
 
@@ -134,5 +161,6 @@ int bam_flagstat(int argc, char *argv[])
     free(s);
     bam_hdr_destroy(header);
     sam_close(fp);
+    hts_opt_free(in_opts);
     return 0;
 }

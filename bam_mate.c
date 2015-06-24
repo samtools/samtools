@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "sam_opts.h"
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
 
@@ -294,10 +295,12 @@ void usage(FILE* where)
 {
     fprintf(where,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
     fprintf(where,"Options:\n");
-    fprintf(stderr,"  -r         Remove unmapped reads and secondary alignments\n");
-    fprintf(stderr,"  -p         Disable FR proper pair check\n");
-    fprintf(stderr,"  -c         Add template cigar ct tag\n");
-    fprintf(stderr,"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')\n");
+    fprintf(stderr,"  -r           Remove unmapped reads and secondary alignments\n");
+    fprintf(stderr,"  -p           Disable FR proper pair check\n");
+    fprintf(stderr,"  -c           Add template cigar ct tag\n");
+
+    sam_global_opt_help(stderr, "-.O..");
+
     fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
     fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
     fprintf(stderr,"input is not accepted.\n");
@@ -307,46 +310,41 @@ int bam_mating(int argc, char *argv[])
 {
     samFile *in, *out;
     int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0;
-    char* fmtout = NULL;
-    char modeout[12];
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
+    assign_short_opts(lopts, "-.O..");
+
     // parse args
     if (argc == 1) { usage(stdout); return 0; }
-    while ((c = getopt(argc, argv, "rpcO:")) >= 0) {
+    while ((c = getopt_long(argc, argv, "rpcO:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': remove_reads = 1; break;
             case 'p': proper_pair_check = 0; break;
             case 'c': add_ct = 1; break;
-            case 'O': fmtout = optarg; break;
-            default: usage(stderr); return 1;
+            //case 'O': fmtout = optarg; break;
+            default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            case '?': usage(stderr); return 1;
         }
     }
     if (optind+1 >= argc) { usage(stderr); return 1; }
-    strcpy(modeout, "w");
-    if (sam_open_mode(&modeout[1], argv[optind+1], fmtout) < 0) {
-        if (fmtout) {
-            fprintf(stderr, "[bam_mating] cannot parse output format \"%s\"\n", fmtout);
-            return 1;
-        }
-
-        // Couldn't determine format from the filename; an unrecognised
-        // extension or perhaps "-".  Emit BAM as samtools 0.1.x did.
-        strcat(modeout, "b");
-    }
 
     // init
-    if ((in = sam_open(argv[optind], "r")) == NULL) {
+    if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {
         fprintf(stderr, "[bam_mating] cannot open input file\n");
         return 1;
     }
-    if ((out = sam_open(argv[optind+1], modeout)) == NULL) {
+    if ((out = sam_open_format(argv[optind+1], "wb", &ga.out)) == NULL) {
         fprintf(stderr, "[bam_mating] cannot open output file\n");
         return 1;
     }
 
     // run
     bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct);
+
     // cleanup
     sam_close(in); sam_close(out);
+    sam_global_args_free(&ga);
+
     return 0;
 }
 

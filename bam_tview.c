@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/faidx.h>
 #include <htslib/sam.h>
 #include <htslib/bgzf.h>
+#include "sam_opts.h"
 
 khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
 {
@@ -53,7 +54,8 @@ khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
     return rg_hash;
 }
 
-int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *samples)
+int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
+                 const char *samples, htsFormat *fmt)
 {
     assert(tv!=NULL);
     assert(fn!=NULL);
@@ -61,7 +63,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *sam
     tv->color_for = TV_COLOR_MAPQ;
     tv->is_dot = 1;
 
-    tv->fp = sam_open(fn, "r");
+    tv->fp = sam_open_format(fn, "r", fmt);
     if(tv->fp == NULL)
     {
         fprintf(stderr,"sam_open %s. %s\n", fn,fn_fa);
@@ -340,9 +342,12 @@ static void error(const char *format, ...)
 }
 
 enum dipsay_mode {display_ncurses,display_html,display_text};
-extern tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples);
-extern tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples);
-extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples);
+extern tview_t* curses_tv_init(const char *fn, const char *fn_fa,
+                               const char *samples, const htsFormat *fmt);
+extern tview_t* html_tv_init(const char *fn, const char *fn_fa,
+                             const char *samples, const htsFormat *fmt);
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa,
+                             const char *samples, const htsFormat *fmt);
 
 int bam_tview_main(int argc, char *argv[])
 {
@@ -350,7 +355,12 @@ int bam_tview_main(int argc, char *argv[])
     tview_t* tv=NULL;
     char *samples=NULL, *position=NULL;
     int c;
-    while ((c = getopt(argc, argv, "s:p:d:")) >= 0) {
+
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
+    assign_short_opts(lopts, "-.--.");
+
+    while ((c = getopt_long(argc, argv, "s:p:d:", lopts, NULL)) >= 0) {
         switch (c) {
             case 's': samples=optarg; break;
             case 'p': position=optarg; break;
@@ -365,28 +375,32 @@ int bam_tview_main(int argc, char *argv[])
                 }
                 break;
             }
-            default: error(NULL);
+            default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            case '?': error(NULL);
         }
     }
     if (argc==optind) error(NULL);
 
     switch(view_mode)
     {
-        case display_ncurses:
-            {
-            tv = curses_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+        case display_ncurses: {
+            tv = curses_tv_init(argv[optind],
+                                (optind+1>=argc)? 0 : argv[optind+1],
+                                samples, &ga.in);
             break;
-            }
-        case display_text:
-            {
-            tv = text_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+        }
+        case display_text: {
+            tv = text_tv_init(argv[optind],
+                              (optind+1>=argc)? 0 : argv[optind+1],
+                              samples, &ga.in);
             break;
-            }
-        case display_html:
-            {
-            tv = html_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+        }
+        case display_html: {
+            tv = html_tv_init(argv[optind],
+                              (optind+1>=argc)? 0 : argv[optind+1],
+                              samples, &ga.in);
             break;
-            }
+        }
     }
     if (tv==NULL)
     {

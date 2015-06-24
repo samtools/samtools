@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
+#include "sam_opts.h"
 
 #include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
@@ -67,14 +68,24 @@ int main_bedcov(int argc, char *argv[])
     int *n_plp, dret, i, n, c, min_mapQ = 0;
     int64_t *cnt;
     const bam_pileup1_t **plp;
+    int usage = 0;
 
-    while ((c = getopt(argc, argv, "Q:")) >= 0) {
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
+    assign_short_opts(lopts, "-.--.");
+
+    while ((c = getopt_long(argc, argv, "Q:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
+        default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+        case '?': usage = 1; break;
         }
+        if (usage) break;
     }
     if (optind + 2 > argc) {
-        fprintf(stderr, "Usage: samtools bedcov <in.bed> <in1.bam> [...]\n");
+        fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...]\n\n");
+        fprintf(stderr, "  -Q INT       Only count bases of at least INT quality [0]\n");
+        sam_global_opt_help(stderr, "-.--.");
         return 1;
     }
     memset(&str, 0, sizeof(kstring_t));
@@ -84,8 +95,9 @@ int main_bedcov(int argc, char *argv[])
     for (i = 0; i < n; ++i) {
         aux[i] = calloc(1, sizeof(aux_t));
         aux[i]->min_mapQ = min_mapQ;
-        aux[i]->fp = sam_open(argv[i+optind+1], "r");
-        idx[i] = sam_index_load(aux[i]->fp, argv[i+optind+1]);
+        aux[i]->fp = sam_open_format(argv[i+optind+1], "r", &ga.in);
+        if (aux[i]->fp)
+            idx[i] = sam_index_load(aux[i]->fp, argv[i+optind+1]);
         if (aux[i]->fp == 0 || idx[i] == 0) {
             fprintf(stderr, "ERROR: fail to open index BAM file '%s'\n", argv[i+optind+1]);
             return 2;
@@ -152,5 +164,6 @@ bed_error:
     }
     free(aux); free(idx);
     free(str.s);
+    sam_global_args_free(&ga);
     return 0;
 }

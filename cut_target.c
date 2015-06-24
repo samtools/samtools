@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bam.h"
 #include "errmod.h"
 #include "htslib/faidx.h"
+#include "sam_opts.h"
 
 #define ERR_DEP 0.83
 
@@ -44,7 +45,7 @@ static score_param_t g_param = { {{0,0,0},{-4,1,6}}, {{0,-14000}, {0,0}} };
 typedef struct {
     int min_baseQ, tid, max_bases;
     uint16_t *bases;
-    bamFile fp;
+    samFile *fp;
     bam_header_t *h;
     char *ref;
     faidx_t *fai;
@@ -147,7 +148,7 @@ static int read_aln(void *data, bam1_t *b)
     int ret, len;
     while (1)
     {
-        ret = bam_read1(g->fp, b);
+        ret = sam_read1(g->fp, g->h, b);
         if ( ret<0 ) break;
         if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
         if ( g->fai && b->core.tid >= 0 ) {
@@ -165,15 +166,19 @@ static int read_aln(void *data, bam1_t *b)
 
 int main_cut_target(int argc, char *argv[])
 {
-    int c, tid, pos, n, lasttid = -1, l, max_l;
+    int c, tid, pos, n, lasttid = -1, l, max_l, usage = 0;
     const bam_pileup1_t *p;
     bam_plp_t plp;
     uint16_t *cns;
     ct_t g;
 
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
+    assign_short_opts(lopts, "-.--.");
+
     memset(&g, 0, sizeof(ct_t));
     g.min_baseQ = 13; g.tid = -1;
-    while ((c = getopt(argc, argv, "f:Q:i:o:0:1:2:")) >= 0) {
+    while ((c = getopt_long(argc, argv, "f:Q:i:o:0:1:2:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'Q': g.min_baseQ = atoi(optarg); break; // quality cutoff
             case 'i': g_param.p[0][1] = -atoi(optarg); break; // 0->1 transition (in) PENALTY
@@ -183,15 +188,18 @@ int main_cut_target(int argc, char *argv[])
             case 'f': g.fai = fai_load(optarg);
                 if (g.fai == 0) fprintf(stderr, "[%s] fail to load the fasta index.\n", __func__);
                 break;
+            default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            case '?': usage=1;
         }
     }
-    if (argc == optind) {
-        fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] [-f ref] <in.bam>\n");
+    if (usage || argc == optind) {
+        fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] [-f ref] [--reference ref.fa] <in.bam>\n");
         return 1;
     }
     l = max_l = 0; cns = 0;
-    g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
-    g.h = bam_header_read(g.fp);
+    //g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
+    g.fp = sam_open_format(argv[optind], "r", &ga.in);
+    g.h = sam_header_read(g.fp);
     g.em = errmod_init(1. - ERR_DEP);
     plp = bam_plp_init(read_aln, &g);
     while ((p = bam_plp_auto(plp, &tid, &pos, &n)) != 0) {
@@ -213,11 +221,12 @@ int main_cut_target(int argc, char *argv[])
     free(cns);
     bam_header_destroy(g.h);
     bam_plp_destroy(plp);
-    bam_close(g.fp);
+    sam_close(g.fp);
     if (g.fai) {
         fai_destroy(g.fai); free(g.ref);
     }
     errmod_destroy(g.em);
     free(g.bases);
+    sam_global_args_free(&ga);
     return 0;
 }

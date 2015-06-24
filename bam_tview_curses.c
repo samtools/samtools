@@ -275,7 +275,8 @@ end_loop:
 
 
 
-tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
+tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
+                        htsFormat *fmt)
     {
     curses_tview_t *tv = (curses_tview_t*)calloc(1, sizeof(curses_tview_t));
     tview_t* base=(tview_t*)tv;
@@ -285,7 +286,7 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
         return 0;
         }
 
-    base_tv_init(base,fn,fn_fa,samples);
+    base_tv_init(base,fn,fn_fa,samples,fmt);
     /* initialize callbacks */
 #define SET_CALLBACK(fun) base->my_##fun=curses_##fun;
     SET_CALLBACK(destroy);
@@ -328,11 +329,13 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
 #include <stdio.h>
 #warning "No curses library is available; tview with curses is disabled."
 
-extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples);
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples,
+                             htsFormat *fmt);
 
-tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
+tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
+                        htsFormat *fmt)
     {
-    return text_tv_init(fn,fn_fa,samples);
+    return text_tv_init(fn,fn_fa,samples,fmt);
     }
 #endif // #ifdef _HAVE_CURSES
 
