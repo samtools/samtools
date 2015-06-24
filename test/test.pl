@@ -2277,6 +2277,6 @@ sub test_reheader
     test_cmd($opts,
 	     out=>'reheader/3_view1.sam.expected',
 	     err=>'reheader/3_view1.sam.expected.err',
-	     cmd=>"$$opts{bin}/samtools reheader --insitu $$opts{path}/reheader/hdr.sam $fn.cram && $$opts{bin}/samtools view -h $fn.cram | perl -pe 's/\tVN:.*//'",
+	     cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.cram && $$opts{bin}/samtools view -h $fn.cram | perl -pe 's/\tVN:.*//'",
 	     expect_fail=>0);
 }

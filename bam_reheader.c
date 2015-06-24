@@ -31,8 +31,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
 #include "htslib/hfile.h"
-#include "cram/cram.h"
-#include "version.h"
+#include "htslib/cram.h"
+#include "samtools.h"
 
 #define BUF_SIZE 0x10000
 
@@ -55,7 +55,7 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
         // Around the houses, but it'll do until we can manipulate bam_hdr_t natively.
         SAM_hdr *sh = sam_hdr_parse_(h->text, h->l_text);
         if (sam_hdr_add_PG(sh, "samtools",
-                           "VN", SAMTOOLS_VERSION,
+                           "VN", samtools_version(),
                            arg_list ? "CL": NULL,
                            arg_list ? arg_list : NULL,
                            NULL) != 0)
@@ -96,10 +96,10 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
     int ret = -1;
 
     // Attempt to fill out a cram->refs[] array from @SQ headers
-    out->header = sam_hdr_parse_(h->text, h->l_text);
+    cram_fd_set_header(out, sam_hdr_parse_(h->text, h->l_text));
     if (add_PG) {
-        if (sam_hdr_add_PG(out->header, "samtools",
-                           "VN", SAMTOOLS_VERSION,
+        if (sam_hdr_add_PG(cram_fd_get_header(out), "samtools",
+                           "VN", samtools_version(),
                            arg_list ? "CL": NULL,
                            arg_list ? arg_list : NULL,
                            NULL) != 0)
@@ -107,8 +107,8 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
 
         // Covert back to bam_hdr_t struct
         free(h->text);
-        h->text = strdup(sam_hdr_str(out->header));
-        h->l_text = sam_hdr_length(out->header);
+        h->text = strdup(sam_hdr_str(cram_fd_get_header(out)));
+        h->l_text = sam_hdr_length(cram_fd_get_header(out));
         if (!h->text)
             goto err;
     }
@@ -118,11 +118,11 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
     cram_set_option(out, CRAM_OPT_REFERENCE, NULL);
 
     while ((c = cram_read_container(in))) {
-        int i;
+        int32_t i, num_blocks = cram_container_get_num_blocks(c);
         if (cram_write_container(out, c) != 0)
             goto err;
 
-        for (i = 0; i < c->num_blocks; i++) {
+        for (i = 0; i < num_blocks; i++) {
             cram_block *blk = cram_read_block(in);
             if (!blk || cram_write_block(out, blk) != 0) {
                 if (blk) cram_free_block(blk);
@@ -143,103 +143,6 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
 }
 
 
-/*
- * CRAM manipulation functions.  A case could be made for moving these
- * to htslib, especially as these expose internal knowledge of the
- * CRAM encodings.
- *
- * However for simplicity and the fact they're needed by precisely one
- * tool (currently) we'll keep them here for now.  Shout if you need
- * them elsewhere.
- */
-
-/* MAXIMUM storage size needed for the container. */
-static inline int cram_container_size(cram_container *c) {
-    return 55 + 5*c->num_landmarks;
-}
-
-/*
- * Stores the container structure in dat and returns *size as the
- * number of bytes written to dat[].  The input size of dat is also
- * held in *size and should be initialised to cram_container_size(c).
- *
- * Returns 0 on success;
- *        -1 on failure
- */
-static int cram_store_container(cram_fd *fd, cram_container *c, char *dat,
-                                int *size) {
-    char *cp = dat;
-    int i;
-    
-    // Check the input buffer is large enough according to our stated
-    // requirements. (NOTE: it may actually take less.)
-    if (cram_container_size(c) > *size)
-        return -1;
-
-    if (CRAM_MAJOR_VERS(fd->version) == 1) {
-	cp += itf8_put(cp, c->length);
-    } else {
-	*(int32_t *)cp = le_int4(c->length);
-	cp += 4;
-    }
-    if (c->multi_seq) {
-	cp += itf8_put(cp, -2);
-	cp += itf8_put(cp, 0);
-	cp += itf8_put(cp, 0);
-    } else {
-	cp += itf8_put(cp, c->ref_seq_id);
-	cp += itf8_put(cp, c->ref_seq_start);
-	cp += itf8_put(cp, c->ref_seq_span);
-    }
-    cp += itf8_put(cp, c->num_records);
-    if (CRAM_MAJOR_VERS(fd->version) == 2) {
-	cp += itf8_put(cp, c->record_counter);
-	cp += ltf8_put(cp, c->num_bases);
-    } else if (CRAM_MAJOR_VERS(fd->version) >= 3) {
-	cp += ltf8_put(cp, c->record_counter);
-	cp += ltf8_put(cp, c->num_bases);
-    }
-
-    cp += itf8_put(cp, c->num_blocks);
-    cp += itf8_put(cp, c->num_landmarks);
-    for (i = 0; i < c->num_landmarks; i++)
-	cp += itf8_put(cp, c->landmark[i]);
-
-    if (CRAM_MAJOR_VERS(fd->version) >= 3) {
-	c->crc32 = crc32(0L, (uc *)dat, cp-dat);
-	cp[0] =  c->crc32        & 0xff;
-	cp[1] = (c->crc32 >>  8) & 0xff;
-	cp[2] = (c->crc32 >> 16) & 0xff;
-	cp[3] = (c->crc32 >> 24) & 0xff;
-	cp += 4;
-    }
-
-    *size = cp-dat; // actual used size
-
-    return 0;
-}
-
-
-/*
- * Computes the size of a cram block, including the block
- * header itself.
- */
-uint32_t cram_block_size(cram_block *b) {
-    unsigned char dat[100], *cp = dat;;
-    uint32_t sz;
-
-    *cp++ = b->method;
-    *cp++ = b->content_type;
-    cp += itf8_put(cp, b->content_id);
-    cp += itf8_put(cp, b->comp_size);
-    cp += itf8_put(cp, b->uncomp_size);
-
-    sz = cp-dat + 4;
-    sz += b->method == RAW ? b->uncomp_size : b->comp_size;
-
-    return sz;
-}
-
 
 /*
  * Reads a version 2 CRAM file and replaces the header in situ,
@@ -253,7 +156,7 @@ uint32_t cram_block_size(cram_block *b) {
  *        -1 on general failure;
  *        -2 on failure due to insufficient size
  */
-int cram_reheader_insitu2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
+int cram_reheader_inplace2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
                           int add_PG)
 {
     cram_container *c = NULL;
@@ -262,17 +165,17 @@ int cram_reheader_insitu2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     off_t start;
     int ret = -1;
 
-    if (CRAM_MAJOR_VERS(fd->version) < 2 ||
-        CRAM_MAJOR_VERS(fd->version) > 3) {
+    if (cram_major_vers(fd) < 2 ||
+        cram_major_vers(fd) > 3) {
         fprintf(stderr, "[%s] unsupported CRAM version %d\n", __func__,
-                CRAM_MAJOR_VERS(fd->version));
+                cram_major_vers(fd));
         goto err;
     }
 
     if (!(hdr = sam_hdr_parse_(h->text, h->l_text)))
         goto err;
 
-    if (add_PG && sam_hdr_add_PG(hdr, "samtools", "VN", SAMTOOLS_VERSION,
+    if (add_PG && sam_hdr_add_PG(hdr, "samtools", "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
                                  NULL))
@@ -282,7 +185,7 @@ int cram_reheader_insitu2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     /* Fix M5 strings? Maybe out of scope for this tool */
 
     // Load the existing header
-    if ((start = hseek(fd->fp, 26, SEEK_SET)) != 26)
+    if ((start = hseek(cram_fd_get_fp(fd), 26, SEEK_SET)) != 26)
         goto err;
 
     if (!(c = cram_read_container(fd)))
@@ -296,21 +199,24 @@ int cram_reheader_insitu2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     if (!(b = cram_read_block(fd)))
         goto err;
 
-    if (b->uncomp_size < header_len+4) {
-        fprintf(stderr, "New header will not fit. Use non-insitu version (%d > %d)\n",
-                header_len+4, b->uncomp_size);
+    if (cram_block_get_uncomp_size(b) < header_len+4) {
+        fprintf(stderr, "New header will not fit. Use non-inplace version (%d > %d)\n",
+                header_len+4, cram_block_get_uncomp_size(b));
         ret = -2;
         goto err;
     }
 
-    BLOCK_SIZE(b) = 0;
+    cram_block_set_offset(b, 0);   // rewind block
     int32_put_blk(b, header_len);
-    BLOCK_APPEND(b, sam_hdr_str(hdr), header_len);
-    memset(BLOCK_DATA(b)+BLOCK_SIZE(b), 0, b->uncomp_size - BLOCK_SIZE(b));
-    BLOCK_SIZE(b) = b->uncomp_size;
-    BLOCK_UPLEN(b);
+    cram_block_append(b, sam_hdr_str(hdr), header_len);
+    // Zero the remaining block
+    memset(cram_block_get_data(b)+cram_block_get_offset(b), 0,
+           cram_block_get_uncomp_size(b) - cram_block_get_offset(b));
+    // Make sure all sizes and byte-offsets are consistent after memset
+    cram_block_set_offset(b, cram_block_get_uncomp_size(b));
+    cram_block_set_comp_size(b, cram_block_get_uncomp_size(b));
 
-    if (hseek(fd->fp, start, SEEK_SET) != start)
+    if (hseek(cram_fd_get_fp(fd), start, SEEK_SET) != start)
         goto err;
     
     if (cram_write_container(fd, c) == -1)
@@ -344,28 +250,28 @@ int cram_reheader_insitu2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
  *        -1 on general failure;
  *        -2 on failure due to insufficient size
  */
-int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
+int cram_reheader_inplace3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
                           int add_PG)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
-    SAM_hdr *hdr;
+    SAM_hdr *hdr = NULL;
     off_t start, sz, end;
     int container_sz, max_container_sz;
     char *buf = NULL;
     int ret = -1;
 
-    if (CRAM_MAJOR_VERS(fd->version) < 2 ||
-        CRAM_MAJOR_VERS(fd->version) > 3) {
+    if (cram_major_vers(fd) < 2 ||
+        cram_major_vers(fd) > 3) {
         fprintf(stderr, "[%s] unsupported CRAM version %d\n", __func__,
-                CRAM_MAJOR_VERS(fd->version));
+                cram_major_vers(fd));
         goto err;
     }
 
     if (!(hdr = sam_hdr_parse_(h->text, h->l_text)))
         goto err;
 
-    if (add_PG && sam_hdr_add_PG(hdr, "samtools", "VN", SAMTOOLS_VERSION,
+    if (add_PG && sam_hdr_add_PG(hdr, "samtools", "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
                                  NULL))
@@ -375,7 +281,7 @@ int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     /* Fix M5 strings? Maybe out of scope for this tool */
 
     // Find current size of SAM header block
-    if ((start = hseek(fd->fp, 26, SEEK_SET)) != 26)
+    if ((start = hseek(cram_fd_get_fp(fd), 26, SEEK_SET)) != 26)
         goto err;
 
     if (!(c = cram_read_container(fd)))
@@ -384,8 +290,8 @@ int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     // +5 allows num_landmarks to increase from 0 to 1 (Cramtools)
     max_container_sz = cram_container_size(c)+5; 
 
-    sz = htell(fd->fp) + c->length - start;
-    end = htell(fd->fp) + c->length;
+    sz = htell(cram_fd_get_fp(fd)) + cram_container_get_length(c) - start;
+    end = htell(cram_fd_get_fp(fd)) + cram_container_get_length(c);
 
     // We force 1 block instead of (optionally) 2.  C CRAM
     // implementations for v3 were writing 1 compressed block followed
@@ -395,17 +301,21 @@ int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     //
     // If we had 1 block, this doesn't change anything.
     // If we had 2 blocks, the new container header will be smaller by
-    // 1+ bytes, requiring the c->length to be larger in value.
+    // 1+ bytes, requiring the cram_container_get_length(c) to be larger in value.
     // However this is an int32 instead of itf8 so the container
     // header structure stays the same size.  This means we can always
     // reduce the number of blocks without running into size problems.
-    c->num_blocks = 1;
-    if (c->num_landmarks && c->landmark) {
-        c->num_landmarks = 1;
-        c->landmark[0] = 0;
+    cram_container_set_num_blocks(c, 1);
+    int32_t *landmark;
+    int32_t num_landmarks;
+    landmark = cram_container_get_landmarks(c, &num_landmarks);
+    if (num_landmarks && landmark) {
+        num_landmarks = 1;
+        landmark[0] = 0;
     } else {
-        c->num_landmarks = 0;
+        num_landmarks = 0;
     }
+    cram_container_set_landmarks(c, num_landmarks, landmark);
 
     buf = malloc(max_container_sz);
     container_sz = max_container_sz;
@@ -415,9 +325,9 @@ int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     if (!buf)
         goto err;
 
-    // Proposed new length, but changing c->length may change the
-    // container_sz and thus the remainder (c->length itself).
-    c->length = sz - container_sz;
+    // Proposed new length, but changing cram_container_get_length(c) may change the
+    // container_sz and thus the remainder (cram_container_get_length(c) itself).
+    cram_container_set_length(c, sz - container_sz);
     
     int old_container_sz = container_sz;
     container_sz = max_container_sz;
@@ -426,7 +336,7 @@ int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
 
     if (old_container_sz != container_sz) {
         fprintf(stderr, "Quirk of fate makes this troublesome! "
-                "Please use non-insitu version.\n");
+                "Please use non-inplace version.\n");
         goto err;
     }
     
@@ -435,25 +345,18 @@ int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     // Version 3.0 supports compressed header
     b = cram_new_block(FILE_HEADER, 0);
     int32_put_blk(b, header_len);
-    BLOCK_APPEND(b, sam_hdr_str(hdr), header_len);
-    BLOCK_UPLEN(b);
+    cram_block_append(b, sam_hdr_str(hdr), header_len);
+    cram_block_update_size(b);
 
-    if (fd->level > 0) {
-        int method = 1<<GZIP;
-        if (fd->use_bz2)
-            method |= 1<<BZIP2;
-        if (fd->use_lzma)
-            method |= 1<<LZMA;
-        cram_compress_block(fd, b, NULL, method, fd->level);
-    }
+    cram_compress_block(fd, b, NULL, -1, -1);
 
-    if (hseek(fd->fp, 26, SEEK_SET) != 26)
+    if (hseek(cram_fd_get_fp(fd), 26, SEEK_SET) != 26)
         goto err;
 
-    if (cram_block_size(b) > c->length) {
-        fprintf(stderr, "New header will not fit. Use non-insitu version"
+    if (cram_block_size(b) > cram_container_get_length(c)) {
+        fprintf(stderr, "New header will not fit. Use non-inplace version"
                 " (%d > %d)\n",
-                cram_block_size(b), c->length);
+                (int)cram_block_size(b), cram_container_get_length(c));
         ret = -2;
         goto err;
     }
@@ -465,11 +368,11 @@ int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
         goto err;
 
     // Blank out the remainder
-    int rsz = end - htell(fd->fp);
+    int rsz = end - htell(cram_fd_get_fp(fd));
     assert(rsz >= 0);
     if (rsz) {
         char *rem = calloc(1, rsz);
-        ret = hwrite(fd->fp, rem, rsz) == rsz ? 0 : -1;
+        ret = hwrite(cram_fd_get_fp(fd), rem, rsz) == rsz ? 0 : -1;
         free(rem);
     }
 
@@ -482,47 +385,47 @@ int cram_reheader_insitu3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
     return ret;
 }
 
-int cram_reheader_insitu(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
+int cram_reheader_inplace(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
                          int add_PG)
 {
-    switch (CRAM_MAJOR_VERS(fd->version)) {
-    case 2: return cram_reheader_insitu2(fd, h, arg_list, add_PG);
-    case 3: return cram_reheader_insitu3(fd, h, arg_list, add_PG);
+    switch (cram_major_vers(fd)) {
+    case 2: return cram_reheader_inplace2(fd, h, arg_list, add_PG);
+    case 3: return cram_reheader_inplace3(fd, h, arg_list, add_PG);
     default:
         fprintf(stderr, "[%s] unsupported CRAM version %d\n", __func__,
-                CRAM_MAJOR_VERS(fd->version));
+                cram_major_vers(fd));
         return -1;
     }
 }
 
 static void usage(int ret) {
     printf("Usage: samtools reheader [-P] in.header.sam in.bam > out.bam\n"
-           "   or  samtools reheader [-P] -I in.header.sam file.bam\n"
+           "   or  samtools reheader [-P] -i in.header.sam file.bam\n"
            "\n"
            "Options:\n"
            "    -P, --no-PG      Do not generate an @PG header line.\n"
-           "    -I, --insitu     Modify the bam/cram file directly.\n"
+           "    -i, --in-place   Modify the bam/cram file directly.\n"
            "                     (Defaults to outputting to stdout.)\n");
     exit(ret);
 }
 
 int main_reheader(int argc, char *argv[])
 {
-    int insitu = 0, r, add_PG = 1, c;
+    int inplace = 0, r, add_PG = 1, c;
     bam_hdr_t *h;
     samFile *in;
     char *arg_list = stringify_argv(argc+1, argv-1);
 
     static const struct option lopts[] = {
-        {"insitu", no_argument, NULL, 'I'},
-        {"no-PG",  no_argument, NULL, 'P'},
+        {"in-place", no_argument, NULL, 'i'},
+        {"no-PG",    no_argument, NULL, 'P'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "hIP", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "hiP", lopts, NULL)) >= 0) {
         switch (c) {
         case 'P': add_PG = 0; break;
-        case 'I': insitu = 1; break;
+        case 'i': inplace = 1; break;
         case 'h': usage(0);
         default:
             fprintf(stderr, "Invalid option '%c'\n", c);
@@ -542,7 +445,7 @@ int main_reheader(int argc, char *argv[])
         h = sam_hdr_read(fph);
         sam_close(fph);
     }
-    in = sam_open(argv[optind+1], insitu?"r+":"r");
+    in = sam_open(argv[optind+1], inplace?"r+":"r");
     if (in == 0) {
         fprintf(stderr, "[%s] fail to open file %s.\n", __func__, argv[optind+1]);
         return 1;
@@ -550,8 +453,8 @@ int main_reheader(int argc, char *argv[])
     if (in->format.format == bam) {
         r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG);
     } else {
-        if (insitu)
-            r = cram_reheader_insitu(in->fp.cram, h, arg_list, add_PG);
+        if (inplace)
+            r = cram_reheader_inplace(in->fp.cram, h, arg_list, add_PG);
         else
             r = cram_reheader(in->fp.cram, h, arg_list, add_PG);
     }

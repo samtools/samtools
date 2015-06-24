@@ -1265,7 +1265,7 @@ BAM\(->SAM\(->BAM conversion.
 
 By default this command outputs the BAM or CRAM file to standard
 output (stdout), but for CRAM format files it has the option to
-perform an insitu edit, both reading and writing to the same file.  No
+perform an in-situ edit, both reading and writing to the same file.  No
 validity checking is performed on the header, nor that it is suitable
 to use with the sequence data itself.
 
@@ -1275,8 +1275,8 @@ to use with the sequence data itself.
 .B -P, --no-PG
 Do not generate an @PG header line.
 .TP 8
-.B -I, --insitu
-Perform the header edit insitu, if possible.  This only works on CRAM
+.B -I, --in-place
+Perform the header edit in-place, if possible.  This only works on CRAM
 files and only if there is sufficient room to store the new header.
 The amount of space available will differ for each CRAM file.
 .RE

@@ -149,7 +149,7 @@ bam_md.o: bam_md.c $(htslib_faidx_h) $(htslib_sam_h) kprobaln.h
 bam_pileup.o: bam_pileup.c $(sam_h)
 bam_plbuf.o: bam_plbuf.c $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(bam2bcf_h) $(sample_h)
-bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(bam_h) version.h
+bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(bam_h)
 bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
 bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
 bam_sort.o: bam_sort.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h $(HTSDIR)/htslib/kstring.h $(htslib_sam_h)
