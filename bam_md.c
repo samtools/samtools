@@ -26,6 +26,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
+#include <limits.h>
 #include <math.h>
 #include "htslib/faidx.h"
 #include "htslib/sam.h"
@@ -41,7 +42,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
-void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
+void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm)
 {
     uint8_t *seq = bam_get_seq(b);
     uint32_t *cigar = bam_get_cigar(b);
@@ -55,9 +56,9 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
         int j, l = cigar[i]>>4, op = cigar[i]&0xf;
         if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
             for (j = 0; j < l; ++j) {
-                int z = y + j;
-                int c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
-                if (ref[x+j] == 0) break; // out of boundary
+                int c1, c2, z = y + j;
+                if (x+j >= ref_len || ref[x+j] == '\0') break; // out of bounds
+                c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
                 if ((c1 == c2 && c1 != 15 && c2 != 15) || c1 == 0) { // a match
                     if (flag&USE_EQUAL) seq[z/2] &= (z&1)? 0xf0 : 0x0f;
                     ++u;
@@ -71,7 +72,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
         } else if (op == BAM_CDEL) {
             kputw(u, str); kputc('^', str);
             for (j = 0; j < l; ++j) {
-                if (ref[x+j] == 0) break;
+                if (x+j >= ref_len || ref[x+j] == '\0') break;
                 kputc(ref[x+j], str);
             }
             u = 0;
@@ -91,9 +92,9 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
             int j, l = cigar[i]>>4, op = cigar[i]&0xf;
             if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
                 for (j = 0; j < l; ++j) {
-                    int z = y + j;
-                    int c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
-                    if (ref[x+j] == 0) break; // out of boundary
+                    int c1, c2, z = y + j;
+                    if (x+j >= ref_len || ref[x+j] == '\0') break; // out of bounds
+                    c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
                     if ((c1 == c2 && c1 != 15 && c2 != 15) || c1 == 0) { // a match
                         seq[z/2] |= (z&1)? 0x0f : 0xf0;
                         bam_get_qual(b)[z] = 0;
@@ -153,10 +154,10 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int flag, int max_nm)
 
 void bam_fillmd1(bam1_t *b, char *ref, int flag)
 {
-    bam_fillmd1_core(b, ref, flag, 0);
+    bam_fillmd1_core(b, ref, INT_MAX, flag, 0);
 }
 
-int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
+int bam_cap_mapQ(bam1_t *b, char *ref, int ref_len, int thres)
 {
     uint8_t *seq = bam_get_seq(b), *qual = bam_get_qual(b);
     uint32_t *cigar = bam_get_cigar(b);
@@ -169,9 +170,9 @@ int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
         int j, l = cigar[i]>>4, op = cigar[i]&0xf;
         if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
             for (j = 0; j < l; ++j) {
-                int z = y + j;
-                int c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
-                if (ref[x+j] == 0) break; // out of boundary
+                int c1, c2, z = y + j;
+                if (x+j >= ref_len || ref[x+j] == '\0') break; // out of bounds
+                c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
                 if (c2 != 15 && c1 != 15 && qual[z] >= 13) { // not ambiguous
                     ++len;
                     if (c1 && c1 != c2 && qual[z] >= 13) { // mismatch
@@ -184,7 +185,7 @@ int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
             x += l; y += l; len += l;
         } else if (op == BAM_CDEL) {
             for (j = 0; j < l; ++j)
-                if (ref[x+j] == 0) break;
+                if (x+j >= ref_len || ref[x+j] == '\0') break;
             if (j < l) break;
             x += l;
         } else if (op == BAM_CSOFT_CLIP) {
@@ -207,7 +208,7 @@ int bam_cap_mapQ(bam1_t *b, char *ref, int thres)
     return (int)(t + .499);
 }
 
-int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
+int bam_prob_realn_core(bam1_t *b, const char *ref, int ref_len, int flag)
 {
     int k, i, bw, x, y, yb, ye, xb, xe, apply_baq = flag&1, extend_baq = flag>>1&1, redo_baq = flag&4;
     uint32_t *cigar = bam_get_cigar(b);
@@ -272,7 +273,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
         for (i = 0; i < c->l_qseq; ++i) s[i] = seq_nt16_int[bam_seqi(seq, i)];
         r = calloc(xe - xb, 1);
         for (i = xb; i < xe; ++i) {
-            if (ref[i] == 0) { xe = i; break; }
+            if (i >= ref_len || ref[i] == '\0') { xe = i; break; }
             r[i-xb] = seq_nt16_int[seq_nt16_table[(int)ref[i]]];
         }
         state = calloc(c->l_qseq, sizeof(int));
@@ -323,7 +324,7 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int flag)
 
 int bam_prob_realn(bam1_t *b, const char *ref)
 {
-    return bam_prob_realn_core(b, ref, 1);
+    return bam_prob_realn_core(b, ref, INT_MAX, 1);
 }
 
 int bam_fillmd(int argc, char *argv[])
@@ -396,12 +397,12 @@ int bam_fillmd(int argc, char *argv[])
                     fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
                             header->target_name[tid]);
             }
-            if (is_realn) bam_prob_realn_core(b, ref, baq_flag);
+            if (is_realn) bam_prob_realn_core(b, ref, len, baq_flag);
             if (capQ > 10) {
-                int q = bam_cap_mapQ(b, ref, capQ);
+                int q = bam_cap_mapQ(b, ref, len, capQ);
                 if (b->core.qual > q) b->core.qual = q;
             }
-            if (ref) bam_fillmd1_core(b, ref, flt_flag, max_nm);
+            if (ref) bam_fillmd1_core(b, ref, len, flt_flag, max_nm);
         }
         sam_write1(fpout, header, b);
     }
