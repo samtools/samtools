@@ -28,6 +28,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <ctype.h>
 #include <string.h>
+#include <limits.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <getopt.h>
@@ -303,7 +304,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
     extern void bcf_call_del_rghash(void *rghash);
     mplp_aux_t **data;
-    int i, tid, pos, *n_plp, beg0 = 0, end0 = 1u<<29, ref_len, max_depth, max_indel_depth;
+    int i, tid, pos, *n_plp, beg0 = 0, end0 = INT_MAX, ref_len, max_depth, max_indel_depth;
     const bam_pileup1_t **plp;
     mplp_ref_t mp_ref = MPLP_REF_INIT;
     bam_mplp_t iter;
