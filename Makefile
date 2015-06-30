@@ -85,7 +85,9 @@ all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
 HTSDIR = ../htslib
+ifneq ("$(wildcard $(HTSDIR)/htslib.mk)","")
 include $(HTSDIR)/htslib.mk
+endif
 HTSLIB = $(HTSDIR)/libhts.a
 BGZIP  = $(HTSDIR)/bgzip
 
