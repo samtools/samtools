@@ -21,10 +21,10 @@
 # FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-CC       = gcc
-CPPFLAGS =
-CFLAGS   = -g -Wall -O2
-LDFLAGS  =
+CC       ?= gcc
+CPPFLAGS +=
+CFLAGS   += -g -Wall -O2
+LDFLAGS  +=
 LIBS     =
 
 DFLAGS=     -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE -D_CURSES_LIB=1
@@ -85,7 +85,9 @@ all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
 # Adjust $(HTSDIR) to point to your top-level htslib directory
 HTSDIR = ../htslib
+ifneq ("$(wildcard $(HTSDIR)/htslib.mk)","")
 include $(HTSDIR)/htslib.mk
+endif
 HTSLIB = $(HTSDIR)/libhts.a
 BGZIP  = $(HTSDIR)/bgzip
 
