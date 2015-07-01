@@ -198,7 +198,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     *text_in_out = output;
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, const char* rg_override)
+static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, const char* rg_override, khash_t(c2i)* out_tid)
 {
     tbl->n_targets = translate->n_targets;
     tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
@@ -211,16 +211,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     kstring_t out_text = { 0, 0, NULL };
     kputsn(out->text, out_len, &out_text);
 
-    int i, min_tid = -1;
+    int i, ilim, min_tid = -1;
     tbl->lost_coord_sort = false;
-
-    khash_t(c2i) *out_tid = kh_init(c2i);
-    for (i = 0; i < out->n_targets; ++i) {
-        int ret;
-        khiter_t iter = kh_put(c2i, out_tid, out->target_name[i], &ret);
-        if (ret <= 0) abort();
-        kh_value(out_tid, iter) = i;
-    }
 
     // @HD
     {
@@ -245,6 +237,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     }
 
     // SQ
+
+    int old_n_targets = out->n_targets;
+
     for (i = 0; i < translate->n_targets; ++i) {
         khiter_t iter = kh_get(c2i, out_tid, translate->target_name[i]);
 
@@ -254,38 +249,127 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             out->target_name[out->n_targets-1] = strdup(translate->target_name[i]);
             out->target_len = (uint32_t*)realloc(out->target_len, sizeof(uint32_t)*out->n_targets);
             out->target_len[out->n_targets-1] = translate->target_len[i];
-            // grep line with regex '^@SQ.*\tSN:%s(\t.*$|$)', translate->target_name[i]
-            // from translate->text
-            regex_t sq_id;
-            regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-            if (matches == NULL) { perror("out of memory"); exit(-1); }
-            kstring_t seq_regex = { 0, 0, NULL };
-            ksprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)", translate->target_name[i]);
-            regcomp(&sq_id, seq_regex.s, REG_EXTENDED|REG_NEWLINE);
-            free(seq_regex.s);
-            if (regexec(&sq_id, translate->text, 1, matches, 0) != 0)
-            {
-                fprintf(stderr, "[trans_tbl_init] @SQ SN (%s) found in binary header but not text header.\n",translate->target_name[i]);
-                exit(1);
-            }
-            regfree(&sq_id);
 
-            // Produce our output line and append it to out_text
-            kputc('\n', &out_text);
-            kputsn(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &out_text);
-
-            free(matches);
-        } else {
-            tbl->tid_trans[i] = kh_value(out_tid, iter);
-        }
-        if (tbl->tid_trans[i] > min_tid) {
-            min_tid = tbl->tid_trans[i];
-        } else {
-            tbl->lost_coord_sort = true;
-        }
+	    // Record the new identifier for reference below, and when building the ttable for other inputs.
+	    int ret;
+	    khiter_t iter = kh_put(c2i, out_tid, out->target_name[out->n_targets-1], &ret);
+	    if (ret <= 0) abort();
+	    kh_value(out_tid, iter) = out->n_targets - 1;
+	} else {
+	    tbl->tid_trans[i] = kh_value(out_tid, iter);
+	}
+	if (tbl->tid_trans[i] > min_tid) {
+	    min_tid = tbl->tid_trans[i];
+	} else {
+	    tbl->lost_coord_sort = true;
+	}
     }
-    kh_destroy(c2i, out_tid);
 
+    if(old_n_targets != out->n_targets) {
+
+	// Find @SQ lines in translate->text for all newly added targets. Do a single
+	// sweep through translate->text to avoid quadratic cost. Record each one's offsets within translate->text.
+
+	int* new_header_so = (int*)malloc(sizeof(int) * (out->n_targets - old_n_targets));
+	int* new_header_eo = (int*)malloc(sizeof(int) * (out->n_targets - old_n_targets));
+
+	for(i = 0, ilim = out->n_targets - old_n_targets; i != ilim; ++i) {
+	    new_header_so[i] = -1;
+	    new_header_eo[i] = -1;
+	}
+
+	if(!new_header_so || !new_header_eo) {
+	    fprintf(stderr, "[trans_tbl_init] new_header_s/eo out of memory\n");
+	    exit(1);
+	}
+
+	const char* translate_text_offset = translate->text;
+
+	while(1) {
+
+	    // Find @SQ at the start of a line, or start of translate->text.
+	    const char* rec_start;
+	    if(!strcmp(translate_text_offset, "@SQ"))
+		rec_start = translate_text_offset;
+	    else {
+		rec_start = strstr(translate_text_offset, "\n@SQ");
+		if(rec_start)
+		    ++rec_start;
+	    }
+
+	    if(!rec_start)
+		break;
+
+	    const char* rec_end = strchr(rec_start, '\n');
+	    if(!rec_end)
+		rec_end = rec_start + strlen(rec_start);
+
+	    const char* tag_start = strstr(rec_start, "\tSN:");
+	    if(tag_start) {
+
+		// Skip tag ID:
+		tag_start += 4;
+
+		const char* tag_end = tag_start;
+		while(tag_end < rec_end && (*tag_end) != '\t')
+		    ++tag_end;
+
+		const char* this_sq_name = strndup(tag_start, tag_end - tag_start);
+		if(!this_sq_name) {
+		    fprintf(stderr, "[trans_tbl_init] strndup out of memory\n");
+		    exit(1);
+		}
+
+		khiter_t iter = kh_get(c2i, out_tid, this_sq_name);
+		if (iter == kh_end(out_tid)) { 
+		    fprintf(stderr, "[trans_tbl_init] SQ entry (%s) in text but not table?\n", this_sq_name);
+		    exit(1);
+		}
+
+		free((void*)this_sq_name);
+
+		int this_sq_idx = kh_value(out_tid, iter);
+
+		if(this_sq_idx >= old_n_targets) {
+
+		    // This is a newly added sequence -- record where we found it.
+		    new_header_so[this_sq_idx - old_n_targets] = rec_start - translate->text;
+		    new_header_eo[this_sq_idx - old_n_targets] = rec_end - translate->text;
+		    
+		}
+
+	    }
+	    else {
+
+		fprintf(stderr, "Tag with no SN? %.*s\n", (int)(rec_end - rec_start), rec_start);
+
+	    }
+
+	    // Skip forwards for next match
+	    translate_text_offset = rec_end;
+	    
+	}
+
+	// Append each new text header we found:
+	
+	for(i = 0, ilim = (out->n_targets - old_n_targets); i != ilim; ++i) {
+
+	    if(new_header_so[i] == -1 || new_header_eo[i] == -1) {
+		fprintf(stderr, "[trans_tbl_init] @SQ SN (%s) found in binary header but not text header.\n", translate->target_name[i + old_n_targets]);
+		exit(1);
+	    }
+
+	    // Produce our output line and append it to out_text
+	    kputc('\n', &out_text);
+	    kputsn(translate->text + new_header_so[i], new_header_eo[i] - new_header_so[i], &out_text);
+
+	}
+
+	free(new_header_so);
+	free(new_header_eo);
+
+    }
+	    
     // grep @RG id's
     regex_t rg_id;
     regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
@@ -657,6 +741,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             strncpy(RG[i], s + j, l);
         }
     }
+
+    // Create a table mapping string contig names to their index in the output file,
+    // to be populated by importing each input header @SQ record in turn.
+    khash_t(c2i) *out_tid = kh_init(c2i);
+
     // open and read the header from each file
     for (i = 0; i < n; ++i) {
         bam_hdr_t *hin;
@@ -685,7 +774,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             return -1;
         }
 
-        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, RG[i]);
+        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, RG[i], out_tid);
 
         // TODO sam_itr_next() doesn't yet work for SAM files,
         // so for those keep the headers around for use with sam_read1()
@@ -696,6 +785,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
         }
     }
+
+    kh_destroy(c2i, out_tid);
 
     // Transform the header into standard form
     pretty_header(&hout->text,hout->l_text);
