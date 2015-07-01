@@ -528,6 +528,10 @@ int main_cat(int argc, char *argv[])
     }
     
     in = sam_open(argv[optind], "r");
+    if (!in) {
+        fprintf(stderr, "[%s] ERROR: failed to open file '%s'.\n", __func__, argv[optind]);
+        return 1;
+    }
     if (in->format.format == bam) {
         sam_close(in);
         ret = bam_cat(argc - optind, argv + optind, h, outfn? outfn : "-");
