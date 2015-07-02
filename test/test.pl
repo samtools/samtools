@@ -147,10 +147,12 @@ sub cmd
 #       cmd=> command to test
 #       expect_fail=> as per passed()/failed()
 #       want_fail=> consider passed() if cmd() returns non-zero
+#       out_map => map output filenames to their expected result file (can be used alongside out)
+#       hskip => number of header lines to ignore during diff
 sub test_cmd
 {
     my ($opts,%args) = @_;
-    if ( !exists($args{out}) )
+    if ( !exists($args{out}) && !exists($args{out_map}) )
     {
         if ( !exists($args{in}) ) { error("FIXME: expected out or in key\n"); }
         $args{out} = "$args{in}.out";
@@ -248,6 +250,54 @@ sub test_cmd
                 failed($opts,%args,msg=>$test,reason=>"The outputs stderr differ:\n\t\t$$opts{path}/$args{err}\n\t\t$$opts{path}/$args{err}.new");
             }
             return;
+        }
+    }
+
+    # check other output files
+    if( exists($args{out_map}) )
+    {
+        while ( my($out_actual, $out_expected) = each %{$args{out_map}} )
+        {
+            my $exp = '';
+            if ( open(my $fh,'<',"$$opts{path}/$out_expected") )
+            {
+                my @exp = <$fh>;
+                $exp = join('',@exp);
+                close($fh);
+            }
+            elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_expected: $!"); return; }
+
+            my $out = '';
+            if ( open(my $fh,'<',"$$opts{path}/$out_actual") )
+            {
+                my @out = <$fh>;
+                if( exists($args{hskip}) ){
+                    # Strip hskip lines to allow match to the expected output
+                    splice @out, 0, $args{hskip};
+                }
+                $out = join('',@out);
+                close($fh);
+            }
+            elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_actual: $!"); return; }
+
+            if ( $exp ne $out )
+            {
+                open(my $fh,'>',"$$opts{path}/$out_expected.new") or error("$$opts{path}/$out_expected.new");
+                print $fh $out;
+                close($fh);
+                if ( !-e "$$opts{path}/$out_expected" )
+                {
+                    rename("$$opts{path}/$out_expected.new","$$opts{path}/$out_expected") or error("rename $$opts{path}/$out_expected.new $$opts{path}/$out_expected: $!");
+                    print "\tthe file with expected output does not exist, creating new one:\n";
+                    print "\t\t$$opts{path}/$out_expected\n";
+                }
+                else
+                {
+                    failed($opts,%args,msg=>$test,reason=>"The output files differ:\n\t\t$$opts{path}/$out_expected\n\t\t$$opts{path}/$out_expected.new");
+                }
+                return;
+            }
+            _cmd("rm $$opts{path}/$out_actual");
         }
     }
     passed($opts,%args,msg=>$test);
