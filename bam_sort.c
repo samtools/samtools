@@ -42,6 +42,9 @@ DEALINGS IN THE SOFTWARE.  */
 #define NEED_MEMSET_PATTERN4
 #endif
 
+#define forever for(;;)
+#define bam_is_r1(b) (((b)->core.flag&BAM_FREAD1) != 0)
+
 #ifdef NEED_MEMSET_PATTERN4
 void memset_pattern4(void *target, const void *pattern, size_t size) {
     uint32_t* target_iter = target;
@@ -981,10 +984,37 @@ static int change_SO(bam_hdr_t *h, const char *so)
 // Function to compare reads and determine which one is < the other
 static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
-    if (g_is_by_qname) {
+    if(g_is_by_qname){
         int t = strnum_cmp(bam_get_qname(a), bam_get_qname(b));
         return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
-    } else return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+    }
+    else{
+        if((a->core.tid) != (b->core.tid)) {
+            if(a->core.tid < b->core.tid) {
+                return true;
+            }
+            return false;
+        }
+        else if(a->core.pos != b->core.pos){
+            return (a->core.pos < b->core.pos);
+        }
+        else if((a->core.mtid) != (b->core.mtid)) {
+            if(a->core.mtid < b->core.mtid) {
+                return true;
+            }
+            return false;
+        }
+        else if(a->core.mpos != b->core.mpos){
+            return (a->core.mpos < b->core.mpos);
+        }
+        int t = bam_is_r1(a) - bam_is_r1(b);
+        if(t != 0) {
+            return (t > 0);
+        }
+        t = bam_is_rev(a) - bam_is_rev(b);
+        if(t != 0) {return (t < 0);}
+        return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+    }
 }
 KSORT_INIT(sort, bam1_p, bam1_lt)
 
@@ -1091,10 +1121,10 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
         sam_close(fp);
         return -1;
     }
-    if (is_by_qname) change_SO(header, "queryname");
+    if (is_by_qname == 1) change_SO(header, "queryname");
     else change_SO(header, "coordinate");
     // write sub files
-    for (;;) {
+    forever {
         if (k == max_k) {
             size_t kk, old_max = max_k;
             max_k = max_k? max_k<<1 : 0x10000;
