@@ -108,7 +108,7 @@ P 48.out $samtools mpileup -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 49.out $samtools mpileup -x -v -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 50.out $samtools mpileup -D -V -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 51.out $samtools mpileup -S -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
-P 52.out $samtools mpileup -u -x -f mpileup.ref.fa mpileup.1.bam | GREP_OPTIONS= egrep -v '^##samtools'
+P 52.out $samtools mpileup -u -x -f mpileup.ref.fa mpileup.1.bam | ../vcf-miniview - | awk '!/^##samtools/'
 
 # # -o/e/h for indel scores
 P 53.out $samtools mpileup -e 1       -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
