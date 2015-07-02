@@ -502,7 +502,6 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -c       print only the count of matching records\n"
 "  -o FILE  output file name [stdout]\n"
 "  -U FILE  output reads not selected by filters to FILE [null]\n"
-""
 // extra input
 "  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
 "  -T FILE  reference sequence FASTA FILE [null]\n"
