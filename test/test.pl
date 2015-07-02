@@ -1284,6 +1284,10 @@ sub gen_pair
 # which is an index of the fasta file.  Both of these are used for CRAM.
 # The SAM file is compressed with bgzf to keep the size down.
 #
+# To generate random sequence aligned against identical referenes,
+# pass in the 4th argument (ref_seed) with a constant value.  Otherwise a
+# random reference is generated too.
+#
 # $opts is the global setting hash.
 # $prefix is the prefix for the generated file names.
 # $size is the length of the random reference sequence.
@@ -1293,9 +1297,12 @@ sub gen_pair
 
 sub gen_file
 {
-    my ($opts, $prefix, $size) = @_;
+    my ($opts, $prefix, $size, $ref_seed) = @_;
 
     local $| = 1;
+
+    $ref_seed = rand(1<<31) unless defined($ref_seed);
+    my $pair_seed = rand(1<<31);
 
     print "\tGenerating test data file ";
     my $dot_interval = $size / 10;
@@ -1303,6 +1310,7 @@ sub gen_file
     my $seq  = "!" x $size;
     my $qual = $seq;
 
+    srand($ref_seed);
     my $next_dot = $dot_interval;
     for (my $b = 0; $b < $size; $b++) {
         if ($b == $next_dot) {
@@ -1338,6 +1346,8 @@ sub gen_file
     my %read_store;
     my $rnum = 0;
     $next_dot = $dot_interval;
+
+    srand($pair_seed);
     for (my $i = 0; $i < $size; $i++) {
         if ($i == $next_dot) {
             print ".";
@@ -1967,6 +1977,7 @@ sub test_cat
 
     my @sams;
     my @bams;
+    my @crams;
     my @bgbams;
     my $nfiles = 4;
     my $test = 1;
@@ -1974,7 +1985,7 @@ sub test_cat
 
     # Generate some files big enough to include a few bgzf blocks
     for (my $i = 0; $i < $nfiles; $i++) {
-        ($sams[$i]) = gen_file($opts, sprintf("%s.%d", $out, $i + 1), 10000);
+        ($sams[$i]) = gen_file($opts, sprintf("%s.%d", $out, $i + 1), 10000, 15551);
 
         # Convert to BAM
         $bams[$i] = sprintf("%s.%d.bam", $out, $i + 1);
@@ -1988,6 +1999,15 @@ sub test_cat
         # Recompress with bgzip to alter the location of the bgzf boundaries.
         $bgbams[$i] = sprintf("%s.%d.bgzip.bam", $out, $i + 1);
         cmd("'$$opts{bgzip}' -c -d < '$bams[$i]' | '$$opts{bgzip}' -c > '$bgbams[$i]'");
+
+	# Create CRAMS
+	$crams[$i] = sprintf("%s.%d.cram", $out, $i + 1);
+        run_view_test($opts,
+                      msg =>  sprintf("Generate CRAM file #%d", $i + 1),
+                      args => ['-C', $sams[$i]],
+                      out => $crams[$i],
+                      compare_sam => $sams[$i],
+                      pipe => 1);
     }
 
     # Make a concatenated SAM file to compare
@@ -2016,10 +2036,22 @@ sub test_cat
                       redirect => $redirect,
                       compare_sam => $catsam1);
         $test++;
+
+        # Test CRAM files
+        run_view_test($opts,
+                      msg =>  "$test: cat CRAM files$to_stdout",
+                      cmd => 'cat',
+                      args => [@crams],
+                      out => sprintf("%s.test%03d.cram", $out, $test),
+                      redirect => $redirect,
+                      compare_sam => $catsam1);
+        $test++;
     }
 
     # Test reheader option
-    my $header  = "$$opts{path}/dat/cat.hdr";
+    my $hdr_no_ur   = "$$opts{path}/dat/cat.hdr";
+    my $header      = "$$opts{tmp}/cat.hdr";
+    add_ur_tags($hdr_no_ur, $header, "$$opts{tmp}/cat.1.fa");
     my $catsam2 = "$out.all2.sam";
     cat_sams($catsam2, $header, @sams);
 
@@ -2036,6 +2068,14 @@ sub test_cat
                   cmd => 'cat',
                   args => ['-h', $header, @bgbams],
                   out => sprintf("%s.test%03d.bam", $out, $test),
+                  compare_sam => $catsam2);
+    $test++;
+
+    run_view_test($opts,
+                  msg =>  "$test: cat CRAM files with new header",
+                  cmd => 'cat',
+                  args => ['-h', $header, @crams],
+                  out => sprintf("%s.test%03d.cram", $out, $test),
                   compare_sam => $catsam2);
     $test++;
 }
