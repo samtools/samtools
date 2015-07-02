@@ -111,10 +111,10 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
 
 
 //Uses the invert_pass field
-static int process_aln_v(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
+static inline int process_aln_v(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
 
 {
-    return settings->invert_pass ? (!process_aln(h, b, settings)) : process_aln(h, b, settings);
+    return settings->invert_pass ? !process_aln(h, b, settings) : process_aln(h, b, settings);
 }
 
 
@@ -260,7 +260,7 @@ int main_samview(int argc, char *argv[])
     /* parse command-line options */
     /* TODO: convert this to getopt_long we're running out of letters */
     strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
+    while ((c = getopt(argc, argv, "vSbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
         switch (c) {
         case 'v': settings.invert_pass = 1; break;
         case 's':
