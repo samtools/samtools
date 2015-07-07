@@ -1,9 +1,11 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2014 Genome Research Ltd.
+    Copyright (C) 2008-2015 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
+    Author: Martin Pollard <mp15@sanger.ac.uk>
+
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -307,14 +309,18 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         regcomp(&rg_id_search, rg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
         free(rg_regex.s);
         kstring_t transformed_id = { 0, 0, NULL };
-        bool transformed_equals_match;
+        bool transformed_equals_match; // Have we changed the ID of this line?
+        bool not_found_in_output; // Do we need to add this line to our output?
+        not_found_in_output = regexec(&rg_id_search, out->text, 0, NULL, 0) == REG_NOMATCH;
+
         if (rg_override) {
+            // If we're overriding RG terminate the loop early
             kputs(rg_override, &transformed_id);
             transformed_equals_match = false;
             rg_override = NULL;
             loop = false;
         } else {
-            if (regexec(&rg_id_search, out->text, 0, NULL, 0) != 0  || merge_rg) {
+            if ( not_found_in_output || merge_rg) {
                 // Not in there so can add it as 1-1 mapping
                 kputs(match_id.s, &transformed_id);
                 transformed_equals_match = true;
@@ -323,8 +329,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
                 ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
                 transformed_equals_match = false;
             }
-            regfree(&rg_id_search);
         }
+        regfree(&rg_id_search);
 
         // Insert it into our translation map
         int in_there = 0;
@@ -341,7 +347,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
         }
 
-        if (!(transformed_equals_match && merge_rg)) {
+        // Does this line need to go into our output header?
+        if (!(transformed_equals_match && merge_rg && !not_found_in_output)) {
             // append line to linked list for PG processing
             char** ln = kl_pushp(hdrln, rg_list);
             *ln = ks_release(&transformed_line);  // Give away to linked list
@@ -377,8 +384,10 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         regcomp(&pg_id_search, pg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
         free(pg_regex.s);
         kstring_t transformed_id = { 0, 0, NULL };
-        bool transformed_equals_match;
-        if (regexec(&pg_id_search, out->text, 0, NULL, 0) != 0 || merge_pg) {
+        bool transformed_equals_match; // Have we changed the ID of this line?
+        bool not_found_in_output; // Do we need to add this line to our output?
+        not_found_in_output = regexec(&pg_id_search, out->text, 0, NULL, 0) == REG_NOMATCH;
+        if (not_found_in_output || merge_pg) {
             // Not in there so can add it as 1-1 mapping
             kputs(match_id.s, &transformed_id);
             transformed_equals_match = true;
@@ -404,7 +413,8 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
         }
 
-        if (!(transformed_equals_match && merge_pg)) {
+        // Does this line need to go into our output header?
+        if (!(transformed_equals_match && merge_pg && !not_found_in_output)) {
             // append line to linked list for PP processing
             char** ln = kl_pushp(hdrln, pg_list);
             *ln = ks_release(&transformed_line);  // Give away to linked list
