@@ -215,7 +215,9 @@ int bam_prob_realn_core(bam1_t *b, const char *ref, int ref_len, int flag)
     bam1_core_t *c = &b->core;
     kpa_par_t conf = kpa_par_def;
     uint8_t *bq = 0, *zq = 0, *qual = bam_get_qual(b);
-    if ((c->flag & BAM_FUNMAP) || b->core.l_qseq == 0) return -1; // do nothing
+    if ((c->flag & BAM_FUNMAP) || b->core.l_qseq == 0 || qual[0] == (uint8_t)-1)
+        return -1; // do nothing
+
     // test if BQ or ZQ is present
     if ((bq = bam_aux_get(b, "BQ")) != 0) ++bq;
     if ((zq = bam_aux_get(b, "ZQ")) != 0 && *zq == 'Z') ++zq;
