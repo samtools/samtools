@@ -95,7 +95,7 @@ int main_depth(int argc, char *argv[])
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
             case 'f': file_list = optarg; break;
             case 'a': all++; break;
-        case 'd': case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
+            case 'd': case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
         }
     }
     if (optind == argc && !file_list) {
