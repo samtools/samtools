@@ -112,6 +112,10 @@ int main_depth(int argc, char *argv[])
         fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
         fprintf(stderr, "   -r <chr:from-to>    region\n");
         fprintf(stderr, "\n");
+        fprintf(stderr, "The output is a simple tab-separated table with three columns, the\n");
+        fprintf(stderr, "the reference name, position, and coverage depth. Note that positions\n");
+        fprintf(stderr, "with zero coverage may be omitted.\n");
+        fprintf(stderr, "\n");
         return 1;
     }
 
