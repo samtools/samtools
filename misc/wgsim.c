@@ -286,30 +286,50 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
             target = rseq[drand48()<0.5?0:1].s; // haplotype from which the reads are generated
             n_sub[0] = n_sub[1] = n_indel[0] = n_indel[1] = n_err[0] = n_err[1] = 0;
 
-#define __gen_read(x, start, iter) do {                                 \
-                for (i = (start), k = 0, ext_coor[x] = -10; i >= 0 && i < ks->seq.l && k < s[x]; iter) {    \
-                    int c = target[i], mut_type = c & mutmsk;           \
-                    if (ext_coor[x] < 0) {                              \
-                        if (mut_type != NOCHANGE && mut_type != SUBSTITUTE) continue; \
-                        ext_coor[x] = i;                                \
-                    }                                                   \
-                    if (mut_type == DELETE) ++n_indel[x];               \
-                    else if (mut_type == NOCHANGE || mut_type == SUBSTITUTE) { \
-                        tmp_seq[x][k++] = c & 0xf;                      \
-                        if (mut_type == SUBSTITUTE) ++n_sub[x];         \
-                    } else {                                            \
-                        int n, ins;                                     \
-                        ++n_indel[x];                                   \
-                        tmp_seq[x][k++] = c & 0xf;                      \
-                        for (n = mut_type>>12, ins = c>>4; n > 0 && k < s[x]; --n, ins >>= 2) \
-                            tmp_seq[x][k++] = ins & 0x3;                \
-                    }                                                   \
-                }                                                       \
-                if (k != s[x]) ext_coor[x] = -10;                       \
-            } while (0)
+            // forward read
+            for (i = pos, k = 0, ext_coor[0] = -10; i >= 0 && i < ks->seq.l && k < s[0]; ++i) {
+                int c = target[i], mut_type = c & mutmsk;
+                if (ext_coor[0] < 0) {
+                    if (mut_type != NOCHANGE && mut_type != SUBSTITUTE) continue;
+                    ext_coor[0] = i;
+                }
+                if (mut_type == DELETE) ++n_indel[0];
+                else if (mut_type == NOCHANGE || mut_type == SUBSTITUTE) {
+                    tmp_seq[0][k++] = c & 0xf;
+                    if (mut_type == SUBSTITUTE) ++n_sub[0];
+                } else {
+                    int n, ins;
+                    ++n_indel[0];
+                    tmp_seq[0][k++] = c & 0xf;
+                    for (n = mut_type>>12, ins = c>>4; n > 0 && k < s[0]; --n, ins >>= 2)
+                        tmp_seq[0][k++] = ins & 0x3;
+                }
+            }
+            if (k != s[0]) ext_coor[0] = -10;
 
-            __gen_read(0, pos, ++i);
-            __gen_read(1, pos + d - 1, --i);
+            // reverse read
+            for (i = pos + d - 1, k = 0, ext_coor[1] = -10; i >= 0 && i < ks->seq.l && k < s[1]; --i) {
+                int c = target[i], mut_type = c & mutmsk;
+                if (ext_coor[1] < 0) {
+                    if (mut_type != NOCHANGE && mut_type != SUBSTITUTE) continue;
+                    ext_coor[1] = i;
+                }
+                if (mut_type == DELETE) ++n_indel[1];
+                else if (mut_type == NOCHANGE || mut_type == SUBSTITUTE) {
+                    tmp_seq[1][k++] = c & 0xf;
+                    if (mut_type == SUBSTITUTE) ++n_sub[1];
+                } else {
+                    int n, ins;
+                    ++n_indel[1];
+                    for (n = mut_type>>12, ins = c>>4; n > 0 && k < s[1];)
+                        tmp_seq[1][k++] = (ins>>(2*--n)) & 0x3;
+                    tmp_seq[1][k++] = c & 0xf;
+                }
+            }
+            if (k != s[1]) ext_coor[1] = -10;
+
+
+
             for (k = 0; k < s[1]; ++k) tmp_seq[1][k] = tmp_seq[1][k] < 4? 3 - tmp_seq[1][k] : 4; // complement
             if (ext_coor[0] < 0 || ext_coor[1] < 0) { // fail to generate the read(s)
                 --ii;
