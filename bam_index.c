@@ -35,12 +35,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 #define BAM_LIDX_SHIFT    14
 
-int bam_index_build2(const char *fn, const char *_fnidx)
-{
-    fprintf(stderr, "Samtools-htslib-API: bam_index_build2() not yet implemented\n");
-    abort();
-}
-
 static void index_usage(FILE *fp)
 {
     fprintf(fp,
@@ -71,9 +65,8 @@ int bam_index(int argc, char *argv[])
         index_usage(stdout);
         return 1;
     }
-    if (argc - optind > 1) ret = bam_index_build2(argv[optind], argv[optind+1]);
-    else ret = bam_index_build(argv[optind], csi? min_shift : 0);
 
+    ret = sam_index_build2(argv[optind], argv[optind+1], csi? min_shift : 0);
     if (ret != 0) {
         fprintf(stderr, "[%s] corrupted or unsorted input file\n", __func__);
         return EXIT_FAILURE;

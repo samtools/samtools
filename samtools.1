@@ -448,6 +448,7 @@ samtools index
 .RB [ -m
 .IR INT ]
 .IR aln.bam | aln.cram
+.RI [ out.index ]
 
 Index a coordinate-sorted BAM or CRAM file for fast random access.
 (Note that this does not work with SAM files even if they are bgzip
@@ -459,12 +460,13 @@ arguments are used to limit
 .B samtools view
 and similar commands to particular regions of interest.
 
-For a CRAM file
+If an output filename is given, the index file will be written to
+.IR out.index .
+Otherwise, for a CRAM file
 .IR aln.cram ,
 index file
 .IB aln.cram .crai
-will be created.
-For a BAM file
+will be created; for a BAM file
 .IR aln.bam ,
 either
 .IB aln.bam .bai
