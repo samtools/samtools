@@ -40,7 +40,7 @@
 #include "htslib/kseq.h"
 KSEQ_INIT(gzFile, gzread)
 
-#define PACKAGE_VERSION "0.3.0-r13"
+#define PACKAGE_VERSION "0.3.1"
 
 const uint8_t nst_nt4_table[256] = {
     4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,
