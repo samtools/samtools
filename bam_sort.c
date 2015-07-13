@@ -201,6 +201,50 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     *text_in_out = output;
 }
 
+static char* regex_escape(const char* input)
+{
+    size_t new_size = strlen(input) + 1;
+    char* output = (char*)malloc((2*new_size)+1);
+    if (output == NULL) {
+        perror("[regex_escape] Error allocating memory for regex escape buffer");
+        exit(1);
+    }
+    char* output_iter = output;
+    const char* input_iter = input;
+
+    while (*input_iter != '\0') {
+        switch (*input_iter) {
+            case '.':
+            case '[':
+            case '{':
+            case '}':
+            case '(':
+            case ')':
+            case '\\':
+            case '*':
+            case '+':
+            case '?':
+            case '|':
+            case '^':
+            case '$':
+                *output_iter = '\\';
+                ++output_iter;
+                ++new_size;
+                break;
+            default:
+                break;
+        }
+
+        *output_iter = *input_iter;
+        ++input_iter;
+        ++output_iter;
+    }
+    *output_iter = '\0';
+
+    output = realloc(output,new_size); // This should always be smaller than (2*new_size)+1 and thus never fail
+    return output;
+}
+
 static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, const char* rg_override)
 {
     tbl->n_targets = translate->n_targets;
@@ -263,7 +307,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
             if (matches == NULL) { perror("out of memory"); exit(-1); }
             kstring_t seq_regex = { 0, 0, NULL };
-            ksprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)", translate->target_name[i]);
+            char *t_name_escaped = regex_escape(translate->target_name[i]);
+            ksprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)", t_name_escaped);
+            free(t_name_escaped);
             regcomp(&sq_id, seq_regex.s, REG_EXTENDED|REG_NEWLINE);
             free(seq_regex.s);
             if (regexec(&sq_id, translate->text, 1, matches, 0) != 0)
@@ -306,7 +352,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         // is our matched ID in our output list already
         regex_t rg_id_search;
         kstring_t rg_regex = { 0, 0, NULL };
-        ksprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)", match_id.s);
+        char *rg_id_escaped = regex_escape(match_id.s);
+        ksprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)", rg_id_escaped);
+        free(rg_id_escaped);
         regcomp(&rg_id_search, rg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
         free(rg_regex.s);
         kstring_t transformed_id = { 0, 0, NULL };
@@ -381,7 +429,9 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         // is our matched ID in our output list already
         regex_t pg_id_search;
         kstring_t pg_regex = { 0, 0, NULL };
-        ksprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)", match_id.s);
+        char *pg_id_escaped = regex_escape(match_id.s);
+        ksprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)", pg_id_escaped);
+        free(pg_id_escaped);
         regcomp(&pg_id_search, pg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
         free(pg_regex.s);
         kstring_t transformed_id = { 0, 0, NULL };
@@ -962,8 +1012,8 @@ end:
     if (fn_size > 0) {
         int i;
         for (i=0; i<fn_size; i++) free(fn[i]);
-        free(fn);
     }
+    free(fn);
     free(reg);
     free(fn_headers);
     sam_global_args_free(&ga);
