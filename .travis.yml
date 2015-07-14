@@ -1,5 +1,9 @@
 # Control file for continuous integration testing at http://travis-ci.org/
 
+os:
+  - linux
+  - osx
+
 language: c
 compiler:
   - clang
