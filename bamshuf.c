@@ -77,14 +77,17 @@ KSORT_INIT(bamshuf, elem_t, elem_lt)
 static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
                    int is_stdout, sam_global_args *ga)
 {
-    samFile *fp, *fpw, **fpt;
-    char **fnt, modew[8];
-    bam1_t *b;
-    int i, l;
-    bam_hdr_t *h;
-    int64_t *cnt;
+    samFile *fp, *fpw = NULL, **fpt = NULL;
+    char **fnt = NULL, modew[8];
+    bam1_t *b = NULL;
+    int i, l, r;
+    bam_hdr_t *h = NULL;
+    int64_t *cnt = NULL;
+    elem_t *a = NULL;
+    int64_t a_size = 0, a_first = 0, a_last = 0;
 
-    // split
+    // Read input, distribute reads pseudo-randomly into n_files temporary
+    // files.
     fp = sam_open_format(fn, "r", &ga->in);
     if (fp == NULL) {
         print_error_errno("bamshuf", "Cannot open input file \"%s\"", fn);
@@ -94,39 +97,69 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     h = sam_hdr_read(fp);
     if (h == NULL) {
         fprintf(stderr, "Couldn't read header for '%s'\n", fn);
-        return 1;
+        goto fail;
     }
     fnt = (char**)calloc(n_files, sizeof(char*));
+    if (!fnt) goto mem_fail;
     fpt = (samFile**)calloc(n_files, sizeof(samFile*));
+    if (!fpt) goto mem_fail;
     cnt = (int64_t*)calloc(n_files, 8);
+    if (!cnt) goto mem_fail;
+
     l = strlen(pre);
 
     for (i = 0; i < n_files; ++i) {
         fnt[i] = (char*)calloc(l + 10, 1);
+        if (!fnt[i]) goto mem_fail;
         sprintf(fnt[i], "%s.%.4d.bam", pre, i);
         fpt[i] = sam_open(fnt[i], "wb1");
         if (fpt[i] == NULL) {
             print_error_errno("bamshuf", "Cannot open intermediate file \"%s\"", fnt[i]);
-            return 1;
+            goto fail;
         }
-        sam_hdr_write(fpt[i], h);
+        if (sam_hdr_write(fpt[i], h) < 0) {
+            fprintf(stderr, "Couldn't write header for '%s'\n", fnt[i]);
+            goto fail;
+        }
     }
     b = bam_init1();
-    while (sam_read1(fp, h, b) >= 0) {
+    if (!b) goto mem_fail;
+    while ((r = sam_read1(fp, h, b)) >= 0) {
         uint32_t x;
         x = hash_X31_Wang(bam_get_qname(b)) % n_files;
-        sam_write1(fpt[x], h, b);
+        if (sam_write1(fpt[x], h, b) < 0) {
+            fprintf(stderr, "Couldn't write to '%s'\n", fnt[x]);
+            goto fail;
+        }
         ++cnt[x];
     }
     bam_destroy1(b);
-    for (i = 0; i < n_files; ++i) sam_close(fpt[i]);
-    free(fpt);
-    sam_close(fp);
+    b = NULL;
+    if (r < -1) {
+        fprintf(stderr, "Error reading input file\n");
+        goto fail;
+    }
+    for (i = 0; i < n_files; ++i) {
+        // Close split output
+        r = sam_close(fpt[i]);
+        fpt[i] = NULL;
+        if (r < 0) {
+            fprintf(stderr, "Error on closing '%s'\n", fnt[i]);
+            return 1;
+        }
 
+        // Find biggest count
+        if (a_size < cnt[i]) a_size = cnt[i];
+    }
+    free(fpt);
+    fpt = NULL;
+    sam_close(fp);
+    fp = NULL;
     // merge
     sprintf(modew, "wb%d", (clevel >= 0 && clevel <= 9)? clevel : DEF_CLEVEL);
     if (!is_stdout) { // output to a file
         char *fnw = (char*)calloc(l + 5, 1);
+        if (!fnw) goto mem_fail;
         if (ga->out.format == unknown_format)
             sprintf(fnw, "%s.bam", pre); // "wb" above makes BAM the default
         else
@@ -137,37 +170,91 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     if (fpw == NULL) {
         if (is_stdout) print_error_errno("bamshuf", "Cannot open standard output");
         else print_error_errno("bamshuf", "Cannot open output file \"%s.bam\"", pre);
-        return 1;
+        goto fail;
     }
 
-    sam_hdr_write(fpw, h);
+    if (sam_hdr_write(fpw, h) < 0) {
+        fprintf(stderr, "Couldn't write header\n");
+        goto fail;
+    }
+
+    a = malloc(a_size * sizeof(elem_t));
+    if (!a) goto mem_fail;
+
     for (i = 0; i < n_files; ++i) {
         int64_t j, c = cnt[i];
-        elem_t *a;
         fp = sam_open_format(fnt[i], "r", &ga->in);
-        bam_hdr_destroy(sam_hdr_read(fp));
-        a = (elem_t*)calloc(c, sizeof(elem_t));
+        if (NULL == fp) {
+            fprintf(stderr, "Couldn't open '%s'\n", fnt[i]);
+            goto fail;
+        }
+        bam_hdr_destroy(sam_hdr_read(fp)); // Skip over header
+
+        a_first = a_last = 0; // Track which bit of 'a' contains bam structs
+
+        // Slurp in one of the split files
         for (j = 0; j < c; ++j) {
             a[j].b = bam_init1();
-            sam_read1(fp, h, a[j].b);
+            if (!a[j].b) goto mem_fail;
+            a_last++;
+            if (sam_read1(fp, h, a[j].b) < 0) {
+                fprintf(stderr, "Error reading '%s'\n", fnt[i]);
+                goto fail;
+            }
             a[j].key = hash_X31_Wang(bam_get_qname(a[j].b));
         }
         sam_close(fp);
         unlink(fnt[i]);
         free(fnt[i]);
-        ks_introsort(bamshuf, c, a);
+        fnt[i] = NULL;
+
+        ks_introsort(bamshuf, c, a); // Shuffle all the reads
+
+        // Write them out again
         for (j = 0; j < c; ++j) {
-            sam_write1(fpw, h, a[j].b);
+            if (sam_write1(fpw, h, a[j].b) < 0) {
+                fprintf(stderr, "Error writing to output\n");
+                goto fail;
+            }
             bam_destroy1(a[j].b);
+            a_first++;
+        }
+    }
+
+    bam_hdr_destroy(h);
+    free(a); free(fnt); free(cnt);
+    sam_global_args_free(ga);
+    if (sam_close(fpw) < 0) {
+        fprintf(stderr, "Error on closing output\n");
+        return 1;
+    }
+
+    return 0;
+
+ mem_fail:
+    fprintf(stderr, "Out of memory\n");
+
+ fail:
+    if (fp) sam_close(fp);
+    if (fpw) sam_close(fpw);
+    if (h) bam_hdr_destroy(h);
+    if (b) bam_destroy1(b);
+    for (i = 0; i < n_files; ++i) {
+        if (fnt) free(fnt[i]);
+        if (fpt && fpt[i]) sam_close(fpt[i]);
+    }
+    if (a) {
+        int64_t j;
+        for (j = a_first; j < a_last; j++) {
+            if (a[j].b) bam_destroy1(a[j].b);
         }
         free(a);
     }
-    sam_close(fpw);
-    bam_hdr_destroy(h);
-    free(fnt); free(cnt);
+    free(fnt);
+    free(fpt);
+    free(cnt);
     sam_global_args_free(ga);
-
-    return 0;
+    return 1;
 }
 
 static int usage(FILE *fp, int n_files) {
