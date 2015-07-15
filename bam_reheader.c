@@ -32,30 +32,51 @@ DEALINGS IN THE SOFTWARE.  */
 
 int bam_reheader(BGZF *in, const bam_header_t *h, int fd)
 {
-    BGZF *fp;
+    BGZF *fp = NULL;
     bam_header_t *old;
     ssize_t len;
-    uint8_t *buf;
+    uint8_t *buf = NULL;
     if (in->is_write) return -1;
     buf = malloc(BUF_SIZE);
     old = bam_header_read(in);
     if (old == NULL) {
-        fprintf(stderr, "Couldn't read header\n");
-        free(buf);
-        return -1;
+        fprintf(stderr, "[%s] Couldn't read header\n", __func__);
+        goto fail;
     }
     fp = bgzf_fdopen(fd, "w");
-    bam_header_write(fp, h);
-    if (in->block_offset < in->block_length) {
-        bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset);
-        bgzf_flush(fp);
+    if (!fp) {
+        fprintf(stderr, "[%s] Couldn't open output file\n", __func__);
+        goto fail;
     }
-    while ((len = bgzf_raw_read(in, buf, BUF_SIZE)) > 0)
-        bgzf_raw_write(fp, buf, len);
+    if (bam_header_write(fp, h) < 0) {
+        fprintf(stderr, "[%s] Couldn't write header\n", __func__);
+        goto fail;
+    }
+    if (in->block_offset < in->block_length) {
+        if (bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
+        if (bgzf_flush(fp) < 0) goto write_fail;
+    }
+    while ((len = bgzf_raw_read(in, buf, BUF_SIZE)) > 0) {
+        if (bgzf_raw_write(fp, buf, len) < 0) goto write_fail;
+    }
+    if (len < 0) {
+        fprintf(stderr, "[%s] Error reading input file\n", __func__);
+        goto fail;
+    }
     free(buf);
     fp->block_offset = in->block_offset = 0;
-    bgzf_close(fp);
+    if (bgzf_close(fp) < 0) {
+        fprintf(stderr, "[%s] Error closing output file\n", __func__);
+        return -1;
+    }
     return 0;
+
+ write_fail:
+    fprintf(stderr, "[%s] Error writing to output file\n", __func__);
+ fail:
+    bgzf_close(fp);
+    free(buf);
+    return -1;
 }
 
 int main_reheader(int argc, char *argv[])

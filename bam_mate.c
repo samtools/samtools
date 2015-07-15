@@ -201,7 +201,10 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
             exit(1);
         }
     }
-    sam_hdr_write(out, header);
+    if (sam_hdr_write(out, header) < 0) {
+        fprintf(stderr, "[bam_mating_core] ERROR: Couldn't write header\n");
+        exit(1);
+    }
 
     b[0] = bam_init1();
     b[1] = bam_init1();
@@ -210,12 +213,14 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
         bam1_t *cur = b[curr], *pre = b[1-curr];
         if (cur->core.flag & BAM_FSECONDARY)
         {
-            if ( !remove_reads ) sam_write1(out, header, cur);
+            if ( !remove_reads ) {
+                if (sam_write1(out, header, cur) < 0) goto write_fail;
+            }
             continue; // skip secondary alignments
         }
         if (cur->core.flag & BAM_FSUPPLEMENTARY)
         {
-            sam_write1(out, header, cur);
+            if (sam_write1(out, header, cur) < 0) goto write_fail;
             continue; // pass supplementary alignments through unchanged (TODO:make them match read they came from)
         }
         if (cur->core.tid < 0 || cur->core.pos < 0) // If unmapped set the flag
@@ -252,14 +257,18 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
 
                 // Write out result
                 if ( !remove_reads ) {
-                    sam_write1(out, header, pre);
-                    sam_write1(out, header, cur);
+                    if (sam_write1(out, header, pre) < 0) goto write_fail;
+                    if (sam_write1(out, header, cur) < 0) goto write_fail;
                 } else {
                     // If we have to remove reads make sure we do it in a way that doesn't create orphans with bad flags
                     if(pre->core.flag&BAM_FUNMAP) cur->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
                     if(cur->core.flag&BAM_FUNMAP) pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-                    if(!(pre->core.flag&BAM_FUNMAP)) sam_write1(out, header, pre);
-                    if(!(cur->core.flag&BAM_FUNMAP)) sam_write1(out, header, cur);
+                    if(!(pre->core.flag&BAM_FUNMAP)) {
+                        if (sam_write1(out, header, pre) < 0) goto write_fail;
+                    }
+                    if(!(cur->core.flag&BAM_FUNMAP)) {
+                        if (sam_write1(out, header, cur) < 0) goto write_fail;
+                    }
                 }
                 has_prev = 0;
             } else { // unpaired?  clear bad info and write it out
@@ -270,7 +279,9 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
                 }
                 pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
                 pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
-                if ( !remove_reads || !(pre->core.flag&BAM_FUNMAP) ) sam_write1(out, header, pre);
+                if ( !remove_reads || !(pre->core.flag&BAM_FUNMAP) ) {
+                    if (sam_write1(out, header, pre) < 0) goto write_fail;
+                }
             }
         } else has_prev = 1;
         curr = 1 - curr;
@@ -286,12 +297,17 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
         pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
         pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
 
-        sam_write1(out, header, pre);
+        if (sam_write1(out, header, pre) < 0) goto write_fail;
     }
     bam_hdr_destroy(header);
     bam_destroy1(b[0]);
     bam_destroy1(b[1]);
     free(str.s);
+    return;
+
+ write_fail:
+    fprintf(stderr, "[bam_mating_core] ERROR: Couldn't write to output file\n");
+    exit(1);
 }
 
 void usage(FILE* where)
@@ -350,7 +366,10 @@ int bam_mating(int argc, char *argv[])
     // run
     bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct);
     // cleanup
-    sam_close(in); sam_close(out);
+    sam_close(in);
+    if (sam_close(out) < 0) {
+        fprintf(stderr, "[bam_mating] error while closing output file\n");
+    }
     return 0;
 }
 

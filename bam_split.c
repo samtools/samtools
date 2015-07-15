@@ -53,6 +53,7 @@ struct state {
     bam_hdr_t* unaccounted_header;
     size_t output_count;
     char** rg_id;
+    char **rg_output_file_name;
     samFile** rg_output_file;
     bam_hdr_t** rg_output_header;
     kh_c2i_t* rg_hash;
@@ -60,7 +61,7 @@ struct state {
 
 typedef struct state state_t;
 
-static void cleanup_state(state_t* status);
+static bool cleanup_state(state_t* status, bool check_close);
 static void cleanup_opts(parsed_opts_t* opts);
 
 static void usage(FILE *write_to)
@@ -312,7 +313,7 @@ static state_t* init(parsed_opts_t* opts)
     if (retval->merged_input_header == NULL) {
         fprintf(stderr, "Could not read header for file '%s'\n",
                 opts->merged_input_name);
-        cleanup_state(retval);
+        cleanup_state(retval, false);
         return NULL;
     }
 
@@ -321,14 +322,14 @@ static state_t* init(parsed_opts_t* opts)
             samFile* hdr_load = sam_open(opts->unaccounted_header_name, "r");
             if (!hdr_load) {
                 fprintf(stderr, "Could not open unaccounted header file (%s)\n", opts->unaccounted_header_name);
-                cleanup_state(retval);
+                cleanup_state(retval, false);
                 return NULL;
             }
             retval->unaccounted_header = sam_hdr_read(hdr_load);
             if (retval->unaccounted_header == NULL) {
                 fprintf(stderr, "Could not read header for file '%s'\n",
                         opts->unaccounted_header_name);
-                cleanup_state(retval);
+                cleanup_state(retval, false);
                 return NULL;
             }
             sam_close(hdr_load);
@@ -339,7 +340,7 @@ static state_t* init(parsed_opts_t* opts)
         retval->unaccounted_file = sam_open(opts->unaccounted_name, "wb");
         if (retval->unaccounted_file == NULL) {
             fprintf(stderr, "Could not open unaccounted output file: %s\n", opts->unaccounted_name);
-            cleanup_state(retval);
+            cleanup_state(retval, false);
             return NULL;
         }
     }
@@ -348,12 +349,13 @@ static state_t* init(parsed_opts_t* opts)
     if (!count_RG(retval->merged_input_header, &retval->output_count, &retval->rg_id)) return NULL;
     if (opts->verbose) fprintf(stderr, "@RG's found %zu\n",retval->output_count);
 
+    retval->rg_output_file_name = (char **)calloc(retval->output_count, sizeof(char *));
     retval->rg_output_file = (samFile**)calloc(retval->output_count, sizeof(samFile*));
     retval->rg_output_header = (bam_hdr_t**)calloc(retval->output_count, sizeof(bam_hdr_t*));
     retval->rg_hash = kh_init_c2i();
-    if (!retval->rg_output_file || !retval->rg_output_header) {
+    if (!retval->rg_output_file_name || !retval->rg_output_file || !retval->rg_output_header || !retval->rg_hash) {
         fprintf(stderr, "Could not allocate memory for output file array. Out of memory?");
-        cleanup_state(retval);
+        cleanup_state(retval, false);
         return NULL;
     }
 
@@ -361,7 +363,7 @@ static state_t* init(parsed_opts_t* opts)
     char* input_base_name = strdup(dirsep? dirsep+1 : opts->merged_input_name);
     if (!input_base_name) {
         fprintf(stderr, "Out of memory\n");
-        cleanup_state(retval);
+        cleanup_state(retval, false);
         return NULL;
     }
     char* extension = strrchr(input_base_name, '.');
@@ -373,15 +375,16 @@ static state_t* init(parsed_opts_t* opts)
 
         if ( ( output_filename = expand_format_string(opts->output_format_string, input_base_name, retval->rg_id[i], i) ) == NULL) {
             fprintf(stderr, "Error expanding output filename format string.\r\n");
-            cleanup_state(retval);
+            cleanup_state(retval, false);
             free(input_base_name);
             return NULL;
         }
 
+        retval->rg_output_file_name[i] = output_filename;
         retval->rg_output_file[i] = sam_open(output_filename, "wb");
         if (retval->rg_output_file[i] == NULL) {
             fprintf(stderr, "Could not open output file: %s\r\n", output_filename);
-            cleanup_state(retval);
+            cleanup_state(retval, false);
             free(input_base_name);
             return NULL;
         }
@@ -395,12 +398,10 @@ static state_t* init(parsed_opts_t* opts)
         retval->rg_output_header[i] = bam_hdr_dup(retval->merged_input_header);
         if ( !filter_header_rg(retval->rg_output_header[i], retval->rg_id[i]) ) {
             fprintf(stderr, "Could not rewrite header for file: %s\r\n", output_filename);
-            cleanup_state(retval);
-            free(output_filename);
+            cleanup_state(retval, false);
             free(input_base_name);
             return NULL;
         }
-        free(output_filename);
     }
 
     free(input_base_name);
@@ -417,17 +418,23 @@ static bool split(state_t* state)
     size_t i;
     for (i = 0; i < state->output_count; i++) {
         if (sam_hdr_write(state->rg_output_file[i], state->rg_output_header[i]) != 0) {
-            fprintf(stderr, "Could not write output file header\n");
+            fprintf(stderr, "Could not write output file header for '%s'\n",
+                    state->rg_output_file_name[i]);
             return false;
         }
     }
 
     bam1_t* file_read = bam_init1();
     // Read the first record
-    if (sam_read1(state->merged_input_file, state->merged_input_header, file_read) < 0) {
+    int res = sam_read1(state->merged_input_file, state->merged_input_header, file_read);
+    if (res < 0) {
         // Nothing more to read?  Ignore this file
         bam_destroy1(file_read);
         file_read = NULL;
+        if (res < -1) {  // read error
+            fprintf(stderr, "Could not read first input record\n");
+            return false;
+        }
     }
 
     while (file_read != NULL) {
@@ -445,7 +452,13 @@ static bool split(state_t* state)
         if (iter != kh_end(state->rg_hash)) {
             // if found write to the appropriate untangled bam
             int i = kh_val(state->rg_hash,iter);
-            sam_write1(state->rg_output_file[i], state->rg_output_header[i], file_read);
+            if (sam_write1(state->rg_output_file[i],
+                           state->rg_output_header[i], file_read) < 0) {
+                fprintf(stderr, "Could not write to output file '%s'\n",
+                        state->rg_output_file_name[i]);
+                bam_destroy1(file_read);
+                return false;
+            }
         } else {
             // otherwise write to the unaccounted bam if there is one or fail
             if (state->unaccounted_file == NULL) {
@@ -457,39 +470,65 @@ static bool split(state_t* state)
                 bam_destroy1(file_read);
                 return false;
             } else {
-                sam_write1(state->unaccounted_file, state->unaccounted_header, file_read);
+                if (sam_write1(state->unaccounted_file, state->unaccounted_header, file_read) < 0) {
+                    fprintf(stderr, "Could not write to unaccounted output file\n");
+                    bam_destroy1(file_read);
+                    return false;
+                }
             }
         }
 
         // Replace written read with the next one to process
-        if (sam_read1(state->merged_input_file, state->merged_input_header, file_read) < 0) {
+        res = sam_read1(state->merged_input_file, state->merged_input_header, file_read);
+        if (res < 0) {
             // Nothing more to read?  Ignore this file in future
             bam_destroy1(file_read);
             file_read = NULL;
+            if (res < -1) {  // read error
+                fprintf(stderr, "Could not read input record\n");
+                return false;
+            }
         }
     }
 
     return true;
 }
 
-static void cleanup_state(state_t* status)
+static bool cleanup_state(state_t* status, bool check_close)
 {
-    if (!status) return;
+    bool retval = true;
+    if (!status) return true;
     if (status->unaccounted_header) bam_hdr_destroy(status->unaccounted_header);
-    if (status->unaccounted_file) sam_close(status->unaccounted_file);
+    if (status->unaccounted_file) {
+        if (sam_close(status->unaccounted_file) < 0 && check_close) {
+            fprintf(stderr, "Error on closing unaccounted file\n");
+            retval = false;
+        }
+    }
     sam_close(status->merged_input_file);
     size_t i;
     for (i = 0; i < status->output_count; i++) {
-        bam_hdr_destroy(status->rg_output_header[i]);
-        sam_close(status->rg_output_file[i]);
-        free(status->rg_id[i]);
+        if (status->rg_output_header && status->rg_output_header[i])
+            bam_hdr_destroy(status->rg_output_header[i]);
+        if (status->rg_output_file && status->rg_output_file[i]) {
+            if (sam_close(status->rg_output_file[i]) < 0 && check_close) {
+                fprintf(stderr, "Error on closing output file '%s'\n",
+                        status->rg_output_file_name[i]);
+                retval = false;
+            }
+        }
+        if (status->rg_id) free(status->rg_id[i]);
+        if (status->rg_output_file_name) free(status->rg_output_file_name[i]);
     }
-    bam_hdr_destroy(status->merged_input_header);
+    if (status->merged_input_header)
+        bam_hdr_destroy(status->merged_input_header);
     free(status->rg_output_header);
     free(status->rg_output_file);
+    free(status->rg_output_file_name);
     kh_destroy_c2i(status->rg_hash);
     free(status->rg_id);
     free(status);
+    return retval;
 }
 
 static void cleanup_opts(parsed_opts_t* opts)
@@ -510,9 +549,13 @@ int main_split(int argc, char** argv)
     state_t* status = init(opts);
     if (!status) goto cleanup_opts;
 
-    if (split(status)) ret = 0;
+    if (!split(status)) {
+        cleanup_state(status, false);
+        goto cleanup_opts;
+    }
 
-    cleanup_state(status);
+    if (cleanup_state(status, true)) ret = 0;
+
 cleanup_opts:
     cleanup_opts(opts);
 
