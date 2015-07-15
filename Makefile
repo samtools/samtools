@@ -182,7 +182,7 @@ errmod.o: errmod.c config.h errmod.h $(htslib_ksort_h)
 faidx.o: faidx.c config.h $(htslib_faidx_h)
 kprobaln.o: kprobaln.c config.h kprobaln.h
 padding.o: padding.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_faidx_h) sam_header.h $(sam_opts_h)
-phase.o: phase.c config.h $(htslib_sam_h) errmod.h $(sam_opts_h) $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
+phase.o: phase.c config.h $(htslib_sam_h) $(htslib_kstring_h) errmod.h $(sam_opts_h) $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
 sam.o: sam.c config.h $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c config.h sam_header.h $(htslib_khash_h)
 sam_opts.o: sam_opts.c config.h $(sam_opts_h)
