@@ -1170,14 +1170,15 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
 static int sort_usage(FILE *fp, int status)
 {
     fprintf(fp,
-"Usage: samtools sort [options...] [in.bam]\n"
+"Usage: samtools sort -T PREFIX [options...] [in.bam]\n"
 "Options:\n"
 "  -l INT     Set compression level, from 0 (uncompressed) to 9 (best)\n"
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -n         Sort by read name\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
-"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')   (either -O or\n"
-"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam       -T is required)\n"
+"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram') if not same as input\n"
+"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
+"             Note that -T is a required option for non-legacy usage\n"
 "  -@ INT     Set number of sorting and compression threads [1]\n"
 "\n"
 "Legacy usage: samtools sort [options...] <in.bam> <out.prefix>\n"
@@ -1240,9 +1241,15 @@ int bam_sort(int argc, char *argv[])
     strcpy(modeout, "w");
     if (sam_open_mode(&modeout[1], fnout, fmtout) < 0) {
         if (fmtout) fprintf(stderr, "[bam_sort] can't parse output format \"%s\"\n", fmtout);
-        else fprintf(stderr, "[bam_sort] can't determine output format\n");
-        ret = EXIT_FAILURE;
-        goto sort_end;
+        else{
+            // If modern but not supplied with -O, attempt to infer format
+            // with input before aborting with failure (if not modern, abort anyway)
+            if (!(modern && sam_open_mode(&modeout[1], argv[optind], fmtout) >= 0)){
+                fprintf(stderr, "[bam_sort] can't determine output format\n");
+                ret = EXIT_FAILURE;
+                goto sort_end;
+            }
+        }
     }
     if (level >= 0) sprintf(strchr(modeout, '\0'), "%d", level < 9? level : 9);
 
