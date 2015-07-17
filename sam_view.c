@@ -54,6 +54,7 @@ typedef struct samview_settings {
     void* bed;
     size_t remove_aux_len;
     char** remove_aux;
+    int invert_pass;
 } samview_settings_t;
 
 
@@ -107,6 +108,15 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     }
     return 0;
 }
+
+
+//Uses the invert_pass field
+static inline int process_aln_v(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
+
+{
+    return settings->invert_pass ? !process_aln(h, b, settings) : process_aln(h, b, settings);
+}
+
 
 static char *drop_rg(char *hdtxt, rghash_t h, int *len)
 {
@@ -244,13 +254,15 @@ int main_samview(int argc, char *argv[])
         .subsam_frac = -1.,
         .library = NULL,
         .bed = NULL,
+        .invert_pass = 0
     };
 
     /* parse command-line options */
     /* TODO: convert this to getopt_long we're running out of letters */
     strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
+    while ((c = getopt(argc, argv, "vSbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
         switch (c) {
+        case 'v': settings.invert_pass = 1; break;
         case 's':
             if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
                 srand(settings.subsam_seed);
@@ -395,7 +407,7 @@ int main_samview(int argc, char *argv[])
         bam1_t *b = bam_init1();
         int r;
         while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
-            if (!process_aln(header, b, &settings)) {
+            if (!process_aln_v(header, b, &settings)) {
                 if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
                 count++;
             } else {
@@ -430,7 +442,7 @@ int main_samview(int argc, char *argv[])
             }
             // fetch alignments
             while ((result = sam_itr_next(in, iter, b)) >= 0) {
-                if (!process_aln(header, b, &settings)) {
+                if (!process_aln_v(header, b, &settings)) {
                     if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
                     count++;
                 } else {
@@ -480,6 +492,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "\n"
 "Options:\n"
 // output options
+"  -v       invert pass/fail (analogous to grep -v)\n"
 "  -b       output BAM\n"
 "  -C       output CRAM (requires -T)\n"
 "  -1       use fast BAM compression (implies -b)\n"

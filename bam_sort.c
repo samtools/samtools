@@ -42,6 +42,11 @@ DEALINGS IN THE SOFTWARE.  */
 #define NEED_MEMSET_PATTERN4
 #endif
 
+#define forever for(;;)
+#define bam_is_r1(b) (((b)->core.flag&BAM_FREAD1) != 0)
+#define bam_is_r2(b) (((b)->core.flag&BAM_FREAD2) != 0)
+
+
 #ifdef NEED_MEMSET_PATTERN4
 void memset_pattern4(void *target, const void *pattern, size_t size) {
     uint32_t* target_iter = target;
@@ -55,6 +60,7 @@ void memset_pattern4(void *target, const void *pattern, size_t size) {
         memcpy(target_iter, pattern, size%4);
 }
 #endif
+
 
 KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
 KHASH_MAP_INIT_STR(c2i, int)
@@ -981,10 +987,20 @@ static int change_SO(bam_hdr_t *h, const char *so)
 // Function to compare reads and determine which one is < the other
 static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
-    if (g_is_by_qname) {
+    if(g_is_by_qname){
         int t = strnum_cmp(bam_get_qname(a), bam_get_qname(b));
         return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
-    } else return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+    }
+    else{
+        uint64_t cmp = ((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) - ((uint64_t)b->core.tid<<32|(b->core.pos+1));
+        if(cmp < 0){ return true;}
+        else if(cmp > 0){return false;}
+        uint64_t cmp2 = ((uint64_t)a->core.mtid<<34|a->core.mpos<<2|bam_is_rev(a)<<1|bam_is_r1(a)) -
+                         ((uint64_t)b->core.mtid<<34|b->core.mpos<<2|bam_is_rev(b)<<1|bam_is_r1(b));
+        if(cmp2 < 0) {return true;}
+        else if(cmp2 > 0) {return false;}
+        else {return strnum_cmp(bam_get_qname(a), bam_get_qname(b)) < 0;}
+    }
 }
 KSORT_INIT(sort, bam1_p, bam1_lt)
 
@@ -1069,9 +1085,9 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
  */
 int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const char *fnout, const char *modeout, size_t _max_mem, int n_threads)
 {
-    int ret = -1, i, n_files = 0;
+    int ret, i, n_files = 0;
     size_t mem, max_k, k, max_mem;
-    bam_hdr_t *header = NULL;
+    bam_hdr_t *header;
     samFile *fp;
     bam1_t *b, **buf;
 
@@ -1088,12 +1104,13 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
     header = sam_hdr_read(fp);
     if (header == NULL) {
         fprintf(stderr, "[bam_sort_core] failed to read header for '%s'\n", fn);
-        goto err;
+        sam_close(fp);
+        return -1;
     }
-    if (is_by_qname) change_SO(header, "queryname");
+    if (is_by_qname == 1) change_SO(header, "queryname");
     else change_SO(header, "coordinate");
     // write sub files
-    for (;;) {
+    forever {
         if (k == max_k) {
             size_t kk, old_max = max_k;
             max_k = max_k? max_k<<1 : 0x10000;
@@ -1115,12 +1132,8 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
             mem = k = 0;
         }
     }
-    if (ret != -1) {
-        fprintf(stderr, "[bam_sort_core] truncated file. Aborting.\n");
-        ret = -1;
-        goto err;
-    }
-
+    if (ret != -1)
+        fprintf(stderr, "[bam_sort_core] truncated file. Continue anyway.\n");
     // write the final output
     if (n_files == 0) { // a single block
         ks_mergesort(sort, k, buf, 0);
@@ -1137,7 +1150,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
         if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns, MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads) < 0) {
             // Propagate bam_merge_core2() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
-            goto err;
+            return -1;
         }
         for (i = 0; i < n_files; ++i) {
             unlink(fns[i]);
@@ -1145,16 +1158,12 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
         }
         free(fns);
     }
-
-    ret = 0;
-
- err:
     // free
     for (k = 0; k < max_k; ++k) bam_destroy1(buf[k]);
     free(buf);
     bam_hdr_destroy(header);
     sam_close(fp);
-    return ret;
+    return 0;
 }
 
 int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
