@@ -271,7 +271,7 @@ misc/maq2sam-long.o: misc/maq2sam.c
 install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
 	$(INSTALL_PROGRAM) $(PROGRAMS) $(MISC_PROGRAMS) $(DESTDIR)$(bindir)
-	$(INSTALL_DATA) samtools.1 $(DESTDIR)$(man1dir)
+	$(INSTALL_DATA) samtools.1 misc/wgsim.1 $(DESTDIR)$(man1dir)
 
 
 testclean:
