@@ -2140,6 +2140,7 @@ sub sam2fq
     while (<$in>) {
         next if (/^@/);
         my @s = split(/\t/, $_);
+        next if ($s[1] & 2304);
         my $dirn = ($s[1] & 0xc0) >> 6;
         my $suff = $suffixes ? ('', '/1', '/2', '')[$dirn] : '';
         if (($s[1] & 0x10) != 0) { # reverse complement
@@ -2205,6 +2206,14 @@ sub test_bam2fq
             $test++;
         }
     }
+    # basic 2 output test without singleton tracking
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected', out_map=>{'1.fq' => 'bam2fq/1.1.fq.expected', '2.fq' => 'bam2fq/1.2.fq.expected'},cmd=>"$$opts{bin}/samtools bam2fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.001.sam");
+    # basic 2 output test with singleton tracking but no singleton
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/2.1.fq.expected', '2.fq' => 'bam2fq/2.2.fq.expected', 's.fq' => 'bam2fq/2.s.fq.expected'}, cmd=>"$$opts{bin}/samtools bam2fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.001.sam");
+    # basic 2 output test with singleton tracking with a singleton in the middle
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/3.1.fq.expected', '2.fq' => 'bam2fq/3.2.fq.expected', 's.fq' => 'bam2fq/3.s.fq.expected'}, cmd=>"$$opts{bin}/samtools bam2fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.002.sam");
+    # basic 2 output test with singleton tracking with a singleton as last read
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected'}, cmd=>"$$opts{bin}/samtools bam2fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.003.sam");
 }
 
 sub test_depad

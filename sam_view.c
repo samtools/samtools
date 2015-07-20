@@ -591,37 +591,45 @@ static void bam2fq_usage(FILE *to)
 {
     fprintf(to,
 "Usage:   samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>\n\n"
-"Options: -n        don't append /1 and /2 to the read name\n"
-"         -O        output quality in the OQ tag if present\n"
-"         -s FILE   write singleton reads to FILE [assume single-end]\n"
-"         -t        copy RG, BC and QT tags to the FASTQ header line\n"
-"         -1 FILE   write reads flagged READ1 to FILE\n"
-"         -2 FILE   write reads flagged READ2 to FILE\n"
-"         -f INT    only include reads with all bits set in INT set in FLAG [0]\n"
-"         -F INT    only include reads with none of the bits set in INT\n"
-"                   set in FLAG [0]\n");
+"Options:\n"
+"  -0 FILE   write paired reads flagged both or neither READ1 and READ2 to FILE\n"
+"  -1 FILE   write paired reads flagged READ1 to FILE\n"
+"  -2 FILE   write paired reads flagged READ2 to FILE\n"
+"  -f INT    only include reads with all bits set in INT set in FLAG [0]\n"
+"  -F INT    only include reads with none of the bits set in INT\n"
+"            set in FLAG [0]\n"
+"  -n        don't append /1 and /2 to the read name\n"
+"  -O        output quality in the OQ tag if present\n"
+"  -s FILE   write singleton reads to FILE [assume single-end]\n"
+"  -t        copy RG, BC and QT tags to the FASTQ header line\n"
+"  -T TYPE   write the output in FASTQ or FASTA [FASTQ]\n"
+"  -v INT    default quality score if not given in file [1]\n"
+            );
     sam_global_opt_help(to, "-.--.");
 }
 
 typedef enum { READ_UNKNOWN = 0, READ_1 = 1, READ_2 = 2 } readpart;
-
+typedef enum { FASTA, FASTQ } fastfile;
 typedef struct bam2fq_opts {
     char *fnse;
-    char *fnr1;
-    char *fnr2;
+    char *fnr[3];
     char *fn_input; // pointer to input filename in argv do not free
     bool has12, use_oq, copy_tags;
     int flag_on, flag_off;
     sam_global_args ga;
+    fastfile filetype;
+    int def_qual;
 } bam2fq_opts_t;
 
 typedef struct bam2fq_state {
     samFile *fp;
     FILE *fpse;
-    FILE **fpr;
+    FILE *fpr[3];
     bam_hdr_t *h;
     bool has12, use_oq, copy_tags;
     int flag_on, flag_off;
+    fastfile filetype;
+    int def_qual;
 } bam2fq_state_t;
 
 static readpart which_readpart(const bam1_t *b)
@@ -636,6 +644,7 @@ static readpart which_readpart(const bam1_t *b)
 }
 
 // Transform a bam1_t record into a string with the FASTQ representation of it
+// @returns true for error, false for success
 static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t *state)
 {
     int i;
@@ -644,13 +653,13 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
     uint8_t *seq;
     uint8_t *qual = bam_get_qual(b);
     const uint8_t *oq = NULL;
-    if (state->use_oq) oq = bam_aux_get(b, "OQ");
+    if (state->use_oq) oq = bam_aux_get(b, "OQ") + 1;
     bool has_qual = (qual[0] != 0xff || (state->use_oq && oq)); // test if there is quality
 
     linebuf->l = 0;
     // Write read name
     readpart readpart = which_readpart(b);
-    kputc(!has_qual? '>' : '@', linebuf);
+    kputc(state->filetype == FASTA? '>' : '@', linebuf);
     kputs(bam_get_qname(b), linebuf);
     // Add the /1 /2 if requested
     if (state->has12) {
@@ -658,7 +667,6 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
         else if (readpart == READ_2) kputs("/2", linebuf);
     }
     if (state->copy_tags) {
-        kputc('\n', linebuf);
         for (i = 0; copied_tags[i]; ++i) {
             uint8_t *s;
             if ((s = bam_aux_get(b, copied_tags[i])) != 0) {
@@ -686,31 +694,37 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
     }
     kputc('\n', linebuf);
 
-    if (has_qual) {
+    if (state->filetype == FASTQ) {
         // Write quality
         kputs("+\n", linebuf);
-        if (state->use_oq && oq) {
-            if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
-                for (i = qlen-1; i > -1; --i) {
-                    kputc(oq[i], linebuf);
+        if (has_qual) {
+            if (state->use_oq && oq) {
+                if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+                    for (i = qlen-1; i > -1; --i) {
+                        kputc(oq[i], linebuf);
+                    }
+                } else {
+                    kputs((char*)oq, linebuf);
                 }
             } else {
-                kputs((char*)oq, linebuf);
+                if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+                    for (i = qlen-1; i > -1; --i) {
+                        kputc(33 + qual[i], linebuf);
+                    }
+                } else {
+                    for (i = 0; i < qlen; ++i) {
+                        kputc(33 + qual[i], linebuf);
+                    }
+                }
             }
         } else {
-            if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
-                for (i = qlen-1; i > -1; --i) {
-                    kputc(33 + qual[i], linebuf);
-                }
-            } else {
-                for (i = 0; i < qlen; ++i) {
-                    kputc(33 + qual[i], linebuf);
-                }
+            for (i = 0; i < qlen; ++i) {
+                kputc(33 + state->def_qual, linebuf);
             }
         }
         kputc('\n', linebuf);
     }
-    return true;
+    return false;
 }
 
 // return false if valid
@@ -719,23 +733,29 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     // Parse args
     bam2fq_opts_t* opts = calloc(1, sizeof(bam2fq_opts_t));
     opts->has12 = true;
+    opts->filetype = FASTQ;
+    opts->def_qual = 1;
 
     int c;
+    char* type_str = NULL;
     sam_global_args_init(&opts->ga);
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "nOts:1:2:f:F:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "0:1:2:f:F:nOs:tv:", lopts, NULL)) > 0) {
         switch (c) {
             case 'n': opts->has12 = false; break;
             case 'O': opts->use_oq = true; break;
             case 's': opts->fnse = optarg; break;
             case 't': opts->copy_tags = true; break;
-            case '1': opts->fnr1 = optarg; break;
-            case '2': opts->fnr2 = optarg; break;
+            case '0': opts->fnr[0] = optarg; break;
+            case '1': opts->fnr[1] = optarg; break;
+            case '2': opts->fnr[2] = optarg; break;
             case 'f': opts->flag_on |= strtol(optarg, 0, 0); break;
             case 'F': opts->flag_off |= strtol(optarg, 0, 0); break;
+            case 'v': opts->def_qual = atoi(optarg); break;
+            case 'T': type_str = optarg; break;
             case '?': bam2fq_usage(stderr); free(opts); return true;
             default:
                 if (parse_sam_global_opt(c, optarg, lopts, &opts->ga) != 0) {
@@ -745,7 +765,29 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         }
     }
 
-    if (opts->fnr1 || opts->fnr2) opts->has12 = false;
+    if (opts->fnr[1] || opts->fnr[2]) opts->has12 = false;
+
+    if (opts->def_qual < 0 || 93 < opts->def_qual) {
+        fprintf(stderr, "Invalid -v default quality %i, allowed range 0 to 93\n", opts->def_qual);
+        bam2fq_usage(stderr);
+        free(opts);
+        return true;
+    }
+
+    if (type_str) {
+        if (strcasecmp("fastq", type_str) == 0) {
+            fprintf(stderr, "Forcing FASTQ output.\n");
+            opts->filetype = FASTQ;
+        } else if (strcasecmp("fasta", type_str) == 0) {
+            fprintf(stderr, "Forcing FASTA output.\n");
+            opts->filetype = FASTA;
+        } else {
+            print_error("bam2fq", "Unrecognised -T argument, use FASTA or FASTQ, not: \"%s\"", type_str);
+            bam2fq_usage(stderr);
+            free(opts);
+            return true;
+        }
+    }
 
     if ((argc - (optind)) == 0) {
         bam2fq_usage(stdout);
@@ -767,12 +809,13 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
 static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
 {
     bam2fq_state_t* state = calloc(1, sizeof(bam2fq_state_t));
-    state->fpr = malloc(3 * sizeof(FILE*));
     state->flag_on = opts->flag_on;
     state->flag_off = opts->flag_off;
     state->has12 = opts->has12;
     state->use_oq = opts->use_oq;
     state->copy_tags = opts->copy_tags;
+    state->filetype = opts->filetype;
+    state->def_qual = opts->def_qual;
 
     state->fp = sam_open(opts->fn_input, "r");
     if (state->fp == NULL) {
@@ -801,25 +844,17 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         }
     }
 
-    state->fpr[0] = stdout;
-    state->fpr[1] = stdout;
-    state->fpr[2] = stdout;
-
-    if (opts->fnr1) {
-        state->fpr[1] = fopen(opts->fnr1, "w");
-        if (state->fpr[1] == NULL) {
-            print_error_errno("bam2fq", "Cannot write to r1 file \"%s\"", opts->fnr1);
-            free(state);
-            return true;
-        }
-    }
-
-    if (opts->fnr2) {
-        state->fpr[2] = fopen(opts->fnr2, "w");
-        if (state->fpr[2] == NULL) {
-            print_error_errno("bam2fq", "Cannot write to r2 file \"%s\"", opts->fnr2);
-            free(state);
-            return true;
+    int i;
+    for (i = 0; i < 3; ++i) {
+        if (opts->fnr[i]) {
+            state->fpr[i] = fopen(opts->fnr[i], "w");
+            if (state->fpr[i] == NULL) {
+                print_error_errno("bam2fq", "Cannot write to r%d file \"%s\"", i, opts->fnr[i]);
+                free(state);
+                return true;
+            }
+        } else {
+            state->fpr[i] = stdout;
         }
     }
 
@@ -834,20 +869,102 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     return false;
 }
 
-bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int* status)
+static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int* status)
 {
+    bool error = false;
     bam_hdr_destroy(state->h);
     check_sam_close("bam2fq", state->fp, opts->fn_input, "file", status);
-    if (state->fpse && !fclose(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); return true; }
-    if (state->fpr[0] != stdout && !fclose(state->fpr[0])) { print_error_errno("bam2fq", "Error closing r0 file"); return true; }
-    if (state->fpr[1] != stdout && !fclose(state->fpr[1])) { print_error_errno("bam2fq", "Error closing r1 file \"%s\"", opts->fnr1); return true; }
-    if (state->fpr[2] != stdout && !fclose(state->fpr[2])) { print_error_errno("bam2fq", "Error closing r2 file \"%s\"", opts->fnr2); return true; }
-    free(state->fpr);
+    if (state->fpse && fclose(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); error = true; }
+    int i;
+    for (i = 0; i < 3; ++i) {
+        if (state->fpr[i] != stdout && fclose(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); error = true; }
+    }
     free(state);
-    return false;
+    return error;
 }
 
-bool bam2fq_mainloop(bam2fq_state_t *state)
+static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
+{
+    return (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
+        || (b->core.flag&(state->flag_on)) != state->flag_on // or reads indicated by filter flags
+        || (b->core.flag&(state->flag_off)) != 0);
+
+}
+
+static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
+{
+    bam1_t* b = bam_init1();
+    char *current_qname = NULL;
+    int64_t n_reads = 0, n_singletons = 0; // Statistics
+    kstring_t linebuf[3] = {{0,0,NULL},{0,0,NULL},{0,0,NULL}};
+    int score[3];
+    int at_eof;
+    if (b == NULL ) {
+        perror("[bam2fq_mainloop_singletontrack] Malloc error for bam record buffer.");
+        return true;
+    }
+
+    bool error = false;
+    while (true) {
+        at_eof = sam_read1(state->fp, state->h, b);
+
+        if (!at_eof && filter_it_out(b, state)) continue;
+        if (!at_eof) ++n_reads;
+
+        if (at_eof || !current_qname || (strcmp(current_qname, bam_get_qname(b)) != 0)) {
+            if (current_qname) {
+                if (score[1] > 0 && score[2] > 0) {
+                    // print linebuf[1] to fpr[1], linebuf[2] to fpr[2]
+                    if (fputs(linebuf[1].s, state->fpr[1]) == EOF) { error = true; break; }
+                    if (fputs(linebuf[2].s, state->fpr[2]) == EOF) { error = true; break; }
+                } else if (score[1] > 0 || score[2] > 0) {
+                    // print whichever one exists to fpse
+                    if (score[1] > 0) {
+                        if (fputs(linebuf[1].s, state->fpse) == EOF) { error = true; break; }
+                    } else {
+                        if (fputs(linebuf[2].s, state->fpse) == EOF) { error = true; break; }
+                    }
+                    ++n_singletons;
+                }
+                if (score[0]) { // TODO: check this
+                    // print linebuf[0] to fpr[0]
+                    if (fputs(linebuf[0].s, state->fpr[0]) == EOF) { error = true; break; }
+                }
+            }
+
+            if (at_eof) break;
+
+            if (current_qname) free(current_qname);
+            current_qname = strdup(bam_get_qname(b));
+            score[0] = score[1] = score[2] = 0;
+        }
+
+        // Prefer a copy of the read that has base qualities
+        int b_score = bam_get_qual(b)[0] != 0xff? 2 : 1;
+        if (b_score > score[which_readpart(b)]) {
+            if(bam1_to_fq(b, &linebuf[which_readpart(b)], state)) {
+                fprintf(stderr, "[%s] Error converting read to FASTA/Q\n", __func__);
+                return true;
+            }
+            score[which_readpart(b)] = b_score;
+        }
+    }
+    if (error)
+    {
+        perror("[bam2fq_mainloop_singletontrack] Error writing to FASTx files.");
+    }
+    bam_destroy1(b);
+    free(current_qname);
+    free(linebuf[0].s);
+    free(linebuf[1].s);
+    free(linebuf[2].s);
+    fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
+    fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
+
+    return error;
+}
+
+static bool bam2fq_mainloop(bam2fq_state_t *state)
 {
     // process a name collated BAM into fastq
     bam1_t* b = bam_init1();
@@ -855,67 +972,21 @@ bool bam2fq_mainloop(bam2fq_state_t *state)
         perror(NULL);
         return true;
     }
-    int64_t n_singletons = 0, n_reads = 0; // Statistics
+    int64_t n_reads = 0; // Statistics
     kstring_t linebuf = { 0, 0, NULL }; // Buffer
-    char *previous_readname = NULL; // The readname of the read in linebuf
-    int previous_readpart = READ_UNKNOWN; // Whether the read in linebuf belongs to the forward, reverse, or unknown read
-    kputsn("", 0, &linebuf);
-    int ret;
-
-    // This loop writes reads as pairs, holding the unpaired read from the previous read in linebuf until either
-    // the read's mate is found or a new read name is encountered in which case we write it as a singleton.
-    while ((ret = sam_read1(state->fp, state->h, b)) >= 0) {
+    while (sam_read1(state->fp, state->h, b) >= 0) {
         if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
             || (b->core.flag&(state->flag_on)) != state->flag_on             // or reads indicated by filter flags
             || (b->core.flag&(state->flag_off)) != 0) continue;
         ++n_reads;
 
-        //////////////////////////////////////////////////////////////////
-        // First deal with the previous read, checking if it has a mate //
-        //////////////////////////////////////////////////////////////////
-        // If there was a previous readname and we're tracking singletons
-        if ( state->fpse && previous_readname ) {
-            if (!strcmp(bam_get_qname(b), previous_readname ) ) {
-                fputs(linebuf.s, state->fpr[previous_readpart]); // Write previous read to appropriate output file
-                free(previous_readname);
-                previous_readname = NULL;
-                previous_readpart = READ_UNKNOWN;
-            } else { // Doesn't match it's a singleton
-                ++n_singletons;
-                fputs(linebuf.s, state->fpse);  // Write previous read to singleton file
-                free(previous_readname);
-                previous_readname = strdup(bam_get_qname(b));
-                previous_readpart = which_readpart(b);
-            }
-        } else {
-            fputs(linebuf.s, state->fpr[previous_readpart]); // Write pending read to appropriate output file
-            if (state->fpse) previous_readname = strdup(bam_get_qname(b));
-            previous_readpart = which_readpart(b);
-        }
         /////////////////////////////////////////////////////////////
         // Translate read into fastq format into the output buffer //
         /////////////////////////////////////////////////////////////
-        if (bam1_to_fq(b, &linebuf, state) == false) return true;
-    }
-    if (ret < -1) {
-        fprintf(stderr, "[bam2fq] ERROR: failed to decode sequence\n");
-        return true;
-    }
-    // Flush pending output from linebuf
-    if (state->fpse) {
-        if ( previous_readname ) { // Nothing left to match it is a singleton
-            ++n_singletons;
-            fputs(linebuf.s, state->fpse);  // Write to singletons
-        } else {
-            fputs(linebuf.s, state->fpr[previous_readpart]); // Write previous read to appropriate output file
-        }
-
-        fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
-    } else {
-        fputs(linebuf.s, state->fpr[previous_readpart]); // Write previous read
+        if (bam1_to_fq(b, &linebuf, state)) return true;
+        fputs(linebuf.s, state->fpr[which_readpart(b)]);
     }
     free(linebuf.s);
-    free(previous_readname);
     bam_destroy1(b);
 
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
@@ -933,7 +1004,11 @@ int main_bam2fq(int argc, char *argv[])
 
     if (init_state(opts, &state)) return EXIT_FAILURE;
 
-    if (bam2fq_mainloop(state)) status = EXIT_FAILURE;
+    if (state->fpse) {
+        if (bam2fq_mainloop_singletontrack(state)) status = EXIT_FAILURE;
+    } else {
+        if (bam2fq_mainloop(state)) status = EXIT_FAILURE;
+    }
 
     if (destroy_state(opts, state, &status)) return EXIT_FAILURE;
     sam_global_args_free(&opts->ga);
