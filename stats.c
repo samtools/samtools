@@ -57,8 +57,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/khash.h>
 #include "stats_isize.h"
 
-KHASH_MAP_INIT_STR(c2i, intptr_t)
-
 #define BWA_MIN_RDLEN 35
 // From the spec
 // If 0x4 is set, no assumptions can be made about RNAME, POS, CIGAR, MAPQ, bits 0x2, 0x10, 0x100 and 0x800, and the bit 0x20 of the previous read in the template.
@@ -211,6 +209,7 @@ typedef struct
 
 }
 stats_t;
+KHASH_MAP_INIT_STR(c2i, stats_t*)
 
 static void error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
@@ -1446,8 +1445,7 @@ void output_split_stats(kh_c2i_t *split_hash, char* bam_fname, int sparse)
     stats_t *curr_stats = NULL;
     for(i = kh_begin(split_hash); i != kh_end(split_hash); ++i){
         if(!kh_exist(split_hash, i)) continue;
-        intptr_t curr_addr = kh_value(split_hash, i);
-        curr_stats = (stats_t *)curr_addr;
+        curr_stats = kh_value(split_hash, i);
         round_buffer_flush(curr_stats, -1);
 
         size_t bam_name_len = strlen(bam_fname);
@@ -1472,8 +1470,7 @@ void destroy_split_stats(kh_c2i_t *split_hash)
     stats_t *curr_stats = NULL;
     for(i = kh_begin(split_hash); i != kh_end(split_hash); ++i){
         if(!kh_exist(split_hash, i)) continue;
-            intptr_t curr_addr = kh_value(split_hash, i);
-            curr_stats = (stats_t *)curr_addr;
+            curr_stats = kh_value(split_hash, i);
             cleanup_stats(curr_stats);
     }
     kh_destroy(c2i, split_hash);
@@ -1594,11 +1591,10 @@ static stats_t* get_curr_split_stats(bam1_t* bam_line, kh_c2i_t* split_hash, sta
         if( ret < 0 ){
             error("Failed to insert key '%s' into split_hash", split_name);
         }
-        kh_val(split_hash, iter) = (intptr_t) curr_stats; // store address of deref'd location
+        kh_val(split_hash, iter) = curr_stats; // store pointer to stats
     }
     else{
-        intptr_t curr_addr = kh_value(split_hash, k);
-        curr_stats = (stats_t *)curr_addr;
+        curr_stats = kh_value(split_hash, k);
         free(split_name); // don't need to hold on to this if it wasn't new
     }
     return curr_stats;
