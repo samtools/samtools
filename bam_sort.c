@@ -160,10 +160,15 @@ static char *copy_headers(char *output_pointer, const char *header_type, char *t
 }
 
 // Takes in existing header and rewrites it in the usual order HD, SQ, RG, PG CO, other
-static void pretty_header(char** text_in_out, int32_t text_len)
+// returns true on error
+static bool pretty_header(char** text_in_out, int32_t text_len)
 {
     char *output, *output_pointer;
     output = output_pointer = (char*)calloc(1,text_len+1);
+    if (output == NULL) {
+        perror("[pretty_header] Could not allocate memory for new header.");
+        return true;
+    }
     output[text_len] = '\0';
 
     // Read @HD and write
@@ -193,10 +198,11 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     // Safety check, make sure we copied it all, if we didn't something is wrong with the header
     if ( output+text_len != output_pointer ) {
         fprintf(stderr, "[pretty_header] invalid header\n");
-        exit(1);
+        return true;
     }
     free(*text_in_out);
     *text_in_out = output;
+    return false;
 }
 
 static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, const char* rg_override)
@@ -707,7 +713,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     }
 
     // Transform the header into standard form
-    pretty_header(&hout->text,hout->l_text);
+    if (pretty_header(&hout->text,hout->l_text)) {
+        return -1;
+    }
 
     // If we're only merging a specified region move our iters to start at that point
     if (reg) {
