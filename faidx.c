@@ -67,7 +67,9 @@ int faidx_main(int argc, char *argv[])
         error(NULL);
     if ( argc==2 )
     {
-        fai_build(argv[optind]);
+        if (fai_build(argv[optind]) != 0) {
+            error("Could not build fai index %s.fai\n", argv[optind]);
+        }
         return 0;
     }
 

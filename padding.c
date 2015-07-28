@@ -190,6 +190,10 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
     int ret = 0, n2 = 0, m2 = 0, *posmap = 0;
 
     b = bam_init1();
+    if (!b) {
+        fprintf(stderr, "[depad] Couldn't allocate bam struct\n");
+        return -1;
+    }
     r.l = r.m = q.l = q.m = 0; r.s = q.s = 0;
     int read_ret;
     while ((read_ret = sam_read1(in, h, b)) >= 0) { // read one alignment from `in'
@@ -356,7 +360,10 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
         b->core.bin = bam_reg2bin(b->core.pos, bam_endpos(b));
 
     next_seq:
-        sam_write1(out, h, b);
+        if (sam_write1(out, h, b) < 0) {
+            fprintf(stderr, "[depad] error writing to output.\n");
+            return -1;
+        }
     }
     if (read_ret < -1) {
         fprintf(stderr, "[depad] truncated file.\n");
@@ -560,7 +567,10 @@ depad_end:
     if (fai) fai_destroy(fai);
     if (h) bam_hdr_destroy(h);
     sam_close(in);
-    sam_close(out);
+    if (sam_close(out) < 0) {
+        fprintf(stderr, "[depad] error on closing output file.\n");
+        ret = 1;
+    }
     free(fn_list); free(fn_out);
     return ret;
 }
