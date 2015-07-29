@@ -24,7 +24,7 @@ INIT x $samtools view -S -b anomalous.sam > anomalous.bam
 INIT x $samtools view -S -C anomalous.sam > anomalous.cram 
 INIT x $samtools view -S -b indels.sam > indels.bam  
 INIT x $samtools view -S -C indels.sam > indels.cram 
-INIT x xz -d < expected/1.out.xz > expected/1.out
+INIT x gunzip -c expected/1.out.f3-6.gz | awk -v OFS='\\t' '{print "CHROMOSOME_I", NR, $0}' > expected/1.out
 
 # Nasty file corner cases
 P 1.out $samtools mpileup -B -Q0 -x -f ce.fa ce#large_seq.bam 
