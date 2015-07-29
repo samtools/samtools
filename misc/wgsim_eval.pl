@@ -56,6 +56,17 @@ sub alneval {
 Usage:   wgsim_eval.pl alneval [options] <in.sam>\n
 Options: -p        print wrong alignments
          -g INT    correct if withint INT of the true coordinate
+         -a        generate ROC curves
+
+The default output has columns of mapping quality, number of correct
+alignments \/ total number of alignments at that mapping quality,
+cumulative sum of number of alignments, and the ratio of cumulative
+correct alignments over cumulative total alignments.
+
+The -a option outputs columns with mapping quality, number of mapped
+reads with mqual >= the mqual in the first column, and the number of
+mismapped reads.  Together they can be used to produce ROC curves for
+accuracy of aligners.
 \n/) if (@ARGV == 0 && -t STDIN);
   my (@c0, @c1, %fnfp);
   my ($max_q, $flag) = (0, 0);
