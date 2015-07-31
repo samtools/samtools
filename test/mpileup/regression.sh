@@ -90,7 +90,7 @@ regtest() {
     nufail=0; nefail=0
 
     exec 9<"$1"
-    while read line <&9
+    while read -r line <&9
     do
         set -- $line
         case $1 in
