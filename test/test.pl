@@ -48,6 +48,7 @@ test_merge($opts);
 test_fixmate($opts);
 test_calmd($opts);
 test_idxstat($opts);
+test_reheader($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -2295,4 +2296,36 @@ sub test_idxstat
     my ($opts,%args) = @_;
 
     test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.bam", expect_fail=>0);
+}
+
+sub test_reheader
+{
+    my ($opts,%args) = @_;
+
+    local $ENV{REF_PATH} = "$$opts{path}/dat/cram_md5/%s";
+
+    my $fn = "$$opts{path}/dat/view.001";
+
+    # Create local BAM and CRAM inputs
+    system("$$opts{bin}/samtools view -b $fn.sam > $fn.tmp.bam")  == 0 or die "failed to create bam: $?";
+    system("$$opts{bin}/samtools view -C $fn.sam > $fn.tmp.cram") == 0 or die "failed to create cram: $?";
+
+    # Fudge @PG lines.  The version number will differ each commit.
+    # Also the pathname will differ for each install. We'll take it on faith
+    # that these bits work.
+    test_cmd($opts,
+             out=>'reheader/1_view1.sam.expected',
+             err=>'reheader/1_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+
+    test_cmd($opts,
+             out=>'reheader/2_view1.sam.expected',
+             err=>'reheader/2_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+
+    # In-place testing
+    test_cmd($opts,
+             out=>'reheader/3_view1.sam.expected',
+             err=>'reheader/3_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.cram && $$opts{bin}/samtools view -h $fn.tmp.cram | perl -pe 's/\tVN:.*//'");
 }
