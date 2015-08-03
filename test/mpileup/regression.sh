@@ -114,14 +114,14 @@ regtest() {
             if [ "`expr \"$cmd\" : '.*\$fmt'`" != 0 -a "$samtools" != "./samtools-0.1.19" ]
             then
                 _cmd=`echo $cmd | sed 's/\$fmt/bam/'`
-                run_test $p $o $_cmd
+                run_test $p $o "$_cmd"
                 #_cmd=`echo $cmd | sed 's/\$fmt/sam/'`
-                #run_test $p $o $_cmd
+                #run_test $p $o "$_cmd"
                 _cmd=`echo $cmd | sed 's/\$fmt/cram/'`
-                run_test $p $o $_cmd
+                run_test $p $o "$_cmd"
             else
                 _cmd=`echo $cmd | sed 's/\$fmt/bam/'`
-                run_test $p $o $_cmd
+                run_test $p $o "$_cmd"
             fi
             ;;
         esac
