@@ -1623,13 +1623,16 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf,
     samFile* fp;
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
-    if (sam_hdr_write(fp, h) != 0) return -1;
+    if (sam_hdr_write(fp, h) != 0) goto fail;
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i) {
-        if (sam_write1(fp, h, buf[i]) < 0) return -1;
+        if (sam_write1(fp, h, buf[i]) < 0) goto fail;
     }
     if (sam_close(fp) < 0) return -1;
     return 0;
+ fail:
+    sam_close(fp);
+    return -1;
 }
 
 static void *worker(void *data)
