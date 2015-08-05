@@ -25,6 +25,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <string.h>
@@ -276,13 +277,13 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
             const bam_pileup1_t *p = plp[i] + j;
             uint8_t *q;
             int id = -1;
-            q = ignore_rg? 0 : bam_aux_get(p->b, "RG");
+            q = ignore_rg? NULL : bam_aux_get(p->b, "RG");
             if (q) id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
             if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
             if (id < 0 || id >= m->n) {
                 assert(q); // otherwise a bug
                 fprintf(stderr, "[%s] Read group %s used in file %s but absent from the header or an alignment missing read group.\n", __func__, (char*)q+1, fn[i]);
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             if (m->n_plp[id] == m->m_plp[id]) {
                 m->m_plp[id] = m->m_plp[id]? m->m_plp[id]<<1 : 8;
@@ -333,7 +334,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
     if (n == 0) {
         fprintf(stderr,"[%s] no input file/data given\n", __func__);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     // read the header of each file in the list and initialize data
@@ -344,36 +345,36 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         if ( !data[i]->fp )
         {
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
             fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         if (conf->fai_fname && hts_set_fai_filename(data[i]->fp, conf->fai_fname) != 0) {
             fprintf(stderr, "[%s] failed to process %s: %s\n",
                     __func__, conf->fai_fname, strerror(errno));
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         data[i]->conf = conf;
         data[i]->ref = &mp_ref;
         h_tmp = sam_hdr_read(data[i]->fp);
         if ( !h_tmp ) {
             fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
         // Collect read group IDs with PL (platform) listed in pl_list (note: fragile, strstr search)
         rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
         if (conf->reg) {
             hts_idx_t *idx = sam_index_load(data[i]->fp, fn[i]);
-            if (idx == 0) {
+            if (idx == NULL) {
                 fprintf(stderr, "[%s] fail to load index for %s\n", __func__, fn[i]);
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             if ( (data[i]->iter=sam_itr_querys(idx, h_tmp, conf->reg)) == 0) {
                 fprintf(stderr, "[E::%s] fail to parse region '%s' with %s\n", __func__, conf->reg, fn[i]);
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             if (i == 0) beg0 = data[i]->iter->beg, end0 = data[i]->iter->end;
             hts_idx_destroy(idx);
@@ -410,12 +411,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_fp = bcf_open(conf->output_fname? conf->output_fname : "-", mode);
         if (bcf_fp == NULL) {
             fprintf(stderr, "[%s] failed to write to %s: %s\n", __func__, conf->output_fname? conf->output_fname : "standard output", strerror(errno));
-            exit(1);
+            exit(EXIT_FAILURE);
         }
 
         // BCF header creation
         bcf_hdr = bcf_hdr_init("w");
-        kstring_t str = {0,0,0};
+        kstring_t str = {0,0,NULL};
 
         ksprintf(&str, "##samtoolsVersion=%s+htslib-%s\n",samtools_version(),hts_version());
         bcf_hdr_append(bcf_hdr, str.s);
@@ -529,7 +530,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
         if (pileup_fp == NULL) {
             fprintf(stderr, "[%s] failed to write to %s: %s\n", __func__, conf->output_fname, strerror(errno));
-            exit(1);
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -751,7 +752,7 @@ int parse_format_flag(const char *str)
         else
         {
             fprintf(stderr,"Could not parse tag \"%s\" in \"%s\"\n", tags[i], str);
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         free(tags[i]);
     }
@@ -917,7 +918,7 @@ int bam_mpileup(int argc, char *argv[])
         case  4 : mplp.openQ = atoi(optarg); break;
         case 'f':
             mplp.fai = fai_load(optarg);
-            if (mplp.fai == 0) return 1;
+            if (mplp.fai == NULL) return 1;
             mplp.fai_fname = optarg;
             break;
         case 'd': mplp.max_depth = atoi(optarg); break;
@@ -966,7 +967,7 @@ int bam_mpileup(int argc, char *argv[])
                 FILE *fp_rg;
                 char buf[1024];
                 mplp.rghash = khash_str2int_init();
-                if ((fp_rg = fopen(optarg, "r")) == 0)
+                if ((fp_rg = fopen(optarg, "r")) == NULL)
                     fprintf(stderr, "(%s) Fail to open file %s. Continue anyway.\n", __func__, optarg);
                 while (!feof(fp_rg) && fscanf(fp_rg, "%s", buf) > 0) // this is not a good style, but forgive me...
                     khash_str2int_inc(mplp.rghash, strdup(buf));
