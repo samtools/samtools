@@ -22,8 +22,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
-#ifndef BAM_OPTS_H
-#define BAM_OPTS_H
+#ifndef SAM_OPTS_H
+#define SAM_OPTS_H
 
 #include <stdio.h>
 #include <limits.h>
@@ -91,8 +91,8 @@ void assign_short_opts(struct option lopts[], const char *shortopts);
  * Returns 0 on success,
  *        -1 on failure.
  */
-int parse_sam_global_opt(int c, char *optarg, struct option *lopt, 
-			 sam_global_args *ga);
+int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
+                         sam_global_args *ga);
 
 /*
  * Report the usage for global options.
@@ -100,7 +100,7 @@ int parse_sam_global_opt(int c, char *optarg, struct option *lopt,
  * This accepts the same shortopts string as used by assign_short_opts()
  * to determine which options need to be printed and how.
  */
-void sam_global_opt_help(FILE *fp, char *shortopts);
+void sam_global_opt_help(FILE *fp, const char *shortopts);
 
 
 void sam_global_args_init(sam_global_args *ga);

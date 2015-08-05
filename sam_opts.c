@@ -68,7 +68,7 @@ void assign_short_opts(struct option lopts[], const char *shortopts) {
  * Returns 0 on success,
  *        -1 on failure.
  */
-int parse_sam_global_opt(int c, char *optarg, struct option *lopt, 
+int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
 			 sam_global_args *ga) {
     int r = 0;
 
@@ -91,12 +91,12 @@ int parse_sam_global_opt(int c, char *optarg, struct option *lopt,
 	    r = hts_opt_add((hts_opt **)&ga->out.specific, optarg);
 	    break;
 	} else if (strcmp(lopt->name, "reference") == 0) {
-	    char ref[8192];
-	    ref[8191] = 0;
-	    snprintf(ref, 8191, "reference=%s", optarg);
+	    char *ref = malloc(10 + strlen(optarg) + 1);
+	    sprintf(ref, "reference=%s", optarg);
 	    ga->reference = strdup(optarg);
 	    r  = hts_opt_add((hts_opt **)&ga->in.specific, ref);
 	    r |= hts_opt_add((hts_opt **)&ga->out.specific, ref);
+	    free(ref);
 	    break;
 //	} else if (strcmp(lopt->name, "verbose") == 0) {
 //	    ga->verbosity++;
@@ -118,7 +118,7 @@ int parse_sam_global_opt(int c, char *optarg, struct option *lopt,
  * This accepts the same shortopts string as used by assign_short_opts()
  * to determine which options need to be printed and how.
  */
-void sam_global_opt_help(FILE *fp, char *shortopts) {
+void sam_global_opt_help(FILE *fp, const char *shortopts) {
     int i = 0;
 
     struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
