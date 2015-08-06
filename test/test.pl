@@ -1948,7 +1948,7 @@ sub test_view
     foreach my $threads (2, 4) {
         run_view_test($opts,
                       msg => "$test: Big SAM -> CRAM ($threads threads)",
-                      args => ['-b', '-@', $threads, $big_sam],
+                      args => ['-C', '-@', $threads, $big_sam],
                       out => sprintf("%s.test%03d.cram", $out, $test),
                       compare_sam => $big_sam,
                       pipe => 1);
