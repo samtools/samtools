@@ -249,9 +249,10 @@ int main_samview(int argc, char *argv[])
         .bed = NULL,
     };
 
-    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-
-    assign_short_opts(lopts, "-.O.T");
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T'),
+        { NULL, 0, NULL, 0 }
+    };
 
     /* parse command-line options */
     strcpy(out_mode, "w");
@@ -609,8 +610,10 @@ int main_bam2fq(int argc, char *argv[])
     int c;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
-    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-.--.");
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        { NULL, 0, NULL, 0 }
+    };
 
     while ((c = getopt_long(argc, argv, "nOts:", lopts, NULL)) > 0) {
         switch (c) {

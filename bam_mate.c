@@ -311,8 +311,10 @@ int bam_mating(int argc, char *argv[])
     samFile *in, *out;
     int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
-    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-.O..");
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+        { NULL, 0, NULL, 0 }
+    };
 
     // parse args
     if (argc == 1) { usage(stdout); return 0; }

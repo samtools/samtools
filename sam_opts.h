@@ -48,35 +48,21 @@ enum {
     //SAM_OPT_VERBOSE
 };
 
-// Use this within an existing struct option lopts[] = {...}, used where
-// the subcommmand is already using some long options.
-//
-// NOTE: MUST use this as the first thing in struct option lopts[] array.
-#define SAM_GLOBAL_LOPTS \
-    {"input-fmt",         required_argument, NULL, SAM_OPT_INPUT_FMT}, \
-    {"input-fmt-option",  required_argument, NULL, SAM_OPT_INPUT_FMT_OPTION}, \
-    {"output-fmt",        required_argument, NULL, SAM_OPT_OUTPUT_FMT}, \
-    {"output-fmt-option", required_argument, NULL, SAM_OPT_OUTPUT_FMT_OPTION}, \
-    {"reference",         required_argument, NULL, SAM_OPT_REFERENCE}
+#define SAM_OPT_VAL(val, defval) ((val) == '-')? '?' : (val)? (val) : (defval)
+
+// Use this within struct option lopts[] = {...} to add the standard global
+// options.  The arguments determine whether the corresponding option is
+// enabled and, if so, whether it has a short option equivalent:
+// 0      No short option has been assigned. Use --long-opt only.
+// '-'    Both long and short options are disabled.
+// <c>    Otherwise the equivalent short option is character <c>.
+#define SAM_OPT_GLOBAL_OPTIONS(o1, o2, o3, o4, o5) \
+    {"input-fmt",         required_argument, NULL, SAM_OPT_VAL(o1, SAM_OPT_INPUT_FMT)}, \
+    {"input-fmt-option",  required_argument, NULL, SAM_OPT_VAL(o2, SAM_OPT_INPUT_FMT_OPTION)}, \
+    {"output-fmt",        required_argument, NULL, SAM_OPT_VAL(o3, SAM_OPT_OUTPUT_FMT)}, \
+    {"output-fmt-option", required_argument, NULL, SAM_OPT_VAL(o4, SAM_OPT_OUTPUT_FMT_OPTION)}, \
+    {"reference",         required_argument, NULL, SAM_OPT_VAL(o5, SAM_OPT_REFERENCE)}
     //{"verbose",           no_argument,       NULL, SAM_OPT_VERBOSE}
-
-// Use this to completely assign all long options, used where the subcommand
-// doesn't have any long options of its own.
-//
-// Eg: struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-#define SAM_GLOBAL_LOPTS_INIT {SAM_GLOBAL_LOPTS, {NULL,0,NULL,0}}
-
-
-/*
- * Assign a short option to each of the long options listed above.
- *
- * There should be one character per option. This will be one of:
- * '.'    No short option has been assigned. Use --long-opt only.
- * '-'    The long (and short) option has been disabled.
- * <c>    Otherwise the short option is character <c>.
- */
-void assign_short_opts(struct option lopts[], const char *shortopts);
-
 
 /*
  * Processes a standard "global" samtools long option.
@@ -97,8 +83,12 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
 /*
  * Report the usage for global options.
  *
- * This accepts the same shortopts string as used by assign_short_opts()
+ * This accepts a string with one character per SAM_OPT_GLOBAL_OPTIONS option
  * to determine which options need to be printed and how.
+ * Each character should be one of:
+ * '.'    No short option has been assigned. Use --long-opt only.
+ * '-'    The long (and short) option has been disabled.
+ * <c>    Otherwise the short option is character <c>.
  */
 void sam_global_opt_help(FILE *fp, const char *shortopts);
 

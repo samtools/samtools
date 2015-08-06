@@ -102,8 +102,10 @@ int main_depth(int argc, char *argv[])
     int last_pos = -1, last_tid = -1, ret;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
-    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-.--.");
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        { NULL, 0, NULL, 0 }
+    };
 
     // parse the command line
     while ((n = getopt_long(argc, argv, "r:b:q:Q:l:f:a", lopts, NULL)) >= 0) {

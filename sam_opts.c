@@ -28,34 +28,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "sam_opts.h"
 
 /*
- * Assign a short option to each of the long options listed above.
- *
- * There should be one character per option. This will be one of:
- * '.'    No short option has been assigned. Use --long-opt only.
- * '-'    The long (and short) option has been disabled.
- * <c>    Otherwise the short option is character <c>.
- *
- * Consider using varargs to supply a map, or some better tokenised
- * string that allows things out of order.  It's all internal to 
- * samtools though so we can change later without breaking the public
- * API.
- */
-void assign_short_opts(struct option lopts[], const char *shortopts) {
-    int i, j;
-    
-    // Assign sub-command specific short option codes
-    for (i=j=0; shortopts && shortopts[i]; i++,j++) {
-	lopts[j] = lopts[i];
-
-	if (shortopts[i] == '-')
-	    j--; // skip this option.
-	else if (shortopts[i] != '.')
-	    lopts[j].val = shortopts[i];
-    }
-    lopts[j] = lopts[i];
-}
-
-/*
  * Processes a standard "global" samtools long option.
  *
  * The 'c' value is the return value from a getopt_long() call.  It is checked
@@ -115,16 +87,22 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
 /*
  * Report the usage for global options.
  *
- * This accepts the same shortopts string as used by assign_short_opts()
+ * This accepts a string with one character per SAM_OPT_GLOBAL_OPTIONS option
  * to determine which options need to be printed and how.
+ * Each character should be one of:
+ * '.'    No short option has been assigned. Use --long-opt only.
+ * '-'    The long (and short) option has been disabled.
+ * <c>    Otherwise the short option is character <c>.
  */
 void sam_global_opt_help(FILE *fp, const char *shortopts) {
     int i = 0;
 
-    struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    int nopts = sizeof(lopts)/sizeof(*lopts);
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS(0,0,0,0,0),
+        { NULL, 0, NULL, 0 }
+    };
 
-    for (i = 0; shortopts && shortopts[i] && i < nopts; i++) {
+    for (i = 0; shortopts && shortopts[i] && lopts[i].name; i++) {
 	if (shortopts[i] == '-')
 	    continue;
 

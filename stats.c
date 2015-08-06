@@ -1394,9 +1394,9 @@ int main_stats(int argc, char *argv[])
 
     strcpy(in_mode, "rb");
 
-    static struct option loptions[] =
+    static const struct option loptions[] =
     {
-        SAM_GLOBAL_LOPTS,
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
         {"help", no_argument, NULL, 'h'},
         {"remove-dups", no_argument, NULL, 'd'},
         {"sam", no_argument, NULL, 's'},
@@ -1415,8 +1415,6 @@ int main_stats(int argc, char *argv[])
         {NULL, 0, NULL, 0}
     };
     int opt;
-
-    assign_short_opts(loptions, "-.--.");
 
     while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:",loptions,NULL))>0 )
     {

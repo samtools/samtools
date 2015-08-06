@@ -96,8 +96,10 @@ static parsed_opts_t* parse_args(int argc, char** argv)
     const char* optstring = "vf:u:";
     char* delim;
 
-    static struct option lopts[] = SAM_GLOBAL_LOPTS_INIT;
-    assign_short_opts(lopts, "-....");
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0),
+        { NULL, 0, NULL, 0 }
+    };
 
     parsed_opts_t* retval = calloc(sizeof(parsed_opts_t), 1);
     if (! retval ) { perror("cannot allocate option parsing memory"); return NULL; }

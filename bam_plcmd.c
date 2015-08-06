@@ -758,9 +758,9 @@ int bam_mpileup(int argc, char *argv[])
     mplp.output_fname = NULL;
     sam_global_args_init(&mplp.ga);
 
-    static struct option lopts[] =
+    static const struct option lopts[] =
     {
-        SAM_GLOBAL_LOPTS,
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
         {"rf", required_argument, NULL, 1},   // require flag
         {"ff", required_argument, NULL, 2},   // filter flag
         {"incl-flags", required_argument, NULL, 1},
@@ -810,7 +810,6 @@ int bam_mpileup(int argc, char *argv[])
         {"platforms", required_argument, NULL, 'P'},
         {NULL, 0, NULL, 0}
     };
-    assign_short_opts(lopts, "-.--.");
     while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:",lopts,NULL)) >= 0) {
         switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
