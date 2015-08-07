@@ -448,6 +448,7 @@ samtools index
 .RB [ -m
 .IR INT ]
 .IR aln.bam | aln.cram
+.RI [ out.index ]
 
 Index a coordinate-sorted BAM or CRAM file for fast random access.
 (Note that this does not work with SAM files even if they are bgzip
@@ -459,12 +460,13 @@ arguments are used to limit
 .B samtools view
 and similar commands to particular regions of interest.
 
-For a CRAM file
+If an output filename is given, the index file will be written to
+.IR out.index .
+Otherwise, for a CRAM file
 .IR aln.cram ,
 index file
 .IB aln.cram .crai
-will be created.
-For a BAM file
+will be created; for a BAM file
 .IR aln.bam ,
 either
 .IB aln.bam .bai
@@ -678,7 +680,7 @@ Output absolutely all positions, including unused reference sequences
 .BI "-l " INT
 .RI "Ignore reads shorter than " INT
 .TP
-.BI "-m " INT
+.BI "-m, -d " INT
 .RI "Truncate reported depth at a maximum of " INT " reads."
 [8000]
 .TP
@@ -1256,14 +1258,34 @@ Number of temporary files to use.
 
 .TP \"-------- reheader
 .B reheader
-samtools reheader <in.header.sam> <in.bam>
+samtools reheader
+.RB [ -iP ]
+.I in.header.sam in.bam
 
 Replace the header in
 .I in.bam
 with the header in
-.I in.header.sam.
+.IR in.header.sam .
 This command is much faster than replacing the header with a
 BAM\(->SAM\(->BAM conversion.
+
+By default this command outputs the BAM or CRAM file to standard
+output (stdout), but for CRAM format files it has the option to
+perform an in-place edit, both reading and writing to the same file.
+No validity checking is performed on the header, nor that it is suitable
+to use with the sequence data itself.
+
+.B OPTIONS:
+.RS
+.TP 8
+.B -P, --no-PG
+Do not generate an @PG header line.
+.TP 8
+.B -i, --in-place
+Perform the header edit in-place, if possible.  This only works on CRAM
+files and only if there is sufficient room to store the new header.
+The amount of space available will differ for each CRAM file.
+.RE
 
 .TP \"-------- cat
 .B cat

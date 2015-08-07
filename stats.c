@@ -1,6 +1,6 @@
 /*  stats.c -- This is the former bamcheck integrated into samtools/htslib.
 
-    Copyright (C) 2012-2014 Genome Research Ltd.
+    Copyright (C) 2012-2015 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -634,7 +634,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     if ( bam_line->core.flag & BAM_FPAIRED ) stats->nreads_paired_tech++;
 
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
-    uint8_t base, *seq  = bam_get_seq(bam_line);
+    uint8_t *seq  = bam_get_seq(bam_line);
     int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line);
     for (i=0; i<seq_len; i++)
     {

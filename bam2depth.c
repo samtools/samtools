@@ -83,7 +83,7 @@ int main_depth(int argc, char *argv[])
     int last_pos = -1, last_tid = -1;
 
     // parse the command line
-    while ((n = getopt(argc, argv, "r:b:q:Q:l:f:am:")) >= 0) {
+    while ((n = getopt(argc, argv, "r:b:q:Q:l:f:am:d:")) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -95,7 +95,7 @@ int main_depth(int argc, char *argv[])
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
             case 'f': file_list = optarg; break;
             case 'a': all++; break;
-            case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
+            case 'd': case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
         }
     }
     if (optind == argc && !file_list) {
@@ -107,10 +107,14 @@ int main_depth(int argc, char *argv[])
         fprintf(stderr, "   -b <bed>            list of positions or regions\n");
         fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
         fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>)\n");
-        fprintf(stderr, "   -m <int>            maximum coverage depth [8000]\n");  // the htslib's default
+        fprintf(stderr, "   -d/-m <int>         maximum coverage depth [8000]\n");  // the htslib's default
         fprintf(stderr, "   -q <int>            base quality threshold\n");
         fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
         fprintf(stderr, "   -r <chr:from-to>    region\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "The output is a simple tab-separated table with three columns, the reference\n");
+        fprintf(stderr, "name, position, and coverage depth. Note that positions with zero coverage may\n");
+        fprintf(stderr, "may be omitted.\n");
         fprintf(stderr, "\n");
         return 1;
     }

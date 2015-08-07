@@ -48,6 +48,7 @@ test_merge($opts);
 test_fixmate($opts);
 test_calmd($opts);
 test_idxstat($opts);
+test_reheader($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -147,10 +148,12 @@ sub cmd
 #       cmd=> command to test
 #       expect_fail=> as per passed()/failed()
 #       want_fail=> consider passed() if cmd() returns non-zero
+#       out_map => map output filenames to their expected result file (can be used alongside out)
+#       hskip => number of header lines to ignore during diff
 sub test_cmd
 {
     my ($opts,%args) = @_;
-    if ( !exists($args{out}) )
+    if ( !exists($args{out}) && !exists($args{out_map}) )
     {
         if ( !exists($args{in}) ) { error("FIXME: expected out or in key\n"); }
         $args{out} = "$args{in}.out";
@@ -248,6 +251,54 @@ sub test_cmd
                 failed($opts,%args,msg=>$test,reason=>"The outputs stderr differ:\n\t\t$$opts{path}/$args{err}\n\t\t$$opts{path}/$args{err}.new");
             }
             return;
+        }
+    }
+
+    # check other output files
+    if( exists($args{out_map}) )
+    {
+        while ( my($out_actual, $out_expected) = each %{$args{out_map}} )
+        {
+            my $exp = '';
+            if ( open(my $fh,'<',"$$opts{path}/$out_expected") )
+            {
+                my @exp = <$fh>;
+                $exp = join('',@exp);
+                close($fh);
+            }
+            elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_expected: $!"); return; }
+
+            my $out = '';
+            if ( open(my $fh,'<',"$$opts{path}/$out_actual") )
+            {
+                my @out = <$fh>;
+                if( exists($args{hskip}) ){
+                    # Strip hskip lines to allow match to the expected output
+                    splice @out, 0, $args{hskip};
+                }
+                $out = join('',@out);
+                close($fh);
+            }
+            elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_actual: $!"); return; }
+
+            if ( $exp ne $out )
+            {
+                open(my $fh,'>',"$$opts{path}/$out_expected.new") or error("$$opts{path}/$out_expected.new");
+                print $fh $out;
+                close($fh);
+                if ( !-e "$$opts{path}/$out_expected" )
+                {
+                    rename("$$opts{path}/$out_expected.new","$$opts{path}/$out_expected") or error("rename $$opts{path}/$out_expected.new $$opts{path}/$out_expected: $!");
+                    print "\tthe file with expected output does not exist, creating new one:\n";
+                    print "\t\t$$opts{path}/$out_expected\n";
+                }
+                else
+                {
+                    failed($opts,%args,msg=>$test,reason=>"The output files differ:\n\t\t$$opts{path}/$out_expected\n\t\t$$opts{path}/$out_expected.new");
+                }
+                return;
+            }
+            _cmd("rm $$opts{path}/$out_actual");
         }
     }
     passed($opts,%args,msg=>$test);
@@ -2213,6 +2264,10 @@ sub test_merge
     test_cmd($opts,out=>'merge/4.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/dat/test_input_1_b.bam");
     # Merge 5 - 3 file SAM merge all presented on the command line override IDs to file names
     test_cmd($opts,out=>'merge/5.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -r -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
+    # Merge 6 - merge all presented on the command line, combine PG and RG rather than dedup
+    test_cmd($opts,out=>'merge/6.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -cp -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
+    # Merge 7 - ID and SN with regex in them
+    test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
 }
 
 sub test_fixmate
@@ -2243,4 +2298,36 @@ sub test_idxstat
     my ($opts,%args) = @_;
 
     test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.bam", expect_fail=>0);
+}
+
+sub test_reheader
+{
+    my ($opts,%args) = @_;
+
+    local $ENV{REF_PATH} = "$$opts{path}/dat/cram_md5/%s";
+
+    my $fn = "$$opts{path}/dat/view.001";
+
+    # Create local BAM and CRAM inputs
+    system("$$opts{bin}/samtools view -b $fn.sam > $fn.tmp.bam")  == 0 or die "failed to create bam: $?";
+    system("$$opts{bin}/samtools view -C $fn.sam > $fn.tmp.cram") == 0 or die "failed to create cram: $?";
+
+    # Fudge @PG lines.  The version number will differ each commit.
+    # Also the pathname will differ for each install. We'll take it on faith
+    # that these bits work.
+    test_cmd($opts,
+             out=>'reheader/1_view1.sam.expected',
+             err=>'reheader/1_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+
+    test_cmd($opts,
+             out=>'reheader/2_view1.sam.expected',
+             err=>'reheader/2_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+
+    # In-place testing
+    test_cmd($opts,
+             out=>'reheader/3_view1.sam.expected',
+             err=>'reheader/3_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.cram && $$opts{bin}/samtools view -h $fn.tmp.cram | perl -pe 's/\tVN:.*//'");
 }
