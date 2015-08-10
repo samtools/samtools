@@ -23,6 +23,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 #include "../../bam_sort.c"
+#include <assert.h>
 
 void dump_header(bam_hdr_t* hdr) {
     printf("->n_targets:(%d)\n", hdr->n_targets);
@@ -41,7 +42,8 @@ static const char test_1_trans_text[] =
 "@HD\tVN:1.4\tSO:unknown\n"
 "@SQ\tSN:fish\tLN:133\n";
 
-void setup_test_1(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+void setup_test_1(bam_hdr_t** translate_in, bam_hdr_t** out_in,
+                  khash_t(c2i) *out_tid) {
     bam_hdr_t* out;
     bam_hdr_t* translate;
 
@@ -64,6 +66,11 @@ void setup_test_1(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
     out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
     out->target_name[0] = strdup("fish");
     out->target_len[0] = 133;
+
+    int ret = 0;
+    khiter_t iter = kh_put(c2i, out_tid, out->target_name[0], &ret);
+    assert(ret > 0);
+    kh_value(out_tid, iter) = 0;
 
     *translate_in = translate;
     *out_in = out;
@@ -100,7 +107,8 @@ static const char test_2_trans_text[] =
 "@SQ\tSN:donkey\tLN:133\n"
 "@SQ\tSN:fish\tLN:133";
 
-void setup_test_2(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+void setup_test_2(bam_hdr_t** translate_in, bam_hdr_t** out_in,
+                  khash_t(c2i) *out_tid) {
     bam_hdr_t* out;
     bam_hdr_t* translate;
 
@@ -125,6 +133,11 @@ void setup_test_2(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
     out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
     out->target_name[0] = strdup("fish");
     out->target_len[0] = 133;
+
+    int ret = 0;
+    khiter_t iter = kh_put(c2i, out_tid, out->target_name[0], &ret);
+    assert(ret > 0);
+    kh_value(out_tid, iter) = 0;
 
     *translate_in = translate;
     *out_in = out;
@@ -163,7 +176,8 @@ static const char test_3_trans_text[] =
 "@SQ\tSN:fish\tLN:133\n"
 "@RG\tID:fish\tPU:trans\n";
 
-void setup_test_3(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+void setup_test_3(bam_hdr_t** translate_in, bam_hdr_t** out_in,
+                  khash_t(c2i) *out_tid) {
     bam_hdr_t* out;
     bam_hdr_t* translate;
 
@@ -189,6 +203,11 @@ void setup_test_3(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
     out->target_name[0] = strdup("fish");
     out->target_len[0] = 133;
 
+    int ret = 0;
+    khiter_t iter = kh_put(c2i, out_tid, out->target_name[0], &ret);
+    assert(ret > 0);
+    kh_value(out_tid, iter) = 0;
+
     *translate_in = translate;
     *out_in = out;
 }
@@ -209,7 +228,8 @@ static const char test_4_trans_text[] =
 "@SQ\tSN:fish\tLN:133\n"
 "@RG\tID:fish\tPU:trans\n";
 
-void setup_test_4(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+void setup_test_4(bam_hdr_t** translate_in, bam_hdr_t** out_in,
+                  khash_t(c2i) *out_tid) {
     bam_hdr_t* out;
     bam_hdr_t* translate;
 
@@ -236,6 +256,11 @@ void setup_test_4(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
     out->target_name[0] = strdup("fish");
     out->target_len[0] = 133;
 
+    int ret = 0;
+    khiter_t iter = kh_put(c2i, out_tid, out->target_name[0], &ret);
+    assert(ret > 0);
+    kh_value(out_tid, iter) = 0;
+
     *translate_in = translate;
     *out_in = out;
 }
@@ -258,7 +283,8 @@ static const char test_5_trans_text[] =
 "@PG\tXX:dummy\tID:fish\tDS:trans\n"
 "@PG\tPP:fish\tID:hook\tDS:trans\n";
 
-void setup_test_5(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+void setup_test_5(bam_hdr_t** translate_in, bam_hdr_t** out_in,
+                  khash_t(c2i) *out_tid) {
     bam_hdr_t* out;
     bam_hdr_t* translate;
 
@@ -287,6 +313,11 @@ void setup_test_5(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
     out->target_name[0] = strdup("fish");
     out->target_len[0] = 133;
 
+    int ret = 0;
+    khiter_t iter = kh_put(c2i, out_tid, out->target_name[0], &ret);
+    assert(ret > 0);
+    kh_value(out_tid, iter) = 0;
+
     *translate_in = translate;
     *out_in = out;
 }
@@ -309,7 +340,8 @@ static const char test_6_trans_text[] =
 "@PG\tXX:dummy\tID:fish\tDS:trans\n"
 "@PG\tPP:fish\tID:hook\tDS:trans\n";
 
-void setup_test_6(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
+void setup_test_6(bam_hdr_t** translate_in, bam_hdr_t** out_in,
+                  khash_t(c2i) *out_tid) {
     bam_hdr_t* out;
     bam_hdr_t* translate;
 
@@ -334,6 +366,11 @@ void setup_test_6(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
     out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
     out->target_name[0] = strdup("fish");
     out->target_len[0] = 133;
+
+    int ret = 0;
+    khiter_t iter = kh_put(c2i, out_tid, out->target_name[0], &ret);
+    assert(ret > 0);
+    kh_value(out_tid, iter) = 0;
 
     *translate_in = translate;
     *out_in = out;
@@ -377,7 +414,8 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 1\n");
     // setup
     trans_tbl_t tbl_1;
-    setup_test_1(&translate,&out);
+    khash_t(c2i) *out_tid = kh_init(c2i);
+    setup_test_1(&translate, &out, out_tid);
     // test
     if (verbose > 1) {
         printf("translate\n");
@@ -386,7 +424,8 @@ int main(int argc, char**argv)
         dump_header(out);
     }
     if (verbose) printf("RUN test 1\n");
-    trans_tbl_init(out, translate, &tbl_1, false, false, NULL);
+    trans_tbl_init(out, translate, &tbl_1, false, false, NULL, out_tid);
+    kh_destroy(c2i, out_tid);
     if (verbose) printf("END RUN test 1\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -394,7 +433,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_1(translate, out, &tbl_1)) { ++success; } else { ++failure; }
+    if (check_test_1(translate, out, &tbl_1)) {
+        if (verbose) printf("Test 1 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 1 : FAIL\n");
+        fprintf(stderr, "Test 1 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -405,7 +451,8 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 2\n");
     // reinit
     trans_tbl_t tbl_2;
-    setup_test_2(&translate,&out);
+    out_tid = kh_init(c2i);
+    setup_test_2(&translate, &out, out_tid);
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
@@ -413,7 +460,8 @@ int main(int argc, char**argv)
         dump_header(out);
     }
     if (verbose) printf("RUN test 2\n");
-    trans_tbl_init(out, translate, &tbl_2, false, false, NULL);
+    trans_tbl_init(out, translate, &tbl_2, false, false, NULL, out_tid);
+    kh_destroy(c2i, out_tid);
     if (verbose) printf("END RUN test 2\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -421,7 +469,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_2(translate, out, &tbl_2)) { ++success; } else { ++failure; }
+    if (check_test_2(translate, out, &tbl_2)) {
+        if (verbose) printf("Test 2 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 2 : FAIL\n");
+        fprintf(stderr, "Test 2 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -432,7 +487,8 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 3\n");
     // reinit
     trans_tbl_t tbl_3;
-    setup_test_3(&translate,&out);
+    out_tid = kh_init(c2i);
+    setup_test_3(&translate, &out, out_tid);
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
@@ -440,7 +496,8 @@ int main(int argc, char**argv)
         dump_header(out);
     }
     if (verbose) printf("RUN test 3\n");
-    trans_tbl_init(out, translate, &tbl_3, false, false, NULL);
+    trans_tbl_init(out, translate, &tbl_3, false, false, NULL, out_tid);
+    kh_destroy(c2i, out_tid);
     if (verbose) printf("END RUN test 3\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -448,7 +505,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_3(translate, out, &tbl_3)) { ++success; } else { ++failure; }
+    if (check_test_3(translate, out, &tbl_3)) {
+        if (verbose) printf("Test 3 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 3 : FAIL\n");
+        fprintf(stderr, "Test 3 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -459,7 +523,8 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 4\n");
     // reinit
     trans_tbl_t tbl_4;
-    setup_test_4(&translate,&out);
+    out_tid = kh_init(c2i);
+    setup_test_4(&translate, &out, out_tid);
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
@@ -467,7 +532,8 @@ int main(int argc, char**argv)
         dump_header(out);
     }
     if (verbose) printf("RUN test 4\n");
-    trans_tbl_init(out, translate, &tbl_4, false, false, NULL);
+    trans_tbl_init(out, translate, &tbl_4, false, false, NULL, out_tid);
+    kh_destroy(c2i, out_tid);
     if (verbose) printf("END RUN test 4\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -475,7 +541,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_4(translate, out, &tbl_4)) { ++success; } else { ++failure; }
+    if (check_test_4(translate, out, &tbl_4)) {
+        if (verbose) printf("Test 4 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 4 : FAIL\n");
+        fprintf(stderr, "Test 4 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -486,7 +559,8 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 5\n");
     // reinit
     trans_tbl_t tbl_5;
-    setup_test_5(&translate,&out);
+    out_tid = kh_init(c2i);
+    setup_test_5(&translate, &out, out_tid);
     if (verbose > 1) {
 
         printf("translate\n");
@@ -495,7 +569,8 @@ int main(int argc, char**argv)
         dump_header(out);
     }
     if (verbose) printf("RUN test 5\n");
-    trans_tbl_init(out, translate, &tbl_5, false, false, NULL);
+    trans_tbl_init(out, translate, &tbl_5, false, false, NULL, out_tid);
+    kh_destroy(c2i, out_tid);
     if (verbose) printf("END RUN test 5\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -503,7 +578,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_5(translate, out, &tbl_5)) { ++success; } else { ++failure; }
+    if (check_test_5(translate, out, &tbl_5)) {
+        if (verbose) printf("Test 5 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 5 : FAIL\n");
+        fprintf(stderr, "Test 5 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -514,7 +596,8 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 6\n");
     // reinit
     trans_tbl_t tbl_6;
-    setup_test_6(&translate,&out);
+    out_tid = kh_init(c2i);
+    setup_test_6(&translate, &out, out_tid);
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
@@ -522,7 +605,8 @@ int main(int argc, char**argv)
         dump_header(out);
     }
     if (verbose) printf("RUN test 6\n");
-    trans_tbl_init(out, translate, &tbl_6, false, false, "filename");
+    trans_tbl_init(out, translate, &tbl_6, false, false, "filename", out_tid);
+    kh_destroy(c2i, out_tid);
     if (verbose) printf("END RUN test 6\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -530,7 +614,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_6(translate, out, &tbl_6)) { ++success; } else { ++failure; }
+    if (check_test_6(translate, out, &tbl_6)) {
+        if (verbose) printf("Test 6 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 6 : FAIL\n");
+        fprintf(stderr, "Test 6 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
