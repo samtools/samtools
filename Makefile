@@ -164,7 +164,7 @@ bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h samtools.h
 bamtk.o: bamtk.c $(htslib_hts_h) version.h samtools.h
 bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(HTSDIR)/htslib/kseq.h
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
-cut_target.o: cut_target.c $(bam_h) errmod.h $(htslib_faidx_h)
+cut_target.o: cut_target.c $(htslib_sam_h) errmod.h $(htslib_faidx_h) $(sam_opts_h)
 dict.o: dict.c $(htslib_kseq_h) $(htslib_hts_h)
 errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
 kprobaln.o: kprobaln.c kprobaln.h

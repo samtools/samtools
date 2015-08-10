@@ -1,7 +1,7 @@
 /*  cut_target.c -- targetcut subcommand.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2012-2013 Genome Research Ltd.
+    Copyright (C) 2012-2013, 2015 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -26,7 +26,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include "bam.h"
+#include "htslib/sam.h"
 #include "errmod.h"
 #include "htslib/faidx.h"
 #include "sam_opts.h"
@@ -46,7 +46,7 @@ typedef struct {
     int min_baseQ, tid, max_bases;
     uint16_t *bases;
     samFile *fp;
-    bam_header_t *h;
+    bam_hdr_t *h;
     char *ref;
     faidx_t *fai;
     errmod_t *em;
@@ -66,15 +66,15 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
         uint8_t *seq;
         int q, baseQ, b;
         if (p->is_refskip || p->is_del) continue;
-        baseQ = bam1_qual(p->b)[p->qpos];
+        baseQ = bam_get_qual(p->b)[p->qpos];
         if (baseQ < g->min_baseQ) continue;
-        seq = bam1_seq(p->b);
-        b = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos)];
+        seq = bam_get_seq(p->b);
+        b = seq_nt16_int[bam_seqi(seq, p->qpos)];
         if (b > 3) continue;
         q = baseQ < p->b->core.qual? baseQ : p->b->core.qual;
         if (q < 4) q = 4;
         if (q > 63) q = 63;
-        g->bases[k++] = q<<5 | bam1_strand(p->b)<<4 | b;
+        g->bases[k++] = q<<5 | bam_is_rev(p->b)<<4 | b;
     }
     if (k == 0) return 0;
     errmod_cal(g->em, k, 4, g->bases, q);
@@ -88,7 +88,7 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
     return ret<<8|k;
 }
 
-static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
+static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
 {
     int i, f[2][2], *prev, *curr, *swap_tmp, s;
     uint8_t *b; // backtrack array
@@ -199,9 +199,8 @@ int main_cut_target(int argc, char *argv[])
         return 1;
     }
     l = max_l = 0; cns = 0;
-    //g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
     g.fp = sam_open_format(argv[optind], "r", &ga.in);
-    g.h = sam_header_read(g.fp);
+    g.h = sam_hdr_read(g.fp);
     g.em = errmod_init(1. - ERR_DEP);
     plp = bam_plp_init(read_aln, &g);
     while ((p = bam_plp_auto(plp, &tid, &pos, &n)) != 0) {
@@ -221,7 +220,7 @@ int main_cut_target(int argc, char *argv[])
     }
     process_cns(g.h, lasttid, l, cns);
     free(cns);
-    bam_header_destroy(g.h);
+    bam_hdr_destroy(g.h);
     bam_plp_destroy(plp);
     sam_close(g.fp);
     if (g.fai) {
