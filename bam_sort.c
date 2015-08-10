@@ -1185,33 +1185,22 @@ static int sort_usage(FILE *fp, int status)
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -n         Sort by read name\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
-"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')   (either -O or\n"
-"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam       -T is required)\n"
-"  -@ INT     Set number of sorting and compression threads [1]\n"
-"\n"
-"Legacy usage: samtools sort [options...] <in.bam> <out.prefix>\n"
-"Options:\n"
-"  -f         Use <out.prefix> as full final filename rather than prefix\n"
-"  -o         Write final output to stdout rather than <out.prefix>.bam\n"
-"  -l,m,n,@   Similar to corresponding options above\n");
+"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')\n"
+"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
+"  -@ INT     Set number of sorting and compression threads [1]\n");
     return status;
 }
 
 int bam_sort(int argc, char *argv[])
 {
     size_t max_mem = 768<<20; // 512MB
-    int c, i, modern, nargs, is_by_qname = 0, is_stdout = 0, ret = EXIT_SUCCESS, n_threads = 0, level = -1, full_path = 0;
-    char *fnout = "-", *fmtout = NULL, modeout[12], *tmpprefix = NULL;
+    int c, nargs, is_by_qname = 0, ret = EXIT_SUCCESS, n_threads = 0, level = -1, prefix_gen = 0;
+    char *fnin = NULL, *fnout = NULL, *fmtout = NULL, modeout[12], *tmpprefix = NULL;
     kstring_t fnout_buffer = { 0, 0, NULL };
 
-    modern = 0;
-    for (i = 1; i < argc; ++i)
-        if (argv[i][0] == '-' && strpbrk(argv[i], "OT")) { modern = 1; break; }
-
-    while ((c = getopt(argc, argv, modern? "l:m:no:O:T:@:" : "fnom:@:l:")) >= 0) {
+    while ((c = getopt(argc, argv, "l:m:no:O:T:@:")) >= 0) {
         switch (c) {
-        case 'f': full_path = 1; break;
-        case 'o': if (modern) fnout = optarg; else is_stdout = 1; break;
+        case 'o': fnout = optarg; break;
         case 'n': is_by_qname = 1; break;
         case 'm': {
                 char *q;
@@ -1229,41 +1218,66 @@ int bam_sort(int argc, char *argv[])
         }
     }
 
+    fnin = argv[optind];
     nargs = argc - optind;
-    if (argc == 1)
-        return sort_usage(stdout, EXIT_SUCCESS);
-    else if (modern? (nargs > 1) : (nargs != 2))
-        return sort_usage(stderr, EXIT_FAILURE);
-
-    if (!modern) {
-        fmtout = "bam";
-        if (is_stdout) fnout = "-";
-        else if (full_path) fnout = argv[optind+1];
-        else {
-            ksprintf(&fnout_buffer, "%s.%s", argv[optind+1], fmtout);
-            fnout = fnout_buffer.s;
+    if (nargs == 0){
+        if (isatty(STDIN_FILENO)){
+            // Cowardly refusing to allow user to manually type in a SAM file
+            fprintf(stderr, "[bam_sort] No input specified, aborting...\n");
+            return sort_usage(stderr, EXIT_FAILURE);
         }
-        tmpprefix = argv[optind+1];
+        else{
+            // Input is stdin
+            fnin = "-";
+            if (!fmtout) fmtout = "bam";
+        }
+    }
+    if (nargs == 2){
+        // user probably tried to specify legacy <out.prefix>
+        fprintf(stderr, "[bam_sort] Use -T to specify a PREFIX\n");
+        return sort_usage(stdout, EXIT_FAILURE);
+    }
+    else if (nargs > 2) {
+        fprintf(stderr, "[bam_sort] too many arguments\n");
+        return sort_usage(stdout, EXIT_FAILURE);
+    }
+
+    if(fnout){
+        if(fnout[0] == '-' && strlen(fnout) > 1){
+            // user probably specified -o followed by another option that was not '-'
+            fprintf(stderr, "[bam_sort] -o specifies output filename, got option '%s', aborting...\n", fnout);
+            return sort_usage(stderr, EXIT_FAILURE);
+        }
     }
 
     strcpy(modeout, "w");
     if (sam_open_mode(&modeout[1], fnout, fmtout) < 0) {
         if (fmtout) fprintf(stderr, "[bam_sort] can't parse output format \"%s\"\n", fmtout);
-        else fprintf(stderr, "[bam_sort] can't determine output format\n");
-        ret = EXIT_FAILURE;
-        goto sort_end;
+        else{
+            // If not supplied with -O, attempt to infer format with input before
+            // aborting with failure (if not modern, abort anyway)
+            if (!fmtout && sam_open_mode(&modeout[1], argv[optind], fmtout) < 0){
+                fprintf(stderr, "[bam_sort] can't determine output format\n");
+                ret = EXIT_FAILURE;
+                goto sort_end;
+            }
+        }
     }
     if (level >= 0) sprintf(strchr(modeout, '\0'), "%d", level < 9? level : 9);
 
-    if (tmpprefix == NULL) {
-        fprintf(stderr, "[bam_sort] no prefix specified for temporary files (use -T option)\n");
-        ret = EXIT_FAILURE;
-        goto sort_end;
+    if (tmpprefix == NULL){
+        prefix_gen = 1;
+        int tmpprefix_len = strlen(fnin) + 5;
+        tmpprefix = malloc(sizeof(char) * tmpprefix_len);
+        if (tmpprefix == NULL) { perror("out of memory"); exit(-1); }
+        snprintf(tmpprefix, tmpprefix_len, "%s.tmp", fnin);
     }
+    if (fnout == NULL) fnout = "-";
 
-    if (bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-", tmpprefix, fnout, modeout, max_mem, n_threads) < 0) ret = EXIT_FAILURE;
+    if (bam_sort_core_ext(is_by_qname, fnin, tmpprefix, fnout, modeout, max_mem, n_threads) < 0) ret = EXIT_FAILURE;
 
 sort_end:
     free(fnout_buffer.s);
+    if (prefix_gen > 0) free(tmpprefix);
     return ret;
 }
