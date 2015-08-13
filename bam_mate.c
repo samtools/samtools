@@ -297,17 +297,20 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
 
 void usage(FILE* where)
 {
-    fprintf(where,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
-    fprintf(where,"Options:\n");
-    fprintf(stderr,"  -r           Remove unmapped reads and secondary alignments\n");
-    fprintf(stderr,"  -p           Disable FR proper pair check\n");
-    fprintf(stderr,"  -c           Add template cigar ct tag\n");
+    fprintf(where,
+"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n"
+"Options:\n"
+"  -r           Remove unmapped reads and secondary alignments\n"
+"  -p           Disable FR proper pair check\n"
+"  -c           Add template cigar ct tag\n");
 
-    sam_global_opt_help(stderr, "-.O..");
+    sam_global_opt_help(where, "-.O..");
 
-    fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
-    fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
-    fprintf(stderr,"input is not accepted.\n");
+    fprintf(where,
+"\n"
+"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n"
+"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n"
+"input is not accepted.\n");
 }
 
 int bam_mating(int argc, char *argv[])
