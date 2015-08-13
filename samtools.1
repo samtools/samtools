@@ -831,7 +831,7 @@ Splits a file by read group.
 .TP
 .BI "-f " STRING
 Output filename format string (see below)
-["%*_%#.bam"]
+["%*_%#.%."]
 .TP
 .B -v
 Verbose output
@@ -844,6 +844,7 @@ Format string expansions:
   %*     basename
   %#     @RG index
   %!     @RG ID
+  %.     output format filename extension
 .RE
 
 .TP \"-------- dict
@@ -1466,6 +1467,112 @@ the important libraries used by samtools.
 .TP
 .B --version-only
 Display the full samtools version number in a machine-readable format.
+.PP
+.SH GLOBAL OPTIONS
+.PP
+Several long-options are shared between multiple samtools subcommands:
+\fB--input-fmt\fR, \fB--input-fmt-options\fR, \fB--output-fmt\fR,
+\fB--output-fmt-options\fR, and \fB--reference\fR.
+The input format is typically auto-detected so specifying the format
+is usually unnecessary and the option is included for completeness.
+Note that not all subcommands have all options.  Consult the subcommand
+help for more details.
+.PP
+Format strings recognised are "sam", "bam" and "cram".  They may be
+followed by a comma separated list of options as \fIkey\fR or
+\fIkey\fR=\fIvalue\fR. See below for examples.
+.PP
+The \fBfmt-options\fR arguments accept either a single \fIoption\fR or
+\fIoption\fR=\fIvalue\fR.  Note that some options only work on some
+file formats and only on read or write streams.  If value is
+unspecified for a boolean option, the value is assumed to be 1.  The
+valid options are as follows.
+.RS 0
+.\" General purpose
+.TP 4
+.BI nthreads= INT
+Specifies the number of threads to use during encoding and/or
+decoding.  For BAM this will be encoding only.  In CRAM the threads
+are dynamically shared between encoder and decoder.
+.\" CRAM specific
+.TP
+.BI reference= fasta_file
+Specifies a FASTA reference file for use in CRAM encoding or decoding.
+It usually is not required for decoding except in the situation of the
+MD5 not being obtainable via the REF_PATH or REF_CACHE environment variables.
+.TP
+.BI decode_md= 0|1
+CRAM decode only; defaults to 1 (on).  CRAM does not typically store
+MD and NM tags, preferring to generate them on the fly.  This option
+controls this behaviour.
+.TP
+.BI ignore_md5= 0|1
+CRAM decode only; defaults to 0 (off).  When enabled, md5 checksum
+errors on the reference sequence and block checksum errors within CRAM
+are ignored.  Use of this option is strongly discouraged.
+.TP
+.BI required_fields= bit-field
+CRAM decode only; specifies which SAM columns need to be populated.
+By default all fields are used.  Limiting the decode to specific
+columns can have significant performance gains.  The bit-field is a
+numerical value constructed from the following table.
+.TS
+center;
+rb l .
+0x1	SAM_QNAME
+0x2	SAM_FLAG
+0x4	SAM_RNAME
+0x8	SAM_POS
+0x10	SAM_MAPQ
+0x20	SAM_CIGAR
+0x40	SAM_RNEXT
+0x80	SAM_PNEXT
+0x100	SAM_TLEN
+0x200	SAM_SEQ
+0x400	SAM_QUAL
+0x800	SAM_AUX
+0x1000	SAM_RGAUX
+.TE
+.TP
+.BI multi_seq_per_slice= 0|1
+CRAM encode only; defaults to 0 (off).  By default CRAM generates one
+container per reference sequence, except in the case of many small
+references (such as a fragmented assembly).
+.TP
+.BI version= major.minor
+CRAM encode only.  Specifies the CRAM version number.  Acceptable
+values are "2.1" and "3.0".
+.TP
+.BI seqs_per_slice= INT
+CRAM encode only; defaults to 10000.
+.TP
+.BI slices_per_container= INT
+CRAM encode only; defaults to 1.  The effect of having multiple slices
+per container is to share the compression header block between
+multiple slices.  This is unlikely to have any significant impact
+unless the number of sequences per slice is reduced.  (Together these
+two options control the granularity of random access.)
+.TP
+.BI embed_ref= 0|1
+CRAM encode only; defaults to 0 (off).  If 1, this will store portions
+of the reference sequence in each slice, permitting decode without
+having requiring an external copy of the reference sequence.
+.TP
+.BI no_ref= 0|1
+CRAM encode only; defaults to 0 (off).  If 1, sequences will be stored
+verbatim with no reference encoding.  This can be useful if no
+reference is available for the file.
+.RE
+.PP
+For example:
+.RS 4
+.HP 4
+samtools view --input-fmt-option decode_md=0
+.br
+--output-fmt cram,version=3.0 --output-fmt-option embed_ref
+.br
+--output-fmt-option seqs_per_slice=2000 -o foo.cram foo.bam
+.RE
 .PP
 .SH REFERENCE SEQUENCES
 .PP

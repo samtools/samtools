@@ -31,11 +31,13 @@ DEALINGS IN THE SOFTWARE.  */
 #include <inttypes.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <getopt.h>
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "htslib/khash.h"
 #include "samtools.h"
+#include "sam_opts.h"
 KHASH_SET_INIT_STR(rg)
 
 typedef khash_t(rg) *rghash_t;
@@ -231,7 +233,8 @@ int main_samview(int argc, char *argv[])
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     bam_hdr_t *header = NULL;
-    char out_mode[5], *out_format = "", *fn_in = 0, *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
+    char out_mode[5], *out_format = "", *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -246,10 +249,16 @@ int main_samview(int argc, char *argv[])
         .bed = NULL,
     };
 
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T'),
+        { NULL, 0, NULL, 0 }
+    };
+
     /* parse command-line options */
-    /* TODO: convert this to getopt_long we're running out of letters */
     strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
+    while ((c = getopt_long(argc, argv,
+                            "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:",
+                            lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
             if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -298,7 +307,6 @@ int main_samview(int argc, char *argv[])
         //case 'X': out_format = "X"; break;
                  */
         case '?': is_long_help = 1; break;
-        case 'T': fn_ref = strdup(optarg); break;
         case 'B': settings.remove_B = 1; break;
         case '@': n_threads = strtol(optarg, 0, 0); break;
         case 'x':
@@ -311,10 +319,14 @@ int main_samview(int argc, char *argv[])
                 settings.remove_aux[settings.remove_aux_len-1] = optarg;
             }
             break;
-        default: return usage(stderr, EXIT_FAILURE, is_long_help);
+
+        default:
+            if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
+                return usage(stderr, EXIT_FAILURE, is_long_help);
+            break;
         }
     }
-    if (compress_level >= 0) out_format = "b";
+    if (compress_level >= 0 && !*out_format) out_format = "b";
     if (is_header_only) is_header = 1;
     strcat(out_mode, out_format);
     if (compress_level >= 0) {
@@ -326,13 +338,14 @@ int main_samview(int argc, char *argv[])
 
     fn_in = (optind < argc)? argv[optind] : "-";
     // generate the fn_list if necessary
-    if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
+    if (fn_list == 0 && ga.reference) fn_list = samfaipath(ga.reference);
     // open file handlers
-    if ((in = sam_open(fn_in, "r")) == 0) {
+    if ((in = sam_open_format(fn_in, "r", &ga.in)) == 0) {
         print_error_errno("failed to open \"%s\" for reading", fn_in);
         ret = 1;
         goto view_end;
     }
+
     if (fn_list) {
         if (hts_set_fai_filename(in, fn_list) != 0) {
             fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
@@ -354,7 +367,7 @@ int main_samview(int argc, char *argv[])
         header->l_text = l;
     }
     if (!is_count) {
-        if ((out = sam_open(fn_out? fn_out : "-", out_mode)) == 0) {
+        if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
             print_error_errno("failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
             ret = 1;
             goto view_end;
@@ -366,7 +379,8 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
-        if (*out_format || is_header)  {
+        if (*out_format || is_header ||
+            (ga.out.format != sam && ga.out.format != unknown_format))  {
             if (sam_hdr_write(out, header) != 0) {
                 fprintf(stderr, "[main_samview] failed to write the SAM header\n");
                 ret = 1;
@@ -374,7 +388,7 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (fn_un_out) {
-            if ((un_out = sam_open(fn_un_out, out_mode)) == 0) {
+                if ((un_out = sam_open_format(fn_un_out, out_mode, &ga.out)) == 0) {
                 print_error_errno("failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
@@ -388,6 +402,7 @@ int main_samview(int argc, char *argv[])
             }
         }
     }
+
     if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
 
@@ -457,7 +472,8 @@ view_end:
     if (out) check_sam_close(out, fn_out, "standard output", &ret);
     if (un_out) check_sam_close(un_out, fn_un_out, "file", &ret);
 
-    free(fn_list); free(fn_ref); free(fn_out); free(settings.library);  free(fn_un_out);
+    free(fn_list); free(fn_out); free(settings.library);  free(fn_un_out);
+    sam_global_args_free(&ga);
     if ( header ) bam_hdr_destroy(header);
     if (settings.bed) bed_destroy(settings.bed);
     if (settings.rghash) {
@@ -491,7 +507,6 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -U FILE  output reads not selected by filters to FILE [null]\n"
 // extra input
 "  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
-"  -T FILE  reference sequence FASTA FILE [null]\n"
 // read filters
 "  -L FILE  only include reads overlapping this BED FILE [null]\n"
 "  -r STR   only include reads in read group STR [null]\n"
@@ -510,13 +525,26 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 // general options
 "  -@ INT   number of BAM compression threads [0]\n"
 "  -?       print long help, including note about region specification\n"
-"  -S       ignored (input format is auto-detected)\n"
-"\n");
+"  -S       ignored (input format is auto-detected)\n");
+
+    sam_global_opt_help(fp, "-.O.T");
+    fprintf(fp, "\n");
+
     if (is_long_help)
         fprintf(fp,
 "Notes:\n"
 "\n"
 "  1. This command now auto-detects the input format (BAM/CRAM/SAM).\n"
+"     Further control over the CRAM format can be specified by using the\n"
+"     --output-fmt-option, e.g. to specify the number of sequences per slice\n"
+"     and to use avoid reference based compression:\n"
+"     `samtools view -C --output-fmt-option seqs_per_slice=5000 \\\n"
+"         --output-fmt-option no_ref -o out.cram in.bam'\n"
+"\n"
+"     Options can also be specified as a comma separated list within the\n"
+"     --output-fmt value too.  For example this is equivalent to the above\n"
+"     `samtools view --output-fmt cram,seqs_per_slice=5000,no_ref \\\n"
+"         -o out.cram in.bam'\n"
 "\n"
 "  2. The file supplied with `-t' is SPACE/TAB delimited with the first\n"
 "     two fields of each line consisting of the reference name and the\n"
@@ -536,6 +564,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  6. Option `-u' is preferred over `-b' when the output is piped to\n"
 "     another samtools command.\n"
 "\n");
+
     return exit_status;
 }
 
@@ -565,6 +594,7 @@ static void bam2fq_usage(FILE *to)
     fprintf(to, "         -O        output quality in the OQ tag if present\n");
     fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
     fprintf(to, "         -t        copy RG, BC and QT tags to the FASTQ header line\n");
+    sam_global_opt_help(to, "-.--.");
     fprintf(to, "\n");
 }
 
@@ -581,13 +611,26 @@ int main_bam2fq(int argc, char *argv[])
     char* fnse = NULL;
     bool has12 = true, use_oq = false, copy_tags = false;
     int c;
-    while ((c = getopt(argc, argv, "nOts:")) > 0) {
+
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        { NULL, 0, NULL, 0 }
+    };
+
+    while ((c = getopt_long(argc, argv, "nOts:", lopts, NULL)) > 0) {
         switch (c) {
             case 'n': has12 = false; break;
             case 'O': use_oq = true; break;
             case 's': fnse = optarg; break;
             case 't': copy_tags = true; break;
-            default: bam2fq_usage(stderr); return 1;
+            case '?': bam2fq_usage(stderr); return 1;
+
+            default:
+                if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0) {
+                    bam2fq_usage(stderr); return 1;
+                }
+                break;
         }
     }
 
@@ -602,13 +645,15 @@ int main_bam2fq(int argc, char *argv[])
         return 1;
     }
 
-    fp = sam_open(argv[optind], "r");
+    fp = sam_open_format(argv[optind], "r", &ga.in);
     if (fp == NULL) {
         print_error_errno("Cannot read file \"%s\"", argv[optind]);
         return 1;
     }
-    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS,
-                    SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL)) {
+
+    uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
+    if (use_oq) rf |= SAM_AUX;
+    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
         return 1;
     }
@@ -645,8 +690,9 @@ int main_bam2fq(int argc, char *argv[])
     char* previous = NULL;
     kstring_t linebuf = { 0, 0, NULL };
     kputsn("", 0, &linebuf);
+    int ret;
 
-    while (sam_read1(fp, h, b) >= 0) {
+    while ((ret = sam_read1(fp, h, b)) >= 0) {
         if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) continue; // skip secondary and supplementary alignments
         ++n_reads;
 
@@ -744,6 +790,11 @@ int main_bam2fq(int argc, char *argv[])
         }
     }
 
+    if (ret < -1) {
+        fprintf(stderr, "[bam2fq] ERROR: failed to decode sequence\n");
+        return 1;
+    }
+
     if (fpse) {
         if ( previous ) { // Nothing left to match it's a singleton
             ++n_singletons;
@@ -762,6 +813,7 @@ int main_bam2fq(int argc, char *argv[])
 
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
 
+    sam_global_args_free(&ga);
     free(buf);
     bam_destroy1(b);
     bam_hdr_destroy(h);

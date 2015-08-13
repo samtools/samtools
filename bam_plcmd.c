@@ -39,6 +39,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/khash_str2int.h>
 #include "sam_header.h"
 #include "samtools.h"
+#include "sam_opts.h"
 
 static inline int printw(int c, FILE *fp)
 {
@@ -124,6 +125,7 @@ typedef struct {
     void *bed, *rghash;
     int argc;
     char **argv;
+    sam_global_args ga;
 } mplp_conf_t;
 
 typedef struct {
@@ -341,7 +343,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     for (i = 0; i < n; ++i) {
         bam_hdr_t *h_tmp;
         data[i] = calloc(1, sizeof(mplp_aux_t));
-        data[i]->fp = sam_open(fn[i], "rb");
+        data[i]->fp = sam_open_format(fn[i], "rb", &conf->ga.in);
         if ( !data[i]->fp )
         {
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
@@ -803,7 +805,9 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -o, --open-prob INT     Phred-scaled gap open seq error probability [%d]\n", mplp->openQ);
     fprintf(fp,
 "  -p, --per-sample-mF     apply -m and -F per-sample for increased sensitivity\n"
-"  -P, --platforms STR     comma separated list of platforms for indels [all]\n"
+"  -P, --platforms STR     comma separated list of platforms for indels [all]\n");
+    sam_global_opt_help(fp, "-.--.");
+    fprintf(fp,
 "\n"
 "Notes: Assuming diploid individuals.\n");
 
@@ -828,8 +832,11 @@ int bam_mpileup(int argc, char *argv[])
     mplp.argc = argc; mplp.argv = argv;
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
     mplp.output_fname = NULL;
+    sam_global_args_init(&mplp.ga);
+
     static const struct option lopts[] =
     {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
         {"rf", required_argument, NULL, 1},   // require flag
         {"ff", required_argument, NULL, 2},   // filter flag
         {"incl-flags", required_argument, NULL, 1},
@@ -952,7 +959,10 @@ int bam_mpileup(int argc, char *argv[])
             break;
         case 't': mplp.fmt_flag |= parse_format_flag(optarg); break;
         default:
-            fprintf(stderr,"Invalid option: '%c'\n", c);
+            if (parse_sam_global_opt(c, optarg, lopts, &mplp.ga) == 0) break;
+            /* else fall-through */
+        case '?':
+            print_usage(stderr, &mplp);
             return 1;
         }
     }
