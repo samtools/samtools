@@ -494,7 +494,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     if ( (getline(&res, &len, check) != -1 ) &&
-        res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+        res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.\n",res)) {
         ++success;
     } else {
         ++failure;
@@ -530,7 +530,7 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     if ( (getline(&res, &len, check) != -1 ) &&
-        res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost\n",res)) {
+        res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.\n",res)) {
         ++success;
     } else {
         ++failure;

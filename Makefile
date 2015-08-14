@@ -71,7 +71,6 @@ MISC_PROGRAMS = \
 
 BUILT_TEST_PROGRAMS = \
 	test/merge/test_bam_translate \
-	test/merge/test_pretty_header \
 	test/merge/test_rtrans_build \
 	test/merge/test_trans_tbl_init \
 	test/split/test_count_rg \
@@ -184,7 +183,6 @@ stats.o: stats.c $(sam_h) sam_header.h samtools.h stats_isize.h $(HTSDIR)/htslib
 check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 	REF_PATH=: test/test.pl --exec bgzip=$(BGZIP)
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
-	test/merge/test_pretty_header
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
 	cd test/mpileup && ./regression.sh mpileup.reg
@@ -197,9 +195,6 @@ check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o $(HTSLIB) -lz $(LIBS)
-
-test/merge/test_pretty_header: test/merge/test_pretty_header.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_pretty_header.o $(HTSLIB) -lz $(LIBS)
 
 test/merge/test_rtrans_build: test/merge/test_rtrans_build.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o $(HTSLIB) -lz $(LIBS)
@@ -225,7 +220,6 @@ test/vcf-miniview: test/vcf-miniview.o $(HTSLIB)
 test_test_h = test/test.h $(htslib_sam_h)
 
 test/merge/test_bam_translate.o: test/merge/test_bam_translate.c $(test_test_h) bam_sort.o
-test/merge/test_pretty_header.o: test/merge/test_pretty_header.c bam_sort.o
 test/merge/test_rtrans_build.o: test/merge/test_rtrans_build.c bam_sort.o
 test/merge/test_trans_tbl_init.o: test/merge/test_trans_tbl_init.c bam_sort.o
 test/split/test_count_rg.o: test/split/test_count_rg.c bam_split.o $(test_test_h)

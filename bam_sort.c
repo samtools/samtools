@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <regex.h>
 #include <time.h>
 #include <unistd.h>
+#include <assert.h>
 #include "htslib/ksort.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
@@ -58,10 +59,11 @@ void memset_pattern4(void *target, const void *pattern, size_t size) {
 #endif
 
 KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
+KHASH_INIT(cset, char*, char, 0, kh_str_hash_func, kh_str_hash_equal)
 KHASH_MAP_INIT_STR(c2i, int)
 
-#define __free_char(p)
-KLIST_INIT(hdrln, char*, __free_char)
+#define hdrln_free_char(p)
+KLIST_INIT(hdrln, char*, hdrln_free_char)
 
 static int g_is_by_qname = 0;
 
@@ -112,6 +114,22 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 
 KSORT_INIT(heap, heap1_t, heap_lt)
 
+typedef struct merged_header {
+    kstring_t     out_hd;
+    kstring_t     out_sq;
+    kstring_t     out_rg;
+    kstring_t     out_pg;
+    kstring_t     out_co;
+    char        **target_name;
+    uint32_t     *target_len;
+    size_t        n_targets;
+    size_t        targets_sz;
+    khash_t(c2i) *sq_tids;
+    khash_t(cset) *rg_ids;
+    khash_t(cset) *pg_ids;
+    bool          have_hd;
+} merged_header_t;
+
 typedef struct trans_tbl {
     int32_t n_targets;
     int* tid_trans;
@@ -121,17 +139,25 @@ typedef struct trans_tbl {
 } trans_tbl_t;
 
 static void trans_tbl_destroy(trans_tbl_t *tbl) {
-    free(tbl->tid_trans);
     khiter_t iter;
+
+    free(tbl->tid_trans);
+
+    /*
+     * The values for the tbl->rg_trans and tbl->pg_trans hashes are pointers
+     * to keys in the rg_ids and pg_ids sets of the merged_header_t, so
+     * they should not be freed here.
+     *
+     * The keys are unique to each hash entry, so they do have to go.
+     */
+
     for (iter = kh_begin(tbl->rg_trans); iter != kh_end(tbl->rg_trans); ++iter) {
         if (kh_exist(tbl->rg_trans, iter)) {
-            free(kh_value(tbl->rg_trans, iter));
             free(kh_key(tbl->rg_trans, iter));
         }
     }
     for (iter = kh_begin(tbl->pg_trans); iter != kh_end(tbl->pg_trans); ++iter) {
         if (kh_exist(tbl->pg_trans, iter)) {
-            free(kh_value(tbl->pg_trans, iter));
             free(kh_key(tbl->pg_trans, iter));
         }
     }
@@ -140,169 +166,225 @@ static void trans_tbl_destroy(trans_tbl_t *tbl) {
     kh_destroy(c2c,tbl->pg_trans);
 }
 
-// scan text_in, copying all lines beginning with the string header_type to
-// the buffer output_pointer. Return a pointer to the first unused position in
-// output_pointer after the last copied newline.
-static char *copy_headers(char *output_pointer, const char *header_type, char *text_in) {
-    char *begin_pointer;
-    const char *end_pointer = text_in;
-    while ((begin_pointer = strstr(end_pointer, header_type))) {
-        end_pointer = strchr(begin_pointer, '\n');
-        // Copy header line, provided the match was at the start of the line
-        if (begin_pointer == text_in || *(begin_pointer - 1) == '\n') {
-            size_t length = end_pointer - begin_pointer + 1;
-            memcpy(output_pointer, begin_pointer, length);
-            output_pointer += length;
-            *begin_pointer = '#';  // Mark header as copied
-        }
-    }
-    return output_pointer;
+/*
+ *  Create a merged_header_t struct.
+ */
+
+static merged_header_t * init_merged_header() {
+    merged_header_t *merged_hdr;
+
+    merged_hdr = calloc(1, sizeof(*merged_hdr));
+    if (merged_hdr == NULL) return NULL;
+
+    merged_hdr->targets_sz   = 16;
+    merged_hdr->target_name = malloc(merged_hdr->targets_sz
+                                     * sizeof(*merged_hdr->target_name));
+    if (NULL == merged_hdr->target_name) goto fail;
+    
+    merged_hdr->target_len = malloc(merged_hdr->targets_sz
+                                    * sizeof(*merged_hdr->target_len));
+    if (NULL == merged_hdr->target_len) goto fail;
+
+    merged_hdr->sq_tids = kh_init(c2i);
+    if (merged_hdr->sq_tids == NULL) goto fail;
+
+    merged_hdr->rg_ids = kh_init(cset);
+    if (merged_hdr->rg_ids == NULL) goto fail;
+
+    merged_hdr->pg_ids = kh_init(cset);
+    if (merged_hdr->pg_ids == NULL) goto fail;
+
+    return merged_hdr;
+
+ fail:
+    perror("[init_merged_header]");
+    kh_destroy(cset, merged_hdr->pg_ids);
+    kh_destroy(cset, merged_hdr->rg_ids);
+    kh_destroy(c2i, merged_hdr->sq_tids);
+    free(merged_hdr->target_name);
+    free(merged_hdr->target_len);
+    free(merged_hdr);
+    return NULL;
 }
 
-// Takes in existing header and rewrites it in the usual order HD, SQ, RG, PG CO, other
-static void pretty_header(char** text_in_out, int32_t text_len)
-{
-    char *output, *output_pointer;
-    output = output_pointer = (char*)calloc(1,text_len+1);
-    output[text_len] = '\0';
+/* Some handy kstring manipulating functions */
 
-    // Read @HD and write
-    output_pointer = copy_headers(output_pointer, "@HD", *text_in_out);
-
-    // Read @SQ's and write
-    output_pointer = copy_headers(output_pointer, "@SQ", *text_in_out);
-
-    // Read @RG's and write
-    output_pointer = copy_headers(output_pointer, "@RG", *text_in_out);
-
-    // Read @PG's and write
-    output_pointer = copy_headers(output_pointer, "@PG", *text_in_out);
-
-    // Read any other headers (including @CO) and write
-    char *line, *end_pointer;
-    for (line = *text_in_out; *line; line = end_pointer + 1) {
-        end_pointer = strchr(line, '\n');
-        if (end_pointer == NULL) abort();
-        if (line[0] == '@') {
-            size_t length = end_pointer - line + 1;
-            memcpy(output_pointer, line, length);
-            output_pointer += length;
-        }
-    }
-
-    // Safety check, make sure we copied it all, if we didn't something is wrong with the header
-    if ( output+text_len != output_pointer ) {
-        fprintf(stderr, "[pretty_header] invalid header\n");
-        exit(1);
-    }
-    free(*text_in_out);
-    *text_in_out = output;
+// Append char range to kstring
+static inline int range_to_ks(const char *src, int from, int to,
+                              kstring_t *dest) {
+    return kputsn(src + from, to - from, dest) != to - from;
 }
 
-static char* regex_escape(const char* input)
-{
-    size_t new_size = strlen(input) + 1;
-    char* output = (char*)malloc((2*new_size)+1);
-    if (output == NULL) {
-        perror("[regex_escape] Error allocating memory for regex escape buffer");
-        exit(1);
-    }
-    char* output_iter = output;
-    const char* input_iter = input;
-
-    while (*input_iter != '\0') {
-        switch (*input_iter) {
-            case '.':
-            case '[':
-            case '{':
-            case '}':
-            case '(':
-            case ')':
-            case '\\':
-            case '*':
-            case '+':
-            case '?':
-            case '|':
-            case '^':
-            case '$':
-                *output_iter = '\\';
-                ++output_iter;
-                ++new_size;
-                break;
-            default:
-                break;
-        }
-
-        *output_iter = *input_iter;
-        ++input_iter;
-        ++output_iter;
-    }
-    *output_iter = '\0';
-
-    output = realloc(output,new_size); // This should always be smaller than (2*new_size)+1 and thus never fail
-    return output;
+// Append a regexp match to kstring
+static inline int match_to_ks(const char *src, const regmatch_t *match,
+                              kstring_t *dest) {
+    return range_to_ks(src, match->rm_so, match->rm_eo, dest);
 }
 
-static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, const char* rg_override, khash_t(c2i)* out_tid)
-{
-    tbl->n_targets = translate->n_targets;
-    tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
-    tbl->rg_trans = kh_init(c2c);
-    tbl->pg_trans = kh_init(c2c);
-    if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
+// Append a kstring to a kstring
+static inline int ks_to_ks(kstring_t *src, kstring_t *dest) {
+    return kputsn(ks_str(src), ks_len(src), dest) != ks_len(src);
+}
 
-    int32_t out_len = out->l_text;
-    while (out_len > 0 && out->text[out_len-1] == '\n') {--out_len; } // strip trailing \n's
-    kstring_t out_text = { 0, 0, NULL };
-    kputsn(out->text, out_len, &out_text);
+/* 
+ * Generate a unique ID by appending a random suffix to a given prefix.
+ * existing_ids is the set of IDs that are already in use.
+ * If always_add_suffix is true, the suffix will always be included.
+ * If false, prefix will be returned unchanged if it isn't in existing_ids.
+ */
 
-    int i, ilim, min_tid = -1;
-    tbl->lost_coord_sort = false;
+static int gen_unique_id(char *prefix, khash_t(cset) *existing_ids,
+                         bool always_add_suffix, kstring_t *dest) {
+    khiter_t iter;
 
-    // @HD
-    {
-        regex_t hd;
-        regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-        regmatch_t* matches_2 = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-        if (matches == NULL) { perror("out of memory"); exit(-1); }
-        regcomp(&hd, "^@HD.*", REG_EXTENDED|REG_NEWLINE);
-        if (regexec(&hd, translate->text, 1, matches, 0) != 0)
-        {
-            fprintf(stderr, "No @HD tag found.\n");
-            exit(1);
+    if (!always_add_suffix) {
+        // Try prefix on its own first
+        iter = kh_get(cset, existing_ids, prefix);
+        if (iter == kh_end(existing_ids)) { // prefix isn't used yet
+            dest->l = 0;
+            if (kputs(prefix, dest) == EOF) return -1;
+            return 0;
         }
-        // Only add @HD tag if not already in output
-        if (regexec(&hd, out->text, 1, matches_2, 0) != 0)
-        {
-            kputsn(translate->text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &out_text);
-        } // TODO: handle case when @HD needs merging.
-        regfree(&hd);
-        free(matches_2);
-        free(matches);
     }
 
-    // SQ
+    do {
+        dest->l = 0;
+        ksprintf(dest, "%s-%0lX", prefix, lrand48());
+        iter = kh_get(cset, existing_ids, ks_str(dest));
+    } while (iter != kh_end(existing_ids));
 
-    int old_n_targets = out->n_targets;
+    return 0;
+}
+
+/*
+ * Add the @HD line to the new header
+ * In practice the @HD line will come from the first input header.
+ */
+
+static int trans_tbl_add_hd(merged_header_t* merged_hdr,
+                            bam_hdr_t *translate) {
+    regex_t hd;
+    regmatch_t match = {0, 0};
+    int err;
+
+    // TODO: handle case when @HD needs merging.
+    if (merged_hdr->have_hd) return 0;
+    
+    err = regcomp(&hd, "^@HD.*", REG_EXTENDED|REG_NEWLINE);
+    if (err) {
+        fprintf(stderr, "[%s] failed to compile regex\n", __func__);
+        return -1;
+    }
+
+    if (regexec(&hd, translate->text, 1, &match, 0) != 0) {
+        fprintf(stderr, "[%s] No @HD tag found.\n", __func__);
+        goto fail;
+    }
+
+    if (match_to_ks(translate->text, &match, &merged_hdr->out_hd)) goto memfail;
+    if (kputc('\n', &merged_hdr->out_hd) == EOF) goto memfail;
+    merged_hdr->have_hd = true;
+    regfree(&hd);
+
+    return 0;
+
+ memfail:
+    perror(__func__);
+ fail:
+    regfree(&hd);
+    return -1;
+}
+
+static inline int grow_target_list(merged_header_t* merged_hdr) {
+    size_t     new_size;
+    char     **new_names;
+    uint32_t  *new_len;
+
+    new_size = merged_hdr->targets_sz * 2;
+    new_names = realloc(merged_hdr->target_name, sizeof(*new_names) * new_size);
+    if (!new_names) goto fail;
+    merged_hdr->target_name = new_names;
+
+    new_len = realloc(merged_hdr->target_len, sizeof(*new_len) * new_size);
+    if (!new_len) goto fail;
+    merged_hdr->target_len = new_len;
+
+    merged_hdr->targets_sz = new_size;
+
+    return 0;
+
+ fail:
+    perror(__func__);
+    return -1;
+}
+
+/*
+ * Add @SQ records to the translation table.
+ *
+ * Go through the target list for the input header.  Any new targets found
+ * are added to the output header target list.  At the same time, a mapping
+ * from the input to output target ids is stored in tbl.
+ *
+ * If any new targets are found, the header text is scanned to find the
+ * corresponding @SQ records.  They are then copied into the
+ * merged_hdr->out_text kstring (which will eventually become the
+ * output header text).
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+
+static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
+                            trans_tbl_t* tbl) {
+
+    kstring_t *out_text = &merged_hdr->out_sq;
+    khash_t(c2i)* sq_tids = merged_hdr->sq_tids;
+    unsigned char *new_sq_seen = NULL;
+    char *text;
+    const char *sq_re = "^@SQ.*\tSN:([^\t]+).*$";
+    regex_t sq;
+    regmatch_t matches[2];
+    bool sq_compiled = false;
+    int32_t i, missing;
+    int32_t old_n_targets = merged_hdr->n_targets;
+    khiter_t iter;
+    int min_tid = -1, err;
+
+    // Fill in the tid part of the translation table, adding new targets
+    // to the merged header as we go.
 
     for (i = 0; i < translate->n_targets; ++i) {
-        khiter_t iter = kh_get(c2i, out_tid, translate->target_name[i]);
 
-        if (iter == kh_end(out_tid)) { // Append missing entries to out
-            tbl->tid_trans[i] = out->n_targets++;
-            out->target_name = (char**)realloc(out->target_name, sizeof(char*)*out->n_targets);
-            out->target_name[out->n_targets-1] = strdup(translate->target_name[i]);
-            out->target_len = (uint32_t*)realloc(out->target_len, sizeof(uint32_t)*out->n_targets);
-            out->target_len[out->n_targets-1] = translate->target_len[i];
+        // Check if it's a new target.
+        iter = kh_get(c2i, sq_tids, translate->target_name[i]);
 
-            // Record the new identifier for reference below, and when building the ttable for other inputs.
+        if (iter == kh_end(sq_tids)) {
             int ret;
-            khiter_t iter = kh_put(c2i, out_tid, out->target_name[out->n_targets-1], &ret);
-            if (ret <= 0) abort();
-            kh_value(out_tid, iter) = out->n_targets - 1;
+            // Append missing entries to out_hdr
+
+            if (merged_hdr->n_targets == merged_hdr->targets_sz) {
+                if (grow_target_list(merged_hdr)) goto fail;
+            }
+
+            merged_hdr->target_name[merged_hdr->n_targets] = strdup(translate->target_name[i]);
+            if (merged_hdr->target_name[merged_hdr->n_targets] == NULL) goto memfail;
+            merged_hdr->target_len[merged_hdr->n_targets] = translate->target_len[i];
+
+            // Record the new identifier for reference below,
+            // and when building the ttable for other inputs.
+            iter = kh_put(c2i, sq_tids,
+                          merged_hdr->target_name[merged_hdr->n_targets], &ret);
+            if (ret < 0) {
+                free(merged_hdr->target_name[merged_hdr->n_targets]);
+                goto memfail;
+            }
+            assert(ret > 0);  // Should not be in hash already.
+
+            kh_value(sq_tids, iter) = merged_hdr->n_targets;
+            tbl->tid_trans[i] = merged_hdr->n_targets++;
         } else {
-            tbl->tid_trans[i] = kh_value(out_tid, iter);
+            tbl->tid_trans[i] = kh_value(sq_tids, iter);
         }
+
         if (tbl->tid_trans[i] > min_tid) {
             min_tid = tbl->tid_trans[i];
         } else {
@@ -310,338 +392,538 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         }
     }
 
-    if(old_n_targets != out->n_targets) {
+    if (merged_hdr->n_targets == old_n_targets)
+        return 0;  // Everything done if no new targets.
 
-        // Find @SQ lines in translate->text for all newly added targets. Do a single
-        // sweep through translate->text to avoid quadratic cost. Record each one's offsets within translate->text.
+    // Otherwise, find @SQ lines in translate->text for all newly added targets.
 
-        int* new_header_so = (int*)malloc(sizeof(int) * (out->n_targets - old_n_targets));
-        int* new_header_eo = (int*)malloc(sizeof(int) * (out->n_targets - old_n_targets));
-
-        for(i = 0, ilim = out->n_targets - old_n_targets; i != ilim; ++i) {
-            new_header_so[i] = -1;
-            new_header_eo[i] = -1;
-        }
-
-        if(!new_header_so || !new_header_eo) {
-            fprintf(stderr, "[trans_tbl_init] new_header_s/eo out of memory\n");
-            exit(1);
-        }
-
-        const char* translate_text_offset = translate->text;
-
-        while(1) {
-
-            // Find @SQ at the start of a line, or start of translate->text.
-            const char* rec_start;
-            if(!strcmp(translate_text_offset, "@SQ"))
-                rec_start = translate_text_offset;
-            else {
-                rec_start = strstr(translate_text_offset, "\n@SQ");
-                if(rec_start)
-                    ++rec_start;
-            }
-
-            if(!rec_start)
-                break;
-
-            const char* rec_end = strchr(rec_start, '\n');
-            if(!rec_end)
-                rec_end = rec_start + strlen(rec_start);
-
-            const char* tag_start = strstr(rec_start, "\tSN:");
-            if(tag_start) {
-
-                // Skip tag ID:
-                tag_start += 4;
-
-                const char* tag_end = tag_start;
-                while(tag_end < rec_end && (*tag_end) != '\t')
-                    ++tag_end;
-
-                const char* this_sq_name = strndup(tag_start, tag_end - tag_start);
-                if(!this_sq_name) {
-                    fprintf(stderr, "[trans_tbl_init] strndup out of memory\n");
-                    exit(1);
-                }
-
-                khiter_t iter = kh_get(c2i, out_tid, this_sq_name);
-                if (iter == kh_end(out_tid)) { 
-                    fprintf(stderr, "[trans_tbl_init] SQ entry (%s) in text but not table?\n", this_sq_name);
-                    exit(1);
-                }
-
-                free((void*)this_sq_name);
-
-                int this_sq_idx = kh_value(out_tid, iter);
-
-                if(this_sq_idx >= old_n_targets) {
-
-                    // This is a newly added sequence -- record where we found it.
-                    new_header_so[this_sq_idx - old_n_targets] = rec_start - translate->text;
-                    new_header_eo[this_sq_idx - old_n_targets] = rec_end - translate->text;
-                    
-                }
-
-            }
-            else {
-
-                fprintf(stderr, "Tag with no SN? %.*s\n", (int)(rec_end - rec_start), rec_start);
-
-            }
-
-            // Skip forwards for next match
-            translate_text_offset = rec_end;
-            
-        }
-
-        // Append each new text header we found:
-        
-        for(i = 0, ilim = (out->n_targets - old_n_targets); i != ilim; ++i) {
-
-            if(new_header_so[i] == -1 || new_header_eo[i] == -1) {
-                fprintf(stderr, "[trans_tbl_init] @SQ SN (%s) found in binary header but not text header.\n", translate->target_name[i + old_n_targets]);
-                exit(1);
-            }
-
-            // Produce our output line and append it to out_text
-            kputc('\n', &out_text);
-            kputsn(translate->text + new_header_so[i], new_header_eo[i] - new_header_so[i], &out_text);
-
-        }
-
-        free(new_header_so);
-        free(new_header_eo);
-
+    err = regcomp(&sq, sq_re, REG_EXTENDED|REG_NEWLINE);
+    if (err) {
+        fprintf(stderr, "[%s] failed to compile regex /%s/\n",
+                __func__, sq_re);
+        goto fail;
     }
-            
-    // grep @RG id's
-    regex_t rg_id;
-    regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-    if (matches == NULL) { perror("out of memory"); exit(-1); }
-    regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-    char* text = translate->text;
-    klist_t(hdrln) *rg_list = kl_init(hdrln);
-    bool loop = true;
-    while(loop) { //   foreach rg id in translate's header
-        if (regexec(&rg_id, text, 2, matches, 0) != 0) break;
-        // matches[0] is the whole @RG line; matches[1] is the ID field value
-        kstring_t match_id = { 0, 0, NULL };
-        kputsn(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &match_id);
+    sq_compiled = true;
 
-        // is our matched ID in our output list already
-        regex_t rg_id_search;
-        kstring_t rg_regex = { 0, 0, NULL };
-        char *rg_id_escaped = regex_escape(match_id.s);
-        ksprintf(&rg_regex, "^@RG.*\tID:%s(\t.*$|$)", rg_id_escaped);
-        free(rg_id_escaped);
-        regcomp(&rg_id_search, rg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
-        free(rg_regex.s);
-        kstring_t transformed_id = { 0, 0, NULL };
-        bool transformed_equals_match; // Have we changed the ID of this line?
-        bool not_found_in_output; // Do we need to add this line to our output?
-        not_found_in_output = regexec(&rg_id_search, out->text, 0, NULL, 0) == REG_NOMATCH;
+    new_sq_seen = calloc(merged_hdr->n_targets - old_n_targets,
+                         sizeof(*new_sq_seen));
+    if (new_sq_seen == NULL) goto memfail;
 
-        if (rg_override) {
-            // If we're overriding RG terminate the loop early
-            kputs(rg_override, &transformed_id);
-            transformed_equals_match = false;
-            rg_override = NULL;
-            loop = false;
-        } else {
-            if ( not_found_in_output || merge_rg) {
-                // Not in there so can add it as 1-1 mapping
-                kputs(match_id.s, &transformed_id);
-                transformed_equals_match = true;
-            } else {
-                // It's in there so we need to transform it by appending random number to id
-                ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
-                transformed_equals_match = false;
-            }
+    text = translate->text;
+    while ((err = regexec(&sq, text, 2, matches, 0)) == 0) {
+        // matches[0] is whole line, matches[1] is SN value.
+        
+        // This is a bit disgusting, but avoids a copy...
+        char c = text[matches[1].rm_eo];
+        int idx;
+        
+        text[matches[1].rm_eo] = '\0';
+        
+        // Look up the SN value in the sq_tids hash.
+        iter = kh_get(c2i, sq_tids, text + matches[1].rm_so);
+        text[matches[1].rm_eo] = c; // restore text
+        
+        if (iter == kh_end(sq_tids)) {
+            // Warn about this, but it's not really fatal.
+            fprintf(stderr, "[W::%s] @SQ SN (%.*s) found in text header but not binary header.\n",
+                    __func__,
+                    (int) (matches[1].rm_eo - matches[1].rm_so),
+                    text + matches[1].rm_so);
+            text += matches[0].rm_eo;
+            continue;  // Skip to next
         }
-        regfree(&rg_id_search);
 
-        // Insert it into our translation map
-        int in_there = 0;
-        khiter_t iter = kh_put(c2c, tbl->rg_trans, ks_release(&match_id), &in_there);
-        char *transformed_id_s = ks_release(&transformed_id);
-        kh_value(tbl->rg_trans,iter) = transformed_id_s;
-        // take matched line and replace ID with transformed_id
-        kstring_t transformed_line = { 0, 0, NULL };
-        if (transformed_equals_match) {
-            kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
+        idx = kh_value(sq_tids, iter);
+        if (idx >= old_n_targets) {
+            // is a new SQ, so add it to out_text.
+            assert(idx < merged_hdr->n_targets);
+            new_sq_seen[idx - old_n_targets] = 1;
+            if (match_to_ks(text, &matches[0], out_text)) goto memfail;
+            if (kputc('\n', out_text) == EOF) goto memfail;
+        }
+
+        // Carry on searching from end of current match
+        text += matches[0].rm_eo;
+    }
+
+    if (err != REG_NOMATCH) {
+        char buffer[256] = { 0 };
+        regerror(err, &sq, buffer, sizeof(buffer));
+        fprintf(stderr, "[%s] error executing regex /%s/ : %s\n",
+                __func__, sq_re, buffer);
+        goto fail;
+    }
+
+    // Check if any new targets have been missed
+    missing = 0;
+    for (i = 0; i < merged_hdr->n_targets - old_n_targets; i++) {
+        if (!new_sq_seen[i]) {
+            fprintf(stderr, "[E::%s] @SQ SN (%s) found in binary header but not text header.\n",
+                    __func__, merged_hdr->target_name[i + old_n_targets]);
+            missing++;
+        }
+    }
+    if (missing) goto fail;
+
+    free(new_sq_seen);
+    regfree(&sq);
+    return 0;
+
+ memfail:
+    perror(__func__);
+ fail:
+    free(new_sq_seen);
+    if (sq_compiled) regfree(&sq);
+    return -1;
+}
+
+/*
+ * Common code for setting up RG and PG record ID tag translation.
+ *
+ * is_rg is true for RG translation, false for PG.
+ * translate is the input bam header
+ * merge is true if tags with the same ID are to be merged.
+ * known_ids is the set of IDs already in the output header.
+ * id_map is the translation map from input header IDs to output header IDs
+ * If override is set, it will be used to replace the existing ID (RG only)
+ *
+ * known_ids and id_map have entries for the new IDs added to them.
+ *
+ * Return value is a linked list of header lines with the translated IDs,
+ * or NULL if something went wrong (probably out of memory).
+ *
+ */
+
+static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
+                                    bool merge, khash_t(cset)* known_ids,
+                                    khash_t(c2c)* id_map, char *override) {
+    regmatch_t matches[2];
+    regex_t re;
+    int err;
+    khiter_t iter;
+    const char *text = translate->text;
+    const char *search = (is_rg ? "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)"
+                          : "^@PG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)");
+    klist_t(hdrln) *hdr_lines;
+
+    err = regcomp(&re, search, REG_EXTENDED|REG_NEWLINE);
+    if (err) {
+        fprintf(stderr, "[%s] failed to compile regex /%s/\n",
+                __func__, search);
+        return NULL;
+    }
+
+    hdr_lines = kl_init(hdrln);
+
+    // Search through translate's header
+    err = 0;
+    while ((err = regexec(&re, text, 2, matches, 0)) == 0) {
+        // matches[0] is the whole @RG/PG line; matches[1] is the ID field value
+
+        kstring_t orig_id = { 0, 0, NULL };        // ID in original header
+        kstring_t transformed_id = { 0, 0, NULL }; // ID in output header
+        char *map_value;    // Value to store in id_map
+        bool id_changed;    // Have we changed the ID?
+        bool not_found_in_output; // ID isn't in the output header (yet)
+
+        // Take a copy of the ID as we'll need it for a hash key.
+        if (match_to_ks(text, &matches[1], &orig_id)) goto memfail;
+        
+        // is our matched ID in our output ID set already?
+        iter = kh_get(cset, known_ids, ks_str(&orig_id));
+        not_found_in_output = (iter == kh_end(known_ids));
+
+        if (override) {
+            // Override original ID (RG only)
+#ifdef OVERRIDE_DOES_NOT_MERGE
+            if (gen_unique_id(override, known_ids, false, &transformed_id))
+                goto memfail;
+            not_found_in_output = true;  // As ID now unique
+#else
+            if (kputs(override, &transformed_id) == EOF) goto memfail;
+            // Know about override already?
+            iter = kh_get(cset, known_ids, ks_str(&transformed_id));
+            not_found_in_output = (iter == kh_end(known_ids));
+#endif
+            id_changed = true;
         } else {
-            kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-            kputs(transformed_id_s, &transformed_line);
-            kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+            if ( not_found_in_output || merge) {
+                // Not in there or merging so can add it as 1-1 mapping
+                if (ks_to_ks(&orig_id, &transformed_id)) goto memfail;
+                id_changed = false;
+            } else {
+                // It's in there so we need to transform it by appending
+                // a random number to the id
+                if (gen_unique_id(ks_str(&orig_id), known_ids,
+                                  true, &transformed_id))
+                    goto memfail;
+                id_changed = true;
+                not_found_in_output = true;  // As ID now unique
+            }
         }
 
         // Does this line need to go into our output header?
-        if (!(transformed_equals_match && merge_rg && !not_found_in_output)) {
-            // append line to linked list for PG processing
-            char** ln = kl_pushp(hdrln, rg_list);
-            *ln = ks_release(&transformed_line);  // Give away to linked list
+        if (not_found_in_output) {
+
+            // Take matched line and replace ID with transformed_id
+            kstring_t new_hdr_line = { 0, 0, NULL };
+
+            if (!id_changed) { // Can just copy
+                if (match_to_ks(text, &matches[0], &new_hdr_line)) goto memfail;
+            } else { // Substitute new name for original
+                if (range_to_ks(text, matches[0].rm_so, matches[1].rm_so,
+                                &new_hdr_line)) goto memfail;
+                if (ks_to_ks(&transformed_id, &new_hdr_line)) goto memfail;
+                if (range_to_ks(text, matches[1].rm_eo, matches[0].rm_eo,
+                                &new_hdr_line)) goto memfail;
+            }
+
+            // append line to output linked list
+            char** ln = kl_pushp(hdrln, hdr_lines);
+            *ln = ks_release(&new_hdr_line);  // Give away to linked list
+
+            // Need to add it to known_ids set
+            int in_there = 0;
+            iter = kh_put(cset, known_ids, ks_str(&transformed_id), &in_there);
+            if (in_there < 0) goto memfail;
+            assert(in_there > 0);  // Should not already be in the map
+            map_value = ks_release(&transformed_id);
+        } else {
+            // Use existing string in id_map
+            assert(kh_exist(known_ids, iter));
+            map_value = kh_key(known_ids, iter);
+            free(ks_release(&transformed_id));
         }
-        else free(transformed_line.s);
+
+        // Insert it into our translation map
+        int in_there = 0;
+        iter = kh_put(c2c, id_map, ks_release(&orig_id), &in_there);
+        kh_value(id_map, iter) = map_value;
 
         text += matches[0].rm_eo; // next!
     }
-    regfree(&rg_id);
+
+    if (err != REG_NOMATCH) {
+        fprintf(stderr, "[%s] error executing regex /%s/\n", __func__, search);
+        goto fail;
+    }
 
     // If there are no RG lines in the file and we are overriding add one
-    if (rg_override && kl_begin(rg_list) == NULL) {
-        char* line = (char *) malloc(7 + strlen(rg_override) + 1);
-        sprintf(line, "@RG\tID:%s", rg_override);
-        char** ln = kl_pushp(hdrln, rg_list);
-        *ln = line;
-    }
-
-    // Do same for PG id's
-    regex_t pg_id;
-    regcomp(&pg_id, "^@PG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-    text = translate->text;
-    klist_t(hdrln) *pg_list = kl_init(hdrln);
-    while(1) { //   foreach pg id in translate's header
-        if (regexec(&pg_id, text, 2, matches, 0) != 0) break;
-        kstring_t match_id = { 0, 0, NULL };
-        kputsn(text+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &match_id);
-
-        // is our matched ID in our output list already
-        regex_t pg_id_search;
-        kstring_t pg_regex = { 0, 0, NULL };
-        char *pg_id_escaped = regex_escape(match_id.s);
-        ksprintf(&pg_regex, "^@PG.*\tID:%s(\t.*$|$)", pg_id_escaped);
-        free(pg_id_escaped);
-        regcomp(&pg_id_search, pg_regex.s, REG_EXTENDED|REG_NEWLINE|REG_NOSUB);
-        free(pg_regex.s);
-        kstring_t transformed_id = { 0, 0, NULL };
-        bool transformed_equals_match; // Have we changed the ID of this line?
-        bool not_found_in_output; // Do we need to add this line to our output?
-        not_found_in_output = regexec(&pg_id_search, out->text, 0, NULL, 0) == REG_NOMATCH;
-        if (not_found_in_output || merge_pg) {
-            // Not in there so can add it as 1-1 mapping
-            kputs(match_id.s, &transformed_id);
-            transformed_equals_match = true;
-        } else {
-            // It's in there so we need to transform it by appending random number to id
-            ksprintf(&transformed_id, "%s-%0lX", match_id.s, lrand48());
-            transformed_equals_match = false;
-        }
-        regfree(&pg_id_search);
-
-        // Insert it into our translation map
+    if (is_rg && override && kl_begin(hdr_lines) == NULL) {
+        kstring_t new_id = {0, 0, NULL};
+        kstring_t line = {0, 0, NULL};
+        kstring_t empty = {0, 0, NULL};
         int in_there = 0;
-        khiter_t iter = kh_put(c2c, tbl->pg_trans, ks_release(&match_id), &in_there);
-        char *transformed_id_s = ks_release(&transformed_id);
-        kh_value(tbl->pg_trans,iter) = transformed_id_s;
-        // take matched line and replace ID with transformed_id
-        kstring_t transformed_line = { 0, 0, NULL };
-        if (transformed_equals_match) {
-            kputsn(text+matches[0].rm_so, matches[0].rm_eo-matches[0].rm_so, &transformed_line);
-        } else {
-            kputsn(text+matches[0].rm_so, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-            kputs(transformed_id_s, &transformed_line);
-            kputsn(text+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
+        char** ln;
+
+        // Get the new ID
+        if (gen_unique_id(override, known_ids, false, &new_id))
+            goto memfail;
+
+        // Make into a header line and add to linked list
+        ksprintf(&line, "@RG\tID:%s", ks_str(&new_id));
+        ln = kl_pushp(hdrln, hdr_lines);
+        *ln = ks_release(&line);
+
+        // Put into known_ids set
+        iter = kh_put(cset, known_ids, ks_str(&new_id), &in_there);
+        if (in_there < 0) goto memfail;
+        assert(in_there > 0);  // Should be a new entry
+
+        // Put into translation map (key is empty string)
+        if (kputs("", &empty) == EOF) goto memfail;
+        iter = kh_put(c2c, id_map, ks_release(&empty), &in_there);
+        if (in_there < 0) goto memfail;
+        assert(in_there > 0);  // Should be a new entry
+        kh_value(id_map, iter) = ks_release(&new_id);
+    }
+
+    regfree(&re);
+
+    return hdr_lines;
+
+ memfail:
+    perror(__func__);
+ fail:
+    if (hdr_lines) kl_destroy(hdrln, hdr_lines);
+    return NULL;
+}
+
+/*
+ * Common code for completing RG and PG record translation.
+ *
+ * Input is a list of header lines, and the mapping from input to
+ * output @PG record IDs.
+ *
+ * RG and PG records can contain tags that cross-reference to other @PG
+ * records.  This fixes the tags to contain the new IDs before adding
+ * them to the output header text.
+ */
+
+static int finish_rg_pg(bool is_rg, klist_t(hdrln) *hdr_lines,
+                        khash_t(c2c)* pg_map, kstring_t *out_text) {
+    const char *search = is_rg ? "\tPG:" : "\tPP:";
+    khiter_t idx;
+    char *line = NULL;
+    
+    while ((kl_shift(hdrln, hdr_lines, &line)) == 0) {
+        char *id = strstr(line, search); // Look for tag to fix
+        int pos1 = 0, pos2 = 0;
+        char *new_id = NULL;
+
+        if (id) {
+            // Found a tag.  Look up the value in the translation map
+            // to see what it should be changed to in the output file.
+            char *end, tmp;
+
+            id += 4; // Point to value
+            end = strchr(id, '\t');  // Find end of tag
+            if (!end) end = id + strlen(id);
+
+            tmp = *end;
+            *end = '\0'; // Temporarily get the value on its own.
+
+            // Look-up in translation table
+            idx = kh_get(c2c, pg_map, id);
+            if (idx == kh_end(pg_map)) {
+                // Not found, warn.
+                fprintf(stderr, "[W::%s] Tag %s%s not found in @PG records\n",
+                        __func__, search + 1, id);
+            } else {
+                // Remember new id and splice points on original string
+                new_id = kh_value(pg_map, idx);
+                pos1 = id - line;
+                pos2 = end - line;
+            }
+
+            *end = tmp; // Restore string
         }
 
-        // Does this line need to go into our output header?
-        if (!(transformed_equals_match && merge_pg && !not_found_in_output)) {
-            // append line to linked list for PP processing
-            char** ln = kl_pushp(hdrln, pg_list);
-            *ln = ks_release(&transformed_line);  // Give away to linked list
-        }
-        else free(transformed_line.s);
-        text += matches[0].rm_eo; // next!
-    }
-    regfree(&pg_id);
-    // need to translate PP's on the fly in second pass because they may not be in correct order and need complete tbl->pg_trans to do this
-    // for each line {
-    // with ID replaced with tranformed_id and PP's transformed using the translation table
-    // }
-    regex_t pg_pp;
-    regcomp(&pg_pp, "^@PG.*\tPP:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-    kliter_t(hdrln) *iter = kl_begin(pg_list);
-    while (iter != kl_end(pg_list)) {
-        char* data = kl_val(iter);
+        // Copy line to output:
+        // line[0..pos1), new_id (if not NULL), line[pos2..end), '\n'
 
-        kstring_t transformed_line = { 0, 0, NULL };
-        // Find PP tag
-        if (regexec(&pg_pp, data, 2, matches, 0) == 0) {
-            // Lookup in hash table
-            kstring_t pp_id = { 0, 0, NULL };
-            kputsn(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &pp_id);
-
-            khiter_t k = kh_get(c2c, tbl->pg_trans, pp_id.s);
-            free(pp_id.s);
-            char* transformed_id = kh_value(tbl->pg_trans,k);
-            // Replace
-            kputsn(data, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-            kputs(transformed_id, &transformed_line);
-            kputsn(data+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-        } else { kputs(data, &transformed_line); }
-        // Produce our output line and append it to out_text
-        kputc('\n', &out_text);
-        kputsn(transformed_line.s, transformed_line.l, &out_text);
-
-        free(transformed_line.s);
-        free(data);
-        iter = kl_next(iter);
-    }
-    regfree(&pg_pp);
-
-    // Need to also translate @RG PG's on the fly too
-    regex_t rg_pg;
-    regcomp(&rg_pg, "^@RG.*\tPG:([!-)+-<>-~][!-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
-    kliter_t(hdrln) *rg_iter = kl_begin(rg_list);
-    while (rg_iter != kl_end(rg_list)) {
-        char* data = kl_val(rg_iter);
-
-        kstring_t transformed_line = { 0, 0, NULL };
-        // Find PG tag
-        if (regexec(&rg_pg, data, 2, matches, 0) == 0) {
-            // Lookup in hash table
-            kstring_t pg_id = { 0, 0, NULL };
-            kputsn(data+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &pg_id);
-
-            khiter_t k = kh_get(c2c, tbl->pg_trans, pg_id.s);
-            free(pg_id.s);
-            char* transformed_id = kh_value(tbl->pg_trans,k);
-            // Replace
-            kputsn(data, matches[1].rm_so-matches[0].rm_so, &transformed_line);
-            kputs(transformed_id, &transformed_line);
-            kputsn(data+matches[1].rm_eo, matches[0].rm_eo-matches[1].rm_eo, &transformed_line);
-        } else { kputs(data, &transformed_line); }
-        // Produce our output line and append it to out_text
-        kputc('\n', &out_text);
-        kputsn(transformed_line.s, transformed_line.l, &out_text);
-
-        free(transformed_line.s);
-        free(data);
-        rg_iter = kl_next(rg_iter);
+        if (pos1 && range_to_ks(line, 0, pos1, out_text)) goto memfail;
+        if (new_id && kputs(new_id, out_text) == EOF) goto memfail;
+        if (kputs(line + pos2, out_text) == EOF) goto memfail;
+        if (kputc('\n', out_text) == EOF) goto memfail;
+        free(line);   // No longer needed
+        line = NULL;
     }
 
-    regfree(&rg_pg);
-    kl_destroy(hdrln,pg_list);
-    kl_destroy(hdrln,rg_list);
-    free(matches);
+    return 0;
+
+ memfail:
+    perror(__func__);
+    free(line);  // Prevent leakage as no longer on list
+    return -1;
+}
+
+/*
+ * Build the translation table for an input *am file.  This stores mappings
+ * which allow IDs to be converted from those used in the input file
+ * to the ones which will be used in the output.  The mappings are for:
+ *   Reference sequence IDs (for @SQ records)
+ *   @RG record ID tags
+ *   @PG record ID tags
+ *
+ * At the same time, new header text is built up by copying records
+ * from the input bam file.  This will eventually become the header for
+ * the output file.  When copied, the ID tags for @RG and @PG records
+ * are replaced with their values.  The @PG PP: and @RG PG: tags
+ * are also modified if necessary.
+ *
+ * merged_hdr holds state on the output header (which IDs are present, etc.)
+ * translate is the input header
+ * tbl is the translation table that gets filled in.
+ * merge_rg controls merging of @RG records
+ * merge_pg controls merging of @PG records
+ * If rg_override is not NULL, it will be used to replace the existing @RG ID
+ *
+ * Returns 0 on success, -1 on failure.
+ */
+
+static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
+                          trans_tbl_t* tbl, bool merge_rg, bool merge_pg,
+                          char* rg_override)
+{
+    klist_t(hdrln) *rg_list = NULL;
+    klist_t(hdrln) *pg_list = NULL;
+
+    tbl->n_targets = translate->n_targets;
+    tbl->rg_trans = tbl->pg_trans = NULL;
+    tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
+    if (tbl->tid_trans == NULL) goto memfail;
+    tbl->rg_trans = kh_init(c2c);
+    if (tbl->rg_trans == NULL) goto memfail;
+    tbl->pg_trans = kh_init(c2c);
+    if (tbl->pg_trans == NULL) goto memfail;
+
+    tbl->lost_coord_sort = false;
+
+    // Get the @HD record (if not there already).
+    if (trans_tbl_add_hd(merged_hdr, translate)) goto fail;
+
+    // Fill in map and add header lines for @SQ records
+    if (trans_tbl_add_sq(merged_hdr, translate, tbl)) goto fail;
+    
+    // Get translated header lines and fill in map for @RG records
+    rg_list = trans_rg_pg(true, translate, merge_rg, merged_hdr->rg_ids,
+                          tbl->rg_trans, rg_override);
+    if (!rg_list) goto fail;
+
+    // Get translated header lines and fill in map for @PG records
+    pg_list = trans_rg_pg(false, translate, merge_pg, merged_hdr->pg_ids,
+                          tbl->pg_trans, NULL);
+
+    // Fix-up PG: tags in the new @RG records and add to output
+    if (finish_rg_pg(true, rg_list, tbl->pg_trans, &merged_hdr->out_rg))
+        goto fail;
+
+    // Fix-up PP: tags in the new @PG records and add to output
+    if (finish_rg_pg(false, pg_list, tbl->pg_trans, &merged_hdr->out_pg))
+        goto fail;
+
+    kl_destroy(hdrln, rg_list); rg_list = NULL;
+    kl_destroy(hdrln, pg_list); pg_list = NULL;
 
     // Just append @CO headers without translation
     const char *line, *end_pointer;
     for (line = translate->text; *line; line = end_pointer + 1) {
         end_pointer = strchr(line, '\n');
         if (strncmp(line, "@CO", 3) == 0) {
-            kputc('\n', &out_text);
-            if (end_pointer) kputsn(line, end_pointer - line, &out_text);
-            else kputs(line, &out_text);
+            if (end_pointer) {
+                if (kputsn(line, end_pointer - line + 1, &merged_hdr->out_co) == EOF)
+                    goto memfail;
+            } else { // Last line with no trailing '\n'
+                if (kputs(line, &merged_hdr->out_co) == EOF) goto memfail;
+                if (kputc('\n', &merged_hdr->out_co) == EOF) goto memfail;
+            }
         }
         if (end_pointer == NULL) break;
     }
 
-    // Add trailing \n and write back to header
-    free(out->text);
-    kputc('\n', &out_text);
-    out->l_text = out_text.l;
-    out->text = ks_release(&out_text);
+    return 0;
+
+ memfail:
+    perror(__func__);
+ fail:
+    trans_tbl_destroy(tbl);
+    if (rg_list) kl_destroy(hdrln, rg_list);
+    if (pg_list) kl_destroy(hdrln, pg_list);
+    return -1;
+}
+
+static inline void move_kstr_to_text(char **text, kstring_t *ks) {
+    memcpy(*text, ks_str(ks), ks_len(ks));
+    *text += ks_len(ks);
+    **text = '\0';
+    free(ks_release(ks));
+}
+
+/*
+ * Populate a bam_hdr_t struct from data in a merged_header_t.
+ */
+
+static bam_hdr_t * finish_merged_header(merged_header_t *merged_hdr) {
+    size_t     txt_sz;
+    char      *text;
+    char     **target_name;
+    uint32_t  *target_len;
+    bam_hdr_t *hdr;
+
+    // Check output text size
+    txt_sz = (ks_len(&merged_hdr->out_hd)
+              + ks_len(&merged_hdr->out_sq)
+              + ks_len(&merged_hdr->out_rg)
+              + ks_len(&merged_hdr->out_pg)
+              + ks_len(&merged_hdr->out_co));
+    if (txt_sz >= INT32_MAX) {
+        fprintf(stderr, "[%s] Output header text too long\n", __func__);
+        return NULL;
+    }
+
+    // Allocate new header
+    hdr = bam_hdr_init();
+    if (hdr == NULL) goto memfail;
+
+    // Try to shrink targets arrays to correct size
+    target_name = realloc(merged_hdr->target_name,
+                          merged_hdr->n_targets * sizeof(*target_name));
+    target_len = realloc(merged_hdr->target_len,
+                         merged_hdr->n_targets * sizeof(*target_len));
+
+    // Transfer targets arrays to new header
+    hdr->n_targets   = merged_hdr->n_targets;
+    hdr->target_name = target_name ? target_name : merged_hdr->target_name;
+    hdr->target_len  = target_len ? target_len : merged_hdr->target_len;
+    merged_hdr->target_name = NULL;
+    merged_hdr->target_len  = NULL;
+
+    // Allocate text
+    text = hdr->text = malloc(txt_sz + 1);
+    if (!text) goto memfail;
+
+    // Put header text in order @HD, @SQ, @RG, @PG, @CO
+    move_kstr_to_text(&text, &merged_hdr->out_hd);
+    move_kstr_to_text(&text, &merged_hdr->out_sq);
+    move_kstr_to_text(&text, &merged_hdr->out_rg);
+    move_kstr_to_text(&text, &merged_hdr->out_pg);
+    move_kstr_to_text(&text, &merged_hdr->out_co);
+    hdr->l_text = txt_sz;
+
+    return hdr;
+
+ memfail:
+    perror(__func__);
+    bam_hdr_destroy(hdr);
+    return NULL;
+}
+
+/*
+ * Free a merged_header_t struct and all associated data.
+ *
+ * Note that the keys to the rg_ids and pg_ids sets are also used as
+ * values in the translation tables.  This function should therefore not
+ * be called until the translation tables are no longer needed.
+ */
+
+static void free_merged_header(merged_header_t *merged_hdr) {
+    size_t i;
+    khiter_t iter;
+    if (!merged_hdr) return;
+    free(ks_release(&merged_hdr->out_hd));
+    free(ks_release(&merged_hdr->out_sq));
+    free(ks_release(&merged_hdr->out_rg));
+    free(ks_release(&merged_hdr->out_pg));
+    free(ks_release(&merged_hdr->out_co));
+    if (merged_hdr->target_name) {
+        for (i = 0; i < merged_hdr->n_targets; i++) {
+            free(merged_hdr->target_name[i]);
+        }
+        free(merged_hdr->target_name);
+    }
+    free(merged_hdr->target_len);
+    kh_destroy(c2i, merged_hdr->sq_tids);
+
+    if (merged_hdr->rg_ids) {
+        for (iter = kh_begin(merged_hdr->rg_ids);
+             iter != kh_end(merged_hdr->rg_ids); ++iter) {
+            if (kh_exist(merged_hdr->rg_ids, iter))
+                free(kh_key(merged_hdr->rg_ids, iter));
+        }
+        kh_destroy(cset, merged_hdr->rg_ids);
+    }
+
+    if (merged_hdr->pg_ids) {
+        for (iter = kh_begin(merged_hdr->pg_ids);
+             iter != kh_end(merged_hdr->pg_ids); ++iter) {
+            if (kh_exist(merged_hdr->pg_ids, iter))
+                free(kh_key(merged_hdr->pg_ids, iter));
+        }
+        kh_destroy(cset, merged_hdr->pg_ids);
+    }
+
+    free(merged_hdr);
 }
 
 static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
@@ -658,10 +940,25 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
         if (k != kh_end(tbl->rg_trans)) {
             char* translate_rg = kh_value(tbl->rg_trans,k);
             bam_aux_del(b, rg);
-            bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1, (uint8_t*)translate_rg);
+            if (translate_rg) {
+                bam_aux_append(b, "RG", 'Z', strlen(translate_rg) + 1,
+                               (uint8_t*)translate_rg);
+            }
         } else {
-            fprintf(stderr, "[bam_translate] RG tag \"%s\" on read \"%s\" encountered with no corresponding entry in header, tag lost\n",decoded_rg, bam_get_qname(b));
+            char *tmp = strdup(decoded_rg);
+            fprintf(stderr,
+                    "[bam_translate] RG tag \"%s\" on read \"%s\" encountered "
+                    "with no corresponding entry in header, tag lost. "
+                    "Unknown tags are only reported once per input file for "
+                    "each tag ID.\n",
+                    decoded_rg, bam_get_qname(b));
             bam_aux_del(b, rg);
+            // Prevent future whinges
+            if (tmp) {
+                int in_there = 0;
+                k = kh_put(c2c, tbl->rg_trans, tmp, &in_there);
+                if (in_there > 0) kh_value(tbl->rg_trans, k) = NULL;
+            }
         }
     }
 
@@ -673,10 +970,25 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
         if (k != kh_end(tbl->pg_trans)) {
             char* translate_pg = kh_value(tbl->pg_trans,k);
             bam_aux_del(b, pg);
-            bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1, (uint8_t*)translate_pg);
+            if (translate_pg) {
+                bam_aux_append(b, "PG", 'Z', strlen(translate_pg) + 1,
+                               (uint8_t*)translate_pg);
+            }
         } else {
-            fprintf(stderr, "[bam_translate] PG tag \"%s\" on read \"%s\" encountered with no corresponding entry in header, tag lost\n",decoded_pg, bam_get_qname(b));
+            char *tmp = strdup(decoded_pg);
+            fprintf(stderr,
+                    "[bam_translate] PG tag \"%s\" on read \"%s\" encountered "
+                    "with no corresponding entry in header, tag lost. "
+                    "Unknown tags are only reported once per input file for "
+                    "each tag ID.\n",
+                    decoded_pg, bam_get_qname(b));
             bam_aux_del(b, pg);
+            // Prevent future whinges
+            if (tmp) {
+                int in_there = 0;
+                k = kh_put(c2c, tbl->pg_trans, tmp, &in_there);
+                if (in_there > 0) kh_value(tbl->pg_trans, k) = NULL;
+            }
         }
     }
 }
@@ -749,12 +1061,15 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
     samFile *fpout, **fp;
     heap1_t *heap;
     bam_hdr_t *hout = NULL;
+    bam_hdr_t *hin  = NULL;
     int i, j, *RG_len = NULL;
     uint64_t idx = 0;
     char **RG = NULL;
     hts_itr_t **iter = NULL;
     bam_hdr_t **hdr = NULL;
     trans_tbl_t *translation_tbl = NULL;
+    merged_header_t *merged_hdr = init_merged_header();
+    if (!merged_hdr) return -1;
 
     // Is there a specified pre-prepared header to use for output?
     if (headers) {
@@ -764,16 +1079,13 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", headers, message);
             return -1;
         }
-        hout = sam_hdr_read(fpheaders);
+        hin = sam_hdr_read(fpheaders);
         sam_close(fpheaders);
-        if (hout == NULL) {
+        if (hin == NULL) {
             fprintf(stderr, "[bam_merge_core] couldn't read headers for '%s'\n",
                     headers);
             return -1;
         }
-    } else  {
-        hout = bam_hdr_init();
-        hout->text = strdup("");
     }
 
     g_is_by_qname = by_qname;
@@ -799,9 +1111,15 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
     }
 
-    // Create a table mapping string contig names to their index in the output file,
-    // to be populated by importing each input header @SQ record in turn.
-    khash_t(c2i) *out_tid = kh_init(c2i);
+    if (hin) {
+        // Popluate merged_hdr from the pre-prepared header
+        trans_tbl_t dummy;
+        int res;
+        res = trans_tbl_init(merged_hdr, hin, &dummy, flag & MERGE_COMBINE_RG,
+                             flag & MERGE_COMBINE_PG, NULL);
+        trans_tbl_destroy(&dummy);
+        if (res) return -1; // FIXME: memory leak
+    }
 
     // open and read the header from each file
     for (i = 0; i < n; ++i) {
@@ -831,7 +1149,10 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
             return -1;
         }
 
-        trans_tbl_init(hout, hin, translation_tbl+i, flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG, RG[i], out_tid);
+        if (trans_tbl_init(merged_hdr, hin, translation_tbl+i,
+                           flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG,
+                           RG[i]))
+            return -1; // FIXME: memory leak
 
         // TODO sam_itr_next() doesn't yet work for SAM files,
         // so for those keep the headers around for use with sam_read1()
@@ -843,10 +1164,11 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         }
     }
 
-    kh_destroy(c2i, out_tid);
-
     // Transform the header into standard form
-    pretty_header(&hout->text,hout->l_text);
+
+    //pretty_header(&hout->text,hout->l_text);
+    hout = finish_merged_header(merged_hdr);
+    if (!hout) return -1;  // FIXME: memory leak
 
     // If we're only merging a specified region move our iters to start at that point
     if (reg) {
@@ -963,7 +1285,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode, const char 
         bam_hdr_destroy(hdr[i]);
         sam_close(fp[i]);
     }
+    bam_hdr_destroy(hin);
     bam_hdr_destroy(hout);
+    free_merged_header(merged_hdr);
     sam_close(fpout);
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     return 0;
