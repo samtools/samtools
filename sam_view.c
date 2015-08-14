@@ -257,7 +257,7 @@ int main_samview(int argc, char *argv[])
     /* parse command-line options */
     strcpy(out_mode, "w");
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:",
+                            "SbBcCt:h1Ho:O:q:f:F:ul:r:?T:R:L:s:@:m:x:U:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
