@@ -554,7 +554,7 @@ void realloc_buffers(stats_t *stats, int seq_len)
     stats->acgtno_cycles = realloc(stats->acgtno_cycles, n*sizeof(acgtno_count_t));
     if ( !stats->acgtno_cycles )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
-    memset(stats->acgtno_cycles + stats->nbases*sizeof(acgtno_count_t), 0, (n-stats->nbases)*sizeof(acgtno_count_t));
+    memset(stats->acgtno_cycles + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
 
     stats->read_lengths = realloc(stats->read_lengths, n*sizeof(uint64_t));
     if ( !stats->read_lengths )
