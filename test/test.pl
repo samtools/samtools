@@ -48,6 +48,7 @@ test_merge($opts);
 test_fixmate($opts);
 test_calmd($opts);
 test_idxstat($opts);
+test_quickcheck($opts);
 test_reheader($opts);
 
 print "\nNumber of tests:\n";
@@ -2296,6 +2297,30 @@ sub test_idxstat
     my ($opts,%args) = @_;
 
     test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.bam", expect_fail=>0);
+}
+
+sub test_quickcheck
+{
+    my ($opts,%args) = @_;
+
+    my @testfiles = (
+        'quickcheck/1.quickcheck.badeof.bam',
+        'quickcheck/2.quickcheck.badheader.bam',
+        'quickcheck/3.quickcheck.ok.bam',
+        'quickcheck/4.quickcheck.ok.bam',
+        );
+
+    my $all_testfiles;
+
+    foreach my $fn (@testfiles) {
+        $all_testfiles .= " $$opts{path}/$fn";
+        test_cmd($opts, out => 'dat/empty.expected',
+            want_fail => ($fn !~ /[.]ok[.]/),
+            cmd => "$$opts{bin}/samtools quickcheck $$opts{path}/$fn");
+    }
+
+    test_cmd($opts, out => 'quickcheck/all.expected', want_fail => 1,
+        cmd => "$$opts{bin}/samtools quickcheck -v $all_testfiles | sed 's,.*/quickcheck/,,'");
 }
 
 sub test_reheader
