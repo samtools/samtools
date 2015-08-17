@@ -166,7 +166,7 @@ sub test_cmd
     print "\t$args{cmd}\n";
 
     my ($ret,$out,$err) = _cmd("$args{cmd}");
-    if ( $args{want_fail}? ($ret == 0) : ($ret != 0) ) { failed($opts,%args,msg=>$test); return; }
+    if ( $args{want_fail}? ($ret == 0) : ($ret != 0) ) { failed($opts,%args,msg=>$test,reason=>"ERR: $err"); return; }
     if ( $$opts{redo_outputs} && -e "$$opts{path}/$args{out}" )
     {
         rename("$$opts{path}/$args{out}","$$opts{path}/$args{out}.old");
@@ -2333,7 +2333,8 @@ sub test_reheader
 
     # Create local BAM and CRAM inputs
     system("$$opts{bin}/samtools view -b $fn.sam > $fn.tmp.bam")  == 0 or die "failed to create bam: $?";
-    system("$$opts{bin}/samtools view -C $fn.sam > $fn.tmp.cram") == 0 or die "failed to create cram: $?";
+    system("$$opts{bin}/samtools view -C --output-fmt-option version=2.1 $fn.sam > $fn.tmp.v21.cram") == 0 or die "failed to create cram: $?";
+    system("$$opts{bin}/samtools view -C --output-fmt-option version=3.0 $fn.sam > $fn.tmp.v30.cram") == 0 or die "failed to create cram: $?";
 
     # Fudge @PG lines.  The version number will differ each commit.
     # Also the pathname will differ for each install. We'll take it on faith
@@ -2346,11 +2347,21 @@ sub test_reheader
     test_cmd($opts,
              out=>'reheader/2_view1.sam.expected',
              err=>'reheader/2_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+
+    test_cmd($opts,
+             out=>'reheader/2_view1.sam.expected',
+             err=>'reheader/2_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
 
     # In-place testing
     test_cmd($opts,
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.cram && $$opts{bin}/samtools view -h $fn.tmp.cram | perl -pe 's/\tVN:.*//'");
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram && $$opts{bin}/samtools view -h $fn.tmp.v21.cram | perl -pe 's/\tVN:.*//'");
+
+    test_cmd($opts,
+             out=>'reheader/3_view1.sam.expected',
+             err=>'reheader/3_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'");
 }
