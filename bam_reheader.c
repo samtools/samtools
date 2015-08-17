@@ -461,7 +461,7 @@ int main_reheader(int argc, char *argv[])
         fprintf(stderr, "[%s] fail to open file %s.\n", __func__, argv[optind+1]);
         return 1;
     }
-    if (in->format.format == bam) {
+    if (hts_get_format(in)->format == bam) {
         r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG);
     } else {
         if (inplace)

@@ -532,13 +532,19 @@ int main_cat(int argc, char *argv[])
         fprintf(stderr, "[%s] ERROR: failed to open file '%s'.\n", __func__, argv[optind]);
         return 1;
     }
-    if (in->format.format == bam) {
+
+    switch (hts_get_format(in)->format) {
+    case bam:
         sam_close(in);
         ret = bam_cat(argc - optind, argv + optind, h, outfn? outfn : "-");
-    } else if (in->format.format == cram) {
+        break;
+
+    case cram:
         sam_close(in);
         ret = cram_cat(argc - optind, argv + optind, h, outfn? outfn : "-");
-    } else {
+        break;
+
+    default:
         sam_close(in);
         fprintf(stderr, "[%s] ERROR: input is not BAM or CRAM\n", __func__);
         return 1;
