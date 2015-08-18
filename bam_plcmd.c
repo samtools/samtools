@@ -445,7 +445,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_append(bcf_hdr, str.s);
         }
         free(str.s);
-        bcf_hdr_append(bcf_hdr,"##ALT=<ID=X,Description=\"Represents allele(s) other than observed.\">");
+        bcf_hdr_append(bcf_hdr,"##ALT=<ID=*,Description=\"Represents allele(s) other than observed.\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=INDEL,Number=0,Type=Flag,Description=\"Indicates that the variant is an INDEL.\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=IDV,Number=1,Type=Integer,Description=\"Maximum number of reads supporting an indel\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=IMF,Number=1,Type=Float,Description=\"Maximum fraction of reads supporting an indel\">");
@@ -478,6 +478,18 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP4,Number=4,Type=Integer,Description=\"Number of high-quality ref-fwd, ref-reverse, alt-fwd and alt-reverse bases\">");
         if ( conf->fmt_flag&B2B_FMT_SP )
             bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">");
+        if ( conf->fmt_flag&B2B_FMT_AD )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Allelic depths\">");
+        if ( conf->fmt_flag&B2B_FMT_ADF )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=ADF,Number=R,Type=Integer,Description=\"Allelic depths on the forward strand\">");
+        if ( conf->fmt_flag&B2B_FMT_ADR )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=ADR,Number=R,Type=Integer,Description=\"Allelic depths on the reverse strand\">");
+        if ( conf->fmt_flag&B2B_INFO_AD )
+            bcf_hdr_append(bcf_hdr,"##INFO=<ID=AD,Number=R,Type=Integer,Description=\"Total allelic depths\">");
+        if ( conf->fmt_flag&B2B_INFO_ADF )
+            bcf_hdr_append(bcf_hdr,"##INFO=<ID=ADF,Number=R,Type=Integer,Description=\"Total allelic depths on the forward strand\">");
+        if ( conf->fmt_flag&B2B_INFO_ADR )
+            bcf_hdr_append(bcf_hdr,"##INFO=<ID=ADR,Number=R,Type=Integer,Description=\"Total allelic depths on the reverse strand\">");
 
         for (i=0; i<sm->n; i++)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
@@ -502,12 +514,16 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             assert( sizeof(float)==sizeof(int32_t) );
             bc.DP4 = malloc(sm->n * sizeof(int32_t) * 4);
             bc.fmt_arr = malloc(sm->n * sizeof(float)); // all fmt_flag fields
-            if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR) )
+            if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR|B2B_INFO_AD|B2B_INFO_ADF|B2B_INFO_ADR|B2B_FMT_AD|B2B_FMT_ADF|B2B_FMT_ADR) )
             {
                 // first B2B_MAX_ALLELES fields for total numbers, the rest per-sample
-                bc.DPR = malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
+                bc.ADR = (int32_t*) malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
+                bc.ADF = (int32_t*) malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
                 for (i=0; i<sm->n; i++)
-                    bcr[i].DPR = bc.DPR + (i+1)*B2B_MAX_ALLELES;
+                {
+                    bcr[i].ADR = bc.ADR + (i+1)*B2B_MAX_ALLELES;
+                    bcr[i].ADF = bc.ADF + (i+1)*B2B_MAX_ALLELES;
+                }
             }
         }
     }
@@ -636,7 +652,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_call_destroy(bca);
         free(bc.PL);
         free(bc.DP4);
-        free(bc.DPR);
+        free(bc.ADR);
+        free(bc.ADF);
         free(bc.fmt_arr);
         free(bcr);
     }
@@ -723,11 +740,17 @@ int parse_format_flag(const char *str)
     for(i=0; i<n_tags; i++)
     {
         if ( !strcasecmp(tags[i],"DP") ) flag |= B2B_FMT_DP;
-        else if ( !strcasecmp(tags[i],"DV") ) flag |= B2B_FMT_DV;
+        else if ( !strcasecmp(tags[i],"DV") ) { flag |= B2B_FMT_DV; fprintf(stderr, "[warning] tag DV functional, but deprecated. Please switch to `AD` in future.\n"); }
         else if ( !strcasecmp(tags[i],"SP") ) flag |= B2B_FMT_SP;
-        else if ( !strcasecmp(tags[i],"DP4") ) flag |= B2B_FMT_DP4;
-        else if ( !strcasecmp(tags[i],"DPR") ) flag |= B2B_FMT_DPR;
-        else if ( !strcasecmp(tags[i],"INFO/DPR") ) flag |= B2B_INFO_DPR;
+        else if ( !strcasecmp(tags[i],"DP4") ) { flag |= B2B_FMT_DP4; fprintf(stderr, "[warning] tag DP4 functional, but deprecated. Please switch to `ADF` and `ADR` in future.\n"); }
+        else if ( !strcasecmp(tags[i],"DPR") ) { flag |= B2B_FMT_DPR; fprintf(stderr, "[warning] tag DPR functional, but deprecated. Please switch to `AD` in future.\n"); }
+        else if ( !strcasecmp(tags[i],"INFO/DPR") ) { flag |= B2B_INFO_DPR; fprintf(stderr, "[warning] tag INFO/DPR functional, but deprecated. Please switch to `INFO/AD` in future.\n"); }
+        else if ( !strcasecmp(tags[i],"AD") ) flag |= B2B_FMT_AD;
+        else if ( !strcasecmp(tags[i],"ADF") ) flag |= B2B_FMT_ADF;
+        else if ( !strcasecmp(tags[i],"ADR") ) flag |= B2B_FMT_ADR;
+        else if ( !strcasecmp(tags[i],"INFO/AD") ) flag |= B2B_INFO_AD;
+        else if ( !strcasecmp(tags[i],"INFO/ADF") ) flag |= B2B_INFO_ADF;
+        else if ( !strcasecmp(tags[i],"INFO/ADR") ) flag |= B2B_INFO_ADR;
         else
         {
             fprintf(stderr,"Could not parse tag \"%s\" in \"%s\"\n", tags[i], str);
@@ -787,7 +810,8 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -s, --output-MQ         output mapping quality\n"
 "\n"
 "Output options for genotype likelihoods (when -g/-v is used):\n"
-"  -t, --output-tags LIST  optional tags to output: DP,DPR,DV,DP4,INFO/DPR,SP []\n"
+"  -t, --output-tags LIST  optional tags to output:\n"
+"               DP,AD,ADF,ADR,SP,INFO/AD,INFO/ADF,INFO/ADR []\n"
 "  -u, --uncompressed      generate uncompressed VCF/BCF output\n"
 "\n"
 "SNP/INDEL genotype likelihoods options (effective with -g/-v):\n"

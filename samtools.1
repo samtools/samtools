@@ -1121,16 +1121,28 @@ instead]
 .TP
 .BI -t,\ --output-tags \ LIST
 Comma-separated list of FORMAT and INFO tags to output (case-insensitive):
+.B AD
+(Allelic depth, FORMAT),
+.B INFO/AD
+(Total allelic depth, INFO),
+.B ADF
+(Allelic depths on the forward strand, FORMAT),
+.B INFO/ADF
+(Total allelic depths on the forward strand, INFO),
+.B ADR
+(Allelic depths on the reverse strand, FORMAT),
+.B INFO/ADR
+(Total allelic depths on the reverse strand, INFO),
 .B DP
 (Number of high-quality bases, FORMAT),
 .B DV
-(Number of high-quality non-reference bases, FORMAT),
+(Deprecated in favor of AD; Number of high-quality non-reference bases, FORMAT),
 .B DPR
-(Number of high-quality bases for each observed allele, FORMAT),
+(Deprecated in favor of AD; Number of high-quality bases for each observed allele, FORMAT),
 .B INFO/DPR
 (Number of high-quality bases for each observed allele, INFO),
 .B DP4
-(Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT),
+(Deprecated in favor of ADF and ADR; Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT),
 .B SP
 (Phred-scaled strand bias P-value, FORMAT)
 [null]
