@@ -24,6 +24,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "../../bam_sort.c"
 #include <assert.h>
+#include <regex.h>
 
 typedef struct refseq_info {
     const char *name;

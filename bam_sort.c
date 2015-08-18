@@ -30,7 +30,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include <stdio.h>
 #include <string.h>
-#include <regex.h>
 #include <time.h>
 #include <unistd.h>
 #include <assert.h>
@@ -138,6 +137,80 @@ typedef struct trans_tbl {
     bool lost_coord_sort;
 } trans_tbl_t;
 
+/* Something to look like a regmatch_t */
+typedef struct hdr_match {
+    ptrdiff_t rm_so;
+    ptrdiff_t rm_eo;
+} hdr_match_t;
+
+/* 
+ * Search for header lines of a particular record type.
+ *
+ * This replaces a regex search for something like /^@SQ.*\tSN:([^\t]+).*$/
+ * but is much quicker.  The locations found are returned in *matches,
+ * which has a signature the same as that of a regmatch_t.
+ *
+ * rec is the record type to match (i.e. @HD, @SQ, @PG or @RG)
+ * tag is a tag type in the record to match (SN for @SQ, ID for @PG or @RG)
+ *
+ * The location of the record (if found) is returned in matches[0]
+ * If tag is not NULL, the record is searched for the presence of the
+ * given tag.  If found, the location of the value is returned in matches[1].
+ * If the tag isn't found then the record is ignored and the search resumes
+ * on the next header line.
+ *
+ * For simplicity, some assumptions are made about rec and tag:
+ *   rec should include the leading '@' sign and be three characters long.
+ *   tag should be exactly two characters long.
+ * These are always string constants when this is called below, so we don't
+ * bother to check here.
+ *
+ * Returns 0 if a match was found, -1 if not.
+ */
+
+
+static int hdr_line_match(const char *text, const char *rec,
+                          const char *tag,  hdr_match_t *matches) {
+    const char *line_start, *line_end = text;
+    const char *tag_start, *tag_end;
+    
+    for (;;) {
+        // Find record, ensure either at start of text or follows '\n'
+        line_start = strstr(line_end, rec);
+        while (line_start && line_start > text && *(line_start - 1) != '\n') {
+            line_start = strstr(line_start + 3, rec);
+        }
+        if (!line_start) return -1;
+        
+        // Find end of header line
+        line_end = strchr(line_start, '\n');
+        if (!line_end) line_end = line_start + strlen(line_start);
+        
+        matches[0].rm_so = line_start - text;
+        matches[0].rm_eo = line_end - text;
+        if (!tag) return 0;  // Match found if not looking for tag.
+        
+        for (tag_start = line_start + 3; tag_start < line_end; tag_start++) {
+            // Find possible tag start.  Hacky but quick.
+            while (*tag_start > '\n') tag_start++;
+            
+            // Check it
+            if (tag_start[0] == '\t'
+                && strncmp(tag_start + 1, tag, 2) == 0
+                && tag_start[3] == ':') {
+                // Found tag, record location and return.
+                tag_end = tag_start + 4;
+                while (*tag_end && *tag_end != '\t' && *tag_end != '\n')
+                    ++tag_end;
+                matches[1].rm_so = tag_start - text + 4;
+                matches[1].rm_eo = tag_end - text;
+                return 0;
+            }
+        }
+        // Couldn't find tag, try again from end of current record.
+    }
+}
+
 static void trans_tbl_destroy(trans_tbl_t *tbl) {
     khiter_t iter;
 
@@ -215,8 +288,8 @@ static inline int range_to_ks(const char *src, int from, int to,
     return kputsn(src + from, to - from, dest) != to - from;
 }
 
-// Append a regexp match to kstring
-static inline int match_to_ks(const char *src, const regmatch_t *match,
+// Append a header line match to kstring
+static inline int match_to_ks(const char *src, const hdr_match_t *match,
                               kstring_t *dest) {
     return range_to_ks(src, match->rm_so, match->rm_eo, dest);
 }
@@ -263,35 +336,24 @@ static int gen_unique_id(char *prefix, khash_t(cset) *existing_ids,
 
 static int trans_tbl_add_hd(merged_header_t* merged_hdr,
                             bam_hdr_t *translate) {
-    regex_t hd;
-    regmatch_t match = {0, 0};
-    int err;
+    hdr_match_t match = {0, 0};
 
     // TODO: handle case when @HD needs merging.
     if (merged_hdr->have_hd) return 0;
     
-    err = regcomp(&hd, "^@HD.*", REG_EXTENDED|REG_NEWLINE);
-    if (err) {
-        fprintf(stderr, "[%s] failed to compile regex\n", __func__);
-        return -1;
-    }
-
-    if (regexec(&hd, translate->text, 1, &match, 0) != 0) {
+    if (hdr_line_match(translate->text, "@HD", NULL, &match) != 0) {
         fprintf(stderr, "[%s] No @HD tag found.\n", __func__);
-        goto fail;
+        return -1;
     }
 
     if (match_to_ks(translate->text, &match, &merged_hdr->out_hd)) goto memfail;
     if (kputc('\n', &merged_hdr->out_hd) == EOF) goto memfail;
     merged_hdr->have_hd = true;
-    regfree(&hd);
 
     return 0;
 
  memfail:
     perror(__func__);
- fail:
-    regfree(&hd);
     return -1;
 }
 
@@ -340,14 +402,11 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
     khash_t(c2i)* sq_tids = merged_hdr->sq_tids;
     unsigned char *new_sq_seen = NULL;
     char *text;
-    const char *sq_re = "^@SQ.*\tSN:([^\t]+).*$";
-    regex_t sq;
-    regmatch_t matches[2];
-    bool sq_compiled = false;
+    hdr_match_t matches[2];
     int32_t i, missing;
     int32_t old_n_targets = merged_hdr->n_targets;
     khiter_t iter;
-    int min_tid = -1, err;
+    int min_tid = -1;
 
     // Fill in the tid part of the translation table, adding new targets
     // to the merged header as we go.
@@ -397,20 +456,12 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
 
     // Otherwise, find @SQ lines in translate->text for all newly added targets.
 
-    err = regcomp(&sq, sq_re, REG_EXTENDED|REG_NEWLINE);
-    if (err) {
-        fprintf(stderr, "[%s] failed to compile regex /%s/\n",
-                __func__, sq_re);
-        goto fail;
-    }
-    sq_compiled = true;
-
     new_sq_seen = calloc(merged_hdr->n_targets - old_n_targets,
                          sizeof(*new_sq_seen));
     if (new_sq_seen == NULL) goto memfail;
 
     text = translate->text;
-    while ((err = regexec(&sq, text, 2, matches, 0)) == 0) {
+    while (hdr_line_match(text, "@SQ", "SN", matches) == 0) {
         // matches[0] is whole line, matches[1] is SN value.
         
         // This is a bit disgusting, but avoids a copy...
@@ -446,14 +497,6 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
         text += matches[0].rm_eo;
     }
 
-    if (err != REG_NOMATCH) {
-        char buffer[256] = { 0 };
-        regerror(err, &sq, buffer, sizeof(buffer));
-        fprintf(stderr, "[%s] error executing regex /%s/ : %s\n",
-                __func__, sq_re, buffer);
-        goto fail;
-    }
-
     // Check if any new targets have been missed
     missing = 0;
     for (i = 0; i < merged_hdr->n_targets - old_n_targets; i++) {
@@ -466,14 +509,12 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
     if (missing) goto fail;
 
     free(new_sq_seen);
-    regfree(&sq);
     return 0;
 
  memfail:
     perror(__func__);
  fail:
     free(new_sq_seen);
-    if (sq_compiled) regfree(&sq);
     return -1;
 }
 
@@ -497,27 +538,16 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
 static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
                                     bool merge, khash_t(cset)* known_ids,
                                     khash_t(c2c)* id_map, char *override) {
-    regmatch_t matches[2];
-    regex_t re;
-    int err;
+    hdr_match_t matches[2];
     khiter_t iter;
     const char *text = translate->text;
-    const char *search = (is_rg ? "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)"
-                          : "^@PG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)");
+    const char *rec_type = is_rg ? "@RG" : "@PG";
     klist_t(hdrln) *hdr_lines;
-
-    err = regcomp(&re, search, REG_EXTENDED|REG_NEWLINE);
-    if (err) {
-        fprintf(stderr, "[%s] failed to compile regex /%s/\n",
-                __func__, search);
-        return NULL;
-    }
 
     hdr_lines = kl_init(hdrln);
 
     // Search through translate's header
-    err = 0;
-    while ((err = regexec(&re, text, 2, matches, 0)) == 0) {
+    while (hdr_line_match(text, rec_type, "ID", matches) == 0) {
         // matches[0] is the whole @RG/PG line; matches[1] is the ID field value
 
         kstring_t orig_id = { 0, 0, NULL };        // ID in original header
@@ -603,11 +633,6 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
         text += matches[0].rm_eo; // next!
     }
 
-    if (err != REG_NOMATCH) {
-        fprintf(stderr, "[%s] error executing regex /%s/\n", __func__, search);
-        goto fail;
-    }
-
     // If there are no RG lines in the file and we are overriding add one
     if (is_rg && override && kl_begin(hdr_lines) == NULL) {
         kstring_t new_id = {0, 0, NULL};
@@ -638,13 +663,10 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
         kh_value(id_map, iter) = ks_release(&new_id);
     }
 
-    regfree(&re);
-
     return hdr_lines;
 
  memfail:
     perror(__func__);
- fail:
     if (hdr_lines) kl_destroy(hdrln, hdr_lines);
     return NULL;
 }
