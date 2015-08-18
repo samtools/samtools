@@ -400,7 +400,7 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
 
     kstring_t *out_text = &merged_hdr->out_sq;
     khash_t(c2i)* sq_tids = merged_hdr->sq_tids;
-    unsigned char *new_sq_seen = NULL;
+    hdr_match_t *new_sq_matches = NULL;
     char *text;
     hdr_match_t matches[2];
     int32_t i, missing;
@@ -456,9 +456,13 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
 
     // Otherwise, find @SQ lines in translate->text for all newly added targets.
 
-    new_sq_seen = calloc(merged_hdr->n_targets - old_n_targets,
-                         sizeof(*new_sq_seen));
-    if (new_sq_seen == NULL) goto memfail;
+    new_sq_matches = malloc((merged_hdr->n_targets - old_n_targets)
+                            * sizeof(*new_sq_matches));
+    if (new_sq_matches == NULL) goto memfail;
+
+    for (i = 0; i < merged_hdr->n_targets - old_n_targets; i++) {
+        new_sq_matches[i].rm_so = new_sq_matches[i].rm_eo = -1;
+    }
 
     text = translate->text;
     while (hdr_line_match(text, "@SQ", "SN", matches) == 0) {
@@ -486,11 +490,11 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
 
         idx = kh_value(sq_tids, iter);
         if (idx >= old_n_targets) {
-            // is a new SQ, so add it to out_text.
+            // is a new SQ, so record position so we can add it to out_text.
             assert(idx < merged_hdr->n_targets);
-            new_sq_seen[idx - old_n_targets] = 1;
-            if (match_to_ks(text, &matches[0], out_text)) goto memfail;
-            if (kputc('\n', out_text) == EOF) goto memfail;
+            ptrdiff_t off = text - translate->text;
+            new_sq_matches[idx - old_n_targets].rm_so = matches[0].rm_so + off;
+            new_sq_matches[idx - old_n_targets].rm_eo = matches[0].rm_eo + off;
         }
 
         // Carry on searching from end of current match
@@ -500,7 +504,11 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
     // Check if any new targets have been missed
     missing = 0;
     for (i = 0; i < merged_hdr->n_targets - old_n_targets; i++) {
-        if (!new_sq_seen[i]) {
+        if (new_sq_matches[i].rm_so >= 0) {
+            if (match_to_ks(translate->text, &new_sq_matches[i], out_text))
+                goto memfail;
+            if (kputc('\n', out_text) == EOF) goto memfail;
+        } else {
             fprintf(stderr, "[E::%s] @SQ SN (%s) found in binary header but not text header.\n",
                     __func__, merged_hdr->target_name[i + old_n_targets]);
             missing++;
@@ -508,13 +516,13 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
     }
     if (missing) goto fail;
 
-    free(new_sq_seen);
+    free(new_sq_matches);
     return 0;
 
  memfail:
     perror(__func__);
  fail:
-    free(new_sq_seen);
+    free(new_sq_matches);
     return -1;
 }
 
