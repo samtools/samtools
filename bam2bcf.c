@@ -830,7 +830,7 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
         bcf_update_format_int32(hdr, rec, "ADR", bc->ADR+B2B_MAX_ALLELES, rec->n_sample*rec->n_allele);
     if ( fmt_flag&(B2B_FMT_AD|B2B_FMT_DPR) )
     {
-        for (i=0; i<rec->n_sample*rec->n_allele; i++) bc->ADF[i] += bc->ADR[i];
+        for (i=0; i<rec->n_sample*rec->n_allele; i++) bc->ADF[B2B_MAX_ALLELES+i] += bc->ADR[B2B_MAX_ALLELES+i];
         if ( fmt_flag&B2B_FMT_AD )
             bcf_update_format_int32(hdr, rec, "AD", bc->ADF+B2B_MAX_ALLELES, rec->n_sample*rec->n_allele);
         if ( fmt_flag&B2B_FMT_DPR )
