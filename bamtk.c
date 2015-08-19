@@ -66,24 +66,31 @@ const char *samtools_version()
     return SAMTOOLS_VERSION;
 }
 
-void print_error(const char *format, ...)
+static void vprint_error_core(const char *subcommand, const char *format, va_list args, const char *extra)
+{
+    fflush(stdout);
+    if (subcommand && *subcommand) fprintf(stderr, "samtools %s: ", subcommand);
+    else fprintf(stderr, "samtools: ");
+    vfprintf(stderr, format, args);
+    if (extra) fprintf(stderr, ": %s\n", extra);
+    else fprintf(stderr, "\n");
+    fflush(stderr);
+}
+
+void print_error(const char *subcommand, const char *format, ...)
 {
     va_list args;
     va_start(args, format);
-    fprintf(stderr, "samtools: ");
-    vfprintf(stderr, format, args);
-    fprintf(stderr, "\n");
+    vprint_error_core(subcommand, format, args, NULL);
     va_end(args);
 }
 
-void print_error_errno(const char *format, ...)
+void print_error_errno(const char *subcommand, const char *format, ...)
 {
     int err = errno;
     va_list args;
     va_start(args, format);
-    fprintf(stderr, "samtools: ");
-    vfprintf(stderr, format, args);
-    fprintf(stderr, ": %s\n", strerror(err));
+    vprint_error_core(subcommand, format, args, strerror(err));
     va_end(args);
 }
 

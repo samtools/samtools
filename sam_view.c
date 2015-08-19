@@ -143,7 +143,7 @@ static char *drop_rg(char *hdtxt, rghash_t h, int *len)
 
 static int usage(FILE *fp, int exit_status, int is_long_help);
 
-static int add_read_group_single(samview_settings_t *settings, char *name)
+static int add_read_group_single(const char *subcmd, samview_settings_t *settings, char *name)
 {
     char *d = strdup(name);
     int ret = 0;
@@ -161,12 +161,12 @@ static int add_read_group_single(samview_settings_t *settings, char *name)
     return 0;
 
  err:
-    print_error("Couldn't add \"%s\" to read group list: memory exhausted?", name);
+    print_error(subcmd, "Couldn't add \"%s\" to read group list: memory exhausted?", name);
     free(d);
     return -1;
 }
 
-static int add_read_groups_file(samview_settings_t *settings, char *fn)
+static int add_read_groups_file(const char *subcmd, samview_settings_t *settings, char *fn)
 {
     FILE *fp;
     char buf[1024];
@@ -181,7 +181,7 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
 
     fp = fopen(fn, "r");
     if (fp == NULL) {
-        print_error_errno("failed to open \"%s\" for reading", fn);
+        print_error_errno(subcmd, "failed to open \"%s\" for reading", fn);
         return -1;
     }
 
@@ -196,7 +196,7 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
     }
     if (ferror(fp)) ret = -1;
     if (ret == -1) {
-        print_error_errno("failed to read \"%s\"", fn);
+        print_error_errno(subcmd, "failed to read \"%s\"", fn);
     }
     fclose(fp);
     return (ret != -1) ? 0 : -1;
@@ -207,21 +207,21 @@ static inline int check_sam_write1(samFile *fp, const bam_hdr_t *h, const bam1_t
     int r = sam_write1(fp, h, b);
     if (r >= 0) return r;
 
-    if (fname) print_error_errno("writing to \"%s\" failed", fname);
-    else print_error_errno("writing to standard output failed");
+    if (fname) print_error_errno("view", "writing to \"%s\" failed", fname);
+    else print_error_errno("view", "writing to standard output failed");
 
     *retp = EXIT_FAILURE;
     return r;
 }
 
-static void check_sam_close(samFile *fp, const char *fname, const char *null_fname, int *retp)
+static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp)
 {
     int r = sam_close(fp);
     if (r >= 0) return;
 
     // TODO Need error infrastructure so we can print a message instead of r
-    if (fname) print_error("error closing \"%s\": %d", fname, r);
-    else print_error("error closing %s: %d", null_fname, r);
+    if (fname) print_error(subcmd, "error closing \"%s\": %d", fname, r);
+    else print_error(subcmd, "error closing %s: %d", null_fname, r);
 
     *retp = EXIT_FAILURE;
 }
@@ -285,19 +285,19 @@ int main_samview(int argc, char *argv[])
         case 'l': settings.library = strdup(optarg); break;
         case 'L':
             if ((settings.bed = bed_read(optarg)) == NULL) {
-                print_error_errno("Could not read file \"%s\"", optarg);
+                print_error_errno("view", "Could not read file \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
             break;
         case 'r':
-            if (add_read_group_single(&settings, optarg) != 0) {
+            if (add_read_group_single("view", &settings, optarg) != 0) {
                 ret = 1;
                 goto view_end;
             }
             break;
         case 'R':
-            if (add_read_groups_file(&settings, optarg) != 0) {
+            if (add_read_groups_file("view", &settings, optarg) != 0) {
                 ret = 1;
                 goto view_end;
             }
@@ -341,7 +341,7 @@ int main_samview(int argc, char *argv[])
     if (fn_list == 0 && ga.reference) fn_list = samfaipath(ga.reference);
     // open file handlers
     if ((in = sam_open_format(fn_in, "r", &ga.in)) == 0) {
-        print_error_errno("failed to open \"%s\" for reading", fn_in);
+        print_error_errno("view", "failed to open \"%s\" for reading", fn_in);
         ret = 1;
         goto view_end;
     }
@@ -368,7 +368,7 @@ int main_samview(int argc, char *argv[])
     }
     if (!is_count) {
         if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
-            print_error_errno("failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
+            print_error_errno("view", "failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
             ret = 1;
             goto view_end;
         }
@@ -389,7 +389,7 @@ int main_samview(int argc, char *argv[])
         }
         if (fn_un_out) {
                 if ((un_out = sam_open_format(fn_un_out, out_mode, &ga.out)) == 0) {
-                print_error_errno("failed to open \"%s\" for writing", fn_un_out);
+                print_error_errno("view", "failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
             }
@@ -468,9 +468,9 @@ view_end:
         printf("%" PRId64 "\n", count);
 
     // close files, free and return
-    if (in) check_sam_close(in, fn_in, "standard input", &ret);
-    if (out) check_sam_close(out, fn_out, "standard output", &ret);
-    if (un_out) check_sam_close(un_out, fn_un_out, "file", &ret);
+    if (in) check_sam_close("view", in, fn_in, "standard input", &ret);
+    if (out) check_sam_close("view", out, fn_out, "standard output", &ret);
+    if (un_out) check_sam_close("view", un_out, fn_un_out, "file", &ret);
 
     free(fn_list); free(fn_out); free(settings.library);  free(fn_un_out);
     sam_global_args_free(&ga);
@@ -647,7 +647,7 @@ int main_bam2fq(int argc, char *argv[])
 
     fp = sam_open_format(argv[optind], "r", &ga.in);
     if (fp == NULL) {
-        print_error_errno("Cannot read file \"%s\"", argv[optind]);
+        print_error_errno("bam2fq", "Cannot read file \"%s\"", argv[optind]);
         return 1;
     }
 
@@ -680,7 +680,7 @@ int main_bam2fq(int argc, char *argv[])
     if (fnse) {
         fpse = fopen(fnse,"w");
         if (fpse == NULL) {
-            print_error_errno("Cannot write to singleton file \"%s\"", fnse);
+            print_error_errno("bam2fq", "Cannot write to singleton file \"%s\"", fnse);
             bam_hdr_destroy(h);
             return 1;
         }
@@ -817,6 +817,6 @@ int main_bam2fq(int argc, char *argv[])
     free(buf);
     bam_destroy1(b);
     bam_hdr_destroy(h);
-    check_sam_close(fp, argv[optind], "file", &status);
+    check_sam_close("bam2fq", fp, argv[optind], "file", &status);
     return status;
 }

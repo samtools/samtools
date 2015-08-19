@@ -935,7 +935,7 @@ int bam_mpileup(int argc, char *argv[])
                   //  with few BED intervals and big BAMs. Todo: devise a heuristic to determine
                   //  best strategy, that is streaming or jumping.
                   mplp.bed = bed_read(optarg);
-                  if (!mplp.bed) { print_error_errno("Could not read file \"%s\"", optarg); return 1; }
+                  if (!mplp.bed) { print_error_errno("mpileup", "Could not read file \"%s\"", optarg); return 1; }
                   break;
         case 'P': mplp.pl_list = strdup(optarg); break;
         case 'p': mplp.flag |= MPLP_PER_SAMPLE; break;

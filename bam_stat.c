@@ -131,7 +131,7 @@ int bam_flagstat(int argc, char *argv[])
     }
     fp = sam_open(argv[optind], "r");
     if (fp == NULL) {
-        print_error_errno("Cannot open input file \"%s\"", argv[optind]);
+        print_error_errno("flagstat", "Cannot open input file \"%s\"", argv[optind]);
         return 1;
     }
     if (hts_opt_apply(fp, in_opts)) {

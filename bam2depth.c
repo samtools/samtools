@@ -121,7 +121,7 @@ int main_depth(int argc, char *argv[])
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
             case 'b':
                 bed = bed_read(optarg); // BED or position list file can be parsed now
-                if (!bed) { print_error_errno("Could not read file \"%s\"", optarg); return 1; }
+                if (!bed) { print_error_errno("depth", "Could not read file \"%s\"", optarg); return 1; }
                 break;
             case 'q': baseQ = atoi(optarg); break;   // base quality threshold
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
@@ -153,7 +153,7 @@ int main_depth(int argc, char *argv[])
         data[i] = calloc(1, sizeof(aux_t));
         data[i]->fp = sam_open_format(argv[optind+i], "r", &ga.in); // open BAM
         if (data[i]->fp == NULL) {
-            print_error_errno("Could not open \"%s\"", argv[optind+i]);
+            print_error_errno("depth", "Could not open \"%s\"", argv[optind+i]);
             status = EXIT_FAILURE;
             goto depth_end;
         }
@@ -179,14 +179,14 @@ int main_depth(int argc, char *argv[])
         if (reg) { // if a region is specified
             hts_idx_t *idx = sam_index_load(data[i]->fp, argv[optind+i]);  // load the index
             if (idx == NULL) {
-                print_error("can't load index for \"%s\"", argv[optind+i]);
+                print_error("depth", "can't load index for \"%s\"", argv[optind+i]);
                 status = EXIT_FAILURE;
                 goto depth_end;
             }
             data[i]->iter = sam_itr_querys(idx, data[i]->hdr, reg); // set the iterator
             hts_idx_destroy(idx); // the index is not needed any more; free the memory
             if (data[i]->iter == NULL) {
-                print_error("can't parse region \"%s\"", reg);
+                print_error("depth", "can't parse region \"%s\"", reg);
                 status = EXIT_FAILURE;
                 goto depth_end;
             }
