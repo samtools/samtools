@@ -139,7 +139,7 @@ bam.o: bam.c $(bam_h) $(HTSDIR)/htslib/kstring.h sam_header.h
 bam2bcf.o: bam2bcf.c $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kfunc.h $(bam2bcf_h) errmod.h
 bam2bcf_indel.o: bam2bcf_indel.c $(htslib_sam_h) $(bam2bcf_h) kprobaln.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 bam2depth.o: bam2depth.c $(htslib_sam_h) samtools.h $(sam_opts_h)
-bam_addrprg.o: bam_addrprg.c $(htslib_sam_h)
+bam_addrprg.o: bam_addrprg.c $(htslib_sam_h) samtools.h $(sam_opts_h) $(HTSDIR)/htslib/kstring.h
 bam_aux.o: bam_aux.c $(bam_h)
 bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(HTSDIR)/htslib/khash.h
 bam_color.o: bam_color.c $(bam_h)

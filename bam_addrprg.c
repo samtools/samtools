@@ -23,10 +23,10 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 #include <htslib/sam.h>
+#include <htslib/kstring.h>
 #include "samtools.h"
 #include "sam_opts.h"
 #include <string.h>
-#include <strings.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -42,7 +42,6 @@ typedef enum {
 struct parsed_opts {
     char* input_name;
     char* output_name;
-    char* output_mode;
     char* rg_id;
     char* rg_line;
     rg_mode mode;
@@ -66,7 +65,6 @@ static void cleanup_opts(parsed_opts_t* opts)
 {
     if (!opts) return;
     free(opts->rg_id);
-    free(opts->output_mode);
     free(opts->output_name);
     free(opts->input_name);
     sam_global_args_free(&opts->ga);
@@ -95,7 +93,7 @@ static char* basic_unescape(const char* in)
         if (*in == '\\') {
             ++in;
             if (*in == '\0') {
-                fprintf(stderr, "Unterminated escape sequence\n");
+                fprintf(stderr, "[%s] Unterminated escape sequence.\n", __func__);
                 free(out);
                 return NULL;
             }
@@ -107,14 +105,13 @@ static char* basic_unescape(const char* in)
                 *ptr = '\t';
                 break;
             case 'n':
-                *ptr = '\n';
-                break;
+                fprintf(stderr, "[%s] \\n in escape sequence is not supported.\n", __func__);
+                free(out);
+                return NULL;
             default:
-                {
-                    fprintf(stderr, "Unterminated escape sequence\n");
-                    free(out);
-                    return NULL;
-                }
+                fprintf(stderr, "[%s] Unsupported escape sequence.\n", __func__);
+                free(out);
+                return NULL;
             }
         } else {
             *ptr = *in;
@@ -228,8 +225,7 @@ static void usage(FILE *fp)
             "Options:\n"
             "  -r STRING @RG line text\n"
             "  -R STRING ID of @RG line in existing header to use\n"
-            "  -m MODE   Set the mode of operation from one of overwrite_all, orphan_only [overwrite_all]\n"
-            "  -l INT    Set compression level, from 0 (uncompressed) to 9 (best)\n");
+            "  -m MODE   Set the mode of operation from one of overwrite_all, orphan_only [overwrite_all]\n");
     sam_global_opt_help(fp, "..O..");
 }
 
@@ -237,9 +233,6 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
 {
     *opts = NULL;
     int n;
-    char modeout[12], *fmtout = NULL, *rg_line = NULL;
-    strcpy(modeout, "w");
-    int level = -1;
 
     parsed_opts_t* retval = calloc(1, sizeof(parsed_opts_t));
     if (! retval ) {
@@ -253,19 +246,28 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
         SAM_OPT_GLOBAL_OPTIONS(0, 0, 'O', 0, 0),
         { NULL, 0, NULL, 0 }
     };
+    kstring_t rg_line = {0,0,NULL};
 
-    while ((n = getopt_long(argc, argv, "r:R:m:O:l:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:R:m:o:O:l:h", lopts, NULL)) >= 0) {
         switch (n) {
             case 'r':
-                rg_line = optarg;
+                // Are we adding to existing rg line?
+                if (ks_len(&rg_line) == 0) {
+                    if (strlen(optarg)<3 || (optarg[0] != '@' && optarg[1] != 'R' && optarg[2] != 'G')) {
+                        kputs("@RG\t", &rg_line);
+                    }
+                } else {
+                    kputs("\t", &rg_line);
+                }
+                kputs(optarg, &rg_line);
                 break;
             case 'R':
                 retval->rg_id = strdup(optarg);
                 break;
             case 'm': {
-                if (!strcmp(optarg, "overwrite_all")) {
+                if (strcmp(optarg, "overwrite_all") == 0) {
                     retval->mode = overwrite_all;
-                } else if (!strcmp(optarg, "orphan_only")) {
+                } else if (strcmp(optarg, "orphan_only") == 0) {
                     retval->mode = orphan_only;
                 } else {
                     usage(stderr);
@@ -273,32 +275,38 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
                 }
                 break;
             }
-            case 'O': fmtout = optarg; break;
-            case 'l': level = atoi(optarg); break;
-            case '?':
+            case 'o':
+                retval->input_name = strdup(optarg);
+                break;
+            case 'h':
                 usage(stdout);
                 return false;
+            case '?':
+                usage(stderr);
+                return true;
+            case 'O':
             default:
                 if (parse_sam_global_opt(n, optarg, lopts, &retval->ga) == 0) break;
                 usage(stderr);
                 return true;
         }
     }
+    retval->rg_line = ks_release(&rg_line);
 
-    if (argc-optind < 2) {
+    if (argc-optind < 1) {
         usage(stdout);
         cleanup_opts(retval);
         return true;
     }
-    if (retval->rg_id && rg_line) {
+    if (retval->rg_id && retval->rg_line) {
         fprintf(stderr, "The options -r and -R are mutually exclusive.\n");
         cleanup_opts(retval);
         return true;
     }
 
-    if (rg_line)
+    if (retval->rg_line)
     {
-        char* tmp = basic_unescape(rg_line);
+        char* tmp = basic_unescape(retval->rg_line);
 
         if ((retval->rg_id = get_rg_id(tmp)) == NULL) {
             fprintf(stderr, "[%s] The supplied RG line lacks an ID tag.\n", __func__);
@@ -309,17 +317,6 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
         retval->rg_line = tmp;
     }
     retval->input_name = strdup(argv[optind+0]);
-    retval->output_name = strdup(argv[optind+1]);
-
-    if (sam_open_mode(&modeout[1], retval->output_name, fmtout) < 0) {
-        if (fmtout) fprintf(stderr, "[%s] can't parse output format \"%s\"\n", __func__, fmtout);
-        else fprintf(stderr, "[%s] can't determine output format\n", __func__);
-        cleanup_opts(retval);
-        return true;
-    }
-    retval->output_mode = strdup(modeout);
-
-    if (level >= 0) sprintf(strchr(modeout, '\0'), "%d", level < 9? level : 9);
 
     *opts = retval;
     return false;
@@ -351,7 +348,7 @@ static void orphan_only_func(const state_t* state, bam1_t* file_read)
     free(data);
 }
 
-static bool init(parsed_opts_t* opts, state_t** state_out) {
+static bool init(const parsed_opts_t* opts, state_t** state_out) {
     state_t* retval = (state_t*) calloc(1, sizeof(state_t));
     if (retval == NULL) {
         fprintf(stderr, "[init] Out of memory allocating state struct.\n");
@@ -368,10 +365,10 @@ static bool init(parsed_opts_t* opts, state_t** state_out) {
     retval->input_header = sam_hdr_read(retval->input_file);
 
     retval->output_header = bam_hdr_dup(retval->input_header);
-    retval->output_file = sam_open_format(opts->output_name, opts->output_mode, &opts->ga.out);
+    retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, "w", &opts->ga.out);
     
     if (retval->output_file == NULL) {
-        print_error_errno("Could not open output file: %s mode: %s\n", opts->output_name, opts->output_mode);
+        print_error_errno("Could not open output file: %s\n", opts->output_name);
         return true;
     }
 
@@ -424,28 +421,28 @@ static bool init(parsed_opts_t* opts, state_t** state_out) {
 static bool readgroupise(state_t* state)
 {
     if (sam_hdr_write(state->output_file, state->output_header) != 0) {
+        print_error_errno("[%s] Could not write header to output file", __func__);
         return true;
     }
 
     bam1_t* file_read = bam_init1();
-    if (sam_read1(state->input_file, state->input_header, file_read) < 0) {
-        bam_destroy1(file_read);
-        file_read = NULL;
-    }
-    while (file_read != NULL) {
+    int ret;
+    while ((ret = sam_read1(state->input_file, state->input_header, file_read)) >= 0) {
         state->mode_func(state, file_read);
 
         if (sam_write1(state->output_file, state->output_header, file_read) < 0) {
-            fprintf(stderr, "Could not write read to output file.\n");
+            print_error_errno("[%s] Could not write read to output file", __func__);
+            bam_destroy1(file_read);
             return true;
         }
-        if (sam_read1(state->input_file, state->input_header, file_read) < 0) {
-            bam_destroy1(file_read);
-            file_read = NULL;
-        }
     }
-
-    return false;
+    bam_destroy1(file_read);
+    if (ret != -1) {
+        print_error_errno("[%s] Error reading from input file", __func__);
+        return true;
+    } else {
+        return false;
+    }
 }
 
 int main_addreplacerg(int argc, char** argv)
