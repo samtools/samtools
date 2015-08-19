@@ -162,10 +162,15 @@ static char *copy_headers(char *output_pointer, const char *header_type, char *t
 }
 
 // Takes in existing header and rewrites it in the usual order HD, SQ, RG, PG CO, other
-static void pretty_header(char** text_in_out, int32_t text_len)
+// returns true on error
+static bool pretty_header(char** text_in_out, int32_t text_len)
 {
     char *output, *output_pointer;
     output = output_pointer = (char*)calloc(1,text_len+1);
+    if (output == NULL) {
+        perror("[pretty_header] Could not allocate memory for new header.");
+        return true;
+    }
     output[text_len] = '\0';
 
     // Read @HD and write
@@ -184,7 +189,7 @@ static void pretty_header(char** text_in_out, int32_t text_len)
     char *line, *end_pointer;
     for (line = *text_in_out; *line; line = end_pointer + 1) {
         end_pointer = strchr(line, '\n');
-        if (end_pointer == NULL) abort();
+        if (end_pointer == NULL) { fprintf(stderr, "[%s] Missing newline in header.\n", __func__); exit(EXIT_FAILURE); }
         if (line[0] == '@') {
             size_t length = end_pointer - line + 1;
             memcpy(output_pointer, line, length);
@@ -194,11 +199,12 @@ static void pretty_header(char** text_in_out, int32_t text_len)
 
     // Safety check, make sure we copied it all, if we didn't something is wrong with the header
     if ( output+text_len != output_pointer ) {
-        fprintf(stderr, "[pretty_header] invalid header\n");
-        exit(1);
+        fprintf(stderr, "[%s] Invalid header.\n", __func__);
+        return true;
     }
     free(*text_in_out);
     *text_in_out = output;
+    return false;
 }
 
 static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tbl, bool merge_rg, bool merge_pg, const char* rg_override)
@@ -207,7 +213,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
     tbl->rg_trans = kh_init(c2c);
     tbl->pg_trans = kh_init(c2c);
-    if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("out of memory"); exit(-1); }
+    if (!tbl->tid_trans || !tbl->rg_trans || !tbl->pg_trans) { perror("[trans_tbl_init] Could not malloc memory for translation tables."); exit(EXIT_FAILURE); }
 
     int32_t out_len = out->l_text;
     while (out_len > 0 && out->text[out_len-1] == '\n') {--out_len; } // strip trailing \n's
@@ -218,10 +224,11 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     tbl->lost_coord_sort = false;
 
     khash_t(c2i) *out_tid = kh_init(c2i);
+    if (out_tid == NULL) { perror("[trans_tbl_init] Could not malloc memory for target id translation tables."); exit(EXIT_FAILURE); }
     for (i = 0; i < out->n_targets; ++i) {
         int ret;
         khiter_t iter = kh_put(c2i, out_tid, out->target_name[i], &ret);
-        if (ret <= 0) abort();
+        if (ret <= 0) { fprintf(stderr, "[%s] Unable to insert element into hash.\n", __func__); exit(EXIT_FAILURE); };
         kh_value(out_tid, iter) = i;
     }
 
@@ -230,12 +237,12 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
         regex_t hd;
         regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
         regmatch_t* matches_2 = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-        if (matches == NULL) { perror("out of memory"); exit(-1); }
+        if (matches == NULL || matches_2 == NULL) { perror("[trans_tbl_init] Could not malloc memory for @HD regex matches."); exit(EXIT_FAILURE); }
         regcomp(&hd, "^@HD.*", REG_EXTENDED|REG_NEWLINE);
         if (regexec(&hd, translate->text, 1, matches, 0) != 0)
         {
             fprintf(stderr, "No @HD tag found.\n");
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         // Only add @HD tag if not already in output
         if (regexec(&hd, out->text, 1, matches_2, 0) != 0)
@@ -261,7 +268,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             // from translate->text
             regex_t sq_id;
             regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-            if (matches == NULL) { perror("out of memory"); exit(-1); }
+            if (matches == NULL) { perror("[trans_tbl_init] Could not malloc memory for @SQ regex matches."); exit(EXIT_FAILURE); }
             kstring_t seq_regex = { 0, 0, NULL };
             ksprintf(&seq_regex, "^@SQ.*\tSN:%s(\t.*$|$)", translate->target_name[i]);
             regcomp(&sq_id, seq_regex.s, REG_EXTENDED|REG_NEWLINE);
@@ -269,7 +276,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
             if (regexec(&sq_id, translate->text, 1, matches, 0) != 0)
             {
                 fprintf(stderr, "[trans_tbl_init] @SQ SN (%s) found in binary header but not text header.\n",translate->target_name[i]);
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             regfree(&sq_id);
 
@@ -292,7 +299,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     // grep @RG id's
     regex_t rg_id;
     regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-    if (matches == NULL) { perror("out of memory"); exit(-1); }
+    if (matches == NULL) { perror("[trans_tbl_init] Could not malloc memory for @RG/@PG regex matches."); exit(EXIT_FAILURE); }
     regcomp(&rg_id, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE);
     char* text = translate->text;
     klist_t(hdrln) *rg_list = kl_init(hdrln);
@@ -363,6 +370,7 @@ static void trans_tbl_init(bam_hdr_t* out, bam_hdr_t* translate, trans_tbl_t* tb
     // If there are no RG lines in the file and we are overriding add one
     if (rg_override && kl_begin(rg_list) == NULL) {
         char* line = (char *) malloc(7 + strlen(rg_override) + 1);
+        if (line == NULL) {perror("[trans_tbl_init] Could not malloc memory for @RG replacement line."); exit(EXIT_FAILURE);}
         sprintf(line, "@RG\tID:%s", rg_override);
         char** ln = kl_pushp(hdrln, rg_list);
         *ln = line;
@@ -714,7 +722,9 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
     }
 
     // Transform the header into standard form
-    pretty_header(&hout->text,hout->l_text);
+    if (pretty_header(&hout->text,hout->l_text)) {
+        return -1;
+    }
 
     // If we're only merging a specified region move our iters to start at that point
     if (reg) {
