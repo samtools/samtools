@@ -209,7 +209,7 @@ typedef struct
 
 }
 stats_t;
-KHASH_MAP_INIT_STR(c2i, stats_t*)
+KHASH_MAP_INIT_STR(c2stats, stats_t*)
 
 static void error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
@@ -1439,7 +1439,7 @@ void cleanup_stats(stats_t* stats)
     free(stats);
 }
 
-void output_split_stats(kh_c2i_t *split_hash, char* bam_fname, int sparse)
+void output_split_stats(khash_t(c2stats) *split_hash, char* bam_fname, int sparse)
 {
     int i = 0;
     stats_t *curr_stats = NULL;
@@ -1464,7 +1464,7 @@ void output_split_stats(kh_c2i_t *split_hash, char* bam_fname, int sparse)
     }
 }
 
-void destroy_split_stats(kh_c2i_t *split_hash)
+void destroy_split_stats(khash_t(c2stats) *split_hash)
 {
     int i = 0;
     stats_t *curr_stats = NULL;
@@ -1473,7 +1473,7 @@ void destroy_split_stats(kh_c2i_t *split_hash)
             curr_stats = kh_value(split_hash, i);
             cleanup_stats(curr_stats);
     }
-    kh_destroy(c2i, split_hash);
+    kh_destroy(c2stats, split_hash);
 }
 
 stats_info_t* stats_info_init(int argc, char *argv[])
@@ -1569,7 +1569,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
         init_regions(stats, targets);
 }
 
-static stats_t* get_curr_split_stats(bam1_t* bam_line, kh_c2i_t* split_hash, stats_info_t* info, char* targets, const char* tag)
+static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_hash, stats_info_t* info, char* targets, const char* tag)
 {
     stats_t *curr_stats = NULL;
     const uint8_t *tag_val = bam_aux_get(bam_line, tag);
@@ -1579,7 +1579,7 @@ static stats_t* get_curr_split_stats(bam1_t* bam_line, kh_c2i_t* split_hash, sta
     char* split_name = strdup(bam_aux2Z(tag_val));
 
     // New stats object, under split
-    khiter_t k = kh_get(c2i, split_hash, split_name);
+    khiter_t k = kh_get(c2stats, split_hash, split_name);
     if(k == kh_end(split_hash)){
         curr_stats = stats_init(); // mallocs new instance
         init_stat_structs(curr_stats, info, NULL, targets);
@@ -1587,7 +1587,7 @@ static stats_t* get_curr_split_stats(bam1_t* bam_line, kh_c2i_t* split_hash, sta
 
         // Record index in hash
         int ret = 0;
-        khiter_t iter = kh_put(c2i, split_hash, split_name, &ret);
+        khiter_t iter = kh_put(c2stats, split_hash, split_name, &ret);
         if( ret < 0 ){
             error("Failed to insert key '%s' into split_hash", split_name);
         }
@@ -1684,7 +1684,7 @@ int main_stats(int argc, char *argv[])
     init_stat_structs(all_stats, info, group_id, targets);
     // Init
     // .. hash
-    kh_c2i_t* split_hash = kh_init_c2i();
+    khash_t(c2stats)* split_hash = kh_init(c2stats);
 
     // Collect statistics
     bam1_t *bam_line = bam_init1();
