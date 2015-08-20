@@ -23,6 +23,13 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 #include "../../bam_sort.c"
+#include <assert.h>
+#include <regex.h>
+
+typedef struct refseq_info {
+    const char *name;
+    uint32_t    len;
+} refseq_info_t;
 
 void dump_header(bam_hdr_t* hdr) {
     printf("->n_targets:(%d)\n", hdr->n_targets);
@@ -37,36 +44,90 @@ void dump_header(bam_hdr_t* hdr) {
     printf(")\n");
 }
 
+static int populate_merged_header(bam_hdr_t *hdr, merged_header_t *merged_hdr) {
+    trans_tbl_t dummy;
+    int res;
+    res = trans_tbl_init(merged_hdr, hdr, &dummy, 0, 0, NULL);
+    trans_tbl_destroy(&dummy);
+    return res;
+}
+
+/*
+ * Populate merged_hdr with data from bam0_header_text and bam0_refseqs.
+ * Return bam_hdr_t based on the content in bam1_header_text and bam1_refseqs.
+ */
+
+bam_hdr_t * setup_test(const char *bam0_header_text,
+                       const refseq_info_t *bam0_refseqs,
+                       int32_t bam0_n_refseqs,
+                       const char *bam1_header_text,
+                       const refseq_info_t *bam1_refseqs,
+                       int32_t bam1_n_refseqs,
+                       merged_header_t *merged_hdr) {
+    bam_hdr_t* bam0 = NULL;
+    bam_hdr_t* bam1 = NULL;
+    int32_t i;
+
+    bam0 = bam_hdr_init();
+    bam0->text = strdup(bam0_header_text);
+    if (!bam0->text) goto fail;
+    bam0->l_text = strlen(bam0_header_text);
+    bam0->n_targets = 1;
+    bam0->target_name = (char**)calloc(bam0_n_refseqs, sizeof(char*));
+    bam0->target_len = (uint32_t*)calloc(bam0_n_refseqs, sizeof(uint32_t));
+    for (i = 0; i < bam0_n_refseqs; i++) {
+        bam0->target_name[i] = strdup(bam0_refseqs[i].name);
+        if (!bam0->target_name[i]) goto fail;
+        bam0->target_len[i] = bam0_refseqs[i].len;
+    }
+
+    if (populate_merged_header(bam0, merged_hdr)) goto fail;
+
+    bam1 = bam_hdr_init();
+    if (!bam1) goto fail;
+    bam1->text = strdup(bam1_header_text);
+    if (!bam1->text) goto fail;
+    bam1->l_text = strlen(bam1_header_text);
+    bam1->n_targets = bam1_n_refseqs;
+    bam1->target_name = (char**)calloc(bam1_n_refseqs, sizeof(char*));
+    bam1->target_len = (uint32_t*)calloc(bam1_n_refseqs, sizeof(uint32_t));
+    for (i = 0; i < bam1_n_refseqs; i++) {
+        bam1->target_name[i] = strdup(bam1_refseqs[i].name);
+        if (!bam1->target_name[i]) goto fail;
+        bam1->target_len[i] = bam1_refseqs[i].len;
+    }
+
+    bam_hdr_destroy(bam0);
+    return bam1;
+
+ fail:
+    bam_hdr_destroy(bam1);
+    bam_hdr_destroy(bam0);
+    return NULL;
+}
+
+#define NELE(x) (sizeof((x)) / sizeof((x)[0]))
+
+static const char init_text[] =
+    "@HD\tVN:1.4\tSO:unknown\n"
+    "@SQ\tSN:fish\tLN:133\tSP:frog";
+
+static const refseq_info_t init_refs[1] = {
+    { "fish", 133 }
+};
+
 static const char test_1_trans_text[] =
 "@HD\tVN:1.4\tSO:unknown\n"
 "@SQ\tSN:fish\tLN:133\n";
 
-void setup_test_1(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
-    bam_hdr_t* out;
-    bam_hdr_t* translate;
+static const refseq_info_t test_1_refs[1] = {
+    { "fish", 133 }
+};
 
-    translate = bam_hdr_init();
-    translate->text = strdup(test_1_trans_text);
-    translate->l_text = strlen(test_1_trans_text);
-    translate->n_targets = 1;
-    translate->target_name = (char**)calloc(1, sizeof(char*));
-    translate->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
-    translate->target_name[0] = strdup("fish");
-    translate->target_len[0] = 133;
-    out = bam_hdr_init();
-    const char out_text[] =
-        "@HD\tVN:1.4\tSO:unknown\n"
-        "@SQ\tSN:fish\tLN:133\tSP:frog";
-    out->text = strdup(out_text);
-    out->l_text = strlen(out_text);
-    out->n_targets = 1;
-    out->target_name = (char**)calloc(1, sizeof(char*));
-    out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
-    out->target_name[0] = strdup("fish");
-    out->target_len[0] = 133;
-
-    *translate_in = translate;
-    *out_in = out;
+bam_hdr_t * setup_test_1(merged_header_t *merged_hdr) {
+    return setup_test(init_text, init_refs, NELE(init_refs),
+                      test_1_trans_text, test_1_refs, NELE(test_1_refs),
+                      merged_hdr);
 }
 
 bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
@@ -100,34 +161,15 @@ static const char test_2_trans_text[] =
 "@SQ\tSN:donkey\tLN:133\n"
 "@SQ\tSN:fish\tLN:133";
 
-void setup_test_2(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
-    bam_hdr_t* out;
-    bam_hdr_t* translate;
+static const refseq_info_t test_2_refs[2] = {
+    { "donkey", 133 },
+    { "fish",   133 }
+};
 
-    translate = bam_hdr_init();
-    translate->text = strdup(test_2_trans_text);
-    translate->l_text = strlen(test_2_trans_text);
-    translate->n_targets = 2;
-    translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
-    translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
-    translate->target_name[0] = strdup("donkey");
-    translate->target_len[0] = 133;
-    translate->target_name[1] = strdup("fish");
-    translate->target_len[1] = 133;
-    out = bam_hdr_init();
-    const char* out_text =
-        "@HD\tVN:1.4\tSO:unknown\n"
-        "@SQ\tSN:fish\tLN:133\tSP:frog";
-    out->text = strdup(out_text);
-    out->l_text = strlen(out_text);
-    out->n_targets = 1;
-    out->target_name = (char**)calloc(1, sizeof(char*));
-    out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
-    out->target_name[0] = strdup("fish");
-    out->target_len[0] = 133;
-
-    *translate_in = translate;
-    *out_in = out;
+bam_hdr_t * setup_test_2(merged_header_t *merged_hdr) {
+    return setup_test(init_text, init_refs, NELE(init_refs),
+                      test_2_trans_text, test_2_refs, NELE(test_2_refs),
+                      merged_hdr);
 }
 
 bool check_test_2(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
@@ -163,34 +205,15 @@ static const char test_3_trans_text[] =
 "@SQ\tSN:fish\tLN:133\n"
 "@RG\tID:fish\tPU:trans\n";
 
-void setup_test_3(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
-    bam_hdr_t* out;
-    bam_hdr_t* translate;
+static const refseq_info_t test_3_refs[2] = {
+    { "donkey", 133 },
+    { "fish",   133 }
+};
 
-    translate = bam_hdr_init();
-    translate->text = strdup(test_3_trans_text);
-    translate->l_text = strlen(test_3_trans_text);
-    translate->n_targets = 2;
-    translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
-    translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
-    translate->target_name[0] = strdup("donkey");
-    translate->target_len[0] = 133;
-    translate->target_name[1] = strdup("fish");
-    translate->target_len[1] = 133;
-    out = bam_hdr_init();
-    const char* out_text =
-        "@HD\tVN:1.4\tSO:unknown\n"
-        "@SQ\tSN:fish\tLN:133\tSP:frog";
-    out->text = strdup(out_text);
-    out->l_text = strlen(out_text);
-    out->n_targets = 1;
-    out->target_name = (char**)calloc(1, sizeof(char*));
-    out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
-    out->target_name[0] = strdup("fish");
-    out->target_len[0] = 133;
-
-    *translate_in = translate;
-    *out_in = out;
+bam_hdr_t * setup_test_3(merged_header_t *merged_hdr) {
+    return setup_test(init_text, init_refs, NELE(init_refs),
+                      test_3_trans_text, test_3_refs, NELE(test_3_refs),
+                      merged_hdr);
 }
 
 bool check_test_3(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
@@ -209,35 +232,20 @@ static const char test_4_trans_text[] =
 "@SQ\tSN:fish\tLN:133\n"
 "@RG\tID:fish\tPU:trans\n";
 
-void setup_test_4(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
-    bam_hdr_t* out;
-    bam_hdr_t* translate;
+static const refseq_info_t test_4_refs[2] = {
+    { "donkey", 133 },
+    { "fish",   133 }
+};
 
-    translate = bam_hdr_init();
-    translate->text = strdup(test_4_trans_text);
-    translate->l_text = strlen(test_4_trans_text);
-    translate->n_targets = 2;
-    translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
-    translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
-    translate->target_name[0] = strdup("donkey");
-    translate->target_len[0] = 133;
-    translate->target_name[1] = strdup("fish");
-    translate->target_len[1] = 133;
-    out = bam_hdr_init();
-    const char* out_text =
+bam_hdr_t * setup_test_4(merged_header_t *merged_hdr) {
+    const char* t4_init_text =
         "@HD\tVN:1.4\tSO:unknown\n"
         "@SQ\tSN:fish\tLN:133\tSP:frog\n"
         "@RG\tID:fish\tPU:out\n";
-    out->text = strdup(out_text);
-    out->l_text = strlen(out_text);
-    out->n_targets = 1;
-    out->target_name = (char**)calloc(1, sizeof(char*));
-    out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
-    out->target_name[0] = strdup("fish");
-    out->target_len[0] = 133;
 
-    *translate_in = translate;
-    *out_in = out;
+    return setup_test(t4_init_text, init_refs, NELE(init_refs),
+                      test_4_trans_text, test_4_refs, NELE(test_4_refs),
+                      merged_hdr);
 }
 
 bool check_test_4(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
@@ -258,37 +266,22 @@ static const char test_5_trans_text[] =
 "@PG\tXX:dummy\tID:fish\tDS:trans\n"
 "@PG\tPP:fish\tID:hook\tDS:trans\n";
 
-void setup_test_5(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
-    bam_hdr_t* out;
-    bam_hdr_t* translate;
+static const refseq_info_t test_5_refs[2] = {
+    { "donkey", 133 },
+    { "fish",   133 }
+};
 
-    translate = bam_hdr_init();
-    translate->text = strdup(test_5_trans_text);
-    translate->l_text = strlen(test_5_trans_text);
-    translate->n_targets = 2;
-    translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
-    translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
-    translate->target_name[0] = strdup("donkey");
-    translate->target_len[0] = 133;
-    translate->target_name[1] = strdup("fish");
-    translate->target_len[1] = 133;
-    out = bam_hdr_init();
-    const char* out_text =
+bam_hdr_t * setup_test_5(merged_header_t *merged_hdr) {
+    const char* t5_init_text =
         "@HD\tVN:1.4\tSO:unknown\n"
         "@SQ\tSN:fish\tLN:133\tSP:frog\n"
         "@RG\tID:fish\tPU:out\n"
         "@PG\tXX:dummyx\tID:fish\tDS:out\n"
         "@PG\tPP:fish\tID:hook\tDS:out\n";
-    out->text = strdup(out_text);
-    out->l_text = strlen(out_text);
-    out->n_targets = 1;
-    out->target_name = (char**)calloc(1, sizeof(char*));
-    out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
-    out->target_name[0] = strdup("fish");
-    out->target_len[0] = 133;
 
-    *translate_in = translate;
-    *out_in = out;
+    return setup_test(t5_init_text, init_refs, NELE(init_refs),
+                      test_5_trans_text, test_5_refs, NELE(test_5_refs),
+                      merged_hdr);
 }
 
 bool check_test_5(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
@@ -309,34 +302,15 @@ static const char test_6_trans_text[] =
 "@PG\tXX:dummy\tID:fish\tDS:trans\n"
 "@PG\tPP:fish\tID:hook\tDS:trans\n";
 
-void setup_test_6(bam_hdr_t** translate_in, bam_hdr_t** out_in) {
-    bam_hdr_t* out;
-    bam_hdr_t* translate;
+static const refseq_info_t test_6_refs[2] = {
+    { "donkey", 133 },
+    { "fish",   133 }
+};
 
-    translate = bam_hdr_init();
-    translate->text = strdup(test_6_trans_text);
-    translate->l_text = strlen(test_6_trans_text);
-    translate->n_targets = 2;
-    translate->target_name = (char**)calloc(translate->n_targets, sizeof(char*));
-    translate->target_len = (uint32_t*)calloc(translate->n_targets, sizeof(uint32_t));
-    translate->target_name[0] = strdup("donkey");
-    translate->target_len[0] = 133;
-    translate->target_name[1] = strdup("fish");
-    translate->target_len[1] = 133;
-    out = bam_hdr_init();
-    const char* out_text =
-    "@HD\tVN:1.4\tSO:unknown\n"
-    "@SQ\tSN:fish\tLN:133\tSP:frog\n";
-    out->text = strdup(out_text);
-    out->l_text = strlen(out_text);
-    out->n_targets = 1;
-    out->target_name = (char**)calloc(1, sizeof(char*));
-    out->target_len = (uint32_t*)calloc(1, sizeof(uint32_t));
-    out->target_name[0] = strdup("fish");
-    out->target_len[0] = 133;
-
-    *translate_in = translate;
-    *out_in = out;
+bam_hdr_t * setup_test_6(merged_header_t *merged_hdr) {
+    return setup_test(init_text, init_refs, NELE(init_refs),
+                      test_6_trans_text, test_6_refs, NELE(test_6_refs),
+                      merged_hdr);
 }
 
 bool check_test_6(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
@@ -348,7 +322,6 @@ bool check_test_6(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
         ) return false;
     return true;
 }
-
 
 int main(int argc, char**argv)
 {
@@ -377,16 +350,18 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 1\n");
     // setup
     trans_tbl_t tbl_1;
-    setup_test_1(&translate,&out);
+    merged_header_t *merged_hdr = init_merged_header();
+    translate = setup_test_1(merged_hdr);
+    assert(translate);
     // test
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
-        printf("out\n");
-        dump_header(out);
     }
     if (verbose) printf("RUN test 1\n");
-    trans_tbl_init(out, translate, &tbl_1, false, false, NULL);
+    trans_tbl_init(merged_hdr, translate, &tbl_1, false, false, NULL);
+    out = finish_merged_header(merged_hdr);
+    free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 1\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -394,7 +369,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_1(translate, out, &tbl_1)) { ++success; } else { ++failure; }
+    if (check_test_1(translate, out, &tbl_1)) {
+        if (verbose) printf("Test 1 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 1 : FAIL\n");
+        fprintf(stderr, "Test 1 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -405,15 +387,18 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 2\n");
     // reinit
     trans_tbl_t tbl_2;
-    setup_test_2(&translate,&out);
+
+    merged_hdr = init_merged_header();
+    translate = setup_test_2(merged_hdr);
+    assert(translate);
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
-        printf("out\n");
-        dump_header(out);
     }
     if (verbose) printf("RUN test 2\n");
-    trans_tbl_init(out, translate, &tbl_2, false, false, NULL);
+    trans_tbl_init(merged_hdr, translate, &tbl_2, false, false, NULL);
+    out = finish_merged_header(merged_hdr);
+    free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 2\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -421,7 +406,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_2(translate, out, &tbl_2)) { ++success; } else { ++failure; }
+    if (check_test_2(translate, out, &tbl_2)) {
+        if (verbose) printf("Test 2 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 2 : FAIL\n");
+        fprintf(stderr, "Test 2 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -432,15 +424,17 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 3\n");
     // reinit
     trans_tbl_t tbl_3;
-    setup_test_3(&translate,&out);
+    merged_hdr = init_merged_header();
+    translate = setup_test_3(merged_hdr);
+    assert(translate);
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
-        printf("out\n");
-        dump_header(out);
-    }
+     }
     if (verbose) printf("RUN test 3\n");
-    trans_tbl_init(out, translate, &tbl_3, false, false, NULL);
+    trans_tbl_init(merged_hdr, translate, &tbl_3, false, false, NULL);
+    out = finish_merged_header(merged_hdr);
+    free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 3\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -448,7 +442,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_3(translate, out, &tbl_3)) { ++success; } else { ++failure; }
+    if (check_test_3(translate, out, &tbl_3)) {
+        if (verbose) printf("Test 3 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 3 : FAIL\n");
+        fprintf(stderr, "Test 3 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -459,15 +460,17 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 4\n");
     // reinit
     trans_tbl_t tbl_4;
-    setup_test_4(&translate,&out);
+    merged_hdr = init_merged_header();
+    translate = setup_test_4(merged_hdr);
+    assert(translate);
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
-        printf("out\n");
-        dump_header(out);
     }
     if (verbose) printf("RUN test 4\n");
-    trans_tbl_init(out, translate, &tbl_4, false, false, NULL);
+    trans_tbl_init(merged_hdr, translate, &tbl_4, false, false, NULL);
+    out = finish_merged_header(merged_hdr);
+    free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 4\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -475,7 +478,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_4(translate, out, &tbl_4)) { ++success; } else { ++failure; }
+    if (check_test_4(translate, out, &tbl_4)) {
+        if (verbose) printf("Test 4 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 4 : FAIL\n");
+        fprintf(stderr, "Test 4 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -486,16 +496,18 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 5\n");
     // reinit
     trans_tbl_t tbl_5;
-    setup_test_5(&translate,&out);
+    merged_hdr = init_merged_header();
+    translate = setup_test_5(merged_hdr);
+    assert(translate);
     if (verbose > 1) {
 
         printf("translate\n");
         dump_header(translate);
-        printf("out\n");
-        dump_header(out);
     }
     if (verbose) printf("RUN test 5\n");
-    trans_tbl_init(out, translate, &tbl_5, false, false, NULL);
+    trans_tbl_init(merged_hdr, translate, &tbl_5, false, false, NULL);
+    out = finish_merged_header(merged_hdr);
+    free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 5\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -503,7 +515,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_5(translate, out, &tbl_5)) { ++success; } else { ++failure; }
+    if (check_test_5(translate, out, &tbl_5)) {
+        if (verbose) printf("Test 5 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 5 : FAIL\n");
+        fprintf(stderr, "Test 5 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
@@ -514,15 +533,17 @@ int main(int argc, char**argv)
     if (verbose) printf("BEGIN test 6\n");
     // reinit
     trans_tbl_t tbl_6;
-    setup_test_6(&translate,&out);
+    merged_hdr = init_merged_header();
+    translate = setup_test_6(merged_hdr);
+    assert(translate);
     if (verbose > 1) {
         printf("translate\n");
         dump_header(translate);
-        printf("out\n");
-        dump_header(out);
     }
     if (verbose) printf("RUN test 6\n");
-    trans_tbl_init(out, translate, &tbl_6, false, false, "filename");
+    trans_tbl_init(merged_hdr, translate, &tbl_6, false, false, "filename");
+    out = finish_merged_header(merged_hdr);
+    free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 6\n");
     if (verbose > 1) {
         printf("translate\n");
@@ -530,7 +551,14 @@ int main(int argc, char**argv)
         printf("out\n");
         dump_header(out);
     }
-    if (check_test_6(translate, out, &tbl_6)) { ++success; } else { ++failure; }
+    if (check_test_6(translate, out, &tbl_6)) {
+        if (verbose) printf("Test 6 : PASS\n");
+        ++success;
+    } else {
+        if (verbose) printf("Test 6 : FAIL\n");
+        fprintf(stderr, "Test 6 : FAIL\n");
+        ++failure;
+    }
     // teardown
     bam_hdr_destroy(translate);
     bam_hdr_destroy(out);
