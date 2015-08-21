@@ -1069,9 +1069,9 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
  */
 int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const char *fnout, const char *modeout, size_t _max_mem, int n_threads)
 {
-    int ret, i, n_files = 0;
+    int ret = -1, i, n_files = 0;
     size_t mem, max_k, k, max_mem;
-    bam_hdr_t *header;
+    bam_hdr_t *header = NULL;
     samFile *fp;
     bam1_t *b, **buf;
 
@@ -1088,8 +1088,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
     header = sam_hdr_read(fp);
     if (header == NULL) {
         fprintf(stderr, "[bam_sort_core] failed to read header for '%s'\n", fn);
-        sam_close(fp);
-        return -1;
+        goto err;
     }
     if (is_by_qname) change_SO(header, "queryname");
     else change_SO(header, "coordinate");
@@ -1116,8 +1115,12 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
             mem = k = 0;
         }
     }
-    if (ret != -1)
-        fprintf(stderr, "[bam_sort_core] truncated file. Continue anyway.\n");
+    if (ret != -1) {
+        fprintf(stderr, "[bam_sort_core] truncated file. Aborting.\n");
+        ret = -1;
+        goto err;
+    }
+
     // write the final output
     if (n_files == 0) { // a single block
         ks_mergesort(sort, k, buf, 0);
@@ -1134,7 +1137,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
         if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns, MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads) < 0) {
             // Propagate bam_merge_core2() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
-            return -1;
+            goto err;
         }
         for (i = 0; i < n_files; ++i) {
             unlink(fns[i]);
@@ -1142,12 +1145,16 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix, const
         }
         free(fns);
     }
+
+    ret = 0;
+
+ err:
     // free
     for (k = 0; k < max_k; ++k) bam_destroy1(buf[k]);
     free(buf);
     bam_hdr_destroy(header);
     sam_close(fp);
-    return 0;
+    return ret;
 }
 
 int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
