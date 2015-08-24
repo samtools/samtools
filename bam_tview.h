@@ -53,7 +53,8 @@ typedef struct AbstractTview {
     faidx_t* fai;
     bcf_callaux_t* bca;
 
-    int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins, no_skip, show_name;
+    int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins;
+    int no_skip, show_name, inverse;
     char *ref;
     /* maps @RG ID => SM (sample), in practice only used to determine whether a particular RG is in the list of allowed ones */
     khash_t(kh_rg) *rg_hash;

@@ -110,6 +110,33 @@ static void curses_clear(struct AbstractTview* tv)
     clear();
     }
 
+static int curses_init_colors(int inverse)
+{
+    if (inverse) {
+        init_pair(1, COLOR_WHITE, COLOR_BLUE);
+        init_pair(2, COLOR_BLACK, COLOR_GREEN);
+        init_pair(3, COLOR_BLACK, COLOR_YELLOW);
+        init_pair(4, COLOR_BLACK, COLOR_WHITE);
+        init_pair(5, COLOR_BLACK, COLOR_GREEN);
+        init_pair(6, COLOR_BLACK, COLOR_CYAN);
+        init_pair(7, COLOR_WHITE, COLOR_MAGENTA);
+        init_pair(8, COLOR_WHITE, COLOR_RED);
+        init_pair(9, COLOR_WHITE, COLOR_BLUE);
+    } else {
+        init_pair(1, COLOR_BLUE, COLOR_BLACK);
+        init_pair(2, COLOR_GREEN, COLOR_BLACK);
+        init_pair(3, COLOR_YELLOW, COLOR_BLACK);
+        init_pair(4, COLOR_WHITE, COLOR_BLACK);
+        init_pair(5, COLOR_GREEN, COLOR_BLACK);
+        init_pair(6, COLOR_CYAN, COLOR_BLACK);
+        init_pair(7, COLOR_MAGENTA, COLOR_BLACK);
+        init_pair(8, COLOR_RED, COLOR_BLACK);
+        init_pair(9, COLOR_BLUE, COLOR_BLACK);
+    }
+
+    return 0;
+}
+
 static int curses_colorpair(struct AbstractTview* tv,int flag)
     {
     return COLOR_PAIR(flag);
@@ -206,6 +233,7 @@ static void tv_win_help(curses_tview_t *tv) {
     mvwprintw(win, r++, 2, "N          Turn on nt view");
     mvwprintw(win, r++, 2, "C          Turn on cs view");
     mvwprintw(win, r++, 2, "i          Toggle on/off ins");
+    mvwprintw(win, r++, 2, "v          Inverse video");
     mvwprintw(win, r++, 2, "q          Exit");
     r++;
     mvwprintw(win, r++, 2, "Underline:      Secondary or orphan");
@@ -238,6 +266,7 @@ static int curses_loop(tview_t* tv)
             case 'n': tv->color_for = TV_COLOR_NUCL; break;
             case 'c': tv->color_for = TV_COLOR_COL; break;
             case 'z': tv->color_for = TV_COLOR_COLQ; break;
+            case 'v': curses_init_colors(tv->inverse = !tv->inverse); break;
             case 's': tv->no_skip = !tv->no_skip; break;
             case 'r': tv->show_name = !tv->show_name; break;
             case KEY_LEFT:
@@ -309,18 +338,10 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
 
     getmaxyx(stdscr, base->mrow, base->mcol);
     tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
-    tv->whelp = newwin(29, 40, 5, 5);
+    tv->whelp = newwin(30, 40, 5, 5);
 
     start_color();
-    init_pair(1, COLOR_BLUE, COLOR_BLACK);
-    init_pair(2, COLOR_GREEN, COLOR_BLACK);
-    init_pair(3, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(4, COLOR_WHITE, COLOR_BLACK);
-    init_pair(5, COLOR_GREEN, COLOR_BLACK);
-    init_pair(6, COLOR_CYAN, COLOR_BLACK);
-    init_pair(7, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(8, COLOR_RED, COLOR_BLACK);
-    init_pair(9, COLOR_BLUE, COLOR_BLACK);
+    curses_init_colors(0);
     return base;
     }
 
