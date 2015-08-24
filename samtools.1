@@ -633,12 +633,26 @@ The BWA trimming parameter
 Reference sequence (required for GC-depth and mismatches-per-cycle calculation).
 []
 .TP
+.BI "-S, --split " TAG
+In addition to the complete statistics, also output categorised statistics
+based on the tagged field
+.I TAG
+(e.g., use
+.B --split RG
+to split into read groups).
+
+Categorised statistics are written to files named
+.RI < input >_< value >.bamstat,
+where
+.I input
+is the input filename and
+.I value
+has been encountered as the specified tagged field's value in one or more
+alignment records.
+.TP
 .BI "-t, --target-regions " FILE
 Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.
 []
-.TP
-.B "-s, --sam"
-Input is SAM (usually auto-detected now).
 .TP
 .B "-x, --sparse"
 Suppress outputting IS rows where there are no insertions.

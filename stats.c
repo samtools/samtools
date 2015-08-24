@@ -1394,9 +1394,9 @@ static void error(const char *format, ...)
         printf("    -q, --trim-quality <int>            The BWA trimming parameter [0]\n");
         printf("    -r, --ref-seq <file>                Reference sequence (required for GC-depth and mismatches-per-cycle calculation).\n");
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
-        printf("    -s, --sam                           Input is SAM (usually auto-detected now).\n");
+        printf("    -s, --sam                           Ignored (input format is auto-detected).\n");
+        printf("    -S, --split <tag>                   Also write statistics to separate files split by tagged field.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
-        printf("    -T, --tag-split                     Split statistics over lines sharing a tag in to separate files.\n");
         printf("\n");
     }
     else
@@ -1605,10 +1605,9 @@ int main_stats(int argc, char *argv[])
     char *targets = NULL;
     char *bam_fname = NULL;
     char *group_id = NULL;
-    char* tag;
+    char *split_tag = NULL;
     char in_mode[5];
     int sparse = 0;
-    int split = 0;
 
     stats_info_t *info = stats_info_init(argc, argv);
 
@@ -1631,11 +1630,11 @@ int main_stats(int argc, char *argv[])
         {"filtering-flag", required_argument, NULL, 'F'},
         {"id", required_argument, NULL, 'I'},
         {"GC-depth", required_argument, NULL, 1},
-        {"tag-split", required_argument, NULL, 'T'},
+        {"split", required_argument, NULL, 'S'},
         {NULL, 0, NULL, 0}
     };
     int opt;
-    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:T:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:",loptions,NULL))>0 )
     {
         switch (opt)
         {
@@ -1658,10 +1657,7 @@ int main_stats(int argc, char *argv[])
             case 't': targets = optarg; break;
             case 'I': group_id = optarg; break;
             case 'x': sparse = 1; break;
-            case 'T':
-                split = 1;
-                tag = strdup(optarg);
-                break;
+            case 'S': split_tag = optarg; break;
             case '?':
             case 'h': error(NULL);
             default: error("Unknown argument: %s\n", optarg);
@@ -1700,8 +1696,8 @@ int main_stats(int argc, char *argv[])
         {
             hts_itr_t* iter = bam_itr_querys(bam_idx, info->sam_header, argv[i]);
             while (sam_itr_next(info->sam, iter, bam_line) >= 0) {
-                if( split == 1 ) {
-                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets, tag);
+                if (split_tag) {
+                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets, split_tag);
                     collect_stats(bam_line, curr_stats);
                 }
                 collect_stats(bam_line, all_stats);
@@ -1715,8 +1711,8 @@ int main_stats(int argc, char *argv[])
     {
         // Stream through the entire BAM ignoring off-target regions if -t is given
         while (sam_read1(info->sam, info->sam_header, bam_line) >= 0) {
-            if( split == 1 ) {
-                curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets, tag);
+            if (split_tag) {
+                curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets, split_tag);
                 collect_stats(bam_line, curr_stats);
             }
             collect_stats(bam_line, all_stats);
@@ -1725,20 +1721,14 @@ int main_stats(int argc, char *argv[])
 
     round_buffer_flush(all_stats, -1);
     output_stats(stdout, all_stats, sparse);
-
-    if( split == 1 ){
+    if (split_tag)
         output_split_stats(split_hash, bam_fname, sparse);
-    }
 
     bam_destroy1(bam_line);
     bam_hdr_destroy(info->sam_header);
 
     cleanup_stats(all_stats);
     cleanup_stats_info(info);
-
-    if( split == 1 ){
-        free(tag);
-    }
     destroy_split_stats(split_hash);
 
     return 0;
