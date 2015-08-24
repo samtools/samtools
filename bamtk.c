@@ -126,7 +126,8 @@ static void usage(FILE *fp)
 "     sort           sort alignment file\n"
 "     split          splits a file by read group\n"
 "     quickcheck     quickly check if SAM/BAM/CRAM file appears intact\n"
-"     bam2fq         converts a BAM to a FASTQ\n"
+"     fastq          converts a BAM to a FASTQ\n"
+"     fasta          converts a BAM to a FASTA\n"
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
@@ -188,7 +189,9 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "targetcut") == 0) ret = main_cut_target(argc-1, argv+1);
     else if (strcmp(argv[1], "phase") == 0)     ret = main_phase(argc-1, argv+1);
     else if (strcmp(argv[1], "depth") == 0)     ret = main_depth(argc-1, argv+1);
-    else if (strcmp(argv[1], "bam2fq") == 0)    ret = main_bam2fq(argc-1, argv+1);
+    else if (strcmp(argv[1], "bam2fq") == 0 ||
+             strcmp(argv[1], "fastq") == 0 ||
+             strcmp(argv[1], "fasta") == 0)     ret = main_bam2fq(argc-1, argv+1);
     else if (strcmp(argv[1], "pad2unpad") == 0) ret = main_pad2unpad(argc-1, argv+1);
     else if (strcmp(argv[1], "depad") == 0)     ret = main_pad2unpad(argc-1, argv+1);
     else if (strcmp(argv[1], "bedcov") == 0)    ret = main_bedcov(argc-1, argv+1);

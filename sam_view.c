@@ -587,10 +587,10 @@ int main_import(int argc, char *argv[])
 int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 static const char *copied_tags[] = { "RG", "BC", "QT", NULL };
 
-static void bam2fq_usage(FILE *to)
+static void bam2fq_usage(FILE *to, const char *command)
 {
     fprintf(to,
-"Usage:   samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>\n\n"
+"Usage:   samtools %s [-nOt] [-s <outSE.fq>] <in.bam>\n"
 "Options:\n"
 "  -0 FILE   write paired reads flagged both or neither READ1 and READ2 to FILE\n"
 "  -1 FILE   write paired reads flagged READ1 to FILE\n"
@@ -602,8 +602,8 @@ static void bam2fq_usage(FILE *to)
 "  -O        output quality in the OQ tag if present\n"
 "  -s FILE   write singleton reads to FILE [assume single-end]\n"
 "  -t        copy RG, BC and QT tags to the FASTQ header line\n"
-"  -T TYPE   write the output in FASTQ or FASTA [FASTQ]\n"
-"  -v INT    default quality score if not given in file [1]\n"
+"  -v INT    default quality score if not given in file [1]\n",
+            command
             );
     sam_global_opt_help(to, "-.--.");
 }
@@ -737,7 +737,6 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     opts->def_qual = 1;
 
     int c;
-    char* type_str = NULL;
     sam_global_args_init(&opts->ga);
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
@@ -745,21 +744,20 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     };
     while ((c = getopt_long(argc, argv, "0:1:2:f:F:nOs:tv:", lopts, NULL)) > 0) {
         switch (c) {
-            case 'n': opts->has12 = false; break;
-            case 'O': opts->use_oq = true; break;
-            case 's': opts->fnse = optarg; break;
-            case 't': opts->copy_tags = true; break;
             case '0': opts->fnr[0] = optarg; break;
             case '1': opts->fnr[1] = optarg; break;
             case '2': opts->fnr[2] = optarg; break;
             case 'f': opts->flag_on |= strtol(optarg, 0, 0); break;
             case 'F': opts->flag_off |= strtol(optarg, 0, 0); break;
+            case 'n': opts->has12 = false; break;
+            case 'O': opts->use_oq = true; break;
+            case 's': opts->fnse = optarg; break;
+            case 't': opts->copy_tags = true; break;
             case 'v': opts->def_qual = atoi(optarg); break;
-            case 'T': type_str = optarg; break;
-            case '?': bam2fq_usage(stderr); free(opts); return true;
+            case '?': bam2fq_usage(stderr, argv[0]); free(opts); return true;
             default:
                 if (parse_sam_global_opt(c, optarg, lopts, &opts->ga) != 0) {
-                    bam2fq_usage(stderr); free(opts); return true;
+                    bam2fq_usage(stderr, argv[0]); free(opts); return true;
                 }
                 break;
         }
@@ -769,35 +767,34 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
 
     if (opts->def_qual < 0 || 93 < opts->def_qual) {
         fprintf(stderr, "Invalid -v default quality %i, allowed range 0 to 93\n", opts->def_qual);
-        bam2fq_usage(stderr);
+        bam2fq_usage(stderr, argv[0]);
         free(opts);
         return true;
     }
 
-    if (type_str) {
-        if (strcasecmp("fastq", type_str) == 0) {
-            fprintf(stderr, "Forcing FASTQ output.\n");
-            opts->filetype = FASTQ;
-        } else if (strcasecmp("fasta", type_str) == 0) {
-            fprintf(stderr, "Forcing FASTA output.\n");
-            opts->filetype = FASTA;
-        } else {
-            print_error("bam2fq", "Unrecognised -T argument, use FASTA or FASTQ, not: \"%s\"", type_str);
-            bam2fq_usage(stderr);
-            free(opts);
-            return true;
-        }
+    const char* type_str = argv[0];
+    if (strcasecmp("fastq", type_str) == 0 || strcasecmp("bam2fq", type_str) == 0) {
+        fprintf(stderr, "Producing FASTQ output.\n");
+        opts->filetype = FASTQ;
+    } else if (strcasecmp("fasta", type_str) == 0) {
+        fprintf(stderr, "Producing FASTA output.\n");
+        opts->filetype = FASTA;
+    } else {
+        print_error("bam2fq", "Unrecognised type call \"%s\", this should be impossible... but you managed it!", type_str);
+        bam2fq_usage(stderr, argv[0]);
+        free(opts);
+        return true;
     }
 
     if ((argc - (optind)) == 0) {
-        bam2fq_usage(stdout);
+        bam2fq_usage(stdout, argv[0]);
         free(opts);
         return false;
     }
 
     if ((argc - (optind)) != 1) {
         fprintf(stderr, "Too many arguments.\n");
-        bam2fq_usage(stderr);
+        bam2fq_usage(stderr, argv[0]);
         free(opts);
         return true;
     }
