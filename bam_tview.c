@@ -354,7 +354,7 @@ int bam_tview_main(int argc, char *argv[])
 {
     int view_mode=display_ncurses;
     tview_t* tv=NULL;
-    char *samples=NULL, *position=NULL;
+    char *samples=NULL, *position=NULL, *ref;
     int c;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -385,24 +385,20 @@ int bam_tview_main(int argc, char *argv[])
     }
     if (argc==optind) error(NULL);
 
+    ref = (optind+1>=argc)? ga.reference : argv[optind+1];
+
     switch(view_mode)
     {
         case display_ncurses:
-            tv = curses_tv_init(argv[optind],
-                                (optind+1>=argc)? 0 : argv[optind+1],
-                                samples, &ga.in);
+            tv = curses_tv_init(argv[optind], ref, samples, &ga.in);
             break;
 
         case display_text:
-            tv = text_tv_init(argv[optind],
-                              (optind+1>=argc)? 0 : argv[optind+1],
-                              samples, &ga.in);
+            tv = text_tv_init(argv[optind], ref, samples, &ga.in);
             break;
 
         case display_html:
-            tv = html_tv_init(argv[optind],
-                              (optind+1>=argc)? 0 : argv[optind+1],
-                              samples, &ga.in);
+            tv = html_tv_init(argv[optind], ref, samples, &ga.in);
             break;
     }
     if (tv==NULL)
