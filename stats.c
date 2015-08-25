@@ -128,6 +128,9 @@ typedef struct
     // Filters
     int filter_readlen;
 
+    // Misc
+    char *split_tag;      // Tag on which to perform stats splitting
+    char *split_prefix;   // Path or string to prepend to filenames created when splitting
 }
 stats_info_t;
 
@@ -1022,6 +1025,12 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
 
     fprintf(to, "# This file was produced by samtools stats (%s+htslib-%s) and can be plotted using plot-bamstats\n", samtools_version(), hts_version());
+    if( stats->split_name != NULL ){
+        fprintf(to, "# This file contains statistics only for reads with tag: %s=%s\n", stats->info->split_tag, stats->split_name);
+    }
+    else{
+        fprintf(to, "# This file contains statistics for all reads.\n");
+    }
     fprintf(to, "# The command line was:  %s",stats->info->argv[0]);
     int i;
     for (i=1; i<stats->info->argc; i++)
@@ -1397,6 +1406,7 @@ static void error(const char *format, ...)
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -s, --sam                           Ignored (input format is auto-detected).\n");
         printf("    -S, --split <tag>                   Also write statistics to separate files split by tagged field.\n");
+        printf("    -P, --split-prefix <str>            Path or string prefix to prepend to filepaths output by -S.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         sam_global_opt_help(stdout, "-.--.");
         printf("\n");
@@ -1450,11 +1460,15 @@ void output_split_stats(khash_t(c2stats) *split_hash, char* bam_fname, int spars
         curr_stats = kh_value(split_hash, i);
         round_buffer_flush(curr_stats, -1);
 
-        size_t bam_name_len = strlen(bam_fname);
-        size_t rgid_len = strlen(curr_stats->split_name);
+        size_t prefix_len = 0;
+        char* prefix = "";
+        if( curr_stats->info->split_prefix != NULL){
+            prefix_len = strlen(curr_stats->info->split_prefix);
+            prefix = curr_stats->info->split_prefix;
+        }
 
-        char *output_filename = malloc(bam_name_len+1+rgid_len+8+1); // +1 for sep, +8 for '.bamstat', +1 for '\0'
-        sprintf(output_filename, "%s_%s.bamstat", bam_fname, curr_stats->split_name);
+        char *output_filename = malloc(prefix_len+strlen(bam_fname)+1+strlen(curr_stats->split_name)+8+1); // +1 for sep, +8 for '.bamstat', +1 for '\0'
+        sprintf(output_filename, "%s%s_%s.bamstat", prefix, bam_fname, curr_stats->split_name);
 
         FILE *to = fopen(output_filename, "w");
         if(to == NULL){
@@ -1571,12 +1585,12 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
         init_regions(stats, targets);
 }
 
-static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_hash, stats_info_t* info, char* targets, const char* tag)
+static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_hash, stats_info_t* info, char* targets)
 {
     stats_t *curr_stats = NULL;
-    const uint8_t *tag_val = bam_aux_get(bam_line, tag);
+    const uint8_t *tag_val = bam_aux_get(bam_line, info->split_tag);
     if(tag_val == 0){
-        error("Tag '%s' not found in bam_line.\n", tag);
+        error("Tag '%s' not found in bam_line.\n", info->split_tag);
     }
     char* split_name = strdup(bam_aux2Z(tag_val));
 
@@ -1607,7 +1621,6 @@ int main_stats(int argc, char *argv[])
     char *targets = NULL;
     char *bam_fname = NULL;
     char *group_id = NULL;
-    char *split_tag = NULL;
     int sparse = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
@@ -1632,11 +1645,12 @@ int main_stats(int argc, char *argv[])
         {"GC-depth", required_argument, NULL, 1},
         {"sparse", no_argument, NULL, 'x'},
         {"split", required_argument, NULL, 'S'},
+        {"split-prefix", required_argument, NULL, 'P'},
         {NULL, 0, NULL, 0}
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:",loptions,NULL))>0 )
     {
         switch (opt)
         {
@@ -1659,7 +1673,8 @@ int main_stats(int argc, char *argv[])
             case 't': targets = optarg; break;
             case 'I': group_id = optarg; break;
             case 'x': sparse = 1; break;
-            case 'S': split_tag = optarg; break;
+            case 'S': info->split_tag = optarg; break;
+            case 'P': info->split_prefix = optarg; break;
             case '?':
             case 'h': error(NULL);
             default:
@@ -1701,8 +1716,8 @@ int main_stats(int argc, char *argv[])
         {
             hts_itr_t* iter = bam_itr_querys(bam_idx, info->sam_header, argv[i]);
             while (sam_itr_next(info->sam, iter, bam_line) >= 0) {
-                if (split_tag) {
-                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets, split_tag);
+                if (info->split_tag) {
+                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
                     collect_stats(bam_line, curr_stats);
                 }
                 collect_stats(bam_line, all_stats);
@@ -1717,8 +1732,8 @@ int main_stats(int argc, char *argv[])
         // Stream through the entire BAM ignoring off-target regions if -t is given
         int ret;
         while ((ret = sam_read1(info->sam, info->sam_header, bam_line)) >= 0) {
-            if (split_tag) {
-                curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets, split_tag);
+            if (info->split_tag) {
+                curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
                 collect_stats(bam_line, curr_stats);
             }
             collect_stats(bam_line, all_stats);
@@ -1732,7 +1747,7 @@ int main_stats(int argc, char *argv[])
 
     round_buffer_flush(all_stats, -1);
     output_stats(stdout, all_stats, sparse);
-    if (split_tag)
+    if (info->split_tag)
         output_split_stats(split_hash, bam_fname, sparse);
 
     bam_destroy1(bam_line);
