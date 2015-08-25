@@ -237,6 +237,7 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
     int size[2], Q, max_size;
     uint8_t *tmp_seq[2];
     mut_t *target;
+    int max_loop, max_loop_err = 0;
 
     l = size_l > size_r? size_l : size_r;
     qstr = (char*)calloc(l+1, 1);
@@ -272,12 +273,15 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
         wgsim_mut_diref(ks, is_hap, rseq, rseq+1);
         wgsim_print_mutref(ks->name.s, ks, rseq, rseq+1);
 
-        for (ii = 0; ii != n_pairs; ++ii) { // the core loop
+        for (ii = 0; max_loop = 1000, ii != n_pairs; ++ii) { // the core loop
             double ran;
-            int d, pos, s[2], is_flip = 0;
+            int d, pos, s[2], is_flip;
             int n_sub[2], n_indel[2], n_err[2], ext_coor[2], j, k;
             FILE *fpo[2];
 
+        try_again:
+            is_flip = 0;
+            
             do { // avoid boundary failure
                 ran = ran_normal();
                 ran = ran * std_dev + dist;
@@ -368,7 +372,12 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
                 if ((double)n_n / s[j] > MAX_N_RATIO) break;
             }
             if (j < 2) { // too many ambiguous bases on one of the reads
-                --ii;
+                if (max_loop--) goto try_again;
+                if (!max_loop_err) {
+                    fprintf(stderr, "Failed to produce a sequence with insufficient Ns. "
+                            "Omitting some sequence-pairs\n");
+                    max_loop_err = 1;
+                }
                 continue;
             }
 
