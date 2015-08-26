@@ -281,7 +281,7 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
 
         try_again:
             is_flip = 0;
-            
+
             do { // avoid boundary failure
                 ran = ran_normal();
                 ran = ran * std_dev + dist;

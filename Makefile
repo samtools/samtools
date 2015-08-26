@@ -177,7 +177,7 @@ sam_opts.o: sam_opts.c $(sam_opts_h)
 sam_view.o: sam_view.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash.h samtools.h $(sam_opts_h)
 sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
 stats_isize.o: stats_isize.c stats_isize.h $(HTSDIR)/htslib/khash.h
-stats.o: stats.c $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) sam_header.h $(HTSDIR)/htslib/khash_str2int.h samtools.h $(HTSDIR)/htslib/khash.h stats_isize.h $(sam_opts_h)
+stats.o: stats.c $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) sam_header.h $(HTSDIR)/htslib/khash_str2int.h samtools.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/kstring.h stats_isize.h $(sam_opts_h)
 
 
 # test programs
