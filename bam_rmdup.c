@@ -218,6 +218,7 @@ int bam_rmdup(int argc, char *argv[])
     int c, is_se = 0, force_se = 0;
     samFile *in, *out;
     bam_hdr_t *header;
+    char wmode[3] = {'w', 'b', 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     static const struct option lopts[] = {
@@ -225,7 +226,7 @@ int bam_rmdup(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt(argc, argv, "sS")) >= 0) {
+    while ((c = getopt_long(argc, argv, "sS", lopts, NULL)) >= 0) {
         switch (c) {
         case 's': is_se = 1; break;
         case 'S': force_se = is_se = 1; break;
@@ -244,7 +245,8 @@ int bam_rmdup(int argc, char *argv[])
         return 1;
     }
 
-    out = sam_open_format(argv[optind+1], "w", &ga.out);
+    sam_open_mode(wmode+1, argv[optind+1], NULL);
+    out = sam_open_format(argv[optind+1], wmode, &ga.out);
     if (in == 0 || out == 0) {
         fprintf(stderr, "[bam_rmdup] fail to read/write input files\n");
         return 1;

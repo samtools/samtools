@@ -318,6 +318,7 @@ int bam_mating(int argc, char *argv[])
     samFile *in, *out;
     int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    char wmode[3] = {'w', 'b', 0};
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
         { NULL, 0, NULL, 0 }
@@ -342,7 +343,8 @@ int bam_mating(int argc, char *argv[])
         fprintf(stderr, "[bam_mating] cannot open input file\n");
         return 1;
     }
-    if ((out = sam_open_format(argv[optind+1], "wb", &ga.out)) == NULL) {
+    sam_open_mode(wmode+1, argv[optind+1], NULL);
+    if ((out = sam_open_format(argv[optind+1], wmode, &ga.out)) == NULL) {
         fprintf(stderr, "[bam_mating] cannot open output file\n");
         return 1;
     }

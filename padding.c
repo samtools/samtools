@@ -546,6 +546,8 @@ int main_pad2unpad(int argc, char *argv[])
         fprintf(stderr, "[depad] Warning - reference lengths will not be corrected without FASTA reference\n");
         h_fix = h;
     }
+    char wmode[2];
+    strcat(out_mode, sam_open_mode(wmode, fn_out, NULL)==0 ? wmode : "b");
     if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
         fprintf(stderr, "[depad] failed to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
         ret = 1;
