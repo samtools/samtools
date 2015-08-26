@@ -644,10 +644,12 @@ based on the tagged field
 to split into read groups).
 
 Categorised statistics are written to files named
-.RI < input >_< value >.bamstat,
+.RI < prefix >_< value >.bamstat,
 where
-.I input
-is the input filename and
+.I prefix
+is as given by
+.B --split-prefix
+(or the input filename by default) and
 .I value
 has been encountered as the specified tagged field's value in one or more
 alignment records.
@@ -655,7 +657,8 @@ alignment records.
 .BI "-P, --split-prefix " STR
 A path or string prefix to prepend to filenames output when creating
 categorised statistics files with
-.BI -S
+.BR -S / --split .
+[input filename]
 .TP
 .BI "-t, --target-regions " FILE
 Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.

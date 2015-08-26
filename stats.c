@@ -55,6 +55,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/khash_str2int.h>
 #include "samtools.h"
 #include <htslib/khash.h>
+#include <htslib/kstring.h>
 #include "stats_isize.h"
 #include "sam_opts.h"
 
@@ -1454,30 +1455,31 @@ void cleanup_stats(stats_t* stats)
 void output_split_stats(khash_t(c2stats) *split_hash, char* bam_fname, int sparse)
 {
     int i = 0;
+    kstring_t output_filename = { 0, 0, NULL };
     stats_t *curr_stats = NULL;
     for(i = kh_begin(split_hash); i != kh_end(split_hash); ++i){
         if(!kh_exist(split_hash, i)) continue;
         curr_stats = kh_value(split_hash, i);
         round_buffer_flush(curr_stats, -1);
 
-        size_t prefix_len = 0;
-        char* prefix = "";
-        if( curr_stats->info->split_prefix != NULL){
-            prefix_len = strlen(curr_stats->info->split_prefix);
-            prefix = curr_stats->info->split_prefix;
-        }
+        output_filename.l = 0;
+        if (curr_stats->info->split_prefix)
+            kputs(curr_stats->info->split_prefix, &output_filename);
+        else
+            kputs(bam_fname, &output_filename);
+        kputc('_', &output_filename);
+        kputs(curr_stats->split_name, &output_filename);
+        kputs(".bamstat", &output_filename);
 
-        char *output_filename = malloc(prefix_len+strlen(bam_fname)+1+strlen(curr_stats->split_name)+8+1); // +1 for sep, +8 for '.bamstat', +1 for '\0'
-        sprintf(output_filename, "%s%s_%s.bamstat", prefix, bam_fname, curr_stats->split_name);
-
-        FILE *to = fopen(output_filename, "w");
+        FILE *to = fopen(output_filename.s, "w");
         if(to == NULL){
-            error("Could not open '%s' for writing.\n", output_filename);
+            error("Could not open '%s' for writing.\n", output_filename.s);
         }
         output_stats(to, curr_stats, sparse);
-        free(output_filename);
         fclose(to);
     }
+
+    free(output_filename.s);
 }
 
 void destroy_split_stats(khash_t(c2stats) *split_hash)
