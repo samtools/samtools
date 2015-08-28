@@ -131,7 +131,7 @@ typedef struct
 
     // Misc
     char *split_tag;      // Tag on which to perform stats splitting
-    char *split_prefix;   // Path or string to prepend to filenames created when splitting
+    char *split_prefix;   // Path or string prefix for filenames created when splitting
 }
 stats_info_t;
 
@@ -1402,7 +1402,7 @@ static void error(const char *format, ...)
         printf("    -I, --id <string>                   Include only listed read group or sample name\n");
         printf("    -l, --read-length <int>             Include in the statistics only reads with the given read length []\n");
         printf("    -m, --most-inserts <float>          Report only the main part of inserts [0.99]\n");
-        printf("    -P, --split-prefix <str>            Path or string prefix to prepend to filepaths output by -S.\n");
+        printf("    -P, --split-prefix <str>            Path or string prefix for filepaths output by -S (default is input filename)\n");
         printf("    -q, --trim-quality <int>            The BWA trimming parameter [0]\n");
         printf("    -r, --ref-seq <file>                Reference sequence (required for GC-depth and mismatches-per-cycle calculation).\n");
         printf("    -s, --sam                           Ignored (input format is auto-detected).\n");
