@@ -220,12 +220,14 @@ static char* get_first_rgid( const bam_hdr_t *hdr )
 static void usage(FILE *fp)
 {
     fprintf(fp,
-            "Usage: samtools addreplacerg [options] [-r <@RG line> | -R <existing id>] <input.bam> <output.bam>\n"
+            "Usage: samtools addreplacerg [options] [-r <@RG line> | -R <existing id>] [-o <output.bam>] <input.bam>\n"
             "\n"
             "Options:\n"
+            "  -m MODE   Set the mode of operation from one of overwrite_all, orphan_only [overwrite_all]\n"
+            "  -o STRING Where to write output to [stdout]\n"
             "  -r STRING @RG line text\n"
             "  -R STRING ID of @RG line in existing header to use\n"
-            "  -m MODE   Set the mode of operation from one of overwrite_all, orphan_only [overwrite_all]\n");
+            );
     sam_global_opt_help(fp, "..O..");
 }
 
@@ -237,7 +239,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     parsed_opts_t* retval = calloc(1, sizeof(parsed_opts_t));
     if (! retval ) {
         fprintf(stderr, "[%s] Out of memory allocating parsed_opts_t\n", __func__);
-        return true;
+        return false;
     }
     // Set defaults
     retval->mode = overwrite_all;
@@ -276,32 +278,36 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
                 break;
             }
             case 'o':
-                retval->input_name = strdup(optarg);
+                retval->output_name = strdup(optarg);
                 break;
             case 'h':
                 usage(stdout);
-                return false;
+                free(retval);
+                return true;
             case '?':
                 usage(stderr);
-                return true;
+                free(retval);
+                return false;
             case 'O':
             default:
                 if (parse_sam_global_opt(n, optarg, lopts, &retval->ga) == 0) break;
                 usage(stderr);
-                return true;
+                free(retval);
+                return false;
         }
     }
     retval->rg_line = ks_release(&rg_line);
 
     if (argc-optind < 1) {
-        usage(stdout);
+        fprintf(stderr, "You must specify an input file.\n");
+        usage(stderr);
         cleanup_opts(retval);
-        return true;
+        return false;
     }
     if (retval->rg_id && retval->rg_line) {
         fprintf(stderr, "The options -r and -R are mutually exclusive.\n");
         cleanup_opts(retval);
-        return true;
+        return false;
     }
 
     if (retval->rg_line)
@@ -312,14 +318,14 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
             fprintf(stderr, "[%s] The supplied RG line lacks an ID tag.\n", __func__);
             free(tmp);
             cleanup_opts(retval);
-            return true;
+            return false;
         }
         retval->rg_line = tmp;
     }
     retval->input_name = strdup(argv[optind+0]);
 
     *opts = retval;
-    return false;
+    return true;
 }
 
 static void overwrite_all_func(const state_t* state, bam1_t* file_read)
@@ -352,7 +358,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     state_t* retval = (state_t*) calloc(1, sizeof(state_t));
     if (retval == NULL) {
         fprintf(stderr, "[init] Out of memory allocating state struct.\n");
-        return true;
+        return false;
     }
     *state_out = retval;
 
@@ -360,7 +366,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     retval->input_file = sam_open_format(opts->input_name, "r", &opts->ga.in);
     if (retval->input_file == NULL) {
         fprintf(stderr, "[init] Could not open input file: %s\n", opts->input_name);
-        return true;
+        return false;
     }
     retval->input_header = sam_hdr_read(retval->input_file);
 
@@ -368,8 +374,8 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, "w", &opts->ga.out);
     
     if (retval->output_file == NULL) {
-        print_error_errno("Could not open output file: %s\n", opts->output_name);
-        return true;
+        print_error_errno("addreplacerg", "Could not open output file: %s\n", opts->output_name);
+        return false;
     }
 
     if (opts->rg_line) {
@@ -377,14 +383,14 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
         // Check does not already exist
         if ( confirm_rg(retval->output_header, opts->rg_id) ) {
             fprintf(stderr, "[init] ID of new RG line specified conflicts with that of an existing header RG line. Overwrite not yet implemented.\n");
-            return true;
+            return false;
         }
         retval->rg_id = strdup(opts->rg_id);
         size_t new_len = strlen( retval->output_header->text ) + strlen( opts->rg_line ) + 2;
         char* new_header = malloc(new_len);
         if (!new_header) {
             fprintf(stderr, "[init] Out of memory whilst writing new header.\n");
-            return true;
+            return false;
         }
         sprintf(new_header,"%s%s\n", retval->output_header->text, opts->rg_line);
         free(retval->output_header->text);
@@ -395,13 +401,13 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
             // Confirm what has been supplied exists
             if ( !confirm_rg(retval->output_header, opts->rg_id) ) {
                 fprintf(stderr, "RG ID supplied does not exist in header. Supply full @RG line with -r instead?\n");
-                return true;
+                return false;
             }
             retval->rg_id = strdup(opts->rg_id);
         } else {
             if ((retval->rg_id = get_first_rgid(retval->output_header)) == NULL ) {
                 fprintf(stderr, "No RG specified on command line or in existing header.\n");
-                return true;
+                return false;
             }
         }
     }
@@ -415,14 +421,14 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
             break;
     }
 
-    return false;
+    return true;
 }
 
 static bool readgroupise(state_t* state)
 {
     if (sam_hdr_write(state->output_file, state->output_header) != 0) {
-        print_error_errno("[%s] Could not write header to output file", __func__);
-        return true;
+        print_error_errno("addreplacerg", "[%s] Could not write header to output file", __func__);
+        return false;
     }
 
     bam1_t* file_read = bam_init1();
@@ -431,17 +437,17 @@ static bool readgroupise(state_t* state)
         state->mode_func(state, file_read);
 
         if (sam_write1(state->output_file, state->output_header, file_read) < 0) {
-            print_error_errno("[%s] Could not write read to output file", __func__);
+            print_error_errno("addreplacerg", "[%s] Could not write read to output file", __func__);
             bam_destroy1(file_read);
-            return true;
+            return false;
         }
     }
     bam_destroy1(file_read);
     if (ret != -1) {
-        print_error_errno("[%s] Error reading from input file", __func__);
-        return true;
-    } else {
+        print_error_errno("addreplacerg", "[%s] Error reading from input file", __func__);
         return false;
+    } else {
+        return true;
     }
 }
 
@@ -450,19 +456,19 @@ int main_addreplacerg(int argc, char** argv)
     parsed_opts_t* opts = NULL;
     state_t* state = NULL;
 
-    if (parse_args(argc, argv, &opts)) goto error;
-    if (!opts) return 0;
-    if (!opts || init(opts, &state)) goto error;
+    if (!parse_args(argc, argv, &opts)) goto error;
+    if (opts == NULL) return EXIT_SUCCESS; // Not an error but user doesn't want us to proceed
+    if (!opts || !init(opts, &state)) goto error;
 
-    if (readgroupise(state)) goto error;
+    if (!readgroupise(state)) goto error;
 
     cleanup_opts(opts);
     cleanup_state(state);
 
-    return 0;
+    return EXIT_SUCCESS;
 error:
     cleanup_opts(opts);
     cleanup_state(state);
 
-    return 1;
+    return EXIT_FAILURE;
 }
