@@ -354,8 +354,7 @@ int main(int argc, char**argv)
     bam1_t* b;
 
     // Setup stderr redirect
-    size_t len = 0;
-    char* res = NULL;
+    kstring_t res = { 0, 0, NULL };
     FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
     char* tempfname = (optind < argc)? argv[optind] : "test_bam_translate.tmp";
     FILE* check = NULL;
@@ -383,8 +382,9 @@ int main(int argc, char**argv)
 
     // check result
     check = fopen(tempfname, "r");
-    if ( (getline(&res, &len, check) == -1 ) &&
-        (feof(check) || (res && !strcmp("",res))) ) {
+    res.l = 0;
+    if (kgetline(&res, (kgets_func *)fgets, check) < 0 &&
+        (feof(check) || res.l == 0) ) {
         ++success;
     } else {
         ++failure;
@@ -420,8 +420,9 @@ int main(int argc, char**argv)
 
     // check result
     check = fopen(tempfname, "r");
-    if ( (getline(&res, &len, check) == -1 ) &&
-        (feof(check) || (res && !strcmp("",res))) ) {
+    res.l = 0;
+    if (kgetline(&res, (kgets_func *)fgets, check) < 0 &&
+        (feof(check) || res.l == 0) ) {
         ++success;
     } else {
         ++failure;
@@ -457,8 +458,9 @@ int main(int argc, char**argv)
 
     // check result
     check = fopen(tempfname, "r");
-    if ( (getline(&res, &len, check) == -1 ) &&
-        (feof(check) || (res && !strcmp("",res)))) {
+    res.l = 0;
+    if (kgetline(&res, (kgets_func *)fgets, check) < 0 &&
+        (feof(check) || res.l == 0)) {
         ++success;
     } else {
         ++failure;
@@ -493,8 +495,9 @@ int main(int argc, char**argv)
     }
     // check result
     check = fopen(tempfname, "r");
-    if ( (getline(&res, &len, check) != -1 ) &&
-        res && !strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.\n",res)) {
+    res.l = 0;
+    if (kgetline(&res, (kgets_func *)fgets, check) >= 0 &&
+        strcmp("[bam_translate] RG tag \"rg4hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.",res.s) == 0) {
         ++success;
     } else {
         ++failure;
@@ -529,8 +532,9 @@ int main(int argc, char**argv)
 
     // check result
     check = fopen(tempfname, "r");
-    if ( (getline(&res, &len, check) != -1 ) &&
-        res && !strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.\n",res)) {
+    res.l = 0;
+    if (kgetline(&res, (kgets_func *)fgets, check) >= 0 &&
+        strcmp("[bam_translate] PG tag \"pg5hello\" on read \"123456789\" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.",res.s) == 0) {
         ++success;
     } else {
         ++failure;
@@ -566,8 +570,9 @@ int main(int argc, char**argv)
 
     // check result
     check = fopen(tempfname, "r");
-    if ( (getline(&res, &len, check) == -1 ) &&
-        (feof(check) || (res && !strcmp("",res))) ) {
+    res.l = 0;
+    if (kgetline(&res, (kgets_func *)fgets, check) < 0 &&
+        (feof(check) || res.l == 0) ) {
         ++success;
     } else {
         ++failure;
@@ -581,7 +586,7 @@ int main(int argc, char**argv)
     if (verbose) printf("END test 6\n");
 
     // Cleanup
-    free(res);
+    free(res.s);
     remove(tempfname);
     if (failure > 0)
         fprintf(orig_stderr, "%d failures %d successes\n", failure, success);

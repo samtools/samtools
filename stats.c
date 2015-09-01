@@ -1217,64 +1217,28 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
 }
 
-size_t mygetline(char **line, size_t *n, FILE *fp)
-{
-    if (line == NULL || n == NULL || fp == NULL)
-    {
-        errno = EINVAL;
-        return -1;
-    }
-    if (*n==0 || !*line)
-    {
-        *line = NULL;
-        *n = 0;
-    }
-
-    size_t nread=0;
-    int c;
-    while ((c=getc(fp))!= EOF && c!='\n')
-    {
-        if ( ++nread>=*n )
-        {
-            *n += 255;
-            *line = realloc(*line, sizeof(char)*(*n));
-        }
-        (*line)[nread-1] = c;
-    }
-    if ( nread>=*n )
-    {
-        *n += 255;
-        *line = realloc(*line, sizeof(char)*(*n));
-    }
-    (*line)[nread] = 0;
-    return nread>0 ? nread : -1;
-
-}
-
 void init_regions(stats_t *stats, const char *file)
 {
     FILE *fp = fopen(file,"r");
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
 
-    char *line = NULL;
-    size_t len = 0;
-    ssize_t nread;
+    kstring_t line = { 0, 0, NULL };
     int warned = 0;
     int prev_tid=-1, prev_pos=-1;
-    while ((nread = mygetline(&line, &len, fp)) != -1)
+    while (line.l = 0, kgetline(&line, (kgets_func *)fgets, fp) >= 0)
     {
-        if ( line[0] == '#' ) continue;
+        if ( line.s[0] == '#' ) continue;
 
         int i = 0;
-        while ( i<nread && !isspace(line[i]) ) i++;
-        if ( i>=nread ) error("Could not parse the file: %s [%s]\n", file,line);
-        line[i] = 0;
+        while ( i<line.l && !isspace(line.s[i]) ) i++;
+        if ( i>=line.l ) error("Could not parse the file: %s [%s]\n", file, line.s);
+        line.s[i] = '\0';
 
-        int tid = bam_name2id(stats->info->sam_header, line);
+        int tid = bam_name2id(stats->info->sam_header, line.s);
         if ( tid < 0 )
         {
             if ( !warned )
-                fprintf(stderr,"Warning: Some sequences not present in the BAM, e.g. \"%s\". This message is printed only once.\n", line);
+                fprintf(stderr,"Warning: Some sequences not present in the BAM, e.g. \"%s\". This message is printed only once.\n", line.s);
             warned = 1;
             continue;
         }
@@ -1297,17 +1261,17 @@ void init_regions(stats_t *stats, const char *file)
             stats->regions[tid].pos = realloc(stats->regions[tid].pos,sizeof(pos_t)*stats->regions[tid].mpos);
         }
 
-        if ( (sscanf(line+i+1,"%d %d",&stats->regions[tid].pos[npos].from,&stats->regions[tid].pos[npos].to))!=2 ) error("Could not parse the region [%s]\n");
+        if ( (sscanf(&line.s[i+1],"%d %d",&stats->regions[tid].pos[npos].from,&stats->regions[tid].pos[npos].to))!=2 ) error("Could not parse the region [%s]\n", &line.s[i+1]);
         if ( prev_tid==-1 || prev_tid!=tid )
         {
             prev_tid = tid;
             prev_pos = stats->regions[tid].pos[npos].from;
         }
         if ( prev_pos>stats->regions[tid].pos[npos].from )
-            error("The positions are not in chromosomal order (%s:%d comes after %d)\n", line,stats->regions[tid].pos[npos].from,prev_pos);
+            error("The positions are not in chromosomal order (%s:%d comes after %d)\n", line.s,stats->regions[tid].pos[npos].from,prev_pos);
         stats->regions[tid].npos++;
     }
-    if (line) free(line);
+    free(line.s);
     if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
     fclose(fp);
 }
