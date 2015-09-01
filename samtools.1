@@ -64,7 +64,9 @@ samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools flags PAIRED,UNMAP,MUNMAP
 .PP
-samtools bam2fq input.bam > output.fastq
+samtools fastq input.bam > output.fastq
+.PP
+samtools fasta input.bam > output.fasta
 .PP
 samtools bamshuf aln.sorted.bam reads.together.bam
 .PP
@@ -1242,11 +1244,16 @@ rb l l .
 0x800	SUPPLEMENTARY	supplementary alignment
 .TE
 
-.TP \"-------- bam2fq
-.B bam2fq
-samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>
+.TP \"-------- fastq fasta
+.B fastq/a
+samtools fastq [-nOt] [-s <outSE.fq>] <in.bam>
 
-Converts a bam into FASTQ format.
+or
+
+samtools fasta [-nOt] [-s <outSE.fa>] <in.bam>
+
+Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
+command invoked.
 
 .B OPTIONS:
 .RS

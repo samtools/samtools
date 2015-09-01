@@ -644,7 +644,7 @@ static readpart which_readpart(const bam1_t *b)
 }
 
 // Transform a bam1_t record into a string with the FASTQ representation of it
-// @returns true for error, false for success
+// @returns false for error, true for success
 static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t *state)
 {
     int i;
@@ -724,10 +724,10 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
         }
         kputc('\n', linebuf);
     }
-    return false;
+    return true;
 }
 
-// return false if valid
+// return true if valid
 static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
 {
     // Parse args
@@ -754,10 +754,10 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case 's': opts->fnse = optarg; break;
             case 't': opts->copy_tags = true; break;
             case 'v': opts->def_qual = atoi(optarg); break;
-            case '?': bam2fq_usage(stderr, argv[0]); free(opts); return true;
+            case '?': bam2fq_usage(stderr, argv[0]); free(opts); return false;
             default:
                 if (parse_sam_global_opt(c, optarg, lopts, &opts->ga) != 0) {
-                    bam2fq_usage(stderr, argv[0]); free(opts); return true;
+                    bam2fq_usage(stderr, argv[0]); free(opts); return false;
                 }
                 break;
         }
@@ -783,7 +783,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         print_error("bam2fq", "Unrecognised type call \"%s\", this should be impossible... but you managed it!", type_str);
         bam2fq_usage(stderr, argv[0]);
         free(opts);
-        return true;
+        return false;
     }
 
     if ((argc - (optind)) == 0) {
@@ -796,11 +796,11 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         fprintf(stderr, "Too many arguments.\n");
         bam2fq_usage(stderr, argv[0]);
         free(opts);
-        return true;
+        return false;
     }
     opts->fn_input = argv[optind];
     *opts_out = opts;
-    return false;
+    return true;
 }
 
 static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
@@ -818,26 +818,26 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     if (state->fp == NULL) {
         print_error_errno("bam2fq","Cannot read file \"%s\"", opts->fn_input);
         free(state);
-        return true;
+        return false;
     }
     uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
     if (opts->use_oq) rf |= SAM_AUX;
     if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
         free(state);
-        return true;
+        return false;
     }
     if (hts_set_opt(state->fp, CRAM_OPT_DECODE_MD, 0)) {
         fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
         free(state);
-        return true;
+        return false;
     }
     if (opts->fnse) {
         state->fpse = fopen(opts->fnse,"w");
         if (state->fpse == NULL) {
             print_error_errno("bam2fq", "Cannot write to singleton file \"%s\"", opts->fnse);
             free(state);
-            return true;
+            return false;
         }
     }
 
@@ -848,7 +848,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
             if (state->fpr[i] == NULL) {
                 print_error_errno("bam2fq", "Cannot write to r%d file \"%s\"", i, opts->fnr[i]);
                 free(state);
-                return true;
+                return false;
             }
         } else {
             state->fpr[i] = stdout;
@@ -859,25 +859,25 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     if (state->h == NULL) {
         fprintf(stderr, "Failed to read header for \"%s\"\n", opts->fn_input);
         free(state);
-        return true;
+        return false;
     }
 
     *state_out = state;
-    return false;
+    return true;
 }
 
 static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int* status)
 {
-    bool error = false;
+    bool valid = true;
     bam_hdr_destroy(state->h);
     check_sam_close("bam2fq", state->fp, opts->fn_input, "file", status);
-    if (state->fpse && fclose(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); error = true; }
+    if (state->fpse && fclose(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); valid = false; }
     int i;
     for (i = 0; i < 3; ++i) {
-        if (state->fpr[i] != stdout && fclose(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); error = true; }
+        if (state->fpr[i] != stdout && fclose(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); valid = false; }
     }
     free(state);
-    return error;
+    return valid;
 }
 
 static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
@@ -898,10 +898,10 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
     int at_eof;
     if (b == NULL ) {
         perror("[bam2fq_mainloop_singletontrack] Malloc error for bam record buffer.");
-        return true;
+        return false;
     }
 
-    bool error = false;
+    bool valid = true;
     while (true) {
         at_eof = sam_read1(state->fp, state->h, b);
 
@@ -912,20 +912,20 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
             if (current_qname) {
                 if (score[1] > 0 && score[2] > 0) {
                     // print linebuf[1] to fpr[1], linebuf[2] to fpr[2]
-                    if (fputs(linebuf[1].s, state->fpr[1]) == EOF) { error = true; break; }
-                    if (fputs(linebuf[2].s, state->fpr[2]) == EOF) { error = true; break; }
+                    if (fputs(linebuf[1].s, state->fpr[1]) == EOF) { valid = false; break; }
+                    if (fputs(linebuf[2].s, state->fpr[2]) == EOF) { valid = false; break; }
                 } else if (score[1] > 0 || score[2] > 0) {
                     // print whichever one exists to fpse
                     if (score[1] > 0) {
-                        if (fputs(linebuf[1].s, state->fpse) == EOF) { error = true; break; }
+                        if (fputs(linebuf[1].s, state->fpse) == EOF) { valid = false; break; }
                     } else {
-                        if (fputs(linebuf[2].s, state->fpse) == EOF) { error = true; break; }
+                        if (fputs(linebuf[2].s, state->fpse) == EOF) { valid = false; break; }
                     }
                     ++n_singletons;
                 }
                 if (score[0]) { // TODO: check this
                     // print linebuf[0] to fpr[0]
-                    if (fputs(linebuf[0].s, state->fpr[0]) == EOF) { error = true; break; }
+                    if (fputs(linebuf[0].s, state->fpr[0]) == EOF) { valid = false; break; }
                 }
             }
 
@@ -939,14 +939,14 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
         // Prefer a copy of the read that has base qualities
         int b_score = bam_get_qual(b)[0] != 0xff? 2 : 1;
         if (b_score > score[which_readpart(b)]) {
-            if(bam1_to_fq(b, &linebuf[which_readpart(b)], state)) {
+            if(!bam1_to_fq(b, &linebuf[which_readpart(b)], state)) {
                 fprintf(stderr, "[%s] Error converting read to FASTA/Q\n", __func__);
-                return true;
+                return false;
             }
             score[which_readpart(b)] = b_score;
         }
     }
-    if (error)
+    if (!valid)
     {
         perror("[bam2fq_mainloop_singletontrack] Error writing to FASTx files.");
     }
@@ -958,7 +958,7 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
     fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
 
-    return error;
+    return valid;
 }
 
 static bool bam2fq_mainloop(bam2fq_state_t *state)
@@ -967,7 +967,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state)
     bam1_t* b = bam_init1();
     if (b == NULL) {
         perror(NULL);
-        return true;
+        return false;
     }
     int64_t n_reads = 0; // Statistics
     kstring_t linebuf = { 0, 0, NULL }; // Buffer
@@ -980,14 +980,14 @@ static bool bam2fq_mainloop(bam2fq_state_t *state)
         /////////////////////////////////////////////////////////////
         // Translate read into fastq format into the output buffer //
         /////////////////////////////////////////////////////////////
-        if (bam1_to_fq(b, &linebuf, state)) return true;
+        if (!bam1_to_fq(b, &linebuf, state)) return false;
         fputs(linebuf.s, state->fpr[which_readpart(b)]);
     }
     free(linebuf.s);
     bam_destroy1(b);
 
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
-    return false;
+    return true;
 }
 
 int main_bam2fq(int argc, char *argv[])
@@ -996,18 +996,18 @@ int main_bam2fq(int argc, char *argv[])
     bam2fq_opts_t* opts = NULL;
     bam2fq_state_t* state = NULL;
 
-    bool invalid = parse_opts(argc, argv, &opts);
-    if (invalid || opts == NULL) return invalid ? EXIT_FAILURE : EXIT_SUCCESS;
+    bool valid = parse_opts(argc, argv, &opts);
+    if (!valid || opts == NULL) return valid ? EXIT_SUCCESS : EXIT_FAILURE;
 
-    if (init_state(opts, &state)) return EXIT_FAILURE;
+    if (!init_state(opts, &state)) return EXIT_FAILURE;
 
     if (state->fpse) {
-        if (bam2fq_mainloop_singletontrack(state)) status = EXIT_FAILURE;
+        if (!bam2fq_mainloop_singletontrack(state)) status = EXIT_FAILURE;
     } else {
-        if (bam2fq_mainloop(state)) status = EXIT_FAILURE;
+        if (!bam2fq_mainloop(state)) status = EXIT_FAILURE;
     }
 
-    if (destroy_state(opts, state, &status)) return EXIT_FAILURE;
+    if (!destroy_state(opts, state, &status)) return EXIT_FAILURE;
     sam_global_args_free(&opts->ga);
     free(opts);
 
