@@ -233,7 +233,8 @@ int main_samview(int argc, char *argv[])
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     bam_hdr_t *header = NULL;
-    char out_mode[5], *out_format = "", *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
+    char out_mode[5], out_un_mode[5], *out_format = "";
+    char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     samview_settings_t settings = {
@@ -256,6 +257,7 @@ int main_samview(int argc, char *argv[])
 
     /* parse command-line options */
     strcpy(out_mode, "w");
+    strcpy(out_un_mode, "w");
     while ((c = getopt_long(argc, argv,
                             "SbBcCt:h1Ho:O:q:f:F:ul:r:?T:R:L:s:@:m:x:U:",
                             lopts, NULL)) >= 0) {
@@ -328,11 +330,19 @@ int main_samview(int argc, char *argv[])
     }
     if (compress_level >= 0 && !*out_format) out_format = "b";
     if (is_header_only) is_header = 1;
-    strcat(out_mode, out_format);
+    // File format auto-detection first
+    if (fn_out)    sam_open_mode(out_mode+1,    fn_out,    NULL);
+    if (fn_un_out) sam_open_mode(out_un_mode+1, fn_un_out, NULL);
+    // Overridden by manual -b, -C
+    if (*out_format)
+        out_mode[1] = out_un_mode[1] = *out_format;
+    out_mode[2] = out_un_mode[2] = 0;
+    // out_(un_)mode now 1 or 2 bytes long, followed by nul.
     if (compress_level >= 0) {
         char tmp[2];
         tmp[0] = compress_level + '0'; tmp[1] = '\0';
         strcat(out_mode, tmp);
+        strcat(out_un_mode, tmp);
     }
     if (argc == optind && isatty(STDIN_FILENO)) return usage(stdout, EXIT_SUCCESS, is_long_help); // potential memory leak...
 
@@ -380,6 +390,7 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (*out_format || is_header ||
+            out_mode[1] == 'b' || out_mode[1] == 'c' ||
             (ga.out.format != sam && ga.out.format != unknown_format))  {
             if (sam_hdr_write(out, header) != 0) {
                 fprintf(stderr, "[main_samview] failed to write the SAM header\n");
@@ -388,12 +399,21 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (fn_un_out) {
-                if ((un_out = sam_open_format(fn_un_out, out_mode, &ga.out)) == 0) {
+                if ((un_out = sam_open_format(fn_un_out, out_un_mode, &ga.out)) == 0) {
                 print_error_errno("view", "failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
             }
-            if (*out_format || is_header) {
+                if (fn_list) {
+                    if (hts_set_fai_filename(un_out, fn_list) != 0) {
+                        fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+                        ret = 1;
+                        goto view_end;
+                    }
+                }
+            if (*out_format || is_header ||
+                out_un_mode[1] == 'b' || out_un_mode[1] == 'c' ||
+                (ga.out.format != sam && ga.out.format != unknown_format))  {
                 if (sam_hdr_write(un_out, header) != 0) {
                     fprintf(stderr, "[main_samview] failed to write the SAM header\n");
                     ret = 1;
