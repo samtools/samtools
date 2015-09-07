@@ -161,11 +161,11 @@ bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
 bam_flags.o: bam_flags.c $(htslib_sam_h)
 bamshuf.o: bamshuf.c $(htslib_sam_h) $(htslib_hts_h) $(HTSDIR)/htslib/ksort.h samtools.h $(sam_opts_h)
-bamtk.o: bamtk.c $(htslib_hts_h) version.h samtools.h
+bamtk.o: bamtk.c $(htslib_hts_h) samtools.h version.h
 bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(sam_opts_h) $(HTSDIR)/htslib/kseq.h
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
 cut_target.o: cut_target.c $(htslib_sam_h) errmod.h $(htslib_faidx_h) $(sam_opts_h)
-dict.o: dict.c $(htslib_kseq_h) $(htslib_hts_h)
+dict.o: dict.c $(HTSDIR)/htslib/kseq.h $(htslib_hts_h)
 errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
 kprobaln.o: kprobaln.c kprobaln.h
 padding.o: padding.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(htslib_faidx_h) sam_header.h
@@ -223,7 +223,7 @@ test/vcf-miniview: test/vcf-miniview.o $(HTSLIB)
 
 test_test_h = test/test.h $(htslib_sam_h)
 
-test/merge/test_bam_translate.o: test/merge/test_bam_translate.c $(test_test_h) bam_sort.o
+test/merge/test_bam_translate.o: test/merge/test_bam_translate.c bam_sort.o $(test_test_h)
 test/merge/test_rtrans_build.o: test/merge/test_rtrans_build.c bam_sort.o
 test/merge/test_trans_tbl_init.o: test/merge/test_trans_tbl_init.c bam_sort.o
 test/split/test_count_rg.o: test/split/test_count_rg.c bam_split.o $(test_test_h)
@@ -255,7 +255,7 @@ misc/wgsim: misc/wgsim.o
 	$(CC) $(LDFLAGS) -o $@ misc/wgsim.o -lm -lz $(LIBS)
 
 misc/ace2sam.o: misc/ace2sam.c $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kseq.h
-misc/md5fa.o: misc/md5fa.c $(htslib_hts_h) $(HTSDIR)/htslib/kseq.h
+misc/md5fa.o: misc/md5fa.c $(HTSDIR)/htslib/kseq.h $(htslib_hts_h)
 misc/md5sum-lite.o: misc/md5sum-lite.c $(htslib_hts_h)
 misc/wgsim.o: misc/wgsim.c $(HTSDIR)/htslib/kseq.h
 
