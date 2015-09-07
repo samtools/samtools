@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2014 Genome Research Ltd.
+#    Copyright (C) 2008-2015 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -135,19 +135,18 @@ sam_h = sam.h $(htslib_sam_h) $(bam_h)
 sam_opts_h = sam_opts.h $(htslib_hts_h)
 sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 
-bam.o: bam.c $(bam_h) sam_header.h
+bam.o: bam.c $(bam_h) $(HTSDIR)/htslib/kstring.h sam_header.h
 bam2bcf.o: bam2bcf.c $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kfunc.h $(bam2bcf_h) errmod.h
 bam2bcf_indel.o: bam2bcf_indel.c $(htslib_sam_h) $(bam2bcf_h) kprobaln.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 bam2depth.o: bam2depth.c $(htslib_sam_h) samtools.h $(sam_opts_h)
-bam_aux.o: bam_aux.c
+bam_aux.o: bam_aux.c $(bam_h)
 bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(HTSDIR)/htslib/khash.h
 bam_color.o: bam_color.c $(bam_h)
 bam_import.o: bam_import.c $(HTSDIR)/htslib/kstring.h $(bam_h) $(HTSDIR)/htslib/kseq.h
 bam_index.o: bam_index.c $(htslib_hts_h) $(htslib_sam_h) $(HTSDIR)/htslib/khash.h
 bam_lpileup.o: bam_lpileup.c $(bam_plbuf_h) $(bam_lpileup_h) $(HTSDIR)/htslib/ksort.h
 bam_mate.o: bam_mate.c $(sam_opts_h) $(HTSDIR)/htslib/kstring.h $(htslib_sam_h)
-bam_md.o: bam_md.c $(htslib_faidx_h) $(htslib_sam_h) kprobaln.h
-bam_pileup.o: bam_pileup.c $(sam_h)
+bam_md.o: bam_md.c $(htslib_faidx_h) $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h kprobaln.h
 bam_plbuf.o: bam_plbuf.c $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(sam_opts_h) $(bam2bcf_h) $(sample_h)
 bam_quickcheck.o: bam_quickcheck.c $(htslib_hts_h) $(htslib_sam_h) $(htslib_bgzf_h)
@@ -160,7 +159,7 @@ bam_stat.o: bam_stat.c $(htslib_sam_h) samtools.h
 bam_tview.o: bam_tview.c $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h) $(sam_opts_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
-bam_flags.o: bam_flags.c $(sam_h)
+bam_flags.o: bam_flags.c $(htslib_sam_h)
 bamshuf.o: bamshuf.c $(htslib_sam_h) $(htslib_hts_h) $(HTSDIR)/htslib/ksort.h samtools.h $(sam_opts_h)
 bamtk.o: bamtk.c $(htslib_hts_h) version.h samtools.h
 bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(sam_opts_h) $(HTSDIR)/htslib/kseq.h
