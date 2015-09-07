@@ -85,7 +85,7 @@ samtools fasta input.bam > output.fasta
 .PP
 samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
 .PP
-samtools bamshuf aln.sorted.bam reads.together.bam
+samtools collate aln.sorted.bam aln.name_collated.bam
 .PP
 samtools depad input.bam
 
@@ -1342,16 +1342,17 @@ can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 .RE
 
-.TP \"-------- bamshuf
-.B bamshuf
-samtools bamshuf
+.TP \"-------- collate
+.B collate
+samtools collate
 .RI [ options ]
 .IR in.sam | in.bam | in.cram " [" out.prefix "]"
 
-Shuffles and groups alignments by name. A faster alternative to a full
-query name sort, bamshuf ensures that reads of the same name are grouped
-together in contiguous groups, but doesn't make any guarantees about the
-order of read names between groups.
+Shuffles and groups reads together by their names.
+A faster alternative to a full query name sort,
+.B collate
+ensures that reads of the same name are grouped together in contiguous groups,
+but doesn't make any guarantees about the order of read names between groups.
 
 The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
