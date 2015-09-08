@@ -331,15 +331,16 @@ int bam_prob_realn(bam1_t *b, const char *ref)
 }
 
 int calmd_usage() {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Usage:   samtools calmd [-eubrS] <aln.bam> <ref.fasta>\n\n");
-    fprintf(stderr, "Options: -e       change identical bases to '='\n");
-    fprintf(stderr, "         -u       uncompressed BAM output (for piping)\n");
-    fprintf(stderr, "         -b       compressed BAM output\n");
-    fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
-    fprintf(stderr, "         -A       modify the quality string\n");
-    fprintf(stderr, "         -r       compute the BQ tag (without -A) or cap baseQ by BAQ (with -A)\n");
-    fprintf(stderr, "         -E       extended BAQ for better sensitivity but lower specificity\n\n");
+    fprintf(stderr,
+"Usage: samtools calmd [-eubrAES] <aln.bam> <ref.fasta>\n"
+"Options:\n"
+"  -e       change identical bases to '='\n"
+"  -u       uncompressed BAM output (for piping)\n"
+"  -b       compressed BAM output\n"
+"  -S       ignored (input format is auto-detected)\n"
+"  -A       modify the quality string\n"
+"  -r       compute the BQ tag (without -A) or cap baseQ by BAQ (with -A)\n"
+"  -E       extended BAQ for better sensitivity but lower specificity\n");
 
     sam_global_opt_help(stderr, "-....");
     return 1;
