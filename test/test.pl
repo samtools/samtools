@@ -1664,7 +1664,7 @@ sub test_view
         ['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
          ['-r', 'grp2', '-R', $fogn], 0],
         # Libraries
-        ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 1],
+        ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
         # Mapping qualities
         ['mq50',  { min_map_qual => 50 },  ['-q', 50], 0],
         ['mq99',  { min_map_qual => 99 },  ['-q', 99], 0],

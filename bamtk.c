@@ -140,7 +140,7 @@ static void usage(FILE *fp)
 "     flags          explain BAM flags\n"
 "     tview          text alignment viewer\n"
 "     view           SAM<->BAM<->CRAM conversion\n"
-//"     depad          convert padded BAM to unpadded BAM\n" // not stable
+"     depad          convert padded BAM to unpadded BAM\n"
 "\n");
 #ifdef _WIN32
     fprintf(fp,

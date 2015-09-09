@@ -1395,6 +1395,11 @@ Generate the MD tag. If the MD tag is already present, this command will
 give a warning if the MD tag generated is different from the existing
 tag. Output SAM by default.
 
+Calmd can also read and write CRAM files although in most cases it is
+pointless as CRAM recalculates MD and NM tags on the fly.  The one
+exception to this case is where both input and output CRAM files
+have been / are being created with the \fIno_ref\fR option.
+
 .B OPTIONS:
 .RS
 .TP 8

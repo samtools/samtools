@@ -146,13 +146,13 @@ bam_import.o: bam_import.c $(HTSDIR)/htslib/kstring.h $(bam_h) $(HTSDIR)/htslib/
 bam_index.o: bam_index.c $(htslib_hts_h) $(htslib_sam_h) $(HTSDIR)/htslib/khash.h
 bam_lpileup.o: bam_lpileup.c $(bam_plbuf_h) $(bam_lpileup_h) $(HTSDIR)/htslib/ksort.h
 bam_mate.o: bam_mate.c $(sam_opts_h) $(HTSDIR)/htslib/kstring.h $(htslib_sam_h)
-bam_md.o: bam_md.c $(htslib_faidx_h) $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h kprobaln.h
+bam_md.o: bam_md.c $(htslib_faidx_h) $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h kprobaln.h $(sam_opts_h)
 bam_plbuf.o: bam_plbuf.c $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(sam_opts_h) $(bam2bcf_h) $(sample_h)
 bam_quickcheck.o: bam_quickcheck.c $(htslib_hts_h) $(htslib_sam_h) $(htslib_bgzf_h)
 bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) samtools.h
-bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
-bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
+bam_rmdup.o: bam_rmdup.c $(htslib_sam_h) $(sam_opts_h) $(bam_h) $(HTSDIR)/htslib/khash.h
+bam_rmdupse.o: bam_rmdupse.c $(bam_h) $(htslib_sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
 bam_sort.o: bam_sort.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(sam_opts_h)
 bam_split.o: bam_split.c $(htslib_sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/kstring.h $(sam_opts_h)
 bam_stat.o: bam_stat.c $(htslib_sam_h) samtools.h
@@ -168,7 +168,7 @@ cut_target.o: cut_target.c $(htslib_sam_h) errmod.h $(htslib_faidx_h) $(sam_opts
 dict.o: dict.c $(HTSDIR)/htslib/kseq.h $(htslib_hts_h)
 errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
 kprobaln.o: kprobaln.c kprobaln.h
-padding.o: padding.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(htslib_faidx_h) sam_header.h
+padding.o: padding.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(htslib_faidx_h) sam_header.h $(sam_opts_h)
 phase.o: phase.c $(htslib_sam_h) errmod.h $(sam_opts_h) $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h

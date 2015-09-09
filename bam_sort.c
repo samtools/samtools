@@ -1443,6 +1443,7 @@ int bam_merge(int argc, char *argv[])
         return 1;
     }
     strcpy(mode, "wb");
+    sam_open_mode(mode+1, argv[optind], NULL);
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
     if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers,
                         fn_size+nargcfiles, fn, flag, reg, n_threads,
@@ -1809,7 +1810,8 @@ int bam_sort(int argc, char *argv[])
         tmpprefix = argv[optind+1];
     }
 
-    strcpy(modeout, "w");
+    strcpy(modeout, "wb");
+    sam_open_mode(modeout+1, fnout, NULL);
     if (level >= 0) sprintf(strchr(modeout, '\0'), "%d", level < 9? level : 9);
 
     if (tmpprefix == NULL) {

@@ -990,6 +990,12 @@ int bam_mpileup(int argc, char *argv[])
             return 1;
         }
     }
+    if (!mplp.fai && mplp.ga.reference) {
+        mplp.fai_fname = mplp.ga.reference;
+        mplp.fai = fai_load(mplp.fai_fname);
+        if (mplp.fai == NULL) return 1;
+    }
+
     if ( !(mplp.flag&MPLP_REALN) && mplp.flag&MPLP_REDO_BAQ )
     {
         fprintf(stderr,"Error: The -B option cannot be combined with -E\n");

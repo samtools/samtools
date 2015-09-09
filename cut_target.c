@@ -175,7 +175,7 @@ int main_cut_target(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 'f'),
         { NULL, 0, NULL, 0 }
     };
 
@@ -188,17 +188,18 @@ int main_cut_target(int argc, char *argv[])
             case '0': g_param.e[1][0] = atoi(optarg); break; // emission SCORE
             case '1': g_param.e[1][1] = atoi(optarg); break;
             case '2': g_param.e[1][2] = atoi(optarg); break;
-            case 'f': g.fai = fai_load(optarg);
-                if (g.fai == 0) fprintf(stderr, "[%s] fail to load the fasta index.\n", __func__);
-                break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage=1; break;
         }
     }
+    if (ga.reference) {
+        g.fai = fai_load(ga.reference);
+        if (g.fai == 0) fprintf(stderr, "[%s] fail to load the fasta index.\n", __func__);
+    }
     if (usage || argc == optind) {
-        fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] [-f ref] [--reference ref.fa] <in.bam>\n");
-        sam_global_opt_help(stderr, "-.--.");
+        fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] <in.bam>\n");
+        sam_global_opt_help(stderr, "-.--f");
         return 1;
     }
     l = max_l = 0; cns = 0;
