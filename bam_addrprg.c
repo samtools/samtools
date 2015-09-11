@@ -395,7 +395,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
         sprintf(new_header,"%s%s\n", retval->output_header->text, opts->rg_line);
         free(retval->output_header->text);
         retval->output_header->text = new_header;
-        retval->output_header->l_text = (int)new_len;
+        retval->output_header->l_text = (int)new_len - 1;
     } else {
         if (opts->rg_id) {
             // Confirm what has been supplied exists
