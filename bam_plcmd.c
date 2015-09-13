@@ -637,9 +637,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                             int c = bam_get_qual(p->b)[p->qpos];
                             if ( c < conf->min_baseQ ) continue;
                             
-                            if (last > 0) putc(',', pileup_fp);
+                            if (last++) putc(',', pileup_fp);
                             fprintf(pileup_fp, "%d", plp[i][j].qpos + 1); // FIXME: printf() is very slow...
-                            last = j;
                         }
                     }
                 }
