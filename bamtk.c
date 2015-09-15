@@ -58,6 +58,7 @@ int main_stats(int argc, char *argv[]);
 int main_flags(int argc, char *argv[]);
 int main_split(int argc, char *argv[]);
 int main_quickcheck(int argc, char *argv[]);
+int main_addreplacerg(int argc, char *argv[]);
 int faidx_main(int argc, char *argv[]);
 int dict_main(int argc, char *argv[]);
 
@@ -117,6 +118,7 @@ static void usage(FILE *fp)
 "     reheader       replace BAM header\n"
 "     rmdup          remove PCR duplicates\n"
 "     targetcut      cut fosmid regions (for fosmid pool only)\n"
+"     addreplacerg   adds or replaces RG tags\n"
 "\n"
 "  -- File operations\n"
 "     bamshuf        shuffle and group alignments by name\n"
@@ -197,6 +199,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
     else if (strcmp(argv[1], "split") == 0)     ret = main_split(argc-1, argv+1);
     else if (strcmp(argv[1], "quickcheck") == 0)  ret = main_quickcheck(argc-1, argv+1);
+    else if (strcmp(argv[1], "addreplacerg") == 0) ret = main_addreplacerg(argc-1, argv+1);
     else if (strcmp(argv[1], "pileup") == 0) {
         fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
         return 1;

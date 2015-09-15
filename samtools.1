@@ -66,6 +66,8 @@ samtools flags PAIRED,UNMAP,MUNMAP
 .PP
 samtools bam2fq input.bam > output.fastq
 .PP
+samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
+.PP
 samtools bamshuf aln.sorted.bam reads.together.bam
 .PP
 samtools depad input.bam
@@ -1385,6 +1387,39 @@ paired-end reads only.
 .TP 8
 .B -S
 Treat paired-end reads and single-end reads.
+.RE
+
+.TP \"-------- addreplacerg
+.B addreplacerg
+samtools addreplacerg [-r rg line | -R rg ID] [-m mode] [-l level] [-o out.bam]
+<input.bam>
+
+Adds or replaces read group tags in a file.
+
+.B OPTIONS:
+.RS
+.TP 8
+.BI "-r " STRING
+Allows you to specify a read group line to append to the header and applies it
+to the reads specified by the -m option. If repeated it automatically adds in
+tabs between invocations.
+.TP 8
+.BI "-R " STRING
+Allows you to specify the read group ID of an existing @RG line and applies it
+to the reads specified.
+.TP 8
+.BI "-m " MODE
+If you choose orphan_only then existing RG tags are not overwritten, if you choose
+overwrite_all, existing RG tags are overwritten. The default is overwrite_all.
+.TP 8
+.BI "-o " STRING
+Write the final output to STRING. The default is to write to stdout.
+
+By default, samtools tries to select a format based on the output
+filename extension; if output is to standard output or no format can be
+deduced,
+.B bam
+is selected.
 .RE
 
 .TP \"-------- calmd

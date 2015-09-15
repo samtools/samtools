@@ -50,6 +50,8 @@ test_calmd($opts);
 test_idxstat($opts);
 test_quickcheck($opts);
 test_reheader($opts);
+test_addrprg($opts);
+
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -2409,4 +2411,16 @@ sub test_reheader
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'");
+}
+
+sub test_addrprg
+{
+    my ($opts,%args) = @_;
+
+    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -m overwrite_all $$opts{path}/addrprg/1_fixup.sam");
+    test_cmd($opts,out=>'addrprg/2_fixup_orphan.sam.expected', err=>'addrprg/2_fixup_orphan.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -m orphan_only $$opts{path}/addrprg/2_fixup_orphan.sam");
+    test_cmd($opts,out=>'addrprg/3_fixup.sam.expected', err=>'addrprg/3_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -R '1#7' $$opts{path}/addrprg/1_fixup.sam", want_fail=>1);
+    test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -r '\@RG\\tID:1#8\\tCN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
+    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -m overwrite_all -R '1#8' $$opts{path}/addrprg/1_fixup.sam");
+    test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -r 'ID:1#8' -r 'CN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
 }
