@@ -37,6 +37,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 */
 
+#include <sys/stat.h>
 #include <unistd.h> // for isatty()
 #include <stdio.h>
 #include <stdlib.h>
@@ -71,6 +72,8 @@ DEALINGS IN THE SOFTWARE.  */
 #define IS_READ2(bam) ((bam)->core.flag&BAM_FREAD2)
 #define IS_DUP(bam) ((bam)->core.flag&BAM_FDUP)
 #define IS_ORIGINAL(bam) (((bam)->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) == 0)
+
+KHASH_MAP_INIT_INT(tidlist, int)
 
 // The GC-depth graph works as follows: split the reference sequence into
 // segments and calculate GC content and depth in each bin. Then sort
@@ -125,6 +128,7 @@ typedef struct
     int cov_min,cov_max,cov_step;   // Minimum, maximum coverage and size of the coverage bins
     samFile* sam;
     bam_hdr_t* sam_header;
+    khash_t(tidlist)* alts;
 
     // Filters
     int filter_readlen;
@@ -786,6 +790,14 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         return;
     }
 
+    // If we have alternate contigs we need to treat supp reads mapped there as secondary
+    if (stats->info->alts && bam_line->core.flag & BAM_FSUPPLEMENTARY ) {
+        khiter_t k = kh_get(tidlist, stats->info->alts, bam_line->core.tid);
+        if(k != kh_end(stats->info->alts)){
+            return;
+        }
+    }
+
     // If line has no sequence cannot continue
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
@@ -1388,6 +1400,7 @@ static void error(const char *format, ...)
 
 void cleanup_stats_info(stats_info_t* info){
     if (info->fai) fai_destroy(info->fai);
+    if (info->alts) kh_destroy(tidlist, info->alts);
     sam_close(info->sam);
     free(info);
 }
@@ -1582,6 +1595,33 @@ static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_h
     return curr_stats;
 }
 
+int load_alts(const char* file, khash_t(tidlist)* alt_tids)
+{
+    samFile* input_file = sam_open(file, "r");
+    bam1_t *rec = bam_init1();
+    bam_hdr_t* hdr = sam_hdr_read(input_file);
+
+    int ret;
+    while ((ret = sam_read1(input_file, hdr, rec)) >= 0) {
+        // Add tid to hash
+        int ret_hash = 0;
+        khiter_t iter = kh_put(tidlist, alt_tids, rec->core.tid, &ret_hash);
+        if( ret_hash < 0 ){
+            error("Failed to insert tid key '%d' into alt_list", rec->core.tid);
+        }
+        kh_val(alt_tids, iter) = IS_UNMAPPED(rec); // store pointer to stats
+    }
+
+    if (ret < -1) {
+        fprintf(stderr, "Failure while decoding alt list file.\n");
+        return 1;
+    }
+    bam_destroy1(rec);
+    bam_hdr_destroy(hdr);
+    sam_close(input_file);
+    return 0;
+}
+
 int main_stats(int argc, char *argv[])
 {
     char *targets = NULL;
@@ -1624,10 +1664,23 @@ int main_stats(int argc, char *argv[])
             case 'F': info->flag_filter = bam_str2flag(optarg); break;
             case 'd': info->flag_filter |= BAM_FDUP; break;
             case 's': break;
-            case 'r': info->fai = fai_load(optarg);
-                      if (info->fai==NULL)
-                          error("Could not load faidx: %s\n", optarg);
-                      break;
+            case 'r': {
+                info->fai = fai_load(optarg);
+                if (info->fai==NULL)
+                    error("Could not load faidx: %s\n", optarg);
+
+                char* name_buf = malloc(strlen(optarg)+5);
+                sprintf(name_buf, "%s.alt", optarg);
+                struct stat   buffer;
+                if (stat (name_buf, &buffer) == 0) {
+                    info->alts = kh_init(tidlist);
+                    if (load_alts(name_buf, info->alts)) {
+                        error("Unable to load alternate contigs\n");
+                    }
+                }
+                free(name_buf);
+                break;
+            }
             case '1': info->gcd_bin_size = atof(optarg); break;
             case 'c': if ( sscanf(optarg,"%d,%d,%d",&info->cov_min,&info->cov_max,&info->cov_step)!= 3 )
                           error("Unable to parse -c %s\n", optarg);
