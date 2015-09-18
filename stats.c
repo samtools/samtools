@@ -1628,7 +1628,7 @@ int main_stats(int argc, char *argv[])
                       if (info->fai==NULL)
                           error("Could not load faidx: %s\n", optarg);
                       break;
-            case  1 : info->gcd_bin_size = atof(optarg); break;
+            case '1': info->gcd_bin_size = atof(optarg); break;
             case 'c': if ( sscanf(optarg,"%d,%d,%d",&info->cov_min,&info->cov_max,&info->cov_step)!= 3 )
                           error("Unable to parse -c %s\n", optarg);
                       break;
