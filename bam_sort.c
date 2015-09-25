@@ -1342,19 +1342,20 @@ static void merge_usage(FILE *to)
 {
     fprintf(to, "Usage: samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> [<in2.bam> ... <inN.bam>]\n\n");
     fprintf(to, "Options:\n");
-    fprintf(to, "  -n             sort by read names\n");
-    fprintf(to, "  -r             attach RG tag (inferred from file names)\n");
-    fprintf(to, "  -u             uncompressed BAM output\n");
-    fprintf(to, "  -f             overwrite the output BAM if exist\n");
-    fprintf(to, "  -1             compress level 1\n");
-    fprintf(to, "  -l INT         compression level, from 0 to 9 [-1]\n");
-    fprintf(to, "  -@ INT         number of BAM compression threads [0]\n");
-    fprintf(to, "  -R STR         merge file in the specified region STR [all]\n");
-    fprintf(to, "  -h FILE        copy the header in FILE to <out.bam> [in1.bam]\n");
-    fprintf(to, "  -c             combine RG tags with colliding IDs rather than amending them\n");
-    fprintf(to, "  -p             combine PG tags with colliding IDs rather than amending them\n");
-    fprintf(to, "  -s VALUE       override random seed\n");
-    fprintf(to, "  -b FILE        list of input BAM filenames, one per line [null]\n");
+    fprintf(to, "  -n           sort by read names\n");
+    fprintf(to, "  -r           attach RG tag (inferred from file names)\n");
+    fprintf(to, "  -u           uncompressed BAM output\n");
+    fprintf(to, "  -f           overwrite the output BAM if exist\n");
+    fprintf(to, "  -1           compress level 1\n");
+    fprintf(to, "  -l INT       compression level, from 0 to 9 [-1]\n");
+    fprintf(to, "  -R STR       merge file in the specified region STR [all]\n");
+    fprintf(to, "  -h FILE      copy the header in FILE to <out.bam> [in1.bam]\n");
+    fprintf(to, "  -c           combine RG tags with colliding IDs rather than amending them\n");
+    fprintf(to, "  -p           combine PG tags with colliding IDs rather than amending them\n");
+    fprintf(to, "  -s VALUE     override random seed\n");
+    fprintf(to, "  -b FILE      list of input BAM filenames, one per line [null]\n");
+    fprintf(to, "  -@, --threads INT\n");
+    fprintf(to, "               number of BAM/CRAM compression threads [0]\n");
     sam_global_opt_help(to, "-.O..");
 }
 
@@ -1369,6 +1370,7 @@ int bam_merge(int argc, char *argv[])
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+        {"threads", 1, 0, '@'}, 
         { NULL, 0, NULL, 0 }
     };
 
@@ -1716,13 +1718,14 @@ static int sort_usage(FILE *fp, int status)
     fprintf(fp,
 "Usage: samtools sort [options...] [in.bam]\n"
 "Options:\n"
-"  -l INT     Set compression level, from 0 (uncompressed) to 9 (best)\n"
-"  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
-"  -n         Sort by read name\n"
-"  -o FILE    Write final output to FILE rather than standard output\n"
-"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')   (either -O or\n"
-"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam       -T is required)\n"
-"  -@ INT     Set number of sorting and compression threads [1]\n");
+"  -l INT       Set compression level, from 0 (uncompressed) to 9 (best)\n"
+"  -m INT       Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
+"  -n           Sort by read name\n"
+"  -o FILE      Write final output to FILE rather than standard output\n"
+"  -O FORMAT    Write output as FORMAT ('sam'/'bam'/'cram')   (either -O or\n"
+"  -T PREFIX    Write temporary files to PREFIX.nnnn.bam       -T is required)\n"
+"  -@, --threads INT\n"
+"               Set number of sorting and compression threads [1]\n");
     sam_global_opt_help(fp, "-.O..");
     fprintf(fp, "\n"
 "Legacy usage: samtools sort [options...] <in.bam> <out.prefix>\n"
@@ -1748,6 +1751,7 @@ int bam_sort(int argc, char *argv[])
     if (modern) {
         static const struct option lopts[] = {
             SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+            {"threads", 1, 0, '@'}, 
             { NULL, 0, NULL, 0 }
         };
 
