@@ -42,6 +42,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/kstring.h>
 #include <htslib/klist.h>
 #include <htslib/khash_str2int.h>
+#include <htslib/cram.h>
 #include "samtools.h"
 #include "bedidx.h"
 #include "sam_opts.h"
@@ -445,6 +446,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
     }
 
     // read the header of each file in the list and initialize data
+    refs_t *refs = NULL;
     for (i = 0; i < n; ++i) {
         sam_hdr_t *h_tmp;
         data[i] = calloc(1, sizeof(mplp_aux_t));
@@ -458,11 +460,22 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
             fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
             exit(EXIT_FAILURE);
         }
-        if (conf->fai_fname && hts_set_fai_filename(data[i]->fp, conf->fai_fname) != 0) {
-            fprintf(stderr, "[%s] failed to process %s: %s\n",
-                    __func__, conf->fai_fname, strerror(errno));
-            exit(EXIT_FAILURE);
+
+        if (!refs && conf->fai_fname) {
+            if (hts_set_fai_filename(data[i]->fp, conf->fai_fname) != 0) {
+                fprintf(stderr, "[%s] failed to process %s: %s\n",
+                        __func__, conf->fai_fname, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
+            refs = cram_get_refs(data[i]->fp);
+        } else if (conf->fai_fname) {
+            if (hts_set_opt(data[i]->fp, CRAM_OPT_SHARED_REF, refs) != 0) {
+                fprintf(stderr, "[%s] failed to process %s: %s\n",
+                        __func__, conf->fai_fname, strerror(errno));
+                exit(EXIT_FAILURE);
+            }
         }
+
         data[i]->conf = conf;
         data[i]->ref = &mp_ref;
         h_tmp = sam_hdr_read(data[i]->fp);

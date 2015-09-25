@@ -47,6 +47,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
 #include "htslib/hts_endian.h"
+#include "htslib/cram.h"
 #include "sam_opts.h"
 #include "samtools.h"
 #include "bedidx.h"
@@ -1017,6 +1018,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     hts_reglist_t *lreg = NULL;
     merged_header_t *merged_hdr = init_merged_header();
     if (!merged_hdr) return -1;
+    refs_t *refs = NULL;
 
     // Is there a specified pre-prepared header to use for output?
     if (headers) {
@@ -1107,15 +1109,11 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
         }
 
-        // Potential future improvement is to share headers between CRAM files for
-        // samtools sort (where all headers are identical.
-        // Eg:
-        //
-        // if (i > 1) {
-        //     sam_hdr_free(cram_fd_get_header(fp[i]->fp.cram));
-        //     cram_fd_set_header(fp[i]->fp.cram, cram_fd_get_header(fp[0]->fp.cram));
-        //     sam_hdr_incr_ref(cram_fd_get_header(fp[0]->fp.cram));
-        // }
+        if (!refs && cram_get_refs(fp[i]))
+            refs = cram_get_refs(fp[i]);
+
+        if (refs && hts_set_opt(fp[i], CRAM_OPT_SHARED_REF, refs))
+            return -1;  // FIXME: memory leak
     }
 
     // Did we get an @HD line?
@@ -1283,6 +1281,9 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         }
     }
     if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
+
+    if (refs && hts_set_opt(fpout, CRAM_OPT_SHARED_REF, refs))
+        goto fail;
 
     // Begin the actual merge
     ks_heapmake(heap, n, heap);
