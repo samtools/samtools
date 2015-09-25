@@ -1370,7 +1370,7 @@ int bam_merge(int argc, char *argv[])
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
-        {"threads", 1, 0, '@'}, 
+        {"threads", required_argument, 0, '@'},
         { NULL, 0, NULL, 0 }
     };
 
@@ -1751,7 +1751,7 @@ int bam_sort(int argc, char *argv[])
     if (modern) {
         static const struct option lopts[] = {
             SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
-            {"threads", 1, 0, '@'}, 
+            {"threads", required_argument, 0, '@'},
             { NULL, 0, NULL, 0 }
         };
 
