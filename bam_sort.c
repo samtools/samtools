@@ -1367,13 +1367,14 @@ static void merge_usage(FILE *to)
 "  -f         Overwrite the output BAM if exist\n"
 "  -1         Compress level 1\n"
 "  -l INT     Compression level, from 0 to 9 [-1]\n"
-"  -@ INT     Number of BAM compression threads [0]\n"
 "  -R STR     Merge file in the specified region STR [all]\n"
 "  -h FILE    Copy the header in FILE to <out.bam> [in1.bam]\n"
 "  -c         Combine @RG headers with colliding IDs [alter IDs to be distinct]\n"
 "  -p         Combine @PG headers with colliding IDs [alter IDs to be distinct]\n"
 "  -s VALUE   Override random seed\n"
-"  -b FILE    List of input BAM filenames, one per line [null]\n");
+"  -b FILE    List of input BAM filenames, one per line [null]\n"
+"  -@, --threads INT\n"
+"             Number of BAM/CRAM compression threads [0]\n");
     sam_global_opt_help(to, "-.O..");
 }
 
@@ -1388,6 +1389,7 @@ int bam_merge(int argc, char *argv[])
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+        { "threads", required_argument, NULL, '@' },
         { NULL, 0, NULL, 0 }
     };
 
@@ -1741,7 +1743,8 @@ static void sort_usage(FILE *fp)
 "  -n         Sort by read name\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
-"  -@ INT     Set number of sorting and compression threads [1]\n");
+"  -@, --threads INT\n"
+"             Set number of sorting and compression threads [1]\n");
     sam_global_opt_help(fp, "-.O..");
 }
 
@@ -1755,6 +1758,7 @@ int bam_sort(int argc, char *argv[])
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+        { "threads", required_argument, NULL, '@' },
         { NULL, 0, NULL, 0 }
     };
 

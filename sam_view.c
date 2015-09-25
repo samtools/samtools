@@ -252,6 +252,7 @@ int main_samview(int argc, char *argv[])
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T'),
+        { "threads", required_argument, NULL, '@' },
         { NULL, 0, NULL, 0 }
     };
 
@@ -543,7 +544,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -s FLOAT integer part sets seed of random number generator [0];\n"
 "           rest sets fraction of templates to subsample [no subsampling]\n"
 // general options
-"  -@ INT   number of BAM compression threads [0]\n"
+"  -@, --threads INT\n"
+"           number of BAM/CRAM compression threads [0]\n"
 "  -?       print long help, including note about region specification\n"
 "  -S       ignored (input format is auto-detected)\n");
 
