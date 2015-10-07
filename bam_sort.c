@@ -344,8 +344,7 @@ static int trans_tbl_add_hd(merged_header_t* merged_hdr,
     if (merged_hdr->have_hd) return 0;
 
     if (hdr_line_match(translate->text, "@HD", NULL, &match) != 0) {
-        fprintf(stderr, "[%s] No @HD tag found.\n", __func__);
-        return -1;
+        return 0;
     }
 
     if (match_to_ks(translate->text, &match, &merged_hdr->out_hd)) goto memfail;
@@ -1199,6 +1198,17 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
         }
+    }
+
+    // Did we get an @HD line?
+    if (!merged_hdr->have_hd) {
+        fprintf(stderr, "[W::%s] No @HD tag found.\n", __func__);
+        /* FIXME:  Should we add an @HD line here, and if so what should
+           we put in it? Ideally we want a way of getting htslib to tell
+           us the SAM version number to assume given no @HD line.  Is
+           it also safe to assume that the output is coordinate sorted?
+           SO: is optional so we don't have to have it.*/
+        /* ksprintf(&merged_hdr->out_hd, "@HD\tVN:1.5\tSO:coordinate\n"); */
     }
 
     // Transform the header into standard form
