@@ -182,8 +182,7 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
     }
 
     // New, so migrate to old and load new
-    if (r->ref[1])
-        free(r->ref[1]);
+    free(r->ref[1]);
     r->ref[1]     = r->ref[0];
     r->ref_id[1]  = r->ref_id[0];
     r->ref_len[1] = r->ref_len[0];
@@ -192,10 +191,10 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
     r->ref[0] = faidx_fetch_seq(ma->conf->fai,
                                 ma->h->target_name[r->ref_id[0]],
                                 0,
-                                0x7fffffff,
+                                INT_MAX,
                                 &r->ref_len[0]);
 
-    if (!r->ref) {
+    if (!r->ref[0]) {
         r->ref[0] = NULL;
         r->ref_id[0] = -1;
         r->ref_len[0] = 0;
@@ -675,8 +674,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         free(data[i]);
     }
     free(data); free(plp); free(n_plp);
-    if (mp_ref.ref[0]) free(mp_ref.ref[0]);
-    if (mp_ref.ref[1]) free(mp_ref.ref[1]);
+    free(mp_ref.ref[0]);
+    free(mp_ref.ref[1]);
     return ret;
 }
 
