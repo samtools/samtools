@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2014 Genome Research Ltd.
+    Copyright (C) 2009-2015 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -590,21 +590,19 @@ static const char *copied_tags[] = { "RG", "BC", "QT", NULL };
 static void bam2fq_usage(FILE *to, const char *command)
 {
     fprintf(to,
-"Usage:   samtools %s [-nOt] [-s <outSE.fq>] <in.bam>\n"
+"Usage: samtools %s [options...] <in.bam>\n", command);
+    fprintf(to,
 "Options:\n"
 "  -0 FILE   write paired reads flagged both or neither READ1 and READ2 to FILE\n"
 "  -1 FILE   write paired reads flagged READ1 to FILE\n"
 "  -2 FILE   write paired reads flagged READ2 to FILE\n"
 "  -f INT    only include reads with all bits set in INT set in FLAG [0]\n"
-"  -F INT    only include reads with none of the bits set in INT\n"
-"            set in FLAG [0]\n"
+"  -F INT    only include reads with none of the bits set in INT set in FLAG [0]\n"
 "  -n        don't append /1 and /2 to the read name\n"
 "  -O        output quality in the OQ tag if present\n"
 "  -s FILE   write singleton reads to FILE [assume single-end]\n"
 "  -t        copy RG, BC and QT tags to the FASTQ header line\n"
-"  -v INT    default quality score if not given in file [1]\n",
-            command
-            );
+"  -v INT    default quality score if not given in file [1]\n");
     sam_global_opt_help(to, "-.--.");
 }
 
@@ -774,10 +772,8 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
 
     const char* type_str = argv[0];
     if (strcasecmp("fastq", type_str) == 0 || strcasecmp("bam2fq", type_str) == 0) {
-        fprintf(stderr, "Producing FASTQ output.\n");
         opts->filetype = FASTQ;
     } else if (strcasecmp("fasta", type_str) == 0) {
-        fprintf(stderr, "Producing FASTA output.\n");
         opts->filetype = FASTA;
     } else {
         print_error("bam2fq", "Unrecognised type call \"%s\", this should be impossible... but you managed it!", type_str);
@@ -931,7 +927,7 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
 
             if (at_eof) break;
 
-            if (current_qname) free(current_qname);
+            free(current_qname);
             current_qname = strdup(bam_get_qname(b));
             score[0] = score[1] = score[2] = 0;
         }
@@ -977,9 +973,6 @@ static bool bam2fq_mainloop(bam2fq_state_t *state)
             || (b->core.flag&(state->flag_off)) != 0) continue;
         ++n_reads;
 
-        /////////////////////////////////////////////////////////////
-        // Translate read into fastq format into the output buffer //
-        /////////////////////////////////////////////////////////////
         if (!bam1_to_fq(b, &linebuf, state)) return false;
         fputs(linebuf.s, state->fpr[which_readpart(b)]);
     }

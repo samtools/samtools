@@ -2140,7 +2140,7 @@ sub sam2fq
     while (<$in>) {
         next if (/^@/);
         my @s = split(/\t/, $_);
-        next if ($s[1] & 2304);
+        next if ($s[1] & (256|2048));
         my $dirn = ($s[1] & 0xc0) >> 6;
         my $suff = $suffixes ? ('', '/1', '/2', '')[$dirn] : '';
         if (($s[1] & 0x10) != 0) { # reverse complement

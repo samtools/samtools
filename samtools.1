@@ -1246,11 +1246,13 @@ rb l l .
 
 .TP \"-------- fastq fasta
 .B fastq/a
-samtools fastq [-nOt] [-s <outSE.fq>] <in.bam>
-
-or
-
-samtools fasta [-nOt] [-s <outSE.fa>] <in.bam>
+samtools fastq
+.RI [ options ]
+.I in.bam
+.br
+samtools fasta
+.RI [ options ]
+.I in.bam
 
 Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
 command invoked.
