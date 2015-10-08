@@ -64,7 +64,9 @@ samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools flags PAIRED,UNMAP,MUNMAP
 .PP
-samtools bam2fq input.bam > output.fastq
+samtools fastq input.bam > output.fastq
+.PP
+samtools fasta input.bam > output.fasta
 .PP
 samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
 .PP
@@ -1266,11 +1268,18 @@ rb l l .
 0x800	SUPPLEMENTARY	supplementary alignment
 .TE
 
-.TP \"-------- bam2fq
-.B bam2fq
-samtools bam2fq [-nOt] [-s <outSE.fq>] <in.bam>
+.TP \"-------- fastq fasta
+.B fastq/a
+samtools fastq
+.RI [ options ]
+.I in.bam
+.br
+samtools fasta
+.RI [ options ]
+.I in.bam
 
-Converts a bam into FASTQ format.
+Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
+command invoked.
 
 .B OPTIONS:
 .RS
@@ -1291,6 +1300,32 @@ Write singleton reads in FASTQ format to FILE instead of outputting them.
 .TP 8
 .B -t
 Copy RG, BC and QT tags to the FASTQ header line, if they exist.
+.TP 8
+.B -1 FILE
+Write reads with the BAM_READ1 flag set to FILE instead of outputting them.
+.TP 8
+.B -2 FILE
+Write reads with the BAM_READ2 flag set to FILE instead of outputting them.
+.TP 8
+.B -0 FILE
+Write reads with both or neither of the BAM_READ1 and BAM_READ2 flags set
+to FILE instead of outputting them.
+.TP 8
+.BI "-f " INT
+Only output alignments with all bits set in
+.I INT
+present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+.TP 8
+.BI "-F " INT
+Do not output alignments with any bits set in
+.I INT
+present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 .RE
 
 .TP \"-------- bamshuf

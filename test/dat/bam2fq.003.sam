@@ -41,6 +41,7 @@ ref1_grp1_p006	147	ref1	45	22	10M	=	21	-34	GCAAGCTTGA	7777777777	MD:Z:10	NM:i:0	
 ref1_grp2_p001	99	ref1	3	1	8M2S	=	27	34	AGCTCGGTAC	""""""""""	MD:Z:8	NM:i:0	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE
 ref1_grp2_p001	2147	ref1	11	1	8H2M	=	27	34	AC	""	MD:Z:2	NM:i:0	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE
 ref1_grp2_p001	147	ref1	27	13	10M	=	3	-34	GAGTCGACCT	..........	MD:Z:10	NM:i:0	RG:Z:grp2
+ref1_grp2_p002a	99	ref1	7	3	10M	=	31	34	CGGTACCCGG	$$$$$$$$$$	MD:Z:10	NM:i:0	fa:f:6.022e+23	RG:Z:grp2
 ref1_grp2_p002	99	ref1	7	3	10M	=	31	34	CGGTACCCGG	$$$$$$$$$$	MD:Z:10	NM:i:0	fa:f:6.022e+23	RG:Z:grp2
 ref1_grp2_p002	147	ref1	31	15	10M	=	7	-34	CGACCTGCAG	0000000000	MD:Z:10	NM:i:0	RG:Z:grp2
 ref1_grp2_p003	99	ref1	11	5	10M	=	35	34	ACCCGGGGAT	&&&&&&&&&&	MD:Z:10	NM:i:0	RG:Z:grp2	ia:i:4294967295
@@ -62,4 +63,3 @@ ref12_grp1_p001	145	ref2	2	50	10M	ref1	36	0	TTCTATAGTG	BBBBBBBBBB	MD:Z:10	NM:i:0
 ref12_grp2_p001	97	ref1	46	50	10M	ref2	12	0	CAAGCTTGAG	AAAAAAAAAA	MD:Z:10	NM:i:0	RG:Z:grp2
 ref12_grp2_p001	145	ref2	12	50	10M	ref1	46	0	TCACCTAAAT	BBBBBBBBBB	MD:Z:10	NM:i:0	RG:Z:grp2
 unaligned_grp3_p001	77	*	0	0	*	*	0	0	CACTCGTTCATGACG	0123456789abcde	RG:Z:grp3
-unaligned_grp3_p001	141	*	0	0	*	*	0	0	GAAAGTGAGGAGGTG	edcba9876543210	RG:Z:grp3
