@@ -1,3 +1,4 @@
+'\" t
 .TH samtools 1 "2 February 2015" "samtools-1.2" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
@@ -25,7 +26,21 @@ samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 .\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 .\" DEALINGS IN THE SOFTWARE.
-.\"
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
 .SH SYNOPSIS
 .PP
 samtools view -bt ref_list.txt -o aln.bam aln.sam.gz
@@ -1706,14 +1721,11 @@ reference is available for the file.
 .RE
 .PP
 For example:
-.RS 4
-.HP 4
+.EX 4
 samtools view --input-fmt-option decode_md=0
-.br
---output-fmt cram,version=3.0 --output-fmt-option embed_ref
-.br
---output-fmt-option seqs_per_slice=2000 -o foo.cram foo.bam
-.RE
+    --output-fmt cram,version=3.0 --output-fmt-option embed_ref
+    --output-fmt-option seqs_per_slice=2000 -o foo.cram foo.bam
+.EE
 .PP
 .SH REFERENCE SEQUENCES
 .PP
@@ -1788,16 +1800,16 @@ and generates the MD5sum named files.
 Import SAM to BAM when
 .B @SQ
 lines are present in the header:
-
-  samtools view -bS aln.sam > aln.bam
-
+.EX 2
+samtools view -bS aln.sam > aln.bam
+.EE
 If
 .B @SQ
 lines are absent:
-
-  samtools faidx ref.fa
-  samtools view -bt ref.fa.fai aln.sam > aln.bam
-
+.EX 2
+samtools faidx ref.fa
+samtools view -bt ref.fa.fai aln.sam > aln.bam
+.EE
 where
 .I ref.fa.fai
 is generated automatically by the
@@ -1806,17 +1818,17 @@ command.
 
 .IP o 2
 Convert a BAM file to a CRAM file using a local reference sequence.
-
-  samtools view -C -T ref.fa aln.bam > aln.cram
-
+.EX 2
+samtools view -C -T ref.fa aln.bam > aln.cram
+.EE
 .IP o 2
 Attach the
 .B RG
 tag while merging sorted alignments:
-
-  perl -e 'print "@RG\\tID:ga\\tSM:hs\\tLB:ga\\tPL:Illumina\\n@RG\\tID:454\\tSM:hs\\tLB:454\\tPL:454\\n"' > rg.txt
-  samtools merge -rh rg.txt merged.bam ga.bam 454.bam
-
+.EX 2
+perl -e 'print "@RG\\tID:ga\\tSM:hs\\tLB:ga\\tPL:Illumina\\n@RG\\tID:454\\tSM:hs\\tLB:454\\tPL:454\\n"' > rg.txt
+samtools merge -rh rg.txt merged.bam ga.bam 454.bam
+.EE
 The value in a
 .B RG
 tag is determined by the file name the read is coming from. In this
@@ -1833,10 +1845,10 @@ will be attached
 
 .IP o 2
 Call SNPs and short INDELs:
-
-  samtools mpileup -uf ref.fa aln.bam | bcftools call -mv > var.raw.vcf
-  bcftools filter -s LowQual -e '%QUAL<20 || DP>100' var.raw.vcf  > var.flt.vcf
-
+.EX 2
+samtools mpileup -uf ref.fa aln.bam | bcftools call -mv > var.raw.vcf
+bcftools filter -s LowQual -e '%QUAL<20 || DP>100' var.raw.vcf  > var.flt.vcf
+.EE
 The
 .B bcftools filter
 command marks low quality sites and sites with the read depth exceeding
@@ -1868,14 +1880,14 @@ technology may affect the performance of indel calling.
 
 .IP o 2
 Generate the consensus sequence for one diploid individual:
-
-  samtools mpileup -uf ref.fa aln.bam | bcftools call -c | vcfutils.pl vcf2fq > cns.fq
-
+.EX 2
+samtools mpileup -uf ref.fa aln.bam | bcftools call -c | vcfutils.pl vcf2fq > cns.fq
+.EE
 .IP o 2
 Phase one individual:
-
-  samtools calmd -AEur aln.bam ref.fa | samtools phase -b prefix - > phase.out
-
+.EX 2
+samtools calmd -AEur aln.bam ref.fa | samtools phase -b prefix - > phase.out
+.EE
 The
 .B calmd
 command is used to reduce false heterozygotes around INDELs.
@@ -1883,9 +1895,9 @@ command is used to reduce false heterozygotes around INDELs.
 
 .IP o 2
 Dump BAQ applied alignment for other SNP callers:
-
-  samtools calmd -bAr aln.bam > aln.baq.bam
-
+.EX 2
+samtools calmd -bAr aln.bam > aln.baq.bam
+.EE
 It adds and corrects the
 .B NM
 and
