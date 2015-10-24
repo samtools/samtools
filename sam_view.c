@@ -252,6 +252,7 @@ int main_samview(int argc, char *argv[])
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T'),
+        {"threads", required_argument, 0, '@'},
         { NULL, 0, NULL, 0 }
     };
 
@@ -516,36 +517,38 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "\n"
 "Options:\n"
 // output options
-"  -b       output BAM\n"
-"  -C       output CRAM (requires -T)\n"
-"  -1       use fast BAM compression (implies -b)\n"
-"  -u       uncompressed BAM output (implies -b)\n"
-"  -h       include header in SAM output\n"
-"  -H       print SAM header only (no alignments)\n"
-"  -c       print only the count of matching records\n"
-"  -o FILE  output file name [stdout]\n"
-"  -U FILE  output reads not selected by filters to FILE [null]\n"
+"  -b           output BAM\n"
+"  -C           output CRAM (requires -T)\n"
+"  -1           use fast BAM compression (implies -b)\n"
+"  -u           uncompressed BAM output (implies -b)\n"
+"  -h           include header in SAM output\n"
+"  -H           print SAM header only (no alignments)\n"
+"  -c           print only the count of matching records\n"
+"  -o FILE      output file name [stdout]\n"
+"  -U FILE      output reads not selected by filters to FILE [null]\n"
 // extra input
-"  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
+"  -t FILE      FILE listing reference names and lengths (see long help) [null]\n"
 // read filters
-"  -L FILE  only include reads overlapping this BED FILE [null]\n"
-"  -r STR   only include reads in read group STR [null]\n"
-"  -R FILE  only include reads with read group listed in FILE [null]\n"
-"  -q INT   only include reads with mapping quality >= INT [0]\n"
-"  -l STR   only include reads in library STR [null]\n"
-"  -m INT   only include reads with number of CIGAR operations consuming\n"
-"           query sequence >= INT [0]\n"
-"  -f INT   only include reads with all bits set in INT set in FLAG [0]\n"
-"  -F INT   only include reads with none of the bits set in INT set in FLAG [0]\n"
+"  -L FILE      only include reads overlapping this BED FILE [null]\n"
+"  -r STR       only include reads in read group STR [null]\n"
+"  -R FILE      only include reads with read group listed in FILE [null]\n"
+"  -q INT       only include reads with mapping quality >= INT [0]\n"
+"  -l STR       only include reads in library STR [null]\n"
+"  -m INT       only include reads with number of CIGAR operations consuming\n"
+"               query sequence >= INT [0]\n"
+"  -f INT       only include reads with all bits set in INT set in FLAG [0]\n"
+"  -F INT       only include reads with none of the bits set in INT set in\n"
+"               FLAG [0]\n"
 // read processing
-"  -x STR   read tag to strip (repeatable) [null]\n"
-"  -B       collapse the backward CIGAR operation\n"
-"  -s FLOAT integer part sets seed of random number generator [0];\n"
-"           rest sets fraction of templates to subsample [no subsampling]\n"
+"  -x STR       read tag to strip (repeatable) [null]\n"
+"  -B           collapse the backward CIGAR operation\n"
+"  -s FLOAT     integer part sets seed of random number generator [0];\n"
+"               rest sets fraction of templates to subsample [no subsampling]\n"
 // general options
-"  -@ INT   number of BAM compression threads [0]\n"
-"  -?       print long help, including note about region specification\n"
-"  -S       ignored (input format is auto-detected)\n");
+"  -@, --threads INT\n"
+"               number of BAM/CRAM compression threads [0]\n"
+"  -?           print long help, including note about region specification\n"
+"  -S           ignored (input format is auto-detected)\n");
 
     sam_global_opt_help(fp, "-.O.T");
     fprintf(fp, "\n");
