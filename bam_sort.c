@@ -1363,8 +1363,8 @@ static void merge_usage(FILE *to)
 "  -@ INT     Number of BAM compression threads [0]\n"
 "  -R STR     Merge file in the specified region STR [all]\n"
 "  -h FILE    Copy the header in FILE to <out.bam> [in1.bam]\n"
-"  -c         Combine RG tags with colliding IDs rather than amending them\n"
-"  -p         Combine PG tags with colliding IDs rather than amending them\n"
+"  -c         Combine @RG headers with colliding IDs [alter IDs to be distinct]\n"
+"  -p         Combine @PG headers with colliding IDs [alter IDs to be distinct]\n"
 "  -s VALUE   Override random seed\n"
 "  -b FILE    List of input BAM filenames, one per line [null]\n");
     sam_global_opt_help(to, "-.O..");
