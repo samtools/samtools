@@ -1361,8 +1361,8 @@ static void merge_usage(FILE *to)
     fprintf(to, "  -@ INT         number of BAM compression threads [0]\n");
     fprintf(to, "  -R STR         merge file in the specified region STR [all]\n");
     fprintf(to, "  -h FILE        copy the header in FILE to <out.bam> [in1.bam]\n");
-    fprintf(to, "  -c             combine RG tags with colliding IDs rather than amending them\n");
-    fprintf(to, "  -p             combine PG tags with colliding IDs rather than amending them\n");
+    fprintf(to, "  -c             for each RG ID use RG line of 1st file it is in rather than uniquifying them\n");
+    fprintf(to, "  -p             for each PG ID use PG line of 1st file it is in rather than uniquifying them\n");
     fprintf(to, "  -s VALUE       override random seed\n");
     fprintf(to, "  -b FILE        list of input BAM filenames, one per line [null]\n");
     sam_global_opt_help(to, "-.O..");

@@ -798,10 +798,13 @@ Attach an RG tag to each alignment. The tag value is inferred from file names.
 Uncompressed BAM output
 .TP
 .B -c
-Combine RG tags with colliding IDs rather than adding a suffix to differentiate them.
+For each RG ID in the set of files to merge use RG line of the first file
+we find it in rather than adding a suffix to differentiate them. This and the
+following option is to be used when the files to be merged were originally one file.
 .TP
 .B -p
-Combine PG tags with colliding IDs rather than adding a suffix to differentiate them.
+For each RG ID in the set of files to merge use RG line of the first file
+we find it in rather than adding a suffix to differentiate them.
 .RE
 
 .TP \"-------- faidx
