@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
 #include "sam_header.h"
+#include "sam_opts.h"
 
 #define bam_reg2bin(b,e) hts_reg2bin((b),(e), 14, 5)
 
@@ -474,33 +475,42 @@ int main_pad2unpad(int argc, char *argv[])
     samFile *in = 0, *out = 0;
     bam_hdr_t *h = 0, *h_fix = 0;
     faidx_t *fai = 0;
-    int c, is_bamin = 1, compress_level = -1, is_long_help = 0;
-    char in_mode[5], out_mode[6], *fn_out = 0, *fn_list = 0, *fn_ref = 0;
-    int out_format = 'b', ret=0;
+    int c, compress_level = -1, is_long_help = 0;
+    char in_mode[5], out_mode[6], *fn_out = 0, *fn_list = 0;
+    int ret=0;
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 'T'),
+        { NULL, 0, NULL, 0 }
+    };
 
     /* parse command-line options */
-    /* TODO: add --output-fmt-option long opts once that branch is merged */
     strcpy(in_mode, "r"); strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "SCso:u1T:?")) >= 0) {
+    while ((c = getopt_long(argc, argv, "SCso:u1T:?", lopts, NULL)) >= 0) {
         switch (c) {
-        case 'S': is_bamin = 0; break;
-        case 'C': out_format = 'c';break;
-        case 's': assert(compress_level == -1); out_format = 0; break;
+        case 'S': break;
+        case 'C': hts_parse_format(&ga.out, "cram"); break;
+        case 's': assert(compress_level == -1); hts_parse_format(&ga.out, "sam"); break;
         case 'o': fn_out = strdup(optarg); break;
-        case 'u': compress_level = 0; break;
-        case '1': compress_level = 1; break;
-        case 'T': fn_ref = strdup(optarg); break;
+        case 'u':
+            compress_level = 0;
+            if (ga.out.format == unknown_format)
+                hts_parse_format(&ga.out, "bam");
+            break;
+        case '1':
+            compress_level = 1;
+            if (ga.out.format == unknown_format)
+                hts_parse_format(&ga.out, "bam");
+            break;
         case '?': is_long_help = 1; break;
-        default: return usage(is_long_help);
+        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n\n", c);
+            return usage(is_long_help);
         }
     }
     if (argc == optind) return usage(is_long_help);
 
-    if (is_bamin) strcat(in_mode, "b");
-    if (out_format) {
-        char o[2] = {out_format, '\0'};
-        strcat(out_mode, o);
-    }
     strcat(out_mode, "h");
     if (compress_level >= 0) {
         char tmp[2];
@@ -509,12 +519,12 @@ int main_pad2unpad(int argc, char *argv[])
     }
 
     // Load FASTA reference (also needed for SAM -> BAM if missing header)
-    if (fn_ref) {
-        fn_list = samfaipath(fn_ref);
-        fai = fai_load(fn_ref);
+    if (ga.reference) {
+        fn_list = samfaipath(ga.reference);
+        fai = fai_load(ga.reference);
     }
     // open file handlers
-    if ((in = sam_open(argv[optind], in_mode)) == 0) {
+    if ((in = sam_open_format(argv[optind], in_mode, &ga.in)) == 0) {
         fprintf(stderr, "[depad] failed to open \"%s\" for reading.\n", argv[optind]);
         ret = 1;
         goto depad_end;
@@ -529,13 +539,15 @@ int main_pad2unpad(int argc, char *argv[])
         ret = 1;
         goto depad_end;
     }
-    if (fn_ref) {
+    if (fai) {
         h_fix = fix_header(h, fai);
     } else {
         fprintf(stderr, "[depad] Warning - reference lengths will not be corrected without FASTA reference\n");
         h_fix = h;
     }
-    if ((out = sam_open(fn_out? fn_out : "-", out_mode)) == 0) {
+    char wmode[2];
+    strcat(out_mode, sam_open_mode(wmode, fn_out, NULL)==0 ? wmode : "b");
+    if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
         fprintf(stderr, "[depad] failed to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
         ret = 1;
         goto depad_end;
@@ -543,7 +555,7 @@ int main_pad2unpad(int argc, char *argv[])
 
     // Reference-based CRAM won't work unless we also create a new reference.
     // We could embed this, but for now we take the easy option.
-    if (out_format == 'c')
+    if (ga.out.format == cram)
         hts_set_opt(out, CRAM_OPT_NO_REF, 1);
 
     if (sam_hdr_write(out, h_fix) != 0) {
@@ -569,14 +581,17 @@ static int usage(int is_long_help)
 {
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:   samtools depad <in.bam>\n\n");
-    fprintf(stderr, "Options: -s       output is SAM (default is BAM)\n");
-    fprintf(stderr, "         -S       input is SAM (default is BAM)\n");
-    fprintf(stderr, "         -u       uncompressed BAM output (can't use with -s)\n");
-    fprintf(stderr, "         -1       fast compression BAM output (can't use with -s)\n");
-    fprintf(stderr, "         -T FILE  padded reference sequence file [null]\n");
-    fprintf(stderr, "         -o FILE  output file name [stdout]\n");
-    fprintf(stderr, "         -?       longer help\n");
-    fprintf(stderr, "\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -s           Output is SAM (default is BAM)\n");
+    fprintf(stderr, "  -S           Input is SAM (default is BAM)\n");
+    fprintf(stderr, "  -u           Uncompressed BAM output (can't use with -s)\n");
+    fprintf(stderr, "  -1           Fast compression BAM output (can't use with -s)\n");
+    fprintf(stderr, "  -T, --reference FILE\n");
+    fprintf(stderr, "               Padded reference sequence file [null]\n");
+    fprintf(stderr, "  -o FILE      Output file name [stdout]\n");
+    fprintf(stderr, "  -?           Longer help\n");
+    sam_global_opt_help(stderr, "-...-");
+
     if (is_long_help)
         fprintf(stderr, "Notes:\n\
 \n\

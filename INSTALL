@@ -32,6 +32,15 @@ that you would prefer to build against, you can arrange this by overriding
 $(HTSDIR) by typing 'make HTSDIR=/path/to/htslib-source' -- see the makefile
 for details.
 
+The bgzip, htsfile, and tabix utilities are provided by HTSlib.  If you are
+not also compiling HTSlib separately, you may wish to compile these utilities
+in the associated copy of HTSlib.  Type 'make all-htslib' to do this.
+
+In summary, where items in [brackets] are optional:
+
+    cd /path/to/samtools-1.x
+    make [HTSDIR=...] [all all-htslib]
+
 
 Installation
 ============
@@ -43,7 +52,10 @@ Type 'make prefix=/path/to/dir install' to install everything under your
 choice of installation directory.  The install target also understands
 DESTDIR and the other usual installation directory variables.
 
-The bgzip and tabix utilities are provided by HTSlib.  If you have not also
-installed HTSlib separately, you may wish to install these utilities by hand
-by copying samtools-1.x/htslib-1.x/{bgzip,tabix} to the same bin directory
-to which you have installed samtools et al.
+The bgzip, htsfile, and tabix utilities are provided by HTSlib.  If you have
+not also installed HTSlib separately, you may wish to install these utilities
+from the associated copy of HTSlib.  Type 'make install-htslib' to do this.
+
+In summary:
+
+    make [prefix=...] install [HTSDIR=...] [install-htslib]

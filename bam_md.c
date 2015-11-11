@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "htslib/kstring.h"
 #include "kprobaln.h"
+#include "sam_opts.h"
 
 #define USE_EQUAL 1
 #define DROP_TAG  2
@@ -329,19 +330,41 @@ int bam_prob_realn(bam1_t *b, const char *ref)
     return bam_prob_realn_core(b, ref, INT_MAX, 1);
 }
 
+int calmd_usage() {
+    fprintf(stderr,
+"Usage: samtools calmd [-eubrAES] <aln.bam> <ref.fasta>\n"
+"Options:\n"
+"  -e       change identical bases to '='\n"
+"  -u       uncompressed BAM output (for piping)\n"
+"  -b       compressed BAM output\n"
+"  -S       ignored (input format is auto-detected)\n"
+"  -A       modify the quality string\n"
+"  -r       compute the BQ tag (without -A) or cap baseQ by BAQ (with -A)\n"
+"  -E       extended BAQ for better sensitivity but lower specificity\n");
+
+    sam_global_opt_help(stderr, "-....");
+    return 1;
+}
+
 int bam_fillmd(int argc, char *argv[])
 {
     int c, flt_flag, tid = -2, ret, len, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag;
     samFile *fp, *fpout = 0;
     bam_hdr_t *header;
     faidx_t *fai;
-    char *ref = 0, mode_w[8];
+    char *ref = 0, mode_w[8], *ref_file;
     bam1_t *b;
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0),
+        { NULL, 0, NULL, 0 }
+    };
 
     flt_flag = UPDATE_NM | UPDATE_MD;
     is_bam_out = is_uncompressed = is_realn = max_nm = capQ = baq_flag = 0;
     strcpy(mode_w, "w");
-    while ((c = getopt(argc, argv, "EqreuNhbSC:n:Ad")) >= 0) {
+    while ((c = getopt_long(argc, argv, "EqreuNhbSC:n:Ad", lopts, NULL)) >= 0) {
         switch (c) {
         case 'r': is_realn = 1; break;
         case 'e': flt_flag |= USE_EQUAL; break;
@@ -356,25 +379,18 @@ int bam_fillmd(int argc, char *argv[])
         case 'C': capQ = atoi(optarg); break;
         case 'A': baq_flag |= 1; break;
         case 'E': baq_flag |= 2; break;
-        default: fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n", c); return 1;
+        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n\n", c);
+            /* else fall-through */
+        case '?': return calmd_usage();
         }
     }
     if (is_bam_out) strcat(mode_w, "b");
     else strcat(mode_w, "h");
     if (is_uncompressed) strcat(mode_w, "0");
-    if (optind + 1 >= argc) {
-        fprintf(stderr, "\n");
-        fprintf(stderr, "Usage:   samtools calmd [-eubrS] <aln.bam> <ref.fasta>\n\n");
-        fprintf(stderr, "Options: -e       change identical bases to '='\n");
-        fprintf(stderr, "         -u       uncompressed BAM output (for piping)\n");
-        fprintf(stderr, "         -b       compressed BAM output\n");
-        fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
-        fprintf(stderr, "         -A       modify the quality string\n");
-        fprintf(stderr, "         -r       compute the BQ tag (without -A) or cap baseQ by BAQ (with -A)\n");
-        fprintf(stderr, "         -E       extended BAQ for better sensitivity but lower specificity\n\n");
-        return 1;
-    }
-    fp = sam_open(argv[optind], "r");
+    if (optind + (ga.reference == NULL) >= argc)
+        return calmd_usage();
+    fp = sam_open_format(argv[optind], "r", &ga.in);
     if (fp == 0) return 1;
 
     header = sam_hdr_read(fp);
@@ -383,10 +399,16 @@ int bam_fillmd(int argc, char *argv[])
         return 1;
     }
 
-    fpout = sam_open("-", mode_w);
+    fpout = sam_open_format("-", mode_w, &ga.out);
     sam_hdr_write(fpout, header);
 
-    fai = fai_load(argv[optind+1]);
+    ref_file = argc > optind + 1 ? argv[optind+1] : ga.reference;
+    fai = fai_load(ref_file);
+
+    if (!fai) {
+        perror(ref_file);
+        return 1;
+    }
 
     b = bam_init1();
     while ((ret = sam_read1(fp, header, b)) >= 0) {

@@ -27,6 +27,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
+#include <getopt.h>
 
 #include "htslib/sam.h"
 #include "samtools.h"
@@ -88,20 +90,52 @@ static const char *percent(char *buffer, long long n, long long total)
     return buffer;
 }
 
+static void usage_exit(FILE *fp, int exit_status)
+{
+    fprintf(fp, "Usage: samtools flagstat [--input-fmt-option OPT=VAL] <in.bam>\n");
+    exit(exit_status);
+}
+
 int bam_flagstat(int argc, char *argv[])
 {
     samFile *fp;
     bam_hdr_t *header;
     bam_flagstat_t *s;
     char b0[16], b1[16];
+    hts_opt *in_opts = NULL;
+    int c;
 
-    if (argc == optind) {
-        fprintf(stderr, "Usage: samtools flagstat <in.bam>\n");
-        return 1;
+    enum {
+        INPUT_FMT_OPTION = CHAR_MAX+1,
+    };
+
+    static const struct option lopts[] = {
+        {"input-fmt-option",  required_argument, NULL, INPUT_FMT_OPTION},
+        {NULL, 0, NULL, 0}
+    };
+
+    while ((c = getopt_long(argc, argv, "", lopts, NULL)) >= 0) {
+        switch (c) {
+        case INPUT_FMT_OPTION:
+            if (hts_opt_add(&in_opts, optarg) < 0)
+                usage_exit(stderr, EXIT_FAILURE);
+            break;
+        default:
+            usage_exit(stderr, EXIT_FAILURE);
+        }
+    }
+
+    if (argc != optind+1) {
+        if (argc == optind) usage_exit(stdout, EXIT_SUCCESS);
+        else usage_exit(stderr, EXIT_FAILURE);
     }
     fp = sam_open(argv[optind], "r");
     if (fp == NULL) {
-        print_error_errno("Cannot open input file \"%s\"", argv[optind]);
+        print_error_errno("flagstat", "Cannot open input file \"%s\"", argv[optind]);
+        return 1;
+    }
+    if (hts_opt_apply(fp, in_opts)) {
+        fprintf(stderr, "Failed to apply input-fmt-options\n");
         return 1;
     }
 
@@ -138,5 +172,6 @@ int bam_flagstat(int argc, char *argv[])
     free(s);
     bam_hdr_destroy(header);
     sam_close(fp);
+    hts_opt_free(in_opts);
     return 0;
 }

@@ -54,6 +54,8 @@ samtools tview aln.sorted.bam ref.fasta
 .PP
 samtools split merged.bam
 .PP
+samtools quickcheck in1.bam in2.cram
+.PP
 samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
 .PP
 samtools fixmate in.namesorted.sam out.bam
@@ -591,6 +593,12 @@ Include in the statistics only reads with the given read length
 Report only the main part of inserts
 [0.99]
 .TP
+.BI "-P, --split-prefix " STR
+A path or string prefix to prepend to filenames output when creating
+categorised statistics files with
+.BR -S / --split .
+[input filename]
+.TP
 .BI "-q, --trim-quality " INT
 The BWA trimming parameter
 [0]
@@ -599,12 +607,28 @@ The BWA trimming parameter
 Reference sequence (required for GC-depth and mismatches-per-cycle calculation).
 []
 .TP
+.BI "-S, --split " TAG
+In addition to the complete statistics, also output categorised statistics
+based on the tagged field
+.I TAG
+(e.g., use
+.B --split RG
+to split into read groups).
+
+Categorised statistics are written to files named
+.RI < prefix >_< value >.bamstat,
+where
+.I prefix
+is as given by
+.B --split-prefix
+(or the input filename by default) and
+.I value
+has been encountered as the specified tagged field's value in one or more
+alignment records.
+.TP
 .BI "-t, --target-regions " FILE
 Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.
 []
-.TP
-.B "-s, --sam"
-Input is SAM (usually auto-detected now).
 .TP
 .B "-x, --sparse"
 Suppress outputting IS rows where there are no insertions.
@@ -797,19 +821,51 @@ Splits a file by read group.
 .TP
 .BI "-f " STRING
 Output filename format string (see below)
-["%*_%#.bam"]
+["%*_%#.%."]
 .TP
 .B -v
 Verbose output
+.PP
+Format string expansions:
+.TS
+center;
+lb l .
+%%	%
+%*	basename
+%#	@RG index
+%!	@RG ID
+%.	output format filename extension
+.TE
 .RE
 
+.TP \"-------- quickcheck
+.B quickcheck
+samtools quickcheck
+.RI [ options ]
+.IR in.sam | in.bam | in.cram
+[ ... ]
+
+Quickly check that input files appear to be intact. Checks that beginning of the
+file contains a valid header (all formats) containing at least one target
+sequence and then seeks to the end of the file and checks that an end-of-file
+(EOF) is present and intact (BAM only).
+
+Data in the middle of the file is not read since that would be much more time
+consuming, so please note that this command will not detect internal corruption,
+but is useful for testing that files are not truncated before performing more
+intensive tasks on them.
+
+This command will exit with a non-zero exit code if any input files don't have a
+valid header or are missing an EOF block. Otherwise it will exit successfully
+(with a zero exit code).
+
+.B Options:
 .RS
-.TP 14
-Format string expansions:
-  %%     %
-  %*     basename
-  %#     @RG index
-  %!     @RG ID
+.TP 8
+.B -v
+Verbose output: will additionally print the names of all input files that don't
+pass the check to stdout. Multiple -v options will cause additional messages
+regarding check results to be printed to stderr.
 .RE
 
 .TP \"-------- dict
@@ -1053,16 +1109,28 @@ instead]
 .TP
 .BI -t,\ --output-tags \ LIST
 Comma-separated list of FORMAT and INFO tags to output (case-insensitive):
+.B AD
+(Allelic depth, FORMAT),
+.B INFO/AD
+(Total allelic depth, INFO),
+.B ADF
+(Allelic depths on the forward strand, FORMAT),
+.B INFO/ADF
+(Total allelic depths on the forward strand, INFO),
+.B ADR
+(Allelic depths on the reverse strand, FORMAT),
+.B INFO/ADR
+(Total allelic depths on the reverse strand, INFO),
 .B DP
 (Number of high-quality bases, FORMAT),
 .B DV
-(Number of high-quality non-reference bases, FORMAT),
+(Deprecated in favor of AD; Number of high-quality non-reference bases, FORMAT),
 .B DPR
-(Number of high-quality bases for each observed allele, FORMAT),
+(Deprecated in favor of AD; Number of high-quality bases for each observed allele, FORMAT),
 .B INFO/DPR
 (Number of high-quality bases for each observed allele, INFO),
 .B DP4
-(Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT),
+(Deprecated in favor of ADF and ADR; Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT),
 .B SP
 (Phred-scaled strand bias P-value, FORMAT)
 [null]
@@ -1147,20 +1215,19 @@ Convert between textual and numeric flag representation.
 
 .B FLAGS:
 .TS
-tab(%);
-l l l .
-0x1 % PAIRED % .. paired-end (or multiple-segment) sequencing technology
-0x2 % PROPER_PAIR % .. each segment properly aligned according to the aligner
-0x4 % UNMAP % .. segment unmapped
-0x8 % MUNMAP % .. next segment in the template unmapped
-0x10 % REVERSE % .. SEQ is reverse complemented
-0x20 % MREVERSE % .. SEQ of the next segment in the template is reversed
-0x40 % READ1 % .. the first segment in the template
-0x80 % READ2 % .. the last segment in the template
-0x100 % SECONDARY % .. secondary alignment
-0x200 % QCFAIL % .. not passing quality controls
-0x400 % DUP % .. PCR or optical duplicate
-0x800 % SUPPLEMENTARY % .. supplementary alignment
+rb l l .
+0x1	PAIRED	paired-end (or multiple-segment) sequencing technology
+0x2	PROPER_PAIR	each segment properly aligned according to the aligner
+0x4	UNMAP	segment unmapped
+0x8	MUNMAP	next segment in the template unmapped
+0x10	REVERSE	SEQ is reverse complemented
+0x20	MREVERSE	SEQ of the next segment in the template is reverse complemented
+0x40	READ1	the first segment in the template
+0x80	READ2	the last segment in the template
+0x100	SECONDARY	secondary alignment
+0x200	QCFAIL	not passing quality controls
+0x400	DUP	PCR or optical duplicate
+0x800	SUPPLEMENTARY	supplementary alignment
 .TE
 
 .TP \"-------- bam2fq
@@ -1293,6 +1360,11 @@ samtools calmd [-Eeubr] [-C capQcoef] <aln.bam> <ref.fasta>
 Generate the MD tag. If the MD tag is already present, this command will
 give a warning if the MD tag generated is different from the existing
 tag. Output SAM by default.
+
+Calmd can also read and write CRAM files although in most cases it is
+pointless as CRAM recalculates MD and NM tags on the fly.  The one
+exception to this case is where both input and output CRAM files
+have been / are being created with the \fIno_ref\fR option.
 
 .B OPTIONS:
 .RS
@@ -1432,6 +1504,112 @@ the important libraries used by samtools.
 .TP
 .B --version-only
 Display the full samtools version number in a machine-readable format.
+.PP
+.SH GLOBAL OPTIONS
+.PP
+Several long-options are shared between multiple samtools subcommands:
+\fB--input-fmt\fR, \fB--input-fmt-options\fR, \fB--output-fmt\fR,
+\fB--output-fmt-options\fR, and \fB--reference\fR.
+The input format is typically auto-detected so specifying the format
+is usually unnecessary and the option is included for completeness.
+Note that not all subcommands have all options.  Consult the subcommand
+help for more details.
+.PP
+Format strings recognised are "sam", "bam" and "cram".  They may be
+followed by a comma separated list of options as \fIkey\fR or
+\fIkey\fR=\fIvalue\fR. See below for examples.
+.PP
+The \fBfmt-options\fR arguments accept either a single \fIoption\fR or
+\fIoption\fR=\fIvalue\fR.  Note that some options only work on some
+file formats and only on read or write streams.  If value is
+unspecified for a boolean option, the value is assumed to be 1.  The
+valid options are as follows.
+.RS 0
+.\" General purpose
+.TP 4
+.BI nthreads= INT
+Specifies the number of threads to use during encoding and/or
+decoding.  For BAM this will be encoding only.  In CRAM the threads
+are dynamically shared between encoder and decoder.
+.\" CRAM specific
+.TP
+.BI reference= fasta_file
+Specifies a FASTA reference file for use in CRAM encoding or decoding.
+It usually is not required for decoding except in the situation of the
+MD5 not being obtainable via the REF_PATH or REF_CACHE environment variables.
+.TP
+.BI decode_md= 0|1
+CRAM decode only; defaults to 1 (on).  CRAM does not typically store
+MD and NM tags, preferring to generate them on the fly.  This option
+controls this behaviour.
+.TP
+.BI ignore_md5= 0|1
+CRAM decode only; defaults to 0 (off).  When enabled, md5 checksum
+errors on the reference sequence and block checksum errors within CRAM
+are ignored.  Use of this option is strongly discouraged.
+.TP
+.BI required_fields= bit-field
+CRAM decode only; specifies which SAM columns need to be populated.
+By default all fields are used.  Limiting the decode to specific
+columns can have significant performance gains.  The bit-field is a
+numerical value constructed from the following table.
+.TS
+center;
+rb l .
+0x1	SAM_QNAME
+0x2	SAM_FLAG
+0x4	SAM_RNAME
+0x8	SAM_POS
+0x10	SAM_MAPQ
+0x20	SAM_CIGAR
+0x40	SAM_RNEXT
+0x80	SAM_PNEXT
+0x100	SAM_TLEN
+0x200	SAM_SEQ
+0x400	SAM_QUAL
+0x800	SAM_AUX
+0x1000	SAM_RGAUX
+.TE
+.TP
+.BI multi_seq_per_slice= 0|1
+CRAM encode only; defaults to 0 (off).  By default CRAM generates one
+container per reference sequence, except in the case of many small
+references (such as a fragmented assembly).
+.TP
+.BI version= major.minor
+CRAM encode only.  Specifies the CRAM version number.  Acceptable
+values are "2.1" and "3.0".
+.TP
+.BI seqs_per_slice= INT
+CRAM encode only; defaults to 10000.
+.TP
+.BI slices_per_container= INT
+CRAM encode only; defaults to 1.  The effect of having multiple slices
+per container is to share the compression header block between
+multiple slices.  This is unlikely to have any significant impact
+unless the number of sequences per slice is reduced.  (Together these
+two options control the granularity of random access.)
+.TP
+.BI embed_ref= 0|1
+CRAM encode only; defaults to 0 (off).  If 1, this will store portions
+of the reference sequence in each slice, permitting decode without
+having requiring an external copy of the reference sequence.
+.TP
+.BI no_ref= 0|1
+CRAM encode only; defaults to 0 (off).  If 1, sequences will be stored
+verbatim with no reference encoding.  This can be useful if no
+reference is available for the file.
+.RE
+.PP
+For example:
+.RS 4
+.HP 4
+samtools view --input-fmt-option decode_md=0
+.br
+--output-fmt cram,version=3.0 --output-fmt-option embed_ref
+.br
+--output-fmt-option seqs_per_slice=2000 -o foo.cram foo.bam
+.RE
 .PP
 .SH REFERENCE SEQUENCES
 .PP

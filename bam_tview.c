@@ -1,6 +1,6 @@
 /*  bam_tview.c -- tview subcommand.
 
-    Copyright (C) 2008-2014 Genome Research Ltd.
+    Copyright (C) 2008-2015 Genome Research Ltd.
     Portions copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/faidx.h>
 #include <htslib/sam.h>
 #include <htslib/bgzf.h>
+#include "sam_opts.h"
 
 khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
 {
@@ -53,7 +54,8 @@ khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
     return rg_hash;
 }
 
-int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *samples)
+int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
+                 const char *samples, const htsFormat *fmt)
 {
     assert(tv!=NULL);
     assert(fn!=NULL);
@@ -61,7 +63,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *sam
     tv->color_for = TV_COLOR_MAPQ;
     tv->is_dot = 1;
 
-    tv->fp = sam_open(fn, "r");
+    tv->fp = sam_open_format(fn, "r", fmt);
     if(tv->fp == NULL)
     {
         fprintf(stderr,"sam_open %s. %s\n", fn,fn_fa);
@@ -328,6 +330,7 @@ static void error(const char *format, ...)
 "   -d display      output as (H)tml or (C)urses or (T)ext \n"
 "   -p chr:pos      go directly to this position\n"
 "   -s STR          display only reads from this sample or group\n");
+        sam_global_opt_help(stderr, "-.--.");
     }
     else
     {
@@ -340,17 +343,27 @@ static void error(const char *format, ...)
 }
 
 enum dipsay_mode {display_ncurses,display_html,display_text};
-extern tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples);
-extern tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples);
-extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples);
+extern tview_t* curses_tv_init(const char *fn, const char *fn_fa,
+                               const char *samples, const htsFormat *fmt);
+extern tview_t* html_tv_init(const char *fn, const char *fn_fa,
+                             const char *samples, const htsFormat *fmt);
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa,
+                             const char *samples, const htsFormat *fmt);
 
 int bam_tview_main(int argc, char *argv[])
 {
     int view_mode=display_ncurses;
     tview_t* tv=NULL;
-    char *samples=NULL, *position=NULL;
+    char *samples=NULL, *position=NULL, *ref;
     int c;
-    while ((c = getopt(argc, argv, "s:p:d:")) >= 0) {
+
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        { NULL, 0, NULL, 0 }
+    };
+
+    while ((c = getopt_long(argc, argv, "s:p:d:", lopts, NULL)) >= 0) {
         switch (c) {
             case 's': samples=optarg; break;
             case 'p': position=optarg; break;
@@ -365,28 +378,28 @@ int bam_tview_main(int argc, char *argv[])
                 }
                 break;
             }
-            default: error(NULL);
+            default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+                      /* else fall-through */
+            case '?': error(NULL);
         }
     }
     if (argc==optind) error(NULL);
 
+    ref = (optind+1>=argc)? ga.reference : argv[optind+1];
+
     switch(view_mode)
     {
         case display_ncurses:
-            {
-            tv = curses_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+            tv = curses_tv_init(argv[optind], ref, samples, &ga.in);
             break;
-            }
+
         case display_text:
-            {
-            tv = text_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+            tv = text_tv_init(argv[optind], ref, samples, &ga.in);
             break;
-            }
+
         case display_html:
-            {
-            tv = html_tv_init(argv[optind], (optind+1>=argc)? 0 : argv[optind+1], samples);
+            tv = html_tv_init(argv[optind], ref, samples, &ga.in);
             break;
-            }
     }
     if (tv==NULL)
     {

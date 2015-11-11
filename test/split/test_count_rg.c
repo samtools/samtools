@@ -63,8 +63,7 @@ int main(int argc, char**argv)
 
 
     // Setup stderr redirect
-    size_t len = 0;
-    char* res = NULL;
+    kstring_t res = { 0, 0, NULL };
     FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
     char* tempfname = (optind < argc)? argv[optind] : "test_count_rg.tmp";
     FILE* check = NULL;
@@ -95,8 +94,8 @@ int main(int argc, char**argv)
     // check result
     check = fopen(tempfname, "r");
     if (result_1 && count == 1 && !strcmp(output[0], "fish")
-        && (getline(&res, &len, check) == -1)
-        && (feof(check) || (res && !strcmp("",res)))) {
+        && kgetline(&res, (kgets_func *)fgets, check) < 0
+        && (feof(check) || res.l == 0)) {
         ++success;
     } else {
         ++failure;
@@ -114,7 +113,7 @@ int main(int argc, char**argv)
     if (verbose) printf("END test 1\n");
 
     // Cleanup
-    free(res);
+    free(res.s);
     remove(tempfname);
     if (failure > 0)
         fprintf(orig_stderr, "%d failures %d successes\n", failure, success);

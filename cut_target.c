@@ -26,9 +26,10 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include "bam.h"
+#include "htslib/sam.h"
 #include "errmod.h"
 #include "htslib/faidx.h"
+#include "sam_opts.h"
 
 #define ERR_DEP 0.83
 
@@ -44,8 +45,8 @@ static score_param_t g_param = { {{0,0,0},{-4,1,6}}, {{0,-14000}, {0,0}} };
 typedef struct {
     int min_baseQ, tid, max_bases;
     uint16_t *bases;
-    bamFile fp;
-    bam_header_t *h;
+    samFile *fp;
+    bam_hdr_t *h;
     char *ref;
     int len;
     faidx_t *fai;
@@ -66,15 +67,15 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
         uint8_t *seq;
         int q, baseQ, b;
         if (p->is_refskip || p->is_del) continue;
-        baseQ = bam1_qual(p->b)[p->qpos];
+        baseQ = bam_get_qual(p->b)[p->qpos];
         if (baseQ < g->min_baseQ) continue;
-        seq = bam1_seq(p->b);
-        b = bam_nt16_nt4_table[bam1_seqi(seq, p->qpos)];
+        seq = bam_get_seq(p->b);
+        b = seq_nt16_int[bam_seqi(seq, p->qpos)];
         if (b > 3) continue;
         q = baseQ < p->b->core.qual? baseQ : p->b->core.qual;
         if (q < 4) q = 4;
         if (q > 63) q = 63;
-        g->bases[k++] = q<<5 | bam1_strand(p->b)<<4 | b;
+        g->bases[k++] = q<<5 | bam_is_rev(p->b)<<4 | b;
     }
     if (k == 0) return 0;
     errmod_cal(g->em, k, 4, g->bases, q);
@@ -88,7 +89,7 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
     return ret<<8|k;
 }
 
-static void process_cns(bam_header_t *h, int tid, int l, uint16_t *cns)
+static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
 {
     int i, f[2][2], *prev, *curr, *swap_tmp, s;
     uint8_t *b; // backtrack array
@@ -148,7 +149,7 @@ static int read_aln(void *data, bam1_t *b)
     int ret;
     while (1)
     {
-        ret = bam_read1(g->fp, b);
+        ret = sam_read1(g->fp, g->h, b);
         if ( ret<0 ) break;
         if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
         if ( g->fai && b->core.tid >= 0 ) {
@@ -166,36 +167,47 @@ static int read_aln(void *data, bam1_t *b)
 
 int main_cut_target(int argc, char *argv[])
 {
-    int c, tid, pos, n, lasttid = -1, l, max_l;
+    int c, tid, pos, n, lasttid = -1, l, max_l, usage = 0;
     const bam_pileup1_t *p;
     bam_plp_t plp;
     uint16_t *cns;
     ct_t g;
 
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 'f'),
+        { NULL, 0, NULL, 0 }
+    };
+
     memset(&g, 0, sizeof(ct_t));
     g.min_baseQ = 13; g.tid = -1;
-    while ((c = getopt(argc, argv, "f:Q:i:o:0:1:2:")) >= 0) {
+    while ((c = getopt_long(argc, argv, "f:Q:i:o:0:1:2:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'Q': g.min_baseQ = atoi(optarg); break; // quality cutoff
             case 'i': g_param.p[0][1] = -atoi(optarg); break; // 0->1 transition (in) PENALTY
             case '0': g_param.e[1][0] = atoi(optarg); break; // emission SCORE
             case '1': g_param.e[1][1] = atoi(optarg); break;
             case '2': g_param.e[1][2] = atoi(optarg); break;
-            case 'f': g.fai = fai_load(optarg);
-                if (g.fai == 0) fprintf(stderr, "[%s] fail to load the fasta index.\n", __func__);
-                break;
+            default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+                      /* else fall-through */
+            case '?': usage=1; break;
         }
     }
-    if (argc == optind) {
-        fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] [-f ref] <in.bam>\n");
+    if (ga.reference) {
+        g.fai = fai_load(ga.reference);
+        if (g.fai == 0) fprintf(stderr, "[%s] fail to load the fasta index.\n", __func__);
+    }
+    if (usage || argc == optind) {
+        fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] <in.bam>\n");
+        sam_global_opt_help(stderr, "-.--f");
         return 1;
     }
     l = max_l = 0; cns = 0;
-    g.fp = strcmp(argv[optind], "-")? bam_open(argv[optind], "r") : bam_dopen(fileno(stdin), "r");
-    g.h = bam_header_read(g.fp);
+    g.fp = sam_open_format(argv[optind], "r", &ga.in);
+    g.h = sam_hdr_read(g.fp);
     if (g.h == NULL) {
         fprintf(stderr, "Couldn't read header for '%s'\n", argv[optind]);
-        bam_close(g.fp);
+        sam_close(g.fp);
         return 1;
     }
     g.em = errmod_init(1. - ERR_DEP);
@@ -217,13 +229,14 @@ int main_cut_target(int argc, char *argv[])
     }
     process_cns(g.h, lasttid, l, cns);
     free(cns);
-    bam_header_destroy(g.h);
+    bam_hdr_destroy(g.h);
     bam_plp_destroy(plp);
-    bam_close(g.fp);
+    sam_close(g.fp);
     if (g.fai) {
         fai_destroy(g.fai); free(g.ref);
     }
     errmod_destroy(g.em);
     free(g.bases);
+    sam_global_args_free(&ga);
     return 0;
 }

@@ -134,6 +134,7 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
             }
             cram_free_block(blk);
         }
+        cram_free_container(c);
     }
 
     ret = 0;
@@ -141,7 +142,6 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
  err:
     if (hts_close(h_out) != 0)
         ret = -1;
-    if (c) cram_free_container(c);
 
     return ret;
 }
@@ -461,7 +461,7 @@ int main_reheader(int argc, char *argv[])
         fprintf(stderr, "[%s] fail to open file %s.\n", __func__, argv[optind+1]);
         return 1;
     }
-    if (in->format.format == bam) {
+    if (hts_get_format(in)->format == bam) {
         r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG);
     } else {
         if (inplace)

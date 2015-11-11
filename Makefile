@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2014 Genome Research Ltd.
+#    Copyright (C) 2008-2015 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -33,10 +33,11 @@ LOBJS=      bam_aux.o bam.o bam_import.o sam.o \
 AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o kprobaln.o \
             bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
-            bamtk.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
+            bamtk.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o sam_opts.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
-            bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o
+            bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
+            bam_quickcheck.o
 
 EXTRA_CPPFLAGS = $(DFLAGS) -I. -I$(HTSDIR)
 LIBCURSES=  -lcurses # -lXCurses
@@ -71,7 +72,6 @@ MISC_PROGRAMS = \
 
 BUILT_TEST_PROGRAMS = \
 	test/merge/test_bam_translate \
-	test/merge/test_pretty_header \
 	test/merge/test_rtrans_build \
 	test/merge/test_trans_tbl_init \
 	test/split/test_count_rg \
@@ -132,48 +132,51 @@ bam_lpileup_h = bam_lpileup.h $(htslib_sam_h)
 bam_plbuf_h = bam_plbuf.h $(htslib_sam_h)
 bam_tview_h = bam_tview.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(bam2bcf_h) $(HTSDIR)/htslib/khash.h $(bam_lpileup_h)
 sam_h = sam.h $(htslib_sam_h) $(bam_h)
+sam_opts_h = sam_opts.h $(htslib_hts_h)
 sample_h = sample.h $(HTSDIR)/htslib/kstring.h
 
-bam.o: bam.c $(bam_h) sam_header.h
+bam.o: bam.c $(bam_h) $(HTSDIR)/htslib/kstring.h sam_header.h
 bam2bcf.o: bam2bcf.c $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kfunc.h $(bam2bcf_h) errmod.h
 bam2bcf_indel.o: bam2bcf_indel.c $(htslib_sam_h) $(bam2bcf_h) kprobaln.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
-bam2depth.o: bam2depth.c $(htslib_sam_h) samtools.h
-bam_aux.o: bam_aux.c
-bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(bam_h)
+bam2depth.o: bam2depth.c $(htslib_sam_h) samtools.h $(sam_opts_h)
+bam_aux.o: bam_aux.c $(bam_h)
+bam_cat.o: bam_cat.c $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(HTSDIR)/htslib/khash.h
 bam_color.o: bam_color.c $(bam_h)
 bam_import.o: bam_import.c $(HTSDIR)/htslib/kstring.h $(bam_h) $(HTSDIR)/htslib/kseq.h
 bam_index.o: bam_index.c $(htslib_hts_h) $(htslib_sam_h) $(HTSDIR)/htslib/khash.h
 bam_lpileup.o: bam_lpileup.c $(bam_plbuf_h) $(bam_lpileup_h) $(HTSDIR)/htslib/ksort.h
-bam_mate.o: bam_mate.c $(bam_h)
-bam_md.o: bam_md.c $(htslib_faidx_h) $(htslib_sam_h) kprobaln.h
-bam_pileup.o: bam_pileup.c $(sam_h)
+bam_mate.o: bam_mate.c $(sam_opts_h) $(HTSDIR)/htslib/kstring.h $(htslib_sam_h)
+bam_md.o: bam_md.c $(htslib_faidx_h) $(htslib_sam_h) $(HTSDIR)/htslib/kstring.h kprobaln.h $(sam_opts_h)
 bam_plbuf.o: bam_plbuf.c $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
-bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(bam2bcf_h) $(sample_h)
+bam_plcmd.o: bam_plcmd.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash_str2int.h sam_header.h samtools.h $(sam_opts_h) $(bam2bcf_h) $(sample_h)
+bam_quickcheck.o: bam_quickcheck.c $(htslib_hts_h) $(htslib_sam_h) $(htslib_bgzf_h)
 bam_reheader.o: bam_reheader.c $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) samtools.h
-bam_rmdup.o: bam_rmdup.c $(sam_h) $(HTSDIR)/htslib/khash.h
-bam_rmdupse.o: bam_rmdupse.c $(sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
-bam_sort.o: bam_sort.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h $(HTSDIR)/htslib/kstring.h $(htslib_sam_h)
+bam_rmdup.o: bam_rmdup.c $(htslib_sam_h) $(sam_opts_h) $(bam_h) $(HTSDIR)/htslib/khash.h
+bam_rmdupse.o: bam_rmdupse.c $(bam_h) $(htslib_sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h
+bam_sort.o: bam_sort.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/klist.h $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(sam_opts_h)
+bam_split.o: bam_split.c $(htslib_sam_h) $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/kstring.h $(sam_opts_h)
 bam_stat.o: bam_stat.c $(htslib_sam_h) samtools.h
-bam_tview.o: bam_tview.c $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h)
+bam_tview.o: bam_tview.c $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h) $(sam_opts_h)
 bam_tview_curses.o: bam_tview_curses.c $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c $(bam_tview_h)
-bam_flags.o: bam_flags.c $(sam_h)
-bamshuf.o: bamshuf.c $(htslib_sam_h) $(HTSDIR)/htslib/ksort.h samtools.h
-bamtk.o: bamtk.c $(htslib_hts_h) version.h samtools.h
-bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(HTSDIR)/htslib/kseq.h
+bam_flags.o: bam_flags.c $(htslib_sam_h)
+bamshuf.o: bamshuf.c $(htslib_sam_h) $(htslib_hts_h) $(HTSDIR)/htslib/ksort.h samtools.h $(sam_opts_h)
+bamtk.o: bamtk.c $(htslib_hts_h) samtools.h version.h
+bedcov.o: bedcov.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(sam_opts_h) $(HTSDIR)/htslib/kseq.h
 bedidx.o: bedidx.c $(HTSDIR)/htslib/ksort.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h
-cut_target.o: cut_target.c $(bam_h) errmod.h $(htslib_faidx_h)
-dict.o: dict.c $(htslib_kseq_h) $(htslib_hts_h)
+cut_target.o: cut_target.c $(htslib_sam_h) errmod.h $(htslib_faidx_h) $(sam_opts_h)
+dict.o: dict.c $(HTSDIR)/htslib/kseq.h $(htslib_hts_h)
 errmod.o: errmod.c errmod.h $(HTSDIR)/htslib/ksort.h
 kprobaln.o: kprobaln.c kprobaln.h
-padding.o: padding.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(htslib_faidx_h) sam_header.h
-phase.o: phase.c $(htslib_sam_h) errmod.h $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
+padding.o: padding.c $(HTSDIR)/htslib/kstring.h $(htslib_sam_h) $(htslib_faidx_h) sam_header.h $(sam_opts_h)
+phase.o: phase.c $(htslib_sam_h) errmod.h $(sam_opts_h) $(HTSDIR)/htslib/kseq.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/ksort.h
 sam.o: sam.c $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c sam_header.h $(HTSDIR)/htslib/khash.h
-sam_view.o: sam_view.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash.h samtools.h
+sam_opts.o: sam_opts.c $(sam_opts_h)
+sam_view.o: sam_view.c $(htslib_sam_h) $(htslib_faidx_h) $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/khash.h samtools.h $(sam_opts_h)
 sample.o: sample.c $(sample_h) $(HTSDIR)/htslib/khash.h
 stats_isize.o: stats_isize.c stats_isize.h $(HTSDIR)/htslib/khash.h
-stats.o: stats.c $(sam_h) sam_header.h samtools.h stats_isize.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/khash_str2int.h $(htslib_faidx_h)
+stats.o: stats.c $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) sam_header.h $(HTSDIR)/htslib/khash_str2int.h samtools.h $(HTSDIR)/htslib/khash.h $(HTSDIR)/htslib/kstring.h stats_isize.h $(sam_opts_h)
 
 
 # test programs
@@ -184,7 +187,6 @@ stats.o: stats.c $(sam_h) sam_header.h samtools.h stats_isize.h $(HTSDIR)/htslib
 check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 	REF_PATH=: test/test.pl --exec bgzip=$(BGZIP)
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
-	test/merge/test_pretty_header
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
 	cd test/mpileup && ./regression.sh mpileup.reg
@@ -195,37 +197,33 @@ check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
 	test/split/test_parse_args
 
 
-test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o $(HTSLIB) -lz $(LIBS)
+test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/merge/test_pretty_header: test/merge/test_pretty_header.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_pretty_header.o $(HTSLIB) -lz $(LIBS)
+test/merge/test_rtrans_build: test/merge/test_rtrans_build.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/merge/test_rtrans_build: test/merge/test_rtrans_build.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_rtrans_build.o $(HTSLIB) -lz $(LIBS)
+test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o $(HTSLIB) -lz $(LIBS)
+test/split/test_count_rg: test/split/test_count_rg.o test/test.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/split/test_count_rg: test/split/test_count_rg.o test/test.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o $(HTSLIB) -lz $(LIBS)
+test/split/test_expand_format_string: test/split/test_expand_format_string.o test/test.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_expand_format_string.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/split/test_expand_format_string: test/split/test_expand_format_string.o test/test.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_expand_format_string.o test/test.o $(HTSLIB) -lz $(LIBS)
+test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_filter_header_rg.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
-test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_filter_header_rg.o test/test.o $(HTSLIB) -lz $(LIBS)
-
-test/split/test_parse_args: test/split/test_parse_args.o test/test.o $(HTSLIB)
-	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o $(HTSLIB) -lz $(LIBS)
+test/split/test_parse_args: test/split/test_parse_args.o test/test.o sam_opts.o $(HTSLIB)
+	$(CC) -pthread $(LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o sam_opts.o $(HTSLIB) -lz $(LIBS)
 
 test/vcf-miniview: test/vcf-miniview.o $(HTSLIB)
 	$(CC) -pthread $(LDFLAGS) -o $@ test/vcf-miniview.o $(HTSLIB) -lz $(LIBS)
 
 test_test_h = test/test.h $(htslib_sam_h)
 
-test/merge/test_bam_translate.o: test/merge/test_bam_translate.c $(test_test_h) bam_sort.o
-test/merge/test_pretty_header.o: test/merge/test_pretty_header.c bam_sort.o
+test/merge/test_bam_translate.o: test/merge/test_bam_translate.c bam_sort.o $(test_test_h)
 test/merge/test_rtrans_build.o: test/merge/test_rtrans_build.c bam_sort.o
 test/merge/test_trans_tbl_init.o: test/merge/test_trans_tbl_init.c bam_sort.o
 test/split/test_count_rg.o: test/split/test_count_rg.c bam_split.o $(test_test_h)
@@ -257,7 +255,7 @@ misc/wgsim: misc/wgsim.o
 	$(CC) $(LDFLAGS) -o $@ misc/wgsim.o -lm -lz $(LIBS)
 
 misc/ace2sam.o: misc/ace2sam.c $(HTSDIR)/htslib/kstring.h $(HTSDIR)/htslib/kseq.h
-misc/md5fa.o: misc/md5fa.c $(htslib_hts_h) $(HTSDIR)/htslib/kseq.h
+misc/md5fa.o: misc/md5fa.c $(HTSDIR)/htslib/kseq.h $(htslib_hts_h)
 misc/md5sum-lite.o: misc/md5sum-lite.c $(htslib_hts_h)
 misc/wgsim.o: misc/wgsim.c $(HTSDIR)/htslib/kseq.h
 
@@ -271,7 +269,7 @@ misc/maq2sam-long.o: misc/maq2sam.c
 install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
 	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
 	$(INSTALL_PROGRAM) $(PROGRAMS) $(MISC_PROGRAMS) $(DESTDIR)$(bindir)
-	$(INSTALL_DATA) samtools.1 $(DESTDIR)$(man1dir)
+	$(INSTALL_DATA) samtools.1 misc/wgsim.1 $(DESTDIR)$(man1dir)
 
 
 testclean:

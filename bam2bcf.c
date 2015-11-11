@@ -123,7 +123,8 @@ void bcf_callaux_clean(bcf_callaux_t *bca, bcf_call_t *call)
     memset(bca->alt_bq,0,sizeof(int)*bca->nqual);
     memset(bca->fwd_mqs,0,sizeof(int)*bca->nqual);
     memset(bca->rev_mqs,0,sizeof(int)*bca->nqual);
-    if ( call->DPR ) memset(call->DPR,0,sizeof(int32_t)*(call->n+1)*B2B_MAX_ALLELES);
+    if ( call->ADF ) memset(call->ADF,0,sizeof(int32_t)*(call->n+1)*B2B_MAX_ALLELES);
+    if ( call->ADR ) memset(call->ADR,0,sizeof(int32_t)*(call->n+1)*B2B_MAX_ALLELES);
 }
 
 /*
@@ -193,7 +194,13 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
         if (b < 4)
         {
             r->qsum[b] += q;
-            if ( r->DPR ) r->DPR[b]++;
+            if ( r->ADF )
+            {
+                if ( bam_is_rev(p->b) )
+                    r->ADR[b]++;
+                else
+                    r->ADF[b]++;
+            }
         }
         ++r->anno[0<<2|is_diff<<1|bam_is_rev(p->b)];
         min_dist = p->b->core.l_qseq - 1 - p->qpos;
@@ -618,23 +625,34 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
                 call->DP4[4*i+3] = calls[i].anno[3];
             }
         }
-        if ( call->DPR )
+        if ( call->ADF )
         {
             assert( call->n_alleles<=B2B_MAX_ALLELES );   // this is always true for SNPs and so far for indels as well
 
+            // reorder ADR,ADF to match the allele ordering at this site
             int32_t tmp[B2B_MAX_ALLELES];
-            int32_t *dpr = call->DPR + B2B_MAX_ALLELES, *dpr_out = call->DPR + B2B_MAX_ALLELES;
-            int32_t *dpr_tot = call->DPR;
+            int32_t *adr = call->ADR + B2B_MAX_ALLELES, *adr_out = call->ADR + B2B_MAX_ALLELES;
+            int32_t *adf = call->ADF + B2B_MAX_ALLELES, *adf_out = call->ADF + B2B_MAX_ALLELES;
+            int32_t *adr_tot = call->ADR;   // the first bin stores total counts per site
+            int32_t *adf_tot = call->ADF;
             for (i=0; i<n; i++)
             {
                 for (j=0; j<call->n_alleles; j++)
                 {
-                    tmp[j] = dpr[ call->a[j] ];
-                    dpr_tot[j] += tmp[j];
+                    tmp[j] = adr[ call->a[j] ];
+                    adr_tot[j] += tmp[j];
                 }
-                for (j=0; j<call->n_alleles; j++) dpr_out[j] = tmp[j];
-                dpr_out += call->n_alleles;
-                dpr += B2B_MAX_ALLELES;
+                for (j=0; j<call->n_alleles; j++) adr_out[j] = tmp[j];
+                for (j=0; j<call->n_alleles; j++)
+                {
+                    tmp[j] = adf[ call->a[j] ];
+                    adf_tot[j] += tmp[j];
+                }
+                for (j=0; j<call->n_alleles; j++) adf_out[j] = tmp[j];
+                adf_out += call->n_alleles;
+                adr_out += call->n_alleles;
+                adr += B2B_MAX_ALLELES;
+                adf += B2B_MAX_ALLELES;
             }
         }
 
@@ -718,7 +736,7 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
         {
             if (bc->a[i] < 0) break;
             kputc(',', &bc->tmp);
-            if ( bc->unseen==i ) kputs("<X>", &bc->tmp);
+            if ( bc->unseen==i ) kputs("<*>", &bc->tmp);
             else kputc("ACGT"[bc->a[i]], &bc->tmp);
             nals++;
         }
@@ -735,6 +753,18 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
         bcf_update_info_float(hdr, rec, "IMF", &bca->max_frac, 1);
     }
     bcf_update_info_int32(hdr, rec, "DP", &bc->ori_depth, 1);
+    if ( fmt_flag&B2B_INFO_ADF )
+        bcf_update_info_int32(hdr, rec, "ADF", bc->ADF, rec->n_allele);
+    if ( fmt_flag&B2B_INFO_ADR )
+        bcf_update_info_int32(hdr, rec, "ADR", bc->ADR, rec->n_allele);
+    if ( fmt_flag&(B2B_INFO_AD|B2B_INFO_DPR) )
+    {
+        for (i=0; i<rec->n_allele; i++) bc->ADF[i] += bc->ADR[i];
+        if ( fmt_flag&B2B_INFO_AD )
+            bcf_update_info_int32(hdr, rec, "AD", bc->ADF, rec->n_allele);
+        if ( fmt_flag&B2B_INFO_DPR )
+            bcf_update_info_int32(hdr, rec, "DPR", bc->ADF, rec->n_allele);
+    }
 
     float tmpf[16];
     for (i=0; i<16; i++) tmpf[i] = bc->anno[i];
@@ -794,10 +824,18 @@ int bcf_call2bcf(bcf_call_t *bc, bcf1_t *rec, bcf_callret1_t *bcr, int fmt_flag,
     }
     if ( fmt_flag&B2B_FMT_DP4 )
         bcf_update_format_int32(hdr, rec, "DP4", bc->DP4, rec->n_sample*4);
-    if ( fmt_flag&B2B_FMT_DPR )
-        bcf_update_format_int32(hdr, rec, "DPR", bc->DPR+B2B_MAX_ALLELES, rec->n_sample*rec->n_allele);
-    if ( fmt_flag&B2B_INFO_DPR )
-        bcf_update_info_int32(hdr, rec, "DPR", bc->DPR, rec->n_allele);
+    if ( fmt_flag&B2B_FMT_ADF )
+        bcf_update_format_int32(hdr, rec, "ADF", bc->ADF+B2B_MAX_ALLELES, rec->n_sample*rec->n_allele);
+    if ( fmt_flag&B2B_FMT_ADR )
+        bcf_update_format_int32(hdr, rec, "ADR", bc->ADR+B2B_MAX_ALLELES, rec->n_sample*rec->n_allele);
+    if ( fmt_flag&(B2B_FMT_AD|B2B_FMT_DPR) )
+    {
+        for (i=0; i<rec->n_sample*rec->n_allele; i++) bc->ADF[B2B_MAX_ALLELES+i] += bc->ADR[B2B_MAX_ALLELES+i];
+        if ( fmt_flag&B2B_FMT_AD )
+            bcf_update_format_int32(hdr, rec, "AD", bc->ADF+B2B_MAX_ALLELES, rec->n_sample*rec->n_allele);
+        if ( fmt_flag&B2B_FMT_DPR )
+            bcf_update_format_int32(hdr, rec, "DPR", bc->ADF+B2B_MAX_ALLELES, rec->n_sample*rec->n_allele);
+    }
 
     return 0;
 }
