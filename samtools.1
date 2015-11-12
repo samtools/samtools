@@ -330,8 +330,8 @@ samtools sort
 .RB [ -O
 .IR format ]
 .RB [ -n ]
-.RB [-T
-.IR out.prefix]
+.RB [ -T
+.IR tmpprefix ]
 .RB [ -@
 .IR threads "] [" in.sam | in.bam | in.cram ]
 .ad
@@ -350,7 +350,7 @@ when
 .B -o
 is used.
 This command will also create temporary files
-.IB out.prefix . %d .bam
+.IB tmpprefix . %d .bam
 as needed when the entire alignment data cannot fit into memory
 (as controlled via the
 .B -m
@@ -395,18 +395,33 @@ By default, samtools tries to select a format based on the
 .B -o
 filename extension; if output is to standard output or no format can be
 deduced,
-.B -O
-must be used.
+.B bam
+is selected.
 .TP
 .BI "-T " PREFIX
 Write temporary files to
 .IB PREFIX . nnnn .bam.
-The option defaults to
-.IB <in.bam> . tmp . nnnn .bam.
+By default, any temporary files are written alongside the input file, as
+.IB in.bam .tmp. nnnn .bam.
 .TP
 .BI "-@ " INT
 Set number of sorting and compression threads.
 By default, operation is single-threaded.
+.PP
+Historically
+.B samtools sort
+also accepted a less flexible way of specifying the final and
+temporary output filenames:
+.IP
+samtools sort
+.RB [ -f "] [" -o ]
+.I in.bam out.prefix
+.PP
+This has now been removed.
+The previous \fIout.prefix\fP argument (and \fB-f\fP option, if any)
+should be changed to an appropriate combination of \fB-T\fP \fIPREFIX\fP
+and \fB-o\fP \fIFILE\fP.  The previous \fB-o\fP option should be removed,
+as output defaults to standard output.
 .RE
 
 .TP \"-------- index
