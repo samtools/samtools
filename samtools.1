@@ -187,16 +187,25 @@ multiple times if they overlap more than one of the specified regions.
 
 Examples of region specifications:
 .TP 10
-`chr1'
-Output all alignments mapped to the reference sequence named `chr1' (i.e. @SQ SN:chr1) .
+.B chr1
+Output all alignments mapped to the reference sequence named `chr1' (i.e. @SQ SN:chr1).
 .TP
-`chr2:1000000'
+.B chr2:1000000
 The region on chr2 beginning at base position 1,000,000 and ending at the
 end of the chromosome.
 .TP
-`chr3:1000-2000'
+.B chr3:1000-2000
 The 1001bp region on chr3 beginning at base position 1,000 and ending at base
 position 2,000 (including both end positions).
+.TP
+.B '*'
+Output the unmapped reads at the end of the file.
+(This does not include any unmapped reads placed on a reference sequence
+alongside their mapped mates.)
+.TP
+.B .
+Output all alignments.
+(Mostly unnecessary as not specifying a region at all has the same effect.)
 .RE
 
 .B OPTIONS:
