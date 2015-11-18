@@ -1712,7 +1712,7 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
     return ret;
 }
 
-static int sort_usage(FILE *fp, int status)
+static void sort_usage(FILE *fp)
 {
     fprintf(fp,
 "Usage: samtools sort [options...] [in.bam]\n"
@@ -1724,7 +1724,6 @@ static int sort_usage(FILE *fp, int status)
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
 "  -@ INT     Set number of sorting and compression threads [1]\n");
     sam_global_opt_help(fp, "-.O..");
-    return status;
 }
 
 int bam_sort(int argc, char *argv[])
@@ -1758,21 +1757,24 @@ int bam_sort(int argc, char *argv[])
 
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
-        case '?': return sort_usage(stderr, EXIT_FAILURE);
+        case '?': sort_usage(stderr); ret = EXIT_FAILURE; goto sort_end;
         }
     }
 
     nargs = argc - optind;
     if (nargs == 0 && isatty(STDIN_FILENO)) {
-        return sort_usage(stdout, EXIT_SUCCESS);
+        sort_usage(stdout);
+        ret = EXIT_SUCCESS;
+        goto sort_end;
     }
-    else if (nargs == 2) {
-        // user probably tried to specify legacy <out.prefix>
-        fprintf(stderr, "[bam_sort] Use -T PREFIX / -o FILE to specify temporary and final output files\n");
-        return sort_usage(stderr, EXIT_FAILURE);
-    }
-    else if (nargs > 2) {
-        return sort_usage(stderr, EXIT_FAILURE);
+    else if (nargs >= 2) {
+        // If exactly two, user probably tried to specify legacy <out.prefix>
+        if (nargs == 2)
+            fprintf(stderr, "[bam_sort] Use -T PREFIX / -o FILE to specify temporary and final output files\n");
+
+        sort_usage(stderr);
+        ret = EXIT_FAILURE;
+        goto sort_end;
     }
 
     strcpy(modeout, "wb");
@@ -1797,6 +1799,7 @@ int bam_sort(int argc, char *argv[])
         ret = EXIT_FAILURE;
     }
 
+sort_end:
     free(tmpprefix.s);
     sam_global_args_free(&ga);
 
