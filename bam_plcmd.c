@@ -116,7 +116,7 @@ void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
 typedef struct {
-    int min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, fmt_flag;
+    int min_mq, flag, min_baseQ, capQ_thres, min_depth, max_depth, max_indel_depth, fmt_flag;
     int rflag_require, rflag_filter;
     int openQ, extQ, tandemQ, min_support; // for indels
     double min_frac; // for indels
@@ -554,10 +554,30 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
         if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
         mplp_get_ref(data[0], tid, &ref, &ref_len);
+				
+        if(conf->min_depth > 0){// check minimum depth requirement per BAM
+            int passed = 1;
+            for (i = 0; i < n; ++i) {
+                int j, cnt;
+                for (j = cnt = 0; j < n_plp[i]; ++j) {
+                    const bam_pileup1_t *p = plp[i] + j;
+                    int c = p->qpos < p->b->core.l_qseq
+                             ? bam_get_qual(p->b)[p->qpos]
+                             : 0;
+                    if (c >= conf->min_baseQ) ++cnt;
+                }
+                if(cnt < conf->min_depth){
+                    passed = 0;
+                    break;
+                }
+            }
+            if(!passed) continue;
+        }
+				
         //printf("tid=%d len=%d ref=%p/%s\n", tid, ref_len, ref, ref);
         if (conf->flag & MPLP_BCF) {
             int total_depth, _ref0, ref16;
-            for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
+						for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
             group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp, conf->flag & MPLP_IGNORE_RG);
             _ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
             ref16 = seq_nt16_table[_ref0];
@@ -791,7 +811,8 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -f, --fasta-ref FILE    faidx indexed reference sequence file\n"
 "  -G, --exclude-RG FILE   exclude read groups listed in FILE\n"
 "  -l, --positions FILE    skip unlisted positions (chr pos) or regions (BED)\n"
-"  -q, --min-MQ INT        skip alignments with mapQ smaller than INT [%d]\n", mplp->min_mq);
+"  -md, --min-depth INT    min per-BAM depth; [%d]\n"
+"  -q, --min-MQ INT        skip alignments with mapQ smaller than INT [%d]\n", mplp->min_depth, mplp->min_mq);
     fprintf(fp,
 "  -Q, --min-BQ INT        skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp->min_baseQ);
     fprintf(fp,
@@ -853,7 +874,7 @@ int bam_mpileup(int argc, char *argv[])
     memset(&mplp, 0, sizeof(mplp_conf_t));
     mplp.min_baseQ = 13;
     mplp.capQ_thres = 0;
-    mplp.max_depth = 250; mplp.max_indel_depth = 250;
+    mplp.max_depth = 250; mplp.min_depth = 0; mplp.max_indel_depth = 250;
     mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
     mplp.min_frac = 0.002; mplp.min_support = 1;
     mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_SMART_OVERLAPS;
@@ -871,6 +892,7 @@ int bam_mpileup(int argc, char *argv[])
         {"excl-flags", required_argument, NULL, 2},
         {"output", required_argument, NULL, 3},
         {"open-prob", required_argument, NULL, 4},
+        {"md", required_argument, NULL, 5},
         {"illumina1.3+", no_argument, NULL, '6'},
         {"count-orphans", no_argument, NULL, 'A'},
         {"bam-list", required_argument, NULL, 'b'},
@@ -927,6 +949,7 @@ int bam_mpileup(int argc, char *argv[])
             break;
         case  3 : mplp.output_fname = optarg; break;
         case  4 : mplp.openQ = atoi(optarg); break;
+        case  5 : mplp.min_depth = atoi(optarg); break;
         case 'f':
             mplp.fai = fai_load(optarg);
             if (mplp.fai == NULL) return 1;
