@@ -811,7 +811,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -f, --fasta-ref FILE    faidx indexed reference sequence file\n"
 "  -G, --exclude-RG FILE   exclude read groups listed in FILE\n"
 "  -l, --positions FILE    skip unlisted positions (chr pos) or regions (BED)\n"
-"  -md, --min-depth INT    min per-BAM depth; [%d]\n"
+"  --md, --min-depth INT   min per-BAM depth; [%d]\n"
 "  -q, --min-MQ INT        skip alignments with mapQ smaller than INT [%d]\n", mplp->min_depth, mplp->min_mq);
     fprintf(fp,
 "  -Q, --min-BQ INT        skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp->min_baseQ);
