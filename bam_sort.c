@@ -1350,21 +1350,23 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 
 static void merge_usage(FILE *to)
 {
-    fprintf(to, "Usage: samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> [<in2.bam> ... <inN.bam>]\n\n");
-    fprintf(to, "Options:\n");
-    fprintf(to, "  -n             sort by read names\n");
-    fprintf(to, "  -r             attach RG tag (inferred from file names)\n");
-    fprintf(to, "  -u             uncompressed BAM output\n");
-    fprintf(to, "  -f             overwrite the output BAM if exist\n");
-    fprintf(to, "  -1             compress level 1\n");
-    fprintf(to, "  -l INT         compression level, from 0 to 9 [-1]\n");
-    fprintf(to, "  -@ INT         number of BAM compression threads [0]\n");
-    fprintf(to, "  -R STR         merge file in the specified region STR [all]\n");
-    fprintf(to, "  -h FILE        copy the header in FILE to <out.bam> [in1.bam]\n");
-    fprintf(to, "  -c             combine RG tags with colliding IDs rather than amending them\n");
-    fprintf(to, "  -p             combine PG tags with colliding IDs rather than amending them\n");
-    fprintf(to, "  -s VALUE       override random seed\n");
-    fprintf(to, "  -b FILE        list of input BAM filenames, one per line [null]\n");
+    fprintf(to,
+"Usage: samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> [<in2.bam> ... <inN.bam>]\n"
+"\n"
+"Options:\n"
+"  -n         Sort by read names\n"
+"  -r         Attach RG tag (inferred from file names)\n"
+"  -u         Uncompressed BAM output\n"
+"  -f         Overwrite the output BAM if exist\n"
+"  -1         Compress level 1\n"
+"  -l INT     Compression level, from 0 to 9 [-1]\n"
+"  -@ INT     Number of BAM compression threads [0]\n"
+"  -R STR     Merge file in the specified region STR [all]\n"
+"  -h FILE    Copy the header in FILE to <out.bam> [in1.bam]\n"
+"  -c         Combine RG tags with colliding IDs rather than amending them\n"
+"  -p         Combine PG tags with colliding IDs rather than amending them\n"
+"  -s VALUE   Override random seed\n"
+"  -b FILE    List of input BAM filenames, one per line [null]\n");
     sam_global_opt_help(to, "-.O..");
 }
 
