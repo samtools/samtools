@@ -1747,6 +1747,16 @@ Look for a local file listed in the UR: header tag.
 .SH ENVIRONMENT VARIABLES
 .PP
 .TP
+.B HTS_PATH
+A colon-separated list of directories in which to search for HTSlib plugins.
+If $HTS_PATH starts or ends with a colon or contains a double colon (\fB::\fP),
+the built-in list of directories is searched at that point in the search.
+
+If no HTS_PATH variable is defined, the built-in list of directories
+specified when HTSlib was built is used, which typically includes
+\fB/usr/local/libexec/htslib\fP and similar directories.
+
+.TP
 .B REF_PATH
 A colon separated (semi-colon on Windows) list of locations in which
 to look for sequences identified by their MD5sums.  This can be either
