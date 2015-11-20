@@ -45,6 +45,7 @@ test_bam2fq($opts);
 test_depad($opts);
 test_stats($opts);
 test_merge($opts);
+test_sort($opts);
 test_fixmate($opts);
 test_calmd($opts);
 test_idxstat($opts);
@@ -2323,6 +2324,18 @@ sub test_merge
     test_cmd($opts,out=>'merge/6.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -cp -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
     # Merge 7 - ID and SN with regex in them
     test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
+}
+
+sub test_sort
+{
+    my ($opts, %args) = @_;
+
+    # TODO Sort test cases
+
+    # Check obsolete invocation is detected
+    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout", want_fail=>1);
+    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort -f $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout.bam", want_fail=>1);
+    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort -o $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sorttmp", want_fail=>1);
 }
 
 sub test_fixmate

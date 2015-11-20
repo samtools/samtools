@@ -349,7 +349,8 @@ samtools sort
 .RB [ -O
 .IR format ]
 .RB [ -n ]
-.BI "-T " out.prefix
+.RB [ -T
+.IR tmpprefix ]
 .RB [ -@
 .IR threads "] [" in.sam | in.bam | in.cram ]
 .ad
@@ -368,7 +369,7 @@ when
 .B -o
 is used.
 This command will also create temporary files
-.IB out.prefix . %d .bam
+.IB tmpprefix . %d .bam
 as needed when the entire alignment data cannot fit into memory
 (as controlled via the
 .B -m
@@ -413,53 +414,33 @@ By default, samtools tries to select a format based on the
 .B -o
 filename extension; if output is to standard output or no format can be
 deduced,
-.B -O
-must be used.
+.B bam
+is selected.
 .TP
 .BI "-T " PREFIX
 Write temporary files to
 .IB PREFIX . nnnn .bam.
-This option is required.
+By default, any temporary files are written alongside the input file, as
+.IB in.bam .tmp. nnnn .bam.
 .TP
 .BI "-@ " INT
 Set number of sorting and compression threads.
 By default, operation is single-threaded.
 .PP
-For compatibility with existing scripts,
+Historically
 .B samtools sort
-also accepts the previous less flexible way of specifying the final and
+also accepted a less flexible way of specifying the final and
 temporary output filenames:
-.PP
+.IP
 samtools sort
-.RB [ -nof "] [" -m
-.IR maxMem ]
+.RB [ -f "] [" -o ]
 .I in.bam out.prefix
-
-The sorted BAM output is written to
-.IB out.prefix .bam
-(or as determined by the
-.B -o
-and
-.B -f
-options below) and any temporary files are written alongside as
-.IB out.prefix . %d .bam.
-
-.TP 5
-.B -o
-Output the final alignment to the standard output.
-.TP
-.B -f
-Use
-.I out.prefix
-as the full output path and do not append
-.B .bam
-suffix.
-.TP
-.BR -l ", " -m ", " -n ", " -@
-Accepted with the same meanings as above.
 .PP
-This will eventually be removed; you should move to using the more flexible
-newer style of invocation.
+This has now been removed.
+The previous \fIout.prefix\fP argument (and \fB-f\fP option, if any)
+should be changed to an appropriate combination of \fB-T\fP \fIPREFIX\fP
+and \fB-o\fP \fIFILE\fP.  The previous \fB-o\fP option should be removed,
+as output defaults to standard output.
 .RE
 
 .TP \"-------- index
