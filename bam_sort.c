@@ -1554,7 +1554,7 @@ static void *worker(void *data)
     ks_mergesort(sort, w->buf_len, w->buf, 0);
     name = (char*)calloc(strlen(w->prefix) + 20, 1);
     sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-    write_buffer(name, "wb1", w->buf_len, w->buf, w->h, 0, NULL);
+    write_buffer(name, "wb1x", w->buf_len, w->buf, w->h, 0, NULL);
 
 // Consider using CRAM temporary files if the final output is CRAM.
 // Typically it is comparable speed while being smaller.
