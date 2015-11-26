@@ -33,6 +33,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <inttypes.h>
 #include <unistd.h>
 
+#include "samtools.h"
+
 #define BAM_LIDX_SHIFT    14
 
 static void index_usage(FILE *fp)
@@ -68,7 +70,12 @@ int bam_index(int argc, char *argv[])
 
     ret = sam_index_build2(argv[optind], argv[optind+1], csi? min_shift : 0);
     if (ret != 0) {
-        fprintf(stderr, "[%s] corrupted or unsorted input file\n", __func__);
+        if (ret == -2)
+            print_error_errno("index", "failed to open \"%s\"", argv[optind]);
+        else if (ret == -3)
+            print_error("index", "\"%s\" is in a format that cannot be usefully indexed", argv[optind]);
+        else
+            print_error("index", "\"%s\" is corrupted or unsorted", argv[optind]);
         return EXIT_FAILURE;
     }
 
