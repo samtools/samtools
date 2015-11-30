@@ -1,4 +1,4 @@
-/*  bamshuf.c -- bamshuf subcommand.
+/*  bamshuf.c -- collate subcommand.
 
     Copyright (C) 2012 Broad Institute.
     Copyright (C) 2013 Genome Research Ltd.
@@ -87,7 +87,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     // split
     fp = sam_open_format(fn, "r", &ga->in);
     if (fp == NULL) {
-        print_error_errno("bamshuf", "Cannot open input file \"%s\"", fn);
+        print_error_errno("collate", "Cannot open input file \"%s\"", fn);
         return 1;
     }
 
@@ -106,7 +106,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         sprintf(fnt[i], "%s.%.4d.bam", pre, i);
         fpt[i] = sam_open(fnt[i], "wb1");
         if (fpt[i] == NULL) {
-            print_error_errno("bamshuf", "Cannot open intermediate file \"%s\"", fnt[i]);
+            print_error_errno("collate", "Cannot open intermediate file \"%s\"", fnt[i]);
             return 1;
         }
         sam_hdr_write(fpt[i], h);
@@ -135,8 +135,8 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         free(fnw);
     } else fpw = sam_open_format("-", modew, &ga->out); // output to stdout
     if (fpw == NULL) {
-        if (is_stdout) print_error_errno("bamshuf", "Cannot open standard output");
-        else print_error_errno("bamshuf", "Cannot open output file \"%s.bam\"", pre);
+        if (is_stdout) print_error_errno("collate", "Cannot open standard output");
+        else print_error_errno("collate", "Cannot open output file \"%s.bam\"", pre);
         return 1;
     }
 
@@ -172,7 +172,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
 
 static int usage(FILE *fp, int n_files) {
     fprintf(fp,
-            "Usage:   samtools bamshuf [-Ou] [-n nFiles] [-c cLevel] <in.bam> <out.prefix>\n\n"
+            "Usage:   samtools collate [-Ou] [-n nFiles] [-c cLevel] <in.bam> <out.prefix>\n\n"
             "Options:\n"
             "      -O       output to stdout\n"
             "      -u       uncompressed BAM output\n"
