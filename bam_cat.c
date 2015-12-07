@@ -310,7 +310,10 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     //fprintf(stderr, "Creating cram vers %s\n", vers);
 
     cram_fd_set_header(out_c, sam_hdr_parse_(new_h->text,  new_h->l_text)); // needed?
-    sam_hdr_write(out, new_h);
+    if (sam_hdr_write(out, new_h) < 0) {
+        fprintf(stderr, "[%s] Couldn't write header\n", __func__);
+        return 1;
+    }
 
     for (i = 0; i < nfn; ++i) {
         samFile *in;
@@ -414,8 +417,8 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
 
 int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
 {
-    BGZF *fp;
-    uint8_t *buf;
+    BGZF *fp, *in = NULL;
+    uint8_t *buf = NULL;
     uint8_t ebuf[BGZF_EMPTY_BLOCK_SIZE];
     const int es=BGZF_EMPTY_BLOCK_SIZE;
     int i;
@@ -425,18 +428,26 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
         fprintf(stderr, "[%s] ERROR: fail to open output file '%s'.\n", __func__, outbam);
         return 1;
     }
-    if (h) bam_hdr_write(fp, h);
+    if (h) {
+        if (bam_hdr_write(fp, h) < 0) {
+            fprintf(stderr, "[%s] Couldn't write header\n", __func__);
+            goto fail;
+        }
+    }
 
     buf = (uint8_t*) malloc(BUF_SIZE);
+    if (!buf) {
+        fprintf(stderr, "[%s] Couldn't allocate buffer\n", __func__);
+        goto fail;
+    }
     for(i = 0; i < nfn; ++i){
-        BGZF *in;
         bam_hdr_t *old;
         int len,j;
 
         in = strcmp(fn[i], "-")? bgzf_open(fn[i], "r") : bgzf_fdopen(fileno(stdin), "r");
         if (in == 0) {
             fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
-            return -1;
+            goto fail;
         }
         if (in->is_write) return -1;
 
@@ -444,14 +455,18 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
         if (old == NULL) {
             fprintf(stderr, "[%s] ERROR: couldn't read header for '%s'.\n",
                     __func__, fn[i]);
-            bgzf_close(in);
-            return -1;
+            goto fail;
         }
-        if (h == 0 && i == 0) bam_hdr_write(fp, old);
+        if (h == 0 && i == 0) {
+            if (bam_hdr_write(fp, old) < 0) {
+                fprintf(stderr, "[%s] Couldn't write header\n", __func__);
+                goto fail;
+            }
+        }
 
         if (in->block_offset < in->block_length) {
-            bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset);
-            bgzf_flush(fp);
+            if (bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
+            if (bgzf_flush(fp) != 0) goto write_fail;
         }
 
         j=0;
@@ -460,16 +475,19 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
                 int diff=es-len;
                 if(j==0) {
                     fprintf(stderr, "[%s] ERROR: truncated file?: '%s'.\n", __func__, fn[i]);
-                    return -1;
+                    goto fail;
                 }
-                bgzf_raw_write(fp, ebuf, len);
+                if (bgzf_raw_write(fp, ebuf, len) < 0) goto write_fail;
+
                 memcpy(ebuf,ebuf+len,diff);
                 memcpy(ebuf+diff,buf,len);
             } else {
-                if(j!=0) bgzf_raw_write(fp, ebuf, es);
+                if(j!=0) {
+                    if (bgzf_raw_write(fp, ebuf, es) < 0) goto write_fail;
+                }
                 len-= es;
                 memcpy(ebuf,buf+len,es);
-                bgzf_raw_write(fp, buf, len);
+                if (bgzf_raw_write(fp, buf, len) < 0) goto write_fail;
             }
             j=1;
         }
@@ -482,15 +500,27 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
             if(((gzip1!=GZIPID1) || (gzip2!=GZIPID2)) || (isize!=0)) {
                 fprintf(stderr, "[%s] WARNING: Unexpected block structure in file '%s'.", __func__, fn[i]);
                 fprintf(stderr, " Possible output corruption.\n");
-                bgzf_raw_write(fp, ebuf, es);
+                if (bgzf_raw_write(fp, ebuf, es) < 0) goto write_fail;
             }
         }
         bam_hdr_destroy(old);
         bgzf_close(in);
+        in = NULL;
     }
     free(buf);
-    bgzf_close(fp);
+    if (bgzf_close(fp) < 0) {
+        fprintf(stderr, "[%s] Error on closing '%s'.\n", __func__, outbam);
+        return -1;
+    }
     return 0;
+
+ write_fail:
+    fprintf(stderr, "[%s] Error writing to '%s'.\n", __func__, outbam);
+ fail:
+    if (in) bgzf_close(in);
+    if (fp) bgzf_close(fp);
+    free(buf);
+    return -1;
 }
 
 

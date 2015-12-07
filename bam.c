@@ -34,15 +34,22 @@ char *bam_format1(const bam_header_t *header, const bam1_t *b)
 {
     kstring_t str;
     str.l = str.m = 0; str.s = NULL;
-    sam_format1(header, b, &str);
+    if (sam_format1(header, b, &str) < 0) {
+        free(str.s);
+        str.s = NULL;
+        return NULL;
+    }
     return str.s;
 }
 
-void bam_view1(const bam_header_t *header, const bam1_t *b)
+int bam_view1(const bam_header_t *header, const bam1_t *b)
 {
     char *s = bam_format1(header, b);
-    puts(s);
+    int ret = -1;
+    if (!s) return -1;
+    if (puts(s) != EOF) ret = 0;
     free(s);
+    return ret;
 }
 
 int bam_validate1(const bam_header_t *header, const bam1_t *b)
