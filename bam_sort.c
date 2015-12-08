@@ -860,6 +860,7 @@ static bam_hdr_t * finish_merged_header(merged_header_t *merged_hdr) {
     char      *text;
     char     **target_name;
     uint32_t  *target_len;
+    size_t     targets_sz = merged_hdr->n_targets ? merged_hdr->n_targets : 1;
     bam_hdr_t *hdr;
 
     // Check output text size
@@ -879,9 +880,9 @@ static bam_hdr_t * finish_merged_header(merged_header_t *merged_hdr) {
 
     // Try to shrink targets arrays to correct size
     target_name = realloc(merged_hdr->target_name,
-                          merged_hdr->n_targets * sizeof(*target_name));
+                          targets_sz * sizeof(*target_name));
     target_len = realloc(merged_hdr->target_len,
-                         merged_hdr->n_targets * sizeof(*target_len));
+                         targets_sz * sizeof(*target_len));
 
     // Transfer targets arrays to new header
     hdr->n_targets   = merged_hdr->n_targets;
