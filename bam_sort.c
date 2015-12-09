@@ -858,8 +858,6 @@ static inline void move_kstr_to_text(char **text, kstring_t *ks) {
 static bam_hdr_t * finish_merged_header(merged_header_t *merged_hdr) {
     size_t     txt_sz;
     char      *text;
-    char     **target_name;
-    uint32_t  *target_len;
     bam_hdr_t *hdr;
 
     // Check output text size
@@ -877,18 +875,27 @@ static bam_hdr_t * finish_merged_header(merged_header_t *merged_hdr) {
     hdr = bam_hdr_init();
     if (hdr == NULL) goto memfail;
 
-    // Try to shrink targets arrays to correct size
-    target_name = realloc(merged_hdr->target_name,
-                          merged_hdr->n_targets * sizeof(*target_name));
-    target_len = realloc(merged_hdr->target_len,
-                         merged_hdr->n_targets * sizeof(*target_len));
-
     // Transfer targets arrays to new header
-    hdr->n_targets   = merged_hdr->n_targets;
-    hdr->target_name = target_name ? target_name : merged_hdr->target_name;
-    hdr->target_len  = target_len ? target_len : merged_hdr->target_len;
-    merged_hdr->target_name = NULL;
-    merged_hdr->target_len  = NULL;
+    hdr->n_targets = merged_hdr->n_targets;
+    if (hdr->n_targets > 0) {
+        // Try to shrink targets arrays to correct size
+        hdr->target_name = realloc(merged_hdr->target_name,
+                                   hdr->n_targets * sizeof(char*));
+        if (!hdr->target_name) hdr->target_name = merged_hdr->target_name;
+
+        hdr->target_len = realloc(merged_hdr->target_len,
+                                  hdr->n_targets * sizeof(uint32_t));
+        if (!hdr->target_len) hdr->target_len = merged_hdr->target_len;
+
+        // These have either been freed by realloc() or, in the unlikely
+        // event that failed, have had their ownership transferred to hdr
+        merged_hdr->target_name = NULL;
+        merged_hdr->target_len  = NULL;
+    }
+    else {
+        hdr->target_name = NULL;
+        hdr->target_len  = NULL;
+    }
 
     // Allocate text
     text = hdr->text = malloc(txt_sz + 1);
