@@ -208,9 +208,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "[main] The `pileup' command has been removed. Please use `mpileup' instead.\n");
         return 1;
     }
-#if _CURSES_LIB != 0
     else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
-#endif
     else if (strcmp(argv[1], "--version") == 0) {
         printf(
 "samtools %s\n"

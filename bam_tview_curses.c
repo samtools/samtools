@@ -23,37 +23,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
-#undef _HAVE_CURSES
-
-#if _CURSES_LIB == 0
-#elif _CURSES_LIB == 1
-#include <curses.h>
-#ifndef NCURSES_VERSION
-#warning "_CURSES_LIB=1 but NCURSES_VERSION not defined; tview is NOT compiled"
-#else
-#define _HAVE_CURSES
-#endif
-#elif _CURSES_LIB == 2
-#include <xcurses.h>
-#define _HAVE_CURSES
-#else
-#warning "_CURSES_LIB is not 0, 1 or 2; tview is NOT compiled"
-#endif
-
+#include <config.h>
 
 #include "bam_tview.h"
 
-#ifdef _HAVE_CURSES
+#ifdef HAVE_CURSES
 
-
+#if defined HAVE_NCURSESW_CURSES_H
+#include <ncursesw/curses.h>
+#elif defined HAVE_NCURSESW_H
+#include <ncursesw.h>
+#elif defined HAVE_NCURSES_CURSES_H
+#include <ncurses/curses.h>
+#elif defined HAVE_NCURSES_H
+#include <ncurses.h>
+#elif defined HAVE_CURSES_H
+#include <curses.h>
+#endif
 
 typedef struct CursesTview {
     tview_t view;
     WINDOW *wgoto, *whelp;
     } curses_tview_t;
-
-
-
 
 #define FROM_TV(ptr) ((curses_tview_t*)ptr)
 
@@ -345,9 +336,8 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
     return base;
     }
 
+#else // !HAVE_CURSES
 
-#else // #ifdef _HAVE_CURSES
-#include <stdio.h>
 #warning "No curses library is available; tview with curses is disabled."
 
 extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples,
@@ -358,6 +348,5 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
     {
     return text_tv_init(fn,fn_fa,samples,fmt);
     }
-#endif // #ifdef _HAVE_CURSES
 
-
+#endif
