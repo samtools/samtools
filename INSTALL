@@ -1,61 +1,123 @@
+Basic Installation
+==================
+
+To build and install Samtools, 'cd' to the samtools-1.x directory containing
+the package's source and type the following commands:
+
+    ./configure
+    make
+    make install
+
+The './configure' command checks your build environment and allows various
+optional functionality to be enabled (see Configuration below).  If you
+don't want to select any optional functionality, you may wish to omit
+configure and just type 'make; make install' as for previous versions
+of samtools.  However if the build fails you should run './configure'
+as it can diagnose the common reasons for build failures.
+
+The 'make' command builds samtools and various miscellaneous utilities.
+If compilation fails you should run './configure' as it can diagnose
+problems with your build environment that cause build failures.
+
+(The bgzip, htsfile, and tabix utilities are provided by HTSlib.  If you are
+not also compiling HTSlib separately, you may wish to compile these utilities
+in the associated copy of HTSlib.  Type 'make all all-htslib' to do this.)
+
+The 'make install' command installs the samtools executable and various
+scripts and executables from misc/ and a manual page to /usr/local.
+The installation location can be changed by configuring with --prefix=DIR
+or via 'make prefix=DIR install' (see Installation Locations below).
+
+(If you have not also installed HTSlib separately, you may wish to install
+the bgzip, htsfile, and tabix utilities from the associated copy of HTSlib.
+Type 'make install install-htslib' to do this.)
+
+Typically you will want to enable HTSlib's HTTPS/etc plugin etc.
+See README for recipes for typical installation.
+
+
 System Requirements
 ===================
 
-Samtools and HTSlib depend on the zlib library <http://zlib.net>.  Building
-them requires zlib development files to be installed on the build machine;
-you may need to ensure a package such as zlib1g-dev (on Debian or Ubuntu Linux)
-or zlib-devel (on RPM/yum-based distributions) is installed.
-
-SAMtools' faidx is able to index a bgzip-compressed FASTA file to save
-diskspace.
-
-The text-based viewer (tview) requires the GNU ncurses library
-<http://www.gnu.org/software/ncurses/>, which comes with Mac OS X and most of
-the modern Linux/Unix distributions. If you do not have this library installed,
-you can still compile the rest of SAMtools by manually changing:
-`-D_CURSES_LIB=1' to `-D_CURSES_LIB=0' at the line starting with `DFLAGS=', and
-comment out the line starting with `LIBCURSES='.
-Note that on some systems the library is available as -lcurses while on others
-as -lncurses. This can be set in Makefile by setting LIBCURSES= -lcurses vs
--lncurses.
+Samtools requires the zlib library <http://zlib.net> and (optionally) a
+curses or GNU ncurses library <http://www.gnu.org/software/ncurses/>.
+If you are unsure about this, be sure to use './configure' to determine
+whether you have these libraries and to help diagnose which packages may
+need to be installed on your build machine to provide them.
 
 
-Compilation
-===========
+Configuration
+=============
 
-'cd' to the samtools-1.x directory containing the package's source and type
-'make' to compile samtools.
+By default, './configure' examines your build environment, searching for a
+usable HTSlib and checking for requirements such as the curses development
+files, and arranges for a plain samtools build.
 
-This samtools release contains a copy of HTSlib which will be used to build
-samtools.  If you already have a system-installed HTSlib or another HTSlib
-that you would prefer to build against, you can arrange this by overriding
-$(HTSDIR) by typing 'make HTSDIR=/path/to/htslib-source' -- see the makefile
-for details.
+This samtools release contains a copy of the HTSlib source code which will
+be used to build samtools.  If you already have a system-installed HTSlib
+or another HTSlib that you would prefer to build against, you can arrange
+this via the --with-htslib option.
 
-The bgzip, htsfile, and tabix utilities are provided by HTSlib.  If you are
-not also compiling HTSlib separately, you may wish to compile these utilities
-in the associated copy of HTSlib.  Type 'make all-htslib' to do this.
+The following configure options can be used to enable various features and
+specify further optional external requirements:
 
-In summary, where items in [brackets] are optional:
+--with-htslib=DIR
+    Specifies the HTSlib source tree or installation directory that samtools
+    should use to parse bioinformatics file formats etc.  Configure will check
+    that DIR appears to contain HTSlib source files or to be the root of an
+    installation directory (i.e., it has 'include' and 'lib' subdirectories
+    containing HTSlib headers and libraries).
 
-    cd /path/to/samtools-1.x
-    make [HTSDIR=...] [all all-htslib]
+    By default, configure looks for an HTSlib source tree within or alongside
+    the samtools source directory; if there are several likely candidates,
+    you will have to choose one via this option.
+
+--with-htslib=system
+    Ignores any nearby HTSlib source trees, and builds samtools using an
+    existing HTSlib installation in a system directory (i.e., a directory
+    already being searched by $CPPFLAGS/$LDFLAGS).
+
+--without-curses
+    Omit the curses-based 'tview' subcommand from the build.  If you do not
+    have curses on your build machine or otherwise don't want the interactive
+    tview subcommand, this option disables it and skips testing for working
+    curses development files.
+
+If you are building with an HTSlib source tree, HTSlib's configure script
+will also be run.  So HTSlib configure options can also be used and will be
+passed down to the HTSlib configure.  See HTSlib's INSTALL documentation for
+details of these options.
+
+The configure script also accepts the usual options and environment variables
+for tuning installation locations and compilers: type './configure --help'
+for details.  For example,
+
+    ./configure CC=icc --prefix=/opt/icc-compiled
+
+would specify that samtools is to be built with icc and installed into bin,
+lib, etc subdirectories under /opt/icc-compiled.
 
 
-Installation
-============
+Installation Locations
+======================
 
-Type 'make install' to install the samtools executable and various scripts
-and executables from misc/ and a manual page to /usr/local.
+By default, 'make install' installs samtools and the utilities under
+/usr/local/bin and manual pages under /usr/local/share/man.
 
-Type 'make prefix=/path/to/dir install' to install everything under your
-choice of installation directory.  The install target also understands
-DESTDIR and the other usual installation directory variables.
+You can specify a different location to install Samtools by configuring
+with --prefix=DIR or specify locations for particular parts of HTSlib by
+configuring with --bindir=DIR and so on.  Type './configure --help' for
+the full list of such install directory options.
 
-The bgzip, htsfile, and tabix utilities are provided by HTSlib.  If you have
-not also installed HTSlib separately, you may wish to install these utilities
-from the associated copy of HTSlib.  Type 'make install-htslib' to do this.
+Alternatively you can specify different locations at install time by
+typing 'make prefix=DIR install' or 'make bindir=DIR install' and so on.
+Consult the list of prefix/exec_prefix/etc variables near the top of the
+Makefile for the full list of such variables that can be overridden.
 
-In summary:
+You can also specify a staging area by typing 'make DESTDIR=DIR install',
+possibly in conjunction with other --prefix or prefix=DIR settings.
+For example,
 
-    make [prefix=...] install [HTSDIR=...] [install-htslib]
+    make DESTDIR=/tmp/staging prefix=/opt
+
+would install into bin and share/man subdirectories under /tmp/staging/opt.
