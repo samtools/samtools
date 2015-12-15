@@ -40,7 +40,7 @@
 #include "htslib/kseq.h"
 KSEQ_INIT(gzFile, gzread)
 
-#define PACKAGE_VERSION "0.3.0"
+#define PACKAGE_VERSION "0.3.2"
 
 const uint8_t nst_nt4_table[256] = {
     4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,
@@ -99,7 +99,7 @@ static double ERR_RATE = 0.02;
 static double MUT_RATE = 0.001;
 static double INDEL_FRAC = 0.15;
 static double INDEL_EXTEND = 0.3;
-static double MAX_N_RATIO = 0.1;
+static double MAX_N_RATIO = 0.05;
 
 void wgsim_mut_diref(const kseq_t *ks, int is_hap, mutseq_t *hap1, mutseq_t *hap2)
 {
@@ -158,21 +158,25 @@ void wgsim_mut_diref(const kseq_t *ks, int is_hap, mutseq_t *hap1, mutseq_t *hap
 }
 void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, mutseq_t *hap2)
 {
-    int i;
+    int i, j = 0; // j keeps the end of the last deletion
     for (i = 0; i != ks->seq.l; ++i) {
         int c[3];
         c[0] = nst_nt4_table[(int)ks->seq.s[i]];
         c[1] = hap1->s[i]; c[2] = hap2->s[i];
         if (c[0] >= 4) continue;
         if ((c[1] & mutmsk) != NOCHANGE || (c[2] & mutmsk) != NOCHANGE) {
-            printf("%s\t%d\t", name, i+1);
             if (c[1] == c[2]) { // hom
                 if ((c[1]&mutmsk) == SUBSTITUTE) { // substitution
-                    printf("%c\t%c\t-\n", "ACGTN"[c[0]], "ACGTN"[c[1]&0xf]);
+                    printf("%s\t%d\t%c\t%c\t-\n", name, i+1, "ACGTN"[c[0]], "ACGTN"[c[1]&0xf]);
                 } else if ((c[1]&mutmsk) == DELETE) { // del
-                    printf("%c\t-\t-\n", "ACGTN"[c[0]]);
-                } else if (((c[1] & mutmsk) >> 12) <= 5) { // ins
-                    printf("-\t");
+                    if (i >= j) {
+                        printf("%s\t%d\t", name, i+1);
+                        for (j = i; j < ks->seq.l && hap1->s[j] == hap2->s[j] && (hap1->s[j]&mutmsk) == DELETE; ++j)
+                            putchar("ACGTN"[nst_nt4_table[(int)ks->seq.s[j]]]);
+                        printf("\t-\t-\n");
+                    }
+                } else if (((c[1] & mutmsk) >> 12) <= 4) { // ins
+                    printf("%s\t%d\t-\t", name, i+1);
                     int n = (c[1]&mutmsk) >> 12, ins = c[1] >> 4;
                     while (n > 0) {
                         putchar("ACGTN"[ins & 0x3]);
@@ -180,16 +184,26 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                         n--;
                     }
                     printf("\t-\n");
-                }  else assert(0);
+                } // else: deleted base in a long deletion
             } else { // het
                 if ((c[1]&mutmsk) == SUBSTITUTE || (c[2]&mutmsk) == SUBSTITUTE) { // substitution
-                    printf("%c\t%c\t+\n", "ACGTN"[c[0]], "XACMGRSVTWYHKDBN"[1<<(c[1]&0x3)|1<<(c[2]&0x3)]);
+                    printf("%s\t%d\t%c\t%c\t+\n", name, i+1, "ACGTN"[c[0]], "XACMGRSVTWYHKDBN"[1<<(c[1]&0x3)|1<<(c[2]&0x3)]);
                 } else if ((c[1]&mutmsk) == DELETE) {
-                    printf("%c\t-\t+\n", "ACGTN"[c[0]]);
+                    if (i >= j) {
+                        printf("%s\t%d\t", name, i+1);
+                        for (j = i; j < ks->seq.l && hap1->s[j] != hap2->s[j] && (hap1->s[j]&mutmsk) == DELETE; ++j)
+                            putchar("ACGTN"[nst_nt4_table[(int)ks->seq.s[j]]]);
+                        printf("\t-\t-\n");
+                    }
                 } else if ((c[2]&mutmsk) == DELETE) {
-                    printf("%c\t-\t+\n", "ACGTN"[c[0]]);
-                } else if (((c[1] & mutmsk) >> 12) <= 4) { // ins1
-                    printf("-\t");
+                    if (i >= j) {
+                        printf("%s\t%d\t", name, i+1);
+                        for (j = i; j < ks->seq.l && hap1->s[j] != hap2->s[j] && (hap2->s[j]&mutmsk) == DELETE; ++j)
+                            putchar("ACGTN"[nst_nt4_table[(int)ks->seq.s[j]]]);
+                        printf("\t-\t-\n");
+                    }
+                } else if (((c[1] & mutmsk) >> 12) <= 4 && ((c[1] & mutmsk) >> 12) > 0) { // ins1
+                    printf("%s\t%d\t-\t", name, i+1);
                     int n = (c[1]&mutmsk) >> 12, ins = c[1] >> 4;
                     while (n > 0) {
                         putchar("ACGTN"[ins & 0x3]);
@@ -197,8 +211,8 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                         n--;
                     }
                     printf("\t+\n");
-                } else if (((c[2] & mutmsk) >> 12) <= 5) { // ins2
-                    printf("-\t");
+                } else if (((c[2] & mutmsk) >> 12) <= 4 || ((c[2] & mutmsk) >> 12) > 0) { // ins2
+                    printf("%s\t%d\t-\t", name, i+1);
                     int n = (c[2]&mutmsk) >> 12, ins = c[2] >> 4;
                     while (n > 0) {
                         putchar("ACGTN"[ins & 0x3]);
@@ -206,7 +220,7 @@ void wgsim_print_mutref(const char *name, const kseq_t *ks, mutseq_t *hap1, muts
                         n--;
                     }
                     printf("\t+\n");
-                } else assert(0);
+                } // else: deleted base in a long deletion
             }
         }
     }
@@ -223,6 +237,7 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
     int size[2], Q, max_size;
     uint8_t *tmp_seq[2];
     mut_t *target;
+    int max_loop, max_loop_err = 0;
 
     l = size_l > size_r? size_l : size_r;
     qstr = (char*)calloc(l+1, 1);
@@ -258,11 +273,14 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
         wgsim_mut_diref(ks, is_hap, rseq, rseq+1);
         wgsim_print_mutref(ks->name.s, ks, rseq, rseq+1);
 
-        for (ii = 0; ii != n_pairs; ++ii) { // the core loop
+        for (ii = 0; max_loop = 1000, ii != n_pairs; ++ii) { // the core loop
             double ran;
-            int d, pos, s[2], is_flip = 0;
+            int d, pos, s[2], is_flip;
             int n_sub[2], n_indel[2], n_err[2], ext_coor[2], j, k;
             FILE *fpo[2];
+
+        try_again:
+            is_flip = 0;
 
             do { // avoid boundary failure
                 ran = ran_normal();
@@ -286,30 +304,50 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
             target = rseq[drand48()<0.5?0:1].s; // haplotype from which the reads are generated
             n_sub[0] = n_sub[1] = n_indel[0] = n_indel[1] = n_err[0] = n_err[1] = 0;
 
-#define __gen_read(x, start, iter) do {                                 \
-                for (i = (start), k = 0, ext_coor[x] = -10; i >= 0 && i < ks->seq.l && k < s[x]; iter) {    \
-                    int c = target[i], mut_type = c & mutmsk;           \
-                    if (ext_coor[x] < 0) {                              \
-                        if (mut_type != NOCHANGE && mut_type != SUBSTITUTE) continue; \
-                        ext_coor[x] = i;                                \
-                    }                                                   \
-                    if (mut_type == DELETE) ++n_indel[x];               \
-                    else if (mut_type == NOCHANGE || mut_type == SUBSTITUTE) { \
-                        tmp_seq[x][k++] = c & 0xf;                      \
-                        if (mut_type == SUBSTITUTE) ++n_sub[x];         \
-                    } else {                                            \
-                        int n, ins;                                     \
-                        ++n_indel[x];                                   \
-                        tmp_seq[x][k++] = c & 0xf;                      \
-                        for (n = mut_type>>12, ins = c>>4; n > 0 && k < s[x]; --n, ins >>= 2) \
-                            tmp_seq[x][k++] = ins & 0x3;                \
-                    }                                                   \
-                }                                                       \
-                if (k != s[x]) ext_coor[x] = -10;                       \
-            } while (0)
+            // forward read
+            for (i = pos, k = 0, ext_coor[0] = -10; i >= 0 && i < ks->seq.l && k < s[0]; ++i) {
+                int c = target[i], mut_type = c & mutmsk;
+                if (ext_coor[0] < 0) {
+                    if (mut_type != NOCHANGE && mut_type != SUBSTITUTE) continue;
+                    ext_coor[0] = i;
+                }
+                if (mut_type == DELETE) ++n_indel[0];
+                else if (mut_type == NOCHANGE || mut_type == SUBSTITUTE) {
+                    tmp_seq[0][k++] = c & 0xf;
+                    if (mut_type == SUBSTITUTE) ++n_sub[0];
+                } else {
+                    int n, ins;
+                    ++n_indel[0];
+                    tmp_seq[0][k++] = c & 0xf;
+                    for (n = mut_type>>12, ins = c>>4; n > 0 && k < s[0]; --n, ins >>= 2)
+                        tmp_seq[0][k++] = ins & 0x3;
+                }
+            }
+            if (k != s[0]) ext_coor[0] = -10;
 
-            __gen_read(0, pos, ++i);
-            __gen_read(1, pos + d - 1, --i);
+            // reverse read
+            for (i = pos + d - 1, k = 0, ext_coor[1] = -10; i >= 0 && i < ks->seq.l && k < s[1]; --i) {
+                int c = target[i], mut_type = c & mutmsk;
+                if (ext_coor[1] < 0) {
+                    if (mut_type != NOCHANGE && mut_type != SUBSTITUTE) continue;
+                    ext_coor[1] = i;
+                }
+                if (mut_type == DELETE) ++n_indel[1];
+                else if (mut_type == NOCHANGE || mut_type == SUBSTITUTE) {
+                    tmp_seq[1][k++] = c & 0xf;
+                    if (mut_type == SUBSTITUTE) ++n_sub[1];
+                } else {
+                    int n, ins;
+                    ++n_indel[1];
+                    for (n = mut_type>>12, ins = c>>4; n > 0 && k < s[1];)
+                        tmp_seq[1][k++] = (ins>>(2*--n)) & 0x3;
+                    tmp_seq[1][k++] = c & 0xf;
+                }
+            }
+            if (k != s[1]) ext_coor[1] = -10;
+
+
+
             for (k = 0; k < s[1]; ++k) tmp_seq[1][k] = tmp_seq[1][k] < 4? 3 - tmp_seq[1][k] : 4; // complement
             if (ext_coor[0] < 0 || ext_coor[1] < 0) { // fail to generate the read(s)
                 --ii;
@@ -334,7 +372,12 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
                 if ((double)n_n / s[j] > MAX_N_RATIO) break;
             }
             if (j < 2) { // too many ambiguous bases on one of the reads
-                --ii;
+                if (max_loop--) goto try_again;
+                if (!max_loop_err) {
+                    fprintf(stderr, "Failed to produce a sequence with insufficient Ns. "
+                            "Omitting some sequence-pairs\n");
+                    max_loop_err = 1;
+                }
                 continue;
             }
 
@@ -374,7 +417,8 @@ static int simu_usage(void)
     fprintf(stderr, "         -r FLOAT      rate of mutations [%.4f]\n", MUT_RATE);
     fprintf(stderr, "         -R FLOAT      fraction of indels [%.2f]\n", INDEL_FRAC);
     fprintf(stderr, "         -X FLOAT      probability an indel is extended [%.2f]\n", INDEL_EXTEND);
-    fprintf(stderr, "         -S INT        seed for random generator [-1]\n");
+    fprintf(stderr, "         -S INT        seed for random generator [0, use the current time]\n");
+    fprintf(stderr, "         -A FLOAT      discard if the fraction of ambiguous bases higher than FLOAT [%.2f]\n", MAX_N_RATIO);
     fprintf(stderr, "         -h            haplotype mode\n");
     fprintf(stderr, "\n");
     return 1;
@@ -385,11 +429,11 @@ int main(int argc, char *argv[])
     int64_t N;
     int dist, std_dev, c, size_l, size_r, is_hap = 0;
     FILE *fpout1, *fpout2;
-    int seed = -1;
+    int seed = 0;
 
     N = 1000000; dist = 500; std_dev = 50;
     size_l = size_r = 70;
-    while ((c = getopt(argc, argv, "e:d:s:N:1:2:r:R:hX:S:")) >= 0) {
+    while ((c = getopt(argc, argv, "e:d:s:N:1:2:r:R:hX:S:A:")) >= 0) {
         switch (c) {
         case 'd': dist = atoi(optarg); break;
         case 's': std_dev = atoi(optarg); break;
@@ -400,6 +444,7 @@ int main(int argc, char *argv[])
         case 'r': MUT_RATE = atof(optarg); break;
         case 'R': INDEL_FRAC = atof(optarg); break;
         case 'X': INDEL_EXTEND = atof(optarg); break;
+        case 'A': MAX_N_RATIO = atof(optarg); break;
         case 'S': seed = atoi(optarg); break;
         case 'h': is_hap = 1; break;
         }
@@ -411,7 +456,9 @@ int main(int argc, char *argv[])
         fprintf(stderr, "[wgsim] file open error\n");
         return 1;
     }
-    srand48(seed > 0? seed : time(0));
+    if (seed <= 0) seed = time(0)&0x7fffffff;
+    fprintf(stderr, "[wgsim] seed = %d\n", seed);
+    srand48(seed);
     wgsim_core(fpout1, fpout2, argv[optind], is_hap, N, dist, std_dev, size_l, size_r);
 
     fclose(fpout1); fclose(fpout2);

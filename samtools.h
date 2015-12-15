@@ -1,6 +1,6 @@
 /*  samtools.h -- utility routines.
 
-    Copyright (C) 2013-2014 Genome Research Ltd.
+    Copyright (C) 2013-2015 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -27,7 +27,13 @@ DEALINGS IN THE SOFTWARE.  */
 
 const char *samtools_version(void);
 
-void print_error(const char *format, ...);
-void print_error_errno(const char *format, ...);
+#if defined __GNUC__ && __GNUC__ >= 2
+#define CHECK_PRINTF(fmt,args) __attribute__ ((format (printf, fmt, args)))
+#else
+#define CHECK_PRINTF(fmt,args)
+#endif
+
+void print_error(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
+void print_error_errno(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
 
 #endif

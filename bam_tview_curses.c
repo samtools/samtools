@@ -23,37 +23,28 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
-#undef _HAVE_CURSES
-
-#if _CURSES_LIB == 0
-#elif _CURSES_LIB == 1
-#include <curses.h>
-#ifndef NCURSES_VERSION
-#warning "_CURSES_LIB=1 but NCURSES_VERSION not defined; tview is NOT compiled"
-#else
-#define _HAVE_CURSES
-#endif
-#elif _CURSES_LIB == 2
-#include <xcurses.h>
-#define _HAVE_CURSES
-#else
-#warning "_CURSES_LIB is not 0, 1 or 2; tview is NOT compiled"
-#endif
-
+#include <config.h>
 
 #include "bam_tview.h"
 
-#ifdef _HAVE_CURSES
+#ifdef HAVE_CURSES
 
-
+#if defined HAVE_NCURSESW_CURSES_H
+#include <ncursesw/curses.h>
+#elif defined HAVE_NCURSESW_H
+#include <ncursesw.h>
+#elif defined HAVE_NCURSES_CURSES_H
+#include <ncurses/curses.h>
+#elif defined HAVE_NCURSES_H
+#include <ncurses.h>
+#elif defined HAVE_CURSES_H
+#include <curses.h>
+#endif
 
 typedef struct CursesTview {
     tview_t view;
     WINDOW *wgoto, *whelp;
     } curses_tview_t;
-
-
-
 
 #define FROM_TV(ptr) ((curses_tview_t*)ptr)
 
@@ -110,6 +101,33 @@ static void curses_clear(struct AbstractTview* tv)
     clear();
     }
 
+static int curses_init_colors(int inverse)
+{
+    if (inverse) {
+        init_pair(1, COLOR_WHITE, COLOR_BLUE);
+        init_pair(2, COLOR_BLACK, COLOR_GREEN);
+        init_pair(3, COLOR_BLACK, COLOR_YELLOW);
+        init_pair(4, COLOR_BLACK, COLOR_WHITE);
+        init_pair(5, COLOR_BLACK, COLOR_GREEN);
+        init_pair(6, COLOR_BLACK, COLOR_CYAN);
+        init_pair(7, COLOR_WHITE, COLOR_MAGENTA);
+        init_pair(8, COLOR_WHITE, COLOR_RED);
+        init_pair(9, COLOR_WHITE, COLOR_BLUE);
+    } else {
+        init_pair(1, COLOR_BLUE, COLOR_BLACK);
+        init_pair(2, COLOR_GREEN, COLOR_BLACK);
+        init_pair(3, COLOR_YELLOW, COLOR_BLACK);
+        init_pair(4, COLOR_WHITE, COLOR_BLACK);
+        init_pair(5, COLOR_GREEN, COLOR_BLACK);
+        init_pair(6, COLOR_CYAN, COLOR_BLACK);
+        init_pair(7, COLOR_MAGENTA, COLOR_BLACK);
+        init_pair(8, COLOR_RED, COLOR_BLACK);
+        init_pair(9, COLOR_BLUE, COLOR_BLACK);
+    }
+
+    return 0;
+}
+
 static int curses_colorpair(struct AbstractTview* tv,int flag)
     {
     return COLOR_PAIR(flag);
@@ -145,10 +163,17 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos)
                 }
             } else {
                 char *name_lim = (char *) hts_parse_reg(str, &_beg, &_end);
-                char name_terminator = *name_lim;
-                *name_lim = '\0';
-                _tid = bam_name2id(base->header, str);
-                *name_lim = name_terminator;
+                if (name_lim) {
+                    char name_terminator = *name_lim;
+                    *name_lim = '\0';
+                    _tid = bam_name2id(base->header, str);
+                    *name_lim = name_terminator;
+                }
+                else {
+                    // Unparsable region, but possibly a sequence named "foo:a"
+                    _tid = bam_name2id(base->header, str);
+                    _beg = 0;
+                }
 
                 if (_tid >= 0) {
                     *tid = _tid; *pos = _beg;
@@ -199,6 +224,7 @@ static void tv_win_help(curses_tview_t *tv) {
     mvwprintw(win, r++, 2, "N          Turn on nt view");
     mvwprintw(win, r++, 2, "C          Turn on cs view");
     mvwprintw(win, r++, 2, "i          Toggle on/off ins");
+    mvwprintw(win, r++, 2, "v          Inverse video");
     mvwprintw(win, r++, 2, "q          Exit");
     r++;
     mvwprintw(win, r++, 2, "Underline:      Secondary or orphan");
@@ -231,6 +257,7 @@ static int curses_loop(tview_t* tv)
             case 'n': tv->color_for = TV_COLOR_NUCL; break;
             case 'c': tv->color_for = TV_COLOR_COL; break;
             case 'z': tv->color_for = TV_COLOR_COLQ; break;
+            case 'v': curses_init_colors(tv->inverse = !tv->inverse); break;
             case 's': tv->no_skip = !tv->no_skip; break;
             case 'r': tv->show_name = !tv->show_name; break;
             case KEY_LEFT:
@@ -268,7 +295,8 @@ end_loop:
 
 
 
-tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
+tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
+                        const htsFormat *fmt)
     {
     curses_tview_t *tv = (curses_tview_t*)calloc(1, sizeof(curses_tview_t));
     tview_t* base=(tview_t*)tv;
@@ -278,7 +306,7 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
         return 0;
         }
 
-    base_tv_init(base,fn,fn_fa,samples);
+    base_tv_init(base,fn,fn_fa,samples,fmt);
     /* initialize callbacks */
 #define SET_CALLBACK(fun) base->my_##fun=curses_##fun;
     SET_CALLBACK(destroy);
@@ -301,32 +329,24 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
 
     getmaxyx(stdscr, base->mrow, base->mcol);
     tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
-    tv->whelp = newwin(29, 40, 5, 5);
+    tv->whelp = newwin(30, 40, 5, 5);
 
     start_color();
-    init_pair(1, COLOR_BLUE, COLOR_BLACK);
-    init_pair(2, COLOR_GREEN, COLOR_BLACK);
-    init_pair(3, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(4, COLOR_WHITE, COLOR_BLACK);
-    init_pair(5, COLOR_GREEN, COLOR_BLACK);
-    init_pair(6, COLOR_CYAN, COLOR_BLACK);
-    init_pair(7, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(8, COLOR_RED, COLOR_BLACK);
-    init_pair(9, COLOR_BLUE, COLOR_BLACK);
+    curses_init_colors(0);
     return base;
     }
 
+#else // !HAVE_CURSES
 
-#else // #ifdef _HAVE_CURSES
-#include <stdio.h>
 #warning "No curses library is available; tview with curses is disabled."
 
-extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples);
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples,
+                             const htsFormat *fmt);
 
-tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples)
+tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
+                        const htsFormat *fmt)
     {
-    return text_tv_init(fn,fn_fa,samples);
+    return text_tv_init(fn,fn_fa,samples,fmt);
     }
-#endif // #ifdef _HAVE_CURSES
 
-
+#endif

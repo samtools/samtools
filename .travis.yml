@@ -1,5 +1,9 @@
 # Control file for continuous integration testing at http://travis-ci.org/
 
+os:
+  - linux
+  - osx
+
 language: c
 compiler:
   - clang
@@ -11,8 +15,14 @@ matrix:
     - compiler: gcc
       env: CFLAGS="-std=gnu99 -O0"
 
+env:
+  global:
+    - HTSDIR=./htslib
+
 before_script:
-  - git clone --depth=5 --branch=develop git://github.com/samtools/htslib.git
-  - export HTSDIR=./htslib
+  # Clone samtools/htslib (or another repository, as specified by a Travis CI
+  # repository $HTSREPO setting) and check out a corresponding branch with the
+  # same name, if any, or otherwise the default branch.
+  - .travis/clone ${HTSREPO:-git://github.com/samtools/htslib.git} $HTSDIR $TRAVIS_BRANCH
 
 script: make -e && make -e test

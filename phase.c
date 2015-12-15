@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <zlib.h>
 #include "htslib/sam.h"
 #include "errmod.h"
+#include "sam_opts.h"
 
 #include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
@@ -76,8 +77,6 @@ typedef khash_t(64) nseq_t;
 
 #include "htslib/ksort.h"
 KSORT_INIT(rseq, frag_p, rseq_lt)
-
-extern const char bam_nt16_nt4_table[];
 
 static inline uint64_t X31_hash_string(const char *s)
 {
@@ -539,7 +538,7 @@ static int gl2cns(float q[16])
 
 int main_phase(int argc, char *argv[])
 {
-    int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0;
+    int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0, usage = 0;
     const bam_pileup1_t *plp;
     bam_plp_t iter;
     nseq_t *seqs;
@@ -550,10 +549,16 @@ int main_phase(int argc, char *argv[])
     errmod_t *em;
     uint16_t *bases;
 
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0),
+        { NULL, 0, NULL, 0 }
+    };
+
     memset(&g, 0, sizeof(phaseg_t));
     g.flag = FLAG_FIX_CHIMERA;
     g.min_varLOD = 37; g.k = 13; g.min_baseQ = 13; g.max_depth = 256;
-    while ((c = getopt(argc, argv, "Q:eFq:k:b:l:D:A:")) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:eFq:k:b:l:D:A:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'D': g.max_depth = atoi(optarg); break;
             case 'q': g.min_varLOD = atoi(optarg); break;
@@ -564,9 +569,13 @@ int main_phase(int argc, char *argv[])
             case 'A': g.flag |= FLAG_DROP_AMBI; break;
             case 'b': g.pre = strdup(optarg); break;
             case 'l': fn_list = strdup(optarg); break;
+            default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+                      /* else fall-through */
+            case '?': usage=1; break;
         }
+        if (usage) break;
     }
-    if (argc == optind) {
+    if (usage || argc == optind) {
         fprintf(stderr, "\n");
         fprintf(stderr, "Usage:   samtools phase [options] <in.bam>\n\n");
         fprintf(stderr, "Options: -k INT    block length [%d]\n", g.k);
@@ -579,19 +588,31 @@ int main_phase(int argc, char *argv[])
         fprintf(stderr, "         -A        drop reads with ambiguous phase\n");
 //      fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
         fprintf(stderr, "\n");
+
+        sam_global_opt_help(stderr, "-....");
+
         return 1;
     }
-    g.fp = sam_open(argv[optind], "r");
+    g.fp = sam_open_format(argv[optind], "r", &ga.in);
     g.fp_hdr = sam_hdr_read(g.fp);
+    if (g.fp_hdr == NULL) {
+        fprintf(stderr, "Failed to read header for '%s'\n", argv[optind]);
+        return 1;
+    }
     if (fn_list) { // read the list of sites to phase
         set = loadpos(fn_list, g.fp_hdr);
         free(fn_list);
     } else g.flag &= ~FLAG_LIST_EXCL;
     if (g.pre) { // open BAMs to write
         char *s = (char*)malloc(strlen(g.pre) + 20);
-        strcpy(s, g.pre); strcat(s, ".0.bam"); g.out[0] = sam_open(s, "wb");
-        strcpy(s, g.pre); strcat(s, ".1.bam"); g.out[1] = sam_open(s, "wb");
-        strcpy(s, g.pre); strcat(s, ".chimera.bam"); g.out[2] = sam_open(s, "wb");
+        if (ga.out.format == unknown_format)
+            ga.out.format = bam; // default via "wb".
+        strcpy(s, g.pre); strcat(s, ".0."); strcat(s, hts_format_file_extension(&ga.out));
+        g.out[0] = sam_open_format(s, "wb", &ga.out);
+        strcpy(s, g.pre); strcat(s, ".1."); strcat(s, hts_format_file_extension(&ga.out));
+        g.out[1] = sam_open_format(s, "wb", &ga.out);
+        strcpy(s, g.pre); strcat(s, ".chimera."); strcat(s, hts_format_file_extension(&ga.out));
+        g.out[2] = sam_open_format(s, "wb", &ga.out);
         for (c = 0; c <= 2; ++c) {
             g.out_hdr[c] = bam_hdr_dup(g.fp_hdr);
             sam_hdr_write(g.out[c], g.out_hdr[c]);
@@ -643,7 +664,7 @@ int main_phase(int argc, char *argv[])
             baseQ = bam_get_qual(p->b)[p->qpos];
             if (baseQ < g.min_baseQ) continue;
             seq = bam_get_seq(p->b);
-            b = bam_nt16_nt4_table[bam_seqi(seq, p->qpos)];
+            b = seq_nt16_int[bam_seqi(seq, p->qpos)];
             if (b > 3) continue;
             q = baseQ < p->b->core.qual? baseQ : p->b->core.qual;
             if (q < 4) q = 4;
@@ -671,7 +692,7 @@ int main_phase(int argc, char *argv[])
             if (p->is_del || p->is_refskip) continue;
             if (p->b->core.qual == 0) continue;
             // get the base code
-            c = bam_nt16_nt4_table[(int)bam_seqi(seq, p->qpos)];
+            c = seq_nt16_int[bam_seqi(seq, p->qpos)];
             if (c == (cns[vpos]&3)) c = 1;
             else if (c == (cns[vpos]>>16&3)) c = 2;
             else c = 0;
@@ -718,5 +739,6 @@ int main_phase(int argc, char *argv[])
         }
         free(g.pre); free(g.b);
     }
+    sam_global_args_free(&ga);
     return 0;
 }

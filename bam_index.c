@@ -33,13 +33,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include <inttypes.h>
 #include <unistd.h>
 
-#define BAM_LIDX_SHIFT    14
+#include "samtools.h"
 
-int bam_index_build2(const char *fn, const char *_fnidx)
-{
-    fprintf(stderr, "Samtools-htslib-API: bam_index_build2() not yet implemented\n");
-    abort();
-}
+#define BAM_LIDX_SHIFT    14
 
 static void index_usage(FILE *fp)
 {
@@ -55,7 +51,7 @@ int bam_index(int argc, char *argv[])
 {
     int csi = 0;
     int min_shift = BAM_LIDX_SHIFT;
-    int c;
+    int c, ret;
 
     while ((c = getopt(argc, argv, "bcm:")) >= 0)
         switch (c) {
@@ -71,8 +67,18 @@ int bam_index(int argc, char *argv[])
         index_usage(stdout);
         return 1;
     }
-    if (argc - optind > 1) bam_index_build2(argv[optind], argv[optind+1]);
-    else bam_index_build(argv[optind], csi? min_shift : 0);
+
+    ret = sam_index_build2(argv[optind], argv[optind+1], csi? min_shift : 0);
+    if (ret != 0) {
+        if (ret == -2)
+            print_error_errno("index", "failed to open \"%s\"", argv[optind]);
+        else if (ret == -3)
+            print_error("index", "\"%s\" is in a format that cannot be usefully indexed", argv[optind]);
+        else
+            print_error("index", "\"%s\" is corrupted or unsorted", argv[optind]);
+        return EXIT_FAILURE;
+    }
+
     return 0;
 }
 
@@ -89,6 +95,11 @@ int bam_idxstats(int argc, char *argv[])
     fp = sam_open(argv[1], "r");
     if (fp == NULL) { fprintf(stderr, "[%s] fail to open BAM.\n", __func__); return 1; }
     header = sam_hdr_read(fp);
+    if (header == NULL) {
+        fprintf(stderr, "[%s] failed to read header for '%s'.\n",
+                __func__, argv[1]);
+        return 1;
+    }
     idx = sam_index_load(fp, argv[1]);
     if (idx == NULL) { fprintf(stderr, "[%s] fail to load the index.\n", __func__); return 1; }
 

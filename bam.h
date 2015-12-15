@@ -38,7 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "1.2"
+#define BAM_VERSION "1.3"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -184,6 +184,9 @@ typedef hts_itr_t *bam_iter_t;
 
 /*! @abstract Table for converting a 4-bit encoded nucleotide to a letter. */
 #define bam_nt16_rev_table seq_nt16_str
+
+/*! @abstract Table for converting a 4-bit encoded nucleotide to ~2 bits. */
+#define bam_nt16_nt4_table seq_nt16_int
 
 #ifdef __cplusplus
 extern "C" {
@@ -457,7 +460,7 @@ extern "C" {
 
     /*!
       @abstract Retrieve the alignments that are overlapped with the
-      specified region.
+      specified region.  (For BAM files only; see also samfetch() in sam.h.)
 
       @discussion A user defined function will be called for each
       retrieved alignment ordered by its start position.

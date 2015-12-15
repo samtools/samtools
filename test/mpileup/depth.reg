@@ -1,0 +1,39 @@
+# First field:
+#   INIT = initialisation, not counted in testing
+#   P = expected to pass
+#   F = expected to fail
+
+# Second field:
+#   Filename of expected output
+
+# Third onwards; command to execute. $fmt is replaced by the current file
+# format, ie sam, bam or cram. $samtools is a pointer to the desired
+# samtools binary. This can be useful for testing older versions.
+
+# Create indexed BAMs
+INIT x $samtools view -b -o xx#depth1.bam xx#depth1.sam
+INIT x $samtools view -b -o xx#depth2.bam xx#depth2.sam
+INIT x $samtools index xx#depth1.bam
+INIT x $samtools index xx#depth2.bam
+
+# Test basic 1 and 2 file outputs
+P d1_1.out  $samtools depth xx#depth1.sam
+P d1_2.out  $samtools depth xx#depth2.sam
+P d1_12.out $samtools depth xx#depth1.sam xx#depth2.sam
+
+# Regions via -r or bed
+P d1_12.out  $samtools depth -r xx:5-16 xx#depth1.bam xx#depth2.bam
+P d1_12.out  $samtools depth -b xx.bed  xx#depth1.sam xx#depth2.sam
+P d2_12r.out $samtools depth -r xx:8-13 xx#depth1.bam xx#depth2.bam
+P d2_12r.out $samtools depth -b xx.bed2 xx#depth1.sam xx#depth2.sam
+
+# With single -a for all (in used refs)
+P d3_12r1a.out $samtools depth -a -r xx:5-16 xx#depth1.bam xx#depth2.bam
+P d3_12r1a.out $samtools depth -a -b xx.bed  xx#depth1.bam xx#depth2.bam
+P d3_12r2a.out $samtools depth -a -r xx:8-13 xx#depth1.bam xx#depth2.bam
+P d3_12r2a.out $samtools depth -a -b xx.bed2 xx#depth1.bam xx#depth2.bam
+
+# With double -a for all including unused refs
+P d4_12.out  $samtools depth -a -a            xx#depth1.bam xx#depth2.bam
+P d4_12r.out $samtools depth -a -a -r xx:5-16 xx#depth1.bam xx#depth2.bam
+P d4_12b.out $samtools depth -a -a -b xx.bed  xx#depth1.bam xx#depth2.bam

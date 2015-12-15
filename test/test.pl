@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013, 2014 Genome Research Ltd.
+#    Copyright (C) 2013-2015 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -35,6 +35,7 @@ my $opts = parse_params();
 
 test_bgzip($opts);
 test_faidx($opts);
+test_dict($opts);
 test_index($opts);
 test_mpileup($opts);
 test_usage($opts, cmd=>'samtools');
@@ -44,8 +45,14 @@ test_bam2fq($opts);
 test_depad($opts);
 test_stats($opts);
 test_merge($opts);
+test_sort($opts);
 test_fixmate($opts);
+test_calmd($opts);
 test_idxstat($opts);
+test_quickcheck($opts);
+test_reheader($opts);
+test_addrprg($opts);
+
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -145,10 +152,12 @@ sub cmd
 #       cmd=> command to test
 #       expect_fail=> as per passed()/failed()
 #       want_fail=> consider passed() if cmd() returns non-zero
+#       out_map => map output filenames to their expected result file (can be used alongside out)
+#       hskip => number of header lines to ignore during diff
 sub test_cmd
 {
     my ($opts,%args) = @_;
-    if ( !exists($args{out}) )
+    if ( !exists($args{out}) && !exists($args{out_map}) )
     {
         if ( !exists($args{in}) ) { error("FIXME: expected out or in key\n"); }
         $args{out} = "$args{in}.out";
@@ -160,7 +169,7 @@ sub test_cmd
     print "\t$args{cmd}\n";
 
     my ($ret,$out,$err) = _cmd("$args{cmd}");
-    if ( $args{want_fail}? ($ret == 0) : ($ret != 0) ) { failed($opts,%args,msg=>$test); return; }
+    if ( $args{want_fail}? ($ret == 0) : ($ret != 0) ) { failed($opts,%args,msg=>$test,reason=>"ERR: $err"); return; }
     if ( $$opts{redo_outputs} && -e "$$opts{path}/$args{out}" )
     {
         rename("$$opts{path}/$args{out}","$$opts{path}/$args{out}.old");
@@ -246,6 +255,54 @@ sub test_cmd
                 failed($opts,%args,msg=>$test,reason=>"The outputs stderr differ:\n\t\t$$opts{path}/$args{err}\n\t\t$$opts{path}/$args{err}.new");
             }
             return;
+        }
+    }
+
+    # check other output files
+    if( exists($args{out_map}) )
+    {
+        while ( my($out_actual, $out_expected) = each %{$args{out_map}} )
+        {
+            my $exp = '';
+            if ( open(my $fh,'<',"$$opts{path}/$out_expected") )
+            {
+                my @exp = <$fh>;
+                $exp = join('',@exp);
+                close($fh);
+            }
+            elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_expected: $!"); return; }
+
+            my $out = '';
+            if ( open(my $fh,'<',"$$opts{path}/$out_actual") )
+            {
+                my @out = <$fh>;
+                if( exists($args{hskip}) ){
+                    # Strip hskip lines to allow match to the expected output
+                    splice @out, 0, $args{hskip};
+                }
+                $out = join('',@out);
+                close($fh);
+            }
+            elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_actual: $!"); return; }
+
+            if ( $exp ne $out )
+            {
+                open(my $fh,'>',"$$opts{path}/$out_expected.new") or error("$$opts{path}/$out_expected.new");
+                print $fh $out;
+                close($fh);
+                if ( !-e "$$opts{path}/$out_expected" )
+                {
+                    rename("$$opts{path}/$out_expected.new","$$opts{path}/$out_expected") or error("rename $$opts{path}/$out_expected.new $$opts{path}/$out_expected: $!");
+                    print "\tthe file with expected output does not exist, creating new one:\n";
+                    print "\t\t$$opts{path}/$out_expected\n";
+                }
+                else
+                {
+                    failed($opts,%args,msg=>$test,reason=>"The output files differ:\n\t\t$$opts{path}/$out_expected\n\t\t$$opts{path}/$out_expected.new");
+                }
+                return;
+            }
+            _cmd("rm $$opts{path}/$out_actual");
         }
     }
     passed($opts,%args,msg=>$test);
@@ -421,6 +478,15 @@ sub test_faidx
     }
 }
 
+sub test_dict
+{
+    my ($opts,%args) = @_;
+    cmd("cat $$opts{path}/dat/dict.fa | $$opts{bgzip} -c > $$opts{tmp}/dict.fa.gz");
+    test_cmd($opts,out=>'dat/dict.out',cmd=>"$$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://orthanc.org/hf37d5.fa.gz $$opts{path}/dat/dict.fa");
+    test_cmd($opts,out=>'dat/dict.out',cmd=>"$$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://orthanc.org/hf37d5.fa.gz $$opts{tmp}/dict.fa.gz");
+    test_cmd($opts,out=>'dat/dict.out',cmd=>"cat $$opts{path}/dat/dict.fa | $$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://orthanc.org/hf37d5.fa.gz");
+}
+
 sub test_index
 {
     my ($opts,%args) = @_;
@@ -429,6 +495,7 @@ sub test_index
     cmd("$$opts{bin}/samtools index -c $$opts{tmp}/large_chrom.bam");
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2");
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view $$opts{tmp}/large_chrom.bam ref2:1-541556283");
+    test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index $$opts{path}/dat/test_input_1_a.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai");
 }
 
 sub test_mpileup
@@ -1105,7 +1172,9 @@ sub sam_compare
     close($f2) || die "Error reading $sam2: $!\n";
 
     if ($l1 || $l2) {
-        print "\n\tSAM files differ at $sam1 : $lno1 / $sam2 : $lno2\n";
+        print "\n"; STDOUT->flush();
+        print STDERR "\tSAM files differ at $sam1 line $lno1 / $sam2 line $lno2\n";
+        print STDERR "$l1\n$l2\n";
         return 1;
     }
 
@@ -1268,6 +1337,10 @@ sub gen_pair
 # which is an index of the fasta file.  Both of these are used for CRAM.
 # The SAM file is compressed with bgzf to keep the size down.
 #
+# To generate random sequence aligned against identical referenes,
+# pass in the 4th argument (ref_seed) with a constant value.  Otherwise a
+# random reference is generated too.
+#
 # $opts is the global setting hash.
 # $prefix is the prefix for the generated file names.
 # $size is the length of the random reference sequence.
@@ -1277,9 +1350,12 @@ sub gen_pair
 
 sub gen_file
 {
-    my ($opts, $prefix, $size) = @_;
+    my ($opts, $prefix, $size, $ref_seed) = @_;
 
     local $| = 1;
+
+    $ref_seed = rand(1<<31) unless defined($ref_seed);
+    my $pair_seed = rand(1<<31);
 
     print "\tGenerating test data file ";
     my $dot_interval = $size / 10;
@@ -1287,6 +1363,7 @@ sub gen_file
     my $seq  = "!" x $size;
     my $qual = $seq;
 
+    srand($ref_seed);
     my $next_dot = $dot_interval;
     for (my $b = 0; $b < $size; $b++) {
         if ($b == $next_dot) {
@@ -1322,6 +1399,8 @@ sub gen_file
     my %read_store;
     my $rnum = 0;
     $next_dot = $dot_interval;
+
+    srand($pair_seed);
     for (my $i = 0; $i < $size; $i++) {
         if ($i == $next_dot) {
             print ".";
@@ -1588,7 +1667,7 @@ sub test_view
         ['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
          ['-r', 'grp2', '-R', $fogn], 0],
         # Libraries
-        ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 1],
+        ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
         # Mapping qualities
         ['mq50',  { min_map_qual => 50 },  ['-q', 50], 0],
         ['mq99',  { min_map_qual => 99 },  ['-q', 99], 0],
@@ -1883,7 +1962,7 @@ sub test_view
     foreach my $threads (2, 4) {
         run_view_test($opts,
                       msg => "$test: Big SAM -> CRAM ($threads threads)",
-                      args => ['-b', '-@', $threads, $big_sam],
+                      args => ['-C', '-@', $threads, $big_sam],
                       out => sprintf("%s.test%03d.cram", $out, $test),
                       compare_sam => $big_sam,
                       pipe => 1);
@@ -1951,6 +2030,7 @@ sub test_cat
 
     my @sams;
     my @bams;
+    my @crams;
     my @bgbams;
     my $nfiles = 4;
     my $test = 1;
@@ -1958,7 +2038,7 @@ sub test_cat
 
     # Generate some files big enough to include a few bgzf blocks
     for (my $i = 0; $i < $nfiles; $i++) {
-        ($sams[$i]) = gen_file($opts, sprintf("%s.%d", $out, $i + 1), 10000);
+        ($sams[$i]) = gen_file($opts, sprintf("%s.%d", $out, $i + 1), 10000, 15551);
 
         # Convert to BAM
         $bams[$i] = sprintf("%s.%d.bam", $out, $i + 1);
@@ -1972,6 +2052,15 @@ sub test_cat
         # Recompress with bgzip to alter the location of the bgzf boundaries.
         $bgbams[$i] = sprintf("%s.%d.bgzip.bam", $out, $i + 1);
         cmd("'$$opts{bgzip}' -c -d < '$bams[$i]' | '$$opts{bgzip}' -c > '$bgbams[$i]'");
+
+        # Create CRAMs
+        $crams[$i] = sprintf("%s.%d.cram", $out, $i + 1);
+        run_view_test($opts,
+                      msg =>  sprintf("Generate CRAM file #%d", $i + 1),
+                      args => ['-C', $sams[$i]],
+                      out => $crams[$i],
+                      compare_sam => $sams[$i],
+                      pipe => 1);
     }
 
     # Make a concatenated SAM file to compare
@@ -2000,10 +2089,22 @@ sub test_cat
                       redirect => $redirect,
                       compare_sam => $catsam1);
         $test++;
+
+        # Test CRAM files
+        run_view_test($opts,
+                      msg =>  "$test: cat CRAM files$to_stdout",
+                      cmd => 'cat',
+                      args => [@crams],
+                      out => sprintf("%s.test%03d.cram", $out, $test),
+                      redirect => $redirect,
+                      compare_sam => $catsam1);
+        $test++;
     }
 
     # Test reheader option
-    my $header  = "$$opts{path}/dat/cat.hdr";
+    my $hdr_no_ur   = "$$opts{path}/dat/cat.hdr";
+    my $header      = "$$opts{tmp}/cat.hdr";
+    add_ur_tags($hdr_no_ur, $header, "$$opts{tmp}/cat.1.fa");
     my $catsam2 = "$out.all2.sam";
     cat_sams($catsam2, $header, @sams);
 
@@ -2022,6 +2123,14 @@ sub test_cat
                   out => sprintf("%s.test%03d.bam", $out, $test),
                   compare_sam => $catsam2);
     $test++;
+
+    run_view_test($opts,
+                  msg =>  "$test: cat CRAM files with new header",
+                  cmd => 'cat',
+                  args => ['-h', $header, @crams],
+                  out => sprintf("%s.test%03d.cram", $out, $test),
+                  compare_sam => $catsam2);
+    $test++;
 }
 
 sub sam2fq
@@ -2034,6 +2143,7 @@ sub sam2fq
     while (<$in>) {
         next if (/^@/);
         my @s = split(/\t/, $_);
+        next if ($s[1] & (256|2048));
         my $dirn = ($s[1] & 0xc0) >> 6;
         my $suff = $suffixes ? ('', '/1', '/2', '')[$dirn] : '';
         if (($s[1] & 0x10) != 0) { # reverse complement
@@ -2089,8 +2199,8 @@ sub test_bam2fq
             my @n = $nosuffix ? ('-n') : ();
 
             run_view_test($opts,
-                          msg => "$test: bam2fq @n ($input->[0] input)",
-                          cmd => 'bam2fq',
+                          msg => "$test: fastq @n ($input->[0] input)",
+                          cmd => 'fastq',
                           args => [@n, $input->[1]],
                           out => sprintf("%s.test%03d.fq", $out, $test),
                           ref_path => "$$opts{path}/dat/cram_md5",
@@ -2099,6 +2209,14 @@ sub test_bam2fq
             $test++;
         }
     }
+    # basic 2 output test without singleton tracking
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected', out_map=>{'1.fq' => 'bam2fq/1.1.fq.expected', '2.fq' => 'bam2fq/1.2.fq.expected'},cmd=>"$$opts{bin}/samtools fastq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.001.sam");
+    # basic 2 output test with singleton tracking but no singleton
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/2.1.fq.expected', '2.fq' => 'bam2fq/2.2.fq.expected', 's.fq' => 'bam2fq/2.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.001.sam");
+    # basic 2 output test with singleton tracking with a singleton in the middle
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/3.1.fq.expected', '2.fq' => 'bam2fq/3.2.fq.expected', 's.fq' => 'bam2fq/3.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.002.sam");
+    # basic 2 output test with singleton tracking with a singleton as last read
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.003.sam");
 }
 
 sub test_depad
@@ -2156,8 +2274,7 @@ sub test_depad
                                              $out, $test, $format->[1]),
                               ref_path => "$$opts{path}/dat/cram_md5",
                               redirect => 1,
-                              $compare => $unpad_sam,
-                              expect_fail => 1);
+                              $compare => $unpad_sam);
             }
         }
     }
@@ -2167,12 +2284,17 @@ sub test_stats
 {
     my ($opts,%args) = @_;
 
-    test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+3");
-    test_cmd($opts,out=>'stat/2.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+3");
-    test_cmd($opts,out=>'stat/3.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+3");
-    test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+3");
-    test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n+3");
-    test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n+3");
+    test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4");
+    test_cmd($opts,out=>'stat/2.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+4");
+    test_cmd($opts,out=>'stat/3.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+4");
+    test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+4");
+    test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n+4");
+    test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n+4");
+    test_cmd($opts,out=>'stat/7.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/7_supp.sam | tail -n+4");
+    test_cmd($opts,out=>'stat/8.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/8_secondary.sam | tail -n+4");
+
+    test_cmd($opts,out=>'stat/9.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4",out_map=>{"stat/1_map_cigar.sam_s1_a_1.bamstat"=>"stat/1_map_cigar.sam_s1_a_1.expected.bamstat"},hskip=>3);
+    test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n+4",out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
 }
 
 sub test_merge
@@ -2194,6 +2316,26 @@ sub test_merge
     }
     close($tmpfile_fh);
     test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge -s 1 -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam");
+    # Merge 4 - 1 file BAM merge with file presented on the command line
+    test_cmd($opts,out=>'merge/4.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/dat/test_input_1_b.bam");
+    # Merge 5 - 3 file SAM merge all presented on the command line override IDs to file names
+    test_cmd($opts,out=>'merge/5.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -r -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
+    # Merge 6 - merge all presented on the command line, combine PG and RG rather than dedup
+    test_cmd($opts,out=>'merge/6.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -cp -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
+    # Merge 7 - ID and SN with regex in them
+    test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
+}
+
+sub test_sort
+{
+    my ($opts, %args) = @_;
+
+    # TODO Sort test cases
+
+    # Check obsolete invocation is detected
+    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout", want_fail=>1);
+    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort -f $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout.bam", want_fail=>1);
+    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort -o $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sorttmp", want_fail=>1);
 }
 
 sub test_fixmate
@@ -2208,9 +2350,99 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', cmd=>"$$opts{bin}/samtools fixmate -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
 }
 
+sub test_calmd
+{
+    my ($opts, %args) = @_;
+
+    my $test = "$$opts{bin}/samtools calmd -uAr $$opts{path}/dat/mpileup.1.sam $$opts{path}/dat/mpileup.ref.fa";
+    print "$test\n";
+    my $out = cmd($test);
+    if (substr($out, 0, 2) eq "\x1f\x8b") { passed($opts,msg=>$test); }
+    else { failed($opts,msg=>$test,reason=>"Expected BGZF-compressed output"); }
+}
+
 sub test_idxstat
 {
     my ($opts,%args) = @_;
 
     test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.bam", expect_fail=>0);
+}
+
+sub test_quickcheck
+{
+    my ($opts,%args) = @_;
+
+    my @testfiles = (
+        'quickcheck/1.quickcheck.badeof.bam',
+        'quickcheck/2.quickcheck.badheader.bam',
+        'quickcheck/3.quickcheck.ok.bam',
+        'quickcheck/4.quickcheck.ok.bam',
+        );
+
+    my $all_testfiles;
+
+    foreach my $fn (@testfiles) {
+        $all_testfiles .= " $$opts{path}/$fn";
+        test_cmd($opts, out => 'dat/empty.expected',
+            want_fail => ($fn !~ /[.]ok[.]/),
+            cmd => "$$opts{bin}/samtools quickcheck $$opts{path}/$fn");
+    }
+
+    test_cmd($opts, out => 'quickcheck/all.expected', want_fail => 1,
+        cmd => "$$opts{bin}/samtools quickcheck -v $all_testfiles | sed 's,.*/quickcheck/,,'");
+}
+
+sub test_reheader
+{
+    my ($opts,%args) = @_;
+
+    local $ENV{REF_PATH} = "$$opts{path}/dat/cram_md5/%s";
+
+    my $fn = "$$opts{path}/dat/view.001";
+
+    # Create local BAM and CRAM inputs
+    system("$$opts{bin}/samtools view -b $fn.sam > $fn.tmp.bam")  == 0 or die "failed to create bam: $?";
+    system("$$opts{bin}/samtools view -C --output-fmt-option version=2.1 $fn.sam > $fn.tmp.v21.cram") == 0 or die "failed to create cram: $?";
+    system("$$opts{bin}/samtools view -C --output-fmt-option version=3.0 $fn.sam > $fn.tmp.v30.cram") == 0 or die "failed to create cram: $?";
+
+    # Fudge @PG lines.  The version number will differ each commit.
+    # Also the pathname will differ for each install. We'll take it on faith
+    # that these bits work.
+    test_cmd($opts,
+             out=>'reheader/1_view1.sam.expected',
+             err=>'reheader/1_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+
+    test_cmd($opts,
+             out=>'reheader/2_view1.sam.expected',
+             err=>'reheader/2_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+
+    test_cmd($opts,
+             out=>'reheader/2_view1.sam.expected',
+             err=>'reheader/2_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+
+    # In-place testing
+    test_cmd($opts,
+             out=>'reheader/3_view1.sam.expected',
+             err=>'reheader/3_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram && $$opts{bin}/samtools view -h $fn.tmp.v21.cram | perl -pe 's/\tVN:.*//'");
+
+    test_cmd($opts,
+             out=>'reheader/3_view1.sam.expected',
+             err=>'reheader/3_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'");
+}
+
+sub test_addrprg
+{
+    my ($opts,%args) = @_;
+
+    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -m overwrite_all $$opts{path}/addrprg/1_fixup.sam");
+    test_cmd($opts,out=>'addrprg/2_fixup_orphan.sam.expected', err=>'addrprg/2_fixup_orphan.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -m orphan_only $$opts{path}/addrprg/2_fixup_orphan.sam");
+    test_cmd($opts,out=>'addrprg/3_fixup.sam.expected', err=>'addrprg/3_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -R '1#7' $$opts{path}/addrprg/1_fixup.sam", want_fail=>1);
+    test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -r '\@RG\\tID:1#8\\tCN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
+    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -m overwrite_all -R '1#8' $$opts{path}/addrprg/1_fixup.sam");
+    test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg -O sam -r 'ID:1#8' -r 'CN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
 }

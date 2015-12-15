@@ -1,0 +1,14 @@
+#!/bin/sh
+# Usage: .travis/clone REPOSITORY [DIR] [BRANCH]
+#
+# Creates a shallow clone, checking out the specified branch.  If BRANCH is
+# omitted or if there is no branch with that name, checks out origin/HEAD.
+
+repository=$1
+localdir=$2
+branch=$3
+
+[ -n "$branch" ] && ref=$(git ls-remote --heads $repository $branch)
+
+set -x
+git clone --depth=1 ${ref:+--branch=$branch} $repository $localdir

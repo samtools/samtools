@@ -1,3 +1,96 @@
+Beta Release 1.3  (15 December 2015)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Noteworthy changes in samtools:
+
+* The obsolete "samtools sort in.bam out.prefix" usage has been removed.
+  If you are still using -f, -o, or out.prefix, convert to use -T PREFIX
+  and/or -o FILE instead.  (#295, #349, #356, #418, PR #441; see also
+  discussions in #171, #213.)
+
+* The "bamshuf" command has been renamed to "collate" (hence the term
+  bamshuf no longer appears in the documentation, though it still works
+  on the command line for compatibility with existing scripts).
+
+* The mpileup command now outputs the unseen allele in VCF/BCF as <*>
+  rather than X or <X> as previously, and now has AD, ADF, ADR, INFO/AD,
+  INFO/ADF, INFO/ADR --output-tags annotations that largely supersede
+  the existing DV, DP4, DPR annotations.
+
+* The mpileup command now applies BAQ calculations at all base positions,
+  regardless of which -l or -r options are used (previously with -l it was
+  not applied to the first few tens of bases of each chromosome, leading
+  to different mpileup results with -l vs. -r; #79, #125, #286, #407).
+
+* Samtools now has a configure script which checks your build environment
+  and facilitates choosing which HTSlib to build against.  See INSTALL
+  for details.
+
+* Samtools's Makefile now fully supports the standard convention of
+  allowing CC/CPPFLAGS/CFLAGS/LDFLAGS/LIBS to be overridden as needed.
+  Previously it listened to $(LDLIBS) instead; if you were overriding
+  that, you should now override LIBS rather than LDLIBS.
+
+* A new addreplacerg command that adds or alters @RG headers and RG:Z
+  record tags has been added.
+
+* The rmdup command no longer immediately aborts (previously it always
+  aborted with "bam_get_library() not yet implemented"), but remains
+  not recommended for most use (#159, #252, #291, #393).
+
+* Merging files with millions of headers now completes in a reasonable
+  amount of time (#337, #373, #419, #453; thanks to Nathan Weeks,
+  Chris Smowton, Martin Pollard, Rob Davies).
+
+* Samtools index's optional index output path argument works again (#199).
+
+* Fixed calmd, targetcut, and potential mpileup segfaults when given broken
+  alignments with POS far beyond the end of their reference sequences.
+
+* If you have source code using bam_md.c's bam_fillmd1_core(), bam_cap_mapQ(),
+  or bam_prob_realn_core() functions, note that these now take an additional
+  ref_len parameter.  (The versions named without "_core" are unchanged.)
+
+* The tview command's colour scheme has been altered to be more suitable
+  for users with colour blindness (#457).
+
+* Samtools depad command now handles CIGAR N operators and accepts
+  CRAM files (#201, #404).
+
+* Samtools stats now outputs separate "N" and "other" columns in the
+  ACGT content per cycle section (#376).
+
+* Added -a option to samtools depth to show all locations, including
+  zero depth sites (#374).
+
+* New samtools dict command, which creates a sequence dictionary
+  (as used by Picard) from a FASTA reference file.
+
+* Samtools stats --target-regions option works again.
+
+* Added legacy API sam.h functions sam_index_load() and samfetch() providing
+  bam_fetch()-style iteration over either BAM or CRAM files.  (In general
+  we recommend recoding against the htslib API directly, but this addition
+  may help existing libbam-using programs to be CRAM-enabled easily.)
+
+* Fixed legacy API's samopen() to write headers only with "wh" when writing
+  SAM files.  Plain "w" suppresses headers for SAM file output, but this
+  was broken in 1.2.
+
+* "samtools fixmate - -" works in pipelines again; with 1.0 to 1.2,
+  this failed with "[bam_mating] cannot determine output format".
+
+* Restored previous "samtools calmd -u" behaviour of writing compression
+  level 0 BAM files.  Samtools 1.0 to 1.2 incorrectly wrote raw non-BGZF
+  BAM files, which cannot be read by most other tools.  (Samtools commands
+  other than calmd were unaffected by this bug.)
+
+* Restored bam_nt16_nt4_table[] to legacy API header bam.h.
+
+* Fixed bugs #269, #305, #320, #328, #346, #353, #365, #392, #410, #445,
+  #462, #475, and #495.
+
+
 Beta Release 1.2  (2 February 2015)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -36,6 +129,11 @@ First release of HTSlib-based samtools.
 
 Numerous changes, notably support for the CRAM sequencing file format.
 
+The faidx command now reads either uncompressed or BGZF-compressed FASTA files
+compressed with bgzip.  In previous samtools-0.1.x versions, faidx could read
+either uncompressed or RAZF-compressed FASTA files, but RAZF and razip are
+superseded by BGZF/bgzip and have been removed from samtools.
+
 
 Beta Release 0.1.20 (15 August, 2014)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -58,13 +156,13 @@ Notable changes in samtools and bcftools:
  * Important changes in calling, see
     - samtools mpileup -p
     - bcftools view -m
- 
+
  * New annotations useful for filtering (RPB, HWE, QBD, MDV)
 
  * New tools, bamcheck and plot-bamcheck
 
- * New features in samtools tview 
- 
+ * New features in samtools tview
+
  * And much more..
 
 For a detailed list of commits, please see

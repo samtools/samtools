@@ -2,7 +2,34 @@ Samtools implements various utilities for post-processing alignments in the
 SAM, BAM, and CRAM formats, including indexing, variant calling (in conjunction
 with bcftools), and a simple alignment viewer.
 
-See INSTALL for building and installation instructions.
+
+Building samtools
+=================
+
+The typical simple case of building Samtools using the HTSlib bundled within
+this Samtools release tarball and enabling useful plugins, is done as follows:
+
+    cd .../samtools-1.3    # Within the unpacked release directory
+    ./configure --enable-plugins --enable-libcurl --with-plugin-path=$PWD/htslib-1.3
+    make all plugins-htslib
+
+You may wish to copy the resulting samtools executable into somewhere on your
+$PATH, or run it where it is.
+
+Rather than running-in-place like that, the next simplest typical case is to
+install samtools etc properly into a directory of your choosing.  Building for
+installation using the HTSlib bundled within this Samtools release tarball,
+also building the various HTSlib utilities such as bgzip and enabling useful
+plugins, is done as follows:
+
+    cd .../samtools-1.3    # Within the unpacked release directory
+    ./configure --enable-plugins --enable-libcurl --prefix=/path/to/location
+    make all all-htslib
+    make install install-htslib
+
+You will likely wish to add /path/to/location/bin to your $PATH.
+
+See INSTALL for full building and installation instructions and details.
 
 
 Using an optimised zlib library
@@ -22,7 +49,7 @@ containing the libz.so.1 file.
 
 Benchmarks comparing the various zlibs are available at:
 
-    https://www.snellman.net/blog/archive/2014-08-04-comparison-of-intel-and-cloudflare-zlib-patches.html
+    http://www.htslib.org/benchmarks/zlib.html
 
 It is recommended that you perform your own rigorous tests for an entire
 pipeline if you wish to switch to one of the optimised zlib implementations.

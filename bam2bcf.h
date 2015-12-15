@@ -49,6 +49,12 @@ DEALINGS IN THE SOFTWARE.  */
 #define B2B_FMT_DP4     (1<<3)
 #define B2B_FMT_DPR     (1<<4)
 #define B2B_INFO_DPR    (1<<5)
+#define B2B_FMT_AD      (1<<6)
+#define B2B_FMT_ADF     (1<<7)
+#define B2B_FMT_ADR     (1<<8)
+#define B2B_INFO_AD     (1<<9)
+#define B2B_INFO_ADF    (1<<10)
+#define B2B_INFO_ADR    (1<<11)
 
 #define B2B_MAX_ALLELES 5
 
@@ -56,7 +62,8 @@ typedef struct __bcf_callaux_t {
     int capQ, min_baseQ;
     int openQ, extQ, tandemQ; // for indels
     uint32_t min_support, max_support; // for collecting indel candidates
-    float min_frac, max_frac; // for collecting indel candidates
+    double min_frac; // for collecting indel candidates
+    float max_frac; // for collecting indel candidates
     int per_sample_flt; // indel filtering strategy
     int *ref_pos, *alt_pos, npos, *ref_mq, *alt_mq, *ref_bq, *alt_bq, *fwd_mqs, *rev_mqs, nqual; // for bias tests
     // for internal uses
@@ -73,7 +80,7 @@ typedef struct __bcf_callaux_t {
 typedef struct {
     uint32_t ori_depth;
     unsigned int mq0;
-    int32_t *DPR;
+    int32_t *ADF, *ADR;
     float qsum[4];
     // The fields are:
     //      depth fwd   .. ref (0) and non-ref (2)
@@ -100,7 +107,7 @@ typedef struct {
     int n_supp; // number of supporting non-reference reads
     double anno[16];
     unsigned int depth, ori_depth, mq0;
-    int32_t *PL, *DP4, *DPR;
+    int32_t *PL, *DP4, *ADR, *ADF;
     uint8_t *fmt_arr;
     float vdb; // variant distance bias
     float mwu_pos, mwu_mq, mwu_bq, mwu_mqs;

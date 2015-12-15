@@ -1,6 +1,6 @@
 /*  sam.c -- format-neutral SAM/BAM API.
 
-    Copyright (C) 2009, 2012-2014 Genome Research Ltd.
+    Copyright (C) 2009, 2012-2015 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -45,16 +45,28 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
     fp->file = hts_fp;
     fp->x.bam = hts_fp->fp.bgzf;
     if (strchr(mode, 'r')) {
-        if (aux) hts_set_fai_filename(fp->file, aux);
+        if (aux) {
+            if (hts_set_fai_filename(fp->file, aux) != 0) {
+                sam_close(hts_fp);
+                free(fp);
+                return NULL;
+            }
+        }
         fp->header = sam_hdr_read(fp->file);  // samclose() will free this
+        if (fp->header == NULL) {
+            sam_close(hts_fp);
+            free(fp);
+            return NULL;
+        }
         fp->is_write = 0;
         if (fp->header->n_targets == 0 && bam_verbose >= 1)
             fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
     }
     else {
+        enum htsExactFormat fmt = hts_get_format(fp->file)->format;
         fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it
         fp->is_write = 1;
-        if (hts_get_format(fp->file)->format != sam || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
+        if (!(fmt == text_format || fmt == sam) || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
     }
 
     return fp;
@@ -67,6 +79,17 @@ void samclose(samfile_t *fp)
         sam_close(fp->file);
         free(fp);
     }
+}
+
+int samfetch(samfile_t *fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)
+{
+    bam1_t *b = bam_init1();
+    hts_itr_t *iter = sam_itr_queryi(idx, tid, beg, end);
+    int ret;
+    while ((ret = sam_itr_next(fp->file, iter, b)) >= 0) func(b, data);
+    hts_itr_destroy(iter);
+    bam_destroy1(b);
+    return (ret == -1)? 0 : ret;
 }
 
 int sampileup(samfile_t *fp, int mask, bam_pileup_f func, void *func_data)

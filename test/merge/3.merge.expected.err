@@ -1,5 +1,1 @@
-[bam_translate] PG tag "colt" on read "r001" encountered with no corresponding entry in header, tag lost
-[bam_translate] PG tag "colt" on read "r002" encountered with no corresponding entry in header, tag lost
-[bam_translate] PG tag "colt" on read "r004" encountered with no corresponding entry in header, tag lost
-[bam_translate] PG tag "colt" on read "r003" encountered with no corresponding entry in header, tag lost
-[bam_translate] PG tag "colt" on read "r001" encountered with no corresponding entry in header, tag lost
+[bam_translate] PG tag "colt" on read "r001" encountered with no corresponding entry in header, tag lost. Unknown tags are only reported once per input file for each tag ID.

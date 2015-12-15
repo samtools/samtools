@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "sam_opts.h"
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
 
@@ -185,6 +186,10 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
 
     str.l = str.m = 0; str.s = 0;
     header = sam_hdr_read(in);
+    if (header == NULL) {
+        fprintf(stderr, "[bam_mating_core] ERROR: Couldn't read header\n");
+        exit(1);
+    }
     // Accept unknown, unsorted, or queryname sort order, but error on coordinate sorted.
     if ((header->l_text > 3) && (strncmp(header->text, "@HD", 3) == 0)) {
         char *p, *q;
@@ -292,56 +297,65 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
 
 void usage(FILE* where)
 {
-    fprintf(where,"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n\n");
-    fprintf(where,"Options:\n");
-    fprintf(stderr,"  -r         Remove unmapped reads and secondary alignments\n");
-    fprintf(stderr,"  -p         Disable FR proper pair check\n");
-    fprintf(stderr,"  -c         Add template cigar ct tag\n");
-    fprintf(stderr,"  -O FORMAT  Write output as FORMAT ('sam'/'bam'/'cram')\n");
-    fprintf(stderr,"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n");
-    fprintf(stderr,"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n");
-    fprintf(stderr,"input is not accepted.\n");
+    fprintf(where,
+"Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n"
+"Options:\n"
+"  -r           Remove unmapped reads and secondary alignments\n"
+"  -p           Disable FR proper pair check\n"
+"  -c           Add template cigar ct tag\n");
+
+    sam_global_opt_help(where, "-.O..");
+
+    fprintf(where,
+"\n"
+"As elsewhere in samtools, use '-' as the filename for stdin/stdout. The input\n"
+"file must be grouped by read name (e.g. sorted by name). Coordinated sorted\n"
+"input is not accepted.\n");
 }
 
 int bam_mating(int argc, char *argv[])
 {
     samFile *in, *out;
     int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0;
-    char* fmtout = NULL;
-    char modeout[12];
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    char wmode[3] = {'w', 'b', 0};
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+        { NULL, 0, NULL, 0 }
+    };
+
     // parse args
     if (argc == 1) { usage(stdout); return 0; }
-    while ((c = getopt(argc, argv, "rpcO:")) >= 0) {
+    while ((c = getopt_long(argc, argv, "rpcO:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': remove_reads = 1; break;
             case 'p': proper_pair_check = 0; break;
             case 'c': add_ct = 1; break;
-            case 'O': fmtout = optarg; break;
-            default: usage(stderr); return 1;
+            default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+                      /* else fall-through */
+            case '?': usage(stderr); return 1;
         }
     }
     if (optind+1 >= argc) { usage(stderr); return 1; }
-    strcpy(modeout, "w");
-    if (sam_open_mode(&modeout[1], argv[optind+1], fmtout) < 0) {
-        if (fmtout) fprintf(stderr, "[bam_mating] cannot parse output format \"%s\"\n", fmtout);
-        else fprintf(stderr, "[bam_mating] cannot determine output format\n");
-        return 1;
-    }
 
     // init
-    if ((in = sam_open(argv[optind], "r")) == NULL) {
+    if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {
         fprintf(stderr, "[bam_mating] cannot open input file\n");
         return 1;
     }
-    if ((out = sam_open(argv[optind+1], modeout)) == NULL) {
+    sam_open_mode(wmode+1, argv[optind+1], NULL);
+    if ((out = sam_open_format(argv[optind+1], wmode, &ga.out)) == NULL) {
         fprintf(stderr, "[bam_mating] cannot open output file\n");
         return 1;
     }
 
     // run
     bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct);
+
     // cleanup
     sam_close(in); sam_close(out);
+    sam_global_args_free(&ga);
+
     return 0;
 }
 

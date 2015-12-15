@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2014 Genome Research Ltd.
+    Copyright (C) 2009-2015 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -31,11 +31,13 @@ DEALINGS IN THE SOFTWARE.  */
 #include <inttypes.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <getopt.h>
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "htslib/khash.h"
 #include "samtools.h"
+#include "sam_opts.h"
 KHASH_SET_INIT_STR(rg)
 
 typedef khash_t(rg) *rghash_t;
@@ -139,9 +141,9 @@ static char *drop_rg(char *hdtxt, rghash_t h, int *len)
     return str.s;
 }
 
-static int usage(int is_long_help);
+static int usage(FILE *fp, int exit_status, int is_long_help);
 
-static int add_read_group_single(samview_settings_t *settings, char *name)
+static int add_read_group_single(const char *subcmd, samview_settings_t *settings, char *name)
 {
     char *d = strdup(name);
     int ret = 0;
@@ -159,12 +161,12 @@ static int add_read_group_single(samview_settings_t *settings, char *name)
     return 0;
 
  err:
-    print_error("Couldn't add \"%s\" to read group list: memory exhausted?", name);
+    print_error(subcmd, "Couldn't add \"%s\" to read group list: memory exhausted?", name);
     free(d);
     return -1;
 }
 
-static int add_read_groups_file(samview_settings_t *settings, char *fn)
+static int add_read_groups_file(const char *subcmd, samview_settings_t *settings, char *fn)
 {
     FILE *fp;
     char buf[1024];
@@ -179,7 +181,7 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
 
     fp = fopen(fn, "r");
     if (fp == NULL) {
-        print_error_errno("failed to open \"%s\" for reading", fn);
+        print_error_errno(subcmd, "failed to open \"%s\" for reading", fn);
         return -1;
     }
 
@@ -194,7 +196,7 @@ static int add_read_groups_file(samview_settings_t *settings, char *fn)
     }
     if (ferror(fp)) ret = -1;
     if (ret == -1) {
-        print_error_errno("failed to read \"%s\"", fn);
+        print_error_errno(subcmd, "failed to read \"%s\"", fn);
     }
     fclose(fp);
     return (ret != -1) ? 0 : -1;
@@ -205,21 +207,21 @@ static inline int check_sam_write1(samFile *fp, const bam_hdr_t *h, const bam1_t
     int r = sam_write1(fp, h, b);
     if (r >= 0) return r;
 
-    if (fname) print_error_errno("writing to \"%s\" failed", fname);
-    else print_error_errno("writing to standard output failed");
+    if (fname) print_error_errno("view", "writing to \"%s\" failed", fname);
+    else print_error_errno("view", "writing to standard output failed");
 
     *retp = EXIT_FAILURE;
     return r;
 }
 
-static void check_sam_close(samFile *fp, const char *fname, const char *null_fname, int *retp)
+static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp)
 {
     int r = sam_close(fp);
     if (r >= 0) return;
 
     // TODO Need error infrastructure so we can print a message instead of r
-    if (fname) print_error("error closing \"%s\": %d", fname, r);
-    else print_error("error closing %s: %d", null_fname, r);
+    if (fname) print_error(subcmd, "error closing \"%s\": %d", fname, r);
+    else print_error(subcmd, "error closing %s: %d", null_fname, r);
 
     *retp = EXIT_FAILURE;
 }
@@ -231,7 +233,9 @@ int main_samview(int argc, char *argv[])
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     bam_hdr_t *header = NULL;
-    char out_mode[5], *out_format = "", *fn_out = 0, *fn_list = 0, *fn_ref = 0, *q, *fn_un_out = 0;
+    char out_mode[5], out_un_mode[5], *out_format = "";
+    char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -246,10 +250,18 @@ int main_samview(int argc, char *argv[])
         .bed = NULL,
     };
 
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T'),
+        { "threads", required_argument, NULL, '@' },
+        { NULL, 0, NULL, 0 }
+    };
+
     /* parse command-line options */
-    /* TODO: convert this to getopt_long we're running out of letters */
     strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
+    strcpy(out_un_mode, "w");
+    while ((c = getopt_long(argc, argv,
+                            "SbBcCt:h1Ho:O:q:f:F:ul:r:?T:R:L:s:@:m:x:U:",
+                            lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
             if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -276,19 +288,19 @@ int main_samview(int argc, char *argv[])
         case 'l': settings.library = strdup(optarg); break;
         case 'L':
             if ((settings.bed = bed_read(optarg)) == NULL) {
-                print_error_errno("Could not read file \"%s\"", optarg);
+                print_error_errno("view", "Could not read file \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
             break;
         case 'r':
-            if (add_read_group_single(&settings, optarg) != 0) {
+            if (add_read_group_single("view", &settings, optarg) != 0) {
                 ret = 1;
                 goto view_end;
             }
             break;
         case 'R':
-            if (add_read_groups_file(&settings, optarg) != 0) {
+            if (add_read_groups_file("view", &settings, optarg) != 0) {
                 ret = 1;
                 goto view_end;
             }
@@ -298,43 +310,62 @@ int main_samview(int argc, char *argv[])
         //case 'X': out_format = "X"; break;
                  */
         case '?': is_long_help = 1; break;
-        case 'T': fn_ref = strdup(optarg); break;
         case 'B': settings.remove_B = 1; break;
         case '@': n_threads = strtol(optarg, 0, 0); break;
         case 'x':
             {
                 if (strlen(optarg) != 2) {
                     fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
-                    return usage(is_long_help);
+                    return usage(stderr, EXIT_FAILURE, is_long_help);
                 }
                 settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
                 settings.remove_aux[settings.remove_aux_len-1] = optarg;
             }
             break;
-        default: return usage(is_long_help);
+
+        default:
+            if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
+                return usage(stderr, EXIT_FAILURE, is_long_help);
+            break;
         }
     }
-    if (compress_level >= 0) out_format = "b";
+    if (compress_level >= 0 && !*out_format) out_format = "b";
     if (is_header_only) is_header = 1;
-    strcat(out_mode, out_format);
+    // File format auto-detection first
+    if (fn_out)    sam_open_mode(out_mode+1,    fn_out,    NULL);
+    if (fn_un_out) sam_open_mode(out_un_mode+1, fn_un_out, NULL);
+    // Overridden by manual -b, -C
+    if (*out_format)
+        out_mode[1] = out_un_mode[1] = *out_format;
+    out_mode[2] = out_un_mode[2] = '\0';
+    // out_(un_)mode now 1 or 2 bytes long, followed by nul.
     if (compress_level >= 0) {
         char tmp[2];
         tmp[0] = compress_level + '0'; tmp[1] = '\0';
         strcat(out_mode, tmp);
+        strcat(out_un_mode, tmp);
     }
-    if (argc == optind) return usage(is_long_help); // potential memory leak...
+    if (argc == optind && isatty(STDIN_FILENO)) return usage(stdout, EXIT_SUCCESS, is_long_help); // potential memory leak...
 
+    fn_in = (optind < argc)? argv[optind] : "-";
     // generate the fn_list if necessary
-    if (fn_list == 0 && fn_ref) fn_list = samfaipath(fn_ref);
+    if (fn_list == 0 && ga.reference) fn_list = samfaipath(ga.reference);
     // open file handlers
-    if ((in = sam_open(argv[optind], "r")) == 0) {
-        print_error_errno("failed to open \"%s\" for reading", argv[optind]);
+    if ((in = sam_open_format(fn_in, "r", &ga.in)) == 0) {
+        print_error_errno("view", "failed to open \"%s\" for reading", fn_in);
         ret = 1;
         goto view_end;
     }
-    if (fn_list) hts_set_fai_filename(in, fn_list);
+
+    if (fn_list) {
+        if (hts_set_fai_filename(in, fn_list) != 0) {
+            fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+            ret = 1;
+            goto view_end;
+        }
+    }
     if ((header = sam_hdr_read(in)) == 0) {
-        fprintf(stderr, "[main_samview] fail to read the header from \"%s\".\n", argv[optind]);
+        fprintf(stderr, "[main_samview] fail to read the header from \"%s\".\n", fn_in);
         ret = 1;
         goto view_end;
     }
@@ -347,13 +378,21 @@ int main_samview(int argc, char *argv[])
         header->l_text = l;
     }
     if (!is_count) {
-        if ((out = sam_open(fn_out? fn_out : "-", out_mode)) == 0) {
-            print_error_errno("failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
+        if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
+            print_error_errno("view", "failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
             ret = 1;
             goto view_end;
         }
-        if (fn_list) hts_set_fai_filename(out, fn_list);
-        if (*out_format || is_header)  {
+        if (fn_list) {
+            if (hts_set_fai_filename(out, fn_list) != 0) {
+                fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+                ret = 1;
+                goto view_end;
+            }
+        }
+        if (*out_format || is_header ||
+            out_mode[1] == 'b' || out_mode[1] == 'c' ||
+            (ga.out.format != sam && ga.out.format != unknown_format))  {
             if (sam_hdr_write(out, header) != 0) {
                 fprintf(stderr, "[main_samview] failed to write the SAM header\n");
                 ret = 1;
@@ -361,12 +400,21 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (fn_un_out) {
-            if ((un_out = sam_open(fn_un_out, out_mode)) == 0) {
-                print_error_errno("failed to open \"%s\" for writing", fn_un_out);
+                if ((un_out = sam_open_format(fn_un_out, out_un_mode, &ga.out)) == 0) {
+                print_error_errno("view", "failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
             }
-            if (*out_format || is_header) {
+                if (fn_list) {
+                    if (hts_set_fai_filename(un_out, fn_list) != 0) {
+                        fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+                        ret = 1;
+                        goto view_end;
+                    }
+                }
+            if (*out_format || is_header ||
+                out_un_mode[1] == 'b' || out_un_mode[1] == 'c' ||
+                (ga.out.format != sam && ga.out.format != unknown_format))  {
                 if (sam_hdr_write(un_out, header) != 0) {
                     fprintf(stderr, "[main_samview] failed to write the SAM header\n");
                     ret = 1;
@@ -375,10 +423,11 @@ int main_samview(int argc, char *argv[])
             }
         }
     }
+
     if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
 
-    if (argc == optind + 1) { // convert/print the entire file
+    if (optind + 1 >= argc) { // convert/print the entire file
         bam1_t *b = bam_init1();
         int r;
         while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
@@ -397,7 +446,7 @@ int main_samview(int argc, char *argv[])
     } else { // retrieve alignments in specified regions
         int i;
         bam1_t *b;
-        hts_idx_t *idx = sam_index_load(in, argv[optind]); // load index
+        hts_idx_t *idx = sam_index_load(in, fn_in); // load index
         if (idx == 0) { // index is unavailable
             fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
             ret = 1;
@@ -407,8 +456,12 @@ int main_samview(int argc, char *argv[])
         for (i = optind + 1; i < argc; ++i) {
             int result;
             hts_itr_t *iter = sam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
-            if (iter == NULL) { // reference name is not found
-                fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
+            if (iter == NULL) { // region invalid or reference name not found
+                int beg, end;
+                if (hts_parse_reg(argv[i], &beg, &end))
+                    fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
+                else
+                    fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", argv[i]);
                 continue;
             }
             // fetch alignments
@@ -436,11 +489,12 @@ view_end:
         printf("%" PRId64 "\n", count);
 
     // close files, free and return
-    if (in) check_sam_close(in, argv[optind], "standard input", &ret);
-    if (out) check_sam_close(out, fn_out, "standard output", &ret);
-    if (un_out) check_sam_close(un_out, fn_un_out, "file", &ret);
+    if (in) check_sam_close("view", in, fn_in, "standard input", &ret);
+    if (out) check_sam_close("view", out, fn_out, "standard output", &ret);
+    if (un_out) check_sam_close("view", un_out, fn_un_out, "file", &ret);
 
-    free(fn_list); free(fn_ref); free(fn_out); free(settings.library);  free(fn_un_out);
+    free(fn_list); free(fn_out); free(settings.library);  free(fn_un_out);
+    sam_global_args_free(&ga);
     if ( header ) bam_hdr_destroy(header);
     if (settings.bed) bed_destroy(settings.bed);
     if (settings.rghash) {
@@ -455,68 +509,85 @@ view_end:
     return ret;
 }
 
-static int usage(int is_long_help)
+static int usage(FILE *fp, int exit_status, int is_long_help)
 {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Usage:   samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n\n");
-    // output options
-    fprintf(stderr, "Options: -b       output BAM\n");
-    fprintf(stderr, "         -C       output CRAM (requires -T)\n");
-    fprintf(stderr, "         -1       use fast BAM compression (implies -b)\n");
-    fprintf(stderr, "         -u       uncompressed BAM output (implies -b)\n");
-    fprintf(stderr, "         -h       include header in SAM output\n");
-    fprintf(stderr, "         -H       print SAM header only (no alignments)\n");
-    fprintf(stderr, "         -c       print only the count of matching records\n");
-    fprintf(stderr, "         -o FILE  output file name [stdout]\n");
-    fprintf(stderr, "         -U FILE  output reads not selected by filters to FILE [null]\n");
-    // extra input
-    fprintf(stderr, "         -t FILE  FILE listing reference names and lengths (see long help) [null]\n");
-    fprintf(stderr, "         -T FILE  reference sequence FASTA FILE [null]\n");
-    // read filters
-    fprintf(stderr, "         -L FILE  only include reads overlapping this BED FILE [null]\n");
-    fprintf(stderr, "         -r STR   only include reads in read group STR [null]\n");
-    fprintf(stderr, "         -R FILE  only include reads with read group listed in FILE [null]\n");
-    fprintf(stderr, "         -q INT   only include reads with mapping quality >= INT [0]\n");
-    fprintf(stderr, "         -l STR   only include reads in library STR [null]\n");
-    fprintf(stderr, "         -m INT   only include reads with number of CIGAR operations\n");
-    fprintf(stderr, "                  consuming query sequence >= INT [0]\n");
-    fprintf(stderr, "         -f INT   only include reads with all bits set in INT set in FLAG [0]\n");
-    fprintf(stderr, "         -F INT   only include reads with none of the bits set in INT\n");
-    fprintf(stderr, "                  set in FLAG [0]\n");
-    // read processing
-    fprintf(stderr, "         -x STR   read tag to strip (repeatable) [null]\n");
-    fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
-    fprintf(stderr, "         -s FLOAT integer part sets seed of random number generator [0];\n");
-    fprintf(stderr, "                  rest sets fraction of templates to subsample [no subsampling]\n");
-    // general options
-    fprintf(stderr, "         -@ INT   number of BAM compression threads [0]\n");
-    fprintf(stderr, "         -?       print long help, including note about region specification\n");
-    fprintf(stderr, "         -S       ignored (input format is auto-detected)\n");
-    fprintf(stderr, "\n");
+    fprintf(fp,
+"\n"
+"Usage: samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n"
+"\n"
+"Options:\n"
+// output options
+"  -b       output BAM\n"
+"  -C       output CRAM (requires -T)\n"
+"  -1       use fast BAM compression (implies -b)\n"
+"  -u       uncompressed BAM output (implies -b)\n"
+"  -h       include header in SAM output\n"
+"  -H       print SAM header only (no alignments)\n"
+"  -c       print only the count of matching records\n"
+"  -o FILE  output file name [stdout]\n"
+"  -U FILE  output reads not selected by filters to FILE [null]\n"
+// extra input
+"  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
+// read filters
+"  -L FILE  only include reads overlapping this BED FILE [null]\n"
+"  -r STR   only include reads in read group STR [null]\n"
+"  -R FILE  only include reads with read group listed in FILE [null]\n"
+"  -q INT   only include reads with mapping quality >= INT [0]\n"
+"  -l STR   only include reads in library STR [null]\n"
+"  -m INT   only include reads with number of CIGAR operations consuming\n"
+"           query sequence >= INT [0]\n"
+"  -f INT   only include reads with all bits set in INT set in FLAG [0]\n"
+"  -F INT   only include reads with none of the bits set in INT set in FLAG [0]\n"
+// read processing
+"  -x STR   read tag to strip (repeatable) [null]\n"
+"  -B       collapse the backward CIGAR operation\n"
+"  -s FLOAT integer part sets seed of random number generator [0];\n"
+"           rest sets fraction of templates to subsample [no subsampling]\n"
+// general options
+"  -@, --threads INT\n"
+"           number of BAM/CRAM compression threads [0]\n"
+"  -?       print long help, including note about region specification\n"
+"  -S       ignored (input format is auto-detected)\n");
+
+    sam_global_opt_help(fp, "-.O.T");
+    fprintf(fp, "\n");
+
     if (is_long_help)
-        fprintf(stderr, "Notes:\n\
-\n\
-  1. This command now auto-detects the input format (BAM/CRAM/SAM).\n\
-\n\
-  2. The file supplied with `-t' is SPACE/TAB delimited with the first\n\
-     two fields of each line consisting of the reference name and the\n\
-     corresponding sequence length. The `.fai' file generated by \n\
-     `samtools faidx' is suitable for use as this file. This may be an\n\
-     empty file if reads are unaligned.\n\
-\n\
-  3. SAM->BAM conversion: `samtools view -bT ref.fa in.sam.gz'.\n\
-\n\
-  4. BAM->SAM conversion: `samtools view -h in.bam'.\n\
-\n\
-  5. A region should be presented in one of the following formats:\n\
-     `chr1', `chr2:1,000' and `chr3:1000-2,000'. When a region is\n\
-     specified, the input alignment file must be a sorted and indexed\n\
-     alignment (BAM/CRAM) file.\n\
-\n\
-  6. Option `-u' is preferred over `-b' when the output is piped to\n\
-     another samtools command.\n\
-\n");
-    return 1;
+        fprintf(fp,
+"Notes:\n"
+"\n"
+"  1. This command now auto-detects the input format (BAM/CRAM/SAM).\n"
+"     Further control over the CRAM format can be specified by using the\n"
+"     --output-fmt-option, e.g. to specify the number of sequences per slice\n"
+"     and to use avoid reference based compression:\n"
+"     `samtools view -C --output-fmt-option seqs_per_slice=5000 \\\n"
+"         --output-fmt-option no_ref -o out.cram in.bam'\n"
+"\n"
+"     Options can also be specified as a comma separated list within the\n"
+"     --output-fmt value too.  For example this is equivalent to the above\n"
+"     `samtools view --output-fmt cram,seqs_per_slice=5000,no_ref \\\n"
+"         -o out.cram in.bam'\n"
+"\n"
+"  2. The file supplied with `-t' is SPACE/TAB delimited with the first\n"
+"     two fields of each line consisting of the reference name and the\n"
+"     corresponding sequence length. The `.fai' file generated by \n"
+"     `samtools faidx' is suitable for use as this file. This may be an\n"
+"     empty file if reads are unaligned.\n"
+"\n"
+"  3. SAM->BAM conversion: `samtools view -bT ref.fa in.sam.gz'.\n"
+"\n"
+"  4. BAM->SAM conversion: `samtools view -h in.bam'.\n"
+"\n"
+"  5. A region should be presented in one of the following formats:\n"
+"     `chr1', `chr2:1,000' and `chr3:1000-2,000'. When a region is\n"
+"     specified, the input alignment file must be a sorted and indexed\n"
+"     alignment (BAM/CRAM) file.\n"
+"\n"
+"  6. Option `-u' is preferred over `-b' when the output is piped to\n"
+"     another samtools command.\n"
+"\n");
+
+    return exit_status;
 }
 
 int main_import(int argc, char *argv[])
@@ -536,192 +607,424 @@ int main_import(int argc, char *argv[])
 }
 
 int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
+static const char *copied_tags[] = { "RG", "BC", "QT", NULL };
 
-static void bam2fq_usage(FILE *to)
+static void bam2fq_usage(FILE *to, const char *command)
 {
-    fprintf(to, "\nUsage:   samtools bam2fq [-nO] [-s <outSE.fq>] <in.bam>\n\n");
-    fprintf(to, "Options: -n        don't append /1 and /2 to the read name\n");
-    fprintf(to, "         -O        output quality in the OQ tag if present\n");
-    fprintf(to, "         -s FILE   write singleton reads to FILE [assume single-end]\n");
-    fprintf(to, "\n");
+    fprintf(to,
+"Usage: samtools %s [options...] <in.bam>\n", command);
+    fprintf(to,
+"Options:\n"
+"  -0 FILE   write paired reads flagged both or neither READ1 and READ2 to FILE\n"
+"  -1 FILE   write paired reads flagged READ1 to FILE\n"
+"  -2 FILE   write paired reads flagged READ2 to FILE\n"
+"  -f INT    only include reads with all bits set in INT set in FLAG [0]\n"
+"  -F INT    only include reads with none of the bits set in INT set in FLAG [0]\n"
+"  -n        don't append /1 and /2 to the read name\n"
+"  -O        output quality in the OQ tag if present\n"
+"  -s FILE   write singleton reads to FILE [assume single-end]\n"
+"  -t        copy RG, BC and QT tags to the FASTQ header line\n"
+"  -v INT    default quality score if not given in file [1]\n");
+    sam_global_opt_help(to, "-.--.");
 }
 
-int main_bam2fq(int argc, char *argv[])
-{
+typedef enum { READ_UNKNOWN = 0, READ_1 = 1, READ_2 = 2 } readpart;
+typedef enum { FASTA, FASTQ } fastfile;
+typedef struct bam2fq_opts {
+    char *fnse;
+    char *fnr[3];
+    char *fn_input; // pointer to input filename in argv do not free
+    bool has12, use_oq, copy_tags;
+    int flag_on, flag_off;
+    sam_global_args ga;
+    fastfile filetype;
+    int def_qual;
+} bam2fq_opts_t;
+
+typedef struct bam2fq_state {
     samFile *fp;
+    FILE *fpse;
+    FILE *fpr[3];
     bam_hdr_t *h;
-    bam1_t *b;
-    int8_t *buf;
-    int status = EXIT_SUCCESS;
-    size_t max_buf;
-    FILE* fpse;
+    bool has12, use_oq, copy_tags;
+    int flag_on, flag_off;
+    fastfile filetype;
+    int def_qual;
+} bam2fq_state_t;
+
+static readpart which_readpart(const bam1_t *b)
+{
+    if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) {
+        return READ_1;
+    } else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) {
+        return READ_2;
+    } else {
+        return READ_UNKNOWN;
+    }
+}
+
+// Transform a bam1_t record into a string with the FASTQ representation of it
+// @returns false for error, true for success
+static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t *state)
+{
+    int i;
+    int32_t qlen = b->core.l_qseq;
+    assert(qlen >= 0);
+    uint8_t *seq;
+    uint8_t *qual = bam_get_qual(b);
+    const uint8_t *oq = NULL;
+    if (state->use_oq) oq = bam_aux_get(b, "OQ") + 1;
+    bool has_qual = (qual[0] != 0xff || (state->use_oq && oq)); // test if there is quality
+
+    linebuf->l = 0;
+    // Write read name
+    readpart readpart = which_readpart(b);
+    kputc(state->filetype == FASTA? '>' : '@', linebuf);
+    kputs(bam_get_qname(b), linebuf);
+    // Add the /1 /2 if requested
+    if (state->has12) {
+        if (readpart == READ_1) kputs("/1", linebuf);
+        else if (readpart == READ_2) kputs("/2", linebuf);
+    }
+    if (state->copy_tags) {
+        for (i = 0; copied_tags[i]; ++i) {
+            uint8_t *s;
+            if ((s = bam_aux_get(b, copied_tags[i])) != 0) {
+                kputc('\t', linebuf);
+                kputsn(copied_tags[i], 2, linebuf);
+                kputsn(":Z:", 3, linebuf);
+                kputs(bam_aux2Z(s), linebuf);
+            }
+        }
+    }
+    kputc('\n', linebuf);
+
+    seq = bam_get_seq(b);
+
+    if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+        for (i = qlen-1; i > -1; --i) {
+            char c = seq_nt16_str[seq_comp_table[bam_seqi(seq,i)]];
+            kputc(c, linebuf);
+        }
+    } else {
+        for (i = 0; i < qlen; ++i) {
+            char c = seq_nt16_str[bam_seqi(seq,i)];
+            kputc(c, linebuf);
+        }
+    }
+    kputc('\n', linebuf);
+
+    if (state->filetype == FASTQ) {
+        // Write quality
+        kputs("+\n", linebuf);
+        if (has_qual) {
+            if (state->use_oq && oq) {
+                if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+                    for (i = qlen-1; i > -1; --i) {
+                        kputc(oq[i], linebuf);
+                    }
+                } else {
+                    kputs((char*)oq, linebuf);
+                }
+            } else {
+                if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+                    for (i = qlen-1; i > -1; --i) {
+                        kputc(33 + qual[i], linebuf);
+                    }
+                } else {
+                    for (i = 0; i < qlen; ++i) {
+                        kputc(33 + qual[i], linebuf);
+                    }
+                }
+            }
+        } else {
+            for (i = 0; i < qlen; ++i) {
+                kputc(33 + state->def_qual, linebuf);
+            }
+        }
+        kputc('\n', linebuf);
+    }
+    return true;
+}
+
+// return true if valid
+static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
+{
     // Parse args
-    char* fnse = NULL;
-    bool has12 = true, use_oq = false;
+    bam2fq_opts_t* opts = calloc(1, sizeof(bam2fq_opts_t));
+    opts->has12 = true;
+    opts->filetype = FASTQ;
+    opts->def_qual = 1;
+
     int c;
-    while ((c = getopt(argc, argv, "nOs:")) > 0) {
+    sam_global_args_init(&opts->ga);
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        { NULL, 0, NULL, 0 }
+    };
+    while ((c = getopt_long(argc, argv, "0:1:2:f:F:nOs:tv:", lopts, NULL)) > 0) {
         switch (c) {
-            case 'n': has12 = false; break;
-            case 'O': use_oq = true; break;
-            case 's': fnse = optarg; break;
-            default: bam2fq_usage(stderr); return 1;
+            case '0': opts->fnr[0] = optarg; break;
+            case '1': opts->fnr[1] = optarg; break;
+            case '2': opts->fnr[2] = optarg; break;
+            case 'f': opts->flag_on |= strtol(optarg, 0, 0); break;
+            case 'F': opts->flag_off |= strtol(optarg, 0, 0); break;
+            case 'n': opts->has12 = false; break;
+            case 'O': opts->use_oq = true; break;
+            case 's': opts->fnse = optarg; break;
+            case 't': opts->copy_tags = true; break;
+            case 'v': opts->def_qual = atoi(optarg); break;
+            case '?': bam2fq_usage(stderr, argv[0]); free(opts); return false;
+            default:
+                if (parse_sam_global_opt(c, optarg, lopts, &opts->ga) != 0) {
+                    bam2fq_usage(stderr, argv[0]); free(opts); return false;
+                }
+                break;
         }
     }
 
+    if (opts->fnr[1] || opts->fnr[2]) opts->has12 = false;
+
+    if (opts->def_qual < 0 || 93 < opts->def_qual) {
+        fprintf(stderr, "Invalid -v default quality %i, allowed range 0 to 93\n", opts->def_qual);
+        bam2fq_usage(stderr, argv[0]);
+        free(opts);
+        return true;
+    }
+
+    const char* type_str = argv[0];
+    if (strcasecmp("fastq", type_str) == 0 || strcasecmp("bam2fq", type_str) == 0) {
+        opts->filetype = FASTQ;
+    } else if (strcasecmp("fasta", type_str) == 0) {
+        opts->filetype = FASTA;
+    } else {
+        print_error("bam2fq", "Unrecognised type call \"%s\", this should be impossible... but you managed it!", type_str);
+        bam2fq_usage(stderr, argv[0]);
+        free(opts);
+        return false;
+    }
+
     if ((argc - (optind)) == 0) {
-        bam2fq_usage(stdout);
-        return 0;
+        bam2fq_usage(stdout, argv[0]);
+        free(opts);
+        return false;
     }
 
     if ((argc - (optind)) != 1) {
         fprintf(stderr, "Too many arguments.\n");
-        bam2fq_usage(stderr);
-        return 1;
+        bam2fq_usage(stderr, argv[0]);
+        free(opts);
+        return false;
     }
+    opts->fn_input = argv[optind];
+    *opts_out = opts;
+    return true;
+}
 
-    fp = sam_open(argv[optind], "r");
-    if (fp == NULL) {
-        print_error_errno("Cannot read file \"%s\"", argv[optind]);
-        return 1;
+static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
+{
+    bam2fq_state_t* state = calloc(1, sizeof(bam2fq_state_t));
+    state->flag_on = opts->flag_on;
+    state->flag_off = opts->flag_off;
+    state->has12 = opts->has12;
+    state->use_oq = opts->use_oq;
+    state->copy_tags = opts->copy_tags;
+    state->filetype = opts->filetype;
+    state->def_qual = opts->def_qual;
+
+    state->fp = sam_open(opts->fn_input, "r");
+    if (state->fp == NULL) {
+        print_error_errno("bam2fq","Cannot read file \"%s\"", opts->fn_input);
+        free(state);
+        return false;
     }
-    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS,
-                    SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL)) {
+    uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
+    if (opts->use_oq) rf |= SAM_AUX;
+    if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
-        return 1;
+        free(state);
+        return false;
     }
-    if (hts_set_opt(fp, CRAM_OPT_DECODE_MD, 0)) {
+    if (hts_set_opt(state->fp, CRAM_OPT_DECODE_MD, 0)) {
         fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
-        return 1;
+        free(state);
+        return false;
     }
-    fpse = NULL;
-    if (fnse) {
-        fpse = fopen(fnse,"w");
-        if (fpse == NULL) {
-            print_error_errno("Cannot write to singleton file \"%s\"", fnse);
-            return 1;
+    if (opts->fnse) {
+        state->fpse = fopen(opts->fnse,"w");
+        if (state->fpse == NULL) {
+            print_error_errno("bam2fq", "Cannot write to singleton file \"%s\"", opts->fnse);
+            free(state);
+            return false;
         }
     }
 
-    h = sam_hdr_read(fp);
-    b = bam_init1();
-    buf = NULL;
-    max_buf = 0;
-
-    int64_t n_singletons = 0, n_reads = 0;
-    char* previous = NULL;
-    kstring_t linebuf = { 0, 0, NULL };
-    kputsn("", 0, &linebuf);
-
-    while (sam_read1(fp, h, b) >= 0) {
-        if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) continue; // skip secondary and supplementary alignments
-        ++n_reads;
-
-        int i;
-        int32_t qlen = b->core.l_qseq;
-        assert(qlen >= 0);
-        uint8_t* seq;
-        uint8_t* qual = bam_get_qual(b);
-        const uint8_t *oq = NULL;
-        if (use_oq) oq = bam_aux_get(b, "OQ");
-        bool has_qual = (qual[0] != 0xff || (use_oq && oq)); // test if there is quality
-
-        // If there was a previous readname
-        if ( fpse && previous ) {
-            if (!strcmp(bam_get_qname(b), previous ) ) {
-                fputs(linebuf.s, stdout); // Write previous read
-                free(previous);
-                previous = NULL;
-            } else { // Doesn't match it's a singleton
-                ++n_singletons;
-                fputs(linebuf.s, fpse);  // Write previous read to singletons
-                free(previous);
-                previous = strdup(bam_get_qname(b));
+    int i;
+    for (i = 0; i < 3; ++i) {
+        if (opts->fnr[i]) {
+            state->fpr[i] = fopen(opts->fnr[i], "w");
+            if (state->fpr[i] == NULL) {
+                print_error_errno("bam2fq", "Cannot write to r%d file \"%s\"", i, opts->fnr[i]);
+                free(state);
+                return false;
             }
         } else {
-            fputs(linebuf.s, stdout); // Write pending read
-            if (fpse) previous = strdup(bam_get_qname(b));
+            state->fpr[i] = stdout;
         }
+    }
 
-        linebuf.l = 0;
-        // Write read name
-        kputc(!has_qual? '>' : '@', &linebuf);
-        kputs(bam_get_qname(b), &linebuf);
-        // Add the /1 /2 if requested
-        if (has12) {
-            if ((b->core.flag & BAM_FREAD1) && !(b->core.flag & BAM_FREAD2)) kputs("/1\n", &linebuf);
-            else if ((b->core.flag & BAM_FREAD2) && !(b->core.flag & BAM_FREAD1)) kputs("/2\n", &linebuf);
-            else kputc('\n', &linebuf);
-        } else {
-            kputc('\n', &linebuf);
-        }
+    state->h = sam_hdr_read(state->fp);
+    if (state->h == NULL) {
+        fprintf(stderr, "Failed to read header for \"%s\"\n", opts->fn_input);
+        free(state);
+        return false;
+    }
 
-        if (max_buf < qlen + 1) {
-            max_buf = qlen + 1;
-            kroundup32(max_buf);
-            buf = realloc(buf, max_buf);
-            if (buf == NULL) {
-                fprintf(stderr, "Out of memory");
-                return 1;
-            }
-        }
-        buf[qlen] = '\0';
-        seq = bam_get_seq(b);
-        for (i = 0; i < qlen; ++i)
-            buf[i] = bam_seqi(seq, i);
-        if (b->core.flag & BAM_FREVERSE) { // reverse complement
-            for (i = 0; i < qlen>>1; ++i) {
-                int8_t t = seq_comp_table[buf[qlen - 1 - i]];
-                buf[qlen - 1 - i] = seq_comp_table[buf[i]];
-                buf[i] = t;
-            }
-            if (qlen&1) buf[i] = seq_comp_table[buf[i]];
-        }
-        for (i = 0; i < qlen; ++i)
-            buf[i] = seq_nt16_str[buf[i]];
-        kputs((char*)buf, &linebuf);
-        kputc('\n', &linebuf);
+    *state_out = state;
+    return true;
+}
 
-        if (has_qual) {
-            // Write quality
-            kputs("+\n", &linebuf);
-            if (use_oq && oq) memcpy(buf, oq + 1, qlen);
-            else {
-                for (i = 0; i < qlen; ++i)
-                    buf[i] = 33 + qual[i];
-            }
-            if (b->core.flag & BAM_FREVERSE) { // reverse
-                for (i = 0; i < qlen>>1; ++i) {
-                    int8_t t = buf[qlen - 1 - i];
-                    buf[qlen - 1 - i] = buf[i];
-                    buf[i] = t;
+static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int* status)
+{
+    bool valid = true;
+    bam_hdr_destroy(state->h);
+    check_sam_close("bam2fq", state->fp, opts->fn_input, "file", status);
+    if (state->fpse && fclose(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); valid = false; }
+    int i;
+    for (i = 0; i < 3; ++i) {
+        if (state->fpr[i] != stdout && fclose(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); valid = false; }
+    }
+    free(state);
+    return valid;
+}
+
+static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
+{
+    return (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
+        || (b->core.flag&(state->flag_on)) != state->flag_on // or reads indicated by filter flags
+        || (b->core.flag&(state->flag_off)) != 0);
+
+}
+
+static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
+{
+    bam1_t* b = bam_init1();
+    char *current_qname = NULL;
+    int64_t n_reads = 0, n_singletons = 0; // Statistics
+    kstring_t linebuf[3] = {{0,0,NULL},{0,0,NULL},{0,0,NULL}};
+    int score[3];
+    int at_eof;
+    if (b == NULL ) {
+        perror("[bam2fq_mainloop_singletontrack] Malloc error for bam record buffer.");
+        return false;
+    }
+
+    bool valid = true;
+    while (true) {
+        at_eof = sam_read1(state->fp, state->h, b);
+
+        if (!at_eof && filter_it_out(b, state)) continue;
+        if (!at_eof) ++n_reads;
+
+        if (at_eof || !current_qname || (strcmp(current_qname, bam_get_qname(b)) != 0)) {
+            if (current_qname) {
+                if (score[1] > 0 && score[2] > 0) {
+                    // print linebuf[1] to fpr[1], linebuf[2] to fpr[2]
+                    if (fputs(linebuf[1].s, state->fpr[1]) == EOF) { valid = false; break; }
+                    if (fputs(linebuf[2].s, state->fpr[2]) == EOF) { valid = false; break; }
+                } else if (score[1] > 0 || score[2] > 0) {
+                    // print whichever one exists to fpse
+                    if (score[1] > 0) {
+                        if (fputs(linebuf[1].s, state->fpse) == EOF) { valid = false; break; }
+                    } else {
+                        if (fputs(linebuf[2].s, state->fpse) == EOF) { valid = false; break; }
+                    }
+                    ++n_singletons;
+                }
+                if (score[0]) { // TODO: check this
+                    // print linebuf[0] to fpr[0]
+                    if (fputs(linebuf[0].s, state->fpr[0]) == EOF) { valid = false; break; }
                 }
             }
-            kputs((char*)buf, &linebuf);
-            kputc('\n', &linebuf);
-        }
-    }
 
-    if (fpse) {
-        if ( previous ) { // Nothing left to match it's a singleton
-            ++n_singletons;
-            fputs(linebuf.s, fpse);  // Write previous read to singletons
-        } else {
-            fputs(linebuf.s, stdout); // Write previous read
+            if (at_eof) break;
+
+            free(current_qname);
+            current_qname = strdup(bam_get_qname(b));
+            score[0] = score[1] = score[2] = 0;
         }
 
-        fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
-        fclose(fpse);
-    } else {
-        fputs(linebuf.s, stdout); // Write previous read
+        // Prefer a copy of the read that has base qualities
+        int b_score = bam_get_qual(b)[0] != 0xff? 2 : 1;
+        if (b_score > score[which_readpart(b)]) {
+            if(!bam1_to_fq(b, &linebuf[which_readpart(b)], state)) {
+                fprintf(stderr, "[%s] Error converting read to FASTA/Q\n", __func__);
+                return false;
+            }
+            score[which_readpart(b)] = b_score;
+        }
     }
-    free(linebuf.s);
-    free(previous);
-
+    if (!valid)
+    {
+        perror("[bam2fq_mainloop_singletontrack] Error writing to FASTx files.");
+    }
+    bam_destroy1(b);
+    free(current_qname);
+    free(linebuf[0].s);
+    free(linebuf[1].s);
+    free(linebuf[2].s);
+    fprintf(stderr, "[M::%s] discarded %" PRId64 " singletons\n", __func__, n_singletons);
     fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
 
-    free(buf);
+    return valid;
+}
+
+static bool bam2fq_mainloop(bam2fq_state_t *state)
+{
+    // process a name collated BAM into fastq
+    bam1_t* b = bam_init1();
+    if (b == NULL) {
+        perror(NULL);
+        return false;
+    }
+    int64_t n_reads = 0; // Statistics
+    kstring_t linebuf = { 0, 0, NULL }; // Buffer
+    while (sam_read1(state->fp, state->h, b) >= 0) {
+        if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
+            || (b->core.flag&(state->flag_on)) != state->flag_on             // or reads indicated by filter flags
+            || (b->core.flag&(state->flag_off)) != 0) continue;
+        ++n_reads;
+
+        if (!bam1_to_fq(b, &linebuf, state)) return false;
+        fputs(linebuf.s, state->fpr[which_readpart(b)]);
+    }
+    free(linebuf.s);
     bam_destroy1(b);
-    bam_hdr_destroy(h);
-    check_sam_close(fp, argv[optind], "file", &status);
+
+    fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
+    return true;
+}
+
+int main_bam2fq(int argc, char *argv[])
+{
+    int status = EXIT_SUCCESS;
+    bam2fq_opts_t* opts = NULL;
+    bam2fq_state_t* state = NULL;
+
+    bool valid = parse_opts(argc, argv, &opts);
+    if (!valid || opts == NULL) return valid ? EXIT_SUCCESS : EXIT_FAILURE;
+
+    if (!init_state(opts, &state)) return EXIT_FAILURE;
+
+    if (state->fpse) {
+        if (!bam2fq_mainloop_singletontrack(state)) status = EXIT_FAILURE;
+    } else {
+        if (!bam2fq_mainloop(state)) status = EXIT_FAILURE;
+    }
+
+    if (!destroy_state(opts, state, &status)) return EXIT_FAILURE;
+    sam_global_args_free(&opts->ga);
+    free(opts);
+
     return status;
 }

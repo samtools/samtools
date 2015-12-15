@@ -38,7 +38,7 @@ bool check_test_1(const parsed_opts_t* opts) {
     if ( opts->merged_input_name != NULL
         || opts->unaccounted_header_name != NULL
         || opts->unaccounted_name != NULL
-        || strcmp(opts->output_format_string,"%*_%#.bam")
+        || strcmp(opts->output_format_string,"%*_%#.%.")
         || opts->verbose == true )
         return false;
     return true;
@@ -57,7 +57,7 @@ bool check_test_2(const parsed_opts_t* opts) {
         || strcmp(opts->merged_input_name, "merged.bam")
         || opts->unaccounted_header_name != NULL
         || opts->unaccounted_name != NULL
-        || strcmp(opts->output_format_string,"%*_%#.bam")
+        || strcmp(opts->output_format_string,"%*_%#.%.")
         || opts->verbose == true )
         return false;
     return true;
@@ -87,10 +87,8 @@ int main(int argc, char**argv)
     }
 
     // Setup stdout and stderr redirect
-    size_t len_stdout = 0;
-    char* res_stdout = NULL;
-    size_t len_stderr = 0;
-    char* res_stderr = NULL;
+    kstring_t res_stdout = { 0, 0, NULL };
+    kstring_t res_stderr = { 0, 0, NULL };
     FILE* orig_stdout = fdopen(dup(STDOUT_FILENO), "a"); // Save stderr
     FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
     char* tempfname_stdout = (optind < argc)? argv[optind] : "test_parse_args.tmp.o";
@@ -124,14 +122,15 @@ int main(int argc, char**argv)
     }
 
     // check result
+    res_stdout.l = res_stderr.l = 0;
     check_stdout = fopen(tempfname_stdout, "r");
     check_stderr = fopen(tempfname_stderr, "r");
     if ( !result_1
-        && (getline(&res_stdout, &len_stdout, check_stdout) != -1)
+        && kgetline(&res_stdout, (kgets_func *)fgets, check_stdout) >= 0
         && !feof(check_stdout)
-        && (res_stdout && strcmp("",res_stdout))
-        && (getline(&res_stderr, &len_stderr, check_stderr) == -1)
-        && (feof(check_stderr) || (res_stderr && !strcmp("",res_stderr)))) {
+        && res_stdout.l > 0
+        && kgetline(&res_stderr, (kgets_func *)fgets, check_stderr) < 0
+        && (feof(check_stderr) || res_stderr.l == 0)) {
         ++success;
     } else {
         ++failure;
@@ -174,14 +173,15 @@ int main(int argc, char**argv)
     }
 
     // check result
+    res_stdout.l = res_stderr.l = 0;
     check_stdout = fopen(tempfname_stdout, "r");
     check_stderr = fopen(tempfname_stderr, "r");
     if ( result_2
         && check_test_2(result_2)
-        && (getline(&res_stdout, &len_stdout, check_stdout) == -1)
-        && (feof(check_stdout) || (res_stdout && !strcmp("",res_stdout)))
-        && (getline(&res_stderr, &len_stderr, check_stderr) == -1)
-        && (feof(check_stderr) || (res_stderr && !strcmp("",res_stderr)))) {
+        && kgetline(&res_stdout, (kgets_func *)fgets, check_stdout) < 0
+        && (feof(check_stdout) || res_stdout.l == 0)
+        && kgetline(&res_stderr, (kgets_func *)fgets, check_stderr) < 0
+        && (feof(check_stderr) || res_stderr.l == 0)) {
         ++success;
     } else {
         ++failure;
@@ -202,8 +202,8 @@ int main(int argc, char**argv)
 
 
     // Cleanup
-    free(res_stdout);
-    free(res_stderr);
+    free(res_stdout.s);
+    free(res_stderr.s);
     remove(tempfname_stdout);
     remove(tempfname_stderr);
     fclose(orig_stdout);

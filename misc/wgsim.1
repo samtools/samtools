@@ -1,0 +1,55 @@
+.TH wgsim 1 "15 December 2015" "samtools-1.3" "Bioinformatics tools"
+.SH NAME
+wgsim \- Whole-genome sequencing read simulator
+.SH SYNOPSIS
+.B wgsim
+[\fI\,options\/\fR] \fI\,<in.ref.fa> <out.read1.fq> <out.read2.fq>\/\fR
+.PP
+<in.ref.fa> must be a fasta file containing a reference genome.
+.PP
+<out.read1.fq> and <out.read2.fq> are the first and second read output files.
+.SH OPTIONS
+.TP
+\fB\-e\fR FLOAT
+base error rate [0.000]
+.TP
+\fB\-d\fR INT
+outer distance between the two ends [500]
+.TP
+\fB\-s\fR INT
+standard deviation [50]
+.TP
+\fB\-N\fR INT
+number of read pairs [1000000]
+.TP
+\fB\-1\fR INT
+length of the first read [70]
+.TP
+\fB\-2\fR INT
+length of the second read [70]
+.TP
+\fB\-r\fR FLOAT
+rate of mutations [0.0010]
+.TP
+\fB\-R\fR FLOAT
+fraction of indels [0.15]
+.TP
+\fB\-X\fR FLOAT
+probability an indel is extended [0.30]
+.TP
+\fB\-S\fR INT
+seed for random generator [\-1]
+.TP
+\fB\-A\fR FLOAT
+discard if the fraction of ambiguous bases higher than FLOAT [0.05]
+.TP
+\fB\-h\fR
+haplotype mode
+.TP
+Parameter defaults are given in square brackets.
+.SH AUTHOR
+Copyright 2008 Genome Research Limited.
+.br
+Copyright 2011 Heng Li.
+.TP
+wgsim is part of samtools, https://github.com/samtools/samtools

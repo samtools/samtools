@@ -44,8 +44,9 @@ run_test() {
     #result=`eval valgrind --error-exitcode=1 --leak-check=full ${@+"$@"}`
     if [ $? != 0 ]
     then
-        echo "Error running $@"
+        echo "$e: Error running $@"
         mv _out FAIL-$e.${test_iter}
+        nufail=`expr $nufail + 1`
         return 0
     elif cmp -s _out expected/$e
     then
@@ -89,7 +90,7 @@ regtest() {
     nufail=0; nefail=0
 
     exec 9<"$1"
-    while read line <&9
+    while read -r line <&9
     do
         set -- $line
         case $1 in
@@ -112,14 +113,14 @@ regtest() {
             test_iter=0
             if [ "`expr \"$cmd\" : '.*\$fmt'`" != 0 -a "$samtools" != "./samtools-0.1.19" ]
             then
-                _cmd=`echo $cmd | sed 's/\$fmt/bam/'`
+                _cmd=`printf '%s' "$cmd" | sed 's/\$fmt/bam/'`
                 run_test $p $o $_cmd
-                #_cmd=`echo $cmd | sed 's/\$fmt/sam/'`
+                #_cmd=`printf '%s' "$cmd" | sed 's/\$fmt/sam/'`
                 #run_test $p $o $_cmd
-                _cmd=`echo $cmd | sed 's/\$fmt/cram/'`
+                _cmd=`printf '%s' "$cmd" | sed 's/\$fmt/cram/'`
                 run_test $p $o $_cmd
             else
-                _cmd=`echo $cmd | sed 's/\$fmt/bam/'`
+                _cmd=`printf '%s' "$cmd" | sed 's/\$fmt/bam/'`
                 run_test $p $o $_cmd
             fi
             ;;
@@ -143,11 +144,12 @@ regtest() {
     fi
 }
 
-echo "Samtools mpileup tests:"
+echo ""
+echo "=== Testing $@ regressions ==="
 
 samtools="../../samtools"
 filter="../vcf-miniview -f"
-regtest mpileup.reg
+regtest $@
 
 # samtools="./samtools-0.1.19"
 # filter="./bcftools-0.1.19 view - | sed etc"

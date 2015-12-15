@@ -5,7 +5,7 @@
 @PG	ID:prog1	PN:emacs	CL:emacs	VN:23.1.1
 @CO	The MIT License
 @CO	
-@CO	Copyright (c) 2014 Genome Research Ltd.
+@CO	Copyright (c) 2014, 2015 Genome Research Ltd.
 @CO	
 @CO	Permission is hereby granted, free of charge, to any person obtaining a copy
 @CO	of this software and associated documentation files (the "Software"), to deal
@@ -38,7 +38,8 @@ ref1_grp1_p005	99	ref1	17	8	10M	=	41	34	GGATCCTCTA	))))))))))	MD:Z:10	NM:i:0	RG:
 ref1_grp1_p005	147	ref1	41	20	10M	=	17	-34	GCATGCAAGC	5555555555	MD:Z:10	NM:i:0	RG:Z:grp1
 ref1_grp1_p006	99	ref1	21	10	10M	=	45	34	CCTCTAGAGT	++++++++++	MD:Z:10	NM:i:0	RG:Z:grp1	ia:i:255
 ref1_grp1_p006	147	ref1	45	22	10M	=	21	-34	GCAAGCTTGA	7777777777	MD:Z:10	NM:i:0	RG:Z:grp1
-ref1_grp2_p001	99	ref1	3	1	10M	=	27	34	AGCTCGGTAC	""""""""""	MD:Z:10	NM:i:0	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE
+ref1_grp2_p001	99	ref1	3	1	8M2S	=	27	34	AGCTCGGTAC	""""""""""	MD:Z:8	NM:i:0	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE
+ref1_grp2_p001	2147	ref1	11	1	8H2M	=	27	34	AC	""	MD:Z:2	NM:i:0	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE
 ref1_grp2_p001	147	ref1	27	13	10M	=	3	-34	GAGTCGACCT	..........	MD:Z:10	NM:i:0	RG:Z:grp2
 ref1_grp2_p002	99	ref1	7	3	10M	=	31	34	CGGTACCCGG	$$$$$$$$$$	MD:Z:10	NM:i:0	fa:f:6.022e+23	RG:Z:grp2
 ref1_grp2_p002	147	ref1	31	15	10M	=	7	-34	CGACCTGCAG	0000000000	MD:Z:10	NM:i:0	RG:Z:grp2
@@ -54,8 +55,8 @@ ref2_grp3_p001	83	ref2	1	99	15M	=	31	45	ATTCTATAGTGTCAC	~~~~~~~~~~~~~~~	MD:Z:15	
 ref2_grp3_p001	163	ref2	31	99	15M	=	1	-45	CTGTTTCCTGTGTGA	|||||||||||||||	MD:Z:0T0A0A1C0A0T0G0G0T0C0A1A0G0	NM:i:13	RG:Z:grp3
 ref2_grp3_p002	99	ref2	46	99	15M	=	16	-45	CTGTTTCCTGTGTGA	{{{{{{{{{{{{{{{	MD:Z:15	NM:i:0	RG:Z:grp3
 ref2_grp3_p002	147	ref2	16	99	15M	=	46	45	CTAAATAGCTTGGCG	}}}}}}}}}}}}}}}	MD:Z:15	NM:i:0	RG:Z:grp3
-ref2_grp3_p003	99	ref2	1	99	15M	=	1	15	ACGTMRWSYKVHDBN	0123456789abcd!	MD:Z:1T0T0C0C0	NM:i:4	RG:Z:grp3
-ref2_grp3_p003	147	ref2	1	99	15M	=	1	-15	NVHDBMRSWYKACGT	!dcba9876543210	MD:Z:0A0T1A0C0	NM:i:4	RG:Z:grp3
+ref2_grp3_p003	99	ref2	1	99	15M	=	1	15	ACGTMRWSYKVHDBN	0123456789abcd!	MD:Z:1T0T0C0T0A0T0A0G0T0G0T0C0A0C0	NM:i:14	RG:Z:grp3
+ref2_grp3_p003	147	ref2	1	99	15M	=	1	-15	NVHDBMRSWYKACGT	!dcba9876543210	MD:Z:0A0T0T0C0T0A0T0A0G0T0G0T1A0C0	NM:i:14	RG:Z:grp3
 ref12_grp1_p001	97	ref1	36	50	10M	ref2	2	0	TGCAGGCATG	AAAAAAAAAA	MD:Z:10	NM:i:0	RG:Z:grp1
 ref12_grp1_p001	145	ref2	2	50	10M	ref1	36	0	TTCTATAGTG	BBBBBBBBBB	MD:Z:10	NM:i:0	RG:Z:grp1
 ref12_grp2_p001	97	ref1	46	50	10M	ref2	12	0	CAAGCTTGAG	AAAAAAAAAA	MD:Z:10	NM:i:0	RG:Z:grp2

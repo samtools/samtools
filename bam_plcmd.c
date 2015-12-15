@@ -1,6 +1,6 @@
 /*  bam_plcmd.c -- mpileup subcommand.
 
-    Copyright (C) 2008-2014 Genome Research Ltd.
+    Copyright (C) 2008-2015 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -25,9 +25,11 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <ctype.h>
 #include <string.h>
+#include <limits.h>
 #include <errno.h>
 #include <sys/stat.h>
 #include <getopt.h>
@@ -37,6 +39,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/khash_str2int.h>
 #include "sam_header.h"
 #include "samtools.h"
+#include "sam_opts.h"
 
 static inline int printw(int c, FILE *fp)
 {
@@ -122,14 +125,22 @@ typedef struct {
     void *bed, *rghash;
     int argc;
     char **argv;
+    sam_global_args ga;
 } mplp_conf_t;
+
+typedef struct {
+    char *ref[2];
+    int ref_id[2];
+    int ref_len[2];
+} mplp_ref_t;
+
+#define MPLP_REF_INIT {{NULL,NULL},{-1,-1},{0,0}}
 
 typedef struct {
     samFile *fp;
     hts_itr_t *iter;
     bam_hdr_t *h;
-    int ref_id;
-    char *ref;
+    mplp_ref_t *ref;
     const mplp_conf_t *conf;
 } mplp_aux_t;
 
@@ -139,13 +150,71 @@ typedef struct {
     bam_pileup1_t **plp;
 } mplp_pileup_t;
 
+static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
+    mplp_ref_t *r = ma->ref;
+
+    //printf("get ref %d {%d/%p, %d/%p}\n", tid, r->ref_id[0], r->ref[0], r->ref_id[1], r->ref[1]);
+
+    if (!r || !ma->conf->fai) {
+        *ref = NULL;
+        return 0;
+    }
+
+    // Do we need to reference count this so multiple mplp_aux_t can
+    // track which references are in use?
+    // For now we just cache the last two. Sufficient?
+    if (tid == r->ref_id[0]) {
+        *ref = r->ref[0];
+        *ref_len = r->ref_len[0];
+        return 1;
+    }
+    if (tid == r->ref_id[1]) {
+        // Last, swap over
+        int tmp;
+        tmp = r->ref_id[0];  r->ref_id[0]  = r->ref_id[1];  r->ref_id[1]  = tmp;
+        tmp = r->ref_len[0]; r->ref_len[0] = r->ref_len[1]; r->ref_len[1] = tmp;
+
+        char *tc;
+        tc = r->ref[0]; r->ref[0] = r->ref[1]; r->ref[1] = tc;
+        *ref = r->ref[0];
+        *ref_len = r->ref_len[0];
+        return 1;
+    }
+
+    // New, so migrate to old and load new
+    free(r->ref[1]);
+    r->ref[1]     = r->ref[0];
+    r->ref_id[1]  = r->ref_id[0];
+    r->ref_len[1] = r->ref_len[0];
+
+    r->ref_id[0] = tid;
+    r->ref[0] = faidx_fetch_seq(ma->conf->fai,
+                                ma->h->target_name[r->ref_id[0]],
+                                0,
+                                INT_MAX,
+                                &r->ref_len[0]);
+
+    if (!r->ref[0]) {
+        r->ref[0] = NULL;
+        r->ref_id[0] = -1;
+        r->ref_len[0] = 0;
+        *ref = NULL;
+        return 0;
+    }
+
+    *ref = r->ref[0];
+    *ref_len = r->ref_len[0];
+    return 1;
+}
+
 static int mplp_func(void *data, bam1_t *b)
 {
     extern int bam_realn(bam1_t *b, const char *ref);
-    extern int bam_prob_realn_core(bam1_t *b, const char *ref, int);
-    extern int bam_cap_mapQ(bam1_t *b, char *ref, int thres);
+    extern int bam_prob_realn_core(bam1_t *b, const char *ref, int ref_len, int flag);
+    extern int bam_cap_mapQ(bam1_t *b, char *ref, int ref_len, int thres);
+    char *ref;
     mplp_aux_t *ma = (mplp_aux_t*)data;
-    int ret, skip = 0;
+    int ret, skip = 0, ref_len;
     do {
         int has_ref;
         ret = ma->iter? sam_itr_next(ma->fp, ma->iter, b) : sam_read1(ma->fp, ma->h, b);
@@ -173,11 +242,23 @@ static int mplp_func(void *data, bam1_t *b)
             for (i = 0; i < b->core.l_qseq; ++i)
                 qual[i] = qual[i] > 31? qual[i] - 31 : 0;
         }
-        has_ref = (ma->ref && ma->ref_id == b->core.tid)? 1 : 0;
+
+        if (ma->conf->fai && b->core.tid >= 0) {
+            has_ref = mplp_get_ref(ma, b->core.tid, &ref, &ref_len);
+            if (has_ref && ref_len <= b->core.pos) { // exclude reads outside of the reference sequence
+                fprintf(stderr,"[%s] Skipping because %d is outside of %d [ref:%d]\n",
+                        __func__, b->core.pos, ref_len, b->core.tid);
+                skip = 1;
+                continue;
+            }
+        } else {
+            has_ref = 0;
+        }
+
         skip = 0;
-        if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ma->ref, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
+        if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ref, ref_len, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
         if (has_ref && ma->conf->capQ_thres > 10) {
-            int q = bam_cap_mapQ(b, ma->ref, ma->conf->capQ_thres);
+            int q = bam_cap_mapQ(b, ref, ref_len, ma->conf->capQ_thres);
             if (q < 0) skip = 1;
             else if (b->core.qual > q) b->core.qual = q;
         }
@@ -197,13 +278,13 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
             const bam_pileup1_t *p = plp[i] + j;
             uint8_t *q;
             int id = -1;
-            q = ignore_rg? 0 : bam_aux_get(p->b, "RG");
+            q = ignore_rg? NULL : bam_aux_get(p->b, "RG");
             if (q) id = bam_smpl_rg2smid(sm, fn[i], (char*)q+1, buf);
             if (id < 0) id = bam_smpl_rg2smid(sm, fn[i], 0, buf);
             if (id < 0 || id >= m->n) {
                 assert(q); // otherwise a bug
                 fprintf(stderr, "[%s] Read group %s used in file %s but absent from the header or an alignment missing read group.\n", __func__, (char*)q+1, fn[i]);
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             if (m->n_plp[id] == m->m_plp[id]) {
                 m->m_plp[id] = m->m_plp[id]? m->m_plp[id]<<1 : 8;
@@ -225,8 +306,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
     extern void bcf_call_del_rghash(void *rghash);
     mplp_aux_t **data;
-    int i, tid, pos, *n_plp, tid0 = -1, beg0 = 0, end0 = 1u<<29, ref_len, ref_tid = -1, max_depth, max_indel_depth;
+    int i, tid, pos, *n_plp, beg0 = 0, end0 = INT_MAX, ref_len, max_depth, max_indel_depth;
     const bam_pileup1_t **plp;
+    mplp_ref_t mp_ref = MPLP_REF_INIT;
     bam_mplp_t iter;
     bam_hdr_t *h = NULL; /* header of first file in input list */
     char *ref;
@@ -253,44 +335,49 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
     if (n == 0) {
         fprintf(stderr,"[%s] no input file/data given\n", __func__);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     // read the header of each file in the list and initialize data
     for (i = 0; i < n; ++i) {
         bam_hdr_t *h_tmp;
         data[i] = calloc(1, sizeof(mplp_aux_t));
-        data[i]->fp = sam_open(fn[i], "rb");
+        data[i]->fp = sam_open_format(fn[i], "rb", &conf->ga.in);
         if ( !data[i]->fp )
         {
             fprintf(stderr, "[%s] failed to open %s: %s\n", __func__, fn[i], strerror(errno));
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
             fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
-            return 1;
+            exit(EXIT_FAILURE);
         }
-        hts_set_fai_filename(data[i]->fp, conf->fai_fname);
+        if (conf->fai_fname && hts_set_fai_filename(data[i]->fp, conf->fai_fname) != 0) {
+            fprintf(stderr, "[%s] failed to process %s: %s\n",
+                    __func__, conf->fai_fname, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
         data[i]->conf = conf;
+        data[i]->ref = &mp_ref;
         h_tmp = sam_hdr_read(data[i]->fp);
         if ( !h_tmp ) {
             fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
         // Collect read group IDs with PL (platform) listed in pl_list (note: fragile, strstr search)
         rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
         if (conf->reg) {
             hts_idx_t *idx = sam_index_load(data[i]->fp, fn[i]);
-            if (idx == 0) {
+            if (idx == NULL) {
                 fprintf(stderr, "[%s] fail to load index for %s\n", __func__, fn[i]);
-                exit(1);
+                exit(EXIT_FAILURE);
             }
             if ( (data[i]->iter=sam_itr_querys(idx, h_tmp, conf->reg)) == 0) {
                 fprintf(stderr, "[E::%s] fail to parse region '%s' with %s\n", __func__, conf->reg, fn[i]);
-                exit(1);
+                exit(EXIT_FAILURE);
             }
-            if (i == 0) tid0 = data[i]->iter->tid, beg0 = data[i]->iter->beg, end0 = data[i]->iter->end;
+            if (i == 0) beg0 = data[i]->iter->beg, end0 = data[i]->iter->end;
             hts_idx_destroy(idx);
         }
         else
@@ -325,12 +412,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_fp = bcf_open(conf->output_fname? conf->output_fname : "-", mode);
         if (bcf_fp == NULL) {
             fprintf(stderr, "[%s] failed to write to %s: %s\n", __func__, conf->output_fname? conf->output_fname : "standard output", strerror(errno));
-            exit(1);
+            exit(EXIT_FAILURE);
         }
 
         // BCF header creation
         bcf_hdr = bcf_hdr_init("w");
-        kstring_t str = {0,0,0};
+        kstring_t str = {0,0,NULL};
 
         ksprintf(&str, "##samtoolsVersion=%s+htslib-%s\n",samtools_version(),hts_version());
         bcf_hdr_append(bcf_hdr, str.s);
@@ -357,7 +444,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_append(bcf_hdr, str.s);
         }
         free(str.s);
-        bcf_hdr_append(bcf_hdr,"##ALT=<ID=X,Description=\"Represents allele(s) other than observed.\">");
+        bcf_hdr_append(bcf_hdr,"##ALT=<ID=*,Description=\"Represents allele(s) other than observed.\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=INDEL,Number=0,Type=Flag,Description=\"Indicates that the variant is an INDEL.\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=IDV,Number=1,Type=Integer,Description=\"Maximum number of reads supporting an indel\">");
         bcf_hdr_append(bcf_hdr,"##INFO=<ID=IMF,Number=1,Type=Float,Description=\"Maximum fraction of reads supporting an indel\">");
@@ -390,6 +477,18 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=DP4,Number=4,Type=Integer,Description=\"Number of high-quality ref-fwd, ref-reverse, alt-fwd and alt-reverse bases\">");
         if ( conf->fmt_flag&B2B_FMT_SP )
             bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=SP,Number=1,Type=Integer,Description=\"Phred-scaled strand bias P-value\">");
+        if ( conf->fmt_flag&B2B_FMT_AD )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=AD,Number=R,Type=Integer,Description=\"Allelic depths\">");
+        if ( conf->fmt_flag&B2B_FMT_ADF )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=ADF,Number=R,Type=Integer,Description=\"Allelic depths on the forward strand\">");
+        if ( conf->fmt_flag&B2B_FMT_ADR )
+            bcf_hdr_append(bcf_hdr,"##FORMAT=<ID=ADR,Number=R,Type=Integer,Description=\"Allelic depths on the reverse strand\">");
+        if ( conf->fmt_flag&B2B_INFO_AD )
+            bcf_hdr_append(bcf_hdr,"##INFO=<ID=AD,Number=R,Type=Integer,Description=\"Total allelic depths\">");
+        if ( conf->fmt_flag&B2B_INFO_ADF )
+            bcf_hdr_append(bcf_hdr,"##INFO=<ID=ADF,Number=R,Type=Integer,Description=\"Total allelic depths on the forward strand\">");
+        if ( conf->fmt_flag&B2B_INFO_ADR )
+            bcf_hdr_append(bcf_hdr,"##INFO=<ID=ADR,Number=R,Type=Integer,Description=\"Total allelic depths on the reverse strand\">");
 
         for (i=0; i<sm->n; i++)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
@@ -414,12 +513,16 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             assert( sizeof(float)==sizeof(int32_t) );
             bc.DP4 = malloc(sm->n * sizeof(int32_t) * 4);
             bc.fmt_arr = malloc(sm->n * sizeof(float)); // all fmt_flag fields
-            if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR) )
+            if ( conf->fmt_flag&(B2B_INFO_DPR|B2B_FMT_DPR|B2B_INFO_AD|B2B_INFO_ADF|B2B_INFO_ADR|B2B_FMT_AD|B2B_FMT_ADF|B2B_FMT_ADR) )
             {
                 // first B2B_MAX_ALLELES fields for total numbers, the rest per-sample
-                bc.DPR = malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
+                bc.ADR = (int32_t*) malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
+                bc.ADF = (int32_t*) malloc((sm->n+1)*B2B_MAX_ALLELES*sizeof(int32_t));
                 for (i=0; i<sm->n; i++)
-                    bcr[i].DPR = bc.DPR + (i+1)*B2B_MAX_ALLELES;
+                {
+                    bcr[i].ADR = bc.ADR + (i+1)*B2B_MAX_ALLELES;
+                    bcr[i].ADF = bc.ADF + (i+1)*B2B_MAX_ALLELES;
+                }
             }
         }
     }
@@ -428,15 +531,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
         if (pileup_fp == NULL) {
             fprintf(stderr, "[%s] failed to write to %s: %s\n", __func__, conf->output_fname, strerror(errno));
-            exit(1);
+            exit(EXIT_FAILURE);
         }
     }
-
-    if (tid0 >= 0 && conf->fai) { // region is set
-        ref = faidx_fetch_seq(conf->fai, h->target_name[tid0], 0, 0x7fffffff, &ref_len);
-        ref_tid = tid0;
-        for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid0;
-    } else ref_tid = -1, ref = 0;
 
     // init pileup
     iter = bam_mplp_init(n, mplp_func, (void**)data);
@@ -456,12 +553,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     while ( (ret=bam_mplp_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
         if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
-        if (tid != ref_tid) {
-            free(ref); ref = 0;
-            if (conf->fai) ref = faidx_fetch_seq(conf->fai, h->target_name[tid], 0, 0x7fffffff, &ref_len);
-            for (i = 0; i < n; ++i) data[i]->ref = ref, data[i]->ref_id = tid;
-            ref_tid = tid;
-        }
+        mplp_get_ref(data[0], tid, &ref, &ref_len);
+        //printf("tid=%d len=%d ref=%p/%s\n", tid, ref_len, ref, ref);
         if (conf->flag & MPLP_BCF) {
             int total_depth, _ref0, ref16;
             for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
@@ -537,8 +630,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                     }
                     if (conf->flag & MPLP_PRINT_POS) {
                         putc('\t', pileup_fp);
+                        int last = 0;
                         for (j = 0; j < n_plp[i]; ++j) {
-                            if (j > 0) putc(',', pileup_fp);
+                            const bam_pileup1_t *p = plp[i] + j;
+                            int c = bam_get_qual(p->b)[p->qpos];
+                            if ( c < conf->min_baseQ ) continue;
+
+                            if (last++) putc(',', pileup_fp);
                             fprintf(pileup_fp, "%d", plp[i][j].qpos + 1); // FIXME: printf() is very slow...
                         }
                     }
@@ -558,7 +656,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         bcf_call_destroy(bca);
         free(bc.PL);
         free(bc.DP4);
-        free(bc.DPR);
+        free(bc.ADR);
+        free(bc.ADF);
         free(bc.fmt_arr);
         free(bcr);
     }
@@ -574,7 +673,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         if (data[i]->iter) hts_itr_destroy(data[i]->iter);
         free(data[i]);
     }
-    free(data); free(plp); free(ref); free(n_plp);
+    free(data); free(plp); free(n_plp);
+    free(mp_ref.ref[0]);
+    free(mp_ref.ref[1]);
     return ret;
 }
 
@@ -643,15 +744,21 @@ int parse_format_flag(const char *str)
     for(i=0; i<n_tags; i++)
     {
         if ( !strcasecmp(tags[i],"DP") ) flag |= B2B_FMT_DP;
-        else if ( !strcasecmp(tags[i],"DV") ) flag |= B2B_FMT_DV;
+        else if ( !strcasecmp(tags[i],"DV") ) { flag |= B2B_FMT_DV; fprintf(stderr, "[warning] tag DV functional, but deprecated. Please switch to `AD` in future.\n"); }
         else if ( !strcasecmp(tags[i],"SP") ) flag |= B2B_FMT_SP;
-        else if ( !strcasecmp(tags[i],"DP4") ) flag |= B2B_FMT_DP4;
-        else if ( !strcasecmp(tags[i],"DPR") ) flag |= B2B_FMT_DPR;
-        else if ( !strcasecmp(tags[i],"INFO/DPR") ) flag |= B2B_INFO_DPR;
+        else if ( !strcasecmp(tags[i],"DP4") ) { flag |= B2B_FMT_DP4; fprintf(stderr, "[warning] tag DP4 functional, but deprecated. Please switch to `ADF` and `ADR` in future.\n"); }
+        else if ( !strcasecmp(tags[i],"DPR") ) { flag |= B2B_FMT_DPR; fprintf(stderr, "[warning] tag DPR functional, but deprecated. Please switch to `AD` in future.\n"); }
+        else if ( !strcasecmp(tags[i],"INFO/DPR") ) { flag |= B2B_INFO_DPR; fprintf(stderr, "[warning] tag INFO/DPR functional, but deprecated. Please switch to `INFO/AD` in future.\n"); }
+        else if ( !strcasecmp(tags[i],"AD") ) flag |= B2B_FMT_AD;
+        else if ( !strcasecmp(tags[i],"ADF") ) flag |= B2B_FMT_ADF;
+        else if ( !strcasecmp(tags[i],"ADR") ) flag |= B2B_FMT_ADR;
+        else if ( !strcasecmp(tags[i],"INFO/AD") ) flag |= B2B_INFO_AD;
+        else if ( !strcasecmp(tags[i],"INFO/ADF") ) flag |= B2B_INFO_ADF;
+        else if ( !strcasecmp(tags[i],"INFO/ADR") ) flag |= B2B_INFO_ADR;
         else
         {
             fprintf(stderr,"Could not parse tag \"%s\" in \"%s\"\n", tags[i], str);
-            exit(1);
+            exit(EXIT_FAILURE);
         }
         free(tags[i]);
     }
@@ -707,7 +814,8 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -s, --output-MQ         output mapping quality\n"
 "\n"
 "Output options for genotype likelihoods (when -g/-v is used):\n"
-"  -t, --output-tags LIST  optional tags to output: DP,DPR,DV,DP4,INFO/DPR,SP []\n"
+"  -t, --output-tags LIST  optional tags to output:\n"
+"               DP,AD,ADF,ADR,SP,INFO/AD,INFO/ADF,INFO/ADR []\n"
 "  -u, --uncompressed      generate uncompressed VCF/BCF output\n"
 "\n"
 "SNP/INDEL genotype likelihoods options (effective with -g/-v):\n"
@@ -725,7 +833,9 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -o, --open-prob INT     Phred-scaled gap open seq error probability [%d]\n", mplp->openQ);
     fprintf(fp,
 "  -p, --per-sample-mF     apply -m and -F per-sample for increased sensitivity\n"
-"  -P, --platforms STR     comma separated list of platforms for indels [all]\n"
+"  -P, --platforms STR     comma separated list of platforms for indels [all]\n");
+    sam_global_opt_help(fp, "-.--.");
+    fprintf(fp,
 "\n"
 "Notes: Assuming diploid individuals.\n");
 
@@ -750,8 +860,11 @@ int bam_mpileup(int argc, char *argv[])
     mplp.argc = argc; mplp.argv = argv;
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
     mplp.output_fname = NULL;
+    sam_global_args_init(&mplp.ga);
+
     static const struct option lopts[] =
     {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
         {"rf", required_argument, NULL, 1},   // require flag
         {"ff", required_argument, NULL, 2},   // filter flag
         {"incl-flags", required_argument, NULL, 1},
@@ -816,7 +929,7 @@ int bam_mpileup(int argc, char *argv[])
         case  4 : mplp.openQ = atoi(optarg); break;
         case 'f':
             mplp.fai = fai_load(optarg);
-            if (mplp.fai == 0) return 1;
+            if (mplp.fai == NULL) return 1;
             mplp.fai_fname = optarg;
             break;
         case 'd': mplp.max_depth = atoi(optarg); break;
@@ -826,7 +939,7 @@ int bam_mpileup(int argc, char *argv[])
                   //  with few BED intervals and big BAMs. Todo: devise a heuristic to determine
                   //  best strategy, that is streaming or jumping.
                   mplp.bed = bed_read(optarg);
-                  if (!mplp.bed) { print_error_errno("Could not read file \"%s\"", optarg); return 1; }
+                  if (!mplp.bed) { print_error_errno("mpileup", "Could not read file \"%s\"", optarg); return 1; }
                   break;
         case 'P': mplp.pl_list = strdup(optarg); break;
         case 'p': mplp.flag |= MPLP_PER_SAMPLE; break;
@@ -865,7 +978,7 @@ int bam_mpileup(int argc, char *argv[])
                 FILE *fp_rg;
                 char buf[1024];
                 mplp.rghash = khash_str2int_init();
-                if ((fp_rg = fopen(optarg, "r")) == 0)
+                if ((fp_rg = fopen(optarg, "r")) == NULL)
                     fprintf(stderr, "(%s) Fail to open file %s. Continue anyway.\n", __func__, optarg);
                 while (!feof(fp_rg) && fscanf(fp_rg, "%s", buf) > 0) // this is not a good style, but forgive me...
                     khash_str2int_inc(mplp.rghash, strdup(buf));
@@ -874,10 +987,19 @@ int bam_mpileup(int argc, char *argv[])
             break;
         case 't': mplp.fmt_flag |= parse_format_flag(optarg); break;
         default:
-            fprintf(stderr,"Invalid option: '%c'\n", c);
+            if (parse_sam_global_opt(c, optarg, lopts, &mplp.ga) == 0) break;
+            /* else fall-through */
+        case '?':
+            print_usage(stderr, &mplp);
             return 1;
         }
     }
+    if (!mplp.fai && mplp.ga.reference) {
+        mplp.fai_fname = mplp.ga.reference;
+        mplp.fai = fai_load(mplp.fai_fname);
+        if (mplp.fai == NULL) return 1;
+    }
+
     if ( !(mplp.flag&MPLP_REALN) && mplp.flag&MPLP_REDO_BAQ )
     {
         fprintf(stderr,"Error: The -B option cannot be combined with -E\n");
