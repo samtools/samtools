@@ -1,5 +1,7 @@
 # Control file for continuous integration testing at http://travis-ci.org/
 
+sudo: false
+
 os:
   - linux
   - osx
