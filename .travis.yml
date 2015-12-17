@@ -1,19 +1,21 @@
 # Control file for continuous integration testing at http://travis-ci.org/
 
-os:
-  - linux
-  - osx
-
 language: c
-compiler:
-  - clang
-  - gcc
 
 matrix:
   include:
+    - os: linux
+      compiler: clang
+    - os: linux
+      compiler: gcc
     # An unoptimised C99 build, for detecting non-static inline functions
-    - compiler: gcc
+    - os: linux
+      compiler: gcc
       env: CFLAGS="-std=gnu99 -O0"
+    - os: osx
+      compiler: clang
+    - os: osx
+      compiler: gcc
 
 env:
   global:
