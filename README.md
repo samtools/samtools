@@ -19,7 +19,7 @@ committed to this repository, so building the code from a Git repository
 requires some extra steps:
 
 ```sh
-aclocal -I.../autoconf-archive/m4   # Cache configure subroutines
+aclocal -I ../autoconf-archive/m4   # Cache configure subroutines
 autoconf       # Generate the configure script, if needed
 ./configure    # Optional, needed for choosing optional functionality
 make
