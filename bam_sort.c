@@ -1620,6 +1620,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
   @param  max_mem  approxiate maximum memory (very inaccurate)
   @param  in_fmt   input file format options
   @param  out_fmt  output file format and options
+  @param  free_on_exit free data structures before returning (optimization)
   @return 0 for successful sorting, negative on errors
 
   @discussion It may create multiple temporary subalignment files
@@ -1629,7 +1630,8 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
 int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
                       const char *fnout, const char *modeout,
                       size_t _max_mem, int n_threads,
-                      const htsFormat *in_fmt, const htsFormat *out_fmt)
+                      const htsFormat *in_fmt, const htsFormat *out_fmt,
+                      bool free_on_exit)
 {
     int ret = -1, i, n_files = 0;
     size_t mem, max_k, k, max_mem;
@@ -1714,10 +1716,14 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     ret = 0;
 
  err:
-    // free
-    for (k = 0; k < max_k; ++k) bam_destroy1(buf[k]);
-    free(buf);
-    bam_hdr_destroy(header);
+    // Free bam buffers before returning if requested. This can be an
+    // expensive operation, and can be avoided if the caller is exiting the
+    // program immediately afterwards.
+    if (free_on_exit) {
+        for (k = 0; k < max_k; ++k) bam_destroy1(buf[k]);
+        free(buf);
+        bam_hdr_destroy(header);
+    }
     sam_close(fp);
     return ret;
 }
@@ -1728,7 +1734,7 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
     int ret;
     char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
     sprintf(fnout, "%s.bam", prefix);
-    ret = bam_sort_core_ext(is_by_qname, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL);
+    ret = bam_sort_core_ext(is_by_qname, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL, true);
     free(fnout);
     return ret;
 }
@@ -1809,7 +1815,7 @@ int bam_sort(int argc, char *argv[])
 
     ret = bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-",
                             tmpprefix.s, fnout, modeout, max_mem, n_threads,
-                            &ga.in, &ga.out);
+                            &ga.in, &ga.out, false);
     if (ret >= 0)
         ret = EXIT_SUCCESS;
     else {
