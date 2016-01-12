@@ -458,6 +458,7 @@ sub test_faidx
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa");
     cmd("cat $$opts{tmp}/faidx.fa | $$opts{bgzip} -ci -I $$opts{tmp}/faidx.fa.gz.gzi > $$opts{tmp}/faidx.fa.gz");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa.gz");
+    cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa $$opts{tmp}/faidx.fa 1:1-104 && test -f $$opts{tmp}/output_faidx.fa");
 
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
     {
