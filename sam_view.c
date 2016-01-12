@@ -80,7 +80,9 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
                 qlen += bam_cigar_oplen(cigar[k]);
         if (qlen < settings->min_qlen) return 1;
     }
-    if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off) || ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
+    if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off))
+        return 1;
+    if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
         return 1;
     if (settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
         return 1;
