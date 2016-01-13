@@ -38,6 +38,19 @@ static void usage_quickcheck(FILE *write_to)
 "Options:\n"
 "  -v              verbose output (repeat for more verbosity)\n"
 "\n"
+"Notes:\n"
+"\n"
+"  1. In order to use this command effectively, you should check\n"
+"     its exit status (without any -v options it will NOT print\n"
+"     any output, even when files fail the check). One way to\n"
+"     use quickcheck might be as a check that all BAM files in\n"
+"     a directory are ok:\n"
+"     `samtools quickcheck *.bam && echo \"all ok\" \\\n"
+"         || echo \"fail!\"`\n"
+"     To also determine which files have failed, use the -v option:\n"
+"     `samtools quickcheck -v *.bam > bad_bams.fofn \\\n"
+"         && echo \"all ok\" \\\n"
+"         || echo \"some files failed check, see bad_bams.fofn\"`\n"
     );
 }
 
