@@ -44,11 +44,11 @@ static void usage_quickcheck(FILE *write_to)
 "     use quickcheck might be as a check that all BAM files in\n"
 "     a directory are ok:\n"
 "     `samtools quickcheck *.bam && echo \"all ok\" \\\n"
-"         || echo \"fail!\"\n"
+"         || echo \"fail!\"`\n"
 "     To also determine which files have failed, use the -v option:\n"
 "     `samtools quickcheck -v *.bam > bad_bams.fofn \\\n"
 "         && echo \"all ok\" \\\n"
-"         || echo \"some files failed check, see bad_bams.fofn\"\n"
+"         || echo \"some files failed check, see bad_bams.fofn\"`\n"
     );
 }
 
