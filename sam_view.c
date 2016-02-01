@@ -675,7 +675,10 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
     uint8_t *seq;
     uint8_t *qual = bam_get_qual(b);
     const uint8_t *oq = NULL;
-    if (state->use_oq) oq = bam_aux_get(b, "OQ") + 1;
+    if (state->use_oq) {
+        oq = bam_aux_get(b, "OQ");
+        if (oq) oq++; // skip tag type
+    }
     bool has_qual = (qual[0] != 0xff || (state->use_oq && oq)); // test if there is quality
 
     linebuf->l = 0;
