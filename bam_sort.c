@@ -1617,6 +1617,8 @@ typedef struct {
     int error;
 } worker_t;
 
+// Returns 0 for success
+//        -1 for failure
 static int write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf, const bam_hdr_t *h, int n_threads, const htsFormat *fmt)
 {
     size_t i;
@@ -1644,7 +1646,7 @@ static void *worker(void *data)
     name = (char*)calloc(strlen(w->prefix) + 20, 1);
     if (!name) return 0;
     sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-    w->error = write_buffer(name, "wb1", w->buf_len, w->buf, w->h, 0, NULL);
+    w->error = write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL);
 
 // Consider using CRAM temporary files if the final output is CRAM.
 // Typically it is comparable speed while being smaller.
@@ -1785,6 +1787,10 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     } else { // then merge
         char **fns;
         n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
+        if (n_files == -1) {
+            ret = -1;
+            goto err;
+        }
         fprintf(stderr, "[bam_sort_core] merging from %d files...\n", n_files);
         fns = (char**)calloc(n_files, sizeof(char*));
         for (i = 0; i < n_files; ++i) {
