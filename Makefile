@@ -27,7 +27,6 @@ CFLAGS   = -g -Wall -O2
 LDFLAGS  =
 LIBS     =
 
-DFLAGS=     -D_FILE_OFFSET_BITS=64 -D_LARGEFILE64_SOURCE
 LOBJS=      bam_aux.o bam.o bam_import.o sam.o \
             sam_header.o bam_plbuf.o
 AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
@@ -81,7 +80,7 @@ BUILT_TEST_PROGRAMS = \
 all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
 
 # TODO Use configure or htslib.pc to add -rdynamic/-ldl conditionally
-ALL_CPPFLAGS = $(DFLAGS) -I. $(HTSLIB_CPPFLAGS) $(CPPFLAGS)
+ALL_CPPFLAGS = -I. $(HTSLIB_CPPFLAGS) $(CPPFLAGS)
 ALL_LDFLAGS  = -rdynamic $(HTSLIB_LDFLAGS) $(LDFLAGS)
 ALL_LIBS     = -lz -ldl $(LIBS)
 
