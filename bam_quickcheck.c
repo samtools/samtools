@@ -123,7 +123,10 @@ int main_quickcheck(int argc, char** argv)
                 }
             }
 
-            hts_close(hts_fp);
+            if (hts_close(hts_fp) < 0) {
+                file_state |= 32;
+                if (verbose >= 2) fprintf(stderr, "%s did not close cleanly\n", fn);
+            }
         }
 
         if (file_state > 0 && verbose >= 1) {

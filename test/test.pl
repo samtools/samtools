@@ -2377,6 +2377,7 @@ sub test_quickcheck
         'quickcheck/2.quickcheck.badheader.bam',
         'quickcheck/3.quickcheck.ok.bam',
         'quickcheck/4.quickcheck.ok.bam',
+        'quickcheck/5.quickcheck.truncated.cram',
         );
 
     my $all_testfiles;
@@ -2385,10 +2386,12 @@ sub test_quickcheck
         $all_testfiles .= " $$opts{path}/$fn";
         test_cmd($opts, out => 'dat/empty.expected',
             want_fail => ($fn !~ /[.]ok[.]/),
+            expect_fail => ($fn =~ /truncated[.]cram/)? 1 : 0,
             cmd => "$$opts{bin}/samtools quickcheck $$opts{path}/$fn");
     }
 
     test_cmd($opts, out => 'quickcheck/all.expected', want_fail => 1,
+        expect_fail => 1, # due to 5.quickcheck.truncated.cram
         cmd => "$$opts{bin}/samtools quickcheck -v $all_testfiles | sed 's,.*/quickcheck/,,'");
 }
 
