@@ -25,6 +25,10 @@ INIT x $samtools view -S -C anomalous.sam > anomalous.cram
 INIT x $samtools view -S -b indels.sam > indels.bam  
 INIT x $samtools view -S -C indels.sam > indels.cram 
 INIT x gunzip -c expected/1.out.f3-6.gz | awk -v OFS='\t' '{print "CHROMOSOME_I", NR, $0}' > expected/1.out
+INIT x $samtools view -b -o xx#depth1.bam xx#depth1.sam
+INIT x $samtools view -b -o xx#depth2.bam xx#depth2.sam
+INIT x $samtools index xx#depth1.bam
+INIT x $samtools index xx#depth2.bam
 
 # Nasty file corner cases
 P 1.out $samtools mpileup -B -Q0 -x -f ce.fa ce#large_seq.bam 
@@ -32,8 +36,8 @@ P 2.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap.bam
 P 3.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap1.bam
 P 4.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap2.bam
 P 5.out $samtools mpileup -Q0 -x -f c1.fa c1#clip.bam
-P 6.out $samtools mpileup -Q0 -x -f c1.fa c1#pad1.bam
-P 7.out $samtools mpileup -Q0 -x -f c1.fa c1#pad2.bam
+F 6.out $samtools mpileup -Q0 -x -f c1.fa c1#pad1.bam
+F 7.out $samtools mpileup -Q0 -x -f c1.fa c1#pad2.bam
 
 # I'm not convinced this case is valid, but I also don't know if it's even
 # possible to encode this data in a pileup format output.
@@ -142,3 +146,27 @@ P 75.out $samtools mpileup -x -P LS454          -m 1 -u -f mpileup.ref.fa indels
 # Pileup output options; -s/O
 P 76.out $samtools mpileup -Q0 -s -x -f mpileup.ref.fa mpileup.1.bam
 P 77.out $samtools mpileup -Q0 -O -x -f mpileup.ref.fa mpileup.1.bam
+
+# -a and -aa.  See depth.reg too
+P a0.out  $samtools mpileup -Q40 -r 17:1-4200 -f mpileup.ref.fa -a mpileup.1.$fmt
+P a1.out  $samtools mpileup -ABQ0 -a  xx#depth1.sam
+P a2.out  $samtools mpileup -ABQ0 -a  xx#depth2.sam
+P a3.out  $samtools mpileup -ABQ0 -a  xx#depth1.sam xx#depth2.sam
+P a4.out  $samtools mpileup -ABQ0 -aa xx#depth1.sam
+P a5.out  $samtools mpileup -ABQ0 -aa xx#depth2.sam
+P a6.out  $samtools mpileup -ABQ0 -aa xx#depth1.sam xx#depth2.sam
+
+# -a with regions / bed
+P a8.out  $samtools mpileup -ABQ0 -a -r xx:5-16 xx#depth1.bam xx#depth2.bam
+P a9.out  $samtools mpileup -ABQ0 -a -l xx.bed  xx#depth1.bam xx#depth2.bam
+P a10.out $samtools mpileup -ABQ0 -a -r xx:8-13 xx#depth1.bam xx#depth2.bam
+P a11.out $samtools mpileup -ABQ0 -a -l xx.bed2 xx#depth1.bam xx#depth2.bam
+
+# -aa with regions/bed
+P a13.out $samtools mpileup -ABQ0 -a -a -r xx:5-16 xx#depth1.bam xx#depth2.bam
+P a14.out $samtools mpileup -ABQ0 -a -a -l xx.bed  xx#depth1.bam xx#depth2.bam
+
+# -a with additional columns (-s and -O)
+P a15.out $samtools mpileup -ABQ0 -a -s  xx#depth1.sam xx#depth2.sam
+P a16.out $samtools mpileup -ABQ0 -a -O  xx#depth1.sam xx#depth2.sam
+P a17.out $samtools mpileup -ABQ0 -a -sO xx#depth1.sam xx#depth2.sam

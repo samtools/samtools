@@ -37,3 +37,31 @@ P d3_12r2a.out $samtools depth -a -b xx.bed2 xx#depth1.bam xx#depth2.bam
 P d4_12.out  $samtools depth -a -a            xx#depth1.bam xx#depth2.bam
 P d4_12r.out $samtools depth -a -a -r xx:5-16 xx#depth1.bam xx#depth2.bam
 P d4_12b.out $samtools depth -a -a -b xx.bed  xx#depth1.bam xx#depth2.bam
+
+
+#-----------------------------------------------------------------------------
+# With mpileup simulation of depth
+# This is a useful check that depth vs mpileup have the the same -a, -aa, -r
+# and -b / -l semantics.
+
+# Test basic 1 and 2 file outputs
+P d1_1.out  $samtools mpileup -ABQ0 xx#depth1.sam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]"'
+P d1_2.out  $samtools mpileup -ABQ0 xx#depth2.sam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]"'
+P d1_12.out $samtools mpileup -ABQ0 xx#depth1.sam xx#depth2.sam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+
+# Regions via -r or bed
+P d1_12.out  $samtools mpileup -ABQ0 -r xx:5-16 xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+P d1_12.out  $samtools mpileup -ABQ0 -l xx.bed  xx#depth1.sam xx#depth2.sam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+P d2_12r.out $samtools mpileup -ABQ0 -r xx:8-13 xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+P d2_12r.out $samtools mpileup -ABQ0 -l xx.bed2 xx#depth1.sam xx#depth2.sam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+
+# With single -a for all (in used refs)
+P d3_12r1a.out $samtools mpileup -ABQ0 -a -r xx:5-16 xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+P d3_12r1a.out $samtools mpileup -ABQ0 -a -l xx.bed  xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+P d3_12r2a.out $samtools mpileup -ABQ0 -a -r xx:8-13 xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+P d3_12r2a.out $samtools mpileup -ABQ0 -a -l xx.bed2 xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+
+# With double -a for all including unused refs
+P d4_12.out  $samtools mpileup -ABQ0 -a -a            xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+P d4_12r.out $samtools mpileup -ABQ0 -a -a -r xx:5-16 xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+P d4_12b.out $samtools mpileup -ABQ0 -a -a -l xx.bed  xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
