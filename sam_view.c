@@ -98,7 +98,7 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     }
     if (settings->library) {
         const char *p = bam_get_library((bam_hdr_t*)h, b);
-        if (p && strcmp(p, settings->library) != 0) return 1;
+        if (!p || strcmp(p, settings->library) != 0) return 1;
     }
     if (settings->remove_aux_len) {
         size_t i;
