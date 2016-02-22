@@ -595,12 +595,13 @@ static int usage(int is_long_help)
     sam_global_opt_help(stderr, "-...-");
 
     if (is_long_help)
-        fprintf(stderr, "Notes:\n\
-\n\
-  1. Requires embedded reference sequences (before the reads for that reference),\n\
-     or ideally a FASTA file of the padded reference sequences (via the -T argument).\n\
-\n\
-  2. The input padded alignment read's CIGAR strings must not use P or I operators.\n\
-\n");
+        fprintf(stderr,
+"Notes:\n"
+"\n"
+"1. Requires embedded reference sequences (before the reads for that reference),\n"
+"   or ideally a FASTA file of the padded reference sequences (via a -T option).\n"
+"\n"
+"2. Input padded alignment reads' CIGAR strings must not use P or I operators.\n"
+"\n");
     return 1;
 }
