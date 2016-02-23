@@ -1363,7 +1363,7 @@ static void merge_usage(FILE *to)
 "Usage: samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> [<in2.bam> ... <inN.bam>]\n"
 "\n"
 "Options:\n"
-"  -n         Sort by read names\n"
+"  -n         Input files are sorted by read name\n"
 "  -r         Attach RG tag (inferred from file names)\n"
 "  -u         Uncompressed BAM output\n"
 "  -f         Overwrite the output BAM if exist\n"
