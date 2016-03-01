@@ -39,5 +39,5 @@ before_script:
   - (cd htslib && autoreconf -fi -I .)
 
 script:
-  - (cd htslib && make -e)
+  - (cd htslib && ./configure && make -e)
   - make -e && make -e test
