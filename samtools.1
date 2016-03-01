@@ -1712,6 +1712,10 @@ rb l .
 0x1000	SAM_RGAUX
 .TE
 .TP
+.BI name_prefix= string
+CRAM decode only; defaults to output filename.  Any sequences with
+auto-generated read names will use \fIstring\fR as the name prefix.
+.TP
 .BI multi_seq_per_slice= 0|1
 CRAM encode only; defaults to 0 (off).  By default CRAM generates one
 container per reference sequence, except in the case of many small
@@ -1740,6 +1744,20 @@ having requiring an external copy of the reference sequence.
 CRAM encode only; defaults to 0 (off).  If 1, sequences will be stored
 verbatim with no reference encoding.  This can be useful if no
 reference is available for the file.
+.TP
+.BI use_bzip2= 0|1
+CRAM encode only; defaults to 0 (off).  Permits use of bzip2 in CRAM
+block compression.
+.TP
+.BI use_lzma= 0|1
+CRAM encode only; defaults to 0 (off).  Permits use of lzma in CRAM
+block compression.
+.TP
+.BI lossy_names= 0|1
+CRAM encode only; defaults to 0 (off).  If 1, templates with all
+members within the same CRAM slice will have their read names
+removed.  New names will be automatically generated during decoding.
+Also see the \fBname_prefix\fR option.
 .RE
 .PP
 For example:
