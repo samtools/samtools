@@ -1680,17 +1680,17 @@ It usually is not required for decoding except in the situation of the
 MD5 not being obtainable via the REF_PATH or REF_CACHE environment variables.
 .TP
 .BI decode_md= 0|1
-CRAM decode only; defaults to 1 (on).  CRAM does not typically store
+CRAM input only; defaults to 1 (on).  CRAM does not typically store
 MD and NM tags, preferring to generate them on the fly.  This option
 controls this behaviour.
 .TP
 .BI ignore_md5= 0|1
-CRAM decode only; defaults to 0 (off).  When enabled, md5 checksum
+CRAM input only; defaults to 0 (off).  When enabled, md5 checksum
 errors on the reference sequence and block checksum errors within CRAM
 are ignored.  Use of this option is strongly discouraged.
 .TP
 .BI required_fields= bit-field
-CRAM decode only; specifies which SAM columns need to be populated.
+CRAM input only; specifies which SAM columns need to be populated.
 By default all fields are used.  Limiting the decode to specific
 columns can have significant performance gains.  The bit-field is a
 numerical value constructed from the following table.
@@ -1713,48 +1713,48 @@ rb l .
 .TE
 .TP
 .BI name_prefix= string
-CRAM decode only; defaults to output filename.  Any sequences with
+CRAM input only; defaults to output filename.  Any sequences with
 auto-generated read names will use \fIstring\fR as the name prefix.
 .TP
 .BI multi_seq_per_slice= 0|1
-CRAM encode only; defaults to 0 (off).  By default CRAM generates one
+CRAM output only; defaults to 0 (off).  By default CRAM generates one
 container per reference sequence, except in the case of many small
 references (such as a fragmented assembly).
 .TP
 .BI version= major.minor
-CRAM encode only.  Specifies the CRAM version number.  Acceptable
+CRAM output only.  Specifies the CRAM version number.  Acceptable
 values are "2.1" and "3.0".
 .TP
 .BI seqs_per_slice= INT
-CRAM encode only; defaults to 10000.
+CRAM output only; defaults to 10000.
 .TP
 .BI slices_per_container= INT
-CRAM encode only; defaults to 1.  The effect of having multiple slices
+CRAM output only; defaults to 1.  The effect of having multiple slices
 per container is to share the compression header block between
 multiple slices.  This is unlikely to have any significant impact
 unless the number of sequences per slice is reduced.  (Together these
 two options control the granularity of random access.)
 .TP
 .BI embed_ref= 0|1
-CRAM encode only; defaults to 0 (off).  If 1, this will store portions
+CRAM output only; defaults to 0 (off).  If 1, this will store portions
 of the reference sequence in each slice, permitting decode without
 having requiring an external copy of the reference sequence.
 .TP
 .BI no_ref= 0|1
-CRAM encode only; defaults to 0 (off).  If 1, sequences will be stored
+CRAM output only; defaults to 0 (off).  If 1, sequences will be stored
 verbatim with no reference encoding.  This can be useful if no
 reference is available for the file.
 .TP
 .BI use_bzip2= 0|1
-CRAM encode only; defaults to 0 (off).  Permits use of bzip2 in CRAM
+CRAM output only; defaults to 0 (off).  Permits use of bzip2 in CRAM
 block compression.
 .TP
 .BI use_lzma= 0|1
-CRAM encode only; defaults to 0 (off).  Permits use of lzma in CRAM
+CRAM output only; defaults to 0 (off).  Permits use of lzma in CRAM
 block compression.
 .TP
 .BI lossy_names= 0|1
-CRAM encode only; defaults to 0 (off).  If 1, templates with all
+CRAM output only; defaults to 0 (off).  If 1, templates with all
 members within the same CRAM slice will have their read names
 removed.  New names will be automatically generated during decoding.
 Also see the \fBname_prefix\fR option.
