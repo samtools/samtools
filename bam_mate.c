@@ -156,9 +156,27 @@ static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
         return false;
 }
 
-static void sync_mq(bam1_t* src, bam1_t* dest)
+static void bam_format_cigar(const bam1_t* b, kstring_t* str)
+{
+    // An empty cigar is a special case return "*" rather than ""
+    if (b->core.n_cigar == 0) {
+        kputc('*', str);
+        return;
+    }
+
+    const uint32_t *cigar = bam_get_cigar(b);
+    uint16_t i;
+
+    for (i = 0; i < b->core.n_cigar; ++i) {
+        kputw(bam_cigar_oplen(cigar[i]), str);
+        kputc(bam_cigar_opchr(cigar[i]), str);
+    }
+}
+
+static void sync_mq_mc(bam1_t* src, bam1_t* dest)
 {
     if ( (src->core.flag & BAM_FUNMAP) == 0 ) { // If mapped
+        // Copy Mate Mapping Quality
         uint32_t mq = src->core.qual;
         uint8_t* data;
         if ((data = bam_aux_get(dest,"MQ")) != NULL) {
@@ -166,6 +184,20 @@ static void sync_mq(bam1_t* src, bam1_t* dest)
         }
 
         bam_aux_append(dest, "MQ", 'i', sizeof(uint32_t), (uint8_t*)&mq);
+    }
+    // Copy mate cigar if either read is mapped
+    if ( (src->core.flag & BAM_FUNMAP) == 0 || (dest->core.flag & BAM_FUNMAP) == 0 ) {
+        uint8_t* data_mc;
+        if ((data_mc = bam_aux_get(dest,"MC")) != NULL) {
+            bam_aux_del(dest, data_mc);
+        }
+
+        // Convert cigar to string
+        kstring_t mc = { 0, 0, NULL };
+        bam_format_cigar(src, &mc);
+
+        bam_aux_append(dest, "MC", 'Z', ks_len(&mc)+1, (uint8_t*)ks_str(&mc));
+        free(mc.s);
     }
 }
 
@@ -176,8 +208,8 @@ static void sync_mate(bam1_t* a, bam1_t* b)
     sync_unmapped_pos_inner(b,a);
     sync_mate_inner(a,b);
     sync_mate_inner(b,a);
-    sync_mq(a,b);
-    sync_mq(b,a);
+    sync_mq_mc(a,b);
+    sync_mq_mc(b,a);
 }
 
 // currently, this function ONLY works if each read has one hit
