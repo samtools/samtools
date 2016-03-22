@@ -42,7 +42,8 @@ void setup_test_1(bam_hdr_t** hdr_in)
 bool check_test_1(const bam_hdr_t* hdr) {
     const char *test1_res =
     "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n";
+    "@SQ\tSN:blah\n"
+    "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
 
     if (strcmp(hdr->text, test1_res)) {
         return false;
@@ -65,7 +66,8 @@ bool check_test_2(const bam_hdr_t* hdr) {
     const char *test2_res =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\n"
-    "@RG\tID:fish\n";
+    "@RG\tID:fish\n"
+    "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
 
     if (strcmp(hdr->text, test2_res)) {
         return false;
@@ -73,7 +75,7 @@ bool check_test_2(const bam_hdr_t* hdr) {
     return true;
 }
 
-int main(int argc, char**argv)
+int main(int argc, char *argv[])
 {
     // test state
     const int NUM_TESTS = 2;
@@ -82,6 +84,8 @@ int main(int argc, char**argv)
     int failure = 0;
 
     int getopt_char;
+    char *test_argv[] = { "test_filter_header_rg", "foo\tbar", "baz" };
+    char *arg_list = stringify_argv(3, test_argv);
     while ((getopt_char = getopt(argc, argv, "v")) != -1) {
         switch (getopt_char) {
             case 'v':
@@ -116,7 +120,7 @@ int main(int argc, char**argv)
 
     // test
     xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
-    bool result_1 = filter_header_rg(hdr1, id_to_keep_1);
+    bool result_1 = filter_header_rg(hdr1, id_to_keep_1, arg_list);
     fclose(stderr);
 
     if (verbose) printf("END RUN test 1\n");
@@ -155,7 +159,7 @@ int main(int argc, char**argv)
 
     // test
     xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
-    bool result_2 = filter_header_rg(hdr2, id_to_keep_2);
+    bool result_2 = filter_header_rg(hdr2, id_to_keep_2, arg_list);
     fclose(stderr);
 
     if (verbose) printf("END RUN test 2\n");
@@ -185,6 +189,7 @@ int main(int argc, char**argv)
 
     // Cleanup
     free(res.s);
+    free(arg_list);
     remove(tempfname);
     if (failure > 0)
         fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
