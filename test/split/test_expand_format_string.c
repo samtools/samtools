@@ -28,6 +28,12 @@ DEALINGS IN THE SOFTWARE.  */
 #include "../test.h"
 #include <stdlib.h>
 #include <unistd.h>
+#include "version.h"
+
+const char *samtools_version(void)
+{
+    return SAMTOOLS_VERSION;
+}
 
 void setup_test_1(bam_hdr_t** hdr_in)
 {
