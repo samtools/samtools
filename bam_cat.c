@@ -45,6 +45,7 @@ Illumina.
 #include "htslib/sam.h"
 #include "htslib/cram.h"
 #include "htslib/khash.h"
+#include "samtools.h"
 
 KHASH_MAP_INIT_STR(s2i, int)
 
@@ -197,7 +198,7 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const bam_hdr_t 
 
         in = sam_open(fn[i], "rc");
         if (in == 0) {
-            fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
+            print_error_errno("cat", "fail to open file '%s'", fn[i]);
             return NULL;
         }
         in_c = in->fp.cram;
@@ -304,7 +305,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     sprintf(vers, "%d.%d", vers_maj, vers_min);
     out = sam_open(outcram, "wc");
     if (out == 0) {
-        fprintf(stderr, "[%s] ERROR: fail to open output file '%s'.\n", __func__, outcram);
+        print_error_errno("cat", "fail to open output file '%s'", outcram);
         return 1;
     }
     out_c = out->fp.cram;
@@ -313,7 +314,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
 
     cram_fd_set_header(out_c, sam_hdr_parse_(new_h->text,  new_h->l_text)); // needed?
     if (sam_hdr_write(out, new_h) < 0) {
-        fprintf(stderr, "[%s] Couldn't write header\n", __func__);
+        print_error_errno("cat", "Couldn't write header");
         return 1;
     }
 
@@ -326,7 +327,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
 
         in = sam_open(fn[i], "rc");
         if (in == 0) {
-            fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
+            print_error_errno("cat", "fail to open file '%s'", fn[i]);
             return -1;
         }
         in_c = in->fp.cram;
@@ -427,12 +428,12 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
 
     fp = strcmp(outbam, "-")? bgzf_open(outbam, "w") : bgzf_fdopen(fileno(stdout), "w");
     if (fp == 0) {
-        fprintf(stderr, "[%s] ERROR: fail to open output file '%s'.\n", __func__, outbam);
+        print_error_errno("cat", "fail to open output file '%s'", outbam);
         return 1;
     }
     if (h) {
         if (bam_hdr_write(fp, h) < 0) {
-            fprintf(stderr, "[%s] Couldn't write header\n", __func__);
+            print_error_errno("cat", "Couldn't write header");
             goto fail;
         }
     }
@@ -448,7 +449,7 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
 
         in = strcmp(fn[i], "-")? bgzf_open(fn[i], "r") : bgzf_fdopen(fileno(stdin), "r");
         if (in == 0) {
-            fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
+            print_error_errno("cat", "fail to open file '%s'", fn[i]);
             goto fail;
         }
         if (in->is_write) return -1;
@@ -461,7 +462,7 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
         }
         if (h == 0 && i == 0) {
             if (bam_hdr_write(fp, old) < 0) {
-                fprintf(stderr, "[%s] Couldn't write header\n", __func__);
+                print_error_errno("cat", "Couldn't write header");
                 goto fail;
             }
         }
@@ -561,7 +562,7 @@ int main_cat(int argc, char *argv[])
 
     in = sam_open(argv[optind], "r");
     if (!in) {
-        fprintf(stderr, "[%s] ERROR: failed to open file '%s'.\n", __func__, argv[optind]);
+        print_error_errno("cat", "failed to open file '%s'", argv[optind]);
         return 1;
     }
 

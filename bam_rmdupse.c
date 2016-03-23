@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
+#include "samtools.h"
 
 #define QUEUE_CLEAR_SIZE 0x100000
 #define MAX_POS 0x7fffffff
@@ -206,7 +207,7 @@ int bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se)
     return 0;
 
  write_fail:
-    fprintf(stderr, "[%s] failed to write record\n", __func__);
+    print_error_errno("rmdup", "failed to write record");
  fail:
     if (aux) {
         for (k = kh_begin(aux); k != kh_end(aux); ++k) {

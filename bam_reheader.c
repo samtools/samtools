@@ -61,7 +61,7 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
     }
     fp = bgzf_fdopen(fd, "w");
     if (!fp) {
-        fprintf(stderr, "[%s] Couldn't open output file\n", __func__);
+        print_error_errno("reheader", "Couldn't open output file");
         goto fail;
     }
 
@@ -87,7 +87,7 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
     }
 
     if (bam_hdr_write(fp, h) < 0) {
-        fprintf(stderr, "[%s] Couldn't write header\n", __func__);
+        print_error_errno("reheader", "Couldn't write header");
         goto fail;
     }
     if (in->block_offset < in->block_length) {
@@ -110,7 +110,7 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
     return 0;
 
  write_fail:
-    fprintf(stderr, "[%s] Error writing to output file\n", __func__);
+    print_error_errno("reheader", "Error writing to output file");
  fail:
     bgzf_close(fp);
     free(buf);
@@ -477,7 +477,7 @@ int main_reheader(int argc, char *argv[])
     { // read the header
         samFile *fph = sam_open(argv[optind], "r");
         if (fph == 0) {
-            fprintf(stderr, "[%s] fail to read the header from %s.\n", __func__, argv[optind]);
+            print_error_errno("reheader", "fail to read the header from '%s'", argv[optind]);
             return 1;
         }
         h = sam_hdr_read(fph);
@@ -490,7 +490,7 @@ int main_reheader(int argc, char *argv[])
     }
     in = sam_open(argv[optind+1], inplace?"r+":"r");
     if (in == 0) {
-        fprintf(stderr, "[%s] fail to open file %s.\n", __func__, argv[optind+1]);
+        print_error_errno("reheader", "fail to open file '%s'", argv[optind+1]);
         return 1;
     }
     if (hts_get_format(in)->format == bam) {

@@ -120,7 +120,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
             goto fail;
         }
         if (sam_hdr_write(fpt[i], h) < 0) {
-            fprintf(stderr, "Couldn't write header for '%s'\n", fnt[i]);
+            print_error_errno("collate", "Couldn't write header to intermediate file \"%s\"", fnt[i]);
             goto fail;
         }
     }
@@ -130,7 +130,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         uint32_t x;
         x = hash_X31_Wang(bam_get_qname(b)) % n_files;
         if (sam_write1(fpt[x], h, b) < 0) {
-            fprintf(stderr, "Couldn't write to '%s'\n", fnt[x]);
+            print_error_errno("collate", "Couldn't write to intermediate file \"%s\"", fnt[x]);
             goto fail;
         }
         ++cnt[x];
@@ -176,7 +176,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     }
 
     if (sam_hdr_write(fpw, h) < 0) {
-        fprintf(stderr, "Couldn't write header\n");
+        print_error_errno("collate", "Couldn't write header");
         goto fail;
     }
 
@@ -187,7 +187,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         int64_t j, c = cnt[i];
         fp = sam_open_format(fnt[i], "r", &ga->in);
         if (NULL == fp) {
-            fprintf(stderr, "Couldn't open '%s'\n", fnt[i]);
+            print_error_errno("collate", "Couldn't open \"%s\"", fnt[i]);
             goto fail;
         }
         bam_hdr_destroy(sam_hdr_read(fp)); // Skip over header
@@ -215,7 +215,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         // Write them out again
         for (j = 0; j < c; ++j) {
             if (sam_write1(fpw, h, a[j].b) < 0) {
-                fprintf(stderr, "Error writing to output\n");
+                print_error_errno("collate", "Error writing to output");
                 goto fail;
             }
             bam_destroy1(a[j].b);

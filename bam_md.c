@@ -35,6 +35,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "kprobaln.h"
 #include "sam_opts.h"
+#include "samtools.h"
 
 #define USE_EQUAL 1
 #define DROP_TAG  2
@@ -394,8 +395,7 @@ int bam_fillmd(int argc, char *argv[])
         return calmd_usage();
     fp = sam_open_format(argv[optind], "r", &ga.in);
     if (fp == NULL) {
-        fprintf(stderr,
-                "[bam_fillmd] Failed to open input file '%s'\n", argv[optind]);
+        print_error_errno("calmd", "Failed to open input file '%s'", argv[optind]);
         return 1;
     }
 
@@ -407,11 +407,11 @@ int bam_fillmd(int argc, char *argv[])
 
     fpout = sam_open_format("-", mode_w, &ga.out);
     if (fpout == NULL) {
-        fprintf(stderr, "[bam_fillmd] Failed to open output\n");
+        print_error_errno("calmd", "Failed to open output");
         goto fail;
     }
     if (sam_hdr_write(fpout, header) < 0) {
-        fprintf(stderr, "[bam_fillmd] Failed to write sam header\n");
+        print_error_errno("calmd", "Failed to write sam header");
         goto fail;
     }
 
@@ -419,7 +419,7 @@ int bam_fillmd(int argc, char *argv[])
     fai = fai_load(ref_file);
 
     if (!fai) {
-        perror(ref_file);
+        print_error_errno("calmd", "Failed to open reference file '%s'", ref_file);
         goto fail;
     }
 
@@ -448,7 +448,7 @@ int bam_fillmd(int argc, char *argv[])
             if (ref) bam_fillmd1_core(b, ref, len, flt_flag, max_nm);
         }
         if (sam_write1(fpout, header, b) < 0) {
-            fprintf(stderr, "[bam_fillmd] failed to write to output file\n");
+            print_error_errno("calmd", "failed to write to output file");
             goto fail;
         }
     }

@@ -35,6 +35,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "errmod.h"
 #include "sam_opts.h"
+#include "samtools.h"
 
 #include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
@@ -366,8 +367,7 @@ static int dump_aln(phaseg_t *g, int min_pos, const nseq_t *hash)
         }
         if (which == 3) which = (drand48() < 0.5);
         if (sam_write1(g->out[which], g->out_hdr[which], b) < 0) {
-            fprintf(stderr, "[%s] error writing to '%s'\n",
-                    __func__, g->out_name[which]);
+            print_error_errno("phase", "error writing to '%s'", g->out_name[which]);
             return -1;
         }
         bam_destroy1(b);
@@ -604,7 +604,7 @@ int main_phase(int argc, char *argv[])
     }
     g.fp = sam_open_format(argv[optind], "r", &ga.in);
     if (!g.fp) {
-        fprintf(stderr, "[%s] Couldn't open '%s'\n", __func__, argv[optind]);
+        print_error_errno("phase", "Couldn't open '%s'", argv[optind]);
         return 1;
     }
     g.fp_hdr = sam_hdr_read(g.fp);
@@ -630,14 +630,12 @@ int main_phase(int argc, char *argv[])
             g.out_name[c] = ks_release(&s);
             g.out[c] = sam_open_format(g.out_name[c], "wb", &ga.out);
             if (NULL == g.out[c]) {
-                fprintf(stderr, "[%s] Failed to open output file '%s'\n",
-                        __func__, g.out_name[c]);
+                print_error_errno("phase", "Failed to open output file '%s'", g.out_name[c]);
                 return 1;
             }
             g.out_hdr[c] = bam_hdr_dup(g.fp_hdr);
             if (sam_hdr_write(g.out[c], g.out_hdr[c]) < 0) {
-                fprintf(stderr, "[%s] Failed to write header for '%s'\n",
-                        __func__, g.out_name[c]);
+                print_error_errno("phase", "Failed to write header for '%s'", g.out_name[c]);
                 return 1;
             }
         }

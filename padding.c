@@ -34,6 +34,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/faidx.h>
 #include "sam_header.h"
 #include "sam_opts.h"
+#include "samtools.h"
 
 #define bam_reg2bin(b,e) hts_reg2bin((b),(e), 14, 5)
 
@@ -364,7 +365,7 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
 
     next_seq:
         if (sam_write1(out, h, b) < 0) {
-            fprintf(stderr, "[depad] error writing to output.\n");
+            print_error_errno("depad", "error writing to output");
             return -1;
         }
     }
@@ -534,7 +535,7 @@ int main_pad2unpad(int argc, char *argv[])
     }
     // open file handlers
     if ((in = sam_open_format(argv[optind], in_mode, &ga.in)) == 0) {
-        fprintf(stderr, "[depad] failed to open \"%s\" for reading.\n", argv[optind]);
+        print_error_errno("depad", "failed to open \"%s\" for reading", argv[optind]);
         ret = 1;
         goto depad_end;
     }
@@ -557,7 +558,7 @@ int main_pad2unpad(int argc, char *argv[])
     char wmode[2];
     strcat(out_mode, sam_open_mode(wmode, fn_out, NULL)==0 ? wmode : "b");
     if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
-        fprintf(stderr, "[depad] failed to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
+        print_error_errno("depad", "failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
         ret = 1;
         goto depad_end;
     }

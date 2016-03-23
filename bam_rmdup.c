@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include "htslib/sam.h"
 #include "sam_opts.h"
+#include "samtools.h"
 #include "bam.h" // for bam_get_library
 
 typedef bam1_t *bam1_p;
@@ -227,7 +228,7 @@ int bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
     return 0;
 
  write_fail:
-    fprintf(stderr, "[%s] failed to write record\n", __func__);
+    print_error_errno("rmdup", "failed to write record");
  fail:
     clear_stack(&stack);
     free(stack.a);
@@ -288,7 +289,7 @@ int bam_rmdup(int argc, char *argv[])
 
     in = sam_open_format(argv[optind], "r", &ga.in);
     if (!in) {
-        fprintf(stderr, "[bam_rmdup] failed to open input file\n");
+        print_error_errno("rmdup", "failed to open \"%s\" for input", argv[optind]);
         return 1;
     }
     header = sam_hdr_read(in);
@@ -300,11 +301,11 @@ int bam_rmdup(int argc, char *argv[])
     sam_open_mode(wmode+1, argv[optind+1], NULL);
     out = sam_open_format(argv[optind+1], wmode, &ga.out);
     if (!out) {
-        fprintf(stderr, "[bam_rmdup] failed to open output file\n");
+        print_error_errno("rmdup", "failed to open \"%s\" for output", argv[optind+1]);
         return 1;
     }
     if (sam_hdr_write(out, header) < 0) {
-        fprintf(stderr, "[bam_rmdup] failed to write header\n");
+        print_error_errno("rmdup", "failed to write header");
         return 1;
     }
 

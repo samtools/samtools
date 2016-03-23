@@ -34,6 +34,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "sam_opts.h"
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
+#include "samtools.h"
 
 /*
  * This function calculates ct tag for two bams, it assumes they are from the same template and
@@ -309,7 +310,7 @@ static int bam_mating_core(samFile* in, samFile* out, int remove_reads, int prop
     return 0;
 
  write_fail:
-    fprintf(stderr, "[bam_mating_core] ERROR: Couldn't write to output file\n");
+    print_error_errno("fixmate", "Couldn't write to output file");
  fail:
     bam_hdr_destroy(header);
     bam_destroy1(b[0]);
@@ -362,12 +363,12 @@ int bam_mating(int argc, char *argv[])
 
     // init
     if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {
-        fprintf(stderr, "[bam_mating] cannot open input file\n");
+        print_error_errno("fixmate", "cannot open input file");
         goto fail;
     }
     sam_open_mode(wmode+1, argv[optind+1], NULL);
     if ((out = sam_open_format(argv[optind+1], wmode, &ga.out)) == NULL) {
-        fprintf(stderr, "[bam_mating] cannot open output file\n");
+        print_error_errno("fixmate", "cannot open output file");
         goto fail;
     }
 

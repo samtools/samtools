@@ -152,19 +152,19 @@ bam2bcf_indel.o: bam2bcf_indel.c config.h $(htslib_sam_h) $(bam2bcf_h) kprobaln.
 bam2depth.o: bam2depth.c config.h $(htslib_sam_h) samtools.h $(sam_opts_h)
 bam_addrprg.o: bam_addrprg.c config.h $(htslib_sam_h) $(htslib_kstring_h) samtools.h $(sam_opts_h)
 bam_aux.o: bam_aux.c config.h $(bam_h)
-bam_cat.o: bam_cat.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_khash_h)
+bam_cat.o: bam_cat.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_khash_h) samtools.h
 bam_color.o: bam_color.c config.h $(bam_h)
 bam_import.o: bam_import.c config.h $(htslib_kstring_h) $(bam_h) $(htslib_kseq_h)
 bam_index.o: bam_index.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_khash_h) samtools.h
 bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) $(htslib_ksort_h)
-bam_mate.o: bam_mate.c config.h $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h)
-bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) kprobaln.h $(sam_opts_h)
+bam_mate.o: bam_mate.c config.h $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h) samtools.h
+bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) kprobaln.h $(sam_opts_h) samtools.h
 bam_plbuf.o: bam_plbuf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
 bam_plcmd.o: bam_plcmd.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_khash_str2int_h) sam_header.h samtools.h $(sam_opts_h) $(bam2bcf_h) $(sample_h)
 bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_bgzf_h)
 bam_reheader.o: bam_reheader.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) samtools.h
-bam_rmdup.o: bam_rmdup.c config.h $(htslib_sam_h) $(sam_opts_h) $(bam_h) $(htslib_khash_h)
-bam_rmdupse.o: bam_rmdupse.c config.h $(bam_h) $(htslib_sam_h) $(htslib_khash_h) $(htslib_klist_h)
+bam_rmdup.o: bam_rmdup.c config.h $(htslib_sam_h) $(sam_opts_h) samtools.h $(bam_h) $(htslib_khash_h)
+bam_rmdupse.o: bam_rmdupse.c config.h $(bam_h) $(htslib_sam_h) $(htslib_khash_h) $(htslib_klist_h) samtools.h
 bam_sort.o: bam_sort.c config.h $(htslib_ksort_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_sam_h) $(sam_opts_h)
 bam_split.o: bam_split.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(sam_opts_h)
 bam_stat.o: bam_stat.c config.h $(htslib_sam_h) samtools.h
@@ -181,8 +181,8 @@ dict.o: dict.c config.h $(htslib_kseq_h) $(htslib_hts_h)
 errmod.o: errmod.c config.h errmod.h $(htslib_ksort_h)
 faidx.o: faidx.c config.h $(htslib_faidx_h)
 kprobaln.o: kprobaln.c config.h kprobaln.h
-padding.o: padding.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_faidx_h) sam_header.h $(sam_opts_h)
-phase.o: phase.c config.h $(htslib_sam_h) $(htslib_kstring_h) errmod.h $(sam_opts_h) $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
+padding.o: padding.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_faidx_h) sam_header.h $(sam_opts_h) samtools.h
+phase.o: phase.c config.h $(htslib_sam_h) $(htslib_kstring_h) errmod.h $(sam_opts_h) samtools.h $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
 sam.o: sam.c config.h $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c config.h sam_header.h $(htslib_khash_h)
 sam_opts.o: sam_opts.c config.h $(sam_opts_h)
