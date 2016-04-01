@@ -403,10 +403,10 @@ int main_samview(int argc, char *argv[])
         }
         if (fn_un_out) {
                 if ((un_out = sam_open_format(fn_un_out, out_un_mode, &ga.out)) == 0) {
-                print_error_errno("view", "failed to open \"%s\" for writing", fn_un_out);
-                ret = 1;
-                goto view_end;
-            }
+                    print_error_errno("view", "failed to open \"%s\" for writing", fn_un_out);
+                    ret = 1;
+                    goto view_end;
+                }
                 if (fn_list) {
                     if (hts_set_fai_filename(un_out, fn_list) != 0) {
                         fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
