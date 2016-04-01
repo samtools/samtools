@@ -406,7 +406,7 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
     hdr_match_t *new_sq_matches = NULL;
     char *text;
     hdr_match_t matches[2];
-    int32_t i, missing;
+    int32_t i;
     int32_t old_n_targets = merged_hdr->n_targets;
     khiter_t iter;
     int min_tid = -1;
@@ -504,20 +504,20 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
         text += matches[0].rm_eo;
     }
 
-    // Check if any new targets have been missed
-    missing = 0;
+    // Copy the @SQ headers found and recreate any missing from binary header.
     for (i = 0; i < merged_hdr->n_targets - old_n_targets; i++) {
         if (new_sq_matches[i].rm_so >= 0) {
             if (match_to_ks(translate->text, &new_sq_matches[i], out_text))
                 goto memfail;
             if (kputc('\n', out_text) == EOF) goto memfail;
         } else {
-            fprintf(stderr, "[E::%s] @SQ SN (%s) found in binary header but not text header.\n",
-                    __func__, merged_hdr->target_name[i + old_n_targets]);
-            missing++;
+            if (kputs("@SQ\tSN:", out_text) == EOF ||
+                kputs(merged_hdr->target_name[i + old_n_targets], out_text) == EOF ||
+                kputs("\tLN:", out_text) == EOF ||
+                kputuw(merged_hdr->target_len[i + old_n_targets], out_text) == EOF ||
+                kputc('\n', out_text) == EOF) goto memfail;
         }
     }
-    if (missing) goto fail;
 
     free(new_sq_matches);
     return 0;
