@@ -205,10 +205,7 @@ static int bam_mating_core(samFile* in, samFile* out, int remove_reads, int prop
             goto fail;
         }
     }
-    if (sam_hdr_write(out, header) < 0) {
-        fprintf(stderr, "[bam_mating_core] ERROR: Couldn't write header\n");
-        goto fail;
-    }
+    if (sam_hdr_write(out, header) < 0) goto write_fail;
 
     b[0] = bam_init1();
     b[1] = bam_init1();

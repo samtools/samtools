@@ -1401,7 +1401,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
         free(RG_len);
     }
     for (i = 0; i < n; ++i) {
-        if (translation_tbl) trans_tbl_destroy(translation_tbl + i);
+        if (translation_tbl && translation_tbl[i].tid_trans) trans_tbl_destroy(translation_tbl + i);
         if (iter && iter[i]) hts_itr_destroy(iter[i]);
         if (hdr && hdr[i]) bam_hdr_destroy(hdr[i]);
         if (fp && fp[i]) sam_close(fp[i]);

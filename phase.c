@@ -545,6 +545,26 @@ static int gl2cns(float q[16])
     return (min_ij>>2&3) == (min_ij&3)? 0 : 1<<18 | (min_ij>>2&3)<<16 | (min_ij&3) | (int)(min2 - min + .499) << 2;
 }
 
+static int start_output(phaseg_t *g, int c, const char *middle, const htsFormat *fmt)
+{
+    kstring_t s = { 0, 0, NULL };
+    ksprintf(&s, "%s.%s.%s", g->pre, middle, hts_format_file_extension(fmt));
+    g->out_name[c] = ks_release(&s);
+    g->out[c] = sam_open_format(g->out_name[c], "wb", fmt);
+    if (! g->out[c]) {
+        print_error_errno("phase", "Failed to open output file '%s'", g->out_name[c]);
+        return -1;
+    }
+
+    g->out_hdr[c] = bam_hdr_dup(g->fp_hdr);
+    if (sam_hdr_write(g->out[c], g->out_hdr[c]) < 0) {
+        print_error_errno("phase", "Failed to write header for '%s'", g->out_name[c]);
+        return -1;
+    }
+
+    return 0;
+}
+
 int main_phase(int argc, char *argv[])
 {
     int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0, usage = 0;
@@ -563,6 +583,8 @@ int main_phase(int argc, char *argv[])
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0),
         { NULL, 0, NULL, 0 }
     };
+
+    // FIXME Leaks galore in the case of error returns
 
     memset(&g, 0, sizeof(phaseg_t));
     g.flag = FLAG_FIX_CHIMERA;
@@ -618,27 +640,13 @@ int main_phase(int argc, char *argv[])
         free(fn_list);
     } else g.flag &= ~FLAG_LIST_EXCL;
     if (g.pre) { // open BAMs to write
-        char *middles[3] = { ".0.", ".1.", ".chimera." };
-
         if (ga.out.format == unknown_format)
             ga.out.format = bam; // default via "wb".
 
-        for (c = 0; c <= 2; ++c) {
-            kstring_t s = { 0, 0, NULL };
-            ksprintf(&s, "%s%s%s",
-                     g.pre, middles[c], hts_format_file_extension(&ga.out));
-            g.out_name[c] = ks_release(&s);
-            g.out[c] = sam_open_format(g.out_name[c], "wb", &ga.out);
-            if (NULL == g.out[c]) {
-                print_error_errno("phase", "Failed to open output file '%s'", g.out_name[c]);
-                return 1;
-            }
-            g.out_hdr[c] = bam_hdr_dup(g.fp_hdr);
-            if (sam_hdr_write(g.out[c], g.out_hdr[c]) < 0) {
-                print_error_errno("phase", "Failed to write header for '%s'", g.out_name[c]);
-                return 1;
-            }
-        }
+        // Open each output file g.out[0..2], dupping and writing the header
+        if (start_output(&g, 0, "0", &ga.out) < 0 ||
+            start_output(&g, 1, "1", &ga.out) < 0 ||
+            start_output(&g, 2, "chimera", &ga.out) < 0) return 1;
     }
 
     iter = bam_plp_init(readaln, &g);
@@ -670,7 +678,7 @@ int main_phase(int argc, char *argv[])
                 seqs = shrink_hash(seqs);
                 if (phase(&g, g.fp_hdr->target_name[lasttid],
                           vpos, cns, seqs) < 0) {
-                    return -1;
+                    return 1;
                 }
                 update_vpos(0x7fffffff, seqs);
             }

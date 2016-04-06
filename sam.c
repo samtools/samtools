@@ -74,13 +74,11 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
         fp->is_write = 1;
         if (!(fmt == text_format || fmt == sam) || strchr(mode, 'h')) {
             if (sam_hdr_write(fp->file, fp->header) < 0) {
-                if (bam_verbose >= 1) {
+                if (bam_verbose >= 1)
                     fprintf(stderr, "[samopen] Couldn't write header\n");
-                    bam_hdr_destroy(fp->header);
-                    sam_close(hts_fp);
-                    free(fp);
-                    return NULL;
-                }
+                sam_close(hts_fp);
+                free(fp);
+                return NULL;
             }
         }
     }

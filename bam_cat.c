@@ -306,7 +306,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     out = sam_open(outcram, "wc");
     if (out == 0) {
         print_error_errno("cat", "fail to open output file '%s'", outcram);
-        return 1;
+        return -1;
     }
     out_c = out->fp.cram;
     cram_set_option(out_c, CRAM_OPT_VERSION, vers);
@@ -315,7 +315,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     cram_fd_set_header(out_c, sam_hdr_parse_(new_h->text,  new_h->l_text)); // needed?
     if (sam_hdr_write(out, new_h) < 0) {
         print_error_errno("cat", "Couldn't write header");
-        return 1;
+        return -1;
     }
 
     for (i = 0; i < nfn; ++i) {
@@ -429,7 +429,7 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
     fp = strcmp(outbam, "-")? bgzf_open(outbam, "w") : bgzf_fdopen(fileno(stdout), "w");
     if (fp == 0) {
         print_error_errno("cat", "fail to open output file '%s'", outbam);
-        return 1;
+        return -1;
     }
     if (h) {
         if (bam_hdr_write(fp, h) < 0) {
@@ -531,7 +531,7 @@ int main_cat(int argc, char *argv[])
 {
     bam_hdr_t *h = 0;
     char *outfn = 0;
-    int c, ret;
+    int c, ret = 0;
     samFile *in;
 
     while ((c = getopt(argc, argv, "h:o:")) >= 0) {
@@ -569,12 +569,14 @@ int main_cat(int argc, char *argv[])
     switch (hts_get_format(in)->format) {
     case bam:
         sam_close(in);
-        ret = bam_cat(argc - optind, argv + optind, h, outfn? outfn : "-");
+        if (bam_cat(argc - optind, argv + optind, h, outfn? outfn : "-") < 0)
+            ret = 1;
         break;
 
     case cram:
         sam_close(in);
-        ret = cram_cat(argc - optind, argv + optind, h, outfn? outfn : "-");
+        if (cram_cat(argc - optind, argv + optind, h, outfn? outfn : "-") < 0)
+            ret = 1;
         break;
 
     default:

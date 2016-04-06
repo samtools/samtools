@@ -264,7 +264,7 @@ static int rmdup_usage(void) {
 
 int bam_rmdup(int argc, char *argv[])
 {
-    int c, is_se = 0, force_se = 0;
+    int c, ret, is_se = 0, force_se = 0;
     samFile *in, *out;
     bam_hdr_t *header;
     char wmode[3] = {'w', 'b', 0};
@@ -309,16 +309,14 @@ int bam_rmdup(int argc, char *argv[])
         return 1;
     }
 
-    if (is_se) {
-        if (bam_rmdupse_core(in, header, out, force_se)) return 1;
-    } else {
-        if (bam_rmdup_core(in, header, out)) return 1;
-    }
+    if (is_se) ret = bam_rmdupse_core(in, header, out, force_se);
+    else ret = bam_rmdup_core(in, header, out);
+
     bam_hdr_destroy(header);
     sam_close(in);
     if (sam_close(out) < 0) {
         fprintf(stderr, "[bam_rmdup] error closing output file\n");
-        return 1;
+        ret = 1;
     }
-    return 0;
+    return ret;
 }

@@ -575,14 +575,14 @@ int main_pad2unpad(int argc, char *argv[])
     }
 
     // Do the depad
-    ret = bam_pad2unpad(in, out, h, fai);
+    if (bam_pad2unpad(in, out, h, fai) != 0) ret = 1;
 
 depad_end:
     // close files, free and return
     if (fai) fai_destroy(fai);
     if (h) bam_hdr_destroy(h);
-    sam_close(in);
-    if (sam_close(out) < 0) {
+    if (in) sam_close(in);
+    if (out && sam_close(out) < 0) {
         fprintf(stderr, "[depad] error on closing output file.\n");
         ret = 1;
     }

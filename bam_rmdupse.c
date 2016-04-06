@@ -111,7 +111,7 @@ static int dump_alignment(samFile *out, bam_hdr_t *hdr,
                 continue;
             }
             if ((q->b->core.flag&BAM_FREVERSE) && q->endpos > pos) break;
-            if (sam_write1(out, hdr, q->b) < 0) return 1;
+            if (sam_write1(out, hdr, q->b) < 0) return -1;
             q->b->l_data = 0;
             kl_shift(q, queue, 0);
         }
@@ -148,12 +148,13 @@ int bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se)
 
         if (last_tid != c->tid) {
             if (last_tid >= 0) {
-                if (dump_alignment(out, hdr, queue, MAX_POS, aux))
+                if (dump_alignment(out, hdr, queue, MAX_POS, aux) < 0)
                     goto write_fail;
             }
             last_tid = c->tid;
         } else {
-            if (dump_alignment(out, hdr, queue, c->pos, aux)) goto write_fail;
+            if (dump_alignment(out, hdr, queue, c->pos, aux) < 0)
+                goto write_fail;
         }
         if ((c->flag&BAM_FUNMAP) || ((c->flag&BAM_FPAIRED) && !force_se)) {
             push_queue(queue, b, endpos, score);
@@ -189,7 +190,7 @@ int bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se)
         goto fail;
     }
 
-    if (dump_alignment(out, hdr, queue, MAX_POS, aux)) goto write_fail;
+    if (dump_alignment(out, hdr, queue, MAX_POS, aux) < 0) goto write_fail;
 
     for (k = kh_begin(aux); k != kh_end(aux); ++k) {
         if (kh_exist(aux, k)) {

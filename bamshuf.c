@@ -84,9 +84,8 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     bam1_t *b = NULL;
     int i, l, r;
     bam_hdr_t *h = NULL;
-    int64_t *cnt = NULL;
+    int64_t j, max_cnt = 0, *cnt = NULL;
     elem_t *a = NULL;
-    int64_t a_size = 0, a_first = 0, a_last = 0;
 
     // Read input, distribute reads pseudo-randomly into n_files temporary
     // files.
@@ -151,7 +150,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         }
 
         // Find biggest count
-        if (a_size < cnt[i]) a_size = cnt[i];
+        if (max_cnt < cnt[i]) max_cnt = cnt[i];
     }
     free(fpt);
     fpt = NULL;
@@ -180,11 +179,15 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         goto fail;
     }
 
-    a = malloc(a_size * sizeof(elem_t));
+    a = malloc(max_cnt * sizeof(elem_t));
     if (!a) goto mem_fail;
+    for (j = 0; j < max_cnt; ++j) {
+        a[j].b = bam_init1();
+        if (!a[j].b) { max_cnt = j; goto mem_fail; }
+    }
 
     for (i = 0; i < n_files; ++i) {
-        int64_t j, c = cnt[i];
+        int64_t c = cnt[i];
         fp = sam_open_format(fnt[i], "r", &ga->in);
         if (NULL == fp) {
             print_error_errno("collate", "Couldn't open \"%s\"", fnt[i]);
@@ -192,13 +195,8 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         }
         bam_hdr_destroy(sam_hdr_read(fp)); // Skip over header
 
-        a_first = a_last = 0; // Track which bit of 'a' contains bam structs
-
         // Slurp in one of the split files
         for (j = 0; j < c; ++j) {
-            a[j].b = bam_init1();
-            if (!a[j].b) goto mem_fail;
-            a_last++;
             if (sam_read1(fp, h, a[j].b) < 0) {
                 fprintf(stderr, "Error reading '%s'\n", fnt[i]);
                 goto fail;
@@ -218,12 +216,11 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
                 print_error_errno("collate", "Error writing to output");
                 goto fail;
             }
-            bam_destroy1(a[j].b);
-            a_first++;
         }
     }
 
     bam_hdr_destroy(h);
+    for (j = 0; j < max_cnt; ++j) bam_destroy1(a[j].b);
     free(a); free(fnt); free(cnt);
     sam_global_args_free(ga);
     if (sam_close(fpw) < 0) {
@@ -246,10 +243,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         if (fpt && fpt[i]) sam_close(fpt[i]);
     }
     if (a) {
-        int64_t j;
-        for (j = a_first; j < a_last; j++) {
-            if (a[j].b) bam_destroy1(a[j].b);
-        }
+        for (j = 0; j < max_cnt; ++j) bam_destroy1(a[j].b);
         free(a);
     }
     free(fnt);
