@@ -615,6 +615,7 @@ static const char *copied_tags[] = { "RG", "BC", "QT", NULL };
 
 static void bam2fq_usage(FILE *to, const char *command)
 {
+    int fq = strcasecmp("fastq", command) == 0 || strcasecmp("bam2fq", command) == 0;
     fprintf(to,
 "Usage: samtools %s [options...] <in.bam>\n", command);
     fprintf(to,
@@ -624,10 +625,14 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -2 FILE   write paired reads flagged READ2 to FILE\n"
 "  -f INT    only include reads with all bits set in INT set in FLAG [0]\n"
 "  -F INT    only include reads with none of the bits set in INT set in FLAG [0]\n"
-"  -n        don't append /1 and /2 to the read name\n"
-"  -O        output quality in the OQ tag if present\n"
+"  -n        don't append /1 and /2 to the read name\n");
+    if (fq) fprintf(to,
+"  -O        output quality in the OQ tag if present\n");
+    fprintf(to,
 "  -s FILE   write singleton reads to FILE [assume single-end]\n"
-"  -t        copy RG, BC and QT tags to the FASTQ header line\n"
+"  -t        copy RG, BC and QT tags to the %s header line\n",
+    fq ? "FASTQ" : "FASTA");
+    if (fq) fprintf(to,
 "  -v INT    default quality score if not given in file [1]\n");
     sam_global_opt_help(to, "-.--.");
 }
