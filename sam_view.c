@@ -933,7 +933,7 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
 
     bool valid = true;
     while (true) {
-        at_eof = sam_read1(state->fp, state->h, b);
+        at_eof = sam_read1(state->fp, state->h, b) < 0;
 
         if (!at_eof && filter_it_out(b, state)) continue;
         if (!at_eof) ++n_reads;
