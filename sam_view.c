@@ -50,6 +50,7 @@ typedef struct samview_settings {
     int min_mapQ;
     int flag_on;
     int flag_off;
+    int flag_alloff;
     int min_qlen;
     int remove_B;
     uint32_t subsam_seed;
@@ -82,6 +83,8 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         if (qlen < settings->min_qlen) return 1;
     }
     if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off))
+        return 1;
+    if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
         return 1;
     if (settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
         return 1;
@@ -244,6 +247,7 @@ int main_samview(int argc, char *argv[])
         .min_mapQ = 0,
         .flag_on = 0,
         .flag_off = 0,
+        .flag_alloff = 0,
         .min_qlen = 0,
         .remove_B = 0,
         .subsam_seed = 0,
@@ -262,7 +266,7 @@ int main_samview(int argc, char *argv[])
     strcpy(out_mode, "w");
     strcpy(out_un_mode, "w");
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:ul:r:?T:R:L:s:@:m:x:U:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -284,6 +288,7 @@ int main_samview(int argc, char *argv[])
         case 'U': fn_un_out = strdup(optarg); break;
         case 'f': settings.flag_on |= strtol(optarg, 0, 0); break;
         case 'F': settings.flag_off |= strtol(optarg, 0, 0); break;
+        case 'G': settings.flag_alloff |= strtol(optarg, 0, 0); break;
         case 'q': settings.min_mapQ = atoi(optarg); break;
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
@@ -540,6 +545,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "           query sequence >= INT [0]\n"
 "  -f INT   only include reads with all bits set in INT set in FLAG [0]\n"
 "  -F INT   only include reads with none of the bits set in INT set in FLAG [0]\n"
+"  -G INT   only include reads with not all the bits set in INT set in FLAG [0]\n"
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
@@ -624,6 +630,7 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -2 FILE   write paired reads flagged READ2 to FILE\n"
 "  -f INT    only include reads with all bits set in INT set in FLAG [0]\n"
 "  -F INT    only include reads with none of the bits set in INT set in FLAG [0]\n"
+"  -G INT    only include reads with not all the bits set in INT set in FLAG [0]\n"
 "  -n        don't append /1 and /2 to the read name\n"
 "  -O        output quality in the OQ tag if present\n"
 "  -s FILE   write singleton reads to FILE [assume single-end]\n"
@@ -639,7 +646,7 @@ typedef struct bam2fq_opts {
     char *fnr[3];
     char *fn_input; // pointer to input filename in argv do not free
     bool has12, use_oq, copy_tags;
-    int flag_on, flag_off;
+    int flag_on, flag_off, flag_alloff;
     sam_global_args ga;
     fastfile filetype;
     int def_qual;
@@ -651,7 +658,7 @@ typedef struct bam2fq_state {
     FILE *fpr[3];
     bam_hdr_t *h;
     bool has12, use_oq, copy_tags;
-    int flag_on, flag_off;
+    int flag_on, flag_off, flag_alloff;
     fastfile filetype;
     int def_qual;
 } bam2fq_state_t;
@@ -769,13 +776,14 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:f:F:nOs:tv:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:nOs:tv:", lopts, NULL)) > 0) {
         switch (c) {
             case '0': opts->fnr[0] = optarg; break;
             case '1': opts->fnr[1] = optarg; break;
             case '2': opts->fnr[2] = optarg; break;
             case 'f': opts->flag_on |= strtol(optarg, 0, 0); break;
             case 'F': opts->flag_off |= strtol(optarg, 0, 0); break;
+            case 'G': opts->flag_alloff |= strtol(optarg, 0, 0); break;
             case 'n': opts->has12 = false; break;
             case 'O': opts->use_oq = true; break;
             case 's': opts->fnse = optarg; break;
@@ -833,6 +841,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     bam2fq_state_t* state = calloc(1, sizeof(bam2fq_state_t));
     state->flag_on = opts->flag_on;
     state->flag_off = opts->flag_off;
+    state->flag_alloff = opts->flag_alloff;
     state->has12 = opts->has12;
     state->use_oq = opts->use_oq;
     state->copy_tags = opts->copy_tags;
@@ -909,7 +918,8 @@ static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
 {
     return (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
         || (b->core.flag&(state->flag_on)) != state->flag_on // or reads indicated by filter flags
-        || (b->core.flag&(state->flag_off)) != 0);
+        || (b->core.flag&(state->flag_off)) != 0
+        || (b->core.flag&(state->flag_alloff)) == state->flag_alloff);
 
 }
 
@@ -999,7 +1009,8 @@ static bool bam2fq_mainloop(bam2fq_state_t *state)
     while (sam_read1(state->fp, state->h, b) >= 0) {
         if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
             || (b->core.flag&(state->flag_on)) != state->flag_on             // or reads indicated by filter flags
-            || (b->core.flag&(state->flag_off)) != 0) continue;
+            || (b->core.flag&(state->flag_off)) != 0
+            || (b->core.flag&(state->flag_alloff)) == state->flag_alloff) continue;
         ++n_reads;
 
         if (!bam1_to_fq(b, &linebuf, state)) return false;
