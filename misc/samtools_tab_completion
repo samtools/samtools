@@ -47,12 +47,10 @@ _samtools_options()
 
 		# If on the first word, generate possible subcommands, and tab complete those
 
-		opts=$($SAMTOOLS_BIN 2>&1 | awk '{if ($1 != "" && $1 != "Program:" && \
-			$1 != "Usage:" && $1 != "Version:" && $1 != "Commands:" && \
-			$1 != "--") print $1}' | xargs -n 1 -I @ printf @" ")
+		opts=$($SAMTOOLS_BIN 2>&1 | grep '^   ' | awk '{print $1}')
 
-			COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
-			return 0
+		COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
+		return 0
 
 	else 
 
