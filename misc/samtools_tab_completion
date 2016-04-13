@@ -1,0 +1,81 @@
+################################################################################
+# Copyright (c) 2016 Genome Research Ltd. 
+# 
+# Author: George Hall <gh10@sanger.ac.uk> 
+# 
+# Permission is hereby granted, free of charge, to any person obtaining
+# a copy of this software and associated documentation files (the
+# "Software"), to deal in the Software without restriction, including
+# without limitation the rights to use, copy, modify, merge, publish,
+# distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so, subject to
+# the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included
+# in all copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+# EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+# MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+# IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+# CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+################################################################################
+
+# This script determines whether the user is trying to complete a subcommand or 
+# a long-option, then determines and displays possible completions. For commands
+# with long-options, the initial '-' must be first be typed in order to trigger 
+# the completion mechanism. 
+
+# This file must be sourced for the tab completions to work - it is advisable to 
+# source it from your .bashrc. By default, it will only perform tab completion for
+# a binary called 'samtools'. To enable tab completion for other versions of
+# Samtools, or for Samtools binaries with different names, simply append 
+# 'complete -F _samtools_options <name of binary>' to the end of this file. This 
+# file will then need to be sourced again. 
+
+_samtools_options() 
+{
+
+	SAMTOOLS_BIN="${COMP_WORDS[0]}"
+	local cur current_sub opts
+	COMPREPLY=()
+	cur="${COMP_WORDS[COMP_CWORD]}"
+
+	if [[ $COMP_CWORD == 1 ]] ; then
+
+		# If on the first word, generate possible subcommands, and tab complete those
+
+		opts=$($SAMTOOLS_BIN 2>&1 | awk '{if ($1 != "" && $1 != "Program:" && \
+			$1 != "Usage:" && $1 != "Version:" && $1 != "Commands:" && \
+			$1 != "--") print $1}' | xargs -n 1 -I @ printf @" ")
+
+			COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
+			return 0
+
+	else 
+
+		# Complete long-options (if available) for current subcommand
+
+		current_sub="${COMP_WORDS[1]}"
+
+		opts=$($SAMTOOLS_BIN $current_sub 2>&1 | grep -oh "\(\-\-\)\([[:alnum:]]\|\-\)* " | \
+			xargs -I @ printf @)
+		
+		if [[ ${cur} == -* ]] ; then
+			COMPREPLY=($(compgen -W "${opts}" -- ${cur}))
+			return 0
+		fi
+		
+	fi
+
+	# If we have not returned by now, assume that the user is looking for files
+	compopt -o filenames # Don't append a space
+	COMPREPLY=($(compgen -f "${cur}"))
+	return 0
+
+}
+
+complete -F _samtools_options samtools
+
