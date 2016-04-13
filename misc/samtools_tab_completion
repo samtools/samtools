@@ -43,7 +43,7 @@ _samtools_options()
 	COMPREPLY=()
 	cur="${COMP_WORDS[COMP_CWORD]}"
 
-	if [[ $COMP_CWORD == 1 ]] ; then
+	if [[ $COMP_CWORD -eq 1 ]] ; then
 
 		# If on the first word, generate possible subcommands, and tab complete those
 
