@@ -55,6 +55,6 @@ void print_error_errno(const char *subcommand, const char *format, ...)
     int err = errno;
     va_list args;
     va_start(args, format);
-    vprint_error_core(subcommand, format, args, strerror(err));
+    vprint_error_core(subcommand, format, args, err? strerror(err) : NULL);
     va_end(args);
 }
