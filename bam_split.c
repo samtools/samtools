@@ -403,7 +403,7 @@ static state_t* init(parsed_opts_t* opts)
                                                &opts->ga.out);
 
         if ( output_filename == NULL ) {
-            fprintf(stderr, "Error expanding output filename format string.\r\n");
+            fprintf(stderr, "Error expanding output filename format string.\n");
             cleanup_state(retval, false);
             free(input_base_name);
             return NULL;
@@ -412,7 +412,7 @@ static state_t* init(parsed_opts_t* opts)
         retval->rg_output_file_name[i] = output_filename;
         retval->rg_output_file[i] = sam_open_format(output_filename, "wb", &opts->ga.out);
         if (retval->rg_output_file[i] == NULL) {
-            fprintf(stderr, "Could not open output file: %s\r\n", output_filename);
+            fprintf(stderr, "Could not open output file: %s\n", output_filename);
             cleanup_state(retval, false);
             free(input_base_name);
             return NULL;
@@ -426,7 +426,7 @@ static state_t* init(parsed_opts_t* opts)
         // Set and edit header
         retval->rg_output_header[i] = bam_hdr_dup(retval->merged_input_header);
         if ( !filter_header_rg(retval->rg_output_header[i], retval->rg_id[i]) ) {
-            fprintf(stderr, "Could not rewrite header for file: %s\r\n", output_filename);
+            fprintf(stderr, "Could not rewrite header for file: %s\n", output_filename);
             cleanup_state(retval, false);
             free(input_base_name);
             return NULL;
