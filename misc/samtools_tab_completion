@@ -64,14 +64,12 @@ _samtools_options()
 		if [[ ${CUR} == -* ]] ; then
 			COMPREPLY=($(compgen -W "${OPTS}" -- ${CUR}))
 			return 0
+		else
+			# Assume the user wants normal file name completion
+			compopt -o default
 		fi
-		
-	fi
 
-	# If we have not returned by now, assume that the user is looking for files
-	compopt -o filenames # Don't append a space
-	COMPREPLY=($(compgen -f "${CUR}"))
-	return 0
+	fi
 
 }
 
