@@ -1329,7 +1329,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
 
     // Open output file and write header
     if ((fpout = sam_open_format(out, mode, out_fmt)) == 0) {
-        fprintf(stderr, "[%s] fail to create the output file.\n", __func__);
+        fprintf(stderr, "[%s] failed to create \"%s\": %s\n", __func__, out, strerror(errno));
         return -1;
     }
     if (sam_hdr_write(fpout, hout) != 0) {
@@ -1641,12 +1641,13 @@ static void *worker(void *data)
 {
     worker_t *w = (worker_t*)data;
     char *name;
-    w->error = -1;
+    w->error = 0;
     ks_mergesort(sort, w->buf_len, w->buf, 0);
     name = (char*)calloc(strlen(w->prefix) + 20, 1);
-    if (!name) return 0;
+    if (!name) { w->error = errno; return 0; }
     sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-    w->error = write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL);
+    if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL) < 0)
+        w->error = errno;
 
 // Consider using CRAM temporary files if the final output is CRAM.
 // Typically it is comparable speed while being smaller.
@@ -1655,7 +1656,8 @@ static void *worker(void *data)
 //        {"no_ref",      CRAM_OPT_NO_REF,  {1},     NULL}
 //    };
 //    opt[0].next = &opt[1];
-//    w->error = write_buffer(name, "wc1", w->buf_len, w->buf, w->h, 0, opt);
+//    if (write_buffer(name, "wc1", w->buf_len, w->buf, w->h, 0, opt) < 0)
+//        w->error = errno;
 
     free(name);
     return 0;
@@ -1669,7 +1671,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
     pthread_t *tid;
     pthread_attr_t attr;
     worker_t *w;
-    int res = 0;
+    int n_failed = 0;
 
     if (n_threads < 1) n_threads = 1;
     if (k < n_threads * 64) n_threads = 1; // use a single thread if we only sort a small batch of records
@@ -1689,10 +1691,13 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
     }
     for (i = 0; i < n_threads; ++i) {
         pthread_join(tid[i], 0);
-        res |= w[i].error;
+        if (w[i].error != 0) {
+            fprintf(stderr, "[bam_sort_core] failed to create temporary file \"%s.%.4d.bam\": %s\n", prefix, w[i].index, strerror(w[i].error));
+            n_failed++;
+        }
     }
     free(tid); free(w);
-    return res == 0 ? n_files + n_threads : -1;
+    return (n_failed == 0)? n_files + n_threads : -1;
 }
 
 /*!
@@ -1763,7 +1768,6 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
         if (mem >= max_mem) {
             n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
             if (n_files < 0) {
-                fprintf(stderr, "[bam_sort_core] error sorting blocks.\n");
                 ret = -1;
                 goto err;
             }
@@ -1780,7 +1784,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     if (n_files == 0) { // a single block
         ks_mergesort(sort, k, buf, 0);
         if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt) != 0) {
-            fprintf(stderr, "[bam_sort_core] error writing final output.\n");
+            fprintf(stderr, "[bam_sort_core] failed to create \"%s\": %s\n", fnout, strerror(errno));
             ret = -1;
             goto err;
         }
