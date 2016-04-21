@@ -777,7 +777,7 @@ static int finish_rg_pg(bool is_rg, klist_t(hdrln) *hdr_lines,
 
 static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
                           trans_tbl_t* tbl, bool merge_rg, bool merge_pg,
-                          char* rg_override)
+                          bool copy_co, char* rg_override)
 {
     klist_t(hdrln) *rg_list = NULL;
     klist_t(hdrln) *pg_list = NULL;
@@ -819,20 +819,22 @@ static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
     kl_destroy(hdrln, rg_list); rg_list = NULL;
     kl_destroy(hdrln, pg_list); pg_list = NULL;
 
-    // Just append @CO headers without translation
-    const char *line, *end_pointer;
-    for (line = translate->text; *line; line = end_pointer + 1) {
-        end_pointer = strchr(line, '\n');
-        if (strncmp(line, "@CO", 3) == 0) {
-            if (end_pointer) {
-                if (kputsn(line, end_pointer - line + 1, &merged_hdr->out_co) == EOF)
-                    goto memfail;
-            } else { // Last line with no trailing '\n'
-                if (kputs(line, &merged_hdr->out_co) == EOF) goto memfail;
-                if (kputc('\n', &merged_hdr->out_co) == EOF) goto memfail;
+    if (copy_co) {
+        // Just append @CO headers without translation
+        const char *line, *end_pointer;
+        for (line = translate->text; *line; line = end_pointer + 1) {
+            end_pointer = strchr(line, '\n');
+            if (strncmp(line, "@CO", 3) == 0) {
+                if (end_pointer) {
+                    if (kputsn(line, end_pointer - line + 1, &merged_hdr->out_co) == EOF)
+                        goto memfail;
+                } else { // Last line with no trailing '\n'
+                    if (kputs(line, &merged_hdr->out_co) == EOF) goto memfail;
+                    if (kputc('\n', &merged_hdr->out_co) == EOF) goto memfail;
+                }
             }
+            if (end_pointer == NULL) break;
         }
-        if (end_pointer == NULL) break;
     }
 
     return 0;
@@ -1059,6 +1061,7 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 #define MERGE_FORCE       8 // Overwrite output BAM if it exists
 #define MERGE_COMBINE_RG 16 // Combine RG tags frather than redefining them
 #define MERGE_COMBINE_PG 32 // Combine PG tags frather than redefining them
+#define MERGE_FIRST_CO   64 // Use only first file's @CO headers (sort cmd only)
 
 /*
  * How merging is handled
@@ -1180,7 +1183,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
         trans_tbl_t dummy;
         int res;
         res = trans_tbl_init(merged_hdr, hin, &dummy, flag & MERGE_COMBINE_RG,
-                             flag & MERGE_COMBINE_PG, NULL);
+                             flag & MERGE_COMBINE_PG, true, NULL);
         trans_tbl_destroy(&dummy);
         if (res) return -1; // FIXME: memory leak
     }
@@ -1202,6 +1205,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
 
         if (trans_tbl_init(merged_hdr, hin, translation_tbl+i,
                            flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG,
+                           (flag & MERGE_FIRST_CO)? (i == 0) : true,
                            RG[i]))
             return -1; // FIXME: memory leak
 
@@ -1802,8 +1806,8 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
             sprintf(fns[i], "%s.%.4d.bam", prefix, i);
         }
         if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns,
-                            MERGE_COMBINE_RG|MERGE_COMBINE_PG, NULL, n_threads,
-                            in_fmt, out_fmt) < 0) {
+                            MERGE_COMBINE_RG|MERGE_COMBINE_PG|MERGE_FIRST_CO,
+                            NULL, n_threads, in_fmt, out_fmt) < 0) {
             // Propagate bam_merge_core2() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             goto err;
