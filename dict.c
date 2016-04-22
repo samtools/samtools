@@ -22,7 +22,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <stdio.h>
+#include <unistd.h>
 #include <zlib.h>
 #include <getopt.h>
 #include "htslib/kseq.h"
@@ -140,7 +143,7 @@ int dict_main(int argc, char *argv[])
     char *fname = NULL;
     if ( optind>=argc )
     {
-        if ( !isatty(fileno((FILE *)stdin)) ) fname = "-";  // reading from stdin
+        if ( !isatty(STDIN_FILENO) ) fname = "-";  // reading from stdin
         else return dict_usage();
     }
     else fname = argv[optind];

@@ -23,6 +23,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <string.h>
 #include <unistd.h>
 #include "htslib/faidx.h"
@@ -31,7 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 int samthreads(samfile_t *fp, int n_threads, int n_sub_blks)
 {
     if (hts_get_format(fp->file)->format != bam || !fp->is_write) return -1;
-    bgzf_mt(fp->x.bam, n_threads, n_sub_blks);
+    if (bgzf_mt(fp->x.bam, n_threads, n_sub_blks) < 0) return -1;
     return 0;
 }
 
@@ -42,6 +44,10 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
     if (hts_fp == NULL)  return NULL;
 
     samfile_t *fp = malloc(sizeof (samfile_t));
+    if (!fp) {
+        sam_close(hts_fp);
+        return NULL;
+    }
     fp->file = hts_fp;
     fp->x.bam = hts_fp->fp.bgzf;
     if (strchr(mode, 'r')) {
@@ -66,7 +72,15 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
         enum htsExactFormat fmt = hts_get_format(fp->file)->format;
         fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it
         fp->is_write = 1;
-        if (!(fmt == text_format || fmt == sam) || strchr(mode, 'h')) sam_hdr_write(fp->file, fp->header);
+        if (!(fmt == text_format || fmt == sam) || strchr(mode, 'h')) {
+            if (sam_hdr_write(fp->file, fp->header) < 0) {
+                if (bam_verbose >= 1)
+                    fprintf(stderr, "[samopen] Couldn't write header\n");
+                sam_close(hts_fp);
+                free(fp);
+                return NULL;
+            }
+        }
     }
 
     return fp;

@@ -37,6 +37,8 @@ redistribute it.  There is NO WARRANTY, to the extent permitted by law.])
 
 AC_PROG_CC
 
+AC_SYS_LARGEFILE
+
 AX_WITH_HTSLIB
 if test "$ax_cv_htslib" != yes; then
   AC_MSG_ERROR([HTSlib development files not found

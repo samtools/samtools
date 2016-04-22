@@ -23,6 +23,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <unistd.h>
 #include <string.h>
 #include <ctype.h>
@@ -33,6 +35,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "kprobaln.h"
 #include "sam_opts.h"
+#include "samtools.h"
 
 #define USE_EQUAL 1
 #define DROP_TAG  2
@@ -349,11 +352,11 @@ int calmd_usage() {
 int bam_fillmd(int argc, char *argv[])
 {
     int c, flt_flag, tid = -2, ret, len, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag;
-    samFile *fp, *fpout = 0;
-    bam_hdr_t *header;
-    faidx_t *fai;
-    char *ref = 0, mode_w[8], *ref_file;
-    bam1_t *b;
+    samFile *fp = NULL, *fpout = NULL;
+    bam_hdr_t *header = NULL;
+    faidx_t *fai = NULL;
+    char *ref = NULL, mode_w[8], *ref_file;
+    bam1_t *b = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     static const struct option lopts[] = {
@@ -391,35 +394,51 @@ int bam_fillmd(int argc, char *argv[])
     if (optind + (ga.reference == NULL) >= argc)
         return calmd_usage();
     fp = sam_open_format(argv[optind], "r", &ga.in);
-    if (fp == 0) return 1;
+    if (fp == NULL) {
+        print_error_errno("calmd", "Failed to open input file '%s'", argv[optind]);
+        return 1;
+    }
 
     header = sam_hdr_read(fp);
     if (header == NULL || header->n_targets == 0) {
         fprintf(stderr, "[bam_fillmd] input SAM does not have header. Abort!\n");
-        return 1;
+        goto fail;
     }
 
     fpout = sam_open_format("-", mode_w, &ga.out);
-    sam_hdr_write(fpout, header);
+    if (fpout == NULL) {
+        print_error_errno("calmd", "Failed to open output");
+        goto fail;
+    }
+    if (sam_hdr_write(fpout, header) < 0) {
+        print_error_errno("calmd", "Failed to write sam header");
+        goto fail;
+    }
 
     ref_file = argc > optind + 1 ? argv[optind+1] : ga.reference;
     fai = fai_load(ref_file);
 
     if (!fai) {
-        perror(ref_file);
-        return 1;
+        print_error_errno("calmd", "Failed to open reference file '%s'", ref_file);
+        goto fail;
     }
 
     b = bam_init1();
+    if (!b) {
+        fprintf(stderr, "[bam_fillmd] Failed to allocate bam struct\n");
+        goto fail;
+    }
     while ((ret = sam_read1(fp, header, b)) >= 0) {
         if (b->core.tid >= 0) {
             if (tid != b->core.tid) {
                 free(ref);
                 ref = fai_fetch(fai, header->target_name[b->core.tid], &len);
                 tid = b->core.tid;
-                if (ref == 0)
+                if (ref == 0) { // FIXME: Should this always be fatal?
                     fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
                             header->target_name[tid]);
+                    if (is_realn || capQ > 10) goto fail; // Would otherwise crash
+                }
             }
             if (is_realn) bam_prob_realn_core(b, ref, len, baq_flag);
             if (capQ > 10) {
@@ -428,7 +447,14 @@ int bam_fillmd(int argc, char *argv[])
             }
             if (ref) bam_fillmd1_core(b, ref, len, flt_flag, max_nm);
         }
-        sam_write1(fpout, header, b);
+        if (sam_write1(fpout, header, b) < 0) {
+            print_error_errno("calmd", "failed to write to output file");
+            goto fail;
+        }
+    }
+    if (ret < -1) {
+        fprintf(stderr, "[bam_fillmd] Error reading input.\n");
+        goto fail;
     }
     bam_destroy1(b);
     bam_hdr_destroy(header);
@@ -436,6 +462,18 @@ int bam_fillmd(int argc, char *argv[])
     free(ref);
     fai_destroy(fai);
     sam_close(fp);
-    sam_close(fpout);
+    if (sam_close(fpout) < 0) {
+        fprintf(stderr, "[bam_fillmd] error when closing output file\n");
+        return 1;
+    }
     return 0;
+
+ fail:
+    free(ref);
+    if (b) bam_destroy1(b);
+    if (header) bam_hdr_destroy(header);
+    if (fai) fai_destroy(fai);
+    if (fp) sam_close(fp);
+    if (fpout) sam_close(fpout);
+    return 1;
 }

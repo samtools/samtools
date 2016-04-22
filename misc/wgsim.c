@@ -27,6 +27,8 @@
 /* This program is separated from maq's read simulator with Colin
  * Hercus' modification to allow longer indels. */
 
+#include <config.h>
+
 #include <stdlib.h>
 #include <math.h>
 #include <time.h>

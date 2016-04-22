@@ -1,3 +1,41 @@
+Beta Release 1.3.1  (22 April 2016)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Noteworthy changes in samtools:
+
+* The sort command creates any needed temporary files alongside the final
+  output file (similarly to the pre-1.3 behaviour), and now aborts when
+  it detects a collision with another sort invocation's temporary files.
+
+  When the -T PREFIX option specified is a directory (or when sorting to
+  standard output), a random component is now added to temporary filenames
+  to try to avoid collisions (#432, #523, #529, #535, PR #530).
+
+* All samtools commands now check for I/O errors more carefully, especially
+  when writing output files (#111, #253, #470, PR #467).
+
+* Build fixes for 32-bit systems; be sure to run configure on such systems
+  to enable large file support and access to 2GiB+ files.
+
+* The fasta/fastq/bam2fq command no longer ignores reads when the -s option
+  is used (#532).
+
+* The fastq -O option no longer crashes on reads that do not have an OQ tag
+  field (#517).
+
+* The merge and sort commands now handle (unusual) BAM files that have no
+  textual @SQ headers (#548, #550).
+
+* Sorting files containing @CO headers no longer duplicates the comment
+  headers, which previously happened on large sorts for which temporary
+  files were needed (#563).
+
+* The rmdup and view -l commands no longer crash on @RG headers that do not
+  have a LB field (#538).
+
+* Fixed miscellaneous issues #128, #130, #131, #489, and #514.
+
+
 Beta Release 1.3  (15 December 2015)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -7,6 +45,9 @@ Noteworthy changes in samtools:
   If you are still using -f, -o, or out.prefix, convert to use -T PREFIX
   and/or -o FILE instead.  (#295, #349, #356, #418, PR #441; see also
   discussions in #171, #213.)
+
+* When writing CRAM output, samtools now defaults to writing CRAM v3.0
+  rather than v2.1.
 
 * The "bamshuf" command has been renamed to "collate" (hence the term
   bamshuf no longer appears in the documentation, though it still works

@@ -1,7 +1,7 @@
 /*  bam_reheader.c -- reheader subcommand.
 
     Copyright (C) 2010 Broad Institute.
-    Copyright (C) 2012, 2013 Genome Research Ltd.
+    Copyright (C) 2012-2015 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -23,6 +23,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
@@ -43,47 +45,77 @@ DEALINGS IN THE SOFTWARE.  */
 int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
                  const char *arg_list, int add_PG)
 {
-    BGZF *fp;
+    BGZF *fp = NULL;
     ssize_t len;
-    uint8_t *buf;
+    uint8_t *buf = NULL;
+    SAM_hdr *sh = NULL;
     if (in->is_write) return -1;
     buf = malloc(BUF_SIZE);
-    if (bam_hdr_read(in) == NULL) {
-        fprintf(stderr, "Couldn't read header\n");
-        free(buf);
+    if (!buf) {
+        fprintf(stderr, "Out of memory\n");
         return -1;
     }
+    if (bam_hdr_read(in) == NULL) {
+        fprintf(stderr, "Couldn't read header\n");
+        goto fail;
+    }
     fp = bgzf_fdopen(fd, "w");
+    if (!fp) {
+        print_error_errno("reheader", "Couldn't open output file");
+        goto fail;
+    }
 
     if (add_PG) {
         // Around the houses, but it'll do until we can manipulate bam_hdr_t natively.
-        SAM_hdr *sh = sam_hdr_parse_(h->text, h->l_text);
+        sh = sam_hdr_parse_(h->text, h->l_text);
+        if (!sh)
+            goto fail;
         if (sam_hdr_add_PG(sh, "samtools",
                            "VN", samtools_version(),
                            arg_list ? "CL": NULL,
                            arg_list ? arg_list : NULL,
                            NULL) != 0)
-            return -1;
+            goto fail;
 
         free(h->text);
         h->text = strdup(sam_hdr_str(sh));
         h->l_text = sam_hdr_length(sh);
         if (!h->text)
-            return -1;
+            goto fail;
         sam_hdr_free(sh);
+        sh = NULL;
     }
 
-    bam_hdr_write(fp, h);
-    if (in->block_offset < in->block_length) {
-        bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset);
-        bgzf_flush(fp);
+    if (bam_hdr_write(fp, h) < 0) {
+        print_error_errno("reheader", "Couldn't write header");
+        goto fail;
     }
-    while ((len = bgzf_raw_read(in, buf, BUF_SIZE)) > 0)
-        bgzf_raw_write(fp, buf, len);
+    if (in->block_offset < in->block_length) {
+        if (bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
+        if (bgzf_flush(fp) < 0) goto write_fail;
+    }
+    while ((len = bgzf_raw_read(in, buf, BUF_SIZE)) > 0) {
+        if (bgzf_raw_write(fp, buf, len) < 0) goto write_fail;
+    }
+    if (len < 0) {
+        fprintf(stderr, "[%s] Error reading input file\n", __func__);
+        goto fail;
+    }
     free(buf);
     fp->block_offset = in->block_offset = 0;
-    bgzf_close(fp);
+    if (bgzf_close(fp) < 0) {
+        fprintf(stderr, "[%s] Error closing output file\n", __func__);
+        return -1;
+    }
     return 0;
+
+ write_fail:
+    print_error_errno("reheader", "Error writing to output file");
+ fail:
+    bgzf_close(fp);
+    free(buf);
+    sam_hdr_free(sh);
+    return -1;
 }
 
 /*
@@ -445,7 +477,7 @@ int main_reheader(int argc, char *argv[])
     { // read the header
         samFile *fph = sam_open(argv[optind], "r");
         if (fph == 0) {
-            fprintf(stderr, "[%s] fail to read the header from %s.\n", __func__, argv[optind]);
+            print_error_errno("reheader", "fail to read the header from '%s'", argv[optind]);
             return 1;
         }
         h = sam_hdr_read(fph);
@@ -458,7 +490,7 @@ int main_reheader(int argc, char *argv[])
     }
     in = sam_open(argv[optind+1], inplace?"r+":"r");
     if (in == 0) {
-        fprintf(stderr, "[%s] fail to open file %s.\n", __func__, argv[optind+1]);
+        print_error_errno("reheader", "fail to open file '%s'", argv[optind+1]);
         return 1;
     }
     if (hts_get_format(in)->format == bam) {

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools 1 "15 December 2015" "samtools-1.3" "Bioinformatics tools"
+.TH samtools 1 "22 April 2016" "samtools-1.3.1" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2015 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2016 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -428,9 +428,21 @@ is selected.
 .TP
 .BI "-T " PREFIX
 Write temporary files to
-.IB PREFIX . nnnn .bam.
-By default, any temporary files are written alongside the input file, as
-.IB in.bam .tmp. nnnn .bam.
+.IB PREFIX . nnnn .bam,
+or if the specified
+.I PREFIX
+is an existing directory, to
+.IB PREFIX /samtools. mmm . mmm .tmp. nnnn .bam,
+where
+.I mmm
+is unique to this invocation of the
+.B sort
+command.
+.IP
+By default, any temporary files are written alongside the output file, as
+.IB out.bam .tmp. nnnn .bam,
+or if output is to standard output, in the current directory as
+.BI samtools. mmm . mmm .tmp. nnnn .bam.
 .TP
 .BI "-@ " INT
 Set number of sorting and compression threads.
@@ -746,7 +758,7 @@ Unless the
 or
 .BR -p
 flags are specified then when merging @RG and @PG records into the output header then any IDs found to be duplicates
-of existing IDs in the output header will have a suffix appended to them to diffientiate them from similar header
+of existing IDs in the output header will have a suffix appended to them to differentiate them from similar header
 records from other files and the read records will be updated to reflect this.
 
 .B OPTIONS:
@@ -1032,6 +1044,16 @@ symbol `^' marks the start of a read. The ASCII of the character
 following `^' minus 33 gives the mapping quality. A symbol `$' marks the
 end of a read segment.
 
+Note that there are two orthogonal ways to specify locations in the
+input file; via \fB-r\fR \fIregion\fR and \fB-l\fR \fIfile\fR.  The
+former uses (and requires) an index to do random access while the
+latter streams through the file contents filtering out the specified
+regions, requiring no index.  The two may be used in conjunction.  For
+example a BED file containing locations of genes in chromosome 20
+could be specified using \fB-r 20 -l chr20.bed\fR, meaning that the
+index is used to find chromosome 20 and then it is filtered for the
+regions listed in the bed file.
+
 .B Input Options:
 .RS
 .TP 10
@@ -1060,7 +1082,13 @@ functionality; if enabled, the recommended value for BWA is 50. [0]
 .BI -d,\ --max-depth \ INT
 At a position, read maximally
 .I INT
-reads per input BAM. [250]
+reads per input file. Note that samtools has a minimum value of
+.I 8000/n
+where
+.I n
+is the number of input files given to mpileup.  This means the default
+is highly likely to be increased.  Once above the cross-sample minimum of
+8000 the -d parameter will have an effect. [250]
 .TP
 .B -E, --redo-BAQ
 Recalculate BAQ on the fly, ignore existing BQ tags
@@ -1077,8 +1105,14 @@ Exclude reads from readgroups listed in FILE (one @RG-ID per line)
 .TP
 .BI -l,\ --positions \ FILE
 BED or position list file containing a list of regions or sites where
-pileup or BCF should be generated. If BED, positions are 0-based
-half-open [null]
+pileup or BCF should be generated. Position list files contain two
+columns (chromosome and position) and start counting from 1.  BED
+files contain at least 3 columns (chromosome, start and end position)
+and are 0-based half-open.
+.br
+While it is possible to mix both position-list and BED coordinates in
+the same file, this is strongly ill advised due to the differing
+coordinate systems. [null]
 .TP
 .BI -q,\ -min-MQ \ INT
 Minimum mapping quality for an alignment to be used [0]
@@ -1219,7 +1253,7 @@ is modeled as
 Do not perform INDEL calling
 .TP
 .BI -L,\ --max-idepth \ INT
-Skip INDEL calling if the average per-sample depth is above
+Skip INDEL calling if the average per-input-file depth is above
 .IR INT .
 [250]
 .TP

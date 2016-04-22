@@ -38,7 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "1.3"
+#define BAM_VERSION "1.3.1"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -322,8 +322,11 @@ extern "C" {
      */
     char *bam_format1(const bam_header_t *header, const bam1_t *b);
 
-    /*! @abstract     Formats a BAM record and writes it and \n to stdout */
-    void bam_view1(const bam_header_t *header, const bam1_t *b);
+    /*!
+      @abstract     Formats a BAM record and writes it and \n to stdout
+      @return       0 if successful, -1 on error
+    */
+    int bam_view1(const bam_header_t *header, const bam1_t *b);
 
     /*!
       @abstract       Check whether a BAM record is plausibly valid

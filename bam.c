@@ -23,6 +23,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <stdio.h>
 #include <ctype.h>
 #include <errno.h>
@@ -34,15 +36,22 @@ char *bam_format1(const bam_header_t *header, const bam1_t *b)
 {
     kstring_t str;
     str.l = str.m = 0; str.s = NULL;
-    sam_format1(header, b, &str);
+    if (sam_format1(header, b, &str) < 0) {
+        free(str.s);
+        str.s = NULL;
+        return NULL;
+    }
     return str.s;
 }
 
-void bam_view1(const bam_header_t *header, const bam1_t *b)
+int bam_view1(const bam_header_t *header, const bam1_t *b)
 {
     char *s = bam_format1(header, b);
-    puts(s);
+    int ret = -1;
+    if (!s) return -1;
+    if (puts(s) != EOF) ret = 0;
     free(s);
+    return ret;
 }
 
 int bam_validate1(const bam_header_t *header, const bam1_t *b)
@@ -102,6 +111,9 @@ const char *bam_get_library(bam_header_t *h, const bam1_t *b)
             }
             last = *cp++;
         }
+
+        if (!ID || !LB)
+            continue;
 
         // Check it's the correct ID
         if (strncmp(rg, ID, strlen(rg)) != 0 || ID[strlen(rg)] != '\t')

@@ -22,6 +22,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <htslib/hts.h>
 #include <htslib/sam.h>
 #include <htslib/bgzf.h>
@@ -36,6 +38,21 @@ static void usage_quickcheck(FILE *write_to)
 "Options:\n"
 "  -v              verbose output (repeat for more verbosity)\n"
 "\n"
+"Notes:\n"
+"\n"
+"1. In order to use this command effectively, you should check its exit status;\n"
+"   without any -v options it will NOT print any output, even when some files\n"
+"   fail the check. One way to use quickcheck might be as a check that all\n"
+"   BAM files in a directory are okay:\n"
+"\n"
+"\tsamtools quickcheck *.bam && echo 'all ok' \\\n"
+"\t   || echo 'fail!'\n"
+"\n"
+"   To also determine which files have failed, use the -v option:\n"
+"\n"
+"\tsamtools quickcheck -v *.bam > bad_bams.fofn \\\n"
+"\t   && echo 'all ok' \\\n"
+"\t   || echo 'some files failed check, see bad_bams.fofn'\n"
     );
 }
 
@@ -121,7 +138,10 @@ int main_quickcheck(int argc, char** argv)
                 }
             }
 
-            hts_close(hts_fp);
+            if (hts_close(hts_fp) < 0) {
+                file_state |= 32;
+                if (verbose >= 2) fprintf(stderr, "%s did not close cleanly\n", fn);
+            }
         }
 
         if (file_state > 0 && verbose >= 1) {

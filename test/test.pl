@@ -794,13 +794,13 @@ sub filter_sam
             if ($libraries && /^\@RG/) {
                 my ($id) = /\tID:([^\t]+)/;
                 my ($lib) = /\tLB:([^\t]+)/;
-                if (exists($libraries->{$lib})) {
+                if (exists($libraries->{$lib||""})) {
                     $lib_read_groups->{$id} = 1;
                 }
             }
             if ($read_groups && /^\@RG/) {
                 my ($id) = /\tID:([^\t]+)/;
-                next if (!exists($read_groups->{$id}));
+                next if (!exists($read_groups->{$id||""}));
             }
             next if ($no_sq && /^\@SQ/);
             if ($no_m5 && /^\@SQ/) {
@@ -820,9 +820,9 @@ sub filter_sam
                     for my $i (11 .. $#sam) {
                         last if (($group) = $sam[$i] =~ /^RG:Z:(.*)/);
                     }
-                    next if ($read_groups && !exists($read_groups->{$group}));
+                    next if ($read_groups && !exists($read_groups->{$group||""}));
                     next if ($lib_read_groups
-                             && !exists($lib_read_groups->{$group}));
+                             && !exists($lib_read_groups->{$group||""}));
                 }
                 if ($region) {
                     my $in_range = 0;
@@ -1668,6 +1668,7 @@ sub test_view
          ['-r', 'grp2', '-R', $fogn], 0],
         # Libraries
         ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
+        ['lib3', { libraries => { 'Library 3' => 1 }}, ['-l', 'Library 3'], 0],
         # Mapping qualities
         ['mq50',  { min_map_qual => 50 },  ['-q', 50], 0],
         ['mq99',  { min_map_qual => 99 },  ['-q', 99], 0],
@@ -2377,6 +2378,7 @@ sub test_quickcheck
         'quickcheck/2.quickcheck.badheader.bam',
         'quickcheck/3.quickcheck.ok.bam',
         'quickcheck/4.quickcheck.ok.bam',
+        'quickcheck/5.quickcheck.truncated.cram',
         );
 
     my $all_testfiles;
@@ -2385,10 +2387,12 @@ sub test_quickcheck
         $all_testfiles .= " $$opts{path}/$fn";
         test_cmd($opts, out => 'dat/empty.expected',
             want_fail => ($fn !~ /[.]ok[.]/),
+            expect_fail => ($fn =~ /truncated[.]cram/)? 1 : 0,
             cmd => "$$opts{bin}/samtools quickcheck $$opts{path}/$fn");
     }
 
     test_cmd($opts, out => 'quickcheck/all.expected', want_fail => 1,
+        expect_fail => 1, # due to 5.quickcheck.truncated.cram
         cmd => "$$opts{bin}/samtools quickcheck -v $all_testfiles | sed 's,.*/quickcheck/,,'");
 }
 

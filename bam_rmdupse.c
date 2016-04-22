@@ -23,12 +23,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <math.h>
 #include <stdio.h>
 #include "bam.h" // for bam_get_library
 #include "htslib/sam.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
+#include "samtools.h"
 
 #define QUEUE_CLEAR_SIZE 0x100000
 #define MAX_POS 0x7fffffff
@@ -93,8 +96,8 @@ static void clear_besthash(besthash_t *h, int32_t pos)
             kh_del(best, h, k);
 }
 
-static void dump_alignment(samFile *out, bam_hdr_t *hdr,
-                           queue_t *queue, int32_t pos, khash_t(lib) *h)
+static int dump_alignment(samFile *out, bam_hdr_t *hdr,
+                          queue_t *queue, int32_t pos, khash_t(lib) *h)
 {
     if (queue->size > QUEUE_CLEAR_SIZE || pos == MAX_POS) {
         khint_t k;
@@ -108,7 +111,7 @@ static void dump_alignment(samFile *out, bam_hdr_t *hdr,
                 continue;
             }
             if ((q->b->core.flag&BAM_FREVERSE) && q->endpos > pos) break;
-            sam_write1(out, hdr, q->b);
+            if (sam_write1(out, hdr, q->b) < 0) return -1;
             q->b->l_data = 0;
             kl_shift(q, queue, 0);
         }
@@ -119,28 +122,40 @@ static void dump_alignment(samFile *out, bam_hdr_t *hdr,
             }
         }
     }
+    return 0;
 }
 
-void bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se)
+int bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se)
 {
-    bam1_t *b;
-    queue_t *queue;
+    bam1_t *b = NULL;
+    queue_t *queue = NULL;
     khint_t k;
-    int last_tid = -2;
-    khash_t(lib) *aux;
+    int last_tid = -2, r;
+    khash_t(lib) *aux = NULL;
 
     aux = kh_init(lib);
     b = bam_init1();
     queue = kl_init(q);
-    while (sam_read1(in, hdr, b) >= 0) {
+    if (!aux || !b || !queue) {
+        perror(__func__);
+        goto fail;
+    }
+
+    while ((r = sam_read1(in, hdr, b)) >= 0) {
         bam1_core_t *c = &b->core;
         int endpos = bam_endpos(b);
         int score = sum_qual(b);
 
         if (last_tid != c->tid) {
-            if (last_tid >= 0) dump_alignment(out, hdr, queue, MAX_POS, aux);
+            if (last_tid >= 0) {
+                if (dump_alignment(out, hdr, queue, MAX_POS, aux) < 0)
+                    goto write_fail;
+            }
             last_tid = c->tid;
-        } else dump_alignment(out, hdr, queue, c->pos, aux);
+        } else {
+            if (dump_alignment(out, hdr, queue, c->pos, aux) < 0)
+                goto write_fail;
+        }
         if ((c->flag&BAM_FUNMAP) || ((c->flag&BAM_FPAIRED) && !force_se)) {
             push_queue(queue, b, endpos, score);
         } else {
@@ -170,7 +185,12 @@ void bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se)
             } else kh_val(h, k) = push_queue(queue, b, endpos, score);
         }
     }
-    dump_alignment(out, hdr, queue, MAX_POS, aux);
+    if (r < -1) {
+        fprintf(stderr, "[%s] error reading input file\n", __func__);
+        goto fail;
+    }
+
+    if (dump_alignment(out, hdr, queue, MAX_POS, aux) < 0) goto write_fail;
 
     for (k = kh_begin(aux); k != kh_end(aux); ++k) {
         if (kh_exist(aux, k)) {
@@ -179,9 +199,29 @@ void bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se)
                     (long long)q->n_checked, (double)q->n_removed/q->n_checked, kh_key(aux, k));
             kh_destroy(best, q->left); kh_destroy(best, q->rght);
             free((char*)kh_key(aux, k));
+            kh_del(lib, aux, k);
         }
     }
     kh_destroy(lib, aux);
     bam_destroy1(b);
     kl_destroy(q, queue);
+    return 0;
+
+ write_fail:
+    print_error_errno("rmdup", "failed to write record");
+ fail:
+    if (aux) {
+        for (k = kh_begin(aux); k != kh_end(aux); ++k) {
+            if (kh_exist(aux, k)) {
+                lib_aux_t *q = &kh_val(aux, k);
+                kh_destroy(best, q->left);
+                kh_destroy(best, q->rght);
+                free((char*)kh_key(aux, k));
+            }
+        }
+        kh_destroy(lib, aux);
+    }
+    bam_destroy1(b);
+    kl_destroy(q, queue);
+    return 1;
 }

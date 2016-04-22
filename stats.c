@@ -37,6 +37,8 @@ DEALINGS IN THE SOFTWARE.  */
 
 */
 
+#include <config.h>
+
 #include <unistd.h> // for isatty()
 #include <stdio.h>
 #include <stdlib.h>

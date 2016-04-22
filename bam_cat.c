@@ -1,6 +1,6 @@
 /*  bam_cat.c -- efficiently concatenates bam files.
 
-    Copyright (C) 2008-2009, 2011-2013 Genome Research Ltd.
+    Copyright (C) 2008-2009, 2011-2013, 2015-2016 Genome Research Ltd.
     Modified SAMtools work copyright (C) 2010 Illumina, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -34,6 +34,8 @@ and modified to perform concatenation by Chris Saunders on behalf of
 Illumina.
 */
 
+#include <config.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -43,6 +45,7 @@ Illumina.
 #include "htslib/sam.h"
 #include "htslib/cram.h"
 #include "htslib/khash.h"
+#include "samtools.h"
 
 KHASH_MAP_INIT_STR(s2i, int)
 
@@ -195,7 +198,7 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const bam_hdr_t 
 
         in = sam_open(fn[i], "rc");
         if (in == 0) {
-            fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
+            print_error_errno("cat", "fail to open file '%s'", fn[i]);
             return NULL;
         }
         in_c = in->fp.cram;
@@ -302,15 +305,18 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     sprintf(vers, "%d.%d", vers_maj, vers_min);
     out = sam_open(outcram, "wc");
     if (out == 0) {
-        fprintf(stderr, "[%s] ERROR: fail to open output file '%s'.\n", __func__, outcram);
-        return 1;
+        print_error_errno("cat", "fail to open output file '%s'", outcram);
+        return -1;
     }
     out_c = out->fp.cram;
     cram_set_option(out_c, CRAM_OPT_VERSION, vers);
     //fprintf(stderr, "Creating cram vers %s\n", vers);
 
     cram_fd_set_header(out_c, sam_hdr_parse_(new_h->text,  new_h->l_text)); // needed?
-    sam_hdr_write(out, new_h);
+    if (sam_hdr_write(out, new_h) < 0) {
+        print_error_errno("cat", "Couldn't write header");
+        return -1;
+    }
 
     for (i = 0; i < nfn; ++i) {
         samFile *in;
@@ -321,7 +327,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
 
         in = sam_open(fn[i], "rc");
         if (in == 0) {
-            fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
+            print_error_errno("cat", "fail to open file '%s'", fn[i]);
             return -1;
         }
         in_c = in->fp.cram;
@@ -414,29 +420,37 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
 
 int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
 {
-    BGZF *fp;
-    uint8_t *buf;
+    BGZF *fp, *in = NULL;
+    uint8_t *buf = NULL;
     uint8_t ebuf[BGZF_EMPTY_BLOCK_SIZE];
     const int es=BGZF_EMPTY_BLOCK_SIZE;
     int i;
 
     fp = strcmp(outbam, "-")? bgzf_open(outbam, "w") : bgzf_fdopen(fileno(stdout), "w");
     if (fp == 0) {
-        fprintf(stderr, "[%s] ERROR: fail to open output file '%s'.\n", __func__, outbam);
-        return 1;
+        print_error_errno("cat", "fail to open output file '%s'", outbam);
+        return -1;
     }
-    if (h) bam_hdr_write(fp, h);
+    if (h) {
+        if (bam_hdr_write(fp, h) < 0) {
+            print_error_errno("cat", "Couldn't write header");
+            goto fail;
+        }
+    }
 
     buf = (uint8_t*) malloc(BUF_SIZE);
+    if (!buf) {
+        fprintf(stderr, "[%s] Couldn't allocate buffer\n", __func__);
+        goto fail;
+    }
     for(i = 0; i < nfn; ++i){
-        BGZF *in;
         bam_hdr_t *old;
         int len,j;
 
         in = strcmp(fn[i], "-")? bgzf_open(fn[i], "r") : bgzf_fdopen(fileno(stdin), "r");
         if (in == 0) {
-            fprintf(stderr, "[%s] ERROR: fail to open file '%s'.\n", __func__, fn[i]);
-            return -1;
+            print_error_errno("cat", "fail to open file '%s'", fn[i]);
+            goto fail;
         }
         if (in->is_write) return -1;
 
@@ -444,14 +458,18 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
         if (old == NULL) {
             fprintf(stderr, "[%s] ERROR: couldn't read header for '%s'.\n",
                     __func__, fn[i]);
-            bgzf_close(in);
-            return -1;
+            goto fail;
         }
-        if (h == 0 && i == 0) bam_hdr_write(fp, old);
+        if (h == 0 && i == 0) {
+            if (bam_hdr_write(fp, old) < 0) {
+                print_error_errno("cat", "Couldn't write header");
+                goto fail;
+            }
+        }
 
         if (in->block_offset < in->block_length) {
-            bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset);
-            bgzf_flush(fp);
+            if (bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
+            if (bgzf_flush(fp) != 0) goto write_fail;
         }
 
         j=0;
@@ -460,16 +478,19 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
                 int diff=es-len;
                 if(j==0) {
                     fprintf(stderr, "[%s] ERROR: truncated file?: '%s'.\n", __func__, fn[i]);
-                    return -1;
+                    goto fail;
                 }
-                bgzf_raw_write(fp, ebuf, len);
+                if (bgzf_raw_write(fp, ebuf, len) < 0) goto write_fail;
+
                 memcpy(ebuf,ebuf+len,diff);
                 memcpy(ebuf+diff,buf,len);
             } else {
-                if(j!=0) bgzf_raw_write(fp, ebuf, es);
+                if(j!=0) {
+                    if (bgzf_raw_write(fp, ebuf, es) < 0) goto write_fail;
+                }
                 len-= es;
                 memcpy(ebuf,buf+len,es);
-                bgzf_raw_write(fp, buf, len);
+                if (bgzf_raw_write(fp, buf, len) < 0) goto write_fail;
             }
             j=1;
         }
@@ -482,15 +503,27 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
             if(((gzip1!=GZIPID1) || (gzip2!=GZIPID2)) || (isize!=0)) {
                 fprintf(stderr, "[%s] WARNING: Unexpected block structure in file '%s'.", __func__, fn[i]);
                 fprintf(stderr, " Possible output corruption.\n");
-                bgzf_raw_write(fp, ebuf, es);
+                if (bgzf_raw_write(fp, ebuf, es) < 0) goto write_fail;
             }
         }
         bam_hdr_destroy(old);
         bgzf_close(in);
+        in = NULL;
     }
     free(buf);
-    bgzf_close(fp);
+    if (bgzf_close(fp) < 0) {
+        fprintf(stderr, "[%s] Error on closing '%s'.\n", __func__, outbam);
+        return -1;
+    }
     return 0;
+
+ write_fail:
+    fprintf(stderr, "[%s] Error writing to '%s'.\n", __func__, outbam);
+ fail:
+    if (in) bgzf_close(in);
+    if (fp) bgzf_close(fp);
+    free(buf);
+    return -1;
 }
 
 
@@ -498,7 +531,7 @@ int main_cat(int argc, char *argv[])
 {
     bam_hdr_t *h = 0;
     char *outfn = 0;
-    int c, ret;
+    int c, ret = 0;
     samFile *in;
 
     while ((c = getopt(argc, argv, "h:o:")) >= 0) {
@@ -529,19 +562,21 @@ int main_cat(int argc, char *argv[])
 
     in = sam_open(argv[optind], "r");
     if (!in) {
-        fprintf(stderr, "[%s] ERROR: failed to open file '%s'.\n", __func__, argv[optind]);
+        print_error_errno("cat", "failed to open file '%s'", argv[optind]);
         return 1;
     }
 
     switch (hts_get_format(in)->format) {
     case bam:
         sam_close(in);
-        ret = bam_cat(argc - optind, argv + optind, h, outfn? outfn : "-");
+        if (bam_cat(argc - optind, argv + optind, h, outfn? outfn : "-") < 0)
+            ret = 1;
         break;
 
     case cram:
         sam_close(in);
-        ret = cram_cat(argc - optind, argv + optind, h, outfn? outfn : "-");
+        if (cram_cat(argc - optind, argv + optind, h, outfn? outfn : "-") < 0)
+            ret = 1;
         break;
 
     default:

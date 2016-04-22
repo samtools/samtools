@@ -1,7 +1,7 @@
 @HD	VN:1.4	SO:coordinate
 @RG	ID:grp1	DS:Group 1	LB:Library 1	SM:Sample
 @RG	ID:grp2	DS:Group 2	LB:Library 2	SM:Sample
-@RG	ID:grp3	DS:Group 3	LB:Library 3	SM:Sample
+@RG	ID:grp3	DS:Group 3	SM:Sample
 @PG	ID:prog1	PN:emacs	CL:emacs	VN:23.1.1
 @CO	The MIT License
 @CO	

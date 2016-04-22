@@ -101,7 +101,7 @@ P 45.out $samtools view -h -F 16 mpileup.1.bam | $samtools mpileup -x -
 P 46.out $samtools view -h mpileup.1.bam | $samtools mpileup -x --ff 0x714 -
 
 # -d; depth
-F 47.out $samtools mpileup -x -d 8500 -B -f mpileup.ref.fa deep.sam|awk '{print $4}'
+P 47.out $samtools mpileup -x -d 8500 -B -f mpileup.ref.fa deep.sam|awk '{print $4}'
 
 # BCF output options
 P 48.out $samtools mpileup -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter

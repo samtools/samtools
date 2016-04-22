@@ -23,6 +23,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -30,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include "htslib/sam.h"
 #include "sam_opts.h"
+#include "samtools.h"
 #include "bam.h" // for bam_get_library
 
 typedef bam1_t *bam1_p;
@@ -60,14 +63,24 @@ static inline void stack_insert(tmp_stack_t *stack, bam1_t *b)
     stack->a[stack->n++] = b;
 }
 
-static inline void dump_best(tmp_stack_t *stack, samFile *out, bam_hdr_t *hdr)
+static inline int dump_best(tmp_stack_t *stack, samFile *out, bam_hdr_t *hdr)
 {
     int i;
     for (i = 0; i != stack->n; ++i) {
-        sam_write1(out, hdr, stack->a[i]);
+        if (sam_write1(out, hdr, stack->a[i]) < 0) return -1;
         bam_destroy1(stack->a[i]);
+        stack->a[i] = NULL;
     }
     stack->n = 0;
+    return 0;
+}
+
+static inline void clear_stack(tmp_stack_t *stack) {
+    int i;
+    if (!stack->a) return;
+    for (i = 0; i != stack->n; ++i) {
+        bam_destroy1(stack->a[i]);
+    }
 }
 
 static void clear_del_set(khash_t(name) *del_set)
@@ -114,25 +127,29 @@ static inline int sum_qual(const bam1_t *b)
     return q;
 }
 
-void bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
+int bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
 {
-    bam1_t *b;
-    int last_tid = -1, last_pos = -1;
+    bam1_t *b = NULL;
+    int last_tid = -1, last_pos = -1, r;
     tmp_stack_t stack;
     khint_t k;
-    khash_t(lib) *aux;
-    khash_t(name) *del_set;
+    khash_t(lib) *aux = NULL;
+    khash_t(name) *del_set = NULL;
 
+    memset(&stack, 0, sizeof(tmp_stack_t));
     aux = kh_init(lib);
     del_set = kh_init(name);
     b = bam_init1();
-    memset(&stack, 0, sizeof(tmp_stack_t));
+    if (!aux || !del_set || !b) {
+        perror(__func__);
+        goto fail;
+    }
 
     kh_resize(name, del_set, 4 * BUFFER_SIZE);
-    while (sam_read1(in, hdr, b) >= 0) {
+    while ((r = sam_read1(in, hdr, b)) >= 0) {
         bam1_core_t *c = &b->core;
         if (c->tid != last_tid || last_pos != c->pos) {
-            dump_best(&stack, out, hdr); // write the result
+            if (dump_best(&stack, out, hdr) < 0) goto write_fail; // write the result
             clear_best(aux, BUFFER_SIZE);
             if (c->tid != last_tid) {
                 clear_best(aux, 0);
@@ -141,8 +158,10 @@ void bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
                     clear_del_set(del_set);
                 }
                 if ((int)c->tid == -1) { // append unmapped reads
-                    sam_write1(out, hdr, b);
-                    while (sam_read1(in, hdr, b) >= 0) sam_write1(out, hdr, b);
+                    if (sam_write1(out, hdr, b) < 0) goto write_fail;
+                    while ((r = sam_read1(in, hdr, b)) >= 0) {
+                        if (sam_write1(out, hdr, b) < 0) goto write_fail;
+                    }
                     break;
                 }
                 last_tid = c->tid;
@@ -150,7 +169,7 @@ void bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
             }
         }
         if (!(c->flag&BAM_FPAIRED) || (c->flag&(BAM_FUNMAP|BAM_FMUNMAP)) || (c->mtid >= 0 && c->tid != c->mtid)) {
-            sam_write1(out, hdr, b);
+            if (sam_write1(out, hdr, b) < 0) goto write_fail;
         } else if (c->isize > 0) { // paired, head
             uint64_t key = (uint64_t)c->pos<<32 | c->isize;
             const char *lib;
@@ -178,19 +197,26 @@ void bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
             if (k != kh_end(del_set)) {
                 free((char*)kh_key(del_set, k));
                 kh_del(name, del_set, k);
-            } else sam_write1(out, hdr, b);
+            } else {
+                if (sam_write1(out, hdr, b) < 0) goto write_fail;
+            }
         }
         last_pos = c->pos;
+    }
+    if (r < -1) {
+        fprintf(stderr, "[%s] failed to read input file\n", __func__);
+        goto fail;
     }
 
     for (k = kh_begin(aux); k != kh_end(aux); ++k) {
         if (kh_exist(aux, k)) {
             lib_aux_t *q = &kh_val(aux, k);
-            dump_best(&stack, out, hdr);
+            if (dump_best(&stack, out, hdr) < 0) goto write_fail;
             fprintf(stderr, "[bam_rmdup_core] %lld / %lld = %.4lf in library '%s'\n", (long long)q->n_removed,
                     (long long)q->n_checked, (double)q->n_removed/q->n_checked, kh_key(aux, k));
             kh_destroy(pos, q->best_hash);
             free((char*)kh_key(aux, k));
+            kh_del(lib, aux, k);
         }
     }
     kh_destroy(lib, aux);
@@ -199,9 +225,32 @@ void bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
     kh_destroy(name, del_set);
     free(stack.a);
     bam_destroy1(b);
+    return 0;
+
+ write_fail:
+    print_error_errno("rmdup", "failed to write record");
+ fail:
+    clear_stack(&stack);
+    free(stack.a);
+    if (aux) {
+        for (k = kh_begin(aux); k != kh_end(aux); ++k) {
+            if (kh_exist(aux, k)) {
+                lib_aux_t *q = &kh_val(aux, k);
+                kh_destroy(pos, q->best_hash);
+                free((char*)kh_key(aux, k));
+            }
+        }
+        kh_destroy(lib, aux);
+    }
+    if (del_set) {
+        clear_del_set(del_set);
+        kh_destroy(name, del_set);
+    }
+    bam_destroy1(b);
+    return 1;
 }
 
-void bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se);
+int bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se);
 
 static int rmdup_usage(void) {
     fprintf(stderr, "\n");
@@ -215,7 +264,7 @@ static int rmdup_usage(void) {
 
 int bam_rmdup(int argc, char *argv[])
 {
-    int c, is_se = 0, force_se = 0;
+    int c, ret, is_se = 0, force_se = 0;
     samFile *in, *out;
     bam_hdr_t *header;
     char wmode[3] = {'w', 'b', 0};
@@ -239,6 +288,10 @@ int bam_rmdup(int argc, char *argv[])
         return rmdup_usage();
 
     in = sam_open_format(argv[optind], "r", &ga.in);
+    if (!in) {
+        print_error_errno("rmdup", "failed to open \"%s\" for input", argv[optind]);
+        return 1;
+    }
     header = sam_hdr_read(in);
     if (header == NULL || header->n_targets == 0) {
         fprintf(stderr, "[bam_rmdup] input SAM does not have header. Abort!\n");
@@ -247,15 +300,23 @@ int bam_rmdup(int argc, char *argv[])
 
     sam_open_mode(wmode+1, argv[optind+1], NULL);
     out = sam_open_format(argv[optind+1], wmode, &ga.out);
-    if (in == 0 || out == 0) {
-        fprintf(stderr, "[bam_rmdup] fail to read/write input files\n");
+    if (!out) {
+        print_error_errno("rmdup", "failed to open \"%s\" for output", argv[optind+1]);
         return 1;
     }
-    sam_hdr_write(out, header);
+    if (sam_hdr_write(out, header) < 0) {
+        print_error_errno("rmdup", "failed to write header");
+        return 1;
+    }
 
-    if (is_se) bam_rmdupse_core(in, header, out, force_se);
-    else bam_rmdup_core(in, header, out);
+    if (is_se) ret = bam_rmdupse_core(in, header, out, force_se);
+    else ret = bam_rmdup_core(in, header, out);
+
     bam_hdr_destroy(header);
-    sam_close(in); sam_close(out);
-    return 0;
+    sam_close(in);
+    if (sam_close(out) < 0) {
+        fprintf(stderr, "[bam_rmdup] error closing output file\n");
+        ret = 1;
+    }
+    return ret;
 }

@@ -1,6 +1,6 @@
 *.o
 *.dSYM
-*~
+*.exe
 /version.h
 
 aclocal.m4
@@ -14,7 +14,6 @@ configure
 
 lib*.a
 
-/bgzip
 /misc/ace2sam
 /misc/maq2sam-long
 /misc/maq2sam-short
@@ -25,5 +24,3 @@ lib*.a
 /test/vcf-miniview
 
 /TAGS
-
-core

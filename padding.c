@@ -1,7 +1,7 @@
 /*  padding.c -- depad subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2014, 2015 Genome Research Ltd.
+    Copyright (C) 2014-2016 Genome Research Ltd.
     Portions copyright (C) 2012, 2013 Peter Cock, The James Hutton Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -24,6 +24,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
+#include <config.h>
+
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
@@ -32,6 +34,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/faidx.h>
 #include "sam_header.h"
 #include "sam_opts.h"
+#include "samtools.h"
 
 #define bam_reg2bin(b,e) hts_reg2bin((b),(e), 14, 5)
 
@@ -191,6 +194,10 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
     int ret = 0, n2 = 0, m2 = 0, *posmap = 0;
 
     b = bam_init1();
+    if (!b) {
+        fprintf(stderr, "[depad] Couldn't allocate bam struct\n");
+        return -1;
+    }
     r.l = r.m = q.l = q.m = 0; r.s = q.s = 0;
     int read_ret;
     while ((read_ret = sam_read1(in, h, b)) >= 0) { // read one alignment from `in'
@@ -357,7 +364,10 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
         b->core.bin = bam_reg2bin(b->core.pos, bam_endpos(b));
 
     next_seq:
-        sam_write1(out, h, b);
+        if (sam_write1(out, h, b) < 0) {
+            print_error_errno("depad", "error writing to output");
+            return -1;
+        }
     }
     if (read_ret < -1) {
         fprintf(stderr, "[depad] truncated file.\n");
@@ -525,7 +535,7 @@ int main_pad2unpad(int argc, char *argv[])
     }
     // open file handlers
     if ((in = sam_open_format(argv[optind], in_mode, &ga.in)) == 0) {
-        fprintf(stderr, "[depad] failed to open \"%s\" for reading.\n", argv[optind]);
+        print_error_errno("depad", "failed to open \"%s\" for reading", argv[optind]);
         ret = 1;
         goto depad_end;
     }
@@ -548,7 +558,7 @@ int main_pad2unpad(int argc, char *argv[])
     char wmode[2];
     strcat(out_mode, sam_open_mode(wmode, fn_out, NULL)==0 ? wmode : "b");
     if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
-        fprintf(stderr, "[depad] failed to open \"%s\" for writing.\n", fn_out? fn_out : "standard output");
+        print_error_errno("depad", "failed to open \"%s\" for writing", fn_out? fn_out : "standard output");
         ret = 1;
         goto depad_end;
     }
@@ -565,14 +575,17 @@ int main_pad2unpad(int argc, char *argv[])
     }
 
     // Do the depad
-    ret = bam_pad2unpad(in, out, h, fai);
+    if (bam_pad2unpad(in, out, h, fai) != 0) ret = 1;
 
 depad_end:
     // close files, free and return
     if (fai) fai_destroy(fai);
     if (h) bam_hdr_destroy(h);
-    sam_close(in);
-    sam_close(out);
+    if (in) sam_close(in);
+    if (out && sam_close(out) < 0) {
+        fprintf(stderr, "[depad] error on closing output file.\n");
+        ret = 1;
+    }
     free(fn_list); free(fn_out);
     return ret;
 }
@@ -593,12 +606,13 @@ static int usage(int is_long_help)
     sam_global_opt_help(stderr, "-...-");
 
     if (is_long_help)
-        fprintf(stderr, "Notes:\n\
-\n\
-  1. Requires embedded reference sequences (before the reads for that reference),\n\
-     or ideally a FASTA file of the padded reference sequences (via the -T argument).\n\
-\n\
-  2. The input padded alignment read's CIGAR strings must not use P or I operators.\n\
-\n");
+        fprintf(stderr,
+"Notes:\n"
+"\n"
+"1. Requires embedded reference sequences (before the reads for that reference),\n"
+"   or ideally a FASTA file of the padded reference sequences (via a -T option).\n"
+"\n"
+"2. Input padded alignment reads' CIGAR strings must not use P or I operators.\n"
+"\n");
     return 1;
 }
