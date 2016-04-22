@@ -1,6 +1,6 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2015 Genome Research Ltd.
+    Copyright (C) 2008-2016 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <getopt.h>
 #include <assert.h>
@@ -1862,6 +1863,7 @@ int bam_sort(int argc, char *argv[])
     int c, nargs, is_by_qname = 0, ret, o_seen = 0, n_threads = 0, level = -1;
     char *fnout = "-", modeout[12];
     kstring_t tmpprefix = { 0, 0, NULL };
+    struct stat st;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     static const struct option lopts[] = {
@@ -1912,8 +1914,15 @@ int bam_sort(int argc, char *argv[])
     sam_open_mode(modeout+1, fnout, NULL);
     if (level >= 0) sprintf(strchr(modeout, '\0'), "%d", level < 9? level : 9);
 
-    if (tmpprefix.l == 0)
-        ksprintf(&tmpprefix, "%s.tmp", (nargs > 0)? argv[optind] : "STDIN");
+    if (tmpprefix.l == 0) {
+        if (strcmp(fnout, "-") != 0) ksprintf(&tmpprefix, "%s.tmp", fnout);
+        else kputc('.', &tmpprefix);
+    }
+    if (stat(tmpprefix.s, &st) == 0 && S_ISDIR(st.st_mode)) {
+        unsigned t = ((unsigned) time(NULL)) ^ ((unsigned) clock());
+        if (tmpprefix.s[tmpprefix.l-1] != '/') kputc('/', &tmpprefix);
+        ksprintf(&tmpprefix, "samtools.%d.%u.tmp", (int) getpid(), t % 10000);
+    }
 
     ret = bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-",
                             tmpprefix.s, fnout, modeout, max_mem, n_threads,

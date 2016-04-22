@@ -3,7 +3,7 @@
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2015 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2016 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -428,9 +428,21 @@ is selected.
 .TP
 .BI "-T " PREFIX
 Write temporary files to
-.IB PREFIX . nnnn .bam.
-By default, any temporary files are written alongside the input file, as
-.IB in.bam .tmp. nnnn .bam.
+.IB PREFIX . nnnn .bam,
+or if the specified
+.I PREFIX
+is an existing directory, to
+.IB PREFIX /samtools. mmm . mmm .tmp. nnnn .bam,
+where
+.I mmm
+is unique to this invocation of the
+.B sort
+command.
+.IP
+By default, any temporary files are written alongside the output file, as
+.IB out.bam .tmp. nnnn .bam,
+or if output is to standard output, in the current directory as
+.BI samtools. mmm . mmm .tmp. nnnn .bam.
 .TP
 .BI "-@ " INT
 Set number of sorting and compression threads.
