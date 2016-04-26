@@ -9,8 +9,8 @@ Building samtools
 The typical simple case of building Samtools using the HTSlib bundled within
 this Samtools release tarball and enabling useful plugins, is done as follows:
 
-    cd .../samtools-1.3    # Within the unpacked release directory
-    ./configure --enable-plugins --enable-libcurl --with-plugin-path=$PWD/htslib-1.3
+    cd .../samtools-1.3.1    # Within the unpacked release directory
+    ./configure --enable-plugins --enable-libcurl --with-plugin-path=$PWD/htslib-1.3.1
     make all plugins-htslib
 
 You may wish to copy the resulting samtools executable into somewhere on your
@@ -22,7 +22,7 @@ installation using the HTSlib bundled within this Samtools release tarball,
 also building the various HTSlib utilities such as bgzip and enabling useful
 plugins, is done as follows:
 
-    cd .../samtools-1.3    # Within the unpacked release directory
+    cd .../samtools-1.3.1    # Within the unpacked release directory
     ./configure --enable-plugins --enable-libcurl --prefix=/path/to/location
     make all all-htslib
     make install install-htslib

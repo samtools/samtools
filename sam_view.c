@@ -402,18 +402,18 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (fn_un_out) {
-                if ((un_out = sam_open_format(fn_un_out, out_un_mode, &ga.out)) == 0) {
+            if ((un_out = sam_open_format(fn_un_out, out_un_mode, &ga.out)) == 0) {
                 print_error_errno("view", "failed to open \"%s\" for writing", fn_un_out);
                 ret = 1;
                 goto view_end;
             }
-                if (fn_list) {
-                    if (hts_set_fai_filename(un_out, fn_list) != 0) {
-                        fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
-                        ret = 1;
-                        goto view_end;
-                    }
+            if (fn_list) {
+                if (hts_set_fai_filename(un_out, fn_list) != 0) {
+                    fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+                    ret = 1;
+                    goto view_end;
                 }
+            }
             if (*out_format || is_header ||
                 out_un_mode[1] == 'b' || out_un_mode[1] == 'c' ||
                 (ga.out.format != sam && ga.out.format != unknown_format))  {
@@ -615,6 +615,7 @@ static const char *copied_tags[] = { "RG", "BC", "QT", NULL };
 
 static void bam2fq_usage(FILE *to, const char *command)
 {
+    int fq = strcasecmp("fastq", command) == 0 || strcasecmp("bam2fq", command) == 0;
     fprintf(to,
 "Usage: samtools %s [options...] <in.bam>\n", command);
     fprintf(to,
@@ -624,10 +625,14 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -2 FILE   write paired reads flagged READ2 to FILE\n"
 "  -f INT    only include reads with all bits set in INT set in FLAG [0]\n"
 "  -F INT    only include reads with none of the bits set in INT set in FLAG [0]\n"
-"  -n        don't append /1 and /2 to the read name\n"
-"  -O        output quality in the OQ tag if present\n"
+"  -n        don't append /1 and /2 to the read name\n");
+    if (fq) fprintf(to,
+"  -O        output quality in the OQ tag if present\n");
+    fprintf(to,
 "  -s FILE   write singleton reads to FILE [assume single-end]\n"
-"  -t        copy RG, BC and QT tags to the FASTQ header line\n"
+"  -t        copy RG, BC and QT tags to the %s header line\n",
+    fq ? "FASTQ" : "FASTA");
+    if (fq) fprintf(to,
 "  -v INT    default quality score if not given in file [1]\n");
     sam_global_opt_help(to, "-.--.");
 }
@@ -928,7 +933,7 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state)
 
     bool valid = true;
     while (true) {
-        at_eof = sam_read1(state->fp, state->h, b);
+        at_eof = sam_read1(state->fp, state->h, b) < 0;
 
         if (!at_eof && filter_it_out(b, state)) continue;
         if (!at_eof) ++n_reads;

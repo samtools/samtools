@@ -794,13 +794,13 @@ sub filter_sam
             if ($libraries && /^\@RG/) {
                 my ($id) = /\tID:([^\t]+)/;
                 my ($lib) = /\tLB:([^\t]+)/;
-                if (exists($libraries->{$lib})) {
+                if (exists($libraries->{$lib||""})) {
                     $lib_read_groups->{$id} = 1;
                 }
             }
             if ($read_groups && /^\@RG/) {
                 my ($id) = /\tID:([^\t]+)/;
-                next if (!exists($read_groups->{$id}));
+                next if (!exists($read_groups->{$id||""}));
             }
             next if ($no_sq && /^\@SQ/);
             if ($no_m5 && /^\@SQ/) {
@@ -820,9 +820,9 @@ sub filter_sam
                     for my $i (11 .. $#sam) {
                         last if (($group) = $sam[$i] =~ /^RG:Z:(.*)/);
                     }
-                    next if ($read_groups && !exists($read_groups->{$group}));
+                    next if ($read_groups && !exists($read_groups->{$group||""}));
                     next if ($lib_read_groups
-                             && !exists($lib_read_groups->{$group}));
+                             && !exists($lib_read_groups->{$group||""}));
                 }
                 if ($region) {
                     my $in_range = 0;
