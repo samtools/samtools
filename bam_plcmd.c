@@ -211,9 +211,6 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
 
 static int mplp_func(void *data, bam1_t *b)
 {
-    extern int bam_realn(bam1_t *b, const char *ref);
-    extern int bam_prob_realn_core(bam1_t *b, const char *ref, int ref_len, int flag);
-    extern int bam_cap_mapQ(bam1_t *b, char *ref, int ref_len, int thres);
     char *ref;
     mplp_aux_t *ma = (mplp_aux_t*)data;
     int ret, skip = 0, ref_len;
@@ -258,9 +255,9 @@ static int mplp_func(void *data, bam1_t *b)
         }
 
         skip = 0;
-        if (has_ref && (ma->conf->flag&MPLP_REALN)) bam_prob_realn_core(b, ref, ref_len, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
+        if (has_ref && (ma->conf->flag&MPLP_REALN)) sam_prob_realn(b, ref, ref_len, (ma->conf->flag & MPLP_REDO_BAQ)? 7 : 3);
         if (has_ref && ma->conf->capQ_thres > 10) {
-            int q = bam_cap_mapQ(b, ref, ref_len, ma->conf->capQ_thres);
+            int q = sam_cap_mapq(b, ref, ref_len, ma->conf->capQ_thres);
             if (q < 0) skip = 1;
             else if (b->core.qual > q) b->core.qual = q;
         }
