@@ -126,6 +126,7 @@ int main_bedcov(int argc, char *argv[])
         int tid, beg, end, pos;
         bam_mplp_t mplp;
 
+        if(*str.s == '#') continue; /* header line */
         for (p = q = str.s; *p && *p != '\t'; ++p);
         if (*p != '\t') goto bed_error;
         *p = 0; tid = bam_name2id(aux[0]->header, q); *p = '\t';
