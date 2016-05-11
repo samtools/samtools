@@ -62,8 +62,7 @@ void erase(kstring_t* str, const char *tag)
 
 int main(int argc, char **argv)
 {
-    int optind, hdr_length, filter = 0;
-    char *hdr_text;
+    int optind, filter = 0;
     htsFile *in;
     bcf_hdr_t *hdr;
     bcf1_t *rec;
@@ -80,13 +79,12 @@ int main(int argc, char **argv)
     if ((hdr = bcf_hdr_read(in)) == NULL)
         fail("can't read header");
 
-    hdr_text = bcf_hdr_fmt_text(hdr, 0, &hdr_length);
+    bcf_hdr_format(hdr, 0, &str);
     if (filter) {
-        char *fixed = strstr(hdr_text, "\n#CHROM");
-        printf("%s", fixed? fixed+1 : hdr_text);
+        char *fixed = strstr(str.s, "\n#CHROM");
+        printf("%s", fixed? fixed+1 : str.s);
     }
-    else printf("%s", hdr_text);
-    free(hdr_text);
+    else printf("%s", str.s);
 
     rec = bcf_init();
     while (bcf_read(in, hdr, rec) >= 0) {
