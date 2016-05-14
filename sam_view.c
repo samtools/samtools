@@ -51,6 +51,7 @@ typedef struct samview_settings {
     uint32_t subsam_seed;
     double subsam_frac;
     char* library;
+    char* aux_tag;
     void* bed;
     size_t remove_aux_len;
     char** remove_aux;
@@ -95,6 +96,10 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     if (settings->library) {
         const char *p = bam_get_library((bam_hdr_t*)h, b);
         if (p && strcmp(p, settings->library) != 0) return 1;
+    }
+    if (settings ->aux_tag) {
+        uint8_t *aux =bam_aux_get(b,settings->aux_tag);
+        if (aux) return 1;
     }
     if (settings->remove_aux_len) {
         size_t i;
@@ -249,7 +254,7 @@ int main_samview(int argc, char *argv[])
     /* parse command-line options */
     /* TODO: convert this to getopt_long we're running out of letters */
     strcpy(out_mode, "w");
-    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:")) >= 0) {
+    while ((c = getopt(argc, argv, "SbBcCt:h1Ho:q:f:F:ul:r:?T:R:L:s:@:m:x:U:a:")) >= 0) {
         switch (c) {
         case 's':
             if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
@@ -274,6 +279,16 @@ int main_samview(int argc, char *argv[])
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
         case 'l': settings.library = strdup(optarg); break;
+        case 'a': {
+            if(2!=strlen(optarg)) {
+                print_error_errno("auxiliary tag length should be exactly 2 \"%s\"", optarg);
+                ret=1;
+                goto view_end;
+            }
+            settings.aux_tag = strdup(optarg);
+        }
+        break;
+        
         case 'L':
             if ((settings.bed = bed_read(optarg)) == NULL) {
                 print_error_errno("Could not read file \"%s\"", optarg);
@@ -501,6 +516,7 @@ static int usage(int is_long_help)
     fprintf(stderr, "                  set in FLAG [0]\n");
     // read processing
     fprintf(stderr, "         -x STR   read tag to strip (repeatable) [null]\n");
+    fprintf(stderr, "         -a STR   read tag to exclude [null]\n");
     fprintf(stderr, "         -B       collapse the backward CIGAR operation\n");
     fprintf(stderr, "         -s FLOAT integer part sets seed of random number generator [0];\n");
     fprintf(stderr, "                  rest sets fraction of templates to subsample [no subsampling]\n");
