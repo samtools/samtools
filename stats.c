@@ -828,8 +828,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         // reads. Mates mapped to different chromosomes have isize==0.
         int32_t isize = bam_line->core.isize;
         if ( isize<0 ) isize = -isize;
-        if ( stats->info->nisize > 0 && isize >= stats->info->nisize )
-            isize = stats->info->nisize-1;
+        if ( stats->info->nisize > 0 && isize > stats->info->nisize )
+            isize = stats->info->nisize;
         if ( isize>0 || bam_line->core.tid==bam_line->core.mtid )
         {
             int pos_fst = bam_line->core.mpos - bam_line->core.pos;
@@ -1537,7 +1537,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->quals_2nd      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
     stats->gc_1st         = calloc(stats->ngc,sizeof(uint64_t));
     stats->gc_2nd         = calloc(stats->ngc,sizeof(uint64_t));
-    stats->isize          = init_isize_t(info->nisize);
+    stats->isize          = init_isize_t(info->nisize ?info->nisize+1 :0);
     stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
     stats->mpc_buf        = info->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
     stats->acgtno_cycles  = calloc(stats->nbases,sizeof(acgtno_count_t));
