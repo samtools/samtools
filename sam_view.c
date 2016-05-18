@@ -1002,9 +1002,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state)
     int64_t n_reads = 0; // Statistics
     kstring_t linebuf = { 0, 0, NULL }; // Buffer
     while (sam_read1(state->fp, state->h, b) >= 0) {
-        if (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
-            || (b->core.flag&(state->flag_on)) != state->flag_on             // or reads indicated by filter flags
-            || (b->core.flag&(state->flag_off)) != 0) continue;
+        if (filter_it_out(b, state)) continue;
         ++n_reads;
 
         if (!bam1_to_fq(b, &linebuf, state)) return false;
