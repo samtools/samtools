@@ -404,6 +404,9 @@ or with a
 .BR K ", " M ", or " G
 suffix.
 [768 MiB]
+.IP
+To prevent sort from creating a huge number of temporary files, it enforces a
+minimum value of 1M for this setting.
 .TP
 .B -n
 Sort by read names (i.e., the

@@ -44,6 +44,16 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "sam_opts.h"
 
+/* Minimum memory required in megabytes before sort will attempt to run. This
+   is to prevent accidents where failing to use the -m option correctly results
+   in the creation of a temporary file for each read in the input file.
+   Don't forget to update the man page if you change this. */
+const size_t SORT_MIN_MEGS_PER_THREAD = 1;
+
+/* Default per-thread memory for sort. Must be >= SORT_MIN_MEGS_PER_THREAD.
+   Don't forget to update the man page if you change this. */
+const size_t SORT_DEFAULT_MEGS_PER_THREAD = 768;
+
 #if !defined(__DARWIN_C_LEVEL) || __DARWIN_C_LEVEL < 900000L
 #define NEED_MEMSET_PATTERN4
 #endif
@@ -1857,9 +1867,26 @@ static void sort_usage(FILE *fp)
     sam_global_opt_help(fp, "-.O..");
 }
 
+static void complain_about_memory_setting(size_t max_mem) {
+    char  *suffix = "";
+    const size_t nine_k = 9<<10;
+    if (max_mem > nine_k) { max_mem >>= 10; suffix = "K"; }
+    if (max_mem > nine_k) { max_mem >>= 10; suffix = "M"; }
+
+    fprintf(stderr,
+            "[bam_sort] -m setting (%zu%s bytes) is less than the minimum required (%zuM).\n\n"
+            "Trying to run with -m too small can lead to the creation of a very large number\n"
+            "of temporary files.  This may make sort fail due to it exceeding limits on the\n"
+            "number of files it can have open at the same time.\n\n"
+            "Please check your -m parameter.  It should be an integer followed by one of the\n"
+            "letters K (for kilobytes), M (megabytes) or G (gigabytes).  You should ensure it\n"
+            "is at least the minimum above, and much higher if you are sorting a large file.\n",
+            max_mem, suffix, SORT_MIN_MEGS_PER_THREAD);
+}
+
 int bam_sort(int argc, char *argv[])
 {
-    size_t max_mem = 768<<20; // 512MB
+    size_t max_mem = SORT_DEFAULT_MEGS_PER_THREAD << 20;
     int c, nargs, is_by_qname = 0, ret, o_seen = 0, n_threads = 0, level = -1;
     char *fnout = "-", modeout[12];
     kstring_t tmpprefix = { 0, 0, NULL };
@@ -1906,6 +1933,12 @@ int bam_sort(int argc, char *argv[])
             fprintf(stderr, "[bam_sort] Use -T PREFIX / -o FILE to specify temporary and final output files\n");
 
         sort_usage(stderr);
+        ret = EXIT_FAILURE;
+        goto sort_end;
+    }
+
+    if (max_mem < (SORT_MIN_MEGS_PER_THREAD << 20)) {
+        complain_about_memory_setting(max_mem);
         ret = EXIT_FAILURE;
         goto sort_end;
     }
