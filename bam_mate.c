@@ -265,7 +265,7 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
                     pre->core.pos = -1;
                 }
                 pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
-                pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+                pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR|BAM_FREAD1|BAM_FREAD2|BAM_FMUNMAP);
                 if ( !remove_reads || !(pre->core.flag&BAM_FUNMAP) ) sam_write1(out, header, pre);
             }
         } else has_prev = 1;
@@ -280,7 +280,7 @@ static void bam_mating_core(samFile* in, samFile* out, int remove_reads, int pro
             pre->core.pos = -1;
         }
         pre->core.mtid = -1; pre->core.mpos = -1; pre->core.isize = 0;
-        pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR);
+        pre->core.flag &= ~(BAM_FPAIRED|BAM_FMREVERSE|BAM_FPROPER_PAIR|BAM_FREAD1|BAM_FREAD2|BAM_FMUNMAP);
 
         sam_write1(out, header, pre);
     }
