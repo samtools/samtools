@@ -213,7 +213,7 @@ int main_depth(int argc, char *argv[])
         if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue; // not in BED; skip
         if (all) {
             while (tid > last_tid) {
-                if (last_tid >= 0 && all > 1 && !reg) {
+                if (last_tid >= 0 && !reg) {
                     // Deal with remainder or entirety of last tid
                     while (++last_pos < h->target_len[last_tid]) {
                         if (bed && bed_overlap(bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)
@@ -226,6 +226,8 @@ int main_depth(int argc, char *argv[])
                 }
                 last_tid++;
                 last_pos = -1;
+                if (all < 2)
+                    break;
             }
 
             // Deal with missing portion of current tid
