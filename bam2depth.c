@@ -99,7 +99,7 @@ static int usage() {
 
 int main_depth(int argc, char *argv[])
 {
-    int i, n, tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0;
+    int i, n, tid, reg_tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0;
     int all = 0, status = EXIT_SUCCESS, nfiles, max_depth = -1;
     const bam_pileup1_t **plp;
     char *reg = 0; // specified region
@@ -149,7 +149,7 @@ int main_depth(int argc, char *argv[])
     else
         n = argc - optind; // the number of BAMs on the command line
     data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
-    beg = 0; end = INT_MAX;  // set the default region
+    reg_tid = 0; beg = 0; end = INT_MAX;  // set the default region
     for (i = 0; i < n; ++i) {
         int rf;
         data[i] = calloc(1, sizeof(aux_t));
@@ -199,6 +199,7 @@ int main_depth(int argc, char *argv[])
     if (reg) {
         beg = data[0]->iter->beg; // and to the parsed region coordinates
         end = data[0]->iter->end;
+        reg_tid = data[0]->iter->tid;
     }
 
     // the core multi-pileup loop
@@ -210,12 +211,12 @@ int main_depth(int argc, char *argv[])
     while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
         if (pos < beg || pos >= end) continue; // out of range; skip
         if (tid >= h->n_targets) continue;     // diff number of @SQ lines per file?
-        if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue; // not in BED; skip
         if (all) {
             while (tid > last_tid) {
                 if (last_tid >= 0 && !reg) {
-                    // Deal with remainder or entirety of last tid
+                    // Deal with remainder or entirety of last tid.
                     while (++last_pos < h->target_len[last_tid]) {
+                        // Horribly inefficient, but the bed API is an obfuscated black box.
                         if (bed && bed_overlap(bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)
                             continue;
                         fputs(h->target_name[last_tid], stdout); printf("\t%d", last_pos+1);
@@ -244,6 +245,7 @@ int main_depth(int argc, char *argv[])
             last_tid = tid;
             last_pos = pos;
         }
+        if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue;
         fputs(h->target_name[tid], stdout); printf("\t%d", pos+1); // a customized printf() would be faster
         for (i = 0; i < n; ++i) { // base level filters have to go here
             int j, m = 0;
@@ -262,7 +264,11 @@ int main_depth(int argc, char *argv[])
 
     if (all) {
         // Handle terminating region
-        while (last_tid < h->n_targets) {
+        if (last_tid < 0 && reg && all > 1) {
+            last_tid = reg_tid;
+            last_pos = beg-1;
+        }
+        while (last_tid >= 0 && last_tid < h->n_targets) {
             while (++last_pos < h->target_len[last_tid]) {
                 if (last_pos >= end) break;
                 if (bed && bed_overlap(bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)

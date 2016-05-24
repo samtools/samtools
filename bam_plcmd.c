@@ -240,7 +240,7 @@ static int mplp_func(void *data, bam1_t *b)
         }
         if (ma->conf->rflag_require && !(ma->conf->rflag_require&b->core.flag)) { skip = 1; continue; }
         if (ma->conf->rflag_filter && ma->conf->rflag_filter&b->core.flag) { skip = 1; continue; }
-        if (ma->conf->bed) { // test overlap
+        if (ma->conf->bed && ma->conf->all == 0) { // test overlap
             skip = !bed_overlap(ma->conf->bed, ma->h->target_name[b->core.tid], b->core.pos, bam_endpos(b));
             if (skip) continue;
         }
@@ -319,7 +319,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
     extern void bcf_call_del_rghash(void *rghash);
     mplp_aux_t **data;
-    int i, tid, pos, *n_plp, beg0 = 0, end0 = INT_MAX, ref_len, max_depth, max_indel_depth;
+    int i, tid, pos, *n_plp, beg0 = 0, end0 = INT_MAX, tid0 = 0, ref_len, max_depth, max_indel_depth;
     const bam_pileup1_t **plp;
     mplp_ref_t mp_ref = MPLP_REF_INIT;
     bam_mplp_t iter;
@@ -390,7 +390,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 fprintf(stderr, "[E::%s] fail to parse region '%s' with %s\n", __func__, conf->reg, fn[i]);
                 exit(EXIT_FAILURE);
             }
-            if (i == 0) beg0 = data[i]->iter->beg, end0 = data[i]->iter->end;
+            if (i == 0) beg0 = data[i]->iter->beg, end0 = data[i]->iter->end, tid0 = data[i]->iter->tid;
             hts_idx_destroy(idx);
         }
         else
@@ -567,11 +567,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     // begin pileup
     while ( (ret=bam_mplp_auto(iter, &tid, &pos, n_plp, plp)) > 0) {
         if (conf->reg && (pos < beg0 || pos >= end0)) continue; // out of the region requested
-        if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
         mplp_get_ref(data[0], tid, &ref, &ref_len);
         //printf("tid=%d len=%d ref=%p/%s\n", tid, ref_len, ref, ref);
         if (conf->flag & MPLP_BCF) {
             int total_depth, _ref0, ref16;
+            if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
             for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
             group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp, conf->flag & MPLP_IGNORE_RG);
             _ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
@@ -597,10 +597,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 }
             }
         } else {
-            if (conf->all > 1 && !conf->reg) {
+            if (conf->all) {
                 // Deal with missing portions of previous tids
                 while (tid > last_tid) {
-                    if (last_tid >= 0) {
+                    if (last_tid >= 0 && !conf->reg) {
                         while (++last_pos < h->target_len[last_tid]) {
                             if (conf->bed && bed_overlap(conf->bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)
                                 continue;
@@ -609,6 +609,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                     }
                     last_tid++;
                     last_pos = -1;
+                    if (conf->all < 2)
+                        break;
                 }
             }
             if (conf->all) {
@@ -622,6 +624,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 last_tid = tid;
                 last_pos = pos;
             }
+            if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
 
             fprintf(pileup_fp, "%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
             for (i = 0; i < n; ++i) {
@@ -701,8 +704,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     }
 
     if (conf->all && !(conf->flag & MPLP_BCF)) {
-        // Handle terminating region
-        while (last_tid < h->n_targets) {
+        // Handle terminating region 
+        if (last_tid < 0 && conf->reg && conf->all > 1) {
+            last_tid = tid0;
+            last_pos = beg0-1;
+            mplp_get_ref(data[0], tid0, &ref, &ref_len);
+        }
+       while (last_tid >= 0 && last_tid < h->n_targets) {
             while (++last_pos < h->target_len[last_tid]) {
                 if (last_pos >= end0) break;
                 if (conf->bed && bed_overlap(conf->bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)
