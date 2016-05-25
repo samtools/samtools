@@ -1777,8 +1777,8 @@ sub test_view
         ['reg10', 1,
          { region => [['ref1', 15, 45]], read_groups => { grp2 => 1 }},
          ['-r', 'grp2'], ['ref1:15-45']],
-	# Unmapped reads
-	['reg_unmapped1', 1, { region => [['*']] }, [], ['*']],
+        # Unmapped reads
+        ['reg_unmapped1', 1, { region => [['*']] }, [], ['*']],
 
         # Regions from BED files.  Regions here need to be kept in synch.
         # with the .bed files in test/dat.  Note that BED counts from

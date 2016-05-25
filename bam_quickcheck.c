@@ -119,7 +119,6 @@ int main_quickcheck(int argc, char** argv)
                 if (header == NULL) {
                     if (verbose >= 2) fprintf(stderr, "%s caused an error whilst reading its header.\n", fn);
                     file_state |= 8;
-                    
                 } else {
                     if (header->n_targets <= 0) {
                         if (verbose >= 2) fprintf(stderr, "%s had no targets in header.\n", fn);
