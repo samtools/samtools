@@ -13,8 +13,10 @@
 # Create indexed BAMs
 INIT x $samtools view -b -o xx#depth1.bam xx#depth1.sam
 INIT x $samtools view -b -o xx#depth2.bam xx#depth2.sam
+INIT x $samtools view -b -o xx#depth3.bam xx#depth3.sam
 INIT x $samtools index xx#depth1.bam
 INIT x $samtools index xx#depth2.bam
+INIT x $samtools index xx#depth3.bam
 
 # Test basic 1 and 2 file outputs
 P d1_1.out  $samtools depth xx#depth1.sam
@@ -32,6 +34,7 @@ P d3_12r1a.out $samtools depth -a -r xx:5-16 xx#depth1.bam xx#depth2.bam
 P d3_12r1a.out $samtools depth -a -b xx.bed  xx#depth1.bam xx#depth2.bam
 P d3_12r2a.out $samtools depth -a -r xx:8-13 xx#depth1.bam xx#depth2.bam
 P d3_12r2a.out $samtools depth -a -b xx.bed2 xx#depth1.bam xx#depth2.bam
+P d3_3.out     $samtools depth -a xx#depth3.bam
 
 # With double -a for all including unused refs
 P d4_12.out  $samtools depth -a -a            xx#depth1.bam xx#depth2.bam
