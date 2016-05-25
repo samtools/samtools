@@ -27,8 +27,10 @@ INIT x $samtools view -S -C indels.sam > indels.cram
 INIT x gunzip -c expected/1.out.f3-6.gz | awk -v OFS='\t' '{print "CHROMOSOME_I", NR, $0}' > expected/1.out
 INIT x $samtools view -b -o xx#depth1.bam xx#depth1.sam
 INIT x $samtools view -b -o xx#depth2.bam xx#depth2.sam
+INIT x $samtools view -b -o xx#depth3.bam xx#depth3.sam
 INIT x $samtools index xx#depth1.bam
 INIT x $samtools index xx#depth2.bam
+INIT x $samtools index xx#depth3.bam
 
 # Nasty file corner cases
 P 1.out $samtools mpileup -B -Q0 -x -f ce.fa ce#large_seq.bam 
@@ -170,3 +172,23 @@ P a14.out $samtools mpileup -ABQ0 -a -a -l xx.bed  xx#depth1.bam xx#depth2.bam
 P a15.out $samtools mpileup -ABQ0 -a -s  xx#depth1.sam xx#depth2.sam
 P a16.out $samtools mpileup -ABQ0 -a -O  xx#depth1.sam xx#depth2.sam
 P a17.out $samtools mpileup -ABQ0 -a -sO xx#depth1.sam xx#depth2.sam
+
+# Various boundary cases (see samtools#579 and #374)
+# These are the same regions tested as in depth.reg.
+P m5_all1.out  $samtools mpileup -ABQ0               xx#depth3.bam
+P m5_all2.out  $samtools mpileup -ABQ0 -a            xx#depth3.bam
+P m5_all3.out  $samtools mpileup -ABQ0 -aa           xx#depth3.bam
+P m5_blank.out $samtools mpileup -ABQ0     -r xy:5-6 xx#depth3.bam
+P m5_blank.out $samtools mpileup -ABQ0 -a  -r xy:5-6 xx#depth3.bam
+P m5_xy1.out   $samtools mpileup -ABQ0 -aa -r xy:5-6 xx#depth3.bam
+P m5_xx1.out   $samtools mpileup -ABQ0     -r xx:4-10 xx#depth3.bam
+P m5_xx2.out   $samtools mpileup -ABQ0 -a  -r xx:4-10 xx#depth3.bam
+P m5_xx2.out   $samtools mpileup -ABQ0 -aa -r xx:4-10 xx#depth3.bam
+P m5_blank.out $samtools mpileup -ABQ0     -r xx:9    xx#depth3.bam
+P m5_blank.out $samtools mpileup -ABQ0 -a  -r xx:9    xx#depth3.bam
+P m5_xx3.out   $samtools mpileup -ABQ0 -aa -r xx:9    xx#depth3.bam
+P m5_b3.out    $samtools mpileup -ABQ0     -l xx.bed3 xx#depth3.bam
+P m5_b3aa.out  $samtools mpileup -ABQ0 -aa -l xx.bed3 xx#depth3.bam
+
+# Fail as -a shouldn't output xn:16-20 (it doesn't with -r)
+F m5_b3a.out   $samtools mpileup -ABQ0 -a  -l xx.bed3 xx#depth3.bam

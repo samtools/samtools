@@ -714,7 +714,10 @@ Computes the depth at each position or region.
 Output all positions (including those with zero depth)
 .TP
 .B -a -a, -aa
-Output absolutely all positions, including unused reference sequences
+Output absolutely all positions, including unused reference sequences.
+Note that when used in conjunction with a BED file the -a option may
+sometimes operate as if -aa was specified if the reference sequence
+has coverage outside of the region specified in the BED file.
 .TP
 .BI "-b "  FILE
 .RI "Compute depth at list of positions or regions in specified BED " FILE.
@@ -1189,6 +1192,9 @@ Output all positions, including those with zero depth.
 .TP
 .B -a -a, -aa
 Output absolutely all positions, including unused reference sequences.
+Note that when used in conjunction with a BED file the -a option may
+sometimes operate as if -aa was specified if the reference sequence
+has coverage outside of the region specified in the BED file.
 .PP
 .B Output Options for VCF/BCF format (with -g or -v):
 .TP 10

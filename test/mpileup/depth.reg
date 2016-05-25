@@ -41,6 +41,24 @@ P d4_12.out  $samtools depth -a -a            xx#depth1.bam xx#depth2.bam
 P d4_12r.out $samtools depth -a -a -r xx:5-16 xx#depth1.bam xx#depth2.bam
 P d4_12b.out $samtools depth -a -a -b xx.bed  xx#depth1.bam xx#depth2.bam
 
+# Various boundary cases (see samtools#579 and #374)
+P d5_all1.out  $samtools depth               xx#depth3.bam
+P d5_all2.out  $samtools depth -a            xx#depth3.bam
+P d5_all3.out  $samtools depth -aa           xx#depth3.bam
+P d5_blank.out $samtools depth     -r xy:5-6 xx#depth3.bam
+P d5_blank.out $samtools depth -a  -r xy:5-6 xx#depth3.bam
+P d5_xy1.out   $samtools depth -aa -r xy:5-6 xx#depth3.bam
+P d5_xx1.out   $samtools depth     -r xx:4-10 xx#depth3.bam
+P d5_xx2.out   $samtools depth -a  -r xx:4-10 xx#depth3.bam
+P d5_xx2.out   $samtools depth -aa -r xx:4-10 xx#depth3.bam
+P d5_blank.out $samtools depth     -r xx:9    xx#depth3.bam
+P d5_blank.out $samtools depth -a  -r xx:9    xx#depth3.bam
+P d5_xx3.out   $samtools depth -aa -r xx:9    xx#depth3.bam
+P d5_b3.out    $samtools depth     -b xx.bed3 xx#depth3.bam
+P d5_b3aa.out  $samtools depth -aa -b xx.bed3 xx#depth3.bam
+
+# Fail as -a shouldn't output xn:16-20 (it doesn't with -r)
+F d5_b3a.out   $samtools depth -a  -b xx.bed3 xx#depth3.bam
 
 #-----------------------------------------------------------------------------
 # With mpileup simulation of depth
