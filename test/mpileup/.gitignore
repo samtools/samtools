@@ -7,6 +7,6 @@ indels.[bc]*am
 mpileup.*.[cs]*am
 mpileup.*.crai
 overlap50.[bc]*am
-xx#depth[12].bam*
+xx#depth*.bam*
 
 expected/1.out
