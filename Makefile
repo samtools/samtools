@@ -45,21 +45,25 @@ datarootdir = $(prefix)/share
 mandir      = $(datarootdir)/man
 man1dir     = $(mandir)/man1
 
+# Installation location for $(MISC_PROGRAMS) and $(MISC_SCRIPTS)
+misc_bindir = $(bindir)
+
 MKDIR_P = mkdir -p
 INSTALL = install -p
-INSTALL_PROGRAM = $(INSTALL)
 INSTALL_DATA    = $(INSTALL) -m 644
 INSTALL_DIR     = $(MKDIR_P) -m 755
+INSTALL_MAN     = $(INSTALL_DATA)
+INSTALL_PROGRAM = $(INSTALL)
+INSTALL_SCRIPT  = $(INSTALL_PROGRAM)
 
 
 PROGRAMS = samtools
 
-BUILT_MISC_PROGRAMS = \
+MISC_PROGRAMS = \
 	misc/ace2sam misc/maq2sam-long misc/maq2sam-short \
 	misc/md5fa misc/md5sum-lite misc/wgsim
 
-MISC_PROGRAMS = \
-	$(BUILT_MISC_PROGRAMS) \
+MISC_SCRIPTS = \
 	misc/blast2sam.pl misc/bowtie2sam.pl misc/export2sam.pl \
 	misc/interpolate_sam.pl misc/novo2sam.pl \
 	misc/plot-bamstats misc/psl2sam.pl \
@@ -67,7 +71,7 @@ MISC_PROGRAMS = \
 	misc/soap2sam.pl \
 	misc/varfilter.py misc/wgsim_eval.pl misc/zoom2sam.pl
 
-BUILT_TEST_PROGRAMS = \
+TEST_PROGRAMS = \
 	test/merge/test_bam_translate \
 	test/merge/test_rtrans_build \
 	test/merge/test_trans_tbl_init \
@@ -77,7 +81,7 @@ BUILT_TEST_PROGRAMS = \
 	test/split/test_parse_args \
 	test/vcf-miniview
 
-all: $(PROGRAMS) $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
+all: $(PROGRAMS) $(MISC_PROGRAMS) $(TEST_PROGRAMS)
 
 # TODO Use configure or htslib.pc to add -rdynamic/-ldl conditionally
 ALL_CPPFLAGS = -I. $(HTSLIB_CPPFLAGS) $(CPPFLAGS)
@@ -195,7 +199,7 @@ stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) sam_
 # For tests that might use it, set $REF_PATH explicitly to use only reference
 # areas within the test suite (or set it to ':' to use no reference areas).
 # (regression.sh sets $REF_PATH to a subdirectory itself.)
-check test: samtools $(BGZIP) $(BUILT_TEST_PROGRAMS)
+check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	REF_PATH=: test/test.pl --exec bgzip=$(BGZIP)
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
 	test/merge/test_rtrans_build
@@ -277,10 +281,12 @@ misc/maq2sam-long.o: misc/maq2sam.c config.h
 	$(CC) $(CFLAGS) -DMAQ_LONGREADS $(ALL_CPPFLAGS) -c -o $@ misc/maq2sam.c
 
 
-install: $(PROGRAMS) $(BUILT_MISC_PROGRAMS)
-	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(man1dir)
-	$(INSTALL_PROGRAM) $(PROGRAMS) $(MISC_PROGRAMS) $(DESTDIR)$(bindir)
-	$(INSTALL_DATA) samtools.1 misc/wgsim.1 $(DESTDIR)$(man1dir)
+install: $(PROGRAMS) $(MISC_PROGRAMS)
+	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(misc_bindir) $(DESTDIR)$(man1dir)
+	$(INSTALL_PROGRAM) $(PROGRAMS) $(DESTDIR)$(bindir)
+	$(INSTALL_PROGRAM) $(MISC_PROGRAMS) $(DESTDIR)$(misc_bindir)
+	$(INSTALL_SCRIPT) $(MISC_SCRIPTS) $(DESTDIR)$(misc_bindir)
+	$(INSTALL_MAN) samtools.1 misc/wgsim.1 $(DESTDIR)$(man1dir)
 
 
 testclean:
@@ -292,7 +298,7 @@ mostlyclean: testclean
 	-rm -f *.o misc/*.o test/*.o test/*/*.o version.h
 
 clean: mostlyclean
-	-rm -f $(PROGRAMS) libbam.a $(BUILT_MISC_PROGRAMS) $(BUILT_TEST_PROGRAMS)
+	-rm -f $(PROGRAMS) libbam.a $(MISC_PROGRAMS) $(TEST_PROGRAMS)
 
 distclean: clean
 	-rm -f config.cache config.h config.log config.mk config.status
