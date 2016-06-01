@@ -695,9 +695,17 @@ Suppress outputting IS rows where there are no insertions.
 .TP \"-------- bedcov
 .B bedcov
 samtools bedcov
+.RI [ options ]
 .IR region.bed " " in1.sam | in1.bam | in1.cram "[...]"
 
 Reports read depth per genomic region, as specified in the supplied BED file.
+
+.B Options:
+.RS
+.TP
+.BI "-Q " INT
+.RI "Only count reads with mapping quality greater than " INT
+.RE
 
 .TP \"-------- depth
 .B depth

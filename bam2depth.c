@@ -80,10 +80,10 @@ static int usage() {
     fprintf(stderr, "   -a -a (or -aa)      output absolutely all positions, including unused ref. sequences\n");
     fprintf(stderr, "   -b <bed>            list of positions or regions\n");
     fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
-    fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>)\n");
+    fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>) [0]\n");
     fprintf(stderr, "   -d/-m <int>         maximum coverage depth [8000]\n");  // the htslib's default
-    fprintf(stderr, "   -q <int>            base quality threshold\n");
-    fprintf(stderr, "   -Q <int>            mapping quality threshold\n");
+    fprintf(stderr, "   -q <int>            base quality threshold [0]\n");
+    fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
 
     sam_global_opt_help(stderr, "-.--.");
