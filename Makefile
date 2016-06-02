@@ -22,6 +22,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 CC       = gcc
+AR       = ar
 CPPFLAGS =
 CFLAGS   = -g -Wall -O2
 LDFLAGS  =
@@ -32,7 +33,7 @@ LOBJS=      bam_aux.o bam.o bam_import.o sam.o \
 AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o \
             bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
-            bamtk.o bam2bcf.o bam2bcf_indel.o sample.o sam_opts.o \
+            bamtk.o bam2bcf.o bam2bcf_indel.o sample.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
@@ -133,13 +134,22 @@ print-version:
 	$(CC) $(CFLAGS) $(ALL_CPPFLAGS) -c -o $@ $<
 
 
+LIBST_OBJS = sam_opts.o sam_utils.o
+
+
 lib:libbam.a
 
 libbam.a:$(LOBJS)
 	$(AR) -csru $@ $(LOBJS)
 
-samtools: $(AOBJS) libbam.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ $(AOBJS) libbam.a $(HTSLIB_LIB) $(CURSES_LIB) -lm $(ALL_LIBS)
+samtools: $(AOBJS) libbam.a libst.a $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ $(AOBJS) libbam.a libst.a $(HTSLIB_LIB) $(CURSES_LIB) -lm $(ALL_LIBS)
+
+# For building samtools and its test suite only: NOT to be installed.
+libst.a: $(LIBST_OBJS)
+	@-rm -f $@
+	$(AR) -rcs $@ $(LIBST_OBJS)
+
 
 bam_h = bam.h $(htslib_bgzf_h) $(htslib_sam_h)
 bam2bcf_h = bam2bcf.h $(htslib_hts_h) $(htslib_vcf_h)
@@ -188,6 +198,7 @@ phase.o: phase.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(
 sam.o: sam.c config.h $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c config.h sam_header.h $(htslib_khash_h)
 sam_opts.o: sam_opts.c config.h $(sam_opts_h)
+sam_utils.o: sam_utils.c config.h samtools.h
 sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_khash_h) samtools.h $(sam_opts_h)
 sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)
 stats_isize.o: stats_isize.c config.h stats_isize.h $(htslib_khash_h)
@@ -212,26 +223,26 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	test/split/test_parse_args
 
 
-test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o sam_opts.o $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
+test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
 
-test/merge/test_rtrans_build: test/merge/test_rtrans_build.o sam_opts.o $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_rtrans_build.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
+test/merge/test_rtrans_build: test/merge/test_rtrans_build.o libst.a $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_rtrans_build.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
 
-test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o sam_opts.o $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
+test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o libst.a $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
 
-test/split/test_count_rg: test/split/test_count_rg.o test/test.o sam_opts.o $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
+test/split/test_count_rg: test/split/test_count_rg.o test/test.o libst.a $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
 
-test/split/test_expand_format_string: test/split/test_expand_format_string.o test/test.o sam_opts.o $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_expand_format_string.o test/test.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
+test/split/test_expand_format_string: test/split/test_expand_format_string.o test/test.o libst.a $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_expand_format_string.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
 
-test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o sam_opts.o $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_filter_header_rg.o test/test.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
+test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o libst.a $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_filter_header_rg.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
 
-test/split/test_parse_args: test/split/test_parse_args.o test/test.o sam_opts.o $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o sam_opts.o $(HTSLIB_LIB) $(ALL_LIBS)
+test/split/test_parse_args: test/split/test_parse_args.o test/test.o libst.a $(HTSLIB)
+	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
 
 test/vcf-miniview: test/vcf-miniview.o $(HTSLIB)
 	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/vcf-miniview.o $(HTSLIB_LIB) $(ALL_LIBS)
@@ -298,7 +309,7 @@ mostlyclean: testclean
 	-rm -f *.o misc/*.o test/*.o test/*/*.o version.h
 
 clean: mostlyclean
-	-rm -f $(PROGRAMS) libbam.a $(MISC_PROGRAMS) $(TEST_PROGRAMS)
+	-rm -f $(PROGRAMS) libbam.a libst.a $(MISC_PROGRAMS) $(TEST_PROGRAMS)
 
 distclean: clean
 	-rm -f config.cache config.h config.log config.mk config.status
