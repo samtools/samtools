@@ -1,6 +1,6 @@
 /* bam_addrprg.c -- samtools command to add or replace readgroups.
 
-   Copyright (c) 2013, 2015 Genome Research Limited.
+   Copyright (c) 2013, 2015, 2016 Genome Research Limited.
 
    Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -131,6 +131,19 @@ static char* basic_unescape(const char* in)
     return tmp;
 }
 
+// Malloc a string containing [s,slim) or to the end of s if slim is NULL.
+// If lenp is non-NULL, stores the length of the resulting string there.
+static char *dup_substring(const char *s, const char *slim, size_t *lenp)
+{
+    size_t len = slim? (slim - s) : strlen(s);
+    char *ns = malloc(len+1);
+    if (ns == NULL) return NULL;
+    memcpy(ns, s, len);
+    ns[len] = '\0';
+    if (lenp) *lenp = len;
+    return ns;
+}
+
 // These are to be replaced by samtools header parser
 // Extracts the first @RG line from a string.
 static char* get_rg_line(const char* text, size_t* last)
@@ -143,37 +156,17 @@ static char* get_rg_line(const char* text, size_t* last)
         rg++;//skip initial \n
     }
     // duplicate the line for return
-    char* line;
-    char* end = strchr(rg, '\n');
-    if (end) {
-        line = strndup(rg,(end-rg));
-        *last = end - rg;
-    } else {
-        line = strdup(rg);
-        *last = strlen(rg);
-    }
-    return line;
+    return dup_substring(rg, strchr(rg, '\n'), last);
 }
 
 // Given a @RG line return the id
-static char* get_rg_id(const char* input)
+static char* get_rg_id(const char *line)
 {
-    assert(input!=NULL);
-    char* line = strdup(input);
-    char *next = line;
-    char* token = strsep(&next, "\t");
-    token = strsep(&next,"\t"); // skip first token it should always be "@RG"
-    while (next != NULL) {
-        char* key = strsep(&token,":");
-        if (!strcmp(key,"ID")) {
-            char* retval = strdup(token);
-            free(line);
-            return retval;
-        }
-        token = strsep(&next,"\t");
-    }
-    free(line);
-    return NULL;
+    const char *id = strstr(line, "\tID:");
+    if (! id) return NULL;
+
+    id += 4;
+    return dup_substring(id, strchr(id, '\t'), NULL);
 }
 
 // Confirms the existance of an RG line with a given ID in a bam header
@@ -181,9 +174,8 @@ static bool confirm_rg( const bam_hdr_t *hdr, const char* rgid )
 {
     assert( hdr != NULL && rgid != NULL );
 
-    char *ptr, *start;
+    const char *ptr = hdr->text;
     bool found = false;
-    start = ptr = strndup(hdr->text, hdr->l_text);
     while (ptr != NULL && *ptr != '\0' && found == false ) {
         size_t end = 0;
         char* line = get_rg_line(ptr, &end);
@@ -196,16 +188,14 @@ static bool confirm_rg( const bam_hdr_t *hdr, const char* rgid )
         free(line);
         ptr += end;
     }
-    free(start);
     return found;
 }
 
 static char* get_first_rgid( const bam_hdr_t *hdr )
 {
     assert( hdr != NULL );
-    char *ptr, *start;
+    const char *ptr = hdr->text;
     char* found = NULL;
-    start = ptr = strndup(hdr->text, hdr->l_text);
     while (ptr != NULL && *ptr != '\0' && found == NULL ) {
         size_t end = 0;
         char* line = get_rg_line(ptr, &end);
@@ -215,7 +205,6 @@ static char* get_first_rgid( const bam_hdr_t *hdr )
         free(line);
         ptr += end;
     }
-    free(start);
     return found;
 }
 
