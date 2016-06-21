@@ -55,6 +55,7 @@ sub error
         "       plot-bamstats -p outdir/ file.bam.bc\n",
         "Options:\n",
         "   -k, --keep-files                    Do not remove temporary files.\n",
+        "   -l, --insert-size-log-10            Set the Y axis scale of the Insert Size plot to log 10",
         "   -m, --merge                         Merge multiple bamstats files and output to STDOUT.\n",
         "   -p, --prefix <path>                 The output files prefix, add a slash to create new directory.\n",
         "   -r, --ref-stats <file.fa.gc>        Optional reference stats file with expected GC content (created with -s).\n",
@@ -184,6 +185,7 @@ sub parse_params
     while (defined(my $arg=shift(@ARGV)))
     {
         if ( $arg eq '-k' || $arg eq '--keep-files' ) { $$opts{keep_files}=1; next; }
+        if ( $arg eq '-l' || $arg eq '-insert-size-log-10' ) { $$opts{insert_size_log_10}=1; next;  }
         if ( $arg eq '-m' || $arg eq '--merge' ) { $$opts{merge}=1; next; }
         if ( $arg eq '-r' || $arg eq '--ref-stats' ) { $$opts{ref_stats}=shift(@ARGV); next; }
         if ( $arg eq '-s' || $arg eq '--do-ref-stats' ) { $$opts{do_ref_stats}=shift(@ARGV); next; }
@@ -972,6 +974,11 @@ sub plot_isize
             set ylabel  "Number of pairs"
             set xlabel  "Insert Size"
             set title "$$args{title}"
+        ];
+        if (exists($$opts{insert_size_log_10}))	{
+            print $fh "set logscale y 10\n";
+        }
+    print $fh qq[
             plot \\
                 '-' with lines lc rgb 'black' title 'All pairs', \\
                 '-' with lines title 'Inward', \\
