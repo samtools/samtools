@@ -757,6 +757,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     return ret;
 }
 
+static int is_url(const char *s)
+{
+    static const char uri_scheme_chars[] =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+.-";
+    return s[strspn(s, uri_scheme_chars)] == ':';
+}
+
 #define MAX_PATH_LEN 1024
 int read_file_list(const char *file_list,int *n,char **argv[])
 {
@@ -786,7 +793,7 @@ int read_file_list(const char *file_list,int *n,char **argv[])
 
         // check sanity of the file list
         buf[len] = 0;
-        if (stat(buf, &sb) != 0)
+        if (! (is_url(buf) || stat(buf, &sb) == 0))
         {
             // no such file, check if it is safe to print its name
             int i, safe_to_print = 1;
