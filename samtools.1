@@ -404,6 +404,9 @@ or with a
 .BR K ", " M ", or " G
 suffix.
 [768 MiB]
+.IP
+To prevent sort from creating a huge number of temporary files, it enforces a
+minimum value of 1M for this setting.
 .TP
 .B -n
 Sort by read names (i.e., the
@@ -692,9 +695,17 @@ Suppress outputting IS rows where there are no insertions.
 .TP \"-------- bedcov
 .B bedcov
 samtools bedcov
+.RI [ options ]
 .IR region.bed " " in1.sam | in1.bam | in1.cram "[...]"
 
 Reports read depth per genomic region, as specified in the supplied BED file.
+
+.B Options:
+.RS
+.TP
+.BI "-Q " INT
+.RI "Only count reads with mapping quality greater than " INT
+.RE
 
 .TP \"-------- depth
 .B depth
@@ -711,7 +722,10 @@ Computes the depth at each position or region.
 Output all positions (including those with zero depth)
 .TP
 .B -a -a, -aa
-Output absolutely all positions, including unused reference sequences
+Output absolutely all positions, including unused reference sequences.
+Note that when used in conjunction with a BED file the -a option may
+sometimes operate as if -aa was specified if the reference sequence
+has coverage outside of the region specified in the BED file.
 .TP
 .BI "-b "  FILE
 .RI "Compute depth at list of positions or regions in specified BED " FILE.
@@ -1180,6 +1194,15 @@ Output base positions on reads.
 .TP
 .B -s, --output-MQ
 Output mapping quality.
+.TP
+.B -a
+Output all positions, including those with zero depth.
+.TP
+.B -a -a, -aa
+Output absolutely all positions, including unused reference sequences.
+Note that when used in conjunction with a BED file the -a option may
+sometimes operate as if -aa was specified if the reference sequence
+has coverage outside of the region specified in the BED file.
 .PP
 .B Output Options for VCF/BCF format (with -g or -v):
 .TP 10

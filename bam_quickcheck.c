@@ -26,7 +26,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <htslib/hts.h>
 #include <htslib/sam.h>
-#include <htslib/bgzf.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -102,7 +101,7 @@ int main_quickcheck(int argc, char** argv)
         // attempt to open
         htsFile *hts_fp = hts_open(fn, "r");
         if (hts_fp == NULL) {
-            if (verbose >= 2) fprintf(stderr, "%s could not be opened for reading\n", fn);
+            if (verbose >= 2) fprintf(stderr, "%s could not be opened for reading.\n", fn);
             file_state |= 2;
         }
         else {
@@ -110,37 +109,54 @@ int main_quickcheck(int argc, char** argv)
             // make sure we have sequence data
             const htsFormat *fmt = hts_get_format(hts_fp);
             if (fmt->category != sequence_data ) {
-                if (verbose >= 2) fprintf(stderr, "%s was not identified as sequence data\n", fn);
+                if (verbose >= 2) fprintf(stderr, "%s was not identified as sequence data.\n", fn);
                 file_state |= 4;
             }
             else {
                 if (verbose >= 3) fprintf(stderr, "%s is sequence data\n", fn);
                 // check header
                 bam_hdr_t *header = sam_hdr_read(hts_fp);
-                if (header->n_targets <= 0) {
-                    if (verbose >= 2) fprintf(stderr, "%s had no targets in header\n", fn);
+                if (header == NULL) {
+                    if (verbose >= 2) fprintf(stderr, "%s caused an error whilst reading its header.\n", fn);
                     file_state |= 8;
-                }
-                else {
-                    if (verbose >= 3) fprintf(stderr, "%s has %d targets in header\n", fn, header->n_targets);
-                }
-
-                // only check EOF on BAM for now
-                // TODO implement and use hts_check_EOF() to include CRAM support
-                if (fmt->format == bam) {
-                    if (bgzf_check_EOF(hts_fp->fp.bgzf) <= 0) {
-                        if (verbose >= 2) fprintf(stderr, "%s was missing EOF block\n", fn);
-                        file_state |= 16;
+                } else {
+                    if (header->n_targets <= 0) {
+                        if (verbose >= 2) fprintf(stderr, "%s had no targets in header.\n", fn);
+                        file_state |= 8;
                     }
                     else {
-                        if (verbose >= 3) fprintf(stderr, "%s has good EOF block\n", fn);
+                        if (verbose >= 3) fprintf(stderr, "%s has %d targets in header.\n", fn, header->n_targets);
                     }
+                    bam_hdr_destroy(header);
+                }
+            }
+            // check EOF on formats that support this
+            int ret;
+            if ((ret = hts_check_EOF(hts_fp)) < 0) {
+                if (verbose >= 2) fprintf(stderr, "%s caused an error whilst checking for EOF block.\n", fn);
+                file_state |= 16;
+            }
+            else {
+                switch (ret) {
+                    case 0:
+                        if (verbose >= 2) fprintf(stderr, "%s was missing EOF block when one should be present.\n", fn);
+                        file_state |= 16;
+                        break;
+                    case 1:
+                        if (verbose >= 3) fprintf(stderr, "%s has good EOF block.\n", fn);
+                        break;
+                    case 2:
+                        if (verbose >= 3) fprintf(stderr, "%s cannot be checked for EOF block as it is not seekable.\n", fn);
+                        break;
+                    case 3:
+                        if (verbose >= 3) fprintf(stderr, "%s cannot be checked for EOF block because its filetype does not contain one.\n", fn);
+                        break;
                 }
             }
 
             if (hts_close(hts_fp) < 0) {
                 file_state |= 32;
-                if (verbose >= 2) fprintf(stderr, "%s did not close cleanly\n", fn);
+                if (verbose >= 2) fprintf(stderr, "%s did not close cleanly.\n", fn);
             }
         }
 

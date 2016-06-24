@@ -43,6 +43,17 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
 #include "sam_opts.h"
+#include "samtools.h"
+
+/* Minimum memory required in megabytes before sort will attempt to run. This
+   is to prevent accidents where failing to use the -m option correctly results
+   in the creation of a temporary file for each read in the input file.
+   Don't forget to update the man page if you change this. */
+const size_t SORT_MIN_MEGS_PER_THREAD = 1;
+
+/* Default per-thread memory for sort. Must be >= SORT_MIN_MEGS_PER_THREAD.
+   Don't forget to update the man page if you change this. */
+const size_t SORT_DEFAULT_MEGS_PER_THREAD = 768;
 
 #if !defined(__DARWIN_C_LEVEL) || __DARWIN_C_LEVEL < 900000L
 #define NEED_MEMSET_PATTERN4
@@ -1098,6 +1109,7 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
   @param  flag        flags that control how the merge is undertaken
   @param  reg         region to merge
   @param  n_threads   number of threads to use (passed to htslib)
+  @param  cmd         command name (used in print_error() etc)
   @param  in_fmt      format options for input files
   @param  out_fmt     output file format and options
   @discussion Padding information may NOT correctly maintained. This
@@ -1105,7 +1117,7 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
  */
 int bam_merge_core2(int by_qname, const char *out, const char *mode,
                     const char *headers, int n, char * const *fn, int flag,
-                    const char *reg, int n_threads,
+                    const char *reg, int n_threads, const char *cmd,
                     const htsFormat *in_fmt, const htsFormat *out_fmt)
 {
     samFile *fpout, **fp = NULL;
@@ -1126,21 +1138,19 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
     if (headers) {
         samFile* fpheaders = sam_open(headers, "r");
         if (fpheaders == NULL) {
-            const char *message = strerror(errno);
-            fprintf(stderr, "[bam_merge_core] cannot open '%s': %s\n", headers, message);
+            print_error_errno(cmd, "cannot open \"%s\"", headers);
             return -1;
         }
         hin = sam_hdr_read(fpheaders);
         sam_close(fpheaders);
         if (hin == NULL) {
-            fprintf(stderr, "[bam_merge_core] couldn't read headers for '%s'\n",
-                    headers);
+            print_error(cmd, "couldn't read headers from \"%s\"", headers);
             goto mem_fail;
         }
     } else  {
         hout = bam_hdr_init();
         if (!hout) {
-            fprintf(stderr, "[bam_merge_core] couldn't allocate bam header\n");
+            print_error(cmd, "couldn't allocate bam header");
             goto mem_fail;
         }
         hout->text = strdup("");
@@ -1194,13 +1204,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
         bam_hdr_t *hin;
         fp[i] = sam_open_format(fn[i], "r", in_fmt);
         if (fp[i] == NULL) {
-            fprintf(stderr, "[bam_merge_core] fail to open file %s\n", fn[i]);
+            print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
             goto fail;
         }
         hin = sam_hdr_read(fp[i]);
         if (hin == NULL) {
-            fprintf(stderr, "[bam_merge_core] failed to read header for '%s'\n",
-                    fn[i]);
+            print_error(cmd, "failed to read header from \"%s\"", fn[i]);
             goto fail;
         }
 
@@ -1326,19 +1335,18 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
             bam_destroy1(h->b);
             h->b = NULL;
         } else {
-            fprintf(stderr, "[%s] failed to read first record from %s\n",
-                    __func__, fn[i]);
+            print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
             goto fail;
         }
     }
 
     // Open output file and write header
     if ((fpout = sam_open_format(out, mode, out_fmt)) == 0) {
-        fprintf(stderr, "[%s] failed to create \"%s\": %s\n", __func__, out, strerror(errno));
+        print_error_errno(cmd, "failed to create \"%s\"", out);
         return -1;
     }
     if (sam_hdr_write(fpout, hout) != 0) {
-        fprintf(stderr, "[%s] failed to write header.\n", __func__);
+        print_error_errno(cmd, "failed to write header to \"%s\"", out);
         sam_close(fpout);
         return -1;
     }
@@ -1354,7 +1362,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
             bam_aux_append(b, "RG", 'Z', RG_len[heap->i] + 1, (uint8_t*)RG[heap->i]);
         }
         if (sam_write1(fpout, hout, b) < 0) {
-            fprintf(stderr, "[%s] failed to write to output file.\n", __func__);
+            print_error_errno(cmd, "failed writing to \"%s\"", out);
             sam_close(fpout);
             return -1;
         }
@@ -1367,8 +1375,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
             bam_destroy1(heap->b);
             heap->b = NULL;
         } else {
-            fprintf(stderr, "[bam_merge_core] error: '%s' is truncated.\n",
-                    fn[heap->i]);
+            print_error(cmd, "\"%s\" is truncated", fn[heap->i]);
             goto fail;
         }
         ks_heapadjust(heap, 0, n, heap);
@@ -1390,13 +1397,13 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
     free_merged_header(merged_hdr);
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     if (sam_close(fpout) < 0) {
-        fprintf(stderr, "[bam_merge_core] error closing output file\n");
+        print_error(cmd, "error closing output file");
         return -1;
     }
     return 0;
 
  mem_fail:
-    fprintf(stderr, "[bam_merge_core] Out of memory\n");
+    print_error(cmd, "Out of memory");
 
  fail:
     if (flag & MERGE_RG) {
@@ -1430,7 +1437,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
     strcpy(mode, "wb");
     if (flag & MERGE_UNCOMP) strcat(mode, "0");
     else if (flag & MERGE_LEVEL1) strcat(mode, "1");
-    return bam_merge_core2(by_qname, out, mode, headers, n, fn, flag, reg, 0, NULL, NULL);
+    return bam_merge_core2(by_qname, out, mode, headers, n, fn, flag, reg, 0, "merge", NULL, NULL);
 }
 
 static void merge_usage(FILE *to)
@@ -1502,7 +1509,7 @@ int bam_merge(int argc, char *argv[])
                 fn_size += nfiles;
             }
             else {
-                fprintf(stderr, "[%s] Invalid file list \"%s\"\n", __func__, optarg);
+                print_error("merge", "Invalid file list \"%s\"", optarg);
                 ret = 1;
             }
             break;
@@ -1514,7 +1521,7 @@ int bam_merge(int argc, char *argv[])
         }
     }
     if ( argc - optind < 1 ) {
-        fprintf(stderr, "You must at least specify the output file.\n");
+        print_error("merge", "You must at least specify the output file");
         merge_usage(stderr);
         return 1;
     }
@@ -1537,7 +1544,7 @@ int bam_merge(int argc, char *argv[])
         memcpy(fn+fn_size, argv + (optind+1), nargcfiles * sizeof(char*));
     }
     if (fn_size+nargcfiles < 1) {
-        fprintf(stderr, "You must specify at least one (and usually two or more) input files.\n");
+        print_error("merge", "You must specify at least one (and usually two or more) input files");
         merge_usage(stderr);
         return 1;
     }
@@ -1546,7 +1553,7 @@ int bam_merge(int argc, char *argv[])
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
     if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers,
                         fn_size+nargcfiles, fn, flag, reg, n_threads,
-                        &ga.in, &ga.out) < 0)
+                        "merge", &ga.in, &ga.out) < 0)
         ret = 1;
 
 end:
@@ -1697,7 +1704,8 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
     for (i = 0; i < n_threads; ++i) {
         pthread_join(tid[i], 0);
         if (w[i].error != 0) {
-            fprintf(stderr, "[bam_sort_core] failed to create temporary file \"%s.%.4d.bam\": %s\n", prefix, w[i].index, strerror(w[i].error));
+            errno = w[i].error;
+            print_error_errno("sort", "failed to create temporary file \"%s.%.4d.bam\"", prefix, w[i].index);
             n_failed++;
         }
     }
@@ -1741,13 +1749,12 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     buf = NULL;
     fp = sam_open_format(fn, "r", in_fmt);
     if (fp == NULL) {
-        const char *message = strerror(errno);
-        fprintf(stderr, "[bam_sort_core] fail to open '%s': %s\n", fn, message);
+        print_error_errno("sort", "can't open \"%s\"", fn);
         return -2;
     }
     header = sam_hdr_read(fp);
     if (header == NULL) {
-        fprintf(stderr, "[bam_sort_core] failed to read header for '%s'\n", fn);
+        print_error("sort", "failed to read header from \"%s\"", fn);
         goto err;
     }
     if (is_by_qname) change_SO(header, "queryname");
@@ -1780,7 +1787,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
         }
     }
     if (ret != -1) {
-        fprintf(stderr, "[bam_sort_core] truncated file. Aborting.\n");
+        print_error("sort", "truncated file. Aborting");
         ret = -1;
         goto err;
     }
@@ -1789,7 +1796,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     if (n_files == 0) { // a single block
         ks_mergesort(sort, k, buf, 0);
         if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt) != 0) {
-            fprintf(stderr, "[bam_sort_core] failed to create \"%s\": %s\n", fnout, strerror(errno));
+            print_error_errno("sort", "failed to create \"%s\"", fnout);
             ret = -1;
             goto err;
         }
@@ -1808,7 +1815,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
         }
         if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns,
                             MERGE_COMBINE_RG|MERGE_COMBINE_PG|MERGE_FIRST_CO,
-                            NULL, n_threads, in_fmt, out_fmt) < 0) {
+                            NULL, n_threads, "sort", in_fmt, out_fmt) < 0) {
             // Propagate bam_merge_core2() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             goto err;
@@ -1857,9 +1864,26 @@ static void sort_usage(FILE *fp)
     sam_global_opt_help(fp, "-.O..");
 }
 
+static void complain_about_memory_setting(size_t max_mem) {
+    char  *suffix = "";
+    const size_t nine_k = 9<<10;
+    if (max_mem > nine_k) { max_mem >>= 10; suffix = "K"; }
+    if (max_mem > nine_k) { max_mem >>= 10; suffix = "M"; }
+
+    fprintf(stderr,
+"[bam_sort] -m setting (%zu%s bytes) is less than the minimum required (%zuM).\n\n"
+"Trying to run with -m too small can lead to the creation of a very large number\n"
+"of temporary files.  This may make sort fail due to it exceeding limits on the\n"
+"number of files it can have open at the same time.\n\n"
+"Please check your -m parameter.  It should be an integer followed by one of the\n"
+"letters K (for kilobytes), M (megabytes) or G (gigabytes).  You should ensure it\n"
+"is at least the minimum above, and much higher if you are sorting a large file.\n",
+            max_mem, suffix, SORT_MIN_MEGS_PER_THREAD);
+}
+
 int bam_sort(int argc, char *argv[])
 {
-    size_t max_mem = 768<<20; // 512MB
+    size_t max_mem = SORT_DEFAULT_MEGS_PER_THREAD << 20;
     int c, nargs, is_by_qname = 0, ret, o_seen = 0, n_threads = 0, level = -1;
     char *fnout = "-", modeout[12];
     kstring_t tmpprefix = { 0, 0, NULL };
@@ -1906,6 +1930,12 @@ int bam_sort(int argc, char *argv[])
             fprintf(stderr, "[bam_sort] Use -T PREFIX / -o FILE to specify temporary and final output files\n");
 
         sort_usage(stderr);
+        ret = EXIT_FAILURE;
+        goto sort_end;
+    }
+
+    if (max_mem < (SORT_MIN_MEGS_PER_THREAD << 20)) {
+        complain_about_memory_setting(max_mem);
         ret = EXIT_FAILURE;
         goto sort_end;
     }

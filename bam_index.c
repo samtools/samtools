@@ -74,17 +74,31 @@ int bam_index(int argc, char *argv[])
     }
 
     ret = sam_index_build3(argv[optind], argv[optind+1], csi? min_shift : 0, nthreads);
-    if (ret != 0) {
-        if (ret == -2)
-            print_error_errno("index", "failed to open \"%s\"", argv[optind]);
-        else if (ret == -3)
-            print_error("index", "\"%s\" is in a format that cannot be usefully indexed", argv[optind]);
+    switch (ret) {
+    case 0:
+        return 0;
+
+    case -2:
+        print_error_errno("index", "failed to open \"%s\"", argv[optind]);
+        break;
+
+    case -3:
+        print_error("index", "\"%s\" is in a format that cannot be usefully indexed", argv[optind]);
+        break;
+
+    case -4:
+        if (argv[optind+1])
+            print_error("index", "failed to create or write index \"%s\"", argv[optind+1]);
         else
-            print_error("index", "\"%s\" is corrupted or unsorted", argv[optind]);
-        return EXIT_FAILURE;
+            print_error("index", "failed to create or write index");
+        break;
+
+    default:
+        print_error("index", "\"%s\" is corrupted or unsorted", argv[optind]);
+        break;
     }
 
-    return 0;
+    return EXIT_FAILURE;
 }
 
 int bam_idxstats(int argc, char *argv[])

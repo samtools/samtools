@@ -28,8 +28,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include "htslib/hts.h"
 #include "htslib/sam.h"
-#include "errmod.h"
 #include "htslib/faidx.h"
 #include "sam_opts.h"
 
@@ -146,7 +146,6 @@ static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
 
 static int read_aln(void *data, bam1_t *b)
 {
-    extern int bam_prob_realn_core(bam1_t *b, const char *ref, int ref_len, int flag);
     ct_t *g = (ct_t*)data;
     int ret;
     while (1)
@@ -160,7 +159,7 @@ static int read_aln(void *data, bam1_t *b)
                 g->ref = fai_fetch(g->fai, g->h->target_name[b->core.tid], &g->len);
                 g->tid = b->core.tid;
             }
-            bam_prob_realn_core(b, g->ref, g->len, 1<<1|1);
+            sam_prob_realn(b, g->ref, g->len, 1<<1|1);
         }
         break;
     }

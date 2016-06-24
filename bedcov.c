@@ -89,7 +89,8 @@ int main_bedcov(int argc, char *argv[])
     }
     if (usage || optind + 2 > argc) {
         fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...]\n\n");
-        fprintf(stderr, "  -Q INT       Only count bases of at least INT quality [0]\n");
+        fprintf(stderr, "Options:\n");
+        fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
         sam_global_opt_help(stderr, "-.--.");
         return 1;
     }

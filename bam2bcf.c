@@ -29,11 +29,11 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdint.h>
 #include <assert.h>
 #include <float.h>
+#include <htslib/hts.h>
 #include <htslib/sam.h>
 #include <htslib/kstring.h>
 #include <htslib/kfunc.h>
 #include "bam2bcf.h"
-#include "errmod.h"
 
 extern  void ks_introsort_uint32_t(size_t n, uint32_t a[]);
 

@@ -79,6 +79,11 @@ Linux distributions) is installed.
 FAILED.  Either configure --without-curses or resolve this error to build
 samtools successfully.])
   fi
+else
+  CURSES_LIB=
+  CURSES_CPPFLAGS=
+  AC_SUBST([CURSES_LIB])
+  AC_SUBST([CURSES_CPPFLAGS])
 fi
 
 save_LIBS=$LIBS

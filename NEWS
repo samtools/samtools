@@ -3,6 +3,20 @@ Beta Release 1.4  (DD Mmmmm 2016)
 
 Noteworthy changes in samtools:
 
+* Added -a option to samtools mpileup to show all locations, including
+  sites with zero depth; repeating the option as -aa or -a -a additionally
+  shows reference sequences without any reads mapped to them (#496).
+
+* The mpileup text output no longer contains empty columns at zero coverage
+  positions.  Previously it would output "...0\t\t..." in some circumstances
+  (zero coverage due to being below a minumum base quality); this has been
+  fixed to output as "...0\t*\t*..." with placeholder '*' characters as in
+  other zero coverage circumstances (see PR #537).
+
+* To stop it from creating too many temporary files, samtools sort
+  will now not run unless its per-thread memory limit (-m) is set to
+  at least 1 megabyte (#547).
+
 
 Beta Release 1.3.1  (22 April 2016)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -31,9 +31,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdint.h>
 #include <math.h>
 #include <zlib.h>
+#include "htslib/hts.h"
 #include "htslib/sam.h"
 #include "htslib/kstring.h"
-#include "errmod.h"
 #include "sam_opts.h"
 #include "samtools.h"
 
