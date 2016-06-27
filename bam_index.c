@@ -54,7 +54,7 @@ int bam_index(int argc, char *argv[])
 {
     int csi = 0;
     int min_shift = BAM_LIDX_SHIFT;
-    int nthreads = 0;
+    int n_threads = 0;
     int c, ret;
 
     while ((c = getopt(argc, argv, "bcm:@:")) >= 0)
@@ -62,7 +62,7 @@ int bam_index(int argc, char *argv[])
         case 'b': csi = 0; break;
         case 'c': csi = 1; break;
         case 'm': csi = 1; min_shift = atoi(optarg); break;
-        case '@': nthreads = atoi(optarg); break;
+        case '@': n_threads = atoi(optarg); break;
         default:
             index_usage(stderr);
             return 1;
@@ -73,7 +73,7 @@ int bam_index(int argc, char *argv[])
         return 1;
     }
 
-    ret = sam_index_build3(argv[optind], argv[optind+1], csi? min_shift : 0, nthreads);
+    ret = sam_index_build3(argv[optind], argv[optind+1], csi? min_shift : 0, n_threads);
     switch (ret) {
     case 0:
         return 0;
