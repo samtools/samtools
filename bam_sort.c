@@ -1071,9 +1071,10 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 #define MERGE_UNCOMP      2 // Generate uncompressed BAM
 #define MERGE_LEVEL1      4 // Compress the BAM at level 1 (fast) mode
 #define MERGE_FORCE       8 // Overwrite output BAM if it exists
-#define MERGE_COMBINE_RG 16 // Combine RG tags frather than redefining them
-#define MERGE_COMBINE_PG 32 // Combine PG tags frather than redefining them
+#define MERGE_COMBINE_RG 16 // Combine RG tags rather than redefining them
+#define MERGE_COMBINE_PG 32 // Combine PG tags rather than redefining them
 #define MERGE_FIRST_CO   64 // Use only first file's @CO headers (sort cmd only)
+#define MERGE_NO_TRANS  128 // Disable the trans_tbl code (sort optimisation)
 
 /*
  * How merging is handled
@@ -1166,13 +1167,35 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
     if (!iter) goto mem_fail;
     hdr = (bam_hdr_t**)calloc(n, sizeof(bam_hdr_t*));
     if (!hdr) goto mem_fail;
+
+    if (flag & MERGE_NO_TRANS) {
+        if (hout) bam_hdr_destroy(hout);
+        hout = NULL;
+        for (i = 0; i < n; ++i) {
+            fp[i] = sam_open_format(fn[i], "r", in_fmt);
+            if (fp[i] == NULL) {
+                print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
+                goto fail;
+            }
+            hin = sam_hdr_read(fp[i]);
+            if (!hout) hout = hin;
+            if (hts_get_format(fp[i])->format == sam) hdr[i] = hin;
+            else { if (hin != hout) bam_hdr_destroy(hin); hdr[i] = NULL; }
+        }
+        hin = NULL;
+        // Also skips region parsing; valid assumption.
+        // When the FIXME regarding iteration of SAM files is fixed we'll
+        // be able to make this a tidier goto: after the if (reg) blocks.
+        goto no_trans_tbl;
+    }
+
     translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
     if (!translation_tbl) goto mem_fail;
     RG = (char**)calloc(n, sizeof(char*));
     if (!RG) goto mem_fail;
 
     // prepare RG tag from file names
-    if (flag & MERGE_RG) {
+    if ((flag & MERGE_RG)) {
         RG_len = (int*)calloc(n, sizeof(int));
         if (!RG_len) goto mem_fail;
         for (i = 0; i != n; ++i) {
@@ -1305,6 +1328,7 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
         free(rtrans);
         rtrans = NULL;
     } else {
+ no_trans_tbl:
         for (i = 0; i < n; ++i) {
             if (hdr[i] == NULL) {
                 iter[i] = sam_itr_queryi(NULL, HTS_IDX_REST, 0, 0);
@@ -1326,7 +1350,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
         if (!h->b) goto mem_fail;
         res = iter[i] ? sam_itr_next(fp[i], iter[i], h->b) : sam_read1(fp[i], hdr[i], h->b);
         if (res >= 0) {
-            bam_translate(h->b, translation_tbl + i);
+            if (!(flag & MERGE_NO_TRANS))
+                bam_translate(h->b, translation_tbl + i);
             h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam_is_rev(h->b);
             h->idx = idx++;
         }
@@ -1367,7 +1392,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
             return -1;
         }
         if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
-            bam_translate(b, translation_tbl + heap->i);
+            if (!(flag & MERGE_NO_TRANS))
+                bam_translate(b, translation_tbl + heap->i);
             heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
             heap->idx = idx++;
         } else if (j == -1 && (!iter[heap->i] || iter[heap->i]->finished)) {
@@ -1387,12 +1413,12 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
         free(RG_len);
     }
     for (i = 0; i < n; ++i) {
-        trans_tbl_destroy(translation_tbl + i);
+        if (translation_tbl) trans_tbl_destroy(translation_tbl + i);
         hts_itr_destroy(iter[i]);
         bam_hdr_destroy(hdr[i]);
         sam_close(fp[i]);
     }
-    bam_hdr_destroy(hin);
+    if (hin) bam_hdr_destroy(hin);
     bam_hdr_destroy(hout);
     free_merged_header(merged_hdr);
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
@@ -1759,6 +1785,13 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     }
     if (is_by_qname) change_SO(header, "queryname");
     else change_SO(header, "coordinate");
+
+    // No gain to using the thread pool here as the flow of this code
+    // is such that we are *either* reading *or* sorting.  Hence a shared
+    // pool makes no real difference except to reduce the thread count a little.
+    if (n_threads > 1)
+        hts_set_threads(fp, n_threads);
+
     // write sub files
     for (;;) {
         if (k == max_k) {
@@ -1815,6 +1848,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
         }
         if (bam_merge_core2(is_by_qname, fnout, modeout, NULL, n_files, fns,
                             MERGE_COMBINE_RG|MERGE_COMBINE_PG|MERGE_FIRST_CO,
+                            //MERGE_FIRST_CO | MERGE_NO_TRANS,
                             NULL, n_threads, "sort", in_fmt, out_fmt) < 0) {
             // Propagate bam_merge_core2() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
@@ -1835,6 +1869,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     free(buf);
     bam_hdr_destroy(header);
     sam_close(fp);
+
     return ret;
 }
 
