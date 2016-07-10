@@ -1741,7 +1741,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     size_t max_k, k, max_mem;
     bam_hdr_t *header = NULL;
     samFile *fp;
-    bam1_t b = {0}, **buf;
+    bam1_t b, **buf;
     uint8_t *bam_mem, *bam_mem_offset;
 
     if (n_threads < 2) n_threads = 1;
