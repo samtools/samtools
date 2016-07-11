@@ -428,7 +428,7 @@ int main_samview(int argc, char *argv[])
 
     htsThreadPool p = {NULL, 0};
     if (n_threads > 1) {
-        if (!(p.pool = hts_create_threads(n_threads))) {
+        if (!(p.pool = hts_tpool_init(n_threads))) {
             fprintf(stderr, "Error creating thread pool\n");
             ret = 1;
             goto view_end;
@@ -519,7 +519,7 @@ view_end:
     }
 
     if (p.pool)
-        hts_destroy_threads(p.pool);
+        hts_tpool_destroy(p.pool);
 
     return ret;
 }
