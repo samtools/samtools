@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdint.h>
 #include <unistd.h>
 #include <stdarg.h>
+#include <errno.h>
 #include <htslib/faidx.h>
 
 static void error(const char *format, ...)
@@ -81,18 +82,27 @@ int faidx_main(int argc, char *argv[])
     while ( ++optind<argc )
     {
         printf(">%s\n", argv[optind]);
-        int i, j, seq_len;
+        int seq_len;
         char *seq = fai_fetch(fai, argv[optind], &seq_len);
         if ( seq_len < 0 ) error("Failed to fetch sequence in %s\n", argv[optind]);
-        for (i=0; i<seq_len; i+=60)
+        size_t i, seq_sz = seq_len;
+        for (i=0; i<seq_sz; i+=60)
         {
-            for (j=0; j<60 && i+j<seq_len; j++)
-                putchar(seq[i+j]);
-            putchar('\n');
+            size_t len = i + 60 < seq_sz ? 60 : seq_sz - i;
+            if (fwrite(seq + i, 1, len, stdout) < len) {
+                error("Failed to write output : %s\n", strerror(errno));
+            }
+            if (putchar('\n') == EOF) {
+                error("Failed to write output : %s\n", strerror(errno));
+            }
         }
         free(seq);
     }
     fai_destroy(fai);
+
+    if (fflush(stdout) == EOF) {
+        error("Failed to flush output : %s\n", strerror(errno));
+    }
 
     return 0;
 }
