@@ -192,7 +192,7 @@ bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(sam_opts_h) $(
 bedidx.o: bedidx.c config.h $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(sam_opts_h)
 dict.o: dict.c config.h $(htslib_kseq_h) $(htslib_hts_h)
-faidx.o: faidx.c config.h $(htslib_faidx_h)
+faidx.o: faidx.c config.h $(htslib_faidx_h) samtools.h
 padding.o: padding.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_faidx_h) sam_header.h $(sam_opts_h) samtools.h
 phase.o: phase.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(sam_opts_h) samtools.h $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
 sam.o: sam.c config.h $(htslib_faidx_h) $(sam_h)
