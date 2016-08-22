@@ -358,7 +358,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     // Open files
     retval->input_file = sam_open_format(opts->input_name, "r", &opts->ga.in);
     if (retval->input_file == NULL) {
-        fprintf(stderr, "[init] Could not open input file: %s\n", opts->input_name);
+        print_error_errno("addreplacerg", "could not open \"%s\"", opts->input_name);
         return false;
     }
     retval->input_header = sam_hdr_read(retval->input_file);
@@ -367,7 +367,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, "w", &opts->ga.out);
 
     if (retval->output_file == NULL) {
-        print_error_errno("addreplacerg", "Could not open output file: %s\n", opts->output_name);
+        print_error_errno("addreplacerg", "could not create \"%s\"", opts->output_name);
         return false;
     }
 

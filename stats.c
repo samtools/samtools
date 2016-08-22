@@ -1481,13 +1481,13 @@ int init_stat_info_fname(stats_info_t* info, const char* bam_fname, const htsFor
     // .. bam
     samFile* sam;
     if ((sam = sam_open_format(bam_fname, "r", in_fmt)) == 0) {
-        error("Failed to open: %s\n", bam_fname);
+        print_error_errno("stats", "failed to open \"%s\"", bam_fname);
         return 1;
     }
     info->sam = sam;
     info->sam_header = sam_hdr_read(sam);
     if (info->sam_header == NULL) {
-        error("Failed to read header for '%s'\n", bam_fname);
+        print_error("stats", "failed to read header for \"%s\"", bam_fname);
         return 1;
     }
     return 0;

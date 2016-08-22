@@ -1,6 +1,6 @@
 /*  bam_tview.c -- tview subcommand.
 
-    Copyright (C) 2008-2015 Genome Research Ltd.
+    Copyright (C) 2008-2016 Genome Research Ltd.
     Portions copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/faidx.h>
 #include <htslib/sam.h>
 #include <htslib/bgzf.h>
+#include "samtools.h"
 #include "sam_opts.h"
 
 khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
@@ -68,7 +69,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
     tv->fp = sam_open_format(fn, "r", fmt);
     if(tv->fp == NULL)
     {
-        fprintf(stderr,"sam_open %s. %s\n", fn,fn_fa);
+        print_error_errno("tview", "can't open \"%s\"", fn);
         exit(EXIT_FAILURE);
     }
     // TODO bgzf_set_cache_size(tv->fp->fp.bgzf, 8 * 1024 *1024);
@@ -77,13 +78,13 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
     tv->header = sam_hdr_read(tv->fp);
     if(tv->header == NULL)
     {
-        fprintf(stderr,"Cannot read '%s'.\n", fn);
+        print_error("tview", "cannot read \"%s\"", fn);
         exit(EXIT_FAILURE);
     }
     tv->idx = sam_index_load(tv->fp, fn);
     if (tv->idx == NULL)
     {
-        fprintf(stderr,"Cannot read index for '%s'.\n", fn);
+        print_error("tview", "cannot read index for \"%s\"", fn);
         exit(EXIT_FAILURE);
     }
     tv->lplbuf = bam_lplbuf_init(tv_pl_func, tv);

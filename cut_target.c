@@ -1,7 +1,7 @@
 /*  cut_target.c -- targetcut subcommand.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2012-2013, 2015 Genome Research Ltd.
+    Copyright (C) 2012-2013, 2015, 2016 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/hts.h"
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
+#include "samtools.h"
 #include "sam_opts.h"
 
 #define ERR_DEP 0.83
@@ -205,9 +206,13 @@ int main_cut_target(int argc, char *argv[])
     }
     l = max_l = 0; cns = 0;
     g.fp = sam_open_format(argv[optind], "r", &ga.in);
+    if (g.fp == NULL) {
+        print_error_errno("targetcut", "can't open \"%s\"", argv[optind]);
+        return 1;
+    }
     g.h = sam_hdr_read(g.fp);
     if (g.h == NULL) {
-        fprintf(stderr, "Couldn't read header for '%s'\n", argv[optind]);
+        print_error("targetcut", "couldn't read header for \"%s\"", argv[optind]);
         sam_close(g.fp);
         return 1;
     }

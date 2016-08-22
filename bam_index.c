@@ -109,15 +109,20 @@ int bam_idxstats(int argc, char *argv[])
         return 1;
     }
     fp = sam_open(argv[1], "r");
-    if (fp == NULL) { fprintf(stderr, "[%s] fail to open BAM.\n", __func__); return 1; }
+    if (fp == NULL) {
+        print_error_errno("idxstats", "failed to open \"%s\"", argv[1]);
+        return 1;
+    }
     header = sam_hdr_read(fp);
     if (header == NULL) {
-        fprintf(stderr, "[%s] failed to read header for '%s'.\n",
-                __func__, argv[1]);
+        print_error("idxstats", "failed to read header for \"%s\"", argv[1]);
         return 1;
     }
     idx = sam_index_load(fp, argv[1]);
-    if (idx == NULL) { fprintf(stderr, "[%s] fail to load the index.\n", __func__); return 1; }
+    if (idx == NULL) {
+        print_error("idxstats", "fail to load index for \"%s\"", argv[1]);
+        return 1;
+    }
 
     int i;
     for (i = 0; i < header->n_targets; ++i) {
