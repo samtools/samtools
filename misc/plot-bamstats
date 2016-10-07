@@ -1386,8 +1386,8 @@ sub create_html
             <tr><th>Bases</tr>
             <tr>
                 <td class="pad"><table>
-                <tr><td>total:       <td class="right"> $bases_total    <td class="right"> $bpercent_mapped</tr>
-                <tr><td>mapped:      <td class="right"> $bases_mapped   <td class="right"></tr>
+                <tr><td>total:       <td class="right"> $bases_total    <td class="right"></tr>
+                <tr><td>mapped:      <td class="right"> $bases_mapped   <td class="right"> $bpercent_mapped</tr>
                 <tr><td>error rate:      <td class="right"> $error_rate  <td class="right"></tr>
                 </table></tr>
         </table>
