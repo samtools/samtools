@@ -154,6 +154,7 @@ The
 .BR -L ,
 .BR -r ,
 .BR -R ,
+.BR -s ,
 .BR -q ,
 .BR -l ,
 .BR -m ,
@@ -164,10 +165,9 @@ options filter the alignments that will be included in the output to only those
 alignments that match certain criteria.
 
 The
-.BR -x ,
-.BR -B ,
+.B -x
 and
-.B -s
+.B -B
 options modify the data which is contained in each alignment.
 
 Finally, the
@@ -332,8 +332,23 @@ Read tag to exclude from output (repeatable) [null]
 Collapse the backward CIGAR operation.
 .TP
 .BI "-s " FLOAT
-Integer part is used to seed the random number generator [0]. Part after the
-decimal point sets the fraction of templates/pairs to subsample [no subsampling].
+Output only a proportion of the input alignments.
+This subsampling acts in the same way on all of the alignment records in
+the same template or read pair, so it never keeps a read but not its mate.
+.IP
+The integer and fractional parts of the
+.BI "-s " INT . FRAC
+option are used separately: the part after the
+decimal point sets the fraction of templates/pairs to be kept,
+while the integer part is used as a seed that influences
+.I which
+subset of reads is kept.
+.IP
+.\" Reads are retained based on a score computed by hashing their QNAME
+.\" field and the seed value.
+When subsampling data that has previously been subsampled, be sure to use
+a different seed value from those used previously; otherwise more reads
+will be retained than expected.
 .TP
 .BI "-@ " INT
 Number of BAM compression threads to use in addition to main thread [0].

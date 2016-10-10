@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2015 Genome Research Ltd.
+    Copyright (C) 2009-2016 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -267,6 +267,8 @@ int main_samview(int argc, char *argv[])
         switch (c) {
         case 's':
             if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
+                // Convert likely user input 0,1,2,... to pseudo-random
+                // values with more entropy and more bits set
                 srand(settings.subsam_seed);
                 settings.subsam_seed = rand();
             }
@@ -540,11 +542,11 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "           query sequence >= INT [0]\n"
 "  -f INT   only include reads with all bits set in INT set in FLAG [0]\n"
 "  -F INT   only include reads with none of the bits set in INT set in FLAG [0]\n"
+"  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
+"           fraction of templates/read pairs to keep; INT part sets seed)\n"
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
-"  -s FLOAT integer part sets seed of random number generator [0];\n"
-"           rest sets fraction of templates to subsample [no subsampling]\n"
 // general options
 "  -@, --threads INT\n"
 "           number of BAM/CRAM compression threads [0]\n"
