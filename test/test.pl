@@ -556,13 +556,12 @@ sub test_usage
     if (-t) {
         $args{redirection} = "";  # no redirection necessary
     }
-    elsif (eval { require IO::Pty }) {
-        $tty_input = new IO::Pty;
+    elsif (eval { require IO::Pty; $tty_input = new IO::Pty; }) {
         # ensure stdin is a terminal, so that subcommands display their usage
         $args{redirection} = "<'" . $tty_input->ttyname . "'";
     }
     else {
-        warn "$0: module IO::Pty not found; skipping usage tests\n";
+        warn "$0: no IO::Pty module or can't open pty; skipping usage tests\n";
         return;
     }
 
