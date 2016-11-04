@@ -255,7 +255,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
 
 static int usage(FILE *fp, int n_files) {
     fprintf(fp,
-            "Usage:   samtools collate [-Ou] [-n nFiles] [-c cLevel] <in.bam> <out.prefix>\n\n"
+            "Usage:   samtools collate [-Ou] [-n nFiles] [-l cLevel] <in.bam> <out.prefix>\n\n"
             "Options:\n"
             "      -O       output to stdout\n"
             "      -u       uncompressed BAM output\n"
