@@ -38,6 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "htslib/khash.h"
+#include "htslib/thread_pool.h"
 #include "samtools.h"
 #include "sam_opts.h"
 KHASH_SET_INIT_STR(rg)
