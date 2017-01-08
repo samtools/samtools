@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2016 Genome Research Ltd.
+    Copyright (C) 2009-2017 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -234,6 +234,7 @@ int main_samview(int argc, char *argv[])
     int is_long_help = 0, n_threads = 0;
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
+    FILE *fp_out = NULL;
     bam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
     char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
@@ -427,6 +428,16 @@ int main_samview(int argc, char *argv[])
             }
         }
     }
+    else {
+        if (fn_out) {
+            fp_out = fopen(fn_out, "w");
+            if (fp_out == NULL) {
+                print_error_errno("view", "can't create \"%s\"", fn_out);
+                ret = EXIT_FAILURE;
+                goto view_end;
+            }
+        }
+    }
 
     if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
     if (is_header_only) goto view_end; // no need to print alignments
@@ -489,13 +500,19 @@ int main_samview(int argc, char *argv[])
     }
 
 view_end:
-    if (is_count && ret == 0)
-        printf("%" PRId64 "\n", count);
+    if (is_count && ret == 0) {
+        if (fprintf(fn_out? fp_out : stdout, "%" PRId64 "\n", count) < 0) {
+            if (fn_out) print_error_errno("view", "writing to \"%s\" failed", fn_out);
+            else print_error_errno("view", "writing to standard output failed");
+            ret = EXIT_FAILURE;
+        }
+    }
 
     // close files, free and return
     if (in) check_sam_close("view", in, fn_in, "standard input", &ret);
     if (out) check_sam_close("view", out, fn_out, "standard output", &ret);
     if (un_out) check_sam_close("view", un_out, fn_un_out, "file", &ret);
+    if (fp_out) fclose(fp_out);
 
     free(fn_list); free(fn_out); free(settings.library);  free(fn_un_out);
     sam_global_args_free(&ga);
