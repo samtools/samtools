@@ -46,20 +46,23 @@ static void index_usage(FILE *fp)
 "Options:\n"
 "  -b       Generate BAI-format index for BAM files [default]\n"
 "  -c       Generate CSI-format index for BAM files\n"
-"  -m INT   Set minimum interval size for CSI indices to 2^INT [%d]\n", BAM_LIDX_SHIFT);
+"  -m INT   Set minimum interval size for CSI indices to 2^INT [%d]\n"
+"  -@ INT   Sets the number of threads [none]\n", BAM_LIDX_SHIFT);
 }
 
 int bam_index(int argc, char *argv[])
 {
     int csi = 0;
     int min_shift = BAM_LIDX_SHIFT;
+    int n_threads = 0;
     int c, ret;
 
-    while ((c = getopt(argc, argv, "bcm:")) >= 0)
+    while ((c = getopt(argc, argv, "bcm:@:")) >= 0)
         switch (c) {
         case 'b': csi = 0; break;
         case 'c': csi = 1; break;
         case 'm': csi = 1; min_shift = atoi(optarg); break;
+        case '@': n_threads = atoi(optarg); break;
         default:
             index_usage(stderr);
             return 1;
@@ -70,7 +73,7 @@ int bam_index(int argc, char *argv[])
         return 1;
     }
 
-    ret = sam_index_build2(argv[optind], argv[optind+1], csi? min_shift : 0);
+    ret = sam_index_build3(argv[optind], argv[optind+1], csi? min_shift : 0, n_threads);
     switch (ret) {
     case 0:
         return 0;
