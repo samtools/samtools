@@ -37,7 +37,7 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
-            bam_quickcheck.o bam_addrprg.o
+            bam_quickcheck.o bam_addrprg.o stats_contaminants.o
 
 prefix      = /usr/local
 exec_prefix = $(prefix)
@@ -202,6 +202,7 @@ sam_utils.o: sam_utils.c config.h samtools.h
 sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_khash_h) samtools.h $(sam_opts_h)
 sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)
 stats_isize.o: stats_isize.c config.h stats_isize.h $(htslib_khash_h)
+stats_contaminants.o: stats_contaminants.c config.h stats_contaminants.h $(htslib_khash_h) $(htslib_kstring_h) $(htslib_kseq_h)
 stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) sam_header.h $(htslib_khash_str2int_h) samtools.h $(htslib_khash_h) $(htslib_kstring_h) stats_isize.h $(sam_opts_h)
 
 

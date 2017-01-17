@@ -59,6 +59,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
 #include "stats_isize.h"
+#include "stats_contaminants.h"
 #include "sam_opts.h"
 
 #define BWA_MIN_RDLEN 35
@@ -117,6 +118,7 @@ typedef struct
 {
     // Auxiliary data
     int flag_require, flag_filter;
+    contaminant_map_t *contaminants;  // Contaminant information
     faidx_t *fai;                   // Reference sequence for GC-depth graph
     int argc;                       // Command line arguments to be printed on the output
     char **argv;
@@ -813,6 +815,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     {
         stats->read_lengths[read_len]++;
         collect_orig_read_stats(bam_line, stats, &gc_count);
+        if (stats->info->contaminants)
+            collect_contaminant_info(stats->info->contaminants, bam_line);
     }
 
     // Look at the flags and increment appropriate counters (mapped, paired, etc)
@@ -1217,6 +1221,35 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
               );
         igcd += nbins;
     }
+
+    // Display shared k-mers with the contaminants
+    if (stats->info->contaminants) {
+        fprintf(to, "# Shared k-mers with contaminants. Use `grep ^SKC | cut -f 2-` to extract this part. The columns are: contaminant name, count, percentage, count/expected\n");
+        uint64_t max_shared = 0;
+        uint32_t i, max_i = 0;
+        contaminant_map_t * contaminants = stats->info->contaminants;
+        double max_e = 0;
+        for (i = 0; i < contaminants->n_seqs; ++i) {
+            // Note that the approximation of k-mer count is terribly approximate.
+            //
+            // a - approximate number of k-mers in adapter
+            double a = contaminants->seqs[i].l - contaminants->k + 1;
+            // r - approximate average number of k-mers in adapter
+            double r = avg_read_length - contaminants->k + 1;
+            // Approximation for expected number of shared k-mers (2 because of reverse-complements)
+            double e = 1.0 - pow(1 - pow(0.25, contaminants->k), 2 * a + 2 * r);
+
+            if (e > max_e) {
+                max_shared = contaminants->shared_kmers[i];
+                max_i = i;
+                max_e = e;
+            }
+            double fraction = 1.0 * contaminants->shared_kmers[i] / contaminants->total_reads;
+            fprintf(to, "SKC\t%s\t%ld\t%.2f\t%f\n", contaminants->names[i].s, contaminants->shared_kmers[i], 100.0 * fraction, fraction / e);
+        }
+        double fraction = 1.0 * contaminants->shared_kmers[max_i] / contaminants->total_reads;
+        fprintf(to, "SKC\tMAX:%s\t%ld\t%.2f\t%f\n", contaminants->names[max_i].s, max_shared, 100.0 * fraction, fraction / max_e);
+    }
 }
 
 void init_regions(stats_t *stats, const char *file)
@@ -1373,6 +1406,7 @@ static void error(const char *format, ...)
         printf("    -r, --ref-seq <file>                Reference sequence (required for GC-depth and mismatches-per-cycle calculation).\n");
         printf("    -s, --sam                           Ignored (input format is auto-detected).\n");
         printf("    -S, --split <tag>                   Also write statistics to separate files split by tagged field.\n");
+        printf("    -C, --contaminants <file>           FASTA file with contaminants to report k-mer overlap with.\n");
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         sam_global_opt_help(stdout, "-.--.");
@@ -1470,6 +1504,7 @@ stats_info_t* stats_info_init(int argc, char *argv[])
     info->cov_max  = 1000;
     info->cov_step = 1;
     info->filter_readlen = -1;
+    info->contaminants = NULL;
     info->argc = argc;
     info->argv = argv;
 
@@ -1602,6 +1637,7 @@ int main_stats(int argc, char *argv[])
         {"sam", no_argument, NULL, 's'},
         {"ref-seq", required_argument, NULL, 'r'},
         {"coverage", required_argument, NULL, 'c'},
+        {"contaminants", required_argument, NULL, 'C'},
         {"read-length", required_argument, NULL, 'l'},
         {"insert-size", required_argument, NULL, 'i'},
         {"most-inserts", required_argument, NULL, 'm'},
@@ -1618,7 +1654,7 @@ int main_stats(int argc, char *argv[])
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:C:",loptions,NULL))>0 )
     {
         switch (opt)
         {
@@ -1643,6 +1679,10 @@ int main_stats(int argc, char *argv[])
             case 'x': sparse = 1; break;
             case 'S': info->split_tag = optarg; break;
             case 'P': info->split_prefix = optarg; break;
+            case 'C': info->contaminants = load_contaminant_fasta(optarg, /*kmer_size=*/10);
+                      if (info->contaminants == NULL)
+                          error("Could not load FASTA file %s\n", optarg);
+                      break;
             case '?':
             case 'h': error(NULL);
             default:
