@@ -41,8 +41,10 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 KHASH_SET_INIT_STR(rg)
+KHASH_SET_INIT_INT(aux_exists)
 
 typedef khash_t(rg) *rghash_t;
+typedef khash_t(aux_exists) *auxhash_t;
 
 // This structure contains the settings for a samview run
 typedef struct samview_settings {
@@ -56,8 +58,8 @@ typedef struct samview_settings {
     double subsam_frac;
     char* library;
     void* bed;
-    size_t remove_aux_len;
-    char** remove_aux;
+    auxhash_t aux_blacklist;
+    auxhash_t aux_whitelist;
 } samview_settings_t;
 
 
@@ -68,6 +70,49 @@ extern char *samfaipath(const char *fn_ref);
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
+
+// Copied from htslib/sam.c.
+// TODO: we need a proper interface to find the length of an aux tag,
+// or at the very make exportable versions of these in htslib.
+static inline int aux_type2size(uint8_t type)
+{
+    switch (type) {
+    case 'A': case 'c': case 'C':
+        return 1;
+    case 's': case 'S':
+        return 2;
+    case 'i': case 'I': case 'f':
+        return 4;
+    case 'd':
+        return 8;
+    case 'Z': case 'H': case 'B':
+        return type;
+    default:
+        return 0;
+    }
+}
+
+// Copied from htslib/sam.c.
+static inline uint8_t *skip_aux(uint8_t *s)
+{
+    int size = aux_type2size(*s); ++s; // skip type
+    uint32_t n;
+    switch (size) {
+    case 'Z':
+    case 'H':
+        while (*s) ++s;
+        return s + 1;
+    case 'B':
+        size = aux_type2size(*s); ++s;
+        memcpy(&n, s, 4); s += 4;
+        return s + size * n;
+    case 0:
+        abort();
+        break;
+    default:
+        return s + size;
+    }
+}
 
 // Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
@@ -100,14 +145,39 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         const char *p = bam_get_library((bam_hdr_t*)h, b);
         if (!p || strcmp(p, settings->library) != 0) return 1;
     }
-    if (settings->remove_aux_len) {
-        size_t i;
-        for (i = 0; i < settings->remove_aux_len; ++i) {
-            uint8_t *s = bam_aux_get(b, settings->remove_aux[i]);
-            if (s) {
-                bam_aux_del(b, s);
+    if (settings->aux_whitelist) {
+        uint8_t *s_from, *s_to;
+        auxhash_t h = settings->aux_whitelist;
+
+        s_from = s_to = bam_get_aux(b);
+        while (s_from < b->data + b->l_data) {
+            int x = (int)s_from[0]<<8 | s_from[1];
+            uint8_t *s = skip_aux(s_from+2);
+
+            if (kh_get(aux_exists, h, x) != kh_end(h) ) {
+                if (s_to != s_from) memmove(s_to, s_from, s - s_from);
+                s_to += s - s_from;
             }
+            s_from = s;
         }
+        b->l_data = s_to - b->data;
+
+    } else if (settings->aux_blacklist) {
+        uint8_t *s_from, *s_to;
+        auxhash_t h = settings->aux_blacklist;
+
+        s_from = s_to = bam_get_aux(b);
+        while (s_from < b->data + b->l_data) {
+            int x = (int)s_from[0]<<8 | s_from[1];
+            uint8_t *s = skip_aux(s_from+2);
+
+            if (kh_get(aux_exists, h, x) == kh_end(h) ) {
+                if (s_to != s_from) memmove(s_to, s_from, s - s_from);
+                s_to += s - s_from;
+            }
+            s_from = s;
+        }
+        b->l_data = s_to - b->data;
     }
     return 0;
 }
@@ -228,6 +298,31 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
     *retp = EXIT_FAILURE;
 }
 
+int parse_aux_list(auxhash_t *h, char *optarg) {
+    if (!*h)
+        *h = kh_init(aux_exists);
+
+    while (strlen(optarg) >= 2) {
+        int x = optarg[0]<<8 | optarg[1];
+        int ret = 0;
+        kh_put(aux_exists, *h, x, &ret);
+
+        optarg += 2;
+        if (*optarg == ',') // allow white-space too for easy `cat file`?
+            optarg++;
+        else if (*optarg != 0)
+            break;
+    }
+
+    if (strlen(optarg) != 0) {
+        fprintf(stderr, "main_samview: Error parsing option, "
+                "auxiliary tags should be exactly two characters long.\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
@@ -251,11 +346,20 @@ int main_samview(int argc, char *argv[])
         .subsam_frac = -1.,
         .library = NULL,
         .bed = NULL,
+        .aux_whitelist = NULL,
+        .aux_blacklist = NULL,
+    };
+    
+    enum {
+        TAG_WHITELIST_OPTION = CHAR_MAX+1,
+        TAG_BLACKLIST_OPTION,
     };
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T'),
         { "threads", required_argument, NULL, '@' },
+        { "tag-whitelist", required_argument, NULL, TAG_WHITELIST_OPTION },
+        { "tag-blacklist", required_argument, NULL, 'x' },
         { NULL, 0, NULL, 0 }
     };
 
@@ -317,17 +421,17 @@ int main_samview(int argc, char *argv[])
         case '?': is_long_help = 1; break;
         case 'B': settings.remove_B = 1; break;
         case '@': n_threads = strtol(optarg, 0, 0); break;
+
         case 'x':
-            {
-                if (strlen(optarg) != 2) {
-                    fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
-                    return usage(stderr, EXIT_FAILURE, is_long_help);
-                }
-                settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
-                settings.remove_aux[settings.remove_aux_len-1] = optarg;
-            }
+            if (parse_aux_list(&settings.aux_blacklist, optarg))
+                return usage(stderr, EXIT_FAILURE, is_long_help);
             break;
 
+        case TAG_WHITELIST_OPTION:
+            if (parse_aux_list(&settings.aux_whitelist, optarg))
+                return usage(stderr, EXIT_FAILURE, is_long_help);
+            break;
+            
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, is_long_help);
@@ -524,9 +628,12 @@ view_end:
             if (kh_exist(settings.rghash, k)) free((char*)kh_key(settings.rghash, k));
         kh_destroy(rg, settings.rghash);
     }
-    if (settings.remove_aux_len) {
-        free(settings.remove_aux);
-    }
+    
+    if (settings.aux_whitelist)
+        kh_destroy(aux_exists, settings.aux_whitelist);
+    if (settings.aux_blacklist)
+        kh_destroy(aux_exists, settings.aux_blacklist);
+
     return ret;
 }
 
@@ -562,7 +669,10 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
 // read processing
-"  -x STR   read tag to strip (repeatable) [null]\n"
+"  -x, --tag-blacklist STR\n"
+"           comma-separated read tags to strip (repeatable) [null]\n"
+"      --tag-whitelist STR\n"
+"           comma-separated read tags to preserve (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
 // general options
 "  -@, --threads INT\n"

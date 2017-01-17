@@ -325,8 +325,16 @@ present in the FLAG field.
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 .TP
-.BI "-x " STR
-Read tag to exclude from output (repeatable) [null]
+.BI "-x, --tag-blacklist " STR
+Comma separated list of read tags to exclude from output (repeatable) [null].
+.TP
+.BI "--tag-whitelist " STR
+Comma separated list of read tags to preserve from output (repeatable)
+[null].  All other tags are dropped.  If both
+.BR --tag-blacklist
+and
+.BR --tag-whitelist
+are specified, the whitelist is used and the blacklist is ignored.
 .TP
 .B -B
 Collapse the backward CIGAR operation.
