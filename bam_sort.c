@@ -37,6 +37,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <getopt.h>
 #include <assert.h>
+#include "htslib/bgzf.h"
 #include "htslib/ksort.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
@@ -1737,14 +1738,14 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
                       const htsFormat *in_fmt, const htsFormat *out_fmt)
 {
     int ret = -1, i, n_files = 0;
-    size_t mem, max_k, k, max_mem;
+    size_t max_k, k, max_mem, bam_mem_offset;
     bam_hdr_t *header = NULL;
     samFile *fp;
-    bam1_t *b, **buf;
+    bam1_t *b = bam_init1(), **buf;
+    uint8_t *bam_mem;
 
     if (n_threads < 2) n_threads = 1;
     g_is_by_qname = is_by_qname;
-    max_k = k = 0; mem = 0;
     max_mem = _max_mem * n_threads;
     buf = NULL;
     fp = sam_open_format(fn, "r", in_fmt);
@@ -1759,32 +1760,38 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     }
     if (is_by_qname) change_SO(header, "queryname");
     else change_SO(header, "coordinate");
+    if ((bam_mem = malloc(max_mem)) == NULL) {
+        print_error("sort", "couldn't allocate memory for bam_mem");
+        goto err;
+
+    }
     // write sub files
-    for (;;) {
-        if (k == max_k) {
-            size_t kk, old_max = max_k;
-            max_k = max_k? max_k<<1 : 0x10000;
-            buf = (bam1_t**)realloc(buf, max_k * sizeof(bam1_t*));
-            for (kk = old_max; kk < max_k; ++kk) buf[kk] = NULL;
-        }
-        if (buf[k] == NULL) buf[k] = bam_init1();
-        b = buf[k];
+    for (k = 0, max_k = 0, bam_mem_offset = 0; true; ++k) {
         if ((ret = sam_read1(fp, header, b)) < 0) break;
-        if (b->l_data < b->m_data>>2) { // shrink
-            b->m_data = b->l_data;
-            kroundup32(b->m_data);
-            b->data = (uint8_t*)realloc(b->data, b->m_data);
-        }
-        mem += sizeof(bam1_t) + b->m_data + sizeof(void*) + sizeof(void*); // two sizeof(void*) for the data allocated to pointer arrays
-        ++k;
-        if (mem >= max_mem) {
+        // if the BAM record could cause the memory limit to be exceeded
+        if (bam_mem_offset + sizeof(*b) + b->l_data > (uintptr_t)bam_mem + max_mem - 1) {
             n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
             if (n_files < 0) {
                 ret = -1;
                 goto err;
             }
-            mem = k = 0;
+            k = 0;
+            bam_mem_offset = 0;
         }
+        if (k == max_k) {
+            max_k = max_k? max_k<<1 : 0x10000;
+            if ((buf = realloc(buf, max_k * sizeof(bam1_t*))) == NULL) {
+                print_error("sort", "couldn't allocate memory for buf");
+                ret = -1;
+                goto err;
+            }
+        }
+        buf[k] = (bam1_t *)(bam_mem + bam_mem_offset);
+        *buf[k] = *b;
+        buf[k]->data = (uint8_t *)((char *)buf[k] + sizeof(bam1_t));
+        memcpy(buf[k]->data, b->data, b->l_data);
+        // store next BAM record in next 8-byte-aligned address after current BAM record
+        bam_mem_offset = (bam_mem_offset + sizeof(*b) + b->l_data + 8 - 1) & ~((size_t)(8 - 1));
     }
     if (ret != -1) {
         print_error("sort", "truncated file. Aborting");
@@ -1831,7 +1838,7 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
 
  err:
     // free
-    for (k = 0; k < max_k; ++k) bam_destroy1(buf[k]);
+    bam_destroy1(b);
     free(buf);
     bam_hdr_destroy(header);
     sam_close(fp);
