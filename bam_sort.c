@@ -1759,6 +1759,13 @@ int bam_sort_core_ext(int is_by_qname, const char *fn, const char *prefix,
     }
     if (is_by_qname) change_SO(header, "queryname");
     else change_SO(header, "coordinate");
+
+    // No gain to using the thread pool here as the flow of this code
+    // is such that we are *either* reading *or* sorting.  Hence a shared
+    // pool makes no real difference except to reduce the thread count a little.
+    if (n_threads > 1)
+        hts_set_threads(fp, n_threads);
+
     // write sub files
     for (;;) {
         if (k == max_k) {

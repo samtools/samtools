@@ -38,6 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "htslib/khash.h"
+#include "htslib/thread_pool.h"
 #include "samtools.h"
 #include "sam_opts.h"
 KHASH_SET_INIT_STR(rg)
@@ -439,7 +440,16 @@ int main_samview(int argc, char *argv[])
         }
     }
 
-    if (n_threads > 1) { if (out) hts_set_threads(out, n_threads); }
+    htsThreadPool p = {NULL, 0};
+    if (n_threads > 1) {
+        if (!(p.pool = hts_tpool_init(n_threads))) {
+            fprintf(stderr, "Error creating thread pool\n");
+            ret = 1;
+            goto view_end;
+        }
+        hts_set_opt(in,  HTS_OPT_THREAD_POOL, &p);
+        if (out) hts_set_opt(out, HTS_OPT_THREAD_POOL, &p);
+    }
     if (is_header_only) goto view_end; // no need to print alignments
 
     if (optind + 1 >= argc) { // convert/print the entire file
@@ -527,6 +537,10 @@ view_end:
     if (settings.remove_aux_len) {
         free(settings.remove_aux);
     }
+
+    if (p.pool)
+        hts_tpool_destroy(p.pool);
+
     return ret;
 }
 
