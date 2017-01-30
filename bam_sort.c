@@ -1074,6 +1074,7 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 #define MERGE_COMBINE_RG 16 // Combine RG tags frather than redefining them
 #define MERGE_COMBINE_PG 32 // Combine PG tags frather than redefining them
 #define MERGE_FIRST_CO   64 // Use only first file's @CO headers (sort cmd only)
+#define MERGE_DELETE    128 // Delete input files when they're completed
 
 /*
  * How merging is handled
@@ -1334,6 +1335,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
             h->pos = HEAP_EMPTY;
             bam_destroy1(h->b);
             h->b = NULL;
+            if (flag & MERGE_DELETE)
+                unlink(fn[i]);
         } else {
             print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
             goto fail;
@@ -1374,6 +1377,8 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
             heap->pos = HEAP_EMPTY;
             bam_destroy1(heap->b);
             heap->b = NULL;
+            if (flag & MERGE_DELETE)
+                unlink(fn[heap->i]);
         } else {
             print_error(cmd, "\"%s\" is truncated", fn[heap->i]);
             goto fail;
@@ -1459,7 +1464,9 @@ static void merge_usage(FILE *to)
 "  -s VALUE   Override random seed\n"
 "  -b FILE    List of input BAM filenames, one per line [null]\n"
 "  -@, --threads INT\n"
-"             Number of BAM/CRAM compression threads [0]\n");
+"             Number of BAM/CRAM compression threads [0]\n"
+"  -D, --delete\n"
+"             Delete input files as they are completed\n");
     sam_global_opt_help(to, "-.O..");
 }
 
@@ -1475,6 +1482,7 @@ int bam_merge(int argc, char *argv[])
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
         { "threads", required_argument, NULL, '@' },
+        { "delete", no_argument, NULL, 'D' },
         { NULL, 0, NULL, 0 }
     };
 
@@ -1497,6 +1505,7 @@ int bam_merge(int argc, char *argv[])
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
         case 's': random_seed = atol(optarg); break;
+        case 'D': flag |= MERGE_DELETE; break;
         case 'b': {
             // load the list of files to read
             int nfiles;
