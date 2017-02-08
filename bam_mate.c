@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
@@ -324,7 +325,7 @@ void usage(FILE* where)
 "  -p           Disable FR proper pair check\n"
 "  -c           Add template cigar ct tag\n");
 
-    sam_global_opt_help(where, "-.O..");
+    sam_global_opt_help(where, "-.O..@");
 
     fprintf(where,
 "\n"
@@ -335,18 +336,19 @@ void usage(FILE* where)
 
 int bam_mating(int argc, char *argv[])
 {
+    htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL;
     int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0, res = 1;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     char wmode[3] = {'w', 'b', 0};
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         { NULL, 0, NULL, 0 }
     };
 
     // parse args
     if (argc == 1) { usage(stdout); return 0; }
-    while ((c = getopt_long(argc, argv, "rpcO:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rpcO:@:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': remove_reads = 1; break;
             case 'p': proper_pair_check = 0; break;
@@ -369,6 +371,15 @@ int bam_mating(int argc, char *argv[])
         goto fail;
     }
 
+    if (ga.nthreads > 0) {
+        if (!(p.pool = hts_tpool_init(ga.nthreads))) {
+            fprintf(stderr, "Error creating thread pool\n");
+            goto fail;
+        }
+        hts_set_opt(in,  HTS_OPT_THREAD_POOL, &p);
+        hts_set_opt(out, HTS_OPT_THREAD_POOL, &p);
+    }
+
     // run
     res = bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct);
 
@@ -379,12 +390,14 @@ int bam_mating(int argc, char *argv[])
         res = 1;
     }
 
+    if (p.pool) hts_tpool_destroy(p.pool);
     sam_global_args_free(&ga);
     return res;
 
  fail:
     if (in) sam_close(in);
     if (out) sam_close(out);
+    if (p.pool) hts_tpool_destroy(p.pool);
     sam_global_args_free(&ga);
     return 1;
 }

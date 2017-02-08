@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/faidx.h"
 #include "htslib/sam.h"
 #include "htslib/kstring.h"
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 #include "samtools.h"
 
@@ -172,13 +173,14 @@ int calmd_usage() {
 "  -r       compute the BQ tag (without -A) or cap baseQ by BAQ (with -A)\n"
 "  -E       extended BAQ for better sensitivity but lower specificity\n");
 
-    sam_global_opt_help(stderr, "-....");
+    sam_global_opt_help(stderr, "-....@");
     return 1;
 }
 
 int bam_fillmd(int argc, char *argv[])
 {
     int c, flt_flag, tid = -2, ret, len, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag;
+    htsThreadPool p = {NULL, 0};
     samFile *fp = NULL, *fpout = NULL;
     bam_hdr_t *header = NULL;
     faidx_t *fai = NULL;
@@ -187,14 +189,14 @@ int bam_fillmd(int argc, char *argv[])
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0,'@'),
         { NULL, 0, NULL, 0 }
     };
 
     flt_flag = UPDATE_NM | UPDATE_MD;
     is_bam_out = is_uncompressed = is_realn = max_nm = capQ = baq_flag = 0;
     strcpy(mode_w, "w");
-    while ((c = getopt_long(argc, argv, "EqreuNhbSC:n:Ad", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "EqreuNhbSC:n:Ad@:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'r': is_realn = 1; break;
         case 'e': flt_flag |= USE_EQUAL; break;
@@ -240,6 +242,15 @@ int bam_fillmd(int argc, char *argv[])
     if (sam_hdr_write(fpout, header) < 0) {
         print_error_errno("calmd", "Failed to write sam header");
         goto fail;
+    }
+
+    if (ga.nthreads > 0) {
+        if (!(p.pool = hts_tpool_init(ga.nthreads))) {
+            fprintf(stderr, "Error creating thread pool\n");
+            goto fail;
+        }
+        hts_set_opt(fp,    HTS_OPT_THREAD_POOL, &p);
+        hts_set_opt(fpout, HTS_OPT_THREAD_POOL, &p);
     }
 
     ref_file = argc > optind + 1 ? argv[optind+1] : ga.reference;
@@ -293,6 +304,8 @@ int bam_fillmd(int argc, char *argv[])
         fprintf(stderr, "[bam_fillmd] error when closing output file\n");
         return 1;
     }
+    if (p.pool) hts_tpool_destroy(p.pool);
+
     return 0;
 
  fail:
@@ -302,5 +315,7 @@ int bam_fillmd(int argc, char *argv[])
     if (fai) fai_destroy(fai);
     if (fp) sam_close(fp);
     if (fpout) sam_close(fpout);
+    if (p.pool) hts_tpool_destroy(p.pool);
+
     return 1;
 }

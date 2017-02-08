@@ -34,6 +34,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/hts.h"
 #include "htslib/ksort.h"
 #include "samtools.h"
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 
 #define DEF_CLEVEL 1
@@ -86,6 +87,14 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     bam_hdr_t *h = NULL;
     int64_t j, max_cnt = 0, *cnt = NULL;
     elem_t *a = NULL;
+    htsThreadPool p = {NULL, 0};
+
+    if (ga->nthreads > 0) {
+        if (!(p.pool = hts_tpool_init(ga->nthreads))) {
+            print_error_errno("collate", "Error creating thread pool\n");
+            return 1;
+        }
+    }
 
     // Read input, distribute reads pseudo-randomly into n_files temporary
     // files.
@@ -94,6 +103,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         print_error_errno("collate", "Cannot open input file \"%s\"", fn);
         return 1;
     }
+    if (p.pool) hts_set_opt(fp, HTS_OPT_THREAD_POOL, &p);
 
     h = sam_hdr_read(fp);
     if (h == NULL) {
@@ -173,6 +183,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         else print_error_errno("collate", "Cannot open output file \"%s.bam\"", pre);
         goto fail;
     }
+    if (p.pool) hts_set_opt(fpw, HTS_OPT_THREAD_POOL, &p);
 
     if (sam_hdr_write(fpw, h) < 0) {
         print_error_errno("collate", "Couldn't write header");
@@ -193,6 +204,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
             print_error_errno("collate", "Couldn't open \"%s\"", fnt[i]);
             goto fail;
         }
+        if (p.pool) hts_set_opt(fp, HTS_OPT_THREAD_POOL, &p);
         bam_hdr_destroy(sam_hdr_read(fp)); // Skip over header
 
         // Slurp in one of the split files
@@ -228,6 +240,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         return 1;
     }
 
+    if (p.pool) hts_tpool_destroy(p.pool);
     return 0;
 
  mem_fail:
@@ -249,6 +262,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     free(fnt);
     free(fpt);
     free(cnt);
+    if (p.pool) hts_tpool_destroy(p.pool);
     sam_global_args_free(ga);
     return 1;
 }
@@ -263,7 +277,7 @@ static int usage(FILE *fp, int n_files) {
             "      -n INT   number of temporary files [%d]\n", // n_files
             DEF_CLEVEL, n_files);
 
-    sam_global_opt_help(fp, "-....");
+    sam_global_opt_help(fp, "-....@");
 
     return 1;
 }
@@ -273,11 +287,11 @@ int main_bamshuf(int argc, char *argv[])
     int c, n_files = 64, clevel = DEF_CLEVEL, is_stdout = 0, is_un = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "n:l:uO", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "n:l:uO@:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'n': n_files = atoi(optarg); break;
         case 'l': clevel = atoi(optarg); break;

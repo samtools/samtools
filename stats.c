@@ -1375,7 +1375,7 @@ static void error(const char *format, ...)
         printf("    -S, --split <tag>                   Also write statistics to separate files split by tagged field.\n");
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
-        sam_global_opt_help(stdout, "-.--.");
+        sam_global_opt_help(stdout, "-.--.@");
         printf("\n");
     }
     else
@@ -1596,7 +1596,7 @@ int main_stats(int argc, char *argv[])
 
     static const struct option loptions[] =
     {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         {"help", no_argument, NULL, 'h'},
         {"remove-dups", no_argument, NULL, 'd'},
         {"sam", no_argument, NULL, 's'},
@@ -1618,7 +1618,7 @@ int main_stats(int argc, char *argv[])
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:@:",loptions,NULL))>0 )
     {
         switch (opt)
         {
@@ -1662,6 +1662,8 @@ int main_stats(int argc, char *argv[])
     }
 
     if (init_stat_info_fname(info, bam_fname, &ga.in)) return 1;
+    if (ga.nthreads > 0)
+        hts_set_threads(info->sam, ga.nthreads);
 
     stats_t *all_stats = stats_init();
     stats_t *curr_stats = NULL;

@@ -1457,15 +1457,13 @@ static void merge_usage(FILE *to)
 "  -c         Combine @RG headers with colliding IDs [alter IDs to be distinct]\n"
 "  -p         Combine @PG headers with colliding IDs [alter IDs to be distinct]\n"
 "  -s VALUE   Override random seed\n"
-"  -b FILE    List of input BAM filenames, one per line [null]\n"
-"  -@, --threads INT\n"
-"             Number of BAM/CRAM compression threads [0]\n");
-    sam_global_opt_help(to, "-.O..");
+"  -b FILE    List of input BAM filenames, one per line [null]\n");
+    sam_global_opt_help(to, "-.O..@");
 }
 
 int bam_merge(int argc, char *argv[])
 {
-    int c, is_by_qname = 0, flag = 0, ret = 0, n_threads = 0, level = -1;
+    int c, is_by_qname = 0, flag = 0, ret = 0, level = -1;
     char *fn_headers = NULL, *reg = NULL, mode[12];
     long random_seed = (long)time(NULL);
     char** fn = NULL;
@@ -1473,7 +1471,7 @@ int bam_merge(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         { "threads", required_argument, NULL, '@' },
         { NULL, 0, NULL, 0 }
     };
@@ -1493,7 +1491,6 @@ int bam_merge(int argc, char *argv[])
         case 'u': flag |= MERGE_UNCOMP; level = 0; break;
         case 'R': reg = strdup(optarg); break;
         case 'l': level = atoi(optarg); break;
-        case '@': n_threads = atoi(optarg); break;
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
         case 's': random_seed = atol(optarg); break;
@@ -1552,7 +1549,7 @@ int bam_merge(int argc, char *argv[])
     sam_open_mode(mode+1, argv[optind], NULL);
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
     if (bam_merge_core2(is_by_qname, argv[optind], mode, fn_headers,
-                        fn_size+nargcfiles, fn, flag, reg, n_threads,
+                        fn_size+nargcfiles, fn, flag, reg, ga.nthreads,
                         "merge", &ga.in, &ga.out) < 0)
         ret = 1;
 
@@ -1865,10 +1862,8 @@ static void sort_usage(FILE *fp)
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -n         Sort by read name\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
-"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
-"  -@, --threads INT\n"
-"             Set number of sorting and compression threads [1]\n");
-    sam_global_opt_help(fp, "-.O..");
+"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n");
+    sam_global_opt_help(fp, "-.O..@");
 }
 
 static void complain_about_memory_setting(size_t max_mem) {
@@ -1891,14 +1886,14 @@ static void complain_about_memory_setting(size_t max_mem) {
 int bam_sort(int argc, char *argv[])
 {
     size_t max_mem = SORT_DEFAULT_MEGS_PER_THREAD << 20;
-    int c, nargs, is_by_qname = 0, ret, o_seen = 0, n_threads = 0, level = -1;
+    int c, nargs, is_by_qname = 0, ret, o_seen = 0, level = -1;
     char *fnout = "-", modeout[12];
     kstring_t tmpprefix = { 0, 0, NULL };
     struct stat st;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         { "threads", required_argument, NULL, '@' },
         { NULL, 0, NULL, 0 }
     };
@@ -1916,7 +1911,6 @@ int bam_sort(int argc, char *argv[])
                 break;
             }
         case 'T': kputs(optarg, &tmpprefix); break;
-        case '@': n_threads = atoi(optarg); break;
         case 'l': level = atoi(optarg); break;
 
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
@@ -1962,7 +1956,7 @@ int bam_sort(int argc, char *argv[])
     }
 
     ret = bam_sort_core_ext(is_by_qname, (nargs > 0)? argv[optind] : "-",
-                            tmpprefix.s, fnout, modeout, max_mem, n_threads,
+                            tmpprefix.s, fnout, modeout, max_mem, ga.nthreads,
                             &ga.in, &ga.out);
     if (ret >= 0)
         ret = EXIT_SUCCESS;

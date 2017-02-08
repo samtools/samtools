@@ -72,6 +72,9 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
             r |= hts_opt_add((hts_opt **)&ga->out.specific, ref);
             free(ref);
             break;
+        } else if (strcmp(lopt->name, "threads") == 0) {
+            ga->nthreads = atoi(optarg);
+            break;
 //      } else if (strcmp(lopt->name, "verbose") == 0) {
 //          ga->verbosity++;
 //          break;
@@ -100,7 +103,7 @@ void sam_global_opt_help(FILE *fp, const char *shortopts) {
     int i = 0;
 
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS(0,0,0,0,0),
+        SAM_OPT_GLOBAL_OPTIONS(0,0,0,0,0,0),
         { NULL, 0, NULL, 0 }
     };
 
@@ -130,6 +133,9 @@ void sam_global_opt_help(FILE *fp, const char *shortopts) {
         else if (strcmp(lopts[i].name, "reference") == 0)
             fprintf(fp,"reference FILE\n"
                     "               Reference sequence FASTA FILE [null]\n");
+        else if (strcmp(lopts[i].name, "threads") == 0)
+            fprintf(fp,"threads INT\n"
+                    "               Number of additional threads to use [0]\n");
 //      else if (strcmp(lopts[i].name, "verbose") == 0)
 //          fprintf(fp,"verbose\n"
 //                  "               Increment level of verbosity\n");

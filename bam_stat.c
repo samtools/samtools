@@ -34,6 +34,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "htslib/sam.h"
 #include "samtools.h"
+#include "sam_opts.h"
 
 typedef struct {
     long long n_reads[2], n_mapped[2], n_pair_all[2], n_pair_map[2], n_pair_good[2];
@@ -94,7 +95,8 @@ static const char *percent(char *buffer, long long n, long long total)
 
 static void usage_exit(FILE *fp, int exit_status)
 {
-    fprintf(fp, "Usage: samtools flagstat [--input-fmt-option OPT=VAL] <in.bam>\n");
+    fprintf(fp, "Usage: samtools flagstat [options] <in.bam>\n");
+    sam_global_opt_help(fp, "-.---@");
     exit(exit_status);
 }
 
@@ -104,25 +106,23 @@ int bam_flagstat(int argc, char *argv[])
     bam_hdr_t *header;
     bam_flagstat_t *s;
     char b0[16], b1[16];
-    hts_opt *in_opts = NULL;
     int c;
 
     enum {
         INPUT_FMT_OPTION = CHAR_MAX+1,
     };
 
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        {"input-fmt-option",  required_argument, NULL, INPUT_FMT_OPTION},
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', '-', '@'),
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:", lopts, NULL)) >= 0) {
         switch (c) {
-        case INPUT_FMT_OPTION:
-            if (hts_opt_add(&in_opts, optarg) < 0)
-                usage_exit(stderr, EXIT_FAILURE);
-            break;
-        default:
+        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            /* else fall-through */
+        case '?':
             usage_exit(stderr, EXIT_FAILURE);
         }
     }
@@ -131,15 +131,13 @@ int bam_flagstat(int argc, char *argv[])
         if (argc == optind) usage_exit(stdout, EXIT_SUCCESS);
         else usage_exit(stderr, EXIT_FAILURE);
     }
-    fp = sam_open(argv[optind], "r");
+    fp = sam_open_format(argv[optind], "r", &ga.in);
     if (fp == NULL) {
         print_error_errno("flagstat", "Cannot open input file \"%s\"", argv[optind]);
         return 1;
     }
-    if (hts_opt_apply(fp, in_opts)) {
-        fprintf(stderr, "Failed to apply input-fmt-options\n");
-        return 1;
-    }
+    if (ga.nthreads > 0)
+        hts_set_threads(fp, ga.nthreads);
 
     if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS,
                     SAM_FLAG | SAM_MAPQ | SAM_RNEXT)) {
@@ -174,6 +172,6 @@ int bam_flagstat(int argc, char *argv[])
     free(s);
     bam_hdr_destroy(header);
     sam_close(fp);
-    hts_opt_free(in_opts);
+    sam_global_args_free(&ga);
     return 0;
 }

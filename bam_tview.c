@@ -333,7 +333,7 @@ static void error(const char *format, ...)
 "   -d display      output as (H)tml or (C)urses or (T)ext \n"
 "   -p chr:pos      go directly to this position\n"
 "   -s STR          display only reads from this sample or group\n");
-        sam_global_opt_help(stderr, "-.--.");
+        sam_global_opt_help(stderr, "-.--.-");
     }
     else
     {
@@ -362,7 +362,7 @@ int bam_tview_main(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
         { NULL, 0, NULL, 0 }
     };
 

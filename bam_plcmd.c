@@ -921,7 +921,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
     fprintf(fp,
 "  -p, --per-sample-mF     apply -m and -F per-sample for increased sensitivity\n"
 "  -P, --platforms STR     comma separated list of platforms for indels [all]\n");
-    sam_global_opt_help(fp, "-.--.");
+    sam_global_opt_help(fp, "-.--.-");
     fprintf(fp,
 "\n"
 "Notes: Assuming diploid individuals.\n");
@@ -952,7 +952,7 @@ int bam_mpileup(int argc, char *argv[])
 
     static const struct option lopts[] =
     {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
         {"rf", required_argument, NULL, 1},   // require flag
         {"ff", required_argument, NULL, 2},   // filter flag
         {"incl-flags", required_argument, NULL, 1},

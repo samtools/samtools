@@ -177,7 +177,7 @@ int main_cut_target(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 'f'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 'f', '-'),
         { NULL, 0, NULL, 0 }
     };
 
@@ -201,7 +201,7 @@ int main_cut_target(int argc, char *argv[])
     }
     if (usage || argc == optind) {
         fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] <in.bam>\n");
-        sam_global_opt_help(stderr, "-.--f");
+        sam_global_opt_help(stderr, "-.--f-");
         return 1;
     }
     l = max_l = 0; cns = 0;
@@ -210,6 +210,7 @@ int main_cut_target(int argc, char *argv[])
         print_error_errno("targetcut", "can't open \"%s\"", argv[optind]);
         return 1;
     }
+
     g.h = sam_hdr_read(g.fp);
     if (g.h == NULL) {
         print_error("targetcut", "couldn't read header for \"%s\"", argv[optind]);

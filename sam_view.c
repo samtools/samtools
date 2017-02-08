@@ -232,7 +232,7 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
-    int is_long_help = 0, n_threads = 0;
+    int is_long_help = 0;
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
@@ -255,7 +255,7 @@ int main_samview(int argc, char *argv[])
     };
 
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
         { "threads", required_argument, NULL, '@' },
         { NULL, 0, NULL, 0 }
     };
@@ -317,7 +317,6 @@ int main_samview(int argc, char *argv[])
                  */
         case '?': is_long_help = 1; break;
         case 'B': settings.remove_B = 1; break;
-        case '@': n_threads = strtol(optarg, 0, 0); break;
         case 'x':
             {
                 if (strlen(optarg) != 2) {
@@ -441,8 +440,8 @@ int main_samview(int argc, char *argv[])
     }
 
     htsThreadPool p = {NULL, 0};
-    if (n_threads > 1) {
-        if (!(p.pool = hts_tpool_init(n_threads))) {
+    if (ga.nthreads > 1) {
+        if (!(p.pool = hts_tpool_init(ga.nthreads))) {
             fprintf(stderr, "Error creating thread pool\n");
             ret = 1;
             goto view_end;
@@ -579,12 +578,10 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
 // general options
-"  -@, --threads INT\n"
-"           number of BAM/CRAM compression threads [0]\n"
 "  -?       print long help, including note about region specification\n"
 "  -S       ignored (input format is auto-detected)\n");
 
-    sam_global_opt_help(fp, "-.O.T");
+    sam_global_opt_help(fp, "-.O.T@");
     fprintf(fp, "\n");
 
     if (is_long_help)
@@ -667,7 +664,7 @@ static void bam2fq_usage(FILE *to, const char *command)
     fq ? "FASTQ" : "FASTA");
     if (fq) fprintf(to,
 "  -v INT    default quality score if not given in file [1]\n");
-    sam_global_opt_help(to, "-.--.");
+    sam_global_opt_help(to, "-.--.@");
 }
 
 typedef enum { READ_UNKNOWN = 0, READ_1 = 1, READ_2 = 2 } readpart;
@@ -804,10 +801,10 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     int c;
     sam_global_args_init(&opts->ga);
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:f:F:nOs:tv:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "0:1:2:f:F:nOs:tv:@:", lopts, NULL)) > 0) {
         switch (c) {
             case '0': opts->fnr[0] = optarg; break;
             case '1': opts->fnr[1] = optarg; break;
@@ -883,6 +880,8 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         free(state);
         return false;
     }
+    if (opts->ga.nthreads > 0)
+        hts_set_threads(state->fp, opts->ga.nthreads);
     uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
     if (opts->use_oq) rf |= SAM_AUX;
     if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {

@@ -27,6 +27,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/sam.h>
 #include <htslib/kstring.h>
 #include "samtools.h"
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 #include <string.h>
 #include <stdio.h>
@@ -48,6 +49,7 @@ struct parsed_opts {
     char* rg_line;
     rg_mode mode;
     sam_global_args ga;
+    htsThreadPool p;
 };
 
 struct state;
@@ -69,6 +71,7 @@ static void cleanup_opts(parsed_opts_t* opts)
     free(opts->rg_id);
     free(opts->output_name);
     free(opts->input_name);
+    if (opts->p.pool) hts_tpool_destroy(opts->p.pool);
     sam_global_args_free(&opts->ga);
     free(opts);
 }
@@ -219,7 +222,7 @@ static void usage(FILE *fp)
             "  -r STRING @RG line text\n"
             "  -R STRING ID of @RG line in existing header to use\n"
             );
-    sam_global_opt_help(fp, "..O..");
+    sam_global_opt_help(fp, "..O..@");
 }
 
 static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
@@ -238,12 +241,12 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     retval->mode = overwrite_all;
     sam_global_args_init(&retval->ga);
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS(0, 0, 'O', 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS(0, 0, 'O', 0, 0, '@'),
         { NULL, 0, NULL, 0 }
     };
     kstring_t rg_line = {0,0,NULL};
 
-    while ((n = getopt_long(argc, argv, "r:R:m:o:O:l:h", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:R:m:o:O:l:h@:", lopts, NULL)) >= 0) {
         switch (n) {
             case 'r':
                 // Are we adding to existing rg line?
@@ -317,6 +320,13 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     }
     retval->input_name = strdup(argv[optind+0]);
 
+    if (retval->ga.nthreads > 0) {
+        if (!(retval->p.pool = hts_tpool_init(retval->ga.nthreads))) {
+            fprintf(stderr, "Error creating thread pool\n");
+            return false;
+        }
+    }
+
     *opts = retval;
     return true;
 }
@@ -369,6 +379,11 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     if (retval->output_file == NULL) {
         print_error_errno("addreplacerg", "could not create \"%s\"", opts->output_name);
         return false;
+    }
+
+    if (opts->p.pool) {
+        hts_set_opt(retval->input_file,  HTS_OPT_THREAD_POOL, &opts->p);
+        hts_set_opt(retval->output_file, HTS_OPT_THREAD_POOL, &opts->p);
     }
 
     if (opts->rg_line) {
@@ -455,13 +470,13 @@ int main_addreplacerg(int argc, char** argv)
 
     if (!readgroupise(state)) goto error;
 
-    cleanup_opts(opts);
     cleanup_state(state);
+    cleanup_opts(opts);
 
     return EXIT_SUCCESS;
 error:
-    cleanup_opts(opts);
     cleanup_state(state);
+    cleanup_opts(opts);
 
     return EXIT_FAILURE;
 }

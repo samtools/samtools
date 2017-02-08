@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 
 #include "htslib/kseq.h"
@@ -74,7 +75,7 @@ int main_bedcov(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
         { NULL, 0, NULL, 0 }
     };
 
@@ -91,7 +92,7 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...]\n\n");
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
-        sam_global_opt_help(stderr, "-.--.");
+        sam_global_opt_help(stderr, "-.--.-");
         return 1;
     }
     memset(&str, 0, sizeof(kstring_t));

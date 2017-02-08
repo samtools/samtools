@@ -35,6 +35,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
 #include <htslib/cram.h>
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 #include "samtools.h"
 
@@ -63,6 +64,7 @@ struct state {
     samFile** rg_output_file;
     bam_hdr_t** rg_output_header;
     kh_c2i_t* rg_hash;
+    htsThreadPool p;
 };
 
 typedef struct state state_t;
@@ -80,7 +82,7 @@ static void usage(FILE *write_to)
 "  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
 "  -u FILE1:FILE2  ...and override the header with FILE2\n"
 "  -v              verbose output\n");
-    sam_global_opt_help(write_to, "-....");
+    sam_global_opt_help(write_to, "-....@");
     fprintf(write_to,
 "\n"
 "Format string expansions:\n"
@@ -97,11 +99,11 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
-    const char* optstring = "vf:u:";
+    const char* optstring = "vf:u:@:";
     char* delim;
 
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
         { NULL, 0, NULL, 0 }
     };
 
@@ -345,12 +347,21 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         return NULL;
     }
 
+    if (opts->ga.nthreads > 0) {
+        if (!(retval->p.pool = hts_tpool_init(opts->ga.nthreads))) {
+            fprintf(stderr, "Error creating thread pool\n");
+            return NULL;
+        }
+    }
+
     retval->merged_input_file = sam_open_format(opts->merged_input_name, "rb", &opts->ga.in);
     if (!retval->merged_input_file) {
         print_error_errno("split", "Could not open \"%s\"", opts->merged_input_name);
         free(retval);
         return NULL;
     }
+    if (retval->p.pool)
+        hts_set_opt(retval->merged_input_file, HTS_OPT_THREAD_POOL, &retval->p);
     retval->merged_input_header = sam_hdr_read(retval->merged_input_file);
     if (retval->merged_input_header == NULL) {
         print_error("split", "Could not read header from \"%s\"", opts->merged_input_name);
@@ -383,6 +394,8 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
             cleanup_state(retval, false);
             return NULL;
         }
+        if (retval->p.pool)
+            hts_set_opt(retval->unaccounted_file, HTS_OPT_THREAD_POOL, &retval->p);
     }
 
     // Open output files for RGs
@@ -433,6 +446,8 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
             free(input_base_name);
             return NULL;
         }
+        if (retval->p.pool)
+            hts_set_opt(retval->rg_output_file[i], HTS_OPT_THREAD_POOL, &retval->p);
 
         // Record index in hash
         int ret;
@@ -569,6 +584,9 @@ static int cleanup_state(state_t* status, bool check_close)
     kh_destroy_c2i(status->rg_hash);
     free(status->rg_id);
     free(status);
+
+    if (status->p.pool)
+        hts_tpool_destroy(status->p.pool);
 
     return ret;
 }
