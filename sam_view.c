@@ -256,7 +256,6 @@ int main_samview(int argc, char *argv[])
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
-        { "threads", required_argument, NULL, '@' },
         { NULL, 0, NULL, 0 }
     };
 
