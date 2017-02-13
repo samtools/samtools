@@ -156,24 +156,28 @@ static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
         return false;
 }
 
-static void bam_format_cigar(const bam1_t* b, kstring_t* str)
+// Returns true on error, false on success
+static bool bam_format_cigar(const bam1_t* b, kstring_t* str)
 {
     // An empty cigar is a special case return "*" rather than ""
     if (b->core.n_cigar == 0) {
-        kputc('*', str);
-        return;
+        if (kputc('*', str) == EOF) return true;
+        return false;
     }
 
     const uint32_t *cigar = bam_get_cigar(b);
-    uint16_t i;
+    uint32_t i;
 
     for (i = 0; i < b->core.n_cigar; ++i) {
-        kputw(bam_cigar_oplen(cigar[i]), str);
-        kputc(bam_cigar_opchr(cigar[i]), str);
+        if (kputw(bam_cigar_oplen(cigar[i]), str) == EOF) return true;
+        if (kputc(bam_cigar_opchr(cigar[i]), str) == EOF) return true;
     }
+
+    return false;
 }
 
-static void sync_mq_mc(bam1_t* src, bam1_t* dest)
+// returns true on error
+static bool sync_mq_mc(bam1_t* src, bam1_t* dest)
 {
     if ( (src->core.flag & BAM_FUNMAP) == 0 ) { // If mapped
         // Copy Mate Mapping Quality
@@ -194,22 +198,24 @@ static void sync_mq_mc(bam1_t* src, bam1_t* dest)
 
         // Convert cigar to string
         kstring_t mc = { 0, 0, NULL };
-        bam_format_cigar(src, &mc);
+        if (bam_format_cigar(src, &mc)) { return true; }
 
         bam_aux_append(dest, "MC", 'Z', ks_len(&mc)+1, (uint8_t*)ks_str(&mc));
         free(mc.s);
     }
+    return false;
 }
 
-// copy flags
-static void sync_mate(bam1_t* a, bam1_t* b)
+// copy flags returns true on error
+static bool sync_mate(bam1_t* a, bam1_t* b)
 {
     sync_unmapped_pos_inner(a,b);
     sync_unmapped_pos_inner(b,a);
     sync_mate_inner(a,b);
     sync_mate_inner(b,a);
-    sync_mq_mc(a,b);
-    sync_mq_mc(b,a);
+    if (sync_mq_mc(a,b)) return true;
+    if (sync_mq_mc(b,a)) return true;
+    return false;
 }
 
 // currently, this function ONLY works if each read has one hit
@@ -272,7 +278,7 @@ static int bam_mating_core(samFile* in, samFile* out, int remove_reads, int prop
             if (strcmp(bam_get_qname(cur), bam_get_qname(pre)) == 0) { // identical pair name
                 pre->core.flag |= BAM_FPAIRED;
                 cur->core.flag |= BAM_FPAIRED;
-                sync_mate(pre, cur);
+                if (sync_mate(pre, cur)) goto fail;
 
                 if (pre->core.tid == cur->core.tid && !(cur->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))
                     && !(pre->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))) // if safe set TLEN/ISIZE
