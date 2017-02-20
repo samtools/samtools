@@ -156,28 +156,27 @@ static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
         return false;
 }
 
-// Returns true on error, false on success
-static bool bam_format_cigar(const bam1_t* b, kstring_t* str)
+// Returns 0 on success, -1 on failure.
+static int bam_format_cigar(const bam1_t* b, kstring_t* str)
 {
     // An empty cigar is a special case return "*" rather than ""
     if (b->core.n_cigar == 0) {
-        if (kputc('*', str) == EOF) return true;
-        return false;
+        return (kputc('*', str) == EOF) ? -1 : 0;
     }
 
     const uint32_t *cigar = bam_get_cigar(b);
     uint32_t i;
 
     for (i = 0; i < b->core.n_cigar; ++i) {
-        if (kputw(bam_cigar_oplen(cigar[i]), str) == EOF) return true;
-        if (kputc(bam_cigar_opchr(cigar[i]), str) == EOF) return true;
+        if (kputw(bam_cigar_oplen(cigar[i]), str) == EOF) return -1;
+        if (kputc(bam_cigar_opchr(cigar[i]), str) == EOF) return -1;
     }
 
-    return false;
+    return 0;
 }
 
-// returns true on error
-static bool sync_mq_mc(bam1_t* src, bam1_t* dest)
+// Returns 0 on success, -1 on failure.
+static int sync_mq_mc(bam1_t* src, bam1_t* dest)
 {
     if ( (src->core.flag & BAM_FUNMAP) == 0 ) { // If mapped
         // Copy Mate Mapping Quality
@@ -198,24 +197,25 @@ static bool sync_mq_mc(bam1_t* src, bam1_t* dest)
 
         // Convert cigar to string
         kstring_t mc = { 0, 0, NULL };
-        if (bam_format_cigar(src, &mc)) { return true; }
+        if (bam_format_cigar(src, &mc) < 0) return -1;
 
         bam_aux_append(dest, "MC", 'Z', ks_len(&mc)+1, (uint8_t*)ks_str(&mc));
         free(mc.s);
     }
-    return false;
+    return 0;
 }
 
-// copy flags returns true on error
-static bool sync_mate(bam1_t* a, bam1_t* b)
+// Copy flags.
+// Returns 0 on success, -1 on failure.
+static int sync_mate(bam1_t* a, bam1_t* b)
 {
     sync_unmapped_pos_inner(a,b);
     sync_unmapped_pos_inner(b,a);
     sync_mate_inner(a,b);
     sync_mate_inner(b,a);
-    if (sync_mq_mc(a,b)) return true;
-    if (sync_mq_mc(b,a)) return true;
-    return false;
+    if (sync_mq_mc(a,b) < 0) return -1;
+    if (sync_mq_mc(b,a) < 0) return -1;
+    return 0;
 }
 
 // currently, this function ONLY works if each read has one hit
