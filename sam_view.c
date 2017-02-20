@@ -240,6 +240,7 @@ int main_samview(int argc, char *argv[])
     char out_mode[5], out_un_mode[5], *out_format = "";
     char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    htsThreadPool p = {NULL, 0};
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -438,7 +439,6 @@ int main_samview(int argc, char *argv[])
         }
     }
 
-    htsThreadPool p = {NULL, 0};
     if (ga.nthreads > 1) {
         if (!(p.pool = hts_tpool_init(ga.nthreads))) {
             fprintf(stderr, "Error creating thread pool\n");
