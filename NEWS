@@ -21,6 +21,8 @@ Noteworthy changes in samtools:
   various graphs to display their Y axis log-scaled.  Currently this
   affects the Insert Size graph (PR #589; thanks to Anton Kratz).
 
+* Fixmate will now also add and update MC (mate CIGAR) tags.
+
 
 Beta Release 1.3.1  (22 April 2016)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
