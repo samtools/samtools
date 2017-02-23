@@ -94,7 +94,7 @@ int bam_index(int argc, char *argv[])
         break;
 
     default:
-        print_error("index", "\"%s\" is corrupted or unsorted", argv[optind]);
+        print_error_errno("index", "failed to create index for \"%s\"", argv[optind]);
         break;
     }
 
