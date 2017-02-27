@@ -58,6 +58,7 @@ static inline int printw(int c, FILE *fp)
     return 0;
 }
 
+// this is the function to be changed
 static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref_len, const char *ref)
 {
     int j;
@@ -596,7 +597,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                     bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
                 }
             }
-        } else {
+        } else { // bowhan: write to pileup file handler pileup_fp
             if (conf->all) {
                 // Deal with missing portions of previous tids
                 while (tid > last_tid) {
