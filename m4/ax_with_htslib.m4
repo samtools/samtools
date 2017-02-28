@@ -25,8 +25,10 @@
 #   With --with-htslib=system, checks for a working default installation.
 #
 #   If a source tree is found or specified, it is added to AC_CONFIG_SUBDIRS
-#   (which unfortunately may cause a "you should use literals" warning when
-#   autoconf is run).
+#   if either --enable-configure-htslib is set, or where htslib is included
+#   in a subdirectory (for packages that want to supply an embedded htslib).
+#   Unfortunately this may cause a "you should use literals" warning when
+#   autoconf is run.
 #
 #   The following output variables are set by this macro:
 #
@@ -41,7 +43,7 @@
 #
 # LICENSE
 #
-#   Copyright (C) 2015 Genome Research Ltd
+#   Copyright (C) 2015,2017 Genome Research Ltd
 #
 #   Copying and distribution of this file, with or without modification, are
 #   permitted in any medium without royalty provided the copyright notice
@@ -58,6 +60,10 @@ dnl Not indented, to avoid extra whitespace outwith AS_HELP_STRING()
 AS_HELP_STRING([--with-htslib=system],
     [use only a system HTSlib installation])],
   [], [with_htslib=search])
+AC_ARG_ENABLE([configure-htslib],
+  [AS_HELP_STRING([--enable-configure-htslib],
+     [run configure for htslib as well @<:@default=only_in_subdir@:>@])],
+  [], [enable_configure_htslib=only_in_subdir])
 
 case $with_htslib in
 yes|search)
@@ -82,6 +88,12 @@ yes|search)
   elif test "$found" = 1; then
     AC_MSG_RESULT([$HTSDIR])
     ax_cv_htslib_which=source
+    if test "x$enable_configure_htslib" = "xonly_in_subdir" ; then
+      case $HTSDIR in
+        "${srcp}htslib"*) enable_configure_htslib=yes ;;
+        *) ;;
+      esac
+    fi
   else
     AC_MSG_RESULT([several directories found])
     AC_MSG_ERROR([use --with-htslib=DIR to select which HTSlib to use])
@@ -104,8 +116,10 @@ source)
   ax_cv_htslib=yes
   HTSLIB_CPPFLAGS="-I$HTSDIR"
   HTSLIB_LDFLAGS="-L$HTSDIR"
-  # We can't use a literal, because $HTSDIR is user-provided and variable
-  AC_CONFIG_SUBDIRS($HTSDIR)
+  if test "x$enable_configure_htslib" = "xyes"; then
+    # We can't use a literal, because $HTSDIR is user-provided and variable
+    AC_CONFIG_SUBDIRS($HTSDIR)
+  fi
   ;;
 system)
   AC_CHECK_HEADER([htslib/sam.h],
