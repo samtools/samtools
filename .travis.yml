@@ -15,6 +15,18 @@ matrix:
     - os: osx
       compiler: clang
 
+# For linux systems
+addons:
+  apt:
+    packages:
+    - liblzma-dev
+    - libbz2-dev
+
+# For MacOSX systems
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update    ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install xz; fi
+
 env:
   global:
     - HTSDIR=./htslib
@@ -24,5 +36,9 @@ before_script:
   # repository $HTSREPO setting) and check out a corresponding branch with the
   # same name, if any, or otherwise the default branch.
   - .travis/clone ${HTSREPO:-git://github.com/samtools/htslib.git} $HTSDIR $TRAVIS_BRANCH
+  - (cd htslib && autoreconf -fi -I m4)
 
-script: make -e && make -e test
+script:
+  - (cd htslib && ./configure && make -e)
+  - make -e && make -e test
+
