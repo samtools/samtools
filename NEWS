@@ -3,6 +3,12 @@ Beta Release 1.4  (DD Mmmmm 2016)
 
 Noteworthy changes in samtools:
 
+* Fixed Issue #345 - out-by-one error in insert-size in samtools stats
+
+* bam_split now add a @PG header to the bam file
+
+* Added mate cigar tag support to fixmate
+
 * Multi-threading is now supported for decoding BAM and CRAM (as well
   as the previously supported encoding).  Most commands that read BAM
   or CRAM have gained an -@ or --threads arguments, providing a
