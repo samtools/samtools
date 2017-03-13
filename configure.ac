@@ -111,5 +111,8 @@ dnl connect() etc. fns are in libc on linux, but libsocket on illumos/Solaris
 libsocket=unneeded
 AC_SEARCH_LIBS(connect, socket, [libsocket=needed], [])
 
+dnl alloca.h should be included on platforms that supply it
+AC_FUNC_ALLOCA
+
 AC_CONFIG_FILES([config.mk])
 AC_OUTPUT
