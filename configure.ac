@@ -107,5 +107,9 @@ Ubuntu Linux) or zlib-devel (on RPM-based Linux distributions) is installed.
 FAILED.  This error must be resolved in order to build samtools successfully.])
 fi
 
+dnl connect() etc. fns are in libc on linux, but libsocket on illumos/Solaris
+libsocket=unneeded
+AC_SEARCH_LIBS(connect, socket, [libsocket=needed], [])
+
 AC_CONFIG_FILES([config.mk])
 AC_OUTPUT
