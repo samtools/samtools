@@ -8,3 +8,6 @@
 .git*           export-ignore
 .travis*        export-ignore
 README.md       export-ignore
+
+# Correct language misidentifications.
+test/**/*.[1-9] linguist-language=none

@@ -828,8 +828,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         // reads. Mates mapped to different chromosomes have isize==0.
         int32_t isize = bam_line->core.isize;
         if ( isize<0 ) isize = -isize;
-        if ( stats->info->nisize > 0 && isize >= stats->info->nisize )
-            isize = stats->info->nisize-1;
+        if ( stats->info->nisize > 0 && isize > stats->info->nisize )
+            isize = stats->info->nisize;
         if ( isize>0 || bam_line->core.tid==bam_line->core.mtid )
         {
             int pos_fst = bam_line->core.mpos - bam_line->core.pos;
@@ -1375,7 +1375,7 @@ static void error(const char *format, ...)
         printf("    -S, --split <tag>                   Also write statistics to separate files split by tagged field.\n");
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
-        sam_global_opt_help(stdout, "-.--.");
+        sam_global_opt_help(stdout, "-.--.@");
         printf("\n");
     }
     else
@@ -1481,13 +1481,13 @@ int init_stat_info_fname(stats_info_t* info, const char* bam_fname, const htsFor
     // .. bam
     samFile* sam;
     if ((sam = sam_open_format(bam_fname, "r", in_fmt)) == 0) {
-        error("Failed to open: %s\n", bam_fname);
+        print_error_errno("stats", "failed to open \"%s\"", bam_fname);
         return 1;
     }
     info->sam = sam;
     info->sam_header = sam_hdr_read(sam);
     if (info->sam_header == NULL) {
-        error("Failed to read header for '%s'\n", bam_fname);
+        print_error("stats", "failed to read header for \"%s\"", bam_fname);
         return 1;
     }
     return 0;
@@ -1537,7 +1537,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->quals_2nd      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
     stats->gc_1st         = calloc(stats->ngc,sizeof(uint64_t));
     stats->gc_2nd         = calloc(stats->ngc,sizeof(uint64_t));
-    stats->isize          = init_isize_t(info->nisize);
+    stats->isize          = init_isize_t(info->nisize ?info->nisize+1 :0);
     stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
     stats->mpc_buf        = info->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
     stats->acgtno_cycles  = calloc(stats->nbases,sizeof(acgtno_count_t));
@@ -1596,7 +1596,7 @@ int main_stats(int argc, char *argv[])
 
     static const struct option loptions[] =
     {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '@'),
         {"help", no_argument, NULL, 'h'},
         {"remove-dups", no_argument, NULL, 'd'},
         {"sam", no_argument, NULL, 's'},
@@ -1618,7 +1618,7 @@ int main_stats(int argc, char *argv[])
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:@:",loptions,NULL))>0 )
     {
         switch (opt)
         {
@@ -1662,6 +1662,8 @@ int main_stats(int argc, char *argv[])
     }
 
     if (init_stat_info_fname(info, bam_fname, &ga.in)) return 1;
+    if (ga.nthreads > 0)
+        hts_set_threads(info->sam, ga.nthreads);
 
     stats_t *all_stats = stats_init();
     stats_t *curr_stats = NULL;

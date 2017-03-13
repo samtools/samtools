@@ -19,6 +19,18 @@ env:
   global:
     - HTSDIR=./htslib
 
+# For linux systems
+addons:
+  apt:
+    packages:
+    - liblzma-dev
+    - libbz2-dev
+
+# For MacOSX systems
+before_install:
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update    ; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew install xz; fi
+
 before_script:
   # Clone samtools/htslib (or another repository, as specified by a Travis CI
   # repository $HTSREPO setting) and check out a corresponding branch with the

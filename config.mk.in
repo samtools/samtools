@@ -1,6 +1,6 @@
 #  Optional configure Makefile overrides for samtools.
 #
-#    Copyright (C) 2015 Genome Research Ltd.
+#    Copyright (C) 2015,2017 Genome Research Ltd.
 #
 #    Author: John Marshall <jm18@sanger.ac.uk>
 #
@@ -42,8 +42,10 @@ LIBS     = @LIBS@
 
 @Hsource@HTSDIR = @HTSDIR@
 @Hsource@include $(HTSDIR)/htslib.mk
+@Hsource@include $(HTSDIR)/htslib_static.mk
 @Hsource@HTSLIB = $(HTSDIR)/libhts.a
-@Hsource@HTSLIB_LIB = $(HTSLIB)
+@Hsource@HTSLIB_LIB = $(HTSLIB) $(HTSLIB_static_LIBS)
+@Hsource@HTSLIB_LDFLAGS = $(HTSLIB_static_LDFLAGS)
 @Hsource@BGZIP = $(HTSDIR)/bgzip
 HTSLIB_CPPFLAGS = @HTSLIB_CPPFLAGS@
 @Hinstall@HTSLIB_LDFLAGS = @HTSLIB_LDFLAGS@

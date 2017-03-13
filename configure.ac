@@ -29,6 +29,9 @@ AC_PREREQ([2.63])  dnl This version introduced 4-argument AC_CHECK_HEADER
 AC_CONFIG_SRCDIR([bamtk.c])
 AC_CONFIG_HEADERS([config.h])
 
+m4_include([m4/ax_with_curses.m4])
+m4_include([m4/ax_with_htslib.m4])
+
 dnl Copyright notice to be copied into the generated configure script
 AC_COPYRIGHT([Portions copyright (C) 2015 Genome Research Ltd.
 
@@ -79,6 +82,11 @@ Linux distributions) is installed.
 FAILED.  Either configure --without-curses or resolve this error to build
 samtools successfully.])
   fi
+else
+  CURSES_LIB=
+  CURSES_CPPFLAGS=
+  AC_SUBST([CURSES_LIB])
+  AC_SUBST([CURSES_CPPFLAGS])
 fi
 
 save_LIBS=$LIBS

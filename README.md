@@ -16,12 +16,11 @@ See also http://github.com/samtools/
 See [INSTALL](INSTALL) for complete details.
 [Release tarballs][download] contain generated files that have not been
 committed to this repository, so building the code from a Git repository
-requires some extra steps:
+requires an extra step:
 
 ```sh
-aclocal -I.../autoconf-archive/m4   # Cache configure subroutines
-autoconf       # Generate the configure script, if needed
-./configure    # Optional, needed for choosing optional functionality
+autoconf -Wno-syntax  # Generate the configure script, if needed
+./configure           # Optional, needed for choosing optional functionality
 make
 make install
 ```
@@ -30,9 +29,4 @@ By default, this will build against an HTSlib source tree in `../htslib`.
 You can alter this to a source tree elsewhere or to a previously-installed
 HTSlib by configuring with `--with-htslib=DIR`.
 
-The configure script uses several macros from the [autoconf-archive],
-so you will need to point `aclocal` at a copy of the archive in order to
-regenerate the script.
-
-[autoconf-archive]: http://www.gnu.org/software/autoconf-archive/
 [download]: http://www.htslib.org/download/

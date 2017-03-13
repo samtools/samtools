@@ -1,3 +1,16 @@
+System Requirements
+===================
+
+Samtools requires the zlib library <http://zlib.net>, the bzip2
+library <http://bzip.org/>, liblzma <http://tukaani.org/xz/> and (optionally)
+a curses or GNU ncurses library <http://www.gnu.org/software/ncurses/>.
+The bzip2 and liblzma dependencies can be removed if full CRAM support
+is not needed - see HTSlib's INSTALL file for details.
+
+If you are unsure about this, be sure to use './configure' to determine
+whether you have these libraries and to help diagnose which packages may
+need to be installed on your build machine to provide them.
+
 Basic Installation
 ==================
 
@@ -34,16 +47,6 @@ Type 'make install install-htslib' to do this.)
 
 Typically you will want to enable HTSlib's HTTPS/etc plugin etc.
 See README for recipes for typical installation.
-
-
-System Requirements
-===================
-
-Samtools requires the zlib library <http://zlib.net> and (optionally) a
-curses or GNU ncurses library <http://www.gnu.org/software/ncurses/>.
-If you are unsure about this, be sure to use './configure' to determine
-whether you have these libraries and to help diagnose which packages may
-need to be installed on your build machine to provide them.
 
 
 Configuration
@@ -83,10 +86,16 @@ specify further optional external requirements:
     tview subcommand, this option disables it and skips testing for working
     curses development files.
 
-If you are building with an HTSlib source tree, HTSlib's configure script
-will also be run.  So HTSlib configure options can also be used and will be
-passed down to the HTSlib configure.  See HTSlib's INSTALL documentation for
-details of these options.
+--enable-configure-htslib
+    When building with an HTSlib source tree, run HTSlib's configure script
+    as well.  HTSlib configure options can also be used and will be
+    passed down to the HTSlib configure.  See HTSlib's INSTALL documentation
+    for details of these options.
+
+If you are building with HTSlib source in a subdirectory of the samtools
+tree,  --enable-configure-htslib is turned on by default and the HTSlib
+configure script will be run automatically.  This is the case for the
+samtools release tar archives which include an embedded copy of HTSlib.
 
 The configure script also accepts the usual options and environment variables
 for tuning installation locations and compilers: type './configure --help'

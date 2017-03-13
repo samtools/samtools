@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "22 April 2016" "samtools-1.3.1" "Bioinformatics tools"
+.TH samtools 1 "13 March 2017" "samtools-1.4" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -154,6 +154,7 @@ The
 .BR -L ,
 .BR -r ,
 .BR -R ,
+.BR -s ,
 .BR -q ,
 .BR -l ,
 .BR -m ,
@@ -164,10 +165,9 @@ options filter the alignments that will be included in the output to only those
 alignments that match certain criteria.
 
 The
-.BR -x ,
-.BR -B ,
+.B -x
 and
-.B -s
+.B -B
 options modify the data which is contained in each alignment.
 
 Finally, the
@@ -332,8 +332,23 @@ Read tag to exclude from output (repeatable) [null]
 Collapse the backward CIGAR operation.
 .TP
 .BI "-s " FLOAT
-Integer part is used to seed the random number generator [0]. Part after the
-decimal point sets the fraction of templates/pairs to subsample [no subsampling].
+Output only a proportion of the input alignments.
+This subsampling acts in the same way on all of the alignment records in
+the same template or read pair, so it never keeps a read but not its mate.
+.IP
+The integer and fractional parts of the
+.BI "-s " INT . FRAC
+option are used separately: the part after the
+decimal point sets the fraction of templates/pairs to be kept,
+while the integer part is used as a seed that influences
+.I which
+subset of reads is kept.
+.IP
+.\" Reads are retained based on a score computed by hashing their QNAME
+.\" field and the seed value.
+When subsampling data that has previously been subsampled, be sure to use
+a different seed value from those used previously; otherwise more reads
+will be retained than expected.
 .TP
 .BI "-@ " INT
 Number of BAM compression threads to use in addition to main thread [0].
@@ -404,6 +419,9 @@ or with a
 .BR K ", " M ", or " G
 suffix.
 [768 MiB]
+.IP
+To prevent sort from creating a huge number of temporary files, it enforces a
+minimum value of 1M for this setting.
 .TP
 .B -n
 Sort by read names (i.e., the
@@ -692,9 +710,19 @@ Suppress outputting IS rows where there are no insertions.
 .TP \"-------- bedcov
 .B bedcov
 samtools bedcov
+.RI [ options ]
 .IR region.bed " " in1.sam | in1.bam | in1.cram "[...]"
 
-Reports read depth per genomic region, as specified in the supplied BED file.
+Reports the total read base count (i.e. the sum of per base read depths)
+for each genomic region specified in the supplied BED file.
+Counts for each alignment file supplied are reported in separate columns.
+
+.B Options:
+.RS
+.TP
+.BI "-Q " INT
+.RI "Only count reads with mapping quality greater than " INT
+.RE
 
 .TP \"-------- depth
 .B depth
@@ -711,7 +739,10 @@ Computes the depth at each position or region.
 Output all positions (including those with zero depth)
 .TP
 .B -a -a, -aa
-Output absolutely all positions, including unused reference sequences
+Output absolutely all positions, including unused reference sequences.
+Note that when used in conjunction with a BED file the -a option may
+sometimes operate as if -aa was specified if the reference sequence
+has coverage outside of the region specified in the BED file.
 .TP
 .BI "-b "  FILE
 .RI "Compute depth at list of positions or regions in specified BED " FILE.
@@ -807,7 +838,7 @@ Combining these similar headers is usually the right thing to do when the
 files being merged originated from the same file.
 
 Without \fB-c\fP, all @RG headers appear in the output file, with random
-suffices added to their IDs where necessary to differentiate them.
+suffixes added to their IDs where necessary to differentiate them.
 .TP
 .B -p
 Similarly, for each @PG ID in the set of files to merge, use the @PG line
@@ -1180,6 +1211,15 @@ Output base positions on reads.
 .TP
 .B -s, --output-MQ
 Output mapping quality.
+.TP
+.B -a
+Output all positions, including those with zero depth.
+.TP
+.B -a -a, -aa
+Output absolutely all positions, including unused reference sequences.
+Note that when used in conjunction with a BED file the -a option may
+sometimes operate as if -aa was specified if the reference sequence
+has coverage outside of the region specified in the BED file.
 .PP
 .B Output Options for VCF/BCF format (with -g or -v):
 .TP 10

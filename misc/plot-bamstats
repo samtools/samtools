@@ -55,6 +55,7 @@ sub error
         "       plot-bamstats -p outdir/ file.bam.bc\n",
         "Options:\n",
         "   -k, --keep-files                    Do not remove temporary files.\n",
+        "   -l, --log-y                         Set the Y axis scale of the Insert Size plot to log 10.\n",
         "   -m, --merge                         Merge multiple bamstats files and output to STDOUT.\n",
         "   -p, --prefix <path>                 The output files prefix, add a slash to create new directory.\n",
         "   -r, --ref-stats <file.fa.gc>        Optional reference stats file with expected GC content (created with -s).\n",
@@ -184,6 +185,7 @@ sub parse_params
     while (defined(my $arg=shift(@ARGV)))
     {
         if ( $arg eq '-k' || $arg eq '--keep-files' ) { $$opts{keep_files}=1; next; }
+        if ( $arg eq '-l' || $arg eq '--log-y' ) { $$opts{y_axis_log10}=1; next; }
         if ( $arg eq '-m' || $arg eq '--merge' ) { $$opts{merge}=1; next; }
         if ( $arg eq '-r' || $arg eq '--ref-stats' ) { $$opts{ref_stats}=shift(@ARGV); next; }
         if ( $arg eq '-s' || $arg eq '--do-ref-stats' ) { $$opts{do_ref_stats}=shift(@ARGV); next; }
@@ -971,7 +973,10 @@ sub plot_isize
             set label sprintf("%d",$isize_max) at $isize_max+10,$isize_cnt
             set ylabel  "Number of pairs"
             set xlabel  "Insert Size"
-            set title "$$args{title}"
+            set title "$$args{title}"];
+    print $fh qq[
+            set logscale y 10] if exists $$opts{y_axis_log10};
+    print $fh qq[
             plot \\
                 '-' with lines lc rgb 'black' title 'All pairs', \\
                 '-' with lines title 'Inward', \\
@@ -1381,8 +1386,8 @@ sub create_html
             <tr><th>Bases</tr>
             <tr>
                 <td class="pad"><table>
-                <tr><td>total:       <td class="right"> $bases_total    <td class="right"> $bpercent_mapped</tr>
-                <tr><td>mapped:      <td class="right"> $bases_mapped   <td class="right"></tr>
+                <tr><td>total:       <td class="right"> $bases_total    <td class="right"></tr>
+                <tr><td>mapped:      <td class="right"> $bases_mapped   <td class="right"> $bpercent_mapped</tr>
                 <tr><td>error rate:      <td class="right"> $error_rate  <td class="right"></tr>
                 </table></tr>
         </table>

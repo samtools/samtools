@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2016 Genome Research Ltd.
+    Copyright (C) 2008-2017 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -27,9 +27,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <stdarg.h>
 #include <string.h>
-#include <errno.h>
+
 #include "htslib/hts.h"
 #include "samtools.h"
 #include "version.h"
@@ -67,34 +66,6 @@ int dict_main(int argc, char *argv[]);
 const char *samtools_version()
 {
     return SAMTOOLS_VERSION;
-}
-
-static void vprint_error_core(const char *subcommand, const char *format, va_list args, const char *extra)
-{
-    fflush(stdout);
-    if (subcommand && *subcommand) fprintf(stderr, "samtools %s: ", subcommand);
-    else fprintf(stderr, "samtools: ");
-    vfprintf(stderr, format, args);
-    if (extra) fprintf(stderr, ": %s\n", extra);
-    else fprintf(stderr, "\n");
-    fflush(stderr);
-}
-
-void print_error(const char *subcommand, const char *format, ...)
-{
-    va_list args;
-    va_start(args, format);
-    vprint_error_core(subcommand, format, args, NULL);
-    va_end(args);
-}
-
-void print_error_errno(const char *subcommand, const char *format, ...)
-{
-    int err = errno;
-    va_list args;
-    va_start(args, format);
-    vprint_error_core(subcommand, format, args, strerror(err));
-    va_end(args);
 }
 
 static void usage(FILE *fp)
@@ -215,7 +186,7 @@ int main(int argc, char *argv[])
         printf(
 "samtools %s\n"
 "Using htslib %s\n"
-"Copyright (C) 2016 Genome Research Ltd.\n",
+"Copyright (C) 2017 Genome Research Ltd.\n",
                samtools_version(), hts_version());
     }
     else if (strcmp(argv[1], "--version-only") == 0) {

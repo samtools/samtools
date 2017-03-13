@@ -258,7 +258,7 @@ static int rmdup_usage(void) {
     fprintf(stderr, "Option: -s    rmdup for SE reads\n");
     fprintf(stderr, "        -S    treat PE reads as SE in rmdup (force -s)\n");
 
-    sam_global_opt_help(stderr, "-....");
+    sam_global_opt_help(stderr, "-....-");
     return 1;
 }
 
@@ -271,7 +271,7 @@ int bam_rmdup(int argc, char *argv[])
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '-'),
         { NULL, 0, NULL, 0 }
     };
 

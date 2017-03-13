@@ -1,6 +1,6 @@
 /* bam_addrprg.c -- samtools command to add or replace readgroups.
 
-   Copyright (c) 2013, 2015 Genome Research Limited.
+   Copyright (c) 2013, 2015, 2016 Genome Research Limited.
 
    Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -27,6 +27,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/sam.h>
 #include <htslib/kstring.h>
 #include "samtools.h"
+#include "htslib/thread_pool.h"
 #include "sam_opts.h"
 #include <string.h>
 #include <stdio.h>
@@ -48,6 +49,7 @@ struct parsed_opts {
     char* rg_line;
     rg_mode mode;
     sam_global_args ga;
+    htsThreadPool p;
 };
 
 struct state;
@@ -69,6 +71,7 @@ static void cleanup_opts(parsed_opts_t* opts)
     free(opts->rg_id);
     free(opts->output_name);
     free(opts->input_name);
+    if (opts->p.pool) hts_tpool_destroy(opts->p.pool);
     sam_global_args_free(&opts->ga);
     free(opts);
 }
@@ -131,6 +134,19 @@ static char* basic_unescape(const char* in)
     return tmp;
 }
 
+// Malloc a string containing [s,slim) or to the end of s if slim is NULL.
+// If lenp is non-NULL, stores the length of the resulting string there.
+static char *dup_substring(const char *s, const char *slim, size_t *lenp)
+{
+    size_t len = slim? (slim - s) : strlen(s);
+    char *ns = malloc(len+1);
+    if (ns == NULL) return NULL;
+    memcpy(ns, s, len);
+    ns[len] = '\0';
+    if (lenp) *lenp = len;
+    return ns;
+}
+
 // These are to be replaced by samtools header parser
 // Extracts the first @RG line from a string.
 static char* get_rg_line(const char* text, size_t* last)
@@ -143,37 +159,17 @@ static char* get_rg_line(const char* text, size_t* last)
         rg++;//skip initial \n
     }
     // duplicate the line for return
-    char* line;
-    char* end = strchr(rg, '\n');
-    if (end) {
-        line = strndup(rg,(end-rg));
-        *last = end - rg;
-    } else {
-        line = strdup(rg);
-        *last = strlen(rg);
-    }
-    return line;
+    return dup_substring(rg, strchr(rg, '\n'), last);
 }
 
 // Given a @RG line return the id
-static char* get_rg_id(const char* input)
+static char* get_rg_id(const char *line)
 {
-    assert(input!=NULL);
-    char* line = strdup(input);
-    char *next = line;
-    char* token = strsep(&next, "\t");
-    token = strsep(&next,"\t"); // skip first token it should always be "@RG"
-    while (next != NULL) {
-        char* key = strsep(&token,":");
-        if (!strcmp(key,"ID")) {
-            char* retval = strdup(token);
-            free(line);
-            return retval;
-        }
-        token = strsep(&next,"\t");
-    }
-    free(line);
-    return NULL;
+    const char *id = strstr(line, "\tID:");
+    if (! id) return NULL;
+
+    id += 4;
+    return dup_substring(id, strchr(id, '\t'), NULL);
 }
 
 // Confirms the existance of an RG line with a given ID in a bam header
@@ -181,9 +177,8 @@ static bool confirm_rg( const bam_hdr_t *hdr, const char* rgid )
 {
     assert( hdr != NULL && rgid != NULL );
 
-    char *ptr, *start;
+    const char *ptr = hdr->text;
     bool found = false;
-    start = ptr = strndup(hdr->text, hdr->l_text);
     while (ptr != NULL && *ptr != '\0' && found == false ) {
         size_t end = 0;
         char* line = get_rg_line(ptr, &end);
@@ -196,16 +191,14 @@ static bool confirm_rg( const bam_hdr_t *hdr, const char* rgid )
         free(line);
         ptr += end;
     }
-    free(start);
     return found;
 }
 
 static char* get_first_rgid( const bam_hdr_t *hdr )
 {
     assert( hdr != NULL );
-    char *ptr, *start;
+    const char *ptr = hdr->text;
     char* found = NULL;
-    start = ptr = strndup(hdr->text, hdr->l_text);
     while (ptr != NULL && *ptr != '\0' && found == NULL ) {
         size_t end = 0;
         char* line = get_rg_line(ptr, &end);
@@ -215,7 +208,6 @@ static char* get_first_rgid( const bam_hdr_t *hdr )
         free(line);
         ptr += end;
     }
-    free(start);
     return found;
 }
 
@@ -230,7 +222,7 @@ static void usage(FILE *fp)
             "  -r STRING @RG line text\n"
             "  -R STRING ID of @RG line in existing header to use\n"
             );
-    sam_global_opt_help(fp, "..O..");
+    sam_global_opt_help(fp, "..O..@");
 }
 
 static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
@@ -249,12 +241,12 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     retval->mode = overwrite_all;
     sam_global_args_init(&retval->ga);
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS(0, 0, 'O', 0, 0),
+        SAM_OPT_GLOBAL_OPTIONS(0, 0, 'O', 0, 0, '@'),
         { NULL, 0, NULL, 0 }
     };
     kstring_t rg_line = {0,0,NULL};
 
-    while ((n = getopt_long(argc, argv, "r:R:m:o:O:l:h", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:R:m:o:O:l:h@:", lopts, NULL)) >= 0) {
         switch (n) {
             case 'r':
                 // Are we adding to existing rg line?
@@ -328,6 +320,13 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     }
     retval->input_name = strdup(argv[optind+0]);
 
+    if (retval->ga.nthreads > 0) {
+        if (!(retval->p.pool = hts_tpool_init(retval->ga.nthreads))) {
+            fprintf(stderr, "Error creating thread pool\n");
+            return false;
+        }
+    }
+
     *opts = retval;
     return true;
 }
@@ -369,7 +368,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     // Open files
     retval->input_file = sam_open_format(opts->input_name, "r", &opts->ga.in);
     if (retval->input_file == NULL) {
-        fprintf(stderr, "[init] Could not open input file: %s\n", opts->input_name);
+        print_error_errno("addreplacerg", "could not open \"%s\"", opts->input_name);
         return false;
     }
     retval->input_header = sam_hdr_read(retval->input_file);
@@ -378,8 +377,13 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, "w", &opts->ga.out);
 
     if (retval->output_file == NULL) {
-        print_error_errno("addreplacerg", "Could not open output file: %s\n", opts->output_name);
+        print_error_errno("addreplacerg", "could not create \"%s\"", opts->output_name);
         return false;
+    }
+
+    if (opts->p.pool) {
+        hts_set_opt(retval->input_file,  HTS_OPT_THREAD_POOL, &opts->p);
+        hts_set_opt(retval->output_file, HTS_OPT_THREAD_POOL, &opts->p);
     }
 
     if (opts->rg_line) {
@@ -466,13 +470,13 @@ int main_addreplacerg(int argc, char** argv)
 
     if (!readgroupise(state)) goto error;
 
-    cleanup_opts(opts);
     cleanup_state(state);
+    cleanup_opts(opts);
 
     return EXIT_SUCCESS;
 error:
-    cleanup_opts(opts);
     cleanup_state(state);
+    cleanup_opts(opts);
 
     return EXIT_FAILURE;
 }

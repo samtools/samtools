@@ -1,6 +1,6 @@
 /*  faidx.c -- faidx subcommand.
 
-    Copyright (C) 2008, 2009, 2013 Genome Research Ltd.
+    Copyright (C) 2008, 2009, 2013, 2016 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -25,33 +25,18 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <config.h>
 
-#include <ctype.h>
-#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <stdint.h>
 #include <unistd.h>
-#include <stdarg.h>
+
 #include <htslib/faidx.h>
+#include "samtools.h"
 
-static void error(const char *format, ...)
+static int usage(FILE *fp, int exit_status)
 {
-    if ( format )
-    {
-        va_list ap;
-        va_start(ap, format);
-        vfprintf(stderr, format, ap);
-        va_end(ap);
-    }
-    else
-    {
-        fprintf(stderr, "\n");
-        fprintf(stderr, "Usage:   samtools faidx <file.fa|file.fa.gz> [<reg> [...]]\n");
-        fprintf(stderr, "\n");
-    }
-    exit(-1);
+    fprintf(fp, "Usage: samtools faidx <file.fa|file.fa.gz> [<reg> [...]]\n");
+    return exit_status;
 }
-
 
 int faidx_main(int argc, char *argv[])
 {
@@ -61,39 +46,60 @@ int faidx_main(int argc, char *argv[])
         switch(c)
         {
             case 'h':
+                return usage(stdout, EXIT_SUCCESS);
+
             default:
-                error(NULL);
+                return usage(stderr, EXIT_FAILURE);
         }
     }
     if ( argc==optind )
-        error(NULL);
+        return usage(stdout, EXIT_SUCCESS);
     if ( argc==2 )
     {
         if (fai_build(argv[optind]) != 0) {
-            error("Could not build fai index %s.fai\n", argv[optind]);
+            fprintf(stderr, "Could not build fai index %s.fai\n", argv[optind]);
+            return EXIT_FAILURE;
         }
         return 0;
     }
 
     faidx_t *fai = fai_load(argv[optind]);
-    if ( !fai ) error("Could not load fai index of %s\n", argv[optind]);
+    if ( !fai ) {
+        fprintf(stderr, "Could not load fai index of %s\n", argv[optind]);
+        return EXIT_FAILURE;
+    }
 
-    while ( ++optind<argc )
+    int exit_status = EXIT_SUCCESS;
+
+    while ( ++optind<argc && exit_status == EXIT_SUCCESS)
     {
         printf(">%s\n", argv[optind]);
-        int i, j, seq_len;
+        int seq_len;
         char *seq = fai_fetch(fai, argv[optind], &seq_len);
-        if ( seq_len < 0 ) error("Failed to fetch sequence in %s\n", argv[optind]);
-        for (i=0; i<seq_len; i+=60)
+        if ( seq_len < 0 ) {
+            fprintf(stderr, "Failed to fetch sequence in %s\n", argv[optind]);
+            exit_status = EXIT_FAILURE;
+            break;
+        }
+        size_t i, seq_sz = seq_len;
+        for (i=0; i<seq_sz; i+=60)
         {
-            for (j=0; j<60 && i+j<seq_len; j++)
-                putchar(seq[i+j]);
-            putchar('\n');
+            size_t len = i + 60 < seq_sz ? 60 : seq_sz - i;
+            if (fwrite(seq + i, 1, len, stdout) < len ||
+                putchar('\n') == EOF) {
+                print_error_errno("faidx", "failed to write output");
+                exit_status = EXIT_FAILURE;
+                break;
+            }
         }
         free(seq);
     }
     fai_destroy(fai);
 
-    return 0;
-}
+    if (fflush(stdout) == EOF) {
+        print_error_errno("faidx", "failed to flush output");
+        exit_status = EXIT_FAILURE;
+    }
 
+    return exit_status;
+}

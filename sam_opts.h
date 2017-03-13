@@ -34,6 +34,7 @@ typedef struct sam_global_args {
     htsFormat in;
     htsFormat out;
     char *reference;
+    int nthreads;
     //int verbosity;
 } sam_global_args;
 
@@ -45,6 +46,7 @@ enum {
     SAM_OPT_OUTPUT_FMT,
     SAM_OPT_OUTPUT_FMT_OPTION,
     SAM_OPT_REFERENCE,
+    SAM_OPT_NTHREADS,
     //SAM_OPT_VERBOSE
 };
 
@@ -56,12 +58,13 @@ enum {
 // 0      No short option has been assigned. Use --long-opt only.
 // '-'    Both long and short options are disabled.
 // <c>    Otherwise the equivalent short option is character <c>.
-#define SAM_OPT_GLOBAL_OPTIONS(o1, o2, o3, o4, o5) \
+#define SAM_OPT_GLOBAL_OPTIONS(o1, o2, o3, o4, o5, o6) \
     {"input-fmt",         required_argument, NULL, SAM_OPT_VAL(o1, SAM_OPT_INPUT_FMT)}, \
     {"input-fmt-option",  required_argument, NULL, SAM_OPT_VAL(o2, SAM_OPT_INPUT_FMT_OPTION)}, \
     {"output-fmt",        required_argument, NULL, SAM_OPT_VAL(o3, SAM_OPT_OUTPUT_FMT)}, \
     {"output-fmt-option", required_argument, NULL, SAM_OPT_VAL(o4, SAM_OPT_OUTPUT_FMT_OPTION)}, \
-    {"reference",         required_argument, NULL, SAM_OPT_VAL(o5, SAM_OPT_REFERENCE)}
+    {"reference",         required_argument, NULL, SAM_OPT_VAL(o5, SAM_OPT_REFERENCE)}, \
+    {"threads",           required_argument, NULL, SAM_OPT_VAL(o6, SAM_OPT_NTHREADS)}
     //{"verbose",           no_argument,       NULL, SAM_OPT_VERBOSE}
 
 /*

@@ -1,3 +1,5 @@
 1.quickcheck.badeof.bam
 2.quickcheck.badheader.bam
-5.quickcheck.truncated.cram
+5.quickcheck.scramble30.truncated.cram
+8.quickcheck.cram21.truncated.cram
+9.quickcheck.cram30.truncated.cram
