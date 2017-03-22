@@ -1147,14 +1147,6 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
             print_error(cmd, "couldn't read headers from \"%s\"", headers);
             goto mem_fail;
         }
-    } else  {
-        hout = bam_hdr_init();
-        if (!hout) {
-            print_error(cmd, "couldn't allocate bam header");
-            goto mem_fail;
-        }
-        hout->text = strdup("");
-        if (!hout->text) goto mem_fail;
     }
 
     g_is_by_qname = by_qname;
@@ -1504,6 +1496,7 @@ int bam_merge(int argc, char *argv[])
                 if (fn == NULL) { ret = 1; goto end; }
                 memcpy(fn+fn_size, fn_read, nfiles * sizeof(char*));
                 fn_size += nfiles;
+                free(fn_read);
             }
             else {
                 print_error("merge", "Invalid file list \"%s\"", optarg);
