@@ -1482,13 +1482,32 @@ The amount of space available will differ for each CRAM file.
 
 .TP \"-------- cat
 .B cat
-samtools cat [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [ ... ]
+samtools cat [-b list] [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [ ... ]
 
-Concatenate BAMs. The sequence dictionary of each input BAM must be identical,
-although this command does not check this. This command uses a similar trick
-to
+Concatenate BAMs or CRAMs. Although this works on either BAM or CRAM,
+all input files must be the same format as each other. The sequence
+dictionary of each input file must be identical, although this command
+does not check this. This command uses a similar trick to 
 .B reheader
 which enables fast BAM concatenation.
+
+.B OPTIONS:
+.RS
+.TP 8
+.BI "-b " FOFN
+Read the list of input BAM or CRAM files from \fIFOFN\fR.  These are
+concatenated prior to any files specified on the command line.
+Multiple \fB-b\fR \fIFOFN\fR options may be specified to concatenate
+multiple lists of BAM/CRAM files.
+.TP 8
+.BI "-h " FILE
+Uses the SAM header from \fIFILE\fR.  By default the header is taken
+from the first file to be concatenated.
+.TP 8
+.BI "-o " FILE
+Write the concatenated output to \fIFILE\fR.  By default this is sent
+to stdout.
+.RE
 
 .TP \"-------- rmdup
 .B rmdup
