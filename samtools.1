@@ -159,8 +159,9 @@ The
 .BR -l ,
 .BR -m ,
 .BR -f ,
+.BR -F ,
 and
-.B -F
+.B -G
 options filter the alignments that will be included in the output to only those
 alignments that match certain criteria.
 
@@ -321,6 +322,15 @@ or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 Do not output alignments with any bits set in
 .I INT
 present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+.TP
+.BI "-G " INT
+Do not output alignments with all bits set in
+.I INT
+present in the FLAG field.  This is the opposite of \fI-f\fR such
+that \fI-f12 -G12\fR is the same as no filtering at all.
 .I INT
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
