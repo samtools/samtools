@@ -574,9 +574,9 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -l STR   only include reads in library STR [null]\n"
 "  -m INT   only include reads with number of CIGAR operations consuming\n"
 "           query sequence >= INT [0]\n"
-"  -f INT   only include reads with all of the bits set in INT set in FLAG [0]\n"
-"  -F INT   only include reads with all of the bits unset in INT set in FLAG [0]\n"
-"  -G INT   only include reads with any of the bits unset in INT set in FLAG [0]\n"
+"  -f INT   only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
+"  -F INT   only include reads with none of the FLAGS in INT present [0]\n"       //   F&x == 0
+"  -G INT   only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
 // read processing
@@ -658,9 +658,9 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -0 FILE   write paired reads flagged both or neither READ1 and READ2 to FILE\n"
 "  -1 FILE   write paired reads flagged READ1 to FILE\n"
 "  -2 FILE   write paired reads flagged READ2 to FILE\n"
-"  -f INT    only include reads with all of the bits set in INT set in FLAG [0]\n"
-"  -F INT    only include reads with all of the bits unset in INT set in FLAG [0]\n"
-"  -G INT    only include reads with any of the bits unset in INT set in FLAG [0]\n"
+"  -f INT    only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
+"  -F INT    only include reads with none of the FLAGS in INT present [0]\n"       //   F&x == 0
+"  -G INT    only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
 "  -n        don't append /1 and /2 to the read name\n");
     if (fq) fprintf(to,
 "  -O        output quality in the OQ tag if present\n");
