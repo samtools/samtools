@@ -91,7 +91,7 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
         goto fail;
     }
     if (in->block_offset < in->block_length) {
-        if (bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
+        if (bgzf_write(fp, (char *)in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
         if (bgzf_flush(fp) < 0) goto write_fail;
     }
     while ((len = bgzf_raw_read(in, buf, BUF_SIZE)) > 0) {
@@ -246,7 +246,7 @@ int cram_reheader_inplace2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list
     int32_put_blk(b, header_len);
     cram_block_append(b, sam_hdr_str(hdr), header_len);
     // Zero the remaining block
-    memset(cram_block_get_data(b)+cram_block_get_offset(b), 0,
+    memset((char *)cram_block_get_data(b)+cram_block_get_offset(b), 0,
            cram_block_get_uncomp_size(b) - cram_block_get_offset(b));
     // Make sure all sizes and byte-offsets are consistent after memset
     cram_block_set_offset(b, cram_block_get_uncomp_size(b));

@@ -40,6 +40,7 @@ Illumina.
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <strings.h>
 
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
@@ -468,7 +469,7 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
         }
 
         if (in->block_offset < in->block_length) {
-            if (bgzf_write(fp, in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
+            if (bgzf_write(fp, (char *)in->uncompressed_block + in->block_offset, in->block_length - in->block_offset) < 0) goto write_fail;
             if (bgzf_flush(fp) != 0) goto write_fail;
         }
 

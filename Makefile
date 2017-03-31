@@ -24,6 +24,7 @@
 CC       = gcc
 AR       = ar
 CPPFLAGS =
+#CFLAGS   = -g -Wall -O2 -pedantic -std=c99 -D_XOPEN_SOURCE=600
 CFLAGS   = -g -Wall -O2
 LDFLAGS  =
 LIBS     =

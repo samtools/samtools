@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <ctype.h>
 #include <string.h>
+#include <strings.h>
 #include <limits.h>
 #include <errno.h>
 #include <sys/stat.h>
