@@ -159,8 +159,9 @@ The
 .BR -l ,
 .BR -m ,
 .BR -f ,
+.BR -F ,
 and
-.B -F
+.B -G
 options filter the alignments that will be included in the output to only those
 alignments that match certain criteria.
 
@@ -321,6 +322,15 @@ or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 Do not output alignments with any bits set in
 .I INT
 present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+.TP
+.BI "-G " INT
+Do not output alignments with all bits set in
+.I INT
+present in the FLAG field.  This is the opposite of \fI-f\fR such
+that \fI-f12 -G12\fR is the same as no filtering at all.
 .I INT
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
@@ -1482,13 +1492,32 @@ The amount of space available will differ for each CRAM file.
 
 .TP \"-------- cat
 .B cat
-samtools cat [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [ ... ]
+samtools cat [-b list] [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [ ... ]
 
-Concatenate BAMs. The sequence dictionary of each input BAM must be identical,
-although this command does not check this. This command uses a similar trick
-to
+Concatenate BAMs or CRAMs. Although this works on either BAM or CRAM,
+all input files must be the same format as each other. The sequence
+dictionary of each input file must be identical, although this command
+does not check this. This command uses a similar trick to 
 .B reheader
 which enables fast BAM concatenation.
+
+.B OPTIONS:
+.RS
+.TP 8
+.BI "-b " FOFN
+Read the list of input BAM or CRAM files from \fIFOFN\fR.  These are
+concatenated prior to any files specified on the command line.
+Multiple \fB-b\fR \fIFOFN\fR options may be specified to concatenate
+multiple lists of BAM/CRAM files.
+.TP 8
+.BI "-h " FILE
+Uses the SAM header from \fIFILE\fR.  By default the header is taken
+from the first file to be concatenated.
+.TP 8
+.BI "-o " FILE
+Write the concatenated output to \fIFILE\fR.  By default this is sent
+to stdout.
+.RE
 
 .TP \"-------- rmdup
 .B rmdup
@@ -1732,17 +1761,17 @@ It usually is not required for decoding except in the situation of the
 MD5 not being obtainable via the REF_PATH or REF_CACHE environment variables.
 .TP
 .BI decode_md= 0|1
-CRAM decode only; defaults to 1 (on).  CRAM does not typically store
+CRAM input only; defaults to 1 (on).  CRAM does not typically store
 MD and NM tags, preferring to generate them on the fly.  This option
 controls this behaviour.
 .TP
 .BI ignore_md5= 0|1
-CRAM decode only; defaults to 0 (off).  When enabled, md5 checksum
+CRAM input only; defaults to 0 (off).  When enabled, md5 checksum
 errors on the reference sequence and block checksum errors within CRAM
 are ignored.  Use of this option is strongly discouraged.
 .TP
 .BI required_fields= bit-field
-CRAM decode only; specifies which SAM columns need to be populated.
+CRAM input only; specifies which SAM columns need to be populated.
 By default all fields are used.  Limiting the decode to specific
 columns can have significant performance gains.  The bit-field is a
 numerical value constructed from the following table.
@@ -1764,34 +1793,52 @@ rb l .
 0x1000	SAM_RGAUX
 .TE
 .TP
+.BI name_prefix= string
+CRAM input only; defaults to output filename.  Any sequences with
+auto-generated read names will use \fIstring\fR as the name prefix.
+.TP
 .BI multi_seq_per_slice= 0|1
-CRAM encode only; defaults to 0 (off).  By default CRAM generates one
+CRAM output only; defaults to 0 (off).  By default CRAM generates one
 container per reference sequence, except in the case of many small
 references (such as a fragmented assembly).
 .TP
 .BI version= major.minor
-CRAM encode only.  Specifies the CRAM version number.  Acceptable
+CRAM output only.  Specifies the CRAM version number.  Acceptable
 values are "2.1" and "3.0".
 .TP
 .BI seqs_per_slice= INT
-CRAM encode only; defaults to 10000.
+CRAM output only; defaults to 10000.
 .TP
 .BI slices_per_container= INT
-CRAM encode only; defaults to 1.  The effect of having multiple slices
+CRAM output only; defaults to 1.  The effect of having multiple slices
 per container is to share the compression header block between
 multiple slices.  This is unlikely to have any significant impact
 unless the number of sequences per slice is reduced.  (Together these
 two options control the granularity of random access.)
 .TP
 .BI embed_ref= 0|1
-CRAM encode only; defaults to 0 (off).  If 1, this will store portions
+CRAM output only; defaults to 0 (off).  If 1, this will store portions
 of the reference sequence in each slice, permitting decode without
 having requiring an external copy of the reference sequence.
 .TP
 .BI no_ref= 0|1
-CRAM encode only; defaults to 0 (off).  If 1, sequences will be stored
+CRAM output only; defaults to 0 (off).  If 1, sequences will be stored
 verbatim with no reference encoding.  This can be useful if no
 reference is available for the file.
+.TP
+.BI use_bzip2= 0|1
+CRAM output only; defaults to 0 (off).  Permits use of bzip2 in CRAM
+block compression.
+.TP
+.BI use_lzma= 0|1
+CRAM output only; defaults to 0 (off).  Permits use of lzma in CRAM
+block compression.
+.TP
+.BI lossy_names= 0|1
+CRAM output only; defaults to 0 (off).  If 1, templates with all
+members within the same CRAM slice will have their read names
+removed.  New names will be automatically generated during decoding.
+Also see the \fBname_prefix\fR option.
 .RE
 .PP
 For example:
