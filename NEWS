@@ -1,3 +1,9 @@
+Release x.x  (the future)
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added options to fastq to create fastq files from BC (or other)
+  tags.
+
 Release 1.4  (13 March 2017)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
