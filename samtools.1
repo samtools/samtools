@@ -1389,6 +1389,10 @@ Using
 .B -n
 causes read names to be left as they are.
 .TP 8
+.B -N
+Always add either '/1' or '/2' to the end of read names
+even when put into different files.
+.TP 8
 .B -O
 Use quality values from OQ tags in preference to standard quality string
 if available.
@@ -1424,6 +1428,44 @@ present in the FLAG field.
 .I INT
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+.TP 8
+.BI "-G " INT
+Only EXCLUDE reads with all of the bits set in
+.I INT
+present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+.TP 8
+.B --i1 FILE
+write first index reads to FILE
+.TP 8
+.B --i2 FILE
+write second index reads to FILE
+.TP 8
+.B --barcode-tag TAG
+aux tag to find index reads in [default: BC]
+.TP 8
+.B --quality-tag TAG
+aux tag to find index quality in [default: QT]
+.TP 8
+.B --index-format STR
+string to describe how to parse the barcode and quality tags. For example:
+
+.RS
+.TP 8
+.B i14i8
+the first 14 characters are index 1, the next 8 characters are index 2
+.TP 8
+.B n8i14
+ignore the first 8 characters, and use the next 14 characters for index 1
+
+If the tag contains a separator, then the numeric part can be replaced with '*' to
+mean 'read until the separator or end of tag', for example:
+.TP 8
+.B n*i*
+ignore the left part of the tag until the separator, then use the second part
+.RE
 .RE
 
 .TP \"-------- collate
