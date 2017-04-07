@@ -92,7 +92,11 @@ regtest() {
     exec 9<"$1"
     while read -r line <&9
     do
+	# Work around oddity in argument expansion with ksh.
+        set -o noglob
         set -- $line
+        set +o noglob
+
         case $1 in
         "#"*) # skip comments
             ;;
@@ -121,7 +125,7 @@ regtest() {
                 run_test $p $o $_cmd
             else
                 _cmd=`printf '%s' "$cmd" | sed 's/\$fmt/bam/'`
-                run_test $p $o $_cmd
+                run_test $p $o "$_cmd"
             fi
             ;;
         esac
@@ -149,6 +153,7 @@ echo "=== Testing $@ regressions ==="
 
 samtools="../../samtools"
 filter="../vcf-miniview -f"
+awk=${AWK:-awk}
 regtest $@
 
 # samtools="./samtools-0.1.19"

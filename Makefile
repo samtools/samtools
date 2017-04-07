@@ -262,8 +262,8 @@ test/vcf-miniview.o: test/vcf-miniview.c config.h $(htslib_vcf_h)
 
 # misc programs
 
-misc/ace2sam: misc/ace2sam.o
-	$(CC) $(LDFLAGS) -o $@ misc/ace2sam.o $(ALL_LIBS)
+misc/ace2sam: misc/ace2sam.o $(HTSLIB)
+	$(CC) $(LDFLAGS) -o $@ misc/ace2sam.o $(HTSLIB) $(ALL_LIBS)
 
 misc/maq2sam-short: misc/maq2sam-short.o
 	$(CC) $(LDFLAGS) -o $@ misc/maq2sam-short.o $(ALL_LIBS)

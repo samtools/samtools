@@ -24,7 +24,7 @@ INIT x $samtools view -S -b anomalous.sam > anomalous.bam
 INIT x $samtools view -S -C anomalous.sam > anomalous.cram 
 INIT x $samtools view -S -b indels.sam > indels.bam  
 INIT x $samtools view -S -C indels.sam > indels.cram 
-INIT x gunzip -c expected/1.out.f3-6.gz | awk -v OFS='\t' '{print "CHROMOSOME_I", NR, $0}' > expected/1.out
+INIT x gunzip -c expected/1.out.f3-6.gz | $awk -v OFS='\t' '{print "CHROMOSOME_I", NR, $0}' > expected/1.out
 INIT x $samtools view -b -o xx#depth1.bam xx#depth1.sam
 INIT x $samtools view -b -o xx#depth2.bam xx#depth2.sam
 INIT x $samtools view -b -o xx#depth3.bam xx#depth3.sam
@@ -107,43 +107,43 @@ P 45.out $samtools view -h -F 16 mpileup.1.bam | $samtools mpileup -x -
 P 46.out $samtools view -h mpileup.1.bam | $samtools mpileup -x --ff 0x714 -
 
 # -d; depth
-P 47.out $samtools mpileup -x -d 8500 -B -f mpileup.ref.fa deep.sam|awk '{print $4}'
+P 47.out $samtools mpileup -x -d 8500 -B -f mpileup.ref.fa deep.sam|$awk '{print $4}'
 
 # BCF output options
 P 48.out $samtools mpileup -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 49.out $samtools mpileup -x -v -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 50.out $samtools mpileup -D -V -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 51.out $samtools mpileup -S -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
-P 52.out $samtools mpileup -u -x -f mpileup.ref.fa mpileup.1.bam | ../vcf-miniview - | awk -v OFS='\t' '/#samtools/ {next} /^#/ {print; next} {gsub(/[=,][-+]?[0-9]+(e[-+]?[0-9]+)?\.[0-9][0-9]+/,"&#del",$8);gsub(/[0-9]#del/,"",$8);print}'
+P 52.out $samtools mpileup -u -x -f mpileup.ref.fa mpileup.1.bam | ../vcf-miniview - | $awk -v OFS='\t' '/#samtools/ {next} /^#/ {print; next} {gsub(/[=,][-+]?[0-9]+(e[-+]?[0-9]+)?\.[0-9][0-9]+/,"&#del",$8);gsub(/[0-9]#del/,"",$8);print}'
 
 # # -o/e/h for indel scores
-P 53.out $samtools mpileup -e 1       -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 54.out $samtools mpileup -e 10      -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 55.out $samtools mpileup -h 10      -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 56.out $samtools mpileup -h 90      -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 57.out $samtools mpileup -e 1 -o 10 -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 58.out $samtools mpileup -e 1 -o 40 -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 53.out $samtools mpileup -e 1       -u -x -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 54.out $samtools mpileup -e 10      -u -x -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 55.out $samtools mpileup -h 10      -u -x -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 56.out $samtools mpileup -h 90      -u -x -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 57.out $samtools mpileup -e 1 -o 10 -u -x -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 58.out $samtools mpileup -e 1 -o 40 -u -x -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
 
 # -F/-m for indel reads; 2 samples {2indel, 1not} + {1indel, 1not}.
-P 59.out $samtools mpileup -x -F 0.60    -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 60.out $samtools mpileup -x -F 0.66    -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 61.out $samtools mpileup -x -m 3       -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 62.out $samtools mpileup -x -m 4       -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 63.out $samtools mpileup -x -p -F 0.66 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 64.out $samtools mpileup -x -p -F 0.67 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 65.out $samtools mpileup -x -p -m 2    -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 66.out $samtools mpileup -x -p -m 3    -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 67.out $samtools mpileup -x -L 3       -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 68.out $samtools mpileup -x -L 2       -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 69.out $samtools mpileup -x -I         -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 59.out $samtools mpileup -x -F 0.60    -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 60.out $samtools mpileup -x -F 0.66    -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 61.out $samtools mpileup -x -m 3       -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 62.out $samtools mpileup -x -m 4       -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 63.out $samtools mpileup -x -p -F 0.66 -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 64.out $samtools mpileup -x -p -F 0.67 -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 65.out $samtools mpileup -x -p -m 2    -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 66.out $samtools mpileup -x -p -m 3    -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 67.out $samtools mpileup -x -L 3       -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 68.out $samtools mpileup -x -L 2       -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 69.out $samtools mpileup -x -I         -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
 
 # -P to select platform. Note the actual indel sequence call is made on the entire set.
-P 70.out $samtools mpileup -x                   -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 71.out $samtools mpileup -x -P ILLUMINA,LS454 -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 72.out $samtools mpileup -x -P ILLUMINA       -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 73.out $samtools mpileup -x -P ILLUMINA       -m 2 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 74.out $samtools mpileup -x -P LS454          -m 2 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
-P 75.out $samtools mpileup -x -P LS454          -m 1 -u -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
+P 70.out $samtools mpileup -x                   -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 71.out $samtools mpileup -x -P ILLUMINA,LS454 -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 72.out $samtools mpileup -x -P ILLUMINA       -m 3 -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 73.out $samtools mpileup -x -P ILLUMINA       -m 2 -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 74.out $samtools mpileup -x -P LS454          -m 2 -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
+P 75.out $samtools mpileup -x -P LS454          -m 1 -u -f mpileup.ref.fa indels.$fmt|$filter|$awk '/INDEL/'
 
 # Pileup output options; -s/O
 P 76.out $samtools mpileup -Q0 -s -x -f mpileup.ref.fa mpileup.1.bam
