@@ -143,7 +143,7 @@ libbam.a:$(LOBJS)
 	$(AR) -csru $@ $(LOBJS)
 
 samtools: $(AOBJS) libbam.a libst.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ $(AOBJS) libbam.a libst.a $(HTSLIB_LIB) $(CURSES_LIB) -lm $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ $(AOBJS) libbam.a libst.a $(HTSLIB_LIB) $(CURSES_LIB) -lm $(ALL_LIBS) -lpthread
 
 # For building samtools and its test suite only: NOT to be installed.
 libst.a: $(LIBST_OBJS)
@@ -224,28 +224,28 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/merge/test_rtrans_build: test/merge/test_rtrans_build.o libst.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_rtrans_build.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_rtrans_build.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o libst.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/split/test_count_rg: test/split/test_count_rg.o test/test.o libst.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/split/test_expand_format_string: test/split/test_expand_format_string.o test/test.o libst.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_expand_format_string.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ test/split/test_expand_format_string.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/split/test_filter_header_rg: test/split/test_filter_header_rg.o test/test.o libst.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_filter_header_rg.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ test/split/test_filter_header_rg.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/split/test_parse_args: test/split/test_parse_args.o test/test.o libst.a $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ test/split/test_parse_args.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/vcf-miniview: test/vcf-miniview.o $(HTSLIB)
-	$(CC) -pthread $(ALL_LDFLAGS) -o $@ test/vcf-miniview.o $(HTSLIB_LIB) $(ALL_LIBS)
+	$(CC) $(ALL_LDFLAGS) -o $@ test/vcf-miniview.o $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test_test_h = test/test.h $(htslib_sam_h)
 
