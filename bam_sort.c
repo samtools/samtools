@@ -1219,6 +1219,16 @@ int bam_merge_core2(int by_qname, const char *out, const char *mode,
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
         }
+
+        // Potential future improvement is to share headers between CRAM files for
+        // samtools sort (where all headers are identical.
+        // Eg:
+        //
+        // if (i > 1) {
+        //     sam_hdr_free(cram_fd_get_header(fp[i]->fp.cram));
+        //     cram_fd_set_header(fp[i]->fp.cram, cram_fd_get_header(fp[0]->fp.cram));
+        //     sam_hdr_incr_ref(cram_fd_get_header(fp[0]->fp.cram));
+        // }
     }
 
     // Did we get an @HD line?
@@ -1648,18 +1658,30 @@ static void *worker(void *data)
     name = (char*)calloc(strlen(w->prefix) + 20, 1);
     if (!name) { w->error = errno; return 0; }
     sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-    if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL) < 0)
-        w->error = errno;
 
-// Consider using CRAM temporary files if the final output is CRAM.
-// Typically it is comparable speed while being smaller.
-//    hts_opt opt[2] = {
-//        {"version=3.0", CRAM_OPT_VERSION, {"3.0"}, NULL},
-//        {"no_ref",      CRAM_OPT_NO_REF,  {1},     NULL}
-//    };
-//    opt[0].next = &opt[1];
-//    if (write_buffer(name, "wc1", w->buf_len, w->buf, w->h, 0, opt) < 0)
-//        w->error = errno;
+    uint32_t max_ncigar = 0;
+    int i;
+    for (i = 0; i < w->buf_len; i++) {
+        uint32_t nc = w->buf[i]->core.n_cigar;
+        if (max_ncigar < nc)
+            max_ncigar = nc;
+    }
+
+    if (max_ncigar > 65535) {
+        htsFormat fmt;
+        memset(&fmt, 0, sizeof(fmt));
+        if (hts_parse_format(&fmt, "cram,version=3.0,no_ref,seqs_per_slice=1000") < 0) {
+            w->error = errno;
+            free(name);
+            return 0;
+        }
+
+        if (write_buffer(name, "wcx1", w->buf_len, w->buf, w->h, 0, &fmt) < 0)
+            w->error = errno;
+    } else {
+        if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL) < 0)
+            w->error = errno;
+    }
 
     free(name);
     return 0;
