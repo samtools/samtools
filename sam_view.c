@@ -724,14 +724,17 @@ typedef struct bam2fq_state {
 } bam2fq_state_t;
 
 /*
- * get and decode the read from a BAM record
- * Why on earth isn't this (and the next few functions) part of htslib?
- * The whole point of an API is that we should not have to know the internal structure...
+ * Get and decode the read from a BAM record.
+ *
+ * TODO: htslib really needs an interface for this.  Consider this or perhaps
+ * bam_get_seq_str (current vs original orientation) and bam_get_qual_str
+ * functions as string formatted equivalents to bam_get_{seq,qual}?
  */
 
 /*
- * reverse a string in place
- (stolen from http://stackoverflow.com/questions/8534274/is-the-strrev-function-not-available-in-linux)
+ * Reverse a string in place.
+ * From http://stackoverflow.com/questions/8534274/is-the-strrev-function-not-available-in-linux.
+ * Author Sumit-naik: http://stackoverflow.com/users/4590926/sumit-naik
  */
 static char *reverse(char *str)
 {
