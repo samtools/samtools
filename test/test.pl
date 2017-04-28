@@ -29,7 +29,7 @@ use Cwd qw/ abs_path /;
 use FindBin;
 use lib "$FindBin::Bin";
 use Getopt::Long;
-use File::Temp qw/ tempfile tempdir /;
+use File::Temp;
 use IO::Handle;
 
 my $opts = parse_params();
@@ -94,21 +94,61 @@ sub error
         "\n";
     exit 1;
 }
+
+sub tempfile {
+    my ($fh, $name) = File::Temp::tempfile(@_);
+    if (wantarray) {
+	if ($^O =~ /^(?:msys|MSWin32)/) {
+	    $name = abs_path($name);
+	}
+	return ($fh, $name);
+    }
+    return $fh;
+}
+
+sub cygpath {
+    my ($path) = @_;
+    $path = `cygpath -m $path`;
+    $path =~ s/\r?\n//;
+    return $path
+}
+
+sub tempdir
+{
+    my $dir = File::Temp::tempdir(@_);
+    if ($^O =~ /^msys/) {
+        $dir = cygpath($dir);
+    } elsif ($^O eq 'MSWin32') {
+	$dir =~ s/\\/\//g;
+    }
+    return $dir;
+}
+
 sub parse_params
 {
     my $opts = { bgzip=>"bgzip", keep_files=>0, nok=>0, nfailed=>0, nxfail => 0, nxpass => 0 };
     my $help;
     Getopt::Long::Configure('bundling');
     my $ret = GetOptions (
-            'e|exec=s' => sub { my ($tool, $path) = split /=/, $_[1]; $$opts{$tool} = $path if $path },
+            'e|exec=s' => sub {
+		my ($tool, $path) = split /=/, $_[1];
+		if ($^O eq 'MSWin32' && $path !~ /\.exe$/) {
+		    $path .= '.exe';
+		}
+		$$opts{$tool} = abs_path($path) if $path;
+	},
             't|temp-dir:s' => \$$opts{keep_files},
             'r|redo-outputs' => \$$opts{redo_outputs},
             'h|?|help' => \$help
             );
     if ( !$ret or $help ) { error(); }
-    $$opts{tmp}  = $$opts{keep_files} ? $$opts{keep_files} : tempdir(CLEANUP=>1);
+    $$opts{tmp}  = $$opts{keep_files} ? $$opts{keep_files} : tempdir(CLEANUP => 1);
     $$opts{path} = $FindBin::RealBin;
     $$opts{bin}  = $FindBin::RealBin;
+    if ($^O =~ /^msys/) {
+	$$opts{path} = cygpath($$opts{path});
+	$$opts{bin}  = cygpath($$opts{bin});
+    }
     $$opts{bin}  =~ s{/test/?$}{};
     if ( $$opts{keep_files} ) { cmd("mkdir -p $$opts{keep_files}"); }
     else
@@ -125,34 +165,35 @@ sub clean_files
 }
 sub _cmd
 {
-    my ($cmd) = @_;
+    my ($cmd, $args) = @_;
     my $kid_io;
-    my @out;
-    my @err;
+    my $out;
+    my $err;
     my ($err_fh, $err_filename) = tempfile(UNLINK => 1);
-
-    my $pid = open($kid_io, "-|");
+    my $pid = open($kid_io, "-|", 'bash', '-o','pipefail','-c', "($cmd) 2> $err_filename");
     if ( !defined $pid ) { error("Cannot fork: $!"); }
     if ($pid)
     {
         # parent
-        @out = <$kid_io>;
+	binmode($kid_io);
+	binmode($err_fh);
+	local $/;
+        $out = <$kid_io>;
         close($kid_io);
         my $child_retval = $?;
-        @err = <$err_fh>;
+        $err = <$err_fh>;
         close ($err_fh);
-        return ($child_retval, join('',@out), join('',@err));
-    }
-    else
-    {
-        # child
-        exec('/bin/bash', '-o','pipefail','-c', "($cmd) 2> $err_filename") or error("Cannot execute the command [/bin/sh -o pipefail -c $cmd]: $!");
+	$out =~ s/\x0d\x0a/\x0a/g if (!$args->{binary});
+	$err =~ s/\x0d\x0a/\x0a/g if (!$args->{binary_err});
+	$out =~ s/e([-+])0(\d\d)/e$1$2/g if ($args->{exp_fix});
+
+        return ($child_retval, $out, $err);
     }
 }
 sub cmd
 {
-    my ($cmd) = @_;
-    my ($ret,$out,$err) = _cmd($cmd);
+    my ($cmd, $args) = @_;
+    my ($ret,$out,$err) = _cmd($cmd, $args);
     if ( $ret ) { error("The command failed [$ret]: $cmd\n", "out:$out\n", "err:$err\n"); }
     return $out;
 }
@@ -178,12 +219,13 @@ sub test_cmd
     print "$test:\n";
     print "\t$args{cmd}\n";
 
-    my ($ret,$out,$err) = _cmd("$args{cmd}");
+    my ($ret,$out,$err) = _cmd("$args{cmd}", \%args);
     if ( $args{want_fail}? ($ret == 0) : ($ret != 0) ) { failed($opts,%args,msg=>$test,reason=>"ERR: $err"); return; }
     if ( $$opts{redo_outputs} && -e "$$opts{path}/$args{out}" )
     {
         rename("$$opts{path}/$args{out}","$$opts{path}/$args{out}.old");
         open(my $fh,'>',"$$opts{path}/$args{out}") or error("$$opts{path}/$args{out}: $!");
+	binmode($fh);
         print $fh $out;
         close($fh);
         my ($ret,$out) = _cmd("diff -q $$opts{path}/$args{out} $$opts{path}/$args{out}.old");
@@ -199,6 +241,7 @@ sub test_cmd
     {
         rename("$$opts{path}/$args{err}","$$opts{path}/$args{err}.old");
         open(my $fh,'>',"$$opts{path}/$args{err}") or error("$$opts{path}/$args{err}: $!");
+	binmode($fh);
         print $fh $err;
         close($fh);
         my ($ret,$out) = _cmd("diff -q $$opts{path}/$args{err} $$opts{path}/$args{err}.old");
@@ -215,8 +258,9 @@ sub test_cmd
     my $exp = '';
     if ( open(my $fh,'<',"$$opts{path}/$args{out}") )
     {
-        my @exp = <$fh>;
-        $exp = join('',@exp);
+	binmode($fh);
+	local $/;
+        $exp = <$fh>;
         close($fh);
     }
     elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$args{out}: $!"); return; }
@@ -224,6 +268,7 @@ sub test_cmd
     if ( $exp ne $out )
     {
         open(my $fh,'>',"$$opts{path}/$args{out}.new") or error("$$opts{path}/$args{out}.new");
+	binmode($fh);
         print $fh $out;
         close($fh);
         if ( !-e "$$opts{path}/$args{out}" )
@@ -243,6 +288,7 @@ sub test_cmd
         my $exp_err = '';
         if ( open(my $fh,'<',"$$opts{path}/$args{err}") )
         {
+	    binmode($fh);
             my @exp = <$fh>;
             $exp_err = join('',@exp);
             close($fh);
@@ -252,6 +298,7 @@ sub test_cmd
         if ( $exp_err ne $err )
         {
             open(my $fh,'>',"$$opts{path}/$args{err}.new") or error("$$opts{path}/$args{err}.new");
+	    binmode($fh);
             print $fh $err;
             close($fh);
             if ( !-e "$$opts{path}/$args{err}" )
@@ -276,8 +323,9 @@ sub test_cmd
             my $exp = '';
             if ( open(my $fh,'<',"$$opts{path}/$out_expected") )
             {
-                my @exp = <$fh>;
-                $exp = join('',@exp);
+		binmode($fh);
+		local $/;
+                $exp = <$fh>;
                 close($fh);
             }
             elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_expected: $!"); return; }
@@ -285,12 +333,17 @@ sub test_cmd
             my $out = '';
             if ( open(my $fh,'<',"$$opts{path}/$out_actual") )
             {
-                my @out = <$fh>;
+		binmode($fh);
                 if( exists($args{hskip}) ){
                     # Strip hskip lines to allow match to the expected output
-                    splice @out, 0, $args{hskip};
+                    for (my $i = 0; $i < $args{hskip}; $i++) {
+			my $ignore = <$fh>;
+		    }
                 }
-                $out = join('',@out);
+		local $/;
+                $out = <$fh>;
+		$out =~ s/\x0d\x0a/\x0a/g if (!$args{binary});
+		$out =~ s/e\+0(\d\d)/e+$1/g if ($args{exp_fix});
                 close($fh);
             }
             elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_actual: $!"); return; }
@@ -298,6 +351,7 @@ sub test_cmd
             if ( $exp ne $out )
             {
                 open(my $fh,'>',"$$opts{path}/$out_expected.new") or error("$$opts{path}/$out_expected.new");
+		binmode($fh);
                 print $fh $out;
                 close($fh);
                 if ( !-e "$$opts{path}/$out_expected" )
@@ -312,7 +366,7 @@ sub test_cmd
                 }
                 return;
             }
-            _cmd("rm $$opts{path}/$out_actual");
+	    unlink("$$opts{path}/$out_actual");
         }
     }
     passed($opts,%args,msg=>$test);
@@ -366,6 +420,7 @@ sub test_bgzip
     # Create test data: The beginning of each line gives the 0-based offset (including '\n's)
     #
     open(my $fh,'>',"$$opts{tmp}/bgzip.dat") or error("$$opts{tmp}/bgzip.dat: $!");
+    binmode($fh);
     my $ntot = 1_000_000;
     my $nwr  = 0;
     while ($nwr < $ntot)
@@ -507,7 +562,7 @@ sub test_index
     cmd("$$opts{bin}/samtools index${threads} -c $$opts{tmp}/large_chrom.bam");
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view${threads} $$opts{tmp}/large_chrom.bam ref2");
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view${threads} $$opts{tmp}/large_chrom.bam ref2:1-541556283");
-    test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_a.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai");
+    test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_a.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai",binary=>1);
 }
 
 sub test_mpileup
@@ -530,9 +585,11 @@ sub test_mpileup
         cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.cram");
         print $fh1 "$$opts{tmp}/$file.bam\n";
         print $fh2 "$$opts{tmp}/$file.cram\n";
-        print $fh3 "file://", abs_path("$$opts{tmp}/$file.bam"), "\n";
-        print $fh4 "file://", abs_path("$$opts{tmp}/$file.cram"), "\n";
-    }
+	my $atmp = $^O =~ /^msys/ ? cygpath($$opts{tmp}) : abs_path($$opts{tmp});
+	unless ($atmp =~ /^\//) { $atmp = "/$atmp"; }
+	print $fh3 "file://$atmp/$file.bam\n";
+	print $fh4 "file://$atmp/$file.cram\n";
+   }
     close($fh1);
     close($fh2);
     close($fh3);
@@ -617,6 +674,9 @@ sub test_usage
 
     # now test subcommand usage as well
     foreach my $subcommand (@subcommands) {
+	# Under msys the isatty function fails to recognise the terminal.
+	# Skip these tests for now.
+	next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view)$/);
         test_usage_subcommand($opts,%args,subcmd=>$subcommand);
     }
 }
@@ -925,6 +985,12 @@ sub run_view_test
 
     my $pid = fork();
     unless (defined($pid)) { die "Couldn't fork : $!\n"; }
+    my $save_stdout;
+    if ($^O eq 'MSWin32') {
+	# Ensure we can restore STDOUT properly on Windows.  Not doing this
+	# causes output to be lost if STDOUT is redirected below.
+	open($save_stdout, '>&STDOUT') || die "Couldn't dup STDOUT: $!\n";
+    }
     unless ($pid) {
         if ($args{stdin}) {
             open(STDIN, '-|', 'cat', $args{stdin})
@@ -938,7 +1004,11 @@ sub run_view_test
     }
     my $reaped = waitpid($pid, 0);
     my $res = $reaped == $pid && $? == 0 ? 0 : 1;
-
+    if ($^O eq 'MSWin32') {
+	open(STDOUT, '>&', $save_stdout)
+	    || die "Couldn't restore STDOUT : $!\n";
+    }
+    
     if (!$res && $args{compare_sam} && $args{out}) {
         # Convert output back to sam and compare
         my $sam_name = "$args{out}.sam";
@@ -957,6 +1027,7 @@ sub run_view_test
         } else {
             open($sam_out, '-|', @cmd2)
                 || die "Couldn't open pipe from @cmd2: $!\n";
+	    binmode($sam_out);
         }
         # Hack $args so the comparison gets done
         $args{compare} = $args{compare_sam};
@@ -1061,14 +1132,10 @@ sub open_bgunzip
 {
     my ($opts, $in) = @_;
 
-    my @cmd = ("$$opts{bgzip}", '-c', '-d');
     my $bgzip;
-    my $pid = open($bgzip, '-|');
-    unless (defined($pid)) { die "Couldn't fork: $!\n"; }
-    unless ($pid) {
-        open(STDIN, '<', $in) || die "Couldn't redirect STDIN: $!\n";
-        exec(@cmd) || die "Couldn't exec @cmd: $!\n";
-    }
+    open($bgzip, "$$opts{bgzip} -c -d < $in |")
+	|| die "Couldn't open pipe to bgzip -c -d $!\n";
+    binmode($bgzip);
     return $bgzip;
 }
 
@@ -1117,6 +1184,7 @@ sub sam_compare
     while ($l1 = <$f1>) {
         $lno1++;
         if (($ht1) = $l1 =~ /^(@\S+)/) {
+	    $l1 =~ s/\x0d\x0a$/\x0a/;
             push(@{$hdr1{$ht1}}, $l1);
         } else {
             last;
@@ -1132,6 +1200,7 @@ sub sam_compare
     while ($l2 = <$f2>) {
         $lno2++;
         if (($ht2) = $l2 =~ /^(@\S+)/) {
+	    $l2 =~ s/\x0d\x0a$/\x0a/;
             push(@{$hdr2{$ht2}}, $l2);
         } else {
             last;
@@ -1172,12 +1241,15 @@ sub sam_compare
     }
 
     while ($l1 && $l2) {
-        chomp($l1);
-        chomp($l2);
+        chomp($l1); $l1 =~ s/\r$//;
+        chomp($l2); $l2 =~ s/\r$//;
         my @sam1 = split(/\t/, $l1);
         my @sam2 = split(/\t/, $l2);
         my @tags1 = sort(splice(@sam1, 11));
         my @tags2 = sort(splice(@sam2, 11));
+	# Windows uses e.g. 1.9e+009 vs 1.9e+09 on Linux
+	@tags1 = map {s/(e[-+])0(\d\d)/$1$2/g;$_} @tags1;
+	@tags2 = map {s/(e[-+])0(\d\d)/$1$2/g;$_} @tags2;
         if (join("\t", @sam1, @tags1) ne join("\t", @sam2, @tags2)) {
             last;
         }
@@ -1262,6 +1334,8 @@ sub text_compare
         my $l1 = <$t1>;
         my $l2 = <$t2>;
         last if (!defined($l1) && !defined($l2));
+	$l1 =~ s/\x0d\x0a$/\x0a/;
+	$l2 =~ s/\x0d\x0a$/\x0a/;
         if (($l1 || '') ne ($l2 || '')) {
             $diff = 1;
             if (defined($l1)) { chomp($l1); }
@@ -1292,7 +1366,7 @@ sub count_compare
 
     open(my $c1, '<', $count1) || die "Couldn't open $count1 : $!\n";
     my $number1 = <$c1>;
-    chomp($number1);
+    chomp($number1); $number1 =~ s/\r$//;
     close($c1) || die "Error reading $count1 : $!\n";
 
     unless ($number1 =~ /^\d+$/) {
@@ -1394,6 +1468,7 @@ sub gen_file
     }
     my $fasta = "$prefix.fa";
     open(my $fa, '>', $fasta) || die "Couldn't open $fasta for writing : $!\n";
+    binmode($fa);
     print $fa ">ref1\n";
     for (my $i = 0; $i < $size; $i += 60) {
         print $fa substr($seq, $i, 60), "\n";
@@ -1402,16 +1477,14 @@ sub gen_file
 
     my $fai = "$prefix.fa.fai";
     open($fa, '>', $fai) || die "Couldn't open $fai for writing : $!\n";
+    binmode($fa);
     print $fa "ref1\t$size\t6\t60\t61\n";
     close($fa) || die "Error writing to $fai : $!\n";
 
     my $sam = "$prefix.sam.gz";
-    my $pid = open(my $s, '|-');
-    unless (defined($pid)) { die "Couldn't fork : $!\n"; }
-    unless ($pid) {
-        open(STDOUT, '>', $sam) || die "Couldn't redirect STDOUT to $sam: $!\n";
-        exec("$$opts{bgzip}", '-c') || die "Couldn't exec bgzip : $!\n";
-    }
+    open(my $s, "| $$opts{bgzip} -c > $sam")
+	|| die "Couldn't open pipe to bgzip $!";
+    binmode($s);
     print $s "\@HD\tVN:1.4\tSO:coordinate\n";
     print $s "\@RG\tID:g1\tDS:Group 1\tLB:Lib1\tSM:Sample1\n";
     print $s "\@SQ\tSN:ref1\tLN:$size\tUR:$fasta\n";
@@ -2321,17 +2394,19 @@ sub test_stats
 {
     my ($opts,%args) = @_;
 
-    test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4");
-    test_cmd($opts,out=>'stat/2.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+4");
-    test_cmd($opts,out=>'stat/3.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+4");
-    test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+4");
-    test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n+4");
-    test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n+4");
-    test_cmd($opts,out=>'stat/7.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/7_supp.sam | tail -n+4");
-    test_cmd($opts,out=>'stat/8.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/8_secondary.sam | tail -n+4");
+    my $efix = ($^O =~ /^(?:msys|MSWin32)$/) ? 1 : 0;
 
-    test_cmd($opts,out=>'stat/9.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4",out_map=>{"stat/1_map_cigar.sam_s1_a_1.bamstat"=>"stat/1_map_cigar.sam_s1_a_1.expected.bamstat"},hskip=>3);
-    test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n+4",out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
+    test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/2.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/3.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/7.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/7_supp.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/8.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/8_secondary.sam | tail -n+4", exp_fix=>$efix);
+
+    test_cmd($opts,out=>'stat/9.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/1_map_cigar.sam_s1_a_1.bamstat"=>"stat/1_map_cigar.sam_s1_a_1.expected.bamstat"},hskip=>3);
+    test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
 }
 
 sub test_merge
@@ -2343,9 +2418,9 @@ sub test_merge
     # Note the use of -s 1 to fix the random seed in place
 
     # Merge 1 - Standard 3 file SAM merge all presented on the command line
-    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
+    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam",binary=>1);
     # Merge 2 - Standard 3 file BAM merge all files presented on the command line
-    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam");
+    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam",binary=>1);
     # Merge 3 - Standard 3 file BAM merge 2 files in fofn 1 on command line
     open(my $fofn, "$$opts{path}/merge/test_3.fofn");
     my ($tmpfile_fh, $tmpfile_filename) = tempfile(UNLINK => 1);
@@ -2354,15 +2429,15 @@ sub test_merge
         print $tmpfile_fh "$$opts{path}/$_";
     }
     close($tmpfile_fh);
-    test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam");
+    test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam",binary=>1);
     # Merge 4 - 1 file BAM merge with file presented on the command line
-    test_cmd($opts,out=>'merge/4.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_b.bam");
+    test_cmd($opts,out=>'merge/4.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_b.bam",binary=>1);
     # Merge 5 - 3 file SAM merge all presented on the command line override IDs to file names
-    test_cmd($opts,out=>'merge/5.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -r -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
+    test_cmd($opts,out=>'merge/5.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -r -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam",binary=>1);
     # Merge 6 - merge all presented on the command line, combine PG and RG rather than dedup
-    test_cmd($opts,out=>'merge/6.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
+    test_cmd($opts,out=>'merge/6.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam",binary=>1);
     # Merge 7 - ID and SN with regex in them
-    test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
+    test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam",binary=>1);
 
     # Sort inputs by PG, then merge
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG  $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
@@ -2489,28 +2564,33 @@ sub test_reheader
     test_cmd($opts,
              out=>'reheader/1_view1.sam.expected',
              err=>'reheader/1_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
+	     exp_fix=>1);
 
     test_cmd($opts,
              out=>'reheader/2_view1.sam.expected',
              err=>'reheader/2_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
+	     exp_fix=>1);
 
     test_cmd($opts,
              out=>'reheader/2_view1.sam.expected',
              err=>'reheader/2_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'");
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
+	     exp_fix=>1);
 
     # In-place testing
     test_cmd($opts,
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram && $$opts{bin}/samtools view -h $fn.tmp.v21.cram | perl -pe 's/\tVN:.*//'");
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram && $$opts{bin}/samtools view -h $fn.tmp.v21.cram | perl -pe 's/\tVN:.*//'",
+	     exp_fix=>1);
 
     test_cmd($opts,
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'");
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'",
+	     exp_fix=>1);
 }
 
 sub test_addrprg

@@ -40,6 +40,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <pthread.h>
 #include "htslib/bgzf.h"
 #include "htslib/ksort.h"
+#include "htslib/hts_os.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
 #include "htslib/kstring.h"

@@ -39,10 +39,10 @@
 #include <ctype.h>
 #include <string.h>
 #include <zlib.h>
+#include "version.h"
 #include "htslib/kseq.h"
+#include "htslib/hts_os.h"
 KSEQ_INIT(gzFile, gzread)
-
-#define PACKAGE_VERSION "0.3.2"
 
 const uint8_t nst_nt4_table[256] = {
     4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,  4, 4, 4, 4,
@@ -407,7 +407,7 @@ static int simu_usage(void)
 {
     fprintf(stderr, "\n");
     fprintf(stderr, "Program: wgsim (short read simulator)\n");
-    fprintf(stderr, "Version: %s\n", PACKAGE_VERSION);
+    fprintf(stderr, "Version: %s\n", SAMTOOLS_VERSION);
     fprintf(stderr, "Contact: Heng Li <lh3@sanger.ac.uk>\n\n");
     fprintf(stderr, "Usage:   wgsim [options] <in.ref.fa> <out.read1.fq> <out.read2.fq>\n\n");
     fprintf(stderr, "Options: -e FLOAT      base error rate [%.3f]\n", ERR_RATE);

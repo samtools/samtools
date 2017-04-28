@@ -102,20 +102,12 @@ config.h:
 
 include config.mk
 
-
-PACKAGE_VERSION = 1.5
-
-# If building from a Git repository, replace $(PACKAGE_VERSION) with the Git
-# description of the working tree: either a release tag with the same value
-# as $(PACKAGE_VERSION) above, or an exact description likely based on a tag.
-# $(shell), :=, etc are GNU Make-specific.  If you don't have GNU Make,
-# comment out this conditional.
-ifneq "$(wildcard .git)" ""
-PACKAGE_VERSION := $(shell git describe --always --dirty)
+# If not using GNU make, you need to copy the version number from version.sh
+# into here.
+PACKAGE_VERSION = $(shell ./version.sh)
 
 # Force version.h to be remade if $(PACKAGE_VERSION) has changed.
 version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(shell cat version.h)),,force))
-endif
 
 # If you don't have GNU Make but are building from a Git repository, you may
 # wish to replace this with a rule that always rebuilds version.h:
@@ -211,8 +203,11 @@ bam_markdup.o: bam_markdup.c config.h $(htslib_sam_h) $(sam_opts_h) samtools.h $
 # For tests that might use it, set $REF_PATH explicitly to use only reference
 # areas within the test suite (or set it to ':' to use no reference areas).
 # (regression.sh sets $REF_PATH to a subdirectory itself.)
+#
+# If using MSYS, avoid poor shell expansion via:
+#    MSYS2_ARG_CONV_EXCL="*" make check
 check test: samtools $(BGZIP) $(TEST_PROGRAMS)
-	REF_PATH=: test/test.pl --exec bgzip=$(BGZIP)
+	REF_PATH=: test/test.pl --exec bgzip=$(BGZIP) $${TEST_OPTS:-}
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
@@ -278,18 +273,18 @@ misc/md5fa: misc/md5fa.o $(HTSLIB)
 misc/md5sum-lite: misc/md5sum-lite.o $(HTSLIB)
 	$(CC) $(ALL_LDFLAGS) -o $@ misc/md5sum-lite.o $(HTSLIB_LIB) $(ALL_LIBS)
 
-misc/wgsim: misc/wgsim.o
-	$(CC) $(LDFLAGS) -o $@ misc/wgsim.o -lm $(ALL_LIBS)
+misc/wgsim: misc/wgsim.o $(HTSLIB)
+	$(CC) $(ALL_LDFLAGS) -o $@ misc/wgsim.o -lm $(HTSLIB_LIB) $(ALL_LIBS)
 
 misc/ace2sam.o: misc/ace2sam.c config.h $(htslib_kstring_h) $(htslib_kseq_h)
 misc/md5fa.o: misc/md5fa.c config.h $(htslib_kseq_h) $(htslib_hts_h)
 misc/md5sum-lite.o: misc/md5sum-lite.c config.h $(htslib_hts_h)
-misc/wgsim.o: misc/wgsim.c config.h $(htslib_kseq_h)
+misc/wgsim.o: misc/wgsim.c config.h version.h $(htslib_kseq_h)
 
-misc/maq2sam-short.o: misc/maq2sam.c config.h
+misc/maq2sam-short.o: misc/maq2sam.c config.h version.h
 	$(CC) $(CFLAGS) $(ALL_CPPFLAGS) -c -o $@ misc/maq2sam.c
 
-misc/maq2sam-long.o: misc/maq2sam.c config.h
+misc/maq2sam-long.o: misc/maq2sam.c config.h version.h
 	$(CC) $(CFLAGS) -DMAQ_LONGREADS $(ALL_CPPFLAGS) -c -o $@ misc/maq2sam.c
 
 
