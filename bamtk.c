@@ -126,6 +126,18 @@ static void usage(FILE *fp)
 #endif
 }
 
+// This is a tricky one, but on Windows the filename wildcard expansion is done by
+// the application and not by the shell, as traditionally it never had a "shell".
+// Even now, DOS and Powershell do not do this expansion (but bash does).
+//
+// This means that Mingw/Msys implements code before main() that takes e.g. "*" and
+// expands it up to a list of matching filenames.  This in turn breaks things like
+// specifying "*" as a region (all the unmapped reads).  We take a hard line here -
+// filename expansion is the task of the shell, not our application!
+#ifdef _WIN32
+int _CRT_glob = 0;
+#endif
+
 int main(int argc, char *argv[])
 {
 #ifdef _WIN32

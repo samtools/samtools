@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "htslib/hts.h"
 #include "htslib/ksort.h"
+#include "htslib/hts_os.h"
 #include "samtools.h"
 #include "htslib/thread_pool.h"
 #include "sam_opts.h"

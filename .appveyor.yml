@@ -1,0 +1,52 @@
+# version format.
+# you can use {branch} name in version format too
+# version: 1.0.{build}-{branch}
+version: 'vers.{build}'
+
+# branches to build
+branches:
+    # Whitelist
+    only:
+      - develop
+
+    # Blacklist
+    except:
+      - gh-pages
+
+# Do not build on tags (GitHub and BitBucket)
+skip_tags: true
+
+# Skipping commits affecting specific files (GitHub only). More details here: /docs/appveyor-yml
+#skip_commits:
+#  files:
+#    - docs/*
+#    - '**/*.html'
+
+# We use Mingw/Msys, so use pacman for installs
+install:
+  - set HOME=.
+  - set MSYSTEM=MINGW64
+  - set PATH=C:/msys64/usr/bin;C:/msys64/mingw64/bin;%PATH%
+  - set MINGWPREFIX=x86_64-w64-mingw32
+  - "sh -lc \"pacman -S --noconfirm --needed base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-zlib mingw-w64-x86_64-bzip2 mingw-w64-x86_64-xz mingw-w64-x86_64-curl\""
+
+# The user may have e.g. jkbonfield/samtools branch FOO and an associated
+# jkbonfield/htslib branch FOO.  If so use that related htslib, obtained by
+# munging $APPVEYOR_REPO_NAME.  Otherwise we assume this is a PR only to
+# samtools and should be linked against samtools(org)/htslib develop branch.
+clone_script:
+  - "sh -lc \"git clone --branch=$APPVEYOR_REPO_BRANCH https://github.com/$APPVEYOR_REPO_NAME $APPVEYOR_BUILD_FOLDER\""
+  - "sh -lc \"git clone --branch=$APPVEYOR_REPO_BRANCH https://github.com/`echo $APPVEYOR_REPO_NAME|sed 's#/samtools#/htslib#'`.git $APPVEYOR_BUILD_FOLDER/htslib || git clone https://github.com/samtools/htslib.git $APPVEYOR_BUILD_FOLDER/htslib \""
+
+build_script:
+  - set HOME=.
+  - set MSYSTEM=MINGW64
+  - set PATH=C:/msys64/usr/bin;C:/msys64/mingw64/bin;%PATH%
+  - "sh -lc \"(cd htslib; aclocal && autoheader && autoconf)\""
+  - "sh -lc \"aclocal && autoheader && autoconf && ./configure && make -j2\""
+
+test_script:
+  - set HOME=.
+  - set MSYSTEM=MINGW64
+  - set PATH=C:/msys64/usr/bin;C:/msys64/mingw64/bin;%PATH%
+  - "sh -lc \"make test\""

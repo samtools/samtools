@@ -40,6 +40,7 @@
 #include <string.h>
 #include <zlib.h>
 #include "htslib/kseq.h"
+#include "htslib/hts_os.h"
 KSEQ_INIT(gzFile, gzread)
 
 #define PACKAGE_VERSION "0.3.2"

@@ -38,6 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <getopt.h>
 #include <assert.h>
 #include "htslib/ksort.h"
+#include "htslib/hts_os.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
 #include "htslib/kstring.h"
