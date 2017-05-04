@@ -1,0 +1,68 @@
+@ref1_grp1_p001/2	RG:Z:grp1
+GTCGACTCTA
++
+----------
+@ref1_grp1_p002/2	RG:Z:grp1
+GCAGGTCGAC
++
+//////////
+@ref1_grp1_p003/2	RG:Z:grp1
+GCCTGCAGGT
++
+1111111111
+@ref1_grp1_p004/2	RG:Z:grp1
+GCATGCCTGC
++
+3333333333
+@ref1_grp1_p005/2	RG:Z:grp1
+GCTTGCATGC
++
+5555555555
+@ref1_grp1_p006/2	RG:Z:grp1
+TCAAGCTTGC
++
+7777777777
+@ref1_grp2_p001/2	RG:Z:grp2
+AGGTCGACTC
++
+..........
+@ref1_grp2_p002/2	RG:Z:grp2
+CTGCAGGTCG
++
+0000000000
+@ref1_grp2_p003/2	RG:Z:grp2
+ATGCCTGCAG
++
+2222222222
+@ref1_grp2_p004/2	RG:Z:grp2
+TTGCATGCCT
++
+4444444444
+@ref1_grp2_p005/2	RG:Z:grp2
+AAGCTTGCAT
++
+6666666666
+@ref1_grp2_p006/2	RG:Z:grp2
+ACTCAAGCTT
++
+8888888888
+@ref2_grp3_p001/2	RG:Z:grp3
+CTGTTTCCTGTGTGA
++
+|||||||||||||||
+@ref2_grp3_p002/2	RG:Z:grp3
+CGCCAAGCTATTTAG
++
+}}}}}}}}}}}}}}}
+@ref2_grp3_p003/2	RG:Z:grp3
+ACGTMRWSYKVHDBN
++
+0123456789abcd!
+@ref12_grp1_p001/2	RG:Z:grp1
+CACTATAGAA
++
+BBBBBBBBBB
+@ref12_grp2_p001/2	RG:Z:grp2
+ATTTAGGTGA
++
+BBBBBBBBBB

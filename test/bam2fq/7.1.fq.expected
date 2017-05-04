@@ -1,0 +1,68 @@
+@ref1_grp1_p001/1	RG:Z:grp1	BC:Z:AC-GT	MD:Z:10
+CGAGCTCGGT
++
+!!!!!!!!!!
+@ref1_grp1_p002/1	RG:Z:grp1	BC:Z:AATT+CCGG	MD:Z:10
+CTCGGTACCC
++
+##########
+@ref1_grp1_p003/1	RG:Z:grp1	MD:Z:10
+GTACCCGGGG
++
+%%%%%%%%%%
+@ref1_grp1_p004/1	RG:Z:grp1	MD:Z:10
+CCGGGGATCC
++
+''''''''''
+@ref1_grp1_p005/1	RG:Z:grp1	MD:Z:10	ia:i:40000
+GGATCCTCTA
++
+))))))))))
+@ref1_grp1_p006/1	RG:Z:grp1	MD:Z:10	ia:i:255
+CCTCTAGAGT
++
+++++++++++
+@ref1_grp2_p001/1	RG:Z:grp2	BC:Z:TG+CA	QT:Z:ab+cd	MD:Z:8
+AGCTCGGTAC
++
+""""""""""
+@ref1_grp2_p002/1	RG:Z:grp2	MD:Z:10
+CGGTACCCGG
++
+$$$$$$$$$$
+@ref1_grp2_p003/1	RG:Z:grp2	MD:Z:10	ia:i:4294967295
+ACCCGGGGAT
++
+&&&&&&&&&&
+@ref1_grp2_p004/1	RG:Z:grp2	MD:Z:10	ia:i:-2147483648
+GGGGATCCTC
++
+((((((((((
+@ref1_grp2_p005/1	RG:Z:grp2	MD:Z:10	ia:i:-1000
+ATCCTCTAGA
++
+**********
+@ref1_grp2_p006/1	RG:Z:grp2	MD:Z:10	ia:i:-1
+TCTAGAGTCG
++
+,,,,,,,,,,
+@ref2_grp3_p001/1	RG:Z:grp3	MD:Z:15
+GTGACACTATAGAAT
++
+~~~~~~~~~~~~~~~
+@ref2_grp3_p002/1	RG:Z:grp3	MD:Z:15
+CTGTTTCCTGTGTGA
++
+{{{{{{{{{{{{{{{
+@ref2_grp3_p003/1	RG:Z:grp3	MD:Z:1T0T0C0T0A0T0A0G0T0G0T0C0A0C0
+ACGTMRWSYKVHDBN
++
+0123456789abcd!
+@ref12_grp1_p001/1	RG:Z:grp1	MD:Z:10
+TGCAGGCATG
++
+AAAAAAAAAA
+@ref12_grp2_p001/1	RG:Z:grp2	MD:Z:10
+CAAGCTTGAG
++
+AAAAAAAAAA

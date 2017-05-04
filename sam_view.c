@@ -40,6 +40,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/faidx.h"
 #include "htslib/kstring.h"
 #include "htslib/khash.h"
+#include "htslib/klist.h"
 #include "htslib/thread_pool.h"
 #include "samtools.h"
 #include "sam_opts.h"
@@ -48,6 +49,8 @@ DEALINGS IN THE SOFTWARE.  */
 #define DEFAULT_QUALITY_TAG "QT"
 
 KHASH_SET_INIT_STR(rg)
+#define taglist_free(p)
+KLIST_INIT(ktaglist, char*, taglist_free)
 
 typedef khash_t(rg) *rghash_t;
 
@@ -675,6 +678,9 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -s FILE              write singleton reads to FILE [assume single-end]\n"
 "  -t                   copy RG, BC and QT tags to the %s header line\n",
     fq ? "FASTQ" : "FASTA");
+    fprintf(to,
+"  -T TAGLIST           copy arbitrary tags to the %s header line\n",
+    fq ? "FASTQ" : "FASTA");
     if (fq) fprintf(to,
 "  -v INT               default quality score if not given in file [1]\n"
 "  --i1 FILE            write first index reads to FILE\n"
@@ -709,6 +715,7 @@ typedef struct bam2fq_opts {
     char *quality_tag;
     char *index_file[2];
     char *index_format;
+    char *extra_tags;
 } bam2fq_opts_t;
 
 typedef struct bam2fq_state {
@@ -721,6 +728,7 @@ typedef struct bam2fq_state {
     int flag_on, flag_off, flag_alloff;
     fastfile filetype;
     int def_qual;
+    klist_t(ktaglist) *taglist;
 } bam2fq_state_t;
 
 /*
@@ -817,6 +825,38 @@ static int getLength(char **s)
     return n;
 }
 
+static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
+{
+    uint8_t *s = bam_aux_get(rec, tag);
+    if (s) {
+        char aux_type = *s;
+        switch (aux_type) {
+            case 'C':
+            case 'S': aux_type = 'I'; break;
+            case 'c':
+            case 's': aux_type = 'i'; break;
+            case 'd': aux_type = 'f'; break;
+        }
+
+        kputc('\t', linebuf);
+        kputsn(tag, 2, linebuf);
+        kputc(':', linebuf);
+        kputc(aux_type=='I'? 'i': aux_type, linebuf);
+        kputc(':', linebuf);
+        switch (aux_type) {
+            case 'H':
+            case 'Z': kputs(bam_aux2Z(s), linebuf); break;
+            case 'i': kputw(bam_aux2i(s), linebuf); break;
+            case 'I': kputuw(bam_aux2i(s), linebuf); break;
+            case 'A': kputc(bam_aux2A(s), linebuf); break;
+            case 'f': kputd(bam_aux2f(s), linebuf); break;
+            case 'B': kputs("*** Unhandled aux type ***", linebuf); return false;
+            default:  kputs("*** Unknown aux type ***", linebuf); return false;
+       }
+    }
+    return true;
+}
+
 static bool make_fq_line(const bam1_t *rec, char *seq, char *qual, kstring_t *linebuf, const bam2fq_state_t *state)
 {
     int i;
@@ -833,17 +873,23 @@ static bool make_fq_line(const bam1_t *rec, char *seq, char *qual, kstring_t *li
     }
     if (state->copy_tags) {
         for (i = 0; copied_tags[i]; ++i) {
-            uint8_t *s;
-            if ((s = bam_aux_get(rec, copied_tags[i])) != 0) {
-                if (*s == 'Z') {
-                    kputc('\t', linebuf);
-                    kputsn(copied_tags[i], 2, linebuf);
-                    kputsn(":Z:", 3, linebuf);
-                    kputs(bam_aux2Z(s), linebuf);
-                }
+            if (!copy_tag(copied_tags[i], rec, linebuf)) {
+                fprintf(stderr, "Problem copying aux tags: [%s]\n", linebuf->s);
+                return false;
             }
         }
     }
+
+    if (state->taglist->size) {
+        kliter_t(ktaglist) *p;
+        for (p = kl_begin(state->taglist); p != kl_end(state->taglist); p = kl_next(p)) {
+            if (!copy_tag(kl_val(p), rec, linebuf)) {
+                fprintf(stderr, "Problem copying aux tags: [%s]\n", linebuf->s);
+                return false;
+            }
+        }
+    }
+
     kputc('\n', linebuf);
     kputs(seq, linebuf);
     kputc('\n', linebuf);
@@ -918,7 +964,7 @@ static bool tags2fq(bam1_t *rec, const bam2fq_state_t *state, const bam2fq_opts_
         }
 
         if (action=='i' && *sub_tag && state->fpi[file_number]) {
-            make_fq_line(rec, sub_tag, sub_qual, &linebuf, state);
+            if (!make_fq_line(rec, sub_tag, sub_qual, &linebuf, state)) return false;
             fputs(linebuf.s, state->fpi[file_number++]);
         }
         free(sub_qual); free(sub_tag);
@@ -953,7 +999,7 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
         qual = get_quality(b);
     }
 
-    make_fq_line(b, seq, qual, linebuf, state);
+    if (!make_fq_line(b, seq, qual, linebuf, state)) return false;
 
     free(qual);
     free(seq);
@@ -965,6 +1011,7 @@ static void free_opts(bam2fq_opts_t *opts)
     free(opts->barcode_tag);
     free(opts->quality_tag);
     free(opts->index_format);
+    free(opts->extra_tags);
     free(opts);
 }
 
@@ -982,6 +1029,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     opts->index_format = NULL;
     opts->index_file[0] = NULL;
     opts->index_file[1] = NULL;
+    opts->extra_tags = NULL;
 
     int c;
     sam_global_args_init(&opts->ga);
@@ -998,7 +1046,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"quality-tag", required_argument, NULL, 'q'},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:nNOs:tv:@:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:nNOs:tT:v:@:", lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = strdup(optarg); break;
             case 'q': opts->quality_tag = strdup(optarg); break;
@@ -1016,6 +1064,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case 'O': opts->use_oq = true; break;
             case 's': opts->fnse = optarg; break;
             case 't': opts->copy_tags = true; break;
+            case 'T': opts->extra_tags = strdup(optarg); break;
             case 'v': opts->def_qual = atoi(optarg); break;
             case '?': bam2fq_usage(stderr, argv[0]); free_opts(opts); return false;
             default:
@@ -1116,6 +1165,22 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->filetype = opts->filetype;
     state->def_qual = opts->def_qual;
 
+    state->taglist = kl_init(ktaglist);
+    if (opts->extra_tags) {
+        char *save_p;
+        char *s = strtok_r(opts->extra_tags, ",", &save_p);
+        while (s) {
+            if (strlen(s) != 2) {
+                fprintf(stderr, "Parsing extra tags - '%s' is not two characters\n", s);
+                free(state);
+                return false;
+            }
+            char **et = kl_pushp(ktaglist, state->taglist);
+            *et = s;
+            s = strtok_r(NULL, ",", &save_p);
+        }
+    }
+
     state->fp = sam_open(opts->fn_input, "r");
     if (state->fp == NULL) {
         print_error_errno("bam2fq","Cannot read file \"%s\"", opts->fn_input);
@@ -1197,6 +1262,7 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
             valid = false;
         }
     }
+    kl_destroy(ktaglist,state->taglist);
     free(state);
     return valid;
 }
