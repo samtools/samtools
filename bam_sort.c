@@ -1633,11 +1633,19 @@ static int change_SO(bam_hdr_t *h, const char *so)
 }
 
 // Function to compare reads and determine which one is < the other
+// Handle sort-by-pos and sort-by-name. Used as the secondary sort in bam1_lt_by_tag, if reads are equivalent by tag.
 static inline int bam1_lt_core(const bam1_p a, const bam1_p b)
 {
-    return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+    if (g_is_by_qname) {
+        int t = strnum_cmp(bam_get_qname(a), bam_get_qname(b));
+        return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
+    } else {
+        return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+    }
 }
 
+// Sort record by tag, using pos or read name as a secondary key if tags are identical. Reads not carrying the tag sort first. 
+// Tags are first sorted by the type character (in case the types differ), or by the appropriate comparator for that type if they agree.
 static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b) 
 {
     uint8_t* aux_a = bam_aux_get(a, g_sort_tag);
@@ -1678,15 +1686,13 @@ static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b)
 }
 
 // Function to compare reads and determine which one is < the other
+// Handle sort-by-pos, sort-by-name, or sort-by-tag
 static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
-    if (g_is_by_qname) {
-        int t = strnum_cmp(bam_get_qname(a), bam_get_qname(b));
-        return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
-    } else if (g_is_by_tag) {
+    if (g_is_by_tag) {
         return bam1_lt_by_tag(a, b);
     } else {
-        return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+        return bam1_lt_core(a,b);
     }
 }
 
