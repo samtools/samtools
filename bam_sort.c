@@ -134,7 +134,9 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
         t = strnum_cmp(bam_get_qname(a.b), bam_get_qname(b.b));
         return (t > 0 || (t == 0 && (a.b->core.flag&0xc0) > (b.b->core.flag&0xc0)));
     } else if (g_is_by_tag) {
-        int t = bam1_lt_by_tag(a.b,b.b);
+        int t;
+        if (a.b == NULL || b.b == NULL) return a.b == NULL? 1 : 0;
+        t = bam1_lt_by_tag(a.b,b.b);
         return (t > 0 || t == 0);
     } else {
         return __pos_cmp(a, b);
@@ -1955,7 +1957,7 @@ static void sort_usage(FILE *fp)
 "  -l INT     Set compression level, from 0 (uncompressed) to 9 (best)\n"
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -n         Sort by read name\n"
-"  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)"
+"  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n");
     sam_global_opt_help(fp, "-.O..@");
@@ -1998,7 +2000,7 @@ int bam_sort(int argc, char *argv[])
         switch (c) {
         case 'o': fnout = optarg; o_seen = 1; break;
         case 'n': is_by_qname = 1; break;
-        case 't': sort_tag = strdup(optarg);
+        case 't': sort_tag = strdup(optarg); break;
         case 'm': {
                 char *q;
                 max_mem = strtol(optarg, &q, 0);
