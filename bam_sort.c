@@ -136,8 +136,8 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
     } else if (g_is_by_tag) {
         int t;
         if (a.b == NULL || b.b == NULL) return a.b == NULL? 1 : 0;
-        t = bam1_lt_by_tag(a.b,b.b);
-        return (t > 0 || t == 0);
+        t = bam1_lt_by_tag(b.b,a.b);
+        return t;
     } else {
         return __pos_cmp(a, b);
     }
