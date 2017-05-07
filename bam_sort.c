@@ -1848,8 +1848,13 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         print_error("sort", "failed to read header from \"%s\"", fn);
         goto err;
     }
-    if (is_by_qname) change_SO(header, "queryname");
-    else change_SO(header, "coordinate");
+
+    if (sort_by_tag != NULL)
+        change_SO(header, "unknown");
+    else if (is_by_qname)
+        change_SO(header, "queryname");
+    else
+        change_SO(header, "coordinate");
 
     // No gain to using the thread pool here as the flow of this code
     // is such that we are *either* reading *or* sorting.  Hence a shared
