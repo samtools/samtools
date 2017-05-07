@@ -134,8 +134,10 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
         t = strnum_cmp(bam_get_qname(a.b), bam_get_qname(b.b));
         return (t > 0 || (t == 0 && (a.b->core.flag&0xc0) > (b.b->core.flag&0xc0)));
     } else if (g_is_by_tag) {
-        int t = bam1_lt_by_tag(a.b,b.b);
-        return (t > 0 || t == 0);
+        int t;
+        if (a.b == NULL || b.b == NULL) return a.b == NULL? 1 : 0;
+        t = bam1_lt_by_tag(b.b,a.b);
+        return t;
     } else {
         return __pos_cmp(a, b);
     }
@@ -1631,11 +1633,19 @@ static int change_SO(bam_hdr_t *h, const char *so)
 }
 
 // Function to compare reads and determine which one is < the other
+// Handle sort-by-pos and sort-by-name. Used as the secondary sort in bam1_lt_by_tag, if reads are equivalent by tag.
 static inline int bam1_lt_core(const bam1_p a, const bam1_p b)
 {
-    return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+    if (g_is_by_qname) {
+        int t = strnum_cmp(bam_get_qname(a), bam_get_qname(b));
+        return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
+    } else {
+        return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+    }
 }
 
+// Sort record by tag, using pos or read name as a secondary key if tags are identical. Reads not carrying the tag sort first. 
+// Tags are first sorted by the type character (in case the types differ), or by the appropriate comparator for that type if they agree.
 static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b) 
 {
     uint8_t* aux_a = bam_aux_get(a, g_sort_tag);
@@ -1676,15 +1686,13 @@ static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b)
 }
 
 // Function to compare reads and determine which one is < the other
+// Handle sort-by-pos, sort-by-name, or sort-by-tag
 static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
-    if (g_is_by_qname) {
-        int t = strnum_cmp(bam_get_qname(a), bam_get_qname(b));
-        return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
-    } else if (g_is_by_tag) {
+    if (g_is_by_tag) {
         return bam1_lt_by_tag(a, b);
     } else {
-        return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+        return bam1_lt_core(a,b);
     }
 }
 
@@ -1960,7 +1968,7 @@ static void sort_usage(FILE *fp)
 "  -l INT     Set compression level, from 0 (uncompressed) to 9 (best)\n"
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -n         Sort by read name\n"
-"  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)"
+"  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n");
     sam_global_opt_help(fp, "-.O..@");
@@ -2003,7 +2011,7 @@ int bam_sort(int argc, char *argv[])
         switch (c) {
         case 'o': fnout = optarg; o_seen = 1; break;
         case 'n': is_by_qname = 1; break;
-        case 't': sort_tag = strdup(optarg);
+        case 't': sort_tag = strdup(optarg); break;
         case 'm': {
                 char *q;
                 max_mem = strtol(optarg, &q, 0);
