@@ -1263,7 +1263,7 @@ void init_regions(stats_t *stats, const char *file)
             stats->regions[tid].pos = realloc(stats->regions[tid].pos,sizeof(pos_t)*stats->regions[tid].mpos);
         }
 
-        if ( (sscanf(&line.s[i+1],"%d %d",&stats->regions[tid].pos[npos].from,&stats->regions[tid].pos[npos].to))!=2 ) error("Could not parse the region [%s]\n", &line.s[i+1]);
+        if ( (sscanf(&line.s[i+1],"%u %u",&stats->regions[tid].pos[npos].from,&stats->regions[tid].pos[npos].to))!=2 ) error("Could not parse the region [%s]\n", &line.s[i+1]);
         if ( prev_tid==-1 || prev_tid!=tid )
         {
             prev_tid = tid;

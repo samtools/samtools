@@ -1,4 +1,29 @@
-Beta Release 1.4  (DD Mmmmm 2016)
+Release 1.4.1  (8th May 2017)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+* Added options to fastq to create fastq files from BC (or other)
+  tags.
+
+* Samtools view has gained a -G <flags> option to exclude on all bits
+  set.  For example to discard reads where neither end has been
+  mapped use "-G 12".
+
+* Samtools cat has a -b <fofn> option to ease concatenation of many
+  files.
+
+* Added misc/samtools_tab_completion for bash auto-completion of
+  samtools sub-commands. (#560)
+
+* Samtools tview now has J and K keys for verticale movement by 20
+  lines. (#257)
+
+* Various compilation / portability improvements.
+
+* Fixed issue with more than 65536 CIGAR operations and SAM/CRAM files.
+  (#667)
+
+
+Release 1.4  (13 March 2017)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Noteworthy changes in samtools:

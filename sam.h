@@ -50,7 +50,7 @@ typedef struct {
     samFile *file;
     struct { BGZF *bam; } x;  // Hack so that fp->x.bam still works
     bam_hdr_t *header;
-    short is_write:1;
+    unsigned short is_write:1;
 } samfile_t;
 
 #ifdef __cplusplus

@@ -439,10 +439,13 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
     }
     free(ref2); free(query);
     { // compute indelQ
-        int *sc, tmp, *sumq;
-        sc   = alloca(n_types * sizeof(int));
-        sumq = alloca(n_types * sizeof(int));
-        memset(sumq, 0, sizeof(int) * n_types);
+        int sc_a[16], sumq_a[16];
+        int tmp, *sc = sc_a, *sumq = sumq_a;
+        if (n_types > 16) {
+            sc   = (int *)malloc(n_types * sizeof(int));
+            sumq = (int *)malloc(n_types * sizeof(int));
+        }
+        memset(sumq, 0, n_types * sizeof(int));
         for (s = K = 0; s < n; ++s) {
             for (i = 0; i < n_plp[s]; ++i, ++K) {
                 bam_pileup1_t *p = plp[s] + i;
@@ -523,6 +526,9 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                 //fprintf(stderr, "X pos=%d read=%d:%d name=%s call=%d type=%d seqQ=%d indelQ=%d\n", pos, s, i, bam1_qname(p->b), (p->aux>>16)&0x3f, bca->indel_types[(p->aux>>16)&0x3f], (p->aux>>8)&0xff, p->aux&0xff);
             }
         }
+
+        if (sc   != sc_a)   free(sc);
+        if (sumq != sumq_a) free(sumq);
     }
     free(score1); free(score2);
     // free
