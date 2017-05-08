@@ -23,7 +23,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 dnl Process this file with autoconf to produce a configure script
-AC_INIT([Samtools], m4_esyscmd_s([make print-version]),
+AC_INIT([Samtools], m4_esyscmd_s([git describe --always --dirty]),
         [samtools-help@lists.sourceforge.net], [], [http://www.htslib.org/])
 AC_PREREQ([2.63])  dnl This version introduced 4-argument AC_CHECK_HEADER
 AC_CONFIG_SRCDIR([bamtk.c])
@@ -84,9 +84,7 @@ samtools successfully.])
   fi
 else
   CURSES_LIB=
-  CURSES_CPPFLAGS=
   AC_SUBST([CURSES_LIB])
-  AC_SUBST([CURSES_CPPFLAGS])
 fi
 
 save_LIBS=$LIBS
@@ -106,6 +104,23 @@ Ubuntu Linux) or zlib-devel (on RPM-based Linux distributions) is installed.
 
 FAILED.  This error must be resolved in order to build samtools successfully.])
 fi
+
+dnl Look for regcomp in various libraries (needed on windows/mingw).
+AC_SEARCH_LIBS(regcomp, regex, [libregex=needed], [])
+
+dnl Force POSIX mode on Windows/Mingw
+test -n "$host_alias" || host_alias=unknown-`uname -s`
+case $host_alias in
+  *-msys* | *-MSYS* | *-mingw* | *-MINGW*)
+    host_result="MSYS dll"
+    PLATFORM=MSYS
+    PLUGIN_EXT=.dll
+    # This also sets __USE_MINGW_ANSI_STDIO which in turn makes PRId64,
+    # %lld and %z printf formats work.  It also enforces the snprintf to
+    # be C99 compliant so it returns the correct values (in kstring.c).
+    CPPFLAGS="$CPPCFLAGS -D_POSIX_C_SOURCE=600"
+    ;;
+esac
 
 AC_CONFIG_FILES([config.mk])
 AC_OUTPUT

@@ -32,6 +32,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include <zlib.h>
 
+#include "htslib/hts_os.h"
+
 #ifdef _WIN32
 #define drand48() ((double)rand() / RAND_MAX)
 #endif

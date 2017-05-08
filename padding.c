@@ -29,9 +29,10 @@ DEALINGS IN THE SOFTWARE.  */
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
-#include <htslib/kstring.h>
-#include <htslib/sam.h>
-#include <htslib/faidx.h>
+#include "htslib/kstring.h"
+#include "htslib/sam.h"
+#include "htslib/faidx.h"
+#include "htslib/hts_os.h"
 #include "sam_header.h"
 #include "sam_opts.h"
 #include "samtools.h"

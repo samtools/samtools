@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/sam.h>
 #include <htslib/kstring.h>
 #include <htslib/kfunc.h>
+#include "htslib/hts_os.h"
 #include "bam2bcf.h"
 
 extern  void ks_introsort_uint32_t(size_t n, uint32_t a[]);

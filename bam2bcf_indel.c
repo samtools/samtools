@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <ctype.h>
 #include <string.h>
 #include "htslib/hts.h"
+#include "htslib/hts_os.h"
 #include "htslib/sam.h"
 #include "bam2bcf.h"
 #include "htslib/khash.h"
