@@ -1,9 +1,4 @@
-/* config.h.in -- template for config.h.  If you use configure, this file
-   provides #defines reflecting your configuration choices.  If you don't
-   run configure, suitable conservative defaults will be used.
-
-   This template file can be updated with autoheader, but do so carefully
-   as autoheader adds #defines such as PACKAGE_* that we don't want.  */
+/* config.h.in.  Generated from configure.ac by autoheader.  */
 
 /* Define to 1 if a SysV or X/Open compatible Curses library is present */
 #undef HAVE_CURSES
@@ -19,6 +14,9 @@
 
 /* Define to 1 if library supports certain obsolete features */
 #undef HAVE_CURSES_OBSOLETE
+
+/* Define to 1 if you have the `z' library (-lz). */
+#undef HAVE_LIBZ
 
 /* Define to 1 if the Ncurses library is present */
 #undef HAVE_NCURSES
@@ -38,10 +36,23 @@
 /* Define to 1 if <ncurses.h> is present */
 #undef HAVE_NCURSES_H
 
-/* Enable large inode numbers on Mac OS X 10.5.  */
-#ifndef _DARWIN_USE_64_BIT_INODE
-# define _DARWIN_USE_64_BIT_INODE 1
-#endif
+/* Define to the address where bug reports for this package should be sent. */
+#undef PACKAGE_BUGREPORT
+
+/* Define to the full name of this package. */
+#undef PACKAGE_NAME
+
+/* Define to the full name and version of this package. */
+#undef PACKAGE_STRING
+
+/* Define to the one symbol short name of this package. */
+#undef PACKAGE_TARNAME
+
+/* Define to the home page for this package. */
+#undef PACKAGE_URL
+
+/* Define to the version of this package. */
+#undef PACKAGE_VERSION
 
 /* Number of bits in a file offset, on hosts where this is settable. */
 #undef _FILE_OFFSET_BITS

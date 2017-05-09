@@ -103,19 +103,10 @@ config.h:
 include config.mk
 
 
-PACKAGE_VERSION = 1.4.1
-
-# If building from a Git repository, replace $(PACKAGE_VERSION) with the Git
-# description of the working tree: either a release tag with the same value
-# as $(PACKAGE_VERSION) above, or an exact description likely based on a tag.
-# $(shell), :=, etc are GNU Make-specific.  If you don't have GNU Make,
-# comment out this conditional.
-ifneq "$(wildcard .git)" ""
-PACKAGE_VERSION := $(shell git describe --always --dirty)
+PACKAGE_VERSION := $(shell ./version.sh)
 
 # Force version.h to be remade if $(PACKAGE_VERSION) has changed.
 version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(shell cat version.h)),,force))
-endif
 
 # If you don't have GNU Make but are building from a Git repository, you may
 # wish to replace this with a rule that always rebuilds version.h:
@@ -321,6 +312,64 @@ clean-all: clean clean-htslib
 tags:
 	ctags -f TAGS *.[ch] misc/*.[ch]
 
+# Making tarballs for distribution.
+# All changes should be committed before running this.
+DDIR=samtools-$(PACKAGE_VERSION)
+DTAR=$(DDIR).tar.bz2
+DTAR_SOLO=$(DDIR)-solo.tar.bz2
+
+# HTSDIR may be unset due to only appearing in an auto-generated (by
+# this Makefile) config.mk include.  It'll perform a second pass though
+# so it works out in the end; we just have to protect against a
+# temporarily missing value.
+HTS_VERS:=$(shell [ ! -z "$(HTSDIR)" ] && (cd $(HTSDIR) && ./version.sh))
+HTS_TAR:=$(realpath $(HTSDIR))/htslib-$(HTS_VERS).tar.bz2
+
+$(HTS_TAR):
+	cd $(HTSDIR) && $(MAKE) dist
+
+# NB: make sure you run this on a committed branch as uncommitted changes
+# will not be copied.
+# Building the distribution here is complicated by the Makefile rebuilding its
+# own config.mk if it is removed and also generating new files in htslib, so
+# we have to be careful to tidy this up.
+$(DTAR) dist: $(HTS_TAR)
+	-rm -rf _dist
+	if [ -e .git ]; then \
+	    mkdir -p _dist/$(DDIR); \
+	    git archive HEAD . | (cd _dist/$(DDIR) && tar xf -); \
+	else \
+	    tf=`tempfile`; \
+	    tar cf $$tf .; \
+	    (mkdir -p _dist/$(DDIR); cd _dist/$(DDIR) && tar xf $$tf; rm $$tf); \
+	    rm -rf _dist/$(DDIR)/config.mk _dist/$(DDIR)/htslib-* _dist/samtools-*.tar.bz2; \
+	fi
+	(cd _dist/$(DDIR) && autoreconf && rm -rf autom4te.cache config.h.in~)
+	@# If we want a joint tarball with htslib in it too, then the
+	@# following line unpacks the pre-built htslib tarball.  In this
+	@# scenario we ought to also add a dependency on this so we cd and
+	@# build that tarball first.
+	(cd _dist/$(DDIR) && tar xjf $(HTS_TAR))
+	@# Also needed for the joint tarball
+	sed -e "s#\.\./htslib#htslib-$(HTS_VERS)#g" -i _dist/$(DDIR)/Makefile
+	(cd _dist; tar cfj ../$(DTAR) --exclude=$(HTS_TAR) $(DDIR))
+	rm -rf _dist/$(DDIR)/htslib-*
+	(cd _dist; tar cfj ../$(DTAR_SOLO) $(DDIR))
+	rm -rf _dist
+
+# Make and extract the distribution tarball followed by configure, make
+# and check.  We then rebuild the tar ball again to validate it matches
+# the original one.  This validates our make dist can cope with debris
+# left behind from a build and that everything is successfully committed.
+distcheck: $(DTAR)
+	-mkdir _dist
+	cd _dist && tar xfj ../$(DTAR)
+	cd _dist/samtools-* && ./configure $${CONFIG_OPTS:-} && $(MAKE) && $(MAKE) check
+	cd _dist/samtools-* && $(MAKE) distclean && (cd htslib-* && $(MAKE) distclean) && $(MAKE) dist
+	tar tvf $(DTAR) |awk '{sub("^[^/]*/","",$$6);print $$6,$$3}' | sort > _dist/curr.lst
+	tar tvf _dist/samtools-*/samtools-*.tar.bz2 |awk '{sub("^[^/]*/","",$$6);print $$6,$$3}' | sort > _dist/sub.lst
+	diff _dist/*.lst || (echo "This is expected to fail when not run on a fresh git tag."; false)
+	-rm -rf _dist
 
 force:
 

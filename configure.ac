@@ -23,7 +23,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 dnl Process this file with autoconf to produce a configure script
-AC_INIT([Samtools], m4_esyscmd_s([make print-version]),
+AC_INIT([Samtools], m4_esyscmd_s([./version 2>/dev/null]),
         [samtools-help@lists.sourceforge.net], [], [http://www.htslib.org/])
 AC_PREREQ([2.63])  dnl This version introduced 4-argument AC_CHECK_HEADER
 AC_CONFIG_SRCDIR([bamtk.c])
