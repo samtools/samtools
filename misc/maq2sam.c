@@ -31,8 +31,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <assert.h>
 
-#define PACKAGE_VERSION "r439"
-
 //#define MAQ_LONGREADS
 
 #ifdef MAQ_LONGREADS
