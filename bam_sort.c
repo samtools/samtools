@@ -1352,6 +1352,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         int res;
         h->i = i;
         h->b.b = bam_init1();
+        h->b.tag = NULL;
         if (!h->b.b) goto mem_fail;
         res = iter[i] ? sam_itr_next(fp[i], iter[i], h->b.b) : sam_read1(fp[i], hdr[i], h->b.b);
         if (res >= 0) {
@@ -1368,6 +1369,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
             h->pos = HEAP_EMPTY;
             bam_destroy1(h->b.b);
             h->b.b = NULL;
+            h->b.tag = NULL;
         } else {
             print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
             goto fail;

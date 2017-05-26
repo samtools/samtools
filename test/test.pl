@@ -34,7 +34,6 @@ use IO::Handle;
 
 my $opts = parse_params();
 
-=begin
 test_bgzip($opts);
 test_faidx($opts);
 test_dict($opts);
@@ -50,12 +49,8 @@ test_depad($opts);
 test_stats($opts);
 test_merge($opts);
 test_merge($opts, threads=>2);
-=cut
-
 test_sort($opts);
 test_sort($opts, threads=>2);
-
-=begin
 test_fixmate($opts);
 test_fixmate($opts, threads=>2);
 test_calmd($opts);
@@ -65,7 +60,6 @@ test_quickcheck($opts);
 test_reheader($opts);
 test_addrprg($opts);
 test_addrprg($opts, threads=>2);
-=cut
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
