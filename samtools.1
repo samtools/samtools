@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "13 March 2017" "samtools-1.4" "Bioinformatics tools"
+.TH samtools 1 "08 May 2017" "samtools-1.4.1" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -1402,6 +1402,9 @@ Write singleton reads in FASTQ format to FILE instead of outputting them.
 .TP 8
 .B -t
 Copy RG, BC and QT tags to the FASTQ header line, if they exist.
+.TP 8
+.B -T TAGLIST
+Specify a comma-separated list of tags to copy to the FASTQ header line, if they exist.
 .TP 8
 .B -1 FILE
 Write reads with the BAM_READ1 flag set to FILE instead of outputting them.
