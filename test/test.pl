@@ -34,6 +34,7 @@ use IO::Handle;
 
 my $opts = parse_params();
 
+=begin
 test_bgzip($opts);
 test_faidx($opts);
 test_dict($opts);
@@ -49,8 +50,12 @@ test_depad($opts);
 test_stats($opts);
 test_merge($opts);
 test_merge($opts, threads=>2);
+=cut
+
 test_sort($opts);
 test_sort($opts, threads=>2);
+
+=begin
 test_fixmate($opts);
 test_fixmate($opts, threads=>2);
 test_calmd($opts);
@@ -60,6 +65,7 @@ test_quickcheck($opts);
 test_reheader($opts);
 test_addrprg($opts);
 test_addrprg($opts, threads=>2);
+=cut
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -2366,6 +2372,19 @@ sub test_sort
     test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout", want_fail=>1);
     test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} -f $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout.bam", want_fail=>1);
     test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} -o $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sorttmp", want_fail=>1);
+
+
+    # Pos sort
+    test_cmd($opts, out=>"dat/empty.expected", out_map=>{"sorttmp.bam"=> 'sort/pos.sort.expected.bam'}, cmd=>"$$opts{bin}/samtools sort${threads}  $$opts{path}/dat/test_input_1_a.bam -o $$opts{path}/sorttmp.bam");
+
+    # Name sort
+    test_cmd($opts, out=>"dat/empty.expected", out_map=>{"sorttmp.bam"=> 'sort/name.sort.expected.bam'}, cmd=>"$$opts{bin}/samtools sort${threads} -n  $$opts{path}/dat/test_input_1_a.bam -o $$opts{path}/sorttmp.bam");
+
+    # Tag sort (RG)
+    test_cmd($opts, out=>"dat/empty.expected", out_map=>{"sorttmp.bam"=> 'sort/tag.rg.sort.expected.bam'}, cmd=>"$$opts{bin}/samtools sort${threads} -t RG  $$opts{path}/dat/test_input_1_a.bam -o $$opts{path}/sorttmp.bam");
+
+    # Tag sort (AS)
+    test_cmd($opts, out=>"dat/empty.expected", out_map=>{"sorttmp.bam"=> 'sort/tag.as.sort.expected.bam'}, cmd=>"$$opts{bin}/samtools sort${threads} -t AS  $$opts{path}/dat/test_input_1_c.bam -o $$opts{path}/sorttmp.bam");
 }
 
 sub test_fixmate

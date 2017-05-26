@@ -47,8 +47,12 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 
 
-typedef bam1_t *bam1_p;
-
+// Struct which contains the a record, and the pointer to the sort tag (if any)
+// Used to speed up sort-by-tag.
+typedef struct bam1_p {
+    bam1_t *b;
+    const uint8_t *tag;
+} bam1_p;
 
 /* Minimum memory required in megabytes before sort will attempt to run. This
    is to prevent accidents where failing to use the -m option correctly results
@@ -118,7 +122,7 @@ static int strnum_cmp(const char *_a, const char *_b)
 typedef struct {
     int i;
     uint64_t pos, idx;
-    bam1_t *b;
+    bam1_p b;
 } heap1_t;
 
 #define __pos_cmp(a, b) ((a).pos > (b).pos || ((a).pos == (b).pos && ((a).i > (b).i || ((a).i == (b).i && (a).idx > (b).idx))))
@@ -130,12 +134,12 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 {
     if (g_is_by_qname) {
         int t;
-        if (a.b == NULL || b.b == NULL) return a.b == NULL? 1 : 0;
-        t = strnum_cmp(bam_get_qname(a.b), bam_get_qname(b.b));
-        return (t > 0 || (t == 0 && (a.b->core.flag&0xc0) > (b.b->core.flag&0xc0)));
+        if (a.b.b == NULL || b.b.b == NULL) return a.b.b == NULL? 1 : 0;
+        t = strnum_cmp(bam_get_qname(a.b.b), bam_get_qname(b.b.b));
+        return (t > 0 || (t == 0 && (a.b.b->core.flag&0xc0) > (b.b.b->core.flag&0xc0)));
     } else if (g_is_by_tag) {
         int t;
-        if (a.b == NULL || b.b == NULL) return a.b == NULL? 1 : 0;
+        if (a.b.b == NULL || b.b.b == NULL) return a.b.b == NULL? 1 : 0;
         t = bam1_lt_by_tag(b.b,a.b);
         return t;
     } else {
@@ -1347,18 +1351,23 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         heap1_t *h = heap + i;
         int res;
         h->i = i;
-        h->b = bam_init1();
-        if (!h->b) goto mem_fail;
-        res = iter[i] ? sam_itr_next(fp[i], iter[i], h->b) : sam_read1(fp[i], hdr[i], h->b);
+        h->b.b = bam_init1();
+        if (!h->b.b) goto mem_fail;
+        res = iter[i] ? sam_itr_next(fp[i], iter[i], h->b.b) : sam_read1(fp[i], hdr[i], h->b.b);
         if (res >= 0) {
-            bam_translate(h->b, translation_tbl + i);
-            h->pos = ((uint64_t)h->b->core.tid<<32) | (uint32_t)((int32_t)h->b->core.pos+1)<<1 | bam_is_rev(h->b);
+            bam_translate(h->b.b, translation_tbl + i);
+            h->pos = ((uint64_t)h->b.b->core.tid<<32) | (uint32_t)((int32_t)h->b.b->core.pos+1)<<1 | bam_is_rev(h->b.b);
             h->idx = idx++;
+            if (g_is_by_tag) {
+                h->b.tag = bam_aux_get(h->b.b, g_sort_tag);
+            } else {
+                h->b.tag = NULL;
+            }
         }
         else if (res == -1 && (!iter[i] || iter[i]->finished)) {
             h->pos = HEAP_EMPTY;
-            bam_destroy1(h->b);
-            h->b = NULL;
+            bam_destroy1(h->b.b);
+            h->b.b = NULL;
         } else {
             print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
             goto fail;
@@ -1380,7 +1389,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     // Begin the actual merge
     ks_heapmake(heap, n, heap);
     while (heap->pos != HEAP_EMPTY) {
-        bam1_t *b = heap->b;
+        bam1_t *b = heap->b.b;
         if (flag & MERGE_RG) {
             uint8_t *rg = bam_aux_get(b, "RG");
             if (rg) bam_aux_del(b, rg);
@@ -1397,8 +1406,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
             heap->idx = idx++;
         } else if (j == -1 && (!iter[heap->i] || iter[heap->i]->finished)) {
             heap->pos = HEAP_EMPTY;
-            bam_destroy1(heap->b);
-            heap->b = NULL;
+            bam_destroy1(heap->b.b);
+            heap->b.b = NULL;
         } else {
             print_error(cmd, "\"%s\" is truncated", fn[heap->i]);
             goto fail;
@@ -1442,7 +1451,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         if (iter && iter[i]) hts_itr_destroy(iter[i]);
         if (hdr && hdr[i]) bam_hdr_destroy(hdr[i]);
         if (fp && fp[i]) sam_close(fp[i]);
-        if (heap && heap[i].b) bam_destroy1(heap[i].b);
+        if (heap && heap[i].b.b) bam_destroy1(heap[i].b.b);
     }
     if (hout) bam_hdr_destroy(hout);
     free(RG);
@@ -1637,10 +1646,22 @@ static int change_SO(bam_hdr_t *h, const char *so)
 static inline int bam1_lt_core(const bam1_p a, const bam1_p b)
 {
     if (g_is_by_qname) {
-        int t = strnum_cmp(bam_get_qname(a), bam_get_qname(b));
-        return (t < 0 || (t == 0 && (a->core.flag&0xc0) < (b->core.flag&0xc0)));
+        int t = strnum_cmp(bam_get_qname(a.b), bam_get_qname(b.b));
+        return (t < 0 || (t == 0 && (a.b->core.flag&0xc0) < (b.b->core.flag&0xc0)));
     } else {
-        return (((uint64_t)a->core.tid<<32|(a->core.pos+1)<<1|bam_is_rev(a)) < ((uint64_t)b->core.tid<<32|(b->core.pos+1)<<1|bam_is_rev(b)));
+        return (((uint64_t)a.b->core.tid<<32|(a.b->core.pos+1)<<1|bam_is_rev(a.b)) < ((uint64_t)b.b->core.tid<<32|(b.b->core.pos+1)<<1|bam_is_rev(b.b)));
+    }
+}
+
+uint8_t normalize_type(const uint8_t* aux) {
+    if (*aux == 'c' || *aux == 'C' || *aux == 's' || *aux == 'S' || *aux == 'i' || *aux == 'I') {
+        return 'c';
+    } else if (*aux == 'f' || *aux == 'F') {
+        return 'f';
+    } else if (*aux == 'H' || *aux == 'Z') {
+         return 'H';
+    } else {
+        return *aux;
     }
 }
 
@@ -1648,35 +1669,41 @@ static inline int bam1_lt_core(const bam1_p a, const bam1_p b)
 // Tags are first sorted by the type character (in case the types differ), or by the appropriate comparator for that type if they agree.
 static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b) 
 {
-    uint8_t* aux_a = bam_aux_get(a, g_sort_tag);
-    uint8_t* aux_b = bam_aux_get(b, g_sort_tag);
+    const uint8_t* aux_a = a.tag;
+    const uint8_t* aux_b = b.tag;
 
-    if (aux_a == 0 && aux_b > 0) {
+    if (aux_a == NULL && aux_b != NULL) {
         return 1;
-    } else if (aux_a > 0 && aux_b == 0) {
+    } else if (aux_a != NULL && aux_b == NULL) {
         return 0;
-    } else if (aux_a == 0 && aux_b == 0) {
+    } else if (aux_a == NULL && aux_b == NULL) {
         return bam1_lt_core(a,b);
     } 
 
-    if (*aux_a < *aux_b) {
+    // 'Normalize' the letters of the datatypes to a canonical letter,
+    // so that comparison of different types 
+    // forms a correct total ordering.
+    uint8_t a_type = normalize_type(aux_a);
+    uint8_t b_type = normalize_type(aux_b);
+
+    if (a_type < b_type) {
         return 1;
-    } else if (*aux_a > *aux_b) {
+    } else if (a_type > b_type) {
         return 0;
     } else {
-        if (*aux_a == 'c' || *aux_a == 'C' || *aux_a == 's' || *aux_a == 'S' || *aux_a == 'i' || *aux_a == 'I') {
-            int32_t va = bam_aux2i(aux_a);
-            int32_t vb = bam_aux2i(aux_b);
+        if (a_type == 'c') {
+            int64_t va = bam_aux2i(aux_a);
+            int64_t vb = bam_aux2i(aux_b);
             return (va < vb || (va == vb && bam1_lt_core(a, b)));
-        } else if (*aux_a == 'f' || *aux_a == 'F') {
+        } else if (a_type == 'f') {
             double va = bam_aux2f(aux_a);
             double vb = bam_aux2f(aux_b);
             return (va < vb || (va == vb && bam1_lt_core(a,b)));
-        } else if (*aux_a == 'A') {
+        } else if (a_type == 'A') {
             char va = bam_aux2A(aux_a);
             char vb = bam_aux2A(aux_b);
             return (va < vb || (va == vb && bam1_lt_core(a,b)));
-        } else if (*aux_a == 'Z' || *aux_a == 'H') {
+        } else if (a_type == 'H') {
             int t = strcmp(bam_aux2Z(aux_a), bam_aux2Z(aux_b));
             return (t < 0 || (t == 0 && bam1_lt_core(a,b)));
         } else {
@@ -1720,7 +1747,7 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_p *buf,
     if (sam_hdr_write(fp, h) != 0) goto fail;
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i) {
-        if (sam_write1(fp, h, buf[i]) < 0) goto fail;
+        if (sam_write1(fp, h, buf[i].b) < 0) goto fail;
     }
     if (sam_close(fp) < 0) return -1;
     return 0;
@@ -1742,7 +1769,7 @@ static void *worker(void *data)
     uint32_t max_ncigar = 0;
     int i;
     for (i = 0; i < w->buf_len; i++) {
-        uint32_t nc = w->buf[i]->core.n_cigar;
+        uint32_t nc = w->buf[i].b->core.n_cigar;
         if (max_ncigar < nc)
             max_ncigar = nc;
     }
@@ -1833,14 +1860,14 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     size_t mem, max_k, k, max_mem;
     bam_hdr_t *header = NULL;
     samFile *fp;
-    bam1_t *b, **buf;
+    bam1_p *buf;
+    bam1_t *b;
 
     if (n_threads < 2) n_threads = 1;
     g_is_by_qname = is_by_qname;
     if (sort_by_tag) {
         g_is_by_tag = 1;
-        g_sort_tag[0] = sort_by_tag[0];
-        g_sort_tag[1] = sort_by_tag[1];
+        strncpy(g_sort_tag, sort_by_tag, 2);
     }
 
     max_k = k = 0; mem = 0;
@@ -1875,17 +1902,28 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         if (k == max_k) {
             size_t kk, old_max = max_k;
             max_k = max_k? max_k<<1 : 0x10000;
-            buf = (bam1_t**)realloc(buf, max_k * sizeof(bam1_t*));
-            for (kk = old_max; kk < max_k; ++kk) buf[kk] = NULL;
+            buf = (bam1_p*)realloc(buf, max_k * sizeof(bam1_p));
+            for (kk = old_max; kk < max_k; ++kk) {
+                buf[kk].b = NULL;
+                buf[kk].tag = NULL;
+            }
         }
-        if (buf[k] == NULL) buf[k] = bam_init1();
-        b = buf[k];
+        if (buf[k].b == NULL) buf[k].b = bam_init1();
+        b = buf[k].b;
         if ((ret = sam_read1(fp, header, b)) < 0) break;
         if (b->l_data < b->m_data>>2) { // shrink
             b->m_data = b->l_data;
             kroundup32(b->m_data);
             b->data = (uint8_t*)realloc(b->data, b->m_data);
         }
+
+        // Pull out the pointer to the sort tag if applicable
+        if (g_is_by_tag) {
+            buf[k].tag = bam_aux_get(b, g_sort_tag);
+        } else {
+            buf[k].tag = NULL;
+        }
+
         mem += sizeof(bam1_t) + b->m_data + sizeof(void*) + sizeof(void*); // two sizeof(void*) for the data allocated to pointer arrays
         ++k;
         if (mem >= max_mem) {
@@ -1942,7 +1980,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
 
  err:
     // free
-    for (k = 0; k < max_k; ++k) bam_destroy1(buf[k]);
+    for (k = 0; k < max_k; ++k) bam_destroy1(buf[k].b);
     free(buf);
     bam_hdr_destroy(header);
     sam_close(fp);
@@ -1995,7 +2033,7 @@ int bam_sort(int argc, char *argv[])
 {
     size_t max_mem = SORT_DEFAULT_MEGS_PER_THREAD << 20;
     int c, nargs, is_by_qname = 0, ret, o_seen = 0, level = -1;
-    char* sort_tag;
+    char* sort_tag = NULL;
     char *fnout = "-", modeout[12];
     kstring_t tmpprefix = { 0, 0, NULL };
     struct stat st;
