@@ -1243,7 +1243,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         if (hts_get_format(fp[i])->format == sam) hdr[i] = hin;
         else { bam_hdr_destroy(hin); hdr[i] = NULL; }
 
-        if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
+        if ((translation_tbl+i)->lost_coord_sort && !(by_qname || g_is_by_tag)) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
         }
 
