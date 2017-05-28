@@ -2382,7 +2382,7 @@ sub test_sort
     test_cmd($opts, out=>"dat/empty.expected", out_map=>{"sorttmp.bam"=> 'sort/tag.rg.sort.expected.bam'}, cmd=>"$$opts{bin}/samtools sort${threads} -t RG  $$opts{path}/dat/test_input_1_a.bam -o $$opts{path}/sorttmp.bam");
 
     # Tag sort (AS)
-    test_cmd($opts, out=>"dat/empty.expected", out_map=>{"sorttmp.bam"=> 'sort/tag.as.sort.expected.bam'}, cmd=>"$$opts{bin}/samtools sort${threads} -t AS  $$opts{path}/dat/test_input_1_c.bam -o $$opts{path}/sorttmp.bam");
+    test_cmd($opts, out=>"dat/empty.expected", out_map=>{"sorttmp.bam"=> 'sort/tag.as.sort.expected.bam'}, cmd=>"$$opts{bin}/samtools sort${threads} -t AS  $$opts{path}/dat/test_input_1_d.bam -o $$opts{path}/sorttmp.bam");
 }
 
 sub test_fixmate
