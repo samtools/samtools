@@ -1406,10 +1406,16 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
             bam_translate(b, translation_tbl + heap->i);
             heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
             heap->idx = idx++;
+            if (g_is_by_tag) {
+                heap->b.tag = bam_aux_get(heap->b.b, g_sort_tag);
+            } else {
+                heap->b.tag = NULL;
+            }
         } else if (j == -1 && (!iter[heap->i] || iter[heap->i]->finished)) {
             heap->pos = HEAP_EMPTY;
             bam_destroy1(heap->b.b);
             heap->b.b = NULL;
+            heap->b.tag = NULL;
         } else {
             print_error(cmd, "\"%s\" is truncated", fn[heap->i]);
             goto fail;
