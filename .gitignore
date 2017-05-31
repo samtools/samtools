@@ -24,3 +24,7 @@ lib*.a
 /test/vcf-miniview
 
 /TAGS
+
+
+.idea
+CMakeCache.txt 

@@ -34,7 +34,7 @@ and modified to perform concatenation by Chris Saunders on behalf of
 Illumina.
 */
 
-#include <config.h>
+#include "config.h"
 
 #include <stdio.h>
 #include <stdlib.h>
