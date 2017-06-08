@@ -683,6 +683,7 @@ static void bam2fq_usage(FILE *to, const char *command)
     fq ? "FASTQ" : "FASTA");
     if (fq) fprintf(to,
 "  -v INT               default quality score if not given in file [1]\n"
+"  -i                   add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)\n"
 "  --i1 FILE            write first index reads to FILE\n"
 "  --i2 FILE            write second index reads to FILE\n"
 "  --barcode-tag TAG    Barcode tag [default: " DEFAULT_BARCODE_TAG "]\n"
@@ -706,7 +707,7 @@ typedef struct bam2fq_opts {
     char *fnse;
     char *fnr[3];
     char *fn_input; // pointer to input filename in argv do not free
-    bool has12, has12always, use_oq, copy_tags;
+    bool has12, has12always, use_oq, copy_tags, illumina_tag;
     int flag_on, flag_off, flag_alloff;
     sam_global_args ga;
     fastfile filetype;
@@ -724,11 +725,12 @@ typedef struct bam2fq_state {
     FILE *fpr[3];
     FILE *fpi[2];
     bam_hdr_t *h;
-    bool has12, use_oq, copy_tags;
+    bool has12, use_oq, copy_tags, illumina_tag;
     int flag_on, flag_off, flag_alloff;
     fastfile filetype;
     int def_qual;
     klist_t(ktaglist) *taglist;
+    char *index_sequence;
 } bam2fq_state_t;
 
 /*
@@ -857,6 +859,38 @@ static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
     return true;
 }
 
+static void insert_index_sequence_into_linebuf(char *index_sequence, kstring_t *linebuf, bam1_t *rec)
+{
+    int n;
+
+    if (!index_sequence) return;
+
+    kstring_t new = {0,0,NULL};
+    if (linebuf->s) {
+        char *s = strchr(linebuf->s, '\n');
+        if (s) {
+            *s = 0;
+            kputs(linebuf->s, &new);
+            kputc(' ', &new);
+            readpart readpart = which_readpart(rec);
+            if (readpart == READ_1) kputc('1', &new);
+            else if (readpart == READ_2) kputc('2', &new);
+            else kputc('0', &new);
+
+            kputc(':', &new);
+            if (rec->core.flag & BAM_FQCFAIL) kputc('Y', &new);
+            else                              kputc('N', &new);
+
+            kputs(":0:", &new);
+            kputs(index_sequence, &new);
+            kputc('\n', &new);
+            kputs(s+1, &new);
+            free(ks_release(linebuf)); kputs(new.s,linebuf);
+            free(ks_release(&new));
+        }
+    }
+}
+
 static bool make_fq_line(const bam1_t *rec, char *seq, char *qual, kstring_t *linebuf, const bam2fq_state_t *state)
 {
     int i;
@@ -913,7 +947,7 @@ static bool make_fq_line(const bam1_t *rec, char *seq, char *qual, kstring_t *li
 /*
  * Create FASTQ lines from the barcode tag using the index-format 
  */
-static bool tags2fq(bam1_t *rec, const bam2fq_state_t *state, const bam2fq_opts_t* opts)
+static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opts)
 {
     uint8_t *p;
     char *ifmt = opts->index_format;
@@ -921,6 +955,7 @@ static bool tags2fq(bam1_t *rec, const bam2fq_state_t *state, const bam2fq_opts_
     char *qual = NULL;
     int file_number = 0;
     kstring_t linebuf = { 0, 0, NULL }; // Buffer
+
 
     // read barcode tag
     p = bam_aux_get(rec,opts->barcode_tag);
@@ -964,7 +999,10 @@ static bool tags2fq(bam1_t *rec, const bam2fq_state_t *state, const bam2fq_opts_
         }
 
         if (action=='i' && *sub_tag && state->fpi[file_number]) {
+            //if (file_number==0) state->index_sequence = strdup(sub_tag);    // we're going to need this later...
+            state->index_sequence = strdup(sub_tag);    // we're going to need this later...
             if (!make_fq_line(rec, sub_tag, sub_qual, &linebuf, state)) return false;
+            if (state->illumina_tag) insert_index_sequence_into_linebuf(state->index_sequence, &linebuf, rec);
             fputs(linebuf.s, state->fpi[file_number++]);
         }
         free(sub_qual); free(sub_tag);
@@ -1046,7 +1084,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"quality-tag", required_argument, NULL, 'q'},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:nNOs:tT:v:@:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:niNOs:tT:v:@:", lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = strdup(optarg); break;
             case 'q': opts->quality_tag = strdup(optarg); break;
@@ -1064,6 +1102,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case 'O': opts->use_oq = true; break;
             case 's': opts->fnse = optarg; break;
             case 't': opts->copy_tags = true; break;
+            case 'i': opts->illumina_tag = true; break;
             case 'T': opts->extra_tags = strdup(optarg); break;
             case 'v': opts->def_qual = atoi(optarg); break;
             case '?': bam2fq_usage(stderr, argv[0]); free_opts(opts); return false;
@@ -1161,9 +1200,11 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->flag_alloff = opts->flag_alloff;
     state->has12 = opts->has12;
     state->use_oq = opts->use_oq;
+    state->illumina_tag = opts->illumina_tag;
     state->copy_tags = opts->copy_tags;
     state->filetype = opts->filetype;
     state->def_qual = opts->def_qual;
+    state->index_sequence = NULL;
 
     state->taglist = kl_init(ktaglist);
     if (opts->extra_tags) {
@@ -1263,6 +1304,7 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
         }
     }
     kl_destroy(ktaglist,state->taglist);
+    free(state->index_sequence);
     free(state);
     return valid;
 }
@@ -1276,8 +1318,10 @@ static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
 
 }
 
-static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state, bam2fq_opts_t* opts)
+static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
 {
+    int n;
+    bam1_t *records[3];
     bam1_t* b = bam_init1();
     char *current_qname = NULL;
     int64_t n_reads = 0, n_singletons = 0; // Statistics
@@ -1298,11 +1342,13 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state, bam2fq_opts_t*
 
         if (at_eof || !current_qname || (strcmp(current_qname, bam_get_qname(b)) != 0)) {
             if (current_qname) {
+                if (state->illumina_tag) for (n=0; n<3; n++) insert_index_sequence_into_linebuf(state->index_sequence, &linebuf[n], records[n]);
+                free(state->index_sequence); state->index_sequence = NULL;
                 if (score[1] > 0 && score[2] > 0) {
                     // print linebuf[1] to fpr[1], linebuf[2] to fpr[2]
                     if (fputs(linebuf[1].s, state->fpr[1]) == EOF) { valid = false; break; }
                     if (fputs(linebuf[2].s, state->fpr[2]) == EOF) { valid = false; break; }
-                } else if (score[1] > 0 || score[2] > 0) {
+                } else if ((score[1] > 0 || score[2] > 0) && state->fpse) {
                     // print whichever one exists to fpse
                     if (score[1] > 0) {
                         if (fputs(linebuf[1].s, state->fpse) == EOF) { valid = false; break; }
@@ -1327,12 +1373,13 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state, bam2fq_opts_t*
         // Prefer a copy of the read that has base qualities
         int b_score = bam_get_qual(b)[0] != 0xff? 2 : 1;
         if (b_score > score[which_readpart(b)]) {
+            if (state->fpi[0]) if (!tags2fq(b, state, opts)) return false;
+            records[which_readpart(b)] = b;
             if(!bam1_to_fq(b, &linebuf[which_readpart(b)], state)) {
                 fprintf(stderr, "[%s] Error converting read to FASTA/Q\n", __func__);
                 return false;
             }
             score[which_readpart(b)] = b_score;
-            if (state->fpi[0]) tags2fq(b, state, opts);
         }
     }
     if (!valid)
@@ -1350,31 +1397,6 @@ static bool bam2fq_mainloop_singletontrack(bam2fq_state_t *state, bam2fq_opts_t*
     return valid;
 }
 
-static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
-{
-    // process a name collated BAM into fastq
-    bam1_t* b = bam_init1();
-    if (b == NULL) {
-        perror(NULL);
-        return false;
-    }
-    int64_t n_reads = 0; // Statistics
-    kstring_t linebuf = { 0, 0, NULL }; // Buffer
-    while (sam_read1(state->fp, state->h, b) >= 0) {
-        if (filter_it_out(b, state)) continue;
-        ++n_reads;
-
-        if (!bam1_to_fq(b, &linebuf, state)) return false;
-        fputs(linebuf.s, state->fpr[which_readpart(b)]);
-        if (state->fpi[0]) tags2fq(b, state, opts);
-    }
-    free(linebuf.s);
-    bam_destroy1(b);
-
-    fprintf(stderr, "[M::%s] processed %" PRId64 " reads\n", __func__, n_reads);
-    return true;
-}
-
 int main_bam2fq(int argc, char *argv[])
 {
     int status = EXIT_SUCCESS;
@@ -1386,11 +1408,7 @@ int main_bam2fq(int argc, char *argv[])
 
     if (!init_state(opts, &state)) return EXIT_FAILURE;
 
-    if (state->fpse) {
-        if (!bam2fq_mainloop_singletontrack(state,opts)) status = EXIT_FAILURE;
-    } else {
-        if (!bam2fq_mainloop(state,opts)) status = EXIT_FAILURE;
-    }
+    if (!bam2fq_mainloop(state,opts)) status = EXIT_FAILURE;
 
     if (!destroy_state(opts, state, &status)) return EXIT_FAILURE;
     sam_global_args_free(&opts->ga);
