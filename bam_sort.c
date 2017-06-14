@@ -1531,7 +1531,7 @@ int bam_merge(int argc, char *argv[])
         case 'f': flag |= MERGE_FORCE; break;
         case 'h': fn_headers = strdup(optarg); break;
         case 'n': is_by_qname = 1; break;
-        case 't': sort_tag = strdup(optarg); break; 
+        case 't': sort_tag = strdup(optarg); break;
         case '1': flag |= MERGE_LEVEL1; level = 1; break;
         case 'u': flag |= MERGE_UNCOMP; level = 0; break;
         case 'R': reg = strdup(optarg); break;
@@ -1664,7 +1664,7 @@ static inline int bam1_lt_core(const bam1_p a, const bam1_p b)
 uint8_t normalize_type(const uint8_t* aux) {
     if (*aux == 'c' || *aux == 'C' || *aux == 's' || *aux == 'S' || *aux == 'i' || *aux == 'I') {
         return 'c';
-    } else if (*aux == 'f' || *aux == 'F') {
+    } else if (*aux == 'f' || *aux == 'd') {
         return 'f';
     } else if (*aux == 'H' || *aux == 'Z') {
          return 'H';
@@ -1673,9 +1673,9 @@ uint8_t normalize_type(const uint8_t* aux) {
     }
 }
 
-// Sort record by tag, using pos or read name as a secondary key if tags are identical. Reads not carrying the tag sort first. 
+// Sort record by tag, using pos or read name as a secondary key if tags are identical. Reads not carrying the tag sort first.
 // Tags are first sorted by the type character (in case the types differ), or by the appropriate comparator for that type if they agree.
-static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b) 
+static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b)
 {
     const uint8_t* aux_a = a.tag;
     const uint8_t* aux_b = b.tag;
@@ -1686,37 +1686,43 @@ static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b)
         return 0;
     } else if (aux_a == NULL && aux_b == NULL) {
         return bam1_lt_core(a,b);
-    } 
+    }
 
     // 'Normalize' the letters of the datatypes to a canonical letter,
-    // so that comparison of different types 
+    // so that comparison of different types
     // forms a correct total ordering.
     uint8_t a_type = normalize_type(aux_a);
     uint8_t b_type = normalize_type(aux_b);
 
-    if (a_type < b_type) {
-        return 1;
-    } else if (a_type > b_type) {
-        return 0;
-    } else {
-        if (a_type == 'c') {
-            int64_t va = bam_aux2i(aux_a);
-            int64_t vb = bam_aux2i(aux_b);
-            return (va < vb || (va == vb && bam1_lt_core(a, b)));
-        } else if (a_type == 'f') {
-            double va = bam_aux2f(aux_a);
-            double vb = bam_aux2f(aux_b);
-            return (va < vb || (va == vb && bam1_lt_core(a,b)));
-        } else if (a_type == 'A') {
-            char va = bam_aux2A(aux_a);
-            char vb = bam_aux2A(aux_b);
-            return (va < vb || (va == vb && bam1_lt_core(a,b)));
-        } else if (a_type == 'H') {
-            int t = strcmp(bam_aux2Z(aux_a), bam_aux2Z(aux_b));
-            return (t < 0 || (t == 0 && bam1_lt_core(a,b)));
+    if (a_type != b_type) {
+        // Fix int to float comparisons by using bam_aux2f() to read the int
+        if (a_type == 'c' && b_type == 'f') {
+            a_type = 'f';
+        } else if (a_type == 'f' && b_type == 'c') {
+            b_type = 'f';
         } else {
-            return bam1_lt_core(a,b);
+            // Unfixable mismatched types
+            return a_type < b_type ? 1 : 0;
         }
+    }
+
+    if (a_type == 'c') {
+        int64_t va = bam_aux2i(aux_a);
+        int64_t vb = bam_aux2i(aux_b);
+        return (va < vb || (va == vb && bam1_lt_core(a, b)));
+    } else if (a_type == 'f') {
+        double va = bam_aux2f(aux_a);
+        double vb = bam_aux2f(aux_b);
+        return (va < vb || (va == vb && bam1_lt_core(a,b)));
+    } else if (a_type == 'A') {
+        char va = bam_aux2A(aux_a);
+        char vb = bam_aux2A(aux_b);
+        return (va < vb || (va == vb && bam1_lt_core(a,b)));
+    } else if (a_type == 'H') {
+        int t = strcmp(bam_aux2Z(aux_a), bam_aux2Z(aux_b));
+        return (t < 0 || (t == 0 && bam1_lt_core(a,b)));
+    } else {
+        return bam1_lt_core(a,b);
     }
 }
 

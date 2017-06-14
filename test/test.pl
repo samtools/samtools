@@ -2359,8 +2359,8 @@ sub test_merge
     test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
 
     # Sort inputs by PG, then merge
-    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG  $$opts{path}/dat/test_input_1_c.bam") == 0 or die "failed to create sort BAM: $?";
-    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.2.bam -t PG  $$opts{path}/dat/test_input_1_d.bam") == 0 or die "failed to create sort BAM: $?";
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG  $$opts{path}/dat/test_input_1_c.sam") == 0 or die "failed to create sort BAM: $?";
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.2.bam -t PG  $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
     test_cmd($opts,out=>'merge/tag.pg.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -t PG -O SAM - $$opts{tmp}/merge.tag.1.bam $$opts{tmp}/merge.tag.2.bam");
 }
 
@@ -2388,7 +2388,10 @@ sub test_sort
     test_cmd($opts, out=>"sort/tag.rg.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Tag sort (AS)
-    test_cmd($opts, out=>"sort/tag.as.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t AS $$opts{path}/dat/test_input_1_d.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.as.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t AS $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+
+    # Tag sort (FI)
+    test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t FI $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
 }
 
 sub test_fixmate
