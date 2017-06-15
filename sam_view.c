@@ -866,8 +866,6 @@ static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
 
 static void insert_index_sequence_into_linebuf(char *index_sequence, kstring_t *linebuf, bam1_t *rec)
 {
-    int n;
-
     if (!index_sequence) return;
 
     kstring_t new = {0,0,NULL};
@@ -890,8 +888,8 @@ static void insert_index_sequence_into_linebuf(char *index_sequence, kstring_t *
             kputs(index_sequence, &new);
             kputc('\n', &new);
             kputs(s+1, &new);
-            free(ks_release(linebuf)); kputs(new.s,linebuf);
-            free(ks_release(&new));
+            free(ks_release(linebuf));
+            linebuf->s = new.s; linebuf->l = new.l; linebuf->m = new.m;
         }
     }
 }
@@ -1203,11 +1201,10 @@ static BGZF *open_fqfile(char *filename, int c)
 {
     char mode[4] = "w";
 
-    mode[1] = '0'+c;
-    mode[2] = 0;
+    mode[2] = 0; mode[3] = 0;
     if (strstr(filename,".gz")) { mode[1] = 'g'; mode[2] = c+'0'; }
-    else if (!strstr(filename,".bgzf")) { mode[1] = 'u'; }
-    else { mode[1] = c+'0'; }
+    else if (strstr(filename,".bgz")) { mode[1] = c+'0'; }
+    else { mode[1] = 'u'; }
 
     return bgzf_open(filename,mode);
 }
