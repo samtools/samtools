@@ -1253,7 +1253,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     if (opts->ga.nthreads > 0)
         hts_set_threads(state->fp, opts->ga.nthreads);
     uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
-    if (opts->use_oq) rf |= SAM_AUX;
+    if (opts->use_oq || opts->extra_tags || opts->index_file[0]) rf |= SAM_AUX;
     if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
         fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
         free(state);
