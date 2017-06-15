@@ -1377,7 +1377,8 @@ samtools fasta
 .I in.bam
 
 Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
-command invoked.
+command invoked. The FASTQ files will be automatically compressed if the 
+filenames have a .gz or .bgzf extention.
 
 .B OPTIONS:
 .RS
@@ -1442,6 +1443,9 @@ or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
 .TP 8
 .B -i
 add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)
+.TP 8
+.B -c [0..9]
+set compression level when writing gz or bgzf fastq files.
 .TP 8
 .B --i1 FILE
 write first index reads to FILE

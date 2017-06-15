@@ -42,6 +42,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/khash.h"
 #include "htslib/klist.h"
 #include "htslib/thread_pool.h"
+#include "htslib/bgzf.h"
 #include "samtools.h"
 #include "sam_opts.h"
 
@@ -684,6 +685,7 @@ static void bam2fq_usage(FILE *to, const char *command)
     if (fq) fprintf(to,
 "  -v INT               default quality score if not given in file [1]\n"
 "  -i                   add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)\n"
+"  -c                   compression level [0..9] to use when creating gz or bgzf fastq files\n"
 "  --i1 FILE            write first index reads to FILE\n"
 "  --i2 FILE            write second index reads to FILE\n"
 "  --barcode-tag TAG    Barcode tag [default: " DEFAULT_BARCODE_TAG "]\n"
@@ -717,13 +719,15 @@ typedef struct bam2fq_opts {
     char *index_file[2];
     char *index_format;
     char *extra_tags;
+    char compression_level;
 } bam2fq_opts_t;
 
 typedef struct bam2fq_state {
     samFile *fp;
-    FILE *fpse;
-    FILE *fpr[3];
-    FILE *fpi[2];
+    BGZF *fpse;
+    BGZF *fpr[3];
+    BGZF *fpi[2];
+    BGZF *hstdout;
     bam_hdr_t *h;
     bool has12, use_oq, copy_tags, illumina_tag;
     int flag_on, flag_off, flag_alloff;
@@ -731,6 +735,7 @@ typedef struct bam2fq_state {
     int def_qual;
     klist_t(ktaglist) *taglist;
     char *index_sequence;
+    char compression_level;
 } bam2fq_state_t;
 
 /*
@@ -1003,7 +1008,7 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
             state->index_sequence = strdup(sub_tag);    // we're going to need this later...
             if (!make_fq_line(rec, sub_tag, sub_qual, &linebuf, state)) return false;
             if (state->illumina_tag) insert_index_sequence_into_linebuf(state->index_sequence, &linebuf, rec);
-            fputs(linebuf.s, state->fpi[file_number++]);
+            if (bgzf_write(state->fpi[file_number++], linebuf.s, linebuf.l) < 0) return false;
         }
         free(sub_qual); free(sub_tag);
 
@@ -1068,6 +1073,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     opts->index_file[0] = NULL;
     opts->index_file[1] = NULL;
     opts->extra_tags = NULL;
+    opts->compression_level = 1;
 
     int c;
     sam_global_args_init(&opts->ga);
@@ -1084,7 +1090,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"quality-tag", required_argument, NULL, 'q'},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:niNOs:tT:v:@:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:niNOs:c:tT:v:@:", lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = strdup(optarg); break;
             case 'q': opts->quality_tag = strdup(optarg); break;
@@ -1103,6 +1109,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case 's': opts->fnse = optarg; break;
             case 't': opts->copy_tags = true; break;
             case 'i': opts->illumina_tag = true; break;
+            case 'c': opts->compression_level = atoi(optarg); break;
             case 'T': opts->extra_tags = strdup(optarg); break;
             case 'v': opts->def_qual = atoi(optarg); break;
             case '?': bam2fq_usage(stderr, argv[0]); free_opts(opts); return false;
@@ -1192,6 +1199,19 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     return true;
 }
 
+static BGZF *open_fqfile(char *filename, int c)
+{
+    char mode[4] = "w";
+
+    mode[1] = '0'+c;
+    mode[2] = 0;
+    if (strstr(filename,".gz")) { mode[1] = 'g'; mode[2] = c+'0'; }
+    else if (!strstr(filename,".bgzf")) { mode[1] = 'u'; }
+    else { mode[1] = c+'0'; }
+
+    return bgzf_open(filename,mode);
+}
+
 static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
 {
     bam2fq_state_t* state = calloc(1, sizeof(bam2fq_state_t));
@@ -1205,6 +1225,8 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->filetype = opts->filetype;
     state->def_qual = opts->def_qual;
     state->index_sequence = NULL;
+    state->hstdout = bgzf_dopen(fileno(stdout), "wu");
+    state->compression_level = opts->compression_level;
 
     state->taglist = kl_init(ktaglist);
     if (opts->extra_tags) {
@@ -1243,7 +1265,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         return false;
     }
     if (opts->fnse) {
-        state->fpse = fopen(opts->fnse,"w");
+        state->fpse = open_fqfile(opts->fnse, state->compression_level);
         if (state->fpse == NULL) {
             print_error_errno("bam2fq", "Cannot write to singleton file \"%s\"", opts->fnse);
             free(state);
@@ -1254,20 +1276,20 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     int i;
     for (i = 0; i < 3; ++i) {
         if (opts->fnr[i]) {
-            state->fpr[i] = fopen(opts->fnr[i], "w");
+            state->fpr[i] = open_fqfile(opts->fnr[i], state->compression_level);
             if (state->fpr[i] == NULL) {
                 print_error_errno("bam2fq", "Cannot write to r%d file \"%s\"", i, opts->fnr[i]);
                 free(state);
                 return false;
             }
         } else {
-            state->fpr[i] = stdout;
+            state->fpr[i] = state->hstdout;
         }
     }
     for (i = 0; i < 2; i++) {
         state->fpi[i] = NULL;
         if (opts->index_file[i]) {
-            state->fpi[i] = fopen(opts->index_file[i], "w");
+            state->fpi[i] = open_fqfile(opts->index_file[i], state->compression_level);
             if (state->fpi[i] == NULL) {
                 print_error_errno("bam2fq", "Cannot write to i%d file \"%s\"", i+1, opts->index_file[i]);
                 free(state);
@@ -1292,13 +1314,17 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
     bool valid = true;
     bam_hdr_destroy(state->h);
     check_sam_close("bam2fq", state->fp, opts->fn_input, "file", status);
-    if (state->fpse && fclose(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); valid = false; }
+    if (state->fpse && bgzf_close(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); valid = false; }
     int i;
     for (i = 0; i < 3; ++i) {
-        if (state->fpr[i] != stdout && fclose(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); valid = false; }
+        if (state->fpr[i] == state->hstdout) {
+            if (i==0 && bgzf_close(state->fpr[i])) { print_error_errno("bam2fq", "Error closing STDOUT"); valid = false; }
+        } else {
+            if (bgzf_close(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); valid = false; }
+        }
     }
     for (i = 0; i < 2; i++) {
-        if (state->fpi[i] && fclose(state->fpi[i])) { 
+        if (state->fpi[i] && bgzf_close(state->fpi[i])) { 
             print_error_errno("bam2fq", "Error closing i%d file \"%s\"", i+1, opts->index_file[i]);
             valid = false;
         }
@@ -1346,20 +1372,20 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
                 free(state->index_sequence); state->index_sequence = NULL;
                 if (score[1] > 0 && score[2] > 0) {
                     // print linebuf[1] to fpr[1], linebuf[2] to fpr[2]
-                    if (fputs(linebuf[1].s, state->fpr[1]) == EOF) { valid = false; break; }
-                    if (fputs(linebuf[2].s, state->fpr[2]) == EOF) { valid = false; break; }
+                    if (bgzf_write(state->fpr[1], linebuf[1].s, linebuf[1].l) < 0) { valid = false; break; }
+                    if (bgzf_write(state->fpr[2], linebuf[2].s, linebuf[2].l) < 0) { valid = false; break; }
                 } else if ((score[1] > 0 || score[2] > 0) && state->fpse) {
                     // print whichever one exists to fpse
                     if (score[1] > 0) {
-                        if (fputs(linebuf[1].s, state->fpse) == EOF) { valid = false; break; }
+                        if (bgzf_write(state->fpse, linebuf[1].s, linebuf[1].l) < 0) { valid = false; break; }
                     } else {
-                        if (fputs(linebuf[2].s, state->fpse) == EOF) { valid = false; break; }
+                        if (bgzf_write(state->fpse, linebuf[2].s, linebuf[2].l) == EOF) { valid = false; break; }
                     }
                     ++n_singletons;
                 }
                 if (score[0]) { // TODO: check this
                     // print linebuf[0] to fpr[0]
-                    if (fputs(linebuf[0].s, state->fpr[0]) == EOF) { valid = false; break; }
+                    if (bgzf_write(state->fpr[0], linebuf[0].s, linebuf[0].l) < 0) { valid = false; break; }
                 }
             }
 
