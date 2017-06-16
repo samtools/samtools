@@ -1,6 +1,11 @@
 Release a.b (future)
 --------------------
 
+* Samtools sort has a -t TAG option, that allows records to be sorted by
+  the value of the specified aux tag, then by position or name.  Merge
+  gets a similar option, allowing files sorted this way to be merged.
+  (#675; thanks to Patrick Marks of 10xgenomics).
+
 Release 1.4.1  (8th May 2017)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
