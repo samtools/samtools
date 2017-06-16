@@ -1248,11 +1248,17 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
 static BGZF *open_fqfile(char *filename, int c)
 {
     char mode[4] = "w";
+    size_t len = strlen(filename);
 
     mode[2] = 0; mode[3] = 0;
-    if (strstr(filename,".gz")) { mode[1] = 'g'; mode[2] = c+'0'; }
-    else if (strstr(filename,".bgz")) { mode[1] = c+'0'; }
-    else { mode[1] = 'u'; }
+    if (len > 3 && strstr(filename + (len - 3),".gz")) {
+        mode[1] = 'g'; mode[2] = c+'0';
+    } else if ((len > 4 && strstr(filename + (len - 4),".bgz"))
+               || (len > 5 && strstr(filename + (len - 5),".bgzf"))) {
+        mode[1] = c+'0';
+    } else {
+        mode[1] = 'u';
+    }
 
     return bgzf_open(filename,mode);
 }
