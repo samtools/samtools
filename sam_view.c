@@ -786,19 +786,26 @@ static char *get_read(const bam1_t *rec)
 /*
  * get and decode the quality from a BAM record
  */
-static char *get_quality(const bam1_t *rec)
+static int get_quality(const bam1_t *rec, char **qual_out)
 {
     char *quality = calloc(1, rec->core.l_qseq + 1);
     char *q = (char *)bam_get_qual(rec);
     int n;
 
-    if (*q == '\xff') { free(quality); return NULL; }
+    if (!quality) return -1;
+
+    if (*q == '\xff') {
+        free(quality);
+        *qual_out = NULL;
+        return 0;
+    }
 
     for (n=0; n < rec->core.l_qseq; n++) {
         quality[n] = q[n]+33;
     }
     if (rec->core.flag & BAM_FREVERSE) reverse(quality);
-    return quality;
+    *qual_out = quality;
+    return 0;
 }
 
 //
@@ -845,6 +852,11 @@ static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
             case 'd': aux_type = 'f'; break;
         }
 
+        // Ensure space.  Need 6 chars + length of tag.  Max length of
+        // i is 16, A is 21, B currently 26, Z is unknown, so
+        // have to check that one later.
+        if (ks_resize(linebuf, ks_len(linebuf) + 64) < 0) return false;
+
         kputc('\t', linebuf);
         kputsn(tag, 2, linebuf);
         kputc(':', linebuf);
@@ -852,7 +864,9 @@ static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
         kputc(':', linebuf);
         switch (aux_type) {
             case 'H':
-            case 'Z': kputs(bam_aux2Z(s), linebuf); break;
+            case 'Z':
+                if (kputs(bam_aux2Z(s), linebuf) < 0) return false;
+                break;
             case 'i': kputw(bam_aux2i(s), linebuf); break;
             case 'I': kputuw(bam_aux2i(s), linebuf); break;
             case 'A': kputc(bam_aux2A(s), linebuf); break;
@@ -864,14 +878,16 @@ static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
     return true;
 }
 
-static void insert_index_sequence_into_linebuf(char *index_sequence, kstring_t *linebuf, bam1_t *rec)
+static int insert_index_sequence_into_linebuf(char *index_sequence, kstring_t *linebuf, bam1_t *rec)
 {
-    if (!index_sequence) return;
+    if (!index_sequence) return 0;
 
     kstring_t new = {0,0,NULL};
     if (linebuf->s) {
         char *s = strchr(linebuf->s, '\n');
         if (s) {
+            if (ks_resize(&new, linebuf->l + strlen(index_sequence) + 16) < 0)
+                return -1;
             *s = 0;
             kputs(linebuf->s, &new);
             kputc(' ', &new);
@@ -892,6 +908,7 @@ static void insert_index_sequence_into_linebuf(char *index_sequence, kstring_t *
             linebuf->s = new.s; linebuf->l = new.l; linebuf->m = new.m;
         }
     }
+    return 0;
 }
 
 static bool make_fq_line(const bam1_t *rec, char *seq, char *qual, kstring_t *linebuf, const bam2fq_state_t *state)
@@ -900,13 +917,16 @@ static bool make_fq_line(const bam1_t *rec, char *seq, char *qual, kstring_t *li
 
     linebuf->l = 0;
     // Write read name
-    kputc(state->filetype == FASTA? '>' : '@', linebuf);
-    kputs(bam_get_qname(rec), linebuf);
+    if (kputc(state->filetype == FASTA? '>' : '@', linebuf) < 0) return false;
+    if (kputs(bam_get_qname(rec), linebuf) < 0) return false;
     // Add the /1 /2 if requested
     if (state->has12) {
         readpart readpart = which_readpart(rec);
-        if (readpart == READ_1) kputs("/1", linebuf);
-        else if (readpart == READ_2) kputs("/2", linebuf);
+        if (readpart == READ_1) {
+            if (kputs("/1", linebuf) < 0) return false;
+        } else if (readpart == READ_2) {
+            if (kputs("/2", linebuf) < 0) return false;
+        }
     }
     if (state->copy_tags) {
         for (i = 0; copied_tags[i]; ++i) {
@@ -927,22 +947,23 @@ static bool make_fq_line(const bam1_t *rec, char *seq, char *qual, kstring_t *li
         }
     }
 
-    kputc('\n', linebuf);
-    kputs(seq, linebuf);
-    kputc('\n', linebuf);
+    if (kputc('\n', linebuf) < 0) return false;
+    if (kputs(seq, linebuf) < 0) return false;
+    if (kputc('\n', linebuf) < 0) return false;
 
     if (state->filetype == FASTQ) {
         // Write quality
-        kputs("+\n", linebuf);
+        if (kputs("+\n", linebuf) < 0) return false;
         if (qual && *qual) {
-            kputs(qual, linebuf);
+            if (kputs(qual, linebuf) < 0) return false;
         } else {
             int len = strlen(seq);
+            if (ks_resize(linebuf, ks_len(linebuf) + len + 1) < 0) return false;
             for (i = 0; i < len; ++i) {
                 kputc(33 + state->def_qual, linebuf);
             }
         }
-        kputc('\n', linebuf);
+        if (kputc('\n', linebuf) < 0) return false;
     }
     return true;
 }
@@ -956,6 +977,9 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
     char *ifmt = opts->index_format;
     char *tag = NULL;
     char *qual = NULL;
+    char *sub_tag = NULL;
+    char *sub_qual = NULL;
+    size_t tag_len;
     int file_number = 0;
     kstring_t linebuf = { 0, 0, NULL }; // Buffer
 
@@ -965,6 +989,12 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
     if (p) tag = bam_aux2Z(p);
 
     if (!tag) return true; // there is no tag
+
+    tag_len = strlen(tag);
+    sub_tag = calloc(1, tag_len + 1);
+    if (!sub_tag) goto fail;
+    sub_qual = calloc(1, tag_len + 1);
+    if (!sub_qual) goto fail;
 
     // read quality tag
     p = bam_aux_get(rec, opts->quality_tag);
@@ -976,9 +1006,6 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
         char action = *ifmt;        // should be 'i' or 'n'
         ifmt++; // skip over action
         int index_len = getLength(&ifmt);
-
-        char *sub_tag = calloc(1, strlen(tag)+1);
-        char *sub_qual = calloc(1, strlen(tag)+1);
         int n = 0;
 
         if (index_len < 0) {
@@ -1000,18 +1027,32 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
                 n++;
             }
         }
+        sub_tag[n] = '\0';
+        sub_qual[n] = '\0';
 
         if (action=='i' && *sub_tag && state->fpi[file_number]) {
             //if (file_number==0) state->index_sequence = strdup(sub_tag);    // we're going to need this later...
             state->index_sequence = strdup(sub_tag);    // we're going to need this later...
-            if (!make_fq_line(rec, sub_tag, sub_qual, &linebuf, state)) return false;
-            if (state->illumina_tag) insert_index_sequence_into_linebuf(state->index_sequence, &linebuf, rec);
-            if (bgzf_write(state->fpi[file_number++], linebuf.s, linebuf.l) < 0) return false;
+            if (!state->index_sequence) goto fail;
+            if (!make_fq_line(rec, sub_tag, sub_qual, &linebuf, state)) goto fail;
+            if (state->illumina_tag) {
+                if (insert_index_sequence_into_linebuf(state->index_sequence, &linebuf, rec) < 0) {
+                    goto fail;
+                }
+            }
+            if (bgzf_write(state->fpi[file_number++], linebuf.s, linebuf.l) < 0)
+                goto fail;
         }
-        free(sub_qual); free(sub_tag);
 
     }
 
+    free(sub_qual); free(sub_tag);
+    free(linebuf.s);
+    return true;
+
+ fail:
+    perror(__func__);
+    free(sub_qual); free(sub_tag);
     free(linebuf.s);
     return true;
 }
@@ -1026,25 +1067,32 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
     char *qual = NULL;
 
     char *seq = get_read(b);
+    if (!seq) return false;
 
     if (state->use_oq) {
         oq = bam_aux_get(b, "OQ");
         if (oq) {
             oq++; 
             qual = strdup(bam_aux2Z(oq));
+            if (!qual) goto fail;
             if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
                 reverse(qual);
             }
         }
     } else {
-        qual = get_quality(b);
+        if (get_quality(b, &qual) < 0) goto fail;
     }
 
-    if (!make_fq_line(b, seq, qual, linebuf, state)) return false;
+    if (!make_fq_line(b, seq, qual, linebuf, state)) goto fail;
 
     free(qual);
     free(seq);
     return true;
+
+ fail:
+    free(seq);
+    free(qual);
+    return false;
 }
 
 static void free_opts(bam2fq_opts_t *opts)
@@ -1352,20 +1400,30 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
     int score[3];
     int at_eof;
     if (b == NULL ) {
-        perror("[bam2fq_mainloop_singletontrack] Malloc error for bam record buffer.");
+        perror("[bam2fq_mainloop] Malloc error for bam record buffer.");
         return false;
     }
 
     bool valid = true;
     while (true) {
-        at_eof = sam_read1(state->fp, state->h, b) < 0;
+        int res = sam_read1(state->fp, state->h, b);
+        if (res < -1) {
+            fprintf(stderr, "[bam2fq_mainloop] Failed to read bam record.\n");
+            return false;
+        }
+        at_eof = res < 0;
 
         if (!at_eof && filter_it_out(b, state)) continue;
         if (!at_eof) ++n_reads;
 
         if (at_eof || !current_qname || (strcmp(current_qname, bam_get_qname(b)) != 0)) {
             if (current_qname) {
-                if (state->illumina_tag) for (n=0; n<3; n++) insert_index_sequence_into_linebuf(state->index_sequence, &linebuf[n], records[n]);
+                if (state->illumina_tag) {
+                    for (n=0; valid && n<3; n++) {
+                        if (insert_index_sequence_into_linebuf(state->index_sequence, &linebuf[n], records[n]) < 0) valid = false;
+                    }
+                    if (!valid) break;
+                }
                 free(state->index_sequence); state->index_sequence = NULL;
                 if (score[1] > 0 && score[2] > 0) {
                     // print linebuf[1] to fpr[1], linebuf[2] to fpr[2]
@@ -1376,7 +1434,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
                     if (score[1] > 0) {
                         if (bgzf_write(state->fpse, linebuf[1].s, linebuf[1].l) < 0) { valid = false; break; }
                     } else {
-                        if (bgzf_write(state->fpse, linebuf[2].s, linebuf[2].l) == EOF) { valid = false; break; }
+                        if (bgzf_write(state->fpse, linebuf[2].s, linebuf[2].l) < 0) { valid = false; break; }
                     }
                     ++n_singletons;
                 }
@@ -1390,6 +1448,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
 
             free(current_qname);
             current_qname = strdup(bam_get_qname(b));
+            if (!current_qname) { valid = false; break; }
             score[0] = score[1] = score[2] = 0;
         }
 
@@ -1407,7 +1466,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
     }
     if (!valid)
     {
-        perror("[bam2fq_mainloop_singletontrack] Error writing to FASTx files.");
+        perror("[bam2fq_mainloop] Error writing to FASTx files.");
     }
     bam_destroy1(b);
     free(current_qname);
