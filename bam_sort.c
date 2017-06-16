@@ -132,16 +132,16 @@ static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b);
 // Function to compare reads in the heap and determine which one is < the other
 static inline int heap_lt(const heap1_t a, const heap1_t b)
 {
-    if (g_is_by_qname) {
-        int t;
-        if (a.b.b == NULL || b.b.b == NULL) return a.b.b == NULL? 1 : 0;
-        t = strnum_cmp(bam_get_qname(a.b.b), bam_get_qname(b.b.b));
-        return (t > 0 || (t == 0 && (a.b.b->core.flag&0xc0) > (b.b.b->core.flag&0xc0)));
-    } else if (g_is_by_tag) {
+    if (g_is_by_tag) {
         int t;
         if (a.b.b == NULL || b.b.b == NULL) return a.b.b == NULL? 1 : 0;
         t = bam1_lt_by_tag(b.b,a.b);
         return t;
+    } else if (g_is_by_qname) {
+        int t;
+        if (a.b.b == NULL || b.b.b == NULL) return a.b.b == NULL? 1 : 0;
+        t = strnum_cmp(bam_get_qname(a.b.b), bam_get_qname(b.b.b));
+        return (t > 0 || (t == 0 && (a.b.b->core.flag&0xc0) > (b.b.b->core.flag&0xc0)));
     } else {
         return __pos_cmp(a, b);
     }
@@ -1243,7 +1243,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         if (hts_get_format(fp[i])->format == sam) hdr[i] = hin;
         else { bam_hdr_destroy(hin); hdr[i] = NULL; }
 
-        if ((translation_tbl+i)->lost_coord_sort && !(by_qname || g_is_by_tag)) {
+        if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
         }
 
