@@ -314,6 +314,7 @@ clean: mostlyclean
 distclean: clean
 	-rm -f config.cache config.h config.log config.mk config.status
 	-rm -f TAGS
+	-rm -rf autom4te.cache
 
 clean-all: clean clean-htslib
 
