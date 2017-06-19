@@ -1,5 +1,12 @@
-Release a.b (future)
+Release 1.5 [Solstice Release] (21st June 2017)
 --------------------
+
+* Samtools fastq now has a -i option to create a fastq file from an index
+  tag, and a -T option (similar to -t) to add user specified aux tags to
+  the fastq header line.
+
+* Samtools fastq can now create compressed fastq files, by giving the
+  output filenames an extention of .gq, .bgz, or .bgzf
 
 * Samtools sort has a -t TAG option, that allows records to be sorted by
   the value of the specified aux tag, then by position or name.  Merge
