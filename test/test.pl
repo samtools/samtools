@@ -61,6 +61,7 @@ test_reheader($opts);
 test_addrprg($opts);
 test_addrprg($opts, threads=>2);
 
+
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
 printf "    passed           .. %d\n", $$opts{nok};
@@ -2243,6 +2244,14 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected', 'bc.fq' => 'bam2fq/bc.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
     # tag output test with separators and -N flag
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/5.1.fq.expected', '2.fq' => 'bam2fq/5.2.fq.expected', 's.fq' => 'bam2fq/5.s.fq.expected', 'bc_split.fq' => 'bam2fq/bc_split.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -N --index-format 'n*i*' --i1 $$opts{path}/bc_split.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    # -t flag
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/6.1.fq.expected', '2.fq' => 'bam2fq/6.2.fq.expected', 's.fq' => 'bam2fq/6.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    # -T flag
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/7.1.fq.expected', '2.fq' => 'bam2fq/7.2.fq.expected', 's.fq' => 'bam2fq/7.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -T MD,ia -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    # -i flag with no index
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/7.1.fq.expected', '2.fq' => 'bam2fq/7.2.fq.expected', 's.fq' => 'bam2fq/7.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -i -T MD,ia -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    # -i flag with index
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/8.1.fq.expected', '2.fq' => 'bam2fq/8.2.fq.expected', 's.fq' => 'bam2fq/8.s.fq.expected', 'i.fq' => 'bam2fq/8.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'n2i2' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
 }
 
 sub test_depad
@@ -2352,6 +2361,16 @@ sub test_merge
     test_cmd($opts,out=>'merge/6.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
     # Merge 7 - ID and SN with regex in them
     test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
+
+    # Sort inputs by PG, then merge
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG  $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.2.bam -t PG  $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
+    test_cmd($opts,out=>'merge/tag.pg.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -t PG -O SAM - $$opts{tmp}/merge.tag.1.bam $$opts{tmp}/merge.tag.2.bam");
+
+    # Sort inputs by PG, then merge (name sorted)
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.3.bam -n -t PG  $$opts{path}/dat/test_input_1_c.sam") == 0 or die "failed to create sort BAM: $?";
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.4.bam -n -t PG  $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
+    test_cmd($opts,out=>'merge/tag.pg.n.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -n -t PG -O SAM - $$opts{tmp}/merge.tag.3.bam $$opts{tmp}/merge.tag.4.bam");
 }
 
 sub test_sort
@@ -2366,6 +2385,25 @@ sub test_sort
     test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout", want_fail=>1);
     test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} -f $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout.bam", want_fail=>1);
     test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} -o $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sorttmp", want_fail=>1);
+
+
+    # Pos sort
+    test_cmd($opts, out=>"sort/pos.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads}  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+
+    # Name sort
+    test_cmd($opts, out=>"sort/name.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -n  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+
+    # Tag sort (RG)
+    test_cmd($opts, out=>"sort/tag.rg.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+
+    # Tag sort (RG); secondary by name
+    test_cmd($opts, out=>"sort/tag.rg.n.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -n -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+
+    # Tag sort (AS)
+    test_cmd($opts, out=>"sort/tag.as.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t AS $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+
+    # Tag sort (FI)
+    test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t FI $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
 }
 
 sub test_fixmate

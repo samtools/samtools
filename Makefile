@@ -103,7 +103,7 @@ config.h:
 include config.mk
 
 
-PACKAGE_VERSION = 1.4.1
+PACKAGE_VERSION = 1.5
 
 # If building from a Git repository, replace $(PACKAGE_VERSION) with the Git
 # description of the working tree: either a release tag with the same value
@@ -314,6 +314,7 @@ clean: mostlyclean
 distclean: clean
 	-rm -f config.cache config.h config.log config.mk config.status
 	-rm -f TAGS
+	-rm -rf autom4te.cache
 
 clean-all: clean clean-htslib
 
