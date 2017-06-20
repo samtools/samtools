@@ -103,7 +103,7 @@ config.h:
 include config.mk
 
 
-PACKAGE_VERSION = 1.4.1
+PACKAGE_VERSION = 1.5
 
 # If building from a Git repository, replace $(PACKAGE_VERSION) with the Git
 # description of the working tree: either a release tag with the same value
