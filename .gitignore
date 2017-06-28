@@ -24,3 +24,6 @@ lib*.a
 /test/vcf-miniview
 
 /TAGS
+.autotools
+.cproject
+.project
