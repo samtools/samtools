@@ -1435,14 +1435,22 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
                     // print linebuf[1] to fpr[1], linebuf[2] to fpr[2]
                     if (bgzf_write(state->fpr[1], linebuf[1].s, linebuf[1].l) < 0) { valid = false; break; }
                     if (bgzf_write(state->fpr[2], linebuf[2].s, linebuf[2].l) < 0) { valid = false; break; }
-                } else if ((score[1] > 0 || score[2] > 0) && state->fpse) {
-                    // print whichever one exists to fpse
-                    if (score[1] > 0) {
-                        if (bgzf_write(state->fpse, linebuf[1].s, linebuf[1].l) < 0) { valid = false; break; }
+                } else if (score[1] > 0 || score[2] > 0) {
+                    if (state->fpse) {
+                        // print whichever one exists to fpse
+                        if (score[1] > 0) {
+                            if (bgzf_write(state->fpse, linebuf[1].s, linebuf[1].l) < 0) { valid = false; break; }
+                        } else {
+                            if (bgzf_write(state->fpse, linebuf[2].s, linebuf[2].l) < 0) { valid = false; break; }
+                        }
+                        ++n_singletons;
                     } else {
-                        if (bgzf_write(state->fpse, linebuf[2].s, linebuf[2].l) < 0) { valid = false; break; }
+                        if (score[1] > 0) {
+                            if (bgzf_write(state->fpr[1], linebuf[1].s, linebuf[1].l) < 0) { valid = false; break; }
+                        } else {
+                            if (bgzf_write(state->fpr[2], linebuf[2].s, linebuf[2].l) < 0) { valid = false; break; }
+                        }
                     }
-                    ++n_singletons;
                 }
                 if (score[0]) { // TODO: check this
                     // print linebuf[0] to fpr[0]
