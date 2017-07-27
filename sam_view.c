@@ -1208,6 +1208,13 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         return false;
     }
 
+    if (nIndex==0 && opts->index_file[0]) {
+        fprintf(stderr, "index_format not specified, but index file given\n");
+        bam2fq_usage(stderr, argv[0]);
+        free_opts(opts);
+        return false;
+    }
+
     if (opts->def_qual < 0 || 93 < opts->def_qual) {
         fprintf(stderr, "Invalid -v default quality %i, allowed range 0 to 93\n", opts->def_qual);
         bam2fq_usage(stderr, argv[0]);
