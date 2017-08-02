@@ -97,8 +97,8 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
         return 1;
-    if (settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
-        return 1;
+/*    if (settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
+        return 1;*/
     if (settings->subsam_frac > 0.) {
         uint32_t k = __ac_Wang_hash(__ac_X31_hash_string(bam_get_qname(b)) ^ settings->subsam_seed);
         if ((double)(k&0xffffff) / 0x1000000 >= settings->subsam_frac) return 1;
@@ -500,10 +500,16 @@ int main_samview(int argc, char *argv[])
     }
     if (is_header_only) goto view_end; // no need to print alignments
 
-    if (optind + 1 >= argc) { // convert/print the entire file
-        bam1_t *b = bam_init1();
-        int r;
-        while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
+    if (optind < argc - 1) { //regions have been specified in the command line
+        settings.bed = sam_hash_regs(&settings, argv, argc); //put the regions from the command line in the same hash table as the bed file
+    }
+
+    int result;
+    bam1_t *b = bam_init1();
+    hts_idx_t *idx = sam_index_load(in, fn_in); // load index
+
+    if (idx == 0 || settings.bed == NULL) { // index is unavailable or no regions have been specified
+        while ((result = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
             if (!process_aln(header, b, &settings)) {
                 if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
                 count++;
@@ -511,27 +517,13 @@ int main_samview(int argc, char *argv[])
                 if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
             }
         }
-        if (r < -1) {
+        if (result < -1) {
             fprintf(stderr, "[main_samview] truncated file.\n");
             ret = 1;
         }
-        bam_destroy1(b);
-    } else { // retrieve alignments in specified regions
-        int i;
-        bam1_t *b;
-        hts_idx_t *idx = sam_index_load(in, fn_in); // load index
-        if (idx == 0) { // index is unavailable
-            fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
-            ret = 1;
-            goto view_end;
-        }
-        b = bam_init1();
-
-        settings.bed = sam_hash_regs(&settings, argv, argc); //put the regions from the command line in the same hash table as the bed file
-
-        for (i=0; i < bed_size(settings.bed); i++)
+    } else {
+        for (int i=0; i < bed_size(settings.bed); i++)
         {
-            int result;
             char *bed_current = bed_get(settings.bed, i);
 
             hts_itr_t *iter = sam_itr_querys(idx, header, bed_current); // parse a region in the format like `chr2:100-200'
@@ -558,9 +550,10 @@ int main_samview(int argc, char *argv[])
                 break;
             }
         }
-        bam_destroy1(b);
+
         hts_idx_destroy(idx); // destroy the BAM index
     }
+    bam_destroy1(b);
 
 view_end:
     if (is_count && ret == 0) {
