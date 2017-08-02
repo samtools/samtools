@@ -80,6 +80,9 @@ extern char *samfaipath(const char *fn_ref);
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
+inline int bed_size(void *reg_hash);
+void *bed_insert(void *reg_hash, char *reg, int beg, int end);
+char* bed_get(void *reg_hash, int index);
 
 // Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
@@ -522,9 +525,10 @@ int main_samview(int argc, char *argv[])
             ret = 1;
         }
     } else {
-        for (int i=0; i < bed_size(settings.bed); i++)
+        int i;
+        for (i=0; i < bed_size(settings.bed); i++)
         {
-            char *bed_current = bed_get(settings.bed, i);
+            const char *bed_current = bed_get(settings.bed, i);
 
             hts_itr_t *iter = sam_itr_querys(idx, header, bed_current); // parse a region in the format like `chr2:100-200'
             if (iter == NULL) { // region invalid or reference name not found
