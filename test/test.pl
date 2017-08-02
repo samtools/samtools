@@ -1008,7 +1008,7 @@ sub run_view_test
 	open(STDOUT, '>&', $save_stdout)
 	    || die "Couldn't restore STDOUT : $!\n";
     }
-    
+
     if (!$res && $args{compare_sam} && $args{out}) {
         # Convert output back to sam and compare
         my $sam_name = "$args{out}.sam";
@@ -1902,6 +1902,9 @@ sub test_view
          ['-L', $bed1], ['ref1:11-16']],
         ['bed1r2', 1,
          { region => [['ref2', 17, 17]] }, ['-L', $bed1], ['ref2']],
+        ['bed1r11', 1,
+         { region => [['ref1', 11, 15], ['ref1', 45, 45]]}, ['-L', $bed1],
+         ['ref1:1-15', 'ref1:44-45']],
 
         # BED file plus other filters
 
