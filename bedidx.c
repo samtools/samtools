@@ -258,3 +258,73 @@ void bed_destroy(void *_h)
     }
     kh_destroy(reg, h);
 }
+
+
+void *bed_insert(void *reg_hash, char *reg, int beg, int end) {
+
+    reghash_t *h;
+    khint_t k;
+    bed_reglist_t *p;
+    int init_flag = 0;
+
+    if (reg_hash) {
+        h = (reghash_t *)reg_hash;
+    } else {
+        h = kh_init(reg);
+        init_flag = 1;
+    }
+    if (NULL == h) return NULL;
+
+    // Put reg in the hash table if not already there
+    k = kh_get(reg, h, reg); //looks strange, but only the second reg is a proper argument.
+    if (k == kh_end(h)) { // absent from the hash table
+        int ret;
+        char *s = strdup(reg);
+        if (NULL == s) goto fail;
+        k = kh_put(reg, h, s, &ret);
+        if (-1 == ret) {
+            free(s);
+            goto fail;
+        }
+        memset(&kh_val(h, k), 0, sizeof(bed_reglist_t));
+    }
+    p = &kh_val(h, k);
+
+    // Add begin,end to the list
+    if (p->n == p->m) {
+        p->m = p->m? p->m<<1 : 4;
+        p->a = realloc(p->a, p->m * 8);
+        if (NULL == p->a) goto fail;
+    }
+    p->a[p->n++] = (uint64_t)beg<<32 | end;
+
+    bed_index(h);
+    return h;
+fail:
+    if (init_flag)
+        bed_destroy(h);
+    return reg_hash;
+}
+
+inline int bed_size(void *reg_hash) {
+    reghash_t *h;
+
+    if (reg_hash) {
+        h = (reghash_t *)reg_hash;
+        return kh_size(h);
+    }
+
+    return 0;
+}
+
+char* bed_get(void *reg_hash, int i) {
+    reghash_t *h;
+
+    if (reg_hash) {
+        h = (reghash_t *)reg_hash;
+        return kh_key(h, i);
+    }
+
+    return NULL;
+}
+

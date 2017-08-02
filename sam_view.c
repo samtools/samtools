@@ -242,6 +242,41 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
     *retp = EXIT_FAILURE;
 }
 
+static void* sam_hash_regs(samview_settings_t *settings, char **regs, int count) {
+    int i, beg, end, alloc_flag=0;
+    const char *q;
+    void *bed_hash = settings->bed;
+
+    for (i=0; i<count; i++) {
+
+        char *reg;
+
+        q = hts_parse_reg(regs[i], &beg, &end);
+        if (q) {
+            if (!(reg = malloc(q - regs[i] + 1))) {
+                continue;
+            }
+            alloc_flag = 1;
+            strncpy(reg, regs[i], q - regs[i]);
+            reg[q - regs[i]] = 0;
+        }
+        else {
+            // not parsable as a region, but possibly a sequence named "foo:a"
+            reg = regs[i];
+            beg = 0; end = INT_MAX;
+        }
+
+        if(!(bed_hash = bed_insert(bed_hash, reg, beg, end))) {
+            printf("Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], bed_hash);
+        }
+
+        if (alloc_flag)
+            free(reg);
+    }
+
+    return bed_hash;
+}
+
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
@@ -491,16 +526,21 @@ int main_samview(int argc, char *argv[])
             goto view_end;
         }
         b = bam_init1();
-        for (i = optind + 1; i < argc; ++i) {
+
+        settings.bed = sam_hash_regs(&settings, argv, argc); //put the regions from the command line in the same hash table as the bed file
+
+        for (i=0; i < bed_size(settings.bed); i++)
+        {
             int result;
-            hts_itr_t *iter = sam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
+            char *bed_current = bed_get(settings.bed, i);
+
+            hts_itr_t *iter = sam_itr_querys(idx, header, bed_current); // parse a region in the format like `chr2:100-200'
             if (iter == NULL) { // region invalid or reference name not found
                 int beg, end;
-                if (hts_parse_reg(argv[i], &beg, &end))
-                    fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
+                if (hts_parse_reg(bed_current, &beg, &end))
+                    fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", bed_current);
                 else
-                    fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", argv[i]);
-                continue;
+                    fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", bed_current);
             }
             // fetch alignments
             while ((result = sam_itr_next(in, iter, b)) >= 0) {
@@ -513,7 +553,7 @@ int main_samview(int argc, char *argv[])
             }
             hts_itr_destroy(iter);
             if (result < -1) {
-                fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", argv[i]);
+                fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", bed_current);
                 ret = 1;
                 break;
             }
