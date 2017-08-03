@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <errno.h>
 #include <zlib.h>
+#include "bedidx.h"
 
 #ifdef _WIN32
 #define drand48() ((double)rand() / RAND_MAX)
@@ -46,17 +47,13 @@ typedef struct {
     int n, m;
     uint64_t *a;
     int *idx;
+    int filter;
 } bed_reglist_t;
 
 #include "htslib/khash.h"
 KHASH_MAP_INIT_STR(reg, bed_reglist_t)
 
-#define LIDX_SHIFT 13
-
 typedef kh_reg_t reghash_t;
-
-void bed_destroy(void *_h);
-
 
 int *bed_index_core(int n, uint64_t *a, int *n_idx)
 {
@@ -259,7 +256,6 @@ void bed_destroy(void *_h)
     kh_destroy(reg, h);
 }
 
-
 void *bed_insert(void *reg_hash, char *reg, int beg, int end) {
 
     reghash_t *h;
@@ -317,12 +313,32 @@ inline int bed_end(void *reg_hash) {
     return 0;
 }
 
-const char* bed_get(void *reg_hash, int i) {
+void *bed_filter(void *reg_hash, char *reg) {
+
     reghash_t *h;
+    bed_reglist_t *p;
+    khint_t k;
+
+    if (!reg_hash) 
+        return NULL;
+    h = (reghash_t *)reg_hash;
+
+    k = kh_get(reg, h, reg); //looks strange, but only the second reg is a proper argument.
+    if (k != kh_end(h)) { // absent from the hash table
+        p = &kh_val(h, k);
+        p->filter = FILTERED;
+    }
+
+    return h;
+}
+
+const char* bed_get(void *reg_hash, int i, int filter) {
+    reghash_t *h;
+    bed_reglist_t *p;
 
     if (reg_hash) {
         h = (reghash_t *)reg_hash;
-        if (!kh_exist(h,i)) 
+        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter)) 
             return NULL;
         return kh_key(h, i);
     }

@@ -45,6 +45,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/bgzf.h"
 #include "samtools.h"
 #include "sam_opts.h"
+#include "bedidx.h"
 
 #define DEFAULT_BARCODE_TAG "BC"
 #define DEFAULT_QUALITY_TAG "QT"
@@ -77,12 +78,6 @@ typedef struct samview_settings {
 extern const char *bam_get_library(bam_hdr_t *header, const bam1_t *b);
 extern int bam_remove_B(bam1_t *b);
 extern char *samfaipath(const char *fn_ref);
-void *bed_read(const char *fn);
-void bed_destroy(void *_h);
-int bed_overlap(const void *_h, const char *chr, int beg, int end);
-inline int bed_end(void *reg_hash);
-void *bed_insert(void *reg_hash, char *reg, int beg, int end);
-const char* bed_get(void *reg_hash, int index);
 
 // Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
@@ -245,7 +240,7 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
     *retp = EXIT_FAILURE;
 }
 
-static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first, int last) {
+static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first, int last, int op) {
     int i, beg, end, alloc_flag=0;
     const char *q;
     void *bed_hash = settings->bed;
@@ -269,9 +264,14 @@ static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first,
             beg = 0; end = INT_MAX;
         }
 
-        if(!(bed_hash = bed_insert(bed_hash, reg, beg, end))) {
+        if (op && !(bed_hash = bed_insert(bed_hash, reg, beg, end))) { //if op==1 insert reg to bed hash table
             printf("Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], bed_hash);
         }
+
+        if (!op && !(bed_hash = bed_filter(bed_hash, reg))) { //if op==0 filter out reg from bed hash table
+            printf("Error when filtering region='%s' from the bed hash table at address=%p!\n", regs[i], bed_hash);
+        }
+
 
         if (alloc_flag)
             free(reg);
@@ -292,6 +292,8 @@ int main_samview(int argc, char *argv[])
     char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
+    int filter_state = ALL;
+    int filter_op = 0;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -504,7 +506,9 @@ int main_samview(int argc, char *argv[])
     if (is_header_only) goto view_end; // no need to print alignments
 
     if (optind < argc - 1) { //regions have been specified in the command line
-        settings.bed = sam_hash_regs(&settings, argv, optind+1, argc); //put the regions from the command line in the same hash table as the bed file
+        settings.bed = sam_hash_regs(&settings, argv, optind+1, argc, filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
+        if (!filter_op) 
+            filter_state = FILTERED;
     }
 
     int result;
@@ -528,7 +532,7 @@ int main_samview(int argc, char *argv[])
         int i;
         for (i=0; i < bed_end(settings.bed); i++)
         {
-            const char *bed_current = bed_get(settings.bed, i);
+            const char *bed_current = bed_get(settings.bed, i, filter_state);
             if (!bed_current) continue;
 
             hts_itr_t *iter = sam_itr_querys(idx, header, bed_current); // parse a region in the format like `chr2:100-200'
