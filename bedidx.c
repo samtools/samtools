@@ -306,22 +306,24 @@ fail:
     return reg_hash;
 }
 
-inline int bed_size(void *reg_hash) {
+inline int bed_end(void *reg_hash) {
     reghash_t *h;
 
     if (reg_hash) {
         h = (reghash_t *)reg_hash;
-        return kh_size(h);
+        return kh_end(h);
     }
 
     return 0;
 }
 
-char* bed_get(void *reg_hash, int i) {
+const char* bed_get(void *reg_hash, int i) {
     reghash_t *h;
 
     if (reg_hash) {
         h = (reghash_t *)reg_hash;
+        if (!kh_exist(h,i)) 
+            return NULL;
         return kh_key(h, i);
     }
 

@@ -80,9 +80,9 @@ extern char *samfaipath(const char *fn_ref);
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
-inline int bed_size(void *reg_hash);
+inline int bed_end(void *reg_hash);
 void *bed_insert(void *reg_hash, char *reg, int beg, int end);
-char* bed_get(void *reg_hash, int index);
+const char* bed_get(void *reg_hash, int index);
 
 // Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
@@ -245,12 +245,12 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
     *retp = EXIT_FAILURE;
 }
 
-static void* sam_hash_regs(samview_settings_t *settings, char **regs, int count) {
+static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first, int last) {
     int i, beg, end, alloc_flag=0;
     const char *q;
     void *bed_hash = settings->bed;
 
-    for (i=0; i<count; i++) {
+    for (i=first; i<last; i++) {
 
         char *reg;
 
@@ -504,7 +504,7 @@ int main_samview(int argc, char *argv[])
     if (is_header_only) goto view_end; // no need to print alignments
 
     if (optind < argc - 1) { //regions have been specified in the command line
-        settings.bed = sam_hash_regs(&settings, argv, argc); //put the regions from the command line in the same hash table as the bed file
+        settings.bed = sam_hash_regs(&settings, argv, optind+1, argc); //put the regions from the command line in the same hash table as the bed file
     }
 
     int result;
@@ -526,9 +526,10 @@ int main_samview(int argc, char *argv[])
         }
     } else {
         int i;
-        for (i=0; i < bed_size(settings.bed); i++)
+        for (i=0; i < bed_end(settings.bed); i++)
         {
             const char *bed_current = bed_get(settings.bed, i);
+            if (!bed_current) continue;
 
             hts_itr_t *iter = sam_itr_querys(idx, header, bed_current); // parse a region in the format like `chr2:100-200'
             if (iter == NULL) { // region invalid or reference name not found
@@ -553,7 +554,7 @@ int main_samview(int argc, char *argv[])
                 ret = 1;
                 break;
             }
-        }
+        } 
 
         hts_idx_destroy(idx); // destroy the BAM index
     }
