@@ -32,7 +32,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include <zlib.h>
 #include "bedidx.h"
-#include "cram/misc.h"
 
 #ifdef _WIN32
 #define drand48() ((double)rand() / RAND_MAX)
@@ -91,6 +90,20 @@ void bed_index(void *_h)
             p->idx = bed_index_core(p->n, p->a, &p->m);
         }
     }
+}
+
+static int bed_minoff(const bed_reglist_t *p, unsigned int beg, unsigned int end) {
+    int i, min_off;
+    min_off = (beg>>LIDX_SHIFT >= p->n)? p->idx[p->n-1] : p->idx[beg>>LIDX_SHIFT];
+    if (min_off < 0) { // TODO: this block can be improved, but speed should not matter too much here
+        int n = beg>>LIDX_SHIFT;
+        if (n > p->n) n = p->n;
+        for (i = n - 1; i >= 0; --i)
+            if (p->idx[i] >= 0) break;
+        min_off = i >= 0? p->idx[i] : 0;
+    }
+
+    return min_off;
 }
 
 int bed_overlap_core(const bed_reglist_t *p, int beg, int end)
@@ -367,16 +380,3 @@ const char* bed_get(void *reg_hash, int i, int filter) {
     return NULL;
 }
 
-static int bed_minoff(bed_reglist_t *p, unsigned int beg, unsigned int end) {
-    int i, min_off;
-    min_off = (beg>>LIDX_SHIFT >= p->n)? p->idx[p->n-1] : p->idx[beg>>LIDX_SHIFT];
-    if (min_off < 0) { // TODO: this block can be improved, but speed should not matter too much here
-        int n = beg>>LIDX_SHIFT;
-        if (n > p->n) n = p->n;
-        for (i = n - 1; i >= 0; --i)
-            if (p->idx[i] >= 0) break;
-        min_off = i >= 0? p->idx[i] : 0;
-    }
-
-    return min_off;
-}
