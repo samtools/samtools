@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include <zlib.h>
 #include "bedidx.h"
+#include "cram/misc.h"
 
 #ifdef _WIN32
 #define drand48() ((double)rand() / RAND_MAX)
@@ -69,12 +70,10 @@ int *bed_index_core(int n, uint64_t *a, int *n_idx)
             idx = realloc(idx, m * sizeof(int));
             for (j = oldm; j < m; ++j) idx[j] = -1;
         }
-        if (beg == end) {
-            if (idx[beg] < 0) idx[beg] = i;
-        } else {
-            for (j = beg; j <= end; ++j)
-                if (idx[j] < 0) idx[j] = i;
-        }
+
+        for (j = beg; j < end+1; ++j)
+            if (idx[j] < 0) idx[j] = i;
+
         *n_idx = end + 1;
     }
     return idx;
@@ -98,14 +97,8 @@ int bed_overlap_core(const bed_reglist_t *p, int beg, int end)
 {
     int i, min_off;
     if (p->n == 0) return 0;
-    min_off = (beg>>LIDX_SHIFT >= p->n)? p->idx[p->n-1] : p->idx[beg>>LIDX_SHIFT];
-    if (min_off < 0) { // TODO: this block can be improved, but speed should not matter too much here
-        int n = beg>>LIDX_SHIFT;
-        if (n > p->n) n = p->n;
-        for (i = n - 1; i >= 0; --i)
-            if (p->idx[i] >= 0) break;
-        min_off = i >= 0? p->idx[i] : 0;
-    }
+    min_off = bed_minoff(p, beg, end);
+
     for (i = min_off; i < p->n; ++i) {
         if ((int)(p->a[i]>>32) >= end) break; // out of range; no need to proceed
         if ((int32_t)p->a[i] > beg && (int32_t)(p->a[i]>>32) < end)
@@ -256,7 +249,7 @@ void bed_destroy(void *_h)
     kh_destroy(reg, h);
 }
 
-void *bed_insert(void *reg_hash, char *reg, int beg, int end) {
+void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end) {
 
     reghash_t *h;
     khint_t k;
@@ -313,20 +306,48 @@ inline int bed_end(void *reg_hash) {
     return 0;
 }
 
-void *bed_filter(void *reg_hash, char *reg) {
+void *bed_filter(void *reg_hash, char *reg, unsigned int beg, unsigned int end) {
 
     reghash_t *h;
     bed_reglist_t *p;
     khint_t k;
+
+    uint64_t *new_a;
+    int new_n = 0;
 
     if (!reg_hash) 
         return NULL;
     h = (reghash_t *)reg_hash;
 
     k = kh_get(reg, h, reg); //looks strange, but only the second reg is a proper argument.
-    if (k != kh_end(h)) { // absent from the hash table
-        p = &kh_val(h, k);
-        p->filter = FILTERED;
+    if (k != kh_end(h) && (p = &kh_val(h, k)) != NULL && (p->n > 0)) {
+
+        if ((beg == 0 && end == INT_MAX)) {
+            p->filter = FILTERED;
+        } else {
+            new_a = (uint64_t *)malloc(p->m*8);
+            if (new_a) {
+
+                int i, min_off;
+                min_off = bed_minoff(p, beg, end);
+
+                for (i = min_off; i < p->n; ++i) {
+                    if ((int)(p->a[i]>>32) >= end) break; // out of range; no need to proceed
+                    if ((uint32_t)p->a[i] > beg && (uint32_t)(p->a[i]>>32) < end) {
+                        new_a[new_n++] = (MAX((uint32_t)(p->a[i]>>32), beg) << 32) | MIN((uint32_t)p->a[i], end);
+                    }
+                }
+
+                if(new_n) {
+                    free(p->a);
+                    p->a = new_a;
+                    p->n = new_n;
+                    p->filter = FILTERED;
+
+                    bed_index(h);
+                }
+            }
+        }
     }
 
     return h;
@@ -346,3 +367,16 @@ const char* bed_get(void *reg_hash, int i, int filter) {
     return NULL;
 }
 
+static int bed_minoff(bed_reglist_t *p, unsigned int beg, unsigned int end) {
+    int i, min_off;
+    min_off = (beg>>LIDX_SHIFT >= p->n)? p->idx[p->n-1] : p->idx[beg>>LIDX_SHIFT];
+    if (min_off < 0) { // TODO: this block can be improved, but speed should not matter too much here
+        int n = beg>>LIDX_SHIFT;
+        if (n > p->n) n = p->n;
+        for (i = n - 1; i >= 0; --i)
+            if (p->idx[i] >= 0) break;
+        min_off = i >= 0? p->idx[i] : 0;
+    }
+
+    return min_off;
+}

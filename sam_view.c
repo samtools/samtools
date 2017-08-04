@@ -241,8 +241,9 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
 }
 
 static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first, int last, int op) {
-    int i, beg, end, alloc_flag=0;
+    int i, alloc_flag=0;
     const char *q;
+    unsigned beg, end;
     void *bed_hash = settings->bed;
 
     for (i=first; i<last; i++) {
@@ -268,7 +269,7 @@ static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first,
             printf("Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], bed_hash);
         }
 
-        if (!op && !(bed_hash = bed_filter(bed_hash, reg))) { //if op==0 filter out reg from bed hash table
+        if (!op && !(bed_hash = bed_filter(bed_hash, reg, beg, end))) { //if op==0 filter out reg from bed hash table
             printf("Error when filtering region='%s' from the bed hash table at address=%p!\n", regs[i], bed_hash);
         }
 
@@ -537,7 +538,7 @@ int main_samview(int argc, char *argv[])
 
             hts_itr_t *iter = sam_itr_querys(idx, header, bed_current); // parse a region in the format like `chr2:100-200'
             if (iter == NULL) { // region invalid or reference name not found
-                int beg, end;
+                unsigned int beg, end;
                 if (hts_parse_reg(bed_current, &beg, &end))
                     fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", bed_current);
                 else
