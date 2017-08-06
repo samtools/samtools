@@ -113,6 +113,7 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
 #define MPLP_PRINT_MAPQ (1<<10)
 #define MPLP_PER_SAMPLE (1<<11)
 #define MPLP_SMART_OVERLAPS (1<<12)
+#define MPLP_PRINT_QNAME (1<<13)
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -220,6 +221,7 @@ print_empty_pileup(FILE *fp, const mplp_conf_t *conf, const char *tname,
         fputs("\t0\t*\t*", fp);
         if (conf->flag & MPLP_PRINT_MAPQ) fputs("\t*", fp);
         if (conf->flag & MPLP_PRINT_POS) fputs("\t*", fp);
+        if (conf->flag & MPLP_PRINT_QNAME) fputs("\t*", fp);
     }
     putc('\n', fp);
 }
@@ -642,6 +644,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                     fputs("*\t*", pileup_fp);
                     if (conf->flag & MPLP_PRINT_MAPQ) fputs("\t*", pileup_fp);
                     if (conf->flag & MPLP_PRINT_POS) fputs("\t*", pileup_fp);
+                    if (conf->flag & MPLP_PRINT_QNAME) fputs("\t*", pileup_fp);
                 } else {
                     int n = 0;
                     for (j = 0; j < n_plp[i]; ++j) {
@@ -694,6 +697,21 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
 
                             if (n > 0) putc(',', pileup_fp);
                             fprintf(pileup_fp, "%d", plp[i][j].qpos + 1); // FIXME: printf() is very slow...
+                            n++;
+                        }
+                        if (!n) putc('*', pileup_fp);
+                    }
+
+                    if (conf->flag & MPLP_PRINT_QNAME) {
+                        n = 0;
+                        putc('\t', pileup_fp);
+                        for (j = 0; j < n_plp[i]; ++j) {
+                            const bam_pileup1_t *p = &plp[i][j];
+                            int c = bam_get_qual(p->b)[p->qpos];
+                            if ( c < conf->min_baseQ ) continue;
+
+                            if (n > 0) putc(',', pileup_fp);
+                            fputs(bam_get_qname(p->b), pileup_fp);
                             n++;
                         }
                         if (!n) putc('*', pileup_fp);
@@ -898,6 +916,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "Output options for mpileup format (without -g/-v):\n"
 "  -O, --output-BP         output base positions on reads\n"
 "  -s, --output-MQ         output mapping quality\n"
+"      --output-QNAME      output read names\n"
 "  -a                      output all positions (including zero depth)\n"
 "  -a -a (or -aa)          output absolutely all positions, including unused ref. sequences\n"
 "\n"
@@ -960,6 +979,8 @@ int bam_mpileup(int argc, char *argv[])
         {"excl-flags", required_argument, NULL, 2},
         {"output", required_argument, NULL, 3},
         {"open-prob", required_argument, NULL, 4},
+        {"output-QNAME", no_argument, NULL, 5},
+        {"output-qname", no_argument, NULL, 5},
         {"illumina1.3+", no_argument, NULL, '6'},
         {"count-orphans", no_argument, NULL, 'A'},
         {"bam-list", required_argument, NULL, 'b'},
@@ -1016,6 +1037,7 @@ int bam_mpileup(int argc, char *argv[])
             break;
         case  3 : mplp.output_fname = optarg; break;
         case  4 : mplp.openQ = atoi(optarg); break;
+        case  5 : mplp.flag |= MPLP_PRINT_QNAME; break;
         case 'f':
             mplp.fai = fai_load(optarg);
             if (mplp.fai == NULL) return 1;
