@@ -88,6 +88,8 @@ samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam inpu
 samtools collate aln.sorted.bam aln.name_collated.bam
 .PP
 samtools depad input.bam
+.PP
+samtools markdup in.algnsorted.bam out.bam
 
 .SH DESCRIPTION
 .PP
@@ -1069,7 +1071,7 @@ unless reading from stdin.
 .B fixmate
 .na
 samtools fixmate
-.RB [ -rpc ]
+.RB [ -rpcm ]
 .RB [ -O
 .IR format ]
 .I in.nameSrt.bam out.bam
@@ -1089,6 +1091,11 @@ Disable FR proper pair check.
 .TP
 .B -c
 Add template cigar ct tag.
+.TP
+.B -m
+Add ms (mate score) tags.  These are used by
+.B markdup
+to select the best reads to keep.
 .TP
 .BI "-O " FORMAT
 Write the final output as
@@ -1640,6 +1647,8 @@ to stdout.
 .B rmdup
 samtools rmdup [-sS] <input.srt.bam> <out.bam>
 
+.B This command is obsolete.  Use markdup instead.
+
 Remove potential PCR duplicates: if multiple read pairs have identical
 external coordinates, only retain the pair with highest mapping quality.
 In the paired-end mode, this command
@@ -1828,6 +1837,50 @@ be considered as mandatory.
 Specifies the output filename.  By default output is sent to stdout.
 .RE
 
+.TP \"-------- markdup
+.B markdup
+.na
+samtools markdup
+.RB [ -l
+.IR length ]
+.RB [ -r ]
+.RB [ -s ]
+.I in.algsort.bam out.bam
+.ad
+
+Mark duplicate alignments from a coordinate sorted file that
+has been run through fixmate with the -m option.  This program
+relies on the MC and ms tags that fixmate provides.
+
+.B
+.RS
+.TP 11
+.BI "-l " INT
+.RI "Expected maximum read length of " INT " bases."
+[300]
+.TP
+.B -r
+Remove duplicate reads.
+.TP
+.B -s
+Print some basic stats.
+.RE
+
+.EX 4
+.B EXAMPLE
+
+# The first sort can be omitted if the file is already name ordered
+samtools sort -n -o namesort.bam example.bam
+
+# Add ms and MC tags for markdup to use later
+samtools fixmate -m namesort.bam fixmate.bam
+
+# Markdup needs position order
+samtools sort -o positionsort.bam fixmate.bam
+
+# Finally mark duplicates
+samtools markdup positionsort.bam markdup.bam
+.EE
 .TP \"-------- help etc
 .BR help ,\  --help
 Display a brief usage message listing the samtools commands available.

@@ -60,6 +60,9 @@ test_quickcheck($opts);
 test_reheader($opts);
 test_addrprg($opts);
 test_addrprg($opts, threads=>2);
+test_markdup($opts);
+test_markdup($opts, threads=>2);
+
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -2251,10 +2254,6 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/7.1.fq.expected', '2.fq' => 'bam2fq/7.2.fq.expected', 's.fq' => 'bam2fq/7.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -i -T MD,ia -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
     # -i flag with index
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/8.1.fq.expected', '2.fq' => 'bam2fq/8.2.fq.expected', 's.fq' => 'bam2fq/8.s.fq.expected', 'i.fq' => 'bam2fq/8.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'n2i2' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
-
-    # test for Issue #703 (failure to write all reads on uncollated input)
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/9.1.fq.expected', '2.fq' => 'bam2fq/9.2.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.703.sam");
-
 }
 
 sub test_depad
@@ -2525,4 +2524,17 @@ sub test_addrprg
     test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r '\@RG\\tID:1#8\\tCN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
     test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all -R '1#8' $$opts{path}/addrprg/1_fixup.sam");
     test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r 'ID:1#8' -r 'CN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
+}
+
+sub test_markdup
+{
+    my ($opts,%args) = @_;
+
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
+    test_cmd($opts, out=>'markdup/1_name_sort.expected.sam', err=>'1_name_sort.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/1_name_sort.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/2_bad_order.expected.sam', err=>'2_bad_order.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/2_bad_order.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/3_missing_mc.expected.sam', err=>'3_missing_mc.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/3_missing_mc.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/4_missing_ms.expected.sam', err=>'4_missing_ms.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/4_missing_ms.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/5_markdup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/5_markdup.sam -");
+    test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r $$opts{path}/markdup/6_remove_dups.sam -");
 }
