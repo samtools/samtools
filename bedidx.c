@@ -347,7 +347,7 @@ void *bed_filter(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
                 for (i = min_off; i < p->n; ++i) {
                     if ((int)(p->a[i]>>32) >= end) break; // out of range; no need to proceed
                     if ((uint32_t)p->a[i] > beg && (uint32_t)(p->a[i]>>32) < end) {
-                        new_a[new_n++] = (MAX((uint32_t)(p->a[i]>>32), beg) << 32) | MIN((uint32_t)p->a[i], end);
+                        new_a[new_n++] = ((uint64_t)MAX((uint32_t)(p->a[i]>>32), beg) << 32) | MIN((uint32_t)p->a[i], end);
                     }
                 }
 
@@ -378,5 +378,46 @@ const char* bed_get(void *reg_hash, int i, int filter) {
     }
 
     return NULL;
+}
+
+bed_fullreg_t *bed_getall(void *reg_hash, int filter, int *count_regs) {
+
+    reghash_t *h;
+    bed_reglist_t *p;
+    khint_t i;
+    bed_fullreg_t *reglist = NULL;
+    int count = 0;
+    int j;
+
+    if (!reg_hash)
+        return NULL;
+    h = (reghash_t *)reg_hash;
+
+    for (i = kh_begin(h); i < kh_end(h); i++) {
+        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter))
+            continue;
+
+        count += p->n;
+    }
+
+    reglist = malloc(count * sizeof(bed_fullreg_t));
+    if (!reglist)
+        return NULL;
+
+    *count_regs = count;
+    count = 0;
+
+    for (i = kh_begin(h); i < kh_end(h) && count < *count_regs; i++) {
+        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter))
+            continue;
+
+        for (j = 0; j < p->n; j++, count++) {
+            reglist[count].name = kh_key(h,i);
+            reglist[count].beg = (uint32_t)(p->a[j]>>32);
+            reglist[count].end = (uint32_t)(p->a[j]);
+        }
+    }
+
+    return reglist;
 }
 

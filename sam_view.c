@@ -96,7 +96,7 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
         return 1;
 /*    if (settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
-        return 1;*/
+        return 1; */
     if (settings->subsam_frac > 0.) {
         uint32_t k = __ac_Wang_hash(__ac_X31_hash_string(bam_get_qname(b)) ^ settings->subsam_seed);
         if ((double)(k&0xffffff) / 0x1000000 >= settings->subsam_frac) return 1;
@@ -240,11 +240,14 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
     *retp = EXIT_FAILURE;
 }
 
-static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first, int last, int op) {
+static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first, int last, int *op) {
     int i, alloc_flag=0;
     const char *q;
     unsigned beg, end;
     void *bed_hash = settings->bed;
+
+    if (!(*op) && !bed_hash)
+        (*op) = 1;
 
     for (i=first; i<last; i++) {
 
@@ -265,11 +268,11 @@ static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first,
             beg = 0; end = INT_MAX;
         }
 
-        if (op && !(bed_hash = bed_insert(bed_hash, reg, beg, end))) { //if op==1 insert reg to bed hash table
+        if (*op && !(bed_hash = bed_insert(bed_hash, reg, beg, end))) { //if op==1 insert reg to bed hash table
             printf("Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], bed_hash);
         }
 
-        if (!op && !(bed_hash = bed_filter(bed_hash, reg, beg, end))) { //if op==0 filter out reg from bed hash table
+        if (!(*op) && !(bed_hash = bed_filter(bed_hash, reg, beg, end))) { //if op==0 filter out reg from bed hash table
             printf("Error when filtering region='%s' from the bed hash table at address=%p!\n", regs[i], bed_hash);
         }
 
@@ -507,7 +510,7 @@ int main_samview(int argc, char *argv[])
     if (is_header_only) goto view_end; // no need to print alignments
 
     if (optind < argc - 1) { //regions have been specified in the command line
-        settings.bed = sam_hash_regs(&settings, argv, optind+1, argc, filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
+        settings.bed = sam_hash_regs(&settings, argv, optind+1, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
         if (!filter_op) 
             filter_state = FILTERED;
     }
@@ -530,19 +533,15 @@ int main_samview(int argc, char *argv[])
             ret = 1;
         }
     } else {
-        int i;
-        for (i=0; i < bed_end(settings.bed); i++)
-        {
-            const char *bed_current = bed_get(settings.bed, i, filter_state);
-            if (!bed_current) continue;
+        int i, regcount = 0;
+        bed_fullreg_t *reglist = bed_getall(settings.bed, filter_state, &regcount);
 
-            hts_itr_t *iter = sam_itr_querys(idx, header, bed_current); // parse a region in the format like `chr2:100-200'
+        for (i=0; i < regcount; i++)
+        {
+            hts_itr_t *iter = sam_itr_bed(idx, header, reglist[i].name, reglist[i].beg, reglist[i].end); 
             if (iter == NULL) { // region invalid or reference name not found
-                unsigned int beg, end;
-                if (hts_parse_reg(bed_current, &beg, &end))
-                    fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", bed_current);
-                else
-                    fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", bed_current);
+                fprintf(stderr, "[main_samview] iterator could not be created for region \"%s\". Continue anyway.\n", reglist[i].name);
+                continue;
             }
             // fetch alignments
             while ((result = sam_itr_next(in, iter, b)) >= 0) {
@@ -555,12 +554,13 @@ int main_samview(int argc, char *argv[])
             }
             hts_itr_destroy(iter);
             if (result < -1) {
-                fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", bed_current);
+                fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", reglist[i].name);
                 ret = 1;
                 break;
             }
         } 
 
+        free(reglist);
         hts_idx_destroy(idx); // destroy the BAM index
     }
     bam_destroy1(b);
