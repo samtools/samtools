@@ -44,6 +44,7 @@ int bam_rmdup(int argc, char *argv[]);
 int bam_flagstat(int argc, char *argv[]);
 int bam_fillmd(int argc, char *argv[]);
 int bam_idxstats(int argc, char *argv[]);
+int bam_markdup(int argc, char *argv[]);
 int main_samview(int argc, char *argv[]);
 int main_import(int argc, char *argv[]);
 int main_reheader(int argc, char *argv[]);
@@ -92,6 +93,7 @@ static void usage(FILE *fp)
 "     rmdup          remove PCR duplicates\n"
 "     targetcut      cut fosmid regions (for fosmid pool only)\n"
 "     addreplacerg   adds or replaces RG tags\n"
+"     markdup        mark duplicates\n"
 "\n"
 "  -- File operations\n"
 "     collate        shuffle and group alignments by name\n"
@@ -156,6 +158,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "dict") == 0)      ret = dict_main(argc-1, argv+1);
     else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
     else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
+    else if (strcmp(argv[1], "markdup") == 0)   ret = bam_markdup(argc-1, argv+1);
     else if (strcmp(argv[1], "flagstat") == 0)  ret = bam_flagstat(argc-1, argv+1);
     else if (strcmp(argv[1], "calmd") == 0)     ret = bam_fillmd(argc-1, argv+1);
     else if (strcmp(argv[1], "fillmd") == 0)    ret = bam_fillmd(argc-1, argv+1);

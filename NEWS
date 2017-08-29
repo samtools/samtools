@@ -1,6 +1,12 @@
 Release a.b (Equinox)
 --------------------
 
+* Added new markdup sub-command and '-m' option for fixmate.  Used together,
+  they allow duplicates to be marked and optionally removed.  This
+  fixes a number of problems with the old 'rmdup' sub-command, for
+  example samtools issue #497.  'rmdup' is kept for backwards compatibility
+  but 'markdup' should be used in preference.
+
 Release 1.5 [Solstice Release] (21st June 2017)
 --------------------
 

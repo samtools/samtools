@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2016 Genome Research Ltd.
+#    Copyright (C) 2008-2017 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -38,7 +38,7 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
-            bam_quickcheck.o bam_addrprg.o
+            bam_quickcheck.o bam_addrprg.o bam_markdup.o
 
 prefix      = /usr/local
 exec_prefix = $(prefix)
@@ -203,6 +203,7 @@ sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstri
 sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)
 stats_isize.o: stats_isize.c config.h stats_isize.h $(htslib_khash_h)
 stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) sam_header.h $(htslib_khash_str2int_h) samtools.h $(htslib_khash_h) $(htslib_kstring_h) stats_isize.h $(sam_opts_h)
+bam_markdup.o: bam_markdup.c config.h $(htslib_sam_h) $(sam_opts_h) samtools.h $(bam_h) $(htslib_khash_h)
 
 
 # test programs
