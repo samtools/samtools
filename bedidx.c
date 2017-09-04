@@ -237,6 +237,7 @@ void *bed_read(const char *fn)
     gzclose(fp);
     free(str.s);
     bed_index(h);
+    bed_unify(h);
     return h;
  fail:
     fprintf(stderr, "[bed_read] Error reading %s : %s\n", fn, strerror(errno));
@@ -301,6 +302,7 @@ void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
     p->a[p->n++] = (uint64_t)beg<<32 | end;
 
     bed_index(h);
+    bed_unify(h);
     return h;
 fail:
     if (init_flag)
@@ -338,7 +340,7 @@ void *bed_filter(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
         if ((beg == 0 && end == INT_MAX)) {
             p->filter = FILTERED;
         } else {
-            new_a = (uint64_t *)malloc(p->m*8);
+            new_a = (uint64_t *)malloc(p->n * 8);
             if (new_a) {
 
                 int i, min_off;
@@ -358,6 +360,8 @@ void *bed_filter(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
                     p->filter = FILTERED;
 
                     bed_index(h);
+                } else {
+                    free(new_a);
                 }
             }
         }
@@ -421,3 +425,40 @@ bed_fullreg_t *bed_getall(void *reg_hash, int filter, int *count_regs) {
     return reglist;
 }
 
+void bed_unify(void *reg_hash) {
+
+    int i, j, new_n;
+    uint64_t *new_a;
+    reghash_t *h;
+    bed_reglist_t *p;
+
+    if (!reg_hash)
+        return;
+
+    h = (reghash_t *)reg_hash;
+
+    for (i = kh_begin(h); i < kh_end(h); i++) {
+        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || !(p->n) || !(p->m))
+            continue;
+        
+        new_a = malloc(p->n * 8);
+        if (!new_a) 
+            return;
+        new_n = 0;
+        j = 1;
+        new_a[new_n] = p->a[0];
+
+        while (j < p->n) {
+            if ((uint32_t)new_a[new_n] < (uint32_t)(p->a[j]>>32))
+                new_a[++new_n] = p->a[j++];
+            else if ((uint32_t)new_a[new_n] < (uint32_t)p->a[j]) 
+                new_a[new_n] = (new_a[new_n] & 0xFFFFFFFF00000000) | (uint32_t)(p->a[j++]);
+            else 
+                j++;
+        }
+
+        free(p->a);
+        p->a = new_a;
+        p->n = ++new_n;
+    }         
+}
