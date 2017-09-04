@@ -43,8 +43,21 @@ KSORT_INIT_GENERIC(uint64_t)
 #include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 8192)
 
+/*! @typedef
+ * @abstract bed_reglist_t - value type of the BED hash table
+ * This structure encodes the list of intervals (ranges) for the regions provided via BED file or
+ * command line arguments.
+ * @field *a       pointer to the array of intervals (kept as 64 bit integers). The upper 32 bits 
+ * encode the beginning of the interval, while the lower 32 bits encode the end, for easy sorting. 
+ * |-- 32 bits --|-- 32 bits --|
+ * |- beginning -|---- end ----|  
+ * @field n        actual number of elements contained by a
+ * @field a_size   number of allocated elements to a (n <= a_size)
+ * @field *idx     index array for computing the minimum offset 
+ * @field m        number of elements in the index array
+ */
 typedef struct {
-    int n, m;
+    int n, m, a_space; 
     uint64_t *a;
     int *idx;
     int filter;
@@ -223,9 +236,9 @@ void *bed_read(const char *fn)
         p = &kh_val(h, k);
 
         // Add begin,end to the list
-        if (p->n == p->m) {
-            p->m = p->m? p->m<<1 : 4;
-            p->a = realloc(p->a, p->m * 8);
+        if (p->n == p->a_space) {
+            p->a_space = p->a_space ? p->a_space<<1 : 4;
+            p->a = realloc(p->a, p->a_space * sizeof(uint64_t));
             if (NULL == p->a) goto fail;
         }
         p->a[p->n++] = (uint64_t)beg<<32 | end;
@@ -294,9 +307,9 @@ void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
     p = &kh_val(h, k);
 
     // Add begin,end to the list
-    if (p->n == p->m) {
-        p->m = p->m? p->m<<1 : 4;
-        p->a = realloc(p->a, p->m * 8);
+    if (p->n == p->a_space) {
+        p->a_space = p->a_space ? p->a_space<<1 : 4;
+        p->a = realloc(p->a, p->a_space * sizeof(uint64_t));
         if (NULL == p->a) goto fail;
     }
     p->a[p->n++] = (uint64_t)beg<<32 | end;
@@ -340,7 +353,7 @@ void *bed_filter(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
         if ((beg == 0 && end == INT_MAX)) {
             p->filter = FILTERED;
         } else {
-            new_a = (uint64_t *)malloc(p->n * 8);
+            new_a = (uint64_t *)malloc(p->n * sizeof(uint64_t));
             if (new_a) {
 
                 int i, min_off;
@@ -441,7 +454,7 @@ void bed_unify(void *reg_hash) {
         if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || !(p->n) || !(p->m))
             continue;
         
-        new_a = malloc(p->n * 8);
+        new_a = malloc(p->n * sizeof(uint64_t));
         if (!new_a) 
             return;
         new_n = 0;
