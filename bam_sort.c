@@ -38,6 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <getopt.h>
 #include <assert.h>
 #include <pthread.h>
+#include "htslib/bgzf.h"
 #include "htslib/ksort.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
@@ -1635,14 +1636,15 @@ static int change_SO(bam_hdr_t *h, const char *so)
     if (beg == NULL) { // no @HD
         h->l_text += strlen(so) + 15;
         newtext = (char*)malloc(h->l_text + 1);
-        sprintf(newtext, "@HD\tVN:1.3\tSO:%s\n", so);
-        strcat(newtext, h->text);
+        if (!newtext) return -1;
+        snprintf(newtext, h->l_text + 1,
+                 "@HD\tVN:1.3\tSO:%s\n%s", so, h->text);
     } else { // has @HD but different or no SO
         h->l_text = (beg - h->text) + (4 + strlen(so)) + (h->text + h->l_text - end);
         newtext = (char*)malloc(h->l_text + 1);
-        strncpy(newtext, h->text, beg - h->text);
-        sprintf(newtext + (beg - h->text), "\tSO:%s", so);
-        strcat(newtext, end);
+        if (!newtext) return -1;
+        snprintf(newtext, h->l_text + 1, "%.*s\tSO:%s%s",
+                 (int) (beg - h->text), h->text, so, end);
     }
     free(h->text);
     h->text = newtext;
@@ -1823,7 +1825,9 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
     w = (worker_t*)calloc(n_threads, sizeof(worker_t));
+    if (!w) return -1;
     tid = (pthread_t*)calloc(n_threads, sizeof(pthread_t));
+    if (!tid) { free(w); return -1; }
     b = buf; rest = k;
     for (i = 0; i < n_threads; ++i) {
         w[i].buf_len = rest / (n_threads - i);
@@ -1870,12 +1874,20 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
                       size_t _max_mem, int n_threads,
                       const htsFormat *in_fmt, const htsFormat *out_fmt)
 {
-    int ret = -1, i, n_files = 0;
-    size_t mem, max_k, k, max_mem;
+    int ret = -1, res, i, n_files = 0;
+    size_t max_k, k, max_mem, bam_mem_offset;
     bam_hdr_t *header = NULL;
     samFile *fp;
-    bam1_p *buf;
-    bam1_t *b;
+    bam1_p *buf = NULL;
+    bam1_t *b = bam_init1();
+    uint8_t *bam_mem = NULL;
+    char **fns = NULL;
+    const char *new_so;
+
+    if (!b) {
+        print_error("sort", "couldn't allocate memory for bam record");
+        return -1;
+    }
 
     if (n_threads < 2) n_threads = 1;
     g_is_by_qname = is_by_qname;
@@ -1884,13 +1896,12 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         strncpy(g_sort_tag, sort_by_tag, 2);
     }
 
-    max_k = k = 0; mem = 0;
     max_mem = _max_mem * n_threads;
     buf = NULL;
     fp = sam_open_format(fn, "r", in_fmt);
     if (fp == NULL) {
         print_error_errno("sort", "can't open \"%s\"", fn);
-        return -2;
+        goto err;
     }
     header = sam_hdr_read(fp);
     if (header == NULL) {
@@ -1899,11 +1910,17 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     }
 
     if (sort_by_tag != NULL)
-        change_SO(header, "unknown");
+        new_so = "unknown";
     else if (is_by_qname)
-        change_SO(header, "queryname");
+        new_so = "queryname";
     else
-        change_SO(header, "coordinate");
+        new_so = "coordinate";
+
+    if (change_SO(header, new_so) != 0) {
+        print_error("sort",
+                    "failed to change sort order header to '%s'\n", new_so);
+        goto err;
+    }
 
     // No gain to using the thread pool here as the flow of this code
     // is such that we are *either* reading *or* sorting.  Hence a shared
@@ -1911,47 +1928,61 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     if (n_threads > 1)
         hts_set_threads(fp, n_threads);
 
+    if ((bam_mem = malloc(max_mem)) == NULL) {
+        print_error("sort", "couldn't allocate memory for bam_mem");
+        goto err;
+    }
+
     // write sub files
-    for (;;) {
+    k = max_k = bam_mem_offset = 0;
+    while ((res = sam_read1(fp, header, b)) >= 0) {
+        int mem_full = 0;
+
         if (k == max_k) {
-            size_t kk, old_max = max_k;
+            bam1_p *new_buf;
             max_k = max_k? max_k<<1 : 0x10000;
-            buf = (bam1_p*)realloc(buf, max_k * sizeof(bam1_p));
-            for (kk = old_max; kk < max_k; ++kk) {
-                buf[kk].b = NULL;
-                buf[kk].tag = NULL;
+            if ((new_buf = realloc(buf, max_k * sizeof(bam1_p))) == NULL) {
+                print_error("sort", "couldn't allocate memory for buf");
+                goto err;
             }
+            buf = new_buf;
         }
-        if (buf[k].b == NULL) buf[k].b = bam_init1();
-        b = buf[k].b;
-        if ((ret = sam_read1(fp, header, b)) < 0) break;
-        if (b->l_data < b->m_data>>2) { // shrink
-            b->m_data = b->l_data;
-            kroundup32(b->m_data);
-            b->data = (uint8_t*)realloc(b->data, b->m_data);
+
+        // Check if the BAM record will fit in the memory limit
+        if (bam_mem_offset + sizeof(*b) + b->l_data < max_mem) {
+            // Copy record into the memory block
+            buf[k].b = (bam1_t *)(bam_mem + bam_mem_offset);
+            *buf[k].b = *b;
+            buf[k].b->data = (uint8_t *)((char *)buf[k].b + sizeof(bam1_t));
+            memcpy(buf[k].b->data, b->data, b->l_data);
+            // store next BAM record in next 8-byte-aligned address after
+            // current one
+            bam_mem_offset = (bam_mem_offset + sizeof(*b) + b->l_data + 8 - 1) & ~((size_t)(8 - 1));
+        } else {
+            // Add a pointer to the remaining record
+            buf[k].b = b;
+            mem_full = 1;
         }
 
         // Pull out the pointer to the sort tag if applicable
         if (g_is_by_tag) {
-            buf[k].tag = bam_aux_get(b, g_sort_tag);
+            buf[k].tag = bam_aux_get(buf[k].b, g_sort_tag);
         } else {
             buf[k].tag = NULL;
         }
-
-        mem += sizeof(bam1_t) + b->m_data + sizeof(void*) + sizeof(void*); // two sizeof(void*) for the data allocated to pointer arrays
         ++k;
-        if (mem >= max_mem) {
+
+        if (mem_full) {
             n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
             if (n_files < 0) {
-                ret = -1;
                 goto err;
             }
-            mem = k = 0;
+            k = 0;
+            bam_mem_offset = 0;
         }
     }
-    if (ret != -1) {
+    if (res != -1) {
         print_error("sort", "truncated file. Aborting");
-        ret = -1;
         goto err;
     }
 
@@ -1960,20 +1991,19 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         ks_mergesort(sort, k, buf, 0);
         if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt) != 0) {
             print_error_errno("sort", "failed to create \"%s\"", fnout);
-            ret = -1;
             goto err;
         }
     } else { // then merge
-        char **fns;
         n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads);
         if (n_files == -1) {
-            ret = -1;
             goto err;
         }
         fprintf(stderr, "[bam_sort_core] merging from %d files...\n", n_files);
         fns = (char**)calloc(n_files, sizeof(char*));
+        if (!fns) goto err;
         for (i = 0; i < n_files; ++i) {
             fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
+            if (!fns[i]) goto err;
             sprintf(fns[i], "%s.%.4d.bam", prefix, i);
         }
         if (bam_merge_core2(is_by_qname, sort_by_tag, fnout, modeout, NULL, n_files, fns,
@@ -1983,19 +2013,24 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
             // message explaining the failure, so no further message is needed.
             goto err;
         }
-        for (i = 0; i < n_files; ++i) {
-            unlink(fns[i]);
-            free(fns[i]);
-        }
-        free(fns);
     }
 
     ret = 0;
 
  err:
     // free
-    for (k = 0; k < max_k; ++k) bam_destroy1(buf[k].b);
+    if (fns) {
+        for (i = 0; i < n_files; ++i) {
+            if (fns[i]) {
+                unlink(fns[i]);
+                free(fns[i]);
+            }
+        }
+        free(fns);
+    }
+    bam_destroy1(b);
     free(buf);
+    free(bam_mem);
     bam_hdr_destroy(header);
     sam_close(fp);
     return ret;
@@ -2006,6 +2041,7 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
 {
     int ret;
     char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
+    if (!fnout) return -1;
     sprintf(fnout, "%s.bam", prefix);
     ret = bam_sort_core_ext(is_by_qname, NULL, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL);
     free(fnout);
