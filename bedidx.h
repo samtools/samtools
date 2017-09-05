@@ -21,5 +21,6 @@ void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end);
 void *bed_filter(void *reg_hash, char *reg, unsigned int beg, unsigned int end);
 const char* bed_get(void *reg_hash, int index, int filter);
 bed_fullreg_t *bed_getall(void *reg_hash, int filter, int *count_regs);
+void bed_unify(void *reg_hash);
 
 #endif

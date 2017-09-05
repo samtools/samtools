@@ -57,10 +57,11 @@ KSTREAM_INIT(gzFile, gzread, 8192)
  * @field m        number of elements in the index array
  */
 typedef struct {
-    int n, m, a_space; 
+    int n, m; 
     uint64_t *a;
     int *idx;
     int filter;
+    int idx_space;
 } bed_reglist_t;
 
 #include "htslib/khash.h"
@@ -70,17 +71,17 @@ typedef kh_reg_t reghash_t;
 
 int *bed_index_core(int n, uint64_t *a, int *n_idx)
 {
-    int i, j, m, *idx;
-    m = *n_idx = 0; idx = 0;
+    int i, j, l, *idx;
+    l = *n_idx = 0; idx = 0;
     for (i = 0; i < n; ++i) {
         int beg, end;
         beg = a[i]>>32 >> LIDX_SHIFT; end = ((uint32_t)a[i]) >> LIDX_SHIFT;
-        if (m < end + 1) {
-            int oldm = m;
-            m = end + 1;
-            kroundup32(m);
-            idx = realloc(idx, m * sizeof(int));
-            for (j = oldm; j < m; ++j) idx[j] = -1;
+        if (l < end + 1) {
+            int old_l = l;
+            l = end + 1;
+            kroundup32(l);
+            idx = realloc(idx, l * sizeof(int));
+            for (j = old_l; j < l; ++j) idx[j] = -1;
         }
 
         for (j = beg; j < end+1; ++j)
@@ -100,7 +101,7 @@ void bed_index(void *_h)
             bed_reglist_t *p = &kh_val(h, k);
             if (p->idx) free(p->idx);
             ks_introsort(uint64_t, p->n, p->a);
-            p->idx = bed_index_core(p->n, p->a, &p->m);
+            p->idx = bed_index_core(p->n, p->a, &p->idx_space);
         }
     }
 }
@@ -236,9 +237,9 @@ void *bed_read(const char *fn)
         p = &kh_val(h, k);
 
         // Add begin,end to the list
-        if (p->n == p->a_space) {
-            p->a_space = p->a_space ? p->a_space<<1 : 4;
-            p->a = realloc(p->a, p->a_space * sizeof(uint64_t));
+        if (p->n == p->m) {
+            p->m = p->m ? p->m<<1 : 4;
+            p->a = realloc(p->a, p->m * sizeof(uint64_t));
             if (NULL == p->a) goto fail;
         }
         p->a[p->n++] = (uint64_t)beg<<32 | end;
@@ -307,9 +308,9 @@ void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
     p = &kh_val(h, k);
 
     // Add begin,end to the list
-    if (p->n == p->a_space) {
-        p->a_space = p->a_space ? p->a_space<<1 : 4;
-        p->a = realloc(p->a, p->a_space * sizeof(uint64_t));
+    if (p->n == p->m) {
+        p->m = p->m ? p->m<<1 : 4;
+        p->a = realloc(p->a, p->m * sizeof(uint64_t));
         if (NULL == p->a) goto fail;
     }
     p->a[p->n++] = (uint64_t)beg<<32 | end;
@@ -441,7 +442,6 @@ bed_fullreg_t *bed_getall(void *reg_hash, int filter, int *count_regs) {
 void bed_unify(void *reg_hash) {
 
     int i, j, new_n;
-    uint64_t *new_a;
     reghash_t *h;
     bed_reglist_t *p;
 
@@ -451,27 +451,21 @@ void bed_unify(void *reg_hash) {
     h = (reghash_t *)reg_hash;
 
     for (i = kh_begin(h); i < kh_end(h); i++) {
-        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || !(p->n) || !(p->m))
+        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || !(p->n))
             continue;
         
-        new_a = malloc(p->n * sizeof(uint64_t));
-        if (!new_a) 
-            return;
         new_n = 0;
         j = 1;
-        new_a[new_n] = p->a[0];
 
         while (j < p->n) {
-            if ((uint32_t)new_a[new_n] < (uint32_t)(p->a[j]>>32))
-                new_a[++new_n] = p->a[j++];
-            else if ((uint32_t)new_a[new_n] < (uint32_t)p->a[j]) 
-                new_a[new_n] = (new_a[new_n] & 0xFFFFFFFF00000000) | (uint32_t)(p->a[j++]);
+            if ((uint32_t)p->a[new_n] < (uint32_t)(p->a[j]>>32))
+                p->a[++new_n] = p->a[j++];
+            else if ((uint32_t)p->a[new_n] < (uint32_t)p->a[j]) 
+                p->a[new_n] = (p->a[new_n] & 0xFFFFFFFF00000000) | (uint32_t)(p->a[j++]);
             else 
                 j++;
         }
 
-        free(p->a);
-        p->a = new_a;
         p->n = ++new_n;
     }         
 }
