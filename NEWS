@@ -7,6 +7,10 @@ Release a.b (Equinox)
   example samtools issue #497.  'rmdup' is kept for backwards compatibility
   but 'markdup' should be used in preference.
 
+* Sort is now much better at keeping within the requested memory limit.  It
+  should also be slightly faster and need fewer temporary files when the file
+  to be sorted does not fit in memory.  (#593; thanks to Nathan Weeks.)
+
 Release 1.5 [Solstice Release] (21st June 2017)
 --------------------
 
