@@ -1616,6 +1616,147 @@ end:
  * BAM sorting *
  ***************/
 
+/* Simplified version of bam_merge_core2() for merging part-sorted
+   temporary files.  No need for header merging or translation,
+   it just needs to read data into the heap and push it out again. */
+static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
+                            const char *mode, bam_hdr_t *hout,
+                            int n, char * const *fn, int n_threads,
+                            const char *cmd, const htsFormat *in_fmt,
+                            const htsFormat *out_fmt) {
+    samFile *fpout = NULL, **fp = NULL;
+    heap1_t *heap = NULL;
+    uint64_t idx = 0;
+    int res, i;
+
+    g_is_by_qname = by_qname;
+    if (sort_tag) {
+        g_is_by_tag = 1;
+        g_sort_tag[0] = sort_tag[0];
+        g_sort_tag[1] = sort_tag[1];
+    }
+    fp = (samFile**)calloc(n, sizeof(samFile*));
+    if (!fp) goto mem_fail;
+    heap = (heap1_t*)calloc(n, sizeof(heap1_t));
+    if (!heap) goto mem_fail;
+
+    // Open each file, read the header and put the first read into the heap
+    for (i = 0; i < n; i++) {
+        bam_hdr_t *hin;
+        heap1_t *h = &heap[i];
+
+        fp[i] = sam_open_format(fn[i], "r", in_fmt);
+        if (fp[i] == NULL) {
+            print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
+            goto fail;
+        }
+
+        // Read header ...
+        hin = sam_hdr_read(fp[i]);
+        if (hin == NULL) {
+            print_error(cmd, "failed to read header from \"%s\"", fn[i]);
+            goto fail;
+        }
+        // ... and throw it away as we don't really need it
+        bam_hdr_destroy(hin);
+
+        // Get a read into the heap
+        h->i = i;
+        h->b.b = bam_init1();
+        h->b.tag = NULL;
+        if (!h->b.b) goto mem_fail;
+        res = sam_read1(fp[i], hout, h->b.b);
+        if (res >= 0) {
+            h->pos = ((uint64_t)h->b.b->core.tid<<32) | (uint32_t)((int32_t)h->b.b->core.pos+1)<<1 | bam_is_rev(h->b.b);
+            h->idx = idx++;
+            if (g_is_by_tag) {
+                h->b.tag = bam_aux_get(h->b.b, g_sort_tag);
+            } else {
+                h->b.tag = NULL;
+            }
+        } else if (res == -1) {
+            h->pos = HEAP_EMPTY;
+            bam_destroy1(h->b.b);
+            h->b.b = NULL;
+            h->b.tag = NULL;
+        } else {
+            print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
+            goto fail;
+        }
+    }
+
+    // Open output file and write header
+    if ((fpout = sam_open_format(out, mode, out_fmt)) == 0) {
+        print_error_errno(cmd, "failed to create \"%s\"", out);
+        return -1;
+    }
+
+    hts_set_threads(fpout, n_threads);
+
+    if (sam_hdr_write(fpout, hout) != 0) {
+        print_error_errno(cmd, "failed to write header to \"%s\"", out);
+        sam_close(fpout);
+        return -1;
+    }
+
+    // Now do the merge
+    ks_heapmake(heap, n, heap);
+    while (heap->pos != HEAP_EMPTY) {
+        bam1_t *b = heap->b.b;
+        if (sam_write1(fpout, hout, b) < 0) {
+            print_error_errno(cmd, "failed writing to \"%s\"", out);
+            sam_close(fpout);
+            return -1;
+        }
+        res = sam_read1(fp[heap->i], hout, b);
+        if (res >= 0) {
+            heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
+            heap->idx = idx++;
+            if (g_is_by_tag) {
+                heap->b.tag = bam_aux_get(heap->b.b, g_sort_tag);
+            } else {
+                heap->b.tag = NULL;
+            }
+        } else if (res == -1) {
+            heap->pos = HEAP_EMPTY;
+            bam_destroy1(heap->b.b);
+            heap->b.b = NULL;
+            heap->b.tag = NULL;
+        } else {
+            print_error(cmd, "Error reading \"%s\" : %s",
+                        fn[heap->i], strerror(errno));
+            goto fail;
+        }
+        ks_heapadjust(heap, 0, n, heap);
+    }
+    // Clean up and close
+    for (i = 0; i < n; i++) {
+        if (sam_close(fp[i]) != 0) {
+            print_error(cmd, "Error on closing \"%s\" : %s",
+                        fn[i], strerror(errno));
+        }
+    }
+    free(fp);
+    free(heap);
+    if (sam_close(fpout) < 0) {
+        print_error(cmd, "error closing output file");
+        return -1;
+    }
+    return 0;
+ mem_fail:
+    print_error(cmd, "Out of memory");
+
+ fail:
+    for (i = 0; i < n; i++) {
+        if (fp && fp[i]) sam_close(fp[i]);
+        if (heap && heap[i].b.b) bam_destroy1(heap[i].b.b);
+    }
+    free(fp);
+    free(heap);
+    if (fpout) sam_close(fpout);
+    return -1;
+}
+
 static int change_SO(bam_hdr_t *h, const char *so)
 {
     char *p, *q, *beg = NULL, *end = NULL, *newtext;
@@ -1866,7 +2007,7 @@ static int sort_blocks(int n_files, size_t k, bam1_p *buf, const char *prefix, c
   @return 0 for successful sorting, negative on errors
 
   @discussion It may create multiple temporary subalignment files
-  and then merge them by calling bam_merge_core2(). This function is
+  and then merge them by calling bam_merge_simple(). This function is
   NOT thread safe.
  */
 int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const char *prefix,
@@ -2006,10 +2147,10 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
             if (!fns[i]) goto err;
             sprintf(fns[i], "%s.%.4d.bam", prefix, i);
         }
-        if (bam_merge_core2(is_by_qname, sort_by_tag, fnout, modeout, NULL, n_files, fns,
-                            MERGE_COMBINE_RG|MERGE_COMBINE_PG|MERGE_FIRST_CO,
-                            NULL, n_threads, "sort", in_fmt, out_fmt) < 0) {
-            // Propagate bam_merge_core2() failure; it has already emitted a
+        if (bam_merge_simple(is_by_qname, sort_by_tag, fnout, modeout, header,
+                             n_files, fns, n_threads, "sort",
+                             in_fmt, out_fmt) < 0) {
+            // Propagate bam_merge_simple() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             goto err;
         }
