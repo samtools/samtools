@@ -171,7 +171,7 @@ Note that there is no header generated, so you will need to run
 
 =over
 
-samtools -hT your_ref.fasta your_file.sam > your_file_with_header.sam
+samtools view -hT your_ref.fasta your_file.sam > your_file_with_header.sam
 
 =back
 
