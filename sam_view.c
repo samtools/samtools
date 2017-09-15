@@ -269,11 +269,11 @@ static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first,
         }
 
         if (*op && !(bed_hash = bed_insert(bed_hash, reg, beg, end))) { //if op==1 insert reg to bed hash table
-            printf("Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], bed_hash);
+            fprintf(stderr, "Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], bed_hash);
         }
 
         if (!(*op) && !(bed_hash = bed_filter(bed_hash, reg, beg, end))) { //if op==0 filter out reg from bed hash table
-            printf("Error when filtering region='%s' from the bed hash table at address=%p!\n", regs[i], bed_hash);
+            fprintf(stderr, "Error when filtering region='%s' from the bed hash table at address=%p!\n", regs[i], bed_hash);
         }
 
 
@@ -534,33 +534,34 @@ int main_samview(int argc, char *argv[])
         }
     } else {
         int i, regcount = 0;
-        bed_fullreg_t *reglist = bed_getall(settings.bed, filter_state, &regcount);
 
-        for (i=0; i < regcount; i++)
-        {
-            hts_itr_t *iter = sam_itr_bed(idx, header, reglist[i].name, reglist[i].beg, reglist[i].end); 
-            if (iter == NULL) { // region invalid or reference name not found
-                fprintf(stderr, "[main_samview] iterator could not be created for region \"%s\". Continue anyway.\n", reglist[i].name);
-                continue;
-            }
-            // fetch alignments
-            while ((result = sam_itr_next(in, iter, b)) >= 0) {
-                if (!process_aln(header, b, &settings)) {
-                    if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
-                    count++;
-                } else {
-                    if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
+        hts_reglist_t *reglist = bed_reglist(settings.bed, filter_state, &regcount);
+        if(reglist) {
+        
+            hts_itr_multi_t *iter = sam_itr_regions(idx, header, reglist, regcount); 
+            if (iter) {
+
+                // fetch alignments
+                while ((result = sam_itr_multi_next(in, iter, b)) >= 0) {
+                    if (!process_aln(header, b, &settings)) {
+                        if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
+                        count++;
+                    } else {
+                        if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
+                    }
                 }
-            }
-            hts_itr_destroy(iter);
-            if (result < -1) {
-                fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", reglist[i].name);
-                ret = 1;
-                break;
-            }
-        } 
+                if (result < -1) {
+                    fprintf(stderr, "[main_samview] retrieval of region %d failed due to truncated file or corrupt BAM index file\n", iter->curr_tid);
+                    ret = 1;
+                }
 
-        free(reglist);
+                hts_itr_multi_destroy(iter, regcount);
+            } else {
+                fprintf(stderr, "[main_samview] iterator could not be created. Aborting.\n");
+            }
+        } else {
+            fprintf(stderr, "[main_samview] region list could not be created from bed hash table. Aborting.\n");
+        }
         hts_idx_destroy(idx); // destroy the BAM index
     }
     bam_destroy1(b);

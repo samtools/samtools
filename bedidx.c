@@ -398,12 +398,12 @@ const char* bed_get(void *reg_hash, int i, int filter) {
     return NULL;
 }
 
-bed_fullreg_t *bed_getall(void *reg_hash, int filter, int *count_regs) {
+hts_reglist_t *bed_reglist(void *reg_hash, int filter, int *n_reg) {
 
     reghash_t *h;
     bed_reglist_t *p;
     khint_t i;
-    bed_fullreg_t *reglist = NULL;
+    hts_reglist_t *reglist = NULL;
     int count = 0;
     int j;
 
@@ -414,26 +414,32 @@ bed_fullreg_t *bed_getall(void *reg_hash, int filter, int *count_regs) {
     for (i = kh_begin(h); i < kh_end(h); i++) {
         if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter))
             continue;
-
-        count += p->n;
+        count++;
     }
 
-    reglist = malloc(count * sizeof(bed_fullreg_t));
+    reglist = (hts_reglist_t *)calloc(count, sizeof(hts_reglist_t));
     if (!reglist)
         return NULL;
-
-    *count_regs = count;
+    *n_reg = count;
     count = 0;
 
-    for (i = kh_begin(h); i < kh_end(h) && count < *count_regs; i++) {
+    for (i = kh_begin(h); i < kh_end(h) && count < n_reg; i++) {
         if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter))
             continue;
 
-        for (j = 0; j < p->n; j++, count++) {
-            reglist[count].name = kh_key(h,i);
-            reglist[count].beg = (uint32_t)(p->a[j]>>32);
-            reglist[count].end = (uint32_t)(p->a[j]);
+        reglist[count].reg = kh_key(h,i);
+        reglist[count].intervals = (hts_pair32_t *)calloc(p->n, sizeof(hts_pair32_t));
+        if(!(reglist[count].intervals)) {
+            hts_reglist_free(reglist, count);
+            return NULL;
         }
+        reglist[count].count = p->n;
+
+        for (j = 0; j < p->n; j++) {
+            reglist[count].intervals[j].beg = (uint32_t)(p->a[j]>>32);
+            reglist[count].intervals[j].end = (uint32_t)(p->a[j]);
+        }
+        count++;
     }
 
     return reglist;
