@@ -126,9 +126,7 @@ typedef struct {
     bam1_p b;
 } heap1_t;
 
-#define __pos_cmp(a, b) ((a).pos > (b).pos || ((a).pos == (b).pos && ((a).i > (b).i || ((a).i == (b).i && (a).idx > (b).idx))))
-
-static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b);
+static inline int bam1_cmp_by_tag(const bam1_p a, const bam1_p b);
 
 // Function to compare reads in the heap and determine which one is < the other
 static inline int heap_lt(const heap1_t a, const heap1_t b)
@@ -136,16 +134,22 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
     if (g_is_by_tag) {
         int t;
         if (a.b.b == NULL || b.b.b == NULL) return a.b.b == NULL? 1 : 0;
-        t = bam1_lt_by_tag(b.b,a.b);
-        return t;
+        t = bam1_cmp_by_tag(a.b, b.b);
+        if (t != 0) return t > 0;
     } else if (g_is_by_qname) {
-        int t;
+        int t, fa, fb;
         if (a.b.b == NULL || b.b.b == NULL) return a.b.b == NULL? 1 : 0;
         t = strnum_cmp(bam_get_qname(a.b.b), bam_get_qname(b.b.b));
-        return (t > 0 || (t == 0 && (a.b.b->core.flag&0xc0) > (b.b.b->core.flag&0xc0)));
+        if (t != 0) return t > 0;
+        fa = a.b.b->core.flag & 0xc0;
+        fb = b.b.b->core.flag & 0xc0;
+        if (fa != fb) return fa > fb;
     } else {
-        return __pos_cmp(a, b);
+        if (a.pos != b.pos) return a.pos > b.pos;
     }
+    // This compares by position in the input file(s)
+    if (a.i != b.i) return a.i > b.i;
+    return a.idx > b.idx;
 }
 
 KSORT_INIT(heap, heap1_t, heap_lt)
@@ -1814,15 +1818,21 @@ static int change_SO(bam_hdr_t *h, const char *so)
     return 0;
 }
 
-// Function to compare reads and determine which one is < the other
+// Function to compare reads and determine which one is < or > the other
 // Handle sort-by-pos and sort-by-name. Used as the secondary sort in bam1_lt_by_tag, if reads are equivalent by tag.
-static inline int bam1_lt_core(const bam1_p a, const bam1_p b)
+// Returns a value less than, equal to or greater than zero if a is less than,
+// equal to or greater than b, respectively.
+static inline int bam1_cmp_core(const bam1_p a, const bam1_p b)
 {
+    uint64_t pa, pb;
     if (g_is_by_qname) {
         int t = strnum_cmp(bam_get_qname(a.b), bam_get_qname(b.b));
-        return (t < 0 || (t == 0 && (a.b->core.flag&0xc0) < (b.b->core.flag&0xc0)));
+        if (t != 0) return t;
+        return (int) (a.b->core.flag&0xc0) - (int) (b.b->core.flag&0xc0);
     } else {
-        return (((uint64_t)a.b->core.tid<<32|(a.b->core.pos+1)<<1|bam_is_rev(a.b)) < ((uint64_t)b.b->core.tid<<32|(b.b->core.pos+1)<<1|bam_is_rev(b.b)));
+        pa = (uint64_t)a.b->core.tid<<32|(a.b->core.pos+1)<<1|bam_is_rev(a.b);
+        pb = (uint64_t)b.b->core.tid<<32|(b.b->core.pos+1)<<1|bam_is_rev(b.b);
+        return pa < pb ? -1 : (pa > pb ? 1 : 0);
     }
 }
 
@@ -1840,17 +1850,19 @@ uint8_t normalize_type(const uint8_t* aux) {
 
 // Sort record by tag, using pos or read name as a secondary key if tags are identical. Reads not carrying the tag sort first.
 // Tags are first sorted by the type character (in case the types differ), or by the appropriate comparator for that type if they agree.
-static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b)
+// Returns a value less than, equal to or greater than zero if a is less than,
+// equal to or greater than b, respectively.
+static inline int bam1_cmp_by_tag(const bam1_p a, const bam1_p b)
 {
     const uint8_t* aux_a = a.tag;
     const uint8_t* aux_b = b.tag;
 
     if (aux_a == NULL && aux_b != NULL) {
-        return 1;
+        return -1;
     } else if (aux_a != NULL && aux_b == NULL) {
-        return 0;
+        return 1;
     } else if (aux_a == NULL && aux_b == NULL) {
-        return bam1_lt_core(a,b);
+        return bam1_cmp_core(a,b);
     }
 
     // 'Normalize' the letters of the datatypes to a canonical letter,
@@ -1867,27 +1879,31 @@ static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b)
             b_type = 'f';
         } else {
             // Unfixable mismatched types
-            return a_type < b_type ? 1 : 0;
+            return a_type < b_type ? -1 : 1;
         }
     }
 
     if (a_type == 'c') {
         int64_t va = bam_aux2i(aux_a);
         int64_t vb = bam_aux2i(aux_b);
-        return (va < vb || (va == vb && bam1_lt_core(a, b)));
+        if (va != vb) return va < vb ? -1 : 1;
+        return bam1_cmp_core(a, b);
     } else if (a_type == 'f') {
         double va = bam_aux2f(aux_a);
         double vb = bam_aux2f(aux_b);
-        return (va < vb || (va == vb && bam1_lt_core(a,b)));
+        if (va != vb) return va < vb ? -1 : 1;
+        return bam1_cmp_core(a, b);
     } else if (a_type == 'A') {
-        char va = bam_aux2A(aux_a);
-        char vb = bam_aux2A(aux_b);
-        return (va < vb || (va == vb && bam1_lt_core(a,b)));
+        unsigned char va = bam_aux2A(aux_a);
+        unsigned char vb = bam_aux2A(aux_b);
+        if (va != vb) return va < vb ? -1 : 1;
+        return bam1_cmp_core(a, b);
     } else if (a_type == 'H') {
         int t = strcmp(bam_aux2Z(aux_a), bam_aux2Z(aux_b));
-        return (t < 0 || (t == 0 && bam1_lt_core(a,b)));
+        if (t) return t;
+        return bam1_cmp_core(a, b);
     } else {
-        return bam1_lt_core(a,b);
+        return bam1_cmp_core(a,b);
     }
 }
 
@@ -1896,9 +1912,9 @@ static inline int bam1_lt_by_tag(const bam1_p a, const bam1_p b)
 static inline int bam1_lt(const bam1_p a, const bam1_p b)
 {
     if (g_is_by_tag) {
-        return bam1_lt_by_tag(a, b);
+        return bam1_cmp_by_tag(a, b) < 0;
     } else {
-        return bam1_lt_core(a,b);
+        return bam1_cmp_core(a,b) < 0;
     }
 }
 
