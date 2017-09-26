@@ -30,8 +30,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <inttypes.h>
 #include <stdlib.h>
 #include <assert.h>
-
-#define PACKAGE_VERSION "r439"
+#include "version.h"
 
 //#define MAQ_LONGREADS
 
@@ -188,7 +187,7 @@ int main(int argc, char *argv[])
 {
     gzFile fp;
     if (argc == 1) {
-        fprintf(stderr, "Version: %s\n", PACKAGE_VERSION);
+        fprintf(stderr, "Version: %s\n", SAMTOOLS_VERSION);
         fprintf(stderr, "Usage: maq2sam <in.map> [<readGroup>]\n");
         return 1;
     }

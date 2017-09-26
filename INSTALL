@@ -7,9 +7,45 @@ a curses or GNU ncurses library <http://www.gnu.org/software/ncurses/>.
 The bzip2 and liblzma dependencies can be removed if full CRAM support
 is not needed - see HTSlib's INSTALL file for details.
 
+The following programs are required:
+
+    GNU make
+    C compiler (e.g. gcc or clang)
+
+In addition, building the configure script requires:
+
+    autoheader
+    autoconf
+
+Running the configure script uses awk, along with a number of
+standard UNIX tools (cat, cp, grep, mv, rm, sed, among others).  Almost
+all installations will have these already.  
+
+Running the test harness (make test) uses:
+
+    bash
+    perl
+
 If you are unsure about this, be sure to use './configure' to determine
 whether you have these libraries and to help diagnose which packages may
 need to be installed on your build machine to provide them.
+
+Building Configure
+==================
+
+This step is only needed if configure.ac has been changed, or if configure
+does not exist (for example, when building from a git clone).  The
+configure script and config.h.in can be built by running:
+
+    autoheader
+    autoconf -Wno-syntax
+
+If you have a full GNU autotools install, you can alternatively run:
+
+    autoreconf
+
+When running these tools, you may see warnings about AC_CONFIG_SUBDIRS.
+These are expected, and should be ignored.
 
 Basic Installation
 ==================
