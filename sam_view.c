@@ -240,50 +240,6 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
     *retp = EXIT_FAILURE;
 }
 
-static void* sam_hash_regs(samview_settings_t *settings, char **regs, int first, int last, int *op) {
-    int i, alloc_flag=0;
-    const char *q;
-    unsigned beg, end;
-    void *bed_hash = settings->bed;
-
-    if (!(*op) && !bed_hash)
-        (*op) = 1;
-
-    for (i=first; i<last; i++) {
-
-        char *reg;
-
-        q = hts_parse_reg(regs[i], &beg, &end);
-        if (q) {
-            if (!(reg = malloc(q - regs[i] + 1))) {
-                continue;
-            }
-            alloc_flag = 1;
-            strncpy(reg, regs[i], q - regs[i]);
-            reg[q - regs[i]] = 0;
-        }
-        else {
-            // not parsable as a region, but possibly a sequence named "foo:a"
-            reg = regs[i];
-            beg = 0; end = INT_MAX;
-        }
-
-        if (*op && !(bed_hash = bed_insert(bed_hash, reg, beg, end))) { //if op==1 insert reg to bed hash table
-            fprintf(stderr, "Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], bed_hash);
-        }
-
-        if (!(*op) && !(bed_hash = bed_filter(bed_hash, reg, beg, end))) { //if op==0 filter out reg from bed hash table
-            fprintf(stderr, "Error when filtering region='%s' from the bed hash table at address=%p!\n", regs[i], bed_hash);
-        }
-
-
-        if (alloc_flag)
-            free(reg);
-    }
-
-    return bed_hash;
-}
-
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
@@ -510,7 +466,7 @@ int main_samview(int argc, char *argv[])
     if (is_header_only) goto view_end; // no need to print alignments
 
     if (optind < argc - 1) { //regions have been specified in the command line
-        settings.bed = sam_hash_regs(&settings, argv, optind+1, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
+        settings.bed = bed_hash_regs(settings.bed, argv, optind+1, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
         if (!filter_op) 
             filter_state = FILTERED;
     }

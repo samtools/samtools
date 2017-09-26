@@ -47,14 +47,14 @@ KSTREAM_INIT(gzFile, gzread, 8192)
  * @abstract bed_reglist_t - value type of the BED hash table
  * This structure encodes the list of intervals (ranges) for the regions provided via BED file or
  * command line arguments.
- * @field *a       pointer to the array of intervals (kept as 64 bit integers). The upper 32 bits 
+ * @field *a           pointer to the array of intervals (kept as 64 bit integers). The upper 32 bits 
  * encode the beginning of the interval, while the lower 32 bits encode the end, for easy sorting. 
  * |-- 32 bits --|-- 32 bits --|
  * |- beginning -|---- end ----|  
- * @field n        actual number of elements contained by a
- * @field a_size   number of allocated elements to a (n <= a_size)
- * @field *idx     index array for computing the minimum offset 
- * @field m        number of elements in the index array
+ * @field n            actual number of elements contained by a
+ * @field m            number of allocated elements to a (n <= m)
+ * @field *idx         index array for computing the minimum offset 
+ * @field idx_space    number of elements in the index array
  */
 typedef struct {
     int n, m; 
@@ -69,7 +69,38 @@ KHASH_MAP_INIT_STR(reg, bed_reglist_t)
 
 typedef kh_reg_t reghash_t;
 
-int *bed_index_core(int n, uint64_t *a, int *n_idx)
+static void bed_print(void *reg_hash) {
+    reghash_t *h = (reghash_t *)reg_hash;
+    bed_reglist_t *p;
+    khint_t k;
+    int i;
+    const char *reg;
+    uint32_t beg, end;
+
+    if (!h) {
+        printf("Hash table is empty!\n");
+        return;
+    }
+    for (k = kh_begin(h); k < kh_end(h); k++) {
+        if (kh_exist(h,k)) {
+            reg = kh_key(h,k);
+            printf("Region: '%s'\n", reg);
+            if ((p = &kh_val(h,k)) != NULL && p->n > 0) {
+                printf("Filter: %d\n", p->filter);
+                for (i=0; i<p->n; i++) {
+                    beg = (uint32_t)(p->a[i]>>32);
+                    end = (uint32_t)(p->a[i]);
+
+                    printf("\tinterval[%d]: %d-%d\n",i,beg,end);                    
+                }
+            } else {
+                printf("Region '%s' has no intervals!\n", reg);
+            }
+        }
+    }    
+}
+
+static int *bed_index_core(int n, uint64_t *a, int *n_idx)
 {
     int i, j, l, *idx;
     l = *n_idx = 0; idx = 0;
@@ -92,7 +123,7 @@ int *bed_index_core(int n, uint64_t *a, int *n_idx)
     return idx;
 }
 
-void bed_index(void *_h)
+static void bed_index(void *_h)
 {
     reghash_t *h = (reghash_t*)_h;
     khint_t k;
@@ -120,7 +151,7 @@ static int bed_minoff(const bed_reglist_t *p, unsigned int beg, unsigned int end
     return min_off;
 }
 
-int bed_overlap_core(const bed_reglist_t *p, int beg, int end)
+static int bed_overlap_core(const bed_reglist_t *p, int beg, int end)
 {
     int i, min_off;
     if (p->n == 0) return 0;
@@ -142,6 +173,37 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end)
     k = kh_get(reg, h, chr);
     if (k == kh_end(h)) return 0;
     return bed_overlap_core(&kh_val(h, k), beg, end);
+}
+
+static void bed_unify(void *reg_hash) {
+
+    int i, j, new_n;
+    reghash_t *h;
+    bed_reglist_t *p;
+
+    if (!reg_hash)
+        return;
+
+    h = (reghash_t *)reg_hash;
+
+    for (i = kh_begin(h); i < kh_end(h); i++) {
+        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || !(p->n))
+            continue;
+        
+        new_n = 0;
+        j = 1;
+
+        while (j < p->n) {
+            if ((uint32_t)p->a[new_n] < (uint32_t)(p->a[j]>>32))
+                p->a[++new_n] = p->a[j++];
+            else if ((uint32_t)p->a[new_n] < (uint32_t)p->a[j]) 
+                p->a[new_n] = (p->a[new_n] & 0xFFFFFFFF00000000) | (uint32_t)(p->a[j++]);
+            else 
+                j++;
+        }
+
+        p->n = ++new_n;
+    }         
 }
 
 /* "BED" file reader, which actually reads two different formats.
@@ -277,23 +339,20 @@ void bed_destroy(void *_h)
     kh_destroy(reg, h);
 }
 
-void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end) {
+static void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end) {
 
     reghash_t *h;
     khint_t k;
     bed_reglist_t *p;
-    int init_flag = 0;
 
     if (reg_hash) {
         h = (reghash_t *)reg_hash;
-    } else {
-        h = kh_init(reg);
-        init_flag = 1;
     }
-    if (NULL == h) return NULL;
+    if (!h) 
+        return NULL;
 
     // Put reg in the hash table if not already there
-    k = kh_get(reg, h, reg); //looks strange, but only the second reg is a proper argument.
+    k = kh_get(reg, h, reg); //looks strange, but only the second reg is the actual region name.
     if (k == kh_end(h)) { // absent from the hash table
         int ret;
         char *s = strdup(reg);
@@ -307,7 +366,7 @@ void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
     }
     p = &kh_val(h, k);
 
-    // Add begin,end to the list
+    // Add beg and end to the list
     if (p->n == p->m) {
         p->m = p->m ? p->m<<1 : 4;
         p->a = realloc(p->a, p->m * sizeof(uint64_t));
@@ -315,13 +374,8 @@ void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned int end) 
     }
     p->a[p->n++] = (uint64_t)beg<<32 | end;
 
-    bed_index(h);
-    bed_unify(h);
-    return h;
 fail:
-    if (init_flag)
-        bed_destroy(h);
-    return reg_hash;
+    return h;
 }
 
 inline int bed_end(void *reg_hash) {
@@ -335,50 +389,132 @@ inline int bed_end(void *reg_hash) {
     return 0;
 }
 
-void *bed_filter(void *reg_hash, char *reg, unsigned int beg, unsigned int end) {
+static void *bed_filter(void *reg_hash, void *tmp_hash) {
 
     reghash_t *h;
-    bed_reglist_t *p;
-    khint_t k;
-
+    reghash_t *t;
+    bed_reglist_t *p, *q;
+    khint_t l, k;
     uint64_t *new_a;
-    int new_n = 0;
+    int i, j, new_n, min_off;
+    const char *reg;
+    uint32_t beg, end;
 
-    if (!reg_hash) 
-        return NULL;
     h = (reghash_t *)reg_hash;
+    t = (reghash_t *)tmp_hash;
+    if (!h) 
+        return NULL;
+    if (!t)
+        return h;
 
-    k = kh_get(reg, h, reg); //looks strange, but only the second reg is a proper argument.
-    if (k != kh_end(h) && (p = &kh_val(h, k)) != NULL && (p->n > 0)) {
+    for (l = kh_begin(t); l < kh_end(t); l++) {
+        if (!kh_exist(t,l) || !(q = &kh_val(t,l)) || !(q->n)) 
+            continue;
 
-        if ((beg == 0 && end == INT_MAX)) {
-            p->filter = FILTERED;
-        } else {
-            new_a = (uint64_t *)malloc(p->n * sizeof(uint64_t));
-            if (new_a) {
+        reg = kh_key(t,l);
+        k = kh_get(reg, h, reg); //looks strange, but only the second reg is a proper argument.
+        if (k == kh_end(h) || !(p = &kh_val(h, k)) || !(p->n))
+            continue;
 
-                int i, min_off;
-                min_off = bed_minoff(p, beg, end);
+        new_a = (uint64_t *)calloc(q->n + p->n, sizeof(uint64_t));
+        if (!new_a)
+            return NULL;
+        new_n = 0;
+ 
+        for (i = 0; i < q->n; i++) {
+            beg = (uint32_t)(q->a[i]>>32);
+            end = (uint32_t)(q->a[i]);
 
-                for (i = min_off; i < p->n; ++i) {
-                    if ((int)(p->a[i]>>32) >= end) break; // out of range; no need to proceed
-                    if ((uint32_t)p->a[i] > beg && (uint32_t)(p->a[i]>>32) < end) {
-                        new_a[new_n++] = ((uint64_t)MAX((uint32_t)(p->a[i]>>32), beg) << 32) | MIN((uint32_t)p->a[i], end);
-                    }
-                }
-
-                if(new_n) {
-                    free(p->a);
-                    p->a = new_a;
-                    p->n = new_n;
-                    p->filter = FILTERED;
-
-                    bed_index(h);
-                } else {
-                    free(new_a);
+            min_off = bed_minoff(p, beg, end);
+            for (j = min_off; j < p->n; ++j) {
+                if ((uint32_t)(p->a[j]>>32) >= end) break; // out of range; no need to proceed
+                if ((uint32_t)(p->a[j]) > beg && (uint32_t)(p->a[j]>>32) < end) {
+                    new_a[new_n++] = ((uint64_t)MAX((uint32_t)(p->a[j]>>32), beg) << 32) | MIN((uint32_t)p->a[j], end);
                 }
             }
         }
+
+        if (new_n > 0) {
+            free(p->a);
+            p->a = new_a;
+            p->n = new_n;
+            p->m = new_n;
+            p->filter = FILTERED;
+        } else {
+            free(new_a);
+            p->filter = ALL;
+        }
+    }
+
+    return h;
+}
+
+void *bed_hash_regs(void *reg_hash, char **regs, int first, int last, int *op) {
+
+    reghash_t *h = (reghash_t *)reg_hash;
+    reghash_t *t;
+
+    int i;
+    char reg[1024];
+    const char *q;
+    uint32_t beg, end;
+
+    if (h) {
+        t = kh_init(reg);
+        if (!t) {
+            fprintf(stderr, "Error when creating the temporary region hash table!\n");
+            return NULL;
+        }
+    } else {
+        h = kh_init(reg);
+        if (!h) {
+            fprintf(stderr, "Error when creating the region hash table!\n");
+            return NULL;
+        }
+        *op = 1;
+    }
+
+    for (i=first; i<last; i++) {
+
+        q = hts_parse_reg(regs[i], &beg, &end);
+        if (q) {
+            if ((int)(q - regs[i] + 1) > 1024) {
+                fprintf(stderr, "Region name '%s' is too long (bigger than %d).\n", regs[i], 1024);
+                continue;
+            }
+            strncpy(reg, regs[i], q - regs[i]);
+            reg[q - regs[i]] = 0;
+        } else {
+            // not parsable as a region, but possibly a sequence named "foo:a"
+            if (strlen(regs[i]) > 1024) {
+                fprintf(stderr, "Region name '%s' is too long (bigger than %d).\n", regs[i], 1024);
+                continue;
+            }
+            strcpy(reg, regs[i]);
+            beg = 0; end = INT_MAX;
+        }
+
+        //if op==1 insert reg to the bed hash table
+        if (*op && !(bed_insert(h, reg, beg, end))) { 
+            fprintf(stderr, "Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], h);
+        }
+        //if op==0, first insert the regions in the temporary hash table, 
+        //then filter the bed hash table using it
+        if (!(*op) && !(bed_insert(t, reg, beg, end))) { 
+            fprintf(stderr, "Error when inserting region='%s' in the temporary hash table at address=%p!\n", regs[i], t);
+        }
+    }
+
+    if (!(*op)) {
+        bed_index(t);
+        bed_unify(t);
+        h = bed_filter(h, t);
+        bed_destroy(t);
+    }
+
+    if (h) {
+        bed_index(h);
+        bed_unify(h);
     }
 
     return h;
@@ -423,7 +559,7 @@ hts_reglist_t *bed_reglist(void *reg_hash, int filter, int *n_reg) {
     *n_reg = count;
     count = 0;
 
-    for (i = kh_begin(h); i < kh_end(h) && count < n_reg; i++) {
+    for (i = kh_begin(h); i < kh_end(h) && count < *n_reg; i++) {
         if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter))
             continue;
 
@@ -443,35 +579,4 @@ hts_reglist_t *bed_reglist(void *reg_hash, int filter, int *n_reg) {
     }
 
     return reglist;
-}
-
-void bed_unify(void *reg_hash) {
-
-    int i, j, new_n;
-    reghash_t *h;
-    bed_reglist_t *p;
-
-    if (!reg_hash)
-        return;
-
-    h = (reghash_t *)reg_hash;
-
-    for (i = kh_begin(h); i < kh_end(h); i++) {
-        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || !(p->n))
-            continue;
-        
-        new_n = 0;
-        j = 1;
-
-        while (j < p->n) {
-            if ((uint32_t)p->a[new_n] < (uint32_t)(p->a[j]>>32))
-                p->a[++new_n] = p->a[j++];
-            else if ((uint32_t)p->a[new_n] < (uint32_t)p->a[j]) 
-                p->a[new_n] = (p->a[new_n] & 0xFFFFFFFF00000000) | (uint32_t)(p->a[j++]);
-            else 
-                j++;
-        }
-
-        p->n = ++new_n;
-    }         
 }
