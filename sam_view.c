@@ -969,7 +969,7 @@ static bool make_fq_line(const bam1_t *rec, char *seq, char *qual, kstring_t *li
 }
 
 /*
- * Create FASTQ lines from the barcode tag using the index-format 
+ * Create FASTQ lines from the barcode tag using the index-format
  */
 static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opts)
 {
@@ -1072,7 +1072,7 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
     if (state->use_oq) {
         oq = bam_aux_get(b, "OQ");
         if (oq) {
-            oq++; 
+            oq++;
             qual = strdup(bam_aux2Z(oq));
             if (!qual) goto fail;
             if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
@@ -1382,7 +1382,7 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
         }
     }
     for (i = 0; i < 2; i++) {
-        if (state->fpi[i] && bgzf_close(state->fpi[i])) { 
+        if (state->fpi[i] && bgzf_close(state->fpi[i])) {
             print_error_errno("bam2fq", "Error closing i%d file \"%s\"", i+1, opts->index_file[i]);
             valid = false;
         }
