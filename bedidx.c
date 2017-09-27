@@ -482,7 +482,7 @@ void *bed_hash_regs(void *reg_hash, char **regs, int first, int last, int *op) {
             reg[q - regs[i]] = 0;
         } else {
             // not parsable as a region, but possibly a sequence named "foo:a"
-            if (strlen(regs[i]) > 1024) {
+            if (strlen(regs[i]) + 1 > 1024) {
                 fprintf(stderr, "Region name '%s' is too long (bigger than %d).\n", regs[i], 1024);
                 continue;
             }
@@ -548,10 +548,13 @@ hts_reglist_t *bed_reglist(void *reg_hash, int filter, int *n_reg) {
             continue;
         count++;
     }
+    if (!count)
+        return NULL;
 
     reglist = (hts_reglist_t *)calloc(count, sizeof(hts_reglist_t));
     if (!reglist)
         return NULL;
+
     *n_reg = count;
     count = 0;
 

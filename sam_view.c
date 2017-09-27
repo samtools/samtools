@@ -493,10 +493,8 @@ int main_samview(int argc, char *argv[])
 
         hts_reglist_t *reglist = bed_reglist(settings.bed, filter_state, &regcount);
         if(reglist) {
-        
             hts_itr_multi_t *iter = sam_itr_regions(idx, header, reglist, regcount); 
             if (iter) {
-
                 // fetch alignments
                 while ((result = sam_itr_multi_next(in, iter, b)) >= 0) {
                     if (!process_aln(header, b, &settings)) {
@@ -516,7 +514,7 @@ int main_samview(int argc, char *argv[])
                 fprintf(stderr, "[main_samview] iterator could not be created. Aborting.\n");
             }
         } else {
-            fprintf(stderr, "[main_samview] region list could not be created from bed hash table. Aborting.\n");
+            fprintf(stderr, "[main_samview] region list is empty or could not be created. Aborting.\n");
         }
         hts_idx_destroy(idx); // destroy the BAM index
     }
