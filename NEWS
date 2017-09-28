@@ -1,3 +1,30 @@
+Release 1.6 (28th September 2017)
+--------------------
+
+* Added new markdup sub-command and '-m' option for fixmate.  Used together,
+  they allow duplicates to be marked and optionally removed.  This
+  fixes a number of problems with the old 'rmdup' sub-command, for
+  example samtools issue #497.  'rmdup' is kept for backwards compatibility
+  but 'markdup' should be used in preference.
+
+* Sort is now much better at keeping within the requested memory limit.  It
+  should also be slightly faster and need fewer temporary files when the file
+  to be sorted does not fit in memory.  (#593; thanks to Nathan Weeks.)
+
+* Sort no longer rewrites the header when merging from files.  It can also
+  now merge from memory, so fewer temporary files need to be written and
+  it is better at sorting in parallel when everything fits in memory.
+
+* Both sort and merge now resolve ties when merging based on the position
+  in the input file(s).  This makes them fully stable for all ordering
+  options.  (Previously position sort was stable, but name and by tag
+  sorts were not).
+
+* New --output-qname option for mpileup.
+
+* Support for building on Windows using msys2/mingw64 or cygwin has
+  been improved.
+
 Release 1.5 [Solstice Release] (21st June 2017)
 --------------------
 

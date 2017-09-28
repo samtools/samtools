@@ -7,6 +7,7 @@ aclocal.m4
 autom4te.cache
 config.cache
 config.h
+config.h.in
 config.log
 config.mk
 config.status
@@ -24,3 +25,6 @@ lib*.a
 /test/vcf-miniview
 
 /TAGS
+.autotools
+.cproject
+.project

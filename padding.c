@@ -382,6 +382,7 @@ bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
 {
     int i = 0, unpadded_len = 0;
     bam_hdr_t *header = 0 ;
+    unsigned short ln_found;
 
     header = bam_hdr_dup(old);
     for (i = 0; i < old->n_targets; ++i) {
@@ -418,27 +419,45 @@ bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
             name += 4;
             for (name_end = name; name_end != end && *name_end != '\t'; name_end++);
             strcat(newtext, "@SQ");
+            ln_found = 0;
 
             /* Parse the @SQ lines */
             while (cp != end) {
-                if (end-cp >= 2 && strncmp(cp, "LN", 2) == 0) {
+                if (!ln_found && end-cp >= 2 && strncmp(cp, "LN", 2) == 0) {
                     // Rewrite the length
                     char len_buf[100];
                     int tid;
+                    unsigned int old_length, new_length;
+                    const char *old_cp = cp;
+
+                    ln_found = 1;
+
+                    while (cp != end && *cp++ != '\t');
+                    old_length = (int)(cp - old_cp);
+
                     for (tid = 0; tid < header->n_targets; tid++) {
                         // may want to hash this, but new header API incoming.
                         if (strncmp(name, header->target_name[tid], name_end - name) == 0) {
-                            sprintf(len_buf, "LN:%d", header->target_len[tid]);
-                            strcat(newtext, len_buf);
+                            new_length = sprintf(len_buf, "LN:%d", header->target_len[tid]);
+                            if (new_length <= old_length) {
+                                strcat(newtext, len_buf);
+                            }
+                            else {
+                                fprintf(stderr, "LN value of the reference is larger than the original!\n");
+                                exit(1);
+                            }
                             break;
                         }
                     }
-                    while (cp != end && *cp++ != '\t');
+
                     if (cp != end)
                         strcat(newtext, "\t");
                 } else if (end-cp >= 2 &&
-                           (strncmp(cp, "M5", 2) == 0 ||
-                            strncmp(cp, "UR", 2) == 0)) {
+                           ((ln_found && strncmp(cp, "LN", 2) == 0) ||
+                            strncmp(cp, "M5", 2) == 0 ||
+                            strncmp(cp, "UR", 2) == 0))
+                {
+                    // skip secondary LNs
                     // MD5 changed during depadding; ditch it.
                     // URLs are also invalid.
                     while (cp != end && *cp++ != '\t');

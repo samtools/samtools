@@ -16,11 +16,13 @@ See also http://github.com/samtools/
 See [INSTALL](INSTALL) for complete details.
 [Release tarballs][download] contain generated files that have not been
 committed to this repository, so building the code from a Git repository
-requires an extra step:
+requires extra steps:
 
 ```sh
-autoconf -Wno-syntax  # Generate the configure script, if needed
-./configure           # Optional, needed for choosing optional functionality
+autoheader            # Build config.h.in (this may generate a warning about
+                      # AC_CONFIG_SUBDIRS - please ignore it).
+autoconf -Wno-syntax  # Generate the configure script
+./configure           # Needed for choosing optional functionality
 make
 make install
 ```

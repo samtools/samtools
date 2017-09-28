@@ -82,7 +82,11 @@ static void write_dict(const char *fn, args_t *args)
         if (args->uri)
             fprintf(out, "\tUR:%s", args->uri);
         else if (strcmp(fn, "-") != 0) {
+#ifdef _WIN32
+            char *real_path = _fullpath(NULL, fn, PATH_MAX);
+#else
             char *real_path = realpath(fn, NULL);
+#endif
             fprintf(out, "\tUR:file://%s", real_path);
             free(real_path);
         }

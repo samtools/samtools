@@ -36,6 +36,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "sam_opts.h"
 #include "samtools.h"
+#include "htslib/hts_os.h"
 
 #include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)

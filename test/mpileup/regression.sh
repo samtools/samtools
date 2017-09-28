@@ -39,7 +39,8 @@ run_test() {
     e=$1; shift
     test_iter=`expr $test_iter + 1`
     #echo "p=$p e=$e cmd=$@"
-    result=`eval ${@+"$@"} 2>/dev/null > _out`
+    # All output here is text, so blanket and naive removal of cr just about works.
+    result=`eval ${@+"$@"} 2>/dev/null | tr -d '\015' > _out`
     #result=`eval ${@+"$@"} > _out`
     #result=`eval valgrind --error-exitcode=1 --leak-check=full ${@+"$@"}`
     if [ $? != 0 ]
