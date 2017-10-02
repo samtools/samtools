@@ -440,7 +440,7 @@ bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
                         if (strncmp(name, header->target_name[tid], name_end - name) == 0) {
                             new_length = sprintf(len_buf, "LN:%d", header->target_len[tid]);
                             if (new_length <= old_length) {
-                            	strcat(newtext, len_buf);
+                                strcat(newtext, len_buf);
                             }
                             else {
                                 fprintf(stderr, "LN value of the reference is larger than the original!\n");
@@ -457,7 +457,7 @@ bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
                             strncmp(cp, "M5", 2) == 0 ||
                             strncmp(cp, "UR", 2) == 0))
                 {
-                	// skip secondary LNs
+                    // skip secondary LNs
                     // MD5 changed during depadding; ditch it.
                     // URLs are also invalid.
                     while (cp != end && *cp++ != '\t');

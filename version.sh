@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Master version, for use in tarballs or non-git source copies
-VERSION=1.5
+VERSION=1.6
 
 # If we have a git clone, then check against the current tag
 if [ -e .git ]
