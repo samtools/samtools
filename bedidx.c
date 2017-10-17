@@ -46,14 +46,14 @@ KSTREAM_INIT(gzFile, gzread, 8192)
  * @field *a           pointer to the array of intervals (kept as 64 bit integers). The upper 32 bits 
  * encode the beginning of the interval, while the lower 32 bits encode the end, for easy sorting. 
  * |-- 32 bits --|-- 32 bits --|
- * |- beginning -|---- end ----|  
+ * |---- beg ----|---- end ----|  
  * @field n            actual number of elements contained by a
  * @field m            number of allocated elements to a (n <= m)
  * @field *idx         index array for computing the minimum offset 
  * @field idx_space    number of elements in the index array
  */
 typedef struct {
-    int n, m; 
+    int n, m;
     uint64_t *a;
     int *idx;
     int filter;
@@ -323,8 +323,13 @@ void *bed_read(const char *fn)
 
 void bed_destroy(void *_h)
 {
-    reghash_t *h = (reghash_t*)_h;
+    reghash_t *h;
     khint_t k;
+
+    if (!_h)
+        return;
+   
+    h = (reghash_t*)_h;
     for (k = 0; k < kh_end(h); ++k) {
         if (kh_exist(h, k)) {
             free(kh_val(h, k).a);
@@ -341,11 +346,10 @@ static void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned in
     khint_t k;
     bed_reglist_t *p;
 
-    if (reg_hash) {
-        h = (reghash_t *)reg_hash;
-    }
-    if (!h) 
+    if (!reg_hash)
         return NULL;
+
+    h = (reghash_t *)reg_hash;
 
     // Put reg in the hash table if not already there
     k = kh_get(reg, h, reg); //looks strange, but only the second reg is the actual region name.
@@ -377,12 +381,11 @@ fail:
 inline int bed_end(void *reg_hash) {
     reghash_t *h;
 
-    if (reg_hash) {
-        h = (reghash_t *)reg_hash;
-        return kh_end(h);
-    }
+    if (!reg_hash)
+        return 0;
 
-    return 0;
+    h = (reghash_t *)reg_hash;
+    return kh_end(h);
 }
 
 static void *bed_filter(void *reg_hash, void *tmp_hash) {
@@ -445,7 +448,7 @@ static void *bed_filter(void *reg_hash, void *tmp_hash) {
     return h;
 }
 
-void *bed_hash_regs(void *reg_hash, char **regs, int first, int last, int *op) {
+void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op) {
 
     reghash_t *h = (reghash_t *)reg_hash;
     reghash_t *t;
@@ -517,17 +520,18 @@ void *bed_hash_regs(void *reg_hash, char **regs, int first, int last, int *op) {
 }
 
 const char* bed_get(void *reg_hash, int i, int filter) {
+
     reghash_t *h;
     bed_reglist_t *p;
 
-    if (reg_hash) {
-        h = (reghash_t *)reg_hash;
-        if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter)) 
-            return NULL;
-        return kh_key(h, i);
-    }
+    if (!reg_hash)
+        return NULL;
 
-    return NULL;
+    h = (reghash_t *)reg_hash;
+    if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter)) 
+        return NULL;
+
+    return kh_key(h, i);
 }
 
 hts_reglist_t *bed_reglist(void *reg_hash, int filter, int *n_reg) {
@@ -541,6 +545,7 @@ hts_reglist_t *bed_reglist(void *reg_hash, int filter, int *n_reg) {
 
     if (!reg_hash)
         return NULL;
+
     h = (reghash_t *)reg_hash;
 
     for (i = kh_begin(h); i < kh_end(h); i++) {
