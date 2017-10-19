@@ -574,10 +574,14 @@ hts_reglist_t *bed_reglist(void *reg_hash, int filter, int *n_reg) {
             return NULL;
         }
         reglist[count].count = p->n;
+        reglist[count].max_end = 0;
 
         for (j = 0; j < p->n; j++) {
             reglist[count].intervals[j].beg = (uint32_t)(p->a[j]>>32);
             reglist[count].intervals[j].end = (uint32_t)(p->a[j]);
+
+            if (reglist[count].intervals[j].end > reglist[count].max_end)
+                reglist[count].max_end = reglist[count].intervals[j].end;
         }
         count++;
     }
