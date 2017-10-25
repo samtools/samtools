@@ -473,9 +473,8 @@ int main_samview(int argc, char *argv[])
 
     int result;
     bam1_t *b = bam_init1();
-    hts_idx_t *idx = sam_index_load(in, fn_in); // load index
 
-    if (idx == 0 || settings.bed == NULL) { // index is unavailable or no regions have been specified
+    if (settings.bed == NULL) { // index is unavailable or no regions have been specified
         while ((result = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
             if (!process_aln(header, b, &settings)) {
                 if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
@@ -489,34 +488,40 @@ int main_samview(int argc, char *argv[])
             ret = 1;
         }
     } else {
-        int i, regcount = 0;
+        hts_idx_t *idx = sam_index_load(in, fn_in); // load index
+        if (idx != NULL) {
 
-        hts_reglist_t *reglist = bed_reglist(settings.bed, filter_state, &regcount);
-        if(reglist) {
-            hts_itr_multi_t *iter = sam_itr_regions(idx, header, reglist, regcount); 
-            if (iter) {
-                // fetch alignments
-                while ((result = sam_itr_multi_next(in, iter, b)) >= 0) {
-                    if (!process_aln(header, b, &settings)) {
-                        if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
-                        count++;
-                    } else {
-                        if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
+            int i, regcount = 0;
+
+            hts_reglist_t *reglist = bed_reglist(settings.bed, filter_state, &regcount);
+            if(reglist) {
+                hts_itr_multi_t *iter = sam_itr_regions(idx, header, reglist, regcount); 
+                if (iter) {
+                    // fetch alignments
+                    while ((result = sam_itr_multi_next(in, iter, b)) >= 0) {
+                        if (!process_aln(header, b, &settings)) {
+                            if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
+                            count++;
+                        } else {
+                            if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
+                        }
                     }
-                }
-                if (result < -1) {
-                    fprintf(stderr, "[main_samview] retrieval of region %d failed due to truncated file or corrupt BAM index file\n", iter->curr_tid);
-                    ret = 1;
-                }
+                    if (result < -1) {
+                        fprintf(stderr, "[main_samview] retrieval of region %d failed due to truncated file or corrupt BAM index file\n", iter->curr_tid);
+                        ret = 1;
+                    }
 
-                hts_itr_multi_destroy(iter, regcount);
+                    hts_itr_multi_destroy(iter, regcount);
+                } else {
+                    fprintf(stderr, "[main_samview] iterator could not be created. Aborting.\n");
+                }
             } else {
-                fprintf(stderr, "[main_samview] iterator could not be created. Aborting.\n");
+                fprintf(stderr, "[main_samview] region list is empty or could not be created. Aborting.\n");
             }
+            hts_idx_destroy(idx); // destroy the BAM index
         } else {
-            fprintf(stderr, "[main_samview] region list is empty or could not be created. Aborting.\n");
+            fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
         }
-        hts_idx_destroy(idx); // destroy the BAM index
     }
     bam_destroy1(b);
 
