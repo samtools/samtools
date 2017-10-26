@@ -171,6 +171,12 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end)
     return bed_overlap_core(&kh_val(h, k), beg, end);
 }
 
+/** @brief Trim a sorted interval list, inside a region hash table,
+ *   by removing completely contained intervals and merging adjacent or
+ *   overlapping intervals.
+ *  @param reg_hash    the region hash table with interval lists as values
+ */
+
 static void bed_unify(void *reg_hash) {
 
     int i, j, new_n;
@@ -186,16 +192,13 @@ static void bed_unify(void *reg_hash) {
         if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || !(p->n))
             continue;
         
-        new_n = 0;
-        j = 1;
-
-        while (j < p->n) {
-            if ((uint32_t)p->a[new_n] < (uint32_t)(p->a[j]>>32))
-                p->a[++new_n] = p->a[j++];
-            else if ((uint32_t)p->a[new_n] < (uint32_t)p->a[j]) 
-                p->a[new_n] = (p->a[new_n] & 0xFFFFFFFF00000000) | (uint32_t)(p->a[j++]);
-            else 
-                j++;
+        for (new_n = 0, j = 1; j < p->n; j++) {
+            if ((uint32_t)p->a[new_n] < (uint32_t)(p->a[j]>>32)) {
+                p->a[++new_n] = p->a[j];
+            } else {
+                if ((uint32_t)p->a[new_n] < (uint32_t)p->a[j]) 
+                    p->a[new_n] = (p->a[new_n] & 0xFFFFFFFF00000000) | (uint32_t)(p->a[j]);
+            }
         }
 
         p->n = ++new_n;
@@ -387,6 +390,14 @@ inline int bed_end(void *reg_hash) {
     h = (reghash_t *)reg_hash;
     return kh_end(h);
 }
+
+/* @brief Filter a region hash table (coming from the BED file) by another 
+ *  region hash table (coming from CLI), so that only intervals contained in
+ *  both hash tables are kept.
+ * @param reg_hash    the target region hash table
+ * @param tmp_hash    the filter region hash table
+ * @return            pointer to the filtered hash table
+ */
 
 static void *bed_filter(void *reg_hash, void *tmp_hash) {
 
