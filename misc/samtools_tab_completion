@@ -59,14 +59,14 @@ _samtools_options()
 		CURRENT_SUB="${COMP_WORDS[1]}"
 
 		OPTS=$($SAMTOOLS_BIN $CURRENT_SUB 2>&1 | grep -oh "\(\-\-\)\([[:alnum:]]\|\-\)* " | \
-			xargs -I @ printf @)
+			xargs -I @ printf -- @)
 		
 		if [[ ${CUR} == -* ]] ; then
 			COMPREPLY=($(compgen -W "${OPTS}" -- ${CUR}))
 			return 0
 		else
 			# Assume the user wants normal file name completion
-			compopt -o default
+			COMPREPLY=($(compgen -o default))
 		fi
 
 	fi
