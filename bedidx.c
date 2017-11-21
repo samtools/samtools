@@ -467,7 +467,7 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
     int i;
     char reg[1024];
     const char *q;
-    uint32_t beg, end;
+    int beg, end;
 
     if (h) {
         t = kh_init(reg);

@@ -491,7 +491,7 @@ int main_samview(int argc, char *argv[])
         hts_idx_t *idx = sam_index_load(in, fn_in); // load index
         if (idx != NULL) {
 
-            int i, regcount = 0;
+            int regcount = 0;
 
             hts_reglist_t *reglist = bed_reglist(settings.bed, filter_state, &regcount);
             if(reglist) {
@@ -511,7 +511,7 @@ int main_samview(int argc, char *argv[])
                         ret = 1;
                     }
 
-                    hts_itr_multi_destroy(iter, regcount);
+                    hts_itr_multi_destroy(iter);
                 } else {
                     fprintf(stderr, "[main_samview] iterator could not be created. Aborting.\n");
                 }
