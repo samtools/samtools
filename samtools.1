@@ -1035,6 +1035,10 @@ valid header or are missing an EOF block. Otherwise it will exit successfully
 Verbose output: will additionally print the names of all input files that don't
 pass the check to stdout. Multiple -v options will cause additional messages
 regarding check results to be printed to stderr.
+.TP 8
+.B -q
+Quiet mode: disables warning messages on stderr about files that fail.
+If both -q and -v options are used then the appropriate level of -v takes precedence.
 .RE
 
 .TP \"-------- dict
