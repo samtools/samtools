@@ -651,6 +651,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -G INT   only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
+"  -M       use the multi-region iterator (increases the speed, removes\n"
+"           duplicates and outputs the reads as they are ordered in the file)\n"
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
