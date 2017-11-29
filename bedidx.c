@@ -312,7 +312,7 @@ void *bed_read(const char *fn)
     gzclose(fp);
     free(str.s);
     bed_index(h);
-    bed_unify(h);
+    //bed_unify(h);
     return h;
  fail:
     fprintf(stderr, "[bed_read] Error reading %s : %s\n", fn, strerror(errno));
@@ -379,16 +379,6 @@ static void *bed_insert(void *reg_hash, char *reg, unsigned int beg, unsigned in
 
 fail:
     return h;
-}
-
-inline int bed_end(void *reg_hash) {
-    reghash_t *h;
-
-    if (!reg_hash)
-        return 0;
-
-    h = (reghash_t *)reg_hash;
-    return kh_end(h);
 }
 
 /* @brief Filter a region hash table (coming from the BED file) by another 
