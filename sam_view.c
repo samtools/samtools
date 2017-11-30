@@ -246,6 +246,7 @@ int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
     int is_long_help = 0;
+    int is_reverse_selection = 0;
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
@@ -254,6 +255,8 @@ int main_samview(int argc, char *argv[])
     char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
+    int index_count = 0;
+    char **index_selection = NULL;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -278,7 +281,7 @@ int main_samview(int argc, char *argv[])
     strcpy(out_mode, "w");
     strcpy(out_un_mode, "w");
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:v",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -342,6 +345,7 @@ int main_samview(int argc, char *argv[])
                 settings.remove_aux[settings.remove_aux_len-1] = optarg;
             }
             break;
+            case 'v': is_reverse_selection = 1;break;
 
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
@@ -465,6 +469,83 @@ int main_samview(int argc, char *argv[])
     }
     if (is_header_only) goto view_end; // no need to print alignments
 
+    if (is_reverse_selection) {
+        if (optind +1 >= argc) {goto view_end;} // no need to print alignments
+        int i;
+        int64_t **selections = calloc(header->n_targets, sizeof(*selections));
+        int region_number = argc - optind - 1;
+        index_selection = calloc(header->n_targets + region_number, sizeof(*index_selection));
+        int beg, end;
+        const char *colon;
+        for (i = optind + 1; i < argc; ++i) {
+            int j;
+            if ((colon = hts_parse_reg(argv[i], &beg, &end))) {
+                char ref_name[colon - argv[i] + 1];
+                strncpy(ref_name, argv[i], colon - argv[i]);
+                ref_name[colon - argv[i]] = 0;
+                for (j = 0; (j < header->n_targets) && (strcmp(header->target_name[j], ref_name)); ++j) {} // since sam.h in htslib didn't expose the type of the hash table
+                if (j >= header->n_targets){
+                    fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
+                    continue;
+                }
+                if (end < beg) continue;
+                if (selections[j] == NULL){
+                    selections[j] = calloc(region_number + 1, sizeof(*selections[j]));
+                }
+                int64_t *st_en_array = selections[j];
+                int64_t st_en = (int64_t) beg << 32 | (uint32_t) end;
+                int k, pos;
+                for (pos = 0; (st_en_array[pos]!=0) && (st_en_array[pos] < st_en); ++pos ) {}
+                for(k = region_number-2; k >= pos; k--){
+                    st_en_array[k+1] = st_en_array[k];
+                }
+                st_en_array[pos] = st_en;
+            }
+            else {
+                fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", argv[i]);
+            }
+        }
+        for (i = 0; i < header->n_targets; ++i){
+            if (selections[i] == NULL) {
+                index_selection[index_count++] = header->target_name[i];
+            }
+            else {
+                int buffer_size = 20+2+1+strlen(header->target_name[i]); // 2 * int32 width + ":"and"-" + '\0'
+                int64_t begin = 1;
+                int j;
+                int64_t *st_en_array = selections[i];
+                for(j = 0; (j < region_number) && st_en_array[j]; ++j){
+                    int64_t st = st_en_array[j] >> 32, en = st_en_array[j] & 0xffffffffUL;
+                    if ((begin < st) || (!st_en_array[j])){
+                        index_selection[index_count] = calloc(buffer_size, sizeof(*index_selection[index_count]));
+                        sprintf(index_selection[index_count], "%s:%lld-%lld", header->target_name[i], begin, st);
+                        index_count ++;
+                        begin = en + 1;
+                    }else {
+                        if (begin <= en) { begin = en + 1; }
+                    }
+                }
+                if(begin < INT_MAX){
+                    index_selection[index_count] = calloc(buffer_size, sizeof(*index_selection[index_count]));
+                    sprintf(index_selection[index_count], "%s:%lld", header->target_name[i], begin);
+                    index_count ++;
+                }
+                free(selections[i]);
+            }
+        }
+        free(selections);
+
+    } else {
+        index_selection = calloc(argc - optind, sizeof(*index_selection));
+        int i;
+        for (i = optind + 1; i < argc; ++i){
+            index_selection[index_count] = argv[i];
+            ++index_count;
+        }
+    }
+
+
+
     if (optind + 1 >= argc) { // convert/print the entire file
         bam1_t *b = bam_init1();
         int r;
@@ -491,15 +572,15 @@ int main_samview(int argc, char *argv[])
             goto view_end;
         }
         b = bam_init1();
-        for (i = optind + 1; i < argc; ++i) {
+        for (i = 0; i < index_count; ++i) {
             int result;
-            hts_itr_t *iter = sam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
+            hts_itr_t *iter = sam_itr_querys(idx, header, index_selection[i]); // parse a region in the format like `chr2:100-200'
             if (iter == NULL) { // region invalid or reference name not found
                 int beg, end;
-                if (hts_parse_reg(argv[i], &beg, &end))
-                    fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
+                if (hts_parse_reg(index_selection[i], &beg, &end))
+                    fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", index_selection[i]);
                 else
-                    fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", argv[i]);
+                    fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", index_selection[i]);
                 continue;
             }
             // fetch alignments
@@ -574,6 +655,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -c       print only the count of matching records\n"
 "  -o FILE  output file name [stdout]\n"
 "  -U FILE  output reads not selected by filters to FILE [null]\n"
+"  -v       output reads not selected by INDEXES\n"
 // extra input
 "  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
 // read filters
