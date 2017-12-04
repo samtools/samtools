@@ -90,6 +90,8 @@ samtools collate aln.sorted.bam aln.name_collated.bam
 samtools depad input.bam
 .PP
 samtools markdup in.algnsorted.bam out.bam
+.PP
+samtools fastaref in.bam out.fa
 
 .SH DESCRIPTION
 .PP
@@ -1035,6 +1037,10 @@ valid header or are missing an EOF block. Otherwise it will exit successfully
 Verbose output: will additionally print the names of all input files that don't
 pass the check to stdout. Multiple -v options will cause additional messages
 regarding check results to be printed to stderr.
+.TP 8
+.B -q
+Quiet mode: disables warning messages on stderr about files that fail.
+If both -q and -v options are used then the appropriate level of -v takes precedence.
 .RE
 
 .TP \"-------- dict
@@ -1864,6 +1870,24 @@ Remove duplicate reads.
 .TP
 .B -s
 Print some basic stats.
+.RE
+
+.TP \"-------- fastaref
+.B fastaref
+samtools fastaref [options] <in.bam> <out.fq>
+
+Generates a fasta reference file, by reading SQ lines.
+
+.B OPTIONS:
+.RS
+.TP 8
+.BI "-k " LIST
+Output the specified keys into the fasta file (separated by commas).
+[LN,AH,AN,AS,M5,SP]
+.TP 8
+.BI "-l " INT
+Maximum length of outputted lines
+[60]
 .RE
 
 .EX 4

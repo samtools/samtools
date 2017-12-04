@@ -62,6 +62,7 @@ test_addrprg($opts);
 test_addrprg($opts, threads=>2);
 test_markdup($opts);
 test_markdup($opts, threads=>2);
+test_fastaref($opts);
 
 
 print "\nNumber of tests:\n";
@@ -2617,4 +2618,14 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/4_missing_ms.expected.sam', err=>'4_missing_ms.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/4_missing_ms.sam -", expect_fail=>1);
     test_cmd($opts, out=>'markdup/5_markdup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/5_markdup.sam -");
     test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r $$opts{path}/markdup/6_remove_dups.sam -");
+}
+
+sub test_fastaref
+{
+    my ($opts,%args) = @_;
+
+    local $ENV{REF_PATH} = "$$opts{path}/dat/cram_md5/%s";
+    test_cmd($opts, out=>'fastaref/expected-stdout.txt', out_map=>{'test.out.1.fa' => 'fastaref/test.expected.1.fa'}, cmd=>"$$opts{bin}/samtools fastaref $$opts{path}/fastaref/test.sam $$opts{path}/test.out.1.fa");
+    test_cmd($opts, out=>'fastaref/expected-stdout.txt', out_map=>{'test.out.2.fa' => 'fastaref/test.expected.2.fa'}, cmd=>"$$opts{bin}/samtools fastaref -l 13 $$opts{path}/fastaref/test.sam $$opts{path}/test.out.2.fa");
+    test_cmd($opts, out=>'fastaref/expected-stdout.txt', out_map=>{'test.out.3.fa' => 'fastaref/test.expected.3.fa'}, cmd=>"$$opts{bin}/samtools fastaref -k M5,LN,UR $$opts{path}/fastaref/test.sam $$opts{path}/test.out.3.fa");
 }

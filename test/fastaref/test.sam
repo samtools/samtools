@@ -1,0 +1,6 @@
+@CO this line should not be parsed @SQ SN M5
+@SQ	SN:ref2	LN:60	M5:7c35feac7036c1cdef3bee0cc4b21437
+@CO this line should not be parsed @SQ SN M5
+@SQ	SN:ref1	LN:56	M5:08c04d512d4797d9ba2a156c1daba468
+@CO this line should not be parsed @SQ SN M5
+ref1	4	*	0	0	*	*	0	0	*	*
