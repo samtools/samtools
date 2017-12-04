@@ -2625,7 +2625,9 @@ sub test_fastaref
     my ($opts,%args) = @_;
 
     local $ENV{REF_PATH} = "$$opts{path}/dat/cram_md5/%s";
-    test_cmd($opts, out=>'fastaref/expected-stdout.txt', out_map=>{'test.out.1.fa' => 'fastaref/test.expected.1.fa'}, cmd=>"$$opts{bin}/samtools fastaref $$opts{path}/fastaref/test.sam $$opts{path}/test.out.1.fa");
-    test_cmd($opts, out=>'fastaref/expected-stdout.txt', out_map=>{'test.out.2.fa' => 'fastaref/test.expected.2.fa'}, cmd=>"$$opts{bin}/samtools fastaref -l 13 $$opts{path}/fastaref/test.sam $$opts{path}/test.out.2.fa");
-    test_cmd($opts, out=>'fastaref/expected-stdout.txt', out_map=>{'test.out.3.fa' => 'fastaref/test.expected.3.fa'}, cmd=>"$$opts{bin}/samtools fastaref -k M5,LN,UR $$opts{path}/fastaref/test.sam $$opts{path}/test.out.3.fa");
+    test_cmd($opts, out=>'fastaref/blank.txt', out_map=>{'test.out.1.fa' => 'fastaref/test.expected.1.fa'}, cmd=>"$$opts{bin}/samtools fastaref -o $$opts{path}/test.out.1.fa $$opts{path}/fastaref/test.sam");
+    test_cmd($opts, out=>'fastaref/test.expected.1.fa', cmd=>"$$opts{bin}/samtools fastaref $$opts{path}/fastaref/test.sam");
+    test_cmd($opts, out=>'fastaref/test.expected.2.fa', cmd=>"$$opts{bin}/samtools fastaref -l 13 $$opts{path}/fastaref/test.sam");
+    test_cmd($opts, out=>'fastaref/test.expected.3.fa', cmd=>"$$opts{bin}/samtools fastaref -k M5,LN,UR $$opts{path}/fastaref/test.sam");
+    test_cmd($opts, out=>'fastaref/blank.txt', cmd=>"$$opts{bin}/samtools fastaref $$opts{path}/fastaref/blank.txt");
 }

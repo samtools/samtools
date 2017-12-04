@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 #include <htslib/sam.h>
 #include <htslib/ref.h>
@@ -61,7 +62,7 @@ typedef struct{
     char outputKeys[8][2];
     int numOutputKeys;
     char* samFileName;
-    char* outFileName;
+    char* outFileName; // NULL if this is to output to stdout
 } FastarefOptions;
 
 void init_kstring(kstring_t* str){
@@ -163,7 +164,7 @@ int generateFastaFile(FastarefOptions *options){
 
     kstring_t fqHeader = {0, 0, NULL};
 
-    outFile = fopen(options->outFileName, "w");
+    outFile = options->outFileName?fopen(options->outFileName, "w") : stdout;
 
     if(outFile == NULL){
         print_error_errno("fastaref", "failed to write file \"%s\"", options->outFileName);
@@ -285,20 +286,28 @@ int parse_SQ_keys_list(char* keysStr, char outputKeys[][2], int* numKeys){
     return 1;
 }
 
+void print_usage(){
+    fprintf(stderr, "Usage: samtools fastaref [options] <in.bam>\n\n");
+    fprintf(stderr, "Options:\n");
+    fprintf(stderr, "  -o FILE  Output file name [stdout]\n");
+    fprintf(stderr, "  -k LIST  Output the specified keys into the fasta file (separated by commas)  [LN,AH,AN,AS,M5,SP]\n");
+    fprintf(stderr, "  -l INT   Maximum length of outputted lines [60]\n");
+}
+
 int main_fastaref(int argc, char *argv[])
 {
     FastarefOptions options;
     options.numOutputKeys = -1;
     options.maxLineLength = 60;
+    options.outFileName = NULL; // (point to stdout)
 
     int opt;
-    while((opt = getopt(argc, argv, "k:l:")) >= 0){
+    while((opt = getopt(argc, argv, "k:l:o:")) >= 0){
         switch (opt) {
-            case 'k':{
+            case 'k':
                 if(parse_SQ_keys_list(optarg, options.outputKeys, &(options.numOutputKeys)) != 0){
                     return 1;
                 }
-            }
             break;
             case 'l':
                 options.maxLineLength = atoi(optarg);
@@ -306,6 +315,9 @@ int main_fastaref(int argc, char *argv[])
                     fprintf(stderr, "invalid maximum line length\n");
                     return 1;
                 }
+            break;
+            case 'o':
+                options.outFileName = optarg;
             break;
         }
     }
@@ -318,16 +330,17 @@ int main_fastaref(int argc, char *argv[])
 
     int numOtherArgs = argc - optind;
     char** otherArgs = argv + optind;
-    if(numOtherArgs < 2){
-        fprintf(stderr, "Usage: samtools fastaref [options] <in.bam> <out.fq>\n\n");
-        fprintf(stderr, "Options:\n");
-        fprintf(stderr, "  -k LIST  Output the specified keys into the fasta file (separated by commas).  [LN,AH,AN,AS,M5,SP]\n");
-        fprintf(stderr, "  -l INT   Maximum length of outputted lines [60]\n");
+
+    if(numOtherArgs == 0 && !isatty(STDIN_FILENO)){
+        options.samFileName = "-";
+    }
+    else if(numOtherArgs == 1){
+        options.samFileName = otherArgs[0];
+    }
+    else{
+        print_usage();
         return 1;
     }
-
-    options.samFileName = otherArgs[0];
-    options.outFileName = otherArgs[1];
 
     return generateFastaFile(&options);
 }
