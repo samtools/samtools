@@ -64,7 +64,7 @@ void destroy_malloced_s2s_khash(khash_t(s2s)* khash){
 /**
  * Given a string, pointing to the start of a SQ line, parses
  * it into a hash map, which is populated into out_khash
- * 
+ *
  * @returns The length of the string parsed if successful
  *          -1 if not successful
  */
@@ -117,7 +117,7 @@ int parseSQLine(const char* sqLine, khash_t(s2s)* out_khash){
 
 /**
  * Generates a fasta file according to command line options specified in options
- * 
+ *
  * @returns 0 if successful
  */
 int generateFastaFile(FastarefOptions *options){
@@ -178,7 +178,7 @@ int generateFastaFile(FastarefOptions *options){
             print_error("fastaref", "error: SN field not found in SQ line in \"%s\"", options->samFileName);
             goto cleanup;
         }
-        
+
         const char* SN = kh_value(khash, SN_pointer);
         if(M5_pointer == kh_end(khash)){
             print_error("fastaref", "warning: no M5 string found for sequence \"%s\" in \"%s\"", SN, options->samFileName);
@@ -186,13 +186,13 @@ int generateFastaFile(FastarefOptions *options){
         else{
             const char* M5 = kh_value(khash, M5_pointer);
 
-            if(fputc('>', outFile) < 0 
+            if(fputc('>', outFile) < 0
             || fputs(SN, outFile) < 0){
                 print_error("fastaref", "failed to write to output file");
                 returnCode = 1;
                 goto cleanup;
             }
-            
+
             for(int i = 0;i < options->numOutputKeys;i++){
                 char* fieldName = options->outputKeys[i];
                 khint_t fieldPointer = kh_get(s2s, khash, fieldName);
@@ -255,7 +255,7 @@ cleanup:
 
 /**
  * Parses keysStr to obtain a list of two letter keys
- * 
+ *
  * @returns 0 if successful
  */
 char** parse_SQ_keys_list(const char* keysStr, int* numKeys){
@@ -279,7 +279,7 @@ char** parse_SQ_keys_list(const char* keysStr, int* numKeys){
             return NULL;
         }
     }
-    
+
     return outputKeys;
 }
 
