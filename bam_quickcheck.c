@@ -30,42 +30,65 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <unistd.h>
 
+/* File status flags (zero means OK). It's possible for more than one to be
+ * set on a single file.   The final exit status is the bitwise-or of the
+ * status of all the files. */
+#define QC_FAIL_OPEN     2
+#define QC_NOT_SEQUENCE  4
+#define QC_BAD_HEADER    8
+#define QC_NO_EOF_BLOCK 16
+#define QC_FAIL_CLOSE   32
+
 static void usage_quickcheck(FILE *write_to)
 {
     fprintf(write_to,
 "Usage: samtools quickcheck [options] <input> [...]\n"
 "Options:\n"
 "  -v              verbose output (repeat for more verbosity)\n"
+"  -q              suppress warning messages\n"
 "\n"
 "Notes:\n"
 "\n"
-"1. In order to use this command effectively, you should check its exit status;\n"
-"   without any -v options it will NOT print any output, even when some files\n"
-"   fail the check. One way to use quickcheck might be as a check that all\n"
-"   BAM files in a directory are okay:\n"
+"1. By default quickcheck will emit a warning message if and only if a file\n"
+"   fails the checks, in which case the exit status is non-zero.  Under normal\n"
+"   behaviour with valid data it will be silent and has a zero exit status.\n"
+"   The warning messages are purely for manual inspection and should not be \n"
+"   parsed by scripts.\n"
+"\n"
+"2. In order to use this command programmatically, you should check its exit\n"
+"   status.  One way to use quickcheck might be as a check that all BAM files in\n"
+"   a directory are okay:\n"
 "\n"
 "\tsamtools quickcheck *.bam && echo 'all ok' \\\n"
 "\t   || echo 'fail!'\n"
 "\n"
-"   To also determine which files have failed, use the -v option:\n"
+"   The first level of verbosity lists only files that fail to stdout.\n"
+"   To obtain a parsable list of files that have failed, use this option:\n"
 "\n"
-"\tsamtools quickcheck -v *.bam > bad_bams.fofn \\\n"
+"\tsamtools quickcheck -qv *.bam > bad_bams.fofn \\\n"
 "\t   && echo 'all ok' \\\n"
 "\t   || echo 'some files failed check, see bad_bams.fofn'\n"
     );
 }
 
+#define QC_ERR(state, v, msg, arg1)                                     \
+    file_state |= (state);                                              \
+    if (!quiet || verbose >= (v)) fprintf(stderr, (msg), (arg1))
+
 int main_quickcheck(int argc, char** argv)
 {
-    int verbose = 0;
+    int verbose = 0, quiet = 0;
     hts_verbose = 0;
 
-    const char* optstring = "v";
+    const char* optstring = "vq";
     int opt;
     while ((opt = getopt(argc, argv, optstring)) != -1) {
         switch (opt) {
         case 'v':
             verbose++;
+            break;
+        case 'q':
+            quiet = 1;
             break;
         default:
             usage_quickcheck(stderr);
@@ -101,28 +124,24 @@ int main_quickcheck(int argc, char** argv)
         // attempt to open
         htsFile *hts_fp = hts_open(fn, "r");
         if (hts_fp == NULL) {
-            if (verbose >= 2) fprintf(stderr, "%s could not be opened for reading.\n", fn);
-            file_state |= 2;
+            QC_ERR(QC_FAIL_OPEN, 2, "%s could not be opened for reading.\n", fn);
         }
         else {
             if (verbose >= 3) fprintf(stderr, "opened %s\n", fn);
             // make sure we have sequence data
             const htsFormat *fmt = hts_get_format(hts_fp);
             if (fmt->category != sequence_data ) {
-                if (verbose >= 2) fprintf(stderr, "%s was not identified as sequence data.\n", fn);
-                file_state |= 4;
+                QC_ERR(QC_NOT_SEQUENCE, 2, "%s was not identified as sequence data.\n", fn);
             }
             else {
                 if (verbose >= 3) fprintf(stderr, "%s is sequence data\n", fn);
                 // check header
                 bam_hdr_t *header = sam_hdr_read(hts_fp);
                 if (header == NULL) {
-                    if (verbose >= 2) fprintf(stderr, "%s caused an error whilst reading its header.\n", fn);
-                    file_state |= 8;
+                    QC_ERR(QC_BAD_HEADER, 2, "%s caused an error whilst reading its header.\n", fn);
                 } else {
                     if (header->n_targets <= 0) {
-                        if (verbose >= 2) fprintf(stderr, "%s had no targets in header.\n", fn);
-                        file_state |= 8;
+                        QC_ERR(QC_BAD_HEADER, 2, "%s had no targets in header.\n", fn);
                     }
                     else {
                         if (verbose >= 3) fprintf(stderr, "%s has %d targets in header.\n", fn, header->n_targets);
@@ -133,14 +152,12 @@ int main_quickcheck(int argc, char** argv)
             // check EOF on formats that support this
             int ret;
             if ((ret = hts_check_EOF(hts_fp)) < 0) {
-                if (verbose >= 2) fprintf(stderr, "%s caused an error whilst checking for EOF block.\n", fn);
-                file_state |= 16;
-            }
+                QC_ERR(QC_NO_EOF_BLOCK, 2, "%s caused an error whilst checking for EOF block.\n", fn); 
+           }
             else {
                 switch (ret) {
                     case 0:
-                        if (verbose >= 2) fprintf(stderr, "%s was missing EOF block when one should be present.\n", fn);
-                        file_state |= 16;
+                        QC_ERR(QC_NO_EOF_BLOCK, 2, "%s was missing EOF block when one should be present.\n", fn);
                         break;
                     case 1:
                         if (verbose >= 3) fprintf(stderr, "%s has good EOF block.\n", fn);
@@ -155,8 +172,7 @@ int main_quickcheck(int argc, char** argv)
             }
 
             if (hts_close(hts_fp) < 0) {
-                file_state |= 32;
-                if (verbose >= 2) fprintf(stderr, "%s did not close cleanly.\n", fn);
+                QC_ERR(QC_FAIL_CLOSE, 2, "%s did not close cleanly.\n", fn);
             }
         }
 
