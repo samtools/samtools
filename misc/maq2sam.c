@@ -99,14 +99,37 @@ maqmap_t *maqmap_read_header(gzFile fp)
         }
         assert(mm->format == MAQMAP_FORMAT_NEW);
     }
-    gzread(fp, &mm->n_ref, sizeof(int));
+    if ( gzread(fp, &mm->n_ref, sizeof(int)) < sizeof(int)) {
+        fprintf(stderr, "To few bytes in input file");
+        return NULL;
+    }
+    if (mm->n_ref < 0) {
+        fprintf(stderr, "Incorrect n_ref read from input file\n");
+        return NULL;
+    }
+    if ( gzeof(fp) ) {
+        fprintf(stderr, "Unexpected end of file.");
+        return NULL;
+    }
     mm->ref_name = (char**)calloc(mm->n_ref, sizeof(char*));
     for (k = 0; k != mm->n_ref; ++k) {
+        if ( gzeof(fp) ) {
+            fprintf(stderr, "Unexpected end of file.");
+            return NULL;
+        }
         gzread(fp, &len, sizeof(int));
         mm->ref_name[k] = (char*)malloc(len * sizeof(char));
+        if ( gzeof(fp) ) {
+            fprintf(stderr, "Unexpected end of file.");
+            return NULL;
+        }
         gzread(fp, mm->ref_name[k], len);
     }
     /* read number of mapped reads */
+    if ( gzeof(fp) ) {
+        fprintf(stderr, "Unexpected end of file.");
+        return NULL;
+    }
     gzread(fp, &mm->n_mapped_reads, sizeof(uint64_t));
     return mm;
 }
@@ -118,6 +141,8 @@ void maq2tam_core(gzFile fp, const char *rg)
     int ret;
     m1 = &mm1;
     mm = maqmap_read_header(fp);
+    if (!mm) exit(1);
+
     while ((ret = gzread(fp, m1, sizeof(maqmap1_t))) == sizeof(maqmap1_t)) {
         int j, flag = 0, se_mapq = m1->seq[MAX_READLEN-1];
         if (m1->flag) flag |= 1;
@@ -192,6 +217,11 @@ int main(int argc, char *argv[])
         return 1;
     }
     fp = strcmp(argv[1], "-")? gzopen(argv[1], "r") : gzdopen(fileno(stdin), "r");
+    if (!fp ) {
+        fprintf(stderr, "Unable to open file %s", argv[1]);
+        fprintf(stderr, "Usage: maq2sam <in.map> [<readGroup>]\n");
+        return 1;
+    }
     maq2tam_core(fp, argc > 2? argv[2] : 0);
     gzclose(fp);
     return 0;
