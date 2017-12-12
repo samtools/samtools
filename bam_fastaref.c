@@ -39,80 +39,52 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/cram.h"
 #include "sam_header.h"
 
-KHASH_INIT(s2s, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
+KHASH_MAP_INIT_STR(s2s, char*)
 
 typedef struct{
     int maxLineLength;
-    char **outputKeys;
+    char (*outputKeys)[3];
     int numOutputKeys;
     char* samFileName;
     char* outFileName; // NULL if this is to output to stdout
-} FastarefOptions;
-
-void destroy_malloced_s2s_khash(khash_t(s2s)* khash){
-    char* value;
-    char* key;
-
-    kh_foreach(khash, value, key, {
-        free(value);
-        free(key);
-    });
-
-    kh_destroy(s2s, khash);
-}
+} fastaref_options_t;
 
 /**
- * Given a string, pointing to the start of a SQ line, parses
- * it into a hash map, which is populated into out_khash
- *
- * @returns The length of the string parsed if successful
- *          -1 if not successful
+ * Given an SQ line, returns a hash map, containing it's fields.
+ * Note: this modifies the text in the sqLine parameter
  */
-int parseSQLine(const char* sqLine, khash_t(s2s)* out_khash){
-    const char* fieldStart = sqLine + 4;// 4 == len("@SQ\t")
-    const char* fieldEnd;
+kh_s2s_t* parseSQLine(char* sqLine){
+    char* parsePosition = sqLine + 4; // 4 = len("@SQ\t")
+    char* field;
+    kh_s2s_t* khash = kh_init(s2s);
 
-    while(1){
-        fieldEnd = strpbrk(fieldStart, "\t\n\0");
-
-        int valueLength = fieldEnd - fieldStart - 3;
-        if(valueLength < 1){
+    while((field = strsep(&parsePosition, "\t")) != NULL){
+        if(strlen(field) < 4){
+            // cannot have a field of length < 4, we need to have "FD:" present
+            // where FD is the field name
             print_error("fastaref", "failed parsing SQ line in header");
-            return -1;
+            return NULL;
         }
 
-        char* key = malloc(3);
-        memcpy(key, fieldStart, 2);
+        char* key = field;
         key[2] = '\0';
 
-        char* value = malloc(valueLength + 1);
-        memcpy(value, fieldStart + 3, valueLength);
-        value[valueLength] = '\0';
+        char* value = field + 3;
 
         int ret;
-        int keyPointer = kh_put(s2s, out_khash, key, &ret);
+        int valuePointer = kh_put(s2s, khash, key, &ret);
         if(ret == -1){
             print_error("fastaref", "failed parsing SQ line in header");
-            free(value);
-            free(key);
-            return -1;
+            return NULL;
         }
         else if(ret == 0){
             print_error("fastaref", "duplicate field name in SQ line");
-            free(value);
-            free(key);
-            return -1;
+            return NULL;
         }
-        kh_value(out_khash, keyPointer) = value;
-
-        if(*fieldEnd != '\t'){
-            // reached the end of the file or line
-            break;
-        }
-        fieldStart = fieldEnd + 1; // move fieldStart to the end of the tab
+        kh_value(khash, valuePointer) = value;
     }
 
-    return fieldEnd - fieldStart;
+    return khash;
 }
 
 /**
@@ -120,15 +92,15 @@ int parseSQLine(const char* sqLine, khash_t(s2s)* out_khash){
  *
  * @returns 0 if successful
  */
-int generateFastaFile(FastarefOptions *options){
-    const char* readPosition = NULL;
+int generateFastaFile(fastaref_options_t *options){
     int writeBufferLength = options->maxLineLength;
     char* writeBuffer = malloc(writeBufferLength);
+    if(writeBuffer == NULL) return -1;
     FILE* outFile = NULL;
     int returnCode = 0;
     bam_hdr_t* header = NULL;
     hFILE* ref = NULL;
-    khash_t(s2s)* khash = kh_init(s2s);
+    kh_s2s_t* khash = NULL;
 
     samFile* inFile = sam_open(options->samFileName, "r");
     if (inFile == NULL) {
@@ -144,143 +116,102 @@ int generateFastaFile(FastarefOptions *options){
         goto cleanup;
     }
 
-    readPosition = header->text;
+    char* readPosition = header->text;
 
-    outFile = options->outFileName?fopen(options->outFileName, "w") : stdout;
-
+    outFile = options->outFileName ? fopen(options->outFileName, "w") : stdout;
     if(outFile == NULL){
         print_error_errno("fastaref", "failed to write file \"%s\"", options->outFileName);
         returnCode = 1;
         goto cleanup;
     }
 
-    int atStartOfFile = 1;
-
-    while(1){
-        for(; !(*readPosition == '\0'
-            || (atStartOfFile && strncmp(readPosition, "@SQ", 3) == 0)
-            || (!atStartOfFile && strncmp(readPosition, "@SQ", 3) == 0 && *(readPosition - 1) == '\n')
-        );readPosition++){
-            if(atStartOfFile) atStartOfFile = 0;
-        }
-        if(*readPosition == '\0') break;
-
-        int parsedLength;
-        if((parsedLength = parseSQLine(readPosition, khash)) == -1){
-            goto cleanup;
-        }
-        readPosition += parsedLength;
-
-        khint_t M5_pointer = kh_get(s2s, khash, "M5");
-        khint_t SN_pointer = kh_get(s2s, khash, "SN");
-
-        if(SN_pointer == kh_end(khash)){
-            print_error("fastaref", "error: SN field not found in SQ line in \"%s\"", options->samFileName);
-            goto cleanup;
-        }
-
-        const char* SN = kh_value(khash, SN_pointer);
-        if(M5_pointer == kh_end(khash)){
-            print_error("fastaref", "warning: no M5 string found for sequence \"%s\" in \"%s\"", SN, options->samFileName);
-        }
-        else{
-            const char* M5 = kh_value(khash, M5_pointer);
-
-            if(fputc('>', outFile) < 0
-            || fputs(SN, outFile) < 0){
-                print_error("fastaref", "failed to write to output file");
+    char* line;
+    while((line = strsep(&readPosition, "\n")) != NULL){
+        if(strncmp(line, "@SQ", 3) == 0){
+            if((khash = parseSQLine(line)) == NULL){
                 returnCode = 1;
                 goto cleanup;
             }
 
-            for(int i = 0;i < options->numOutputKeys;i++){
-                char* fieldName = options->outputKeys[i];
-                khint_t fieldPointer = kh_get(s2s, khash, fieldName);
-                if(fieldPointer != kh_end(khash)){
-                    if(fputc('\t', outFile) < 0
-                    || fputs(fieldName, outFile) < 0
-                    || fputc(':', outFile) < 0
-                    || fputs(kh_value(khash, fieldPointer), outFile) < 0){
-                        print_error("fastaref", "failed to write to output file");
+            khint_t M5_pointer = kh_get(s2s, khash, "M5");
+            khint_t SN_pointer = kh_get(s2s, khash, "SN");
+
+            if(SN_pointer == kh_end(khash)){
+                print_error("fastaref", "error: SN field not found in SQ line in \"%s\"", options->samFileName);
+                goto cleanup;
+            }
+
+            const char* SN = kh_value(khash, SN_pointer);
+            if(M5_pointer == kh_end(khash)){
+                print_error("fastaref", "warning: no M5 string found for sequence \"%s\" in \"%s\"", SN, options->samFileName);
+            }
+            else{
+                const char* M5 = kh_value(khash, M5_pointer);
+
+                if(fputc('>', outFile) < 0
+                || fputs(SN, outFile) < 0){
+                    print_error("fastaref", "failed to write to output file");
+                    returnCode = 1;
+                    goto cleanup;
+                }
+
+                for(int i = 0;i < options->numOutputKeys;i++){
+                    char* fieldName = options->outputKeys[i];
+                    khint_t fieldPointer = kh_get(s2s, khash, fieldName);
+                    if(fieldPointer != kh_end(khash)){
+                        if(fputc('\t', outFile) < 0
+                        || fputs(fieldName, outFile) < 0
+                        || fputc(':', outFile) < 0
+                        || fputs(kh_value(khash, fieldPointer), outFile) < 0){
+                            print_error("fastaref", "failed to write to output file");
+                            returnCode = 1;
+                            goto cleanup;
+                        }
+                    }
+                }
+                if(fputc('\n', outFile) < 0){
+                    print_error("fastaref", "failed to write to output file");
+                    returnCode = 1;
+                    goto cleanup;
+                }
+
+                if(m5_to_ref(M5, &ref) != 0){
+                    print_error("fastaref", "could not fetch the reference with MD5 of %s", M5);
+                    returnCode = 1;
+                    goto cleanup;
+                }
+
+                while(1){
+                    int lengthRead = hread(ref, writeBuffer, writeBufferLength);
+
+                    if(lengthRead < 0){
+                        print_error_errno("fastaref", "failed to read the reference with MD5 of \"%s\"", M5);
                         returnCode = 1;
                         goto cleanup;
                     }
-                }
-            }
-            if(fputc('\n', outFile) < 0){
-                print_error("fastaref", "failed to write to output file");
-                returnCode = 1;
-                goto cleanup;
-            }
 
-            if(m5_to_ref(M5, &ref) != 0){
-                print_error("fastaref", "could not fetch the reference with md5 of %s", M5);
-                returnCode = 1;
-                goto cleanup;
-            }
+                    if(fwrite(writeBuffer, sizeof(char), lengthRead, outFile) != lengthRead
+                    || fputc('\n', outFile) < 0){
+                        print_error_errno("fastaref", "failed to write file \"%s\"", options->outFileName);
+                        returnCode = 1;
+                        goto cleanup;
+                    }
 
-            while(1){
-                int lengthRead = hread(ref, writeBuffer, writeBufferLength);
-
-                if(lengthRead < 0){
-                    print_error_errno("fastaref", "failed to read the reference with md5 of \"%s\"", M5);
-                    returnCode = 1;
-                    goto cleanup;
+                    if(lengthRead < writeBufferLength) break;
                 }
 
-                if(fwrite(writeBuffer, sizeof(char), lengthRead, outFile) != lengthRead
-                || fputc('\n', outFile) < 0){
-                    print_error_errno("fastaref", "failed to write file \"%s\"", options->outFileName);
-                    returnCode = 1;
-                    goto cleanup;
-                }
-
-                if(lengthRead < writeBufferLength) break;
+                (void)hclose(ref); ref = NULL;
             }
-
-            destroy_malloced_s2s_khash(khash); khash = kh_init(s2s);;
-            (void)hclose(ref); ref = NULL;
         }
     }
 
 cleanup:
-    destroy_malloced_s2s_khash(khash);
     if(ref) (void)hclose(ref);
     if(writeBuffer) free(writeBuffer);
     if(outFile) fclose(outFile);
     if(header) bam_hdr_destroy(header);
     if(inFile) sam_close(inFile);
     return returnCode;
-}
-
-/**
- * Parses keysStr to obtain a list of two letter keys
- *
- * @returns 0 if successful
- */
-char** parse_SQ_keys_list(const char* keysStr, int* numKeys){
-    int keysStrLength = strlen(keysStr);
-
-    if((keysStrLength + 1) / 3 * 3 != keysStrLength + 1){ // keysStrLength + 1 is not divisible by 3
-        fprintf(stderr, "%s is not a valid set of keys\n", keysStr);
-        return NULL;
-    }
-
-    *numKeys = (keysStrLength + 1) / 3;
-    char** outputKeys = malloc(*numKeys * sizeof(char*));
-
-    for(int i = 0;i < *numKeys;i++){
-        outputKeys[i] = malloc(3);
-        memcpy(outputKeys[i], keysStr + i*3, 2);
-        outputKeys[i][2] = 0;
-
-        if (*numKeys - 1 != i && keysStr[i*3 + 2] != ','){
-            fprintf(stderr, "%s is not a valid set of keys\n", keysStr);
-            return NULL;
-        }
-    }
-
-    return outputKeys;
 }
 
 void print_usage(){
@@ -293,23 +224,30 @@ void print_usage(){
 
 int main_fastaref(int argc, char *argv[])
 {
-    FastarefOptions options;
-    options.numOutputKeys = -1;
+    fastaref_options_t options;
+    options.numOutputKeys = 0;
     options.maxLineLength = 60;
     options.outFileName = NULL; // (point to stdout)
 
     int opt;
     while((opt = getopt(argc, argv, "k:l:o:")) >= 0){
         switch (opt) {
-            case 'k':
-                if((options.outputKeys = parse_SQ_keys_list(optarg, &(options.numOutputKeys))) == NULL){
-                    return 1;
+            case 'k':{
+                const char* key;
+                const char* strStart = optarg;
+                while((key = strsep(&optarg, ",")) != NULL){
+                    if(strlen(key) != 2){
+                        print_error("fastaref", "invalid filtering key '%s', keys must have length 2", key);
+                    }
+                    options.numOutputKeys++;
                 }
+                options.outputKeys = (char(*)[3])strStart;
+            }
             break;
             case 'l':
                 options.maxLineLength = atoi(optarg);
                 if(options.maxLineLength <= 0){
-                    fprintf(stderr, "invalid maximum line length\n");
+                    print_error("fastaref", "invalid maximum line length");
                     return 1;
                 }
             break;
@@ -319,10 +257,13 @@ int main_fastaref(int argc, char *argv[])
         }
     }
 
-    if(options.numOutputKeys == -1){ // i.e. -k is not set
-        if((options.outputKeys = parse_SQ_keys_list("LN,AH,AN,AS,M5,SP", &(options.numOutputKeys))) == NULL){
-            return 1;
-        }
+    if(options.numOutputKeys == 0){ // i.e. -k is not set
+        char defaultValues[6][3] = {
+            "LN", "AH", "AN", "AS", "M5", "SP"
+        };
+
+        options.outputKeys = defaultValues;
+        options.numOutputKeys = 6;
     }
 
     int numOtherArgs = argc - optind;
@@ -339,12 +280,5 @@ int main_fastaref(int argc, char *argv[])
         return 1;
     }
 
-    int returnValue = generateFastaFile(&options);
-    for(int i = 0;i < options.numOutputKeys;i++){
-        free(options.outputKeys[i]);
-    }
-    free(options.outputKeys);
-
-    return returnValue;
+    return generateFastaFile(&options);
 }
-
