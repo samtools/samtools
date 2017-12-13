@@ -43,13 +43,13 @@ KSTREAM_INIT(gzFile, gzread, 8192)
  * @abstract bed_reglist_t - value type of the BED hash table
  * This structure encodes the list of intervals (ranges) for the regions provided via BED file or
  * command line arguments.
- * @field *a           pointer to the array of intervals (kept as 64 bit integers). The upper 32 bits 
- * encode the beginning of the interval, while the lower 32 bits encode the end, for easy sorting. 
+ * @field *a           pointer to the array of intervals (kept as 64 bit integers). The upper 32 bits
+ * encode the beginning of the interval, while the lower 32 bits encode the end, for easy sorting.
  * |-- 32 bits --|-- 32 bits --|
- * |---- beg ----|---- end ----|  
+ * |---- beg ----|---- end ----|
  * @field n            actual number of elements contained by a
  * @field m            number of allocated elements to a (n <= m)
- * @field *idx         index array for computing the minimum offset 
+ * @field *idx         index array for computing the minimum offset
  * @field idx_space    number of elements in the index array
  */
 typedef struct {
@@ -89,13 +89,13 @@ static void bed_print(void *reg_hash) {
                     beg = (uint32_t)(p->a[i]>>32);
                     end = (uint32_t)(p->a[i]);
 
-                    printf("\tinterval[%d]: %d-%d\n",i,beg,end);                    
+                    printf("\tinterval[%d]: %d-%d\n",i,beg,end);
                 }
             } else {
                 printf("Region '%s' has no intervals!\n", reg);
             }
         }
-    }    
+    }
 }
 #endif
 
@@ -194,18 +194,18 @@ static void bed_unify(void *reg_hash) {
     for (i = kh_begin(h); i < kh_end(h); i++) {
         if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || !(p->n))
             continue;
-        
+
         for (new_n = 0, j = 1; j < p->n; j++) {
             if ((uint32_t)p->a[new_n] < (uint32_t)(p->a[j]>>32)) {
                 p->a[++new_n] = p->a[j];
             } else {
-                if ((uint32_t)p->a[new_n] < (uint32_t)p->a[j]) 
+                if ((uint32_t)p->a[new_n] < (uint32_t)p->a[j])
                     p->a[new_n] = (p->a[new_n] & 0xFFFFFFFF00000000) | (uint32_t)(p->a[j]);
             }
         }
 
         p->n = ++new_n;
-    }         
+    }
 }
 
 /* "BED" file reader, which actually reads two different formats.
@@ -334,7 +334,7 @@ void bed_destroy(void *_h)
 
     if (!_h)
         return;
-   
+
     h = (reghash_t*)_h;
     for (k = 0; k < kh_end(h); ++k) {
         if (kh_exist(h, k)) {
@@ -384,7 +384,7 @@ fail:
     return h;
 }
 
-/* @brief Filter a region hash table (coming from the BED file) by another 
+/* @brief Filter a region hash table (coming from the BED file) by another
  *  region hash table (coming from CLI), so that only intervals contained in
  *  both hash tables are kept.
  * @param reg_hash    the target region hash table
@@ -405,13 +405,13 @@ static void *bed_filter(void *reg_hash, void *tmp_hash) {
 
     h = (reghash_t *)reg_hash;
     t = (reghash_t *)tmp_hash;
-    if (!h) 
+    if (!h)
         return NULL;
     if (!t)
         return h;
 
     for (l = kh_begin(t); l < kh_end(t); l++) {
-        if (!kh_exist(t,l) || !(q = &kh_val(t,l)) || !(q->n)) 
+        if (!kh_exist(t,l) || !(q = &kh_val(t,l)) || !(q->n))
             continue;
 
         reg = kh_key(t,l);
@@ -423,7 +423,7 @@ static void *bed_filter(void *reg_hash, void *tmp_hash) {
         if (!new_a)
             return NULL;
         new_n = 0;
- 
+
         for (i = 0; i < q->n; i++) {
             beg = (uint32_t)(q->a[i]>>32);
             end = (uint32_t)(q->a[i]);
@@ -498,12 +498,12 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
         }
 
         //if op==1 insert reg to the bed hash table
-        if (*op && !(bed_insert(h, reg, beg, end))) { 
+        if (*op && !(bed_insert(h, reg, beg, end))) {
             fprintf(stderr, "Error when inserting region='%s' in the bed hash table at address=%p!\n", regs[i], h);
         }
-        //if op==0, first insert the regions in the temporary hash table, 
+        //if op==0, first insert the regions in the temporary hash table,
         //then filter the bed hash table using it
-        if (!(*op) && !(bed_insert(t, reg, beg, end))) { 
+        if (!(*op) && !(bed_insert(t, reg, beg, end))) {
             fprintf(stderr, "Error when inserting region='%s' in the temporary hash table at address=%p!\n", regs[i], t);
         }
     }
@@ -532,7 +532,7 @@ const char* bed_get(void *reg_hash, int i, int filter) {
         return NULL;
 
     h = (reghash_t *)reg_hash;
-    if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter)) 
+    if (!kh_exist(h,i) || !(p = &kh_val(h,i)) || (p->filter < filter))
         return NULL;
 
     return kh_key(h, i);
