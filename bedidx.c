@@ -50,14 +50,12 @@ KSTREAM_INIT(gzFile, gzread, 8192)
  * @field n            actual number of elements contained by a
  * @field m            number of allocated elements to a (n <= m)
  * @field *idx         index array for computing the minimum offset
- * @field idx_space    number of elements in the index array
  */
 typedef struct {
     int n, m;
     uint64_t *a;
     int *idx;
     int filter;
-    int idx_space;
 } bed_reglist_t;
 
 #include "htslib/khash.h"
@@ -99,10 +97,10 @@ static void bed_print(void *reg_hash) {
 }
 #endif
 
-static int *bed_index_core(int n, uint64_t *a, int *n_idx)
+static int *bed_index_core(int n, uint64_t *a)
 {
     int i, j, l, *idx;
-    l = *n_idx = 0; idx = 0;
+    l = 0; idx = 0;
     for (i = 0; i < n; ++i) {
         int beg, end;
         beg = a[i]>>32 >> LIDX_SHIFT; end = ((uint32_t)a[i]) >> LIDX_SHIFT;
@@ -111,13 +109,16 @@ static int *bed_index_core(int n, uint64_t *a, int *n_idx)
             l = end + 1;
             kroundup32(l);
             idx = realloc(idx, l * sizeof(int));
-            for (j = old_l; j < l; ++j) idx[j] = -1;
+            if (!idx) 
+                return NULL;
+
+            for (j = old_l; j < l; ++j) 
+                idx[j] = -1;
         }
 
         for (j = beg; j < end+1; ++j)
-            if (idx[j] < 0) idx[j] = i;
-
-        *n_idx = end + 1;
+            if (idx[j] < 0) 
+                idx[j] = i;
     }
     return idx;
 }
@@ -131,20 +132,25 @@ static void bed_index(void *_h)
             bed_reglist_t *p = &kh_val(h, k);
             if (p->idx) free(p->idx);
             ks_introsort(uint64_t, p->n, p->a);
-            p->idx = bed_index_core(p->n, p->a, &p->idx_space);
+            p->idx = bed_index_core(p->n, p->a);
         }
     }
 }
 
 static int bed_minoff(const bed_reglist_t *p, unsigned int beg, unsigned int end) {
-    int i, min_off;
-    min_off = (beg>>LIDX_SHIFT >= p->n)? p->idx[p->n-1] : p->idx[beg>>LIDX_SHIFT];
-    if (min_off < 0) { // TODO: this block can be improved, but speed should not matter too much here
-        int n = beg>>LIDX_SHIFT;
-        if (n > p->n) n = p->n;
-        for (i = n - 1; i >= 0; --i)
-            if (p->idx[i] >= 0) break;
-        min_off = i >= 0? p->idx[i] : 0;
+    int i, min_off=0;
+    
+    if (p && p->idx) {
+        min_off = (beg>>LIDX_SHIFT >= p->n)? p->idx[p->n-1] : p->idx[beg>>LIDX_SHIFT];
+        if (min_off < 0) { // TODO: this block can be improved, but speed should not matter too much here
+            int n = beg>>LIDX_SHIFT;
+            if (n > p->n) 
+                n = p->n;
+            for (i = n - 1; i >= 0; --i)
+                if (p->idx[i] >= 0) 
+                    break;
+            min_off = i >= 0? p->idx[i] : 0;
+        }
     }
 
     return min_off;
