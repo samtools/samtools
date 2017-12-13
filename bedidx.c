@@ -65,6 +65,8 @@ KHASH_MAP_INIT_STR(reg, bed_reglist_t)
 
 typedef kh_reg_t reghash_t;
 
+#if 0
+// Debug function
 static void bed_print(void *reg_hash) {
     reghash_t *h = (reghash_t *)reg_hash;
     bed_reglist_t *p;
@@ -95,6 +97,7 @@ static void bed_print(void *reg_hash) {
         }
     }    
 }
+#endif
 
 static int *bed_index_core(int n, uint64_t *a, int *n_idx)
 {
@@ -452,7 +455,7 @@ static void *bed_filter(void *reg_hash, void *tmp_hash) {
 void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op) {
 
     reghash_t *h = (reghash_t *)reg_hash;
-    reghash_t *t;
+    reghash_t *t = NULL;
 
     int i;
     char reg[1024];
