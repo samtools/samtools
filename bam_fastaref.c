@@ -155,7 +155,8 @@ int generateFastaFile(fastaref_options_t *options){
                     goto cleanup;
                 }
 
-                for(int i = 0;i < options->numOutputKeys;i++){
+                int i;
+                for(i = 0;i < options->numOutputKeys;i++){
                     char* fieldName = options->outputKeys[i];
                     khint_t fieldPointer = kh_get(s2s, khash, fieldName);
                     if(fieldPointer != kh_end(khash)){
