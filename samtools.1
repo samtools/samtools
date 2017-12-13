@@ -154,6 +154,7 @@ option is required whenever writing CRAM output.
 
 The
 .BR -L ,
+.BR -M ,
 .BR -r ,
 .BR -R ,
 .BR -s ,
@@ -285,6 +286,13 @@ If an index is not present, one will be generated for you.
 Only output alignments overlapping the input BED
 .I FILE
 [null].
+.TP
+.B "-M "
+Use the multi-region iterator on the union of the BED file and
+command-line region arguments.  This avoids re-reading the same regions
+of files so can sometimes be much faster.  Note this also removes
+duplicate sequences.  Without this a sequence that overlaps multiple
+regions specified on the command line will be reported multiple times.
 .TP
 .BI "-r " STR
 Only output alignments in read group
