@@ -51,7 +51,7 @@ typedef struct {
 /**
  * Replacement in C99 for strsep
  */
-char* _strsep(char** stringp, const char* delim) {
+static char* _strsep(char** stringp, const char* delim) {
     if (*stringp == NULL) return NULL;
     char* foundChar = strpbrk(*stringp, delim);
 
@@ -120,6 +120,7 @@ int generateFastaFile(fastaref_options_t* options) {
     bam_hdr_t* header = NULL;
     hFILE* ref = NULL;
     kh_s2s_t* sqLineDict = NULL;
+    char* headerTextCopy = NULL;
 
     samFile* inFile = sam_open(options->samFileName, "r");
     if (inFile == NULL) {
@@ -135,7 +136,8 @@ int generateFastaFile(fastaref_options_t* options) {
         goto cleanup;
     }
 
-    char* readPosition = header->text;
+    headerTextCopy = strdup(header->text);
+    char* readPosition = headerTextCopy;
 
     outFile = options->outFileName ? fopen(options->outFileName, "w") : stdout;
     if (outFile == NULL) {
@@ -227,6 +229,7 @@ int generateFastaFile(fastaref_options_t* options) {
     }
 
 cleanup:
+    if (headerTextCopy) free(headerTextCopy);
     if (sqLineDict) kh_destroy(s2s, sqLineDict);
     if (ref) (void)hclose(ref);
     if (writeBuffer) free(writeBuffer);
