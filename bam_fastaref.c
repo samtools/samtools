@@ -50,15 +50,35 @@ typedef struct{
 } fastaref_options_t;
 
 /**
+ * Replacement in C99 for strsep
+*/
+char* _strsep(char **stringp, const char *delim){
+    if(*stringp == NULL) return NULL;
+    char* foundChar = strpbrk(*stringp, delim);
+
+    if(foundChar == NULL){
+        char* token = *stringp;
+        *stringp = NULL;
+        return token;
+    }
+
+    *foundChar = 0;
+
+    char* token = *stringp;
+    *stringp = foundChar + 1;
+    return token;
+}
+
+/**
  * Given an SQ line, returns a hash map, containing it's fields.
  * Note: this modifies the text in the sqLine parameter
  */
 kh_s2s_t* parseSQLine(char* sqLine){
     char* parsePosition = sqLine + 4; // 4 = len("@SQ\t")
     char* field;
-    kh_s2s_t* khash = kh_init(s2s);
+    kh_s2s_t* sqLineDict = kh_init(s2s);
 
-    while((field = strsep(&parsePosition, "\t")) != NULL){
+    while((field = _strsep(&parsePosition, "\t")) != NULL){
         if(strlen(field) < 4){
             // cannot have a field of length < 4, we need to have "FD:" present
             // where FD is the field name
@@ -72,7 +92,7 @@ kh_s2s_t* parseSQLine(char* sqLine){
         char* value = field + 3;
 
         int ret;
-        int valuePointer = kh_put(s2s, khash, key, &ret);
+        int valuePointer = kh_put(s2s, sqLineDict, key, &ret);
         if(ret == -1){
             print_error("fastaref", "failed parsing SQ line in header");
             return NULL;
@@ -81,10 +101,10 @@ kh_s2s_t* parseSQLine(char* sqLine){
             print_error("fastaref", "duplicate field name in SQ line");
             return NULL;
         }
-        kh_value(khash, valuePointer) = value;
+        kh_value(sqLineDict, valuePointer) = value;
     }
 
-    return khash;
+    return sqLineDict;
 }
 
 /**
@@ -100,7 +120,7 @@ int generateFastaFile(fastaref_options_t *options){
     int returnCode = 0;
     bam_hdr_t* header = NULL;
     hFILE* ref = NULL;
-    kh_s2s_t* khash = NULL;
+    kh_s2s_t* sqLineDict = NULL;
 
     samFile* inFile = sam_open(options->samFileName, "r");
     if (inFile == NULL) {
@@ -126,27 +146,27 @@ int generateFastaFile(fastaref_options_t *options){
     }
 
     char* line;
-    while((line = strsep(&readPosition, "\n")) != NULL){
+    while((line = _strsep(&readPosition, "\n")) != NULL){
         if(strncmp(line, "@SQ", 3) == 0){
-            if((khash = parseSQLine(line)) == NULL){
+            if((sqLineDict = parseSQLine(line)) == NULL){
                 returnCode = 1;
                 goto cleanup;
             }
 
-            khint_t M5_pointer = kh_get(s2s, khash, "M5");
-            khint_t SN_pointer = kh_get(s2s, khash, "SN");
+            khint_t M5_pointer = kh_get(s2s, sqLineDict, "M5");
+            khint_t SN_pointer = kh_get(s2s, sqLineDict, "SN");
 
-            if(SN_pointer == kh_end(khash)){
+            if(SN_pointer == kh_end(sqLineDict)){
                 print_error("fastaref", "error: SN field not found in SQ line in \"%s\"", options->samFileName);
                 goto cleanup;
             }
 
-            const char* SN = kh_value(khash, SN_pointer);
-            if(M5_pointer == kh_end(khash)){
+            const char* SN = kh_value(sqLineDict, SN_pointer);
+            if(M5_pointer == kh_end(sqLineDict)){
                 print_error("fastaref", "warning: no M5 string found for sequence \"%s\" in \"%s\"", SN, options->samFileName);
             }
             else{
-                const char* M5 = kh_value(khash, M5_pointer);
+                const char* M5 = kh_value(sqLineDict, M5_pointer);
 
                 if(fputc('>', outFile) < 0
                 || fputs(SN, outFile) < 0){
@@ -158,12 +178,12 @@ int generateFastaFile(fastaref_options_t *options){
                 int i;
                 for(i = 0;i < options->numOutputKeys;i++){
                     char* fieldName = options->outputKeys[i];
-                    khint_t fieldPointer = kh_get(s2s, khash, fieldName);
-                    if(fieldPointer != kh_end(khash)){
+                    khint_t fieldPointer = kh_get(s2s, sqLineDict, fieldName);
+                    if(fieldPointer != kh_end(sqLineDict)){
                         if(fputc('\t', outFile) < 0
                         || fputs(fieldName, outFile) < 0
                         || fputc(':', outFile) < 0
-                        || fputs(kh_value(khash, fieldPointer), outFile) < 0){
+                        || fputs(kh_value(sqLineDict, fieldPointer), outFile) < 0){
                             print_error("fastaref", "failed to write to output file");
                             returnCode = 1;
                             goto cleanup;
@@ -200,13 +220,14 @@ int generateFastaFile(fastaref_options_t *options){
 
                     if(lengthRead < writeBufferLength) break;
                 }
-
+                kh_destroy(s2s, sqLineDict); sqLineDict = NULL;
                 (void)hclose(ref); ref = NULL;
             }
         }
     }
 
 cleanup:
+    if(sqLineDict) kh_destroy(s2s, sqLineDict);
     if(ref) (void)hclose(ref);
     if(writeBuffer) free(writeBuffer);
     if(outFile) fclose(outFile);
@@ -236,7 +257,7 @@ int main_fastaref(int argc, char *argv[])
             case 'k':{
                 const char* key;
                 const char* strStart = optarg;
-                while((key = strsep(&optarg, ",")) != NULL){
+                while((key = _strsep(&optarg, ",")) != NULL){
                     if(strlen(key) != 2){
                         print_error("fastaref", "invalid filtering key '%s', keys must have length 2", key);
                     }
