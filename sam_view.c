@@ -46,6 +46,11 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 
+#ifdef HAVE_GUILE
+ #include "htsguile.h"
+ #define GUILE_FILTER_NAME "read-filter"
+#endif
+
 #define DEFAULT_BARCODE_TAG "BC"
 #define DEFAULT_QUALITY_TAG "QT"
 
@@ -70,6 +75,10 @@ typedef struct samview_settings {
     void* bed;
     size_t remove_aux_len;
     char** remove_aux;
+#ifdef HAVE_GUILE
+    char* guile_str;
+    SCM filterproc;
+#endif
 } samview_settings_t;
 
 
@@ -123,6 +132,28 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
             }
         }
     }
+#ifdef HAVE_GUILE
+    if (settings->filterproc)
+    	{
+    	HtsGuileCtx ctx;
+    	ctx.header = h;
+    	ctx.b  = b;
+    	SCM sc_ptr = scm_from_pointer((void*)&ctx,NULL);
+    	SCM ret=scm_call_1(settings->filterproc,sc_ptr);
+	if(scm_is_bool(ret))
+		{
+		if(!scm_to_bool (ret)) return 1;
+		}
+	else 
+		{
+		fprintf(stderr,"Guile returned value that is not a boolean\n");
+		return 1;
+		}
+	if(!scm_to_bool (ret)) return 1;
+    	}
+
+#endif   
+    
     return 0;
 }
 
@@ -267,6 +298,10 @@ int main_samview(int argc, char *argv[])
         .subsam_frac = -1.,
         .library = NULL,
         .bed = NULL,
+#ifdef HAVE_GUILE
+	.guile_str = NULL,
+	.filterproc = NULL,
+#endif
     };
 
     static const struct option lopts[] = {
@@ -278,7 +313,7 @@ int main_samview(int argc, char *argv[])
     strcpy(out_mode, "w");
     strcpy(out_un_mode, "w");
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:g:ul:r:?T:R:L:s:@:m:x:U:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -303,6 +338,11 @@ int main_samview(int argc, char *argv[])
         case 'f': settings.flag_on |= strtol(optarg, 0, 0); break;
         case 'F': settings.flag_off |= strtol(optarg, 0, 0); break;
         case 'G': settings.flag_alloff |= strtol(optarg, 0, 0); break;
+#ifdef HAVE_GUILE
+            case 'g': settings.guile_str = optarg; break;
+#else
+            case 'g': fprintf(stderr,"GNU guile is not available\n"); return false;
+#endif
         case 'q': settings.min_mapQ = atoi(optarg); break;
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
@@ -384,6 +424,26 @@ int main_samview(int argc, char *argv[])
             goto view_end;
         }
     }
+#ifdef HAVE_GUILE
+    if (settings.guile_str != NULL)
+    	{
+    	/* Start up the Guile interpeter */
+	scm_init_guile();
+	scm_with_guile (hts_guile_init, NULL);
+	scm_c_use_module("hts");
+	fprintf(stderr,"compiling %s\n",settings.guile_str);
+	scm_c_eval_string(settings.guile_str);
+	
+	SCM filterfun = scm_c_lookup(GUILE_FILTER_NAME);
+	if(scm_is_false(scm_variable_p(filterfun)))
+		{
+		fprintf(stderr,"Guile " GUILE_FILTER_NAME " is not a procedure...\n");
+		//return -1;
+		}
+	settings.filterproc = scm_variable_ref(filterfun);
+	}
+#endif
+
     if ((header = sam_hdr_read(in)) == 0) {
         fprintf(stderr, "[main_samview] fail to read the header from \"%s\".\n", fn_in);
         ret = 1;
@@ -589,6 +649,11 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -G INT   only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
+
+#ifdef HAVE_GUILE
+"  -g STR   GNU Guile filtering expression or file[null]\n"
+#endif
+
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
@@ -1136,7 +1201,8 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"quality-tag", required_argument, NULL, 'q'},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:niNOs:c:tT:v:@:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:niNOs:c:tT:v:@:"
+	, lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = strdup(optarg); break;
             case 'q': opts->quality_tag = strdup(optarg); break;
