@@ -32,6 +32,7 @@ AC_CONFIG_HEADERS([config.h])
 m4_include([m4/ax_with_curses.m4])
 m4_include([m4/ax_with_htslib.m4])
 
+
 dnl Copyright notice to be copied into the generated configure script
 AC_COPYRIGHT([Portions copyright (C) 2015,2017 Genome Research Ltd.
 
@@ -52,6 +53,27 @@ AH_TOP([/* If you use configure, this file provides @%:@defines reflecting your
 AC_PROG_CC
 
 AC_SYS_LARGEFILE
+
+
+dnl begin test for GNU guile https://stackoverflow.com/questions/47819563
+
+AC_ARG_WITH(guile, [AS_HELP_STRING([--with-guile], [use GNU guile])],
+           [with_guile=yes],[with_guile=no])
+
+AC_ARG_VAR([GUILE_CFLAGS],[include files for guile])
+AC_ARG_VAR([GUILE_LDFLAGS],[library files for guile])
+AS_IF([test "x$with_guile" = xyes],
+   [AC_CHECK_PROG([GUILE_CONFIG],[guile-config],[guile-config])
+    AS_IF([test -z "$GUILE_CONFIG"],[AC_MSG_FAILURE([cannot find guile-config])],[AC_MSG_NOTICE([GNU Guile is supported])])
+   
+    AC_SUBST(GUILE_CFLAGS,[`$GUILE_CONFIG compile`])
+    AC_SUBST(GUILE_LDFLAGS,[`$GUILE_CONFIG link`])
+    AC_DEFINE([HAVE_GUILE],[1],[Guile supported])],
+    [AC_MSG_NOTICE([GNU Guile is not supported])]
+    )
+
+dnl end test for GNU guile
+
 
 AX_WITH_HTSLIB
 if test "$ax_cv_htslib" != yes; then
@@ -132,6 +154,10 @@ case $host_alias in
     CPPFLAGS="$CPPCFLAGS -D_POSIX_C_SOURCE=600"
     ;;
 esac
+
+
+
+
 
 AC_CONFIG_FILES([config.mk])
 AC_OUTPUT

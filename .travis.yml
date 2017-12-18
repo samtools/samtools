@@ -25,6 +25,7 @@ addons:
     packages:
     - liblzma-dev
     - libbz2-dev
+    - libguile-dev
 
 # For MacOSX systems
 before_install:
