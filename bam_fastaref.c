@@ -196,7 +196,7 @@ int generateFastaFile(fastaref_options_t* options) {
                     goto cleanup;
                 }
 
-                if (m5_to_ref(M5, &ref) != 0) {
+                if (!(ref = m5_to_ref(M5))) {
                     print_error("fastaref", "could not fetch the reference with MD5 of %s", M5);
                     returnCode = 1;
                     goto cleanup;
