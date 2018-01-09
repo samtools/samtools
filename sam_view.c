@@ -1133,15 +1133,12 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
     char *seq = get_read(b);
     if (!seq) return false;
 
-    if (state->use_oq) {
-        oq = bam_aux_get(b, "OQ");
-        if (oq) {
-            oq++;
-            qual = strdup(bam_aux2Z(oq));
-            if (!qual) goto fail;
-            if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
-                reverse(qual);
-            }
+    if (state->use_oq) oq = bam_aux_get(b, "OQ");
+    if (oq && *oq=='Z') {
+        qual = strdup(bam_aux2Z(oq));
+        if (!qual) goto fail;
+        if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+            reverse(qual);
         }
     } else {
         if (get_quality(b, &qual) < 0) goto fail;
