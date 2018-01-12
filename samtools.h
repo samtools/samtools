@@ -26,6 +26,7 @@ DEALINGS IN THE SOFTWARE.  */
 #define SAMTOOLS_H
 
 const char *samtools_version(void);
+const char *samtools_version_short(void);
 
 #if defined __GNUC__ && __GNUC__ >= 2
 #define CHECK_PRINTF(fmt,args) __attribute__ ((format (printf, fmt, args)))
