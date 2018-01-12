@@ -123,7 +123,7 @@ static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
         s = b[i]>>s&1;
     }
     // print
-    for (i = 0, s = -1; i <= l; ++i) {
+    for (i = 0, s = -1; i < INT_MAX && i <= l; ++i) {
         if (i == l || ((b[i]>>2&3) == 0 && s >= 0)) {
             if (s >= 0) {
                 int j;
