@@ -85,7 +85,6 @@ static void usage(FILE *fp)
 "     calmd          recalculate MD/NM tags and '=' bases\n"
 "     fixmate        fix mate information\n"
 "     reheader       replace BAM header\n"
-"     rmdup          remove PCR duplicates\n"
 "     targetcut      cut fosmid regions (for fosmid pool only)\n"
 "     addreplacerg   adds or replaces RG tags\n"
 "     markdup        mark duplicates\n"
