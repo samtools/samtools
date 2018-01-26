@@ -1,4 +1,7 @@
-Release a.b (New Year)
+Release a.b
+--------------------
+
+Release 1.7 (26th January 2018)
 --------------------
 
 * HTSlib, and so samtools, now support BAMs which include CIGARs with more

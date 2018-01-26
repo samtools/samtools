@@ -9,7 +9,7 @@ Building samtools
 The typical simple case of building Samtools using the HTSlib bundled within
 this Samtools release tarball is done as follows:
 
-    cd .../samtools-1.6 # Within the unpacked release directory
+    cd .../samtools-1.7 # Within the unpacked release directory
     ./configure
     make
 
@@ -21,7 +21,7 @@ install samtools etc properly into a directory of your choosing.  Building for
 installation using the HTSlib bundled within this Samtools release tarball,
 and building the various HTSlib utilities such as bgzip is done as follows:
 
-    cd .../samtools-1.6 # Within the unpacked release directory
+    cd .../samtools-1.7 # Within the unpacked release directory
     ./configure --prefix=/path/to/location
     make all all-htslib
     make install install-htslib
