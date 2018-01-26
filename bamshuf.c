@@ -110,6 +110,18 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         fprintf(stderr, "Couldn't read header for '%s'\n", fn);
         goto fail;
     }
+
+    if (sam_hdr_change_HD(h, "SO", "unsorted") != 0) {
+        print_error("collate",
+                    "failed to change sort order header to 'unsorted'\n");
+        goto fail;
+    }
+    if (sam_hdr_change_HD(h, "GO", "query") != 0) {
+        print_error("collate",
+                    "failed to change group order header to 'query'\n");
+        goto fail;
+    }
+
     fnt = (char**)calloc(n_files, sizeof(char*));
     if (!fnt) goto mem_fail;
     fpt = (samFile**)calloc(n_files, sizeof(samFile*));

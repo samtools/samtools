@@ -58,8 +58,8 @@ static void md5_one(const char *fn)
     seq = kseq_init(fp);
     while ((l = kseq_read(seq)) >= 0) {
         for (i = k = 0; i < seq->seq.l; ++i) {
-            if (islower(seq->seq.s[i])) seq->seq.s[k++] = toupper(seq->seq.s[i]);
-            else if (isupper(seq->seq.s[i])) seq->seq.s[k++] = seq->seq.s[i];
+            if (seq->seq.s[i] >= '!' && seq->seq.s[i] <= '~')
+                seq->seq.s[k++] = toupper(seq->seq.s[i]);
         }
         hts_md5_reset(md5_one);
         hts_md5_update(md5_one, (unsigned char*)seq->seq.s, k);

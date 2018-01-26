@@ -1787,41 +1787,6 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     return -1;
 }
 
-static int change_SO(bam_hdr_t *h, const char *so)
-{
-    char *p, *q, *beg = NULL, *end = NULL, *newtext;
-    if (h->l_text > 3) {
-        if (strncmp(h->text, "@HD", 3) == 0) {
-            if ((p = strchr(h->text, '\n')) == 0) return -1;
-            *p = '\0';
-            if ((q = strstr(h->text, "\tSO:")) != 0) {
-                *p = '\n'; // change back
-                if (strncmp(q + 4, so, p - q - 4) != 0) {
-                    beg = q;
-                    for (q += 4; *q != '\n' && *q != '\t'; ++q);
-                    end = q;
-                } else return 0; // no need to change
-            } else beg = end = p, *p = '\n';
-        }
-    }
-    if (beg == NULL) { // no @HD
-        h->l_text += strlen(so) + 15;
-        newtext = (char*)malloc(h->l_text + 1);
-        if (!newtext) return -1;
-        snprintf(newtext, h->l_text + 1,
-                 "@HD\tVN:1.3\tSO:%s\n%s", so, h->text);
-    } else { // has @HD but different or no SO
-        h->l_text = (beg - h->text) + (4 + strlen(so)) + (h->text + h->l_text - end);
-        newtext = (char*)malloc(h->l_text + 1);
-        if (!newtext) return -1;
-        snprintf(newtext, h->l_text + 1, "%.*s\tSO:%s%s",
-                 (int) (beg - h->text), h->text, so, end);
-    }
-    free(h->text);
-    h->text = newtext;
-    return 0;
-}
-
 // Function to compare reads and determine which one is < or > the other
 // Handle sort-by-pos and sort-by-name. Used as the secondary sort in bam1_lt_by_tag, if reads are equivalent by tag.
 // Returns a value less than, equal to or greater than zero if a is less than,
@@ -2120,9 +2085,14 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     else
         new_so = "coordinate";
 
-    if (change_SO(header, new_so) != 0) {
+    if (sam_hdr_change_HD(header, "SO", new_so) != 0) {
         print_error("sort",
                     "failed to change sort order header to '%s'\n", new_so);
+        goto err;
+    }
+    if (sam_hdr_change_HD(header, "GO", NULL) != 0) {
+        print_error("sort",
+                    "failed to delete group order header\n");
         goto err;
     }
 

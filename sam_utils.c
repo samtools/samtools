@@ -28,8 +28,10 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdarg.h>
 #include <string.h>
 #include <errno.h>
+#include <stdlib.h>
 
 #include "samtools.h"
+#include "version.h"
 
 static void vprint_error_core(const char *subcommand, const char *format, va_list args, const char *extra)
 {
@@ -57,4 +59,30 @@ void print_error_errno(const char *subcommand, const char *format, ...)
     va_start(args, format);
     vprint_error_core(subcommand, format, args, err? strerror(err) : NULL);
     va_end(args);
+}
+
+const char *samtools_version()
+{
+    return SAMTOOLS_VERSION;
+}
+
+const char *samtools_version_short()
+{
+    char *sv, *hyph, *v;
+    int len;
+
+    v = SAMTOOLS_VERSION;
+    hyph = strchr(v, '-');
+    if (!hyph)
+        return strdup(v);
+
+    len = hyph - v;
+    sv = (char *)malloc(len+1);
+    if (!sv)
+        return NULL;
+
+    strncpy(sv, v, len);
+    sv[len] = '\0';
+
+    return (const char*)sv;
 }

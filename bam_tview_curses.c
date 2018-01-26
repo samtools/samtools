@@ -39,7 +39,16 @@ DEALINGS IN THE SOFTWARE.  */
 #include <ncurses.h>
 #elif defined HAVE_CURSES_H
 #include <curses.h>
+#else
+// Have the library, but no header file
+#warning "Curses header file not found; tview with curses is disabled."
+#undef HAVE_CURSES
 #endif
+#else
+#warning "No curses library is available; tview with curses is disabled."
+#endif
+
+#ifdef HAVE_CURSES
 
 typedef struct CursesTview {
     tview_t view;
@@ -339,8 +348,6 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
     }
 
 #else // !HAVE_CURSES
-
-#warning "No curses library is available; tview with curses is disabled."
 
 extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples,
                              const htsFormat *fmt);

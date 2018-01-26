@@ -45,6 +45,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/bgzf.h"
 #include "samtools.h"
 #include "sam_opts.h"
+#include "bedidx.h"
 
 #define DEFAULT_BARCODE_TAG "BC"
 #define DEFAULT_QUALITY_TAG "QT"
@@ -70,6 +71,7 @@ typedef struct samview_settings {
     void* bed;
     size_t remove_aux_len;
     char** remove_aux;
+    int multi_region;
 } samview_settings_t;
 
 
@@ -77,9 +79,6 @@ typedef struct samview_settings {
 extern const char *bam_get_library(bam_hdr_t *header, const bam1_t *b);
 extern int bam_remove_B(bam1_t *b);
 extern char *samfaipath(const char *fn_ref);
-void *bed_read(const char *fn);
-void bed_destroy(void *_h);
-int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
 // Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
@@ -97,7 +96,7 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
         return 1;
-    if (settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
+    if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
         return 1;
     if (settings->subsam_frac > 0.) {
         uint32_t k = __ac_Wang_hash(__ac_X31_hash_string(bam_get_qname(b)) ^ settings->subsam_seed);
@@ -254,6 +253,8 @@ int main_samview(int argc, char *argv[])
     char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
+    int filter_state = ALL, filter_op = 0;
+    int result;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -267,6 +268,7 @@ int main_samview(int argc, char *argv[])
         .subsam_frac = -1.,
         .library = NULL,
         .bed = NULL,
+        .multi_region = 0
     };
 
     static const struct option lopts[] = {
@@ -278,7 +280,7 @@ int main_samview(int argc, char *argv[])
     strcpy(out_mode, "w");
     strcpy(out_un_mode, "w");
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:M",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -342,7 +344,7 @@ int main_samview(int argc, char *argv[])
                 settings.remove_aux[settings.remove_aux_len-1] = optarg;
             }
             break;
-
+        case 'M': settings.multi_region = 1; break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, is_long_help);
@@ -465,45 +467,16 @@ int main_samview(int argc, char *argv[])
     }
     if (is_header_only) goto view_end; // no need to print alignments
 
-    if (optind + 1 >= argc) { // convert/print the entire file
+    if (settings.multi_region) {
+        if (optind < argc - 1) { //regions have been specified in the command line
+            settings.bed = bed_hash_regions(settings.bed, argv, optind+1, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
+            if (!filter_op)
+                filter_state = FILTERED;
+        }
+
         bam1_t *b = bam_init1();
-        int r;
-        while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
-            if (!process_aln(header, b, &settings)) {
-                if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
-                count++;
-            } else {
-                if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
-            }
-        }
-        if (r < -1) {
-            fprintf(stderr, "[main_samview] truncated file.\n");
-            ret = 1;
-        }
-        bam_destroy1(b);
-    } else { // retrieve alignments in specified regions
-        int i;
-        bam1_t *b;
-        hts_idx_t *idx = sam_index_load(in, fn_in); // load index
-        if (idx == 0) { // index is unavailable
-            fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
-            ret = 1;
-            goto view_end;
-        }
-        b = bam_init1();
-        for (i = optind + 1; i < argc; ++i) {
-            int result;
-            hts_itr_t *iter = sam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
-            if (iter == NULL) { // region invalid or reference name not found
-                int beg, end;
-                if (hts_parse_reg(argv[i], &beg, &end))
-                    fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
-                else
-                    fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", argv[i]);
-                continue;
-            }
-            // fetch alignments
-            while ((result = sam_itr_next(in, iter, b)) >= 0) {
+        if (settings.bed == NULL) { // index is unavailable or no regions have been specified
+            while ((result = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
                 if (!process_aln(header, b, &settings)) {
                     if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
                     count++;
@@ -511,15 +484,104 @@ int main_samview(int argc, char *argv[])
                     if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                 }
             }
-            hts_itr_destroy(iter);
             if (result < -1) {
-                fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", argv[i]);
+                fprintf(stderr, "[main_samview] truncated file.\n");
                 ret = 1;
-                break;
+            }
+        } else {
+            hts_idx_t *idx = sam_index_load(in, fn_in); // load index
+            if (idx != NULL) {
+
+                int regcount = 0;
+
+                hts_reglist_t *reglist = bed_reglist(settings.bed, filter_state, &regcount);
+                if(reglist) {
+                    hts_itr_multi_t *iter = sam_itr_regions(idx, header, reglist, regcount);
+                    if (iter) {
+                        // fetch alignments
+                        while ((result = sam_itr_multi_next(in, iter, b)) >= 0) {
+                            if (!process_aln(header, b, &settings)) {
+                                if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
+                                count++;
+                            } else {
+                                if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
+                            }
+                        }
+                        if (result < -1) {
+                            fprintf(stderr, "[main_samview] retrieval of region %d failed due to truncated file or corrupt BAM index file\n", iter->curr_tid);
+                            ret = 1;
+                        }
+
+                        hts_itr_multi_destroy(iter);
+                    } else {
+                        fprintf(stderr, "[main_samview] iterator could not be created. Aborting.\n");
+                    }
+                } else {
+                    fprintf(stderr, "[main_samview] region list is empty or could not be created. Aborting.\n");
+                }
+                hts_idx_destroy(idx); // destroy the BAM index
+            } else {
+                fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
             }
         }
         bam_destroy1(b);
-        hts_idx_destroy(idx); // destroy the BAM index
+    } else {
+        if (optind + 1 >= argc) { // convert/print the entire file
+            bam1_t *b = bam_init1();
+            int r;
+            while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
+                if (!process_aln(header, b, &settings)) {
+                    if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
+                    count++;
+                } else {
+                    if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
+                }
+            }
+            if (r < -1) {
+                fprintf(stderr, "[main_samview] truncated file.\n");
+                ret = 1;
+            }
+            bam_destroy1(b);
+        } else { // retrieve alignments in specified regions
+            int i;
+            bam1_t *b;
+            hts_idx_t *idx = sam_index_load(in, fn_in); // load index
+            if (idx == 0) { // index is unavailable
+                fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
+                ret = 1;
+                goto view_end;
+            }
+            b = bam_init1();
+            for (i = optind + 1; i < argc; ++i) {
+                int result;
+                hts_itr_t *iter = sam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
+                if (iter == NULL) { // region invalid or reference name not found
+                    int beg, end;
+                    if (hts_parse_reg(argv[i], &beg, &end))
+                        fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
+                    else
+                        fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", argv[i]);
+                    continue;
+                }
+                // fetch alignments
+                while ((result = sam_itr_next(in, iter, b)) >= 0) {
+                    if (!process_aln(header, b, &settings)) {
+                        if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
+                        count++;
+                    } else {
+                        if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
+                    }
+                }
+                hts_itr_destroy(iter);
+                if (result < -1) {
+                    fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", argv[i]);
+                    ret = 1;
+                    break;
+                }
+            }
+            bam_destroy1(b);
+            hts_idx_destroy(idx); // destroy the BAM index
+        }
     }
 
 view_end:
@@ -589,6 +651,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -G INT   only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
+"  -M       use the multi-region iterator (increases the speed, removes\n"
+"           duplicates and outputs the reads as they are ordered in the file)\n"
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
@@ -1069,15 +1133,12 @@ static bool bam1_to_fq(const bam1_t *b, kstring_t *linebuf, const bam2fq_state_t
     char *seq = get_read(b);
     if (!seq) return false;
 
-    if (state->use_oq) {
-        oq = bam_aux_get(b, "OQ");
-        if (oq) {
-            oq++;
-            qual = strdup(bam_aux2Z(oq));
-            if (!qual) goto fail;
-            if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
-                reverse(qual);
-            }
+    if (state->use_oq) oq = bam_aux_get(b, "OQ");
+    if (oq && *oq=='Z') {
+        qual = strdup(bam_aux2Z(oq));
+        if (!qual) goto fail;
+        if (b->core.flag & BAM_FREVERSE) { // read is reverse complemented
+            reverse(qual);
         }
     } else {
         if (get_quality(b, &qual) < 0) goto fail;

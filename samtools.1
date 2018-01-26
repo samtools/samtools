@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "28 September 2017" "samtools-1.6" "Bioinformatics tools"
+.TH samtools 1 "26 January 2018" "samtools-1.7" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -154,6 +154,7 @@ option is required whenever writing CRAM output.
 
 The
 .BR -L ,
+.BR -M ,
 .BR -r ,
 .BR -R ,
 .BR -s ,
@@ -285,6 +286,13 @@ If an index is not present, one will be generated for you.
 Only output alignments overlapping the input BED
 .I FILE
 [null].
+.TP
+.B "-M "
+Use the multi-region iterator on the union of the BED file and
+command-line region arguments.  This avoids re-reading the same regions
+of files so can sometimes be much faster.  Note this also removes
+duplicate sequences.  Without this a sequence that overlaps multiple
+regions specified on the command line will be reported multiple times.
 .TP
 .BI "-r " STR
 Only output alignments in read group
@@ -1035,6 +1043,10 @@ valid header or are missing an EOF block. Otherwise it will exit successfully
 Verbose output: will additionally print the names of all input files that don't
 pass the check to stdout. Multiple -v options will cause additional messages
 regarding check results to be printed to stderr.
+.TP 8
+.B -q
+Quiet mode: disables warning messages on stderr about files that fail.
+If both -q and -v options are used then the appropriate level of -v takes precedence.
 .RE
 
 .TP \"-------- dict
@@ -1845,6 +1857,8 @@ samtools markdup
 .IR length ]
 .RB [ -r ]
 .RB [ -s ]
+.RB [ -T ]
+.RB [ -S ]
 .I in.algsort.bam out.bam
 .ad
 
@@ -1864,6 +1878,13 @@ Remove duplicate reads.
 .TP
 .B -s
 Print some basic stats.
+.TP
+.BI "-T " PREFIX
+Write temporary files to
+.IB PREFIX . samtools . nnnn . mmmm . tmp
+.TP
+.B -S
+Mark supplementary reads of duplicates as duplicates.
 .RE
 
 .EX 4

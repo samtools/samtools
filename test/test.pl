@@ -547,9 +547,9 @@ sub test_dict
 {
     my ($opts,%args) = @_;
     cmd("cat $$opts{path}/dat/dict.fa | $$opts{bgzip} -c > $$opts{tmp}/dict.fa.gz");
-    test_cmd($opts,out=>'dat/dict.out',cmd=>"$$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://orthanc.org/hf37d5.fa.gz $$opts{path}/dat/dict.fa");
-    test_cmd($opts,out=>'dat/dict.out',cmd=>"$$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://orthanc.org/hf37d5.fa.gz $$opts{tmp}/dict.fa.gz");
-    test_cmd($opts,out=>'dat/dict.out',cmd=>"cat $$opts{path}/dat/dict.fa | $$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://orthanc.org/hf37d5.fa.gz");
+    test_cmd($opts,out=>'dat/dict.out',cmd=>"$$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://example.com/hf37d5.fa.gz $$opts{path}/dat/dict.fa");
+    test_cmd($opts,out=>'dat/dict.out',cmd=>"$$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://example.com/hf37d5.fa.gz $$opts{tmp}/dict.fa.gz");
+    test_cmd($opts,out=>'dat/dict.out',cmd=>"cat $$opts{path}/dat/dict.fa | $$opts{bin}/samtools dict -a hf37d5 -s 'Homo floresiensis' -u ftp://example.com/hf37d5.fa.gz");
 }
 
 sub test_index
@@ -1008,7 +1008,7 @@ sub run_view_test
 	open(STDOUT, '>&', $save_stdout)
 	    || die "Couldn't restore STDOUT : $!\n";
     }
-    
+
     if (!$res && $args{compare_sam} && $args{out}) {
         # Convert output back to sam and compare
         my $sam_name = "$args{out}.sam";
@@ -1902,6 +1902,9 @@ sub test_view
          ['-L', $bed1], ['ref1:11-16']],
         ['bed1r2', 1,
          { region => [['ref2', 17, 17]] }, ['-L', $bed1], ['ref2']],
+        ['bed1r11', 1,
+         { region => [['ref1', 11, 15], ['ref1', 45, 45]]}, ['-L', $bed1],
+         ['ref1:1-15', 'ref1:44-45']],
 
         # BED file plus other filters
 
@@ -2317,6 +2320,10 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.003.sam");
     # tag output test with singleton tracking with a singleton as last read
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected', 'bc.fq' => 'bam2fq/bc.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
+    # test -O flag with no OQ tags
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected', 'bc.fq' => 'bam2fq/bc.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -O --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
+    # test -O flag with OQ tags
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/10.1.fq.expected', '2.fq' => 'bam2fq/10.2.fq.expected', 's.fq' => 'bam2fq/10.s.fq.expected', 'bc.fq' => 'bam2fq/bc10.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -O --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.010.sam");
     # tag output test with separators and -N flag
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/5.1.fq.expected', '2.fq' => 'bam2fq/5.2.fq.expected', 's.fq' => 'bam2fq/5.s.fq.expected', 'bc_split.fq' => 'bam2fq/bc_split.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -N --index-format 'n*i*' --i1 $$opts{path}/bc_split.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
     # -t flag
@@ -2617,4 +2624,5 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/4_missing_ms.expected.sam', err=>'4_missing_ms.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/4_missing_ms.sam -", expect_fail=>1);
     test_cmd($opts, out=>'markdup/5_markdup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/5_markdup.sam -");
     test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r $$opts{path}/markdup/6_remove_dups.sam -");
+    test_cmd($opts, out=>'markdup/7_mark_supp_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -O sam $$opts{path}/markdup/7_mark_supp_dup.sam -");
 }
