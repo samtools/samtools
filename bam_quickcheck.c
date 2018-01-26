@@ -152,7 +152,7 @@ int main_quickcheck(int argc, char** argv)
             // check EOF on formats that support this
             int ret;
             if ((ret = hts_check_EOF(hts_fp)) < 0) {
-                QC_ERR(QC_NO_EOF_BLOCK, 2, "%s caused an error whilst checking for EOF block.\n", fn); 
+                QC_ERR(QC_NO_EOF_BLOCK, 2, "%s caused an error whilst checking for EOF block.\n", fn);
            }
             else {
                 switch (ret) {
