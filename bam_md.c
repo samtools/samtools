@@ -46,7 +46,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
-void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm)
+void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm, int quiet_mode)
 {
     uint8_t *seq = bam_get_seq(b);
     uint32_t *cigar = bam_get_cigar(b);
@@ -116,7 +116,9 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm)
         if (old_nm) old_nm_i = bam_aux2i(old_nm);
         if (!old_nm) bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
         else if (nm != old_nm_i) {
-            fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d -> %d\n", bam_get_qname(b), old_nm_i, nm);
+            if (!quiet_mode) {
+                fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d -> %d\n", bam_get_qname(b), old_nm_i, nm);
+            }
             bam_aux_del(b, old_nm);
             bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
         }
@@ -134,7 +136,9 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm)
                 if (i < str->l) is_diff = 1;
             } else is_diff = 1;
             if (is_diff) {
-                fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam_get_qname(b), old_md+1, str->s);
+                if (!quiet_mode) {
+                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam_get_qname(b), old_md+1, str->s);
+                }
                 bam_aux_del(b, old_md);
                 bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
             }
@@ -156,20 +160,21 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm)
     free(str->s); free(str);
 }
 
-void bam_fillmd1(bam1_t *b, char *ref, int flag)
+void bam_fillmd1(bam1_t *b, char *ref, int flag, int quiet_mode)
 {
-    bam_fillmd1_core(b, ref, INT_MAX, flag, 0);
+    bam_fillmd1_core(b, ref, INT_MAX, flag, 0, quiet_mode);
 }
 
 int calmd_usage() {
     fprintf(stderr,
-"Usage: samtools calmd [-eubrAES] <aln.bam> <ref.fasta>\n"
+"Usage: samtools calmd [-eubrAESQ] <aln.bam> <ref.fasta>\n"
 "Options:\n"
 "  -e       change identical bases to '='\n"
 "  -u       uncompressed BAM output (for piping)\n"
 "  -b       compressed BAM output\n"
 "  -S       ignored (input format is auto-detected)\n"
 "  -A       modify the quality string\n"
+"  -Q       use quiet mode to output less debug info to stdout\n"
 "  -r       compute the BQ tag (without -A) or cap baseQ by BAQ (with -A)\n"
 "  -E       extended BAQ for better sensitivity but lower specificity\n");
 
@@ -179,7 +184,7 @@ int calmd_usage() {
 
 int bam_fillmd(int argc, char *argv[])
 {
-    int c, flt_flag, tid = -2, ret, len, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag;
+    int c, flt_flag, tid = -2, ret, len, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag, quiet_mode;
     htsThreadPool p = {NULL, 0};
     samFile *fp = NULL, *fpout = NULL;
     bam_hdr_t *header = NULL;
@@ -194,9 +199,9 @@ int bam_fillmd(int argc, char *argv[])
     };
 
     flt_flag = UPDATE_NM | UPDATE_MD;
-    is_bam_out = is_uncompressed = is_realn = max_nm = capQ = baq_flag = 0;
+    is_bam_out = is_uncompressed = is_realn = max_nm = capQ = baq_flag = quiet_mode = 0;
     strcpy(mode_w, "w");
-    while ((c = getopt_long(argc, argv, "EqreuNhbSC:n:Ad@:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "EqQreuNhbSC:n:Ad@:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'r': is_realn = 1; break;
         case 'e': flt_flag |= USE_EQUAL; break;
@@ -211,6 +216,7 @@ int bam_fillmd(int argc, char *argv[])
         case 'C': capQ = atoi(optarg); break;
         case 'A': baq_flag |= 1; break;
         case 'E': baq_flag |= 2; break;
+        case 'Q': quiet_mode = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n\n", c);
             /* else fall-through */
@@ -283,7 +289,7 @@ int bam_fillmd(int argc, char *argv[])
                 int q = sam_cap_mapq(b, ref, len, capQ);
                 if (b->core.qual > q) b->core.qual = q;
             }
-            if (ref) bam_fillmd1_core(b, ref, len, flt_flag, max_nm);
+            if (ref) bam_fillmd1_core(b, ref, len, flt_flag, max_nm, quiet_mode);
         }
         if (sam_write1(fpout, header, b) < 0) {
             print_error_errno("calmd", "failed to write to output file");
