@@ -358,7 +358,9 @@ static void orphan_only_func(const state_t* state, bam1_t* file_read)
 }
 
 static bool init(const parsed_opts_t* opts, state_t** state_out) {
+    char output_mode[8] = "w";
     state_t* retval = (state_t*) calloc(1, sizeof(state_t));
+
     if (retval == NULL) {
         fprintf(stderr, "[init] Out of memory allocating state struct.\n");
         return false;
@@ -374,7 +376,9 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     retval->input_header = sam_hdr_read(retval->input_file);
 
     retval->output_header = bam_hdr_dup(retval->input_header);
-    retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, "w", &opts->ga.out);
+    if (opts->output_name) // File format auto-detection
+        sam_open_mode(output_mode + 1, opts->output_name, NULL);
+    retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, output_mode, &opts->ga.out);
 
     if (retval->output_file == NULL) {
         print_error_errno("addreplacerg", "could not create \"%s\"", opts->output_name);
