@@ -2425,9 +2425,9 @@ sub test_merge
     # Note the use of -s 1 to fix the random seed in place
 
     # Merge 1 - Standard 3 file SAM merge all presented on the command line
-    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam",binary=>1);
+    test_cmd($opts,out=>'merge/2.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
     # Merge 2 - Standard 3 file BAM merge all files presented on the command line
-    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam",binary=>1);
+    test_cmd($opts,out=>'merge/2.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam");
     # Merge 3 - Standard 3 file BAM merge 2 files in fofn 1 on command line
     open(my $fofn, "$$opts{path}/merge/test_3.fofn");
     my ($tmpfile_fh, $tmpfile_filename) = tempfile(UNLINK => 1);
@@ -2436,15 +2436,15 @@ sub test_merge
         print $tmpfile_fh "$$opts{path}/$_";
     }
     close($tmpfile_fh);
-    test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam",binary=>1);
+    test_cmd($opts,out=>'merge/3.merge.expected.sam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam");
     # Merge 4 - 1 file BAM merge with file presented on the command line
-    test_cmd($opts,out=>'merge/4.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_b.bam",binary=>1);
+    test_cmd($opts,out=>'merge/4.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_b.bam");
     # Merge 5 - 3 file SAM merge all presented on the command line override IDs to file names
-    test_cmd($opts,out=>'merge/5.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -r -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam",binary=>1);
+    test_cmd($opts,out=>'merge/5.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -r -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
     # Merge 6 - merge all presented on the command line, combine PG and RG rather than dedup
-    test_cmd($opts,out=>'merge/6.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam",binary=>1);
+    test_cmd($opts,out=>'merge/6.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
     # Merge 7 - ID and SN with regex in them
-    test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam",binary=>1);
+    test_cmd($opts,out=>'merge/7.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
 
     # Sort inputs by PG, then merge
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG  $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
