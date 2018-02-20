@@ -830,7 +830,7 @@ has coverage outside of the region specified in the BED file.
 .TP
 .BI "-m, -d " INT
 .RI "Truncate reported depth at a maximum of " INT " reads."
-[8000]
+[8000]. If 0, depth is set to the maximum integer value, effectively removing any depth limit.
 .TP
 .BI "-q " INT
 .RI "Only count reads with base quality greater than " INT
