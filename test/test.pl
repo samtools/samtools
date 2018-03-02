@@ -51,6 +51,8 @@ test_merge($opts);
 test_merge($opts, threads=>2);
 test_sort($opts);
 test_sort($opts, threads=>2);
+test_collate($opts);
+test_collate($opts, threads=>2);
 test_fixmate($opts);
 test_fixmate($opts, threads=>2);
 test_calmd($opts);
@@ -2488,6 +2490,35 @@ sub test_sort
 
     # Tag sort (FI)
     test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t FI $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+}
+
+sub test_collate
+{
+    my ($opts, %args) = @_;
+
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
+
+    # Output to stdout
+    test_cmd($opts, out=>"collate/collate.expected.sam",
+	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -O $$opts{path}/dat/test_input_1_d.sam");
+
+    # Output to file
+    test_cmd($opts, out=>"dat/empty.expected",
+	     out_map=>{"collate/collate1.tmp.sam"
+			    =>"collate/collate.expected.sam"},
+	     cmd=>"$$opts{bin}/samtools collate${threads} -o $$opts{path}/collate/collate1.tmp.sam  $$opts{path}/dat/test_input_1_d.sam");
+
+    # Output to file, given tmp file prefix
+    test_cmd($opts, out=>"dat/empty.expected",
+	     out_map=>{"collate/collate2.tmp.sam"
+			   =>"collate/collate.expected.sam"},
+	     cmd=>"$$opts{bin}/samtools collate${threads} -o $$opts{path}/collate/collate2.tmp.sam  $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate2.tmp");
+
+    # Legacy usage with output file name based on prefix
+    test_cmd($opts, out=>"dat/empty.expected",
+	     out_map=>{"collate/collate3.tmp.sam"
+			   =>"collate/collate.expected.sam"},
+	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate3.tmp");
 }
 
 sub test_fixmate

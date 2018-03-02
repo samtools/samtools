@@ -85,7 +85,7 @@ samtools fasta input.bam > output.fasta
 .PP
 samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
 .PP
-samtools collate aln.sorted.bam aln.name_collated.bam
+samtools collate -o aln.name_collated.bam aln.sorted.bam
 .PP
 samtools depad input.bam
 .PP
@@ -1566,7 +1566,7 @@ ignore the left part of the tag until the separator, then use the second part
 .B collate
 samtools collate
 .RI [ options ]
-.IR in.sam | in.bam | in.cram " [" out.prefix "]"
+.IR in.sam | in.bam | in.cram " [" <prefix> "]"
 
 Shuffles and groups reads together by their names.
 A faster alternative to a full query name sort,
@@ -1577,11 +1577,23 @@ but doesn't make any guarantees about the order of read names between groups.
 The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
 
+If present, <prefix> is used to name the temporary files that collate
+uses when sorting the data.  If neither the '-O' nor '-o' options are used,
+<prefix> must be present and collate will use it to make an output file name
+by appending a suffix depending on the format written (.bam by default).
+
+If either the -O or -o option is used, <prefix> is optional.  If <prefix>
+is absent, collate will write the temporary files to a system-dependent
+location (/tmp on UNIX).
+
 .B Options:
 .RS
 .TP 8
 .B -O
-Output to stdout rather than to files starting with out.prefix
+Output to stdout.  This option cannot be used with '-o'.
+.TP
+.B -o FILE
+Write output to FILE.  This option cannot be used with '-O'.
 .TP
 .B -u
 Write uncompressed BAM output
