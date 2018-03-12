@@ -230,13 +230,13 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)
-	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
+	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_bam_translate.o test/test.o libst.a tmp_file.o $(LZ4OBJS) $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/merge/test_rtrans_build: test/merge/test_rtrans_build.o libst.a $(HTSLIB)
-	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_rtrans_build.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
+	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_rtrans_build.o libst.a tmp_file.o $(LZ4OBJS) $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/merge/test_trans_tbl_init: test/merge/test_trans_tbl_init.o libst.a $(HTSLIB)
-	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
+	$(CC) $(ALL_LDFLAGS) -o $@ test/merge/test_trans_tbl_init.o libst.a tmp_file.o $(LZ4OBJS) $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
 
 test/split/test_count_rg: test/split/test_count_rg.o test/test.o libst.a $(HTSLIB)
 	$(CC) $(ALL_LDFLAGS) -o $@ test/split/test_count_rg.o test/test.o libst.a $(HTSLIB_LIB) $(ALL_LIBS) -lpthread
