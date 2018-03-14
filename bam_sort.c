@@ -123,6 +123,7 @@ static int strnum_cmp(const char *_a, const char *_b)
 
 typedef struct {
     int i;
+    uint32_t rev;
     uint64_t pos, idx;
     bam1_tag entry;
 } heap1_t;
@@ -150,6 +151,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
         if (fa != fb) return fa > fb;
     } else {
         if (a.pos != b.pos) return a.pos > b.pos;
+        if (a.rev != b.rev) return a.rev > b.rev;
     }
     // This compares by position in the input file(s)
     if (a.i != b.i) return a.i > b.i;
@@ -1366,7 +1368,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         res = iter[i] ? sam_itr_next(fp[i], iter[i], h->entry.bam_record) : sam_read1(fp[i], hdr[i], h->entry.bam_record);
         if (res >= 0) {
             bam_translate(h->entry.bam_record, translation_tbl + i);
-            h->pos = ((uint64_t)h->entry.bam_record->core.tid<<32) | (uint32_t)((int32_t)h->entry.bam_record->core.pos+1)<<1 | bam_is_rev(h->entry.bam_record);
+            h->pos = ((uint64_t)h->entry.bam_record->core.tid<<32) | (uint32_t)((int32_t)h->entry.bam_record->core.pos+1);
+            h->rev = bam_is_rev(h->entry.bam_record);
             h->idx = idx++;
             if (g_is_by_tag) {
                 h->entry.tag = bam_aux_get(h->entry.bam_record, g_sort_tag);
@@ -1413,7 +1416,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         }
         if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
             bam_translate(b, translation_tbl + heap->i);
-            heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
+            heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1);
+            heap->rev = bam_is_rev(b);
             heap->idx = idx++;
             if (g_is_by_tag) {
                 heap->entry.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
@@ -1649,8 +1653,8 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
     }
     if (res >= 0) {
         heap->pos = (((uint64_t)heap->entry.bam_record->core.tid<<32)
-                     | (uint32_t)((int32_t)heap->entry.bam_record->core.pos+1)<<1
-                     | bam_is_rev(heap->entry.bam_record));
+                     | (uint32_t)((int32_t)heap->entry.bam_record->core.pos+1));
+        heap->rev = bam_is_rev(heap->entry.bam_record);
         heap->idx = (*idx)++;
         if (g_is_by_tag) {
             heap->entry.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
@@ -1804,8 +1808,14 @@ static inline int bam1_cmp_core(const bam1_tag a, const bam1_tag b)
         if (t != 0) return t;
         return (int) (a.bam_record->core.flag&0xc0) - (int) (b.bam_record->core.flag&0xc0);
     } else {
-        pa = (uint64_t)a.bam_record->core.tid<<32|(a.bam_record->core.pos+1)<<1|bam_is_rev(a.bam_record);
-        pb = (uint64_t)b.bam_record->core.tid<<32|(b.bam_record->core.pos+1)<<1|bam_is_rev(b.bam_record);
+        pa = (uint64_t)a.bam_record->core.tid<<32|(a.bam_record->core.pos+1);
+        pb = (uint64_t)b.bam_record->core.tid<<32|(b.bam_record->core.pos+1);
+
+        if (pa == pb) {
+            pa = bam_is_rev(a.bam_record);
+            pb = bam_is_rev(b.bam_record);
+        }
+
         return pa < pb ? -1 : (pa > pb ? 1 : 0);
     }
 }
@@ -2215,6 +2225,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     bam_destroy1(b);
     free(buf);
     free(bam_mem);
+    free(in_mem);
     bam_hdr_destroy(header);
     if (fp) sam_close(fp);
     return ret;
