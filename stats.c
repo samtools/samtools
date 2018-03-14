@@ -134,6 +134,7 @@ typedef struct
     // Misc
     char *split_tag;      // Tag on which to perform stats splitting
     char *split_prefix;   // Path or string prefix for filenames created when splitting
+    int overlap;          // 1 - reads overlapping the target, 0 - reads fully included
 }
 stats_info_t;
 
@@ -1308,10 +1309,18 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
 
     // Find a matching interval or skip this read. No splicing of reads is done, no indels or soft clips considered,
     //  even small overlap is enough to include the read in the stats.
-    int i = reg->cpos;
-    while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
-    if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
-    if ( bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) return 0;
+    int i;
+    if (stats->info->overlap) {
+        i = reg->cpos;
+        while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
+        if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
+        if ( bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) return 0;
+    } else { //only reads fully included in the target
+        i = 0;
+        while ( i<reg->npos && (reg->pos[i].to < (bam_line->core.pos + bam_line->core.l_qseq) || reg->pos[i].from > (bam_line->core.pos + 1)) ) i++;
+        if ( i>=reg->npos ) return 0;
+    }
+
     reg->cpos = i;
     stats->reg_from = reg->pos[i].from;
     stats->reg_to   = reg->pos[i].to;
@@ -1375,6 +1384,7 @@ static void error(const char *format, ...)
         printf("    -S, --split <tag>                   Also write statistics to separate files split by tagged field.\n");
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
+        printf("    -W, --within                        Works in conjunction with -t. If set, only the reads fully included in the target regions will be used for statistic. Otherwise, all regions overlapping the target are used.\n");
         sam_global_opt_help(stdout, "-.--.@");
         printf("\n");
     }
@@ -1472,6 +1482,7 @@ stats_info_t* stats_info_init(int argc, char *argv[])
     info->filter_readlen = -1;
     info->argc = argc;
     info->argv = argv;
+    info->overlap = 1;
 
     return info;
 }
@@ -1614,11 +1625,12 @@ int main_stats(int argc, char *argv[])
         {"sparse", no_argument, NULL, 'x'},
         {"split", required_argument, NULL, 'S'},
         {"split-prefix", required_argument, NULL, 'P'},
+        {"within", no_argument, NULL, 'W'},
         {NULL, 0, NULL, 0}
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:@:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:W@:",loptions,NULL))>0 )
     {
         switch (opt)
         {
@@ -1643,6 +1655,7 @@ int main_stats(int argc, char *argv[])
             case 'x': sparse = 1; break;
             case 'S': info->split_tag = optarg; break;
             case 'P': info->split_prefix = optarg; break;
+            case 'W': info->overlap = 0; break;
             case '?':
             case 'h': error(NULL);
             default:
