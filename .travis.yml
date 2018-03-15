@@ -31,9 +31,11 @@ before_install:
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install xz || ( brew update && brew install xz ); fi
 
 before_script:
-  # Clone samtools/htslib (or another repository, as specified by a Travis CI
-  # repository $HTSREPO setting) and check out a corresponding branch with the
-  # same name, if any, or otherwise the default branch.
-  - .travis/clone ${HTSREPO:-git://github.com/samtools/htslib.git} $HTSDIR $TRAVIS_BRANCH
+  # Try using the same branch name in the owners copy of htslib.  If this exists then
+  # the user is likely making a joint PR to htslib and samtools and we want to validate
+  # this PR works in the context of their htslib.
+  # If this doesn't exist, then we need to test this PR against the upstream develop
+  # htslib as this is what we'll be linking against once merged.
+  - git clone git://github.com/$(dirname $TRAVIS_REPO_SLUG)/htslib.git $HTSDIR -b $TRAVIS_BRANCH || git clone git://github.com/samtools/htslib.git $HTSDIR
 
 script: make -e && make -e test
