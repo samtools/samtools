@@ -1309,17 +1309,11 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
 
     // Find a matching interval or skip this read. No splicing of reads is done, no indels or soft clips considered,
     //  even small overlap is enough to include the read in the stats.
-    int i;
-    if (stats->info->overlap) {
-        i = reg->cpos;
-        while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
-        if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
-        if ( bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) return 0;
-    } else { //only reads fully included in the target
-        i = 0;
-        while ( i<reg->npos && (reg->pos[i].to < (bam_line->core.pos + bam_line->core.l_qseq) || reg->pos[i].from > (bam_line->core.pos + 1)) ) i++;
-        if ( i>=reg->npos ) return 0;
-    }
+    int i = reg->cpos;
+    while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
+    if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
+    if ( stats->info->overlap && bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) return 0;
+    if ( !stats->info->overlap && (reg->pos[i].to < (bam_line->core.pos + bam_line->core.l_qseq) || reg->pos[i].from > (bam_line->core.pos + 1)) ) return 0;
 
     reg->cpos = i;
     stats->reg_from = reg->pos[i].from;
