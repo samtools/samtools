@@ -1392,6 +1392,14 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         }
     }
 
+    if (opts->ga.reference) {
+        if (hts_set_fai_filename(state->fp, opts->ga.reference) != 0) {
+            print_error_errno("bam2fq", "cannot load reference \"%s\"", opts->ga.reference);
+            free(state);
+            return false;
+        }
+    }
+
     int i;
     for (i = 0; i < 3; ++i) {
         if (opts->fnr[i]) {
