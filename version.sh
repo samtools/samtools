@@ -7,7 +7,7 @@ VERSION=1.7
 if [ -e .git ]
 then
     # If we ever get to 10.x this will need to be more liberal
-    VERSION=`git describe --match '[0-9].[0-9]*' --dirty`
+    VERSION=`git describe --match '[0-9].[0-9]*' --dirty --always`
 fi
 
 echo $VERSION
