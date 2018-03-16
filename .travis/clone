@@ -2,13 +2,16 @@
 # Usage: .travis/clone REPOSITORY [DIR] [BRANCH]
 #
 # Creates a shallow clone, checking out the specified branch.  If BRANCH is
-# omitted or if there is no branch with that name, checks out origin/HEAD.
+# omitted or if there is no branch with that name, checks out origin/HEAD
+# from the samtools/htslib repository.
 
 repository=$1
 localdir=$2
 branch=$3
 
-[ -n "$branch" ] && ref=$(git ls-remote --heads $repository $branch)
+ref=''
+[ -n "$branch" ] && ref=$(git ls-remote --heads "$repository" "$branch" 2>/dev/null)
+[ -z "$ref" ] && repository='git://github.com/samtools/htslib.git'
 
 set -x
-git clone --depth=1 ${ref:+--branch=$branch} $repository $localdir
+git clone --depth=50 ${ref:+--branch="$branch"} "$repository" "$localdir"
