@@ -227,6 +227,10 @@ static void error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
 void realloc_buffers(stats_t *stats, int seq_len);
 
+static int regions_lt(const void *r1, const void *r2) {
+    int from_diff = ((pos_t *)r1)->from - ((pos_t *)r2)->from;
+    return from_diff ? from_diff : ((pos_t *)r1)->to - ((pos_t *)r2)->to;
+}
 
 // Coverage distribution methods
 static inline int coverage_idx(int min, int max, int n, int step, int depth)
@@ -1236,7 +1240,7 @@ void init_regions(stats_t *stats, const char *file)
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
 
     kstring_t line = { 0, 0, NULL };
-    int warned = 0;
+    int warned = 0, r, p, new_p;
     int prev_tid=-1, prev_pos=-1;
     while (line.l = 0, kgetline(&line, (kgets_func *)fgets, fp) >= 0)
     {
@@ -1287,6 +1291,19 @@ void init_regions(stats_t *stats, const char *file)
     free(line.s);
     if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
     fclose(fp);
+
+    // sort region intervals and remove duplicates
+    for (r = 0; r < stats->nregions; r++) {
+        regions_t *reg = &stats->regions[r];
+        qsort(reg->pos, reg->npos, sizeof(pos_t), regions_lt);
+        for (new_p = 0, p = 1; p < reg->npos; p++) {
+            if ( reg->pos[new_p].to < reg->pos[p].from )
+                reg->pos[++new_p] = reg->pos[p];
+            else if ( reg->pos[new_p].to < reg->pos[p].to )
+                reg->pos[new_p].to = reg->pos[p].to;
+        }
+        reg->npos = ++new_p;
+    }
 }
 
 void destroy_regions(stats_t *stats)
@@ -1298,6 +1315,7 @@ void destroy_regions(stats_t *stats)
         free(stats->regions[i].pos);
     }
     if ( stats->regions ) free(stats->regions);
+    if ( stats->chunks ) free(stats->chunks);
 }
 
 void reset_regions(stats_t *stats)

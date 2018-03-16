@@ -19,7 +19,7 @@ SN	reads QC failed:	0
 SN	non-primary alignments:	0
 SN	total length:	260	# ignores clipping
 SN	bases mapped:	260	# ignores clipping
-SN	bases mapped (cigar):	179	# more accurate
+SN	bases mapped (cigar):	206	# more accurate
 SN	bases trimmed:	0
 SN	bases duplicated:	0
 SN	mismatches:	0	# from NM fields
