@@ -74,6 +74,9 @@ DEALINGS IN THE SOFTWARE.  */
 #define IS_DUP(bam) ((bam)->core.flag&BAM_FDUP)
 #define IS_ORIGINAL(bam) (((bam)->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) == 0)
 
+#define MIN(A,B) ( ( (A) < (B) ) ? (A) : (B) )
+#define MAX(A,B) ( ( (A) > (B) ) ? (A) : (B) )
+
 // The GC-depth graph works as follows: split the reference sequence into
 // segments and calculate GC content and depth in each bin. Then sort
 // these segments by their GC and plot the depth distribution by means
@@ -213,6 +216,8 @@ typedef struct
     char* split_name;
 
     stats_info_t* info;             // Pointer to options and settings struct
+    pos_t *chunks;
+    uint32_t nchunks;
 
 }
 stats_t;
@@ -875,7 +880,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
             if ( !ncig ) continue;  // curiously, this can happen: 0D
             if ( cig==BAM_CDEL ) readlen += ncig;
-            else if ( cig==BAM_CMATCH )
+            else if ( cig==BAM_CMATCH || cig==BAM_CEQUAL || cig==BAM_CDIFF )
             {
                 if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
                 else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
@@ -958,7 +963,13 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
         // Coverage distribution graph
         round_buffer_flush(stats,bam_line->core.pos);
-        round_buffer_insert_read(&(stats->cov_rbuf),bam_line->core.pos,bam_line->core.pos+seq_len-1);
+        if ( stats->regions ) {
+            for (i = 0; i < stats->nchunks; i++) {
+                round_buffer_insert_read(&(stats->cov_rbuf), stats->chunks[i].from, stats->chunks[i].to);
+            }
+        } else {
+            round_buffer_insert_read(&(stats->cov_rbuf),bam_line->core.pos,bam_line->core.pos+seq_len-1);
+        }
     }
 }
 
@@ -1311,10 +1322,23 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     int i = reg->cpos;
     while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
     if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
-    if ( bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) return 0;
+    if ( bam_line->core.pos + bam_line->core.l_qseq < reg->pos[i].from ) return 0;
+
+    //found a read overlapping a region
     reg->cpos = i;
     stats->reg_from = reg->pos[i].from;
     stats->reg_to   = reg->pos[i].to;
+
+    //now find all the overlapping chunks
+    stats->nchunks = 0;
+    while (i < reg->npos) {
+        if (bam_line->core.pos < reg->pos[i].to && bam_line->core.pos + bam_line->core.l_qseq >= reg->pos[i].from) {
+            stats->chunks[stats->nchunks].from = MAX(bam_line->core.pos+1, reg->pos[i].from);
+            stats->chunks[stats->nchunks].to = MIN(bam_line->core.pos+bam_line->core.l_qseq, reg->pos[i].to);
+            stats->nchunks++;
+        }
+        i++;
+    }
 
     return 1;
 }
@@ -1507,6 +1531,7 @@ stats_t* stats_init()
     stats->is_sorted = 1;
     stats->nindels = stats->nbases;
     stats->split_name = NULL;
+    stats->nchunks = 0;
 
     return stats;
 }
@@ -1549,8 +1574,10 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
     stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
     realloc_rseq_buffer(stats);
-    if ( targets )
+    if ( targets ) {
         init_regions(stats, targets);
+        stats->chunks = calloc(stats->nregions, sizeof(pos_t));
+    }
 }
 
 static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_hash, stats_info_t* info, char* targets)
