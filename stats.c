@@ -150,7 +150,8 @@ typedef struct
     // Arrays for the histogram data
     uint64_t *quals_1st, *quals_2nd;
     uint64_t *gc_1st, *gc_2nd;
-    acgtno_count_t *acgtno_cycles;
+    acgtno_count_t *acgtno_cycles_1st;
+    acgtno_count_t *acgtno_cycles_2nd;
     uint64_t *read_lengths, *read_lengths_1st, *read_lengths_2nd;
     uint64_t *insertions, *deletions;
     uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
@@ -583,10 +584,15 @@ void realloc_buffers(stats_t *stats, int seq_len)
         memset(stats->mpc_buf + stats->nbases*stats->nquals, 0, (n-stats->nbases)*stats->nquals*sizeof(uint64_t));
     }
 
-    stats->acgtno_cycles = realloc(stats->acgtno_cycles, n*sizeof(acgtno_count_t));
-    if ( !stats->acgtno_cycles )
+    stats->acgtno_cycles_1st = realloc(stats->acgtno_cycles_1st, n*sizeof(acgtno_count_t));
+    if ( !stats->acgtno_cycles_1st )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
-    memset(stats->acgtno_cycles + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
+    memset(stats->acgtno_cycles_1st + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
+
+    stats->acgtno_cycles_2nd = realloc(stats->acgtno_cycles_2nd, n*sizeof(acgtno_count_t));
+    if ( !stats->acgtno_cycles_2nd )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
+    memset(stats->acgtno_cycles_2nd + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
 
     stats->read_lengths = realloc(stats->read_lengths, n*sizeof(uint64_t));
     if ( !stats->read_lengths )
@@ -678,8 +684,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
     uint8_t *seq  = bam_get_seq(bam_line);
-    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line);
-
+    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line), is_first = IS_READ1(bam_line);
     for (i=0; i<seq_len; i++)
     {
         // Read cycle for current index
@@ -690,28 +695,28 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
         //      =ACMGRSVTWYHKDBN
         switch (bam_seqi(seq, i)) {
         case 1:
-            stats->acgtno_cycles[ read_cycle ].a++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].a++ : stats->acgtno_cycles_2nd[ read_cycle ].a++;
             break;
         case 2:
-            stats->acgtno_cycles[ read_cycle ].c++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].c++ : stats->acgtno_cycles_2nd[ read_cycle ].c++;
             gc_count++;
             break;
         case 4:
-            stats->acgtno_cycles[ read_cycle ].g++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].g++ : stats->acgtno_cycles_2nd[ read_cycle ].g++;
             gc_count++;
             break;
         case 8:
-            stats->acgtno_cycles[ read_cycle ].t++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].t++ : stats->acgtno_cycles_2nd[ read_cycle ].t++;
             break;
         case 15:
-            stats->acgtno_cycles[ read_cycle ].n++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].n++ : stats->acgtno_cycles_2nd[ read_cycle ].n++;
             break;
         default:
             /*
              * count "=" sequences in "other" along
              * with MRSVWYHKDB ambiguity codes
              */
-            stats->acgtno_cycles[ read_cycle ].other++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].other++ : stats->acgtno_cycles_2nd[ read_cycle ].other++;
             break;
         }
     }
@@ -1219,10 +1224,51 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "# ACGT content per cycle. Use `grep ^GCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
     {
-        acgtno_count_t *acgtno_count = &(stats->acgtno_cycles[ibase]);
-        uint64_t acgt_sum = acgtno_count->a + acgtno_count->c + acgtno_count->g + acgtno_count->t;
+        acgtno_count_t *acgtno_count_1st = &(stats->acgtno_cycles_1st[ibase]);
+        acgtno_count_t *acgtno_count_2nd = &(stats->acgtno_cycles_2nd[ibase]);
+        uint64_t acgt_sum = acgtno_count_1st->a + acgtno_count_1st->c + acgtno_count_1st->g + acgtno_count_1st->t +
+                acgtno_count_2nd->a + acgtno_count_2nd->c + acgtno_count_2nd->g + acgtno_count_2nd->t;
         if ( ! acgt_sum ) continue;
-        fprintf(to, "GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1, 100.*acgtno_count->a/acgt_sum, 100.*acgtno_count->c/acgt_sum, 100.*acgtno_count->g/acgt_sum, 100.*acgtno_count->t/acgt_sum, 100.*acgtno_count->n/acgt_sum, 100.*acgtno_count->other/acgt_sum);
+        fprintf(to, "GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                100.*(acgtno_count_1st->a + acgtno_count_2nd->a)/acgt_sum,
+                100.*(acgtno_count_1st->c + acgtno_count_2nd->c)/acgt_sum,
+                100.*(acgtno_count_1st->g + acgtno_count_2nd->g)/acgt_sum,
+                100.*(acgtno_count_1st->t + acgtno_count_2nd->t)/acgt_sum,
+                100.*(acgtno_count_1st->n + acgtno_count_2nd->n)/acgt_sum,
+                100.*(acgtno_count_1st->other + acgtno_count_2nd->other)/acgt_sum);
+
+    }
+    fprintf(to, "# ACGT content per cycle for first fragments. Use `grep ^FBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
+    for (ibase=0; ibase<stats->max_len; ibase++)
+    {
+        acgtno_count_t *acgtno_count_1st = &(stats->acgtno_cycles_1st[ibase]);
+        uint64_t acgt_sum_1st = acgtno_count_1st->a + acgtno_count_1st->c + acgtno_count_1st->g + acgtno_count_1st->t;
+
+        if ( acgt_sum_1st )
+            fprintf(to, "FBC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                    100.*acgtno_count_1st->a/acgt_sum_1st,
+                    100.*acgtno_count_1st->c/acgt_sum_1st,
+                    100.*acgtno_count_1st->g/acgt_sum_1st,
+                    100.*acgtno_count_1st->t/acgt_sum_1st,
+                    100.*acgtno_count_1st->n/acgt_sum_1st,
+                    100.*acgtno_count_1st->other/acgt_sum_1st);
+
+    }
+    fprintf(to, "# ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
+    for (ibase=0; ibase<stats->max_len; ibase++)
+    {
+        acgtno_count_t *acgtno_count_2nd = &(stats->acgtno_cycles_2nd[ibase]);
+        uint64_t acgt_sum_2nd = acgtno_count_2nd->a + acgtno_count_2nd->c + acgtno_count_2nd->g + acgtno_count_2nd->t;
+
+        if ( acgt_sum_2nd )
+            fprintf(to, "LBC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                    100.*acgtno_count_2nd->a/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->c/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->g/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->t/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->n/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->other/acgt_sum_2nd);
+
     }
     fprintf(to, "# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
@@ -1574,7 +1620,8 @@ void cleanup_stats(stats_t* stats)
     free(stats->gcd);
     free(stats->rseq_buf);
     free(stats->mpc_buf);
-    free(stats->acgtno_cycles);
+    free(stats->acgtno_cycles_1st);
+    free(stats->acgtno_cycles_2nd);
     free(stats->read_lengths);
     free(stats->read_lengths_1st);
     free(stats->read_lengths_2nd);
@@ -1711,7 +1758,8 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->isize          = init_isize_t(info->nisize ?info->nisize+1 :0);
     stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
     stats->mpc_buf        = info->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
-    stats->acgtno_cycles  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    stats->acgtno_cycles_1st  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    stats->acgtno_cycles_2nd  = calloc(stats->nbases,sizeof(acgtno_count_t));
     stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
     stats->read_lengths_1st   = calloc(stats->nbases,sizeof(uint64_t));
     stats->read_lengths_2nd   = calloc(stats->nbases,sizeof(uint64_t));
