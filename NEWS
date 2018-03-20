@@ -1,6 +1,33 @@
 Release a.b
 --------------------
 
+ * samtools calmd now has a quiet mode.  This can be enabled by passing `-Q` to
+   calmd. (Thanks to Colin Davenport)
+
+ * In samtools depth `-d 0` will effectively remove the depth limit. (#764)
+
+ * Improvements made to samtools collate's interface and documentation.  It is
+   now possible to specify an output file name using `-o`, instead of deriving  
+   it from the prefix used for temporary files.  The prefix itself is now
+   optional if `-o` or `-O` (to stdout) is used. (#780)
+
+ * Bug-fixes:
+
+   - Make samtools addreplacerg choose output format by file extension. (#767; 
+     reported by Argy Megalios)
+
+   - Merge tests now work on ungzipped data, allowing tests to be run against
+     different deflate libraries.
+
+   - samtools markdup error messages about missing tags have been updated with
+     the suggestion that samtools fixmate is run beforehand. (#765; reported by
+     Yudong Cai)
+
+   - Enables the `--reference` option for samtools fastq.  Now works like other
+     programs when a reference sequence is needed for CRAM files. (#791,
+     reported by Milana Kaljevic)
+
+
 Release 1.7 (26th January 2018)
 --------------------
 
