@@ -60,6 +60,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/kstring.h>
 #include "stats_isize.h"
 #include "sam_opts.h"
+#include "bedidx.h"
 
 #define BWA_MIN_RDLEN 35
 // From the spec
@@ -228,8 +229,10 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats);
 void realloc_buffers(stats_t *stats, int seq_len);
 
 static int regions_lt(const void *r1, const void *r2) {
-    int from_diff = ((pos_t *)r1)->from - ((pos_t *)r2)->from;
-    return from_diff ? from_diff : ((pos_t *)r1)->to - ((pos_t *)r2)->to;
+    int64_t from_diff = (int64_t)((pos_t *)r1)->from - (int64_t)((pos_t *)r2)->from;
+    int64_t to_diff = (int64_t)((pos_t *)r1)->to - (int64_t)((pos_t *)r2)->to;
+
+    return from_diff > 0 ? 1 : from_diff < 0 ? -1 : to_diff > 0 ? 1 : to_diff < 0 ? -1 : 0;
 }
 
 // Coverage distribution methods
@@ -968,8 +971,25 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         // Coverage distribution graph
         round_buffer_flush(stats,bam_line->core.pos);
         if ( stats->regions ) {
+            uint32_t p = bam_line->core.pos, pmin, pmax, j;
             for (i = 0; i < stats->nchunks; i++) {
-                round_buffer_insert_read(&(stats->cov_rbuf), stats->chunks[i].from, stats->chunks[i].to);
+                for (j = 0; p < stats->chunks[i].to && j < bam_line->core.n_cigar; j++) {
+                    int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
+                    int oplen = bam_cigar_oplen(bam_get_cigar(bam_line)[j]);
+                    switch(op) {
+                    case BAM_CMATCH:
+                    case BAM_CEQUAL:
+                    case BAM_CDIFF:
+                        pmin = MAX(p, stats->chunks[i].from);
+                        pmax = MIN(p+oplen, stats->chunks[i].to);
+                        if (pmax>pmin)
+                            round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+                        break;
+                    case BAM_CDEL:
+                        break;
+                    }
+                    p += bam_cigar_type(op)&2 ? oplen : 0; // consumes reference
+                }
             }
         } else {
             round_buffer_insert_read(&(stats->cov_rbuf),bam_line->core.pos,bam_line->core.pos+seq_len-1);
@@ -1361,6 +1381,43 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     return 1;
 }
 
+int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
+    if ( !stats || !iter)
+        return 1;
+
+    int i, j, tid;
+    stats->nregions = iter->n_reg;
+    stats->regions = calloc(stats->nregions, sizeof(regions_t));
+    stats->chunks = calloc(stats->nregions, sizeof(pos_t));
+    if ( !stats->regions || !stats->chunks )
+        return 1;
+
+    for (i = 0; i < stats->nregions; i++) {
+        tid = iter->reg_list[i].tid;
+        if ( tid < 0 )
+            continue;
+
+        if ( tid >= stats->nregions ) {
+            stats->nregions = tid+10;
+            regions_t *tmp = realloc(stats->regions, stats->nregions * sizeof(regions_t));
+            if (!tmp)
+                return 1;
+            stats->regions = tmp;
+            memset(stats->regions + tid, 0, 10 * sizeof(regions_t));
+        }
+
+        stats->regions[tid].mpos = stats->regions[tid].npos = iter->reg_list[i].count;
+        stats->regions[tid].pos = calloc(stats->regions[tid].mpos, sizeof(pos_t));
+        if ( !stats->regions[tid].pos )
+            return 1;
+
+        for (j = 0; j < stats->regions[tid].npos; j++) {
+            stats->regions[tid].pos[j].from = iter->reg_list[i].intervals->beg;
+            stats->regions[tid].pos[j].to = iter->reg_list[i].intervals->end;
+        }
+    }
+}
+
 void init_group_id(stats_t *stats, const char *id)
 {
 #if 0
@@ -1721,26 +1778,53 @@ int main_stats(int argc, char *argv[])
     bam1_t *bam_line = bam_init1();
     if ( optind<argc )
     {
-        // Collect stats in selected regions only
-        hts_idx_t *bam_idx = sam_index_load(info->sam,bam_fname);
-        if (bam_idx == 0)
-            error("Random alignment retrieval only works for indexed BAM files.\n");
+        if(targets)
+            error("Both a target file and target regions have been specified. Please choose only one method.\n");
 
-        int i;
-        for (i=optind; i<argc; i++)
-        {
-            hts_itr_t* iter = bam_itr_querys(bam_idx, info->sam_header, argv[i]);
-            while (sam_itr_next(info->sam, iter, bam_line) >= 0) {
-                if (info->split_tag) {
-                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
-                    collect_stats(bam_line, curr_stats);
+        int filter = 1;
+        // Prepare the region hash table for the multi-region iterator
+        void *region_hash = bed_hash_regions(NULL, argv, optind+1, argc, &filter);
+        if (region_hash) {
+
+            // Collect stats in selected regions only
+            hts_idx_t *bam_idx = sam_index_load(info->sam,bam_fname);
+            if (bam_idx) {
+
+                int regcount = 0;
+                hts_reglist_t *reglist = bed_reglist(region_hash, ALL, &regcount);
+                if (reglist) {
+
+                    hts_itr_multi_t *iter = sam_itr_regions(bam_idx, info->sam_header, reglist, regcount);
+                    if (iter) {
+
+                        replicate_regions(all_stats, iter);
+                        while (sam_itr_multi_next(info->sam, iter, bam_line) >= 0) {
+                           if (info->split_tag) {
+                               curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
+                               collect_stats(bam_line, curr_stats);
+                           }
+                           collect_stats(bam_line, all_stats);
+                        }
+
+                        hts_itr_multi_destroy(iter);
+                    } else {
+                       fprintf(stderr, "Creation of the region iterator failed.");
+                    }
+
+                    hts_reglist_free(reglist, regcount);
+                } else {
+                    fprintf(stderr, "Creation of the region list failed.");
                 }
-                collect_stats(bam_line, all_stats);
+
+                hts_idx_destroy(bam_idx);
+            } else {
+                fprintf(stderr, "Random alignment retrieval only works for indexed BAM files.\n");
             }
-            reset_regions(all_stats);
-            bam_itr_destroy(iter);
+
+            bed_destroy(region_hash);
+        } else {
+            fprintf(stderr, "Creation of the region hash table failed.\n");
         }
-        hts_idx_destroy(bam_idx);
     }
     else
     {
