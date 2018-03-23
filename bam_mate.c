@@ -254,7 +254,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
 {
     bam_hdr_t *header;
     bam1_t *b[2] = { NULL, NULL };
-    int curr, has_prev, pre_end = 0, cur_end = 0;
+    int curr, has_prev, pre_end = 0, cur_end = 0, result;
     kstring_t str;
 
     str.l = str.m = 0; str.s = 0;
@@ -280,7 +280,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
     b[0] = bam_init1();
     b[1] = bam_init1();
     curr = 0; has_prev = 0;
-    while (sam_read1(in, header, b[curr]) >= 0) {
+    while ((result = sam_read1(in, header, b[curr])) >= 0) {
         bam1_t *cur = b[curr], *pre = b[1-curr];
         if (cur->core.flag & BAM_FSECONDARY)
         {
@@ -365,6 +365,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
         curr = 1 - curr;
         pre_end = cur_end;
     }
+    if (result < -1) goto fail;
     if (has_prev && !remove_reads) { // If we still have a BAM in the buffer it must be unpaired
         bam1_t *pre = b[1-curr];
         if (pre->core.tid < 0 || pre->core.pos < 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
