@@ -61,6 +61,7 @@ int main_split(int argc, char *argv[]);
 int main_quickcheck(int argc, char *argv[]);
 int main_addreplacerg(int argc, char *argv[]);
 int faidx_main(int argc, char *argv[]);
+int fqidx_main(int argc, char *argv[]);
 int dict_main(int argc, char *argv[]);
 
 
@@ -79,6 +80,7 @@ static void usage(FILE *fp)
 "  -- Indexing\n"
 "     dict           create a sequence dictionary file\n"
 "     faidx          index/extract FASTA\n"
+"     fqidx          index/extract FASTQ\n"
 "     index          index alignment\n"
 "\n"
 "  -- Editing\n"
@@ -161,6 +163,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "index") == 0)     ret = bam_index(argc-1, argv+1);
     else if (strcmp(argv[1], "idxstats") == 0)  ret = bam_idxstats(argc-1, argv+1);
     else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
+    else if (strcmp(argv[1], "fqidx") == 0)     ret = fqidx_main(argc-1, argv+1);
     else if (strcmp(argv[1], "dict") == 0)      ret = dict_main(argc-1, argv+1);
     else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
     else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);

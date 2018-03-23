@@ -44,7 +44,8 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
-            bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o
+            bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
+            fqidx.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -192,6 +193,7 @@ bedidx.o: bedidx.c config.h $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) samtools.h $(sam_opts_h)
 dict.o: dict.c config.h $(htslib_kseq_h) $(htslib_hts_h)
 faidx.o: faidx.c config.h $(htslib_faidx_h) samtools.h
+fqidx.o: fqidx.c config.h $(htslib_fqidx_h) samtools.h
 padding.o: padding.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_faidx_h) sam_header.h $(sam_opts_h) samtools.h
 phase.o: phase.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(sam_opts_h) samtools.h $(htslib_kseq_h) $(htslib_khash_h) $(htslib_ksort_h)
 sam.o: sam.c config.h $(htslib_faidx_h) $(sam_h)
