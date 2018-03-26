@@ -972,23 +972,31 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         round_buffer_flush(stats,bam_line->core.pos);
         if ( stats->regions ) {
             uint32_t p = bam_line->core.pos, pmin, pmax, j;
-            for (i = 0; i < stats->nchunks; i++) {
-                for (j = 0; p < stats->chunks[i].to && j < bam_line->core.n_cigar; j++) {
-                    int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
-                    int oplen = bam_cigar_oplen(bam_get_cigar(bam_line)[j]);
-                    switch(op) {
-                    case BAM_CMATCH:
-                    case BAM_CEQUAL:
-                    case BAM_CDIFF:
-                        pmin = MAX(p, stats->chunks[i].from);
-                        pmax = MIN(p+oplen, stats->chunks[i].to);
-                        if (pmax>pmin)
-                            round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
-                        break;
-                    case BAM_CDEL:
-                        break;
-                    }
-                    p += bam_cigar_type(op)&2 ? oplen : 0; // consumes reference
+            pmin = pmax = i = j = 0;
+            while ( j < bam_line->core.n_cigar && i < stats->nchunks ) {
+                int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
+                int oplen = bam_cigar_oplen(bam_get_cigar(bam_line)[j]);
+                switch(op) {
+                case BAM_CMATCH:
+                case BAM_CEQUAL:
+                case BAM_CDIFF:
+                    pmin = MAX(p, stats->chunks[i].from);
+                    pmax = MIN(p+oplen, stats->chunks[i].to);
+                    if ( pmax >= pmin )
+                        round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax);
+                    break;
+                case BAM_CDEL:
+                    break;
+                }
+                p += bam_cigar_type(op)&2 ? oplen : 0; // consumes reference
+
+                if ( p == pmax ) {
+                    i++, j++;
+                } else if ( p < pmax ) {
+                    j++;
+                } else {
+                    i++;
+                    p = pmax;
                 }
             }
         } else {
@@ -1307,6 +1315,8 @@ void init_regions(stats_t *stats, const char *file)
         if ( prev_pos>stats->regions[tid].pos[npos].from )
             error("The positions are not in chromosomal order (%s:%d comes after %d)\n", line.s,stats->regions[tid].pos[npos].from,prev_pos);
         stats->regions[tid].npos++;
+        if ( stats->regions[tid].npos > stats->nchunks )
+            stats->nchunks = stats->regions[tid].npos;
     }
     free(line.s);
     if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
@@ -1324,6 +1334,8 @@ void init_regions(stats_t *stats, const char *file)
         }
         reg->npos = ++new_p;
     }
+
+    stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
 }
 
 void destroy_regions(stats_t *stats)
@@ -1388,7 +1400,7 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
     int i, j, tid;
     stats->nregions = iter->n_reg;
     stats->regions = calloc(stats->nregions, sizeof(regions_t));
-    stats->chunks = calloc(stats->nregions, sizeof(pos_t));
+    stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
     if ( !stats->regions || !stats->chunks )
         return 1;
 
@@ -1412,10 +1424,12 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
             return 1;
 
         for (j = 0; j < stats->regions[tid].npos; j++) {
-            stats->regions[tid].pos[j].from = iter->reg_list[i].intervals->beg;
-            stats->regions[tid].pos[j].to = iter->reg_list[i].intervals->end;
+            stats->regions[tid].pos[j].from = iter->reg_list[i].intervals[j].beg+1;
+            stats->regions[tid].pos[j].to = iter->reg_list[i].intervals[j].end;
         }
     }
+ 
+    return 0;
 }
 
 void init_group_id(stats_t *stats, const char *id)
@@ -1649,10 +1663,8 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
     stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
     realloc_rseq_buffer(stats);
-    if ( targets ) {
+    if ( targets )
         init_regions(stats, targets);
-        stats->chunks = calloc(stats->nregions, sizeof(pos_t));
-    }
 }
 
 static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_hash, stats_info_t* info, char* targets)
@@ -1783,7 +1795,7 @@ int main_stats(int argc, char *argv[])
 
         int filter = 1;
         // Prepare the region hash table for the multi-region iterator
-        void *region_hash = bed_hash_regions(NULL, argv, optind+1, argc, &filter);
+        void *region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
         if (region_hash) {
 
             // Collect stats in selected regions only
@@ -1797,21 +1809,25 @@ int main_stats(int argc, char *argv[])
                     hts_itr_multi_t *iter = sam_itr_regions(bam_idx, info->sam_header, reglist, regcount);
                     if (iter) {
 
-                        replicate_regions(all_stats, iter);
-                        while (sam_itr_multi_next(info->sam, iter, bam_line) >= 0) {
-                           if (info->split_tag) {
-                               curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
-                               collect_stats(bam_line, curr_stats);
-                           }
-                           collect_stats(bam_line, all_stats);
+                        all_stats->nchunks = argc-optind;
+                        if ( !replicate_regions(all_stats, iter) ) {
+                            while (sam_itr_multi_next(info->sam, iter, bam_line) >= 0) {
+                               if (info->split_tag) {
+                                   curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
+                                   collect_stats(bam_line, curr_stats);
+                               }
+                               collect_stats(bam_line, all_stats);
+                            }
+                        }
+                        else {
+                            fprintf(stderr, "Replications of the regions failed."); 
                         }
 
                         hts_itr_multi_destroy(iter);
                     } else {
                        fprintf(stderr, "Creation of the region iterator failed.");
+                       hts_reglist_free(reglist, regcount);
                     }
-
-                    hts_reglist_free(reglist, regcount);
                 } else {
                     fprintf(stderr, "Creation of the region list failed.");
                 }

@@ -2417,6 +2417,7 @@ sub test_stats
     test_cmd($opts,out=>'stat/9.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/1_map_cigar.sam_s1_a_1.bamstat"=>"stat/1_map_cigar.sam_s1_a_1.expected.bamstat"},hskip=>3);
     test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
     test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/11_target.bam ref1:10-24 ref1:30-46 ref1:39-56 | tail -n+4", exp_fix=>$efix);
 }
 
 sub test_merge
