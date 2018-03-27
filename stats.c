@@ -60,6 +60,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/kstring.h>
 #include "stats_isize.h"
 #include "sam_opts.h"
+#include "bedidx.h"
 
 #define BWA_MIN_RDLEN 35
 // From the spec
@@ -73,6 +74,9 @@ DEALINGS IN THE SOFTWARE.  */
 #define IS_READ2(bam) ((bam)->core.flag&BAM_FREAD2)
 #define IS_DUP(bam) ((bam)->core.flag&BAM_FDUP)
 #define IS_ORIGINAL(bam) (((bam)->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) == 0)
+
+#define MIN(A,B) ( ( (A) < (B) ) ? (A) : (B) )
+#define MAX(A,B) ( ( (A) > (B) ) ? (A) : (B) )
 
 // The GC-depth graph works as follows: split the reference sequence into
 // segments and calculate GC content and depth in each bin. Then sort
@@ -213,6 +217,8 @@ typedef struct
     char* split_name;
 
     stats_info_t* info;             // Pointer to options and settings struct
+    pos_t *chunks;
+    uint32_t nchunks;
 
 }
 stats_t;
@@ -222,6 +228,12 @@ static void error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
 void realloc_buffers(stats_t *stats, int seq_len);
 
+static int regions_lt(const void *r1, const void *r2) {
+    int64_t from_diff = (int64_t)((pos_t *)r1)->from - (int64_t)((pos_t *)r2)->from;
+    int64_t to_diff = (int64_t)((pos_t *)r1)->to - (int64_t)((pos_t *)r2)->to;
+
+    return from_diff > 0 ? 1 : from_diff < 0 ? -1 : to_diff > 0 ? 1 : to_diff < 0 ? -1 : 0;
+}
 
 // Coverage distribution methods
 static inline int coverage_idx(int min, int max, int n, int step, int depth)
@@ -875,7 +887,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
             if ( !ncig ) continue;  // curiously, this can happen: 0D
             if ( cig==BAM_CDEL ) readlen += ncig;
-            else if ( cig==BAM_CMATCH )
+            else if ( cig==BAM_CMATCH || cig==BAM_CEQUAL || cig==BAM_CDIFF )
             {
                 if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
                 else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
@@ -958,7 +970,52 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
         // Coverage distribution graph
         round_buffer_flush(stats,bam_line->core.pos);
-        round_buffer_insert_read(&(stats->cov_rbuf),bam_line->core.pos,bam_line->core.pos+seq_len-1);
+        if ( stats->regions ) {
+            uint32_t p = bam_line->core.pos, pnew, pmin, pmax, j;
+            pmin = pmax = i = j = 0;
+            while ( j < bam_line->core.n_cigar && i < stats->nchunks ) {
+                int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
+                int oplen = bam_cigar_oplen(bam_get_cigar(bam_line)[j]);
+                switch(op) {
+                case BAM_CMATCH:
+                case BAM_CEQUAL:
+                case BAM_CDIFF:
+                    pmin = MAX(p, stats->chunks[i].from-1);
+                    pmax = MIN(p+oplen, stats->chunks[i].to);
+                    if ( pmax >= pmin )
+                        round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+                    break;
+                case BAM_CDEL:
+                    break;
+                }
+                pnew = p + (bam_cigar_type(op)&2 ? oplen : 0); // consumes reference
+
+                if ( pnew >= stats->chunks[i].to ) {
+                    // go to the next chunk
+                    i++;
+                } else {
+                    // go to the next CIGAR op
+                    j++;
+                    p = pnew;
+                }
+            }
+        } else {
+            uint32_t p = bam_line->core.pos, j;
+            for (j = 0; j < bam_line->core.n_cigar; j++) {
+                int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
+                int oplen = bam_cigar_oplen(bam_get_cigar(bam_line)[j]);
+                switch(op) {
+                case BAM_CMATCH:
+                case BAM_CEQUAL:
+                case BAM_CDIFF:
+                    round_buffer_insert_read(&(stats->cov_rbuf), p, p+oplen-1);
+                    break;
+                case BAM_CDEL:
+                    break;
+                }
+                p += bam_cigar_type(op)&2 ? oplen : 0; // consumes reference
+            }
+        }
     }
 }
 
@@ -1225,7 +1282,7 @@ void init_regions(stats_t *stats, const char *file)
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
 
     kstring_t line = { 0, 0, NULL };
-    int warned = 0;
+    int warned = 0, r, p, new_p;
     int prev_tid=-1, prev_pos=-1;
     while (line.l = 0, kgetline(&line, (kgets_func *)fgets, fp) >= 0)
     {
@@ -1272,10 +1329,27 @@ void init_regions(stats_t *stats, const char *file)
         if ( prev_pos>stats->regions[tid].pos[npos].from )
             error("The positions are not in chromosomal order (%s:%d comes after %d)\n", line.s,stats->regions[tid].pos[npos].from,prev_pos);
         stats->regions[tid].npos++;
+        if ( stats->regions[tid].npos > stats->nchunks )
+            stats->nchunks = stats->regions[tid].npos;
     }
     free(line.s);
     if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
     fclose(fp);
+
+    // sort region intervals and remove duplicates
+    for (r = 0; r < stats->nregions; r++) {
+        regions_t *reg = &stats->regions[r];
+        qsort(reg->pos, reg->npos, sizeof(pos_t), regions_lt);
+        for (new_p = 0, p = 1; p < reg->npos; p++) {
+            if ( reg->pos[new_p].to < reg->pos[p].from )
+                reg->pos[++new_p] = reg->pos[p];
+            else if ( reg->pos[new_p].to < reg->pos[p].to )
+                reg->pos[new_p].to = reg->pos[p].to;
+        }
+        reg->npos = ++new_p;
+    }
+
+    stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
 }
 
 void destroy_regions(stats_t *stats)
@@ -1287,6 +1361,7 @@ void destroy_regions(stats_t *stats)
         free(stats->regions[i].pos);
     }
     if ( stats->regions ) free(stats->regions);
+    if ( stats->chunks ) free(stats->chunks);
 }
 
 void reset_regions(stats_t *stats)
@@ -1311,12 +1386,64 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     int i = reg->cpos;
     while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
     if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
-    if ( bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) return 0;
+    if ( bam_endpos(bam_line) < reg->pos[i].from ) return 0;
+
+    //found a read overlapping a region
     reg->cpos = i;
     stats->reg_from = reg->pos[i].from;
     stats->reg_to   = reg->pos[i].to;
 
+    //now find all the overlapping chunks
+    stats->nchunks = 0;
+    while (i < reg->npos) {
+        if (bam_line->core.pos < reg->pos[i].to && bam_endpos(bam_line) >= reg->pos[i].from) {
+            stats->chunks[stats->nchunks].from = MAX(bam_line->core.pos+1, reg->pos[i].from);
+            stats->chunks[stats->nchunks].to = MIN(bam_endpos(bam_line), reg->pos[i].to);
+            stats->nchunks++;
+        }
+        i++;
+    }
+
     return 1;
+}
+
+int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
+    if ( !stats || !iter)
+        return 1;
+
+    int i, j, tid;
+    stats->nregions = iter->n_reg;
+    stats->regions = calloc(stats->nregions, sizeof(regions_t));
+    stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
+    if ( !stats->regions || !stats->chunks )
+        return 1;
+
+    for (i = 0; i < stats->nregions; i++) {
+        tid = iter->reg_list[i].tid;
+        if ( tid < 0 )
+            continue;
+
+        if ( tid >= stats->nregions ) {
+            stats->nregions = tid+10;
+            regions_t *tmp = realloc(stats->regions, stats->nregions * sizeof(regions_t));
+            if (!tmp)
+                return 1;
+            stats->regions = tmp;
+            memset(stats->regions + tid, 0, 10 * sizeof(regions_t));
+        }
+
+        stats->regions[tid].mpos = stats->regions[tid].npos = iter->reg_list[i].count;
+        stats->regions[tid].pos = calloc(stats->regions[tid].mpos, sizeof(pos_t));
+        if ( !stats->regions[tid].pos )
+            return 1;
+
+        for (j = 0; j < stats->regions[tid].npos; j++) {
+            stats->regions[tid].pos[j].from = iter->reg_list[i].intervals[j].beg+1;
+            stats->regions[tid].pos[j].to = iter->reg_list[i].intervals[j].end;
+        }
+    }
+ 
+    return 0;
 }
 
 void init_group_id(stats_t *stats, const char *id)
@@ -1507,6 +1634,7 @@ stats_t* stats_init()
     stats->is_sorted = 1;
     stats->nindels = stats->nbases;
     stats->split_name = NULL;
+    stats->nchunks = 0;
 
     return stats;
 }
@@ -1661,7 +1789,10 @@ int main_stats(int argc, char *argv[])
         bam_fname = "-";
     }
 
-    if (init_stat_info_fname(info, bam_fname, &ga.in)) return 1;
+    if (init_stat_info_fname(info, bam_fname, &ga.in)) {
+        free(info);
+        return 1;
+    }
     if (ga.nthreads > 0)
         hts_set_threads(info->sam, ga.nthreads);
 
@@ -1676,26 +1807,56 @@ int main_stats(int argc, char *argv[])
     bam1_t *bam_line = bam_init1();
     if ( optind<argc )
     {
-        // Collect stats in selected regions only
-        hts_idx_t *bam_idx = sam_index_load(info->sam,bam_fname);
-        if (bam_idx == 0)
-            error("Random alignment retrieval only works for indexed BAM files.\n");
+        int filter = 1;
+        // Prepare the region hash table for the multi-region iterator
+        void *region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
+        if (region_hash) {
 
-        int i;
-        for (i=optind; i<argc; i++)
-        {
-            hts_itr_t* iter = bam_itr_querys(bam_idx, info->sam_header, argv[i]);
-            while (sam_itr_next(info->sam, iter, bam_line) >= 0) {
-                if (info->split_tag) {
-                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
-                    collect_stats(bam_line, curr_stats);
+            // Collect stats in selected regions only
+            hts_idx_t *bam_idx = sam_index_load(info->sam,bam_fname);
+            if (bam_idx) {
+
+                int regcount = 0;
+                hts_reglist_t *reglist = bed_reglist(region_hash, ALL, &regcount);
+                if (reglist) {
+
+                    hts_itr_multi_t *iter = sam_itr_regions(bam_idx, info->sam_header, reglist, regcount);
+                    if (iter) {
+
+                        if (!targets) {
+                            all_stats->nchunks = argc-optind;
+                            if ( replicate_regions(all_stats, iter) ) 
+                                fprintf(stderr, "Replications of the regions failed."); 
+                        }
+
+                        if ( all_stats->nregions && all_stats->regions ) {
+                            while (sam_itr_multi_next(info->sam, iter, bam_line) >= 0) {
+                               if (info->split_tag) {
+                                   curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
+                                   collect_stats(bam_line, curr_stats);
+                               }
+                               collect_stats(bam_line, all_stats);
+                            }
+                        }
+
+                        hts_itr_multi_destroy(iter);
+                    } else {
+                       fprintf(stderr, "Creation of the region iterator failed.");
+                       hts_reglist_free(reglist, regcount);
+                    }
+                } else {
+                    fprintf(stderr, "Creation of the region list failed.");
                 }
-                collect_stats(bam_line, all_stats);
+
+                hts_idx_destroy(bam_idx);
+            } else {
+                fprintf(stderr, "Random alignment retrieval only works for indexed BAM files.\n");
             }
-            reset_regions(all_stats);
-            bam_itr_destroy(iter);
+
+            bed_destroy(region_hash);
+        } else {
+            fprintf(stderr, "Creation of the region hash table failed.\n");
         }
-        hts_idx_destroy(bam_idx);
     }
     else
     {
