@@ -971,7 +971,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         // Coverage distribution graph
         round_buffer_flush(stats,bam_line->core.pos);
         if ( stats->regions ) {
-            uint32_t p = bam_line->core.pos, pmin, pmax, j;
+            uint32_t p = bam_line->core.pos, pnew, pmin, pmax, j;
             pmin = pmax = i = j = 0;
             while ( j < bam_line->core.n_cigar && i < stats->nchunks ) {
                 int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
@@ -980,27 +980,41 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                 case BAM_CMATCH:
                 case BAM_CEQUAL:
                 case BAM_CDIFF:
-                    pmin = MAX(p, stats->chunks[i].from);
+                    pmin = MAX(p, stats->chunks[i].from-1);
                     pmax = MIN(p+oplen, stats->chunks[i].to);
                     if ( pmax >= pmin )
-                        round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax);
+                        round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+                    break;
+                case BAM_CDEL:
+                    break;
+                }
+                pnew = p + (bam_cigar_type(op)&2 ? oplen : 0); // consumes reference
+
+                if ( pnew >= stats->chunks[i].to ) {
+                    // go to the next chunk
+                    i++;
+                } else {
+                    // go to the next CIGAR op
+                    j++;
+                    p = pnew;
+                }
+            }
+        } else {
+            uint32_t p = bam_line->core.pos, j;
+            for (j = 0; j < bam_line->core.n_cigar; j++) {
+                int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
+                int oplen = bam_cigar_oplen(bam_get_cigar(bam_line)[j]);
+                switch(op) {
+                case BAM_CMATCH:
+                case BAM_CEQUAL:
+                case BAM_CDIFF:
+                    round_buffer_insert_read(&(stats->cov_rbuf), p, p+oplen-1);
                     break;
                 case BAM_CDEL:
                     break;
                 }
                 p += bam_cigar_type(op)&2 ? oplen : 0; // consumes reference
-
-                if ( p == pmax ) {
-                    i++, j++;
-                } else if ( p < pmax ) {
-                    j++;
-                } else {
-                    i++;
-                    p = pmax;
-                }
             }
-        } else {
-            round_buffer_insert_read(&(stats->cov_rbuf),bam_line->core.pos,bam_line->core.pos+seq_len-1);
         }
     }
 }
@@ -1372,7 +1386,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     int i = reg->cpos;
     while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
     if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
-    if ( bam_line->core.pos + bam_line->core.l_qseq < reg->pos[i].from ) return 0;
+    if ( bam_endpos(bam_line) < reg->pos[i].from ) return 0;
 
     //found a read overlapping a region
     reg->cpos = i;
@@ -1382,9 +1396,9 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     //now find all the overlapping chunks
     stats->nchunks = 0;
     while (i < reg->npos) {
-        if (bam_line->core.pos < reg->pos[i].to && bam_line->core.pos + bam_line->core.l_qseq >= reg->pos[i].from) {
+        if (bam_line->core.pos < reg->pos[i].to && bam_endpos(bam_line) >= reg->pos[i].from) {
             stats->chunks[stats->nchunks].from = MAX(bam_line->core.pos+1, reg->pos[i].from);
-            stats->chunks[stats->nchunks].to = MIN(bam_line->core.pos+bam_line->core.l_qseq, reg->pos[i].to);
+            stats->chunks[stats->nchunks].to = MIN(bam_endpos(bam_line), reg->pos[i].to);
             stats->nchunks++;
         }
         i++;

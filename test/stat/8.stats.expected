@@ -299,6 +299,6 @@ ID	1	1	0
 # Indels per cycle. Use `grep ^IC | cut -f 2-` to extract this part. The columns are: cycle, number of insertions (fwd), .. (rev) , number of deletions (fwd), .. (rev)
 IC	2	1	0	0	0
 # Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.
-COV	[1-1]	1	70
+COV	[1-1]	1	69
 # GC-depth. Use `grep ^GCD | cut -f 2-` to extract this part. The columns are: GC%, unique sequence percentiles, 10th, 25th, 50th, 75th and 90th depth percentile
 GCD	0.0	100.000	0.000	0.000	0.000	0.000	0.000
