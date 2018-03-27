@@ -1789,7 +1789,10 @@ int main_stats(int argc, char *argv[])
         bam_fname = "-";
     }
 
-    if (init_stat_info_fname(info, bam_fname, &ga.in)) return 1;
+    if (init_stat_info_fname(info, bam_fname, &ga.in)) {
+        free(info);
+        return 1;
+    }
     if (ga.nthreads > 0)
         hts_set_threads(info->sam, ga.nthreads);
 
@@ -1804,9 +1807,6 @@ int main_stats(int argc, char *argv[])
     bam1_t *bam_line = bam_init1();
     if ( optind<argc )
     {
-        if(targets)
-            error("Both a target file and target regions have been specified. Please choose only one method.\n");
-
         int filter = 1;
         // Prepare the region hash table for the multi-region iterator
         void *region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
@@ -1823,8 +1823,13 @@ int main_stats(int argc, char *argv[])
                     hts_itr_multi_t *iter = sam_itr_regions(bam_idx, info->sam_header, reglist, regcount);
                     if (iter) {
 
-                        all_stats->nchunks = argc-optind;
-                        if ( !replicate_regions(all_stats, iter) ) {
+                        if (!targets) {
+                            all_stats->nchunks = argc-optind;
+                            if ( replicate_regions(all_stats, iter) ) 
+                                fprintf(stderr, "Replications of the regions failed."); 
+                        }
+
+                        if ( all_stats->nregions && all_stats->regions ) {
                             while (sam_itr_multi_next(info->sam, iter, bam_line) >= 0) {
                                if (info->split_tag) {
                                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
@@ -1832,9 +1837,6 @@ int main_stats(int argc, char *argv[])
                                }
                                collect_stats(bam_line, all_stats);
                             }
-                        }
-                        else {
-                            fprintf(stderr, "Replications of the regions failed."); 
                         }
 
                         hts_itr_multi_destroy(iter);
