@@ -1608,6 +1608,12 @@ If either the -O or -o option is used, <prefix> is optional.  If <prefix>
 is absent, collate will write the temporary files to a system-dependent
 location (/tmp on UNIX).
 
+Using -f for fast mode will output only primary alignments that are flagged as
+either READ1 \fBor\fR READ2.  For speed it holds alignments in memory for
+immediate pairing and will try to bypass the use of temporary files as much as
+possible.  The number of alignments held can be changed using -r, the more
+alignments stored the greater the amount of memory used.
+
 .B Options:
 .RS
 .TP 8
@@ -1627,6 +1633,13 @@ Compression level.
 .BI "-n " INT
 Number of temporary files to use.
 [64]
+.TP
+.B -f
+Fast mode (primary alignments only).
+.TP
+.BI "-r " INT
+Number of reads to store in memory (for use with -f).
+[10000]
 .RE
 
 .TP \"-------- reheader

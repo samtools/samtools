@@ -2529,6 +2529,16 @@ sub test_collate
 	     out_map=>{"collate/collate3.tmp.sam"
 			   =>"collate/collate.expected.sam"},
 	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate3.tmp");
+             
+    # fast collate, supplementary files not output
+    test_cmd($opts, out=>"dat/empty.expected",
+             out_map=>{"collate/1_fast_collate.sam" => "collate/1_fast_collate.sam.expected"},
+             cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -f $$opts{path}/collate/fast_collate.sam -o $$opts{path}/collate/1_fast_collate.sam");
+
+    # fast collate, supplementary files not output and force temp file
+    test_cmd($opts, out=>"dat/empty.expected",
+             out_map=>{"collate/2_fast_collate_with_tmp.sam" => "collate/2_fast_collate_with_tmp_used.sam.expected"},
+             cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -f -r 4 $$opts{path}/collate/fast_collate.sam -o $$opts{path}/collate/2_fast_collate_with_tmp.sam");
 }
 
 sub test_fixmate
