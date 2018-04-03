@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "26 January 2018" "samtools-1.7" "Bioinformatics tools"
+.TH samtools 1 "3 April 2018" "samtools-1.8" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -85,7 +85,7 @@ samtools fasta input.bam > output.fasta
 .PP
 samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
 .PP
-samtools collate aln.sorted.bam aln.name_collated.bam
+samtools collate -o aln.name_collated.bam aln.sorted.bam
 .PP
 samtools depad input.bam
 .PP
@@ -830,7 +830,7 @@ has coverage outside of the region specified in the BED file.
 .TP
 .BI "-m, -d " INT
 .RI "Truncate reported depth at a maximum of " INT " reads."
-[8000]
+[8000]. If 0, depth is set to the maximum integer value, effectively removing any depth limit.
 .TP
 .BI "-q " INT
 .RI "Only count reads with base quality greater than " INT
@@ -1566,7 +1566,7 @@ ignore the left part of the tag until the separator, then use the second part
 .B collate
 samtools collate
 .RI [ options ]
-.IR in.sam | in.bam | in.cram " [" out.prefix "]"
+.IR in.sam | in.bam | in.cram " [" <prefix> "]"
 
 Shuffles and groups reads together by their names.
 A faster alternative to a full query name sort,
@@ -1577,11 +1577,23 @@ but doesn't make any guarantees about the order of read names between groups.
 The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
 
+If present, <prefix> is used to name the temporary files that collate
+uses when sorting the data.  If neither the '-O' nor '-o' options are used,
+<prefix> must be present and collate will use it to make an output file name
+by appending a suffix depending on the format written (.bam by default).
+
+If either the -O or -o option is used, <prefix> is optional.  If <prefix>
+is absent, collate will write the temporary files to a system-dependent
+location (/tmp on UNIX).
+
 .B Options:
 .RS
 .TP 8
 .B -O
-Output to stdout rather than to files starting with out.prefix
+Output to stdout.  This option cannot be used with '-o'.
+.TP
+.B -o FILE
+Write output to FILE.  This option cannot be used with '-O'.
 .TP
 .B -u
 Write uncompressed BAM output
@@ -1954,7 +1966,18 @@ MD5 not being obtainable via the REF_PATH or REF_CACHE environment variables.
 .BI decode_md= 0|1
 CRAM input only; defaults to 1 (on).  CRAM does not typically store
 MD and NM tags, preferring to generate them on the fly.  This option
-controls this behaviour.
+controls this behaviour.  It can be particularly useful when combined
+with a file encoded using store_md=1 and store_nm=1.
+.TP
+.BI store_md= 0|1
+CRAM output only; defaults to 0 (off).  CRAM normally only stores MD
+tags when no reference is unknown and lets the decoder generate these
+values on-the-fly (see decode_md).
+.TP
+.BI store_nm= 0|1
+CRAM output only; defaults to 0 (off).  CRAM normally only stores NM
+tags when no reference is unknown and lets the decoder generate these
+values on-the-fly (see decode_md).
 .TP
 .BI ignore_md5= 0|1
 CRAM input only; defaults to 0 (off).  When enabled, md5 checksum

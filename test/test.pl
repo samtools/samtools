@@ -51,6 +51,8 @@ test_merge($opts);
 test_merge($opts, threads=>2);
 test_sort($opts);
 test_sort($opts, threads=>2);
+test_collate($opts);
+test_collate($opts, threads=>2);
 test_fixmate($opts);
 test_fixmate($opts, threads=>2);
 test_calmd($opts);
@@ -2414,6 +2416,8 @@ sub test_stats
 
     test_cmd($opts,out=>'stat/9.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/1_map_cigar.sam_s1_a_1.bamstat"=>"stat/1_map_cigar.sam_s1_a_1.expected.bamstat"},hskip=>3);
     test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
+    test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/11_target.bam ref1:10-24 ref1:30-46 ref1:39-56 | tail -n+4", exp_fix=>$efix);
 }
 
 sub test_merge
@@ -2425,9 +2429,9 @@ sub test_merge
     # Note the use of -s 1 to fix the random seed in place
 
     # Merge 1 - Standard 3 file SAM merge all presented on the command line
-    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam",binary=>1);
+    test_cmd($opts,out=>'merge/2.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
     # Merge 2 - Standard 3 file BAM merge all files presented on the command line
-    test_cmd($opts,out=>'merge/2.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam",binary=>1);
+    test_cmd($opts,out=>'merge/2.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam");
     # Merge 3 - Standard 3 file BAM merge 2 files in fofn 1 on command line
     open(my $fofn, "$$opts{path}/merge/test_3.fofn");
     my ($tmpfile_fh, $tmpfile_filename) = tempfile(UNLINK => 1);
@@ -2436,15 +2440,15 @@ sub test_merge
         print $tmpfile_fh "$$opts{path}/$_";
     }
     close($tmpfile_fh);
-    test_cmd($opts,out=>'merge/3.merge.expected.bam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam",binary=>1);
+    test_cmd($opts,out=>'merge/3.merge.expected.sam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam");
     # Merge 4 - 1 file BAM merge with file presented on the command line
-    test_cmd($opts,out=>'merge/4.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_b.bam",binary=>1);
+    test_cmd($opts,out=>'merge/4.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_b.bam");
     # Merge 5 - 3 file SAM merge all presented on the command line override IDs to file names
-    test_cmd($opts,out=>'merge/5.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -r -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam",binary=>1);
+    test_cmd($opts,out=>'merge/5.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -r -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
     # Merge 6 - merge all presented on the command line, combine PG and RG rather than dedup
-    test_cmd($opts,out=>'merge/6.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam",binary=>1);
+    test_cmd($opts,out=>'merge/6.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
     # Merge 7 - ID and SN with regex in them
-    test_cmd($opts,out=>'merge/7.merge.expected.bam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam",binary=>1);
+    test_cmd($opts,out=>'merge/7.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
 
     # Sort inputs by PG, then merge
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG  $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
@@ -2488,6 +2492,35 @@ sub test_sort
 
     # Tag sort (FI)
     test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t FI $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+}
+
+sub test_collate
+{
+    my ($opts, %args) = @_;
+
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
+
+    # Output to stdout
+    test_cmd($opts, out=>"collate/collate.expected.sam",
+	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -O $$opts{path}/dat/test_input_1_d.sam");
+
+    # Output to file
+    test_cmd($opts, out=>"dat/empty.expected",
+	     out_map=>{"collate/collate1.tmp.sam"
+			    =>"collate/collate.expected.sam"},
+	     cmd=>"$$opts{bin}/samtools collate${threads} -o $$opts{path}/collate/collate1.tmp.sam  $$opts{path}/dat/test_input_1_d.sam");
+
+    # Output to file, given tmp file prefix
+    test_cmd($opts, out=>"dat/empty.expected",
+	     out_map=>{"collate/collate2.tmp.sam"
+			   =>"collate/collate.expected.sam"},
+	     cmd=>"$$opts{bin}/samtools collate${threads} -o $$opts{path}/collate/collate2.tmp.sam  $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate2.tmp");
+
+    # Legacy usage with output file name based on prefix
+    test_cmd($opts, out=>"dat/empty.expected",
+	     out_map=>{"collate/collate3.tmp.sam"
+			   =>"collate/collate.expected.sam"},
+	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate3.tmp");
 }
 
 sub test_fixmate

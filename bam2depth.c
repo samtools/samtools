@@ -81,7 +81,8 @@ static int usage() {
     fprintf(stderr, "   -b <bed>            list of positions or regions\n");
     fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
     fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>) [0]\n");
-    fprintf(stderr, "   -d/-m <int>         maximum coverage depth [8000]\n");  // the htslib's default
+    fprintf(stderr, "   -d/-m <int>         maximum coverage depth [8000]. If 0, depth is set to the maximum\n"
+                    "                       integer value, effectively removing any depth limit.\n");  // the htslib's default
     fprintf(stderr, "   -q <int>            base quality threshold [0]\n");
     fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
@@ -206,6 +207,8 @@ int main_depth(int argc, char *argv[])
     mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
     if (0 < max_depth)
         bam_mplp_set_maxcnt(mplp,max_depth);  // set maximum coverage depth
+    else if (!max_depth)
+        bam_mplp_set_maxcnt(mplp,INT_MAX);
     n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
     while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
