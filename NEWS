@@ -1,5 +1,8 @@
 Release a.b
---------------------
+-----------
+
+Release 1.8 (3rd April 2018)
+----------------------------
 
  * samtools calmd now has a quiet mode.  This can be enabled by passing `-Q` to
    calmd. (Thanks to Colin Davenport)
