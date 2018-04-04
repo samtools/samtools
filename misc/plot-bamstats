@@ -84,7 +84,7 @@ sub parse_params
             {
                 id=>'FFQ',
                 header=>
-                    "# First Fragment Qualitites. Use `grep ^FFQ | cut -f 2-` to extract this part.\n" .
+                    "# First Fragment Qualities. Use `grep ^FFQ | cut -f 2-` to extract this part.\n" .
                     "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n",
             },
             {
@@ -712,15 +712,16 @@ sub plot_qualities
             unset xlabel
             set xrange [0:$nquals]
             set format x ""
+            plot '-' using 1:2:3 with lines linecolor variable title ''
         ];
-    my @plots;
-    for (my $i=0; $i<$ncycles; $i++) { push @plots, q['-' using 1:2 with lines t ''] }
-    print $fh "plot ", join(",", @plots), "\n";
-    for my $cycle (@ffq)
+    for my $cycle (0..$#ffq)
     {
-        for (my $iqual=1; $iqual<$nquals; $iqual++) { print $fh "$iqual\t$$cycle[$iqual]\n"; }
-        print $fh "end\n";
+        for (my $iqual=1; $iqual<$nquals; $iqual++) {
+	    printf $fh "%d\t%d\t%d\n", $iqual, $ffq[$cycle]->[$iqual], $cycle + 1;
+	}
+	print $fh "\n";
     }
+    print $fh "end\n";
     if ( $is_paired )
     {
         print $fh qq[
@@ -733,16 +734,17 @@ sub plot_qualities
                 unset label
                 set label "Cycle $lmax_cycle" at $lmax_qual+1,$lmax
                 set ylabel "Frequency (rev reads)"
+                plot '-' using 1:2:3 with lines linecolor variable title ''
             ];
-        print $fh "plot ", join(",", @plots), "\n";
-        for my $cycle (@lfq)
+        for my $cycle (0..$#lfq)
         {
             for (my $iqual=1; $iqual<$nquals; $iqual++)
             {
-                print $fh "$iqual\t$$cycle[$iqual]\n";
+		printf $fh "%d\t%d\t%d\n", $iqual, $lfq[$cycle]->[$iqual], $cycle + 1;
             }
-            print $fh "end\n";
+            print $fh "\n";
         }
+	print $fh "end\n";
     }
     close($fh);
     plot($$args{gp});
