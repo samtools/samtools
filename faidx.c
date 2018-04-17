@@ -28,9 +28,55 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <string.h>
 
 #include <htslib/faidx.h>
 #include "samtools.h"
+
+int print_fasta(faidx_t *fai, char * region){
+  int seq_len;
+  int ex = EXIT_SUCCESS;
+  char *seq = fai_fetch(fai, region, &seq_len);
+  if ( seq_len < 0 ) {
+      fprintf(stderr, "Failed to fetch sequence in %s\n", region);
+      ex = EXIT_FAILURE;
+      return ex;
+  }
+  printf(">%s\n", region);
+  size_t i, seq_sz = seq_len;
+  for (i=0; i<seq_sz; i+=60)
+  {
+      size_t len = i + 60 < seq_sz ? 60 : seq_sz - i;
+      if (fwrite(seq + i, 1, len, stdout) < len ||
+          putchar('\n') == EOF) {
+          print_error_errno("faidx", "failed to write output");
+          ex = EXIT_FAILURE;
+          break;
+      }
+  }
+  free(seq);
+  return ex;
+}
+
+char * read_string_from_fp(FILE* fp, size_t size){
+//The size is extended by the input with the value of the provisional
+    char *str;
+    int ch;
+    size_t len = 0;
+    str = realloc(NULL, sizeof(char)*size);//size is start size
+    if(!str)return str;
+    while(EOF!=(ch=fgetc(fp)) && ch != '\n'){
+        str[len++]=ch;
+        if(len==size){
+            str = realloc(str, sizeof(char)*(size+=16000));
+            if(!str)return str;
+        }
+    }
+    str[len++]='\0';
+
+    return realloc(str, sizeof(char)*len);
+}
+
 
 static int usage(FILE *fp, int exit_status)
 {
@@ -73,26 +119,26 @@ int faidx_main(int argc, char *argv[])
 
     while ( ++optind<argc && exit_status == EXIT_SUCCESS)
     {
-        printf(">%s\n", argv[optind]);
-        int seq_len;
-        char *seq = fai_fetch(fai, argv[optind], &seq_len);
-        if ( seq_len < 0 ) {
-            fprintf(stderr, "Failed to fetch sequence in %s\n", argv[optind]);
-            exit_status = EXIT_FAILURE;
-            break;
+    /**
+     * This checks if argv[optind] is a file containing regions. The format
+     * needs to be the same, i.e. space delimited. This allows for a large
+     * number of regions. A file or a region can be passed on the command line.
+     * This maintains the UI and solves the "Argument too long" issue.
+     */
+      if( access( argv[optind], F_OK ) != -1 ) {
+        FILE * fn = fopen(argv[optind], "r");
+        char * regions  = read_string_from_fp(fn, 2000);
+        fclose(fn);
+
+        char* token = strtok(regions, " ");
+        while (token && exit_status == EXIT_SUCCESS) {
+          exit_status = print_fasta(fai, token);
+          token = strtok(NULL, " ");
         }
-        size_t i, seq_sz = seq_len;
-        for (i=0; i<seq_sz; i+=60)
-        {
-            size_t len = i + 60 < seq_sz ? 60 : seq_sz - i;
-            if (fwrite(seq + i, 1, len, stdout) < len ||
-                putchar('\n') == EOF) {
-                print_error_errno("faidx", "failed to write output");
-                exit_status = EXIT_FAILURE;
-                break;
-            }
-        }
-        free(seq);
+      }
+      else{
+        exit_status = print_fasta(fai, argv[optind]);
+      }
     }
     fai_destroy(fai);
 
