@@ -186,7 +186,7 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end)
  *  @param reg_hash    the region hash table with interval lists as values
  */
 
-static void bed_unify(void *reg_hash) {
+void bed_unify(void *reg_hash) {
 
     int i, j, new_n;
     reghash_t *h;

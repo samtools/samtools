@@ -472,22 +472,13 @@ int main_samview(int argc, char *argv[])
             settings.bed = bed_hash_regions(settings.bed, argv, optind+1, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
             if (!filter_op)
                 filter_state = FILTERED;
+        } else {
+            bed_unify(settings.bed);
         }
 
         bam1_t *b = bam_init1();
         if (settings.bed == NULL) { // index is unavailable or no regions have been specified
-            while ((result = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
-                if (!process_aln(header, b, &settings)) {
-                    if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
-                    count++;
-                } else {
-                    if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
-                }
-            }
-            if (result < -1) {
-                fprintf(stderr, "[main_samview] truncated file.\n");
-                ret = 1;
-            }
+            fprintf(stderr, "[main_samview] no regions or BED file have been provided. Aborting.\n");
         } else {
             hts_idx_t *idx = sam_index_load(in, fn_in); // load index
             if (idx != NULL) {
