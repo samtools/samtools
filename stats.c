@@ -1427,14 +1427,16 @@ void init_regions(stats_t *stats, const char *file)
     // sort region intervals and remove duplicates
     for (r = 0; r < stats->nregions; r++) {
         regions_t *reg = &stats->regions[r];
-        qsort(reg->pos, reg->npos, sizeof(pos_t), regions_lt);
-        for (new_p = 0, p = 1; p < reg->npos; p++) {
-            if ( reg->pos[new_p].to < reg->pos[p].from )
-                reg->pos[++new_p] = reg->pos[p];
-            else if ( reg->pos[new_p].to < reg->pos[p].to )
-                reg->pos[new_p].to = reg->pos[p].to;
+        if ( reg->npos > 1 ) {
+            qsort(reg->pos, reg->npos, sizeof(pos_t), regions_lt);
+            for (new_p = 0, p = 1; p < reg->npos; p++) {
+                if ( reg->pos[new_p].to < reg->pos[p].from )
+                    reg->pos[++new_p] = reg->pos[p];
+                else if ( reg->pos[new_p].to < reg->pos[p].to )
+                    reg->pos[new_p].to = reg->pos[p].to;
+            }
+            reg->npos = ++new_p;
         }
-        reg->npos = ++new_p;
     }
 
     stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
