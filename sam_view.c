@@ -279,6 +279,8 @@ int main_samview(int argc, char *argv[])
     /* parse command-line options */
     strcpy(out_mode, "w");
     strcpy(out_un_mode, "w");
+    if (argc == 1 && isatty(STDIN_FILENO))
+        return usage(stdout, EXIT_SUCCESS, is_long_help);
     while ((c = getopt_long(argc, argv,
                             "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:M",
                             lopts, NULL)) >= 0) {
@@ -290,7 +292,18 @@ int main_samview(int argc, char *argv[])
                 srand(settings.subsam_seed);
                 settings.subsam_seed = rand();
             }
-            settings.subsam_frac = strtod(q, &q);
+ 
+            if (q && *q == '.') {
+                settings.subsam_frac = strtod(q, &q);
+                if (*q) ret = 1;
+            } else {
+                ret = 1;
+            }
+
+            if (ret == 1) {
+                print_error("view", "Incorrect sampling argument \"%s\"", optarg);
+                goto view_end;
+            }
             break;
         case 'm': settings.min_qlen = atoi(optarg); break;
         case 'c': is_count = 1; break;
@@ -367,7 +380,10 @@ int main_samview(int argc, char *argv[])
         strcat(out_mode, tmp);
         strcat(out_un_mode, tmp);
     }
-    if (argc == optind && isatty(STDIN_FILENO)) return usage(stdout, EXIT_SUCCESS, is_long_help); // potential memory leak...
+    if (argc == optind && isatty(STDIN_FILENO)) {
+        print_error("view", "No input provided or missing option argument.");
+        return usage(stderr, EXIT_FAILURE, is_long_help); // potential memory leak...
+    }
 
     fn_in = (optind < argc)? argv[optind] : "-";
     // generate the fn_list if necessary
