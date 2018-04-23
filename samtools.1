@@ -1933,8 +1933,8 @@ Display the full samtools version number in a machine-readable format.
 .SH GLOBAL OPTIONS
 .PP
 Several long-options are shared between multiple samtools subcommands:
-\fB--input-fmt\fR, \fB--input-fmt-options\fR, \fB--output-fmt\fR,
-\fB--output-fmt-options\fR, and \fB--reference\fR.
+\fB--input-fmt\fR, \fB--input-fmt-option\fR, \fB--output-fmt\fR,
+\fB--output-fmt-option\fR, and \fB--reference\fR.
 The input format is typically auto-detected so specifying the format
 is usually unnecessary and the option is included for completeness.
 Note that not all subcommands have all options.  Consult the subcommand
@@ -1944,7 +1944,7 @@ Format strings recognised are "sam", "bam" and "cram".  They may be
 followed by a comma separated list of options as \fIkey\fR or
 \fIkey\fR=\fIvalue\fR. See below for examples.
 .PP
-The \fBfmt-options\fR arguments accept either a single \fIoption\fR or
+The \fBfmt-option\fR arguments accept either a single \fIoption\fR or
 \fIoption\fR=\fIvalue\fR.  Note that some options only work on some
 file formats and only on read or write streams.  If value is
 unspecified for a boolean option, the value is assumed to be 1.  The
@@ -2187,6 +2187,28 @@ while reads from
 .I 454.bam
 will be attached
 .IR RG:Z:454 .
+
+.IP o 2
+Convert a BAM file to a CRAM with NM and MD tags stored verbatim
+rather than calculating on the fly during CRAM decode, so that mixed
+data sets with MD/NM only on some records, or NM calculated using
+different definitions of mismatch, can be decoded without change.  The
+second command demonstrates how to decode such a file.  The request to
+not decode MD here is turning off auto-generation of both MD and NM;
+it will still emit the MD/NM tags on records that had these stored
+verbatim.
+.EX 2
+samtools view -C --output-fmt-option store_md=1 --output-fmt-option store_nm=1 -o aln.cram aln.bam
+samtools view --input-fmt-option decode_md=0 -o aln.new.bam aln.cram
+.EE
+.IP o 2
+An alternative way of achieving the above is listing multiple options
+after the \fB--output-fmt\fR or \fB-O\fR option.  The commands below
+are equivalent to the two above.
+.EX 2
+samtools view -O cram,store_md=1,store_nm=1 -o aln.cram aln.bam
+samtools view --input-fmt cram,decode_md=0 -o aln.new.bam aln.cram
+.EE
 
 .IP o 2
 Call SNPs and short INDELs:
