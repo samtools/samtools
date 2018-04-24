@@ -1846,7 +1846,7 @@ int main_stats(int argc, char *argv[])
         switch (opt)
         {
             case 'f': info->flag_require = bam_str2flag(optarg); break;
-            case 'F': info->flag_filter = bam_str2flag(optarg); break;
+            case 'F': info->flag_filter |= bam_str2flag(optarg); break;
             case 'd': info->flag_filter |= BAM_FDUP; break;
             case 's': break;
             case 'r': info->fai = fai_load(optarg);
