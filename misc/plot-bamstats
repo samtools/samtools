@@ -599,7 +599,7 @@ sub plot_qualities
             set ylabel "Average Quality"
             set xlabel "Cycle"
             set yrange [0:$yrange]
-            set title "$$args{title}"
+            set title "$$args{title}" noenhanced
             plot '-' using 1:2 with lines title 'Forward reads' ] . ($is_paired ? q[, '-' using 1:2 with lines title 'Reverse reads'] : '') . q[
         ];
     my (@fp75,@fp50,@fmean);
@@ -682,7 +682,7 @@ sub plot_qualities
                 set yrange [0:$yrange]
                 unset ylabel
                 set xlabel "Cycle (rev reads)"
-                set label "$$args{title}" at screen 0.5,0.95 center
+                set label "$$args{title}" at screen 0.5,0.95 center noenhanced
                 plot '-' using 1:2:3 with filledcurve lt 1 lc rgb "#cccccc" t '25-75th percentile' , '-' using 1:2 with lines lc rgb "#000000" t 'Median', '-' using 1:2 with lines lt 2 t 'Mean'
             ];
         print $fh join('',@lp75),"end\n";
@@ -706,7 +706,7 @@ sub plot_qualities
             $$args{grid}
             set multiplot
             $pos_size
-            set title "$$args{title}"
+            set title "$$args{title}" noenhanced
             set ylabel "Frequency (fwd reads)"
             set label "Cycle $fmax_cycle" at $fmax_qual+1,$fmax
             unset xlabel
@@ -779,7 +779,7 @@ sub plot_qualities
             unset ytics
             set ytics ($ytics)
             unset xtics
-            set title "$$args{title}"
+            set title "$$args{title}" noenhanced
             splot '-' matrix with image
         ];
     for my $cycle (@ffq)
@@ -840,7 +840,7 @@ sub plot_acgt_cycles
             set ylabel "Base content [%]"
             set xlabel "Read Cycle"
             set yrange [0:100]
-            set title "$$args{title}"
+            set title "$$args{title}" noenhanced
             plot '-' w l ti 'A', '-' w l ti 'C', '-' w l ti 'G', '-' w l ti 'T'
         ];
     for my $base (1..4)
@@ -873,7 +873,7 @@ sub plot_gc
             $$args{terminal}
             set output "$$args{img}"
             $$args{grid}
-            set title "$$args{title}"
+            set title "$$args{title}" noenhanced
             set ylabel "Normalized Frequency"
             set xlabel "GC Content [%]"
             set yrange [0:1.1]
@@ -934,7 +934,7 @@ sub plot_gc_depth
             set ylabel "Mapped depth"
             set xlabel "Percentile of mapped sequence ordered by GC content"
             set x2label "GC Content [%]"
-            set title "$$args{title}"
+            set title "$$args{title}" noenhanced
             set x2tics ($x2tics)
             set xtics nomirror
             set xrange [0.1:99.9]
@@ -975,7 +975,7 @@ sub plot_isize
             set label sprintf("%d",$isize_max) at $isize_max+10,$isize_cnt
             set ylabel  "Number of pairs"
             set xlabel  "Insert Size"
-            set title "$$args{title}"];
+            set title "$$args{title}" noenhanced];
     print $fh qq[
             set logscale y 10] if exists $$opts{y_axis_log10};
     print $fh qq[
@@ -1016,7 +1016,7 @@ sub plot_coverage
             set xlabel "Coverage"
             set log y
             set style fill solid border -1
-            set title "$$args{title}"
+            set title "$$args{title}" noenhanced
             set xrange [:$p99]
             plot '-' with lines notitle
         ];
@@ -1061,7 +1061,7 @@ sub plot_mismatches_per_cycle
             set ylabel "Number of mismatches"
             set xlabel "Read Cycle"
             set style fill solid border -1
-            set title "$$args{title}"
+            set title "$$args{title}" noenhanced
             set xrange [-1:$ncycles]
             plot '-' $with ti 'Base Quality>30', \\
                  '-' $with ti '30>=Q>20', \\
@@ -1122,7 +1122,7 @@ sub plot_indel_dist
         set log y
         set y2tics nomirror
         set ytics nomirror
-        set title "$$args{title}"
+        set title "$$args{title}" noenhanced
         plot '-' w l ti 'Insertions', '-' w l ti 'Deletions', '-' axes x1y2 w l ti "Ins/Dels ratio"
     ];
     for my $len (@indels) { print $fh "$$len[0]\t$$len[1]\n"; } print $fh "end\n";
@@ -1154,7 +1154,7 @@ sub plot_indel_cycles
         set style increment user
         set ylabel "Indel count"
         set xlabel "Read Cycle"
-        set title "$$args{title}"
+        set title "$$args{title}" noenhanced
     ];
     if ( $is_paired )
     {
