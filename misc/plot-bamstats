@@ -682,7 +682,7 @@ sub plot_qualities
                 set yrange [0:$yrange]
                 unset ylabel
                 set xlabel "Cycle (rev reads)"
-                set label "$$args{title}" at screen 0.5,0.95 center
+                set label "$$args{title}" at screen 0.5,0.95 center noenhanced
                 plot '-' using 1:2:3 with filledcurve lt 1 lc rgb "#cccccc" t '25-75th percentile' , '-' using 1:2 with lines lc rgb "#000000" t 'Median', '-' using 1:2 with lines lt 2 t 'Mean'
             ];
         print $fh join('',@lp75),"end\n";
