@@ -2562,6 +2562,8 @@ sub test_idxstat
     my ($opts,%args) = @_;
 
     test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.bam", expect_fail=>0);
+    test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.cram", expect_fail=>0);
+    test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.sam", expect_fail=>0);
 }
 
 sub test_quickcheck

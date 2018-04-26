@@ -34,8 +34,10 @@ DEALINGS IN THE SOFTWARE.  */
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include <unistd.h>
+#include <getopt.h>
 
 #include "samtools.h"
+#include "sam_opts.h"
 
 #define BAM_LIDX_SHIFT    14
 
@@ -101,45 +103,144 @@ int bam_index(int argc, char *argv[])
     return EXIT_FAILURE;
 }
 
+/*
+ * Cram indices do not contain mapped/unmapped record counts, so we have to
+ * decode each record and count.  However we can speed this up as much as
+ * possible by using the required fields parameter.
+ *
+ * This prints the stats to stdout in the same manner than the BAM function
+ * does.
+ *
+ * Returns 0 on success,
+ *        -1 on failure.
+ */
+int slow_idxstats(samFile *fp, bam_hdr_t *header) {
+    int ret, last_tid = -2;
+    bam1_t *b = bam_init1();
+
+    if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS, SAM_RNAME | SAM_FLAG))
+        return -1;
+
+    uint64_t (*count0)[2] = calloc(header->n_targets+1, sizeof(*count0));
+    uint64_t (*counts)[2] = count0+1;
+    if (!count0)
+        return -1;
+
+    while ((ret = sam_read1(fp, header, b)) >= 0) {
+        if (b->core.tid >= header->n_targets || b->core.tid < -1) {
+            free(count0);
+            return -1;
+        }
+
+        if (b->core.tid != last_tid) {
+            if (last_tid >= -1) {
+                if (counts[b->core.tid][0] + counts[b->core.tid][1]) {
+                    print_error("idxstats", "file is not position sorted");
+                    free(count0);
+                    return -1;
+                }
+            }
+            last_tid = b->core.tid;
+        }
+
+        counts[b->core.tid][(b->core.flag & BAM_FUNMAP) ? 1 : 0]++;
+    }
+
+    if (ret == -1) {
+        int i;
+        for (i = 0; i < header->n_targets; i++) {
+            printf("%s\t%d\t%"PRIu64"\t%"PRIu64"\n",
+                   header->target_name[i],
+                   header->target_len[i],
+                   counts[i][0], counts[i][1]);
+        }
+        printf("*\t0\t%"PRIu64"\t%"PRIu64"\n", counts[-1][0], counts[-1][1]);
+    }
+
+    free(count0);
+
+    bam_destroy1(b);
+
+    return (ret == -1) ? 0 : -1;
+}
+
+static void usage_exit(FILE *fp, int exit_status)
+{
+    fprintf(fp, "Usage: samtools idxstats [options] <in.bam>\n");
+    sam_global_opt_help(fp, "-.---@");
+    exit(exit_status);
+}
+
 int bam_idxstats(int argc, char *argv[])
 {
     hts_idx_t* idx;
     bam_hdr_t* header;
     samFile* fp;
+    int c;
 
-    if (argc < 2) {
-        fprintf(stderr, "Usage: samtools idxstats <in.bam>\n");
-        return 1;
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', '-', '@'),
+        {NULL, 0, NULL, 0}
+    };
+
+    while ((c = getopt_long(argc, argv, "@:", lopts, NULL)) >= 0) {
+        switch (c) {
+        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            /* else fall-through */
+        case '?':
+            usage_exit(stderr, EXIT_FAILURE);
+        }
     }
-    fp = sam_open(argv[1], "r");
+
+    if (argc != optind+1) {
+        if (argc == optind) usage_exit(stdout, EXIT_SUCCESS);
+        else usage_exit(stderr, EXIT_FAILURE);
+    }
+
+    fp = sam_open_format(argv[optind], "r", &ga.in);
     if (fp == NULL) {
-        print_error_errno("idxstats", "failed to open \"%s\"", argv[1]);
+        print_error_errno("idxstats", "failed to open \"%s\"", argv[optind]);
         return 1;
     }
     header = sam_hdr_read(fp);
     if (header == NULL) {
-        print_error("idxstats", "failed to read header for \"%s\"", argv[1]);
-        return 1;
-    }
-    idx = sam_index_load(fp, argv[1]);
-    if (idx == NULL) {
-        print_error("idxstats", "fail to load index for \"%s\"", argv[1]);
+        print_error("idxstats", "failed to read header for \"%s\"", argv[optind]);
         return 1;
     }
 
-    int i;
-    for (i = 0; i < header->n_targets; ++i) {
-        // Print out contig name and length
-        printf("%s\t%d", header->target_name[i], header->target_len[i]);
-        // Now fetch info about it from the meta bin
-        uint64_t u, v;
-        hts_idx_get_stat(idx, i, &u, &v);
-        printf("\t%" PRIu64 "\t%" PRIu64 "\n", u, v);
+    if (hts_get_format(fp)->format != bam) {
+    slow_method:
+        if (ga.nthreads)
+            hts_set_threads(fp, ga.nthreads);
+
+        if (slow_idxstats(fp, header) < 0) {
+            print_error("idxstats", "failed to process \"%s\"", argv[optind]);
+            return 1;
+        }
+    } else {
+        idx = sam_index_load(fp, argv[optind]);
+        if (idx == NULL) {
+            print_error("idxstats", "fail to load index for \"%s\", "
+                        "reverting to slow method", argv[optind]);
+            goto slow_method;
+        }
+
+        int i;
+        for (i = 0; i < header->n_targets; ++i) {
+            // Print out contig name and length
+            printf("%s\t%d", header->target_name[i], header->target_len[i]);
+            // Now fetch info about it from the meta bin
+            uint64_t u, v;
+            hts_idx_get_stat(idx, i, &u, &v);
+            printf("\t%" PRIu64 "\t%" PRIu64 "\n", u, v);
+        }
+        // Dump information about unmapped reads
+        printf("*\t0\t0\t%" PRIu64 "\n", hts_idx_get_n_no_coor(idx));
+        hts_idx_destroy(idx);
     }
-    // Dump information about unmapped reads
-    printf("*\t0\t0\t%" PRIu64 "\n", hts_idx_get_n_no_coor(idx));
+
     bam_hdr_destroy(header);
-    hts_idx_destroy(idx);
     sam_close(fp);
     return 0;
 }
