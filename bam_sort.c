@@ -1738,7 +1738,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
         return -1;
     }
 
-    hts_set_threads(fpout, n_threads);
+    if (n_threads > 1) hts_set_threads(fpout, n_threads);
 
     if (sam_hdr_write(fpout, hout) != 0) {
         print_error_errno(cmd, "failed to write header to \"%s\"", out);
