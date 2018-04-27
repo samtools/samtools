@@ -41,7 +41,7 @@ SN	pairs with other orientation:	0
 SN	pairs on different chromosomes:	1
 SN	percentage of properly paired reads (%):	92.3
 SN	bases inside the target:	42
-SN	percentage of target genome with coverage > 0 (%):	100.00
+SN	percentage of target genome with coverage > 4 (%):	85.71
 # First Fragment Qualities. Use `grep ^FFQ | cut -f 2-` to extract this part.
 # Columns correspond to qualities and rows to cycles. First column is the cycle number.
 FFQ	1	1	1	1	1	1	1	1	1	1	1	1	1	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	2	0
