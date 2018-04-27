@@ -3,7 +3,7 @@
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2017 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -948,6 +948,23 @@ The sequences in the input file should all have different names.
 If they do not, indexing will emit a warning about duplicate sequences and
 retrieval will only produce subsequences from the first sequence with the
 duplicated name.
+
+.B Options
+.RS
+.TP 8
+.BI "-o, --output " FILE
+Write FASTA to file rather than to stdout.
+.TP
+.BI "-n, --length " INT
+Length of FASTA sequence line.
+[60]
+.TP
+.B -c, --continue
+Continue working if a non-existant region is requested.
+.TP
+.B -h, --help
+Print help message and exit.
+.RE
 
 .TP \"-------- tview
 .B tview

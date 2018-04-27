@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2017 Genome Research Ltd.
+#    Copyright (C) 2013-2018 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -526,6 +526,13 @@ sub test_faidx
     cmd("cat $$opts{tmp}/faidx.fa | $$opts{bgzip} -ci -I $$opts{tmp}/faidx.fa.gz.gzi > $$opts{tmp}/faidx.fa.gz");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa.gz");
     cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa $$opts{tmp}/faidx.fa 1:1-104 && test -f $$opts{tmp}/output_faidx.fa");
+    
+    # test continuing after an error
+    cmd("$$opts{bin}/samtools faidx --output $$opts{tmp}/output_faidx.fa --continue $$opts{tmp}/faidx.fa 100 EEE FFF");
+    
+    # test for reporting retrieval errors, Zero results and truncated
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1:10000000-10000005 > $$opts{tmp}/output_faidx.fa 2>&1 && grep Zero $$opts{tmp}/output_faidx.fa");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1:99998-100099 > $$opts{tmp}/output_faidx.fa 2>&1 && grep Truncated $$opts{tmp}/output_faidx.fa");
 
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
     {
