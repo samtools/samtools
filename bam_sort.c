@@ -1941,7 +1941,7 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 #define MAXDIGIT 64
 #define STEP 8
 
-void radixsort(size_t n, bam1_tag *buf, uint64_t *pos_arr)
+void ks_radixsort(size_t n, bam1_tag *buf, uint64_t *pos_arr)
 {
     int i, curr = 0;
     bam1_tag *buf_ar2[2], *bam_a, *bam_b;
@@ -1982,7 +1982,7 @@ static void *worker(void *data)
     w->error = 0;
 
     if (!g_is_by_qname && !g_is_by_tag)
-        radixsort(w->buf_len, w->buf, w->pos_arr);
+        ks_radixsort(w->buf_len, w->buf, w->pos_arr);
     else
         ks_mergesort(sort, w->buf_len, w->buf, 0);
 
