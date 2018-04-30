@@ -2629,6 +2629,6 @@ sub test_fastaref
     test_cmd($opts, out=>'fastaref/blank.txt', out_map=>{'test.out.1.fa' => 'fastaref/test.expected.1.fa'}, cmd=>"$$opts{bin}/samtools fastaref -o $$opts{path}/test.out.1.fa $$opts{path}/fastaref/test.sam");
     test_cmd($opts, out=>'fastaref/test.expected.1.fa', cmd=>"$$opts{bin}/samtools fastaref $$opts{path}/fastaref/test.sam");
     test_cmd($opts, out=>'fastaref/test.expected.2.fa', cmd=>"$$opts{bin}/samtools fastaref -l 13 $$opts{path}/fastaref/test.sam");
-    test_cmd($opts, out=>'fastaref/test.expected.3.fa', cmd=>"$$opts{bin}/samtools fastaref -k M5,LN,UR $$opts{path}/fastaref/test.sam");
-    test_cmd($opts, out=>'fastaref/blank.txt', cmd=>"$$opts{bin}/samtools fastaref $$opts{path}/fastaref/blank.txt");
+    test_cmd($opts, out=>'fastaref/test.expected.3.fa', cmd=>"$$opts{bin}/samtools fastaref -t M5,LN,UR $$opts{path}/fastaref/test.sam");
+    test_cmd($opts, out=>'fastaref/blank.txt', want_fail=>1, cmd=>"$$opts{bin}/samtools fastaref $$opts{path}/fastaref/blank.txt");
 }

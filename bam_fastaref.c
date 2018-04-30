@@ -42,8 +42,8 @@ KHASH_MAP_INIT_STR(s2s, char*)
 
 typedef struct {
     int maxLineLength;
-    char (*outputKeys)[3];
-    int numOutputKeys;
+    char (*outputTags)[3];
+    int numOutputTags;
     char* samFileName;
     char* outFileName; // NULL if this is to output to stdout
 } fastaref_options_t;
@@ -85,19 +85,19 @@ kh_s2s_t* parseSQLine(char* sqLine) {
             return NULL;
         }
 
-        char* key = field;
-        key[2] = '\0';
+        char* tag = field;
+        tag[2] = '\0';
 
         char* value = field + 3;
 
         int ret;
-        int valuePointer = kh_put(s2s, sqLineDict, key, &ret);
+        int valuePointer = kh_put(s2s, sqLineDict, tag, &ret);
         if (ret == -1) {
             print_error("fastaref", "failed parsing SQ line in header");
             return NULL;
         }
         else if (ret == 0) {
-            print_error("fastaref", "duplicate field name in SQ line");
+            print_error("fastaref", "duplicate tag in SQ line");
             return NULL;
         }
         kh_value(sqLineDict, valuePointer) = value;
@@ -112,6 +112,7 @@ kh_s2s_t* parseSQLine(char* sqLine) {
  * @returns 0 if successful
  */
 int generateFastaFile(fastaref_options_t* options) {
+    int haveWrittenSomething = 0;
     int writeBufferLength = options->maxLineLength;
     char* writeBuffer = malloc(writeBufferLength);
     if (writeBuffer == NULL) return -1;
@@ -178,13 +179,15 @@ int generateFastaFile(fastaref_options_t* options) {
                 }
 
                 int i;
-                for (i = 0; i < options->numOutputKeys; i++) {
-                    char* fieldName = options->outputKeys[i];
+                for (i = 0; i < options->numOutputTags; i++) {
+                    char* fieldName = options->outputTags[i];
                     khint_t fieldPointer = kh_get(s2s, sqLineDict, fieldName);
                     if (fieldPointer != kh_end(sqLineDict)) {
-                        if (fputc('\t', outFile) < 0 || fputs(fieldName, outFile) < 0 || fputc(':', outFile) < 0 || fputs(kh_value(sqLineDict, fieldPointer), outFile) < 0) {
-                            print_error("fastaref", "failed to write to output "
-                                                    "file");
+                        if (fputc('\t', outFile) < 0
+                                || fputs(fieldName, outFile) < 0
+                                || fputc(':', outFile) < 0
+                                || fputs(kh_value(sqLineDict, fieldPointer), outFile) < 0) {
+                            print_error("fastaref", "failed to write to output file");
                             returnCode = 1;
                             goto cleanup;
                         }
@@ -212,20 +215,26 @@ int generateFastaFile(fastaref_options_t* options) {
                     }
 
                     if (fwrite(writeBuffer, sizeof(char), lengthRead, outFile) != lengthRead || fputc('\n', outFile) < 0) {
-                        print_error_errno("fastaref", "failed to write file \"%s\"",
-                                          options->outFileName);
+                        print_error_errno("fastaref", "failed to write file \"%s\"", options->outFileName);
                         returnCode = 1;
                         goto cleanup;
                     }
 
                     if (lengthRead < writeBufferLength) break;
                 }
+                haveWrittenSomething = 1;
                 kh_destroy(s2s, sqLineDict);
                 sqLineDict = NULL;
                 (void)hclose(ref);
                 ref = NULL;
             }
         }
+    }
+
+    if(!haveWrittenSomething){
+        print_error_errno("fastaref", "no SQ lines found in \"%s\"", options->samFileName);
+        returnCode = 1;
+        goto cleanup;
     }
 
 cleanup:
@@ -243,30 +252,30 @@ void print_usage() {
     fprintf(stderr, "Usage: samtools fastaref [options] <in.bam>\n\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "  -o FILE  Output file name [stdout]\n");
-    fprintf(stderr, "  -k LIST  Output the specified keys into the fasta file "
+    fprintf(stderr, "  -t LIST  Output the specified tags into the output fasta file "
                     "(separated by commas)  [LN,AH,AN,AS,M5,SP]\n");
     fprintf(stderr, "  -l INT   Maximum length of outputted lines [60]\n");
 }
 
 int main_fastaref(int argc, char* argv[]) {
     fastaref_options_t options;
-    options.numOutputKeys = 0;
+    options.numOutputTags = 0;
     options.maxLineLength = 60;
     options.outFileName = NULL; // (point to stdout)
 
     int opt;
-    while ((opt = getopt(argc, argv, "k:l:o:")) >= 0) {
+    while ((opt = getopt(argc, argv, "t:l:o:")) >= 0) {
         switch (opt) {
-        case 'k': {
-            const char* key;
+        case 't': {
+            const char* tag;
             const char* strStart = optarg;
-            while ((key = _strsep(&optarg, ",")) != NULL) {
-                if (strlen(key) != 2) {
-                    print_error("fastaref", "invalid filtering key '%s', keys must have length 2", key);
+            while ((tag = _strsep(&optarg, ",")) != NULL) {
+                if (strlen(tag) != 2) {
+                    print_error("fastaref", "invalid filtering tag '%s', tags must have length 2", tag);
                 }
-                options.numOutputKeys++;
+                options.numOutputTags++;
             }
-            options.outputKeys = (char(*)[3])strStart;
+            options.outputTags = (char(*)[3])strStart;
         } break;
         case 'l':
             options.maxLineLength = atoi(optarg);
@@ -281,11 +290,11 @@ int main_fastaref(int argc, char* argv[]) {
         }
     }
 
-    if (options.numOutputKeys == 0) { // i.e. -k is not set
+    if (options.numOutputTags == 0) { // i.e. -t is not set
         char defaultValues[6][3] = {"LN", "AH", "AN", "AS", "M5", "SP"};
 
-        options.outputKeys = defaultValues;
-        options.numOutputKeys = 6;
+        options.outputTags = defaultValues;
+        options.numOutputTags = 6;
     }
 
     int numOtherArgs = argc - optind;

@@ -1885,17 +1885,21 @@ Mark supplementary reads of duplicates as duplicates.
 .B fastaref
 samtools fastaref [options] <in.bam>
 
-Generates a fasta reference file, by reading SQ lines.
+Uses the REF_PATH and REF_CACHE (using their defaults if not specified)
+to find and output references for all M5 tags in a specified BAM file in
+the fasta format.
+
+If no M5 tags are found in the input bam file, this gives an error.
 
 .B OPTIONS:
 .RS
 .TP 8
-.BI "-k " FILE
+.BI "-o " FILE
 Output file name
 [stdout]
 .TP 8
-.BI "-k " LIST
-Output the specified keys into the fasta file (separated by commas)
+.BI "-t " LIST
+Output the specified tags into the fasta file (separated by commas)
 [LN,AH,AN,AS,M5,SP]
 .TP 8
 .BI "-l " INT
