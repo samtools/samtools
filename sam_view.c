@@ -244,7 +244,6 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
-    int is_long_help = 0;
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
@@ -280,9 +279,16 @@ int main_samview(int argc, char *argv[])
     strcpy(out_mode, "w");
     strcpy(out_un_mode, "w");
     if (argc == 1 && isatty(STDIN_FILENO))
-        return usage(stdout, EXIT_SUCCESS, is_long_help);
+        return usage(stdout, EXIT_SUCCESS, 0);
+
+    // Suppress complaints about '?' being an unrecognised option.  Without
+    // this we have to put '?' in the options list, which makes it hard to
+    // tell a bad long option from the use of '-?' (both return '?' and
+    // set optopt to '\0').
+    opterr = 0;
+
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:M",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:M",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -345,13 +351,29 @@ int main_samview(int argc, char *argv[])
         //case 'x': out_format = "x"; break;
         //case 'X': out_format = "X"; break;
                  */
-        case '?': is_long_help = 1; break;
+        case '?':
+            if (optopt == '?') {  // '-?' appeared on command line
+                return usage(stdout, EXIT_SUCCESS, 1);
+            } else {
+                if (optopt) { // Bad short option
+                    print_error("view", "invalid option -- '%c'", optopt);
+                } else { // Bad long option
+                    // Do our best.  There is no good solution to finding
+                    // out what the bad option was.
+                    // See, e.g. https://stackoverflow.com/questions/2723888/where-does-getopt-long-store-an-unrecognized-option
+                    if (optind > 0 && strncmp(argv[optind - 1], "--", 2) == 0) {
+                        print_error("view", "unrecognised option '%s'",
+                                    argv[optind - 1]);
+                    }
+                }
+                return usage(stderr, EXIT_FAILURE, 0);
+            }
         case 'B': settings.remove_B = 1; break;
         case 'x':
             {
                 if (strlen(optarg) != 2) {
                     fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
-                    return usage(stderr, EXIT_FAILURE, is_long_help);
+                    return usage(stderr, EXIT_FAILURE, 0);
                 }
                 settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
                 settings.remove_aux[settings.remove_aux_len-1] = optarg;
@@ -360,7 +382,7 @@ int main_samview(int argc, char *argv[])
         case 'M': settings.multi_region = 1; break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
-                return usage(stderr, EXIT_FAILURE, is_long_help);
+                return usage(stderr, EXIT_FAILURE, 0);
             break;
         }
     }
@@ -382,7 +404,7 @@ int main_samview(int argc, char *argv[])
     }
     if (argc == optind && isatty(STDIN_FILENO)) {
         print_error("view", "No input provided or missing option argument.");
-        return usage(stderr, EXIT_FAILURE, is_long_help); // potential memory leak...
+        return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
     }
 
     fn_in = (optind < argc)? argv[optind] : "-";
