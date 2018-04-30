@@ -60,6 +60,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/kstring.h>
 #include "stats_isize.h"
 #include "sam_opts.h"
+#include "bedidx.h"
 
 #define BWA_MIN_RDLEN 35
 // From the spec
@@ -149,19 +150,24 @@ typedef struct
     // Arrays for the histogram data
     uint64_t *quals_1st, *quals_2nd;
     uint64_t *gc_1st, *gc_2nd;
-    acgtno_count_t *acgtno_cycles;
-    uint64_t *read_lengths;
+    acgtno_count_t *acgtno_cycles_1st;
+    acgtno_count_t *acgtno_cycles_2nd;
+    uint64_t *read_lengths, *read_lengths_1st, *read_lengths_2nd;
     uint64_t *insertions, *deletions;
     uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
     isize_t *isize;
 
     // The extremes encountered
     int max_len;            // Maximum read length
+    int max_len_1st;        // Maximum read length for forward reads
+    int max_len_2nd;        // Maximum read length for reverse reads
     int max_qual;           // Maximum quality
     int is_sorted;
 
     // Summary numbers
     uint64_t total_len;
+    uint64_t total_len_1st;
+    uint64_t total_len_2nd;
     uint64_t total_len_dup;
     uint64_t nreads_1st;
     uint64_t nreads_2nd;
@@ -202,7 +208,7 @@ typedef struct
     uint64_t *mpc_buf;              // Mismatches per cycle
 
     // Target regions
-    int nregions, reg_from,reg_to;
+    int nregions, reg_from, reg_to;
     regions_t *regions;
 
     // Auxiliary data
@@ -213,6 +219,8 @@ typedef struct
     char* split_name;
 
     stats_info_t* info;             // Pointer to options and settings struct
+    pos_t *chunks;
+    uint32_t nchunks;
 
 }
 stats_t;
@@ -222,6 +230,12 @@ static void error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
 void realloc_buffers(stats_t *stats, int seq_len);
 
+static int regions_lt(const void *r1, const void *r2) {
+    int64_t from_diff = (int64_t)((pos_t *)r1)->from - (int64_t)((pos_t *)r2)->from;
+    int64_t to_diff = (int64_t)((pos_t *)r1)->to - (int64_t)((pos_t *)r2)->to;
+
+    return from_diff > 0 ? 1 : from_diff < 0 ? -1 : to_diff > 0 ? 1 : to_diff < 0 ? -1 : 0;
+}
 
 // Coverage distribution methods
 static inline int coverage_idx(int min, int max, int n, int step, int depth)
@@ -570,15 +584,30 @@ void realloc_buffers(stats_t *stats, int seq_len)
         memset(stats->mpc_buf + stats->nbases*stats->nquals, 0, (n-stats->nbases)*stats->nquals*sizeof(uint64_t));
     }
 
-    stats->acgtno_cycles = realloc(stats->acgtno_cycles, n*sizeof(acgtno_count_t));
-    if ( !stats->acgtno_cycles )
+    stats->acgtno_cycles_1st = realloc(stats->acgtno_cycles_1st, n*sizeof(acgtno_count_t));
+    if ( !stats->acgtno_cycles_1st )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
-    memset(stats->acgtno_cycles + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
+    memset(stats->acgtno_cycles_1st + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
+
+    stats->acgtno_cycles_2nd = realloc(stats->acgtno_cycles_2nd, n*sizeof(acgtno_count_t));
+    if ( !stats->acgtno_cycles_2nd )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
+    memset(stats->acgtno_cycles_2nd + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
 
     stats->read_lengths = realloc(stats->read_lengths, n*sizeof(uint64_t));
     if ( !stats->read_lengths )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
     memset(stats->read_lengths + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
+
+    stats->read_lengths_1st = realloc(stats->read_lengths_1st, n*sizeof(uint64_t));
+    if ( !stats->read_lengths_1st )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
+    memset(stats->read_lengths_1st + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
+
+    stats->read_lengths_2nd = realloc(stats->read_lengths_2nd, n*sizeof(uint64_t));
+    if ( !stats->read_lengths_2nd )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
+    memset(stats->read_lengths_2nd + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
 
     stats->insertions = realloc(stats->insertions, n*sizeof(uint64_t));
     if ( !stats->insertions )
@@ -655,7 +684,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
     uint8_t *seq  = bam_get_seq(bam_line);
-    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line);
+    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line), is_first = IS_READ1(bam_line);
     for (i=0; i<seq_len; i++)
     {
         // Read cycle for current index
@@ -666,28 +695,28 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
         //      =ACMGRSVTWYHKDBN
         switch (bam_seqi(seq, i)) {
         case 1:
-            stats->acgtno_cycles[ read_cycle ].a++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].a++ : stats->acgtno_cycles_2nd[ read_cycle ].a++;
             break;
         case 2:
-            stats->acgtno_cycles[ read_cycle ].c++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].c++ : stats->acgtno_cycles_2nd[ read_cycle ].c++;
             gc_count++;
             break;
         case 4:
-            stats->acgtno_cycles[ read_cycle ].g++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].g++ : stats->acgtno_cycles_2nd[ read_cycle ].g++;
             gc_count++;
             break;
         case 8:
-            stats->acgtno_cycles[ read_cycle ].t++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].t++ : stats->acgtno_cycles_2nd[ read_cycle ].t++;
             break;
         case 15:
-            stats->acgtno_cycles[ read_cycle ].n++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].n++ : stats->acgtno_cycles_2nd[ read_cycle ].n++;
             break;
         default:
             /*
              * count "=" sequences in "other" along
              * with MRSVWYHKDB ambiguity codes
              */
-            stats->acgtno_cycles[ read_cycle ].other++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].other++ : stats->acgtno_cycles_2nd[ read_cycle ].other++;
             break;
         }
     }
@@ -700,10 +729,11 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     //  fill GC histogram
     uint64_t *quals;
     uint8_t *bam_quals = bam_get_qual(bam_line);
-    if ( bam_line->core.flag&BAM_FREAD2 )
+    if ( IS_READ2(bam_line) )
     {
         quals  = stats->quals_2nd;
         stats->nreads_2nd++;
+        stats->total_len_2nd += seq_len;
         for (i=gc_idx_min; i<gc_idx_max; i++)
             stats->gc_2nd[i]++;
     }
@@ -711,6 +741,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     {
         quals = stats->quals_1st;
         stats->nreads_1st++;
+        stats->total_len_1st += seq_len;
         for (i=gc_idx_min; i<gc_idx_max; i++)
             stats->gc_1st[i]++;
     }
@@ -804,6 +835,11 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     // Update max_len observed
     if ( stats->max_len<read_len )
         stats->max_len = read_len;
+    if ( IS_READ1(bam_line) && stats->max_len_1st < read_len )
+        stats->max_len_1st = read_len;
+    if ( IS_READ2(bam_line) && stats->max_len_2nd < read_len )
+        stats->max_len_2nd = read_len;
+
     int i;
     int gc_count = 0;
 
@@ -812,6 +848,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     if ( IS_ORIGINAL(bam_line) )
     {
         stats->read_lengths[read_len]++;
+        if ( IS_READ1(bam_line) ) stats->read_lengths_1st[read_len]++;
+        if ( IS_READ2(bam_line) ) stats->read_lengths_2nd[read_len]++;
         collect_orig_read_stats(bam_line, stats, &gc_count);
     }
 
@@ -875,7 +913,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
             int ncig = bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
             if ( !ncig ) continue;  // curiously, this can happen: 0D
             if ( cig==BAM_CDEL ) readlen += ncig;
-            else if ( cig==BAM_CMATCH )
+            else if ( cig==BAM_CMATCH || cig==BAM_CEQUAL || cig==BAM_CDIFF )
             {
                 if ( iref < stats->reg_from ) ncig -= stats->reg_from-iref;
                 else if ( iref+ncig-1 > stats->reg_to ) ncig -= iref+ncig-1 - stats->reg_to;
@@ -958,7 +996,52 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
         // Coverage distribution graph
         round_buffer_flush(stats,bam_line->core.pos);
-        round_buffer_insert_read(&(stats->cov_rbuf),bam_line->core.pos,bam_line->core.pos+seq_len-1);
+        if ( stats->regions ) {
+            uint32_t p = bam_line->core.pos, pnew, pmin, pmax, j;
+            pmin = pmax = i = j = 0;
+            while ( j < bam_line->core.n_cigar && i < stats->nchunks ) {
+                int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
+                int oplen = bam_cigar_oplen(bam_get_cigar(bam_line)[j]);
+                switch(op) {
+                case BAM_CMATCH:
+                case BAM_CEQUAL:
+                case BAM_CDIFF:
+                    pmin = MAX(p, stats->chunks[i].from-1);
+                    pmax = MIN(p+oplen, stats->chunks[i].to);
+                    if ( pmax >= pmin )
+                        round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+                    break;
+                case BAM_CDEL:
+                    break;
+                }
+                pnew = p + (bam_cigar_type(op)&2 ? oplen : 0); // consumes reference
+
+                if ( pnew >= stats->chunks[i].to ) {
+                    // go to the next chunk
+                    i++;
+                } else {
+                    // go to the next CIGAR op
+                    j++;
+                    p = pnew;
+                }
+            }
+        } else {
+            uint32_t p = bam_line->core.pos, j;
+            for (j = 0; j < bam_line->core.n_cigar; j++) {
+                int op = bam_cigar_op(bam_get_cigar(bam_line)[j]);
+                int oplen = bam_cigar_oplen(bam_get_cigar(bam_line)[j]);
+                switch(op) {
+                case BAM_CMATCH:
+                case BAM_CEQUAL:
+                case BAM_CDIFF:
+                    round_buffer_insert_read(&(stats->cov_rbuf), p, p+oplen-1);
+                    break;
+                case BAM_CDEL:
+                    break;
+                }
+                p += bam_cigar_type(op)&2 ? oplen : 0; // consumes reference
+            }
+        }
     }
 }
 
@@ -1059,6 +1142,8 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
     fprintf(to, "SN\tnon-primary alignments:\t%ld\n", (long)stats->nreads_secondary);
     fprintf(to, "SN\ttotal length:\t%ld\t# ignores clipping\n", (long)stats->total_len);
+    fprintf(to, "SN\ttotal first fragment length:\t%ld\t# ignores clipping\n", (long)stats->total_len_1st);
+    fprintf(to, "SN\ttotal last fragment length:\t%ld\t# ignores clipping\n", (long)stats->total_len_2nd);
     fprintf(to, "SN\tbases mapped:\t%ld\t# ignores clipping\n", (long)stats->nbases_mapped);                 // the length of the whole read goes here, including soft-clips etc.
     fprintf(to, "SN\tbases mapped (cigar):\t%ld\t# more accurate\n", (long)stats->nbases_mapped_cigar);   // only matched and inserted bases are counted here
     fprintf(to, "SN\tbases trimmed:\t%ld\n", (long)stats->nbases_trimmed);
@@ -1067,7 +1152,11 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\terror rate:\t%e\t# mismatches / bases mapped (cigar)\n", stats->nbases_mapped_cigar ? (float)stats->nmismatches/stats->nbases_mapped_cigar : 0);
     float avg_read_length = (stats->nreads_1st+stats->nreads_2nd)?stats->total_len/(stats->nreads_1st+stats->nreads_2nd):0;
     fprintf(to, "SN\taverage length:\t%.0f\n", avg_read_length);
+    fprintf(to, "SN\taverage first fragment length:\t%.0f\n", stats->nreads_1st? (float)stats->total_len_1st/stats->nreads_1st:0);
+    fprintf(to, "SN\taverage last fragment length:\t%.0f\n", stats->nreads_2nd? (float)stats->total_len_2nd/stats->nreads_2nd:0);
     fprintf(to, "SN\tmaximum length:\t%d\n", stats->max_len);
+    fprintf(to, "SN\tmaximum first fragment length:\t%d\n", stats->max_len_1st);
+    fprintf(to, "SN\tmaximum last fragment length:\t%d\n", stats->max_len_2nd);
     fprintf(to, "SN\taverage quality:\t%.1f\n", stats->total_len?stats->sum_qual/stats->total_len:0);
     fprintf(to, "SN\tinsert size average:\t%.1f\n", avg_isize);
     fprintf(to, "SN\tinsert size standard deviation:\t%.1f\n", sd_isize);
@@ -1079,9 +1168,9 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     int ibase,iqual;
     if ( stats->max_len<stats->nbases ) stats->max_len++;
     if ( stats->max_qual+1<stats->nquals ) stats->max_qual++;
-    fprintf(to, "# First Fragment Qualitites. Use `grep ^FFQ | cut -f 2-` to extract this part.\n");
+    fprintf(to, "# First Fragment Qualities. Use `grep ^FFQ | cut -f 2-` to extract this part.\n");
     fprintf(to, "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n");
-    for (ibase=0; ibase<stats->max_len; ibase++)
+    for (ibase=0; ibase<stats->max_len_1st; ibase++)
     {
         fprintf(to, "FFQ\t%d",ibase+1);
         for (iqual=0; iqual<=stats->max_qual; iqual++)
@@ -1090,9 +1179,9 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
         }
         fprintf(to, "\n");
     }
-    fprintf(to, "# Last Fragment Qualitites. Use `grep ^LFQ | cut -f 2-` to extract this part.\n");
+    fprintf(to, "# Last Fragment Qualities. Use `grep ^LFQ | cut -f 2-` to extract this part.\n");
     fprintf(to, "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n");
-    for (ibase=0; ibase<stats->max_len; ibase++)
+    for (ibase=0; ibase<stats->max_len_2nd; ibase++)
     {
         fprintf(to, "LFQ\t%d",ibase+1);
         for (iqual=0; iqual<=stats->max_qual; iqual++)
@@ -1135,10 +1224,51 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "# ACGT content per cycle. Use `grep ^GCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
     {
-        acgtno_count_t *acgtno_count = &(stats->acgtno_cycles[ibase]);
-        uint64_t acgt_sum = acgtno_count->a + acgtno_count->c + acgtno_count->g + acgtno_count->t;
+        acgtno_count_t *acgtno_count_1st = &(stats->acgtno_cycles_1st[ibase]);
+        acgtno_count_t *acgtno_count_2nd = &(stats->acgtno_cycles_2nd[ibase]);
+        uint64_t acgt_sum = acgtno_count_1st->a + acgtno_count_1st->c + acgtno_count_1st->g + acgtno_count_1st->t +
+                acgtno_count_2nd->a + acgtno_count_2nd->c + acgtno_count_2nd->g + acgtno_count_2nd->t;
         if ( ! acgt_sum ) continue;
-        fprintf(to, "GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1, 100.*acgtno_count->a/acgt_sum, 100.*acgtno_count->c/acgt_sum, 100.*acgtno_count->g/acgt_sum, 100.*acgtno_count->t/acgt_sum, 100.*acgtno_count->n/acgt_sum, 100.*acgtno_count->other/acgt_sum);
+        fprintf(to, "GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                100.*(acgtno_count_1st->a + acgtno_count_2nd->a)/acgt_sum,
+                100.*(acgtno_count_1st->c + acgtno_count_2nd->c)/acgt_sum,
+                100.*(acgtno_count_1st->g + acgtno_count_2nd->g)/acgt_sum,
+                100.*(acgtno_count_1st->t + acgtno_count_2nd->t)/acgt_sum,
+                100.*(acgtno_count_1st->n + acgtno_count_2nd->n)/acgt_sum,
+                100.*(acgtno_count_1st->other + acgtno_count_2nd->other)/acgt_sum);
+
+    }
+    fprintf(to, "# ACGT content per cycle for first fragments. Use `grep ^FBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
+    for (ibase=0; ibase<stats->max_len; ibase++)
+    {
+        acgtno_count_t *acgtno_count_1st = &(stats->acgtno_cycles_1st[ibase]);
+        uint64_t acgt_sum_1st = acgtno_count_1st->a + acgtno_count_1st->c + acgtno_count_1st->g + acgtno_count_1st->t;
+
+        if ( acgt_sum_1st )
+            fprintf(to, "FBC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                    100.*acgtno_count_1st->a/acgt_sum_1st,
+                    100.*acgtno_count_1st->c/acgt_sum_1st,
+                    100.*acgtno_count_1st->g/acgt_sum_1st,
+                    100.*acgtno_count_1st->t/acgt_sum_1st,
+                    100.*acgtno_count_1st->n/acgt_sum_1st,
+                    100.*acgtno_count_1st->other/acgt_sum_1st);
+
+    }
+    fprintf(to, "# ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
+    for (ibase=0; ibase<stats->max_len; ibase++)
+    {
+        acgtno_count_t *acgtno_count_2nd = &(stats->acgtno_cycles_2nd[ibase]);
+        uint64_t acgt_sum_2nd = acgtno_count_2nd->a + acgtno_count_2nd->c + acgtno_count_2nd->g + acgtno_count_2nd->t;
+
+        if ( acgt_sum_2nd )
+            fprintf(to, "LBC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                    100.*acgtno_count_2nd->a/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->c/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->g/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->t/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->n/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->other/acgt_sum_2nd);
+
     }
     fprintf(to, "# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
@@ -1155,11 +1285,26 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     int ilen;
     for (ilen=0; ilen<stats->max_len; ilen++)
     {
-        if ( stats->read_lengths[ilen]>0 )
-            fprintf(to, "RL\t%d\t%ld\n", ilen, (long)stats->read_lengths[ilen]);
+        if ( stats->read_lengths[ilen+1]>0 )
+            fprintf(to, "RL\t%d\t%ld\n", ilen+1, (long)stats->read_lengths[ilen+1]);
+    }
+
+    fprintf(to, "# Read lengths - first fragments. Use `grep ^FRL | cut -f 2-` to extract this part. The columns are: read length, count\n");
+    for (ilen=0; ilen<stats->max_len_1st; ilen++)
+    {
+        if ( stats->read_lengths_1st[ilen+1]>0 )
+            fprintf(to, "FRL\t%d\t%ld\n", ilen+1, (long)stats->read_lengths_1st[ilen+1]);
+    }
+
+    fprintf(to, "# Read lengths - last fragments. Use `grep ^LRL | cut -f 2-` to extract this part. The columns are: read length, count\n");
+    for (ilen=0; ilen<stats->max_len_2nd; ilen++)
+    {
+        if ( stats->read_lengths_2nd[ilen+1]>0 )
+            fprintf(to, "LRL\t%d\t%ld\n", ilen+1, (long)stats->read_lengths_2nd[ilen+1]);
     }
 
     fprintf(to, "# Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions\n");
+
     for (ilen=0; ilen<stats->nindels; ilen++)
     {
         if ( stats->insertions[ilen]>0 || stats->deletions[ilen]>0 )
@@ -1225,7 +1370,7 @@ void init_regions(stats_t *stats, const char *file)
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
 
     kstring_t line = { 0, 0, NULL };
-    int warned = 0;
+    int warned = 0, r, p, new_p;
     int prev_tid=-1, prev_pos=-1;
     while (line.l = 0, kgetline(&line, (kgets_func *)fgets, fp) >= 0)
     {
@@ -1272,10 +1417,29 @@ void init_regions(stats_t *stats, const char *file)
         if ( prev_pos>stats->regions[tid].pos[npos].from )
             error("The positions are not in chromosomal order (%s:%d comes after %d)\n", line.s,stats->regions[tid].pos[npos].from,prev_pos);
         stats->regions[tid].npos++;
+        if ( stats->regions[tid].npos > stats->nchunks )
+            stats->nchunks = stats->regions[tid].npos;
     }
     free(line.s);
     if ( !stats->regions ) error("Unable to map the -t sequences to the BAM sequences.\n");
     fclose(fp);
+
+    // sort region intervals and remove duplicates
+    for (r = 0; r < stats->nregions; r++) {
+        regions_t *reg = &stats->regions[r];
+        if ( reg->npos > 1 ) {
+            qsort(reg->pos, reg->npos, sizeof(pos_t), regions_lt);
+            for (new_p = 0, p = 1; p < reg->npos; p++) {
+                if ( reg->pos[new_p].to < reg->pos[p].from )
+                    reg->pos[++new_p] = reg->pos[p];
+                else if ( reg->pos[new_p].to < reg->pos[p].to )
+                    reg->pos[new_p].to = reg->pos[p].to;
+            }
+            reg->npos = ++new_p;
+        }
+    }
+
+    stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
 }
 
 void destroy_regions(stats_t *stats)
@@ -1287,6 +1451,7 @@ void destroy_regions(stats_t *stats)
         free(stats->regions[i].pos);
     }
     if ( stats->regions ) free(stats->regions);
+    if ( stats->chunks ) free(stats->chunks);
 }
 
 void reset_regions(stats_t *stats)
@@ -1311,12 +1476,65 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     int i = reg->cpos;
     while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
     if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
-    if ( bam_line->core.pos + bam_line->core.l_qseq + 1 < reg->pos[i].from ) return 0;
+    if ( bam_endpos(bam_line) < reg->pos[i].from ) return 0;
+
+    //found a read overlapping a region
     reg->cpos = i;
     stats->reg_from = reg->pos[i].from;
     stats->reg_to   = reg->pos[i].to;
 
+    //now find all the overlapping chunks
+    stats->nchunks = 0;
+    while (i < reg->npos) {
+        if (bam_line->core.pos < reg->pos[i].to && bam_endpos(bam_line) >= reg->pos[i].from) {
+            int32_t endpos = bam_endpos(bam_line);
+            stats->chunks[stats->nchunks].from = MAX(bam_line->core.pos+1, reg->pos[i].from);
+            stats->chunks[stats->nchunks].to = MIN(endpos, reg->pos[i].to);
+            stats->nchunks++;
+        }
+        i++;
+    }
+
     return 1;
+}
+
+int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
+    if ( !stats || !iter)
+        return 1;
+
+    int i, j, tid;
+    stats->nregions = iter->n_reg;
+    stats->regions = calloc(stats->nregions, sizeof(regions_t));
+    stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
+    if ( !stats->regions || !stats->chunks )
+        return 1;
+
+    for (i = 0; i < stats->nregions; i++) {
+        tid = iter->reg_list[i].tid;
+        if ( tid < 0 )
+            continue;
+
+        if ( tid >= stats->nregions ) {
+            stats->nregions = tid+10;
+            regions_t *tmp = realloc(stats->regions, stats->nregions * sizeof(regions_t));
+            if (!tmp)
+                return 1;
+            stats->regions = tmp;
+            memset(stats->regions + tid, 0, 10 * sizeof(regions_t));
+        }
+
+        stats->regions[tid].mpos = stats->regions[tid].npos = iter->reg_list[i].count;
+        stats->regions[tid].pos = calloc(stats->regions[tid].mpos, sizeof(pos_t));
+        if ( !stats->regions[tid].pos )
+            return 1;
+
+        for (j = 0; j < stats->regions[tid].npos; j++) {
+            stats->regions[tid].pos[j].from = iter->reg_list[i].intervals[j].beg+1;
+            stats->regions[tid].pos[j].to = iter->reg_list[i].intervals[j].end;
+        }
+    }
+ 
+    return 0;
 }
 
 void init_group_id(stats_t *stats, const char *id)
@@ -1404,8 +1622,11 @@ void cleanup_stats(stats_t* stats)
     free(stats->gcd);
     free(stats->rseq_buf);
     free(stats->mpc_buf);
-    free(stats->acgtno_cycles);
+    free(stats->acgtno_cycles_1st);
+    free(stats->acgtno_cycles_2nd);
     free(stats->read_lengths);
+    free(stats->read_lengths_1st);
+    free(stats->read_lengths_2nd);
     free(stats->insertions);
     free(stats->deletions);
     free(stats->ins_cycles_1st);
@@ -1499,14 +1720,13 @@ stats_t* stats_init()
     stats->ngc    = 200;
     stats->nquals = 256;
     stats->nbases = 300;
-    stats->max_len   = 30;
-    stats->max_qual  = 40;
     stats->rseq_pos     = -1;
     stats->tid = stats->gcd_pos = -1;
     stats->igcd = 0;
     stats->is_sorted = 1;
     stats->nindels = stats->nbases;
     stats->split_name = NULL;
+    stats->nchunks = 0;
 
     return stats;
 }
@@ -1540,8 +1760,11 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->isize          = init_isize_t(info->nisize ?info->nisize+1 :0);
     stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
     stats->mpc_buf        = info->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
-    stats->acgtno_cycles  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    stats->acgtno_cycles_1st  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    stats->acgtno_cycles_2nd  = calloc(stats->nbases,sizeof(acgtno_count_t));
     stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
+    stats->read_lengths_1st   = calloc(stats->nbases,sizeof(uint64_t));
+    stats->read_lengths_2nd   = calloc(stats->nbases,sizeof(uint64_t));
     stats->insertions     = calloc(stats->nbases,sizeof(uint64_t));
     stats->deletions      = calloc(stats->nbases,sizeof(uint64_t));
     stats->ins_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
@@ -1623,7 +1846,7 @@ int main_stats(int argc, char *argv[])
         switch (opt)
         {
             case 'f': info->flag_require = bam_str2flag(optarg); break;
-            case 'F': info->flag_filter = bam_str2flag(optarg); break;
+            case 'F': info->flag_filter |= bam_str2flag(optarg); break;
             case 'd': info->flag_filter |= BAM_FDUP; break;
             case 's': break;
             case 'r': info->fai = fai_load(optarg);
@@ -1661,7 +1884,10 @@ int main_stats(int argc, char *argv[])
         bam_fname = "-";
     }
 
-    if (init_stat_info_fname(info, bam_fname, &ga.in)) return 1;
+    if (init_stat_info_fname(info, bam_fname, &ga.in)) {
+        free(info);
+        return 1;
+    }
     if (ga.nthreads > 0)
         hts_set_threads(info->sam, ga.nthreads);
 
@@ -1676,26 +1902,56 @@ int main_stats(int argc, char *argv[])
     bam1_t *bam_line = bam_init1();
     if ( optind<argc )
     {
-        // Collect stats in selected regions only
-        hts_idx_t *bam_idx = sam_index_load(info->sam,bam_fname);
-        if (bam_idx == 0)
-            error("Random alignment retrieval only works for indexed BAM files.\n");
+        int filter = 1;
+        // Prepare the region hash table for the multi-region iterator
+        void *region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
+        if (region_hash) {
 
-        int i;
-        for (i=optind; i<argc; i++)
-        {
-            hts_itr_t* iter = bam_itr_querys(bam_idx, info->sam_header, argv[i]);
-            while (sam_itr_next(info->sam, iter, bam_line) >= 0) {
-                if (info->split_tag) {
-                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
-                    collect_stats(bam_line, curr_stats);
+            // Collect stats in selected regions only
+            hts_idx_t *bam_idx = sam_index_load(info->sam,bam_fname);
+            if (bam_idx) {
+
+                int regcount = 0;
+                hts_reglist_t *reglist = bed_reglist(region_hash, ALL, &regcount);
+                if (reglist) {
+
+                    hts_itr_multi_t *iter = sam_itr_regions(bam_idx, info->sam_header, reglist, regcount);
+                    if (iter) {
+
+                        if (!targets) {
+                            all_stats->nchunks = argc-optind;
+                            if ( replicate_regions(all_stats, iter) ) 
+                                fprintf(stderr, "Replications of the regions failed."); 
+                        }
+
+                        if ( all_stats->nregions && all_stats->regions ) {
+                            while (sam_itr_multi_next(info->sam, iter, bam_line) >= 0) {
+                               if (info->split_tag) {
+                                   curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
+                                   collect_stats(bam_line, curr_stats);
+                               }
+                               collect_stats(bam_line, all_stats);
+                            }
+                        }
+
+                        hts_itr_multi_destroy(iter);
+                    } else {
+                       fprintf(stderr, "Creation of the region iterator failed.");
+                       hts_reglist_free(reglist, regcount);
+                    }
+                } else {
+                    fprintf(stderr, "Creation of the region list failed.");
                 }
-                collect_stats(bam_line, all_stats);
+
+                hts_idx_destroy(bam_idx);
+            } else {
+                fprintf(stderr, "Random alignment retrieval only works for indexed BAM files.\n");
             }
-            reset_regions(all_stats);
-            bam_itr_destroy(iter);
+
+            bed_destroy(region_hash);
+        } else {
+            fprintf(stderr, "Creation of the region hash table failed.\n");
         }
-        hts_idx_destroy(bam_idx);
     }
     else
     {

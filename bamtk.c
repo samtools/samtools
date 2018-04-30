@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2017 Genome Research Ltd.
+    Copyright (C) 2008-2018 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -31,7 +31,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "htslib/hts.h"
 #include "samtools.h"
-#include "version.h"
 
 int bam_taf2baf(int argc, char *argv[]);
 int bam_mpileup(int argc, char *argv[]);
@@ -65,10 +64,6 @@ int main_fastaref(int argc, char *argv[]);
 int faidx_main(int argc, char *argv[]);
 int dict_main(int argc, char *argv[]);
 
-const char *samtools_version()
-{
-    return SAMTOOLS_VERSION;
-}
 
 static void usage(FILE *fp)
 {
@@ -91,7 +86,6 @@ static void usage(FILE *fp)
 "     calmd          recalculate MD/NM tags and '=' bases\n"
 "     fixmate        fix mate information\n"
 "     reheader       replace BAM header\n"
-"     rmdup          remove PCR duplicates\n"
 "     targetcut      cut fosmid regions (for fosmid pool only)\n"
 "     addreplacerg   adds or replaces RG tags\n"
 "     markdup        mark duplicates\n"
@@ -204,7 +198,7 @@ int main(int argc, char *argv[])
         printf(
 "samtools %s\n"
 "Using htslib %s\n"
-"Copyright (C) 2017 Genome Research Ltd.\n",
+"Copyright (C) 2018 Genome Research Ltd.\n",
                samtools_version(), hts_version());
     }
     else if (strcmp(argv[1], "--version-only") == 0) {

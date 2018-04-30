@@ -123,6 +123,7 @@ static int strnum_cmp(const char *_a, const char *_b)
 
 typedef struct {
     int i;
+    uint32_t rev;
     uint64_t pos, idx;
     bam1_tag entry;
 } heap1_t;
@@ -150,6 +151,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
         if (fa != fb) return fa > fb;
     } else {
         if (a.pos != b.pos) return a.pos > b.pos;
+        if (a.rev != b.rev) return a.rev > b.rev;
     }
     // This compares by position in the input file(s)
     if (a.i != b.i) return a.i > b.i;
@@ -1366,7 +1368,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         res = iter[i] ? sam_itr_next(fp[i], iter[i], h->entry.bam_record) : sam_read1(fp[i], hdr[i], h->entry.bam_record);
         if (res >= 0) {
             bam_translate(h->entry.bam_record, translation_tbl + i);
-            h->pos = ((uint64_t)h->entry.bam_record->core.tid<<32) | (uint32_t)((int32_t)h->entry.bam_record->core.pos+1)<<1 | bam_is_rev(h->entry.bam_record);
+            h->pos = ((uint64_t)h->entry.bam_record->core.tid<<32) | (uint32_t)((int32_t)h->entry.bam_record->core.pos+1);
+            h->rev = bam_is_rev(h->entry.bam_record);
             h->idx = idx++;
             if (g_is_by_tag) {
                 h->entry.tag = bam_aux_get(h->entry.bam_record, g_sort_tag);
@@ -1413,7 +1416,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         }
         if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
             bam_translate(b, translation_tbl + heap->i);
-            heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1)<<1 | bam_is_rev(b);
+            heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1);
+            heap->rev = bam_is_rev(b);
             heap->idx = idx++;
             if (g_is_by_tag) {
                 heap->entry.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
@@ -1649,8 +1653,8 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
     }
     if (res >= 0) {
         heap->pos = (((uint64_t)heap->entry.bam_record->core.tid<<32)
-                     | (uint32_t)((int32_t)heap->entry.bam_record->core.pos+1)<<1
-                     | bam_is_rev(heap->entry.bam_record));
+                     | (uint32_t)((int32_t)heap->entry.bam_record->core.pos+1));
+        heap->rev = bam_is_rev(heap->entry.bam_record);
         heap->idx = (*idx)++;
         if (g_is_by_tag) {
             heap->entry.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
@@ -1734,7 +1738,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
         return -1;
     }
 
-    hts_set_threads(fpout, n_threads);
+    if (n_threads > 1) hts_set_threads(fpout, n_threads);
 
     if (sam_hdr_write(fpout, hout) != 0) {
         print_error_errno(cmd, "failed to write header to \"%s\"", out);
@@ -1787,41 +1791,6 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     return -1;
 }
 
-static int change_SO(bam_hdr_t *h, const char *so)
-{
-    char *p, *q, *beg = NULL, *end = NULL, *newtext;
-    if (h->l_text > 3) {
-        if (strncmp(h->text, "@HD", 3) == 0) {
-            if ((p = strchr(h->text, '\n')) == 0) return -1;
-            *p = '\0';
-            if ((q = strstr(h->text, "\tSO:")) != 0) {
-                *p = '\n'; // change back
-                if (strncmp(q + 4, so, p - q - 4) != 0) {
-                    beg = q;
-                    for (q += 4; *q != '\n' && *q != '\t'; ++q);
-                    end = q;
-                } else return 0; // no need to change
-            } else beg = end = p, *p = '\n';
-        }
-    }
-    if (beg == NULL) { // no @HD
-        h->l_text += strlen(so) + 15;
-        newtext = (char*)malloc(h->l_text + 1);
-        if (!newtext) return -1;
-        snprintf(newtext, h->l_text + 1,
-                 "@HD\tVN:1.3\tSO:%s\n%s", so, h->text);
-    } else { // has @HD but different or no SO
-        h->l_text = (beg - h->text) + (4 + strlen(so)) + (h->text + h->l_text - end);
-        newtext = (char*)malloc(h->l_text + 1);
-        if (!newtext) return -1;
-        snprintf(newtext, h->l_text + 1, "%.*s\tSO:%s%s",
-                 (int) (beg - h->text), h->text, so, end);
-    }
-    free(h->text);
-    h->text = newtext;
-    return 0;
-}
-
 // Function to compare reads and determine which one is < or > the other
 // Handle sort-by-pos and sort-by-name. Used as the secondary sort in bam1_lt_by_tag, if reads are equivalent by tag.
 // Returns a value less than, equal to or greater than zero if a is less than,
@@ -1839,8 +1808,14 @@ static inline int bam1_cmp_core(const bam1_tag a, const bam1_tag b)
         if (t != 0) return t;
         return (int) (a.bam_record->core.flag&0xc0) - (int) (b.bam_record->core.flag&0xc0);
     } else {
-        pa = (uint64_t)a.bam_record->core.tid<<32|(a.bam_record->core.pos+1)<<1|bam_is_rev(a.bam_record);
-        pb = (uint64_t)b.bam_record->core.tid<<32|(b.bam_record->core.pos+1)<<1|bam_is_rev(b.bam_record);
+        pa = (uint64_t)a.bam_record->core.tid<<32|(a.bam_record->core.pos+1);
+        pb = (uint64_t)b.bam_record->core.tid<<32|(b.bam_record->core.pos+1);
+
+        if (pa == pb) {
+            pa = bam_is_rev(a.bam_record);
+            pb = bam_is_rev(b.bam_record);
+        }
+
         return pa < pb ? -1 : (pa > pb ? 1 : 0);
     }
 }
@@ -2120,9 +2095,14 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     else
         new_so = "coordinate";
 
-    if (change_SO(header, new_so) != 0) {
+    if (sam_hdr_change_HD(header, "SO", new_so) != 0) {
         print_error("sort",
                     "failed to change sort order header to '%s'\n", new_so);
+        goto err;
+    }
+    if (sam_hdr_change_HD(header, "GO", NULL) != 0) {
+        print_error("sort",
+                    "failed to delete group order header\n");
         goto err;
     }
 
@@ -2204,7 +2184,6 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
 
     // write the final output
     if (n_files == 0 && num_in_mem < 2) { // a single block
-        ks_mergesort(sort, k, buf, 0);
         if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt) != 0) {
             print_error_errno("sort", "failed to create \"%s\"", fnout);
             goto err;
@@ -2245,6 +2224,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     bam_destroy1(b);
     free(buf);
     free(bam_mem);
+    free(in_mem);
     bam_hdr_destroy(header);
     if (fp) sam_close(fp);
     return ret;

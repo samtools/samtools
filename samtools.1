@@ -1,9 +1,9 @@
 '\" t
-.TH samtools 1 "28 September 2017" "samtools-1.6" "Bioinformatics tools"
+.TH samtools 1 "3 April 2018" "samtools-1.8" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2017 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -85,7 +85,7 @@ samtools fasta input.bam > output.fasta
 .PP
 samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
 .PP
-samtools collate aln.sorted.bam aln.name_collated.bam
+samtools collate -o aln.name_collated.bam aln.sorted.bam
 .PP
 samtools depad input.bam
 .PP
@@ -156,6 +156,7 @@ option is required whenever writing CRAM output.
 
 The
 .BR -L ,
+.BR -M ,
 .BR -r ,
 .BR -R ,
 .BR -s ,
@@ -287,6 +288,13 @@ If an index is not present, one will be generated for you.
 Only output alignments overlapping the input BED
 .I FILE
 [null].
+.TP
+.B "-M "
+Use the multi-region iterator on the union of the BED file and
+command-line region arguments.  This avoids re-reading the same regions
+of files so can sometimes be much faster.  Note this also removes
+duplicate sequences.  Without this a sequence that overlaps multiple
+regions specified on the command line will be reported multiple times.
 .TP
 .BI "-r " STR
 Only output alignments in read group
@@ -603,7 +611,12 @@ samtools idxstats
 .IR in.sam | in.bam | in.cram
 
 Retrieve and print stats in the index file corresponding to the input file.
-Before calling idxstats, the input BAM file must be indexed by samtools index.
+Before calling idxstats, the input BAM file should be indexed by samtools index.
+
+If run on a SAM or CRAM file or an unindexed BAM file, this command
+will still produce the same summary statistics, but does so by reading
+through the entire file.  This is far slower than using the BAM
+indices.
 
 The output is TAB-delimited with each line consisting of reference sequence
 name, sequence length, # mapped reads and # unmapped reads. It is written to
@@ -824,7 +837,7 @@ has coverage outside of the region specified in the BED file.
 .TP
 .BI "-m, -d " INT
 .RI "Truncate reported depth at a maximum of " INT " reads."
-[8000]
+[8000]. If 0, depth is set to the maximum integer value, effectively removing any depth limit.
 .TP
 .BI "-q " INT
 .RI "Only count reads with base quality greater than " INT
@@ -942,6 +955,23 @@ The sequences in the input file should all have different names.
 If they do not, indexing will emit a warning about duplicate sequences and
 retrieval will only produce subsequences from the first sequence with the
 duplicated name.
+
+.B Options
+.RS
+.TP 8
+.BI "-o, --output " FILE
+Write FASTA to file rather than to stdout.
+.TP
+.BI "-n, --length " INT
+Length of FASTA sequence line.
+[60]
+.TP
+.B -c, --continue
+Continue working if a non-existant region is requested.
+.TP
+.B -h, --help
+Print help message and exit.
+.RE
 
 .TP \"-------- tview
 .B tview
@@ -1560,7 +1590,7 @@ ignore the left part of the tag until the separator, then use the second part
 .B collate
 samtools collate
 .RI [ options ]
-.IR in.sam | in.bam | in.cram " [" out.prefix "]"
+.IR in.sam | in.bam | in.cram " [" <prefix> "]"
 
 Shuffles and groups reads together by their names.
 A faster alternative to a full query name sort,
@@ -1571,11 +1601,23 @@ but doesn't make any guarantees about the order of read names between groups.
 The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
 
+If present, <prefix> is used to name the temporary files that collate
+uses when sorting the data.  If neither the '-O' nor '-o' options are used,
+<prefix> must be present and collate will use it to make an output file name
+by appending a suffix depending on the format written (.bam by default).
+
+If either the -O or -o option is used, <prefix> is optional.  If <prefix>
+is absent, collate will write the temporary files to a system-dependent
+location (/tmp on UNIX).
+
 .B Options:
 .RS
 .TP 8
 .B -O
-Output to stdout rather than to files starting with out.prefix
+Output to stdout.  This option cannot be used with '-o'.
+.TP
+.B -o FILE
+Write output to FILE.  This option cannot be used with '-O'.
 .TP
 .B -u
 Write uncompressed BAM output
@@ -1941,8 +1983,8 @@ Display the full samtools version number in a machine-readable format.
 .SH GLOBAL OPTIONS
 .PP
 Several long-options are shared between multiple samtools subcommands:
-\fB--input-fmt\fR, \fB--input-fmt-options\fR, \fB--output-fmt\fR,
-\fB--output-fmt-options\fR, and \fB--reference\fR.
+\fB--input-fmt\fR, \fB--input-fmt-option\fR, \fB--output-fmt\fR,
+\fB--output-fmt-option\fR, and \fB--reference\fR.
 The input format is typically auto-detected so specifying the format
 is usually unnecessary and the option is included for completeness.
 Note that not all subcommands have all options.  Consult the subcommand
@@ -1952,7 +1994,7 @@ Format strings recognised are "sam", "bam" and "cram".  They may be
 followed by a comma separated list of options as \fIkey\fR or
 \fIkey\fR=\fIvalue\fR. See below for examples.
 .PP
-The \fBfmt-options\fR arguments accept either a single \fIoption\fR or
+The \fBfmt-option\fR arguments accept either a single \fIoption\fR or
 \fIoption\fR=\fIvalue\fR.  Note that some options only work on some
 file formats and only on read or write streams.  If value is
 unspecified for a boolean option, the value is assumed to be 1.  The
@@ -1974,7 +2016,18 @@ MD5 not being obtainable via the REF_PATH or REF_CACHE environment variables.
 .BI decode_md= 0|1
 CRAM input only; defaults to 1 (on).  CRAM does not typically store
 MD and NM tags, preferring to generate them on the fly.  This option
-controls this behaviour.
+controls this behaviour.  It can be particularly useful when combined
+with a file encoded using store_md=1 and store_nm=1.
+.TP
+.BI store_md= 0|1
+CRAM output only; defaults to 0 (off).  CRAM normally only stores MD
+tags when no reference is unknown and lets the decoder generate these
+values on-the-fly (see decode_md).
+.TP
+.BI store_nm= 0|1
+CRAM output only; defaults to 0 (off).  CRAM normally only stores NM
+tags when no reference is unknown and lets the decoder generate these
+values on-the-fly (see decode_md).
 .TP
 .BI ignore_md5= 0|1
 CRAM input only; defaults to 0 (off).  When enabled, md5 checksum
@@ -2184,6 +2237,28 @@ while reads from
 .I 454.bam
 will be attached
 .IR RG:Z:454 .
+
+.IP o 2
+Convert a BAM file to a CRAM with NM and MD tags stored verbatim
+rather than calculating on the fly during CRAM decode, so that mixed
+data sets with MD/NM only on some records, or NM calculated using
+different definitions of mismatch, can be decoded without change.  The
+second command demonstrates how to decode such a file.  The request to
+not decode MD here is turning off auto-generation of both MD and NM;
+it will still emit the MD/NM tags on records that had these stored
+verbatim.
+.EX 2
+samtools view -C --output-fmt-option store_md=1 --output-fmt-option store_nm=1 -o aln.cram aln.bam
+samtools view --input-fmt-option decode_md=0 -o aln.new.bam aln.cram
+.EE
+.IP o 2
+An alternative way of achieving the above is listing multiple options
+after the \fB--output-fmt\fR or \fB-O\fR option.  The commands below
+are equivalent to the two above.
+.EX 2
+samtools view -O cram,store_md=1,store_nm=1 -o aln.cram aln.bam
+samtools view --input-fmt cram,decode_md=0 -o aln.new.bam aln.cram
+.EE
 
 .IP o 2
 Call SNPs and short INDELs:

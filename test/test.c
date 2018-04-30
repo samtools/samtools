@@ -53,9 +53,3 @@ void dump_hdr(const bam_hdr_t* hdr)
     }
     printf("text: \"%s\"\n", hdr->text);
 }
-
-// For tests, just return a constant that can be embedded in expected output.
-const char *samtools_version(void)
-{
-    return "x.y.test";
-}

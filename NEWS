@@ -1,7 +1,86 @@
-Release a.b (New Year)
+Release a.b
+-----------
+
+Release 1.8 (3rd April 2018)
+----------------------------
+
+ * samtools calmd now has a quiet mode.  This can be enabled by passing `-Q` to
+   calmd. (Thanks to Colin Davenport)
+
+ * In samtools depth `-d 0` will effectively remove the depth limit. (#764)
+
+ * Improvements made to samtools collate's interface and documentation.  It is
+   now possible to specify an output file name using `-o`, instead of deriving  
+   it from the prefix used for temporary files.  The prefix itself is now
+   optional if `-o` or `-O` (to stdout) is used. (#780)
+
+ * Bug-fixes:
+
+   - Make samtools addreplacerg choose output format by file extension. (#767; 
+     reported by Argy Megalios)
+
+   - Merge tests now work on ungzipped data, allowing tests to be run against
+     different deflate libraries.
+
+   - samtools markdup error messages about missing tags have been updated with
+     the suggestion that samtools fixmate is run beforehand. (#765; reported by
+     Yudong Cai)
+
+   - Enables the `--reference` option for samtools fastq.  Now works like other
+     programs when a reference sequence is needed for CRAM files. (#791,
+     reported by Milana Kaljevic)
+
+
+Release 1.7 (26th January 2018)
 --------------------
 
+* HTSlib, and so samtools, now support BAMs which include CIGARs with more
+  than 65535 operations as per HTS-Specs 18th November (dab57f4 and 2f915a8).
 
+* samtools quickcheck will now write a warning to stderr if it finds
+  any problems.  These messages can be suppressed with a new `-q` option.
+
+* samtools markdup can now mark supplementary alignments of reads where
+  the primary alignment is found to be a duplicate.  Supplementary marking
+  can be turned on by passing the `-S` option to markdup.  When this
+  option is enabled, all the alignment data will be written to a temporary
+  file so that supplementary alignments that occur before a duplicated
+  primary can be correctly marked in the final output.  The location
+  of this temporary file can be influenced using the new `-T` option.
+
+* samtools view now supports HTSlib's new multi-region iterator.
+  This can be enabled by passing the `-M` option to view.  When using
+  this option:
+
+  - The BED filter (`-L` option) will use the index to skip through the file
+  - Reads from overlapping regions will only be output once
+  
+* samtools bedcov will now ignore BED comment and header lines (#571; thanks
+  to Daniel Baker).
+
+* samtools collate now updates the @HD SO: and GO: tags, and sort will
+  remove a GO: tag if present.  (#757; reported by Imran Haque).
+
+* Bug-fixes:
+
+ - maq2sam now checks for input files that end early.  (#751; patch supplied
+   by Alexandre Rebert of the Mayhem team, via Andreas Tille from Debian.)
+
+ - Fixed incorrect check when looking up header tags that could lead
+   to a crash in samtools stats. (#208; thanks to Dave Larson.)
+
+ - Fixed bug in samtools fastq `-O` option where it would fail if
+   the OQ tag in the input file had an unexpected type. (#758;
+   reported by Taejeong Bae)
+
+ - The MD5 calculations in samtools dict and md5fa did not handle
+   non-alphabetic characters in the same way as the CRAM MD5 function.
+   They have now been updated to match. (#704; reported by Chris Norman).
+
+ - Fix possible infinite loop in samtools targetcut.
+
+ - Building bam_tview_curses should no longer fail if a curses header file
+   cannot be found.
 
 Release 1.6 (28th September 2017)
 --------------------

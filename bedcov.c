@@ -128,6 +128,12 @@ int main_bedcov(int argc, char *argv[])
         int tid, beg, end, pos;
         bam_mplp_t mplp;
 
+        if (str.l == 0 || *str.s == '#') continue; /* empty or comment line */
+        /* Track and browser lines.  Also look for a trailing *space* in
+           case someone has badly-chosen a chromosome name (it would
+           be followed by a tab in that case). */
+        if (strncmp(str.s, "track ", 6) == 0) continue;
+        if (strncmp(str.s, "browser ", 8) == 0) continue;
         for (p = q = str.s; *p && *p != '\t'; ++p);
         if (*p != '\t') goto bed_error;
         *p = 0; tid = bam_name2id(aux[0]->header, q); *p = '\t';

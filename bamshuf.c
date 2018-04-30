@@ -30,6 +30,11 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <errno.h>
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  include <windows.h>
+#endif
 #include "htslib/sam.h"
 #include "htslib/hts.h"
 #include "htslib/ksort.h"
@@ -78,12 +83,12 @@ static inline int elem_lt(elem_t x, elem_t y)
 KSORT_INIT(bamshuf, elem_t, elem_lt)
 
 static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
-                   int is_stdout, sam_global_args *ga)
+                   int is_stdout, const char *output_file, sam_global_args *ga)
 {
     samFile *fp, *fpw = NULL, **fpt = NULL;
     char **fnt = NULL, modew[8];
     bam1_t *b = NULL;
-    int i, l, r;
+    int i, counter, l, r;
     bam_hdr_t *h = NULL;
     int64_t j, max_cnt = 0, *cnt = NULL;
     elem_t *a = NULL;
@@ -110,6 +115,18 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         fprintf(stderr, "Couldn't read header for '%s'\n", fn);
         goto fail;
     }
+
+    if (sam_hdr_change_HD(h, "SO", "unsorted") != 0) {
+        print_error("collate",
+                    "failed to change sort order header to 'unsorted'\n");
+        goto fail;
+    }
+    if (sam_hdr_change_HD(h, "GO", "query") != 0) {
+        print_error("collate",
+                    "failed to change group order header to 'query'\n");
+        goto fail;
+    }
+
     fnt = (char**)calloc(n_files, sizeof(char*));
     if (!fnt) goto mem_fail;
     fpt = (samFile**)calloc(n_files, sizeof(samFile*));
@@ -119,15 +136,18 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
 
     l = strlen(pre);
 
-    for (i = 0; i < n_files; ++i) {
-        fnt[i] = (char*)calloc(l + 10, 1);
+    for (i = counter = 0; i < n_files; ++i) {
+        fnt[i] = (char*)calloc(l + 20, 1);
         if (!fnt[i]) goto mem_fail;
-        sprintf(fnt[i], "%s.%.4d.bam", pre, i);
-        fpt[i] = sam_open(fnt[i], "wb1");
+        do {
+            sprintf(fnt[i], "%s.%04d.bam", pre, counter++);
+            fpt[i] = sam_open(fnt[i], "wxb1");
+        } while (!fpt[i] && errno == EEXIST);
         if (fpt[i] == NULL) {
             print_error_errno("collate", "Cannot open intermediate file \"%s\"", fnt[i]);
             goto fail;
         }
+        if (p.pool) hts_set_opt(fpt[i], HTS_OPT_THREAD_POOL, &p);
         if (sam_hdr_write(fpt[i], h) < 0) {
             print_error_errno("collate", "Couldn't write header to intermediate file \"%s\"", fnt[i]);
             goto fail;
@@ -168,7 +188,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     fp = NULL;
     // merge
     sprintf(modew, "wb%d", (clevel >= 0 && clevel <= 9)? clevel : DEF_CLEVEL);
-    if (!is_stdout) { // output to a file
+    if (!is_stdout && !output_file) { // output to a file (name based on prefix)
         char *fnw = (char*)calloc(l + 5, 1);
         if (!fnw) goto mem_fail;
         if (ga->out.format == unknown_format)
@@ -177,6 +197,13 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
             sprintf(fnw, "%s.%s", pre,  hts_format_file_extension(&ga->out));
         fpw = sam_open_format(fnw, modew, &ga->out);
         free(fnw);
+    } else if (output_file) { // output to a given file
+        modew[0] = 'w'; modew[1] = '\0';
+        sam_open_mode(modew + 1, output_file, NULL);
+        j = strlen(modew);
+        snprintf(modew + j, sizeof(modew) - j, "%d",
+                 (clevel >= 0 && clevel <= 9)? clevel : DEF_CLEVEL);
+        fpw = sam_open_format(output_file, modew, &ga->out);
     } else fpw = sam_open_format("-", modew, &ga->out); // output to stdout
     if (fpw == NULL) {
         if (is_stdout) print_error_errno("collate", "Cannot open standard output");
@@ -269,42 +296,87 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
 
 static int usage(FILE *fp, int n_files) {
     fprintf(fp,
-            "Usage:   samtools collate [-Ou] [-n nFiles] [-l cLevel] <in.bam> <out.prefix>\n\n"
+            "Usage: samtools collate [-Ou] [-o <name>] [-n nFiles] [-l cLevel] <in.bam> [<prefix>]\n\n"
             "Options:\n"
             "      -O       output to stdout\n"
+            "      -o       output file name (use prefix if not set)\n"
             "      -u       uncompressed BAM output\n"
             "      -l INT   compression level [%d]\n" // DEF_CLEVEL
             "      -n INT   number of temporary files [%d]\n", // n_files
             DEF_CLEVEL, n_files);
 
     sam_global_opt_help(fp, "-....@");
+    fprintf(fp,
+            "  <prefix> is required unless the -o or -O options are used.\n");
 
     return 1;
+}
+
+char * generate_prefix() {
+    char *prefix;
+    unsigned int pid = getpid();
+#ifdef _WIN32
+#  define PREFIX_LEN (MAX_PATH + 16)
+    DWORD ret;
+    prefix = calloc(PREFIX_LEN, sizeof(*prefix));
+    if (!prefix) {
+        perror("collate");
+        return NULL;
+    }
+    ret = GetTempPathA(MAX_PATH, prefix);
+    if (ret > MAX_PATH || ret == 0) {
+        fprintf(stderr,
+                "[E::collate] Couldn't get path for temporary files.\n");
+        free(prefix);
+        return NULL;
+    }
+    snprintf(prefix + ret, PREFIX_LEN - ret, "\\%x", pid);
+    return prefix;
+#else
+#  define PREFIX_LEN 64
+    prefix = malloc(PREFIX_LEN);
+    if (!prefix) {
+        perror("collate");
+        return NULL;
+    }
+    snprintf(prefix, PREFIX_LEN, "/tmp/collate%x", pid);
+    return prefix;
+#endif
 }
 
 int main_bamshuf(int argc, char *argv[])
 {
     int c, n_files = 64, clevel = DEF_CLEVEL, is_stdout = 0, is_un = 0;
+    const char *output_file = NULL, *prefix = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "n:l:uO@:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "n:l:uOo:@:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'n': n_files = atoi(optarg); break;
         case 'l': clevel = atoi(optarg); break;
         case 'u': is_un = 1; break;
         case 'O': is_stdout = 1; break;
+        case 'o': output_file = optarg; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
         case '?': return usage(stderr, n_files);
         }
     }
     if (is_un) clevel = 0;
-    if (optind + 2 > argc)
+    if (argc >= optind + 2) prefix = argv[optind+1];
+    if (!(prefix || is_stdout || output_file))
         return usage(stderr, n_files);
+    if (is_stdout && output_file) {
+        fprintf(stderr, "collate: -o and -O options cannot be used together.\n");
+        return usage(stderr, n_files);
+    }
+    if (!prefix) prefix = generate_prefix();
+    if (!prefix) return EXIT_FAILURE;
 
-    return bamshuf(argv[optind], n_files, argv[optind+1], clevel, is_stdout, &ga);
+    return bamshuf(argv[optind], n_files, prefix, clevel, is_stdout,
+                   output_file, &ga);
 }

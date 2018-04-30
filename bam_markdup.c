@@ -1,7 +1,7 @@
 /*  bam_markdup.c -- Mark duplicates from a coord sorted file that has gone
                      through fixmates with the mate scoring option on.
 
-    Copyright (C) 2017 Genome Research Ltd.
+    Copyright (C) 2017-18 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 
@@ -276,7 +276,7 @@ static int64_t get_mate_score(bam1_t *b) {
     if ((data = bam_aux_get(b, "ms"))) {
         score = bam_aux2i(data);
     } else {
-        fprintf(stderr, "[markdup] error: no ms score tag.\n");
+        fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
         return -1;
     }
 
@@ -323,7 +323,7 @@ static int make_pair_key(key_data_t *key, bam1_t *bam) {
         other_end   = unclipped_other_end(bam->core.mpos, cig);
         other_coord = unclipped_other_start(bam->core.mpos, cig);
     } else {
-        fprintf(stderr, "[markdup] error: no MC tag.\n");
+        fprintf(stderr, "[markdup] error: no MC tag. Please run samtools fixmate on file first.\n");
         return 1;
     }
 
@@ -634,14 +634,14 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
                     bp = &kh_val(pair_hash, k);
 
                     if ((mate_tmp = get_mate_score(bp->p)) == -1) {
-                        fprintf(stderr, "[markdup] error: no ms score tag.\n");
+                        fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
                         return 1;
                     } else {
                         old_score = calc_score(bp->p) + mate_tmp;
                     }
 
                     if ((mate_tmp = get_mate_score(in_read->b)) == -1) {
-                        fprintf(stderr, "[markdup] error: no ms score tag.\n");
+                        fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
                         return 1;
                     } else {
                         new_score = calc_score(in_read->b) + mate_tmp;
