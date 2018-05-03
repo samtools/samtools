@@ -1608,11 +1608,29 @@ If either the -O or -o option is used, <prefix> is optional.  If <prefix>
 is absent, collate will write the temporary files to a system-dependent
 location (/tmp on UNIX).
 
-Using -f for fast mode will output only primary alignments that are flagged as
-either READ1 \fBor\fR READ2.  For speed it holds alignments in memory for
-immediate pairing and will try to bypass the use of temporary files as much as
-possible.  The number of alignments held can be changed using -r, the more
-alignments stored the greater the amount of memory used.
+Using -f for fast mode will output \fBonly\fR primary alignments that have
+either the READ1 \fBor\fR READ2 flags set (but not both).
+Any other alignment records will be filtered out.
+The collation will only work correctly if there are no more than two reads
+for any given QNAME after filtering.
+
+Fast mode keeps a buffer of alignments in memory so that it can write out
+most pairs as soon as they are found instead of storing them in temporary
+files.
+This allows collate to avoid some work and so finish more quickly compared
+to the standard mode.
+The number of alignments held can be changed using -r, storing more alignments
+uses more memory but increases the number of pairs that can be written early.
+
+While collate normally randomises the ordering of read pairs, fast mode
+does not.
+Position-dependent biases that would normally be broken up can remain in the
+fast collate output.
+It is therefore not a good idea to use fast mode when preparing data for
+programs that expect randomly ordered paired reads.
+For example using fast collate instead of the standard mode may lead to
+significantly different results from aligners that estimate library insert
+sizes on batches of reads.
 
 .B Options:
 .RS
