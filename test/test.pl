@@ -64,6 +64,7 @@ test_addrprg($opts);
 test_addrprg($opts, threads=>2);
 test_markdup($opts);
 test_markdup($opts, threads=>2);
+test_bedcov($opts);
 
 
 print "\nNumber of tests:\n";
@@ -2689,3 +2690,12 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r $$opts{path}/markdup/6_remove_dups.sam -");
     test_cmd($opts, out=>'markdup/7_mark_supp_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -O sam $$opts{path}/markdup/7_mark_supp_dup.sam -");
 }
+
+sub test_bedcov
+{
+    my ($opts,%args) = @_;
+
+    test_cmd($opts,out=>'bedcov/bedcov.expected',cmd=>"$$opts{bin}/samtools bedcov $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
+    test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
+}
+

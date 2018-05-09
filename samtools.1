@@ -791,7 +791,8 @@ samtools bedcov
 .IR region.bed " " in1.sam | in1.bam | in1.cram "[...]"
 
 Reports the total read base count (i.e. the sum of per base read depths)
-for each genomic region specified in the supplied BED file.
+for each genomic region specified in the supplied BED file. The regions 
+are output as they appear in the BED file and are 0-based.
 Counts for each alignment file supplied are reported in separate columns.
 
 .B Options:
@@ -799,6 +800,9 @@ Counts for each alignment file supplied are reported in separate columns.
 .TP
 .BI "-Q " INT
 .RI "Only count reads with mapping quality greater than " INT
+.TP
+.B  -j
+Do not include deletions (D) and ref skips (N) in bedcov computation.
 .RE
 
 .TP \"-------- depth
