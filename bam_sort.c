@@ -1949,8 +1949,16 @@ void ks_radixsort(size_t n, bam1_tag *buf, uint64_t *pos_arr)
 
     buf_ar2[0] = buf;
     buf_ar2[1] = (bam1_tag *)malloc(sizeof(bam1_tag) * n);
+    if (buf_ar2[1] == NULL) {
+        print_error("sort", "couldn't allocate memory for temporary buf");
+        goto err;
+    }
     pos_ar2[0] = pos_arr;
     pos_ar2[1] = (uint64_t *)malloc(sizeof(uint64_t) * n);
+    if (pos_ar2[1] == NULL) {
+        print_error("sort", "couldn't allocate memory for temporary pos_arr");
+        goto err;
+    }
 
     while (shift < MAXDIGIT){
         int remainders[NUMBASE] = { 0 };
@@ -1972,6 +1980,8 @@ void ks_radixsort(size_t n, bam1_tag *buf, uint64_t *pos_arr)
 		bam_a = buf_ar2[0]; bam_b = buf_ar2[1];
 		for (; bam_a < end; ++bam_b) *bam_a++ = *bam_b;
 	}
+
+err:
     free(buf_ar2[1]); free(pos_ar2[1]);
 }
 
