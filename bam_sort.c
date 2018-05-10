@@ -1910,6 +1910,7 @@ typedef struct {
     size_t buf_len;
     const char *prefix;
     bam1_tag *buf;
+    uint64_t *pos_arr;
     const bam_hdr_t *h;
     int index;
     int error;
@@ -1936,12 +1937,72 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
     return -1;
 }
 
+#define NUMBASE 256
+#define STEP 8
+
+void ks_radixsort(size_t n, bam1_tag *buf, uint64_t *pos_arr)
+{
+    int i, curr = 0;
+    bam1_tag *buf_ar2[2], *bam_a, *bam_b;
+    uint64_t *pos_ar2[2], *pos_a, *pos_b;
+    uint64_t max_pos = 0, max_digit = 0, shift = 0;
+
+    buf_ar2[0] = buf;
+    buf_ar2[1] = (bam1_tag *)malloc(sizeof(bam1_tag) * n);
+    if (buf_ar2[1] == NULL) {
+        print_error("sort", "couldn't allocate memory for temporary buf");
+        goto err;
+    }
+    pos_ar2[0] = pos_arr;
+    pos_ar2[1] = (uint64_t *)malloc(sizeof(uint64_t) * n);
+    if (pos_ar2[1] == NULL) {
+        print_error("sort", "couldn't allocate memory for temporary pos_arr");
+        goto err;
+    }
+
+    pos_a = pos_ar2[0];
+    for (i = 0; i < n; ++i)
+        if (pos_a[i] > max_pos) max_pos = pos_a[i];
+    while (max_pos) {
+        ++max_digit;
+        max_pos = max_pos >> 1;
+    }
+
+    while (shift < max_digit){
+        int remainders[NUMBASE] = { 0 };
+        pos_a = pos_ar2[curr]; pos_b = pos_ar2[1-curr];
+        bam_a = buf_ar2[curr]; bam_b = buf_ar2[1-curr];
+        for (i = 0; i < n; ++i)
+            remainders[(pos_a[i] >> shift) % NUMBASE]++;
+        for (i = 1; i < NUMBASE; ++i)
+            remainders[i] += remainders[i - 1];
+        for (i = n - 1; i >= 0; i--) {
+            int j = --remainders[(pos_a[i] >> shift) % NUMBASE];
+            pos_b[j] = pos_a[i]; bam_b[j] = bam_a[i];
+        }
+        shift += STEP;
+        curr = 1 - curr;
+    }
+    if (curr == 1) {
+		bam1_tag *end = buf + n;
+		bam_a = buf_ar2[0]; bam_b = buf_ar2[1];
+		for (; bam_a < end;) *bam_a++ = *bam_b++;
+	}
+
+err:
+    free(buf_ar2[1]); free(pos_ar2[1]);
+}
+
 static void *worker(void *data)
 {
     worker_t *w = (worker_t*)data;
     char *name;
     w->error = 0;
-    ks_mergesort(sort, w->buf_len, w->buf, 0);
+
+    if (!g_is_by_qname && !g_is_by_tag)
+        ks_radixsort(w->buf_len, w->buf, w->pos_arr);
+    else
+        ks_mergesort(sort, w->buf_len, w->buf, 0);
 
     if (w->no_save)
         return 0;
@@ -1978,11 +2039,12 @@ static void *worker(void *data)
     return 0;
 }
 
-static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
-                       const bam_hdr_t *h, int n_threads, buf_region *in_mem)
+static int sort_blocks(int n_files, size_t k, bam1_tag *buf, uint64_t *pos_arr,
+                       const char *prefix, const bam_hdr_t *h, int n_threads,
+                       buf_region *in_mem)
 {
     int i;
-    size_t pos, rest;
+    size_t curr, rest;
     pthread_t *tid;
     pthread_attr_t attr;
     worker_t *w;
@@ -1996,21 +2058,22 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
     if (!w) return -1;
     tid = (pthread_t*)calloc(n_threads, sizeof(pthread_t));
     if (!tid) { free(w); return -1; }
-    pos = 0; rest = k;
+    curr = 0; rest = k;
     for (i = 0; i < n_threads; ++i) {
         w[i].buf_len = rest / (n_threads - i);
-        w[i].buf = &buf[pos];
+        w[i].buf = &buf[curr];
+        if (pos_arr) w[i].pos_arr = &pos_arr[curr];
         w[i].prefix = prefix;
         w[i].h = h;
         w[i].index = n_files + i;
         if (in_mem) {
             w[i].no_save = 1;
-            in_mem[i].from = pos;
-            in_mem[i].to = pos + w[i].buf_len;
+            in_mem[i].from = curr;
+            in_mem[i].to = curr + w[i].buf_len;
         } else {
             w[i].no_save = 0;
         }
-        pos += w[i].buf_len; rest -= w[i].buf_len;
+        curr += w[i].buf_len; rest -= w[i].buf_len;
         pthread_create(&tid[i], &attr, worker, &w[i]);
     }
     for (i = 0; i < n_threads; ++i) {
@@ -2056,6 +2119,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     bam_hdr_t *header = NULL;
     samFile *fp;
     bam1_tag *buf = NULL;
+    uint64_t *pos_arr = NULL;
     bam1_t *b = bam_init1();
     uint8_t *bam_mem = NULL;
     char **fns = NULL;
@@ -2124,12 +2188,20 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
 
         if (k == max_k) {
             bam1_tag *new_buf;
+            uint64_t *new_pos_arr;
             max_k = max_k? max_k<<1 : 0x10000;
             if ((new_buf = realloc(buf, max_k * sizeof(bam1_tag))) == NULL) {
                 print_error("sort", "couldn't allocate memory for buf");
                 goto err;
             }
             buf = new_buf;
+            if (!g_is_by_qname && !g_is_by_tag) {
+                if ((new_pos_arr = realloc(pos_arr, max_k * sizeof(uint64_t))) == NULL) {
+                    print_error("sort", "couldn't allocate memory for pos_arr");
+                    goto err;
+                }
+                pos_arr = new_pos_arr;
+            }
         }
 
         // Check if the BAM record will fit in the memory limit
@@ -2148,17 +2220,28 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
             mem_full = 1;
         }
 
-        // Pull out the pointer to the sort tag if applicable
+        // Pull out the value of the position
+        // or the pointer to the sort tag if applicable
         if (g_is_by_tag) {
             buf[k].tag = bam_aux_get(buf[k].bam_record, g_sort_tag);
+        } else if (g_is_by_qname) {
+            buf[k].tag = NULL;
         } else {
             buf[k].tag = NULL;
+            if (buf[k].bam_record->core.tid == -1)
+                pos_arr[k] = (uint64_t)header->n_targets<<32|
+                             (buf[k].bam_record->core.pos+1)<<1|
+                             bam_is_rev(buf[k].bam_record);
+            else
+                pos_arr[k] = (uint64_t)buf[k].bam_record->core.tid<<32|
+                             (buf[k].bam_record->core.pos+1)<<1|
+                             bam_is_rev(buf[k].bam_record);
         }
         ++k;
 
         if (mem_full) {
-            n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                  NULL);
+            n_files = sort_blocks(n_files, k, buf, pos_arr, prefix, header,
+                                  n_threads, NULL);
             if (n_files < 0) {
                 goto err;
             }
@@ -2175,8 +2258,8 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     if (k > 0) {
         in_mem = calloc(n_threads > 0 ? n_threads : 1, sizeof(in_mem[0]));
         if (!in_mem) goto err;
-        num_in_mem = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                   in_mem);
+        num_in_mem = sort_blocks(n_files, k, buf, pos_arr, prefix, header,
+                                 n_threads, in_mem);
         if (num_in_mem < 0) goto err;
     } else {
         num_in_mem = 0;
@@ -2223,6 +2306,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     }
     bam_destroy1(b);
     free(buf);
+    free(pos_arr);
     free(bam_mem);
     free(in_mem);
     bam_hdr_destroy(header);
