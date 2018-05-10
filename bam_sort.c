@@ -2228,8 +2228,14 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
             buf[k].tag = NULL;
         } else {
             buf[k].tag = NULL;
-            pos_arr[k] = (uint64_t)buf[k].bam_record->core.tid<<32|
-                         (buf[k].bam_record->core.pos+1)<<1|bam_is_rev(buf[k].bam_record);
+            if (buf[k].bam_record->core.tid == -1)
+                pos_arr[k] = (uint64_t)header->n_targets<<32|
+                             (buf[k].bam_record->core.pos+1)<<1|
+                             bam_is_rev(buf[k].bam_record);
+            else
+                pos_arr[k] = (uint64_t)buf[k].bam_record->core.tid<<32|
+                             (buf[k].bam_record->core.pos+1)<<1|
+                             bam_is_rev(buf[k].bam_record);
         }
         ++k;
 
