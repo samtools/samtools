@@ -1938,14 +1938,14 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 }
 
 #define NUMBASE 256
-#define MAXDIGIT 64
 #define STEP 8
 
 void ks_radixsort(size_t n, bam1_tag *buf, uint64_t *pos_arr)
 {
     int i, curr = 0;
     bam1_tag *buf_ar2[2], *bam_a, *bam_b;
-    uint64_t *pos_ar2[2], *pos_a, *pos_b, shift = 0;
+    uint64_t *pos_ar2[2], *pos_a, *pos_b;
+    uint64_t max_pos = 0, max_digit = 0, shift = 0;
 
     buf_ar2[0] = buf;
     buf_ar2[1] = (bam1_tag *)malloc(sizeof(bam1_tag) * n);
@@ -1960,13 +1960,21 @@ void ks_radixsort(size_t n, bam1_tag *buf, uint64_t *pos_arr)
         goto err;
     }
 
-    while (shift < MAXDIGIT){
+    pos_a = pos_ar2[0];
+    for (i = 0; i < n; ++i)
+        if (pos_a[i] > max_pos) max_pos = pos_a[i];
+    while (max_pos) {
+        ++max_digit;
+        max_pos = max_pos >> 1;
+    }
+
+    while (shift < max_digit){
         int remainders[NUMBASE] = { 0 };
         pos_a = pos_ar2[curr]; pos_b = pos_ar2[1-curr];
         bam_a = buf_ar2[curr]; bam_b = buf_ar2[1-curr];
-        for (i = 0; i < n; i++)
+        for (i = 0; i < n; ++i)
             remainders[(pos_a[i] >> shift) % NUMBASE]++;
-        for (i = 1; i < NUMBASE; i++)
+        for (i = 1; i < NUMBASE; ++i)
             remainders[i] += remainders[i - 1];
         for (i = n - 1; i >= 0; i--) {
             int j = --remainders[(pos_a[i] >> shift) % NUMBASE];
@@ -1978,7 +1986,7 @@ void ks_radixsort(size_t n, bam1_tag *buf, uint64_t *pos_arr)
     if (curr == 1) {
 		bam1_tag *end = buf + n;
 		bam_a = buf_ar2[0]; bam_b = buf_ar2[1];
-		for (; bam_a < end; ++bam_b) *bam_a++ = *bam_b;
+		for (; bam_a < end;) *bam_a++ = *bam_b++;
 	}
 
 err:
