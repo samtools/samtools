@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "htslib/hts.h"
 #include "samtools.h"
+#include "version.h"
 
 int bam_taf2baf(int argc, char *argv[]);
 int bam_mpileup(int argc, char *argv[]);
@@ -63,6 +64,10 @@ int main_addreplacerg(int argc, char *argv[]);
 int faidx_main(int argc, char *argv[]);
 int dict_main(int argc, char *argv[]);
 
+const char *samtools_version()
+{
+    return SAMTOOLS_VERSION;
+}
 
 static void usage(FILE *fp)
 {
