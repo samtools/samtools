@@ -877,7 +877,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
             if ( is_fwd*is_mfwd>0 )
                 stats->isize->inc_other(stats->isize->data, isize);
-            else if ( is_fst*pos_fst>0 )
+            else if ( is_fst*pos_fst>=0 )
             {
                 if ( is_fst*is_fwd>0 )
                     stats->isize->inc_inward(stats->isize->data, isize);
@@ -1078,6 +1078,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     // Calculate average insert size and standard deviation (from the main bulk data only)
     int isize, ibulk=0;
     uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0;
+    double bulk=0, avg_isize=0, sd_isize=0;
     for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
     {
         // Each pair was counted twice
@@ -1091,10 +1092,11 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
         nisize += stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
     }
 
-    double bulk=0, avg_isize=0, sd_isize=0;
     for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
     {
-        bulk += stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
+        uint64_t num = stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
+        if (num > 0) ibulk = isize + 1;
+        bulk += num;
         avg_isize += isize * (stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize));
 
         if ( bulk/nisize > stats->info->isize_main_bulk )
@@ -1106,7 +1108,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
     avg_isize /= nisize ? nisize : 1;
     for (isize=1; isize<ibulk; isize++)
-        sd_isize += (stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) +stats->isize->other(stats->isize->data, isize)) * (isize-avg_isize)*(isize-avg_isize) / nisize;
+        sd_isize += (stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) +stats->isize->other(stats->isize->data, isize)) * (isize-avg_isize)*(isize-avg_isize) / (nisize ? nisize : 1);
     sd_isize = sqrt(sd_isize);
 
 
