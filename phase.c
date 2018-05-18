@@ -590,7 +590,7 @@ int main_phase(int argc, char *argv[])
     memset(&g, 0, sizeof(phaseg_t));
     g.flag = FLAG_FIX_CHIMERA;
     g.min_varLOD = 37; g.k = 13; g.min_baseQ = 13; g.max_depth = 256;
-    while ((c = getopt_long(argc, argv, "Q:eFq:k:b:l:D:A:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:eFq:k:b:l:D:A", lopts, NULL)) >= 0) {
         switch (c) {
             case 'D': g.max_depth = atoi(optarg); break;
             case 'q': g.min_varLOD = atoi(optarg); break;
