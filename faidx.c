@@ -49,13 +49,11 @@ History:
 #define DEFAULT_FASTA_LINE_LEN 60
 
 
-static int write_fasta(faidx_t *faid, FILE *file, const char *name, const int ignore, const int length) {
-    int seq_len, beg, end;
-    char *seq = fai_fetch(faid, name, &seq_len);
+static int write_line(FILE *file, const char *line, const char *name, const int ignore,
+                      const int length, const int seq_len) {
+    int beg, end;
 
-    fprintf(file, ">%s\n", name);
-
-    if ( seq_len < 0 ) {
+    if (seq_len < 0) {
         fprintf(stderr, "[faidx] Failed to fetch sequence in %s\n", name);
 
         if (ignore && seq_len == -2) {
@@ -71,28 +69,62 @@ static int write_fasta(faidx_t *faid, FILE *file, const char *name, const int ig
 
     size_t i, seq_sz = seq_len;
 
-    for (i=0; i<seq_sz; i+=length)
+    for (i = 0; i < seq_sz; i += length)
     {
         size_t len = i + length < seq_sz ? length : seq_sz - i;
-        if (fwrite(seq + i, 1, len, file) < len ||
+        if (fwrite(line + i, 1, len, file) < len ||
             fputc('\n', file) == EOF) {
             print_error_errno("faidx", "failed to write output");
             return EXIT_FAILURE;
         }
     }
 
+    return EXIT_SUCCESS;
+}
+
+
+static int write_output(faidx_t *faid, FILE *file, const char *name, const int ignore,
+                        const int length, enum fai_format_options format) {
+    int seq_len;
+    char *seq = fai_fetch(faid, name, &seq_len);
+
+    if (format == FAI_FASTA) {
+        fprintf(file, ">%s\n", name);
+    } else {
+        fprintf(file, "@%s\n", name);
+    }
+
+    if (write_line(file, seq, name, ignore, length, seq_len) == EXIT_FAILURE) {
+        free(seq);
+        return EXIT_FAILURE;
+    }
+
     free(seq);
+
+    if (format == FAI_FASTQ) {
+        fprintf(file, "+\n");
+
+        char *qual = fai_fetchqual(faid, name, &seq_len);
+
+        if (write_line(file, qual, name, ignore, length, seq_len) == EXIT_FAILURE) {
+            free(seq);
+            return EXIT_FAILURE;
+        }
+
+        free(qual);
+    }
 
     return EXIT_SUCCESS;
 }
 
 
-static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, const int ignore, const int length) {
+static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, const int ignore,
+                                  const int length, enum fai_format_options format) {
     kstring_t line = {0, 0, NULL};
     int ret = EXIT_FAILURE;
 
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, in_file) >= 0) {
-        if ((ret = write_fasta(faid, file, line.s, ignore, length)) == EXIT_FAILURE) {
+        if ((ret = write_output(faid, file, line.s, ignore, length, format)) == EXIT_FAILURE) {
             break;
         }
     }
@@ -103,19 +135,37 @@ static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, con
 }
 
 
-static int usage(FILE *fp, int exit_status)
+static int usage(FILE *fp, enum fai_format_options format, int exit_status)
 {
-    fprintf(fp, "Usage: samtools faidx <file.fa|file.fa.gz> [<reg> [...]]\n");
+    char *tool, *file_type;
+
+    if (format == FAI_FASTA) {
+        tool = "faidx <file.fa|file.fa.gz>";
+        file_type = "FASTA";
+    } else {
+        tool = "fqidx <file.fq|file.fq.gz>";
+        file_type = "FASTQ";
+    }
+
+    fprintf(fp, "Usage: samtools %s [<reg> [...]]\n", tool);
     fprintf(fp, "Option: \n"
-                " -o, --output      FILE Write FASTA to file.\n"
-                " -n, --length      INT  Length of FASTA sequence line. [60]\n"
+                " -o, --output      FILE Write %s to file.\n"
+                " -n, --length      INT  Length of %s sequence line. [60]\n"
                 " -c, --continue         Continue after trying to retrieve missing region.\n"
-                " -r, --region-file FILE File of regions.  Format is chr:from-to. One per line.\n"
-                " -h, --help             This message.\n");
+                " -r, --region-file FILE File of regions.  Format is chr:from-to. One per line.\n",
+                file_type, file_type);
+
+    if (format == FAI_FASTA) {
+       fprintf(fp, " -f, --fastq            File and index in FASTQ format.\n");
+    }
+
+    fprintf(fp, " -h, --help             This message.\n");
+
     return exit_status;
 }
 
-int faidx_main(int argc, char *argv[])
+
+int faidx_core(int argc, char *argv[], enum fai_format_options format)
 {
     int c, ignore_error = 0;
     int line_len = DEFAULT_FASTA_LINE_LEN ;/* fasta line len */
@@ -129,10 +179,11 @@ int faidx_main(int argc, char *argv[])
         { "length", required_argument,      NULL, 'n' },
         { "continue", no_argument,          NULL, 'c' },
         { "region-file", required_argument, NULL, 'r' },
+        { "fastq", no_argument,             NULL, 'f' },
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "ho:n:cr:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "ho:n:cr:f", lopts, NULL)) >= 0) {
         switch (c) {
             case 'o': output_file = optarg; break;
             case 'n': line_len = atoi(optarg);
@@ -143,14 +194,15 @@ int faidx_main(int argc, char *argv[])
                       break;
             case 'c': ignore_error = 1; break;
             case 'r': region_file = optarg; break;
-            case '?': return usage(stderr, EXIT_FAILURE);
-            case 'h': return usage(stdout, EXIT_SUCCESS);
+            case 'f': format = FAI_FASTQ; break;
+            case '?': return usage(stderr, format, EXIT_FAILURE);
+            case 'h': return usage(stdout, format, EXIT_SUCCESS);
             default:  break;
         }
     }
 
     if ( argc==optind )
-        return usage(stdout, EXIT_SUCCESS);
+        return usage(stdout, format, EXIT_SUCCESS);
 
     if ( optind+1 == argc && !region_file)
     {
@@ -161,7 +213,7 @@ int faidx_main(int argc, char *argv[])
         return 0;
     }
 
-    faidx_t *fai = fai_load(argv[optind]);
+    faidx_t *fai = fai_load_format(argv[optind], format);
 
     if ( !fai ) {
         fprintf(stderr, "[faidx] Could not load fai index of %s\n", argv[optind]);
@@ -189,7 +241,7 @@ int faidx_main(int argc, char *argv[])
         hFILE *rf;
 
         if ((rf = hopen(region_file, "r"))) {
-            exit_status = read_regions_from_file(fai, rf, file_out, ignore_error, line_len);
+            exit_status = read_regions_from_file(fai, rf, file_out, ignore_error, line_len, format);
 
             if (hclose(rf) != 0) {
                 fprintf(stderr, "[faidx] Warning: failed to close %s", region_file);
@@ -201,7 +253,7 @@ int faidx_main(int argc, char *argv[])
     }
 
     while ( ++optind<argc && exit_status == EXIT_SUCCESS) {
-        exit_status = write_fasta(fai, file_out, argv[optind], ignore_error, line_len);
+        exit_status = write_output(fai, file_out, argv[optind], ignore_error, line_len, format);
     }
 
     fai_destroy(fai);
@@ -215,3 +267,14 @@ int faidx_main(int argc, char *argv[])
 
     return exit_status;
 }
+
+
+int faidx_main(int argc, char *argv[]) {
+    return faidx_core(argc, argv, FAI_FASTA);
+}
+
+
+int fqidx_main(int argc, char *argv[]) {
+    return faidx_core(argc, argv, FAI_FASTQ);
+}
+

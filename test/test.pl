@@ -36,6 +36,7 @@ my $opts = parse_params();
 
 test_bgzip($opts);
 test_faidx($opts);
+test_fqidx($opts);
 test_dict($opts);
 test_index($opts);
 test_index($opts, threads=>2);
@@ -560,6 +561,125 @@ sub test_faidx
             $xreg =~ s/^[^:]*://;
             $xreg =~ s/-.*$//;
             if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". faidx_num_to_seq($xreg) ."\" got \"$seq\"\n"); }
+            else { passed($opts,msg=>$test); }
+        }
+    }
+}
+
+sub fqidx_num_to_qual
+{
+    my ($dec) = @_;
+    my $out = '';
+    my @base = qw(I J K L);
+    while ( $dec>=0 )
+    {
+        my $r = $dec % 4;
+        $out  = $base[$r] . $out;
+        $dec  = int( ($dec - $r) / 4 );
+        if ( !$dec ) { last; }
+    }
+    return $out;
+}
+
+sub fqidx_qual_to_num
+{
+    my ($seq) = @_;
+    my $out = 0;
+    my $len = length($seq);
+    my %base = ( I=>0, J=>1, K=>2, L=>3 );
+    for (my $i=0; $i<$len; $i++)
+    {
+        my $b = substr($seq,$i,1);
+        $out += $base{$b} * 4**($len-$i-1);
+    }
+    return $out;
+}
+
+sub test_fqidx
+{
+    my ($opts,%args) = @_;
+
+    # Create test data: The fake sequence consists of sequence offsets coded
+    # into A,C,G,T and separated with Ns. The offsets are 1-based.
+    #
+    open(my $fh,'>',"$$opts{tmp}/fqidx.fq") or error("$$opts{tmp}/fqidx.fq: $!");
+    my $ntot = 100_000;
+    my @dat  = qw(A C G T);
+    
+    for (my $seq=1; $seq<=3; $seq++)
+    {
+        my $nwr = 1;
+        my $out = '';
+        while ($nwr < $ntot)
+        {
+            my $tmp = faidx_num_to_seq($nwr) . 'N';
+            $out .= $tmp;
+            $nwr += length($tmp);
+        }
+        
+        print $fh "\@$seq\n";
+        print $fh faidx_wrap($out);
+        
+        $nwr = 1;
+        $out = '';
+        
+        while ($nwr < $ntot) {
+            my $tmp = fqidx_num_to_qual($nwr) . '!';
+            $out .= $tmp;
+            $nwr += length($tmp);
+        }
+        
+        print $fh "+\n";
+        print $fh faidx_wrap($out);
+    }
+    
+    close($fh);
+
+    # Run tests: index and retrieval from plain text and compressed files
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq");
+    cmd("cat $$opts{tmp}/fqidx.fq | $$opts{bgzip} -ci -I $$opts{tmp}/fqidx.fq.gz.gzi > $$opts{tmp}/fqidx.fq.gz");
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq.gz");
+    
+    # Write to file
+    cmd("$$opts{bin}/samtools fqidx --length 5 $$opts{tmp}/fqidx.fq 1:1-104 > $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq $$opts{tmp}/fqidx.fq 1:1-104 && diff $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+    
+    # test continuing after an error
+    cmd("$$opts{bin}/samtools fqidx --output $$opts{tmp}/output_fqidx.fq --continue $$opts{tmp}/fqidx.fq 100 EEE FFF");
+    
+    # test for reporting retrieval errors, Zero results and truncated
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1:10000000-10000005 > $$opts{tmp}/output_fqidx.fq 2>&1 && grep Zero $$opts{tmp}/output_fqidx.fq");
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1:99998-100099 > $$opts{tmp}/output_fqidx.fq 2>&1 && grep Truncated $$opts{tmp}/output_fqidx.fq");
+
+    # Get regions from a file, also test fqidx as faidx -f
+    open($fh, ">$$opts{tmp}/region.txt") or error("$$opts{tmp}/region.txt: $!");
+    print $fh "1\n2:5-10\n3:20-30\n";
+    close $fh;
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1 2:5-10 3:20-30 > $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools faidx -f $$opts{tmp}/fqidx.fq -r $$opts{tmp}/region.txt > $$opts{tmp}/output_fqidx.fq && diff $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+
+    for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
+    {
+        for my $file ("$$opts{tmp}/fqidx.fq","$$opts{tmp}/fqidx.fq.gz")
+        {
+            my $test = "$$opts{bin}/samtools fqidx $file $reg";
+            print "$test\n";
+            my $result = cmd($test);
+            my @fq = split "\n", $result;
+            
+            my $seq = $fq[1];            
+            $seq =~ s/N.*$//;
+            my $num = faidx_seq_to_num($seq);
+            my $xreg = $reg;
+            $xreg =~ s/^[^:]*://;
+            $xreg =~ s/-.*$//;
+            if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". faidx_num_to_seq($xreg) ."\" got \"$seq\"\n"); }
+            else { passed($opts,msg=>$test); }
+            
+            my $qual = $fq[3];            
+            $qual =~ s/!.*$//;
+            my $num = fqidx_qual_to_num($qual);
+            if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". fqidx_num_to_qual($xreg) ."\" got \"$qual\"\n"); }
             else { passed($opts,msg=>$test); }
         }
     }

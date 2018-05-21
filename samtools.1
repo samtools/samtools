@@ -65,6 +65,8 @@ samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
 samtools faidx ref.fasta
 .PP
+samtools fqidx ref.fastq
+.PP
 samtools tview aln.sorted.bam ref.fasta
 .PP
 samtools split merged.bam
@@ -958,6 +960,10 @@ If they do not, indexing will emit a warning about duplicate sequences and
 retrieval will only produce subsequences from the first sequence with the
 duplicated name.
 
+FASTQ files can be read and indexed by this command.  Without using
+.B --fastq
+any extracted subsequence will be in FASTA format.
+
 .B Options
 .RS
 .TP 8
@@ -966,6 +972,56 @@ Write FASTA to file rather than to stdout.
 .TP
 .BI "-n, --length " INT
 Length of FASTA sequence line.
+[60]
+.TP
+.B -c, --continue
+Continue working if a non-existant region is requested.
+.TP
+.BI "-r, --region-file " FILE
+Read regions from a file. Format is chr:from-to, one per line.
+.TP
+.B -f, --fastq
+Read FASTQ files and output extracted sequences in FASTQ format.  Same as using samtools fqidx.
+.TP
+.B -h, --help
+Print help message and exit.
+.RE
+
+.TP \"-------- fqidx
+.B fqidx
+samtools fqidx <ref.fastq> [region1 [...]]
+
+Index reference sequence in the FASTQ format or extract subsequence from
+indexed reference sequence. If no region is specified,
+.B fqidx
+will index the file and create
+.I <ref.fastq>.fai
+on the disk. If regions are specified, the subsequences will be
+retrieved and printed to stdout in the FASTQ format.
+
+The input file can be compressed in the
+.B BGZF
+format.
+
+The sequences in the input file should all have different names.
+If they do not, indexing will emit a warning about duplicate sequences and
+retrieval will only produce subsequences from the first sequence with the
+duplicated name.
+
+.B samtools fqidx
+should only be used on fastq files with a small number of entries.
+Trying to use it on a file containing millions of short sequencing reads
+will produce an index that is almost as big as the original file, and
+searches using the index will be very slow and use a lot of memory.
+
+.B Options
+.RS
+.TP 8
+.BI "-o, --output " FILE
+Write FASTQ to file rather than to stdout.
+.TP
+.BI "-n, --length " INT
+Length of FASTQ sequence line.
 [60]
 .TP
 .B -c, --continue
