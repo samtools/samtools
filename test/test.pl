@@ -158,6 +158,7 @@ sub parse_params
     {
         $SIG{TERM} = $SIG{INT} = sub { clean_files($opts); };
     }
+    $$opts{diff} = "diff" . ($^O =~ /^(?:msys|MSWin32)/ ? " -b":"");
     return $opts;
 }
 sub clean_files
@@ -231,7 +232,7 @@ sub test_cmd
 	binmode($fh);
         print $fh $out;
         close($fh);
-        my ($ret,$out) = _cmd("diff -q $$opts{path}/$args{out} $$opts{path}/$args{out}.old");
+        my ($ret,$out) = _cmd("$$opts{diff} -q $$opts{path}/$args{out} $$opts{path}/$args{out}.old");
         if ( !$ret && $out eq '' ) { unlink("$$opts{path}/$args{out}.old"); }
         else
         {
@@ -247,7 +248,7 @@ sub test_cmd
 	binmode($fh);
         print $fh $err;
         close($fh);
-        my ($ret,$out) = _cmd("diff -q $$opts{path}/$args{err} $$opts{path}/$args{err}.old");
+        my ($ret,$out) = _cmd("$$opts{diff} -q $$opts{path}/$args{err} $$opts{path}/$args{err}.old");
         if ( !$ret && $err eq '' ) { unlink("$$opts{path}/$args{err}.old"); }
         else
         {
@@ -529,7 +530,7 @@ sub test_faidx
     
     # Write to file
     cmd("$$opts{bin}/samtools faidx --length 5 $$opts{tmp}/faidx.fa 1:1-104 > $$opts{tmp}/output_faidx_base.fa");
-    cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa $$opts{tmp}/faidx.fa 1:1-104 && diff $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
+    cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa $$opts{tmp}/faidx.fa 1:1-104 && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
     
     # test continuing after an error
     cmd("$$opts{bin}/samtools faidx --output $$opts{tmp}/output_faidx.fa --continue $$opts{tmp}/faidx.fa 100 EEE FFF");
@@ -543,7 +544,7 @@ sub test_faidx
     print $fh "1\n2:5-10\n3:20-30\n";
     close $fh;
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1 2:5-10 3:20-30 > $$opts{tmp}/output_faidx_base.fa");
-    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa -r $$opts{tmp}/region.txt > $$opts{tmp}/output_faidx.fa && diff $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa -r $$opts{tmp}/region.txt > $$opts{tmp}/output_faidx.fa && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
 
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
     {
