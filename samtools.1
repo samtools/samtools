@@ -90,6 +90,8 @@ samtools collate -o aln.name_collated.bam aln.sorted.bam
 samtools depad input.bam
 .PP
 samtools markdup in.algnsorted.bam out.bam
+.PP
+samtools fastaref input.bam > output.fa
 
 .SH DESCRIPTION
 .PP
@@ -1953,6 +1955,32 @@ Write temporary files to
 .TP
 .B -S
 Mark supplementary reads of duplicates as duplicates.
+.RE
+
+.TP \"-------- fastaref
+.B fastaref
+samtools fastaref [options] <in.bam>
+
+Uses the REF_PATH and REF_CACHE (using their defaults if not specified)
+to find and output references for all M5 tags in a specified BAM file in
+the fasta format.
+
+If no M5 tags are found in the input bam file, this gives an error.
+
+.B OPTIONS:
+.RS
+.TP 8
+.BI "-o " FILE
+Output file name
+[stdout]
+.TP 8
+.BI "-t " LIST
+Output the specified tags into the fasta file (separated by commas)
+[LN,AH,AN,AS,M5,SP]
+.TP 8
+.BI "-l " INT
+Maximum length of outputted lines
+[60]
 .RE
 
 .EX 4

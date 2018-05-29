@@ -9,7 +9,7 @@ LOBJS=		bgzf.o kstring.o bam_aux.o bam.o bam_import.o sam.o bam_index.o	\
 AOBJS=		bam_tview.o bam_plcmd.o sam_view.o \
 			bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o	\
 			bamtk.o kaln.o bam2bcf.o bam2bcf_indel.o errmod.o sample.o \
-			cut_target.o phase.o bam_cat.o bam2depth.o
+			cut_target.o phase.o bam_cat.o bam2depth.o bam_fastaref.o
 BCFOBJS=	bcftools/bcf.o bcftools/fet.o bcftools/bcf2qcall.o bcftools/bcfutils.o \
 			bcftools/call1.o bcftools/index.o bcftools/kfunc.o bcftools/em.o \
 			bcftools/kmin.o bcftools/prob1.o bcftools/vcf.o bcftools/mut.o
