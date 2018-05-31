@@ -115,6 +115,8 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
 #define MPLP_SMART_OVERLAPS (1<<12)
 #define MPLP_PRINT_QNAME (1<<13)
 
+#define MPLP_MAX_DEPTH 250
+
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
@@ -554,12 +556,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     // init pileup
     iter = bam_mplp_init(n, mplp_func, (void**)data);
     if ( conf->flag & MPLP_SMART_OVERLAPS ) bam_mplp_init_overlaps(iter);
-    max_depth = conf->max_depth;
-    if (max_depth * sm->n > 1<<20)
-        fprintf(stderr, "(%s) Max depth is above 1M. Potential memory hog!\n", __func__);
-    if (max_depth * sm->n < 8000) {
-        max_depth = 8000 / sm->n;
-        fprintf(stderr, "<%s> Set max per-file depth to %d\n", __func__, max_depth);
+    if ( !conf->max_depth ) {
+        max_depth = INT_MAX;
+        fprintf(stderr, "[%s] Max depth set to maximum value (%d)\n", __func__, INT_MAX);
+    } else {
+        max_depth = conf->max_depth;
+        if ( max_depth * sm->n > 1<<20 )
+            fprintf(stderr, "[%s] Combined max depth is above 1M. Potential memory hog!\n", __func__);
     }
     max_indel_depth = conf->max_indel_depth * sm->n;
     bam_mplp_set_maxcnt(iter, max_depth);
@@ -960,7 +963,7 @@ int bam_mpileup(int argc, char *argv[])
     memset(&mplp, 0, sizeof(mplp_conf_t));
     mplp.min_baseQ = 13;
     mplp.capQ_thres = 0;
-    mplp.max_depth = 250; mplp.max_indel_depth = 250;
+    mplp.max_depth = MPLP_MAX_DEPTH; mplp.max_indel_depth = MPLP_MAX_DEPTH;
     mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
     mplp.min_frac = 0.002; mplp.min_support = 1;
     mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_SMART_OVERLAPS;
@@ -1090,7 +1093,7 @@ int bam_mpileup(int argc, char *argv[])
                 char buf[1024];
                 mplp.rghash = khash_str2int_init();
                 if ((fp_rg = fopen(optarg, "r")) == NULL)
-                    fprintf(stderr, "(%s) Fail to open file %s. Continue anyway.\n", __func__, optarg);
+                    fprintf(stderr, "[%s] Fail to open file %s. Continue anyway.\n", __func__, optarg);
                 while (!feof(fp_rg) && fscanf(fp_rg, "%s", buf) > 0) // this is not a good style, but forgive me...
                     khash_str2int_inc(mplp.rghash, strdup(buf));
                 fclose(fp_rg);
