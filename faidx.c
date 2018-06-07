@@ -69,7 +69,7 @@ static unsigned char comp_base[256] = {
 
 static void reverse_complement(char *str, const hts_pos_t len) {
     char c;
-    int i = 0, j = len - 1;
+    hts_pos_t i = 0, j = len - 1;
 
     while (i <= j) {
         c = str[i];
@@ -80,10 +80,9 @@ static void reverse_complement(char *str, const hts_pos_t len) {
     }
 }
 
-
 static void reverse(char *str, const hts_pos_t len) {
     char c;
-    int i = 0, j = len - 1;
+    hts_pos_t i = 0, j = len - 1;
 
     while (i < j) {
         c = str[i];
@@ -95,8 +94,9 @@ static void reverse(char *str, const hts_pos_t len) {
 }
 
 
-static int write_line(FILE *file, const char *line, const char *name, const int ignore,
-                      const int length, const hts_pos_t seq_len) {
+static int write_line(faidx_t *faid, FILE *file, const char *line, const char *name,
+                      const int ignore, const int length, const hts_pos_t seq_len) {
+    int id;
     hts_pos_t beg, end;
 
     if (seq_len < 0) {
@@ -109,7 +109,8 @@ static int write_line(FILE *file, const char *line, const char *name, const int 
         }
     } else if (seq_len == 0) {
         fprintf(stderr, "[faidx] Zero length sequence: %s\n", name);
-    } else if (hts_parse_reg64(name, &beg, &end) && (end < HTS_POS_MAX) && (seq_len != end - beg)) {
+    } else if (fai_parse_region(faid, name, &id, &beg, &end, 0)
+               && (end < INT_MAX) && (seq_len != end - beg)) {
         fprintf(stderr, "[faidx] Truncated sequence: %s\n", name);
     }
 
@@ -146,7 +147,8 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
         reverse_complement(seq, seq_len);
     }
 
-    if (write_line(file, seq, name, ignore, length, seq_len) == EXIT_FAILURE) {
+    if (write_line(faid, file, seq, name, ignore, length, seq_len)
+        == EXIT_FAILURE) {
         free(seq);
         return EXIT_FAILURE;
     }
@@ -162,7 +164,8 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
             reverse(qual, seq_len);
         }
 
-        if (write_line(file, qual, name, ignore, length, seq_len) == EXIT_FAILURE) {
+        if (write_line(faid, file, qual, name, ignore, length, seq_len)
+            == EXIT_FAILURE) {
             free(seq);
             return EXIT_FAILURE;
         }

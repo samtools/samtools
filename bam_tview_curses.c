@@ -162,19 +162,7 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
                     return;
                 }
             } else {
-                char *name_lim = (char *) hts_parse_reg64(str, &_beg, &_end);
-                if (name_lim) {
-                    char name_terminator = *name_lim;
-                    *name_lim = '\0';
-                    _tid = bam_name2id(base->header, str);
-                    *name_lim = name_terminator;
-                } else {
-                    // Unparsable region, but possibly a sequence named "foo:a"
-                    _tid = bam_name2id(base->header, str);
-                    _beg = 0;
-                }
-
-                if (_tid >= 0) {
+                if (sam_parse_region(base->header, str, &_tid, &_beg, &_end, 0) && _tid >= 0) {
                     *tid = _tid; *pos = _beg;
                     return;
                 }

@@ -1101,29 +1101,12 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     if (reg) {
         int tid;
         hts_pos_t beg, end;
-        const char *name_lim;
 
         rtrans = rtrans_build(n, sam_hdr_nref(hout), translation_tbl);
         if (!rtrans) goto mem_fail;
 
-        name_lim = hts_parse_reg64(reg, &beg, &end);
-        if (name_lim) {
-            char *name = malloc(name_lim - reg + 1);
-            if (!name) goto mem_fail;
-            memcpy(name, reg, name_lim - reg);
-            name[name_lim - reg] = '\0';
-            tid = bam_name2id(hout, name);
-            free(name);
-        }
-        else {
-            // not parsable as a region, but possibly a sequence named "foo:a"
-            tid = bam_name2id(hout, reg);
-            beg = 0;
-            end = INT_MAX;
-        }
-        if (tid < 0) {
-            if (name_lim) fprintf(stderr, "[%s] Region \"%s\" specifies an unknown reference name\n", __func__, reg);
-            else fprintf(stderr, "[%s] Badly formatted region: \"%s\"\n", __func__, reg);
+        if (!sam_parse_region(hout, reg, &tid, &beg, &end, 0)) {
+            fprintf(stderr, "[%s] Badly formatted region or unknown reference name: \"%s\"\n", __func__, reg);
             goto fail;
         }
         for (i = 0; i < n; ++i) {

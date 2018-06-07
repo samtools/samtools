@@ -716,11 +716,7 @@ int main_samview(int argc, char *argv[])
                 int result;
                 hts_itr_t *iter = sam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
                 if (iter == NULL) { // region invalid or reference name not found
-                    hts_pos_t beg, end;
-                    if (hts_parse_reg64(argv[i], &beg, &end))
-                        fprintf(stderr, "[main_samview] region \"%s\" specifies an unknown reference name. Continue anyway.\n", argv[i]);
-                    else
-                        fprintf(stderr, "[main_samview] region \"%s\" could not be parsed. Continue anyway.\n", argv[i]);
+                    fprintf(stderr, "[main_samview] region \"%s\" specifies an invalid region or unknown reference. Continue anyway.\n", argv[i]);
                     continue;
                 }
                 // fetch alignments
