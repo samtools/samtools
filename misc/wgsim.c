@@ -1,6 +1,6 @@
 /* The MIT License
 
-   Copyright (c) 2008 Genome Research Ltd (GRL).
+   Copyright (c) 2008, 2018 Genome Research Ltd (GRL).
                  2011 Heng Li <lh3@live.co.uk>
 
    Permission is hereby granted, free of charge, to any person obtaining
@@ -39,7 +39,7 @@
 #include <ctype.h>
 #include <string.h>
 #include <zlib.h>
-#include "version.h"
+#include "../version.h"
 #include "htslib/kseq.h"
 #include "htslib/hts_os.h"
 KSEQ_INIT(gzFile, gzread)
