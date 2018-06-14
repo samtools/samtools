@@ -71,6 +71,7 @@ typedef struct samview_settings {
     void* bed;
     size_t remove_aux_len;
     char** remove_aux;
+    int remove_aux_all;
     int multi_region;
 } samview_settings_t;
 
@@ -121,6 +122,9 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
                 bam_aux_del(b, s);
             }
         }
+    }
+    if (settings->remove_aux_all) {
+        b->l_data -= bam_get_l_aux(b);
     }
     return 0;
 }
@@ -288,7 +292,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:M",
+                            "XSbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:M",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -369,6 +373,7 @@ int main_samview(int argc, char *argv[])
                 return usage(stderr, EXIT_FAILURE, 0);
             }
         case 'B': settings.remove_B = 1; break;
+        case 'X': settings.remove_aux_all = 1; break;
         case 'x':
             {
                 if (strlen(optarg) != 2) {
@@ -684,6 +689,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "           duplicates and outputs the reads as they are ordered in the file)\n"
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
+"  -X       strip all tags\n"
 "  -B       collapse the backward CIGAR operation\n"
 // general options
 "  -?       print long help, including note about region specification\n"
