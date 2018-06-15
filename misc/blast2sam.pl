@@ -40,9 +40,10 @@ sub blast2sam {
   $dummy_score = defined($opts{d});
   @sam = (); @sam[0,4,6..8,10] = ('', 255, '*', 0, 0, '*');
   while (<>) {
-    if (@cigar && (/^Query=/ || /Score =.*bits.*Expect/ || /^>\S+/)) { # print
+    if ((@cigar || @cmaux) && (/^Query=/ || /Score =.*bits.*Expect/ || /^>\S+/)) { # print
       &blast_print_sam(\@sam, \@cigar, \@cmaux, $qlen - $qend);
       @cigar = ();
+      @cmaux = ();
     }
     if (/^Query=\s(\S+)/) {
       $sam[2] = undef;
@@ -174,5 +175,7 @@ Note that there is no header generated, so you will need to run
 samtools view -hT your_ref.fasta your_file.sam > your_file_with_header.sam
 
 =back
+
+Note that queries that have no alignments will not be output (as unmapped).
 
 =cut
