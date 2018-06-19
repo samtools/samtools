@@ -642,7 +642,7 @@ sub test_fqidx
     
     # Write to file
     cmd("$$opts{bin}/samtools fqidx --length 5 $$opts{tmp}/fqidx.fq 1:1-104 > $$opts{tmp}/output_fqidx_base.fq");
-    cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq $$opts{tmp}/fqidx.fq 1:1-104 && diff $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq $$opts{tmp}/fqidx.fq 1:1-104 && $$opts{diff} $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
     
     # test continuing after an error
     cmd("$$opts{bin}/samtools fqidx --output $$opts{tmp}/output_fqidx.fq --continue $$opts{tmp}/fqidx.fq 100 EEE FFF");
@@ -656,7 +656,7 @@ sub test_fqidx
     print $fh "1\n2:5-10\n3:20-30\n";
     close $fh;
     cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1 2:5-10 3:20-30 > $$opts{tmp}/output_fqidx_base.fq");
-    cmd("$$opts{bin}/samtools faidx -f $$opts{tmp}/fqidx.fq -r $$opts{tmp}/region.txt > $$opts{tmp}/output_fqidx.fq && diff $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools faidx -f $$opts{tmp}/fqidx.fq -r $$opts{tmp}/region.txt > $$opts{tmp}/output_fqidx.fq && $$opts{diff} $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
 
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
     {
