@@ -1511,18 +1511,19 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
     if ( !stats->regions || !stats->chunks )
         return 1;
 
-    for (i = 0; i < stats->nregions; i++) {
+    for (i = 0; i < iter->n_reg; i++) {
         tid = iter->reg_list[i].tid;
         if ( tid < 0 )
             continue;
 
         if ( tid >= stats->nregions ) {
-            stats->nregions = tid+10;
-            regions_t *tmp = realloc(stats->regions, stats->nregions * sizeof(regions_t));
-            if (!tmp)
+            regions_t *tmp = realloc(stats->regions, (tid+10) * sizeof(regions_t));
+            if ( !tmp )
                 return 1;
             stats->regions = tmp;
-            memset(stats->regions + tid, 0, 10 * sizeof(regions_t));
+            memset(stats->regions + stats->nregions, 0, 
+                   (tid+10-stats->nregions) * sizeof(regions_t));
+            stats->nregions = tid+10;
         }
 
         stats->regions[tid].mpos = stats->regions[tid].npos = iter->reg_list[i].count;
