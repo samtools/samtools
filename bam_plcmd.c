@@ -384,8 +384,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             exit(EXIT_FAILURE);
         }
         bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
-        // Collect read group IDs with PL (platform) listed in pl_list (note: fragile, strstr search)
-        rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
+        if (conf->flag & MPLP_BCF) {
+            // Collect read group IDs with PL (platform) listed in pl_list (note: fragile, strstr search)
+            rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
+        }
         if (conf->reg) {
             hts_idx_t *idx = sam_index_load(data[i]->fp, fn[i]);
             if (idx == NULL) {
@@ -412,17 +414,17 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             data[i]->h = h;
         }
     }
-    // allocate data storage proportionate to number of samples being studied sm->n
-    gplp.n = sm->n;
-    gplp.n_plp = calloc(sm->n, sizeof(int));
-    gplp.m_plp = calloc(sm->n, sizeof(int));
-    gplp.plp = calloc(sm->n, sizeof(bam_pileup1_t*));
-
     fprintf(stderr, "[%s] %d samples in %d input files\n", __func__, sm->n, n);
-    // write the VCF header
     if (conf->flag & MPLP_BCF)
     {
         const char *mode;
+        // allocate data storage proportionate to number of samples being studied sm->n
+        gplp.n = sm->n;
+        gplp.n_plp = calloc(sm->n, sizeof(int));
+        gplp.m_plp = calloc(sm->n, sizeof(int));
+        gplp.plp = calloc(sm->n, sizeof(bam_pileup1_t*));
+
+        // write the VCF header
 
         if ( conf->flag & MPLP_VCF )
             mode = (conf->flag&MPLP_NO_COMP)? "wu" : "wz";   // uncompressed VCF or compressed VCF
@@ -566,7 +568,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         if ( max_depth * n > 1<<20 )
             fprintf(stderr, "[%s] Combined max depth is above 1M. Potential memory hog!\n", __func__);
     }
-    max_indel_depth = conf->max_indel_depth * sm->n;
+
+    if (conf->flag & MPLP_BCF) {
+        // Only used when writing BCF
+        max_indel_depth = conf->max_indel_depth * sm->n;
+    }
     bam_mplp_set_maxcnt(iter, max_depth);
     bcf1_t *bcf_rec = bcf_init1();
     int ret;
