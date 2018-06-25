@@ -48,6 +48,53 @@ History:
 
 #define DEFAULT_FASTA_LINE_LEN 60
 
+static unsigned char comp_base[256] = {
+  0,   1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,
+ 16,  17,  18,  19,  20,  21,  22,  23,  24,  25,  26,  27,  28,  29,  30,  31,
+ 32, '!', '"', '#', '$', '%', '&', '\'','(', ')', '*', '+', ',', '-', '.', '/',
+'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', ':', ';', '<', '=', '>', '?',
+'@', 'T', 'V', 'G', 'H', 'E', 'F', 'C', 'D', 'I', 'J', 'M', 'L', 'K', 'N', 'O',
+'P', 'Q', 'Y', 'S', 'A', 'A', 'B', 'W', 'X', 'R', 'Z', '[', '\\',']', '^', '_',
+'`', 't', 'v', 'g', 'h', 'e', 'f', 'c', 'd', 'i', 'j', 'm', 'l', 'k', 'n', 'o',
+'p', 'q', 'y', 's', 'a', 'a', 'b', 'w', 'x', 'r', 'z', '{', '|', '}', '~', 127,
+128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143,
+144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159,
+160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175,
+176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191,
+192, 193, 194, 195, 196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207,
+208, 209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221, 222, 223,
+224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
+240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
+};
+
+
+static void reverse_complement(char *str, int len) {
+    char c;
+    int i = 0, j = len - 1;
+
+    while (i <= j) {
+        c = str[i];
+        str[i] = comp_base[(unsigned char)str[j]];
+        str[j] = comp_base[(unsigned char)c];
+        i++;
+        j--;
+    }
+}
+
+
+static void reverse(char *str, int len) {
+    char c;
+    int i = 0, j = len - 1;
+
+    while (i < j) {
+        c = str[i];
+        str[i] = str[j];
+        str[j] = c;
+        i++;
+        j--;
+    }
+}
+
 
 static int write_line(FILE *file, const char *line, const char *name, const int ignore,
                       const int length, const int seq_len) {
@@ -84,7 +131,7 @@ static int write_line(FILE *file, const char *line, const char *name, const int 
 
 
 static int write_output(faidx_t *faid, FILE *file, const char *name, const int ignore,
-                        const int length, enum fai_format_options format) {
+                        const int length, const int rev, enum fai_format_options format) {
     int seq_len;
     char *seq = fai_fetch(faid, name, &seq_len);
 
@@ -92,6 +139,10 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
         fprintf(file, ">%s\n", name);
     } else {
         fprintf(file, "@%s\n", name);
+    }
+
+    if (rev && seq_len > 0) {
+        reverse_complement(seq, seq_len);
     }
 
     if (write_line(file, seq, name, ignore, length, seq_len) == EXIT_FAILURE) {
@@ -106,6 +157,10 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
 
         char *qual = fai_fetchqual(faid, name, &seq_len);
 
+        if (rev && seq_len > 0) {
+            reverse(qual, seq_len);
+        }
+
         if (write_line(file, qual, name, ignore, length, seq_len) == EXIT_FAILURE) {
             free(seq);
             return EXIT_FAILURE;
@@ -119,12 +174,12 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
 
 
 static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, const int ignore,
-                                  const int length, enum fai_format_options format) {
+                                  const int length, const int rev,  enum fai_format_options format) {
     kstring_t line = {0, 0, NULL};
     int ret = EXIT_FAILURE;
 
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, in_file) >= 0) {
-        if ((ret = write_output(faid, file, line.s, ignore, length, format)) == EXIT_FAILURE) {
+        if ((ret = write_output(faid, file, line.s, ignore, length, rev, format)) == EXIT_FAILURE) {
             break;
         }
     }
@@ -149,17 +204,18 @@ static int usage(FILE *fp, enum fai_format_options format, int exit_status)
 
     fprintf(fp, "Usage: samtools %s [<reg> [...]]\n", tool);
     fprintf(fp, "Option: \n"
-                " -o, --output      FILE Write %s to file.\n"
-                " -n, --length      INT  Length of %s sequence line. [60]\n"
-                " -c, --continue         Continue after trying to retrieve missing region.\n"
-                " -r, --region-file FILE File of regions.  Format is chr:from-to. One per line.\n",
+                " -o, --output FILE        Write %s to file.\n"
+                " -n, --length INT         Length of %s sequence line. [60]\n"
+                " -c, --continue           Continue after trying to retrieve missing region.\n"
+                " -r, --region-file FILE   File of regions.  Format is chr:from-to. One per line.\n"
+                " -i, --reverse-complement Reverse complement sequences.\n",
                 file_type, file_type);
 
     if (format == FAI_FASTA) {
-       fprintf(fp, " -f, --fastq            File and index in FASTQ format.\n");
+       fprintf(fp, " -f, --fastq              File and index in FASTQ format.\n");
     }
 
-    fprintf(fp, " -h, --help             This message.\n");
+    fprintf(fp, " -h, --help               This message.\n");
 
     return exit_status;
 }
@@ -167,23 +223,24 @@ static int usage(FILE *fp, enum fai_format_options format, int exit_status)
 
 int faidx_core(int argc, char *argv[], enum fai_format_options format)
 {
-    int c, ignore_error = 0;
+    int c, ignore_error = 0, rev = 0;
     int line_len = DEFAULT_FASTA_LINE_LEN ;/* fasta line len */
     char* output_file = NULL; /* output file (default is stdout ) */
     char *region_file = NULL; // list of regions from file, one per line
     FILE* file_out = stdout;/* output stream */
 
     static const struct option lopts[] = {
-        { "output", required_argument,      NULL, 'o' },
-        { "help",   no_argument,            NULL, 'h' },
-        { "length", required_argument,      NULL, 'n' },
-        { "continue", no_argument,          NULL, 'c' },
-        { "region-file", required_argument, NULL, 'r' },
-        { "fastq", no_argument,             NULL, 'f' },
+        { "output", required_argument,       NULL, 'o' },
+        { "help",   no_argument,             NULL, 'h' },
+        { "length", required_argument,       NULL, 'n' },
+        { "continue", no_argument,           NULL, 'c' },
+        { "region-file", required_argument,  NULL, 'r' },
+        { "fastq", no_argument,              NULL, 'f' },
+        { "reverse-complement", no_argument, NULL, 'i' },
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "ho:n:cr:f", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "ho:n:cr:fi", lopts, NULL)) >= 0) {
         switch (c) {
             case 'o': output_file = optarg; break;
             case 'n': line_len = atoi(optarg);
@@ -195,6 +252,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
             case 'c': ignore_error = 1; break;
             case 'r': region_file = optarg; break;
             case 'f': format = FAI_FASTQ; break;
+            case 'i': rev = 1; break;
             case '?': return usage(stderr, format, EXIT_FAILURE);
             case 'h': return usage(stdout, format, EXIT_SUCCESS);
             default:  break;
@@ -241,7 +299,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
         hFILE *rf;
 
         if ((rf = hopen(region_file, "r"))) {
-            exit_status = read_regions_from_file(fai, rf, file_out, ignore_error, line_len, format);
+            exit_status = read_regions_from_file(fai, rf, file_out, ignore_error, line_len, rev, format);
 
             if (hclose(rf) != 0) {
                 fprintf(stderr, "[faidx] Warning: failed to close %s", region_file);
@@ -253,7 +311,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
     }
 
     while ( ++optind<argc && exit_status == EXIT_SUCCESS) {
-        exit_status = write_output(fai, file_out, argv[optind], ignore_error, line_len, format);
+        exit_status = write_output(fai, file_out, argv[optind], ignore_error, line_len, rev, format);
     }
 
     fai_destroy(fai);

@@ -983,6 +983,9 @@ Read regions from a file. Format is chr:from-to, one per line.
 .B -f, --fastq
 Read FASTQ files and output extracted sequences in FASTQ format.  Same as using samtools fqidx.
 .TP
+.B -i, --reverse-complement
+Output the sequence as the reverse complement.
+.TP
 .B -h, --help
 Print help message and exit.
 .RE
@@ -1029,6 +1032,9 @@ Continue working if a non-existant region is requested.
 .TP
 .BI "-r, --region-file " FILE
 Read regions from a file. Format is chr:from-to, one per line.
+.TP
+.B -i, --reverse-complement
+Output the sequence as the reverse complement.
 .TP
 .B -h, --help
 Print help message and exit.

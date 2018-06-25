@@ -546,6 +546,20 @@ sub test_faidx
     close $fh;
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1 2:5-10 3:20-30 > $$opts{tmp}/output_faidx_base.fa");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa -r $$opts{tmp}/region.txt > $$opts{tmp}/output_faidx.fa && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
+    
+    # reverse complement test
+    my $fseq = 'ATGAAATGTAACCCAAGAGATATACTCTTCAAGGTACTGTAAGCTATTTCTGTGGACACC';
+    my $rseq = $fseq;
+    $rseq =~ tr/ACGTMRWSYKVHDBN/TGCAKYWSRMBDHVN/;
+    $rseq = reverse $rseq;
+    open($fh, ">$$opts{tmp}/forward_test.fa") or error("$$opts{tmp}/forward_test.fa: $!");
+    print $fh ">rc\n$fseq\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test.fa") or error("$$opts{tmp}/rc_answer_test.fa: $!");
+    print $fh ">rc\n$rseq\n";
+    close $fh;
+    cmd("$$opts{bin}/samtools faidx -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out.fa && $$opts{diff} $$opts{tmp}/forward_test_out.fa $$opts{tmp}/rc_answer_test.fa");
+    
 
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
     {
@@ -657,6 +671,21 @@ sub test_fqidx
     close $fh;
     cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1 2:5-10 3:20-30 > $$opts{tmp}/output_fqidx_base.fq");
     cmd("$$opts{bin}/samtools faidx -f $$opts{tmp}/fqidx.fq -r $$opts{tmp}/region.txt > $$opts{tmp}/output_fqidx.fq && $$opts{diff} $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+
+    # reverse complement test
+    my $fseq  = 'ATGAAATGTAACCCAAGAGATATACTCTTCAAGGTACTGTAAGCTATTTCTGTGGACACC';
+    my $fqual = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx';
+    my $rseq = $fseq;
+    $rseq =~ tr/ACGTMRWSYKVHDBN/TGCAKYWSRMBDHVN/;
+    $rseq = reverse $rseq;
+    my $rqual = reverse $fqual;
+    open($fh, ">$$opts{tmp}/forward_test.fq") or error("$$opts{tmp}/forward_test.fq: $!");
+    print $fh "\@rc\n$fseq\n+\n$fqual\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test.fq") or error("$$opts{tmp}/rc_answer_test.fq: $!");
+    print $fh "\@rc\n$rseq\n+\n$rqual\n";
+    close $fh;
+    cmd("$$opts{bin}/samtools fqidx -i $$opts{tmp}/forward_test.fq rc > $$opts{tmp}/forward_test_out.fq && $$opts{diff} $$opts{tmp}/forward_test_out.fq $$opts{tmp}/rc_answer_test.fq");
 
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
     {
