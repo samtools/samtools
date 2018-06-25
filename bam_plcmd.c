@@ -115,7 +115,8 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
 #define MPLP_SMART_OVERLAPS (1<<12)
 #define MPLP_PRINT_QNAME (1<<13)
 
-#define MPLP_MAX_DEPTH 250
+#define MPLP_MAX_DEPTH 8000
+#define MPLP_MAX_INDEL_DEPTH 250
 
 void *bed_read(const char *fn);
 void bed_destroy(void *_h);
@@ -422,6 +423,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
     if (conf->flag & MPLP_BCF)
     {
         const char *mode;
+
         if ( conf->flag & MPLP_VCF )
             mode = (conf->flag&MPLP_NO_COMP)? "wu" : "wz";   // uncompressed VCF or compressed VCF
         else
@@ -561,7 +563,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         fprintf(stderr, "[%s] Max depth set to maximum value (%d)\n", __func__, INT_MAX);
     } else {
         max_depth = conf->max_depth;
-        if ( max_depth * sm->n > 1<<20 )
+        if ( max_depth * n > 1<<20 )
             fprintf(stderr, "[%s] Combined max depth is above 1M. Potential memory hog!\n", __func__);
     }
     max_indel_depth = conf->max_indel_depth * sm->n;
@@ -963,7 +965,8 @@ int bam_mpileup(int argc, char *argv[])
     memset(&mplp, 0, sizeof(mplp_conf_t));
     mplp.min_baseQ = 13;
     mplp.capQ_thres = 0;
-    mplp.max_depth = MPLP_MAX_DEPTH; mplp.max_indel_depth = MPLP_MAX_DEPTH;
+    mplp.max_depth = MPLP_MAX_DEPTH;
+    mplp.max_indel_depth = MPLP_MAX_INDEL_DEPTH;
     mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
     mplp.min_frac = 0.002; mplp.min_support = 1;
     mplp.flag = MPLP_NO_ORPHAN | MPLP_REALN | MPLP_SMART_OVERLAPS;

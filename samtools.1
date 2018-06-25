@@ -1289,13 +1289,14 @@ functionality; if enabled, the recommended value for BWA is 50. [0]
 .BI -d,\ --max-depth \ INT
 At a position, read maximally
 .I INT
-reads per input file. Note that samtools has a minimum value of
-.I 8000/n
-where
-.I n
-is the number of input files given to mpileup.  This means the default
-is highly likely to be increased.  Once above the cross-sample minimum of
-8000 the -d parameter will have an effect. [250]
+reads per input file. Setting this limit reduces the amount of memory and
+time needed to process regions with very high coverage.  Passing zero for this
+option sets it to the highest possible value, effectively removing the depth
+limit. [8000]
+
+Note that up to release 1.8, samtools would enforce a minimum value for
+this option.  This no longer happens and the limit is set exactly as
+specified.
 .TP
 .B -E, --redo-BAQ
 Recalculate BAQ on the fly, ignore existing BQ tags
