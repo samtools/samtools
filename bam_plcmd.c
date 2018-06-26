@@ -569,10 +569,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             fprintf(stderr, "[%s] Combined max depth is above 1M. Potential memory hog!\n", __func__);
     }
 
-    if (conf->flag & MPLP_BCF) {
-        // Only used when writing BCF
-        max_indel_depth = conf->max_indel_depth * sm->n;
-    }
+    // Only used when writing BCF
+    max_indel_depth = conf->max_indel_depth * sm->n;
     bam_mplp_set_maxcnt(iter, max_depth);
     bcf1_t *bcf_rec = bcf_init1();
     int ret;
