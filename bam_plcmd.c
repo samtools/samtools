@@ -919,44 +919,26 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "\n"
 "Output options:\n"
 "  -o, --output FILE       write output to FILE [standard output]\n"
-"  -g, --BCF               generate genotype likelihoods in BCF format\n"
-"  -v, --VCF               generate genotype likelihoods in VCF format\n"
-"\n"
-"Output options for mpileup format (without -g/-v):\n"
 "  -O, --output-BP         output base positions on reads\n"
 "  -s, --output-MQ         output mapping quality\n"
 "      --output-QNAME      output read names\n"
 "  -a                      output all positions (including zero depth)\n"
 "  -a -a (or -aa)          output absolutely all positions, including unused ref. sequences\n"
 "\n"
-"Output options for genotype likelihoods (when -g/-v is used):\n"
-"  -t, --output-tags LIST  optional tags to output:\n"
-"               DP,AD,ADF,ADR,SP,INFO/AD,INFO/ADF,INFO/ADR []\n"
-"  -u, --uncompressed      generate uncompressed VCF/BCF output\n"
-"\n"
-"SNP/INDEL genotype likelihoods options (effective with -g/-v):\n"
-"  -e, --ext-prob INT      Phred-scaled gap extension seq error probability [%d]\n", mplp->extQ);
-    fprintf(fp,
-"  -F, --gap-frac FLOAT    minimum fraction of gapped reads [%g]\n", mplp->min_frac);
-    fprintf(fp,
-"  -h, --tandem-qual INT   coefficient for homopolymer errors [%d]\n", mplp->tandemQ);
-    fprintf(fp,
-"  -I, --skip-indels       do not perform indel calling\n"
-"  -L, --max-idepth INT    maximum per-file depth for INDEL calling [%d]\n", mplp->max_indel_depth);
-    fprintf(fp,
-"  -m, --min-ireads INT    minimum number gapped reads for indel candidates [%d]\n", mplp->min_support);
-    fprintf(fp,
-"  -o, --open-prob INT     Phred-scaled gap open seq error probability [%d]\n", mplp->openQ);
-    fprintf(fp,
-"  -p, --per-sample-mF     apply -m and -F per-sample for increased sensitivity\n"
-"  -P, --platforms STR     comma separated list of platforms for indels [all]\n");
+"Generic options:\n");
     sam_global_opt_help(fp, "-.--.-");
-    fprintf(fp,
-"\n"
-"Notes: Assuming diploid individuals.\n");
+
+    fprintf(fp, "\n"
+"Note that using \"samtools mpileup\" to generate BCF or VCF files is now\n"
+"deprecated.  To output these formats, please use \"bcftools mpileup\" instead.\n");
 
     free(tmp_require);
     free(tmp_filter);
+}
+
+static void deprecated(char opt) {
+    fprintf(stderr, "[warning] samtools mpileup option `%c` is functional, "
+            "but deprecated. Please switch to using bcftools mpileup in future.\n", opt);
 }
 
 int bam_mpileup(int argc, char *argv[])
@@ -1062,16 +1044,16 @@ int bam_mpileup(int argc, char *argv[])
                   mplp.bed = bed_read(optarg);
                   if (!mplp.bed) { print_error_errno("mpileup", "Could not read file \"%s\"", optarg); return 1; }
                   break;
-        case 'P': mplp.pl_list = strdup(optarg); break;
-        case 'p': mplp.flag |= MPLP_PER_SAMPLE; break;
-        case 'g': mplp.flag |= MPLP_BCF; break;
-        case 'v': mplp.flag |= MPLP_BCF | MPLP_VCF; break;
-        case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_BCF; break;
+        case 'P': mplp.pl_list = strdup(optarg); deprecated(c); break;
+        case 'p': mplp.flag |= MPLP_PER_SAMPLE; deprecated(c); break;
+        case 'g': mplp.flag |= MPLP_BCF; deprecated(c); break;
+        case 'v': mplp.flag |= MPLP_BCF | MPLP_VCF; deprecated(c); break;
+        case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_BCF; deprecated(c); break;
         case 'B': mplp.flag &= ~MPLP_REALN; break;
-        case 'D': mplp.fmt_flag |= B2B_FMT_DP; fprintf(stderr, "[warning] samtools mpileup option `-D` is functional, but deprecated. Please switch to `-t DP` in future.\n"); break;
-        case 'S': mplp.fmt_flag |= B2B_FMT_SP; fprintf(stderr, "[warning] samtools mpileup option `-S` is functional, but deprecated. Please switch to `-t SP` in future.\n"); break;
-        case 'V': mplp.fmt_flag |= B2B_FMT_DV; fprintf(stderr, "[warning] samtools mpileup option `-V` is functional, but deprecated. Please switch to `-t DV` in future.\n"); break;
-        case 'I': mplp.flag |= MPLP_NO_INDEL; break;
+        case 'D': mplp.fmt_flag |= B2B_FMT_DP; deprecated(c); break;
+        case 'S': mplp.fmt_flag |= B2B_FMT_SP; deprecated(c); break;
+        case 'V': mplp.fmt_flag |= B2B_FMT_DV; deprecated(c); break;
+        case 'I': mplp.flag |= MPLP_NO_INDEL; deprecated(c); break;
         case 'E': mplp.flag |= MPLP_REDO_BAQ; break;
         case '6': mplp.flag |= MPLP_ILLUMINA13; break;
         case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
@@ -1085,16 +1067,22 @@ int bam_mpileup(int argc, char *argv[])
                 char *end;
                 long value = strtol(optarg, &end, 10);
                 // Distinguish between -o INT and -o FILE (a bit of a hack!)
-                if (*end == '\0') mplp.openQ = value;
-                else mplp.output_fname = optarg;
+                if (*end == '\0') {
+                    mplp.openQ = value;
+                    fprintf(stderr, "[warning] samtools mpileup option "
+                            "'--open-prob INT' is functional, but deprecated. "
+                            "Please switch to using bcftools mpileup in future.\n");
+                } else {
+                    mplp.output_fname = optarg;
+                }
             }
             break;
-        case 'e': mplp.extQ = atoi(optarg); break;
-        case 'h': mplp.tandemQ = atoi(optarg); break;
+        case 'e': mplp.extQ = atoi(optarg); deprecated(c); break;
+        case 'h': mplp.tandemQ = atoi(optarg); deprecated(c); break;
         case 'A': use_orphan = 1; break;
-        case 'F': mplp.min_frac = atof(optarg); break;
-        case 'm': mplp.min_support = atoi(optarg); break;
-        case 'L': mplp.max_indel_depth = atoi(optarg); break;
+        case 'F': mplp.min_frac = atof(optarg); deprecated(c); break;
+        case 'm': mplp.min_support = atoi(optarg); deprecated(c); break;
+        case 'L': mplp.max_indel_depth = atoi(optarg); deprecated(c); break;
         case 'G': {
                 FILE *fp_rg;
                 char buf[1024];
@@ -1106,7 +1094,7 @@ int bam_mpileup(int argc, char *argv[])
                 fclose(fp_rg);
             }
             break;
-        case 't': mplp.fmt_flag |= parse_format_flag(optarg); break;
+        case 't': mplp.fmt_flag |= parse_format_flag(optarg); deprecated(c); break;
         case 'a': mplp.all++; break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &mplp.ga) == 0) break;

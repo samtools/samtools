@@ -77,7 +77,7 @@ samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
 .PP
 samtools fixmate in.namesorted.sam out.bam
 .PP
-samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
+samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools flags PAIRED,UNMAP,MUNMAP
 .PP
@@ -1208,7 +1208,7 @@ is selected.
 .TP \"-------- mpileup
 .B mpileup
 samtools mpileup
-.RB [ -EBugp ]
+.RB [ -EB ]
 .RB [ -C
 .IR capQcoef ]
 .RB [ -r
@@ -1225,9 +1225,16 @@ samtools mpileup
 .RI [ in2.bam
 .RI [ ... ]]
 
-Generate VCF, BCF or pileup for one or multiple BAM files. Alignment records
+Generate pileup for one or multiple BAM files. Alignment records
 are grouped by sample (SM) identifiers in @RG header lines. If sample
 identifiers are absent, each input file is regarded as one sample.
+
+Samtools mpileup can still produce VCF and BCF output, but this feature is
+deprecated and will be removed in a future release.  Please use
+.B bcftools mpileup
+for this instead.  (Documentation on the deprecated options has been removed
+from this manual page, but older versions are available online
+at <http://www.htslib.org/doc/>.)
 
 In the pileup format (without
 .BR -u \ or \ -g ),
@@ -1351,13 +1358,13 @@ Disable read-pair overlap detection.
 .B Output Options:
 .TP 10
 .BI "-o, --output " FILE
-Write pileup or VCF/BCF output to
+Write pileup output to
 .IR FILE ,
 rather than the default of standard output.
 
-(The same short option is used for both
+(The same short option is used for both the deprecated
 .B --open-prob
-and
+option and
 .BR --output .
 If
 .BR -o 's
@@ -1370,19 +1377,6 @@ entirely numeric filename use
 or
 .BR "--output 123" .)
 .TP
-.B -g,\ --BCF
-Compute genotype likelihoods and output them in the binary call format (BCF).
-As of v1.0, this is BCF2 which is incompatible with the BCF1 format produced
-by previous (0.1.x) versions of samtools.
-.TP
-.B -v,\ --VCF
-Compute genotype likelihoods and output them in the variant call format (VCF).
-Output is bgzip-compressed VCF unless
-.B -u
-option is set.
-.PP
-.B Output Options for mpileup format (without -g or -v):
-.TP 10
 .B -O, --output-BP
 Output base positions on reads.
 .TP
@@ -1400,117 +1394,6 @@ Output absolutely all positions, including unused reference sequences.
 Note that when used in conjunction with a BED file the -a option may
 sometimes operate as if -aa was specified if the reference sequence
 has coverage outside of the region specified in the BED file.
-.PP
-.B Output Options for VCF/BCF format (with -g or -v):
-.TP 10
-.B -D
-Output per-sample read depth [DEPRECATED - use
-.B -t DP
-instead]
-.TP
-.B -S
-Output per-sample Phred-scaled strand bias P-value [DEPRECATED - use
-.B -t SP
-instead]
-.TP
-.BI -t,\ --output-tags \ LIST
-Comma-separated list of FORMAT and INFO tags to output (case-insensitive):
-.B AD
-(Allelic depth, FORMAT),
-.B INFO/AD
-(Total allelic depth, INFO),
-.B ADF
-(Allelic depths on the forward strand, FORMAT),
-.B INFO/ADF
-(Total allelic depths on the forward strand, INFO),
-.B ADR
-(Allelic depths on the reverse strand, FORMAT),
-.B INFO/ADR
-(Total allelic depths on the reverse strand, INFO),
-.B DP
-(Number of high-quality bases, FORMAT),
-.B DV
-(Deprecated in favor of AD; Number of high-quality non-reference bases, FORMAT),
-.B DPR
-(Deprecated in favor of AD; Number of high-quality bases for each observed allele, FORMAT),
-.B INFO/DPR
-(Number of high-quality bases for each observed allele, INFO),
-.B DP4
-(Deprecated in favor of ADF and ADR; Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT),
-.B SP
-(Phred-scaled strand bias P-value, FORMAT)
-[null]
-.TP
-.B -u,\ --uncompressed
-Generate uncompressed VCF/BCF output, which is preferred for piping.
-.TP
-.B -V
-Output per-sample number of non-reference reads [DEPRECATED - use
-.B -t DV
-instead]
-.PP
-.B Options for SNP/INDEL Genotype Likelihood Computation (for -g or -v):
-.TP 10
-.BI -e,\ --ext-prob \ INT
-Phred-scaled gap extension sequencing error probability. Reducing
-.I INT
-leads to longer indels. [20]
-.TP
-.BI -F,\ --gap-frac \ FLOAT
-Minimum fraction of gapped reads [0.002]
-.TP
-.BI -h,\ --tandem-qual \ INT
-Coefficient for modeling homopolymer errors. Given an
-.IR l -long
-homopolymer
-run, the sequencing error of an indel of size
-.I s
-is modeled as
-.IR INT * s / l .
-[100]
-.TP
-.B -I, --skip-indels
-Do not perform INDEL calling
-.TP
-.BI -L,\ --max-idepth \ INT
-Skip INDEL calling if the average per-input-file depth is above
-.IR INT .
-[250]
-.TP
-.BI -m,\ --min-ireads \ INT
-Minimum number gapped reads for indel candidates
-.IR INT .
-[1]
-.TP
-.BI -o,\ --open-prob \ INT
-Phred-scaled gap open sequencing error probability. Reducing
-.I INT
-leads to more indel calls. [40]
-
-(The same short option is used for both
-.B --open-prob
-and
-.BR --output .
-When
-.BR -o 's
-argument contains only an optional + or - sign followed by the digits 0 to 9,
-it is interpreted as
-.BR --open-prob .)
-.TP
-.B -p, --per-sample-mF
-Apply
-.B -m
-and
-.B -F
-thresholds per sample to increase sensitivity of calling.
-By default both options are applied to reads pooled from all samples.
-.TP
-.BI -P,\ --platforms \ STR
-Comma-delimited list of platforms (determined by
-.BR @RG-PL )
-from which indel candidates are obtained. It is recommended to collect
-indel candidates from sequencing technologies that have low indel error
-rate such as ILLUMINA. [all]
 .RE
 
 .TP \"-------- flags
