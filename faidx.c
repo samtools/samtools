@@ -67,7 +67,6 @@ static unsigned char comp_base[256] = {
 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
 };
 
-
 static void reverse_complement(char *str, int len) {
     char c;
     int i = 0, j = len - 1;
@@ -131,14 +130,16 @@ static int write_line(FILE *file, const char *line, const char *name, const int 
 
 
 static int write_output(faidx_t *faid, FILE *file, const char *name, const int ignore,
-                        const int length, const int rev, enum fai_format_options format) {
+                        const int length, const int rev,
+                        const char *pos_strand_name, const char *neg_strand_name,
+                        enum fai_format_options format) {
     int seq_len;
     char *seq = fai_fetch(faid, name, &seq_len);
 
     if (format == FAI_FASTA) {
-        fprintf(file, ">%s\n", name);
+        fprintf(file, ">%s%s\n", name, rev ? neg_strand_name : pos_strand_name);
     } else {
-        fprintf(file, "@%s\n", name);
+        fprintf(file, "@%s%s\n", name, rev ? neg_strand_name : pos_strand_name);
     }
 
     if (rev && seq_len > 0) {
@@ -174,12 +175,15 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
 
 
 static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, const int ignore,
-                                  const int length, const int rev,  enum fai_format_options format) {
+                                  const int length, const int rev,
+                                  const char *pos_strand_name,
+                                  const char *neg_strand_name,
+                                  enum fai_format_options format) {
     kstring_t line = {0, 0, NULL};
     int ret = EXIT_FAILURE;
 
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, in_file) >= 0) {
-        if ((ret = write_output(faid, file, line.s, ignore, length, rev, format)) == EXIT_FAILURE) {
+        if ((ret = write_output(faid, file, line.s, ignore, length, rev, pos_strand_name, neg_strand_name, format)) == EXIT_FAILURE) {
             break;
         }
     }
@@ -188,7 +192,6 @@ static int read_regions_from_file(faidx_t *faid, hFILE *in_file, FILE *file, con
 
     return ret;
 }
-
 
 static int usage(FILE *fp, enum fai_format_options format, int exit_status)
 {
@@ -208,8 +211,13 @@ static int usage(FILE *fp, enum fai_format_options format, int exit_status)
                 " -n, --length INT         Length of %s sequence line. [60]\n"
                 " -c, --continue           Continue after trying to retrieve missing region.\n"
                 " -r, --region-file FILE   File of regions.  Format is chr:from-to. One per line.\n"
-                " -i, --reverse-complement Reverse complement sequences.\n",
+                " -i, --reverse-complement Reverse complement sequences.\n"
+                "     --mark-strand TYPE   Add strand indicator to sequence name\n"
+                "                          TYPE = sign for (+) / (-)\n"
+                "                                 rc   for /rc on negative strand\n"
+                "                                 custom,<pos>,<neg> for custom indicator\n",
                 file_type, file_type);
+
 
     if (format == FAI_FASTA) {
        fprintf(fp, " -f, --fastq              File and index in FASTQ format.\n");
@@ -220,13 +228,15 @@ static int usage(FILE *fp, enum fai_format_options format, int exit_status)
     return exit_status;
 }
 
-
 int faidx_core(int argc, char *argv[], enum fai_format_options format)
 {
     int c, ignore_error = 0, rev = 0;
     int line_len = DEFAULT_FASTA_LINE_LEN ;/* fasta line len */
     char* output_file = NULL; /* output file (default is stdout ) */
     char *region_file = NULL; // list of regions from file, one per line
+    char *pos_strand_name = ""; // Extension to add to name for +ve strand
+    char *neg_strand_name = ""; // Extension to add to name for -ve strand
+    char *strand_names = NULL; // Used for custom strand annotation
     FILE* file_out = stdout;/* output stream */
 
     static const struct option lopts[] = {
@@ -237,6 +247,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
         { "region-file", required_argument,  NULL, 'r' },
         { "fastq", no_argument,              NULL, 'f' },
         { "reverse-complement", no_argument, NULL, 'i' },
+        { "mark-strand", required_argument, NULL, 1000 },
         { NULL, 0, NULL, 0 }
     };
 
@@ -255,6 +266,32 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
             case 'i': rev = 1; break;
             case '?': return usage(stderr, format, EXIT_FAILURE);
             case 'h': return usage(stdout, format, EXIT_SUCCESS);
+            case 1000:
+                if (strcmp(optarg, "sign") == 0) {
+                    pos_strand_name = "(+)";
+                    neg_strand_name = "(-)";
+                } else if (strcmp(optarg, "rc") == 0) {
+                    neg_strand_name = "/rc";
+                } else if (strncmp(optarg, "custom,", 7) == 0) {
+                    size_t len = strlen(optarg + 7);
+                    size_t comma = strcspn(optarg + 7, ",");
+                    strand_names = pos_strand_name = malloc(len + 2);
+                    if (!strand_names) {
+                        fprintf(stderr, "[faidx] Out of memory\n");
+                        return EXIT_FAILURE;
+                    }
+                    neg_strand_name = pos_strand_name + comma + 1;
+                    memcpy(pos_strand_name, optarg + 7, comma);
+                    pos_strand_name[comma] = '\0';
+                    if (comma < len)
+                        memcpy(neg_strand_name, optarg + 7 + comma + 1,
+                               len - comma);
+                    neg_strand_name[len - comma] = '\0';
+                } else {
+                    fprintf(stderr, "[faidx] Unknown --mark-strand option \"%s\"\n", optarg);
+                    return usage(stderr, format, EXIT_FAILURE);
+                }
+                break;
             default:  break;
         }
     }
@@ -299,7 +336,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
         hFILE *rf;
 
         if ((rf = hopen(region_file, "r"))) {
-            exit_status = read_regions_from_file(fai, rf, file_out, ignore_error, line_len, rev, format);
+            exit_status = read_regions_from_file(fai, rf, file_out, ignore_error, line_len, rev, pos_strand_name, neg_strand_name, format);
 
             if (hclose(rf) != 0) {
                 fprintf(stderr, "[faidx] Warning: failed to close %s", region_file);
@@ -311,7 +348,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
     }
 
     while ( ++optind<argc && exit_status == EXIT_SUCCESS) {
-        exit_status = write_output(fai, file_out, argv[optind], ignore_error, line_len, rev, format);
+        exit_status = write_output(fai, file_out, argv[optind], ignore_error, line_len, rev, pos_strand_name, neg_strand_name, format);
     }
 
     fai_destroy(fai);
@@ -322,6 +359,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
     }
 
     if( output_file != NULL) fclose(file_out);
+    free(strand_names);
 
     return exit_status;
 }

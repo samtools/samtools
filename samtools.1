@@ -986,6 +986,24 @@ Read FASTQ files and output extracted sequences in FASTQ format.  Same as using 
 .B -i, --reverse-complement
 Output the sequence as the reverse complement.
 .TP
+.B     --mark-strand TYPE
+Append strand indicator to sequence name.  TYPE can be one of:
+.RS
+.TP
+.B sign
+Append '(+)' for forward strand or '(-)' for reverse complement.  This matches
+the output of "bedtools getfasta -s".
+.TP
+.B rc
+Append '/rc' when writing the reverse complement.
+.TP
+.B custom,<pos>,<neg>
+Append string <pos> to names when writing the forward strand and <neg> when
+writing the reverse strand.  Spaces are preserved, so it is possible to move
+the indicator into the comment part of the description line by including
+a leading space in the strings <pos> and <neg>.
+.RE
+.TP
 .B -h, --help
 Print help message and exit.
 .RE
