@@ -159,9 +159,9 @@ int main_bedcov(int argc, char *argv[])
         while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0)
             if (pos >= beg && pos < end) {
                 for (i = 0, m = 0; i < n; ++i) {
-                    if (skip_DN) 
+                    if (skip_DN)
                         for (j = 0; j < n_plp[i]; ++j) {
-                            const bam_pileup1_t *pi = plp[i] + j; 
+                            const bam_pileup1_t *pi = plp[i] + j;
                             if (pi->is_del || pi->is_refskip) ++m;
                         }
                     cnt[i] += n_plp[i] - m;

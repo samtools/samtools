@@ -841,7 +841,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
     uint32_t first = (IS_READ1(bam_line) > 0 ? 1 : 0) + (IS_READ2(bam_line) > 0 ? 2 : 0) ;
     if ( !(bam_line->core.flag & BAM_FPAIRED) ||
          (bam_line->core.flag & BAM_FMUNMAP) ||
-         (abs(bam_line->core.isize) >= 2*bam_line->core.l_qseq) || 
+         (abs(bam_line->core.isize) >= 2*bam_line->core.l_qseq) ||
          (first != 1 && first != 2) ) {
         if ( pmin >= 0 )
             round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
@@ -865,7 +865,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
             fprintf(stderr, "Error allocating memory\n");
             return;
         }
-          
+
         k = kh_put(qn2pair, read_pairs, s, &ret);
         if ( -1 == ret ) {
             fprintf(stderr, "Error inserting read '%s' in pair hash table\n", qname);
@@ -934,7 +934,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
             for (i=0; i<pc->n; i++) {
                 if ( pmin >= pc->chunks[i].to )
                     continue;
-                
+
                 if ( pmax <= pc->chunks[i].from ) //no overlap
                     break;
 
@@ -945,7 +945,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
 
                 if ( pmax <= pc->chunks[i].to ) { //completely contained
                     stats->nbases_mapped_cigar -= (pmax - pmin);
-                    return; 
+                    return;
                 } else {                           //overlap at the end
                     stats->nbases_mapped_cigar -= (pc->chunks[i].to - pmin);
                     pmin = pc->chunks[i].to;
@@ -1721,7 +1721,7 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
             if ( !tmp )
                 return 1;
             stats->regions = tmp;
-            memset(stats->regions + stats->nregions, 0, 
+            memset(stats->regions + stats->nregions, 0,
                    (tid+10-stats->nregions) * sizeof(regions_t));
             stats->nregions = tid+10;
         }
@@ -1738,7 +1738,7 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
             stats->target_count += (stats->regions[tid].pos[j].to - stats->regions[tid].pos[j].from + 1);
         }
     }
- 
+
     return 0;
 }
 
@@ -2082,8 +2082,8 @@ int main_stats(int argc, char *argv[])
             case 'S': info->split_tag = optarg; break;
             case 'P': info->split_prefix = optarg; break;
             case 'p': info->remove_overlaps = 1; break;
-            case 'g': info->cov_threshold = atoi(optarg); 
-                      if ( info->cov_threshold < 0 || info->cov_threshold == INT_MAX ) 
+            case 'g': info->cov_threshold = atoi(optarg);
+                      if ( info->cov_threshold < 0 || info->cov_threshold == INT_MAX )
                           error("Unsupported value for coverage threshold %d\n", info->cov_threshold);
                       break;
             case '?':
@@ -2142,8 +2142,8 @@ int main_stats(int argc, char *argv[])
 
                         if (!targets) {
                             all_stats->nchunks = argc-optind;
-                            if ( replicate_regions(all_stats, iter) ) 
-                                fprintf(stderr, "Replications of the regions failed."); 
+                            if ( replicate_regions(all_stats, iter) )
+                                fprintf(stderr, "Replications of the regions failed.");
                         }
 
                         if ( all_stats->nregions && all_stats->regions ) {
@@ -2181,7 +2181,7 @@ int main_stats(int argc, char *argv[])
             fprintf(stderr, "Coverage percentage calcuation requires a list of target regions\n");
             goto cleanup;
         }
-               
+
         // Stream through the entire BAM ignoring off-target regions if -t is given
         int ret;
         while ((ret = sam_read1(info->sam, info->sam_header, bam_line)) >= 0) {

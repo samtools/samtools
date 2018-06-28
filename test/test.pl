@@ -528,25 +528,25 @@ sub test_faidx
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa");
     cmd("cat $$opts{tmp}/faidx.fa | $$opts{bgzip} -ci -I $$opts{tmp}/faidx.fa.gz.gzi > $$opts{tmp}/faidx.fa.gz");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa.gz");
-    
+
     # Write to file
     cmd("$$opts{bin}/samtools faidx --length 5 $$opts{tmp}/faidx.fa 1:1-104 > $$opts{tmp}/output_faidx_base.fa");
     cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa $$opts{tmp}/faidx.fa 1:1-104 && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
-    
+
     # test continuing after an error
     cmd("$$opts{bin}/samtools faidx --output $$opts{tmp}/output_faidx.fa --continue $$opts{tmp}/faidx.fa 100 EEE FFF");
-    
+
     # test for reporting retrieval errors, Zero results and truncated
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1:10000000-10000005 > $$opts{tmp}/output_faidx.fa 2>&1 && grep Zero $$opts{tmp}/output_faidx.fa");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1:99998-100099 > $$opts{tmp}/output_faidx.fa 2>&1 && grep Truncated $$opts{tmp}/output_faidx.fa");
-    
+
     # Get regions from a file
     open($fh, ">$$opts{tmp}/region.txt") or error("$$opts{tmp}/region.txt: $!");
     print $fh "1\n2:5-10\n3:20-30\n";
     close $fh;
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1 2:5-10 3:20-30 > $$opts{tmp}/output_faidx_base.fa");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa -r $$opts{tmp}/region.txt > $$opts{tmp}/output_faidx.fa && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
-    
+
     # reverse complement test
     my $fseq = 'ATGAAATGTAACCCAAGAGATATACTCTTCAAGGTACTGTAAGCTATTTCTGTGGACACC';
     my $rseq = $fseq;
@@ -630,7 +630,7 @@ sub test_fqidx
     open(my $fh,'>',"$$opts{tmp}/fqidx.fq") or error("$$opts{tmp}/fqidx.fq: $!");
     my $ntot = 100_000;
     my @dat  = qw(A C G T);
-    
+
     for (my $seq=1; $seq<=3; $seq++)
     {
         my $nwr = 1;
@@ -641,37 +641,37 @@ sub test_fqidx
             $out .= $tmp;
             $nwr += length($tmp);
         }
-        
+
         print $fh "\@$seq\n";
         print $fh faidx_wrap($out);
-        
+
         $nwr = 1;
         $out = '';
-        
+
         while ($nwr < $ntot) {
             my $tmp = fqidx_num_to_qual($nwr) . '!';
             $out .= $tmp;
             $nwr += length($tmp);
         }
-        
+
         print $fh "+\n";
         print $fh faidx_wrap($out);
     }
-    
+
     close($fh);
 
     # Run tests: index and retrieval from plain text and compressed files
     cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq");
     cmd("cat $$opts{tmp}/fqidx.fq | $$opts{bgzip} -ci -I $$opts{tmp}/fqidx.fq.gz.gzi > $$opts{tmp}/fqidx.fq.gz");
     cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq.gz");
-    
+
     # Write to file
     cmd("$$opts{bin}/samtools fqidx --length 5 $$opts{tmp}/fqidx.fq 1:1-104 > $$opts{tmp}/output_fqidx_base.fq");
     cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq $$opts{tmp}/fqidx.fq 1:1-104 && $$opts{diff} $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
-    
+
     # test continuing after an error
     cmd("$$opts{bin}/samtools fqidx --output $$opts{tmp}/output_fqidx.fq --continue $$opts{tmp}/fqidx.fq 100 EEE FFF");
-    
+
     # test for reporting retrieval errors, Zero results and truncated
     cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1:10000000-10000005 > $$opts{tmp}/output_fqidx.fq 2>&1 && grep Zero $$opts{tmp}/output_fqidx.fq");
     cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1:99998-100099 > $$opts{tmp}/output_fqidx.fq 2>&1 && grep Truncated $$opts{tmp}/output_fqidx.fq");
@@ -706,8 +706,8 @@ sub test_fqidx
             print "$test\n";
             my $result = cmd($test);
             my @fq = split "\n", $result;
-            
-            my $seq = $fq[1];            
+
+            my $seq = $fq[1];
             $seq =~ s/N.*$//;
             my $num = faidx_seq_to_num($seq);
             my $xreg = $reg;
@@ -715,10 +715,10 @@ sub test_fqidx
             $xreg =~ s/-.*$//;
             if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". faidx_num_to_seq($xreg) ."\" got \"$seq\"\n"); }
             else { passed($opts,msg=>$test); }
-            
-            my $qual = $fq[3];            
+
+            my $qual = $fq[3];
             $qual =~ s/!.*$//;
-            my $num = fqidx_qual_to_num($qual);
+            $num = fqidx_qual_to_num($qual);
             if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". fqidx_num_to_qual($xreg) ."\" got \"$qual\"\n"); }
             else { passed($opts,msg=>$test); }
         }
@@ -2710,7 +2710,7 @@ sub test_collate
 	     out_map=>{"collate/collate3.tmp.sam"
 			   =>"collate/collate.expected.sam"},
 	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate3.tmp");
-             
+
     # fast collate, supplementary files not output
     test_cmd($opts, out=>"dat/empty.expected",
              out_map=>{"collate/1_fast_collate.sam" => "collate/1_fast_collate.sam.expected"},
