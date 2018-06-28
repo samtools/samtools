@@ -556,20 +556,20 @@ sub test_faidx
     print $fh ">rc\n$fseq\n";
     close $fh;
     open ($fh, ">$$opts{tmp}/rc_answer_test.fa") or error("$$opts{tmp}/rc_answer_test.fa: $!");
-    print $fh ">rc\n$rseq\n";
+    print $fh ">rc/rc\n$rseq\n";
     close $fh;
     open ($fh, ">$$opts{tmp}/rc_answer_test2.fa") or error("$$opts{tmp}/rc_answer_test2.fa: $!");
     print $fh ">rc(-)\n$rseq\n";
     close $fh;
     open ($fh, ">$$opts{tmp}/rc_answer_test3.fa") or error("$$opts{tmp}/rc_answer_test3.fa: $!");
-    print $fh ">rc/rc\n$rseq\n";
+    print $fh ">rc\n$rseq\n";
     close $fh;
     open ($fh, ">$$opts{tmp}/rc_answer_test4.fa") or error("$$opts{tmp}/rc_answer_test3.fa: $!");
     print $fh ">rc reverse\n$rseq\n";
     close $fh;
     cmd("$$opts{bin}/samtools faidx -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out.fa && $$opts{diff} $$opts{tmp}/forward_test_out.fa $$opts{tmp}/rc_answer_test.fa");
     cmd("$$opts{bin}/samtools faidx --mark-strand sign -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out2.fa && $$opts{diff} $$opts{tmp}/forward_test_out2.fa $$opts{tmp}/rc_answer_test2.fa");
-    cmd("$$opts{bin}/samtools faidx --mark-strand rc -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out3.fa && $$opts{diff} $$opts{tmp}/forward_test_out3.fa $$opts{tmp}/rc_answer_test3.fa");
+    cmd("$$opts{bin}/samtools faidx --mark-strand no -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out3.fa && $$opts{diff} $$opts{tmp}/forward_test_out3.fa $$opts{tmp}/rc_answer_test3.fa");
     cmd("$$opts{bin}/samtools faidx --mark-strand 'custom, forward, reverse' -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out4.fa && $$opts{diff} $$opts{tmp}/forward_test_out4.fa $$opts{tmp}/rc_answer_test4.fa");
 
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
@@ -694,10 +694,17 @@ sub test_fqidx
     print $fh "\@rc\n$fseq\n+\n$fqual\n";
     close $fh;
     open ($fh, ">$$opts{tmp}/rc_answer_test.fq") or error("$$opts{tmp}/rc_answer_test.fq: $!");
+    print $fh "\@rc/rc\n$rseq\n+\n$rqual\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test2.fq") or error("$$opts{tmp}/rc_answer_test.fq: $!");
     print $fh "\@rc\n$rseq\n+\n$rqual\n";
     close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test3.fq") or error("$$opts{tmp}/rc_answer_test.fq: $!");
+    print $fh "\@rc reverse\n$rseq\n+\n$rqual\n";
+    close $fh;
     cmd("$$opts{bin}/samtools fqidx -i $$opts{tmp}/forward_test.fq rc > $$opts{tmp}/forward_test_out.fq && $$opts{diff} $$opts{tmp}/forward_test_out.fq $$opts{tmp}/rc_answer_test.fq");
-
+    cmd("$$opts{bin}/samtools fqidx --mark-strand no -i $$opts{tmp}/forward_test.fq rc > $$opts{tmp}/forward_test_out2.fq && $$opts{diff} $$opts{tmp}/forward_test_out2.fq $$opts{tmp}/rc_answer_test2.fq");
+    cmd("$$opts{bin}/samtools fqidx --mark-strand 'custom, forward, reverse' -i $$opts{tmp}/forward_test.fq rc > $$opts{tmp}/forward_test_out3.fq && $$opts{diff} $$opts{tmp}/forward_test_out3.fq $$opts{tmp}/rc_answer_test3.fq");
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
     {
         for my $file ("$$opts{tmp}/fqidx.fq","$$opts{tmp}/fqidx.fq.gz")

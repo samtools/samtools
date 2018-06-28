@@ -213,8 +213,9 @@ static int usage(FILE *fp, enum fai_format_options format, int exit_status)
                 " -r, --region-file FILE   File of regions.  Format is chr:from-to. One per line.\n"
                 " -i, --reverse-complement Reverse complement sequences.\n"
                 "     --mark-strand TYPE   Add strand indicator to sequence name\n"
-                "                          TYPE = sign for (+) / (-)\n"
-                "                                 rc   for /rc on negative strand\n"
+                "                          TYPE = rc   for /rc on negative strand (default)\n"
+                "                                 no   for no strand indicator\n"
+                "                                 sign for (+) / (-)\n"
                 "                                 custom,<pos>,<neg> for custom indicator\n",
                 file_type, file_type);
 
@@ -235,7 +236,7 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
     char* output_file = NULL; /* output file (default is stdout ) */
     char *region_file = NULL; // list of regions from file, one per line
     char *pos_strand_name = ""; // Extension to add to name for +ve strand
-    char *neg_strand_name = ""; // Extension to add to name for -ve strand
+    char *neg_strand_name = "/rc"; // Extension to add to name for -ve strand
     char *strand_names = NULL; // Used for custom strand annotation
     FILE* file_out = stdout;/* output stream */
 
@@ -267,14 +268,18 @@ int faidx_core(int argc, char *argv[], enum fai_format_options format)
             case '?': return usage(stderr, format, EXIT_FAILURE);
             case 'h': return usage(stdout, format, EXIT_SUCCESS);
             case 1000:
-                if (strcmp(optarg, "sign") == 0) {
+                if (strcmp(optarg, "no") == 0) {
+                    pos_strand_name = neg_strand_name = "";
+                } else if (strcmp(optarg, "sign") == 0) {
                     pos_strand_name = "(+)";
                     neg_strand_name = "(-)";
                 } else if (strcmp(optarg, "rc") == 0) {
+                    pos_strand_name = "";
                     neg_strand_name = "/rc";
                 } else if (strncmp(optarg, "custom,", 7) == 0) {
                     size_t len = strlen(optarg + 7);
                     size_t comma = strcspn(optarg + 7, ",");
+                    free(strand_names);
                     strand_names = pos_strand_name = malloc(len + 2);
                     if (!strand_names) {
                         fprintf(stderr, "[faidx] Out of memory\n");

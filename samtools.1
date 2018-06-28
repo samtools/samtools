@@ -985,17 +985,24 @@ Read FASTQ files and output extracted sequences in FASTQ format.  Same as using 
 .TP
 .B -i, --reverse-complement
 Output the sequence as the reverse complement.
+When this option is used, \*(lq/rc\*(rq will be appended to the sequence names.
+To turn this off or change the string appended, use the
+.B --mark-strand
+option.
 .TP
 .B     --mark-strand TYPE
 Append strand indicator to sequence name.  TYPE can be one of:
 .RS
 .TP
+.B rc
+Append '/rc' when writing the reverse complement.  This is the default.
+.TP
+.B no
+Do not append anything.
+.TP
 .B sign
 Append '(+)' for forward strand or '(-)' for reverse complement.  This matches
-the output of "bedtools getfasta -s".
-.TP
-.B rc
-Append '/rc' when writing the reverse complement.
+the output of \*(lqbedtools getfasta -s\*(rq.
 .TP
 .B custom,<pos>,<neg>
 Append string <pos> to names when writing the forward strand and <neg> when
@@ -1053,6 +1060,31 @@ Read regions from a file. Format is chr:from-to, one per line.
 .TP
 .B -i, --reverse-complement
 Output the sequence as the reverse complement.
+When this option is used, \*(lq/rc\*(rq will be appended to the sequence names.
+To turn this off or change the string appended, use the
+.B --mark-strand
+option.
+.TP
+.B     --mark-strand TYPE
+Append strand indicator to sequence name.  TYPE can be one of:
+.RS
+.TP
+.B rc
+Append '/rc' when writing the reverse complement.  This is the default.
+.TP
+.B no
+Do not append anything.
+.TP
+.B sign
+Append '(+)' for forward strand or '(-)' for reverse complement.  This matches
+the output of \*(lqbedtools getfasta -s\*(rq.
+.TP
+.B custom,<pos>,<neg>
+Append string <pos> to names when writing the forward strand and <neg> when
+writing the reverse strand.  Spaces are preserved, so it is possible to move
+the indicator into the comment part of the description line by including
+a leading space in the strings <pos> and <neg>.
+.RE
 .TP
 .B -h, --help
 Print help message and exit.
