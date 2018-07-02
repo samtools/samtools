@@ -30,6 +30,53 @@ You will likely wish to add /path/to/location/bin to your $PATH.
 
 See INSTALL for full building and installation instructions and details.
 
+Building with HTSlib plug-in support
+====================================
+
+Enabling plug-ins causes some parts of HTSlib to be built as separate modules.
+There are two advantages to this:
+
+ * The static library libhts.a has fewer dependencies, which makes linking
+   third-party code against it easier.
+
+ * It is possible to build extra plug-ins in addition to the ones that are
+   bundled with HTSlib.  For example, the hts-plugins repository
+   <https://github.com/samtools/htslib-plugins> includes a module that
+   allows direct access to files stored in an iRODS data management
+   repository (see <https://irods.org/>).
+
+To build with plug-ins, you need to use the --enable-plugins configure option
+as follows:
+
+    cd .../samtools-1.8 # Within the unpacked release directory
+    ./configure --enable-plugins --prefix=/path/to/location
+    make all all-htslib
+    make install install-htslib
+
+There are two other configure options that affect plug-ins.  These are:
+   --with-plugin-dir=DIR     plug-in installation location
+   --with-plugin-path=PATH   default plug-in search path
+
+The default for --with-plugin-dir is <prefix>/libexec/htslib.
+--with-plugin-path sets the built-in search path used to find the plug-ins.  By
+default this is the directory set by the --with-plugin-dir option.  Multiple
+directories should be separated by colons.
+
+Setting --with-plugin-path is useful if you want to run directly from
+the source distribution instead of installing the package.  In that case
+you can use:
+
+    cd .../samtools-1.8 # Within the unpacked release directory
+    ./configure --enable-plugins --with-plugin-path=$PWD/htslib-1.8
+    make all all-htslib
+
+It is possible to override the built-in search path using the HTS_PATH
+environment variable.  Directories should be separated by colons.  To
+include the built-in path, add an empty entry to HTS_PATH:
+
+   export HTS_PATH=:/my/path            # Search built-in path first
+   export HTS_PATH=/my/path:            # Search built-in path last
+   export HTS_PATH=/my/path1::/my/path2 # Search built-in path between others
 
 Using an optimised zlib library
 ===============================
