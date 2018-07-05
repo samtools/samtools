@@ -38,7 +38,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <getopt.h>
 #include <assert.h>
 #include <pthread.h>
-#include "htslib/bgzf.h"
 #include "htslib/ksort.h"
 #include "htslib/hts_os.h"
 #include "htslib/khash.h"
