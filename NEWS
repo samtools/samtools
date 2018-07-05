@@ -101,6 +101,9 @@ Release a.b
    - blast2sam.pl now reports perfect match hits (no indels or mismatches).
      (#873, thanks to Nils Homer)
 
+   - Fixed bug in fasta and fastq subcommands where stdout would not be flushed
+     correctly if the -0 option was used.
+
 Release 1.8 (3rd April 2018)
 ----------------------------
 

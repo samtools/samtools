@@ -758,9 +758,11 @@ static void bam2fq_usage(FILE *to, const char *command)
 "Usage: samtools %s [options...] <in.bam>\n", command);
     fprintf(to,
 "Options:\n"
-"  -0 FILE              write paired reads flagged both or neither READ1 and READ2 to FILE\n"
-"  -1 FILE              write paired reads flagged READ1 to FILE\n"
-"  -2 FILE              write paired reads flagged READ2 to FILE\n"
+"  -0 FILE              write reads designated READ_OTHER to FILE\n"
+"  -1 FILE              write reads designated READ1 to FILE\n"
+"  -2 FILE              write reads designated READ2 to FILE\n"
+"                       note: if a singleton file is specified with -s, only\n"
+"                       paired reads will be written to the -1 and -2 files.\n"
 "  -f INT               only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
 "  -F INT               only include reads with none of the FLAGS in INT present [0]\n"       //   F&x == 0
 "  -G INT               only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
@@ -769,7 +771,7 @@ static void bam2fq_usage(FILE *to, const char *command)
     if (fq) fprintf(to,
 "  -O                   output quality in the OQ tag if present\n");
     fprintf(to,
-"  -s FILE              write singleton reads to FILE [assume single-end]\n"
+"  -s FILE              write singleton reads designated READ1 or READ2 to FILE\n"
 "  -t                   copy RG, BC and QT tags to the %s header line\n",
     fq ? "FASTQ" : "FASTA");
     fprintf(to,
@@ -786,14 +788,30 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  --index-format STR   How to parse barcode and quality tags\n\n");
     sam_global_opt_help(to, "-.--.@");
     fprintf(to,
-"   \n"
-"   The index-format string describes how to parse the barcode and quality tags, for example:\n"
+"\n"
+"Reads are designated READ1 if FLAG READ1 is set and READ2 is not set.\n"
+"Reads are designated READ2 if FLAG READ1 is not set and READ2 is set.\n"
+"Reads are designated READ_OTHER if FLAGs READ1 and READ2 are either both set\n"
+"or both unset.\n"
+"Run 'samtools flags' for more information on flag codes and meanings.\n");
+    fprintf(to,
+"\n"
+"The index-format string describes how to parse the barcode and quality tags, for example:\n"
 "   i14i8       the first 14 characters are index 1, the next 8 characters are index 2\n"
 "   n8i14       ignore the first 8 characters, and use the next 14 characters for index 1\n"
-"   If the tag contains a separator, then the numeric part can be replaced with '*' to mean\n"
-"   'read until the separator or end of tag', for example:\n"
+"If the tag contains a separator, then the numeric part can be replaced with '*' to mean\n"
+"'read until the separator or end of tag', for example:\n"
 "   n*i*        ignore the left part of the tag until the separator, then use the second part\n"
 "               of the tag as index 1\n");
+    fprintf(to,
+"\n"
+"Examples:\n"
+" To get just the paired reads in separate files, use:\n"
+"   samtools %s -1 paired1.%s -2 paired2.%s -0 /dev/null -s /dev/null -n -F 0x900 in.bam\n"
+"\n To get all non-supplementary/secondary reads in a single file, redirect the output:\n"
+"   samtools %s -F 0x900 in.bam > all_reads.%s\n",
+            command, fq ? "fq" : "fa", fq ? "fq" : "fa",
+            command, fq ? "fq" : "fa");
 }
 
 typedef enum { READ_UNKNOWN = 0, READ_1 = 1, READ_2 = 2 } readpart;
@@ -1373,7 +1391,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->filetype = opts->filetype;
     state->def_qual = opts->def_qual;
     state->index_sequence = NULL;
-    state->hstdout = bgzf_dopen(fileno(stdout), "wu");
+    state->hstdout = NULL;
     state->compression_level = opts->compression_level;
 
     state->taglist = kl_init(ktaglist);
@@ -1439,6 +1457,14 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
                 return false;
             }
         } else {
+            if (!state->hstdout) {
+                state->hstdout = bgzf_dopen(fileno(stdout), "wu");
+                if (!state->hstdout) {
+                    print_error_errno("bam2fq", "Cannot open STDOUT");
+                    free(state);
+                    return false;
+                }
+            }
             state->fpr[i] = state->hstdout;
         }
     }
@@ -1473,10 +1499,14 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
     if (state->fpse && bgzf_close(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); valid = false; }
     int i;
     for (i = 0; i < 3; ++i) {
-        if (state->fpr[i] == state->hstdout) {
-            if (i==0 && bgzf_close(state->fpr[i])) { print_error_errno("bam2fq", "Error closing STDOUT"); valid = false; }
-        } else {
+        if (state->fpr[i] != state->hstdout) {
             if (bgzf_close(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); valid = false; }
+        }
+    }
+    if (state->hstdout) {
+        if (bgzf_close(state->hstdout)) {
+            print_error_errno("bam2fq", "Error closing STDOUT");
+            valid = false;
         }
     }
     for (i = 0; i < 2; i++) {
