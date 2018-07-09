@@ -793,7 +793,7 @@ samtools bedcov
 .IR region.bed " " in1.sam | in1.bam | in1.cram "[...]"
 
 Reports the total read base count (i.e. the sum of per base read depths)
-for each genomic region specified in the supplied BED file. The regions 
+for each genomic region specified in the supplied BED file. The regions
 are output as they appear in the BED file and are 0-based.
 Counts for each alignment file supplied are reported in separate columns.
 
@@ -1841,7 +1841,7 @@ samtools cat [-b list] [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [ ... ]
 Concatenate BAMs or CRAMs. Although this works on either BAM or CRAM,
 all input files must be the same format as each other. The sequence
 dictionary of each input file must be identical, although this command
-does not check this. This command uses a similar trick to 
+does not check this. This command uses a similar trick to
 .B reheader
 which enables fast BAM concatenation.
 
