@@ -765,17 +765,20 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
         stats->nbases_trimmed += bwa_trim_read(stats->info->trim_qual, bam_quals, seq_len, reverse);
 
     // Quality histogram and average quality. Clipping is neglected.
+    uint64_t sum_qual = 0;
     for (i=0; i<seq_len; i++)
     {
         uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
-        if ( qual>=stats->nquals )
-            error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
-        if ( qual>stats->max_qual )
+        if ( qual>stats->max_qual ) {
             stats->max_qual = qual;
+            if (stats->max_qual >= stats->nquals)
+                error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+        }
 
         quals[ i*stats->nquals+qual ]++;
-        stats->sum_qual += qual;
+        sum_qual += qual;
     }
+    stats->sum_qual += sum_qual;
 
     // Look at the flags and increment appropriate counters (mapped, paired, etc)
     if ( IS_UNMAPPED(bam_line) )
@@ -1368,7 +1371,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
     int ibase,iqual;
     if ( stats->max_len<stats->nbases ) stats->max_len++;
-    if ( stats->max_qual+1<stats->nquals ) stats->max_qual++;
+    if ( stats->max_qual+1<256 ) stats->max_qual++;
     fprintf(to, "# First Fragment Qualities. Use `grep ^FFQ | cut -f 2-` to extract this part.\n");
     fprintf(to, "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n");
     for (ibase=0; ibase<stats->max_len_1st; ibase++)
@@ -1927,7 +1930,7 @@ stats_t* stats_init()
 {
     stats_t *stats = calloc(1,sizeof(stats_t));
     stats->ngc    = 200;
-    stats->nquals = 256;
+    stats->nquals = 261; // only 256 needed, but reduces cache collisions
     stats->nbases = 300;
     stats->rseq_pos     = -1;
     stats->tid = stats->gcd_pos = -1;
