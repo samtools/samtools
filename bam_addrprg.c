@@ -71,6 +71,7 @@ static void cleanup_opts(parsed_opts_t* opts)
     free(opts->rg_id);
     free(opts->output_name);
     free(opts->input_name);
+    free(opts->rg_line);
     if (opts->p.pool) hts_tpool_destroy(opts->p.pool);
     sam_global_args_free(&opts->ga);
     free(opts);
@@ -316,6 +317,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
             cleanup_opts(retval);
             return false;
         }
+        free(retval->rg_line);
         retval->rg_line = tmp;
     }
     retval->input_name = strdup(argv[optind+0]);
