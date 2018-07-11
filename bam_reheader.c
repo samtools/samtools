@@ -49,16 +49,18 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
     ssize_t len;
     uint8_t *buf = NULL;
     SAM_hdr *sh = NULL;
+    bam_hdr_t *tmp;
     if (in->is_write) return -1;
     buf = malloc(BUF_SIZE);
     if (!buf) {
         fprintf(stderr, "Out of memory\n");
         return -1;
     }
-    if (bam_hdr_read(in) == NULL) {
+    if ((tmp = bam_hdr_read(in)) == NULL) {
         fprintf(stderr, "Couldn't read header\n");
         goto fail;
     }
+    bam_hdr_destroy(tmp);
     fp = bgzf_fdopen(fd, "w");
     if (!fp) {
         print_error_errno("reheader", "Couldn't open output file");
