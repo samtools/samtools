@@ -47,36 +47,32 @@ typedef struct
 }
 isize_sparse_data_t;
 
-typedef union {
+// Insert size structure
+typedef struct isize_t
+{
     isize_sparse_data_t *sparse;
     isize_dense_data_t *dense;
-} isize_data_t;
-
-// Insert size structure
-typedef struct
-{
-    isize_data_t data;
 
     // Maximum
-    int (*nitems)(isize_data_t);
+    int (*nitems)(struct isize_t *);
 
     // Fetch the number of inserts of a given size
-    uint64_t (*inward)(isize_data_t, int);
-    uint64_t (*outward)(isize_data_t, int);
-    uint64_t (*other)(isize_data_t, int);
+    uint64_t (*inward)(struct isize_t *, int);
+    uint64_t (*outward)(struct isize_t *, int);
+    uint64_t (*other)(struct isize_t *, int);
 
     // Set the number of inserts of a given size
-    void (*set_inward)(isize_data_t, int, uint64_t);
-    void (*set_outward)(isize_data_t, int, uint64_t);
-    void (*set_other)(isize_data_t, int, uint64_t);
+    void (*set_inward)(struct isize_t *, int, uint64_t);
+    void (*set_outward)(struct isize_t *, int, uint64_t);
+    void (*set_other)(struct isize_t *, int, uint64_t);
 
     // Increment the number of inserts of a given size
-    void (*inc_inward)(isize_data_t, int);
-    void (*inc_outward)(isize_data_t, int);
-    void (*inc_other)(isize_data_t, int);
+    void (*inc_inward)(struct isize_t *, int);
+    void (*inc_outward)(struct isize_t *, int);
+    void (*inc_other)(struct isize_t *, int);
 
     // Free this structure
-    void (*isize_free)(isize_data_t);
+    void (*isize_free)(struct isize_t *);
 }
 isize_t;
 
