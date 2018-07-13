@@ -30,7 +30,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 typedef enum {IN,OUT,OTHER} isize_insert_t;
 
-static int max(int a, int b) {
+static inline int max(int a, int b) {
     if (a < b) {
         return b;
     } else {
@@ -38,7 +38,7 @@ static int max(int a, int b) {
     }
 }
 
-static isize_sparse_record_t * sparse_get_f(isize_t * data, int at) {
+static inline isize_sparse_record_t * sparse_get_f(isize_t * data, int at) {
     isize_sparse_data_t *a = data->sparse;
     khash_t(m32) *h = a->array;
 
@@ -74,8 +74,23 @@ static uint64_t sparse_other_f(isize_t * data, int at) {
         return 0;
     }
 }
+static uint64_t sparse_all_f(isize_t * data, int at,
+                             uint64_t *inward, uint64_t *outward, uint64_t *other) {
+    isize_sparse_record_t* a = sparse_get_f(data, at);
+    if (a != NULL) {
+        if (inward)  *inward  = a->isize_inward;
+        if (outward) *outward = a->isize_outward;
+        if (other)   *other   = a->isize_other;
+        return a->isize_inward + a->isize_outward + a->isize_other;
+    } else {
+        if (inward)  *inward  = 0;
+        if (outward) *outward = 0;
+        if (other)   *other   = 0;
+        return 0;
+    }
+}
 
-static void sparse_set_f(isize_t * data, int at, isize_insert_t field, uint64_t value) {
+static inline void sparse_set_f(isize_t * data, int at, isize_insert_t field, uint64_t value) {
     isize_sparse_data_t *a = data->sparse;
     khash_t(m32) *h = a->array;
 
@@ -114,9 +129,42 @@ static void sparse_set_in_f(isize_t * data, int at, uint64_t value) { sparse_set
 static void sparse_set_out_f(isize_t * data, int at, uint64_t value) { sparse_set_f(data, at, OUT, value); }
 static void sparse_set_other_f(isize_t * data, int at, uint64_t value) { sparse_set_f(data, at, OTHER, value); }
 
-static void sparse_inc_in_f(isize_t * data, int at) { sparse_set_in_f(data, at, sparse_in_f(data, at) + 1); }
-static void sparse_inc_out_f(isize_t * data, int at) { sparse_set_out_f(data, at, sparse_out_f(data, at) + 1); }
-static void sparse_inc_other_f(isize_t * data, int at) { sparse_set_other_f(data, at, sparse_other_f(data, at) + 1); }
+//static void sparse_inc_in_f(isize_t * data, int at) { sparse_set_in_f(data, at, sparse_in_f(data, at) + 1); }
+//static void sparse_inc_out_f(isize_t * data, int at) { sparse_set_out_f(data, at, sparse_out_f(data, at) + 1); }
+//static void sparse_inc_other_f(isize_t * data, int at) { sparse_set_other_f(data, at, sparse_other_f(data, at) + 1); }
+static void sparse_inc_in_f(isize_t * data, int at) {
+    isize_sparse_data_t *a = data->sparse;
+    khash_t(m32) *h = a->array;
+
+    khint_t k = kh_get(m32, h, at);
+    if (k != kh_end(h)) {
+        kh_value(h, k)->isize_inward++;
+    } else {
+        sparse_set_in_f(data, at, sparse_in_f(data, at) + 1);
+    }
+}
+static void sparse_inc_out_f(isize_t * data, int at) {
+    isize_sparse_data_t *a = data->sparse;
+    khash_t(m32) *h = a->array;
+
+    khint_t k = kh_get(m32, h, at);
+    if (k != kh_end(h)) {
+        kh_value(h, k)->isize_outward++;
+    } else {
+        sparse_set_out_f(data, at, sparse_out_f(data, at) + 1);
+    }
+}
+static void sparse_inc_other_f(isize_t * data, int at) {
+    isize_sparse_data_t *a = data->sparse;
+    khash_t(m32) *h = a->array;
+
+    khint_t k = kh_get(m32, h, at);
+    if (k != kh_end(h)) {
+        kh_value(h, k)->isize_other++;
+    } else {
+        sparse_set_other_f(data, at, sparse_other_f(data, at) + 1);
+    }
+}
 
 static void sparse_isize_free(isize_t * data) {
     isize_sparse_data_t *a = data->sparse;
@@ -135,6 +183,15 @@ static int sparse_nitems(isize_t * data) {
 static uint64_t dense_in_f(isize_t * data, int at) { return data->dense->isize_inward[at]; }
 static uint64_t dense_out_f(isize_t * data, int at) { return data->dense->isize_outward[at]; }
 static uint64_t dense_other_f(isize_t * data, int at) { return data->dense->isize_other[at]; }
+static uint64_t dense_all_f(isize_t * data, int at,
+                            uint64_t *inward, uint64_t *outward, uint64_t *other) {
+    if (inward)  *inward  = data->dense->isize_inward[at];
+    if (outward) *outward = data->dense->isize_outward[at];
+    if (other)   *other   = data->dense->isize_other[at];
+    return data->dense->isize_inward[at]
+         + data->dense->isize_outward[at]
+         + data->dense->isize_other[at];
+}
 
 static void dense_set_in_f(isize_t * data, int at, uint64_t value) { data->dense->isize_inward[at] = value; }
 static void dense_set_out_f(isize_t * data, int at, uint64_t value) { data->dense->isize_outward[at] = value; }
@@ -175,6 +232,7 @@ isize_t *init_isize_t(int bound) {
         isize->inward = & sparse_in_f;
         isize->outward = & sparse_out_f;
         isize->other = & sparse_other_f;
+        isize->all = &sparse_all_f;
 
         isize->set_inward = & sparse_set_in_f;
         isize->set_outward = & sparse_set_out_f;
@@ -205,6 +263,7 @@ isize_t *init_isize_t(int bound) {
         isize->inward = & dense_in_f;
         isize->outward = & dense_out_f;
         isize->other = & dense_other_f;
+        isize->all = &dense_all_f;
 
         isize->set_inward = & dense_set_in_f;
         isize->set_outward = & dense_set_out_f;

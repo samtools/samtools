@@ -1283,9 +1283,10 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     {
         // Each pair was counted twice
         uint64_t n_in, n_out, n_oth;
-        is->set_inward (is, isize, n_in  = is->inward (is, isize) * 0.5);
-        is->set_outward(is, isize, n_out = is->outward(is, isize) * 0.5);
-        is->set_other  (is, isize, n_oth = is->other  (is, isize) * 0.5);
+        is->all(is, isize, &n_in, &n_out, &n_oth);
+        is->set_inward (is, isize, n_in  *= 0.5);
+        is->set_outward(is, isize, n_out *= 0.5);
+        is->set_other  (is, isize, n_oth *= 0.5);
 
         nisize_inward  += n_in;
         nisize_outward += n_out;
@@ -1296,10 +1297,10 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     // Compute ibulk to cover e.g. 99% of insert sizes.
     for (isize=0; isize<nitems; isize++)
     {
-        uint64_t num = is->inward(is, isize) +  is->outward(is, isize) + is->other(is, isize);
+        uint64_t num = is->all(is, isize, NULL, NULL, NULL);
         if (num > 0) ibulk = isize + 1;
         bulk += num;
-        avg_isize += isize * (is->inward(is, isize) +  is->outward(is, isize) + is->other(is, isize));
+        avg_isize += isize * num;
 
         if ( bulk/nisize > stats->info->isize_main_bulk )
         {
@@ -1311,7 +1312,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
     avg_isize /= nisize ? nisize : 1;
     for (isize=1; isize<ibulk; isize++)
-        sd_isize += (is->inward(is, isize) + is->outward(is, isize) +is->other(is, isize)) * (isize-avg_isize)*(isize-avg_isize) / (nisize ? nisize : 1);
+        sd_isize += is->all(is, isize, NULL, NULL, NULL) * (isize-avg_isize)*(isize-avg_isize) / (nisize ? nisize : 1);
     sd_isize = sqrt(sd_isize);
 
     fprintf(to, "# This file was produced by samtools stats (%s+htslib-%s) and can be plotted using plot-bamstats\n", samtools_version(), hts_version());
@@ -1463,7 +1464,6 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                     100.*acgtno_count_1st->t/acgt_sum_1st,
                     100.*acgtno_count_1st->n/acgt_sum_1st,
                     100.*acgtno_count_1st->other/acgt_sum_1st);
-
     }
     fprintf(to, "# ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
@@ -1483,12 +1483,11 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
     fprintf(to, "# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
-        long in = (long)(is->inward(is, isize));
-        long out = (long)(is->outward(is, isize));
-        long other = (long)(is->other(is, isize));
+        uint64_t in, out, other, all;
+        all = is->all(is, isize, &in, &out, &other);
         if (!sparse || in + out + other > 0) {
-            fprintf(to, "IS\t%d\t%ld\t%ld\t%ld\t%ld\n", isize,  in+out+other,
-                in , out, other);
+            fprintf(to, "IS\t%d\t%ld\t%ld\t%ld\t%ld\n", isize,
+                    (long)all, (long)in, (long)out, (long)other);
         }
     }
 
