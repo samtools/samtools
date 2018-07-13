@@ -1,0 +1,110 @@
+'\" t
+.TH samtools-markdup 1 "14 August 2018" "samtools-1.9" "Bioinformatics tools"
+.SH NAME
+samtools markdup \- mark duplicate alignments in a coordinate sorted file
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools markdup
+.RB [ -l
+.IR length ]
+.RB [ -r ]
+.RB [ -s ]
+.RB [ -T ]
+.RB [ -S ]
+.I in.algsort.bam out.bam
+
+.SH DESCRIPTION
+.PP
+Mark duplicate alignments from a coordinate sorted file that
+has been run through \fBsamtools fixmate\fR with the \fB-m\fR option.  This program
+relies on the MC and ms tags that fixmate provides.
+
+.SH OPTIONS
+.TP 11
+.BI "-l " INT
+.RI "Expected maximum read length of " INT " bases."
+[300]
+.TP
+.B -r
+Remove duplicate reads.
+.TP
+.B -s
+Print some basic stats.
+.TP
+.BI "-T " PREFIX
+Write temporary files to
+.IB PREFIX . samtools . nnnn . mmmm . tmp
+.TP
+.B -S
+Mark supplementary reads of duplicates as duplicates.
+
+.SH EXAMPLES
+This first command sort can be omitted if the file is already name ordered:
+.EX
+samtools sort -n -o namesort.bam example.bam
+.EE
+
+Add ms and MC tags for markdup to use later:
+.EX
+samtools fixmate -m namesort.bam fixmate.bam
+.EE
+
+Markdup needs position order:
+.EX
+samtools sort -o positionsort.bam fixmate.bam
+.EE
+
+Finally mark duplicates:
+.EX
+samtools markdup positionsort.bam markdup.bam
+.EE
+
+.SH AUTHOR
+.PP
+Written by Andrew Whitwham from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-sort (1),
+.IR samtools-fixmate (1)
+.PP
+Samtools website: <http://www.htslib.org/>

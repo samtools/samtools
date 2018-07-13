@@ -303,7 +303,7 @@ install: $(PROGRAMS) $(MISC_PROGRAMS)
 	$(INSTALL_PROGRAM) $(PROGRAMS) $(DESTDIR)$(bindir)
 	$(INSTALL_PROGRAM) $(MISC_PROGRAMS) $(DESTDIR)$(misc_bindir)
 	$(INSTALL_SCRIPT) $(MISC_SCRIPTS) $(DESTDIR)$(misc_bindir)
-	$(INSTALL_MAN) samtools.1 misc/wgsim.1 $(DESTDIR)$(man1dir)
+	$(INSTALL_MAN) doc/samtools*.1 misc/wgsim.1 $(DESTDIR)$(man1dir)
 
 
 testclean:

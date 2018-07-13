@@ -1,0 +1,154 @@
+'\" t
+.TH samtools-stats 1 "14 August 2018" "samtools-1.9" "Bioinformatics tools"
+.SH NAME
+samtools stats \- produces comprehensive statistics from alignment file
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools stats
+.RI [ options ]
+.IR in.sam | in.bam | in.cram
+.RI [ region ...]
+
+.SH DESCRIPTION
+.PP
+samtools stats collects statistics from BAM files and outputs in a text format.
+The output can be visualized graphically using plot-bamstats.
+
+.SH OPTIONS
+.TP 8
+.BI "-c, --coverage " MIN , MAX , STEP
+Set coverage distribution to the specified range (MIN, MAX, STEP all given as integers)
+[1,1000,1]
+.TP
+.B -d, --remove-dups
+Exclude from statistics reads marked as duplicates
+.TP
+.BI "-f, --required-flag "  STR "|" INT
+Required flag, 0 for unset. See also `samtools flags`
+[0]
+.TP
+.BI "-F, --filtering-flag " STR "|" INT
+Filtering flag, 0 for unset. See also `samtools flags`
+[0]
+.TP
+.BI "--GC-depth " FLOAT
+the size of GC-depth bins (decreasing bin size increases memory requirement)
+[2e4]
+.TP
+.B -h, --help
+This help message
+.TP
+.BI "-i, --insert-size " INT
+Maximum insert size
+[8000]
+.TP
+.BI "-I, --id " STR
+Include only listed read group or sample name
+[]
+.TP
+.BI "-l, --read-length " INT
+Include in the statistics only reads with the given read length
+[-1]
+.TP
+.BI "-m, --most-inserts " FLOAT
+Report only the main part of inserts
+[0.99]
+.TP
+.BI "-P, --split-prefix " STR
+A path or string prefix to prepend to filenames output when creating
+categorised statistics files with
+.BR -S / --split .
+[input filename]
+.TP
+.BI "-q, --trim-quality " INT
+The BWA trimming parameter
+[0]
+.TP
+.BI "-r, --ref-seq " FILE
+Reference sequence (required for GC-depth and mismatches-per-cycle calculation).
+[]
+.TP
+.BI "-S, --split " TAG
+In addition to the complete statistics, also output categorised statistics
+based on the tagged field
+.I TAG
+(e.g., use
+.B --split RG
+to split into read groups).
+
+Categorised statistics are written to files named
+.RI < prefix >_< value >.bamstat,
+where
+.I prefix
+is as given by
+.B --split-prefix
+(or the input filename by default) and
+.I value
+has been encountered as the specified tagged field's value in one or more
+alignment records.
+.TP
+.BI "-t, --target-regions " FILE
+Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.
+[]
+.TP
+.B "-x, --sparse"
+Suppress outputting IS rows where there are no insertions.
+.TP
+.B "-p, --remove-overlaps"
+Remove overlaps of paired-end reads from coverage and base count computations.
+.TP
+.BI "-g, --cov-threshold " INT
+Only bases with coverage above this value will be included in the target percentage computation [0]
+.RE
+
+.SH AUTHOR
+.PP
+Written by Petr Danacek with major modifications by Nicholas Clarke,
+Martin Pollard, Nicholas Clarke, Josh Randall and Valeriu Ohan, all
+from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-flagstat (1),
+.IR samtools-idxstats (1)
+.PP
+Samtools website: <http://www.htslib.org/>
