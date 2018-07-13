@@ -104,6 +104,9 @@ Release a.b
    - Fixed bug in fasta and fastq subcommands where stdout would not be flushed
      correctly if the -0 option was used.
 
+   - Fixed invalid memory access in mpileup and depth on alignment records
+     where the sequence is absent.
+
 Release 1.8 (3rd April 2018)
 ----------------------------
 
