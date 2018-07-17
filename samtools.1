@@ -297,14 +297,22 @@ duplicate sequences.  Without this a sequence that overlaps multiple
 regions specified on the command line will be reported multiple times.
 .TP
 .BI "-r " STR
-Only output alignments in read group
+Output alignments in read group
 .I STR
 [null].
+Note that records with no
+.B RG
+tag will also be output when using this option.
+This behaviour may change in a future release.
 .TP
 .BI "-R " FILE
 Output alignments in read groups listed in
 .I FILE
 [null].
+Note that records with no
+.B RG
+tag will also be output when using this option.
+This behaviour may change in a future release.
 .TP
 .BI "-q " INT
 Skip alignments with MAPQ smaller than
