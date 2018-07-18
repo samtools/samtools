@@ -255,7 +255,8 @@ int main_depth(int argc, char *argv[])
             for (j = 0; j < n_plp[i]; ++j) {
                 const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
                 if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
-                else if (bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
+                else if (p->qpos < p->b->core.l_qseq &&
+                         bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
             }
             printf("\t%d", n_plp[i] - m); // this the depth to output
         }

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools 1 "3 April 2018" "samtools-1.8" "Bioinformatics tools"
+.TH samtools 1 "18 July 2018" "samtools-1.9" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2017 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -65,6 +65,8 @@ samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
 samtools faidx ref.fasta
 .PP
+samtools fqidx ref.fastq
+.PP
 samtools tview aln.sorted.bam ref.fasta
 .PP
 samtools split merged.bam
@@ -75,7 +77,7 @@ samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
 .PP
 samtools fixmate in.namesorted.sam out.bam
 .PP
-samtools mpileup -C50 -gf ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
+samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools flags PAIRED,UNMAP,MUNMAP
 .PP
@@ -295,14 +297,22 @@ duplicate sequences.  Without this a sequence that overlaps multiple
 regions specified on the command line will be reported multiple times.
 .TP
 .BI "-r " STR
-Only output alignments in read group
+Output alignments in read group
 .I STR
 [null].
+Note that records with no
+.B RG
+tag will also be output when using this option.
+This behaviour may change in a future release.
 .TP
 .BI "-R " FILE
 Output alignments in read groups listed in
 .I FILE
 [null].
+Note that records with no
+.B RG
+tag will also be output when using this option.
+This behaviour may change in a future release.
 .TP
 .BI "-q " INT
 Skip alignments with MAPQ smaller than
@@ -609,7 +619,12 @@ samtools idxstats
 .IR in.sam | in.bam | in.cram
 
 Retrieve and print stats in the index file corresponding to the input file.
-Before calling idxstats, the input BAM file must be indexed by samtools index.
+Before calling idxstats, the input BAM file should be indexed by samtools index.
+
+If run on a SAM or CRAM file or an unindexed BAM file, this command
+will still produce the same summary statistics, but does so by reading
+through the entire file.  This is far slower than using the BAM
+indices.
 
 The output is TAB-delimited with each line consisting of reference sequence
 name, sequence length, # mapped reads and # unmapped reads. It is written to
@@ -786,7 +801,8 @@ samtools bedcov
 .IR region.bed " " in1.sam | in1.bam | in1.cram "[...]"
 
 Reports the total read base count (i.e. the sum of per base read depths)
-for each genomic region specified in the supplied BED file.
+for each genomic region specified in the supplied BED file. The regions
+are output as they appear in the BED file and are 0-based.
 Counts for each alignment file supplied are reported in separate columns.
 
 .B Options:
@@ -794,6 +810,9 @@ Counts for each alignment file supplied are reported in separate columns.
 .TP
 .BI "-Q " INT
 .RI "Only count reads with mapping quality greater than " INT
+.TP
+.B  -j
+Do not include deletions (D) and ref skips (N) in bedcov computation.
 .RE
 
 .TP \"-------- depth
@@ -948,6 +967,136 @@ The sequences in the input file should all have different names.
 If they do not, indexing will emit a warning about duplicate sequences and
 retrieval will only produce subsequences from the first sequence with the
 duplicated name.
+
+FASTQ files can be read and indexed by this command.  Without using
+.B --fastq
+any extracted subsequence will be in FASTA format.
+
+.B Options
+.RS
+.TP 8
+.BI "-o, --output " FILE
+Write FASTA to file rather than to stdout.
+.TP
+.BI "-n, --length " INT
+Length of FASTA sequence line.
+[60]
+.TP
+.B -c, --continue
+Continue working if a non-existant region is requested.
+.TP
+.BI "-r, --region-file " FILE
+Read regions from a file. Format is chr:from-to, one per line.
+.TP
+.B -f, --fastq
+Read FASTQ files and output extracted sequences in FASTQ format.  Same as using samtools fqidx.
+.TP
+.B -i, --reverse-complement
+Output the sequence as the reverse complement.
+When this option is used, \*(lq/rc\*(rq will be appended to the sequence names.
+To turn this off or change the string appended, use the
+.B --mark-strand
+option.
+.TP
+.B     --mark-strand TYPE
+Append strand indicator to sequence name.  TYPE can be one of:
+.RS
+.TP
+.B rc
+Append '/rc' when writing the reverse complement.  This is the default.
+.TP
+.B no
+Do not append anything.
+.TP
+.B sign
+Append '(+)' for forward strand or '(-)' for reverse complement.  This matches
+the output of \*(lqbedtools getfasta -s\*(rq.
+.TP
+.B custom,<pos>,<neg>
+Append string <pos> to names when writing the forward strand and <neg> when
+writing the reverse strand.  Spaces are preserved, so it is possible to move
+the indicator into the comment part of the description line by including
+a leading space in the strings <pos> and <neg>.
+.RE
+.TP
+.B -h, --help
+Print help message and exit.
+.RE
+
+.TP \"-------- fqidx
+.B fqidx
+samtools fqidx <ref.fastq> [region1 [...]]
+
+Index reference sequence in the FASTQ format or extract subsequence from
+indexed reference sequence. If no region is specified,
+.B fqidx
+will index the file and create
+.I <ref.fastq>.fai
+on the disk. If regions are specified, the subsequences will be
+retrieved and printed to stdout in the FASTQ format.
+
+The input file can be compressed in the
+.B BGZF
+format.
+
+The sequences in the input file should all have different names.
+If they do not, indexing will emit a warning about duplicate sequences and
+retrieval will only produce subsequences from the first sequence with the
+duplicated name.
+
+.B samtools fqidx
+should only be used on fastq files with a small number of entries.
+Trying to use it on a file containing millions of short sequencing reads
+will produce an index that is almost as big as the original file, and
+searches using the index will be very slow and use a lot of memory.
+
+.B Options
+.RS
+.TP 8
+.BI "-o, --output " FILE
+Write FASTQ to file rather than to stdout.
+.TP
+.BI "-n, --length " INT
+Length of FASTQ sequence line.
+[60]
+.TP
+.B -c, --continue
+Continue working if a non-existant region is requested.
+.TP
+.BI "-r, --region-file " FILE
+Read regions from a file. Format is chr:from-to, one per line.
+.TP
+.B -i, --reverse-complement
+Output the sequence as the reverse complement.
+When this option is used, \*(lq/rc\*(rq will be appended to the sequence names.
+To turn this off or change the string appended, use the
+.B --mark-strand
+option.
+.TP
+.B     --mark-strand TYPE
+Append strand indicator to sequence name.  TYPE can be one of:
+.RS
+.TP
+.B rc
+Append '/rc' when writing the reverse complement.  This is the default.
+.TP
+.B no
+Do not append anything.
+.TP
+.B sign
+Append '(+)' for forward strand or '(-)' for reverse complement.  This matches
+the output of \*(lqbedtools getfasta -s\*(rq.
+.TP
+.B custom,<pos>,<neg>
+Append string <pos> to names when writing the forward strand and <neg> when
+writing the reverse strand.  Spaces are preserved, so it is possible to move
+the indicator into the comment part of the description line by including
+a leading space in the strings <pos> and <neg>.
+.RE
+.TP
+.B -h, --help
+Print help message and exit.
+.RE
 
 .TP \"-------- tview
 .B tview
@@ -1123,7 +1272,7 @@ is selected.
 .TP \"-------- mpileup
 .B mpileup
 samtools mpileup
-.RB [ -EBugp ]
+.RB [ -EB ]
 .RB [ -C
 .IR capQcoef ]
 .RB [ -r
@@ -1140,9 +1289,16 @@ samtools mpileup
 .RI [ in2.bam
 .RI [ ... ]]
 
-Generate VCF, BCF or pileup for one or multiple BAM files. Alignment records
+Generate pileup for one or multiple BAM files. Alignment records
 are grouped by sample (SM) identifiers in @RG header lines. If sample
 identifiers are absent, each input file is regarded as one sample.
+
+Samtools mpileup can still produce VCF and BCF output, but this feature is
+deprecated and will be removed in a future release.  Please use
+.B bcftools mpileup
+for this instead.  (Documentation on the deprecated options has been removed
+from this manual page, but older versions are available online
+at <http://www.htslib.org/doc/>.)
 
 In the pileup format (without
 .BR -u \ or \ -g ),
@@ -1189,10 +1345,10 @@ Do not skip anomalous read pairs in variant calling.
 List of input BAM files, one file per line [null]
 .TP
 .B -B, --no-BAQ
-Disable probabilistic realignment for the computation of base alignment
-quality (BAQ). BAQ is the Phred-scaled probability of a read base being
-misaligned. Applying this option greatly helps to reduce false SNPs
-caused by misalignments.
+Disable base alignment quality (BAQ) computation.
+See
+.B BAQ
+below.
 .TP
 .BI -C,\ --adjust-MQ \ INT
 Coefficient for downgrading mapping quality for reads containing
@@ -1204,16 +1360,20 @@ functionality; if enabled, the recommended value for BWA is 50. [0]
 .BI -d,\ --max-depth \ INT
 At a position, read maximally
 .I INT
-reads per input file. Note that samtools has a minimum value of
-.I 8000/n
-where
-.I n
-is the number of input files given to mpileup.  This means the default
-is highly likely to be increased.  Once above the cross-sample minimum of
-8000 the -d parameter will have an effect. [250]
+reads per input file. Setting this limit reduces the amount of memory and
+time needed to process regions with very high coverage.  Passing zero for this
+option sets it to the highest possible value, effectively removing the depth
+limit. [8000]
+
+Note that up to release 1.8, samtools would enforce a minimum value for
+this option.  This no longer happens and the limit is set exactly as
+specified.
 .TP
 .B -E, --redo-BAQ
-Recalculate BAQ on the fly, ignore existing BQ tags
+Recalculate BAQ on the fly, ignore existing BQ tags.
+See
+.B BAQ
+below.
 .TP
 .BI -f,\ --fasta-ref \ FILE
 The
@@ -1221,6 +1381,11 @@ The
 reference file in the FASTA format. The file can be optionally compressed by
 .BR bgzip .
 [null]
+
+Supplying a reference file will enable base alignment quality calculation
+for all reads aligned to a reference in the file.  See
+.B BAQ
+below.
 .TP
 .BI -G,\ --exclude-RG \ FILE
 Exclude reads from readgroups listed in FILE (one @RG-ID per line)
@@ -1265,14 +1430,14 @@ Disable read-pair overlap detection.
 .B Output Options:
 .TP 10
 .BI "-o, --output " FILE
-Write pileup or VCF/BCF output to
+Write pileup output to
 .IR FILE ,
 rather than the default of standard output.
 
-(The same short option is used for both
-.B --open-prob
-and
-.BR --output .
+(The same short option is used for both the deprecated
+.BR --open-prob
+option and
+.B --output .
 If
 .BR -o 's
 argument contains any non-digit characters other than a leading + or - sign,
@@ -1284,19 +1449,6 @@ entirely numeric filename use
 or
 .BR "--output 123" .)
 .TP
-.B -g,\ --BCF
-Compute genotype likelihoods and output them in the binary call format (BCF).
-As of v1.0, this is BCF2 which is incompatible with the BCF1 format produced
-by previous (0.1.x) versions of samtools.
-.TP
-.B -v,\ --VCF
-Compute genotype likelihoods and output them in the variant call format (VCF).
-Output is bgzip-compressed VCF unless
-.B -u
-option is set.
-.PP
-.B Output Options for mpileup format (without -g or -v):
-.TP 10
 .B -O, --output-BP
 Output base positions on reads.
 .TP
@@ -1315,116 +1467,27 @@ Note that when used in conjunction with a BED file the -a option may
 sometimes operate as if -aa was specified if the reference sequence
 has coverage outside of the region specified in the BED file.
 .PP
-.B Output Options for VCF/BCF format (with -g or -v):
-.TP 10
-.B -D
-Output per-sample read depth [DEPRECATED - use
-.B -t DP
-instead]
-.TP
-.B -S
-Output per-sample Phred-scaled strand bias P-value [DEPRECATED - use
-.B -t SP
-instead]
-.TP
-.BI -t,\ --output-tags \ LIST
-Comma-separated list of FORMAT and INFO tags to output (case-insensitive):
-.B AD
-(Allelic depth, FORMAT),
-.B INFO/AD
-(Total allelic depth, INFO),
-.B ADF
-(Allelic depths on the forward strand, FORMAT),
-.B INFO/ADF
-(Total allelic depths on the forward strand, INFO),
-.B ADR
-(Allelic depths on the reverse strand, FORMAT),
-.B INFO/ADR
-(Total allelic depths on the reverse strand, INFO),
-.B DP
-(Number of high-quality bases, FORMAT),
-.B DV
-(Deprecated in favor of AD; Number of high-quality non-reference bases, FORMAT),
-.B DPR
-(Deprecated in favor of AD; Number of high-quality bases for each observed allele, FORMAT),
-.B INFO/DPR
-(Number of high-quality bases for each observed allele, INFO),
-.B DP4
-(Deprecated in favor of ADF and ADR; Number of high-quality ref-forward, ref-reverse, alt-forward and alt-reverse bases, FORMAT),
-.B SP
-(Phred-scaled strand bias P-value, FORMAT)
-[null]
-.TP
-.B -u,\ --uncompressed
-Generate uncompressed VCF/BCF output, which is preferred for piping.
-.TP
-.B -V
-Output per-sample number of non-reference reads [DEPRECATED - use
-.B -t DV
-instead]
+.B BAQ (Base Alignment Quality)
 .PP
-.B Options for SNP/INDEL Genotype Likelihood Computation (for -g or -v):
-.TP 10
-.BI -e,\ --ext-prob \ INT
-Phred-scaled gap extension sequencing error probability. Reducing
-.I INT
-leads to longer indels. [20]
-.TP
-.BI -F,\ --gap-frac \ FLOAT
-Minimum fraction of gapped reads [0.002]
-.TP
-.BI -h,\ --tandem-qual \ INT
-Coefficient for modeling homopolymer errors. Given an
-.IR l -long
-homopolymer
-run, the sequencing error of an indel of size
-.I s
-is modeled as
-.IR INT * s / l .
-[100]
-.TP
-.B -I, --skip-indels
-Do not perform INDEL calling
-.TP
-.BI -L,\ --max-idepth \ INT
-Skip INDEL calling if the average per-input-file depth is above
-.IR INT .
-[250]
-.TP
-.BI -m,\ --min-ireads \ INT
-Minimum number gapped reads for indel candidates
-.IR INT .
-[1]
-.TP
-.BI -o,\ --open-prob \ INT
-Phred-scaled gap open sequencing error probability. Reducing
-.I INT
-leads to more indel calls. [40]
+BAQ is the Phred-scaled probability of a read base being misaligned.
+It greatly helps to reduce false SNPs caused by misalignments.
+BAQ is calculated using the probabilistic realignment method described
+in the paper \*(lqImproving SNP discovery by base alignment quality\*(rq,
+Heng Li, Bioinformatics, Volume 27, Issue 8
+<https://doi.org/10.1093/bioinformatics/btr076>
 
-(The same short option is used for both
-.B --open-prob
-and
-.BR --output .
-When
-.BR -o 's
-argument contains only an optional + or - sign followed by the digits 0 to 9,
-it is interpreted as
-.BR --open-prob .)
-.TP
-.B -p, --per-sample-mF
-Apply
-.B -m
-and
-.B -F
-thresholds per sample to increase sensitivity of calling.
-By default both options are applied to reads pooled from all samples.
-.TP
-.BI -P,\ --platforms \ STR
-Comma-delimited list of platforms (determined by
-.BR @RG-PL )
-from which indel candidates are obtained. It is recommended to collect
-indel candidates from sequencing technologies that have low indel error
-rate such as ILLUMINA. [all]
+BAQ is turned on when a reference file is supplied using the
+.B -f
+option.  To disable it, use the
+.B -B
+option.
+
+It is possible to store pre-calculated BAQ values in a SAM BQ:Z tag.
+Samtools mpileup will use the precalculated values if it finds them.
+The
+.B -E
+option can be used to make it ignore the contents of the BQ:Z tag and
+force it to recalculate the BAQ scores by making a new alignment.
 .RE
 
 .TP \"-------- flags
@@ -1461,15 +1524,69 @@ samtools fasta
 .I in.bam
 
 Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
-command invoked. The FASTQ files will be automatically compressed if the 
-filenames have a .gz or .bgzf extention.
+command invoked. The files will be automatically compressed if the
+file names have a .gz or .bgzf extension.
+
+The input to this program must be collated by name.
+Use
+.B samtools collate
+or
+.B samtools sort -n
+to ensure this.
+
+For each different QNAME, the input records are categorised according to
+the state of the READ1 and READ2 flag bits.
+The three categories used are:
+
+1 : Only READ1 is set.
+
+2 : Only READ2 is set.
+
+0 : Either both READ1 and READ2 are set; or neither is set.
+
+The exact meaning of these categories depends on the sequencing technology
+used.
+It is expected that ordinary single and paired-end sequencing reads will be
+in categories 1 and 2 (in the case of paired-end reads, one read of the pair
+will be in category 1, the other in category 2).
+Category 0 is essentially a \*(lqcatch-all\*(rq for reads that do not
+fit into a simple paired-end sequencing model.
+
+For each category only one sequence will be written for a given QNAME.
+If more than one record is available for a given QNAME and category,
+the first in input file order that has quality values will be used.
+If none of the candidate records has quality values, then the first in
+input file order will be used instead.
+
+Sequences will be written to standard output unless one of the
+.BR -1 , -2 ", or " -0
+options is used, in which case sequences for that category will be written to
+the specified file.
+
+If a singleton file is specified using the
+.B -s
+option then only paired sequences will be output for categories 1 and 2;
+paired meaning that for a given QNAME there are sequences for both
+category 1
+.B and
+2.
+If there is a sequence for only one of categories 1 or 2 then it will be
+diverted into the specified singletons file.
+This can be used to prepare fastq files for programs that cannot handle
+a mixture of paired and singleton reads.
+
+The
+.B -s
+option only affects category 1 and 2 records.
+The output for category 0 will be the same irrespective of the use of this
+option.
 
 .B OPTIONS:
 .RS
 .TP 8
 .B -n
 By default, either '/1' or '/2' is added to the end of read names
-where the corresponding BAM_READ1 or BAM_READ2 flag is set.
+where the corresponding READ1 or READ2 FLAG bit is set.
 Using
 .B -n
 causes read names to be left as they are.
@@ -1483,23 +1600,32 @@ Use quality values from OQ tags in preference to standard quality string
 if available.
 .TP 8
 .B -s FILE
-Write singleton reads in FASTQ format to FILE instead of outputting them.
+Write singleton reads to FILE.
 .TP 8
 .B -t
 Copy RG, BC and QT tags to the FASTQ header line, if they exist.
 .TP 8
 .B -T TAGLIST
-Specify a comma-separated list of tags to copy to the FASTQ header line, if they exist.
+Specify a comma-separated list of tags to copy to the FASTQ header line, if
+they exist.
 .TP 8
 .B -1 FILE
-Write reads with the BAM_READ1 flag set to FILE instead of outputting them.
+Write reads with the READ1 FLAG set (and READ2 not set) to FILE instead of
+outputting them.
+If the
+.B -s
+option is used, only paired reads will be written to this file.
 .TP 8
 .B -2 FILE
-Write reads with the BAM_READ2 flag set to FILE instead of outputting them.
+Write reads with the READ2 FLAG set (and READ1 not set) to FILE instead of
+outputting them.
+If the
+.B -s
+option is used, only paired reads will be written to this file.
 .TP 8
 .B -0 FILE
-Write reads with both or neither of the BAM_READ1 and BAM_READ2 flags set
-to FILE instead of outputting them.
+Write reads where the READ1 and READ2 FLAG bits set are either both set
+or both unset to FILE instead of outputting them.
 .TP 8
 .BI "-f " INT
 Only output alignments with all bits set in
@@ -1560,6 +1686,53 @@ mean 'read until the separator or end of tag', for example:
 .B n*i*
 ignore the left part of the tag until the separator, then use the second part
 .RE
+
+.B EXAMPLES
+
+Output paired reads to separate files, discarding singletons, supplementary
+and secondary reads.
+The resulting files can be used with, for example, the
+.B bwa
+aligner.
+.EX 4
+samtools fastq -1 paired1.fq -2 paired2.fq -0 /dev/null -s /dev/null -n -F 0x900 in.bam
+.EE
+
+Output paired and singleton reads in a single file, discarding supplementary
+and secondary reads.
+To get all of the reads in a single file, it is necessary to redirect the
+output of samtools fastq.
+The output file is suitable for use with
+.B bwa mem -p
+which understands interleaved files containing a mixture of paired and
+singleton reads.
+.EX 4
+samtools fastq -0 /dev/null -F 0x900 in.bam > all_reads.fq
+.EE
+
+Output paired reads in a single file, discarding supplementary and
+secondary reads.
+Save any singletons in a separate file.
+Append /1 and /2 to read names.
+This format is suitable for use by
+.B NextGenMap
+when using its
+.BR -p " and " -q " options."
+With this aligner, paired reads must be mapped separately to the singletons.
+.EX 4
+samtools fastq -0 /dev/null -s single.fq -N -F 0x900 in.bam > paired.fq
+.EE
+
+.B BUGS
+
+.IP o 2
+The way of specifying output files is far to complicated and easy to get wrong.
+
+.IP o 2
+The default value for the -F option should really be 0x900 so that secondary
+and supplementary reads are automatically excluded.
+The existing default of 0 is retained for reasons of compatibility.
+
 .RE
 
 .TP \"-------- collate
@@ -1586,6 +1759,30 @@ If either the -O or -o option is used, <prefix> is optional.  If <prefix>
 is absent, collate will write the temporary files to a system-dependent
 location (/tmp on UNIX).
 
+Using -f for fast mode will output \fBonly\fR primary alignments that have
+either the READ1 \fBor\fR READ2 flags set (but not both).
+Any other alignment records will be filtered out.
+The collation will only work correctly if there are no more than two reads
+for any given QNAME after filtering.
+
+Fast mode keeps a buffer of alignments in memory so that it can write out
+most pairs as soon as they are found instead of storing them in temporary
+files.
+This allows collate to avoid some work and so finish more quickly compared
+to the standard mode.
+The number of alignments held can be changed using -r, storing more alignments
+uses more memory but increases the number of pairs that can be written early.
+
+While collate normally randomises the ordering of read pairs, fast mode
+does not.
+Position-dependent biases that would normally be broken up can remain in the
+fast collate output.
+It is therefore not a good idea to use fast mode when preparing data for
+programs that expect randomly ordered paired reads.
+For example using fast collate instead of the standard mode may lead to
+significantly different results from aligners that estimate library insert
+sizes on batches of reads.
+
 .B Options:
 .RS
 .TP 8
@@ -1605,6 +1802,13 @@ Compression level.
 .BI "-n " INT
 Number of temporary files to use.
 [64]
+.TP
+.B -f
+Fast mode (primary alignments only).
+.TP
+.BI "-r " INT
+Number of reads to store in memory (for use with -f).
+[10000]
 .RE
 
 .TP \"-------- reheader
@@ -1645,7 +1849,7 @@ samtools cat [-b list] [-h header.sam] [-o out.bam] <in1.bam> <in2.bam> [ ... ]
 Concatenate BAMs or CRAMs. Although this works on either BAM or CRAM,
 all input files must be the same format as each other. The sequence
 dictionary of each input file must be identical, although this command
-does not check this. This command uses a similar trick to 
+does not check this. This command uses a similar trick to
 .B reheader
 which enables fast BAM concatenation.
 
@@ -1933,8 +2137,8 @@ Display the full samtools version number in a machine-readable format.
 .SH GLOBAL OPTIONS
 .PP
 Several long-options are shared between multiple samtools subcommands:
-\fB--input-fmt\fR, \fB--input-fmt-options\fR, \fB--output-fmt\fR,
-\fB--output-fmt-options\fR, and \fB--reference\fR.
+\fB--input-fmt\fR, \fB--input-fmt-option\fR, \fB--output-fmt\fR,
+\fB--output-fmt-option\fR, and \fB--reference\fR.
 The input format is typically auto-detected so specifying the format
 is usually unnecessary and the option is included for completeness.
 Note that not all subcommands have all options.  Consult the subcommand
@@ -1944,7 +2148,7 @@ Format strings recognised are "sam", "bam" and "cram".  They may be
 followed by a comma separated list of options as \fIkey\fR or
 \fIkey\fR=\fIvalue\fR. See below for examples.
 .PP
-The \fBfmt-options\fR arguments accept either a single \fIoption\fR or
+The \fBfmt-option\fR arguments accept either a single \fIoption\fR or
 \fIoption\fR=\fIvalue\fR.  Note that some options only work on some
 file formats and only on read or write streams.  If value is
 unspecified for a boolean option, the value is assumed to be 1.  The
@@ -1952,6 +2156,10 @@ valid options are as follows.
 .RS 0
 .\" General purpose
 .TP 4
+.BI level= INT
+Output only. Specifies the compression level from 1 to 9, or 0 for
+uncompressed.
+.TP
 .BI nthreads= INT
 Specifies the number of threads to use during encoding and/or
 decoding.  For BAM this will be encoding only.  In CRAM the threads
@@ -2187,6 +2395,28 @@ while reads from
 .I 454.bam
 will be attached
 .IR RG:Z:454 .
+
+.IP o 2
+Convert a BAM file to a CRAM with NM and MD tags stored verbatim
+rather than calculating on the fly during CRAM decode, so that mixed
+data sets with MD/NM only on some records, or NM calculated using
+different definitions of mismatch, can be decoded without change.  The
+second command demonstrates how to decode such a file.  The request to
+not decode MD here is turning off auto-generation of both MD and NM;
+it will still emit the MD/NM tags on records that had these stored
+verbatim.
+.EX 2
+samtools view -C --output-fmt-option store_md=1 --output-fmt-option store_nm=1 -o aln.cram aln.bam
+samtools view --input-fmt-option decode_md=0 -o aln.new.bam aln.cram
+.EE
+.IP o 2
+An alternative way of achieving the above is listing multiple options
+after the \fB--output-fmt\fR or \fB-O\fR option.  The commands below
+are equivalent to the two above.
+.EX 2
+samtools view -O cram,store_md=1,store_nm=1 -o aln.cram aln.bam
+samtools view --input-fmt cram,decode_md=0 -o aln.new.bam aln.cram
+.EE
 
 .IP o 2
 Call SNPs and short INDELs:

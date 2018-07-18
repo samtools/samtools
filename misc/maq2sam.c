@@ -1,6 +1,6 @@
 /*  maq2sam.c -- convert MAQ output to SAM.
 
-    Copyright (C) 2008, 2009 Genome Research Ltd.
+    Copyright (C) 2008, 2009, 2018 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -30,7 +30,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <inttypes.h>
 #include <stdlib.h>
 #include <assert.h>
-#include "version.h"
+#include "../version.h"
 
 //#define MAQ_LONGREADS
 

@@ -68,7 +68,7 @@ int main_bedcov(int argc, char *argv[])
     kstream_t *ks;
     hts_idx_t **idx;
     aux_t **aux;
-    int *n_plp, dret, i, n, c, min_mapQ = 0;
+    int *n_plp, dret, i, j, m, n, c, min_mapQ = 0, skip_DN = 0;
     int64_t *cnt;
     const bam_pileup1_t **plp;
     int usage = 0;
@@ -79,9 +79,10 @@ int main_bedcov(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "Q:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:j", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
+        case 'j': skip_DN = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
         case '?': usage = 1; break;
@@ -91,7 +92,8 @@ int main_bedcov(int argc, char *argv[])
     if (usage || optind + 2 > argc) {
         fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...]\n\n");
         fprintf(stderr, "Options:\n");
-        fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
+        fprintf(stderr, "      -Q <int>            mapping quality threshold [0]\n");
+        fprintf(stderr, "      -j                  do not include deletions (D) and ref skips (N) in bedcov computation\n");
         sam_global_opt_help(stderr, "-.--.-");
         return 1;
     }
@@ -155,8 +157,16 @@ int main_bedcov(int argc, char *argv[])
         bam_mplp_set_maxcnt(mplp, 64000);
         memset(cnt, 0, 8 * n);
         while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0)
-            if (pos >= beg && pos < end)
-                for (i = 0; i < n; ++i) cnt[i] += n_plp[i];
+            if (pos >= beg && pos < end) {
+                for (i = 0, m = 0; i < n; ++i) {
+                    if (skip_DN)
+                        for (j = 0; j < n_plp[i]; ++j) {
+                            const bam_pileup1_t *pi = plp[i] + j;
+                            if (pi->is_del || pi->is_refskip) ++m;
+                        }
+                    cnt[i] += n_plp[i] - m;
+                }
+            }
         for (i = 0; i < n; ++i) {
             kputc('\t', &str);
             kputl(cnt[i], &str);

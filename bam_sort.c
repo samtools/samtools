@@ -38,7 +38,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <getopt.h>
 #include <assert.h>
 #include <pthread.h>
-#include "htslib/bgzf.h"
 #include "htslib/ksort.h"
 #include "htslib/hts_os.h"
 #include "htslib/khash.h"
@@ -49,11 +48,15 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 
 
-// Struct which contains the a record, and the pointer to the sort tag (if any)
-// Used to speed up sort-by-tag.
+// Struct which contains the a record, and the pointer to the sort tag (if any) or
+// a combined ref / position / strand.
+// Used to speed up tag and position sorts.
 typedef struct bam1_tag {
     bam1_t *bam_record;
-    const uint8_t *tag;
+    union {
+        const uint8_t *tag;
+        uint64_t pos;
+    } u;
 } bam1_tag;
 
 /* Minimum memory required in megabytes before sort will attempt to run. This
@@ -1363,7 +1366,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         int res;
         h->i = i;
         h->entry.bam_record = bam_init1();
-        h->entry.tag = NULL;
+        h->entry.u.tag = NULL;
         if (!h->entry.bam_record) goto mem_fail;
         res = iter[i] ? sam_itr_next(fp[i], iter[i], h->entry.bam_record) : sam_read1(fp[i], hdr[i], h->entry.bam_record);
         if (res >= 0) {
@@ -1372,16 +1375,16 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
             h->rev = bam_is_rev(h->entry.bam_record);
             h->idx = idx++;
             if (g_is_by_tag) {
-                h->entry.tag = bam_aux_get(h->entry.bam_record, g_sort_tag);
+                h->entry.u.tag = bam_aux_get(h->entry.bam_record, g_sort_tag);
             } else {
-                h->entry.tag = NULL;
+                h->entry.u.tag = NULL;
             }
         }
         else if (res == -1 && (!iter[i] || iter[i]->finished)) {
             h->pos = HEAP_EMPTY;
             bam_destroy1(h->entry.bam_record);
             h->entry.bam_record = NULL;
-            h->entry.tag = NULL;
+            h->entry.u.tag = NULL;
         } else {
             print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
             goto fail;
@@ -1420,15 +1423,15 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
             heap->rev = bam_is_rev(b);
             heap->idx = idx++;
             if (g_is_by_tag) {
-                heap->entry.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
+                heap->entry.u.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
             } else {
-                heap->entry.tag = NULL;
+                heap->entry.u.tag = NULL;
             }
         } else if (j == -1 && (!iter[heap->i] || iter[heap->i]->finished)) {
             heap->pos = HEAP_EMPTY;
             bam_destroy1(heap->entry.bam_record);
             heap->entry.bam_record = NULL;
-            heap->entry.tag = NULL;
+            heap->entry.u.tag = NULL;
         } else {
             print_error(cmd, "\"%s\" is truncated", fn[heap->i]);
             goto fail;
@@ -1657,15 +1660,15 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
         heap->rev = bam_is_rev(heap->entry.bam_record);
         heap->idx = (*idx)++;
         if (g_is_by_tag) {
-            heap->entry.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
+            heap->entry.u.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
         } else {
-            heap->entry.tag = NULL;
+            heap->entry.u.tag = NULL;
         }
     } else if (res == -1) {
         heap->pos = HEAP_EMPTY;
         if (i < nfiles) bam_destroy1(heap->entry.bam_record);
         heap->entry.bam_record = NULL;
-        heap->entry.tag = NULL;
+        heap->entry.u.tag = NULL;
     } else {
         return -1;
     }
@@ -1720,7 +1723,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
 
         // Get a read into the heap
         h->i = i;
-        h->entry.tag = NULL;
+        h->entry.u.tag = NULL;
         if (i < n) {
             h->entry.bam_record = bam_init1();
             if (!h->entry.bam_record) goto mem_fail;
@@ -1738,7 +1741,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
         return -1;
     }
 
-    hts_set_threads(fpout, n_threads);
+    if (n_threads > 1) hts_set_threads(fpout, n_threads);
 
     if (sam_hdr_write(fpout, hout) != 0) {
         print_error_errno(cmd, "failed to write header to \"%s\"", out);
@@ -1838,8 +1841,8 @@ uint8_t normalize_type(const uint8_t* aux) {
 // equal to or greater than b, respectively.
 static inline int bam1_cmp_by_tag(const bam1_tag a, const bam1_tag b)
 {
-    const uint8_t* aux_a = a.tag;
-    const uint8_t* aux_b = b.tag;
+    const uint8_t* aux_a = a.u.tag;
+    const uint8_t* aux_b = b.u.tag;
 
     if (aux_a == NULL && aux_b != NULL) {
         return -1;
@@ -1936,12 +1939,76 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
     return -1;
 }
 
+#define NUMBASE 256
+#define STEP 8
+
+static int ks_radixsort(size_t n, bam1_tag *buf, const bam_hdr_t *h)
+{
+    int curr = 0, ret = -1;
+    ssize_t i;
+    bam1_tag *buf_ar2[2], *bam_a, *bam_b;
+    uint64_t max_pos = 0, max_digit = 0, shift = 0;
+
+    for (i = 0; i < n; i++) {
+        bam1_t *b = buf[i].bam_record;
+        int32_t tid = b->core.tid == -1 ? h->n_targets : b->core.tid;
+        buf[i].u.pos = (uint64_t)tid<<32 | (b->core.pos+1)<<1 | bam_is_rev(b);
+        if (max_pos < buf[i].u.pos)
+            max_pos = buf[i].u.pos;
+    }
+
+    while (max_pos) {
+        ++max_digit;
+        max_pos = max_pos >> 1;
+    }
+
+    buf_ar2[0] = buf;
+    buf_ar2[1] = (bam1_tag *)malloc(sizeof(bam1_tag) * n);
+    if (buf_ar2[1] == NULL) {
+        print_error("sort", "couldn't allocate memory for temporary buf");
+        goto err;
+    }
+
+    while (shift < max_digit){
+        size_t remainders[NUMBASE] = { 0 };
+        bam_a = buf_ar2[curr]; bam_b = buf_ar2[1-curr];
+        for (i = 0; i < n; ++i)
+            remainders[(bam_a[i].u.pos >> shift) % NUMBASE]++;
+        for (i = 1; i < NUMBASE; ++i)
+            remainders[i] += remainders[i - 1];
+        for (i = n - 1; i >= 0; i--) {
+            size_t j = --remainders[(bam_a[i].u.pos >> shift) % NUMBASE];
+            bam_b[j] = bam_a[i];
+        }
+        shift += STEP;
+        curr = 1 - curr;
+    }
+    if (curr == 1) {
+        bam1_tag *end = buf + n;
+        bam_a = buf_ar2[0]; bam_b = buf_ar2[1];
+        while (bam_a < end) *bam_a++ = *bam_b++;
+    }
+
+    ret = 0;
+err:
+    free(buf_ar2[1]);
+    return ret;
+}
+
 static void *worker(void *data)
 {
     worker_t *w = (worker_t*)data;
     char *name;
     w->error = 0;
-    ks_mergesort(sort, w->buf_len, w->buf, 0);
+
+    if (!g_is_by_qname && !g_is_by_tag) {
+        if (ks_radixsort(w->buf_len, w->buf, w->h) < 0) {
+            w->error = errno;
+            return NULL;
+        }
+    } else {
+        ks_mergesort(sort, w->buf_len, w->buf, 0);
+    }
 
     if (w->no_save)
         return 0;
@@ -2148,11 +2215,12 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
             mem_full = 1;
         }
 
-        // Pull out the pointer to the sort tag if applicable
+        // Pull out the value of the position
+        // or the pointer to the sort tag if applicable
         if (g_is_by_tag) {
-            buf[k].tag = bam_aux_get(buf[k].bam_record, g_sort_tag);
+            buf[k].u.tag = bam_aux_get(buf[k].bam_record, g_sort_tag);
         } else {
-            buf[k].tag = NULL;
+            buf[k].u.tag = NULL;
         }
         ++k;
 
@@ -2176,7 +2244,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         in_mem = calloc(n_threads > 0 ? n_threads : 1, sizeof(in_mem[0]));
         if (!in_mem) goto err;
         num_in_mem = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                   in_mem);
+                                 in_mem);
         if (num_in_mem < 0) goto err;
     } else {
         num_in_mem = 0;
@@ -2184,7 +2252,6 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
 
     // write the final output
     if (n_files == 0 && num_in_mem < 2) { // a single block
-        ks_mergesort(sort, k, buf, 0);
         if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt) != 0) {
             print_error_errno("sort", "failed to create \"%s\"", fnout);
             goto err;

@@ -244,7 +244,6 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
-    int is_long_help = 0;
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
@@ -279,8 +278,17 @@ int main_samview(int argc, char *argv[])
     /* parse command-line options */
     strcpy(out_mode, "w");
     strcpy(out_un_mode, "w");
+    if (argc == 1 && isatty(STDIN_FILENO))
+        return usage(stdout, EXIT_SUCCESS, 0);
+
+    // Suppress complaints about '?' being an unrecognised option.  Without
+    // this we have to put '?' in the options list, which makes it hard to
+    // tell a bad long option from the use of '-?' (both return '?' and
+    // set optopt to '\0').
+    opterr = 0;
+
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:?T:R:L:s:@:m:x:U:M",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:M",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -290,7 +298,18 @@ int main_samview(int argc, char *argv[])
                 srand(settings.subsam_seed);
                 settings.subsam_seed = rand();
             }
-            settings.subsam_frac = strtod(q, &q);
+ 
+            if (q && *q == '.') {
+                settings.subsam_frac = strtod(q, &q);
+                if (*q) ret = 1;
+            } else {
+                ret = 1;
+            }
+
+            if (ret == 1) {
+                print_error("view", "Incorrect sampling argument \"%s\"", optarg);
+                goto view_end;
+            }
             break;
         case 'm': settings.min_qlen = atoi(optarg); break;
         case 'c': is_count = 1; break;
@@ -332,13 +351,29 @@ int main_samview(int argc, char *argv[])
         //case 'x': out_format = "x"; break;
         //case 'X': out_format = "X"; break;
                  */
-        case '?': is_long_help = 1; break;
+        case '?':
+            if (optopt == '?') {  // '-?' appeared on command line
+                return usage(stdout, EXIT_SUCCESS, 1);
+            } else {
+                if (optopt) { // Bad short option
+                    print_error("view", "invalid option -- '%c'", optopt);
+                } else { // Bad long option
+                    // Do our best.  There is no good solution to finding
+                    // out what the bad option was.
+                    // See, e.g. https://stackoverflow.com/questions/2723888/where-does-getopt-long-store-an-unrecognized-option
+                    if (optind > 0 && strncmp(argv[optind - 1], "--", 2) == 0) {
+                        print_error("view", "unrecognised option '%s'",
+                                    argv[optind - 1]);
+                    }
+                }
+                return usage(stderr, EXIT_FAILURE, 0);
+            }
         case 'B': settings.remove_B = 1; break;
         case 'x':
             {
                 if (strlen(optarg) != 2) {
                     fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
-                    return usage(stderr, EXIT_FAILURE, is_long_help);
+                    return usage(stderr, EXIT_FAILURE, 0);
                 }
                 settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
                 settings.remove_aux[settings.remove_aux_len-1] = optarg;
@@ -347,7 +382,7 @@ int main_samview(int argc, char *argv[])
         case 'M': settings.multi_region = 1; break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
-                return usage(stderr, EXIT_FAILURE, is_long_help);
+                return usage(stderr, EXIT_FAILURE, 0);
             break;
         }
     }
@@ -367,7 +402,10 @@ int main_samview(int argc, char *argv[])
         strcat(out_mode, tmp);
         strcat(out_un_mode, tmp);
     }
-    if (argc == optind && isatty(STDIN_FILENO)) return usage(stdout, EXIT_SUCCESS, is_long_help); // potential memory leak...
+    if (argc == optind && isatty(STDIN_FILENO)) {
+        print_error("view", "No input provided or missing option argument.");
+        return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
+    }
 
     fn_in = (optind < argc)? argv[optind] : "-";
     // generate the fn_list if necessary
@@ -472,22 +510,13 @@ int main_samview(int argc, char *argv[])
             settings.bed = bed_hash_regions(settings.bed, argv, optind+1, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
             if (!filter_op)
                 filter_state = FILTERED;
+        } else {
+            bed_unify(settings.bed);
         }
 
         bam1_t *b = bam_init1();
         if (settings.bed == NULL) { // index is unavailable or no regions have been specified
-            while ((result = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
-                if (!process_aln(header, b, &settings)) {
-                    if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
-                    count++;
-                } else {
-                    if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
-                }
-            }
-            if (result < -1) {
-                fprintf(stderr, "[main_samview] truncated file.\n");
-                ret = 1;
-            }
+            fprintf(stderr, "[main_samview] no regions or BED file have been provided. Aborting.\n");
         } else {
             hts_idx_t *idx = sam_index_load(in, fn_in); // load index
             if (idx != NULL) {
@@ -729,9 +758,11 @@ static void bam2fq_usage(FILE *to, const char *command)
 "Usage: samtools %s [options...] <in.bam>\n", command);
     fprintf(to,
 "Options:\n"
-"  -0 FILE              write paired reads flagged both or neither READ1 and READ2 to FILE\n"
-"  -1 FILE              write paired reads flagged READ1 to FILE\n"
-"  -2 FILE              write paired reads flagged READ2 to FILE\n"
+"  -0 FILE              write reads designated READ_OTHER to FILE\n"
+"  -1 FILE              write reads designated READ1 to FILE\n"
+"  -2 FILE              write reads designated READ2 to FILE\n"
+"                       note: if a singleton file is specified with -s, only\n"
+"                       paired reads will be written to the -1 and -2 files.\n"
 "  -f INT               only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
 "  -F INT               only include reads with none of the FLAGS in INT present [0]\n"       //   F&x == 0
 "  -G INT               only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
@@ -740,7 +771,7 @@ static void bam2fq_usage(FILE *to, const char *command)
     if (fq) fprintf(to,
 "  -O                   output quality in the OQ tag if present\n");
     fprintf(to,
-"  -s FILE              write singleton reads to FILE [assume single-end]\n"
+"  -s FILE              write singleton reads designated READ1 or READ2 to FILE\n"
 "  -t                   copy RG, BC and QT tags to the %s header line\n",
     fq ? "FASTQ" : "FASTA");
     fprintf(to,
@@ -757,14 +788,30 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  --index-format STR   How to parse barcode and quality tags\n\n");
     sam_global_opt_help(to, "-.--.@");
     fprintf(to,
-"   \n"
-"   The index-format string describes how to parse the barcode and quality tags, for example:\n"
+"\n"
+"Reads are designated READ1 if FLAG READ1 is set and READ2 is not set.\n"
+"Reads are designated READ2 if FLAG READ1 is not set and READ2 is set.\n"
+"Reads are designated READ_OTHER if FLAGs READ1 and READ2 are either both set\n"
+"or both unset.\n"
+"Run 'samtools flags' for more information on flag codes and meanings.\n");
+    fprintf(to,
+"\n"
+"The index-format string describes how to parse the barcode and quality tags, for example:\n"
 "   i14i8       the first 14 characters are index 1, the next 8 characters are index 2\n"
 "   n8i14       ignore the first 8 characters, and use the next 14 characters for index 1\n"
-"   If the tag contains a separator, then the numeric part can be replaced with '*' to mean\n"
-"   'read until the separator or end of tag', for example:\n"
+"If the tag contains a separator, then the numeric part can be replaced with '*' to mean\n"
+"'read until the separator or end of tag', for example:\n"
 "   n*i*        ignore the left part of the tag until the separator, then use the second part\n"
 "               of the tag as index 1\n");
+    fprintf(to,
+"\n"
+"Examples:\n"
+" To get just the paired reads in separate files, use:\n"
+"   samtools %s -1 paired1.%s -2 paired2.%s -0 /dev/null -s /dev/null -n -F 0x900 in.bam\n"
+"\n To get all non-supplementary/secondary reads in a single file, redirect the output:\n"
+"   samtools %s -F 0x900 in.bam > all_reads.%s\n",
+            command, fq ? "fq" : "fa", fq ? "fq" : "fa",
+            command, fq ? "fq" : "fa");
 }
 
 typedef enum { READ_UNKNOWN = 0, READ_1 = 1, READ_2 = 2 } readpart;
@@ -1344,7 +1391,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     state->filetype = opts->filetype;
     state->def_qual = opts->def_qual;
     state->index_sequence = NULL;
-    state->hstdout = bgzf_dopen(fileno(stdout), "wu");
+    state->hstdout = NULL;
     state->compression_level = opts->compression_level;
 
     state->taglist = kl_init(ktaglist);
@@ -1410,6 +1457,14 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
                 return false;
             }
         } else {
+            if (!state->hstdout) {
+                state->hstdout = bgzf_dopen(fileno(stdout), "wu");
+                if (!state->hstdout) {
+                    print_error_errno("bam2fq", "Cannot open STDOUT");
+                    free(state);
+                    return false;
+                }
+            }
             state->fpr[i] = state->hstdout;
         }
     }
@@ -1444,10 +1499,14 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
     if (state->fpse && bgzf_close(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); valid = false; }
     int i;
     for (i = 0; i < 3; ++i) {
-        if (state->fpr[i] == state->hstdout) {
-            if (i==0 && bgzf_close(state->fpr[i])) { print_error_errno("bam2fq", "Error closing STDOUT"); valid = false; }
-        } else {
+        if (state->fpr[i] != state->hstdout) {
             if (bgzf_close(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); valid = false; }
+        }
+    }
+    if (state->hstdout) {
+        if (bgzf_close(state->hstdout)) {
+            print_error_errno("bam2fq", "Error closing STDOUT");
+            valid = false;
         }
     }
     for (i = 0; i < 2; i++) {

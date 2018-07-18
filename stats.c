@@ -63,6 +63,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bedidx.h"
 
 #define BWA_MIN_RDLEN 35
+#define DEFAULT_CHUNK_NO 8
+#define DEFAULT_PAIR_MAX 10000
 // From the spec
 // If 0x4 is set, no assumptions can be made about RNAME, POS, CIGAR, MAPQ, bits 0x2, 0x10, 0x100 and 0x800, and the bit 0x20 of the previous read in the template.
 #define IS_PAIRED_AND_MAPPED(bam) (((bam)->core.flag&BAM_FPAIRED) && !((bam)->core.flag&BAM_FUNMAP) && !((bam)->core.flag&BAM_FMUNMAP))
@@ -135,6 +137,8 @@ typedef struct
     // Misc
     char *split_tag;      // Tag on which to perform stats splitting
     char *split_prefix;   // Path or string prefix for filenames created when splitting
+    int remove_overlaps;
+    int cov_threshold;
 }
 stats_info_t;
 
@@ -150,19 +154,24 @@ typedef struct
     // Arrays for the histogram data
     uint64_t *quals_1st, *quals_2nd;
     uint64_t *gc_1st, *gc_2nd;
-    acgtno_count_t *acgtno_cycles;
-    uint64_t *read_lengths;
+    acgtno_count_t *acgtno_cycles_1st;
+    acgtno_count_t *acgtno_cycles_2nd;
+    uint64_t *read_lengths, *read_lengths_1st, *read_lengths_2nd;
     uint64_t *insertions, *deletions;
     uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
     isize_t *isize;
 
     // The extremes encountered
     int max_len;            // Maximum read length
+    int max_len_1st;        // Maximum read length for forward reads
+    int max_len_2nd;        // Maximum read length for reverse reads
     int max_qual;           // Maximum quality
     int is_sorted;
 
     // Summary numbers
     uint64_t total_len;
+    uint64_t total_len_1st;
+    uint64_t total_len_2nd;
     uint64_t total_len_dup;
     uint64_t nreads_1st;
     uint64_t nreads_2nd;
@@ -203,7 +212,7 @@ typedef struct
     uint64_t *mpc_buf;              // Mismatches per cycle
 
     // Target regions
-    int nregions, reg_from,reg_to;
+    int nregions, reg_from, reg_to;
     regions_t *regions;
 
     // Auxiliary data
@@ -217,9 +226,21 @@ typedef struct
     pos_t *chunks;
     uint32_t nchunks;
 
+    uint32_t pair_count;          // Number of active pairs in the pairing hash table
+    uint32_t target_count;        // Number of bases covered by the target file
+    uint32_t last_pair_tid;
+    uint32_t last_read_flush;
 }
 stats_t;
 KHASH_MAP_INIT_STR(c2stats, stats_t*)
+
+typedef struct {
+    uint32_t first;     // 1 - first read, 2 - second read
+    uint32_t n, m;      // number of chunks, allocated chunks
+    pos_t *chunks;      // chunk array of size m
+} pair_t;
+KHASH_MAP_INIT_STR(qn2pair, pair_t*)
+
 
 static void error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
@@ -579,15 +600,30 @@ void realloc_buffers(stats_t *stats, int seq_len)
         memset(stats->mpc_buf + stats->nbases*stats->nquals, 0, (n-stats->nbases)*stats->nquals*sizeof(uint64_t));
     }
 
-    stats->acgtno_cycles = realloc(stats->acgtno_cycles, n*sizeof(acgtno_count_t));
-    if ( !stats->acgtno_cycles )
+    stats->acgtno_cycles_1st = realloc(stats->acgtno_cycles_1st, n*sizeof(acgtno_count_t));
+    if ( !stats->acgtno_cycles_1st )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
-    memset(stats->acgtno_cycles + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
+    memset(stats->acgtno_cycles_1st + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
+
+    stats->acgtno_cycles_2nd = realloc(stats->acgtno_cycles_2nd, n*sizeof(acgtno_count_t));
+    if ( !stats->acgtno_cycles_2nd )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
+    memset(stats->acgtno_cycles_2nd + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
 
     stats->read_lengths = realloc(stats->read_lengths, n*sizeof(uint64_t));
     if ( !stats->read_lengths )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
     memset(stats->read_lengths + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
+
+    stats->read_lengths_1st = realloc(stats->read_lengths_1st, n*sizeof(uint64_t));
+    if ( !stats->read_lengths_1st )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
+    memset(stats->read_lengths_1st + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
+
+    stats->read_lengths_2nd = realloc(stats->read_lengths_2nd, n*sizeof(uint64_t));
+    if ( !stats->read_lengths_2nd )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
+    memset(stats->read_lengths_2nd + stats->nbases, 0, (n-stats->nbases)*sizeof(uint64_t));
 
     stats->insertions = realloc(stats->insertions, n*sizeof(uint64_t));
     if ( !stats->insertions )
@@ -664,7 +700,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
     uint8_t *seq  = bam_get_seq(bam_line);
-    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line);
+    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line), is_first = IS_READ1(bam_line);
     for (i=0; i<seq_len; i++)
     {
         // Read cycle for current index
@@ -675,28 +711,28 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
         //      =ACMGRSVTWYHKDBN
         switch (bam_seqi(seq, i)) {
         case 1:
-            stats->acgtno_cycles[ read_cycle ].a++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].a++ : stats->acgtno_cycles_2nd[ read_cycle ].a++;
             break;
         case 2:
-            stats->acgtno_cycles[ read_cycle ].c++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].c++ : stats->acgtno_cycles_2nd[ read_cycle ].c++;
             gc_count++;
             break;
         case 4:
-            stats->acgtno_cycles[ read_cycle ].g++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].g++ : stats->acgtno_cycles_2nd[ read_cycle ].g++;
             gc_count++;
             break;
         case 8:
-            stats->acgtno_cycles[ read_cycle ].t++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].t++ : stats->acgtno_cycles_2nd[ read_cycle ].t++;
             break;
         case 15:
-            stats->acgtno_cycles[ read_cycle ].n++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].n++ : stats->acgtno_cycles_2nd[ read_cycle ].n++;
             break;
         default:
             /*
              * count "=" sequences in "other" along
              * with MRSVWYHKDB ambiguity codes
              */
-            stats->acgtno_cycles[ read_cycle ].other++;
+            is_first ? stats->acgtno_cycles_1st[ read_cycle ].other++ : stats->acgtno_cycles_2nd[ read_cycle ].other++;
             break;
         }
     }
@@ -709,10 +745,11 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     //  fill GC histogram
     uint64_t *quals;
     uint8_t *bam_quals = bam_get_qual(bam_line);
-    if ( bam_line->core.flag&BAM_FREAD2 )
+    if ( IS_READ2(bam_line) )
     {
         quals  = stats->quals_2nd;
         stats->nreads_2nd++;
+        stats->total_len_2nd += seq_len;
         for (i=gc_idx_min; i<gc_idx_max; i++)
             stats->gc_2nd[i]++;
     }
@@ -720,6 +757,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     {
         quals = stats->quals_1st;
         stats->nreads_1st++;
+        stats->total_len_1st += seq_len;
         for (i=gc_idx_min; i<gc_idx_max; i++)
             stats->gc_1st[i]++;
     }
@@ -765,7 +803,160 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     *gc_count_out = gc_count;
 }
 
-void collect_stats(bam1_t *bam_line, stats_t *stats)
+static int cleanup_overlaps(khash_t(qn2pair) *read_pairs, int max) {
+    if ( !read_pairs )
+        return 0;
+
+    int count = 0;
+    khint_t k;
+    for (k = kh_begin(read_pairs); k < kh_end(read_pairs); k++) {
+        if ( kh_exist(read_pairs, k) ) {
+            char *key = (char *)kh_key(read_pairs, k);
+            pair_t *val = kh_val(read_pairs, k);
+            if ( val && val->chunks ) {
+                if ( val->chunks[val->n-1].to < max ) {
+                    free(val->chunks);
+                    free(val);
+                    free(key);
+                    kh_del(qn2pair, read_pairs, k);
+                    count++;
+                }
+            } else {
+                free(key);
+                kh_del(qn2pair, read_pairs, k);
+                count++;
+            }
+        }
+    }
+    if ( max == INT_MAX )
+        kh_destroy(qn2pair, read_pairs);
+
+    return count;
+}
+
+static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stats_t *stats, int pmin, int pmax) {
+    if ( !bam_line || !read_pairs || !stats )
+        return;
+
+    uint32_t first = (IS_READ1(bam_line) > 0 ? 1 : 0) + (IS_READ2(bam_line) > 0 ? 2 : 0) ;
+    if ( !(bam_line->core.flag & BAM_FPAIRED) ||
+         (bam_line->core.flag & BAM_FMUNMAP) ||
+         (abs(bam_line->core.isize) >= 2*bam_line->core.l_qseq) ||
+         (first != 1 && first != 2) ) {
+        if ( pmin >= 0 )
+            round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+        return;
+    }
+
+    char *qname = bam_get_qname(bam_line);
+    if ( !qname ) {
+        fprintf(stderr, "Error retrieving qname for line starting at pos %d\n", bam_line->core.pos);
+        return;
+    }
+
+    khint_t k = kh_get(qn2pair, read_pairs, qname);
+    if ( k == kh_end(read_pairs) ) { //first chunk from this template
+        if ( pmin == -1 )
+            return;
+
+        int ret;
+        char *s = strdup(qname);
+        if ( !s ) {
+            fprintf(stderr, "Error allocating memory\n");
+            return;
+        }
+
+        k = kh_put(qn2pair, read_pairs, s, &ret);
+        if ( -1 == ret ) {
+            fprintf(stderr, "Error inserting read '%s' in pair hash table\n", qname);
+            return;
+        }
+
+        pair_t *pc = calloc(1, sizeof(pair_t));
+        if ( !pc ) {
+            fprintf(stderr, "Error allocating memory\n");
+            return;
+        }
+
+        pc->m = DEFAULT_CHUNK_NO;
+        pc->chunks = calloc(pc->m, sizeof(pos_t));
+        if ( !pc->chunks ) {
+            fprintf(stderr, "Error allocating memory\n");
+            return;
+        }
+
+        pc->chunks[0].from = pmin;
+        pc->chunks[0].to = pmax;
+        pc->n = 1;
+        pc->first = first;
+
+        kh_val(read_pairs, k) = pc;
+        stats->pair_count++;
+    } else { //template already present
+        pair_t *pc = kh_val(read_pairs, k);
+        if ( !pc ) {
+            fprintf(stderr, "Invalid hash table entry\n");
+            return;
+        }
+
+        if ( first == pc->first ) { //chunk from an existing line
+            if ( pmin == -1 )
+                return;
+
+            if ( pc->n == pc->m ) {
+                pos_t *tmp = realloc(pc->chunks, (pc->m<<1)*sizeof(pos_t));
+                if ( !tmp ) {
+                    fprintf(stderr, "Error allocating memory\n");
+                    return;
+                }
+                pc->chunks = tmp;
+                pc->m<<=1;
+            }
+
+            pc->chunks[pc->n].from = pmin;
+            pc->chunks[pc->n].to = pmax;
+            pc->n++;
+        } else { //the other line, check for overlapping
+            if ( pmin == -1 && kh_exist(read_pairs, k) ) { //job done, delete entry
+                char *key = (char *)kh_key(read_pairs, k);
+                pair_t *val = kh_val(read_pairs, k);
+                if ( val) {
+                    free(val->chunks);
+                    free(val);
+                }
+                free(key);
+                kh_del(qn2pair, read_pairs, k);
+                stats->pair_count--;
+                return;
+            }
+
+            int i;
+            for (i=0; i<pc->n; i++) {
+                if ( pmin >= pc->chunks[i].to )
+                    continue;
+
+                if ( pmax <= pc->chunks[i].from ) //no overlap
+                    break;
+
+                if ( pmin < pc->chunks[i].from ) { //overlap at the beginning
+                    round_buffer_insert_read(&(stats->cov_rbuf), pmin, pc->chunks[i].from-1);
+                    pmin = pc->chunks[i].from;
+                }
+
+                if ( pmax <= pc->chunks[i].to ) { //completely contained
+                    stats->nbases_mapped_cigar -= (pmax - pmin);
+                    return;
+                } else {                           //overlap at the end
+                    stats->nbases_mapped_cigar -= (pc->chunks[i].to - pmin);
+                    pmin = pc->chunks[i].to;
+                }
+            }
+        }
+    }
+    round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+}
+
+void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pairs)
 {
     if ( stats->rg_hash )
     {
@@ -813,6 +1004,11 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     // Update max_len observed
     if ( stats->max_len<read_len )
         stats->max_len = read_len;
+    if ( IS_READ1(bam_line) && stats->max_len_1st < read_len )
+        stats->max_len_1st = read_len;
+    if ( IS_READ2(bam_line) && stats->max_len_2nd < read_len )
+        stats->max_len_2nd = read_len;
+
     int i;
     int gc_count = 0;
 
@@ -821,6 +1017,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
     if ( IS_ORIGINAL(bam_line) )
     {
         stats->read_lengths[read_len]++;
+        if ( IS_READ1(bam_line) ) stats->read_lengths_1st[read_len]++;
+        if ( IS_READ2(bam_line) ) stats->read_lengths_2nd[read_len]++;
         collect_orig_read_stats(bam_line, stats, &gc_count);
     }
 
@@ -848,7 +1046,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
             if ( is_fwd*is_mfwd>0 )
                 stats->isize->inc_other(stats->isize->data, isize);
-            else if ( is_fst*pos_fst>0 )
+            else if ( is_fst*pos_fst>=0 )
             {
                 if ( is_fst*is_fwd>0 )
                     stats->isize->inc_inward(stats->isize->data, isize);
@@ -905,9 +1103,10 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
         // Count the whole read
         for (i=0; i<bam_line->core.n_cigar; i++)
         {
-            if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CMATCH || bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CINS )
+            int cig  = bam_cigar_op(bam_get_cigar(bam_line)[i]);
+            if ( cig==BAM_CMATCH || cig==BAM_CINS || cig==BAM_CEQUAL || cig==BAM_CDIFF )
                 stats->nbases_mapped_cigar += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
-            if ( bam_cigar_op(bam_get_cigar(bam_line)[i])==BAM_CDEL )
+            if ( cig==BAM_CDEL )
                 readlen += bam_cigar_oplen(bam_get_cigar(bam_line)[i]);
         }
     }
@@ -918,8 +1117,22 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
 
     if ( stats->is_sorted )
     {
-        if ( stats->tid==-1 || stats->tid!=bam_line->core.tid )
+        if ( stats->tid==-1 || stats->tid!=bam_line->core.tid ) {
             round_buffer_flush(stats, -1);
+        }
+
+        //cleanup the pair hash table to free memory
+        stats->last_read_flush++;
+        if ( stats->pair_count > DEFAULT_PAIR_MAX && stats->last_read_flush > DEFAULT_PAIR_MAX) {
+            stats->pair_count -= cleanup_overlaps(read_pairs, bam_line->core.pos);
+            stats->last_read_flush = 0;
+        }
+
+        if ( stats->last_pair_tid != bam_line->core.tid) {
+            stats->pair_count -= cleanup_overlaps(read_pairs, INT_MAX-1);
+            stats->last_pair_tid = bam_line->core.tid;
+            stats->last_read_flush = 0;
+        }
 
         // Mismatches per cycle and GC-depth graph. For simplicity, reads overlapping GCD bins
         //  are not splitted which results in up to seq_len-1 overlaps. The default bin size is
@@ -979,8 +1192,12 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                 case BAM_CDIFF:
                     pmin = MAX(p, stats->chunks[i].from-1);
                     pmax = MIN(p+oplen, stats->chunks[i].to);
-                    if ( pmax >= pmin )
-                        round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+                    if ( pmax >= pmin ) {
+                        if ( stats->info->remove_overlaps )
+                            remove_overlaps(bam_line, read_pairs, stats, pmin, pmax);
+                        else
+                            round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+                    }
                     break;
                 case BAM_CDEL:
                     break;
@@ -1005,7 +1222,10 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                 case BAM_CMATCH:
                 case BAM_CEQUAL:
                 case BAM_CDIFF:
-                    round_buffer_insert_read(&(stats->cov_rbuf), p, p+oplen-1);
+                    if ( stats->info->remove_overlaps )
+                        remove_overlaps(bam_line, read_pairs, stats, p, p+oplen);
+                    else
+                        round_buffer_insert_read(&(stats->cov_rbuf), p, p+oplen-1);
                     break;
                 case BAM_CDEL:
                     break;
@@ -1013,6 +1233,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats)
                 p += bam_cigar_type(op)&2 ? oplen : 0; // consumes reference
             }
         }
+        if ( stats->info->remove_overlaps )
+           remove_overlaps(bam_line, read_pairs, stats, -1, -1); //remove the line from the hash table
     }
 }
 
@@ -1047,8 +1269,9 @@ float gcd_percentile(gc_depth_t *gcd, int N, int p)
 void output_stats(FILE *to, stats_t *stats, int sparse)
 {
     // Calculate average insert size and standard deviation (from the main bulk data only)
-    int isize, ibulk=0;
-    uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0;
+    int isize, ibulk=0, icov;
+    uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0, cov_sum=0;
+    double bulk=0, avg_isize=0, sd_isize=0;
     for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
     {
         // Each pair was counted twice
@@ -1062,10 +1285,11 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
         nisize += stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
     }
 
-    double bulk=0, avg_isize=0, sd_isize=0;
     for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
     {
-        bulk += stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
+        uint64_t num = stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
+        if (num > 0) ibulk = isize + 1;
+        bulk += num;
         avg_isize += isize * (stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize));
 
         if ( bulk/nisize > stats->info->isize_main_bulk )
@@ -1077,9 +1301,8 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
     avg_isize /= nisize ? nisize : 1;
     for (isize=1; isize<ibulk; isize++)
-        sd_isize += (stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) +stats->isize->other(stats->isize->data, isize)) * (isize-avg_isize)*(isize-avg_isize) / nisize;
+        sd_isize += (stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) +stats->isize->other(stats->isize->data, isize)) * (isize-avg_isize)*(isize-avg_isize) / (nisize ? nisize : 1);
     sd_isize = sqrt(sd_isize);
-
 
     fprintf(to, "# This file was produced by samtools stats (%s+htslib-%s) and can be plotted using plot-bamstats\n", samtools_version(), hts_version());
     if( stats->split_name != NULL ){
@@ -1113,6 +1336,8 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
     fprintf(to, "SN\tnon-primary alignments:\t%ld\n", (long)stats->nreads_secondary);
     fprintf(to, "SN\ttotal length:\t%ld\t# ignores clipping\n", (long)stats->total_len);
+    fprintf(to, "SN\ttotal first fragment length:\t%ld\t# ignores clipping\n", (long)stats->total_len_1st);
+    fprintf(to, "SN\ttotal last fragment length:\t%ld\t# ignores clipping\n", (long)stats->total_len_2nd);
     fprintf(to, "SN\tbases mapped:\t%ld\t# ignores clipping\n", (long)stats->nbases_mapped);                 // the length of the whole read goes here, including soft-clips etc.
     fprintf(to, "SN\tbases mapped (cigar):\t%ld\t# more accurate\n", (long)stats->nbases_mapped_cigar);   // only matched and inserted bases are counted here
     fprintf(to, "SN\tbases trimmed:\t%ld\n", (long)stats->nbases_trimmed);
@@ -1121,7 +1346,11 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\terror rate:\t%e\t# mismatches / bases mapped (cigar)\n", stats->nbases_mapped_cigar ? (float)stats->nmismatches/stats->nbases_mapped_cigar : 0);
     float avg_read_length = (stats->nreads_1st+stats->nreads_2nd)?stats->total_len/(stats->nreads_1st+stats->nreads_2nd):0;
     fprintf(to, "SN\taverage length:\t%.0f\n", avg_read_length);
+    fprintf(to, "SN\taverage first fragment length:\t%.0f\n", stats->nreads_1st? (float)stats->total_len_1st/stats->nreads_1st:0);
+    fprintf(to, "SN\taverage last fragment length:\t%.0f\n", stats->nreads_2nd? (float)stats->total_len_2nd/stats->nreads_2nd:0);
     fprintf(to, "SN\tmaximum length:\t%d\n", stats->max_len);
+    fprintf(to, "SN\tmaximum first fragment length:\t%d\n", stats->max_len_1st);
+    fprintf(to, "SN\tmaximum last fragment length:\t%d\n", stats->max_len_2nd);
     fprintf(to, "SN\taverage quality:\t%.1f\n", stats->total_len?stats->sum_qual/stats->total_len:0);
     fprintf(to, "SN\tinsert size average:\t%.1f\n", avg_isize);
     fprintf(to, "SN\tinsert size standard deviation:\t%.1f\n", sd_isize);
@@ -1129,13 +1358,20 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\toutward oriented pairs:\t%ld\n", (long)nisize_outward);
     fprintf(to, "SN\tpairs with other orientation:\t%ld\n", (long)nisize_other);
     fprintf(to, "SN\tpairs on different chromosomes:\t%ld\n", (long)stats->nreads_anomalous/2);
+    fprintf(to, "SN\tpercentage of properly paired reads (%%):\t%.1f\n", (stats->nreads_1st+stats->nreads_2nd)? (float)(100*stats->nreads_properly_paired)/(stats->nreads_1st+stats->nreads_2nd):0);
+    if ( stats->target_count ) {
+        fprintf(to, "SN\tbases inside the target:\t%u\n", stats->target_count);
+        for (icov=stats->info->cov_threshold+1; icov<stats->ncov; icov++)
+            cov_sum += stats->cov[icov];
+        fprintf(to, "SN\tpercentage of target genome with coverage > %d (%%):\t%.2f\n", stats->info->cov_threshold, (float)(100*cov_sum)/stats->target_count);
+    }
 
     int ibase,iqual;
     if ( stats->max_len<stats->nbases ) stats->max_len++;
     if ( stats->max_qual+1<stats->nquals ) stats->max_qual++;
-    fprintf(to, "# First Fragment Qualitites. Use `grep ^FFQ | cut -f 2-` to extract this part.\n");
+    fprintf(to, "# First Fragment Qualities. Use `grep ^FFQ | cut -f 2-` to extract this part.\n");
     fprintf(to, "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n");
-    for (ibase=0; ibase<stats->max_len; ibase++)
+    for (ibase=0; ibase<stats->max_len_1st; ibase++)
     {
         fprintf(to, "FFQ\t%d",ibase+1);
         for (iqual=0; iqual<=stats->max_qual; iqual++)
@@ -1144,9 +1380,9 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
         }
         fprintf(to, "\n");
     }
-    fprintf(to, "# Last Fragment Qualitites. Use `grep ^LFQ | cut -f 2-` to extract this part.\n");
+    fprintf(to, "# Last Fragment Qualities. Use `grep ^LFQ | cut -f 2-` to extract this part.\n");
     fprintf(to, "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n");
-    for (ibase=0; ibase<stats->max_len; ibase++)
+    for (ibase=0; ibase<stats->max_len_2nd; ibase++)
     {
         fprintf(to, "LFQ\t%d",ibase+1);
         for (iqual=0; iqual<=stats->max_qual; iqual++)
@@ -1189,10 +1425,51 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "# ACGT content per cycle. Use `grep ^GCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
     {
-        acgtno_count_t *acgtno_count = &(stats->acgtno_cycles[ibase]);
-        uint64_t acgt_sum = acgtno_count->a + acgtno_count->c + acgtno_count->g + acgtno_count->t;
+        acgtno_count_t *acgtno_count_1st = &(stats->acgtno_cycles_1st[ibase]);
+        acgtno_count_t *acgtno_count_2nd = &(stats->acgtno_cycles_2nd[ibase]);
+        uint64_t acgt_sum = acgtno_count_1st->a + acgtno_count_1st->c + acgtno_count_1st->g + acgtno_count_1st->t +
+                acgtno_count_2nd->a + acgtno_count_2nd->c + acgtno_count_2nd->g + acgtno_count_2nd->t;
         if ( ! acgt_sum ) continue;
-        fprintf(to, "GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1, 100.*acgtno_count->a/acgt_sum, 100.*acgtno_count->c/acgt_sum, 100.*acgtno_count->g/acgt_sum, 100.*acgtno_count->t/acgt_sum, 100.*acgtno_count->n/acgt_sum, 100.*acgtno_count->other/acgt_sum);
+        fprintf(to, "GCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                100.*(acgtno_count_1st->a + acgtno_count_2nd->a)/acgt_sum,
+                100.*(acgtno_count_1st->c + acgtno_count_2nd->c)/acgt_sum,
+                100.*(acgtno_count_1st->g + acgtno_count_2nd->g)/acgt_sum,
+                100.*(acgtno_count_1st->t + acgtno_count_2nd->t)/acgt_sum,
+                100.*(acgtno_count_1st->n + acgtno_count_2nd->n)/acgt_sum,
+                100.*(acgtno_count_1st->other + acgtno_count_2nd->other)/acgt_sum);
+
+    }
+    fprintf(to, "# ACGT content per cycle for first fragments. Use `grep ^FBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
+    for (ibase=0; ibase<stats->max_len; ibase++)
+    {
+        acgtno_count_t *acgtno_count_1st = &(stats->acgtno_cycles_1st[ibase]);
+        uint64_t acgt_sum_1st = acgtno_count_1st->a + acgtno_count_1st->c + acgtno_count_1st->g + acgtno_count_1st->t;
+
+        if ( acgt_sum_1st )
+            fprintf(to, "FBC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                    100.*acgtno_count_1st->a/acgt_sum_1st,
+                    100.*acgtno_count_1st->c/acgt_sum_1st,
+                    100.*acgtno_count_1st->g/acgt_sum_1st,
+                    100.*acgtno_count_1st->t/acgt_sum_1st,
+                    100.*acgtno_count_1st->n/acgt_sum_1st,
+                    100.*acgtno_count_1st->other/acgt_sum_1st);
+
+    }
+    fprintf(to, "# ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
+    for (ibase=0; ibase<stats->max_len; ibase++)
+    {
+        acgtno_count_t *acgtno_count_2nd = &(stats->acgtno_cycles_2nd[ibase]);
+        uint64_t acgt_sum_2nd = acgtno_count_2nd->a + acgtno_count_2nd->c + acgtno_count_2nd->g + acgtno_count_2nd->t;
+
+        if ( acgt_sum_2nd )
+            fprintf(to, "LBC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                    100.*acgtno_count_2nd->a/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->c/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->g/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->t/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->n/acgt_sum_2nd,
+                    100.*acgtno_count_2nd->other/acgt_sum_2nd);
+
     }
     fprintf(to, "# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
@@ -1209,11 +1486,26 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     int ilen;
     for (ilen=0; ilen<stats->max_len; ilen++)
     {
-        if ( stats->read_lengths[ilen]>0 )
-            fprintf(to, "RL\t%d\t%ld\n", ilen, (long)stats->read_lengths[ilen]);
+        if ( stats->read_lengths[ilen+1]>0 )
+            fprintf(to, "RL\t%d\t%ld\n", ilen+1, (long)stats->read_lengths[ilen+1]);
+    }
+
+    fprintf(to, "# Read lengths - first fragments. Use `grep ^FRL | cut -f 2-` to extract this part. The columns are: read length, count\n");
+    for (ilen=0; ilen<stats->max_len_1st; ilen++)
+    {
+        if ( stats->read_lengths_1st[ilen+1]>0 )
+            fprintf(to, "FRL\t%d\t%ld\n", ilen+1, (long)stats->read_lengths_1st[ilen+1]);
+    }
+
+    fprintf(to, "# Read lengths - last fragments. Use `grep ^LRL | cut -f 2-` to extract this part. The columns are: read length, count\n");
+    for (ilen=0; ilen<stats->max_len_2nd; ilen++)
+    {
+        if ( stats->read_lengths_2nd[ilen+1]>0 )
+            fprintf(to, "LRL\t%d\t%ld\n", ilen+1, (long)stats->read_lengths_2nd[ilen+1]);
     }
 
     fprintf(to, "# Indel distribution. Use `grep ^ID | cut -f 2-` to extract this part. The columns are: length, number of insertions, number of deletions\n");
+
     for (ilen=0; ilen<stats->nindels; ilen++)
     {
         if ( stats->insertions[ilen]>0 || stats->deletions[ilen]>0 )
@@ -1232,7 +1524,6 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "# Coverage distribution. Use `grep ^COV | cut -f 2-` to extract this part.\n");
     if  ( stats->cov[0] )
         fprintf(to, "COV\t[<%d]\t%d\t%ld\n",stats->info->cov_min,stats->info->cov_min-1, (long)stats->cov[0]);
-    int icov;
     for (icov=1; icov<stats->ncov-1; icov++)
         if ( stats->cov[icov] )
             fprintf(to, "COV\t[%d-%d]\t%d\t%ld\n",stats->info->cov_min + (icov-1)*stats->info->cov_step, stats->info->cov_min + icov*stats->info->cov_step-1,stats->info->cov_min + icov*stats->info->cov_step-1, (long)stats->cov[icov]);
@@ -1336,14 +1627,18 @@ void init_regions(stats_t *stats, const char *file)
     // sort region intervals and remove duplicates
     for (r = 0; r < stats->nregions; r++) {
         regions_t *reg = &stats->regions[r];
-        qsort(reg->pos, reg->npos, sizeof(pos_t), regions_lt);
-        for (new_p = 0, p = 1; p < reg->npos; p++) {
-            if ( reg->pos[new_p].to < reg->pos[p].from )
-                reg->pos[++new_p] = reg->pos[p];
-            else if ( reg->pos[new_p].to < reg->pos[p].to )
-                reg->pos[new_p].to = reg->pos[p].to;
+        if ( reg->npos > 1 ) {
+            qsort(reg->pos, reg->npos, sizeof(pos_t), regions_lt);
+            for (new_p = 0, p = 1; p < reg->npos; p++) {
+                if ( reg->pos[new_p].to < reg->pos[p].from )
+                    reg->pos[++new_p] = reg->pos[p];
+                else if ( reg->pos[new_p].to < reg->pos[p].to )
+                    reg->pos[new_p].to = reg->pos[p].to;
+            }
+            reg->npos = ++new_p;
         }
-        reg->npos = ++new_p;
+        for (p = 0; p < reg->npos; p++)
+            stats->target_count += (reg->pos[p].to - reg->pos[p].from + 1);
     }
 
     stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
@@ -1383,7 +1678,8 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     int i = reg->cpos;
     while ( i<reg->npos && reg->pos[i].to<=bam_line->core.pos ) i++;
     if ( i>=reg->npos ) { reg->cpos = reg->npos; return 0; }
-    if ( bam_endpos(bam_line) < reg->pos[i].from ) return 0;
+    int64_t endpos = bam_endpos(bam_line);
+    if ( endpos < reg->pos[i].from ) return 0;
 
     //found a read overlapping a region
     reg->cpos = i;
@@ -1393,8 +1689,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     //now find all the overlapping chunks
     stats->nchunks = 0;
     while (i < reg->npos) {
-        if (bam_line->core.pos < reg->pos[i].to && bam_endpos(bam_line) >= reg->pos[i].from) {
-            int32_t endpos = bam_endpos(bam_line);
+        if (bam_line->core.pos < reg->pos[i].to && endpos >= reg->pos[i].from) {
             stats->chunks[stats->nchunks].from = MAX(bam_line->core.pos+1, reg->pos[i].from);
             stats->chunks[stats->nchunks].to = MIN(endpos, reg->pos[i].to);
             stats->nchunks++;
@@ -1416,18 +1711,19 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
     if ( !stats->regions || !stats->chunks )
         return 1;
 
-    for (i = 0; i < stats->nregions; i++) {
+    for (i = 0; i < iter->n_reg; i++) {
         tid = iter->reg_list[i].tid;
         if ( tid < 0 )
             continue;
 
         if ( tid >= stats->nregions ) {
-            stats->nregions = tid+10;
-            regions_t *tmp = realloc(stats->regions, stats->nregions * sizeof(regions_t));
-            if (!tmp)
+            regions_t *tmp = realloc(stats->regions, (tid+10) * sizeof(regions_t));
+            if ( !tmp )
                 return 1;
             stats->regions = tmp;
-            memset(stats->regions + tid, 0, 10 * sizeof(regions_t));
+            memset(stats->regions + stats->nregions, 0,
+                   (tid+10-stats->nregions) * sizeof(regions_t));
+            stats->nregions = tid+10;
         }
 
         stats->regions[tid].mpos = stats->regions[tid].npos = iter->reg_list[i].count;
@@ -1438,9 +1734,11 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
         for (j = 0; j < stats->regions[tid].npos; j++) {
             stats->regions[tid].pos[j].from = iter->reg_list[i].intervals[j].beg+1;
             stats->regions[tid].pos[j].to = iter->reg_list[i].intervals[j].end;
+
+            stats->target_count += (stats->regions[tid].pos[j].to - stats->regions[tid].pos[j].from + 1);
         }
     }
- 
+
     return 0;
 }
 
@@ -1500,6 +1798,8 @@ static void error(const char *format, ...)
         printf("    -S, --split <tag>                   Also write statistics to separate files split by tagged field.\n");
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
+        printf("    -p, --remove-overlaps               Remove overlaps of paired-end reads from coverage and base count computations.\n");
+        printf("    -g, --cov-threshold                 Only bases with coverage above this value will be included in the target percentage computation.\n");
         sam_global_opt_help(stdout, "-.--.@");
         printf("\n");
     }
@@ -1529,8 +1829,11 @@ void cleanup_stats(stats_t* stats)
     free(stats->gcd);
     free(stats->rseq_buf);
     free(stats->mpc_buf);
-    free(stats->acgtno_cycles);
+    free(stats->acgtno_cycles_1st);
+    free(stats->acgtno_cycles_2nd);
     free(stats->read_lengths);
+    free(stats->read_lengths_1st);
+    free(stats->read_lengths_2nd);
     free(stats->insertions);
     free(stats->deletions);
     free(stats->ins_cycles_1st);
@@ -1579,8 +1882,8 @@ void destroy_split_stats(khash_t(c2stats) *split_hash)
     stats_t *curr_stats = NULL;
     for(i = kh_begin(split_hash); i != kh_end(split_hash); ++i){
         if(!kh_exist(split_hash, i)) continue;
-            curr_stats = kh_value(split_hash, i);
-            cleanup_stats(curr_stats);
+        curr_stats = kh_value(split_hash, i);
+        cleanup_stats(curr_stats);
     }
     kh_destroy(c2stats, split_hash);
 }
@@ -1597,6 +1900,8 @@ stats_info_t* stats_info_init(int argc, char *argv[])
     info->filter_readlen = -1;
     info->argc = argc;
     info->argv = argv;
+    info->remove_overlaps = 0;
+    info->cov_threshold = 0;
 
     return info;
 }
@@ -1624,8 +1929,6 @@ stats_t* stats_init()
     stats->ngc    = 200;
     stats->nquals = 256;
     stats->nbases = 300;
-    stats->max_len   = 30;
-    stats->max_qual  = 40;
     stats->rseq_pos     = -1;
     stats->tid = stats->gcd_pos = -1;
     stats->igcd = 0;
@@ -1633,6 +1936,10 @@ stats_t* stats_init()
     stats->nindels = stats->nbases;
     stats->split_name = NULL;
     stats->nchunks = 0;
+    stats->pair_count = 0;
+    stats->last_pair_tid = -2;
+    stats->last_read_flush = 0;
+    stats->target_count = 0;
 
     return stats;
 }
@@ -1666,8 +1973,11 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->isize          = init_isize_t(info->nisize ?info->nisize+1 :0);
     stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
     stats->mpc_buf        = info->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
-    stats->acgtno_cycles  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    stats->acgtno_cycles_1st  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    stats->acgtno_cycles_2nd  = calloc(stats->nbases,sizeof(acgtno_count_t));
     stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
+    stats->read_lengths_1st   = calloc(stats->nbases,sizeof(uint64_t));
+    stats->read_lengths_2nd   = calloc(stats->nbases,sizeof(uint64_t));
     stats->insertions     = calloc(stats->nbases,sizeof(uint64_t));
     stats->deletions      = calloc(stats->nbases,sizeof(uint64_t));
     stats->ins_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
@@ -1740,16 +2050,18 @@ int main_stats(int argc, char *argv[])
         {"sparse", no_argument, NULL, 'x'},
         {"split", required_argument, NULL, 'S'},
         {"split-prefix", required_argument, NULL, 'P'},
+        {"remove-overlaps", no_argument, NULL, 'p'},
+        {"cov-threshold", required_argument, NULL, 'g'},
         {NULL, 0, NULL, 0}
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsxr:c:l:i:t:m:q:f:F:I:1:S:P:@:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxpr:c:l:i:t:m:q:f:F:g:I:1:S:P:@:",loptions,NULL))>0 )
     {
         switch (opt)
         {
             case 'f': info->flag_require = bam_str2flag(optarg); break;
-            case 'F': info->flag_filter = bam_str2flag(optarg); break;
+            case 'F': info->flag_filter |= bam_str2flag(optarg); break;
             case 'd': info->flag_filter |= BAM_FDUP; break;
             case 's': break;
             case 'r': info->fai = fai_load(optarg);
@@ -1769,6 +2081,11 @@ int main_stats(int argc, char *argv[])
             case 'x': sparse = 1; break;
             case 'S': info->split_tag = optarg; break;
             case 'P': info->split_prefix = optarg; break;
+            case 'p': info->remove_overlaps = 1; break;
+            case 'g': info->cov_threshold = atoi(optarg);
+                      if ( info->cov_threshold < 0 || info->cov_threshold == INT_MAX )
+                          error("Unsupported value for coverage threshold %d\n", info->cov_threshold);
+                      break;
             case '?':
             case 'h': error(NULL);
             default:
@@ -1801,6 +2118,8 @@ int main_stats(int argc, char *argv[])
     // .. hash
     khash_t(c2stats)* split_hash = kh_init(c2stats);
 
+    khash_t(qn2pair)* read_pairs = kh_init(qn2pair);
+
     // Collect statistics
     bam1_t *bam_line = bam_init1();
     if ( optind<argc )
@@ -1823,17 +2142,17 @@ int main_stats(int argc, char *argv[])
 
                         if (!targets) {
                             all_stats->nchunks = argc-optind;
-                            if ( replicate_regions(all_stats, iter) ) 
-                                fprintf(stderr, "Replications of the regions failed."); 
+                            if ( replicate_regions(all_stats, iter) )
+                                fprintf(stderr, "Replications of the regions failed.");
                         }
 
                         if ( all_stats->nregions && all_stats->regions ) {
                             while (sam_itr_multi_next(info->sam, iter, bam_line) >= 0) {
                                if (info->split_tag) {
                                    curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
-                                   collect_stats(bam_line, curr_stats);
+                                   collect_stats(bam_line, curr_stats, read_pairs);
                                }
-                               collect_stats(bam_line, all_stats);
+                               collect_stats(bam_line, all_stats, read_pairs);
                             }
                         }
 
@@ -1858,14 +2177,19 @@ int main_stats(int argc, char *argv[])
     }
     else
     {
+        if ( info->cov_threshold > 0 && !targets ) {
+            fprintf(stderr, "Coverage percentage calcuation requires a list of target regions\n");
+            goto cleanup;
+        }
+
         // Stream through the entire BAM ignoring off-target regions if -t is given
         int ret;
         while ((ret = sam_read1(info->sam, info->sam_header, bam_line)) >= 0) {
             if (info->split_tag) {
                 curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
-                collect_stats(bam_line, curr_stats);
+                collect_stats(bam_line, curr_stats, read_pairs);
             }
-            collect_stats(bam_line, all_stats);
+            collect_stats(bam_line, all_stats, read_pairs);
         }
 
         if (ret < -1) {
@@ -1879,6 +2203,7 @@ int main_stats(int argc, char *argv[])
     if (info->split_tag)
         output_split_stats(split_hash, bam_fname, sparse);
 
+cleanup:
     bam_destroy1(bam_line);
     bam_hdr_destroy(info->sam_header);
     sam_global_args_free(&ga);
@@ -1886,6 +2211,7 @@ int main_stats(int argc, char *argv[])
     cleanup_stats(all_stats);
     cleanup_stats_info(info);
     destroy_split_stats(split_hash);
+    cleanup_overlaps(read_pairs, INT_MAX);
 
     return 0;
 }

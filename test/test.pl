@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2017 Genome Research Ltd.
+#    Copyright (C) 2013-2018 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -36,6 +36,7 @@ my $opts = parse_params();
 
 test_bgzip($opts);
 test_faidx($opts);
+test_fqidx($opts);
 test_dict($opts);
 test_index($opts);
 test_index($opts, threads=>2);
@@ -64,6 +65,7 @@ test_addrprg($opts);
 test_addrprg($opts, threads=>2);
 test_markdup($opts);
 test_markdup($opts, threads=>2);
+test_bedcov($opts);
 
 
 print "\nNumber of tests:\n";
@@ -157,6 +159,7 @@ sub parse_params
     {
         $SIG{TERM} = $SIG{INT} = sub { clean_files($opts); };
     }
+    $$opts{diff} = "diff" . ($^O =~ /^(?:msys|MSWin32)/ ? " -b":"");
     return $opts;
 }
 sub clean_files
@@ -230,7 +233,7 @@ sub test_cmd
 	binmode($fh);
         print $fh $out;
         close($fh);
-        my ($ret,$out) = _cmd("diff -q $$opts{path}/$args{out} $$opts{path}/$args{out}.old");
+        my ($ret,$out) = _cmd("$$opts{diff} -q $$opts{path}/$args{out} $$opts{path}/$args{out}.old");
         if ( !$ret && $out eq '' ) { unlink("$$opts{path}/$args{out}.old"); }
         else
         {
@@ -246,7 +249,7 @@ sub test_cmd
 	binmode($fh);
         print $fh $err;
         close($fh);
-        my ($ret,$out) = _cmd("diff -q $$opts{path}/$args{err} $$opts{path}/$args{err}.old");
+        my ($ret,$out) = _cmd("$$opts{diff} -q $$opts{path}/$args{err} $$opts{path}/$args{err}.old");
         if ( !$ret && $err eq '' ) { unlink("$$opts{path}/$args{err}.old"); }
         else
         {
@@ -526,6 +529,49 @@ sub test_faidx
     cmd("cat $$opts{tmp}/faidx.fa | $$opts{bgzip} -ci -I $$opts{tmp}/faidx.fa.gz.gzi > $$opts{tmp}/faidx.fa.gz");
     cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa.gz");
 
+    # Write to file
+    cmd("$$opts{bin}/samtools faidx --length 5 $$opts{tmp}/faidx.fa 1:1-104 > $$opts{tmp}/output_faidx_base.fa");
+    cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa $$opts{tmp}/faidx.fa 1:1-104 && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
+
+    # test continuing after an error
+    cmd("$$opts{bin}/samtools faidx --output $$opts{tmp}/output_faidx.fa --continue $$opts{tmp}/faidx.fa 100 EEE FFF");
+
+    # test for reporting retrieval errors, Zero results and truncated
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1:10000000-10000005 > $$opts{tmp}/output_faidx.fa 2>&1 && grep Zero $$opts{tmp}/output_faidx.fa");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1:99998-100099 > $$opts{tmp}/output_faidx.fa 2>&1 && grep Truncated $$opts{tmp}/output_faidx.fa");
+
+    # Get regions from a file
+    open($fh, ">$$opts{tmp}/region.txt") or error("$$opts{tmp}/region.txt: $!");
+    print $fh "1\n2:5-10\n3:20-30\n";
+    close $fh;
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa 1 2:5-10 3:20-30 > $$opts{tmp}/output_faidx_base.fa");
+    cmd("$$opts{bin}/samtools faidx $$opts{tmp}/faidx.fa -r $$opts{tmp}/region.txt > $$opts{tmp}/output_faidx.fa && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
+
+    # reverse complement test
+    my $fseq = 'ATGAAATGTAACCCAAGAGATATACTCTTCAAGGTACTGTAAGCTATTTCTGTGGACACC';
+    my $rseq = $fseq;
+    $rseq =~ tr/ACGTMRWSYKVHDBN/TGCAKYWSRMBDHVN/;
+    $rseq = reverse $rseq;
+    open($fh, ">$$opts{tmp}/forward_test.fa") or error("$$opts{tmp}/forward_test.fa: $!");
+    print $fh ">rc\n$fseq\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test.fa") or error("$$opts{tmp}/rc_answer_test.fa: $!");
+    print $fh ">rc/rc\n$rseq\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test2.fa") or error("$$opts{tmp}/rc_answer_test2.fa: $!");
+    print $fh ">rc(-)\n$rseq\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test3.fa") or error("$$opts{tmp}/rc_answer_test3.fa: $!");
+    print $fh ">rc\n$rseq\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test4.fa") or error("$$opts{tmp}/rc_answer_test3.fa: $!");
+    print $fh ">rc reverse\n$rseq\n";
+    close $fh;
+    cmd("$$opts{bin}/samtools faidx -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out.fa && $$opts{diff} $$opts{tmp}/forward_test_out.fa $$opts{tmp}/rc_answer_test.fa");
+    cmd("$$opts{bin}/samtools faidx --mark-strand sign -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out2.fa && $$opts{diff} $$opts{tmp}/forward_test_out2.fa $$opts{tmp}/rc_answer_test2.fa");
+    cmd("$$opts{bin}/samtools faidx --mark-strand no -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out3.fa && $$opts{diff} $$opts{tmp}/forward_test_out3.fa $$opts{tmp}/rc_answer_test3.fa");
+    cmd("$$opts{bin}/samtools faidx --mark-strand 'custom, forward, reverse' -i $$opts{tmp}/forward_test.fa rc > $$opts{tmp}/forward_test_out4.fa && $$opts{diff} $$opts{tmp}/forward_test_out4.fa $$opts{tmp}/rc_answer_test4.fa");
+
     for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
     {
         for my $file ("$$opts{tmp}/faidx.fa","$$opts{tmp}/faidx.fa.gz")
@@ -540,6 +586,147 @@ sub test_faidx
             $xreg =~ s/^[^:]*://;
             $xreg =~ s/-.*$//;
             if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". faidx_num_to_seq($xreg) ."\" got \"$seq\"\n"); }
+            else { passed($opts,msg=>$test); }
+        }
+    }
+}
+
+sub fqidx_num_to_qual
+{
+    my ($dec) = @_;
+    my $out = '';
+    my @base = qw(I J K L);
+    while ( $dec>=0 )
+    {
+        my $r = $dec % 4;
+        $out  = $base[$r] . $out;
+        $dec  = int( ($dec - $r) / 4 );
+        if ( !$dec ) { last; }
+    }
+    return $out;
+}
+
+sub fqidx_qual_to_num
+{
+    my ($seq) = @_;
+    my $out = 0;
+    my $len = length($seq);
+    my %base = ( I=>0, J=>1, K=>2, L=>3 );
+    for (my $i=0; $i<$len; $i++)
+    {
+        my $b = substr($seq,$i,1);
+        $out += $base{$b} * 4**($len-$i-1);
+    }
+    return $out;
+}
+
+sub test_fqidx
+{
+    my ($opts,%args) = @_;
+
+    # Create test data: The fake sequence consists of sequence offsets coded
+    # into A,C,G,T and separated with Ns. The offsets are 1-based.
+    #
+    open(my $fh,'>',"$$opts{tmp}/fqidx.fq") or error("$$opts{tmp}/fqidx.fq: $!");
+    my $ntot = 100_000;
+    my @dat  = qw(A C G T);
+
+    for (my $seq=1; $seq<=3; $seq++)
+    {
+        my $nwr = 1;
+        my $out = '';
+        while ($nwr < $ntot)
+        {
+            my $tmp = faidx_num_to_seq($nwr) . 'N';
+            $out .= $tmp;
+            $nwr += length($tmp);
+        }
+
+        print $fh "\@$seq\n";
+        print $fh faidx_wrap($out);
+
+        $nwr = 1;
+        $out = '';
+
+        while ($nwr < $ntot) {
+            my $tmp = fqidx_num_to_qual($nwr) . '!';
+            $out .= $tmp;
+            $nwr += length($tmp);
+        }
+
+        print $fh "+\n";
+        print $fh faidx_wrap($out);
+    }
+
+    close($fh);
+
+    # Run tests: index and retrieval from plain text and compressed files
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq");
+    cmd("cat $$opts{tmp}/fqidx.fq | $$opts{bgzip} -ci -I $$opts{tmp}/fqidx.fq.gz.gzi > $$opts{tmp}/fqidx.fq.gz");
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq.gz");
+
+    # Write to file
+    cmd("$$opts{bin}/samtools fqidx --length 5 $$opts{tmp}/fqidx.fq 1:1-104 > $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq $$opts{tmp}/fqidx.fq 1:1-104 && $$opts{diff} $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+
+    # test continuing after an error
+    cmd("$$opts{bin}/samtools fqidx --output $$opts{tmp}/output_fqidx.fq --continue $$opts{tmp}/fqidx.fq 100 EEE FFF");
+
+    # test for reporting retrieval errors, Zero results and truncated
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1:10000000-10000005 > $$opts{tmp}/output_fqidx.fq 2>&1 && grep Zero $$opts{tmp}/output_fqidx.fq");
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1:99998-100099 > $$opts{tmp}/output_fqidx.fq 2>&1 && grep Truncated $$opts{tmp}/output_fqidx.fq");
+
+    # Get regions from a file, also test fqidx as faidx -f
+    open($fh, ">$$opts{tmp}/region.txt") or error("$$opts{tmp}/region.txt: $!");
+    print $fh "1\n2:5-10\n3:20-30\n";
+    close $fh;
+    cmd("$$opts{bin}/samtools fqidx $$opts{tmp}/fqidx.fq 1 2:5-10 3:20-30 > $$opts{tmp}/output_fqidx_base.fq");
+    cmd("$$opts{bin}/samtools faidx -f $$opts{tmp}/fqidx.fq -r $$opts{tmp}/region.txt > $$opts{tmp}/output_fqidx.fq && $$opts{diff} $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+
+    # reverse complement test
+    my $fseq  = 'ATGAAATGTAACCCAAGAGATATACTCTTCAAGGTACTGTAAGCTATTTCTGTGGACACC';
+    my $fqual = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwx';
+    my $rseq = $fseq;
+    $rseq =~ tr/ACGTMRWSYKVHDBN/TGCAKYWSRMBDHVN/;
+    $rseq = reverse $rseq;
+    my $rqual = reverse $fqual;
+    open($fh, ">$$opts{tmp}/forward_test.fq") or error("$$opts{tmp}/forward_test.fq: $!");
+    print $fh "\@rc\n$fseq\n+\n$fqual\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test.fq") or error("$$opts{tmp}/rc_answer_test.fq: $!");
+    print $fh "\@rc/rc\n$rseq\n+\n$rqual\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test2.fq") or error("$$opts{tmp}/rc_answer_test.fq: $!");
+    print $fh "\@rc\n$rseq\n+\n$rqual\n";
+    close $fh;
+    open ($fh, ">$$opts{tmp}/rc_answer_test3.fq") or error("$$opts{tmp}/rc_answer_test.fq: $!");
+    print $fh "\@rc reverse\n$rseq\n+\n$rqual\n";
+    close $fh;
+    cmd("$$opts{bin}/samtools fqidx -i $$opts{tmp}/forward_test.fq rc > $$opts{tmp}/forward_test_out.fq && $$opts{diff} $$opts{tmp}/forward_test_out.fq $$opts{tmp}/rc_answer_test.fq");
+    cmd("$$opts{bin}/samtools fqidx --mark-strand no -i $$opts{tmp}/forward_test.fq rc > $$opts{tmp}/forward_test_out2.fq && $$opts{diff} $$opts{tmp}/forward_test_out2.fq $$opts{tmp}/rc_answer_test2.fq");
+    cmd("$$opts{bin}/samtools fqidx --mark-strand 'custom, forward, reverse' -i $$opts{tmp}/forward_test.fq rc > $$opts{tmp}/forward_test_out3.fq && $$opts{diff} $$opts{tmp}/forward_test_out3.fq $$opts{tmp}/rc_answer_test3.fq");
+    for my $reg ('3:11-13','2:998-1003','1:100-104','1:99998-100007')
+    {
+        for my $file ("$$opts{tmp}/fqidx.fq","$$opts{tmp}/fqidx.fq.gz")
+        {
+            my $test = "$$opts{bin}/samtools fqidx $file $reg";
+            print "$test\n";
+            my $result = cmd($test);
+            my @fq = split "\n", $result;
+
+            my $seq = $fq[1];
+            $seq =~ s/N.*$//;
+            my $num = faidx_seq_to_num($seq);
+            my $xreg = $reg;
+            $xreg =~ s/^[^:]*://;
+            $xreg =~ s/-.*$//;
+            if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". faidx_num_to_seq($xreg) ."\" got \"$seq\"\n"); }
+            else { passed($opts,msg=>$test); }
+
+            my $qual = $fq[3];
+            $qual =~ s/!.*$//;
+            $num = fqidx_qual_to_num($qual);
+            if ( $num ne $xreg ) { failed($opts,msg=>$test,reason=>"Expected \"". fqidx_num_to_qual($xreg) ."\" got \"$qual\"\n"); }
             else { passed($opts,msg=>$test); }
         }
     }
@@ -2336,6 +2523,9 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/7.1.fq.expected', '2.fq' => 'bam2fq/7.2.fq.expected', 's.fq' => 'bam2fq/7.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -i -T MD,ia -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
     # -i flag with index
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/8.1.fq.expected', '2.fq' => 'bam2fq/8.2.fq.expected', 's.fq' => 'bam2fq/8.s.fq.expected', 'i.fq' => 'bam2fq/8.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'n2i2' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
+
+    # test for Issue #703 (failure to write all reads on uncollated input)
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/9.1.fq.expected', '2.fq' => 'bam2fq/9.2.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.703.sam");
 }
 
 sub test_depad
@@ -2418,6 +2608,12 @@ sub test_stats
     test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
     test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/11.stats.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/11_target.bam ref1:10-24 ref1:30-46 ref1:39-56 | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/11.stats.g4.expected',cmd=>"$$opts{bin}/samtools stats -g 4 -t $$opts{path}/stat/11.stats.targets $$opts{path}/stat/11_target.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/11.stats.g4.expected',cmd=>"$$opts{bin}/samtools stats -g 4 $$opts{path}/stat/11_target.bam ref1:10-24 ref1:30-46 ref1:39-56 | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/12.3reads.overlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -t $$opts{path}/stat/12_3reads.bed | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/12.3reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_3reads.bed | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/12.2reads.overlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -t $$opts{path}/stat/12_2reads.bed | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/12.2reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_2reads.bed | tail -n+4", exp_fix=>$efix);
 }
 
 sub test_merge
@@ -2521,6 +2717,16 @@ sub test_collate
 	     out_map=>{"collate/collate3.tmp.sam"
 			   =>"collate/collate.expected.sam"},
 	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate3.tmp");
+
+    # fast collate, supplementary files not output
+    test_cmd($opts, out=>"dat/empty.expected",
+             out_map=>{"collate/1_fast_collate.sam" => "collate/1_fast_collate.sam.expected"},
+             cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -f $$opts{path}/collate/fast_collate.sam -o $$opts{path}/collate/1_fast_collate.sam");
+
+    # fast collate, supplementary files not output and force temp file
+    test_cmd($opts, out=>"dat/empty.expected",
+             out_map=>{"collate/2_fast_collate_with_tmp.sam" => "collate/2_fast_collate_with_tmp_used.sam.expected"},
+             cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -f -r 4 $$opts{path}/collate/fast_collate.sam -o $$opts{path}/collate/2_fast_collate_with_tmp.sam");
 }
 
 sub test_fixmate
@@ -2554,6 +2760,8 @@ sub test_idxstat
     my ($opts,%args) = @_;
 
     test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.bam", expect_fail=>0);
+    test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.cram", expect_fail=>0);
+    test_cmd($opts,out=>'idxstats/test_input_1_a.bam.expected', err=>'idxstats/test_input_1_a.bam.expected.err', cmd=>"$$opts{bin}/samtools idxstats $$opts{path}/dat/test_input_1_a.sam", expect_fail=>0);
 }
 
 sub test_quickcheck
@@ -2659,3 +2867,12 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r $$opts{path}/markdup/6_remove_dups.sam -");
     test_cmd($opts, out=>'markdup/7_mark_supp_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -O sam $$opts{path}/markdup/7_mark_supp_dup.sam -");
 }
+
+sub test_bedcov
+{
+    my ($opts,%args) = @_;
+
+    test_cmd($opts,out=>'bedcov/bedcov.expected',cmd=>"$$opts{bin}/samtools bedcov $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
+    test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
+}
+

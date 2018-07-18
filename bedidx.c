@@ -1,7 +1,7 @@
 /*  bedidx.c -- BED file indexing.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2014 Genome Research Ltd.
+    Copyright (C) 2014,2017 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -186,7 +186,7 @@ int bed_overlap(const void *_h, const char *chr, int beg, int end)
  *  @param reg_hash    the region hash table with interval lists as values
  */
 
-static void bed_unify(void *reg_hash) {
+void bed_unify(void *reg_hash) {
 
     int i, j, new_n;
     reghash_t *h;
@@ -251,7 +251,7 @@ void *bed_read(const char *fn)
     gzFile fp;
     kstream_t *ks = NULL;
     int dret;
-    unsigned int line = 0;
+    unsigned int line = 0, save_errno;
     kstring_t str = { 0, 0, NULL };
 
     if (NULL == h) return NULL;
@@ -286,9 +286,18 @@ void *bed_read(const char *fn)
             // has called their reference "browser" or "track".
             if (0 == strcmp(ref, "browser")) continue;
             if (0 == strcmp(ref, "track")) continue;
-            fprintf(stderr, "[bed_read] Parse error reading %s at line %u\n",
-                    fn, line);
-            goto fail_no_msg;
+            if (num < 1) {
+                fprintf(stderr,
+                        "[bed_read] Parse error reading \"%s\" at line %u\n",
+                        fn, line);
+            } else {
+                fprintf(stderr,
+                        "[bed_read] Parse error reading \"%s\" at line %u : "
+                        "end (%u) must not be less than start (%u)\n",
+                        fn, line, end, beg);
+            }
+            errno = 0; // Prevent caller from printing misleading error messages
+            goto fail;
         }
 
         // Put reg in the hash table if not already there
@@ -324,12 +333,12 @@ void *bed_read(const char *fn)
     //bed_unify(h);
     return h;
  fail:
-    fprintf(stderr, "[bed_read] Error reading %s : %s\n", fn, strerror(errno));
- fail_no_msg:
+    save_errno = errno;
     if (ks) ks_destroy(ks);
     if (fp) gzclose(fp);
     free(str.s);
     bed_destroy(h);
+    errno = save_errno;
     return NULL;
 }
 

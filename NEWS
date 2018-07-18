@@ -1,3 +1,112 @@
+Release 1.9 (18th July 2018)
+----------------------------
+
+ * Samtools mpileup VCF and BCF output is now deprecated.  It is still
+   functional, but will warn.  Please use bcftools mpileup instead. (#884)
+
+ * Samtools mpileup now handles the '-d' max_depth option differently.  There
+   is no longer an enforced minimum, and '-d 0' is interpreted as limitless
+   (no maximum - warning this may be slow).  The default per-file depth is
+   now 8000, which matches the value mpileup used to use when processing
+   a single sample.  To get the previous default behaviour use the higher
+   of 8000 divided by the number of samples across all input files, or 250.
+   (#859)
+
+ * Samtools stats new features:
+
+   - The '--remove-overlaps' option discounts overlapping portions of
+     templates when computing coverage and mapped base counting. (#855)
+   
+   - When a target file is in use, the number of bases inside the
+     target is printed and the percentage of target bases with coverage
+     above a given threshold specified by the '--cov-threshold' option. (#855)
+
+   - Split base composition and length statistics by first and last reads.
+     (#814, #816)
+
+ * Samtools faidx new features:
+
+   - Now takes long options. (#509, thanks to Pierre Lindenbaum)
+
+   - Now warns about zero-length and truncated sequences due to the
+     requested range being beyond the end of the sequence. (#834)
+     
+   - Gets a new option (--continue) that allows it to carry on
+     when a requested sequence was not in the index. (#834)
+
+   - It is now possible to supply the list of regions to output in a text
+     file using the new '--region-file' option. (#840)
+
+   - New '-i' option to make faidx return the reverse complement of
+     the regions requested. (#878)
+
+   - faidx now works on FASTQ (returning FASTA) and added a new
+     fqidx command to index and return FASTQ. (#852)
+
+ * Samtools collate now has a fast option '-f' that only operates on
+   primary pairs, dropping secondary and supplementary.  It tries to write
+   pairs to the final output file as soon as both reads have been found. (#818)
+
+ * Samtools bedcov gets a new '-j' option to make it ignore deletions (D) and
+   reference skips (N) when computing coverage. (#843)
+
+ * Small speed up to samtools coordinate sort, by converting it to use
+   radix sort. (#835, thanks to Zhuravleva Aleksandra)
+
+ * Samtools idxstats now works on SAM and CRAM files, however this
+   isn't fast due to some information lacking from indices. (#832)
+
+ * Compression levels may now be specified with the level=N
+   output-fmt-option.  E.g. with -O bam,level=3.
+
+ * Various documentation improvements.
+
+ * Bug-fixes:
+
+   - Improved error reporting in several places. (#827, #834, #877, cd7197)
+
+   - Various test improvements.
+
+   - Fixed failures in the multi-region iterator (view -M) when regions
+     provided via BED files include overlaps (#819, reported by Dave Larson).
+
+   - Samtools stats now counts '=' and 'X' CIGAR operators when
+     counting mapped bases. (#855)
+
+   - Samtools stats has fixes for insert size filtering (-m, -i). (#845; #697
+     reported by Soumitra Pal)
+
+   - Samtools stats -F now longer negates an earlier -d option. (#830)
+
+   - Fix samtools stats crash when using a target region. (#875, reported by
+     John Marshall)
+
+   - Samtools sort now keeps to a single thread when the -@ option is absent.
+     Previously it would spawn a writer thread, which could cause the CPU
+     usage to go slightly over 100%. (#833, reported by Matthias Bernt)
+
+   - Fixed samtools phase '-A' option which was incorrectly defined to take
+     a parameter. (#850; #846 reported by Dianne Velasco)
+
+   - Fixed compilation problems when using C_INCLUDE_PATH. (#870; #817 reported
+     by Robert Boissy)
+
+   - Fixed --version when built from a Git repository. (#844, thanks to John
+     Marshall)
+
+   - Use noenhanced mode for title in plot-bamstats.  Prevents unwanted
+     interpretation of characters like underscore in gnuplot version 5. (#829,
+     thanks to M. Zapukhlyak)
+
+   - blast2sam.pl now reports perfect match hits (no indels or mismatches).
+     (#873, thanks to Nils Homer)
+
+   - Fixed bug in fasta and fastq subcommands where stdout would not be flushed
+     correctly if the -0 option was used.
+
+   - Fixed invalid memory access in mpileup and depth on alignment records
+     where the sequence is absent.
+
 Release 1.8 (3rd April 2018)
 ----------------------------
 
