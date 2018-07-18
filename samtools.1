@@ -2173,18 +2173,19 @@ MD5 not being obtainable via the REF_PATH or REF_CACHE environment variables.
 .TP
 .BI decode_md= 0|1
 CRAM input only; defaults to 1 (on).  CRAM does not typically store
-MD and NM tags, preferring to generate them on the fly.  This option
-controls this behaviour.  It can be particularly useful when combined
-with a file encoded using store_md=1 and store_nm=1.
+MD and NM tags, preferring to generate them on the fly.  When this 
+option is 0 missing MD, NM tags will not be generated.  It can be 
+particularly useful when combined with a file encoded using store_md=1 
+and store_nm=1.
 .TP
 .BI store_md= 0|1
 CRAM output only; defaults to 0 (off).  CRAM normally only stores MD
-tags when no reference is unknown and lets the decoder generate these
+tags when the reference is unknown and lets the decoder generate these
 values on-the-fly (see decode_md).
 .TP
 .BI store_nm= 0|1
 CRAM output only; defaults to 0 (off).  CRAM normally only stores NM
-tags when no reference is unknown and lets the decoder generate these
+tags when the reference is unknown and lets the decoder generate these
 values on-the-fly (see decode_md).
 .TP
 .BI ignore_md5= 0|1
