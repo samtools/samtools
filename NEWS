@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.9 (18th July 2018)
+----------------------------
+
  * Samtools mpileup VCF and BCF output is now deprecated.  It is still
    functional, but will warn.  Please use bcftools mpileup instead. (#884)
 
