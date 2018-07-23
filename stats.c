@@ -234,7 +234,10 @@ typedef struct
     // Barcode statistics
     acgtno_count_t *acgtno_bc;
     uint32_t nbases_bc;
+    uint64_t *quals_bc;
     uint32_t nquals_bc;
+    int maxqual_bc;
+    int32_t dual_flag;           // Index of the hyphen (if present)
 }
 stats_t;
 KHASH_MAP_INIT_STR(c2stats, stats_t*)
@@ -782,40 +785,83 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
         stats->sum_qual += qual;
     }
 
+    // Barcode statistics
     uint8_t *bc = bam_aux_get(bam_line, "BC");
-    if (bc) {
+    if (bc && IS_READ1(bam_line)) {
         char *barcode = bam_aux2Z(bc);
-        uint32_t barcode_len = strlen(barcode);
-        if (barcode_len > stats->nbases_bc) {
-            acgtno_count_t *tmp = realloc(stats->acgtno_bc, barcode_len * sizeof(acgtno_count_t));
-            if (!tmp) {
-                error("Error allocating memory. Aborting!\n");
-            }
-            stats->acgtno_bc = tmp;
-            memset(stats->acgtno_bc+stats->nbases_bc, 0 , (barcode_len - stats->nbases_bc) * sizeof(acgtno_count_t));
-            stats->nbases_bc = barcode_len;
-        }
+        if (barcode) {
+            uint32_t barcode_len = strlen(barcode);
+            if (barcode_len > stats->nbases_bc) {
+                acgtno_count_t *tmp_code = realloc(stats->acgtno_bc, barcode_len * sizeof(acgtno_count_t));
+                if (!tmp_code) {
+                    error("Error allocating memory. Aborting!\n");
+                }
+                stats->acgtno_bc = tmp_code;
+                memset(stats->acgtno_bc + stats->nbases_bc, 0 , (barcode_len - stats->nbases_bc) * sizeof(acgtno_count_t));
 
-        for (i=0; i<barcode_len; i++) {
-            switch (barcode[i]) {
-            case 'A':
-                stats->acgtno_bc[i].a++;
-                break;
-            case 'C':
-                stats->acgtno_bc[i].c++;
-                break;
-            case 'G':
-                stats->acgtno_bc[i].g++;
-                break;
-            case 'T':
-                stats->acgtno_bc[i].t++;
-                break;
-            case 'N':
-                stats->acgtno_bc[i].n++;
-                break;
-            default:
-                stats->acgtno_bc[i].other++;
+                uint64_t *tmp_qual = realloc(stats->quals_bc, barcode_len * stats->nquals_bc * sizeof(uint64_t));
+                if (!tmp_qual) {
+                    error("Error allocating memory. Aborting!\n");
+                }
+                stats->quals_bc = tmp_qual;
+                memset(stats->quals_bc + stats->nbases_bc*stats->nquals_bc, 0 , (barcode_len - stats->nbases_bc) * stats->nquals_bc * sizeof(uint64_t));
+
+                stats->nbases_bc = barcode_len;
             }
+
+            for (i=0; i<barcode_len; i++) {
+                switch (barcode[i]) {
+                case 'A':
+                    stats->acgtno_bc[i].a++;
+                    break;
+                case 'C':
+                    stats->acgtno_bc[i].c++;
+                    break;
+                case 'G':
+                    stats->acgtno_bc[i].g++;
+                    break;
+                case 'T':
+                    stats->acgtno_bc[i].t++;
+                    break;
+                case 'N':
+                    stats->acgtno_bc[i].n++;
+                    break;
+                case '-':
+                    if (stats->dual_flag > 0) {
+                        if (stats->dual_flag != i)
+                            error("Dual barcodes differ in length. Aborting!\n");
+                    } else {
+                        stats->dual_flag = i;
+                    }
+                    break;
+                default:
+                    stats->acgtno_bc[i].other++;
+                }
+            }
+
+            uint8_t *qt = bam_aux_get(bam_line, "QT");
+            if (qt) {
+                char *barqual = bam_aux2Z(qt);
+                if (barqual) {
+                    uint32_t barqual_len = strlen(barqual);
+                    if (barqual_len == barcode_len) {
+                        for (i=0; i<barcode_len; i++) {
+                            int32_t qual = (int32_t)barqual[i] - '!'; // Phred + 33
+                            if (qual >=0 && qual < stats->nquals_bc) {
+                                stats->quals_bc[i*stats->nquals_bc + qual]++;
+                                if (qual > stats->maxqual_bc)
+                                    stats->maxqual_bc = qual;
+                            }
+                        }
+                    } else {
+                        fprintf(stderr, "BC length and QT length don't match for sequence %s\n", bam_get_qname(bam_line));
+                    }
+                } else {
+                    fprintf(stderr, "QT value does not exist for sequence %s\n", bam_get_qname(bam_line));
+                }
+            }
+        } else {
+            fprintf(stderr, "BC value does not exist for sequence %s\n", bam_get_qname(bam_line));
         }
     }
 
@@ -1514,13 +1560,14 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
     }
     fprintf(to, "# ACGT content per cycle for bar codes. Use `grep ^BCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
-    for (ibase=0; ibase<stats->nbases_bc; ibase++)
+    for (ibase=0; ibase<stats->nbases_bc && ibase!=stats->dual_flag; ibase++)
     {
         acgtno_count_t *acgtno_count_bc = &(stats->acgtno_bc[ibase]);
         uint64_t acgt_sum_bc = acgtno_count_bc->a + acgtno_count_bc->c + acgtno_count_bc->g + acgtno_count_bc->t;
 
         if ( acgt_sum_bc )
-            fprintf(to, "BCC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+            fprintf(to, "BCC%d\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", stats->dual_flag < 0 || ibase < stats->dual_flag ? 1 : 2,
+                    stats->dual_flag < 0 || ibase < stats->dual_flag ? ibase+1 : ibase-stats->dual_flag,
                     100.*acgtno_count_bc->a/acgt_sum_bc,
                     100.*acgtno_count_bc->c/acgt_sum_bc,
                     100.*acgtno_count_bc->g/acgt_sum_bc,
@@ -1528,6 +1575,17 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                     100.*acgtno_count_bc->n/acgt_sum_bc,
                     100.*acgtno_count_bc->other/acgt_sum_bc);
 
+    }
+    fprintf(to, "# Barcode Qualities. Use `grep ^BCQ | cut -f 2-` to extract this part.\n");
+    fprintf(to, "# Columns correspond to qualities and rows to barcode cycles. First column is the cycle number.\n");
+    for (ibase=0; ibase<stats->nbases_bc && ibase!=stats->dual_flag; ibase++)
+    {
+        fprintf(to, "BCQ%d\t%d",stats->dual_flag < 0 || ibase < stats->dual_flag ? 1 : 2, stats->dual_flag < 0 || ibase < stats->dual_flag ? ibase+1 : ibase-stats->dual_flag);
+        for (iqual=0; iqual<=stats->maxqual_bc; iqual++)
+        {
+            fprintf(to, "\t%ld", (long)stats->quals_bc[ibase*stats->nquals_bc+iqual]);
+        }
+        fprintf(to, "\n");
     }
     fprintf(to, "# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
@@ -1899,6 +1957,7 @@ void cleanup_stats(stats_t* stats)
     free(stats->del_cycles_1st);
     free(stats->del_cycles_2nd);
     free(stats->acgtno_bc);
+    free(stats->quals_bc);
     destroy_regions(stats);
     if ( stats->rg_hash ) khash_str2int_destroy(stats->rg_hash);
     free(stats->split_name);
@@ -1999,7 +2058,10 @@ stats_t* stats_init()
     stats->last_pair_tid = -2;
     stats->last_read_flush = 0;
     stats->target_count = 0;
-    stats->nbases_bc = 8;
+    stats->nbases_bc = 0;
+    stats->nquals_bc = 256;
+    stats->maxqual_bc = -1;
+    stats->dual_flag = -1;
 
     return stats;
 }
@@ -2045,6 +2107,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
     stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
     stats->acgtno_bc      = calloc(stats->nbases_bc, sizeof(acgtno_count_t));
+    stats->quals_bc       = calloc(stats->nbases_bc*stats->nquals_bc,sizeof(uint64_t));
     realloc_rseq_buffer(stats);
     if ( targets )
         init_regions(stats, targets);
