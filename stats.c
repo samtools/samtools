@@ -829,7 +829,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
                 case '-':
                     if (stats->dual_flag > 0) {
                         if (stats->dual_flag != i)
-                            error("Dual barcodes differ in length. Aborting!\n");
+                            error("Dual barcodes differ in length at sequence '%s'. Aborting!\n", bam_get_qname(bam_line));
                     } else {
                         stats->dual_flag = i;
                     }
@@ -854,14 +854,14 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
                             }
                         }
                     } else {
-                        fprintf(stderr, "BC length and QT length don't match for sequence %s\n", bam_get_qname(bam_line));
+                        fprintf(stderr, "BC length and QT length don't match for sequence '%s'\n", bam_get_qname(bam_line));
                     }
                 } else {
-                    fprintf(stderr, "QT value does not exist for sequence %s\n", bam_get_qname(bam_line));
+                    fprintf(stderr, "QT value does not exist for sequence '%s'\n", bam_get_qname(bam_line));
                 }
             }
         } else {
-            fprintf(stderr, "BC value does not exist for sequence %s\n", bam_get_qname(bam_line));
+            fprintf(stderr, "BC value does not exist for sequence '%s'\n", bam_get_qname(bam_line));
         }
     }
 
@@ -1560,8 +1560,11 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
     }
     fprintf(to, "# ACGT content per cycle for bar codes. Use `grep ^BCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
-    for (ibase=0; ibase<stats->nbases_bc && ibase!=stats->dual_flag; ibase++)
+    for (ibase=0; ibase<stats->nbases_bc; ibase++)
     {
+        if (ibase == stats->dual_flag)
+            continue;
+
         acgtno_count_t *acgtno_count_bc = &(stats->acgtno_bc[ibase]);
         uint64_t acgt_sum_bc = acgtno_count_bc->a + acgtno_count_bc->c + acgtno_count_bc->g + acgtno_count_bc->t;
 
@@ -1578,8 +1581,11 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
     fprintf(to, "# Barcode Qualities. Use `grep ^BCQ | cut -f 2-` to extract this part.\n");
     fprintf(to, "# Columns correspond to qualities and rows to barcode cycles. First column is the cycle number.\n");
-    for (ibase=0; ibase<stats->nbases_bc && ibase!=stats->dual_flag; ibase++)
+    for (ibase=0; ibase<stats->nbases_bc; ibase++)
     {
+        if (ibase == stats->dual_flag)
+            continue;
+
         fprintf(to, "BCQ%d\t%d",stats->dual_flag < 0 || ibase < stats->dual_flag ? 1 : 2, stats->dual_flag < 0 || ibase < stats->dual_flag ? ibase+1 : ibase-stats->dual_flag);
         for (iqual=0; iqual<=stats->maxqual_bc; iqual++)
         {
