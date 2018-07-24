@@ -515,7 +515,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
         for (i=0; i<sm->n; i++)
             bcf_hdr_add_sample(bcf_hdr, sm->smpl[i]);
         bcf_hdr_add_sample(bcf_hdr, NULL);
-        bcf_hdr_write(bcf_fp, bcf_hdr);
+        if (bcf_hdr_write(bcf_fp, bcf_hdr) != 0) {
+            fprintf(stderr, "Failed to write BCF header to \"%s\" : %s\n",
+                    conf->output_fname? conf->output_fname : "standard output",
+                    strerror(errno));
+            exit(EXIT_FAILURE);
+        }
         // End of BCF header creation
 
         // Initialise the calling algorithm
@@ -595,7 +600,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             bcf_call_combine(gplp.n, bcr, bca, ref16, &bc);
             bcf_clear1(bcf_rec);
             bcf_call2bcf(&bc, bcf_rec, bcr, conf->fmt_flag, 0, 0);
-            bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
+            if (bcf_write1(bcf_fp, bcf_hdr, bcf_rec) != 0) {
+                fprintf(stderr, "Failed to write BCF record to \"%s\" : %s\n",
+                        conf->output_fname?conf->output_fname:"standard output",
+                        strerror(errno));
+                exit(EXIT_FAILURE);
+            }
             // call indels; todo: subsampling with total_depth>max_indel_depth instead of ignoring?
             if (!(conf->flag&MPLP_NO_INDEL) && total_depth < max_indel_depth && bcf_call_gap_prep(gplp.n, gplp.n_plp, gplp.plp, pos, bca, ref, rghash) >= 0)
             {
@@ -605,7 +615,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
                 if (bcf_call_combine(gplp.n, bcr, bca, -1, &bc) >= 0) {
                     bcf_clear1(bcf_rec);
                     bcf_call2bcf(&bc, bcf_rec, bcr, conf->fmt_flag, bca, ref);
-                    bcf_write1(bcf_fp, bcf_hdr, bcf_rec);
+                    if (bcf_write1(bcf_fp, bcf_hdr, bcf_rec) != 0) {
+                        fprintf(stderr, "Failed to write BCF record to \"%s\" : %s\n",
+                                conf->output_fname?conf->output_fname:"standard output",
+                                strerror(errno));
+                        exit(EXIT_FAILURE);
+                    }
                 }
             }
         } else {
