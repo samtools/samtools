@@ -31,9 +31,9 @@
 @SQ	SN:ref3_unused	LN:70	M5:5fdd18c2c6ecac4838996d029bf395b5
 r1	99	alpha	1	40	35M	=	66	100	TGGGGTGTCATAGTAATCCGGTTGGGAGTCCGAGG	*	NM:i:0	RG:Z:s1_a_1
 r1	147	alpha	66	40	35M	=	1	-100	TATCCAGAACTTTGCAGCCATATCTCCAAGACATG	*	NM:i:0	RG:Z:s1_a_1
-ref1_grp1_p001	99	ref1	1	0	10M	=	25	34	CGAGCTCGGT	!!!!!!!!!!	RG:Z:grp1	BC:Z:ACGT	H0:i:1	aa:A:!	ab:A:~	fa:f:3.14159	za:Z:Hello world!	ha:H:DEADBEEF	ba:B:c,-128,0,127	bb:B:C,0,127,255	bc:B:s,-32768,0,32767	bd:B:S,0,32768,65535	be:B:i,-2147483648,0,2147483647	bf:B:I,0,2147483648,4294967295	bg:B:f,2.71828,6.626e-34,2.9979e+09	NM:i:0	MD:Z:10
-ref1_grp2_p001	99	ref1	3	1	10M	=	27	34	AGCTCGGTAC	""""""""""	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE	NM:i:0	MD:Z:10
-ref1_grp1_p002	99	ref1	5	2	10M	=	29	34	CTCGGTACCC	##########	RG:Z:grp1	BC:Z:AATTCCGG	H0:i:1	aa:A:a	ab:A:z	fa:f:4.3597e-18	za:Z:Another string	ha:H:2000AD	NM:i:0	MD:Z:10
+ref1_grp1_p001	99	ref1	1	0	10M	=	25	34	CGAGCTCGGT	!!!!!!!!!!	RG:Z:grp1	H0:i:1	aa:A:!	ab:A:~	fa:f:3.14159	za:Z:Hello world!	ha:H:DEADBEEF	ba:B:c,-128,0,127	bb:B:C,0,127,255	bc:B:s,-32768,0,32767	bd:B:S,0,32768,65535	be:B:i,-2147483648,0,2147483647	bf:B:I,0,2147483648,4294967295	bg:B:f,2.71828,6.626e-34,2.9979e+09	NM:i:0	MD:Z:10
+ref1_grp2_p001	99	ref1	3	1	10M	=	27	34	AGCTCGGTAC	""""""""""	RG:Z:grp2	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE	NM:i:0	MD:Z:10
+ref1_grp1_p002	99	ref1	5	2	10M	=	29	34	CTCGGTACCC	##########	RG:Z:grp1	H0:i:1	aa:A:a	ab:A:z	fa:f:4.3597e-18	za:Z:Another string	ha:H:2000AD	NM:i:0	MD:Z:10
 ref1_grp2_p002	99	ref1	7	3	10M	=	31	34	CGGTACCCGG	$$$$$$$$$$	fa:f:6.022e+23	RG:Z:grp2	NM:i:0	MD:Z:10
 ref1_grp1_p003	99	ref1	9	4	10M	=	33	34	GTACCCGGGG	%%%%%%%%%%	fa:f:1.66e-27	RG:Z:grp1	NM:i:0	MD:Z:10
 ref1_grp2_p003	99	ref1	11	5	10M	=	35	34	ACCCGGGGAT	&&&&&&&&&&	RG:Z:grp2	ia:i:4294967295	NM:i:0	MD:Z:10
