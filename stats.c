@@ -231,13 +231,33 @@ typedef struct
     uint32_t last_pair_tid;
     uint32_t last_read_flush;
 
-    // Barcode statistics
+    // Barcode BC statistics
     acgtno_count_t *acgtno_bc;
     uint32_t nbases_bc;
     uint64_t *quals_bc;
-    uint32_t nquals_bc;
     int maxqual_bc;
-    int32_t dual_flag;           // Index of the hyphen (if present)
+    int32_t separator_bc;           // Index of the hyphen (if present)
+
+    // Barcode CR statistics
+    acgtno_count_t *acgtno_cr;
+    uint32_t nbases_cr;
+    uint64_t *quals_cr;
+    int maxqual_cr;
+    int32_t separator_cr;           // Index of the hyphen (if present)
+
+    // Barcode OX statistics
+    acgtno_count_t *acgtno_ox;
+    uint32_t nbases_ox;
+    uint64_t *quals_ox;
+    int maxqual_ox;
+    int32_t separator_ox;           // Index of the hyphen (if present)
+
+    // Barcode RX statistics
+    acgtno_count_t *acgtno_rx;
+    uint32_t nbases_rx;
+    uint64_t *quals_rx;
+    int maxqual_rx;
+    int32_t separator_rx;           // Index of the hyphen (if present)
 }
 stats_t;
 KHASH_MAP_INIT_STR(c2stats, stats_t*)
@@ -703,47 +723,111 @@ int collect_barcode_stats(bam1_t* bam_line, stats_t* stats, const char *barcode_
     if (bc) {
         char* barcode = bam_aux2Z(bc);
         if (barcode) {
-            uint32_t barcode_len = strlen(barcode);
-            if (!stats->nbases_bc) {
-                stats->nbases_bc = barcode_len;
+            uint32_t barcode_len = strlen(barcode), nbases;
+            int *maxqual;
+            acgtno_count_t *acgtno;
+            uint64_t *quals;
+            int32_t *separator;
 
-                stats->acgtno_bc = calloc(stats->nbases_bc, sizeof(acgtno_count_t));
-                stats->quals_bc  = calloc(stats->nbases_bc*stats->nquals_bc, sizeof(uint64_t));
+            if (!strncmp(barcode_tag, "BC", 2)) {
+                if (!stats->nbases_bc) {
+                    stats->nbases_bc = barcode_len;
 
-                if (!stats->acgtno_bc || !stats->quals_bc)
-                    error("Error allocating memory. Aborting!\n");
+                    stats->acgtno_bc = calloc(stats->nbases_bc, sizeof(acgtno_count_t));
+                    stats->quals_bc  = calloc(stats->nbases_bc*stats->nquals, sizeof(uint64_t));
+
+                    if (!stats->acgtno_bc || !stats->quals_bc)
+                        error("Error allocating memory. Aborting!\n");
+                }
+
+                nbases = stats->nbases_bc;
+                maxqual = &stats->maxqual_bc;
+                acgtno = stats->acgtno_bc;
+                quals = stats->quals_bc;
+                separator = &stats->separator_bc;
             }
 
-            if (barcode_len > stats->nbases_bc)
+            if (!strncmp(barcode_tag, "CR", 2)) {
+                if (!stats->nbases_cr) {
+                    stats->nbases_cr = barcode_len;
+
+                    stats->acgtno_cr = calloc(stats->nbases_cr, sizeof(acgtno_count_t));
+                    stats->quals_cr  = calloc(stats->nbases_cr*stats->nquals, sizeof(uint64_t));
+
+                    if (!stats->acgtno_cr || !stats->quals_cr)
+                        error("Error allocating memory. Aborting!\n");
+                }
+
+                nbases = stats->nbases_cr;
+                maxqual = &stats->maxqual_cr;
+                acgtno = stats->acgtno_cr;
+                quals = stats->quals_cr;
+                separator = &stats->separator_cr;
+            }
+
+            if (!strncmp(barcode_tag, "OX", 2)) {
+                if (!stats->nbases_ox) {
+                    stats->nbases_ox = barcode_len;
+
+                    stats->acgtno_ox = calloc(stats->nbases_ox, sizeof(acgtno_count_t));
+                    stats->quals_ox  = calloc(stats->nbases_ox*stats->nquals, sizeof(uint64_t));
+
+                    if (!stats->acgtno_ox || !stats->quals_ox)
+                        error("Error allocating memory. Aborting!\n");
+                }
+
+                nbases = stats->nbases_ox;
+                maxqual = &stats->maxqual_ox;
+                acgtno = stats->acgtno_ox;
+                quals = stats->quals_ox;
+                separator = &stats->separator_ox;
+            }
+
+            if (!strncmp(barcode_tag, "RX", 2)) {
+                if (!stats->nbases_rx) {
+                    stats->nbases_rx = barcode_len;
+
+                    stats->acgtno_rx = calloc(stats->nbases_rx, sizeof(acgtno_count_t));
+                    stats->quals_rx  = calloc(stats->nbases_rx*stats->nquals, sizeof(uint64_t));
+
+                    if (!stats->acgtno_rx || !stats->quals_rx)
+                        error("Error allocating memory. Aborting!\n");
+                }
+
+                nbases = stats->nbases_rx;
+                maxqual = &stats->maxqual_rx;
+                acgtno = stats->acgtno_rx;
+                quals = stats->quals_rx;
+                separator = &stats->separator_rx;
+            }
+
+            if (barcode_len > nbases)
                 error("Barcodes differ in length at sequence '%s'. Aborting!\n", bam_get_qname(bam_line));
 
             for (i = 0; i < barcode_len; i++) {
                 switch (barcode[i]) {
                 case 'A':
-                    stats->acgtno_bc[i].a++;
+                    acgtno[i].a++;
                     break;
                 case 'C':
-                    stats->acgtno_bc[i].c++;
+                    acgtno[i].c++;
                     break;
                 case 'G':
-                    stats->acgtno_bc[i].g++;
+                    acgtno[i].g++;
                     break;
                 case 'T':
-                    stats->acgtno_bc[i].t++;
+                    acgtno[i].t++;
                     break;
                 case 'N':
-                    stats->acgtno_bc[i].n++;
-                    break;
-                case '-':
-                    if (stats->dual_flag > 0) {
-                        if (stats->dual_flag != i)
-                            error("Dual barcode separator in different position at sequence '%s'. Aborting!\n", bam_get_qname(bam_line));
-                    } else {
-                        stats->dual_flag = i;
-                    }
+                    acgtno[i].n++;
                     break;
                 default:
-                    stats->acgtno_bc[i].other++;
+                    if (*separator > 0) {
+                        if (*separator != i)
+                            error("Barcode separator in different position at sequence '%s'. Aborting!\n", bam_get_qname(bam_line));
+                    } else {
+                        *separator = i;
+                    }
                 }
             }
 
@@ -755,10 +839,10 @@ int collect_barcode_stats(bam1_t* bam_line, stats_t* stats, const char *barcode_
                     if (barqual_len == barcode_len) {
                         for (i = 0; i < barcode_len; i++) {
                             int32_t qual = (int32_t)barqual[i] - '!';  // Phred + 33
-                            if (qual >= 0 && qual < stats->nquals_bc) {
-                                stats->quals_bc[i * stats->nquals_bc + qual]++;
-                                if (qual > stats->maxqual_bc)
-                                    stats->maxqual_bc = qual;
+                            if (qual >= 0 && qual < stats->nquals) {
+                                quals[i * stats->nquals + qual]++;
+                                if (qual > *maxqual)
+                                    *maxqual = qual;
                             }
                         }
                     } else {
@@ -863,10 +947,10 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
     // Barcode statistics
     if (IS_READ1(bam_line)) {
-        if (collect_barcode_stats(bam_line, stats, "BC", "QT"))
-            if (collect_barcode_stats(bam_line, stats, "CR", "CY"))
-                if (collect_barcode_stats(bam_line, stats, "OX", "BZ"))
-                    collect_barcode_stats(bam_line, stats, "RX", "QX");
+        collect_barcode_stats(bam_line, stats, "BC", "QT");
+        collect_barcode_stats(bam_line, stats, "CR", "CY");
+        collect_barcode_stats(bam_line, stats, "OX", "BZ");
+        collect_barcode_stats(bam_line, stats, "RX", "QX");
     }
 
     // Look at the flags and increment appropriate counters (mapped, paired, etc)
@@ -1564,37 +1648,139 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
     }
     if (stats->nbases_bc) {
-        fprintf(to, "# ACGT content per cycle for bar codes. Use `grep ^BCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
+        fprintf(to, "# ACGT content per cycle for barcodes. Use `grep ^BCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N counts as a percentage of all A/C/G/T bases [%%]\n");
         for (ibase=0; ibase<stats->nbases_bc; ibase++)
         {
-            if (ibase == stats->dual_flag)
+            if (ibase == stats->separator_bc)
                 continue;
 
             acgtno_count_t *acgtno_count_bc = &(stats->acgtno_bc[ibase]);
             uint64_t acgt_sum_bc = acgtno_count_bc->a + acgtno_count_bc->c + acgtno_count_bc->g + acgtno_count_bc->t;
 
             if ( acgt_sum_bc )
-                fprintf(to, "BCC%d\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", stats->dual_flag < 0 || ibase < stats->dual_flag ? 1 : 2,
-                        stats->dual_flag < 0 || ibase < stats->dual_flag ? ibase+1 : ibase-stats->dual_flag,
+                fprintf(to, "BCC%d\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", stats->separator_bc < 0 || ibase < stats->separator_bc ? 1 : 2,
+                        stats->separator_bc < 0 || ibase < stats->separator_bc ? ibase+1 : ibase-stats->separator_bc,
                                 100.*acgtno_count_bc->a/acgt_sum_bc,
                                 100.*acgtno_count_bc->c/acgt_sum_bc,
                                 100.*acgtno_count_bc->g/acgt_sum_bc,
                                 100.*acgtno_count_bc->t/acgt_sum_bc,
-                                100.*acgtno_count_bc->n/acgt_sum_bc,
-                                100.*acgtno_count_bc->other/acgt_sum_bc);
-
+                                100.*acgtno_count_bc->n/acgt_sum_bc);
         }
         fprintf(to, "# Barcode Qualities. Use `grep ^BCQ | cut -f 2-` to extract this part.\n");
         fprintf(to, "# Columns correspond to qualities and rows to barcode cycles. First column is the cycle number.\n");
         for (ibase=0; ibase<stats->nbases_bc; ibase++)
         {
-            if (ibase == stats->dual_flag)
+            if (ibase == stats->separator_bc)
                 continue;
 
-            fprintf(to, "BCQ%d\t%d",stats->dual_flag < 0 || ibase < stats->dual_flag ? 1 : 2, stats->dual_flag < 0 || ibase < stats->dual_flag ? ibase+1 : ibase-stats->dual_flag);
+            fprintf(to, "BCQ%d\t%d",stats->separator_bc < 0 || ibase < stats->separator_bc ? 1 : 2, stats->separator_bc < 0 || ibase < stats->separator_bc ? ibase+1 : ibase-stats->separator_bc);
             for (iqual=0; iqual<=stats->maxqual_bc; iqual++)
             {
-                fprintf(to, "\t%ld", (long)stats->quals_bc[ibase*stats->nquals_bc+iqual]);
+                fprintf(to, "\t%ld", (long)stats->quals_bc[ibase*stats->nquals+iqual]);
+            }
+            fprintf(to, "\n");
+        }
+    }
+    if (stats->nbases_cr) {
+        fprintf(to, "# ACGT content per cycle for cellular barcodes. Use `grep ^CRC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N counts as a percentage of all A/C/G/T bases [%%]\n");
+        for (ibase=0; ibase<stats->nbases_cr; ibase++)
+        {
+            if (ibase == stats->separator_cr)
+                continue;
+
+            acgtno_count_t *acgtno_count_cr = &(stats->acgtno_cr[ibase]);
+            uint64_t acgt_sum_cr = acgtno_count_cr->a + acgtno_count_cr->c + acgtno_count_cr->g + acgtno_count_cr->t;
+
+            if ( acgt_sum_cr )
+                fprintf(to, "CRC%d\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", stats->separator_cr < 0 || ibase < stats->separator_cr ? 1 : 2,
+                        stats->separator_cr < 0 || ibase < stats->separator_cr ? ibase+1 : ibase-stats->separator_cr,
+                                100.*acgtno_count_cr->a/acgt_sum_cr,
+                                100.*acgtno_count_cr->c/acgt_sum_cr,
+                                100.*acgtno_count_cr->g/acgt_sum_cr,
+                                100.*acgtno_count_cr->t/acgt_sum_cr,
+                                100.*acgtno_count_cr->n/acgt_sum_cr);
+        }
+        fprintf(to, "# Cellular barcode Qualities. Use `grep ^CRQ | cut -f 2-` to extract this part.\n");
+        fprintf(to, "# Columns correspond to qualities and rows to barcode cycles. First column is the cycle number.\n");
+        for (ibase=0; ibase<stats->nbases_cr; ibase++)
+        {
+            if (ibase == stats->separator_cr)
+                continue;
+
+            fprintf(to, "CRQ%d\t%d",stats->separator_cr < 0 || ibase < stats->separator_cr ? 1 : 2, stats->separator_cr < 0 || ibase < stats->separator_cr ? ibase+1 : ibase-stats->separator_cr);
+            for (iqual=0; iqual<=stats->maxqual_cr; iqual++)
+            {
+                fprintf(to, "\t%ld", (long)stats->quals_cr[ibase*stats->nquals+iqual]);
+            }
+            fprintf(to, "\n");
+        }
+    }
+    if (stats->nbases_ox) {
+        fprintf(to, "# ACGT content per cycle for raw molecular identifiers. Use `grep ^OXC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N counts as a percentage of all A/C/G/T bases [%%]\n");
+        for (ibase=0; ibase<stats->nbases_ox; ibase++)
+        {
+            if (ibase == stats->separator_ox)
+                continue;
+
+            acgtno_count_t *acgtno_count_ox = &(stats->acgtno_ox[ibase]);
+            uint64_t acgt_sum_ox = acgtno_count_ox->a + acgtno_count_ox->c + acgtno_count_ox->g + acgtno_count_ox->t;
+
+            if ( acgt_sum_ox )
+                fprintf(to, "OXC%d\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", stats->separator_ox < 0 || ibase < stats->separator_ox ? 1 : 2,
+                        stats->separator_ox < 0 || ibase < stats->separator_ox ? ibase+1 : ibase-stats->separator_ox,
+                                100.*acgtno_count_ox->a/acgt_sum_ox,
+                                100.*acgtno_count_ox->c/acgt_sum_ox,
+                                100.*acgtno_count_ox->g/acgt_sum_ox,
+                                100.*acgtno_count_ox->t/acgt_sum_ox,
+                                100.*acgtno_count_ox->n/acgt_sum_ox);
+
+        }
+        fprintf(to, "# Raw molecular identifiers Qualities. Use `grep ^OXQ | cut -f 2-` to extract this part.\n");
+        fprintf(to, "# Columns correspond to qualities and rows to barcode cycles. First column is the cycle number.\n");
+        for (ibase=0; ibase<stats->nbases_ox; ibase++)
+        {
+            if (ibase == stats->separator_ox)
+                continue;
+
+            fprintf(to, "OXQ%d\t%d",stats->separator_ox < 0 || ibase < stats->separator_ox ? 1 : 2, stats->separator_ox < 0 || ibase < stats->separator_ox ? ibase+1 : ibase-stats->separator_ox);
+            for (iqual=0; iqual<=stats->maxqual_ox; iqual++)
+            {
+                fprintf(to, "\t%ld", (long)stats->quals_ox[ibase*stats->nquals+iqual]);
+            }
+            fprintf(to, "\n");
+        }
+    }
+    if (stats->nbases_rx) {
+        fprintf(to, "# ACGT content per cycle for molecular identifiers. Use `grep ^RXC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N counts as a percentage of all A/C/G/T bases [%%]\n");
+        for (ibase=0; ibase<stats->nbases_rx; ibase++)
+        {
+            if (ibase == stats->separator_rx)
+                continue;
+
+            acgtno_count_t *acgtno_count_rx = &(stats->acgtno_rx[ibase]);
+            uint64_t acgt_sum_rx = acgtno_count_rx->a + acgtno_count_rx->c + acgtno_count_rx->g + acgtno_count_rx->t;
+
+            if ( acgt_sum_rx )
+                fprintf(to, "RXC%d\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", stats->separator_rx < 0 || ibase < stats->separator_rx ? 1 : 2,
+                        stats->separator_rx < 0 || ibase < stats->separator_rx ? ibase+1 : ibase-stats->separator_rx,
+                                100.*acgtno_count_rx->a/acgt_sum_rx,
+                                100.*acgtno_count_rx->c/acgt_sum_rx,
+                                100.*acgtno_count_rx->g/acgt_sum_rx,
+                                100.*acgtno_count_rx->t/acgt_sum_rx,
+                                100.*acgtno_count_rx->n/acgt_sum_rx);
+
+        }
+        fprintf(to, "# Molecular identifiers Qualities. Use `grep ^RXQ | cut -f 2-` to extract this part.\n");
+        fprintf(to, "# Columns correspond to qualities and rows to barcode cycles. First column is the cycle number.\n");
+        for (ibase=0; ibase<stats->nbases_rx; ibase++)
+        {
+            if (ibase == stats->separator_rx)
+                continue;
+
+            fprintf(to, "RXQ%d\t%d",stats->separator_rx < 0 || ibase < stats->separator_rx ? 1 : 2, stats->separator_rx < 0 || ibase < stats->separator_rx ? ibase+1 : ibase-stats->separator_rx);
+            for (iqual=0; iqual<=stats->maxqual_rx; iqual++)
+            {
+                fprintf(to, "\t%ld", (long)stats->quals_rx[ibase*stats->nquals+iqual]);
             }
             fprintf(to, "\n");
         }
@@ -1970,6 +2156,12 @@ void cleanup_stats(stats_t* stats)
     free(stats->del_cycles_2nd);
     if (stats->acgtno_bc) free(stats->acgtno_bc);
     if (stats->quals_bc) free(stats->quals_bc);
+    if (stats->acgtno_cr) free(stats->acgtno_cr);
+    if (stats->quals_cr) free(stats->quals_cr);
+    if (stats->acgtno_ox) free(stats->acgtno_ox);
+    if (stats->quals_ox) free(stats->quals_ox);
+    if (stats->acgtno_rx) free(stats->acgtno_rx);
+    if (stats->quals_rx) free(stats->quals_rx);
     destroy_regions(stats);
     if ( stats->rg_hash ) khash_str2int_destroy(stats->rg_hash);
     free(stats->split_name);
@@ -2070,9 +2262,14 @@ stats_t* stats_init()
     stats->last_pair_tid = -2;
     stats->last_read_flush = 0;
     stats->target_count = 0;
-    stats->nquals_bc = 256;
     stats->maxqual_bc = -1;
-    stats->dual_flag = -1;
+    stats->separator_bc = -1;
+    stats->maxqual_cr = -1;
+    stats->separator_cr = -1;
+    stats->maxqual_ox = -1;
+    stats->separator_ox = -1;
+    stats->maxqual_rx = -1;
+    stats->separator_rx = -1;
 
     return stats;
 }
