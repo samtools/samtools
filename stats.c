@@ -745,9 +745,7 @@ int collect_barcode_stats(bam1_t* bam_line, stats_t* stats, const char *barcode_
                 acgtno = stats->acgtno_bc;
                 quals = stats->quals_bc;
                 separator = &stats->separator_bc;
-            }
-
-            if (!strncmp(barcode_tag, "CR", 2)) {
+            } else if (!strncmp(barcode_tag, "CR", 2)) {
                 if (!stats->nbases_cr) {
                     stats->nbases_cr = barcode_len;
 
@@ -763,9 +761,7 @@ int collect_barcode_stats(bam1_t* bam_line, stats_t* stats, const char *barcode_
                 acgtno = stats->acgtno_cr;
                 quals = stats->quals_cr;
                 separator = &stats->separator_cr;
-            }
-
-            if (!strncmp(barcode_tag, "OX", 2)) {
+            } else if (!strncmp(barcode_tag, "OX", 2)) {
                 if (!stats->nbases_ox) {
                     stats->nbases_ox = barcode_len;
 
@@ -781,9 +777,7 @@ int collect_barcode_stats(bam1_t* bam_line, stats_t* stats, const char *barcode_
                 acgtno = stats->acgtno_ox;
                 quals = stats->quals_ox;
                 separator = &stats->separator_ox;
-            }
-
-            if (!strncmp(barcode_tag, "RX", 2)) {
+            } else if (!strncmp(barcode_tag, "RX", 2)) {
                 if (!stats->nbases_rx) {
                     stats->nbases_rx = barcode_len;
 
@@ -799,6 +793,8 @@ int collect_barcode_stats(bam1_t* bam_line, stats_t* stats, const char *barcode_
                 acgtno = stats->acgtno_rx;
                 quals = stats->quals_rx;
                 separator = &stats->separator_rx;
+            } else {
+                return 2;
             }
 
             if (barcode_len > nbases)
