@@ -716,7 +716,7 @@ void update_checksum(bam1_t *bam_line, stats_t *stats)
     stats->checksum.quals += crc32(0L, qual, (seq_len+1)/2);
 }
 
-int collect_barcode_stats(bam1_t* bam_line, stats_t* stats, const char *barcode_tag, const char *qual_tag) {
+static int collect_barcode_stats(bam1_t* bam_line, stats_t* stats, const char *barcode_tag, const char *qual_tag) {
     // Barcode statistics
     uint32_t i;
     uint8_t* bc = bam_aux_get(bam_line, barcode_tag);
