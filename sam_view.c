@@ -780,7 +780,7 @@ static void bam2fq_usage(FILE *to, const char *command)
     if (fq) fprintf(to,
 "  -v INT               default quality score if not given in file [1]\n"
 "  -i                   add Illumina Casava 1.8 format entry to header (eg 1:N:0:ATCACG)\n"
-"  -c                   compression level [0..9] to use when creating gz or bgzf fastq files\n"
+"  -c                   compression level [0..9] to use when creating gz or bgzf fastq files [1]\n"
 "  --i1 FILE            write first index reads to FILE\n"
 "  --i2 FILE            write second index reads to FILE\n"
 "  --barcode-tag TAG    Barcode tag [default: " DEFAULT_BARCODE_TAG "]\n"
