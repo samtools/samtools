@@ -847,6 +847,7 @@ typedef struct bam2fq_state {
     klist_t(ktaglist) *taglist;
     char *index_sequence;
     char compression_level;
+    htsThreadPool p;
 } bam2fq_state_t;
 
 /*
@@ -1360,7 +1361,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     return true;
 }
 
-static BGZF *open_fqfile(char *filename, int c)
+static BGZF *open_fqfile(char *filename, int c, htsThreadPool *tp)
 {
     char mode[4] = "w";
     size_t len = strlen(filename);
@@ -1375,7 +1376,14 @@ static BGZF *open_fqfile(char *filename, int c)
         mode[1] = 'u';
     }
 
-    return bgzf_open(filename,mode);
+    BGZF *fp = bgzf_open(filename,mode);
+    if (!fp)
+        return fp;
+    if (tp->pool && bgzf_thread_pool(fp, tp->pool, tp->qsize) < 0) {
+        bgzf_close(fp);
+        return NULL;
+    }
+    return fp;
 }
 
 static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
@@ -1416,8 +1424,18 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         free(state);
         return false;
     }
-    if (opts->ga.nthreads > 0)
-        hts_set_threads(state->fp, opts->ga.nthreads);
+
+    state->p.pool = NULL;
+    if (opts->ga.nthreads > 0) {
+        if (!(state->p.pool = hts_tpool_init(opts->ga.nthreads))) {
+            fprintf(stderr, "Failed to create thread pool\n");
+            free(state);
+            return false;
+        }
+        state->p.qsize = opts->ga.nthreads*2;
+        hts_set_thread_pool(state->fp, &state->p);
+    }
+
     uint32_t rf = SAM_QNAME | SAM_FLAG | SAM_SEQ | SAM_QUAL;
     if (opts->use_oq || opts->extra_tags || opts->index_file[0]) rf |= SAM_AUX;
     if (hts_set_opt(state->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
@@ -1431,7 +1449,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         return false;
     }
     if (opts->fnse) {
-        state->fpse = open_fqfile(opts->fnse, state->compression_level);
+        state->fpse = open_fqfile(opts->fnse, state->compression_level, &state->p);
         if (state->fpse == NULL) {
             print_error_errno("bam2fq", "Cannot write to singleton file \"%s\"", opts->fnse);
             free(state);
@@ -1450,7 +1468,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     int i;
     for (i = 0; i < 3; ++i) {
         if (opts->fnr[i]) {
-            state->fpr[i] = open_fqfile(opts->fnr[i], state->compression_level);
+            state->fpr[i] = open_fqfile(opts->fnr[i], state->compression_level, &state->p);
             if (state->fpr[i] == NULL) {
                 print_error_errno("bam2fq", "Cannot write to r%d file \"%s\"", i, opts->fnr[i]);
                 free(state);
@@ -1471,7 +1489,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     for (i = 0; i < 2; i++) {
         state->fpi[i] = NULL;
         if (opts->index_file[i]) {
-            state->fpi[i] = open_fqfile(opts->index_file[i], state->compression_level);
+            state->fpi[i] = open_fqfile(opts->index_file[i], state->compression_level, &state->p);
             if (state->fpi[i] == NULL) {
                 print_error_errno("bam2fq", "Cannot write to i%d file \"%s\"", i+1, opts->index_file[i]);
                 free(state);
@@ -1517,6 +1535,8 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
     }
     kl_destroy(ktaglist,state->taglist);
     free(state->index_sequence);
+    if (state->p.pool)
+        hts_tpool_destroy(state->p.pool);
     free(state);
     return valid;
 }
