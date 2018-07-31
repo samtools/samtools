@@ -123,6 +123,7 @@ typedef struct
     uint32_t nbases;
     int32_t tag_sep;    // Index of the separator (if present)
     int32_t max_qual;
+    uint32_t offset;    // Where the tag stats info is located in the allocated memory
 }
 barcode_info_t;
 
@@ -705,101 +706,101 @@ void update_checksum(bam1_t *bam_line, stats_t *stats)
 }
 
 // Collect statistics about the barcode tags specified by init_barcode_tags method
-static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats, uint32_t tag) {
-    if (tag >= stats->ntags)
-        return;
-
-    const char *barcode_tag = stats->tags_barcode[tag].tag_name, *qual_tag = stats->tags_barcode[tag].qual_name;
-    uint8_t* bc = bam_aux_get(bam_line, barcode_tag);
-    if (!bc)
-        return;
-
-    char* barcode = bam_aux2Z(bc);
-    if (!barcode)
-        return;
-
-    uint32_t barcode_len = strlen(barcode), nbases, i, prior_nbases = 0;
+static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats) {
+    uint32_t nbases, tag, i;
     acgtno_count_t *acgtno;
     uint64_t *quals;
     int32_t *separator, *maxqual;
 
-    for (i = 0; i < tag; i++)
-        prior_nbases += stats->tags_barcode[i].nbases;
+    for (tag = 0; tag < stats->ntags; tag++) {
+        const char *barcode_tag = stats->tags_barcode[tag].tag_name, *qual_tag = stats->tags_barcode[tag].qual_name;
+        uint8_t* bc = bam_aux_get(bam_line, barcode_tag);
+        if (!bc)
+            continue;
 
-    if (!stats->tags_barcode[tag].nbases) {
-        stats->tags_barcode[tag].nbases = barcode_len;
+        char* barcode = bam_aux2Z(bc);
+        if (!barcode)
+            continue;
 
-        stats->acgtno_barcode = realloc(stats->acgtno_barcode, (prior_nbases + barcode_len) * sizeof(acgtno_count_t));
-        stats->quals_barcode  = realloc(stats->quals_barcode, (prior_nbases + barcode_len) * stats->nquals * sizeof(uint64_t));
+        uint32_t barcode_len = strlen(barcode);
+        if (!stats->tags_barcode[tag].nbases) { // tag seen for the first time
+            uint32_t offset = 0;
+            for (i = 0; i < stats->ntags; i++)
+                offset += stats->tags_barcode[i].nbases;
 
-        if (!stats->acgtno_barcode || !stats->quals_barcode)
-            error("Error allocating memory. Aborting!\n");
+            stats->tags_barcode[tag].offset = offset;
+            stats->tags_barcode[tag].nbases = barcode_len;
+            stats->acgtno_barcode = realloc(stats->acgtno_barcode, (offset + barcode_len) * sizeof(acgtno_count_t));
+            stats->quals_barcode  = realloc(stats->quals_barcode, (offset + barcode_len) * stats->nquals * sizeof(uint64_t));
 
-        memset(stats->acgtno_barcode + prior_nbases, 0, barcode_len*sizeof(acgtno_count_t));
-        memset(stats->quals_barcode + prior_nbases*stats->nquals, 0, barcode_len*stats->nquals*sizeof(uint64_t));
-    }
+            if (!stats->acgtno_barcode || !stats->quals_barcode)
+                error("Error allocating memory. Aborting!\n");
 
-    acgtno = stats->acgtno_barcode + prior_nbases;
-    quals = stats->quals_barcode + prior_nbases*stats->nquals;
-    nbases = stats->tags_barcode[tag].nbases;
-    maxqual = &stats->tags_barcode[tag].max_qual;
-    separator = &stats->tags_barcode[tag].tag_sep;
-
-    if (barcode_len > nbases) {
-        fprintf(stderr, "Barcodes differ in length at sequence '%s'\n", bam_get_qname(bam_line));
-        return;
-    }
-
-    for (i = 0; i < barcode_len; i++) {
-        switch (barcode[i]) {
-        case 'A':
-            acgtno[i].a++;
-            break;
-        case 'C':
-            acgtno[i].c++;
-            break;
-        case 'G':
-            acgtno[i].g++;
-            break;
-        case 'T':
-            acgtno[i].t++;
-            break;
-        case 'N':
-            acgtno[i].n++;
-            break;
-        default:
-            if (*separator >= 0) {
-                if (*separator != i) {
-                    fprintf(stderr, "Barcode separator in different position at sequence '%s'\n", bam_get_qname(bam_line));
-                    return;
-                }
-            } else {
-                *separator = i;
-            }
+            memset(stats->acgtno_barcode + offset, 0, barcode_len*sizeof(acgtno_count_t));
+            memset(stats->quals_barcode + offset*stats->nquals, 0, barcode_len*stats->nquals*sizeof(uint64_t));
         }
-    }
 
-    uint8_t* qt = bam_aux_get(bam_line, qual_tag);
-    if (!qt)
-        return;
+        nbases = stats->tags_barcode[tag].nbases;
+        if (barcode_len > nbases) {
+            fprintf(stderr, "Barcodes with tag %s differ in length at sequence '%s'\n", barcode_tag, bam_get_qname(bam_line));
+            continue;
+        }
 
-    char* barqual = bam_aux2Z(qt);
-    if (!barqual)
-        return;
+        acgtno = stats->acgtno_barcode + stats->tags_barcode[tag].offset;
+        quals = stats->quals_barcode + stats->tags_barcode[tag].offset*stats->nquals;
+        maxqual = &stats->tags_barcode[tag].max_qual;
+        separator = &stats->tags_barcode[tag].tag_sep;
 
-    uint32_t barqual_len = strlen(barqual);
-    if (barqual_len == barcode_len) {
         for (i = 0; i < barcode_len; i++) {
-            int32_t qual = (int32_t)barqual[i] - '!';  // Phred + 33
-            if (qual >= 0 && qual < stats->nquals) {
-                quals[i * stats->nquals + qual]++;
-                if (qual > *maxqual)
-                    *maxqual = qual;
+            switch (barcode[i]) {
+            case 'A':
+                acgtno[i].a++;
+                break;
+            case 'C':
+                acgtno[i].c++;
+                break;
+            case 'G':
+                acgtno[i].g++;
+                break;
+            case 'T':
+                acgtno[i].t++;
+                break;
+            case 'N':
+                acgtno[i].n++;
+                break;
+            default:
+                if (*separator >= 0) {
+                    if (*separator != i) {
+                        fprintf(stderr, "Barcode separator for tag %s is in a different position at sequence '%s'\n", barcode_tag, bam_get_qname(bam_line));
+                        continue;
+                    }
+                } else {
+                    *separator = i;
+                }
             }
         }
-    } else {
-        fprintf(stderr, "%s length and %s length don't match for sequence '%s'\n", barcode_tag, qual_tag, bam_get_qname(bam_line));
-        return;
+
+        uint8_t* qt = bam_aux_get(bam_line, qual_tag);
+        if (!qt)
+            continue;
+
+        char* barqual = bam_aux2Z(qt);
+        if (!barqual)
+            continue;
+
+        uint32_t barqual_len = strlen(barqual);
+        if (barqual_len == barcode_len) {
+            for (i = 0; i < barcode_len; i++) {
+                int32_t qual = (int32_t)barqual[i] - '!';  // Phred + 33
+                if (qual >= 0 && qual < stats->nquals) {
+                    quals[i * stats->nquals + qual]++;
+                    if (qual > *maxqual)
+                        *maxqual = qual;
+                }
+            }
+        } else {
+            fprintf(stderr, "%s length and %s length don't match for sequence '%s'\n", barcode_tag, qual_tag, bam_get_qname(bam_line));
+        }
     }
 }
 
@@ -894,9 +895,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
     // Barcode statistics
     if (IS_READ1(bam_line)) {
-        uint32_t tag;
-        for (tag = 0; tag < stats->ntags; tag++)
-            collect_barcode_stats(bam_line, stats, tag);
+        collect_barcode_stats(bam_line, stats);
     }
 
     // Look at the flags and increment appropriate counters (mapped, paired, etc)
@@ -1595,8 +1594,6 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
     int tag;
     for (tag=0; tag<stats->ntags; tag++) {
-        uint32_t prior_nbases = 0;
-
         if (stats->tags_barcode[tag].nbases) {
             fprintf(to, "# ACGT content per cycle for barcodes. Use `grep ^%sC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N counts as a percentage of all A/C/G/T bases [%%]\n",
                     stats->tags_barcode[tag].tag_name);
@@ -1605,7 +1602,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                 if (ibase == stats->tags_barcode[tag].tag_sep)
                     continue;
 
-                acgtno_count_t *acgtno_count = stats->acgtno_barcode + prior_nbases + ibase;
+                acgtno_count_t *acgtno_count = stats->acgtno_barcode + stats->tags_barcode[tag].offset + ibase;
                 uint64_t acgt_sum = acgtno_count->a + acgtno_count->c + acgtno_count->g + acgtno_count->t;
 
                 if ( acgt_sum )
@@ -1631,11 +1628,10 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                         stats->tags_barcode[tag].tag_sep < 0 || ibase < stats->tags_barcode[tag].tag_sep ? ibase+1 : ibase-stats->tags_barcode[tag].tag_sep);
                 for (iqual=0; iqual<=stats->tags_barcode[tag].max_qual; iqual++)
                 {
-                    fprintf(to, "\t%ld", (long)stats->quals_barcode[(prior_nbases + ibase)*stats->nquals+iqual]);
+                    fprintf(to, "\t%ld", (long)stats->quals_barcode[(stats->tags_barcode[tag].offset + ibase)*stats->nquals+iqual]);
                 }
                 fprintf(to, "\n");
             }
-            prior_nbases += stats->tags_barcode[tag].nbases;
         }
     }
 
@@ -2120,10 +2116,10 @@ static void init_barcode_tags(stats_t* stats) {
     stats->tags_barcode = calloc(stats->ntags, sizeof(barcode_info_t));
     if (!stats->tags_barcode)
         return;
-    stats->tags_barcode[0] = (barcode_info_t){"BC", "QT", 0, -1, -1};
-    stats->tags_barcode[1] = (barcode_info_t){"CR", "CY", 0, -1, -1};
-    stats->tags_barcode[2] = (barcode_info_t){"OX", "BZ", 0, -1, -1};
-    stats->tags_barcode[3] = (barcode_info_t){"RX", "QX", 0, -1, -1};
+    stats->tags_barcode[0] = (barcode_info_t){"BC", "QT", 0, -1, -1, 0};
+    stats->tags_barcode[1] = (barcode_info_t){"CR", "CY", 0, -1, -1, 0};
+    stats->tags_barcode[2] = (barcode_info_t){"OX", "BZ", 0, -1, -1, 0};
+    stats->tags_barcode[3] = (barcode_info_t){"RX", "QX", 0, -1, -1, 0};
 }
 
 static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* group_id, const char* targets)
