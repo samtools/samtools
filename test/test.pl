@@ -2614,6 +2614,11 @@ sub test_stats
     test_cmd($opts,out=>'stat/12.3reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_3reads.bed | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/12.2reads.overlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -t $$opts{path}/stat/12_2reads.bed | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/12.2reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_2reads.bed | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.bc.ok.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_ok.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.ox.ok.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_ok_ox_bz.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_bc_length.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_hyphen.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_qt_length.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
 }
 
 sub test_merge

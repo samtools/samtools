@@ -118,6 +118,17 @@ acgtno_count_t;
 
 typedef struct
 {
+    char tag_name[3];
+    char qual_name[3];
+    uint32_t nbases;
+    int32_t tag_sep;    // Index of the separator (if present)
+    int32_t max_qual;
+    uint32_t offset;    // Where the tag stats info is located in the allocated memory
+}
+barcode_info_t;
+
+typedef struct
+{
     // Auxiliary data
     int flag_require, flag_filter;
     faidx_t *fai;                   // Reference sequence for GC-depth graph
@@ -230,6 +241,12 @@ typedef struct
     uint32_t target_count;        // Number of bases covered by the target file
     uint32_t last_pair_tid;
     uint32_t last_read_flush;
+
+    // Barcode statistics
+    acgtno_count_t *acgtno_barcode;
+    uint64_t *quals_barcode;
+    barcode_info_t *tags_barcode;
+    uint32_t ntags;
 }
 stats_t;
 KHASH_MAP_INIT_STR(c2stats, stats_t*)
@@ -688,6 +705,105 @@ void update_checksum(bam1_t *bam_line, stats_t *stats)
     stats->checksum.quals += crc32(0L, qual, (seq_len+1)/2);
 }
 
+// Collect statistics about the barcode tags specified by init_barcode_tags method
+static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats) {
+    uint32_t nbases, tag, i;
+    acgtno_count_t *acgtno;
+    uint64_t *quals;
+    int32_t *separator, *maxqual;
+
+    for (tag = 0; tag < stats->ntags; tag++) {
+        const char *barcode_tag = stats->tags_barcode[tag].tag_name, *qual_tag = stats->tags_barcode[tag].qual_name;
+        uint8_t* bc = bam_aux_get(bam_line, barcode_tag);
+        if (!bc)
+            continue;
+
+        char* barcode = bam_aux2Z(bc);
+        if (!barcode)
+            continue;
+
+        uint32_t barcode_len = strlen(barcode);
+        if (!stats->tags_barcode[tag].nbases) { // tag seen for the first time
+            uint32_t offset = 0;
+            for (i = 0; i < stats->ntags; i++)
+                offset += stats->tags_barcode[i].nbases;
+
+            stats->tags_barcode[tag].offset = offset;
+            stats->tags_barcode[tag].nbases = barcode_len;
+            stats->acgtno_barcode = realloc(stats->acgtno_barcode, (offset + barcode_len) * sizeof(acgtno_count_t));
+            stats->quals_barcode  = realloc(stats->quals_barcode, (offset + barcode_len) * stats->nquals * sizeof(uint64_t));
+
+            if (!stats->acgtno_barcode || !stats->quals_barcode)
+                error("Error allocating memory. Aborting!\n");
+
+            memset(stats->acgtno_barcode + offset, 0, barcode_len*sizeof(acgtno_count_t));
+            memset(stats->quals_barcode + offset*stats->nquals, 0, barcode_len*stats->nquals*sizeof(uint64_t));
+        }
+
+        nbases = stats->tags_barcode[tag].nbases;
+        if (barcode_len > nbases) {
+            fprintf(stderr, "Barcodes with tag %s differ in length at sequence '%s'\n", barcode_tag, bam_get_qname(bam_line));
+            continue;
+        }
+
+        acgtno = stats->acgtno_barcode + stats->tags_barcode[tag].offset;
+        quals = stats->quals_barcode + stats->tags_barcode[tag].offset*stats->nquals;
+        maxqual = &stats->tags_barcode[tag].max_qual;
+        separator = &stats->tags_barcode[tag].tag_sep;
+
+        for (i = 0; i < barcode_len; i++) {
+            switch (barcode[i]) {
+            case 'A':
+                acgtno[i].a++;
+                break;
+            case 'C':
+                acgtno[i].c++;
+                break;
+            case 'G':
+                acgtno[i].g++;
+                break;
+            case 'T':
+                acgtno[i].t++;
+                break;
+            case 'N':
+                acgtno[i].n++;
+                break;
+            default:
+                if (*separator >= 0) {
+                    if (*separator != i) {
+                        fprintf(stderr, "Barcode separator for tag %s is in a different position at sequence '%s'\n", barcode_tag, bam_get_qname(bam_line));
+                        continue;
+                    }
+                } else {
+                    *separator = i;
+                }
+            }
+        }
+
+        uint8_t* qt = bam_aux_get(bam_line, qual_tag);
+        if (!qt)
+            continue;
+
+        char* barqual = bam_aux2Z(qt);
+        if (!barqual)
+            continue;
+
+        uint32_t barqual_len = strlen(barqual);
+        if (barqual_len == barcode_len) {
+            for (i = 0; i < barcode_len; i++) {
+                int32_t qual = (int32_t)barqual[i] - '!';  // Phred + 33
+                if (qual >= 0 && qual < stats->nquals) {
+                    quals[i * stats->nquals + qual]++;
+                    if (qual > *maxqual)
+                        *maxqual = qual;
+                }
+            }
+        } else {
+            fprintf(stderr, "%s length and %s length don't match for sequence '%s'\n", barcode_tag, qual_tag, bam_get_qname(bam_line));
+        }
+    }
+}
+
 // These stats should only be calculated for the original reads ignoring
 // supplementary artificial reads otherwise we'll accidentally double count
 void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out)
@@ -775,6 +891,11 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
 
         quals[ i*stats->nquals+qual ]++;
         stats->sum_qual += qual;
+    }
+
+    // Barcode statistics
+    if (IS_READ1(bam_line)) {
+        collect_barcode_stats(bam_line, stats);
     }
 
     // Look at the flags and increment appropriate counters (mapped, paired, etc)
@@ -1471,6 +1592,49 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                     100.*acgtno_count_2nd->other/acgt_sum_2nd);
 
     }
+    int tag;
+    for (tag=0; tag<stats->ntags; tag++) {
+        if (stats->tags_barcode[tag].nbases) {
+            fprintf(to, "# ACGT content per cycle for barcodes. Use `grep ^%sC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N counts as a percentage of all A/C/G/T bases [%%]\n",
+                    stats->tags_barcode[tag].tag_name);
+            for (ibase=0; ibase<stats->tags_barcode[tag].nbases; ibase++)
+            {
+                if (ibase == stats->tags_barcode[tag].tag_sep)
+                    continue;
+
+                acgtno_count_t *acgtno_count = stats->acgtno_barcode + stats->tags_barcode[tag].offset + ibase;
+                uint64_t acgt_sum = acgtno_count->a + acgtno_count->c + acgtno_count->g + acgtno_count->t;
+
+                if ( acgt_sum )
+                    fprintf(to, "%sC%d\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", stats->tags_barcode[tag].tag_name,
+                            stats->tags_barcode[tag].tag_sep < 0 || ibase < stats->tags_barcode[tag].tag_sep ? 1 : 2,
+                            stats->tags_barcode[tag].tag_sep < 0 || ibase < stats->tags_barcode[tag].tag_sep ? ibase+1 : ibase-stats->tags_barcode[tag].tag_sep,
+                                    100.*acgtno_count->a/acgt_sum,
+                                    100.*acgtno_count->c/acgt_sum,
+                                    100.*acgtno_count->g/acgt_sum,
+                                    100.*acgtno_count->t/acgt_sum,
+                                    100.*acgtno_count->n/acgt_sum);
+            }
+
+            fprintf(to, "# Barcode Qualities. Use `grep ^%sQ | cut -f 2-` to extract this part.\n", stats->tags_barcode[tag].qual_name);
+            fprintf(to, "# Columns correspond to qualities and rows to barcode cycles. First column is the cycle number.\n");
+            for (ibase=0; ibase<stats->tags_barcode[tag].nbases; ibase++)
+            {
+                if (ibase == stats->tags_barcode[tag].tag_sep)
+                    continue;
+
+                fprintf(to, "%sQ%d\t%d", stats->tags_barcode[tag].qual_name,
+                        stats->tags_barcode[tag].tag_sep < 0 || ibase < stats->tags_barcode[tag].tag_sep ? 1 : 2,
+                        stats->tags_barcode[tag].tag_sep < 0 || ibase < stats->tags_barcode[tag].tag_sep ? ibase+1 : ibase-stats->tags_barcode[tag].tag_sep);
+                for (iqual=0; iqual<=stats->tags_barcode[tag].max_qual; iqual++)
+                {
+                    fprintf(to, "\t%ld", (long)stats->quals_barcode[(stats->tags_barcode[tag].offset + ibase)*stats->nquals+iqual]);
+                }
+                fprintf(to, "\n");
+            }
+        }
+    }
+
     fprintf(to, "# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
         long in = (long)(stats->isize->inward(stats->isize->data, isize));
@@ -1840,6 +2004,9 @@ void cleanup_stats(stats_t* stats)
     free(stats->ins_cycles_2nd);
     free(stats->del_cycles_1st);
     free(stats->del_cycles_2nd);
+    if (stats->acgtno_barcode) free(stats->acgtno_barcode);
+    if (stats->quals_barcode) free(stats->quals_barcode);
+    free(stats->tags_barcode);
     destroy_regions(stats);
     if ( stats->rg_hash ) khash_str2int_destroy(stats->rg_hash);
     free(stats->split_name);
@@ -1944,6 +2111,17 @@ stats_t* stats_init()
     return stats;
 }
 
+static void init_barcode_tags(stats_t* stats) {
+    stats->ntags = 4;
+    stats->tags_barcode = calloc(stats->ntags, sizeof(barcode_info_t));
+    if (!stats->tags_barcode)
+        return;
+    stats->tags_barcode[0] = (barcode_info_t){"BC", "QT", 0, -1, -1, 0};
+    stats->tags_barcode[1] = (barcode_info_t){"CR", "CY", 0, -1, -1, 0};
+    stats->tags_barcode[2] = (barcode_info_t){"OX", "BZ", 0, -1, -1, 0};
+    stats->tags_barcode[3] = (barcode_info_t){"RX", "QX", 0, -1, -1, 0};
+}
+
 static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* group_id, const char* targets)
 {
     // Give stats_t a pointer to the info struct
@@ -1984,6 +2162,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->ins_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
     stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
     stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
+    init_barcode_tags(stats);
     realloc_rseq_buffer(stats);
     if ( targets )
         init_regions(stats, targets);
@@ -2178,7 +2357,7 @@ int main_stats(int argc, char *argv[])
     else
     {
         if ( info->cov_threshold > 0 && !targets ) {
-            fprintf(stderr, "Coverage percentage calcuation requires a list of target regions\n");
+            fprintf(stderr, "Coverage percentage calculation requires a list of target regions\n");
             goto cleanup;
         }
 
