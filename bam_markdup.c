@@ -866,7 +866,7 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
 
         // read data from temp file and mark duplicate supplementary alignments
 
-        if (tmp_file_begin_read(&temp, NULL)) {
+        if (tmp_file_begin_read(&temp)) {
             return 1;
         }
 
@@ -901,8 +901,7 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
             }
         }
 
-        tmp_file_destroy(&temp, b, 0);
-        kh_destroy(duplicates, dup_hash);
+        tmp_file_destroy(&temp);
         bam_destroy1(b);
     }
 
@@ -918,6 +917,7 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
     kl_destroy(read_queue, read_buffer);
+    kh_destroy(duplicates, dup_hash);
     bam_hdr_destroy(header);
 
     return 0;
