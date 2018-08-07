@@ -907,11 +907,16 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
     }
 
     if (do_stats) {
-        fprintf(stderr, "READ %d WRITTEN %d \n"
-            "EXCLUDED %d EXAMINED %d\n"
-            "PAIRED %d SINGLE %d\n"
-            "DULPICATE PAIR %d DUPLICATE SINGLE %d\n"
-            "DUPLICATE TOTAL %d\n", reading, writing, excluded, examined, pair, single,
+        fprintf(stderr, 
+                "READ: %d\n"
+                "WRITTEN: %d\n"
+                "EXCLUDED: %d\n"
+                "EXAMINED: %d\n"
+                "PAIRED: %d\n"
+                "SINGLE: %d\n"
+                "DULPICATE PAIR: %d\n" 
+                "DUPLICATE SINGLE: %d\n"
+                "DUPLICATE TOTAL: %d\n", reading, writing, excluded, examined, pair, single,
                                 duplicate, single_dup, single_dup + duplicate);
     }
 
