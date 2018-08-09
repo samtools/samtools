@@ -747,7 +747,7 @@ Include only listed read group or sample name
 .TP
 .BI "-l, --read-length " INT
 Include in the statistics only reads with the given read length
-[]
+[-1]
 .TP
 .BI "-m, --most-inserts " FLOAT
 Report only the main part of inserts
@@ -792,6 +792,12 @@ Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusi
 .TP
 .B "-x, --sparse"
 Suppress outputting IS rows where there are no insertions.
+.TP
+.B "-p, --remove-overlaps"
+Remove overlaps of paired-end reads from coverage and base count computations.
+.TP
+.BI "-g, --cov-threshold " INT
+Only bases with coverage above this value will be included in the target percentage computation [0]
 .RE
 
 .TP \"-------- bedcov
