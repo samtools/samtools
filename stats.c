@@ -1953,7 +1953,7 @@ static void error(const char *format, ...)
         printf("    -h, --help                          This help message\n");
         printf("    -i, --insert-size <int>             Maximum insert size [8000]\n");
         printf("    -I, --id <string>                   Include only listed read group or sample name\n");
-        printf("    -l, --read-length <int>             Include in the statistics only reads with the given read length []\n");
+        printf("    -l, --read-length <int>             Include in the statistics only reads with the given read length [-1]\n");
         printf("    -m, --most-inserts <float>          Report only the main part of inserts [0.99]\n");
         printf("    -P, --split-prefix <str>            Path or string prefix for filepaths output by -S (default is input filename)\n");
         printf("    -q, --trim-quality <int>            The BWA trimming parameter [0]\n");
@@ -1963,7 +1963,7 @@ static void error(const char *format, ...)
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         printf("    -p, --remove-overlaps               Remove overlaps of paired-end reads from coverage and base count computations.\n");
-        printf("    -g, --cov-threshold                 Only bases with coverage above this value will be included in the target percentage computation.\n");
+        printf("    -g, --cov-threshold                 Only bases with coverage above this value will be included in the target percentage computation [0]\n");
         sam_global_opt_help(stdout, "-.--.@");
         printf("\n");
     }
