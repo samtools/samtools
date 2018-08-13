@@ -437,11 +437,11 @@ int cram_reheader_inplace(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
 static void usage(FILE *fp, int ret) {
     fprintf(fp,
            "Usage: samtools reheader [-P] in.header.sam in.bam > out.bam\n"
-           "   or  samtools reheader [-P] -i in.header.sam file.bam\n"
+           "   or  samtools reheader [-P] -i in.header.sam file.cram\n"
            "\n"
            "Options:\n"
            "    -P, --no-PG      Do not generate an @PG header line.\n"
-           "    -i, --in-place   Modify the bam/cram file directly.\n"
+           "    -i, --in-place   Modify the CRAM file directly, if possible.\n"
            "                     (Defaults to outputting to stdout.)\n");
     exit(ret);
 }
