@@ -2783,6 +2783,7 @@ sub test_quickcheck
         'quickcheck/7.quickcheck.cram30.ok.cram',
         'quickcheck/8.quickcheck.cram21.truncated.cram',
         'quickcheck/9.quickcheck.cram30.truncated.cram',
+        'quickcheck/10.quickcheck.notargets.bam',
         );
 
     my $all_testfiles;
@@ -2796,6 +2797,9 @@ sub test_quickcheck
 
     test_cmd($opts, out => 'quickcheck/all.expected', want_fail => 1,
         cmd => "$$opts{bin}/samtools quickcheck -v $all_testfiles | sed 's,.*/quickcheck/,,'");
+
+    test_cmd($opts, out => 'dat/empty.expected', want_fail => 0,
+        cmd => "$$opts{bin}/samtools quickcheck -uv $$opts{path}/quickcheck/10.quickcheck.notargets.bam | sed 's,.*/quickcheck/,,'");
 }
 
 sub test_reheader
