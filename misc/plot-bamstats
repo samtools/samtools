@@ -90,7 +90,7 @@ sub parse_params
             {
                 id=>'LFQ',
                 header=>
-                    "# Last Fragment Qualitites. Use `grep ^LFQ | cut -f 2-` to extract this part.\n" .
+                    "# Last Fragment Qualities. Use `grep ^LFQ | cut -f 2-` to extract this part.\n" .
                     "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n",
             },
             {
