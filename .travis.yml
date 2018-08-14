@@ -4,8 +4,11 @@ language: c
 
 matrix:
   include:
+    # An optimised build with address, leak and undefined behavior checking
     - os: linux
       compiler: clang
+      sudo: required
+      env: CFLAGS="-fsanitize=address" LDFLAGS="-fsanitize=address"
     - os: linux
       compiler: gcc
     # An unoptimised C99 build, for detecting non-static inline functions
@@ -39,4 +42,4 @@ before_script:
   # Logic for choosing which to use is in the .travis/clone script.
   - .travis/clone "git://github.com/$(dirname $TRAVIS_REPO_SLUG)/htslib.git" "$HTSDIR" "$TRAVIS_BRANCH"
 
-script: make -e && make -e test
+script: autoreconf -i && (./configure || (cat config.log; /bin/false)) && make -e && make -e test

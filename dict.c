@@ -98,6 +98,7 @@ static void write_dict(const char *fn, args_t *args)
     hts_md5_destroy(md5);
 
     if (args->output_fname) fclose(out);
+    gzclose(fp);
 }
 
 static int dict_usage(void)

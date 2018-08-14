@@ -146,7 +146,7 @@ void setup_test_2(bam1_t** b_in, trans_tbl_t* tbl) {
     tbl->tid_trans[3] = 8;
     int in_there = 0;
     khiter_t iter = kh_put(c2c, tbl->rg_trans, strdup("hello"), &in_there);
-    kh_value(tbl->rg_trans, iter) = strdup("goodbye");
+    kh_value(tbl->rg_trans, iter) = "goodbye";
 
     b->core.tid = 0;
     b->core.pos = 1334;
@@ -186,7 +186,7 @@ void setup_test_3(bam1_t** b_in, trans_tbl_t* tbl) {
     tbl->tid_trans[3] = 8;
     int in_there = 0;
     khiter_t iter = kh_put(c2c, tbl->pg_trans, strdup("hello"), &in_there);
-    kh_value(tbl->pg_trans,iter) = strdup("goodbye");
+    kh_value(tbl->pg_trans,iter) = "goodbye";
 
 
     b->core.tid = 0;
@@ -302,9 +302,9 @@ void setup_test_6(bam1_t** b_in, trans_tbl_t* tbl) {
     tbl->tid_trans[3] = 8;
     int in_there = 0;
     khiter_t iter_rg = kh_put(c2c, tbl->rg_trans, strdup("hello"), &in_there);
-    kh_value(tbl->rg_trans, iter_rg) = strdup("goodbye");
+    kh_value(tbl->rg_trans, iter_rg) = "goodbye";
     khiter_t iter_pg = kh_put(c2c, tbl->pg_trans, strdup("quail"), &in_there);
-    kh_value(tbl->pg_trans, iter_pg) = strdup("bird");
+    kh_value(tbl->pg_trans, iter_pg) = "bird";
 
 
     b->core.tid = 0;

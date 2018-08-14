@@ -1545,9 +1545,9 @@ int bam_merge(int argc, char *argv[])
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
-        case 'h': fn_headers = strdup(optarg); break;
+        case 'h': fn_headers = optarg; break;
         case 'n': is_by_qname = 1; break;
-        case 't': sort_tag = strdup(optarg); break;
+        case 't': sort_tag = optarg; break;
         case '1': flag |= MERGE_LEVEL1; level = 1; break;
         case 'u': flag |= MERGE_UNCOMP; level = 0; break;
         case 'R': reg = strdup(optarg); break;
@@ -1622,7 +1622,6 @@ end:
     }
     free(fn);
     free(reg);
-    free(fn_headers);
     sam_global_args_free(&ga);
     return ret;
 }
@@ -2361,7 +2360,7 @@ int bam_sort(int argc, char *argv[])
         switch (c) {
         case 'o': fnout = optarg; o_seen = 1; break;
         case 'n': is_by_qname = 1; break;
-        case 't': sort_tag = strdup(optarg); break;
+        case 't': sort_tag = optarg; break;
         case 'm': {
                 char *q;
                 max_mem = strtol(optarg, &q, 0);

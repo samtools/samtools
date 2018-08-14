@@ -62,6 +62,10 @@ static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
         if (_n == _m) { \
             _m = _m? _m<<1 : 4; \
             _c = (uint32_t*)realloc(_c, _m * 4); \
+            if (!(_c)) { \
+                fprintf(stderr, "[depad] ERROR: Memory allocation failure.\n"); \
+                return -1; \
+            } \
         } \
         _c[_n++] = (_v); \
     } while (0)
@@ -374,6 +378,7 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
         ret = 1;
     }
     free(r.s); free(q.s); free(posmap);
+    free(cigar2);
     bam_destroy1(b);
     return ret;
 }
@@ -600,12 +605,14 @@ depad_end:
     // close files, free and return
     if (fai) fai_destroy(fai);
     if (h) bam_hdr_destroy(h);
+    if (h_fix && h_fix != h) bam_hdr_destroy(h_fix);
     if (in) sam_close(in);
     if (out && sam_close(out) < 0) {
         fprintf(stderr, "[depad] error on closing output file.\n");
         ret = 1;
     }
     free(fn_list); free(fn_out);
+    sam_global_args_free(&ga);
     return ret;
 }
 
