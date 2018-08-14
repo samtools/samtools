@@ -1183,7 +1183,7 @@ sub merge_bamcheck
         open($fh,'>',"$$opts{prefix}merge.bchk") or error("$$opts{prefix}merge.bchk: $!\n");
     }
 
-    print $fh "# This file was produced by plot-bamstats, the command line was:\n#   $$opts{args}\n#\n";
+    print $fh "# This file was produced by plot-bamstats and the command line was:\n#   $$opts{args}\n#\n";
 
     for my $sec (@{$$opts{sections}})
     {
