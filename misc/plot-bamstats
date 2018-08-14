@@ -380,6 +380,7 @@ sub parse_bamcheck1
         if ( $a eq 'COV' ) { merge_coverage($$opts{dat}{$a}, $dat{$a}); next; }
         if ( $a eq 'GCC' ) { merge_gcc($nseq_ori, $$opts{dat}{$a}, $nseq_new, $dat{$a}); next; }
         if ( $a eq 'GCD' ) { merge_gcd(); next; }
+	if ( $a eq 'CHK' ) { next; }
         error("not processed: $a\n");
     }
     if ( $i==0 ) { return; }
