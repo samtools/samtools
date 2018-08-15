@@ -184,7 +184,7 @@ static int tmp_file_grow_ring_buffer(tmp_file_t *tmp, size_t new_size) {
 
 
 /*
- * This does the actual compression and writing to disk.  On disk format consists of a
+ * This does the actual compression and writing to a file.  The file format consists of a
  * single size_t for the size of the compressed data followed by the data itself.
  * Returns 0 on success, a negative number on failure.
  */
@@ -247,12 +247,11 @@ static int tmp_file_write_to_file(tmp_file_t *tmp) {
 
 /*
  * Stores an in memory bam structure for writing and if enough are gathered together writes
- * it to disk.  Mulitiple alignments compress better that single ones though after a certain number
+ * it to a file.  Multiple alignments compress better that single ones though after a certain number
  * there is a law of diminishing returns.
  * Returns 0 on success, a negative number on failure.
  */
 int tmp_file_write(tmp_file_t *tmp, bam1_t *inbam) {
-    static size_t longest = 0;
 
     if ((tmp->offset + tmp->input_size + sizeof(bam1_t) + inbam->l_data) >= tmp->ring_buffer_size) {
         int ret;
@@ -265,12 +264,7 @@ int tmp_file_write(tmp_file_t *tmp, bam1_t *inbam) {
         }
     }
 
-
     tmp->ring_index = tmp->ring_buffer + tmp->offset + tmp->input_size;
-
-    if (longest < inbam->l_data) {
-        longest = inbam->l_data;
-    }
 
     // copy data into the ring buffer
     memcpy(tmp->ring_index, inbam, sizeof(bam1_t));
@@ -343,7 +337,7 @@ int tmp_file_begin_read(tmp_file_t *tmp) {
 
 
 /*
- * Read the next alignment, either from memory or from disk.
+ * Read the next alignment, either from memory or from a file.
  * Returns size of entry on success, 0 on end of file or a negative on error.
  */
 int tmp_file_read(tmp_file_t *tmp, bam1_t *inbam) {

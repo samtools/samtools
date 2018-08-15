@@ -83,7 +83,7 @@ int tmp_file_open_write(tmp_file_t *tmp, char *tmp_name, int verbose);
 
 /*
  * Stores an in memory bam structure for writing and if enough are gathered together writes
- * it to disk.  Mulitiple alignments compress better that single ones though after a certain number
+ * it to a file.  Multiple alignments compress better that single ones though after a certain number
  * there is a law of diminishing returns.
  * Returns 0 on success, a negative number on failure.
  */
@@ -107,7 +107,7 @@ int tmp_file_begin_read(tmp_file_t *tmp);
 
 
 /*
- * Read the next alignment, either from memory or from disk.
+ * Read the next alignment, either from memory or from a file.
  * Returns size of entry on success, 0 on end of file or a negative on error.
  */
 int tmp_file_read(tmp_file_t *tmp, bam1_t *inbam);
