@@ -1963,7 +1963,7 @@ static void error(const char *format, ...)
         printf("    -t, --target-regions <file>         Do stats in these regions only. Tab-delimited file chr,from,to, 1-based, inclusive.\n");
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         printf("    -p, --remove-overlaps               Remove overlaps of paired-end reads from coverage and base count computations.\n");
-        printf("    -g, --cov-threshold                 Only bases with coverage above this value will be included in the target percentage computation [0]\n");
+        printf("    -g, --cov-threshold <int>           Only bases with coverage above this value will be included in the target percentage computation [0]\n");
         sam_global_opt_help(stdout, "-.--.@");
         printf("\n");
     }
@@ -2235,7 +2235,7 @@ int main_stats(int argc, char *argv[])
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsxpr:c:l:i:t:m:q:f:F:g:I:1:S:P:@:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsxpr:c:l:i:t:m:q:f:F:g:I:S:P:@:",loptions,NULL))>0 )
     {
         switch (opt)
         {
