@@ -53,6 +53,125 @@ samtools stats
 samtools stats collects statistics from BAM files and outputs in a text format.
 The output can be visualized graphically using plot-bamstats.
 
+A summary of output sections is listed below, followed by more
+detailed descriptions.
+
+.TS
+lb l .
+CHK     checksum
+SN      summary numbers
+FFQ     First fragment qualities
+LFQ     Last fragment qualities
+GCF     GC content of first fragments
+GCL     GC content of last fragments
+GCC     ACGT content per cycle
+FBC     ACGT content per cycle for first fragments only
+LBC     ACGT content per cycle for last fragments only
+BCC1    ACGT content per cycle for BC barcode
+CRC1    ACGT content per cycle for CR barcode
+OXC1    ACGT content per cycle for OX barcode
+RXC1    ACGT content per cycle for RX barcode
+QTQ1    Quality distribution for BC barcode
+CYQ1    Quality distribution for CR barcode
+BZQ1    Quality distribution for OX barcode
+QXQ1    Quality distribution for RX barcode
+IS      Insert sizes
+RL      Read lengths
+FRL     Read lengths for first fragments only
+LRL     Read lengths for last fragments only
+ID      Indel size distribution
+IC      indels per cycle
+COV     Coverage (depth) distribution
+GCD     GC-depth
+.TE
+
+Not all sections will be reported as some depend on the data being
+coordinate sorted while others are only present when specific barcode
+tags are in use.
+
+The CHK row contains distinct CRC32 checksums of read names, sequences
+and quality values.  The checksums are computed per alignment record
+and summed, meaning the checksum does not change if the input file has
+the sort-order changed.
+
+The SN section contains a series of counts, in a similar style to
+.BR "samtools stats" ,
+but more comprehensive.
+
+The FFQ and LFQ sections report the quality distribution per
+first/last fragment and per cycle number.  They have one row per cycle
+(reported as the first column after the FFQ/LFQ key) with remaining
+columns being the observed integer counts per quality value, starting
+at quality 0 in the left-most row and ending at the largest observed
+quality.  Thus each row forms its own quality distribution and any
+cycle specific quality artefacts can be observed.
+
+GCF and GCL report the total GC content of each fragment, separated
+into first and last fragments.  The columns show the GC percentile
+(between 0 and 100) and an integer count of fragments at that
+percentile.
+
+GCC, FBC and LBC report the nucleotide content per cycle either combined
+(GCC) or split into first (FBC) and last (LBC) fragments.  The columns
+are cycle number (integer), and percentage counts for A, C, G, T, N
+and other (typically containing ambiguity codes) normalised against
+the total counts of A, C, G and T only (excluding N and other).
+
+BCC1, CRC1, OXC1 and RXC1 are the barcode equivalent of GCC, showing
+nucleotide content for the barcode tags BC, CR, OX and RX respectively.
+Their quality values distributions are in the QTQ1, CYQ1, BZQ1 and
+QXQ1 sections, corresponding to the BC/QT, CR/CY, OX/BZ and RX/QX SAM
+format sequence/quality tags.  These quality value distributions
+follow the same format used in the FFQ and LFQ sections.
+Note if a separator is present in the SAM tag (usually a hyphen) to
+indicate dual indexing, then sections ending in "2" will also be
+reported to show the second tag statistics (e.g. both BCC1 and
+BCC2 are present).
+
+IS reports insert size distributions with one row per size, reported
+in the first column, with subsequent columns for the frequency of
+total pairs, inward oriented pairs, outward orient pairs and other
+orientation pairs.  The \fB-i\fR option specifies the maximum insert
+size reported.
+
+RL reports the distribution for all read lengths, with one row per
+observed length (up to the maximum specified by the \fB-l\fR option).
+Columns are read length and frequency.  FRL and LRL contains the same
+information separated into first and last fragments.
+
+ID reports the distribution of indel sizes, with one row per observed
+size. The columns are size, frequency of insertions at that size and
+frequency of deletions at that size.
+
+IC reports the frequency of indels occurring per cycle, broken down by
+both insertion / deletion and by first / last read.  Note for
+multi-base indels this only counts the first base location.  Columns
+are cycle, number of insertions in first fragments, number of
+insertions in last fragments, number of deletions in first fragments,
+and number of deletions in last fragments.
+
+COV reports a distribution of the alignment depth per covered
+reference site.  For example an average depth of 50 would ideally
+result in a normal distribution centred on 50, but the presence of
+repeats or copy-number variation may reveal multiple peaks at
+approximate multiples of 50.  The first column is an inclusive
+coverage range in the form of \fB[\fImin\fB-\fImax\fB]\fR.  The next
+columns are a repeat of the \fImax\fRimum portion of the depth range
+(now as a single integer) and the frequency that depth range was
+observed.  The minimum, maximum and range step size are controlled by
+the \fB-c\fR option.  Depths above and below the minimum and maximum
+are reported with ranges \fB[<\fImin\fB]\fR and \fB[\fImax\fB<]\fR.
+
+GCD reports the GC content of the reference data aligned against per
+alignment record, with one row per observed GC percentage reported as
+the first column and sorted on this column.  The second column is a
+total sequence percentile, as a running total (ending at 100%).  The
+first and second columns may be used to produce a simple distribution
+of GC content.  Subsequent columns list the coverage depth at 10th,
+25th, 50th, 75th and 90th GC percentiles for this specific GC
+percentage, revealing any GC bias in mapping.  These columns are
+averaged depths, so are floating point with no maximum value.
+
 .SH OPTIONS
 .TP 8
 .BI "-c, --coverage " MIN , MAX , STEP
