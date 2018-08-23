@@ -881,17 +881,20 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
         stats->nbases_trimmed += bwa_trim_read(stats->info->trim_qual, bam_quals, seq_len, reverse);
 
     // Quality histogram and average quality. Clipping is neglected.
+    uint64_t sum_qual = 0;
     for (i=0; i<seq_len; i++)
     {
         uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
-        if ( qual>=stats->nquals )
-            error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
-        if ( qual>stats->max_qual )
+        if ( qual>stats->max_qual ) {
             stats->max_qual = qual;
+            if (stats->max_qual >= stats->nquals)
+                error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+        }
 
         quals[ i*stats->nquals+qual ]++;
-        stats->sum_qual += qual;
+        sum_qual += qual;
     }
+    stats->sum_qual += sum_qual;
 
     // Barcode statistics
     if (IS_READ1(bam_line)) {
@@ -1166,20 +1169,20 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
             int is_mfwd = IS_MATE_REVERSE(bam_line) ? -1 : 1;
 
             if ( is_fwd*is_mfwd>0 )
-                stats->isize->inc_other(stats->isize->data, isize);
+                stats->isize->inc_other(stats->isize, isize);
             else if ( is_fst*pos_fst>=0 )
             {
                 if ( is_fst*is_fwd>0 )
-                    stats->isize->inc_inward(stats->isize->data, isize);
+                    stats->isize->inc_inward(stats->isize, isize);
                 else
-                    stats->isize->inc_outward(stats->isize->data, isize);
+                    stats->isize->inc_outward(stats->isize, isize);
             }
             else if ( is_fst*pos_fst<0 )
             {
                 if ( is_fst*is_fwd>0 )
-                    stats->isize->inc_outward(stats->isize->data, isize);
+                    stats->isize->inc_outward(stats->isize, isize);
                 else
-                    stats->isize->inc_inward(stats->isize->data, isize);
+                    stats->isize->inc_inward(stats->isize, isize);
             }
         }
     }
@@ -1391,27 +1394,34 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 {
     // Calculate average insert size and standard deviation (from the main bulk data only)
     int isize, ibulk=0, icov;
-    uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0, cov_sum=0;
+    uint64_t nisize=0, nisize_inward=0, nisize_outward=0, nisize_other=0, cov_sum=0, nitems;
     double bulk=0, avg_isize=0, sd_isize=0;
-    for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
+    isize_t *is = stats->isize;
+
+    // Count number of insert sizes per type.
+    nitems = is->nitems(is);
+    for (isize=0; isize<nitems; isize++)
     {
         // Each pair was counted twice
-        stats->isize->set_inward(stats->isize->data, isize, stats->isize->inward(stats->isize->data, isize) * 0.5);
-        stats->isize->set_outward(stats->isize->data, isize, stats->isize->outward(stats->isize->data, isize) * 0.5);
-        stats->isize->set_other(stats->isize->data, isize, stats->isize->other(stats->isize->data, isize) * 0.5);
+        uint64_t n_in, n_out, n_oth;
+        is->all(is, isize, &n_in, &n_out, &n_oth);
+        is->set_inward (is, isize, n_in  *= 0.5);
+        is->set_outward(is, isize, n_out *= 0.5);
+        is->set_other  (is, isize, n_oth *= 0.5);
 
-        nisize_inward += stats->isize->inward(stats->isize->data, isize);
-        nisize_outward += stats->isize->outward(stats->isize->data, isize);
-        nisize_other += stats->isize->other(stats->isize->data, isize);
-        nisize += stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
+        nisize_inward  += n_in;
+        nisize_outward += n_out;
+        nisize_other   += n_oth;
+        nisize += n_in + n_out + n_oth;
     }
 
-    for (isize=0; isize<stats->isize->nitems(stats->isize->data); isize++)
+    // Compute ibulk to cover e.g. 99% of insert sizes.
+    for (isize=0; isize<nitems; isize++)
     {
-        uint64_t num = stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize);
+        uint64_t num = is->all(is, isize, NULL, NULL, NULL);
         if (num > 0) ibulk = isize + 1;
         bulk += num;
-        avg_isize += isize * (stats->isize->inward(stats->isize->data, isize) +  stats->isize->outward(stats->isize->data, isize) + stats->isize->other(stats->isize->data, isize));
+        avg_isize += isize * num;
 
         if ( bulk/nisize > stats->info->isize_main_bulk )
         {
@@ -1420,9 +1430,10 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
             break;
         }
     }
+
     avg_isize /= nisize ? nisize : 1;
     for (isize=1; isize<ibulk; isize++)
-        sd_isize += (stats->isize->inward(stats->isize->data, isize) + stats->isize->outward(stats->isize->data, isize) +stats->isize->other(stats->isize->data, isize)) * (isize-avg_isize)*(isize-avg_isize) / (nisize ? nisize : 1);
+        sd_isize += is->all(is, isize, NULL, NULL, NULL) * (isize-avg_isize)*(isize-avg_isize) / (nisize ? nisize : 1);
     sd_isize = sqrt(sd_isize);
 
     fprintf(to, "# This file was produced by samtools stats (%s+htslib-%s) and can be plotted using plot-bamstats\n", samtools_version(), hts_version());
@@ -1489,7 +1500,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
     int ibase,iqual;
     if ( stats->max_len<stats->nbases ) stats->max_len++;
-    if ( stats->max_qual+1<stats->nquals ) stats->max_qual++;
+    if ( stats->max_qual+1<256 ) stats->max_qual++;
     fprintf(to, "# First Fragment Qualities. Use `grep ^FFQ | cut -f 2-` to extract this part.\n");
     fprintf(to, "# Columns correspond to qualities and rows to cycles. First column is the cycle number.\n");
     for (ibase=0; ibase<stats->max_len_1st; ibase++)
@@ -1574,7 +1585,6 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                     100.*acgtno_count_1st->t/acgt_sum_1st,
                     100.*acgtno_count_1st->n/acgt_sum_1st,
                     100.*acgtno_count_1st->other/acgt_sum_1st);
-
     }
     fprintf(to, "# ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
@@ -1637,12 +1647,11 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
 
     fprintf(to, "# Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs\n");
     for (isize=0; isize<ibulk; isize++) {
-        long in = (long)(stats->isize->inward(stats->isize->data, isize));
-        long out = (long)(stats->isize->outward(stats->isize->data, isize));
-        long other = (long)(stats->isize->other(stats->isize->data, isize));
+        uint64_t in, out, other, all;
+        all = is->all(is, isize, &in, &out, &other);
         if (!sparse || in + out + other > 0) {
-            fprintf(to, "IS\t%d\t%ld\t%ld\t%ld\t%ld\n", isize,  in+out+other,
-                in , out, other);
+            fprintf(to, "IS\t%d\t%ld\t%ld\t%ld\t%ld\n", isize,
+                    (long)all, (long)in, (long)out, (long)other);
         }
     }
 
@@ -1988,7 +1997,7 @@ void cleanup_stats(stats_t* stats)
     free(stats->cov_rbuf.buffer); free(stats->cov);
     free(stats->quals_1st); free(stats->quals_2nd);
     free(stats->gc_1st); free(stats->gc_2nd);
-    stats->isize->isize_free(stats->isize->data);
+    stats->isize->isize_free(stats->isize);
     free(stats->isize);
     free(stats->gcd);
     free(stats->rseq_buf);
@@ -2094,7 +2103,7 @@ stats_t* stats_init()
 {
     stats_t *stats = calloc(1,sizeof(stats_t));
     stats->ngc    = 200;
-    stats->nquals = 256;
+    stats->nquals = 261; // only 256 needed, but reduces cache collisions
     stats->nbases = 300;
     stats->rseq_pos     = -1;
     stats->tid = stats->gcd_pos = -1;
