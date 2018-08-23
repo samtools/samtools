@@ -65,6 +65,7 @@ DEALINGS IN THE SOFTWARE.  */
 #define BWA_MIN_RDLEN 35
 #define DEFAULT_CHUNK_NO 8
 #define DEFAULT_PAIR_MAX 10000
+#define ERROR_LIMIT 200
 // From the spec
 // If 0x4 is set, no assumptions can be made about RNAME, POS, CIGAR, MAPQ, bits 0x2, 0x10, 0x100 and 0x800, and the bit 0x20 of the previous read in the template.
 #define IS_PAIRED_AND_MAPPED(bam) (((bam)->core.flag&BAM_FPAIRED) && !((bam)->core.flag&BAM_FUNMAP) && !((bam)->core.flag&BAM_FMUNMAP))
@@ -247,6 +248,7 @@ typedef struct
     uint64_t *quals_barcode;
     barcode_info_t *tags_barcode;
     uint32_t ntags;
+    uint32_t error_number;
 }
 stats_t;
 KHASH_MAP_INIT_STR(c2stats, stats_t*)
@@ -750,6 +752,7 @@ static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats) {
         quals = stats->quals_barcode + stats->tags_barcode[tag].offset*stats->nquals;
         maxqual = &stats->tags_barcode[tag].max_qual;
         separator = &stats->tags_barcode[tag].tag_sep;
+        int error_flag = 0;
 
         for (i = 0; i < barcode_len; i++) {
             switch (barcode[i]) {
@@ -771,14 +774,25 @@ static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats) {
             default:
                 if (*separator >= 0) {
                     if (*separator != i) {
-                        fprintf(stderr, "Barcode separator for tag %s is in a different position at sequence '%s'\n", barcode_tag, bam_get_qname(bam_line));
-                        continue;
+                        if (stats->error_number < ERROR_LIMIT) {
+                            fprintf(stderr, "Barcode separator for tag %s is in a different position or wrong barcode content('%s') at sequence '%s'\n", barcode_tag, barcode, bam_get_qname(bam_line));
+                            stats->error_number++;
+                        }
+                        error_flag = 1;
                     }
                 } else {
                     *separator = i;
                 }
             }
+
+            /* don't process the rest of the tag bases */
+            if (error_flag)
+                break;
         }
+
+        /* skip to the next tag */
+        if (error_flag)
+            continue;
 
         uint8_t* qt = bam_aux_get(bam_line, qual_tag);
         if (!qt)
@@ -799,7 +813,9 @@ static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats) {
                 }
             }
         } else {
-            fprintf(stderr, "%s length and %s length don't match for sequence '%s'\n", barcode_tag, qual_tag, bam_get_qname(bam_line));
+            if (stats->error_number++ < ERROR_LIMIT) {
+                fprintf(stderr, "%s length and %s length don't match for sequence '%s'\n", barcode_tag, qual_tag, bam_get_qname(bam_line));
+            }
         }
     }
 }
