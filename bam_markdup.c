@@ -490,9 +490,14 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
     int reading, writing, excluded, duplicate, single, pair, single_dup, examined;
     tmp_file_t temp;
 
+    if (!pair_hash || !single_hash || !read_buffer || !dup_hash) {
+        fprintf(stderr, "[markdup] out of memory\n");
+        goto fail;
+    }
+
     if ((header = sam_hdr_read(in)) == NULL) {
         fprintf(stderr, "[markdup] error reading header\n");
-        return 1;
+        goto fail;
     }
 
     // accept unknown, unsorted or coordinate sort order, but error on queryname sorted.
@@ -521,6 +526,10 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
 
     // get the buffer going
     in_read = kl_pushp(read_queue, read_buffer);
+    if (!in_read) {
+        fprintf(stderr, "[markdup] out of memory\n");
+        goto fail;
+    }
 
     // handling supplementary reads needs a temporary file
     if (supp) {
@@ -811,6 +820,10 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
 
         // set the next one up for reading
         in_read = kl_pushp(read_queue, read_buffer);
+        if (!in_read) {
+            fprintf(stderr, "[markdup] out of memory\n");
+            goto fail;
+        }
 
         if ((in_read->b = bam_init1()) == NULL) {
             fprintf(stderr, "[markdup] error: unable to allocate memory for alignment.\n");
