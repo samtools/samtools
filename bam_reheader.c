@@ -496,12 +496,20 @@ int main_reheader(int argc, char *argv[])
         return 1;
     }
     if (hts_get_format(in)->format == bam) {
-        r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG);
-    } else {
+        if (inplace) {
+            print_error("reheader", "cannot reheader BAM '%s' in-place", argv[optind+1]);
+            r = -1;
+        } else {
+            r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG);
+        }
+    } else if (hts_get_format(in)->format == cram) {
         if (inplace)
             r = cram_reheader_inplace(in->fp.cram, h, arg_list, add_PG);
         else
             r = cram_reheader(in->fp.cram, h, arg_list, add_PG);
+    } else {
+        print_error("reheader", "input file '%s' must be BAM or CRAM", argv[optind+1]);
+        r = -1;
     }
 
     if (sam_close(in) != 0)
