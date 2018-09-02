@@ -79,6 +79,7 @@ static int usage() {
     fprintf(stderr, "   -a                  output all positions (including zero depth)\n");
     fprintf(stderr, "   -a -a (or -aa)      output absolutely all positions, including unused ref. sequences\n");
     fprintf(stderr, "   -b <bed>            list of positions or regions\n");
+    fprintf(stderr, "   -H                  print a file header\n");
     fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
     fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>) [0]\n");
     fprintf(stderr, "   -d/-m <int>         maximum coverage depth [8000]. If 0, depth is set to the maximum\n"
@@ -110,6 +111,7 @@ int main_depth(int argc, char *argv[])
     aux_t **data;
     bam_mplp_t mplp;
     int last_pos = -1, last_tid = -1, ret;
+    int print_header = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -118,7 +120,7 @@ int main_depth(int argc, char *argv[])
     };
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:q:Q:l:f:am:d:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:q:Q:l:f:am:d:H", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -131,6 +133,7 @@ int main_depth(int argc, char *argv[])
             case 'f': file_list = optarg; break;
             case 'a': all++; break;
             case 'd': case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
+            case 'H': print_header = 1; break;
             default:  if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': return usage();
@@ -151,6 +154,7 @@ int main_depth(int argc, char *argv[])
         n = argc - optind; // the number of BAMs on the command line
     data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
     reg_tid = 0; beg = 0; end = INT_MAX;  // set the default region
+    if(print_header) fputs("#CHROM\tPOS",stdout);
     for (i = 0; i < n; ++i) {
         int rf;
         data[i] = calloc(1, sizeof(aux_t));
@@ -159,6 +163,10 @@ int main_depth(int argc, char *argv[])
             print_error_errno("depth", "Could not open \"%s\"", argv[optind+i]);
             status = EXIT_FAILURE;
             goto depth_end;
+        }
+        if(print_header) {
+            fputc('\t',stdout);
+            fputs(argv[optind+i],stdout);
         }
         rf = SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | SAM_CIGAR | SAM_SEQ;
         if (baseQ) rf |= SAM_QUAL;
@@ -195,6 +203,7 @@ int main_depth(int argc, char *argv[])
             }
         }
     }
+    if(print_header) fputc('\n',stdout);
 
     h = data[0]->hdr; // easy access to the header of the 1st BAM
     if (reg) {
