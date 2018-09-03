@@ -147,9 +147,9 @@ int main_depth(int argc, char *argv[])
         return usage();
 
     /* output file provided by user */
-    if( output_file != NULL && strcmp(output_file,"-")!=0 ) {
+    if (output_file != NULL && strcmp(output_file,"-")!=0) {
         file_out = fopen( output_file, "w" );
-        if( file_out == NULL) {
+        if (file_out == NULL) {
             print_error_errno("depth", "Cannot open \"%s\" for writing.", output_file);
             return EXIT_FAILURE;
         }
@@ -213,12 +213,12 @@ int main_depth(int argc, char *argv[])
             }
         }
     }
-    if( print_header ) {
+    if (print_header) {
         fputs("#CHROM\tPOS", file_out);
         for (i = 0; i < n; ++i) {
             fputc('\t', file_out);
             fputs(argv[optind+i], file_out);
-            }  
+            }
         fputc('\n', file_out);
         }
     h = data[0]->hdr; // easy access to the header of the 1st BAM
@@ -317,7 +317,7 @@ int main_depth(int argc, char *argv[])
 depth_end:
     fflush(file_out);
     fclose(file_out);
-    
+
     for (i = 0; i < n && data[i]; ++i) {
         bam_hdr_destroy(data[i]->hdr);
         if (data[i]->fp) sam_close(data[i]->fp);
