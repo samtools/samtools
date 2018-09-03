@@ -71,6 +71,12 @@ has coverage outside of the region specified in the BED file.
 (a file of filenames, one file per line)
 []
 .TP
+.B -H
+Write a comment line showing column names at the beginning of the output.
+The names are CHROM, POS, and then the input file name for each depth column.
+If one of the inputs came from stdin, the name \*(lq-\*(rq will be used for
+the corresponding column.
+.TP
 .BI "-l " INT
 .RI "Ignore reads shorter than " INT
 .TP
@@ -89,6 +95,10 @@ limit. [8000]
 Note that up to release 1.8, samtools would enforce a minimum value for
 this option.  This no longer happens and the limit is set exactly as
 specified.
+.TP
+.BI "-o " FILE
+.RI "Write output to " FILE ".  Using \*(lq-\*(rq for " FILE
+will send the output to stdout (also the default if this option is not used).
 .TP
 .BI "-q " INT
 .RI "Only count reads with base quality greater than " INT
