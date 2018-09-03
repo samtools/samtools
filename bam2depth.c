@@ -79,15 +79,15 @@ static int usage() {
     fprintf(stderr, "   -a                  output all positions (including zero depth)\n");
     fprintf(stderr, "   -a -a (or -aa)      output absolutely all positions, including unused ref. sequences\n");
     fprintf(stderr, "   -b <bed>            list of positions or regions\n");
-    fprintf(stderr, "   -H                  print a file header\n");
     fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
+    fprintf(stderr, "   -H                  print a file header\n");
     fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>) [0]\n");
     fprintf(stderr, "   -d/-m <int>         maximum coverage depth [8000]. If 0, depth is set to the maximum\n"
                     "                       integer value, effectively removing any depth limit.\n");  // the htslib's default
+    fprintf(stderr, "   -o FILE             where to write output to [stdout]\n");
     fprintf(stderr, "   -q <int>            base quality threshold [0]\n");
     fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
-    fprintf(stderr, "   -o FILE             where to write output to [stdout]\n");
 
     sam_global_opt_help(stderr, "-.--.-");
 
@@ -113,9 +113,9 @@ int main_depth(int argc, char *argv[])
     bam_mplp_t mplp;
     int last_pos = -1, last_tid = -1, ret;
     int print_header = 0;
-    char* output_file = NULL;
-    FILE* file_out = stdout;
-    
+    char *output_file = NULL;
+    FILE *file_out = stdout;
+
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
