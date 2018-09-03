@@ -150,7 +150,7 @@ int main_depth(int argc, char *argv[])
     if( output_file != NULL && strcmp(output_file,"-")!=0 ) {
         file_out = fopen( output_file, "w" );
         if( file_out == NULL) {
-            print_error_errno("depth", "Cannot open \"%s\" for writing\n", output_file);
+            print_error_errno("depth", "Cannot open \"%s\" for writing.", output_file);
             return EXIT_FAILURE;
         }
     }
@@ -168,7 +168,7 @@ int main_depth(int argc, char *argv[])
         n = argc - optind; // the number of BAMs on the command line
     data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
     reg_tid = 0; beg = 0; end = INT_MAX;  // set the default region
-    if( print_header ) fputs("#CHROM\tPOS", file_out);
+
     for (i = 0; i < n; ++i) {
         int rf;
         data[i] = calloc(1, sizeof(aux_t));
@@ -177,10 +177,6 @@ int main_depth(int argc, char *argv[])
             print_error_errno("depth", "Could not open \"%s\"", argv[optind+i]);
             status = EXIT_FAILURE;
             goto depth_end;
-        }
-        if( print_header ) {
-            fputc('\t', file_out);
-            fputs(argv[optind+i], file_out);
         }
         rf = SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | SAM_CIGAR | SAM_SEQ;
         if (baseQ) rf |= SAM_QUAL;
@@ -217,8 +213,14 @@ int main_depth(int argc, char *argv[])
             }
         }
     }
-    if( print_header ) fputc('\n', file_out);
-
+    if( print_header ) {
+        fputs("#CHROM\tPOS", file_out);
+        for (i = 0; i < n; ++i) {
+            fputc('\t', file_out);
+            fputs(argv[optind+i], file_out);
+            }  
+        fputc('\n', file_out);
+        }
     h = data[0]->hdr; // easy access to the header of the 1st BAM
     if (reg) {
         beg = data[0]->iter->beg; // and to the parsed region coordinates
