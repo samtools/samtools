@@ -220,6 +220,13 @@ AC_DEFUN([AX_WITH_CURSES], [
             AC_DEFINE([HAVE_NCURSESW], [1], [Define to 1 if the NcursesW library is present])
             AC_DEFINE([HAVE_CURSES],   [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
 
+            # Normally linking ncursesw gets tinfo as well, but that doesn't
+            # always happen.  Check to see if it's needed as well.
+            AC_SEARCH_LIBS(cbreak, tinfo)
+            AS_CASE([$ac_cv_search_cbreak],
+                    [-l*],[CURSES_LIB="$CURSES_LIB $ac_cv_search_cbreak"
+                           LIBS="$LIBS $ac_cv_search_cbreak"])
+
             AC_CACHE_CHECK([for working ncursesw/curses.h], [ax_cv_header_ncursesw_curses_h], [
                 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
                         @%:@define _XOPEN_SOURCE_EXTENDED 1
@@ -339,6 +346,13 @@ AC_DEFUN([AX_WITH_CURSES], [
             AC_DEFINE([HAVE_NCURSES], [1], [Define to 1 if the Ncurses library is present])
             AC_DEFINE([HAVE_CURSES],  [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
 
+            # Normally linking ncurses gets tinfo as well, but that doesn't
+            # always happen.  Check to see if it's needed as well.
+            AC_SEARCH_LIBS(cbreak, tinfo)
+            AS_CASE([$ac_cv_search_cbreak],
+                    [-l*],[CURSES_LIB="$CURSES_LIB $ac_cv_search_cbreak"
+                           LIBS="$LIBS $ac_cv_search_cbreak"])
+
             AC_CACHE_CHECK([for working ncurses/curses.h], [ax_cv_header_ncurses_curses_h], [
                 AC_LINK_IFELSE([AC_LANG_PROGRAM([[
                         @%:@include <ncurses/curses.h>
@@ -412,6 +426,12 @@ AC_DEFUN([AX_WITH_CURSES], [
                 CURSES_LIB="-lcurses"
             ])
             AC_DEFINE([HAVE_CURSES], [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
+
+            # Check to see if linking tinfo is also needed
+            AC_SEARCH_LIBS(cbreak, tinfo)
+            AS_CASE([$ac_cv_search_cbreak],
+                    [-l*],[CURSES_LIB="$CURSES_LIB $ac_cv_search_cbreak"
+                           LIBS="$LIBS $ac_cv_search_cbreak"])
 
             # Check for base conformance (and header file)
 
