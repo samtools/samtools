@@ -46,6 +46,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <string.h>
 #include <math.h>
 #include <ctype.h>
+#include <inttypes.h>
 #include <getopt.h>
 #include <errno.h>
 #include <assert.h>
@@ -1576,11 +1577,18 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                 100.*(acgtno_count_1st->other + acgtno_count_2nd->other)/acgt_sum);
 
     }
+
+    uint64_t tA=0, tC=0, tG=0, tT=0, tN=0;
     fprintf(to, "# ACGT content per cycle for first fragments. Use `grep ^FBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
     {
         acgtno_count_t *acgtno_count_1st = &(stats->acgtno_cycles_1st[ibase]);
         uint64_t acgt_sum_1st = acgtno_count_1st->a + acgtno_count_1st->c + acgtno_count_1st->g + acgtno_count_1st->t;
+        tA += acgtno_count_1st->a;
+        tC += acgtno_count_1st->c;
+        tG += acgtno_count_1st->g;
+        tT += acgtno_count_1st->t;
+        tN += acgtno_count_1st->n;
 
         if ( acgt_sum_1st )
             fprintf(to, "FBC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
@@ -1592,11 +1600,19 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                     100.*acgtno_count_1st->other/acgt_sum_1st);
 
     }
+    fprintf(to, "# ACGT raw counters for first fragments. Use `grep ^FTC | cut -f 2-` to extract this part. The columns are: A,C,G,T,N base counters\n");
+    fprintf(to, "FTC\t%" PRId64 "\t%" PRId64 "\t%" PRId64 "\t%" PRId64 "\t%" PRId64 "\n", tA, tC, tG, tT, tN);
+    tA=0, tC=0, tG=0, tT=0, tN=0;
     fprintf(to, "# ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]; and N and O counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
     {
         acgtno_count_t *acgtno_count_2nd = &(stats->acgtno_cycles_2nd[ibase]);
         uint64_t acgt_sum_2nd = acgtno_count_2nd->a + acgtno_count_2nd->c + acgtno_count_2nd->g + acgtno_count_2nd->t;
+        tA += acgtno_count_2nd->a;
+        tC += acgtno_count_2nd->c;
+        tG += acgtno_count_2nd->g;
+        tT += acgtno_count_2nd->t;
+        tN += acgtno_count_2nd->n;
 
         if ( acgt_sum_2nd )
             fprintf(to, "LBC\t%d\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
@@ -1608,6 +1624,9 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                     100.*acgtno_count_2nd->other/acgt_sum_2nd);
 
     }
+    fprintf(to, "# ACGT raw counters for last fragments. Use `grep ^LTC | cut -f 2-` to extract this part. The columns are: A,C,G,T,N base counters\n");
+    fprintf(to, "LTC\t%" PRId64 "\t%" PRId64 "\t%" PRId64 "\t%" PRId64 "\t%" PRId64 "\n", tA, tC, tG, tT, tN);
+
     int tag;
     for (tag=0; tag<stats->ntags; tag++) {
         if (stats->tags_barcode[tag].nbases) {

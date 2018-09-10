@@ -456,6 +456,8 @@ FBC	97	0.00	100.00	0.00	0.00	0.00	0.00
 FBC	98	0.00	0.00	0.00	100.00	0.00	0.00
 FBC	99	0.00	100.00	0.00	0.00	0.00	0.00
 FBC	100	0.00	0.00	0.00	100.00	0.00	0.00
+# ACGT raw counters for first fragments. Use `grep ^FTC | cut -f 2-` to extract this part. The columns are: A,C,G,T,N base counters
+FTC	0	51	0	49	0
 # ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]; and N and O counts as a percentage of all A/C/G/T bases [%]
 LBC	1	0.00	0.00	0.00	100.00	0.00	0.00
 LBC	2	0.00	50.00	0.00	50.00	0.00	0.00
@@ -557,6 +559,8 @@ LBC	97	50.00	0.00	0.00	50.00	0.00	0.00
 LBC	98	0.00	100.00	0.00	0.00	0.00	0.00
 LBC	99	0.00	100.00	0.00	0.00	0.00	0.00
 LBC	100	0.00	0.00	0.00	100.00	0.00	0.00
+# ACGT raw counters for last fragments. Use `grep ^LTC | cut -f 2-` to extract this part. The columns are: A,C,G,T,N base counters
+LTC	1	102	0	97	0
 # ACGT content per cycle for barcodes. Use `grep ^BCC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]; and N counts as a percentage of all A/C/G/T bases [%]
 BCC1	2	0.00	0.00	100.00	0.00	0.00
 BCC1	3	0.00	0.00	0.00	100.00	0.00
