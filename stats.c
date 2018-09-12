@@ -69,6 +69,7 @@ DEALINGS IN THE SOFTWARE.  */
 #define ERROR_LIMIT 200
 // From the spec
 // If 0x4 is set, no assumptions can be made about RNAME, POS, CIGAR, MAPQ, bits 0x2, 0x10, 0x100 and 0x800, and the bit 0x20 of the previous read in the template.
+#define IS_PAIRED(bam) ((bam)->core.flag&BAM_FPAIRED)
 #define IS_PAIRED_AND_MAPPED(bam) (((bam)->core.flag&BAM_FPAIRED) && !((bam)->core.flag&BAM_FUNMAP) && !((bam)->core.flag&BAM_FMUNMAP))
 #define IS_PROPERLYPAIRED(bam) (((bam)->core.flag&(BAM_FPAIRED|BAM_FPROPER_PAIR)) == (BAM_FPAIRED|BAM_FPROPER_PAIR) && !((bam)->core.flag&BAM_FUNMAP))
 #define IS_UNMAPPED(bam) ((bam)->core.flag&BAM_FUNMAP)
@@ -78,6 +79,11 @@ DEALINGS IN THE SOFTWARE.  */
 #define IS_READ2(bam) ((bam)->core.flag&BAM_FREAD2)
 #define IS_DUP(bam) ((bam)->core.flag&BAM_FDUP)
 #define IS_ORIGINAL(bam) (((bam)->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY)) == 0)
+
+#define READ_ORDER_NONE 0
+#define READ_ORDER_FIRST 1
+#define READ_ORDER_LAST 2
+#define READ_ORDER_MIDDLE 3
 
 // The GC-depth graph works as follows: split the reference sequence into
 // segments and calculate GC content and depth in each bin. Then sort
@@ -188,6 +194,7 @@ typedef struct
     uint64_t total_len_dup;
     uint64_t nreads_1st;
     uint64_t nreads_2nd;
+    uint64_t nreads_other;
     uint64_t nreads_filtered;
     uint64_t nreads_dup;
     uint64_t nreads_unmapped;
@@ -382,7 +389,7 @@ int bwa_trim_read(int trim_qual, uint8_t *quals, int len, int reverse)
 void count_indels(stats_t *stats,bam1_t *bam_line)
 {
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
-    int is_1st = IS_READ1(bam_line) ? 1 : 0;
+    uint32_t order = IS_PAIRED(bam_line) ? (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0) : READ_ORDER_FIRST;
     int icig;
     int icycle = 0;
     int read_len = bam_line->core.l_qseq;
@@ -398,9 +405,9 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
             if ( idx<0 )
                 error("FIXME: read_len=%d vs icycle=%d\n", read_len,icycle);
             if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d, %s:%d %s\n", idx,stats->nbases, stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
-            if ( is_1st )
+            if ( order == READ_ORDER_FIRST )
                 stats->ins_cycles_1st[idx]++;
-            else
+            if ( order == READ_ORDER_LAST )
                 stats->ins_cycles_2nd[idx]++;
             icycle += ncig;
             if ( ncig<=stats->nindels )
@@ -412,9 +419,9 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
             int idx = is_fwd ? icycle-1 : read_len-icycle-1;
             if ( idx<0 ) continue;  // discard meaningless deletions
             if ( idx >= stats->nbases ) error("FIXME: %d vs %d\n", idx,stats->nbases);
-            if ( is_1st )
+            if ( order == READ_ORDER_FIRST )
                 stats->del_cycles_1st[idx]++;
-            else
+            if ( order == READ_ORDER_LAST )
                 stats->del_cycles_2nd[idx]++;
             if ( ncig<=stats->nindels )
                 stats->deletions[ncig-1]++;
@@ -831,42 +838,48 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     if ( bam_line->core.flag & BAM_FQCFAIL ) stats->nreads_QCfailed++;
     if ( bam_line->core.flag & BAM_FPAIRED ) stats->nreads_paired_tech++;
 
+    uint32_t order = IS_PAIRED(bam_line) ? (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0) : READ_ORDER_FIRST;
+
     // Count GC and ACGT per cycle. Note that cycle is approximate, clipping is ignored
     uint8_t *seq  = bam_get_seq(bam_line);
-    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line), is_first = IS_READ1(bam_line);
-    for (i=0; i<seq_len; i++)
-    {
-        // Read cycle for current index
-        read_cycle = (reverse ? seq_len-i-1 : i);
+    int i, read_cycle, gc_count = 0, reverse = IS_REVERSE(bam_line);
 
-        // Conversion from uint8_t coding:
-        //      -12-4---8------5
-        //      =ACMGRSVTWYHKDBN
-        switch (bam_seqi(seq, i)) {
-        case 1:
-            is_first ? stats->acgtno_cycles_1st[ read_cycle ].a++ : stats->acgtno_cycles_2nd[ read_cycle ].a++;
-            break;
-        case 2:
-            is_first ? stats->acgtno_cycles_1st[ read_cycle ].c++ : stats->acgtno_cycles_2nd[ read_cycle ].c++;
-            gc_count++;
-            break;
-        case 4:
-            is_first ? stats->acgtno_cycles_1st[ read_cycle ].g++ : stats->acgtno_cycles_2nd[ read_cycle ].g++;
-            gc_count++;
-            break;
-        case 8:
-            is_first ? stats->acgtno_cycles_1st[ read_cycle ].t++ : stats->acgtno_cycles_2nd[ read_cycle ].t++;
-            break;
-        case 15:
-            is_first ? stats->acgtno_cycles_1st[ read_cycle ].n++ : stats->acgtno_cycles_2nd[ read_cycle ].n++;
-            break;
-        default:
-            /*
-             * count "=" sequences in "other" along
-             * with MRSVWYHKDB ambiguity codes
-             */
-            is_first ? stats->acgtno_cycles_1st[ read_cycle ].other++ : stats->acgtno_cycles_2nd[ read_cycle ].other++;
-            break;
+    acgtno_count_t *acgtno_cycles = (order == READ_ORDER_FIRST) ? stats->acgtno_cycles_1st : (order == READ_ORDER_LAST) ?  stats->acgtno_cycles_2nd : NULL ;
+    if (acgtno_cycles) {
+        for (i=0; i<seq_len; i++)
+        {
+            // Read cycle for current index
+            read_cycle = (reverse ? seq_len-i-1 : i);
+
+            // Conversion from uint8_t coding:
+            //      -12-4---8------5
+            //      =ACMGRSVTWYHKDBN
+            switch (bam_seqi(seq, i)) {
+            case 1:
+                acgtno_cycles[ read_cycle ].a++;
+                break;
+            case 2:
+                acgtno_cycles[ read_cycle ].c++;
+                gc_count++;
+                break;
+            case 4:
+                acgtno_cycles[ read_cycle ].g++;
+                gc_count++;
+                break;
+            case 8:
+                acgtno_cycles[ read_cycle ].t++;
+                break;
+            case 15:
+                acgtno_cycles[ read_cycle ].n++;
+                break;
+            default:
+                /*
+                 * count "=" sequences in "other" along
+                 * with MRSVWYHKDB ambiguity codes
+                 */
+                acgtno_cycles[ read_cycle ].other++;
+                break;
+            }
         }
     }
     int gc_idx_min = gc_count*(stats->ngc-1)/seq_len;
@@ -876,42 +889,47 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
     // Determine which array (1st or 2nd read) will these stats go to,
     //  trim low quality bases from end the same way BWA does,
     //  fill GC histogram
-    uint64_t *quals;
+    uint64_t *quals = NULL;
     uint8_t *bam_quals = bam_get_qual(bam_line);
-    if ( IS_READ2(bam_line) )
-    {
-        quals  = stats->quals_2nd;
-        stats->nreads_2nd++;
-        stats->total_len_2nd += seq_len;
-        for (i=gc_idx_min; i<gc_idx_max; i++)
-            stats->gc_2nd[i]++;
-    }
-    else
-    {
+
+    switch (order) {
+    case READ_ORDER_FIRST:
         quals = stats->quals_1st;
         stats->nreads_1st++;
         stats->total_len_1st += seq_len;
         for (i=gc_idx_min; i<gc_idx_max; i++)
             stats->gc_1st[i]++;
+        break;
+    case READ_ORDER_LAST:
+        quals  = stats->quals_2nd;
+        stats->nreads_2nd++;
+        stats->total_len_2nd += seq_len;
+        for (i=gc_idx_min; i<gc_idx_max; i++)
+            stats->gc_2nd[i]++;
+        break;
+    default:
+        stats->nreads_other++;
     }
     if ( stats->info->trim_qual>0 )
         stats->nbases_trimmed += bwa_trim_read(stats->info->trim_qual, bam_quals, seq_len, reverse);
 
     // Quality histogram and average quality. Clipping is neglected.
-    for (i=0; i<seq_len; i++)
-    {
-        uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
-        if ( qual>=stats->nquals )
-            error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
-        if ( qual>stats->max_qual )
-            stats->max_qual = qual;
+    if (quals) {
+        for (i=0; i<seq_len; i++)
+        {
+            uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
+            if ( qual>=stats->nquals )
+                error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+            if ( qual>stats->max_qual )
+                stats->max_qual = qual;
 
-        quals[ i*stats->nquals+qual ]++;
-        stats->sum_qual += qual;
+            quals[ i*stats->nquals+qual ]++;
+            stats->sum_qual += qual;
+        }
     }
 
     // Barcode statistics
-    if (IS_READ1(bam_line)) {
+    if (order == READ_ORDER_FIRST) {
         collect_barcode_stats(bam_line, stats);
     }
 
@@ -976,11 +994,11 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
     if ( !bam_line || !read_pairs || !stats )
         return;
 
-    uint32_t first = (IS_READ1(bam_line) > 0 ? 1 : 0) + (IS_READ2(bam_line) > 0 ? 2 : 0) ;
+    uint32_t order = (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0);
     if ( !(bam_line->core.flag & BAM_FPAIRED) ||
          (bam_line->core.flag & BAM_FMUNMAP) ||
          (abs(bam_line->core.isize) >= 2*bam_line->core.l_qseq) ||
-         (first != 1 && first != 2) ) {
+         (order != READ_ORDER_FIRST && order != READ_ORDER_LAST) ) {
         if ( pmin >= 0 )
             round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
         return;
@@ -1026,7 +1044,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
         pc->chunks[0].from = pmin;
         pc->chunks[0].to = pmax;
         pc->n = 1;
-        pc->first = first;
+        pc->first = order;
 
         kh_val(read_pairs, k) = pc;
         stats->pair_count++;
@@ -1037,7 +1055,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
             return;
         }
 
-        if ( first == pc->first ) { //chunk from an existing line
+        if ( order == pc->first ) { //chunk from an existing line
             if ( pmin == -1 )
                 return;
 
@@ -1136,15 +1154,17 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         stats->nreads_dup++;
     }
 
+    uint32_t order = IS_PAIRED(bam_line) ? (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0) : READ_ORDER_FIRST;
+
     int read_len = unclipped_length(bam_line);
     if ( read_len >= stats->nbases )
         realloc_buffers(stats,read_len);
     // Update max_len observed
     if ( stats->max_len<read_len )
         stats->max_len = read_len;
-    if ( IS_READ1(bam_line) && stats->max_len_1st < read_len )
+    if ( order == READ_ORDER_FIRST && stats->max_len_1st < read_len )
         stats->max_len_1st = read_len;
-    if ( IS_READ2(bam_line) && stats->max_len_2nd < read_len )
+    if ( order == READ_ORDER_LAST && stats->max_len_2nd < read_len )
         stats->max_len_2nd = read_len;
 
     int i;
@@ -1155,8 +1175,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
     if ( IS_ORIGINAL(bam_line) )
     {
         stats->read_lengths[read_len]++;
-        if ( IS_READ1(bam_line) ) stats->read_lengths_1st[read_len]++;
-        if ( IS_READ2(bam_line) ) stats->read_lengths_2nd[read_len]++;
+        if ( order == READ_ORDER_FIRST ) stats->read_lengths_1st[read_len]++;
+        if ( order == READ_ORDER_LAST ) stats->read_lengths_2nd[read_len]++;
         collect_orig_read_stats(bam_line, stats, &gc_count);
     }
 
@@ -1458,9 +1478,9 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "# CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)\n");
     fprintf(to, "CHK\t%08x\t%08x\t%08x\n", stats->checksum.names,stats->checksum.reads,stats->checksum.quals);
     fprintf(to, "# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.\n");
-    fprintf(to, "SN\traw total sequences:\t%ld\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd));  // not counting excluded seqs (and none of the below)
+    fprintf(to, "SN\traw total sequences:\t%ld\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));  // not counting excluded seqs (and none of the below)
     fprintf(to, "SN\tfiltered sequences:\t%ld\n", (long)stats->nreads_filtered);
-    fprintf(to, "SN\tsequences:\t%ld\n", (long)(stats->nreads_1st+stats->nreads_2nd));
+    fprintf(to, "SN\tsequences:\t%ld\n", (long)(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));
     fprintf(to, "SN\tis sorted:\t%d\n", stats->is_sorted ? 1 : 0);
     fprintf(to, "SN\t1st fragments:\t%ld\n", (long)stats->nreads_1st);
     fprintf(to, "SN\tlast fragments:\t%ld\n", (long)stats->nreads_2nd);
@@ -1482,7 +1502,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\tbases duplicated:\t%ld\n", (long)stats->total_len_dup);
     fprintf(to, "SN\tmismatches:\t%ld\t# from NM fields\n", (long)stats->nmismatches);
     fprintf(to, "SN\terror rate:\t%e\t# mismatches / bases mapped (cigar)\n", stats->nbases_mapped_cigar ? (float)stats->nmismatches/stats->nbases_mapped_cigar : 0);
-    float avg_read_length = (stats->nreads_1st+stats->nreads_2nd)?stats->total_len/(stats->nreads_1st+stats->nreads_2nd):0;
+    float avg_read_length = (stats->nreads_1st+stats->nreads_2nd+stats->nreads_other)?stats->total_len/(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other):0;
     fprintf(to, "SN\taverage length:\t%.0f\n", avg_read_length);
     fprintf(to, "SN\taverage first fragment length:\t%.0f\n", stats->nreads_1st? (float)stats->total_len_1st/stats->nreads_1st:0);
     fprintf(to, "SN\taverage last fragment length:\t%.0f\n", stats->nreads_2nd? (float)stats->total_len_2nd/stats->nreads_2nd:0);
@@ -1496,7 +1516,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\toutward oriented pairs:\t%ld\n", (long)nisize_outward);
     fprintf(to, "SN\tpairs with other orientation:\t%ld\n", (long)nisize_other);
     fprintf(to, "SN\tpairs on different chromosomes:\t%ld\n", (long)stats->nreads_anomalous/2);
-    fprintf(to, "SN\tpercentage of properly paired reads (%%):\t%.1f\n", (stats->nreads_1st+stats->nreads_2nd)? (float)(100*stats->nreads_properly_paired)/(stats->nreads_1st+stats->nreads_2nd):0);
+    fprintf(to, "SN\tpercentage of properly paired reads (%%):\t%.1f\n", (stats->nreads_1st+stats->nreads_2nd+stats->nreads_other)? (float)(100*stats->nreads_properly_paired)/(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other):0);
     if ( stats->target_count ) {
         fprintf(to, "SN\tbases inside the target:\t%u\n", stats->target_count);
         for (icov=stats->info->cov_threshold+1; icov<stats->ncov; icov++)
