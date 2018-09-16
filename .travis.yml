@@ -10,11 +10,29 @@ matrix:
       sudo: required
       env: CFLAGS="-fsanitize=address" LDFLAGS="-fsanitize=address"
     - os: linux
-      compiler: gcc
+      compiler: gcc-8
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - gcc-8
+      env:
+        - CC=gcc-8
+        - AR=gcc-ar-8
     # An unoptimised C99 build, for detecting non-static inline functions
     - os: linux
-      compiler: gcc
-      env: CFLAGS="-std=gnu99 -O0"
+      compiler: gcc-8
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - gcc-8
+      env:
+        - CC=gcc-8
+        - AR=gcc-ar-8
+        - CFLAGS="-std=gnu99 -O0"
     - os: osx
       compiler: clang
 
