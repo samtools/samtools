@@ -91,6 +91,24 @@ Not all sections will be reported as some depend on the data being
 coordinate sorted while others are only present when specific barcode
 tags are in use.
 
+Some of the statistics are collected for \*(lqfirst\*(rq or \*(lqlast\*(rq
+fragments.
+Records are put into these categories using the PAIRED (0x1), READ1 (0x40)
+and READ2 (0x80) flag bits, as follows:
+
+.IP \(bu 4
+Unpaired reads (i.e. PAIRED is not set) are all \*(lqfirst\*(rq fragments.
+For these records, the READ1 and READ2 flags are ignored.
+.IP \(bu 4
+Reads where PAIRED and READ1 are set, and READ2 is not set are \*(lqfirst\*(rq
+fragments.
+.IP \(bu 4
+Reads where PAIRED and READ2 are set, and READ1 is not set are \*(lqlast\*(rq
+fragments.
+.IP \(bu 4
+Reads where PAIRED is set and either both READ1 and READ2 are set or
+neither is set are not counted in either category.
+.PP
 The CHK row contains distinct CRC32 checksums of read names, sequences
 and quality values.  The checksums are computed per alignment record
 and summed, meaning the checksum does not change if the input file has
@@ -115,10 +133,15 @@ but more comprehensive.
 - flag indicating whether the file is coordinate sorted (1) or not (0).
 
 .B 1st fragments
-- number of reads with flag 0x40 (64) set.
+- number of
+.B first
+fragment reads (flags 0x01 not set; or flags 0x01
+and 0x40 set, 0x80 not set).
 
 .B last fragments
-- number of reads with flag 0x80 (128) set.
+- number of
+.B last
+fragment reads (flags 0x01 and 0x80 set, 0x40 not set).
 
 .B reads mapped
 - number of reads, paired or single, that are mapped (flag 0x4 or 0x8 not set).
@@ -152,11 +175,11 @@ but more comprehensive.
 
 .B total first fragment length
 - number of processed bases that belong to
-.B 1st fragments.
+.BR "first " fragments.
 
 .B total last fragment length
 - number of processed bases that belong to
-.B last fragments.
+.BR "last " fragments.
 
 .B bases mapped
 - number of processed bases that belong to
@@ -203,10 +226,14 @@ and
 - length of the longest read (includes hard-clipped bases).
 
 .B maximum first fragment length
-- length of the longest read with flag 0x40 (64) set (includes hard-clipped bases).
+- length of the longest
+.B first
+fragment read (includes hard-clipped bases).
 
 .B maximum last fragment length
-- length of the longest read with flag 0x80 (128) set (includes hard-clipped bases).
+- length of the longest
+.B last
+fragment read (includes hard-clipped bases).
 
 .B average quality
 - ratio between the sum of base qualities and
@@ -263,9 +290,9 @@ are cycle number (integer), and percentage counts for A, C, G, T, N
 and other (typically containing ambiguity codes) normalised against
 the total counts of A, C, G and T only (excluding N and other).
 
-FTC and LTC report the total numbers of nucleotides for first and last 
+FTC and LTC report the total numbers of nucleotides for first and last
 fragments, respectively. The columns are the raw counters for A, C, G,
-T and N bases.  
+T and N bases.
 
 BCC, CRC, OXC and RXC are the barcode equivalent of GCC, showing
 nucleotide content for the barcode tags BC, CR, OX and RX respectively.
