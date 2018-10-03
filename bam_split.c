@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <limits.h>
 #include <unistd.h>
 #include <regex.h>
+#include <assert.h>
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
 #include <htslib/cram.h>
@@ -235,7 +236,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
     // Second stage locate @RG ID's //
     //////////////////////////////////
     char** names = (char**)calloc(sizeof(char*), n_rg);
-    size_t next = 0;
+    size_t n_rg_id = 0;
 
     regex_t rg_finder;
     if (regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE) != 0) {
@@ -250,7 +251,8 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
     while ((error = regexec(&rg_finder, begin, 2, matches, 0)) == 0) {
         kstring_t str = { 0, 0, NULL };
         kputsn(begin+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &str);
-        names[next++] = ks_release(&str);
+        assert(n_rg_id < n_rg);
+        names[n_rg_id++] = ks_release(&str);
         begin += matches[0].rm_eo;
     }
 
@@ -265,7 +267,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
     free(matches);
 
     // return results
-    *count = n_rg;
+    *count = n_rg_id;
     *output_name = names;
     regfree(&rg_finder);
     free(input.s);
@@ -583,10 +585,9 @@ static int cleanup_state(state_t* status, bool check_close)
     free(status->rg_output_file_name);
     kh_destroy_c2i(status->rg_hash);
     free(status->rg_id);
-    free(status);
-
     if (status->p.pool)
         hts_tpool_destroy(status->p.pool);
+    free(status);
 
     return ret;
 }
