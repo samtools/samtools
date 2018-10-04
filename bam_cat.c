@@ -47,6 +47,7 @@ Illumina.
 #include "htslib/cram.h"
 #include "htslib/khash.h"
 #include "samtools.h"
+#include "sam_opts.h"
 
 KHASH_MAP_INIT_STR(s2i, int)
 
@@ -171,6 +172,34 @@ static khash_s2i *hash_rg(const bam_hdr_t *h) {
     return rg2id;
 }
 
+static int addNewPG(bam_hdr_t *h, char *arg_list)
+{
+    // Add new PG line
+    SAM_hdr *sh = sam_hdr_parse_(h->text, h->l_text);
+    if (!sh) goto fail;
+    if (sam_hdr_add_PG(sh, "samtools",
+                           "VN", samtools_version(),
+                           arg_list ? "CL": NULL,
+                           arg_list ? arg_list : NULL,
+                           NULL) != 0) {
+        print_error_errno("cat", "Couldn't add PG line");
+        goto fail;
+    }
+    free(h->text);
+    h->text = strdup(sam_hdr_str(sh));
+    if (!h->text) {
+        print_error_errno("cat", "problem adding PG line");
+        goto fail;
+    }
+    h->l_text = sam_hdr_length(sh);
+    sam_hdr_free(sh);
+    return 0;
+
+fail:
+    sam_hdr_free(sh);
+    return 1;
+}
+
 /*
  * Check the files are consistent and capable of being concatenated.
  * Also fills out the rg2id read-group hash and the version numbers
@@ -289,7 +318,7 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const bam_hdr_t 
  * huffman code.  In this situation we can change the meta-data in the
  * compression header to renumber an RG value..
  */
-int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
+int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram, sam_global_args *ga, char *arg_list)
 {
     samFile *out;
     cram_fd *out_c;
@@ -304,7 +333,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     /* Open the file with cram_vers */
     char vers[100];
     sprintf(vers, "%d.%d", vers_maj, vers_min);
-    out = sam_open(outcram, "wc");
+    out = sam_open_format(outcram, "wc", &ga->out);
     if (out == 0) {
         print_error_errno("cat", "fail to open output file '%s'", outcram);
         return -1;
@@ -313,6 +342,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     cram_set_option(out_c, CRAM_OPT_VERSION, vers);
     //fprintf(stderr, "Creating cram vers %s\n", vers);
 
+    if (addNewPG(new_h, arg_list)) return -1;
     cram_fd_set_header(out_c, sam_hdr_parse_(new_h->text,  new_h->l_text)); // needed?
     if (sam_hdr_write(out, new_h) < 0) {
         print_error_errno("cat", "Couldn't write header");
@@ -419,7 +449,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
 
 #define BGZF_EMPTY_BLOCK_SIZE 28
 
-int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
+int bam_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outbam, char *arg_list)
 {
     BGZF *fp, *in = NULL;
     uint8_t *buf = NULL;
@@ -433,6 +463,7 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
         return -1;
     }
     if (h) {
+        if (addNewPG(h, arg_list)) goto fail;
         if (bam_hdr_write(fp, h) < 0) {
             print_error_errno("cat", "Couldn't write header");
             goto fail;
@@ -462,6 +493,7 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
             goto fail;
         }
         if (h == 0 && i == 0) {
+            if (addNewPG(old, arg_list)) goto fail;
             if (bam_hdr_write(fp, old) < 0) {
                 print_error_errno("cat", "Couldn't write header");
                 goto fail;
@@ -536,8 +568,18 @@ int main_cat(int argc, char *argv[])
     int infns_size = 0;
     int c, ret = 0;
     samFile *in;
+    sam_global_args ga;
 
-    while ((c = getopt(argc, argv, "h:o:b:")) >= 0) {
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', '-', '-', 0, '-', '@'),
+        { NULL, 0, NULL, 0 }
+    };
+
+    char *arg_list = stringify_argv(argc+1, argv-1);
+
+    sam_global_args_init(&ga);
+
+    while ((c = getopt_long(argc, argv, "h:o:b:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'h': {
                 samFile *fph = sam_open(optarg, "r");
@@ -573,6 +615,8 @@ int main_cat(int argc, char *argv[])
                 }
                 break;
             }
+            default:
+                if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
         }
     }
 
@@ -592,6 +636,7 @@ int main_cat(int argc, char *argv[])
         fprintf(stderr, "Options: -b FILE  list of input BAM/CRAM file names, one per line\n");
         fprintf(stderr, "         -h FILE  copy the header from FILE [default is 1st input file]\n");
         fprintf(stderr, "         -o FILE  output BAM/CRAM\n");
+        sam_global_opt_help(stderr, "--..-@");
         return 1;
     }
 
@@ -604,13 +649,13 @@ int main_cat(int argc, char *argv[])
     switch (hts_get_format(in)->format) {
     case bam:
         sam_close(in);
-        if (bam_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-") < 0)
+        if (bam_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", arg_list) < 0)
             ret = 1;
         break;
 
     case cram:
         sam_close(in);
-        if (cram_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-") < 0)
+        if (cram_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", &ga, arg_list) < 0)
             ret = 1;
         break;
 
@@ -629,7 +674,7 @@ int main_cat(int argc, char *argv[])
 
     free(outfn);
     free(infns);
-
+    free(arg_list);
     if (h)
         bam_hdr_destroy(h);
 

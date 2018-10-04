@@ -1409,6 +1409,17 @@ sub sam_compare
                     next if ($h1->[$i] eq $h2->[$i]);
                 }
 
+                # Hack to handle PP, CL and VN tags for @PG lines
+                if ($ht eq '@PG') {
+                    $h1->[$i] =~ s/\tVN:[^\t\n]+//;
+                    $h2->[$i] =~ s/\tVN:[^\t\n]+//;
+                    $h1->[$i] =~ s/\tCL:[^\t\n]+//;
+                    $h2->[$i] =~ s/\tCL:[^\t\n]+//;
+                    $h1->[$i] =~ s/\tPP:[^\t\n]+//;
+                    $h2->[$i] =~ s/\tPP:[^\t\n]+//;
+                    next if ($h1->[$i] eq $h2->[$i]);
+                }
+
                 $same = 0;
                 last;
             }
@@ -1417,11 +1428,13 @@ sub sam_compare
             print "\n\tHeader type $ht differs.\n";
             print "\t$sam1 has:\n";
             foreach my $t (@{$hdr1{$ht}}) {
-                print "\t$t\n";
+                my $n = length($t);
+                print "\t|$t| ($n)\n";
             }
             print "\t$sam2 has:\n";
             foreach my $t (@{$hdr2{$ht}}) {
-                print "\t$t\n";
+                my $n = length($t);
+                print "\t|$t| ($n)\n";
             }
             close($f1);
             close($f2);
@@ -2296,6 +2309,17 @@ sub cat_sams
         } else {
             open($in, '<', $sam_in) || die "Couldn't open $sam_in : $!\n";
         }
+        if ($first) {
+            # copy header
+            my $prev = '';
+            while (<$in>) {
+                if (/^@/) { print $out $_ || die "Error writing to $sam_out : $!\n"; }
+                else { $prev = $_; last; }
+            }
+            print $out "\@PG\tID:samtools\tPN:samtools\n";
+            if ($prev) { print $out $prev; }
+        }
+                
         while (<$in>) {
             next if (/^@/ && !$first);
             print $out $_ || die "Error writing to $sam_out : $!\n";
