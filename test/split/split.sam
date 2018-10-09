@@ -1,0 +1,62 @@
+@HD	VN:1.4	SO:coordinate
+@RG	ID:grp1	DS:Group 1	LB:Library 1	SM:Sample
+@RG	ID:grp2	DS:Group 2	LB:Library 2	SM:Sample
+@PG	ID:prog1	PN:emacs	CL:emacs	VN:23.1.1
+@CO	The MIT License
+@CO	
+@CO	Copyright (c) 2014 Genome Research Ltd.
+@CO	
+@CO	Permission is hereby granted, free of charge, to any person obtaining a copy
+@CO	of this software and associated documentation files (the "Software"), to deal
+@CO	in the Software without restriction, including without limitation the rights
+@CO	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+@CO	copies of the Software, and to permit persons to whom the Software is
+@CO	furnished to do so, subject to the following conditions:
+@CO	
+@CO	The above copyright notice and this permission notice shall be included in
+@CO	all copies or substantial portions of the Software.
+@CO	
+@CO	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+@CO	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+@CO	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+@CO	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+@CO	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+@CO	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+@CO	THE SOFTWARE.
+@SQ	SN:ref1	LN:56	M5:08c04d512d4797d9ba2a156c1daba468
+@SQ	SN:ref2	LN:60	M5:7c35feac7036c1cdef3bee0cc4b21437
+@SQ	SN:ref3_unused	LN:70	M5:5fdd18c2c6ecac4838996d029bf395b5
+ref1_grp1_p001	99	ref1	1	0	10M	=	25	34	CGAGCTCGGT	!!!!!!!!!!	RG:Z:grp1	BC:Z:ACGT	H0:i:1	aa:A:!	ab:A:~	fa:f:3.14159	za:Z:Hello world!	ha:H:DEADBEEF	ba:B:c,-128,0,127	bb:B:C,0,127,255	bc:B:s,-32768,0,32767	bd:B:S,0,32768,65535	be:B:i,-2147483648,0,2147483647	bf:B:I,0,2147483648,4294967295	bg:B:f,2.71828,6.626e-34,2.9979e+09	NM:i:0	MD:Z:10
+ref1_grp2_p001	99	ref1	3	1	10M	=	27	34	AGCTCGGTAC	""""""""""	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE	NM:i:0	MD:Z:10
+ref1_grp1_p002	99	ref1	5	2	10M	=	29	34	CTCGGTACCC	##########	RG:Z:grp1	BC:Z:AATTCCGG	H0:i:1	aa:A:a	ab:A:z	fa:f:4.3597e-18	za:Z:Another string	ha:H:2000AD	NM:i:0	MD:Z:10
+ref1_grp2_p002	99	ref1	7	3	10M	=	31	34	CGGTACCCGG	$$$$$$$$$$	fa:f:6.022e+23	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp1_p003	99	ref1	9	4	10M	=	33	34	GTACCCGGGG	%%%%%%%%%%	fa:f:1.66e-27	RG:Z:grp1	NM:i:0	MD:Z:10
+ref1_grp2_p003	99	ref1	11	5	10M	=	35	34	ACCCGGGGAT	&&&&&&&&&&	RG:Z:grp2	ia:i:4294967295	NM:i:0	MD:Z:10
+ref1_grp1_p004	99	ref1	13	6	10M	=	37	34	CCGGGGATCC	''''''''''	fa:f:1.38e-23	za:Z:xRG:Z:grp2	RG:Z:grp1	NM:i:0	MD:Z:10
+ref1_grp2_p004	99	ref1	15	7	10M	=	39	34	GGGGATCCTC	((((((((((	RG:Z:grp2	ia:i:-2147483648	NM:i:0	MD:Z:10
+ref1_grp1_p005	99	ref1	17	8	10M	=	41	34	GGATCCTCTA	))))))))))	RG:Z:grp1	ia:i:40000	NM:i:0	MD:Z:10
+ref1_grp2_p005	99	ref1	19	9	10M	=	43	34	ATCCTCTAGA	**********	RG:Z:grp2	ia:i:-1000	NM:i:0	MD:Z:10
+ref1_grp1_p006	99	ref1	21	10	10M	=	45	34	CCTCTAGAGT	++++++++++	RG:Z:grp1	ia:i:255	NM:i:0	MD:Z:10
+ref1_grp2_p006	99	ref1	23	11	10M	=	47	34	TCTAGAGTCG	,,,,,,,,,,	RG:Z:grp2	ia:i:-1	NM:i:0	MD:Z:10
+ref1_grp1_p001	147	ref1	25	12	10M	=	1	-34	TAGAGTCGAC	----------	RG:Z:grp1	NM:i:0	MD:Z:10
+ref1_grp2_p001	147	ref1	27	13	10M	=	3	-34	GAGTCGACCT	..........	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp1_p002	147	ref1	29	14	10M	=	5	-34	GTCGACCTGC	//////////	RG:Z:grp1	NM:i:0	MD:Z:10
+ref1_grp2_p002	147	ref1	31	15	10M	=	7	-34	CGACCTGCAG	0000000000	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp1_p003	147	ref1	33	16	10M	=	9	-34	ACCTGCAGGC	1111111111	RG:Z:grp1	NM:i:0	MD:Z:10
+ref1_grp2_p003	147	ref1	35	17	10M	=	11	-34	CTGCAGGCAT	2222222222	RG:Z:grp2	NM:i:0	MD:Z:10
+ref12_grp1_p001	97	ref1	36	50	10M	ref2	2	0	TGCAGGCATG	AAAAAAAAAA	RG:Z:grp1	NM:i:0	MD:Z:10
+ref1_grp1_p004	147	ref1	37	18	10M	=	13	-34	GCAGGCATGC	3333333333	RG:Z:grp1	NM:i:0	MD:Z:10
+ref1_grp2_p004	147	ref1	39	19	10M	=	15	-34	AGGCATGCAA	4444444444	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp1_p005	147	ref1	41	20	10M	=	17	-34	GCATGCAAGC	5555555555	RG:Z:grp1	NM:i:0	MD:Z:10
+ref1_grp2_p005	147	ref1	43	21	10M	=	19	-34	ATGCAAGCTT	6666666666	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp1_p006	147	ref1	45	22	10M	=	21	-34	GCAAGCTTGA	7777777777	RG:Z:grp1	NM:i:0	MD:Z:10
+ref12_grp2_p001	97	ref1	46	50	10M	ref2	12	0	CAAGCTTGAG	AAAAAAAAAA	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp2_p006	147	ref1	47	23	10M	=	23	-34	AAGCTTGAGT	8888888888	RG:Z:grp2	NM:i:0	MD:Z:10
+ref2_grp3_p001	83	ref2	1	99	15M	=	31	45	ATTCTATAGTGTCAC	~~~~~~~~~~~~~~~	NM:i:0	MD:Z:15
+ref12_grp1_p001	145	ref2	2	50	10M	ref1	36	0	TTCTATAGTG	BBBBBBBBBB	RG:Z:grp1	NM:i:0	MD:Z:10
+ref12_grp2_p001	145	ref2	12	50	10M	ref1	46	0	TCACCTAAAT	BBBBBBBBBB	RG:Z:grp2	NM:i:0	MD:Z:10
+ref2_grp3_p002	147	ref2	16	99	15M	=	46	45	CTAAATAGCTTGGCG	}}}}}}}}}}}}}}}	NM:i:0	MD:Z:15
+ref2_grp3_p001	163	ref2	31	99	15M	=	1	-45	CTGTTTCCTGTGTGA	|||||||||||||||	NM:i:13	MD:Z:0T0A0A1C0A0T0G0G0T0C0A1A0G0
+ref2_grp3_p002	99	ref2	46	99	15M	=	16	-45	CTGTTTCCTGTGTGA	{{{{{{{{{{{{{{{	NM:i:0	MD:Z:15
+unaligned_grp3_p001	77	*	0	0	*	*	0	0	CACTCGTTCATGACG	0123456789abcde
+unaligned_grp3_p001	141	*	0	0	*	*	0	0	GAAAGTGAGGAGGTG	edcba9876543210

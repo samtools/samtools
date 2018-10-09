@@ -66,7 +66,8 @@ test_addrprg($opts, threads=>2);
 test_markdup($opts);
 test_markdup($opts, threads=>2);
 test_bedcov($opts);
-
+test_split($opts);
+test_split($opts, threads=>2);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -210,6 +211,7 @@ sub cmd
 #       want_fail=> consider passed() if cmd() returns non-zero
 #       out_map => map output filenames to their expected result file (can be used alongside out)
 #       hskip => number of header lines to ignore during diff
+#       ignore_pg_header => remove @PG header lines
 sub test_cmd
 {
     my ($opts,%args) = @_;
@@ -269,6 +271,11 @@ sub test_cmd
         close($fh);
     }
     elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$args{out}: $!"); return; }
+
+    if ($args{ignore_pg_header}) {
+	$out =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
+	$exp =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
+    }
 
     if ( $exp ne $out )
     {
@@ -352,6 +359,11 @@ sub test_cmd
                 close($fh);
             }
             elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_actual: $!"); return; }
+
+	    if ($args{ignore_pg_header}) {
+		$out =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
+		$exp =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
+	    }
 
             if ( $exp ne $out )
             {
@@ -2885,3 +2897,19 @@ sub test_bedcov
     test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
 }
 
+sub test_split
+{
+    my ($opts, %args) = @_;
+
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
+
+    test_cmd($opts,
+	     out=>"dat/empty.expected",
+	     out_map => {
+		 'split/split.tmp.grp1.sam' => 'split/split.expected.grp1.sam',
+		 'split/split.tmp.grp2.sam' => 'split/split.expected.grp2.sam',
+		 'split/split.tmp.unk.sam' => 'split/split.expected.unk.sam',
+	     },
+	     ignore_pg_header => 1,
+	     cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%!.\%. $$opts{path}/split/split.sam");
+}
