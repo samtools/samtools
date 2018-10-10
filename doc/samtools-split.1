@@ -61,8 +61,13 @@ records without an RG tag.
 .BI "-u " FILE1
 .RI "Put reads with no RG tag or an unrecognised RG tag into " FILE1
 .TP
-.BI "-u " FILE1 ":" FILE2
-.RI "As above, but assigns an RG tag as given in the header of " FILE2
+.BI "-h " FILE2
+.RI "Use the header from " FILE2 " when writing the file given in the " -u
+option.
+This header completely replaces the one from the input file.
+It must be compatible with the input file header, which means it must
+have the same number of references listed in the @SQ lines and the
+references must be in the same order and have the same lengths.
 .TP
 .BI "-f " STRING
 Output filename format string (see below)
