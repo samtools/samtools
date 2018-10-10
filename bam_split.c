@@ -1,6 +1,6 @@
 /*  bam_split.c -- split subcommand.
 
-    Copyright (C) 2013-2016 Genome Research Ltd.
+    Copyright (C) 2013-2016,2018 Genome Research Ltd.
 
     Author: Martin Pollard <mp15@sanger.ac.uk>
 
@@ -46,7 +46,7 @@ KHASH_MAP_INIT_STR(c2i, int)
 struct parsed_opts {
     const char *merged_input_name;
     const char *unaccounted_header_name;
-    char *unaccounted_name;
+    const char *unaccounted_name;
     const char *output_format_string;
     bool verbose;
     sam_global_args ga;
@@ -76,12 +76,12 @@ static void cleanup_opts(parsed_opts_t* opts);
 static void usage(FILE *write_to)
 {
     fprintf(write_to,
-"Usage: samtools split [-u <unaccounted.bam>[:<unaccounted_header.sam>]]\n"
+"Usage: samtools split [-u <unaccounted.bam>] [-h <unaccounted_header.sam>]\n"
 "                      [-f <format_string>] [-v] <merged.bam>\n"
 "Options:\n"
 "  -f STRING       output filename format string [\"%%*_%%#.%%.\"]\n"
 "  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
-"  -u FILE1:FILE2  ...and override the header with FILE2\n"
+"  -h FILE2        ... and override the header with FILE2 (-u file only)\n"
 "  -v              verbose output\n");
     sam_global_opt_help(write_to, "-....@");
     fprintf(write_to,
@@ -100,8 +100,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
-    const char* optstring = "vf:u:@:";
-    char* delim;
+    const char *optstring = "vf:h:u:@:";
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
@@ -119,16 +118,14 @@ static parsed_opts_t* parse_args(int argc, char** argv)
         case 'f':
             retval->output_format_string = optarg;
             break;
+        case 'h':
+            retval->unaccounted_header_name = optarg;
+            break;
         case 'v':
             retval->verbose = true;
             break;
         case 'u':
-            retval->unaccounted_name = strdup(optarg);
-            if (! retval->unaccounted_name ) { perror("cannot allocate string memory"); return NULL; }
-            if ((delim = strchr(retval->unaccounted_name, ':')) != NULL) {
-                *delim = '\0';
-                retval->unaccounted_header_name = delim+1;
-            }
+            retval->unaccounted_name = optarg;
             break;
         default:
             if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) == 0) break;
@@ -377,6 +374,25 @@ static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep, const char *ar
     return false;
 }
 
+static int header_compatible(bam_hdr_t *hdr1, bam_hdr_t *hdr2)
+{
+    size_t n;
+    if (hdr1->n_targets != hdr2->n_targets) {
+        print_error("split",
+                    "Unaccounted header contains wrong number of references");
+        return -1;
+    }
+    for (n = 0; n < hdr1->n_targets; n++) {
+        if (hdr1->target_len[n] != hdr2->target_len[n]) {
+            print_error("split",
+                        "Unaccounted header reference %zu \"%s\" is not the same length as in the input file",
+                        n + 1, hdr2->target_name[n]);
+            return -1;
+        }
+    }
+    return 0;
+}
+
 // Set the initial state
 static state_t* init(parsed_opts_t* opts, const char *arg_list)
 {
@@ -415,7 +431,6 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
             if (!hdr_load) {
                 print_error_errno("split", "Could not open unaccounted header file \"%s\"", opts->unaccounted_header_name);
                 cleanup_state(retval, false);
-                sam_close(hdr_load);
                 return NULL;
             }
             retval->unaccounted_header = sam_hdr_read(hdr_load);
@@ -426,6 +441,11 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
                 return NULL;
             }
             sam_close(hdr_load);
+            if (header_compatible(retval->merged_input_header,
+                                  retval->unaccounted_header) != 0) {
+                cleanup_state(retval, false);
+                return NULL;
+            }
         } else {
             retval->unaccounted_header = bam_hdr_dup(retval->merged_input_header);
         }
@@ -640,7 +660,6 @@ static int cleanup_state(state_t* status, bool check_close)
 static void cleanup_opts(parsed_opts_t* opts)
 {
     if (!opts) return;
-    free(opts->unaccounted_name);
     sam_global_args_free(&opts->ga);
     free(opts);
 }
