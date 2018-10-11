@@ -1,6 +1,6 @@
 /*  bam.c -- BAM format.
 
-    Copyright (C) 2008-2013, 2015 Genome Research Ltd.
+    Copyright (C) 2008-2013, 2015, 2018 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -30,6 +30,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include "bam.h"
 #include "htslib/kstring.h"
+#include "samtools.h"
 #include "sam_header.h"
 
 char *bam_format1(const bam_header_t *header, const bam1_t *b)
@@ -245,3 +246,34 @@ rmB_err:
     b->core.flag |= BAM_FUNMAP;
     return -1;
 }
+
+/*
+ * Add new @PG line to a BAM header
+ *
+ * Return 0 for success, 1 if there was a problem.
+ */
+int bam_hdr_add_PG(bam_hdr_t *h, char *arg_list)
+{
+    // Add new PG line
+    SAM_hdr *sh = sam_hdr_parse_(h->text, h->l_text);
+    if (sam_hdr_add_PG(sh, "samtools",
+                           "VN", samtools_version(),
+                           arg_list ? "CL": NULL,
+                           arg_list ? arg_list : NULL,
+                           NULL) != 0) {
+        goto fail;
+    }
+    free(h->text);
+    h->text = strdup(sam_hdr_str(sh));
+    if (!h->text) {
+        goto fail;
+    }
+    h->l_text = sam_hdr_length(sh);
+    sam_hdr_free(sh);
+    return 0;
+
+fail:
+    sam_hdr_free(sh);
+    return 1;
+}
+

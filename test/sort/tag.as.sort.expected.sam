@@ -10,6 +10,8 @@
 @PG	ID:bull	PP:donkey
 @PG	ID:donkey
 @CO	Do you know?
+@PG	ID:samtools	PN:samtools	PP:llama
+@PG	ID:samtools.1	PN:samtools	PP:bull
 r006	16	ref1	29	30	6H5M	*	0	0	TAGGC	*	RG:Z:colt	PG:Z:donkey	FI:i:3
 x11	0	ref2	12	30	24M	*	0	0	AATAATTAAGTCTACAGAGCAACT	????????????????????????	RG:Z:cow	PG:Z:bull	FI:Z:a
 r007	0	ref1	16	30	6M14N1I5M	*	0	0	ATAGCTCTCAGC	*	RG:Z:colt	PG:Z:donkey	AS:i:-5	FI:f:3.5

@@ -33,6 +33,8 @@ typedef struct refseq_info {
     uint32_t    len;
 } refseq_info_t;
 
+int bam_hdr_add_PG(bam_hdr_t *h, char *arg_list) { return 0; }
+
 void dump_header(bam_hdr_t* hdr) {
     printf("->n_targets:(%d)\n", hdr->n_targets);
     int i;

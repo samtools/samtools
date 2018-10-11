@@ -9,8 +9,12 @@
 @PG	ID:llama
 @PG	ID:bull	PP:donkey
 @PG	ID:donkey
+@PG	ID:samtools	PN:samtools	PP:llama
+@PG	ID:samtools.1	PN:samtools	PP:bull
 @CO	Do you know?
 @CO	Do you know?
+@PG	ID:samtools.2	PN:samtools	PP:samtools
+@PG	ID:samtools.3	PN:samtools	PP:samtools.1
 x7	0	ref2	1	30	20M	*	0	0	AGGTTTTATAAAACAAATAA	*	RG:Z:cow	PG:Z:bull
 x7	0	ref2	1	30	20M	*	0	0	AGGTTTTATAAAACAAATAA	*	AS:i:50	FI:i:2	RG:Z:cow	PG:Z:bull
 x8	0	ref2	2	30	21M	*	0	0	GGTTTTATAAAACAAATAATT	?????????????????????	RG:Z:cow	PG:Z:bull

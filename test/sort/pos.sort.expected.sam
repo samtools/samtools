@@ -11,6 +11,8 @@
 @PG	ID:moose
 @PG	PP:moose	ID:cow
 @CO	
+@PG	ID:samtools	PN:samtools	PP:bull
+@PG	ID:samtools.1	PN:samtools	PP:cow
 r000	99	insert	50	30	10M	=	80	30	ATTTAGCTAC	AAAAAAAAAA	RG:Z:cow	PG:Z:bull
 r000	211	insert	80	30	10M	=	50	-30	CCCAATCATT	AAAAAAAAAA	RG:Z:cow	PG:Z:bull
 r001	163	ref1	7	30	8M4I4M1D3M	=	37	39	TTAGATAAAGAGGATACTG	*	XX:B:S,12561,2,20,112	YY:i:100	RG:Z:fish	PG:Z:colt

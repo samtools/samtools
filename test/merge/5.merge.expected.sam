@@ -19,6 +19,11 @@
 @CO	Do you know?
 @CO	Do you know?
 @CO	Another comment from test_input_1_c
+@PG	ID:samtools	PN:samtools	PP:bull
+@PG	ID:samtools.1	PN:samtools	PP:cow
+@PG	ID:samtools.2	PN:samtools	PP:llama
+@PG	ID:samtools.3	PN:samtools	PP:bull-55424A4
+@PG	ID:samtools.4	PN:samtools	PP:bull-6ADB4A65
 r000	99	insert	50	30	10M	=	80	30	ATTTAGCTAC	AAAAAAAAAA	PG:Z:bull	RG:Z:test_input_1_a
 r000	211	insert	80	30	10M	=	50	-30	CCCAATCATT	AAAAAAAAAA	PG:Z:bull	RG:Z:test_input_1_a
 r001	163	ref1	7	30	8M4I4M1D3M	=	37	39	TTAGATAAAGAGGATACTG	*	XX:B:S,12561,2,20,112	YY:i:100	RG:Z:test_input_1_a

@@ -26,6 +26,8 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "../../bam_sort.c"
 
+int bam_hdr_add_PG(bam_hdr_t *h, char *arg_list) { return 0; }
+
 void dump_rtrans(int* rtrans, int n, int n_targets) {
     printf("->n_targets:(%d)\n", n_targets);
     int i, j;

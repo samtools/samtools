@@ -47,6 +47,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
+#include "htslib/cram.h"
 
 /*! @abstract BAM file handler */
 typedef BGZF *bamFile;
@@ -576,5 +577,14 @@ static inline int bam_reg2bin(uint32_t beg, uint32_t end)
   @return       pointer to the destination alignment struct
  */
 // bam1_t *bam_dup1(const bam1_t *src)
+
+/*!
+  @abstract         Add a new @PG line to a BAM header
+  @param  h         pointer to a bam_hdr_t struct
+  @param  arg_list  the argument list to add to the CL: tag of the @PG line
+  @return           0 on success, 1 on failure
+ */
+
+int bam_hdr_add_PG(bam_hdr_t *h, char *arg_list);
 
 #endif

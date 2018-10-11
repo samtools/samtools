@@ -270,6 +270,10 @@ sub test_cmd
     }
     elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$args{out}: $!"); return; }
 
+    $exp =~ s/\tVN:[^\t\n]+//g;
+    $exp =~ s/\tCL:[^\t\n]+//g;
+    $out =~ s/\tVN:[^\t\n]+//g;
+    $out =~ s/\tCL:[^\t\n]+//g;
     if ( $exp ne $out )
     {
         open(my $fh,'>',"$$opts{path}/$args{out}.new") or error("$$opts{path}/$args{out}.new");

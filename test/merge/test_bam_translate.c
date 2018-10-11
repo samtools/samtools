@@ -32,6 +32,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include <unistd.h>
 
+int bam_hdr_add_PG(bam_hdr_t *h, char *arg_list) { return 0; }
+
 void dump_read(bam1_t* b) {
     printf("->core.tid:(%d)\n", b->core.tid);
     printf("->core.pos:(%d)\n", b->core.pos);
