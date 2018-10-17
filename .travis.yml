@@ -20,6 +20,18 @@ matrix:
       env:
         - CC=gcc-8
         - AR=gcc-ar-8
+    - os: linux
+      compiler: gcc-7
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - gcc-7
+      env:
+        - CC=gcc-7
+        - AR=gcc-ar-7
+      if: type = cron OR env(CI_SECONDARY) = 1
     # An unoptimised C99 build, for detecting non-static inline functions
     - os: linux
       compiler: gcc-8
