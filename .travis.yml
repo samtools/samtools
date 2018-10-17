@@ -35,6 +35,8 @@ matrix:
         - CFLAGS="-std=gnu99 -O0"
     - os: osx
       compiler: clang
+    - os: linux
+      compiler: gcc
 
 env:
   global:
