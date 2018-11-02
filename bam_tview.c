@@ -57,7 +57,7 @@ khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
     return rg_hash;
 }
 
-int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
+int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *fn_idx,
                  const char *samples, const htsFormat *fmt)
 {
     assert(tv!=NULL);
@@ -81,7 +81,13 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
         print_error("tview", "cannot read \"%s\"", fn);
         exit(EXIT_FAILURE);
     }
-    tv->idx = sam_index_load(tv->fp, fn);
+    // If index filename has not been specfied, look in BAM folder
+    if (fn_idx != NULL) {
+        tv->idx = sam_index_load2(tv->fp, fn, fn_idx);
+    } else {
+        tv->idx = sam_index_load(tv->fp, fn);
+    }
+    
     if (tv->idx == NULL)
     {
         print_error("tview", "cannot read index for \"%s\"", fn);
@@ -331,6 +337,7 @@ static void error(const char *format, ...)
 "Usage: samtools tview [options] <aln.bam> [ref.fasta]\n"
 "Options:\n"
 "   -d display      output as (H)tml or (C)urses or (T)ext \n"
+"   -D FILE         include customized index file\n"
 "   -p chr:pos      go directly to this position\n"
 "   -s STR          display only reads from this sample or group\n");
         sam_global_opt_help(stderr, "-.--.-");
@@ -348,16 +355,16 @@ static void error(const char *format, ...)
 enum dipsay_mode {display_ncurses,display_html,display_text};
 extern tview_t* curses_tv_init(const char *fn, const char *fn_fa,
                                const char *samples, const htsFormat *fmt);
-extern tview_t* html_tv_init(const char *fn, const char *fn_fa,
+extern tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *fn_idx,
                              const char *samples, const htsFormat *fmt);
-extern tview_t* text_tv_init(const char *fn, const char *fn_fa,
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *fn_idx,
                              const char *samples, const htsFormat *fmt);
 
 int bam_tview_main(int argc, char *argv[])
 {
     int view_mode=display_ncurses;
     tview_t* tv=NULL;
-    char *samples=NULL, *position=NULL, *ref;
+    char *samples=NULL, *position=NULL, *ref, *fn_idx=NULL;
     int c;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -366,10 +373,11 @@ int bam_tview_main(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "s:p:d:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "s:p:d:D:", lopts, NULL)) >= 0) {
         switch (c) {
             case 's': samples=optarg; break;
             case 'p': position=optarg; break;
+            case 'D': fn_idx=optarg; break; // -D flag for index filename
             case 'd':
             {
                 switch(optarg[0])
@@ -397,11 +405,11 @@ int bam_tview_main(int argc, char *argv[])
             break;
 
         case display_text:
-            tv = text_tv_init(argv[optind], ref, samples, &ga.in);
+            tv = text_tv_init(argv[optind], ref, fn_idx, samples, &ga.in);
             break;
 
         case display_html:
-            tv = html_tv_init(argv[optind], ref, samples, &ga.in);
+            tv = html_tv_init(argv[optind], ref, fn_idx, samples, &ga.in);
             break;
     }
     if (tv==NULL)

@@ -314,7 +314,7 @@ static void init_pair(html_tview_t *tv,int id_ge_1, const char* pen, const char*
     }
 */
 
-tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples,
+tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *fn_idx, const char *samples,
                       const htsFormat *fmt)
     {
     char* colstr=getenv("COLUMNS");
@@ -329,7 +329,7 @@ tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples,
     tv->screen=NULL;
     tv->out=stdout;
     tv->attributes=0;
-    base_tv_init(base,fn,fn_fa,samples,fmt);
+    base_tv_init(base,fn,fn_fa,fn_idx,samples,fmt);
     /* initialize callbacks */
 #define SET_CALLBACK(fun) base->my_##fun=html_##fun;
     SET_CALLBACK(destroy);
@@ -367,10 +367,10 @@ tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples,
     }
 
 
-tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples,
+tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *fn_idx, const char *samples,
                       const htsFormat *fmt)
     {
-    tview_t* tv=html_tv_init(fn,fn_fa,samples,fmt);
+    tview_t* tv=html_tv_init(fn,fn_fa,fn_idx,samples,fmt);
     tv->my_drawaln=text_drawaln;
     return tv;
     }

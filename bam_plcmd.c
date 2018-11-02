@@ -319,8 +319,9 @@ static void group_smpl(mplp_pileup_t *m, bam_sample_t *sm, kstring_t *buf,
  * @param conf configuration for this pileup
  * @param n number of files specified in fn
  * @param fn filenames
+ * @param fn_idx index filenames
  */
-static int mpileup(mplp_conf_t *conf, int n, char **fn)
+static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
 {
     extern void *bcf_call_add_rg(void *rghash, const char *hdtext, const char *list);
     extern void bcf_call_del_rghash(void *rghash);
@@ -389,7 +390,14 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn)
             rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
         }
         if (conf->reg) {
-            hts_idx_t *idx = sam_index_load(data[i]->fp, fn[i]);
+            hts_idx_t *idx = NULL;
+            // If index filename has not been specfied, look in BAM folder
+            if (fn_idx != NULL)  {
+                idx = sam_index_load2(data[i]->fp, fn[i], fn_idx[i]);
+            } else {
+                idx = sam_index_load(data[i]->fp, fn[i]);
+            }
+                
             if (idx == NULL) {
                 fprintf(stderr, "[%s] fail to load index for %s\n", __func__, fn[i]);
                 exit(EXIT_FAILURE);
@@ -908,7 +916,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 
     fprintf(fp,
 "\n"
-"Usage: samtools mpileup [options] in1.bam [in2.bam [...]]\n"
+"Usage: samtools mpileup [options] in1.bam [in2.bam [...]] [index1 index2 ...]\n"
 "\n"
 "Input options:\n"
 "  -6, --illumina1.3+      quality is in the Illumina-1.3+ encoding\n"
@@ -934,6 +942,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "                                            [%s]\n", tmp_filter);
     fprintf(fp,
 "  -x, --ignore-overlaps   disable read-pair overlap detection\n"
+"  -D, --customized-index  use customized index files\n" // -D flag for index filename
 "\n"
 "Output options:\n"
 "  -o, --output FILE       write output to FILE [standard output]\n"
@@ -964,7 +973,7 @@ int bam_mpileup(int argc, char *argv[])
     int c;
     const char *file_list = NULL;
     char **fn = NULL;
-    int nfiles = 0, use_orphan = 0;
+    int nfiles = 0, use_orphan = 0, has_index_file = 0;
     mplp_conf_t mplp;
     memset(&mplp, 0, sizeof(mplp_conf_t));
     mplp.min_baseQ = 13;
@@ -1032,8 +1041,10 @@ int bam_mpileup(int argc, char *argv[])
         {"per-sample-mF", no_argument, NULL, 'p'},
         {"per-sample-mf", no_argument, NULL, 'p'},
         {"platforms", required_argument, NULL, 'P'},
+        {"customized-index", no_argument, NULL, 'D'},
         {NULL, 0, NULL, 0}
     };
+
     while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:a",lopts,NULL)) >= 0) {
         switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
@@ -1068,7 +1079,7 @@ int bam_mpileup(int argc, char *argv[])
         case 'v': mplp.flag |= MPLP_BCF | MPLP_VCF; deprecated(c); break;
         case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_BCF; deprecated(c); break;
         case 'B': mplp.flag &= ~MPLP_REALN; break;
-        case 'D': mplp.fmt_flag |= B2B_FMT_DP; deprecated(c); break;
+        case 'D': has_index_file = 1; break;
         case 'S': mplp.fmt_flag |= B2B_FMT_SP; deprecated(c); break;
         case 'V': mplp.fmt_flag |= B2B_FMT_DV; deprecated(c); break;
         case 'I': mplp.flag |= MPLP_NO_INDEL; deprecated(c); break;
@@ -1141,13 +1152,28 @@ int bam_mpileup(int argc, char *argv[])
     }
     int ret;
     if (file_list) {
+        if (has_index_file) {
+            fprintf(stderr,"Error: The -b option cannot be combined with -D\n"); // No customize index loc in file list mode
+            return 1;
+        }
         if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
-        ret = mpileup(&mplp,nfiles,fn);
+        ret = mpileup(&mplp,nfiles,fn,NULL);
         for (c=0; c<nfiles; c++) free(fn[c]);
         free(fn);
     }
-    else
-        ret = mpileup(&mplp, argc - optind, argv + optind);
+    else {
+        if (has_index_file) {
+            if ((argc - optind)%2 !=0) { // Calculate # of input BAM files
+                fprintf(stderr, "Odd number of filenames detected! Each BAM file should have an index file\n");
+                return 1;
+            }
+            nfiles = (argc - optind)/2;
+            ret = mpileup(&mplp, nfiles, argv + optind, argv + nfiles + optind);
+        } else {
+            nfiles = argc - optind;
+            ret = mpileup(&mplp, nfiles, argv + optind, NULL);
+        }
+    }
     if (mplp.rghash) khash_str2int_destroy_free(mplp.rghash);
     free(mplp.reg); free(mplp.pl_list);
     if (mplp.fai) fai_destroy(mplp.fai);

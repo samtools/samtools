@@ -74,11 +74,12 @@ int read_file_list(const char *file_list,int *n,char **argv[]);
 
 static int usage() {
     fprintf(stderr, "\n");
-    fprintf(stderr, "Usage: samtools depth [options] in1.bam [in2.bam [...]]\n");
+    fprintf(stderr, "Usage: samtools depth [options] in1.bam [in2.bam [...]] [index1 index2 ...]\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "   -a                  output all positions (including zero depth)\n");
     fprintf(stderr, "   -a -a (or -aa)      output absolutely all positions, including unused ref. sequences\n");
     fprintf(stderr, "   -b <bed>            list of positions or regions\n");
+    fprintf(stderr, "   -D                  use customized index files\n");
     fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
     fprintf(stderr, "   -H                  print a file header\n");
     fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>) [0]\n");
@@ -102,7 +103,7 @@ static int usage() {
 
 int main_depth(int argc, char *argv[])
 {
-    int i, n, tid, reg_tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0;
+    int i, n, tid, reg_tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, has_index_file = 0;
     int all = 0, status = EXIT_SUCCESS, nfiles, max_depth = -1;
     const bam_pileup1_t **plp;
     char *reg = 0; // specified region
@@ -123,7 +124,7 @@ int main_depth(int argc, char *argv[])
     };
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:q:Q:l:f:am:d:Ho:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:Dq:Q:l:f:am:d:Ho:", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -131,6 +132,7 @@ int main_depth(int argc, char *argv[])
                 bed = bed_read(optarg); // BED or position list file can be parsed now
                 if (!bed) { print_error_errno("depth", "Could not read file \"%s\"", optarg); return 1; }
                 break;
+            case 'D': has_index_file = 1; break;
             case 'q': baseQ = atoi(optarg); break;   // base quality threshold
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
             case 'f': file_list = optarg; break;
@@ -159,13 +161,24 @@ int main_depth(int argc, char *argv[])
     // initialize the auxiliary data structures
     if (file_list)
     {
+        if (has_index_file) {
+            fprintf(stderr,"Error: The -f option cannot be combined with -D\n");
+            return 1;
+        }
         if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
         n = nfiles;
         argv = fn;
         optind = 0;
     }
-    else
-        n = argc - optind; // the number of BAMs on the command line
+    else if (has_index_file) { // Calculate # of input BAM files
+        if ((argc - optind) % 2 != 0) {
+            fprintf(stderr, "Error: Odd number of filenames detected! Each BAM file should have an index file\n");
+            return 1;
+        }
+        n = (argc - optind) / 2;
+    } else {
+        n = argc - optind;
+    }
     data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
     reg_tid = 0; beg = 0; end = INT_MAX;  // set the default region
 
@@ -198,7 +211,13 @@ int main_depth(int argc, char *argv[])
             goto depth_end;
         }
         if (reg) { // if a region is specified
-            hts_idx_t *idx = sam_index_load(data[i]->fp, argv[optind+i]);  // load the index
+            hts_idx_t *idx = NULL;
+            // If index filename has not been specfied, look in BAM folder
+            if (has_index_file) {
+                idx = sam_index_load2(data[i]->fp, argv[optind+i], argv[optind+i+n]);  // load the index
+            } else {
+                idx = sam_index_load(data[i]->fp, argv[optind+i]);
+            }
             if (idx == NULL) {
                 print_error("depth", "can't load index for \"%s\"", argv[optind+i]);
                 status = EXIT_FAILURE;

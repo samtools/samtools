@@ -103,14 +103,20 @@ extern "C" {
     static inline int samwrite(samfile_t *fp, const bam1_t *b) { return sam_write1(fp->file, fp->header, b); }
 
     /*!
-      @abstract     Load BAM/CRAM index for use with samfetch()
+      @abstract     Load BAM/CRAM index for use with samfetch() with supporting the use of index file
       @param  fp    file handler
       @param  fn    name of the BAM or CRAM file (NOT the index file)
+      @param  fnidx name of the index file
       @return       pointer to the index structure
      */
-    static inline bam_index_t *samtools_sam_index_load(samfile_t *fp, const char *fn) { return sam_index_load(fp->file, fn); }
+    static inline bam_index_t *samtools_sam_index_load(samfile_t *fp, const char *fn, const char *fnidx) {
+      if (fnidx != NULL) {
+        return sam_index_load2(fp->file, fn, fnidx);
+      }
+      return sam_index_load(fp->file, fn); 
+    }
     #undef sam_index_load
-    #define sam_index_load(fp,fn) (samtools_sam_index_load((fp), (fn)))
+    #define sam_index_load(fp,fn,fnidx) (samtools_sam_index_load((fp), (fn), (fnidx)))
 
     /*!
       @abstract Retrieve the alignments overlapping the specified region.

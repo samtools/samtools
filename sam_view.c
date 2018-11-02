@@ -249,7 +249,7 @@ int main_samview(int argc, char *argv[])
     FILE *fp_out = NULL;
     bam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
-    char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
+    char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     int filter_state = ALL, filter_op = 0;
@@ -288,7 +288,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:M",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:MD:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -321,6 +321,7 @@ int main_samview(int argc, char *argv[])
         case 'H': is_header_only = 1; break;
         case 'o': fn_out = strdup(optarg); break;
         case 'U': fn_un_out = strdup(optarg); break;
+        case 'D': fn_idx_in = strdup(optarg); break;
         case 'f': settings.flag_on |= strtol(optarg, 0, 0); break;
         case 'F': settings.flag_off |= strtol(optarg, 0, 0); break;
         case 'G': settings.flag_alloff |= strtol(optarg, 0, 0); break;
@@ -518,7 +519,13 @@ int main_samview(int argc, char *argv[])
         if (settings.bed == NULL) { // index is unavailable or no regions have been specified
             fprintf(stderr, "[main_samview] no regions or BED file have been provided. Aborting.\n");
         } else {
-            hts_idx_t *idx = sam_index_load(in, fn_in); // load index
+            hts_idx_t *idx = NULL;
+            // If index filename has not been specfied, look in BAM folder
+            if (fn_idx_in != 0) {
+                idx = sam_index_load2(in, fn_in, fn_idx_in); // load index
+            } else {
+                idx = sam_index_load(in, fn_in);
+            }
             if (idx != NULL) {
 
                 int regcount = 0;
@@ -574,7 +581,13 @@ int main_samview(int argc, char *argv[])
         } else { // retrieve alignments in specified regions
             int i;
             bam1_t *b;
-            hts_idx_t *idx = sam_index_load(in, fn_in); // load index
+            hts_idx_t *idx = NULL;
+            // If index filename has not been specfied, look in BAM folder
+            if (fn_idx_in != NULL) {
+                idx = sam_index_load2(in, fn_in, fn_idx_in); // load index
+            } else {
+                idx = sam_index_load(in, fn_in);
+            }
             if (idx == 0) { // index is unavailable
                 fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
                 ret = 1;
@@ -667,6 +680,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -U FILE  output reads not selected by filters to FILE [null]\n"
 // extra input
 "  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
+"  -D FILE  include customized index file\n"
 // read filters
 "  -L FILE  only include reads overlapping this BED FILE [null]\n"
 "  -r STR   only include reads in read group STR [null]\n"
