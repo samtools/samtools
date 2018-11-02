@@ -2002,7 +2002,7 @@ static void error(const char *format, ...)
         printf("Options:\n");
         printf("    -c, --coverage <int>,<int>,<int>    Coverage distribution min,max,step [1,1000,1]\n");
         printf("    -d, --remove-dups                   Exclude from statistics reads marked as duplicates\n");
-        printf("    -D, --customized-index-file <file>  Use a customized index file\n");
+        printf("    -X, --customized-index-file <file>  Use a customized index file\n");
         printf("    -f, --required-flag  <str|int>      Required flag, 0 for unset. See also `samtools flags` [0]\n");
         printf("    -F, --filtering-flag <str|int>      Filtering flag, 0 for unset. See also `samtools flags` [0]\n");
         printf("        --GC-depth <float>              the size of GC-depth bins (decreasing bin size increases memory requirement) [2e4]\n");
@@ -2272,7 +2272,7 @@ int main_stats(int argc, char *argv[])
         {"help", no_argument, NULL, 'h'},
         {"remove-dups", no_argument, NULL, 'd'},
         {"sam", no_argument, NULL, 's'},
-        {"customized-index-file", required_argument, NULL, 'D'},
+        {"customized-index-file", required_argument, NULL, 'X'},
         {"ref-seq", required_argument, NULL, 'r'},
         {"coverage", required_argument, NULL, 'c'},
         {"read-length", required_argument, NULL, 'l'},
@@ -2293,14 +2293,14 @@ int main_stats(int argc, char *argv[])
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsD:xpr:c:l:i:t:m:q:f:F:g:I:S:P:@:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsX:xpr:c:l:i:t:m:q:f:F:g:I:S:P:@:",loptions,NULL))>0 )
     {
         switch (opt)
         {
             case 'f': info->flag_require = bam_str2flag(optarg); break;
             case 'F': info->flag_filter |= bam_str2flag(optarg); break;
             case 'd': info->flag_filter |= BAM_FDUP; break;
-            case 'D': bam_idx_fname = optarg; break;
+            case 'X': bam_idx_fname = optarg; break;
             case 's': break;
             case 'r': info->fai = fai_load(optarg);
                       if (info->fai==NULL)

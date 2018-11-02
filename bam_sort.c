@@ -1523,7 +1523,7 @@ static void merge_usage(FILE *to)
 "  -p         Combine @PG headers with colliding IDs [alter IDs to be distinct]\n"
 "  -s VALUE   Override random seed\n"
 "  -b FILE    List of input BAM filenames, one per line [null]\n"
-"  -D         Use customized index files\n");
+"  -X         Use customized index files\n");
     sam_global_opt_help(to, "-.O..@");
 }
 
@@ -1549,7 +1549,7 @@ int bam_merge(int argc, char *argv[])
         return 0;
     }
 
-    while ((c = getopt_long(argc, argv, "h:nru1R:f@:l:cps:b:O:t:D", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "h:nru1R:f@:l:cps:b:O:t:X", lopts, NULL)) >= 0) {
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
@@ -1563,11 +1563,11 @@ int bam_merge(int argc, char *argv[])
         case 'c': flag |= MERGE_COMBINE_RG; break;
         case 'p': flag |= MERGE_COMBINE_PG; break;
         case 's': random_seed = atol(optarg); break;
-        case 'D': has_index_file = 1; break; // -D flag for index filename
+        case 'X': has_index_file = 1; break; // -X flag for index filename
         case 'b': {
             // load the list of files to read
             if (has_index_file) {
-                fprintf(stderr,"Error: The -b option cannot be combined with -D\n");
+                fprintf(stderr,"Error: The -b option cannot be combined with -X\n");
                 ret = 1; goto end;
             }
             int nfiles;

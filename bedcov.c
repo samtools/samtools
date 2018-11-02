@@ -79,10 +79,10 @@ int main_bedcov(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "Q:Dj", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:Xj", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
-        case 'D': has_index_file = 1; break;
+        case 'X': has_index_file = 1; break;
         case 'j': skip_DN = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
@@ -94,7 +94,7 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...] [index1 index2 ...]\n\n");
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "      -Q <int>            mapping quality threshold [0]\n");
-        fprintf(stderr, "      -D                  use customized index files\n");
+        fprintf(stderr, "      -X                  use customized index files\n");
         fprintf(stderr, "      -j                  do not include deletions (D) and ref skips (N) in bedcov computation\n");
         sam_global_opt_help(stderr, "-.--.-");
         return 1;

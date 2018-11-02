@@ -288,7 +288,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:MD:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:MX:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -321,7 +321,7 @@ int main_samview(int argc, char *argv[])
         case 'H': is_header_only = 1; break;
         case 'o': fn_out = strdup(optarg); break;
         case 'U': fn_un_out = strdup(optarg); break;
-        case 'D': fn_idx_in = strdup(optarg); break;
+        case 'X': fn_idx_in = strdup(optarg); break;
         case 'f': settings.flag_on |= strtol(optarg, 0, 0); break;
         case 'F': settings.flag_off |= strtol(optarg, 0, 0); break;
         case 'G': settings.flag_alloff |= strtol(optarg, 0, 0); break;
@@ -680,7 +680,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -U FILE  output reads not selected by filters to FILE [null]\n"
 // extra input
 "  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
-"  -D FILE  include customized index file\n"
+"  -X FILE  include customized index file\n"
 // read filters
 "  -L FILE  only include reads overlapping this BED FILE [null]\n"
 "  -r STR   only include reads in read group STR [null]\n"

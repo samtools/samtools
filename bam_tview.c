@@ -337,7 +337,7 @@ static void error(const char *format, ...)
 "Usage: samtools tview [options] <aln.bam> [ref.fasta]\n"
 "Options:\n"
 "   -d display      output as (H)tml or (C)urses or (T)ext \n"
-"   -D FILE         include customized index file\n"
+"   -X FILE         include customized index file\n"
 "   -p chr:pos      go directly to this position\n"
 "   -s STR          display only reads from this sample or group\n");
         sam_global_opt_help(stderr, "-.--.-");
@@ -373,11 +373,11 @@ int bam_tview_main(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "s:p:d:D:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "s:p:d:X:", lopts, NULL)) >= 0) {
         switch (c) {
             case 's': samples=optarg; break;
             case 'p': position=optarg; break;
-            case 'D': fn_idx=optarg; break; // -D flag for index filename
+            case 'X': fn_idx=optarg; break; // -X flag for index filename
             case 'd':
             {
                 switch(optarg[0])

@@ -79,7 +79,7 @@ static int usage() {
     fprintf(stderr, "   -a                  output all positions (including zero depth)\n");
     fprintf(stderr, "   -a -a (or -aa)      output absolutely all positions, including unused ref. sequences\n");
     fprintf(stderr, "   -b <bed>            list of positions or regions\n");
-    fprintf(stderr, "   -D                  use customized index files\n");
+    fprintf(stderr, "   -X                  use customized index files\n");
     fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
     fprintf(stderr, "   -H                  print a file header\n");
     fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>) [0]\n");
@@ -124,7 +124,7 @@ int main_depth(int argc, char *argv[])
     };
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:Dq:Q:l:f:am:d:Ho:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -132,7 +132,7 @@ int main_depth(int argc, char *argv[])
                 bed = bed_read(optarg); // BED or position list file can be parsed now
                 if (!bed) { print_error_errno("depth", "Could not read file \"%s\"", optarg); return 1; }
                 break;
-            case 'D': has_index_file = 1; break;
+            case 'X': has_index_file = 1; break;
             case 'q': baseQ = atoi(optarg); break;   // base quality threshold
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
             case 'f': file_list = optarg; break;
@@ -162,7 +162,7 @@ int main_depth(int argc, char *argv[])
     if (file_list)
     {
         if (has_index_file) {
-            fprintf(stderr,"Error: The -f option cannot be combined with -D\n");
+            fprintf(stderr,"Error: The -f option cannot be combined with -X\n");
             return 1;
         }
         if ( read_file_list(file_list,&nfiles,&fn) ) return 1;

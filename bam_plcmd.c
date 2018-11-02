@@ -942,7 +942,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "                                            [%s]\n", tmp_filter);
     fprintf(fp,
 "  -x, --ignore-overlaps   disable read-pair overlap detection\n"
-"  -D, --customized-index  use customized index files\n" // -D flag for index filename
+"  -X, --customized-index  use customized index files\n" // -X flag for index filename
 "\n"
 "Output options:\n"
 "  -o, --output FILE       write output to FILE [standard output]\n"
@@ -1041,11 +1041,11 @@ int bam_mpileup(int argc, char *argv[])
         {"per-sample-mF", no_argument, NULL, 'p'},
         {"per-sample-mf", no_argument, NULL, 'p'},
         {"platforms", required_argument, NULL, 'P'},
-        {"customized-index", no_argument, NULL, 'D'},
+        {"customized-index", no_argument, NULL, 'X'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxt:a",lopts,NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxXt:a",lopts,NULL)) >= 0) {
         switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 :
@@ -1079,7 +1079,8 @@ int bam_mpileup(int argc, char *argv[])
         case 'v': mplp.flag |= MPLP_BCF | MPLP_VCF; deprecated(c); break;
         case 'u': mplp.flag |= MPLP_NO_COMP | MPLP_BCF; deprecated(c); break;
         case 'B': mplp.flag &= ~MPLP_REALN; break;
-        case 'D': has_index_file = 1; break;
+        case 'X': has_index_file = 1; break;
+        case 'D': mplp.fmt_flag |= B2B_FMT_DP; deprecated(c); break;
         case 'S': mplp.fmt_flag |= B2B_FMT_SP; deprecated(c); break;
         case 'V': mplp.fmt_flag |= B2B_FMT_DV; deprecated(c); break;
         case 'I': mplp.flag |= MPLP_NO_INDEL; deprecated(c); break;
@@ -1153,7 +1154,7 @@ int bam_mpileup(int argc, char *argv[])
     int ret;
     if (file_list) {
         if (has_index_file) {
-            fprintf(stderr,"Error: The -b option cannot be combined with -D\n"); // No customize index loc in file list mode
+            fprintf(stderr,"Error: The -b option cannot be combined with -X\n"); // No customize index loc in file list mode
             return 1;
         }
         if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
