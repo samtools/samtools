@@ -243,13 +243,13 @@ static void check_sam_close(const char *subcmd, samFile *fp, const char *fname, 
 
 int main_samview(int argc, char *argv[])
 {
-    int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0;
+    int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0, has_index_file = 0;
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
     bam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
-    char *fn_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
+    char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     int filter_state = ALL, filter_op = 0;
@@ -288,7 +288,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:M",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:MX",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -321,6 +321,7 @@ int main_samview(int argc, char *argv[])
         case 'H': is_header_only = 1; break;
         case 'o': fn_out = strdup(optarg); break;
         case 'U': fn_un_out = strdup(optarg); break;
+        case 'X': has_index_file = 1; break;
         case 'f': settings.flag_on |= strtol(optarg, 0, 0); break;
         case 'F': settings.flag_off |= strtol(optarg, 0, 0); break;
         case 'G': settings.flag_alloff |= strtol(optarg, 0, 0); break;
@@ -505,9 +506,25 @@ int main_samview(int argc, char *argv[])
     }
     if (is_header_only) goto view_end; // no need to print alignments
 
+    if (has_index_file) {
+        fn_idx_in = (optind+1 < argc)? argv[optind+1] : 0;
+        if (fn_idx_in == 0) {
+            fprintf(stderr, "[main_samview] incorrect number of arguments for -X option. Aborting.\n");
+            return 1;
+        }
+        if(strstr(fn_idx_in, ".bai") == NULL){
+            fprintf(stderr, "[main_samview] incorrect index filename detected in arguments for -X option (looking for something ending with .bai). Aborting.\n");
+            return 1;
+        }
+    }
+
     if (settings.multi_region) {
-        if (optind < argc - 1) { //regions have been specified in the command line
+        if (!has_index_file && optind < argc - 1) { //regions have been specified in the command line
             settings.bed = bed_hash_regions(settings.bed, argv, optind+1, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
+            if (!filter_op)
+                filter_state = FILTERED;
+        } else if (has_index_file && optind < argc - 2) {
+            settings.bed = bed_hash_regions(settings.bed, argv, optind+2, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
             if (!filter_op)
                 filter_state = FILTERED;
         } else {
@@ -518,7 +535,13 @@ int main_samview(int argc, char *argv[])
         if (settings.bed == NULL) { // index is unavailable or no regions have been specified
             fprintf(stderr, "[main_samview] no regions or BED file have been provided. Aborting.\n");
         } else {
-            hts_idx_t *idx = sam_index_load(in, fn_in); // load index
+            hts_idx_t *idx = NULL;
+            // If index filename has not been specfied, look in BAM folder
+            if (fn_idx_in != 0) {
+                idx = sam_index_load2(in, fn_in, fn_idx_in); // load index
+            } else {
+                idx = sam_index_load(in, fn_in);
+            }
             if (idx != NULL) {
 
                 int regcount = 0;
@@ -555,7 +578,7 @@ int main_samview(int argc, char *argv[])
         }
         bam_destroy1(b);
     } else {
-        if (optind + 1 >= argc) { // convert/print the entire file
+        if ((has_index_file && optind >= argc - 2) || (!has_index_file && optind >= argc - 1)) { // convert/print the entire file
             bam1_t *b = bam_init1();
             int r;
             while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
@@ -574,14 +597,21 @@ int main_samview(int argc, char *argv[])
         } else { // retrieve alignments in specified regions
             int i;
             bam1_t *b;
-            hts_idx_t *idx = sam_index_load(in, fn_in); // load index
+            hts_idx_t *idx = NULL;
+            // If index filename has not been specfied, look in BAM folder
+            if (fn_idx_in != NULL) {
+                idx = sam_index_load2(in, fn_in, fn_idx_in); // load index
+            } else {
+                idx = sam_index_load(in, fn_in);
+            }
             if (idx == 0) { // index is unavailable
                 fprintf(stderr, "[main_samview] random alignment retrieval only works for indexed BAM or CRAM files.\n");
                 ret = 1;
                 goto view_end;
             }
             b = bam_init1();
-            for (i = optind + 1; i < argc; ++i) {
+
+            for (i = (has_index_file)? optind+2 : optind+1; i < argc; ++i) {
                 int result;
                 hts_itr_t *iter = sam_itr_querys(idx, header, argv[i]); // parse a region in the format like `chr2:100-200'
                 if (iter == NULL) { // region invalid or reference name not found
@@ -667,6 +697,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -U FILE  output reads not selected by filters to FILE [null]\n"
 // extra input
 "  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
+"  -X       include customized index file\n"
 // read filters
 "  -L FILE  only include reads overlapping this BED FILE [null]\n"
 "  -r STR   only include reads in read group STR [null]\n"

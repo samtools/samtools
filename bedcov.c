@@ -71,7 +71,7 @@ int main_bedcov(int argc, char *argv[])
     int *n_plp, dret, i, j, m, n, c, min_mapQ = 0, skip_DN = 0;
     int64_t *cnt;
     const bam_pileup1_t **plp;
-    int usage = 0;
+    int usage = 0, has_index_file = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -79,9 +79,10 @@ int main_bedcov(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "Q:j", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:Xj", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
+        case 'X': has_index_file = 1; break;
         case 'j': skip_DN = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
@@ -93,20 +94,36 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...]\n\n");
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "      -Q <int>            mapping quality threshold [0]\n");
+        fprintf(stderr, "      -X                  use customized index files\n");
         fprintf(stderr, "      -j                  do not include deletions (D) and ref skips (N) in bedcov computation\n");
         sam_global_opt_help(stderr, "-.--.-");
         return 1;
     }
+    if (has_index_file) {
+        if ((argc - optind - 1) % 2 != 0) { // Calculate # of input BAM files
+            fprintf(stderr, "ERROR: odd number of filenames detected! Each BAM file should have an index file\n");
+            return 1;
+        }
+        n = (argc - optind - 1) / 2;
+    } else {
+        n = argc - optind - 1;
+    }
+
     memset(&str, 0, sizeof(kstring_t));
-    n = argc - optind - 1;
     aux = calloc(n, sizeof(aux_t*));
     idx = calloc(n, sizeof(hts_idx_t*));
     for (i = 0; i < n; ++i) {
         aux[i] = calloc(1, sizeof(aux_t));
         aux[i]->min_mapQ = min_mapQ;
         aux[i]->fp = sam_open_format(argv[i+optind+1], "r", &ga.in);
-        if (aux[i]->fp)
-            idx[i] = sam_index_load(aux[i]->fp, argv[i+optind+1]);
+        if (aux[i]->fp) {
+            // If index filename has not been specfied, look in BAM folder
+            if (has_index_file) {
+                idx[i] = sam_index_load2(aux[i]->fp, argv[i+optind+1], argv[i+optind+n+1]);
+            } else {
+                idx[i] = sam_index_load(aux[i]->fp, argv[i+optind+1]);
+            }
+        }   
         if (aux[i]->fp == 0 || idx[i] == 0) {
             fprintf(stderr, "ERROR: fail to open index BAM file '%s'\n", argv[i+optind+1]);
             return 2;

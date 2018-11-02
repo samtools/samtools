@@ -135,6 +135,12 @@ suffixes added to their IDs where necessary to differentiate them.
 Similarly, for each @PG ID in the set of files to merge, use the @PG line
 of the first file we find that ID in rather than adding a suffix to
 differentiate similar IDs.
+.TP
+.B -X
+If this option is set, it will allows user to specify customized index file location(s) if the data 
+folder does not contain any index file. See 
+.B EXAMPLES 
+section for sample of useage.
 
 .SH EXAMPLES
 .IP o 2
@@ -158,6 +164,12 @@ while reads from
 .I 454.bam
 will be attached
 .IR RG:Z:454 .
+
+.IP o 2
+Include customized index file as a part of arugments:
+.EX 2
+samtools merge [options] -X <out.bam> </data_folder/in1.bam> [</data_folder/in2.bam> ... </data_folder/inN.bam>] </index_folder/index1.bai> [</index_folder/index2.bai> ... </index_folder/indexN.bai>]
+.EE
 
 .SH AUTHOR
 .PP

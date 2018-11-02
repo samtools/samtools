@@ -317,7 +317,7 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
         return 0;
         }
 
-    base_tv_init(base,fn,fn_fa,samples,fmt);
+    base_tv_init(base,fn,fn_fa,NULL,samples,fmt);
     /* initialize callbacks */
 #define SET_CALLBACK(fun) base->my_##fun=curses_##fun;
     SET_CALLBACK(destroy);
@@ -355,7 +355,7 @@ extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samp
 tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
                         const htsFormat *fmt)
     {
-    return text_tv_init(fn,fn_fa,samples,fmt);
+    return text_tv_init(fn,fn_fa,NULL,samples,fmt);
     }
 
 #endif
