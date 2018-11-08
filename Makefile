@@ -217,16 +217,16 @@ tmp_file.o: tmp_file.c config.h $(tmp_file_h) $(htslib_sam_h)
 # If using MSYS, avoid poor shell expansion via:
 #    MSYS2_ARG_CONV_EXCL="*" make check
 check test: samtools $(BGZIP) $(TEST_PROGRAMS)
+	test/split/test_count_rg
+	test/split/test_expand_format_string
+	test/split/test_filter_header_rg
+	test/split/test_parse_args
 	REF_PATH=: test/test.pl --exec bgzip=$(BGZIP) $${TEST_OPTS:-}
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
 	cd test/mpileup && ./regression.sh mpileup.reg
 	cd test/mpileup && ./regression.sh depth.reg
-	test/split/test_count_rg
-	test/split/test_expand_format_string
-	test/split/test_filter_header_rg
-	test/split/test_parse_args
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)

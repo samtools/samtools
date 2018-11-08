@@ -129,7 +129,7 @@ case $host_alias in
     # This also sets __USE_MINGW_ANSI_STDIO which in turn makes PRId64,
     # %lld and %z printf formats work.  It also enforces the snprintf to
     # be C99 compliant so it returns the correct values (in kstring.c).
-    CPPFLAGS="$CPPCFLAGS -D_POSIX_C_SOURCE=600"
+    CPPFLAGS="$CPPCFLAGS -D_XOPEN_SOURCE=600"
     ;;
 esac
 

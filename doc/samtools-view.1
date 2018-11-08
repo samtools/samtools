@@ -220,11 +220,14 @@ Only output alignments overlapping the input BED
 [null].
 .TP
 .B "-M "
-Use the multi-region iterator on the union of the BED file and
+Use the multi-region iterator on the union of a BED file and
 command-line region arguments.  This avoids re-reading the same regions
 of files so can sometimes be much faster.  Note this also removes
 duplicate sequences.  Without this a sequence that overlaps multiple
 regions specified on the command line will be reported multiple times.
+The usage of a BED file is optional and its path has to be preceded by
+.BR -L
+option.
 .TP
 .BI "-r " STR
 Output alignments in read group

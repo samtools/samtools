@@ -1,6 +1,15 @@
 Release a.b
 -----------
 
+* In samtools split, the '-u' option no longer accepts an extra file name
+  from which a replacement header was read.  The two file names were
+  separated using a colon, which caused problems on Windows and prevented
+  the use of URLs.  A new '-h' option has been added to allow the replacement
+  header file to be specified in its own option.
+
+* Fixed bug where samtools split would crash if it read a SAM header that
+  contained an @RG line with no ID tag. (#954, reported by @blue-bird1)
+
 Release 1.9 (18th July 2018)
 ----------------------------
 

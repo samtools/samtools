@@ -1,6 +1,6 @@
 /*  bam_split.c -- split subcommand.
 
-    Copyright (C) 2013-2016 Genome Research Ltd.
+    Copyright (C) 2013-2016,2018 Genome Research Ltd.
 
     Author: Martin Pollard <mp15@sanger.ac.uk>
 
@@ -32,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <limits.h>
 #include <unistd.h>
 #include <regex.h>
+#include <assert.h>
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
 #include <htslib/cram.h>
@@ -43,10 +44,10 @@ DEALINGS IN THE SOFTWARE.  */
 KHASH_MAP_INIT_STR(c2i, int)
 
 struct parsed_opts {
-    char* merged_input_name;
-    char* unaccounted_header_name;
-    char* unaccounted_name;
-    char* output_format_string;
+    const char *merged_input_name;
+    const char *unaccounted_header_name;
+    const char *unaccounted_name;
+    const char *output_format_string;
     bool verbose;
     sam_global_args ga;
 };
@@ -75,12 +76,12 @@ static void cleanup_opts(parsed_opts_t* opts);
 static void usage(FILE *write_to)
 {
     fprintf(write_to,
-"Usage: samtools split [-u <unaccounted.bam>[:<unaccounted_header.sam>]]\n"
+"Usage: samtools split [-u <unaccounted.bam>] [-h <unaccounted_header.sam>]\n"
 "                      [-f <format_string>] [-v] <merged.bam>\n"
 "Options:\n"
 "  -f STRING       output filename format string [\"%%*_%%#.%%.\"]\n"
 "  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
-"  -u FILE1:FILE2  ...and override the header with FILE2\n"
+"  -h FILE2        ... and override the header with FILE2 (-u file only)\n"
 "  -v              verbose output\n");
     sam_global_opt_help(write_to, "-....@");
     fprintf(write_to,
@@ -99,8 +100,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 {
     if (argc == 1) { usage(stdout); return NULL; }
 
-    const char* optstring = "vf:u:@:";
-    char* delim;
+    const char *optstring = "vf:h:u:@:";
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
@@ -116,20 +116,16 @@ static parsed_opts_t* parse_args(int argc, char** argv)
     while ((opt = getopt_long(argc, argv, optstring, lopts, NULL)) != -1) {
         switch (opt) {
         case 'f':
-            retval->output_format_string = strdup(optarg);
-            if (! retval->output_format_string ) { perror("cannot allocate output format string memory"); return NULL; }
+            retval->output_format_string = optarg;
+            break;
+        case 'h':
+            retval->unaccounted_header_name = optarg;
             break;
         case 'v':
             retval->verbose = true;
             break;
         case 'u':
-            retval->unaccounted_name = strdup(optarg);
-            if (! retval->unaccounted_name ) { perror("cannot allocate string memory"); return NULL; }
-            if ((delim = strchr(retval->unaccounted_name, ':')) != NULL) {
-                *delim = '\0';
-                retval->unaccounted_header_name = strdup(delim+1);
-                if (! retval->unaccounted_header_name ) { perror("cannot allocate string memory"); return NULL; }
-            }
+            retval->unaccounted_name = optarg;
             break;
         default:
             if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) == 0) break;
@@ -141,7 +137,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
         }
     }
 
-    if (retval->output_format_string == NULL) retval->output_format_string = strdup("%*_%#.%.");
+    if (retval->output_format_string == NULL) retval->output_format_string = "%*_%#.%.";
 
     argc -= optind;
     argv += optind;
@@ -153,8 +149,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
         return NULL;
     }
 
-    retval->merged_input_name = strdup(argv[0]);
-    if (! retval->merged_input_name ) { perror("cannot allocate string memory"); return NULL; }
+    retval->merged_input_name = argv[0];
 
     return retval;
 }
@@ -166,58 +161,65 @@ static char* expand_format_string(const char* format_string, const char* basenam
     const char* pointer = format_string;
     const char* next;
     while ((next = strchr(pointer, '%')) != NULL) {
-        kputsn(pointer, next-pointer, &str);
+        if (kputsn(pointer, next-pointer, &str) < 0) goto memfail;
         ++next;
         switch (*next) {
             case '%':
-                kputc('%', &str);
+                if (kputc('%', &str) < 0) goto memfail;
                 break;
             case '*':
-                kputs(basename, &str);
+                if (kputs(basename, &str) < 0) goto memfail;
                 break;
             case '#':
-                kputl(rg_idx, &str);
+                if (kputl(rg_idx, &str) < 0) goto memfail;
                 break;
             case '!':
-                kputs(rg_id, &str);
+                if (kputs(rg_id, &str) < 0) goto memfail;
                 break;
             case '.':
                 // Only really need to cope with sam, bam, cram
-                if (format->format != unknown_format)
-                    kputs(hts_format_file_extension(format), &str);
-                else
-                    kputs("bam", &str);
+                if (format->format != unknown_format) {
+                    if (kputs(hts_format_file_extension(format), &str) < 0)
+                        goto memfail;
+                } else {
+                    if (kputs("bam", &str) < 0) goto memfail;
+                }
                 break;
             case '\0':
-                // Error is: fprintf(stderr, "bad format string, trailing %%\n");
-                free(str.s);
-                return NULL;
+                print_error("split", "Trailing %% in filename format string");
+                goto fail;
             default:
                 // Error is: fprintf(stderr, "bad format string, unknown format specifier\n");
-                free(str.s);
-                return NULL;
+                print_error("split", "Unknown specifier %%%c in filename format string", *next);
+                goto fail;
         }
         pointer = next + 1;
     }
-    kputs(pointer, &str);
+    if (kputs(pointer, &str) < 0) goto memfail;
     return ks_release(&str);
+
+ memfail:
+    print_error_errno("split", "Couldn't build output filename");
+ fail:
+    free(str.s);
+    return NULL;
 }
 
 // Parse the header, count the number of RG tags and return a list of their names
 static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 {
+    char **names = NULL;
+
     if (hdr->l_text < 3 ) {
         *count = 0;
         *output_name = NULL;
         return true;
     }
-    kstring_t input = { 0, 0, NULL };
-    kputsn(hdr->text, hdr->l_text, &input);
 
     //////////////////////////////////////////
     // First stage count number of @RG tags //
     //////////////////////////////////////////
-    char* pointer = ks_str(&input);
+    const char *pointer = hdr->text;
     size_t n_rg = 0;
     // Guard against rare case where @RG is first header line
     // This shouldn't happen but could where @HD is omitted
@@ -225,7 +227,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
         ++n_rg;
         pointer += 3;
     }
-    char* line;
+    const char *line;
     while ((line = strstr(pointer, "\n@RG")) != NULL) {
         ++n_rg;
         pointer = line + 1;
@@ -234,42 +236,55 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
     //////////////////////////////////
     // Second stage locate @RG ID's //
     //////////////////////////////////
-    char** names = (char**)calloc(sizeof(char*), n_rg);
-    size_t next = 0;
-
     regex_t rg_finder;
-    if (regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE) != 0) {
-        free(input.s);
-        free(names);
-        return false;
-    }
-    regmatch_t* matches = (regmatch_t*)calloc(sizeof(regmatch_t),2);
     int error;
-    char* begin = ks_str(&input);
+    memset(&rg_finder, 0, sizeof(rg_finder));
+    if ((error = regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE)) != 0) {
+        goto regfail;
+    }
+    regmatch_t matches[2] = {{0, 0}, {0, 0}};
+    const char *begin = hdr->text;
+
+    names = calloc(n_rg, sizeof(names[0]));
+    if (!names) goto memfail;
+    size_t n_rg_id = 0;
 
     while ((error = regexec(&rg_finder, begin, 2, matches, 0)) == 0) {
         kstring_t str = { 0, 0, NULL };
-        kputsn(begin+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &str);
-        names[next++] = ks_release(&str);
+        if (kputsn(begin+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &str) < 0)
+            goto memfail;
+        assert(n_rg_id < n_rg);
+        names[n_rg_id++] = ks_release(&str);
         begin += matches[0].rm_eo;
     }
 
-    if (error != REG_NOMATCH) {
-        // cleanup
-        regfree(&rg_finder);
-        free(matches);
-        free(names);
-        free(input.s);
-        return false;
-    }
-    free(matches);
+    if (error != REG_NOMATCH)
+        goto regfail;
 
     // return results
-    *count = n_rg;
+    *count = n_rg_id;
     *output_name = names;
     regfree(&rg_finder);
-    free(input.s);
     return true;
+
+ memfail:
+    print_error_errno("split", "Failed to get @RG IDs");
+    *count = 0;
+    *output_name = NULL;
+    regfree(&rg_finder);
+    free(names);
+    return false;
+
+ regfail: {
+        char msg[256];
+        regerror(error, &rg_finder, msg, sizeof(msg));
+        print_error("split", "Failed to parse @RG IDs : %s", msg);
+        *count = 0;
+        *output_name = NULL;
+        regfree(&rg_finder);
+        free(names);
+        return false;
+    }
 }
 
 // Filters a header of @RG lines where ID != id_keep
@@ -277,39 +292,39 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep, const char *arg_list)
 {
     kstring_t str = {0, 0, NULL};
-
+    size_t len_id_keep = strlen(id_keep);
+    SAM_hdr *sh = NULL;
     regex_t rg_finder;
+    int error;
+    memset(&rg_finder, 0, sizeof(rg_finder));
 
-    if (regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE) != 0) {
-        return false;
+    if ((error = regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE)) != 0) {
+        goto regfail;
     }
 
     // regex vars
     char* header = hdr->text;
-    regmatch_t* matches = (regmatch_t*)calloc(sizeof(regmatch_t),2);
-    kstring_t found_id = { 0, 0, NULL };
-    int error;
+    regmatch_t matches[2] = {{0, 0}, {0, 0}};
+
+    // We're removing lines so new header must be shorter than old
+    if (ks_resize(&str, hdr->l_text + 1) < 0)
+        goto memfail;
 
     while ((error = regexec(&rg_finder, header, 2, matches, 0)) == 0) {
         kputsn(header, matches[0].rm_so, &str); // copy header up until the found RG line
 
-        found_id.l = 0;
-        kputsn(header+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &found_id); // extract ID
-        // if it matches keep keep it, else we can just ignore it
-        if (strcmp(ks_str(&found_id), id_keep) == 0) {
+        // if ID matches keep keep it, else we can just ignore it
+        if (matches[1].rm_eo-matches[1].rm_so == len_id_keep &&
+            memcmp(header+matches[1].rm_so, id_keep, len_id_keep) == 0) {
             kputsn(header+matches[0].rm_so, (matches[0].rm_eo+1)-matches[0].rm_so, &str);
         }
         // move pointer forward
         header += matches[0].rm_eo+1;
     }
     // cleanup
-    free(found_id.s);
-    free(matches);
-    regfree(&rg_finder);
     // Did we leave loop because of an error?
-    if (error != REG_NOMATCH) {
-        return false;
-    }
+    if (error != REG_NOMATCH)
+        goto regfail;
 
     // Write remainder of string
     kputs(header, &str);
@@ -320,22 +335,62 @@ static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep, const char *ar
     hdr->text = ks_release(&str);
 
     // Add the PG line
-    SAM_hdr *sh = sam_hdr_parse_(hdr->text, hdr->l_text);
+    sh = sam_hdr_parse_(hdr->text, hdr->l_text);
+    if (!sh) {
+        print_error("split", "Couldn't parse SAM header");
+        goto fail;
+    }
     if (sam_hdr_add_PG(sh, "samtools",
                            "VN", samtools_version(),
                            arg_list ? "CL": NULL,
                            arg_list ? arg_list : NULL,
                            NULL) != 0)
-        return -1;
+        goto fail;
 
     free(hdr->text);
-    hdr->text = strdup(sam_hdr_str(sh));
+    char *new_text = strdup(sam_hdr_str(sh));
+    if (!new_text)
+        goto memfail;
     hdr->l_text = sam_hdr_length(sh);
-    if (!hdr->text)
-        return false;
+    hdr->text = new_text;
     sam_hdr_free(sh);
+    regfree(&rg_finder);
 
     return true;
+
+ regfail: {
+        char msg[256];
+        regerror(error, &rg_finder, msg, sizeof(msg));
+        print_error("split", "Failed to parse @RG IDs : %s", msg);
+        goto fail;
+    }
+
+ memfail:
+    print_error_errno("split", "Couldn't make new SAM header");
+ fail:
+    regfree(&rg_finder);
+    free(ks_release(&str));
+    if (sh) sam_hdr_free(sh);
+    return false;
+}
+
+static int header_compatible(bam_hdr_t *hdr1, bam_hdr_t *hdr2)
+{
+    size_t n;
+    if (hdr1->n_targets != hdr2->n_targets) {
+        print_error("split",
+                    "Unaccounted header contains wrong number of references");
+        return -1;
+    }
+    for (n = 0; n < hdr1->n_targets; n++) {
+        if (hdr1->target_len[n] != hdr2->target_len[n]) {
+            print_error("split",
+                        "Unaccounted header reference %zu \"%s\" is not the same length as in the input file",
+                        n + 1, hdr2->target_name[n]);
+            return -1;
+        }
+    }
+    return 0;
 }
 
 // Set the initial state
@@ -350,6 +405,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
     if (opts->ga.nthreads > 0) {
         if (!(retval->p.pool = hts_tpool_init(opts->ga.nthreads))) {
             fprintf(stderr, "Error creating thread pool\n");
+            cleanup_state(retval, false);
             return NULL;
         }
     }
@@ -357,7 +413,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
     retval->merged_input_file = sam_open_format(opts->merged_input_name, "rb", &opts->ga.in);
     if (!retval->merged_input_file) {
         print_error_errno("split", "Could not open \"%s\"", opts->merged_input_name);
-        free(retval);
+        cleanup_state(retval, false);
         return NULL;
     }
     if (retval->p.pool)
@@ -381,9 +437,15 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
             if (retval->unaccounted_header == NULL) {
                 print_error("split", "Could not read header from \"%s\"", opts->unaccounted_header_name);
                 cleanup_state(retval, false);
+                sam_close(hdr_load);
                 return NULL;
             }
             sam_close(hdr_load);
+            if (header_compatible(retval->merged_input_header,
+                                  retval->unaccounted_header) != 0) {
+                cleanup_state(retval, false);
+                return NULL;
+            }
         } else {
             retval->unaccounted_header = bam_hdr_dup(retval->merged_input_header);
         }
@@ -432,7 +494,6 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
                                                &opts->ga.out);
 
         if ( output_filename == NULL ) {
-            print_error("split", "Error expanding output filename format string");
             cleanup_state(retval, false);
             free(input_base_name);
             return NULL;
@@ -452,6 +513,12 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         // Record index in hash
         int ret;
         khiter_t iter = kh_put_c2i(retval->rg_hash, retval->rg_id[i], &ret);
+        if (ret < 0) {
+            print_error_errno("split", "Couldn't add @RG ID to look-up table");
+            cleanup_state(retval, false);
+            free(input_base_name);
+            return NULL;
+        }
         kh_val(retval->rg_hash,iter) = i;
 
         // Set and edit header
@@ -583,10 +650,9 @@ static int cleanup_state(state_t* status, bool check_close)
     free(status->rg_output_file_name);
     kh_destroy_c2i(status->rg_hash);
     free(status->rg_id);
-    free(status);
-
     if (status->p.pool)
         hts_tpool_destroy(status->p.pool);
+    free(status);
 
     return ret;
 }
@@ -594,10 +660,6 @@ static int cleanup_state(state_t* status, bool check_close)
 static void cleanup_opts(parsed_opts_t* opts)
 {
     if (!opts) return;
-    free(opts->merged_input_name);
-    free(opts->unaccounted_header_name);
-    free(opts->unaccounted_name);
-    free(opts->output_format_string);
     sam_global_args_free(&opts->ga);
     free(opts);
 }
