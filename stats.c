@@ -2363,17 +2363,14 @@ int main_stats(int argc, char *argv[])
     if ( optind<argc )
     {
         int filter = 1;
-        printf("%d, %d\n", optind, argc);
         // Prepare the region hash table for the multi-region iterator
         void *region_hash = NULL;
         if (!has_index_file) {
-            printf("%d, %d\n", optind, argc);
             region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
         } else if (has_index_file) {
             if (optind < argc - 1){
             region_hash = bed_hash_regions(NULL, argv, optind+1, argc, &filter);
             } else {
-                printf("%d, %d\n", optind, argc);
                 if (strstr(argv[optind], ".bai") != NULL) {
                 fprintf(stderr, "If no region number(s) specified, no need to supply index file.\n");
                 goto whole_file;
