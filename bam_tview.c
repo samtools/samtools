@@ -334,10 +334,10 @@ static void error(const char *format, ...)
     if ( !format )
     {
         fprintf(stderr,
-"Usage: samtools tview [options] <aln.bam> [ref.fasta]\n"
+"Usage: samtools tview [options] <aln.bam> [aln.bai] [ref.fasta]\n"
 "Options:\n"
 "   -d display      output as (H)tml or (C)urses or (T)ext \n"
-"   -X FILE         include customized index file\n"
+"   -X              include customized index file\n"
 "   -p chr:pos      go directly to this position\n"
 "   -s STR          display only reads from this sample or group\n");
         sam_global_opt_help(stderr, "-.--.-");
@@ -365,7 +365,7 @@ int bam_tview_main(int argc, char *argv[])
     int view_mode=display_ncurses;
     tview_t* tv=NULL;
     char *samples=NULL, *position=NULL, *ref, *fn_idx=NULL;
-    int c;
+    int c, has_index_file = 0, ref_index = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -373,11 +373,11 @@ int bam_tview_main(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "s:p:d:X:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "s:p:d:X", lopts, NULL)) >= 0) {
         switch (c) {
             case 's': samples=optarg; break;
             case 'p': position=optarg; break;
-            case 'X': fn_idx=optarg; break; // -X flag for index filename
+            case 'X': has_index_file=1; break; // -X flag for index filename
             case 'd':
             {
                 switch(optarg[0])
@@ -396,20 +396,33 @@ int bam_tview_main(int argc, char *argv[])
     }
     if (argc==optind) error(NULL);
 
-    ref = (optind+1>=argc)? ga.reference : argv[optind+1];
+    ref = NULL;
+    ref_index = optind;
+    if (!has_index_file) {
+        ref = (optind+1>=argc)? ga.reference : argv[optind+1];
+    }
+    else {
+        ref = (optind+2>=argc)? ga.reference : argv[optind+2];
+        if (optind+1 >= argc) {
+            fprintf(stderr, "Incorrect number of arguments provided! Aborting...\n");
+            return 1;
+        }
+        fn_idx = argv[optind+1];
+        ref_index = optind+1;
+    }
 
     switch(view_mode)
     {
         case display_ncurses:
-            tv = curses_tv_init(argv[optind], ref, samples, &ga.in);
+            tv = curses_tv_init(argv[ref_index], ref, samples, &ga.in);
             break;
 
         case display_text:
-            tv = text_tv_init(argv[optind], ref, fn_idx, samples, &ga.in);
+            tv = text_tv_init(argv[ref_index], ref, fn_idx, samples, &ga.in);
             break;
 
         case display_html:
-            tv = html_tv_init(argv[optind], ref, fn_idx, samples, &ga.in);
+            tv = html_tv_init(argv[ref_index], ref, fn_idx, samples, &ga.in);
             break;
     }
     if (tv==NULL)
