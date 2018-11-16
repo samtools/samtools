@@ -507,7 +507,6 @@ int main_samview(int argc, char *argv[])
     if (is_header_only) goto view_end; // no need to print alignments
 
     if (has_index_file) {
-        printf("%d %d\n", optind, argc);
         fn_idx_in = (optind+1 < argc)? argv[optind+1] : 0;
         if (fn_idx_in == 0) {
             fprintf(stderr, "[main_samview] incorrect number of arguments for -X option. Aborting.\n");
@@ -520,8 +519,12 @@ int main_samview(int argc, char *argv[])
     }
 
     if (settings.multi_region) {
-        if ((has_index_file && optind < argc - 2) || (!has_index_file && optind < argc - 1)) { //regions have been specified in the command line
+        if (!has_index_file && optind < argc - 1) { //regions have been specified in the command line
             settings.bed = bed_hash_regions(settings.bed, argv, optind+1, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
+            if (!filter_op)
+                filter_state = FILTERED;
+        } else if (has_index_file && optind < argc - 2) {
+            settings.bed = bed_hash_regions(settings.bed, argv, optind+2, argc, &filter_op); //insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
             if (!filter_op)
                 filter_state = FILTERED;
         } else {

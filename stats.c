@@ -1999,10 +1999,11 @@ static void error(const char *format, ...)
         printf("About: The program collects statistics from BAM files. The output can be visualized using plot-bamstats.\n");
         printf("Usage: samtools stats [OPTIONS] file.bam\n");
         printf("       samtools stats [OPTIONS] file.bam chr:from-to\n");
+        printf("       samtools stats -X [OPTIONS] file.bam [index.bai] [chr:from-to] (if the -X option has been set)\n");
         printf("Options:\n");
         printf("    -c, --coverage <int>,<int>,<int>    Coverage distribution min,max,step [1,1000,1]\n");
         printf("    -d, --remove-dups                   Exclude from statistics reads marked as duplicates\n");
-        printf("    -X, --customized-index-file <file>  Use a customized index file\n");
+        printf("    -X, --customized-index-file         Use a customized index file\n");
         printf("    -f, --required-flag  <str|int>      Required flag, 0 for unset. See also `samtools flags` [0]\n");
         printf("    -F, --filtering-flag <str|int>      Filtering flag, 0 for unset. See also `samtools flags` [0]\n");
         printf("        --GC-depth <float>              the size of GC-depth bins (decreasing bin size increases memory requirement) [2e4]\n");
@@ -2261,7 +2262,7 @@ int main_stats(int argc, char *argv[])
     char *bam_fname = NULL;
     char *bam_idx_fname = NULL;
     char *group_id = NULL;
-    int sparse = 0;
+    int sparse = 0, has_index_file = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     stats_info_t *info = stats_info_init(argc, argv);
@@ -2293,14 +2294,14 @@ int main_stats(int argc, char *argv[])
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hdsX:xpr:c:l:i:t:m:q:f:F:g:I:S:P:@:",loptions,NULL))>0 )
+    while ( (opt=getopt_long(argc,argv,"?hdsXxpr:c:l:i:t:m:q:f:F:g:I:S:P:@:",loptions,NULL))>0 )
     {
         switch (opt)
         {
             case 'f': info->flag_require = bam_str2flag(optarg); break;
             case 'F': info->flag_filter |= bam_str2flag(optarg); break;
             case 'd': info->flag_filter |= BAM_FDUP; break;
-            case 'X': bam_idx_fname = optarg; break;
+            case 'X': has_index_file = 1; break;
             case 's': break;
             case 'r': info->fai = fai_load(optarg);
                       if (info->fai==NULL)
@@ -2362,8 +2363,31 @@ int main_stats(int argc, char *argv[])
     if ( optind<argc )
     {
         int filter = 1;
+        printf("%d, %d\n", optind, argc);
         // Prepare the region hash table for the multi-region iterator
-        void *region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
+        void *region_hash = NULL;
+        if (!has_index_file) {
+            printf("%d, %d\n", optind, argc);
+            region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
+        } else if (has_index_file) {
+            if (optind < argc - 1){
+            region_hash = bed_hash_regions(NULL, argv, optind+1, argc, &filter);
+            } else {
+                printf("%d, %d\n", optind, argc);
+                if (strstr(argv[optind], ".bai") != NULL) {
+                fprintf(stderr, "If no region number(s) specified, no need to supply index file.\n");
+                goto whole_file;
+                }
+                else {
+                    fprintf(stderr, "Incorrect index filename provided.\n");
+                    return 1;
+                }
+            }
+            bam_idx_fname = argv[optind];
+        } else {
+            fprintf(stderr, "Incorrect number of arguments provided.\n");
+        }
+
         if (region_hash) {
 
             // Collect stats in selected regions only
@@ -2420,6 +2444,7 @@ int main_stats(int argc, char *argv[])
     }
     else
     {
+        whole_file:
         if ( info->cov_threshold > 0 && !targets ) {
             fprintf(stderr, "Coverage percentage calculation requires a list of target regions\n");
             goto cleanup;
