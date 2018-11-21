@@ -85,6 +85,9 @@ DEALINGS IN THE SOFTWARE.  */
 #define READ_ORDER_LAST 2
 #define READ_ORDER_MIDDLE 3
 
+#define REG_INC 100
+#define POS_INC 1000
+
 // The GC-depth graph works as follows: split the reference sequence into
 // segments and calculate GC content and depth in each bin. Then sort
 // these segments by their GC and plot the depth distribution by means
@@ -1783,7 +1786,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
 }
 
-void init_regions(stats_t *stats, const char *file)
+static void init_regions(stats_t *stats, const char *file)
 {
     FILE *fp = fopen(file,"r");
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
@@ -1811,20 +1814,23 @@ void init_regions(stats_t *stats, const char *file)
 
         if ( tid >= stats->nregions )
         {
-            stats->regions = realloc(stats->regions,sizeof(regions_t)*(stats->nregions+100));
+            if(!(stats->regions = realloc(stats->regions,sizeof(regions_t)*(tid+REG_INC))))
+                error("Could not allocate memory for region.\n");
+
             int j;
-            for (j=stats->nregions; j<stats->nregions+100; j++)
+            for (j=stats->nregions; j<tid+REG_INC; j++)
             {
                 stats->regions[j].npos = stats->regions[j].mpos = stats->regions[j].cpos = 0;
                 stats->regions[j].pos = NULL;
             }
-            stats->nregions += 100;
+            stats->nregions = tid+REG_INC;
         }
         int npos = stats->regions[tid].npos;
         if ( npos >= stats->regions[tid].mpos )
         {
-            stats->regions[tid].mpos += 1000;
-            stats->regions[tid].pos = realloc(stats->regions[tid].pos,sizeof(pos_t)*stats->regions[tid].mpos);
+            stats->regions[tid].mpos = npos+POS_INC;
+            if (!(stats->regions[tid].pos = realloc(stats->regions[tid].pos,sizeof(pos_t)*stats->regions[tid].mpos)))
+                error("Could not allocate memory for interval.\n");
         }
 
         if ( (sscanf(&line.s[i+1],"%u %u",&stats->regions[tid].pos[npos].from,&stats->regions[tid].pos[npos].to))!=2 ) error("Could not parse the region [%s]\n", &line.s[i+1]);
@@ -1860,7 +1866,8 @@ void init_regions(stats_t *stats, const char *file)
             stats->target_count += (reg->pos[p].to - reg->pos[p].from + 1);
     }
 
-    stats->chunks = calloc(stats->nchunks, sizeof(pos_t));
+    if (!(stats->chunks = calloc(stats->nchunks, sizeof(pos_t))))
+        error("Could not allocate memory for chunk.\n");
 }
 
 void destroy_regions(stats_t *stats)
@@ -2100,6 +2107,9 @@ void output_split_stats(khash_t(c2stats) *split_hash, char* bam_fname, int spars
 
 void destroy_split_stats(khash_t(c2stats) *split_hash)
 {
+    if (!split_hash)
+        return;
+
     int i = 0;
     stats_t *curr_stats = NULL;
     for(i = kh_begin(split_hash); i != kh_end(split_hash); ++i){
@@ -2263,6 +2273,10 @@ int main_stats(int argc, char *argv[])
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     stats_info_t *info = stats_info_init(argc, argv);
+    if (!info) {
+        fprintf(stderr, "Could not allocate memory for info.\n");
+        return 1;
+    }
 
     static const struct option loptions[] =
     {
@@ -2346,16 +2360,25 @@ int main_stats(int argc, char *argv[])
         hts_set_threads(info->sam, ga.nthreads);
 
     stats_t *all_stats = stats_init();
+    if (!all_stats) {
+        fprintf(stderr, "Could not allocate memory for stats.\n");
+        cleanup_stats_info(info);
+        return 1;
+    }
     stats_t *curr_stats = NULL;
     init_stat_structs(all_stats, info, group_id, targets);
     // Init
     // .. hash
     khash_t(c2stats)* split_hash = kh_init(c2stats);
+    if (!split_hash) goto cleanup_all_stats;
 
     khash_t(qn2pair)* read_pairs = kh_init(qn2pair);
+    if (!read_pairs) goto cleanup_split_hash;
 
     // Collect statistics
     bam1_t *bam_line = bam_init1();
+    if (!bam_line) goto cleanup_read_pairs;
+
     if ( optind<argc )
     {
         int filter = 1;
@@ -2442,10 +2465,13 @@ cleanup:
     bam_hdr_destroy(info->sam_header);
     sam_global_args_free(&ga);
 
+cleanup_read_pairs:
+    cleanup_overlaps(read_pairs, INT_MAX);
+cleanup_split_hash:
+    destroy_split_stats(split_hash);
+cleanup_all_stats:
     cleanup_stats(all_stats);
     cleanup_stats_info(info);
-    destroy_split_stats(split_hash);
-    cleanup_overlaps(read_pairs, INT_MAX);
 
     return 0;
 }
