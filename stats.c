@@ -54,6 +54,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/faidx.h>
 #include <htslib/sam.h>
 #include <htslib/hts.h>
+#include <htslib/hts_defs.h>
 #include "sam_header.h"
 #include <htslib/khash_str2int.h>
 #include "samtools.h"
@@ -272,7 +273,7 @@ typedef struct {
 KHASH_MAP_INIT_STR(qn2pair, pair_t*)
 
 
-static void error(const char *format, ...);
+static void HTS_NORETURN error(const char *format, ...);
 int is_in_regions(bam1_t *bam_line, stats_t *stats);
 void realloc_buffers(stats_t *stats, int seq_len);
 
@@ -598,6 +599,9 @@ void realloc_rseq_buffer(stats_t *stats)
     if ( stats->mrseq_buf<n )
     {
         stats->rseq_buf = realloc(stats->rseq_buf,sizeof(uint8_t)*n);
+        if (!stats->rseq_buf) {
+            error("Could not reallocate reference sequence buffer");
+        }
         stats->mrseq_buf = n;
     }
 }
@@ -689,6 +693,9 @@ void realloc_buffers(stats_t *stats, int seq_len)
 
     // Realloc the coverage distribution buffer
     int *rbuffer = calloc(sizeof(int),seq_len*5);
+    if (!rbuffer) {
+        error("Could not allocate coverage distribution buffer");
+    }
     n = stats->cov_rbuf.size-stats->cov_rbuf.start;
     memcpy(rbuffer,stats->cov_rbuf.buffer+stats->cov_rbuf.start,n);
     if ( stats->cov_rbuf.start>1 )
@@ -1027,8 +1034,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
 
         k = kh_put(qn2pair, read_pairs, s, &ret);
         if ( -1 == ret ) {
-            fprintf(stderr, "Error inserting read '%s' in pair hash table\n", qname);
-            return;
+            error("Error inserting read '%s' in pair hash table\n", qname);
         }
 
         pair_t *pc = calloc(1, sizeof(pair_t));
@@ -1999,7 +2005,7 @@ void init_group_id(stats_t *stats, const char *id)
 }
 
 
-static void error(const char *format, ...)
+static void HTS_NORETURN error(const char *format, ...)
 {
     if ( !format )
     {
@@ -2123,6 +2129,10 @@ void destroy_split_stats(khash_t(c2stats) *split_hash)
 stats_info_t* stats_info_init(int argc, char *argv[])
 {
     stats_info_t* info = calloc(1, sizeof(stats_info_t));
+    if (!info) {
+        return NULL;
+    }
+
     info->nisize = 8000;
     info->isize_main_bulk = 0.99;   // There are always outliers at the far end
     info->gcd_bin_size = 20e3;
@@ -2158,6 +2168,9 @@ int init_stat_info_fname(stats_info_t* info, const char* bam_fname, const htsFor
 stats_t* stats_init()
 {
     stats_t *stats = calloc(1,sizeof(stats_t));
+    if (!stats)
+        return NULL;
+
     stats->ngc    = 200;
     stats->nquals = 256;
     stats->nbases = 300;
@@ -2176,15 +2189,16 @@ stats_t* stats_init()
     return stats;
 }
 
-static void init_barcode_tags(stats_t* stats) {
+static int init_barcode_tags(stats_t* stats) {
     stats->ntags = 4;
     stats->tags_barcode = calloc(stats->ntags, sizeof(barcode_info_t));
     if (!stats->tags_barcode)
-        return;
+        return -1;
     stats->tags_barcode[0] = (barcode_info_t){"BC", "QT", 0, -1, -1, 0};
     stats->tags_barcode[1] = (barcode_info_t){"CR", "CY", 0, -1, -1, 0};
     stats->tags_barcode[2] = (barcode_info_t){"OX", "BZ", 0, -1, -1, 0};
     stats->tags_barcode[3] = (barcode_info_t){"RX", "QX", 0, -1, -1, 0};
+    return 0;
 }
 
 static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* group_id, const char* targets)
@@ -2204,33 +2218,60 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->ncov = 3 + (info->cov_max-info->cov_min) / info->cov_step;
     info->cov_max = info->cov_min + ((info->cov_max-info->cov_min)/info->cov_step +1)*info->cov_step - 1;
     stats->cov = calloc(sizeof(uint64_t),stats->ncov);
+    if (!stats->cov) goto nomem;
     stats->cov_rbuf.size = stats->nbases*5;
     stats->cov_rbuf.buffer = calloc(sizeof(int32_t),stats->cov_rbuf.size);
-
+    if (!stats->cov_rbuf.buffer) goto nomem;
     if ( group_id ) init_group_id(stats, group_id);
     // .. arrays
     stats->quals_1st      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
+    if (!stats->quals_1st) goto nomem;
     stats->quals_2nd      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
+    if (!stats->quals_2nd) goto nomem;
     stats->gc_1st         = calloc(stats->ngc,sizeof(uint64_t));
+    if (!stats->gc_1st) goto nomem;
     stats->gc_2nd         = calloc(stats->ngc,sizeof(uint64_t));
+    if (!stats->gc_2nd) goto nomem;
     stats->isize          = init_isize_t(info->nisize ?info->nisize+1 :0);
+    if (!stats->isize) goto nomem;
     stats->gcd            = calloc(stats->ngcd,sizeof(gc_depth_t));
-    stats->mpc_buf        = info->fai ? calloc(stats->nquals*stats->nbases,sizeof(uint64_t)) : NULL;
+    if (!stats->gcd) goto nomem;
+    if (info->fai) {
+        stats->mpc_buf    = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
+        if (!stats->mpc_buf) goto nomem;
+    } else {
+        stats->mpc_buf    = NULL;
+    }
     stats->acgtno_cycles_1st  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    if (!stats->acgtno_cycles_1st) goto nomem;
     stats->acgtno_cycles_2nd  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    if (!stats->acgtno_cycles_2nd) goto nomem;
     stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
+    if (!stats->read_lengths)     goto nomem;
     stats->read_lengths_1st   = calloc(stats->nbases,sizeof(uint64_t));
+    if (!stats->read_lengths_1st) goto nomem;
     stats->read_lengths_2nd   = calloc(stats->nbases,sizeof(uint64_t));
+    if (!stats->read_lengths_2nd) goto nomem;
     stats->insertions     = calloc(stats->nbases,sizeof(uint64_t));
+    if (!stats->insertions) goto nomem;
     stats->deletions      = calloc(stats->nbases,sizeof(uint64_t));
+    if (!stats->deletions)  goto nomem;
     stats->ins_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
+    if (!stats->ins_cycles_1st) goto nomem;
     stats->ins_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
+    if (!stats->ins_cycles_2nd) goto nomem;
     stats->del_cycles_1st = calloc(stats->nbases+1,sizeof(uint64_t));
+    if (!stats->del_cycles_1st) goto nomem;
     stats->del_cycles_2nd = calloc(stats->nbases+1,sizeof(uint64_t));
-    init_barcode_tags(stats);
+    if (!stats->del_cycles_2nd) goto nomem;
+    if (init_barcode_tags(stats) < 0)
+        goto nomem;
     realloc_rseq_buffer(stats);
     if ( targets )
         init_regions(stats, targets);
+    return;
+ nomem:
+    error("Out of memory");
 }
 
 static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_hash, stats_info_t* info, char* targets)
@@ -2246,6 +2287,9 @@ static stats_t* get_curr_split_stats(bam1_t* bam_line, khash_t(c2stats)* split_h
     khiter_t k = kh_get(c2stats, split_hash, split_name);
     if(k == kh_end(split_hash)){
         curr_stats = stats_init(); // mallocs new instance
+        if (!curr_stats) {
+            error("Couldn't allocate split stats");
+        }
         init_stat_structs(curr_stats, info, NULL, targets);
         curr_stats->split_name = split_name;
 
