@@ -97,7 +97,7 @@ static int usage() {
     fprintf(stderr, "omitted by default; see the -a option.\n");
     fprintf(stderr, "\n");
 
-    return 1;
+    return EXIT_FAILURE;
 }
 
 int main_depth(int argc, char *argv[])
@@ -129,7 +129,10 @@ int main_depth(int argc, char *argv[])
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
             case 'b':
                 bed = bed_read(optarg); // BED or position list file can be parsed now
-                if (!bed) { print_error_errno("depth", "Could not read file \"%s\"", optarg); return 1; }
+                if (!bed) { 
+                    print_error_errno("depth", "Could not read file \"%s\"", optarg); 
+                    return EXIT_FAILURE; 
+                }
                 break;
             case 'q': baseQ = atoi(optarg); break;   // base quality threshold
             case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
@@ -159,7 +162,7 @@ int main_depth(int argc, char *argv[])
     // initialize the auxiliary data structures
     if (file_list)
     {
-        if ( read_file_list(file_list,&nfiles,&fn) ) return 1;
+        if ( read_file_list(file_list,&nfiles,&fn) ) return EXIT_FAILURE;
         n = nfiles;
         argv = fn;
         optind = 0;
@@ -181,18 +184,20 @@ int main_depth(int argc, char *argv[])
         rf = SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | SAM_CIGAR | SAM_SEQ;
         if (baseQ) rf |= SAM_QUAL;
         if (hts_set_opt(data[i]->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
-            fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
-            return 1;
+            print_error_errno("depth", "Failed to set CRAM_OPT_REQUIRED_FIELDS value");
+            status = EXIT_FAILURE;
+            goto depth_end;
         }
         if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
-            fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
-            return 1;
+            print_error_errno("depth", "Failed to set CRAM_OPT_DECODE_MD value");
+            status = EXIT_FAILURE;
+            goto depth_end;
         }
         data[i]->min_mapQ = mapQ;                    // set the mapQ filter
         data[i]->min_len  = min_len;                 // set the qlen filter
         data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
         if (data[i]->hdr == NULL) {
-            fprintf(stderr, "Couldn't read header for \"%s\"\n",
+            print_error_errno("depth", "Couldn't read header for \"%s\"",
                     argv[optind+i]);
             status = EXIT_FAILURE;
             goto depth_end;
