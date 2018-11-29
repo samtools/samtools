@@ -67,7 +67,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm, i
                     if (flag&USE_EQUAL) seq[z/2] &= (z&1)? 0xf0 : 0x0f;
                     ++u;
                 } else {
-                    kputw(u, str); kputc(ref[x+j], str);
+                    kputw(u, str); kputc(toupper(ref[x+j]), str);
                     u = 0; ++nm;
                 }
             }
@@ -77,7 +77,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm, i
             kputw(u, str); kputc('^', str);
             for (j = 0; j < l; ++j) {
                 if (x+j >= ref_len || ref[x+j] == '\0') break;
-                kputc(ref[x+j], str);
+                kputc(toupper(ref[x+j]), str);
             }
             u = 0;
             x += j; nm += j;
