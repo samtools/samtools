@@ -811,6 +811,7 @@ sub test_mpileup
     # test that filter mask replaces (not just adds to) default mask
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam | grep -v mpileup");
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram | grep -v mpileup");
+    test_cmd($opts,out=>'dat/mpileup.out.5',cmd=>"$$opts{bin}/samtools mpileup $$opts{path}/mpileup/overlap.bam | grep 128814202");
 }
 
 sub test_usage
