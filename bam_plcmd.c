@@ -916,7 +916,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 
     fprintf(fp,
 "\n"
-"Usage: samtools mpileup [options] in1.bam [in2.bam [...]] [index1 index2 ...]\n"
+"Usage: samtools mpileup [options] in1.bam [in2.bam [...]]\n"
 "\n"
 "Input options:\n"
 "  -6, --illumina1.3+      quality is in the Illumina-1.3+ encoding\n"

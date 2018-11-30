@@ -199,6 +199,12 @@ Filter flags: skip reads with mask bits set
 .TP
 .B -x,\ --ignore-overlaps
 Disable read-pair overlap detection.
+.TP
+.B -X
+Include customized index file as a part of arugments. See 
+.B EXAMPLES 
+section for sample of useage.
+
 .PP
 .B Output Options:
 .TP 10
@@ -302,6 +308,11 @@ technology may affect the performance of indel calling.
 Generate the consensus sequence for one diploid individual:
 .EX 2
 samtools mpileup -uf ref.fa aln.bam | bcftools call -c | vcfutils.pl vcf2fq > cns.fq
+.EE
+.IP o 2
+Include customized index file as a part of arugments.
+.EX 2
+samtools mpileup [options] -X /data_folder/in1.bam [/data_folder/in2.bam [...]] /index_folder/index1.bai [/index_folder/index2.bai [...]]
 .EE
 .IP o 2
 Phase one individual:

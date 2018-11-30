@@ -62,6 +62,10 @@ Counts for each alignment file supplied are reported in separate columns.
 .TP
 .B  -j
 Do not include deletions (D) and ref skips (N) in bedcov computation.
+.TP
+.B "-X"
+If this option is set, it will allows user to specify customized index file location(s) if the data 
+folder does not contain any index file. Example usage: samtools bedcov [options] -X <in.bed> </data_folder/in1.bam> [...] </index_folder/index1.bai> [...]
 
 .SH AUTHOR
 .PP

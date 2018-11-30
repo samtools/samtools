@@ -72,6 +72,10 @@ Go directly to this position
 .TP
 .BI -s \ STR
 Display only alignments from this sample or read group
+.TP
+.B -X
+If this option is set, it will allows user to specify customized index file location(s) if the data 
+folder does not contain any index file. Example usage: samtools tview [options] -X </data_folder/data.bam> [/index_folder/index.bai] [ref.fasta]
 
 .SH AUTHOR
 .PP

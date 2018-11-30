@@ -91,7 +91,7 @@ int main_bedcov(int argc, char *argv[])
         if (usage) break;
     }
     if (usage || optind + 2 > argc) {
-        fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...] [index1 index2 ...]\n\n");
+        fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...]\n\n");
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "      -Q <int>            mapping quality threshold [0]\n");
         fprintf(stderr, "      -X                  use customized index files\n");

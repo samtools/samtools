@@ -1999,7 +1999,6 @@ static void error(const char *format, ...)
         printf("About: The program collects statistics from BAM files. The output can be visualized using plot-bamstats.\n");
         printf("Usage: samtools stats [OPTIONS] file.bam\n");
         printf("       samtools stats [OPTIONS] file.bam chr:from-to\n");
-        printf("       samtools stats -X [OPTIONS] file.bam [index.bai] [chr:from-to] (if the -X option has been set)\n");
         printf("Options:\n");
         printf("    -c, --coverage <int>,<int>,<int>    Coverage distribution min,max,step [1,1000,1]\n");
         printf("    -d, --remove-dups                   Exclude from statistics reads marked as duplicates\n");

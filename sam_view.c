@@ -682,7 +682,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 {
     fprintf(fp,
 "\n"
-"Usage: samtools view [options] <in.bam>|<in.sam>|<in.cram> [index.bai] [region ...]\n"
+"Usage: samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n"
 "\n"
 "Options:\n"
 // output options

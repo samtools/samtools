@@ -334,7 +334,7 @@ static void error(const char *format, ...)
     if ( !format )
     {
         fprintf(stderr,
-"Usage: samtools tview [options] <aln.bam> [aln.bai] [ref.fasta]\n"
+"Usage: samtools tview [options] <aln.bam> [ref.fasta]\n"
 "Options:\n"
 "   -d display      output as (H)tml or (C)urses or (T)ext \n"
 "   -X              include customized index file\n"

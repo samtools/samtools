@@ -106,6 +106,13 @@ and
 .B -B
 options modify the data which is contained in each alignment.
 
+The
+.B -X
+option can be used to allow user to specify customized index file location(s) if the data 
+folder does not contain any index file. See 
+.B EXAMPLES 
+section for sample of useage.
+
 Finally, the
 .B -@
 option can be used to allocate additional threads to be used for compression, and the
@@ -318,6 +325,11 @@ Ignored for compatibility with previous samtools versions.
 Previously this option was required if input was in SAM format, but now the
 correct format is automatically detected by examining the first few characters
 of input.
+.TP
+.B -X
+Include customized index file as a part of arugments. See 
+.B EXAMPLES 
+section for sample of useage.
 
 .SH EXAMPLES
 .IP o 2
@@ -366,6 +378,12 @@ are equivalent to the two above.
 .EX 2
 samtools view -O cram,store_md=1,store_nm=1 -o aln.cram aln.bam
 samtools view --input-fmt cram,decode_md=0 -o aln.new.bam aln.cram
+.EE
+
+.IP o 2
+Include customized index file as a part of arugments.
+.EX 2
+samtools view [options] -X data_folder/data.bam index_folder/data.bai chrM:1-10
 .EE
 
 .SH AUTHOR

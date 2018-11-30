@@ -74,7 +74,7 @@ int read_file_list(const char *file_list,int *n,char **argv[]);
 
 static int usage() {
     fprintf(stderr, "\n");
-    fprintf(stderr, "Usage: samtools depth [options] in1.bam [in2.bam [...]] [index1 index2 ...]\n");
+    fprintf(stderr, "Usage: samtools depth [options] in1.bam [in2.bam [...]]\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr, "   -a                  output all positions (including zero depth)\n");
     fprintf(stderr, "   -a -a (or -aa)      output absolutely all positions, including unused ref. sequences\n");
