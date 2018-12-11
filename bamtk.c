@@ -52,6 +52,7 @@ int main_cut_target(int argc, char *argv[]);
 int main_phase(int argc, char *argv[]);
 int main_cat(int argc, char *argv[]);
 int main_depth(int argc, char *argv[]);
+int main_coverage(int argc, char *argv[]);
 int main_bam2fq(int argc, char *argv[]);
 int main_pad2unpad(int argc, char *argv[]);
 int main_bedcov(int argc, char *argv[]);
@@ -109,6 +110,7 @@ static void usage(FILE *fp)
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
+"     coverage       alignment depth and percent coverage\n"
 "     depth          compute the depth\n"
 "     flagstat       simple stats\n"
 "     idxstats       BAM index stats\n"
@@ -183,6 +185,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "targetcut") == 0) ret = main_cut_target(argc-1, argv+1);
     else if (strcmp(argv[1], "phase") == 0)     ret = main_phase(argc-1, argv+1);
     else if (strcmp(argv[1], "depth") == 0)     ret = main_depth(argc-1, argv+1);
+    else if (strcmp(argv[1], "coverage") == 0)  ret = main_coverage(argc-1, argv+1);
     else if (strcmp(argv[1], "bam2fq") == 0 ||
              strcmp(argv[1], "fastq") == 0 ||
              strcmp(argv[1], "fasta") == 0)     ret = main_bam2fq(argc-1, argv+1);
