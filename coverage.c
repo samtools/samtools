@@ -296,10 +296,9 @@ int main_coverage(int argc, char *argv[]) {
     int *n_plp;
     bam_hdr_t *h = NULL; // BAM header of the 1st input
 
-    bool opt_print_header = true;
+    bool opt_print_header = false;
     bool opt_print_tabular = true;
     bool opt_print_histogram = false;
-    bool opt_print_html = false;
     bool *covered_tids;
 
     int current_tid = -1;
@@ -313,7 +312,7 @@ int main_coverage(int argc, char *argv[]) {
 
     // parse the command line
     int c;
-    while ((c = getopt_long(argc, argv, "o:l:q:Q:hH:w:vr:Df:m", lopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "o:l:q:Q:hHw:vr:f:m", lopts, NULL)) != -1) {
             switch (c) {
                 case 'o': opt_output_file = optarg; break;
                 case 'l': opt_min_len = atoi(optarg); break;
@@ -324,7 +323,6 @@ int main_coverage(int argc, char *argv[]) {
                 case 'f': opt_file_list = optarg; break;
                 case 'm': opt_print_histogram = true; opt_print_tabular = false; break;
                 case 'H': opt_print_header = true; break;
-                case 'D': opt_print_html = true; opt_print_tabular = false; break;
                 case 'h': return usage(EXIT_SUCCESS);
                 case 'v': return version(EXIT_SUCCESS);
                 default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
@@ -333,7 +331,7 @@ int main_coverage(int argc, char *argv[]) {
             }
     }
 
-    bool compute_histogram = opt_print_histogram || opt_print_html;
+    bool compute_histogram = opt_print_histogram;
 
     if (optind == argc && !opt_file_list) 
         return usage(EXIT_SUCCESS);
@@ -468,9 +466,6 @@ int main_coverage(int argc, char *argv[]) {
                     fputc('\n', file_out);
                 } else if (opt_print_tabular) {
                     print_tabular_line(file_out, h, stats);
-                } else if (opt_print_html) {
-                    //hists_for_html.push_back(hist);
-                    //stats_for_html.push_back(stats);
                 }
 
                 for (i = 0; i < n_bam_files && data[i]; ++i) {
