@@ -173,14 +173,14 @@ static int read_bam(void *data, bam1_t *b) {
 
 void print_tabular_line(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats) {
     fputs(h->target_name[stats->tid], file_out);
-    double target_len = (double) stats->end - stats->beg;
+    double region_len = (double) stats->end - stats->beg;
     fprintf(file_out, "\t%d\t%d\t%u\t%llu\t%g\t%g\t%.3g\t%.3g\n",
             stats->beg+1,
             stats->end,
             stats->n_selected_reads,
             stats->n_covered_bases,
-            100.0 * stats->n_covered_bases / target_len,
-            stats->summed_coverage / target_len,
+            100.0 * stats->n_covered_bases / region_len,
+            stats->summed_coverage / region_len,
             stats->summed_coverage > 0? stats->summed_baseQ/(double) stats->summed_coverage : 0,
             stats->n_selected_reads > 0? stats->summed_mapQ/(double) stats->n_selected_reads : 0
             );
@@ -196,7 +196,7 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
         stats->end = h->target_len[stats->tid];
     }
     */
-    uint32_t region_len = stats->end - stats->beg;
+    double region_len = stats->end - stats->beg;
 
     // Calculate histogram that contains percent covered
     double hist_d[hist_size];
@@ -249,9 +249,9 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
             case 8: if (stats->n_reads - stats->n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats->n_reads - stats->n_selected_reads); break;
             case 7: fprintf(file_out, "Covered bases:    %sbp", readable_bps(stats->n_covered_bases, buf)); break;
             case 6: fprintf(file_out, "Percent covered:  %.4g%%", 
-                            100.0 * stats->n_covered_bases / (double) region_len); break;
+                            100.0 * stats->n_covered_bases / region_len); break;
             case 5: fprintf(file_out, "Average coverage: %.3gx",
-                            stats->summed_coverage / (double) region_len); break;
+                            stats->summed_coverage / region_len); break;
             case 4: fprintf(file_out, "Average baseQ:    %.3g",
                             stats->summed_baseQ/(double) stats->summed_coverage); break;
             case 3: fprintf(file_out, "Average mapQ:     %.3g",
@@ -478,9 +478,8 @@ int main_coverage(int argc, char *argv[]) {
                     data[i]->n_selected_reads = 0;
                 }
 
-                stats->n_covered_bases = 0;
-                stats->summed_coverage = 0;
-                stats->summed_baseQ = 0;
+                memset(stats, 0, sizeof(stats_aux_t));
+
                 if (compute_histogram)
                     memset(hist, 0, opt_n_bins*sizeof(uint32_t));
             }
@@ -532,20 +531,16 @@ int main_coverage(int argc, char *argv[]) {
             print_hist(file_out, h, stats, hist, opt_n_bins);
         } else if (opt_print_tabular) {
             print_tabular_line(file_out, h, stats);
-        } else if (opt_print_html) {
-            //hists_for_html.push_back(hist);
-            //stats_for_html.push_back(stats);
         }
     }
 
 
-    if (!opt_reg && (opt_print_tabular || opt_print_html)) {
-        stats->n_covered_bases = 0;
-        stats->summed_coverage = 0;
-        stats->summed_baseQ = 0;
+    if (!opt_reg && opt_print_tabular) {
+        memset(stats, 0, sizeof(stats_aux_t));
         for (int tid = 0; tid < h->n_targets; ++tid) {
             if (!covered_tids[tid]) {
                 stats->tid = tid;
+                stats->end = h->target_len[tid];
                 print_tabular_line(file_out, h, stats);
             }
         }
