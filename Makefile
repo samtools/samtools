@@ -41,7 +41,7 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o \
             bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
             bamtk.o bam2bcf.o bam2bcf_indel.o sample.o \
-            cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
+            cut_target.o phase.o bam2depth.o coverage.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o
@@ -165,6 +165,7 @@ bam.o: bam.c config.h $(bam_h) $(htslib_kstring_h) sam_header.h
 bam2bcf.o: bam2bcf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_kfunc_h) $(bam2bcf_h)
 bam2bcf_indel.o: bam2bcf_indel.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam2bcf_h) $(htslib_khash_h) $(htslib_ksort_h)
 bam2depth.o: bam2depth.c config.h $(htslib_sam_h) samtools.h $(sam_opts_h)
+coverage.o: coverage.c config.h $(htslib_sam_h) samtools.h $(sam_opts_h)
 bam_addrprg.o: bam_addrprg.c config.h $(htslib_sam_h) $(htslib_kstring_h) samtools.h $(htslib_thread_pool_h) $(sam_opts_h)
 bam_aux.o: bam_aux.c config.h $(bam_h)
 bam_cat.o: bam_cat.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_khash_h) samtools.h
