@@ -54,22 +54,22 @@ typedef struct {  // auxiliary data structure to hold a BAM file
     hts_itr_t *iter; // iterator to a region - NULL for us by default
     int min_mapQ;    // mapQ filter
     int min_len;     // length filter
-    uint32_t n_reads;  // records the number of reads seen in file
-    uint32_t n_selected_reads; // records the number of reads passing filter
-    uint32_t summed_mapQ; // summed mapQ of all reads passing filter
+    unsigned int n_reads;  // records the number of reads seen in file
+    unsigned int n_selected_reads; // records the number of reads passing filter
+    unsigned long summed_mapQ; // summed mapQ of all reads passing filter
 } bam_aux_t;
 
 typedef struct {  // auxiliary data structure to hold stats on coverage
+    unsigned long long n_covered_bases;
+    unsigned long long summed_coverage;
+    unsigned long long summed_baseQ;
+    unsigned long long summed_mapQ;
+    unsigned int n_reads;
+    unsigned int n_selected_reads;
     int32_t tid;    // chromosome ID, defined by header
     int beg;
     int end;
     int bin_width;
-    uint64_t n_covered_bases;
-    uint64_t summed_coverage;
-    uint64_t summed_baseQ;
-    uint64_t summed_mapQ;
-    uint32_t n_reads;
-    uint32_t n_selected_reads;
 } stats_aux_t;
 
 int read_file_list(const char *file_list, int *n, char **argv[]);
@@ -136,10 +136,11 @@ char* readable_bps(double base_pairs, char *buf) {
 }
 
 void set_read_counts(bam_aux_t **data, stats_aux_t *stats, int n_bam_files) {
+    int i;
     stats->n_reads = 0;
     stats->n_selected_reads = 0;
     stats->summed_mapQ = 0;
-    for (int i = 0; i < n_bam_files && data[i]; ++i) {
+    for (i = 0; i < n_bam_files && data[i]; ++i) {
         stats->n_reads += data[i]->n_reads;
         stats->n_selected_reads += data[i]->n_selected_reads;
         stats->summed_mapQ += data[i]->summed_mapQ;
@@ -188,7 +189,7 @@ void print_tabular_line(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *s
 
 void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, const uint32_t *hist, 
                 const int hist_size) {
-
+    int i;
     bool show_percentiles = false;
     const int n_rows = 10;
     /*
@@ -200,7 +201,7 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
 
     // Calculate histogram that contains percent covered
     double hist_d[hist_size];
-    for (int i = 0; i < hist_size; ++i) {
+    for (i = 0; i < hist_size; ++i) {
         hist_d[i] = 100 * hist[i] / (double) stats->bin_width;
         //std::cerr << col_bin_size * i << "," << hist_d[i] << "\n";
         //std::cerr << "{x:" << col_bin_size * i << ",y:" << hist_d[i] << "},";
@@ -209,27 +210,27 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
     //return;
 
     double max_val = 0.0;
-    for (int i = 0; i < hist_size; ++i) {
+    for (i = 0; i < hist_size; ++i) {
         if (hist_d[i] > max_val) max_val = hist_d[i];
     }
 
     char buf[100];
-
     fprintf(file_out, "%s (%sbp)\n", h->target_name[stats->tid], readable_bps(h->target_len[stats->tid], buf));
     
     double row_bin_size = max_val / (double) n_rows;
+    int col;
 
-    for (int row = n_rows-1; row >= 0; --row) {
-        double current_bin = row_bin_size * row;
+    for (i = n_rows-1; i >= 0; --i) {
+        double current_bin = row_bin_size * i;
         if (show_percentiles) {
-            fprintf(file_out, ">%3i%% \u2502", row*10);
+            fprintf(file_out, ">%3i%% \u2502", i*10);
         } else {
-            //if (row == 0) 
+            //if (i == 0) 
             //    fprintf(file_out, ">%7.2f%% \u23A3", current_bin);
             //else
             fprintf(file_out, ">%7.2f%% \u2502", current_bin);
         }
-        for (int col = 0; col < hist_size; ++col) {
+        for (col = 0; col < hist_size; ++col) {
             // get the difference in eights
             int cur_val_diff = round(8 * (hist_d[col] - current_bin) / row_bin_size);
             if (cur_val_diff == 0) {
@@ -244,7 +245,7 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
         }
         fprintf(file_out, "\u2502 ");
         //fprintf(file_out, "  ");
-        switch (row) {
+        switch (i) {
             case 9: fprintf(file_out, "Number of reads:  %i", stats->n_selected_reads); break;
             case 8: if (stats->n_reads - stats->n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats->n_reads - stats->n_selected_reads); break;
             case 7: fprintf(file_out, "Covered bases:    %sbp", readable_bps(stats->n_covered_bases, buf)); break;
@@ -267,7 +268,8 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
     // by 10 by variable spacing of the labels, instead of placing a label every 10 characters
     char buf2[11];
     fprintf(file_out, "     %s", centerText(readable_bps(stats->beg + 1, buf), buf2, 10));
-    for (int rest = 10; rest < 10*(hist_size/10); rest += 10) {
+    int rest;
+    for (rest = 10; rest < 10*(hist_size/10); rest += 10) {
         fprintf(file_out, "%s", centerText(readable_bps(stats->beg + stats->bin_width*rest, buf), buf2, 10));
     }
     int last_padding = hist_size%10;
@@ -278,7 +280,7 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
 int main_coverage(int argc, char *argv[]) {
     int status = EXIT_SUCCESS;
 
-    int ret, tid, pos, i;
+    int ret, tid, pos, i, j;
 
     int max_depth = 0;
     int opt_min_baseQ = 0;
@@ -370,7 +372,7 @@ int main_coverage(int argc, char *argv[]) {
 
     data = (bam_aux_t **)calloc(n_bam_files, sizeof(bam_aux_t*)); // data[i] for the i-th BAM file
 
-    for (int i = 0; i < n_bam_files; ++i) {
+    for (i = 0; i < n_bam_files; ++i) {
         int rf;
         data[i] = (bam_aux_t *) calloc(1, sizeof(bam_aux_t));
         data[i]->fp = sam_open_format(argv[optind+i], "r", &ga.in); // open BAM
@@ -497,7 +499,7 @@ int main_coverage(int argc, char *argv[]) {
         bool count_base = false;
         for (i = 0; i < n_bam_files; ++i) { // base level filters have to go here
             int depth_at_pos = n_plp[i];
-            for (int j = 0; j < n_plp[i]; ++j) {
+            for (j = 0; j < n_plp[i]; ++j) {
                 const bam_pileup1_t *p = plp[i] + j; // DON'T modify plp[][] unless you really know
 
                 if (p->is_del || p->is_refskip) --depth_at_pos; // having dels or refskips at tid:pos
@@ -532,10 +534,10 @@ int main_coverage(int argc, char *argv[]) {
 
     if (!opt_reg && opt_print_tabular) {
         memset(stats, 0, sizeof(stats_aux_t));
-        for (int tid = 0; tid < h->n_targets; ++tid) {
-            if (!covered_tids[tid]) {
-                stats->tid = tid;
-                stats->end = h->target_len[tid];
+        for (i = 0; i < h->n_targets; ++i) {
+            if (!covered_tids[i]) {
+                stats->tid = i;
+                stats->end = h->target_len[i];
                 print_tabular_line(file_out, h, stats);
             }
         }
@@ -571,7 +573,7 @@ coverage_end:
     free(data); 
     free(opt_reg);
     if (opt_file_list) {
-        for (int i = 0; i < n_bam_files; ++i) {
+        for (i = 0; i < n_bam_files; ++i) {
             free(argv[i]);
             free(argv);
         }
