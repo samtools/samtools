@@ -55,7 +55,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/sam.h>
 #include <htslib/hts.h>
 #include <htslib/hts_defs.h>
-#include "sam_header.h"
 #include <htslib/khash_str2int.h>
 #include "samtools.h"
 #include <htslib/khash.h>

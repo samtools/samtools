@@ -41,7 +41,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/kstring.h>
 #include <htslib/klist.h>
 #include <htslib/khash_str2int.h>
-#include "sam_header.h"
 #include "samtools.h"
 #include "sam_opts.h"
 

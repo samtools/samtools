@@ -34,10 +34,9 @@ void setup_test_1(bam_hdr_t** hdr_in)
     *hdr_in = bam_hdr_init();
     const char *test1 =
     "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
+    "@SQ\tSN:blah\tLN:150\n"
     "@RG\tID:fish\n";
-    (*hdr_in)->text = strdup(test1);
-    (*hdr_in)->l_text = strlen(test1);
+    sam_hdr_add_lines(*hdr_in, test1, 0);
 }
 
 int main(int argc, char**argv)

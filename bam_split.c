@@ -212,7 +212,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
 {
     char **names = NULL;
 
-    if (hdr->l_text < 3 ) {
+    if (sam_hdr_length(hdr) < 3 ) {
         *count = 0;
         *output_name = NULL;
         return true;
@@ -221,7 +221,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
     //////////////////////////////////////////
     // First stage count number of @RG tags //
     //////////////////////////////////////////
-    const char *pointer = hdr->text;
+    const char *pointer = sam_hdr_str(hdr);
     size_t n_rg = 0;
     // Guard against rare case where @RG is first header line
     // This shouldn't happen but could where @HD is omitted
@@ -245,7 +245,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
         goto regfail;
     }
     regmatch_t matches[2] = {{0, 0}, {0, 0}};
-    const char *begin = hdr->text;
+    const char *begin = sam_hdr_str(hdr);
 
     names = calloc(n_rg, sizeof(names[0]));
     if (!names) goto memfail;
@@ -289,102 +289,15 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
     }
 }
 
-// Filters a header of @RG lines where ID != id_keep
-// TODO: strip @PG's descended from other RGs and their descendants
-static bool filter_header_rg(bam_hdr_t* hdr, const char* id_keep, const char *arg_list)
-{
-    kstring_t str = {0, 0, NULL};
-    size_t len_id_keep = strlen(id_keep);
-    SAM_hdr *sh = NULL;
-    regex_t rg_finder;
-    int error;
-    memset(&rg_finder, 0, sizeof(rg_finder));
-
-    if ((error = regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE)) != 0) {
-        goto regfail;
-    }
-
-    // regex vars
-    char* header = hdr->text;
-    regmatch_t matches[2] = {{0, 0}, {0, 0}};
-
-    // We're removing lines so new header must be shorter than old
-    if (ks_resize(&str, hdr->l_text + 1) < 0)
-        goto memfail;
-
-    while ((error = regexec(&rg_finder, header, 2, matches, 0)) == 0) {
-        kputsn(header, matches[0].rm_so, &str); // copy header up until the found RG line
-
-        // if ID matches keep keep it, else we can just ignore it
-        if (matches[1].rm_eo-matches[1].rm_so == len_id_keep &&
-            memcmp(header+matches[1].rm_so, id_keep, len_id_keep) == 0) {
-            kputsn(header+matches[0].rm_so, (matches[0].rm_eo+1)-matches[0].rm_so, &str);
-        }
-        // move pointer forward
-        header += matches[0].rm_eo+1;
-    }
-    // cleanup
-    // Did we leave loop because of an error?
-    if (error != REG_NOMATCH)
-        goto regfail;
-
-    // Write remainder of string
-    kputs(header, &str);
-
-    // Modify header
-    hdr->l_text = ks_len(&str);
-    free(hdr->text);
-    hdr->text = ks_release(&str);
-
-    // Add the PG line
-    sh = sam_hdr_parse_(hdr->text, hdr->l_text);
-    if (!sh) {
-        print_error("split", "Couldn't parse SAM header");
-        goto fail;
-    }
-    if (sam_hdr_add_PG(sh, "samtools",
-                           "VN", samtools_version(),
-                           arg_list ? "CL": NULL,
-                           arg_list ? arg_list : NULL,
-                           NULL) != 0)
-        goto fail;
-
-    free(hdr->text);
-    char *new_text = strdup(sam_hdr_str(sh));
-    if (!new_text)
-        goto memfail;
-    hdr->l_text = sam_hdr_length(sh);
-    hdr->text = new_text;
-    sam_hdr_free(sh);
-    regfree(&rg_finder);
-
-    return true;
-
- regfail: {
-        char msg[256];
-        regerror(error, &rg_finder, msg, sizeof(msg));
-        print_error("split", "Failed to parse @RG IDs : %s", msg);
-        goto fail;
-    }
-
- memfail:
-    print_error_errno("split", "Couldn't make new SAM header");
- fail:
-    regfree(&rg_finder);
-    free(ks_release(&str));
-    if (sh) sam_hdr_free(sh);
-    return false;
-}
-
 static int header_compatible(bam_hdr_t *hdr1, bam_hdr_t *hdr2)
 {
     size_t n;
-    if (hdr1->n_targets != hdr2->n_targets) {
+    if (sam_hdr_nref(hdr1) != sam_hdr_nref(hdr2)) {
         print_error("split",
                     "Unaccounted header contains wrong number of references");
         return -1;
     }
-    for (n = 0; n < hdr1->n_targets; n++) {
+    for (n = 0; n < sam_hdr_nref(hdr1); n++) {
         if (hdr1->target_len[n] != hdr2->target_len[n]) {
             print_error("split",
                         "Unaccounted header reference %zu \"%s\" is not the same length as in the input file",
@@ -527,7 +440,12 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
 
         // Set and edit header
         retval->rg_output_header[i] = bam_hdr_dup(retval->merged_input_header);
-        if ( !filter_header_rg(retval->rg_output_header[i], retval->rg_id[i], arg_list) ) {
+        if (sam_hdr_remove_except(retval->rg_output_header[i], "RG", "ID", retval->rg_id[i]) ||
+            sam_hdr_add_pg(retval->rg_output_header[i], "samtools",
+                        "VN", samtools_version(),
+                        arg_list ? "CL": NULL,
+                        arg_list ? arg_list : NULL,
+                        NULL)) {
             print_error("split", "Could not rewrite header for \"%s\"", output_filename);
             cleanup_state(retval, false);
             free(input_base_name);

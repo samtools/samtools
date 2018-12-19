@@ -278,8 +278,8 @@ sub test_cmd
     }
 
     if ($args{ignore_pg_header}) {
-        $out =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
-        $exp =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
+        $out =~ s/(^|\n)(?:\@PG\t[^\n]*\n)+/$1/sg;
+        $exp =~ s/(^|\n)(?:\@PG\t[^\n]*\n)+/$1/sg;
     }
 
     if ( $exp ne $out )

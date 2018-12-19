@@ -34,9 +34,9 @@ typedef struct refseq_info {
 } refseq_info_t;
 
 void dump_header(bam_hdr_t* hdr) {
-    printf("->n_targets:(%d)\n", hdr->n_targets);
+    printf("->n_targets:(%d)\n", sam_hdr_nref(hdr));
     int i;
-    for (i = 0; i < hdr->n_targets; ++i) {
+    for (i = 0; i < sam_hdr_nref(hdr); ++i) {
         printf("->target_name[%d]:(%s)\n",i,hdr->target_name[i]);
         printf("->target_len[%d]:(%d)\n",i,hdr->target_len[i]);
     }
@@ -68,36 +68,16 @@ bam_hdr_t * setup_test(const char *bam0_header_text,
                        merged_header_t *merged_hdr) {
     bam_hdr_t* bam0 = NULL;
     bam_hdr_t* bam1 = NULL;
-    int32_t i;
 
     bam0 = bam_hdr_init();
-    bam0->text = strdup(bam0_header_text);
-    if (!bam0->text) goto fail;
-    bam0->l_text = strlen(bam0_header_text);
-    bam0->n_targets = 1;
-    bam0->target_name = (char**)calloc(bam0_n_refseqs, sizeof(char*));
-    bam0->target_len = (uint32_t*)calloc(bam0_n_refseqs, sizeof(uint32_t));
-    for (i = 0; i < bam0_n_refseqs; i++) {
-        bam0->target_name[i] = strdup(bam0_refseqs[i].name);
-        if (!bam0->target_name[i]) goto fail;
-        bam0->target_len[i] = bam0_refseqs[i].len;
-    }
+    if (!bam0 || -1 == sam_hdr_add_lines(bam0, bam0_header_text, strlen(bam0_header_text)))
+        goto fail;
 
     if (populate_merged_header(bam0, merged_hdr)) goto fail;
 
     bam1 = bam_hdr_init();
-    if (!bam1) goto fail;
-    bam1->text = strdup(bam1_header_text);
-    if (!bam1->text) goto fail;
-    bam1->l_text = strlen(bam1_header_text);
-    bam1->n_targets = bam1_n_refseqs;
-    bam1->target_name = (char**)calloc(bam1_n_refseqs, sizeof(char*));
-    bam1->target_len = (uint32_t*)calloc(bam1_n_refseqs, sizeof(uint32_t));
-    for (i = 0; i < bam1_n_refseqs; i++) {
-        bam1->target_name[i] = strdup(bam1_refseqs[i].name);
-        if (!bam1->target_name[i]) goto fail;
-        bam1->target_len[i] = bam1_refseqs[i].len;
-    }
+    if (!bam1 || -1 == sam_hdr_add_lines(bam1, bam1_header_text, strlen(bam1_header_text)))
+        goto fail;
 
     bam_hdr_destroy(bam0);
     return bam1;
@@ -135,9 +115,9 @@ bam_hdr_t * setup_test_1(merged_header_t *merged_hdr) {
 bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_1_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen( test_1_trans_text)
-        || translate->n_targets != 1
+        strncmp(test_1_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen( test_1_trans_text)
+        || sam_hdr_nref(translate) != 1
         ) return false;
 
     // Check output header
@@ -148,7 +128,7 @@ bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     regex_t check_regex;
     regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
 
-    if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 1 ) return false;
+    if ( regexec(&check_regex, sam_hdr_str(out), 0, NULL, 0) != 0 || sam_hdr_nref(out) != 1 ) return false;
 
     regfree(&check_regex);
 
@@ -161,7 +141,7 @@ bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 static const char test_2_trans_text[] =
 "@HD\tVN:1.4\tSO:unknown\n"
 "@SQ\tSN:donkey\tLN:133\n"
-"@SQ\tSN:fish\tLN:133";
+"@SQ\tSN:fish\tLN:133\n";
 
 static const refseq_info_t test_2_refs[2] = {
     { "donkey", 133 },
@@ -176,10 +156,9 @@ bam_hdr_t * setup_test_2(merged_header_t *merged_hdr) {
 
 bool check_test_2(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
-    if (
-        strncmp(test_2_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_2_trans_text)
-        || translate->n_targets != 2
+    if (sam_hdr_length(translate) != strlen(test_2_trans_text)
+        || strncmp(test_2_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_nref(translate) != 2
         ) return false;
 
     // Check output header
@@ -191,7 +170,7 @@ bool check_test_2(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     regex_t check_regex;
     regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
 
-    if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 2 ) return false;
+    if ( regexec(&check_regex, sam_hdr_str(out), 0, NULL, 0) != 0 || sam_hdr_nref(out) != 2 ) return false;
 
     regfree(&check_regex);
 
@@ -221,9 +200,9 @@ bam_hdr_t * setup_test_3(merged_header_t *merged_hdr) {
 bool check_test_3(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_3_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_3_trans_text)
-        || translate->n_targets != 2
+        strncmp(test_3_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen(test_3_trans_text)
+        || sam_hdr_nref(translate) != 2
         ) return false;
     return true;
 }
@@ -253,9 +232,9 @@ bam_hdr_t * setup_test_4(merged_header_t *merged_hdr) {
 bool check_test_4(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_4_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_4_trans_text)
-        || translate->n_targets != 2
+        strncmp(test_4_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen(test_4_trans_text)
+        || sam_hdr_nref(translate) != 2
         ) return false;
     return true;
 }
@@ -289,9 +268,9 @@ bam_hdr_t * setup_test_5(merged_header_t *merged_hdr) {
 bool check_test_5(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_5_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_5_trans_text)
-        || translate->n_targets != 2
+        strncmp(test_5_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen(test_5_trans_text)
+        || sam_hdr_nref(translate) != 2
         ) return false;
     return true;
 }
@@ -318,9 +297,9 @@ bam_hdr_t * setup_test_6(merged_header_t *merged_hdr) {
 bool check_test_6(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_6_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_5_trans_text)
-        || translate->n_targets != 2
+        strncmp(test_6_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen(test_5_trans_text)
+        || sam_hdr_nref(translate) != 2
         ) return false;
     return true;
 }

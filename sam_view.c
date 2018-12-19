@@ -127,37 +127,6 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     return 0;
 }
 
-static char *drop_rg(char *hdtxt, rghash_t h, int *len)
-{
-    char *p = hdtxt, *q, *r, *s;
-    kstring_t str;
-    memset(&str, 0, sizeof(kstring_t));
-    while (1) {
-        int toprint = 0;
-        q = strchr(p, '\n');
-        if (q == 0) q = p + strlen(p);
-        if (q - p < 3) break; // the line is too short; then stop
-        if (strncmp(p, "@RG\t", 4) == 0) {
-            int c;
-            khint_t k;
-            if ((r = strstr(p, "\tID:")) != 0) {
-                r += 4;
-                for (s = r; *s != '\0' && *s != '\n' && *s != '\t'; ++s);
-                c = *s; *s = '\0';
-                k = kh_get(rg, h, r);
-                *s = c;
-                if (k != kh_end(h)) toprint = 1;
-            }
-        } else toprint = 1;
-        if (toprint) {
-            kputsn(p, q - p, &str); kputc('\n', &str);
-        }
-        p = q + 1;
-    }
-    *len = str.l;
-    return str.s;
-}
-
 static int usage(FILE *fp, int exit_status, int is_long_help);
 
 static int add_read_group_single(const char *subcmd, samview_settings_t *settings, char *name)
@@ -538,13 +507,8 @@ int main_samview(int argc, char *argv[])
         ret = 1;
         goto view_end;
     }
-    if (settings.rghash) { // FIXME: I do not know what "bam_header_t::n_text" is for...
-        char *tmp;
-        int l;
-        tmp = drop_rg(header->text, settings.rghash, &l);
-        free(header->text);
-        header->text = tmp;
-        header->l_text = l;
+    if (settings.rghash) {
+        sam_hdr_remove_lines(header, "RG", "ID", settings.rghash);
     }
     if (!is_count) {
         if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {

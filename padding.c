@@ -32,7 +32,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/kstring.h>
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
-#include "sam_header.h"
 #include "sam_opts.h"
 #include "samtools.h"
 
@@ -385,120 +384,38 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
 
 bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
 {
-    int i = 0, unpadded_len = 0;
-    bam_hdr_t *header = 0 ;
-    unsigned short ln_found;
+    int i = 0, ret = 0, unpadded_len = 0;
+    bam_hdr_t *header = bam_hdr_dup(old);
+    if (!header)
+        return NULL;
 
-    header = bam_hdr_dup(old);
     for (i = 0; i < old->n_targets; ++i) {
         unpadded_len = get_unpadded_len(fai, old->target_name[i], old->target_len[i]);
         if (unpadded_len < 0) {
             fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %i\n", old->target_name[i], old->target_len[i]);
+        } else if (unpadded_len > old->target_len[i]) {
+            fprintf(stderr, "[depad] New unpadded length of '%s' is larger than the padded length (%d > %i)\n", old->target_name[i], unpadded_len, old->target_len[i]);
+            ret = 1;
         } else {
             header->target_len[i] = unpadded_len;
             //fprintf(stderr, "[depad] Recalculating '%s' length %i -> %i\n", old->target_name[i], old->target_len[i], header->target_len[i]);
         }
     }
-    /* Duplicating the header allocated new buffer for header string */
-    /* After modifying the @SQ lines it will only get smaller, since */
-    /* the LN entries will be the same or shorter, and we'll remove */
-    /* any MD entries (MD5 checksums). */
-    assert(strlen(old->text) == strlen(header->text));
-    assert (0==strcmp(old->text, header->text));
-    const char *text;
-    text = old->text;
-    header->text[0] = '\0'; /* Resuse the allocated buffer */
-    char * newtext = header->text;
-    char * end=NULL;
-    while (text[0]=='@') {
-        end = strchr(text, '\n');
-        assert(end != 0);
-        if (text[1]=='S' && text[2]=='Q' && text[3]=='\t') {
-            const char *cp = text+3;
-            char *name = strstr(text, "\tSN:");
-            char *name_end;
-            if (!name) {
-                fprintf(stderr, "Unable to find SN: header field\n");
-                return NULL;
-            }
-            name += 4;
-            for (name_end = name; name_end != end && *name_end != '\t'; name_end++);
-            strcat(newtext, "@SQ");
-            ln_found = 0;
 
-            /* Parse the @SQ lines */
-            while (cp != end) {
-                if (!ln_found && end-cp >= 2 && strncmp(cp, "LN", 2) == 0) {
-                    // Rewrite the length
-                    char len_buf[100];
-                    int tid;
-                    unsigned int old_length, new_length;
-                    const char *old_cp = cp;
-
-                    ln_found = 1;
-
-                    while (cp != end && *cp++ != '\t');
-                    old_length = (int)(cp - old_cp);
-
-                    for (tid = 0; tid < header->n_targets; tid++) {
-                        // may want to hash this, but new header API incoming.
-                        if (strncmp(name, header->target_name[tid], name_end - name) == 0) {
-                            new_length = sprintf(len_buf, "LN:%d", header->target_len[tid]);
-                            if (new_length <= old_length) {
-                                strcat(newtext, len_buf);
-                            }
-                            else {
-                                fprintf(stderr, "LN value of the reference is larger than the original!\n");
-                                exit(1);
-                            }
-                            break;
-                        }
-                    }
-
-                    if (cp != end)
-                        strcat(newtext, "\t");
-                } else if (end-cp >= 2 &&
-                           ((ln_found && strncmp(cp, "LN", 2) == 0) ||
-                            strncmp(cp, "M5", 2) == 0 ||
-                            strncmp(cp, "UR", 2) == 0))
-                {
-                    // skip secondary LNs
-                    // MD5 changed during depadding; ditch it.
-                    // URLs are also invalid.
-                    while (cp != end && *cp++ != '\t');
-                } else {
-                    // Otherwise copy this sub-field verbatim
-                    const char *cp_start = cp;
-                    while (cp != end && *cp++ != '\t');
-                    strncat(newtext, cp_start, cp-cp_start);
-                }
-            }
-
-            // Add newline, replacing trailing '\t' if last on line was the LN:
-            char *text_end = newtext + strlen(newtext);
-            if (text_end[-1] == '\t')
-                text_end[-1] = '\n';
-            else
-                *text_end++ = '\n', *text_end = '\0';
-        } else {
-            /* Copy this line to the new header */
-            strncat(newtext, text, end - text + 1);
-        }
-        text = end + 1;
+    char len_buf[50];
+    for (i = 0; i < header->n_targets; i++) {
+        sprintf(len_buf, "%d", header->target_len[i]);
+        if((ret |= sam_hdr_update_line(header, "SQ", "SN", header->target_name[i], "LN", len_buf, NULL)))
+            fprintf(stderr, "[depad] Error updating length of '%s' to %d\n", header->target_name[i], header->target_len[i]);
+        ret |= sam_hdr_remove_tag_id(header, "SQ", "SN", header->target_name[i], "M5") < 0;
+        ret |= sam_hdr_remove_tag_id(header, "SQ", "SN", header->target_name[i], "UR") < 0;
     }
-    assert (text[0]=='\0');
-    /* Check we didn't overflow the buffer */
-    assert (strlen(header->text) <= strlen(old->text));
-    if (strlen(header->text) < header->l_text) {
-        //fprintf(stderr, "[depad] Reallocating header buffer\n");
-        assert (newtext == header->text);
-        newtext = malloc(strlen(header->text) + 1);
-        strcpy(newtext, header->text);
-        free(header->text);
-        header->text = newtext;
-        header->l_text = strlen(newtext);
+
+    if (ret) {
+        bam_hdr_destroy(header);
+        return NULL;
     }
-    //fprintf(stderr, "[depad] Here is the new header (pending @SQ lines),\n\n%s\n(end)\n", header->text);
+
     return header;
 }
 
@@ -574,7 +491,11 @@ int main_pad2unpad(int argc, char *argv[])
         goto depad_end;
     }
     if (fai) {
-        h_fix = fix_header(h, fai);
+        if (!(h_fix = fix_header(h, fai))){
+            fprintf(stderr, "[depad] failed to fix the header from\n");
+            ret = 1;
+            goto depad_end;
+        }
     } else {
         fprintf(stderr, "[depad] Warning - reference lengths will not be corrected without FASTA reference\n");
         h_fix = h;

@@ -214,14 +214,10 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         goto fail;
     }
 
-    if (sam_hdr_change_HD(h, "SO", "unsorted") != 0) {
-        print_error("collate",
-                    "failed to change sort order header to 'unsorted'\n");
-        goto fail;
-    }
-    if (sam_hdr_change_HD(h, "GO", "query") != 0) {
-        print_error("collate",
-                    "failed to change group order header to 'query'\n");
+    if ((-1 == sam_hdr_update_hd(h, "SO", "unsorted", "GO", "query"))
+     && (-1 == sam_hdr_add_line(h, "HD", "VN", SAM_FORMAT_VERSION, "SO", "unsorted", "GO", "query", NULL))
+     ) {
+        print_error("collate", "failed to update HD line\n");
         goto fail;
     }
 

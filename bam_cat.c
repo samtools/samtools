@@ -181,7 +181,7 @@ static khash_s2i *hash_rg(const bam_hdr_t *h) {
  * Returns updated header on success;
  *        NULL on failure.
  */
-static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const bam_hdr_t *h,
+static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, bam_hdr_t *h,
                                      khash_s2i **rg2id, int *vers_maj_p, int *vers_min_p) {
     int i, vers_maj = -1, vers_min = -1;
     bam_hdr_t *new_h = NULL;
@@ -289,7 +289,7 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const bam_hdr_t 
  * huffman code.  In this situation we can change the meta-data in the
  * compression header to renumber an RG value..
  */
-int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
+int cram_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outcram)
 {
     samFile *out;
     cram_fd *out_c;
@@ -313,7 +313,6 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     cram_set_option(out_c, CRAM_OPT_VERSION, vers);
     //fprintf(stderr, "Creating cram vers %s\n", vers);
 
-    cram_fd_set_header(out_c, sam_hdr_parse_(new_h->text,  new_h->l_text)); // needed?
     if (sam_hdr_write(out, new_h) < 0) {
         print_error_errno("cat", "Couldn't write header");
         return -1;
@@ -404,9 +403,8 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
         sam_close(in);
     }
     sam_close(out);
-
-    hash_s2i_free(rg2id);
     bam_hdr_destroy(new_h);
+    hash_s2i_free(rg2id);
 
     return 0;
 }
@@ -419,7 +417,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
 
 #define BGZF_EMPTY_BLOCK_SIZE 28
 
-int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
+int bam_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outbam)
 {
     BGZF *fp, *in = NULL;
     uint8_t *buf = NULL;

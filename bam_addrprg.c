@@ -148,20 +148,6 @@ static char *dup_substring(const char *s, const char *slim, size_t *lenp)
     return ns;
 }
 
-// These are to be replaced by samtools header parser
-// Extracts the first @RG line from a string.
-static char* get_rg_line(const char* text, size_t* last)
-{
-    const char* rg = text;
-    if (rg[0] != '@' || rg[1] != 'R' || rg[2] != 'G' ) {
-        if ((rg = (const char*)strstr(text,"\n@RG")) == NULL) {
-            return NULL;
-        }
-        rg++;//skip initial \n
-    }
-    // duplicate the line for return
-    return dup_substring(rg, strchr(rg, '\n'), last);
-}
 
 // Given a @RG line return the id
 static char* get_rg_id(const char *line)
@@ -173,44 +159,6 @@ static char* get_rg_id(const char *line)
     return dup_substring(id, strchr(id, '\t'), NULL);
 }
 
-// Confirms the existance of an RG line with a given ID in a bam header
-static bool confirm_rg( const bam_hdr_t *hdr, const char* rgid )
-{
-    assert( hdr != NULL && rgid != NULL );
-
-    const char *ptr = hdr->text;
-    bool found = false;
-    while (ptr != NULL && *ptr != '\0' && found == false ) {
-        size_t end = 0;
-        char* line = get_rg_line(ptr, &end);
-        if (line == NULL) break; // No more @RG
-        char* id;
-        if (((id = get_rg_id(line)) != NULL) && !strcmp(id, rgid)) {
-            found = true;
-        }
-        free(id);
-        free(line);
-        ptr += end;
-    }
-    return found;
-}
-
-static char* get_first_rgid( const bam_hdr_t *hdr )
-{
-    assert( hdr != NULL );
-    const char *ptr = hdr->text;
-    char* found = NULL;
-    while (ptr != NULL && *ptr != '\0' && found == NULL ) {
-        size_t end = 0;
-        char* line = get_rg_line(ptr, &end);
-        if ( line ) {
-            found = get_rg_id(line);
-        } else break;
-        free(line);
-        ptr += end;
-    }
-    return found;
-}
 
 static void usage(FILE *fp)
 {
@@ -395,34 +343,34 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     if (opts->rg_line) {
         // Append new RG line to header.
         // Check does not already exist
-        if ( confirm_rg(retval->output_header, opts->rg_id) ) {
+        kstring_t hdr_line = { 0, 0, NULL };
+        if (sam_hdr_find_line_id(retval->output_header, "RG", "ID", opts->rg_id, &hdr_line) == 0) {
             fprintf(stderr, "[init] ID of new RG line specified conflicts with that of an existing header RG line. Overwrite not yet implemented.\n");
+            free(hdr_line.s);
+            return false;
+        }
+        if (-1 == sam_hdr_add_lines(retval->output_header, opts->rg_line, strlen(opts->rg_line))) {
+            fprintf(stderr, "[init] Error adding RG line with ID:%s to the output header.\n", opts->rg_id);
             return false;
         }
         retval->rg_id = strdup(opts->rg_id);
-        size_t new_len = strlen( retval->output_header->text ) + strlen( opts->rg_line ) + 2;
-        char* new_header = malloc(new_len);
-        if (!new_header) {
-            fprintf(stderr, "[init] Out of memory whilst writing new header.\n");
-            return false;
-        }
-        sprintf(new_header,"%s%s\n", retval->output_header->text, opts->rg_line);
-        free(retval->output_header->text);
-        retval->output_header->text = new_header;
-        retval->output_header->l_text = (int)new_len - 1;
     } else {
         if (opts->rg_id) {
             // Confirm what has been supplied exists
-            if ( !confirm_rg(retval->output_header, opts->rg_id) ) {
+            kstring_t hdr_line = { 0, 0, NULL };
+            if (sam_hdr_find_line_id(retval->output_header, "RG", "ID", opts->rg_id, &hdr_line) < 0) {
                 fprintf(stderr, "RG ID supplied does not exist in header. Supply full @RG line with -r instead?\n");
                 return false;
             }
             retval->rg_id = strdup(opts->rg_id);
+            free(hdr_line.s);
         } else {
-            if ((retval->rg_id = get_first_rgid(retval->output_header)) == NULL ) {
+            kstring_t rg_id = { 0, 0, NULL };
+            if (sam_hdr_find_tag_id(retval->output_header, "RG", NULL, NULL, "ID", &rg_id) < 0) {
                 fprintf(stderr, "No RG specified on command line or in existing header.\n");
                 return false;
             }
+            retval->rg_id = ks_release(&rg_id);
         }
     }
 

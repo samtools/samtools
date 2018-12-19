@@ -387,15 +387,20 @@ static int gen_unique_id(char *prefix, khash_t(cset) *existing_ids,
 static int trans_tbl_add_hd(merged_header_t* merged_hdr,
                             bam_hdr_t *translate) {
     hdr_match_t match = {0, 0};
+    const char *text;
 
     // TODO: handle case when @HD needs merging.
     if (merged_hdr->have_hd) return 0;
 
-    if (hdr_line_match(translate->text, "@HD", NULL, &match) != 0) {
+    text = sam_hdr_str(translate);
+    if (!text)
+        return -1;
+
+    if (hdr_line_match(text, "@HD", NULL, &match) != 0) {
         return 0;
     }
 
-    if (match_to_ks(translate->text, &match, &merged_hdr->out_hd)) goto memfail;
+    if (match_to_ks(text, &match, &merged_hdr->out_hd)) goto memfail;
     if (kputc('\n', &merged_hdr->out_hd) == EOF) goto memfail;
     merged_hdr->have_hd = true;
 
@@ -460,7 +465,7 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
     // Fill in the tid part of the translation table, adding new targets
     // to the merged header as we go.
 
-    for (i = 0; i < translate->n_targets; ++i) {
+    for (i = 0; i < sam_hdr_nref(translate); ++i) {
 
         // Check if it's a new target.
         iter = kh_get(c2i, sq_tids, translate->target_name[i]);
@@ -513,7 +518,7 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
         new_sq_matches[i].rm_so = new_sq_matches[i].rm_eo = -1;
     }
 
-    text = translate->text;
+    text = (char *) sam_hdr_str(translate);
     while (hdr_line_match(text, "@SQ", "SN", matches) == 0) {
         // matches[0] is whole line, matches[1] is SN value.
 
@@ -597,7 +602,7 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
                                     khash_t(c2c)* id_map, char *override) {
     hdr_match_t matches[2];
     khiter_t iter;
-    const char *text = translate->text;
+    const char *text = sam_hdr_str(translate);
     const char *rec_type = is_rg ? "@RG" : "@PG";
     klist_t(hdrln) *hdr_lines;
 
@@ -828,9 +833,10 @@ static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
     klist_t(hdrln) *rg_list = NULL;
     klist_t(hdrln) *pg_list = NULL;
 
-    tbl->n_targets = translate->n_targets;
+    tbl->n_targets = sam_hdr_nref(translate);
     tbl->rg_trans = tbl->pg_trans = NULL;
-    tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
+    tbl->tid_trans = (int*)calloc(tbl->n_targets ? tbl->n_targets : 1,
+                                  sizeof(int));
     if (tbl->tid_trans == NULL) goto memfail;
     tbl->rg_trans = kh_init(c2c);
     if (tbl->rg_trans == NULL) goto memfail;
@@ -868,7 +874,7 @@ static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
     if (copy_co) {
         // Just append @CO headers without translation
         const char *line, *end_pointer;
-        for (line = translate->text; *line; line = end_pointer + 1) {
+        for (line = sam_hdr_str(translate); *line; line = end_pointer + 1) {
             end_pointer = strchr(line, '\n');
             if (strncmp(line, "@CO", 3) == 0) {
                 if (end_pointer) {
@@ -894,20 +900,12 @@ static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
     return -1;
 }
 
-static inline void move_kstr_to_text(char **text, kstring_t *ks) {
-    memcpy(*text, ks_str(ks), ks_len(ks));
-    *text += ks_len(ks);
-    **text = '\0';
-    free(ks_release(ks));
-}
-
 /*
  * Populate a bam_hdr_t struct from data in a merged_header_t.
  */
 
 static bam_hdr_t * finish_merged_header(merged_header_t *merged_hdr) {
     size_t     txt_sz;
-    char      *text;
     bam_hdr_t *hdr;
 
     // Check output text size
@@ -925,39 +923,11 @@ static bam_hdr_t * finish_merged_header(merged_header_t *merged_hdr) {
     hdr = bam_hdr_init();
     if (hdr == NULL) goto memfail;
 
-    // Transfer targets arrays to new header
-    hdr->n_targets = merged_hdr->n_targets;
-    if (hdr->n_targets > 0) {
-        // Try to shrink targets arrays to correct size
-        hdr->target_name = realloc(merged_hdr->target_name,
-                                   hdr->n_targets * sizeof(char*));
-        if (!hdr->target_name) hdr->target_name = merged_hdr->target_name;
-
-        hdr->target_len = realloc(merged_hdr->target_len,
-                                  hdr->n_targets * sizeof(uint32_t));
-        if (!hdr->target_len) hdr->target_len = merged_hdr->target_len;
-
-        // These have either been freed by realloc() or, in the unlikely
-        // event that failed, have had their ownership transferred to hdr
-        merged_hdr->target_name = NULL;
-        merged_hdr->target_len  = NULL;
-    }
-    else {
-        hdr->target_name = NULL;
-        hdr->target_len  = NULL;
-    }
-
-    // Allocate text
-    text = hdr->text = malloc(txt_sz + 1);
-    if (!text) goto memfail;
-
-    // Put header text in order @HD, @SQ, @RG, @PG, @CO
-    move_kstr_to_text(&text, &merged_hdr->out_hd);
-    move_kstr_to_text(&text, &merged_hdr->out_sq);
-    move_kstr_to_text(&text, &merged_hdr->out_rg);
-    move_kstr_to_text(&text, &merged_hdr->out_pg);
-    move_kstr_to_text(&text, &merged_hdr->out_co);
-    hdr->l_text = txt_sz;
+    sam_hdr_add_lines(hdr, ks_str(&merged_hdr->out_hd), ks_len(&merged_hdr->out_hd));
+    sam_hdr_add_lines(hdr, ks_str(&merged_hdr->out_sq), ks_len(&merged_hdr->out_sq));
+    sam_hdr_add_lines(hdr, ks_str(&merged_hdr->out_rg), ks_len(&merged_hdr->out_rg));
+    sam_hdr_add_lines(hdr, ks_str(&merged_hdr->out_pg), ks_len(&merged_hdr->out_pg));
+    sam_hdr_add_lines(hdr, ks_str(&merged_hdr->out_co), ks_len(&merged_hdr->out_co));
 
     return hdr;
 
@@ -1293,7 +1263,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         int tid, beg, end;
         const char *name_lim;
 
-        rtrans = rtrans_build(n, hout->n_targets, translation_tbl);
+        rtrans = rtrans_build(n, sam_hdr_nref(hout), translation_tbl);
         if (!rtrans) goto mem_fail;
 
         name_lim = hts_parse_reg(reg, &beg, &end);
@@ -1325,7 +1295,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
                 idx = sam_index_load(fp[i], fn[i]);
             }
             // (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
-            int mapped_tid = rtrans[i*hout->n_targets+tid];
+            int mapped_tid = rtrans[i*sam_hdr_nref(hout)+tid];
             if (idx == NULL) {
                 fprintf(stderr, "[%s] failed to load index for %s.  Random alignment retrieval only works for indexed BAM or CRAM files.\n",
                         __func__, fn[i]);
@@ -1974,10 +1944,10 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
     samFile* fp;
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
-    if (sam_hdr_write(fp, h) != 0) goto fail;
+    if (sam_hdr_write(fp, (bam_hdr_t *)h) != 0) goto fail;
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i) {
-        if (sam_write1(fp, h, buf[i].bam_record) < 0) goto fail;
+        if (sam_write1(fp, (bam_hdr_t *)h, buf[i].bam_record) < 0) goto fail;
     }
     if (sam_close(fp) < 0) return -1;
     return 0;
@@ -1998,7 +1968,7 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const bam_hdr_t *h)
 
     for (i = 0; i < n; i++) {
         bam1_t *b = buf[i].bam_record;
-        int32_t tid = b->core.tid == -1 ? h->n_targets : b->core.tid;
+        int32_t tid = b->core.tid == -1 ? sam_hdr_nref(h) : b->core.tid;
         buf[i].u.pos = (uint64_t)tid<<32 | (b->core.pos+1)<<1 | bam_is_rev(b);
         if (max_pos < buf[i].u.pos)
             max_pos = buf[i].u.pos;
@@ -2210,14 +2180,15 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     else
         new_so = "coordinate";
 
-    if (sam_hdr_change_HD(header, "SO", new_so) != 0) {
-        print_error("sort",
-                    "failed to change sort order header to '%s'\n", new_so);
+    if ((-1 == sam_hdr_update_hd(header, "SO", new_so))
+     && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION, "SO", new_so, NULL))
+     ) {
+        print_error("sort", "failed to change sort order header to '%s'\n", new_so);
         goto err;
     }
-    if (sam_hdr_change_HD(header, "GO", NULL) != 0) {
-        print_error("sort",
-                    "failed to delete group order header\n");
+
+    if (-1 == sam_hdr_remove_tag_hd(header, "GO")) {
+        print_error("sort", "failed to delete group order header\n");
         goto err;
     }
 

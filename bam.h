@@ -224,16 +224,6 @@ extern "C" {
     // int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b);
 
     /*!
-      @abstract       Read header information from a TAB-delimited list file.
-      @param  fn_list file name for the list
-      @return         a pointer to the header structure
-
-      @discussion Each line in this file consists of chromosome name and
-      the length of chromosome.
-     */
-    bam_header_t *sam_header_read2(const char *fn_list);
-
-    /*!
       @abstract       Read header from a SAM file (if present)
       @param  fp      SAM file handler
       @return         pointer to header struct; 0 if no @SQ lines available
@@ -277,7 +267,7 @@ extern "C" {
       @param  header pointer to the header structure
       @return        always 0 currently
      */
-    static inline int bam_header_write(bamFile fp, const bam_header_t *header) { return bam_hdr_write(fp, header); }
+    static inline int bam_header_write(bamFile fp, bam_header_t *header) { return bam_hdr_write(fp, header); }
 
     /*!
       @abstract   Read an alignment from BAM.
