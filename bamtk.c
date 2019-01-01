@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2018 Genome Research Ltd.
+    Copyright (C) 2008-2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -207,7 +207,7 @@ int main(int argc, char *argv[])
         printf(
 "samtools %s\n"
 "Using htslib %s\n"
-"Copyright (C) 2018 Genome Research Ltd.\n",
+"Copyright (C) 2019 Genome Research Ltd.\n",
                samtools_version(), hts_version());
     }
     else if (strcmp(argv[1], "--version-only") == 0) {
