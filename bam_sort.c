@@ -1151,8 +1151,8 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
   function is NOT thread safe.
  */
 int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *mode,
-                    const char *headers, int n, char * const *fn, char * const *fn_idx,int flag,
-                    const char *reg, int n_threads, const char *cmd,
+                    const char *headers, int n, char * const *fn, char * const *fn_idx,
+                    int flag, const char *reg, int n_threads, const char *cmd,
                     const htsFormat *in_fmt, const htsFormat *out_fmt)
 {
     samFile *fpout, **fp = NULL;
@@ -1634,6 +1634,7 @@ int bam_merge(int argc, char *argv[])
     if (fn_size+nargcfiles < 1) {
         print_error("merge", "You must specify at least one (and usually two or more) input files");
         merge_usage(stderr);
+        free(fn_idx);
         return 1;
     }
     strcpy(mode, "wb");
@@ -1650,6 +1651,7 @@ end:
         for (i=0; i<fn_size; i++) free(fn[i]);
     }
     free(fn);
+    free(fn_idx);
     free(reg);
     sam_global_args_free(&ga);
     return ret;

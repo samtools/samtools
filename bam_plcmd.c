@@ -397,7 +397,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
             } else {
                 idx = sam_index_load(data[i]->fp, fn[i]);
             }
-                
+
             if (idx == NULL) {
                 fprintf(stderr, "[%s] fail to load index for %s\n", __func__, fn[i]);
                 exit(EXIT_FAILURE);

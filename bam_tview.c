@@ -87,7 +87,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *fn_
     } else {
         tv->idx = sam_index_load(tv->fp, fn);
     }
-    
+
     if (tv->idx == NULL)
     {
         print_error("tview", "cannot read index for \"%s\"", fn);

@@ -764,6 +764,10 @@ sub test_index
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view${threads} $$opts{tmp}/large_chrom.bam ref2");
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view${threads} $$opts{tmp}/large_chrom.bam ref2:1-541556283");
     test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_a.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai",binary=>1);
+
+    cmd("$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai");
+    test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai ref2");
+    test_cmd($opts,out=>'dat/test_input_1_ab.X.expected',cmd=>"$$opts{bin}/samtools merge${threads} -O sam - -X -cp -R ref2 $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_a.bam.bai $$opts{tmp}/test_input_1_b.bam.bai");
 }
 
 sub test_mpileup

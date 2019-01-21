@@ -110,10 +110,10 @@ extern "C" {
       @return       pointer to the index structure
      */
     static inline bam_index_t *samtools_sam_index_load(samfile_t *fp, const char *fn, const char *fnidx) {
-      if (fnidx != NULL) {
-        return sam_index_load2(fp->file, fn, fnidx);
-      }
-      return sam_index_load(fp->file, fn); 
+        if (fnidx != NULL) {
+            return sam_index_load2(fp->file, fn, fnidx);
+        }
+        return sam_index_load(fp->file, fn);
     }
     #undef sam_index_load
     #define sam_index_load(fp,fn,fnidx) (samtools_sam_index_load((fp), (fn), (fnidx)))

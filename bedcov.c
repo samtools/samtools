@@ -123,7 +123,7 @@ int main_bedcov(int argc, char *argv[])
             } else {
                 idx[i] = sam_index_load(aux[i]->fp, argv[i+optind+1]);
             }
-        }   
+        }
         if (aux[i]->fp == 0 || idx[i] == 0) {
             fprintf(stderr, "ERROR: fail to open index BAM file '%s'\n", argv[i+optind+1]);
             return 2;

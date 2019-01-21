@@ -512,10 +512,6 @@ int main_samview(int argc, char *argv[])
             fprintf(stderr, "[main_samview] incorrect number of arguments for -X option. Aborting.\n");
             return 1;
         }
-        if(strstr(fn_idx_in, ".bai") == NULL){
-            fprintf(stderr, "[main_samview] incorrect index filename detected in arguments for -X option (looking for something ending with .bai). Aborting.\n");
-            return 1;
-        }
     }
 
     if (settings.multi_region) {

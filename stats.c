@@ -2426,25 +2426,17 @@ int main_stats(int argc, char *argv[])
     bam1_t *bam_line = bam_init1();
     if (!bam_line) goto cleanup_read_pairs;
 
-    if ( optind<argc )
-    {
+    if ( optind<argc ) {
         int filter = 1;
         // Prepare the region hash table for the multi-region iterator
         void *region_hash = NULL;
         if (!has_index_file) {
             region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
         } else if (has_index_file) {
-            if (optind < argc - 1){
-            region_hash = bed_hash_regions(NULL, argv, optind+1, argc, &filter);
+            if (optind < argc - 1) {
+                region_hash = bed_hash_regions(NULL, argv, optind+1, argc, &filter);
             } else {
-                if (strstr(argv[optind], ".bai") != NULL) {
-                fprintf(stderr, "If no region number(s) specified, no need to supply index file.\n");
                 goto whole_file;
-                }
-                else {
-                    fprintf(stderr, "Incorrect index filename provided.\n");
-                    return 1;
-                }
             }
             bam_idx_fname = argv[optind];
         } else {
