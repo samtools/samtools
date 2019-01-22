@@ -51,14 +51,17 @@ DEALINGS IN THE SOFTWARE.  */
 #define DEFAULT_QUALITY_TAG "QT"
 
 KHASH_SET_INIT_STR(rg)
+KHASH_SET_INIT_STR(bc)
 #define taglist_free(p)
 KLIST_INIT(ktaglist, char*, taglist_free)
 
 typedef khash_t(rg) *rghash_t;
+typedef khash_t(bc) *bchash_t;
 
 // This structure contains the settings for a samview run
 typedef struct samview_settings {
     rghash_t rghash;
+    bchash_t bchash;
     int min_mapQ;
     int flag_on;
     int flag_off;
@@ -72,6 +75,7 @@ typedef struct samview_settings {
     size_t remove_aux_len;
     char** remove_aux;
     int multi_region;
+    char* barcode_tag;
 } samview_settings_t;
 
 
@@ -107,6 +111,15 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         if (s) {
             khint_t k = kh_get(rg, settings->rghash, (char*)(s + 1));
             if (k == kh_end(settings->rghash)) return 1;
+        }
+    }
+    if (settings->bchash && settings->barcode_tag) {
+        uint8_t *s = bam_aux_get(b, settings->barcode_tag);
+        if (s) {
+            khint_t k = kh_get(bc, settings->bchash, (char*)(s + 1));
+            if (k == kh_end(settings->bchash)) return 1;
+        } else {
+            return 1;
         }
     }
     if (settings->library) {
@@ -217,6 +230,65 @@ static int add_read_groups_file(const char *subcmd, samview_settings_t *settings
     return (ret != -1) ? 0 : -1;
 }
 
+static int add_barcode_single(const char *subcmd, samview_settings_t *settings, char *name)
+{
+    char *d = strdup(name);
+    int ret = 0;
+
+    if (d == NULL) goto err;
+
+    if (settings->bchash == NULL) {
+        settings->bchash = kh_init(bc);
+        if (settings->bchash == NULL) goto err;
+    }
+
+    kh_put(bc, settings->bchash, d, &ret);
+    if (ret == -1) goto err;
+    if (ret ==  0) free(d); /* Duplicate */
+    return 0;
+
+ err:
+    print_error(subcmd, "Couldn't add \"%s\" to barcode list: memory exhausted?", name);
+    free(d);
+    return -1;
+}
+
+static int add_barcodes_file(const char *subcmd, samview_settings_t *settings, char *fn)
+{
+    FILE *fp;
+    char buf[1024];
+    int ret = 0;
+    if (settings->bchash == NULL) {
+        settings->bchash = kh_init(bc);
+        if (settings->bchash == NULL) {
+            perror(NULL);
+            return -1;
+        }
+    }
+
+    fp = fopen(fn, "r");
+    if (fp == NULL) {
+        print_error_errno(subcmd, "failed to open \"%s\" for reading", fn);
+        return -1;
+    }
+
+    while (ret != -1 && !feof(fp) && fscanf(fp, "%1023s", buf) > 0) {
+        char *d = strdup(buf);
+        if (d != NULL) {
+            kh_put(bc, settings->bchash, d, &ret);
+            if (ret == 0) free(d); /* Duplicate */
+        } else {
+            ret = -1;
+        }
+    }
+    if (ferror(fp)) ret = -1;
+    if (ret == -1) {
+        print_error_errno(subcmd, "failed to read \"%s\"", fn);
+    }
+    fclose(fp);
+    return (ret != -1) ? 0 : -1;
+}
+
 static inline int check_sam_write1(samFile *fp, const bam_hdr_t *h, const bam1_t *b, const char *fname, int *retp)
 {
     int r = sam_write1(fp, h, b);
@@ -257,6 +329,7 @@ int main_samview(int argc, char *argv[])
 
     samview_settings_t settings = {
         .rghash = NULL,
+        .bchash = NULL,
         .min_mapQ = 0,
         .flag_on = 0,
         .flag_off = 0,
@@ -267,7 +340,8 @@ int main_samview(int argc, char *argv[])
         .subsam_frac = -1.,
         .library = NULL,
         .bed = NULL,
-        .multi_region = 0
+        .multi_region = 0,
+        .barcode_tag = NULL
     };
 
     static const struct option lopts[] = {
@@ -288,7 +362,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:MX",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:d:D:L:s:@:m:x:U:MX",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -298,7 +372,7 @@ int main_samview(int argc, char *argv[])
                 srand(settings.subsam_seed);
                 settings.subsam_seed = rand();
             }
- 
+
             if (q && *q == '.') {
                 settings.subsam_frac = strtod(q, &q);
                 if (*q) ret = 1;
@@ -346,6 +420,45 @@ int main_samview(int argc, char *argv[])
             if (add_read_groups_file("view", &settings, optarg) != 0) {
                 ret = 1;
                 goto view_end;
+            }
+            break;
+        case 'd':
+            if (strlen(optarg) < 4 || optarg[2] != ':') {
+                print_error_errno("view", "Invalid barcode option: \"%s\"", optarg);
+                ret = 1;
+                goto view_end;
+            }
+
+            {
+            char* tmp = strdup(optarg);
+            tmp[2] = '\0';
+            settings.barcode_tag = strdup(tmp);
+            if (add_barcode_single("view", &settings, &tmp[3]) != 0) {
+                free(tmp);
+                ret = 1;
+                goto view_end;
+            }
+            free(tmp);
+            }
+            break;
+        case 'D':
+            if (strlen(optarg) < 4 || optarg[2] != ':') {
+                print_error_errno("view", "Invalid barcode option: \"%s\"", optarg);
+                ret = 1;
+                goto view_end;
+            }
+
+            {
+            char* tmp = strdup(optarg);
+            tmp[2] = '\0';
+            settings.barcode_tag = strdup(tmp);
+
+            if (add_barcodes_file("view", &settings, &tmp[3]) != 0) {
+                free(tmp);
+                ret = 1;
+                goto view_end;
+            }
+            free(tmp);
             }
             break;
                 /* REMOVED as htslib doesn't support this
@@ -664,8 +777,17 @@ view_end:
             if (kh_exist(settings.rghash, k)) free((char*)kh_key(settings.rghash, k));
         kh_destroy(rg, settings.rghash);
     }
+    if (settings.bchash) {
+        khint_t k;
+        for (k = 0; k < kh_end(settings.bchash); ++k)
+            if (kh_exist(settings.bchash, k)) free((char*)kh_key(settings.bchash, k));
+        kh_destroy(bc, settings.bchash);
+    }
     if (settings.remove_aux_len) {
         free(settings.remove_aux);
+    }
+    if (settings.barcode_tag) {
+        free(settings.barcode_tag);
     }
 
     if (p.pool)
@@ -698,6 +820,11 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -L FILE  only include reads overlapping this BED FILE [null]\n"
 "  -r STR   only include reads in read group STR [null]\n"
 "  -R FILE  only include reads with read group listed in FILE [null]\n"
+"  -d STR:STR\n"
+"           only include reads with barcode tag STR and barcode STR [null]\n"
+"  -D STR:FILE\n"
+"           only include reads with barcode tag STR and barcodes listed in\n"
+"           FILE [null]\n"
 "  -q INT   only include reads with mapping quality >= INT [0]\n"
 "  -l STR   only include reads in library STR [null]\n"
 "  -m INT   only include reads with number of CIGAR operations consuming\n"
