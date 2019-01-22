@@ -1009,6 +1009,8 @@ sub querylen
 #   $args->{flags_required} bits which must be set in flags (-f option)
 #   $args->{flags_rejected} bits which must not be set in flags (-F option)
 #   $args->{read_groups}    hash of read groups to output (-r or -R)
+#   $args->{tag}            tag used for checking if reads match tag_values (-d or -D)
+#   $args->{tag_values}     hash of values assocated with tag to output (-d or -D)
 #   $args->{libraries}      hash of libraries to output (-l)
 #   $args->{region}         region list to output (-L and region list)
 #   $args->{strip_tags}     hash of tags to strip from alignments (-x)
@@ -1061,11 +1063,14 @@ sub filter_sam
     my $flags_required = $args->{flags_required} || 0;
     my $flags_rejected = $args->{flags_rejected} || 0;
     my $read_groups    = $args->{read_groups};
+    my $tag            = $args->{tag};
+    my $tag_values     = $args->{tag_values};
     my $libraries      = $args->{libraries};
     my $region         = $args->{region};
     my $strip_tags     = $args->{strip_tags};
     my $min_qlen       = $args->{min_qlen} || 0;
-    my $body_filter = ($flags_required || $flags_rejected || $read_groups
+    my $body_filter = ($flags_required || $flags_rejected
+                       || $read_groups || $tag_values
                        || $min_map_qual || $libraries || $region
                        || $strip_tags || $min_qlen);
     my $lib_read_groups = $libraries ? {} : undef;
@@ -1108,6 +1113,13 @@ sub filter_sam
                     next if ($read_groups && !exists($read_groups->{$group||""}));
                     next if ($lib_read_groups
                              && !exists($lib_read_groups->{$group||""}));
+                }
+                if ($tag_values) {
+                    my $tag_value = '';
+                    for my $i (11 .. $#sam) {
+                        last if (($tag_value) = $sam[$i] =~ /^${tag}:Z:(.*)/);
+                    }
+                    next if (!exists($tag_values->{$tag_value||""}));
                 }
                 if ($region) {
                     my $in_range = 0;
@@ -1948,6 +1960,12 @@ sub test_view
     print $f "grp1\ngrp3\n" || die "Error writing to $fogn : $!\n";
     close($f) || die "Error writing to $fogn : $!\n";
 
+    # Barcodes file for -D test
+    my $fobc = "$$opts{tmp}/view.001.fobc";
+    open(my $f, '>', $fobc) || die "Couldn't open $fobc : $!\n";
+    print $f "ACGT\nAATTCCGG\n" || die "Error writing to $fobc : $!\n";
+    close($f) || die "Error writing to $fobc : $!\n";
+
 
     my @filter_tests = (
         # [test_name, {filter_sam options}, [samtools options], expect_fail]
@@ -1964,6 +1982,25 @@ sub test_view
          ['-R', $fogn, '-r', 'grp2'], 0],
         ['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
          ['-r', 'grp2', '-R', $fogn], 0],
+        # Tag with values
+        ['tv_BC_TGCA', { tag => 'BC', tag_values => { TGCA => 1 }},
+         ['-d', 'BC:TGCA'], 0],
+        ['tv_BC_fobc', { tag => 'BC', tag_values => { ACGT => 1, AATTCCGG => 1 }},
+         ['-D', "BC:${fobc}"], 0],
+        ['tv_D_and_d', { tag => 'BC', tag_values => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+         ['-D', "BC:${fobc}", '-d', 'BC:TGCA'], 0],
+        ['tv_d_and_D', { tag => "BC", tag_values => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+         ['-d', 'BC:TGCA', '-D', "BC:${fobc}"], 0],
+        ['tv_D_RG_fogn', { tag => 'RG', tag_values => { grp1 => 1, grp3 => 1 }},
+         ['-D', "RG:${fogn}"], 0],
+        ['tv_d_non_existent_tag', { tag => 'NE', tag_values => { TGCA => 1 }},
+         ['-d', 'NE:TGCA'], 0],
+        ['tv_d_no_tag', { tag => '', tag_values => { TGCA => 1 }},
+         ['-d', 'TGCA'], 1],
+        ['tv_D_invalid_tag_fobc', { tag => 'BClong', tag_values => { ACGT => 1, AATTCCGG => 1 }},
+         ['-D', "BClong:${fobc}"], 1],
+        ['tv_d_different_tags', { tag => 'BC', tag_values => { ACGT => 1, grp2 => 1 }},
+         ['-d', 'BC:ACGT', '-d', 'RG:grp2' ], 1],
         # Libraries
         ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
         ['lib3', { libraries => { 'Library 3' => 1 }}, ['-l', 'Library 3'], 0],

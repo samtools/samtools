@@ -89,6 +89,8 @@ The
 .BR -M ,
 .BR -r ,
 .BR -R ,
+.BR -d ,
+.BR -D ,
 .BR -s ,
 .BR -q ,
 .BR -l ,
@@ -254,6 +256,20 @@ Note that records with no
 tag will also be output when using this option.
 This behaviour may change in a future release.
 .TP
+.BI "-d " STR:STR
+Only output alignments with tag
+.I STR
+and associated value
+.I STR
+[null].
+.TP
+.BI "-D " STR:FILE
+Only output alignments with tag
+.I STR
+and associated values listed in
+.I FILE
+[null].
+.TP
 .BI "-q " INT
 Skip alignments with MAPQ smaller than
 .I INT
@@ -387,6 +403,26 @@ samtools view --input-fmt cram,decode_md=0 -o aln.new.bam aln.cram
 Include customized index file as a part of arugments.
 .EX 2
 samtools view [options] -X /data_folder/data.bam /index_folder/data.bai chrM:1-10
+.EE
+
+.IP o 2
+Output alignments in read group \fBgrp2\fR (records with no \fBRG\fR tag will also be in the output).
+.EX 2
+samtools view -r grp2 -o /data_folder/data.rg2.bam /data_folder/data.bam
+.EE
+
+.IP o 2
+Only keep reads with tag \fBBC\fR and were the barcode
+matches the barcodes listed in the barcode file.
+.EX 2
+samtools view -D BC:barcodes.txt -o /data_folder/data.barcodes.bam /data_folder/data.bam
+.EE
+
+.IP o 2
+Only keep reads with tag \fBRG\fR and read group \fBgrp2\fR.
+This does almost the same than \fB-r grp2\fR but will not keep records without the \fBRG\fR tag.
+.EX 2
+samtools view -d RG:grp2 -o /data_folder/data.rg2_only.bam /data_folder/data.bam
 .EE
 
 .SH AUTHOR
