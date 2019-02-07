@@ -45,7 +45,10 @@ samtools reheader \- replaces the header in the input file
 .PP
 samtools reheader
 .RB [ -iP ]
-.I in.header.sam in.bam
+[-c CMD | 
+.I in.header.sam
+] 
+.I in.bam
 
 .SH DESCRIPTION
 .PP
@@ -71,6 +74,18 @@ Do not generate an @PG header line.
 Perform the header edit in-place, if possible.  This only works on CRAM
 files and only if there is sufficient room to store the new header.
 The amount of space available will differ for each CRAM file.
+.TP 8
+.B -c, --command CMD
+Allow the header from 
+.I in.bam
+to be processed by external 
+.B CMD
+and read back the result. When used in this manner, the external header file
+.I in.header.sam
+has to be omitted.
+.B CMD
+must take the original header through stdin in SAM format and output the
+modified header to stdout.
 
 .SH AUTHOR
 .PP

@@ -1,7 +1,7 @@
 /*  bam_reheader.c -- reheader subcommand.
 
     Copyright (C) 2010 Broad Institute.
-    Copyright (C) 2012-2015 Genome Research Ltd.
+    Copyright (C) 2012-2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -43,7 +43,7 @@ DEALINGS IN THE SOFTWARE.  */
  * the header.    No checks are made to the validity.
  */
 int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
-                 const char *arg_list, int add_PG)
+                 const char *arg_list, int add_PG, int skip_header)
 {
     BGZF *fp = NULL;
     ssize_t len;
@@ -56,11 +56,15 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
         fprintf(stderr, "Out of memory\n");
         return -1;
     }
-    if ((tmp = bam_hdr_read(in)) == NULL) {
-        fprintf(stderr, "Couldn't read header\n");
-        goto fail;
+
+    if (!skip_header) {
+        if ((tmp = bam_hdr_read(in)) == NULL) {
+            fprintf(stderr, "Couldn't read header\n");
+            goto fail;
+        }
+        bam_hdr_destroy(tmp);
     }
-    bam_hdr_destroy(tmp);
+
     fp = bgzf_fdopen(fd, "w");
     if (!fp) {
         print_error_errno("reheader", "Couldn't open output file");
@@ -440,32 +444,123 @@ static void usage(FILE *fp, int ret) {
     fprintf(fp,
            "Usage: samtools reheader [-P] in.header.sam in.bam > out.bam\n"
            "   or  samtools reheader [-P] -i in.header.sam file.cram\n"
+           "   or  samtools reheader -c CMD in.bam\n"
+           "   or  samtools reheader -c CMD in.cram\n"
            "\n"
            "Options:\n"
-           "    -P, --no-PG      Do not generate an @PG header line.\n"
-           "    -i, --in-place   Modify the CRAM file directly, if possible.\n"
-           "                     (Defaults to outputting to stdout.)\n");
+           "    -P, --no-PG         Do not generate an @PG header line.\n"
+           "    -i, --in-place      Modify the CRAM file directly, if possible.\n"
+           "                        (Defaults to outputting to stdout.)\n"
+           "    -c, --command CMD   Pass the header in SAM format to external program CMD.\n");
     exit(ret);
+}
+
+static bam_hdr_t* external_reheader(samFile* in, const char* external) {
+    char *command = NULL;
+    bam_hdr_t* h = NULL;
+    bam_hdr_t* ih = sam_hdr_read(in);
+    if (ih == NULL) {
+        fprintf(stderr, "[%s] failed to read the header for '%s'.\n", __func__, in->fn);
+        return NULL;
+    }
+    char tmp_fn[] = "reheaderXXXXXX";
+    int tmp_fd = mkstemp(tmp_fn);
+    if (tmp_fd < 0) {
+        print_error_errno("reheader", "fail to open temp file '%s'", tmp_fn);
+        return NULL;
+    }
+    hFILE* tmp_hf = hdopen(tmp_fd, "w");
+    if (!tmp_hf) {
+        fprintf(stderr, "[%s] failed to convert to hFILE.\n", __func__);
+        goto cleanup;
+    }
+    samFile* tmp_sf = hts_hopen(tmp_hf, tmp_fn, "w");
+    if (!tmp_sf) {
+        fprintf(stderr, "[%s] failed to convert to samFile.\n", __func__);
+        goto cleanup;
+    }
+    if (-1 == sam_hdr_write(tmp_sf, ih)) {
+        fprintf(stderr, "[%s] failed to write the header to the temp file.\n", __func__);
+        goto cleanup;
+    }
+    sam_close(tmp_sf);
+    bam_hdr_destroy(ih);
+    int comm_len = strlen(external) + strlen(tmp_fn) + 8;
+    command = calloc(comm_len, 1);
+    if (!command || snprintf(command, comm_len, "( %s ) < %s", external, tmp_fn) != comm_len - 1) {
+        fprintf(stderr, "[%s] failed to create command string.\n", __func__);
+        goto cleanup;
+    }
+    FILE* nh = popen(command, "r");
+    if (!nh) {
+        print_error_errno("reheader", "[%s] failed to run external command '%s'.\n", __func__, command);
+        goto cleanup;
+    }
+
+    int nh_fd = dup(fileno(nh));
+    if (nh_fd < 0) {
+        fprintf(stderr, "[%s] failed to get the file descriptor.\n", __func__);
+        goto cleanup;
+    }
+    hFILE* nh_hf = hdopen(nh_fd, "r");
+    if (!nh_hf) {
+        fprintf(stderr, "[%s] failed to convert to hFILE.\n", __func__);
+        goto cleanup;
+    }
+    samFile* nh_sf = hts_hopen(nh_hf, tmp_fn, "r");
+    if (!nh_sf) {
+        fprintf(stderr, "[%s] failed to convert to samFile.\n", __func__);
+        goto cleanup;
+    }
+
+    h = sam_hdr_read(nh_sf);
+    sam_close(nh_sf);
+    if (h == NULL) {
+        fprintf(stderr, "[%s] failed to read the header from the temp file.\n", __func__);
+    }
+    int res = pclose(nh);
+    if (res != 0) {
+        if (res < 0) {
+            print_error_errno("reheader",
+                              "Error on closing pipe from command '%s'.\n",
+                              command);
+        } else {
+            print_error("reheader",
+                        "Non-zero exit code returned by command '%s'\n",
+                        command);
+        }
+        if (h) bam_hdr_destroy(h);
+        h = NULL;
+    }
+cleanup:
+    free(command);
+    if (unlink(tmp_fn) != 0) {
+        print_error_errno("reheader", "failed to remove the temp file '%s'", tmp_fn);
+    }
+
+    return h;
 }
 
 int main_reheader(int argc, char *argv[])
 {
-    int inplace = 0, r, add_PG = 1, c;
+    int inplace = 0, r, add_PG = 1, c, skip_header = 0;
     bam_hdr_t *h;
     samFile *in;
-    char *arg_list = stringify_argv(argc+1, argv-1);
+    char *arg_list = stringify_argv(argc+1, argv-1), *external = NULL;
 
     static const struct option lopts[] = {
         {"help",     no_argument, NULL, 'h'},
         {"in-place", no_argument, NULL, 'i'},
         {"no-PG",    no_argument, NULL, 'P'},
+        {"command", required_argument, NULL, 'c'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "hiP", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "hiPc:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'P': add_PG = 0; break;
         case 'i': inplace = 1; break;
+        case 'c': external = optarg; break;
         case 'h': usage(stdout, 0); break;
         default:
             fprintf(stderr, "Invalid option '%c'\n", c);
@@ -473,10 +568,24 @@ int main_reheader(int argc, char *argv[])
         }
     }
 
-    if (argc - optind != 2)
+    if ((argc - optind != 2 || external) && (argc - optind != 1 || !external))
         usage(stderr, 1);
 
-    { // read the header
+    if (external) {
+        skip_header = 1;
+        in = sam_open(argv[optind], inplace?"r+":"r");
+        if (in == 0) {
+            print_error_errno("reheader", "fail to open file '%s'", argv[optind]);
+            return 1;
+        }
+
+        h = external_reheader(in, external);
+        if (h == NULL) {
+            fprintf(stderr, "[%s] failed to read the header from '%s'.\n", __func__, external);
+            sam_close(in);
+            return 1;
+        }
+    } else { // read the header from a separate file
         samFile *fph = sam_open(argv[optind], "r");
         if (fph == 0) {
             print_error_errno("reheader", "fail to read the header from '%s'", argv[optind]);
@@ -489,18 +598,19 @@ int main_reheader(int argc, char *argv[])
                     __func__, argv[1]);
             return 1;
         }
+        in = sam_open(argv[optind+1], inplace?"r+":"r");
+        if (in == 0) {
+            print_error_errno("reheader", "fail to open file '%s'", argv[optind+1]);
+            return 1;
+        }
     }
-    in = sam_open(argv[optind+1], inplace?"r+":"r");
-    if (in == 0) {
-        print_error_errno("reheader", "fail to open file '%s'", argv[optind+1]);
-        return 1;
-    }
+
     if (hts_get_format(in)->format == bam) {
         if (inplace) {
             print_error("reheader", "cannot reheader BAM '%s' in-place", argv[optind+1]);
             r = -1;
         } else {
-            r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG);
+            r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG, skip_header);
         }
     } else if (hts_get_format(in)->format == cram) {
         if (inplace)

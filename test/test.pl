@@ -2865,6 +2865,18 @@ sub test_reheader
              err=>'reheader/3_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'",
 	     exp_fix=>1);
+
+    test_cmd($opts,
+             out=>'reheader/4_view1.sam.expected',
+             err=>'reheader/1_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader -c \"sed \'s/2014 Genome/2019 Genome/g\'\" $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
+	     exp_fix=>1);
+	     
+    test_cmd($opts,
+             out=>'reheader/5_view1.sam.expected',
+             err=>'reheader/1_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader -c \"sed \'s/2014 Genome/2019 Genome/g\'\" $fn.tmp.v30.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
+         exp_fix=>1);    
 }
 
 sub test_addrprg
