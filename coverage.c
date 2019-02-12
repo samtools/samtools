@@ -254,8 +254,8 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
                 fprintf(file_out, "%s", BLOCK_CHARS[cur_val_diff]);
             }
         }
-        fputc(' ', file_out);
         fprintf(file_out, VERTICAL_LINE);
+        fputc(' ', file_out);
         switch (i) {
             case 9: fprintf(file_out, "Number of reads: %i", stats->n_selected_reads); break;
             case 8: if (stats->n_reads - stats->n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats->n_reads - stats->n_selected_reads); break;
