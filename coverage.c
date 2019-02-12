@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 // C headers
 #include <config.h>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdarg.h>  // variadic functions
@@ -57,6 +58,8 @@ typedef struct {  // auxiliary data structure to hold a BAM file
     unsigned int n_reads;  // records the number of reads seen in file
     unsigned int n_selected_reads; // records the number of reads passing filter
     unsigned long summed_mapQ; // summed mapQ of all reads passing filter
+    int fail_flags;
+    int required_flags;
 } bam_aux_t;
 
 typedef struct {  // auxiliary data structure to hold stats on coverage
@@ -72,47 +75,68 @@ typedef struct {  // auxiliary data structure to hold stats on coverage
     int bin_width;
 } stats_aux_t;
 
+#if __STDC_VERSION__ >= 199901L
+#define VERTICAL_LINE "\u2502" // BOX DRAWINGS LIGHT VERTICAL
+
+// UTF8 specifies block characters in eights going from \u2581 (lower one eight block) to \u2588 (full block)
+//   https://en.wikipedia.org/wiki/Block_Elements
+// LOWER ONE EIGHTH BLOCK … FULL BLOCK
+static const char *const BLOCK_CHARS8[8] = {"\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"};
+// In some terminals / with some fonts not all UTF8 block characters are supported (e.g. Putty). Use only half and full block for those
+static const char *const BLOCK_CHARS2[2] = {"\u2584", "\u2588"};
+
+#else
+
+// Fall back to explicit UTF-8 encodings of the same characters
+#define VERTICAL_LINE "\xE2\x94\x82"
+
+static const char *const BLOCK_CHARS8*[8] = { 
+    "\xE2\x96\x81", "\xE2\x96\x82", "\xE2\x96\x83", "\xE2\x96\x84", 
+    "\xE2\x96\x85", "\xE2\x96\x86", "\xE2\x96\x87", "\xE2\x96\x88" };
+
+static const char *const BLOCK_CHARS2[2] = {"\xE2\x96\x84", "\xE2\x96\x88"};
+
+#endif
+
+// in bam_plcmd.c
 int read_file_list(const char *file_list, int *n, char **argv[]);
 
-static int usage(int status) {
-    fprintf(stderr, "\nUsage: samtools coverage [options] in1.bam [in2.bam [...]]\n"
-                    "Options:\n"
-                    "  -o FILE           where to write output to [stdout]\n"
-                    "  -l <int>          read length threshold - ignore reads shorter than <int> [0]\n"
-                    "  -q <int>          base quality threshold [0]\n"
-                    "  -Q <int>          mapping quality threshold [0]\n"
-                    "  -H                print a file header\n"
-                    "  -m                show histogram instead of tabular output\n"
-                    "  -w <int>          number of bins in histogram. Set to 0 to use terminal width [50]\n"
-                    "  -r <chr:from-to>  Show region on chromosome chr. \n"
-                    "  -h                help (this page)\n"
-                    "  -v                version of this command\n"
-                    "\nGlobal options:\n");
+static int usage() {
+    fprintf(stdout, "Usage: samtools coverage [options] in1.bam [in2.bam [...]]\n\n"
+                    "Input options:\n"
+                    "  -b, --bam-list FILE     list of input BAM filenames, one per line\n"
+                    "  -l, --min-read-len INT  ignore reads shorter than INT bp [0]\n"
+                    "  -q, --min-MQ INT        base quality threshold [0]\n"
+                    "  -Q, --min-BQ INT        mapping quality threshold [0]\n"
+                    "  --rf <int|str>          required flags: skip reads with mask bits unset []\n"
+                    "  --ff <int|str>          filter flags: skip reads with mask bits set \n"
+                    "                                      [UNMAP,SECONDARY,QCFAIL,DUP]\n"
+                    "Output options:\n"
+                    "  -m, --histogram         show histogram instead of tabular output\n"
+                    "  -o, --output FILE       write output to FILE [stdout]\n"
+                    "  -H, --no-header         don't print a header in tabular mode\n"
+                    "  -U, --full-utf          full UTF8 mode for histogram for finer resolution\n"
+                    "  -w, --n-bins INT        number of bins in histogram. If 0, use terminal width [50]\n"
+                    "  -r, --region REG        show specified region. Format: chr:start-end. \n"
+                    "  -h, --help              help (this page)\n");
 
-    sam_global_opt_help(stderr, "-.--.-");
+    fprintf(stdout, "\nGeneric options:\n");
+    sam_global_opt_help(stdout, "-.--.-");
 
-    fprintf(stderr, 
-            "\nThe tabular output is a simple tab-seperate table with 7 columns:\n"
-                    "  1. Reference name / chromosome\n"
-                    "  2. Start position\n"
-                    "  3. End position (or sequence length)\n"
-                    "  4. Number reads aligned to the region\n"
-                    "  5. Number of covered bases with depth >= 1\n"
-                    "  6. Percent of covered bases\n"
-                    "  7. Average coverage depth\n"
-                    "  8. Average baseQ in covered region\n"
-                    "  9. Average mapQ of selected reads\n"
+    fprintf(stdout, 
+            "\nSee manpage for additional details.\n"
+                    "  rname       Reference name / chromosome\n"
+                    "  startpos    Start position\n"
+                    "  endpos      End position (or sequence length)\n"
+                    "  numreads    Number reads aligned to the region (after filtering)\n"
+                    "  covbases    Number of covered bases with depth >= 1\n"
+                    "  coverage    Proportion of covered bases [0..1]\n"
+                    "  meandepth   Mean depth of coverage\n"
+                    "  meanbaseq   Mean baseQ in covered region\n"
+                    "  meanmapq    Mean mapQ of selected reads\n"
                     );
 
-    return status;
-}
-
-static int version(int status) {
-    fprintf(stderr,
-    "┌┐ ┌─┐┌┬┐┌─┐┌─┐┬  ┬\n"
-    "├┴┐├─┤││││  │ │└┐┌┘\n"
-    "└─┘┴ ┴┴ ┴└─┘└─┘ └┘   v%s\n", VERSION);
-    return status;
+    return EXIT_SUCCESS;
 }
 
 char* centerText(char *text, char *buf, int width) {
@@ -150,20 +174,17 @@ void set_read_counts(bam_aux_t **data, stats_aux_t *stats, int n_bam_files) {
     }
 }
 
-// UTF8 specifies block characters in eights going from \u2581 (lower one eight block) to \u2588 (full block)
-//   https://en.wikipedia.org/wiki/Block_Elements
-const char* BLOCK_CHARS[8] = {"\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"};
-
 // read one alignment from one BAM file
 static int read_bam(void *data, bam1_t *b) {
     bam_aux_t *aux = (bam_aux_t*)data; // data in fact is a pointer to an auxiliary structure
     int ret;
     while (1) {
-        ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->hdr, b);
-        if ( ret<0 ) break;
-        if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
+        if((ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->hdr, b)) < 0) break;
         ++aux->n_reads;
-        if ( (int)b->core.qual < aux->min_mapQ ) continue;
+
+        if ( aux->fail_flags && b->core.flag & aux->fail_flags ) continue;
+        if ( aux->required_flags && !(b->core.flag & aux->required_flags) ) continue;
+        if ( b->core.qual < aux->min_mapQ ) continue;
         if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
         ++aux->n_selected_reads;
         aux->summed_mapQ += b->core.qual;
@@ -188,10 +209,12 @@ void print_tabular_line(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *s
 }
 
 void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, const uint32_t *hist, 
-                const int hist_size) {
-    int i;
+                const int hist_size, const bool full_utf) {
+    int i, col;
     bool show_percentiles = false;
     const int n_rows = 10;
+    const char * const * BLOCK_CHARS = full_utf? BLOCK_CHARS8 : BLOCK_CHARS2;
+    const int blockchar_len = full_utf? 8 : 2;
     /*
     if (stats->beg == 0) {
         stats->end = h->target_len[stats->tid];
@@ -200,66 +223,52 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
     double region_len = stats->end - stats->beg;
 
     // Calculate histogram that contains percent covered
-    double hist_d[hist_size];
-    for (i = 0; i < hist_size; ++i) {
-        hist_d[i] = 100 * hist[i] / (double) stats->bin_width;
-        //std::cerr << col_bin_size * i << "," << hist_d[i] << "\n";
-        //std::cerr << "{x:" << col_bin_size * i << ",y:" << hist_d[i] << "},";
-    }
-    //std::cerr << std::endl;
-    //return;
-
+    double hist_data[hist_size];
     double max_val = 0.0;
     for (i = 0; i < hist_size; ++i) {
-        if (hist_d[i] > max_val) max_val = hist_d[i];
+        hist_data[i] = 100 * hist[i] / (double) stats->bin_width;
+        if (hist_data[i] > max_val) max_val = hist_data[i];
     }
 
     char buf[100];
     fprintf(file_out, "%s (%sbp)\n", h->target_name[stats->tid], readable_bps(h->target_len[stats->tid], buf));
     
     double row_bin_size = max_val / (double) n_rows;
-    int col;
-
     for (i = n_rows-1; i >= 0; --i) {
         double current_bin = row_bin_size * i;
         if (show_percentiles) {
             fprintf(file_out, ">%3i%% \u2502", i*10);
         } else {
-            //if (i == 0) 
-            //    fprintf(file_out, ">%7.2f%% \u23A3", current_bin);
-            //else
             fprintf(file_out, ">%7.2f%% \u2502", current_bin);
         }
         for (col = 0; col < hist_size; ++col) {
-            // get the difference in eights
-            int cur_val_diff = round(8 * (hist_d[col] - current_bin) / row_bin_size);
-            if (cur_val_diff == 0) {
-                fputc('_', file_out);
-            } else if (cur_val_diff > 0) {
-                if (cur_val_diff > 8)
-                    cur_val_diff = 8;
-                fprintf(file_out, "%s", BLOCK_CHARS[cur_val_diff-1]);
-            } else {
+            // get the difference in eights, or halfs when full UTF8 is not supported
+            int cur_val_diff = round(blockchar_len * (hist_data[col] - current_bin) / row_bin_size) - 1;
+            if (cur_val_diff < 0) {
                 fputc(' ', file_out);
+            } else {
+                if (cur_val_diff >= blockchar_len)
+                    cur_val_diff = blockchar_len - 1;
+
+                fprintf(file_out, "%s", BLOCK_CHARS[cur_val_diff]);
             }
         }
         fprintf(file_out, "\u2502 ");
-        //fprintf(file_out, "  ");
         switch (i) {
-            case 9: fprintf(file_out, "Number of reads:  %i", stats->n_selected_reads); break;
+            case 9: fprintf(file_out, "Number of reads: %i", stats->n_selected_reads); break;
             case 8: if (stats->n_reads - stats->n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats->n_reads - stats->n_selected_reads); break;
-            case 7: fprintf(file_out, "Covered bases:    %sbp", readable_bps(stats->n_covered_bases, buf)); break;
-            case 6: fprintf(file_out, "Percent covered:  %.4g%%", 
+            case 7: fprintf(file_out, "Covered bases:   %sbp", readable_bps(stats->n_covered_bases, buf)); break;
+            case 6: fprintf(file_out, "Percent covered: %.4g%%", 
                             100.0 * stats->n_covered_bases / region_len); break;
-            case 5: fprintf(file_out, "Average coverage: %.3gx",
+            case 5: fprintf(file_out, "Mean coverage:   %.3gx",
                             stats->summed_coverage / region_len); break;
-            case 4: fprintf(file_out, "Average baseQ:    %.3g",
+            case 4: fprintf(file_out, "Mean baseQ:      %.3g",
                             stats->summed_baseQ/(double) stats->summed_coverage); break;
-            case 3: fprintf(file_out, "Average mapQ:     %.3g",
+            case 3: fprintf(file_out, "Mean mapQ:       %.3g",
                             stats->summed_mapQ/(double) stats->n_selected_reads); break;
-            case 1: fprintf(file_out, "Histo bin width:  %sbp",
+            case 1: fprintf(file_out, "Histo bin width: %sbp",
                             readable_bps(stats->bin_width, buf)); break;
-            case 0: fprintf(file_out, "Histo max bin:    %.5g%%", max_val); break;
+            case 0: fprintf(file_out, "Histo max bin:   %.5g%%", max_val); break;
         };
         fputc('\n', file_out);
     }
@@ -294,49 +303,80 @@ int main_coverage(int argc, char *argv[]) {
     char *opt_reg = 0; // specified region
     char *opt_file_list = NULL;
     int n_bam_files = 0;
+    int fail_flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP); // Default fail flags
+    int required_flags = 0;
 
     int *n_plp;
     bam_hdr_t *h = NULL; // BAM header of the 1st input
 
-    bool opt_print_header = false;
+    bool opt_print_header = true;
     bool opt_print_tabular = true;
     bool opt_print_histogram = false;
     bool *covered_tids;
+    bool opt_full_utf = false;
 
-    int current_tid = -1;
     FILE *file_out = stdout;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
+        {"rf", required_argument, NULL, 1}, // require flag
+        {"ff", required_argument, NULL, 2}, // filter flag
+        {"incl-flags", required_argument, NULL, 1}, // require flag
+        {"excl-flags", required_argument, NULL, 2}, // filter flag
+        {"bam-list", required_argument, NULL, 'b'},
+        {"min-read-len", required_argument, NULL, 'L'},
+        {"min-MQ", required_argument, NULL, 'q'},
+        {"min-mq", required_argument, NULL, 'q'},
+        {"min-BQ", required_argument, NULL, 'Q'},
+        {"min-bq", required_argument, NULL, 'Q'},
+        {"histogram", no_argument, NULL, 'm'},
+        {"output", required_argument, NULL, 'o'},
+        {"no-header", required_argument, NULL, 'H'},
+        {"full-utf", no_argument, NULL, 'U'},
+        {"n-bins", required_argument, NULL, 'w'},
+        {"region", required_argument, NULL, 'r'},
+        {"help", no_argument, NULL, 'h'},
         { NULL, 0, NULL, 0 }
     };
 
     // parse the command line
     int c;
-    while ((c = getopt_long(argc, argv, "o:l:q:Q:hHw:vr:f:m", lopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "o:L:q:Q:hHw:r:b:mU", lopts, NULL)) != -1) {
             switch (c) {
+                case 1:
+                        if ((required_flags = bam_str2flag(optarg)) < 0) {
+                             fprintf(stderr,"Could not parse --rf %s\n", optarg); return EXIT_FAILURE;
+                         }; break;
+                case 2:
+                        if ((fail_flags = bam_str2flag(optarg)) < 0) {
+                             fprintf(stderr,"Could not parse --ff %s\n", optarg); return EXIT_FAILURE;
+                         }; break;
                 case 'o': opt_output_file = optarg; break;
-                case 'l': opt_min_len = atoi(optarg); break;
+                case 'L': opt_min_len = atoi(optarg); break;
                 case 'q': opt_min_baseQ = atoi(optarg); break;
                 case 'Q': opt_min_mapQ = atoi(optarg); break;
                 case 'w': opt_n_bins = atoi(optarg); break;
-                case 'r': opt_reg = strdup(optarg); break;   // parsing a region requires a BAM header
-                case 'f': opt_file_list = optarg; break;
+                case 'r': opt_reg = optarg; break;   // parsing a region requires a BAM header (strdup unnecessary)
+                case 'b': opt_file_list = optarg; break;
                 case 'm': opt_print_histogram = true; opt_print_tabular = false; break;
-                case 'H': opt_print_header = true; break;
-                case 'h': return usage(EXIT_SUCCESS);
-                case 'v': return version(EXIT_SUCCESS);
+                case 'U': opt_full_utf = true; break;
+                case 'H': opt_print_header = false; break;
+                case 'h': return usage();
                 default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
-                case '?': return usage(EXIT_FAILURE);
+                case '?': 
+                   if (optopt == 'c')
+                      fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+                    else if (isprint (optopt))
+                      fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+                    else
+                      fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
+                    return 1;
             }
     }
-
-    bool compute_histogram = opt_print_histogram;
-
     if (optind == argc && !opt_file_list) 
-        return usage(EXIT_SUCCESS);
+        return usage();
 
     // output file provided by user
     if (opt_output_file != NULL && strcmp(opt_output_file,"-")!=0) {
@@ -355,10 +395,9 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    //setvbuf(file_out, NULL, _IONBF, 0); //turn off buffering
+    // setvbuf(file_out, NULL, _IONBF, 0); //turn off buffering
 
     // Open all BAM files
-    
     if (opt_file_list) {
         // Read file names from opt_file_list into argv, and record the number of files in n_bam_files
         if ( read_file_list(opt_file_list, &n_bam_files, &argv) ) {
@@ -399,6 +438,8 @@ int main_coverage(int argc, char *argv[]) {
         data[i]->min_mapQ = opt_min_mapQ;            // set the mapQ filter
         data[i]->min_len  = opt_min_len;             // set the qlen filter
         data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
+        data[i]->fail_flags = fail_flags;
+        data[i]->required_flags = required_flags;
         if (data[i]->hdr == NULL) {
             print_error_errno("coverage", "Couldn't read header for \"%s\"", argv[optind+i]);
             status = EXIT_FAILURE;
@@ -424,25 +465,29 @@ int main_coverage(int argc, char *argv[]) {
     }
 
     if (opt_print_tabular && opt_print_header)
-        fputs("#CHROM\tSTART\tEND\tN_READS\tN_COVERED_BASES\tPERCENT_COVERED\tAVG_COV\tAVG_BASEQ\tAVG_MAPQ\n", file_out);
-
+        fputs("#rname\tstartpos\tendpos\tnumreads\tcovbases\tcoverage\tmeandepth\tmeanbaseq\tmeanmapq\n", file_out);
 
     h = data[0]->hdr; // easy access to the header of the 1st BAM
     covered_tids = calloc(h->n_targets, sizeof(bool));
     stats_aux_t *stats = calloc(1, sizeof(stats_aux_t));
 
-    bool reg_sets_end = false;
+    int n_bins = opt_n_bins;
     if (opt_reg) {
+        stats->tid = data[0]->iter->tid;
         stats->beg = data[0]->iter->beg; // and to the parsed region coordinates
         stats->end = data[0]->iter->end;
-        stats->tid = data[0]->iter->tid;
-        stats->bin_width = (stats->end-stats->beg) / opt_n_bins;
-        reg_sets_end = stats->end != INT_MAX;
+        if (stats->end == INT_MAX) {
+            stats->end = h->target_len[stats->tid];
+        }
+        if (opt_n_bins > stats->end - stats->beg) {
+            n_bins = stats->end - stats->beg;
+        }
+        stats->bin_width = (stats->end-stats->beg) / n_bins;
     } else {
         stats->tid = -1;
     }
 
-    int current_bin;
+    int current_bin = 0;
 
     // the core multi-pileup loop
     mplp = bam_mplp_init(n_bam_files, read_bam, (void**)data); // initialization
@@ -454,45 +499,41 @@ int main_coverage(int argc, char *argv[]) {
 
     // Extra info for histogram and coverage counting
     uint32_t *hist = (uint32_t*) calloc(opt_n_bins, sizeof(uint32_t));
-    //uint32_t **hists_for_html = (uint32_t**) calloc(opt_n_bins*h->n_targets, sizeof(uint32_t));
-    //stats_aux_t **stats_for_html = (stats_aux_t*) calloc(h->n_targets, sizeof(stats_aux_t));
-    
+
     n_plp = (int*) calloc(n_bam_files, sizeof(int*)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = (const bam_pileup1_t**) calloc(n_bam_files, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
     while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
-        if (tid != stats->tid) {
-            if (stats->tid >= 0) {
+
+        if (tid != stats->tid) { // Next target sequence
+            if (stats->tid >= 0) { // It's not the first sequence, print results
                 set_read_counts(data, stats, n_bam_files);
                 if (opt_print_histogram) {
-                    print_hist(file_out, h, stats, hist, opt_n_bins);
+                    print_hist(file_out, h, stats, hist, n_bins, opt_full_utf);
                     fputc('\n', file_out);
                 } else if (opt_print_tabular) {
                     print_tabular_line(file_out, h, stats);
                 }
 
-                for (i = 0; i < n_bam_files && data[i]; ++i) {
-                    data[i]->n_reads = 0;
-                    data[i]->n_selected_reads = 0;
-                }
-
+                // reset data
                 memset(stats, 0, sizeof(stats_aux_t));
-
-                if (compute_histogram)
-                    memset(hist, 0, opt_n_bins*sizeof(uint32_t));
+                if (opt_print_histogram)
+                    memset(hist, 0, n_bins*sizeof(uint32_t));
             }
 
             stats->tid = tid;
             covered_tids[tid] = true;
-            if (!reg_sets_end)
+            if (!opt_reg)
                 stats->end = h->target_len[tid];
 
-            if (compute_histogram) 
-                stats->bin_width = (stats->end-stats->beg) / opt_n_bins;
+            if (opt_print_histogram) {
+                n_bins = opt_n_bins > stats->end-stats->beg? stats->end-stats->beg : opt_n_bins;
+                stats->bin_width = (stats->end-stats->beg) / n_bins;
+            }
         }
         if (pos < stats->beg || pos >= stats->end) continue; // out of range; skip
         if (tid >= h->n_targets) continue;     // diff number of @SQ lines per file?
 
-        if (compute_histogram) {
+        if (opt_print_histogram) {
             current_bin = (pos - stats->beg) / stats->bin_width;
         }
 
@@ -517,7 +558,7 @@ int main_coverage(int argc, char *argv[]) {
         }
         if (count_base) {
             ++(stats->n_covered_bases);
-            if (compute_histogram && current_bin < opt_n_bins)
+            if (opt_print_histogram && current_bin < n_bins)
                 ++(hist[current_bin]); // Histogram based on breadth of coverage
         }
     }
@@ -525,7 +566,7 @@ int main_coverage(int argc, char *argv[]) {
     if (stats->tid != -1) {
         set_read_counts(data, stats, n_bam_files);
         if (opt_print_histogram) {
-            print_hist(file_out, h, stats, hist, opt_n_bins);
+            print_hist(file_out, h, stats, hist, n_bins, opt_full_utf);
         } else if (opt_print_tabular) {
             print_tabular_line(file_out, h, stats);
         }
@@ -555,7 +596,7 @@ int main_coverage(int argc, char *argv[]) {
 
 coverage_end:
     // Close files and free data structures
-    if (fclose(file_out) != 0) {
+    if (!(file_out == stdout || fclose(file_out) == 0)) {
         if (status == EXIT_SUCCESS) {
             print_error_errno("coverage", "error on closing \"%s\"", 
                     (opt_output_file && strcmp(opt_output_file, "-") != 0?
@@ -571,7 +612,6 @@ coverage_end:
     }
 
     free(data); 
-    free(opt_reg);
     if (opt_file_list) {
         for (i = 0; i < n_bam_files; ++i) {
             free(argv[i]);
