@@ -237,10 +237,11 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
     for (i = n_rows-1; i >= 0; --i) {
         double current_bin = row_bin_size * i;
         if (show_percentiles) {
-            fprintf(file_out, ">%3i%% \u2502", i*10);
+            fprintf(file_out, ">%3i%% ", i*10);
         } else {
-            fprintf(file_out, ">%7.2f%% \u2502", current_bin);
+            fprintf(file_out, ">%7.2f%% ", current_bin);
         }
+        fprintf(file_out, VERTICAL_LINE);
         for (col = 0; col < hist_size; ++col) {
             // get the difference in eights, or halfs when full UTF8 is not supported
             int cur_val_diff = round(blockchar_len * (hist_data[col] - current_bin) / row_bin_size) - 1;
@@ -253,7 +254,8 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
                 fprintf(file_out, "%s", BLOCK_CHARS[cur_val_diff]);
             }
         }
-        fprintf(file_out, "\u2502 ");
+        fputc(' ', file_out);
+        fprintf(file_out, VERTICAL_LINE);
         switch (i) {
             case 9: fprintf(file_out, "Number of reads: %i", stats->n_selected_reads); break;
             case 8: if (stats->n_reads - stats->n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats->n_reads - stats->n_selected_reads); break;
