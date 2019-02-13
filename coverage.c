@@ -90,7 +90,7 @@ static const char *const BLOCK_CHARS2[2] = {"\u2584", "\u2588"};
 // Fall back to explicit UTF-8 encodings of the same characters
 #define VERTICAL_LINE "\xE2\x94\x82"
 
-static const char *const BLOCK_CHARS8*[8] = { 
+static const char *const BLOCK_CHARS8[8] = { 
     "\xE2\x96\x81", "\xE2\x96\x82", "\xE2\x96\x83", "\xE2\x96\x84", 
     "\xE2\x96\x85", "\xE2\x96\x86", "\xE2\x96\x87", "\xE2\x96\x88" };
 
