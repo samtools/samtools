@@ -40,7 +40,24 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
+
+#if defined (__has_include)
+  #if __has_include(<sys/ioctl.h>)
+    #include <sys/ioctl.h>
+    #define has_ioctl
+  #elif __has_include(<windows.h>)
+    #include <windows.h>
+    #define has_windows
+  #endif
+#else
+  #if defined (__MSYS__) || defined (__CYGWIN__) || defined (_WIN32)
+    #include <windows.h>
+    #define has_windows
+  #else
+    #include <sys/ioctl.h>
+    #define has_ioctl
+  #endif
+#endif
 
 #include "htslib/sam.h"
 #include "htslib/hts.h"
@@ -113,10 +130,10 @@ static int usage() {
                     "                                      [UNMAP,SECONDARY,QCFAIL,DUP]\n"
                     "Output options:\n"
                     "  -m, --histogram         show histogram instead of tabular output\n"
+                    "  -M, --Histogram         show histogram with full UTF8 mode for finer resolution\n"
                     "  -o, --output FILE       write output to FILE [stdout]\n"
                     "  -H, --no-header         don't print a header in tabular mode\n"
-                    "  -U, --full-utf          full UTF8 mode for histogram for finer resolution\n"
-                    "  -w, --n-bins INT        number of bins in histogram. If 0, use terminal width [50]\n"
+                    "  -w, --n-bins INT        number of bins in histogram [terminal width - 40]\n"
                     "  -r, --region REG        show specified region. Format: chr:start-end. \n"
                     "  -h, --help              help (this page)\n");
 
@@ -298,6 +315,7 @@ int main_coverage(int argc, char *argv[]) {
     int opt_min_mapQ = 0;
     int opt_min_len = 0;
     int opt_n_bins = 50;
+    bool opt_full_width = true;
     char *opt_output_file = NULL;
     bam_aux_t **data;
     bam_mplp_t mplp;
@@ -333,10 +351,11 @@ int main_coverage(int argc, char *argv[]) {
         {"min-BQ", required_argument, NULL, 'Q'},
         {"min-bq", required_argument, NULL, 'Q'},
         {"histogram", no_argument, NULL, 'm'},
+        {"Histogram", no_argument, NULL, 'M'},
         {"output", required_argument, NULL, 'o'},
         {"no-header", required_argument, NULL, 'H'},
-        {"full-utf", no_argument, NULL, 'U'},
         {"n-bins", required_argument, NULL, 'w'},
+        {"full-width", required_argument, NULL, 'W'},
         {"region", required_argument, NULL, 'r'},
         {"help", no_argument, NULL, 'h'},
         { NULL, 0, NULL, 0 }
@@ -344,7 +363,7 @@ int main_coverage(int argc, char *argv[]) {
 
     // parse the command line
     int c;
-    while ((c = getopt_long(argc, argv, "o:L:q:Q:hHw:r:b:mU", lopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "o:L:q:Q:hHw:r:b:mM", lopts, NULL)) != -1) {
             switch (c) {
                 case 1:
                         if ((required_flags = bam_str2flag(optarg)) < 0) {
@@ -354,15 +373,19 @@ int main_coverage(int argc, char *argv[]) {
                         if ((fail_flags = bam_str2flag(optarg)) < 0) {
                              fprintf(stderr,"Could not parse --ff %s\n", optarg); return EXIT_FAILURE;
                          }; break;
-                case 'o': opt_output_file = optarg; break;
+                case 'o': opt_output_file = optarg; opt_full_width = false; break;
                 case 'L': opt_min_len = atoi(optarg); break;
                 case 'q': opt_min_baseQ = atoi(optarg); break;
                 case 'Q': opt_min_mapQ = atoi(optarg); break;
-                case 'w': opt_n_bins = atoi(optarg); break;
+                case 'w': opt_n_bins = atoi(optarg); opt_full_width = false;
+                          opt_print_histogram = true; opt_print_tabular = false; 
+			              break;
                 case 'r': opt_reg = optarg; break;   // parsing a region requires a BAM header (strdup unnecessary)
                 case 'b': opt_file_list = optarg; break;
                 case 'm': opt_print_histogram = true; opt_print_tabular = false; break;
-                case 'U': opt_full_utf = true; break;
+                case 'M': opt_full_utf = true; 
+                          opt_print_histogram = true; opt_print_tabular = false; 
+                          break;
                 case 'H': opt_print_header = false; break;
                 case 'h': return usage();
                 default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
@@ -389,12 +412,28 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    if (opt_n_bins <= 0) {
-        // get number of lines and columns of terminal
-        struct winsize w; // lines are in field ws_row, columns in field ws_col
-        if (ioctl(2, TIOCGWINSZ, &w) == 0 && w.ws_col > 60) {
-            opt_n_bins = w.ws_col - 40;
+    if (opt_n_bins <= 0 || opt_full_width) {
+        // get number of columns of terminal
+        const char* ccolumns = getenv("COLUMNS");
+        int columns = 0;
+        if (ccolumns == NULL) {
+#if defined has_windows
+            CONSOLE_SCREEN_BUFFER_INFO csbi;
+            GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
+	    columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+#elif defined has_ioctl
+            struct winsize w; 
+            if (ioctl(2, TIOCGWINSZ, &w) == 0)
+                columns = w.ws_col;
+#endif
+        } else {
+            columns = atoi(ccolumns); // atoi(NULL) returns 0
         }
+        if (columns > 60) {
+            opt_n_bins = columns - 40;
+        } else {
+            opt_n_bins = 50;
+	}
     }
 
     // setvbuf(file_out, NULL, _IONBF, 0); //turn off buffering
