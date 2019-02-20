@@ -511,9 +511,15 @@ static khash_t(set64) *loadpos(const char *fn, bam_hdr_t *h)
     kstring_t *str;
     khash_t(set64) *hash;
 
+    fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
+    if (fp == NULL) {
+        print_error_errno("phase", "Couldn't open site file '%s'", fn);
+        return NULL;
+    }
+
     hash = kh_init(set64);
     str = calloc(1, sizeof(kstring_t));
-    fp = strcmp(fn, "-")? gzopen(fn, "r") : gzdopen(fileno(stdin), "r");
+
     ks = ks_init(fp);
     while (ks_getuntil(ks, 0, str, &dret) >= 0) {
         int tid = bam_name2id(h, str->s);
@@ -638,6 +644,7 @@ int main_phase(int argc, char *argv[])
     }
     if (fn_list) { // read the list of sites to phase
         set = loadpos(fn_list, g.fp_hdr);
+        if (set == NULL) return 1;
         free(fn_list);
     } else g.flag &= ~FLAG_LIST_EXCL;
     if (g.pre) { // open BAMs to write

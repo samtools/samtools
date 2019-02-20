@@ -34,6 +34,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
 #include "htslib/thread_pool.h"
+#include "samtools.h"
 #include "sam_opts.h"
 
 #include "htslib/kseq.h"
@@ -139,6 +140,10 @@ int main_bedcov(int argc, char *argv[])
     cnt = calloc(n, 8);
 
     fp = gzopen(argv[optind], "rb");
+    if (fp == NULL) {
+        print_error_errno("bedcov", "can't open BED file '%s'", argv[optind]);
+        return 2;
+    }
     ks = ks_init(fp);
     n_plp = calloc(n, sizeof(int));
     plp = calloc(n, sizeof(bam_pileup1_t*));
