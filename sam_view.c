@@ -46,6 +46,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 #include "bedidx.h"
+#include "sam_hooks.h"
 
 #define DEFAULT_BARCODE_TAG "BC"
 #define DEFAULT_QUALITY_TAG "QT"
@@ -72,6 +73,7 @@ typedef struct samview_settings {
     size_t remove_aux_len;
     char** remove_aux;
     int multi_region;
+    struct sam_hook_t* hook;
 } samview_settings_t;
 
 
@@ -95,6 +97,8 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off))
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
+        return 1;
+    if (settings->hook && !settings->hook->accept(settings->hook,h,b))
         return 1;
     if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
         return 1;
@@ -254,6 +258,7 @@ int main_samview(int argc, char *argv[])
     htsThreadPool p = {NULL, 0};
     int filter_state = ALL, filter_op = 0;
     int result;
+    char* hook_name = NULL;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -267,7 +272,8 @@ int main_samview(int argc, char *argv[])
         .subsam_frac = -1.,
         .library = NULL,
         .bed = NULL,
-        .multi_region = 0
+        .multi_region = 0,
+        .hook = NULL
     };
 
     static const struct option lopts[] = {
@@ -288,7 +294,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:MX",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:L:s:@:m:x:U:MXk:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -311,6 +317,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
             break;
+        case 'k': hook_name = strdup(optarg); break;
         case 'm': settings.min_qlen = atoi(optarg); break;
         case 'c': is_count = 1; break;
         case 'S': break;
@@ -430,6 +437,9 @@ int main_samview(int argc, char *argv[])
         ret = 1;
         goto view_end;
     }
+    
+
+
     if (settings.rghash) { // FIXME: I do not know what "bam_header_t::n_text" is for...
         char *tmp;
         int l;
@@ -505,6 +515,18 @@ int main_samview(int argc, char *argv[])
         if (out) hts_set_opt(out, HTS_OPT_THREAD_POOL, &p);
     }
     if (is_header_only) goto view_end; // no need to print alignments
+
+    if(hook_name != NULL) {
+        settings.hook  =  hook_load_by_name(hook_name);
+	if( settings.hook == NULL) {
+            fprintf(stderr, "[main_samview] cannot load hook \"%s\". Aborting.\n",hook_name);
+            return 1;
+            }
+        if(settings.hook->initialize!=NULL && !settings.hook->initialize(settings.hook,header)) {
+            fprintf(stderr, "[main_samview] cannot initialize hook \"%s\". Aborting.\n",hook_name);
+            return 1;
+            }
+	}
 
     if (has_index_file) {
         fn_idx_in = (optind+1 < argc)? argv[optind+1] : 0;
@@ -668,8 +690,12 @@ view_end:
         free(settings.remove_aux);
     }
 
+    if(settings.hook!=NULL && settings.hook->dispose!=NULL) {
+       settings.hook->dispose(settings.hook);
+    }
     if (p.pool)
         hts_tpool_destroy(p.pool);
+
 
     return ret;
 }
@@ -712,6 +738,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
+// hook
+"  -k      <name> plugin name\n"
 // general options
 "  -?       print long help, including note about region specification\n"
 "  -S       ignored (input format is auto-detected)\n");

@@ -44,7 +44,7 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
-            bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o
+            bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o sam_hooks.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
