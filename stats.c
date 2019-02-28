@@ -1428,7 +1428,7 @@ float gcd_percentile(gc_depth_t *gcd, int N, int p)
     float n,d;
     int k;
 
-    n = p*(N+1)/100;
+    n = (float)p*(N+1)/100;
     k = n;
     if ( k<=0 )
         return gcd[0].depth;
