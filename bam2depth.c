@@ -40,12 +40,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "samtools.h"
 #include "sam_opts.h"
+#include "sam_dynreadfilter.h"
 
 typedef struct {     // auxiliary data structure
     samFile *fp;     // the file handle
     bam_hdr_t *hdr;  // the file header
     hts_itr_t *iter; // NULL if a region not specified
     int min_mapQ, min_len; // mapQ filter; length filter
+    SamDynReadFilterPtr dynreadfilter;
 } aux_t;
 
 void *bed_read(const char *fn); // read a BED or position list file
@@ -65,6 +67,7 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
         if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
         if ( (int)b->core.qual < aux->min_mapQ ) continue;
         if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
+	if (!dynreadfilter_accept_all(aux->dynreadfilter,aux->hdr,b)) continue;
         break;
     }
     return ret;
@@ -89,7 +92,7 @@ static int usage() {
     fprintf(stderr, "   -q <int>            base quality threshold [0]\n");
     fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
-
+    fprintf(stderr,DYNREADFILTER_DESC);
     sam_global_opt_help(stderr, "-.--.-");
 
     fprintf(stderr, "\n");
@@ -116,15 +119,18 @@ int main_depth(int argc, char *argv[])
     int print_header = 0;
     char *output_file = NULL;
     FILE *file_out = stdout;
+    SamDynReadFilterPtr rootdynreadfilter = NULL;
+    SamDynReadFilterPtr dynreadfilter = NULL;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
+         {"dynreadfilter",required_argument,NULL,'k'},
         { NULL, 0, NULL, 0 }
     };
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:k:", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -140,6 +146,14 @@ int main_depth(int argc, char *argv[])
             case 'd': case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
             case 'H': print_header = 1; break;
             case 'o': output_file = optarg; break;
+            case 'k':
+		    dynreadfilter = dynreadfilter_load_by_name(optarg);
+		    if (dynreadfilter == NULL ) {
+		        print_error_errno("view", "Could not load dynamic read filter \"%s\"", optarg);
+		       return EXIT_FAILURE;
+		    }
+		    rootdynreadfilter = dynreadfilter_append(rootdynreadfilter,dynreadfilter);
+		    break;
             default:  if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': return usage();
@@ -185,6 +199,7 @@ int main_depth(int argc, char *argv[])
     for (i = 0; i < n; ++i) {
         int rf;
         data[i] = calloc(1, sizeof(aux_t));
+        data[i]->dynreadfilter = rootdynreadfilter;
         data[i]->fp = sam_open_format(argv[optind+i], "r", &ga.in); // open BAM
         if (data[i]->fp == NULL) {
             print_error_errno("depth", "Could not open \"%s\"", argv[optind+i]);
@@ -246,6 +261,17 @@ int main_depth(int argc, char *argv[])
         end = data[0]->iter->end;
         reg_tid = data[0]->iter->tid;
     }
+ 
+    /* initialize all dynamic read filters */
+    dynreadfilter = rootdynreadfilter;
+    while (dynreadfilter != NULL) {
+        if (!dynreadfilter->initialize(dynreadfilter,h)) {
+            print_error("depth", "Error initializing read filter.\n");
+            status = EXIT_FAILURE;
+            goto depth_end;
+            }
+        dynreadfilter = dynreadfilter-> next;
+	}
 
     // the core multi-pileup loop
     mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
@@ -334,6 +360,8 @@ int main_depth(int argc, char *argv[])
     }
 
 depth_end:
+    dynreadfilter_dispose_all(rootdynreadfilter);
+
     if (fclose(file_out) != 0) {
         if (status == EXIT_SUCCESS) {
             print_error_errno("depth", "error on closing \"%s\"",

@@ -748,7 +748,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
 // hook
-"  -k      <name> plugin name\n"
+DYNREADFILTER_DESC
 // general options
 "  -?       print long help, including note about region specification\n"
 "  -S       ignored (input format is auto-detected)\n");

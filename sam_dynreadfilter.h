@@ -49,5 +49,8 @@ int  dynreadfilter_accept_all(SamDynReadFilterPtr hook,const bam_hdr_t *, bam1_t
 /** appends a filter in the linked list, returns root, or child if root is null */
 SamDynReadFilterPtr dynreadfilter_append(SamDynReadFilterPtr root,SamDynReadFilterPtr child);
 
+
+
+#define DYNREADFILTER_DESC "  -k      <name> plugin name\n"
 #endif
 
