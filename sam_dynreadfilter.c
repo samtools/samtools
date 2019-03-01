@@ -48,13 +48,13 @@ SamDynReadFilterPtr dynreadfilter_load_by_name(const char* name) {
 	char* funname=NULL;
 	/* allocate space for DLibDataPtr */
 	DLibDataPtr dlibdata = (DLibDataPtr)calloc(1,sizeof(DLibData));
-	if(dlibdata == NULL) {
+	if (dlibdata == NULL) {
 		fprintf(stderr, LOG_PREFIX "Out of memory. Cannot load hook \"%s\".",name);
 		goto fail;	
 		}
 	/* copy name for this hook */
 	dlibdata->name = strdup(name);
-	if(dlibdata->name == NULL) {
+	if (dlibdata->name == NULL) {
 		fprintf(stderr, LOG_PREFIX "Out of memory. Cannot load hook \"%s\".",name);
 		goto fail;	
 		}
@@ -107,7 +107,7 @@ SamDynReadFilterPtr dynreadfilter_load_by_name(const char* name) {
         /* set callback '_dispose' */
 	sprintf(funname,"%s_dispose",name);
 	dlibdata->base.dispose = dlsym(dlibdata->dl_handle, funname);
-	if(dlibdata->base.dispose==NULL)
+	if (dlibdata->base.dispose==NULL)
 		{
 		fprintf(stderr, LOG_PREFIX "Cannot find function %s in %s.\n",funname,name);
 		goto fail;
@@ -129,9 +129,9 @@ SamDynReadFilterPtr dynreadfilter_load_by_name(const char* name) {
 
 
 int  dynreadfilter_accept_all(SamDynReadFilterPtr root,const bam_hdr_t* header, bam1_t* b) {
-	while(root != NULL)
+	while (root != NULL)
 		{
-		if(!root->accept(root,header,b)) return 0;
+		if (!root->accept(root,header,b)) return 0;
 		root = root->next;
 		}
 	return 1;
@@ -146,7 +146,7 @@ void  dynreadfilter_dispose_all(SamDynReadFilterPtr root)
 	dlibdata = (DLibDataPtr)root;
         if (dlibdata->dl_handle != NULL) {
 		int ret = dlclose(dlibdata->dl_handle);
-		if(ret != 0) {
+		if (ret != 0) {
 			const char* msg = dlerror();
 			fprintf(stderr, LOG_PREFIX "Cannot realease hoot %s : %s.\n",
                                   dlibdata->name,(msg == NULL?"undefined error":msg));
