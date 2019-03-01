@@ -44,7 +44,7 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
             cut_target.o phase.o bam2depth.o padding.o bedcov.o bamshuf.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
-            bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o sam_hooks.o
+            bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o sam_dynreadfilter.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -141,7 +141,7 @@ libbam.a:$(LOBJS)
 	$(AR) -csru $@ $(LOBJS)
 
 samtools: $(AOBJS) $(LZ4OBJS) libbam.a libst.a $(HTSLIB)
-	$(CC) $(ALL_LDFLAGS) -o $@ $(AOBJS) $(LZ4OBJS) libbam.a libst.a $(HTSLIB_LIB) $(CURSES_LIB) -lm $(ALL_LIBS) -lpthread
+	$(CC) $(ALL_LDFLAGS) -o $@ $(AOBJS) $(LZ4OBJS) libbam.a libst.a $(HTSLIB_LIB) $(CURSES_LIB) -lm $(ALL_LIBS) -lpthread  -ldl
 
 # For building samtools and its test suite only: NOT to be installed.
 libst.a: $(LIBST_OBJS)
@@ -297,6 +297,11 @@ misc/maq2sam-short.o: misc/maq2sam.c config.h version.h
 misc/maq2sam-long.o: misc/maq2sam.c config.h version.h
 	$(CC) $(CFLAGS) -DMAQ_LONGREADS $(ALL_CPPFLAGS) -c -o $@ misc/maq2sam.c
 
+misc/libfilterexample1.so:  misc/filterexample1.c config.h version.h
+	$(CC) -rdynamic $(CFLAGS) $(ALL_CPPFLAGS) -shared -fPIC  -o $@ $<
+
+misc/libfilterexample2.so:  misc/filterexample2.c config.h version.h
+	$(CC) -rdynamic $(CFLAGS) $(ALL_CPPFLAGS) -shared -fPIC  -o $@ $<
 
 install: $(PROGRAMS) $(MISC_PROGRAMS)
 	$(INSTALL_DIR) $(DESTDIR)$(bindir) $(DESTDIR)$(misc_bindir) $(DESTDIR)$(man1dir)

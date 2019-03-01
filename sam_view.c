@@ -46,7 +46,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 #include "bedidx.h"
-#include "sam_hooks.h"
+#include "sam_dynreadfilter.h"
 
 #define DEFAULT_BARCODE_TAG "BC"
 #define DEFAULT_QUALITY_TAG "QT"
@@ -73,7 +73,7 @@ typedef struct samview_settings {
     size_t remove_aux_len;
     char** remove_aux;
     int multi_region;
-    struct sam_hook_t* hook;
+    SamDynReadFilterPtr dynreadfilter;
 } samview_settings_t;
 
 
@@ -98,7 +98,7 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
         return 1;
-    if (settings->hook && !settings->hook->accept(settings->hook,h,b))
+    if (!dynreadfilter_accept_all(settings->dynreadfilter,h,b))
         return 1;
     if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
         return 1;
@@ -258,7 +258,7 @@ int main_samview(int argc, char *argv[])
     htsThreadPool p = {NULL, 0};
     int filter_state = ALL, filter_op = 0;
     int result;
-    char* hook_name = NULL;
+    SamDynReadFilterPtr dynreadfilter = NULL;
 
     samview_settings_t settings = {
         .rghash = NULL,
@@ -273,11 +273,12 @@ int main_samview(int argc, char *argv[])
         .library = NULL,
         .bed = NULL,
         .multi_region = 0,
-        .hook = NULL
+        .dynreadfilter = NULL
     };
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
+        {"dynreadfilter",required_argument,NULL,'k'},
         { NULL, 0, NULL, 0 }
     };
 
@@ -317,7 +318,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
             break;
-        case 'k': hook_name = strdup(optarg); break;
+
         case 'm': settings.min_qlen = atoi(optarg); break;
         case 'c': is_count = 1; break;
         case 'S': break;
@@ -336,6 +337,15 @@ int main_samview(int argc, char *argv[])
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
         case 'l': settings.library = strdup(optarg); break;
+        case 'k':
+            dynreadfilter = dynreadfilter_load_by_name(optarg);
+            if (dynreadfilter == NULL ) {
+                print_error_errno("view", "Could not load dynamic read filter \"%s\"", optarg);
+                ret = 1;
+                goto view_end;
+            }
+            settings.dynreadfilter = dynreadfilter_append( settings.dynreadfilter,dynreadfilter);
+	    break;
         case 'L':
             if ((settings.bed = bed_read(optarg)) == NULL) {
                 print_error_errno("view", "Could not read file \"%s\"", optarg);
@@ -516,16 +526,15 @@ int main_samview(int argc, char *argv[])
     }
     if (is_header_only) goto view_end; // no need to print alignments
 
-    if(hook_name != NULL) {
-        settings.hook  =  hook_load_by_name(hook_name);
-	if( settings.hook == NULL) {
-            fprintf(stderr, "[main_samview] cannot load hook \"%s\". Aborting.\n",hook_name);
-            return 1;
+    /* initialize all dynamic read filters */
+    dynreadfilter = settings.dynreadfilter;
+    while (dynreadfilter != NULL) {
+        if (!dynreadfilter->initialize(dynreadfilter,header)) {
+             fprintf(stderr, "Error initializing read filter.\n");
+            ret = 1;
+            goto view_end;
             }
-        if(settings.hook->initialize!=NULL && !settings.hook->initialize(settings.hook,header)) {
-            fprintf(stderr, "[main_samview] cannot initialize hook \"%s\". Aborting.\n",hook_name);
-            return 1;
-            }
+        dynreadfilter = dynreadfilter-> next;
 	}
 
     if (has_index_file) {
@@ -690,9 +699,9 @@ view_end:
         free(settings.remove_aux);
     }
 
-    if(settings.hook!=NULL && settings.hook->dispose!=NULL) {
-       settings.hook->dispose(settings.hook);
-    }
+    /* dispose dynamic read filters */
+    dynreadfilter_dispose_all(settings.dynreadfilter);
+    
     if (p.pool)
         hts_tpool_destroy(p.pool);
 
