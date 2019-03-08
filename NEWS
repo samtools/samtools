@@ -103,8 +103,8 @@ Release 1.9 (18th July 2018)
    - Fixed compilation problems when using C_INCLUDE_PATH. (#870; #817 reported
      by Robert Boissy)
 
-   - Fixed --version when built from a Git repository. (#844, thanks to John
-     Marshall)
+   - Fixed --version when built from a Git repository. (#844, thanks to
+     John Marshall)
 
    - Use noenhanced mode for title in plot-bamstats.  Prevents unwanted
      interpretation of characters like underscore in gnuplot version 5. (#829,
