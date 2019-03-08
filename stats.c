@@ -2321,7 +2321,7 @@ int main_stats(int argc, char *argv[])
     char *bam_fname = NULL;
     char *bam_idx_fname = NULL;
     char *group_id = NULL;
-    int sparse = 0, has_index_file = 0;
+    int sparse = 0, has_index_file = 0, ret = 1;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     stats_info_t *info = stats_info_init(argc, argv);
@@ -2409,6 +2409,13 @@ int main_stats(int argc, char *argv[])
         free(info);
         return 1;
     }
+
+    if (has_index_file && !(bam_idx_fname = argv[optind++])) {
+        fprintf(stderr, "No index file provided\n");
+        free(info);
+        return 1;
+    }
+
     if (ga.nthreads > 0)
         hts_set_threads(info->sam, ga.nthreads);
 
@@ -2432,87 +2439,61 @@ int main_stats(int argc, char *argv[])
     bam1_t *bam_line = bam_init1();
     if (!bam_line) goto cleanup_read_pairs;
 
-    if ( optind<argc ) {
-        int filter = 1;
-        // Prepare the region hash table for the multi-region iterator
-        void *region_hash = NULL;
-        if (!has_index_file) {
-            region_hash = bed_hash_regions(NULL, argv, optind, argc, &filter);
-        } else if (has_index_file) {
-            if (optind < argc - 1) {
-                region_hash = bed_hash_regions(NULL, argv, optind+1, argc, &filter);
-            } else {
-                goto whole_file;
-            }
-            bam_idx_fname = argv[optind];
+    if (optind < argc) {
+        // Region:interval arguments in the command line
+        hts_idx_t *bam_idx = NULL;
+        if (has_index_file) {
+            bam_idx = sam_index_load2(info->sam, bam_fname, bam_idx_fname);
         } else {
-            fprintf(stderr, "Incorrect number of arguments provided.\n");
+            // If an index filename has not been specified, look alongside the alignment file
+            bam_idx = sam_index_load(info->sam, bam_fname);
         }
 
-        if (region_hash) {
-
-            // Collect stats in selected regions only
-            // If index filename has not been specfied, look in BAM folder
-            hts_idx_t *bam_idx = NULL;
-            if (bam_idx_fname != NULL){
-                bam_idx = sam_index_load2(info->sam,bam_fname,bam_idx_fname);
-            } else {
-                bam_idx = sam_index_load(info->sam,bam_fname);
-            }
-            if (bam_idx) {
-
-                int regcount = 0;
-                hts_reglist_t *reglist = bed_reglist(region_hash, ALL, &regcount);
-                if (reglist) {
-
-                    hts_itr_multi_t *iter = sam_itr_regions(bam_idx, info->sam_header, reglist, regcount);
-                    if (iter) {
-
-                        if (!targets) {
-                            all_stats->nchunks = argc-optind;
-                            if ( replicate_regions(all_stats, iter) )
-                                fprintf(stderr, "Replications of the regions failed.");
-                        }
-
-                        if ( all_stats->nregions && all_stats->regions ) {
-                            while (sam_itr_multi_next(info->sam, iter, bam_line) >= 0) {
-                               if (info->split_tag) {
-                                   curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
-                                   collect_stats(bam_line, curr_stats, read_pairs);
-                               }
-                               collect_stats(bam_line, all_stats, read_pairs);
-                            }
-                        }
-
-                        hts_itr_multi_destroy(iter);
-                    } else {
-                       fprintf(stderr, "Creation of the region iterator failed.");
-                       hts_reglist_free(reglist, regcount);
-                    }
-                } else {
-                    fprintf(stderr, "Creation of the region list failed.");
+        if (bam_idx) {
+            hts_itr_multi_t *iter = sam_itr_regarray(bam_idx, info->sam_header, &argv[optind], argc - optind);
+            if (iter) {
+                if (!targets) {
+                    all_stats->nchunks = argc-optind;
+                    if (replicate_regions(all_stats, iter))
+                        fprintf(stderr, "Replications of the regions failed\n");
                 }
 
-                hts_idx_destroy(bam_idx);
-            } else {
-                fprintf(stderr, "Random alignment retrieval only works for indexed BAM files.\n");
-            }
+                if ( all_stats->nregions && all_stats->regions ) {
+                    while ((ret = sam_itr_next(info->sam, iter, bam_line)) >= 0) {
+                        if (info->split_tag) {
+                            curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
+                            collect_stats(bam_line, curr_stats, read_pairs);
+                        }
+                        collect_stats(bam_line, all_stats, read_pairs);
+                    }
 
-            bed_destroy(region_hash);
+                    if (ret < -1) {
+                        fprintf(stderr, "Failure while running the iterator\n");
+                        hts_itr_multi_destroy(iter);
+                        hts_idx_destroy(bam_idx);
+                        goto cleanup;
+                    }
+                }
+                hts_itr_multi_destroy(iter);
+            } else {
+                fprintf(stderr, "Multi-region iterator could not be created\n");
+                hts_idx_destroy(bam_idx);
+                goto cleanup;
+            }
+            hts_idx_destroy(bam_idx);
         } else {
-            fprintf(stderr, "Creation of the region hash table failed.\n");
+            if (has_index_file)
+                fprintf(stderr, "Invalid index file '%s'\n", bam_idx_fname);
+            fprintf(stderr, "Random alignment retrieval only works for indexed files\n");
+            goto cleanup;
         }
-    }
-    else
-    {
-        whole_file:
+    } else {
         if ( info->cov_threshold > 0 && !targets ) {
             fprintf(stderr, "Coverage percentage calculation requires a list of target regions\n");
             goto cleanup;
         }
 
         // Stream through the entire BAM ignoring off-target regions if -t is given
-        int ret;
         while ((ret = sam_read1(info->sam, info->sam_header, bam_line)) >= 0) {
             if (info->split_tag) {
                 curr_stats = get_curr_split_stats(bam_line, split_hash, info, targets);
@@ -2523,7 +2504,7 @@ int main_stats(int argc, char *argv[])
 
         if (ret < -1) {
             fprintf(stderr, "Failure while decoding file\n");
-            return 1;
+            goto cleanup;
         }
     }
 
@@ -2532,6 +2513,7 @@ int main_stats(int argc, char *argv[])
     if (info->split_tag)
         output_split_stats(split_hash, bam_fname, sparse);
 
+    ret = 0;
 cleanup:
     bam_destroy1(bam_line);
     bam_hdr_destroy(info->sam_header);
@@ -2545,5 +2527,5 @@ cleanup_all_stats:
     cleanup_stats(all_stats);
     cleanup_stats_info(info);
 
-    return 0;
+    return ret;
 }
