@@ -784,6 +784,10 @@ static void bam2fq_usage(FILE *to, const char *command)
     fprintf(to,
 "Usage: samtools %s [options...] <in.bam>\n", command);
     fprintf(to,
+"\n"
+"Description:\n"
+"Converts a SAM, BAM or CRAM into either FASTQ or FASTA format depending on the command invoked.\n"
+"\n"
 "Options:\n"
 "  -0 FILE              write reads designated READ_OTHER to FILE\n"
 "  -1 FILE              write reads designated READ1 to FILE\n"
@@ -815,6 +819,9 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  --index-format STR   How to parse barcode and quality tags\n\n");
     sam_global_opt_help(to, "-.--.@");
     fprintf(to,
+"\n"
+"The files will be automatically compressed if the file names have a .gz or .bgzf extension.\n"
+"The input to this program must be collated by name. Run 'samtools collate' or 'samtools sort -n'.\n"
 "\n"
 "Reads are designated READ1 if FLAG READ1 is set and READ2 is not set.\n"
 "Reads are designated READ2 if FLAG READ1 is not set and READ2 is set.\n"
