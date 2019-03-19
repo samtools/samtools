@@ -344,10 +344,13 @@ void round_buffer_flush(stats_t *stats, int64_t pos)
     stats->cov_rbuf.pos   = new_pos;
 }
 
-void round_buffer_insert_read(round_buffer_t *rbuf, int64_t from, int64_t to)
+/**
+ * [from, to) - 0 based half-open
+ */
+static void round_buffer_insert_read(round_buffer_t *rbuf, int64_t from, int64_t to)
 {
-    if ( to-from >= rbuf->size )
-        error("The read length too big (%d), please increase the buffer length (currently %d)\n", to-from+1,rbuf->size);
+    if ( to-from > rbuf->size )
+        error("The read length too big (%d), please increase the buffer length (currently %d)\n", to-from, rbuf->size);
     if ( from < rbuf->pos )
         error("The reads are not sorted (%ld comes after %ld).\n", from,rbuf->pos);
 
@@ -360,7 +363,7 @@ void round_buffer_insert_read(round_buffer_t *rbuf, int64_t from, int64_t to)
             rbuf->buffer[ibuf]++;
         ifrom = 0;
     }
-    for (ibuf=ifrom; ibuf<=ito; ibuf++)
+    for (ibuf=ifrom; ibuf<ito; ibuf++)
         rbuf->buffer[ibuf]++;
 }
 
@@ -1000,6 +1003,9 @@ static int cleanup_overlaps(khash_t(qn2pair) *read_pairs, int max) {
     return count;
 }
 
+/**
+ * [pmin, pmax) - 0 based half-open
+ */
 static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stats_t *stats, int pmin, int pmax) {
     if ( !bam_line || !read_pairs || !stats )
         return;
@@ -1010,7 +1016,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
          (abs(bam_line->core.isize) >= 2*bam_line->core.l_qseq) ||
          (order != READ_ORDER_FIRST && order != READ_ORDER_LAST) ) {
         if ( pmin >= 0 )
-            round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+            round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax);
         return;
     }
 
@@ -1104,7 +1110,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
                     break;
 
                 if ( pmin < pc->chunks[i].from ) { //overlap at the beginning
-                    round_buffer_insert_read(&(stats->cov_rbuf), pmin, pc->chunks[i].from-1);
+                    round_buffer_insert_read(&(stats->cov_rbuf), pmin, pc->chunks[i].from);
                     pmin = pc->chunks[i].from;
                 }
 
@@ -1118,7 +1124,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
             }
         }
     }
-    round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+    round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax);
 }
 
 void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pairs)
@@ -1357,13 +1363,13 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
                 case BAM_CMATCH:
                 case BAM_CEQUAL:
                 case BAM_CDIFF:
-                    pmin = MAX(p, stats->chunks[i].from-1);
-                    pmax = MIN(p+oplen, stats->chunks[i].to);
-                    if ( pmax >= pmin ) {
+                    pmin = MAX(p, stats->chunks[i].from-1); // 0 based
+                    pmax = MIN(p+oplen, stats->chunks[i].to); // 1 based
+                    if ( pmax > pmin ) {
                         if ( stats->info->remove_overlaps )
                             remove_overlaps(bam_line, read_pairs, stats, pmin, pmax);
                         else
-                            round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax-1);
+                            round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax);
                     }
                     break;
                 case BAM_CDEL:
@@ -1392,7 +1398,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
                     if ( stats->info->remove_overlaps )
                         remove_overlaps(bam_line, read_pairs, stats, p, p+oplen);
                     else
-                        round_buffer_insert_read(&(stats->cov_rbuf), p, p+oplen-1);
+                        round_buffer_insert_read(&(stats->cov_rbuf), p, p+oplen);
                     break;
                 case BAM_CDEL:
                     break;
