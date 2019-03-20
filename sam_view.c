@@ -51,17 +51,17 @@ DEALINGS IN THE SOFTWARE.  */
 #define DEFAULT_QUALITY_TAG "QT"
 
 KHASH_SET_INIT_STR(rg)
-KHASH_SET_INIT_STR(bc)
+KHASH_SET_INIT_STR(tv)
 #define taglist_free(p)
 KLIST_INIT(ktaglist, char*, taglist_free)
 
 typedef khash_t(rg) *rghash_t;
-typedef khash_t(bc) *bchash_t;
+typedef khash_t(tv) *tvhash_t;
 
 // This structure contains the settings for a samview run
 typedef struct samview_settings {
     rghash_t rghash;
-    bchash_t bchash;
+    tvhash_t tvhash;
     int min_mapQ;
     int flag_on;
     int flag_off;
@@ -75,7 +75,7 @@ typedef struct samview_settings {
     size_t remove_aux_len;
     char** remove_aux;
     int multi_region;
-    char* barcode_tag;
+    char* tag;
 } samview_settings_t;
 
 
@@ -113,11 +113,11 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
             if (k == kh_end(settings->rghash)) return 1;
         }
     }
-    if (settings->bchash && settings->barcode_tag) {
-        uint8_t *s = bam_aux_get(b, settings->barcode_tag);
+    if (settings->tvhash && settings->tag) {
+        uint8_t *s = bam_aux_get(b, settings->tag);
         if (s) {
-            khint_t k = kh_get(bc, settings->bchash, (char*)(s + 1));
-            if (k == kh_end(settings->bchash)) return 1;
+            khint_t k = kh_get(tv, settings->tvhash, (char*)(s + 1));
+            if (k == kh_end(settings->tvhash)) return 1;
         } else {
             return 1;
         }
@@ -230,37 +230,37 @@ static int add_read_groups_file(const char *subcmd, samview_settings_t *settings
     return (ret != -1) ? 0 : -1;
 }
 
-static int add_barcode_single(const char *subcmd, samview_settings_t *settings, char *name)
+static int add_tag_value_single(const char *subcmd, samview_settings_t *settings, char *name)
 {
     char *d = strdup(name);
     int ret = 0;
 
     if (d == NULL) goto err;
 
-    if (settings->bchash == NULL) {
-        settings->bchash = kh_init(bc);
-        if (settings->bchash == NULL) goto err;
+    if (settings->tvhash == NULL) {
+        settings->tvhash = kh_init(tv);
+        if (settings->tvhash == NULL) goto err;
     }
 
-    kh_put(bc, settings->bchash, d, &ret);
+    kh_put(tv, settings->tvhash, d, &ret);
     if (ret == -1) goto err;
     if (ret ==  0) free(d); /* Duplicate */
     return 0;
 
  err:
-    print_error(subcmd, "Couldn't add \"%s\" to barcode list: memory exhausted?", name);
+    print_error(subcmd, "Couldn't add \"%s\" to tag values list: memory exhausted?", name);
     free(d);
     return -1;
 }
 
-static int add_barcodes_file(const char *subcmd, samview_settings_t *settings, char *fn)
+static int add_tag_values_file(const char *subcmd, samview_settings_t *settings, char *fn)
 {
     FILE *fp;
     char buf[1024];
     int ret = 0;
-    if (settings->bchash == NULL) {
-        settings->bchash = kh_init(bc);
-        if (settings->bchash == NULL) {
+    if (settings->tvhash == NULL) {
+        settings->tvhash = kh_init(tv);
+        if (settings->tvhash == NULL) {
             perror(NULL);
             return -1;
         }
@@ -275,7 +275,7 @@ static int add_barcodes_file(const char *subcmd, samview_settings_t *settings, c
     while (ret != -1 && !feof(fp) && fscanf(fp, "%1023s", buf) > 0) {
         char *d = strdup(buf);
         if (d != NULL) {
-            kh_put(bc, settings->bchash, d, &ret);
+            kh_put(tv, settings->tvhash, d, &ret);
             if (ret == 0) free(d); /* Duplicate */
         } else {
             ret = -1;
@@ -329,7 +329,7 @@ int main_samview(int argc, char *argv[])
 
     samview_settings_t settings = {
         .rghash = NULL,
-        .bchash = NULL,
+        .tvhash = NULL,
         .min_mapQ = 0,
         .flag_on = 0,
         .flag_off = 0,
@@ -341,7 +341,7 @@ int main_samview(int argc, char *argv[])
         .library = NULL,
         .bed = NULL,
         .multi_region = 0,
-        .barcode_tag = NULL
+        .tag = NULL
     };
 
     static const struct option lopts[] = {
@@ -424,54 +424,54 @@ int main_samview(int argc, char *argv[])
             break;
         case 'd':
             if (strlen(optarg) < 4 || optarg[2] != ':') {
-                print_error_errno("view", "Invalid barcode option: \"%s\"", optarg);
+                print_error_errno("view", "Invalid \"tag:value\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
 
-            if (settings.barcode_tag) {
-                if (settings.barcode_tag[0] != optarg[0] || settings.barcode_tag[1] != optarg[1]) {
-                    print_error("view", "Different barcode tag \"%s\" was specified before: \"%s\"", settings.barcode_tag, optarg);
+            if (settings.tag) {
+                if (settings.tag[0] != optarg[0] || settings.tag[1] != optarg[1]) {
+                    print_error("view", "Different tag \"%s\" was specified before: \"%s\"", settings.tag, optarg);
                     ret = 1;
                     goto view_end;
                 }
             } else {
-                if (!(settings.barcode_tag = calloc(3, 1))) {
+                if (!(settings.tag = calloc(3, 1))) {
                     print_error("view", "Could not allocate memory for tag: \"%s\"", optarg);
                     ret = 1;
                     goto view_end;
                 }
-                memcpy(settings.barcode_tag, optarg, 2);
+                memcpy(settings.tag, optarg, 2);
             }
 
-            if (add_barcode_single("view", &settings, optarg+3) != 0) {
+            if (add_tag_value_single("view", &settings, optarg+3) != 0) {
                 ret = 1;
                 goto view_end;
             }
             break;
         case 'D':
             if (strlen(optarg) < 4 || optarg[2] != ':') {
-                print_error_errno("view", "Invalid barcode option: \"%s\"", optarg);
+                print_error_errno("view", "Invalid \"tag:file\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
 
-            if (settings.barcode_tag) {
-                if (settings.barcode_tag[0] != optarg[0] || settings.barcode_tag[1] != optarg[1]) {
-                    print_error("view", "Different barcode tag \"%s\" was specified before: \"%s\"", settings.barcode_tag, optarg);
+            if (settings.tag) {
+                if (settings.tag[0] != optarg[0] || settings.tag[1] != optarg[1]) {
+                    print_error("view", "Different tag \"%s\" was specified before: \"%s\"", settings.tag, optarg);
                     ret = 1;
                     goto view_end;
                 }
             } else {
-                if (!(settings.barcode_tag = calloc(3, 1))) {
+                if (!(settings.tag = calloc(3, 1))) {
                     print_error("view", "Could not allocate memory for tag: \"%s\"", optarg);
                     ret = 1;
                     goto view_end;
                 }
-                memcpy(settings.barcode_tag, optarg, 2);
+                memcpy(settings.tag, optarg, 2);
             }
 
-            if (add_barcodes_file("view", &settings, optarg+3) != 0) {
+            if (add_tag_values_file("view", &settings, optarg+3) != 0) {
                 ret = 1;
                 goto view_end;
             }
@@ -792,17 +792,17 @@ view_end:
             if (kh_exist(settings.rghash, k)) free((char*)kh_key(settings.rghash, k));
         kh_destroy(rg, settings.rghash);
     }
-    if (settings.bchash) {
+    if (settings.tvhash) {
         khint_t k;
-        for (k = 0; k < kh_end(settings.bchash); ++k)
-            if (kh_exist(settings.bchash, k)) free((char*)kh_key(settings.bchash, k));
-        kh_destroy(bc, settings.bchash);
+        for (k = 0; k < kh_end(settings.tvhash); ++k)
+            if (kh_exist(settings.tvhash, k)) free((char*)kh_key(settings.tvhash, k));
+        kh_destroy(tv, settings.tvhash);
     }
     if (settings.remove_aux_len) {
         free(settings.remove_aux);
     }
-    if (settings.barcode_tag) {
-        free(settings.barcode_tag);
+    if (settings.tag) {
+        free(settings.tag);
     }
 
     if (p.pool)
@@ -836,9 +836,9 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -r STR   only include reads in read group STR [null]\n"
 "  -R FILE  only include reads with read group listed in FILE [null]\n"
 "  -d STR:STR\n"
-"           only include reads with barcode tag STR and barcode STR [null]\n"
+"           only include reads with tag STR and associated value STR [null]\n"
 "  -D STR:FILE\n"
-"           only include reads with barcode tag STR and barcodes listed in\n"
+"           only include reads with tag STR and associated values listed in\n"
 "           FILE [null]\n"
 "  -q INT   only include reads with mapping quality >= INT [0]\n"
 "  -l STR   only include reads in library STR [null]\n"
