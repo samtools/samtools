@@ -429,16 +429,16 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
 
-            {
-            char* tmp = strdup(optarg);
-            tmp[2] = '\0';
-            settings.barcode_tag = strdup(tmp);
-            if (add_barcode_single("view", &settings, &tmp[3]) != 0) {
-                free(tmp);
+            if (!(settings.barcode_tag = calloc(3, 1))) {
+                print_error("view", "Could not allocate memory for tag: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
-            free(tmp);
+            memcpy(settings.barcode_tag, optarg, 2);
+
+            if (add_barcode_single("view", &settings, optarg+3) != 0) {
+                ret = 1;
+                goto view_end;
             }
             break;
         case 'D':
@@ -448,17 +448,16 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
 
-            {
-            char* tmp = strdup(optarg);
-            tmp[2] = '\0';
-            settings.barcode_tag = strdup(tmp);
-
-            if (add_barcodes_file("view", &settings, &tmp[3]) != 0) {
-                free(tmp);
+            if (!(settings.barcode_tag = calloc(3, 1))) {
+                print_error("view", "Could not allocate memory for tag: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
-            free(tmp);
+            memcpy(settings.barcode_tag, optarg, 2);
+
+            if (add_barcodes_file("view", &settings, optarg+3) != 0) {
+                ret = 1;
+                goto view_end;
             }
             break;
                 /* REMOVED as htslib doesn't support this
