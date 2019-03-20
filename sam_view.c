@@ -429,12 +429,20 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
 
-            if (!(settings.barcode_tag = calloc(3, 1))) {
-                print_error("view", "Could not allocate memory for tag: \"%s\"", optarg);
-                ret = 1;
-                goto view_end;
+            if (settings.barcode_tag) {
+                if (settings.barcode_tag[0] != optarg[0] || settings.barcode_tag[1] != optarg[1]) {
+                    print_error("view", "Different barcode tag \"%s\" was specified before: \"%s\"", settings.barcode_tag, optarg);
+                    ret = 1;
+                    goto view_end;
+                }
+            } else {
+                if (!(settings.barcode_tag = calloc(3, 1))) {
+                    print_error("view", "Could not allocate memory for tag: \"%s\"", optarg);
+                    ret = 1;
+                    goto view_end;
+                }
+                memcpy(settings.barcode_tag, optarg, 2);
             }
-            memcpy(settings.barcode_tag, optarg, 2);
 
             if (add_barcode_single("view", &settings, optarg+3) != 0) {
                 ret = 1;
@@ -448,12 +456,20 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
 
-            if (!(settings.barcode_tag = calloc(3, 1))) {
-                print_error("view", "Could not allocate memory for tag: \"%s\"", optarg);
-                ret = 1;
-                goto view_end;
+            if (settings.barcode_tag) {
+                if (settings.barcode_tag[0] != optarg[0] || settings.barcode_tag[1] != optarg[1]) {
+                    print_error("view", "Different barcode tag \"%s\" was specified before: \"%s\"", settings.barcode_tag, optarg);
+                    ret = 1;
+                    goto view_end;
+                }
+            } else {
+                if (!(settings.barcode_tag = calloc(3, 1))) {
+                    print_error("view", "Could not allocate memory for tag: \"%s\"", optarg);
+                    ret = 1;
+                    goto view_end;
+                }
+                memcpy(settings.barcode_tag, optarg, 2);
             }
-            memcpy(settings.barcode_tag, optarg, 2);
 
             if (add_barcodes_file("view", &settings, optarg+3) != 0) {
                 ret = 1;

@@ -1997,6 +1997,8 @@ sub test_view
          ['-d', 'TGCA'], 1],
         ['bc_invalid_bc_tag_fobc', { barcode_tag => 'BClong', barcodes => { ACGT => 1, AATTCCGG => 1 }},
          ['-D', "BClong:${fobc}"], 1],
+        ['bc_different_bc_tags', { barcode_tag => 'BC', barcodes => { ACGT => 1, grp2 => 1 }},
+         ['-d', 'BC:ACGT', '-d', 'RG:grp2' ], 1],
         # Libraries
         ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
         ['lib3', { libraries => { 'Library 3' => 1 }}, ['-l', 'Library 3'], 0],
