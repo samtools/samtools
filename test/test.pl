@@ -1061,11 +1061,14 @@ sub filter_sam
     my $flags_required = $args->{flags_required} || 0;
     my $flags_rejected = $args->{flags_rejected} || 0;
     my $read_groups    = $args->{read_groups};
+    my $barcode_tag    = $args->{barcode_tag};
+    my $barcodes       = $args->{barcodes};
     my $libraries      = $args->{libraries};
     my $region         = $args->{region};
     my $strip_tags     = $args->{strip_tags};
     my $min_qlen       = $args->{min_qlen} || 0;
-    my $body_filter = ($flags_required || $flags_rejected || $read_groups
+    my $body_filter = ($flags_required || $flags_rejected
+                       || $read_groups || $barcodes
                        || $min_map_qual || $libraries || $region
                        || $strip_tags || $min_qlen);
     my $lib_read_groups = $libraries ? {} : undef;
@@ -1108,6 +1111,13 @@ sub filter_sam
                     next if ($read_groups && !exists($read_groups->{$group||""}));
                     next if ($lib_read_groups
                              && !exists($lib_read_groups->{$group||""}));
+                }
+                if ($barcodes) {
+                    my $barcode = '';
+                    for my $i (11 .. $#sam) {
+                        last if (($barcode) = $sam[$i] =~ /^${barcode_tag}:Z:(.*)/);
+                    }
+                    next if (!exists($barcodes->{$barcode||""}));
                 }
                 if ($region) {
                     my $in_range = 0;
@@ -1948,6 +1958,12 @@ sub test_view
     print $f "grp1\ngrp3\n" || die "Error writing to $fogn : $!\n";
     close($f) || die "Error writing to $fogn : $!\n";
 
+    # Barcodes file for -D test
+    my $fobc = "$$opts{tmp}/view.001.fobc";
+    open(my $f, '>', $fobc) || die "Couldn't open $fobc : $!\n";
+    print $f "ACGT\nAATTCCGG\n" || die "Error writing to $fobc : $!\n";
+    close($f) || die "Error writing to $fobc : $!\n";
+
 
     my @filter_tests = (
         # [test_name, {filter_sam options}, [samtools options], expect_fail]
@@ -1964,6 +1980,15 @@ sub test_view
          ['-R', $fogn, '-r', 'grp2'], 0],
         ['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
          ['-r', 'grp2', '-R', $fogn], 0],
+        # Barcodes
+        ['bc_TGCA', { barcode_tag => 'BC', barcodes => { TGCA => 1 }},
+         ['-d', 'BC:TGCA'], 0],
+        ['bc_fobc', { barcode_tag => 'BC', barcodes => { ACGT => 1, AATTCCGG => 1 }},
+         ['-D', "BC:${fobc}"], 0],
+        ['bc_both', { barcode_tag => 'BC', barcodes => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+         ['-D', "BC:${fobc}", '-d', 'BC:TGCA'], 0],
+        ['bc_both2', { barcode_tag => "BC", barcodes => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+         ['-d', 'BC:TGCA', '-D', "BC:${fobc}"], 0],
         # Libraries
         ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
         ['lib3', { libraries => { 'Library 3' => 1 }}, ['-l', 'Library 3'], 0],
