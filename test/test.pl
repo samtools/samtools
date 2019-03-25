@@ -212,6 +212,7 @@ sub cmd
 #       out_map => map output filenames to their expected result file (can be used alongside out)
 #       hskip => number of header lines to ignore during diff
 #       ignore_pg_header => remove @PG header lines
+#       reorder_header => ignore inconsequential header line order changes
 sub test_cmd
 {
     my ($opts,%args) = @_;
@@ -271,6 +272,10 @@ sub test_cmd
         close($fh);
     }
     elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$args{out}: $!"); return; }
+
+    if ($args{reorder_header}) {
+	$exp = reorder_headers($exp, $out);
+    }
 
     if ($args{ignore_pg_header}) {
 	$out =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
@@ -361,8 +366,11 @@ sub test_cmd
             elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_actual: $!"); return; }
 
 	    if ($args{ignore_pg_header}) {
-		$out =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
-		$exp =~ s/(^|\n)\@PG\t[^\n]*\n/$1/sg;
+		$out =~ s/(^|\n)\@PG\t[^\n]*\n/$1/mg;
+		$exp =~ s/(^|\n)\@PG\t[^\n]*\n/$1/mg;
+	    }
+	    if ($args{reorder_header}) {
+		$exp = reorder_headers($exp, $out);
 	    }
 
             if ( $exp ne $out )
@@ -427,6 +435,52 @@ sub is_file_newer
     return 0;
 }
 
+sub reorder_headers
+{
+    my ($exp, $out) = @_;
+
+    my %headers;
+    while ($exp =~ /^\@(..)(.*)\n/mg) {
+	my ($type, $vals) = ($1, $2);
+	if ($type eq 'PG' || $type eq 'RG') {
+	    my ($id) = $vals =~ /\tID:([^\t]+)/;
+	    push(@{$headers{$type}->{$id || ""}}, $vals);
+	} else {
+	    push(@{$headers{$type}}, $vals || "");
+	}
+    }
+    $exp =~ s/^\@...*\n//mg;
+    my $reorder = "";
+    while ($out =~ /^\@(..)(.*)\n/mg) {
+	my ($type, $vals) = ($1, $2);
+	if ($type eq 'PG' || $type eq 'RG') {
+	    my ($id) = $vals =~ /\tID:([^\t]+)/;
+	    if (exists($headers{$type}->{$id || ""})
+		&& @{$headers{$type}->{$id}}) {
+		my $v = shift(@{$headers{$type}->{$id}});
+		$reorder .= "\@$type$v\n";
+	    }
+	} elsif (exists($headers{$type}) && @{$headers{$type}}) {
+	    my $v = shift(@{$headers{$type}});
+	    $reorder .= "\@$type$v\n";
+	}
+    }
+    # Deal with any left-overs
+    foreach my $type (sort keys %headers) {
+	if ($type eq 'PG' || $type eq 'RG') {
+	    foreach my $id (sort keys %{$headers{$type}}) {
+		foreach my $v (@{$headers{$type}->{$id}}) {
+		    $reorder .= "\@$type$v\n";
+		}
+	    }
+	} else {
+	    foreach my $v (@{$headers{$type}}) {
+		$reorder .= "\@$type$v\n";
+	    }
+	}
+    }
+    return $reorder . $exp;
+}
 
 # The tests --------------------------
 
@@ -2883,44 +2937,51 @@ sub test_reheader
              out=>'reheader/1_view1.sam.expected',
              err=>'reheader/1_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+	     exp_fix=>1,
+	     reorder_header => 1);
 
     test_cmd($opts,
              out=>'reheader/2_view1.sam.expected',
              err=>'reheader/2_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+	     exp_fix=>1,
+	     reorder_header => 1);
 
     test_cmd($opts,
              out=>'reheader/2_view1.sam.expected',
              err=>'reheader/2_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+	     exp_fix=>1,
+	     reorder_header => 1);
 
     # In-place testing
     test_cmd($opts,
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram && $$opts{bin}/samtools view -h $fn.tmp.v21.cram | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+	     exp_fix=>1,
+	     reorder_header => 1);
 
     test_cmd($opts,
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+	     exp_fix=>1,
+	     reorder_header => 1);
 
     test_cmd($opts,
              out=>'reheader/4_view1.sam.expected',
              err=>'reheader/1_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader -c \"sed \'s/2014 Genome/2019 Genome/g\'\" $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+	     exp_fix=>1,
+	     reorder_header => 1);
 	     
     test_cmd($opts,
              out=>'reheader/5_view1.sam.expected',
              err=>'reheader/1_view1.sam.expected.err',
              cmd=>"$$opts{bin}/samtools reheader -c \"sed \'s/2014 Genome/2019 Genome/g\'\" $fn.tmp.v30.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
-         exp_fix=>1);    
+	     exp_fix=>1,
+	     reorder_header => 1);    
 }
 
 sub test_addrprg
@@ -2930,7 +2991,7 @@ sub test_addrprg
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
     test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all $$opts{path}/addrprg/1_fixup.sam");
     test_cmd($opts,out=>'addrprg/2_fixup_orphan.sam.expected', err=>'addrprg/2_fixup_orphan.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m orphan_only $$opts{path}/addrprg/2_fixup_orphan.sam");
-    test_cmd($opts,out=>'addrprg/3_fixup.sam.expected', err=>'addrprg/3_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -R '1#7' $$opts{path}/addrprg/1_fixup.sam", want_fail=>1);
+    test_cmd($opts,out=>'addrprg/3_fixup.sam.expected', err=>'addrprg/3_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -R '1#9' $$opts{path}/addrprg/1_fixup.sam", want_fail=>1);
     test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r '\@RG\\tID:1#8\\tCN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
     test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all -R '1#8' $$opts{path}/addrprg/1_fixup.sam");
     test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r 'ID:1#8' -r 'CN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
@@ -2972,5 +3033,6 @@ sub test_split
 		 'split/split.tmp.unk.sam' => 'split/split.expected.unk.sam',
 	     },
 	     ignore_pg_header => 1,
+	     reorder_header => 1,
 	     cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%!.\%. $$opts{path}/split/split.sam");
 }
