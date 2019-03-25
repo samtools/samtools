@@ -10,6 +10,10 @@ Release a.b
 * Fixed bug where samtools split would crash if it read a SAM header that
   contained an @RG line with no ID tag. (#954, reported by @blue-bird1)
 
+* Fixed bug where stats could over-estimate coverage when using the
+  target-regions option or when a region was specified on the command-line.
+  (#1025, reported by Miguel Machado; #1029, reported by Jody Phelan).
+
 Release 1.9 (18th July 2018)
 ----------------------------
 
