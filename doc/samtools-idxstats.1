@@ -48,8 +48,6 @@ samtools idxstats
 
 .SH DESCRIPTION
 .PP
-View
-
 Retrieve and print stats in the index file corresponding to the input file.
 Before calling idxstats, the input BAM file should be indexed by samtools index.
 
@@ -59,8 +57,9 @@ through the entire file.  This is far slower than using the BAM
 indices.
 
 The output is TAB-delimited with each line consisting of reference sequence
-name, sequence length, # mapped reads and # unmapped reads. It is written to
-stdout.
+name, sequence length, # mapped read-segments and # unmapped
+read-segments. It is written to stdout.  Note this may count reads
+multiple times if they are mapped more than once or in multiple fragments.
 
 .SH AUTHOR
 .PP
