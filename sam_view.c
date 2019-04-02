@@ -423,7 +423,10 @@ int main_samview(int argc, char *argv[])
             }
             break;
         case 'd':
-            if (strlen(optarg) < 4 || optarg[2] != ':') {
+            // Allow ";" as delimiter besides ":" to support MinGW CLI POSIX
+            // path translation as described at:
+            //   http://www.mingw.org/wiki/Posix_path_conversion
+            if (strlen(optarg) < 4 || (optarg[2] != ':' && optarg[2] != ';')) {
                 print_error_errno("view", "Invalid \"tag:value\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
@@ -450,7 +453,10 @@ int main_samview(int argc, char *argv[])
             }
             break;
         case 'D':
-            if (strlen(optarg) < 4 || optarg[2] != ':') {
+            // Allow ";" as delimiter besides ":" to support MinGW CLI POSIX
+            // path translation as described at:
+            //   http://www.mingw.org/wiki/Posix_path_conversion
+            if (strlen(optarg) < 4 || (optarg[2] != ':' && optarg[2] != ';')) {
                 print_error_errno("view", "Invalid \"tag:file\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
