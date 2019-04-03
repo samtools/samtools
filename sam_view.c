@@ -372,7 +372,6 @@ int main_samview(int argc, char *argv[])
                 srand(settings.subsam_seed);
                 settings.subsam_seed = rand();
             }
-
             if (q && *q == '.') {
                 settings.subsam_frac = strtod(q, &q);
                 if (*q) ret = 1;
@@ -423,10 +422,7 @@ int main_samview(int argc, char *argv[])
             }
             break;
         case 'd':
-            // Allow ";" as delimiter besides ":" to support MinGW CLI POSIX
-            // path translation as described at:
-            //   http://www.mingw.org/wiki/Posix_path_conversion
-            if (strlen(optarg) < 4 || (optarg[2] != ':' && optarg[2] != ';')) {
+            if (strlen(optarg) < 4 || optarg[2] != ':') {
                 print_error_errno("view", "Invalid \"tag:value\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
