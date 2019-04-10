@@ -349,13 +349,13 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
 
 #else // !HAVE_CURSES
 
-extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples,
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *fn_idx, const char *samples,
                              const htsFormat *fmt);
 
 tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
                         const htsFormat *fmt)
     {
-    return text_tv_init(fn,fn_fa,NULL,samples,fmt);
+	return text_tv_init(fn,fn_fa,NULL,samples,fmt);
     }
 
 #endif
