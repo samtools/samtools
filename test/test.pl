@@ -882,7 +882,7 @@ sub test_usage
     foreach my $subcommand (@subcommands) {
 	# Under msys the isatty function fails to recognise the terminal.
 	# Skip these tests for now.
-	next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view)$/);
+	next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq)$/);
         test_usage_subcommand($opts,%args,subcmd=>$subcommand);
     }
 }
@@ -2580,6 +2580,13 @@ sub test_bam2fq
 
     # test for Issue #703 (failure to write all reads on uncollated input)
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/9.1.fq.expected', '2.fq' => 'bam2fq/9.2.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.703.sam");
+
+    # Read 1/2 output, duplicate filename (-1 -2)
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -1 $$opts{path}/o.fq -2 $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
+    # Read 1/2 output, single filename (-o)
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -o $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
+    # Read 1/2 output, stdout and discard singletons/other
+    test_cmd($opts, out=>'bam2fq/11.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -s $$opts{path}/s.fq -0 $$opts{path}/0.fq $$opts{path}/dat/bam2fq.001.sam");
 }
 
 sub test_depad

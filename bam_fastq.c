@@ -31,6 +31,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <ctype.h>
 #include <assert.h>
 #include <inttypes.h>
+#include <unistd.h>
 
 #include "htslib/sam.h"
 #include "htslib/klist.h"
@@ -63,10 +64,11 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  -0 FILE              write reads designated READ_OTHER to FILE\n"
 "  -1 FILE              write reads designated READ1 to FILE\n"
 "  -2 FILE              write reads designated READ2 to FILE\n"
+"  -o FILE              write reads designated READ1 or READ2 to FILE\n"
 "                       note: if a singleton file is specified with -s, only\n"
 "                       paired reads will be written to the -1 and -2 files.\n"
 "  -f INT               only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
-"  -F INT               only include reads with none of the FLAGS in INT present [0]\n"       //   F&x == 0
+"  -F INT               only include reads with none of the FLAGS in INT present [0x900]\n"       //   F&x == 0
 "  -G INT               only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
 "  -n                   don't append /1 and /2 to the read name\n"
 "  -N                   always append /1 and /2 to the read name\n");
@@ -112,9 +114,9 @@ static void bam2fq_usage(FILE *to, const char *command)
 "\n"
 "Examples:\n"
 " To get just the paired reads in separate files, use:\n"
-"   samtools %s -1 paired1.%s -2 paired2.%s -0 /dev/null -s /dev/null -n -F 0x900 in.bam\n"
+"   samtools %s -1 paired1.%s -2 paired2.%s -0 /dev/null -s /dev/null -n in.bam\n"
 "\n To get all non-supplementary/secondary reads in a single file, redirect the output:\n"
-"   samtools %s -F 0x900 in.bam > all_reads.%s\n",
+"   samtools %s in.bam > all_reads.%s\n",
             command, fq ? "fq" : "fa", fq ? "fq" : "fa",
             command, fq ? "fq" : "fa");
 }
@@ -534,6 +536,8 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
     opts->index_file[1] = NULL;
     opts->extra_tags = NULL;
     opts->compression_level = 1;
+    opts->flag_off = BAM_FSECONDARY|BAM_FSUPPLEMENTARY;
+    int flag_off_set = 0;
 
     int c;
     sam_global_args_init(&opts->ga);
@@ -550,7 +554,7 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         {"quality-tag", required_argument, NULL, 'q'},
         { NULL, 0, NULL, 0 }
     };
-    while ((c = getopt_long(argc, argv, "0:1:2:f:F:G:niNOs:c:tT:v:@:", lopts, NULL)) > 0) {
+    while ((c = getopt_long(argc, argv, "0:1:2:o:f:F:G:niNOs:c:tT:v:@:", lopts, NULL)) > 0) {
         switch (c) {
             case 'b': opts->barcode_tag = strdup(optarg); break;
             case 'q': opts->quality_tag = strdup(optarg); break;
@@ -560,8 +564,14 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
             case '0': opts->fnr[0] = optarg; break;
             case '1': opts->fnr[1] = optarg; break;
             case '2': opts->fnr[2] = optarg; break;
+            case 'o': opts->fnr[1] = optarg; opts->fnr[2] = optarg; break;
             case 'f': opts->flag_on |= strtol(optarg, 0, 0); break;
-            case 'F': opts->flag_off |= strtol(optarg, 0, 0); break;
+            case 'F':
+                if (!flag_off_set) {
+                    flag_off_set = 1;
+                    opts->flag_off = 0;
+                }
+                opts->flag_off |= strtol(optarg, 0, 0); break;
             case 'G': opts->flag_alloff |= strtol(optarg, 0, 0); break;
             case 'n': opts->has12 = false; break;
             case 'N': opts->has12always = true; break;
@@ -648,20 +658,19 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         return false;
     }
 
-    if ((argc - (optind)) == 0) {
-        fprintf(stderr, "No input file specified.\n");
+    if (argc == optind && isatty(STDIN_FILENO)) {
         bam2fq_usage(stdout, argv[0]);
         free_opts(opts);
-        return false;
+        return true;
     }
 
-    if ((argc - (optind)) != 1) {
+    if (argc - optind > 1) {
         fprintf(stderr, "Too many arguments.\n");
         bam2fq_usage(stderr, argv[0]);
         free_opts(opts);
         return false;
     }
-    opts->fn_input = argv[optind];
+    opts->fn_input = argc > optind ? argv[optind] : "-";
     *opts_out = opts;
     return true;
 }
@@ -770,14 +779,22 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
         }
     }
 
-    int i;
+    int i, j;
     for (i = 0; i < 3; ++i) {
         if (opts->fnr[i]) {
-            state->fpr[i] = open_fqfile(opts->fnr[i], state->compression_level, &state->p);
-            if (state->fpr[i] == NULL) {
-                print_error_errno("bam2fq", "Cannot write to r%d file \"%s\"", i, opts->fnr[i]);
-                free(state);
-                return false;
+            for (j = 0; j < i; j++)
+                if (opts->fnr[j] && strcmp(opts->fnr[j], opts->fnr[i]) == 0)
+                    break;
+            if (j == i) {
+                state->fpr[i] = open_fqfile(opts->fnr[i], state->compression_level, &state->p);
+                if (state->fpr[i] == NULL) {
+                    print_error_errno("bam2fq", "Cannot write to r%d file \"%s\"",
+                                      i, opts->fnr[i]);
+                    free(state);
+                    return false;
+                }
+            } else {
+                state->fpr[i] = state->fpr[j];
             }
         } else {
             if (!state->hstdout) {
@@ -794,11 +811,24 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
     for (i = 0; i < 2; i++) {
         state->fpi[i] = NULL;
         if (opts->index_file[i]) {
-            state->fpi[i] = open_fqfile(opts->index_file[i], state->compression_level, &state->p);
-            if (state->fpi[i] == NULL) {
-                print_error_errno("bam2fq", "Cannot write to i%d file \"%s\"", i+1, opts->index_file[i]);
-                free(state);
-                return false;
+            for (j = 0; j < 3; j++)
+                if (opts->fnr[j] && strcmp(opts->fnr[j], opts->index_file[i]) == 0)
+                    break;
+            for (j -= 3; j >= 0 && j < i; j++)
+                if (opts->index_file[j] && strcmp(opts->index_file[j], opts->index_file[i]) == 0)
+                    break;
+            if (i == j) {
+                state->fpi[i] = open_fqfile(opts->index_file[i], state->compression_level, &state->p);
+                if (state->fpi[i] == NULL) {
+                    print_error_errno("bam2fq", "Cannot write to i%d file \"%s\"",
+                                      i+1, opts->index_file[i]);
+                    free(state);
+                    return false;
+                }
+            } else if (j < 0) {
+                state->fpi[i] = state->fpr[j+3];
+            } else {
+                state->fpi[i] = state->fpi[j];
             }
         }
     }
@@ -820,10 +850,16 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
     bam_hdr_destroy(state->h);
     check_sam_close("bam2fq", state->fp, opts->fn_input, "file", status);
     if (state->fpse && bgzf_close(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); valid = false; }
-    int i;
+    int i, j;
     for (i = 0; i < 3; ++i) {
         if (state->fpr[i] != state->hstdout) {
-            if (bgzf_close(state->fpr[i])) { print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]); valid = false; }
+            for (j = 0; j < i; j++)
+                if (state->fpr[i] == state->fpr[j])
+                    break;
+            if (j == i && bgzf_close(state->fpr[i])) {
+                print_error_errno("bam2fq", "Error closing r%d file \"%s\"", i, opts->fnr[i]);
+                valid = false;
+            }
         }
     }
     if (state->hstdout) {
@@ -833,7 +869,13 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
         }
     }
     for (i = 0; i < 2; i++) {
-        if (state->fpi[i] && bgzf_close(state->fpi[i])) {
+        for (j = 0; j < 3; j++)
+            if (state->fpi[i] == state->fpr[j])
+                break;
+        for (j -= 3; j >= 0 && j < i; j++)
+            if (state->fpi[i] == state->fpi[j])
+                break;
+        if (j == i && state->fpi[i] && bgzf_close(state->fpi[i])) {
             print_error_errno("bam2fq", "Error closing i%d file \"%s\"", i+1, opts->index_file[i]);
             valid = false;
         }
@@ -848,10 +890,9 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
 
 static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
 {
-    return (b->core.flag&(BAM_FSECONDARY|BAM_FSUPPLEMENTARY) // skip secondary and supplementary alignments
-        || (b->core.flag&(state->flag_on)) != state->flag_on // or reads indicated by filter flags
-        || (b->core.flag&(state->flag_off)) != 0
-        || (b->core.flag&(state->flag_alloff) && (b->core.flag&(state->flag_alloff)) == state->flag_alloff));
+    return ((b->core.flag&(state->flag_on)) != state->flag_on // or reads indicated by filter flags
+        ||  (b->core.flag&(state->flag_off)) != 0
+        ||  (b->core.flag&(state->flag_alloff) && (b->core.flag&(state->flag_alloff)) == state->flag_alloff));
 
 }
 

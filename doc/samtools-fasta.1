@@ -89,9 +89,11 @@ If none of the candidate records has quality values, then the first in
 input file order will be used instead.
 
 Sequences will be written to standard output unless one of the
-.BR -1 , -2 ", or " -0
+.BR -1 ", " -2 ", " -o ", or " -0
 options is used, in which case sequences for that category will be written to
 the specified file.
+The same filename may be specified with multiple options, in which ase the
+sequences will be multiplexed in order of occurrence.
 
 If a singleton file is specified using the
 .B -s
@@ -152,6 +154,11 @@ If the
 .B -s
 option is used, only paired reads will be written to this file.
 .TP 8
+.B -o FILE
+Write reads with either READ1 FLAG or READ2 flag set to FILE instead
+of outputting them to stdout.  This is equivalent to \fB-1\fR FILE
+\fB-2\fR FILE.
+.TP 8
 .B -0 FILE
 Write reads where the READ1 and READ2 FLAG bits set are either both set
 or both unset to FILE instead of outputting them.
@@ -171,6 +178,8 @@ present in the FLAG field.
 .I INT
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
 or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+This defaults to 0x900 representing filtering of secondary and
+supplementary alignments.
 .TP 8
 .BI "-G " INT
 Only EXCLUDE reads with all of the bits set in
