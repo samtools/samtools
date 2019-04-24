@@ -61,11 +61,18 @@ press `?' for help and press `g' to check the alignment start from a
 region in the format like `chr10:10,000,000' or `=10,000,000' when
 viewing the same reference sequence.
 
-
 .SH OPTIONS
 .TP 14
 .BI -d \ display
-Output as (H)tml or (C)urses or (T)ext
+Output as (H)tml, (C)urses or (T)ext.
+
+The width of generated text is controlled by the COLUMNS environment
+variable.  Note this may be a local shell variable so it may need
+exporting first or specifying on the command line prior to the
+command.  For example
+.EX 2
+export COLUMNS ; samtools view -d T -p 1:234567 in.bam
+.EE
 .TP
 .BI -p \ chr:pos
 Go directly to this position
