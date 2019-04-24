@@ -112,7 +112,9 @@ regions listed in the bed file.
 Assume the quality is in the Illumina 1.3+ encoding.
 .TP
 .B -A, --count-orphans
-Do not skip anomalous read pairs in variant calling.
+Do not skip anomalous read pairs in variant calling.  Anomolous read
+pairs are those marked in the FLAG field as paired in sequencing but
+without the properly-paired flag set.
 .TP
 .BI -b,\ --bam-list \ FILE
 List of input BAM files, one file per line [null]
