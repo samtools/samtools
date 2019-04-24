@@ -25,6 +25,8 @@ DEALINGS IN THE SOFTWARE.  */
 #ifndef SAMTOOLS_H
 #define SAMTOOLS_H
 
+#include "htslib/sam.h"
+
 const char *samtools_version(void);
 
 #if defined __GNUC__ && __GNUC__ >= 2
@@ -35,5 +37,7 @@ const char *samtools_version(void);
 
 void print_error(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
 void print_error_errno(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
+
+void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp);
 
 #endif

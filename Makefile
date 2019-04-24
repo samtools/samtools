@@ -37,7 +37,7 @@ LZ4_LDFLAGS  = -L$(LZ4DIR)
 
 LOBJS=      bam_aux.o bam.o bam_import.o sam.o \
             sam_header.o bam_plbuf.o
-AOBJS=      bam_index.o bam_plcmd.o sam_view.o \
+AOBJS=      bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o \
             bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
             bamtk.o bam2bcf.o bam2bcf_indel.o sample.o \
@@ -169,6 +169,7 @@ bam_addrprg.o: bam_addrprg.c config.h $(htslib_sam_h) $(htslib_kstring_h) samtoo
 bam_aux.o: bam_aux.c config.h $(bam_h)
 bam_cat.o: bam_cat.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_khash_h) samtools.h
 bam_color.o: bam_color.c config.h $(bam_h)
+bam_fastq.o: bam_fastq.c config.h $(htslib_sam_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_bgzf_h) $(htslib_thread_pool_h) samtools.h $(sam_opts_h)
 bam_import.o: bam_import.c config.h $(htslib_kstring_h) $(bam_h) $(htslib_kseq_h)
 bam_index.o: bam_index.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_khash_h) samtools.h $(sam_opts_h)
 bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) $(htslib_ksort_h)
@@ -200,7 +201,7 @@ sam.o: sam.c config.h $(htslib_faidx_h) $(sam_h)
 sam_header.o: sam_header.c config.h sam_header.h $(htslib_khash_h)
 sam_opts.o: sam_opts.c config.h $(sam_opts_h)
 sam_utils.o: sam_utils.c config.h samtools.h
-sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_thread_pool_h) $(htslib_bgzf_h) samtools.h $(sam_opts_h) $(bedidx_h)
+sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_thread_pool_h) samtools.h $(sam_opts_h) $(bedidx_h)
 sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)
 stats_isize.o: stats_isize.c config.h $(stats_isize_h) $(htslib_khash_h)
 stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) $(htslib_hts_defs_h) sam_header.h $(htslib_khash_str2int_h) samtools.h $(htslib_khash_h) $(htslib_kstring_h) $(stats_isize_h) $(sam_opts_h) $(bedidx_h)
