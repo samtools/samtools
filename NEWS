@@ -14,6 +14,10 @@ Release a.b
   target-regions option or when a region was specified on the command-line.
   (#1025, reported by Miguel Machado; #1029, reported by Jody Phelan).
 
+* Fixed error in stats GCD percentile depth calculation when the depth to be
+  reported fell between two bins.  It would report the depth entirely from the
+  lower bin instead of taking a weighted average of the two.
+
 Release 1.9 (18th July 2018)
 ----------------------------
 
