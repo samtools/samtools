@@ -63,38 +63,17 @@ samtools mpileup
 
 .SH DESCRIPTION
 .PP
-Generate pileup for one or multiple BAM files. Alignment records
-are grouped by sample (SM) identifiers in @RG header lines. If sample
-identifiers are absent, each input file is regarded as one sample.
+Generate text pileup output for one or multiple BAM files.
+Each input file produces a separate group of pileup columns in the output.
 
-Samtools mpileup can still produce VCF and BCF output, but this feature is
+Samtools mpileup can still produce VCF and BCF output (with
+.BR -g \ or \ -u ),
+but this feature is
 deprecated and will be removed in a future release.  Please use
 .B bcftools mpileup
 for this instead.  (Documentation on the deprecated options has been removed
 from this manual page, but older versions are available online
 at <http://www.htslib.org/doc/>.)
-
-In the pileup format (without
-.BR -u \ or \ -g ),
-each
-line represents a genomic position, consisting of chromosome name,
-1-based coordinate, reference base, the number of reads covering the site,
-read bases, base qualities and alignment
-mapping qualities. Information on match, mismatch, indel, strand,
-mapping quality and start and end of a read are all encoded at the read
-base column. At this column, a dot stands for a match to the reference
-base on the forward strand, a comma for a match on the reverse strand,
-a '>' or '<' for a reference skip, `ACGTN' for a mismatch on the forward
-strand and `acgtn' for a mismatch on the reverse strand. A pattern
-`\\+[0-9]+[ACGTNacgtn]+' indicates there is an insertion between this
-reference position and the next reference position. The length of the
-insertion is given by the integer in the pattern, followed by the
-inserted sequence. Similarly, a pattern `-[0-9]+[ACGTNacgtn]+'
-represents a deletion from the reference. The deleted bases will be
-presented as `*' in the following lines. Also at the read base column, a
-symbol `^' marks the start of a read. The ASCII of the character
-following `^' minus 33 gives the mapping quality. A symbol `$' marks the
-end of a read segment.
 
 Note that there are two orthogonal ways to specify locations in the
 input file; via \fB-r\fR \fIregion\fR and \fB-l\fR \fIfile\fR.  The
@@ -105,6 +84,78 @@ example a BED file containing locations of genes in chromosome 20
 could be specified using \fB-r 20 -l chr20.bed\fR, meaning that the
 index is used to find chromosome 20 and then it is filtered for the
 regions listed in the bed file.
+
+.SS Pileup Format
+Pileup format consists of TAB-separated lines, with each line representing
+the pileup of reads at a single genomic position.
+
+Several columns contain numeric quality values encoded as individual ASCII
+characters.
+Each character can range from \(lq!\(rq to \(lq~\(rq and is decoded by
+taking its ASCII value and subtracting 33; e.g., \(lqA\(rq encodes the
+numeric value 32.
+
+The first three columns give the position and reference:
+.IP \(ci 2
+Chromosome name.
+.IP \(ci 2
+1-based position on the chromosome.
+.IP \(ci 2
+Reference base at this position (this will be \(lqN\(rq on all lines
+if \fB-f\fR/\fB--fasta-ref\fR has not been used).
+.PP
+The remaining columns show the pileup data, and are repeated for each
+input BAM file specified:
+.IP \(ci 2
+Number of reads covering this position.
+.IP \(ci 2
+Read bases.
+This encodes information on matches, mismatches, indels, strand,
+mapping quality, and starts and ends of reads.
+
+For each read covering the position, this column contains:
+.RS
+.IP \(bu 2
+If this is the first position covered by the read, a \(lq^\(rq character
+followed by the alignment's mapping quality encoded as an ASCII character.
+.IP \(bu 2
+A single character indicating the read base and the strand to which the read
+has been mapped:
+.TS
+c c c
+- - -
+ceb ceb l .
+Forward	Reverse	Meaning
+\&.\fR dot	,\fR comma	Base matches the reference base
+ACGTN	acgtn	Base is a mismatch to the reference base
+>	<	Reference skip (due to CIGAR \(lqN\(rq)
+*	*	Deletion of the reference base (CIGAR \(lqD\(rq)
+.TE
+.IP \(bu 2
+If there is an insertion after this read base, text matching
+\(lq\\+[0-9]+[ACGTNacgtn]+\(rq: a \(lq+\(rq character followed by an integer
+giving the length of the insertion and then the inserted sequence.
+.IP \(bu 2
+If there is a deletion after this read base, text matching
+\(lq-[0-9]+[ACGTNacgtn]+\(rq: a \(lq-\(rq character followed by the deleted
+reference bases represented similarly.  (Subsequent pileup lines will
+contain \(lq*\(rq for this read indicating the deleted bases.)
+.IP \(bu 2
+If this is the last position covered by the read, a \(lq$\(rq character.
+.RE
+.IP \(ci 2
+Base qualities, encoded as ASCII characters.
+.IP \(ci 2
+Alignment mapping qualities, encoded as ASCII characters.
+(Column only present when \fB-s\fR/\fB--output-MQ\fR is used.)
+.IP \(ci 2
+Comma-separated 1-based positions within the alignments, e.g., 5 indicates
+that it is the fifth base of the corresponding read that is mapped to this
+genomic position.
+(Column only present when \fB-O\fR/\fB--output-BP\fR is used.)
+.IP \(ci 2
+Comma-separated read names.
+(Column only present when \fB--output-QNAME\fR is used.)
 
 .SH OPTIONS
 .TP 10
