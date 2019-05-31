@@ -1,6 +1,6 @@
 /* coverage.c -- samtools coverage subcommand
- 
-   Author: Florian P Breitwieser <florian.bw@gmail.com>
+
+Author: Florian P Breitwieser <florian.bw@gmail.com>
 
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -42,21 +42,21 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 
 #if defined (__has_include)
-  #if __has_include(<sys/ioctl.h>)
-    #include <sys/ioctl.h>
-    #define has_ioctl
-  #elif __has_include(<windows.h>)
-    #include <windows.h>
-    #define has_windows
-  #endif
+#if __has_include(<sys/ioctl.h>)
+#include <sys/ioctl.h>
+#define has_ioctl
+#elif __has_include(<windows.h>)
+#include <windows.h>
+#define has_windows
+#endif
 #else
-  #if defined (__MSYS__) || defined (__CYGWIN__) || defined (_WIN32)
-    #include <windows.h>
-    #define has_windows
-  #else
-    #include <sys/ioctl.h>
-    #define has_ioctl
-  #endif
+#if defined (__MSYS__) || defined (__CYGWIN__) || defined (_WIN32)
+#include <windows.h>
+#define has_windows
+#else
+#include <sys/ioctl.h>
+#define has_ioctl
+#endif
 #endif
 
 #include "htslib/sam.h"
@@ -120,38 +120,38 @@ int read_file_list(const char *file_list, int *n, char **argv[]);
 
 static int usage() {
     fprintf(stdout, "Usage: samtools coverage [options] in1.bam [in2.bam [...]]\n\n"
-                    "Input options:\n"
-                    "  -b, --bam-list FILE     list of input BAM filenames, one per line\n"
-                    "  -l, --min-read-len INT  ignore reads shorter than INT bp [0]\n"
-                    "  -q, --min-MQ INT        base quality threshold [0]\n"
-                    "  -Q, --min-BQ INT        mapping quality threshold [0]\n"
-                    "  --rf <int|str>          required flags: skip reads with mask bits unset []\n"
-                    "  --ff <int|str>          filter flags: skip reads with mask bits set \n"
-                    "                                      [UNMAP,SECONDARY,QCFAIL,DUP]\n"
-                    "Output options:\n"
-                    "  -m, --histogram         show histogram instead of tabular output\n"
-                    "  -M, --Histogram         show histogram with full UTF8 mode for finer resolution\n"
-                    "  -o, --output FILE       write output to FILE [stdout]\n"
-                    "  -H, --no-header         don't print a header in tabular mode\n"
-                    "  -w, --n-bins INT        number of bins in histogram [terminal width - 40]\n"
-                    "  -r, --region REG        show specified region. Format: chr:start-end. \n"
-                    "  -h, --help              help (this page)\n");
+            "Input options:\n"
+            "  -b, --bam-list FILE     list of input BAM filenames, one per line\n"
+            "  -l, --min-read-len INT  ignore reads shorter than INT bp [0]\n"
+            "  -q, --min-MQ INT        base quality threshold [0]\n"
+            "  -Q, --min-BQ INT        mapping quality threshold [0]\n"
+            "  --rf <int|str>          required flags: skip reads with mask bits unset []\n"
+            "  --ff <int|str>          filter flags: skip reads with mask bits set \n"
+            "                                      [UNMAP,SECONDARY,QCFAIL,DUP]\n"
+            "Output options:\n"
+            "  -m, --histogram         show histogram instead of tabular output\n"
+            "  -A, --ascii             show only ASCII characters in histogram\n"
+            "  -o, --output FILE       write output to FILE [stdout]\n"
+            "  -H, --no-header         don't print a header in tabular mode\n"
+            "  -w, --n-bins INT        number of bins in histogram [terminal width - 40]\n"
+            "  -r, --region REG        show specified region. Format: chr:start-end. \n"
+            "  -h, --help              help (this page)\n");
 
     fprintf(stdout, "\nGeneric options:\n");
     sam_global_opt_help(stdout, "-.--.-");
 
     fprintf(stdout, 
             "\nSee manpage for additional details.\n"
-                    "  rname       Reference name / chromosome\n"
-                    "  startpos    Start position\n"
-                    "  endpos      End position (or sequence length)\n"
-                    "  numreads    Number reads aligned to the region (after filtering)\n"
-                    "  covbases    Number of covered bases with depth >= 1\n"
-                    "  coverage    Proportion of covered bases [0..1]\n"
-                    "  meandepth   Mean depth of coverage\n"
-                    "  meanbaseq   Mean baseQ in covered region\n"
-                    "  meanmapq    Mean mapQ of selected reads\n"
-                    );
+            "  rname       Reference name / chromosome\n"
+            "  startpos    Start position\n"
+            "  endpos      End position (or sequence length)\n"
+            "  numreads    Number reads aligned to the region (after filtering)\n"
+            "  covbases    Number of covered bases with depth >= 1\n"
+            "  coverage    Proportion of covered bases [0..1]\n"
+            "  meandepth   Mean depth of coverage\n"
+            "  meanbaseq   Mean baseQ in covered region\n"
+            "  meanmapq    Mean mapQ of selected reads\n"
+           );
 
     return EXIT_SUCCESS;
 }
@@ -222,21 +222,21 @@ void print_tabular_line(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *s
             stats->summed_coverage / region_len,
             stats->summed_coverage > 0? stats->summed_baseQ/(double) stats->summed_coverage : 0,
             stats->n_selected_reads > 0? stats->summed_mapQ/(double) stats->n_selected_reads : 0
-            );
+           );
 }
 
 void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, const uint32_t *hist, 
-                const int hist_size, const bool full_utf) {
+        const int hist_size, const bool full_utf) {
     int i, col;
     bool show_percentiles = false;
     const int n_rows = 10;
     const char * const * BLOCK_CHARS = full_utf? BLOCK_CHARS8 : BLOCK_CHARS2;
     const int blockchar_len = full_utf? 8 : 2;
     /*
-    if (stats->beg == 0) {
-        stats->end = h->target_len[stats->tid];
-    }
-    */
+       if (stats->beg == 0) {
+       stats->end = h->target_len[stats->tid];
+       }
+       */
     double region_len = stats->end - stats->beg;
 
     // Calculate histogram that contains percent covered
@@ -249,7 +249,7 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
 
     char buf[100];
     fprintf(file_out, "%s (%sbp)\n", h->target_name[stats->tid], readable_bps(h->target_len[stats->tid], buf));
-    
+
     double row_bin_size = max_val / (double) n_rows;
     for (i = n_rows-1; i >= 0; --i) {
         double current_bin = row_bin_size * i;
@@ -333,7 +333,7 @@ int main_coverage(int argc, char *argv[]) {
     bool opt_print_tabular = true;
     bool opt_print_histogram = false;
     bool *covered_tids;
-    bool opt_full_utf = false;
+    bool opt_full_utf = true;
 
     FILE *file_out = stdout;
 
@@ -351,7 +351,7 @@ int main_coverage(int argc, char *argv[]) {
         {"min-BQ", required_argument, NULL, 'Q'},
         {"min-bq", required_argument, NULL, 'Q'},
         {"histogram", no_argument, NULL, 'm'},
-        {"Histogram", no_argument, NULL, 'M'},
+        {"ascii", no_argument, NULL, 'A'},
         {"output", required_argument, NULL, 'o'},
         {"no-header", required_argument, NULL, 'H'},
         {"n-bins", required_argument, NULL, 'w'},
@@ -364,41 +364,41 @@ int main_coverage(int argc, char *argv[]) {
     // parse the command line
     int c;
     while ((c = getopt_long(argc, argv, "o:L:q:Q:hHw:r:b:mM", lopts, NULL)) != -1) {
-            switch (c) {
-                case 1:
-                        if ((required_flags = bam_str2flag(optarg)) < 0) {
-                             fprintf(stderr,"Could not parse --rf %s\n", optarg); return EXIT_FAILURE;
-                         }; break;
-                case 2:
-                        if ((fail_flags = bam_str2flag(optarg)) < 0) {
-                             fprintf(stderr,"Could not parse --ff %s\n", optarg); return EXIT_FAILURE;
-                         }; break;
-                case 'o': opt_output_file = optarg; opt_full_width = false; break;
-                case 'L': opt_min_len = atoi(optarg); break;
-                case 'q': opt_min_baseQ = atoi(optarg); break;
-                case 'Q': opt_min_mapQ = atoi(optarg); break;
-                case 'w': opt_n_bins = atoi(optarg); opt_full_width = false;
-                          opt_print_histogram = true; opt_print_tabular = false; 
-			              break;
-                case 'r': opt_reg = optarg; break;   // parsing a region requires a BAM header (strdup unnecessary)
-                case 'b': opt_file_list = optarg; break;
-                case 'm': opt_print_histogram = true; opt_print_tabular = false; break;
-                case 'M': opt_full_utf = true; 
-                          opt_print_histogram = true; opt_print_tabular = false; 
-                          break;
-                case 'H': opt_print_header = false; break;
-                case 'h': return usage();
-                default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
-                      /* else fall-through */
-                case '?': 
-                   if (optopt == 'c')
-                      fprintf (stderr, "Option -%c requires an argument.\n", optopt);
-                    else if (isprint (optopt))
-                      fprintf (stderr, "Unknown option `-%c'.\n", optopt);
-                    else
-                      fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
-                    return 1;
-            }
+        switch (c) {
+            case 1:
+                if ((required_flags = bam_str2flag(optarg)) < 0) {
+                    fprintf(stderr,"Could not parse --rf %s\n", optarg); return EXIT_FAILURE;
+                }; break;
+            case 2:
+                if ((fail_flags = bam_str2flag(optarg)) < 0) {
+                    fprintf(stderr,"Could not parse --ff %s\n", optarg); return EXIT_FAILURE;
+                }; break;
+            case 'o': opt_output_file = optarg; opt_full_width = false; break;
+            case 'L': opt_min_len = atoi(optarg); break;
+            case 'q': opt_min_baseQ = atoi(optarg); break;
+            case 'Q': opt_min_mapQ = atoi(optarg); break;
+            case 'w': opt_n_bins = atoi(optarg); opt_full_width = false;
+                      opt_print_histogram = true; opt_print_tabular = false; 
+                      break;
+            case 'r': opt_reg = optarg; break;   // parsing a region requires a BAM header (strdup unnecessary)
+            case 'b': opt_file_list = optarg; break;
+            case 'm': opt_print_histogram = true; opt_print_tabular = false; break;
+            case 'A': opt_full_utf = false; 
+                      opt_print_histogram = true; opt_print_tabular = false; 
+                      break;
+            case 'H': opt_print_header = false; break;
+            case 'h': return usage();
+            default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+                          /* else fall-through */
+            case '?': 
+                          if (optopt == 'c')
+                              fprintf (stderr, "Option -%c requires an argument.\n", optopt);
+                          else if (isprint (optopt))
+                              fprintf (stderr, "Unknown option `-%c'.\n", optopt);
+                          else
+                              fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
+                          return 1;
+        }
     }
     if (optind == argc && !opt_file_list) 
         return usage();
@@ -419,8 +419,9 @@ int main_coverage(int argc, char *argv[]) {
         if (ccolumns == NULL) {
 #if defined has_windows
             CONSOLE_SCREEN_BUFFER_INFO csbi;
-            GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi);
-	    columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+            if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
+                columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
+            }
 #elif defined has_ioctl
             struct winsize w; 
             if (ioctl(2, TIOCGWINSZ, &w) == 0)
@@ -432,8 +433,8 @@ int main_coverage(int argc, char *argv[]) {
         if (columns > 60) {
             opt_n_bins = columns - 40;
         } else {
-            opt_n_bins = 50;
-	}
+            opt_n_bins = 60;
+        }
     }
 
     // setvbuf(file_out, NULL, _IONBF, 0); //turn off buffering
@@ -588,7 +589,7 @@ int main_coverage(int argc, char *argv[]) {
                 else if (p->qpos < p->b->core.l_qseq &&
                         bam_get_qual(p->b)[p->qpos] < opt_min_baseQ) --depth_at_pos; // low base quality
                 else
-                        stats->summed_baseQ += bam_get_qual(p->b)[p->qpos];
+                    stats->summed_baseQ += bam_get_qual(p->b)[p->qpos];
             }
             if (depth_at_pos > 0) {
                 count_base = true;
