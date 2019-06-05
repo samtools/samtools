@@ -1153,7 +1153,7 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *mode,
                     const char *headers, int n, char * const *fn, char * const *fn_idx,
                     int flag, const char *reg, int n_threads, const char *cmd,
-                    const htsFormat *in_fmt, const htsFormat *out_fmt)
+                    const htsFormat *in_fmt, const htsFormat *out_fmt, int write_index)
 {
     samFile *fpout, **fp = NULL;
     heap1_t *heap = NULL;
@@ -1166,6 +1166,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     bam_hdr_t **hdr = NULL;
     trans_tbl_t *translation_tbl = NULL;
     int *rtrans = NULL;
+    char *out_idx_fn = NULL;
     merged_header_t *merged_hdr = init_merged_header();
     if (!merged_hdr) return -1;
 
@@ -1407,6 +1408,12 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         sam_close(fpout);
         return -1;
     }
+    if (write_index && out && strcmp(out, "-") != 0) {
+        if (!(out_idx_fn = auto_index(fpout, out, hout))){
+            sam_close(fpout);
+            return -1;
+        }
+    }
     if (!(flag & MERGE_UNCOMP)) hts_set_threads(fpout, n_threads);
 
     // Begin the actual merge
@@ -1421,6 +1428,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         if (sam_write1(fpout, hout, b) < 0) {
             print_error_errno(cmd, "failed writing to \"%s\"", out);
             sam_close(fpout);
+            free(out_idx_fn);
             return -1;
         }
         if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
@@ -1444,6 +1452,14 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         }
         ks_heapadjust(heap, 0, n, heap);
     }
+
+    if (write_index) {
+        if (sam_idx_save(fpout) < 0) {
+            print_error_errno("merge", "writing index failed");
+            goto fail;
+        }
+    }
+    free(out_idx_fn);
 
     // Clean up and close
     if (flag & MERGE_RG) {
@@ -1491,6 +1507,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     free(heap);
     free(fp);
     free(rtrans);
+    free(out_idx_fn);
     return -1;
 }
 
@@ -1501,7 +1518,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
     strcpy(mode, "wb");
     if (flag & MERGE_UNCOMP) strcat(mode, "0");
     else if (flag & MERGE_LEVEL1) strcat(mode, "1");
-    return bam_merge_core2(by_qname, NULL, out, mode, headers, n, fn, NULL, flag, reg, 0, "merge", NULL, NULL);
+    return bam_merge_core2(by_qname, NULL, out, mode, headers, n, fn, NULL, flag, reg, 0, "merge", NULL, NULL, 0);
 }
 
 static void merge_usage(FILE *to)
@@ -1524,7 +1541,7 @@ static void merge_usage(FILE *to)
 "  -s VALUE   Override random seed\n"
 "  -b FILE    List of input BAM filenames, one per line [null]\n"
 "  -X         Use customized index files\n");
-    sam_global_opt_help(to, "-.O..@");
+    sam_global_opt_help(to, "-.O..@.");
 }
 
 int bam_merge(int argc, char *argv[])
@@ -1642,7 +1659,7 @@ int bam_merge(int argc, char *argv[])
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
     if (bam_merge_core2(is_by_qname, sort_tag, argv[optind], mode, fn_headers,
                         fn_size+nargcfiles, fn, fn_idx, flag, reg, ga.nthreads,
-                        "merge", &ga.in, &ga.out) < 0)
+                        "merge", &ga.in, &ga.out, ga.write_index) < 0)
         ret = 1;
 
 end:

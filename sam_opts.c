@@ -75,6 +75,9 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
         } else if (strcmp(lopt->name, "threads") == 0) {
             ga->nthreads = atoi(optarg);
             break;
+        } else if (strcmp(lopt->name, "write-index") == 0) {
+            ga->write_index=1;
+            break;
 //      } else if (strcmp(lopt->name, "verbose") == 0) {
 //          ga->verbosity++;
 //          break;
@@ -84,6 +87,18 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
     if (!lopt->name) {
         fprintf(stderr, "Unexpected global option: %s\n", lopt->name);
         return -1;
+    }
+
+    /*
+     * SAM format with compression enabled implies SAM.bgzf
+     */
+    if (ga->out.format == sam) {
+        hts_opt *opts = (hts_opt *)ga->out.specific;
+        while (opts) {
+            if (opts->opt == HTS_OPT_COMPRESSION_LEVEL)
+                ga->out.compression = bgzf;
+            opts = opts->next;
+        }
     }
 
     return r;
@@ -136,6 +151,9 @@ void sam_global_opt_help(FILE *fp, const char *shortopts) {
         else if (strcmp(lopts[i].name, "threads") == 0)
             fprintf(fp,"threads INT\n"
                     "               Number of additional threads to use [0]\n");
+        else if (strcmp(lopts[i].name, "write-index") == 0)
+            fprintf(fp,"write-index\n"
+                    "               Automatically index the output files [off]\n");
 //      else if (strcmp(lopts[i].name, "verbose") == 0)
 //          fprintf(fp,"verbose\n"
 //                  "               Increment level of verbosity\n");

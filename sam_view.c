@@ -299,6 +299,7 @@ int main_samview(int argc, char *argv[])
     bam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
     char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
+    char *fn_out_idx = NULL, *fn_un_out_idx = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     int filter_state = ALL, filter_op = 0;
@@ -567,6 +568,13 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
+        if (ga.write_index && fn_out) {
+            if (!(fn_out_idx = auto_index(out, fn_out, header))) {
+                ret = 1;
+                goto view_end;
+            }
+        }
+
         if (fn_un_out) {
             if ((un_out = sam_open_format(fn_un_out, out_un_mode, &ga.out)) == 0) {
                 print_error_errno("view", "failed to open \"%s\" for writing", fn_un_out);
@@ -585,6 +593,12 @@ int main_samview(int argc, char *argv[])
                 (ga.out.format != sam && ga.out.format != unknown_format))  {
                 if (sam_hdr_write(un_out, header) != 0) {
                     fprintf(stderr, "[main_samview] failed to write the SAM header\n");
+                    ret = 1;
+                    goto view_end;
+                }
+            }
+            if (ga.write_index && fn_un_out) {
+                if (!(fn_un_out_idx = auto_index(un_out, fn_un_out, header))) {
                     ret = 1;
                     goto view_end;
                 }
@@ -746,6 +760,17 @@ int main_samview(int argc, char *argv[])
         }
     }
 
+    if (ga.write_index) {
+        if (sam_idx_save(out) < 0) {
+            print_error_errno("view", "writing index failed");
+            ret = 1;
+        }
+        if (un_out && sam_idx_save(un_out) < 0) {
+            print_error_errno("view", "writing index failed");
+            ret = 1;
+        }
+    }
+
 view_end:
     if (is_count && ret == 0) {
         if (fprintf(fn_out? fp_out : stdout, "%" PRId64 "\n", count) < 0) {
@@ -786,6 +811,11 @@ view_end:
 
     if (p.pool)
         hts_tpool_destroy(p.pool);
+
+    if (fn_out_idx)
+        free(fn_out_idx);
+    if (fn_un_out_idx)
+        free(fn_un_out_idx);
 
     return ret;
 }
@@ -837,7 +867,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -?       print long help, including note about region specification\n"
 "  -S       ignored (input format is auto-detected)\n");
 
-    sam_global_opt_help(fp, "-.O.T@");
+    sam_global_opt_help(fp, "-.O.T@.");
     fprintf(fp, "\n");
 
     if (is_long_help)

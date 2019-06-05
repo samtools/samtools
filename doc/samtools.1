@@ -681,7 +681,7 @@ Display the full samtools version number in a machine-readable format.
 .PP
 Several long-options are shared between multiple samtools sub-commands:
 \fB--input-fmt\fR, \fB--input-fmt-option\fR, \fB--output-fmt\fR,
-\fB--output-fmt-option\fR, and \fB--reference\fR.
+\fB--output-fmt-option\fR, \fB--reference\fR and \fB--write-index\fR.
 The input format is typically auto-detected so specifying the format
 is usually unnecessary and the option is included for completeness.
 Note that not all subcommands have all options.  Consult the subcommand
@@ -701,7 +701,8 @@ valid options are as follows.
 .TP 4
 .BI level= INT
 Output only. Specifies the compression level from 1 to 9, or 0 for
-uncompressed.
+uncompressed.  If the output format is SAM, this also enables BGZF
+compression, otherwise SAM defaults to uncompressed.
 .TP
 .BI nthreads= INT
 Specifies the number of threads to use during encoding and/or
@@ -812,6 +813,18 @@ samtools view --input-fmt-option decode_md=0
     --output-fmt cram,version=3.0 --output-fmt-option embed_ref
     --output-fmt-option seqs_per_slice=2000 -o foo.cram foo.bam
 .EE
+.PP
+The \fB--write-index\fR option enables automatic index creation while
+writing out BAM, CRAM or bgzf SAM files.  Note to get compressed SAM
+as the output format you need to manually request a compression level,
+otherwise all SAM files are uncompressed.  SAM and BAM will use CSI
+indices while CRAM will use CRAI indices.
+.PP
+For example: to convert a BAM to a compressed SAM with CSI indexing:
+.EX 4
+samtools view -h -O sam,level=6 --write-index in.bam -o out.sam.gz
+.EE
+
 .PP
 .SH REFERENCE SEQUENCES
 .PP

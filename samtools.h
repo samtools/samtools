@@ -40,4 +40,16 @@ void print_error_errno(const char *subcommand, const char *format, ...) CHECK_PR
 
 void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp);
 
+/*
+ * Utility function to add an index to a file we've opened for write.
+ * NB: Call this after writing the header and before writing sequences.
+ *
+ * The returned index filename should be freed by the caller, but only
+ * after sam_idx_save has been called.
+ *
+ * Returns index filename on success,
+ *         NULL on failure.
+ */
+char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header);
+
 #endif
