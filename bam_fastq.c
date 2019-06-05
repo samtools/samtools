@@ -46,6 +46,7 @@ KLIST_INIT(ktaglist, char*, taglist_free)
 
 #define DEFAULT_BARCODE_TAG "BC"
 #define DEFAULT_QUALITY_TAG "QT"
+#define INDEX_SEPARATOR "+"
 
 int8_t seq_comp_table[16] = { 0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15 };
 static const char *copied_tags[] = { "RG", "BC", "QT", NULL };
@@ -402,6 +403,7 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
     int file_number = 0;
     kstring_t linebuf = { 0, 0, NULL }; // Buffer
 
+    if (!ifmt) return true;
 
     // read barcode tag
     p = bam_aux_get(rec,opts->barcode_tag);
@@ -449,18 +451,27 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
         sub_tag[n] = '\0';
         sub_qual[n] = '\0';
 
-        if (action=='i' && *sub_tag && state->fpi[file_number]) {
-            //if (file_number==0) state->index_sequence = strdup(sub_tag);    // we're going to need this later...
-            state->index_sequence = strdup(sub_tag);    // we're going to need this later...
+        if (action=='i' && *sub_tag) {
+            if (state->index_sequence) {
+                char *new_index_sequence = realloc(state->index_sequence, strlen(state->index_sequence) + strlen(sub_tag) + 2);
+                if (!new_index_sequence) goto fail;
+                state->index_sequence = new_index_sequence;
+                strcat(state->index_sequence, INDEX_SEPARATOR);
+                strcat(state->index_sequence, sub_tag);
+            } else {
+                state->index_sequence = strdup(sub_tag);    // we're going to need this later...
+            }
             if (!state->index_sequence) goto fail;
             if (!make_fq_line(rec, sub_tag, sub_qual, &linebuf, state)) goto fail;
             if (state->illumina_tag) {
-                if (insert_index_sequence_into_linebuf(state->index_sequence, &linebuf, rec) < 0) {
+                if (insert_index_sequence_into_linebuf(sub_tag, &linebuf, rec) < 0) {
                     goto fail;
                 }
             }
-            if (bgzf_write(state->fpi[file_number++], linebuf.s, linebuf.l) < 0)
-                goto fail;
+            if (state->fpi[file_number]) {
+                if (bgzf_write(state->fpi[file_number++], linebuf.s, linebuf.l) < 0)
+                    goto fail;
+            }
         }
 
     }
@@ -473,7 +484,7 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
     perror(__func__);
     free(sub_qual); free(sub_tag);
     free(linebuf.s);
-    return true;
+    return false;
 }
 
 // Transform a bam1_t record into a string with the FASTQ representation of it
@@ -618,15 +629,8 @@ static bool parse_opts(int argc, char *argv[], bam2fq_opts_t** opts_out)
         return false;
     }
 
-    if (nIndex==2 && !opts->index_file[1]) {
-        fprintf(stderr, "index_format specifies two indexes, but only one index file given\n");
-        bam2fq_usage(stderr, argv[0]);
-        free_opts(opts);
-        return false;
-    }
-
-    if (nIndex==1 && !opts->index_file[0]) {
-        fprintf(stderr, "index_format specifies an index, but no index file given\n");
+    if (opts->illumina_tag && !nIndex) {
+        fprintf(stderr, "You must specify an index format (--index-format) with the Illumina Casava (-i) option\n");
         bam2fq_usage(stderr, argv[0]);
         free_opts(opts);
         return false;
@@ -899,34 +903,43 @@ static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
 static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
 {
     int n;
-    bam1_t *records[3];
-    bam1_t* b = bam_init1();
+    bam1_t *records[3] = {NULL, NULL, NULL};
     char *current_qname = NULL;
     int64_t n_reads = 0, n_singletons = 0; // Statistics
     kstring_t linebuf[3] = {{0,0,NULL},{0,0,NULL},{0,0,NULL}};
     int score[3];
     int at_eof;
-    if (b == NULL ) {
-        perror("[bam2fq_mainloop] Malloc error for bam record buffer.");
-        return false;
-    }
-
     bool valid = true;
+    bam1_t* b = NULL;
+
     while (true) {
+        assert(b == NULL);
+        b = bam_init1();
+        if (b == NULL ) {
+            perror("[bam2fq_mainloop] Malloc error for bam record buffer.");
+            valid = false;
+            break;
+        }
         int res = sam_read1(state->fp, state->h, b);
         if (res < -1) {
             fprintf(stderr, "[bam2fq_mainloop] Failed to read bam record.\n");
-            return false;
+            valid = false;
+            break;
         }
         at_eof = res < 0;
 
-        if (!at_eof && filter_it_out(b, state)) continue;
+        if (!at_eof && filter_it_out(b, state)) {
+            bam_destroy1(b);
+            b = NULL;
+            continue;
+        }
         if (!at_eof) ++n_reads;
 
         if (at_eof || !current_qname || (strcmp(current_qname, bam_get_qname(b)) != 0)) {
             if (current_qname) {
                 if (state->illumina_tag) {
                     for (n=0; valid && n<3; n++) {
+                        if (!records[n]) continue;
                         if (insert_index_sequence_into_linebuf(state->index_sequence, &linebuf[n], records[n]) < 0) valid = false;
                     }
                     if (!valid) break;
@@ -959,24 +972,32 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
                 }
             }
 
-            if (at_eof) break;
 
-            free(current_qname);
+            free(current_qname); current_qname = NULL;
+            score[0] = score[1] = score[2] = 0;
+            for (n=0; n < 3; n++) {
+                bam_destroy1(records[n]); records[n]=NULL;
+            }
+
+            if (at_eof) { break; }
+
             current_qname = strdup(bam_get_qname(b));
             if (!current_qname) { valid = false; break; }
-            score[0] = score[1] = score[2] = 0;
         }
 
         // Prefer a copy of the read that has base qualities
         int b_score = bam_get_qual(b)[0] != 0xff? 2 : 1;
-        if (b_score > score[which_readpart(b)]) {
-            if (state->fpi[0]) if (!tags2fq(b, state, opts)) return false;
-            records[which_readpart(b)] = b;
-            if(!bam1_to_fq(b, &linebuf[which_readpart(b)], state)) {
+        readpart rp = which_readpart(b);
+        if (b_score > score[rp]) {
+            if (!tags2fq(b, state, opts)) { valid = false; break; }
+            if (records[rp]) bam_destroy1(records[rp]);
+            records[rp] = b;
+            score[rp] = b_score;
+            b = NULL;
+            if(!bam1_to_fq(records[rp], &linebuf[rp], state)) {
                 fprintf(stderr, "[%s] Error converting read to FASTA/Q\n", __func__);
-                return false;
+                valid = false; break;
             }
-            score[which_readpart(b)] = b_score;
         }
     }
     if (!valid)
@@ -984,6 +1005,9 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
         perror("[bam2fq_mainloop] Error writing to FASTx files.");
     }
     bam_destroy1(b);
+    for (n=0; n < 3; n++) {
+        bam_destroy1(records[n]);
+    }
     free(current_qname);
     free(linebuf[0].s);
     free(linebuf[1].s);
