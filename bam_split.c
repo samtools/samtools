@@ -61,11 +61,13 @@ struct state {
     bam_hdr_t* unaccounted_header;
     size_t output_count;
     char** rg_id;
+    char **rg_index_file_name;
     char **rg_output_file_name;
     samFile** rg_output_file;
     bam_hdr_t** rg_output_header;
     kh_c2i_t* rg_hash;
     htsThreadPool p;
+    int write_index;
 };
 
 typedef struct state state_t;
@@ -83,7 +85,7 @@ static void usage(FILE *write_to)
 "  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
 "  -h FILE2        ... and override the header with FILE2 (-u file only)\n"
 "  -v              verbose output\n");
-    sam_global_opt_help(write_to, "-....@");
+    sam_global_opt_help(write_to, "-....@.");
     fprintf(write_to,
 "\n"
 "Format string expansions:\n"
@@ -464,11 +466,13 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
     if (!count_RG(retval->merged_input_header, &retval->output_count, &retval->rg_id)) return NULL;
     if (opts->verbose) fprintf(stderr, "@RG's found %zu\n",retval->output_count);
 
+    retval->rg_index_file_name = (char **)calloc(retval->output_count, sizeof(char *));
     retval->rg_output_file_name = (char **)calloc(retval->output_count, sizeof(char *));
     retval->rg_output_file = (samFile**)calloc(retval->output_count, sizeof(samFile*));
     retval->rg_output_header = (bam_hdr_t**)calloc(retval->output_count, sizeof(bam_hdr_t*));
     retval->rg_hash = kh_init_c2i();
-    if (!retval->rg_output_file_name || !retval->rg_output_file || !retval->rg_output_header || !retval->rg_hash) {
+    if (!retval->rg_output_file_name || !retval->rg_output_file || !retval->rg_output_header ||
+        !retval->rg_hash || !retval->rg_index_file_name) {
         print_error_errno("split", "Could not initialise output file array");
         cleanup_state(retval, false);
         return NULL;
@@ -532,6 +536,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
     }
 
     free(input_base_name);
+    retval->write_index = opts->ga.write_index;
 
     return retval;
 }
@@ -547,6 +552,15 @@ static bool split(state_t* state)
         if (sam_hdr_write(state->rg_output_file[i], state->rg_output_header[i]) != 0) {
             print_error_errno("split", "Could not write file header to \"%s\"", state->rg_output_file_name[i]);
             return false;
+        }
+        if (state->write_index) {
+            state->rg_index_file_name[i] = auto_index(state->rg_output_file[i],
+                                                      state->rg_output_file_name[i],
+                                                      state->rg_output_header[i]);
+            if (!state->rg_index_file_name[i]) {
+                print_error_errno("split", "Could not create index for file \"%s\"", state->rg_output_file_name[i]);
+                return false;
+            }
         }
     }
 
@@ -614,6 +628,16 @@ static bool split(state_t* state)
         }
     }
 
+    if (state->write_index) {
+        for (i = 0; i < state->output_count; i++) {
+            if (sam_idx_save(state->rg_output_file[i]) < 0) {
+                print_error_errno("split", "writing index failed");
+                return false;
+            }
+            free(state->rg_index_file_name[i]);
+        }
+    }
+
     return true;
 }
 
@@ -648,6 +672,7 @@ static int cleanup_state(state_t* status, bool check_close)
     free(status->rg_output_header);
     free(status->rg_output_file);
     free(status->rg_output_file_name);
+    free(status->rg_index_file_name);
     kh_destroy_c2i(status->rg_hash);
     free(status->rg_id);
     if (status->p.pool)

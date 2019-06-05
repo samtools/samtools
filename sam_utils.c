@@ -71,3 +71,52 @@ void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const c
 
     *retp = EXIT_FAILURE;
 }
+
+/* Pick an index suffix based on the output file descriptor type. */
+static char *idx_suffix(htsFile *fp) {
+    switch (fp->format.format) {
+    case sam:
+    case bam:
+        // Tough cheese if you wanted bai!
+        // New feature => mandatory new index too, for simplicity of CLI.
+        return "csi";
+
+    case cram:
+        return "crai";
+
+    default:
+        return NULL;
+    }
+}
+
+/*
+ * Utility function to add an index to a file we've opened for write.
+ * NB: Call this after writing the header and before writing sequences.
+ *
+ * The returned index filename should be freed by the caller, but only
+ * after sam_idx_save has been called.
+ *
+ * Returns index filename on success,
+ *         NULL on failure.
+ */
+char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
+    if (!fn || !*fn || strcmp(fn, "-") == 0)
+        return NULL;
+
+    char *suffix = idx_suffix(fp);
+    if (!suffix)
+        return NULL;
+
+    char *fn_idx = malloc(strlen(fn)+6);
+    if (!fn_idx)
+        return NULL;
+
+    sprintf(fn_idx, "%s.%s", fn, suffix);
+
+    if (sam_idx_init(fp, header, 14 /* CSI */, fn_idx) < 0) {
+        print_error_errno("auto_index", "failed to open index \"%s\" for writing", fn_idx);
+        return NULL;
+    }
+
+    return fn_idx;
+}

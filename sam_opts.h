@@ -35,6 +35,7 @@ typedef struct sam_global_args {
     htsFormat out;
     char *reference;
     int nthreads;
+    int write_index;
     //int verbosity;
 } sam_global_args;
 
@@ -47,7 +48,8 @@ enum {
     SAM_OPT_OUTPUT_FMT_OPTION,
     SAM_OPT_REFERENCE,
     SAM_OPT_NTHREADS,
-    //SAM_OPT_VERBOSE
+    SAM_OPT_WRITE_INDEX,
+    //SAM_OPT_VERBOSE,
 };
 
 #define SAM_OPT_VAL(val, defval) ((val) == '-')? '?' : (val)? (val) : (defval)
@@ -64,7 +66,8 @@ enum {
     {"output-fmt",        required_argument, NULL, SAM_OPT_VAL(o3, SAM_OPT_OUTPUT_FMT)}, \
     {"output-fmt-option", required_argument, NULL, SAM_OPT_VAL(o4, SAM_OPT_OUTPUT_FMT_OPTION)}, \
     {"reference",         required_argument, NULL, SAM_OPT_VAL(o5, SAM_OPT_REFERENCE)}, \
-    {"threads",           required_argument, NULL, SAM_OPT_VAL(o6, SAM_OPT_NTHREADS)}
+    {"threads",           required_argument, NULL, SAM_OPT_VAL(o6, SAM_OPT_NTHREADS)}, \
+    {"write-index",       no_argument,       NULL, SAM_OPT_WRITE_INDEX}
     //{"verbose",           no_argument,       NULL, SAM_OPT_VERBOSE}
 
 /*

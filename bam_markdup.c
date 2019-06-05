@@ -476,7 +476,8 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe) {
    Marking the supplementary reads of a duplicate as also duplicates takes an extra file read/write
    step.  This is because the duplicate can occur before the primary read.*/
 
-static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remove_dups, int32_t max_length, int do_stats, int supp, int tag) {
+static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remove_dups, int32_t max_length,
+                               int do_stats, int supp, int tag, char *out_fn, int write_index) {
     bam_hdr_t *header = NULL;
     khiter_t k;
     khash_t(reads) *pair_hash        = kh_init(reads);
@@ -489,6 +490,7 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
     int ret;
     int reading, writing, excluded, duplicate, single, pair, single_dup, examined;
     tmp_file_t temp;
+    char *idx_fn = NULL;
 
     if (!pair_hash || !single_hash || !read_buffer || !dup_hash) {
         fprintf(stderr, "[markdup] out of memory\n");
@@ -519,6 +521,10 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
     if (sam_hdr_write(out, header) < 0) {
         fprintf(stderr, "[markdup] error writing header.\n");
         goto fail;
+    }
+    if (write_index && out_fn && strcmp(out_fn, "-") != 0) {
+        if (!(idx_fn = auto_index(out, out_fn, header)))
+            goto fail;
     }
 
     // used for coordinate order checks
@@ -928,6 +934,13 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
                                 duplicate, single_dup, single_dup + duplicate);
     }
 
+    if (write_index) {
+        if (sam_idx_save(out) < 0) {
+            print_error_errno("markdup", "writing index failed");
+            goto fail;
+        }
+    }
+
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
     kl_destroy(read_queue, read_buffer);
@@ -967,7 +980,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -t           Mark primary duplicates with the name of the original in a \'do\' tag."
                                   " Mainly for information and debugging.\n");
 
-    sam_global_opt_help(stderr, "-.O..@");
+    sam_global_opt_help(stderr, "-.O..@.");
 
     fprintf(stderr, "\nThe input file must be coordinate sorted and must have gone"
                      " through fixmates with the mate scoring option on.\n");
@@ -1052,7 +1065,8 @@ int bam_markdup(int argc, char **argv) {
     t = ((unsigned) time(NULL)) ^ ((unsigned) clock());
     ksprintf(&tmpprefix, "samtools.%d.%u.tmp", (int) getpid(), t % 10000);
 
-    ret = bam_mark_duplicates(in, out, tmpprefix.s, remove_dups, max_length, report_stats, include_supplementary, tag_dup);
+    ret = bam_mark_duplicates(in, out, tmpprefix.s, remove_dups, max_length, report_stats,
+                              include_supplementary, tag_dup, argv[optind + 1], ga.write_index);
 
     sam_close(in);
 

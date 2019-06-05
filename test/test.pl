@@ -822,6 +822,18 @@ sub test_index
     cmd("$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai");
     test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai ref2");
     test_cmd($opts,out=>'dat/test_input_1_ab.X.expected',cmd=>"$$opts{bin}/samtools merge${threads} -O sam - -X -cp -R ref2 $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_a.bam.bai $$opts{tmp}/test_input_1_b.bam.bai");
+
+    # Check auto-indexing
+    cmd("$$opts{bin}/samtools view${threads} --write-index -o $$opts{path}/dat/auto_indexed.bam $$opts{path}/dat/mpileup.1.sam");
+    test_cmd($opts,out=>"dat/auto_indexed.bam.csi", cmd=>"$$opts{bin}/samtools index${threads} -c $$opts{path}/dat/auto_indexed.bam $$opts{tmp}/auto_indexed.csi && cat $$opts{tmp}/auto_indexed.csi", binary=>1);
+
+    cmd("$$opts{bin}/samtools view${threads} -T $$opts{path}/dat/mpileup.ref.fa --write-index -o $$opts{path}/dat/auto_indexed.cram $$opts{path}/dat/mpileup.1.sam");
+    test_cmd($opts,out=>"dat/auto_indexed.cram.crai", cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/auto_indexed.cram $$opts{tmp}/auto_indexed.crai && cat $$opts{tmp}/auto_indexed.crai", binary=>1);
+
+    print "test_index:\n";
+    print "$$opts{bin}/samtools view${threads} -h --write-index -O sam,level=5 -o $$opts{path}/dat/auto_indexed.sam $$opts{path}/dat/mpileup.1.sam\n\n";
+    cmd("$$opts{bin}/samtools view${threads} -h --write-index -O sam,level=5 -o $$opts{path}/dat/auto_indexed.sam $$opts{path}/dat/mpileup.1.sam");
+    test_cmd($opts,out=>"dat/auto_indexed.sam.csi", cmd=>"$$opts{bin}/samtools index${threads} -c $$opts{path}/dat/auto_indexed.sam $$opts{tmp}/auto_indexed.csi && cat $$opts{tmp}/auto_indexed.csi", binary=>1);
 }
 
 sub test_mpileup
