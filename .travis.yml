@@ -4,11 +4,11 @@ language: c
 
 matrix:
   include:
-    # An optimised build with address, leak and undefined behavior checking
+    # An optimised build with address and leak checking
     - os: linux
       compiler: clang
       sudo: required
-      env: CFLAGS="-fsanitize=address" LDFLAGS="-fsanitize=address"
+      env: CFLAGS="-g -Wall -O3 -fsanitize=address" LDFLAGS="-fsanitize=address"
     - os: linux
       compiler: gcc-8
       addons:
