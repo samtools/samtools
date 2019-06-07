@@ -961,7 +961,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "Option: \n");
     fprintf(stderr, "  -r           Remove duplicate reads\n");
     fprintf(stderr, "  -l INT       Max read length (default 300 bases)\n");
-    fprintf(stderr, "  -S           Mark supplemenary alignments of duplicates as duplicates (slower).\n");
+    fprintf(stderr, "  -S           Mark supplementary alignments of duplicates as duplicates (slower).\n");
     fprintf(stderr, "  -s           Report stats.\n");
     fprintf(stderr, "  -T PREFIX    Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
     fprintf(stderr, "  -t           Mark primary duplicates with the name of the original in a \'do\' tag."
