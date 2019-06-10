@@ -559,7 +559,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
-        if (*out_format || is_header ||
+        if (*out_format || ga.write_index || is_header ||
             out_mode[1] == 'b' || out_mode[1] == 'c' ||
             (ga.out.format != sam && ga.out.format != unknown_format))  {
             if (sam_hdr_write(out, header) != 0) {
