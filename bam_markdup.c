@@ -1,7 +1,7 @@
 /*  bam_markdup.c -- Mark duplicates from a coord sorted file that has gone
                      through fixmates with the mate scoring option on.
 
-    Copyright (C) 2017-18 Genome Research Ltd.
+    Copyright (C) 2017-19 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 
@@ -52,6 +52,7 @@ typedef struct {
     int do_stats;
     int supp;
     int tag;
+    int opt_dist;
     char *stats_file;
 } md_param_t;
 
@@ -480,6 +481,81 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe) {
 }
 
 
+static int optical_duplicate(bam1_t *ori, bam1_t *dup, int max_dist) {
+    int ret = 0;
+    kstring_t original, duplicate;
+    int *original_offset = NULL, *duplicate_offset = NULL;
+    int num_queries;
+    enum read_parts {MACHINE, LANE, TILE, XC, YC};
+
+    ks_initialize(&original);
+    ks_initialize(&duplicate);
+
+    kputs(bam_get_qname(ori), &original);
+    kputs(bam_get_qname(dup), &duplicate);
+
+    if ((original_offset = ksplit(&original, ':', &num_queries)) == NULL || num_queries != 5) {
+        fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking %d.\n", original.s, num_queries);
+        goto error;
+    }
+
+    if ((duplicate_offset = ksplit(&duplicate, ':', &num_queries)) == NULL || num_queries != 5) {
+        fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking %d.\n", original.s, num_queries);
+        goto error;
+    }
+
+    if (strcmp(original.s + original_offset[MACHINE], duplicate.s + duplicate_offset[MACHINE]) == 0 &&
+        strcmp(original.s + original_offset[LANE], duplicate.s + duplicate_offset[LANE]) == 0 &&
+        strcmp(original.s + original_offset[TILE], duplicate.s + duplicate_offset[TILE]) == 0) {
+
+        // the initial parts match, look at the numbers
+        int ox, oy, dx, dy, xdiff, ydiff;
+
+        ox = atoi(original.s + original_offset[XC]);
+        dx = atoi(duplicate.s + duplicate_offset[XC]);
+
+        if (ox > dx) {
+            xdiff = ox - dx;
+        } else {
+            xdiff = dx - ox;
+        }
+
+        if (xdiff <= max_dist) {
+            // still might be optical
+            char *h;
+
+            if ((h = strchr(original.s + original_offset[YC], '#'))) {
+                *h = '\0';
+            }
+
+            if ((h = strchr(duplicate.s + duplicate_offset[YC], '#'))) {
+                *h = '\0';
+            }
+
+            oy = atoi(original.s + original_offset[YC]);
+            dy = atoi(duplicate.s + duplicate_offset[YC]);
+
+            if (oy > dy) {
+                ydiff = oy - dy;
+            } else {
+                ydiff = dy - oy;
+            }
+
+            if (ydiff <= max_dist) ret = 1;
+        }
+    }
+
+  error:
+
+    ks_free(&original);
+    ks_free(&duplicate);
+    free(original_offset);
+    free(duplicate_offset);
+
+    return ret;
+}
+
+
 /* Compare the reads near each other (coordinate sorted) and try to spot the duplicates.
    Generally the highest quality scoring is chosen as the original and all others the duplicates.
    The score is based on the sum of the quality values (<= 15) of the read and its mate (if any).
@@ -626,11 +702,17 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                             }
                         }
 
+                        if (param->opt_dist) { // mark optical duplicates
+                           if (optical_duplicate(bp->p, dup, param->opt_dist)) {
+                               bam_aux_append(dup, "dt", 'Z', 3, (uint8_t *) "SQ");
+                           }
+                        }
+
                         if (param->supp) {
-                            if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP)) {
-                                if (add_duplicate(dup_hash, dup))
-                                    goto fail;
-                            }
+                             if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP)) {
+                                 if (add_duplicate(dup_hash, dup))
+                                     goto fail;
+                             }
                         }
                     }
                 } else {
@@ -694,6 +776,12 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
 
                     }
 
+                    if (param->opt_dist) { // mark optical duplicates
+                        if (optical_duplicate(bp->p, dup, param->opt_dist)) {
+                            bam_aux_append(dup, "dt", 'Z', 3, (uint8_t *) "SQ");
+                        }
+                    }
+
                     if (param->supp) {
                         if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP)) {
                             if (add_duplicate(dup_hash, dup))
@@ -735,6 +823,12 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                             }
                         }
 
+                        if (param->opt_dist) { // mark optical duplicates
+                            if (optical_duplicate(bp->p, in_read->b, param->opt_dist)) {
+                               bam_aux_append(in_read->b, "dt", 'Z', 3, (uint8_t *) "SQ");
+                            }
+                        }
+
                         if (param->supp) {
                             if (bam_aux_get(in_read->b, "SA") || (in_read->b->core.flag & BAM_FMUNMAP)) {
                                 if (add_duplicate(dup_hash, in_read->b))
@@ -765,6 +859,12 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                             if (bam_aux_append(dup, "do", 'Z', strlen(bam_get_qname(bp->p)) + 1, (uint8_t*)bam_get_qname(bp->p))) {
                                 fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
                                 goto fail;
+                            }
+                        }
+
+                        if (param->opt_dist) { // mark optical duplicates
+                            if (optical_duplicate(bp->p, dup, param->opt_dist)) {
+                                bam_aux_append(dup, "dt", 'Z', 3, (uint8_t *) "SQ");
                             }
                         }
 
@@ -1002,6 +1102,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -s           Report stats.\n");
     fprintf(stderr, "  -f NAME      Write stats to named file.  Implies -s.\n");
     fprintf(stderr, "  -T PREFIX    Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
+    fprintf(stderr, "  -d INT       Optical distance (if set, marks with dt tag)\n");
     fprintf(stderr, "  -t           Mark primary duplicates with the name of the original in a \'do\' tag."
                                   " Mainly for information and debugging.\n");
 
@@ -1022,14 +1123,14 @@ int bam_markdup(int argc, char **argv) {
     kstring_t tmpprefix = {0, 0, NULL};
     struct stat st;
     unsigned int t;
-    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, NULL};
+    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': param.remove_dups = 1; break;
             case 'l': param.max_length = atoi(optarg); break;
@@ -1038,6 +1139,7 @@ int bam_markdup(int argc, char **argv) {
             case 'S': param.supp = 1; break;
             case 't': param.tag = 1; break;
             case 'f': param.stats_file = optarg; param.do_stats = 1; break;
+            case 'd': param.opt_dist = atoi(optarg); break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
@@ -1046,6 +1148,8 @@ int bam_markdup(int argc, char **argv) {
 
     if (optind + 2 > argc)
         return markdup_usage();
+
+    if (param.opt_dist < 0) param.opt_dist = 0;
 
     param.in = sam_open_format(argv[optind], "r", &ga.in);
 
