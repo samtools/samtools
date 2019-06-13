@@ -341,7 +341,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 1\n");
     trans_tbl_init(merged_hdr, translate, &tbl_1, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 1\n");
     if (verbose > 1) {
@@ -378,7 +379,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 2\n");
     trans_tbl_init(merged_hdr, translate, &tbl_2, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 2\n");
     if (verbose > 1) {
@@ -414,7 +416,8 @@ int main(int argc, char**argv)
      }
     if (verbose) printf("RUN test 3\n");
     trans_tbl_init(merged_hdr, translate, &tbl_3, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 3\n");
     if (verbose > 1) {
@@ -450,7 +453,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 4\n");
     trans_tbl_init(merged_hdr, translate, &tbl_4, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 4\n");
     if (verbose > 1) {
@@ -487,7 +491,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 5\n");
     trans_tbl_init(merged_hdr, translate, &tbl_5, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 5\n");
     if (verbose > 1) {
@@ -523,7 +528,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 6\n");
     trans_tbl_init(merged_hdr, translate, &tbl_6, false, false, true, "filename");
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 6\n");
     if (verbose > 1) {
