@@ -77,6 +77,11 @@ typedef struct {
     key_data_t single_key;
 } read_queue_t;
 
+typedef struct {
+    char *name;
+    char type;
+} dup_map_t;
+
 
 
 static khint32_t do_hash(unsigned char *key, khint32_t len);
@@ -143,7 +148,7 @@ static int key_equal(key_data_t a, key_data_t b) {
 
 KHASH_INIT(reads, key_data_t, in_hash_t, 1, hash_key, key_equal) // read map hash
 KLIST_INIT(read_queue, read_queue_t, __free_queue_element) // the reads buffer
-KHASH_MAP_INIT_STR(duplicates, int) // map of duplicates for supplementary dup id
+KHASH_MAP_INIT_STR(duplicates, dup_map_t) // map of duplicates for supplementary dup id
 
 
 /* Calculate the mate's unclipped start based on position and cigar string from MC tag. */
@@ -458,7 +463,7 @@ static void make_single_key(key_data_t *key, bam1_t *bam) {
 
 /* Add the duplicate name to a hash if it does not exist. */
 
-static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe) {
+static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_name, char type) {
     khiter_t d;
     int ret;
 
@@ -467,10 +472,19 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe) {
     if (d == kh_end(d_hash)) {
         d = kh_put(duplicates, d_hash, strdup(bam_get_qname(dupe)), &ret);
 
-        if (ret > 0) {
-            kh_value(d_hash, d) = 1;
-        } else if (ret == 0) {
-            kh_value(d_hash, d)++;
+        if (ret >= 0) {
+            if (orig_name) {
+                kh_value(d_hash, d).name = strdup(orig_name);
+
+                if (kh_value(d_hash, d).name == NULL) {
+                    fprintf(stderr, "[markdup] error: unable to allocate memory for duplicate original name.\n");
+                    return 1;
+                }
+            } else {
+                kh_value(d_hash, d).name = NULL;
+            }
+
+            kh_value(d_hash, d).type = type;
         } else {
             fprintf(stderr, "[markdup] error: unable to store supplementary duplicates.\n");
             return 1;
@@ -556,6 +570,42 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, int max_dist) {
 }
 
 
+static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *ori, bam1_t *dup) {
+    char dup_type = 0;
+
+    dup->core.flag |= BAM_FDUP;
+
+    if (param->tag) {
+        if (bam_aux_append(dup, "do", 'Z', strlen(bam_get_qname(ori)) + 1, (uint8_t*)bam_get_qname(ori))) {
+            fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
+            return -1;
+        }
+    }
+
+    if (param->opt_dist) { // mark optical duplicates
+        if (optical_duplicate(ori, dup, param->opt_dist)) {
+            bam_aux_append(dup, "dt", 'Z', 3, (uint8_t *) "SQ");
+            dup_type = 'O';
+        }
+    }
+
+    if (param->supp) {
+        if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP)) {
+            char *original = NULL;
+
+            if (param->tag) {
+                original = bam_get_qname(ori);
+            }
+
+            if (add_duplicate(dup_hash, dup, original, dup_type))
+                return -1;
+        }
+    }
+
+    return 0;
+}
+
+
 /* Compare the reads near each other (coordinate sorted) and try to spot the duplicates.
    Generally the highest quality scoring is chosen as the original and all others the duplicates.
    The score is based on the sum of the quality values (<= 15) of the read and its mate (if any).
@@ -576,7 +626,7 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
     int32_t prev_tid, prev_coord;
     read_queue_t *in_read;
     int ret;
-    int reading, writing, excluded, duplicate, single, pair, single_dup, examined;
+    int reading, writing, excluded, duplicate, single, pair, single_dup, examined, optical;
     tmp_file_t temp;
     char *idx_fn = NULL;
 
@@ -632,7 +682,7 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
         goto fail;
     }
 
-    reading = writing = excluded = single_dup = duplicate = examined = pair = single = 0;
+    reading = writing = excluded = single_dup = duplicate = examined = pair = single = optical = 0;
 
     while ((ret = sam_read1(param->in, header, in_read->b)) >= 0) {
 
@@ -686,34 +736,17 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                     bp = &kh_val(single_hash, k);
 
                     if (!(bp->p->core.flag & BAM_FPAIRED) || (bp->p->core.flag & BAM_FMUNMAP)) {
+                       // singleton will always be marked duplicate even if
+                       // scores more than one read of the pair
                         bam1_t *dup = bp->p;
 
-                        // singleton will always be marked duplicate even if
-                        // scores more than one read of the pair
-
                         bp->p = in_read->b;
-                        dup->core.flag |= BAM_FDUP;
+
+                        if (mark_duplicates(param, dup_hash, bp->p, dup))
+                            goto fail;
+
                         single_dup++;
 
-                        if (param->tag) {
-                            if (bam_aux_append(dup, "do", 'Z', strlen(bam_get_qname(bp->p)) + 1, (uint8_t*)bam_get_qname(bp->p))) {
-                                fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
-                                goto fail;
-                            }
-                        }
-
-                        if (param->opt_dist) { // mark optical duplicates
-                           if (optical_duplicate(bp->p, dup, param->opt_dist)) {
-                               bam_aux_append(dup, "dt", 'Z', 3, (uint8_t *) "SQ");
-                           }
-                        }
-
-                        if (param->supp) {
-                             if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP)) {
-                                 if (add_duplicate(dup_hash, dup))
-                                     goto fail;
-                             }
-                        }
                     }
                 } else {
                     fprintf(stderr, "[markdup] error: single hashing failure.\n");
@@ -766,28 +799,8 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                         dup = in_read->b;
                     }
 
-                    dup->core.flag |= BAM_FDUP;
-
-                    if (param->tag) {
-                        if (bam_aux_append(dup, "do", 'Z', strlen(bam_get_qname(bp->p)) + 1, (uint8_t*)bam_get_qname(bp->p))) {
-                            fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
-                            goto fail;
-                        }
-
-                    }
-
-                    if (param->opt_dist) { // mark optical duplicates
-                        if (optical_duplicate(bp->p, dup, param->opt_dist)) {
-                            bam_aux_append(dup, "dt", 'Z', 3, (uint8_t *) "SQ");
-                        }
-                    }
-
-                    if (param->supp) {
-                        if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP)) {
-                            if (add_duplicate(dup_hash, dup))
-                                goto fail;
-                        }
-                    }
+                    if (mark_duplicates(param, dup_hash, bp->p, dup))
+                        goto fail;
 
                     duplicate++;
                 } else {
@@ -816,27 +829,9 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                     if ((bp->p->core.flag & BAM_FPAIRED) && !(bp->p->core.flag & BAM_FMUNMAP)) {
                         // if matched against one of a pair just mark as duplicate
 
-                        if (param->tag) {
-                            if (bam_aux_append(in_read->b, "do", 'Z', strlen(bam_get_qname(bp->p)) + 1, (uint8_t*)bam_get_qname(bp->p))) {
-                                fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
-                                goto fail;
-                            }
-                        }
+                        if (mark_duplicates(param, dup_hash, bp->p, in_read->b))
+                            goto fail;
 
-                        if (param->opt_dist) { // mark optical duplicates
-                            if (optical_duplicate(bp->p, in_read->b, param->opt_dist)) {
-                               bam_aux_append(in_read->b, "dt", 'Z', 3, (uint8_t *) "SQ");
-                            }
-                        }
-
-                        if (param->supp) {
-                            if (bam_aux_get(in_read->b, "SA") || (in_read->b->core.flag & BAM_FMUNMAP)) {
-                                if (add_duplicate(dup_hash, in_read->b))
-                                    goto fail;
-                            }
-                        }
-
-                        in_read->b->core.flag |= BAM_FDUP;
                     } else {
                         int64_t old_score, new_score;
                         bam1_t *dup;
@@ -853,27 +848,9 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                             dup = in_read->b;
                         }
 
-                        dup->core.flag |= BAM_FDUP;
+                        if (mark_duplicates(param, dup_hash, bp->p, dup))
+                            goto fail;
 
-                        if (param->tag) {
-                            if (bam_aux_append(dup, "do", 'Z', strlen(bam_get_qname(bp->p)) + 1, (uint8_t*)bam_get_qname(bp->p))) {
-                                fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
-                                goto fail;
-                            }
-                        }
-
-                        if (param->opt_dist) { // mark optical duplicates
-                            if (optical_duplicate(bp->p, dup, param->opt_dist)) {
-                                bam_aux_append(dup, "dt", 'Z', 3, (uint8_t *) "SQ");
-                            }
-                        }
-
-                        if (param->supp) {
-                            if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP)) {
-                                if (add_duplicate(dup_hash, dup))
-                                    goto fail;
-                            }
-                        }
                     }
 
                     single_dup++;
@@ -999,6 +976,17 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
 
                 if (k != kh_end(dup_hash)) {
                     b->core.flag  |= BAM_FDUP;
+
+                    if (param->tag && kh_val(dup_hash, k).name) {
+                        if (bam_aux_append(b, "do", 'Z', strlen(kh_val(dup_hash, k).name) + 1, (uint8_t*)kh_val(dup_hash, k).name)) {
+                            fprintf(stderr, "[markdup] error: unable to append supplementary 'do' tag.\n");
+                            goto fail;
+                        }
+                    }
+
+                    if (param->opt_dist && kh_val(dup_hash, k).type) {
+                        bam_aux_append(b, "dt", 'Z', 3, (uint8_t *) "SQ");
+                    }
                 }
             }
 
@@ -1017,6 +1005,7 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
 
         for (k = kh_begin(dup_hash); k != kh_end(dup_hash); ++k) {
             if (kh_exist(dup_hash, k)) {
+                free(kh_val(dup_hash, k).name);
                 free((char *)kh_key(dup_hash, k));
                 kh_key(dup_hash, k) = NULL;
             }
