@@ -100,21 +100,37 @@ static char *idx_suffix(htsFile *fp) {
  *         NULL on failure.
  */
 char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
+    char *fn_idx;
+    int min_shift = 14; /* CSI */
     if (!fn || !*fn || strcmp(fn, "-") == 0)
         return NULL;
 
-    char *suffix = idx_suffix(fp);
-    if (!suffix)
-        return NULL;
+    char *delim = strstr(fn, HTS_IDX_DELIM);
+    if (delim != NULL) {
+        delim += strlen(HTS_IDX_DELIM);
 
-    char *fn_idx = malloc(strlen(fn)+6);
-    if (!fn_idx)
-        return NULL;
+        fn_idx = strdup(delim);
+        if (!fn_idx)
+            return NULL;
 
-    sprintf(fn_idx, "%s.%s", fn, suffix);
+        size_t l = strlen(fn_idx);
+        if (l >= 4 && strcmp(fn_idx + l - 4, ".bai") == 0)
+            min_shift = 0;
+    } else {
+        char *suffix = idx_suffix(fp);
+        if (!suffix)
+            return NULL;
 
-    if (sam_idx_init(fp, header, 14 /* CSI */, fn_idx) < 0) {
+        fn_idx = malloc(strlen(fn)+6);
+        if (!fn_idx)
+            return NULL;
+
+        sprintf(fn_idx, "%s.%s", fn, suffix);
+    }
+
+    if (sam_idx_init(fp, header, min_shift, fn_idx) < 0) {
         print_error_errno("auto_index", "failed to open index \"%s\" for writing", fn_idx);
+        free(fn_idx);
         return NULL;
     }
 
