@@ -495,38 +495,64 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_n
 }
 
 
-static int optical_duplicate(bam1_t *ori, bam1_t *dup, int max_dist) {
+static inline int get_coordinate_positions(const char *qname, int *xpos, int *ypos) {
+    int sep = 0;
+    int pos = 0;
+
+    while (qname[pos]) {
+        if (qname[pos] == ':') {
+            sep++;
+
+            if (sep == 3) {
+                *xpos = pos + 1;
+            } else if (sep == 4) {
+                *ypos = pos + 1;
+            }
+        }
+
+        pos++;
+    }
+
+    return sep;
+}
+
+
+static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist) {
     int ret = 0;
-    kstring_t original, duplicate;
-    int *original_offset = NULL, *duplicate_offset = NULL;
-    int num_queries;
-    enum read_parts {MACHINE, LANE, TILE, XC, YC};
+    char *original, *duplicate;
+    int oxpos, oypos, dxpos, dypos;
 
-    ks_initialize(&original);
-    ks_initialize(&duplicate);
+    original  = bam_get_qname(ori);
+    duplicate = bam_get_qname(dup);
 
-    kputs(bam_get_qname(ori), &original);
-    kputs(bam_get_qname(dup), &duplicate);
-
-    if ((original_offset = ksplit(&original, ':', &num_queries)) == NULL || num_queries != 5) {
-        fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking %d.\n", original.s, num_queries);
-        goto error;
+    if (get_coordinate_positions(original, &oxpos, &oypos) != 4) {
+        fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", original);
+        return ret;
     }
 
-    if ((duplicate_offset = ksplit(&duplicate, ':', &num_queries)) == NULL || num_queries != 5) {
-        fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking %d.\n", original.s, num_queries);
-        goto error;
+    if (get_coordinate_positions(duplicate, &dxpos, &dypos) != 4) {
+        fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", duplicate);
+        return ret;
     }
 
-    if (strcmp(original.s + original_offset[MACHINE], duplicate.s + duplicate_offset[MACHINE]) == 0 &&
-        strcmp(original.s + original_offset[LANE], duplicate.s + duplicate_offset[LANE]) == 0 &&
-        strcmp(original.s + original_offset[TILE], duplicate.s + duplicate_offset[TILE]) == 0) {
-
+    if (strncmp(original, duplicate, oxpos - 1) == 0) {
         // the initial parts match, look at the numbers
-        int ox, oy, dx, dy, xdiff, ydiff;
+        long ox, oy, dx, dy, xdiff, ydiff;
+        char *end;
 
-        ox = atoi(original.s + original_offset[XC]);
-        dx = atoi(duplicate.s + duplicate_offset[XC]);
+        ox = strtol(original + oxpos, &end, 10);
+
+        if ((original + oxpos) == end) {
+            fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s .\n", original);
+            return ret;
+        }
+
+        dx = strtol(duplicate + dxpos, &end, 10);
+
+        if ((duplicate + dxpos) == end) {
+            fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s.\n", duplicate);
+            return ret;
+        }
 
         if (ox > dx) {
             xdiff = ox - dx;
@@ -536,18 +562,20 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, int max_dist) {
 
         if (xdiff <= max_dist) {
             // still might be optical
-            char *h;
 
-            if ((h = strchr(original.s + original_offset[YC], '#'))) {
-                *h = '\0';
+            oy = strtol(original + oypos, &end, 10);
+
+            if ((original + oypos) == end) {
+                fprintf(stderr, "[markdup] warning: can not decipher Y coordinate in %s.\n", original);
+                return ret;
             }
 
-            if ((h = strchr(duplicate.s + duplicate_offset[YC], '#'))) {
-                *h = '\0';
-            }
+            dy = strtol(duplicate + dypos, &end, 10);
 
-            oy = atoi(original.s + original_offset[YC]);
-            dy = atoi(duplicate.s + duplicate_offset[YC]);
+            if ((duplicate + dypos) == end) {
+                fprintf(stderr, "[markdup] warning: can not decipher Y coordinate in %s.\n", duplicate);
+                return ret;
+            }
 
             if (oy > dy) {
                 ydiff = oy - dy;
@@ -558,13 +586,6 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, int max_dist) {
             if (ydiff <= max_dist) ret = 1;
         }
     }
-
-  error:
-
-    ks_free(&original);
-    ks_free(&duplicate);
-    free(original_offset);
-    free(duplicate_offset);
 
     return ret;
 }
