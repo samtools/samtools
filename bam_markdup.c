@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE
 #include <ctype.h>
 #include <time.h>
 #include <sys/stat.h>
+#include <math.h>
 #include "htslib/thread_pool.h"
 #include "htslib/sam.h"
 #include "sam_opts.h"
@@ -461,6 +462,7 @@ static void make_single_key(key_data_t *key, bam1_t *bam) {
     key->orientation   = orientation;
 }
 
+
 /* Add the duplicate name to a hash if it does not exist. */
 
 static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_name, char type) {
@@ -516,6 +518,8 @@ static inline int get_coordinate_positions(const char *qname, int *xpos, int *yp
     return sep;
 }
 
+/* Using the coordinates from the Illumina read name, see whether the duplicated read is
+   close enough (set by max_dist) to the original to be counted as optical.*/
 
 static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist) {
     int ret = 0;
@@ -631,6 +635,54 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
 }
 
 
+/* Modified Lander-Waterman equation */
+static inline double lw_equation(double x, double c, double n) {
+    return c / x - 1 + exp(-n / x);
+}
+
+
+/* estimate the library size */
+static unsigned long estimate_library_size(unsigned long read_pairs, unsigned long duplicate_pairs) {
+    unsigned long estimated_size = 0;
+
+    read_pairs /= 2;
+    duplicate_pairs /= 2;
+
+    if (read_pairs && duplicate_pairs) {
+        unsigned long unique_pairs = read_pairs - duplicate_pairs;
+        double m = 1;
+        double M = 100;
+        int i;
+
+        if (lw_equation(m * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) < 0) {
+            fprintf(stderr, "[markdup] warning: unable to calculate estimated library size.\n");
+            return  estimated_size;
+        }
+
+        while (lw_equation(M * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) > 0) {
+            M *= 10;
+        }
+
+        for (i = 0; i < 40; i++) {
+            double r = (m + M) / 2;
+            double u = lw_equation(r * (double)unique_pairs, (double)unique_pairs, (double)read_pairs);
+
+            if (u > 0) {
+                m = r;
+            } else if (u < 0) {
+                M = r;
+            } else {
+                break;
+            }
+        }
+
+        estimated_size = (unsigned long)(unique_pairs * (m + M) / 2);
+    }
+
+    return estimated_size;
+}
+
+
 /* Compare the reads near each other (coordinate sorted) and try to spot the duplicates.
    Generally the highest quality scoring is chosen as the original and all others the duplicates.
    The score is based on the sum of the quality values (<= 15) of the read and its mate (if any).
@@ -651,7 +703,7 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
     int32_t prev_tid, prev_coord;
     read_queue_t *in_read;
     int ret;
-    int reading, writing, excluded, duplicate, single, pair, single_dup, examined, optical;
+    int reading, writing, excluded, duplicate, single, pair, single_dup, examined, optical, single_optical;
     int np_duplicate, np_opt_duplicate;
     tmp_file_t temp;
     char *idx_fn = NULL;
@@ -708,7 +760,7 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
         goto fail;
     }
 
-    reading = writing = excluded = single_dup = duplicate = examined = pair = single = optical = 0;
+    reading = writing = excluded = single_dup = duplicate = examined = pair = single = optical = single_optical = 0;
     np_duplicate = np_opt_duplicate = 0;
 
     while ((ret = sam_read1(param->in, header, in_read->b)) >= 0) {
@@ -769,7 +821,7 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
 
                         bp->p = in_read->b;
 
-                        if (mark_duplicates(param, dup_hash, bp->p, dup, &optical))
+                        if (mark_duplicates(param, dup_hash, bp->p, dup, &single_optical))
                             goto fail;
 
                         single_dup++;
@@ -875,7 +927,7 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                             dup = in_read->b;
                         }
 
-                        if (mark_duplicates(param, dup_hash, bp->p, dup, &optical))
+                        if (mark_duplicates(param, dup_hash, bp->p, dup, &single_optical))
                             goto fail;
 
                     }
@@ -1051,6 +1103,7 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
     if (param->do_stats) {
         FILE *fp;
         int file_open = 0;
+        unsigned long els;
 
         if (param->stats_file) {
             if (NULL == (fp = fopen(param->stats_file, "w"))) {
@@ -1063,6 +1116,8 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
             fp = stderr;
         }
 
+        els = estimate_library_size(pair, duplicate - optical);
+
         fprintf(fp,
                 "READ: %d\n"
                 "WRITTEN: %d\n"
@@ -1073,12 +1128,14 @@ static int bam_mark_duplicates(md_param_t *param, char *out_fn, int write_index)
                 "DUPLICATE PAIR: %d\n"
                 "DUPLICATE SINGLE: %d\n"
                 "DUPLICATE OPTICAL: %d\n"
+                "DUPLICATE SINGLE OPTICAL: %d\n"
                 "DUPLICATE NON PRIMARY: %d\n"
                 "DUPLICATE NON PRIMARY OPTICAL: %d\n"
                 "DUPLICATE PRIMARY TOTAL: %d\n"
-                "DUPLICATE TOTAL: %d\n", reading, writing, excluded, examined, pair, single,
-                                duplicate, single_dup, optical, np_duplicate, np_opt_duplicate,
-                                single_dup + duplicate, single_dup + duplicate + np_duplicate);
+                "DUPLICATE TOTAL: %d\n"
+                "ESTIMATED_LIBRARY_SIZE %ld\n", reading, writing, excluded, examined, pair, single,
+                                duplicate, single_dup, optical, single_optical, np_duplicate, np_opt_duplicate,
+                                single_dup + duplicate, single_dup + duplicate + np_duplicate, els);
 
         if (file_open) {
             fclose(fp);
