@@ -56,6 +56,7 @@ typedef struct {
     int tag;
     int opt_dist;
     int add_pg;
+    int clear;
     char *stats_file;
 } md_param_t;
 
@@ -789,6 +790,20 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
 
         reading++;
 
+        if (param->clear && (in_read->b->core.flag & BAM_FDUP)) {
+            uint8_t *data;
+
+            in_read->b->core.flag ^= BAM_FDUP;
+
+            if ((data = bam_aux_get(in_read->b, "dt")) != NULL) {
+                bam_aux_del(in_read->b, data);
+            }
+
+            if ((data = bam_aux_get(in_read->b, "do")) != NULL) {
+                bam_aux_del(in_read->b, data);
+            }
+        }
+
         // read must not be secondary, supplementary, unmapped or failed QC
         if (!(in_read->b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY | BAM_FUNMAP | BAM_FQCFAIL))) {
             examined++;
@@ -1196,6 +1211,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -f NAME      Write stats to named file.  Implies -s.\n");
     fprintf(stderr, "  -T PREFIX    Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
     fprintf(stderr, "  -d INT       Optical distance (if set, marks with dt tag)\n");
+    fprintf(stderr, "  -c           Clear previous duplicate settings and tags.\n");
     fprintf(stderr, "  -t           Mark primary duplicates with the name of the original in a \'do\' tag."
                                   " Mainly for information and debugging.\n");
 
@@ -1216,7 +1232,7 @@ int bam_markdup(int argc, char **argv) {
     kstring_t tmpprefix = {0, 0, NULL};
     struct stat st;
     unsigned int t;
-    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 1, NULL};
+    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 1, 0, NULL};
     char *args = stringify_argv(argc + 1, argv - 1);
 
     static const struct option lopts[] = {
@@ -1224,7 +1240,7 @@ int bam_markdup(int argc, char **argv) {
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:n", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:nc", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': param.remove_dups = 1; break;
             case 'l': param.max_length = atoi(optarg); break;
@@ -1235,6 +1251,7 @@ int bam_markdup(int argc, char **argv) {
             case 'f': param.stats_file = optarg; param.do_stats = 1; break;
             case 'd': param.opt_dist = atoi(optarg); break;
             case 'n': param.add_pg = 0; break;
+            case 'c': param.clear = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
