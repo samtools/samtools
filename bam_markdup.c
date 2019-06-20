@@ -55,6 +55,7 @@ typedef struct {
     int supp;
     int tag;
     int opt_dist;
+    int add_pg;
     char *stats_file;
 } md_param_t;
 
@@ -729,7 +730,7 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
     }
     ks_free(&str);
 
-    if (sam_hdr_add_pg(header, "samtools", "VN", samtools_version(),
+    if (param->add_pg && sam_hdr_add_pg(header, "samtools", "VN", samtools_version(),
                         arg_list ? "CL" : NULL,
                         arg_list ? arg_list : NULL,
                         NULL) != 0) {
@@ -1215,7 +1216,7 @@ int bam_markdup(int argc, char **argv) {
     kstring_t tmpprefix = {0, 0, NULL};
     struct stat st;
     unsigned int t;
-    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, NULL};
+    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 1, NULL};
     char *args = stringify_argv(argc + 1, argv - 1);
 
     static const struct option lopts[] = {
@@ -1223,7 +1224,7 @@ int bam_markdup(int argc, char **argv) {
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:n", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': param.remove_dups = 1; break;
             case 'l': param.max_length = atoi(optarg); break;
@@ -1233,6 +1234,7 @@ int bam_markdup(int argc, char **argv) {
             case 't': param.tag = 1; break;
             case 'f': param.stats_file = optarg; param.do_stats = 1; break;
             case 'd': param.opt_dist = atoi(optarg); break;
+            case 'n': param.add_pg = 0; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
