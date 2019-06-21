@@ -830,8 +830,6 @@ sub test_index
     cmd("$$opts{bin}/samtools view${threads} -T $$opts{path}/dat/mpileup.ref.fa --write-index -o $$opts{path}/dat/auto_indexed.cram $$opts{path}/dat/mpileup.1.sam");
     test_cmd($opts,out=>"dat/auto_indexed.cram.crai", cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/auto_indexed.cram $$opts{tmp}/auto_indexed.crai && cat $$opts{tmp}/auto_indexed.crai", binary=>1);
 
-    print "test_index:\n";
-    print "$$opts{bin}/samtools view${threads} -h --write-index -O sam,level=5 -o $$opts{path}/dat/auto_indexed.sam $$opts{path}/dat/mpileup.1.sam\n\n";
     cmd("$$opts{bin}/samtools view${threads} -h --write-index -O sam,level=5 -o $$opts{path}/dat/auto_indexed.sam $$opts{path}/dat/mpileup.1.sam");
     test_cmd($opts,out=>"dat/auto_indexed.sam.csi", cmd=>"$$opts{bin}/samtools index${threads} -c $$opts{path}/dat/auto_indexed.sam $$opts{tmp}/auto_indexed.csi && cat $$opts{tmp}/auto_indexed.csi", binary=>1);
 }

@@ -471,7 +471,7 @@ static bool readgroupise(parsed_opts_t *opts, state_t* state)
 
         if (opts->ga.write_index) {
             if (sam_idx_save(state->output_file) < 0) {
-                print_error_errno("addrelacerg", "writing index failed");
+                print_error_errno("addreplacerg", "[%s] Writing index failed", __func__);
                 free(idx_fn);
                 return false;
             }
