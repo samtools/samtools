@@ -568,7 +568,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
-        if (ga.write_index && fn_out) {
+        if (ga.write_index) {
             if (!(fn_out_idx = auto_index(out, fn_out, header))) {
                 ret = 1;
                 goto view_end;
@@ -597,7 +597,7 @@ int main_samview(int argc, char *argv[])
                     goto view_end;
                 }
             }
-            if (ga.write_index && fn_un_out) {
+            if (ga.write_index) {
                 if (!(fn_un_out_idx = auto_index(un_out, fn_un_out, header))) {
                     ret = 1;
                     goto view_end;

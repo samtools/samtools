@@ -1408,7 +1408,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         sam_close(fpout);
         return -1;
     }
-    if (write_index && out && strcmp(out, "-") != 0) {
+    if (write_index) {
         if (!(out_idx_fn = auto_index(fpout, out, hout))){
             sam_close(fpout);
             return -1;

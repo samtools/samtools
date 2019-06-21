@@ -522,7 +522,7 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
         fprintf(stderr, "[markdup] error writing header.\n");
         goto fail;
     }
-    if (write_index && out_fn && strcmp(out_fn, "-") != 0) {
+    if (write_index) {
         if (!(idx_fn = auto_index(out, out_fn, header)))
             goto fail;
     }

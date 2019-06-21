@@ -76,7 +76,7 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
             ga->nthreads = atoi(optarg);
             break;
         } else if (strcmp(lopt->name, "write-index") == 0) {
-            ga->write_index=1;
+            ga->write_index = 1;
             break;
 //      } else if (strcmp(lopt->name, "verbose") == 0) {
 //          ga->verbosity++;
