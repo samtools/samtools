@@ -815,7 +815,7 @@ sub plot_qualities
         for (my $iqual=1; $iqual<@$cycle; $iqual++) { print $fh "\t$$cycle[$iqual]"; }
         print $fh "\n";
     }
-    print $fh "end\nend\n";
+    print $fh "\nend\n";
     if ( $is_paired )
     {
         @ytics = ();
@@ -840,7 +840,7 @@ sub plot_qualities
             for (my $iqual=1; $iqual<@$cycle; $iqual++) { print $fh "\t$$cycle[$iqual]"; }
             print $fh "\n";
         }
-        print $fh "end\nend\n";
+        print $fh "\nend\n";
     }
     close($fh);
     plot($$args{gp});
