@@ -149,6 +149,9 @@ P 75.out $samtools mpileup -x -P LS454          -m 1 -u -f mpileup.ref.fa indels
 P 76.out $samtools mpileup -Q0 -s -x -f mpileup.ref.fa mpileup.1.bam
 P 77.out $samtools mpileup -Q0 -O -x -f mpileup.ref.fa mpileup.1.bam
 
+# Reverse strand deletions; --reverse-del
+P 78.out $samtools mpileup --reverse-del mpileup.1.bam
+
 # -a and -aa.  See depth.reg too
 P a0.out  $samtools mpileup -Q40 -r 17:1-4200 -f mpileup.ref.fa -a mpileup.1.$fmt
 P a1.out  $samtools mpileup -ABQ0 -a  xx#depth1.sam

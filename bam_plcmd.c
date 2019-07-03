@@ -59,7 +59,7 @@ static inline int printw(int c, FILE *fp)
     return 0;
 }
 
-static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref_len, const char *ref)
+static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref_len, const char *ref, int rev_del)
 {
     int j;
     if (p->is_head) {
@@ -79,7 +79,7 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
             else c = bam_is_rev(p->b)? tolower(c) : toupper(c);
         }
         putc(c, fp);
-    } else putc(p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : '*', fp);
+    } else putc(p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : ((bam_is_rev(p->b) && rev_del) ? '#' : '*'), fp);
     if (p->indel > 0) {
         putc('+', fp); printw(p->indel, fp);
         for (j = 1; j <= p->indel; ++j) {
@@ -123,7 +123,7 @@ void bed_destroy(void *_h);
 int bed_overlap(const void *_h, const char *chr, int beg, int end);
 
 typedef struct {
-    int min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, fmt_flag, all;
+    int min_mq, flag, min_baseQ, capQ_thres, max_depth, max_indel_depth, fmt_flag, all, rev_del;
     int rflag_require, rflag_filter;
     int openQ, extQ, tandemQ, min_support; // for indels
     double min_frac; // for indels
@@ -682,7 +682,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                             ? bam_get_qual(p->b)[p->qpos]
                             : 0;
                         if (c >= conf->min_baseQ)
-                            n++, pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref);
+                            n++, pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref, conf->rev_del);
                     }
                     if (!n) putc('*', pileup_fp);
 
@@ -949,6 +949,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -O, --output-BP         output base positions on reads\n"
 "  -s, --output-MQ         output mapping quality\n"
 "      --output-QNAME      output read names\n"
+"      --reverse-del       use '#' character for deletions on the reverse strand\n"
 "  -a                      output all positions (including zero depth)\n"
 "  -a -a (or -aa)          output absolutely all positions, including unused ref. sequences\n"
 "\n"
@@ -987,6 +988,7 @@ int bam_mpileup(int argc, char *argv[])
     mplp.rflag_filter = BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP;
     mplp.output_fname = NULL;
     mplp.all = 0;
+    mplp.rev_del = 0;
     sam_global_args_init(&mplp.ga);
 
     static const struct option lopts[] =
@@ -1042,6 +1044,7 @@ int bam_mpileup(int argc, char *argv[])
         {"per-sample-mf", no_argument, NULL, 'p'},
         {"platforms", required_argument, NULL, 'P'},
         {"customized-index", no_argument, NULL, 'X'},
+        {"reverse-del", no_argument, NULL, 6},
         {NULL, 0, NULL, 0}
     };
 
@@ -1059,6 +1062,7 @@ int bam_mpileup(int argc, char *argv[])
         case  3 : mplp.output_fname = optarg; break;
         case  4 : mplp.openQ = atoi(optarg); break;
         case  5 : mplp.flag |= MPLP_PRINT_QNAME; break;
+        case  6 : mplp.rev_del = 1; break;
         case 'f':
             mplp.fai = fai_load(optarg);
             if (mplp.fai == NULL) return 1;

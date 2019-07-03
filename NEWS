@@ -1,6 +1,10 @@
 Release a.b
 -----------
 
+* In samtools mpileup, a deletion on the reverse strand is now marked
+  with a different character ('#') than the one used on a forward strand ('*'),
+  if '--reverse-del' option is used.
+
 * In samtools split, the '-u' option no longer accepts an extra file name
   from which a replacement header was read.  The two file names were
   separated using a colon, which caused problems on Windows and prevented
