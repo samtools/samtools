@@ -294,6 +294,32 @@ Output mapping quality.
 .B --output-QNAME
 Output an extra column containing comma-separated read names.
 .TP
+.BI "--output-extra" \ STR
+Output extra columns containing comma-separated values of read fields or read
+tags. The names of the selected fields have to be provided as they are
+described in the SAM Specification (pag. 6) and will be output by the
+mpileup command in the same order as in the document (i.e.
+.B QNAME, FLAG, RNAME...
+)
+The names are case sensitive. Currently, only the following fields are
+supported:
+.IP
+.B QNAME, FLAG, RNAME, POS, MAPQ, RNEXT, PNEXT
+.IP
+Anything that is not on this list is treated as a potential tag, although only
+two character tags are accepted. In the mpileup output, tag columns are
+displayed in the order they were provided by the user in the command line.
+Field and tag names have to be provided in a comma-separated all caps string to
+the mpileup command.
+E.g.
+.IP
+.B samtools mpileup --output-extra FLAG,QNAME,RG,NM in.bam
+.IP
+will display four extra columns in the mpileup output, the first being a list of
+comma-separated read names, followed by a list of flag values, a list of RG tag
+values and a list of NM tag values. Field values are always displayed before
+tag values.
+.TP
 .B --reverse-del
 Mark the deletions on the reverse strand with the character
 .BR # , 

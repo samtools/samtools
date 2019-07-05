@@ -39,10 +39,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
 #include <htslib/kstring.h>
+#include <htslib/klist.h>
 #include <htslib/khash_str2int.h>
 #include "sam_header.h"
 #include "samtools.h"
 #include "sam_opts.h"
+
+#define dummy_free(p)
+KLIST_INIT(auxlist, char *, dummy_free)
 
 static inline int printw(int c, FILE *fp)
 {
@@ -109,11 +113,21 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos, int ref
 #define MPLP_REDO_BAQ   (1<<6)
 #define MPLP_ILLUMINA13 (1<<7)
 #define MPLP_IGNORE_RG  (1<<8)
-#define MPLP_PRINT_POS  (1<<9)
-#define MPLP_PRINT_MAPQ (1<<10)
+#define MPLP_PRINT_QPOS (1<<9)
 #define MPLP_PER_SAMPLE (1<<11)
 #define MPLP_SMART_OVERLAPS (1<<12)
+
 #define MPLP_PRINT_QNAME (1<<13)
+#define MPLP_PRINT_FLAG  (1<<14)
+#define MPLP_PRINT_RNAME (1<<15)
+#define MPLP_PRINT_POS   (1<<16)
+#define MPLP_PRINT_MAPQ  (1<<17)
+#define MPLP_PRINT_CIGAR (1<<18)
+#define MPLP_PRINT_RNEXT (1<<19)
+#define MPLP_PRINT_PNEXT (1<<20)
+#define MPLP_PRINT_TLEN  (1<<21)
+#define MPLP_PRINT_SEQ   (1<<22)
+#define MPLP_PRINT_QUAL  (1<<23)
 
 #define MPLP_MAX_DEPTH 8000
 #define MPLP_MAX_INDEL_DEPTH 250
@@ -129,7 +143,7 @@ typedef struct {
     double min_frac; // for indels
     char *reg, *pl_list, *fai_fname, *output_fname;
     faidx_t *fai;
-    void *bed, *rghash;
+    void *bed, *rghash, *auxlist;
     int argc;
     char **argv;
     sam_global_args ga;
@@ -156,6 +170,53 @@ typedef struct {
     int *n_plp, *m_plp;
     bam_pileup1_t **plp;
 } mplp_pileup_t;
+
+static int build_auxlist(mplp_conf_t *conf, char *optstring) {
+    if (!optstring)
+        return 0;
+
+    void *colhash = khash_str2int_init();
+    if (!colhash)
+        return 1;
+
+    struct active_cols {
+        char *name;
+        int supported;
+    };
+
+    const struct active_cols colnames[11] = {
+            {"QNAME", 1}, {"FLAG", 1}, {"RNAME", 1}, {"POS", 1}, {"MAPQ", 1}, {"CIGAR", 0}, {"RNEXT", 1}, {"PNEXT", 1}, {"TLEN", 0}, {"SEQ", 0}, {"QUAL", 0}
+    };
+
+    int i, f = MPLP_PRINT_QNAME, colno = 11;
+    for (i = 0; i < colno; i++, f <<= 1)
+        if (colnames[i].supported)
+            khash_str2int_set(colhash, colnames[i].name, f);
+
+    conf->auxlist = kl_init(auxlist);
+    if (!conf->auxlist)
+        return 1;
+
+    char *save_p;
+    char *tag = strtok_r(optstring, ",", &save_p);
+    while (tag) {
+        if (khash_str2int_get(colhash, tag, &f) == 0) {
+            conf->flag |= f;
+        } else {
+            if (strlen(tag) != 2) {
+                fprintf(stderr, "[%s] tag '%s' has more than two characters or not supported\n", __func__, tag);
+            } else {
+                char **tag_p = kl_pushp(auxlist, conf->auxlist);
+                *tag_p = tag;
+            }
+        }
+        tag = strtok_r(NULL, ",", &save_p);
+    }
+
+    khash_str2int_destroy(colhash);
+
+    return 0;
+}
 
 static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
     mplp_ref_t *r = ma->ref;
@@ -222,9 +283,19 @@ print_empty_pileup(FILE *fp, const mplp_conf_t *conf, const char *tname,
     fprintf(fp, "%s\t%d\t%c", tname, pos+1, (ref && pos < ref_len)? ref[pos] : 'N');
     for (i = 0; i < n; ++i) {
         fputs("\t0\t*\t*", fp);
-        if (conf->flag & MPLP_PRINT_MAPQ) fputs("\t*", fp);
-        if (conf->flag & MPLP_PRINT_POS) fputs("\t*", fp);
-        if (conf->flag & MPLP_PRINT_QNAME) fputs("\t*", fp);
+        if (conf->flag & MPLP_PRINT_QPOS)
+            fputs("\t*", fp);
+        int flag_value = MPLP_PRINT_QNAME;
+        while(flag_value < MPLP_PRINT_QUAL + 1) {
+            if (conf->flag & flag_value)
+                fputs("\t*", fp);
+            flag_value <<= 1;
+        }
+        if (conf->auxlist) {
+            int t = 0;
+            while(t++ < ((klist_t(auxlist) *)conf->auxlist)->size)
+                fputs("\t*", fp);
+        }
     }
     putc('\n', fp);
 }
@@ -671,9 +742,19 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                 fprintf(pileup_fp, "\t%d\t", cnt);
                 if (n_plp[i] == 0) {
                     fputs("*\t*", pileup_fp);
-                    if (conf->flag & MPLP_PRINT_MAPQ) fputs("\t*", pileup_fp);
-                    if (conf->flag & MPLP_PRINT_POS) fputs("\t*", pileup_fp);
-                    if (conf->flag & MPLP_PRINT_QNAME) fputs("\t*", pileup_fp);
+                    if (conf->flag & MPLP_PRINT_QPOS)
+                        fputs("\t*", pileup_fp);
+                    int flag_value = MPLP_PRINT_QNAME;
+                    while(flag_value < MPLP_PRINT_QUAL + 1) {
+                        if (conf->flag & flag_value)
+                            fputs("\t*", pileup_fp);
+                        flag_value <<= 1;
+                    }
+                    if (conf->auxlist) {
+                        int t = 0;
+                        while(t++ < ((klist_t(auxlist) *)conf->auxlist)->size)
+                            fputs("\t*", pileup_fp);
+                    }
                 } else {
                     int n = 0;
                     for (j = 0; j < n_plp[i]; ++j) {
@@ -686,6 +767,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                     }
                     if (!n) putc('*', pileup_fp);
 
+                    /* Print base qualities */
                     n = 0;
                     putc('\t', pileup_fp);
                     for (j = 0; j < n_plp[i]; ++j) {
@@ -701,55 +783,122 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                     }
                     if (!n) putc('*', pileup_fp);
 
-                    if (conf->flag & MPLP_PRINT_MAPQ) {
+                    /* Print mpileup positions */
+                    if (conf->flag & MPLP_PRINT_QPOS) {
                         n = 0;
                         putc('\t', pileup_fp);
                         for (j = 0; j < n_plp[i]; ++j) {
                             const bam_pileup1_t *p = plp[i] + j;
                             int c = p->qpos < p->b->core.l_qseq
-                                ? bam_get_qual(p->b)[p->qpos]
-                                : 0;
+                                    ? bam_get_qual(p->b)[p->qpos]
+                                                         : 0;
                             if ( c < conf->min_baseQ ) continue;
-                            c = plp[i][j].b->core.qual + 33;
-                            if (c > 126) c = 126;
-                            putc(c, pileup_fp);
+                            if (n > 0) putc(',', pileup_fp);
                             n++;
+                            fprintf(pileup_fp, "%d", p->qpos + 1);
                         }
                         if (!n) putc('*', pileup_fp);
                     }
 
-                    if (conf->flag & MPLP_PRINT_POS) {
-                        n = 0;
-                        putc('\t', pileup_fp);
-                        for (j = 0; j < n_plp[i]; ++j) {
-                            const bam_pileup1_t *p = plp[i] + j;
-                            int c = p->qpos < p->b->core.l_qseq
-                                ? bam_get_qual(p->b)[p->qpos]
-                                : 0;
-                            if ( c < conf->min_baseQ ) continue;
+                    /* Print selected columns */
+                    int flag_value = MPLP_PRINT_QNAME;
+                    while(flag_value < MPLP_PRINT_QUAL + 1) {
+                        if (conf->flag & flag_value) {
+                            n = 0;
+                            putc('\t', pileup_fp);
+                            for (j = 0; j < n_plp[i]; ++j) {
+                                const bam_pileup1_t *p = &plp[i][j];
+                                int c = p->qpos < p->b->core.l_qseq
+                                    ? bam_get_qual(p->b)[p->qpos]
+                                    : 0;
+                                if ( c < conf->min_baseQ ) continue;
+                                if (n > 0 && flag_value != MPLP_PRINT_MAPQ) putc(',', pileup_fp);
+                                n++;
 
-                            if (n > 0) putc(',', pileup_fp);
-                            fprintf(pileup_fp, "%d", plp[i][j].qpos + 1); // FIXME: printf() is very slow...
-                            n++;
+                                switch (flag_value) {
+                                case MPLP_PRINT_QNAME:
+                                    fputs(bam_get_qname(p->b), pileup_fp);
+                                    break;
+                                case MPLP_PRINT_FLAG:
+                                    fprintf(pileup_fp, "%d", p->b->core.flag);
+                                    break;
+                                case MPLP_PRINT_RNAME:
+                                    if (p->b->core.tid >= 0)
+                                        fputs(h->target_name[p->b->core.tid], pileup_fp);
+                                    else
+                                        putc('*', pileup_fp);
+                                    break;
+                                case MPLP_PRINT_POS:
+                                    fprintf(pileup_fp, "%d", p->b->core.pos + 1);
+                                    break;
+                                case MPLP_PRINT_MAPQ:
+                                    c = p->b->core.qual + 33;
+                                    if (c > 126) c = 126;
+                                    putc(c, pileup_fp);
+                                    break;
+                                case MPLP_PRINT_RNEXT:
+                                    if (p->b->core.mtid >= 0)
+                                        fputs(h->target_name[p->b->core.mtid], pileup_fp);
+                                    else
+                                        putc('*', pileup_fp);
+                                    break;
+                                case MPLP_PRINT_PNEXT:
+                                    fprintf(pileup_fp, "%d", p->b->core.mpos + 1);
+                                    break;
+                                }
+                            }
+                            if (!n) putc('*', pileup_fp);
                         }
-                        if (!n) putc('*', pileup_fp);
+                        flag_value <<= 1;
                     }
 
-                    if (conf->flag & MPLP_PRINT_QNAME) {
-                        n = 0;
-                        putc('\t', pileup_fp);
-                        for (j = 0; j < n_plp[i]; ++j) {
-                            const bam_pileup1_t *p = &plp[i][j];
-                            int c = p->qpos < p->b->core.l_qseq
-                                ? bam_get_qual(p->b)[p->qpos]
-                                : 0;
-                            if ( c < conf->min_baseQ ) continue;
+                    /* Print selected tags */
+                    klist_t(auxlist) *auxlist_p = ((klist_t(auxlist) *)conf->auxlist);
+                    if (auxlist_p && auxlist_p->size) {
+                        kliter_t(auxlist) *aux;
+                        for (aux = kl_begin(auxlist_p); aux != kl_end(auxlist_p); aux = kl_next(aux)) {
+                            n = 0;
+                            putc('\t', pileup_fp);
+                            for (j = 0; j < n_plp[i]; ++j) {
+                                const bam_pileup1_t *p = &plp[i][j];
+                                int c = p->qpos < p->b->core.l_qseq
+                                    ? bam_get_qual(p->b)[p->qpos]
+                                    : 0;
+                                if ( c < conf->min_baseQ ) continue;
 
-                            if (n > 0) putc(',', pileup_fp);
-                            fputs(bam_get_qname(p->b), pileup_fp);
-                            n++;
+                                if (n > 0) putc(',', pileup_fp);
+                                n++;
+                                uint8_t* tag_u = bam_aux_get(p->b, kl_val(aux));
+                                if (!tag_u) continue;
+
+                                //fprintf(stderr, "tag='%s', type='%c'\n", kl_val(aux), *tag_u);
+                                /* Tag value is string */
+                                if (*tag_u == 'Z' || *tag_u == 'H') {
+                                    char *tag_s = bam_aux2Z(tag_u);
+                                    if (!tag_s) continue;
+                                    fputs(tag_s, pileup_fp);
+                                }
+
+                                /* Tag value is integer */
+                                if (*tag_u == 'I' || *tag_u == 'i' || *tag_u == 'C' || *tag_u == 'c' || *tag_u == 'S' || *tag_u == 's') {
+                                    int64_t tag_i = bam_aux2i(tag_u);
+                                    fprintf(pileup_fp, "%" PRId64 "", tag_i);
+                                }
+
+                                /* Tag value is float */
+                                if (*tag_u == 'd' || *tag_u == 'f') {
+                                    double tag_f = bam_aux2f(tag_u);
+                                    fprintf(pileup_fp, "%lf", tag_f);
+                                }
+
+                                /* Tag value is character */
+                                if (*tag_u == 'A') {
+                                    char tag_c = bam_aux2A(tag_u);
+                                    putc(tag_c, pileup_fp);
+                                }
+                            }
+                            if (!n) putc('*', pileup_fp);
                         }
-                        if (!n) putc('*', pileup_fp);
                     }
                 }
             }
@@ -949,6 +1098,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -O, --output-BP         output base positions on reads\n"
 "  -s, --output-MQ         output mapping quality\n"
 "      --output-QNAME      output read names\n"
+"      --output-extra STR  output extra read fields and read tag values\n"
 "      --reverse-del       use '#' character for deletions on the reverse strand\n"
 "  -a                      output all positions (including zero depth)\n"
 "  -a -a (or -aa)          output absolutely all positions, including unused ref. sequences\n"
@@ -1045,6 +1195,7 @@ int bam_mpileup(int argc, char *argv[])
         {"platforms", required_argument, NULL, 'P'},
         {"customized-index", no_argument, NULL, 'X'},
         {"reverse-del", no_argument, NULL, 6},
+        {"output-extra", required_argument, NULL, 7},
         {NULL, 0, NULL, 0}
     };
 
@@ -1063,6 +1214,12 @@ int bam_mpileup(int argc, char *argv[])
         case  4 : mplp.openQ = atoi(optarg); break;
         case  5 : mplp.flag |= MPLP_PRINT_QNAME; break;
         case  6 : mplp.rev_del = 1; break;
+        case  7 :
+            if (build_auxlist(&mplp, optarg) != 0) {
+                fprintf(stderr,"Could not build aux list using '%s'\n", optarg);
+                return 1;
+            }
+            break;
         case 'f':
             mplp.fai = fai_load(optarg);
             if (mplp.fai == NULL) return 1;
@@ -1092,7 +1249,7 @@ int bam_mpileup(int argc, char *argv[])
         case '6': mplp.flag |= MPLP_ILLUMINA13; break;
         case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
         case 's': mplp.flag |= MPLP_PRINT_MAPQ; break;
-        case 'O': mplp.flag |= MPLP_PRINT_POS; break;
+        case 'O': mplp.flag |= MPLP_PRINT_QPOS; break;
         case 'C': mplp.capQ_thres = atoi(optarg); break;
         case 'q': mplp.min_mq = atoi(optarg); break;
         case 'Q': mplp.min_baseQ = atoi(optarg); break;
@@ -1183,5 +1340,6 @@ int bam_mpileup(int argc, char *argv[])
     free(mplp.reg); free(mplp.pl_list);
     if (mplp.fai) fai_destroy(mplp.fai);
     if (mplp.bed) bed_destroy(mplp.bed);
+    if (mplp.auxlist) kl_destroy(auxlist, (klist_t(auxlist) *)mplp.auxlist);
     return ret;
 }

@@ -152,6 +152,9 @@ P 77.out $samtools mpileup -Q0 -O -x -f mpileup.ref.fa mpileup.1.bam
 # Reverse strand deletions; --reverse-del
 P 78.out $samtools mpileup --reverse-del mpileup.1.bam
 
+# Extra columns and tags; --output-extra
+P 79.out $samtools mpileup -O --output-extra POS,FLAG,NM,QNAME,RG ../dat/view.001.sam
+
 # -a and -aa.  See depth.reg too
 P a0.out  $samtools mpileup -Q40 -r 17:1-4200 -f mpileup.ref.fa -a mpileup.1.$fmt
 P a1.out  $samtools mpileup -ABQ0 -a  xx#depth1.sam
