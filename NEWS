@@ -22,6 +22,11 @@ Release a.b
   reported fell between two bins.  It would report the depth entirely from the
   lower bin instead of taking a weighted average of the two.
 
+* Fixed bug where the samtools fastq -i would output incorrect information
+  in the Casava tags for dual-index reads.  It also now prints the tags
+  for dual indicies in the same way as bcl2fastq, using a '+' sign between
+  the two parts of the index.
+
 Release 1.9 (18th July 2018)
 ----------------------------
 
