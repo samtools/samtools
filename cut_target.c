@@ -49,7 +49,7 @@ typedef struct {
     int min_baseQ, tid, max_bases;
     uint16_t *bases;
     samFile *fp;
-    bam_hdr_t *h;
+    sam_hdr_t *h;
     char *ref;
     int len;
     faidx_t *fai;
@@ -92,7 +92,7 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
     return ret<<8|k;
 }
 
-static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
+static void process_cns(sam_hdr_t *h, int tid, int l, uint16_t *cns)
 {
     int i, f[2][2], *prev, *curr, *swap_tmp, s;
     uint8_t *b; // backtrack array
@@ -236,7 +236,7 @@ int main_cut_target(int argc, char *argv[])
     }
     process_cns(g.h, lasttid, l, cns);
     free(cns);
-    bam_hdr_destroy(g.h);
+    sam_hdr_destroy(g.h);
     bam_plp_destroy(plp);
     sam_close(g.fp);
     if (g.fai) {

@@ -29,9 +29,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <unistd.h>
 
-void setup_test_1(bam_hdr_t** hdr_in)
+void setup_test_1(sam_hdr_t** hdr_in)
 {
-    *hdr_in = bam_hdr_init();
+    *hdr_in = sam_hdr_init();
     const char *test1 =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\n"

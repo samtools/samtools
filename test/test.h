@@ -33,6 +33,6 @@ void xfreopen(const char *path, const char *mode, FILE *stream);
 int redirect_stderr(const char *path);
 void flush_and_restore_stderr(int orig_stderr, int redirect_fd);
 
-void dump_hdr(const bam_hdr_t* hdr);
+void dump_hdr(const sam_hdr_t* hdr);
 
 #endif

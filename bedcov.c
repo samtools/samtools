@@ -42,7 +42,7 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
     htsFile *fp;
-    bam_hdr_t *header;
+    sam_hdr_t *header;
     hts_itr_t *iter;
     int min_mapQ;
 } aux_t;
@@ -208,7 +208,7 @@ bed_error:
     for (i = 0; i < n; ++i) {
         if (aux[i]->iter) hts_itr_destroy(aux[i]->iter);
         hts_idx_destroy(idx[i]);
-        bam_hdr_destroy(aux[i]->header);
+        sam_hdr_destroy(aux[i]->header);
         sam_close(aux[i]->fp);
         free(aux[i]);
     }

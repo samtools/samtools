@@ -188,7 +188,7 @@ static inline int * update_posmap(int *posmap, kstring_t ref)
     return posmap;
 }
 
-int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
+int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
 {
     bam1_t *b = 0;
     kstring_t r, q;
@@ -382,10 +382,10 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
     return ret;
 }
 
-bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
+sam_hdr_t * fix_header(sam_hdr_t *old, faidx_t *fai)
 {
     int i = 0, ret = 0, unpadded_len = 0;
-    bam_hdr_t *header = bam_hdr_dup(old);
+    sam_hdr_t *header = sam_hdr_dup(old);
     if (!header)
         return NULL;
 
@@ -412,7 +412,7 @@ bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
     }
 
     if (ret) {
-        bam_hdr_destroy(header);
+        sam_hdr_destroy(header);
         return NULL;
     }
 
@@ -424,7 +424,7 @@ static int usage(int is_long_help);
 int main_pad2unpad(int argc, char *argv[])
 {
     samFile *in = 0, *out = 0;
-    bam_hdr_t *h = 0, *h_fix = 0;
+    sam_hdr_t *h = 0, *h_fix = 0;
     faidx_t *fai = 0;
     int c, compress_level = -1, is_long_help = 0;
     char in_mode[5], out_mode[6], *fn_out = 0, *fn_list = 0, *fn_out_idx = NULL;
@@ -538,8 +538,8 @@ int main_pad2unpad(int argc, char *argv[])
 depad_end:
     // close files, free and return
     if (fai) fai_destroy(fai);
-    if (h) bam_hdr_destroy(h);
-    if (h_fix && h_fix != h) bam_hdr_destroy(h_fix);
+    if (h) sam_hdr_destroy(h);
+    if (h_fix && h_fix != h) sam_hdr_destroy(h_fix);
     if (in) sam_close(in);
     if (out && sam_close(out) < 0) {
         fprintf(stderr, "[depad] error on closing output file.\n");

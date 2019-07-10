@@ -43,7 +43,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 typedef struct {     // auxiliary data structure
     samFile *fp;     // the file handle
-    bam_hdr_t *hdr;  // the file header
+    sam_hdr_t *hdr;  // the file header
     hts_itr_t *iter; // NULL if a region not specified
     int min_mapQ, min_len; // mapQ filter; length filter
 } aux_t;
@@ -109,7 +109,7 @@ int main_depth(int argc, char *argv[])
     char *reg = 0; // specified region
     void *bed = 0; // BED data structure
     char *file_list = NULL, **fn = NULL;
-    bam_hdr_t *h = NULL; // BAM header of the 1st input
+    sam_hdr_t *h = NULL; // BAM header of the 1st input
     aux_t **data;
     bam_mplp_t mplp;
     int last_pos = -1, last_tid = -1, ret;
@@ -349,7 +349,7 @@ depth_end:
     }
 
     for (i = 0; i < n && data[i]; ++i) {
-        bam_hdr_destroy(data[i]->hdr);
+        sam_hdr_destroy(data[i]->hdr);
         if (data[i]->fp) sam_close(data[i]->fp);
         hts_itr_destroy(data[i]->iter);
         free(data[i]);

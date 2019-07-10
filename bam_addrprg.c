@@ -58,9 +58,9 @@ typedef struct state state_t;
 
 struct state {
     samFile* input_file;
-    bam_hdr_t* input_header;
+    sam_hdr_t* input_header;
     samFile* output_file;
-    bam_hdr_t* output_header;
+    sam_hdr_t* output_header;
     char* rg_id;
     void (*mode_func)(const state_t*, bam1_t*);
 };
@@ -82,9 +82,9 @@ static void cleanup_state(state_t* state)
     if (!state) return;
     free(state->rg_id);
     if (state->output_file) sam_close(state->output_file);
-    bam_hdr_destroy(state->output_header);
+    sam_hdr_destroy(state->output_header);
     if (state->input_file) sam_close(state->input_file);
-    bam_hdr_destroy(state->input_header);
+    sam_hdr_destroy(state->input_header);
     free(state);
 }
 
@@ -325,7 +325,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     }
     retval->input_header = sam_hdr_read(retval->input_file);
 
-    retval->output_header = bam_hdr_dup(retval->input_header);
+    retval->output_header = sam_hdr_dup(retval->input_header);
     if (opts->output_name) // File format auto-detection
         sam_open_mode(output_mode + 1, opts->output_name, NULL);
     retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, output_mode, &opts->ga.out);

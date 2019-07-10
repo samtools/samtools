@@ -242,13 +242,13 @@ extern "C" {
       @abstract Initialize a header structure.
       @return   the pointer to the header structure
      */
-    static inline bam_header_t *bam_header_init(void) { return bam_hdr_init(); }
+    static inline bam_header_t *bam_header_init(void) { return sam_hdr_init(); }
 
     /*!
       @abstract        Destroy a header structure.
       @param  header  pointer to the header
      */
-    static inline void bam_header_destroy(bam_header_t *header) { bam_hdr_destroy(header); }
+    static inline void bam_header_destroy(bam_header_t *header) { sam_hdr_destroy(header); }
 
     /*!
       @abstract   Read a header structure from BAM.

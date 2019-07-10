@@ -115,7 +115,7 @@ void base_tv_destroy(tview_t* tv)
     hts_idx_destroy(tv->idx);
     if (tv->fai) fai_destroy(tv->fai);
     free(tv->ref);
-    bam_hdr_destroy(tv->header);
+    sam_hdr_destroy(tv->header);
     sam_close(tv->fp);
 }
 

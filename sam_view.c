@@ -69,12 +69,12 @@ typedef struct samview_settings {
 
 
 // TODO Add declarations of these to a viable htslib or samtools header
-extern const char *bam_get_library(bam_hdr_t *header, const bam1_t *b);
+extern const char *bam_get_library(sam_hdr_t *header, const bam1_t *b);
 extern int bam_remove_B(bam1_t *b);
 extern char *samfaipath(const char *fn_ref);
 
 // Returns 0 to indicate read should be output 1 otherwise
-static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
+static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
 {
     if (settings->remove_B) bam_remove_B(b);
     if (settings->min_qlen > 0) {
@@ -112,7 +112,7 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         }
     }
     if (settings->library) {
-        const char *p = bam_get_library((bam_hdr_t*)h, b);
+        const char *p = bam_get_library((sam_hdr_t*)h, b);
         if (!p || strcmp(p, settings->library) != 0) return 1;
     }
     if (settings->remove_aux_len) {
@@ -247,7 +247,7 @@ static int add_tag_values_file(const char *subcmd, samview_settings_t *settings,
     return (ret != -1) ? 0 : -1;
 }
 
-static inline int check_sam_write1(samFile *fp, const bam_hdr_t *h, const bam1_t *b, const char *fname, int *retp)
+static inline int check_sam_write1(samFile *fp, const sam_hdr_t *h, const bam1_t *b, const char *fname, int *retp)
 {
     int r = sam_write1(fp, h, b);
     if (r >= 0) return r;
@@ -265,7 +265,7 @@ int main_samview(int argc, char *argv[])
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
-    bam_hdr_t *header = NULL;
+    sam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
     char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     char *fn_out_idx = NULL, *fn_un_out_idx = NULL;
@@ -752,7 +752,7 @@ view_end:
 
     free(fn_list); free(fn_out); free(settings.library);  free(fn_un_out);
     sam_global_args_free(&ga);
-    if ( header ) bam_hdr_destroy(header);
+    if ( header ) sam_hdr_destroy(header);
     if (settings.bed) bed_destroy(settings.bed);
     if (settings.rghash) {
         khint_t k;

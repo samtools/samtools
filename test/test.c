@@ -63,7 +63,7 @@ void flush_and_restore_stderr(int orig_stderr, int redirect_fd) {
     close(redirect_fd);
 }
 
-void dump_hdr(const bam_hdr_t* hdr)
+void dump_hdr(const sam_hdr_t* hdr)
 {
     printf("n_targets: %d\n", hdr->n_targets);
     printf("ignore_sam_err: %d\n", hdr->ignore_sam_err);

@@ -56,11 +56,11 @@ typedef struct {
     // other global variables
     int vpos_shift;
     samFile* fp;
-    bam_hdr_t* fp_hdr;
+    sam_hdr_t* fp_hdr;
     char *pre;
     char *out_name[3];
     samFile* out[3];
-    bam_hdr_t* out_hdr[3];
+    sam_hdr_t* out_hdr[3];
     // alignment queue
     int n, m;
     bam1_t **b;
@@ -503,7 +503,7 @@ static int readaln(void *data, bam1_t *b)
     return ret;
 }
 
-static khash_t(set64) *loadpos(const char *fn, bam_hdr_t *h)
+static khash_t(set64) *loadpos(const char *fn, sam_hdr_t *h)
 {
     gzFile fp;
     kstream_t *ks;
@@ -563,7 +563,7 @@ static int start_output(phaseg_t *g, int c, const char *middle, const htsFormat 
         return -1;
     }
 
-    g->out_hdr[c] = bam_hdr_dup(g->fp_hdr);
+    g->out_hdr[c] = sam_hdr_dup(g->fp_hdr);
     if (sam_hdr_write(g->out[c], g->out_hdr[c]) < 0) {
         print_error_errno("phase", "Failed to write header for '%s'", g->out_name[c]);
         return -1;
@@ -770,7 +770,7 @@ int main_phase(int argc, char *argv[])
             return 1;
         }
     }
-    bam_hdr_destroy(g.fp_hdr);
+    sam_hdr_destroy(g.fp_hdr);
     bam_plp_destroy(iter);
     sam_close(g.fp);
     kh_destroy(64, seqs);
@@ -786,7 +786,7 @@ int main_phase(int argc, char *argv[])
                         __func__, g.out_name[c]);
                 res = 1;
             }
-            bam_hdr_destroy(g.out_hdr[c]);
+            sam_hdr_destroy(g.out_hdr[c]);
             free(g.out_name[c]);
         }
         free(g.pre); free(g.b);

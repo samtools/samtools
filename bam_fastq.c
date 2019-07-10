@@ -147,7 +147,7 @@ typedef struct bam2fq_state {
     BGZF *fpr[3];
     BGZF *fpi[2];
     BGZF *hstdout;
-    bam_hdr_t *h;
+    sam_hdr_t *h;
     bool has12, use_oq, copy_tags, illumina_tag;
     int flag_on, flag_off, flag_alloff;
     fastfile filetype;
@@ -851,7 +851,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
 static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int* status)
 {
     bool valid = true;
-    bam_hdr_destroy(state->h);
+    sam_hdr_destroy(state->h);
     check_sam_close("bam2fq", state->fp, opts->fn_input, "file", status);
     if (state->fpse && bgzf_close(state->fpse)) { print_error_errno("bam2fq", "Error closing singleton file \"%s\"", opts->fnse); valid = false; }
     int i, j;

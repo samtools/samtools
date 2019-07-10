@@ -84,9 +84,9 @@ bool hdrcmp(const char *hdr1, const char *hdr2) {
     return res;
 }
 
-void setup_test_1(bam_hdr_t** hdr_in)
+void setup_test_1(sam_hdr_t** hdr_in)
 {
-    *hdr_in = bam_hdr_init();
+    *hdr_in = sam_hdr_init();
     const char *test1 =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\tLN:1\n"
@@ -94,7 +94,7 @@ void setup_test_1(bam_hdr_t** hdr_in)
     sam_hdr_add_lines(*hdr_in, test1, 0);
 }
 
-bool check_test_1(bam_hdr_t* hdr) {
+bool check_test_1(sam_hdr_t* hdr) {
     const char *test1_res =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\tLN:1\n"
@@ -106,9 +106,9 @@ bool check_test_1(bam_hdr_t* hdr) {
     return true;
 }
 
-void setup_test_2(bam_hdr_t** hdr_in)
+void setup_test_2(sam_hdr_t** hdr_in)
 {
-    *hdr_in = bam_hdr_init();
+    *hdr_in = sam_hdr_init();
     const char *test2 =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\tLN:1\n"
@@ -116,7 +116,7 @@ void setup_test_2(bam_hdr_t** hdr_in)
     sam_hdr_add_lines(*hdr_in, test2, 0);
 }
 
-bool check_test_2(bam_hdr_t* hdr) {
+bool check_test_2(sam_hdr_t* hdr) {
     const char *test2_res =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\tLN:1\n"
@@ -164,7 +164,7 @@ int main(int argc, char *argv[])
 
     // setup
     if (verbose) printf("BEGIN test 1\n");  // test eliminating a tag that isn't there
-    bam_hdr_t* hdr1;
+    sam_hdr_t* hdr1;
     const char* id_to_keep_1 = "1#2.3";
     setup_test_1(&hdr1);
     if (verbose > 1) {
@@ -203,11 +203,11 @@ int main(int argc, char *argv[])
     fclose(check);
 
     // teardown
-    bam_hdr_destroy(hdr1);
+    sam_hdr_destroy(hdr1);
     if (verbose) printf("END test 1\n");
 
     if (verbose) printf("BEGIN test 2\n");  // test eliminating a tag that is there
-    bam_hdr_t* hdr2;
+    sam_hdr_t* hdr2;
     const char* id_to_keep_2 = "fish";
     setup_test_2(&hdr2);
     if (verbose > 1) {
@@ -246,7 +246,7 @@ int main(int argc, char *argv[])
     fclose(check);
 
     // teardown
-    bam_hdr_destroy(hdr2);
+    sam_hdr_destroy(hdr2);
     if (verbose) printf("END test 2\n");
 
 

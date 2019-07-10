@@ -252,7 +252,7 @@ static int add_mate_score(bam1_t *src, bam1_t *dest)
 // currently, this function ONLY works if each read has one hit
 static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int proper_pair_check, int add_ct, int do_mate_scoring)
 {
-    bam_hdr_t *header;
+    sam_hdr_t *header;
     bam1_t *b[2] = { NULL, NULL };
     int curr, has_prev, pre_end = 0, cur_end = 0, result;
     kstring_t str;
@@ -378,7 +378,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
 
         if (sam_write1(out, header, pre) < 0) goto write_fail;
     }
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     bam_destroy1(b[0]);
     bam_destroy1(b[1]);
     free(str.s);
@@ -387,7 +387,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
  write_fail:
     print_error_errno("fixmate", "Couldn't write to output file");
  fail:
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     bam_destroy1(b[0]);
     bam_destroy1(b[1]);
     return 1;

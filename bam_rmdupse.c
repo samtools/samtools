@@ -96,7 +96,7 @@ static void clear_besthash(besthash_t *h, int32_t pos)
             kh_del(best, h, k);
 }
 
-static int dump_alignment(samFile *out, bam_hdr_t *hdr,
+static int dump_alignment(samFile *out, sam_hdr_t *hdr,
                           queue_t *queue, int32_t pos, khash_t(lib) *h)
 {
     if (queue->size > QUEUE_CLEAR_SIZE || pos == MAX_POS) {
@@ -125,7 +125,7 @@ static int dump_alignment(samFile *out, bam_hdr_t *hdr,
     return 0;
 }
 
-int bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se)
+int bam_rmdupse_core(samFile *in, sam_hdr_t *hdr, samFile *out, int force_se)
 {
     bam1_t *b = NULL;
     queue_t *queue = NULL;

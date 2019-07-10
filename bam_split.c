@@ -56,15 +56,15 @@ typedef struct parsed_opts parsed_opts_t;
 
 struct state {
     samFile* merged_input_file;
-    bam_hdr_t* merged_input_header;
+    sam_hdr_t* merged_input_header;
     samFile* unaccounted_file;
-    bam_hdr_t* unaccounted_header;
+    sam_hdr_t* unaccounted_header;
     size_t output_count;
     char** rg_id;
     char **rg_index_file_name;
     char **rg_output_file_name;
     samFile** rg_output_file;
-    bam_hdr_t** rg_output_header;
+    sam_hdr_t** rg_output_header;
     kh_c2i_t* rg_hash;
     htsThreadPool p;
     int write_index;
@@ -208,7 +208,7 @@ static char* expand_format_string(const char* format_string, const char* basenam
 }
 
 // Parse the header, count the number of RG tags and return a list of their names
-static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
+static bool count_RG(sam_hdr_t* hdr, size_t* count, char*** output_name)
 {
     char **names = NULL;
 
@@ -289,7 +289,7 @@ static bool count_RG(bam_hdr_t* hdr, size_t* count, char*** output_name)
     }
 }
 
-static int header_compatible(bam_hdr_t *hdr1, bam_hdr_t *hdr2)
+static int header_compatible(sam_hdr_t *hdr1, sam_hdr_t *hdr2)
 {
     size_t n;
     if (sam_hdr_nref(hdr1) != sam_hdr_nref(hdr2)) {
@@ -362,7 +362,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
                 return NULL;
             }
         } else {
-            retval->unaccounted_header = bam_hdr_dup(retval->merged_input_header);
+            retval->unaccounted_header = sam_hdr_dup(retval->merged_input_header);
         }
 
         retval->unaccounted_file = sam_open_format(opts->unaccounted_name, "wb", &opts->ga.out);
@@ -382,7 +382,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
     retval->rg_index_file_name = (char **)calloc(retval->output_count, sizeof(char *));
     retval->rg_output_file_name = (char **)calloc(retval->output_count, sizeof(char *));
     retval->rg_output_file = (samFile**)calloc(retval->output_count, sizeof(samFile*));
-    retval->rg_output_header = (bam_hdr_t**)calloc(retval->output_count, sizeof(bam_hdr_t*));
+    retval->rg_output_header = (sam_hdr_t**)calloc(retval->output_count, sizeof(sam_hdr_t*));
     retval->rg_hash = kh_init_c2i();
     if (!retval->rg_output_file_name || !retval->rg_output_file || !retval->rg_output_header ||
         !retval->rg_hash || !retval->rg_index_file_name) {
@@ -439,7 +439,7 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         kh_val(retval->rg_hash,iter) = i;
 
         // Set and edit header
-        retval->rg_output_header[i] = bam_hdr_dup(retval->merged_input_header);
+        retval->rg_output_header[i] = sam_hdr_dup(retval->merged_input_header);
         if (sam_hdr_remove_except(retval->rg_output_header[i], "RG", "ID", retval->rg_id[i]) ||
             sam_hdr_add_pg(retval->rg_output_header[i], "samtools",
                         "VN", samtools_version(),
@@ -564,7 +564,7 @@ static int cleanup_state(state_t* status, bool check_close)
     int ret = 0;
 
     if (!status) return 0;
-    if (status->unaccounted_header) bam_hdr_destroy(status->unaccounted_header);
+    if (status->unaccounted_header) sam_hdr_destroy(status->unaccounted_header);
     if (status->unaccounted_file) {
         if (sam_close(status->unaccounted_file) < 0 && check_close) {
             print_error("split", "Error on closing unaccounted file");
@@ -575,7 +575,7 @@ static int cleanup_state(state_t* status, bool check_close)
     size_t i;
     for (i = 0; i < status->output_count; i++) {
         if (status->rg_output_header && status->rg_output_header[i])
-            bam_hdr_destroy(status->rg_output_header[i]);
+            sam_hdr_destroy(status->rg_output_header[i]);
         if (status->rg_output_file && status->rg_output_file[i]) {
             if (sam_close(status->rg_output_file[i]) < 0 && check_close) {
                 print_error("split", "Error on closing output file \"%s\"", status->rg_output_file_name[i]);
@@ -586,7 +586,7 @@ static int cleanup_state(state_t* status, bool check_close)
         if (status->rg_output_file_name) free(status->rg_output_file_name[i]);
     }
     if (status->merged_input_header)
-        bam_hdr_destroy(status->merged_input_header);
+        sam_hdr_destroy(status->merged_input_header);
     free(status->rg_output_header);
     free(status->rg_output_file);
     free(status->rg_output_file_name);

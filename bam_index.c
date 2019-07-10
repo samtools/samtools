@@ -114,7 +114,7 @@ int bam_index(int argc, char *argv[])
  * Returns 0 on success,
  *        -1 on failure.
  */
-int slow_idxstats(samFile *fp, bam_hdr_t *header) {
+int slow_idxstats(samFile *fp, sam_hdr_t *header) {
     int ret, last_tid = -2;
     bam1_t *b = bam_init1();
 
@@ -174,7 +174,7 @@ static void usage_exit(FILE *fp, int exit_status)
 int bam_idxstats(int argc, char *argv[])
 {
     hts_idx_t* idx;
-    bam_hdr_t* header;
+    sam_hdr_t* header;
     samFile* fp;
     int c;
 
@@ -240,7 +240,7 @@ int bam_idxstats(int argc, char *argv[])
         hts_idx_destroy(idx);
     }
 
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     sam_close(fp);
     return 0;
 }

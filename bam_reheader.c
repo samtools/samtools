@@ -43,13 +43,13 @@ DEALINGS IN THE SOFTWARE.  */
  * Reads a file and outputs a new BAM file to fd with 'h' replaced as
  * the header.    No checks are made to the validity.
  */
-int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
+int bam_reheader(BGZF *in, sam_hdr_t *h, int fd,
                  const char *arg_list, int add_PG, int skip_header)
 {
     BGZF *fp = NULL;
     ssize_t len;
     uint8_t *buf = NULL;
-    bam_hdr_t *tmp;
+    sam_hdr_t *tmp;
     if (!h)
         return -1;
 
@@ -65,7 +65,7 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
             fprintf(stderr, "Couldn't read header\n");
             goto fail;
         }
-        bam_hdr_destroy(tmp);
+        sam_hdr_destroy(tmp);
     }
 
     fp = bgzf_fdopen(fd, "w");
@@ -75,7 +75,7 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
     }
 
     if (add_PG) {
-        // Around the houses, but it'll do until we can manipulate bam_hdr_t natively.
+        // Around the houses, but it'll do until we can manipulate sam_hdr_t natively.
         if (sam_hdr_add_pg(h, "samtools",
                            "VN", samtools_version(),
                            arg_list ? "CL": NULL,
@@ -121,7 +121,7 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
  *
  * FIXME: error checking
  */
-int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
+int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int add_PG)
 {
     htsFile *h_out = hts_open("-", "wc");
     cram_fd *out = h_out->fp.cram;
@@ -131,7 +131,7 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
         return ret;
 
     // Attempt to fill out a cram->refs[] array from @SQ headers
-    bam_hdr_t *cram_h = bam_hdr_dup(h);
+    sam_hdr_t *cram_h = sam_hdr_dup(h);
     if (!cram_h)
         return -1;
     cram_fd_set_header(out, cram_h);
@@ -185,12 +185,12 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
  *        -1 on general failure;
  *        -2 on failure due to insufficient size
  */
-int cram_reheader_inplace2(cram_fd *fd, bam_hdr_t *h, const char *arg_list,
+int cram_reheader_inplace2(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
                           int add_PG)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
-    bam_hdr_t *cram_h = NULL;
+    sam_hdr_t *cram_h = NULL;
     off_t start;
     int ret = -1;
     if (!h)
@@ -203,7 +203,7 @@ int cram_reheader_inplace2(cram_fd *fd, bam_hdr_t *h, const char *arg_list,
         goto err;
     }
 
-    cram_h = bam_hdr_dup(h);
+    cram_h = sam_hdr_dup(h);
     if (!cram_h)
         goto err;
 
@@ -261,7 +261,7 @@ int cram_reheader_inplace2(cram_fd *fd, bam_hdr_t *h, const char *arg_list,
  err:
     if (c) cram_free_container(c);
     if (b) cram_free_block(b);
-    if (cram_h) bam_hdr_destroy(cram_h);
+    if (cram_h) sam_hdr_destroy(cram_h);
 
     return ret;
 }
@@ -282,12 +282,12 @@ int cram_reheader_inplace2(cram_fd *fd, bam_hdr_t *h, const char *arg_list,
  *        -1 on general failure;
  *        -2 on failure due to insufficient size
  */
-int cram_reheader_inplace3(cram_fd *fd, bam_hdr_t *h, const char *arg_list,
+int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
                           int add_PG)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
-    bam_hdr_t *cram_h = NULL;
+    sam_hdr_t *cram_h = NULL;
     off_t start, sz, end;
     int container_sz, max_container_sz;
     char *buf = NULL;
@@ -302,7 +302,7 @@ int cram_reheader_inplace3(cram_fd *fd, bam_hdr_t *h, const char *arg_list,
         goto err;
     }
 
-    cram_h = bam_hdr_dup(h);
+    cram_h = sam_hdr_dup(h);
     if (!cram_h)
         goto err;
 
@@ -415,12 +415,12 @@ int cram_reheader_inplace3(cram_fd *fd, bam_hdr_t *h, const char *arg_list,
     if (c) cram_free_container(c);
     if (buf) free(buf);
     if (b) cram_free_block(b);
-    if (cram_h) bam_hdr_destroy(cram_h);
+    if (cram_h) sam_hdr_destroy(cram_h);
 
     return ret;
 }
 
-int cram_reheader_inplace(cram_fd *fd, bam_hdr_t *h, const char *arg_list,
+int cram_reheader_inplace(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
                          int add_PG)
 {
     switch (cram_major_vers(fd)) {
@@ -448,10 +448,10 @@ static void usage(FILE *fp, int ret) {
     exit(ret);
 }
 
-static bam_hdr_t* external_reheader(samFile* in, const char* external) {
+static sam_hdr_t* external_reheader(samFile* in, const char* external) {
     char *command = NULL;
-    bam_hdr_t* h = NULL;
-    bam_hdr_t* ih = sam_hdr_read(in);
+    sam_hdr_t* h = NULL;
+    sam_hdr_t* ih = sam_hdr_read(in);
     if (ih == NULL) {
         fprintf(stderr, "[%s] failed to read the header for '%s'.\n", __func__, in->fn);
         return NULL;
@@ -477,7 +477,7 @@ static bam_hdr_t* external_reheader(samFile* in, const char* external) {
         goto cleanup;
     }
     sam_close(tmp_sf);
-    bam_hdr_destroy(ih);
+    sam_hdr_destroy(ih);
     int comm_len = strlen(external) + strlen(tmp_fn) + 8;
     command = calloc(comm_len, 1);
     if (!command || snprintf(command, comm_len, "( %s ) < %s", external, tmp_fn) != comm_len - 1) {
@@ -522,7 +522,7 @@ static bam_hdr_t* external_reheader(samFile* in, const char* external) {
                         "Non-zero exit code returned by command '%s'\n",
                         command);
         }
-        if (h) bam_hdr_destroy(h);
+        if (h) sam_hdr_destroy(h);
         h = NULL;
     }
 cleanup:
@@ -537,7 +537,7 @@ cleanup:
 int main_reheader(int argc, char *argv[])
 {
     int inplace = 0, r, add_PG = 1, c, skip_header = 0;
-    bam_hdr_t *h;
+    sam_hdr_t *h;
     samFile *in;
     char *arg_list = stringify_argv(argc+1, argv-1), *external = NULL;
 
@@ -618,7 +618,7 @@ int main_reheader(int argc, char *argv[])
     if (sam_close(in) != 0)
         r = -1;
 
-    bam_hdr_destroy(h);
+    sam_hdr_destroy(h);
 
     if (arg_list)
         free(arg_list);

@@ -63,7 +63,7 @@ static inline void stack_insert(tmp_stack_t *stack, bam1_t *b)
     stack->a[stack->n++] = b;
 }
 
-static inline int dump_best(tmp_stack_t *stack, samFile *out, bam_hdr_t *hdr)
+static inline int dump_best(tmp_stack_t *stack, samFile *out, sam_hdr_t *hdr)
 {
     int i;
     for (i = 0; i != stack->n; ++i) {
@@ -127,7 +127,7 @@ static inline int sum_qual(const bam1_t *b)
     return q;
 }
 
-int bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
+int bam_rmdup_core(samFile *in, sam_hdr_t *hdr, samFile *out)
 {
     bam1_t *b = NULL;
     int last_tid = -1, last_pos = -1, r;
@@ -250,7 +250,7 @@ int bam_rmdup_core(samFile *in, bam_hdr_t *hdr, samFile *out)
     return 1;
 }
 
-int bam_rmdupse_core(samFile *in, bam_hdr_t *hdr, samFile *out, int force_se);
+int bam_rmdupse_core(samFile *in, sam_hdr_t *hdr, samFile *out, int force_se);
 
 static int rmdup_usage(void) {
     fprintf(stderr, "\n");
@@ -266,7 +266,7 @@ int bam_rmdup(int argc, char *argv[])
 {
     int c, ret, is_se = 0, force_se = 0;
     samFile *in, *out;
-    bam_hdr_t *header;
+    sam_hdr_t *header;
     char wmode[3] = {'w', 'b', 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
@@ -312,7 +312,7 @@ int bam_rmdup(int argc, char *argv[])
     if (is_se) ret = bam_rmdupse_core(in, header, out, force_se);
     else ret = bam_rmdup_core(in, header, out);
 
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     sam_close(in);
     if (sam_close(out) < 0) {
         fprintf(stderr, "[bam_rmdup] error closing output file\n");

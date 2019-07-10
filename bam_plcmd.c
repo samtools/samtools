@@ -160,7 +160,7 @@ typedef struct {
 typedef struct {
     samFile *fp;
     hts_itr_t *iter;
-    bam_hdr_t *h;
+    sam_hdr_t *h;
     mplp_ref_t *ref;
     const mplp_conf_t *conf;
 } mplp_aux_t;
@@ -401,7 +401,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
     const bam_pileup1_t **plp;
     mplp_ref_t mp_ref = MPLP_REF_INIT;
     bam_mplp_t iter;
-    bam_hdr_t *h = NULL; /* header of first file in input list */
+    sam_hdr_t *h = NULL; /* header of first file in input list */
     char *ref;
     void *rghash = NULL;
     FILE *pileup_fp = NULL;
@@ -431,7 +431,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
 
     // read the header of each file in the list and initialize data
     for (i = 0; i < n; ++i) {
-        bam_hdr_t *h_tmp;
+        sam_hdr_t *h_tmp;
         data[i] = calloc(1, sizeof(mplp_aux_t));
         data[i]->fp = sam_open_format(fn[i], "rb", &conf->ga.in);
         if ( !data[i]->fp )
@@ -486,7 +486,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
         if (i == 0) h = data[i]->h = h_tmp; // save the header of the first file
         else {
             // FIXME: check consistency between h and h_tmp
-            bam_hdr_destroy(h_tmp);
+            sam_hdr_destroy(h_tmp);
 
             // we store only the first file's header; it's (alleged to be)
             // compatible with the i-th file's target_name lookup needs
@@ -950,7 +950,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
     free(gplp.plp); free(gplp.n_plp); free(gplp.m_plp);
     bcf_call_del_rghash(rghash);
     bam_mplp_destroy(iter);
-    bam_hdr_destroy(h);
+    sam_hdr_destroy(h);
     for (i = 0; i < n; ++i) {
         sam_close(data[i]->fp);
         if (data[i]->iter) hts_itr_destroy(data[i]->iter);

@@ -70,7 +70,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
     }
     else {
         enum htsExactFormat fmt = hts_get_format(fp->file)->format;
-        fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it
+        fp->header = (sam_hdr_t *)aux;  // For writing, we won't free it
         fp->is_write = 1;
         if (!(fmt == text_format || fmt == sam) || strchr(mode, 'h')) {
             if (sam_hdr_write(fp->file, fp->header) < 0) {
@@ -89,7 +89,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 void samclose(samfile_t *fp)
 {
     if (fp) {
-        if (!fp->is_write && fp->header) bam_hdr_destroy(fp->header);
+        if (!fp->is_write && fp->header) sam_hdr_destroy(fp->header);
         sam_close(fp->file);
         free(fp);
     }

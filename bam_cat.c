@@ -121,7 +121,7 @@ static void hash_s2i_free(khash_s2i *hash) {
     free(hash);
 }
 
-static khash_s2i *hash_rg(const bam_hdr_t *h) {
+static khash_s2i *hash_rg(const sam_hdr_t *h) {
     khash_s2i *rg2id = hash_s2i_create();
     char *cp, *line;
     int j, l;
@@ -174,20 +174,20 @@ static khash_s2i *hash_rg(const bam_hdr_t *h) {
 /*
  * Check the files are consistent and capable of being concatenated.
  * Also fills out the rg2id read-group hash and the version numbers
- * and produces a new bam_hdr_t structure with merged RG lines.
+ * and produces a new sam_hdr_t structure with merged RG lines.
  * Note it is only a simple merge, as we lack the niceties of a proper
  * header API.
  *
  * Returns updated header on success;
  *        NULL on failure.
  */
-static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, bam_hdr_t *h,
+static sam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, sam_hdr_t *h,
                                      khash_s2i **rg2id, int *vers_maj_p, int *vers_min_p) {
     int i, vers_maj = -1, vers_min = -1;
-    bam_hdr_t *new_h = NULL;
+    sam_hdr_t *new_h = NULL;
 
     if (h) {
-        new_h = bam_hdr_dup(h);
+        new_h = sam_hdr_dup(h);
         *rg2id = hash_rg(new_h);
     }
 
@@ -215,11 +215,11 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, bam_hdr_t *h,
         vers_maj = vmaj;
         vers_min = vmin;
 
-        bam_hdr_t *old = sam_hdr_read(in);
+        sam_hdr_t *old = sam_hdr_read(in);
         khash_s2i *rg2id_in = hash_rg(old);
 
         if (!new_h) {
-            new_h = bam_hdr_dup(old);
+            new_h = sam_hdr_dup(old);
             *rg2id = hash_rg(new_h);
         }
 
@@ -251,7 +251,7 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, bam_hdr_t *h,
         }
 
         hash_s2i_free(rg2id_in);
-        bam_hdr_destroy(old);
+        sam_hdr_destroy(old);
         sam_close(in);
     }
 
@@ -289,13 +289,13 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, bam_hdr_t *h,
  * huffman code.  In this situation we can change the meta-data in the
  * compression header to renumber an RG value..
  */
-int cram_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outcram)
+int cram_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outcram)
 {
     samFile *out;
     cram_fd *out_c;
     int i, vers_maj, vers_min;
     khash_s2i *rg2id = NULL;
-    bam_hdr_t *new_h = NULL;
+    sam_hdr_t *new_h = NULL;
 
     /* Check consistent versioning and compatible headers */
     if (!(new_h = cram_cat_check_hdr(nfn, fn, h, &rg2id, &vers_maj, &vers_min)))
@@ -322,7 +322,7 @@ int cram_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outcram)
         samFile *in;
         cram_fd *in_c;
         cram_container *c;
-        bam_hdr_t *old;
+        sam_hdr_t *old;
         int new_rg = -1;
 
         in = sam_open(fn[i], "rc");
@@ -399,11 +399,11 @@ int cram_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outcram)
             cram_free_container(c);
         }
 
-        bam_hdr_destroy(old);
+        sam_hdr_destroy(old);
         sam_close(in);
     }
     sam_close(out);
-    bam_hdr_destroy(new_h);
+    sam_hdr_destroy(new_h);
     hash_s2i_free(rg2id);
 
     return 0;
@@ -417,7 +417,7 @@ int cram_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outcram)
 
 #define BGZF_EMPTY_BLOCK_SIZE 28
 
-int bam_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outbam)
+int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam)
 {
     BGZF *fp, *in = NULL;
     uint8_t *buf = NULL;
@@ -443,7 +443,7 @@ int bam_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outbam)
         goto fail;
     }
     for(i = 0; i < nfn; ++i){
-        bam_hdr_t *old;
+        sam_hdr_t *old;
         int len,j;
 
         in = strcmp(fn[i], "-")? bgzf_open(fn[i], "r") : bgzf_fdopen(fileno(stdin), "r");
@@ -505,7 +505,7 @@ int bam_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outbam)
                 if (bgzf_raw_write(fp, ebuf, es) < 0) goto write_fail;
             }
         }
-        bam_hdr_destroy(old);
+        sam_hdr_destroy(old);
         bgzf_close(in);
         in = NULL;
     }
@@ -528,7 +528,7 @@ int bam_cat(int nfn, char * const *fn, bam_hdr_t *h, const char* outbam)
 
 int main_cat(int argc, char *argv[])
 {
-    bam_hdr_t *h = 0;
+    sam_hdr_t *h = 0;
     char *outfn = 0;
     char **infns = NULL; // files to concatenate
     int infns_size = 0;
@@ -629,7 +629,7 @@ int main_cat(int argc, char *argv[])
     free(infns);
 
     if (h)
-        bam_hdr_destroy(h);
+        sam_hdr_destroy(h);
 
     return ret;
 }

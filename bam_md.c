@@ -187,7 +187,7 @@ int bam_fillmd(int argc, char *argv[])
     int c, flt_flag, tid = -2, ret, len, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag, quiet_mode;
     htsThreadPool p = {NULL, 0};
     samFile *fp = NULL, *fpout = NULL;
-    bam_hdr_t *header = NULL;
+    sam_hdr_t *header = NULL;
     faidx_t *fai = NULL;
     char *ref = NULL, mode_w[8], *ref_file;
     bam1_t *b = NULL;
@@ -301,7 +301,7 @@ int bam_fillmd(int argc, char *argv[])
         goto fail;
     }
     bam_destroy1(b);
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
 
     free(ref);
     fai_destroy(fai);
@@ -317,7 +317,7 @@ int bam_fillmd(int argc, char *argv[])
  fail:
     free(ref);
     if (b) bam_destroy1(b);
-    if (header) bam_hdr_destroy(header);
+    if (header) sam_hdr_destroy(header);
     if (fai) fai_destroy(fai);
     if (fp) sam_close(fp);
     if (fpout) sam_close(fpout);

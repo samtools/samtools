@@ -164,7 +164,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 KSORT_INIT(heap, heap1_t, heap_lt)
 
 typedef struct merged_header {
-    bam_hdr_t    *hdr;
+    sam_hdr_t    *hdr;
     kstring_t     out_rg;
     kstring_t     out_pg;
     kstring_t     out_co;
@@ -224,7 +224,7 @@ static merged_header_t * init_merged_header() {
     merged_hdr = calloc(1, sizeof(*merged_hdr));
     if (merged_hdr == NULL) return NULL;
 
-    merged_hdr->hdr = bam_hdr_init();
+    merged_hdr->hdr = sam_hdr_init();
     if (!merged_hdr->hdr) goto fail;
 
     merged_hdr->targets_sz   = 16;
@@ -254,7 +254,7 @@ static merged_header_t * init_merged_header() {
     kh_destroy(c2i, merged_hdr->sq_tids);
     free(merged_hdr->target_name);
     free(merged_hdr->target_len);
-    bam_hdr_destroy(merged_hdr->hdr);
+    sam_hdr_destroy(merged_hdr->hdr);
     free(merged_hdr);
     return NULL;
 }
@@ -308,7 +308,7 @@ static int gen_unique_id(char *prefix, khash_t(cset) *existing_ids,
  */
 
 static int trans_tbl_add_hd(merged_header_t* merged_hdr,
-                            bam_hdr_t *translate) {
+                            sam_hdr_t *translate) {
     kstring_t hd_line = { 0, 0, NULL };
     int res;
 
@@ -374,7 +374,7 @@ static inline int grow_target_list(merged_header_t* merged_hdr) {
  * Returns 0 on success, -1 on failure.
  */
 
-static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
+static int trans_tbl_add_sq(merged_header_t* merged_hdr, sam_hdr_t *translate,
                             trans_tbl_t* tbl) {
     int32_t i;
     int min_tid = -1, res;
@@ -452,7 +452,7 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
  *
  */
 
-static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
+static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
                                     bool merge, khash_t(cset)* known_ids,
                                     khash_t(c2c)* id_map, char *override) {
     khiter_t iter;
@@ -701,7 +701,7 @@ static int finish_rg_pg(bool is_rg, klist_t(hdrln) *hdr_lines,
  * Returns 0 on success, -1 on failure.
  */
 
-static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
+static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
                           trans_tbl_t* tbl, bool merge_rg, bool merge_pg,
                           bool copy_co, char* rg_override)
 {
@@ -980,13 +980,13 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
 {
     samFile *fpout, **fp = NULL;
     heap1_t *heap = NULL;
-    bam_hdr_t *hout = NULL;
-    bam_hdr_t *hin  = NULL;
+    sam_hdr_t *hout = NULL;
+    sam_hdr_t *hin  = NULL;
     int i, j, *RG_len = NULL;
     uint64_t idx = 0;
     char **RG = NULL;
     hts_itr_t **iter = NULL;
-    bam_hdr_t **hdr = NULL;
+    sam_hdr_t **hdr = NULL;
     trans_tbl_t *translation_tbl = NULL;
     int *rtrans = NULL;
     char *out_idx_fn = NULL;
@@ -1021,7 +1021,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     if (!heap) goto mem_fail;
     iter = (hts_itr_t**)calloc(n, sizeof(hts_itr_t*));
     if (!iter) goto mem_fail;
-    hdr = (bam_hdr_t**)calloc(n, sizeof(bam_hdr_t*));
+    hdr = (sam_hdr_t**)calloc(n, sizeof(sam_hdr_t*));
     if (!hdr) goto mem_fail;
     translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
     if (!translation_tbl) goto mem_fail;
@@ -1058,7 +1058,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
 
     // open and read the header from each file
     for (i = 0; i < n; ++i) {
-        bam_hdr_t *hin;
+        sam_hdr_t *hin;
         fp[i] = sam_open_format(fn[i], "r", in_fmt);
         if (fp[i] == NULL) {
             print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
@@ -1079,7 +1079,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         // TODO sam_itr_next() doesn't yet work for SAM files,
         // so for those keep the headers around for use with sam_read1()
         if (hts_get_format(fp[i])->format == sam) hdr[i] = hin;
-        else { bam_hdr_destroy(hin); hdr[i] = NULL; }
+        else { sam_hdr_destroy(hin); hdr[i] = NULL; }
 
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
@@ -1295,11 +1295,11 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     for (i = 0; i < n; ++i) {
         trans_tbl_destroy(translation_tbl + i);
         hts_itr_destroy(iter[i]);
-        bam_hdr_destroy(hdr[i]);
+        sam_hdr_destroy(hdr[i]);
         sam_close(fp[i]);
     }
-    bam_hdr_destroy(hin);
-    bam_hdr_destroy(hout);
+    sam_hdr_destroy(hin);
+    sam_hdr_destroy(hout);
     free_merged_header(merged_hdr);
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     if (sam_close(fpout) < 0) {
@@ -1321,11 +1321,11 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     for (i = 0; i < n; ++i) {
         if (translation_tbl && translation_tbl[i].tid_trans) trans_tbl_destroy(translation_tbl + i);
         if (iter && iter[i]) hts_itr_destroy(iter[i]);
-        if (hdr && hdr[i]) bam_hdr_destroy(hdr[i]);
+        if (hdr && hdr[i]) sam_hdr_destroy(hdr[i]);
         if (fp && fp[i]) sam_close(fp[i]);
         if (heap && heap[i].entry.bam_record) bam_destroy1(heap[i].entry.bam_record);
     }
-    if (hout) bam_hdr_destroy(hout);
+    if (hout) sam_hdr_destroy(hout);
     free(RG);
     free(translation_tbl);
     free(hdr);
@@ -1515,7 +1515,7 @@ typedef struct {
 
 static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
                                 int num_in_mem, buf_region *in_mem,
-                                bam1_tag *buf, uint64_t *idx, bam_hdr_t *hout) {
+                                bam1_tag *buf, uint64_t *idx, sam_hdr_t *hout) {
     int i = heap->i, res;
     if (i < nfiles) { // read from file
         res = sam_read1(fp[i], hout, heap->entry.bam_record);
@@ -1549,7 +1549,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
 }
 
 static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
-                            const char *mode, bam_hdr_t *hout,
+                            const char *mode, sam_hdr_t *hout,
                             int n, char * const *fn, int num_in_mem,
                             buf_region *in_mem, bam1_tag *buf, int n_threads,
                             const char *cmd, const htsFormat *in_fmt,
@@ -1574,7 +1574,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
 
     // Open each file, read the header and put the first read into the heap
     for (i = 0; i < heap_size; i++) {
-        bam_hdr_t *hin;
+        sam_hdr_t *hin;
         heap1_t *h = &heap[i];
 
         if (i < n) {
@@ -1591,7 +1591,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
                 goto fail;
             }
             // ... and throw it away as we don't really need it
-            bam_hdr_destroy(hin);
+            sam_hdr_destroy(hin);
         }
 
         // Get a read into the heap
@@ -1786,7 +1786,7 @@ typedef struct {
     size_t buf_len;
     const char *prefix;
     bam1_tag *buf;
-    const bam_hdr_t *h;
+    const sam_hdr_t *h;
     int index;
     int error;
     int no_save;
@@ -1794,16 +1794,16 @@ typedef struct {
 
 // Returns 0 for success
 //        -1 for failure
-static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *buf, const bam_hdr_t *h, int n_threads, const htsFormat *fmt)
+static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *buf, const sam_hdr_t *h, int n_threads, const htsFormat *fmt)
 {
     size_t i;
     samFile* fp;
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
-    if (sam_hdr_write(fp, (bam_hdr_t *)h) != 0) goto fail;
+    if (sam_hdr_write(fp, (sam_hdr_t *)h) != 0) goto fail;
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i) {
-        if (sam_write1(fp, (bam_hdr_t *)h, buf[i].bam_record) < 0) goto fail;
+        if (sam_write1(fp, (sam_hdr_t *)h, buf[i].bam_record) < 0) goto fail;
     }
     if (sam_close(fp) < 0) return -1;
     return 0;
@@ -1815,7 +1815,7 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 #define NUMBASE 256
 #define STEP 8
 
-static int ks_radixsort(size_t n, bam1_tag *buf, const bam_hdr_t *h)
+static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
 {
     int curr = 0, ret = -1;
     ssize_t i;
@@ -1919,7 +1919,7 @@ static void *worker(void *data)
 }
 
 static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
-                       const bam_hdr_t *h, int n_threads, buf_region *in_mem)
+                       const sam_hdr_t *h, int n_threads, buf_region *in_mem)
 {
     int i;
     size_t pos, rest;
@@ -1993,7 +1993,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
 {
     int ret = -1, res, i, n_files = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
-    bam_hdr_t *header = NULL;
+    sam_hdr_t *header = NULL;
     samFile *fp;
     bam1_tag *buf = NULL;
     bam1_t *b = bam_init1();
@@ -2168,7 +2168,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     free(buf);
     free(bam_mem);
     free(in_mem);
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     if (fp) sam_close(fp);
     return ret;
 }

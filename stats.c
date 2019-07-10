@@ -151,7 +151,7 @@ typedef struct
     float isize_main_bulk;  // There are always some unrealistically big insert sizes, report only the main part
     int cov_min,cov_max,cov_step;   // Minimum, maximum coverage and size of the coverage bins
     samFile* sam;
-    bam_hdr_t* sam_header;
+    sam_hdr_t* sam_header;
 
     // Filters
     int filter_readlen;
@@ -2515,7 +2515,7 @@ int main_stats(int argc, char *argv[])
     ret = 0;
 cleanup:
     bam_destroy1(bam_line);
-    bam_hdr_destroy(info->sam_header);
+    sam_hdr_destroy(info->sam_header);
     sam_global_args_free(&ga);
 
 cleanup_read_pairs:
