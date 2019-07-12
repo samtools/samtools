@@ -508,9 +508,12 @@ static inline int get_coordinate_positions(const char *qname, int *xpos, int *yp
         if (qname[pos] == ':') {
             sep++;
 
-            if (sep == 3) {
+            if (sep == 2) {
                 *xpos = pos + 1;
-            } else if (sep == 4) {
+            } else if (sep == 3) {
+                *ypos = pos + 1;
+            } else if (sep == 4) { // HiSeq style names
+                *xpos = *ypos;
                 *ypos = pos + 1;
             }
         }
@@ -525,19 +528,24 @@ static inline int get_coordinate_positions(const char *qname, int *xpos, int *yp
    close enough (set by max_dist) to the original to be counted as optical.*/
 
 static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist) {
-    int ret = 0;
+    int ret = 0, seps;
     char *original, *duplicate;
     int oxpos, oypos, dxpos, dypos;
+
 
     original  = bam_get_qname(ori);
     duplicate = bam_get_qname(dup);
 
-    if (get_coordinate_positions(original, &oxpos, &oypos) != 4) {
+    seps = get_coordinate_positions(original, &oxpos, &oypos);
+
+    if (!(seps == 3 || seps == 4)) {
         fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", original);
         return ret;
     }
 
-    if (get_coordinate_positions(duplicate, &dxpos, &dypos) != 4) {
+    seps = get_coordinate_positions(duplicate, &dxpos, &dypos);
+
+    if (!(seps == 3 || seps == 4)) {
         fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", duplicate);
         return ret;
     }
@@ -1143,6 +1151,7 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
         els = estimate_library_size(pair, duplicate - optical);
 
         fprintf(fp,
+                "COMMAND: %s\n"
                 "READ: %d\n"
                 "WRITTEN: %d\n"
                 "EXCLUDED: %d\n"
@@ -1157,7 +1166,7 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
                 "DUPLICATE NON PRIMARY OPTICAL: %d\n"
                 "DUPLICATE PRIMARY TOTAL: %d\n"
                 "DUPLICATE TOTAL: %d\n"
-                "ESTIMATED_LIBRARY_SIZE %ld\n", reading, writing, excluded, examined, pair, single,
+                "ESTIMATED_LIBRARY_SIZE %ld\n", arg_list, reading, writing, excluded, examined, pair, single,
                                 duplicate, single_dup, optical, single_optical, np_duplicate, np_opt_duplicate,
                                 single_dup + duplicate, single_dup + duplicate + np_duplicate, els);
 
