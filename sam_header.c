@@ -722,7 +722,7 @@ void *sam_header2key_val(void *iter, const char type[2], const char key_tag[2], 
         *_key = key->value;
         *_value = value->value;
         if(!l->next){
-            eof = true;
+            *eof = true;
         }
         return l->next;
     }
