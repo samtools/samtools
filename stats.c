@@ -1987,8 +1987,7 @@ void init_group_id(stats_t *stats, const char *id)
         stats->sam_header->dict = sam_header_parse2(stats->sam_header->text);
     void *iter = stats->sam_header->dict;
     const char *key, *val;
-    bool eof = false;
-    int n = 0;
+    int n = 0, eof = 0;
     stats->rg_hash = khash_str2int_init();
     while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val, &eof))  || eof)
     {
@@ -2003,7 +2002,7 @@ void init_group_id(stats_t *stats, const char *id)
             n++;
         }
         if(eof){
-            eof = false;
+            eof = 0;
         }
     }
     if ( !n )
