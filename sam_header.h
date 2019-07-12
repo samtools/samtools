@@ -37,10 +37,16 @@ extern "C" {
     /*
         // Usage example
         const char *key, *val;
+        bool* eof = false;
         void *iter = sam_header_parse2(bam->header->text);
-        while ( iter = sam_header_key_val(iter, "RG","ID","SM" &key,&val) ) printf("%s\t%s\n", key,val);
+        while ((iter = sam_header_key_val(iter, "RG","ID","SM" &key,&val)) || eof){
+            printf("%s\t%s\n", key,val);
+            if(eof){
+                eof = false;
+            }
+        }
     */
-    void *sam_header2key_val(void *iter, const char type[2], const char key_tag[2], const char value_tag[2], const char **key, const char **value);
+    void *sam_header2key_val(void *iter, const char type[2], const char key_tag[2], const char value_tag[2], const char **key, const char **value, bool* eof);
     char **sam_header2list(const void *_dict, char type[2], char key_tag[2], int *_n);
 
     /*

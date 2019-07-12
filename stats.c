@@ -1987,9 +1987,10 @@ void init_group_id(stats_t *stats, const char *id)
         stats->sam_header->dict = sam_header_parse2(stats->sam_header->text);
     void *iter = stats->sam_header->dict;
     const char *key, *val;
+    bool eof = false;
     int n = 0;
     stats->rg_hash = khash_str2int_init();
-    while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val)) )
+    while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val, &eof))  || eof)
     {
         if ( !strcmp(id,key) || (val && !strcmp(id,val)) )
         {
@@ -2000,6 +2001,9 @@ void init_group_id(stats_t *stats, const char *id)
             k = kh_put(kh_rg, stats->rg_hash, key, &ret);
             kh_value(stats->rg_hash, k) = val;
             n++;
+        }
+        if(eof){
+            eof = false;
         }
     }
     if ( !n )
