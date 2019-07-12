@@ -309,8 +309,8 @@ supported:
 Anything that is not on this list is treated as a potential tag, although only
 two character tags are accepted. In the mpileup output, tag columns are
 displayed in the order they were provided by the user in the command line.
-Field and tag names have to be provided in a comma-separated all caps string to
-the mpileup command.
+Field and tag names have to be provided in a comma-separated string to the
+mpileup command.
 E.g.
 .IP
 .B samtools mpileup --output-extra FLAG,QNAME,RG,NM in.bam
@@ -319,6 +319,15 @@ will display four extra columns in the mpileup output, the first being a list of
 comma-separated read names, followed by a list of flag values, a list of RG tag
 values and a list of NM tag values. Field values are always displayed before
 tag values.
+.TP
+.BI "--output-sep" \ CHAR
+Specify a different separtor character for tag value lists, when those values
+might contain one or more commas (\fB,\fR), which is the default list separator.
+.TP
+.BI "--output-empty" \ CHAR
+Specify a different 'no value' character for tag list entries corresponding to
+reads that don't have a tag requested with the \fB--output-extra\fR option. The
+default is \fB*\fR.
 .TP
 .B --reverse-del
 Mark the deletions on the reverse strand with the character

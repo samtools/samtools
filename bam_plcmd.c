@@ -146,6 +146,7 @@ typedef struct {
     void *bed, *rghash, *auxlist;
     int argc;
     char **argv;
+    char sep, empty;
     sam_global_args ga;
 } mplp_conf_t;
 
@@ -866,12 +867,14 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                                     : 0;
                                 if ( c < conf->min_baseQ ) continue;
 
-                                if (n > 0) putc(',', pileup_fp);
+                                if (n > 0) putc(conf->sep, pileup_fp);
                                 n++;
                                 uint8_t* tag_u = bam_aux_get(p->b, kl_val(aux));
-                                if (!tag_u) continue;
+                                if (!tag_u) {
+                                    putc(conf->empty , pileup_fp);
+                                    continue;
+                                }
 
-                                //fprintf(stderr, "tag='%s', type='%c'\n", kl_val(aux), *tag_u);
                                 /* Tag value is string */
                                 if (*tag_u == 'Z' || *tag_u == 'H') {
                                     char *tag_s = bam_aux2Z(tag_u);
@@ -1099,6 +1102,8 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -s, --output-MQ         output mapping quality\n"
 "      --output-QNAME      output read names\n"
 "      --output-extra STR  output extra read fields and read tag values\n"
+"      --output-sep CHAR   set the separator character for tag lists [,]\n"
+"      --output-empty CHAR set the no value character for tag lists [*]\n"
 "      --reverse-del       use '#' character for deletions on the reverse strand\n"
 "  -a                      output all positions (including zero depth)\n"
 "  -a -a (or -aa)          output absolutely all positions, including unused ref. sequences\n"
@@ -1139,6 +1144,8 @@ int bam_mpileup(int argc, char *argv[])
     mplp.output_fname = NULL;
     mplp.all = 0;
     mplp.rev_del = 0;
+    mplp.sep = ',';
+    mplp.empty = '*';
     sam_global_args_init(&mplp.ga);
 
     static const struct option lopts[] =
@@ -1196,6 +1203,8 @@ int bam_mpileup(int argc, char *argv[])
         {"customized-index", no_argument, NULL, 'X'},
         {"reverse-del", no_argument, NULL, 6},
         {"output-extra", required_argument, NULL, 7},
+        {"output-sep", required_argument, NULL, 8},
+        {"output-empty", required_argument, NULL, 9},
         {NULL, 0, NULL, 0}
     };
 
@@ -1220,6 +1229,8 @@ int bam_mpileup(int argc, char *argv[])
                 return 1;
             }
             break;
+        case 8: mplp.sep = optarg[0]; break;
+        case 9: mplp.empty = optarg[0]; break;
         case 'f':
             mplp.fai = fai_load(optarg);
             if (mplp.fai == NULL) return 1;
