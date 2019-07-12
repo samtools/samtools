@@ -257,7 +257,7 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid,  char **ref, int *ref_len) {
 
     r->ref_id[0] = tid;
     r->ref[0] = faidx_fetch_seq(ma->conf->fai,
-                                ma->h->target_name[r->ref_id[0]],
+                                sam_hdr_tid2name(ma->h, r->ref_id[0]),
                                 0,
                                 INT_MAX,
                                 &r->ref_len[0]);
@@ -318,7 +318,7 @@ static int mplp_func(void *data, bam1_t *b)
         if (ma->conf->rflag_require && !(ma->conf->rflag_require&b->core.flag)) { skip = 1; continue; }
         if (ma->conf->rflag_filter && ma->conf->rflag_filter&b->core.flag) { skip = 1; continue; }
         if (ma->conf->bed && ma->conf->all == 0) { // test overlap
-            skip = !bed_overlap(ma->conf->bed, ma->h->target_name[b->core.tid], b->core.pos, bam_endpos(b));
+            skip = !bed_overlap(ma->conf->bed, sam_hdr_tid2name(ma->h, b->core.tid), b->core.pos, bam_endpos(b));
             if (skip) continue;
         }
         if (ma->conf->rghash) { // exclude read groups
@@ -538,10 +538,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
 
         // Translate BAM @SQ tags to BCF ##contig tags
         // todo: use/write new BAM header manipulation routines, fill also UR, M5
-        for (i=0; i<h->n_targets; i++)
+        for (i=0; i < sam_hdr_nref(h); i++)
         {
             str.l = 0;
-            ksprintf(&str, "##contig=<ID=%s,length=%d>", h->target_name[i], h->target_len[i]);
+            ksprintf(&str, "##contig=<ID=%s,length=%d>", sam_hdr_tid2name(h, i), sam_hdr_tid2len(h, i));
             bcf_hdr_append(bcf_hdr, str.s);
         }
         free(str.s);
@@ -666,7 +666,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
         //printf("tid=%d len=%d ref=%p/%s\n", tid, ref_len, ref, ref);
         if (conf->flag & MPLP_BCF) {
             int total_depth, _ref0, ref16;
-            if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
+            if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, sam_hdr_tid2name(h, tid), pos, pos+1)) continue;
             for (i = total_depth = 0; i < n; ++i) total_depth += n_plp[i];
             group_smpl(&gplp, sm, &buf, n, fn, n_plp, plp, conf->flag & MPLP_IGNORE_RG);
             _ref0 = (ref && pos < ref_len)? ref[pos] : 'N';
@@ -704,10 +704,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                 // Deal with missing portions of previous tids
                 while (tid > last_tid) {
                     if (last_tid >= 0 && !conf->reg) {
-                        while (++last_pos < h->target_len[last_tid]) {
-                            if (conf->bed && bed_overlap(conf->bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)
+                        while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
+                            if (conf->bed && bed_overlap(conf->bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
                                 continue;
-                            print_empty_pileup(pileup_fp, conf, h->target_name[last_tid], last_pos, n, ref, ref_len);
+                            print_empty_pileup(pileup_fp, conf, sam_hdr_tid2name(h, last_tid), last_pos, n, ref, ref_len);
                         }
                     }
                     last_tid++;
@@ -720,16 +720,16 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                 // Deal with missing portion of current tid
                 while (++last_pos < pos) {
                     if (conf->reg && last_pos < beg0) continue; // out of range; skip
-                    if (conf->bed && bed_overlap(conf->bed, h->target_name[tid], last_pos, last_pos + 1) == 0)
+                    if (conf->bed && bed_overlap(conf->bed, sam_hdr_tid2name(h, tid), last_pos, last_pos + 1) == 0)
                         continue;
-                    print_empty_pileup(pileup_fp, conf, h->target_name[tid], last_pos, n, ref, ref_len);
+                    print_empty_pileup(pileup_fp, conf, sam_hdr_tid2name(h, tid), last_pos, n, ref, ref_len);
                 }
                 last_tid = tid;
                 last_pos = pos;
             }
-            if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, h->target_name[tid], pos, pos+1)) continue;
+            if (conf->bed && tid >= 0 && !bed_overlap(conf->bed, sam_hdr_tid2name(h, tid), pos, pos+1)) continue;
 
-            fprintf(pileup_fp, "%s\t%d\t%c", h->target_name[tid], pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
+            fprintf(pileup_fp, "%s\t%d\t%c", sam_hdr_tid2name(h, tid), pos + 1, (ref && pos < ref_len)? ref[pos] : 'N');
             for (i = 0; i < n; ++i) {
                 int j, cnt;
                 for (j = cnt = 0; j < n_plp[i]; ++j) {
@@ -824,7 +824,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                                     break;
                                 case MPLP_PRINT_RNAME:
                                     if (p->b->core.tid >= 0)
-                                        fputs(h->target_name[p->b->core.tid], pileup_fp);
+                                        fputs(sam_hdr_tid2name(h, p->b->core.tid), pileup_fp);
                                     else
                                         putc('*', pileup_fp);
                                     break;
@@ -838,7 +838,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                                     break;
                                 case MPLP_PRINT_RNEXT:
                                     if (p->b->core.mtid >= 0)
-                                        fputs(h->target_name[p->b->core.mtid], pileup_fp);
+                                        fputs(sam_hdr_tid2name(h, p->b->core.mtid), pileup_fp);
                                     else
                                         putc('*', pileup_fp);
                                     break;
@@ -915,12 +915,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
             last_pos = beg0-1;
             mplp_get_ref(data[0], tid0, &ref, &ref_len);
         }
-       while (last_tid >= 0 && last_tid < h->n_targets) {
-            while (++last_pos < h->target_len[last_tid]) {
+       while (last_tid >= 0 && last_tid < sam_hdr_nref(h)) {
+            while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
                 if (last_pos >= end0) break;
-                if (conf->bed && bed_overlap(conf->bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)
+                if (conf->bed && bed_overlap(conf->bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
                     continue;
-                print_empty_pileup(pileup_fp, conf, h->target_name[last_tid], last_pos, n, ref, ref_len);
+                print_empty_pileup(pileup_fp, conf, sam_hdr_tid2name(h, last_tid), last_pos, n, ref, ref_len);
             }
             last_tid++;
             last_pos = -1;

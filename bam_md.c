@@ -235,7 +235,7 @@ int bam_fillmd(int argc, char *argv[])
     }
 
     header = sam_hdr_read(fp);
-    if (header == NULL || header->n_targets == 0) {
+    if (header == NULL || sam_hdr_nref(header) == 0) {
         fprintf(stderr, "[bam_fillmd] input SAM does not have header. Abort!\n");
         goto fail;
     }
@@ -276,11 +276,11 @@ int bam_fillmd(int argc, char *argv[])
         if (b->core.tid >= 0) {
             if (tid != b->core.tid) {
                 free(ref);
-                ref = fai_fetch(fai, header->target_name[b->core.tid], &len);
+                ref = fai_fetch(fai, sam_hdr_tid2name(header, b->core.tid), &len);
                 tid = b->core.tid;
                 if (ref == 0) { // FIXME: Should this always be fatal?
                     fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
-                            header->target_name[tid]);
+                            sam_hdr_tid2name(header, tid));
                     if (is_realn || capQ > 10) goto fail; // Would otherwise crash
                 }
             }

@@ -684,7 +684,7 @@ int main_phase(int argc, char *argv[])
             g.vpos_shift = 0;
             if (lasttid >= 0) {
                 seqs = shrink_hash(seqs);
-                if (phase(&g, g.fp_hdr->target_name[lasttid],
+                if (phase(&g, sam_hdr_tid2name(g.fp_hdr, lasttid),
                           vpos, cns, seqs) < 0) {
                     return 1;
                 }
@@ -756,7 +756,7 @@ int main_phase(int argc, char *argv[])
         }
         if (dophase) {
             seqs = shrink_hash(seqs);
-            if (phase(&g, g.fp_hdr->target_name[tid], vpos, cns, seqs) < 0) {
+            if (phase(&g, sam_hdr_tid2name(g.fp_hdr, tid), vpos, cns, seqs) < 0) {
                 return 1;
             }
             update_vpos(vpos, seqs);
@@ -766,7 +766,7 @@ int main_phase(int argc, char *argv[])
         ++vpos;
     }
     if (tid >= 0) {
-        if (phase(&g, g.fp_hdr->target_name[tid], vpos, cns, seqs) < 0) {
+        if (phase(&g, sam_hdr_tid2name(g.fp_hdr, tid), vpos, cns, seqs) < 0) {
             return 1;
         }
     }

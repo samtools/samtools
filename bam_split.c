@@ -298,10 +298,12 @@ static int header_compatible(sam_hdr_t *hdr1, sam_hdr_t *hdr2)
         return -1;
     }
     for (n = 0; n < sam_hdr_nref(hdr1); n++) {
-        if (hdr1->target_len[n] != hdr2->target_len[n]) {
+        int h1_len = sam_hdr_tid2len(hdr1, n);
+        int h2_len = sam_hdr_tid2len(hdr2, n);
+        if (h1_len != h2_len) {
             print_error("split",
                         "Unaccounted header reference %zu \"%s\" is not the same length as in the input file",
-                        n + 1, hdr2->target_name[n]);
+                        n + 1, sam_hdr_tid2name(hdr2, n));
             return -1;
         }
     }

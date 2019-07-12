@@ -65,13 +65,13 @@ void flush_and_restore_stderr(int orig_stderr, int redirect_fd) {
 
 void dump_hdr(const sam_hdr_t* hdr)
 {
-    printf("n_targets: %d\n", hdr->n_targets);
+    printf("n_targets: %d\n", sam_hdr_nref(hdr));
     printf("ignore_sam_err: %d\n", hdr->ignore_sam_err);
     printf("l_text: %zu\n", (size_t) hdr->l_text);
     printf("idx\ttarget_len\ttarget_name:\n");
     int32_t target;
-    for (target = 0; target < hdr->n_targets; ++target) {
-        printf("%d\t%u\t\"%s\"\n", target, hdr->target_len[target], hdr->target_name[target]);
+    for (target = 0; target < sam_hdr_nref(hdr); ++target) {
+        printf("%d\t%u\t\"%s\"\n", target, sam_hdr_tid2len(hdr, target), sam_hdr_tid2name(hdr, target));
     }
     printf("text: \"%s\"\n", hdr->text);
 }

@@ -110,7 +110,7 @@ static int unpad_seq(bam1_t *b, kstring_t *s)
     return length != s->l;
 }
 
-int load_unpadded_ref(faidx_t *fai, char *ref_name, int ref_len, kstring_t *seq)
+int load_unpadded_ref(faidx_t *fai, const char *ref_name, int ref_len, kstring_t *seq)
 {
     char base;
     char *fai_ref = 0;
@@ -144,7 +144,7 @@ int load_unpadded_ref(faidx_t *fai, char *ref_name, int ref_len, kstring_t *seq)
     return 0;
 }
 
-int get_unpadded_len(faidx_t *fai, char *ref_name, int padded_len)
+int get_unpadded_len(faidx_t *fai, const char *ref_name, int padded_len)
 {
     char base;
     char *fai_ref = 0;
@@ -210,21 +210,21 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
 
         uint32_t *cigar = bam_get_cigar(b);
         n2 = 0;
-        if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam_get_qname(b), h->target_name[b->core.tid]) == 0) {
+        if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam_get_qname(b), sam_hdr_tid2name(h, b->core.tid)) == 0) {
             // fprintf(stderr, "[depad] Found embedded reference '%s'\n", bam_get_qname(b));
             r_tid = b->core.tid;
             if (0!=unpad_seq(b, &r)) {
                 fprintf(stderr, "[depad] ERROR: Problem parsing SEQ and/or CIGAR in reference %s\n", bam_get_qname(b));
                 return -1;
             };
-            if (h->target_len[r_tid] != r.l) {
-                fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %u in BAM header, but %llu in embedded reference\n", bam_get_qname(b), h->target_len[r_tid], (unsigned long long)(r.l));
+            if (sam_hdr_tid2len(h, r_tid) != r.l) {
+                fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %u in BAM header, but %llu in embedded reference\n", bam_get_qname(b), sam_hdr_tid2len(h, r_tid), (unsigned long long)(r.l));
                 return -1;
             }
             if (fai) {
                 // Check the embedded reference matches the FASTA file
-                if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &q)) {
-                    fprintf(stderr, "[depad] ERROR: Failed to load embedded reference '%s' from FASTA\n", h->target_name[b->core.tid]);
+                if (load_unpadded_ref(fai, sam_hdr_tid2name(h, b->core.tid), sam_hdr_tid2len(h, b->core.tid), &q)) {
+                    fprintf(stderr, "[depad] ERROR: Failed to load embedded reference '%s' from FASTA\n", sam_hdr_tid2name(h, b->core.tid));
                     return -1;
                 }
                 assert(r.l == q.l);
@@ -233,7 +233,7 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
                     if (r.s[i] != q.s[i]) {
                         // Show gaps as ASCII 45
                         fprintf(stderr, "[depad] ERROR: Embedded sequence and reference FASTA don't match for %s base %i, '%c' vs '%c'\n",
-                            h->target_name[b->core.tid], i+1,
+                            sam_hdr_tid2name(h, b->core.tid), i+1,
                             r.s[i] ? seq_nt16_str[(int)r.s[i]] : 45,
                             q.s[i] ? seq_nt16_str[(int)q.s[i]] : 45);
                         return -1;
@@ -252,15 +252,15 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
                 ; // good case, reference available
                 //fprintf(stderr, "[depad] Have ref '%s' for read '%s'\n", h->target_name[b->core.tid], bam_get_qname(b));
             } else if (fai) {
-                if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
-                    fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
+                if (load_unpadded_ref(fai, sam_hdr_tid2name(h, b->core.tid), sam_hdr_tid2len(h, b->core.tid), &r)) {
+                    fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", sam_hdr_tid2name(h, b->core.tid));
                     return -1;
                 }
                 posmap = update_posmap(posmap, r);
                 r_tid = b->core.tid;
                 // fprintf(stderr, "[depad] Loaded %s from FASTA file\n", h->target_name[b->core.tid]);
             } else {
-                fprintf(stderr, "[depad] ERROR: Missing %s embedded reference sequence (and no FASTA file)\n", h->target_name[b->core.tid]);
+                fprintf(stderr, "[depad] ERROR: Missing %s embedded reference sequence (and no FASTA file)\n", sam_hdr_tid2name(h, b->core.tid));
                 return -1;
             }
             if (0!=unpad_seq(b, &q)) {
@@ -346,19 +346,19 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
             /* Nasty case, Must load alternative posmap */
             // fprintf(stderr, "[depad] Loading reference '%s' temporarily\n", h->target_name[b->core.mtid]);
             if (!fai) {
-                fprintf(stderr, "[depad] ERROR: Needed reference %s sequence for mate (and no FASTA file)\n", h->target_name[b->core.mtid]);
+                fprintf(stderr, "[depad] ERROR: Needed reference %s sequence for mate (and no FASTA file)\n", sam_hdr_tid2name(h, b->core.mtid));
                 return -1;
             }
             /* Temporarily load the other reference sequence */
-            if (load_unpadded_ref(fai, h->target_name[b->core.mtid], h->target_len[b->core.mtid], &r)) {
-                fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.mtid]);
+            if (load_unpadded_ref(fai, sam_hdr_tid2name(h, b->core.mtid), sam_hdr_tid2len(h, b->core.mtid), &r)) {
+                fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", sam_hdr_tid2name(h, b->core.mtid));
                 return -1;
             }
             posmap = update_posmap(posmap, r);
             b->core.mpos = posmap[b->core.mpos];
             /* Restore the reference and posmap*/
-            if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
-                fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
+            if (load_unpadded_ref(fai, sam_hdr_tid2name(h, b->core.tid), sam_hdr_tid2len(h, b->core.tid), &r)) {
+                fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", sam_hdr_tid2name(h, b->core.tid));
                 return -1;
             }
             posmap = update_posmap(posmap, r);
@@ -389,26 +389,30 @@ sam_hdr_t * fix_header(sam_hdr_t *old, faidx_t *fai)
     if (!header)
         return NULL;
 
-    for (i = 0; i < old->n_targets; ++i) {
-        unpadded_len = get_unpadded_len(fai, old->target_name[i], old->target_len[i]);
+    int nref = sam_hdr_nref(old);
+    char len_buf[64];
+
+    for (i = 0; i < nref; ++i) {
+        unpadded_len = get_unpadded_len(fai, sam_hdr_tid2name(old, i), sam_hdr_tid2len(old, i));
         if (unpadded_len < 0) {
-            fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %i\n", old->target_name[i], old->target_len[i]);
-        } else if (unpadded_len > old->target_len[i]) {
-            fprintf(stderr, "[depad] New unpadded length of '%s' is larger than the padded length (%d > %i)\n", old->target_name[i], unpadded_len, old->target_len[i]);
+            fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %i\n", sam_hdr_tid2name(old, i), sam_hdr_tid2len(old, i));
+        } else if (unpadded_len > sam_hdr_tid2len(old, i)) {
+            fprintf(stderr, "[depad] New unpadded length of '%s' is larger than the padded length (%d > %i)\n", sam_hdr_tid2name(old, i), unpadded_len, sam_hdr_tid2len(old, i));
             ret = 1;
         } else {
-            header->target_len[i] = unpadded_len;
+            sprintf(len_buf, "%d", unpadded_len);
+            if ((ret |= sam_hdr_update_line(header, "SQ", "SN", sam_hdr_tid2name(header, i), "LN", len_buf, NULL)))
+                fprintf(stderr, "[depad] Error updating length of '%s' from %d to %d\n", sam_hdr_tid2name(header, i), sam_hdr_tid2len(header, i), unpadded_len);
             //fprintf(stderr, "[depad] Recalculating '%s' length %i -> %i\n", old->target_name[i], old->target_len[i], header->target_len[i]);
         }
     }
 
-    char len_buf[50];
-    for (i = 0; i < header->n_targets; i++) {
-        sprintf(len_buf, "%d", header->target_len[i]);
-        if((ret |= sam_hdr_update_line(header, "SQ", "SN", header->target_name[i], "LN", len_buf, NULL)))
-            fprintf(stderr, "[depad] Error updating length of '%s' to %d\n", header->target_name[i], header->target_len[i]);
-        ret |= sam_hdr_remove_tag_id(header, "SQ", "SN", header->target_name[i], "M5") < 0;
-        ret |= sam_hdr_remove_tag_id(header, "SQ", "SN", header->target_name[i], "UR") < 0;
+    for (i = 0; i < nref; i++) {
+        sprintf(len_buf, "%d", sam_hdr_tid2len(header, i));
+        if((ret |= sam_hdr_update_line(header, "SQ", "SN", sam_hdr_tid2name(header, i), "LN", len_buf, NULL)))
+            fprintf(stderr, "[depad] Error updating length of '%s' from %d to %s\n", sam_hdr_tid2name(header, i), sam_hdr_tid2len(header, i), len_buf);
+        ret |= sam_hdr_remove_tag_id(header, "SQ", "SN", sam_hdr_tid2name(header, i), "M5") < 0;
+        ret |= sam_hdr_remove_tag_id(header, "SQ", "SN", sam_hdr_tid2name(header, i), "UR") < 0;
     }
 
     if (ret) {

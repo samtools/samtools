@@ -297,9 +297,10 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
         if (tv->ref) free(tv->ref);
         assert(tv->curr_tid>=0);
 
-        str = (char*)calloc(strlen(tv->header->target_name[tv->curr_tid]) + 30, 1);
+        const char *ref_name = sam_hdr_tid2name(tv->header, tv->curr_tid);
+        str = (char*)calloc(strlen(ref_name) + 30, 1);
         assert(str!=NULL);
-        sprintf(str, "%s:%d-%d", tv->header->target_name[tv->curr_tid], tv->left_pos + 1, tv->left_pos + tv->mcol);
+        sprintf(str, "%s:%d-%d", ref_name, tv->left_pos + 1, tv->left_pos + tv->mcol);
         tv->ref = fai_fetch(tv->fai, str, &tv->l_ref);
         free(str);
         if ( !tv->ref )
@@ -444,11 +445,11 @@ int bam_tview_main(int argc, char *argv[])
     {
         // find the first sequence present in both BAM and the reference file
         int i;
-        for (i=0; i<tv->header->n_targets; i++)
+        for (i=0; i < sam_hdr_nref(tv->header); i++)
         {
-            if ( faidx_has_seq(tv->fai, tv->header->target_name[i]) ) break;
+            if ( faidx_has_seq(tv->fai, sam_hdr_tid2name(tv->header, i)) ) break;
         }
-        if ( i==tv->header->n_targets )
+        if ( i==sam_hdr_nref(tv->header) )
         {
             fprintf(stderr,"None of the BAM sequence names present in the fasta file\n");
             exit(EXIT_FAILURE);

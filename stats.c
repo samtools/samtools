@@ -410,7 +410,7 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
             int idx = is_fwd ? icycle : read_len-icycle-ncig;
             if ( idx<0 )
                 error("FIXME: read_len=%d vs icycle=%d\n", read_len,icycle);
-            if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d, %s:%d %s\n", idx,stats->nbases, stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+            if ( idx >= stats->nbases || idx<0 ) error("FIXME: %d vs %d, %s:%d %s\n", idx, stats->nbases, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
             if ( order == READ_ORDER_FIRST )
                 stats->ins_cycles_1st[idx]++;
             if ( order == READ_ORDER_LAST )
@@ -490,10 +490,10 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
         //  chunk of refseq in memory. Not very frequent and not noticable in the stats.
         if ( cig==BAM_CREF_SKIP || cig==BAM_CHARD_CLIP || cig==BAM_CPAD ) continue;
         if ( cig!=BAM_CMATCH && cig!=BAM_CEQUAL && cig!=BAM_CDIFF ) // not relying on precalculated diffs
-            error("TODO: cigar %d, %s:%d %s\n", cig,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+            error("TODO: cigar %d, %s:%d %s\n", cig, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
 
         if ( ncig+iref > stats->nrseq_buf )
-            error("FIXME: %d+%d > %d, %s, %s:%d\n",ncig,iref,stats->nrseq_buf, bam_get_qname(bam_line),stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1);
+            error("FIXME: %d+%d > %d, %s, %s:%d\n", ncig, iref, stats->nrseq_buf, bam_get_qname(bam_line), sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1);
 
         int im;
         for (im=0; im<ncig; im++)
@@ -517,11 +517,11 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
             {
                 uint8_t qual = quals[iread] + 1;
                 if ( qual>=stats->nquals )
-                    error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals, stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+                    error("TODO: quality too high %d>=%d (%s %d %s)\n", qual, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
 
                 int idx = is_fwd ? icycle : read_len-icycle-1;
                 if ( idx>stats->max_len )
-                    error("mpc: %d>%d (%s %d %s)\n",idx,stats->max_len,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+                    error("mpc: %d>%d (%s %d %s)\n", idx, stats->max_len, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
 
                 idx = idx*stats->nquals + qual;
                 if ( idx>=stats->nquals*stats->nbases )
@@ -539,8 +539,8 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
 void read_ref_seq(stats_t *stats, int32_t tid, int32_t pos)
 {
     int i, fai_ref_len;
-    char *fai_ref = faidx_fetch_seq(stats->info->fai, stats->info->sam_header->target_name[tid], pos, pos+stats->mrseq_buf-1, &fai_ref_len);
-    if ( fai_ref_len<0 ) error("Failed to fetch the sequence \"%s\"\n", stats->info->sam_header->target_name[tid]);
+    char *fai_ref = faidx_fetch_seq(stats->info->fai, sam_hdr_tid2name(stats->info->sam_header, tid), pos, pos+stats->mrseq_buf-1, &fai_ref_len);
+    if ( fai_ref_len<0 ) error("Failed to fetch the sequence \"%s\"\n", sam_hdr_tid2name(stats->info->sam_header, tid));
 
     uint8_t *ptr = stats->rseq_buf;
     for (i=0; i<fai_ref_len; i++)
@@ -931,7 +931,7 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
         {
             uint8_t qual = bam_quals[ reverse ? seq_len-i-1 : i];
             if ( qual>=stats->nquals )
-                error("TODO: quality too high %d>=%d (%s %d %s)\n", qual,stats->nquals,stats->info->sam_header->target_name[bam_line->core.tid],bam_line->core.pos+1,bam_get_qname(bam_line));
+                error("TODO: quality too high %d>=%d (%s %d %s)\n", qual, stats->nquals, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
             if ( qual>stats->max_qual )
                 stats->max_qual = qual;
 

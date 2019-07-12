@@ -165,7 +165,7 @@ int bam_rmdup_core(samFile *in, sam_hdr_t *hdr, samFile *out)
                     break;
                 }
                 last_tid = c->tid;
-                fprintf(stderr, "[bam_rmdup_core] processing reference %s...\n", hdr->target_name[c->tid]);
+                fprintf(stderr, "[bam_rmdup_core] processing reference %s...\n", sam_hdr_tid2name(hdr, c->tid));
             }
         }
         if (!(c->flag&BAM_FPAIRED) || (c->flag&(BAM_FUNMAP|BAM_FMUNMAP)) || (c->mtid >= 0 && c->tid != c->mtid)) {
@@ -293,7 +293,7 @@ int bam_rmdup(int argc, char *argv[])
         return 1;
     }
     header = sam_hdr_read(in);
-    if (header == NULL || header->n_targets == 0) {
+    if (header == NULL || sam_hdr_nref(header) == 0) {
         fprintf(stderr, "[bam_rmdup] input SAM does not have header. Abort!\n");
         return 1;
     }

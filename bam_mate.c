@@ -303,7 +303,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
             cur_end = bam_endpos(cur);
 
             // Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
-            if (cur_end > (int)header->target_len[cur->core.tid]) cur->core.flag |= BAM_FUNMAP;
+            if (cur_end > (int)sam_hdr_tid2len(header, cur->core.tid)) cur->core.flag |= BAM_FUNMAP;
         }
         if (has_prev) { // do we have a pair of reads to examine?
             if (strcmp(bam_get_qname(cur), bam_get_qname(pre)) == 0) { // identical pair name

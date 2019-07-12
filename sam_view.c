@@ -89,7 +89,7 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
         return 1;
-    if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
+    if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, sam_hdr_tid2name(h, b->core.tid), b->core.pos, bam_endpos(b))))
         return 1;
     if (settings->subsam_frac > 0.) {
         uint32_t k = __ac_Wang_hash(__ac_X31_hash_string(bam_get_qname(b)) ^ settings->subsam_seed);

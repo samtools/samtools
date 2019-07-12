@@ -144,11 +144,11 @@ int main_quickcheck(int argc, char** argv)
                 if (header == NULL) {
                     QC_ERR(QC_BAD_HEADER, 2, "%s caused an error whilst reading its header.\n", fn);
                 } else {
-                    if (!unmapped && header->n_targets <= 0) {
+                    if (!unmapped && sam_hdr_nref(header) <= 0) {
                         QC_ERR(QC_BAD_HEADER, 2, "%s had no targets in header.\n", fn);
                     }
                     else {
-                        if (verbose >= 3) fprintf(stderr, "%s has %d targets in header.\n", fn, header->n_targets);
+                        if (verbose >= 3) fprintf(stderr, "%s has %d targets in header.\n", fn, sam_hdr_nref(header));
                     }
                     sam_hdr_destroy(header);
                 }

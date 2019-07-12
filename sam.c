@@ -65,7 +65,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
             return NULL;
         }
         fp->is_write = 0;
-        if (fp->header->n_targets == 0 && bam_verbose >= 1)
+        if (sam_hdr_nref(fp->header) == 0 && bam_verbose >= 1)
             fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
     }
     else {

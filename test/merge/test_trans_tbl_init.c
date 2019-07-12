@@ -37,8 +37,8 @@ void dump_header(sam_hdr_t* hdr) {
     printf("->n_targets:(%d)\n", sam_hdr_nref(hdr));
     int i;
     for (i = 0; i < sam_hdr_nref(hdr); ++i) {
-        printf("->target_name[%d]:(%s)\n",i,hdr->target_name[i]);
-        printf("->target_len[%d]:(%d)\n",i,hdr->target_len[i]);
+        printf("->target_name[%d]:(%s)\n", i, sam_hdr_tid2name(hdr, i));
+        printf("->target_len[%d]:(%d)\n", i, sam_hdr_tid2len(hdr, i));
     }
 
     printf("->text:(");
