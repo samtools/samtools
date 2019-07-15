@@ -86,7 +86,7 @@ void setup_test_1(bam_hdr_t** hdr_in)
     *hdr_in = bam_hdr_init();
     const char *test1 =
     "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
+    "@SQ\tSN:blah\tLN:1\n"
     "@RG\tID:fish\n";
     (*hdr_in)->text = strdup(test1);
     (*hdr_in)->l_text = strlen(test1);
@@ -95,7 +95,7 @@ void setup_test_1(bam_hdr_t** hdr_in)
 bool check_test_1(const bam_hdr_t* hdr) {
     const char *test1_res =
     "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
+    "@SQ\tSN:blah\tLN:1\n"
     "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
 
     if (hdrcmp(hdr->text, test1_res)) {
@@ -109,7 +109,7 @@ void setup_test_2(bam_hdr_t** hdr_in)
     *hdr_in = bam_hdr_init();
     const char *test2 =
     "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
+    "@SQ\tSN:blah\tLN:1\n"
     "@RG\tID:fish\n";
     (*hdr_in)->text = strdup(test2);
     (*hdr_in)->l_text = strlen(test2);
@@ -118,7 +118,7 @@ void setup_test_2(bam_hdr_t** hdr_in)
 bool check_test_2(const bam_hdr_t* hdr) {
     const char *test2_res =
     "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
+    "@SQ\tSN:blah\tLN:1\n"
     "@RG\tID:fish\n"
     "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
 
