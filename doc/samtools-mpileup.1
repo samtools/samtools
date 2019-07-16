@@ -290,9 +290,11 @@ Output base positions on reads.
 .TP
 .B -s, --output-MQ
 Output mapping quality.
+Equivalent to \fB--output-extra MAPQ\fR.
 .TP
 .B --output-QNAME
 Output an extra column containing comma-separated read names.
+Equivalent to \fB--output-extra QNAME\fR.
 .TP
 .BI "--output-extra" \ STR
 Output extra columns containing comma-separated values of read fields or read
@@ -323,11 +325,17 @@ tag values.
 .BI "--output-sep" \ CHAR
 Specify a different separtor character for tag value lists, when those values
 might contain one or more commas (\fB,\fR), which is the default list separator.
+This option only affects columns for two-letter tags like NM; standard
+fields like FLAG or QNAME will always be separated by commas.
 .TP
 .BI "--output-empty" \ CHAR
 Specify a different 'no value' character for tag list entries corresponding to
 reads that don't have a tag requested with the \fB--output-extra\fR option. The
 default is \fB*\fR.
+
+This option only applies to rows that have at least one read in the pileup,
+and only to columns for two-letter tags.
+Columns for empty rows will always be printed as \fB*\fR.
 .TP
 .B --reverse-del
 Mark the deletions on the reverse strand with the character
