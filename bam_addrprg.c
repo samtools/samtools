@@ -353,6 +353,11 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
             fprintf(stderr, "[init] Error adding RG line with ID:%s to the output header.\n", opts->rg_id);
             return false;
         }
+        if (opts->mode == overwrite_all &&
+            -1 == sam_hdr_remove_except(retval->output_header, "RG", "ID", opts->rg_id)) {
+            fprintf(stderr, "[init] Error removing the old RG lines from the output header.\n");
+            return false;
+        }
         retval->rg_id = strdup(opts->rg_id);
     } else {
         if (opts->rg_id) {
