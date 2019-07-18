@@ -504,19 +504,13 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
 
     // accept unknown, unsorted or coordinate sort order, but error on queryname sorted.
     // only really works on coordinate sorted files.
-    if ((header->l_text > 3) && (strncmp(header->text, "@HD", 3) == 0)) {
-        char *p, *q;
-
-       p = strstr(header->text, "\tSO:queryname");
-       q = strchr(header->text, '\n');
-
-       // looking for SO:queryname within @HD only
-       // (e.g. must ignore in a @CO comment line later in header)
-       if ((p != 0) && (p < q)) {
-           fprintf(stderr, "[markdup] error: queryname sorted, must be sorted by coordinate.\n");
-           goto fail;
-       }
+    kstring_t str = KS_INITIALIZE;
+    if (!sam_hdr_find_tag_hd(header, "SO", &str) && str.s && !strcmp(str.s, "queryname")) {
+        fprintf(stderr, "[markdup] error: queryname sorted, must be sorted by coordinate.\n");
+        ks_free(&str);
+        goto fail;
     }
+    ks_free(&str);
 
     if (sam_hdr_write(out, header) < 0) {
         fprintf(stderr, "[markdup] error writing header.\n");
