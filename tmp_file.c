@@ -391,8 +391,9 @@ int tmp_file_read(tmp_file_t *tmp, bam1_t *inbam) {
         }
 
         inbam->data = tmp_data;
-        inbam->m_data = tmp->data_size;
     }
+
+    inbam->m_data = tmp->data_size; // set to the actual data size
 
     entry_size = sizeof(bam1_t);
 
