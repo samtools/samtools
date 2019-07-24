@@ -36,6 +36,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include <sys/stat.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
 #include <htslib/kstring.h>
