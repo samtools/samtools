@@ -40,23 +40,12 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdbool.h>
 #include <string.h>
 #include <unistd.h>
+#include <assert.h>
 
-#if defined (__has_include)
-#if __has_include(<sys/ioctl.h>)
-#include <sys/ioctl.h>
-#define has_ioctl
-#elif __has_include(<windows.h>)
+#ifdef _WIN32
 #include <windows.h>
-#define has_windows
-#endif
-#else
-#if defined (__MSYS__) || defined (__CYGWIN__) || defined (_WIN32)
-#include <windows.h>
-#define has_windows
 #else
 #include <sys/ioctl.h>
-#define has_ioctl
-#endif
 #endif
 
 #include "htslib/sam.h"
@@ -156,16 +145,20 @@ static int usage() {
     return EXIT_SUCCESS;
 }
 
-char* centerText(char *text, char *buf, int width) {
+static char* center_text(char *text, char *buf, int width) {
     int len = strlen(text);
+    assert(len <= width);
     int padding = (width - len) / 2;
     int padding_ex = (width - len) % 2;
-    if (padding >= 1) 
+    if (padding >= 1)
         sprintf(buf, " %*s%*s", len+padding, text, padding-1+padding_ex, " ");
-    return(buf);
+    else
+        sprintf(buf, "%s", text);
+
+    return buf;
 }
 
-char* readable_bps(double base_pairs, char *buf) {
+static char* readable_bps(double base_pairs, char *buf) {
     const char* units[] = {"", "K", "M", "G", "T"};
     int i = 0;
     while (base_pairs >= 1000) {
@@ -176,7 +169,7 @@ char* readable_bps(double base_pairs, char *buf) {
     return buf;
 }
 
-void set_read_counts(bam_aux_t **data, stats_aux_t *stats, int n_bam_files) {
+static void set_read_counts(bam_aux_t **data, stats_aux_t *stats, int n_bam_files) {
     int i;
     stats->n_reads = 0;
     stats->n_selected_reads = 0;
@@ -199,7 +192,7 @@ static int read_bam(void *data, bam1_t *b) {
         if((ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->hdr, b)) < 0) break;
         ++aux->n_reads;
 
-        if ( aux->fail_flags && b->core.flag & aux->fail_flags ) continue;
+        if ( aux->fail_flags && (b->core.flag & aux->fail_flags) ) continue;
         if ( aux->required_flags && !(b->core.flag & aux->required_flags) ) continue;
         if ( b->core.qual < aux->min_mapQ ) continue;
         if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
@@ -295,13 +288,13 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
     // print x axis. Could be made pretty for widths that are not divisible 
     // by 10 by variable spacing of the labels, instead of placing a label every 10 characters
     char buf2[11];
-    fprintf(file_out, "     %s", centerText(readable_bps(stats->beg + 1, buf), buf2, 10));
+    fprintf(file_out, "     %s", center_text(readable_bps(stats->beg + 1, buf), buf2, 10));
     int rest;
     for (rest = 10; rest < 10*(hist_size/10); rest += 10) {
-        fprintf(file_out, "%s", centerText(readable_bps(stats->beg + stats->bin_width*rest, buf), buf2, 10));
+        fprintf(file_out, "%s", center_text(readable_bps(stats->beg + stats->bin_width*rest, buf), buf2, 10));
     }
     int last_padding = hist_size%10;
-    fprintf(file_out, "%*s%s", last_padding, " ", centerText(readable_bps(stats->end, buf), buf2, 10));
+    fprintf(file_out, "%*s%s", last_padding, " ", center_text(readable_bps(stats->end, buf), buf2, 10));
     fprintf(file_out, "\n");
 }
 
@@ -317,22 +310,23 @@ int main_coverage(int argc, char *argv[]) {
     int opt_n_bins = 50;
     bool opt_full_width = true;
     char *opt_output_file = NULL;
-    bam_aux_t **data;
+    bam_aux_t **data = NULL;
     bam_mplp_t mplp;
-    const bam_pileup1_t **plp;
+    const bam_pileup1_t **plp = NULL;
     char *opt_reg = 0; // specified region
     char *opt_file_list = NULL;
     int n_bam_files = 0;
+    char **fn = NULL;
     int fail_flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP); // Default fail flags
     int required_flags = 0;
 
-    int *n_plp;
+    int *n_plp = NULL;
     bam_hdr_t *h = NULL; // BAM header of the 1st input
 
     bool opt_print_header = true;
     bool opt_print_tabular = true;
     bool opt_print_histogram = false;
-    bool *covered_tids;
+    bool *covered_tids = NULL;
     bool opt_full_utf = true;
 
     FILE *file_out = stdout;
@@ -353,9 +347,8 @@ int main_coverage(int argc, char *argv[]) {
         {"histogram", no_argument, NULL, 'm'},
         {"ascii", no_argument, NULL, 'A'},
         {"output", required_argument, NULL, 'o'},
-        {"no-header", required_argument, NULL, 'H'},
+        {"no-header", no_argument, NULL, 'H'},
         {"n-bins", required_argument, NULL, 'w'},
-        {"full-width", required_argument, NULL, 'W'},
         {"region", required_argument, NULL, 'r'},
         {"help", no_argument, NULL, 'h'},
         { NULL, 0, NULL, 0 }
@@ -363,7 +356,8 @@ int main_coverage(int argc, char *argv[]) {
 
     // parse the command line
     int c;
-    while ((c = getopt_long(argc, argv, "o:L:q:Q:hHw:r:b:mM", lopts, NULL)) != -1) {
+    opterr = 0;
+    while ((c = getopt_long(argc, argv, "Ao:L:q:Q:hHw:r:b:m", lopts, NULL)) != -1) {
         switch (c) {
             case 1:
                 if ((required_flags = bam_str2flag(optarg)) < 0) {
@@ -390,14 +384,21 @@ int main_coverage(int argc, char *argv[]) {
             case 'h': return usage();
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                           /* else fall-through */
-            case '?': 
-                          if (optopt == 'c')
-                              fprintf (stderr, "Option -%c requires an argument.\n", optopt);
-                          else if (isprint (optopt))
-                              fprintf (stderr, "Unknown option `-%c'.\n", optopt);
-                          else
-                              fprintf (stderr, "Unknown option character `\\x%x'.\n", optopt);
-                          return 1;
+            case '?':
+                if (optopt != '?') {  // '-?' appeared on command line
+                    if (optopt) { // Bad short option
+                        print_error("coverage", "invalid option -- '%c'", optopt);
+                    } else { // Bad long option
+                        // Do our best.  There is no good solution to finding
+                        // out what the bad option was.
+                        // See, e.g. https://stackoverflow.com/questions/2723888/where-does-getopt-long-store-an-unrecognized-option
+                        if (optind > 0 && strncmp(argv[optind - 1], "--", 2) == 0) {
+                            print_error("coverage", "unrecognised option '%s'",
+                                        argv[optind - 1]);
+                        }
+                    }
+                }
+                return usage();
         }
     }
     if (optind == argc && !opt_file_list) 
@@ -414,26 +415,27 @@ int main_coverage(int argc, char *argv[]) {
 
     if (opt_n_bins <= 0 || opt_full_width) {
         // get number of columns of terminal
-        const char* ccolumns = getenv("COLUMNS");
+        const char* env_columns = getenv("COLUMNS");
         int columns = 0;
-        if (ccolumns == NULL) {
-#if defined has_windows
+        if (env_columns == NULL) {
+#ifdef _WIN32
             CONSOLE_SCREEN_BUFFER_INFO csbi;
             if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
                 columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
             }
-#elif defined has_ioctl
+#else
             struct winsize w; 
             if (ioctl(2, TIOCGWINSZ, &w) == 0)
                 columns = w.ws_col;
 #endif
         } else {
-            columns = atoi(ccolumns); // atoi(NULL) returns 0
+            columns = atoi(env_columns); // atoi(NULL) returns 0
         }
+
         if (columns > 60) {
             opt_n_bins = columns - 40;
         } else {
-            opt_n_bins = 60;
+            opt_n_bins = 40;
         }
     }
 
@@ -442,20 +444,31 @@ int main_coverage(int argc, char *argv[]) {
     // Open all BAM files
     if (opt_file_list) {
         // Read file names from opt_file_list into argv, and record the number of files in n_bam_files
-        if ( read_file_list(opt_file_list, &n_bam_files, &argv) ) {
+        if (read_file_list(opt_file_list, &n_bam_files, &fn)) {
             print_error_errno("coverage", "Cannot open file list \"%s\".", opt_file_list);
             return EXIT_FAILURE;
         }
+        argv = fn;
         optind = 0;
-    }
-    else
+    } else {
         n_bam_files = argc - optind; // the number of BAMs on the command line
+    }
 
     data = (bam_aux_t **)calloc(n_bam_files, sizeof(bam_aux_t*)); // data[i] for the i-th BAM file
+    if (!data) {
+        print_error("coverage", "Failed to allocate memory");
+        status = EXIT_FAILURE;
+        goto coverage_end;
+    }
 
     for (i = 0; i < n_bam_files; ++i) {
         int rf;
         data[i] = (bam_aux_t *) calloc(1, sizeof(bam_aux_t));
+        if (!data[i]) {
+            print_error("coverage", "Failed to allocate memory");
+            status = EXIT_FAILURE;
+            goto coverage_end;
+        }
         data[i]->fp = sam_open_format(argv[optind+i], "r", &ga.in); // open BAM
 
         if (data[i]->fp == NULL) {
@@ -483,7 +496,7 @@ int main_coverage(int argc, char *argv[]) {
         data[i]->fail_flags = fail_flags;
         data[i]->required_flags = required_flags;
         if (data[i]->hdr == NULL) {
-            print_error_errno("coverage", "Couldn't read header for \"%s\"", argv[optind+i]);
+            print_error_errno("coverage", "Could not read header for \"%s\"", argv[optind+i]);
             status = EXIT_FAILURE;
             goto coverage_end;
         }
@@ -492,14 +505,14 @@ int main_coverage(int argc, char *argv[]) {
         if (opt_reg) { // if a region is specified
             hts_idx_t *idx = sam_index_load(data[i]->fp, argv[optind+i]);  // load the index
             if (idx == NULL) {
-                print_error_errno("coverage", "can't load index for \"%s\"", argv[optind+i]);
+                print_error_errno("coverage", "Failed to load index for \"%s\"", argv[optind+i]);
                 status = EXIT_FAILURE;
                 goto coverage_end;
             }
             data[i]->iter = sam_itr_querys(idx, data[i]->hdr, opt_reg); // set the iterator
             hts_idx_destroy(idx); // the index is not needed any more; free the memory
             if (data[i]->iter == NULL) {
-                print_error_errno("coverage", "can't parse region \"%s\"", opt_reg);
+                print_error_errno("coverage", "Failed to parse region \"%s\"", opt_reg);
                 status = EXIT_FAILURE;
                 goto coverage_end;
             }
@@ -512,6 +525,11 @@ int main_coverage(int argc, char *argv[]) {
     h = data[0]->hdr; // easy access to the header of the 1st BAM
     covered_tids = calloc(h->n_targets, sizeof(bool));
     stats_aux_t *stats = calloc(1, sizeof(stats_aux_t));
+    if (!covered_tids || !stats) {
+        print_error("coverage", "Failed to allocate memory");
+        status = EXIT_FAILURE;
+        goto coverage_end;
+    }
 
     int n_bins = opt_n_bins;
     if (opt_reg) {
@@ -534,16 +552,20 @@ int main_coverage(int argc, char *argv[]) {
     // the core multi-pileup loop
     mplp = bam_mplp_init(n_bam_files, read_bam, (void**)data); // initialization
     if (max_depth > 0)
-        bam_mplp_set_maxcnt(mplp,max_depth);  // set maximum coverage depth
+        bam_mplp_set_maxcnt(mplp, max_depth);  // set maximum coverage depth
     else if (!max_depth)
-        bam_mplp_set_maxcnt(mplp,INT_MAX);
+        bam_mplp_set_maxcnt(mplp, INT_MAX);
 
 
     // Extra info for histogram and coverage counting
     uint32_t *hist = (uint32_t*) calloc(opt_n_bins, sizeof(uint32_t));
-
     n_plp = (int*) calloc(n_bam_files, sizeof(int*)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = (const bam_pileup1_t**) calloc(n_bam_files, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
+    if (!hist || !n_plp || !plp) {
+        print_error("coverage", "Failed to allocate memory");
+        status = EXIT_FAILURE;
+        goto coverage_end;
+    }
     while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
 
         if (tid != stats->tid) { // Next target sequence
@@ -628,15 +650,16 @@ int main_coverage(int argc, char *argv[]) {
 
     if (ret < 0) status = EXIT_FAILURE;
 
-    free(n_plp); 
-    free(plp);
+coverage_end:
+    if (n_plp) free(n_plp);
+    if (plp) free(plp);
     bam_mplp_destroy(mplp);
 
-    free(covered_tids);
-    free(hist);
-    free(stats);
+    if (covered_tids) free(covered_tids);
+    if (hist) free(hist);
+    if (stats) free(stats);
 
-coverage_end:
+
     // Close files and free data structures
     if (!(file_out == stdout || fclose(file_out) == 0)) {
         if (status == EXIT_SUCCESS) {
@@ -646,19 +669,21 @@ coverage_end:
             status = EXIT_FAILURE;
         }
     }
-    for (i = 0; i < n_bam_files && data[i]; ++i) {
-        bam_hdr_destroy(data[i]->hdr);
-        if (data[i]->fp) sam_close(data[i]->fp);
-        hts_itr_destroy(data[i]->iter);
-        free(data[i]);
+
+    if (data) {
+        for (i = 0; i < n_bam_files && data[i]; ++i) {
+            bam_hdr_destroy(data[i]->hdr);
+            if (data[i]->fp) sam_close(data[i]->fp);
+            hts_itr_destroy(data[i]->iter);
+            free(data[i]);
+        }
+        free(data);
     }
 
-    free(data); 
-    if (opt_file_list) {
-        for (i = 0; i < n_bam_files; ++i) {
-            free(argv[i]);
-            free(argv);
-        }
+    if (opt_file_list && fn) {
+        for (i = 0; i < n_bam_files; ++i)
+            free(fn[i]);
+        free(fn);
     }
     sam_global_args_free(&ga);
 
