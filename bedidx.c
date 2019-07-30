@@ -260,12 +260,16 @@ void *bed_read(const char *fn)
     if (fp == 0) return 0;
     ks = ks_init(fp);
     if (NULL == ks) goto fail;  // In case ks_init ever gets error checking...
-    while (ks_getuntil(ks, KS_SEP_LINE, &str, &dret) > 0) { // read a line
+    int ks_len;
+    while ((ks_len = ks_getuntil(ks, KS_SEP_LINE, &str, &dret)) >= 0) { // read a line
         char *ref = str.s, *ref_end;
         unsigned int beg = 0, end = 0;
         int num = 0;
         khint_t k;
         bed_reglist_t *p;
+
+        if (ks_len == 0)
+            continue; // skip blank lines
 
         line++;
         while (*ref && isspace(*ref)) ref++;
@@ -326,8 +330,11 @@ void *bed_read(const char *fn)
     // FIXME: Need to check for errors in ks_getuntil.  At the moment it
     // doesn't look like it can return one.  Possibly use gzgets instead?
 
+    if (gzclose(fp) != Z_OK) {
+        fp = NULL;
+        goto fail;
+    }
     ks_destroy(ks);
-    gzclose(fp);
     free(str.s);
     bed_index(h);
     //bed_unify(h);
