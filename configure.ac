@@ -29,6 +29,7 @@ AC_PREREQ([2.63])  dnl This version introduced 4-argument AC_CHECK_HEADER
 AC_CONFIG_SRCDIR([bamtk.c])
 AC_CONFIG_HEADERS([config.h])
 
+m4_include([m4/hts_prog_cc_warnings.m4])
 m4_include([m4/ax_with_curses.m4])
 m4_include([m4/ax_with_htslib.m4])
 
@@ -50,6 +51,12 @@ AH_TOP([/* If you use configure, this file provides @%:@defines reflecting your
    accurate PACKAGE_VERSION as computed by the Makefile.  */])
 
 AC_PROG_CC
+
+dnl Turn on compiler warnings, if possible
+HTS_PROG_CC_WARNINGS
+dnl Flags to treat warnings as errors.  These need to be applied to CFLAGS
+dnl later as they can interfere with some of the tests (notably AC_SEARCH_LIBS)
+HTS_PROG_CC_WERROR(hts_late_cflags)
 
 AC_SYS_LARGEFILE
 
@@ -132,6 +139,9 @@ case $host_alias in
     CPPFLAGS="$CPPCFLAGS -D_XOPEN_SOURCE=600"
     ;;
 esac
+
+dnl Apply value from HTS_PROG_CC_WERROR (if set)
+AS_IF([test "x$hts_late_cflags" != x],[CFLAGS="$CFLAGS $hts_late_cflags"])
 
 AC_CONFIG_FILES([config.mk])
 AC_OUTPUT
