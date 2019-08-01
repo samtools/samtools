@@ -209,6 +209,12 @@ stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) $(ht
 bam_markdup.o: bam_markdup.c config.h $(htslib_thread_pool_h) $(htslib_sam_h) $(sam_opts_h) samtools.h $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(tmp_file_h)
 tmp_file.o: tmp_file.c config.h $(tmp_file_h) $(htslib_sam_h)
 
+# Maintainer source code checks
+# - copyright boilerplate presence
+# - tab and trailing space detection
+maintainer-check:
+	test/maintainer/check_copyright.pl .
+	test/maintainer/check_spaces.pl .
 
 # test programs
 
