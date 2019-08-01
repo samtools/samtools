@@ -1189,7 +1189,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     if (sort_tag) {
         g_is_by_tag = 1;
         g_sort_tag[0] = sort_tag[0];
-        g_sort_tag[1] = sort_tag[1];
+        g_sort_tag[1] = sort_tag[0] ? sort_tag[1] : '\0';
     }
 
     fp = (samFile**)calloc(n, sizeof(samFile*));
@@ -1737,7 +1737,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     if (sort_tag) {
         g_is_by_tag = 1;
         g_sort_tag[0] = sort_tag[0];
-        g_sort_tag[1] = sort_tag[1];
+        g_sort_tag[1] = sort_tag[0] ? sort_tag[1] : '\0';
     }
     if (n > 0) {
         fp = (samFile**)calloc(n, sizeof(samFile*));
@@ -2186,7 +2186,8 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     g_is_by_qname = is_by_qname;
     if (sort_by_tag) {
         g_is_by_tag = 1;
-        strncpy(g_sort_tag, sort_by_tag, 2);
+        g_sort_tag[0] = sort_by_tag[0];
+        g_sort_tag[1] = sort_by_tag[0] ? sort_by_tag[1] : '\0';
     }
 
     max_mem = _max_mem * n_threads;
