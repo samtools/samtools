@@ -25,15 +25,12 @@ DEALINGS IN THE SOFTWARE.  */
 #ifndef SAMTOOLS_H
 #define SAMTOOLS_H
 
+#include "htslib/hts_defs.h"
 #include "htslib/sam.h"
 
 const char *samtools_version(void);
 
-#if defined __GNUC__ && __GNUC__ >= 2
-#define CHECK_PRINTF(fmt,args) __attribute__ ((format (printf, fmt, args)))
-#else
-#define CHECK_PRINTF(fmt,args)
-#endif
+#define CHECK_PRINTF(fmt,args) HTS_FORMAT(HTS_PRINTF_FMT, (fmt), (args))
 
 void print_error(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
 void print_error_errno(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);

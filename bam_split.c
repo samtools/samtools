@@ -24,7 +24,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <config.h>
 
-#include <htslib/sam.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +32,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <regex.h>
 #include <assert.h>
+#include <htslib/sam.h>
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
 #include <htslib/cram.h>
