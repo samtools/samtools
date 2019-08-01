@@ -41,7 +41,7 @@ build_script:
   - set MSYSTEM=MINGW64
   - set PATH=C:/msys64/usr/bin;C:/msys64/mingw64/bin;%PATH%
   - "sh -lc \"(cd htslib; aclocal && autoheader && autoconf)\""
-  - "sh -lc \"aclocal && autoheader && autoconf && ./configure && make -j2\""
+  - "sh -lc \"aclocal && autoheader && autoconf && ./configure --enable-werror && make -j2\""
 
 test_script:
   - set HOME=.

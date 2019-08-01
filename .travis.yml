@@ -33,6 +33,7 @@ matrix:
         - CC=gcc-8
         - AR=gcc-ar-8
         - CFLAGS="-std=gnu99 -O0"
+        - DO_MAINTAINER_CHECKS=yes
     - os: osx
       compiler: clang
     - os: linux
@@ -62,4 +63,4 @@ before_script:
   # Logic for choosing which to use is in the .travis/clone script.
   - .travis/clone "git://github.com/$(dirname $TRAVIS_REPO_SLUG)/htslib.git" "$HTSDIR" "$TRAVIS_BRANCH"
 
-script: autoreconf -i && (./configure || (cat config.log; /bin/false)) && make -e && make -e test
+script: autoreconf -i && (cd htslib && autoreconf -i) && (./configure --enable-werror || (cat config.log; /bin/false)) && if test "x$DO_MAINTAINER_CHECKS" = "xyes" ; then make -e maintainer-check ; fi && make -e && make -e test
