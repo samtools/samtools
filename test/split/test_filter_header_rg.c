@@ -57,7 +57,7 @@ bool hdrcmp(const char *hdr1, const char *hdr2) {
     for (l = hdr1 + nl1; *l != '\0'; l += strcspn(l, "\n")) ++l, ++count1;
     for (l = hdr2 + nl2; *l != '\0'; l += strcspn(l, "\n")) ++l, ++count2;
     if (count1 != count2) return false;
-    
+
     lines1 = malloc(count1 * sizeof(*lines1));
     if (!lines1) return false;
     lines2 = malloc(count2 * sizeof(*lines2));
