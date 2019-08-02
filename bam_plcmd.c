@@ -455,10 +455,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
             fprintf(stderr,"[%s] fail to read the header of %s\n", __func__, fn[i]);
             exit(EXIT_FAILURE);
         }
-        bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : h_tmp->text);
+        bam_smpl_add(sm, fn[i], (conf->flag&MPLP_IGNORE_RG)? 0 : sam_hdr_str(h_tmp));
         if (conf->flag & MPLP_BCF) {
             // Collect read group IDs with PL (platform) listed in pl_list (note: fragile, strstr search)
-            rghash = bcf_call_add_rg(rghash, h_tmp->text, conf->pl_list);
+            rghash = bcf_call_add_rg(rghash, sam_hdr_str(h_tmp), conf->pl_list);
         }
         if (conf->reg) {
             hts_idx_t *idx = NULL;

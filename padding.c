@@ -407,14 +407,6 @@ sam_hdr_t * fix_header(sam_hdr_t *old, faidx_t *fai)
         }
     }
 
-    for (i = 0; i < nref; i++) {
-        sprintf(len_buf, "%d", sam_hdr_tid2len(header, i));
-        if((ret |= sam_hdr_update_line(header, "SQ", "SN", sam_hdr_tid2name(header, i), "LN", len_buf, NULL)))
-            fprintf(stderr, "[depad] Error updating length of '%s' from %d to %s\n", sam_hdr_tid2name(header, i), sam_hdr_tid2len(header, i), len_buf);
-        ret |= sam_hdr_remove_tag_id(header, "SQ", "SN", sam_hdr_tid2name(header, i), "M5") < 0;
-        ret |= sam_hdr_remove_tag_id(header, "SQ", "SN", sam_hdr_tid2name(header, i), "UR") < 0;
-    }
-
     if (ret) {
         sam_hdr_destroy(header);
         return NULL;

@@ -336,29 +336,6 @@ static int trans_tbl_add_hd(merged_header_t* merged_hdr,
     return 0;
 }
 
-static inline int grow_target_list(merged_header_t* merged_hdr) {
-    size_t     new_size;
-    char     **new_names;
-    uint32_t  *new_len;
-
-    new_size = merged_hdr->targets_sz * 2;
-    new_names = realloc(merged_hdr->target_name, sizeof(*new_names) * new_size);
-    if (!new_names) goto fail;
-    merged_hdr->target_name = new_names;
-
-    new_len = realloc(merged_hdr->target_len, sizeof(*new_len) * new_size);
-    if (!new_len) goto fail;
-    merged_hdr->target_len = new_len;
-
-    merged_hdr->targets_sz = new_size;
-
-    return 0;
-
- fail:
-    perror(__func__);
-    return -1;
-}
-
 /*
  * Add @SQ records to the translation table.
  *

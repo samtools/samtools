@@ -101,7 +101,7 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *fn_
     // If the user has asked for specific samples find out create a list of readgroups make up these samples
     if ( samples )
     {
-        tv->rg_hash = get_rg_sample(tv->header->text, samples); // Init the list of rg's
+        tv->rg_hash = get_rg_sample(sam_hdr_str(tv->header), samples); // Init the list of rg's
     }
 
     return 0;

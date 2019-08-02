@@ -59,7 +59,7 @@ const char *VERSION = "0.1";
 
 typedef struct {  // auxiliary data structure to hold a BAM file
     samFile *fp;     // file handle
-    bam_hdr_t *hdr;  // file header
+    sam_hdr_t *hdr;  // file header
     hts_itr_t *iter; // iterator to a region - NULL for us by default
     int min_mapQ;    // mapQ filter
     int min_len;     // length filter
@@ -205,8 +205,8 @@ static int read_bam(void *data, bam1_t *b) {
     return ret;
 }
 
-void print_tabular_line(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats) {
-    fputs(h->target_name[stats->tid], file_out);
+void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats) {
+    fputs(sam_hdr_tid2name(h, stats->tid), file_out);
     double region_len = (double) stats->end - stats->beg;
     fprintf(file_out, "\t%d\t%d\t%u\t%llu\t%g\t%g\t%.3g\t%.3g\n",
             stats->beg+1,
@@ -220,7 +220,7 @@ void print_tabular_line(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *s
            );
 }
 
-void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, const uint32_t *hist,
+void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, const uint32_t *hist,
         const int hist_size, const bool full_utf) {
     int i, col;
     bool show_percentiles = false;
@@ -243,7 +243,7 @@ void print_hist(FILE *file_out, const bam_hdr_t *h, const stats_aux_t *stats, co
     }
 
     char buf[100];
-    fprintf(file_out, "%s (%sbp)\n", h->target_name[stats->tid], readable_bps(h->target_len[stats->tid], buf));
+    fprintf(file_out, "%s (%sbp)\n", sam_hdr_tid2name(h, stats->tid), readable_bps(sam_hdr_tid2len(h, stats->tid), buf));
 
     double row_bin_size = max_val / (double) n_rows;
     for (i = n_rows-1; i >= 0; --i) {
@@ -325,7 +325,7 @@ int main_coverage(int argc, char *argv[]) {
     int required_flags = 0;
 
     int *n_plp = NULL;
-    bam_hdr_t *h = NULL; // BAM header of the 1st input
+    sam_hdr_t *h = NULL; // BAM header of the 1st input
 
     bool opt_print_header = true;
     bool opt_print_tabular = true;
@@ -527,7 +527,8 @@ int main_coverage(int argc, char *argv[]) {
         fputs("#rname\tstartpos\tendpos\tnumreads\tcovbases\tcoverage\tmeandepth\tmeanbaseq\tmeanmapq\n", file_out);
 
     h = data[0]->hdr; // easy access to the header of the 1st BAM
-    covered_tids = calloc(h->n_targets, sizeof(bool));
+    int n_targets = sam_hdr_nref(h);
+    covered_tids = calloc(n_targets, sizeof(bool));
     stats = calloc(1, sizeof(stats_aux_t));
     if (!covered_tids || !stats) {
         print_error("coverage", "Failed to allocate memory");
@@ -541,7 +542,7 @@ int main_coverage(int argc, char *argv[]) {
         stats->beg = data[0]->iter->beg; // and to the parsed region coordinates
         stats->end = data[0]->iter->end;
         if (stats->end == INT_MAX) {
-            stats->end = h->target_len[stats->tid];
+            stats->end = sam_hdr_tid2len(h, stats->tid);
         }
         if (opt_n_bins > stats->end - stats->beg) {
             n_bins = stats->end - stats->beg;
@@ -591,7 +592,7 @@ int main_coverage(int argc, char *argv[]) {
             stats->tid = tid;
             covered_tids[tid] = true;
             if (!opt_reg)
-                stats->end = h->target_len[tid];
+                stats->end = sam_hdr_tid2len(h, tid);
 
             if (opt_print_histogram) {
                 n_bins = opt_n_bins > stats->end-stats->beg? stats->end-stats->beg : opt_n_bins;
@@ -599,7 +600,7 @@ int main_coverage(int argc, char *argv[]) {
             }
         }
         if (pos < stats->beg || pos >= stats->end) continue; // out of range; skip
-        if (tid >= h->n_targets) continue;     // diff number of @SQ lines per file?
+        if (tid >= n_targets) continue;     // diff number of @SQ lines per file?
 
         if (opt_print_histogram) {
             current_bin = (pos - stats->beg) / stats->bin_width;
@@ -643,10 +644,10 @@ int main_coverage(int argc, char *argv[]) {
 
     if (!opt_reg && opt_print_tabular) {
         memset(stats, 0, sizeof(stats_aux_t));
-        for (i = 0; i < h->n_targets; ++i) {
+        for (i = 0; i < n_targets; ++i) {
             if (!covered_tids[i]) {
                 stats->tid = i;
-                stats->end = h->target_len[i];
+                stats->end = sam_hdr_tid2len(h, i);
                 print_tabular_line(file_out, h, stats);
             }
         }
@@ -676,7 +677,7 @@ coverage_end:
 
     if (data) {
         for (i = 0; i < n_bam_files && data[i]; ++i) {
-            bam_hdr_destroy(data[i]->hdr);
+            sam_hdr_destroy(data[i]->hdr);
             if (data[i]->fp) sam_close(data[i]->fp);
             hts_itr_destroy(data[i]->iter);
             free(data[i]);

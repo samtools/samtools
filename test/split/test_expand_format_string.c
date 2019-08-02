@@ -36,8 +36,7 @@ void setup_test_1(sam_hdr_t** hdr_in)
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\n"
     "@RG\tID:fish\n";
-    (*hdr_in)->text = strdup(test1);
-    (*hdr_in)->l_text = strlen(test1);
+    sam_hdr_add_lines(*hdr_in, test1, 0);
 }
 
 int main(int argc, char**argv)

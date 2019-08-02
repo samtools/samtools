@@ -2437,7 +2437,7 @@ sub cat_sams
             print $out "\@PG\tID:samtools\tPN:samtools\n";
             if ($prev) { print $out $prev; }
         }
-                
+
         while (<$in>) {
             next if (/^@/ && !$first);
             print $out $_ || die "Error writing to $sam_out : $!\n";
