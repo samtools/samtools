@@ -1366,15 +1366,17 @@ static int markdup_usage(void) {
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:  samtools markdup <input.bam> <output.bam>\n\n");
     fprintf(stderr, "Option: \n");
-    fprintf(stderr, "  -r           Remove duplicate reads\n");
-    fprintf(stderr, "  -l INT       Max read length (default 300 bases)\n");
-    fprintf(stderr, "  -S           Mark supplementary alignments of duplicates as duplicates (slower).\n");
-    fprintf(stderr, "  -s           Report stats.\n");
-    fprintf(stderr, "  -f NAME      Write stats to named file.  Implies -s.\n");
-    fprintf(stderr, "  -T PREFIX    Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
-    fprintf(stderr, "  -d INT       Optical distance (if set, marks with dt tag)\n");
-    fprintf(stderr, "  -c           Clear previous duplicate settings and tags.\n");
-    fprintf(stderr, "  -t           Mark primary duplicates with the name of the original in a \'do\' tag."
+    fprintf(stderr, "  -r               Remove duplicate reads\n");
+    fprintf(stderr, "  -l INT           Max read length (default 300 bases)\n");
+    fprintf(stderr, "  -S               Mark supplementary alignments of duplicates as duplicates (slower).\n");
+    fprintf(stderr, "  -s               Report stats.\n");
+    fprintf(stderr, "  -f NAME          Write stats to named file.  Implies -s.\n");
+    fprintf(stderr, "  -T PREFIX        Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
+    fprintf(stderr, "  -d INT           Optical distance (if set, marks with dt tag)\n");
+    fprintf(stderr, "  -c               Clear previous duplicate settings and tags.\n");
+    fprintf(stderr, "  --relaxed        Less strict duplicate definition (more duplicates found).\n");
+    fprintf(stderr, "  --include-fails  Include quality check failed reads (included in relaxed option.\n");
+    fprintf(stderr, "  -t               Mark primary duplicates with the name of the original in a \'do\' tag."
                                   " Mainly for information and debugging.\n");
 
     sam_global_opt_help(stderr, "-.O..@.");
