@@ -57,7 +57,12 @@ typedef struct {
     int opt_dist;
     int add_pg;
     int clear;
+    int relaxed;
+    int write_index;
+    int include_fails;
     char *stats_file;
+    char *arg_list;
+    char *out_fn;
 } md_param_t;
 
 typedef struct {
@@ -441,6 +446,128 @@ static int make_pair_key(key_data_t *key, bam1_t *bam) {
 }
 
 
+static int make_pair_key_relaxed(key_data_t *key, bam1_t *bam) {
+    int32_t this_ref, this_coord, this_end;
+    int32_t other_ref, other_coord, other_end;
+    int32_t orientation, leftmost;
+    uint8_t *data;
+    char *cig;
+
+    this_ref    = bam->core.tid + 1; // avoid a 0 being put into the hash
+    other_ref   = bam->core.mtid + 1;
+
+    this_coord = unclipped_start(bam);
+    this_end   = unclipped_end(bam);
+
+    if ((data = bam_aux_get(bam, "MC"))) {
+        cig = bam_aux2Z(data);
+        other_end   = unclipped_other_end(bam->core.mpos, cig);
+        other_coord = unclipped_other_start(bam->core.mpos, cig);
+    } else {
+        fprintf(stderr, "[markdup] error: no MC tag. Please run samtools fixmate on file first.\n");
+        return 1;
+    }
+
+    // work out orientations
+    if (this_ref != other_ref) {
+        leftmost = this_ref - other_ref;
+    } else {
+        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+            if (!bam_is_rev(bam)) {
+                leftmost = this_coord - other_coord;
+            } else {
+                leftmost = this_end - other_end;
+            }
+        } else {
+            if (bam_is_rev(bam)) {
+                leftmost = this_end - other_coord;
+            } else {
+                leftmost = this_coord - other_end;
+            }
+        }
+    }
+
+    if (leftmost < 0) {
+        leftmost = 1;
+    } else if (leftmost > 0) {
+        leftmost = 0;
+    } else {
+        // tie breaks
+
+        if (bam->core.pos == bam->core.mpos) {
+            if ( bam->core.flag & BAM_FREAD1) {
+                leftmost = 1;
+            } else {
+                leftmost = 0;
+            }
+        } else if (bam->core.pos < bam->core.mpos) {
+            leftmost = 1;
+        } else {
+            leftmost = 0;
+        }
+    }
+
+    // pair orientation
+    if (leftmost) {
+        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+
+            if (!bam_is_rev(bam)) {
+                    orientation = O_FF;
+            } else {
+                    orientation = O_RR;
+            }
+        } else {
+            if (!bam_is_rev(bam)) {
+                orientation = O_FR;
+            } else {
+                orientation = O_RF;
+            }
+        }
+    } else {
+        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+
+            if (!bam_is_rev(bam)) {
+                    orientation = O_RR;
+            } else {
+                    orientation = O_FF;
+            }
+        } else {
+            if (!bam_is_rev(bam)) {
+                orientation = O_RF;
+            } else {
+                orientation = O_FR;
+            }
+        }
+    }
+
+    if (!leftmost)
+        leftmost = 13;
+    else
+        leftmost = 11;
+
+    if (!bam_is_rev(bam)) {
+        this_coord = unclipped_start(bam);
+    } else {
+        this_coord = unclipped_end(bam);
+    }
+
+    if (!bam_is_mrev(bam)) {
+        other_coord = unclipped_other_start(bam->core.mpos, cig);
+    } else {
+        other_coord = unclipped_other_end(bam->core.mpos, cig);
+    }
+
+    key->single        = 0;
+    key->this_ref      = this_ref;
+    key->this_coord    = this_coord;
+    key->other_ref     = other_ref;
+    key->other_coord   = other_coord;
+    key->leftmost      = leftmost;
+    key->orientation   = orientation;
+
+    return 0;
+}
+
 /* Create a signature hash of single read (or read with an unmatched pair).
    Uses unclipped start (or end depending on orientation), reference id,
    and orientation. */
@@ -630,7 +757,7 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
     }
 
     if (param->supp) {
-        if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP)) {
+        if (bam_aux_get(dup, "SA") || (dup->core.flag & BAM_FMUNMAP) || bam_aux_get(dup, "XA")) {
             char *original = NULL;
 
             if (param->tag) {
@@ -703,7 +830,7 @@ static unsigned long estimate_library_size(unsigned long read_pairs, unsigned lo
    Marking the supplementary reads of a duplicate as also duplicates takes an extra file read/write
    step.  This is because the duplicate can occur before the primary read.*/
 
-static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, int write_index) {
+static int bam_mark_duplicates(md_param_t *param) {
     bam_hdr_t *header = NULL;
     khiter_t k;
     khash_t(reads) *pair_hash        = kh_init(reads);
@@ -718,6 +845,7 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
     int np_duplicate, np_opt_duplicate;
     tmp_file_t temp;
     char *idx_fn = NULL;
+    int exclude = 0;
 
     if (!pair_hash || !single_hash || !read_buffer || !dup_hash) {
         fprintf(stderr, "[markdup] out of memory\n");
@@ -740,8 +868,8 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
     ks_free(&str);
 
     if (param->add_pg && sam_hdr_add_pg(header, "samtools", "VN", samtools_version(),
-                        arg_list ? "CL" : NULL,
-                        arg_list ? arg_list : NULL,
+                        param->arg_list ? "CL" : NULL,
+                        param->arg_list ? param->arg_list : NULL,
                         NULL) != 0) {
         fprintf(stderr, "[markdup] warning: unable to add @PG line to header.\n");
     }
@@ -750,8 +878,8 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
         fprintf(stderr, "[markdup] error writing header.\n");
         goto fail;
     }
-    if (write_index) {
-        if (!(idx_fn = auto_index(param->out, out_fn, header)))
+    if (param->write_index) {
+        if (!(idx_fn = auto_index(param->out, param->out_fn, header)))
             goto fail;
     }
 
@@ -812,8 +940,14 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
             }
         }
 
-        // read must not be secondary, supplementary, unmapped or failed QC
-        if (!(in_read->b->core.flag & (BAM_FSECONDARY | BAM_FSUPPLEMENTARY | BAM_FUNMAP | BAM_FQCFAIL))) {
+        if (param->include_fails) {
+            exclude |= (BAM_FSECONDARY | BAM_FSUPPLEMENTARY | BAM_FUNMAP);
+        } else {
+            exclude |= (BAM_FSECONDARY | BAM_FSUPPLEMENTARY | BAM_FUNMAP | BAM_FQCFAIL);
+        }
+
+        // read must not be secondary, supplementary, unmapped or (possibly) failed QC
+        if (!(in_read->b->core.flag & exclude)) {
             examined++;
 
 
@@ -824,9 +958,16 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
                 key_data_t single_key;
                 in_hash_t *bp;
 
-                if (make_pair_key(&pair_key, in_read->b)) {
-                    fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
-                    goto fail;
+                if (param->relaxed) {
+                    if (make_pair_key_relaxed(&pair_key, in_read->b)) {
+                        fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
+                        goto fail;
+                    }
+                } else {
+                    if (make_pair_key(&pair_key, in_read->b)) {
+                        fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
+                        goto fail;
+                    }
                 }
 
                 make_single_key(&single_key, in_read->b);
@@ -878,18 +1019,28 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
 
                     bp = &kh_val(pair_hash, k);
 
-                    if ((mate_tmp = get_mate_score(bp->p)) == -1) {
-                        fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
-                        goto fail;
+                    if ((bp->p->core.flag & BAM_FQCFAIL) != (in_read->b->core.flag & BAM_FQCFAIL)) {
+                        if (bp->p->core.flag & BAM_FQCFAIL) {
+                            old_score = 0;
+                            new_score = 1;
+                        } else {
+                            old_score = 1;
+                            new_score = 0;
+                        }
                     } else {
-                        old_score = calc_score(bp->p) + mate_tmp;
-                    }
+                       if ((mate_tmp = get_mate_score(bp->p)) == -1) {
+                           fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                           goto fail;
+                       } else {
+                           old_score = calc_score(bp->p) + mate_tmp;
+                       }
 
-                    if ((mate_tmp = get_mate_score(in_read->b)) == -1) {
-                        fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
-                        goto fail;
-                    } else {
-                        new_score = calc_score(in_read->b) + mate_tmp;
+                       if ((mate_tmp = get_mate_score(in_read->b)) == -1) {
+                            fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                            goto fail;
+                        } else {
+                            new_score = calc_score(in_read->b) + mate_tmp;
+                        }
                     }
 
                     // choose the highest score as the original
@@ -1083,9 +1234,11 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
         while ((ret = tmp_file_read(&temp, b)) > 0) {
 
             if ((b->core.flag & BAM_FSUPPLEMENTARY) || (b->core.flag & BAM_FUNMAP) || (b->core.flag & BAM_FSECONDARY)) {
+
                 k = kh_get(duplicates, dup_hash, bam_get_qname(b));
 
                 if (k != kh_end(dup_hash)) {
+
                     b->core.flag  |= BAM_FDUP;
                     np_duplicate++;
 
@@ -1166,7 +1319,7 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
                 "DUPLICATE NON PRIMARY OPTICAL: %d\n"
                 "DUPLICATE PRIMARY TOTAL: %d\n"
                 "DUPLICATE TOTAL: %d\n"
-                "ESTIMATED_LIBRARY_SIZE %ld\n", arg_list, reading, writing, excluded, examined, pair, single,
+                "ESTIMATED_LIBRARY_SIZE %ld\n", param->arg_list, reading, writing, excluded, examined, pair, single,
                                 duplicate, single_dup, optical, single_optical, np_duplicate, np_opt_duplicate,
                                 single_dup + duplicate, single_dup + duplicate + np_duplicate, els);
 
@@ -1175,7 +1328,7 @@ static int bam_mark_duplicates(md_param_t *param, char *arg_list, char *out_fn, 
         }
     }
 
-    if (write_index) {
+    if (param->write_index) {
         if (sam_idx_save(param->out) < 0) {
             print_error_errno("markdup", "writing index failed");
             goto fail;
@@ -1241,11 +1394,12 @@ int bam_markdup(int argc, char **argv) {
     kstring_t tmpprefix = {0, 0, NULL};
     struct stat st;
     unsigned int t;
-    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 1, 0, NULL};
-    char *args = stringify_argv(argc + 1, argv - 1);
+    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 1, 0, 0, 0, 0, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
+        {"relaxed", no_argument, NULL, 1000},
+        {"include-fails", no_argument, NULL, 1001},
         {NULL, 0, NULL, 0}
     };
 
@@ -1261,6 +1415,8 @@ int bam_markdup(int argc, char **argv) {
             case 'd': param.opt_dist = atoi(optarg); break;
             case 'n': param.add_pg = 0; break;
             case 'c': param.clear = 1; break;
+            case 1000: param.relaxed = 1, param.include_fails = 1; break;
+            case 1001: param.include_fails = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
@@ -1317,7 +1473,11 @@ int bam_markdup(int argc, char **argv) {
     ksprintf(&tmpprefix, "samtools.%d.%u.tmp", (int) getpid(), t % 10000);
     param.prefix = tmpprefix.s;
 
-    ret = bam_mark_duplicates(&param, args, argv[optind + 1], ga.write_index);
+    param.arg_list = stringify_argv(argc + 1, argv - 1);
+    param.write_index = ga.write_index;
+    param.out_fn = argv[optind + 1];
+
+    ret = bam_mark_duplicates(&param);
 
     sam_close(param.in);
 
@@ -1328,7 +1488,7 @@ int bam_markdup(int argc, char **argv) {
 
     if (p.pool) hts_tpool_destroy(p.pool);
 
-    free(args);
+    free(param.arg_list);
     free(tmpprefix.s);
     sam_global_args_free(&ga);
 
