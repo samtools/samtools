@@ -57,7 +57,9 @@ Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
 command invoked. The files will be automatically compressed if the
 file names have a .gz or .bgzf extension.
 
-The input to this program must be collated by name.
+If the input contains read-pairs which are to be interleaved or
+written to separate files in the same order, then the input should
+be first collated by name.
 Use
 .B samtools collate
 or

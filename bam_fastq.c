@@ -913,9 +913,9 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
     bam1_t* b = NULL;
 
     while (true) {
-        assert(b == NULL);
-        b = bam_init1();
-        if (b == NULL ) {
+        if (!b)
+            b = bam_init1();
+        if (b == NULL) {
             perror("[bam2fq_mainloop] Malloc error for bam record buffer.");
             valid = false;
             break;
@@ -928,11 +928,8 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
         }
         at_eof = res < 0;
 
-        if (!at_eof && filter_it_out(b, state)) {
-            bam_destroy1(b);
-            b = NULL;
+        if (!at_eof && filter_it_out(b, state))
             continue;
-        }
         if (!at_eof) ++n_reads;
 
         if (at_eof || !current_qname || (strcmp(current_qname, bam_get_qname(b)) != 0)) {
