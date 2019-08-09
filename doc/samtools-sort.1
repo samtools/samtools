@@ -51,6 +51,9 @@ samtools sort
 .IR out.bam ]
 .RB [ -O
 .IR format ]
+.RB [ -M ]
+.RB [ -K
+.IR kmerLen ]
 .RB [ -n ]
 .RB [ -t
 .IR tag ]
@@ -88,6 +91,9 @@ instead if you need name collated data without a full lexicographical sort.
 .SH OPTIONS
 
 .TP 11
+.BI "-K " INT
+Sets the kmer size to be used in the \fB-M\fR option. [20]
+.TP
 .BI "-l " INT
 Set the desired compression level for the final output file, ranging from 0
 (uncompressed) or 1 (fastest but minimal compression) to 9 (best compression
@@ -108,6 +114,17 @@ suffix.
 .IP
 To prevent sort from creating a huge number of temporary files, it enforces a
 minimum value of 1M for this setting.
+.TP
+.B "-M "
+Sort unmapped reads (those in chromosome "*") by their sequence
+minimiser (Schleimer et al., 2003; Roberts et al., 2004), also reverse
+complementing as appropriate.  This has the effect of collating some
+similar data together, improving the compressibility of the unmapped
+sequence.  The minimiser kmer size is adjusted using the \fB-K\fR
+option.  Note data compressed in this manner may need to be name
+collated prior to conversion back to fastq.
+.IP
+Mapped sequences are sorted by chromosome and position.
 .TP
 .B -n
 Sort by read names (i.e., the
