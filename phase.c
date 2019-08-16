@@ -52,12 +52,12 @@ KSTREAM_INIT(gzFile, gzread, 16384)
 
 typedef struct {
     // configurations, initialized in the main function
-    int flag, k, min_baseQ, min_varLOD, max_depth;
+    int flag, k, min_baseQ, min_varLOD, max_depth, no_pg;
     // other global variables
     int vpos_shift;
     samFile* fp;
     sam_hdr_t* fp_hdr;
-    char *pre;
+    char *pre, *arg_list;
     char *out_name[3];
     samFile* out[3];
     sam_hdr_t* out_hdr[3];
@@ -564,6 +564,14 @@ static int start_output(phaseg_t *g, int c, const char *middle, const htsFormat 
     }
 
     g->out_hdr[c] = sam_hdr_dup(g->fp_hdr);
+    if (!g->no_pg && sam_hdr_add_pg(g->out_hdr[c], "samtools",
+                                    "VN", samtools_version(),
+                                    g->arg_list ? "CL": NULL,
+                                    g->arg_list ? g->arg_list : NULL,
+                                    NULL)) {
+        print_error("phase", "failed to add PG line to header");
+        return -1;
+    }
     if (sam_hdr_write(g->out[c], g->out_hdr[c]) < 0) {
         print_error_errno("phase", "Failed to write header for '%s'", g->out_name[c]);
         return -1;
@@ -588,6 +596,7 @@ int main_phase(int argc, char *argv[])
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '-'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
@@ -607,6 +616,7 @@ int main_phase(int argc, char *argv[])
             case 'A': g.flag |= FLAG_DROP_AMBI; break;
             case 'b': g.pre = strdup(optarg); break;
             case 'l': fn_list = strdup(optarg); break;
+            case 1: g.no_pg = 1; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage=1; break;
@@ -624,6 +634,7 @@ int main_phase(int argc, char *argv[])
 //      fprintf(stderr, "         -l FILE   list of sites to phase [null]\n");
         fprintf(stderr, "         -F        do not attempt to fix chimeras\n");
         fprintf(stderr, "         -A        drop reads with ambiguous phase\n");
+        fprintf(stderr, "         --no-PG   do not add a PG line\n");
 //      fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
         fprintf(stderr, "\n");
 
@@ -640,6 +651,10 @@ int main_phase(int argc, char *argv[])
     if (g.fp_hdr == NULL) {
         fprintf(stderr, "[%s] Failed to read header for '%s'\n",
                 __func__, argv[optind]);
+        return 1;
+    }
+    if (!g.no_pg && !(g.arg_list = stringify_argv(argc+1, argv-1))) {
+        print_error("phase", "failed to create arg_list");
         return 1;
     }
     if (fn_list) { // read the list of sites to phase
@@ -792,6 +807,7 @@ int main_phase(int argc, char *argv[])
         free(g.pre); free(g.b);
         if (res) return 1;
     }
+    free(g.arg_list);
     sam_global_args_free(&ga);
     return 0;
 }

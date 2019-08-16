@@ -49,6 +49,7 @@ struct parsed_opts {
     const char *unaccounted_name;
     const char *output_format_string;
     bool verbose;
+    int no_pg;
     sam_global_args ga;
 };
 
@@ -84,7 +85,8 @@ static void usage(FILE *write_to)
 "  -f STRING       output filename format string [\"%%*_%%#.%%.\"]\n"
 "  -u FILE1        put reads with no RG tag or an unrecognised RG tag in FILE1\n"
 "  -h FILE2        ... and override the header with FILE2 (-u file only)\n"
-"  -v              verbose output\n");
+"  -v              verbose output\n"
+"  --no-PG         do not add a PG line\n");
     sam_global_opt_help(write_to, "-....@.");
     fprintf(write_to,
 "\n"
@@ -106,6 +108,7 @@ static parsed_opts_t* parse_args(int argc, char** argv)
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
@@ -128,6 +131,9 @@ static parsed_opts_t* parse_args(int argc, char** argv)
             break;
         case 'u':
             retval->unaccounted_name = optarg;
+            break;
+        case 1:
+            retval->no_pg = 1;
             break;
         default:
             if (parse_sam_global_opt(opt, optarg, lopts, &retval->ga) == 0) break;
@@ -403,11 +409,12 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         // Set and edit header
         retval->rg_output_header[i] = sam_hdr_dup(retval->merged_input_header);
         if (sam_hdr_remove_except(retval->rg_output_header[i], "RG", "ID", retval->rg_id[i]) ||
+           (!opts->no_pg &&
             sam_hdr_add_pg(retval->rg_output_header[i], "samtools",
                         "VN", samtools_version(),
                         arg_list ? "CL": NULL,
                         arg_list ? arg_list : NULL,
-                        NULL)) {
+                        NULL))) {
             print_error("split", "Could not rewrite header for \"%s\"", output_filename);
             cleanup_state(retval, false);
             free(input_base_name);
@@ -572,9 +579,11 @@ static void cleanup_opts(parsed_opts_t* opts)
 int main_split(int argc, char** argv)
 {
     int ret = 1;
-    char *arg_list = stringify_argv(argc+1, argv-1);
+    char *arg_list = NULL;
     parsed_opts_t* opts = parse_args(argc, argv);
     if (!opts) goto cleanup_opts;
+    if (!opts->no_pg && !(arg_list = stringify_argv(argc+1, argv-1)))
+        goto cleanup_opts;
     state_t* status = init(opts, arg_list);
     if (!status) goto cleanup_opts;
 

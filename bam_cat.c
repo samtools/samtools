@@ -196,7 +196,7 @@ fail:
  * huffman code.  In this situation we can change the meta-data in the
  * compression header to renumber an RG value..
  */
-int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram, sam_global_args *ga, char *arg_list)
+int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram, sam_global_args *ga, char *arg_list, int no_pg)
 {
     samFile *out;
     cram_fd *out_c;
@@ -219,11 +219,11 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
     cram_set_option(out_c, CRAM_OPT_VERSION, vers);
     //fprintf(stderr, "Creating cram vers %s\n", vers);
 
-    if (sam_hdr_add_pg(new_h, "samtools",
-                              "VN", samtools_version(),
-                              arg_list ? "CL": NULL,
-                              arg_list ? arg_list : NULL,
-                              NULL))
+    if (!no_pg && sam_hdr_add_pg(new_h, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL))
         return -1;
 
     if (sam_hdr_write(out, new_h) < 0) {
@@ -338,7 +338,7 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
 
 #define BGZF_EMPTY_BLOCK_SIZE 28
 
-int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *arg_list)
+int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *arg_list, int no_pg)
 {
     BGZF *fp, *in = NULL;
     uint8_t *buf = NULL;
@@ -352,11 +352,11 @@ int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *a
         return -1;
     }
     if (h) {
-        if (sam_hdr_add_pg(h, "samtools",
-                               "VN", samtools_version(),
-                               arg_list ? "CL": NULL,
-                               arg_list ? arg_list : NULL,
-                               NULL))
+        if (!no_pg && sam_hdr_add_pg(h, "samtools",
+                                     "VN", samtools_version(),
+                                     arg_list ? "CL": NULL,
+                                     arg_list ? arg_list : NULL,
+                                     NULL))
             goto fail;
 
         if (bam_hdr_write(fp, h) < 0) {
@@ -388,11 +388,11 @@ int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *a
             goto fail;
         }
         if (h == 0 && i == 0) {
-            if (sam_hdr_add_pg(old, "samtools",
-                                    "VN", samtools_version(),
-                                    arg_list ? "CL": NULL,
-                                    arg_list ? arg_list : NULL,
-                                    NULL))
+            if (!no_pg && sam_hdr_add_pg(old, "samtools",
+                                         "VN", samtools_version(),
+                                         arg_list ? "CL": NULL,
+                                         arg_list ? arg_list : NULL,
+                                         NULL))
                 goto fail;
 
             if (bam_hdr_write(fp, old) < 0) {
@@ -467,16 +467,17 @@ int main_cat(int argc, char *argv[])
     char *outfn = 0;
     char **infns = NULL; // files to concatenate
     int infns_size = 0;
-    int c, ret = 0;
+    int c, ret = 0, no_pg = 0;
     samFile *in;
     sam_global_args ga;
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', '-', '-', 0, '-', '@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
-    char *arg_list = stringify_argv(argc+1, argv-1);
+    char *arg_list = NULL;
 
     sam_global_args_init(&ga);
 
@@ -516,9 +517,17 @@ int main_cat(int argc, char *argv[])
                 }
                 break;
             }
+            case 1:
+                no_pg = 1;
+                break;
             default:
                 if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
         }
+    }
+
+    if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
+        print_error("cat", "failed to create arg_list");
+        return 1;
     }
 
     // Append files specified in argv to the list.
@@ -537,6 +546,7 @@ int main_cat(int argc, char *argv[])
         fprintf(stderr, "Options: -b FILE  list of input BAM/CRAM file names, one per line\n");
         fprintf(stderr, "         -h FILE  copy the header from FILE [default is 1st input file]\n");
         fprintf(stderr, "         -o FILE  output BAM/CRAM\n");
+        fprintf(stderr, "         --no-PG  do not add a PG line\n");
         sam_global_opt_help(stderr, "--..-@");
         return 1;
     }
@@ -550,13 +560,13 @@ int main_cat(int argc, char *argv[])
     switch (hts_get_format(in)->format) {
     case bam:
         sam_close(in);
-        if (bam_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", arg_list) < 0)
+        if (bam_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", arg_list, no_pg) < 0)
             ret = 1;
         break;
 
     case cram:
         sam_close(in);
-        if (cram_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", &ga, arg_list) < 0)
+        if (cram_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", &ga, arg_list, no_pg) < 0)
             ret = 1;
         break;
 

@@ -47,6 +47,7 @@ struct parsed_opts {
     char* output_name;
     char* rg_id;
     char* rg_line;
+    int no_pg;
     rg_mode mode;
     sam_global_args ga;
     htsThreadPool p;
@@ -170,6 +171,7 @@ static void usage(FILE *fp)
             "  -o FILE   Where to write output to [stdout]\n"
             "  -r STRING @RG line text\n"
             "  -R STRING ID of @RG line in existing header to use\n"
+            "  --no-PG   Do not add a PG line\n"
             );
     sam_global_opt_help(fp, "..O..@.");
 }
@@ -191,6 +193,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     sam_global_args_init(&retval->ga);
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS(0, 0, 'O', 0, 0, '@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
     kstring_t rg_line = {0,0,NULL};
@@ -229,6 +232,9 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
                 usage(stdout);
                 free(retval);
                 return true;
+            case 1:
+                retval->no_pg = 1;
+                break;
             case '?':
                 usage(stderr);
                 free(retval);
@@ -391,8 +397,15 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     return true;
 }
 
-static bool readgroupise(parsed_opts_t *opts, state_t* state)
+static bool readgroupise(parsed_opts_t *opts, state_t* state, char *arg_list)
 {
+    if (!opts->no_pg && sam_hdr_add_pg(state->output_header, "samtools",
+                                       "VN", samtools_version(),
+                                       arg_list ? "CL": NULL,
+                                       arg_list ? arg_list : NULL,
+                                       NULL))
+        return false;
+
     if (sam_hdr_write(state->output_file, state->output_header) != 0) {
         print_error_errno("addreplacerg", "[%s] Could not write header to output file", __func__);
         return false;
@@ -438,20 +451,25 @@ int main_addreplacerg(int argc, char** argv)
 {
     parsed_opts_t* opts = NULL;
     state_t* state = NULL;
+    char *arg_list = stringify_argv(argc+1, argv-1);
+    if (!arg_list)
+        return EXIT_FAILURE;
 
     if (!parse_args(argc, argv, &opts)) goto error;
-    if (opts == NULL) return EXIT_SUCCESS; // Not an error but user doesn't want us to proceed
-    if (!opts || !init(opts, &state)) goto error;
-
-    if (!readgroupise(opts, state)) goto error;
+    if (opts) { // Not an error but user doesn't want us to proceed
+        if (!init(opts, &state) || !readgroupise(opts, state, arg_list))
+            goto error;
+    }
 
     cleanup_state(state);
     cleanup_opts(opts);
+    free(arg_list);
 
     return EXIT_SUCCESS;
 error:
     cleanup_state(state);
     cleanup_opts(opts);
+    free(arg_list);
 
     return EXIT_FAILURE;
 }

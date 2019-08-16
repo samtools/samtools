@@ -250,7 +250,7 @@ static int add_mate_score(bam1_t *src, bam1_t *dest)
 }
 
 // currently, this function ONLY works if each read has one hit
-static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int proper_pair_check, int add_ct, int do_mate_scoring)
+static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int proper_pair_check, int add_ct, int do_mate_scoring, char *arg_list, int no_pg)
 {
     sam_hdr_t *header;
     bam1_t *b[2] = { NULL, NULL };
@@ -269,6 +269,13 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
         goto fail;
     }
     ks_free(&str);
+
+    if (!no_pg && sam_hdr_add_pg(header, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL))
+        goto fail;
 
     if (sam_hdr_write(out, header) < 0) goto write_fail;
 
@@ -397,7 +404,8 @@ void usage(FILE* where)
 "  -r           Remove unmapped reads and secondary alignments\n"
 "  -p           Disable FR proper pair check\n"
 "  -c           Add template cigar ct tag\n"
-"  -m           Add mate score tag\n");
+"  -m           Add mate score tag\n"
+"  --no-PG      do not add a PG line\n");
 
     sam_global_opt_help(where, "-.O..@");
 
@@ -412,13 +420,15 @@ int bam_mating(int argc, char *argv[])
 {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL;
-    int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0, res = 1, mate_score = 0;
+    int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0, res = 1, mate_score = 0, no_pg = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     char wmode[3] = {'w', 'b', 0};
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
+    char *arg_list = NULL;
 
     // parse args
     if (argc == 1) { usage(stdout); return 0; }
@@ -428,12 +438,16 @@ int bam_mating(int argc, char *argv[])
             case 'p': proper_pair_check = 0; break;
             case 'c': add_ct = 1; break;
             case 'm': mate_score = 1; break;
+            case 1: no_pg = 1; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(stderr); goto fail;
         }
     }
     if (optind+1 >= argc) { usage(stderr); goto fail; }
+
+    if (!no_pg && !(arg_list =  stringify_argv(argc+1, argv-1)))
+        goto fail;
 
     // init
     if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {
@@ -456,7 +470,7 @@ int bam_mating(int argc, char *argv[])
     }
 
     // run
-    res = bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct, mate_score);
+    res = bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct, mate_score, arg_list, no_pg);
 
     // cleanup
     sam_close(in);
@@ -466,6 +480,7 @@ int bam_mating(int argc, char *argv[])
     }
 
     if (p.pool) hts_tpool_destroy(p.pool);
+    free(arg_list);
     sam_global_args_free(&ga);
     return res;
 
@@ -473,6 +488,7 @@ int bam_mating(int argc, char *argv[])
     if (in) sam_close(in);
     if (out) sam_close(out);
     if (p.pool) hts_tpool_destroy(p.pool);
+    free(arg_list);
     sam_global_args_free(&ga);
     return 1;
 }

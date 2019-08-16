@@ -44,7 +44,7 @@ DEALINGS IN THE SOFTWARE.  */
  * the header.    No checks are made to the validity.
  */
 int bam_reheader(BGZF *in, sam_hdr_t *h, int fd,
-                 const char *arg_list, int add_PG, int skip_header)
+                 const char *arg_list, int no_pg, int skip_header)
 {
     BGZF *fp = NULL;
     ssize_t len;
@@ -74,15 +74,12 @@ int bam_reheader(BGZF *in, sam_hdr_t *h, int fd,
         goto fail;
     }
 
-    if (add_PG) {
-        // Around the houses, but it'll do until we can manipulate sam_hdr_t natively.
-        if (sam_hdr_add_pg(h, "samtools",
+    if (!no_pg && sam_hdr_add_pg(h, "samtools",
                            "VN", samtools_version(),
                            arg_list ? "CL": NULL,
                            arg_list ? arg_list : NULL,
                            NULL) != 0)
             goto fail;
-    }
 
     if (bam_hdr_write(fp, h) < 0) {
         print_error_errno("reheader", "Couldn't write header");
@@ -121,7 +118,7 @@ int bam_reheader(BGZF *in, sam_hdr_t *h, int fd,
  *
  * FIXME: error checking
  */
-int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int add_PG)
+int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int no_pg)
 {
     htsFile *h_out = hts_open("-", "wc");
     cram_fd *out = h_out->fp.cram;
@@ -135,7 +132,7 @@ int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int add_PG)
     if (!cram_h)
         return -1;
     cram_fd_set_header(out, cram_h);
-    if (add_PG && sam_hdr_add_pg(cram_fd_get_header(out), "samtools",
+    if (!no_pg && sam_hdr_add_pg(cram_fd_get_header(out), "samtools",
                            "VN", samtools_version(),
                            arg_list ? "CL": NULL,
                            arg_list ? arg_list : NULL,
@@ -186,7 +183,7 @@ int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int add_PG)
  *        -2 on failure due to insufficient size
  */
 int cram_reheader_inplace2(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
-                          int add_PG)
+                          int no_pg)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
@@ -207,7 +204,7 @@ int cram_reheader_inplace2(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
     if (!cram_h)
         goto err;
 
-    if (add_PG && sam_hdr_add_pg(cram_h, "samtools", "VN", samtools_version(),
+    if (!no_pg && sam_hdr_add_pg(cram_h, "samtools", "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
                                  NULL))
@@ -283,7 +280,7 @@ int cram_reheader_inplace2(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
  *        -2 on failure due to insufficient size
  */
 int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
-                          int add_PG)
+                          int no_pg)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
@@ -306,7 +303,7 @@ int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
     if (!cram_h)
         goto err;
 
-    if (add_PG && sam_hdr_add_pg(cram_h, "samtools", "VN", samtools_version(),
+    if (!no_pg && sam_hdr_add_pg(cram_h, "samtools", "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
                                  NULL))
@@ -421,11 +418,11 @@ int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
 }
 
 int cram_reheader_inplace(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
-                         int add_PG)
+                         int no_pg)
 {
     switch (cram_major_vers(fd)) {
-    case 2: return cram_reheader_inplace2(fd, h, arg_list, add_PG);
-    case 3: return cram_reheader_inplace3(fd, h, arg_list, add_PG);
+    case 2: return cram_reheader_inplace2(fd, h, arg_list, no_pg);
+    case 3: return cram_reheader_inplace3(fd, h, arg_list, no_pg);
     default:
         fprintf(stderr, "[%s] unsupported CRAM version %d\n", __func__,
                 cram_major_vers(fd));
@@ -441,7 +438,7 @@ static void usage(FILE *fp, int ret) {
            "   or  samtools reheader -c CMD in.cram\n"
            "\n"
            "Options:\n"
-           "    -P, --no-PG         Do not generate an @PG header line.\n"
+           "    -P, --no-PG         Do not generate a @PG header line.\n"
            "    -i, --in-place      Modify the CRAM file directly, if possible.\n"
            "                        (Defaults to outputting to stdout.)\n"
            "    -c, --command CMD   Pass the header in SAM format to external program CMD.\n");
@@ -536,10 +533,10 @@ cleanup:
 
 int main_reheader(int argc, char *argv[])
 {
-    int inplace = 0, r, add_PG = 1, c, skip_header = 0;
+    int inplace = 0, r, no_pg = 0, c, skip_header = 0;
     sam_hdr_t *h;
     samFile *in;
-    char *arg_list = stringify_argv(argc+1, argv-1), *external = NULL;
+    char *arg_list = NULL, *external = NULL;
 
     static const struct option lopts[] = {
         {"help",     no_argument, NULL, 'h'},
@@ -551,7 +548,7 @@ int main_reheader(int argc, char *argv[])
 
     while ((c = getopt_long(argc, argv, "hiPc:", lopts, NULL)) >= 0) {
         switch (c) {
-        case 'P': add_PG = 0; break;
+        case 'P': no_pg = 1; break;
         case 'i': inplace = 1; break;
         case 'c': external = optarg; break;
         case 'h': usage(stdout, 0); break;
@@ -563,6 +560,11 @@ int main_reheader(int argc, char *argv[])
 
     if ((argc - optind != 2 || external) && (argc - optind != 1 || !external))
         usage(stderr, 1);
+
+    if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
+         print_error("reheader", "failed to create arg_list");
+         return 1;
+     }
 
     if (external) {
         skip_header = 1;
@@ -603,13 +605,13 @@ int main_reheader(int argc, char *argv[])
             print_error("reheader", "cannot reheader BAM '%s' in-place", argv[optind+1]);
             r = -1;
         } else {
-            r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG, skip_header);
+            r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, no_pg, skip_header);
         }
     } else if (hts_get_format(in)->format == cram) {
         if (inplace)
-            r = cram_reheader_inplace(in->fp.cram, h, arg_list, add_PG);
+            r = cram_reheader_inplace(in->fp.cram, h, arg_list, no_pg);
         else
-            r = cram_reheader(in->fp.cram, h, arg_list, add_PG);
+            r = cram_reheader(in->fp.cram, h, arg_list, no_pg);
     } else {
         print_error("reheader", "input file '%s' must be BAM or CRAM", argv[optind+1]);
         r = -1;

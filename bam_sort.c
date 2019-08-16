@@ -947,13 +947,17 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
   @param  cmd         command name (used in print_error() etc)
   @param  in_fmt      format options for input files
   @param  out_fmt     output file format and options
+  @param  write_index create the index, together with the output file
+  @param  arg_list    command string for PG line
+  @param  no_pg       if 1, do not add a new PG line
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
 int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *mode,
                     const char *headers, int n, char * const *fn, char * const *fn_idx,
                     int flag, const char *reg, int n_threads, const char *cmd,
-                    const htsFormat *in_fmt, const htsFormat *out_fmt, int write_index)
+                    const htsFormat *in_fmt, const htsFormat *out_fmt, int write_index,
+                    char *arg_list, int no_pg)
 {
     samFile *fpout, **fp = NULL;
     heap1_t *heap = NULL;
@@ -1206,6 +1210,15 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         print_error_errno(cmd, "failed to create \"%s\"", out);
         return -1;
     }
+    if (!no_pg && sam_hdr_add_pg(hout, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL)) {
+        print_error(cmd, "failed to add PG line to the header of \"%s\"", out);
+        sam_close(fpout);
+        return -1;
+    }
     if (sam_hdr_write(fpout, hout) != 0) {
         print_error_errno(cmd, "failed to write header to \"%s\"", out);
         sam_close(fpout);
@@ -1321,7 +1334,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
     strcpy(mode, "wb");
     if (flag & MERGE_UNCOMP) strcat(mode, "0");
     else if (flag & MERGE_LEVEL1) strcat(mode, "1");
-    return bam_merge_core2(by_qname, NULL, out, mode, headers, n, fn, NULL, flag, reg, 0, "merge", NULL, NULL, 0);
+    return bam_merge_core2(by_qname, NULL, out, mode, headers, n, fn, NULL, flag, reg, 0, "merge", NULL, NULL, 0, NULL, 1);
 }
 
 static void merge_usage(FILE *to)
@@ -1343,7 +1356,8 @@ static void merge_usage(FILE *to)
 "  -p         Combine @PG headers with colliding IDs [alter IDs to be distinct]\n"
 "  -s VALUE   Override random seed\n"
 "  -b FILE    List of input BAM filenames, one per line [null]\n"
-"  -X         Use customized index files\n");
+"  -X         Use customized index files\n"
+"  --no-PG    do not add a PG line\n");
     sam_global_opt_help(to, "-.O..@.");
 }
 
@@ -1351,16 +1365,17 @@ int bam_merge(int argc, char *argv[])
 {
     int c, is_by_qname = 0, flag = 0, ret = 0, level = -1, has_index_file = 0;
     char *fn_headers = NULL, *reg = NULL, mode[12];
-    char *sort_tag = NULL;
+    char *sort_tag = NULL, *arg_list = NULL;
     long random_seed = (long)time(NULL);
     char** fn = NULL;
     char** fn_idx = NULL;
-    int fn_size = 0;
+    int fn_size = 0, no_pg = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         { "threads", required_argument, NULL, '@' },
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
@@ -1406,7 +1421,7 @@ int bam_merge(int argc, char *argv[])
             }
             break;
         }
-
+        case 1: no_pg = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
         case '?': merge_usage(stderr); return 1;
@@ -1415,6 +1430,11 @@ int bam_merge(int argc, char *argv[])
     if ( argc - optind < 1 ) {
         print_error("merge", "You must at least specify the output file");
         merge_usage(stderr);
+        return 1;
+    }
+
+    if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
+        print_error("merge", "failed to create arg_list");
         return 1;
     }
 
@@ -1462,7 +1482,7 @@ int bam_merge(int argc, char *argv[])
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
     if (bam_merge_core2(is_by_qname, sort_tag, argv[optind], mode, fn_headers,
                         fn_size+nargcfiles, fn, fn_idx, flag, reg, ga.nthreads,
-                        "merge", &ga.in, &ga.out, ga.write_index) < 0)
+                        "merge", &ga.in, &ga.out, ga.write_index, arg_list, no_pg) < 0)
         ret = 1;
 
 end:
@@ -1473,6 +1493,7 @@ end:
     free(fn);
     free(fn_idx);
     free(reg);
+    free(arg_list);
     sam_global_args_free(&ga);
     return ret;
 }
@@ -1530,7 +1551,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
                             int n, char * const *fn, int num_in_mem,
                             buf_region *in_mem, bam1_tag *buf, int n_threads,
                             const char *cmd, const htsFormat *in_fmt,
-                            const htsFormat *out_fmt) {
+                            const htsFormat *out_fmt, char *arg_list, int no_pg) {
     samFile *fpout = NULL, **fp = NULL;
     heap1_t *heap = NULL;
     uint64_t idx = 0;
@@ -1588,6 +1609,16 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     // Open output file and write header
     if ((fpout = sam_open_format(out, mode, out_fmt)) == 0) {
         print_error_errno(cmd, "failed to create \"%s\"", out);
+        return -1;
+    }
+
+    if (!no_pg && sam_hdr_add_pg(hout, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL)) {
+        print_error(cmd, "failed to add PG line to the header of \"%s\"", out);
+        sam_close(fpout);
         return -1;
     }
 
@@ -1771,12 +1802,20 @@ typedef struct {
 
 // Returns 0 for success
 //        -1 for failure
-static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *buf, const sam_hdr_t *h, int n_threads, const htsFormat *fmt)
+static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *buf,
+        const sam_hdr_t *h, int n_threads, const htsFormat *fmt, char *arg_list, int no_pg)
 {
     size_t i;
     samFile* fp;
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
+    if (!no_pg && sam_hdr_add_pg((sam_hdr_t *)h, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL)) {
+        goto fail;
+    }
     if (sam_hdr_write(fp, (sam_hdr_t *)h) != 0) goto fail;
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i) {
@@ -1884,10 +1923,10 @@ static void *worker(void *data)
             return 0;
         }
 
-        if (write_buffer(name, "wcx1", w->buf_len, w->buf, w->h, 0, &fmt) < 0)
+        if (write_buffer(name, "wcx1", w->buf_len, w->buf, w->h, 0, &fmt, NULL, 1) < 0)
             w->error = errno;
     } else {
-        if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL) < 0)
+        if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL, NULL, 1) < 0)
             w->error = errno;
     }
 
@@ -1957,6 +1996,8 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
   @param  max_mem  approxiate maximum memory (very inaccurate)
   @param  in_fmt   input file format options
   @param  out_fmt  output file format and options
+  @param  arg_list    command string for PG line
+  @param  no_pg       if 1, do not add a new PG line
   @return 0 for successful sorting, negative on errors
 
   @discussion It may create multiple temporary subalignment files
@@ -1966,7 +2007,7 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
 int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const char *prefix,
                       const char *fnout, const char *modeout,
                       size_t _max_mem, int n_threads,
-                      const htsFormat *in_fmt, const htsFormat *out_fmt)
+                      const htsFormat *in_fmt, const htsFormat *out_fmt, char *arg_list, int no_pg)
 {
     int ret = -1, res, i, n_files = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
@@ -2104,7 +2145,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
 
     // write the final output
     if (n_files == 0 && num_in_mem < 2) { // a single block
-        if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt) != 0) {
+        if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt, arg_list, no_pg) != 0) {
             print_error_errno("sort", "failed to create \"%s\"", fnout);
             goto err;
         }
@@ -2121,7 +2162,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         }
         if (bam_merge_simple(is_by_qname, sort_by_tag, fnout, modeout, header,
                              n_files, fns, num_in_mem, in_mem, buf,
-                             n_threads, "sort", in_fmt, out_fmt) < 0) {
+                             n_threads, "sort", in_fmt, out_fmt, arg_list, no_pg) < 0) {
             // Propagate bam_merge_simple() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             goto err;
@@ -2157,7 +2198,7 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
     char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
     if (!fnout) return -1;
     sprintf(fnout, "%s.bam", prefix);
-    ret = bam_sort_core_ext(is_by_qname, NULL, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL);
+    ret = bam_sort_core_ext(is_by_qname, NULL, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL, NULL, 1);
     free(fnout);
     return ret;
 }
@@ -2172,7 +2213,8 @@ static void sort_usage(FILE *fp)
 "  -n         Sort by read name\n"
 "  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
-"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n");
+"  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
+"  --no-PG    do not add a PG line\n");
     sam_global_opt_help(fp, "-.O..@");
 }
 
@@ -2196,8 +2238,8 @@ static void complain_about_memory_setting(size_t max_mem) {
 int bam_sort(int argc, char *argv[])
 {
     size_t max_mem = SORT_DEFAULT_MEGS_PER_THREAD << 20;
-    int c, nargs, is_by_qname = 0, ret, o_seen = 0, level = -1;
-    char* sort_tag = NULL;
+    int c, nargs, is_by_qname = 0, ret, o_seen = 0, level = -1, no_pg = 0;
+    char* sort_tag = NULL, *arg_list = NULL;
     char *fnout = "-", modeout[12];
     kstring_t tmpprefix = { 0, 0, NULL };
     struct stat st;
@@ -2206,6 +2248,7 @@ int bam_sort(int argc, char *argv[])
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         { "threads", required_argument, NULL, '@' },
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
@@ -2224,6 +2267,7 @@ int bam_sort(int argc, char *argv[])
             }
         case 'T': kputs(optarg, &tmpprefix); break;
         case 'l': level = atoi(optarg); break;
+        case 1: no_pg = 1; break;
 
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
@@ -2245,6 +2289,11 @@ int bam_sort(int argc, char *argv[])
         sort_usage(stderr);
         ret = EXIT_FAILURE;
         goto sort_end;
+    }
+
+    if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
+        print_error("sort", "failed to create arg_list");
+        return 1;
     }
 
     if (max_mem < (SORT_MIN_MEGS_PER_THREAD << 20)) {
@@ -2269,7 +2318,7 @@ int bam_sort(int argc, char *argv[])
 
     ret = bam_sort_core_ext(is_by_qname, sort_tag, (nargs > 0)? argv[optind] : "-",
                             tmpprefix.s, fnout, modeout, max_mem, ga.nthreads,
-                            &ga.in, &ga.out);
+                            &ga.in, &ga.out, arg_list, no_pg);
     if (ret >= 0)
         ret = EXIT_SUCCESS;
     else {
@@ -2284,6 +2333,7 @@ int bam_sort(int argc, char *argv[])
 
 sort_end:
     free(tmpprefix.s);
+    free(arg_list);
     sam_global_args_free(&ga);
 
     return ret;

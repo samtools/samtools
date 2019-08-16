@@ -422,13 +422,15 @@ int main_pad2unpad(int argc, char *argv[])
     samFile *in = 0, *out = 0;
     sam_hdr_t *h = 0, *h_fix = 0;
     faidx_t *fai = 0;
-    int c, compress_level = -1, is_long_help = 0;
+    int c, compress_level = -1, is_long_help = 0, no_pg = 0;
     char in_mode[5], out_mode[6], *fn_out = 0, *fn_list = 0, *fn_out_idx = NULL;
     int ret=0;
+    char *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 'T', '-'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
@@ -450,6 +452,7 @@ int main_pad2unpad(int argc, char *argv[])
             if (ga.out.format == unknown_format)
                 hts_parse_format(&ga.out, "bam");
             break;
+        case 1: no_pg = 1; break;
         case '?': is_long_help = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n\n", c);
@@ -509,6 +512,24 @@ int main_pad2unpad(int argc, char *argv[])
     if (ga.out.format == cram)
         hts_set_opt(out, CRAM_OPT_NO_REF, 1);
 
+    if (!no_pg) {
+        if(!(arg_list = stringify_argv(argc+1, argv-1))) {
+            fprintf(stderr, "[depad] failed to create arg_list\n");
+            ret = 1;
+            goto depad_end;
+            }
+
+        if (sam_hdr_add_pg(h_fix, "samtools",
+                           "VN", samtools_version(),
+                           arg_list ? "CL": NULL,
+                           arg_list ? arg_list : NULL,
+                           NULL)) {
+            fprintf(stderr, "[depad] failed to add PG line to header\n");
+            ret = 1;
+            goto depad_end;
+        }
+    }
+
     if (sam_hdr_write(out, h_fix) != 0) {
         fprintf(stderr, "[depad] failed to write header.\n");
         ret = 1;
@@ -533,6 +554,7 @@ int main_pad2unpad(int argc, char *argv[])
 
 depad_end:
     // close files, free and return
+    free(arg_list);
     if (fai) fai_destroy(fai);
     if (h) sam_hdr_destroy(h);
     if (h_fix && h_fix != h) sam_hdr_destroy(h_fix);
@@ -560,6 +582,7 @@ static int usage(int is_long_help)
     fprintf(stderr, "  -T, --reference FILE\n");
     fprintf(stderr, "               Padded reference sequence file [null]\n");
     fprintf(stderr, "  -o FILE      Output file name [stdout]\n");
+    fprintf(stderr, "  --no-PG      do not add a PG line\n");
     fprintf(stderr, "  -?           Longer help\n");
     sam_global_opt_help(stderr, "-...--.");
 
