@@ -164,8 +164,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
 KSORT_INIT(heap, heap1_t, heap_lt)
 
 typedef struct merged_header {
-    kstring_t     out_hd;
-    kstring_t     out_sq;
+    sam_hdr_t    *hdr;
     kstring_t     out_rg;
     kstring_t     out_pg;
     kstring_t     out_co;
@@ -186,80 +185,6 @@ typedef struct trans_tbl {
     kh_c2c_t* pg_trans;
     bool lost_coord_sort;
 } trans_tbl_t;
-
-/* Something to look like a regmatch_t */
-typedef struct hdr_match {
-    ptrdiff_t rm_so;
-    ptrdiff_t rm_eo;
-} hdr_match_t;
-
-/*
- * Search for header lines of a particular record type.
- *
- * This replaces a regex search for something like /^@SQ.*\tSN:([^\t]+).*$/
- * but is much quicker.  The locations found are returned in *matches,
- * which has a signature the same as that of a regmatch_t.
- *
- * rec is the record type to match (i.e. @HD, @SQ, @PG or @RG)
- * tag is a tag type in the record to match (SN for @SQ, ID for @PG or @RG)
- *
- * The location of the record (if found) is returned in matches[0]
- * If tag is not NULL, the record is searched for the presence of the
- * given tag.  If found, the location of the value is returned in matches[1].
- * If the tag isn't found then the record is ignored and the search resumes
- * on the next header line.
- *
- * For simplicity, some assumptions are made about rec and tag:
- *   rec should include the leading '@' sign and be three characters long.
- *   tag should be exactly two characters long.
- * These are always string constants when this is called below, so we don't
- * bother to check here.
- *
- * Returns 0 if a match was found, -1 if not.
- */
-
-
-static int hdr_line_match(const char *text, const char *rec,
-                          const char *tag,  hdr_match_t *matches) {
-    const char *line_start, *line_end = text;
-    const char *tag_start, *tag_end;
-
-    for (;;) {
-        // Find record, ensure either at start of text or follows '\n'
-        line_start = strstr(line_end, rec);
-        while (line_start && line_start > text && *(line_start - 1) != '\n') {
-            line_start = strstr(line_start + 3, rec);
-        }
-        if (!line_start) return -1;
-
-        // Find end of header line
-        line_end = strchr(line_start, '\n');
-        if (!line_end) line_end = line_start + strlen(line_start);
-
-        matches[0].rm_so = line_start - text;
-        matches[0].rm_eo = line_end - text;
-        if (!tag) return 0;  // Match found if not looking for tag.
-
-        for (tag_start = line_start + 3; tag_start < line_end; tag_start++) {
-            // Find possible tag start.  Hacky but quick.
-            while (*tag_start > '\n') tag_start++;
-
-            // Check it
-            if (tag_start[0] == '\t'
-                && strncmp(tag_start + 1, tag, 2) == 0
-                && tag_start[3] == ':') {
-                // Found tag, record location and return.
-                tag_end = tag_start + 4;
-                while (*tag_end && *tag_end != '\t' && *tag_end != '\n')
-                    ++tag_end;
-                matches[1].rm_so = tag_start - text + 4;
-                matches[1].rm_eo = tag_end - text;
-                return 0;
-            }
-        }
-        // Couldn't find tag, try again from end of current record.
-    }
-}
 
 static void trans_tbl_destroy(trans_tbl_t *tbl) {
     khiter_t iter;
@@ -299,6 +224,9 @@ static merged_header_t * init_merged_header() {
     merged_hdr = calloc(1, sizeof(*merged_hdr));
     if (merged_hdr == NULL) return NULL;
 
+    merged_hdr->hdr = sam_hdr_init();
+    if (!merged_hdr->hdr) goto fail;
+
     merged_hdr->targets_sz   = 16;
     merged_hdr->target_name = malloc(merged_hdr->targets_sz
                                      * sizeof(*merged_hdr->target_name));
@@ -326,6 +254,7 @@ static merged_header_t * init_merged_header() {
     kh_destroy(c2i, merged_hdr->sq_tids);
     free(merged_hdr->target_name);
     free(merged_hdr->target_len);
+    sam_hdr_destroy(merged_hdr->hdr);
     free(merged_hdr);
     return NULL;
 }
@@ -336,12 +265,6 @@ static merged_header_t * init_merged_header() {
 static inline int range_to_ks(const char *src, int from, int to,
                               kstring_t *dest) {
     return kputsn(src + from, to - from, dest) != to - from;
-}
-
-// Append a header line match to kstring
-static inline int match_to_ks(const char *src, const hdr_match_t *match,
-                              kstring_t *dest) {
-    return range_to_ks(src, match->rm_so, match->rm_eo, dest);
 }
 
 // Append a kstring to a kstring
@@ -385,48 +308,32 @@ static int gen_unique_id(char *prefix, khash_t(cset) *existing_ids,
  */
 
 static int trans_tbl_add_hd(merged_header_t* merged_hdr,
-                            bam_hdr_t *translate) {
-    hdr_match_t match = {0, 0};
+                            sam_hdr_t *translate) {
+    kstring_t hd_line = { 0, 0, NULL };
+    int res;
 
     // TODO: handle case when @HD needs merging.
     if (merged_hdr->have_hd) return 0;
 
-    if (hdr_line_match(translate->text, "@HD", NULL, &match) != 0) {
-        return 0;
+    res = sam_hdr_find_hd(translate, &hd_line);
+    if (res < -1) {
+        print_error("merge", "failed to get @HD line from header");
+        return -1;
     }
 
-    if (match_to_ks(translate->text, &match, &merged_hdr->out_hd)) goto memfail;
-    if (kputc('\n', &merged_hdr->out_hd) == EOF) goto memfail;
+    if (res < 0) // Not found
+        return 0;
+
+    if (sam_hdr_add_lines(merged_hdr->hdr, hd_line.s, hd_line.l) < 0) {
+        print_error("merge", "failed to add @HD line to new header");
+        free(hd_line.s);
+        return -1;
+    }
+
+    free(hd_line.s);
     merged_hdr->have_hd = true;
 
     return 0;
-
- memfail:
-    perror(__func__);
-    return -1;
-}
-
-static inline int grow_target_list(merged_header_t* merged_hdr) {
-    size_t     new_size;
-    char     **new_names;
-    uint32_t  *new_len;
-
-    new_size = merged_hdr->targets_sz * 2;
-    new_names = realloc(merged_hdr->target_name, sizeof(*new_names) * new_size);
-    if (!new_names) goto fail;
-    merged_hdr->target_name = new_names;
-
-    new_len = realloc(merged_hdr->target_len, sizeof(*new_len) * new_size);
-    if (!new_len) goto fail;
-    merged_hdr->target_len = new_len;
-
-    merged_hdr->targets_sz = new_size;
-
-    return 0;
-
- fail:
-    perror(__func__);
-    return -1;
 }
 
 /*
@@ -444,54 +351,48 @@ static inline int grow_target_list(merged_header_t* merged_hdr) {
  * Returns 0 on success, -1 on failure.
  */
 
-static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
+static int trans_tbl_add_sq(merged_header_t* merged_hdr, sam_hdr_t *translate,
                             trans_tbl_t* tbl) {
-
-    kstring_t *out_text = &merged_hdr->out_sq;
-    khash_t(c2i)* sq_tids = merged_hdr->sq_tids;
-    hdr_match_t *new_sq_matches = NULL;
-    char *text;
-    hdr_match_t matches[2];
     int32_t i;
-    int32_t old_n_targets = merged_hdr->n_targets;
-    khiter_t iter;
-    int min_tid = -1;
+    int min_tid = -1, res;
+    kstring_t sq_line = { 0, 0, NULL }, sq_sn = { 0, 0, NULL };
 
     // Fill in the tid part of the translation table, adding new targets
     // to the merged header as we go.
 
-    for (i = 0; i < translate->n_targets; ++i) {
-
-        // Check if it's a new target.
-        iter = kh_get(c2i, sq_tids, translate->target_name[i]);
-
-        if (iter == kh_end(sq_tids)) {
-            int ret;
-            // Append missing entries to out_hdr
-
-            if (merged_hdr->n_targets == merged_hdr->targets_sz) {
-                if (grow_target_list(merged_hdr)) goto fail;
-            }
-
-            merged_hdr->target_name[merged_hdr->n_targets] = strdup(translate->target_name[i]);
-            if (merged_hdr->target_name[merged_hdr->n_targets] == NULL) goto memfail;
-            merged_hdr->target_len[merged_hdr->n_targets] = translate->target_len[i];
-
-            // Record the new identifier for reference below,
-            // and when building the ttable for other inputs.
-            iter = kh_put(c2i, sq_tids,
-                          merged_hdr->target_name[merged_hdr->n_targets], &ret);
-            if (ret < 0) {
-                free(merged_hdr->target_name[merged_hdr->n_targets]);
-                goto memfail;
-            }
-            assert(ret > 0);  // Should not be in hash already.
-
-            kh_value(sq_tids, iter) = merged_hdr->n_targets;
-            tbl->tid_trans[i] = merged_hdr->n_targets++;
-        } else {
-            tbl->tid_trans[i] = kh_value(sq_tids, iter);
+    for (i = 0; i < sam_hdr_nref(translate); ++i) {
+        int trans_tid;
+        sq_sn.l = 0;
+        res = sam_hdr_find_tag_pos(translate, "SQ", i, "SN", &sq_sn);
+        if (res < 0) {
+            print_error("merge", "failed to get @SQ SN #%d from header", i + 1);
+            goto fail;
         }
+
+        trans_tid = sam_hdr_name2tid(merged_hdr->hdr, sq_sn.s);
+        if (trans_tid < -1) {
+            print_error("merge", "failed to lookup ref");
+            goto fail;
+        }
+
+        if (trans_tid < 0) {
+            // Append missing entries to out_hdr
+            sq_line.l = 0;
+            res = sam_hdr_find_line_id(translate, "SQ", "SN", sq_sn.s, &sq_line);
+            if (res < 0) {
+                print_error("merge", "failed to get @SQ SN:%s from header", sq_sn.s);
+                goto fail;
+            }
+
+            trans_tid = sam_hdr_nref(merged_hdr->hdr);
+
+            res = sam_hdr_add_lines(merged_hdr->hdr, sq_line.s, sq_line.l);
+            if (res < 0) {
+                print_error("merge", "failed to add @SQ SN:%s to new header", sq_sn.s);
+                goto fail;
+            }
+        }
+        tbl->tid_trans[i] = trans_tid;
 
         if (tbl->tid_trans[i] > min_tid) {
             min_tid = tbl->tid_trans[i];
@@ -500,78 +401,14 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
         }
     }
 
-    if (merged_hdr->n_targets == old_n_targets)
-        return 0;  // Everything done if no new targets.
+    free(sq_line.s);
+    free(sq_sn.s);
 
-    // Otherwise, find @SQ lines in translate->text for all newly added targets.
-
-    new_sq_matches = malloc((merged_hdr->n_targets - old_n_targets)
-                            * sizeof(*new_sq_matches));
-    if (new_sq_matches == NULL) goto memfail;
-
-    for (i = 0; i < merged_hdr->n_targets - old_n_targets; i++) {
-        new_sq_matches[i].rm_so = new_sq_matches[i].rm_eo = -1;
-    }
-
-    text = translate->text;
-    while (hdr_line_match(text, "@SQ", "SN", matches) == 0) {
-        // matches[0] is whole line, matches[1] is SN value.
-
-        // This is a bit disgusting, but avoids a copy...
-        char c = text[matches[1].rm_eo];
-        int idx;
-
-        text[matches[1].rm_eo] = '\0';
-
-        // Look up the SN value in the sq_tids hash.
-        iter = kh_get(c2i, sq_tids, text + matches[1].rm_so);
-        text[matches[1].rm_eo] = c; // restore text
-
-        if (iter == kh_end(sq_tids)) {
-            // Warn about this, but it's not really fatal.
-            fprintf(stderr, "[W::%s] @SQ SN (%.*s) found in text header but not binary header.\n",
-                    __func__,
-                    (int) (matches[1].rm_eo - matches[1].rm_so),
-                    text + matches[1].rm_so);
-            text += matches[0].rm_eo;
-            continue;  // Skip to next
-        }
-
-        idx = kh_value(sq_tids, iter);
-        if (idx >= old_n_targets) {
-            // is a new SQ, so record position so we can add it to out_text.
-            assert(idx < merged_hdr->n_targets);
-            ptrdiff_t off = text - translate->text;
-            new_sq_matches[idx - old_n_targets].rm_so = matches[0].rm_so + off;
-            new_sq_matches[idx - old_n_targets].rm_eo = matches[0].rm_eo + off;
-        }
-
-        // Carry on searching from end of current match
-        text += matches[0].rm_eo;
-    }
-
-    // Copy the @SQ headers found and recreate any missing from binary header.
-    for (i = 0; i < merged_hdr->n_targets - old_n_targets; i++) {
-        if (new_sq_matches[i].rm_so >= 0) {
-            if (match_to_ks(translate->text, &new_sq_matches[i], out_text))
-                goto memfail;
-            if (kputc('\n', out_text) == EOF) goto memfail;
-        } else {
-            if (kputs("@SQ\tSN:", out_text) == EOF ||
-                kputs(merged_hdr->target_name[i + old_n_targets], out_text) == EOF ||
-                kputs("\tLN:", out_text) == EOF ||
-                kputuw(merged_hdr->target_len[i + old_n_targets], out_text) == EOF ||
-                kputc('\n', out_text) == EOF) goto memfail;
-        }
-    }
-
-    free(new_sq_matches);
     return 0;
 
- memfail:
-    perror(__func__);
  fail:
-    free(new_sq_matches);
+    free(sq_line.s);
+    free(sq_sn.s);
     return -1;
 }
 
@@ -592,29 +429,30 @@ static int trans_tbl_add_sq(merged_header_t* merged_hdr, bam_hdr_t *translate,
  *
  */
 
-static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
+static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
                                     bool merge, khash_t(cset)* known_ids,
                                     khash_t(c2c)* id_map, char *override) {
-    hdr_match_t matches[2];
     khiter_t iter;
-    const char *text = translate->text;
-    const char *rec_type = is_rg ? "@RG" : "@PG";
+    int num_ids, i;
+    const char *rec_type = is_rg ? "RG" : "PG";
     klist_t(hdrln) *hdr_lines;
 
     hdr_lines = kl_init(hdrln);
 
     // Search through translate's header
-    while (hdr_line_match(text, rec_type, "ID", matches) == 0) {
-        // matches[0] is the whole @RG/PG line; matches[1] is the ID field value
+    num_ids = sam_hdr_count_lines(translate, rec_type);
+    if (num_ids < 0)
+        goto fail;
 
+    for (i = 0; i < num_ids; i++) {
         kstring_t orig_id = { 0, 0, NULL };        // ID in original header
         kstring_t transformed_id = { 0, 0, NULL }; // ID in output header
         char *map_value;    // Value to store in id_map
         bool id_changed;    // Have we changed the ID?
         bool not_found_in_output; // ID isn't in the output header (yet)
 
-        // Take a copy of the ID as we'll need it for a hash key.
-        if (match_to_ks(text, &matches[1], &orig_id)) goto memfail;
+        if (sam_hdr_find_tag_pos(translate, rec_type, i, "ID", &orig_id) < 0)
+            goto fail;
 
         // is our matched ID in our output ID set already?
         iter = kh_get(cset, known_ids, ks_str(&orig_id));
@@ -651,18 +489,38 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
 
         // Does this line need to go into our output header?
         if (not_found_in_output) {
-
             // Take matched line and replace ID with transformed_id
             kstring_t new_hdr_line = { 0, 0, NULL };
+            if (sam_hdr_find_line_id(translate, rec_type,
+                                     "ID", ks_str(&orig_id), &new_hdr_line) < 0){
+                goto fail;
+            }
 
-            if (!id_changed) { // Can just copy
-                if (match_to_ks(text, &matches[0], &new_hdr_line)) goto memfail;
-            } else { // Substitute new name for original
-                if (range_to_ks(text, matches[0].rm_so, matches[1].rm_so,
-                                &new_hdr_line)) goto memfail;
-                if (ks_to_ks(&transformed_id, &new_hdr_line)) goto memfail;
-                if (range_to_ks(text, matches[1].rm_eo, matches[0].rm_eo,
-                                &new_hdr_line)) goto memfail;
+            if (id_changed) {
+                char *idp = strstr(ks_str(&new_hdr_line), "\tID:"), *id_end;
+                ptrdiff_t id_offset, id_len;
+                if (!idp) {
+                    print_error("merge", "failed to find ID in \"%s\"\n",
+                                ks_str(&new_hdr_line));
+                    goto fail;
+                }
+                idp += 4;
+                for (id_end = idp; *id_end >= '\n'; id_end++) {}
+
+                id_offset = idp - new_hdr_line.s;
+                id_len = id_end - idp;
+
+                if (id_len < transformed_id.l) {
+                    if (ks_resize(&new_hdr_line, new_hdr_line.l + transformed_id.l - id_len))
+                        goto fail;
+                }
+                if (id_len != transformed_id.l) {
+                    memmove(new_hdr_line.s + id_offset + transformed_id.l,
+                            new_hdr_line.s + id_offset + id_len,
+                            new_hdr_line.l - id_offset - id_len + 1);
+                }
+                memcpy(new_hdr_line.s + id_offset, transformed_id.s,
+                       transformed_id.l);
             }
 
             // append line to output linked list
@@ -686,8 +544,6 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
         int in_there = 0;
         iter = kh_put(c2c, id_map, ks_release(&orig_id), &in_there);
         kh_value(id_map, iter) = map_value;
-
-        text += matches[0].rm_eo; // next!
     }
 
     // If there are no RG lines in the file and we are overriding add one
@@ -724,6 +580,7 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, bam_hdr_t *translate,
 
  memfail:
     perror(__func__);
+ fail:
     if (hdr_lines) kl_destroy(hdrln, hdr_lines);
     return NULL;
 }
@@ -821,16 +678,18 @@ static int finish_rg_pg(bool is_rg, klist_t(hdrln) *hdr_lines,
  * Returns 0 on success, -1 on failure.
  */
 
-static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
+static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
                           trans_tbl_t* tbl, bool merge_rg, bool merge_pg,
                           bool copy_co, char* rg_override)
 {
+    kstring_t lines = { 0, 0, NULL };
     klist_t(hdrln) *rg_list = NULL;
     klist_t(hdrln) *pg_list = NULL;
 
-    tbl->n_targets = translate->n_targets;
+    tbl->n_targets = sam_hdr_nref(translate);
     tbl->rg_trans = tbl->pg_trans = NULL;
-    tbl->tid_trans = (int*)calloc(translate->n_targets, sizeof(int));
+    tbl->tid_trans = (int*)calloc(tbl->n_targets ? tbl->n_targets : 1,
+                                  sizeof(int));
     if (tbl->tid_trans == NULL) goto memfail;
     tbl->rg_trans = kh_init(c2c);
     if (tbl->rg_trans == NULL) goto memfail;
@@ -859,6 +718,7 @@ static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
         goto fail;
 
     // Fix-up PP: tags in the new @PG records and add to output
+    lines.l = 0;
     if (finish_rg_pg(false, pg_list, tbl->pg_trans, &merged_hdr->out_pg))
         goto fail;
 
@@ -867,21 +727,21 @@ static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
 
     if (copy_co) {
         // Just append @CO headers without translation
-        const char *line, *end_pointer;
-        for (line = translate->text; *line; line = end_pointer + 1) {
-            end_pointer = strchr(line, '\n');
-            if (strncmp(line, "@CO", 3) == 0) {
-                if (end_pointer) {
-                    if (kputsn(line, end_pointer - line + 1, &merged_hdr->out_co) == EOF)
-                        goto memfail;
-                } else { // Last line with no trailing '\n'
-                    if (kputs(line, &merged_hdr->out_co) == EOF) goto memfail;
-                    if (kputc('\n', &merged_hdr->out_co) == EOF) goto memfail;
-                }
-            }
-            if (end_pointer == NULL) break;
+        int num_co = sam_hdr_count_lines(translate, "CO"), i;
+        if (num_co < 0)
+            goto fail;
+
+        for (i = 0; i < num_co; i++) {
+            if (sam_hdr_find_line_pos(translate, "CO", i, &lines) < 0)
+                goto fail;
+            if (ks_to_ks(&lines, &merged_hdr->out_co))
+                goto fail;
+            if (kputc('\n', &merged_hdr->out_co) < 0)
+                goto fail;
         }
     }
+
+    free(lines.s);
 
     return 0;
 
@@ -891,80 +751,22 @@ static int trans_tbl_init(merged_header_t* merged_hdr, bam_hdr_t* translate,
     trans_tbl_destroy(tbl);
     if (rg_list) kl_destroy(hdrln, rg_list);
     if (pg_list) kl_destroy(hdrln, pg_list);
+    free(lines.s);
     return -1;
 }
 
-static inline void move_kstr_to_text(char **text, kstring_t *ks) {
-    memcpy(*text, ks_str(ks), ks_len(ks));
-    *text += ks_len(ks);
-    **text = '\0';
-    free(ks_release(ks));
-}
+static int finish_merged_header(merged_header_t *merged_hdr) {
+    if (sam_hdr_add_lines(merged_hdr->hdr, ks_str(&merged_hdr->out_rg),
+                          ks_len(&merged_hdr->out_rg)) < 0)
+        return -1;
+    if (sam_hdr_add_lines(merged_hdr->hdr, ks_str(&merged_hdr->out_pg),
+                          ks_len(&merged_hdr->out_pg)) < 0)
+        return -1;
+    if (sam_hdr_add_lines(merged_hdr->hdr, ks_str(&merged_hdr->out_co),
+                          ks_len(&merged_hdr->out_co)) < 0)
+        return -1;
 
-/*
- * Populate a bam_hdr_t struct from data in a merged_header_t.
- */
-
-static bam_hdr_t * finish_merged_header(merged_header_t *merged_hdr) {
-    size_t     txt_sz;
-    char      *text;
-    bam_hdr_t *hdr;
-
-    // Check output text size
-    txt_sz = (ks_len(&merged_hdr->out_hd)
-              + ks_len(&merged_hdr->out_sq)
-              + ks_len(&merged_hdr->out_rg)
-              + ks_len(&merged_hdr->out_pg)
-              + ks_len(&merged_hdr->out_co));
-    if (txt_sz >= INT32_MAX) {
-        fprintf(stderr, "[%s] Output header text too long\n", __func__);
-        return NULL;
-    }
-
-    // Allocate new header
-    hdr = bam_hdr_init();
-    if (hdr == NULL) goto memfail;
-
-    // Transfer targets arrays to new header
-    hdr->n_targets = merged_hdr->n_targets;
-    if (hdr->n_targets > 0) {
-        // Try to shrink targets arrays to correct size
-        hdr->target_name = realloc(merged_hdr->target_name,
-                                   hdr->n_targets * sizeof(char*));
-        if (!hdr->target_name) hdr->target_name = merged_hdr->target_name;
-
-        hdr->target_len = realloc(merged_hdr->target_len,
-                                  hdr->n_targets * sizeof(uint32_t));
-        if (!hdr->target_len) hdr->target_len = merged_hdr->target_len;
-
-        // These have either been freed by realloc() or, in the unlikely
-        // event that failed, have had their ownership transferred to hdr
-        merged_hdr->target_name = NULL;
-        merged_hdr->target_len  = NULL;
-    }
-    else {
-        hdr->target_name = NULL;
-        hdr->target_len  = NULL;
-    }
-
-    // Allocate text
-    text = hdr->text = malloc(txt_sz + 1);
-    if (!text) goto memfail;
-
-    // Put header text in order @HD, @SQ, @RG, @PG, @CO
-    move_kstr_to_text(&text, &merged_hdr->out_hd);
-    move_kstr_to_text(&text, &merged_hdr->out_sq);
-    move_kstr_to_text(&text, &merged_hdr->out_rg);
-    move_kstr_to_text(&text, &merged_hdr->out_pg);
-    move_kstr_to_text(&text, &merged_hdr->out_co);
-    hdr->l_text = txt_sz;
-
-    return hdr;
-
- memfail:
-    perror(__func__);
-    bam_hdr_destroy(hdr);
-    return NULL;
+    return 0;
 }
 
 /*
@@ -979,8 +781,6 @@ static void free_merged_header(merged_header_t *merged_hdr) {
     size_t i;
     khiter_t iter;
     if (!merged_hdr) return;
-    free(ks_release(&merged_hdr->out_hd));
-    free(ks_release(&merged_hdr->out_sq));
     free(ks_release(&merged_hdr->out_rg));
     free(ks_release(&merged_hdr->out_pg));
     free(ks_release(&merged_hdr->out_co));
@@ -1157,13 +957,13 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
 {
     samFile *fpout, **fp = NULL;
     heap1_t *heap = NULL;
-    bam_hdr_t *hout = NULL;
-    bam_hdr_t *hin  = NULL;
+    sam_hdr_t *hout = NULL;
+    sam_hdr_t *hin  = NULL;
     int i, j, *RG_len = NULL;
     uint64_t idx = 0;
     char **RG = NULL;
     hts_itr_t **iter = NULL;
-    bam_hdr_t **hdr = NULL;
+    sam_hdr_t **hdr = NULL;
     trans_tbl_t *translation_tbl = NULL;
     int *rtrans = NULL;
     char *out_idx_fn = NULL;
@@ -1198,7 +998,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     if (!heap) goto mem_fail;
     iter = (hts_itr_t**)calloc(n, sizeof(hts_itr_t*));
     if (!iter) goto mem_fail;
-    hdr = (bam_hdr_t**)calloc(n, sizeof(bam_hdr_t*));
+    hdr = (sam_hdr_t**)calloc(n, sizeof(sam_hdr_t*));
     if (!hdr) goto mem_fail;
     translation_tbl = (trans_tbl_t*)calloc(n, sizeof(trans_tbl_t));
     if (!translation_tbl) goto mem_fail;
@@ -1235,7 +1035,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
 
     // open and read the header from each file
     for (i = 0; i < n; ++i) {
-        bam_hdr_t *hin;
+        sam_hdr_t *hin;
         fp[i] = sam_open_format(fn[i], "r", in_fmt);
         if (fp[i] == NULL) {
             print_error_errno(cmd, "fail to open \"%s\"", fn[i]);
@@ -1256,7 +1056,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         // TODO sam_itr_next() doesn't yet work for SAM files,
         // so for those keep the headers around for use with sam_read1()
         if (hts_get_format(fp[i])->format == sam) hdr[i] = hin;
-        else { bam_hdr_destroy(hin); hdr[i] = NULL; }
+        else { sam_hdr_destroy(hin); hdr[i] = NULL; }
 
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
@@ -1285,7 +1085,10 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     }
 
     // Transform the header into standard form
-    hout = finish_merged_header(merged_hdr);
+    if (finish_merged_header(merged_hdr) < 0)
+        goto fail;
+
+    hout = merged_hdr->hdr;
     if (!hout) return -1;  // FIXME: memory leak
 
     // If we're only merging a specified region move our iters to start at that point
@@ -1293,7 +1096,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         int tid, beg, end;
         const char *name_lim;
 
-        rtrans = rtrans_build(n, hout->n_targets, translation_tbl);
+        rtrans = rtrans_build(n, sam_hdr_nref(hout), translation_tbl);
         if (!rtrans) goto mem_fail;
 
         name_lim = hts_parse_reg(reg, &beg, &end);
@@ -1325,7 +1128,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
                 idx = sam_index_load(fp[i], fn[i]);
             }
             // (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
-            int mapped_tid = rtrans[i*hout->n_targets+tid];
+            int mapped_tid = rtrans[i*sam_hdr_nref(hout)+tid];
             if (idx == NULL) {
                 fprintf(stderr, "[%s] failed to load index for %s.  Random alignment retrieval only works for indexed BAM or CRAM files.\n",
                         __func__, fn[i]);
@@ -1469,11 +1272,11 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     for (i = 0; i < n; ++i) {
         trans_tbl_destroy(translation_tbl + i);
         hts_itr_destroy(iter[i]);
-        bam_hdr_destroy(hdr[i]);
+        sam_hdr_destroy(hdr[i]);
         sam_close(fp[i]);
     }
-    bam_hdr_destroy(hin);
-    bam_hdr_destroy(hout);
+    sam_hdr_destroy(hin);
+    sam_hdr_destroy(hout);
     free_merged_header(merged_hdr);
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     if (sam_close(fpout) < 0) {
@@ -1495,11 +1298,11 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     for (i = 0; i < n; ++i) {
         if (translation_tbl && translation_tbl[i].tid_trans) trans_tbl_destroy(translation_tbl + i);
         if (iter && iter[i]) hts_itr_destroy(iter[i]);
-        if (hdr && hdr[i]) bam_hdr_destroy(hdr[i]);
+        if (hdr && hdr[i]) sam_hdr_destroy(hdr[i]);
         if (fp && fp[i]) sam_close(fp[i]);
         if (heap && heap[i].entry.bam_record) bam_destroy1(heap[i].entry.bam_record);
     }
-    if (hout) bam_hdr_destroy(hout);
+    if (hout) sam_hdr_destroy(hout);
     free(RG);
     free(translation_tbl);
     free(hdr);
@@ -1689,7 +1492,7 @@ typedef struct {
 
 static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
                                 int num_in_mem, buf_region *in_mem,
-                                bam1_tag *buf, uint64_t *idx, bam_hdr_t *hout) {
+                                bam1_tag *buf, uint64_t *idx, sam_hdr_t *hout) {
     int i = heap->i, res;
     if (i < nfiles) { // read from file
         res = sam_read1(fp[i], hout, heap->entry.bam_record);
@@ -1723,7 +1526,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
 }
 
 static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
-                            const char *mode, bam_hdr_t *hout,
+                            const char *mode, sam_hdr_t *hout,
                             int n, char * const *fn, int num_in_mem,
                             buf_region *in_mem, bam1_tag *buf, int n_threads,
                             const char *cmd, const htsFormat *in_fmt,
@@ -1748,7 +1551,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
 
     // Open each file, read the header and put the first read into the heap
     for (i = 0; i < heap_size; i++) {
-        bam_hdr_t *hin;
+        sam_hdr_t *hin;
         heap1_t *h = &heap[i];
 
         if (i < n) {
@@ -1765,7 +1568,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
                 goto fail;
             }
             // ... and throw it away as we don't really need it
-            bam_hdr_destroy(hin);
+            sam_hdr_destroy(hin);
         }
 
         // Get a read into the heap
@@ -1960,7 +1763,7 @@ typedef struct {
     size_t buf_len;
     const char *prefix;
     bam1_tag *buf;
-    const bam_hdr_t *h;
+    const sam_hdr_t *h;
     int index;
     int error;
     int no_save;
@@ -1968,16 +1771,16 @@ typedef struct {
 
 // Returns 0 for success
 //        -1 for failure
-static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *buf, const bam_hdr_t *h, int n_threads, const htsFormat *fmt)
+static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *buf, const sam_hdr_t *h, int n_threads, const htsFormat *fmt)
 {
     size_t i;
     samFile* fp;
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
-    if (sam_hdr_write(fp, h) != 0) goto fail;
+    if (sam_hdr_write(fp, (sam_hdr_t *)h) != 0) goto fail;
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i) {
-        if (sam_write1(fp, h, buf[i].bam_record) < 0) goto fail;
+        if (sam_write1(fp, (sam_hdr_t *)h, buf[i].bam_record) < 0) goto fail;
     }
     if (sam_close(fp) < 0) return -1;
     return 0;
@@ -1989,7 +1792,7 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 #define NUMBASE 256
 #define STEP 8
 
-static int ks_radixsort(size_t n, bam1_tag *buf, const bam_hdr_t *h)
+static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
 {
     int curr = 0, ret = -1;
     ssize_t i;
@@ -1998,7 +1801,7 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const bam_hdr_t *h)
 
     for (i = 0; i < n; i++) {
         bam1_t *b = buf[i].bam_record;
-        int32_t tid = b->core.tid == -1 ? h->n_targets : b->core.tid;
+        int32_t tid = b->core.tid == -1 ? sam_hdr_nref(h) : b->core.tid;
         buf[i].u.pos = (uint64_t)tid<<32 | (b->core.pos+1)<<1 | bam_is_rev(b);
         if (max_pos < buf[i].u.pos)
             max_pos = buf[i].u.pos;
@@ -2093,7 +1896,7 @@ static void *worker(void *data)
 }
 
 static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
-                       const bam_hdr_t *h, int n_threads, buf_region *in_mem)
+                       const sam_hdr_t *h, int n_threads, buf_region *in_mem)
 {
     int i;
     size_t pos, rest;
@@ -2167,7 +1970,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
 {
     int ret = -1, res, i, n_files = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
-    bam_hdr_t *header = NULL;
+    sam_hdr_t *header = NULL;
     samFile *fp;
     bam1_tag *buf = NULL;
     bam1_t *b = bam_init1();
@@ -2210,14 +2013,15 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     else
         new_so = "coordinate";
 
-    if (sam_hdr_change_HD(header, "SO", new_so) != 0) {
-        print_error("sort",
-                    "failed to change sort order header to '%s'\n", new_so);
+    if ((-1 == sam_hdr_update_hd(header, "SO", new_so))
+     && (-1 == sam_hdr_add_line(header, "HD", "VN", SAM_FORMAT_VERSION, "SO", new_so, NULL))
+     ) {
+        print_error("sort", "failed to change sort order header to '%s'\n", new_so);
         goto err;
     }
-    if (sam_hdr_change_HD(header, "GO", NULL) != 0) {
-        print_error("sort",
-                    "failed to delete group order header\n");
+
+    if (-1 == sam_hdr_remove_tag_hd(header, "GO")) {
+        print_error("sort", "failed to delete group order header\n");
         goto err;
     }
 
@@ -2341,7 +2145,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     free(buf);
     free(bam_mem);
     free(in_mem);
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     if (fp) sam_close(fp);
     return ret;
 }

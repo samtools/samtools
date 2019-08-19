@@ -139,7 +139,7 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
     base_draw_aln(tv,  tid, pos);
     fputs("<html><head>",ptr->out);
     fprintf(ptr->out,"<title>%s:%d</title>",
-        tv->header->target_name[tid],
+        sam_hdr_tid2name(tv->header, tid),
         pos+1
         );
     //style
@@ -165,7 +165,7 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
     fputs("</head><body>",ptr->out);
 
       fprintf(ptr->out,"<div class='tviewbody'><div class='tviewtitle'>%s:%d</div>",
-        tv->header->target_name[tid],
+        sam_hdr_tid2name(tv->header, tid),
         pos+1
         );
 

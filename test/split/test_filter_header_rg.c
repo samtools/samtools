@@ -24,9 +24,12 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <config.h>
 
-#include "../../bam_split.c"
 #include "../test.h"
 #include <unistd.h>
+#include <stdbool.h>
+#include "samtools.h"
+#include "header.h"
+#include "textutils_internal.h"
 
 int line_cmp(const void *av, const void *bv) {
     const char *a = *(const char **) av;
@@ -81,48 +84,46 @@ bool hdrcmp(const char *hdr1, const char *hdr2) {
     return res;
 }
 
-void setup_test_1(bam_hdr_t** hdr_in)
+void setup_test_1(sam_hdr_t** hdr_in)
 {
-    *hdr_in = bam_hdr_init();
+    *hdr_in = sam_hdr_init();
     const char *test1 =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\tLN:1\n"
     "@RG\tID:fish\n";
-    (*hdr_in)->text = strdup(test1);
-    (*hdr_in)->l_text = strlen(test1);
+    sam_hdr_add_lines(*hdr_in, test1, 0);
 }
 
-bool check_test_1(const bam_hdr_t* hdr) {
+bool check_test_1(sam_hdr_t* hdr) {
     const char *test1_res =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\tLN:1\n"
     "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
 
-    if (hdrcmp(hdr->text, test1_res)) {
+    if (hdrcmp(sam_hdr_str(hdr), test1_res)) {
         return false;
     }
     return true;
 }
 
-void setup_test_2(bam_hdr_t** hdr_in)
+void setup_test_2(sam_hdr_t** hdr_in)
 {
-    *hdr_in = bam_hdr_init();
+    *hdr_in = sam_hdr_init();
     const char *test2 =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\tLN:1\n"
     "@RG\tID:fish\n";
-    (*hdr_in)->text = strdup(test2);
-    (*hdr_in)->l_text = strlen(test2);
+    sam_hdr_add_lines(*hdr_in, test2, 0);
 }
 
-bool check_test_2(const bam_hdr_t* hdr) {
+bool check_test_2(sam_hdr_t* hdr) {
     const char *test2_res =
     "@HD\tVN:1.4\n"
     "@SQ\tSN:blah\tLN:1\n"
     "@RG\tID:fish\n"
     "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
 
-    if (hdrcmp(hdr->text, test2_res)) {
+    if (hdrcmp(sam_hdr_str(hdr), test2_res)) {
         return false;
     }
     return true;
@@ -163,7 +164,7 @@ int main(int argc, char *argv[])
 
     // setup
     if (verbose) printf("BEGIN test 1\n");  // test eliminating a tag that isn't there
-    bam_hdr_t* hdr1;
+    sam_hdr_t* hdr1;
     const char* id_to_keep_1 = "1#2.3";
     setup_test_1(&hdr1);
     if (verbose > 1) {
@@ -174,7 +175,11 @@ int main(int argc, char *argv[])
 
     // test
     redirected_stderr = redirect_stderr(tempfname);
-    bool result_1 = filter_header_rg(hdr1, id_to_keep_1, arg_list);
+    bool result_1 = (!sam_hdr_remove_except(hdr1, "RG", "ID", id_to_keep_1) &&
+                     !sam_hdr_add_pg(hdr1, "samtools", "VN", samtools_version(),
+                                     arg_list ? "CL": NULL,
+                                     arg_list ? arg_list : NULL,
+                                     NULL));
     flush_and_restore_stderr(orig_stderr, redirected_stderr);
 
     if (verbose) printf("END RUN test 1\n");
@@ -198,11 +203,11 @@ int main(int argc, char *argv[])
     fclose(check);
 
     // teardown
-    bam_hdr_destroy(hdr1);
+    sam_hdr_destroy(hdr1);
     if (verbose) printf("END test 1\n");
 
     if (verbose) printf("BEGIN test 2\n");  // test eliminating a tag that is there
-    bam_hdr_t* hdr2;
+    sam_hdr_t* hdr2;
     const char* id_to_keep_2 = "fish";
     setup_test_2(&hdr2);
     if (verbose > 1) {
@@ -213,7 +218,11 @@ int main(int argc, char *argv[])
 
     // test
     redirected_stderr = redirect_stderr(tempfname);
-    bool result_2 = filter_header_rg(hdr2, id_to_keep_2, arg_list);
+    bool result_2 = (!sam_hdr_remove_except(hdr2, "RG", "ID", id_to_keep_2) &&
+            !sam_hdr_add_pg(hdr2, "samtools", "VN", samtools_version(),
+                                    arg_list ? "CL": NULL,
+                                    arg_list ? arg_list : NULL,
+                                    NULL));
     flush_and_restore_stderr(orig_stderr, redirected_stderr);
 
     if (verbose) printf("END RUN test 2\n");
@@ -237,7 +246,7 @@ int main(int argc, char *argv[])
     fclose(check);
 
     // teardown
-    bam_hdr_destroy(hdr2);
+    sam_hdr_destroy(hdr2);
     if (verbose) printf("END test 2\n");
 
 

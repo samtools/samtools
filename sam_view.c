@@ -69,12 +69,12 @@ typedef struct samview_settings {
 
 
 // TODO Add declarations of these to a viable htslib or samtools header
-extern const char *bam_get_library(bam_hdr_t *header, const bam1_t *b);
+extern const char *bam_get_library(sam_hdr_t *header, const bam1_t *b);
 extern int bam_remove_B(bam1_t *b);
 extern char *samfaipath(const char *fn_ref);
 
 // Returns 0 to indicate read should be output 1 otherwise
-static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
+static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
 {
     if (settings->remove_B) bam_remove_B(b);
     if (settings->min_qlen > 0) {
@@ -89,7 +89,7 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
         return 1;
-    if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, h->target_name[b->core.tid], b->core.pos, bam_endpos(b))))
+    if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, sam_hdr_tid2name(h, b->core.tid), b->core.pos, bam_endpos(b))))
         return 1;
     if (settings->subsam_frac > 0.) {
         uint32_t k = __ac_Wang_hash(__ac_X31_hash_string(bam_get_qname(b)) ^ settings->subsam_seed);
@@ -112,7 +112,7 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         }
     }
     if (settings->library) {
-        const char *p = bam_get_library((bam_hdr_t*)h, b);
+        const char *p = bam_get_library((sam_hdr_t*)h, b);
         if (!p || strcmp(p, settings->library) != 0) return 1;
     }
     if (settings->remove_aux_len) {
@@ -125,37 +125,6 @@ static int process_aln(const bam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         }
     }
     return 0;
-}
-
-static char *drop_rg(char *hdtxt, rghash_t h, int *len)
-{
-    char *p = hdtxt, *q, *r, *s;
-    kstring_t str;
-    memset(&str, 0, sizeof(kstring_t));
-    while (1) {
-        int toprint = 0;
-        q = strchr(p, '\n');
-        if (q == 0) q = p + strlen(p);
-        if (q - p < 3) break; // the line is too short; then stop
-        if (strncmp(p, "@RG\t", 4) == 0) {
-            int c;
-            khint_t k;
-            if ((r = strstr(p, "\tID:")) != 0) {
-                r += 4;
-                for (s = r; *s != '\0' && *s != '\n' && *s != '\t'; ++s);
-                c = *s; *s = '\0';
-                k = kh_get(rg, h, r);
-                *s = c;
-                if (k != kh_end(h)) toprint = 1;
-            }
-        } else toprint = 1;
-        if (toprint) {
-            kputsn(p, q - p, &str); kputc('\n', &str);
-        }
-        p = q + 1;
-    }
-    *len = str.l;
-    return str.s;
 }
 
 static int usage(FILE *fp, int exit_status, int is_long_help);
@@ -278,7 +247,7 @@ static int add_tag_values_file(const char *subcmd, samview_settings_t *settings,
     return (ret != -1) ? 0 : -1;
 }
 
-static inline int check_sam_write1(samFile *fp, const bam_hdr_t *h, const bam1_t *b, const char *fname, int *retp)
+static inline int check_sam_write1(samFile *fp, const sam_hdr_t *h, const bam1_t *b, const char *fname, int *retp)
 {
     int r = sam_write1(fp, h, b);
     if (r >= 0) return r;
@@ -296,7 +265,7 @@ int main_samview(int argc, char *argv[])
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
-    bam_hdr_t *header = NULL;
+    sam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
     char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
     char *fn_out_idx = NULL, *fn_un_out_idx = NULL;
@@ -538,13 +507,8 @@ int main_samview(int argc, char *argv[])
         ret = 1;
         goto view_end;
     }
-    if (settings.rghash) { // FIXME: I do not know what "bam_header_t::n_text" is for...
-        char *tmp;
-        int l;
-        tmp = drop_rg(header->text, settings.rghash, &l);
-        free(header->text);
-        header->text = tmp;
-        header->l_text = l;
+    if (settings.rghash) {
+        sam_hdr_remove_lines(header, "RG", "ID", settings.rghash);
     }
     if (!is_count) {
         if ((out = sam_open_format(fn_out? fn_out : "-", out_mode, &ga.out)) == 0) {
@@ -788,7 +752,7 @@ view_end:
 
     free(fn_list); free(fn_out); free(settings.library);  free(fn_un_out);
     sam_global_args_free(&ga);
-    if ( header ) bam_hdr_destroy(header);
+    if ( header ) sam_hdr_destroy(header);
     if (settings.bed) bed_destroy(settings.bed);
     if (settings.rghash) {
         khint_t k;

@@ -69,7 +69,7 @@ typedef struct {
         if ((c)->flag & BAM_FDUP) ++(s)->n_dup[w];                      \
     } while (0)
 
-bam_flagstat_t *bam_flagstat_core(samFile *fp, bam_hdr_t *h)
+bam_flagstat_t *bam_flagstat_core(samFile *fp, sam_hdr_t *h)
 {
     bam_flagstat_t *s;
     bam1_t *b;
@@ -103,7 +103,7 @@ static void usage_exit(FILE *fp, int exit_status)
 int bam_flagstat(int argc, char *argv[])
 {
     samFile *fp;
-    bam_hdr_t *header;
+    sam_hdr_t *header;
     bam_flagstat_t *s;
     char b0[16], b1[16];
     int c;
@@ -170,7 +170,7 @@ int bam_flagstat(int argc, char *argv[])
     printf("%lld + %lld with mate mapped to a different chr\n", s->n_diffchr[0], s->n_diffchr[1]);
     printf("%lld + %lld with mate mapped to a different chr (mapQ>=5)\n", s->n_diffhigh[0], s->n_diffhigh[1]);
     free(s);
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     sam_close(fp);
     sam_global_args_free(&ga);
     return 0;

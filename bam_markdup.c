@@ -478,7 +478,7 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe) {
 
 static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remove_dups, int32_t max_length,
                                int do_stats, int supp, int tag, char *out_fn, int write_index) {
-    bam_hdr_t *header = NULL;
+    sam_hdr_t *header = NULL;
     khiter_t k;
     khash_t(reads) *pair_hash        = kh_init(reads);
     khash_t(reads) *single_hash      = kh_init(reads);
@@ -504,19 +504,13 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
 
     // accept unknown, unsorted or coordinate sort order, but error on queryname sorted.
     // only really works on coordinate sorted files.
-    if ((header->l_text > 3) && (strncmp(header->text, "@HD", 3) == 0)) {
-        char *p, *q;
-
-       p = strstr(header->text, "\tSO:queryname");
-       q = strchr(header->text, '\n');
-
-       // looking for SO:queryname within @HD only
-       // (e.g. must ignore in a @CO comment line later in header)
-       if ((p != 0) && (p < q)) {
-           fprintf(stderr, "[markdup] error: queryname sorted, must be sorted by coordinate.\n");
-           goto fail;
-       }
+    kstring_t str = KS_INITIALIZE;
+    if (!sam_hdr_find_tag_hd(header, "SO", &str) && str.s && !strcmp(str.s, "queryname")) {
+        fprintf(stderr, "[markdup] error: queryname sorted, must be sorted by coordinate.\n");
+        ks_free(&str);
+        goto fail;
     }
+    ks_free(&str);
 
     if (sam_hdr_write(out, header) < 0) {
         fprintf(stderr, "[markdup] error writing header.\n");
@@ -945,7 +939,7 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
     kh_destroy(reads, single_hash);
     kl_destroy(read_queue, read_buffer);
     kh_destroy(duplicates, dup_hash);
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
 
     return 0;
 
@@ -963,7 +957,7 @@ static int bam_mark_duplicates(samFile *in, samFile *out, char *prefix, int remo
 
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     return 1;
 }
 

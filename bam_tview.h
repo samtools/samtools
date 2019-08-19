@@ -47,7 +47,7 @@ typedef struct AbstractTview {
 
     hts_idx_t* idx;
     bam_lplbuf_t* lplbuf;
-    bam_hdr_t* header;
+    sam_hdr_t* header;
     samFile* fp;
     int curr_tid, left_pos;
     faidx_t* fai;

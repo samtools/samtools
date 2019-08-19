@@ -49,7 +49,7 @@ typedef struct {
     int min_baseQ, tid, max_bases;
     uint16_t *bases;
     samFile *fp;
-    bam_hdr_t *h;
+    sam_hdr_t *h;
     char *ref;
     int len;
     faidx_t *fai;
@@ -92,7 +92,7 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
     return ret<<8|k;
 }
 
-static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
+static void process_cns(sam_hdr_t *h, int tid, int l, uint16_t *cns)
 {
     int i, f[2][2], *prev, *curr, *swap_tmp, s;
     uint8_t *b; // backtrack array
@@ -127,7 +127,7 @@ static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
         if (i == l || ((b[i]>>2&3) == 0 && s >= 0)) {
             if (s >= 0) {
                 int j;
-                printf("%s:%d-%d\t0\t%s\t%d\t60\t%dM\t*\t0\t0\t", h->target_name[tid], s+1, i, h->target_name[tid], s+1, i-s);
+                printf("%s:%d-%d\t0\t%s\t%d\t60\t%dM\t*\t0\t0\t", sam_hdr_tid2name(h, tid), s+1, i, sam_hdr_tid2name(h, tid), s+1, i-s);
                 for (j = s; j < i; ++j) {
                     int c = cns[j]>>8;
                     if (c == 0) putchar('N');
@@ -157,7 +157,7 @@ static int read_aln(void *data, bam1_t *b)
         if ( g->fai && b->core.tid >= 0 ) {
             if (b->core.tid != g->tid) { // then load the sequence
                 free(g->ref);
-                g->ref = fai_fetch(g->fai, g->h->target_name[b->core.tid], &g->len);
+                g->ref = fai_fetch(g->fai, sam_hdr_tid2name(g->h, b->core.tid), &g->len);
                 g->tid = b->core.tid;
             }
             sam_prob_realn(b, g->ref, g->len, 1<<1|1);
@@ -223,12 +223,12 @@ int main_cut_target(int argc, char *argv[])
         if (tid < 0) break;
         if (tid != lasttid) { // change of chromosome
             if (cns) process_cns(g.h, lasttid, l, cns);
-            if (max_l < g.h->target_len[tid]) {
-                max_l = g.h->target_len[tid];
+            if (max_l < sam_hdr_tid2len(g.h, tid)) {
+                max_l = sam_hdr_tid2len(g.h, tid);
                 kroundup32(max_l);
                 cns = realloc(cns, max_l * 2);
             }
-            l = g.h->target_len[tid];
+            l = sam_hdr_tid2len(g.h, tid);
             memset(cns, 0, max_l * 2);
             lasttid = tid;
         }
@@ -236,7 +236,7 @@ int main_cut_target(int argc, char *argv[])
     }
     process_cns(g.h, lasttid, l, cns);
     free(cns);
-    bam_hdr_destroy(g.h);
+    sam_hdr_destroy(g.h);
     bam_plp_destroy(plp);
     sam_close(g.fp);
     if (g.fai) {

@@ -29,15 +29,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <unistd.h>
 
-void setup_test_1(bam_hdr_t** hdr_in)
+void setup_test_1(sam_hdr_t** hdr_in)
 {
-    *hdr_in = bam_hdr_init();
+    *hdr_in = sam_hdr_init();
     const char *test1 =
     "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
+    "@SQ\tSN:blah\tLN:150\n"
     "@RG\tID:fish\n";
-    (*hdr_in)->text = strdup(test1);
-    (*hdr_in)->l_text = strlen(test1);
+    sam_hdr_add_lines(*hdr_in, test1, 0);
 }
 
 int main(int argc, char**argv)
@@ -73,7 +72,7 @@ int main(int argc, char**argv)
 
     // setup
     if (verbose) printf("BEGIN test 1\n");  // TID test
-    bam_hdr_t* hdr1;
+    sam_hdr_t* hdr1;
     size_t count;
     char** output;
     setup_test_1(&hdr1);
@@ -112,7 +111,7 @@ int main(int argc, char**argv)
         free(output[i]);
     }
     free(output);
-    bam_hdr_destroy(hdr1);
+    sam_hdr_destroy(hdr1);
     if (verbose) printf("END test 1\n");
 
     // Cleanup

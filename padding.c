@@ -32,7 +32,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/kstring.h>
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
-#include "sam_header.h"
 #include "sam_opts.h"
 #include "samtools.h"
 
@@ -111,7 +110,7 @@ static int unpad_seq(bam1_t *b, kstring_t *s)
     return length != s->l;
 }
 
-int load_unpadded_ref(faidx_t *fai, char *ref_name, int ref_len, kstring_t *seq)
+int load_unpadded_ref(faidx_t *fai, const char *ref_name, int ref_len, kstring_t *seq)
 {
     char base;
     char *fai_ref = 0;
@@ -145,7 +144,7 @@ int load_unpadded_ref(faidx_t *fai, char *ref_name, int ref_len, kstring_t *seq)
     return 0;
 }
 
-int get_unpadded_len(faidx_t *fai, char *ref_name, int padded_len)
+int get_unpadded_len(faidx_t *fai, const char *ref_name, int padded_len)
 {
     char base;
     char *fai_ref = 0;
@@ -189,7 +188,7 @@ static inline int * update_posmap(int *posmap, kstring_t ref)
     return posmap;
 }
 
-int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
+int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
 {
     bam1_t *b = 0;
     kstring_t r, q;
@@ -211,21 +210,21 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
 
         uint32_t *cigar = bam_get_cigar(b);
         n2 = 0;
-        if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam_get_qname(b), h->target_name[b->core.tid]) == 0) {
+        if (b->core.pos == 0 && b->core.tid >= 0 && strcmp(bam_get_qname(b), sam_hdr_tid2name(h, b->core.tid)) == 0) {
             // fprintf(stderr, "[depad] Found embedded reference '%s'\n", bam_get_qname(b));
             r_tid = b->core.tid;
             if (0!=unpad_seq(b, &r)) {
                 fprintf(stderr, "[depad] ERROR: Problem parsing SEQ and/or CIGAR in reference %s\n", bam_get_qname(b));
                 return -1;
             };
-            if (h->target_len[r_tid] != r.l) {
-                fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %u in BAM header, but %llu in embedded reference\n", bam_get_qname(b), h->target_len[r_tid], (unsigned long long)(r.l));
+            if (sam_hdr_tid2len(h, r_tid) != r.l) {
+                fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %u in BAM header, but %llu in embedded reference\n", bam_get_qname(b), sam_hdr_tid2len(h, r_tid), (unsigned long long)(r.l));
                 return -1;
             }
             if (fai) {
                 // Check the embedded reference matches the FASTA file
-                if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &q)) {
-                    fprintf(stderr, "[depad] ERROR: Failed to load embedded reference '%s' from FASTA\n", h->target_name[b->core.tid]);
+                if (load_unpadded_ref(fai, sam_hdr_tid2name(h, b->core.tid), sam_hdr_tid2len(h, b->core.tid), &q)) {
+                    fprintf(stderr, "[depad] ERROR: Failed to load embedded reference '%s' from FASTA\n", sam_hdr_tid2name(h, b->core.tid));
                     return -1;
                 }
                 assert(r.l == q.l);
@@ -234,7 +233,7 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
                     if (r.s[i] != q.s[i]) {
                         // Show gaps as ASCII 45
                         fprintf(stderr, "[depad] ERROR: Embedded sequence and reference FASTA don't match for %s base %i, '%c' vs '%c'\n",
-                            h->target_name[b->core.tid], i+1,
+                            sam_hdr_tid2name(h, b->core.tid), i+1,
                             r.s[i] ? seq_nt16_str[(int)r.s[i]] : 45,
                             q.s[i] ? seq_nt16_str[(int)q.s[i]] : 45);
                         return -1;
@@ -253,15 +252,15 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
                 ; // good case, reference available
                 //fprintf(stderr, "[depad] Have ref '%s' for read '%s'\n", h->target_name[b->core.tid], bam_get_qname(b));
             } else if (fai) {
-                if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
-                    fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
+                if (load_unpadded_ref(fai, sam_hdr_tid2name(h, b->core.tid), sam_hdr_tid2len(h, b->core.tid), &r)) {
+                    fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", sam_hdr_tid2name(h, b->core.tid));
                     return -1;
                 }
                 posmap = update_posmap(posmap, r);
                 r_tid = b->core.tid;
                 // fprintf(stderr, "[depad] Loaded %s from FASTA file\n", h->target_name[b->core.tid]);
             } else {
-                fprintf(stderr, "[depad] ERROR: Missing %s embedded reference sequence (and no FASTA file)\n", h->target_name[b->core.tid]);
+                fprintf(stderr, "[depad] ERROR: Missing %s embedded reference sequence (and no FASTA file)\n", sam_hdr_tid2name(h, b->core.tid));
                 return -1;
             }
             if (0!=unpad_seq(b, &q)) {
@@ -347,19 +346,19 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
             /* Nasty case, Must load alternative posmap */
             // fprintf(stderr, "[depad] Loading reference '%s' temporarily\n", h->target_name[b->core.mtid]);
             if (!fai) {
-                fprintf(stderr, "[depad] ERROR: Needed reference %s sequence for mate (and no FASTA file)\n", h->target_name[b->core.mtid]);
+                fprintf(stderr, "[depad] ERROR: Needed reference %s sequence for mate (and no FASTA file)\n", sam_hdr_tid2name(h, b->core.mtid));
                 return -1;
             }
             /* Temporarily load the other reference sequence */
-            if (load_unpadded_ref(fai, h->target_name[b->core.mtid], h->target_len[b->core.mtid], &r)) {
-                fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.mtid]);
+            if (load_unpadded_ref(fai, sam_hdr_tid2name(h, b->core.mtid), sam_hdr_tid2len(h, b->core.mtid), &r)) {
+                fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", sam_hdr_tid2name(h, b->core.mtid));
                 return -1;
             }
             posmap = update_posmap(posmap, r);
             b->core.mpos = posmap[b->core.mpos];
             /* Restore the reference and posmap*/
-            if (load_unpadded_ref(fai, h->target_name[b->core.tid], h->target_len[b->core.tid], &r)) {
-                fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", h->target_name[b->core.tid]);
+            if (load_unpadded_ref(fai, sam_hdr_tid2name(h, b->core.tid), sam_hdr_tid2len(h, b->core.tid), &r)) {
+                fprintf(stderr, "[depad] ERROR: Failed to load '%s' from reference FASTA\n", sam_hdr_tid2name(h, b->core.tid));
                 return -1;
             }
             posmap = update_posmap(posmap, r);
@@ -383,122 +382,36 @@ int bam_pad2unpad(samFile *in, samFile *out,  bam_hdr_t *h, faidx_t *fai)
     return ret;
 }
 
-bam_hdr_t * fix_header(bam_hdr_t *old, faidx_t *fai)
+sam_hdr_t * fix_header(sam_hdr_t *old, faidx_t *fai)
 {
-    int i = 0, unpadded_len = 0;
-    bam_hdr_t *header = 0 ;
-    unsigned short ln_found;
+    int i = 0, ret = 0, unpadded_len = 0;
+    sam_hdr_t *header = sam_hdr_dup(old);
+    if (!header)
+        return NULL;
 
-    header = bam_hdr_dup(old);
-    for (i = 0; i < old->n_targets; ++i) {
-        unpadded_len = get_unpadded_len(fai, old->target_name[i], old->target_len[i]);
+    int nref = sam_hdr_nref(old);
+    char len_buf[64];
+
+    for (i = 0; i < nref; ++i) {
+        unpadded_len = get_unpadded_len(fai, sam_hdr_tid2name(old, i), sam_hdr_tid2len(old, i));
         if (unpadded_len < 0) {
-            fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %i\n", old->target_name[i], old->target_len[i]);
+            fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %i\n", sam_hdr_tid2name(old, i), sam_hdr_tid2len(old, i));
+        } else if (unpadded_len > sam_hdr_tid2len(old, i)) {
+            fprintf(stderr, "[depad] New unpadded length of '%s' is larger than the padded length (%d > %i)\n", sam_hdr_tid2name(old, i), unpadded_len, sam_hdr_tid2len(old, i));
+            ret = 1;
         } else {
-            header->target_len[i] = unpadded_len;
+            sprintf(len_buf, "%d", unpadded_len);
+            if ((ret |= sam_hdr_update_line(header, "SQ", "SN", sam_hdr_tid2name(header, i), "LN", len_buf, NULL)))
+                fprintf(stderr, "[depad] Error updating length of '%s' from %d to %d\n", sam_hdr_tid2name(header, i), sam_hdr_tid2len(header, i), unpadded_len);
             //fprintf(stderr, "[depad] Recalculating '%s' length %i -> %i\n", old->target_name[i], old->target_len[i], header->target_len[i]);
         }
     }
-    /* Duplicating the header allocated new buffer for header string */
-    /* After modifying the @SQ lines it will only get smaller, since */
-    /* the LN entries will be the same or shorter, and we'll remove */
-    /* any MD entries (MD5 checksums). */
-    assert(strlen(old->text) == strlen(header->text));
-    assert (0==strcmp(old->text, header->text));
-    const char *text;
-    text = old->text;
-    header->text[0] = '\0'; /* Resuse the allocated buffer */
-    char * newtext = header->text;
-    char * end=NULL;
-    while (text[0]=='@') {
-        end = strchr(text, '\n');
-        assert(end != 0);
-        if (text[1]=='S' && text[2]=='Q' && text[3]=='\t') {
-            const char *cp = text+3;
-            char *name = strstr(text, "\tSN:");
-            char *name_end;
-            if (!name) {
-                fprintf(stderr, "Unable to find SN: header field\n");
-                return NULL;
-            }
-            name += 4;
-            for (name_end = name; name_end != end && *name_end != '\t'; name_end++);
-            strcat(newtext, "@SQ");
-            ln_found = 0;
 
-            /* Parse the @SQ lines */
-            while (cp != end) {
-                if (!ln_found && end-cp >= 2 && strncmp(cp, "LN", 2) == 0) {
-                    // Rewrite the length
-                    char len_buf[100];
-                    int tid;
-                    unsigned int old_length, new_length;
-                    const char *old_cp = cp;
-
-                    ln_found = 1;
-
-                    while (cp != end && *cp++ != '\t');
-                    old_length = (int)(cp - old_cp);
-
-                    for (tid = 0; tid < header->n_targets; tid++) {
-                        // may want to hash this, but new header API incoming.
-                        if (strncmp(name, header->target_name[tid], name_end - name) == 0) {
-                            new_length = sprintf(len_buf, "LN:%d", header->target_len[tid]);
-                            if (new_length <= old_length) {
-                                strcat(newtext, len_buf);
-                            }
-                            else {
-                                fprintf(stderr, "LN value of the reference is larger than the original!\n");
-                                exit(1);
-                            }
-                            break;
-                        }
-                    }
-
-                    if (cp != end)
-                        strcat(newtext, "\t");
-                } else if (end-cp >= 2 &&
-                           ((ln_found && strncmp(cp, "LN", 2) == 0) ||
-                            strncmp(cp, "M5", 2) == 0 ||
-                            strncmp(cp, "UR", 2) == 0))
-                {
-                    // skip secondary LNs
-                    // MD5 changed during depadding; ditch it.
-                    // URLs are also invalid.
-                    while (cp != end && *cp++ != '\t');
-                } else {
-                    // Otherwise copy this sub-field verbatim
-                    const char *cp_start = cp;
-                    while (cp != end && *cp++ != '\t');
-                    strncat(newtext, cp_start, cp-cp_start);
-                }
-            }
-
-            // Add newline, replacing trailing '\t' if last on line was the LN:
-            char *text_end = newtext + strlen(newtext);
-            if (text_end[-1] == '\t')
-                text_end[-1] = '\n';
-            else
-                *text_end++ = '\n', *text_end = '\0';
-        } else {
-            /* Copy this line to the new header */
-            strncat(newtext, text, end - text + 1);
-        }
-        text = end + 1;
+    if (ret) {
+        sam_hdr_destroy(header);
+        return NULL;
     }
-    assert (text[0]=='\0');
-    /* Check we didn't overflow the buffer */
-    assert (strlen(header->text) <= strlen(old->text));
-    if (strlen(header->text) < header->l_text) {
-        //fprintf(stderr, "[depad] Reallocating header buffer\n");
-        assert (newtext == header->text);
-        newtext = malloc(strlen(header->text) + 1);
-        strcpy(newtext, header->text);
-        free(header->text);
-        header->text = newtext;
-        header->l_text = strlen(newtext);
-    }
-    //fprintf(stderr, "[depad] Here is the new header (pending @SQ lines),\n\n%s\n(end)\n", header->text);
+
     return header;
 }
 
@@ -507,7 +420,7 @@ static int usage(int is_long_help);
 int main_pad2unpad(int argc, char *argv[])
 {
     samFile *in = 0, *out = 0;
-    bam_hdr_t *h = 0, *h_fix = 0;
+    sam_hdr_t *h = 0, *h_fix = 0;
     faidx_t *fai = 0;
     int c, compress_level = -1, is_long_help = 0;
     char in_mode[5], out_mode[6], *fn_out = 0, *fn_list = 0, *fn_out_idx = NULL;
@@ -574,7 +487,11 @@ int main_pad2unpad(int argc, char *argv[])
         goto depad_end;
     }
     if (fai) {
-        h_fix = fix_header(h, fai);
+        if (!(h_fix = fix_header(h, fai))){
+            fprintf(stderr, "[depad] failed to fix the header from\n");
+            ret = 1;
+            goto depad_end;
+        }
     } else {
         fprintf(stderr, "[depad] Warning - reference lengths will not be corrected without FASTA reference\n");
         h_fix = h;
@@ -617,8 +534,8 @@ int main_pad2unpad(int argc, char *argv[])
 depad_end:
     // close files, free and return
     if (fai) fai_destroy(fai);
-    if (h) bam_hdr_destroy(h);
-    if (h_fix && h_fix != h) bam_hdr_destroy(h_fix);
+    if (h) sam_hdr_destroy(h);
+    if (h_fix && h_fix != h) sam_hdr_destroy(h_fix);
     if (in) sam_close(in);
     if (out && sam_close(out) < 0) {
         fprintf(stderr, "[depad] error on closing output file.\n");

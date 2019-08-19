@@ -49,7 +49,7 @@ DEALINGS IN THE SOFTWARE.  */
 typedef struct {
     samFile *file;
     struct { BGZF *bam; } x;  // Hack so that fp->x.bam still works
-    bam_hdr_t *header;
+    sam_hdr_t *header;
     unsigned short is_write:1;
 } samfile_t;
 

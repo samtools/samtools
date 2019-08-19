@@ -43,7 +43,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 typedef struct {     // auxiliary data structure
     samFile *fp;     // the file handle
-    bam_hdr_t *hdr;  // the file header
+    sam_hdr_t *hdr;  // the file header
     hts_itr_t *iter; // NULL if a region not specified
     int min_mapQ, min_len; // mapQ filter; length filter
 } aux_t;
@@ -109,7 +109,7 @@ int main_depth(int argc, char *argv[])
     char *reg = 0; // specified region
     void *bed = 0; // BED data structure
     char *file_list = NULL, **fn = NULL;
-    bam_hdr_t *h = NULL; // BAM header of the 1st input
+    sam_hdr_t *h = NULL; // BAM header of the 1st input
     aux_t **data;
     bam_mplp_t mplp;
     int last_pos = -1, last_tid = -1, ret;
@@ -262,16 +262,16 @@ int main_depth(int argc, char *argv[])
     plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
     while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
         if (pos < beg || pos >= end) continue; // out of range; skip
-        if (tid >= h->n_targets) continue;     // diff number of @SQ lines per file?
+        if (tid >= sam_hdr_nref(h)) continue;     // diff number of @SQ lines per file?
         if (all) {
             while (tid > last_tid) {
                 if (last_tid >= 0 && !reg) {
                     // Deal with remainder or entirety of last tid.
-                    while (++last_pos < h->target_len[last_tid]) {
+                    while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
                         // Horribly inefficient, but the bed API is an obfuscated black box.
-                        if (bed && bed_overlap(bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)
+                        if (bed && bed_overlap(bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
                             continue;
-                        fputs(h->target_name[last_tid], file_out); fprintf(file_out, "\t%d", last_pos+1);
+                        fputs(sam_hdr_tid2name(h, last_tid), file_out); fprintf(file_out, "\t%d", last_pos+1);
                         for (i = 0; i < n; i++)
                             fputc('\t', file_out), fputc('0', file_out);
                         fputc('\n', file_out);
@@ -286,9 +286,9 @@ int main_depth(int argc, char *argv[])
             // Deal with missing portion of current tid
             while (++last_pos < pos) {
                 if (last_pos < beg) continue; // out of range; skip
-                if (bed && bed_overlap(bed, h->target_name[tid], last_pos, last_pos + 1) == 0)
+                if (bed && bed_overlap(bed, sam_hdr_tid2name(h, tid), last_pos, last_pos + 1) == 0)
                     continue;
-                fputs(h->target_name[tid], file_out); fprintf(file_out, "\t%d", last_pos+1);
+                fputs(sam_hdr_tid2name(h, tid), file_out); fprintf(file_out, "\t%d", last_pos+1);
                 for (i = 0; i < n; i++)
                     fputc('\t', file_out), fputc('0', file_out);
                 fputc('\n', file_out);
@@ -297,8 +297,8 @@ int main_depth(int argc, char *argv[])
             last_tid = tid;
             last_pos = pos;
         }
-        if (bed && bed_overlap(bed, h->target_name[tid], pos, pos + 1) == 0) continue;
-        fputs(h->target_name[tid], file_out); fprintf(file_out, "\t%d", pos+1); // a customized printf() would be faster
+        if (bed && bed_overlap(bed, sam_hdr_tid2name(h, tid), pos, pos + 1) == 0) continue;
+        fputs(sam_hdr_tid2name(h, tid), file_out); fprintf(file_out, "\t%d", pos+1); // a customized printf() would be faster
         for (i = 0; i < n; ++i) { // base level filters have to go here
             int j, m = 0;
             for (j = 0; j < n_plp[i]; ++j) {
@@ -321,12 +321,12 @@ int main_depth(int argc, char *argv[])
             last_tid = reg_tid;
             last_pos = beg-1;
         }
-        while (last_tid >= 0 && last_tid < h->n_targets) {
-            while (++last_pos < h->target_len[last_tid]) {
+        while (last_tid >= 0 && last_tid < sam_hdr_nref(h)) {
+            while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
                 if (last_pos >= end) break;
-                if (bed && bed_overlap(bed, h->target_name[last_tid], last_pos, last_pos + 1) == 0)
+                if (bed && bed_overlap(bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
                     continue;
-                fputs(h->target_name[last_tid], file_out); fprintf(file_out, "\t%d", last_pos+1);
+                fputs(sam_hdr_tid2name(h, last_tid), file_out); fprintf(file_out, "\t%d", last_pos+1);
                 for (i = 0; i < n; i++)
                     fputc('\t', file_out), fputc('0', file_out);
                 fputc('\n', file_out);
@@ -349,7 +349,7 @@ depth_end:
     }
 
     for (i = 0; i < n && data[i]; ++i) {
-        bam_hdr_destroy(data[i]->hdr);
+        sam_hdr_destroy(data[i]->hdr);
         if (data[i]->fp) sam_close(data[i]->fp);
         hts_itr_destroy(data[i]->iter);
         free(data[i]);

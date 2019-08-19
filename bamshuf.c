@@ -164,7 +164,7 @@ static void destroy_bam_list(bam_list_t *list) {
 }
 
 
-static inline int write_to_bin_file(bam1_t *bam, int64_t *count, samFile **bin_files, char **names, bam_hdr_t *header, int files) {
+static inline int write_to_bin_file(bam1_t *bam, int64_t *count, samFile **bin_files, char **names, sam_hdr_t *header, int files) {
     uint32_t x;
 
     x = hash_X31_Wang(bam_get_qname(bam)) % files;
@@ -187,7 +187,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
     char **fnt = NULL, modew[8];
     bam1_t *b = NULL;
     int i, counter, l, r;
-    bam_hdr_t *h = NULL;
+    sam_hdr_t *h = NULL;
     int64_t j, max_cnt = 0, *cnt = NULL;
     elem_t *a = NULL;
     htsThreadPool p = {NULL, 0};
@@ -214,14 +214,10 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         goto fail;
     }
 
-    if (sam_hdr_change_HD(h, "SO", "unsorted") != 0) {
-        print_error("collate",
-                    "failed to change sort order header to 'unsorted'\n");
-        goto fail;
-    }
-    if (sam_hdr_change_HD(h, "GO", "query") != 0) {
-        print_error("collate",
-                    "failed to change group order header to 'query'\n");
+    if ((-1 == sam_hdr_update_hd(h, "SO", "unsorted", "GO", "query"))
+     && (-1 == sam_hdr_add_line(h, "HD", "VN", SAM_FORMAT_VERSION, "SO", "unsorted", "GO", "query", NULL))
+     ) {
+        print_error("collate", "failed to update HD line\n");
         goto fail;
     }
 
@@ -459,7 +455,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
             goto fail;
         }
         if (p.pool) hts_set_opt(fp, HTS_OPT_THREAD_POOL, &p);
-        bam_hdr_destroy(sam_hdr_read(fp)); // Skip over header
+        sam_hdr_destroy(sam_hdr_read(fp)); // Skip over header
 
         // Slurp in one of the split files
         for (j = 0; j < c; ++j) {
@@ -485,7 +481,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         }
     }
 
-    bam_hdr_destroy(h);
+    sam_hdr_destroy(h);
     for (j = 0; j < max_cnt; ++j) bam_destroy1(a[j].b);
     free(a); free(fnt); free(cnt);
     sam_global_args_free(ga);
@@ -503,7 +499,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
  fail:
     if (fp) sam_close(fp);
     if (fpw) sam_close(fpw);
-    if (h) bam_hdr_destroy(h);
+    if (h) sam_hdr_destroy(h);
     for (i = 0; i < n_files; ++i) {
         if (fnt) free(fnt[i]);
         if (fpt && fpt[i]) sam_close(fpt[i]);

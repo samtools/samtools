@@ -252,29 +252,24 @@ static int add_mate_score(bam1_t *src, bam1_t *dest)
 // currently, this function ONLY works if each read has one hit
 static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int proper_pair_check, int add_ct, int do_mate_scoring)
 {
-    bam_hdr_t *header;
+    sam_hdr_t *header;
     bam1_t *b[2] = { NULL, NULL };
     int curr, has_prev, pre_end = 0, cur_end = 0, result;
-    kstring_t str;
+    kstring_t str = KS_INITIALIZE;
 
-    str.l = str.m = 0; str.s = 0;
     header = sam_hdr_read(in);
     if (header == NULL) {
         fprintf(stderr, "[bam_mating_core] ERROR: Couldn't read header\n");
         return 1;
     }
+
     // Accept unknown, unsorted, or queryname sort order, but error on coordinate sorted.
-    if ((header->l_text > 3) && (strncmp(header->text, "@HD", 3) == 0)) {
-        char *p, *q;
-        p = strstr(header->text, "\tSO:coordinate");
-        q = strchr(header->text, '\n');
-        // Looking for SO:coordinate within the @HD line only
-        // (e.g. must ignore in a @CO comment line later in header)
-        if ((p != 0) && (p < q)) {
-            fprintf(stderr, "[bam_mating_core] ERROR: Coordinate sorted, require grouped/sorted by queryname.\n");
-            goto fail;
-        }
+    if (!sam_hdr_find_tag_hd(header, "SO", &str) && str.s && !strcmp(str.s, "coordinate")) {
+        fprintf(stderr, "[bam_mating_core] ERROR: Coordinate sorted, require grouped/sorted by queryname.\n");
+        goto fail;
     }
+    ks_free(&str);
+
     if (sam_hdr_write(out, header) < 0) goto write_fail;
 
     b[0] = bam_init1();
@@ -303,7 +298,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
             cur_end = bam_endpos(cur);
 
             // Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
-            if (cur_end > (int)header->target_len[cur->core.tid]) cur->core.flag |= BAM_FUNMAP;
+            if (cur_end > (int)sam_hdr_tid2len(header, cur->core.tid)) cur->core.flag |= BAM_FUNMAP;
         }
         if (has_prev) { // do we have a pair of reads to examine?
             if (strcmp(bam_get_qname(cur), bam_get_qname(pre)) == 0) { // identical pair name
@@ -378,18 +373,19 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
 
         if (sam_write1(out, header, pre) < 0) goto write_fail;
     }
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     bam_destroy1(b[0]);
     bam_destroy1(b[1]);
-    free(str.s);
+    ks_free(&str);
     return 0;
 
  write_fail:
     print_error_errno("fixmate", "Couldn't write to output file");
  fail:
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     bam_destroy1(b[0]);
     bam_destroy1(b[1]);
+    ks_free(&str);
     return 1;
 }
 
