@@ -211,82 +211,41 @@ static char* expand_format_string(const char* format_string, const char* basenam
 static bool count_RG(sam_hdr_t* hdr, size_t* count, char*** output_name)
 {
     char **names = NULL;
+    kstring_t id_val = KS_INITIALIZE;
+    int i, n_rg = sam_hdr_count_lines(hdr, "RG");
 
-    if (sam_hdr_length(hdr) < 3 ) {
+    if (n_rg < 0) {
+        print_error("split", "Failed to get @RG IDs");
+        *count = 0;
+        *output_name = NULL;
+        return false;
+    }
+
+    if (n_rg == 0) {
         *count = 0;
         *output_name = NULL;
         return true;
     }
 
-    //////////////////////////////////////////
-    // First stage count number of @RG tags //
-    //////////////////////////////////////////
-    const char *pointer = sam_hdr_str(hdr);
-    size_t n_rg = 0;
-    // Guard against rare case where @RG is first header line
-    // This shouldn't happen but could where @HD is omitted
-    if (pointer[0] == '@' && pointer[1] == 'R' && pointer[2] == 'G' ) {
-        ++n_rg;
-        pointer += 3;
-    }
-    const char *line;
-    while ((line = strstr(pointer, "\n@RG")) != NULL) {
-        ++n_rg;
-        pointer = line + 1;
-    }
-
-    //////////////////////////////////
-    // Second stage locate @RG ID's //
-    //////////////////////////////////
-    regex_t rg_finder;
-    int error;
-    memset(&rg_finder, 0, sizeof(rg_finder));
-    if ((error = regcomp(&rg_finder, "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)", REG_EXTENDED|REG_NEWLINE)) != 0) {
-        goto regfail;
-    }
-    regmatch_t matches[2] = {{0, 0}, {0, 0}};
-    const char *begin = sam_hdr_str(hdr);
-
     names = calloc(n_rg, sizeof(names[0]));
     if (!names) goto memfail;
-    size_t n_rg_id = 0;
 
-    while ((error = regexec(&rg_finder, begin, 2, matches, 0)) == 0) {
-        kstring_t str = { 0, 0, NULL };
-        if (kputsn(begin+matches[1].rm_so, matches[1].rm_eo-matches[1].rm_so, &str) < 0)
-            goto memfail;
-        assert(n_rg_id < n_rg);
-        names[n_rg_id++] = ks_release(&str);
-        begin += matches[0].rm_eo;
+    for (i = 0; i < n_rg; i++) {
+        if (sam_hdr_find_tag_pos(hdr, "RG", i, "ID", &id_val) < 0) goto memfail;
+        names[i] = ks_release(&id_val);
     }
 
-    if (error != REG_NOMATCH)
-        goto regfail;
-
-    // return results
-    *count = n_rg_id;
+    *count = n_rg;
     *output_name = names;
-    regfree(&rg_finder);
     return true;
 
  memfail:
     print_error_errno("split", "Failed to get @RG IDs");
     *count = 0;
     *output_name = NULL;
-    regfree(&rg_finder);
+    ks_free(&id_val);
     free(names);
     return false;
-
- regfail: {
-        char msg[256];
-        regerror(error, &rg_finder, msg, sizeof(msg));
-        print_error("split", "Failed to parse @RG IDs : %s", msg);
-        *count = 0;
-        *output_name = NULL;
-        regfree(&rg_finder);
-        free(names);
-        return false;
-    }
 }
 
 static int header_compatible(sam_hdr_t *hdr1, sam_hdr_t *hdr2)
@@ -380,11 +339,12 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
     // Open output files for RGs
     if (!count_RG(retval->merged_input_header, &retval->output_count, &retval->rg_id)) return NULL;
     if (opts->verbose) fprintf(stderr, "@RG's found %zu\n",retval->output_count);
-
-    retval->rg_index_file_name = (char **)calloc(retval->output_count, sizeof(char *));
-    retval->rg_output_file_name = (char **)calloc(retval->output_count, sizeof(char *));
-    retval->rg_output_file = (samFile**)calloc(retval->output_count, sizeof(samFile*));
-    retval->rg_output_header = (sam_hdr_t**)calloc(retval->output_count, sizeof(sam_hdr_t*));
+    // Prevent calloc(0, size);
+    size_t num = retval->output_count ? retval->output_count : 1;
+    retval->rg_index_file_name = (char **)calloc(num, sizeof(char *));
+    retval->rg_output_file_name = (char **)calloc(num, sizeof(char *));
+    retval->rg_output_file = (samFile**)calloc(num, sizeof(samFile*));
+    retval->rg_output_header = (sam_hdr_t**)calloc(num, sizeof(sam_hdr_t*));
     retval->rg_hash = kh_init_c2i();
     if (!retval->rg_output_file_name || !retval->rg_output_file || !retval->rg_output_header ||
         !retval->rg_hash || !retval->rg_index_file_name) {
