@@ -261,14 +261,14 @@ static inline int check_sam_write1(samFile *fp, const sam_hdr_t *h, const bam1_t
 
 int main_samview(int argc, char *argv[])
 {
-    int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0, has_index_file = 0;
+    int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0, has_index_file = 0, no_pg = 0;
     int64_t count = 0;
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
     sam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
     char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
-    char *fn_out_idx = NULL, *fn_un_out_idx = NULL;
+    char *fn_out_idx = NULL, *fn_un_out_idx = NULL, *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     int filter_state = ALL, filter_op = 0;
@@ -293,6 +293,7 @@ int main_samview(int argc, char *argv[])
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
@@ -458,6 +459,7 @@ int main_samview(int argc, char *argv[])
             }
             break;
         case 'M': settings.multi_region = 1; break;
+        case 1: no_pg = 1; break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -523,6 +525,24 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
+
+        if (!no_pg) {
+            if (!(arg_list = stringify_argv(argc+1, argv-1))) {
+                print_error("view", "failed to create arg_list");
+                ret = 1;
+                goto view_end;
+            }
+            if (sam_hdr_add_pg(header, "samtools",
+                                         "VN", samtools_version(),
+                                         arg_list ? "CL": NULL,
+                                         arg_list ? arg_list : NULL,
+                                         NULL)) {
+                print_error("view", "failed to add PG line to the header");
+                ret = 1;
+                goto view_end;
+            }
+        }
+
         if (*out_format || ga.write_index || is_header ||
             out_mode[1] == 'b' || out_mode[1] == 'c' ||
             (ga.out.format != sam && ga.out.format != unknown_format))  {
@@ -780,6 +800,7 @@ view_end:
         free(fn_out_idx);
     if (fn_un_out_idx)
         free(fn_un_out_idx);
+    free(arg_list);
 
     return ret;
 }
@@ -829,7 +850,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -B       collapse the backward CIGAR operation\n"
 // general options
 "  -?       print long help, including note about region specification\n"
-"  -S       ignored (input format is auto-detected)\n");
+"  -S       ignored (input format is auto-detected)\n"
+"  --no-PG  do not add a PG line\n");
 
     sam_global_opt_help(fp, "-.O.T@.");
     fprintf(fp, "\n");
