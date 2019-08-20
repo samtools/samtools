@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <htslib/sam.h>
 
 #include "test.h"
@@ -71,7 +72,7 @@ void dump_hdr(const sam_hdr_t* hdr)
     printf("idx\ttarget_len\ttarget_name:\n");
     int32_t target;
     for (target = 0; target < sam_hdr_nref(hdr); ++target) {
-        printf("%d\t%u\t\"%s\"\n", target, sam_hdr_tid2len(hdr, target), sam_hdr_tid2name(hdr, target));
+        printf("%d\t%"PRId64"\t\"%s\"\n", target, (int64_t) sam_hdr_tid2len(hdr, target), sam_hdr_tid2name(hdr, target));
     }
     printf("text: \"%s\"\n", sam_hdr_str((sam_hdr_t*)hdr));
 }

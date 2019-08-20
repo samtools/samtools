@@ -1021,7 +1021,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
 
     char *qname = bam_get_qname(bam_line);
     if ( !qname ) {
-        fprintf(stderr, "Error retrieving qname for line starting at pos %d\n", bam_line->core.pos);
+        fprintf(stderr, "Error retrieving qname for line starting at pos %"PRId64"\n", (int64_t) bam_line->core.pos);
         return;
     }
 

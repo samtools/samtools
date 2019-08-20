@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
+#include <inttypes.h>
 #include <htslib/kstring.h>
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
@@ -218,7 +219,7 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
                 return -1;
             };
             if (sam_hdr_tid2len(h, r_tid) != r.l) {
-                fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %u in BAM header, but %llu in embedded reference\n", bam_get_qname(b), sam_hdr_tid2len(h, r_tid), (unsigned long long)(r.l));
+                fprintf(stderr, "[depad] ERROR: (Padded) length of '%s' is %"PRId64" in BAM header, but %zu in embedded reference\n", bam_get_qname(b), (int64_t) sam_hdr_tid2len(h, r_tid), r.l);
                 return -1;
             }
             if (fai) {
@@ -395,14 +396,19 @@ sam_hdr_t * fix_header(sam_hdr_t *old, faidx_t *fai)
     for (i = 0; i < nref; ++i) {
         unpadded_len = get_unpadded_len(fai, sam_hdr_tid2name(old, i), sam_hdr_tid2len(old, i));
         if (unpadded_len < 0) {
-            fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %i\n", sam_hdr_tid2name(old, i), sam_hdr_tid2len(old, i));
+            fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %"PRId64"\n", sam_hdr_tid2name(old, i), (int64_t) sam_hdr_tid2len(old, i));
         } else if (unpadded_len > sam_hdr_tid2len(old, i)) {
-            fprintf(stderr, "[depad] New unpadded length of '%s' is larger than the padded length (%d > %i)\n", sam_hdr_tid2name(old, i), unpadded_len, sam_hdr_tid2len(old, i));
+            fprintf(stderr, "[depad] New unpadded length of '%s' is larger than the padded length (%d > %"PRId64")\n",
+                    sam_hdr_tid2name(old, i), unpadded_len,
+                    (int64_t) sam_hdr_tid2len(old, i));
             ret = 1;
         } else {
             sprintf(len_buf, "%d", unpadded_len);
             if ((ret |= sam_hdr_update_line(header, "SQ", "SN", sam_hdr_tid2name(header, i), "LN", len_buf, NULL)))
-                fprintf(stderr, "[depad] Error updating length of '%s' from %d to %d\n", sam_hdr_tid2name(header, i), sam_hdr_tid2len(header, i), unpadded_len);
+                fprintf(stderr, "[depad] Error updating length of '%s' from %"PRId64" to %d\n",
+                        sam_hdr_tid2name(header, i),
+                        (int64_t) sam_hdr_tid2len(header, i),
+                        unpadded_len);
             //fprintf(stderr, "[depad] Recalculating '%s' length %i -> %i\n", old->target_name[i], old->target_len[i], header->target_len[i]);
         }
     }

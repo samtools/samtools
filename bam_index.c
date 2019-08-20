@@ -149,9 +149,9 @@ int slow_idxstats(samFile *fp, sam_hdr_t *header) {
     if (ret == -1) {
         int i;
         for (i = 0; i < sam_hdr_nref(header); i++) {
-            printf("%s\t%d\t%"PRIu64"\t%"PRIu64"\n",
+            printf("%s\t%"PRId64"\t%"PRIu64"\t%"PRIu64"\n",
                    sam_hdr_tid2name(header, i),
-                   sam_hdr_tid2len(header, i),
+                   (int64_t) sam_hdr_tid2len(header, i),
                    counts[i][0], counts[i][1]);
         }
         printf("*\t0\t%"PRIu64"\t%"PRIu64"\n", counts[-1][0], counts[-1][1]);
@@ -229,7 +229,7 @@ int bam_idxstats(int argc, char *argv[])
         int i;
         for (i = 0; i < sam_hdr_nref(header); ++i) {
             // Print out contig name and length
-            printf("%s\t%d", sam_hdr_tid2name(header, i), sam_hdr_tid2len(header, i));
+            printf("%s\t%"PRId64, sam_hdr_tid2name(header, i), (int64_t) sam_hdr_tid2len(header, i));
             // Now fetch info about it from the meta bin
             uint64_t u, v;
             hts_idx_get_stat(idx, i, &u, &v);

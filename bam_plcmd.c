@@ -337,8 +337,8 @@ static int mplp_func(void *data, bam1_t *b)
         if (ma->conf->fai && b->core.tid >= 0) {
             has_ref = mplp_get_ref(ma, b->core.tid, &ref, &ref_len);
             if (has_ref && ref_len <= b->core.pos) { // exclude reads outside of the reference sequence
-                fprintf(stderr,"[%s] Skipping because %d is outside of %d [ref:%d]\n",
-                        __func__, b->core.pos, ref_len, b->core.tid);
+                fprintf(stderr,"[%s] Skipping because %"PRId64" is outside of %d [ref:%d]\n",
+                        __func__, (int64_t) b->core.pos, ref_len, b->core.tid);
                 skip = 1;
                 continue;
             }
@@ -542,7 +542,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
         for (i=0; i < sam_hdr_nref(h); i++)
         {
             str.l = 0;
-            ksprintf(&str, "##contig=<ID=%s,length=%d>", sam_hdr_tid2name(h, i), sam_hdr_tid2len(h, i));
+            ksprintf(&str, "##contig=<ID=%s,length=%"PRId64">", sam_hdr_tid2name(h, i), (int64_t) sam_hdr_tid2len(h, i));
             bcf_hdr_append(bcf_hdr, str.s);
         }
         free(str.s);
@@ -830,7 +830,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                                         putc('*', pileup_fp);
                                     break;
                                 case MPLP_PRINT_POS:
-                                    fprintf(pileup_fp, "%d", p->b->core.pos + 1);
+                                    fprintf(pileup_fp, "%"PRId64, (int64_t) p->b->core.pos + 1);
                                     break;
                                 case MPLP_PRINT_MAPQ:
                                     c = p->b->core.qual + 33;
@@ -844,7 +844,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                                         putc('*', pileup_fp);
                                     break;
                                 case MPLP_PRINT_PNEXT:
-                                    fprintf(pileup_fp, "%d", p->b->core.mpos + 1);
+                                    fprintf(pileup_fp, "%"PRId64, (int64_t) p->b->core.mpos + 1);
                                     break;
                                 }
                             }
