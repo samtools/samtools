@@ -27,6 +27,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "../../bam_sort.c"
 #include <assert.h>
 #include <regex.h>
+#include <inttypes.h>
 
 typedef struct refseq_info {
     const char *name;
@@ -38,7 +39,7 @@ void dump_header(sam_hdr_t* hdr) {
     int i;
     for (i = 0; i < sam_hdr_nref(hdr); ++i) {
         printf("->target_name[%d]:(%s)\n", i, sam_hdr_tid2name(hdr, i));
-        printf("->target_len[%d]:(%d)\n", i, sam_hdr_tid2len(hdr, i));
+        printf("->target_len[%d]:(%"PRId64")\n", i, (int64_t) sam_hdr_tid2len(hdr, i));
     }
 
     printf("->text:(");
