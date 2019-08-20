@@ -34,6 +34,9 @@ Release a.b
   for dual indicies in the same way as bcl2fastq, using a '+' sign between
   the two parts of the index.
 
+* Fixed samtools tview -s option which was not filtering reads correctly.
+  It now only shows reads from the requested sample or read group.
+
 Release 1.9 (18th July 2018)
 ----------------------------
 

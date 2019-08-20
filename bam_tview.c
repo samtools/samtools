@@ -34,27 +34,66 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 
-khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
+static void destroy_rg_hash(khash_t(kh_rg)* rg_hash)
 {
-    khash_t(kh_rg)* rg_hash = kh_init(kh_rg);
-    // given sample id return all the RD ID's
-    const char rg_regex[] = "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)";
+    khiter_t k;
 
-    regex_t rg_id;
-    regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-    if (matches == NULL) { perror("out of memory"); exit(-1); }
-    regcomp(&rg_id, rg_regex, REG_EXTENDED|REG_NEWLINE);
-    char* text = strdup(header);
-    char* end = text + strlen(header);
-    char* tofree = text;
-    while (end > text && regexec(&rg_id, text, 2, matches, 0) == 0) { //    foreach rg id in  header
-        int ret;
-        text[matches[1].rm_eo] = '\0';
-        kh_put(kh_rg, rg_hash, strdup(text+matches[1].rm_so), &ret); // Add the RG to the list
-        text += matches[0].rm_eo + 1; // Move search pointer forward
+    if (!rg_hash)
+        return;
+
+    for (k = 0; k < kh_end(rg_hash); k++) {
+        if (kh_exist(rg_hash, k))
+            free((char *) kh_key(rg_hash, k));
     }
-    free(tofree);
+    kh_destroy(kh_rg, rg_hash);
+}
+
+static
+khash_t(kh_rg)* get_rg_sample(sam_hdr_t* header, const char* sample)
+{
+    int n_rg, i;
+    kstring_t id_val = KS_INITIALIZE, sm_val = KS_INITIALIZE;
+    khash_t(kh_rg)* rg_hash = kh_init(kh_rg);
+    if (!rg_hash) return NULL;
+
+    // There may be more than one @RG with a given SM:, so iterate through them
+    n_rg = sam_hdr_count_lines(header, "RG");
+    if (n_rg < 0) {
+        print_error("tview", "couldn't parse header");
+        goto fail;
+    }
+
+    for (i = 0; i < n_rg; i++) {
+        // Try ID: first
+        int r = sam_hdr_find_tag_pos(header, "RG", i, "ID", &id_val);
+        if (r < -1) goto memfail;
+        if (r == -1) continue;  // Shouldn't happen as ID is compulsory
+
+        if (strcmp(sample, id_val.s) != 0) {
+            // No match, try SM:
+            r = sam_hdr_find_tag_pos(header, "RG", i, "SM", &sm_val);
+            if (r < -1) goto memfail;
+            if (r < 0 || strcmp(sample, sm_val.s) != 0)
+                continue;
+        }
+
+        // Found a match, add ID to rg_hash
+        kh_put(kh_rg, rg_hash, id_val.s, &r);
+        if (r < 0) goto memfail;
+        ks_release(&id_val); // Now owned by hash table
+    }
+
+    ks_free(&id_val);
+    ks_free(&sm_val);
     return rg_hash;
+
+ memfail:
+    perror("tview");
+ fail:
+    ks_free(&id_val);
+    ks_free(&sm_val);
+    destroy_rg_hash(rg_hash);
+    return NULL;
 }
 
 int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *fn_idx,
@@ -101,7 +140,13 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *fn_
     // If the user has asked for specific samples find out create a list of readgroups make up these samples
     if ( samples )
     {
-        tv->rg_hash = get_rg_sample(sam_hdr_str(tv->header), samples); // Init the list of rg's
+        tv->rg_hash = get_rg_sample(tv->header, samples); // Init the list of rg's
+        if (kh_size(tv->rg_hash) == 0) {
+            print_error("tview",
+                        "The sample or read group \"%s\" not present.",
+                        samples);
+            exit(EXIT_FAILURE);
+        }
     }
 
     return 0;
@@ -116,6 +161,7 @@ void base_tv_destroy(tview_t* tv)
     if (tv->fai) fai_destroy(tv->fai);
     free(tv->ref);
     sam_hdr_destroy(tv->header);
+    destroy_rg_hash(tv->rg_hash);
     sam_close(tv->fp);
 }
 
