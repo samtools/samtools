@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-markdup 1 "14 August 2018" "samtools-1.9" "Bioinformatics tools"
+.TH samtools-markdup 1 "20 August 2019" "samtools-1.9" "Bioinformatics tools"
 .SH NAME
 samtools markdup \- mark duplicate alignments in a coordinate sorted file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -50,6 +50,15 @@ samtools markdup
 .RB [ -s ]
 .RB [ -T ]
 .RB [ -S ]
+.RB [ -f
+.IR file ]
+.RB [ -d
+.IR distance ]
+.RB [ -c ]
+.RB [ -t ]
+.RB [ --relaxed ]
+.RB [ --include-fails ]
+.RB [ --no-PG ]
 .I in.algsort.bam out.bam
 
 .SH DESCRIPTION
@@ -76,6 +85,31 @@ Write temporary files to
 .TP
 .B -S
 Mark supplementary reads of duplicates as duplicates.
+.TP
+.BI "-f " file
+Write stats to named file.
+.TP
+.BI "-d " distance
+The optical duplicate distance.  Suggested settings of 100 for HiSeq style
+platforms or about 2500 for NovaSeq ones.  Default is 0 to not look for
+optical duplicates.  When set, duplicate reads are tagged with \fBdt:Z:SQ\fR for
+optical duplicates and \fBdt:Z:LB\fR otherwise.
+.TP
+.B -c
+Clear previous duplicate settings and tags.
+.TP
+.B -t
+Mark duplicates with the name of the original in a \fBdo\fR tag.
+.TP
+.B --relaxed
+An alternative algorithm for choosing which reads are duplicates.  Tends to
+find more duplicates than the default though the results are largely the same.
+.TP
+.B --include-fails
+Include quality checked failed reads (included in the above option).
+.TP
+.B --no-PG
+Do not add a PG line to the output file.
 
 .SH EXAMPLES
 This first command sort can be omitted if the file is already name ordered:

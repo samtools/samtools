@@ -55,7 +55,7 @@ typedef struct {
     int supp;
     int tag;
     int opt_dist;
-    int add_pg;
+    int no_pg;
     int clear;
     int relaxed;
     int write_index;
@@ -867,7 +867,7 @@ static int bam_mark_duplicates(md_param_t *param) {
     }
     ks_free(&str);
 
-    if (param->add_pg && sam_hdr_add_pg(header, "samtools", "VN", samtools_version(),
+    if (!param->no_pg && sam_hdr_add_pg(header, "samtools", "VN", samtools_version(),
                         param->arg_list ? "CL" : NULL,
                         param->arg_list ? param->arg_list : NULL,
                         NULL) != 0) {
@@ -1376,6 +1376,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -c               Clear previous duplicate settings and tags.\n");
     fprintf(stderr, "  --relaxed        Less strict duplicate definition (more duplicates found).\n");
     fprintf(stderr, "  --include-fails  Include quality check failed reads (included in relaxed option.\n");
+    fprintf(stderr, "  --no-PG          Do not add a PG line\n");
     fprintf(stderr, "  -t               Mark primary duplicates with the name of the original in a \'do\' tag."
                                   " Mainly for information and debugging.\n");
 
@@ -1402,6 +1403,7 @@ int bam_markdup(int argc, char **argv) {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         {"relaxed", no_argument, NULL, 1000},
         {"include-fails", no_argument, NULL, 1001},
+        {"no-PG", no_argument, NULL, 1002},
         {NULL, 0, NULL, 0}
     };
 
@@ -1415,10 +1417,10 @@ int bam_markdup(int argc, char **argv) {
             case 't': param.tag = 1; break;
             case 'f': param.stats_file = optarg; param.do_stats = 1; break;
             case 'd': param.opt_dist = atoi(optarg); break;
-            case 'n': param.add_pg = 0; break;
             case 'c': param.clear = 1; break;
             case 1000: param.relaxed = 1, param.include_fails = 1; break;
             case 1001: param.include_fails = 1; break;
+            case 1002: param.no_pg = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
