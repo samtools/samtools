@@ -41,7 +41,7 @@ exit($errors ? 1 : 0);
 
 sub check {
     # Ignore embedded copied of htslib
-    if (m#/htslib[^/]*$# && -d $_) {
+    if (m#/[^/]*htslib[^/]*$# && -d $_) {
         $File::Find::prune = 1;
         return;
     }

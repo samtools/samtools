@@ -8,7 +8,7 @@ matrix:
     - os: linux
       compiler: clang
       sudo: required
-      env: CFLAGS="-g -Wall -O3 -fsanitize=address" LDFLAGS="-fsanitize=address"
+      env: CFLAGS="-g -Wall -O3 -fsanitize=address" LDFLAGS="-fsanitize=address -Wl,-rpath,`pwd`/inst/lib"
     - os: linux
       compiler: gcc-8
       addons:
@@ -41,7 +41,7 @@ matrix:
 
 env:
   global:
-    - HTSDIR=./htslib
+    - HTSDIR=./hidden-htslib
 
 # For linux systems
 addons:
@@ -63,4 +63,4 @@ before_script:
   # Logic for choosing which to use is in the .travis/clone script.
   - .travis/clone "git://github.com/$(dirname $TRAVIS_REPO_SLUG)/htslib.git" "$HTSDIR" "$TRAVIS_BRANCH"
 
-script: autoreconf -i && (cd htslib && autoreconf -i) && (./configure --enable-werror || (cat config.log; /bin/false)) && if test "x$DO_MAINTAINER_CHECKS" = "xyes" ; then make -e maintainer-check ; fi && make -e && make -e test
+script: autoreconf -i && (cd $HTSDIR && autoreconf -i && ./configure --prefix=`pwd`/../inst LDFLAGS="$LDFLAGS -Wl,-rpath,`pwd`/../inst/lib" && make install) && (./configure --enable-werror --with-htslib=`pwd`/inst  LDFLAGS="$LDFLAGS -Wl,-rpath,`pwd`/inst/lib" || (cat config.log; /bin/false)) && if test "x$DO_MAINTAINER_CHECKS" = "xyes" ; then make -e maintainer-check ; fi && make -e && make -e test BGZIP=inst/bin/bgzip
