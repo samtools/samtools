@@ -35,7 +35,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/hfile.h"
 #include "htslib/cram.h"
 #include "samtools.h"
-#include "textutils_internal.h"
 
 #define BUF_SIZE 0x10000
 

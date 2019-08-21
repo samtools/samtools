@@ -28,8 +28,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <stdbool.h>
 #include "samtools.h"
-#include "header.h"
-#include "textutils_internal.h"
+#include <string.h>
+#include <stdlib.h>
+#include "htslib/kstring.h"
 
 int line_cmp(const void *av, const void *bv) {
     const char *a = *(const char **) av;
