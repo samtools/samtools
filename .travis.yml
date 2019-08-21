@@ -72,8 +72,8 @@ script:
     autoreconf -i && \
     (cd $HTSDIR && \
       autoreconf -i && \
-      ./configure --prefix=`pwd`/../inst LDFLAGS="$LDFLAGS -Wl,-rpath,`pwd`/../inst/lib" && \
-      make install \
+      ./configure --prefix=`pwd`/../inst && \
+      make -e install \
     ) && \
     (./configure --enable-werror --with-htslib=`pwd`/inst  LDFLAGS="$LDFLAGS -Wl,-rpath,`pwd`/inst/lib" || \
       (cat config.log; /bin/false) \
