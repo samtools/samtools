@@ -50,14 +50,6 @@ addons:
     - liblzma-dev
     - libbz2-dev
 
-# For MacOSX systems
-before_install:
-  - |
-    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-      HOMEBREW_NO_AUTO_UPDATE=1 brew install xz || \
-      ( brew update && brew install xz )
-    fi
-
 before_script:
   # Clone htslib, trying the same branch name in the owners' copy of htslib.
   # If this exists then the user is likely making a joint PR to htslib and
