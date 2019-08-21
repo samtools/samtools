@@ -22,6 +22,9 @@ THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE
+
+Estimate library size derived from Picard DuplicationMetrics.java
+Copyright (c) 2009,2018 The Broad Institute.  MIT license.
 */
 
 #include <config.h>
@@ -38,7 +41,6 @@ DEALINGS IN THE SOFTWARE
 #include "htslib/sam.h"
 #include "sam_opts.h"
 #include "samtools.h"
-#include "htslib/cram.h"
 #include "htslib/khash.h"
 #include "htslib/klist.h"
 #include "htslib/kstring.h"
@@ -154,6 +156,8 @@ static int key_equal(key_data_t a, key_data_t b) {
 #define O_RR 3
 #define O_FR 5
 #define O_RF 7
+
+#define BMD_WARNING_MAX 10
 
 KHASH_INIT(reads, key_data_t, in_hash_t, 1, hash_key, key_equal) // read map hash
 KLIST_INIT(read_queue, read_queue_t, __free_queue_element) // the reads buffer
@@ -654,7 +658,7 @@ static inline int get_coordinate_positions(const char *qname, int *xpos, int *yp
 /* Using the coordinates from the Illumina read name, see whether the duplicated read is
    close enough (set by max_dist) to the original to be counted as optical.*/
 
-static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist) {
+static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist, long *warnings) {
     int ret = 0, seps;
     char *original, *duplicate;
     int oxpos = 0, oypos = 0, dxpos = 0, dypos = 0;
@@ -666,14 +670,25 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist) {
     seps = get_coordinate_positions(original, &oxpos, &oypos);
 
     if (!(seps == 3 || seps == 4)) {
-        fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", original);
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", original);
+        }
+
         return ret;
     }
 
     seps = get_coordinate_positions(duplicate, &dxpos, &dypos);
 
     if (!(seps == 3 || seps == 4)) {
-        fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", duplicate);
+
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", duplicate);
+        }
+
         return ret;
     }
 
@@ -685,14 +700,24 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist) {
         ox = strtol(original + oxpos, &end, 10);
 
         if ((original + oxpos) == end) {
-            fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s .\n", original);
+            (*warnings)++;
+
+            if (*warnings <= BMD_WARNING_MAX) {
+                fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s .\n", original);
+            }
+
             return ret;
         }
 
         dx = strtol(duplicate + dxpos, &end, 10);
 
         if ((duplicate + dxpos) == end) {
-            fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s.\n", duplicate);
+            (*warnings)++;
+
+            if (*warnings <= BMD_WARNING_MAX) {
+                fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s.\n", duplicate);
+            }
+
             return ret;
         }
 
@@ -708,14 +733,24 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist) {
             oy = strtol(original + oypos, &end, 10);
 
             if ((original + oypos) == end) {
-                fprintf(stderr, "[markdup] warning: can not decipher Y coordinate in %s.\n", original);
+                (*warnings)++;
+
+                if (*warnings <= BMD_WARNING_MAX) {
+                    fprintf(stderr, "[markdup] warning: can not decipher Y coordinate in %s.\n", original);
+                }
+
                 return ret;
             }
 
             dy = strtol(duplicate + dypos, &end, 10);
 
             if ((duplicate + dypos) == end) {
-                fprintf(stderr, "[markdup] warning: can not decipher Y coordinate in %s.\n", duplicate);
+                (*warnings)++;
+
+                if (*warnings <= BMD_WARNING_MAX) {
+                    fprintf(stderr, "[markdup] warning: can not decipher Y coordinate in %s.\n", duplicate);
+                }
+
                 return ret;
             }
 
@@ -733,8 +768,10 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist) {
 }
 
 
-static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *ori, bam1_t *dup, int *optical) {
+static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *ori, bam1_t *dup,
+                           long *optical, long *warn) {
     char dup_type = 0;
+    long incoming_warnings = *warn;
 
     dup->core.flag |= BAM_FDUP;
 
@@ -746,7 +783,7 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
     }
 
     if (param->opt_dist) { // mark optical duplicates
-        if (optical_duplicate(ori, dup, param->opt_dist)) {
+        if (optical_duplicate(ori, dup, param->opt_dist, warn)) {
             bam_aux_append(dup, "dt", 'Z', 3, (const uint8_t *)"SQ");
             dup_type = 'O';
             (*optical)++;
@@ -754,6 +791,11 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
             // not an optical duplicate
             bam_aux_append(dup, "dt", 'Z', 3, (const uint8_t *)"LB");
         }
+    }
+
+    if ((*warn == BMD_WARNING_MAX) && (incoming_warnings != *warn)) {
+        fprintf(stderr, "[markdup] warning: %ld decipher read name warnings.  New warnings will not be reported.\n",
+                        *warn);
     }
 
     if (param->supp) {
@@ -779,7 +821,7 @@ static inline double lw_equation(double x, double c, double n) {
 }
 
 
-/* estimate the library size */
+/* estimate the library size, based on the Picard code in DuplicationMetrics.java*/
 static unsigned long estimate_library_size(unsigned long read_pairs, unsigned long duplicate_pairs) {
     unsigned long estimated_size = 0;
 
@@ -841,8 +883,9 @@ static int bam_mark_duplicates(md_param_t *param) {
     int32_t prev_tid, prev_coord;
     read_queue_t *in_read;
     int ret;
-    int reading, writing, excluded, duplicate, single, pair, single_dup, examined, optical, single_optical;
-    int np_duplicate, np_opt_duplicate;
+    long reading, writing, excluded, duplicate, single, pair, single_dup, examined, optical, single_optical;
+    long np_duplicate, np_opt_duplicate;
+    long opt_warnings = 0;
     tmp_file_t temp;
     char *idx_fn = NULL;
     int exclude = 0;
@@ -994,7 +1037,7 @@ static int bam_mark_duplicates(md_param_t *param) {
 
                         bp->p = in_read->b;
 
-                        if (mark_duplicates(param, dup_hash, bp->p, dup, &single_optical))
+                        if (mark_duplicates(param, dup_hash, bp->p, dup, &single_optical, &opt_warnings))
                             goto fail;
 
                         single_dup++;
@@ -1061,7 +1104,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                         dup = in_read->b;
                     }
 
-                    if (mark_duplicates(param, dup_hash, bp->p, dup, &optical))
+                    if (mark_duplicates(param, dup_hash, bp->p, dup, &optical, &opt_warnings))
                         goto fail;
 
                     duplicate++;
@@ -1091,7 +1134,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                     if ((bp->p->core.flag & BAM_FPAIRED) && !(bp->p->core.flag & BAM_FMUNMAP)) {
                         // if matched against one of a pair just mark as duplicate
 
-                        if (mark_duplicates(param, dup_hash, bp->p, in_read->b, &optical))
+                        if (mark_duplicates(param, dup_hash, bp->p, in_read->b, &optical, &opt_warnings))
                             goto fail;
 
                     } else {
@@ -1110,7 +1153,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                             dup = in_read->b;
                         }
 
-                        if (mark_duplicates(param, dup_hash, bp->p, dup, &single_optical))
+                        if (mark_duplicates(param, dup_hash, bp->p, dup, &single_optical, &opt_warnings))
                             goto fail;
 
                     }
@@ -1285,6 +1328,11 @@ static int bam_mark_duplicates(md_param_t *param) {
         bam_destroy1(b);
     }
 
+    if (opt_warnings) {
+        fprintf(stderr, "[markdup] warning: number of failed attempts to get coordinates from read names = %ld\n",
+                        opt_warnings);
+    }
+
     if (param->do_stats) {
         FILE *fp;
         int file_open = 0;
@@ -1305,20 +1353,20 @@ static int bam_mark_duplicates(md_param_t *param) {
 
         fprintf(fp,
                 "COMMAND: %s\n"
-                "READ: %d\n"
-                "WRITTEN: %d\n"
-                "EXCLUDED: %d\n"
-                "EXAMINED: %d\n"
-                "PAIRED: %d\n"
-                "SINGLE: %d\n"
-                "DUPLICATE PAIR: %d\n"
-                "DUPLICATE SINGLE: %d\n"
-                "DUPLICATE OPTICAL: %d\n"
-                "DUPLICATE SINGLE OPTICAL: %d\n"
-                "DUPLICATE NON PRIMARY: %d\n"
-                "DUPLICATE NON PRIMARY OPTICAL: %d\n"
-                "DUPLICATE PRIMARY TOTAL: %d\n"
-                "DUPLICATE TOTAL: %d\n"
+                "READ: %ld\n"
+                "WRITTEN: %ld\n"
+                "EXCLUDED: %ld\n"
+                "EXAMINED: %ld\n"
+                "PAIRED: %ld\n"
+                "SINGLE: %ld\n"
+                "DUPLICATE PAIR: %ld\n"
+                "DUPLICATE SINGLE: %ld\n"
+                "DUPLICATE OPTICAL: %ld\n"
+                "DUPLICATE SINGLE OPTICAL: %ld\n"
+                "DUPLICATE NON PRIMARY: %ld\n"
+                "DUPLICATE NON PRIMARY OPTICAL: %ld\n"
+                "DUPLICATE PRIMARY TOTAL: %ld\n"
+                "DUPLICATE TOTAL: %ld\n"
                 "ESTIMATED_LIBRARY_SIZE %ld\n", param->arg_list, reading, writing, excluded, examined, pair, single,
                                 duplicate, single_dup, optical, single_optical, np_duplicate, np_opt_duplicate,
                                 single_dup + duplicate, single_dup + duplicate + np_duplicate, els);

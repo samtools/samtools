@@ -93,7 +93,10 @@ Write stats to named file.
 The optical duplicate distance.  Suggested settings of 100 for HiSeq style
 platforms or about 2500 for NovaSeq ones.  Default is 0 to not look for
 optical duplicates.  When set, duplicate reads are tagged with \fBdt:Z:SQ\fR for
-optical duplicates and \fBdt:Z:LB\fR otherwise.
+optical duplicates and \fBdt:Z:LB\fR otherwise.  Calculation of distance depends
+on coordinate data embedded in the read names produced by the Illumina
+sequencing machines.  Optical duplicate detection will not work on non standard
+names.
 .TP
 .B -c
 Clear previous duplicate settings and tags.
