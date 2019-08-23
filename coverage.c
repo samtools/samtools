@@ -163,7 +163,7 @@ static char* center_text(char *text, char *buf, int width) {
 static char* readable_bps(double base_pairs, char *buf) {
     const char* units[] = {"", "K", "M", "G", "T"};
     int i = 0;
-    while (base_pairs >= 1000) {
+    while (base_pairs >= 1000 && i < (sizeof(units)/sizeof(units[0]) - 1)) {
         base_pairs /= 1000;
         i++;
     }
@@ -242,7 +242,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, co
         if (hist_data[i] > max_val) max_val = hist_data[i];
     }
 
-    char buf[100];
+    char buf[30];
     fprintf(file_out, "%s (%sbp)\n", sam_hdr_tid2name(h, stats->tid), readable_bps(sam_hdr_tid2len(h, stats->tid), buf));
 
     double row_bin_size = max_val / (double) n_rows;
@@ -289,7 +289,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, co
 
     // print x axis. Could be made pretty for widths that are not divisible
     // by 10 by variable spacing of the labels, instead of placing a label every 10 characters
-    char buf2[11];
+    char buf2[50];
     fprintf(file_out, "     %s", center_text(readable_bps(stats->beg + 1, buf), buf2, 10));
     int rest;
     for (rest = 10; rest < 10*(hist_size/10); rest += 10) {
