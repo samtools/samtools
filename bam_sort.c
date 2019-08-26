@@ -756,13 +756,13 @@ static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
 }
 
 static int finish_merged_header(merged_header_t *merged_hdr) {
-    if (sam_hdr_add_lines(merged_hdr->hdr, ks_str(&merged_hdr->out_rg),
+    if (sam_hdr_add_lines(merged_hdr->hdr, ks_c_str(&merged_hdr->out_rg),
                           ks_len(&merged_hdr->out_rg)) < 0)
         return -1;
-    if (sam_hdr_add_lines(merged_hdr->hdr, ks_str(&merged_hdr->out_pg),
+    if (sam_hdr_add_lines(merged_hdr->hdr, ks_c_str(&merged_hdr->out_pg),
                           ks_len(&merged_hdr->out_pg)) < 0)
         return -1;
-    if (sam_hdr_add_lines(merged_hdr->hdr, ks_str(&merged_hdr->out_co),
+    if (sam_hdr_add_lines(merged_hdr->hdr, ks_c_str(&merged_hdr->out_co),
                           ks_len(&merged_hdr->out_co)) < 0)
         return -1;
 
