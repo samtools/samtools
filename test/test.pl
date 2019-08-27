@@ -2813,6 +2813,10 @@ sub test_merge
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.3.bam -n -t PG  $$opts{path}/dat/test_input_1_c.sam") == 0 or die "failed to create sort BAM: $?";
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.4.bam -n -t PG  $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
     test_cmd($opts,out=>'merge/tag.pg.n.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -n -t PG -O SAM - $$opts{tmp}/merge.tag.3.bam $$opts{tmp}/merge.tag.4.bam");
+
+    # Check merge works when PG/RG/CO header lines absent (PR #1095)
+    # Note only "merges" one file, so expected output is input
+    test_cmd($opts, out=>'merge/test_no_pg_rg_co.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -O SAM - $$opts{path}/merge/test_no_pg_rg_co.sam");
 }
 
 sub test_sort
