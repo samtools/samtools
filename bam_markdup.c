@@ -152,10 +152,16 @@ static int key_equal(key_data_t a, key_data_t b) {
 
 
 #define __free_queue_element(p)
+
+// Orientations (prime numbers to feed to hashing algorithm)
 #define O_FF 2
 #define O_RR 3
 #define O_FR 5
 #define O_RF 7
+
+// Left or rightmost
+#define R_LE 11
+#define R_RI 13
 
 #define BMD_WARNING_MAX 10
 
@@ -434,9 +440,9 @@ static int make_pair_key(key_data_t *key, bam1_t *bam) {
     }
 
     if (!leftmost)
-        leftmost = 13;
+        leftmost = R_RI;
     else
-        leftmost = 11;
+        leftmost = R_LE;
 
     key->single        = 0;
     key->this_ref      = this_ref;
@@ -545,9 +551,9 @@ static int make_pair_key_relaxed(key_data_t *key, bam1_t *bam) {
     }
 
     if (!leftmost)
-        leftmost = 13;
+        leftmost = R_RI;
     else
-        leftmost = 11;
+        leftmost = R_LE;
 
     if (!bam_is_rev(bam)) {
         this_coord = unclipped_start(bam);
