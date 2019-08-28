@@ -53,7 +53,7 @@ samtools quickcheck
 Quickly check that input files appear to be intact. Checks that beginning of the
 file contains a valid header (all formats) containing at least one target
 sequence and then seeks to the end of the file and checks that an end-of-file
-(EOF) is present and intact (BAM only).
+(EOF) is present and intact (BAM and CRAM only).
 
 Data in the middle of the file is not read since that would be much more time
 consuming, so please note that this command will not detect internal corruption,
