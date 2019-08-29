@@ -179,13 +179,16 @@ int bam_rmdup_core(samFile *in, sam_hdr_t *hdr, samFile *out)
             q = lib? get_aux(aux, lib) : get_aux(aux, "\t");
             ++q->n_checked;
             k = kh_put(pos, q->best_hash, key, &ret);
+            if (ret < 0) goto fail;
             if (ret == 0) { // found in best_hash
                 bam1_t *p = kh_val(q->best_hash, k);
                 ++q->n_removed;
                 if (sum_qual(p) < sum_qual(b)) { // the current alignment is better; this can be accelerated in principle
                     kh_put(name, del_set, strdup(bam_get_qname(p)), &ret); // p will be removed
-                    bam_copy1(p, b); // replaced as b
+                    if (ret < 0) goto fail;
+                    if (bam_copy1(p, b) == NULL) goto fail; // replaced as b
                 } else kh_put(name, del_set, strdup(bam_get_qname(b)), &ret); // b will be removed
+                if (ret < 0) goto fail;
                 if (ret == 0)
                     fprintf(stderr, "[bam_rmdup_core] inconsistent BAM file for pair '%s'. Continue anyway.\n", bam_get_qname(b));
             } else { // not found in best_hash

@@ -84,7 +84,8 @@ static inline elem_t *push_queue(queue_t *queue, const bam1_t *b, int endpos, in
     p->discarded = 0;
     p->endpos = endpos; p->score = score;
     if (p->b == 0) p->b = bam_init1();
-    bam_copy1(p->b, b);
+    if (!p->b) { perror(NULL); exit(EXIT_FAILURE); }
+    if (bam_copy1(p->b, b) == NULL) { perror(NULL); exit(EXIT_FAILURE); }
     return p;
 }
 
@@ -179,7 +180,9 @@ int bam_rmdupse_core(samFile *in, sam_hdr_t *hdr, samFile *out, int force_se)
                         kh_val(h, k) = push_queue(queue, b, endpos, score);
                     } else { // replace
                         p->score = score; p->endpos = endpos;
-                        bam_copy1(p->b, b);
+                        if (bam_copy1(p->b, b) == NULL) {
+                            perror(NULL); exit(EXIT_FAILURE);
+                        }
                     }
                 } // otherwise, discard the alignment
             } else kh_val(h, k) = push_queue(queue, b, endpos, score);
