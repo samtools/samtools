@@ -470,7 +470,11 @@ static int make_pair_key_relaxed(key_data_t *key, bam1_t *bam) {
     this_end   = unclipped_end(bam);
 
     if ((data = bam_aux_get(bam, "MC"))) {
-        cig = bam_aux2Z(data);
+        if (!(cig = bam_aux2Z(data))) {
+            fprintf(stderr, "[markdup] error: MC tag wrong type. Please use the MC tag provided by samtools fixmate.\n");
+            return 1;
+        }
+
         other_end   = unclipped_other_end(bam->core.mpos, cig);
         other_coord = unclipped_other_start(bam->core.mpos, cig);
     } else {
@@ -505,7 +509,7 @@ static int make_pair_key_relaxed(key_data_t *key, bam1_t *bam) {
         // tie breaks
 
         if (bam->core.pos == bam->core.mpos) {
-            if ( bam->core.flag & BAM_FREAD1) {
+            if (bam->core.flag & BAM_FREAD1) {
                 leftmost = 1;
             } else {
                 leftmost = 0;
@@ -612,10 +616,21 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_n
     d = kh_get(duplicates, d_hash, bam_get_qname(dupe));
 
     if (d == kh_end(d_hash)) {
-        d = kh_put(duplicates, d_hash, strdup(bam_get_qname(dupe)), &ret);
+        char *name = strdup(bam_get_qname(dupe));
+        if (name) {
+            d = kh_put(duplicates, d_hash, name, &ret);
+        } else {
+            ret = -1;
+        }
 
         if (ret >= 0) {
             if (orig_name) {
+                if (ret == 0) {
+                    // replace old name
+                    free(kh_value(d_hash, d).name);
+                    free(name);
+                }
+
                 kh_value(d_hash, d).name = strdup(orig_name);
 
                 if (kh_value(d_hash, d).name == NULL) {
@@ -629,6 +644,7 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_n
             kh_value(d_hash, d).type = type;
         } else {
             fprintf(stderr, "[markdup] error: unable to store supplementary duplicates.\n");
+            free(name);
             return 1;
         }
     }
@@ -834,7 +850,7 @@ static unsigned long estimate_library_size(unsigned long read_pairs, unsigned lo
     read_pairs /= 2;
     duplicate_pairs /= 2;
 
-    if (read_pairs && duplicate_pairs) {
+    if ((read_pairs && duplicate_pairs) && (read_pairs > duplicate_pairs)) {
         unsigned long unique_pairs = read_pairs - duplicate_pairs;
         double m = 1;
         double M = 100;
@@ -863,6 +879,10 @@ static unsigned long estimate_library_size(unsigned long read_pairs, unsigned lo
         }
 
         estimated_size = (unsigned long)(unique_pairs * (m + M) / 2);
+    } else {
+        fprintf(stderr, "[markdup] warning: unable to calculate estimated library size."
+                        " Read pairs %ld should be greater than duplicate pairs %ld.\n",
+                        read_pairs, duplicate_pairs);
     }
 
     return estimated_size;
