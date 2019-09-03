@@ -837,8 +837,29 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
 }
 
 
-/* Modified Lander-Waterman equation */
-static inline double lw_equation(double x, double c, double n) {
+/*
+  Function to use when estimating library size.
+
+  This is based on an approximate formula for the coverage of a set
+  obtained after sampling it a given number of times with replacement.
+
+  x = number of items in the set (the number of unique fragments in the library)
+
+  c = number of unique items (unique read pairs observed)
+
+  n = number of items samples (total number of read pairs)
+
+  c and n are known; x is unknown.
+
+  As n -> infinity, the coverage (c/x) can be given as:
+
+  c / x = 1 - exp(-n / x)  (see https://math.stackexchange.com/questions/32800)
+
+  This needs to be solved for x, so it is rearranged to put both terms on the
+  left side and estimate_library_size() finds a value of x which gives a
+  result of zero (or as close as it can get).
+ */
+static inline double coverage_equation(double x, double c, double n) {
     return c / x - 1 + exp(-n / x);
 }
 
@@ -856,18 +877,18 @@ static unsigned long estimate_library_size(unsigned long read_pairs, unsigned lo
         double M = 100;
         int i;
 
-        if (lw_equation(m * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) < 0) {
+        if (coverage_equation(m * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) < 0) {
             fprintf(stderr, "[markdup] warning: unable to calculate estimated library size.\n");
             return  estimated_size;
         }
 
-        while (lw_equation(M * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) > 0) {
+        while (coverage_equation(M * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) > 0) {
             M *= 10;
         }
 
         for (i = 0; i < 40; i++) {
             double r = (m + M) / 2;
-            double u = lw_equation(r * (double)unique_pairs, (double)unique_pairs, (double)read_pairs);
+            double u = coverage_equation(r * (double)unique_pairs, (double)unique_pairs, (double)read_pairs);
 
             if (u > 0) {
                 m = r;
