@@ -133,7 +133,7 @@ ACGTN	acgtn	Base is a mismatch to the reference base
 .TE
 
 Deleted bases are shown as \(lq*\(rq on both strands
-unless \fB--reverse-del\fR is used, in which case they are shows as \(lq#\(rq
+unless \fB--reverse-del\fR is used, in which case they are shown as \(lq#\(rq
 on the reverse strand.
 .IP \(bu 2
 If there is an insertion after this read base, text matching
@@ -160,6 +160,10 @@ genomic position.
 .IP \(ci 2
 Comma-separated read names.
 (Column only present when \fB--output-QNAME\fR is used.)
+.IP \(ci 2
+Additional columns containing other specified read fields or tags,
+as selected via the \fB--output-extra\fR, \fB--output-sep\fR,
+and \fB--output-empty\fR options.
 
 .SH OPTIONS
 .TP 10
@@ -273,7 +277,7 @@ rather than the default of standard output.
 (The same short option is used for both the deprecated
 .BR --open-prob
 option and
-.B --output .
+.BR --output .
 If
 .BR -o 's
 argument contains any non-digit characters other than a leading + or - sign,
@@ -301,8 +305,7 @@ Output extra columns containing comma-separated values of read fields or read
 tags. The names of the selected fields have to be provided as they are
 described in the SAM Specification (pag. 6) and will be output by the
 mpileup command in the same order as in the document (i.e.
-.B QNAME, FLAG, RNAME...
-)
+.BR QNAME ", " FLAG ", " RNAME ,...)
 The names are case sensitive. Currently, only the following fields are
 supported:
 .IP
