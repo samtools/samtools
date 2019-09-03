@@ -77,7 +77,7 @@ relies on the MC and ms tags that fixmate provides.
 Remove duplicate reads.
 .TP
 .B -s
-Print some basic stats.
+Print some basic stats. See STATISTICS.
 .TP
 .BI "-T " PREFIX
 Write temporary files to
@@ -113,7 +113,58 @@ Include quality checked failed reads (included in the above option).
 .TP
 .B --no-PG
 Do not add a PG line to the output file.
+.SH STATISTICS
+Entries are:
+.br
+\fBCOMMAND\fR: the command line.
+.br
+\fBREAD\fR: number of reads read in.
+.br
+\fBWRITTEN\fR: reads written out.
+.br
+\fBEXCLUDED\fR: reads ignored.  See below.
+.br
+\fBEXAMINED\fR: reads examined for duplication.
+.br
+\fBPAIRED\fR: reads that are part of a pair.
+.br
+\fBSINGLE\fR: reads that are not part of a pair.
+.br
+\fBDUPLICATE PAIR\fR: reads in a duplicate pair.
+.br
+\fBDUPLICATE SINGLE\fR: single read duplicates.
+.br
+\fBDUPLICATE OPTICAL\fR: optical duplicate paired reads.
+.br
+\fBDUPLICATE OPTICAL SINGLE\fR: optical duplicate single reads.
+.br
+\fBDUPLICATE NON PRIMARY\fR: supplementary/secondary duplicate reads.
+.br
+\fBDUPLICATE NON PRIMARY OPTICAL\fR: supplementary/secondary optical
+duplicate reads.
+.br
+\fBDUPLICATE PRIMARY TOTAL\fR: number of primary duplicate reads.
+.br
+\fBDUPLICATE TOTAL\fR: total number of duplicate reads.
+.br
+\fBESTIMATED LIBRARY SIZE\fR: estimate of the number of unique fragments in the
+sequencing library.
 
+
+Estimated library size makes various assumptions e.g. the library consists of
+unique fragments that are randomly selected (with replacement) with equal
+probability.
+This is unlikely to be true in practice.
+However it can provide a useful guide into how many unique read pairs are likely 
+to be available.
+In particular it can be used to determine how much more data might be obtained
+by further sequencing of the library.
+
+Excluded reads are those marked as secondary, supplementary or unmapped.
+By default QC failed reads are also excluded but can be included as an option.
+Excluded reads are not used for calculating duplicates.
+They can optionally be marked as duplicates if they have a primary that is also
+a duplicate.    
 .SH EXAMPLES
 This first command sort can be omitted if the file is already name ordered:
 .EX

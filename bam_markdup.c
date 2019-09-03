@@ -357,7 +357,11 @@ static int make_pair_key(key_data_t *key, bam1_t *bam) {
     this_end   = unclipped_end(bam);
 
     if ((data = bam_aux_get(bam, "MC"))) {
-        cig = bam_aux2Z(data);
+        if (!(cig = bam_aux2Z(data))) {
+            fprintf(stderr, "[markdup] error: MC tag wrong type. Please use the MC tag provided by samtools fixmate.\n");
+            return 1;
+        }
+
         other_end   = unclipped_other_end(bam->core.mpos, cig);
         other_coord = unclipped_other_start(bam->core.mpos, cig);
     } else {
