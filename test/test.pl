@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2018 Genome Research Ltd.
+#    Copyright (C) 2013-2019 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -3052,13 +3052,13 @@ sub test_markdup
     my ($opts,%args) = @_;
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
-    test_cmd($opts, out=>'markdup/1_name_sort.expected.sam', err=>'1_name_sort.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/1_name_sort.sam -", expect_fail=>1);
-    test_cmd($opts, out=>'markdup/2_bad_order.expected.sam', err=>'2_bad_order.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/2_bad_order.sam -", expect_fail=>1);
-    test_cmd($opts, out=>'markdup/3_missing_mc.expected.sam', err=>'3_missing_mc.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/3_missing_mc.sam -", expect_fail=>1);
-    test_cmd($opts, out=>'markdup/4_missing_ms.expected.sam', err=>'4_missing_ms.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/4_missing_ms.sam -", expect_fail=>1);
-    test_cmd($opts, out=>'markdup/5_markdup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/5_markdup.sam -");
-    test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r $$opts{path}/markdup/6_remove_dups.sam -");
-    test_cmd($opts, out=>'markdup/7_mark_supp_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -O sam $$opts{path}/markdup/7_mark_supp_dup.sam -");
+    test_cmd($opts, out=>'markdup/1_name_sort.expected.sam', err=>'1_name_sort.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/1_name_sort.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/2_bad_order.expected.sam', err=>'2_bad_order.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/2_bad_order.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/3_missing_mc.expected.sam', err=>'3_missing_mc.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/3_missing_mc.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/4_missing_ms.expected.sam', err=>'4_missing_ms.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/4_missing_ms.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/5_markdup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/5_markdup.sam -");
+    test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r --no-PG $$opts{path}/markdup/6_remove_dups.sam -");
+    test_cmd($opts, out=>'markdup/7_mark_supp_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -O sam --no-PG $$opts{path}/markdup/7_mark_supp_dup.sam -");
 }
 
 sub test_bedcov

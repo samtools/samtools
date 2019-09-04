@@ -18,6 +18,29 @@ Release a.b
   the use of URLs.  A new '-h' option has been added to allow the replacement
   header file to be specified in its own option.
 
+* Samtools markdup new features:
+
+  - It can optionally tag optical duplicates (reads following Illumina
+    naming conventions only).  The is enabled with the '-d' option,
+    which sets the distance for duplicates to be considered as optical.
+
+  - The report stats (-s) option now outputs counts for optical and
+    non-primary (supplementary / secondary) duplicates.  It also reports
+    the Picard "estimate library size" statistic.  A new '-f' option
+    can be used to save the statistics in a given file.
+
+  - The rules for calling duplicates can be changed using the new --mode option.
+    This mainly changes the position associated with each read in a pair.
+    '--mode t' (the default) is the existing behaviour where the position
+    used is that of the outermost template base associated with the read.
+    Alternatively '--mode s' always uses the first unclipped sequence base.
+    In practice, this only makes a difference for read pairs where the
+    two reads are aligned in the same direction.
+
+  - A new '-c' option can be used to clear any existing duplicate tags.
+
+  - A new '--include-fails' option makes markdup include QC-failed reads.
+
 * Fixed bug where samtools split would crash if it read a SAM header that
   contained an @RG line with no ID tag. (#954, reported by @blue-bird1)
 
