@@ -59,7 +59,7 @@ typedef struct {
     int opt_dist;
     int no_pg;
     int clear;
-    int relaxed;
+    int mode;
     int write_index;
     int include_fails;
     char *stats_file;
@@ -164,6 +164,10 @@ static int key_equal(key_data_t a, key_data_t b) {
 #define R_RI 13
 
 #define BMD_WARNING_MAX 10
+
+// Duplicate finding mode
+#define MD_MODE_TEMPLATE 0
+#define MD_MODE_SEQUENCE 1
 
 KHASH_INIT(reads, key_data_t, in_hash_t, 1, hash_key, key_equal) // read map hash
 KLIST_INIT(read_queue, read_queue_t, __free_queue_element) // the reads buffer
@@ -343,7 +347,7 @@ static int64_t calc_score(bam1_t *b)
    the reference id, orientation and whether the current
    read is leftmost of the pair. */
 
-static int make_pair_key(key_data_t *key, bam1_t *bam) {
+static int make_pair_key_template(key_data_t *key, bam1_t *bam) {
     int32_t this_ref, this_coord, this_end;
     int32_t other_ref, other_coord, other_end;
     int32_t orientation, leftmost;
@@ -460,7 +464,7 @@ static int make_pair_key(key_data_t *key, bam1_t *bam) {
 }
 
 
-static int make_pair_key_relaxed(key_data_t *key, bam1_t *bam) {
+static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
     int32_t this_ref, this_coord, this_end;
     int32_t other_ref, other_coord, other_end;
     int32_t orientation, leftmost;
@@ -1052,13 +1056,13 @@ static int bam_mark_duplicates(md_param_t *param) {
                 key_data_t single_key;
                 in_hash_t *bp;
 
-                if (param->relaxed) {
-                    if (make_pair_key_relaxed(&pair_key, in_read->b)) {
+                if (param->mode) {
+                    if (make_pair_key_sequence(&pair_key, in_read->b)) {
                         fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
                         goto fail;
                     }
                 } else {
-                    if (make_pair_key(&pair_key, in_read->b)) {
+                    if (make_pair_key_template(&pair_key, in_read->b)) {
                         fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
                         goto fail;
                     }
@@ -1473,8 +1477,10 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -T PREFIX        Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
     fprintf(stderr, "  -d INT           Optical distance (if set, marks with dt tag)\n");
     fprintf(stderr, "  -c               Clear previous duplicate settings and tags.\n");
-    fprintf(stderr, "  --relaxed        Less strict duplicate definition (more duplicates found).\n");
-    fprintf(stderr, "  --include-fails  Include quality check failed reads (included in relaxed option.\n");
+    fprintf(stderr, "  -m --mode TYPE   Duplicate decision method for paired reads.\n"
+                    "                   TYPE = t measure positions based on template start/end (default).\n"
+                    "                          s measure positions based on sequence start.\n");
+    fprintf(stderr, "  --include-fails  Include quality check failed reads.\n");
     fprintf(stderr, "  --no-PG          Do not add a PG line\n");
     fprintf(stderr, "  -t               Mark primary duplicates with the name of the original in a \'do\' tag."
                                   " Mainly for information and debugging.\n");
@@ -1500,13 +1506,13 @@ int bam_markdup(int argc, char **argv) {
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
-        {"relaxed", no_argument, NULL, 1000},
         {"include-fails", no_argument, NULL, 1001},
         {"no-PG", no_argument, NULL, 1002},
+        {"mode", required_argument, NULL, 'm'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:nc", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:ncm:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': param.remove_dups = 1; break;
             case 'l': param.max_length = atoi(optarg); break;
@@ -1517,7 +1523,17 @@ int bam_markdup(int argc, char **argv) {
             case 'f': param.stats_file = optarg; param.do_stats = 1; break;
             case 'd': param.opt_dist = atoi(optarg); break;
             case 'c': param.clear = 1; break;
-            case 1000: param.relaxed = 1, param.include_fails = 1; break;
+            case 'm':
+                if (strcmp(optarg, "t") == 0) {
+                    param.mode = MD_MODE_TEMPLATE;
+                } else if (strcmp(optarg, "s") == 0) {
+                    param.mode = MD_MODE_SEQUENCE;
+                } else {
+                    fprintf(stderr, "[markdup] error: unknown mode '%s'.\n", optarg);
+                    return markdup_usage();
+                }
+
+                break;
             case 1001: param.include_fails = 1; break;
             case 1002: param.no_pg = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;

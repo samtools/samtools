@@ -56,7 +56,8 @@ samtools markdup
 .IR distance ]
 .RB [ -c ]
 .RB [ -t ]
-.RB [ --relaxed ]
+.RB [ -m ]
+.RB [ --mode ]
 .RB [ --include-fails ]
 .RB [ --no-PG ]
 .I in.algsort.bam out.bam
@@ -104,12 +105,16 @@ Clear previous duplicate settings and tags.
 .B -t
 Mark duplicates with the name of the original in a \fBdo\fR tag.
 .TP
-.B --relaxed
-An alternative algorithm for choosing which reads are duplicates.  Tends to
-find more duplicates than the default though the results are largely the same.
+.BI "-m, --mode " TYPE
+Duplicate decision method for paired reads.  Values are \fBt\fR or \fBs\fR.
+Mode \fBt\fR measures positions based on template start/end (default).
+Mode \fBs\fR measures positions based on sequence start.
+While the two methods identify mostly the same reads as duplicates, mode 
+\fBs\fR tends to return more results.  Unpaired reads are treated identically
+by both modes.
 .TP
 .B --include-fails
-Include quality checked failed reads (included in the above option).
+Include quality checked failed reads.
 .TP
 .B --no-PG
 Do not add a PG line to the output file.
