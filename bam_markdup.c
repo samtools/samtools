@@ -676,6 +676,10 @@ static inline int get_coordinate_positions(const char *qname, int *xpos, int *yp
             } else if (sep == 4) { // HiSeq style names
                 *xpos = *ypos;
                 *ypos = pos + 1;
+            } else if (sep == 5) { // Newer Illumina format
+                *xpos = pos + 1;
+            } else if (sep == 6) {
+                *ypos = pos + 1;
             }
         }
 
@@ -699,7 +703,7 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist, long *warn
 
     seps = get_coordinate_positions(original, &oxpos, &oypos);
 
-    if (!(seps == 3 || seps == 4)) {
+    if (!(seps == 3 || seps == 4 || seps == 6 || seps == 7)) {
         (*warnings)++;
 
         if (*warnings <= BMD_WARNING_MAX) {
@@ -711,7 +715,7 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist, long *warn
 
     seps = get_coordinate_positions(duplicate, &dxpos, &dypos);
 
-    if (!(seps == 3 || seps == 4)) {
+    if (!(seps == 3 || seps == 4 || seps == 6 || seps == 7)) {
 
         (*warnings)++;
 
