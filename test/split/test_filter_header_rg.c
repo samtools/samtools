@@ -65,7 +65,7 @@ bool hdrcmp(const char *hdr1, const char *hdr2) {
     lines1 = malloc(count1 * sizeof(*lines1));
     if (!lines1) return false;
     lines2 = malloc(count2 * sizeof(*lines2));
-    if (!lines2) return false;
+    if (!lines2) { free(lines1); return false; }
 
     for (i = 0, l = hdr1 + nl1; *l != '\0'; l += strcspn(l, "\n"))
         lines1[i++] = ++l;
@@ -82,7 +82,8 @@ bool hdrcmp(const char *hdr1, const char *hdr2) {
 
     free(lines1);
     free(lines2);
-    return res;
+
+    return res?false:true;
 }
 
 void setup_test_1(sam_hdr_t** hdr_in)
@@ -101,10 +102,7 @@ bool check_test_1(sam_hdr_t* hdr) {
     "@SQ\tSN:blah\tLN:1\n"
     "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
 
-    if (hdrcmp(sam_hdr_str(hdr), test1_res)) {
-        return false;
-    }
-    return true;
+    return hdrcmp(sam_hdr_str(hdr), test1_res);
 }
 
 void setup_test_2(sam_hdr_t** hdr_in)
@@ -124,16 +122,35 @@ bool check_test_2(sam_hdr_t* hdr) {
     "@RG\tID:fish\n"
     "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
 
-    if (hdrcmp(sam_hdr_str(hdr), test2_res)) {
-        return false;
-    }
-    return true;
+    return hdrcmp(sam_hdr_str(hdr), test2_res);
+}
+
+void setup_test_3(sam_hdr_t** hdr_in)
+{
+    *hdr_in = sam_hdr_init();
+    const char *test3 =
+    "@HD\tVN:1.4\n"
+    "@SQ\tSN:blah\tLN:1\n"
+    "@RG\tID:fish1\n"
+    "@RG\tID:fish2\n"
+    "@RG\tID:fish3\n"
+    "@RG\tID:fish4\n";
+    sam_hdr_add_lines(*hdr_in, test3, 0);
+}
+
+bool check_test_3(sam_hdr_t* hdr) {
+    const char *test3_res =
+    "@HD\tVN:1.4\n"
+    "@SQ\tSN:blah\tLN:1\n"
+    "@PG\tID:samtools\tPN:samtools\tVN:x.y.test\tCL:test_filter_header_rg foo bar baz\n";
+
+    return hdrcmp(sam_hdr_str(hdr), test3_res);
 }
 
 int main(int argc, char *argv[])
 {
     // test state
-    const int NUM_TESTS = 2;
+    const int NUM_TESTS = 3;
     int verbose = 0;
     int success = 0;
     int failure = 0;
@@ -250,6 +267,47 @@ int main(int argc, char *argv[])
     sam_hdr_destroy(hdr2);
     if (verbose) printf("END test 2\n");
 
+    if (verbose) printf("BEGIN test 3\n");  // test eliminating a tag that is there
+    sam_hdr_t* hdr3;
+    setup_test_3(&hdr3);
+    if (verbose > 1) {
+        printf("hdr3\n");
+        dump_hdr(hdr3);
+    }
+    if (verbose) printf("RUN test 3\n");
+
+    // test
+    redirected_stderr = redirect_stderr(tempfname);
+    bool result_3 = (!sam_hdr_remove_except(hdr3, "RG", NULL, NULL) &&
+            !sam_hdr_add_pg(hdr3, "samtools", "VN", samtools_version(),
+                                    arg_list ? "CL": NULL,
+                                    arg_list ? arg_list : NULL,
+                                    NULL));
+    flush_and_restore_stderr(orig_stderr, redirected_stderr);
+
+    if (verbose) printf("END RUN test 3\n");
+    if (verbose > 1) {
+        printf("hdr3\n");
+        dump_hdr(hdr3);
+    }
+
+    // check result
+    res.l = 0;
+    check = fopen(tempfname, "r");
+    if ( result_3
+        && check_test_3(hdr3)
+        && kgetline(&res, (kgets_func *)fgets, check) < 0
+        && (feof(check) || res.l == 0)) {
+        ++success;
+    } else {
+        ++failure;
+        if (verbose) printf("FAIL test 3\n");
+    }
+    fclose(check);
+
+    // teardown
+    sam_hdr_destroy(hdr3);
+    if (verbose) printf("END test 3\n");
 
     // Cleanup
     free(res.s);

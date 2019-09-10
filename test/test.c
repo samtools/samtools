@@ -67,13 +67,13 @@ void dump_hdr(const sam_hdr_t* hdr)
 {
     printf("n_targets: %d\n", sam_hdr_nref(hdr));
     printf("ignore_sam_err: %d\n", hdr->ignore_sam_err);
-    printf("l_text: %zu\n", (size_t) hdr->l_text);
+    printf("l_text: %zu\n", (size_t) sam_hdr_length((sam_hdr_t*)hdr));
     printf("idx\ttarget_len\ttarget_name:\n");
     int32_t target;
     for (target = 0; target < sam_hdr_nref(hdr); ++target) {
         printf("%d\t%u\t\"%s\"\n", target, sam_hdr_tid2len(hdr, target), sam_hdr_tid2name(hdr, target));
     }
-    printf("text: \"%s\"\n", hdr->text);
+    printf("text: \"%s\"\n", sam_hdr_str((sam_hdr_t*)hdr));
 }
 
 // For tests, just return a constant that can be embedded in expected output.
