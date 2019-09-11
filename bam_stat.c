@@ -97,7 +97,121 @@ static void usage_exit(FILE *fp, int exit_status)
 {
     fprintf(fp, "Usage: samtools flagstat [options] <in.bam>\n");
     sam_global_opt_help(fp, "-.---@");
+    fprintf(fp, "  -O, --");
+    fprintf(fp, "output-fmt FORMAT[,OPT[=VAL]]...\n"
+            "               Specify output format (json, tsv)\n");
     exit(exit_status);
+}
+
+static void out_fmt_default(bam_flagstat_t *s)
+{
+    char b0[16], b1[16];
+    printf("%lld + %lld in total (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
+    printf("%lld + %lld secondary\n", s->n_secondary[0], s->n_secondary[1]);
+    printf("%lld + %lld supplementary\n", s->n_supp[0], s->n_supp[1]);
+    printf("%lld + %lld duplicates\n", s->n_dup[0], s->n_dup[1]);
+    printf("%lld + %lld mapped (%s : %s)\n", s->n_mapped[0], s->n_mapped[1], percent(b0, s->n_mapped[0], s->n_reads[0]), percent(b1, s->n_mapped[1], s->n_reads[1]));
+    printf("%lld + %lld paired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);
+    printf("%lld + %lld read1\n", s->n_read1[0], s->n_read1[1]);
+    printf("%lld + %lld read2\n", s->n_read2[0], s->n_read2[1]);
+    printf("%lld + %lld properly paired (%s : %s)\n", s->n_pair_good[0], s->n_pair_good[1], percent(b0, s->n_pair_good[0], s->n_pair_all[0]), percent(b1, s->n_pair_good[1], s->n_pair_all[1]));
+    printf("%lld + %lld with itself and mate mapped\n", s->n_pair_map[0], s->n_pair_map[1]);
+    printf("%lld + %lld singletons (%s : %s)\n", s->n_sgltn[0], s->n_sgltn[1], percent(b0, s->n_sgltn[0], s->n_pair_all[0]), percent(b1, s->n_sgltn[1], s->n_pair_all[1]));
+    printf("%lld + %lld with mate mapped to a different chr\n", s->n_diffchr[0], s->n_diffchr[1]);
+    printf("%lld + %lld with mate mapped to a different chr (mapQ>=5)\n", s->n_diffhigh[0], s->n_diffhigh[1]);
+}
+
+static void out_fmt_json(bam_flagstat_t *s) {
+    char b0[16], b1[16];
+    printf("{\n \"QC-passed reads\": { \n"
+                 "  \"total\": \"%lld\", \n"
+                 "  \"secondary\": \"%lld\", \n"
+                 "  \"supplementary\": \"%lld\", \n"
+                 "  \"duplicates\": \"%lld\", \n"
+                 "  \"mapped\": \"%lld (%s)\", \n"
+                 "  \"paired in sequencing\": \"%lld\", \n"
+                 "  \"read1\": \"%lld\", \n"
+                 "  \"read2\": \"%lld\", \n"
+                 "  \"properly paired\": \"%lld\", \n"
+                 "  \"with itself and mate mapped\": \"%lld\", \n"
+                 "  \"singletons\": \"%lld (%s)\", \n"
+                 "  \"with mate mapped to a different chr\": \"%lld\", \n"
+                 "  \"with mate mapped to a different chr (mapQ >= 5)\": \"%lld\" \n"
+                 " },"
+            "\n \"QC-failed reads\": { \n"
+                 "  \"total\": \"%lld\", \n"
+                 "  \"secondary\": \"%lld\", \n"
+                 "  \"supplementary\": \"%lld\", \n"
+                 "  \"duplicates\": \"%lld\", \n"
+                 "  \"mapped\": \"%lld (%s)\", \n"
+                 "  \"paired in sequencing\": \"%lld\", \n"
+                 "  \"read1\": \"%lld\", \n"
+                 "  \"read2\": \"%lld\", \n"
+                 "  \"properly paired\": \"%lld\", \n"
+                 "  \"with itself and mate mapped\": \"%lld\", \n"
+                 "  \"singletons\": \"%lld (%s)\", \n"
+                 "  \"with mate mapped to a different chr\": \"%lld\", \n"
+                 "  \"with mate mapped to a different chr (mapQ >= 5)\": \"%lld\" \n"
+                 " }\n"
+            "}\n",
+        s->n_reads[0],
+        s->n_secondary[0],
+        s->n_supp[0],
+        s->n_dup[0],
+        s->n_mapped[0], percent(b0, s->n_mapped[0], s->n_reads[0]),
+        s->n_pair_all[0],
+        s->n_read1[0],
+        s->n_read2[0],
+        s->n_pair_good[0],
+        s->n_pair_map[0],
+        s->n_sgltn[0], percent(b0, s->n_sgltn[0], s->n_pair_all[0]),
+        s->n_diffchr[0],
+        s->n_diffhigh[0],
+        s->n_reads[1],
+        s->n_secondary[1],
+        s->n_supp[1],
+        s->n_dup[1],
+        s->n_mapped[1], percent(b1, s->n_mapped[1], s->n_reads[1]),
+        s->n_pair_all[1],
+        s->n_read1[1],
+        s->n_read2[1],
+        s->n_pair_good[1],
+        s->n_pair_map[1],
+        s->n_sgltn[1], percent(b1, s->n_sgltn[1], s->n_pair_all[1]),
+        s->n_diffchr[1],
+        s->n_diffhigh[1]
+    );
+}
+
+static void out_fmt_tsv(bam_flagstat_t *s) {
+    char b0[16], b1[16];
+    printf("%lld\t%lld\ttotal (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
+    printf("%lld\t%lld\tsecondary\n", s->n_secondary[0], s->n_secondary[1]);
+    printf("%lld\t%lld\tsupplementary\n", s->n_supp[0], s->n_supp[1]);
+    printf("%lld\t%lld\tduplicates\n", s->n_dup[0], s->n_dup[1]);
+    printf("%lld\t%lld\tmapped (%s : %s)\n", s->n_mapped[0], s->n_mapped[1], percent(b0, s->n_mapped[0], s->n_reads[0]), percent(b1, s->n_mapped[1], s->n_reads[1]));
+    printf("%lld\t%lld\tpaired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);
+    printf("%lld\t%lld\tread1\n", s->n_read1[0], s->n_read1[1]);
+    printf("%lld\t%lld\tread2\n", s->n_read2[0], s->n_read2[1]);
+    printf("%lld\t%lld\tproperly paired (%s : %s)\n", s->n_pair_good[0], s->n_pair_good[1], percent(b0, s->n_pair_good[0], s->n_pair_all[0]), percent(b1, s->n_pair_good[1], s->n_pair_all[1]));
+    printf("%lld\t%lld\twith itself and mate mapped\n", s->n_pair_map[0], s->n_pair_map[1]);
+    printf("%lld\t%lld\tsingletons (%s : %s)\n", s->n_sgltn[0], s->n_sgltn[1], percent(b0, s->n_sgltn[0], s->n_pair_all[0]), percent(b1, s->n_sgltn[1], s->n_pair_all[1]));
+    printf("%lld\t%lld\twith mate mapped to a different chr\n", s->n_diffchr[0], s->n_diffchr[1]);
+    printf("%lld\t%lld\twith mate mapped to a different chr (mapQ>=5)\n", s->n_diffhigh[0], s->n_diffhigh[1]);
+}
+
+/*
+ * Select flagstats output format to print.
+ */
+static void output_fmt(bam_flagstat_t *s, char *out_fmt)
+{
+  if (strcmp(out_fmt, "json") == 0 || strcmp(out_fmt, "JSON") == 0) {
+    out_fmt_json(s);
+  } else if (strcmp(out_fmt, "tsv") == 0 || strcmp(out_fmt, "TSV") == 0) {
+    out_fmt_tsv(s);
+  } else {
+    out_fmt_default(s);
+  }
 }
 
 int bam_flagstat(int argc, char *argv[])
@@ -105,7 +219,7 @@ int bam_flagstat(int argc, char *argv[])
     samFile *fp;
     sam_hdr_t *header;
     bam_flagstat_t *s;
-    char b0[16], b1[16];
+    char out_fmt[8];
     int c;
 
     enum {
@@ -114,12 +228,15 @@ int bam_flagstat(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', '-', '@'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', '-', '-', '@'),
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "@:O:", lopts, NULL)) >= 0) {
         switch (c) {
+        case 'O':
+          strcpy(out_fmt, optarg);
+          break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
         case '?':
@@ -155,20 +272,9 @@ int bam_flagstat(int argc, char *argv[])
         fprintf(stderr, "Failed to read header for \"%s\"\n", argv[optind]);
         return 1;
     }
+
     s = bam_flagstat_core(fp, header);
-    printf("%lld + %lld in total (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
-    printf("%lld + %lld secondary\n", s->n_secondary[0], s->n_secondary[1]);
-    printf("%lld + %lld supplementary\n", s->n_supp[0], s->n_supp[1]);
-    printf("%lld + %lld duplicates\n", s->n_dup[0], s->n_dup[1]);
-    printf("%lld + %lld mapped (%s : %s)\n", s->n_mapped[0], s->n_mapped[1], percent(b0, s->n_mapped[0], s->n_reads[0]), percent(b1, s->n_mapped[1], s->n_reads[1]));
-    printf("%lld + %lld paired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);
-    printf("%lld + %lld read1\n", s->n_read1[0], s->n_read1[1]);
-    printf("%lld + %lld read2\n", s->n_read2[0], s->n_read2[1]);
-    printf("%lld + %lld properly paired (%s : %s)\n", s->n_pair_good[0], s->n_pair_good[1], percent(b0, s->n_pair_good[0], s->n_pair_all[0]), percent(b1, s->n_pair_good[1], s->n_pair_all[1]));
-    printf("%lld + %lld with itself and mate mapped\n", s->n_pair_map[0], s->n_pair_map[1]);
-    printf("%lld + %lld singletons (%s : %s)\n", s->n_sgltn[0], s->n_sgltn[1], percent(b0, s->n_sgltn[0], s->n_pair_all[0]), percent(b1, s->n_sgltn[1], s->n_pair_all[1]));
-    printf("%lld + %lld with mate mapped to a different chr\n", s->n_diffchr[0], s->n_diffchr[1]);
-    printf("%lld + %lld with mate mapped to a different chr (mapQ>=5)\n", s->n_diffhigh[0], s->n_diffhigh[1]);
+    output_fmt(s, out_fmt);
     free(s);
     sam_hdr_destroy(header);
     sam_close(fp);
