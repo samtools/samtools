@@ -93,6 +93,13 @@ static const char *percent(char *buffer, long long n, long long total)
     return buffer;
 }
 
+static const char *percent_json(char *buffer, long long n, long long total)
+{
+    if (total != 0) sprintf(buffer, "%.2f", (float)n / total * 100.0);
+    else strcpy(buffer, "null");
+    return buffer;
+}
+
 static void usage_exit(FILE *fp, int exit_status)
 {
     fprintf(fp, "Usage: samtools flagstat [options] <in.bam>\n");
@@ -203,7 +210,7 @@ static void out_fmt_tsv(bam_flagstat_t *s) {
 /*
  * Select flagstats output format to print.
  */
-static void output_fmt(bam_flagstat_t *s, char *out_fmt)
+static void output_fmt(bam_flagstat_t *s, const char *out_fmt)
 {
   if (strcmp(out_fmt, "json") == 0 || strcmp(out_fmt, "JSON") == 0) {
     out_fmt_json(s);
@@ -219,7 +226,7 @@ int bam_flagstat(int argc, char *argv[])
     samFile *fp;
     sam_hdr_t *header;
     bam_flagstat_t *s;
-    char out_fmt[8];
+    const char *out_fmt = "default";
     int c;
 
     enum {
@@ -235,7 +242,7 @@ int bam_flagstat(int argc, char *argv[])
     while ((c = getopt_long(argc, argv, "@:O:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'O':
-          strcpy(out_fmt, optarg);
+          out_fmt = optarg;
           break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
