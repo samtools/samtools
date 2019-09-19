@@ -41,6 +41,9 @@ Release a.b
 
   - A new '--include-fails' option makes markdup include QC-failed reads.
 
+* Samtools flagstat can now optionally write its output in JSON format or
+  as a tab-separated values file. (#1106, thanks to Vivek Rai).
+
 * Fixed bug where samtools split would crash if it read a SAM header that
   contained an @RG line with no ID tag. (#954, reported by @blue-bird1)
 
