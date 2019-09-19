@@ -52,9 +52,10 @@ Does a full pass through the input file to calculate and print statistics
 to stdout.
 
 Provides counts for each of 13 categories based primarily on bit flags in
-the FLAG field. Each category in the output is broken down into QC pass and
-QC fail, which is presented as "#PASS + #FAIL" followed by a description of
-the category.
+the FLAG field.
+Each category in the output is broken down into QC pass and QC fail.
+In the default output format, these are presented as "#PASS + #FAIL" followed
+by a description of the category.
 
 The first row of output gives the total number of reads that are QC pass and
 fail (according to flag bit 0x200). For example:
@@ -114,6 +115,62 @@ with mate mapped to a different chr (mapQ>=5)
 0x1 bit set and neither 0x4 nor 0x8 bits set
 and MRNM not equal to RNAME and MAPQ >= 5
 .RE
+
+.SH ALTERNATIVE OUTPUT FORMATS
+.PP
+The
+.B -O
+option can be used to select two alternative formats for the output.
+.PP
+Using
+.B -O tsv
+selects a tab-separated values format that can easily be imported into
+spreadsheet software.
+In this format the first column contains the values for QC-passed reads,
+the second column has the values for QC-failed reads and the third
+contains the category names.
+.PP
+Using
+.B -O json
+generates an ECMA-404 JSON data interchange format object
+<https://www.json.org/>.
+The top-level object contains two named objects
+.BR "QC-passed reads" " and " "QC-failed reads" .
+These contain the various categories listed above as names and
+the corresponding count as value.
+
+For the default format, the
+.BR mapped ", " "properly paired" ", and " singletons
+show the count as a percentage of the total number of QC-passed or QC-failed
+reads after the category name.
+For example:
+.EX
+32 + 0 mapped (94.12% : N/A)
+.EE
+
+In the
+.BR tsv " and " json
+formats, these percentages are listed in separate categories
+.BR "mapped %" ", " "properly paired %" ", and " "singletons %" .
+If the percentage cannot be calculated (because the total is zero)
+then in the
+.BR default " and " tsv
+formats it will be reported as `N/A'.
+In the
+.B json
+format, it will be reported as a JSON `null' value.
+
+.SH OPTIONS
+.TP 10
+.BI "-@ " INT
+Set number of additional threads to use when reading the file.
+.TP
+.BI "-O " FORMAT
+Set the output format.
+.I FORMAT
+can be set to `default', `json' or `tsv' to select the default, JSON
+or tab-separated values output format.
+If this option is not used, the default format will be selected.
 
 .SH AUTHOR
 .PP
