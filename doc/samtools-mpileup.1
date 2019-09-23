@@ -137,8 +137,10 @@ unless \fB--reverse-del\fR is used, in which case they are shown as \(lq#\(rq
 on the reverse strand.
 .IP \(bu 2
 If there is an insertion after this read base, text matching
-\(lq\\+[0-9]+[ACGTNacgtn]+\(rq: a \(lq+\(rq character followed by an integer
+\(lq\\+[0-9]+[ACGTNacgtn*#]+\(rq: a \(lq+\(rq character followed by an integer
 giving the length of the insertion and then the inserted sequence.
+Pads are shown as \(lq*\(rq unless \fB--reverse-del\fR is used,
+in which case pads on the reverse strand will be shown as \(lq#\(rq.
 .IP \(bu 2
 If there is a deletion after this read base, text matching
 \(lq-[0-9]+[ACGTNacgtn]+\(rq: a \(lq-\(rq character followed by the deleted

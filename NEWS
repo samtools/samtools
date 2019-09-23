@@ -8,7 +8,16 @@ Release a.b
   Examples of problems that will now be rejected include @SQ lines with
   no SN: tag, and @RG or @PG lines with no ID: tag.
 
-* In samtools mpileup, a deletion on the reverse strand is now marked
+* samtools mpileup and tview can now display alignments including CIGAR
+  P (pad) operators correctly.  They will now also produce the correct
+  output for alignments where insertions are immediately followed by
+  deletions, or deletions by insertions.  Note that due to limitations
+  in HTSlib, they are still unable to output sequences that have been
+  inserted before the first aligned base of a read.  (#734, reported
+  by Ryan Lorig-Roach; #842 reported by Tiffany Delhomme.  See also
+  htslib issue #59 and pull request #699).
+
+* In samtools mpileup, a deletion or pad on the reverse strand is now marked
   with a different character ('#') than the one used on a forward strand ('*'),
   if '--reverse-del' option is used.
 
