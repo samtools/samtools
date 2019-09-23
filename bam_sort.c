@@ -44,6 +44,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/klist.h"
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
+#include "htslib/hts_endian.h"
 #include "sam_opts.h"
 #include "samtools.h"
 
@@ -55,7 +56,7 @@ typedef struct bam1_tag {
     bam1_t *bam_record;
     union {
         const uint8_t *tag;
-        uint64_t pos;
+        uint8_t pos_tid[12];
     } u;
 } bam1_tag;
 
@@ -122,12 +123,12 @@ static int strnum_cmp(const char *_a, const char *_b)
     return *pa? 1 : *pb? -1 : 0;
 }
 
-#define HEAP_EMPTY UINT64_MAX
+#define HEAP_EMPTY (UINT64_MAX >> 1)
 
 typedef struct {
     int i;
-    uint32_t rev;
-    uint64_t pos, idx;
+    uint32_t tid;
+    uint64_t pos:63, rev:1, idx;
     bam1_tag entry;
 } heap1_t;
 
@@ -153,6 +154,7 @@ static inline int heap_lt(const heap1_t a, const heap1_t b)
         fb = b.entry.bam_record->core.flag & 0xc0;
         if (fa != fb) return fa > fb;
     } else {
+        if (a.tid != b.tid) return a.tid > b.tid;
         if (a.pos != b.pos) return a.pos > b.pos;
         if (a.rev != b.rev) return a.rev > b.rev;
     }
@@ -1097,13 +1099,14 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
 
     // If we're only merging a specified region move our iters to start at that point
     if (reg) {
-        int tid, beg, end;
+        int tid;
+        hts_pos_t beg, end;
         const char *name_lim;
 
         rtrans = rtrans_build(n, sam_hdr_nref(hout), translation_tbl);
         if (!rtrans) goto mem_fail;
 
-        name_lim = hts_parse_reg(reg, &beg, &end);
+        name_lim = hts_parse_reg64(reg, &beg, &end);
         if (name_lim) {
             char *name = malloc(name_lim - reg + 1);
             if (!name) goto mem_fail;
@@ -1148,7 +1151,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
                 if (mapped_tid != INT32_MIN) {
                     fprintf(stderr,
                             "[%s] failed to get iterator over "
-                            "{%s, %d, %d, %d}\n",
+                            "{%s, %d, %"PRIhts_pos", %"PRIhts_pos"}\n",
                             __func__, fn[i], mapped_tid, beg, end);
                 } else {
                     fprintf(stderr,
@@ -1185,7 +1188,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         res = iter[i] ? sam_itr_next(fp[i], iter[i], h->entry.bam_record) : sam_read1(fp[i], hdr[i], h->entry.bam_record);
         if (res >= 0) {
             bam_translate(h->entry.bam_record, translation_tbl + i);
-            h->pos = ((uint64_t)h->entry.bam_record->core.tid<<32) | (uint32_t)((int32_t)h->entry.bam_record->core.pos+1);
+            h->tid = h->entry.bam_record->core.tid;
+            h->pos = (uint64_t)(h->entry.bam_record->core.pos + 1);
             h->rev = bam_is_rev(h->entry.bam_record);
             h->idx = idx++;
             if (g_is_by_tag) {
@@ -1249,7 +1253,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         }
         if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
             bam_translate(b, translation_tbl + heap->i);
-            heap->pos = ((uint64_t)b->core.tid<<32) | (uint32_t)((int)b->core.pos+1);
+            heap->tid = b->core.tid;
+            heap->pos = (uint64_t)(b->core.pos + 1);
             heap->rev = bam_is_rev(b);
             heap->idx = idx++;
             if (g_is_by_tag) {
@@ -1526,8 +1531,8 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
         }
     }
     if (res >= 0) {
-        heap->pos = (((uint64_t)heap->entry.bam_record->core.tid<<32)
-                     | (uint32_t)((int32_t)heap->entry.bam_record->core.pos+1));
+        heap->tid = heap->entry.bam_record->core.tid;
+        heap->pos = (uint64_t)(heap->entry.bam_record->core.pos + 1);
         heap->rev = bam_is_rev(heap->entry.bam_record);
         heap->idx = (*idx)++;
         if (g_is_by_tag) {
@@ -1692,8 +1697,13 @@ static inline int bam1_cmp_core(const bam1_tag a, const bam1_tag b)
         if (t != 0) return t;
         return (int) (a.bam_record->core.flag&0xc0) - (int) (b.bam_record->core.flag&0xc0);
     } else {
-        pa = (uint64_t)a.bam_record->core.tid<<32|(a.bam_record->core.pos+1);
-        pb = (uint64_t)b.bam_record->core.tid<<32|(b.bam_record->core.pos+1);
+        pa = a.bam_record->core.tid;
+        pb = b.bam_record->core.tid;
+
+        if (pa == pb) {
+            pa = (uint64_t)(a.bam_record->core.pos+1);
+            pb = (uint64_t)(b.bam_record->core.pos+1);
+        }
 
         if (pa == pb) {
             pa = bam_is_rev(a.bam_record);
@@ -1829,26 +1839,43 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 }
 
 #define NUMBASE 256
-#define STEP 8
 
 static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
 {
     int curr = 0, ret = -1;
     ssize_t i;
     bam1_tag *buf_ar2[2], *bam_a, *bam_b;
-    uint64_t max_pos = 0, max_digit = 0, shift = 0;
+    uint64_t max_pos = 1;
+    uint32_t max_tid = 1, tid_bytes = 0, pos_bytes = 0, byte = 0;
+    int nref = sam_hdr_nref(h);
 
+    // Count number of bytes needed for biggest tid and pos
+    //  Notes: Add 1 to core.pos so always positive.
+    //         Convert unmapped tid (-1) to number of references so unmapped
+    //         sort to the end.
     for (i = 0; i < n; i++) {
         bam1_t *b = buf[i].bam_record;
-        int32_t tid = b->core.tid == -1 ? sam_hdr_nref(h) : b->core.tid;
-        buf[i].u.pos = (uint64_t)tid<<32 | (b->core.pos+1)<<1 | bam_is_rev(b);
-        if (max_pos < buf[i].u.pos)
-            max_pos = buf[i].u.pos;
+        uint32_t tid = b->core.tid == -1 ? nref : b->core.tid;
+        uint64_t pos = ((uint64_t)(b->core.pos + 1) << 1) | bam_is_rev(b);
+        if (max_tid < tid)
+            max_tid = tid;
+        if (max_pos < pos)
+            max_pos = pos;
     }
 
-    while (max_pos) {
-        ++max_digit;
-        max_pos = max_pos >> 1;
+    for (; max_pos > 0; max_pos >>= 8) pos_bytes++;
+    for (; max_tid > 0; max_tid >>= 8) tid_bytes++;
+    assert(pos_bytes + tid_bytes < sizeof(buf[0].u.pos_tid));
+
+    // Write position and tid into bam1_tag::u::pos_tid using minimum number
+    // of bytes required.  Values are stored little-endian so that we
+    // get a least-significant digit (byte) radix sort.
+    for (i = 0; i < n; i++) {
+        bam1_t *b = buf[i].bam_record;
+        uint32_t tid = b->core.tid == -1 ? nref : b->core.tid;
+        uint64_t pos = ((uint64_t)(b->core.pos + 1) << 1) | bam_is_rev(b);
+        u64_to_le(pos, buf[i].u.pos_tid);
+        u32_to_le(tid, &buf[i].u.pos_tid[pos_bytes]);
     }
 
     buf_ar2[0] = buf;
@@ -1858,18 +1885,18 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
         goto err;
     }
 
-    while (shift < max_digit){
+    // Least-significant digit radix sort (where "digits" are bytes)
+    for (byte = 0; byte < pos_bytes + tid_bytes; byte++) {
         size_t remainders[NUMBASE] = { 0 };
         bam_a = buf_ar2[curr]; bam_b = buf_ar2[1-curr];
         for (i = 0; i < n; ++i)
-            remainders[(bam_a[i].u.pos >> shift) % NUMBASE]++;
+            remainders[bam_a[i].u.pos_tid[byte]]++;
         for (i = 1; i < NUMBASE; ++i)
             remainders[i] += remainders[i - 1];
         for (i = n - 1; i >= 0; i--) {
-            size_t j = --remainders[(bam_a[i].u.pos >> shift) % NUMBASE];
+            size_t j = --remainders[bam_a[i].u.pos_tid[byte]];
             bam_b[j] = bam_a[i];
         }
-        shift += STEP;
         curr = 1 - curr;
     }
     if (curr == 1) {
