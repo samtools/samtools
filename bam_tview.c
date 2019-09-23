@@ -171,7 +171,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
     tview_t *tv = (tview_t*)data;
     int i, j, c, rb, attr, max_ins = 0;
     uint32_t call = 0;
-    kstring_t ks = {0,0};
+    kstring_t ks = KS_INITIALIZE;
     if (pos < tv->left_pos || tv->ccol > tv->mcol) return 0; // out of screen
     // print reference
     rb = (tv->ref && pos - tv->left_pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N';
@@ -305,7 +305,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
         } else tv->my_mvaddch(tv,1, tv->ccol++, c);
     }
     tv->last_pos = pos;
-    if (ks.s) free(ks.s);
+    ks_free(&ks);
     return 0;
 }
 

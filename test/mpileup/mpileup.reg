@@ -198,10 +198,11 @@ P m5_b3aa.out  $samtools mpileup -ABQ0 -aa -l xx.bed3 xx#depth3.bam
 F m5_b3a.out   $samtools mpileup -ABQ0 -a  -l xx.bed3 xx#depth3.bam
 
 # compound I and D ops along with Pads.
-P mp_D.out     $samtools mpileup -ABQ0 -f mp.fa mp_D.sam
-P mp_DI.out    $samtools mpileup -ABQ0 -f mp.fa mp_DI.sam
-P mp_I.out     $samtools mpileup -ABQ0 -f mp.fa mp_I.sam
-P mp_ID.out    $samtools mpileup -ABQ0 -f mp.fa mp_ID.sam
-P mp_N.out     $samtools mpileup -ABQ0 -f mp.fa mp_N.sam
-P mp_N2.out    $samtools mpileup -ABQ0 -f mp.fa mp_N2.sam
-P mp_P.out     $samtools mpileup -ABQ0 -f mp.fa mp_P.sam
+P mp_D.out      $samtools mpileup -ABQ0 -f mp.fa mp_D.sam
+P mp_DI.out     $samtools mpileup -ABQ0 -f mp.fa mp_DI.sam
+P mp_I.out      $samtools mpileup -ABQ0 -f mp.fa mp_I.sam
+P mp_ID.out     $samtools mpileup -ABQ0 -f mp.fa mp_ID.sam
+P mp_N.out      $samtools mpileup -ABQ0 -f mp.fa mp_N.sam
+P mp_N2.out     $samtools mpileup -ABQ0 -f mp.fa mp_N2.sam
+P mp_P.out      $samtools mpileup -ABQ0 -f mp.fa mp_P.sam
+P mp_ID_rev.out $samtools mpileup -ABQ0 --reverse-del -f mp.fa mp_ID_rev.sam
