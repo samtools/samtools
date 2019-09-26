@@ -46,13 +46,13 @@ P d5_all1.out  $samtools depth               xx#depth3.bam
 P d5_all2.out  $samtools depth -a            xx#depth3.bam
 P d5_all3.out  $samtools depth -aa           xx#depth3.bam
 P d5_blank.out $samtools depth     -r xy:5-6 xx#depth3.bam
-P d5_blank.out $samtools depth -a  -r xy:5-6 xx#depth3.bam
+P d5_xy1.out   $samtools depth -a  -r xy:5-6 xx#depth3.bam
 P d5_xy1.out   $samtools depth -aa -r xy:5-6 xx#depth3.bam
 P d5_xx1.out   $samtools depth     -r xx:4-10 xx#depth3.bam
 P d5_xx2.out   $samtools depth -a  -r xx:4-10 xx#depth3.bam
 P d5_xx2.out   $samtools depth -aa -r xx:4-10 xx#depth3.bam
 P d5_blank.out $samtools depth     -r xx:9    xx#depth3.bam
-P d5_blank.out $samtools depth -a  -r xx:9    xx#depth3.bam
+P d5_xx3.out   $samtools depth -a  -r xx:9    xx#depth3.bam
 P d5_xx3.out   $samtools depth -aa -r xx:9    xx#depth3.bam
 P d5_b3.out    $samtools depth     -b xx.bed3 xx#depth3.bam
 P d5_b3aa.out  $samtools depth -aa -b xx.bed3 xx#depth3.bam
