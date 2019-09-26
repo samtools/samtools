@@ -1012,7 +1012,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
     uint32_t order = (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0);
     if ( !(bam_line->core.flag & BAM_FPAIRED) ||
          (bam_line->core.flag & BAM_FMUNMAP) ||
-         (abs(bam_line->core.isize) >= 2*bam_line->core.l_qseq) ||
+         (llabs(bam_line->core.isize) >= 2*bam_line->core.l_qseq) ||
          (order != READ_ORDER_FIRST && order != READ_ORDER_LAST) ) {
         if ( pmin >= 0 )
             round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax);
