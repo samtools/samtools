@@ -63,9 +63,9 @@ static inline int printw(int c, FILE *fp)
     return 0;
 }
 
-static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos,
-                              int ref_len, const char *ref, kstring_t *ks,
-                              int rev_del)
+static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos,
+                             int ref_len, const char *ref, kstring_t *ks,
+                             int rev_del)
 {
     int j;
     if (p->is_head) {
@@ -89,6 +89,8 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos,
     int del_len = -p->indel;
     if (p->indel > 0) {
         int len = bam_plp_insertion(p, ks, &del_len);
+        if (len < 0)
+            return -1;
         putc('+', fp); printw(len, fp);
         if (bam_is_rev(p->b)) {
             char pad = rev_del ? '#' : '*';
@@ -107,6 +109,7 @@ static inline void pileup_seq(FILE *fp, const bam_pileup1_t *p, int pos,
         }
     }
     if (p->is_tail) putc('$', fp);
+    return 0;
 }
 
 #include <assert.h>
@@ -773,8 +776,13 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                         int c = p->qpos < p->b->core.l_qseq
                             ? bam_get_qual(p->b)[p->qpos]
                             : 0;
-                        if (c >= conf->min_baseQ)
-                            n++, pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref, &ks, conf->rev_del);
+                        if (c >= conf->min_baseQ) {
+                            n++;
+                            if (pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref, &ks, conf->rev_del) < 0) {
+                                ret = 1;
+                                goto fail;
+                            }
+                        }
                     }
                     if (!n) putc('*', pileup_fp);
 
@@ -941,6 +949,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
         }
     }
 
+fail:
     // clean up
     free(bc.tmp.s);
     bcf_destroy1(bcf_rec);

@@ -213,6 +213,10 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
         for (i = 0; i < n; ++i) {
             const bam_pileup1_t *p = pl + i;
             int len = bam_plp_insertion(p, &ks, NULL);
+            if (len < 0) {
+                print_error("tview", "Memory allocation failure.");
+                exit(1);
+            }
             if (max_ins < len) max_ins = len;
         }
     }
@@ -239,6 +243,10 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
                 } else c = p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : '*';
             } else { // padding
                 int len = bam_plp_insertion(p, &ks, NULL);
+                if (len < 0) {
+                    print_error("tview", "Memory allocation failure.");
+                    exit(1);
+                }
 
                 if (j > len) c = '*';
                 else { // insertion
