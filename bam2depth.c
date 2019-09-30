@@ -39,6 +39,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include "htslib/sam.h"
 #include "samtools.h"
+#include "bedidx.h"
 #include "sam_opts.h"
 
 typedef struct {     // auxiliary data structure
@@ -47,11 +48,6 @@ typedef struct {     // auxiliary data structure
     hts_itr_t *iter; // NULL if a region not specified
     int min_mapQ, min_len; // mapQ filter; length filter
 } aux_t;
-
-void *bed_read(const char *fn); // read a BED or position list file
-void bed_destroy(void *_h);     // destroy the BED data structure
-int bed_overlap(const void *_h, const char *chr, int beg, int end); // test if chr:beg-end overlaps
-int bed_query(const void *_h, const char *chr, int pos, int *beg, int *end);
 
 // This function reads a BAM alignment from one BAM file.
 static int read_bam(void *data, bam1_t *b) // read level filters better go here to avoid pileup
