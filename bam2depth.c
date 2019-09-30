@@ -99,7 +99,8 @@ static int usage() {
 
 int main_depth(int argc, char *argv[])
 {
-    int i, n, tid, reg_tid, beg, end, pos, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, has_index_file = 0;
+    int i, n, tid, reg_tid, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, has_index_file = 0;
+    hts_pos_t beg, end, pos, last_pos = -1;
     int all = 0, status = EXIT_SUCCESS, nfiles, max_depth = -1;
     const bam_pileup1_t **plp;
     char *reg = 0; // specified region
@@ -108,7 +109,7 @@ int main_depth(int argc, char *argv[])
     sam_hdr_t *h = NULL; // BAM header of the 1st input
     aux_t **data;
     bam_mplp_t mplp;
-    int last_pos = -1, last_tid = -1, ret;
+    int last_tid = -1, ret;
     int print_header = 0;
     char *output_file = NULL;
     FILE *file_out = stdout;
@@ -179,7 +180,7 @@ int main_depth(int argc, char *argv[])
         n = argc - optind;
     }
     data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
-    reg_tid = 0; beg = 0; end = INT_MAX;  // set the default region
+    reg_tid = 0; beg = 0; end = HTS_POS_MAX;  // set the default region
 
     for (i = 0; i < n; ++i) {
         int rf;
@@ -256,7 +257,7 @@ int main_depth(int argc, char *argv[])
         bam_mplp_set_maxcnt(mplp,INT_MAX);
     n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
-    while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
+    while ((ret=bam_mplp64_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
         if (pos < beg || pos >= end) continue; // out of range; skip
         if (tid >= sam_hdr_nref(h)) continue;     // diff number of @SQ lines per file?
         if (all) {
@@ -267,7 +268,8 @@ int main_depth(int argc, char *argv[])
                         // Horribly inefficient, but the bed API is an obfuscated black box.
                         if (bed && bed_overlap(bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
                             continue;
-                        fputs(sam_hdr_tid2name(h, last_tid), file_out); fprintf(file_out, "\t%d", last_pos+1);
+                        fputs(sam_hdr_tid2name(h, last_tid), file_out);
+                        fprintf(file_out, "\t%"PRIhts_pos, last_pos+1);
                         for (i = 0; i < n; i++)
                             fputc('\t', file_out), fputc('0', file_out);
                         fputc('\n', file_out);
@@ -284,7 +286,8 @@ int main_depth(int argc, char *argv[])
                 if (last_pos < beg) continue; // out of range; skip
                 if (bed && bed_overlap(bed, sam_hdr_tid2name(h, tid), last_pos, last_pos + 1) == 0)
                     continue;
-                fputs(sam_hdr_tid2name(h, tid), file_out); fprintf(file_out, "\t%d", last_pos+1);
+                fputs(sam_hdr_tid2name(h, tid), file_out);
+                fprintf(file_out, "\t%"PRIhts_pos, last_pos+1);
                 for (i = 0; i < n; i++)
                     fputc('\t', file_out), fputc('0', file_out);
                 fputc('\n', file_out);
@@ -294,7 +297,8 @@ int main_depth(int argc, char *argv[])
             last_pos = pos;
         }
         if (bed && bed_overlap(bed, sam_hdr_tid2name(h, tid), pos, pos + 1) == 0) continue;
-        fputs(sam_hdr_tid2name(h, tid), file_out); fprintf(file_out, "\t%d", pos+1); // a customized printf() would be faster
+        fputs(sam_hdr_tid2name(h, tid), file_out);
+        fprintf(file_out, "\t%"PRIhts_pos, pos+1); // a customized printf() would be faster
         for (i = 0; i < n; ++i) { // base level filters have to go here
             int j, m = 0;
             for (j = 0; j < n_plp[i]; ++j) {
@@ -322,7 +326,8 @@ int main_depth(int argc, char *argv[])
                 if (last_pos >= end) break;
                 if (bed && bed_overlap(bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
                     continue;
-                fputs(sam_hdr_tid2name(h, last_tid), file_out); fprintf(file_out, "\t%d", last_pos+1);
+                fputs(sam_hdr_tid2name(h, last_tid), file_out);
+                fprintf(file_out, "\t%"PRIhts_pos, last_pos+1);
                 for (i = 0; i < n; i++)
                     fputc('\t', file_out), fputc('0', file_out);
                 fputc('\n', file_out);
