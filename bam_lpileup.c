@@ -100,7 +100,7 @@ void bam_lplbuf_reset(bam_lplbuf_t *buf)
     buf->n_nodes = 0;
 }
 
-static int tview_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
+static int tview_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data)
 {
     bam_lplbuf_t *tv = (bam_lplbuf_t*)data;
     freenode_t *p;

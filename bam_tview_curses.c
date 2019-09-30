@@ -136,11 +136,11 @@ static int curses_colorpair(struct AbstractTview* tv,int flag) {
     return COLOR_PAIR(flag);
 }
 
-static int curses_drawaln(struct AbstractTview* tv, int tid, int pos) {
+static int curses_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos) {
     return base_draw_aln(tv,  tid, pos);
 }
 
-static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos) {
+static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     char str[256], *p;
     int i, l = 0;
     tview_t *base=(tview_t*)tv;
@@ -153,15 +153,16 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos) {
         if (c == KEY_BACKSPACE || c == '\010' || c == '\177') {
             if(l > 0) --l;
         } else if (c == KEY_ENTER || c == '\012' || c == '\015') {
-            int _tid = -1, _beg, _end;
+            int _tid = -1;
+            hts_pos_t _beg, _end;
             if (str[0] == '=') {
-                _beg = strtol(str+1, &p, 10) - 1;
+                _beg = strtoll(str+1, &p, 10) - 1;
                 if (_beg > 0) {
                     *pos = _beg;
                     return;
                 }
             } else {
-                char *name_lim = (char *) hts_parse_reg(str, &_beg, &_end);
+                char *name_lim = (char *) hts_parse_reg64(str, &_beg, &_end);
                 if (name_lim) {
                     char name_terminator = *name_lim;
                     *name_lim = '\0';
@@ -234,7 +235,8 @@ static int curses_underline(tview_t* tv) {
 }
 
 static int curses_loop(tview_t* tv) {
-    int tid, pos;
+    int tid;
+    hts_pos_t pos;
     curses_tview_t *CTV=(curses_tview_t *)tv;
     tid = tv->curr_tid; pos = tv->left_pos;
     while (1) {

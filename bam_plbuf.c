@@ -58,11 +58,12 @@ void bam_plbuf_destroy(bam_plbuf_t *buf)
 
 int bam_plbuf_push(const bam1_t *b, bam_plbuf_t *buf)
 {
-    int ret, n_plp, tid, pos;
+    int ret, n_plp, tid;
+    hts_pos_t pos;
     const bam_pileup1_t *plp;
     ret = bam_plp_push(buf->iter, b);
     if (ret < 0) return ret;
-    while ((plp = bam_plp_next(buf->iter, &tid, &pos, &n_plp)) != 0)
+    while ((plp = bam_plp64_next(buf->iter, &tid, &pos, &n_plp)) != 0)
         buf->func(tid, pos, n_plp, plp, buf->data);
     return 0;
 }

@@ -49,11 +49,11 @@ typedef struct AbstractTview {
     bam_lplbuf_t* lplbuf;
     sam_hdr_t* header;
     samFile* fp;
-    int curr_tid, left_pos;
     faidx_t* fai;
     bcf_callaux_t* bca;
 
-    int ccol, last_pos, row_shift, base_for, color_for, is_dot, l_ref, ins;
+    hts_pos_t left_pos, last_pos, l_ref;
+    int curr_tid, ccol, row_shift, base_for, color_for, is_dot, ins;
     int no_skip, show_name, inverse;
     char *ref;
     /* maps @RG ID => SM (sample), in practice only used to determine whether a particular RG is in the list of allowed ones */
@@ -66,7 +66,7 @@ typedef struct AbstractTview {
     void (*my_attroff)(struct AbstractTview*,int);
     void (*my_clear)(struct AbstractTview*);
     int (*my_colorpair)(struct AbstractTview*,int);
-    int (*my_drawaln)(struct AbstractTview*,int,int);
+    int (*my_drawaln)(struct AbstractTview*,int,hts_pos_t);
     int (*my_loop)(struct AbstractTview*);
     int (*my_underline)(struct AbstractTview*);
 } tview_t;
@@ -89,12 +89,12 @@ char bam_aux_getCQi(bam1_t *b, int i);
 #define TV_BASE_NUCL 0
 #define TV_BASE_COLOR_SPACE 1
 
-int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data);
+int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data);
 // Added fn_idx to arguments as index file
 int base_tv_init(tview_t*,const char *fn, const char *fn_fa, const char *fn_idx,
                  const char *samples, const htsFormat *fmt);
 void base_tv_destroy(tview_t*);
-int base_draw_aln(tview_t *tv, int tid, int pos);
+int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos);
 
 typedef struct Tixel
     {

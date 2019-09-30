@@ -166,21 +166,24 @@ void base_tv_destroy(tview_t* tv)
 }
 
 
-int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
+int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data)
 {
     tview_t *tv = (tview_t*)data;
-    int i, j, c, rb, attr, max_ins = 0;
+    hts_pos_t cp;
+    int i, j, c, rb, attr, max_ins = 0, interval;
     uint32_t call = 0;
     kstring_t ks = KS_INITIALIZE;
     if (pos < tv->left_pos || tv->ccol > tv->mcol) return 0; // out of screen
     // print reference
     rb = (tv->ref && pos - tv->left_pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N';
-    for (i = tv->last_pos + 1; i < pos; ++i) {
-        if (i%10 == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-d", i+1);
-        c = tv->ref? tv->ref[i - tv->left_pos] : 'N';
+    for (cp = tv->last_pos + 1; cp < pos; ++cp) {
+        interval = cp < 1000000000 ? 10 : 20;
+        if (cp%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, cp+1);
+        c = tv->ref? tv->ref[cp - tv->left_pos] : 'N';
         tv->my_mvaddch(tv,1, tv->ccol++, c);
     }
-    if (pos%10 == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-d", pos+1);
+    interval = pos < 1000000000 ? 10 : 20;
+    if (pos%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, pos+1);
     { // call consensus
         bcf_callret1_t bcr;
         memset(&bcr, 0, sizeof bcr);
@@ -342,7 +345,7 @@ static int tv_push_aln(const bam1_t *b, tview_t *tv)
     return 0;
 }
 
-int base_draw_aln(tview_t *tv, int tid, int pos)
+int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos)
 {
     assert(tv!=NULL);
     // reset
@@ -359,8 +362,8 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
         const char *ref_name = sam_hdr_tid2name(tv->header, tv->curr_tid);
         str = (char*)calloc(strlen(ref_name) + 30, 1);
         assert(str!=NULL);
-        sprintf(str, "%s:%d-%d", ref_name, tv->left_pos + 1, tv->left_pos + tv->mcol);
-        tv->ref = fai_fetch(tv->fai, str, &tv->l_ref);
+        sprintf(str, "%s:%"PRIhts_pos"-%"PRIhts_pos, ref_name, tv->left_pos + 1, tv->left_pos + tv->mcol);
+        tv->ref = fai_fetch64(tv->fai, str, &tv->l_ref);
         free(str);
         if ( !tv->ref )
         {
@@ -378,8 +381,9 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
     bam_lplbuf_push(0, tv->lplbuf);
 
     while (tv->ccol < tv->mcol) {
-        int pos = tv->last_pos + 1;
-        if (pos%10 == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-d", pos+1);
+        hts_pos_t pos = tv->last_pos + 1;
+        int interval = pos < 1000000000 ? 10 : 20;
+        if (pos%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, pos+1);
         tv->my_mvaddch(tv,1, tv->ccol++, (tv->ref && pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N');
         ++tv->last_pos;
     }
@@ -493,8 +497,9 @@ int bam_tview_main(int argc, char *argv[])
 
     if ( position )
     {
-        int tid, beg, end;
-        char *name_lim = (char *) hts_parse_reg(position, &beg, &end);
+        int tid;
+        hts_pos_t beg, end;
+        char *name_lim = (char *) hts_parse_reg64(position, &beg, &end);
         if (name_lim) *name_lim = '\0';
         else beg = 0; // region parsing failed, but possibly a seq named "foo:a"
         tid = bam_name2id(tv->header, position);

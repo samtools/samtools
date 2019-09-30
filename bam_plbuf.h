@@ -29,7 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #ifndef BAM_PILEUP_F_DEFINED
 #define BAM_PILEUP_F_DEFINED
-typedef int (*bam_pileup_f)(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data);
+typedef int (*bam_pileup_f)(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data);
 #endif //BAM_PILEUP_F_DEFINED
 
 typedef struct {

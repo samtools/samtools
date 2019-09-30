@@ -131,14 +131,14 @@ static int html_colorpair(struct AbstractTview* tv,int flag)
     return (1 << (flag));
     }
 
-static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
+static int html_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos)
     {
     int y,x;
     html_tview_t* ptr=FROM_TV(tv);
     html_clear(tv);
     base_draw_aln(tv,  tid, pos);
     fputs("<html><head>",ptr->out);
-    fprintf(ptr->out,"<title>%s:%d</title>",
+    fprintf(ptr->out,"<title>%s:%"PRIhts_pos"</title>",
         sam_hdr_tid2name(tv->header, tid),
         pos+1
         );
@@ -164,7 +164,7 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
 
     fputs("</head><body>",ptr->out);
 
-      fprintf(ptr->out,"<div class='tviewbody'><div class='tviewtitle'>%s:%d</div>",
+      fprintf(ptr->out,"<div class='tviewbody'><div class='tviewtitle'>%s:%"PRIhts_pos"</div>",
         sam_hdr_tid2name(tv->header, tid),
         pos+1
         );
@@ -233,7 +233,7 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
 #define ANSI_UNDERLINE_SET "\033[4m"
 #define ANSI_UNDERLINE_UNSET "\033[0m"
 
-static int text_drawaln(struct AbstractTview* tv, int tid, int pos)
+static int text_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos)
     {
     int y,x;
     html_tview_t* ptr=FROM_TV(tv);
