@@ -317,7 +317,7 @@ int main_depth(int argc, char *argv[])
 
     if (all) {
         // Handle terminating region
-        if (last_tid < 0 && reg && all > 1) {
+        if (last_tid < 0 && reg) {
             last_tid = reg_tid;
             last_pos = beg-1;
         }
