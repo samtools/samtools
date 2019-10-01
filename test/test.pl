@@ -68,6 +68,7 @@ test_markdup($opts, threads=>2);
 test_bedcov($opts);
 test_split($opts);
 test_split($opts, threads=>2);
+test_large_positions($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -2038,7 +2039,7 @@ sub test_view
 
     # Barcodes file for -D test
     my $fobc = "$$opts{tmp}/view.001.fobc";
-    open(my $f, '>', $fobc) || die "Couldn't open $fobc : $!\n";
+    open($f, '>', $fobc) || die "Couldn't open $fobc : $!\n";
     print $f "ACGT\nAATTCCGG\n" || die "Error writing to $fobc : $!\n";
     close($f) || die "Error writing to $fobc : $!\n";
 
@@ -2453,6 +2454,46 @@ sub cat_sams
         $first = 0;
     }
     close($out) || die "Error writing to $sam_out : $!\n";
+}
+
+# Large position tests
+
+sub test_large_positions
+{
+    my ($opts) = @_;
+
+    # Simple round-trip
+    my $longref = "$$opts{tmp}/longref.sam.gz";
+    cmd("$$opts{bgzip} -c $$opts{path}/large_pos/longref.sam > $longref");
+    test_cmd($opts, out => 'large_pos/longref.sam',
+             cmd => "$$opts{bin}/samtools view -h --no-PG $longref");
+
+    # Index
+    cmd("$$opts{bin}/samtools index -c $longref");
+    test_cmd($opts, out => 'large_pos/longref_idx.expected.sam',
+             cmd => "$$opts{bin}/samtools view -h --no-PG $longref CHROMOSOME_I:10000000114-10000000168");
+
+    # Bed file
+    test_cmd($opts, out => 'large_pos/longref_idx.expected.sam',
+             cmd => "$$opts{bin}/samtools view -h --no-PG -L $$opts{path}/large_pos/test.bed $longref");
+
+    # Sort
+    test_cmd($opts, out => 'large_pos/longref.sam',
+             cmd => "$$opts{bin}/samtools sort -O sam --no-PG $$opts{path}/large_pos/longref_name.sam");
+
+    # Merge
+    test_cmd($opts, out => 'large_pos/merge.expected.sam',
+             cmd => "$$opts{bin}/samtools merge -O sam --no-PG - $$opts{path}/large_pos/longref.sam $$opts{path}/large_pos/longref2.sam");
+
+    # Depth
+    test_cmd($opts, out => 'large_pos/depth.expected.sam',
+             cmd => "$$opts{bin}/samtools depth $$opts{path}/large_pos/longref.sam");
+    test_cmd($opts, out => 'large_pos/depth_bed.expected.sam',
+             cmd => "$$opts{bin}/samtools depth -b $$opts{path}/large_pos/test.bed $$opts{path}/large_pos/longref.sam");
+
+    # tview
+    test_cmd($opts, out => 'large_pos/tview.expected.out',
+             cmd => "$$opts{bin}/samtools tview -d T -p CHROMOSOME_I:10000000000 $longref");
 }
 
 # Test samtools cat.
