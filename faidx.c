@@ -1,6 +1,6 @@
 /*  faidx.c -- faidx subcommand.
 
-    Copyright (C) 2008, 2009, 2013, 2016, 2018 Genome Research Ltd.
+    Copyright (C) 2008, 2009, 2013, 2016, 2018-2019 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -67,7 +67,7 @@ static unsigned char comp_base[256] = {
 240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
 };
 
-static void reverse_complement(char *str, int len) {
+static void reverse_complement(char *str, const hts_pos_t len) {
     char c;
     int i = 0, j = len - 1;
 
@@ -81,7 +81,7 @@ static void reverse_complement(char *str, int len) {
 }
 
 
-static void reverse(char *str, int len) {
+static void reverse(char *str, const hts_pos_t len) {
     char c;
     int i = 0, j = len - 1;
 
@@ -96,8 +96,8 @@ static void reverse(char *str, int len) {
 
 
 static int write_line(FILE *file, const char *line, const char *name, const int ignore,
-                      const int length, const int seq_len) {
-    int beg, end;
+                      const int length, const hts_pos_t seq_len) {
+    hts_pos_t beg, end;
 
     if (seq_len < 0) {
         fprintf(stderr, "[faidx] Failed to fetch sequence in %s\n", name);
@@ -109,15 +109,15 @@ static int write_line(FILE *file, const char *line, const char *name, const int 
         }
     } else if (seq_len == 0) {
         fprintf(stderr, "[faidx] Zero length sequence: %s\n", name);
-    } else if (hts_parse_reg(name, &beg, &end) && (end < INT_MAX) && (seq_len != end - beg)) {
+    } else if (hts_parse_reg64(name, &beg, &end) && (end < HTS_POS_MAX) && (seq_len != end - beg)) {
         fprintf(stderr, "[faidx] Truncated sequence: %s\n", name);
     }
 
-    size_t i, seq_sz = seq_len;
+    hts_pos_t i, seq_sz = seq_len;
 
     for (i = 0; i < seq_sz; i += length)
     {
-        size_t len = i + length < seq_sz ? length : seq_sz - i;
+        hts_pos_t len = i + length < seq_sz ? length : seq_sz - i;
         if (fwrite(line + i, 1, len, file) < len ||
             fputc('\n', file) == EOF) {
             print_error_errno("faidx", "failed to write output");
@@ -133,8 +133,8 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
                         const int length, const int rev,
                         const char *pos_strand_name, const char *neg_strand_name,
                         enum fai_format_options format) {
-    int seq_len;
-    char *seq = fai_fetch(faid, name, &seq_len);
+    hts_pos_t seq_len;
+    char *seq = fai_fetch64(faid, name, &seq_len);
 
     if (format == FAI_FASTA) {
         fprintf(file, ">%s%s\n", name, rev ? neg_strand_name : pos_strand_name);
@@ -156,7 +156,7 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
     if (format == FAI_FASTQ) {
         fprintf(file, "+\n");
 
-        char *qual = fai_fetchqual(faid, name, &seq_len);
+        char *qual = fai_fetchqual64(faid, name, &seq_len);
 
         if (rev && seq_len > 0) {
             reverse(qual, seq_len);

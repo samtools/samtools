@@ -2952,6 +2952,7 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/5_ct.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/5_ct.sam -");
     test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
     test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
+    test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
 }
 
 sub test_calmd

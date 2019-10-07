@@ -68,13 +68,13 @@ typedef struct {
 } md_param_t;
 
 typedef struct {
-    int32_t single;
+    hts_pos_t this_coord;
+    hts_pos_t other_coord;
     int32_t this_ref;
-    int32_t this_coord;
     int32_t other_ref;
-    int32_t other_coord;
-    int32_t leftmost;
-    int32_t orientation;
+    int8_t single;
+    int8_t leftmost;
+    int8_t orientation;
 } key_data_t;
 
 typedef struct {
@@ -82,10 +82,10 @@ typedef struct {
 } in_hash_t;
 
 typedef struct {
-    bam1_t *b;
-    int32_t pos;
     key_data_t pair_key;
     key_data_t single_key;
+    bam1_t *b;
+    hts_pos_t pos;
 } read_queue_t;
 
 typedef struct {
@@ -102,22 +102,22 @@ static khint_t hash_key(key_data_t key) {
     khint_t hash;
 
     if (key.single) {
-        unsigned char sig[12];
+        unsigned char sig[13];
 
         memcpy(sig + i, &key.this_ref, 4);      i += 4;
-        memcpy(sig + i, &key.this_coord, 4);    i += 4;
-        memcpy(sig + i, &key.orientation, 4);   i += 4;
+        memcpy(sig + i, &key.this_coord, 8);    i += 8;
+        memcpy(sig + i, &key.orientation, 1);   i += 1;
 
         hash = do_hash(sig, i);
     } else {
-        unsigned char sig[24];
+        unsigned char sig[26];
 
         memcpy(sig + i, &key.this_ref, 4);      i += 4;
-        memcpy(sig + i, &key.this_coord, 4);    i += 4;
+        memcpy(sig + i, &key.this_coord, 8);    i += 8;
         memcpy(sig + i, &key.other_ref, 4);     i += 4;
-        memcpy(sig + i, &key.other_coord, 4);   i += 4;
-        memcpy(sig + i, &key.leftmost, 4);      i += 4;
-        memcpy(sig + i, &key.orientation, 4);   i += 4;
+        memcpy(sig + i, &key.other_coord, 8);   i += 8;
+        memcpy(sig + i, &key.leftmost, 1);      i += 1;
+        memcpy(sig + i, &key.orientation, 1);   i += 1;
 
         hash = do_hash(sig, i);
     }
@@ -165,6 +165,8 @@ static int key_equal(key_data_t a, key_data_t b) {
 
 #define BMD_WARNING_MAX 10
 
+#define MD_MIN_QUALITY 15
+
 // Duplicate finding mode
 #define MD_MODE_TEMPLATE 0
 #define MD_MODE_SEQUENCE 1
@@ -176,9 +178,9 @@ KHASH_MAP_INIT_STR(duplicates, dup_map_t) // map of duplicates for supplementary
 
 /* Calculate the mate's unclipped start based on position and cigar string from MC tag. */
 
-static int32_t unclipped_other_start(int32_t op, char *cigar) {
+static hts_pos_t unclipped_other_start(hts_pos_t op, char *cigar) {
     char *c = cigar;
-    int32_t clipped = 0;
+    int64_t clipped = 0;
 
     while (*c && *c != '*') {
         long num = 0;
@@ -204,9 +206,9 @@ static int32_t unclipped_other_start(int32_t op, char *cigar) {
 
 /* Calculate the current read's start based on the stored cigar string. */
 
-static int32_t unclipped_start(bam1_t *b) {
+static hts_pos_t unclipped_start(bam1_t *b) {
     uint32_t *cigar = bam_get_cigar(b);
-    int32_t clipped = 0;
+    int64_t clipped = 0;
     uint32_t i;
 
     for (i = 0; i < b->core.n_cigar; i++) {
@@ -225,9 +227,9 @@ static int32_t unclipped_start(bam1_t *b) {
 
 /* Calculate the mate's unclipped end based on start position and cigar string from MC tag.*/
 
-static int32_t unclipped_other_end(int32_t op, char *cigar) {
+static hts_pos_t unclipped_other_end(int64_t op, char *cigar) {
     char *c = cigar;
-    int32_t refpos = 0;
+    int64_t refpos = 0;
     int skip = 1;
 
     while (*c && *c != '*') {
@@ -266,9 +268,9 @@ static int32_t unclipped_other_end(int32_t op, char *cigar) {
 
 /* Calculate the current read's end based on the stored cigar string. */
 
-static int32_t unclipped_end(bam1_t *b) {
+static hts_pos_t unclipped_end(bam1_t *b) {
     uint32_t *cigar = bam_get_cigar(b);
-    int32_t end_pos, clipped = 0;
+    hts_pos_t end_pos, clipped = 0;
     int32_t i;
 
     end_pos = bam_endpos(b);
@@ -335,7 +337,7 @@ static int64_t calc_score(bam1_t *b)
     int i;
 
     for (i = 0; i < b->core.l_qseq; i++) {
-        if (qual[i] >= 15) score += qual[i];
+        if (qual[i] >= MD_MIN_QUALITY) score += qual[i];
     }
 
     return score;
@@ -348,9 +350,9 @@ static int64_t calc_score(bam1_t *b)
    read is leftmost of the pair. */
 
 static int make_pair_key_template(key_data_t *key, bam1_t *bam) {
-    int32_t this_ref, this_coord, this_end;
-    int32_t other_ref, other_coord, other_end;
-    int32_t orientation, leftmost;
+    hts_pos_t this_coord, other_coord, this_end, other_end;
+    int32_t this_ref, other_ref;
+    int8_t orientation, leftmost;
     uint8_t *data;
     char *cig;
 
@@ -465,9 +467,9 @@ static int make_pair_key_template(key_data_t *key, bam1_t *bam) {
 
 
 static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
-    int32_t this_ref, this_coord, this_end;
-    int32_t other_ref, other_coord, other_end;
-    int32_t orientation, leftmost;
+    hts_pos_t this_coord, this_end, other_coord, other_end;
+    int32_t this_ref, other_ref;
+    int8_t orientation, leftmost;
     uint8_t *data;
     char *cig;
 
@@ -595,8 +597,9 @@ static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
    and orientation. */
 
 static void make_single_key(key_data_t *key, bam1_t *bam) {
-    int32_t this_ref, this_coord;
-    int32_t orientation;
+    hts_pos_t this_coord;
+    int32_t this_ref;
+    int8_t orientation;
 
     this_ref = bam->core.tid + 1; // avoid a 0 being put into the hash
 
@@ -939,7 +942,8 @@ static int bam_mark_duplicates(md_param_t *param) {
     klist_t(read_queue) *read_buffer = kl_init(read_queue);
     kliter_t(read_queue) *rq;
     khash_t(duplicates) *dup_hash    = kh_init(duplicates);
-    int32_t prev_tid, prev_coord;
+    int32_t prev_tid;
+    hts_pos_t prev_coord;
     read_queue_t *in_read;
     int ret;
     long reading, writing, excluded, duplicate, single, pair, single_dup, examined, optical, single_optical;
@@ -1426,7 +1430,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                 "DUPLICATE NON PRIMARY OPTICAL: %ld\n"
                 "DUPLICATE PRIMARY TOTAL: %ld\n"
                 "DUPLICATE TOTAL: %ld\n"
-                "ESTIMATED_LIBRARY_SIZE %ld\n", param->arg_list, reading, writing, excluded, examined, pair, single,
+                "ESTIMATED_LIBRARY_SIZE: %ld\n", param->arg_list, reading, writing, excluded, examined, pair, single,
                                 duplicate, single_dup, optical, single_optical, np_duplicate, np_opt_duplicate,
                                 single_dup + duplicate, single_dup + duplicate + np_duplicate, els);
 

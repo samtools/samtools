@@ -1,6 +1,6 @@
 /*  bam_mate.c -- fix mate pairing information and clean up flags.
 
-    Copyright (C) 2009, 2011-2017 Genome Research Ltd.
+    Copyright (C) 2009, 2011-2017, 2019 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
     Portions copyright (C) 2012 Peter Cock, The James Hutton Institute.
 
@@ -37,6 +37,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "samtools.h"
 
+
+#define MD_MIN_QUALITY 15
+
 /*
  * This function calculates ct tag for two bams, it assumes they are from the same template and
  * writes the tag to the first read in position terms.
@@ -44,7 +47,8 @@ DEALINGS IN THE SOFTWARE.  */
 static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 {
     bam1_t *swap;
-    int i, end;
+    int i;
+    hts_pos_t end;
     uint32_t *cigar;
     str->l = 0;
     if (b1->core.tid != b2->core.tid || b1->core.tid < 0 || b1->core.pos < 0 || b2->core.pos < 0 || b1->core.flag&BAM_FUNMAP || b2->core.flag&BAM_FUNMAP) return; // coordinateless or not on the same chr; skip
@@ -140,8 +144,8 @@ static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
 
     bam1_t* first = a;
     bam1_t* second = b;
-    int32_t a_pos = a->core.flag&BAM_FREVERSE ? bam_endpos(a) : a->core.pos;
-    int32_t b_pos = b->core.flag&BAM_FREVERSE ? bam_endpos(b) : b->core.pos;
+    hts_pos_t a_pos = a->core.flag&BAM_FREVERSE ? bam_endpos(a) : a->core.pos;
+    hts_pos_t  b_pos = b->core.flag&BAM_FREVERSE ? bam_endpos(b) : b->core.pos;
     if (a_pos > b_pos) {
         first = b;
         second = a;
@@ -226,7 +230,7 @@ static uint32_t calc_mate_score(bam1_t *b)
     int i;
 
     for (i = 0; i < b->core.l_qseq; i++) {
-        if (qual[i] >= 15) score += qual[i];
+        if (qual[i] >= MD_MIN_QUALITY) score += qual[i];
     }
 
     return score;
@@ -254,7 +258,8 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
 {
     sam_hdr_t *header;
     bam1_t *b[2] = { NULL, NULL };
-    int curr, has_prev, pre_end = 0, cur_end = 0, result;
+    int curr, has_prev, result;
+    hts_pos_t pre_end = 0, cur_end = 0;
     kstring_t str = KS_INITIALIZE;
 
     header = sam_hdr_read(in);
@@ -305,7 +310,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
             cur_end = bam_endpos(cur);
 
             // Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
-            if (cur_end > (int)sam_hdr_tid2len(header, cur->core.tid)) cur->core.flag |= BAM_FUNMAP;
+            if (cur_end > sam_hdr_tid2len(header, cur->core.tid)) cur->core.flag |= BAM_FUNMAP;
         }
         if (has_prev) { // do we have a pair of reads to examine?
             if (strcmp(bam_get_qname(cur), bam_get_qname(pre)) == 0) { // identical pair name
@@ -316,7 +321,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
                 if (pre->core.tid == cur->core.tid && !(cur->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))
                     && !(pre->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))) // if safe set TLEN/ISIZE
                 {
-                    int32_t cur5, pre5;
+                    hts_pos_t cur5, pre5;
                     cur5 = (cur->core.flag&BAM_FREVERSE)? cur_end : cur->core.pos;
                     pre5 = (pre->core.flag&BAM_FREVERSE)? pre_end : pre->core.pos;
                     cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
