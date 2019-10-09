@@ -230,7 +230,7 @@ typedef struct
     uint8_t *rseq_buf;              // A buffer for reference sequence to check the mismatches against
     int mrseq_buf;                  // The size of the buffer
     hts_pos_t rseq_pos;             // The coordinate of the first base in the buffer
-    int32_t nrseq_buf;              // The used part of the buffer
+    int64_t nrseq_buf;              // The used part of the buffer
     uint64_t *mpc_buf;              // Mismatches per cycle
 
     // Target regions
@@ -493,7 +493,7 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
             error("TODO: cigar %d, %s:%"PRIhts_pos" %s\n", cig, sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1, bam_get_qname(bam_line));
 
         if ( ncig+iref > stats->nrseq_buf )
-            error("FIXME: %d+%"PRIhts_pos" > %d, %s, %s:%"PRIhts_pos"\n", ncig, iref, stats->nrseq_buf, bam_get_qname(bam_line), sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1);
+            error("FIXME: %d+%"PRIhts_pos" > %"PRId64", %s, %s:%"PRIhts_pos"\n", ncig, iref, stats->nrseq_buf, bam_get_qname(bam_line), sam_hdr_tid2name(stats->info->sam_header, bam_line->core.tid), bam_line->core.pos+1);
 
         int im;
         for (im=0; im<ncig; im++)
