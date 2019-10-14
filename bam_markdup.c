@@ -1193,7 +1193,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                     if ((bp->p->core.flag & BAM_FPAIRED) && !(bp->p->core.flag & BAM_FMUNMAP)) {
                         // if matched against one of a pair just mark as duplicate
 
-                        if (mark_duplicates(param, dup_hash, bp->p, in_read->b, &optical, &opt_warnings))
+                        if (mark_duplicates(param, dup_hash, bp->p, in_read->b, &single_optical, &opt_warnings))
                             goto fail;
 
                     } else {
