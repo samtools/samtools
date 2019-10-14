@@ -277,6 +277,7 @@ sub do_ref_stats
             $pos = 0;
             $ireg = 0;
             $regions = $targets{$1};
+            next;
         }
         if ( defined $skip_chr ) { next; }
 
