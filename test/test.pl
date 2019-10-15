@@ -2494,6 +2494,12 @@ sub test_large_positions
     # tview
     test_cmd($opts, out => 'large_pos/tview.expected.out',
              cmd => "$$opts{bin}/samtools tview -d T -p CHROMOSOME_I:10000000000 $longref");
+
+    # Sort and fixmates
+    test_cmd($opts, out => 'large_pos/longref3.expected.sam',
+             cmd => "$$opts{bin}/samtools sort    -O sam --no-PG -n test/large_pos/longref3.sam |
+                     $$opts{bin}/samtools fixmate -O sam --no-PG - - |
+                     $$opts{bin}/samtools sort    -O sam --no-PG");
 }
 
 # Test samtools cat.
