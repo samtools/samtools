@@ -91,7 +91,7 @@ static void bam2fq_usage(FILE *to, const char *command)
 "  --barcode-tag TAG    Barcode tag [default: " DEFAULT_BARCODE_TAG "]\n"
 "  --quality-tag TAG    Quality tag [default: " DEFAULT_QUALITY_TAG "]\n"
 "  --index-format STR   How to parse barcode and quality tags\n\n");
-    sam_global_opt_help(to, "-.--.@");
+    sam_global_opt_help(to, "-.--.@-.");
     fprintf(to,
 "\n"
 "The files will be automatically compressed if the file names have a .gz or .bgzf extension.\n"

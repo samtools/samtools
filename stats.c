@@ -2038,7 +2038,7 @@ static void HTS_NORETURN error(const char *format, ...)
         printf("    -x, --sparse                        Suppress outputting IS rows where there are no insertions.\n");
         printf("    -p, --remove-overlaps               Remove overlaps of paired-end reads from coverage and base count computations.\n");
         printf("    -g, --cov-threshold <int>           Only bases with coverage above this value will be included in the target percentage computation [0]\n");
-        sam_global_opt_help(stdout, "-.--.@");
+        sam_global_opt_help(stdout, "-.--.@-.");
         printf("\n");
     }
     else

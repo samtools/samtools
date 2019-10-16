@@ -179,7 +179,7 @@ int calmd_usage() {
 "  -E       extended BAQ for better sensitivity but lower specificity\n"
 "  --no-PG  do not add a PG line\n");
 
-    sam_global_opt_help(stderr, "-....@");
+    sam_global_opt_help(stderr, "-....@-.");
     return 1;
 }
 

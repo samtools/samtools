@@ -97,7 +97,7 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "      -Q <int>            mapping quality threshold [0]\n");
         fprintf(stderr, "      -X                  use customized index files\n");
         fprintf(stderr, "      -j                  do not include deletions (D) and ref skips (N) in bedcov computation\n");
-        sam_global_opt_help(stderr, "-.--.-");
+        sam_global_opt_help(stderr, "-.--.--.");
         return 1;
     }
     if (has_index_file) {

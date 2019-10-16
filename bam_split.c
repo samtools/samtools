@@ -87,7 +87,7 @@ static void usage(FILE *write_to)
 "  -h FILE2        ... and override the header with FILE2 (-u file only)\n"
 "  -v              verbose output\n"
 "  --no-PG         do not add a PG line\n");
-    sam_global_opt_help(write_to, "-....@.");
+    sam_global_opt_help(write_to, "-....@..");
     fprintf(write_to,
 "\n"
 "Format string expansions:\n"

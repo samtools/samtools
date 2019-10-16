@@ -681,7 +681,8 @@ Display the full samtools version number in a machine-readable format.
 .PP
 Several long-options are shared between multiple samtools sub-commands:
 \fB--input-fmt\fR, \fB--input-fmt-option\fR, \fB--output-fmt\fR,
-\fB--output-fmt-option\fR, \fB--reference\fR and \fB--write-index\fR.
+\fB--output-fmt-option\fR, \fB--reference\fR, \fB--write-index\fR,
+and \fB--verbosity\fR.
 The input format is typically auto-detected so specifying the format
 is usually unnecessary and the option is included for completeness.
 Note that not all subcommands have all options.  Consult the subcommand
@@ -824,6 +825,11 @@ For example: to convert a BAM to a compressed SAM with CSI indexing:
 .EX 4
 samtools view -h -O sam,level=6 --write-index in.bam -o out.sam.gz
 .EE
+.PP
+The \fB--verbosity \fIINT\fR option sets the verbosity level for samtools
+and HTSlib.  The default is 3 (HTS_LOG_WARNING); 2 reduces warning messages
+and 0 or 1 also reduces some error messages, while values greater than 3
+produce increasing numbers of additional warnings and logging messages.
 
 .PP
 .SH REFERENCE SEQUENCES

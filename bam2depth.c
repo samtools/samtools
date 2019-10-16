@@ -90,7 +90,7 @@ static int usage() {
     fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
 
-    sam_global_opt_help(stderr, "-.--.-");
+    sam_global_opt_help(stderr, "-.--.--.");
 
     fprintf(stderr, "\n");
     fprintf(stderr, "The output is a simple tab-separated table with three columns: reference name,\n");

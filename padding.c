@@ -590,7 +590,7 @@ static int usage(int is_long_help)
     fprintf(stderr, "  -o FILE      Output file name [stdout]\n");
     fprintf(stderr, "  --no-PG      do not add a PG line\n");
     fprintf(stderr, "  -?           Longer help\n");
-    sam_global_opt_help(stderr, "-...--.");
+    sam_global_opt_help(stderr, "-...--..");
 
     if (is_long_help)
         fprintf(stderr,

@@ -173,7 +173,7 @@ static void usage(FILE *fp)
             "  -R STRING ID of @RG line in existing header to use\n"
             "  --no-PG   Do not add a PG line\n"
             );
-    sam_global_opt_help(fp, "..O..@.");
+    sam_global_opt_help(fp, "..O..@..");
 }
 
 static bool parse_args(int argc, char** argv, parsed_opts_t** opts)

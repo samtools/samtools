@@ -78,9 +78,9 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
         } else if (strcmp(lopt->name, "write-index") == 0) {
             ga->write_index = 1;
             break;
-//      } else if (strcmp(lopt->name, "verbose") == 0) {
-//          ga->verbosity++;
-//          break;
+        } else if (strcmp(lopt->name, "verbosity") == 0) {
+            hts_verbose = atoi(optarg);
+            break;
         }
     }
 
@@ -154,9 +154,9 @@ void sam_global_opt_help(FILE *fp, const char *shortopts) {
         else if (strcmp(lopts[i].name, "write-index") == 0)
             fprintf(fp,"write-index\n"
                     "               Automatically index the output files [off]\n");
-//      else if (strcmp(lopts[i].name, "verbose") == 0)
-//          fprintf(fp,"verbose\n"
-//                  "               Increment level of verbosity\n");
+        else if (strcmp(lopts[i].name, "verbosity") == 0)
+            fprintf(fp,"verbosity INT\n"
+                    "               Set level of verbosity\n");
     }
 }
 

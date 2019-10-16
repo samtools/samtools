@@ -1358,7 +1358,7 @@ static void merge_usage(FILE *to)
 "  -b FILE    List of input BAM filenames, one per line [null]\n"
 "  -X         Use customized index files\n"
 "  --no-PG    do not add a PG line\n");
-    sam_global_opt_help(to, "-.O..@.");
+    sam_global_opt_help(to, "-.O..@..");
 }
 
 int bam_merge(int argc, char *argv[])
@@ -2215,7 +2215,7 @@ static void sort_usage(FILE *fp)
 "  -o FILE    Write final output to FILE rather than standard output\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
 "  --no-PG    do not add a PG line\n");
-    sam_global_opt_help(fp, "-.O..@");
+    sam_global_opt_help(fp, "-.O..@-.");
 }
 
 static void complain_about_memory_setting(size_t max_mem) {
