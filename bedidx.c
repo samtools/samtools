@@ -49,8 +49,6 @@ KSORT_INIT_STATIC(hts_pair_pos_t, hts_pair_pos_t, lt_pair_pos)
  * This structure encodes the list of intervals (ranges) for the regions provided via BED file or
  * command line arguments.
  * @field *a           pointer to the array of intervals.
- * |-- 32 bits --|-- 32 bits --|
- * |---- beg ----|---- end ----|
  * @field n            actual number of elements contained by a
  * @field m            number of allocated elements to a (n <= m)
  * @field *idx         index array for computing the minimum offset
