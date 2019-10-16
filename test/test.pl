@@ -2486,9 +2486,9 @@ sub test_large_positions
              cmd => "$$opts{bin}/samtools merge -O sam --no-PG - $$opts{path}/large_pos/longref.sam $$opts{path}/large_pos/longref2.sam");
 
     # Depth
-    test_cmd($opts, out => 'large_pos/depth.expected.sam',
+    test_cmd($opts, out => 'large_pos/depth.expected.out',
              cmd => "$$opts{bin}/samtools depth $$opts{path}/large_pos/longref.sam");
-    test_cmd($opts, out => 'large_pos/depth_bed.expected.sam',
+    test_cmd($opts, out => 'large_pos/depth_bed.expected.out',
              cmd => "$$opts{bin}/samtools depth -b $$opts{path}/large_pos/test.bed $$opts{path}/large_pos/longref.sam");
 
     # tview
