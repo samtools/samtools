@@ -34,6 +34,10 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 
+// Threshold where spacing of numbers on the scale line changes from 10 to 20
+// to stop them running into each other.
+#define TEN_DIGITS 1000000000
+
 static void destroy_rg_hash(khash_t(kh_rg)* rg_hash)
 {
     khiter_t k;
@@ -177,12 +181,12 @@ int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void
     // print reference
     rb = (tv->ref && pos - tv->left_pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N';
     for (cp = tv->last_pos + 1; cp < pos; ++cp) {
-        interval = cp < 1000000000 ? 10 : 20;
+        interval = cp < TEN_DIGITS ? 10 : 20;
         if (cp%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, cp+1);
         c = tv->ref? tv->ref[cp - tv->left_pos] : 'N';
         tv->my_mvaddch(tv,1, tv->ccol++, c);
     }
-    interval = pos < 1000000000 ? 10 : 20;
+    interval = pos < TEN_DIGITS ? 10 : 20;
     if (pos%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, pos+1);
     { // call consensus
         bcf_callret1_t bcr;
@@ -382,7 +386,7 @@ int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos)
 
     while (tv->ccol < tv->mcol) {
         hts_pos_t pos = tv->last_pos + 1;
-        int interval = pos < 1000000000 ? 10 : 20;
+        int interval = pos < TEN_DIGITS ? 10 : 20;
         if (pos%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, pos+1);
         tv->my_mvaddch(tv,1, tv->ccol++, (tv->ref && pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N');
         ++tv->last_pos;
