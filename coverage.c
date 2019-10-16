@@ -129,7 +129,7 @@ static int usage() {
             "  -h, --help              help (this page)\n");
 
     fprintf(stdout, "\nGeneric options:\n");
-    sam_global_opt_help(stdout, "-.--.-");
+    sam_global_opt_help(stdout, "-.--.--.");
 
     fprintf(stdout,
             "\nSee manpage for additional details.\n"

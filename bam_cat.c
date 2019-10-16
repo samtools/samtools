@@ -547,7 +547,7 @@ int main_cat(int argc, char *argv[])
         fprintf(stderr, "         -h FILE  copy the header from FILE [default is 1st input file]\n");
         fprintf(stderr, "         -o FILE  output BAM/CRAM\n");
         fprintf(stderr, "         --no-PG  do not add a PG line\n");
-        sam_global_opt_help(stderr, "--..-@");
+        sam_global_opt_help(stderr, "--..-@-.");
         return 1;
     }
 

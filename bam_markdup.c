@@ -1489,7 +1489,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -t               Mark primary duplicates with the name of the original in a \'do\' tag."
                                   " Mainly for information and debugging.\n");
 
-    sam_global_opt_help(stderr, "-.O..@.");
+    sam_global_opt_help(stderr, "-.O..@..");
 
     fprintf(stderr, "\nThe input file must be coordinate sorted and must have gone"
                      " through fixmates with the mate scoring option on.\n");

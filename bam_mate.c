@@ -407,7 +407,7 @@ void usage(FILE* where)
 "  -m           Add mate score tag\n"
 "  --no-PG      do not add a PG line\n");
 
-    sam_global_opt_help(where, "-.O..@");
+    sam_global_opt_help(where, "-.O..@-.");
 
     fprintf(where,
 "\n"

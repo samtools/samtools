@@ -1129,7 +1129,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -a -a (or -aa)          output absolutely all positions, including unused ref. sequences\n"
 "\n"
 "Generic options:\n");
-    sam_global_opt_help(fp, "-.--.-");
+    sam_global_opt_help(fp, "-.--.--.");
 
     fprintf(fp, "\n"
 "Note that using \"samtools mpileup\" to generate BCF or VCF files is now\n"

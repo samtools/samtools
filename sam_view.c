@@ -853,7 +853,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -S       ignored (input format is auto-detected)\n"
 "  --no-PG  do not add a PG line\n");
 
-    sam_global_opt_help(fp, "-.O.T@.");
+    sam_global_opt_help(fp, "-.O.T@..");
     fprintf(fp, "\n");
 
     if (is_long_help)

@@ -103,7 +103,7 @@ static const char *percent_json(char *buffer, long long n, long long total)
 static void usage_exit(FILE *fp, int exit_status)
 {
     fprintf(fp, "Usage: samtools flagstat [options] <in.bam>\n");
-    sam_global_opt_help(fp, "-.---@");
+    sam_global_opt_help(fp, "-.---@-.");
     fprintf(fp, "  -O, --");
     fprintf(fp, "output-fmt FORMAT[,OPT[=VAL]]...\n"
             "               Specify output format (json, tsv)\n");

@@ -539,7 +539,7 @@ static int usage(FILE *fp, int n_files, int reads_store) {
             "      --no-PG  do not add a PG line\n",
             reads_store, DEF_CLEVEL, n_files);
 
-    sam_global_opt_help(fp, "-....@");
+    sam_global_opt_help(fp, "-....@-.");
     fprintf(fp,
             "  <prefix> is required unless the -o or -O options are used.\n");
 

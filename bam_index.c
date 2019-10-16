@@ -167,7 +167,7 @@ int slow_idxstats(samFile *fp, sam_hdr_t *header) {
 static void usage_exit(FILE *fp, int exit_status)
 {
     fprintf(fp, "Usage: samtools idxstats [options] <in.bam>\n");
-    sam_global_opt_help(fp, "-.---@");
+    sam_global_opt_help(fp, "-.---@-.");
     exit(exit_status);
 }
 

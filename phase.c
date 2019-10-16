@@ -638,7 +638,7 @@ int main_phase(int argc, char *argv[])
 //      fprintf(stderr, "         -e        do not discover SNPs (effective with -l)\n");
         fprintf(stderr, "\n");
 
-        sam_global_opt_help(stderr, "-....-");
+        sam_global_opt_help(stderr, "-....--.");
 
         return 1;
     }
