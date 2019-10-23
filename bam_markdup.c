@@ -467,9 +467,9 @@ static int make_pair_key_template(key_data_t *key, bam1_t *bam) {
 
 
 static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
-    hts_pos_t this_coord, this_end, other_coord, other_end;
+    hts_pos_t this_coord, this_end, other_coord, other_end, leftmost;
     int32_t this_ref, other_ref;
-    int8_t orientation, leftmost;
+    int8_t orientation, left_read;
     uint8_t *data;
     char *cig;
 
@@ -565,9 +565,9 @@ static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
     }
 
     if (!leftmost)
-        leftmost = R_RI;
+        left_read = R_RI;
     else
-        leftmost = R_LE;
+        left_read = R_LE;
 
     if (!bam_is_rev(bam)) {
         this_coord = unclipped_start(bam);
@@ -586,7 +586,7 @@ static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
     key->this_coord    = this_coord;
     key->other_ref     = other_ref;
     key->other_coord   = other_coord;
-    key->leftmost      = leftmost;
+    key->leftmost      = left_read;
     key->orientation   = orientation;
 
     return 0;
