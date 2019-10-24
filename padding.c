@@ -1,7 +1,7 @@
 /*  padding.c -- depad subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2014-2016 Genome Research Ltd.
+    Copyright (C) 2014-2016, 2019 Genome Research Ltd.
     Portions copyright (C) 2012, 2013 Peter Cock, The James Hutton Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -111,15 +111,15 @@ static int unpad_seq(bam1_t *b, kstring_t *s)
     return length != s->l;
 }
 
-int load_unpadded_ref(faidx_t *fai, const char *ref_name, int ref_len, kstring_t *seq)
+int load_unpadded_ref(faidx_t *fai, const char *ref_name, hts_pos_t ref_len, kstring_t *seq)
 {
     char base;
     char *fai_ref = 0;
-    int fai_ref_len = 0, k;
+    hts_pos_t fai_ref_len = 0, k;
 
-    fai_ref = fai_fetch(fai, ref_name, &fai_ref_len);
+    fai_ref = fai_fetch64(fai, ref_name, &fai_ref_len);
     if (fai_ref_len != ref_len) {
-        fprintf(stderr, "[depad] ERROR: FASTA sequence %s length %i, expected %i\n", ref_name, fai_ref_len, ref_len);
+        fprintf(stderr, "[depad] ERROR: FASTA sequence %s length %"PRIhts_pos", expected %"PRIhts_pos"\n", ref_name, fai_ref_len, ref_len);
         free(fai_ref);
         return -1;
     }
@@ -145,16 +145,16 @@ int load_unpadded_ref(faidx_t *fai, const char *ref_name, int ref_len, kstring_t
     return 0;
 }
 
-int get_unpadded_len(faidx_t *fai, const char *ref_name, int padded_len)
+hts_pos_t get_unpadded_len(faidx_t *fai, const char *ref_name, hts_pos_t padded_len)
 {
     char base;
     char *fai_ref = 0;
-    int fai_ref_len = 0, k;
-    int bases=0, gaps=0;
+    hts_pos_t fai_ref_len = 0, k;
+    hts_pos_t bases=0, gaps=0;
 
-    fai_ref = fai_fetch(fai, ref_name, &fai_ref_len);
+    fai_ref = fai_fetch64(fai, ref_name, &fai_ref_len);
     if (fai_ref_len != padded_len) {
-        fprintf(stderr, "[depad] ERROR: FASTA sequence '%s' length %i, expected %i\n", ref_name, fai_ref_len, padded_len);
+        fprintf(stderr, "[depad] ERROR: FASTA sequence '%s' length %"PRIhts_pos", expected %"PRIhts_pos"\n", ref_name, fai_ref_len, padded_len);
         free(fai_ref);
         return -1;
     }
@@ -385,7 +385,8 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
 
 sam_hdr_t * fix_header(sam_hdr_t *old, faidx_t *fai)
 {
-    int i = 0, ret = 0, unpadded_len = 0;
+    int i = 0, ret = 0;
+    hts_pos_t unpadded_len = 0;
     sam_hdr_t *header = sam_hdr_dup(old);
     if (!header)
         return NULL;
@@ -396,18 +397,18 @@ sam_hdr_t * fix_header(sam_hdr_t *old, faidx_t *fai)
     for (i = 0; i < nref; ++i) {
         unpadded_len = get_unpadded_len(fai, sam_hdr_tid2name(old, i), sam_hdr_tid2len(old, i));
         if (unpadded_len < 0) {
-            fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %"PRId64"\n", sam_hdr_tid2name(old, i), (int64_t) sam_hdr_tid2len(old, i));
+            fprintf(stderr, "[depad] ERROR getting unpadded length of '%s', padded length %"PRIhts_pos"\n", sam_hdr_tid2name(old, i), (hts_pos_t) sam_hdr_tid2len(old, i));
         } else if (unpadded_len > sam_hdr_tid2len(old, i)) {
-            fprintf(stderr, "[depad] New unpadded length of '%s' is larger than the padded length (%d > %"PRId64")\n",
+            fprintf(stderr, "[depad] New unpadded length of '%s' is larger than the padded length (%"PRIhts_pos" > %"PRIhts_pos")\n",
                     sam_hdr_tid2name(old, i), unpadded_len,
-                    (int64_t) sam_hdr_tid2len(old, i));
+                    (hts_pos_t) sam_hdr_tid2len(old, i));
             ret = 1;
         } else {
-            sprintf(len_buf, "%d", unpadded_len);
+            sprintf(len_buf, "%"PRIhts_pos"", unpadded_len);
             if ((ret |= sam_hdr_update_line(header, "SQ", "SN", sam_hdr_tid2name(header, i), "LN", len_buf, NULL)))
-                fprintf(stderr, "[depad] Error updating length of '%s' from %"PRId64" to %d\n",
+                fprintf(stderr, "[depad] Error updating length of '%s' from %"PRIhts_pos" to %"PRIhts_pos"\n",
                         sam_hdr_tid2name(header, i),
-                        (int64_t) sam_hdr_tid2len(header, i),
+                        (hts_pos_t) sam_hdr_tid2len(header, i),
                         unpadded_len);
             //fprintf(stderr, "[depad] Recalculating '%s' length %i -> %i\n", old->target_name[i], old->target_len[i], header->target_len[i]);
         }

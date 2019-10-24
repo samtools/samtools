@@ -1,6 +1,6 @@
 /*  bam_md.c -- calmd subcommand.
 
-    Copyright (C) 2009-2011, 2014-2015 Genome Research Ltd.
+    Copyright (C) 2009-2011, 2014-2015, 2019 Genome Research Ltd.
     Portions copyright (C) 2009-2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -46,12 +46,13 @@ DEALINGS IN THE SOFTWARE.  */
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
-void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm, int quiet_mode)
+void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max_nm, int quiet_mode)
 {
     uint8_t *seq = bam_get_seq(b);
     uint32_t *cigar = bam_get_cigar(b);
     bam1_core_t *c = &b->core;
-    int i, x, y, u = 0;
+    int i, y, u = 0;
+    hts_pos_t x;
     kstring_t *str;
     int32_t old_nm_i = -1, nm = 0;
 
@@ -185,7 +186,8 @@ int calmd_usage() {
 
 int bam_fillmd(int argc, char *argv[])
 {
-    int c, flt_flag, tid = -2, ret, len, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag, quiet_mode, no_pg = 0;
+    int c, flt_flag, tid = -2, ret, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag, quiet_mode, no_pg = 0;
+    hts_pos_t len;
     htsThreadPool p = {NULL, 0};
     samFile *fp = NULL, *fpout = NULL;
     sam_hdr_t *header = NULL;
@@ -292,7 +294,7 @@ int bam_fillmd(int argc, char *argv[])
         if (b->core.tid >= 0) {
             if (tid != b->core.tid) {
                 free(ref);
-                ref = fai_fetch(fai, sam_hdr_tid2name(header, b->core.tid), &len);
+                ref = fai_fetch64(fai, sam_hdr_tid2name(header, b->core.tid), &len);
                 tid = b->core.tid;
                 if (ref == 0) { // FIXME: Should this always be fatal?
                     fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
