@@ -72,6 +72,8 @@ Release a.b
 * Fixed samtools tview -s option which was not filtering reads correctly.
   It now only shows reads from the requested sample or read group.
 
+* Removed misc/varFilter python script.
+
 Release 1.9 (18th July 2018)
 ----------------------------
 

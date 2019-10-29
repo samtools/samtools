@@ -77,8 +77,7 @@ MISC_SCRIPTS = \
 	misc/interpolate_sam.pl misc/novo2sam.pl \
 	misc/plot-bamstats misc/psl2sam.pl \
 	misc/sam2vcf.pl misc/samtools.pl misc/seq_cache_populate.pl \
-	misc/soap2sam.pl \
-	misc/varfilter.py misc/wgsim_eval.pl misc/zoom2sam.pl
+	misc/soap2sam.pl misc/wgsim_eval.pl misc/zoom2sam.pl
 
 TEST_PROGRAMS = \
 	test/merge/test_bam_translate \
