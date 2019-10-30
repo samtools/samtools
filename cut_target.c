@@ -1,7 +1,7 @@
 /*  cut_target.c -- targetcut subcommand.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2012-2013, 2015, 2016 Genome Research Ltd.
+    Copyright (C) 2012-2013, 2015, 2016, 2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -51,7 +51,7 @@ typedef struct {
     samFile *fp;
     sam_hdr_t *h;
     char *ref;
-    int len;
+    hts_pos_t len;
     faidx_t *fai;
     errmod_t *em;
 } ct_t;
@@ -92,9 +92,10 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
     return ret<<8|k;
 }
 
-static void process_cns(sam_hdr_t *h, int tid, int l, uint16_t *cns)
+static void process_cns(sam_hdr_t *h, int tid, hts_pos_t l, uint16_t *cns)
 {
-    int i, f[2][2], *prev, *curr, *swap_tmp, s;
+    int64_t i, s;
+    int f[2][2], *prev, *curr, *swap_tmp;
     uint8_t *b; // backtrack array
     b = calloc(l, 1);
     f[0][0] = f[0][1] = 0;
@@ -123,11 +124,11 @@ static void process_cns(sam_hdr_t *h, int tid, int l, uint16_t *cns)
         s = b[i]>>s&1;
     }
     // print
-    for (i = 0, s = -1; i < INT_MAX && i <= l; ++i) {
+    for (i = 0, s = -1; i < INT64_MAX && i <= l; ++i) {
         if (i == l || ((b[i]>>2&3) == 0 && s >= 0)) {
             if (s >= 0) {
-                int j;
-                printf("%s:%d-%d\t0\t%s\t%d\t60\t%dM\t*\t0\t0\t", sam_hdr_tid2name(h, tid), s+1, i, sam_hdr_tid2name(h, tid), s+1, i-s);
+                int64_t j;
+                printf("%s:%"PRId64"-%"PRId64"\t0\t%s\t%"PRId64"\t60\t%"PRId64"M\t*\t0\t0\t", sam_hdr_tid2name(h, tid), s+1, i, sam_hdr_tid2name(h, tid), s+1, i-s);
                 for (j = s; j < i; ++j) {
                     int c = cns[j]>>8;
                     if (c == 0) putchar('N');
@@ -157,7 +158,7 @@ static int read_aln(void *data, bam1_t *b)
         if ( g->fai && b->core.tid >= 0 ) {
             if (b->core.tid != g->tid) { // then load the sequence
                 free(g->ref);
-                g->ref = fai_fetch(g->fai, sam_hdr_tid2name(g->h, b->core.tid), &g->len);
+                g->ref = fai_fetch64(g->fai, sam_hdr_tid2name(g->h, b->core.tid), &g->len);
                 g->tid = b->core.tid;
             }
             sam_prob_realn(b, g->ref, g->len, 1<<1|1);
@@ -169,7 +170,8 @@ static int read_aln(void *data, bam1_t *b)
 
 int main_cut_target(int argc, char *argv[])
 {
-    int c, tid, pos, n, lasttid = -1, l, max_l, usage = 0;
+    int c, tid, pos, n, lasttid = -1, usage = 0;
+    hts_pos_t l, max_l;
     const bam_pileup1_t *p;
     bam_plp_t plp;
     uint16_t *cns;
