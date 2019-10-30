@@ -78,9 +78,9 @@ typedef struct {  // auxiliary data structure to hold stats on coverage
     unsigned int n_reads;
     unsigned int n_selected_reads;
     int32_t tid;    // chromosome ID, defined by header
-    int beg;
-    int end;
-    int bin_width;
+    hts_pos_t beg;
+    hts_pos_t end;
+    int64_t bin_width;
 } stats_aux_t;
 
 #if __STDC_VERSION__ >= 199901L
@@ -208,7 +208,7 @@ static int read_bam(void *data, bam1_t *b) {
 void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats) {
     fputs(sam_hdr_tid2name(h, stats->tid), file_out);
     double region_len = (double) stats->end - stats->beg;
-    fprintf(file_out, "\t%d\t%d\t%u\t%llu\t%g\t%g\t%.3g\t%.3g\n",
+    fprintf(file_out, "\t%"PRId64"\t%"PRId64"\t%u\t%llu\t%g\t%g\t%.3g\t%.3g\n",
             stats->beg+1,
             stats->end,
             stats->n_selected_reads,
@@ -536,12 +536,12 @@ int main_coverage(int argc, char *argv[]) {
         goto coverage_end;
     }
 
-    int n_bins = opt_n_bins;
+    int64_t n_bins = opt_n_bins;
     if (opt_reg) {
         stats->tid = data[0]->iter->tid;
         stats->beg = data[0]->iter->beg; // and to the parsed region coordinates
         stats->end = data[0]->iter->end;
-        if (stats->end == INT_MAX) {
+        if (stats->end == HTS_POS_MAX) {
             stats->end = sam_hdr_tid2len(h, stats->tid);
         }
         if (opt_n_bins > stats->end - stats->beg) {
@@ -552,7 +552,7 @@ int main_coverage(int argc, char *argv[]) {
         stats->tid = -1;
     }
 
-    int current_bin = 0;
+    int64_t current_bin = 0;
 
     // the core multi-pileup loop
     mplp = bam_mplp_init(n_bam_files, read_bam, (void**)data); // initialization
