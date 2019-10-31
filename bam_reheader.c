@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <assert.h>
 #include <getopt.h>
+#include <unistd.h>
 
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
