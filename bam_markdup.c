@@ -77,16 +77,17 @@ typedef struct {
     int8_t orientation;
 } key_data_t;
 
-typedef struct {
-    bam1_t *p;
-} in_hash_t;
-
-typedef struct {
+typedef struct read_queue_s {
     key_data_t pair_key;
     key_data_t single_key;
     bam1_t *b;
+    struct read_queue_s *duplicate;
     hts_pos_t pos;
 } read_queue_t;
+
+typedef struct {
+    read_queue_t *p;
+} in_hash_t;
 
 typedef struct {
     char *name;
@@ -853,6 +854,203 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
 
 
 /*
+    Where there is more than one duplicate go down the list and check for optical duplicates and change
+    do tags (where used) to point to original (non-duplicate) read.
+*/
+static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_hash, read_queue_t *ori, read_queue_t *dup,
+             long *warn, long *optical_single, long *optical_pair) {
+    int ret = 0;
+    read_queue_t *current = dup->duplicate;
+    char *ori_name = bam_get_qname(ori->b);
+    int have_original = !(ori->b->core.flag & BAM_FDUP);
+    int ori_paired = (ori->b->core.flag & BAM_FPAIRED) && !(ori->b->core.flag & BAM_FMUNMAP);
+
+    while (current) {
+        int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
+
+        if (param->tag && have_original) {
+            uint8_t *data;
+
+            // remove any existing do tag
+            if ((data = bam_aux_get(current->b, "do")) != NULL) {
+                bam_aux_del(current->b, data);
+            }
+
+            if (bam_aux_append(current->b, "do", 'Z', strlen(ori_name) + 1, (uint8_t*)ori_name)) {
+                fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
+                ret =  -1;
+                break;
+            }
+
+            // bam_aux_append(current->b, "aa", 'Z', 3, (const uint8_t *)"NC");
+        }
+
+        if (param->opt_dist) {
+            int is_cur_opt = 0, is_ori_opt = 0;
+            uint8_t *data;
+            char *dup_type;
+
+            if ((data = bam_aux_get(ori->b, "dt"))) {
+                if ((dup_type = bam_aux2Z(data))) {
+                    if (strcmp(dup_type, "SQ") == 0) {
+                        is_ori_opt = 1;
+                    }
+                }
+            }
+
+            if ((data = bam_aux_get(current->b, "dt"))) {
+                if ((dup_type = bam_aux2Z(data))) {
+                    if (strcmp(dup_type, "SQ") == 0) {
+                        is_cur_opt = 1;
+                    }
+                }
+            }
+
+            if (!(is_ori_opt && is_cur_opt)) {
+                // if both are already optical duplicates there is no need to check again, otherwise...
+
+                if (optical_duplicate(ori->b, current->b, param->opt_dist, warn)) {
+                    // find out which one is the duplicate
+                    int is_cur_dup = 0;
+
+                    if (have_original) {
+                        // compared against an original, this is a dup.
+                        is_cur_dup = 1;
+                    } else if (ori_paired != current_paired) {
+                        if (!current_paired) {
+                            // current is single vs pair, this is a dup.
+                            is_cur_dup = 1;
+                        }
+                    } else {
+                        // do it by scores
+                        int64_t ori_score, curr_score;
+
+                        ori_score  = calc_score(ori->b);
+                        curr_score = calc_score(current->b);
+
+                        if (current_paired) {
+                            // they are pairs so add mate scores.
+                            int64_t mate_tmp;
+
+                            if ((mate_tmp = get_mate_score(ori->b)) == -1) {
+                                fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                                ret = -1;
+                                break;
+                            } else {
+                                ori_score += mate_tmp;
+                            }
+
+                            if ((mate_tmp = get_mate_score(current->b)) == -1) {
+                                fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                                ret = -1;
+                                break;
+                            } else {
+                                curr_score += mate_tmp;
+                            }
+                        }
+
+                        if (ori_score == curr_score) {
+                            if (strcmp(bam_get_qname(current->b), ori_name) < 0) {
+                                curr_score++;
+                            } else {
+                                curr_score--;
+                            }
+                        }
+
+                        if (ori_score > curr_score) {
+                            is_cur_dup = 1;
+                        }
+                    }
+
+                    if (is_cur_dup) {
+                        // the current is the optical duplicate
+                        if (!is_cur_opt) { // only change if not already an optical duplicate
+
+                            // remove any existing do tag
+                            if ((data = bam_aux_get(current->b, "dt")) != NULL) {
+                                bam_aux_del(current->b, data);
+                            }
+
+                            bam_aux_append(current->b, "dt", 'Z', 3, (const uint8_t *)"SQ");
+                            // bam_aux_append(current->b, "aw", 'Z', 3, (const uint8_t *)"CD");
+
+                            if (current_paired) {
+                                (*optical_pair)++;
+                            } else {
+                                (*optical_single)++;
+                            }
+
+                            if (param->supp) {
+                                // Change the duplicate type
+
+                                if (bam_aux_get(current->b, "SA") || (current->b->core.flag & BAM_FMUNMAP)
+                                    || bam_aux_get(current->b, "XA")) {
+                                    khiter_t d;
+
+                                    d = kh_get(duplicates, dup_hash, bam_get_qname(current->b));
+
+                                    if (d == kh_end(dup_hash)) {
+                                        // error, name should already be in dup hash
+                                        fprintf(stderr, "[markdup] error: duplicate name %s not found in hash.\n",
+                                            bam_get_qname(current->b));
+                                        ret = -1;
+                                        break;
+                                    }
+
+                                    kh_value(dup_hash, d).type = 'O';
+                                }
+                            }
+                        }
+                    } else {
+                        if (!is_ori_opt) {
+
+                            // remove any existing do tag
+                            if ((data = bam_aux_get(ori->b, "dt")) != NULL) {
+                                bam_aux_del(ori->b, data);
+                            }
+
+                            bam_aux_append(ori->b, "dt", 'Z', 3, (const uint8_t *)"SQ");
+                            // bam_aux_append(ori->b, "aw", 'Z', 3, (const uint8_t *)"OD");
+
+                            if (ori_paired) {
+                                (*optical_pair)++;
+                            } else {
+                                (*optical_single)++;
+                            }
+
+                            if (param->supp) {
+                                // Change the duplicate type
+
+                                if (bam_aux_get(ori->b, "SA") || (ori->b->core.flag & BAM_FMUNMAP)
+                                    || bam_aux_get(ori->b, "XA")) {
+                                    khiter_t d;
+
+                                    d = kh_get(duplicates, dup_hash, bam_get_qname(ori->b));
+
+                                    if (d == kh_end(dup_hash)) {
+                                        // error, name should already be in dup hash
+                                        fprintf(stderr, "[markdup] error: duplicate name %s not found in hash.\n",
+                                            bam_get_qname(ori->b));
+                                        ret = -1;
+                                        break;
+                                    }
+
+                                    kh_value(dup_hash, d).type = 'O';
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        current = current->duplicate;
+    }
+
+    return ret;
+}
+
+/*
   Function to use when estimating library size.
 
   This is based on an approximate formula for the coverage of a set
@@ -1055,7 +1253,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         // read must not be secondary, supplementary, unmapped or (possibly) failed QC
         if (!(in_read->b->core.flag & exclude)) {
             examined++;
-
+            in_read->duplicate = NULL;
 
             // look at the pairs first
             if ((in_read->b->core.flag & BAM_FPAIRED) && !(in_read->b->core.flag & BAM_FMUNMAP)) {
@@ -1087,23 +1285,27 @@ static int bam_mark_duplicates(md_param_t *param) {
                 if (ret > 0) { // new
                     // add to single duplicate hash
                     bp = &kh_val(single_hash, k);
-                    bp->p = in_read->b;
+                    bp->p = in_read;
                     in_read->single_key = single_key;
                 } else if (ret == 0) { // exists
                     // look at singles only for duplication marking
                     bp = &kh_val(single_hash, k);
 
-                    if (!(bp->p->core.flag & BAM_FPAIRED) || (bp->p->core.flag & BAM_FMUNMAP)) {
+                    if (!(bp->p->b->core.flag & BAM_FPAIRED) || (bp->p->b->core.flag & BAM_FMUNMAP)) {
                        // singleton will always be marked duplicate even if
                        // scores more than one read of the pair
-                        bam1_t *dup = bp->p;
+                        bam1_t *dup = bp->p->b;
 
-                        bp->p = in_read->b;
+                        in_read->duplicate = bp->p;
+                        bp->p = in_read;
 
-                        if (mark_duplicates(param, dup_hash, bp->p, dup, &single_optical, &opt_warnings))
+                        if (mark_duplicates(param, dup_hash, bp->p->b, dup, &single_optical, &opt_warnings))
                             goto fail;
 
                         single_dup++;
+
+                        if (duplicate_chain_check(param, dup_hash, in_read, bp->p, &opt_warnings, &single_optical, &optical))
+                            goto fail;
 
                     }
                 } else {
@@ -1117,16 +1319,17 @@ static int bam_mark_duplicates(md_param_t *param) {
                 if (ret > 0) { // new
                     // add to the pair hash
                     bp = &kh_val(pair_hash, k);
-                    bp->p = in_read->b;
+                    bp->p = in_read;
                     in_read->pair_key = pair_key;
                 } else if (ret == 0) {
                     int64_t old_score, new_score, tie_add = 0;
                     bam1_t *dup;
+                    int check_chain = 0;
 
                     bp = &kh_val(pair_hash, k);
 
-                    if ((bp->p->core.flag & BAM_FQCFAIL) != (in_read->b->core.flag & BAM_FQCFAIL)) {
-                        if (bp->p->core.flag & BAM_FQCFAIL) {
+                    if ((bp->p->b->core.flag & BAM_FQCFAIL) != (in_read->b->core.flag & BAM_FQCFAIL)) {
+                        if (bp->p->b->core.flag & BAM_FQCFAIL) {
                             old_score = 0;
                             new_score = 1;
                         } else {
@@ -1134,14 +1337,14 @@ static int bam_mark_duplicates(md_param_t *param) {
                             new_score = 0;
                         }
                     } else {
-                       if ((mate_tmp = get_mate_score(bp->p)) == -1) {
-                           fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
-                           goto fail;
-                       } else {
-                           old_score = calc_score(bp->p) + mate_tmp;
-                       }
+                        if ((mate_tmp = get_mate_score(bp->p->b)) == -1) {
+                            fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                            goto fail;
+                        } else {
+                            old_score = calc_score(bp->p->b) + mate_tmp;
+                        }
 
-                       if ((mate_tmp = get_mate_score(in_read->b)) == -1) {
+                        if ((mate_tmp = get_mate_score(in_read->b)) == -1) {
                             fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
                             goto fail;
                         } else {
@@ -1153,7 +1356,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                     // and add it to the pair hash, mark the other as duplicate
 
                     if (new_score == old_score) {
-                        if (strcmp(bam_get_qname(in_read->b), bam_get_qname(bp->p)) < 0) {
+                        if (strcmp(bam_get_qname(in_read->b), bam_get_qname(bp->p->b)) < 0) {
                             tie_add = 1;
                         } else {
                             tie_add = -1;
@@ -1161,13 +1364,28 @@ static int bam_mark_duplicates(md_param_t *param) {
                     }
 
                     if (new_score + tie_add > old_score) { // swap reads
-                        dup = bp->p;
-                        bp->p = in_read->b;
+                        dup = bp->p->b;
+                        in_read->duplicate = bp->p;
+                        bp->p = in_read;
                     } else {
+                        if (bp->p->duplicate) {
+                            in_read->duplicate = bp->p->duplicate;
+                            check_chain = 1;
+                        }
+
+                        bp->p->duplicate = in_read;
                         dup = in_read->b;
                     }
 
-                    if (mark_duplicates(param, dup_hash, bp->p, dup, &optical, &opt_warnings))
+                    if (mark_duplicates(param, dup_hash, bp->p->b, dup, &optical, &opt_warnings))
+                        goto fail;
+
+                    if (check_chain) {
+                        if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, bp->p->duplicate->duplicate, &opt_warnings, &single_optical, &optical))
+                            goto fail;
+                    }
+
+                    if (duplicate_chain_check(param, dup_hash, bp->p, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
                         goto fail;
 
                     duplicate++;
@@ -1179,6 +1397,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                 int ret;
                 key_data_t single_key;
                 in_hash_t *bp;
+                int check_chain = 0;
 
                 make_single_key(&single_key, in_read->b);
 
@@ -1189,37 +1408,71 @@ static int bam_mark_duplicates(md_param_t *param) {
 
                 if (ret > 0) { // new
                     bp = &kh_val(single_hash, k);
-                    bp->p = in_read->b;
+                    bp->p = in_read;
                     in_read->single_key = single_key;
                 } else if (ret == 0) { // exists
                     bp = &kh_val(single_hash, k);
 
-                    if ((bp->p->core.flag & BAM_FPAIRED) && !(bp->p->core.flag & BAM_FMUNMAP)) {
+                    if ((bp->p->b->core.flag & BAM_FPAIRED) && !(bp->p->b->core.flag & BAM_FMUNMAP)) {
                         // if matched against one of a pair just mark as duplicate
 
-                        if (mark_duplicates(param, dup_hash, bp->p, in_read->b, &single_optical, &opt_warnings))
+                        if (bp->p->duplicate) {
+                            in_read->duplicate = bp->p->duplicate;
+                            check_chain = 1;
+                        }
+
+                        bp->p->duplicate = in_read;
+
+                        if (mark_duplicates(param, dup_hash, bp->p->b, in_read->b, &single_optical, &opt_warnings))
+                            goto fail;
+
+                        if (check_chain) {
+                            // check the new duplicate entry in the chain
+                            if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, bp->p->duplicate->duplicate, &opt_warnings, &single_optical, &optical))
+                                    goto fail;
+                        }
+
+                        // check against the new original
+                        if (duplicate_chain_check(param, dup_hash, bp->p, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
                             goto fail;
 
                     } else {
                         int64_t old_score, new_score;
                         bam1_t *dup;
 
-                        old_score = calc_score(bp->p);
+                        old_score = calc_score(bp->p->b);
                         new_score = calc_score(in_read->b);
 
                         // choose the highest score as the original, add it
                         // to the single hash and mark the other as duplicate
                         if (new_score > old_score) { // swap reads
-                            dup = bp->p;
-                            bp->p = in_read->b;
+                            dup = bp->p->b;
+                            in_read->duplicate = bp->p;
+                            bp->p = in_read;
                         } else {
+                            if (bp->p->duplicate) {
+                                in_read->duplicate = bp->p->duplicate;
+                                check_chain = 1;
+                            }
+
+                            bp->p->duplicate = in_read;
                             dup = in_read->b;
                         }
 
-                        if (mark_duplicates(param, dup_hash, bp->p, dup, &single_optical, &opt_warnings))
+                        if (mark_duplicates(param, dup_hash, bp->p->b, dup, &single_optical, &opt_warnings))
                             goto fail;
 
-                    }
+
+                        if (check_chain) {
+                            if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, bp->p->duplicate->duplicate, &opt_warnings, &single_optical, &optical))
+                                goto fail;
+                        }
+
+                        if (duplicate_chain_check(param, dup_hash, bp->p, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
+                            goto fail;
+
+
+                        }
 
                     single_dup++;
                 } else {
@@ -1424,7 +1677,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                 "SINGLE: %ld\n"
                 "DUPLICATE PAIR: %ld\n"
                 "DUPLICATE SINGLE: %ld\n"
-                "DUPLICATE OPTICAL: %ld\n"
+                "DUPLICATE PAIR OPTICAL: %ld\n"
                 "DUPLICATE SINGLE OPTICAL: %ld\n"
                 "DUPLICATE NON PRIMARY: %ld\n"
                 "DUPLICATE NON PRIMARY OPTICAL: %ld\n"
@@ -1510,7 +1763,7 @@ int bam_markdup(int argc, char **argv) {
     kstring_t tmpprefix = {0, 0, NULL};
     struct stat st;
     unsigned int t;
-    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 1, 0, 0, 0, 0, NULL, NULL, NULL};
+    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
