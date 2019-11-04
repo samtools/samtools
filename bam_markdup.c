@@ -853,14 +853,59 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
 }
 
 
+static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *b, int paired, long *optical_single, long *optical_pair) {
+    int ret = 0;
+    uint8_t *data;
+
+    // remove any existing dt tag
+    if ((data = bam_aux_get(b, "dt")) != NULL) {
+        bam_aux_del(b, data);
+    }
+
+    if (bam_aux_append(b, "dt", 'Z', 3, (const uint8_t *)"SQ")) {
+        fprintf(stderr, "[markdup] error: unable to append 'dt' tag.\n");
+        ret = -1;
+    }
+
+    if (paired) {
+        (*optical_pair)++;
+    } else {
+        (*optical_single)++;
+    }
+
+    if (param->supp) {
+        // Change the duplicate type
+
+        if (bam_aux_get(b, "SA") || (b->core.flag & BAM_FMUNMAP)
+            || bam_aux_get(b, "XA")) {
+            khiter_t d;
+
+            d = kh_get(duplicates, dup_hash, bam_get_qname(b));
+
+            if (d == kh_end(dup_hash)) {
+                // error, name should already be in dup hash
+                fprintf(stderr, "[markdup] error: duplicate name %s not found in hash.\n",
+                    bam_get_qname(b));
+                ret = -1;
+            } else {
+                kh_value(dup_hash, d).type = 'O';
+            }
+        }
+    }
+
+    return ret;
+}
+
+
+
 /*
     Where there is more than one duplicate go down the list and check for optical duplicates and change
     do tags (where used) to point to original (non-duplicate) read.
 */
-static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_hash, read_queue_t *ori, read_queue_t *dup,
+static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_hash, read_queue_t *ori,
              long *warn, long *optical_single, long *optical_pair) {
     int ret = 0;
-    read_queue_t *current = dup->duplicate;
+    read_queue_t *current = ori->duplicate;
     char *ori_name = bam_get_qname(ori->b);
     int have_original = !(ori->b->core.flag & BAM_FDUP);
     int ori_paired = (ori->b->core.flag & BAM_FPAIRED) && !(ori->b->core.flag & BAM_FMUNMAP);
@@ -871,18 +916,27 @@ static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_has
         if (param->tag && have_original) {
             uint8_t *data;
 
-            // remove any existing do tag
+            // at this stage all duplicates should have a do tag
             if ((data = bam_aux_get(current->b, "do")) != NULL) {
-                bam_aux_del(current->b, data);
-            }
+                // see if we need to change the tag
+                char *old_name = bam_aux2Z(data);
 
-            if (bam_aux_append(current->b, "do", 'Z', strlen(ori_name) + 1, (uint8_t*)ori_name)) {
-                fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
-                ret =  -1;
-                break;
-            }
+                if (old_name) {
+                    if (strcmp(old_name, ori_name) != 0) {
+                        bam_aux_del(current->b, data);
 
-            // bam_aux_append(current->b, "aa", 'Z', 3, (const uint8_t *)"NC");
+                        if (bam_aux_append(current->b, "do", 'Z', strlen(ori_name) + 1, (uint8_t*)ori_name)) {
+                            fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
+                            ret =  -1;
+                            break;
+                        }
+                    }
+                } else {
+                    fprintf(stderr, "[markdup] error: 'do' tag has wrong type for read %s.\n", bam_get_qname(current->b));
+                    ret = -1;
+                    break;
+                }
+            }
         }
 
         if (param->opt_dist) {
@@ -965,78 +1019,16 @@ static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_has
                     if (is_cur_dup) {
                         // the current is the optical duplicate
                         if (!is_cur_opt) { // only change if not already an optical duplicate
-
-                            // remove any existing do tag
-                            if ((data = bam_aux_get(current->b, "dt")) != NULL) {
-                                bam_aux_del(current->b, data);
-                            }
-
-                            bam_aux_append(current->b, "dt", 'Z', 3, (const uint8_t *)"SQ");
-                            // bam_aux_append(current->b, "aw", 'Z', 3, (const uint8_t *)"CD");
-
-                            if (current_paired) {
-                                (*optical_pair)++;
-                            } else {
-                                (*optical_single)++;
-                            }
-
-                            if (param->supp) {
-                                // Change the duplicate type
-
-                                if (bam_aux_get(current->b, "SA") || (current->b->core.flag & BAM_FMUNMAP)
-                                    || bam_aux_get(current->b, "XA")) {
-                                    khiter_t d;
-
-                                    d = kh_get(duplicates, dup_hash, bam_get_qname(current->b));
-
-                                    if (d == kh_end(dup_hash)) {
-                                        // error, name should already be in dup hash
-                                        fprintf(stderr, "[markdup] error: duplicate name %s not found in hash.\n",
-                                            bam_get_qname(current->b));
-                                        ret = -1;
-                                        break;
-                                    }
-
-                                    kh_value(dup_hash, d).type = 'O';
-                                }
+                            if (optical_retag(param, dup_hash, current->b, current_paired, optical_single, optical_pair)) {
+                                ret = -1;
+                                break;
                             }
                         }
                     } else {
                         if (!is_ori_opt) {
-
-                            // remove any existing do tag
-                            if ((data = bam_aux_get(ori->b, "dt")) != NULL) {
-                                bam_aux_del(ori->b, data);
-                            }
-
-                            bam_aux_append(ori->b, "dt", 'Z', 3, (const uint8_t *)"SQ");
-                            // bam_aux_append(ori->b, "aw", 'Z', 3, (const uint8_t *)"OD");
-
-                            if (ori_paired) {
-                                (*optical_pair)++;
-                            } else {
-                                (*optical_single)++;
-                            }
-
-                            if (param->supp) {
-                                // Change the duplicate type
-
-                                if (bam_aux_get(ori->b, "SA") || (ori->b->core.flag & BAM_FMUNMAP)
-                                    || bam_aux_get(ori->b, "XA")) {
-                                    khiter_t d;
-
-                                    d = kh_get(duplicates, dup_hash, bam_get_qname(ori->b));
-
-                                    if (d == kh_end(dup_hash)) {
-                                        // error, name should already be in dup hash
-                                        fprintf(stderr, "[markdup] error: duplicate name %s not found in hash.\n",
-                                            bam_get_qname(ori->b));
-                                        ret = -1;
-                                        break;
-                                    }
-
-                                    kh_value(dup_hash, d).type = 'O';
-                                }
+                            if (optical_retag(param, dup_hash, ori->b, ori_paired, optical_single, optical_pair)) {
+                                ret = -1;
+                                break;
                             }
                         }
                     }
@@ -1304,7 +1296,7 @@ static int bam_mark_duplicates(md_param_t *param) {
 
                         single_dup++;
 
-                        if (duplicate_chain_check(param, dup_hash, in_read, bp->p, &opt_warnings, &single_optical, &optical))
+                        if (duplicate_chain_check(param, dup_hash, bp->p, &opt_warnings, &single_optical, &optical))
                             goto fail;
 
                     }
@@ -1381,11 +1373,11 @@ static int bam_mark_duplicates(md_param_t *param) {
                         goto fail;
 
                     if (check_chain) {
-                        if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, bp->p->duplicate->duplicate, &opt_warnings, &single_optical, &optical))
+                        if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
                             goto fail;
                     }
 
-                    if (duplicate_chain_check(param, dup_hash, bp->p, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
+                    if (duplicate_chain_check(param, dup_hash, bp->p, &opt_warnings, &single_optical, &optical))
                         goto fail;
 
                     duplicate++;
@@ -1428,12 +1420,12 @@ static int bam_mark_duplicates(md_param_t *param) {
 
                         if (check_chain) {
                             // check the new duplicate entry in the chain
-                            if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, bp->p->duplicate->duplicate, &opt_warnings, &single_optical, &optical))
+                            if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
                                     goto fail;
                         }
 
                         // check against the new original
-                        if (duplicate_chain_check(param, dup_hash, bp->p, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
+                        if (duplicate_chain_check(param, dup_hash, bp->p, &opt_warnings, &single_optical, &optical))
                             goto fail;
 
                     } else {
@@ -1464,11 +1456,11 @@ static int bam_mark_duplicates(md_param_t *param) {
 
 
                         if (check_chain) {
-                            if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, bp->p->duplicate->duplicate, &opt_warnings, &single_optical, &optical))
+                            if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
                                 goto fail;
                         }
 
-                        if (duplicate_chain_check(param, dup_hash, bp->p, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
+                        if (duplicate_chain_check(param, dup_hash, bp->p, &opt_warnings, &single_optical, &optical))
                             goto fail;
 
 
