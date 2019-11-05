@@ -857,7 +857,7 @@ static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash
     int ret = 0;
     uint8_t *data;
 
-    // remove any existing do tag
+    // remove any existing dt tag
     if ((data = bam_aux_get(b, "dt")) != NULL) {
         bam_aux_del(b, data);
     }
