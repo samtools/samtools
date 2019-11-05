@@ -1211,6 +1211,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         if (in_read->b->core.tid >= 0) { // -1 for unmapped reads
             if (in_read->b->core.tid < prev_tid ||
                ((in_read->b->core.tid == prev_tid) && (in_read->b->core.pos < prev_coord))) {
+                fprintf(stderr, "[markdup] error: not in coordinate sorted order.\n");
                 goto fail;
             }
         }
