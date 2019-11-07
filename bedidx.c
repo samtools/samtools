@@ -509,6 +509,11 @@ void *bed_hash_regions(void *reg_hash, char **regs, int first, int last, int *op
 
     for (i=first; i<last; i++) {
 
+        // Note, ideally we would call sam_parse_region here, but it's complicated by not
+        // having the sam header known and the likelihood of the bed file containing data for other
+        // references too which we currently just ignore.
+        //
+        // TO DO...
         q = hts_parse_reg(regs[i], &beg, &end);
         if (q) {
             if ((int)(q - regs[i] + 1) > 1024) {
