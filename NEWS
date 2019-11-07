@@ -66,13 +66,14 @@ Release a.b
 
 * Fixed bug where the samtools fastq -i would output incorrect information
   in the Casava tags for dual-index reads.  It also now prints the tags
-  for dual indicies in the same way as bcl2fastq, using a '+' sign between
+  for dual indices in the same way as bcl2fastq, using a '+' sign between
   the two parts of the index.
 
 * Fixed samtools tview -s option which was not filtering reads correctly.
   It now only shows reads from the requested sample or read group.
 
-* Removed misc/varFilter python script.
+* Removed the misc/varfilter.py Python script, as it takes consensus-pileup
+  as input, which was removed from samtools in release 0.1.17 in 2011. (#1125)
 
 Release 1.9 (18th July 2018)
 ----------------------------
