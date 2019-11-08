@@ -88,8 +88,9 @@ static int usage() {
     fprintf(stderr, "   -q <int>            base quality threshold [0]\n");
     fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
-    fprintf(stderr, "   -g <int>            include reads that have any of the specified flags set [0]\n");
-    fprintf(stderr, "   -G <int>            filter out reads that have any of the specified flags set [0x704]\n");
+    fprintf(stderr, "   -g <flags>          include reads that have any of the specified flags set [0]\n");
+    fprintf(stderr, "   -G <flags>          filter out reads that have any of the specified flags set"
+                    "                       [UNMAP,SECONDARY,QCFAIL,DUP]\n");
 
     sam_global_opt_help(stderr, "-.--.--.");
 
@@ -118,8 +119,8 @@ int main_depth(int argc, char *argv[])
     int print_header = 0;
     char *output_file = NULL;
     FILE *file_out = stdout;
-    uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP), tflags = 0;
-    char *tf;
+    uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
+    int tflags = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -148,16 +149,16 @@ int main_depth(int argc, char *argv[])
             case 'H': print_header = 1; break;
             case 'o': output_file = optarg; break;
             case 'g':
-                tflags = strtol(optarg, &tf, 0);
-                if (optarg == tf || *tf != '\0' || tflags > BAM_FMAX) {
+                tflags = bam_str2flag(optarg);
+                if (tflags < 0 || tflags > BAM_FMAX) {
                     print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
                     return 1;
                 }
                 flags &= ~tflags;
                 break;
             case 'G':
-                tflags = strtol(optarg, &tf, 0);
-                if (optarg == tf || *tf != '\0' || tflags > BAM_FMAX) {
+                tflags = bam_str2flag(optarg);
+                if (tflags < 0 || tflags > BAM_FMAX) {
                     print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
                     return 1;
                 }

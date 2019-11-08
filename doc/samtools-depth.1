@@ -113,18 +113,24 @@ Only report depth in specified region.
 If this option is set, it will allows user to specify customized index file location(s) if the data
 folder does not contain any index file. Example usage: samtools depth [options] -X /data_folder/in1.bam [/data_folder/in2.bam [...]] /index_folder/index1.bai [/index_folder/index2.bai [...]]
 .TP
-.BI "-g " INT
-By default, reads that have any of the flags 4 (0x4), 256 (0x100), 512 (0x200),
-1024 (0x400) set, are skipped. To include these reads back in the analysis, use
+.BI "-g " FLAGS
+By default, reads that have any of the flags UNMAP, SECONDARY, QCFAIL,
+or DUP set are skipped. To include these reads back in the analysis, use
 this option together with the desired flag or flag combination.
-.I INT
-can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
-or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+.I FLAGS
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/),
+in octal by beginning with `0' (i.e. /^0[0-7]+/), as a decimal number
+not beginning with '0' or as a comma-separated list of flag names. [0]
+
+For a list of flag names see
+.IR samtools-flags (1).
 .TP
-.BI "-G " INT
+.BI "-G " FLAGS
 Discard any read that has any of the flags specified by
-.I INT
-set [0x704].
+.I FLAGS
+set.  FLAGS are specified as for the
+.B "-g"
+option. [UNMAP,SECONDARY,QCFAIL,DUP]
 
 .SH AUTHOR
 .PP
