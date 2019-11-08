@@ -134,8 +134,15 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
                         const int length, const int rev,
                         const char *pos_strand_name, const char *neg_strand_name,
                         enum fai_format_options format) {
-    hts_pos_t seq_len;
+    hts_pos_t seq_len = 0;
     char *seq = fai_fetch64(faid, name, &seq_len);
+    if (!seq) {
+        // seq_len == -2 when the requested region is not present.
+        // If ignore is true, report success to skip to the next region,
+        // otherwise report an error (also for other values of seq_len,
+        // which indicate things like IO errors)
+        return (ignore && seq_len == -2) ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
 
     if (format == FAI_FASTA) {
         fprintf(file, ">%s%s\n", name, rev ? neg_strand_name : pos_strand_name);
@@ -159,6 +166,7 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
         fprintf(file, "+\n");
 
         char *qual = fai_fetchqual64(faid, name, &seq_len);
+        if (!qual) return EXIT_FAILURE;
 
         if (rev && seq_len > 0) {
             reverse(qual, seq_len);
@@ -166,7 +174,7 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
 
         if (write_line(faid, file, qual, name, ignore, length, seq_len)
             == EXIT_FAILURE) {
-            free(seq);
+            free(qual);
             return EXIT_FAILURE;
         }
 
