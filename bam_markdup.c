@@ -979,27 +979,37 @@ static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_has
                         // do it by scores
                         int64_t ori_score, curr_score;
 
-                        ori_score  = calc_score(ori->b);
-                        curr_score = calc_score(current->b);
-
-                        if (current_paired) {
-                            // they are pairs so add mate scores.
-                            int64_t mate_tmp;
-
-                            if ((mate_tmp = get_mate_score(ori->b)) == -1) {
-                                fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
-                                ret = -1;
-                                break;
+                        if ((ori->b->core.flag & BAM_FQCFAIL) != (current->b->core.flag & BAM_FQCFAIL)) {
+                            if (ori->b->core.flag & BAM_FQCFAIL) {
+                                ori_score  = 0;
+                                curr_score = 1;
                             } else {
-                                ori_score += mate_tmp;
+                                ori_score  = 1;
+                                curr_score = 0;
                             }
+                        } else {
+                            ori_score  = calc_score(ori->b);
+                            curr_score = calc_score(current->b);
 
-                            if ((mate_tmp = get_mate_score(current->b)) == -1) {
-                                fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
-                                ret = -1;
-                                break;
-                            } else {
-                                curr_score += mate_tmp;
+                            if (current_paired) {
+                                // they are pairs so add mate scores.
+                                int64_t mate_tmp;
+
+                                if ((mate_tmp = get_mate_score(ori->b)) == -1) {
+                                    fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                                    ret = -1;
+                                    break;
+                                } else {
+                                    ori_score += mate_tmp;
+                                }
+
+                                if ((mate_tmp = get_mate_score(current->b)) == -1) {
+                                    fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                                    ret = -1;
+                                    break;
+                                } else {
+                                    curr_score += mate_tmp;
+                                }
                             }
                         }
 
@@ -1107,7 +1117,8 @@ static unsigned long estimate_library_size(unsigned long read_pairs, unsigned lo
         estimated_size = (unsigned long)(unique_pairs * (m + M) / 2);
     } else {
         fprintf(stderr, "[markdup] warning: unable to calculate estimated library size."
-                        " Read pairs %ld should be greater than duplicate pairs %ld.\n",
+                        " Read pairs %ld should be greater than duplicate pairs %ld,"
+                        " which should both be none zero.\n",
                         read_pairs, duplicate_pairs);
     }
 
