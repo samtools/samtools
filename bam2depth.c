@@ -42,11 +42,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bedidx.h"
 #include "sam_opts.h"
 
+#define BAM_FMAX ((BAM_FSUPPLEMENTARY << 1) - 1)
+
 typedef struct {     // auxiliary data structure
     samFile *fp;     // the file handle
     sam_hdr_t *hdr;  // the file header
     hts_itr_t *iter; // NULL if a region not specified
     int min_mapQ, min_len; // mapQ filter; length filter
+    uint32_t flags;  // read filtering flags
 } aux_t;
 
 // This function reads a BAM alignment from one BAM file.
@@ -58,7 +61,7 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
     {
         ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->hdr, b);
         if ( ret<0 ) break;
-        if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
+        if ( b->core.flag & aux->flags) continue;
         if ( (int)b->core.qual < aux->min_mapQ ) continue;
         if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
         break;
@@ -85,6 +88,9 @@ static int usage() {
     fprintf(stderr, "   -q <int>            base quality threshold [0]\n");
     fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
+    fprintf(stderr, "   -g <flags>          include reads that have any of the specified flags set [0]\n");
+    fprintf(stderr, "   -G <flags>          filter out reads that have any of the specified flags set"
+                    "                       [UNMAP,SECONDARY,QCFAIL,DUP]\n");
 
     sam_global_opt_help(stderr, "-.--.--.");
 
@@ -113,6 +119,8 @@ int main_depth(int argc, char *argv[])
     int print_header = 0;
     char *output_file = NULL;
     FILE *file_out = stdout;
+    uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
+    int tflags = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -121,7 +129,7 @@ int main_depth(int argc, char *argv[])
     };
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:g:G:", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -140,6 +148,22 @@ int main_depth(int argc, char *argv[])
             case 'd': case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
             case 'H': print_header = 1; break;
             case 'o': output_file = optarg; break;
+            case 'g':
+                tflags = bam_str2flag(optarg);
+                if (tflags < 0 || tflags > BAM_FMAX) {
+                    print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
+                    return 1;
+                }
+                flags &= ~tflags;
+                break;
+            case 'G':
+                tflags = bam_str2flag(optarg);
+                if (tflags < 0 || tflags > BAM_FMAX) {
+                    print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
+                    return 1;
+                }
+                flags |= tflags;
+                break;
             default:  if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': return usage();
@@ -233,6 +257,7 @@ int main_depth(int argc, char *argv[])
                 goto depth_end;
             }
         }
+        data[i]->flags = flags;
     }
     if (print_header) {
         fputs("#CHROM\tPOS", file_out);
