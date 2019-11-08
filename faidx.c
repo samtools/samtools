@@ -166,7 +166,7 @@ static int write_output(faidx_t *faid, FILE *file, const char *name, const int i
 
         if (write_line(faid, file, qual, name, ignore, length, seq_len)
             == EXIT_FAILURE) {
-            free(seq);
+            free(qual);
             return EXIT_FAILURE;
         }
 
