@@ -1118,7 +1118,7 @@ static unsigned long estimate_library_size(unsigned long read_pairs, unsigned lo
     } else {
         fprintf(stderr, "[markdup] warning: unable to calculate estimated library size."
                         " Read pairs %ld should be greater than duplicate pairs %ld,"
-                        " which should both be none zero.\n",
+                        " which should both be non zero.\n",
                         read_pairs, duplicate_pairs);
     }
 
