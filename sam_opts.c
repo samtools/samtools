@@ -66,8 +66,23 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
             break;
         } else if (strcmp(lopt->name, "reference") == 0) {
             char *ref = malloc(10 + strlen(optarg) + 1);
+
+            if (!ref) {
+                fprintf(stderr, "Unable to allocate memory in "
+                                "parse_sam_global_opt.\n");
+
+                return -1;
+            }
+
             sprintf(ref, "reference=%s", optarg);
-            ga->reference = strdup(optarg);
+
+            if (!(ga->reference = strdup(optarg))) {
+                fprintf(stderr, "Unable to allocate memory in "
+                                "parse_sam_global_opt.\n");
+
+                return -1;
+            }
+
             r  = hts_opt_add((hts_opt **)&ga->in.specific, ref);
             r |= hts_opt_add((hts_opt **)&ga->out.specific, ref);
             free(ref);
@@ -85,7 +100,7 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
     }
 
     if (!lopt->name) {
-        fprintf(stderr, "Unexpected global option: %s\n", lopt->name);
+        fprintf(stderr, "Unexpected global option.\n");
         return -1;
     }
 
