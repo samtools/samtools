@@ -1,6 +1,6 @@
 /*  bam_index.c -- index and idxstats subcommands.
 
-    Copyright (C) 2008-2011, 2013, 2014 Genome Research Ltd.
+    Copyright (C) 2008-2011, 2013-2016, 2018, 2019  Genome Research Ltd.
     Portions copyright (C) 2010 Broad Institute.
     Portions copyright (C) 2013 Peter Cock, The James Hutton Institute.
 

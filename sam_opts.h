@@ -1,6 +1,6 @@
 /*  sam_opts.h -- utilities to aid parsing common command line options.
 
-    Copyright (C) 2015 Genome Research Ltd.
+    Copyright (C) 2015, 2019 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 

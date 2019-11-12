@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2017 Genome Research Ltd.
+    Copyright (C) 2009-2019 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>

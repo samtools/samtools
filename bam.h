@@ -1,6 +1,6 @@
 /*  bam.h -- BAM API.
 
-    Copyright (C) 2008-2014 Genome Research Ltd.
+    Copyright (C) 2008-2014, 2019 Genome Research Ltd.
     Portions copyright (C) 2010-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>

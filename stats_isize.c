@@ -1,6 +1,6 @@
 /*  stats_isize.c -- generalised insert size calculation for samtools stats.
 
-    Copyright (C) 2014 Genome Research Ltd.
+    Copyright (C) 2014, 2018 Genome Research Ltd.
 
     Author: Nicholas Clarke <nc6@sanger.ac.uk>
 

@@ -1,7 +1,7 @@
 /*  bedidx.c -- BED file indexing.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2014,2017 Genome Research Ltd.
+    Copyright (C) 2014, 2017-2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 

@@ -1,6 +1,6 @@
 # Configure script for samtools, utilities for Sequence Alignment/Map files.
 #
-#    Copyright (C) 2015 Genome Research Ltd.
+#    Copyright (C) 2015, 2017 Genome Research Ltd.
 #
 #    Author: John Marshall <jm18@sanger.ac.uk>
 #

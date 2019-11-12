@@ -2,7 +2,7 @@
     tmp_file.c - write to and read from a temporary binary file
     for fast storage plus added compression.
 
-    Copyright (C) 2017 Genome Research Ltd.
+    Copyright (C) 2017, 2018 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 

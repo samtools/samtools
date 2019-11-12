@@ -1,6 +1,6 @@
 /*  bam_split.c -- split subcommand.
 
-    Copyright (C) 2013-2016,2018 Genome Research Ltd.
+    Copyright (C) 2013-2016,2018-2019 Genome Research Ltd.
 
     Author: Martin Pollard <mp15@sanger.ac.uk>
 

@@ -1,6 +1,7 @@
 /*  bam_tview_html.c -- HTML tview output.
 
     Copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
+    Copyright (C) 2019 Genome Research Ltd.
 
     Author: Pierre Lindenbaum <plindenbaum@yahoo.fr>
 

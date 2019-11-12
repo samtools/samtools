@@ -1,6 +1,6 @@
 /*  bam_aux.c -- remaining aux field handling.
 
-    Copyright (C) 2008-2010, 2013 Genome Research Ltd.
+    Copyright (C) 2008-2010, 2013, 2015, 2019 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>

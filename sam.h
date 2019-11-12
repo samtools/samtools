@@ -1,6 +1,6 @@
 /*  sam.h -- format-neutral SAM/BAM API.
 
-    Copyright (C) 2009, 2013-2015 Genome Research Ltd.
+    Copyright (C) 2009, 2013-2015, 2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 

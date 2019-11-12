@@ -1,6 +1,6 @@
 /*  bam_stat.c -- flagstat subcommand.
 
-    Copyright (C) 2009, 2011, 2013-2015 Genome Research Ltd.
+    Copyright (C) 2009, 2011, 2013-2015, 2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 

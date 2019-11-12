@@ -1,6 +1,6 @@
 /*  test/split/test_filter_header_rg.c -- split test cases.
 
-    Copyright (C) 2014 Genome Research Ltd.
+    Copyright (C) 2014-2016, 2018, 2019 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 

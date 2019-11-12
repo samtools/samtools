@@ -3,7 +3,7 @@
 #
 #     Author : Rob Davies <rmd@sanger.ac.uk>
 #
-#     Copyright (C) 2018 Genome Research Ltd.
+#     Copyright (C) 2018-2019 Genome Research Ltd.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal

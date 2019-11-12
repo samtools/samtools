@@ -1,6 +1,6 @@
 /*  bam_quickcheck.c -- quickcheck subcommand.
 
-    Copyright (C) 2015 Genome Research Ltd.
+    Copyright (C) 2015-2017 Genome Research Ltd.
 
     Author: Joshua C. Randall <jcrandall@alum.mit.edu>
 
