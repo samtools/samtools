@@ -330,6 +330,15 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
             }
         } else {
             retval->unaccounted_header = sam_hdr_dup(retval->merged_input_header);
+            if (!opts->no_pg && sam_hdr_add_pg(retval->unaccounted_header, "samtools",
+                                    "VN", samtools_version(),
+                                    arg_list ? "CL": NULL,
+                                    arg_list ? arg_list : NULL,
+                                    NULL)) {
+                print_error("split", "Could not rewrite header for \"%s\"", opts->unaccounted_name);
+                cleanup_state(retval, false);
+                return NULL;
+            }
         }
 
         retval->unaccounted_file = sam_open_format(opts->unaccounted_name, "wb", &opts->ga.out);
