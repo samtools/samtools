@@ -1655,7 +1655,10 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
  fail:
     for (i = 0; i < n; i++) {
         if (fp && fp[i]) sam_close(fp[i]);
-        if (heap && heap[i].entry.bam_record) bam_destroy1(heap[i].entry.bam_record);
+    }
+    for (i = 0; i < heap_size; i++) {
+        if (heap && heap[i].i < n && heap[i].entry.bam_record)
+            bam_destroy1(heap[i].entry.bam_record);
     }
     free(fp);
     free(heap);
