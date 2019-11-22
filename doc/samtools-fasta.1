@@ -179,7 +179,7 @@ Do not output alignments with any bits set in
 present in the FLAG field.
 .I INT
 can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
-or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0].
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0x900].
 This defaults to 0x900 representing filtering of secondary and
 supplementary alignments.
 .TP 8
@@ -233,7 +233,7 @@ The resulting files can be used with, for example, the
 .B bwa
 aligner.
 .EX 4
-samtools fastq -1 paired1.fq -2 paired2.fq -0 /dev/null -s /dev/null -n -F 0x900 in.bam
+samtools fastq -1 paired1.fq -2 paired2.fq -0 /dev/null -s /dev/null -n in.bam
 .EE
 
 Output paired and singleton reads in a single file, discarding supplementary
@@ -245,7 +245,7 @@ The output file is suitable for use with
 which understands interleaved files containing a mixture of paired and
 singleton reads.
 .EX 4
-samtools fastq -0 /dev/null -F 0x900 in.bam > all_reads.fq
+samtools fastq -0 /dev/null in.bam > all_reads.fq
 .EE
 
 Output paired reads in a single file, discarding supplementary and
@@ -258,17 +258,12 @@ when using its
 .BR -p " and " -q " options."
 With this aligner, paired reads must be mapped separately to the singletons.
 .EX 4
-samtools fastq -0 /dev/null -s single.fq -N -F 0x900 in.bam > paired.fq
+samtools fastq -0 /dev/null -s single.fq -N in.bam > paired.fq
 .EE
 
 .SH BUGS
 .IP o 2
 The way of specifying output files is far to complicated and easy to get wrong.
-
-.IP o 2
-The default value for the -F option should really be 0x900 so that secondary
-and supplementary reads are automatically excluded.
-The existing default of 0 is retained for reasons of compatibility.
 
 .SH AUTHOR
 .PP

@@ -52,9 +52,9 @@ samtools index
 
 .SH DESCRIPTION
 .PP
-Index a coordinate-sorted BAM or CRAM file for fast random access.
-(Note that this does not work with SAM files even if they are bgzip
-compressed \(em to index such files, use tabix(1) instead.)
+Index a coordinate-sorted BGZIP-compressed SAM, BAM or CRAM file for fast
+random access.
+(Note that this does not work with uncompressed SAM files.)
 
 This index is needed when
 .I region
@@ -74,6 +74,12 @@ either
 .IB aln.bam .bai
 or
 .IB aln.bam .csi
+will be created; and for a compressed SAM file
+.IR aln.sam.gz ,
+either
+.IB aln.sam.gz .bai
+or
+.IB aln.sam.gz .csi
 will be created, depending on the index format selected.
 
 .SH OPTIONS
