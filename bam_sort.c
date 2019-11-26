@@ -1833,6 +1833,7 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
     bam1_tag *buf_ar2[2], *bam_a, *bam_b;
     uint64_t max_pos = 1;
     uint32_t max_tid = 1, tid_bytes = 0, pos_bytes = 0, byte = 0;
+    uint32_t tid_shift_l, tid_shift_r;
     int nref = sam_hdr_nref(h);
 
     // Count number of bytes needed for biggest tid and pos
@@ -1853,15 +1854,24 @@ static int ks_radixsort(size_t n, bam1_tag *buf, const sam_hdr_t *h)
     for (; max_tid > 0; max_tid >>= 8) tid_bytes++;
     assert(pos_bytes + tid_bytes < sizeof(buf[0].u.pos_tid));
 
+    tid_shift_l = pos_bytes * 8;
+    tid_shift_r = 64 - tid_shift_l;
+
     // Write position and tid into bam1_tag::u::pos_tid using minimum number
     // of bytes required.  Values are stored little-endian so that we
     // get a least-significant digit (byte) radix sort.
     for (i = 0; i < n; i++) {
         bam1_t *b = buf[i].bam_record;
         uint32_t tid = b->core.tid == -1 ? nref : b->core.tid;
-        uint64_t pos = ((uint64_t)(b->core.pos + 1) << 1) | bam_is_rev(b);
+        // 'pos' here includes as many bytes of tid as will fit
+        // in the space remaining above pos_bytes.  The rest of tid
+        // is written out separately.
+        uint64_t pos = (bam_is_rev(b) |
+                        ((uint64_t)(b->core.pos + 1) << 1) |
+                        (tid_shift_l < 64 ? (uint64_t) tid << tid_shift_l : 0));
         u64_to_le(pos, buf[i].u.pos_tid);
-        u32_to_le(tid, &buf[i].u.pos_tid[pos_bytes]);
+        u32_to_le(tid_shift_r < 32 ? tid >> tid_shift_r : 0,
+                  &buf[i].u.pos_tid[8]);
     }
 
     buf_ar2[0] = buf;
