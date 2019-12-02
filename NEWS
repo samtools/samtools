@@ -19,6 +19,10 @@ Changes affecting the whole of samtools, or multiple sub-commands:
    due to file format limitations, data with large reference positions
    must use the SAM format. (#1107; #1117)
 
+ * Improved the efficiency of reading and writing SAM format data by 2 fold
+   (single thread). This is further improved by the ability to use multiple
+   threads, as previously done with BAM and CRAM.
+
  * samtools can now write BGZF-compressed SAM format.  To enable this,
    either save files with a '.sam.gz' suffix, or use '--output-fmt sam.gz'.
 
