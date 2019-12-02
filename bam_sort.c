@@ -1539,11 +1539,13 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
                             int n, char * const *fn, int num_in_mem,
                             buf_region *in_mem, bam1_tag *buf, int n_threads,
                             const char *cmd, const htsFormat *in_fmt,
-                            const htsFormat *out_fmt, char *arg_list, int no_pg) {
+                            const htsFormat *out_fmt, char *arg_list, int no_pg,
+                            int write_index) {
     samFile *fpout = NULL, **fp = NULL;
     heap1_t *heap = NULL;
     uint64_t idx = 0;
     int i, heap_size = n + num_in_mem;
+    char *out_idx_fn = NULL;
 
     g_is_by_qname = by_qname;
     if (sort_tag) {
@@ -1618,14 +1620,20 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
         return -1;
     }
 
+    if (write_index) {
+        if (!(out_idx_fn = auto_index(fpout, out, hout))){
+            sam_close(fpout);
+            return -1;
+        }
+    }
+
     // Now do the merge
     ks_heapmake(heap, heap_size, heap);
     while (heap->pos != HEAP_EMPTY) {
         bam1_t *b = heap->entry.bam_record;
         if (sam_write1(fpout, hout, b) < 0) {
             print_error_errno(cmd, "failed writing to \"%s\"", out);
-            sam_close(fpout);
-            return -1;
+            goto fail;
         }
         if (heap_add_read(heap, n, fp, num_in_mem, in_mem, buf, &idx, hout) < 0) {
             assert(heap->i < n);
@@ -1644,6 +1652,15 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     }
     free(fp);
     free(heap);
+
+    if (write_index) {
+        if (sam_idx_save(fpout) < 0) {
+            print_error_errno("merge", "writing index failed");
+            goto fail;
+        }
+        free(out_idx_fn);
+    }
+
     if (sam_close(fpout) < 0) {
         print_error(cmd, "error closing output file");
         return -1;
@@ -1663,6 +1680,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     free(fp);
     free(heap);
     if (fpout) sam_close(fpout);
+    free(out_idx_fn);
     return -1;
 }
 
@@ -1799,10 +1817,13 @@ typedef struct {
 // Returns 0 for success
 //        -1 for failure
 static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *buf,
-        const sam_hdr_t *h, int n_threads, const htsFormat *fmt, char *arg_list, int no_pg)
+                        const sam_hdr_t *h, int n_threads, const htsFormat *fmt,
+                        char *arg_list, int no_pg, int write_index)
 {
     size_t i;
     samFile* fp;
+    char *out_idx_fn = NULL;
+
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
     if (!no_pg && sam_hdr_add_pg((sam_hdr_t *)h, "samtools",
@@ -1813,14 +1834,30 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
         goto fail;
     }
     if (sam_hdr_write(fp, (sam_hdr_t *)h) != 0) goto fail;
+
+    if (write_index) {
+        if (!(out_idx_fn = auto_index(fp, fn, (sam_hdr_t *)h))) goto fail;
+    }
+
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i) {
         if (sam_write1(fp, (sam_hdr_t *)h, buf[i].bam_record) < 0) goto fail;
     }
+
+    if (write_index) {
+        if (sam_idx_save(fp) < 0) {
+            print_error_errno("merge", "writing index failed");
+            goto fail;
+        }
+        free(out_idx_fn);
+    }
+
+
     if (sam_close(fp) < 0) return -1;
     return 0;
  fail:
     sam_close(fp);
+    free(out_idx_fn);
     return -1;
 }
 
@@ -1946,10 +1983,10 @@ static void *worker(void *data)
             return 0;
         }
 
-        if (write_buffer(name, "wcx1", w->buf_len, w->buf, w->h, 0, &fmt, NULL, 1) < 0)
+        if (write_buffer(name, "wcx1", w->buf_len, w->buf, w->h, 0, &fmt, NULL, 1, 0) < 0)
             w->error = errno;
     } else {
-        if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL, NULL, 1) < 0)
+        if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL, NULL, 1, 0) < 0)
             w->error = errno;
     }
 
@@ -2021,6 +2058,7 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
   @param  out_fmt  output file format and options
   @param  arg_list    command string for PG line
   @param  no_pg       if 1, do not add a new PG line
+  @paran  write_index create index for the output file
   @return 0 for successful sorting, negative on errors
 
   @discussion It may create multiple temporary subalignment files
@@ -2030,7 +2068,8 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
 int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const char *prefix,
                       const char *fnout, const char *modeout,
                       size_t _max_mem, int n_threads,
-                      const htsFormat *in_fmt, const htsFormat *out_fmt, char *arg_list, int no_pg)
+                      const htsFormat *in_fmt, const htsFormat *out_fmt,
+                      char *arg_list, int no_pg, int write_index)
 {
     int ret = -1, res, i, n_files = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
@@ -2168,7 +2207,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
 
     // write the final output
     if (n_files == 0 && num_in_mem < 2) { // a single block
-        if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt, arg_list, no_pg) != 0) {
+        if (write_buffer(fnout, modeout, k, buf, header, n_threads, out_fmt, arg_list, no_pg, write_index) != 0) {
             print_error_errno("sort", "failed to create \"%s\"", fnout);
             goto err;
         }
@@ -2185,7 +2224,8 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         }
         if (bam_merge_simple(is_by_qname, sort_by_tag, fnout, modeout, header,
                              n_files, fns, num_in_mem, in_mem, buf,
-                             n_threads, "sort", in_fmt, out_fmt, arg_list, no_pg) < 0) {
+                             n_threads, "sort", in_fmt, out_fmt, arg_list,
+                             no_pg, write_index) < 0) {
             // Propagate bam_merge_simple() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             goto err;
@@ -2221,7 +2261,7 @@ int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t ma
     char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
     if (!fnout) return -1;
     sprintf(fnout, "%s.bam", prefix);
-    ret = bam_sort_core_ext(is_by_qname, NULL, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL, NULL, 1);
+    ret = bam_sort_core_ext(is_by_qname, NULL, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL, NULL, 1, 0);
     free(fnout);
     return ret;
 }
@@ -2314,6 +2354,11 @@ int bam_sort(int argc, char *argv[])
         goto sort_end;
     }
 
+    if (ga.write_index && (is_by_qname || sort_tag)) {
+        fprintf(stderr, "[W::bam_sort] Ignoring --write-index as it only works for position sorted files.\n");
+        ga.write_index = 0;
+    }
+
     if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
         print_error("sort", "failed to create arg_list");
         return 1;
@@ -2341,7 +2386,7 @@ int bam_sort(int argc, char *argv[])
 
     ret = bam_sort_core_ext(is_by_qname, sort_tag, (nargs > 0)? argv[optind] : "-",
                             tmpprefix.s, fnout, modeout, max_mem, ga.nthreads,
-                            &ga.in, &ga.out, arg_list, no_pg);
+                            &ga.in, &ga.out, arg_list, no_pg, ga.write_index);
     if (ret >= 0)
         ret = EXIT_SUCCESS;
     else {
