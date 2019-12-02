@@ -35,7 +35,7 @@ Changes affecting the whole of samtools, or multiple sub-commands:
 
  * A new global '--write-index' option has been added.  This allows output
    sam.gz/bam/cram files to be indexed while they are being written out.
-   This should work with addreplacerg, depad, markdup, merge, split,
+   This should work with addreplacerg, depad, markdup, merge, sort, split,
    and view. (#1062)
 
  * A global '--verbosity' option has been added to enable/disable
