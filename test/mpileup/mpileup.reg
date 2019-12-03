@@ -112,7 +112,7 @@ P 48.out $samtools mpileup -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 49.out $samtools mpileup -x -v -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 50.out $samtools mpileup -D -V -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
 P 51.out $samtools mpileup -S -x -g -f mpileup.ref.fa mpileup.1.$fmt | $filter
-P 52.out $samtools mpileup -u -x -f mpileup.ref.fa mpileup.1.bam | ../vcf-miniview - | awk -v OFS='\t' '/#samtools/ {next} /^#/ {print; next} {gsub(/[=,][-+]?[0-9]+(e[-+]?[0-9]+)?\.[0-9][0-9]+/,"&#del",$8);gsub(/[0-9]#del/,"",$8);print}'
+P 52.out $samtools mpileup -u -x -f mpileup.ref.fa mpileup.1.bam | ../vcf-miniview - | awk -v OFS='\t' '/#samtools/ {next} /^#/ {print; next} {gsub(/[=,][-+]?[0-9]+(e[-+]?[0-9]+)?\.[0-9][0-9]+/,"&#del",$8); gsub(/[0-9]#del/,"",$8); print}'
 
 # # -o/e/h for indel scores
 P 53.out $samtools mpileup -e 1       -u -x -f mpileup.ref.fa indels.$fmt|$filter|awk '/INDEL/'
