@@ -144,6 +144,7 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     char str[256], *p;
     int i, l = 0;
     tview_t *base=(tview_t*)tv;
+    str[0] = '\0';
     wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
     mvwprintw(tv->wgoto, 1, 2, "Goto: ");
     for (;;) {
