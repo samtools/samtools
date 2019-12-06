@@ -1,6 +1,6 @@
 /*  bam_tview.c -- tview subcommand.
 
-    Copyright (C) 2008-2016 Genome Research Ltd.
+    Copyright (C) 2008-2016, 2019 Genome Research Ltd.
     Portions copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -34,30 +34,73 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 
-khash_t(kh_rg)* get_rg_sample(const char* header, const char* sample)
-{
-    khash_t(kh_rg)* rg_hash = kh_init(kh_rg);
-    // given sample id return all the RD ID's
-    const char rg_regex[] = "^@RG.*\tID:([!-)+-<>-~][ !-~]*)(\t.*$|$)";
+// Threshold where spacing of numbers on the scale line changes from 10 to 20
+// to stop them running into each other.
+#define TEN_DIGITS 1000000000
 
-    regex_t rg_id;
-    regmatch_t* matches = (regmatch_t*)calloc(2, sizeof(regmatch_t));
-    if (matches == NULL) { perror("out of memory"); exit(-1); }
-    regcomp(&rg_id, rg_regex, REG_EXTENDED|REG_NEWLINE);
-    char* text = strdup(header);
-    char* end = text + strlen(header);
-    char* tofree = text;
-    while (end > text && regexec(&rg_id, text, 2, matches, 0) == 0) { //    foreach rg id in  header
-        int ret;
-        text[matches[1].rm_eo] = '\0';
-        kh_put(kh_rg, rg_hash, strdup(text+matches[1].rm_so), &ret); // Add the RG to the list
-        text += matches[0].rm_eo + 1; // Move search pointer forward
+static void destroy_rg_hash(khash_t(kh_rg)* rg_hash)
+{
+    khiter_t k;
+
+    if (!rg_hash)
+        return;
+
+    for (k = 0; k < kh_end(rg_hash); k++) {
+        if (kh_exist(rg_hash, k))
+            free((char *) kh_key(rg_hash, k));
     }
-    free(tofree);
-    return rg_hash;
+    kh_destroy(kh_rg, rg_hash);
 }
 
-int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
+static
+khash_t(kh_rg)* get_rg_sample(sam_hdr_t* header, const char* sample)
+{
+    int n_rg, i;
+    kstring_t id_val = KS_INITIALIZE, sm_val = KS_INITIALIZE;
+    khash_t(kh_rg)* rg_hash = kh_init(kh_rg);
+    if (!rg_hash) return NULL;
+
+    // There may be more than one @RG with a given SM:, so iterate through them
+    n_rg = sam_hdr_count_lines(header, "RG");
+    if (n_rg < 0) {
+        print_error("tview", "couldn't parse header");
+        goto fail;
+    }
+
+    for (i = 0; i < n_rg; i++) {
+        // Try ID: first
+        int r = sam_hdr_find_tag_pos(header, "RG", i, "ID", &id_val);
+        if (r < -1) goto memfail;
+        if (r == -1) continue;  // Shouldn't happen as ID is compulsory
+
+        if (strcmp(sample, id_val.s) != 0) {
+            // No match, try SM:
+            r = sam_hdr_find_tag_pos(header, "RG", i, "SM", &sm_val);
+            if (r < -1) goto memfail;
+            if (r < 0 || strcmp(sample, sm_val.s) != 0)
+                continue;
+        }
+
+        // Found a match, add ID to rg_hash
+        kh_put(kh_rg, rg_hash, id_val.s, &r);
+        if (r < 0) goto memfail;
+        ks_release(&id_val); // Now owned by hash table
+    }
+
+    ks_free(&id_val);
+    ks_free(&sm_val);
+    return rg_hash;
+
+ memfail:
+    perror("tview");
+ fail:
+    ks_free(&id_val);
+    ks_free(&sm_val);
+    destroy_rg_hash(rg_hash);
+    return NULL;
+}
+
+int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa, const char *fn_idx,
                  const char *samples, const htsFormat *fmt)
 {
     assert(tv!=NULL);
@@ -81,7 +124,13 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
         print_error("tview", "cannot read \"%s\"", fn);
         exit(EXIT_FAILURE);
     }
-    tv->idx = sam_index_load(tv->fp, fn);
+    // If index filename has not been specfied, look in BAM folder
+    if (fn_idx != NULL) {
+        tv->idx = sam_index_load2(tv->fp, fn, fn_idx);
+    } else {
+        tv->idx = sam_index_load(tv->fp, fn);
+    }
+
     if (tv->idx == NULL)
     {
         print_error("tview", "cannot read index for \"%s\"", fn);
@@ -95,7 +144,13 @@ int base_tv_init(tview_t* tv, const char *fn, const char *fn_fa,
     // If the user has asked for specific samples find out create a list of readgroups make up these samples
     if ( samples )
     {
-        tv->rg_hash = get_rg_sample(tv->header->text, samples); // Init the list of rg's
+        tv->rg_hash = get_rg_sample(tv->header, samples); // Init the list of rg's
+        if (kh_size(tv->rg_hash) == 0) {
+            print_error("tview",
+                        "The sample or read group \"%s\" not present.",
+                        samples);
+            exit(EXIT_FAILURE);
+        }
     }
 
     return 0;
@@ -109,25 +164,30 @@ void base_tv_destroy(tview_t* tv)
     hts_idx_destroy(tv->idx);
     if (tv->fai) fai_destroy(tv->fai);
     free(tv->ref);
-    bam_hdr_destroy(tv->header);
+    sam_hdr_destroy(tv->header);
+    destroy_rg_hash(tv->rg_hash);
     sam_close(tv->fp);
 }
 
 
-int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void *data)
+int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data)
 {
     tview_t *tv = (tview_t*)data;
-    int i, j, c, rb, attr, max_ins = 0;
+    hts_pos_t cp;
+    int i, j, c, rb, attr, max_ins = 0, interval;
     uint32_t call = 0;
+    kstring_t ks = KS_INITIALIZE;
     if (pos < tv->left_pos || tv->ccol > tv->mcol) return 0; // out of screen
     // print reference
     rb = (tv->ref && pos - tv->left_pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N';
-    for (i = tv->last_pos + 1; i < pos; ++i) {
-        if (i%10 == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-d", i+1);
-        c = tv->ref? tv->ref[i - tv->left_pos] : 'N';
+    for (cp = tv->last_pos + 1; cp < pos; ++cp) {
+        interval = cp < TEN_DIGITS ? 10 : 20;
+        if (cp%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, cp+1);
+        c = tv->ref? tv->ref[cp - tv->left_pos] : 'N';
         tv->my_mvaddch(tv,1, tv->ccol++, c);
     }
-    if (pos%10 == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-d", pos+1);
+    interval = pos < TEN_DIGITS ? 10 : 20;
+    if (pos%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, pos+1);
     { // call consensus
         bcf_callret1_t bcr;
         memset(&bcr, 0, sizeof bcr);
@@ -159,7 +219,12 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
         // calculate maximum insert
         for (i = 0; i < n; ++i) {
             const bam_pileup1_t *p = pl + i;
-            if (p->indel > 0 && max_ins < p->indel) max_ins = p->indel;
+            int len = bam_plp_insertion(p, &ks, NULL);
+            if (len < 0) {
+                print_error("tview", "Memory allocation failure.");
+                exit(1);
+            }
+            if (max_ins < len) max_ins = len;
         }
     }
     // core loop
@@ -184,14 +249,20 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
                     }
                 } else c = p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : '*';
             } else { // padding
-                if (j > p->indel) c = '*';
+                int len = bam_plp_insertion(p, &ks, NULL);
+                if (len < 0) {
+                    print_error("tview", "Memory allocation failure.");
+                    exit(1);
+                }
+
+                if (j > len) c = '*';
                 else { // insertion
                     if (tv->base_for ==  TV_BASE_NUCL) {
                         if (tv->show_name) {
                             char *name = bam_get_qname(p->b);
                             c = (p->qpos + j + 1 >= p->b->core.l_qname)? ' ' : name[p->qpos + j];
                         } else {
-                            c = seq_nt16_str[bam_seqi(bam_get_seq(p->b), p->qpos + j)];
+                            c = ks.s[j-1];
                             if (j == 0 && tv->is_dot && toupper(c) == toupper(rb)) c = bam_is_rev(p->b)? ',' : '.';
                         }
                     } else {
@@ -249,6 +320,7 @@ int tv_pl_func(uint32_t tid, uint32_t pos, int n, const bam_pileup1_t *pl, void 
         } else tv->my_mvaddch(tv,1, tv->ccol++, c);
     }
     tv->last_pos = pos;
+    ks_free(&ks);
     return 0;
 }
 
@@ -277,7 +349,7 @@ static int tv_push_aln(const bam1_t *b, tview_t *tv)
     return 0;
 }
 
-int base_draw_aln(tview_t *tv, int tid, int pos)
+int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos)
 {
     assert(tv!=NULL);
     // reset
@@ -291,10 +363,11 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
         if (tv->ref) free(tv->ref);
         assert(tv->curr_tid>=0);
 
-        str = (char*)calloc(strlen(tv->header->target_name[tv->curr_tid]) + 30, 1);
+        const char *ref_name = sam_hdr_tid2name(tv->header, tv->curr_tid);
+        str = (char*)calloc(strlen(ref_name) + 30, 1);
         assert(str!=NULL);
-        sprintf(str, "%s:%d-%d", tv->header->target_name[tv->curr_tid], tv->left_pos + 1, tv->left_pos + tv->mcol);
-        tv->ref = fai_fetch(tv->fai, str, &tv->l_ref);
+        sprintf(str, "%s:%"PRIhts_pos"-%"PRIhts_pos, ref_name, tv->left_pos + 1, tv->left_pos + tv->mcol);
+        tv->ref = fai_fetch64(tv->fai, str, &tv->l_ref);
         free(str);
         if ( !tv->ref )
         {
@@ -312,8 +385,9 @@ int base_draw_aln(tview_t *tv, int tid, int pos)
     bam_lplbuf_push(0, tv->lplbuf);
 
     while (tv->ccol < tv->mcol) {
-        int pos = tv->last_pos + 1;
-        if (pos%10 == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-d", pos+1);
+        hts_pos_t pos = tv->last_pos + 1;
+        int interval = pos < TEN_DIGITS ? 10 : 20;
+        if (pos%interval == 0 && tv->mcol - tv->ccol >= 10) tv->my_mvprintw(tv,0, tv->ccol, "%-"PRIhts_pos, pos+1);
         tv->my_mvaddch(tv,1, tv->ccol++, (tv->ref && pos < tv->l_ref)? tv->ref[pos - tv->left_pos] : 'N');
         ++tv->last_pos;
     }
@@ -331,9 +405,10 @@ static void error(const char *format, ...)
 "Usage: samtools tview [options] <aln.bam> [ref.fasta]\n"
 "Options:\n"
 "   -d display      output as (H)tml or (C)urses or (T)ext \n"
+"   -X              include customized index file\n"
 "   -p chr:pos      go directly to this position\n"
 "   -s STR          display only reads from this sample or group\n");
-        sam_global_opt_help(stderr, "-.--.-");
+        sam_global_opt_help(stderr, "-.--.--.");
     }
     else
     {
@@ -348,17 +423,17 @@ static void error(const char *format, ...)
 enum dipsay_mode {display_ncurses,display_html,display_text};
 extern tview_t* curses_tv_init(const char *fn, const char *fn_fa,
                                const char *samples, const htsFormat *fmt);
-extern tview_t* html_tv_init(const char *fn, const char *fn_fa,
+extern tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *fn_idx,
                              const char *samples, const htsFormat *fmt);
-extern tview_t* text_tv_init(const char *fn, const char *fn_fa,
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *fn_idx,
                              const char *samples, const htsFormat *fmt);
 
 int bam_tview_main(int argc, char *argv[])
 {
     int view_mode=display_ncurses;
     tview_t* tv=NULL;
-    char *samples=NULL, *position=NULL, *ref;
-    int c;
+    char *samples=NULL, *position=NULL, *ref, *fn_idx=NULL;
+    int c, has_index_file = 0, ref_index = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -366,10 +441,11 @@ int bam_tview_main(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "s:p:d:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "s:p:d:X", lopts, NULL)) >= 0) {
         switch (c) {
             case 's': samples=optarg; break;
             case 'p': position=optarg; break;
+            case 'X': has_index_file=1; break; // -X flag for index filename
             case 'd':
             {
                 switch(optarg[0])
@@ -388,20 +464,33 @@ int bam_tview_main(int argc, char *argv[])
     }
     if (argc==optind) error(NULL);
 
-    ref = (optind+1>=argc)? ga.reference : argv[optind+1];
+    ref = NULL;
+    ref_index = optind;
+    if (!has_index_file) {
+        ref = (optind+1>=argc)? ga.reference : argv[optind+1];
+    }
+    else {
+        ref = (optind+2>=argc)? ga.reference : argv[optind+2];
+        if (optind+1 >= argc) {
+            fprintf(stderr, "Incorrect number of arguments provided! Aborting...\n");
+            return 1;
+        }
+        fn_idx = argv[optind+1];
+        ref_index = optind+1;
+    }
 
     switch(view_mode)
     {
         case display_ncurses:
-            tv = curses_tv_init(argv[optind], ref, samples, &ga.in);
+            tv = curses_tv_init(argv[ref_index], ref, samples, &ga.in);
             break;
 
         case display_text:
-            tv = text_tv_init(argv[optind], ref, samples, &ga.in);
+            tv = text_tv_init(argv[ref_index], ref, fn_idx, samples, &ga.in);
             break;
 
         case display_html:
-            tv = html_tv_init(argv[optind], ref, samples, &ga.in);
+            tv = html_tv_init(argv[ref_index], ref, fn_idx, samples, &ga.in);
             break;
     }
     if (tv==NULL)
@@ -412,23 +501,27 @@ int bam_tview_main(int argc, char *argv[])
 
     if ( position )
     {
-        int tid, beg, end;
-        char *name_lim = (char *) hts_parse_reg(position, &beg, &end);
-        if (name_lim) *name_lim = '\0';
-        else beg = 0; // region parsing failed, but possibly a seq named "foo:a"
-        tid = bam_name2id(tv->header, position);
-        if (tid >= 0) { tv->curr_tid = tid; tv->left_pos = beg; }
+        int tid;
+        hts_pos_t beg, end;
+        if (!sam_parse_region(tv->header, position, &tid, &beg, &end, 0)) {
+            tv->my_destroy(tv);
+            fprintf(stderr, "Unknown reference or malformed region\n");
+            exit(EXIT_FAILURE);
+        }
+        tv->curr_tid = tid;
+        tv->left_pos = beg;
     }
     else if ( tv->fai )
     {
         // find the first sequence present in both BAM and the reference file
         int i;
-        for (i=0; i<tv->header->n_targets; i++)
+        for (i=0; i < sam_hdr_nref(tv->header); i++)
         {
-            if ( faidx_has_seq(tv->fai, tv->header->target_name[i]) ) break;
+            if ( faidx_has_seq(tv->fai, sam_hdr_tid2name(tv->header, i)) ) break;
         }
-        if ( i==tv->header->n_targets )
+        if ( i==sam_hdr_nref(tv->header) )
         {
+            tv->my_destroy(tv);
             fprintf(stderr,"None of the BAM sequence names present in the fasta file\n");
             exit(EXIT_FAILURE);
         }

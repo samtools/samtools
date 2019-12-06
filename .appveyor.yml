@@ -31,15 +31,17 @@ install:
 # munging $APPVEYOR_REPO_NAME.  Otherwise we assume this is a PR only to
 # samtools and should be linked against samtools(org)/htslib develop branch.
 clone_script:
-  - "sh -lc \"git clone --branch=$APPVEYOR_REPO_BRANCH https://github.com/$APPVEYOR_REPO_NAME $APPVEYOR_BUILD_FOLDER\""
+  - "sh -lc \"if test x$APPVEYOR_PULL_REQUEST_HEAD_REPO_NAME != x ; then git clone --branch=$APPVEYOR_PULL_REQUEST_HEAD_REPO_BRANCH https://github.com/$APPVEYOR_PULL_REQUEST_HEAD_REPO_NAME $APPVEYOR_BUILD_FOLDER ; else false ; fi || git clone --branch=$APPVEYOR_REPO_BRANCH https://github.com/$APPVEYOR_REPO_NAME $APPVEYOR_BUILD_FOLDER\""
+  - "sh -lc \"git show-branch --sha1-name HEAD"
   - "sh -lc \"git clone --branch=$APPVEYOR_REPO_BRANCH https://github.com/`echo $APPVEYOR_REPO_NAME|sed 's#/samtools#/htslib#'`.git $APPVEYOR_BUILD_FOLDER/htslib || git clone https://github.com/samtools/htslib.git $APPVEYOR_BUILD_FOLDER/htslib \""
+  - "sh -lc \"cd $APPVEYOR_BUILD_FOLDER/htslib && git show-branch --sha1-name HEAD\""
 
 build_script:
   - set HOME=.
   - set MSYSTEM=MINGW64
   - set PATH=C:/msys64/usr/bin;C:/msys64/mingw64/bin;%PATH%
   - "sh -lc \"(cd htslib; aclocal && autoheader && autoconf)\""
-  - "sh -lc \"aclocal && autoheader && autoconf && ./configure && make -j2\""
+  - "sh -lc \"aclocal && autoheader && autoconf && ./configure --enable-werror && make -j2\""
 
 test_script:
   - set HOME=.

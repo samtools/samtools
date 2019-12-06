@@ -1,6 +1,6 @@
 /*  bam.h -- BAM API.
 
-    Copyright (C) 2008-2014 Genome Research Ltd.
+    Copyright (C) 2008-2014, 2019 Genome Research Ltd.
     Portions copyright (C) 2010-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -38,7 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "1.9"
+#define BAM_VERSION "1.10"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -224,16 +224,6 @@ extern "C" {
     // int sam_read1(tamFile fp, bam_header_t *header, bam1_t *b);
 
     /*!
-      @abstract       Read header information from a TAB-delimited list file.
-      @param  fn_list file name for the list
-      @return         a pointer to the header structure
-
-      @discussion Each line in this file consists of chromosome name and
-      the length of chromosome.
-     */
-    bam_header_t *sam_header_read2(const char *fn_list);
-
-    /*!
       @abstract       Read header from a SAM file (if present)
       @param  fp      SAM file handler
       @return         pointer to header struct; 0 if no @SQ lines available
@@ -252,13 +242,13 @@ extern "C" {
       @abstract Initialize a header structure.
       @return   the pointer to the header structure
      */
-    static inline bam_header_t *bam_header_init(void) { return bam_hdr_init(); }
+    static inline bam_header_t *bam_header_init(void) { return sam_hdr_init(); }
 
     /*!
       @abstract        Destroy a header structure.
       @param  header  pointer to the header
      */
-    static inline void bam_header_destroy(bam_header_t *header) { bam_hdr_destroy(header); }
+    static inline void bam_header_destroy(bam_header_t *header) { sam_hdr_destroy(header); }
 
     /*!
       @abstract   Read a header structure from BAM.
@@ -277,7 +267,7 @@ extern "C" {
       @param  header pointer to the header structure
       @return        always 0 currently
      */
-    static inline int bam_header_write(bamFile fp, const bam_header_t *header) { return bam_hdr_write(fp, header); }
+    static inline int bam_header_write(bamFile fp, bam_header_t *header) { return bam_hdr_write(fp, header); }
 
     /*!
       @abstract   Read an alignment from BAM.

@@ -1,6 +1,6 @@
 /*  sam.c -- format-neutral SAM/BAM API.
 
-    Copyright (C) 2009, 2012-2015 Genome Research Ltd.
+    Copyright (C) 2009, 2012-2016 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -65,12 +65,12 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
             return NULL;
         }
         fp->is_write = 0;
-        if (fp->header->n_targets == 0 && bam_verbose >= 1)
+        if (sam_hdr_nref(fp->header) == 0 && bam_verbose >= 1)
             fprintf(stderr, "[samopen] no @SQ lines in the header.\n");
     }
     else {
         enum htsExactFormat fmt = hts_get_format(fp->file)->format;
-        fp->header = (bam_hdr_t *)aux;  // For writing, we won't free it
+        fp->header = (sam_hdr_t *)aux;  // For writing, we won't free it
         fp->is_write = 1;
         if (!(fmt == text_format || fmt == sam) || strchr(mode, 'h')) {
             if (sam_hdr_write(fp->file, fp->header) < 0) {
@@ -89,7 +89,7 @@ samfile_t *samopen(const char *fn, const char *mode, const void *aux)
 void samclose(samfile_t *fp)
 {
     if (fp) {
-        if (!fp->is_write && fp->header) bam_hdr_destroy(fp->header);
+        if (!fp->is_write && fp->header) sam_hdr_destroy(fp->header);
         sam_close(fp->file);
         free(fp);
     }

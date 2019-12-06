@@ -1,0 +1,125 @@
+'\" t
+.TH samtools-reheader 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools reheader \- replaces the header in the input file
+.\"
+.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools reheader
+.RB [ -iP ]
+[-c CMD | 
+.I in.header.sam
+] 
+.I in.bam
+
+.SH DESCRIPTION
+.PP
+Replace the header in
+.I in.bam
+with the header in
+.IR in.header.sam .
+This command is much faster than replacing the header with a
+BAM\(->SAM\(->BAM conversion.
+
+By default this command outputs the BAM or CRAM file to standard
+output (stdout), but for CRAM format files it has the option to
+perform an in-place edit, both reading and writing to the same file.
+No validity checking is performed on the header, nor that it is suitable
+to use with the sequence data itself.
+
+.SH OPTIONS
+.TP 8
+.B -P, --no-PG
+Do not add a @PG line to the header of the output file.
+.TP 8
+.B -i, --in-place
+Perform the header edit in-place, if possible.  This only works on CRAM
+files and only if there is sufficient room to store the new header.
+The amount of space available will differ for each CRAM file.
+.TP 8
+.B -c, --command CMD
+Allow the header from 
+.I in.bam
+to be processed by external 
+.B CMD
+and read back the result. When used in this manner, the external header file
+.I in.header.sam
+has to be omitted.
+
+.B CMD
+must take the original header through stdin in SAM format and output the
+modified header to stdout.
+.B CMD
+is passed to the system's command shell.
+Care should be taken to ensure the command is quoted correctly to avoid unwanted
+shell expansions (for example of $ variables).
+
+.B CMD
+must return an exit status of zero.
+
+.SH EXAMPLES
+
+.IP \(bu 2
+Remove comment lines
+.EX 2
+samtools reheader -c 'grep -v ^@CO' in.bam
+.EE
+.IP \(bu 2
+Add \(lqChr\(rq prefix to chromosome names.  Note extra backslashes before
+dollar signs to prevent unwanted shell variable expansion.
+.EX 2
+samtools reheader -c 'perl -pe "s/^(@SQ.*)(\(rstSN:)(\(rsd+|X|Y|MT)(\(rss|\(rs$)/\(rs$1Chr\(rs$2\(rs$3/"' in.bam
+.EE
+.IP \(bu 2
+Remove \(lqChr\(rq prefix
+.EX 2
+samtools reheader -c 'perl -pe "s/^(@SQ.*)(\(rstSN:)Chr/\(rs$1\(rs$2/"' in.bam
+.EE
+
+.SH AUTHOR
+.PP
+Written by Heng Li with modifications by James Bonfield and Valeriu Ohan,
+all from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1)
+.PP
+Samtools website: <http://www.htslib.org/>

@@ -1,0 +1,184 @@
+'\" t
+.TH samtools-flagstat 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools flagstat \- counts the number of alignments for each FLAG type
+.\"
+.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools flagstat
+.IR in.sam | in.bam | in.cram
+
+.SH DESCRIPTION
+.PP
+Does a full pass through the input file to calculate and print statistics
+to stdout.
+
+Provides counts for each of 13 categories based primarily on bit flags in
+the FLAG field.
+Each category in the output is broken down into QC pass and QC fail.
+In the default output format, these are presented as "#PASS + #FAIL" followed
+by a description of the category.
+
+The first row of output gives the total number of reads that are QC pass and
+fail (according to flag bit 0x200). For example:
+
+  122 + 28 in total (QC-passed reads + QC-failed reads)
+
+Which would indicate that there are a total of 150 reads in the input file,
+122 of which are marked as QC pass and 28 of which are marked as "not passing
+quality controls"
+
+Following this, additional categories are given for reads which are:
+
+.RS 18
+.TP
+secondary
+0x100 bit set
+.TP
+supplementary
+0x800 bit set
+.TP
+duplicates
+0x400 bit set
+.TP
+mapped
+0x4 bit not set
+.TP
+paired in sequencing
+0x1 bit set
+.TP
+read1
+both 0x1 and 0x40 bits set
+.TP
+read2
+both 0x1 and 0x80 bits set
+.TP
+properly paired
+both 0x1 and 0x2 bits set and 0x4 bit not set
+.TP
+with itself and mate mapped
+0x1 bit set and neither 0x4 nor 0x8 bits set
+.TP
+singletons
+both 0x1 and 0x8 bits set and bit 0x4 not set
+.RE
+
+.RS 10
+And finally, two rows are given that additionally filter on the reference
+name (RNAME), mate reference name (MRNM), and mapping quality (MAPQ) fields:
+.RE
+
+.RS 18
+.TP
+with mate mapped to a different chr
+0x1 bit set and neither 0x4 nor 0x8 bits set and MRNM not equal to RNAME
+.TP
+with mate mapped to a different chr (mapQ>=5)
+0x1 bit set and neither 0x4 nor 0x8 bits set
+and MRNM not equal to RNAME and MAPQ >= 5
+.RE
+
+.SH ALTERNATIVE OUTPUT FORMATS
+.PP
+The
+.B -O
+option can be used to select two alternative formats for the output.
+.PP
+Using
+.B -O tsv
+selects a tab-separated values format that can easily be imported into
+spreadsheet software.
+In this format the first column contains the values for QC-passed reads,
+the second column has the values for QC-failed reads and the third
+contains the category names.
+.PP
+Using
+.B -O json
+generates an ECMA-404 JSON data interchange format object
+<https://www.json.org/>.
+The top-level object contains two named objects
+.BR "QC-passed reads" " and " "QC-failed reads" .
+These contain the various categories listed above as names and
+the corresponding count as value.
+
+For the default format, the
+.BR mapped ", " "properly paired" ", and " singletons
+show the count as a percentage of the total number of QC-passed or QC-failed
+reads after the category name.
+For example:
+.EX
+32 + 0 mapped (94.12% : N/A)
+.EE
+
+In the
+.BR tsv " and " json
+formats, these percentages are listed in separate categories
+.BR "mapped %" ", " "properly paired %" ", and " "singletons %" .
+If the percentage cannot be calculated (because the total is zero)
+then in the
+.BR default " and " tsv
+formats it will be reported as `N/A'.
+In the
+.B json
+format, it will be reported as a JSON `null' value.
+
+.SH OPTIONS
+.TP 10
+.BI "-@ " INT
+Set number of additional threads to use when reading the file.
+.TP
+.BI "-O " FORMAT
+Set the output format.
+.I FORMAT
+can be set to `default', `json' or `tsv' to select the default, JSON
+or tab-separated values output format.
+If this option is not used, the default format will be selected.
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-idxstats (1),
+.IR samtools-stats (1)
+.PP
+Samtools website: <http://www.htslib.org/>

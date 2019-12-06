@@ -1,0 +1,120 @@
+'\" t
+.TH samtools-calmd 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools calmd \- calculates MD and NM tags
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools calmd
+.RB [ -Eeubr ]
+.RB [ -C
+.IR capQcoef "] " aln.bam " " ref.fasta
+
+.SH DESCRIPTION
+.PP
+Generate the MD tag. If the MD tag is already present, this command will
+give a warning if the MD tag generated is different from the existing
+tag. Output SAM by default.
+
+Calmd can also read and write CRAM files although in most cases it is
+pointless as CRAM recalculates MD and NM tags on the fly.  The one
+exception to this case is where both input and output CRAM files
+have been / are being created with the \fIno_ref\fR option.
+
+.SH OPTIONS
+.TP 8
+.B -A
+When used jointly with
+.B -r
+this option overwrites the original base quality.
+.TP 8
+.B -e
+Convert a the read base to = if it is identical to the aligned reference
+base. Indel caller does not support the = bases at the moment.
+.TP
+.B -u
+Output uncompressed BAM
+.TP
+.B -b
+Output compressed BAM
+.TP
+.BI -C \ INT
+Coefficient to cap mapping quality of poorly mapped reads. See the
+.B mpileup
+command for details. [0]
+.TP
+.B -r
+Compute the BQ tag (without -A) or cap base quality by BAQ (with -A).
+.TP
+.B -E
+Extended BAQ calculation. This option trades specificity for sensitivity, though the
+effect is minor.
+.TP
+.BI --no-PG
+Do not add a @PG line to the header of the output file.
+
+.SH EXAMPLES
+.IP o 2
+Dump BAQ applied alignment for other SNP callers:
+.EX 2
+samtools calmd -bAr aln.bam > aln.baq.bam
+.EE
+It adds and corrects the
+.B NM
+and
+.B MD
+tags at the same time. The
+.B calmd
+command also comes with the
+.B -C
+option, the same as the one in
+.BR mpileup .
+Apply if it helps.
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-mpileup (1)
+.PP
+Samtools website: <http://www.htslib.org/>

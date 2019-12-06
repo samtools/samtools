@@ -1,6 +1,6 @@
 /*  test/split/test_count_rg.c -- split test cases.
 
-    Copyright (C) 2014 Genome Research Ltd.
+    Copyright (C) 2014, 2019 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -29,15 +29,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <unistd.h>
 
-void setup_test_1(bam_hdr_t** hdr_in)
+void setup_test_1(sam_hdr_t** hdr_in)
 {
-    *hdr_in = bam_hdr_init();
+    *hdr_in = sam_hdr_init();
     const char *test1 =
     "@HD\tVN:1.4\n"
-    "@SQ\tSN:blah\n"
+    "@SQ\tSN:blah\tLN:150\n"
     "@RG\tID:fish\n";
-    (*hdr_in)->text = strdup(test1);
-    (*hdr_in)->l_text = strlen(test1);
+    sam_hdr_add_lines(*hdr_in, test1, 0);
 }
 
 int main(int argc, char**argv)
@@ -66,13 +65,14 @@ int main(int argc, char**argv)
 
     // Setup stderr redirect
     kstring_t res = { 0, 0, NULL };
-    FILE* orig_stderr = fdopen(dup(STDERR_FILENO), "a"); // Save stderr
+    int orig_stderr = dup(STDERR_FILENO); // Save stderr
+    int redirected_stderr;
     char* tempfname = (optind < argc)? argv[optind] : "test_count_rg.tmp";
     FILE* check = NULL;
 
     // setup
     if (verbose) printf("BEGIN test 1\n");  // TID test
-    bam_hdr_t* hdr1;
+    sam_hdr_t* hdr1;
     size_t count;
     char** output;
     setup_test_1(&hdr1);
@@ -83,9 +83,9 @@ int main(int argc, char**argv)
     if (verbose) printf("RUN test 1\n");
 
     // test
-    xfreopen(tempfname, "w", stderr); // Redirect stderr to pipe
+    redirected_stderr = redirect_stderr(tempfname);
     bool result_1 = count_RG(hdr1, &count, &output);
-    fclose(stderr);
+    flush_and_restore_stderr(orig_stderr, redirected_stderr);
 
     if (verbose) printf("END RUN test 1\n");
     if (verbose > 1) {
@@ -111,15 +111,15 @@ int main(int argc, char**argv)
         free(output[i]);
     }
     free(output);
-    bam_hdr_destroy(hdr1);
+    sam_hdr_destroy(hdr1);
     if (verbose) printf("END test 1\n");
 
     // Cleanup
     free(res.s);
     remove(tempfname);
     if (failure > 0)
-        fprintf(orig_stderr, "%d failures %d successes\n", failure, success);
-    fclose(orig_stderr);
+        fprintf(stderr, "%d failures %d successes\n", failure, success);
+    close(orig_stderr);
 
     return (success == NUM_TESTS)? EXIT_SUCCESS : EXIT_FAILURE;
 }

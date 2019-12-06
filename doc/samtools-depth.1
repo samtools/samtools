@@ -1,0 +1,144 @@
+'\" t
+.TH samtools-depth 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools depth \- computes the read depth at each position or region
+.\"
+.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools depth
+.RI [ options ]
+.RI "[" in1.sam | in1.bam | in1.cram " [" in2.sam | in2.bam | in2.cram "] [...]]"
+
+.SH DESCRIPTION
+.PP
+Computes the depth at each position or region.
+
+.SH OPTIONS
+.TP 8
+.B -a
+Output all positions (including those with zero depth)
+.TP
+.B -a -a, -aa
+Output absolutely all positions, including unused reference sequences.
+Note that when used in conjunction with a BED file the -a option may
+sometimes operate as if -aa was specified if the reference sequence
+has coverage outside of the region specified in the BED file.
+.TP
+.BI "-b "  FILE
+.RI "Compute depth at list of positions or regions in specified BED " FILE.
+[]
+.TP
+.BI "-f " FILE
+.RI "Use the BAM files specified in the " FILE
+(a file of filenames, one file per line)
+[]
+.TP
+.B -H
+Write a comment line showing column names at the beginning of the output.
+The names are CHROM, POS, and then the input file name for each depth column.
+If one of the inputs came from stdin, the name \*(lq-\*(rq will be used for
+the corresponding column.
+.TP
+.BI "-l " INT
+.RI "Ignore reads shorter than " INT
+.TP
+.BI "-m, -d " INT
+At a position, read at most
+.I INT
+reads per input file.  This means figures greater than
+.I INT
+may be reported in the output.
+
+Setting this limit reduces the amount of memory and time needed to
+process regions with very high coverage.  Passing zero for this option
+sets it to the highest possible value, effectively removing the depth
+limit. [8000]
+
+Note that up to release 1.8, samtools would enforce a minimum value for
+this option.  This no longer happens and the limit is set exactly as
+specified.
+.TP
+.BI "-o " FILE
+.RI "Write output to " FILE ".  Using \*(lq-\*(rq for " FILE
+will send the output to stdout (also the default if this option is not used).
+.TP
+.BI "-q " INT
+.RI "Only count reads with base quality greater than " INT
+.TP
+.BI "-Q " INT
+.RI "Only count reads with mapping quality greater than " INT
+.TP
+.BI "-r " CHR ":" FROM "-" TO
+Only report depth in specified region.
+.TP
+.B "-X"
+If this option is set, it will allows user to specify customized index file location(s) if the data
+folder does not contain any index file. Example usage: samtools depth [options] -X /data_folder/in1.bam [/data_folder/in2.bam [...]] /index_folder/index1.bai [/index_folder/index2.bai [...]]
+.TP
+.BI "-g " FLAGS
+By default, reads that have any of the flags UNMAP, SECONDARY, QCFAIL,
+or DUP set are skipped. To include these reads back in the analysis, use
+this option together with the desired flag or flag combination.
+.I FLAGS
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/),
+in octal by beginning with `0' (i.e. /^0[0-7]+/), as a decimal number
+not beginning with '0' or as a comma-separated list of flag names. [0]
+
+For a list of flag names see
+.IR samtools-flags (1).
+.TP
+.BI "-G " FLAGS
+Discard any read that has any of the flags specified by
+.I FLAGS
+set.  FLAGS are specified as for the
+.B "-g"
+option. [UNMAP,SECONDARY,QCFAIL,DUP]
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-mpileup (1),
+.IR samtools-sort (1)
+.PP
+Samtools website: <http://www.htslib.org/>

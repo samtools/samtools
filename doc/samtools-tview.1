@@ -1,0 +1,94 @@
+'\" t
+.TH samtools-tview 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools tview \- display alignments in a curses-based interactive viewer.
+.\"
+.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+.B tview
+samtools tview
+.RB [ -p
+.IR chr:pos ]
+.RB [ -s
+.IR STR ]
+.RB [ -d
+.IR display ]
+.I in.sorted.bam
+.RI [ ref.fasta ]
+	
+.SH DESCRIPTION
+.PP
+Text alignment viewer (based on the ncurses library). In the viewer,
+press `?' for help and press `g' to check the alignment start from a
+region in the format like `chr10:10,000,000' or `=10,000,000' when
+viewing the same reference sequence.
+
+.SH OPTIONS
+.TP 14
+.BI -d \ display
+Output as (H)tml, (C)urses or (T)ext.
+
+The width of generated text is controlled by the COLUMNS environment
+variable.  Note this may be a local shell variable so it may need
+exporting first or specifying on the command line prior to the
+command.  For example
+.EX 2
+export COLUMNS ; samtools tview -d T -p 1:234567 in.bam
+.EE
+.TP
+.BI -p \ chr:pos
+Go directly to this position
+.TP
+.BI -s \ STR
+Display only alignments from this sample or read group
+.TP
+.B -X
+If this option is set, it will allows user to specify customized index file location(s) if the data
+folder does not contain any index file. Example usage: samtools tview [options] -X </data_folder/data.bam> [/index_folder/index.bai] [ref.fasta]
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1)
+.PP
+Samtools website: <http://www.htslib.org/>

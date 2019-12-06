@@ -93,7 +93,8 @@ int main(int argc, char *argv[])
     s.l = s.m = 0; s.s = 0;
     af_n = af_max = af_i = 0; af = 0;
     for (i = 0; i < N_TMPSTR; ++i) t[i].l = t[i].m = 0, t[i].s = 0;
-    fp = strcmp(argv[1], "-")? gzopen(argv[optind], "r") : gzdopen(fileno(stdin), "r");
+    fp = strcmp(argv[optind], "-")? gzopen(argv[optind], "r") : gzdopen(fileno(stdin), "r");
+    if (fp == NULL) fatal("can't open input file");
     ks = ks_init(fp);
     while (ks_getuntil(ks, 0, &s, &dret) >= 0) {
         if (strcmp(s.s, "CO") == 0) { // contig sequence

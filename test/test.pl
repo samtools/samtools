@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2018 Genome Research Ltd.
+#    Copyright (C) 2013-2019 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -66,7 +66,9 @@ test_addrprg($opts, threads=>2);
 test_markdup($opts);
 test_markdup($opts, threads=>2);
 test_bedcov($opts);
-
+test_split($opts);
+test_split($opts, threads=>2);
+test_large_positions($opts);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -102,10 +104,10 @@ sub error
 sub tempfile {
     my ($fh, $name) = File::Temp::tempfile(@_);
     if (wantarray) {
-	if ($^O =~ /^(?:msys|MSWin32)/) {
-	    $name = abs_path($name);
-	}
-	return ($fh, $name);
+        if ($^O =~ /^(?:msys|MSWin32)/) {
+            $name = abs_path($name);
+        }
+        return ($fh, $name);
     }
     return $fh;
 }
@@ -123,7 +125,7 @@ sub tempdir
     if ($^O =~ /^msys/) {
         $dir = cygpath($dir);
     } elsif ($^O eq 'MSWin32') {
-	$dir =~ s/\\/\//g;
+        $dir =~ s/\\/\//g;
     }
     return $dir;
 }
@@ -135,12 +137,12 @@ sub parse_params
     Getopt::Long::Configure('bundling');
     my $ret = GetOptions (
             'e|exec=s' => sub {
-		my ($tool, $path) = split /=/, $_[1];
-		if ($^O eq 'MSWin32' && $path !~ /\.exe$/) {
-		    $path .= '.exe';
-		}
-		$$opts{$tool} = abs_path($path) if $path;
-	},
+                my ($tool, $path) = split /=/, $_[1];
+                if ($^O eq 'MSWin32' && $path !~ /\.exe$/) {
+                    $path .= '.exe';
+                }
+                $$opts{$tool} = abs_path($path) if $path;
+        },
             't|temp-dir:s' => \$$opts{keep_files},
             'r|redo-outputs' => \$$opts{redo_outputs},
             'h|?|help' => \$help
@@ -150,8 +152,8 @@ sub parse_params
     $$opts{path} = $FindBin::RealBin;
     $$opts{bin}  = $FindBin::RealBin;
     if ($^O =~ /^msys/) {
-	$$opts{path} = cygpath($$opts{path});
-	$$opts{bin}  = cygpath($$opts{bin});
+        $$opts{path} = cygpath($$opts{path});
+        $$opts{bin}  = cygpath($$opts{bin});
     }
     $$opts{bin}  =~ s{/test/?$}{};
     if ( $$opts{keep_files} ) { cmd("mkdir -p $$opts{keep_files}"); }
@@ -180,17 +182,17 @@ sub _cmd
     if ($pid)
     {
         # parent
-	binmode($kid_io);
-	binmode($err_fh);
-	local $/;
+        binmode($kid_io);
+        binmode($err_fh);
+        local $/;
         $out = <$kid_io>;
         close($kid_io);
         my $child_retval = $?;
         $err = <$err_fh>;
         close ($err_fh);
-	$out =~ s/\x0d\x0a/\x0a/g if (!$args->{binary});
-	$err =~ s/\x0d\x0a/\x0a/g if (!$args->{binary_err});
-	$out =~ s/e([-+])0(\d\d)/e$1$2/g if ($args->{exp_fix});
+        $out =~ s/\x0d\x0a/\x0a/g if (!$args->{binary});
+        $err =~ s/\x0d\x0a/\x0a/g if (!$args->{binary_err});
+        $out =~ s/e([-+])0(\d\d)/e$1$2/g if ($args->{exp_fix});
 
         return ($child_retval, $out, $err);
     }
@@ -210,6 +212,8 @@ sub cmd
 #       want_fail=> consider passed() if cmd() returns non-zero
 #       out_map => map output filenames to their expected result file (can be used alongside out)
 #       hskip => number of header lines to ignore during diff
+#       ignore_pg_header => remove @PG header lines
+#       reorder_header => ignore inconsequential header line order changes
 sub test_cmd
 {
     my ($opts,%args) = @_;
@@ -230,7 +234,7 @@ sub test_cmd
     {
         rename("$$opts{path}/$args{out}","$$opts{path}/$args{out}.old");
         open(my $fh,'>',"$$opts{path}/$args{out}") or error("$$opts{path}/$args{out}: $!");
-	binmode($fh);
+        binmode($fh);
         print $fh $out;
         close($fh);
         my ($ret,$out) = _cmd("$$opts{diff} -q $$opts{path}/$args{out} $$opts{path}/$args{out}.old");
@@ -246,7 +250,7 @@ sub test_cmd
     {
         rename("$$opts{path}/$args{err}","$$opts{path}/$args{err}.old");
         open(my $fh,'>',"$$opts{path}/$args{err}") or error("$$opts{path}/$args{err}: $!");
-	binmode($fh);
+        binmode($fh);
         print $fh $err;
         close($fh);
         my ($ret,$out) = _cmd("$$opts{diff} -q $$opts{path}/$args{err} $$opts{path}/$args{err}.old");
@@ -263,17 +267,26 @@ sub test_cmd
     my $exp = '';
     if ( open(my $fh,'<',"$$opts{path}/$args{out}") )
     {
-	binmode($fh);
-	local $/;
+        binmode($fh);
+        local $/;
         $exp = <$fh>;
         close($fh);
     }
     elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$args{out}: $!"); return; }
 
+    if ($args{reorder_header}) {
+        $exp = reorder_headers($exp, $out);
+    }
+
+    if ($args{ignore_pg_header}) {
+        $out =~ s/(^|\n)(?:\@PG\t[^\n]*\n)+/$1/sg;
+        $exp =~ s/(^|\n)(?:\@PG\t[^\n]*\n)+/$1/sg;
+    }
+
     if ( $exp ne $out )
     {
         open(my $fh,'>',"$$opts{path}/$args{out}.new") or error("$$opts{path}/$args{out}.new");
-	binmode($fh);
+        binmode($fh);
         print $fh $out;
         close($fh);
         if ( !-e "$$opts{path}/$args{out}" )
@@ -293,7 +306,7 @@ sub test_cmd
         my $exp_err = '';
         if ( open(my $fh,'<',"$$opts{path}/$args{err}") )
         {
-	    binmode($fh);
+            binmode($fh);
             my @exp = <$fh>;
             $exp_err = join('',@exp);
             close($fh);
@@ -303,7 +316,7 @@ sub test_cmd
         if ( $exp_err ne $err )
         {
             open(my $fh,'>',"$$opts{path}/$args{err}.new") or error("$$opts{path}/$args{err}.new");
-	    binmode($fh);
+            binmode($fh);
             print $fh $err;
             close($fh);
             if ( !-e "$$opts{path}/$args{err}" )
@@ -328,8 +341,8 @@ sub test_cmd
             my $exp = '';
             if ( open(my $fh,'<',"$$opts{path}/$out_expected") )
             {
-		binmode($fh);
-		local $/;
+                binmode($fh);
+                local $/;
                 $exp = <$fh>;
                 close($fh);
             }
@@ -338,25 +351,33 @@ sub test_cmd
             my $out = '';
             if ( open(my $fh,'<',"$$opts{path}/$out_actual") )
             {
-		binmode($fh);
+                binmode($fh);
                 if( exists($args{hskip}) ){
                     # Strip hskip lines to allow match to the expected output
                     for (my $i = 0; $i < $args{hskip}; $i++) {
-			my $ignore = <$fh>;
-		    }
+                        my $ignore = <$fh>;
+                    }
                 }
-		local $/;
+                local $/;
                 $out = <$fh>;
-		$out =~ s/\x0d\x0a/\x0a/g if (!$args{binary});
-		$out =~ s/e\+0(\d\d)/e+$1/g if ($args{exp_fix});
+                $out =~ s/\x0d\x0a/\x0a/g if (!$args{binary});
+                $out =~ s/e\+0(\d\d)/e+$1/g if ($args{exp_fix});
                 close($fh);
             }
             elsif ( !$$opts{redo_outputs} ) { failed($opts,%args,msg=>$test,reason=>"$$opts{path}/$out_actual: $!"); return; }
 
+            if ($args{ignore_pg_header}) {
+                $out =~ s/(^|\n)\@PG\t[^\n]*\n/$1/mg;
+                $exp =~ s/(^|\n)\@PG\t[^\n]*\n/$1/mg;
+            }
+            if ($args{reorder_header}) {
+                $exp = reorder_headers($exp, $out);
+            }
+
             if ( $exp ne $out )
             {
                 open(my $fh,'>',"$$opts{path}/$out_expected.new") or error("$$opts{path}/$out_expected.new");
-		binmode($fh);
+                binmode($fh);
                 print $fh $out;
                 close($fh);
                 if ( !-e "$$opts{path}/$out_expected" )
@@ -371,7 +392,7 @@ sub test_cmd
                 }
                 return;
             }
-	    unlink("$$opts{path}/$out_actual");
+            unlink("$$opts{path}/$out_actual");
         }
     }
     passed($opts,%args,msg=>$test);
@@ -415,6 +436,52 @@ sub is_file_newer
     return 0;
 }
 
+sub reorder_headers
+{
+    my ($exp, $out) = @_;
+
+    my %headers;
+    while ($exp =~ /^\@(..)(.*)\n/mg) {
+        my ($type, $vals) = ($1, $2);
+        if ($type eq 'PG' || $type eq 'RG') {
+            my ($id) = $vals =~ /\tID:([^\t]+)/;
+            push(@{$headers{$type}->{$id || ""}}, $vals);
+        } else {
+            push(@{$headers{$type}}, $vals || "");
+        }
+    }
+    $exp =~ s/^\@...*\n//mg;
+    my $reorder = "";
+    while ($out =~ /^\@(..)(.*)\n/mg) {
+        my ($type, $vals) = ($1, $2);
+        if ($type eq 'PG' || $type eq 'RG') {
+            my ($id) = $vals =~ /\tID:([^\t]+)/;
+            if (exists($headers{$type}->{$id || ""})
+                && @{$headers{$type}->{$id}}) {
+                my $v = shift(@{$headers{$type}->{$id}});
+                $reorder .= "\@$type$v\n";
+            }
+        } elsif (exists($headers{$type}) && @{$headers{$type}}) {
+            my $v = shift(@{$headers{$type}});
+            $reorder .= "\@$type$v\n";
+        }
+    }
+    # Deal with any left-overs
+    foreach my $type (sort keys %headers) {
+        if ($type eq 'PG' || $type eq 'RG') {
+            foreach my $id (sort keys %{$headers{$type}}) {
+                foreach my $v (@{$headers{$type}->{$id}}) {
+                    $reorder .= "\@$type$v\n";
+                }
+            }
+        } else {
+            foreach my $v (@{$headers{$type}}) {
+                $reorder .= "\@$type$v\n";
+            }
+        }
+    }
+    return $reorder . $exp;
+}
 
 # The tests --------------------------
 
@@ -752,6 +819,20 @@ sub test_index
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view${threads} $$opts{tmp}/large_chrom.bam ref2");
     test_cmd($opts,out=>'dat/large_chrom.out',cmd=>"$$opts{bin}/samtools view${threads} $$opts{tmp}/large_chrom.bam ref2:1-541556283");
     test_cmd($opts,out=>'dat/test_input_1_a.bam.bai.expected',cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_a.bam && cat $$opts{path}/dat/test_input_1_a.bam.bai",binary=>1);
+
+    cmd("$$opts{bin}/samtools index${threads} $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai");
+    test_cmd($opts,out=>'dat/test_input_1_b.X.expected',cmd=>"$$opts{bin}/samtools view${threads} -X $$opts{path}/dat/test_input_1_b.bam $$opts{tmp}/test_input_1_b.bam.bai ref2");
+    test_cmd($opts,out=>'dat/test_input_1_ab.X.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -O sam - -X -cp -R ref2 $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_a.bam.bai $$opts{tmp}/test_input_1_b.bam.bai");
+
+    # Check auto-indexing
+    cmd("$$opts{bin}/samtools view${threads} --write-index -o $$opts{path}/dat/auto_indexed.tmp.bam $$opts{path}/dat/mpileup.1.sam");
+    test_cmd($opts,out=>"dat/auto_indexed.tmp.bam.csi", cmd=>"$$opts{bin}/samtools index${threads} -c $$opts{path}/dat/auto_indexed.tmp.bam $$opts{tmp}/auto_indexed.csi && cat $$opts{tmp}/auto_indexed.csi", binary=>1);
+
+    cmd("$$opts{bin}/samtools view${threads} -T $$opts{path}/dat/mpileup.ref.fa --write-index -o $$opts{path}/dat/auto_indexed.tmp.cram $$opts{path}/dat/mpileup.1.sam");
+    test_cmd($opts,out=>"dat/auto_indexed.tmp.cram.crai", cmd=>"$$opts{bin}/samtools index${threads} $$opts{path}/dat/auto_indexed.tmp.cram $$opts{tmp}/auto_indexed.crai && cat $$opts{tmp}/auto_indexed.crai", binary=>1);
+
+    cmd("$$opts{bin}/samtools view${threads} -h --write-index -O sam,level=5 -o $$opts{path}/dat/auto_indexed.tmp.sam $$opts{path}/dat/mpileup.1.sam");
+    test_cmd($opts,out=>"dat/auto_indexed.tmp.sam.csi", cmd=>"$$opts{bin}/samtools index${threads} -c $$opts{path}/dat/auto_indexed.tmp.sam $$opts{tmp}/auto_indexed.csi && cat $$opts{tmp}/auto_indexed.csi", binary=>1);
 }
 
 sub test_mpileup
@@ -774,10 +855,10 @@ sub test_mpileup
         cmd("$$opts{bin}/samtools index $$opts{tmp}/$file.cram");
         print $fh1 "$$opts{tmp}/$file.bam\n";
         print $fh2 "$$opts{tmp}/$file.cram\n";
-	my $atmp = $^O =~ /^msys/ ? cygpath($$opts{tmp}) : abs_path($$opts{tmp});
-	unless ($atmp =~ /^\//) { $atmp = "/$atmp"; }
-	print $fh3 "file://$atmp/$file.bam\n";
-	print $fh4 "file://$atmp/$file.cram\n";
+        my $atmp = $^O =~ /^msys/ ? cygpath($$opts{tmp}) : abs_path($$opts{tmp});
+        unless ($atmp =~ /^\//) { $atmp = "/$atmp"; }
+        print $fh3 "file://$atmp/$file.bam\n";
+        print $fh4 "file://$atmp/$file.cram\n";
    }
     close($fh1);
     close($fh2);
@@ -799,6 +880,7 @@ sub test_mpileup
     # test that filter mask replaces (not just adds to) default mask
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam | grep -v mpileup");
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram | grep -v mpileup");
+    test_cmd($opts,out=>'dat/mpileup.out.5',cmd=>"$$opts{bin}/samtools mpileup $$opts{path}/mpileup/overlap.bam | grep 128814202");
 }
 
 sub test_usage
@@ -863,9 +945,9 @@ sub test_usage
 
     # now test subcommand usage as well
     foreach my $subcommand (@subcommands) {
-	# Under msys the isatty function fails to recognise the terminal.
-	# Skip these tests for now.
-	next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view)$/);
+        # Under msys the isatty function fails to recognise the terminal.
+        # Skip these tests for now.
+        next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq)$/);
         test_usage_subcommand($opts,%args,subcmd=>$subcommand);
     }
 }
@@ -992,6 +1074,8 @@ sub querylen
 #   $args->{flags_required} bits which must be set in flags (-f option)
 #   $args->{flags_rejected} bits which must not be set in flags (-F option)
 #   $args->{read_groups}    hash of read groups to output (-r or -R)
+#   $args->{tag}            tag used for checking if reads match tag_values (-d or -D)
+#   $args->{tag_values}     hash of values assocated with tag to output (-d or -D)
 #   $args->{libraries}      hash of libraries to output (-l)
 #   $args->{region}         region list to output (-L and region list)
 #   $args->{strip_tags}     hash of tags to strip from alignments (-x)
@@ -1044,11 +1128,14 @@ sub filter_sam
     my $flags_required = $args->{flags_required} || 0;
     my $flags_rejected = $args->{flags_rejected} || 0;
     my $read_groups    = $args->{read_groups};
+    my $tag            = $args->{tag};
+    my $tag_values     = $args->{tag_values};
     my $libraries      = $args->{libraries};
     my $region         = $args->{region};
     my $strip_tags     = $args->{strip_tags};
     my $min_qlen       = $args->{min_qlen} || 0;
-    my $body_filter = ($flags_required || $flags_rejected || $read_groups
+    my $body_filter = ($flags_required || $flags_rejected
+                       || $read_groups || $tag_values
                        || $min_map_qual || $libraries || $region
                        || $strip_tags || $min_qlen);
     my $lib_read_groups = $libraries ? {} : undef;
@@ -1091,6 +1178,13 @@ sub filter_sam
                     next if ($read_groups && !exists($read_groups->{$group||""}));
                     next if ($lib_read_groups
                              && !exists($lib_read_groups->{$group||""}));
+                }
+                if ($tag_values) {
+                    my $tag_value = '';
+                    for my $i (11 .. $#sam) {
+                        last if (($tag_value) = $sam[$i] =~ /^${tag}:Z:(.*)/);
+                    }
+                    next if (!exists($tag_values->{$tag_value||""}));
                 }
                 if ($region) {
                     my $in_range = 0;
@@ -1176,9 +1270,9 @@ sub run_view_test
     unless (defined($pid)) { die "Couldn't fork : $!\n"; }
     my $save_stdout;
     if ($^O eq 'MSWin32') {
-	# Ensure we can restore STDOUT properly on Windows.  Not doing this
-	# causes output to be lost if STDOUT is redirected below.
-	open($save_stdout, '>&STDOUT') || die "Couldn't dup STDOUT: $!\n";
+        # Ensure we can restore STDOUT properly on Windows.  Not doing this
+        # causes output to be lost if STDOUT is redirected below.
+        open($save_stdout, '>&STDOUT') || die "Couldn't dup STDOUT: $!\n";
     }
     unless ($pid) {
         if ($args{stdin}) {
@@ -1194,14 +1288,14 @@ sub run_view_test
     my $reaped = waitpid($pid, 0);
     my $res = $reaped == $pid && $? == 0 ? 0 : 1;
     if ($^O eq 'MSWin32') {
-	open(STDOUT, '>&', $save_stdout)
-	    || die "Couldn't restore STDOUT : $!\n";
+        open(STDOUT, '>&', $save_stdout)
+            || die "Couldn't restore STDOUT : $!\n";
     }
 
     if (!$res && $args{compare_sam} && $args{out}) {
         # Convert output back to sam and compare
         my $sam_name = "$args{out}.sam";
-        my @cmd2 = ("$$opts{bin}/samtools", 'view', '-h');
+        my @cmd2 = ("$$opts{bin}/samtools", 'view', '-h', '--no-PG');
         if (!$args{pipe}) {
             push(@cmd2, '-o', $sam_name);
         }
@@ -1216,7 +1310,7 @@ sub run_view_test
         } else {
             open($sam_out, '-|', @cmd2)
                 || die "Couldn't open pipe from @cmd2: $!\n";
-	    binmode($sam_out);
+            binmode($sam_out);
         }
         # Hack $args so the comparison gets done
         $args{compare} = $args{compare_sam};
@@ -1323,7 +1417,7 @@ sub open_bgunzip
 
     my $bgzip;
     open($bgzip, "$$opts{bgzip} -c -d < $in |")
-	|| die "Couldn't open pipe to bgzip -c -d $!\n";
+        || die "Couldn't open pipe to bgzip -c -d $!\n";
     binmode($bgzip);
     return $bgzip;
 }
@@ -1373,7 +1467,7 @@ sub sam_compare
     while ($l1 = <$f1>) {
         $lno1++;
         if (($ht1) = $l1 =~ /^(@\S+)/) {
-	    $l1 =~ s/\x0d\x0a$/\x0a/;
+            $l1 =~ s/\x0d\x0a$/\x0a/;
             push(@{$hdr1{$ht1}}, $l1);
         } else {
             last;
@@ -1389,7 +1483,7 @@ sub sam_compare
     while ($l2 = <$f2>) {
         $lno2++;
         if (($ht2) = $l2 =~ /^(@\S+)/) {
-	    $l2 =~ s/\x0d\x0a$/\x0a/;
+            $l2 =~ s/\x0d\x0a$/\x0a/;
             push(@{$hdr2{$ht2}}, $l2);
         } else {
             last;
@@ -1409,6 +1503,17 @@ sub sam_compare
                     next if ($h1->[$i] eq $h2->[$i]);
                 }
 
+                # Hack to handle PP, CL and VN tags for @PG lines
+                if ($ht eq '@PG') {
+                    $h1->[$i] =~ s/\tVN:[^\t\n]+//;
+                    $h2->[$i] =~ s/\tVN:[^\t\n]+//;
+                    $h1->[$i] =~ s/\tCL:[^\t\n]+//;
+                    $h2->[$i] =~ s/\tCL:[^\t\n]+//;
+                    $h1->[$i] =~ s/\tPP:[^\t\n]+//;
+                    $h2->[$i] =~ s/\tPP:[^\t\n]+//;
+                    next if ($h1->[$i] eq $h2->[$i]);
+                }
+
                 $same = 0;
                 last;
             }
@@ -1417,11 +1522,13 @@ sub sam_compare
             print "\n\tHeader type $ht differs.\n";
             print "\t$sam1 has:\n";
             foreach my $t (@{$hdr1{$ht}}) {
-                print "\t$t\n";
+                my $n = length($t);
+                print "\t|$t| ($n)\n";
             }
             print "\t$sam2 has:\n";
             foreach my $t (@{$hdr2{$ht}}) {
-                print "\t$t\n";
+                my $n = length($t);
+                print "\t|$t| ($n)\n";
             }
             close($f1);
             close($f2);
@@ -1436,9 +1543,9 @@ sub sam_compare
         my @sam2 = split(/\t/, $l2);
         my @tags1 = sort(splice(@sam1, 11));
         my @tags2 = sort(splice(@sam2, 11));
-	# Windows uses e.g. 1.9e+009 vs 1.9e+09 on Linux
-	@tags1 = map {s/(e[-+])0(\d\d)/$1$2/g;$_} @tags1;
-	@tags2 = map {s/(e[-+])0(\d\d)/$1$2/g;$_} @tags2;
+        # Windows uses e.g. 1.9e+009 vs 1.9e+09 on Linux
+        @tags1 = map {s/(e[-+])0(\d\d)/$1$2/g;$_} @tags1;
+        @tags2 = map {s/(e[-+])0(\d\d)/$1$2/g;$_} @tags2;
         if (join("\t", @sam1, @tags1) ne join("\t", @sam2, @tags2)) {
             last;
         }
@@ -1490,9 +1597,8 @@ sub bam_compare
         if (!defined($bytes2)) { die "Error reading $bam2 : $!\n"; }
         if ($bytes1 != $bytes2 || $buffer1 ne $buffer2) {
             $fail = 1;
-            last;
         }
-    } while ($bytes1 && $bytes2);
+    } while ($bytes1 && $bytes2 && !$fail);
     close($b1) || die "Error running bgzip -c -d $bam1\n";
     close($b2) || die "Error running bgzip -c -d $bam2\n";
     if ($fail) {
@@ -1523,8 +1629,8 @@ sub text_compare
         my $l1 = <$t1>;
         my $l2 = <$t2>;
         last if (!defined($l1) && !defined($l2));
-	$l1 =~ s/\x0d\x0a$/\x0a/;
-	$l2 =~ s/\x0d\x0a$/\x0a/;
+        $l1 =~ s/\x0d\x0a$/\x0a/;
+        $l2 =~ s/\x0d\x0a$/\x0a/;
         if (($l1 || '') ne ($l2 || '')) {
             $diff = 1;
             if (defined($l1)) { chomp($l1); }
@@ -1672,7 +1778,7 @@ sub gen_file
 
     my $sam = "$prefix.sam.gz";
     open(my $s, "| $$opts{bgzip} -c > $sam")
-	|| die "Couldn't open pipe to bgzip $!";
+        || die "Couldn't open pipe to bgzip $!";
     binmode($s);
     print $s "\@HD\tVN:1.4\tSO:coordinate\n";
     print $s "\@RG\tID:g1\tDS:Group 1\tLB:Lib1\tSM:Sample1\n";
@@ -1732,7 +1838,7 @@ sub test_view
     my $bam_with_ur_out = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
                   msg => "$test: SAM -> BAM -> SAM",
-                  args => ['-b', $sam_with_ur],
+                  args => ['-b', $sam_with_ur, '--no-PG'],
                   out => $bam_with_ur_out,
                   compare_sam => $sam_with_ur);
     $test++;
@@ -1741,13 +1847,13 @@ sub test_view
     my $uncomp_bam = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
                   msg => "$test: SAM -> uncompressed BAM",
-                  args => ['-u', $sam_with_ur],
+                  args => ['-u', $sam_with_ur, '--no-PG'],
                   out => $uncomp_bam,
                   compare_bam => $bam_with_ur_out);
     $test++;
     run_view_test($opts,
                   msg => "$test: uncompressed BAM -> SAM and compare",
-                  args => ['-h', $uncomp_bam],
+                  args => ['-h', $uncomp_bam, '--no-PG'],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   compare => $sam_with_ur);
     $test++;
@@ -1756,13 +1862,13 @@ sub test_view
     my $fastcomp_bam = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
                   msg => "$test: SAM -> fast compressed BAM",
-                  args => ['-1', $sam_with_ur],
+                  args => ['-1', $sam_with_ur, '--no-PG'],
                   out => $fastcomp_bam,
                   compare_bam => $bam_with_ur_out);
     $test++;
     run_view_test($opts,
                   msg => "$test: fast compressed BAM -> SAM and compare",
-                  args => ['-h', $fastcomp_bam],
+                  args => ['-h', $fastcomp_bam, '--no-PG'],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   compare => $sam_with_ur);
     $test++;
@@ -1771,7 +1877,7 @@ sub test_view
     my $cram_with_ur_out = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
                   msg => "$test: SAM -> CRAM -> SAM (UR header tags)",
-                  args => ['-C', $sam_with_ur],
+                  args => ['-C', $sam_with_ur, '--no-PG'],
                   out => $cram_with_ur_out,
                   compare_sam => $sam_with_ur);
     $test++;
@@ -1779,7 +1885,7 @@ sub test_view
     # SAM -> CRAM -> SAM with M5 tags
     run_view_test($opts,
                   msg => "$test: SAM -> CRAM -> SAM (M5 header tags)",
-                  args => ['-C', $sam_no_ur],
+                  args => ['-C', $sam_no_ur, '--no-PG'],
                   out => sprintf("%s.test%03d.cram", $out, $test),
                   compare_sam => $sam_no_ur,
                   ref_path => $ref_path);
@@ -1789,7 +1895,7 @@ sub test_view
     my $cram_from_bam = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
                   msg => "$test: BAM -> CRAM with UR -> SAM",
-                  args => ['-C', $bam_with_ur_out],
+                  args => ['-C', $bam_with_ur_out, '--no-PG'],
                   out => $cram_from_bam,
                   compare_sam => $sam_with_ur);
     $test++;
@@ -1798,14 +1904,14 @@ sub test_view
     my $bam_no_ur = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
                   msg => "$test: SAM -> BAM (M5 header tags)",
-                  args => ['-b', $sam_no_ur],
+                  args => ['-b', $sam_no_ur, '--no-PG'],
                   out => $bam_no_ur,
                   compare_sam => $sam_no_ur);
     $test++;
     my $cram_no_ur = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
                   msg => "$test: SAM -> BAM -> CRAM -> SAM (M5 header tags)",
-                  args => ['-C', $bam_no_ur],
+                  args => ['-C', $bam_no_ur, '--no-PG'],
                   out => $cram_no_ur,
                   compare_sam => $sam_no_ur,
                   ref_path => $ref_path);
@@ -1815,7 +1921,7 @@ sub test_view
     my $bam_from_cram = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
                   msg => "$test: CRAM -> BAM with UR",
-                  args => ['-b', $cram_from_bam],
+                  args => ['-b', $cram_from_bam, '--no-PG'],
                   out => $bam_from_cram,
                   compare_sam => $sam_with_ur);
     $test++;
@@ -1823,7 +1929,7 @@ sub test_view
     # SAM -> BAM -> CRAM -> BAM -> SAM with M5 tags
     run_view_test($opts,
                   msg => "$test: CRAM -> BAM with M5",
-                  args => ['-b', $cram_no_ur],
+                  args => ['-b', $cram_no_ur, '--no-PG'],
                   out => sprintf("%s.test%03d.bam", $out, $test),
                   compare_sam => $sam_no_ur,
                   ref_path => $ref_path);
@@ -1832,14 +1938,14 @@ sub test_view
     # Write to stdout
     run_view_test($opts,
                   msg => "$test: SAM -> SAM via stdout",
-                  args => ['-h', $sam_with_ur],
+                  args => ['-h', $sam_with_ur, '--no-PG'],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   redirect => 1,
                   compare => $sam_with_ur);
     $test++;
     run_view_test($opts,
                   msg => "$test: SAM -> BAM via stdout",
-                  args => ['-b', $sam_with_ur],
+                  args => ['-b', $sam_with_ur, '--no-PG'],
                   out => sprintf("%s.test%03d.bam", $out, $test),
                   redirect => 1,
                   compare_bam => $bam_with_ur_out);
@@ -1847,7 +1953,7 @@ sub test_view
     my $cram_via_stdout = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
                   msg => "$test: SAM -> CRAM via stdout",
-                  args => ['-C', $sam_with_ur],
+                  args => ['-C', $sam_with_ur, '--no-PG'],
                   out => $cram_via_stdout,
                   redirect => 1,
                   compare_sam => $sam_with_ur);
@@ -1856,21 +1962,21 @@ sub test_view
     # Read from stdin
     run_view_test($opts,
                   msg => "$test: SAM from stdin -> SAM",
-                  args => ['-h', '-'],
+                  args => ['-h', '-', '--no-PG'],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   stdin => $sam_with_ur,
                   compare => $sam_with_ur);
     $test++;
     run_view_test($opts,
                   msg => "$test: BAM from stdin -> SAM",
-                  args => ['-h', '-'],
+                  args => ['-h', '-', '--no-PG'],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   stdin => $bam_with_ur_out,
                   compare => $sam_with_ur);
     $test++;
     run_view_test($opts,
                   msg => "$test: CRAM from stdin -> SAM",
-                  args => ['-h', '-'],
+                  args => ['-h', '-', '--no-PG'],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   stdin => $cram_with_ur_out,
                   compare => $sam_with_ur);
@@ -1883,19 +1989,19 @@ sub test_view
 
     run_view_test($opts,
                   msg => "$test: samtools view -H (SAM input)",
-                  args => ['-H', $sam_with_ur],
+                  args => ['-H', $sam_with_ur, '--no-PG'],
                   out => sprintf("%s.test%03d.header", $out, $test),
                   compare => $sam_header);
     $test++;
     run_view_test($opts,
                   msg => "$test: samtools view -H (BAM input)",
-                  args => ['-H', $bam_with_ur_out],
+                  args => ['-H', $bam_with_ur_out, '--no-PG'],
                   out => sprintf("%s.test%03d.header", $out, $test),
                   compare => $sam_header);
     $test++;
     run_view_test($opts,
                   msg => "$test: samtools view -H (CRAM input)",
-                  args => ['-H', $cram_with_ur_out],
+                  args => ['-H', $cram_with_ur_out, '--no-PG'],
                   out => sprintf("%s.test%03d.header", $out, $test),
                   compare => $sam_header);
     $test++;
@@ -1906,19 +2012,19 @@ sub test_view
 
     run_view_test($opts,
                   msg => "$test: No headers (SAM input)",
-                  args => [$sam_with_ur],
+                  args => [$sam_with_ur, '--no-PG'],
                   out => sprintf("%s.test%03d.body", $out, $test),
                   compare => $sam_body);
     $test++;
     run_view_test($opts,
                   msg => "$test: No headers (BAM input)",
-                  args => [$bam_with_ur_out],
+                  args => [$bam_with_ur_out, '--no-PG'],
                   out => sprintf("%s.test%03d.body", $out, $test),
                   compare => $sam_body);
     $test++;
     run_view_test($opts,
                   msg => "$test: No headers (CRAM input)",
-                  args => [$cram_with_ur_out],
+                  args => [$cram_with_ur_out, '--no-PG'],
                   out => sprintf("%s.test%03d.body", $out, $test),
                   compare => $sam_body);
     $test++;
@@ -1930,6 +2036,12 @@ sub test_view
     open(my $f, '>', $fogn) || die "Couldn't open $fogn : $!\n";
     print $f "grp1\ngrp3\n" || die "Error writing to $fogn : $!\n";
     close($f) || die "Error writing to $fogn : $!\n";
+
+    # Barcodes file for -D test
+    my $fobc = "$$opts{tmp}/view.001.fobc";
+    open($f, '>', $fobc) || die "Couldn't open $fobc : $!\n";
+    print $f "ACGT\nAATTCCGG\n" || die "Error writing to $fobc : $!\n";
+    close($f) || die "Error writing to $fobc : $!\n";
 
 
     my @filter_tests = (
@@ -1947,6 +2059,25 @@ sub test_view
          ['-R', $fogn, '-r', 'grp2'], 0],
         ['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
          ['-r', 'grp2', '-R', $fogn], 0],
+        # Tag with values
+        ['tv_BC_TGCA', { tag => 'BC', tag_values => { TGCA => 1 }},
+         ['-d', 'BC:TGCA'], 0],
+        ['tv_BC_fobc', { tag => 'BC', tag_values => { ACGT => 1, AATTCCGG => 1 }},
+         ['-D', "BC:${fobc}"], 0],
+        ['tv_D_and_d', { tag => 'BC', tag_values => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+         ['-D', "BC:${fobc}", '-d', 'BC:TGCA'], 0],
+        ['tv_d_and_D', { tag => "BC", tag_values => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+         ['-d', 'BC:TGCA', '-D', "BC:${fobc}"], 0],
+        ['tv_D_RG_fogn', { tag => 'RG', tag_values => { grp1 => 1, grp3 => 1 }},
+         ['-D', "RG:${fogn}"], 0],
+        ['tv_d_non_existent_tag', { tag => 'NE', tag_values => { TGCA => 1 }},
+         ['-d', 'NE:TGCA'], 0],
+        ['tv_d_no_tag', { tag => '', tag_values => { TGCA => 1 }},
+         ['-d', 'TGCA'], 1],
+        ['tv_D_invalid_tag_fobc', { tag => 'BClong', tag_values => { ACGT => 1, AATTCCGG => 1 }},
+         ['-D', "BClong:${fobc}"], 1],
+        ['tv_d_different_tags', { tag => 'BC', tag_values => { ACGT => 1, grp2 => 1 }},
+         ['-d', 'BC:ACGT', '-d', 'RG:grp2' ], 1],
         # Libraries
         ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
         ['lib3', { libraries => { 'Library 3' => 1 }}, ['-l', 'Library 3'], 0],
@@ -1983,7 +2114,7 @@ sub test_view
             # Filter test
             run_view_test($opts,
                           msg => "$test: Filter @{$$filter[2]} ($$ip[0] input)",
-                          args => ['-h', @{$$filter[2]}, $$ip[1]],
+                          args => ['-h', @{$$filter[2]}, $$ip[1], '--no-PG'],
                           out => sprintf("%s.test%03d.sam", $out, $test),
                           compare => $sam_file,
                           expect_fail => $$filter[3]);
@@ -1992,7 +2123,7 @@ sub test_view
             # Count test
             run_view_test($opts,
                           msg => "$test: Count @{$$filter[2]} ($$ip[0] input)",
-                          args => ['-c', @{$$filter[2]}, $$ip[1]],
+                          args => ['-c', @{$$filter[2]}, $$ip[1], '--no-PG'],
                           out => sprintf("%s.test%03d.count", $out, $test),
                           redirect => 1,
                           compare_count => $sam_file,
@@ -2009,14 +2140,14 @@ sub test_view
     my $bam_with_ur_out2 = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
                   msg => "$test: 1bp reads file SAM -> BAM -> SAM",
-                  args => ['-b', $sam_with_ur2],
+                  args => ['-b', $sam_with_ur2, '--no-PG'],
                   out => $bam_with_ur_out2,
                   compare_sam => $sam_with_ur2);
     $test++;
     my $cram_with_ur_out2 = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
                   msg => "$test: 1bp reads file SAM -> CRAM -> SAM",
-                  args => ['-C', $sam_with_ur2],
+                  args => ['-C', $sam_with_ur2, '--no-PG'],
                   out => $cram_with_ur_out2,
                   compare_sam => $sam_with_ur2);
 
@@ -2119,14 +2250,14 @@ sub test_view
             # Region test
             run_view_test($opts,
                           msg => "$test: Region @{$$rt[3]} @{$$rt[4]} ($$ip[0] input)",
-                          args => ['-h', @{$$rt[3]}, $input_file, @{$$rt[4]}],
+                          args => ['-h', @{$$rt[3]}, $input_file, @{$$rt[4]}, '--no-PG'],
                           out => sprintf("%s.test%03d.sam", $out, $test),
                           compare => $sam_file);
             $test++;
             # Count test
             run_view_test($opts,
                           msg => "$test: Count @{$$rt[3]} @{$$rt[4]} ($$ip[0] input)",
-                          args => ['-c', @{$$rt[3]}, $input_file, @{$$rt[4]}],
+                          args => ['-c', @{$$rt[3]}, $input_file, @{$$rt[4]}, '--no-PG'],
                           out => sprintf("%s.test%03d.count", $out, $test),
                           redirect => 1,
                           compare_count => $sam_file);
@@ -2145,7 +2276,7 @@ sub test_view
     my $bam_no_m5 = "$$opts{tmp}/view.001.no_sq.bam";
     run_view_test($opts,
                   msg => "$test: Make BAM with no M5/UR tags",
-                  args => ['-b', $sam_no_m5],
+                  args => ['-b', $sam_no_m5, '--no-PG'],
                   out => $bam_no_m5,
                   compare_sam => $sam_no_m5);
     $test++;
@@ -2158,7 +2289,7 @@ sub test_view
         foreach my $topt (['-t', $ref_idx], ['-T', $ref_file]) {
             run_view_test($opts,
                           msg => "$test: Add \@SQ with $topt->[0] ($in->[0] -> SAM)",
-                          args => ['-h', @$topt, $in->[1]],
+                          args => ['-h', @$topt, $in->[1], '--no-PG'],
                           out => sprintf("%s.test%03d.sam", $out, $test),
                           compare => $sam_no_m5);
             $test++;
@@ -2171,7 +2302,7 @@ sub test_view
             my $bam = sprintf("%s.test%03d.bam", $out, $test);
             run_view_test($opts,
                           msg => "$test: Add \@SQ with $topt->[0] ($in->[0] -> BAM)",
-                          args => ['-b', @$topt, $in->[1]],
+                          args => ['-b', @$topt, $in->[1], '--no-PG'],
                           out => $bam,
                           compare_sam => $sam_no_m5);
             $test++;
@@ -2184,7 +2315,7 @@ sub test_view
             my $cram = sprintf("%s.test%03d.cram", $out, $test);
             run_view_test($opts,
                           msg => "$test: Add \@SQ with $topt->[0] ($in->[0] -> CRAM)",
-                          args => ['-C', @$topt, $in->[1]],
+                          args => ['-C', @$topt, $in->[1], '--no-PG'],
                           out => $cram,
                           compare_sam => $sam_with_ur);
             $test++;
@@ -2195,14 +2326,14 @@ sub test_view
     my $cram_no_ur_t = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
                   msg => "$test: Make CRAM with no UR field",
-                  args => ['-C', $sam_no_ur],
+                  args => ['-C', $sam_no_ur, '--no-PG'],
                   ref_path => "$$opts{path}/dat/cram_md5",
                   out => $cram_no_ur_t);
     $test++;
 
     run_view_test($opts,
                   msg => "$test: Decoding CRAM with no UR field via -T",
-                  args => ['-T', $ref_file, $cram_no_ur_t],
+                  args => ['-T', $ref_file, $cram_no_ur_t, '--no-PG'],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   compare => $sam_no_ur);
     $test++;
@@ -2213,7 +2344,7 @@ sub test_view
     my $b_op_expected = "$$opts{path}/dat/view.003.expected.sam";
     run_view_test($opts,
                   msg => "$test: CIGAR B-operator removal",
-                  args => ['-h', '-B', $b_op_sam],
+                  args => ['-h', '-B', $b_op_sam, '--no-PG'],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   compare => $b_op_expected);
     $test++;
@@ -2223,14 +2354,14 @@ sub test_view
     my $big_bam = sprintf("%s.test%03d.bam", $out, $test);
     run_view_test($opts,
                   msg => "$test: Big SAM -> BAM",
-                  args => ['-b', $big_sam],
+                  args => ['-b', $big_sam, '--no-PG'],
                   out => $big_bam);
     $test++;
 
     foreach my $threads (2, 4) {
         run_view_test($opts,
                       msg => "$test: Big SAM -> BAM ($threads threads)",
-                      args => ['-b', '-@', $threads, $big_sam],
+                      args => ['-b', '-@', $threads, $big_sam, '--no-PG'],
                       out => sprintf("%s.test%03d.bam", $out, $test),
                       compare_bam => $big_bam);
         $test++;
@@ -2240,7 +2371,7 @@ sub test_view
     my $big_cram = sprintf("%s.test%03d.cram", $out, $test);
     run_view_test($opts,
                   msg => "$test: Big SAM -> CRAM",
-                  args => ['-C', $big_sam],
+                  args => ['-C', $big_sam, '--no-PG'],
                   out => $big_cram,
                   compare_sam => $big_sam,
                   pipe => 1);
@@ -2249,7 +2380,7 @@ sub test_view
     foreach my $threads (2, 4) {
         run_view_test($opts,
                       msg => "$test: Big SAM -> CRAM ($threads threads)",
-                      args => ['-C', '-@', $threads, $big_sam],
+                      args => ['-C', '-@', $threads, $big_sam, '--no-PG'],
                       out => sprintf("%s.test%03d.cram", $out, $test),
                       compare_sam => $big_sam,
                       pipe => 1);
@@ -2273,6 +2404,14 @@ sub test_view
             $test++;
         }
     }
+
+    my $b_pg_sam      = "$$opts{path}/dat/view.001.sam";
+    my $b_pg_expected = "$$opts{path}/dat/view.004.expected.sam";
+    run_view_test($opts,
+                  msg => "$test: SAM add PG",
+                  args => ['-h', $b_pg_sam],
+                  out => sprintf("%s.test%03d.sam", $out, $test),
+                  compare => $b_pg_expected);
 }
 
 # cat SAM files in the same way as samtools cat does with BAMs
@@ -2296,6 +2435,17 @@ sub cat_sams
         } else {
             open($in, '<', $sam_in) || die "Couldn't open $sam_in : $!\n";
         }
+        if ($first) {
+            # copy header
+            my $prev = '';
+            while (<$in>) {
+                if (/^@/) { print $out $_ || die "Error writing to $sam_out : $!\n"; }
+                else { $prev = $_; last; }
+            }
+            print $out "\@PG\tID:samtools\tPN:samtools\n";
+            if ($prev) { print $out $prev; }
+        }
+
         while (<$in>) {
             next if (/^@/ && !$first);
             print $out $_ || die "Error writing to $sam_out : $!\n";
@@ -2304,6 +2454,52 @@ sub cat_sams
         $first = 0;
     }
     close($out) || die "Error writing to $sam_out : $!\n";
+}
+
+# Large position tests
+
+sub test_large_positions
+{
+    my ($opts) = @_;
+
+    # Simple round-trip
+    my $longref = "$$opts{tmp}/longref.sam.gz";
+    cmd("$$opts{bgzip} -c $$opts{path}/large_pos/longref.sam > $longref");
+    test_cmd($opts, out => 'large_pos/longref.sam',
+             cmd => "$$opts{bin}/samtools view -h --no-PG $longref");
+
+    # Index
+    cmd("$$opts{bin}/samtools index -c $longref");
+    test_cmd($opts, out => 'large_pos/longref_idx.expected.sam',
+             cmd => "$$opts{bin}/samtools view -h --no-PG $longref CHROMOSOME_I:10000000114-10000000168");
+
+    # Bed file
+    test_cmd($opts, out => 'large_pos/longref_idx.expected.sam',
+             cmd => "$$opts{bin}/samtools view -h --no-PG -L $$opts{path}/large_pos/test.bed $longref");
+
+    # Sort
+    test_cmd($opts, out => 'large_pos/longref.sam',
+             cmd => "$$opts{bin}/samtools sort -O sam --no-PG $$opts{path}/large_pos/longref_name.sam");
+
+    # Merge
+    test_cmd($opts, out => 'large_pos/merge.expected.sam',
+             cmd => "$$opts{bin}/samtools merge -O sam --no-PG - $$opts{path}/large_pos/longref.sam $$opts{path}/large_pos/longref2.sam");
+
+    # Depth
+    test_cmd($opts, out => 'large_pos/depth.expected.out',
+             cmd => "$$opts{bin}/samtools depth $$opts{path}/large_pos/longref.sam");
+    test_cmd($opts, out => 'large_pos/depth_bed.expected.out',
+             cmd => "$$opts{bin}/samtools depth -b $$opts{path}/large_pos/test.bed $$opts{path}/large_pos/longref.sam");
+
+    # tview
+    test_cmd($opts, out => 'large_pos/tview.expected.out',
+             cmd => "$$opts{bin}/samtools tview -d T -p CHROMOSOME_I:10000000000 $longref");
+
+    # Sort and fixmates
+    test_cmd($opts, out => 'large_pos/longref3.expected.sam',
+             cmd => "$$opts{bin}/samtools sort    -O sam --no-PG -n test/large_pos/longref3.sam |
+                     $$opts{bin}/samtools fixmate -O sam --no-PG - - |
+                     $$opts{bin}/samtools sort    -O sam --no-PG");
 }
 
 # Test samtools cat.
@@ -2331,7 +2527,7 @@ sub test_cat
         $bams[$i] = sprintf("%s.%d.bam", $out, $i + 1);
         run_view_test($opts,
                       msg =>  sprintf("Generate BAM file #%d", $i + 1),
-                      args => ['-b', $sams[$i]],
+                      args => ['-b', $sams[$i], '--no-PG'],
                       out => $bams[$i],
                       compare_sam => $sams[$i],
                       pipe => 1);
@@ -2344,7 +2540,7 @@ sub test_cat
         $crams[$i] = sprintf("%s.%d.cram", $out, $i + 1);
         run_view_test($opts,
                       msg =>  sprintf("Generate CRAM file #%d", $i + 1),
-                      args => ['-C', $sams[$i]],
+                      args => ['-C', $sams[$i], '--no-PG'],
                       out => $crams[$i],
                       compare_sam => $sams[$i],
                       pipe => 1);
@@ -2468,7 +2664,7 @@ sub test_bam2fq
     # Make a BAM file with the test data
     run_view_test($opts,
                   msg =>  "Generate BAM file$nthreads",
-                  args => ['-b', $sam, @$threads],
+                  args => ['-b', $sam, @$threads, '--no-PG'],
                   out => $bam,
                   compare_sam => $sam,
                   pipe => 1);
@@ -2476,7 +2672,7 @@ sub test_bam2fq
     # Make a CRAM file with the test data
     run_view_test($opts,
                   msg =>  "Generate CRAM file$nthreads",
-                  args => ['-C', $sam, @$threads],
+                  args => ['-C', $sam, @$threads, '--no-PG'],
                   out => $cram,
                   ref_path => "$$opts{path}/dat/cram_md5",
                   compare_sam => $sam,
@@ -2519,13 +2715,24 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/6.1.fq.expected', '2.fq' => 'bam2fq/6.2.fq.expected', 's.fq' => 'bam2fq/6.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
     # -T flag
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/7.1.fq.expected', '2.fq' => 'bam2fq/7.2.fq.expected', 's.fq' => 'bam2fq/7.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -T MD,ia -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
-    # -i flag with no index
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/7.1.fq.expected', '2.fq' => 'bam2fq/7.2.fq.expected', 's.fq' => 'bam2fq/7.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -i -T MD,ia -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
     # -i flag with index
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/8.1.fq.expected', '2.fq' => 'bam2fq/8.2.fq.expected', 's.fq' => 'bam2fq/8.s.fq.expected', 'i.fq' => 'bam2fq/8.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'n2i2' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
 
+    # -i flag with dual index
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/12.1.fq.expected', '2.fq' => 'bam2fq/12.2.fq.expected', 's.fq' => 'bam2fq/12.s.fq.expected', 'i.fq' => 'bam2fq/12.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'i*i*' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+
+    # -i flag with dual index but no indexes
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/12.1.fq.expected', '2.fq' => 'bam2fq/12.2.fq.expected', 's.fq' => 'bam2fq/12.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -i --index-format 'i*i*' -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+
     # test for Issue #703 (failure to write all reads on uncollated input)
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/9.1.fq.expected', '2.fq' => 'bam2fq/9.2.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.703.sam");
+
+    # Read 1/2 output, duplicate filename (-1 -2)
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -1 $$opts{path}/o.fq -2 $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
+    # Read 1/2 output, single filename (-o)
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -o $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
+    # Read 1/2 output, stdout and discard singletons/other
+    test_cmd($opts, out=>'bam2fq/11.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -s $out.discard.s.fq -0 $out.discard.0.fq $$opts{path}/dat/bam2fq.001.sam");
 }
 
 sub test_depad
@@ -2546,7 +2753,7 @@ sub test_depad
     # Make a BAM file with the test data
     run_view_test($opts,
                   msg =>  "Generate BAM file",
-                  args => ['-b', $pad_sam],
+                  args => ['-b', $pad_sam, '--no-PG'],
                   out => $pad_bam,
                   compare_sam => $pad_sam);
 
@@ -2574,6 +2781,7 @@ sub test_depad
                 my @args = $use_t ? ('-T', $ref) : ();
                 if ($format->[0]) { push(@args, $format->[0]); }
                 push(@args, $input->[1]);
+                push(@args, '--no-PG');
                 my $compare = $format->[1] eq 'sam' ? 'compare' : 'compare_sam';
                 run_view_test($opts,
                               msg => "depad $format->[0] ($input->[0] input)",
@@ -2596,13 +2804,20 @@ sub test_stats
     my $efix = ($^O =~ /^(?:msys|MSWin32)$/) ? 1 : 0;
 
     test_cmd($opts,out=>'stat/1.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/1.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/1_map_cigar_large.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/2.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/2_equal_cigar_full_seq.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/2.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/2_equal_cigar_full_seq_large.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/3.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/3_map_cigar_equal_seq.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/3.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/3_map_cigar_equal_seq_large.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/4.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/4_X_cigar_full_seq.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/4.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/4_X_cigar_full_seq_large.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/5.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/5_insert_cigar.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/5.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/5_insert_cigar_large.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/6.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa -i 0 $$opts{path}/stat/5_insert_cigar.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/7.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/7_supp.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/7.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/7_supp_large.sam | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/8.stats.expected',cmd=>"$$opts{bin}/samtools stats -r $$opts{path}/stat/test.fa $$opts{path}/stat/8_secondary.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/8.stats.large.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/8_secondary_large.sam | tail -n+4", exp_fix=>$efix);
 
     test_cmd($opts,out=>'stat/9.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/1_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/1_map_cigar.sam_s1_a_1.bamstat"=>"stat/1_map_cigar.sam_s1_a_1.expected.bamstat"},hskip=>3);
     test_cmd($opts,out=>'stat/10.stats.expected',cmd=>"$$opts{bin}/samtools stats -S RG -r $$opts{path}/stat/test.fa $$opts{path}/stat/10_map_cigar.sam | tail -n+4", exp_fix=>$efix,out_map=>{"stat/10_map_cigar.sam_s1_a_1.bamstat"=>"stat/10_map_cigar.sam_s1_a_1.expected.bamstat", "stat/10_map_cigar.sam_s1_b_1.bamstat"=>"stat/10_map_cigar.sam_s1_b_1.expected.bamstat"},hskip=>3);
@@ -2614,6 +2829,11 @@ sub test_stats
     test_cmd($opts,out=>'stat/12.3reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_3reads.bed | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/12.2reads.overlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -t $$opts{path}/stat/12_2reads.bed | tail -n+4", exp_fix=>$efix);
     test_cmd($opts,out=>'stat/12.2reads.nooverlap.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/12_overlaps.bam -p -t $$opts{path}/stat/12_2reads.bed | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.bc.ok.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_ok.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.ox.ok.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_ok_ox_bz.sam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_bc_length.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_hyphen.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_qt_length.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
 }
 
 sub test_merge
@@ -2625,9 +2845,9 @@ sub test_merge
     # Note the use of -s 1 to fix the random seed in place
 
     # Merge 1 - Standard 3 file SAM merge all presented on the command line
-    test_cmd($opts,out=>'merge/2.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
+    test_cmd($opts,out=>'merge/2.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
     # Merge 2 - Standard 3 file BAM merge all files presented on the command line
-    test_cmd($opts,out=>'merge/2.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam");
+    test_cmd($opts,out=>'merge/2.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a.bam $$opts{path}/dat/test_input_1_b.bam $$opts{path}/dat/test_input_1_c.bam");
     # Merge 3 - Standard 3 file BAM merge 2 files in fofn 1 on command line
     open(my $fofn, "$$opts{path}/merge/test_3.fofn");
     my ($tmpfile_fh, $tmpfile_filename) = tempfile(UNLINK => 1);
@@ -2636,25 +2856,29 @@ sub test_merge
         print $tmpfile_fh "$$opts{path}/$_";
     }
     close($tmpfile_fh);
-    test_cmd($opts,out=>'merge/3.merge.expected.sam', err=>'merge/3.merge.expected.err',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam");
+    test_cmd($opts,out=>'merge/3.merge.expected.sam', err=>'merge/3.merge.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam -b $tmpfile_filename - $$opts{path}/dat/test_input_1_a.bam");
     # Merge 4 - 1 file BAM merge with file presented on the command line
-    test_cmd($opts,out=>'merge/4.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_b.bam");
+    test_cmd($opts,out=>'merge/4.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_b.bam");
     # Merge 5 - 3 file SAM merge all presented on the command line override IDs to file names
-    test_cmd($opts,out=>'merge/5.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -r -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
+    test_cmd($opts,out=>'merge/5.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -r -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
     # Merge 6 - merge all presented on the command line, combine PG and RG rather than dedup
-    test_cmd($opts,out=>'merge/6.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
+    test_cmd($opts,out=>'merge/6.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
     # Merge 7 - ID and SN with regex in them
-    test_cmd($opts,out=>'merge/7.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
+    test_cmd($opts,out=>'merge/7.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
 
     # Sort inputs by PG, then merge
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG  $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.2.bam -t PG  $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
-    test_cmd($opts,out=>'merge/tag.pg.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -t PG -O SAM - $$opts{tmp}/merge.tag.1.bam $$opts{tmp}/merge.tag.2.bam");
+    test_cmd($opts,out=>'merge/tag.pg.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -t PG -O SAM - $$opts{tmp}/merge.tag.1.bam $$opts{tmp}/merge.tag.2.bam");
 
     # Sort inputs by PG, then merge (name sorted)
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.3.bam -n -t PG  $$opts{path}/dat/test_input_1_c.sam") == 0 or die "failed to create sort BAM: $?";
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.4.bam -n -t PG  $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
-    test_cmd($opts,out=>'merge/tag.pg.n.merge.expected.sam',cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -n -t PG -O SAM - $$opts{tmp}/merge.tag.3.bam $$opts{tmp}/merge.tag.4.bam");
+    test_cmd($opts,out=>'merge/tag.pg.n.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -n -t PG -O SAM - $$opts{tmp}/merge.tag.3.bam $$opts{tmp}/merge.tag.4.bam");
+
+    # Check merge works when PG/RG/CO header lines absent (PR #1095)
+    # Note only "merges" one file, so expected output is input
+    test_cmd($opts, out=>'merge/test_no_pg_rg_co.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -O SAM - $$opts{path}/merge/test_no_pg_rg_co.sam");
 }
 
 sub test_sort
@@ -2666,28 +2890,28 @@ sub test_sort
     # TODO Sort test cases
 
     # Check obsolete invocation is detected
-    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout", want_fail=>1);
-    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} -f $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout.bam", want_fail=>1);
-    test_cmd($opts, out=>"dat/empty.expected", cmd=>"$$opts{bin}/samtools sort${threads} -o $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sorttmp", want_fail=>1);
+    test_cmd($opts, out=>"dat/empty.expected", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout", want_fail=>1);
+    test_cmd($opts, out=>"dat/empty.expected", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -f $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sortout.bam", want_fail=>1);
+    test_cmd($opts, out=>"dat/empty.expected", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -o $$opts{path}/dat/test_input_1_a.bam $$opts{tmp}/sorttmp", want_fail=>1);
 
 
     # Pos sort
-    test_cmd($opts, out=>"sort/pos.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads}  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/pos.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads}  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Name sort
-    test_cmd($opts, out=>"sort/name.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -n  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/name.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -n  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Tag sort (RG)
-    test_cmd($opts, out=>"sort/tag.rg.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.rg.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Tag sort (RG); secondary by name
-    test_cmd($opts, out=>"sort/tag.rg.n.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -n -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.rg.n.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -n -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Tag sort (AS)
-    test_cmd($opts, out=>"sort/tag.as.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t AS $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.as.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t AS $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
 
     # Tag sort (FI)
-    test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", cmd=>"$$opts{bin}/samtools sort${threads} -t FI $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t FI $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
 }
 
 sub test_collate
@@ -2697,35 +2921,35 @@ sub test_collate
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
 
     # Output to stdout
-    test_cmd($opts, out=>"collate/collate.expected.sam",
-	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -O $$opts{path}/dat/test_input_1_d.sam");
+    test_cmd($opts, out=>"collate/collate.expected.sam", ignore_pg_header => 1,
+             cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -O $$opts{path}/dat/test_input_1_d.sam");
 
     # Output to file
     test_cmd($opts, out=>"dat/empty.expected",
-	     out_map=>{"collate/collate1.tmp.sam"
-			    =>"collate/collate.expected.sam"},
-	     cmd=>"$$opts{bin}/samtools collate${threads} -o $$opts{path}/collate/collate1.tmp.sam  $$opts{path}/dat/test_input_1_d.sam");
+             out_map=>{"collate/collate1.tmp.sam"
+                            =>"collate/collate.expected.sam"}, ignore_pg_header => 1,
+             cmd=>"$$opts{bin}/samtools collate${threads} -o $$opts{path}/collate/collate1.tmp.sam  $$opts{path}/dat/test_input_1_d.sam");
 
     # Output to file, given tmp file prefix
     test_cmd($opts, out=>"dat/empty.expected",
-	     out_map=>{"collate/collate2.tmp.sam"
-			   =>"collate/collate.expected.sam"},
-	     cmd=>"$$opts{bin}/samtools collate${threads} -o $$opts{path}/collate/collate2.tmp.sam  $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate2.tmp");
+             out_map=>{"collate/collate2.tmp.sam"
+                           =>"collate/collate.expected.sam"}, ignore_pg_header => 1,
+             cmd=>"$$opts{bin}/samtools collate${threads} -o $$opts{path}/collate/collate2.tmp.sam  $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate2.tmp");
 
     # Legacy usage with output file name based on prefix
     test_cmd($opts, out=>"dat/empty.expected",
-	     out_map=>{"collate/collate3.tmp.sam"
-			   =>"collate/collate.expected.sam"},
-	     cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate3.tmp");
+             out_map=>{"collate/collate3.tmp.sam"
+                           =>"collate/collate.expected.sam"}, ignore_pg_header => 1,
+             cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam $$opts{path}/dat/test_input_1_d.sam $$opts{path}/collate/collate3.tmp");
 
     # fast collate, supplementary files not output
     test_cmd($opts, out=>"dat/empty.expected",
-             out_map=>{"collate/1_fast_collate.sam" => "collate/1_fast_collate.sam.expected"},
+             out_map=>{"collate/1_fast_collate.sam" => "collate/1_fast_collate.sam.expected"}, ignore_pg_header => 1,
              cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -f $$opts{path}/collate/fast_collate.sam -o $$opts{path}/collate/1_fast_collate.sam");
 
     # fast collate, supplementary files not output and force temp file
     test_cmd($opts, out=>"dat/empty.expected",
-             out_map=>{"collate/2_fast_collate_with_tmp.sam" => "collate/2_fast_collate_with_tmp_used.sam.expected"},
+             out_map=>{"collate/2_fast_collate_with_tmp.sam" => "collate/2_fast_collate_with_tmp_used.sam.expected"}, ignore_pg_header => 1,
              cmd=>"$$opts{bin}/samtools collate${threads} --output-fmt=sam -f -r 4 $$opts{path}/collate/fast_collate.sam -o $$opts{path}/collate/2_fast_collate_with_tmp.sam");
 }
 
@@ -2734,13 +2958,14 @@ sub test_fixmate
     my ($opts,%args) = @_;
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
-    test_cmd($opts,out=>'fixmate/1_coord_sort.sam.expected', err=>'fixmate/1_coord_sort.sam.expected.err', cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/1_coord_sort.sam -", expect_fail=>1);
-    test_cmd($opts,out=>'fixmate/2_isize_overflow.sam.expected', cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/2_isize_overflow.sam -");
-    test_cmd($opts,out=>'fixmate/3_reverse_read_pp_lt.sam.expected', cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/3_reverse_read_pp_lt.sam -");
-    test_cmd($opts,out=>'fixmate/4_reverse_read_pp_equal.sam.expected', cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/4_reverse_read_pp_equal.sam -");
-    test_cmd($opts,out=>'fixmate/5_ct.sam.expected', cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/5_ct.sam -");
-    test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
-    test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
+    test_cmd($opts,out=>'fixmate/1_coord_sort.sam.expected', err=>'fixmate/1_coord_sort.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/1_coord_sort.sam -", expect_fail=>1);
+    test_cmd($opts,out=>'fixmate/2_isize_overflow.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/2_isize_overflow.sam -");
+    test_cmd($opts,out=>'fixmate/3_reverse_read_pp_lt.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/3_reverse_read_pp_lt.sam -");
+    test_cmd($opts,out=>'fixmate/4_reverse_read_pp_equal.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/4_reverse_read_pp_equal.sam -");
+    test_cmd($opts,out=>'fixmate/5_ct.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/5_ct.sam -");
+    test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
+    test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
+    test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
 }
 
 sub test_calmd
@@ -2778,6 +3003,7 @@ sub test_quickcheck
         'quickcheck/7.quickcheck.cram30.ok.cram',
         'quickcheck/8.quickcheck.cram21.truncated.cram',
         'quickcheck/9.quickcheck.cram30.truncated.cram',
+        'quickcheck/10.quickcheck.notargets.bam',
         );
 
     my $all_testfiles;
@@ -2791,6 +3017,9 @@ sub test_quickcheck
 
     test_cmd($opts, out => 'quickcheck/all.expected', want_fail => 1,
         cmd => "$$opts{bin}/samtools quickcheck -v $all_testfiles | sed 's,.*/quickcheck/,,'");
+
+    test_cmd($opts, out => 'dat/empty.expected', want_fail => 0,
+        cmd => "$$opts{bin}/samtools quickcheck -uv $$opts{path}/quickcheck/10.quickcheck.notargets.bam | sed 's,.*/quickcheck/,,'");
 }
 
 sub test_reheader
@@ -2802,9 +3031,9 @@ sub test_reheader
     my $fn = "$$opts{path}/dat/view.001";
 
     # Create local BAM and CRAM inputs
-    system("$$opts{bin}/samtools view -b $fn.sam > $fn.tmp.bam")  == 0 or die "failed to create bam: $?";
-    system("$$opts{bin}/samtools view -C --output-fmt-option version=2.1 $fn.sam > $fn.tmp.v21.cram") == 0 or die "failed to create cram: $?";
-    system("$$opts{bin}/samtools view -C --output-fmt-option version=3.0 $fn.sam > $fn.tmp.v30.cram") == 0 or die "failed to create cram: $?";
+    system("$$opts{bin}/samtools view -b --no-PG $fn.sam > $fn.tmp.bam")  == 0 or die "failed to create bam: $?";
+    system("$$opts{bin}/samtools view -C --no-PG --output-fmt-option version=2.1 $fn.sam > $fn.tmp.v21.cram") == 0 or die "failed to create cram: $?";
+    system("$$opts{bin}/samtools view -C --no-PG --output-fmt-option version=3.0 $fn.sam > $fn.tmp.v30.cram") == 0 or die "failed to create cram: $?";
 
     # Fudge @PG lines.  The version number will differ each commit.
     # Also the pathname will differ for each install. We'll take it on faith
@@ -2812,33 +3041,52 @@ sub test_reheader
     test_cmd($opts,
              out=>'reheader/1_view1.sam.expected',
              err=>'reheader/1_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.bam | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.bam | $$opts{bin}/samtools view -h --no-PG | perl -pe 's/\tVN:.*//'",
+             exp_fix=>1,
+             reorder_header => 1);
 
     test_cmd($opts,
              out=>'reheader/2_view1.sam.expected',
              err=>'reheader/2_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram | $$opts{bin}/samtools view -h --no-PG | perl -pe 's/\tVN:.*//'",
+             exp_fix=>1,
+             reorder_header => 1);
 
     test_cmd($opts,
              out=>'reheader/2_view1.sam.expected',
              err=>'reheader/2_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram | $$opts{bin}/samtools view -h | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+             cmd=>"$$opts{bin}/samtools reheader $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram | $$opts{bin}/samtools view -h --no-PG | perl -pe 's/\tVN:.*//'",
+             exp_fix=>1,
+             reorder_header => 1);
 
     # In-place testing
     test_cmd($opts,
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram && $$opts{bin}/samtools view -h $fn.tmp.v21.cram | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v21.cram && $$opts{bin}/samtools view -h --no-PG $fn.tmp.v21.cram | perl -pe 's/\tVN:.*//'",
+             exp_fix=>1,
+             reorder_header => 1);
 
     test_cmd($opts,
              out=>'reheader/3_view1.sam.expected',
              err=>'reheader/3_view1.sam.expected.err',
-             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'",
-	     exp_fix=>1);
+             cmd=>"$$opts{bin}/samtools reheader --in-place $$opts{path}/reheader/hdr.sam $fn.tmp.v30.cram && $$opts{bin}/samtools view -h --no-PG $fn.tmp.v30.cram | perl -pe 's/\tVN:.*//'",
+             exp_fix=>1,
+             reorder_header => 1);
+
+    test_cmd($opts,
+             out=>'reheader/4_view1.sam.expected',
+             err=>'reheader/1_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader -c \"sed \'s/2014 Genome/2019 Genome/g\'\" $fn.tmp.bam | $$opts{bin}/samtools view -h --no-PG | perl -pe 's/\tVN:.*//'",
+             exp_fix=>1,
+             reorder_header => 1);
+
+    test_cmd($opts,
+             out=>'reheader/5_view1.sam.expected',
+             err=>'reheader/1_view1.sam.expected.err',
+             cmd=>"$$opts{bin}/samtools reheader -c \"sed \'s/2014 Genome/2019 Genome/g\'\" $fn.tmp.v30.cram | $$opts{bin}/samtools view -h --no-PG | perl -pe 's/\tVN:.*//'",
+             exp_fix=>1,
+             reorder_header => 1);
 }
 
 sub test_addrprg
@@ -2846,12 +3094,12 @@ sub test_addrprg
     my ($opts,%args) = @_;
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
-    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all $$opts{path}/addrprg/1_fixup.sam");
-    test_cmd($opts,out=>'addrprg/2_fixup_orphan.sam.expected', err=>'addrprg/2_fixup_orphan.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m orphan_only $$opts{path}/addrprg/2_fixup_orphan.sam");
-    test_cmd($opts,out=>'addrprg/3_fixup.sam.expected', err=>'addrprg/3_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -R '1#7' $$opts{path}/addrprg/1_fixup.sam", want_fail=>1);
-    test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r '\@RG\\tID:1#8\\tCN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
-    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all -R '1#8' $$opts{path}/addrprg/1_fixup.sam");
-    test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r 'ID:1#8' -r 'CN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
+    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all $$opts{path}/addrprg/1_fixup.sam");
+    test_cmd($opts,out=>'addrprg/2_fixup_orphan.sam.expected', err=>'addrprg/2_fixup_orphan.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m orphan_only $$opts{path}/addrprg/2_fixup_orphan.sam");
+    test_cmd($opts,out=>'addrprg/3_fixup.sam.expected', err=>'addrprg/3_fixup.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -R '1#9' $$opts{path}/addrprg/1_fixup.sam", want_fail=>1);
+    test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r '\@RG\\tID:1#8\\tCN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
+    test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all -R '1#8' $$opts{path}/addrprg/1_fixup.sam");
+    test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r 'ID:1#8' -r 'CN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
 }
 
 sub test_markdup
@@ -2859,13 +3107,13 @@ sub test_markdup
     my ($opts,%args) = @_;
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
-    test_cmd($opts, out=>'markdup/1_name_sort.expected.sam', err=>'1_name_sort.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/1_name_sort.sam -", expect_fail=>1);
-    test_cmd($opts, out=>'markdup/2_bad_order.expected.sam', err=>'2_bad_order.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/2_bad_order.sam -", expect_fail=>1);
-    test_cmd($opts, out=>'markdup/3_missing_mc.expected.sam', err=>'3_missing_mc.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/3_missing_mc.sam -", expect_fail=>1);
-    test_cmd($opts, out=>'markdup/4_missing_ms.expected.sam', err=>'4_missing_ms.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/4_missing_ms.sam -", expect_fail=>1);
-    test_cmd($opts, out=>'markdup/5_markdup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam $$opts{path}/markdup/5_markdup.sam -");
-    test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r $$opts{path}/markdup/6_remove_dups.sam -");
-    test_cmd($opts, out=>'markdup/7_mark_supp_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -O sam $$opts{path}/markdup/7_mark_supp_dup.sam -");
+    test_cmd($opts, out=>'markdup/1_name_sort.expected.sam', err=>'1_name_sort.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/1_name_sort.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/2_bad_order.expected.sam', err=>'2_bad_order.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/2_bad_order.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/3_missing_mc.expected.sam', err=>'3_missing_mc.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/3_missing_mc.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/4_missing_ms.expected.sam', err=>'4_missing_ms.expected.sam.err', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/4_missing_ms.sam -", expect_fail=>1);
+    test_cmd($opts, out=>'markdup/5_markdup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam --no-PG $$opts{path}/markdup/5_markdup.sam -");
+    test_cmd($opts, out=>'markdup/6_remove_dups.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -O sam -r --no-PG $$opts{path}/markdup/6_remove_dups.sam -");
+    test_cmd($opts, out=>'markdup/7_mark_supp_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -O sam --no-PG $$opts{path}/markdup/7_mark_supp_dup.sam -");
 }
 
 sub test_bedcov
@@ -2876,3 +3124,20 @@ sub test_bedcov
     test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
 }
 
+sub test_split
+{
+    my ($opts, %args) = @_;
+
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
+
+    test_cmd($opts,
+             out=>"dat/empty.expected",
+             out_map => {
+                 'split/split.tmp.grp1.sam' => 'split/split.expected.grp1.sam',
+                 'split/split.tmp.grp2.sam' => 'split/split.expected.grp2.sam',
+                 'split/split.tmp.unk.sam' => 'split/split.expected.unk.sam',
+             },
+             ignore_pg_header => 1,
+             reorder_header => 1,
+             cmd => "$$opts{bin}/samtools split $threads --output-fmt sam -u $$opts{path}/split/split.tmp.unk.sam -f $$opts{path}/split/split.tmp.\%!.\%. $$opts{path}/split/split.sam");
+}

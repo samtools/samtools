@@ -1,0 +1,132 @@
+'\" t
+.TH samtools-faidx 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools faidx \- indexes or queries regions from a fasta file
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools faidx
+.IR ref.fasta " [" region1 " [...]]"
+
+.SH DESCRIPTION
+.PP
+Index reference sequence in the FASTA format or extract subsequence from
+indexed reference sequence. If no region is specified,
+.B faidx
+will index the file and create
+.I <ref.fasta>.fai
+on the disk. If regions are specified, the subsequences will be
+retrieved and printed to stdout in the FASTA format.
+
+The input file can be compressed in the
+.B BGZF
+format.
+
+The sequences in the input file should all have different names.
+If they do not, indexing will emit a warning about duplicate sequences and
+retrieval will only produce subsequences from the first sequence with the
+duplicated name.
+
+FASTQ files can be read and indexed by this command.  Without using
+.B --fastq
+any extracted subsequence will be in FASTA format.
+
+.SH OPTIONS
+
+.TP 8
+.BI "-o, --output " FILE
+Write FASTA to file rather than to stdout.
+.TP
+.BI "-n, --length " INT
+Length of FASTA sequence line.
+[60]
+.TP
+.B -c, --continue
+Continue working if a non-existent region is requested.
+.TP
+.BI "-r, --region-file " FILE
+Read regions from a file. Format is chr:from-to, one per line.
+.TP
+.B -f, --fastq
+Read FASTQ files and output extracted sequences in FASTQ format.  Same as using samtools fqidx.
+.TP
+.B -i, --reverse-complement
+Output the sequence as the reverse complement.
+When this option is used, \*(lq/rc\*(rq will be appended to the sequence names.
+To turn this off or change the string appended, use the
+.B --mark-strand
+option.
+.TP
+.B     --mark-strand TYPE
+Append strand indicator to sequence name.  TYPE can be one of:
+.RS
+.TP
+.B rc
+Append '/rc' when writing the reverse complement.  This is the default.
+.TP
+.B no
+Do not append anything.
+.TP
+.B sign
+Append '(+)' for forward strand or '(-)' for reverse complement.  This matches
+the output of \*(lqbedtools getfasta -s\*(rq.
+.TP
+.B custom,<pos>,<neg>
+Append string <pos> to names when writing the forward strand and <neg> when
+writing the reverse strand.  Spaces are preserved, so it is possible to move
+the indicator into the comment part of the description line by including
+a leading space in the strings <pos> and <neg>.
+.TP
+.B -h, --help
+Print help message and exit.
+
+.SH AUTHOR
+.PP
+Written by Heng Li, with modifications by Andrew Whitwham and Robert Davies,
+all from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-fasta (1),
+.IR samtools-fqidx (1),
+.IR samtools-fastq (1)
+.PP
+Samtools website: <http://www.htslib.org/>

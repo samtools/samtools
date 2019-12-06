@@ -1,0 +1,13 @@
+@SQ	SN:z	LN:13
+@CO	Various I combinations
+@CO	Starting with I isn't handled due to the pileup ordering.
+@CO	The record only appears in the pileup list when the first base
+@CO	is placed against the reference, which is too late.
+@CO	T  AGCT   TAGCAGG  T ref
+@CO	   AGCT   TAGCAGG
+@CO	   AGCTCCCTAGCAGG
+@CO	 A=AGCT   TAGCAGG=A
+@CO	 AB0123ABC4567890CD
+s1	0	z	2	0	11M	*	0	0	AGCTTAGCAGG	01234567890
+s2	0	z	2	0	4M3I7M	*	0	0	AGCTCCCTAGCAGG	0123ABC4567890
+s1	0	z	2	0	2I11M2I	*	0	0	A=AGCTTAGCAGG=A	AB01234567890CD

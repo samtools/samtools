@@ -1,0 +1,89 @@
+'\" t
+.TH samtools-cat 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools cat \- concatenate files together
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools cat
+.RB [ -b
+.IR list ]
+.RB [ -h
+.IR header.sam ]
+.RB [ -o
+.IR out.bam "] " in1.bam " " in2.bam " [ ... ]"
+
+.SH DESCRIPTION
+.PP
+Concatenate BAMs or CRAMs. Although this works on either BAM or CRAM,
+all input files must be the same format as each other. The sequence
+dictionary of each input file must be identical, although this command
+does not check this. This command uses a similar trick to
+.B reheader
+which enables fast BAM concatenation.
+
+.SH OPTIONS
+.TP 8
+.BI "-b " FOFN
+Read the list of input BAM or CRAM files from \fIFOFN\fR.  These are
+concatenated prior to any files specified on the command line.
+Multiple \fB-b\fR \fIFOFN\fR options may be specified to concatenate
+multiple lists of BAM/CRAM files.
+.TP 8
+.BI "-h " FILE
+Uses the SAM header from \fIFILE\fR.  By default the header is taken
+from the first file to be concatenated.
+.TP 8
+.BI "-o " FILE
+Write the concatenated output to \fIFILE\fR.  By default this is sent
+to stdout.
+.TP
+.BI --no-PG
+Do not add a @PG line to the header of the output file.
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1)
+.PP
+Samtools website: <http://www.htslib.org/>

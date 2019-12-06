@@ -1,6 +1,6 @@
 /*  bam_cat.c -- efficiently concatenates bam files.
 
-    Copyright (C) 2008-2009, 2011-2013, 2015-2016 Genome Research Ltd.
+    Copyright (C) 2008-2009, 2011-2013, 2015-2017, 2019 Genome Research Ltd.
     Modified SAMtools work copyright (C) 2010 Illumina, Inc.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -45,162 +45,43 @@ Illumina.
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
 #include "htslib/cram.h"
-#include "htslib/khash.h"
+#include "htslib/kstring.h"
 #include "samtools.h"
-
-KHASH_MAP_INIT_STR(s2i, int)
-
-// Bi-directional lookup.
-// We can go from name to ID or ID to name.
-typedef struct khash_s2i {
-    khash_t(s2i) *h;
-    int n_id, a_id;
-    const char **id; // map Nth entry back to key
-    const char **line;
-} khash_s2i;
-
-static int hash_s2i_inc(khash_s2i *hash, const char *str, const char *line, int *added) {
-    // loosly based on khash_str2int_inc
-    khint_t k;
-    int n;
-
-    if ( !hash ) return -1;
-    // inefficient, but works
-    char *my_str = strdup(str);
-    k = kh_put(s2i, hash->h, my_str, added);
-    if (*added == 0) {
-        free(my_str);
-        return kh_val(hash->h, k);
-    }
-    n = hash->n_id++;
-    kh_val(hash->h, k) = n;
-    if (hash->a_id <= n) {
-        const char **id;
-        hash->a_id = (n+1)*2;
-        if (!(id = realloc(hash->id, hash->a_id*sizeof(*hash->id))))
-            return -1;
-        hash->id = id;
-        if (!(id = realloc(hash->line, hash->a_id*sizeof(*hash->line))))
-            return -1;
-        hash->line = id;
-    }
-    hash->id[n] = my_str; // reverse map
-    if (line)
-        hash->line[n] = line;
-
-    return n;
-}
-
-khash_s2i *hash_s2i_create(void) {
-    khash_s2i *h = calloc(1, sizeof(*h));
-    if (!h)
-        return NULL;
-
-    h->h = kh_init(s2i);
-    if (!h->h) {
-        free(h);
-        return NULL;
-    }
-    return h;
-}
-
-static void hash_s2i_free(khash_s2i *hash) {
-    // based on khash_str2int_destroy_free
-    khint_t k;
-    if (!hash) return;
-    if (hash->h) {
-        for (k = 0; k < kh_end(hash->h); ++k)
-            if (kh_exist(hash->h, k)) free((char*)kh_key(hash->h, k));
-        kh_destroy(s2i, hash->h);
-    }
-    if (hash->id)
-        free(hash->id);
-    if (hash->line)
-        free(hash->line);
-
-    free(hash);
-}
-
-static khash_s2i *hash_rg(const bam_hdr_t *h) {
-    khash_s2i *rg2id = hash_s2i_create();
-    char *cp, *line;
-    int j, l;
-
-    if (!h)
-        return rg2id;
-
-    if (!rg2id)
-        return NULL;
-
-    cp = h->text;
-
-    for (l = 0; l+3 < h->l_text; l++) {
-        line = &cp[l];
-        if (!(cp[l] == '@' && cp[l+1] == 'R' && cp[l+2] == 'G')) {
-            while (l < h->l_text && cp[l] != '\n')
-                l++;
-            continue;
-        }
-
-        // Found an @RG line; add to hash
-        while (cp[l] != '\n') {
-            while (l < h->l_text && cp[l] != '\n' && cp[l] != '\t')
-                l++;
-            if (l+4 < h->l_text && cp[l+1] == 'I' && cp[l+2] == 'D')
-                break;
-        }
-        if (cp[l] == '\n')
-            continue;
-        l = (j = l+4);
-        while (l < h->l_text && cp[l] != '\n' && cp[l] != '\t')
-            l++;
-
-        // To do: save id and keep realloc as needed, as hash_s2i_inc strdups.
-        char *id = malloc(l-j+1);
-        strncpy(id, &cp[j], l-j);
-        id[l-j] = 0;
-
-        int added;
-        hash_s2i_inc(rg2id, id, line, &added);
-        free(id);
-
-        while (l < h->l_text && cp[l] != '\n')
-            l++;
-    }
-
-    return rg2id;
-}
+#include "sam_opts.h"
 
 /*
  * Check the files are consistent and capable of being concatenated.
- * Also fills out the rg2id read-group hash and the version numbers
- * and produces a new bam_hdr_t structure with merged RG lines.
- * Note it is only a simple merge, as we lack the niceties of a proper
- * header API.
+ * Also fills out the version numbers and produces a new sam_hdr_t
+ * structure with merged RG lines.
+ * Note it is only a simple merge.
  *
  * Returns updated header on success;
  *        NULL on failure.
  */
-static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const bam_hdr_t *h,
-                                     khash_s2i **rg2id, int *vers_maj_p, int *vers_min_p) {
+static sam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const sam_hdr_t *h,
+                                     int *vers_maj_p, int *vers_min_p) {
     int i, vers_maj = -1, vers_min = -1;
-    bam_hdr_t *new_h = NULL;
+    sam_hdr_t *new_h = NULL, *old_h = NULL;
+    samFile *in = NULL;
+    kstring_t ks = KS_INITIALIZE;
 
     if (h) {
-        new_h = bam_hdr_dup(h);
-        *rg2id = hash_rg(new_h);
+        new_h = sam_hdr_dup(h);
+        if (!new_h) {
+            fprintf(stderr, "[%s] ERROR: header duplication failed.\n",
+                    __func__);
+            goto fail;
+        }
     }
 
     for (i = 0; i < nfn; ++i) {
-        samFile *in;
         cram_fd *in_c;
-        khint_t ki;
-        int new_rg = -1;
+        int ki;
 
         in = sam_open(fn[i], "rc");
         if (in == 0) {
             print_error_errno("cat", "fail to open file '%s'", fn[i]);
-            return NULL;
+            goto fail;
         }
         in_c = in->fp.cram;
 
@@ -210,55 +91,81 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const bam_hdr_t 
             (vers_min != -1 && vers_min != vmin)) {
             fprintf(stderr, "[%s] ERROR: input files have differing version numbers.\n",
                     __func__);
-            return NULL;
+            goto fail;
         }
         vers_maj = vmaj;
         vers_min = vmin;
 
-        bam_hdr_t *old = sam_hdr_read(in);
-        khash_s2i *rg2id_in = hash_rg(old);
+        old_h = sam_hdr_read(in);
+        if (!old_h) {
+            fprintf(stderr, "[%s] ERROR: header reading for file '%s' filed.\n",
+                    __func__, fn[i]);
+            goto fail;
+        }
 
         if (!new_h) {
-            new_h = bam_hdr_dup(old);
-            *rg2id = hash_rg(new_h);
+            new_h = sam_hdr_dup(old_h);
+            if (!new_h) {
+                fprintf(stderr, "[%s] ERROR: header duplication for file '%s' failed.\n",
+                        __func__, fn[i]);
+                goto fail;
+            }
+            sam_hdr_destroy(old_h);
+            sam_close(in);
+            continue;
         }
 
-        // Add any existing @RG entries to our global @RG hash.
-        for (ki = 0; ki < rg2id_in->n_id; ki++) {
-            int added;
-
-            new_rg = hash_s2i_inc(*rg2id, rg2id_in->id[ki], rg2id_in->line[ki], &added);
-            //fprintf(stderr, "RG %s: #%d -> #%d\n",
-            //        rg2id_in->id[ki], ki, new_rg);
-
-            if (added) {
-                // Also add to new_h
-                const char *line = rg2id_in->line[ki];
-                const char *line_end = line;
-                while (*line && *line_end++ != '\n')
-                    ;
-                new_h->l_text += line_end - line;
-                new_h->text = realloc(new_h->text, new_h->l_text+1);
-                strncat(&new_h->text[new_h->l_text - (line_end - line)],
-                        line, line_end - line);
-            }
-
-            if (new_rg != ki && rg2id_in->n_id > 1) {
-                fprintf(stderr, "[%s] ERROR: Same size @RG lists but differing order / contents\n",
-                        __func__);
-                return NULL;
+        int old_count = sam_hdr_count_lines(old_h, "RG");
+        for (ki = 0; ki < old_count; ki++) {
+            const char *old_name = sam_hdr_line_name(old_h, "RG", ki);
+            if (old_name) {
+                int new_i = sam_hdr_line_index(new_h, "RG", old_name);
+                if (-1 == new_i) { // line does not exist in the new header
+                    if (sam_hdr_find_line_pos(old_h, "RG", ki, &ks) ||
+                        !ks.s || sam_hdr_add_lines(new_h, ks.s, ks.l)) {
+                        fprintf(stderr, "[%s] ERROR: failed to add @RG line 'ID:%s' from file '%s'\n",
+                                __func__, old_name, fn[i]);
+                        goto fail;
+                    }
+                    ks_free(&ks);
+                }
+            } else {
+                fprintf(stderr, "[%s] ERROR: failed to read %d @RG line from file '%s'\n",
+                        __func__, ki, fn[i]);
+                goto fail;
             }
         }
 
-        hash_s2i_free(rg2id_in);
-        bam_hdr_destroy(old);
+        if (old_count > 1 && sam_hdr_count_lines(new_h, "RG") == old_count) {
+            for (ki = 0; ki < old_count; ki++) {
+                const char *old_name = sam_hdr_line_name(old_h, "RG", ki);
+                const char *new_name = sam_hdr_line_name(new_h, "RG", ki);
+                if (!old_name || !new_name || strcmp(old_name, new_name)) {
+                    fprintf(stderr, "[%s] ERROR: Same size @RG lists but differing order / contents\n",
+                            __func__);
+                    goto fail;
+                }
+            }
+        }
+
+        sam_hdr_destroy(old_h);
         sam_close(in);
     }
+
+    ks_free(&ks);
 
     *vers_maj_p = vers_maj;
     *vers_min_p = vers_min;
 
     return new_h;
+
+fail:
+    ks_free(&ks);
+    if (old_h) sam_hdr_destroy(old_h);
+    if (new_h) sam_hdr_destroy(new_h);
+    if (in) sam_close(in);
+
+    return NULL;
 }
 
 
@@ -289,22 +196,21 @@ static bam_hdr_t *cram_cat_check_hdr(int nfn, char * const *fn, const bam_hdr_t 
  * huffman code.  In this situation we can change the meta-data in the
  * compression header to renumber an RG value..
  */
-int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
+int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram, sam_global_args *ga, char *arg_list, int no_pg)
 {
     samFile *out;
     cram_fd *out_c;
     int i, vers_maj, vers_min;
-    khash_s2i *rg2id = NULL;
-    bam_hdr_t *new_h = NULL;
+    sam_hdr_t *new_h = NULL;
 
     /* Check consistent versioning and compatible headers */
-    if (!(new_h = cram_cat_check_hdr(nfn, fn, h, &rg2id, &vers_maj, &vers_min)))
+    if (!(new_h = cram_cat_check_hdr(nfn, fn, h, &vers_maj, &vers_min)))
         return -1;
 
     /* Open the file with cram_vers */
     char vers[100];
     sprintf(vers, "%d.%d", vers_maj, vers_min);
-    out = sam_open(outcram, "wc");
+    out = sam_open_format(outcram, "wc", &ga->out);
     if (out == 0) {
         print_error_errno("cat", "fail to open output file '%s'", outcram);
         return -1;
@@ -313,7 +219,13 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
     cram_set_option(out_c, CRAM_OPT_VERSION, vers);
     //fprintf(stderr, "Creating cram vers %s\n", vers);
 
-    cram_fd_set_header(out_c, sam_hdr_parse_(new_h->text,  new_h->l_text)); // needed?
+    if (!no_pg && sam_hdr_add_pg(new_h, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL))
+        return -1;
+
     if (sam_hdr_write(out, new_h) < 0) {
         print_error_errno("cat", "Couldn't write header");
         return -1;
@@ -323,7 +235,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
         samFile *in;
         cram_fd *in_c;
         cram_container *c;
-        bam_hdr_t *old;
+        sam_hdr_t *old_h;
         int new_rg = -1;
 
         in = sam_open(fn[i], "rc");
@@ -333,19 +245,28 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
         }
         in_c = in->fp.cram;
 
-        old = sam_hdr_read(in);
-        khash_s2i *rg2id_in = hash_rg(old);
+        old_h = sam_hdr_read(in);
+        if (!old_h) {
+            print_error("cat", "fail to read the header of file '%s'", fn[i]);
+            return -1;
+        }
 
         // Compute RG mapping if suitable for changing.
-        if (rg2id_in->n_id == 1) {
-            int _;
-            new_rg = hash_s2i_inc(rg2id, rg2id_in->id[0], NULL, &_);
+        if (sam_hdr_count_lines(old_h, "RG") == 1) {
+            const char *old_name = sam_hdr_line_name(old_h, "RG", 0);
+            if (old_name) {
+                new_rg = sam_hdr_line_index(new_h, "RG", old_name);
+                if (new_rg < 0) {
+                    print_error("cat", "fail to find @RG line '%s' in the new header", old_name);
+                    return -1;
+                }
+            } else {
+                print_error("cat", "fail to find @RG line in file '%s'", fn[i]);
+                return -1;
+            }
         } else {
             new_rg = 0;
         }
-
-        hash_s2i_free(rg2id_in);
-
 
         // Copy contains and blocks within them
         while ((c = cram_read_container(in_c))) {
@@ -400,13 +321,11 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
             cram_free_container(c);
         }
 
-        bam_hdr_destroy(old);
+        sam_hdr_destroy(old_h);
         sam_close(in);
     }
     sam_close(out);
-
-    hash_s2i_free(rg2id);
-    bam_hdr_destroy(new_h);
+    sam_hdr_destroy(new_h);
 
     return 0;
 }
@@ -419,7 +338,7 @@ int cram_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outcram)
 
 #define BGZF_EMPTY_BLOCK_SIZE 28
 
-int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
+int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *arg_list, int no_pg)
 {
     BGZF *fp, *in = NULL;
     uint8_t *buf = NULL;
@@ -433,6 +352,13 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
         return -1;
     }
     if (h) {
+        if (!no_pg && sam_hdr_add_pg(h, "samtools",
+                                     "VN", samtools_version(),
+                                     arg_list ? "CL": NULL,
+                                     arg_list ? arg_list : NULL,
+                                     NULL))
+            goto fail;
+
         if (bam_hdr_write(fp, h) < 0) {
             print_error_errno("cat", "Couldn't write header");
             goto fail;
@@ -445,7 +371,7 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
         goto fail;
     }
     for(i = 0; i < nfn; ++i){
-        bam_hdr_t *old;
+        sam_hdr_t *old;
         int len,j;
 
         in = strcmp(fn[i], "-")? bgzf_open(fn[i], "r") : bgzf_fdopen(fileno(stdin), "r");
@@ -462,6 +388,13 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
             goto fail;
         }
         if (h == 0 && i == 0) {
+            if (!no_pg && sam_hdr_add_pg(old, "samtools",
+                                         "VN", samtools_version(),
+                                         arg_list ? "CL": NULL,
+                                         arg_list ? arg_list : NULL,
+                                         NULL))
+                goto fail;
+
             if (bam_hdr_write(fp, old) < 0) {
                 print_error_errno("cat", "Couldn't write header");
                 goto fail;
@@ -507,7 +440,7 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
                 if (bgzf_raw_write(fp, ebuf, es) < 0) goto write_fail;
             }
         }
-        bam_hdr_destroy(old);
+        sam_hdr_destroy(old);
         bgzf_close(in);
         in = NULL;
     }
@@ -530,14 +463,25 @@ int bam_cat(int nfn, char * const *fn, const bam_hdr_t *h, const char* outbam)
 
 int main_cat(int argc, char *argv[])
 {
-    bam_hdr_t *h = 0;
+    sam_hdr_t *h = 0;
     char *outfn = 0;
     char **infns = NULL; // files to concatenate
     int infns_size = 0;
-    int c, ret = 0;
+    int c, ret = 0, no_pg = 0;
     samFile *in;
+    sam_global_args ga;
 
-    while ((c = getopt(argc, argv, "h:o:b:")) >= 0) {
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', '-', '-', 0, '-', '@'),
+        {"no-PG", no_argument, NULL, 1},
+        { NULL, 0, NULL, 0 }
+    };
+
+    char *arg_list = NULL;
+
+    sam_global_args_init(&ga);
+
+    while ((c = getopt_long(argc, argv, "h:o:b:", lopts, NULL)) >= 0) {
         switch (c) {
             case 'h': {
                 samFile *fph = sam_open(optarg, "r");
@@ -573,7 +517,17 @@ int main_cat(int argc, char *argv[])
                 }
                 break;
             }
+            case 1:
+                no_pg = 1;
+                break;
+            default:
+                if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
         }
+    }
+
+    if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
+        print_error("cat", "failed to create arg_list");
+        return 1;
     }
 
     // Append files specified in argv to the list.
@@ -592,6 +546,8 @@ int main_cat(int argc, char *argv[])
         fprintf(stderr, "Options: -b FILE  list of input BAM/CRAM file names, one per line\n");
         fprintf(stderr, "         -h FILE  copy the header from FILE [default is 1st input file]\n");
         fprintf(stderr, "         -o FILE  output BAM/CRAM\n");
+        fprintf(stderr, "         --no-PG  do not add a PG line\n");
+        sam_global_opt_help(stderr, "--..-@-.");
         return 1;
     }
 
@@ -604,13 +560,13 @@ int main_cat(int argc, char *argv[])
     switch (hts_get_format(in)->format) {
     case bam:
         sam_close(in);
-        if (bam_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-") < 0)
+        if (bam_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", arg_list, no_pg) < 0)
             ret = 1;
         break;
 
     case cram:
         sam_close(in);
-        if (cram_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-") < 0)
+        if (cram_cat(infns_size+nargv_fns, infns, h, outfn? outfn : "-", &ga, arg_list, no_pg) < 0)
             ret = 1;
         break;
 
@@ -629,9 +585,9 @@ int main_cat(int argc, char *argv[])
 
     free(outfn);
     free(infns);
-
+    free(arg_list);
     if (h)
-        bam_hdr_destroy(h);
+        sam_hdr_destroy(h);
 
     return ret;
 }

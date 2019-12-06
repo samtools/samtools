@@ -1,7 +1,7 @@
 /*  bam2bcf_indel.c -- indel caller.
 
     Copyright (C) 2010, 2011 Broad Institute.
-    Copyright (C) 2012-2014 Genome Research Ltd.
+    Copyright (C) 2012-2014, 2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -87,9 +87,10 @@ void bcf_call_del_rghash(void *_hash)
     kh_destroy(rg, hash);
 }
 
-static int tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, int32_t tpos, int is_left, int32_t *_tpos)
+static int tpos2qpos(const bam1_core_t *c, const uint32_t *cigar, hts_pos_t tpos, hts_pos_t is_left, hts_pos_t *_tpos)
 {
-    int k, x = c->pos, y = 0, last_y = 0;
+    int k, y = 0, last_y = 0;
+    hts_pos_t x = c->pos;
     *_tpos = c->pos;
     for (k = 0; k < c->n_cigar; ++k) {
         int op = cigar[k] & BAM_CIGAR_MASK;
@@ -124,9 +125,10 @@ static inline int est_seqQ(const bcf_callaux_t *bca, int l, int l_run)
     return q < qh? q : qh;
 }
 
-static inline int est_indelreg(int pos, const char *ref, int l, char *ins4)
+static inline int est_indelreg(hts_pos_t pos, const char *ref, int l, char *ins4)
 {
-    int i, j, max = 0, max_i = pos, score = 0;
+    int j, max = 0, score = 0;
+    hts_pos_t i, max_i = pos;
     l = abs(l);
     for (i = pos + 1, j = 0; ref[i]; ++i, ++j) {
         if (ins4) score += (toupper(ref[i]) != "ACGTN"[(int)ins4[j%l]])? -10 : 1;
@@ -146,11 +148,12 @@ static inline int est_indelreg(int pos, const char *ref, int l, char *ins4)
             - 8: estimated sequence quality                     .. (aux>>8)&0xff
             - 8: indel quality                                  .. aux&0xff
  */
-int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_callaux_t *bca, const char *ref,
+int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, hts_pos_t pos, bcf_callaux_t *bca, const char *ref,
                       const void *rghash)
 {
-    int i, s, j, k, t, n_types, *types, max_rd_len, left, right, max_ins, *score1, *score2, max_ref2;
+    int s, k, t, n_types, *types, max_rd_len, max_ins, *score1, *score2, max_ref2;
     int N, K, l_run, ref_type, n_alt;
+    hts_pos_t i, j, left, right;
     char *inscns = 0, *ref2, *query, **ref_sample;
     khash_t(rg) *hash = (khash_t(rg)*)rghash;
     if (ref == 0 || bca == 0) return -1;
@@ -225,7 +228,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
             free(aux);
             // TODO revisit how/whether to control printing this warning
             if (hts_verbose >= 2)
-                fprintf(stderr, "[%s] excessive INDEL alleles at position %d. Skip the position.\n", __func__, pos + 1);
+                fprintf(stderr, "[%s] excessive INDEL alleles at position %"PRIhts_pos". Skip the position.\n", __func__, pos + 1);
             return -1;
         }
         types = (int*)calloc(n_types, sizeof(int));
@@ -274,7 +277,7 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
                 bam1_t *b = p->b;
                 uint32_t *cigar = bam_get_cigar(b);
                 uint8_t *seq = bam_get_seq(b);
-                int x = b->core.pos, y = 0;
+                hts_pos_t x = b->core.pos, y = 0;
                 for (k = 0; k < b->core.n_cigar; ++k) {
                     int op = cigar[k]&0xf;
                     int j, l = cigar[k]>>4;
@@ -382,7 +385,8 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, int pos, bcf_calla
             // align each read to ref2
             for (i = 0; i < n_plp[s]; ++i, ++K) {
                 bam_pileup1_t *p = plp[s] + i;
-                int qbeg, qend, tbeg, tend, sc, kk;
+                int qbeg, qend, sc, kk;
+                hts_pos_t tbeg, tend;
                 uint8_t *seq = bam_get_seq(p->b);
                 uint32_t *cigar = bam_get_cigar(p->b);
                 if (p->b->core.flag&4) continue; // unmapped reads

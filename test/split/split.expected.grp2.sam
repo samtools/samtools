@@ -1,0 +1,40 @@
+@HD	VN:1.4	SO:coordinate
+@CO	The MIT License
+@CO	
+@CO	Copyright (c) 2014 Genome Research Ltd.
+@CO	
+@CO	Permission is hereby granted, free of charge, to any person obtaining a copy
+@CO	of this software and associated documentation files (the "Software"), to deal
+@CO	in the Software without restriction, including without limitation the rights
+@CO	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+@CO	copies of the Software, and to permit persons to whom the Software is
+@CO	furnished to do so, subject to the following conditions:
+@CO	
+@CO	The above copyright notice and this permission notice shall be included in
+@CO	all copies or substantial portions of the Software.
+@CO	
+@CO	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+@CO	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+@CO	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+@CO	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+@CO	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+@CO	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+@CO	THE SOFTWARE.
+@SQ	SN:ref1	LN:56	M5:08c04d512d4797d9ba2a156c1daba468
+@SQ	SN:ref2	LN:60	M5:7c35feac7036c1cdef3bee0cc4b21437
+@SQ	SN:ref3_unused	LN:70	M5:5fdd18c2c6ecac4838996d029bf395b5
+@RG	ID:grp2	DS:Group 2	LB:Library 2	SM:Sample
+ref1_grp2_p001	99	ref1	3	1	10M	=	27	34	AGCTCGGTAC	""""""""""	RG:Z:grp2	BC:Z:TGCA	H0:i:1	aa:A:A	ab:A:Z	fa:f:6.67e-11	za:Z:!"$%^&*()	ha:H:CAFE	NM:i:0	MD:Z:10
+ref1_grp2_p002	99	ref1	7	3	10M	=	31	34	CGGTACCCGG	$$$$$$$$$$	fa:f:6.022e+23	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp2_p003	99	ref1	11	5	10M	=	35	34	ACCCGGGGAT	&&&&&&&&&&	RG:Z:grp2	ia:i:4294967295	NM:i:0	MD:Z:10
+ref1_grp2_p004	99	ref1	15	7	10M	=	39	34	GGGGATCCTC	((((((((((	RG:Z:grp2	ia:i:-2147483648	NM:i:0	MD:Z:10
+ref1_grp2_p005	99	ref1	19	9	10M	=	43	34	ATCCTCTAGA	**********	RG:Z:grp2	ia:i:-1000	NM:i:0	MD:Z:10
+ref1_grp2_p006	99	ref1	23	11	10M	=	47	34	TCTAGAGTCG	,,,,,,,,,,	RG:Z:grp2	ia:i:-1	NM:i:0	MD:Z:10
+ref1_grp2_p001	147	ref1	27	13	10M	=	3	-34	GAGTCGACCT	..........	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp2_p002	147	ref1	31	15	10M	=	7	-34	CGACCTGCAG	0000000000	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp2_p003	147	ref1	35	17	10M	=	11	-34	CTGCAGGCAT	2222222222	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp2_p004	147	ref1	39	19	10M	=	15	-34	AGGCATGCAA	4444444444	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp2_p005	147	ref1	43	21	10M	=	19	-34	ATGCAAGCTT	6666666666	RG:Z:grp2	NM:i:0	MD:Z:10
+ref12_grp2_p001	97	ref1	46	50	10M	ref2	12	0	CAAGCTTGAG	AAAAAAAAAA	RG:Z:grp2	NM:i:0	MD:Z:10
+ref1_grp2_p006	147	ref1	47	23	10M	=	23	-34	AAGCTTGAGT	8888888888	RG:Z:grp2	NM:i:0	MD:Z:10
+ref12_grp2_p001	145	ref2	12	50	10M	ref1	46	0	TCACCTAAAT	BBBBBBBBBB	RG:Z:grp2	NM:i:0	MD:Z:10

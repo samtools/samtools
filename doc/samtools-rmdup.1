@@ -1,0 +1,85 @@
+'\" t
+.TH samtools-rmdup 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools rmdup \- removes duplicate reads (obsolete)
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools rmdup
+.RB [ -sS ]
+.I input.srt.bam out.bam
+
+.SH DESCRIPTION
+.PP
+.B This command is obsolete.  Use markdup instead.
+
+Remove potential PCR duplicates: if multiple read pairs have identical
+external coordinates, only retain the pair with highest mapping quality.
+In the paired-end mode, this command
+.B ONLY
+works with FR orientation and requires ISIZE is correctly set. It does
+not work for unpaired reads (e.g. two ends mapped to different
+chromosomes or orphan reads).
+
+.SH OPTIONS
+.TP 8
+.B -s
+Remove duplicates for single-end reads. By default, the command works for
+paired-end reads only.
+.TP 8
+.B -S
+Treat paired-end reads and single-end reads.
+
+.SH LIMITATIONS
+.IP o 2
+Samtools paired-end rmdup does not work for unpaired reads (e.g. orphan
+reads or ends mapped to different chromosomes). If this is a concern,
+please use Picard's MarkDuplicates which correctly handles these cases,
+although a little slower.
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1)
+.PP
+Samtools website: <http://www.htslib.org/>

@@ -1,8 +1,8 @@
-@ref1_grp1_p001 1:N:0:GT
+@ref1_grp1_p001 2:N:0:GT
 GTCGACTCTA
 +
 ----------
-@ref1_grp1_p002 1:N:0:TT
+@ref1_grp1_p002 2:N:0:TT
 GCAGGTCGAC
 +
 //////////
@@ -22,7 +22,7 @@ GCTTGCATGC
 TCAAGCTTGC
 +
 7777777777
-@ref1_grp2_p001 1:N:0:CA
+@ref1_grp2_p001 2:N:0:CA
 AGGTCGACTC
 +
 ..........

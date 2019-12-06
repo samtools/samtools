@@ -1,0 +1,203 @@
+'\" t
+.TH samtools-markdup 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools markdup \- mark duplicate alignments in a coordinate sorted file
+.\"
+.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools markdup
+.RB [ -l
+.IR length ]
+.RB [ -r ]
+.RB [ -s ]
+.RB [ -T ]
+.RB [ -S ]
+.RB [ -f
+.IR file ]
+.RB [ -d
+.IR distance ]
+.RB [ -c ]
+.RB [ -t ]
+.RB [ -m ]
+.RB [ --mode ]
+.RB [ --include-fails ]
+.RB [ --no-PG ]
+.I in.algsort.bam out.bam
+
+.SH DESCRIPTION
+.PP
+Mark duplicate alignments from a coordinate sorted file that
+has been run through \fBsamtools fixmate\fR with the \fB-m\fR option.  This program
+relies on the MC and ms tags that fixmate provides.
+
+.SH OPTIONS
+.TP 11
+.BI "-l " INT
+.RI "Expected maximum read length of " INT " bases."
+[300]
+.TP
+.B -r
+Remove duplicate reads.
+.TP
+.B -s
+Print some basic stats. See STATISTICS.
+.TP
+.BI "-T " PREFIX
+Write temporary files to
+.IB PREFIX . samtools . nnnn . mmmm . tmp
+.TP
+.B -S
+Mark supplementary reads of duplicates as duplicates.
+.TP
+.BI "-f " file
+Write stats to named file.
+.TP
+.BI "-d " distance
+The optical duplicate distance.  Suggested settings of 100 for HiSeq style
+platforms or about 2500 for NovaSeq ones.  Default is 0 to not look for
+optical duplicates.  When set, duplicate reads are tagged with \fBdt:Z:SQ\fR for
+optical duplicates and \fBdt:Z:LB\fR otherwise.  Calculation of distance depends
+on coordinate data embedded in the read names produced by the Illumina
+sequencing machines.  Optical duplicate detection will not work on non standard
+names.
+.TP
+.B -c
+Clear previous duplicate settings and tags.
+.TP
+.B -t
+Mark duplicates with the name of the original in a \fBdo\fR tag.
+.TP
+.BI "-m, --mode " TYPE
+Duplicate decision method for paired reads.  Values are \fBt\fR or \fBs\fR.
+Mode \fBt\fR measures positions based on template start/end (default).
+Mode \fBs\fR measures positions based on sequence start.
+While the two methods identify mostly the same reads as duplicates, mode 
+\fBs\fR tends to return more results.  Unpaired reads are treated identically
+by both modes.
+.TP
+.B --include-fails
+Include quality checked failed reads.
+.TP
+.B --no-PG
+Do not add a PG line to the output file.
+.SH STATISTICS
+Entries are:
+.br
+\fBCOMMAND\fR: the command line.
+.br
+\fBREAD\fR: number of reads read in.
+.br
+\fBWRITTEN\fR: reads written out.
+.br
+\fBEXCLUDED\fR: reads ignored.  See below.
+.br
+\fBEXAMINED\fR: reads examined for duplication.
+.br
+\fBPAIRED\fR: reads that are part of a pair.
+.br
+\fBSINGLE\fR: reads that are not part of a pair.
+.br
+\fBDUPLICATE PAIR\fR: reads in a duplicate pair.
+.br
+\fBDUPLICATE SINGLE\fR: single read duplicates.
+.br
+\fBDUPLICATE PAIR OPTICAL\fR: optical duplicate paired reads.
+.br
+\fBDUPLICATE SINGLE OPTICAL\fR: optical duplicate single reads.
+.br
+\fBDUPLICATE NON PRIMARY\fR: supplementary/secondary duplicate reads.
+.br
+\fBDUPLICATE NON PRIMARY OPTICAL\fR: supplementary/secondary optical
+duplicate reads.
+.br
+\fBDUPLICATE PRIMARY TOTAL\fR: number of primary duplicate reads.
+.br
+\fBDUPLICATE TOTAL\fR: total number of duplicate reads.
+.br
+\fBESTIMATED LIBRARY SIZE\fR: estimate of the number of unique fragments in the
+sequencing library.
+
+
+Estimated library size makes various assumptions e.g. the library consists of
+unique fragments that are randomly selected (with replacement) with equal
+probability.
+This is unlikely to be true in practice.
+However it can provide a useful guide into how many unique read pairs are likely 
+to be available.
+In particular it can be used to determine how much more data might be obtained
+by further sequencing of the library.
+
+Excluded reads are those marked as secondary, supplementary or unmapped.
+By default QC failed reads are also excluded but can be included as an option.
+Excluded reads are not used for calculating duplicates.
+They can optionally be marked as duplicates if they have a primary that is also
+a duplicate.    
+.SH EXAMPLES
+This first command sort can be omitted if the file is already name ordered:
+.EX
+samtools sort -n -o namesort.bam example.bam
+.EE
+
+Add ms and MC tags for markdup to use later:
+.EX
+samtools fixmate -m namesort.bam fixmate.bam
+.EE
+
+Markdup needs position order:
+.EX
+samtools sort -o positionsort.bam fixmate.bam
+.EE
+
+Finally mark duplicates:
+.EX
+samtools markdup positionsort.bam markdup.bam
+.EE
+
+.SH AUTHOR
+.PP
+Written by Andrew Whitwham from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-sort (1),
+.IR samtools-fixmate (1)
+.PP
+Samtools website: <http://www.htslib.org/>

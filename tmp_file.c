@@ -2,7 +2,7 @@
     tmp_file.c - write to and read from a temporary binary file
     for fast storage plus added compression.
 
-    Copyright (C) 2017 Genome Research Ltd.
+    Copyright (C) 2017, 2018 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 
@@ -66,7 +66,6 @@ static int tmp_file_init(tmp_file_t *tmp, int verbose) {
     tmp->max_data_size    = TMP_SAM_MAX_DATA + sizeof(bam1_t); // arbitrary but growable
     tmp->ring_buffer_size = TMP_SAM_RING_SIZE; // arbitrary (min 64K) but growable
     tmp->comp_buffer_size = LZ4_COMPRESSBOUND(tmp->max_data_size * tmp->group_size);
-    tmp->data = NULL;
     tmp->ring_buffer = malloc(sizeof(uint8_t) * tmp->ring_buffer_size);
     tmp->ring_index  = tmp->ring_buffer;
     tmp->comp_buffer = malloc(tmp->comp_buffer_size);
@@ -184,7 +183,7 @@ static int tmp_file_grow_ring_buffer(tmp_file_t *tmp, size_t new_size) {
 
 
 /*
- * This does the actual compression and writing to disk.  On disk format consists of a
+ * This does the actual compression and writing to a file.  The file format consists of a
  * single size_t for the size of the compressed data followed by the data itself.
  * Returns 0 on success, a negative number on failure.
  */
@@ -244,16 +243,16 @@ static int tmp_file_write_to_file(tmp_file_t *tmp) {
 
 /*
  * Stores an in memory bam structure for writing and if enough are gathered together writes
- * it to disk.  Mulitiple alignments compress better that single ones though after a certain number
+ * it to a file.  Multiple alignments compress better that single ones though after a certain number
  * there is a law of diminishing returns.
  * Returns 0 on success, a negative number on failure.
  */
 int tmp_file_write(tmp_file_t *tmp, bam1_t *inbam) {
 
-    if ((tmp->input_size + sizeof(bam1_t) + inbam->l_data) >= tmp->ring_buffer_size) {
+    if ((tmp->offset + tmp->input_size + sizeof(bam1_t) + inbam->l_data) >= tmp->ring_buffer_size) {
         int ret;
 
-        if ((ret = tmp_file_grow_ring_buffer(tmp, (tmp->input_size + sizeof(bam1_t) + inbam->l_data) * 5))) {
+        if ((ret = tmp_file_grow_ring_buffer(tmp, (tmp->offset + tmp->input_size + sizeof(bam1_t) + inbam->l_data) * 2))) {
             tmp_print_error(tmp, "[tmp_file] Error: input line too big. (%ld).\n",
                 (tmp->input_size + inbam->l_data));
 
@@ -283,70 +282,8 @@ int tmp_file_write(tmp_file_t *tmp, bam1_t *inbam) {
 
 
 /*
- * Closes the file after writing out any remaining alignments.  Adds a size_t 0 to
- * mark the end of the file.  Companion function to tmp_file_open_read below.
- * Returns 0 on success, a negative number on failure.
- */
-int tmp_file_close_write(tmp_file_t *tmp) {
-    size_t terminator = 0;
-
-    if (tmp->entry_number) {
-        int ret;
-
-        if ((ret = tmp_file_write_to_file(tmp))) {
-            return ret;
-        }
-    }
-
-    if (fwrite(&terminator, sizeof(size_t), 1, tmp->fp) < 1) {
-        tmp_print_error(tmp, "[tmp_file] Error: tmp file write terminator failed.\n");
-        return TMP_SAM_FILE_ERROR;
-    }
-
-    if (fclose(tmp->fp)) {
-        tmp_print_error(tmp, "[tmp_file] Error: closing tmp file %s failed.\n", tmp->name);
-        return TMP_SAM_FILE_ERROR;
-    }
-
-    LZ4_freeStream(tmp->stream);
-
-    return TMP_SAM_OK;
-}
-
-
-/*
- * Opens the file for reading.  Optionally, if given a pointer to an existing
- * bam1_t structure, it will free the data entry to prevent memory leaks.
- * Companion function to tmp_file_close_write above.
- * Returns 0 on success, a negative number on failure.
- */
-int tmp_file_open_read(tmp_file_t *tmp, bam1_t *inbam) {
-
-    if ((tmp->fp = fopen(tmp->name, "rb")) == NULL) {
-        tmp_print_error(tmp, "[tmp_file] Error: unable to open read file %s.\n", tmp->name);
-        return TMP_SAM_FILE_ERROR;
-    }
-
-    tmp->dstream = LZ4_createStreamDecode();
-    tmp->offset  = 0;
-
-    if (inbam) {
-        free(inbam->data);
-    }
-
-    if (!tmp->dstream) {
-        tmp_print_error(tmp, "[tmp_file] Error: unable to allocate compression stream.\n");
-        return TMP_SAM_MEM_ERROR;
-    }
-
-
-    return TMP_SAM_OK;
-}
-
-
-/*
- * An alternative to tmp_file_close_write that does the same job without actually
- * closing the file. Companion function to tmp_file_begin_read below.
+ * Marks the end of file writing.  Adds a size_t 0 to mark the end of
+ * the file. Companion function to tmp_file_begin_read below.
  * Returns 0 on success, a negative number on failure.
  */
 int tmp_file_end_write(tmp_file_t *tmp) {
@@ -374,21 +311,17 @@ int tmp_file_end_write(tmp_file_t *tmp) {
 
 
 /*
- * An alternative to tmp_file_open_read but works on an open file.
+ * Prepares the file for reading.
  * Companion function to tmp_file_end_write above.
  * Returns 0 on success, a negative number on failure.
  */
-int tmp_file_begin_read(tmp_file_t *tmp, bam1_t *inbam) {
+int tmp_file_begin_read(tmp_file_t *tmp) {
 
     rewind(tmp->fp);
 
     tmp->dstream = LZ4_createStreamDecode();
     tmp->offset  = 0;
     tmp->entry_number = tmp->group_size;
-
-    if (inbam) {
-        free(inbam->data);
-    }
 
     if (!tmp->dstream) {
         tmp_print_error(tmp, "[tmp_file] Error: unable to allocate compression stream.\n");
@@ -400,11 +333,19 @@ int tmp_file_begin_read(tmp_file_t *tmp, bam1_t *inbam) {
 
 
 /*
- * Read the next alignment, either from memory or from disk.
+ * Read the next alignment, either from memory or from a file.
  * Returns size of entry on success, 0 on end of file or a negative on error.
  */
 int tmp_file_read(tmp_file_t *tmp, bam1_t *inbam) {
     int entry_size;
+    uint8_t *data = inbam->data;
+
+    /* while tmp_file_read assumes that the same bam1_t variable
+       is being used in each call, this may not be the case. So
+       default to the lowest memory size for safety. */
+    if (tmp->data_size > inbam->m_data) {
+        tmp->data_size = inbam->m_data;
+    }
 
     if (tmp->entry_number == tmp->group_size) {
         // read more data
@@ -438,17 +379,22 @@ int tmp_file_read(tmp_file_t *tmp, bam1_t *inbam) {
 
     tmp->ring_index = tmp->ring_buffer + tmp->offset;
     memcpy(inbam, tmp->ring_index, sizeof(bam1_t));
+    inbam->data = data; // put the pointer to real bam data back
 
     if ((unsigned int)inbam->l_data > tmp->data_size) {
-        if ((tmp->data = realloc(tmp->data, sizeof(uint8_t) * inbam->l_data)) == NULL) {
-            tmp_print_error(tmp, "[tmp_file] Error: unable to allocate tmp data memory.\n");
+        uint8_t *tmp_data;
+        tmp->data_size = inbam->l_data; kroundup32(tmp->data_size);
+
+        if ((tmp_data = realloc(inbam->data, sizeof(uint8_t) * tmp->data_size)) == NULL) {
+            tmp_print_error(tmp, "[tmp_file] Error: unable to allocate tmp bam data memory.\n");
             return TMP_SAM_MEM_ERROR;
         }
 
-        tmp->data_size = inbam->l_data;
+        inbam->data = tmp_data;
     }
 
-    inbam->data = tmp->data;
+    inbam->m_data = tmp->data_size; // set to the actual data size
+
     entry_size = sizeof(bam1_t);
 
     memcpy(inbam->data, tmp->ring_index + entry_size, inbam->l_data);
@@ -474,34 +420,19 @@ int tmp_file_read(tmp_file_t *tmp, bam1_t *inbam) {
 
 
 /*
- * Frees up memory, closes the file and optionally deletes it.  Giving this function
- * pointer to the bam1_t structure used for reading will set its data value to null,
- * preventing bam_destroy1() from trying to free already freed memory.
- * Returns 0 on success, a negative number or EOF on failure.
+ * Frees up memory, closes the file and deletes it.
+ * Returns 0 on success or EOF on failure.
  */
-int tmp_file_destroy(tmp_file_t *tmp, bam1_t *inbam, int delete) {
+int tmp_file_destroy(tmp_file_t *tmp) {
     int ret = 0;
 
     ret = fclose(tmp->fp);
-
-    if (delete && ret == 0) {
-        if (unlink(tmp->name)) {
-            tmp_print_error(tmp, "[tmp_file] Error: unable to delete file %s.\n", tmp->name);
-            ret = TMP_SAM_FILE_ERROR;
-        }
-    }
 
     LZ4_freeStreamDecode(tmp->dstream);
     free(tmp->ring_buffer);
     free(tmp->comp_buffer);
     free(tmp->name);
-    free(tmp->data);
     free(tmp->dict);
-
-
-    if (inbam) {
-        inbam->data = NULL;
-    }
 
     return ret;
 }

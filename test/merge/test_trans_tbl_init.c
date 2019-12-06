@@ -1,6 +1,6 @@
 /*  test/merge/test_trans_tbl_init.c -- merge test harness.
 
-    Copyright (C) 2013, 2014 Genome Research Ltd.
+    Copyright (C) 2013-2016, 2019 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -27,18 +27,19 @@ DEALINGS IN THE SOFTWARE.  */
 #include "../../bam_sort.c"
 #include <assert.h>
 #include <regex.h>
+#include <inttypes.h>
 
 typedef struct refseq_info {
     const char *name;
     uint32_t    len;
 } refseq_info_t;
 
-void dump_header(bam_hdr_t* hdr) {
-    printf("->n_targets:(%d)\n", hdr->n_targets);
+void dump_header(sam_hdr_t* hdr) {
+    printf("->n_targets:(%d)\n", sam_hdr_nref(hdr));
     int i;
-    for (i = 0; i < hdr->n_targets; ++i) {
-        printf("->target_name[%d]:(%s)\n",i,hdr->target_name[i]);
-        printf("->target_len[%d]:(%d)\n",i,hdr->target_len[i]);
+    for (i = 0; i < sam_hdr_nref(hdr); ++i) {
+        printf("->target_name[%d]:(%s)\n", i, sam_hdr_tid2name(hdr, i));
+        printf("->target_len[%d]:(%"PRId64")\n", i, (int64_t) sam_hdr_tid2len(hdr, i));
     }
 
     printf("->text:(");
@@ -46,7 +47,7 @@ void dump_header(bam_hdr_t* hdr) {
     printf(")\n");
 }
 
-static int populate_merged_header(bam_hdr_t *hdr, merged_header_t *merged_hdr) {
+static int populate_merged_header(sam_hdr_t *hdr, merged_header_t *merged_hdr) {
     trans_tbl_t dummy;
     int res;
     res = trans_tbl_init(merged_hdr, hdr, &dummy, 0, 0, 1, NULL);
@@ -56,55 +57,35 @@ static int populate_merged_header(bam_hdr_t *hdr, merged_header_t *merged_hdr) {
 
 /*
  * Populate merged_hdr with data from bam0_header_text and bam0_refseqs.
- * Return bam_hdr_t based on the content in bam1_header_text and bam1_refseqs.
+ * Return sam_hdr_t based on the content in bam1_header_text and bam1_refseqs.
  */
 
-bam_hdr_t * setup_test(const char *bam0_header_text,
+sam_hdr_t * setup_test(const char *bam0_header_text,
                        const refseq_info_t *bam0_refseqs,
                        int32_t bam0_n_refseqs,
                        const char *bam1_header_text,
                        const refseq_info_t *bam1_refseqs,
                        int32_t bam1_n_refseqs,
                        merged_header_t *merged_hdr) {
-    bam_hdr_t* bam0 = NULL;
-    bam_hdr_t* bam1 = NULL;
-    int32_t i;
+    sam_hdr_t* bam0 = NULL;
+    sam_hdr_t* bam1 = NULL;
 
-    bam0 = bam_hdr_init();
-    bam0->text = strdup(bam0_header_text);
-    if (!bam0->text) goto fail;
-    bam0->l_text = strlen(bam0_header_text);
-    bam0->n_targets = 1;
-    bam0->target_name = (char**)calloc(bam0_n_refseqs, sizeof(char*));
-    bam0->target_len = (uint32_t*)calloc(bam0_n_refseqs, sizeof(uint32_t));
-    for (i = 0; i < bam0_n_refseqs; i++) {
-        bam0->target_name[i] = strdup(bam0_refseqs[i].name);
-        if (!bam0->target_name[i]) goto fail;
-        bam0->target_len[i] = bam0_refseqs[i].len;
-    }
+    bam0 = sam_hdr_init();
+    if (!bam0 || -1 == sam_hdr_add_lines(bam0, bam0_header_text, strlen(bam0_header_text)))
+        goto fail;
 
     if (populate_merged_header(bam0, merged_hdr)) goto fail;
 
-    bam1 = bam_hdr_init();
-    if (!bam1) goto fail;
-    bam1->text = strdup(bam1_header_text);
-    if (!bam1->text) goto fail;
-    bam1->l_text = strlen(bam1_header_text);
-    bam1->n_targets = bam1_n_refseqs;
-    bam1->target_name = (char**)calloc(bam1_n_refseqs, sizeof(char*));
-    bam1->target_len = (uint32_t*)calloc(bam1_n_refseqs, sizeof(uint32_t));
-    for (i = 0; i < bam1_n_refseqs; i++) {
-        bam1->target_name[i] = strdup(bam1_refseqs[i].name);
-        if (!bam1->target_name[i]) goto fail;
-        bam1->target_len[i] = bam1_refseqs[i].len;
-    }
+    bam1 = sam_hdr_init();
+    if (!bam1 || -1 == sam_hdr_add_lines(bam1, bam1_header_text, strlen(bam1_header_text)))
+        goto fail;
 
-    bam_hdr_destroy(bam0);
+    sam_hdr_destroy(bam0);
     return bam1;
 
  fail:
-    bam_hdr_destroy(bam1);
-    bam_hdr_destroy(bam0);
+    sam_hdr_destroy(bam1);
+    sam_hdr_destroy(bam0);
     return NULL;
 }
 
@@ -126,18 +107,18 @@ static const refseq_info_t test_1_refs[1] = {
     { "fish", 133 }
 };
 
-bam_hdr_t * setup_test_1(merged_header_t *merged_hdr) {
+sam_hdr_t * setup_test_1(merged_header_t *merged_hdr) {
     return setup_test(init_text, init_refs, NELE(init_refs),
                       test_1_trans_text, test_1_refs, NELE(test_1_refs),
                       merged_hdr);
 }
 
-bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
+bool check_test_1(sam_hdr_t* translate, sam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_1_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen( test_1_trans_text)
-        || translate->n_targets != 1
+        strncmp(test_1_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen( test_1_trans_text)
+        || sam_hdr_nref(translate) != 1
         ) return false;
 
     // Check output header
@@ -148,7 +129,7 @@ bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     regex_t check_regex;
     regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
 
-    if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 1 ) return false;
+    if ( regexec(&check_regex, sam_hdr_str(out), 0, NULL, 0) != 0 || sam_hdr_nref(out) != 1 ) return false;
 
     regfree(&check_regex);
 
@@ -161,25 +142,24 @@ bool check_test_1(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
 static const char test_2_trans_text[] =
 "@HD\tVN:1.4\tSO:unknown\n"
 "@SQ\tSN:donkey\tLN:133\n"
-"@SQ\tSN:fish\tLN:133";
+"@SQ\tSN:fish\tLN:133\n";
 
 static const refseq_info_t test_2_refs[2] = {
     { "donkey", 133 },
     { "fish",   133 }
 };
 
-bam_hdr_t * setup_test_2(merged_header_t *merged_hdr) {
+sam_hdr_t * setup_test_2(merged_header_t *merged_hdr) {
     return setup_test(init_text, init_refs, NELE(init_refs),
                       test_2_trans_text, test_2_refs, NELE(test_2_refs),
                       merged_hdr);
 }
 
-bool check_test_2(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
+bool check_test_2(sam_hdr_t* translate, sam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
-    if (
-        strncmp(test_2_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_2_trans_text)
-        || translate->n_targets != 2
+    if (sam_hdr_length(translate) != strlen(test_2_trans_text)
+        || strncmp(test_2_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_nref(translate) != 2
         ) return false;
 
     // Check output header
@@ -191,7 +171,7 @@ bool check_test_2(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
     regex_t check_regex;
     regcomp(&check_regex, out_regex, REG_EXTENDED|REG_NOSUB);
 
-    if ( regexec(&check_regex, out->text, 0, NULL, 0) != 0 || out->n_targets != 2 ) return false;
+    if ( regexec(&check_regex, sam_hdr_str(out), 0, NULL, 0) != 0 || sam_hdr_nref(out) != 2 ) return false;
 
     regfree(&check_regex);
 
@@ -212,18 +192,18 @@ static const refseq_info_t test_3_refs[2] = {
     { "fish",   133 }
 };
 
-bam_hdr_t * setup_test_3(merged_header_t *merged_hdr) {
+sam_hdr_t * setup_test_3(merged_header_t *merged_hdr) {
     return setup_test(init_text, init_refs, NELE(init_refs),
                       test_3_trans_text, test_3_refs, NELE(test_3_refs),
                       merged_hdr);
 }
 
-bool check_test_3(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
+bool check_test_3(sam_hdr_t* translate, sam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_3_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_3_trans_text)
-        || translate->n_targets != 2
+        strncmp(test_3_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen(test_3_trans_text)
+        || sam_hdr_nref(translate) != 2
         ) return false;
     return true;
 }
@@ -239,7 +219,7 @@ static const refseq_info_t test_4_refs[2] = {
     { "fish",   133 }
 };
 
-bam_hdr_t * setup_test_4(merged_header_t *merged_hdr) {
+sam_hdr_t * setup_test_4(merged_header_t *merged_hdr) {
     const char* t4_init_text =
         "@HD\tVN:1.4\tSO:unknown\n"
         "@SQ\tSN:fish\tLN:133\tSP:frog\n"
@@ -250,12 +230,12 @@ bam_hdr_t * setup_test_4(merged_header_t *merged_hdr) {
                       merged_hdr);
 }
 
-bool check_test_4(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
+bool check_test_4(sam_hdr_t* translate, sam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_4_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_4_trans_text)
-        || translate->n_targets != 2
+        strncmp(test_4_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen(test_4_trans_text)
+        || sam_hdr_nref(translate) != 2
         ) return false;
     return true;
 }
@@ -273,7 +253,7 @@ static const refseq_info_t test_5_refs[2] = {
     { "fish",   133 }
 };
 
-bam_hdr_t * setup_test_5(merged_header_t *merged_hdr) {
+sam_hdr_t * setup_test_5(merged_header_t *merged_hdr) {
     const char* t5_init_text =
         "@HD\tVN:1.4\tSO:unknown\n"
         "@SQ\tSN:fish\tLN:133\tSP:frog\n"
@@ -286,12 +266,12 @@ bam_hdr_t * setup_test_5(merged_header_t *merged_hdr) {
                       merged_hdr);
 }
 
-bool check_test_5(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
+bool check_test_5(sam_hdr_t* translate, sam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_5_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_5_trans_text)
-        || translate->n_targets != 2
+        strncmp(test_5_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen(test_5_trans_text)
+        || sam_hdr_nref(translate) != 2
         ) return false;
     return true;
 }
@@ -309,18 +289,18 @@ static const refseq_info_t test_6_refs[2] = {
     { "fish",   133 }
 };
 
-bam_hdr_t * setup_test_6(merged_header_t *merged_hdr) {
+sam_hdr_t * setup_test_6(merged_header_t *merged_hdr) {
     return setup_test(init_text, init_refs, NELE(init_refs),
                       test_6_trans_text, test_6_refs, NELE(test_6_refs),
                       merged_hdr);
 }
 
-bool check_test_6(bam_hdr_t* translate, bam_hdr_t* out, trans_tbl_t* tbl) {
+bool check_test_6(sam_hdr_t* translate, sam_hdr_t* out, trans_tbl_t* tbl) {
     // Check input is unchanged
     if (
-        strncmp(test_6_trans_text, translate->text, translate->l_text)
-        || translate->l_text != strlen(test_5_trans_text)
-        || translate->n_targets != 2
+        strncmp(test_6_trans_text, sam_hdr_str(translate), sam_hdr_length(translate))
+        || sam_hdr_length(translate) != strlen(test_5_trans_text)
+        || sam_hdr_nref(translate) != 2
         ) return false;
     return true;
 }
@@ -346,8 +326,8 @@ int main(int argc, char**argv)
     const long GIMMICK_SEED = 0x1234330e;
     srand48(GIMMICK_SEED);
 
-    bam_hdr_t* out;
-    bam_hdr_t* translate;
+    sam_hdr_t* out;
+    sam_hdr_t* translate;
 
     if (verbose) printf("BEGIN test 1\n");
     // setup
@@ -362,7 +342,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 1\n");
     trans_tbl_init(merged_hdr, translate, &tbl_1, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 1\n");
     if (verbose > 1) {
@@ -380,8 +361,8 @@ int main(int argc, char**argv)
         ++failure;
     }
     // teardown
-    bam_hdr_destroy(translate);
-    bam_hdr_destroy(out);
+    sam_hdr_destroy(translate);
+    sam_hdr_destroy(out);
     trans_tbl_destroy(&tbl_1);
     if (verbose) printf("END test 1\n");
 
@@ -399,7 +380,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 2\n");
     trans_tbl_init(merged_hdr, translate, &tbl_2, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 2\n");
     if (verbose > 1) {
@@ -417,8 +399,8 @@ int main(int argc, char**argv)
         ++failure;
     }
     // teardown
-    bam_hdr_destroy(translate);
-    bam_hdr_destroy(out);
+    sam_hdr_destroy(translate);
+    sam_hdr_destroy(out);
     trans_tbl_destroy(&tbl_2);
     if (verbose) printf("END test 2\n");
 
@@ -435,7 +417,8 @@ int main(int argc, char**argv)
      }
     if (verbose) printf("RUN test 3\n");
     trans_tbl_init(merged_hdr, translate, &tbl_3, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 3\n");
     if (verbose > 1) {
@@ -453,8 +436,8 @@ int main(int argc, char**argv)
         ++failure;
     }
     // teardown
-    bam_hdr_destroy(translate);
-    bam_hdr_destroy(out);
+    sam_hdr_destroy(translate);
+    sam_hdr_destroy(out);
     trans_tbl_destroy(&tbl_3);
     if (verbose) printf("END test 3\n");
 
@@ -471,7 +454,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 4\n");
     trans_tbl_init(merged_hdr, translate, &tbl_4, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 4\n");
     if (verbose > 1) {
@@ -489,8 +473,8 @@ int main(int argc, char**argv)
         ++failure;
     }
     // teardown
-    bam_hdr_destroy(translate);
-    bam_hdr_destroy(out);
+    sam_hdr_destroy(translate);
+    sam_hdr_destroy(out);
     trans_tbl_destroy(&tbl_4);
     if (verbose) printf("END test 4\n");
 
@@ -508,7 +492,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 5\n");
     trans_tbl_init(merged_hdr, translate, &tbl_5, false, false, true, NULL);
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 5\n");
     if (verbose > 1) {
@@ -526,8 +511,8 @@ int main(int argc, char**argv)
         ++failure;
     }
     // teardown
-    bam_hdr_destroy(translate);
-    bam_hdr_destroy(out);
+    sam_hdr_destroy(translate);
+    sam_hdr_destroy(out);
     trans_tbl_destroy(&tbl_5);
     if (verbose) printf("END test 5\n");
 
@@ -544,7 +529,8 @@ int main(int argc, char**argv)
     }
     if (verbose) printf("RUN test 6\n");
     trans_tbl_init(merged_hdr, translate, &tbl_6, false, false, true, "filename");
-    out = finish_merged_header(merged_hdr);
+    finish_merged_header(merged_hdr);
+    out = merged_hdr->hdr;
     free_merged_header(merged_hdr);
     if (verbose) printf("END RUN test 6\n");
     if (verbose > 1) {
@@ -562,8 +548,8 @@ int main(int argc, char**argv)
         ++failure;
     }
     // teardown
-    bam_hdr_destroy(translate);
-    bam_hdr_destroy(out);
+    sam_hdr_destroy(translate);
+    sam_hdr_destroy(out);
     trans_tbl_destroy(&tbl_6);
     if (verbose) printf("END test 6\n");
 

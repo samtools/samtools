@@ -9,8 +9,8 @@
 #
 # The MIT License
 #
-# Original SAMtools work copyright (c) 2008-2009 Genome Research Ltd.
-# Modified SAMtools work copyright (c) 2010 Illumina, Inc.
+# Copyright (c) 2008-2009 Genome Research Ltd.
+# Modifications Copyright (c) 2010 Illumina, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal

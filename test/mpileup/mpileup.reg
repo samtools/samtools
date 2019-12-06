@@ -38,16 +38,14 @@ P 2.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap.bam
 P 3.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap1.bam
 P 4.out $samtools mpileup -Q0 -x -f ce.fa ce#unmap2.bam
 P 5.out $samtools mpileup -Q0 -x -f c1.fa c1#clip.bam
-F 6.out $samtools mpileup -Q0 -x -f c1.fa c1#pad1.bam
-F 7.out $samtools mpileup -Q0 -x -f c1.fa c1#pad2.bam
+P 6.out $samtools mpileup -Q0 -x -f c1.fa c1#pad1.bam
+P 7.out $samtools mpileup -Q0 -x -f c1.fa c1#pad2.bam
 
 # I'm not convinced this case is valid, but I also don't know if it's even
 # possible to encode this data in a pileup format output.
 P 8.out $samtools mpileup -Q0 -x -f c1.fa c1#pad3.bam
 P 9.out $samtools mpileup -Q0 -x -f xx.fa xx#minimal.bam
 P 10.out $samtools mpileup -Q0 -x -f xx.fa xx#triplet.bam
-P 11.out $samtools mpileup -Q0 -x -f c1.fa c1#ID.bam 
-P 12.out $samtools mpileup -Q0 -x -f c1.fa c1#ID2.bam
 
 # Test basic pileup options
 P 13.out $samtools mpileup -x mpileup.1.$fmt
@@ -149,6 +147,12 @@ P 75.out $samtools mpileup -x -P LS454          -m 1 -u -f mpileup.ref.fa indels
 P 76.out $samtools mpileup -Q0 -s -x -f mpileup.ref.fa mpileup.1.bam
 P 77.out $samtools mpileup -Q0 -O -x -f mpileup.ref.fa mpileup.1.bam
 
+# Reverse strand deletions; --reverse-del
+P 78.out $samtools mpileup --reverse-del mpileup.1.bam
+
+# Extra columns and tags; --output-extra
+P 79.out $samtools mpileup -O --output-extra POS,FLAG,NM,QNAME,RG ../dat/view.001.sam
+
 # -a and -aa.  See depth.reg too
 P a0.out  $samtools mpileup -Q40 -r 17:1-4200 -f mpileup.ref.fa -a mpileup.1.$fmt
 P a1.out  $samtools mpileup -ABQ0 -a  xx#depth1.sam
@@ -192,3 +196,13 @@ P m5_b3aa.out  $samtools mpileup -ABQ0 -aa -l xx.bed3 xx#depth3.bam
 
 # Fail as -a shouldn't output xn:16-20 (it doesn't with -r)
 F m5_b3a.out   $samtools mpileup -ABQ0 -a  -l xx.bed3 xx#depth3.bam
+
+# compound I and D ops along with Pads.
+P mp_D.out      $samtools mpileup -ABQ0 -f mp.fa mp_D.sam
+P mp_DI.out     $samtools mpileup -ABQ0 -f mp.fa mp_DI.sam
+P mp_I.out      $samtools mpileup -ABQ0 -f mp.fa mp_I.sam
+P mp_ID.out     $samtools mpileup -ABQ0 -f mp.fa mp_ID.sam
+P mp_N.out      $samtools mpileup -ABQ0 -f mp.fa mp_N.sam
+P mp_N2.out     $samtools mpileup -ABQ0 -f mp.fa mp_N2.sam
+P mp_P.out      $samtools mpileup -ABQ0 -f mp.fa mp_P.sam
+P mp_ID_rev.out $samtools mpileup -ABQ0 --reverse-del -f mp.fa mp_ID_rev.sam

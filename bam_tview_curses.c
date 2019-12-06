@@ -1,6 +1,6 @@
 /*  bam_tview_curses.c -- curses tview implementation.
 
-    Copyright (C) 2008-2013 Genome Research Ltd.
+    Copyright (C) 2008-2015, 2019 Genome Research Ltd.
     Portions copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -53,14 +53,12 @@ DEALINGS IN THE SOFTWARE.  */
 typedef struct CursesTview {
     tview_t view;
     WINDOW *wgoto, *whelp;
-    } curses_tview_t;
+} curses_tview_t;
 
 #define FROM_TV(ptr) ((curses_tview_t*)ptr)
 
-static void curses_destroy(tview_t* base)
-    {
+static void curses_destroy(tview_t* base) {
     curses_tview_t* tv=(curses_tview_t*)base;
-
 
     delwin(tv->wgoto); delwin(tv->whelp);
     endwin();
@@ -68,7 +66,7 @@ static void curses_destroy(tview_t* base)
     base_tv_destroy(base);
 
     free(tv);
-    }
+}
 
 /*
  void (*my_mvprintw)(struct AbstractTview* ,int,int,const char*,...);
@@ -79,8 +77,7 @@ static void curses_destroy(tview_t* base)
     int (*my_colorpair)(struct AbstractTview*,int);
 */
 
-static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...)
-    {
+static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...) {
     unsigned int size=tv->mcol+2;
     char* str=malloc(size);
     if(str==0) exit(EXIT_FAILURE);
@@ -90,25 +87,23 @@ static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fm
     va_end(argptr);
     mvprintw(y,x,str);
     free(str);
-    }
+}
 
-static void curses_mvaddch(struct AbstractTview* tv,int y,int x,int ch)
-    {
+static void curses_mvaddch(struct AbstractTview* tv,int y,int x,int ch) {
     mvaddch(y,x,ch);
-    }
+}
 
-static void curses_attron(struct AbstractTview* tv,int flag)
-    {
+static void curses_attron(struct AbstractTview* tv,int flag) {
     attron(flag);
-    }
-static void curses_attroff(struct AbstractTview* tv,int flag)
-    {
+}
+
+static void curses_attroff(struct AbstractTview* tv,int flag) {
     attroff(flag);
-    }
-static void curses_clear(struct AbstractTview* tv)
-    {
+}
+
+static void curses_clear(struct AbstractTview* tv) {
     clear();
-    }
+}
 
 static int curses_init_colors(int inverse)
 {
@@ -137,23 +132,19 @@ static int curses_init_colors(int inverse)
     return 0;
 }
 
-static int curses_colorpair(struct AbstractTview* tv,int flag)
-    {
+static int curses_colorpair(struct AbstractTview* tv,int flag) {
     return COLOR_PAIR(flag);
-    }
+}
 
-static int curses_drawaln(struct AbstractTview* tv, int tid, int pos)
-    {
+static int curses_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos) {
     return base_draw_aln(tv,  tid, pos);
-    }
+}
 
-
-
-static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos)
-    {
+static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     char str[256], *p;
     int i, l = 0;
     tview_t *base=(tview_t*)tv;
+    str[0] = '\0';
     wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
     mvwprintw(tv->wgoto, 1, 2, "Goto: ");
     for (;;) {
@@ -163,28 +154,16 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos)
         if (c == KEY_BACKSPACE || c == '\010' || c == '\177') {
             if(l > 0) --l;
         } else if (c == KEY_ENTER || c == '\012' || c == '\015') {
-            int _tid = -1, _beg, _end;
+            int _tid = -1;
+            hts_pos_t _beg, _end;
             if (str[0] == '=') {
-                _beg = strtol(str+1, &p, 10) - 1;
+                _beg = strtoll(str+1, &p, 10) - 1;
                 if (_beg > 0) {
                     *pos = _beg;
                     return;
                 }
             } else {
-                char *name_lim = (char *) hts_parse_reg(str, &_beg, &_end);
-                if (name_lim) {
-                    char name_terminator = *name_lim;
-                    *name_lim = '\0';
-                    _tid = bam_name2id(base->header, str);
-                    *name_lim = name_terminator;
-                }
-                else {
-                    // Unparsable region, but possibly a sequence named "foo:a"
-                    _tid = bam_name2id(base->header, str);
-                    _beg = 0;
-                }
-
-                if (_tid >= 0) {
+                if (sam_parse_region(base->header, str, &_tid, &_beg, &_end, 0) && _tid >= 0) {
                     *tid = _tid; *pos = _beg;
                     return;
                 }
@@ -202,9 +181,6 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, int *pos)
         mvwprintw(tv->wgoto, 1, 8, "%s", str);
     }
 }
-
-
-
 
 static void tv_win_help(curses_tview_t *tv) {
     int r = 1;
@@ -243,14 +219,13 @@ static void tv_win_help(curses_tview_t *tv) {
     wgetch(win);
 }
 
-static int curses_underline(tview_t* tv)
-    {
+static int curses_underline(tview_t* tv) {
     return A_UNDERLINE;
-    }
+}
 
-static int curses_loop(tview_t* tv)
-    {
-    int tid, pos;
+static int curses_loop(tview_t* tv) {
+    int tid;
+    hts_pos_t pos;
     curses_tview_t *CTV=(curses_tview_t *)tv;
     tid = tv->curr_tid; pos = tv->left_pos;
     while (1) {
@@ -303,21 +278,16 @@ end_loop:
     return 0;
 }
 
-
-
-
 tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
-                        const htsFormat *fmt)
-    {
+                        const htsFormat *fmt) {
     curses_tview_t *tv = (curses_tview_t*)calloc(1, sizeof(curses_tview_t));
     tview_t* base=(tview_t*)tv;
-    if(tv==0)
-        {
+    if(tv==0) {
         fprintf(stderr,"Calloc failed\n");
         return 0;
-        }
+    }
 
-    base_tv_init(base,fn,fn_fa,samples,fmt);
+    base_tv_init(base,fn,fn_fa,NULL,samples,fmt);
     /* initialize callbacks */
 #define SET_CALLBACK(fun) base->my_##fun=curses_##fun;
     SET_CALLBACK(destroy);
@@ -345,17 +315,16 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
     start_color();
     curses_init_colors(0);
     return base;
-    }
+}
 
 #else // !HAVE_CURSES
 
-extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples,
+extern tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *fn_idx, const char *samples,
                              const htsFormat *fmt);
 
 tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
-                        const htsFormat *fmt)
-    {
-    return text_tv_init(fn,fn_fa,samples,fmt);
-    }
+                        const htsFormat *fmt) {
+    return text_tv_init(fn,fn_fa,NULL,samples,fmt);
+}
 
 #endif

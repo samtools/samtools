@@ -1,0 +1,131 @@
+'\" t
+.TH samtools-collate 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools collate \- shuffles and groups reads together by their names
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools collate
+.RI [ options ]
+.IR in.sam | in.bam | in.cram " [" <prefix> "]"
+
+.SH DESCRIPTION
+.PP
+Shuffles and groups reads together by their names.
+A faster alternative to a full query name sort,
+.B collate
+ensures that reads of the same name are grouped together in contiguous groups,
+but doesn't make any guarantees about the order of read names between groups.
+
+The output from this command should be suitable for any operation that
+requires all reads from the same template to be grouped together.
+
+If present, <prefix> is used to name the temporary files that collate
+uses when sorting the data.  If neither the '-O' nor '-o' options are used,
+<prefix> must be present and collate will use it to make an output file name
+by appending a suffix depending on the format written (.bam by default).
+
+If either the -O or -o option is used, <prefix> is optional.  If <prefix>
+is absent, collate will write the temporary files to a system-dependent
+location (/tmp on UNIX).
+
+Using -f for fast mode will output \fBonly\fR primary alignments that have
+either the READ1 \fBor\fR READ2 flags set (but not both).
+Any other alignment records will be filtered out.
+The collation will only work correctly if there are no more than two reads
+for any given QNAME after filtering.
+
+Fast mode keeps a buffer of alignments in memory so that it can write out
+most pairs as soon as they are found instead of storing them in temporary
+files.
+This allows collate to avoid some work and so finish more quickly compared
+to the standard mode.
+The number of alignments held can be changed using -r, storing more alignments
+uses more memory but increases the number of pairs that can be written early.
+
+While collate normally randomises the ordering of read pairs, fast mode
+does not.
+Position-dependent biases that would normally be broken up can remain in the
+fast collate output.
+It is therefore not a good idea to use fast mode when preparing data for
+programs that expect randomly ordered paired reads.
+For example using fast collate instead of the standard mode may lead to
+significantly different results from aligners that estimate library insert
+sizes on batches of reads.
+
+.SH OPTIONS
+.TP 8
+.B -O
+Output to stdout.  This option cannot be used with '-o'.
+.TP
+.B -o FILE
+Write output to FILE.  This option cannot be used with '-O'.
+.TP
+.B -u
+Write uncompressed BAM output
+.TP
+.BI "-l "  INT
+Compression level.
+[1]
+.TP
+.BI "-n " INT
+Number of temporary files to use.
+[64]
+.TP
+.B -f
+Fast mode (primary alignments only).
+.TP
+.BI "-r " INT
+Number of reads to store in memory (for use with -f).
+[10000]
+.TP
+.BI --no-PG
+Do not add a @PG line to the header of the output file.
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute and extended by Andrew Whitwham.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-sort (1)
+.PP
+Samtools website: <http://www.htslib.org/>

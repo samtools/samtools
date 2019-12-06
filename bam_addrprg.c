@@ -1,6 +1,6 @@
 /* bam_addrprg.c -- samtools command to add or replace readgroups.
 
-   Copyright (c) 2013, 2015, 2016 Genome Research Limited.
+   Copyright (c) 2013, 2015-2017, 2019 Genome Research Limited.
 
    Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -47,6 +47,7 @@ struct parsed_opts {
     char* output_name;
     char* rg_id;
     char* rg_line;
+    int no_pg;
     rg_mode mode;
     sam_global_args ga;
     htsThreadPool p;
@@ -58,9 +59,9 @@ typedef struct state state_t;
 
 struct state {
     samFile* input_file;
-    bam_hdr_t* input_header;
+    sam_hdr_t* input_header;
     samFile* output_file;
-    bam_hdr_t* output_header;
+    sam_hdr_t* output_header;
     char* rg_id;
     void (*mode_func)(const state_t*, bam1_t*);
 };
@@ -71,6 +72,7 @@ static void cleanup_opts(parsed_opts_t* opts)
     free(opts->rg_id);
     free(opts->output_name);
     free(opts->input_name);
+    free(opts->rg_line);
     if (opts->p.pool) hts_tpool_destroy(opts->p.pool);
     sam_global_args_free(&opts->ga);
     free(opts);
@@ -81,9 +83,9 @@ static void cleanup_state(state_t* state)
     if (!state) return;
     free(state->rg_id);
     if (state->output_file) sam_close(state->output_file);
-    bam_hdr_destroy(state->output_header);
+    sam_hdr_destroy(state->output_header);
     if (state->input_file) sam_close(state->input_file);
-    bam_hdr_destroy(state->input_header);
+    sam_hdr_destroy(state->input_header);
     free(state);
 }
 
@@ -147,20 +149,6 @@ static char *dup_substring(const char *s, const char *slim, size_t *lenp)
     return ns;
 }
 
-// These are to be replaced by samtools header parser
-// Extracts the first @RG line from a string.
-static char* get_rg_line(const char* text, size_t* last)
-{
-    const char* rg = text;
-    if (rg[0] != '@' || rg[1] != 'R' || rg[2] != 'G' ) {
-        if ((rg = (const char*)strstr(text,"\n@RG")) == NULL) {
-            return NULL;
-        }
-        rg++;//skip initial \n
-    }
-    // duplicate the line for return
-    return dup_substring(rg, strchr(rg, '\n'), last);
-}
 
 // Given a @RG line return the id
 static char* get_rg_id(const char *line)
@@ -172,44 +160,6 @@ static char* get_rg_id(const char *line)
     return dup_substring(id, strchr(id, '\t'), NULL);
 }
 
-// Confirms the existance of an RG line with a given ID in a bam header
-static bool confirm_rg( const bam_hdr_t *hdr, const char* rgid )
-{
-    assert( hdr != NULL && rgid != NULL );
-
-    const char *ptr = hdr->text;
-    bool found = false;
-    while (ptr != NULL && *ptr != '\0' && found == false ) {
-        size_t end = 0;
-        char* line = get_rg_line(ptr, &end);
-        if (line == NULL) break; // No more @RG
-        char* id;
-        if (((id = get_rg_id(line)) != NULL) && !strcmp(id, rgid)) {
-            found = true;
-        }
-        free(id);
-        free(line);
-        ptr += end;
-    }
-    return found;
-}
-
-static char* get_first_rgid( const bam_hdr_t *hdr )
-{
-    assert( hdr != NULL );
-    const char *ptr = hdr->text;
-    char* found = NULL;
-    while (ptr != NULL && *ptr != '\0' && found == NULL ) {
-        size_t end = 0;
-        char* line = get_rg_line(ptr, &end);
-        if ( line ) {
-            found = get_rg_id(line);
-        } else break;
-        free(line);
-        ptr += end;
-    }
-    return found;
-}
 
 static void usage(FILE *fp)
 {
@@ -221,8 +171,9 @@ static void usage(FILE *fp)
             "  -o FILE   Where to write output to [stdout]\n"
             "  -r STRING @RG line text\n"
             "  -R STRING ID of @RG line in existing header to use\n"
+            "  --no-PG   Do not add a PG line\n"
             );
-    sam_global_opt_help(fp, "..O..@");
+    sam_global_opt_help(fp, "..O..@..");
 }
 
 static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
@@ -242,6 +193,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     sam_global_args_init(&retval->ga);
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS(0, 0, 'O', 0, 0, '@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
     kstring_t rg_line = {0,0,NULL};
@@ -280,6 +232,9 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
                 usage(stdout);
                 free(retval);
                 return true;
+            case 1:
+                retval->no_pg = 1;
+                break;
             case '?':
                 usage(stderr);
                 free(retval);
@@ -316,6 +271,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
             cleanup_opts(retval);
             return false;
         }
+        free(retval->rg_line);
         retval->rg_line = tmp;
     }
     retval->input_name = strdup(argv[optind+0]);
@@ -375,7 +331,7 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     }
     retval->input_header = sam_hdr_read(retval->input_file);
 
-    retval->output_header = bam_hdr_dup(retval->input_header);
+    retval->output_header = sam_hdr_dup(retval->input_header);
     if (opts->output_name) // File format auto-detection
         sam_open_mode(output_mode + 1, opts->output_name, NULL);
     retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, output_mode, &opts->ga.out);
@@ -393,34 +349,39 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     if (opts->rg_line) {
         // Append new RG line to header.
         // Check does not already exist
-        if ( confirm_rg(retval->output_header, opts->rg_id) ) {
+        kstring_t hdr_line = { 0, 0, NULL };
+        if (sam_hdr_find_line_id(retval->output_header, "RG", "ID", opts->rg_id, &hdr_line) == 0) {
             fprintf(stderr, "[init] ID of new RG line specified conflicts with that of an existing header RG line. Overwrite not yet implemented.\n");
+            free(hdr_line.s);
+            return false;
+        }
+        if (-1 == sam_hdr_add_lines(retval->output_header, opts->rg_line, strlen(opts->rg_line))) {
+            fprintf(stderr, "[init] Error adding RG line with ID:%s to the output header.\n", opts->rg_id);
+            return false;
+        }
+        if (opts->mode == overwrite_all &&
+            -1 == sam_hdr_remove_except(retval->output_header, "RG", "ID", opts->rg_id)) {
+            fprintf(stderr, "[init] Error removing the old RG lines from the output header.\n");
             return false;
         }
         retval->rg_id = strdup(opts->rg_id);
-        size_t new_len = strlen( retval->output_header->text ) + strlen( opts->rg_line ) + 2;
-        char* new_header = malloc(new_len);
-        if (!new_header) {
-            fprintf(stderr, "[init] Out of memory whilst writing new header.\n");
-            return false;
-        }
-        sprintf(new_header,"%s%s\n", retval->output_header->text, opts->rg_line);
-        free(retval->output_header->text);
-        retval->output_header->text = new_header;
-        retval->output_header->l_text = (int)new_len - 1;
     } else {
         if (opts->rg_id) {
             // Confirm what has been supplied exists
-            if ( !confirm_rg(retval->output_header, opts->rg_id) ) {
+            kstring_t hdr_line = { 0, 0, NULL };
+            if (sam_hdr_find_line_id(retval->output_header, "RG", "ID", opts->rg_id, &hdr_line) < 0) {
                 fprintf(stderr, "RG ID supplied does not exist in header. Supply full @RG line with -r instead?\n");
                 return false;
             }
             retval->rg_id = strdup(opts->rg_id);
+            free(hdr_line.s);
         } else {
-            if ((retval->rg_id = get_first_rgid(retval->output_header)) == NULL ) {
+            kstring_t rg_id = { 0, 0, NULL };
+            if (sam_hdr_find_tag_id(retval->output_header, "RG", NULL, NULL, "ID", &rg_id) < 0) {
                 fprintf(stderr, "No RG specified on command line or in existing header.\n");
                 return false;
             }
+            retval->rg_id = ks_release(&rg_id);
         }
     }
 
@@ -436,11 +397,23 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     return true;
 }
 
-static bool readgroupise(state_t* state)
+static bool readgroupise(parsed_opts_t *opts, state_t* state, char *arg_list)
 {
+    if (!opts->no_pg && sam_hdr_add_pg(state->output_header, "samtools",
+                                       "VN", samtools_version(),
+                                       arg_list ? "CL": NULL,
+                                       arg_list ? arg_list : NULL,
+                                       NULL))
+        return false;
+
     if (sam_hdr_write(state->output_file, state->output_header) != 0) {
         print_error_errno("addreplacerg", "[%s] Could not write header to output file", __func__);
         return false;
+    }
+    char *idx_fn = NULL;
+    if (opts->ga.write_index) {
+        if (!(idx_fn = auto_index(state->output_file, opts->output_name, state->output_header)))
+            return false;
     }
 
     bam1_t* file_read = bam_init1();
@@ -451,14 +424,25 @@ static bool readgroupise(state_t* state)
         if (sam_write1(state->output_file, state->output_header, file_read) < 0) {
             print_error_errno("addreplacerg", "[%s] Could not write read to output file", __func__);
             bam_destroy1(file_read);
+            free(idx_fn);
             return false;
         }
     }
     bam_destroy1(file_read);
     if (ret != -1) {
         print_error_errno("addreplacerg", "[%s] Error reading from input file", __func__);
+        free(idx_fn);
         return false;
     } else {
+
+        if (opts->ga.write_index) {
+            if (sam_idx_save(state->output_file) < 0) {
+                print_error_errno("addreplacerg", "[%s] Writing index failed", __func__);
+                free(idx_fn);
+                return false;
+            }
+        }
+        free(idx_fn);
         return true;
     }
 }
@@ -467,20 +451,25 @@ int main_addreplacerg(int argc, char** argv)
 {
     parsed_opts_t* opts = NULL;
     state_t* state = NULL;
+    char *arg_list = stringify_argv(argc+1, argv-1);
+    if (!arg_list)
+        return EXIT_FAILURE;
 
     if (!parse_args(argc, argv, &opts)) goto error;
-    if (opts == NULL) return EXIT_SUCCESS; // Not an error but user doesn't want us to proceed
-    if (!opts || !init(opts, &state)) goto error;
-
-    if (!readgroupise(state)) goto error;
+    if (opts) { // Not an error but user doesn't want us to proceed
+        if (!init(opts, &state) || !readgroupise(opts, state, arg_list))
+            goto error;
+    }
 
     cleanup_state(state);
     cleanup_opts(opts);
+    free(arg_list);
 
     return EXIT_SUCCESS;
 error:
     cleanup_state(state);
     cleanup_opts(opts);
+    free(arg_list);
 
     return EXIT_FAILURE;
 }

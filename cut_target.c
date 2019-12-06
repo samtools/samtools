@@ -1,7 +1,7 @@
 /*  cut_target.c -- targetcut subcommand.
 
     Copyright (C) 2011 Broad Institute.
-    Copyright (C) 2012-2013, 2015, 2016 Genome Research Ltd.
+    Copyright (C) 2012-2013, 2015, 2016, 2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -49,9 +49,9 @@ typedef struct {
     int min_baseQ, tid, max_bases;
     uint16_t *bases;
     samFile *fp;
-    bam_hdr_t *h;
+    sam_hdr_t *h;
     char *ref;
-    int len;
+    hts_pos_t len;
     faidx_t *fai;
     errmod_t *em;
 } ct_t;
@@ -92,9 +92,10 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
     return ret<<8|k;
 }
 
-static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
+static void process_cns(sam_hdr_t *h, int tid, hts_pos_t l, uint16_t *cns)
 {
-    int i, f[2][2], *prev, *curr, *swap_tmp, s;
+    int64_t i, s;
+    int f[2][2], *prev, *curr, *swap_tmp;
     uint8_t *b; // backtrack array
     b = calloc(l, 1);
     f[0][0] = f[0][1] = 0;
@@ -123,11 +124,11 @@ static void process_cns(bam_hdr_t *h, int tid, int l, uint16_t *cns)
         s = b[i]>>s&1;
     }
     // print
-    for (i = 0, s = -1; i < INT_MAX && i <= l; ++i) {
+    for (i = 0, s = -1; i < INT64_MAX && i <= l; ++i) {
         if (i == l || ((b[i]>>2&3) == 0 && s >= 0)) {
             if (s >= 0) {
-                int j;
-                printf("%s:%d-%d\t0\t%s\t%d\t60\t%dM\t*\t0\t0\t", h->target_name[tid], s+1, i, h->target_name[tid], s+1, i-s);
+                int64_t j;
+                printf("%s:%"PRId64"-%"PRId64"\t0\t%s\t%"PRId64"\t60\t%"PRId64"M\t*\t0\t0\t", sam_hdr_tid2name(h, tid), s+1, i, sam_hdr_tid2name(h, tid), s+1, i-s);
                 for (j = s; j < i; ++j) {
                     int c = cns[j]>>8;
                     if (c == 0) putchar('N');
@@ -157,7 +158,7 @@ static int read_aln(void *data, bam1_t *b)
         if ( g->fai && b->core.tid >= 0 ) {
             if (b->core.tid != g->tid) { // then load the sequence
                 free(g->ref);
-                g->ref = fai_fetch(g->fai, g->h->target_name[b->core.tid], &g->len);
+                g->ref = fai_fetch64(g->fai, sam_hdr_tid2name(g->h, b->core.tid), &g->len);
                 g->tid = b->core.tid;
             }
             sam_prob_realn(b, g->ref, g->len, 1<<1|1);
@@ -169,7 +170,8 @@ static int read_aln(void *data, bam1_t *b)
 
 int main_cut_target(int argc, char *argv[])
 {
-    int c, tid, pos, n, lasttid = -1, l, max_l, usage = 0;
+    int c, tid, pos, n, lasttid = -1, usage = 0;
+    hts_pos_t l, max_l;
     const bam_pileup1_t *p;
     bam_plp_t plp;
     uint16_t *cns;
@@ -201,7 +203,7 @@ int main_cut_target(int argc, char *argv[])
     }
     if (usage || argc == optind) {
         fprintf(stderr, "Usage: samtools targetcut [-Q minQ] [-i inPen] [-0 em0] [-1 em1] [-2 em2] <in.bam>\n");
-        sam_global_opt_help(stderr, "-.--f-");
+        sam_global_opt_help(stderr, "-.--f--.");
         return 1;
     }
     l = max_l = 0; cns = 0;
@@ -223,12 +225,12 @@ int main_cut_target(int argc, char *argv[])
         if (tid < 0) break;
         if (tid != lasttid) { // change of chromosome
             if (cns) process_cns(g.h, lasttid, l, cns);
-            if (max_l < g.h->target_len[tid]) {
-                max_l = g.h->target_len[tid];
+            if (max_l < sam_hdr_tid2len(g.h, tid)) {
+                max_l = sam_hdr_tid2len(g.h, tid);
                 kroundup32(max_l);
                 cns = realloc(cns, max_l * 2);
             }
-            l = g.h->target_len[tid];
+            l = sam_hdr_tid2len(g.h, tid);
             memset(cns, 0, max_l * 2);
             lasttid = tid;
         }
@@ -236,7 +238,7 @@ int main_cut_target(int argc, char *argv[])
     }
     process_cns(g.h, lasttid, l, cns);
     free(cns);
-    bam_hdr_destroy(g.h);
+    sam_hdr_destroy(g.h);
     bam_plp_destroy(plp);
     sam_close(g.fp);
     if (g.fai) {

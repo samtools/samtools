@@ -1,6 +1,6 @@
 /*  samtools.h -- utility routines.
 
-    Copyright (C) 2013-2015 Genome Research Ltd.
+    Copyright (C) 2013-2015, 2019 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -25,15 +25,28 @@ DEALINGS IN THE SOFTWARE.  */
 #ifndef SAMTOOLS_H
 #define SAMTOOLS_H
 
+#include "htslib/hts_defs.h"
+#include "htslib/sam.h"
+
 const char *samtools_version(void);
 
-#if defined __GNUC__ && __GNUC__ >= 2
-#define CHECK_PRINTF(fmt,args) __attribute__ ((format (printf, fmt, args)))
-#else
-#define CHECK_PRINTF(fmt,args)
-#endif
+#define CHECK_PRINTF(fmt,args) HTS_FORMAT(HTS_PRINTF_FMT, (fmt), (args))
 
 void print_error(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
 void print_error_errno(const char *subcommand, const char *format, ...) CHECK_PRINTF(2, 3);
+
+void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp);
+
+/*
+ * Utility function to add an index to a file we've opened for write.
+ * NB: Call this after writing the header and before writing sequences.
+ *
+ * The returned index filename should be freed by the caller, but only
+ * after sam_idx_save has been called.
+ *
+ * Returns index filename on success,
+ *         NULL on failure.
+ */
+char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header);
 
 #endif

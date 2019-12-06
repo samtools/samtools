@@ -1,6 +1,7 @@
 /*  bam_tview_html.c -- HTML tview output.
 
     Copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
+    Copyright (C) 2019 Genome Research Ltd.
 
     Author: Pierre Lindenbaum <plindenbaum@yahoo.fr>
 
@@ -131,15 +132,15 @@ static int html_colorpair(struct AbstractTview* tv,int flag)
     return (1 << (flag));
     }
 
-static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
+static int html_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos)
     {
     int y,x;
     html_tview_t* ptr=FROM_TV(tv);
     html_clear(tv);
     base_draw_aln(tv,  tid, pos);
     fputs("<html><head>",ptr->out);
-    fprintf(ptr->out,"<title>%s:%d</title>",
-        tv->header->target_name[tid],
+    fprintf(ptr->out,"<title>%s:%"PRIhts_pos"</title>",
+        sam_hdr_tid2name(tv->header, tid),
         pos+1
         );
     //style
@@ -164,8 +165,8 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
 
     fputs("</head><body>",ptr->out);
 
-      fprintf(ptr->out,"<div class='tviewbody'><div class='tviewtitle'>%s:%d</div>",
-        tv->header->target_name[tid],
+      fprintf(ptr->out,"<div class='tviewbody'><div class='tviewtitle'>%s:%"PRIhts_pos"</div>",
+        sam_hdr_tid2name(tv->header, tid),
         pos+1
         );
 
@@ -233,7 +234,7 @@ static int html_drawaln(struct AbstractTview* tv, int tid, int pos)
 #define ANSI_UNDERLINE_SET "\033[4m"
 #define ANSI_UNDERLINE_UNSET "\033[0m"
 
-static int text_drawaln(struct AbstractTview* tv, int tid, int pos)
+static int text_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos)
     {
     int y,x;
     html_tview_t* ptr=FROM_TV(tv);
@@ -314,7 +315,7 @@ static void init_pair(html_tview_t *tv,int id_ge_1, const char* pen, const char*
     }
 */
 
-tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples,
+tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *fn_idx, const char *samples,
                       const htsFormat *fmt)
     {
     char* colstr=getenv("COLUMNS");
@@ -329,7 +330,7 @@ tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples,
     tv->screen=NULL;
     tv->out=stdout;
     tv->attributes=0;
-    base_tv_init(base,fn,fn_fa,samples,fmt);
+    base_tv_init(base,fn,fn_fa,fn_idx,samples,fmt);
     /* initialize callbacks */
 #define SET_CALLBACK(fun) base->my_##fun=html_##fun;
     SET_CALLBACK(destroy);
@@ -367,10 +368,10 @@ tview_t* html_tv_init(const char *fn, const char *fn_fa, const char *samples,
     }
 
 
-tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *samples,
+tview_t* text_tv_init(const char *fn, const char *fn_fa, const char *fn_idx, const char *samples,
                       const htsFormat *fmt)
     {
-    tview_t* tv=html_tv_init(fn,fn_fa,samples,fmt);
+    tview_t* tv=html_tv_init(fn,fn_fa,fn_idx,samples,fmt);
     tv->my_drawaln=text_drawaln;
     return tv;
     }

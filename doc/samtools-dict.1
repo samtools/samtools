@@ -1,0 +1,93 @@
+'\" t
+.TH samtools-dict 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools dict \- create a sequence dictionary file from a fasta file
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools dict
+.IR ref.fasta | ref.fasta.gz
+
+.SH DESCRIPTION
+.PP
+Create a sequence dictionary file from a fasta file.
+
+.SH OPTIONS
+.TP 11
+.BI -a,\ --assembly \ STR
+Specify the assembly for the AS tag.
+.TP
+.B -H,\ --no-header
+Do not print the @HD header line.
+.TP
+.BI -o,\ --output \ FILE
+Output to
+.I FILE
+[stdout].
+.TP
+.BI -s,\ --species \ STR
+Specify the species for the SP tag.
+.TP
+.BI -u,\ --uri \ STR
+Specify the URI for the UR tag. Defaults to
+the absolute path of
+.I ref.fasta
+unless reading from stdin.
+
+.SH AUTHOR
+.PP
+Written by Shane McCarthy from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR bcftools (1),
+.IR sam (5),
+.IR tabix (1)
+.PP
+Samtools website: <http://www.htslib.org/>
+.br
+File format specification of SAM/BAM,CRAM,VCF/BCF: <http://samtools.github.io/hts-specs>
+.br
+Samtools latest source: <https://github.com/samtools/samtools>
+.br
+HTSlib latest source: <https://github.com/samtools/htslib>
+.br
+Bcftools website: <http://samtools.github.io/bcftools>

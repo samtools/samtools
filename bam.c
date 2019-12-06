@@ -1,6 +1,6 @@
 /*  bam.c -- BAM format.
 
-    Copyright (C) 2008-2013, 2015 Genome Research Ltd.
+    Copyright (C) 2008-2013, 2015, 2019 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -30,7 +30,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <errno.h>
 #include "bam.h"
 #include "htslib/kstring.h"
-#include "sam_header.h"
 
 char *bam_format1(const bam_header_t *header, const bam1_t *b)
 {
@@ -59,7 +58,7 @@ int bam_validate1(const bam_header_t *header, const bam1_t *b)
     char *s;
 
     if (b->core.tid < -1 || b->core.mtid < -1) return 0;
-    if (header && (b->core.tid >= header->n_targets || b->core.mtid >= header->n_targets)) return 0;
+    if (header && (b->core.tid >= sam_hdr_nref(header) || b->core.mtid >= sam_hdr_nref(header))) return 0;
 
     if (b->data_len < b->core.l_qname) return 0;
     s = memchr(bam1_qname(b), '\0', b->core.l_qname);
@@ -77,9 +76,8 @@ int bam_validate1(const bam_header_t *header, const bam1_t *b)
 // FIXME: we should also check the LB tag associated with each alignment
 const char *bam_get_library(bam_header_t *h, const bam1_t *b)
 {
-    // Slow and inefficient.  Rewrite once we get a proper header API.
     const char *rg;
-    char *cp = h->text;
+    kstring_t lib = { 0, 0, NULL };
     rg = (char *)bam_aux_get(b, "RG");
 
     if (!rg)
@@ -87,50 +85,18 @@ const char *bam_get_library(bam_header_t *h, const bam1_t *b)
     else
         rg++;
 
-    // Header is guaranteed to be nul terminated, so this is valid.
-    while (*cp) {
-        char *ID, *LB;
-        char last = '\t';
+    if (sam_hdr_find_tag_id(h, "RG", "ID", rg, "LB", &lib)  < 0)
+        return NULL;
 
-        // Find a @RG line
-        if (strncmp(cp, "@RG", 3) != 0) {
-            while (*cp && *cp != '\n') cp++; // skip line
-            if (*cp) cp++;
-            continue;
-        }
+    static char LB_text[1024];
+    int len = lib.l < sizeof(LB_text) - 1 ? lib.l : sizeof(LB_text) - 1;
 
-        // Find ID: and LB: keys
-        cp += 4;
-        ID = LB = NULL;
-        while (*cp && *cp != '\n') {
-            if (last == '\t') {
-                if (strncmp(cp, "LB:", 3) == 0)
-                    LB = cp+3;
-                else if (strncmp(cp, "ID:", 3) == 0)
-                    ID = cp+3;
-            }
-            last = *cp++;
-        }
+    memcpy(LB_text, lib.s, len);
+    LB_text[len] = 0;
 
-        if (!ID || !LB)
-            continue;
+    free(lib.s);
 
-        // Check it's the correct ID
-        if (strncmp(rg, ID, strlen(rg)) != 0 || ID[strlen(rg)] != '\t')
-            continue;
-
-        // Valid until next query
-        static char LB_text[1024];
-        for (cp = LB; *cp && *cp != '\t' && *cp != '\n'; cp++)
-            ;
-        strncpy(LB_text, LB, MIN(cp-LB, 1023));
-        LB_text[MIN(cp-LB, 1023)] = 0;
-
-        // Return it; valid until the next query.
-        return LB_text;
-    }
-
-    return NULL;
+    return LB_text;
 }
 
 int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)

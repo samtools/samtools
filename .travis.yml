@@ -4,20 +4,44 @@ language: c
 
 matrix:
   include:
+    # An optimised build with address and leak checking
     - os: linux
       compiler: clang
+      sudo: required
+      env: CFLAGS="-g -Wall -O3 -fsanitize=address" LDFLAGS="-fsanitize=address -Wl,-rpath,`pwd`/inst/lib"
     - os: linux
-      compiler: gcc
+      compiler: gcc-8
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - gcc-8
+      env:
+        - CC=gcc-8
+        - AR=gcc-ar-8
     # An unoptimised C99 build, for detecting non-static inline functions
     - os: linux
-      compiler: gcc
-      env: CFLAGS="-std=gnu99 -O0"
+      compiler: gcc-8
+      addons:
+        apt:
+          sources:
+            - ubuntu-toolchain-r-test
+          packages:
+            - gcc-8
+      env:
+        - CC=gcc-8
+        - AR=gcc-ar-8
+        - CFLAGS="-std=gnu99 -O0"
+        - DO_MAINTAINER_CHECKS=yes
     - os: osx
       compiler: clang
+    - os: linux
+      compiler: gcc
 
 env:
   global:
-    - HTSDIR=./htslib
+    - HTSDIR=./hidden-htslib
 
 # For linux systems
 addons:
@@ -25,10 +49,6 @@ addons:
     packages:
     - liblzma-dev
     - libbz2-dev
-
-# For MacOSX systems
-before_install:
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then HOMEBREW_NO_AUTO_UPDATE=1 brew install xz || ( brew update && brew install xz ); fi
 
 before_script:
   # Clone htslib, trying the same branch name in the owners' copy of htslib.
@@ -39,4 +59,19 @@ before_script:
   # Logic for choosing which to use is in the .travis/clone script.
   - .travis/clone "git://github.com/$(dirname $TRAVIS_REPO_SLUG)/htslib.git" "$HTSDIR" "$TRAVIS_BRANCH"
 
-script: make -e && make -e test
+script:
+  - |
+    autoreconf -i && \
+    (cd $HTSDIR && \
+      autoreconf -i && \
+      ./configure --prefix=`pwd`/../inst && \
+      make -e install \
+    ) && \
+    (./configure --enable-werror --with-htslib=`pwd`/inst  LDFLAGS="$LDFLAGS -Wl,-rpath,`pwd`/inst/lib" || \
+      (cat config.log; /bin/false) \
+    ) && \
+    if test "x$DO_MAINTAINER_CHECKS" = "xyes" ; then
+        make -e maintainer-check
+    fi && \
+    make -e && \
+    make -e test BGZIP=inst/bin/bgzip

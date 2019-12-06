@@ -1,7 +1,7 @@
 /*  bamshuf.c -- collate subcommand.
 
     Copyright (C) 2012 Broad Institute.
-    Copyright (C) 2013, 2015, 2018 Genome Research Ltd.
+    Copyright (C) 2013, 2015-2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -164,7 +164,7 @@ static void destroy_bam_list(bam_list_t *list) {
 }
 
 
-static inline int write_to_bin_file(bam1_t *bam, int64_t *count, samFile **bin_files, char **names, bam_hdr_t *header, int files) {
+static inline int write_to_bin_file(bam1_t *bam, int64_t *count, samFile **bin_files, char **names, sam_hdr_t *header, int files) {
     uint32_t x;
 
     x = hash_X31_Wang(bam_get_qname(bam)) % files;
@@ -181,13 +181,13 @@ static inline int write_to_bin_file(bam1_t *bam, int64_t *count, samFile **bin_f
 
 
 static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
-                   int is_stdout, const char *output_file, int fast, int store_max, sam_global_args *ga)
+                   int is_stdout, const char *output_file, int fast, int store_max, sam_global_args *ga, char *arg_list, int no_pg)
 {
     samFile *fp, *fpw = NULL, **fpt = NULL;
     char **fnt = NULL, modew[8];
     bam1_t *b = NULL;
     int i, counter, l, r;
-    bam_hdr_t *h = NULL;
+    sam_hdr_t *h = NULL;
     int64_t j, max_cnt = 0, *cnt = NULL;
     elem_t *a = NULL;
     htsThreadPool p = {NULL, 0};
@@ -214,14 +214,10 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         goto fail;
     }
 
-    if (sam_hdr_change_HD(h, "SO", "unsorted") != 0) {
-        print_error("collate",
-                    "failed to change sort order header to 'unsorted'\n");
-        goto fail;
-    }
-    if (sam_hdr_change_HD(h, "GO", "query") != 0) {
-        print_error("collate",
-                    "failed to change group order header to 'query'\n");
+    if ((-1 == sam_hdr_update_hd(h, "SO", "unsorted", "GO", "query"))
+     && (-1 == sam_hdr_add_line(h, "HD", "VN", SAM_FORMAT_VERSION, "SO", "unsorted", "GO", "query", NULL))
+     ) {
+        print_error("collate", "failed to update HD line\n");
         goto fail;
     }
 
@@ -253,6 +249,15 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         goto fail;
     }
     if (p.pool) hts_set_opt(fpw, HTS_OPT_THREAD_POOL, &p);
+
+    if (!no_pg && sam_hdr_add_pg(h, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL)) {
+        print_error("collate", "failed to add PG line to header of \"%s\"", output_file);
+        goto fail;
+    }
 
     if (sam_hdr_write(fpw, h) < 0) {
         print_error_errno("collate", "Couldn't write header");
@@ -459,7 +464,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
             goto fail;
         }
         if (p.pool) hts_set_opt(fp, HTS_OPT_THREAD_POOL, &p);
-        bam_hdr_destroy(sam_hdr_read(fp)); // Skip over header
+        sam_hdr_destroy(sam_hdr_read(fp)); // Skip over header
 
         // Slurp in one of the split files
         for (j = 0; j < c; ++j) {
@@ -485,7 +490,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
         }
     }
 
-    bam_hdr_destroy(h);
+    sam_hdr_destroy(h);
     for (j = 0; j < max_cnt; ++j) bam_destroy1(a[j].b);
     free(a); free(fnt); free(cnt);
     sam_global_args_free(ga);
@@ -503,7 +508,7 @@ static int bamshuf(const char *fn, int n_files, const char *pre, int clevel,
  fail:
     if (fp) sam_close(fp);
     if (fpw) sam_close(fpw);
-    if (h) bam_hdr_destroy(h);
+    if (h) sam_hdr_destroy(h);
     for (i = 0; i < n_files; ++i) {
         if (fnt) free(fnt[i]);
         if (fpt && fpt[i]) sam_close(fpt[i]);
@@ -530,10 +535,11 @@ static int usage(FILE *fp, int n_files, int reads_store) {
             "      -f       fast (only primary alignments)\n"
             "      -r       working reads stored (with -f) [%d]\n" // reads_store
             "      -l INT   compression level [%d]\n" // DEF_CLEVEL
-            "      -n INT   number of temporary files [%d]\n", // n_files
+            "      -n INT   number of temporary files [%d]\n" // n_files
+            "      --no-PG  do not add a PG line\n",
             reads_store, DEF_CLEVEL, n_files);
 
-    sam_global_opt_help(fp, "-....@");
+    sam_global_opt_help(fp, "-....@-.");
     fprintf(fp,
             "  <prefix> is required unless the -o or -O options are used.\n");
 
@@ -574,12 +580,13 @@ char * generate_prefix() {
 
 int main_bamshuf(int argc, char *argv[])
 {
-    int c, n_files = 64, clevel = DEF_CLEVEL, is_stdout = 0, is_un = 0, fast_coll = 0, reads_store = 10000, ret, pre_mem = 0;
+    int c, n_files = 64, clevel = DEF_CLEVEL, is_stdout = 0, is_un = 0, fast_coll = 0, reads_store = 10000, ret, pre_mem = 0, no_pg = 0;
     const char *output_file = NULL;
-    char *prefix = NULL;
+    char *prefix = NULL, *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0, '@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
@@ -592,6 +599,7 @@ int main_bamshuf(int argc, char *argv[])
         case 'o': output_file = optarg; break;
         case 'f': fast_coll = 1; break;
         case 'r': reads_store = atoi(optarg); break;
+        case 1: no_pg = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
         case '?': return usage(stderr, n_files, reads_store);
@@ -612,10 +620,16 @@ int main_bamshuf(int argc, char *argv[])
 
     if (!prefix) return EXIT_FAILURE;
 
+    if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
+        print_error("collate", "failed to create arg_list");
+        return 1;
+    }
+
     ret = bamshuf(argv[optind], n_files, prefix, clevel, is_stdout,
-                   output_file, fast_coll, reads_store, &ga);
+                   output_file, fast_coll, reads_store, &ga, arg_list, no_pg);
 
     if (pre_mem) free(prefix);
+    free(arg_list);
 
     return ret;
 }

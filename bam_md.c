@@ -1,6 +1,6 @@
 /*  bam_md.c -- calmd subcommand.
 
-    Copyright (C) 2009-2011, 2014-2015 Genome Research Ltd.
+    Copyright (C) 2009-2011, 2014-2015, 2019 Genome Research Ltd.
     Portions copyright (C) 2009-2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -46,12 +46,13 @@ DEALINGS IN THE SOFTWARE.  */
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
-void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm, int quiet_mode)
+void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max_nm, int quiet_mode)
 {
     uint8_t *seq = bam_get_seq(b);
     uint32_t *cigar = bam_get_cigar(b);
     bam1_core_t *c = &b->core;
-    int i, x, y, u = 0;
+    int i, y, u = 0;
+    hts_pos_t x;
     kstring_t *str;
     int32_t old_nm_i = -1, nm = 0;
 
@@ -67,7 +68,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm, i
                     if (flag&USE_EQUAL) seq[z/2] &= (z&1)? 0xf0 : 0x0f;
                     ++u;
                 } else {
-                    kputw(u, str); kputc(ref[x+j], str);
+                    kputw(u, str); kputc(toupper(ref[x+j]), str);
                     u = 0; ++nm;
                 }
             }
@@ -77,7 +78,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, int ref_len, int flag, int max_nm, i
             kputw(u, str); kputc('^', str);
             for (j = 0; j < l; ++j) {
                 if (x+j >= ref_len || ref[x+j] == '\0') break;
-                kputc(ref[x+j], str);
+                kputc(toupper(ref[x+j]), str);
             }
             u = 0;
             x += j; nm += j;
@@ -176,25 +177,28 @@ int calmd_usage() {
 "  -A       modify the quality string\n"
 "  -Q       use quiet mode to output less debug info to stdout\n"
 "  -r       compute the BQ tag (without -A) or cap baseQ by BAQ (with -A)\n"
-"  -E       extended BAQ for better sensitivity but lower specificity\n");
+"  -E       extended BAQ for better sensitivity but lower specificity\n"
+"  --no-PG  do not add a PG line\n");
 
-    sam_global_opt_help(stderr, "-....@");
+    sam_global_opt_help(stderr, "-....@-.");
     return 1;
 }
 
 int bam_fillmd(int argc, char *argv[])
 {
-    int c, flt_flag, tid = -2, ret, len, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag, quiet_mode;
+    int c, flt_flag, tid = -2, ret, is_bam_out, is_uncompressed, max_nm, is_realn, capQ, baq_flag, quiet_mode, no_pg = 0;
+    hts_pos_t len;
     htsThreadPool p = {NULL, 0};
     samFile *fp = NULL, *fpout = NULL;
-    bam_hdr_t *header = NULL;
+    sam_hdr_t *header = NULL;
     faidx_t *fai = NULL;
-    char *ref = NULL, mode_w[8], *ref_file;
+    char *ref = NULL, mode_w[8], *ref_file, *arg_list = NULL;
     bam1_t *b = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0,'@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
 
@@ -217,6 +221,7 @@ int bam_fillmd(int argc, char *argv[])
         case 'A': baq_flag |= 1; break;
         case 'E': baq_flag |= 2; break;
         case 'Q': quiet_mode = 1; break;
+        case 1: no_pg = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             fprintf(stderr, "[bam_fillmd] unrecognized option '-%c'\n\n", c);
             /* else fall-through */
@@ -234,8 +239,13 @@ int bam_fillmd(int argc, char *argv[])
         return 1;
     }
 
+    if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
+        print_error("calmd", "failed to create arg_list");
+        return 1;
+    }
+
     header = sam_hdr_read(fp);
-    if (header == NULL || header->n_targets == 0) {
+    if (header == NULL || sam_hdr_nref(header) == 0) {
         fprintf(stderr, "[bam_fillmd] input SAM does not have header. Abort!\n");
         goto fail;
     }
@@ -243,6 +253,14 @@ int bam_fillmd(int argc, char *argv[])
     fpout = sam_open_format("-", mode_w, &ga.out);
     if (fpout == NULL) {
         print_error_errno("calmd", "Failed to open output");
+        goto fail;
+    }
+    if (!no_pg && sam_hdr_add_pg(header, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL)) {
+        print_error("calmd", "failed to add PG line to header");
         goto fail;
     }
     if (sam_hdr_write(fpout, header) < 0) {
@@ -276,11 +294,11 @@ int bam_fillmd(int argc, char *argv[])
         if (b->core.tid >= 0) {
             if (tid != b->core.tid) {
                 free(ref);
-                ref = fai_fetch(fai, header->target_name[b->core.tid], &len);
+                ref = fai_fetch64(fai, sam_hdr_tid2name(header, b->core.tid), &len);
                 tid = b->core.tid;
                 if (ref == 0) { // FIXME: Should this always be fatal?
                     fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
-                            header->target_name[tid]);
+                            sam_hdr_tid2name(header, tid));
                     if (is_realn || capQ > 10) goto fail; // Would otherwise crash
                 }
             }
@@ -301,8 +319,9 @@ int bam_fillmd(int argc, char *argv[])
         goto fail;
     }
     bam_destroy1(b);
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
 
+    free(arg_list);
     free(ref);
     fai_destroy(fai);
     sam_close(fp);
@@ -315,9 +334,10 @@ int bam_fillmd(int argc, char *argv[])
     return 0;
 
  fail:
+    free(arg_list);
     free(ref);
     if (b) bam_destroy1(b);
-    if (header) bam_hdr_destroy(header);
+    if (header) sam_hdr_destroy(header);
     if (fai) fai_destroy(fai);
     if (fp) sam_close(fp);
     if (fpout) sam_close(fpout);

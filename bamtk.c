@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2018 Genome Research Ltd.
+    Copyright (C) 2008-2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -52,6 +52,7 @@ int main_cut_target(int argc, char *argv[]);
 int main_phase(int argc, char *argv[]);
 int main_cat(int argc, char *argv[]);
 int main_depth(int argc, char *argv[]);
+int main_coverage(int argc, char *argv[]);
 int main_bam2fq(int argc, char *argv[]);
 int main_pad2unpad(int argc, char *argv[]);
 int main_bedcov(int argc, char *argv[]);
@@ -109,6 +110,7 @@ static void usage(FILE *fp)
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
+"     coverage       alignment depth and percent coverage\n"
 "     depth          compute the depth\n"
 "     flagstat       simple stats\n"
 "     idxstats       BAM index stats\n"
@@ -166,14 +168,16 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "merge") == 0)     ret = bam_merge(argc-1, argv+1);
     else if (strcmp(argv[1], "sort") == 0)      ret = bam_sort(argc-1, argv+1);
     else if (strcmp(argv[1], "index") == 0)     ret = bam_index(argc-1, argv+1);
-    else if (strcmp(argv[1], "idxstats") == 0)  ret = bam_idxstats(argc-1, argv+1);
+    else if (strcmp(argv[1], "idxstat") == 0 ||
+             strcmp(argv[1], "idxstats") == 0)  ret = bam_idxstats(argc-1, argv+1);
     else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
     else if (strcmp(argv[1], "fqidx") == 0)     ret = fqidx_main(argc-1, argv+1);
     else if (strcmp(argv[1], "dict") == 0)      ret = dict_main(argc-1, argv+1);
     else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
     else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
     else if (strcmp(argv[1], "markdup") == 0)   ret = bam_markdup(argc-1, argv+1);
-    else if (strcmp(argv[1], "flagstat") == 0)  ret = bam_flagstat(argc-1, argv+1);
+    else if (strcmp(argv[1], "flagstat") == 0 ||
+             strcmp(argv[1], "flagstats") == 0) ret = bam_flagstat(argc-1, argv+1);
     else if (strcmp(argv[1], "calmd") == 0)     ret = bam_fillmd(argc-1, argv+1);
     else if (strcmp(argv[1], "fillmd") == 0)    ret = bam_fillmd(argc-1, argv+1);
     else if (strcmp(argv[1], "reheader") == 0)  ret = main_reheader(argc-1, argv+1);
@@ -181,6 +185,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "targetcut") == 0) ret = main_cut_target(argc-1, argv+1);
     else if (strcmp(argv[1], "phase") == 0)     ret = main_phase(argc-1, argv+1);
     else if (strcmp(argv[1], "depth") == 0)     ret = main_depth(argc-1, argv+1);
+    else if (strcmp(argv[1], "coverage") == 0)  ret = main_coverage(argc-1, argv+1);
     else if (strcmp(argv[1], "bam2fq") == 0 ||
              strcmp(argv[1], "fastq") == 0 ||
              strcmp(argv[1], "fasta") == 0)     ret = main_bam2fq(argc-1, argv+1);
@@ -189,8 +194,10 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "bedcov") == 0)    ret = main_bedcov(argc-1, argv+1);
     else if (strcmp(argv[1], "bamshuf") == 0)   ret = main_bamshuf(argc-1, argv+1);
     else if (strcmp(argv[1], "collate") == 0)   ret = main_bamshuf(argc-1, argv+1);
-    else if (strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
-    else if (strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
+    else if (strcmp(argv[1], "stat") == 0 ||
+             strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
+    else if (strcmp(argv[1], "flag") == 0 ||
+             strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
     else if (strcmp(argv[1], "split") == 0)     ret = main_split(argc-1, argv+1);
     else if (strcmp(argv[1], "quickcheck") == 0)  ret = main_quickcheck(argc-1, argv+1);
     else if (strcmp(argv[1], "addreplacerg") == 0) ret = main_addreplacerg(argc-1, argv+1);
@@ -203,7 +210,7 @@ int main(int argc, char *argv[])
         printf(
 "samtools %s\n"
 "Using htslib %s\n"
-"Copyright (C) 2018 Genome Research Ltd.\n",
+"Copyright (C) 2019 Genome Research Ltd.\n",
                samtools_version(), hts_version());
     }
     else if (strcmp(argv[1], "--version-only") == 0) {

@@ -1,0 +1,101 @@
+'\" t
+.TH samtools-split 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools split \- splits a file by read group.
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools split
+.RI [ options ]
+.IR merged.sam | merged.bam | merged.cram
+
+.SH DESCRIPTION
+.PP
+Splits a file by read group, producing one or more output files
+matching a common prefix (by default based on the input filename)
+each containing one read-group.
+
+The \fB-u\fR option may be used to specify the output filename for any
+records without an RG tag.
+
+.SH OPTIONS
+.TP 14
+.BI "-u " FILE1
+.RI "Put reads with no RG tag or an unrecognised RG tag into " FILE1
+.TP
+.BI "-h " FILE2
+.RI "Use the header from " FILE2 " when writing the file given in the " -u
+option.
+This header completely replaces the one from the input file.
+It must be compatible with the input file header, which means it must
+have the same number of references listed in the @SQ lines and the
+references must be in the same order and have the same lengths.
+.TP
+.BI "-f " STRING
+Output filename format string (see below)
+["%*_%#.%."]
+.TP
+.B -v
+Verbose output
+.TP
+.BI --no-PG
+Do not add a @PG line to the header of the output file.
+.PP
+Format string expansions:
+.TS
+center;
+lb l .
+%%	%
+%*	basename
+%#	@RG index
+%!	@RG ID
+%.	output format filename extension
+.TE
+
+.SH AUTHOR
+.PP
+Written by Martin Pollard from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-addreplacerg (1)
+.PP
+Samtools website: <http://www.htslib.org/>

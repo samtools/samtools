@@ -1,6 +1,6 @@
 /*  bam_mate.c -- fix mate pairing information and clean up flags.
 
-    Copyright (C) 2009, 2011-2017 Genome Research Ltd.
+    Copyright (C) 2009, 2011-2017, 2019 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
     Portions copyright (C) 2012 Peter Cock, The James Hutton Institute.
 
@@ -37,6 +37,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "samtools.h"
 
+
+#define MD_MIN_QUALITY 15
+
 /*
  * This function calculates ct tag for two bams, it assumes they are from the same template and
  * writes the tag to the first read in position terms.
@@ -44,7 +47,8 @@ DEALINGS IN THE SOFTWARE.  */
 static void bam_template_cigar(bam1_t *b1, bam1_t *b2, kstring_t *str)
 {
     bam1_t *swap;
-    int i, end;
+    int i;
+    hts_pos_t end;
     uint32_t *cigar;
     str->l = 0;
     if (b1->core.tid != b2->core.tid || b1->core.tid < 0 || b1->core.pos < 0 || b2->core.pos < 0 || b1->core.flag&BAM_FUNMAP || b2->core.flag&BAM_FUNMAP) return; // coordinateless or not on the same chr; skip
@@ -140,8 +144,8 @@ static bool plausibly_properly_paired(bam1_t* a, bam1_t* b)
 
     bam1_t* first = a;
     bam1_t* second = b;
-    int32_t a_pos = a->core.flag&BAM_FREVERSE ? bam_endpos(a) : a->core.pos;
-    int32_t b_pos = b->core.flag&BAM_FREVERSE ? bam_endpos(b) : b->core.pos;
+    hts_pos_t a_pos = a->core.flag&BAM_FREVERSE ? bam_endpos(a) : a->core.pos;
+    hts_pos_t  b_pos = b->core.flag&BAM_FREVERSE ? bam_endpos(b) : b->core.pos;
     if (a_pos > b_pos) {
         first = b;
         second = a;
@@ -226,7 +230,7 @@ static uint32_t calc_mate_score(bam1_t *b)
     int i;
 
     for (i = 0; i < b->core.l_qseq; i++) {
-        if (qual[i] >= 15) score += qual[i];
+        if (qual[i] >= MD_MIN_QUALITY) score += qual[i];
     }
 
     return score;
@@ -250,31 +254,34 @@ static int add_mate_score(bam1_t *src, bam1_t *dest)
 }
 
 // currently, this function ONLY works if each read has one hit
-static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int proper_pair_check, int add_ct, int do_mate_scoring)
+static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int proper_pair_check, int add_ct, int do_mate_scoring, char *arg_list, int no_pg)
 {
-    bam_hdr_t *header;
+    sam_hdr_t *header;
     bam1_t *b[2] = { NULL, NULL };
-    int curr, has_prev, pre_end = 0, cur_end = 0, result;
-    kstring_t str;
+    int curr, has_prev, result;
+    hts_pos_t pre_end = 0, cur_end = 0;
+    kstring_t str = KS_INITIALIZE;
 
-    str.l = str.m = 0; str.s = 0;
     header = sam_hdr_read(in);
     if (header == NULL) {
         fprintf(stderr, "[bam_mating_core] ERROR: Couldn't read header\n");
         return 1;
     }
+
     // Accept unknown, unsorted, or queryname sort order, but error on coordinate sorted.
-    if ((header->l_text > 3) && (strncmp(header->text, "@HD", 3) == 0)) {
-        char *p, *q;
-        p = strstr(header->text, "\tSO:coordinate");
-        q = strchr(header->text, '\n');
-        // Looking for SO:coordinate within the @HD line only
-        // (e.g. must ignore in a @CO comment line later in header)
-        if ((p != 0) && (p < q)) {
-            fprintf(stderr, "[bam_mating_core] ERROR: Coordinate sorted, require grouped/sorted by queryname.\n");
-            goto fail;
-        }
+    if (!sam_hdr_find_tag_hd(header, "SO", &str) && str.s && !strcmp(str.s, "coordinate")) {
+        fprintf(stderr, "[bam_mating_core] ERROR: Coordinate sorted, require grouped/sorted by queryname.\n");
+        goto fail;
     }
+    ks_free(&str);
+
+    if (!no_pg && sam_hdr_add_pg(header, "samtools",
+                                 "VN", samtools_version(),
+                                 arg_list ? "CL": NULL,
+                                 arg_list ? arg_list : NULL,
+                                 NULL))
+        goto fail;
+
     if (sam_hdr_write(out, header) < 0) goto write_fail;
 
     b[0] = bam_init1();
@@ -303,7 +310,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
             cur_end = bam_endpos(cur);
 
             // Check cur_end isn't past the end of the contig we're on, if it is set the UNMAP'd flag
-            if (cur_end > (int)header->target_len[cur->core.tid]) cur->core.flag |= BAM_FUNMAP;
+            if (cur_end > sam_hdr_tid2len(header, cur->core.tid)) cur->core.flag |= BAM_FUNMAP;
         }
         if (has_prev) { // do we have a pair of reads to examine?
             if (strcmp(bam_get_qname(cur), bam_get_qname(pre)) == 0) { // identical pair name
@@ -314,7 +321,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
                 if (pre->core.tid == cur->core.tid && !(cur->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))
                     && !(pre->core.flag&(BAM_FUNMAP|BAM_FMUNMAP))) // if safe set TLEN/ISIZE
                 {
-                    uint32_t cur5, pre5;
+                    hts_pos_t cur5, pre5;
                     cur5 = (cur->core.flag&BAM_FREVERSE)? cur_end : cur->core.pos;
                     pre5 = (pre->core.flag&BAM_FREVERSE)? pre_end : pre->core.pos;
                     cur->core.isize = pre5 - cur5; pre->core.isize = cur5 - pre5;
@@ -378,18 +385,19 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
 
         if (sam_write1(out, header, pre) < 0) goto write_fail;
     }
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     bam_destroy1(b[0]);
     bam_destroy1(b[1]);
-    free(str.s);
+    ks_free(&str);
     return 0;
 
  write_fail:
     print_error_errno("fixmate", "Couldn't write to output file");
  fail:
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     bam_destroy1(b[0]);
     bam_destroy1(b[1]);
+    ks_free(&str);
     return 1;
 }
 
@@ -401,9 +409,10 @@ void usage(FILE* where)
 "  -r           Remove unmapped reads and secondary alignments\n"
 "  -p           Disable FR proper pair check\n"
 "  -c           Add template cigar ct tag\n"
-"  -m           Add mate score tag\n");
+"  -m           Add mate score tag\n"
+"  --no-PG      do not add a PG line\n");
 
-    sam_global_opt_help(where, "-.O..@");
+    sam_global_opt_help(where, "-.O..@-.");
 
     fprintf(where,
 "\n"
@@ -416,13 +425,15 @@ int bam_mating(int argc, char *argv[])
 {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL;
-    int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0, res = 1, mate_score = 0;
+    int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0, res = 1, mate_score = 0, no_pg = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     char wmode[3] = {'w', 'b', 0};
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
+        {"no-PG", no_argument, NULL, 1},
         { NULL, 0, NULL, 0 }
     };
+    char *arg_list = NULL;
 
     // parse args
     if (argc == 1) { usage(stdout); return 0; }
@@ -432,12 +443,16 @@ int bam_mating(int argc, char *argv[])
             case 'p': proper_pair_check = 0; break;
             case 'c': add_ct = 1; break;
             case 'm': mate_score = 1; break;
+            case 1: no_pg = 1; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(stderr); goto fail;
         }
     }
     if (optind+1 >= argc) { usage(stderr); goto fail; }
+
+    if (!no_pg && !(arg_list =  stringify_argv(argc+1, argv-1)))
+        goto fail;
 
     // init
     if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {
@@ -460,7 +475,7 @@ int bam_mating(int argc, char *argv[])
     }
 
     // run
-    res = bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct, mate_score);
+    res = bam_mating_core(in, out, remove_reads, proper_pair_check, add_ct, mate_score, arg_list, no_pg);
 
     // cleanup
     sam_close(in);
@@ -470,6 +485,7 @@ int bam_mating(int argc, char *argv[])
     }
 
     if (p.pool) hts_tpool_destroy(p.pool);
+    free(arg_list);
     sam_global_args_free(&ga);
     return res;
 
@@ -477,6 +493,7 @@ int bam_mating(int argc, char *argv[])
     if (in) sam_close(in);
     if (out) sam_close(out);
     if (p.pool) hts_tpool_destroy(p.pool);
+    free(arg_list);
     sam_global_args_free(&ga);
     return 1;
 }

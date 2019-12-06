@@ -100,6 +100,8 @@ FBC	7	14.29	28.57	35.71	21.43	0.00	0.00
 FBC	8	21.43	28.57	28.57	21.43	0.00	0.00
 FBC	9	21.43	21.43	35.71	21.43	0.00	0.00
 FBC	10	14.29	28.57	35.71	21.43	0.00	0.00
+# ACGT raw counters for first fragments. Use `grep ^FTC | cut -f 2-` to extract this part. The columns are: A,C,G,T,N base counters
+FTC	24	43	45	28	0
 # ACGT content per cycle for last fragments. Use `grep ^LBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]; and N and O counts as a percentage of all A/C/G/T bases [%]
 LBC	1	16.67	41.67	8.33	33.33	0.00	0.00
 LBC	2	33.33	8.33	50.00	8.33	0.00	0.00
@@ -111,6 +113,8 @@ LBC	7	16.67	41.67	16.67	25.00	0.00	0.00
 LBC	8	33.33	16.67	50.00	0.00	0.00	0.00
 LBC	9	25.00	33.33	16.67	25.00	0.00	0.00
 LBC	10	33.33	16.67	41.67	8.33	0.00	0.00
+# ACGT raw counters for last fragments. Use `grep ^LTC | cut -f 2-` to extract this part. The columns are: A,C,G,T,N base counters
+LTC	30	33	36	21	0
 # Insert sizes. Use `grep ^IS | cut -f 2-` to extract this part. The columns are: insert size, pairs total, inward oriented pairs, outward oriented pairs, other pairs
 IS	0	0	0	0	0
 IS	1	0	0	0	0

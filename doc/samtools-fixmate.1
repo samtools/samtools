@@ -1,0 +1,95 @@
+'\" t
+.TH samtools-fixmate 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools fixmate \- fills in mate coordinates and insert size fields.
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools fixmate
+.RB [ -rpcm ]
+.RB [ -O
+.IR format ]
+.I in.nameSrt.bam out.bam
+
+.SH DESCRIPTION
+.PP
+Fill in mate coordinates, ISIZE and mate related flags from a
+name-sorted alignment.
+
+.SH OPTIONS
+.TP 11
+.B -r
+Remove secondary and unmapped reads.
+.TP
+.B -p
+Disable FR proper pair check.
+.TP
+.B -c
+Add template cigar ct tag.
+.TP
+.B -m
+Add ms (mate score) tags.  These are used by
+.B markdup
+to select the best reads to keep.
+.TP
+.BI "-O " FORMAT
+Write the final output as
+.BR sam ", " bam ", or " cram .
+
+By default, samtools tries to select a format based on the output
+filename extension; if output is to standard output or no format can be
+deduced,
+.B bam
+is selected.
+.TP
+.BI --no-PG
+Do not add a @PG line to the header of the output file.
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-markdup (1),
+.IR samtools-sort (1)
+.PP
+Samtools website: <http://www.htslib.org/>

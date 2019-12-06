@@ -1,0 +1,186 @@
+'\" t
+.TH samtools-merge 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools merge \- merges multiple sorted input files into a single output.
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+.B merge
+samtools merge
+.RB [ -nur1f ]
+.RB [ -h
+.IR inh.sam ]
+.RB [ -t
+.IR tag ]
+.RB [ -R
+.IR reg ]
+.RB [ -b
+.IR list "] " out.bam " " in1.bam " [" in2.bam " " in3.bam " ... " inN.bam ]
+
+.SH DESCRIPTION
+.PP
+Merge multiple sorted alignment files, producing a single sorted output file
+that contains all the input records and maintains the existing sort order.
+
+If
+.BR -h
+is specified the @SQ headers of input files will be merged into the specified header, otherwise they will be merged
+into a composite header created from the input headers.  If in the process of merging @SQ lines for coordinate sorted
+input files, a conflict arises as to the order (for example input1.bam has @SQ for a,b,c and input2.bam has b,a,c)
+then the resulting output file will need to be re-sorted back into coordinate order.
+
+Unless the
+.BR -c
+or
+.BR -p
+flags are specified then when merging @RG and @PG records into the output header then any IDs found to be duplicates
+of existing IDs in the output header will have a suffix appended to them to differentiate them from similar header
+records from other files and the read records will be updated to reflect this.
+
+The ordering of the records in the input files must match the usage of the
+\fB-n\fP and \fB-t\fP command-line options.  If they do not, the output
+order will be undefined.  See
+.B sort
+for information about record ordering.
+
+.TP 8
+.B -1
+Use Deflate compression level 1 to compress the output.
+.TP
+.BI -b \ FILE
+List of input BAM files, one file per line.
+.TP
+.B -f
+Force to overwrite the output file if present.
+.TP 8
+.BI -h \ FILE
+Use the lines of
+.I FILE
+as `@' headers to be copied to
+.IR out.bam ,
+replacing any header lines that would otherwise be copied from
+.IR in1.bam .
+.RI ( FILE
+is actually in SAM format, though any alignment records it may contain
+are ignored.)
+.TP
+.B -n
+The input alignments are sorted by read names rather than by chromosomal
+coordinates
+.TP
+.B -t TAG
+The input alignments have been sorted by the value of TAG, then by either
+position or name (if \fB-n\fP is given).
+.TP
+.BI -R \ STR
+Merge files in the specified region indicated by
+.I STR
+[null]
+.TP
+.B -r
+Attach an RG tag to each alignment. The tag value is inferred from file names.
+.TP
+.B -u
+Uncompressed BAM output
+.TP
+.B -c
+When several input files contain @RG headers with the same ID, emit only one
+of them (namely, the header line from the first file we find that ID in) to
+the merged output file.
+Combining these similar headers is usually the right thing to do when the
+files being merged originated from the same file.
+
+Without \fB-c\fP, all @RG headers appear in the output file, with random
+suffixes added to their IDs where necessary to differentiate them.
+.TP
+.B -p
+Similarly, for each @PG ID in the set of files to merge, use the @PG line
+of the first file we find that ID in rather than adding a suffix to
+differentiate similar IDs.
+.TP
+.B -X
+If this option is set, it will allows user to specify customized index file location(s) if the data 
+folder does not contain any index file. See
+.B EXAMPLES
+section for sample of useage.
+.TP
+.BI --no-PG
+Do not add a @PG line to the header of the output file.
+
+.SH EXAMPLES
+.IP o 2
+Attach the
+.B RG
+tag while merging sorted alignments:
+.EX 2
+perl -e 'print "@RG\\tID:ga\\tSM:hs\\tLB:ga\\tPL:Illumina\\n@RG\\tID:454\\tSM:hs\\tLB:454\\tPL:454\\n"' > rg.txt
+samtools merge -rh rg.txt merged.bam ga.bam 454.bam
+.EE
+The value in a
+.B RG
+tag is determined by the file name the read is coming from. In this
+example, in the
+.IR merged.bam ,
+reads from
+.I ga.bam
+will be attached
+.IR RG:Z:ga ,
+while reads from
+.I 454.bam
+will be attached
+.IR RG:Z:454 .
+
+.IP o 2
+Include customized index file as a part of arugments:
+.EX 2
+samtools merge [options] -X <out.bam> </data_folder/in1.bam> [</data_folder/in2.bam> ... </data_folder/inN.bam>] </index_folder/index1.bai> [</index_folder/index2.bai> ... </index_folder/indexN.bai>]
+.EE
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-sort (1),
+.IR sam (5)
+.PP
+Samtools website: <http://www.htslib.org/>

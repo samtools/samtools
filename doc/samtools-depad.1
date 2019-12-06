@@ -1,0 +1,105 @@
+'\" t
+.TH samtools-depad 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools depad \- convert padded BAM to unpadded BAM
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools depad
+.RB [ -SsCu1 ]
+.RB [ -T
+.IR ref.fa ]
+.RB [ -o
+.IR output "] " in.bam
+
+.SH DESCRIPTION
+.PP
+Converts a BAM aligned against a padded reference to a BAM aligned
+against the depadded reference.  The padded reference may contain
+verbatim "*" bases in it, but "*" bases are also counted in the
+reference numbering.  This means that a sequence base-call aligned
+against a reference "*" is considered to be a cigar match ("M" or "X")
+operator (if the base-call is "A", "C", "G" or "T").  After depadding
+the reference "*" bases are deleted and such aligned sequence
+base-calls become insertions.  Similarly transformations apply for
+deletions and padding cigar operations.
+
+.SH OPTIONS
+.TP
+.B -S
+Ignored for compatibility with previous samtools versions.
+Previously this option was required if input was in SAM format, but now the
+correct format is automatically detected by examining the first few characters
+of input.
+.TP
+.B -s
+Output in SAM format.  The default is BAM.
+.TP
+.B -C
+Output in CRAM format.  The default is BAM.
+.TP
+.B -u
+Do not compress the output.  Applies to either BAM or CRAM output
+format.
+.TP
+.B -1
+Enable fastest compression level.  Only works for BAM or CRAM output.
+.TP
+.BI "-T " FILE
+Provides the padded reference file.  Note that without this the @SQ
+line lengths will be incorrect, so for most use cases this option will
+be considered as mandatory.
+.TP
+.BI "-o " FILE
+Specifies the output filename.  By default output is sent to stdout.
+.TP
+.BI --no-PG
+Do not add a @PG line to the header of the output file.
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute with extensions by Peter
+Cock from the James Hutton Institute.
+
+.SH SEE ALSO
+.IR samtools (1)
+.PP
+Samtools website: <http://www.htslib.org/>

@@ -1,0 +1,234 @@
+'\" t
+.TH samtools-sort 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.SH NAME
+samtools sort \- sorts SAM/BAM/CRAM files
+.\"
+.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Heng Li <lh3@sanger.ac.uk>
+.\" Author: Joshua C. Randall <jcrandall@alum.mit.edu>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+samtools sort
+.RB [ -l
+.IR level ]
+.RB [ -m
+.IR maxMem ]
+.RB [ -o
+.IR out.bam ]
+.RB [ -O
+.IR format ]
+.RB [ -n ]
+.RB [ -t
+.IR tag ]
+.RB [ -T
+.IR tmpprefix ]
+.RB [ -@
+.IR threads "] [" in.sam | in.bam | in.cram ]
+
+.SH DESCRIPTION
+.PP
+Sort alignments by leftmost coordinates, or by read name when
+.B -n
+is used.
+An appropriate
+.B @HD-SO
+sort order header tag will be added or an existing one updated if necessary.
+
+The sorted output is written to standard output by default, or to the
+specified file
+.RI ( out.bam )
+when
+.B -o
+is used.
+This command will also create temporary files
+.IB tmpprefix . %d .bam
+as needed when the entire alignment data cannot fit into memory
+(as controlled via the
+.B -m
+option).
+
+Consider using
+.B samtools collate
+instead if you need name collated data without a full lexicographical sort.
+
+.SH OPTIONS
+
+.TP 11
+.BI "-l " INT
+Set the desired compression level for the final output file, ranging from 0
+(uncompressed) or 1 (fastest but minimal compression) to 9 (best compression
+but slowest to write), similarly to
+.BR gzip (1)'s
+compression level setting.
+.IP
+If
+.B -l
+is not used, the default compression level will apply.
+.TP
+.BI "-m " INT
+Approximately the maximum required memory per thread, specified either in bytes
+or with a
+.BR K ", " M ", or " G
+suffix.
+[768 MiB]
+.IP
+To prevent sort from creating a huge number of temporary files, it enforces a
+minimum value of 1M for this setting.
+.TP
+.B -n
+Sort by read names (i.e., the
+.B QNAME
+field) rather than by chromosomal coordinates.
+.TP
+.BI "-t " TAG
+Sort first by the value in the alignment tag TAG, then by position or name (if
+also using \fB-n\fP).
+.TP
+.BI "-o " FILE
+Write the final sorted output to
+.IR FILE ,
+rather than to standard output.
+.TP
+.BI "-O " FORMAT
+Write the final output as
+.BR sam ", " bam ", or " cram .
+
+By default, samtools tries to select a format based on the
+.B -o
+filename extension; if output is to standard output or no format can be
+deduced,
+.B bam
+is selected.
+.TP
+.BI "-T " PREFIX
+Write temporary files to
+.IB PREFIX . nnnn .bam,
+or if the specified
+.I PREFIX
+is an existing directory, to
+.IB PREFIX /samtools. mmm . mmm .tmp. nnnn .bam,
+where
+.I mmm
+is unique to this invocation of the
+.B sort
+command.
+.IP
+By default, any temporary files are written alongside the output file, as
+.IB out.bam .tmp. nnnn .bam,
+or if output is to standard output, in the current directory as
+.BI samtools. mmm . mmm .tmp. nnnn .bam.
+.TP
+.BI "-@ " INT
+Set number of sorting and compression threads.
+By default, operation is single-threaded.
+.TP
+.BI --no-PG
+Do not add a @PG line to the header of the output file.
+.PP
+.B Ordering Rules
+
+The following rules are used for ordering records.
+
+If option \fB-t\fP is in use, records are first sorted by the value of
+the given alignment tag, and then by position or name (if using \fB-n\fP).
+For example, \*(lq-t RG\*(rq will make read group the primary sort key.  The
+rules for ordering by tag are:
+
+.IP \(bu 4
+Records that do not have the tag are sorted before ones that do.
+.IP \(bu 4
+If the types of the tags are different, they will be sorted so
+that single character tags (type A) come before array tags (type B), then
+string tags (types H and Z), then numeric tags (types f and i).
+.IP \(bu 4
+Numeric tags (types f and i) are compared by value.  Note that comparisons
+of floating-point values are subject to issues of rounding and precision.
+.IP \(bu 4
+String tags (types H and Z) are compared based on the binary
+contents of the tag using the C
+.BR strcmp (3)
+function.
+.IP \(bu 4
+Character tags (type A) are compared by binary character value.
+.IP \(bu 4
+No attempt is made to compare tags of other types \(em notably type B
+array values will not be compared.
+.PP
+When the \fB-n\fP option is present, records are sorted by name.  Names are
+compared so as to give a \*(lqnatural\*(rq ordering \(em i.e. sections
+consisting of digits are compared numerically while all other sections are
+compared based on their binary representation.  This means \*(lqa1\*(rq will
+come before \*(lqb1\*(rq and \*(lqa9\*(rq will come before \*(lqa10\*(rq.
+Records with the same name will be ordered according to the values of
+the READ1 and READ2 flags (see
+.BR flags ).
+
+When the \fB-n\fP option is
+.B not
+present, reads are sorted by reference (according to the order of the @SQ
+header records), then by position in the reference, and then by the REVERSE
+flag.
+
+.B Note
+
+.PP
+Historically
+.B samtools sort
+also accepted a less flexible way of specifying the final and
+temporary output filenames:
+.IP
+samtools sort
+.RB [ -f "] [" -o ]
+.I in.bam out.prefix
+.PP
+This has now been removed.
+The previous \fIout.prefix\fP argument (and \fB-f\fP option, if any)
+should be changed to an appropriate combination of \fB-T\fP \fIPREFIX\fP
+and \fB-o\fP \fIFILE\fP.  The previous \fB-o\fP option should be removed,
+as output defaults to standard output.
+
+.SH AUTHOR
+.PP
+Written by Heng Li from the Sanger Institute with numerous subsequent
+modifications.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-collate (1),
+.IR samtools-merge (1)
+.PP
+Samtools website: <http://www.htslib.org/>

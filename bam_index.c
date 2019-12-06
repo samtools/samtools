@@ -1,6 +1,6 @@
 /*  bam_index.c -- index and idxstats subcommands.
 
-    Copyright (C) 2008-2011, 2013, 2014 Genome Research Ltd.
+    Copyright (C) 2008-2011, 2013-2016, 2018, 2019  Genome Research Ltd.
     Portions copyright (C) 2010 Broad Institute.
     Portions copyright (C) 2013 Peter Cock, The James Hutton Institute.
 
@@ -114,20 +114,20 @@ int bam_index(int argc, char *argv[])
  * Returns 0 on success,
  *        -1 on failure.
  */
-int slow_idxstats(samFile *fp, bam_hdr_t *header) {
+int slow_idxstats(samFile *fp, sam_hdr_t *header) {
     int ret, last_tid = -2;
     bam1_t *b = bam_init1();
 
     if (hts_set_opt(fp, CRAM_OPT_REQUIRED_FIELDS, SAM_RNAME | SAM_FLAG))
         return -1;
 
-    uint64_t (*count0)[2] = calloc(header->n_targets+1, sizeof(*count0));
+    uint64_t (*count0)[2] = calloc(sam_hdr_nref(header)+1, sizeof(*count0));
     uint64_t (*counts)[2] = count0+1;
     if (!count0)
         return -1;
 
     while ((ret = sam_read1(fp, header, b)) >= 0) {
-        if (b->core.tid >= header->n_targets || b->core.tid < -1) {
+        if (b->core.tid >= sam_hdr_nref(header) || b->core.tid < -1) {
             free(count0);
             return -1;
         }
@@ -148,10 +148,10 @@ int slow_idxstats(samFile *fp, bam_hdr_t *header) {
 
     if (ret == -1) {
         int i;
-        for (i = 0; i < header->n_targets; i++) {
-            printf("%s\t%d\t%"PRIu64"\t%"PRIu64"\n",
-                   header->target_name[i],
-                   header->target_len[i],
+        for (i = 0; i < sam_hdr_nref(header); i++) {
+            printf("%s\t%"PRId64"\t%"PRIu64"\t%"PRIu64"\n",
+                   sam_hdr_tid2name(header, i),
+                   (int64_t) sam_hdr_tid2len(header, i),
                    counts[i][0], counts[i][1]);
         }
         printf("*\t0\t%"PRIu64"\t%"PRIu64"\n", counts[-1][0], counts[-1][1]);
@@ -167,14 +167,14 @@ int slow_idxstats(samFile *fp, bam_hdr_t *header) {
 static void usage_exit(FILE *fp, int exit_status)
 {
     fprintf(fp, "Usage: samtools idxstats [options] <in.bam>\n");
-    sam_global_opt_help(fp, "-.---@");
+    sam_global_opt_help(fp, "-.---@-.");
     exit(exit_status);
 }
 
 int bam_idxstats(int argc, char *argv[])
 {
     hts_idx_t* idx;
-    bam_hdr_t* header;
+    sam_hdr_t* header;
     samFile* fp;
     int c;
 
@@ -227,9 +227,9 @@ int bam_idxstats(int argc, char *argv[])
         }
 
         int i;
-        for (i = 0; i < header->n_targets; ++i) {
+        for (i = 0; i < sam_hdr_nref(header); ++i) {
             // Print out contig name and length
-            printf("%s\t%d", header->target_name[i], header->target_len[i]);
+            printf("%s\t%"PRId64, sam_hdr_tid2name(header, i), (int64_t) sam_hdr_tid2len(header, i));
             // Now fetch info about it from the meta bin
             uint64_t u, v;
             hts_idx_get_stat(idx, i, &u, &v);
@@ -240,7 +240,7 @@ int bam_idxstats(int argc, char *argv[])
         hts_idx_destroy(idx);
     }
 
-    bam_hdr_destroy(header);
+    sam_hdr_destroy(header);
     sam_close(fp);
     return 0;
 }

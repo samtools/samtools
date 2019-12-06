@@ -1,6 +1,6 @@
 /*  bam_quickcheck.c -- quickcheck subcommand.
 
-    Copyright (C) 2015 Genome Research Ltd.
+    Copyright (C) 2015-2017 Genome Research Ltd.
 
     Author: Joshua C. Randall <jcrandall@alum.mit.edu>
 
@@ -46,6 +46,7 @@ static void usage_quickcheck(FILE *write_to)
 "Options:\n"
 "  -v              verbose output (repeat for more verbosity)\n"
 "  -q              suppress warning messages\n"
+"  -u              unmapped input (do not require targets in header)\n"
 "\n"
 "Notes:\n"
 "\n"
@@ -77,13 +78,16 @@ static void usage_quickcheck(FILE *write_to)
 
 int main_quickcheck(int argc, char** argv)
 {
-    int verbose = 0, quiet = 0;
+    int verbose = 0, quiet = 0, unmapped = 0;
     hts_verbose = 0;
 
-    const char* optstring = "vq";
+    const char* optstring = "vqu";
     int opt;
     while ((opt = getopt(argc, argv, optstring)) != -1) {
         switch (opt) {
+        case 'u':
+            unmapped = 1;
+            break;
         case 'v':
             verbose++;
             break;
@@ -136,17 +140,17 @@ int main_quickcheck(int argc, char** argv)
             else {
                 if (verbose >= 3) fprintf(stderr, "%s is sequence data\n", fn);
                 // check header
-                bam_hdr_t *header = sam_hdr_read(hts_fp);
+                sam_hdr_t *header = sam_hdr_read(hts_fp);
                 if (header == NULL) {
                     QC_ERR(QC_BAD_HEADER, 2, "%s caused an error whilst reading its header.\n", fn);
                 } else {
-                    if (header->n_targets <= 0) {
+                    if (!unmapped && sam_hdr_nref(header) <= 0) {
                         QC_ERR(QC_BAD_HEADER, 2, "%s had no targets in header.\n", fn);
                     }
                     else {
-                        if (verbose >= 3) fprintf(stderr, "%s has %d targets in header.\n", fn, header->n_targets);
+                        if (verbose >= 3) fprintf(stderr, "%s has %d targets in header.\n", fn, sam_hdr_nref(header));
                     }
-                    bam_hdr_destroy(header);
+                    sam_hdr_destroy(header);
                 }
             }
             // check EOF on formats that support this

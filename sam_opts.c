@@ -1,6 +1,6 @@
 /*  sam_opts.c -- utilities to aid parsing common command line options.
 
-    Copyright (C) 2015 Genome Research Ltd.
+    Copyright (C) 2015, 2019 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -66,8 +66,23 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
             break;
         } else if (strcmp(lopt->name, "reference") == 0) {
             char *ref = malloc(10 + strlen(optarg) + 1);
+
+            if (!ref) {
+                fprintf(stderr, "Unable to allocate memory in "
+                                "parse_sam_global_opt.\n");
+
+                return -1;
+            }
+
             sprintf(ref, "reference=%s", optarg);
-            ga->reference = strdup(optarg);
+
+            if (!(ga->reference = strdup(optarg))) {
+                fprintf(stderr, "Unable to allocate memory in "
+                                "parse_sam_global_opt.\n");
+
+                return -1;
+            }
+
             r  = hts_opt_add((hts_opt **)&ga->in.specific, ref);
             r |= hts_opt_add((hts_opt **)&ga->out.specific, ref);
             free(ref);
@@ -75,15 +90,30 @@ int parse_sam_global_opt(int c, const char *optarg, const struct option *lopt,
         } else if (strcmp(lopt->name, "threads") == 0) {
             ga->nthreads = atoi(optarg);
             break;
-//      } else if (strcmp(lopt->name, "verbose") == 0) {
-//          ga->verbosity++;
-//          break;
+        } else if (strcmp(lopt->name, "write-index") == 0) {
+            ga->write_index = 1;
+            break;
+        } else if (strcmp(lopt->name, "verbosity") == 0) {
+            hts_verbose = atoi(optarg);
+            break;
         }
     }
 
     if (!lopt->name) {
-        fprintf(stderr, "Unexpected global option: %s\n", lopt->name);
+        fprintf(stderr, "Unexpected global option.\n");
         return -1;
+    }
+
+    /*
+     * SAM format with compression enabled implies SAM.bgzf
+     */
+    if (ga->out.format == sam) {
+        hts_opt *opts = (hts_opt *)ga->out.specific;
+        while (opts) {
+            if (opts->opt == HTS_OPT_COMPRESSION_LEVEL)
+                ga->out.compression = bgzf;
+            opts = opts->next;
+        }
     }
 
     return r;
@@ -136,9 +166,12 @@ void sam_global_opt_help(FILE *fp, const char *shortopts) {
         else if (strcmp(lopts[i].name, "threads") == 0)
             fprintf(fp,"threads INT\n"
                     "               Number of additional threads to use [0]\n");
-//      else if (strcmp(lopts[i].name, "verbose") == 0)
-//          fprintf(fp,"verbose\n"
-//                  "               Increment level of verbosity\n");
+        else if (strcmp(lopts[i].name, "write-index") == 0)
+            fprintf(fp,"write-index\n"
+                    "               Automatically index the output files [off]\n");
+        else if (strcmp(lopts[i].name, "verbosity") == 0)
+            fprintf(fp,"verbosity INT\n"
+                    "               Set level of verbosity\n");
     }
 }
 

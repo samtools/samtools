@@ -38,6 +38,7 @@
 #include <stdint.h>
 #include <ctype.h>
 #include <string.h>
+#include <errno.h>
 #include <zlib.h>
 #include "../version.h"
 #include "htslib/kseq.h"
@@ -241,6 +242,12 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
     mut_t *target;
     int max_loop, max_loop_err = 0;
 
+    fp_fa = gzopen(fn, "r");
+    if (fp_fa == NULL) {
+        fprintf(stderr, "[wgsim] can't open '%s': %s\n", fn, strerror(errno));
+        return;
+    }
+
     l = size_l > size_r? size_l : size_r;
     qstr = (char*)calloc(l+1, 1);
     tmp_seq[0] = (uint8_t*)calloc(l+2, 1);
@@ -250,7 +257,6 @@ void wgsim_core(FILE *fpout1, FILE *fpout2, const char *fn, int is_hap, uint64_t
 
     Q = (ERR_RATE == 0.0)? 'I' : (int)(-10.0 * log(ERR_RATE) / log(10.0) + 0.499) + 33;
 
-    fp_fa = gzopen(fn, "r");
     ks = kseq_init(fp_fa);
     tot_len = n_ref = 0;
     fprintf(stderr, "[%s] calculating the total length of the reference sequence...\n", __func__);

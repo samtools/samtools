@@ -1,6 +1,6 @@
 /*  bam_aux.c -- remaining aux field handling.
 
-    Copyright (C) 2008-2010, 2013 Genome Research Ltd.
+    Copyright (C) 2008-2010, 2013, 2015, 2019 Genome Research Ltd.
     Portions copyright (C) 2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -61,21 +61,15 @@ int bam_aux_drop_other(bam1_t *b, uint8_t *s)
     return 0;
 }
 
+// Only here due to libbam.a being used by some applications.
 int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *beg, int *end)
 {
-    const char *name_lim = hts_parse_reg(str, beg, end);
-    if (name_lim) {
-        char *name = malloc(name_lim - str + 1);
-        memcpy(name, str, name_lim - str);
-        name[name_lim - str] = '\0';
-        *ref_id = bam_name2id(header, name);
-        free(name);
-    }
-    else {
-        // not parsable as a region, but possibly a sequence named "foo:a"
-        *ref_id = bam_name2id(header, str);
-        *beg = 0; *end = INT_MAX;
-    }
-    if (*ref_id == -1) return -1;
-    return *beg <= *end? 0 : -1;
+    hts_pos_t beg64, end64;
+    int r;
+    r = sam_parse_region(header, str, ref_id, &beg64, &end64, 0) ? 0 : -1;
+    if (beg64 > INT_MAX || end64 > INT_MAX)
+        return -1;
+    *beg = beg64;
+    *end = end64;
+    return r;
 }

@@ -1,7 +1,7 @@
 /*  bam_reheader.c -- reheader subcommand.
 
     Copyright (C) 2010 Broad Institute.
-    Copyright (C) 2012-2015 Genome Research Ltd.
+    Copyright (C) 2012-2019 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -29,6 +29,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdlib.h>
 #include <assert.h>
 #include <getopt.h>
+#include <unistd.h>
 
 #include "htslib/bgzf.h"
 #include "htslib/sam.h"
@@ -42,49 +43,43 @@ DEALINGS IN THE SOFTWARE.  */
  * Reads a file and outputs a new BAM file to fd with 'h' replaced as
  * the header.    No checks are made to the validity.
  */
-int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
-                 const char *arg_list, int add_PG)
+int bam_reheader(BGZF *in, sam_hdr_t *h, int fd,
+                 const char *arg_list, int no_pg, int skip_header)
 {
     BGZF *fp = NULL;
     ssize_t len;
     uint8_t *buf = NULL;
-    SAM_hdr *sh = NULL;
+    sam_hdr_t *tmp;
+    if (!h)
+        return -1;
+
     if (in->is_write) return -1;
     buf = malloc(BUF_SIZE);
     if (!buf) {
         fprintf(stderr, "Out of memory\n");
         return -1;
     }
-    if (bam_hdr_read(in) == NULL) {
-        fprintf(stderr, "Couldn't read header\n");
-        goto fail;
+
+    if (!skip_header) {
+        if ((tmp = bam_hdr_read(in)) == NULL) {
+            fprintf(stderr, "Couldn't read header\n");
+            goto fail;
+        }
+        sam_hdr_destroy(tmp);
     }
+
     fp = bgzf_fdopen(fd, "w");
     if (!fp) {
         print_error_errno("reheader", "Couldn't open output file");
         goto fail;
     }
 
-    if (add_PG) {
-        // Around the houses, but it'll do until we can manipulate bam_hdr_t natively.
-        sh = sam_hdr_parse_(h->text, h->l_text);
-        if (!sh)
-            goto fail;
-        if (sam_hdr_add_PG(sh, "samtools",
+    if (!no_pg && sam_hdr_add_pg(h, "samtools",
                            "VN", samtools_version(),
                            arg_list ? "CL": NULL,
                            arg_list ? arg_list : NULL,
                            NULL) != 0)
             goto fail;
-
-        free(h->text);
-        h->text = strdup(sam_hdr_str(sh));
-        h->l_text = sam_hdr_length(sh);
-        if (!h->text)
-            goto fail;
-        sam_hdr_free(sh);
-        sh = NULL;
-    }
 
     if (bam_hdr_write(fp, h) < 0) {
         print_error_errno("reheader", "Couldn't write header");
@@ -114,7 +109,6 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
  fail:
     bgzf_close(fp);
     free(buf);
-    sam_hdr_free(sh);
     return -1;
 }
 
@@ -124,32 +118,28 @@ int bam_reheader(BGZF *in, bam_hdr_t *h, int fd,
  *
  * FIXME: error checking
  */
-int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
+int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int no_pg)
 {
     htsFile *h_out = hts_open("-", "wc");
     cram_fd *out = h_out->fp.cram;
     cram_container *c = NULL;
     int ret = -1;
+    if (!h)
+        return ret;
 
     // Attempt to fill out a cram->refs[] array from @SQ headers
-    cram_fd_set_header(out, sam_hdr_parse_(h->text, h->l_text));
-    if (add_PG) {
-        if (sam_hdr_add_PG(cram_fd_get_header(out), "samtools",
+    sam_hdr_t *cram_h = sam_hdr_dup(h);
+    if (!cram_h)
+        return -1;
+    cram_fd_set_header(out, cram_h);
+    if (!no_pg && sam_hdr_add_pg(cram_fd_get_header(out), "samtools",
                            "VN", samtools_version(),
                            arg_list ? "CL": NULL,
                            arg_list ? arg_list : NULL,
-                           NULL) != 0)
+                           NULL))
             goto err;
 
-        // Covert back to bam_hdr_t struct
-        free(h->text);
-        h->text = strdup(sam_hdr_str(cram_fd_get_header(out)));
-        h->l_text = sam_hdr_length(cram_fd_get_header(out));
-        if (!h->text)
-            goto err;
-    }
-
-    if (sam_hdr_write(h_out, h) != 0)
+    if (sam_hdr_write(h_out, cram_h) != 0)
         goto err;
     cram_set_option(out, CRAM_OPT_REFERENCE, NULL);
 
@@ -192,14 +182,16 @@ int cram_reheader(cram_fd *in, bam_hdr_t *h, const char *arg_list, int add_PG)
  *        -1 on general failure;
  *        -2 on failure due to insufficient size
  */
-int cram_reheader_inplace2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
-                          int add_PG)
+int cram_reheader_inplace2(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
+                          int no_pg)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
-    SAM_hdr *hdr = NULL;
+    sam_hdr_t *cram_h = NULL;
     off_t start;
     int ret = -1;
+    if (!h)
+        goto err;
 
     if (cram_major_vers(fd) < 2 ||
         cram_major_vers(fd) > 3) {
@@ -208,16 +200,17 @@ int cram_reheader_inplace2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list
         goto err;
     }
 
-    if (!(hdr = sam_hdr_parse_(h->text, h->l_text)))
+    cram_h = sam_hdr_dup(h);
+    if (!cram_h)
         goto err;
 
-    if (add_PG && sam_hdr_add_PG(hdr, "samtools", "VN", samtools_version(),
+    if (!no_pg && sam_hdr_add_pg(cram_h, "samtools", "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
                                  NULL))
         goto err;
 
-    int header_len = sam_hdr_length(hdr);
+    int header_len = sam_hdr_length(cram_h);
     /* Fix M5 strings? Maybe out of scope for this tool */
 
     // Load the existing header
@@ -244,7 +237,7 @@ int cram_reheader_inplace2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list
 
     cram_block_set_offset(b, 0);   // rewind block
     int32_put_blk(b, header_len);
-    cram_block_append(b, sam_hdr_str(hdr), header_len);
+    cram_block_append(b, (void *)sam_hdr_str(cram_h), header_len);
     // Zero the remaining block
     memset((char *)cram_block_get_data(b)+cram_block_get_offset(b), 0,
            cram_block_get_uncomp_size(b) - cram_block_get_offset(b));
@@ -265,7 +258,7 @@ int cram_reheader_inplace2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list
  err:
     if (c) cram_free_container(c);
     if (b) cram_free_block(b);
-    if (hdr) sam_hdr_free(hdr);
+    if (cram_h) sam_hdr_destroy(cram_h);
 
     return ret;
 }
@@ -286,16 +279,18 @@ int cram_reheader_inplace2(cram_fd *fd, const bam_hdr_t *h, const char *arg_list
  *        -1 on general failure;
  *        -2 on failure due to insufficient size
  */
-int cram_reheader_inplace3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
-                          int add_PG)
+int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
+                          int no_pg)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
-    SAM_hdr *hdr = NULL;
+    sam_hdr_t *cram_h = NULL;
     off_t start, sz, end;
     int container_sz, max_container_sz;
     char *buf = NULL;
     int ret = -1;
+    if (!h)
+        goto err;
 
     if (cram_major_vers(fd) < 2 ||
         cram_major_vers(fd) > 3) {
@@ -304,16 +299,17 @@ int cram_reheader_inplace3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list
         goto err;
     }
 
-    if (!(hdr = sam_hdr_parse_(h->text, h->l_text)))
+    cram_h = sam_hdr_dup(h);
+    if (!cram_h)
         goto err;
 
-    if (add_PG && sam_hdr_add_PG(hdr, "samtools", "VN", samtools_version(),
+    if (!no_pg && sam_hdr_add_pg(cram_h, "samtools", "VN", samtools_version(),
                                  arg_list ? "CL": NULL,
                                  arg_list ? arg_list : NULL,
                                  NULL))
         goto err;
 
-    int header_len = sam_hdr_length(hdr);
+    int header_len = sam_hdr_length(cram_h);
     /* Fix M5 strings? Maybe out of scope for this tool */
 
     // Find current size of SAM header block
@@ -381,7 +377,7 @@ int cram_reheader_inplace3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list
     // Version 3.0 supports compressed header
     b = cram_new_block(FILE_HEADER, 0);
     int32_put_blk(b, header_len);
-    cram_block_append(b, sam_hdr_str(hdr), header_len);
+    cram_block_append(b, (void *)sam_hdr_str(cram_h), header_len);
     cram_block_update_size(b);
 
     cram_compress_block(fd, b, NULL, -1, -1);
@@ -416,17 +412,17 @@ int cram_reheader_inplace3(cram_fd *fd, const bam_hdr_t *h, const char *arg_list
     if (c) cram_free_container(c);
     if (buf) free(buf);
     if (b) cram_free_block(b);
-    if (hdr) sam_hdr_free(hdr);
+    if (cram_h) sam_hdr_destroy(cram_h);
 
     return ret;
 }
 
-int cram_reheader_inplace(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
-                         int add_PG)
+int cram_reheader_inplace(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
+                         int no_pg)
 {
     switch (cram_major_vers(fd)) {
-    case 2: return cram_reheader_inplace2(fd, h, arg_list, add_PG);
-    case 3: return cram_reheader_inplace3(fd, h, arg_list, add_PG);
+    case 2: return cram_reheader_inplace2(fd, h, arg_list, no_pg);
+    case 3: return cram_reheader_inplace3(fd, h, arg_list, no_pg);
     default:
         fprintf(stderr, "[%s] unsupported CRAM version %d\n", __func__,
                 cram_major_vers(fd));
@@ -437,33 +433,124 @@ int cram_reheader_inplace(cram_fd *fd, const bam_hdr_t *h, const char *arg_list,
 static void usage(FILE *fp, int ret) {
     fprintf(fp,
            "Usage: samtools reheader [-P] in.header.sam in.bam > out.bam\n"
-           "   or  samtools reheader [-P] -i in.header.sam file.bam\n"
+           "   or  samtools reheader [-P] -i in.header.sam file.cram\n"
+           "   or  samtools reheader -c CMD in.bam\n"
+           "   or  samtools reheader -c CMD in.cram\n"
            "\n"
            "Options:\n"
-           "    -P, --no-PG      Do not generate an @PG header line.\n"
-           "    -i, --in-place   Modify the bam/cram file directly.\n"
-           "                     (Defaults to outputting to stdout.)\n");
+           "    -P, --no-PG         Do not generate a @PG header line.\n"
+           "    -i, --in-place      Modify the CRAM file directly, if possible.\n"
+           "                        (Defaults to outputting to stdout.)\n"
+           "    -c, --command CMD   Pass the header in SAM format to external program CMD.\n");
     exit(ret);
+}
+
+static sam_hdr_t* external_reheader(samFile* in, const char* external) {
+    char *command = NULL;
+    sam_hdr_t* h = NULL;
+    sam_hdr_t* ih = sam_hdr_read(in);
+    if (ih == NULL) {
+        fprintf(stderr, "[%s] failed to read the header for '%s'.\n", __func__, in->fn);
+        return NULL;
+    }
+    char tmp_fn[] = "reheaderXXXXXX";
+    int tmp_fd = mkstemp(tmp_fn);
+    if (tmp_fd < 0) {
+        print_error_errno("reheader", "fail to open temp file '%s'", tmp_fn);
+        return NULL;
+    }
+    hFILE* tmp_hf = hdopen(tmp_fd, "w");
+    if (!tmp_hf) {
+        fprintf(stderr, "[%s] failed to convert to hFILE.\n", __func__);
+        goto cleanup;
+    }
+    samFile* tmp_sf = hts_hopen(tmp_hf, tmp_fn, "w");
+    if (!tmp_sf) {
+        fprintf(stderr, "[%s] failed to convert to samFile.\n", __func__);
+        goto cleanup;
+    }
+    if (-1 == sam_hdr_write(tmp_sf, ih)) {
+        fprintf(stderr, "[%s] failed to write the header to the temp file.\n", __func__);
+        goto cleanup;
+    }
+    sam_close(tmp_sf);
+    sam_hdr_destroy(ih);
+    int comm_len = strlen(external) + strlen(tmp_fn) + 8;
+    command = calloc(comm_len, 1);
+    if (!command || snprintf(command, comm_len, "( %s ) < %s", external, tmp_fn) != comm_len - 1) {
+        fprintf(stderr, "[%s] failed to create command string.\n", __func__);
+        goto cleanup;
+    }
+    FILE* nh = popen(command, "r");
+    if (!nh) {
+        print_error_errno("reheader", "[%s] failed to run external command '%s'.\n", __func__, command);
+        goto cleanup;
+    }
+
+    int nh_fd = dup(fileno(nh));
+    if (nh_fd < 0) {
+        fprintf(stderr, "[%s] failed to get the file descriptor.\n", __func__);
+        goto cleanup;
+    }
+    hFILE* nh_hf = hdopen(nh_fd, "r");
+    if (!nh_hf) {
+        fprintf(stderr, "[%s] failed to convert to hFILE.\n", __func__);
+        goto cleanup;
+    }
+    samFile* nh_sf = hts_hopen(nh_hf, tmp_fn, "r");
+    if (!nh_sf) {
+        fprintf(stderr, "[%s] failed to convert to samFile.\n", __func__);
+        goto cleanup;
+    }
+
+    h = sam_hdr_read(nh_sf);
+    sam_close(nh_sf);
+    if (h == NULL) {
+        fprintf(stderr, "[%s] failed to read the header from the temp file.\n", __func__);
+    }
+    int res = pclose(nh);
+    if (res != 0) {
+        if (res < 0) {
+            print_error_errno("reheader",
+                              "Error on closing pipe from command '%s'.\n",
+                              command);
+        } else {
+            print_error("reheader",
+                        "Non-zero exit code returned by command '%s'\n",
+                        command);
+        }
+        if (h) sam_hdr_destroy(h);
+        h = NULL;
+    }
+cleanup:
+    free(command);
+    if (unlink(tmp_fn) != 0) {
+        print_error_errno("reheader", "failed to remove the temp file '%s'", tmp_fn);
+    }
+
+    return h;
 }
 
 int main_reheader(int argc, char *argv[])
 {
-    int inplace = 0, r, add_PG = 1, c;
-    bam_hdr_t *h;
+    int inplace = 0, r, no_pg = 0, c, skip_header = 0;
+    sam_hdr_t *h;
     samFile *in;
-    char *arg_list = stringify_argv(argc+1, argv-1);
+    char *arg_list = NULL, *external = NULL;
 
     static const struct option lopts[] = {
         {"help",     no_argument, NULL, 'h'},
         {"in-place", no_argument, NULL, 'i'},
         {"no-PG",    no_argument, NULL, 'P'},
+        {"command", required_argument, NULL, 'c'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "hiP", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "hiPc:", lopts, NULL)) >= 0) {
         switch (c) {
-        case 'P': add_PG = 0; break;
+        case 'P': no_pg = 1; break;
         case 'i': inplace = 1; break;
+        case 'c': external = optarg; break;
         case 'h': usage(stdout, 0); break;
         default:
             fprintf(stderr, "Invalid option '%c'\n", c);
@@ -471,10 +558,29 @@ int main_reheader(int argc, char *argv[])
         }
     }
 
-    if (argc - optind != 2)
+    if ((argc - optind != 2 || external) && (argc - optind != 1 || !external))
         usage(stderr, 1);
 
-    { // read the header
+    if (!no_pg && !(arg_list = stringify_argv(argc+1, argv-1))) {
+         print_error("reheader", "failed to create arg_list");
+         return 1;
+     }
+
+    if (external) {
+        skip_header = 1;
+        in = sam_open(argv[optind], inplace?"r+":"r");
+        if (in == 0) {
+            print_error_errno("reheader", "fail to open file '%s'", argv[optind]);
+            return 1;
+        }
+
+        h = external_reheader(in, external);
+        if (h == NULL) {
+            fprintf(stderr, "[%s] failed to read the header from '%s'.\n", __func__, external);
+            sam_close(in);
+            return 1;
+        }
+    } else { // read the header from a separate file
         samFile *fph = sam_open(argv[optind], "r");
         if (fph == 0) {
             print_error_errno("reheader", "fail to read the header from '%s'", argv[optind]);
@@ -487,25 +593,34 @@ int main_reheader(int argc, char *argv[])
                     __func__, argv[1]);
             return 1;
         }
+        in = sam_open(argv[optind+1], inplace?"r+":"r");
+        if (in == 0) {
+            print_error_errno("reheader", "fail to open file '%s'", argv[optind+1]);
+            return 1;
+        }
     }
-    in = sam_open(argv[optind+1], inplace?"r+":"r");
-    if (in == 0) {
-        print_error_errno("reheader", "fail to open file '%s'", argv[optind+1]);
-        return 1;
-    }
+
     if (hts_get_format(in)->format == bam) {
-        r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, add_PG);
-    } else {
+        if (inplace) {
+            print_error("reheader", "cannot reheader BAM '%s' in-place", argv[optind+1]);
+            r = -1;
+        } else {
+            r = bam_reheader(in->fp.bgzf, h, fileno(stdout), arg_list, no_pg, skip_header);
+        }
+    } else if (hts_get_format(in)->format == cram) {
         if (inplace)
-            r = cram_reheader_inplace(in->fp.cram, h, arg_list, add_PG);
+            r = cram_reheader_inplace(in->fp.cram, h, arg_list, no_pg);
         else
-            r = cram_reheader(in->fp.cram, h, arg_list, add_PG);
+            r = cram_reheader(in->fp.cram, h, arg_list, no_pg);
+    } else {
+        print_error("reheader", "input file '%s' must be BAM or CRAM", argv[optind+1]);
+        r = -1;
     }
 
     if (sam_close(in) != 0)
         r = -1;
 
-    bam_hdr_destroy(h);
+    sam_hdr_destroy(h);
 
     if (arg_list)
         free(arg_list);
