@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.10 (6th December 2019)
+--------------------------------
+
 Changes affecting the whole of samtools, or multiple sub-commands:
 
  * Samtools now uses the new HTSlib header API.  As this adds more checks
