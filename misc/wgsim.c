@@ -466,7 +466,7 @@ int main(int argc, char *argv[])
     }
     if (seed <= 0) seed = time(0)&0x7fffffff;
     fprintf(stderr, "[wgsim] seed = %d\n", seed);
-    srand48(seed);
+    hts_srand48(seed);
     wgsim_core(fpout1, fpout2, argv[optind], is_hap, N, dist, std_dev, size_l, size_r);
 
     fclose(fpout1); fclose(fpout2);

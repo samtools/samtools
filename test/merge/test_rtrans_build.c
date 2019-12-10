@@ -79,7 +79,7 @@ int main(int argc, char**argv)
         }
     }
     const long GIMMICK_SEED = 0x1234330e;
-    srand48(GIMMICK_SEED);
+    hts_srand48(GIMMICK_SEED);
 
     if (verbose) printf("BEGIN test 1\n");
     // setup
