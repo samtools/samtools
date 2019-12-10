@@ -1426,7 +1426,7 @@ int bam_merge(int argc, char *argv[])
         return 1;
     }
 
-    srand48(random_seed);
+    hts_srand48(random_seed);
     if (!(flag & MERGE_FORCE) && strcmp(argv[optind], "-")) {
         FILE *fp = fopen(argv[optind], "rb");
         if (fp != NULL) {
