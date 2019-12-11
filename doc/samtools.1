@@ -69,6 +69,8 @@ samtools depth aln.sorted.bam
 .PP
 samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
+samtools coverage aln.sorted.bam
+.PP
 samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
 samtools split merged.bam
@@ -392,6 +394,14 @@ Alignment records are grouped by sample (SM) identifiers in @RG header lines.
 If sample identifiers are absent, each input file is regarded as one sample.
 
 See the samtools-mpileup man page for a description of the pileup format and options.
+
+.TP \"-------- coverage
+.B coverage
+samtools coverage
+.RI [ options ]
+.RI "[" in1.sam | in1.bam | in1.cram " [" in2.sam | in2.bam | in2.cram "] [...]]"
+
+Produces a histogram or table of coverage per chromosome.
 
 .TP \"-------- merge
 .B merge
@@ -968,6 +978,7 @@ for further authorship.
 .IR samtools-calmd (1),
 .IR samtools-cat (1),
 .IR samtools-collate (1),
+.IR samtools-coverage (1),
 .IR samtools-depad (1),
 .IR samtools-depth (1),
 .IR samtools-dict (1),
