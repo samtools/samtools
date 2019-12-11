@@ -45,13 +45,21 @@ samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .PP
 samtools view -bt ref_list.txt -o aln.bam aln.sam.gz
 .PP
-samtools sort -T /tmp/aln.sorted -o aln.sorted.bam aln.bam
+samtools tview aln.sorted.bam ref.fasta
+.PP
+samtools quickcheck in1.bam in2.cram
 .PP
 samtools index aln.sorted.bam
+.PP
+samtools sort -T /tmp/aln.sorted -o aln.sorted.bam aln.bam
+.PP
+samtools collate -o aln.name_collated.bam aln.sorted.bam
 .PP
 samtools idxstats aln.sorted.bam
 .PP
 samtools flagstat aln.sorted.bam
+.PP
+samtools flags PAIRED,UNMAP,MUNMAP
 .PP
 samtools stats aln.sorted.bam
 .PP
@@ -59,39 +67,39 @@ samtools bedcov aln.sorted.bam
 .PP
 samtools depth aln.sorted.bam
 .PP
-samtools view aln.sorted.bam chr2:20,100,000-20,200,000
+samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools merge out.bam in1.bam in2.bam in3.bam
 .PP
-samtools faidx ref.fasta
-.PP
-samtools fqidx ref.fastq
-.PP
-samtools tview aln.sorted.bam ref.fasta
-.PP
 samtools split merged.bam
 .PP
-samtools quickcheck in1.bam in2.cram
-.PP
-samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
-.PP
-samtools fixmate in.namesorted.sam out.bam
-.PP
-samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
-.PP
-samtools flags PAIRED,UNMAP,MUNMAP
+samtools cat out.bam in1.bam in2.bam in3.bam
 .PP
 samtools fastq input.bam > output.fastq
 .PP
 samtools fasta input.bam > output.fasta
 .PP
-samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
+samtools faidx ref.fasta
 .PP
-samtools collate -o aln.name_collated.bam aln.sorted.bam
+samtools fqidx ref.fastq
 .PP
-samtools depad input.bam
+samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
+.PP
+samtools calmd in.sorted.bam ref.fasta
+.PP
+samtools fixmate in.namesorted.sam out.bam
 .PP
 samtools markdup in.algnsorted.bam out.bam
+.PP
+samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
+.PP
+samtools reheader in.header.sam in.bam > out.bam
+.PP
+samtools targetcut input.bam
+.PP
+samtools phase input.bam
+.PP
+samtools depad input.bam
 
 .SH DESCRIPTION
 .PP
@@ -141,6 +149,77 @@ and indexed input file.
 Options exist to change the output format from SAM to BAM or CRAM, so
 this command also acts as a file format conversion utility.
 
+.TP \"-------- tview
+.B tview
+samtools tview
+.RB [ -p
+.IR chr:pos ]
+.RB [ -s
+.IR STR ]
+.RB [ -d
+.IR display ]
+.RI <in.sorted.bam>
+.RI [ref.fasta]
+
+Text alignment viewer (based on the ncurses library). In the viewer,
+press `?' for help and press `g' to check the alignment start from a
+region in the format like `chr10:10,000,000' or `=10,000,000' when
+viewing the same reference sequence.
+
+.TP \"-------- quickcheck
+.B quickcheck
+samtools quickcheck
+.RI [ options ]
+.IR in.sam | in.bam | in.cram
+[ ... ]
+
+Quickly check that input files appear to be intact. Checks that beginning of the
+file contains a valid header (all formats) containing at least one target
+sequence and then seeks to the end of the file and checks that an end-of-file
+(EOF) is present and intact (BAM only).
+
+Data in the middle of the file is not read since that would be much more time
+consuming, so please note that this command will not detect internal corruption,
+but is useful for testing that files are not truncated before performing more
+intensive tasks on them.
+
+This command will exit with a non-zero exit code if any input files don't have a
+valid header or are missing an EOF block. Otherwise it will exit successfully
+(with a zero exit code).
+
+.TP \"-------- index
+.B index
+samtools index
+.RB [ -bc ]
+.RB [ -m
+.IR INT ]
+.IR aln.bam | aln.cram
+.RI [ out.index ]
+
+Index a coordinate-sorted BAM or CRAM file for fast random access.
+(Note that this does not work with SAM files even if they are bgzip
+compressed \(em to index such files, use tabix(1) instead.)
+
+This index is needed when
+.I region
+arguments are used to limit
+.B samtools view
+and similar commands to particular regions of interest.
+
+If an output filename is given, the index file will be written to
+.IR out.index .
+Otherwise, for a CRAM file
+.IR aln.cram ,
+index file
+.IB aln.cram .crai
+will be created; for a BAM file
+.IR aln.bam ,
+either
+.IB aln.bam .bai
+or
+.IB aln.bam .csi
+will be created, depending on the index format selected.
+
 .TP \"-------- sort
 .B sort
 .na
@@ -186,38 +265,20 @@ Consider using
 .B samtools collate
 instead if you need name collated data without a full lexicographical sort.
 
-.TP \"-------- index
-.B index
-samtools index
-.RB [ -bc ]
-.RB [ -m
-.IR INT ]
-.IR aln.bam | aln.cram
-.RI [ out.index ]
+.TP \"-------- collate
+.B collate
+samtools collate
+.RI [ options ]
+.IR in.sam | in.bam | in.cram " [" <prefix> "]"
 
-Index a coordinate-sorted BAM or CRAM file for fast random access.
-(Note that this does not work with SAM files even if they are bgzip
-compressed \(em to index such files, use tabix(1) instead.)
+Shuffles and groups reads together by their names.
+A faster alternative to a full query name sort,
+.B collate
+ensures that reads of the same name are grouped together in contiguous groups,
+but doesn't make any guarantees about the order of read names between groups.
 
-This index is needed when
-.I region
-arguments are used to limit
-.B samtools view
-and similar commands to particular regions of interest.
-
-If an output filename is given, the index file will be written to
-.IR out.index .
-Otherwise, for a CRAM file
-.IR aln.cram ,
-index file
-.IB aln.cram .crai
-will be created; for a BAM file
-.IR aln.bam ,
-either
-.IB aln.bam .bai
-or
-.IB aln.bam .csi
-will be created, depending on the index format selected.
+The output from this command should be suitable for any operation that
+requires all reads from the same template to be grouped together.
 
 .TP \"-------- idxstats
 .B idxstats
@@ -249,6 +310,30 @@ the FLAG field. Each category in the output is broken down into QC pass and
 QC fail, which is presented as "#PASS + #FAIL" followed by a description of
 the category.
 
+.TP \"-------- flags
+.B flags
+samtools flags
+.IR INT | STR [,...]
+
+Convert between textual and numeric flag representation.
+
+.B FLAGS:
+.TS
+rb l l .
+0x1	PAIRED	paired-end (or multiple-segment) sequencing technology
+0x2	PROPER_PAIR	each segment properly aligned according to the aligner
+0x4	UNMAP	segment unmapped
+0x8	MUNMAP	next segment in the template unmapped
+0x10	REVERSE	SEQ is reverse complemented
+0x20	MREVERSE	SEQ of the next segment in the template is reverse complemented
+0x40	READ1	the first segment in the template
+0x80	READ2	the last segment in the template
+0x100	SECONDARY	secondary alignment
+0x200	QCFAIL	not passing quality controls
+0x400	DUP	PCR or optical duplicate
+0x800	SUPPLEMENTARY	supplementary alignment
+.TE
+
 .TP \"-------- stats
 .B stats
 samtools stats
@@ -279,6 +364,35 @@ samtools depth
 
 Computes the read depth at each position or region.
 
+.TP \"-------- mpileup
+.B mpileup
+samtools mpileup
+.RB [ -EB ]
+.RB [ -C
+.IR capQcoef ]
+.RB [ -r
+.IR reg ]
+.RB [ -f
+.IR in.fa ]
+.RB [ -l
+.IR list ]
+.RB [ -Q
+.IR minBaseQ ]
+.RB [ -q
+.IR minMapQ ]
+.I in.bam
+.RI [ in2.bam
+.RI [ ... ]]
+
+Generate textual pileup for one or multiple BAM files.  For VCF and
+BCF output, please use the
+.B bcftools mpileup
+command instead.
+Alignment records are grouped by sample (SM) identifiers in @RG header lines.
+If sample identifiers are absent, each input file is regarded as one sample.
+
+See the samtools-mpileup man page for a description of the pileup format and options.
+
 .TP \"-------- merge
 .B merge
 samtools merge
@@ -306,6 +420,54 @@ The ordering of the records in the input files must match the usage of the
 order will be undefined.  See
 .B sort
 for information about record ordering.
+
+.TP \"-------- split
+.B split
+samtools split
+.RI [ options ]
+.IR merged.sam | merged.bam | merged.cram
+
+Splits a file by read group, producing one or more output files
+matching a common prefix (by default based on the input filename)
+each containing one read-group.
+
+.TP \"-------- cat
+.B cat
+samtools cat
+.RB [ -b
+.IR list ]
+.RB [ -h
+.IR header.sam ]
+.RB [ -o
+.IR out.bam "] " in1.bam " " in2.bam " [ ... ]"
+
+Concatenate BAMs or CRAMs. Although this works on either BAM or CRAM,
+all input files must be the same format as each other. The sequence
+dictionary of each input file must be identical, although this command
+does not check this. This command uses a similar trick to
+.B reheader
+which enables fast BAM concatenation.
+
+.TP \"-------- fastq fasta
+.B fastq/a
+samtools fastq
+.RI [ options ]
+.I in.bam
+.br
+samtools fasta
+.RI [ options ]
+.I in.bam
+
+Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
+command invoked. The files will be automatically compressed if the
+file names have a .gz or .bgzf extension.
+
+The input to this program must be collated by name.
+Use
+.B samtools collate
+or
+.B samtools sort -n
+to ensure this.
 
 .TP \"-------- faidx
 .B faidx
@@ -349,60 +511,28 @@ Trying to use it on a file containing millions of short sequencing reads
 will produce an index that is almost as big as the original file, and
 searches using the index will be very slow and use a lot of memory.
 
-.TP \"-------- tview
-.B tview
-samtools tview
-.RB [ -p
-.IR chr:pos ]
-.RB [ -s
-.IR STR ]
-.RB [ -d
-.IR display ]
-.RI <in.sorted.bam>
-.RI [ref.fasta]
-
-Text alignment viewer (based on the ncurses library). In the viewer,
-press `?' for help and press `g' to check the alignment start from a
-region in the format like `chr10:10,000,000' or `=10,000,000' when
-viewing the same reference sequence.
-
-.TP \"-------- split
-.B split
-samtools split
-.RI [ options ]
-.IR merged.sam | merged.bam | merged.cram
-
-Splits a file by read group, producing one or more output files
-matching a common prefix (by default based on the input filename)
-each containing one read-group.
-
-.TP \"-------- quickcheck
-.B quickcheck
-samtools quickcheck
-.RI [ options ]
-.IR in.sam | in.bam | in.cram
-[ ... ]
-
-Quickly check that input files appear to be intact. Checks that beginning of the
-file contains a valid header (all formats) containing at least one target
-sequence and then seeks to the end of the file and checks that an end-of-file
-(EOF) is present and intact (BAM only).
-
-Data in the middle of the file is not read since that would be much more time
-consuming, so please note that this command will not detect internal corruption,
-but is useful for testing that files are not truncated before performing more
-intensive tasks on them.
-
-This command will exit with a non-zero exit code if any input files don't have a
-valid header or are missing an EOF block. Otherwise it will exit successfully
-(with a zero exit code).
-
 .TP \"-------- dict
 .B dict
 samtools dict
 .IR ref.fasta | ref.fasta.gz
 
 Create a sequence dictionary file from a fasta file.
+
+.TP \"-------- calmd
+.B calmd
+samtools calmd
+.RB [ -Eeubr ]
+.RB [ -C
+.IR capQcoef "] " aln.bam " " ref.fasta
+
+Generate the MD tag. If the MD tag is already present, this command will
+give a warning if the MD tag generated is different from the existing
+tag. Output SAM by default.
+
+Calmd can also read and write CRAM files although in most cases it is
+pointless as CRAM recalculates MD and NM tags on the fly.  The one
+exception to this case is where both input and output CRAM files
+have been / are being created with the \fIno_ref\fR option.
 
 .TP \"-------- fixmate
 .B fixmate
@@ -417,130 +547,22 @@ samtools fixmate
 Fill in mate coordinates, ISIZE and mate related flags from a
 name-sorted alignment.
 
-.TP \"-------- mpileup
-.B mpileup
-samtools mpileup
-.RB [ -EB ]
-.RB [ -C
-.IR capQcoef ]
-.RB [ -r
-.IR reg ]
-.RB [ -f
-.IR in.fa ]
+.TP \"-------- markdup
+.B markdup
+.na
+samtools markdup
 .RB [ -l
-.IR list ]
-.RB [ -Q
-.IR minBaseQ ]
-.RB [ -q
-.IR minMapQ ]
-.I in.bam
-.RI [ in2.bam
-.RI [ ... ]]
+.IR length ]
+.RB [ -r ]
+.RB [ -s ]
+.RB [ -T ]
+.RB [ -S ]
+.I in.algsort.bam out.bam
+.ad
 
-Generate textual pileup for one or multiple BAM files.  For VCF and
-BCF output, please use the
-.B bcftools mpileup
-command instead.
-Alignment records are grouped by sample (SM) identifiers in @RG header lines.
-If sample identifiers are absent, each input file is regarded as one sample.
-
-See the samtools-mpileup man page for a description of the pileup format and options.
-
-.TP \"-------- flags
-.B flags
-samtools flags
-.IR INT | STR [,...]
-
-Convert between textual and numeric flag representation.
-
-.B FLAGS:
-.TS
-rb l l .
-0x1	PAIRED	paired-end (or multiple-segment) sequencing technology
-0x2	PROPER_PAIR	each segment properly aligned according to the aligner
-0x4	UNMAP	segment unmapped
-0x8	MUNMAP	next segment in the template unmapped
-0x10	REVERSE	SEQ is reverse complemented
-0x20	MREVERSE	SEQ of the next segment in the template is reverse complemented
-0x40	READ1	the first segment in the template
-0x80	READ2	the last segment in the template
-0x100	SECONDARY	secondary alignment
-0x200	QCFAIL	not passing quality controls
-0x400	DUP	PCR or optical duplicate
-0x800	SUPPLEMENTARY	supplementary alignment
-.TE
-
-.TP \"-------- fastq fasta
-.B fastq/a
-samtools fastq
-.RI [ options ]
-.I in.bam
-.br
-samtools fasta
-.RI [ options ]
-.I in.bam
-
-Converts a BAM or CRAM into either FASTQ or FASTA format depending on the
-command invoked. The files will be automatically compressed if the
-file names have a .gz or .bgzf extension.
-
-The input to this program must be collated by name.
-Use
-.B samtools collate
-or
-.B samtools sort -n
-to ensure this.
-
-.TP \"-------- collate
-.B collate
-samtools collate
-.RI [ options ]
-.IR in.sam | in.bam | in.cram " [" <prefix> "]"
-
-Shuffles and groups reads together by their names.
-A faster alternative to a full query name sort,
-.B collate
-ensures that reads of the same name are grouped together in contiguous groups,
-but doesn't make any guarantees about the order of read names between groups.
-
-The output from this command should be suitable for any operation that
-requires all reads from the same template to be grouped together.
-
-.TP \"-------- reheader
-.B reheader
-samtools reheader
-.RB [ -iP ]
-.I in.header.sam in.bam
-
-Replace the header in
-.I in.bam
-with the header in
-.IR in.header.sam .
-This command is much faster than replacing the header with a
-BAM\(->SAM\(->BAM conversion.
-
-By default this command outputs the BAM or CRAM file to standard
-output (stdout), but for CRAM format files it has the option to
-perform an in-place edit, both reading and writing to the same file.
-No validity checking is performed on the header, nor that it is suitable
-to use with the sequence data itself.
-
-.TP \"-------- cat
-.B cat
-samtools cat
-.RB [ -b
-.IR list ]
-.RB [ -h
-.IR header.sam ]
-.RB [ -o
-.IR out.bam "] " in1.bam " " in2.bam " [ ... ]"
-
-Concatenate BAMs or CRAMs. Although this works on either BAM or CRAM,
-all input files must be the same format as each other. The sequence
-dictionary of each input file must be identical, although this command
-does not check this. This command uses a similar trick to
-.B reheader
-which enables fast BAM concatenation.
+Mark duplicate alignments from a coordinate sorted file that
+has been run through \fBsamtools fixmate\fR with the \fB-m\fR option.  This program
+relies on the MC and ms tags that fixmate provides.
 
 .TP \"-------- rmdup
 .B rmdup
@@ -566,21 +588,24 @@ samtools addreplacerg
 
 Adds or replaces read group tags in a file.
 
-.TP \"-------- calmd
-.B calmd
-samtools calmd
-.RB [ -Eeubr ]
-.RB [ -C
-.IR capQcoef "] " aln.bam " " ref.fasta
+.TP \"-------- reheader
+.B reheader
+samtools reheader
+.RB [ -iP ]
+.I in.header.sam in.bam
 
-Generate the MD tag. If the MD tag is already present, this command will
-give a warning if the MD tag generated is different from the existing
-tag. Output SAM by default.
+Replace the header in
+.I in.bam
+with the header in
+.IR in.header.sam .
+This command is much faster than replacing the header with a
+BAM\(->SAM\(->BAM conversion.
 
-Calmd can also read and write CRAM files although in most cases it is
-pointless as CRAM recalculates MD and NM tags on the fly.  The one
-exception to this case is where both input and output CRAM files
-have been / are being created with the \fIno_ref\fR option.
+By default this command outputs the BAM or CRAM file to standard
+output (stdout), but for CRAM format files it has the option to
+perform an in-place edit, both reading and writing to the same file.
+No validity checking is performed on the header, nor that it is suitable
+to use with the sequence data itself.
 
 .TP \"-------- targetcut
 .B targetcut
@@ -639,23 +664,6 @@ operator (if the base-call is "A", "C", "G" or "T").  After depadding
 the reference "*" bases are deleted and such aligned sequence
 base-calls become insertions.  Similarly transformations apply for
 deletions and padding cigar operations.
-
-.TP \"-------- markdup
-.B markdup
-.na
-samtools markdup
-.RB [ -l
-.IR length ]
-.RB [ -r ]
-.RB [ -s ]
-.RB [ -T ]
-.RB [ -S ]
-.I in.algsort.bam out.bam
-.ad
-
-Mark duplicate alignments from a coordinate sorted file that
-has been run through \fBsamtools fixmate\fR with the \fB-m\fR option.  This program
-relies on the MC and ms tags that fixmate provides.
 
 .SH SAMTOOLS OPTIONS
 These are options that are passed after the \fBsamtools\fR command,
