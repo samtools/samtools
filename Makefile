@@ -38,7 +38,7 @@ LZ4_LDFLAGS  = -L$(LZ4DIR)
 LOBJS=      bam_aux.o bam.o sam.o \
             bam_plbuf.o
 AOBJS=      bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
-            bam_cat.o bam_md.o bam_reheader.o bam_sort.o bedidx.o \
+            bam_cat.o bam_md.o bam_reheader.o bam_sort.o \
             bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
             bamtk.o bam2bcf.o bam2bcf_indel.o sample.o \
             cut_target.o phase.o bam2depth.o coverage.o padding.o bedcov.o bamshuf.o \
@@ -131,7 +131,7 @@ print-version:
 .c.o:
 	$(CC) $(CFLAGS) $(ALL_CPPFLAGS) -c -o $@ $<
 
-LIBST_OBJS = sam_opts.o sam_utils.o
+LIBST_OBJS = sam_opts.o sam_utils.o bedidx.o
 
 
 lib:libbam.a
@@ -181,7 +181,7 @@ bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h)
 bam_reheader.o: bam_reheader.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) $(samtools_h)
 bam_rmdup.o: bam_rmdup.c config.h $(htslib_sam_h) $(sam_opts_h) $(samtools_h) $(bam_h) $(htslib_khash_h)
 bam_rmdupse.o: bam_rmdupse.c config.h $(bam_h) $(htslib_sam_h) $(htslib_khash_h) $(htslib_klist_h) $(samtools_h)
-bam_sort.o: bam_sort.c config.h $(htslib_ksort_h) $(htslib_hts_os_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_sam_h) $(htslib_hts_endian_h) $(sam_opts_h) $(samtools_h)
+bam_sort.o: bam_sort.c config.h $(htslib_ksort_h) $(htslib_hts_os_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_sam_h) $(htslib_hts_endian_h) $(sam_opts_h) $(samtools_h) $(bedidx_h)
 bam_split.o: bam_split.c config.h $(htslib_sam_h) $(htslib_khash_h) $(htslib_kstring_h) $(htslib_cram_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 bam_stat.o: bam_stat.c config.h $(htslib_sam_h) $(samtools_h) $(sam_opts_h)
 bam_tview.o: bam_tview.c config.h $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h) $(samtools_h) $(sam_opts_h)

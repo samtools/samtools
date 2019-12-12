@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+ * samtools merge now accepts a BED file as a command line argument (-L) and
+   does the merging only with reads overlapping the specified regions.
+
 Release 1.10 (6th December 2019)
 --------------------------------
 

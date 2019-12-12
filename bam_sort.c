@@ -47,6 +47,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/hts_endian.h"
 #include "sam_opts.h"
 #include "samtools.h"
+#include "bedidx.h"
 
 
 // Struct which contains the a record, and the pointer to the sort tag (if any) or
@@ -911,10 +912,38 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 #define MERGE_COMBINE_PG 32 // Combine PG tags frather than redefining them
 #define MERGE_FIRST_CO   64 // Use only first file's @CO headers (sort cmd only)
 
+
+static hts_reglist_t *duplicate_reglist(const hts_reglist_t *rl, int rn) {
+    if (!rl)
+        return NULL;
+
+    hts_reglist_t *new_rl = calloc(rn, sizeof(hts_reglist_t));
+    if (!new_rl)
+        return NULL;
+
+    int i;
+    for (i=0; i < rn; i++) {
+        new_rl[i].tid     = rl[i].tid;
+        new_rl[i].count   = rl[i].count;
+        new_rl[i].min_beg = rl[i].min_beg;
+        new_rl[i].max_end = rl[i].max_end;
+
+        new_rl[i].reg = rl[i].reg;
+        new_rl[i].intervals = malloc(new_rl[i].count * sizeof(hts_pair_pos_t));
+        if (!new_rl[i].intervals) {
+            hts_reglist_free(new_rl, i);
+            return NULL;
+        }
+        memcpy(new_rl[i].intervals, rl[i].intervals, new_rl[i].count * sizeof(hts_pair_pos_t));
+    }
+
+    return new_rl;
+}
+
 /*
  * How merging is handled
  *
- * If a hheader is defined use we will use that as our output header
+ * If a header is defined use we will use that as our output header
  * otherwise we use the first header from the first input file.
  *
  * Now go through each file and create a translation table for that file for:
@@ -957,9 +986,9 @@ int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
  */
 int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *mode,
                     const char *headers, int n, char * const *fn, char * const *fn_idx,
-                    int flag, const char *reg, int n_threads, const char *cmd,
-                    const htsFormat *in_fmt, const htsFormat *out_fmt, int write_index,
-                    char *arg_list, int no_pg)
+                    const char *fn_bed, int flag, const char *reg, int n_threads,
+                    const char *cmd, const htsFormat *in_fmt, const htsFormat *out_fmt,
+                    int write_index, char *arg_list, int no_pg)
 {
     samFile *fpout, **fp = NULL;
     heap1_t *heap = NULL;
@@ -973,6 +1002,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     trans_tbl_t *translation_tbl = NULL;
     int *rtrans = NULL;
     char *out_idx_fn = NULL;
+    void *hreg = NULL;
+    hts_reglist_t *lreg = NULL;
     merged_header_t *merged_hdr = init_merged_header();
     if (!merged_hdr) return -1;
 
@@ -1030,7 +1061,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     }
 
     if (hin) {
-        // Popluate merged_hdr from the pre-prepared header
+        // Populate merged_hdr from the pre-prepared header
         trans_tbl_t dummy;
         int res;
         res = trans_tbl_init(merged_hdr, hin, &dummy, flag & MERGE_COMBINE_RG,
@@ -1059,10 +1090,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
                            RG[i]))
             return -1; // FIXME: memory leak
 
-        // TODO sam_itr_next() doesn't yet work for SAM files,
-        // so for those keep the headers around for use with sam_read1()
-        if (hts_get_format(fp[i])->format == sam) hdr[i] = hin;
-        else { sam_hdr_destroy(hin); hdr[i] = NULL; }
+        hdr[i] = hin;
 
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
@@ -1098,10 +1126,22 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     if (!hout) return -1;  // FIXME: memory leak
 
     // If we're only merging a specified region move our iters to start at that point
-    if (reg) {
-        int tid;
-        hts_pos_t beg, end;
+    int tid, nreg;
+    hts_pos_t beg, end;
 
+    if (fn_bed) {
+        hreg = bed_read(fn_bed);
+        if (!hreg) {
+            fprintf(stderr, "[%s] Could not read BED file: \"%s\"\n", __func__, fn_bed);
+            goto fail;
+        }
+        bed_unify(hreg);
+        lreg = bed_reglist(hreg, ALL, &nreg);
+        if (!lreg || !nreg) {
+            fprintf(stderr, "[%s] Null or empty region list\n", __func__);
+            goto fail;
+        }
+    } else if (reg) {
         rtrans = rtrans_build(n, sam_hdr_nref(hout), translation_tbl);
         if (!rtrans) goto mem_fail;
 
@@ -1109,55 +1149,69 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
             fprintf(stderr, "[%s] Badly formatted region or unknown reference name: \"%s\"\n", __func__, reg);
             goto fail;
         }
+
+    }
+
+    if (reg || fn_bed) {
+        hts_idx_t *reg_idx = NULL;
         for (i = 0; i < n; ++i) {
-            hts_idx_t *idx = NULL;
-            // If index filename has not been specfied, look in BAM folder
+
+            // If index filename has not been specified, look in the BAM folder
             if (fn_idx != NULL) {
-                idx = sam_index_load2(fp[i], fn[i], fn_idx[i]);
+                reg_idx = sam_index_load2(fp[i], fn[i], fn_idx[i]);
             } else {
-                idx = sam_index_load(fp[i], fn[i]);
+                reg_idx = sam_index_load(fp[i], fn[i]);
             }
-            // (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
-            int mapped_tid = rtrans[i*sam_hdr_nref(hout)+tid];
-            if (idx == NULL) {
-                fprintf(stderr, "[%s] failed to load index for %s.  Random alignment retrieval only works for indexed BAM or CRAM files.\n",
+            if (reg_idx == NULL) {
+                fprintf(stderr, "[%s] failed to load index for %s. Random alignment retrieval only works for indexed BAM or CRAM files.\n",
                         __func__, fn[i]);
+                free(rtrans);
+                rtrans = NULL;
                 goto fail;
             }
-            if (mapped_tid != INT32_MIN) {
-                iter[i] = sam_itr_queryi(idx, mapped_tid, beg, end);
+
+            int mapped_tid = INT32_MIN;
+            if (fn_bed) {
+                hts_reglist_t *rl = duplicate_reglist(lreg, nreg);
+                iter[i] = sam_itr_regions(reg_idx, hdr[i], rl, nreg);
             } else {
-                iter[i] = sam_itr_queryi(idx, HTS_IDX_NONE, 0, 0);
-            }
-            hts_idx_destroy(idx);
-            if (iter[i] == NULL) {
+                // (rtrans[i*n+tid]) Look up what hout tid translates to in input tid space
+                mapped_tid = rtrans[i*sam_hdr_nref(hout)+tid];
                 if (mapped_tid != INT32_MIN) {
-                    fprintf(stderr,
-                            "[%s] failed to get iterator over "
-                            "{%s, %d, %"PRIhts_pos", %"PRIhts_pos"}\n",
-                            __func__, fn[i], mapped_tid, beg, end);
+                    iter[i] = sam_itr_queryi(reg_idx, mapped_tid, beg, end);
                 } else {
-                    fprintf(stderr,
-                            "[%s] failed to get iterator over "
-                            "{%s, HTS_IDX_NONE, 0, 0}\n",
-                            __func__, fn[i]);
+                    iter[i] = sam_itr_queryi(reg_idx, HTS_IDX_NONE, 0, 0);
                 }
+            }
+
+            if (iter[i] == NULL) {
+                if (fn_bed) {
+                    fprintf(stderr, "[%s] failed to get multi-region iterator "
+                            "{%s, %s}\n", __func__, fn[i], fn_bed);
+                } else {
+                    if (mapped_tid != INT32_MIN) {
+                        fprintf(stderr,
+                                "[%s] failed to get iterator over "
+                                "{%s, %d, %"PRIhts_pos", %"PRIhts_pos"}\n",
+                                __func__, fn[i], mapped_tid, beg, end);
+                    } else {
+                        fprintf(stderr,
+                                "[%s] failed to get iterator over "
+                                "{%s, HTS_IDX_NONE, 0, 0}\n",
+                                __func__, fn[i]);
+                    }
+                }
+                hts_idx_destroy(reg_idx);
+                free(rtrans);
+                rtrans = NULL;
                 goto fail;
             }
+
+            hts_idx_destroy(reg_idx);
         }
+
         free(rtrans);
         rtrans = NULL;
-    } else {
-        for (i = 0; i < n; ++i) {
-            if (hdr[i] == NULL) {
-                iter[i] = sam_itr_queryi(NULL, HTS_IDX_REST, 0, 0);
-                if (iter[i] == NULL) {
-                    fprintf(stderr, "[%s] failed to get iterator\n", __func__);
-                    goto fail;
-                }
-            }
-            else iter[i] = NULL;
-        }
     }
 
     // Load the first read from each file into the heap
@@ -1279,6 +1333,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     sam_hdr_destroy(hin);
     sam_hdr_destroy(hout);
     free_merged_header(merged_hdr);
+    hts_reglist_free(lreg, nreg);
+    bed_destroy(hreg);
     free(RG); free(translation_tbl); free(fp); free(heap); free(iter); free(hdr);
     if (sam_close(fpout) < 0) {
         print_error(cmd, "error closing output file");
@@ -1307,6 +1363,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     free(RG);
     free(translation_tbl);
     free(hdr);
+    hts_reglist_free(lreg, nreg);
+    bed_destroy(hreg);
     free(iter);
     free(heap);
     free(fp);
@@ -1322,7 +1380,7 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
     strcpy(mode, "wb");
     if (flag & MERGE_UNCOMP) strcat(mode, "0");
     else if (flag & MERGE_LEVEL1) strcat(mode, "1");
-    return bam_merge_core2(by_qname, NULL, out, mode, headers, n, fn, NULL, flag, reg, 0, "merge", NULL, NULL, 0, NULL, 1);
+    return bam_merge_core2(by_qname, NULL, out, mode, headers, n, fn, NULL, NULL, flag, reg, 0, "merge", NULL, NULL, 0, NULL, 1);
 }
 
 static void merge_usage(FILE *to)
@@ -1345,6 +1403,7 @@ static void merge_usage(FILE *to)
 "  -s VALUE   Override random seed\n"
 "  -b FILE    List of input BAM filenames, one per line [null]\n"
 "  -X         Use customized index files\n"
+"  -L FILE    Specify a BED file for multiple region filtering [null]\n"
 "  --no-PG    do not add a PG line\n");
     sam_global_opt_help(to, "-.O..@..");
 }
@@ -1356,7 +1415,7 @@ int bam_merge(int argc, char *argv[])
     char *sort_tag = NULL, *arg_list = NULL;
     long random_seed = (long)time(NULL);
     char** fn = NULL;
-    char** fn_idx = NULL;
+    char** fn_idx = NULL, *fn_bed = NULL;
     int fn_size = 0, no_pg = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -1372,7 +1431,7 @@ int bam_merge(int argc, char *argv[])
         return 0;
     }
 
-    while ((c = getopt_long(argc, argv, "h:nru1R:f@:l:cps:b:O:t:X", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "h:nru1R:f@:l:cps:b:O:t:XL:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
@@ -1387,6 +1446,7 @@ int bam_merge(int argc, char *argv[])
         case 'p': flag |= MERGE_COMBINE_PG; break;
         case 's': random_seed = atol(optarg); break;
         case 'X': has_index_file = 1; break; // -X flag for index filename
+        case 'L': fn_bed = optarg; break;
         case 'b': {
             // load the list of files to read
             if (has_index_file) {
@@ -1432,7 +1492,8 @@ int bam_merge(int argc, char *argv[])
         if (fp != NULL) {
             fclose(fp);
             fprintf(stderr, "[%s] File '%s' exists. Please apply '-f' to overwrite. Abort.\n", __func__, argv[optind]);
-            return 1;
+            ret = 1;
+            goto end;
         }
     }
 
@@ -1440,7 +1501,8 @@ int bam_merge(int argc, char *argv[])
     if (has_index_file) { // Calculate # of input BAM files
         if ((argc - optind - 1) % 2 != 0) {
             fprintf(stderr, "Odd number of filenames detected! Each BAM file should have an index file\n");
-            return 1;
+            ret = 1;
+            goto end;
         }
         nargcfiles = (argc - optind - 1) / 2;
     } else {
@@ -1462,14 +1524,20 @@ int bam_merge(int argc, char *argv[])
     if (fn_size+nargcfiles < 1) {
         print_error("merge", "You must specify at least one (and usually two or more) input files");
         merge_usage(stderr);
-        free(fn_idx);
-        return 1;
+        ret = 1;
+        goto end;
+    }
+
+    if (reg && fn_bed) {
+        print_error("merge", "You must specify either a BED file or a region");
+        ret = 1;
+        goto end;
     }
     strcpy(mode, "wb");
     sam_open_mode(mode+1, argv[optind], NULL);
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
     if (bam_merge_core2(is_by_qname, sort_tag, argv[optind], mode, fn_headers,
-                        fn_size+nargcfiles, fn, fn_idx, flag, reg, ga.nthreads,
+                        fn_size+nargcfiles, fn, fn_idx, fn_bed, flag, reg, ga.nthreads,
                         "merge", &ga.in, &ga.out, ga.write_index, arg_list, no_pg) < 0)
         ret = 1;
 
