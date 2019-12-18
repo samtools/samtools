@@ -2879,6 +2879,12 @@ sub test_merge
     # Check merge works when PG/RG/CO header lines absent (PR #1095)
     # Note only "merges" one file, so expected output is input
     test_cmd($opts, out=>'merge/test_no_pg_rg_co.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -O SAM - $$opts{path}/merge/test_no_pg_rg_co.sam");
+
+    system("$$opts{bin}/samtools view -ho $$opts{tmp}/merge.bed.1.bam --no-PG  $$opts{path}/merge/merge.bed.1.sam") == 0 or die "failed to create merge.bed.1.bam: $?";
+    system("$$opts{bin}/samtools view -ho $$opts{tmp}/merge.bed.2.bam --no-PG  $$opts{path}/merge/merge.bed.2.sam") == 0 or die "failed to create merge.bed.2.bam: $?";
+    system("$$opts{bin}/samtools index $$opts{tmp}/merge.bed.1.bam") == 0 or die "failed to index merge.bed.1.bam: $?";
+    system("$$opts{bin}/samtools index $$opts{tmp}/merge.bed.2.bam") == 0 or die "failed to index merge.bed.2.bam: $?";
+    test_cmd($opts, out=>'merge/merge.bed.expected.sam', cmd => "$$opts{bin}/samtools merge${threads} --no-PG -O SAM -L $$opts{path}/merge/merge.bed - $$opts{tmp}/merge.bed.1.bam $$opts{tmp}/merge.bed.2.bam");
 }
 
 sub test_sort

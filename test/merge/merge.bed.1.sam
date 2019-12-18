@@ -1,0 +1,19 @@
+@HD	VN:1.4
+@SQ	SN:ref1	LN:50
+@SQ	SN:ref2	LN:50	AN:r2
+@SQ	SN:r3	LN:50	AN:ref3
+r1f1g1	0	ref1	1	30	30M	*	0	0	*	*
+r2f1g1	0	ref1	2	30	19M	*	0	0	*	*
+r3f1g1	0	ref1	4	30	32M	*	0	0	*	*
+r4f1g1	0	ref1	5	30	13M	*	0	0	*	*
+r5f1g1	0	ref1	27	30	11M	*	0	0	*	*
+r1f1g2	0	ref2	1	30	30M	*	0	0	*	*
+r2f1g2	0	ref2	2	30	19M	*	0	0	*	*
+r3f1g2	0	ref2	4	30	32M	*	0	0	*	*
+r4f1g2	0	ref2	5	30	13M	*	0	0	*	*
+r5f1g2	0	ref2	27	30	11M	*	0	0	*	*
+r1f1g3	0	ref3	1	30	17M	*	0	0	*	*
+r2f1g3	0	ref3	2	30	19M	*	0	0	*	*
+r3f1g3	0	ref3	4	30	32M	*	0	0	*	*
+r4f1g3	0	ref3	5	30	13M	*	0	0	*	*
+r5f1g3	0	ref3	27	30	11M	*	0	0	*	*
