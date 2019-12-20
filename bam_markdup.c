@@ -1080,30 +1080,29 @@ static inline double coverage_equation(double x, double c, double n) {
 
 
 /* estimate the library size, based on the Picard code in DuplicationMetrics.java*/
-static unsigned long estimate_library_size(unsigned long read_pairs, unsigned long duplicate_pairs) {
+static unsigned long estimate_library_size(unsigned long paired_reads, unsigned long paired_duplicate_reads, unsigned long optical) {
     unsigned long estimated_size = 0;
+    unsigned long non_optical_pairs = (paired_reads - optical) / 2;
+    unsigned long unique_pairs = (paired_reads - paired_duplicate_reads) / 2;
+    unsigned long duplicate_pairs = (paired_duplicate_reads - optical) / 2;
 
-    read_pairs /= 2;
-    duplicate_pairs /= 2;
-
-    if ((read_pairs && duplicate_pairs) && (read_pairs > duplicate_pairs)) {
-        unsigned long unique_pairs = read_pairs - duplicate_pairs;
+    if ((non_optical_pairs && duplicate_pairs && unique_pairs) && (non_optical_pairs > duplicate_pairs)) {
         double m = 1;
         double M = 100;
         int i;
 
-        if (coverage_equation(m * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) < 0) {
+        if (coverage_equation(m * (double)unique_pairs, (double)unique_pairs, (double)non_optical_pairs) < 0) {
             fprintf(stderr, "[markdup] warning: unable to calculate estimated library size.\n");
             return  estimated_size;
         }
 
-        while (coverage_equation(M * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) > 0) {
+        while (coverage_equation(M * (double)unique_pairs, (double)unique_pairs, (double)non_optical_pairs) > 0) {
             M *= 10;
         }
 
         for (i = 0; i < 40; i++) {
             double r = (m + M) / 2;
-            double u = coverage_equation(r * (double)unique_pairs, (double)unique_pairs, (double)read_pairs);
+            double u = coverage_equation(r * (double)unique_pairs, (double)unique_pairs, (double)non_optical_pairs);
 
             if (u > 0) {
                 m = r;
@@ -1119,7 +1118,7 @@ static unsigned long estimate_library_size(unsigned long read_pairs, unsigned lo
         fprintf(stderr, "[markdup] warning: unable to calculate estimated library size."
                         " Read pairs %ld should be greater than duplicate pairs %ld,"
                         " which should both be non zero.\n",
-                        read_pairs, duplicate_pairs);
+                        non_optical_pairs, duplicate_pairs);
     }
 
     return estimated_size;
@@ -1669,7 +1668,7 @@ static int bam_mark_duplicates(md_param_t *param) {
             fp = stderr;
         }
 
-        els = estimate_library_size(pair, duplicate - optical);
+        els = estimate_library_size(pair, duplicate, optical);
 
         fprintf(fp,
                 "COMMAND: %s\n"
