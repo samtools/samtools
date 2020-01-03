@@ -2479,7 +2479,7 @@ sub test_large_positions
 
     # Sort
     test_cmd($opts, out => 'large_pos/longref.sam',
-             cmd => "$$opts{bin}/samtools sort -O sam --no-PG $$opts{path}/large_pos/longref_name.sam");
+             cmd => "$$opts{bin}/samtools sort -O sam --no-PG -m 10M $$opts{path}/large_pos/longref_name.sam");
 
     # Merge
     test_cmd($opts, out => 'large_pos/merge.expected.sam',
@@ -2497,9 +2497,9 @@ sub test_large_positions
 
     # Sort and fixmates
     test_cmd($opts, out => 'large_pos/longref3.expected.sam',
-             cmd => "$$opts{bin}/samtools sort    -O sam --no-PG -n test/large_pos/longref3.sam |
+             cmd => "$$opts{bin}/samtools sort    -O sam --no-PG -n -m 10M test/large_pos/longref3.sam |
                      $$opts{bin}/samtools fixmate -O sam --no-PG - - |
-                     $$opts{bin}/samtools sort    -O sam --no-PG");
+                     $$opts{bin}/samtools sort    -O sam --no-PG -m 10M");
 }
 
 # Test samtools cat.
@@ -2867,13 +2867,13 @@ sub test_merge
     test_cmd($opts,out=>'merge/7.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
 
     # Sort inputs by PG, then merge
-    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG  $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
-    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.2.bam -t PG  $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG -m 10M $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.2.bam -t PG -m 10M $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
     test_cmd($opts,out=>'merge/tag.pg.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -t PG -O SAM - $$opts{tmp}/merge.tag.1.bam $$opts{tmp}/merge.tag.2.bam");
 
     # Sort inputs by PG, then merge (name sorted)
-    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.3.bam -n -t PG  $$opts{path}/dat/test_input_1_c.sam") == 0 or die "failed to create sort BAM: $?";
-    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.4.bam -n -t PG  $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.3.bam -n -t PG -m 10M $$opts{path}/dat/test_input_1_c.sam") == 0 or die "failed to create sort BAM: $?";
+    system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.4.bam -n -t PG -m 10M $$opts{path}/dat/test_input_1_d.sam") == 0 or die "failed to create sort BAM: $?";
     test_cmd($opts,out=>'merge/tag.pg.n.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -p -c -n -t PG -O SAM - $$opts{tmp}/merge.tag.3.bam $$opts{tmp}/merge.tag.4.bam");
 
     # Check merge works when PG/RG/CO header lines absent (PR #1095)
@@ -2896,22 +2896,22 @@ sub test_sort
 
 
     # Pos sort
-    test_cmd($opts, out=>"sort/pos.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads}  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/pos.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -m 10M $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Name sort
-    test_cmd($opts, out=>"sort/name.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -n  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/name.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -n -m 10M $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Tag sort (RG)
-    test_cmd($opts, out=>"sort/tag.rg.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.rg.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t RG -m 10M $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Tag sort (RG); secondary by name
-    test_cmd($opts, out=>"sort/tag.rg.n.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -n -t RG  $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.rg.n.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -n -t RG -m 10M $$opts{path}/dat/test_input_1_a.bam -O SAM -o -");
 
     # Tag sort (AS)
-    test_cmd($opts, out=>"sort/tag.as.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t AS $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.as.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t AS -m 10M $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
 
     # Tag sort (FI)
-    test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t FI $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
+    test_cmd($opts, out=>"sort/tag.fi.sort.expected.sam", ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools sort${threads} -t FI -m 10M $$opts{path}/dat/test_input_1_d.sam -O SAM -o -");
 }
 
 sub test_collate
