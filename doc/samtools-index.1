@@ -47,14 +47,14 @@ samtools index
 .RB [ -bc ]
 .RB [ -m
 .IR INT ]
-.IR aln.bam | aln.cram
+.IR aln.sam | aln.bam | aln.cram
 .RI [ out.index ]
 
 .SH DESCRIPTION
 .PP
 Index a coordinate-sorted BGZIP-compressed SAM, BAM or CRAM file for fast
 random access.
-(Note that this does not work with uncompressed SAM files.)
+Note for SAM this only works if the file has been BGZF compressed first.
 
 This index is needed when
 .I region

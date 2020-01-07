@@ -195,12 +195,11 @@ samtools index
 .RB [ -bc ]
 .RB [ -m
 .IR INT ]
-.IR aln.bam | aln.cram
+.IR aln.sam.gz | aln.bam | aln.cram
 .RI [ out.index ]
 
-Index a coordinate-sorted BAM or CRAM file for fast random access.
-(Note that this does not work with SAM files even if they are bgzip
-compressed \(em to index such files, use tabix(1) instead.)
+Index a coordinate-sorted SAM, BAM or CRAM file for fast random access.
+Note for SAM this only works if the file has been BGZF compressed first.
 
 This index is needed when
 .I region
@@ -214,7 +213,7 @@ Otherwise, for a CRAM file
 .IR aln.cram ,
 index file
 .IB aln.cram .crai
-will be created; for a BAM file
+will be created; for a BAM or SAM file
 .IR aln.bam ,
 either
 .IB aln.bam .bai
