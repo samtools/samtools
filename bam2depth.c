@@ -91,6 +91,7 @@ static int usage() {
     fprintf(stderr, "   -g <flags>          include reads that have any of the specified flags set [0]\n");
     fprintf(stderr, "   -G <flags>          filter out reads that have any of the specified flags set"
                     "                       [UNMAP,SECONDARY,QCFAIL,DUP]\n");
+    fprintf(stderr, "   -J                  include reads with deletions in depth computation\n");
 
     sam_global_opt_help(stderr, "-.--.--.");
 
@@ -121,6 +122,7 @@ int main_depth(int argc, char *argv[])
     FILE *file_out = stdout;
     uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
     int tflags = 0;
+    int inc_del = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -129,7 +131,7 @@ int main_depth(int argc, char *argv[])
     };
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:g:G:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:g:G:J", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -164,6 +166,7 @@ int main_depth(int argc, char *argv[])
                 }
                 flags |= tflags;
                 break;
+            case 'J': inc_del = 1; break;
             default:  if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': return usage();
@@ -238,7 +241,7 @@ int main_depth(int argc, char *argv[])
         }
         if (reg) { // if a region is specified
             hts_idx_t *idx = NULL;
-            // If index filename has not been specfied, look in BAM folder
+            // If index filename has not been specified, look in the BAM folder
             if (has_index_file) {
                 idx = sam_index_load2(data[i]->fp, argv[optind+i], argv[optind+i+n]);  // load the index
             } else {
@@ -327,8 +330,8 @@ int main_depth(int argc, char *argv[])
         for (i = 0; i < n; ++i) { // base level filters have to go here
             int j, m = 0;
             for (j = 0; j < n_plp[i]; ++j) {
-                const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
-                if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
+                const bam_pileup1_t *p = plp[i] + j; // DON'T modify plp[][] unless you really know
+                if ((!inc_del && p->is_del) || p->is_refskip) ++m; // having dels or refskips at tid:pos
                 else if (p->qpos < p->b->core.l_qseq &&
                          bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
             }

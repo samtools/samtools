@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+ * samtools depth can now include deletions (D) when computing the base
+   coverage depth, if the user adds the -J option to the command line.
+
  * samtools merge now accepts a BED file as a command line argument (-L) and
    does the merging only with reads overlapping the specified regions.
 
