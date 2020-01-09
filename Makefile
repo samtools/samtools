@@ -23,6 +23,7 @@
 
 CC       = gcc
 AR       = ar
+AWK      = awk
 CPPFLAGS =
 #CFLAGS   = -g -Wall -O2 -pedantic -std=c99 -D_XOPEN_SOURCE=600
 CFLAGS   = -g -Wall -O2
@@ -231,8 +232,8 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
-	cd test/mpileup && ./regression.sh mpileup.reg
-	cd test/mpileup && ./regression.sh depth.reg
+	cd test/mpileup && AWK="$(AWK)" ./regression.sh mpileup.reg
+	cd test/mpileup && AWK="$(AWK)" ./regression.sh depth.reg
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)
@@ -274,8 +275,8 @@ test/vcf-miniview.o: test/vcf-miniview.c config.h $(htslib_vcf_h)
 
 # misc programs
 
-misc/ace2sam: misc/ace2sam.o
-	$(CC) $(LDFLAGS) -o $@ misc/ace2sam.o $(ALL_LIBS)
+misc/ace2sam: misc/ace2sam.o $(HTSLIB)
+	$(CC) $(ALL_LDFLAGS) -o $@ misc/ace2sam.o $(HTSLIB_LIB) $(ALL_LIBS)
 
 misc/maq2sam-short: misc/maq2sam-short.o
 	$(CC) $(LDFLAGS) -o $@ misc/maq2sam-short.o $(ALL_LIBS)

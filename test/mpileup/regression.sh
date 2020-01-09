@@ -150,6 +150,7 @@ echo "=== Testing $@ regressions ==="
 
 samtools="../../samtools"
 filter="../vcf-miniview -f"
+awk="${AWK:-awk}"
 regtest $@
 
 # samtools="./samtools-0.1.19"

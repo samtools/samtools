@@ -50,6 +50,7 @@ AH_TOP([/* If you use configure, this file provides @%:@defines reflecting your
    the PACKAGE_* defines are unused and are overridden by the more
    accurate PACKAGE_VERSION as computed by the Makefile.  */])
 
+AC_PROG_AWK
 AC_PROG_CC
 
 dnl Turn on compiler warnings, if possible

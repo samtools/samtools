@@ -427,7 +427,7 @@ int main_coverage(int argc, char *argv[]) {
             if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
                 columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
             }
-#else
+#elif defined TIOCGWINSZ
             struct winsize w;
             if (ioctl(2, TIOCGWINSZ, &w) == 0)
                 columns = w.ws_col;
