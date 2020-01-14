@@ -175,14 +175,14 @@ Excluded reads are not used for calculating duplicates.
 They can optionally be marked as duplicates if they have a primary that is also
 a duplicate.    
 .SH EXAMPLES
-This first command sort can be omitted if the file is already name ordered:
+This first collate command can be omitted if the file is already name ordered or collated:
 .EX
-samtools sort -n -o namesort.bam example.bam
+samtools collate -o namecollate.bam example.bam
 .EE
 
 Add ms and MC tags for markdup to use later:
 .EX
-samtools fixmate -m namesort.bam fixmate.bam
+samtools fixmate -m namecollate.bam fixmate.bam
 .EE
 
 Markdup needs position order:
@@ -195,6 +195,10 @@ Finally mark duplicates:
 samtools markdup positionsort.bam markdup.bam
 .EE
 
+Typically the fixmate step would be applied immediately after sequence
+alignment and the markdup step after sorting by chromosome and
+position.  Thus no \fIadditional\fR sort steps are normally needed.
+
 .SH AUTHOR
 .PP
 Written by Andrew Whitwham from the Sanger Institute.
@@ -202,6 +206,7 @@ Written by Andrew Whitwham from the Sanger Institute.
 .SH SEE ALSO
 .IR samtools (1),
 .IR samtools-sort (1),
+.IR samtools-collate (1),
 .IR samtools-fixmate (1)
 .PP
 Samtools website: <http://www.htslib.org/>
