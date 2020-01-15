@@ -7,6 +7,10 @@ Release a.b
  * samtools merge now accepts a BED file as a command line argument (-L) and
    does the merging only with reads overlapping the specified regions.
 
+ * The dict command can now add AN tags containing alternative names with
+   "chr" prefixes added to or removed from each sequence name as appropriate
+   and listing both "M" and "MT" alternatives for mitochondria.
+
 Release 1.10 (6th December 2019)
 --------------------------------
 

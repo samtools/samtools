@@ -25,6 +25,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <config.h>
 
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <zlib.h>
 #include <getopt.h>
@@ -37,7 +38,7 @@ typedef struct _args_t
 {
     char *output_fname, *fname;
     char *assembly, *species, *uri;
-    int  header;
+    int  alias, header;
 }
 args_t;
 
@@ -79,6 +80,20 @@ static void write_dict(const char *fn, args_t *args)
         hts_md5_final(digest, md5);
         hts_md5_hex(hex, digest);
         fprintf(out, "@SQ\tSN:%s\tLN:%d\tM5:%s", seq->name.s, k, hex);
+        if (args->alias) {
+            const char *name = seq->name.s;
+            if (strncmp(name, "chr", 3) == 0) {
+                name += 3;
+                fprintf(out, "\tAN:%s", name);
+            }
+            else
+                fprintf(out, "\tAN:chr%s", name);
+
+            if (strcmp(name, "M") == 0)
+                fprintf(out, ",chrMT,MT");
+            else if (strcmp(name, "MT") == 0)
+                fprintf(out, ",chrM,M");
+        }
         if (args->uri)
             fprintf(out, "\tUR:%s", args->uri);
         else if (strcmp(fn, "-") != 0) {
@@ -107,8 +122,10 @@ static int dict_usage(void)
     fprintf(stderr, "About:   Create a sequence dictionary file from a fasta file\n");
     fprintf(stderr, "Usage:   samtools dict [options] <file.fa|file.fa.gz>\n\n");
     fprintf(stderr, "Options: -a, --assembly STR    assembly\n");
+    fprintf(stderr, "         -A, --alias, --alternative-name\n");
+    fprintf(stderr, "                               add AN tag by adding/removing 'chr'\n");
     fprintf(stderr, "         -H, --no-header       do not print @HD line\n");
-    fprintf(stderr, "         -o, --output STR      file to write out dict file [stdout]\n");
+    fprintf(stderr, "         -o, --output FILE     file to write out dict file [stdout]\n");
     fprintf(stderr, "         -s, --species STR     species\n");
     fprintf(stderr, "         -u, --uri STR         URI [file:///abs/path/to/file.fa]\n");
     fprintf(stderr, "\n");
@@ -124,6 +141,8 @@ int dict_main(int argc, char *argv[])
     {
         {"help", no_argument, NULL, 'h'},
         {"no-header", no_argument, NULL, 'H'},
+        {"alias", no_argument, NULL, 'A'},
+        {"alternative-name", no_argument, NULL, 'A'},
         {"assembly", required_argument, NULL, 'a'},
         {"species", required_argument, NULL, 's'},
         {"uri", required_argument, NULL, 'u'},
@@ -131,10 +150,11 @@ int dict_main(int argc, char *argv[])
         {NULL, 0, NULL, 0}
     };
     int c;
-    while ( (c=getopt_long(argc,argv,"?hHa:s:u:o:",loptions,NULL))>0 )
+    while ( (c=getopt_long(argc,argv,"?AhHa:s:u:o:",loptions,NULL))>0 )
     {
         switch (c)
         {
+            case 'A': args->alias = 1; break;
             case 'a': args->assembly = optarg; break;
             case 's': args->species = optarg; break;
             case 'u': args->uri = optarg; break;
