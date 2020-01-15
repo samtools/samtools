@@ -1,10 +1,11 @@
 # ===========================================================================
+#   Based on serial 15 of AX_WITH_CURSES from autoconf-archive
 #      http://www.gnu.org/software/autoconf-archive/ax_with_curses.html
 # ===========================================================================
 #
 # SYNOPSIS
 #
-#   AX_WITH_CURSES
+#   HTS_WITH_CURSES
 #
 # DESCRIPTION
 #
@@ -94,7 +95,7 @@
 #   If any Curses library will do (but one must be present and must support
 #   color), you could use:
 #
-#     AX_WITH_CURSES
+#     HTS_WITH_CURSES
 #     if test "x$ax_cv_curses" != xyes || test "x$ax_cv_curses_color" != xyes; then
 #         AC_MSG_ERROR([requires an X/Open-compatible Curses library with color])
 #     fi
@@ -149,12 +150,16 @@
 #   of AX_WITH_CURSES, as well as in the additional macros
 #   AX_WITH_CURSES_PANEL, AX_WITH_CURSES_MENU and AX_WITH_CURSES_FORM.
 #
+#   Based on serial 15 of AX_WITH_CURSES from autoconf-archive
+#      http://www.gnu.org/software/autoconf-archive/ax_with_curses.html
+#
 # LICENSE
 #
 #   Copyright (c) 2009 Mark Pulford <mark@kyne.com.au>
 #   Copyright (c) 2009 Damian Pietras <daper@daper.net>
 #   Copyright (c) 2012 Reuben Thomas <rrt@sc3d.org>
 #   Copyright (c) 2011 John Zaitseff <J.Zaitseff@zap.org.au>
+#   Copyright (c) 2020 Genome Research Limited
 #
 #   This program is free software: you can redistribute it and/or modify it
 #   under the terms of the GNU General Public License as published by the
@@ -182,10 +187,8 @@
 #   modified version of the Autoconf Macro, you may extend this special
 #   exception to the GPL to apply to your modified version as well.
 
-#serial 15
-
-AU_ALIAS([MP_WITH_CURSES], [AX_WITH_CURSES])
-AC_DEFUN([AX_WITH_CURSES], [
+AU_ALIAS([MP_WITH_CURSES], [HTS_WITH_CURSES])
+AC_DEFUN([HTS_WITH_CURSES], [
     AC_ARG_VAR([CURSES_LIB], [linker library for Curses, e.g. -lcurses])
     AC_ARG_WITH([ncurses], [AS_HELP_STRING([--with-ncurses],
         [force the use of Ncurses or NcursesW])],
