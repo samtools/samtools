@@ -30,7 +30,7 @@ AC_CONFIG_SRCDIR([bamtk.c])
 AC_CONFIG_HEADERS([config.h])
 
 m4_include([m4/hts_prog_cc_warnings.m4])
-m4_include([m4/ax_with_curses.m4])
+m4_include([m4/hts_with_curses.m4])
 m4_include([m4/ax_with_htslib.m4])
 
 dnl Copyright notice to be copied into the generated configure script
@@ -88,7 +88,7 @@ AC_ARG_WITH([curses],
                   [omit curses support, so no curses library needed])])
 
 if test "$with_curses" != no; then
-  AX_WITH_CURSES
+  HTS_WITH_CURSES
   if test "$ax_cv_curses" != yes; then
     AC_MSG_ERROR([curses development files not found
 
