@@ -495,6 +495,15 @@ AC_DEFUN([HTS_WITH_CURSES], [
         ])
     ])
 
+    AS_IF([test "x$ax_cv_curses_which" != xno], [
+        # Normally linking curses gets tinfo as well, but this doesn't
+        # always happen.  Check to see if it needs to be added explicitly.
+        AC_SEARCH_LIBS(cbreak, tinfo)
+        AS_CASE([$ac_cv_search_cbreak],
+                [-l*],[CURSES_LIB="$CURSES_LIB $ac_cv_search_cbreak"
+                       LIBS="$LIBS $ac_cv_search_cbreak"])
+    ])
+
     AS_IF([test "x$ax_cv_curses"          != xyes], [ax_cv_curses=no])
     AS_IF([test "x$ax_cv_curses_enhanced" != xyes], [ax_cv_curses_enhanced=no])
     AS_IF([test "x$ax_cv_curses_color"    != xyes], [ax_cv_curses_color=no])
