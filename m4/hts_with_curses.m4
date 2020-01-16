@@ -297,6 +297,14 @@ AC_DEFUN([HTS_WITH_CURSES], [
                 AC_DEFINE([HAVE_NCURSES_H],       [1], [Define to 1 if <ncurses.h> is present])
                 ax_cv_curses_which=ncursesw
             ])
+            HTS_NCURSESW_HEADERS_CHECK([for working ncurses/curses.h],
+                                       [ax_cv_header_ncurses_curses_h_with_ncursesw],
+                                       [ncurses/curses.h],
+                                       [test "x$ax_cv_curses_which" = xno])
+            AS_IF([test "x$ax_cv_header_ncurses_curses_h_with_ncursesw" = xyes], [
+                AC_DEFINE([HAVE_NCURSES_CURSES_H], [1], [Define to 1 if <ncurses/curses.h> is present])
+                ax_cv_curses_which=ncursesw
+            ])
             AS_IF([test "x$ax_cv_curses_which" = xncursesw], [
                 ax_cv_curses=yes
                 ax_cv_curses_enhanced=yes
