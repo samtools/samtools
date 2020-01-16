@@ -267,7 +267,9 @@ static int curses_loop(tview_t* tv) {
             case 'K': tv->row_shift += 20; break;
             case KEY_BACKSPACE:
             case '\177': pos -= tv->mcol; break;
+#ifdef KEY_RESIZE
             case KEY_RESIZE: getmaxyx(stdscr, tv->mrow, tv->mcol); break;
+#endif
             default: continue;
         }
         if (pos < 0) pos = 0;
