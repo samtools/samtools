@@ -2463,6 +2463,9 @@ sub test_large_positions
 {
     my ($opts) = @_;
 
+    # Ensure the tview test prints out the expected number of columns
+    local $ENV{COLUMNS} = 80;
+
     # Simple round-trip
     my $longref = "$$opts{tmp}/longref.sam.gz";
     cmd("$$opts{bgzip} -c $$opts{path}/large_pos/longref.sam > $longref");
