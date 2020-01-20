@@ -38,10 +38,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 #define bam_reg2bin(b,e) hts_reg2bin((b),(e), 14, 5)
 
-// The one and only function needed from sam.c.
-// Explicitly here to avoid including bam.h translation layer.
-extern char *samfaipath(const char *fn_ref);
-
 static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
 {
     if (n != b->core.n_cigar) {
@@ -430,7 +426,7 @@ int main_pad2unpad(int argc, char *argv[])
     sam_hdr_t *h = 0, *h_fix = 0;
     faidx_t *fai = 0;
     int c, compress_level = -1, is_long_help = 0, no_pg = 0;
-    char in_mode[5], out_mode[6], *fn_out = 0, *fn_list = 0, *fn_out_idx = NULL;
+    char in_mode[5], out_mode[6], *fn_out = 0, *fn_fai = 0, *fn_out_idx = NULL;
     int ret=0;
     char *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -477,8 +473,8 @@ int main_pad2unpad(int argc, char *argv[])
 
     // Load FASTA reference (also needed for SAM -> BAM if missing header)
     if (ga.reference) {
-        fn_list = samfaipath(ga.reference);
-        fai = fai_load(ga.reference);
+        fn_fai = fai_path(ga.reference);
+        fai = fai_load3(ga.reference, fn_fai, NULL, FAI_CREATE);
     }
     // open file handlers
     if ((in = sam_open_format(argv[optind], in_mode, &ga.in)) == 0) {
@@ -486,8 +482,8 @@ int main_pad2unpad(int argc, char *argv[])
         ret = 1;
         goto depad_end;
     }
-    if (fn_list && hts_set_fai_filename(in, fn_list) != 0) {
-        fprintf(stderr, "[depad] failed to load reference file \"%s\".\n", fn_list);
+    if (fn_fai && hts_set_fai_filename(in, fn_fai) != 0) {
+        fprintf(stderr, "[depad] failed to load reference file \"%s\".\n", fn_fai);
         ret = 1;
         goto depad_end;
     }
@@ -570,7 +566,7 @@ depad_end:
         fprintf(stderr, "[depad] error on closing output file.\n");
         ret = 1;
     }
-    free(fn_list); free(fn_out);
+    free(fn_fai); free(fn_out);
     if (fn_out_idx)
         free(fn_out_idx);
     sam_global_args_free(&ga);

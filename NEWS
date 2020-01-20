@@ -1,6 +1,11 @@
 Release a.b
 -----------
 
+ * samtools view now accepts remote URIs for FASTA and FAI files.
+   Furthermore, the reference and index file can be provided in a single
+   argument, such as
+   samtools view -T ftp://x.com/ref.fa##idx##ftp://y.com/index.fa.fai a.cram
+
  * samtools depth can now include deletions (D) when computing the base
    coverage depth, if the user adds the -J option to the command line.
 
