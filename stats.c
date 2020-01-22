@@ -250,7 +250,7 @@ typedef struct
     uint32_t nchunks;
 
     uint32_t pair_count;          // Number of active pairs in the pairing hash table
-    uint32_t target_count;        // Number of bases covered by the target file
+    uint64_t target_count;        // Number of bases covered by the target file
     uint32_t last_pair_tid;
     uint32_t last_read_flush;
 
@@ -1535,7 +1535,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\tpairs on different chromosomes:\t%ld\n", (long)stats->nreads_anomalous/2);
     fprintf(to, "SN\tpercentage of properly paired reads (%%):\t%.1f\n", (stats->nreads_1st+stats->nreads_2nd+stats->nreads_other)? (float)(100*stats->nreads_properly_paired)/(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other):0);
     if ( stats->target_count ) {
-        fprintf(to, "SN\tbases inside the target:\t%u\n", stats->target_count);
+        fprintf(to, "SN\tbases inside the target:\t%" PRIu64 "\n", stats->target_count);
         for (icov=stats->info->cov_threshold+1; icov<stats->ncov; icov++)
             cov_sum += stats->cov[icov];
         fprintf(to, "SN\tpercentage of target genome with coverage > %d (%%):\t%.2f\n", stats->info->cov_threshold, (float)(100*cov_sum)/stats->target_count);
@@ -1800,7 +1800,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
 }
 
-static void init_regions(stats_t *stats, const char *file)
+static void init_regions(stats_t *stats, const char *file, stats_info_t* info)
 {
     FILE *fp = fopen(file,"r");
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
@@ -1877,8 +1877,15 @@ static void init_regions(stats_t *stats, const char *file)
             }
             reg->npos = ++new_p;
         }
-        for (p = 0; p < reg->npos; p++)
-            stats->target_count += (reg->pos[p].end - reg->pos[p].beg + 1);
+        for (p = 0; p < reg->npos; p++) {
+            if (reg->pos[p].end < HTS_POS_MAX) {
+                stats->target_count += (reg->pos[p].end - reg->pos[p].beg + 1);
+            } else {
+                uint64_t hdr_end = sam_hdr_tid2len(info->sam_header, r);
+                if (hdr_end)
+                    stats->target_count += (hdr_end - reg->pos[p].beg + 1);
+            }
+        }
     }
 
     if (!(stats->chunks = calloc(stats->nchunks, sizeof(hts_pair_pos_t))))
@@ -1941,7 +1948,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     return 1;
 }
 
-int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
+int replicate_regions(stats_t *stats, hts_itr_multi_t *iter, stats_info_t *info) {
     if ( !stats || !iter)
         return 1;
 
@@ -1975,8 +1982,13 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
         for (j = 0; j < stats->regions[tid].npos; j++) {
             stats->regions[tid].pos[j].beg = iter->reg_list[i].intervals[j].beg+1;
             stats->regions[tid].pos[j].end = iter->reg_list[i].intervals[j].end;
-
-            stats->target_count += (stats->regions[tid].pos[j].end - stats->regions[tid].pos[j].beg + 1);
+            if (stats->regions[tid].pos[j].end < HTS_POS_MAX) {
+                stats->target_count += (stats->regions[tid].pos[j].end - stats->regions[tid].pos[j].beg + 1);
+            } else {
+                uint64_t hdr_end = sam_hdr_tid2len(info->sam_header, tid);
+                if (hdr_end)
+                    stats->target_count += (hdr_end - stats->regions[tid].pos[j].beg + 1);
+            }
         }
     }
 
@@ -2279,7 +2291,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
         goto nomem;
     realloc_rseq_buffer(stats);
     if ( targets )
-        init_regions(stats, targets);
+        init_regions(stats, targets, info);
     return;
  nomem:
     error("Out of memory");
@@ -2459,7 +2471,7 @@ int main_stats(int argc, char *argv[])
             if (iter) {
                 if (!targets) {
                     all_stats->nchunks = argc-optind;
-                    if (replicate_regions(all_stats, iter))
+                    if (replicate_regions(all_stats, iter, info))
                         fprintf(stderr, "Replications of the regions failed\n");
                 }
 
