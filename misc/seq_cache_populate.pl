@@ -297,15 +297,15 @@ of the sequence.
 
 By default, sequences are stored in a hierarchy two directories deep, to
 keep the number of items in a single directory to a reasonable number.  This
-depth can be chaged using the -subdirs option.
+depth can be changed using the -subdirs option.
 
 If the -find option is used, the program will scan the given directory tree.
 Any files that appear to be fasta (by looking for a first line starting with
-'>' followed by somthing that looks like DNA sequence) will be read and
+'>' followed by something that looks like DNA sequence) will be read and
 added to the reference cache.  The traversal will ignore symbolic links.
 
 Samtools/htslib can be made to use the cache by appropriate setting of the
-REF_PATH environment varaiable.  For example, if seq_cache_populate was run
+REF_PATH environment variable.  For example, if seq_cache_populate was run
 using options '-root /tmp/ref_cache -subdirs 2', setting REF_PATH to
 '/tmp/ref_cache/%2s/%2s/%s' should allow samtools to find the references that
 it stored.

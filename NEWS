@@ -509,7 +509,7 @@ Release 1.5 [Solstice Release] (21st June 2017)
   the fastq header line.
 
 * Samtools fastq can now create compressed fastq files, by giving the
-  output filenames an extention of .gq, .bgz, or .bgzf
+  output filenames an extension of .gq, .bgz, or .bgzf
 
 * Samtools sort has a -t TAG option, that allows records to be sorted by
   the value of the specified aux tag, then by position or name.  Merge
@@ -564,7 +564,7 @@ Noteworthy changes in samtools:
 
 * The mpileup text output no longer contains empty columns at zero coverage
   positions.  Previously it would output "...0\t\t..." in some circumstances
-  (zero coverage due to being below a minumum base quality); this has been
+  (zero coverage due to being below a minimum base quality); this has been
   fixed to output as "...0\t*\t*..." with placeholder '*' characters as in
   other zero coverage circumstances (see PR #537).
 
@@ -852,7 +852,7 @@ Other notable changes in samtools:
 
 Other notable changes in bcftools:
 
- * Output the ML esitmate of the allele count.
+ * Output the ML estimate of the allele count.
 
  * Added the HWE plus F<0 filter to varFilter. For multiple samples, it
    effectively filters false heterozygous calls around centromeres.
@@ -904,7 +904,7 @@ is substandard and causing a lot of confusion.
 Beta Release 0.1.15 (10 April, 2011)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Noteable changes:
+Notable changes:
 
  * Allow to perform variant calling or to extract information in multiple
    regions specified by a BED file (`samtools mpileup -l', `samtools view -L'
@@ -1044,7 +1044,7 @@ Other notable changes in bcftools:
    of all samples being the same (identical to the reference or all homozygous
    variants). Option `view -f' has been dropped.
 
- * Implementated of "vcfutils.pl vcf2fq" to generate a consensus sequence
+ * Implemented "vcfutils.pl vcf2fq" to generate a consensus sequence
    similar to "samtools.pl pileup2fq".
 
  * Make sure the GT FORMAT field is always the first FORMAT to conform the VCF
@@ -1101,7 +1101,7 @@ This is mainly a bug fix release:
  * Fixed a bug in pileup (since 0.1.9). The bug causes an assertion
    failure when the first CIGAR operation is a deletion.
 
- * Improved fault tolerence in remote access.
+ * Improved fault tolerance in remote access.
 
 One minor feature has been implemented in bcftools:
 
@@ -1165,10 +1165,10 @@ multi-sample SNP calling and the computation of base alignment quality
 (BAQ).
 
 The revised MAQ error model is based on the original model. It solves an
-issue of miscalling SNPs in repetitive regions. Althought such SNPs can
+issue of miscalling SNPs in repetitive regions. Although such SNPs can
 usually be filtered at a later step, they mess up unfiltered calls. This
 is a theoretical flaw in the original model. The revised MAQ model
-deprecates the orginal MAQ model and the simplified SOAPsnp model.
+deprecates the original MAQ model and the simplified SOAPsnp model.
 
 Multi-sample SNP calling is separated in two steps. The first is done by
 samtools mpileup and the second by a new program, bcftools, which is
@@ -1198,7 +1198,7 @@ In addition to the three major improvements, other notable changes are:
  * Fixed a bug in bgzip and razip which causes source files to be
    deleted even if option -c is applied.
 
- * In APIs, propogate errors to downstream callers and make samtools
+ * In APIs, propagate errors to downstream callers and make samtools
    return non-zero values once errors occur.
 
 (0.1.9: 27 October 2010, r783)
@@ -1267,7 +1267,7 @@ APIs and other changes:
  * Added iterator interfaces to random access and pileup. The callback
    interfaces directly call the iterator interfaces.
 
- * The BGZF blocks holding the BAM header are indepedent of alignment
+ * The BGZF blocks holding the BAM header are independent of alignment
    BGZF blocks. Alignment records shorter than 64kB is guaranteed to be
    fully contained in one BGZF block. This change is fully compatible
    with the old version of samtools/picard.
@@ -1297,7 +1297,7 @@ Notable changes:
    performance. Paired-end reads are not touched.
 
  * Duplicate removal is now library aware. Samtools remove potential
-   PCR/optical dupliates inside a library rather than across libraries.
+   PCR/optical duplicates inside a library rather than across libraries.
 
  * SAM header is now fully parsed, although this functionality is not
    used in merging and so on.
@@ -1336,7 +1336,7 @@ Notable changes:
    able to directly open a BAM file on HTTP. HTTP proxy is also
    supported via the "http_proxy" environmental variable.
 
- * Samtools is now compitable with the MinGW (win32) compiler and the
+ * Samtools is now compatible with the MinGW (win32) compiler and the
    PDCurses library.
 
  * The calmd (or fillmd) command now calculates the NM tag and replaces
@@ -1366,7 +1366,7 @@ Notable changes:
  * Fixed a bug in bam_aux_get().
 
 
-Changes in other utilies:
+Changes in other utilities:
 
  * Fixed wrong FLAG in maq2sam.
 

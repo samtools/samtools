@@ -173,7 +173,7 @@ and \fB--output-empty\fR options.
 Assume the quality is in the Illumina 1.3+ encoding.
 .TP
 .B -A, --count-orphans
-Do not skip anomalous read pairs in variant calling.  Anomolous read
+Do not skip anomalous read pairs in variant calling.  Anomalous read
 pairs are those marked in the FLAG field as paired in sequencing but
 without the properly-paired flag set.
 .TP
@@ -264,9 +264,9 @@ Filter flags: skip reads with mask bits set
 Disable read-pair overlap detection.
 .TP
 .B -X
-Include customized index file as a part of arugments. See
+Include customized index file as a part of arguments. See
 .B EXAMPLES
-section for sample of useage.
+section for sample of usage.
 
 .PP
 .B Output Options:
@@ -421,7 +421,7 @@ Generate the consensus sequence for one diploid individual:
 samtools mpileup -uf ref.fa aln.bam | bcftools call -c | vcfutils.pl vcf2fq > cns.fq
 .EE
 .IP o 2
-Include customized index file as a part of arugments.
+Include customized index file as a part of arguments.
 .EX 2
 samtools mpileup [options] -X /data_folder/in1.bam [/data_folder/in2.bam [...]] /index_folder/index1.bai [/index_folder/index2.bai [...]]
 .EE
