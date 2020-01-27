@@ -567,13 +567,18 @@ char * generate_prefix() {
     snprintf(prefix + ret, PREFIX_LEN - ret, "\\%x", pid);
     return prefix;
 #else
-#  define PREFIX_LEN 64
-    prefix = malloc(PREFIX_LEN);
+    char *tmp_env = getenv("TMPDIR");
+    if (!tmp_env)
+        tmp_env = "/tmp";
+
+    size_t prefix_len = strlen(tmp_env)+20;
+    prefix = malloc(prefix_len);
     if (!prefix) {
         perror("collate");
         return NULL;
     }
-    snprintf(prefix, PREFIX_LEN, "/tmp/collate%x", pid);
+    snprintf(prefix, prefix_len, "%s/collate%x", tmp_env, pid);
+
     return prefix;
 #endif
 }
