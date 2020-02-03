@@ -891,19 +891,3 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 
     return exit_status;
 }
-
-int main_import(int argc, char *argv[])
-{
-    int argc2, ret;
-    char **argv2;
-    if (argc != 4) {
-        fprintf(stderr, "Usage: samtools import <in.ref_list> <in.sam> <out.bam>\n");
-        return 1;
-    }
-    argc2 = 6;
-    argv2 = calloc(6, sizeof(char*));
-    argv2[0] = "import", argv2[1] = "-o", argv2[2] = argv[3], argv2[3] = "-bt", argv2[4] = argv[1], argv2[5] = argv[2];
-    ret = main_samview(argc2, argv2);
-    free(argv2);
-    return ret;
-}

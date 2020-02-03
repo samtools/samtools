@@ -11,6 +11,10 @@ Release a.b
    "chr" prefixes added to or removed from each sequence name as appropriate
    and listing both "M" and "MT" alternatives for mitochondria.
 
+ * The samtools import command, labelled as obsolete in May 2009 and
+   removed from all help and documentation later that year, has
+   finally been removed.  Use samtools view instead.
+
 Release 1.10 (6th December 2019)
 --------------------------------
 
