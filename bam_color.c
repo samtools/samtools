@@ -25,7 +25,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include <config.h>
 
 #include <ctype.h>
-#include "bam.h"
+#include <string.h>
+
+#include "htslib/sam.h"
 
 /*!
  @abstract     Get the color encoding the previous and current base
@@ -45,10 +47,10 @@ char bam_aux_getCSi(bam1_t *b, int i)
 
     cs = bam_aux2Z(c);
     // adjust for strandedness and leading adaptor
-    if(bam1_strand(b)) {
+    if(bam_is_rev(b)) {
         i = strlen(cs) - 1 - i;
         // adjust for leading hard clip
-        uint32_t cigar = bam1_cigar(b)[0];
+        uint32_t cigar = bam_get_cigar(b)[0];
         if((cigar & BAM_CIGAR_MASK) == BAM_CHARD_CLIP) {
         i -= cigar >> BAM_CIGAR_SHIFT;
         }
@@ -74,10 +76,10 @@ char bam_aux_getCQi(bam1_t *b, int i)
 
     cq = bam_aux2Z(c);
     // adjust for strandedness
-    if(bam1_strand(b)) {
+    if(bam_is_rev(b)) {
         i = strlen(cq) - 1 - i;
         // adjust for leading hard clip
-        uint32_t cigar = bam1_cigar(b)[0];
+        uint32_t cigar = bam_get_cigar(b)[0];
         if((cigar & BAM_CIGAR_MASK) == BAM_CHARD_CLIP) {
         i -= (cigar >> BAM_CIGAR_SHIFT);
         }
@@ -135,28 +137,28 @@ char bam_aux_getCEi(bam1_t *b, int i)
     cs = bam_aux2Z(c);
 
     // adjust for strandedness and leading adaptor
-    if(bam1_strand(b)) { //reverse strand
+    if(bam_is_rev(b)) { //reverse strand
         cs_i = strlen(cs) - 1 - i;
         // adjust for leading hard clip
-        uint32_t cigar = bam1_cigar(b)[0];
+        uint32_t cigar = bam_get_cigar(b)[0];
         if((cigar & BAM_CIGAR_MASK) == BAM_CHARD_CLIP) {
             cs_i -= cigar >> BAM_CIGAR_SHIFT;
         }
         // get current color
         cur_color = cs[cs_i];
         // get previous base.  Note: must rc adaptor
-        prev_b = (cs_i == 1) ? "TGCAN"[(int)bam_aux_nt2int(cs[0])] : bam_nt16_rev_table[bam1_seqi(bam1_seq(b), i+1)];
+        prev_b = (cs_i == 1) ? "TGCAN"[(int)bam_aux_nt2int(cs[0])] : seq_nt16_str[bam_seqi(bam_get_seq(b), i+1)];
         // get current base
-        cur_b = bam_nt16_rev_table[bam1_seqi(bam1_seq(b), i)];
+        cur_b = seq_nt16_str[bam_seqi(bam_get_seq(b), i)];
     }
     else {
         cs_i=i+1;
         // get current color
         cur_color = cs[cs_i];
         // get previous base
-        prev_b = (0 == i) ? cs[0] : bam_nt16_rev_table[bam1_seqi(bam1_seq(b), i-1)];
+        prev_b = (0 == i) ? cs[0] : seq_nt16_str[bam_seqi(bam_get_seq(b), i-1)];
         // get current base
-        cur_b = bam_nt16_rev_table[bam1_seqi(bam1_seq(b), i)];
+        cur_b = seq_nt16_str[bam_seqi(bam_get_seq(b), i)];
     }
 
     // corrected color

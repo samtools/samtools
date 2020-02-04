@@ -50,13 +50,13 @@ int bam_aux_drop_other(bam1_t *b, uint8_t *s)
 {
     if (s) {
         uint8_t *p, *aux;
-        aux = bam1_aux(b);
+        aux = bam_get_aux(b);
         p = s - 2;
         __skip_tag(s);
         memmove(aux, p, s - p);
-        b->data_len -= bam_get_l_aux(b) - (s - p);
+        b->l_data -= bam_get_l_aux(b) - (s - p);
     } else {
-        b->data_len -= bam_get_l_aux(b);
+        b->l_data -= bam_get_l_aux(b);
     }
     return 0;
 }
