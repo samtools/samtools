@@ -223,6 +223,21 @@ and ideally indexed by
 .BR faidx .
 If an index is not present one will be generated for you, if the reference
 file is local.
+
+If the reference file is not local,
+but is accessed instead via an https://, s3:// or other URL,
+the index file will need to be supplied by the server alongside the reference.
+It is possible to have the reference and index files in different locations
+by supplying both to this option seperated by the string "##idx##",
+for example:
+
+.B -T ftp://x.com/ref.fa##idx##ftp://y.com/index.fa.fai
+
+However, note that only the location of the reference will be stored
+in the output file header.
+If this method is used to make CRAM files, the cram reader may not be able to
+find the index, and may not be able to decode the file unless it can get
+the references it needs using a different method.
 .TP
 .BI "-L " FILE
 Only output alignments overlapping the input BED
