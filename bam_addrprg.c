@@ -164,7 +164,7 @@ static char* get_rg_id(const char *line)
 static void usage(FILE *fp)
 {
     fprintf(fp,
-            "Usage: samtools addreplacerg [options] [-r <@RG line> | -R <existing id>] [-o <output.bam>] <input.bam>\n"
+            "Usage: samtools addreplacerg [options] [-r <@RG line> | -R <existing id>] [-m orphan_only|overwrite_all] [-o <output.bam>] <input.bam>\n"
             "\n"
             "Options:\n"
             "  -m MODE   Set the mode of operation from one of overwrite_all, orphan_only [overwrite_all]\n"
@@ -198,7 +198,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     };
     kstring_t rg_line = {0,0,NULL};
 
-    while ((n = getopt_long(argc, argv, "r:R:m:o:O:l:h@:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:R:m:o:O:h@:", lopts, NULL)) >= 0) {
         switch (n) {
             case 'r':
                 // Are we adding to existing rg line?
