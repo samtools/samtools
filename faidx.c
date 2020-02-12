@@ -232,7 +232,7 @@ static int usage(FILE *fp, enum fai_format_options format, int exit_status)
     return exit_status;
 }
 
-int faidx_core(int argc, char *argv[], enum fai_format_options format)
+static int faidx_core(int argc, char *argv[], enum fai_format_options format)
 {
     int c, ignore_error = 0, rev = 0;
     int line_len = DEFAULT_FASTA_LINE_LEN ;/* fasta line len */

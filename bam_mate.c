@@ -401,7 +401,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
     return 1;
 }
 
-void usage(FILE* where)
+static void usage(FILE* where)
 {
     fprintf(where,
 "Usage: samtools fixmate <in.nameSrt.bam> <out.nameSrt.bam>\n"
