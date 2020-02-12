@@ -273,8 +273,8 @@ KHASH_MAP_INIT_STR(qn2pair, pair_t*)
 
 
 static void HTS_NORETURN error(const char *format, ...);
-int is_in_regions(bam1_t *bam_line, stats_t *stats);
-void realloc_buffers(stats_t *stats, int seq_len);
+static int is_in_regions(bam1_t *bam_line, stats_t *stats);
+static void realloc_buffers(stats_t *stats, int seq_len);
 
 static int regions_lt(const void *r1, const void *r2) {
     int64_t from_diff = ((hts_pair_pos_t *)r1)->beg - ((hts_pair_pos_t *)r2)->beg;
@@ -300,7 +300,7 @@ static inline int round_buffer_lidx2ridx(int offset, int size, hts_pos_t refpos,
     return (offset + (pos-refpos) % size) % size;
 }
 
-void round_buffer_flush(stats_t *stats, hts_pos_t pos)
+static void round_buffer_flush(stats_t *stats, hts_pos_t pos)
 {
     int ibuf,idp;
 
@@ -367,7 +367,7 @@ static void round_buffer_insert_read(round_buffer_t *rbuf, hts_pos_t from, hts_p
 }
 
 // Calculate the number of bases in the read trimmed by BWA
-int bwa_trim_read(int trim_qual, uint8_t *quals, int len, int reverse)
+static int bwa_trim_read(int trim_qual, uint8_t *quals, int len, int reverse)
 {
     if ( len<BWA_MIN_RDLEN ) return 0;
 
@@ -392,7 +392,7 @@ int bwa_trim_read(int trim_qual, uint8_t *quals, int len, int reverse)
 }
 
 
-void count_indels(stats_t *stats,bam1_t *bam_line)
+static void count_indels(stats_t *stats,bam1_t *bam_line)
 {
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
     uint32_t order = IS_PAIRED(bam_line) ? (IS_READ1(bam_line) ? READ_ORDER_FIRST : 0) + (IS_READ2(bam_line) ? READ_ORDER_LAST : 0) : READ_ORDER_FIRST;
@@ -438,7 +438,7 @@ void count_indels(stats_t *stats,bam1_t *bam_line)
     }
 }
 
-int unclipped_length(bam1_t *bam_line)
+static int unclipped_length(bam1_t *bam_line)
 {
     int icig, read_len = bam_line->core.l_qseq;
     for (icig=0; icig<bam_line->core.n_cigar; icig++)
@@ -450,7 +450,7 @@ int unclipped_length(bam1_t *bam_line)
     return read_len;
 }
 
-void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
+static void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
 {
     int is_fwd = IS_REVERSE(bam_line) ? 0 : 1;
     int icig, iread=0, icycle=0;
@@ -536,7 +536,7 @@ void count_mismatches_per_cycle(stats_t *stats, bam1_t *bam_line, int read_len)
     }
 }
 
-void read_ref_seq(stats_t *stats, int32_t tid, hts_pos_t pos)
+static void read_ref_seq(stats_t *stats, int32_t tid, hts_pos_t pos)
 {
     int i;
     hts_pos_t fai_ref_len;
@@ -571,7 +571,7 @@ void read_ref_seq(stats_t *stats, int32_t tid, hts_pos_t pos)
     stats->tid       = tid;
 }
 
-float fai_gc_content(stats_t *stats, hts_pos_t pos, int len)
+static float fai_gc_content(stats_t *stats, hts_pos_t pos, int len)
 {
     uint32_t gc,count,c;
     hts_pos_t i = pos - stats->rseq_pos, ito = i + len;
@@ -595,7 +595,7 @@ float fai_gc_content(stats_t *stats, hts_pos_t pos, int len)
     return count ? (float)gc/count : 0;
 }
 
-void realloc_rseq_buffer(stats_t *stats)
+static void realloc_rseq_buffer(stats_t *stats)
 {
     int n = stats->nbases*10;
     if ( stats->info->gcd_bin_size > n ) n = stats->info->gcd_bin_size;
@@ -609,13 +609,13 @@ void realloc_rseq_buffer(stats_t *stats)
     }
 }
 
-void realloc_gcd_buffer(stats_t *stats, int seq_len)
+static void realloc_gcd_buffer(stats_t *stats, int seq_len)
 {
     hts_expand0(gc_depth_t,stats->igcd+1,stats->ngcd,stats->gcd);
     realloc_rseq_buffer(stats);
 }
 
-void realloc_buffers(stats_t *stats, int seq_len)
+static void realloc_buffers(stats_t *stats, int seq_len)
 {
     int n = 2*(1 + seq_len - stats->nbases) + stats->nbases;
 
@@ -711,7 +711,7 @@ void realloc_buffers(stats_t *stats, int seq_len)
     realloc_rseq_buffer(stats);
 }
 
-void update_checksum(bam1_t *bam_line, stats_t *stats)
+static void update_checksum(bam1_t *bam_line, stats_t *stats)
 {
     uint8_t *name = (uint8_t*) bam_get_qname(bam_line);
     int len = 0;
@@ -843,7 +843,7 @@ static void collect_barcode_stats(bam1_t* bam_line, stats_t* stats) {
 
 // These stats should only be calculated for the original reads ignoring
 // supplementary artificial reads otherwise we'll accidentally double count
-void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out)
+static void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out)
 {
     int seq_len = bam_line->core.l_qseq;
     stats->total_len += seq_len; // This ignores clipping so only count primary
@@ -1127,7 +1127,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
     round_buffer_insert_read(&(stats->cov_rbuf), pmin, pmax);
 }
 
-void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pairs)
+static void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pairs)
 {
     if ( stats->rg_hash )
     {
@@ -1425,7 +1425,7 @@ static int gcd_cmp(const void *a, const void *b)
 }
 #undef GCD_t
 
-float gcd_percentile(gc_depth_t *gcd, int N, int p)
+static float gcd_percentile(gc_depth_t *gcd, int N, int p)
 {
     float n,d;
     int k;
@@ -1441,7 +1441,7 @@ float gcd_percentile(gc_depth_t *gcd, int N, int p)
     return gcd[k-1].depth + d*(gcd[k].depth - gcd[k-1].depth);
 }
 
-void output_stats(FILE *to, stats_t *stats, int sparse)
+static void output_stats(FILE *to, stats_t *stats, int sparse)
 {
     // Calculate average insert size and standard deviation (from the main bulk data only)
     int isize, ibulk=0, icov;
@@ -1892,7 +1892,7 @@ static void init_regions(stats_t *stats, const char *file, stats_info_t* info)
         error("Could not allocate memory for chunk.\n");
 }
 
-void destroy_regions(stats_t *stats)
+static void destroy_regions(stats_t *stats)
 {
     int i;
     for (i=0; i<stats->nregions; i++)
@@ -1904,14 +1904,7 @@ void destroy_regions(stats_t *stats)
     if ( stats->chunks ) free(stats->chunks);
 }
 
-void reset_regions(stats_t *stats)
-{
-    int i;
-    for (i=0; i<stats->nregions; i++)
-        stats->regions[i].cpos = 0;
-}
-
-int is_in_regions(bam1_t *bam_line, stats_t *stats)
+static int is_in_regions(bam1_t *bam_line, stats_t *stats)
 {
     if ( !stats->regions ) return 1;
 
@@ -1948,7 +1941,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     return 1;
 }
 
-int replicate_regions(stats_t *stats, hts_itr_multi_t *iter, stats_info_t *info) {
+static int replicate_regions(stats_t *stats, hts_itr_multi_t *iter, stats_info_t *info) {
     if ( !stats || !iter)
         return 1;
 
@@ -1995,7 +1988,7 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter, stats_info_t *info)
     return 0;
 }
 
-void init_group_id(stats_t *stats, const char *id)
+static void init_group_id(stats_t *stats, const char *id)
 {
 #if 0
     if ( !stats->sam_header->dict )
@@ -2067,13 +2060,13 @@ static void HTS_NORETURN error(const char *format, ...)
     exit(1);
 }
 
-void cleanup_stats_info(stats_info_t* info){
+static void cleanup_stats_info(stats_info_t* info){
     if (info->fai) fai_destroy(info->fai);
     sam_close(info->sam);
     free(info);
 }
 
-void cleanup_stats(stats_t* stats)
+static void cleanup_stats(stats_t* stats)
 {
     free(stats->cov_rbuf.buffer); free(stats->cov);
     free(stats->quals_1st); free(stats->quals_2nd);
@@ -2103,7 +2096,7 @@ void cleanup_stats(stats_t* stats)
     free(stats);
 }
 
-void output_split_stats(khash_t(c2stats) *split_hash, char* bam_fname, int sparse)
+static void output_split_stats(khash_t(c2stats) *split_hash, char* bam_fname, int sparse)
 {
     int i = 0;
     kstring_t output_filename = { 0, 0, NULL };
@@ -2133,7 +2126,7 @@ void output_split_stats(khash_t(c2stats) *split_hash, char* bam_fname, int spars
     free(output_filename.s);
 }
 
-void destroy_split_stats(khash_t(c2stats) *split_hash)
+static void destroy_split_stats(khash_t(c2stats) *split_hash)
 {
     if (!split_hash)
         return;
@@ -2148,7 +2141,7 @@ void destroy_split_stats(khash_t(c2stats) *split_hash)
     kh_destroy(c2stats, split_hash);
 }
 
-stats_info_t* stats_info_init(int argc, char *argv[])
+static stats_info_t* stats_info_init(int argc, char *argv[])
 {
     stats_info_t* info = calloc(1, sizeof(stats_info_t));
     if (!info) {
@@ -2170,7 +2163,7 @@ stats_info_t* stats_info_init(int argc, char *argv[])
     return info;
 }
 
-int init_stat_info_fname(stats_info_t* info, const char* bam_fname, const htsFormat* in_fmt)
+static int init_stat_info_fname(stats_info_t* info, const char* bam_fname, const htsFormat* in_fmt)
 {
     // .. bam
     samFile* sam;
@@ -2187,7 +2180,7 @@ int init_stat_info_fname(stats_info_t* info, const char* bam_fname, const htsFor
     return 0;
 }
 
-stats_t* stats_init()
+static stats_t* stats_init()
 {
     stats_t *stats = calloc(1,sizeof(stats_t));
     if (!stats)

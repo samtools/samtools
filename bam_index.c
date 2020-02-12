@@ -114,7 +114,7 @@ int bam_index(int argc, char *argv[])
  * Returns 0 on success,
  *        -1 on failure.
  */
-int slow_idxstats(samFile *fp, sam_hdr_t *header) {
+static int slow_idxstats(samFile *fp, sam_hdr_t *header) {
     int ret, last_tid = -2;
     bam1_t *b = bam_init1();
 

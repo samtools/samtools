@@ -1050,7 +1050,7 @@ int read_file_list(const char *file_list,int *n,char **argv[])
 }
 #undef MAX_PATH_LEN
 
-int parse_format_flag(const char *str)
+static int parse_format_flag(const char *str)
 {
     int i, flag = 0, n_tags;
     char **tags = hts_readlist(str, 0, &n_tags);

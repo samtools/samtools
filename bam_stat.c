@@ -69,7 +69,7 @@ typedef struct {
         if ((c)->flag & BAM_FDUP) ++(s)->n_dup[w];                      \
     } while (0)
 
-bam_flagstat_t *bam_flagstat_core(samFile *fp, sam_hdr_t *h)
+static bam_flagstat_t *bam_flagstat_core(samFile *fp, sam_hdr_t *h)
 {
     bam_flagstat_t *s;
     bam1_t *b;

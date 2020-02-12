@@ -546,7 +546,7 @@ static int usage(FILE *fp, int n_files, int reads_store) {
     return 1;
 }
 
-char * generate_prefix() {
+static char *generate_prefix() {
     char *prefix;
     unsigned int pid = getpid();
 #ifdef _WIN32

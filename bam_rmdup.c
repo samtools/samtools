@@ -127,7 +127,7 @@ static inline int sum_qual(const bam1_t *b)
     return q;
 }
 
-int bam_rmdup_core(samFile *in, sam_hdr_t *hdr, samFile *out)
+static int bam_rmdup_core(samFile *in, sam_hdr_t *hdr, samFile *out)
 {
     bam1_t *b = NULL;
     int last_tid = -1, last_pos = -1, r;

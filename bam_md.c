@@ -46,7 +46,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
-void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max_nm, int quiet_mode)
+static void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max_nm, int quiet_mode)
 {
     uint8_t *seq = bam_get_seq(b);
     uint32_t *cigar = bam_get_cigar(b);
@@ -166,7 +166,7 @@ void bam_fillmd1(bam1_t *b, char *ref, int flag, int quiet_mode)
     bam_fillmd1_core(b, ref, INT_MAX, flag, 0, quiet_mode);
 }
 
-int calmd_usage() {
+static int calmd_usage() {
     fprintf(stderr,
 "Usage: samtools calmd [-eubrAESQ] <aln.bam> <ref.fasta>\n"
 "Options:\n"

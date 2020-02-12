@@ -185,7 +185,7 @@ static inline int * update_posmap(int *posmap, kstring_t ref)
     return posmap;
 }
 
-int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
+static int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
 {
     bam1_t *b = 0;
     kstring_t r, q;

@@ -89,7 +89,6 @@ char bam_aux_getCQi(bam1_t *b, int i);
 #define TV_BASE_NUCL 0
 #define TV_BASE_COLOR_SPACE 1
 
-int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data);
 // Added fn_idx to arguments as index file
 int base_tv_init(tview_t*,const char *fn, const char *fn_fa, const char *fn_idx,
                  const char *samples, const htsFormat *fmt);

@@ -884,7 +884,7 @@ static void bam_translate(bam1_t* b, trans_tbl_t* tbl)
     }
 }
 
-int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
+static int* rtrans_build(int n, int n_targets, trans_tbl_t* translation_tbl)
 {
     // Create reverse translation table for tids
     int* rtrans = (int*)malloc(sizeof(int32_t)*n*n_targets);
@@ -984,11 +984,11 @@ static hts_reglist_t *duplicate_reglist(const hts_reglist_t *rl, int rn) {
   @discussion Padding information may NOT correctly maintained. This
   function is NOT thread safe.
  */
-int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *mode,
-                    const char *headers, int n, char * const *fn, char * const *fn_idx,
-                    const char *fn_bed, int flag, const char *reg, int n_threads,
-                    const char *cmd, const htsFormat *in_fmt, const htsFormat *out_fmt,
-                    int write_index, char *arg_list, int no_pg)
+static int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *mode,
+                           const char *headers, int n, char * const *fn, char * const *fn_idx,
+                           const char *fn_bed, int flag, const char *reg, int n_threads,
+                           const char *cmd, const htsFormat *in_fmt, const htsFormat *out_fmt,
+                           int write_index, char *arg_list, int no_pg)
 {
     samFile *fpout, **fp = NULL;
     heap1_t *heap = NULL;
@@ -1371,16 +1371,6 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     free(rtrans);
     free(out_idx_fn);
     return -1;
-}
-
-// Unused here but may be used by legacy samtools-using third-party code
-int bam_merge_core(int by_qname, const char *out, const char *headers, int n, char * const *fn, int flag, const char *reg)
-{
-    char mode[12];
-    strcpy(mode, "wb");
-    if (flag & MERGE_UNCOMP) strcat(mode, "0");
-    else if (flag & MERGE_LEVEL1) strcat(mode, "1");
-    return bam_merge_core2(by_qname, NULL, out, mode, headers, n, fn, NULL, NULL, flag, reg, 0, "merge", NULL, NULL, 0, NULL, 1);
 }
 
 static void merge_usage(FILE *to)
@@ -1786,7 +1776,7 @@ static inline int bam1_cmp_core(const bam1_tag a, const bam1_tag b)
     }
 }
 
-uint8_t normalize_type(const uint8_t* aux) {
+static uint8_t normalize_type(const uint8_t* aux) {
     if (*aux == 'c' || *aux == 'C' || *aux == 's' || *aux == 'S' || *aux == 'i' || *aux == 'I') {
         return 'c';
     } else if (*aux == 'f' || *aux == 'd') {
@@ -2133,11 +2123,11 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
   and then merge them by calling bam_merge_simple(). This function is
   NOT thread safe.
  */
-int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const char *prefix,
-                      const char *fnout, const char *modeout,
-                      size_t _max_mem, int n_threads,
-                      const htsFormat *in_fmt, const htsFormat *out_fmt,
-                      char *arg_list, int no_pg, int write_index)
+static int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const char *prefix,
+                             const char *fnout, const char *modeout,
+                             size_t _max_mem, int n_threads,
+                             const htsFormat *in_fmt, const htsFormat *out_fmt,
+                             char *arg_list, int no_pg, int write_index)
 {
     int ret = -1, res, i, n_files = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
@@ -2319,18 +2309,6 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     free(in_mem);
     sam_hdr_destroy(header);
     if (fp) sam_close(fp);
-    return ret;
-}
-
-// Unused here but may be used by legacy samtools-using third-party code
-int bam_sort_core(int is_by_qname, const char *fn, const char *prefix, size_t max_mem)
-{
-    int ret;
-    char *fnout = calloc(strlen(prefix) + 4 + 1, 1);
-    if (!fnout) return -1;
-    sprintf(fnout, "%s.bam", prefix);
-    ret = bam_sort_core_ext(is_by_qname, NULL, fn, prefix, fnout, "wb", max_mem, 0, NULL, NULL, NULL, 1, 0);
-    free(fnout);
     return ret;
 }
 

@@ -205,7 +205,7 @@ static int read_bam(void *data, bam1_t *b) {
     return ret;
 }
 
-void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats) {
+static void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats) {
     fputs(sam_hdr_tid2name(h, stats->tid), file_out);
     double region_len = (double) stats->end - stats->beg;
     fprintf(file_out, "\t%"PRId64"\t%"PRId64"\t%u\t%llu\t%g\t%g\t%.3g\t%.3g\n",
@@ -220,8 +220,8 @@ void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *s
            );
 }
 
-void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, const uint32_t *hist,
-        const int hist_size, const bool full_utf) {
+static void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats,
+                       const uint32_t *hist, const int hist_size, const bool full_utf) {
     int i, col;
     bool show_percentiles = false;
     const int n_rows = 10;

@@ -34,6 +34,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 
+static int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data);
+
 // Threshold where spacing of numbers on the scale line changes from 10 to 20
 // to stop them running into each other.
 #define TEN_DIGITS 1000000000
@@ -170,7 +172,7 @@ void base_tv_destroy(tview_t* tv)
 }
 
 
-int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data)
+static int tv_pl_func(uint32_t tid, hts_pos_t pos, int n, const bam_pileup1_t *pl, void *data)
 {
     tview_t *tv = (tview_t*)data;
     hts_pos_t cp;

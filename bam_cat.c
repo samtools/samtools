@@ -196,7 +196,7 @@ fail:
  * huffman code.  In this situation we can change the meta-data in the
  * compression header to renumber an RG value..
  */
-int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram, sam_global_args *ga, char *arg_list, int no_pg)
+static int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram, sam_global_args *ga, char *arg_list, int no_pg)
 {
     samFile *out;
     cram_fd *out_c;
@@ -338,7 +338,7 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
 
 #define BGZF_EMPTY_BLOCK_SIZE 28
 
-int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *arg_list, int no_pg)
+static int bam_cat(int nfn, char * const *fn, sam_hdr_t *h, const char* outbam, char *arg_list, int no_pg)
 {
     BGZF *fp, *in = NULL;
     uint8_t *buf = NULL;

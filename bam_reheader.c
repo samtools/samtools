@@ -43,8 +43,8 @@ DEALINGS IN THE SOFTWARE.  */
  * Reads a file and outputs a new BAM file to fd with 'h' replaced as
  * the header.    No checks are made to the validity.
  */
-int bam_reheader(BGZF *in, sam_hdr_t *h, int fd,
-                 const char *arg_list, int no_pg, int skip_header)
+static int bam_reheader(BGZF *in, sam_hdr_t *h, int fd,
+                        const char *arg_list, int no_pg, int skip_header)
 {
     BGZF *fp = NULL;
     ssize_t len;
@@ -118,7 +118,7 @@ int bam_reheader(BGZF *in, sam_hdr_t *h, int fd,
  *
  * FIXME: error checking
  */
-int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int no_pg)
+static int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int no_pg)
 {
     htsFile *h_out = hts_open("-", "wc");
     cram_fd *out = h_out->fp.cram;
@@ -182,8 +182,8 @@ int cram_reheader(cram_fd *in, sam_hdr_t *h, const char *arg_list, int no_pg)
  *        -1 on general failure;
  *        -2 on failure due to insufficient size
  */
-int cram_reheader_inplace2(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
-                          int no_pg)
+static int cram_reheader_inplace2(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
+                                  int no_pg)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
@@ -279,8 +279,8 @@ int cram_reheader_inplace2(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
  *        -1 on general failure;
  *        -2 on failure due to insufficient size
  */
-int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
-                          int no_pg)
+static int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
+                                  int no_pg)
 {
     cram_container *c = NULL;
     cram_block *b = NULL;
@@ -417,8 +417,8 @@ int cram_reheader_inplace3(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
     return ret;
 }
 
-int cram_reheader_inplace(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
-                         int no_pg)
+static int cram_reheader_inplace(cram_fd *fd, sam_hdr_t *h, const char *arg_list,
+                                 int no_pg)
 {
     switch (cram_major_vers(fd)) {
     case 2: return cram_reheader_inplace2(fd, h, arg_list, no_pg);

@@ -264,7 +264,7 @@ int bcf_call_glfgen(int _n, const bam_pileup1_t *pl, int ref_base, bcf_callaux_t
  *  reported values are slightly more favourable than those of a true random
  *  distribution.
  */
-double calc_vdb(int *pos, int npos)
+static double calc_vdb(int *pos, int npos)
 {
     // Note well: the parameters were obtained by fitting to simulated data of
     // 100bp reads. This assumes rescaling to 100bp in bcf_call_glfgen().
@@ -327,39 +327,15 @@ double calc_vdb(int *pos, int npos)
     return 0.5*kf_erfc(-(mean_diff-pshift)*pscale);
 }
 
-double calc_chisq_bias(int *a, int *b, int n)
-{
-    int na = 0, nb = 0, i, ndf = n;
-    for (i=0; i<n; i++) na += a[i];
-    for (i=0; i<n; i++) nb += b[i];
-    if ( !na || !nb ) return HUGE_VAL;
-
-    double chisq = 0;
-    for (i=0; i<n; i++)
-    {
-        if ( !a[i] && !b[i] ) ndf--;
-        else
-        {
-            double tmp = a[i] - b[i];
-            chisq += tmp*tmp/(a[i]+b[i]);
-        }
-    }
-    /*
-        kf_gammq: incomplete gamma function Q(a,x) = 1 - P(a,x) = Gamma(a,x)/Gamma(a)
-        1 if the distributions are identical, 0 if very different
-    */
-    double prob = kf_gammaq(0.5*ndf, 0.5*chisq);
-    return prob;
-}
-
-double mann_whitney_1947(int n, int m, int U)
+static double mann_whitney_1947(int n, int m, int U)
 {
     if (U<0) return 0;
     if (n==0||m==0) return U==0 ? 1 : 0;
     return (double)n/(n+m)*mann_whitney_1947(n-1,m,U-m) + (double)m/(n+m)*mann_whitney_1947(n,m-1,U);
 }
 
-double mann_whitney_1947_cdf(int n, int m, int U)
+#if CDF_MWU_TESTS
+static double mann_whitney_1947_cdf(int n, int m, int U)
 {
     int i;
     double sum = 0;
@@ -368,7 +344,7 @@ double mann_whitney_1947_cdf(int n, int m, int U)
     return sum;
 }
 
-double calc_mwu_bias_cdf(int *a, int *b, int n)
+static double calc_mwu_bias_cdf(int *a, int *b, int n)
 {
     int na = 0, nb = 0, i;
     double U = 0, ties = 0;
@@ -411,8 +387,9 @@ double calc_mwu_bias_cdf(int *a, int *b, int n)
     double pval = 2*mann_whitney_1947_cdf(na,nb,U_min);
     return pval>1 ? 1 : pval;
 }
+#endif
 
-double calc_mwu_bias(int *a, int *b, int n)
+static double calc_mwu_bias(int *a, int *b, int n)
 {
     int na = 0, nb = 0, i;
     double U = 0, ties = 0;
@@ -461,7 +438,7 @@ static inline double logsumexp2(double a, double b)
         return log(1 + exp(a-b)) + b;
 }
 
-void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
+static void calc_SegBias(const bcf_callret1_t *bcr, bcf_call_t *call)
 {
     call->seg_bias = HUGE_VAL;
     if ( !bcr ) return;
@@ -674,10 +651,6 @@ int bcf_call_combine(int n, const bcf_callret1_t *calls, bcf_callaux_t *bca, int
     }
 
     calc_SegBias(calls, call);
-
-    // calc_chisq_bias("XPOS", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_pos, bca->alt_pos, bca->npos);
-    // calc_chisq_bias("XMQ", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_mq, bca->alt_mq, bca->nqual);
-    // calc_chisq_bias("XBQ", call->bcf_hdr->id[BCF_DT_CTG][call->tid].key, call->pos, bca->ref_bq, bca->alt_bq, bca->nqual);
 
     call->mwu_pos = calc_mwu_bias(bca->ref_pos, bca->alt_pos, bca->npos);
     call->mwu_mq  = calc_mwu_bias(bca->ref_mq,  bca->alt_mq,  bca->nqual);
