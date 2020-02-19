@@ -122,6 +122,15 @@ Samtools checks the current working directory for the index file and
 will download the index upon absence. Samtools does not retrieve the
 entire alignment file unless it is asked to do so.
 
+If an index is needed, samtools looks for the index suffix
+appended to the filename, and if that isn't found it tries again
+without the filename suffix (for example \fBin.bam.bai\fR followed by
+\fBin.bai\fR).  However if an index is in a completely different
+location or has a different name, both the main data filename and
+index filename can be pasted together with \fB##idx##\fR.  For
+example \fB/data/in.bam##idx##/indices/in.bam.bai\fR may be used to
+explicitly indicate where the data and index files reside.
+
 .SH COMMANDS
 
 Each command has its own man page which can be viewed using
@@ -835,12 +844,20 @@ samtools view --input-fmt-option decode_md=0
 The \fB--write-index\fR option enables automatic index creation while
 writing out BAM, CRAM or bgzf SAM files.  Note to get compressed SAM
 as the output format you need to manually request a compression level,
-otherwise all SAM files are uncompressed.  SAM and BAM will use CSI
-indices while CRAM will use CRAI indices.
+otherwise all SAM files are uncompressed.  By default SAM and BAM will
+use CSI indices while CRAM will use CRAI indices.  If you need to
+create BAI indices note that it is possible to specify the name of
+the index being written to, and hence the format, by using the
+\fBfilename##idx##indexname\fR notation.
 .PP
 For example: to convert a BAM to a compressed SAM with CSI indexing:
 .EX 4
 samtools view -h -O sam,level=6 --write-index in.bam -o out.sam.gz
+.EE
+.PP
+To convert a SAM to a compresed BAM using BAI indexing:
+.EX 4
+samtools view --write-index in.sam -o out.bam##idx##out.bam.bai
 .EE
 .PP
 The \fB--verbosity \fIINT\fR option sets the verbosity level for samtools
