@@ -38,20 +38,38 @@ DEALINGS IN THE SOFTWARE.  */
 
 #define bam_reg2bin(b,e) hts_reg2bin((b),(e), 14, 5)
 
-static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
+static int replace_cigar(bam1_t *b, uint32_t n, uint32_t *cigar)
 {
+    int diff = 0;
     if (n != b->core.n_cigar) {
         int o = b->core.l_qname + b->core.n_cigar * 4;
-        if (b->l_data + (n - b->core.n_cigar) * 4 > b->m_data) {
-            b->m_data = b->l_data + (n - b->core.n_cigar) * 4;
-            kroundup32(b->m_data);
-            b->data = (uint8_t*)realloc(b->data, b->m_data);
+        if (n > b->core.n_cigar) {
+            diff = (n - b->core.n_cigar) * 4;
+            if ((INT_MAX - b->l_data)/4 < (n - b->core.n_cigar)) {
+                fprintf(stderr, "[depad] ERROR: BAM record too big\n");
+                return -1;
+            }
+            if (b->l_data + diff > b->m_data) {
+                b->m_data = b->l_data + diff;
+                kroundup32(b->m_data);
+                uint8_t *tmp = (uint8_t*)realloc(b->data, b->m_data);
+                if (!tmp) {
+                    fprintf(stderr, "[depad] ERROR: Memory allocation failure.\n");
+                    return -1;
+                }
+                b->data = tmp;
+            }
+        } else {
+            diff = -(int)((b->core.n_cigar - n) * 4);
         }
         memmove(b->data + b->core.l_qname + n * 4, b->data + o, b->l_data - o);
-        memcpy(b->data + b->core.l_qname, cigar, n * 4);
-        b->l_data += (n - b->core.n_cigar) * 4;
         b->core.n_cigar = n;
-    } else memcpy(b->data + b->core.l_qname, cigar, n * 4);
+    }
+
+    memcpy(b->data + b->core.l_qname, cigar, n * 4);
+    b->l_data += diff;
+
+    return 0;
 }
 
 #define write_cigar(_c, _n, _m, _v) do { \
@@ -191,7 +209,8 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
     kstring_t r, q;
     int r_tid = -1;
     uint32_t *cigar2 = 0;
-    int ret = 0, n2 = 0, m2 = 0, *posmap = 0;
+    int ret = 0, *posmap = 0;
+    uint32_t n2 = 0, m2 = 0;
 
     b = bam_init1();
     if (!b) {
@@ -238,7 +257,8 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
                 }
             }
             write_cigar(cigar2, n2, m2, bam_cigar_gen(b->core.l_qseq, BAM_CMATCH));
-            replace_cigar(b, n2, cigar2);
+            if (replace_cigar(b, n2, cigar2) < 0)
+                return -1;
             posmap = update_posmap(posmap, r);
         } else if (b->core.n_cigar > 0) {
             int i, k, op;
@@ -324,7 +344,8 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
             for (i = k = 0; i < n2; ++i)
                 if (cigar2[i]) cigar2[k++] = cigar2[i];
             n2 = k;
-            replace_cigar(b, n2, cigar2);
+            if (replace_cigar(b, n2, cigar2) < 0)
+                return -1;
         }
         /* Even unmapped reads can have a POS value, e.g. if their mate was mapped */
         if (b->core.pos != -1) b->core.pos = posmap[b->core.pos];
