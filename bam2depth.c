@@ -368,11 +368,12 @@ int main_depth(int argc, char *argv[])
     }
 
 depth_end:
-    if (fclose(file_out) != 0) {
+    if (((file_out != stdout)? fclose(file_out) : fflush(file_out)) != 0) {
         if (status == EXIT_SUCCESS) {
-            print_error_errno("depth", "error on closing \"%s\"",
-                              (output_file && strcmp(output_file, "-") != 0
-                               ? output_file : "stdout"));
+            if (file_out != stdout)
+                print_error_errno("depth", "error on closing \"%s\"", output_file);
+            else
+                print_error_errno("depth", "error on flushing standard output");
             status = EXIT_FAILURE;
         }
     }
