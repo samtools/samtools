@@ -64,7 +64,6 @@ typedef struct {  // auxiliary data structure to hold stats on coverage
     unsigned long long summed_mapQ;
     unsigned int n_reads;
     unsigned int n_selected_reads;
-    //int32_t tid;    // chromosome ID, defined by header
     bool covered;
     hts_pos_t beg;
     hts_pos_t end;
@@ -286,7 +285,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
 int main_coverage(int argc, char *argv[]) {
     int status = EXIT_SUCCESS;
 
-    int ret, tid, old_tid = -1, pos, i, j;
+    int ret, tid = -1, old_tid = -1, pos, i, j;
 
     int max_depth = 0;
     int opt_min_baseQ = 0;
@@ -528,7 +527,7 @@ int main_coverage(int argc, char *argv[]) {
         if (opt_n_bins > s->end - s->beg) {
             n_bins = s->end - s->beg;
         }
-        s->bin_width = (s->end-s->beg) / n_bins;
+        s->bin_width = (s->end-s->beg) / (n_bins > 0 ? n_bins : 1);
     }
 
     for (i=0; i<n_bam_files; i++)
@@ -612,7 +611,11 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    if (tid < n_targets && tid >=0 && stats[tid].covered == false) {
+    if (tid == -1 && opt_reg && *opt_reg != '*')
+        // Region specified but no data covering it.
+        tid = data[0]->iter->tid;
+
+    if (tid < n_targets && tid >=0) {
         if (opt_print_histogram) {
             print_hist(file_out, h, stats, tid, hist, n_bins, opt_full_utf);
         } else if (opt_print_tabular) {
@@ -635,7 +638,7 @@ int main_coverage(int argc, char *argv[]) {
 coverage_end:
     if (n_plp) free(n_plp);
     if (plp) free(plp);
-    bam_mplp_destroy(mplp);
+    if (mplp) bam_mplp_destroy(mplp);
 
     if (hist) free(hist);
     if (stats) free(stats);
