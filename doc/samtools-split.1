@@ -70,7 +70,7 @@ Output format defaults to BAM.  For SAM or CRAM then either set the format with
 .SH OPTIONS
 .TP 14
 .BI "-u " FILE1
-.RI "Put reads with no RG tag or an unrecognised RG tag into " FILE1
+.RI "Put reads with no tag or an unrecognised tag into " FILE1
 .TP
 .BI "-h " FILE2
 .RI "Use the header from " FILE2 " when writing the file given in the " -u
@@ -83,6 +83,12 @@ references must be in the same order and have the same lengths.
 .BI "-f " STRING
 Output filename format string (see below)
 ["%*_%#.%."]
+.TP
+.BI "-d " TAG
+Split reads by TAG value into distinct files. Only the TAG key must be 
+supplied with the option. The value of the TAG has to be a string (i.e.
+.B key:Z:value
+)
 .TP
 .B -v
 Verbose output
