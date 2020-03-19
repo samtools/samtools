@@ -63,7 +63,7 @@ static uint16_t gencns(ct_t *g, int n, const bam_pileup1_t *plp)
     if (n > g->max_bases) { // enlarge g->bases
         g->max_bases = n;
         kroundup32(g->max_bases);
-        g->bases = realloc(g->bases, g->max_bases * 2);
+        g->bases = realloc(g->bases, (size_t) g->max_bases * 2);
     }
     for (i = k = 0; i < n; ++i) {
         const bam_pileup1_t *p = plp + i;
