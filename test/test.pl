@@ -3134,6 +3134,7 @@ sub test_bedcov
 
     test_cmd($opts,out=>'bedcov/bedcov.expected',cmd=>"$$opts{bin}/samtools bedcov $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
     test_cmd($opts,out=>'bedcov/bedcov_j.expected',cmd=>"$$opts{bin}/samtools bedcov -j $$opts{path}/bedcov/bedcov.bed $$opts{path}/bedcov/bedcov.bam");
+    test_cmd($opts,out=>'bedcov/bedcov_gG.expected',cmd=>"$$opts{bin}/samtools bedcov -g512 -G2048 $$opts{path}/bedcov/bedcov_gG.bed $$opts{path}/bedcov/bedcov.bam");
 }
 
 sub test_split

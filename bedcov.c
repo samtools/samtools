@@ -1,7 +1,7 @@
 /*  bedcov.c -- bedcov subcommand.
 
     Copyright (C) 2012 Broad Institute.
-    Copyright (C) 2013-2014, 2018, 2019 Genome Research Ltd.
+    Copyright (C) 2013-2014, 2018-2020 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -45,6 +45,7 @@ typedef struct {
     sam_hdr_t *header;
     hts_itr_t *iter;
     int min_mapQ;
+    uint32_t flags;  // read filtering flags
 } aux_t;
 
 static int read_bam(void *data, bam1_t *b)
@@ -55,7 +56,7 @@ static int read_bam(void *data, bam1_t *b)
     {
         ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->header, b);
         if ( ret<0 ) break;
-        if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
+        if ( b->core.flag & aux->flags ) continue;
         if ( (int)b->core.qual < aux->min_mapQ ) continue;
         break;
     }
@@ -73,6 +74,8 @@ int main_bedcov(int argc, char *argv[])
     int64_t *cnt;
     const bam_pileup1_t **plp;
     int usage = 0, has_index_file = 0;
+    uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
+    int tflags = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -80,10 +83,26 @@ int main_bedcov(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "Q:Xj", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:Xg:G:j", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
         case 'X': has_index_file = 1; break;
+        case 'g':
+            tflags = bam_str2flag(optarg);
+            if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
+                print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
+                return 1;
+            }
+            flags &= ~tflags;
+            break;
+        case 'G':
+            tflags = bam_str2flag(optarg);
+            if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
+                print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
+                return 1;
+            }
+            flags |= tflags;
+            break;
         case 'j': skip_DN = 1; break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
@@ -96,6 +115,9 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "      -Q <int>            mapping quality threshold [0]\n");
         fprintf(stderr, "      -X                  use customized index files\n");
+        fprintf(stderr, "      -g <flags>          remove the specified flags from the set used to filter out reads\n");
+        fprintf(stderr, "      -G <flags>          add the specified flags to the set used to filter out reads\n"
+                        "                          The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704");
         fprintf(stderr, "      -j                  do not include deletions (D) and ref skips (N) in bedcov computation\n");
         sam_global_opt_help(stderr, "-.--.--.");
         return 1;
@@ -136,6 +158,7 @@ int main_bedcov(int argc, char *argv[])
                     argv[i+optind+1]);
             return 2;
         }
+        aux[i]->flags = flags;
     }
     cnt = calloc(n, 8);
 
