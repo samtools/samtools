@@ -64,7 +64,6 @@ struct state {
     sam_hdr_t* unaccounted_header;
     size_t output_count;
     char** rg_id;
-    char **rg_index_file_name;
     char **rg_output_file_name;
     samFile** rg_output_file;
     sam_hdr_t** rg_output_header;
@@ -341,9 +340,8 @@ static int prep_sam_file(parsed_opts_t *opts, state_t *state, const char *tag, c
             hts_set_opt(new_sam_file, HTS_OPT_THREAD_POOL, &state->p);
 
         if (state->write_index) {
-            char *new_idx_fn = auto_index(new_sam_file, new_file_name, tmp_hdr);
-            if (!new_idx_fn) {
-                print_error_errno("split", "Creating index file for file \"%s\" failed", new_file_name);
+            if (auto_index(new_sam_file, new_file_name, tmp_hdr) < 0) {
+                print_error_errno("split", "Auto-indexing for file \"%s\" failed", new_file_name);
                 sam_close(new_sam_file);
                 ret = -1;
                 goto cleanup;
@@ -353,7 +351,6 @@ static int prep_sam_file(parsed_opts_t *opts, state_t *state, const char *tag, c
         i = kh_put_t2f(state->tf_hash, tag_key, &ret);
         if (ret < 0) {
             print_error_errno("split", "Adding file \"%s\" failed", new_file_name);
-            free((void *)new_sam_file->fnidx);
             sam_close(new_sam_file);
             ret = -1;
             goto cleanup;
@@ -452,13 +449,11 @@ static state_t* init(parsed_opts_t* opts, const char *arg_list)
         if (opts->verbose) fprintf(stderr, "@RG's found %zu\n",retval->output_count);
         // Prevent calloc(0, size);
         size_t num = retval->output_count ? retval->output_count : 1;
-        retval->rg_index_file_name = (char **)calloc(num, sizeof(char *));
         retval->rg_output_file_name = (char **)calloc(num, sizeof(char *));
         retval->rg_output_file = (samFile**)calloc(num, sizeof(samFile*));
         retval->rg_output_header = (sam_hdr_t**)calloc(num, sizeof(sam_hdr_t*));
         retval->rg_hash = kh_init_c2i();
-        if (!retval->rg_output_file_name || !retval->rg_output_file || !retval->rg_output_header ||
-                !retval->rg_hash || !retval->rg_index_file_name) {
+        if (!retval->rg_output_file_name || !retval->rg_output_file || !retval->rg_output_header) {
             print_error_errno("split", "Could not initialise output file array");
             cleanup_state(retval, false);
             return NULL;
@@ -567,10 +562,9 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
                 goto error;
             }
             if (state->write_index) {
-                state->rg_index_file_name[i] = auto_index(state->rg_output_file[i],
+                if (auto_index(state->rg_output_file[i],
                         state->rg_output_file_name[i],
-                        state->rg_output_header[i]);
-                if (!state->rg_index_file_name[i]) {
+                        state->rg_output_header[i]) < 0) {
                     print_error_errno("split", "Could not create index for file \"%s\"", state->rg_output_file_name[i]);
                     goto error;
                 }
@@ -631,7 +625,6 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
                     print_error_errno("split", "writing index failed");
                     return false;
                 }
-                free(state->rg_index_file_name[i]);
             }
         }
     } else {
@@ -675,11 +668,8 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
             for (iter = kh_begin(state->tf_hash); iter < kh_end(state->tf_hash); iter++) {
                 if (kh_exist(state->tf_hash, iter)) {
                     samFile *sf = kh_val(state->tf_hash, iter);
-                    if (sf) {
-                        if (sam_idx_save(sf) < 0)
+                    if (sf && sam_idx_save(sf) < 0) {
                             print_error_errno("split", "Writing index for file \"%s\" failed", hts_get_fn(sf));
-                        if (sf->fnidx)
-                            free((void *)sf->fnidx);
                     }
                 }
             }
@@ -723,7 +713,6 @@ static int cleanup_state(state_t* status, bool check_close)
     free(status->rg_output_header);
     free(status->rg_output_file);
     free(status->rg_output_file_name);
-    free(status->rg_index_file_name);
     kh_destroy_c2i(status->rg_hash);
     if (status->tf_hash) {
         khiter_t k;

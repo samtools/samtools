@@ -93,17 +93,14 @@ static char *idx_suffix(htsFile *fp) {
  * Utility function to add an index to a file we've opened for write.
  * NB: Call this after writing the header and before writing sequences.
  *
- * The returned index filename should be freed by the caller, but only
- * after sam_idx_save has been called.
- *
- * Returns index filename on success,
- *         NULL on failure.
+ * Returns  0 on success,
+ *         -1 on failure.
  */
-char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
+int auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
     char *fn_idx;
     int min_shift = 14; /* CSI */
     if (!fn || !*fn || strcmp(fn, "-") == 0)
-        return NULL;
+        return -1;
 
     char *delim = strstr(fn, HTS_IDX_DELIM);
     if (delim != NULL) {
@@ -111,7 +108,7 @@ char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
 
         fn_idx = strdup(delim);
         if (!fn_idx)
-            return NULL;
+            return -1;
 
         size_t l = strlen(fn_idx);
         if (l >= 4 && strcmp(fn_idx + l - 4, ".bai") == 0)
@@ -119,11 +116,11 @@ char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
     } else {
         char *suffix = idx_suffix(fp);
         if (!suffix)
-            return NULL;
+            return -1;
 
         fn_idx = malloc(strlen(fn)+6);
         if (!fn_idx)
-            return NULL;
+            return -1;
 
         sprintf(fn_idx, "%s.%s", fn, suffix);
     }
@@ -131,8 +128,9 @@ char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header) {
     if (sam_idx_init(fp, header, min_shift, fn_idx) < 0) {
         print_error_errno("auto_index", "failed to open index \"%s\" for writing", fn_idx);
         free(fn_idx);
-        return NULL;
+        return -1;
     }
 
-    return fn_idx;
+    free(fn_idx);
+    return 0;
 }

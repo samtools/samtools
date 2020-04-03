@@ -267,7 +267,7 @@ int main_samview(int argc, char *argv[])
     sam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
     char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_fai = 0, *q, *fn_un_out = 0;
-    char *fn_out_idx = NULL, *fn_un_out_idx = NULL, *arg_list = NULL;
+    char *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     int filter_state = ALL, filter_op = 0;
@@ -550,7 +550,7 @@ int main_samview(int argc, char *argv[])
             }
         }
         if (ga.write_index) {
-            if (!(fn_out_idx = auto_index(out, fn_out, header))) {
+            if (auto_index(out, fn_out, header) < 0) {
                 ret = 1;
                 goto view_end;
             }
@@ -579,7 +579,7 @@ int main_samview(int argc, char *argv[])
                 }
             }
             if (ga.write_index) {
-                if (!(fn_un_out_idx = auto_index(un_out, fn_un_out, header))) {
+                if (auto_index(un_out, fn_un_out, header) < 0) {
                     ret = 1;
                     goto view_end;
                 }
@@ -789,10 +789,6 @@ view_end:
     if (p.pool)
         hts_tpool_destroy(p.pool);
 
-    if (fn_out_idx)
-        free(fn_out_idx);
-    if (fn_un_out_idx)
-        free(fn_un_out_idx);
     free(arg_list);
 
     return ret;

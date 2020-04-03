@@ -410,10 +410,11 @@ static bool readgroupise(parsed_opts_t *opts, state_t* state, char *arg_list)
         print_error_errno("addreplacerg", "[%s] Could not write header to output file", __func__);
         return false;
     }
-    char *idx_fn = NULL;
     if (opts->ga.write_index) {
-        if (!(idx_fn = auto_index(state->output_file, opts->output_name, state->output_header)))
+        if (auto_index(state->output_file, opts->output_name, state->output_header) < 0) {
+            print_error_errno("addreplacerg", "[%s] Auto-indexing failed", __func__);
             return false;
+        }
     }
 
     bam1_t* file_read = bam_init1();
@@ -424,25 +425,21 @@ static bool readgroupise(parsed_opts_t *opts, state_t* state, char *arg_list)
         if (sam_write1(state->output_file, state->output_header, file_read) < 0) {
             print_error_errno("addreplacerg", "[%s] Could not write read to output file", __func__);
             bam_destroy1(file_read);
-            free(idx_fn);
             return false;
         }
     }
     bam_destroy1(file_read);
     if (ret != -1) {
         print_error_errno("addreplacerg", "[%s] Error reading from input file", __func__);
-        free(idx_fn);
         return false;
     } else {
 
         if (opts->ga.write_index) {
             if (sam_idx_save(state->output_file) < 0) {
                 print_error_errno("addreplacerg", "[%s] Writing index failed", __func__);
-                free(idx_fn);
                 return false;
             }
         }
-        free(idx_fn);
         return true;
     }
 }

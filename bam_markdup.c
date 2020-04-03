@@ -1150,7 +1150,6 @@ static int bam_mark_duplicates(md_param_t *param) {
     long np_duplicate, np_opt_duplicate;
     long opt_warnings = 0;
     tmp_file_t temp;
-    char *idx_fn = NULL;
     int exclude = 0;
 
     if (!pair_hash || !single_hash || !read_buffer || !dup_hash) {
@@ -1185,8 +1184,10 @@ static int bam_mark_duplicates(md_param_t *param) {
         goto fail;
     }
     if (param->write_index) {
-        if (!(idx_fn = auto_index(param->out, param->out_fn, header)))
+        if (auto_index(param->out, param->out_fn, header) < 0) {
+            fprintf(stderr, "[markdup] error auto-indexing.\n");
             goto fail;
+        }
     }
 
     // used for coordinate order checks

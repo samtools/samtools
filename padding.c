@@ -447,7 +447,7 @@ int main_pad2unpad(int argc, char *argv[])
     sam_hdr_t *h = 0, *h_fix = 0;
     faidx_t *fai = 0;
     int c, compress_level = -1, is_long_help = 0, no_pg = 0;
-    char in_mode[5], out_mode[6], *fn_out = 0, *fn_fai = 0, *fn_out_idx = NULL;
+    char in_mode[5], out_mode[6], *fn_out = 0, *fn_fai = 0;
     int ret=0;
     char *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -560,7 +560,7 @@ int main_pad2unpad(int argc, char *argv[])
         goto depad_end;
     }
     if (ga.write_index) {
-        if (!(fn_out_idx = auto_index(out, fn_out, h_fix))) {
+        if (auto_index(out, fn_out, h_fix) < 0) {
             ret = 1;
             goto depad_end;
         }
@@ -588,8 +588,6 @@ depad_end:
         ret = 1;
     }
     free(fn_fai); free(fn_out);
-    if (fn_out_idx)
-        free(fn_out_idx);
     sam_global_args_free(&ga);
     return ret;
 }
