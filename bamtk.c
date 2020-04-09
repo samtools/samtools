@@ -1,6 +1,6 @@
 /*  bamtk.c -- main samtools command front-end.
 
-    Copyright (C) 2008-2019 Genome Research Ltd.
+    Copyright (C) 2008-2020 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -64,6 +64,7 @@ int main_addreplacerg(int argc, char *argv[]);
 int faidx_main(int argc, char *argv[]);
 int dict_main(int argc, char *argv[]);
 int fqidx_main(int argc, char *argv[]);
+int amplicon_clip_main(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -95,6 +96,7 @@ static void usage(FILE *fp)
 "     targetcut      cut fosmid regions (for fosmid pool only)\n"
 "     addreplacerg   adds or replaces RG tags\n"
 "     markdup        mark duplicates\n"
+"     ampliconclip   clip oligos from the end of reads\n"
 "\n"
 "  -- File operations\n"
 "     collate        shuffle and group alignments by name\n"
@@ -174,6 +176,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
     else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
     else if (strcmp(argv[1], "markdup") == 0)   ret = bam_markdup(argc-1, argv+1);
+    else if (strcmp(argv[1], "ampliconclip") == 0) ret = amplicon_clip_main(argc-1, argv+1);
     else if (strcmp(argv[1], "flagstat") == 0 ||
              strcmp(argv[1], "flagstats") == 0) ret = bam_flagstat(argc-1, argv+1);
     else if (strcmp(argv[1], "calmd") == 0)     ret = bam_fillmd(argc-1, argv+1);
