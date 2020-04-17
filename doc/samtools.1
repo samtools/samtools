@@ -3,7 +3,7 @@
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
-.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -102,6 +102,8 @@ samtools targetcut input.bam
 samtools phase input.bam
 .PP
 samtools depad input.bam
+.PP
+samtools ampliconclip -b bed.file input.bam
 
 .SH DESCRIPTION
 .PP
@@ -683,6 +685,25 @@ the reference "*" bases are deleted and such aligned sequence
 base-calls become insertions.  Similarly transformations apply for
 deletions and padding cigar operations.
 
+.TP \"-------- ampliconclip
+.B ampliconclip
+samtools ampliconclip
+.RB [ -o
+.IR out.file ]
+.RB [ -f
+.IR stat.file ]
+.RB [ --soft-clip ]
+.RB [ --hard-clip ]
+.RB [ --both-ends ]
+.RB [ --strand ]
+.RB [ --clipped ]
+.RB [ --fail ]
+.RB [ --no-PG ]
+.B -b
+.I bed.file in.file
+
+Clip reads in a SAM compatible file based on data from a BED file.
+
 .SH SAMTOOLS OPTIONS
 These are options that are passed after the \fBsamtools\fR command,
 before any sub-command is specified.
@@ -990,6 +1011,7 @@ for further authorship.
 
 .SH SEE ALSO
 .IR samtools-addreplacerg (1),
+.IR samtools-ampliconclip (1),
 .IR samtools-bedcov (1),
 .IR samtools-calmd (1),
 .IR samtools-cat (1),
