@@ -634,7 +634,7 @@ static bool split(state_t* state, parsed_opts_t *opts, char *arg_list)
                 int i = prep_sam_file(opts, state, bam_aux2Z(tag), arg_list);
                 if (i >= 0) {
                     samFile *sf = kh_val(state->tf_hash, (khint_t)i);
-                    if (sam_write1(sf, hts_get_hdr(sf), file_read) < 0) {
+                    if (sam_write1(sf, NULL, file_read) < 0) {
                         print_error_errno("split", "Could not write to \"%s\"", hts_get_fn(sf));
                         goto error;
                     }
