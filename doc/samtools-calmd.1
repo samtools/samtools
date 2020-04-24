@@ -59,6 +59,15 @@ pointless as CRAM recalculates MD and NM tags on the fly.  The one
 exception to this case is where both input and output CRAM files
 have been / are being created with the \fIno_ref\fR option.
 
+Note that some aligners do not include sequence or confidence values
+in secondary and supplementary alignment records.
+Where this happens in SAM files, a \(lq*\(rq character will be
+seen in the \fBSEQ\fR and \fBQUAL\fR columns.
+These records will be skipped, as it is not possible to recalculate
+the MD and NM tags without access to the query sequence.
+.B samtools calmd
+will emit a warning if any records have been skipped for this reason.
+
 .SH OPTIONS
 .TP 8
 .B -A
