@@ -47,7 +47,9 @@ DEALINGS IN THE SOFTWARE.  */
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
-int bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max_nm, int quiet_mode)
+static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
+                            hts_pos_t ref_len, int flag, int max_nm,
+                            int quiet_mode, uint32_t *skipped)
 {
     uint8_t *seq = bam_get_seq(b);
     uint32_t *cigar = bam_get_cigar(b);
@@ -57,6 +59,21 @@ int bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max_
     kstring_t str = KS_INITIALIZE;
     int32_t old_nm_i = -1, nm = 0;
     uint32_t err = 0;
+
+    if (c->l_qseq == 0) {
+        if (!quiet_mode) {
+            if (ref_name) {
+                fprintf(stderr, "[bam_fillmd1] no sequence in alignment "
+                        "record for '%s' at %s:%"PRIhts_pos", skipped\n",
+                        bam_get_qname(b), ref_name, c->pos + 1);
+            } else {
+                fprintf(stderr, "[bam_fillmd1] no sequence in alignment "
+                        "record for '%s', skipped", bam_get_qname(b));
+            }
+        }
+        if (skipped) (*skipped)++;
+        return 0;
+    }
 
     for (i = qpos = 0, rpos = c->pos; i < c->n_cigar; ++i) {
         int j, oplen = cigar[i]>>4, op = cigar[i]&0xf;
@@ -194,7 +211,7 @@ int bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max_
 
 int bam_fillmd1(bam1_t *b, char *ref, int flag, int quiet_mode)
 {
-    return bam_fillmd1_core(b, ref, INT_MAX, flag, 0, quiet_mode);
+    return bam_fillmd1_core(NULL, b, ref, INT_MAX, flag, 0, quiet_mode, NULL);
 }
 
 int calmd_usage() {
@@ -224,8 +241,10 @@ int bam_fillmd(int argc, char *argv[])
     sam_hdr_t *header = NULL;
     faidx_t *fai = NULL;
     char *ref = NULL, mode_w[8], *ref_file, *arg_list = NULL;
+    const char *ref_name = NULL;
     bam1_t *b = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    uint32_t skipped = 0;
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0,'@'),
@@ -325,11 +344,16 @@ int bam_fillmd(int argc, char *argv[])
         if (b->core.tid >= 0) {
             if (tid != b->core.tid) {
                 free(ref);
-                ref = fai_fetch64(fai, sam_hdr_tid2name(header, b->core.tid), &len);
+                ref = NULL;
+                len = 0;
+                ref_name = sam_hdr_tid2name(header, b->core.tid);
+                if (ref_name) {
+                    ref = fai_fetch64(fai, ref_name, &len);
+                }
                 tid = b->core.tid;
                 if (ref == 0) { // FIXME: Should this always be fatal?
                     fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
-                            sam_hdr_tid2name(header, tid));
+                            ref_name ? ref_name : "(unknown)");
                     if (is_realn || capQ > 10) goto fail; // Would otherwise crash
                 }
             }
@@ -344,7 +368,8 @@ int bam_fillmd(int argc, char *argv[])
                 if (b->core.qual > q) b->core.qual = q;
             }
             if (ref) {
-                if (bam_fillmd1_core(b, ref, len, flt_flag, max_nm, quiet_mode) < 0)
+                if (bam_fillmd1_core(ref_name, b, ref, len, flt_flag, max_nm,
+                                     quiet_mode, &skipped) < 0)
                     goto fail;
             }
         }
@@ -357,6 +382,13 @@ int bam_fillmd(int argc, char *argv[])
         fprintf(stderr, "[bam_fillmd] Error reading input.\n");
         goto fail;
     }
+
+    if (skipped) {
+        fprintf(stderr, "[calmd] Warning: %"PRIu32" records skipped due "
+                "to no query sequence\n",
+                skipped);
+    }
+
     bam_destroy1(b);
     sam_hdr_destroy(header);
 
