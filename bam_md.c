@@ -51,64 +51,64 @@ void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max
     uint8_t *seq = bam_get_seq(b);
     uint32_t *cigar = bam_get_cigar(b);
     bam1_core_t *c = &b->core;
-    int i, y, u = 0;
-    hts_pos_t x;
+    int i, qpos, matched = 0;
+    hts_pos_t rpos;
     kstring_t *str;
     int32_t old_nm_i = -1, nm = 0;
 
     str = (kstring_t*)calloc(1, sizeof(kstring_t));
-    for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
-        int j, l = cigar[i]>>4, op = cigar[i]&0xf;
+    for (i = qpos = 0, rpos = c->pos; i < c->n_cigar; ++i) {
+        int j, oplen = cigar[i]>>4, op = cigar[i]&0xf;
         if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
-            for (j = 0; j < l; ++j) {
-                int c1, c2, z = y + j;
-                if (x+j >= ref_len || ref[x+j] == '\0') break; // out of bounds
-                c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
+            for (j = 0; j < oplen; ++j) {
+                int c1, c2, z = qpos + j;
+                if (rpos+j >= ref_len || ref[rpos+j] == '\0') break; // out of bounds
+                c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[rpos+j]];
                 if ((c1 == c2 && c1 != 15 && c2 != 15) || c1 == 0) { // a match
                     if (flag&USE_EQUAL) seq[z/2] &= (z&1)? 0xf0 : 0x0f;
-                    ++u;
+                    ++matched;
                 } else {
-                    kputw(u, str); kputc(toupper(ref[x+j]), str);
-                    u = 0; ++nm;
+                    kputw(matched, str); kputc(toupper(ref[rpos+j]), str);
+                    matched = 0; ++nm;
                 }
             }
-            if (j < l) break;
-            x += l; y += l;
+            if (j < oplen) break;
+            rpos += oplen; qpos += oplen;
         } else if (op == BAM_CDEL) {
-            kputw(u, str); kputc('^', str);
-            for (j = 0; j < l; ++j) {
-                if (x+j >= ref_len || ref[x+j] == '\0') break;
-                kputc(toupper(ref[x+j]), str);
+            kputw(matched, str); kputc('^', str);
+            for (j = 0; j < oplen; ++j) {
+                if (rpos+j >= ref_len || ref[rpos+j] == '\0') break;
+                kputc(toupper(ref[rpos+j]), str);
             }
-            u = 0;
-            x += j; nm += j;
-            if (j < l) break;
+            matched = 0;
+            rpos += j; nm += j;
+            if (j < oplen) break;
         } else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) {
-            y += l;
-            if (op == BAM_CINS) nm += l;
+            qpos += oplen;
+            if (op == BAM_CINS) nm += oplen;
         } else if (op == BAM_CREF_SKIP) {
-            x += l;
+            rpos += oplen;
         }
     }
-    kputw(u, str);
+    kputw(matched, str);
     // apply max_nm
     if (max_nm > 0 && nm >= max_nm) {
-        for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
-            int j, l = cigar[i]>>4, op = cigar[i]&0xf;
+        for (i = qpos = 0, rpos = c->pos; i < c->n_cigar; ++i) {
+            int j, oplen = cigar[i]>>4, op = cigar[i]&0xf;
             if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
-                for (j = 0; j < l; ++j) {
-                    int c1, c2, z = y + j;
-                    if (x+j >= ref_len || ref[x+j] == '\0') break; // out of bounds
-                    c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
+                for (j = 0; j < oplen; ++j) {
+                    int c1, c2, z = qpos + j;
+                    if (rpos+j >= ref_len || ref[rpos+j] == '\0') break; // out of bounds
+                    c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[rpos+j]];
                     if ((c1 == c2 && c1 != 15 && c2 != 15) || c1 == 0) { // a match
                         seq[z/2] |= (z&1)? 0x0f : 0xf0;
                         bam_get_qual(b)[z] = 0;
                     }
                 }
-                if (j < l) break;
-                x += l; y += l;
-            } else if (op == BAM_CDEL || op == BAM_CREF_SKIP) x += l;
-            else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
+                if (j < oplen) break;
+                rpos += oplen; qpos += oplen;
+            } else if (op == BAM_CDEL || op == BAM_CREF_SKIP) rpos += oplen;
+            else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) qpos += oplen;
         }
     }
     // update NM
