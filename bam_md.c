@@ -53,10 +53,9 @@ void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max
     bam1_core_t *c = &b->core;
     int i, qpos, matched = 0;
     hts_pos_t rpos;
-    kstring_t *str;
+    kstring_t str = KS_INITIALIZE;
     int32_t old_nm_i = -1, nm = 0;
 
-    str = (kstring_t*)calloc(1, sizeof(kstring_t));
     for (i = qpos = 0, rpos = c->pos; i < c->n_cigar; ++i) {
         int j, oplen = cigar[i]>>4, op = cigar[i]&0xf;
         if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
@@ -68,17 +67,17 @@ void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max
                     if (flag&USE_EQUAL) seq[z/2] &= (z&1)? 0xf0 : 0x0f;
                     ++matched;
                 } else {
-                    kputw(matched, str); kputc(toupper(ref[rpos+j]), str);
+                    kputw(matched, &str); kputc(toupper(ref[rpos+j]), &str);
                     matched = 0; ++nm;
                 }
             }
             if (j < oplen) break;
             rpos += oplen; qpos += oplen;
         } else if (op == BAM_CDEL) {
-            kputw(matched, str); kputc('^', str);
+            kputw(matched, &str); kputc('^', &str);
             for (j = 0; j < oplen; ++j) {
                 if (rpos+j >= ref_len || ref[rpos+j] == '\0') break;
-                kputc(toupper(ref[rpos+j]), str);
+                kputc(toupper(ref[rpos+j]), &str);
             }
             matched = 0;
             rpos += j; nm += j;
@@ -90,7 +89,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max
             rpos += oplen;
         }
     }
-    kputw(matched, str);
+    kputw(matched, &str);
     // apply max_nm
     if (max_nm > 0 && nm >= max_nm) {
         for (i = qpos = 0, rpos = c->pos; i < c->n_cigar; ++i) {
@@ -127,21 +126,21 @@ void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max
     // update MD
     if ((flag & UPDATE_MD) && !(c->flag & BAM_FUNMAP)) {
         uint8_t *old_md = bam_aux_get(b, "MD");
-        if (!old_md) bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+        if (!old_md) bam_aux_append(b, "MD", 'Z', str.l + 1, (uint8_t*)str.s);
         else {
             int is_diff = 0;
-            if (strlen((char*)old_md+1) == str->l) {
-                for (i = 0; i < str->l; ++i)
-                    if (toupper(old_md[i+1]) != toupper(str->s[i]))
+            if (strlen((char*)old_md+1) == str.l) {
+                for (i = 0; i < str.l; ++i)
+                    if (toupper(old_md[i+1]) != toupper(str.s[i]))
                         break;
-                if (i < str->l) is_diff = 1;
+                if (i < str.l) is_diff = 1;
             } else is_diff = 1;
             if (is_diff) {
                 if (!quiet_mode) {
-                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam_get_qname(b), old_md+1, str->s);
+                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam_get_qname(b), old_md+1, str.s);
                 }
                 bam_aux_del(b, old_md);
-                bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+                bam_aux_append(b, "MD", 'Z', str.l + 1, (uint8_t*)str.s);
             }
         }
     }
@@ -158,7 +157,7 @@ void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max
             if (qual[i] >= 3) qual[i] = qual[i]/10*10 + 7;
     }
 
-    free(str->s); free(str);
+    free(str.s);
 }
 
 void bam_fillmd1(bam1_t *b, char *ref, int flag, int quiet_mode)
