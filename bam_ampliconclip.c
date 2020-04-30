@@ -39,23 +39,12 @@ DEALINGS IN THE SOFTWARE
 #include "htslib/kstring.h"
 #include "htslib/sam.h"
 #include "samtools.h"
-
-typedef struct {
-    int64_t left;
-    int64_t right;
-    int rev;
-} bed_pair_t;
+#include "bam_ampliconclip.h"
 
 typedef enum {
     soft_clip,
     hard_clip
 } clipping_type;
-
-typedef struct {
-    bed_pair_t *bp;
-    int length;
-    int size;
-} bed_pair_list_t;
 
 typedef struct {
     int add_pg;
@@ -74,8 +63,8 @@ static int bed_pair_sort(const void *av, const void *bv) {
 }
 
 
-static int load_bed_file_pairs(char *infile, int get_strand, bed_pair_list_t *pairs,
-                                       int64_t *longest) {
+int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
+                        bed_pair_list_t *pairs, int64_t *longest) {
     hFILE *fp;
     int line_count = 0, ret;
     int64_t left, right;
@@ -153,7 +142,8 @@ static int load_bed_file_pairs(char *infile, int get_strand, bed_pair_list_t *pa
         pairs->length++;
     }
 
-    qsort(pairs->bp, pairs->length, sizeof(pairs->bp[0]), bed_pair_sort);
+    if (sort_by_pos)
+        qsort(pairs->bp, pairs->length, sizeof(pairs->bp[0]), bed_pair_sort);
 
     if (pairs->length)
         ret = 0;
@@ -516,7 +506,7 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
     bed_pair_list_t sites = {NULL, 0, 0};
     FILE *stats_fp = stderr;
 
-    if (load_bed_file_pairs(bedfile, param->use_strand, &sites, &longest)) {
+    if (load_bed_file_pairs(bedfile, param->use_strand, 1, &sites, &longest)) {
         fprintf(stderr, "[ampliconclip] error: unable to load bed file.\n");
         goto fail;
     }

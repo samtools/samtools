@@ -65,6 +65,7 @@ int faidx_main(int argc, char *argv[]);
 int dict_main(int argc, char *argv[]);
 int fqidx_main(int argc, char *argv[]);
 int amplicon_clip_main(int argc, char *argv[]);
+int main_ampliconstats(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -117,6 +118,7 @@ static void usage(FILE *fp)
 "     idxstats       BAM index stats\n"
 "     phase          phase heterozygotes\n"
 "     stats          generate stats (former bamcheck)\n"
+"     ampliconstats  generate amplicon specific stats\n"
 "\n"
 "  -- Viewing\n"
 "     flags          explain BAM flags\n"
@@ -207,6 +209,7 @@ int main(int argc, char *argv[])
         return 1;
     }
     else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
+    else if (strcmp(argv[1], "ampliconstats") == 0)     ret = main_ampliconstats(argc-1, argv+1);
     else if (strcmp(argv[1], "--version") == 0) {
         printf(
 "samtools %s\n"
