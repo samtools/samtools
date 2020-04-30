@@ -48,7 +48,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <math.h>
 
 #include <htslib/sam.h>
-#include <htslib/hfile.h>
 
 #include "samtools.h"
 #include "sam_opts.h"
