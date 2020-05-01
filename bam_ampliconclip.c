@@ -564,7 +564,7 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
         exclude |= (BAM_FUNMAP | BAM_FQCFAIL);
 
         if (!(b->core.flag & exclude)) {
-            if (!param->both) {      // FIXME - lets see if this works first
+            if (!param->both) {
                 if (bam_is_rev(b)) {
                     pos = bam_endpos(b);
                     is_rev = 1;
@@ -597,7 +597,7 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
             } else {
                 int left = 0, right = 0;
 
-                // front first
+                // left first
                 pos = b->core.pos;
                 is_rev = 0;
 
@@ -610,6 +610,10 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
                     left = 1;
                     been_clipped = 1;
                 }
+
+                // the right
+                pos = bam_endpos(b);
+                is_rev = 1;
 
                 if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
                     if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
