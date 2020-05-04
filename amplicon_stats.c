@@ -65,7 +65,8 @@ DEALINGS IN THE SOFTWARE.  */
 #define ABS(a) ((a)>=0?(a):-(a))
 #endif
 
-#define MAX_AMP_LEN 1000   // Maximum length of any single amplicon
+#define MAX_AMP 1000   // Default maximum number of amplicons
+#define MAX_AMP_LEN 1000   // Default maximum length of any single amplicon
 #define MAX_PRIMER_PER_AMPLICON 4  // Max primers per LEFT/RIGHT
 #define MAX_DEPTH 5        // Number of different depths permitted
 #define MAX_TLEN 2000      // TLEN distribution size
@@ -75,13 +76,15 @@ typedef struct {
     uint32_t flag_require;
     uint32_t flag_filter;
     bed_pair_list_t sites;
-    int max_delta; // Used for matching read to amplicon primer loc
+    int max_delta;   // Used for matching read to amplicon primer loc
     int min_depth[MAX_DEPTH]; // Used for coverage; must be >= min_depth deep
     int use_sample_name;
-    int max_amp;
-    int64_t max_len;
-    int tlen_adj; // Adjust tlen by this amount, due to clip but no fixmate
+    int max_amp;     // Total number of amplicons
+    int max_amp_len; // Maximum length of an individual amplicon
+    int64_t max_len; // Maximum reference length
+    int tlen_adj;    // Adjust tlen by this amount, due to clip but no fixmate
     FILE *out_fp;
+    char *argv;
 } astats_args_t;
 
 // We can have multiple primers for LEFT / RIGHT, so this
@@ -167,6 +170,7 @@ static int64_t bed2amplicon(astats_args_t *args,
                             amplicon_t *amp, int *namp) {
     int i, j;
     int64_t max_right = 0;
+    FILE *ofp = args->out_fp;
 
     *namp = 0;
 
@@ -177,12 +181,16 @@ static int64_t bed2amplicon(astats_args_t *args,
     amp[0].min_right = INT64_MAX;
     amp[0].min_left = INT64_MAX;
     amp[0].max_right = 0;
+    fprintf(ofp, "# Amplicon locations from BED file.\n");
+    fprintf(ofp, "# LEFT/RIGHT are <start>-<end> format and "
+            "comma-separated for alt-primers.\n");
+    fprintf(ofp, "#\n# AMPLICON\tNUMBER\tLEFT\tRIGHT\n");
     for (i = j = 0; i < sites->length; i++) {
         if (sites->bp[i].rev == 0 && last_rev) {
             j++;
             if (j >= args->max_amp) {
-                fprintf(stderr, "[ampliconstats] error: "
-                        "too many amplicons. Use -a option to raise this.");
+                fprintf(stderr, "[ampliconstats] error: too many amplicons"
+                        " (%d). Use -a option to raise this.\n", j);
                 return -1;
             }
             amp[j].max_left = 0;
@@ -191,9 +199,14 @@ static int64_t bed2amplicon(astats_args_t *args,
             amp[j].max_right = 0;
         }
         if (sites->bp[i].rev == 0) {
+            if (i == 0 || last_rev) {
+                if (j>0) fprintf(ofp, "\n");
+                fprintf(ofp, "AMPLICON\t%d", j+1);
+            }
             if (amp[j].nleft >= MAX_PRIMER_PER_AMPLICON) {
                 print_error_errno("ampliconstats",
-                                  "too many primers per amplicon");
+                                  "too many primers per amplicon (%d).\n",
+                                  MAX_PRIMER_PER_AMPLICON);
                 return -1;
             }
             amp[j].left[amp[j].nleft++] = sites->bp[i].right;
@@ -201,10 +214,15 @@ static int64_t bed2amplicon(astats_args_t *args,
                 amp[j].max_left = sites->bp[i].right+1;
             if (amp[j].min_left > sites->bp[i].right+1)
                 amp[j].min_left = sites->bp[i].right+1;
+            // BED file, so left+1 as zero based. right(+1-1) as
+            // BED goes one beyond end (and we want inclusive range).
+            fprintf(ofp, "%c%ld-%ld", "\t,"[amp[j].nleft > 1],
+                    sites->bp[i].left+1, sites->bp[i].right);
         } else {
             if (amp[j].nright >= MAX_PRIMER_PER_AMPLICON) {
                 print_error_errno("ampliconstats",
-                                  "too many primers per amplicon");
+                                  "too many primers per amplicon (%d)",
+                                  MAX_PRIMER_PER_AMPLICON);
                 return -1;
             }
             amp[j].right[amp[j].nright++] = sites->bp[i].left;
@@ -212,22 +230,28 @@ static int64_t bed2amplicon(astats_args_t *args,
                 amp[j].min_right = sites->bp[i].left-1;
             if (amp[j].max_right < sites->bp[i].left-1) {
                 amp[j].max_right = sites->bp[i].left-1;
-                if (amp[j].max_right - amp[j].min_left + 1 >= MAX_AMP_LEN) {
-                    fprintf(stderr, "[ampliconstats] error: "
-                            "amplicon longer than MAX_AMP_LEN define\n");
+                if (amp[j].max_right - amp[j].min_left + 1 >=
+                    args->max_amp_len) {
+                    fprintf(stderr, "[ampliconstats] error: amplicon "
+                            "longer (%d) than max_amp_len option (%d)\n",
+                            (int)(amp[j].max_right - amp[j].min_left + 2),
+                            args->max_amp_len);
                     return -1;
                 }
                 if (max_right < amp[j].max_right)
                     max_right = amp[j].max_right;
             }
+            fprintf(ofp, "%c%ld-%ld", "\t,"[amp[j].nright > 1],
+                    sites->bp[i].left+1, sites->bp[i].right);
         }
         last_rev = sites->bp[i].rev;
     }
     *namp = ++j;
+    if (j) fprintf(ofp, "\n");
 
     if (j >= args->max_amp) {
         fprintf(stderr, "[ampliconstats] error: "
-                "too many amplicons. Use -a option to raise this.");
+                "too many amplicons (%d). Use -a option to raise this.", j);
         return -1;
     }
 
@@ -249,16 +273,16 @@ typedef struct {
     int nfailprimer;// count of sequences not matching the primer locations
 
     // Sizes of memory allocated below, to permit reset
-    int max_amp;
+    int max_amp, max_amp_len;
 
     // Summary across all samples, sum(x) plus sum(x^2) for s.d. calc
-    int64_t *nreads, *nreads2;          // [MAX_AMP]
-    double  *nrperc, *nrperc2;          // [MAX_AMP]
-    int64_t *nbases, *nbases2;          // [MAX_AMP]
-    int64_t (*coverage)[MAX_AMP_LEN];   // [MAX_AMP][MAX_AMP_LEN]
-    double  (*covered_perc)[MAX_DEPTH]; // [MAX_AMP][MAX_DEPTH]
-    double  (*covered_perc2)[MAX_DEPTH];// [MAX_AMP][MAX_DEPTH];
-    int     (*tlen_dist)[MAX_TLEN];     // [MAX_AMP][MAX_TLEN];
+    int64_t *nreads, *nreads2;          // [max_amp]
+    double  *nrperc, *nrperc2;          // [max_amp]
+    int64_t *nbases, *nbases2;          // [max_amp]
+    int64_t *coverage;                  // [max_amp][max_amp_len]
+    double  (*covered_perc)[MAX_DEPTH]; // [max_amp][MAX_DEPTH]
+    double  (*covered_perc2)[MAX_DEPTH];// [max_amp][MAX_DEPTH];
+    int     (*tlen_dist)[MAX_TLEN];     // [max_amp][MAX_TLEN];
 
     // 0 is correct pair, 1 is incorrect pair, 2 is unidentified
     int     (*amp_dist)[3];             // [MAX_AMP][3];
@@ -284,12 +308,13 @@ void stats_free(astats_t *st) {
     free(st);
 }
 
-astats_t *stats_alloc(int64_t max_len, int max_amp) {
+astats_t *stats_alloc(int64_t max_len, int max_amp, int max_amp_len) {
     astats_t *st = calloc(1, sizeof(*st));
     if (!st)
         return NULL;
 
     st->max_amp = max_amp;
+    st->max_amp_len = max_amp_len;
 
     if (!(st->nreads  = calloc(max_amp, sizeof(*st->nreads))))  goto err;
     if (!(st->nreads2 = calloc(max_amp, sizeof(*st->nreads2)))) goto err;
@@ -298,7 +323,8 @@ astats_t *stats_alloc(int64_t max_len, int max_amp) {
     if (!(st->nbases  = calloc(max_amp, sizeof(*st->nbases))))  goto err;
     if (!(st->nbases2 = calloc(max_amp, sizeof(*st->nbases2)))) goto err;
 
-    if (!(st->coverage = calloc(max_amp, sizeof(*st->coverage)))) goto err;
+    if (!(st->coverage = calloc(max_amp*max_amp_len, sizeof(*st->coverage))))
+        goto err;
 
     if (!(st->covered_perc  = calloc(max_amp, sizeof(*st->covered_perc))))
         goto err;
@@ -320,16 +346,17 @@ void stats_reset(astats_t *st) {
     st->nfiltered = 0;
     st->nfailprimer = 0;
 
-    memset(st->nreads,  0, st->max_amp*sizeof(*st->nreads));
-    memset(st->nreads2, 0, st->max_amp*sizeof(*st->nreads2));
+    memset(st->nreads,  0, st->max_amp * sizeof(*st->nreads));
+    memset(st->nreads2, 0, st->max_amp * sizeof(*st->nreads2));
 
-    memset(st->nrperc,  0, st->max_amp*sizeof(*st->nrperc));
-    memset(st->nrperc2, 0, st->max_amp*sizeof(*st->nrperc2));
+    memset(st->nrperc,  0, st->max_amp * sizeof(*st->nrperc));
+    memset(st->nrperc2, 0, st->max_amp * sizeof(*st->nrperc2));
 
-    memset(st->nbases,  0, st->max_amp*sizeof(*st->nbases));
-    memset(st->nbases2, 0, st->max_amp*sizeof(*st->nbases2));
+    memset(st->nbases,  0, st->max_amp * sizeof(*st->nbases));
+    memset(st->nbases2, 0, st->max_amp * sizeof(*st->nbases2));
 
-    memset(st->coverage, 0, st->max_amp * sizeof(*st->coverage));
+    memset(st->coverage, 0, st->max_amp * st->max_amp_len
+           * sizeof(*st->coverage));
     memset(st->covered_perc,  0, st->max_amp * sizeof(*st->covered_perc));
     memset(st->covered_perc2, 0, st->max_amp * sizeof(*st->covered_perc2));
 
@@ -381,7 +408,7 @@ static int accumulate_stats(astats_t *stats,
     int64_t oend = MIN(end, amp[anum].max_right);
     int64_t offset = amp[anum].min_left-1;
     for (i = ostart; i < oend; i++)
-        stats->coverage[anum][i-offset]++;
+        stats->coverage[anum*stats->max_amp_len + i-offset]++;
 
     // Basic template length
     stats->tlen_dist[anum][ISIZE_TO_DIST(b->core.isize)]++;
@@ -485,7 +512,8 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
             int64_t j, offset = amp[i].min_left-1;
             for (j = MAX(start, amp[i].max_left-1);
                  j < MAX(start, amp[i].min_right); j++) {
-                if (stats->coverage[i][j-offset] >= args->min_depth[d])
+                if (stats->coverage[i*stats->max_amp_len + j-offset]
+                    >= args->min_depth[d])
                     covered++;
                 total++;
             }
@@ -596,7 +624,8 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
                 int covered = 0;
                 int64_t j, offset = amp[i].min_left-1;
                 for (j = amp[i].max_left-1; j < amp[i].min_right; j++)
-                    if (stats->coverage[i][j-offset] >= args->min_depth[d])
+                    if (stats->coverage[i*stats->max_amp_len + j-offset]
+                        >= args->min_depth[d])
                         covered++;
                 int64_t alen = amp[i].min_right - amp[i].max_left+1;
                 stats->covered_perc[i][d] = 100.0 * covered / alen;
@@ -709,6 +738,8 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         goto err;
 
     fprintf(ofp, "# Summary statistics, used for scaling the plots.\n");
+    fprintf(ofp, "SS\tSamtools version: %s\n", samtools_version());
+    fprintf(ofp, "SS\tCommand line: %s\n", args->argv);
     fprintf(ofp, "SS\tNumber of amplicons:\t%d\n", namp);
     fprintf(ofp, "SS\tNumber of files:\t%d\n", filec);
     fprintf(ofp, "SS\tEnd of summary\n");
@@ -739,8 +770,10 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         if (initialise_amp_pos_lookup(args, amp, namp, args->max_len) < 0)
             goto err;
 
-        if (!gstats) gstats = stats_alloc(args->max_len, args->max_amp);
-        if (!lstats) lstats = stats_alloc(args->max_len, args->max_amp);
+        if (!gstats) gstats = stats_alloc(args->max_len, args->max_amp,
+                                          args->max_amp_len);
+        if (!lstats) lstats = stats_alloc(args->max_len, args->max_amp,
+                                          args->max_amp_len);
         if (!lstats || !gstats)
             goto err;
 
@@ -827,9 +860,11 @@ static int usage(astats_args_t *args, FILE *fp, int exit_status) {
     fprintf(fp, "  -F, --filter-flag STR|INT\n"
             "               Only include reads with none of the FLAGs in present [0x%X]\n",args->flag_filter & 0xffff);
     fprintf(fp, "  -a, --max-amplicons INT\n"
-            "               Change the maximum number of amplicons permitted\n");
+            "               Change the maximum number of amplicons permitted [%d]\n", MAX_AMP);
     fprintf(fp, "  -d, --min-depth INT[,INT]...\n"
             "               Minimum base depth(s) to consider position covered [%d]\n", args->min_depth[0]);
+    fprintf(fp, "  -l, --max-amplicon-length INT\n"
+            "               Change the maximum length of an individual ampicon [%d]\n", MAX_AMP_LEN);
     fprintf(fp, "  -m, --pos-margin INT\n"
             "               Margin of error for matching primer positions [%d].\n", args->max_delta);
     fprintf(fp, "  -o, FILE\n"
@@ -852,7 +887,8 @@ int main_ampliconstats(int argc, char **argv) {
         .max_delta = 30, // large enough to cope with alt primers
         .min_depth = {1},
         .use_sample_name = 0,
-        .max_amp = 1000,
+        .max_amp = MAX_AMP,
+        .max_amp_len = MAX_AMP_LEN,
         .tlen_adj = 0,
         .out_fp = stdout,
     }, oargs = args;
@@ -867,12 +903,13 @@ int main_ampliconstats(int argc, char **argv) {
         {"pos-margin", required_argument, NULL, 'm'},
         {"use-sample-name", no_argument, NULL, 's'},
         {"max-amplicons", required_argument, NULL, 'a'},
+        {"max-amplicon-length", required_argument, NULL, 'l'},
         {"tlen-adjust", required_argument, NULL, 't'},
         {NULL, 0, NULL, 0}
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:t:o:",loptions,NULL))>0 ) {
+    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:",loptions,NULL))>0 ) {
         switch (opt) {
         case 'f': args.flag_require = bam_str2flag(optarg); break;
         case 'F':
@@ -895,6 +932,7 @@ int main_ampliconstats(int argc, char **argv) {
         }
 
         case 'a': args.max_amp = atoi(optarg)+1;break;
+        case 'l': args.max_amp_len = atoi(optarg)+1;break;
 
         case 't': args.tlen_adj = atoi(optarg);break;
 
@@ -927,6 +965,7 @@ int main_ampliconstats(int argc, char **argv) {
         return 1;
     }
 
+    args.argv = stringify_argv(argc, argv);
     int ret;
     if (argc == optind) {
         char *av = "-";
@@ -936,6 +975,7 @@ int main_ampliconstats(int argc, char **argv) {
     }
 
     free(args.sites.bp);
+    free(args.argv);
 
     return ret;
 }
