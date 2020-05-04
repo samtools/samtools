@@ -847,7 +847,7 @@ int main_ampliconstats(int argc, char **argv) {
     astats_args_t args = {
         .ga = SAM_GLOBAL_ARGS_INIT,
         .flag_require = 0,
-        .flag_filter = 0x10F04,
+        .flag_filter = 0x10B04,
         .sites = {NULL, 0, 0},
         .max_delta = 30, // large enough to cope with alt primers
         .min_depth = {1},
