@@ -30,12 +30,8 @@ DEALINGS IN THE SOFTWARE.  */
 
 /*
  * TODO:
- * - Cope with arbitrary sizes of reference and numbers of amplicons
  * - Cope with multiple references.  What do we do here?  Just request one?
  * - Permit regions rather than consuming whole file (maybe solves above).
- * - Detect double-length products (or primer pool hopping).
- * - eg 31_LEFT to 33_RIGHT, or even 31_LEFT to 32_RIGHT.
- *   Binning via TLEN field will suffice.
  */
 
 #include <config.h>
@@ -164,6 +160,21 @@ static void free_amp_pos_lookup(void) {
     free(pos2end);
 }
 
+// Counts amplicons.
+// Assumption: input BED file alternates between LEFT and RIGHT primers
+// per amplicon, thus we can count the number based on the switching
+// orientation.
+static int count_amplicon(bed_pair_list_t *sites) {
+    int i, namp, last_rev = 0;
+    for (i = namp = 0; i < sites->length; i++) {
+        if (sites->bp[i].rev == 0 && last_rev)
+            namp++;
+        last_rev = sites->bp[i].rev;
+    }
+
+    return ++namp;
+}
+
 // We're only interest in the internal part of the amplicon.
 // Our bed file has LEFT start/end followed by RIGHT start/end,
 // so collapse these to LEFT end / RIGHT start.
@@ -221,7 +232,7 @@ static int64_t bed2amplicon(astats_args_t *args,
                 amp[j].min_left = sites->bp[i].right+1;
             // BED file, so left+1 as zero based. right(+1-1) as
             // BED goes one beyond end (and we want inclusive range).
-            fprintf(ofp, "%c%ld-%ld", "\t,"[amp[j].nleft > 1],
+            fprintf(ofp, "%c%"PRId64"-%"PRId64, "\t,"[amp[j].nleft > 1],
                     sites->bp[i].left+1, sites->bp[i].right);
         } else {
             if (amp[j].nright >= MAX_PRIMER_PER_AMPLICON) {
@@ -246,7 +257,7 @@ static int64_t bed2amplicon(astats_args_t *args,
                 if (max_right < amp[j].max_right)
                     max_right = amp[j].max_right;
             }
-            fprintf(ofp, "%c%ld-%ld", "\t,"[amp[j].nright > 1],
+            fprintf(ofp, "%c%"PRId64"-%"PRId64, "\t,"[amp[j].nright > 1],
                     sites->bp[i].left+1, sites->bp[i].right);
         }
         last_rev = sites->bp[i].rev;
@@ -803,8 +814,7 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
     if (!amp)
         return -1;
 
-    if (bed2amplicon(args, &args->sites, amp, &namp) < 0)
-        goto err;
+    namp = count_amplicon(&args->sites);
 
     fprintf(ofp, "# Summary statistics, used for scaling the plots.\n");
     fprintf(ofp, "SS\tSamtools version: %s\n", samtools_version());
@@ -812,6 +822,9 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
     fprintf(ofp, "SS\tNumber of amplicons:\t%d\n", namp);
     fprintf(ofp, "SS\tNumber of files:\t%d\n", filec);
     fprintf(ofp, "SS\tEnd of summary\n");
+
+    if (bed2amplicon(args, &args->sites, amp, &namp) < 0)
+        goto err;
 
     for (i = 0; i < filec; i++) {
         char *nstart = filev[i];
