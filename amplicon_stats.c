@@ -48,10 +48,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include <math.h>
 
 #include <htslib/sam.h>
+#include <htslib/khash.h>
 
 #include "samtools.h"
 #include "sam_opts.h"
 #include "bam_ampliconclip.h"
+
+KHASH_MAP_INIT_INT64(tcoord, int)
+
 
 #ifndef MIN
 #define MIN(a,b) ((a)<(b)?(a):(b))
@@ -65,11 +69,11 @@ DEALINGS IN THE SOFTWARE.  */
 #define ABS(a) ((a)>=0?(a):-(a))
 #endif
 
-#define MAX_AMP 1000   // Default maximum number of amplicons
+#define TCOORD_MIN_COUNT   5
+#define MAX_AMP 1000       // Default maximum number of amplicons
 #define MAX_AMP_LEN 1000   // Default maximum length of any single amplicon
 #define MAX_PRIMER_PER_AMPLICON 4  // Max primers per LEFT/RIGHT
 #define MAX_DEPTH 5        // Number of different depths permitted
-#define MAX_TLEN 2000      // TLEN distribution size
 
 typedef struct {
     sam_global_args ga;
@@ -85,6 +89,7 @@ typedef struct {
     int tlen_adj;    // Adjust tlen by this amount, due to clip but no fixmate
     FILE *out_fp;
     char *argv;
+    int tcoord_min_count;
 } astats_args_t;
 
 // We can have multiple primers for LEFT / RIGHT, so this
@@ -282,7 +287,7 @@ typedef struct {
     int64_t *coverage;                  // [max_amp][max_amp_len]
     double  (*covered_perc)[MAX_DEPTH]; // [max_amp][MAX_DEPTH]
     double  (*covered_perc2)[MAX_DEPTH];// [max_amp][MAX_DEPTH];
-    int     (*tlen_dist)[MAX_TLEN];     // [max_amp][MAX_TLEN];
+    khash_t(tcoord) **tcoord;           // [max_amp]
 
     // 0 is correct pair, 1 is incorrect pair, 2 is unidentified
     int     (*amp_dist)[3];             // [MAX_AMP][3];
@@ -302,8 +307,16 @@ void stats_free(astats_t *st) {
     free(st->coverage);
     free(st->covered_perc);
     free(st->covered_perc2);
-    free(st->tlen_dist);
     free(st->amp_dist);
+
+    if (st->tcoord) {
+        int i;
+        for (i = 0; i < st->max_amp; i++) {
+            if (st->tcoord[i])
+                kh_destroy(tcoord, st->tcoord[i]);
+        }
+        free(st->tcoord);
+    }
 
     free(st);
 }
@@ -331,7 +344,12 @@ astats_t *stats_alloc(int64_t max_len, int max_amp, int max_amp_len) {
     if (!(st->covered_perc2 = calloc(max_amp, sizeof(*st->covered_perc2))))
         goto err;
 
-    if (!(st->tlen_dist = calloc(max_amp, sizeof(*st->tlen_dist)))) goto err;
+    if (!(st->tcoord = calloc(max_amp, sizeof(*st->tcoord)))) goto err;
+    int i;
+    for (i = 0; i < st->max_amp; i++)
+        if (!(st->tcoord[i] = kh_init(tcoord)))
+            goto err;
+
     if (!(st->amp_dist  = calloc(max_amp, sizeof(*st->amp_dist))))  goto err;
 
     return st;
@@ -360,11 +378,24 @@ void stats_reset(astats_t *st) {
     memset(st->covered_perc,  0, st->max_amp * sizeof(*st->covered_perc));
     memset(st->covered_perc2, 0, st->max_amp * sizeof(*st->covered_perc2));
 
-    memset(st->tlen_dist, 0, st->max_amp * sizeof(*st->tlen_dist));
+    // Keep the allocated entries as it's likely all files will share
+    // the same keys.  Instead we reset counters to zero for common ones
+    // and delete rare ones.
+    int i;
+    for (i = 0; i < st->max_amp; i++) {
+        khiter_t k;
+        for (k = kh_begin(st->tcoord[i]);
+             k != kh_end(st->tcoord[i]); k++)
+            if (kh_exist(st->tcoord[i], k)) {
+                if (kh_value(st->tcoord[i], k) < 5)
+                    kh_del(tcoord, st->tcoord[i], k);
+                else
+                    kh_value(st->tcoord[i], k) = 0;
+            }
+    }
+
     memset(st->amp_dist,  0, st->max_amp * sizeof(*st->amp_dist));
 }
-
-#define ISIZE_TO_DIST(i) (ABS(i)<MAX_TLEN?ABS(i):MAX_TLEN)
 
 static int accumulate_stats(astats_t *stats,
                             astats_args_t *args,
@@ -410,9 +441,6 @@ static int accumulate_stats(astats_t *stats,
     for (i = ostart; i < oend; i++)
         stats->coverage[anum*stats->max_amp_len + i-offset]++;
 
-    // Basic template length
-    stats->tlen_dist[anum][ISIZE_TO_DIST(b->core.isize)]++;
-
     // Template length in terms of amplicon number to amplicon number.
     // We expect left to right of same amplicon (len 0), but it may go
     // to next amplicon (len 1) or prev (len -1), etc.
@@ -437,7 +465,6 @@ static int accumulate_stats(astats_t *stats,
     // If both left/right are known, count it on left only.
     // If only one is known, we'll only get to this code once
     // so we can also count it.
-
     if (anum != -1 && oth_anum != -1) {
         if (start <= t_end)
             stats->amp_dist[anum][oth_anum == anum ? 0 : 1]++;
@@ -445,11 +472,29 @@ static int accumulate_stats(astats_t *stats,
         stats->amp_dist[anum][2]++;
     }
 
+    // Track template start,end frequencies, so we can give stats on
+    // amplicon ptimer usage.
+    if (b->core.isize <= 0)
+        // left to right only, so we don't double count template positions.
+        return 0;
+
+    int ret;
+    start = b->core.pos;
+    t_end = start + b->core.isize-1;
+    uint64_t tcoord = MIN(start+1, UINT32_MAX) | (MIN(t_end+1, UINT32_MAX)<<32);
+    khiter_t k = kh_put(tcoord, stats->tcoord[anum], tcoord, &ret);
+    if (ret < 0)
+        return -1;
+    if (ret == 0)
+        kh_value(stats->tcoord[anum], k)++;
+    else
+        kh_value(stats->tcoord[anum], k)=1;
+
     return 0;
 }
 
 // Append file local stats to global stats
-void append_stats(astats_t *lstats, astats_t *gstats, int namp) {
+int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
     gstats->nseq += lstats->nseq;
     gstats->nfiltered += lstats->nfiltered;
     gstats->nfailprimer += lstats->nfailprimer;
@@ -476,17 +521,36 @@ void append_stats(astats_t *lstats, astats_t *gstats, int namp) {
                                          * lstats->covered_perc[a][d];
         }
 
-        for (d = 0; d < MAX_TLEN; d++)
-            gstats->tlen_dist[a][d] += lstats->tlen_dist[a][d];
+        // Add khash local (kl) to khash global (kg)
+        khiter_t kl, kg;
+        for (kl = kh_begin(lstats->tcoord[a]);
+             kl != kh_end(lstats->tcoord[a]); kl++) {
+            if (!kh_exist(lstats->tcoord[a], kl) ||
+                kh_value(lstats->tcoord[a], kl) == 0)
+                continue;
+
+            int ret;
+            kg = kh_put(tcoord, gstats->tcoord[a],
+                        kh_key(lstats->tcoord[a], kl),
+                        &ret);
+            if (ret < 0)
+                return -1;
+
+            kh_value(gstats->tcoord[a], kg) =
+                (ret ==0 ? kh_value(gstats->tcoord[a], kg) : 0)
+                + kh_value(lstats->tcoord[a], kl);
+        }
 
         for (d = 0; d < 3; d++)
             gstats->amp_dist[a][d] += lstats->amp_dist[a][d];
     }
+
+    return 0;
 }
 
 void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
                 amplicon_t *amp, int namp, int nfile) {
-    int i, j;
+    int i;
     FILE *ofp = args->out_fp;
 
     // summary stats for this sample (or for all samples)
@@ -654,22 +718,27 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     }
 
 
-    // TLEN distribution
-    fprintf(ofp, "# Distribution of aligned template length.\n");
-    fprintf(ofp, "# Use 'grep ^%cTLEN | cut -f 2-' to extract this part.\n", type);
-    fprintf(ofp, "%cTLEN\t%s\t0", type, name); // all merged
-    int tlen_dist[MAX_TLEN] = {0};
-    for (i = 0; i < namp; i++) // accumulate for all amps
-        for (j = 0; j < MAX_TLEN; j++)
-            tlen_dist[j] += stats->tlen_dist[i][j];
-    for (j = 0; j < MAX_TLEN; j++)
-        fprintf(ofp, "\t%d", tlen_dist[j]);
-    fprintf(ofp, "\n");
-
+    // TCOORD (start to end) distribution
+    fprintf(ofp, "# Distribution of aligned template coordinates.\n");
+    fprintf(ofp, "# Use 'grep ^%cTCOORD | cut -f 2-' to extract this part.\n", type);
     for (i = 0; i < namp; i++) {
-        fprintf(ofp, "%cTLEN\t%s\t%d", type, name, i+1); // per amplicon
-        for (j = 0; j < MAX_TLEN; j++)
-            fprintf(ofp, "\t%d", stats->tlen_dist[i][j]);
+        fprintf(ofp, "%cTCOORD\t%s\t%d", type, name, i+1); // per amplicon
+        khiter_t k;
+        for (k = kh_begin(stats->tcoord[i]);
+             k != kh_end(stats->tcoord[i]); k++) {
+            if (!kh_exist(stats->tcoord[i], k) ||
+                kh_value(stats->tcoord[i], k) < args->tcoord_min_count)
+                continue;
+
+            // Key is start,end in 32-bit quantities.
+            // Yes this limits us to 4Gb references, but just how
+            // many primers are we planning on making?  Not that many
+            // I hope.
+            fprintf(ofp, "\t%u,%u,%d",
+                    (uint32_t)(kh_key(stats->tcoord[i], k) & 0xFFFFFFFF),
+                    (uint32_t)(kh_key(stats->tcoord[i], k) >> 32),
+                    kh_value(stats->tcoord[i], k));
+        }
         fprintf(ofp, "\n");
     }
 
@@ -678,7 +747,7 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     // 0 = both ends in this amplicon
     // 1 = ends in different amplicons
     // 2 = other end matching an unknown amplicon site
-    //     (see tlen_dist for further analysis of where)
+    //     (see tcoord for further analysis of where)
     fprintf(ofp, "# Classification of amplicon status.  Columns are\n");
     fprintf(ofp, "# number with both primers from this amplicon, number with\n");
     fprintf(ofp, "# primers from different amplicon, and number with a position\n");
@@ -818,7 +887,8 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
 
         dump_stats('F', sname, lstats, args, amp, namp, filec);
 
-        append_stats(lstats, gstats, namp);
+        if (append_stats(lstats, gstats, namp) < 0)
+            goto err;
 
         if (sname && sname != sname_)
             free(sname);
@@ -891,6 +961,7 @@ int main_ampliconstats(int argc, char **argv) {
         .max_amp_len = MAX_AMP_LEN,
         .tlen_adj = 0,
         .out_fp = stdout,
+        .tcoord_min_count = TCOORD_MIN_COUNT,
     }, oargs = args;
 
     static const struct option loptions[] =
@@ -905,11 +976,12 @@ int main_ampliconstats(int argc, char **argv) {
         {"max-amplicons", required_argument, NULL, 'a'},
         {"max-amplicon-length", required_argument, NULL, 'l'},
         {"tlen-adjust", required_argument, NULL, 't'},
+        {"tcoord-min-count", required_argument, NULL, 'c'},
         {NULL, 0, NULL, 0}
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:",loptions,NULL))>0 ) {
+    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:c:",loptions,NULL))>0 ) {
         switch (opt) {
         case 'f': args.flag_require = bam_str2flag(optarg); break;
         case 'F':
@@ -933,6 +1005,8 @@ int main_ampliconstats(int argc, char **argv) {
 
         case 'a': args.max_amp = atoi(optarg)+1;break;
         case 'l': args.max_amp_len = atoi(optarg)+1;break;
+
+        case 'c': args.tcoord_min_count = atoi(optarg);break;
 
         case 't': args.tlen_adj = atoi(optarg);break;
 
