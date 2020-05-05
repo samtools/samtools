@@ -455,22 +455,29 @@ static int accumulate_stats(astats_t *stats,
     // Template length in terms of amplicon number to amplicon number.
     // We expect left to right of same amplicon (len 0), but it may go
     // to next amplicon (len 1) or prev (len -1), etc.
-    int64_t t_end = (b->core.flag & BAM_FREVERSE ? end : start)
-        + b->core.isize;
-
-    // If we've clipped the primers but not followed up with a fixmates
-    // then our start+TLEN will take us to a location which is
-    // length(LEFT_PRIMER) + length(RIGHT_PRIMER) too far away.
-    //
-    // The correct solution is to run samtools fixmate so TLEN is correct.
-    // The hacky solution is to fudge the expected tlen by double the
-    // average primer length (e.g. 50).
-    t_end += b->core.isize > 0 ? -args->tlen_adj : +args->tlen_adj;
+    int64_t t_end;
     int oth_anum = -1;
-    if (t_end > 0 && t_end < args->max_len && b->core.isize != 0)
-        oth_anum = (b->core.flag & BAM_FREVERSE)
-            ? pos2start[t_end]
-            : pos2end[t_end];
+
+    if (b->core.flag & BAM_FPAIRED) {
+        t_end = (b->core.flag & BAM_FREVERSE ? end : start)
+            + b->core.isize;
+
+        // If we've clipped the primers but not followed up with a fixmates
+        // then our start+TLEN will take us to a location which is
+        // length(LEFT_PRIMER) + length(RIGHT_PRIMER) too far away.
+        //
+        // The correct solution is to run samtools fixmate so TLEN is correct.
+        // The hacky solution is to fudge the expected tlen by double the
+        // average primer length (e.g. 50).
+        t_end += b->core.isize > 0 ? -args->tlen_adj : +args->tlen_adj;
+
+        if (t_end > 0 && t_end < args->max_len && b->core.isize != 0)
+            oth_anum = (b->core.flag & BAM_FREVERSE)
+                ? pos2start[t_end]
+                : pos2end[t_end];
+    } else {
+        oth_anum = pos2end[t_end = end];
+    }
 
     // We don't want to count our pairs twice.
     // If both left/right are known, count it on left only.
@@ -487,13 +494,15 @@ static int accumulate_stats(astats_t *stats,
 
     // Track template start,end frequencies, so we can give stats on
     // amplicon ptimer usage.
-    if (b->core.isize <= 0)
+    if ((b->core.flag & BAM_FPAIRED) && b->core.isize <= 0)
         // left to right only, so we don't double count template positions.
         return 0;
 
     int ret;
     start = b->core.pos;
-    t_end = start + b->core.isize-1;
+    t_end = b->core.flag & BAM_FPAIRED
+        ? start + b->core.isize-1
+        : end;
     uint64_t tcoord = MIN(start+1, UINT32_MAX) | (MIN(t_end+1, UINT32_MAX)<<32);
     khiter_t k = kh_put(tcoord, stats->tcoord[anum], tcoord, &ret);
     if (ret < 0)
