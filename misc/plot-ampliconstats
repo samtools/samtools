@@ -790,10 +790,11 @@ END
   skip_coord:
 
     #--- Template coordinates: COMBINED
-    my $fn = "$prefix-combined-tcoord";  # filename prefix
-    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+    if (scalar(@combined_coord) > 0) {
+	my $fn = "$prefix-combined-tcoord";  # filename prefix
+	open(my $fh, ">", "$fn.gp") || die "$fn.gp";
 
-    print $fh <<"END";
+	print $fh <<"END";
 set title "Template coordinate frequencies, all files"
 unset key
 set xlabel "position"
@@ -815,28 +816,28 @@ set linetype 3 lc "black
 seed=rand(-1)
 END
 
-    my @x2tics = ();
-    for (my $i=1;$i<=$namp;$i++) {
-	my $col = ($i%2)?"blue":"green";
-	print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
-	if ($i%2 == 0) {
-	    my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
-	    my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
-	    my $tpos = ($ts+$te)/2;
-	    push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+	my @x2tics = ();
+	for (my $i=1;$i<=$namp;$i++) {
+	    my $col = ($i%2)?"blue":"green";
+	    print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+	    if ($i%2 == 0) {
+		my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+		my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+		my $tpos = ($ts+$te)/2;
+		push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+	    }
 	}
-    }
-    print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+	print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
 
-    print $fh <<"END";
+	print $fh <<"END";
 plot "-" using 1:(\$3+rand(0)):(\$2-\$1):(0):(int(\$4)?\$4+1:(int(\$5) % 2)) with vector nohead lw 3 lc var
 END
-    local $"="\n";
-    print $fh "@combined_coord\nend\n";
+	local $"="\n";
+	print $fh "@combined_coord\nend\n";
 
-    close($fh);
-    system("gnuplot $fn.gp") && die $!;
-
+	close($fh);
+	system("gnuplot $fn.gp") && die $!;
+  }
 
     #--- Read count / depth
     my $fn = "$prefix-$ff-reads";  # filename prefix
