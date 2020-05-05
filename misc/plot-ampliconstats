@@ -294,13 +294,33 @@ my %fh_cover_count;
 my %fh_cover_page;
 my %fh_cover_nfile;
 
+my @amp_start; # coords for amplicons
+my @amp_end;
+
 #-----------------------------------------------------------------------------
 # Parse stats file, writing to a number of outputs simultaneously
 my %file;
 my $fh;
+my @combined_coord;
 while (<>) {
     chomp($_);
     my @F = split("\t", $_);
+
+    # Amplicon coordinates
+    if (/^AMPLICON/) {
+	my $min_left=1e9;
+	foreach (split(",",$F[2])) {
+	    /\d+-(\d+)/;
+	    $min_left=$1 if ($min_left > $1);
+	}
+	my $max_right=0;
+	foreach (split(",",$F[3])) {
+	    /(\d+)-\d+/;
+	    $max_right=$1 if ($max_right < $1);
+	}
+	$amp_start[$F[1]]=$min_left;
+	$amp_end[$F[1]]=$max_right;
+    }
 
     # Heatmaps showing all files & all amplicons
     local $"="\t";
@@ -640,6 +660,19 @@ END
     if (/^FAMP\s\S+\s[1-9]*/) {
         push(@{$file{$F[1]}{$F[0]}}, 100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add}));
     }
+    if (/^FTCOORD/) {
+	local $"="\t$F[2]\n";
+	$_="@F[3..$#F]";
+	s/,/\t/g;
+	push(@{$file{$F[1]}{$F[0]}}, "$_\t$F[2]") if ($_ ne "");
+    }
+
+    if (/^CTCOORD/) {
+	local $"="\t$F[2]\n";
+	$_="@F[3..$#F]";
+	s/,/\t/g;
+	push(@combined_coord, "$_\t$F[2]") if ($_ ne "");
+    }
 }
 
 #-----------------------------------------------------------------------------
@@ -705,6 +738,105 @@ foreach my $f (sort keys %file) {
     $ff =~ s/[\\;#\$\{\}]/./g;  # safe filename component
     my $fg = $f;                # printable in gnuplot
     $fg =~ s/_/\\\\_/g;
+
+    #--- Template coordinates: FILE
+    goto skip_coord if !exists($file{$f}{FTCOORD});
+    my $fn = "$prefix-$ff-tcoord";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    print $fh <<"END";
+set title "$fg: Template coordinate frequencies"
+unset key
+set xlabel "position"
+set xrange [*:*]
+set ylabel "frequency"
+set yrange [*:*]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "red"
+set linetype 3 lc "black
+seed=rand(-1)
+END
+
+    my @x2tics = ();
+    for (my $i=1;$i<=$namp;$i++) {
+	my $col = ($i%2)?"blue":"green";
+	print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+	if ($i%2 == 0) {
+	    my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+	    my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+	    my $tpos = ($ts+$te)/2;
+	    push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+	}
+    }
+    print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+    print $fh <<"END";
+plot "-" using 1:(\$3+rand(0)):(\$2-\$1):(0):(int(\$4)?\$4+1:(int(\$5) % 2)) with vector nohead lw 3 lc var
+END
+    local $"="\n";
+    print $fh "@{$file{$f}{FTCOORD}}\nend\n";
+
+    close($fh);
+    system("gnuplot $fn.gp") && die $!;
+  skip_coord:
+
+    #--- Template coordinates: COMBINED
+    my $fn = "$prefix-combined-tcoord";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    print $fh <<"END";
+set title "Template coordinate frequencies, all files"
+unset key
+set xlabel "position"
+set xrange [*:*]
+set ylabel "frequency"
+set yrange [*:*]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "red"
+set linetype 3 lc "black
+seed=rand(-1)
+END
+
+    my @x2tics = ();
+    for (my $i=1;$i<=$namp;$i++) {
+	my $col = ($i%2)?"blue":"green";
+	print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+	if ($i%2 == 0) {
+	    my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+	    my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+	    my $tpos = ($ts+$te)/2;
+	    push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+	}
+    }
+    print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+    print $fh <<"END";
+plot "-" using 1:(\$3+rand(0)):(\$2-\$1):(0):(int(\$4)?\$4+1:(int(\$5) % 2)) with vector nohead lw 3 lc var
+END
+    local $"="\n";
+    print $fh "@combined_coord\nend\n";
+
+    close($fh);
+    system("gnuplot $fn.gp") && die $!;
+
 
     #--- Read count / depth
     my $fn = "$prefix-$ff-reads";  # filename prefix

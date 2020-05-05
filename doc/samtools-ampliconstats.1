@@ -196,9 +196,10 @@ length).
 The FTCOORD field holds a distribution of observed template
 coordsinates from the input data.  Each row consists of the file name,
 the amplicon number in question, and tab separated tuples of start,
-end and frequency (whose values are separated by commas).  Each
-template is only counted for one amplicon, so if the read-pairs span
-amplicons the count will show up in the left-most amplicon covered.
+end, frequency and status (0 for OK, 1 for skipping amplicon, 2 for
+unknown location).  Each template is only counted for one amplicon, so
+if the read-pairs span amplicons the count will show up in the
+left-most amplicon covered.
 
 Th COORD data may indicate which primers are being utilised if there
 are alternates available for a given amplicon.
@@ -241,9 +242,18 @@ listed by the "samtools flags" subcommand.
 Specify the maximum number of amplicons permitted.
 
 .TP
+.BI "-c, --tcoord-min-count " INT
+In the FTCOORD and CTCOORD lines, only record template start,end
+coordinate combination if they occur at least \fIINT\fR times.
+
+.TP
 .BI "-d, --min-depth " INT
 Specifies the minimum base depth to consider a reference position to
 be covered, for purposes of the FRPERC and CRPERC sections.
+
+.TP
+.BI "-l, --max-amplicon-length " INT
+Specifies the maximum length of any individual amplicon.
 
 .TP
 .BI "-m, --pos-margin " INT
@@ -264,8 +274,8 @@ Instead of using the basename component of the input path names, use
 the SM field from the first @RG header line.
 
 .TP
-.B "-t, --tlen-adjust " INT
-Adjust the TLEN field by +/- INT to compensate for primer clipping.
+.BI "-t, --tlen-adjust " INT
+Adjust the TLEN field by +/- \fIINT\fR to compensate for primer clipping.
 This defaults to zero, but if the primers have been clipped and the
 TLEN field has not been updated using samtools fixmate then the
 template length will be wrong by the sum of the forward and reverse

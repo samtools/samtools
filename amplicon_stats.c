@@ -50,7 +50,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "sam_opts.h"
 #include "bam_ampliconclip.h"
 
-KHASH_MAP_INIT_INT64(tcoord, int)
+KHASH_MAP_INIT_INT64(tcoord, int64_t)
 
 
 #ifndef MIN
@@ -65,7 +65,7 @@ KHASH_MAP_INIT_INT64(tcoord, int)
 #define ABS(a) ((a)>=0?(a):-(a))
 #endif
 
-#define TCOORD_MIN_COUNT   5
+#define TCOORD_MIN_COUNT   10
 #define MAX_AMP 1000       // Default maximum number of amplicons
 #define MAX_AMP_LEN 1000   // Default maximum length of any single amplicon
 #define MAX_PRIMER_PER_AMPLICON 4  // Max primers per LEFT/RIGHT
@@ -476,11 +476,13 @@ static int accumulate_stats(astats_t *stats,
     // If both left/right are known, count it on left only.
     // If only one is known, we'll only get to this code once
     // so we can also count it.
+    int astatus;
     if (anum != -1 && oth_anum != -1) {
+        astatus = oth_anum == anum ? 0 : 1;
         if (start <= t_end)
-            stats->amp_dist[anum][oth_anum == anum ? 0 : 1]++;
+            stats->amp_dist[anum][astatus]++;
     } else {
-        stats->amp_dist[anum][2]++;
+        stats->amp_dist[anum][astatus = 2]++;
     }
 
     // Track template start,end frequencies, so we can give stats on
@@ -500,6 +502,7 @@ static int accumulate_stats(astats_t *stats,
         kh_value(stats->tcoord[anum], k)++;
     else
         kh_value(stats->tcoord[anum], k)=1;
+    kh_value(stats->tcoord[anum], k) |= ((int64_t)astatus<<32);
 
     return 0;
 }
@@ -548,7 +551,7 @@ int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
                 return -1;
 
             kh_value(gstats->tcoord[a], kg) =
-                (ret ==0 ? kh_value(gstats->tcoord[a], kg) : 0)
+                (ret == 0 ? (kh_value(gstats->tcoord[a], kg) & 0xFFFFFFFF) : 0)
                 + kh_value(lstats->tcoord[a], kl);
         }
 
@@ -738,17 +741,18 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
         for (k = kh_begin(stats->tcoord[i]);
              k != kh_end(stats->tcoord[i]); k++) {
             if (!kh_exist(stats->tcoord[i], k) ||
-                kh_value(stats->tcoord[i], k) < args->tcoord_min_count)
+                (kh_value(stats->tcoord[i], k) & 0xFFFFFFFF) < args->tcoord_min_count)
                 continue;
 
             // Key is start,end in 32-bit quantities.
             // Yes this limits us to 4Gb references, but just how
             // many primers are we planning on making?  Not that many
             // I hope.
-            fprintf(ofp, "\t%u,%u,%d",
+            fprintf(ofp, "\t%u,%u,%d,%d",
                     (uint32_t)(kh_key(stats->tcoord[i], k) & 0xFFFFFFFF),
                     (uint32_t)(kh_key(stats->tcoord[i], k) >> 32),
-                    kh_value(stats->tcoord[i], k));
+                    (uint32_t)(kh_value(stats->tcoord[i], k) & 0xFFFFFFFF),
+                    (uint32_t)(kh_value(stats->tcoord[i], k) >> 32));
         }
         fprintf(ofp, "\n");
     }
@@ -944,18 +948,20 @@ static int usage(astats_args_t *args, FILE *fp, int exit_status) {
             "               Only include reads with none of the FLAGs in present [0x%X]\n",args->flag_filter & 0xffff);
     fprintf(fp, "  -a, --max-amplicons INT\n"
             "               Change the maximum number of amplicons permitted [%d]\n", MAX_AMP);
-    fprintf(fp, "  -d, --min-depth INT[,INT]...\n"
-            "               Minimum base depth(s) to consider position covered [%d]\n", args->min_depth[0]);
     fprintf(fp, "  -l, --max-amplicon-length INT\n"
             "               Change the maximum length of an individual ampicon [%d]\n", MAX_AMP_LEN);
+    fprintf(fp, "  -d, --min-depth INT[,INT]...\n"
+            "               Minimum base depth(s) to consider position covered [%d]\n", args->min_depth[0]);
     fprintf(fp, "  -m, --pos-margin INT\n"
-            "               Margin of error for matching primer positions [%d].\n", args->max_delta);
+            "               Margin of error for matching primer positions [%d]n", args->max_delta);
     fprintf(fp, "  -o, FILE\n"
             "               Specify output file [stdout if unset]\n");
     fprintf(fp, "  -s, --use-sample-name\n"
             "               Use the sample name from the first @RG header line\n");
     fprintf(fp, "  -t, --tlen-adjust INT\n"
             "               Add/subtract from TLEN; use when clipping but no fixmate step\n");
+    fprintf(fp, "  -c, --tcoord-min-count INT\n"
+            "               Minimum template start,end frequency for recording [%d]\n", TCOORD_MIN_COUNT);
     sam_global_opt_help(fp, "I.--.@");
 
     return exit_status;
