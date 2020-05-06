@@ -917,18 +917,20 @@ int main_ampliconstats(int argc, char **argv) {
         }
     }
 
-    if (argc <= optind+1 && isatty(STDIN_FILENO))
+    if (argc <= optind)
         return usage(&oargs, stdout, EXIT_SUCCESS);
+    if (argc <= optind+1 && isatty(STDIN_FILENO))
+        return usage(&oargs, stderr, EXIT_FAILURE);
 
     int64_t longest;
-    if (load_bed_file_pairs(argv[optind++], 1, 0, &args.sites, &longest)) {
+    if (load_bed_file_pairs(argv[optind], 1, 0, &args.sites, &longest)) {
         print_error_errno("ampliconstats",
-                          "Could not read file \"%s\"", optarg);
+                          "Could not read file \"%s\"", argv[optind]);
         return 1;
     }
 
     int ret;
-    if (argc == optind) {
+    if (argc == ++optind) {
         char *av = "-";
         ret = amplicon_stats(&args, &av, 1);
     } else {
