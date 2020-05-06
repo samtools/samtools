@@ -3,7 +3,8 @@
 
     Copyright (C) 2020 Genome Research Ltd.
 
-    Author: Andrew Whitwham <aw7@sanger.ac.uk>
+    Authors: Andrew Whitwham <aw7@sanger.ac.uk>
+             Rob Davies <rmd+git@sanger.ac.uk>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -51,6 +52,7 @@ typedef struct {
     int use_strand;
     int write_clipped;
     int mark_fail;
+    int both;
     char *arg_list;
     char *stats_file;
 } cl_param_t;
@@ -246,10 +248,13 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     if (clipping == hard_clip && bases >= rec->core.l_qseq) {
         rec_out->core.l_qseq = 0;
         rec_out->core.n_cigar = 0;
+
         if (orig_l_aux)
             memcpy(bam_get_aux(rec_out), orig_aux, orig_l_aux);
-        rec->l_data -= bam_get_aux(rec) - rec_out->data + orig_l_aux;
-        return 1;
+
+        rec_out->l_data = bam_get_aux(rec_out) - rec_out->data + orig_l_aux;
+
+        return 0;
     }
 
     // Modify CIGAR
@@ -393,10 +398,12 @@ static int bam_trim_right(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     if (clipping == hard_clip && bases >= rec->core.l_qseq) {
         rec_out->core.l_qseq = 0;
         rec_out->core.n_cigar = 0;
+
         if (orig_l_aux)
             memcpy(bam_get_aux(rec_out), orig_aux, orig_l_aux);
+
         rec_out->l_data = bam_get_aux(rec_out) - rec_out->data + orig_l_aux;
-        return 1;
+        return 0;
     }
 
     // Modify CIGAR here
@@ -500,7 +507,7 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
     int ret = 1, r, exclude = 0, been_clipped, file_open = 0;
     bam_hdr_t *header = NULL;
     bam1_t *b = NULL, *b_tmp = NULL;
-    long f_count = 0, r_count = 0, n_count = 0, l_count = 0, l_exclude = 0;
+    long f_count = 0, r_count = 0, n_count = 0, l_count = 0, l_exclude = 0, b_count = 0;
     int64_t longest = 0;
     kstring_t str = KS_INITIALIZE;
     bed_pair_list_t sites = {NULL, 0, 0};
@@ -557,35 +564,76 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
         exclude |= (BAM_FUNMAP | BAM_FQCFAIL);
 
         if (!(b->core.flag & exclude)) {
+            if (!param->both) {
+                if (bam_is_rev(b)) {
+                    pos = bam_endpos(b);
+                    is_rev = 1;
+                } else {
+                    pos = b->core.pos;
+                    is_rev = 0;
+                }
 
-            if (bam_is_rev(b)) {
-                pos = bam_endpos(b);
-                is_rev = 1;
+                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
+                    if (is_rev) {
+                        if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
+                            goto fail;
+                        swap_bams(&b, &b_tmp);
+                        r_count++;
+                    } else {
+                        if (bam_trim_left(b, b_tmp, p_size, clipping) != 0)
+                            goto fail;
+                        swap_bams(&b, &b_tmp);
+                        f_count++;
+                    }
+
+                    been_clipped = 1;
+                } else {
+                    if (param->mark_fail) {
+                        b->core.flag |= BAM_FQCFAIL;
+                    }
+
+                    n_count++;
+                }
             } else {
+                int left = 0, right = 0;
+
+                // left first
                 pos = b->core.pos;
                 is_rev = 0;
-            }
 
-            if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
-                if (is_rev) {
-                    if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
-                        goto fail;
-                    swap_bams(&b, &b_tmp);
-                    r_count++;
-                } else {
+                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
                     if (bam_trim_left(b, b_tmp, p_size, clipping) != 0)
                         goto fail;
+
                     swap_bams(&b, &b_tmp);
                     f_count++;
+                    left = 1;
+                    been_clipped = 1;
                 }
 
-                been_clipped = 1;
-            } else {
-                if (param->mark_fail) {
-                    b->core.flag |= BAM_FQCFAIL;
+                // the right
+                pos = bam_endpos(b);
+                is_rev = 1;
+
+                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
+                    if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
+                        goto fail;
+
+                    swap_bams(&b, &b_tmp);
+                    r_count++;
+                    right = 1;
+                    been_clipped = 1;
                 }
 
-                n_count++;
+                if (left && right) {
+                    b_count++;
+                } else if (!left && !right) {
+                    if (param->mark_fail) {
+                        b->core.flag |= BAM_FQCFAIL;
+                    }
+
+                    n_count++;
+                }
             }
         } else {
             l_exclude++;
@@ -617,9 +665,10 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
                     "TOTAL CLIPPED: %ld\n"
                     "FORWARD CLIPPED: %ld\n"
                     "REVERSE CLIPPED: %ld\n"
+                    "BOTH CLIPPED: %ld\n"
                     "NOT CLIPPED: %ld\n"
                     "EXCLUDED: %ld\n", param->arg_list, l_count, f_count + r_count,
-                                    f_count, r_count, n_count, l_exclude);
+                                    f_count, r_count, b_count, n_count, l_exclude);
 
     if (file_open) {
         fclose(stats_fp);
@@ -641,9 +690,10 @@ static void usage(void) {
     fprintf(stderr, "Option: \n");
     fprintf(stderr, " -b  FILE     bedfile of amplicons to be removed.\n");
     fprintf(stderr, " -o  FILE     output file name (default stdout).\n");
-    fprintf(stderr, " -f  FILE     Write stats to file name (default stderr)");
+    fprintf(stderr, " -f  FILE     Write stats to file name (default stderr)\n");
     fprintf(stderr, " --soft-clip  soft clip amplicons from reads (default)\n");
     fprintf(stderr, " --hard-clip  hard clip amplicons from reads.\n");
+    fprintf(stderr, " --both-ends  clip on both ends.\n");
     fprintf(stderr, " --strand     use strand data from bed file.\n");
     fprintf(stderr, " --clipped    only output clipped reads.\n");
     fprintf(stderr, " --fail       mark unclipped, mapped reads as QCFAIL.\n");
@@ -660,7 +710,7 @@ int amplicon_clip_main(int argc, char **argv) {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL;
     clipping_type clipping = soft_clip;
-    cl_param_t param = {1, 0, 0, 0, NULL, NULL};
+    cl_param_t param = {1, 0, 0, 0, 0, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -670,6 +720,7 @@ int amplicon_clip_main(int argc, char **argv) {
         {"strand", no_argument, NULL, 1005},
         {"clipped", no_argument, NULL, 1006},
         {"fail", no_argument, NULL, 1007},
+        {"both-ends", no_argument, NULL, 1008},
         {NULL, 0, NULL, 0}
     };
 
@@ -684,6 +735,7 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1005: param.use_strand = 1; break;
             case 1006: param.write_clipped = 1; break;
             case 1007: param.mark_fail = 1; break;
+            case 1008: param.both = 1; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);
