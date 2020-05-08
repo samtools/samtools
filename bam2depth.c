@@ -88,8 +88,9 @@ static int usage() {
     fprintf(stderr, "   -r <chr:from-to>    region\n");
     fprintf(stderr, "   -g <flags>          remove the specified flags from the set used to filter out reads\n");
     fprintf(stderr, "   -G <flags>          add the specified flags to the set used to filter out reads\n"
-                    "                       The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704");
+                    "                       The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704\n");
     fprintf(stderr, "   -J                  include reads with deletions in depth computation\n");
+    fprintf(stderr, "   -s                  for overlapping read pairs cover a pos, set the base quality of the lower-quality base to zero \n");
 
     sam_global_opt_help(stderr, "-.--.--.");
 
@@ -121,6 +122,7 @@ int main_depth(int argc, char *argv[])
     uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
     int tflags = 0;
     int inc_del = 0;
+    int overlap_init = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -129,7 +131,7 @@ int main_depth(int argc, char *argv[])
     };
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:g:G:J", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:g:G:Js", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -165,6 +167,7 @@ int main_depth(int argc, char *argv[])
                 flags |= tflags;
                 break;
             case 'J': inc_del = 1; break;
+            case 's': overlap_init = 1; break;
             default:  if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': return usage();
@@ -276,7 +279,14 @@ int main_depth(int argc, char *argv[])
     }
 
     // the core multi-pileup loop
+    int init_r;
     mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
+    if (overlap_init) {
+        if ((init_r = bam_mplp_init_overlaps(mplp)) < 0 ) {
+           perror("bam_mplp_init_overlaps");
+           return init_r;
+        } // add this to insure an overlap pair reads shoud be counted as 1 depth unit not 2 units
+    }
     if (0 < max_depth)
         bam_mplp_set_maxcnt(mplp,max_depth);  // set maximum coverage depth
     else if (!max_depth)
