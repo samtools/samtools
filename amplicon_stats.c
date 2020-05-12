@@ -632,7 +632,8 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
         fprintf(ofp, "CREADS\tSTDDEV");
         for (i = 0; i < namp; i++) {
             double n1 = stats->nreads[i];
-            fprintf(ofp, "\t%.1f", sqrt(stats->nreads2[i]/nfile - (n1/nfile)*(n1/nfile)));
+            fprintf(ofp, "\t%.1f", sqrt(stats->nreads2[i]/(double)nfile
+                                        - (n1/nfile)*(n1/nfile)));
         }
         fprintf(ofp, "\n");
     }
