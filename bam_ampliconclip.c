@@ -53,8 +53,12 @@ typedef struct {
     int write_clipped;
     int mark_fail;
     int both;
+    int fail_len;
+    int filter_len;
+    int unmapped;
     char *arg_list;
     char *stats_file;
+    char *rejects_file;
 } cl_param_t;
 
 
@@ -495,6 +499,26 @@ static int bam_trim_right(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     return 0;
 }
 
+
+static hts_pos_t active_query_len(bam1_t *b) {
+    uint32_t *cigar = bam_get_cigar(b);
+    uint32_t cig_type, cig_op;
+    hts_pos_t len = 0;
+    int i;
+
+    for (i = 0; i < b->core.n_cigar; i++) {
+        cig_op =  bam_cigar_op(cigar[i]);
+        cig_type = bam_cigar_type(cig_op);
+
+        if ((cig_type & 1) && (cig_op != BAM_CSOFT_CLIP)) {
+            len += bam_cigar_oplen(cigar[i]);
+        }
+    }
+
+    return len;
+}
+
+
 static inline void swap_bams(bam1_t **a, bam1_t **b) {
     bam1_t *tmp = *a;
     *a = *b;
@@ -502,12 +526,13 @@ static inline void swap_bams(bam1_t **a, bam1_t **b) {
 }
 
 
-static int bam_clip(samFile *in, samFile *out, char *bedfile,
+static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     clipping_type clipping, cl_param_t *param) {
-    int ret = 1, r, exclude = 0, been_clipped, file_open = 0;
+    int ret = 1, r, exclude = 0, file_open = 0;
     bam_hdr_t *header = NULL;
     bam1_t *b = NULL, *b_tmp = NULL;
     long f_count = 0, r_count = 0, n_count = 0, l_count = 0, l_exclude = 0, b_count = 0;
+    long filtered = 0, written = 0, failed = 0;
     int64_t longest = 0;
     kstring_t str = KS_INITIALIZE;
     bed_pair_list_t sites = {NULL, 0, 0};
@@ -546,6 +571,13 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
         goto fail;
     }
 
+    if (reject) {
+       if (sam_hdr_write(reject, header) < 0) {
+           fprintf(stderr, "[ampliconclip] error: could not write header to rejects file.\n");
+           goto fail;
+       }
+    }
+
     b = bam_init1();
     b_tmp = bam_init1();
     if (!b || !b_tmp) {
@@ -557,9 +589,9 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
         hts_pos_t pos;
         int is_rev;
         int p_size;
+        int been_clipped  = 0, filter = 0;
 
         l_count++;
-        been_clipped = 0;
 
         exclude |= (BAM_FUNMAP | BAM_FQCFAIL);
 
@@ -635,15 +667,54 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
                     n_count++;
                 }
             }
+
+            if (param->fail_len >= 0 || param->filter_len >= 0) {
+               hts_pos_t aql = active_query_len(b);
+
+               if (param->fail_len >= 0 && aql <= param->fail_len) {
+                   b->core.flag |= BAM_FQCFAIL;
+               }
+
+               if (param->filter_len >= 0 && aql <= param->filter_len) {
+                   filter = 1;
+               }
+
+               // fprintf(stderr, "MI %ld\n", aql);
+           }
+
+           if (b->core.flag & BAM_FQCFAIL) {
+               failed++;
+           }
+
+           if (param->write_clipped && !been_clipped) {
+               filter = 1;
+           }
+
         } else {
             l_exclude++;
+
+            if (param->unmapped) {
+                filter = 1;
+            }
         }
 
-        if (!param->write_clipped || (param->write_clipped && been_clipped)) {
+        if (!filter) {
             if (sam_write1(out, header, b) < 0) {
                 fprintf(stderr, "[ampliconclip] error: could not write line %ld.\n", l_count);
                 goto fail;
             }
+
+            written++;
+        } else {
+            if (reject) {
+                if (sam_write1(reject, header, b) < 0) {
+                    fprintf(stderr, "[ampliconclip] error: could not write to reject file %s\n",
+                            param->rejects_file);
+                    goto fail;
+                }
+            }
+
+            filtered++;
         }
     }
 
@@ -667,8 +738,12 @@ static int bam_clip(samFile *in, samFile *out, char *bedfile,
                     "REVERSE CLIPPED: %ld\n"
                     "BOTH CLIPPED: %ld\n"
                     "NOT CLIPPED: %ld\n"
-                    "EXCLUDED: %ld\n", param->arg_list, l_count, f_count + r_count,
-                                    f_count, r_count, b_count, n_count, l_exclude);
+                    "EXCLUDED: %ld\n"
+                    "FILTERED: %ld\n"
+                    "FAILED: %ld\n"
+                    "WRITTEN: %ld\n", param->arg_list, l_count, f_count + r_count,
+                                    f_count, r_count, b_count, n_count, l_exclude,
+                                    filtered, failed, written);
 
     if (file_open) {
         fclose(stats_fp);
@@ -688,16 +763,20 @@ fail:
 static void usage(void) {
     fprintf(stderr, "Usage samtools ampliconclip -b bedfile <input.bam> -o <output.bam>\n\n");
     fprintf(stderr, "Option: \n");
-    fprintf(stderr, " -b  FILE     bedfile of amplicons to be removed.\n");
-    fprintf(stderr, " -o  FILE     output file name (default stdout).\n");
-    fprintf(stderr, " -f  FILE     Write stats to file name (default stderr)\n");
-    fprintf(stderr, " --soft-clip  soft clip amplicons from reads (default)\n");
-    fprintf(stderr, " --hard-clip  hard clip amplicons from reads.\n");
-    fprintf(stderr, " --both-ends  clip on both ends.\n");
-    fprintf(stderr, " --strand     use strand data from bed file.\n");
-    fprintf(stderr, " --clipped    only output clipped reads.\n");
-    fprintf(stderr, " --fail       mark unclipped, mapped reads as QCFAIL.\n");
-    fprintf(stderr, " --no-PG      do not add an @PG line.\n");
+    fprintf(stderr, " -b  FILE            bedfile of amplicons to be removed.\n");
+    fprintf(stderr, " -o  FILE            output file name (default stdout).\n");
+    fprintf(stderr, " -f  FILE            write stats to file name (default stderr)\n");
+    fprintf(stderr, " --soft-clip         soft clip amplicons from reads (default)\n");
+    fprintf(stderr, " --hard-clip         hard clip amplicons from reads.\n");
+    fprintf(stderr, " --both-ends         clip on both ends.\n");
+    fprintf(stderr, " --strand            use strand data from bed file.\n");
+    fprintf(stderr, " --clipped           only output clipped reads.\n");
+    fprintf(stderr, " --fail              mark unclipped, mapped reads as QCFAIL.\n");
+    fprintf(stderr, " --filter-len INT    do not output reads smaller than INT.\n");
+    fprintf(stderr, " --fail-len   INT    mark as QCFAIL reads smaller than INT.\n");
+    fprintf(stderr, " --no-excluded       do not write excluded reads (unmapped or QCFAIL).\n");
+    fprintf(stderr, " --rejects-file FILE file to write filtered reads.\n");
+    fprintf(stderr, " --no-PG             do not add an @PG line.\n");
     sam_global_opt_help(stderr, "-.O..@-.");
 }
 
@@ -708,9 +787,9 @@ int amplicon_clip_main(int argc, char **argv) {
     char *bedfile = NULL, *fnout = "-";
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
-    samFile *in = NULL, *out = NULL;
+    samFile *in = NULL, *out = NULL, *reject = NULL;
     clipping_type clipping = soft_clip;
-    cl_param_t param = {1, 0, 0, 0, 0, NULL, NULL};
+    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -721,6 +800,10 @@ int amplicon_clip_main(int argc, char **argv) {
         {"clipped", no_argument, NULL, 1006},
         {"fail", no_argument, NULL, 1007},
         {"both-ends", no_argument, NULL, 1008},
+        {"filter-len", required_argument, NULL, 1009},
+        {"fail-len", required_argument, NULL, 1010},
+        {"no-excluded", no_argument, NULL, 1011},
+        {"rejects-file", required_argument, NULL, 1012},
         {NULL, 0, NULL, 0}
     };
 
@@ -736,6 +819,10 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1006: param.write_clipped = 1; break;
             case 1007: param.mark_fail = 1; break;
             case 1008: param.both = 1; break;
+            case 1009: param.filter_len = atoi(optarg); break;
+            case 1010: param.fail_len = atoi(optarg); break;
+            case 1011: param.unmapped = 1; break;
+            case 1012: param.rejects_file = optarg; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);
@@ -764,6 +851,15 @@ int amplicon_clip_main(int argc, char **argv) {
         return 1;
     }
 
+    if (param.rejects_file) {
+        sam_open_mode(wmode+1, param.rejects_file, NULL);
+
+        if ((reject = sam_open_format(param.rejects_file, wmode, &ga.out)) == NULL) {
+            print_error_errno("ampliconclip", "cannot open rejects file");
+            return 1;
+        }
+    }
+
     if (ga.nthreads > 0) {
         if (!(p.pool = hts_tpool_init(ga.nthreads))) {
             fprintf(stderr, "[ampliconclip] error: cannot create thread pool.\n");
@@ -771,18 +867,29 @@ int amplicon_clip_main(int argc, char **argv) {
         }
         hts_set_opt(in,  HTS_OPT_THREAD_POOL, &p);
         hts_set_opt(out, HTS_OPT_THREAD_POOL, &p);
+
+        if (reject) {
+           hts_set_opt(reject,  HTS_OPT_THREAD_POOL, &p);
+        }
     }
 
     param.arg_list = stringify_argv(argc + 1, argv - 1);
 
-    ret = bam_clip(in, out, bedfile, clipping, &param);
+    ret = bam_clip(in, out, reject, bedfile, clipping, &param);
 
     // cleanup
     sam_close(in);
 
     if (sam_close(out) < 0) {
         fprintf(stderr, "[ampliconclip] error: error while closing output file %s.\n", argv[optind+1]);
-        return 1;
+        ret = 1;
+    }
+
+    if (reject) {
+        if (sam_close(reject) < 0) {
+            fprintf(stderr, "[ampliconclip] error: error while closing reject file %s.\n", param.rejects_file);
+            ret = 1;
+        }
     }
 
     if (p.pool) hts_tpool_destroy(p.pool);
