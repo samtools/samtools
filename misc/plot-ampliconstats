@@ -42,8 +42,7 @@ my $res = GetOptions("size=s"      => \$opts{size},
                      "help"        => \$opts{help},
                      "page=i"      => \$opts{page},
                      "amp_add=i"   => \$opts{amp_add},
-                     "orient=s"    => \$opts{orient},
-                     "max_depth=i" => \$opts{max_depth});
+                     "orient=s"    => \$opts{orient});
 
 $opts{size}      = "1000,800" unless $opts{size};
 $opts{size2}     = "1000,400" unless $opts{size2};
@@ -51,12 +50,7 @@ $opts{size3}     = "400,847"  unless $opts{size3};
 $opts{page}      = 96         unless $opts{page};
 $opts{amp_add}   = 100        unless $opts{amp_add};
 $opts{orient}    = "h"        unless $opts{orient};
-$opts{max_depth} = 1e6        unless $opts{max_depth};
 
-# We auto-scale max depth normally.
-# However the vertical oriented combined plot needs to know max_depth upfront
-# as xscale [1:*] doesn't work in that context.  For that we use
-# opts{max_depth}.  It's a fudge.  Sorry.
 my $max_depth = 0;
 
 my $usage = <<END;
@@ -72,7 +66,6 @@ Options:
     -page N      Maximum number of samples per page in heatmaps
     -amp_add X   Small sample fudge: NErr/(NAll+X) in amplicon count plots
     -orient h/v  Orientation for plots, defaults to h (horizontal)
-    -max_depth N Set maximum scale for combined vertical plots with logscale x
 
 If FILE is not specified, reads from stdin.
 END
@@ -125,85 +118,9 @@ my $impw2 = ($namp >= 100) ? 2 : 4;
 #--- Combined
 open(my $ch_depth, ">", $prefix."-combined-depth.gp") ||
     die "$prefix-combined-depth.gp";
-if ($opts{orient} eq "h") {
-    print $ch_depth <<"END";
-set title "average depth per amplicon, all files"
-set xlabel "amplicon"
-set xrange [:$namp+1]
-set ylabel "depth"
-set logscale y
-set key below
-set title font "helvetica,20"
-set xtics 5 font "helvetica,$xfont" scale -2,-1
-set mxtics 5
-set terminal png size $opts{size2}
-set output "$prefix-combined-depth.png"
-plot "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw1 title "mean", \\
-     "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "s.d."
-END
-} else {
-    print $ch_depth <<"END";
-set title "avg depth / amp, all files"
-set ylabel "amplicon"
-set yrange [0:$namp+1]
-set xlabel "depth"
-set xrange [0:$opts{max_depth}]
-set grid; # xtics noytics
-set logscale x
-set format x "%.g"
-set xtics font "helvectica,$yfont"
-set key below
-set title font "helvetica,20"
-set ytics 5 font "helvetica,$xfont" scale -2,-1
-set mytics 5
-set terminal png size $opts{size3}
-set output "$prefix-combined-depth.png"
-plot "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $opts{max_depth} ? \$1 : $opts{max_depth}) : 0.001):(0) with vector nohead lw $impw1 title "mean", \\
-     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $opts{max_depth} ? \$1 : $opts{max_depth}) : 0.001):(0) with vector nohead lw $impw2 lt 3 title "s.d."
-END
-}
 
 open(my $ch_reads, ">", $prefix."-combined-reads.gp") ||
     die "$prefix-combined-reads.gp";
-if ($opts{orient} eq "h") {
-    print $ch_reads <<"END";
-set title "average number of reads per amplicon, all files"
-unset key
-set xlabel "amplicon"
-set xrange [0:$namp+1]
-set ylabel "no. reads"
-set logscale y
-set key below
-set title font "helvetica,20"
-set xtics 5 font "helvetica,$xfont" scale -2,-1
-set mxtics 5
-set terminal png size $opts{size2}
-set output "$prefix-combined-reads.png"
-plot "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw1 title "mean", \\
-     "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "s.d."
-END
-} else {
-    print $ch_reads <<"END";
-set title "no. of reads, all files"
-unset key
-set ylabel "amplicon"
-set yrange [0:$namp+1]
-set xlabel "no. reads"
-set xrange [0:$opts{max_depth}]
-set grid; # xtics noytics
-set logscale x
-set format x "%.g"
-set xtics font "helvectica,$yfont"
-set key below
-set title font "helvetica,20"
-set ytics 5 font "helvectica,$xfont" scale -2,-1
-set mytics 5
-set terminal png size $opts{size3}
-set output "$prefix-combined-reads.png"
-plot "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $opts{max_depth} ? \$1 : $opts{max_depth} ): 0.001):(0) with vector nohead lw $impw1 title "mean", \\
-     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $opts{max_depth} ? \$1 : $opts{max_depth} ): 0.001):(0) with vector nohead lw $impw2 lt 3 title "s.d."
-END
-}
 
 open(my $ch_rperc, ">", $prefix."-combined-read-perc.gp") ||
     die "$prefix-combined-read-perc.gp";
@@ -603,8 +520,10 @@ END
 
     # Graphs with merged file data (mean and SD) for all amplicons
     local $"="\n";
-    print $ch_reads "@F[2..$#F]\nend\n" if (/^CDEPTH.*(MEAN|STDDEV)/);
-    print $ch_depth "@F[2..$#F]\nend\n" if (/^CDEPTH.*(MEAN|STDDEV)/);
+    print $ch_reads "\$mean << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*MEAN/);
+    print $ch_reads "\$sd << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*STDDEV/);
+    print $ch_depth "\$mean << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*MEAN/);
+    print $ch_depth "\$sd << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*STDDEV/);
     print $ch_rperc "@F[2..$#F]\nend\n" if (/^CRPERC.*(MEAN|STDDEV)/);
     print $ch_amp   100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add}),"\n"
         if (/^CAMP\tCOMBINED\t[1-9]/);
@@ -730,9 +649,103 @@ foreach (keys %fh_cover) {
 }
 
 #--- Combined
+$max_depth = 10**ceil(log($max_depth)/log(10)); # round up to power of 10
+
+# combined-reads
+if ($opts{orient} eq "h") {
+    print $ch_reads <<"END";
+set title "average number of reads per amplicon, all files"
+unset key
+set xlabel "amplicon"
+set xrange [0:$namp+1]
+set ylabel "no. reads"
+set logscale y
+set key below
+set title font "helvetica,20"
+set xtics 5 font "helvetica,$xfont" scale -2,-1
+set mxtics 5
+set terminal png size $opts{size2}
+set output "$prefix-combined-reads.png"
+plot \$mean using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw1 title "mean", \\
+     \$sd using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "s.d."
+END
+} else {
+    print $ch_reads <<"END";
+# Compute max X value
+stats \$mean nooutput
+max_range = STATS_max
+stats \$sd nooutput
+max_range = max_range > STATS_max ? max_range : STATS_max
+max_range = 10**ceil(log10(max_range+0.01))
+
+set title "no. of reads, all files"
+unset key
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "no. reads"
+set xrange [0:max_range]
+set grid; # xtics noytics
+set logscale x
+set format x "%.g"
+set xtics font "helvectica,$yfont"
+set key below
+set title font "helvetica,20"
+set ytics 5 font "helvectica,$xfont" scale -2,-1
+set mytics 5
+set terminal png size $opts{size3}
+set output "$prefix-combined-reads.png"
+plot "\$mean" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : max_range ): 0.001):(0) with vector nohead lw $impw1 title "mean", \\
+     "\$sd" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : max_range ): 0.001):(0) with vector nohead lw $impw2 lt 3 title "s.d."
+END
+}
 close($ch_reads);
 system("gnuplot $prefix-combined-reads.gp") && die $!;
 
+# combind-depth
+if ($opts{orient} eq "h") {
+    print $ch_depth <<"END";
+set title "average depth per amplicon, all files"
+set xlabel "amplicon"
+set xrange [:$namp+1]
+set ylabel "depth"
+set logscale y
+set key below
+set title font "helvetica,20"
+set xtics 5 font "helvetica,$xfont" scale -2,-1
+set mxtics 5
+set terminal png size $opts{size2}
+set output "$prefix-combined-depth.png"
+plot "\$mean" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw1 title "mean", \\
+     "\$sd" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "s.d."
+END
+} else {
+    print $ch_depth <<"END";
+# Compute max X value
+stats \$mean nooutput
+max_range = STATS_max
+stats \$sd nooutput
+max_range = max_range > STATS_max ? max_range : STATS_max
+max_range = 10**ceil(log10(max_range+0.01))
+
+set title "avg depth / amp, all files"
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "depth"
+set xrange [0:max_range]
+set grid; # xtics noytics
+set logscale x
+set format x "%.g"
+set xtics font "helvectica,$yfont"
+set key below
+set title font "helvetica,20"
+set ytics 5 font "helvetica,$xfont" scale -2,-1
+set mytics 5
+set terminal png size $opts{size3}
+set output "$prefix-combined-depth.png"
+plot "\$mean" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : max_range) : 0.001):(0) with vector nohead lw $impw1 title "mean", \\
+     "\$sd" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : max_range) : 0.001):(0) with vector nohead lw $impw2 lt 3 title "s.d."
+END
+}
 close($ch_depth);
 system("gnuplot $prefix-combined-depth.gp") && die $!;
 
@@ -746,8 +759,6 @@ system("gnuplot $prefix-combined-amp.gp") && die $!;
 
 #-----------------------------------------------------------------------------
 # Also produce per file graphs
-$max_depth = 10**ceil(log($max_depth)/log(10)); # round up to power of 10
-
 foreach my $f (sort keys %file) {
     my $ff = $f;
     $ff =~ s/[\\;#\$\{\}]/./g;  # safe filename component
