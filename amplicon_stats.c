@@ -953,18 +953,18 @@ static int usage(astats_args_t *args, FILE *fp, int exit_status) {
 "\n"
 "Options:\n");
     fprintf(fp, "  -f, --required-flag STR|INT\n"
-            "               Only include reads with all  of the FLAGs in present [0x%X]\n",args->flag_require);
+            "               Only include reads with all of the FLAGs present [0x%X]\n",args->flag_require);
     fprintf(fp, "  -F, --filter-flag STR|INT\n"
-            "               Only include reads with none of the FLAGs in present [0x%X]\n",args->flag_filter & 0xffff);
+            "               Only include reads with none of the FLAGs present [0x%X]\n",args->flag_filter & 0xffff);
     fprintf(fp, "  -a, --max-amplicons INT\n"
             "               Change the maximum number of amplicons permitted [%d]\n", MAX_AMP);
     fprintf(fp, "  -l, --max-amplicon-length INT\n"
-            "               Change the maximum length of an individual ampicon [%d]\n", MAX_AMP_LEN);
+            "               Change the maximum length of an individual amplicon [%d]\n", MAX_AMP_LEN);
     fprintf(fp, "  -d, --min-depth INT[,INT]...\n"
             "               Minimum base depth(s) to consider position covered [%d]\n", args->min_depth[0]);
     fprintf(fp, "  -m, --pos-margin INT\n"
-            "               Margin of error for matching primer positions [%d]n", args->max_delta);
-    fprintf(fp, "  -o, FILE\n"
+            "               Margin of error for matching primer positions [%d]\n", args->max_delta);
+    fprintf(fp, "  -o, --output FILE\n"
             "               Specify output file [stdout if unset]\n");
     fprintf(fp, "  -s, --use-sample-name\n"
             "               Use the sample name from the first @RG header line\n");
@@ -1000,6 +1000,7 @@ int main_ampliconstats(int argc, char **argv) {
         {"flag-require", required_argument, NULL, 'f'},
         {"flag-filter", required_argument, NULL, 'F'},
         {"min-depth", required_argument, NULL, 'd'},
+        {"output", required_argument, NULL, 'o'},
         {"pos-margin", required_argument, NULL, 'm'},
         {"use-sample-name", no_argument, NULL, 's'},
         {"max-amplicons", required_argument, NULL, 'a'},
