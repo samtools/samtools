@@ -53,6 +53,13 @@ samtools ampliconclip
 .RB [ --strand ]
 .RB [ --clipped ]
 .RB [ --fail ]
+.RB [ --filter-len
+.IR INT ]
+.RB [ --fail-len
+.IR INT ]
+.RB [ --no-excluded ]
+.RB [ --rejects-file
+.IR rejects.file ]
 .RB [ --no-PG ]
 .B -b
 .I bed.file in.file
@@ -94,10 +101,24 @@ Clip at both ends as opposed to just the 5' end.
 Use strand entry from the BED file.
 .TP
 .B --clipped
-Only output clipped reads.
+Only output clipped reads.  Filter all others.
 .TP
 .B --fail
 Mark unclipped reads as QC fail.
+.TP
+.BI "--filter-len " INT
+Filter out reads of less then INT size.  In this case soft clips are not counted
+toward read length.  An INT of 0 will filter out reads with no matching bases.
+.TP
+.BI "--fail-len " INT
+As \fB--filter-len\fR but mark as QC fail rather then filter out.
+.TP
+.B --no-excluded
+Filter out any reads that are marked as QCFAIL or are unmapped.  This works on
+the state of the reads before clipping takes place.
+.TP
+.BI "--rejects-file " FILE
+Write any filtered reads out to FILE.
 .TP
 .B --no-PG
 Do not at a PG line to the header.
