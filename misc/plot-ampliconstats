@@ -26,6 +26,8 @@
 
 use strict;
 use Getopt::Long;
+use List::Util qw(max);
+use POSIX qw(ceil);
 
 my $version = "1.0";
 
@@ -51,6 +53,12 @@ $opts{amp_add}   = 100        unless $opts{amp_add};
 $opts{orient}    = "h"        unless $opts{orient};
 $opts{max_depth} = 1e6        unless $opts{max_depth};
 
+# We auto-scale max depth normally.
+# However the vertical oriented combined plot needs to know max_depth upfront
+# as xscale [1:*] doesn't work in that context.  For that we use
+# opts{max_depth}.  It's a fudge.  Sorry.
+my $max_depth = 0;
+
 my $usage = <<END;
 plot-ampliconstats version $version
 
@@ -64,7 +72,7 @@ Options:
     -page N      Maximum number of samples per page in heatmaps
     -amp_add X   Small sample fudge: NErr/(NAll+X) in amplicon count plots
     -orient h/v  Orientation for plots, defaults to h (horizontal)
-    -max_depth N Set maximum scale for vertical plots with logscale x
+    -max_depth N Set maximum scale for combined vertical plots with logscale x
 
 If FILE is not specified, reads from stdin.
 END
@@ -652,6 +660,11 @@ END
         }
     }
 
+    if (/^(FREADS|FDEPTH)/) {
+	my $max = max(@F[2..$#F]);
+	$max_depth = $max if $max_depth < $max;
+    }
+
     # Per file graphs; accumulate multiple stats here and dump out at end
     if (/^(FREADS|FDEPTH|FPCOV|FRPERC)/) {
         $file{$F[1]}{$F[0]} = \@F;
@@ -733,6 +746,8 @@ system("gnuplot $prefix-combined-amp.gp") && die $!;
 
 #-----------------------------------------------------------------------------
 # Also produce per file graphs
+$max_depth = 10**ceil(log($max_depth)/log(10)); # round up to power of 10
+
 foreach my $f (sort keys %file) {
     my $ff = $f;
     $ff =~ s/[\\;#\$\{\}]/./g;  # safe filename component
@@ -837,7 +852,7 @@ END
 
 	close($fh);
 	system("gnuplot $fn.gp") && die $!;
-  }
+    }
 
     #--- Read count / depth
     my $fn = "$prefix-$ff-reads";  # filename prefix
@@ -851,6 +866,7 @@ set xlabel "amplicon"
 set xrange [0:$namp+1]
 set ylabel "no. reads"
 set logscale y
+set yrange [1:$max_depth]
 set title font "helvetica,20"
 set xtics 5 font "helvectica,$xfont" scale -2,-1
 set mxtics 5
@@ -866,7 +882,7 @@ set key below
 set ylabel "amplicon"
 set yrange [0:$namp+1]
 set xlabel "no. reads"
-set xrange [1:$opts{max_depth}]
+set xrange [1:$max_depth]
 set grid; # xtics noytics
 set logscale x
 set xtics font "helvectica,$yfont"
@@ -875,8 +891,8 @@ set ytics 5 font "helvectica,$xfont" scale -2,-1
 set mytics 5
 set terminal png size $opts{size3}
 set output "$fn.png"
-plot "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $opts{max_depth} ? \$1 : $opts{max_depth}) : 0.001):(0) with vector nohead lw $impw1 title "#reads", \\
-     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $opts{max_depth} ? \$1 : $opts{max_depth}) : 0.001):(0) with vector nohead lw $impw2 lt 3 title "depth",
+plot "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw1 title "#reads", \\
+     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw2 lt 3 title "depth",
 END
     }
 
