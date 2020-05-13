@@ -179,7 +179,8 @@ int main_bedcov(int argc, char *argv[])
     plp = calloc(n, sizeof(bam_pileup1_t*));
     while (ks_getuntil(ks, KS_SEP_LINE, &str, &dret) >= 0) {
         char *p, *q;
-        int tid, beg, end, pos;
+        int tid, pos, num = 0;
+        int64_t beg = 0, end = 0;
         bam_mplp_t mplp;
 
         if (str.l == 0 || *str.s == '#') continue; /* empty or comment line */
@@ -188,18 +189,13 @@ int main_bedcov(int argc, char *argv[])
            be followed by a tab in that case). */
         if (strncmp(str.s, "track ", 6) == 0) continue;
         if (strncmp(str.s, "browser ", 8) == 0) continue;
-        for (p = q = str.s; *p && *p != '\t'; ++p);
-        if (*p != '\t') goto bed_error;
-        *p = 0; tid = bam_name2id(aux[0]->header, q); *p = '\t';
+        for (p = q = str.s; *p && !isspace(*p); ++p);
+        if (*p == 0) goto bed_error;
+        char c = *p;
+        *p = 0; tid = bam_name2id(aux[0]->header, q); *p = c;
         if (tid < 0) goto bed_error;
-        for (q = p = p + 1; isdigit(*p); ++p);
-        if (*p != '\t') goto bed_error;
-        *p = 0; beg = atoi(q); *p = '\t';
-        for (q = p = p + 1; isdigit(*p); ++p);
-        if (*p == '\t' || *p == 0) {
-            int c = *p;
-            *p = 0; end = atoi(q); *p = c;
-        } else goto bed_error;
+        num = sscanf(p + 1, "%"SCNd64" %"SCNd64, &beg, &end);
+        if (num < 2 || end < beg) goto bed_error;
 
         for (i = 0; i < n; ++i) {
             if (aux[i]->iter) hts_itr_destroy(aux[i]->iter);
