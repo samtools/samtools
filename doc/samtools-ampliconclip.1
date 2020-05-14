@@ -107,7 +107,7 @@ Only output clipped reads.  Filter all others.
 Mark unclipped reads as QC fail.
 .TP
 .BI "--filter-len " INT
-Filter out reads of less then INT size.  In this case soft clips are not counted
+Filter out reads of INT size or shorter.  In this case soft clips are not counted
 toward read length.  An INT of 0 will filter out reads with no matching bases.
 .TP
 .BI "--fail-len " INT
@@ -118,7 +118,7 @@ Filter out any reads that are marked as QCFAIL or are unmapped.  This works on
 the state of the reads before clipping takes place.
 .TP
 .BI "--rejects-file " FILE
-Write any filtered reads out to FILE.
+Write any filtered reads out to a file.
 .TP
 .B --no-PG
 Do not at a PG line to the header.

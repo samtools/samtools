@@ -772,8 +772,8 @@ static void usage(void) {
     fprintf(stderr, " --strand            use strand data from bed file.\n");
     fprintf(stderr, " --clipped           only output clipped reads.\n");
     fprintf(stderr, " --fail              mark unclipped, mapped reads as QCFAIL.\n");
-    fprintf(stderr, " --filter-len INT    do not output reads smaller than INT.\n");
-    fprintf(stderr, " --fail-len   INT    mark as QCFAIL reads smaller than INT.\n");
+    fprintf(stderr, " --filter-len INT    do not output reads INT size or shorter.\n");
+    fprintf(stderr, " --fail-len   INT    mark as QCFAIL reads INT size or shorter.\n");
     fprintf(stderr, " --no-excluded       do not write excluded reads (unmapped or QCFAIL).\n");
     fprintf(stderr, " --rejects-file FILE file to write filtered reads.\n");
     fprintf(stderr, " --no-PG             do not add an @PG line.\n");
