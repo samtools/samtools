@@ -82,6 +82,11 @@ or
 .IB aln.sam.gz .csi
 will be created, depending on the index format selected.
 
+The BAI index format can handle individual chromosomes up to 512 Mbp
+(2^29 bases) in length.
+If your input file might contain reads mapped to positions greater than that,
+you will need to use a CSI index.
+
 .SH OPTIONS
 .TP 8
 .B -b
