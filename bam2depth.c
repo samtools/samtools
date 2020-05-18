@@ -24,7 +24,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 /* This program demonstrates how to generate pileup from multiple BAMs
- * simutaneously, to achieve random access and to use the BED interface.
+ * simultaneously, to achieve random access and to use the BED interface.
  * To compile this program separately, you may:
  *
  *   gcc -g -O2 -Wall -o bam2depth -D_MAIN_BAM2DEPTH bam2depth.c -lhts -lz
@@ -105,7 +105,7 @@ static int usage() {
 int main_depth(int argc, char *argv[])
 {
     int i, n, tid, reg_tid, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, has_index_file = 0;
-    hts_pos_t beg, end, pos, last_pos = -1;
+    hts_pos_t beg, end, pos = -1, last_pos = -1;
     int all = 0, status = EXIT_SUCCESS, nfiles, max_depth = -1;
     const bam_pileup1_t **plp;
     char *reg = 0; // specified region
@@ -346,6 +346,9 @@ int main_depth(int argc, char *argv[])
         if (last_tid < 0 && reg) {
             last_tid = reg_tid;
             last_pos = beg-1;
+        }
+        if (pos < 0 && all > 1 && last_tid < 0 && !reg) {
+           last_tid = 0;
         }
         while (last_tid >= 0 && last_tid < sam_hdr_nref(h)) {
             while (++last_pos < sam_hdr_tid2len(h, last_tid)) {

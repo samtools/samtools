@@ -60,6 +60,10 @@ P d5_b3aa.out  $samtools depth -aa -b xx.bed3 xx#depth3.bam
 # Fail as -a shouldn't output xn:16-20 (it doesn't with -r)
 F d5_b3a.out   $samtools depth -a  -b xx.bed3 xx#depth3.bam
 
+# All reference positions in a file with no alignments
+INIT x $samtools view -H -b -o xx#depth-noreads.bam xx#depth1.sam
+P d5_all4.out $samtools depth -aa xx#depth-noreads.bam
+
 #-----------------------------------------------------------------------------
 # With mpileup simulation of depth
 # This is a useful check that depth vs mpileup have the the same -a, -aa, -r
