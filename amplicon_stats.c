@@ -597,6 +597,12 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
         int64_t start = 0, covered = 0, total = 0;
         for (i = 0; i < namp; i++) {
             int64_t j, offset = amp[i].min_left-1;
+            if (amp[i].min_right - amp[i].min_left > stats->max_amp_len) {
+                fprintf(stderr, "[ampliconstats] error: "
+                        "Maximum amplicon length (%d) exceeded for '%s'\n",
+                        stats->max_amp, name);
+                return;
+            }
             for (j = MAX(start, amp[i].max_left-1);
                  j < MAX(start, amp[i].min_right); j++) {
                 if (stats->coverage[i*stats->max_amp_len + j-offset]
@@ -710,6 +716,12 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
             fprintf(ofp, "%cPCOV-%d\t%s", type, args->min_depth[d], name);
             for (i = 0; i < namp; i++) {
                 int covered = 0;
+                if (amp[i].min_right - amp[i].min_left > stats->max_amp_len) {
+                    fprintf(stderr, "[ampliconstats] error: "
+                            "Maximum amplicon length (%d) exceeded for '%s'\n",
+                            stats->max_amp, name);
+                    return;
+                }
                 int64_t j, offset = amp[i].min_left-1;
                 for (j = amp[i].max_left-1; j < amp[i].min_right; j++)
                     if (stats->coverage[i*stats->max_amp_len + j-offset]
