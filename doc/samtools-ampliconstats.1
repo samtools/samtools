@@ -78,19 +78,20 @@ detailed descriptions.
 .TS
 lb l .
 SS	Amplicon and file counts.  Always comes first
+AMPLICON	Amplicon primer locations
 FSS	File specific: summary stats
 FRPERC	File specific: read percentage distributoin between amplicons
 FDEPTH	File specific: average read depth per amplicon
 FREADS	File specific: numbers of reads per amplicon
 FPCOV	File specific: percent coverage per amplicon
-FTLEN	File specific: template length distribution per amplicon
+FTCOORD	File specific: template start,end coordinate frequencies per amplicon
 FAMP	File specific: amplicon correct / double / treble length counts
 CSS	Combined  summary stats
 CRPERC	Combined: read percentage distributoin between amplicons
 CDEPTH	Combined: average read depth per amplicon
 CREADS	Combined: numbers of reads per amplicon
 CPCOV	Combined: percent coverage per amplicon
-CTLEN	Combined: template length distribution per amplicon
+CTCOORD	Combined: template coordinates per amplicon
 CAMP	Combined: amplicon correct / double / treble length counts
 .TE
 
@@ -105,6 +106,21 @@ The combined sections (C*) follow the same format as the file specific
 sections, with a different key.  For simplicity of parsing they also
 have a filename column which is filled out with "COMBINED".  These
 rows contain stats aggregated across all input files.
+
+.SH SS / AMPLICON
+
+This section is once per file and includes summary information to be
+utilised for scaling of plots, for example the total number of
+amplicons and files present, tool version number, and command line
+arguments.
+
+The AMPLICON section is a reformatting of the input BED file.  Each
+line consists of the amplicon number and the \fIstart\fR-\fIend\fR
+coordinates of the left and right primers.  Where multiple primers are
+available these are comma separated, for example \fB10-30,15-40\fR in
+the left primer column indicates two primers have been multiplex
+together covering genome coords 10-30 inclusive and 14-40 inclusively.
+
 
 .SH CSS SECTION
 
@@ -171,25 +187,32 @@ The minimum depth necessary to constitute a position as being
 "covered" is specifiable using the -d option.
 
 
-.SH FTLEN / CTLEN / FAMP / CAMP SECTION
+.SH FTCOORD / CTCOORD / FAMP / CAMP SECTION
 
 It is possible for an amplicon to be produced using incorrect primers,
 giving rise to extra-long amplicons (typically double or treble
 length).
 
-The FTLEN field holds a distribution of observed TLEN fields from the
-input data, up to a maximum value.  Each row consists of the file
-name, the amplicon number in question, and tab separated counts of
-that length.  Amplicon number zero is used as a summation across all
-amplicons for this sample.
+The FTCOORD field holds a distribution of observed template
+coordsinates from the input data.  Each row consists of the file name,
+the amplicon number in question, and tab separated tuples of start,
+end, frequency and status (0 for OK, 1 for skipping amplicon, 2 for
+unknown location).  Each template is only counted for one amplicon, so
+if the read-pairs span amplicons the count will show up in the
+left-most amplicon covered.
 
-If the desired amplicons are of variable length then we can instead
-count the number of reads that map to the expected ends of this
-amplicon, map to this amplicon plus the neighbouring amplicon, or map
-to this amplicon and another further away amplicon (usually meaning
-at least treble size).  As FTLEN the format of this data is one
-amplicon per row followed by the counts of correct, skip-1 and skip-2+
-primers.
+Th COORD data may indicate which primers are being utilised if there
+are alternates available for a given amplicon.
+
+The FAMP / CAMP section is a simple count per amplicon of the number
+of templates coming from this amplicon.  Templates are counted once
+per amplicon, but and like the FTCOORD field if a read-pair spans
+amplicons it is only counted in the left-most amplicon.  Each line
+consists of the file name, amplicon number and 3 counts for the number
+of templates with both ends within this amplicon, the number of
+templates with the rightmost end in another amplicon, and the number
+of templates where the other end has failed to be assigned to an
+amplicon.
 
 .SH OPTIONS
 .TP 8
@@ -219,9 +242,18 @@ listed by the "samtools flags" subcommand.
 Specify the maximum number of amplicons permitted.
 
 .TP
+.BI "-c, --tcoord-min-count " INT
+In the FTCOORD and CTCOORD lines, only record template start,end
+coordinate combination if they occur at least \fIINT\fR times.
+
+.TP
 .BI "-d, --min-depth " INT
 Specifies the minimum base depth to consider a reference position to
 be covered, for purposes of the FRPERC and CRPERC sections.
+
+.TP
+.BI "-l, --max-amplicon-length " INT
+Specifies the maximum length of any individual amplicon.
 
 .TP
 .BI "-m, --pos-margin " INT
@@ -242,8 +274,8 @@ Instead of using the basename component of the input path names, use
 the SM field from the first @RG header line.
 
 .TP
-.B "-t, --tlen-adjust " INT
-Adjust the TLEN field by +/- INT to compensate for primer clipping.
+.BI "-t, --tlen-adjust " INT
+Adjust the TLEN field by +/- \fIINT\fR to compensate for primer clipping.
 This defaults to zero, but if the primers have been clipped and the
 TLEN field has not been updated using samtools fixmate then the
 template length will be wrong by the sum of the forward and reverse

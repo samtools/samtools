@@ -71,6 +71,7 @@ test_split($opts, threads=>2);
 test_large_positions($opts);
 test_ampliconclip($opts);
 test_ampliconclip($opts, threads=>2);
+test_ampliconstats($opts, threads=>2);
 
 print "\nNumber of tests:\n";
 printf "    total            .. %d\n", $$opts{nok}+$$opts{nfailed}+$$opts{nxfail}+$$opts{nxpass};
@@ -3168,4 +3169,17 @@ sub test_ampliconclip
     test_cmd($opts, out=>'ampliconclip/1_filter.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --strand --filter-len 185 -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
     test_cmd($opts, out=>'ampliconclip/1_fail.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --strand --fail-len 185 -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
     test_cmd($opts, out=>'ampliconclip/2_both_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --strand --both-ends -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/2_both_test_data.sam");
+}
+
+sub test_ampliconstats
+{
+    my ($opts,%args) = @_;
+
+    my @inputs = ("$$opts{path}/ampliconclip/1_hard_clipped.expected.sam",
+                  "$$opts{path}/ampliconclip/1_soft_clipped.expected.sam",
+                  "$$opts{path}/ampliconclip/1_soft_clipped_strand.expected.sam",
+                  "$$opts{path}/ampliconclip/2_both_clipped.expected.sam");
+
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
+    test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | egrep -v 'Samtools version|Command line' | tee /tmp/out.txt");
 }
