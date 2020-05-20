@@ -94,11 +94,13 @@ if ($1 < 5) {
 
 my $namp = 0;
 my $nfile = 0;
+my $ref_len = 0;
 while (<>) {
     chomp($_);
     my @F = split("\t", $_);
     $namp  = $F[2] if (/^SS\tNumber of amplicons/);
     $nfile = $F[2] if (/^SS\tNumber of files/);
+    $ref_len = $F[2] if (/^SS\tReference length/);
     last if (/^SS\tEnd of summary/);
 }
 
@@ -245,6 +247,8 @@ while (<>) {
 	}
 	$amp_start[$F[1]]=$min_left;
 	$amp_end[$F[1]]=$max_right;
+
+	$ref_len = $max_right if ($ref_len < $max_right);
     }
 
     # Heatmaps showing all files & all amplicons
@@ -774,7 +778,7 @@ foreach my $f (sort keys %file) {
 set title "$fg: Template coordinate frequencies"
 unset key
 set xlabel "position"
-set xrange [*:*]
+set xrange [0:$ref_len]
 set ylabel "frequency"
 set yrange [*:*]
 set logscale y
@@ -824,7 +828,7 @@ END
 set title "Template coordinate frequencies, all files"
 unset key
 set xlabel "position"
-set xrange [*:*]
+set xrange [0:$ref_len]
 set ylabel "frequency"
 set yrange [*:*]
 set logscale y
