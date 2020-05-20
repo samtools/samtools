@@ -86,6 +86,7 @@ typedef struct {
     FILE *out_fp;
     char *argv;
     int tcoord_min_count;
+    int tcoord_bin;
 } astats_args_t;
 
 // We can have multiple primers for LEFT / RIGHT, so this
@@ -202,6 +203,11 @@ static int64_t bed2amplicon(astats_args_t *args,
             "comma-separated for alt-primers.\n");
     fprintf(ofp, "#\n# AMPLICON\tNUMBER\tLEFT\tRIGHT\n");
     for (i = j = 0; i < sites->length; i++) {
+        if (i == 0 && sites->bp[i].rev != 0) {
+            fprintf(stderr, "[ampliconstats] error: BED file should start"
+                    " with the + strand primer\n");
+            return -1;
+        }
         if (sites->bp[i].rev == 0 && last_rev) {
             j++;
             if (j >= args->max_amp) {
@@ -262,6 +268,12 @@ static int64_t bed2amplicon(astats_args_t *args,
         }
         last_rev = sites->bp[i].rev;
     }
+    if (last_rev != 1) {
+        fprintf(ofp, "\n"); // useful if going to stdout
+        fprintf(stderr, "[ampliconstats] error: bed file does not end on"
+                " a reverse strand primer.\n");
+        return -1;
+    }
     *namp = ++j;
     if (j) fprintf(ofp, "\n");
 
@@ -298,7 +310,7 @@ typedef struct {
     int64_t *coverage;                  // [max_amp][max_amp_len]
     double  (*covered_perc)[MAX_DEPTH]; // [max_amp][MAX_DEPTH]
     double  (*covered_perc2)[MAX_DEPTH];// [max_amp][MAX_DEPTH];
-    khash_t(tcoord) **tcoord;           // [max_amp]
+    khash_t(tcoord) **tcoord;           // [max_amp+1]
 
     // 0 is correct pair, 1 is incorrect pair, 2 is unidentified
     int     (*amp_dist)[3];             // [MAX_AMP][3];
@@ -322,7 +334,7 @@ void stats_free(astats_t *st) {
 
     if (st->tcoord) {
         int i;
-        for (i = 0; i < st->max_amp; i++) {
+        for (i = 0; i <= st->max_amp; i++) {
             if (st->tcoord[i])
                 kh_destroy(tcoord, st->tcoord[i]);
         }
@@ -355,9 +367,9 @@ astats_t *stats_alloc(int64_t max_len, int max_amp, int max_amp_len) {
     if (!(st->covered_perc2 = calloc(max_amp, sizeof(*st->covered_perc2))))
         goto err;
 
-    if (!(st->tcoord = calloc(max_amp, sizeof(*st->tcoord)))) goto err;
+    if (!(st->tcoord = calloc(max_amp+1, sizeof(*st->tcoord)))) goto err;
     int i;
-    for (i = 0; i < st->max_amp; i++)
+    for (i = 0; i <= st->max_amp; i++)
         if (!(st->tcoord[i] = kh_init(tcoord)))
             goto err;
 
@@ -393,7 +405,7 @@ void stats_reset(astats_t *st) {
     // the same keys.  Instead we reset counters to zero for common ones
     // and delete rare ones.
     int i;
-    for (i = 0; i < st->max_amp; i++) {
+    for (i = 0; i <= st->max_amp; i++) {
         khiter_t k;
         for (k = kh_begin(st->tcoord[i]);
              k != kh_end(st->tcoord[i]); k++)
@@ -422,10 +434,11 @@ static int accumulate_stats(astats_t *stats,
     int64_t start = b->core.pos;
     int64_t end = bam_endpos(b);
 
-    int anum = (b->core.flag & BAM_FREVERSE)
+    // On single ended runs, eg ONT or PacBio, we just use the start/end
+    // of the template to assign.
+    int anum = (b->core.flag & BAM_FREVERSE) || !(b->core.flag & BAM_FPAIRED)
         ? (end-1 >= 0 && end-1 < args->max_len ? pos2end[end-1] : -1)
         : (start >= 0 && start < args->max_len ? pos2start[start] : -1);
-
 
     // ivar sometimes soft-clips 100% of the bases.
     // This is essentially unmapped
@@ -434,23 +447,24 @@ static int accumulate_stats(astats_t *stats,
         return 0;
     }
 
-    if (anum == -1) {
+    if (anum == -1)
         stats->nfailprimer++;
-        return 0;
+
+    if (anum >= 0) {
+        stats->nreads[anum]++;
+        // NB: ref bases rather than read bases
+        stats->nbases[anum] += end-start;
+
+        int64_t i;
+        if (start < 0) start = 0;
+        if (end > args->max_len) end = args->max_len;
+
+        int64_t ostart = MAX(start, amp[anum].min_left-1);
+        int64_t oend = MIN(end, amp[anum].max_right);
+        int64_t offset = amp[anum].min_left-1;
+        for (i = ostart; i < oend; i++)
+            stats->coverage[anum*stats->max_amp_len + i-offset]++;
     }
-
-    stats->nreads[anum]++;
-    stats->nbases[anum] += end-start; // NB: ref bases rather than read bases
-
-    int64_t i;
-    if (start < 0) start = 0;
-    if (end > args->max_len) end = args->max_len;
-
-    int64_t ostart = MAX(start, amp[anum].min_left-1);
-    int64_t oend = MIN(end, amp[anum].max_right);
-    int64_t offset = amp[anum].min_left-1;
-    for (i = ostart; i < oend; i++)
-        stats->coverage[anum*stats->max_amp_len + i-offset]++;
 
     // Template length in terms of amplicon number to amplicon number.
     // We expect left to right of same amplicon (len 0), but it may go
@@ -483,12 +497,12 @@ static int accumulate_stats(astats_t *stats,
     // If both left/right are known, count it on left only.
     // If only one is known, we'll only get to this code once
     // so we can also count it.
-    int astatus;
+    int astatus = 2;
     if (anum != -1 && oth_anum != -1) {
         astatus = oth_anum == anum ? 0 : 1;
         if (start <= t_end)
             stats->amp_dist[anum][astatus]++;
-    } else {
+    } else if (anum >= 0) {
         stats->amp_dist[anum][astatus = 2]++;
     }
 
@@ -504,14 +518,14 @@ static int accumulate_stats(astats_t *stats,
         ? start + b->core.isize-1
         : end;
     uint64_t tcoord = MIN(start+1, UINT32_MAX) | (MIN(t_end+1, UINT32_MAX)<<32);
-    khiter_t k = kh_put(tcoord, stats->tcoord[anum], tcoord, &ret);
+    khiter_t k = kh_put(tcoord, stats->tcoord[anum+1], tcoord, &ret);
     if (ret < 0)
         return -1;
     if (ret == 0)
-        kh_value(stats->tcoord[anum], k)++;
+        kh_value(stats->tcoord[anum+1], k)++;
     else
-        kh_value(stats->tcoord[anum], k)=1;
-    kh_value(stats->tcoord[anum], k) |= ((int64_t)astatus<<32);
+        kh_value(stats->tcoord[anum+1], k)=1;
+    kh_value(stats->tcoord[anum+1], k) |= ((int64_t)astatus<<32);
 
     return 0;
 }
@@ -523,7 +537,30 @@ int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
     gstats->nfailprimer += lstats->nfailprimer;
 
     int a;
-    for (a = 0; a < namp; a++) {
+    for (a = -1; a < namp; a++) {
+        // Add khash local (kl) to khash global (kg)
+        khiter_t kl, kg;
+        for (kl = kh_begin(lstats->tcoord[a+1]);
+             kl != kh_end(lstats->tcoord[a+1]); kl++) {
+            if (!kh_exist(lstats->tcoord[a+1], kl) ||
+                kh_value(lstats->tcoord[a+1], kl) == 0)
+                continue;
+
+            int ret;
+            kg = kh_put(tcoord, gstats->tcoord[a+1],
+                        kh_key(lstats->tcoord[a+1], kl),
+                        &ret);
+            if (ret < 0)
+                return -1;
+
+            kh_value(gstats->tcoord[a+1], kg) =
+                (ret == 0
+                 ? (kh_value(gstats->tcoord[a+1], kg) & 0xFFFFFFFF)
+                 : 0)
+                + kh_value(lstats->tcoord[a+1], kl);
+        }
+        if (a == -1) continue;
+
         gstats->nreads[a]  += lstats->nreads[a];
         gstats->nreads2[a] += lstats->nreads[a] * lstats->nreads[a];
 
@@ -544,26 +581,6 @@ int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
                                          * lstats->covered_perc[a][d];
         }
 
-        // Add khash local (kl) to khash global (kg)
-        khiter_t kl, kg;
-        for (kl = kh_begin(lstats->tcoord[a]);
-             kl != kh_end(lstats->tcoord[a]); kl++) {
-            if (!kh_exist(lstats->tcoord[a], kl) ||
-                kh_value(lstats->tcoord[a], kl) == 0)
-                continue;
-
-            int ret;
-            kg = kh_put(tcoord, gstats->tcoord[a],
-                        kh_key(lstats->tcoord[a], kl),
-                        &ret);
-            if (ret < 0)
-                return -1;
-
-            kh_value(gstats->tcoord[a], kg) =
-                (ret == 0 ? (kh_value(gstats->tcoord[a], kg) & 0xFFFFFFFF) : 0)
-                + kh_value(lstats->tcoord[a], kl);
-        }
-
         for (d = 0; d < 3; d++)
             gstats->amp_dist[a][d] += lstats->amp_dist[a][d];
     }
@@ -571,10 +588,117 @@ int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
     return 0;
 }
 
-void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
-                amplicon_t *amp, int namp, int nfile) {
+typedef struct {
+    int32_t start, end;
+    uint32_t freq;
+    uint32_t status;
+} tcoord_t;
+
+// Sort tcoord by descending frequency and then ascending start and  end.
+static int tcoord_freq_sort(const void *vp1, const void *vp2) {
+    const tcoord_t *t1 = (const tcoord_t *)vp1;
+    const tcoord_t *t2 = (const tcoord_t *)vp2;
+
+    if (t1->freq != t2->freq)
+        return t2->freq - t1->freq;
+
+    if (t1->start != t2->start)
+        return t1->start - t2->start;
+
+    return t1->end - t2->end;
+}
+
+
+/*
+ * Merges tcoord start,end,freq,status tuples if their coordinates are
+ * close together.  We aim to keep the start,end for the most frequent
+ * value and assume that is the correct coordinate and all others are
+ * minor fluctuations due to errors or variants.
+ *
+ * We sort by frequency first and then merge later items in the list into
+ * the earlier more frequent ones.  It's O(N^2), but sufficient for now
+ * given current scale of projects.
+ *
+ * If we ever need to resolve that then consider sorting by start
+ * coordinate and scanning the list to find all items within X, find
+ * the most frequent of those, and then cluster that way.  (I'd have
+ * done that had I thought of it at the time!)
+ */
+static void aggregate_tcoord(astats_args_t *args, tcoord_t *tpos, size_t *np){
+    size_t n = *np, j, j2, j3, k;
+
+    // Sort by frequency and cluster infrequent coords into frequent
+    // ones provided they're close by.
+    // This is O(N^2), but we've already binned by tcoord_bin/2 so
+    // the list isn't intended to be vast at this point.
+    qsort(tpos, n, sizeof(*tpos), tcoord_freq_sort);
+
+    // For frequency ties, find mid start coord, and then find mid end
+    // coord of those matching start.
+    // We make that the first item so we merge into that mid point.
+    for (j = 0; j < n; j++) {
+        for (j2 = j+1; j2 < n; j2++) {
+            if (tpos[j].freq != tpos[j2].freq)
+                break;
+            if (tpos[j2].start - tpos[j].start >= args->tcoord_bin)
+                break;
+        }
+
+        // j to j2 all within bin of a common start,
+        // m is the mid start.
+        if (j2-1 > j) {
+            size_t m = (j2-1 + j)/2;
+
+            // Find mid end for this same start
+            while (m > 1 && tpos[m].start == tpos[m-1].start)
+                m--;
+            for (j3 = m+1; j3 < j2; j3++) {
+                if (tpos[m].start != tpos[j3].start)
+                    break;
+                if (tpos[m].end - tpos[j3].end >= args->tcoord_bin)
+                    break;
+            }
+            if (j3-1 > m)
+                m = (j3-1 + m)/2;
+
+            // Swap with first item.
+            tcoord_t tmp = tpos[j];
+            tpos[j] = tpos[m];
+            tpos[m] = tmp;
+            j = j2-1;
+        }
+    }
+
+    // Now merge in coordinates.
+    // This bit is O(N^2), so consider binning first to reduce the
+    // size of the list if we have excessive positional variation.
+    for (k = j = 0; j < n; j++) {
+        if (!tpos[j].freq)
+            continue;
+
+        if (k < j)
+            tpos[k] = tpos[j];
+
+        for (j2 = j+1; j2 < n; j2++) {
+            if (ABS(tpos[j].start-tpos[j2].start) < args->tcoord_bin/2 &&
+                ABS(tpos[j].end  -tpos[j2].end)  < args->tcoord_bin/2 &&
+                tpos[j].status == tpos[j2].status) {
+                tpos[k].freq += tpos[j2].freq;
+                tpos[j2].freq = 0;
+            }
+        }
+        k++;
+    }
+
+    *np = k;
+}
+
+int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
+               amplicon_t *amp, int namp, int nfile) {
     int i;
     FILE *ofp = args->out_fp;
+    tcoord_t *tpos = NULL;
+    size_t ntcoord = 0;
 
     // summary stats for this sample (or for all samples)
     fprintf(ofp, "# Summary stats.\n");
@@ -601,7 +725,7 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
                 fprintf(stderr, "[ampliconstats] error: "
                         "Maximum amplicon length (%d) exceeded for '%s'\n",
                         stats->max_amp, name);
-                return;
+                return -1;
             }
             for (j = MAX(start, amp[i].max_left-1);
                  j < MAX(start, amp[i].min_right); j++) {
@@ -720,7 +844,7 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
                     fprintf(stderr, "[ampliconstats] error: "
                             "Maximum amplicon length (%d) exceeded for '%s'\n",
                             stats->max_amp, name);
-                    return;
+                    return -1;
                 }
                 int64_t j, offset = amp[i].min_left-1;
                 for (j = amp[i].max_left-1; j < amp[i].min_right; j++)
@@ -757,24 +881,49 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     // TCOORD (start to end) distribution
     fprintf(ofp, "# Distribution of aligned template coordinates.\n");
     fprintf(ofp, "# Use 'grep ^%cTCOORD | cut -f 2-' to extract this part.\n", type);
-    for (i = 0; i < namp; i++) {
-        fprintf(ofp, "%cTCOORD\t%s\t%d", type, name, i+1); // per amplicon
-        khiter_t k;
-        for (k = kh_begin(stats->tcoord[i]);
-             k != kh_end(stats->tcoord[i]); k++) {
-            if (!kh_exist(stats->tcoord[i], k) ||
-                (kh_value(stats->tcoord[i], k) & 0xFFFFFFFF) < args->tcoord_min_count)
-                continue;
+    for (i = -1; i < namp; i++) {
+        if (ntcoord < kh_size(stats->tcoord[i+1])) {
+            ntcoord = kh_size(stats->tcoord[i+1]);
+            tcoord_t *tmp = realloc(tpos, ntcoord * sizeof(*tmp));
+            if (!tmp) {
+                free(tpos);
+                return -1;
+            }
+            tpos = tmp;
+        }
 
+        khiter_t k;
+        size_t n = 0, j;
+        for (k = kh_begin(stats->tcoord[i+1]);
+             k != kh_end(stats->tcoord[i+1]); k++) {
+            if (!kh_exist(stats->tcoord[i+1], k) ||
+                (kh_value(stats->tcoord[i+1], k) & 0xFFFFFFFF) == 0)
+                continue;
             // Key is start,end in 32-bit quantities.
             // Yes this limits us to 4Gb references, but just how
             // many primers are we planning on making?  Not that many
             // I hope.
-            fprintf(ofp, "\t%u,%u,%d,%d",
-                    (uint32_t)(kh_key(stats->tcoord[i], k) & 0xFFFFFFFF),
-                    (uint32_t)(kh_key(stats->tcoord[i], k) >> 32),
-                    (uint32_t)(kh_value(stats->tcoord[i], k) & 0xFFFFFFFF),
-                    (uint32_t)(kh_value(stats->tcoord[i], k) >> 32));
+            tpos[n].start = kh_key(stats->tcoord[i+1], k)&0xffffffff;
+            tpos[n].end   = kh_key(stats->tcoord[i+1], k)>>32;
+
+            // Value is frequency (top 32-bits) and status (bottom 32).
+            tpos[n].freq   = kh_value(stats->tcoord[i+1], k)&0xffffffff;
+            tpos[n].status = kh_value(stats->tcoord[i+1], k)>>32;
+            n++;
+        }
+
+        if (args->tcoord_bin > 1)
+            aggregate_tcoord(args, tpos, &n);
+
+        fprintf(ofp, "%cTCOORD\t%s\t%d", type, name, i+1); // per amplicon
+        for (j = 0; j < n; j++) {
+            if (tpos[j].freq < args->tcoord_min_count)
+                continue;
+            fprintf(ofp, "\t%d,%d,%u,%u",
+                    tpos[j].start,
+                    tpos[j].end,
+                    tpos[j].freq,
+                    tpos[j].status);
         }
         fprintf(ofp, "\n");
     }
@@ -812,6 +961,8 @@ void dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
 //        printf("\n");
 //    }
 
+    free(tpos);
+    return 0;
 }
 
 char const *get_sample_name(sam_hdr_t *header, char *RG) {
@@ -847,6 +998,30 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
     fprintf(ofp, "SS\tCommand line: %s\n", args->argv);
     fprintf(ofp, "SS\tNumber of amplicons:\t%d\n", namp);
     fprintf(ofp, "SS\tNumber of files:\t%d\n", filec);
+
+    // Report ref len from first file.
+    // Some minor duplication here.
+    if (filec) {
+        if (!(fp = sam_open_format(filev[0], "r", &args->ga.in))) {
+            print_error_errno("ampliconstats",
+                              "Cannot open input file \"%s\"",
+                              filev[0]);
+            goto err;
+        }
+        if (!(header = sam_hdr_read(fp)))
+            goto err;
+
+        // FIXME: permit other references to be specified.
+        if ((args->max_len = get_ref_len(header, NULL)) < 0)
+            goto err;
+        fprintf(ofp, "SS\tReference length:\t%"PRId64"\n", args->max_len);
+
+        sam_hdr_destroy(header);
+        if (sam_close(fp) < 0) {
+            fp = NULL;
+            goto err;
+        }
+    }
     fprintf(ofp, "SS\tEnd of summary\n");
 
     if (bed2amplicon(args, &args->sites, amp, &namp) < 0)
@@ -924,7 +1099,8 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         fp = NULL;
         header = NULL;
 
-        dump_stats('F', sname, lstats, args, amp, namp, filec);
+        if (dump_stats('F', sname, lstats, args, amp, namp, filec) < 0)
+            goto err;
 
         if (append_stats(lstats, gstats, namp) < 0)
             goto err;
@@ -982,6 +1158,8 @@ static int usage(astats_args_t *args, FILE *fp, int exit_status) {
             "               Use the sample name from the first @RG header line\n");
     fprintf(fp, "  -t, --tlen-adjust INT\n"
             "               Add/subtract from TLEN; use when clipping but no fixmate step\n");
+    fprintf(fp, "  -b, --tcoord-bin INT\n"
+            "               Bin template start,end positions into multiples of INT[1]\n");
     fprintf(fp, "  -c, --tcoord-min-count INT\n"
             "               Minimum template start,end frequency for recording [%d]\n", TCOORD_MIN_COUNT);
     sam_global_opt_help(fp, "I.--.@");
@@ -1003,6 +1181,7 @@ int main_ampliconstats(int argc, char **argv) {
         .tlen_adj = 0,
         .out_fp = stdout,
         .tcoord_min_count = TCOORD_MIN_COUNT,
+        .tcoord_bin = 1,
     }, oargs = args;
 
     static const struct option loptions[] =
@@ -1019,11 +1198,12 @@ int main_ampliconstats(int argc, char **argv) {
         {"max-amplicon-length", required_argument, NULL, 'l'},
         {"tlen-adjust", required_argument, NULL, 't'},
         {"tcoord-min-count", required_argument, NULL, 'c'},
+        {"tcoord-bin", required_argument, NULL, 'b'},
         {NULL, 0, NULL, 0}
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:c:",loptions,NULL))>0 ) {
+    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:c:b:",loptions,NULL))>0 ) {
         switch (opt) {
         case 'f': args.flag_require = bam_str2flag(optarg); break;
         case 'F':
@@ -1049,6 +1229,11 @@ int main_ampliconstats(int argc, char **argv) {
         case 'l': args.max_amp_len = atoi(optarg)+1;break;
 
         case 'c': args.tcoord_min_count = atoi(optarg);break;
+        case 'b':
+            args.tcoord_bin = atoi(optarg);
+            if (args.tcoord_bin < 1)
+                args.tcoord_bin = 1;
+            break;
 
         case 't': args.tlen_adj = atoi(optarg);break;
 

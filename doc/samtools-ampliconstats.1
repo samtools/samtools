@@ -242,6 +242,14 @@ listed by the "samtools flags" subcommand.
 Specify the maximum number of amplicons permitted.
 
 .TP
+.BI "-b, --tcoord-bin " INT
+Bin the template start,end positions into multiples of \fINT\fR prior
+to counting their frequency and reporting in the FTCOORD / CTCOORD
+lines.  This may be useful for technologies with higher errors rates
+where the alignment ends will vary slightly.
+Defaults to 1, which is equivalent to no binning.
+
+.TP
 .BI "-c, --tcoord-min-count " INT
 In the FTCOORD and CTCOORD lines, only record template start,end
 coordinate combination if they occur at least \fIINT\fR times.

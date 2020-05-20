@@ -1,6 +1,7 @@
 # Summary statistics, used for scaling the plots.
 SS	Number of amplicons:	2
 SS	Number of files:	4
+SS	Reference length:	800
 SS	End of summary
 # Amplicon locations from BED file.
 # LEFT/RIGHT are <start>-<end> format and comma-separated for alt-primers.
@@ -33,6 +34,7 @@ FPCOV-20	1_hard_clipped.expected	0.00	0.00
 FPCOV-100	1_hard_clipped.expected	0.00	0.00
 # Distribution of aligned template coordinates.
 # Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
+FTCOORD	1_hard_clipped.expected	0
 FTCOORD	1_hard_clipped.expected	1
 FTCOORD	1_hard_clipped.expected	2
 # Classification of amplicon status.  Columns are
@@ -68,6 +70,7 @@ FPCOV-20	1_soft_clipped.expected	0.00	0.00
 FPCOV-100	1_soft_clipped.expected	0.00	0.00
 # Distribution of aligned template coordinates.
 # Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
+FTCOORD	1_soft_clipped.expected	0
 FTCOORD	1_soft_clipped.expected	1
 FTCOORD	1_soft_clipped.expected	2
 # Classification of amplicon status.  Columns are
@@ -103,6 +106,7 @@ FPCOV-20	1_soft_clipped_strand.expected	0.00	0.00
 FPCOV-100	1_soft_clipped_strand.expected	0.00	0.00
 # Distribution of aligned template coordinates.
 # Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
+FTCOORD	1_soft_clipped_strand.expected	0
 FTCOORD	1_soft_clipped_strand.expected	1
 FTCOORD	1_soft_clipped_strand.expected	2
 # Classification of amplicon status.  Columns are
@@ -138,6 +142,7 @@ FPCOV-20	2_both_clipped.expected	0.00	0.00
 FPCOV-100	2_both_clipped.expected	0.00	0.00
 # Distribution of aligned template coordinates.
 # Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
+FTCOORD	2_both_clipped.expected	0
 FTCOORD	2_both_clipped.expected	1
 FTCOORD	2_both_clipped.expected	2
 # Classification of amplicon status.  Columns are
@@ -180,6 +185,7 @@ CPCOV-100	MEAN	0.0	0.0
 CPCOV-100	STDDEV	0.0	0.0
 # Distribution of aligned template coordinates.
 # Use 'grep ^CTCOORD | cut -f 2-' to extract this part.
+CTCOORD	COMBINED	0
 CTCOORD	COMBINED	1
 CTCOORD	COMBINED	2
 # Classification of amplicon status.  Columns are
