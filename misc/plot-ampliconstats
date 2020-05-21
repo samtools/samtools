@@ -42,7 +42,8 @@ my $res = GetOptions("size=s"      => \$opts{size},
                      "help"        => \$opts{help},
                      "page=i"      => \$opts{page},
                      "amp_add=i"   => \$opts{amp_add},
-                     "orient=s"    => \$opts{orient});
+                     "orient=s"    => \$opts{orient},
+                     "depth_max=s" => \$opts{depth_max});
 
 $opts{size}      = "1000,800" unless $opts{size};
 $opts{size2}     = "1000,400" unless $opts{size2};
@@ -50,6 +51,7 @@ $opts{size3}     = "400,847"  unless $opts{size3};
 $opts{page}      = 96         unless $opts{page};
 $opts{amp_add}   = 100        unless $opts{amp_add};
 $opts{orient}    = "h"        unless $opts{orient};
+$opts{depth_max} = 0          unless $opts{depth_max};
 
 my $max_depth = 0;
 
@@ -59,13 +61,14 @@ plot-ampliconstats version $version
 Usage: plot-ampliconstats prefix [FILE]
 
 Options:
-    -help        Show this usage
-    -size  W,H   Set image width to W and height to H for heatmaps
-    -size2 W,H   Set image width to W and height to H for graphs (horizontal)
-    -size3 W,H   Set image width to W and height to H for graphs (vertical)
-    -page N      Maximum number of samples per page in heatmaps
-    -amp_add X   Small sample fudge: NErr/(NAll+X) in amplicon count plots
-    -orient h/v  Orientation for plots, defaults to h (horizontal)
+    -help         Show this usage
+    -size  W,H    Set image width to W and height to H for heatmaps
+    -size2 W,H    Set image width to W and height to H for graphs (horizontal)
+    -size3 W,H    Set image width to W and height to H for graphs (vertical)
+    -page N       Maximum number of samples per page in heatmaps
+    -amp_add X    Small sample fudge: NErr/(NAll+X) in amplicon count plots
+    -orient h/v   Orientation for plots, defaults to h (horizontal)
+    -depth_max N  Force -reads.png plots to have a fixed yrange
 
 If FILE is not specified, reads from stdin.
 END
@@ -255,6 +258,7 @@ while (<>) {
     local $"="\t";
     my $name=$F[1];
     $name =~ s/_/\\\\_/g if (/^F/);
+    $name =~ s/"/\\\\"/g if (/^F/);
 
     # Initialise gnuplot files as we create new pages
     #----------  Heatmap READS
@@ -299,7 +303,7 @@ set view map
 splot "-" using (\$1+1):2:(\$3>0?log10(\$3):0) matrix rowheaders with image
 END
     }
-    print $fh_reads "$name\t@F[2..$#F]\n" if (/^FREADS/);
+    print $fh_reads "\"$name\"\t@F[2..$#F]\n" if (/^FREADS/);
 
 
     #----------  Heatmap DEPTH
@@ -342,7 +346,7 @@ set view map
 splot "-" using (\$1+1):2:(\$3>0?log10(\$3):0) matrix rowheaders with image
 END
     }
-    print $fh_depth "$name\t@F[2..$#F]\n" if (/^FDEPTH/);
+    print $fh_depth "\"$name\"\t@F[2..$#F]\n" if (/^FDEPTH/);
 
 
     #----------  Heatmap AMP mismatch
@@ -388,9 +392,9 @@ END
         if ($F[2] == 0) {
             # First line will be summary across all amplicons (amp 0)
             if ($fh_amp_count == 0) {
-                print $fh_amp "$name";
+                print $fh_amp "\"$name\"";
             } else {
-                print $fh_amp "\n$name";
+                print $fh_amp "\n\"$name\"";
             }
         } else {
             # Subsequent lines are per amplicon stats,
@@ -470,8 +474,8 @@ set view map
 splot "-" using (\$1+1):2:(\$3>0?log10(\$3):0) matrix rowheaders with image
 END
     }
-    print $fh_rperc "$name\t@F[2..$#F]\n" if (/^FRPERC/);
-    print $fh_rperl "$name\t@F[2..$#F]\n" if (/^FRPERC/);
+    print $fh_rperc "\"$name\"\t@F[2..$#F]\n" if (/^FRPERC/);
+    print $fh_rperl "\"$name\"\t@F[2..$#F]\n" if (/^FRPERC/);
     
     #----------  Heatmap COVERAGE at multiple depths
     $fh_cover_count{$1}++ if (/^FPCOV-(\d+)/);
@@ -519,7 +523,7 @@ splot "-" using (\$1+1):2:3 matrix rowheaders with image
 END
         }
         my $tmp = $fh_cover{$1};
-        print $tmp "$name\t@F[2..$#F]\n";
+        print $tmp "\"$name\"\t@F[2..$#F]\n";
     }
 
     # Graphs with merged file data (mean and SD) for all amplicons
@@ -653,7 +657,13 @@ foreach (keys %fh_cover) {
 }
 
 #--- Combined
-$max_depth = 10**ceil(log($max_depth)/log(10)); # round up to power of 10
+if ($opts{depth_max}) {
+    if ($max_depth > $opts{depth_max}) {
+	print STDERR "Warning: specified -depth_max is lower than the data maximum of $max_depth\n";
+    }
+    $max_depth = $opts{depth_max};
+}
+$max_depth = 10**ceil(log($max_depth+1)/log(10)); # round up to power of 10
 
 # combined-reads
 if ($opts{orient} eq "h") {
@@ -663,6 +673,7 @@ unset key
 set xlabel "amplicon"
 set xrange [0:$namp+1]
 set ylabel "no. reads"
+set yrange [1:$max_depth]
 set logscale y
 set key below
 set title font "helvetica,20"
@@ -769,7 +780,7 @@ foreach my $f (sort keys %file) {
     my $fg = $f;                # printable in gnuplot
     $fg =~ s/_/\\\\_/g;
 
-    #--- Template coordinates: FILE
+    #--- Template coordinates vs frequence: FILE
     goto skip_coord if !exists($file{$f}{FTCOORD});
     my $fn = "$prefix-$ff-tcoord";  # filename prefix
     open(my $fh, ">", "$fn.gp") || die "$fn.gp";
@@ -814,6 +825,59 @@ plot "-" using 1:(\$3+rand(0)):(\$2-\$1):(0):(int(\$4)?\$4+1:(int(\$5) % 2)) wit
 END
     local $"="\n";
     print $fh "@{$file{$f}{FTCOORD}}\nend\n";
+
+    close($fh);
+    system("gnuplot $fn.gp") && die $!;
+
+    #--- Template coordinates vs size: FILE
+    my $fn = "$prefix-$ff-tsize";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    print $fh <<"END";
+set title "$fg: Template sizes"
+unset key
+set xlabel "position"
+set xrange [0:$ref_len]
+set ylabel "length"
+set yrange [10:10000]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "red"
+set linetype 3 lc "black
+seed=rand(-1)
+END
+
+    my @x2tics = ();
+    for (my $i=1;$i<=$namp;$i++) {
+	my $col = ($i%2)?"blue":"green";
+	print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+	if ($i%2 == 0) {
+	    my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+	    my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+	    my $tpos = ($ts+$te)/2;
+	    push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+	}
+    }
+    print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+    print $fh <<"END";
+plot "-" using 1:(\$2-\$1+sqrt(\$3)*rand(0)):(\$2-\$1):(0):(int(log(sqrt(\$3)))) with vector nohead lw 2 lc var
+END
+
+    # Sort by descending freq so high freq colours are on top.
+    local $"="\n";
+    my @sorted = sort {
+	[split(/\s+/,$a)]->[2] <=> [split(/\s+/,$b)]->[2]
+    } split("\n", "@{$file{$f}{FTCOORD}}");
+    print $fh "@sorted\nend\n";
 
     close($fh);
     system("gnuplot $fn.gp") && die $!;
