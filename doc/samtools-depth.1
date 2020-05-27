@@ -134,6 +134,12 @@ option. [UNMAP,SECONDARY,QCFAIL,DUP]
 .TP
 .B -J
 Include reads with deletions in depth computation.
+.TP
+.B -s
+For the overlapping section of a read pair, count only the bases of a single
+read. This is accomplished by lowering to 0 the quality values of one read for
+the span of the overlapping section. As a consequence, the algorithm will
+consider only bases with a quality above 0.
 
 .SH AUTHOR
 .PP

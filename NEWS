@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+ * samtools depth will count only the bases of one read, for the overlapping
+   section of a read pair, if the -s option is used in the command line.
+
  * samtools view now accepts remote URIs for FASTA and FAI files.
    Furthermore, the reference and index file can be provided in a single
    argument, such as
