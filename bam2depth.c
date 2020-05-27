@@ -90,7 +90,9 @@ static int usage() {
     fprintf(stderr, "   -G <flags>          add the specified flags to the set used to filter out reads\n"
                     "                       The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704\n");
     fprintf(stderr, "   -J                  include reads with deletions in depth computation\n");
-    fprintf(stderr, "   -s                  for overlapping read pairs cover a pos, set the base quality of the lower-quality base to zero \n");
+    fprintf(stderr, "   -s                  for the overlapping section of a read pair, count only the bases\n"
+                    "                       of a single read. This option requires raising the base quality\n"
+                    "                       threshold to 1.\n");
 
     sam_global_opt_help(stderr, "-.--.--.");
 
@@ -167,7 +169,10 @@ int main_depth(int argc, char *argv[])
                 flags |= tflags;
                 break;
             case 'J': inc_del = 1; break;
-            case 's': overlap_init = 1; break;
+            case 's':
+                overlap_init = 1;
+                if (!baseQ) baseQ = 1;
+                break;
             default:  if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': return usage();
@@ -279,13 +284,11 @@ int main_depth(int argc, char *argv[])
     }
 
     // the core multi-pileup loop
-    int init_r;
-    mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
-    if (overlap_init) {
-        if ((init_r = bam_mplp_init_overlaps(mplp)) < 0 ) {
-           perror("bam_mplp_init_overlaps");
-           return init_r;
-        } // add this to insure an overlap pair reads shoud be counted as 1 depth unit not 2 units
+    mplp = bam_mplp_init(n, read_bam, (void**)data);
+    if (overlap_init && bam_mplp_init_overlaps(mplp) < 0) {
+        print_error("depth", "failed to init overlap detection\n");
+        status = EXIT_FAILURE;
+        goto depth_end;
     }
     if (0 < max_depth)
         bam_mplp_set_maxcnt(mplp,max_depth);  // set maximum coverage depth
