@@ -56,6 +56,7 @@ typedef struct {
     int fail_len;
     int filter_len;
     int unmapped;
+    int oa_tag;
     char *arg_list;
     char *stats_file;
     char *rejects_file;
@@ -526,6 +527,47 @@ static inline void swap_bams(bam1_t **a, bam1_t **b) {
 }
 
 
+// Format OA:Z:(RNAME,POS,strand,CIGAR,MAPQ,NM;
+static inline int tag_original_data(bam1_t *orig, kstring_t *oa_tag) {
+    char strand;
+    uint8_t *nm_tag, *old_oa_tag;
+    uint32_t *cigar;
+    int64_t nm = 0;
+    int i, res = 0;
+
+    ks_clear(oa_tag);
+
+    // if there is an existing OA tag the new one gets appended to it
+    if ((old_oa_tag = bam_aux_get(orig, "OA"))) {
+        res |= ksprintf(oa_tag, "%s", bam_aux2Z(old_oa_tag)) < 0;
+    }
+
+    if (orig->core.flag & BAM_FREVERSE)
+        strand = '-';
+    else
+        strand = '+';
+
+    if ((nm_tag = bam_aux_get(orig, "NM"))) {
+        nm = bam_aux2i(nm_tag);
+    }
+
+    res |= ksprintf(oa_tag, "%s,%"PRIhts_pos",%c,", bam_get_qname(orig), orig->core.pos + 1, strand) < 0;
+
+    for (i = 0, cigar = bam_get_cigar(orig); i < orig->core.n_cigar && res == 0; ++i) {
+        res |= kputw(bam_cigar_oplen(cigar[i]), oa_tag) < 0;
+        res |= kputc(bam_cigar_opchr(cigar[i]), oa_tag) < 0;
+    }
+
+    if (nm_tag) {
+        res |= ksprintf(oa_tag, ",%d,%"PRId64";", orig->core.qual, nm) < 0;
+    } else {
+        res |= ksprintf(oa_tag, "%d,;", orig->core.qual) < 0;
+    }
+
+    return res;
+}
+
+
 static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     clipping_type clipping, cl_param_t *param) {
     int ret = 1, r, exclude = 0, file_open = 0;
@@ -535,6 +577,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     long filtered = 0, written = 0, failed = 0;
     int64_t longest = 0;
     kstring_t str = KS_INITIALIZE;
+    kstring_t oat = KS_INITIALIZE;
     bed_pair_list_t sites = {NULL, 0, 0};
     FILE *stats_fp = stderr;
 
@@ -596,6 +639,10 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
         exclude |= (BAM_FUNMAP | BAM_FQCFAIL);
 
         if (!(b->core.flag & exclude)) {
+            if (param->oa_tag)
+                if (tag_original_data(b, &oat))
+                    goto fail;
+
             if (!param->both) {
                 if (bam_is_rev(b)) {
                     pos = bam_endpos(b);
@@ -609,13 +656,20 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     if (is_rev) {
                         if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
                             goto fail;
+
                         swap_bams(&b, &b_tmp);
                         r_count++;
                     } else {
                         if (bam_trim_left(b, b_tmp, p_size, clipping) != 0)
                             goto fail;
+
                         swap_bams(&b, &b_tmp);
                         f_count++;
+                    }
+
+                    if (param->oa_tag) {
+                        if (bam_aux_update_str(b, "OA", oat.l + 1, (const char *)oat.s))
+                            goto fail;
                     }
 
                     been_clipped = 1;
@@ -657,6 +711,13 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     been_clipped = 1;
                 }
 
+                if (param->oa_tag && (left || right)) {
+                    uint8_t *tag;
+
+                    if (bam_aux_update_str(b, "OA", oat.l + 1, (const char *)oat.s))
+                        goto fail;
+                }
+
                 if (left && right) {
                     b_count++;
                 } else if (!left && !right) {
@@ -678,8 +739,6 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                if (param->filter_len >= 0 && aql <= param->filter_len) {
                    filter = 1;
                }
-
-               // fprintf(stderr, "MI %ld\n", aql);
            }
 
            if (b->core.flag & BAM_FQCFAIL) {
@@ -753,6 +812,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
 
 fail:
     free(sites.bp);
+    ks_free(&oat);
     sam_hdr_destroy(header);
     bam_destroy1(b);
     bam_destroy1(b_tmp);
@@ -777,6 +837,7 @@ static void usage(void) {
     fprintf(stderr, " --fail-len   INT    mark as QCFAIL reads INT size or shorter.\n");
     fprintf(stderr, " --no-excluded       do not write excluded reads (unmapped or QCFAIL).\n");
     fprintf(stderr, " --rejects-file FILE file to write filtered reads.\n");
+    fprintf(stderr, " --original          for clipped entries add an OA tag with original data.\n");
     fprintf(stderr, " --no-PG             do not add an @PG line.\n");
     sam_global_opt_help(stderr, "-.O..@-.");
 }
@@ -790,7 +851,7 @@ int amplicon_clip_main(int argc, char **argv) {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL, *reject = NULL;
     clipping_type clipping = soft_clip;
-    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, NULL, NULL, NULL};
+    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -805,6 +866,7 @@ int amplicon_clip_main(int argc, char **argv) {
         {"fail-len", required_argument, NULL, 1010},
         {"no-excluded", no_argument, NULL, 1011},
         {"rejects-file", required_argument, NULL, 1012},
+        {"original", no_argument, NULL, 1013},
         {NULL, 0, NULL, 0}
     };
 
@@ -825,6 +887,7 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1010: param.fail_len = atoi(optarg); break;
             case 1011: param.unmapped = 1; break;
             case 1012: param.rejects_file = optarg; break;
+            case 1013: param.oa_tag = 1; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);

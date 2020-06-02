@@ -60,6 +60,7 @@ samtools ampliconclip
 .RB [ --no-excluded ]
 .RB [ --rejects-file
 .IR rejects.file ]
+.RB [ --original ]
 .RB [ --no-PG ]
 .RB [ -u ]
 .B -b
@@ -123,6 +124,9 @@ the state of the reads before clipping takes place.
 .TP
 .BI "--rejects-file " FILE
 Write any filtered reads out to a file.
+.TP
+.B --original
+Add an OA tag with the original data for clipped files.
 .TP
 .B --no-PG
 Do not at a PG line to the header.
