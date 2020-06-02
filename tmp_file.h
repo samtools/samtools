@@ -31,7 +31,7 @@ DEALINGS IN THE SOFTWARE
 #include <lz4.h>
 #include "htslib/sam.h"
 
-#ifdef _cplusplus
+#ifdef __cplusplus
 extern "C" {
 #endif
 
