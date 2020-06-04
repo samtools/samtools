@@ -613,6 +613,11 @@ END
 	s/,/\t/g;
 	push(@combined_coord, "$_\t$F[2]") if ($_ ne "");
     }
+
+    if(/^[FC]DP_(ALL|VALID)/) {
+	local $"="\n";
+	push(@{$file{$F[1]}{$F[0]}}, "@F[2..$#F]") if ($_ ne "");
+    }
 }
 
 #-----------------------------------------------------------------------------
@@ -774,7 +779,9 @@ system("gnuplot $prefix-combined-amp.gp") && die $!;
 
 #-----------------------------------------------------------------------------
 # Also produce per file graphs
+my $combined_done = 0;
 foreach my $f (sort keys %file) {
+    next if $f eq "COMBINED";
     my $ff = $f;
     $ff =~ s/[\\;#\$\{\}]/./g;  # safe filename component
     my $fg = $f;                # printable in gnuplot
@@ -884,7 +891,7 @@ END
   skip_coord:
 
     #--- Template coordinates: COMBINED
-    if (scalar(@combined_coord) > 0) {
+    if (scalar(@combined_coord) > 0 && !$combined_done) {
 	my $fn = "$prefix-combined-tcoord";  # filename prefix
 	open(my $fh, ">", "$fn.gp") || die "$fn.gp";
 
@@ -928,6 +935,134 @@ plot "-" using 1:(\$3+rand(0)):(\$2-\$1):(0):(int(\$4)?\$4+1:(int(\$5) % 2)) wit
 END
 	local $"="\n";
 	print $fh "@combined_coord\nend\n";
+
+	close($fh);
+	system("gnuplot $fn.gp") && die $!;
+    }
+
+
+    #--- Template depth: FILE
+    my $fn = "$prefix-$ff-tdepth";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    print $fh <<"END";
+set title "$fg: Template depth per base"
+set key below
+set xlabel "position"
+set xrange [0:$ref_len]
+set ylabel "depth"
+set yrange [1:$max_depth]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size2} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "#00B000"
+xa=0
+xv=0
+END
+
+    my @x2tics = ();
+    for (my $i=1;$i<=$namp;$i++) {
+	my $col = ($i%2)?"blue":"green";
+	print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+	if ($i%2 == 0) {
+	    my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+	    my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+	    my $tpos = ($ts+$te)/2;
+	    push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+	}
+    }
+    print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+    print $fh <<"END";
+plot "-" using (xa=xa+\$2):(\$1+.1) with fsteps lw 1 title "all templates", \\
+     "-" using (xv=xv+\$2):(\$1+.1) with fsteps lw 2 title "valid templates"
+END
+    if (exists($file{$f}{FDP_ALL})) {
+	foreach (split(/\s+/,"@{$file{$f}{FDP_ALL}}")) {
+	    s/,/ /;
+	    print $fh "$_\n";
+	}
+    }
+    print $fh "end\n";
+
+    if (exists($file{$f}{FDP_VALID})) {
+	foreach (split(/\s+/, "@{$file{$f}{FDP_VALID}}")) {
+	    s/,/ /;
+	    print $fh "$_\n";
+	}
+    }
+    print $fh "end\n";
+
+    close($fh);
+    system("gnuplot $fn.gp") && die $!;
+
+
+    #--- Template depth: FILE
+    if (!$combined_done) {
+	my $fn = "$prefix-combined-tdepth";  # filename prefix
+	open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+	print $fh <<"END";
+set title "Template depth per base, all files"
+set key below
+set xlabel "position"
+set xrange [0:$ref_len]
+set ylabel "depth"
+set yrange [1:$max_depth]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size2} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "#00B000"
+xa=0
+xv=0
+END
+
+	my @x2tics = ();
+	for (my $i=1;$i<=$namp;$i++) {
+	    my $col = ($i%2)?"blue":"green";
+	    print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+	    if ($i%2 == 0) {
+		my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+		my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+		my $tpos = ($ts+$te)/2;
+		push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+	    }
+	}
+	print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+	print $fh <<"END";
+plot "-" using (xa=xa+\$2):((\$1+.1)/$nfile) with fsteps lw 1 title "all templates", \\
+     "-" using (xv=xv+\$2):((\$1+.1)/$nfile) with fsteps lw 2 title "valid templates"
+END
+	if (exists($file{COMBINED}{FDP_ALL})) {
+	    foreach (split(/\s+/,"@{$file{COMBINED}{CDP_ALL}}")) {
+		s/,/ /;
+		print $fh "$_\n";
+	    }
+	}
+	print $fh "end\n";
+
+	if (exists($file{COMBINED}{FDP_VALID})) {
+	    foreach (split(/\s+/, "@{$file{COMBINED}{CDP_VALID}}")) {
+		s/,/ /;
+		print $fh "$_\n";
+	    }
+	}
+	print $fh "end\n";
 
 	close($fh);
 	system("gnuplot $fn.gp") && die $!;
@@ -1109,4 +1244,6 @@ END
 
     close($fh);
     system("gnuplot $fn.gp") && die $!;
+
+    $combined_done = 1;
 }

@@ -32,6 +32,12 @@ FDEPTH	1_hard_clipped.expected	2.8	0.5
 FPCOV-1	1_hard_clipped.expected	100.00	51.80
 FPCOV-20	1_hard_clipped.expected	0.00	0.00
 FPCOV-100	1_hard_clipped.expected	0.00	0.00
+# Depth per reference base for ALL data.
+# Use 'grep ^FDP_ALL | cut -f 2-' to extract this part.
+FDP_ALL	1_hard_clipped.expected	0,54	2,77	3,254	0,25	1,294	0,96
+# Depth per reference base for full-length valid amplicon data.
+# Use 'grep ^FDP_VALID | cut -f 2-' to extract this part.
+FDP_VALID	1_hard_clipped.expected	0,54	2,331	0,415
 # Distribution of aligned template coordinates.
 # Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
 FTCOORD	1_hard_clipped.expected	0
@@ -68,6 +74,12 @@ FDEPTH	1_soft_clipped.expected	2.8	0.5
 FPCOV-1	1_soft_clipped.expected	100.00	51.80
 FPCOV-20	1_soft_clipped.expected	0.00	0.00
 FPCOV-100	1_soft_clipped.expected	0.00	0.00
+# Depth per reference base for ALL data.
+# Use 'grep ^FDP_ALL | cut -f 2-' to extract this part.
+FDP_ALL	1_soft_clipped.expected	0,54	2,77	3,254	0,25	1,294	0,96
+# Depth per reference base for full-length valid amplicon data.
+# Use 'grep ^FDP_VALID | cut -f 2-' to extract this part.
+FDP_VALID	1_soft_clipped.expected	0,54	2,331	0,415
 # Distribution of aligned template coordinates.
 # Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
 FTCOORD	1_soft_clipped.expected	0
@@ -104,6 +116,12 @@ FDEPTH	1_soft_clipped_strand.expected	2.8	0.5
 FPCOV-1	1_soft_clipped_strand.expected	100.00	51.80
 FPCOV-20	1_soft_clipped_strand.expected	0.00	0.00
 FPCOV-100	1_soft_clipped_strand.expected	0.00	0.00
+# Depth per reference base for ALL data.
+# Use 'grep ^FDP_ALL | cut -f 2-' to extract this part.
+FDP_ALL	1_soft_clipped_strand.expected	0,54	2,77	3,254	0,21	1,298	0,96
+# Depth per reference base for full-length valid amplicon data.
+# Use 'grep ^FDP_VALID | cut -f 2-' to extract this part.
+FDP_VALID	1_soft_clipped_strand.expected	0,54	2,331	0,415
 # Distribution of aligned template coordinates.
 # Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
 FTCOORD	1_soft_clipped_strand.expected	0
@@ -140,6 +158,12 @@ FDEPTH	2_both_clipped.expected	2.0	0.0
 FPCOV-1	2_both_clipped.expected	100.00	0.00
 FPCOV-20	2_both_clipped.expected	0.00	0.00
 FPCOV-100	2_both_clipped.expected	0.00	0.00
+# Depth per reference base for ALL data.
+# Use 'grep ^FDP_ALL | cut -f 2-' to extract this part.
+FDP_ALL	2_both_clipped.expected	0,54	2,331	0,415
+# Depth per reference base for full-length valid amplicon data.
+# Use 'grep ^FDP_VALID | cut -f 2-' to extract this part.
+FDP_VALID	2_both_clipped.expected	0,54	2,331	0,415
 # Distribution of aligned template coordinates.
 # Use 'grep ^FTCOORD | cut -f 2-' to extract this part.
 FTCOORD	2_both_clipped.expected	0
@@ -183,6 +207,12 @@ CPCOV-20	MEAN	0.0	0.0
 CPCOV-20	STDDEV	0.0	0.0
 CPCOV-100	MEAN	0.0	0.0
 CPCOV-100	STDDEV	0.0	0.0
+# Depth per reference base for ALL data.
+# Use 'grep ^CDP_ALL | cut -f 2-' to extract this part.
+CDP_ALL	COMBINED	0,54	8,77	11,254	0,21	1,4	3,294	0,96
+# Depth per reference base for full-length valid amplicon data.
+# Use 'grep ^CDP_VALID | cut -f 2-' to extract this part.
+CDP_VALID	COMBINED	0,54	8,331	0,415
 # Distribution of aligned template coordinates.
 # Use 'grep ^CTCOORD | cut -f 2-' to extract this part.
 CTCOORD	COMBINED	0

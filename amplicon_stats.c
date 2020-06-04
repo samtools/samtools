@@ -51,7 +51,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bam_ampliconclip.h"
 
 KHASH_MAP_INIT_INT64(tcoord, int64_t)
-
+KHASH_MAP_INIT_STR(qname, int64_t)
 
 #ifndef MIN
 #define MIN(a,b) ((a)<(b)?(a):(b))
@@ -82,6 +82,7 @@ typedef struct {
     int max_amp;     // Total number of amplicons
     int max_amp_len; // Maximum length of an individual amplicon
     int64_t max_len; // Maximum reference length
+    double depth_bin;// aggregate depth within this fraction
     int tlen_adj;    // Adjust tlen by this amount, due to clip but no fixmate
     FILE *out_fp;
     char *argv;
@@ -301,7 +302,7 @@ typedef struct {
     int nfailprimer;// count of sequences not matching the primer locations
 
     // Sizes of memory allocated below, to permit reset
-    int max_amp, max_amp_len;
+    int max_amp, max_amp_len, max_len;
 
     // Summary across all samples, sum(x) plus sum(x^2) for s.d. calc
     int64_t *nreads, *nreads2;          // [max_amp]
@@ -315,6 +316,10 @@ typedef struct {
     // 0 is correct pair, 1 is incorrect pair, 2 is unidentified
     int     (*amp_dist)[3];             // [MAX_AMP][3];
     //int     amp_pair[MAX_AMP][MAX_AMP]; // dotplot style
+
+    int *depth_valid; // [max_len]
+    int *depth_all;   // [max_len]
+    khash_t(qname) *qend;  // queryname end, for overlap removal
 } astats_t;
 
 void stats_free(astats_t *st) {
@@ -332,6 +337,9 @@ void stats_free(astats_t *st) {
     free(st->covered_perc2);
     free(st->amp_dist);
 
+    free(st->depth_valid);
+    free(st->depth_all);
+
     if (st->tcoord) {
         int i;
         for (i = 0; i <= st->max_amp; i++) {
@@ -340,6 +348,12 @@ void stats_free(astats_t *st) {
         }
         free(st->tcoord);
     }
+
+    khiter_t k;
+    for (k = kh_begin(st->qend); k != kh_end(st->qend); k++)
+        if (kh_exist(st->qend, k))
+            free((void *)kh_key(st->qend, k));
+    kh_destroy(qname, st->qend);
 
     free(st);
 }
@@ -351,6 +365,7 @@ astats_t *stats_alloc(int64_t max_len, int max_amp, int max_amp_len) {
 
     st->max_amp = max_amp;
     st->max_amp_len = max_amp_len;
+    st->max_len = max_len;
 
     if (!(st->nreads  = calloc(max_amp, sizeof(*st->nreads))))  goto err;
     if (!(st->nreads2 = calloc(max_amp, sizeof(*st->nreads2)))) goto err;
@@ -372,6 +387,14 @@ astats_t *stats_alloc(int64_t max_len, int max_amp, int max_amp_len) {
     for (i = 0; i <= st->max_amp; i++)
         if (!(st->tcoord[i] = kh_init(tcoord)))
             goto err;
+
+    if (!(st->qend = kh_init(qname)))
+        goto err;
+
+    if (!(st->depth_valid = calloc(max_len, sizeof(*st->depth_valid))))
+        goto err;
+    if (!(st->depth_all   = calloc(max_len, sizeof(*st->depth_all))))
+        goto err;
 
     if (!(st->amp_dist  = calloc(max_amp, sizeof(*st->amp_dist))))  goto err;
 
@@ -417,6 +440,14 @@ void stats_reset(astats_t *st) {
             }
     }
 
+    khiter_t k;
+    for (k = kh_begin(st->qend); k != kh_end(st->qend); k++)
+        if (kh_exist(st->qend, k))
+            free((void *)kh_key(st->qend, k));
+    kh_clear(qname, st->qend);
+
+    memset(st->depth_valid, 0, st->max_len * sizeof(*st->depth_valid));
+    memset(st->depth_all,   0, st->max_len * sizeof(*st->depth_all));
     memset(st->amp_dist,  0, st->max_amp * sizeof(*st->amp_dist));
 }
 
@@ -431,8 +462,38 @@ static int accumulate_stats(astats_t *stats,
         return 0;
     }
 
-    int64_t start = b->core.pos;
-    int64_t end = bam_endpos(b);
+    int64_t start = b->core.pos, mstart = start; // modified start
+    int64_t end = bam_endpos(b), i;
+
+    // Compute all-template-depth and valid-template-depth.
+    // We track current end location per read name so we can remove overlaps.
+    // Potentially we could use this data for a better amplicon-depth
+    // count too, but for now it's purely for the per-base plots.
+    int ret;
+    khiter_t k;
+    int prev_start = 0, prev_end = 0;
+    if ((b->core.flag & BAM_FPAIRED)
+        && !(b->core.flag & (BAM_FSUPPLEMENTARY | BAM_FSECONDARY))) {
+        k = kh_put(qname, stats->qend, bam_get_qname(b), &ret);
+        if (ret == 0) {
+            prev_start = kh_value(stats->qend, k) & 0xffffffff;
+            prev_end = kh_value(stats->qend, k)>>32;
+            mstart = MAX(mstart, prev_end);
+            // Ideally we'd reuse strings so we don't thrash free/malloc.
+            // However let's see if the official way of doing that (malloc
+            // itself) is fast enough first.
+            free((void *)kh_key(stats->qend, k));
+            kh_del(qname, stats->qend, k);
+            //fprintf(stderr, "remove overlap %d to %d\n", (int)start, (int)mstart);
+        } else {
+            if (!(kh_key(stats->qend, k) = strdup(bam_get_qname(b))))
+                return -1;
+
+            kh_value(stats->qend, k) = start | (end << 32);
+        }
+    }
+    for (i = mstart; i < end; i++)
+        stats->depth_all[i]++;
 
     // On single ended runs, eg ONT or PacBio, we just use the start/end
     // of the template to assign.
@@ -490,7 +551,9 @@ static int accumulate_stats(astats_t *stats,
                 ? pos2start[t_end]
                 : pos2end[t_end];
     } else {
-        oth_anum = pos2end[t_end = end];
+        // Not paired (see int anum = (REV || !PAIR) ?en :st expr above)
+        oth_anum = pos2start[start];
+        t_end = end;
     }
 
     // We don't want to count our pairs twice.
@@ -506,19 +569,30 @@ static int accumulate_stats(astats_t *stats,
         stats->amp_dist[anum][astatus = 2]++;
     }
 
+    if (astatus == 0 && !(b->core.flag & (BAM_FUNMAP | BAM_FMUNMAP))) {
+        if (prev_end && mstart > prev_end) {
+            // 2nd read with gap to 1st; undo previous increment.
+            for (i = prev_start; i < prev_end; i++)
+                stats->depth_valid[i]--;
+        } else {
+            // 1st read, or 2nd read that overlaps 1st
+            for (i = mstart; i < end; i++)
+                stats->depth_valid[i]++;
+        }
+    }
+
     // Track template start,end frequencies, so we can give stats on
     // amplicon ptimer usage.
     if ((b->core.flag & BAM_FPAIRED) && b->core.isize <= 0)
         // left to right only, so we don't double count template positions.
         return 0;
 
-    int ret;
     start = b->core.pos;
     t_end = b->core.flag & BAM_FPAIRED
         ? start + b->core.isize-1
         : end;
     uint64_t tcoord = MIN(start+1, UINT32_MAX) | (MIN(t_end+1, UINT32_MAX)<<32);
-    khiter_t k = kh_put(tcoord, stats->tcoord[anum+1], tcoord, &ret);
+    k = kh_put(tcoord, stats->tcoord[anum+1], tcoord, &ret);
     if (ret < 0)
         return -1;
     if (ret == 0)
@@ -583,6 +657,11 @@ int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
 
         for (d = 0; d < 3; d++)
             gstats->amp_dist[a][d] += lstats->amp_dist[a][d];
+    }
+
+    for (a = 0; a < lstats->max_len; a++) {
+        gstats->depth_valid[a] += lstats->depth_valid[a];
+        gstats->depth_all[a]   += lstats->depth_all[a];
     }
 
     return 0;
@@ -847,16 +926,18 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
                     return -1;
                 }
                 int64_t j, offset = amp[i].min_left-1;
-                for (j = amp[i].max_left-1; j < amp[i].min_right; j++)
-                    if (stats->coverage[i*stats->max_amp_len + j-offset]
-                        >= args->min_depth[d])
+                for (j = amp[i].max_left-1; j < amp[i].min_right; j++) {
+                    int apos = i*stats->max_amp_len + j-offset;
+                    if (stats->coverage[apos] >= args->min_depth[d])
                         covered++;
+                }
                 int64_t alen = amp[i].min_right - amp[i].max_left+1;
                 stats->covered_perc[i][d] = 100.0 * covered / alen;
                 fprintf(ofp, "\t%.2f", 100.0 * covered / alen);
             }
             fprintf(ofp, "\n");
         } while (++d < MAX_DEPTH && args->min_depth[d]);
+
     } else if (type == 'C') {
         // For combined we can compute mean & standard deviation too
         int d = 0;
@@ -877,6 +958,69 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
         } while (++d < MAX_DEPTH && args->min_depth[d]);
     }
 
+    // Plus base depth for all reads, irrespective of amplicon.
+    // This is post overlap removal, if reads in the read-pair overlap.
+    fprintf(ofp, "# Depth per reference base for ALL data.\n");
+    fprintf(ofp, "# Use 'grep ^%cDP_ALL | cut -f 2-' to extract this part.\n",
+            type);
+    fprintf(ofp, "%cDP_ALL\t%s\t", type, name); // Base depth in amplicons
+    for (i = 0; i < args->max_len; i++) {
+        // Basic run-length encoding provided all values are within
+        // +- depth_bin fraction of the mid-point.
+        int dmin = stats->depth_all[i], dmax = stats->depth_all[i], j;
+        double dmid = (dmin + dmax)/2.0;
+        double low  = dmid*(1-args->depth_bin);
+        double high = dmid*(1+args->depth_bin);
+        for (j = i+1; j < args->max_len; j++) {
+            int d = stats->depth_all[j];
+            if (d < low || d > high)
+                break;
+            if (dmin > d) {
+                dmin = d;
+                dmid = (dmin + dmax)/2.0;
+                low  = dmid*(1-args->depth_bin);
+                high = dmid*(1+args->depth_bin);
+            } else if (dmax < d) {
+                dmax = d;
+                dmid = (dmin + dmax)/2.0;
+                low  = dmid*(1-args->depth_bin);
+                high = dmid*(1+args->depth_bin);
+            }
+        }
+        fprintf(ofp, "%d,%d%c", (int)dmid, j-i, "\n\t"[j < args->max_len]);
+        i = j-1;
+    }
+
+    // And depth for only reads matching to a single amplicon for full
+    // length.  This is post read overlap removal.
+    fprintf(ofp, "# Depth per reference base for full-length valid amplicon data.\n");
+    fprintf(ofp, "# Use 'grep ^%cDP_VALID | cut -f 2-' to extract this "
+            "part.\n", type);
+    fprintf(ofp, "%cDP_VALID\t%s\t", type, name); // Base depth in amplicons
+    for (i = 0; i < args->max_len; i++) {
+        int dmin = stats->depth_valid[i], dmax = stats->depth_valid[i], j;
+        double dmid = (dmin + dmax)/2.0;
+        double low  = dmid*(1-args->depth_bin);
+        double high = dmid*(1+args->depth_bin);
+        for (j = i+1; j < args->max_len; j++) {
+            int d = stats->depth_valid[j];
+            if (d < low || d > high)
+                break;
+            if (dmin > d) {
+                dmin = d;
+                dmid = (dmin + dmax)/2.0;
+                low  = dmid*(1-args->depth_bin);
+                high = dmid*(1+args->depth_bin);
+            } else if (dmax < d) {
+                dmax = d;
+                dmid = (dmin + dmax)/2.0;
+                low  = dmid*(1-args->depth_bin);
+                high = dmid*(1+args->depth_bin);
+            }
+        }
+        fprintf(ofp, "%d,%d%c", (int)dmid, j-i, "\n\t"[j < args->max_len]);
+        i = j-1;
+    }
 
     // TCOORD (start to end) distribution
     fprintf(ofp, "# Distribution of aligned template coordinates.\n");
@@ -1162,6 +1306,8 @@ static int usage(astats_args_t *args, FILE *fp, int exit_status) {
             "               Bin template start,end positions into multiples of INT[1]\n");
     fprintf(fp, "  -c, --tcoord-min-count INT\n"
             "               Minimum template start,end frequency for recording [%d]\n", TCOORD_MIN_COUNT);
+    fprintf(fp, "  -D, --depth-bin FRACTION\n"
+            "               Merge FDP values within +/- FRACTION together.\n");
     sam_global_opt_help(fp, "I.--.@");
 
     return exit_status;
@@ -1182,6 +1328,7 @@ int main_ampliconstats(int argc, char **argv) {
         .out_fp = stdout,
         .tcoord_min_count = TCOORD_MIN_COUNT,
         .tcoord_bin = 1,
+        .depth_bin = 0.01
     }, oargs = args;
 
     static const struct option loptions[] =
@@ -1199,11 +1346,12 @@ int main_ampliconstats(int argc, char **argv) {
         {"tlen-adjust", required_argument, NULL, 't'},
         {"tcoord-min-count", required_argument, NULL, 'c'},
         {"tcoord-bin", required_argument, NULL, 'b'},
+        {"depth-bin", required_argument, NULL, 'D'},
         {NULL, 0, NULL, 0}
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:c:b:",loptions,NULL))>0 ) {
+    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:c:b:D:",loptions,NULL))>0 ) {
         switch (opt) {
         case 'f': args.flag_require = bam_str2flag(optarg); break;
         case 'F':
@@ -1212,6 +1360,7 @@ int main_ampliconstats(int argc, char **argv) {
             args.flag_filter |= bam_str2flag(optarg); break;
 
         case 'm': args.max_delta = atoi(optarg); break; // margin
+        case 'D': args.depth_bin = atof(optarg); break; // depth bin fraction
         case 'd': {
             int d = 0;
             char *cp = optarg, *ep;
