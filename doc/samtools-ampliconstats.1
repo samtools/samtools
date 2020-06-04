@@ -86,6 +86,9 @@ FREADS	File specific: numbers of reads per amplicon
 FPCOV	File specific: percent coverage per amplicon
 FTCOORD	File specific: template start,end coordinate frequencies per amplicon
 FAMP	File specific: amplicon correct / double / treble length counts
+FDP_ALL	File specific: template depth per reference base, all templates
+FDP_VALID	File specific: template depth per reference base,
+valid templates only
 CSS	Combined  summary stats
 CRPERC	Combined: read percentage distributoin between amplicons
 CDEPTH	Combined: average read depth per amplicon
@@ -93,6 +96,9 @@ CREADS	Combined: numbers of reads per amplicon
 CPCOV	Combined: percent coverage per amplicon
 CTCOORD	Combined: template coordinates per amplicon
 CAMP	Combined: amplicon correct / double / treble length counts
+CDP_ALL	Combined: template depth per reference base, all templates
+CDP_VALID	Combined: template depth per reference base,
+valid templates only
 .TE
 
 File specific sections start with both the section key and the
@@ -214,6 +220,32 @@ templates with the rightmost end in another amplicon, and the number
 of templates where the other end has failed to be assigned to an
 amplicon.
 
+.SH FDP_ALL / CDP_ALL / FDP_VALID / CDP_VALID section
+
+These are for depth plots per base rather than per amplicon.  They
+distinguish between all reads in all templates, and only reads in
+templates considered to be "valid".  Such templates have both reads
+(if paired) matching known primer locations fromt he same amplicon and
+have full length coverage across the entire amplicon.
+
+This FDP_VALID can be considered to be the minimum template depth
+across the amplicon.
+
+The difference between the VALID and ALL plots represents additional
+data that for some reason may not be suitable for producing a
+consensus.  For example an amplicon that skips a primer, pairing
+10_LEFT with 12_RIGHT, will have coverage for the first half of
+amplicon 10 and the last half of amplicon 12.  Counting the number of
+reads or bases alone in the amplicon does not reveal the potential for
+non-uniformity of coverage.
+
+The format of the data is a series of tab separated tuples consisting
+of \fIdepth,length\fR.  The length field is a basic form of run-length
+encoding where all depth values within a specified fraction of each
+other (e.g. >= (1-fract)*midpoint and <= (1+fract)*midpoint) are
+combined into a single run.  This fraction is controled via the
+\fB-D\fR option..
+
 .SH OPTIONS
 .TP 8
 .BI "-f, --required-flag " INT|STR
@@ -258,6 +290,14 @@ coordinate combination if they occur at least \fIINT\fR times.
 .BI "-d, --min-depth " INT
 Specifies the minimum base depth to consider a reference position to
 be covered, for purposes of the FRPERC and CRPERC sections.
+
+.TP
+.BI "-D, --depth-bin " FRACTION
+Controls the merging of neighbouring similar depths for the FDP_ALL
+and FDP_VALID plots.  The default FRACTION is 0.01, meaning depths
+within +/- 1% of a mid point will be aggregated together as a run of
+the same value.  This merging is useful to reduce the file size.  Use
+\fB-D 0\fR to record every depth.
 
 .TP
 .BI "-l, --max-amplicon-length " INT
