@@ -320,7 +320,7 @@ END
         $fh_depth_count = 0;
     }
 
-    if (/^FDEPTH/ && !defined($fh_depth)) {
+    if (/^VDEPTH/ && !defined($fh_depth)) {
         $fh_depth_nfile = $fh_depth_page * $opts{page} > $nfile
             ? $nfile - ($fh_depth_page-1) * $opts{page}
             : $opts{page};
@@ -346,7 +346,7 @@ set view map
 splot "-" using (\$1+1):2:(\$3>0?log10(\$3):0) matrix rowheaders with image
 END
     }
-    print $fh_depth "\"$name\"\t@F[2..$#F]\n" if (/^FDEPTH/);
+    print $fh_depth "\"$name\"\t@F[2..$#F]\n" if (/^VDEPTH/);
 
 
     #----------  Heatmap AMP mismatch
@@ -587,13 +587,13 @@ END
         }
     }
 
-    if (/^(FREADS|FDEPTH)/) {
+    if (/^(FREADS|FDEPTH|FVDEPTH)/) {
 	my $max = max(@F[2..$#F]);
 	$max_depth = $max if $max_depth < $max;
     }
 
     # Per file graphs; accumulate multiple stats here and dump out at end
-    if (/^(FREADS|FDEPTH|FPCOV|FRPERC)/) {
+    if (/^(FREADS|FDEPTH|FVDEPTH|FPCOV|FRPERC)/) {
         $file{$F[1]}{$F[0]} = \@F;
         #push(@{$file{$F[1]}{keys}}, $F[0]);
     }
@@ -1048,7 +1048,7 @@ END
 plot "-" using (xa=xa+\$2):((\$1+.1)/$nfile) with fsteps lw 1 title "all templates", \\
      "-" using (xv=xv+\$2):((\$1+.1)/$nfile) with fsteps lw 2 title "valid templates"
 END
-	if (exists($file{COMBINED}{FDP_ALL})) {
+	if (exists($file{COMBINED}{CDP_ALL})) {
 	    foreach (split(/\s+/,"@{$file{COMBINED}{CDP_ALL}}")) {
 		s/,/ /;
 		print $fh "$_\n";
@@ -1056,7 +1056,7 @@ END
 	}
 	print $fh "end\n";
 
-	if (exists($file{COMBINED}{FDP_VALID})) {
+	if (exists($file{COMBINED}{CDP_VALID})) {
 	    foreach (split(/\s+/, "@{$file{COMBINED}{CDP_VALID}}")) {
 		s/,/ /;
 		print $fh "$_\n";
@@ -1087,7 +1087,8 @@ set mxtics 5
 set terminal png size $opts{size2}
 set output "$fn.png"
 plot "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw1 title "#reads", \\
-     "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "depth",
+     "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 5 title "all depth",\\
+     "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "usable depth",
 END
     } else {
         print $fh <<"END";
@@ -1106,13 +1107,15 @@ set mytics 5
 set terminal png size $opts{size3}
 set output "$fn.png"
 plot "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw1 title "#reads", \\
-     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw2 lt 3 title "depth",
+     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw2 lt 5 title "all depth",\\
+     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw2 lt 3 title "usable depth",
 END
     }
 
     local $"="\n";
     print $fh "@{$file{$f}{FREADS}}[2..$#{$file{$f}{FREADS}}]\nend\n";
     print $fh "@{$file{$f}{FDEPTH}}[2..$#{$file{$f}{FDEPTH}}]\nend\n";
+    print $fh "@{$file{$f}{FVDEPTH}}[2..$#{$file{$f}{FVDEPTH}}]\nend\n";
 
     close($fh);
     system("gnuplot $fn.gp") && die $!;

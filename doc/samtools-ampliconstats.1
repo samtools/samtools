@@ -82,6 +82,7 @@ AMPLICON	Amplicon primer locations
 FSS	File specific: summary stats
 FRPERC	File specific: read percentage distributoin between amplicons
 FDEPTH	File specific: average read depth per amplicon
+FVDEPTH	File specific: average read depth per amplicon, full length only
 FREADS	File specific: numbers of reads per amplicon
 FPCOV	File specific: percent coverage per amplicon
 FTCOORD	File specific: template start,end coordinate frequencies per amplicon
@@ -92,6 +93,7 @@ valid templates only
 CSS	Combined  summary stats
 CRPERC	Combined: read percentage distributoin between amplicons
 CDEPTH	Combined: average read depth per amplicon
+CVDEPTH	Combined: average read depth per amplicon, full length only
 CREADS	Combined: numbers of reads per amplicon
 CPCOV	Combined: percent coverage per amplicon
 CTCOORD	Combined: template coordinates per amplicon
@@ -171,12 +173,16 @@ be used to diagnose how uniform this distribution is.
 
 Note this is a pure read count and has no relation to amplicon size.
 
-.SH FDEPTH / CDEPTH SECTION
+.SH FDEPTH / CDEPTH / FVDEPTH / CVDEPTH SECTION
 
 Using the reads assigned to each amplicon and their start / end
 locations on that reference, computed using the POS and CIGAR fields,
 we compute the total number of bases aligned to this amplicon and
-corresponding the average depth.
+corresponding the average depth.  The VDEPTH variants are filtered to
+only include templates with end-to-end coverage across the amplicon.
+These can be considered to be "valid" or "usable" templates and give
+an indication of the minimum depth for the amplicon rather than the
+average depth.
 
 To compute the depth the length of the amplicon is computed using the
 innermost set of primers, if multiple choices are listed in the bed

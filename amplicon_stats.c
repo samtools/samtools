@@ -306,6 +306,7 @@ typedef struct {
 
     // Summary across all samples, sum(x) plus sum(x^2) for s.d. calc
     int64_t *nreads, *nreads2;          // [max_amp]
+    double  *nfull_reads;               // [max_amp]; 0.5/read if paired.
     double  *nrperc, *nrperc2;          // [max_amp]
     int64_t *nbases, *nbases2;          // [max_amp]
     int64_t *coverage;                  // [max_amp][max_amp_len]
@@ -328,6 +329,7 @@ void stats_free(astats_t *st) {
 
     free(st->nreads);
     free(st->nreads2);
+    free(st->nfull_reads);
     free(st->nrperc);
     free(st->nrperc2);
     free(st->nbases);
@@ -374,6 +376,9 @@ astats_t *stats_alloc(int64_t max_len, int max_amp, int max_amp_len) {
     if (!(st->nbases  = calloc(max_amp, sizeof(*st->nbases))))  goto err;
     if (!(st->nbases2 = calloc(max_amp, sizeof(*st->nbases2)))) goto err;
 
+    if (!(st->nfull_reads = calloc(max_amp, sizeof(*st->nfull_reads))))
+        goto err;
+
     if (!(st->coverage = calloc(max_amp*max_amp_len, sizeof(*st->coverage))))
         goto err;
 
@@ -412,6 +417,7 @@ void stats_reset(astats_t *st) {
 
     memset(st->nreads,  0, st->max_amp * sizeof(*st->nreads));
     memset(st->nreads2, 0, st->max_amp * sizeof(*st->nreads2));
+    memset(st->nfull_reads, 0, st->max_amp * sizeof(*st->nfull_reads));
 
     memset(st->nrperc,  0, st->max_amp * sizeof(*st->nrperc));
     memset(st->nrperc2, 0, st->max_amp * sizeof(*st->nrperc2));
@@ -514,7 +520,8 @@ static int accumulate_stats(astats_t *stats,
     if (anum >= 0) {
         stats->nreads[anum]++;
         // NB: ref bases rather than read bases
-        stats->nbases[anum] += end-start;
+        stats->nbases[anum] +=
+            MIN(end,amp[anum].min_right+1) - MAX(start,amp[anum].max_left);
 
         int64_t i;
         if (start < 0) start = 0;
@@ -574,10 +581,12 @@ static int accumulate_stats(astats_t *stats,
             // 2nd read with gap to 1st; undo previous increment.
             for (i = prev_start; i < prev_end; i++)
                 stats->depth_valid[i]--;
+            stats->nfull_reads[anum] -= (b->core.flag & BAM_FPAIRED) ? 0.5 : 1;
         } else {
             // 1st read, or 2nd read that overlaps 1st
             for (i = mstart; i < end; i++)
                 stats->depth_valid[i]++;
+            stats->nfull_reads[anum] += (b->core.flag & BAM_FPAIRED) ? 0.5 : 1;
         }
     }
 
@@ -637,6 +646,7 @@ int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
 
         gstats->nreads[a]  += lstats->nreads[a];
         gstats->nreads2[a] += lstats->nreads[a] * lstats->nreads[a];
+        gstats->nfull_reads[a] += lstats->nfull_reads[a];
 
         // To get mean & sd for amplicon read percentage, we need
         // to do the divisions here as nseq differs for each sample.
@@ -830,6 +840,14 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     }
     fprintf(ofp, "\n");
 
+    // Valid depth is the number of full length reads (already divided
+    // by the number we expect to cover), so +0.5 per read in pair.
+    // A.k.a "usable depth" in the plots.
+    fprintf(ofp, "%cVDEPTH\t%s", type, name);
+    for (i = 0; i < namp; i++)
+        fprintf(ofp, "\t%d", (int)stats->nfull_reads[i]);
+    fprintf(ofp, "\n");
+
     if (type == 'C') {
         // For combined we can compute mean & standard deviation too
         fprintf(ofp, "CREADS\tMEAN");
@@ -880,7 +898,7 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
 
     // Base depth
     fprintf(ofp, "# Read depth per amplicon.\n");
-    fprintf(ofp, "# Use 'grep ^%cREADS | cut -f 2-' to extract this part.\n", type);
+    fprintf(ofp, "# Use 'grep ^%cDEPTH | cut -f 2-' to extract this part.\n", type);
     fprintf(ofp, "%cDEPTH\t%s", type, name);
     for (i = 0; i < namp; i++) {
         int nseq = stats->nseq - stats->nfiltered - stats->nfailprimer;
