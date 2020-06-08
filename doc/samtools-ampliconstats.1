@@ -80,8 +80,9 @@ lb l .
 SS	Amplicon and file counts.  Always comes first
 AMPLICON	Amplicon primer locations
 FSS	File specific: summary stats
-FRPERC	File specific: read percentage distributoin between amplicons
+FRPERC	File specific: read percentage distribution between amplicons
 FDEPTH	File specific: average read depth per amplicon
+FVDEPTH	File specific: average read depth per amplicon, full length only
 FREADS	File specific: numbers of reads per amplicon
 FPCOV	File specific: percent coverage per amplicon
 FTCOORD	File specific: template start,end coordinate frequencies per amplicon
@@ -90,8 +91,9 @@ FDP_ALL	File specific: template depth per reference base, all templates
 FDP_VALID	File specific: template depth per reference base,
 valid templates only
 CSS	Combined  summary stats
-CRPERC	Combined: read percentage distributoin between amplicons
+CRPERC	Combined: read percentage distribution between amplicons
 CDEPTH	Combined: average read depth per amplicon
+CVDEPTH	Combined: average read depth per amplicon, full length only
 CREADS	Combined: numbers of reads per amplicon
 CPCOV	Combined: percent coverage per amplicon
 CTCOORD	Combined: template coordinates per amplicon
@@ -171,12 +173,16 @@ be used to diagnose how uniform this distribution is.
 
 Note this is a pure read count and has no relation to amplicon size.
 
-.SH FDEPTH / CDEPTH SECTION
+.SH FDEPTH / CDEPTH / FVDEPTH / CVDEPTH SECTION
 
 Using the reads assigned to each amplicon and their start / end
 locations on that reference, computed using the POS and CIGAR fields,
 we compute the total number of bases aligned to this amplicon and
-corresponding the average depth.
+corresponding the average depth.  The VDEPTH variants are filtered to
+only include templates with end-to-end coverage across the amplicon.
+These can be considered to be "valid" or "usable" templates and give
+an indication of the minimum depth for the amplicon rather than the
+average depth.
 
 To compute the depth the length of the amplicon is computed using the
 innermost set of primers, if multiple choices are listed in the bed
@@ -200,7 +206,7 @@ giving rise to extra-long amplicons (typically double or treble
 length).
 
 The FTCOORD field holds a distribution of observed template
-coordsinates from the input data.  Each row consists of the file name,
+coordinates from the input data.  Each row consists of the file name,
 the amplicon number in question, and tab separated tuples of start,
 end, frequency and status (0 for OK, 1 for skipping amplicon, 2 for
 unknown location).  Each template is only counted for one amplicon, so
@@ -225,7 +231,7 @@ amplicon.
 These are for depth plots per base rather than per amplicon.  They
 distinguish between all reads in all templates, and only reads in
 templates considered to be "valid".  Such templates have both reads
-(if paired) matching known primer locations fromt he same amplicon and
+(if paired) matching known primer locations from he same amplicon and
 have full length coverage across the entire amplicon.
 
 This FDP_VALID can be considered to be the minimum template depth
@@ -243,7 +249,7 @@ The format of the data is a series of tab separated tuples consisting
 of \fIdepth,length\fR.  The length field is a basic form of run-length
 encoding where all depth values within a specified fraction of each
 other (e.g. >= (1-fract)*midpoint and <= (1+fract)*midpoint) are
-combined into a single run.  This fraction is controled via the
+combined into a single run.  This fraction is controlled via the
 \fB-D\fR option..
 
 .SH OPTIONS
