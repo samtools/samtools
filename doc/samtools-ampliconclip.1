@@ -61,6 +61,7 @@ samtools ampliconclip
 .RB [ --rejects-file
 .IR rejects.file ]
 .RB [ --no-PG ]
+.RB [ -u ]
 .B -b
 .I bed.file in.file
 
@@ -87,6 +88,9 @@ Output file name (defaults to stdout).
 .TP
 .BI "-f " FILE
 File to write stats to (defaults to stderr).
+.TP
+.B -u
+Output uncompressed SAM, BAM or CRAM.
 .TP
 .B --soft-clip
 Soft clip reads (default).

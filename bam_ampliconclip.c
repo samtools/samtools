@@ -766,6 +766,7 @@ static void usage(void) {
     fprintf(stderr, " -b  FILE            bedfile of amplicons to be removed.\n");
     fprintf(stderr, " -o  FILE            output file name (default stdout).\n");
     fprintf(stderr, " -f  FILE            write stats to file name (default stderr)\n");
+    fprintf(stderr, " -u                  Output uncompressed data\n");
     fprintf(stderr, " --soft-clip         soft clip amplicons from reads (default)\n");
     fprintf(stderr, " --hard-clip         hard clip amplicons from reads.\n");
     fprintf(stderr, " --both-ends         clip on both ends.\n");
@@ -783,7 +784,7 @@ static void usage(void) {
 
 int amplicon_clip_main(int argc, char **argv) {
     int c, ret;
-    char wmode[3] = {'w', 'b', 0};
+    char wmode[4] = {'w', 'b', 0, 0};
     char *bedfile = NULL, *fnout = "-";
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
@@ -807,11 +808,12 @@ int amplicon_clip_main(int argc, char **argv) {
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "b:@:o:O:f:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "b:@:o:O:f:u", lopts, NULL)) >= 0) {
         switch (c) {
             case 'b': bedfile = optarg; break;
             case 'o': fnout = optarg; break;
             case 'f': param.stats_file = optarg; break;
+            case 'u': wmode[2] = '0'; break;
             case 1002: param.add_pg = 0; break;
             case 1003: clipping = soft_clip; break;
             case 1004: clipping = hard_clip; break;

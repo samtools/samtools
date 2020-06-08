@@ -1744,6 +1744,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -m --mode TYPE   Duplicate decision method for paired reads.\n"
                     "                   TYPE = t measure positions based on template start/end (default).\n"
                     "                          s measure positions based on sequence start.\n");
+    fprintf(stderr, "  -u               Output uncompressed data\n");
     fprintf(stderr, "  --include-fails  Include quality check failed reads.\n");
     fprintf(stderr, "  --no-PG          Do not add a PG line\n");
     fprintf(stderr, "  -t               Mark primary duplicates with the name of the original in a \'do\' tag."
@@ -1760,7 +1761,7 @@ static int markdup_usage(void) {
 
 int bam_markdup(int argc, char **argv) {
     int c, ret;
-    char wmode[3] = {'w', 'b', 0};
+    char wmode[4] = {'w', 'b', 0, 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     kstring_t tmpprefix = {0, 0, NULL};
@@ -1776,7 +1777,7 @@ int bam_markdup(int argc, char **argv) {
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:ncm:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:ncm:u", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': param.remove_dups = 1; break;
             case 'l': param.max_length = atoi(optarg); break;
@@ -1798,6 +1799,7 @@ int bam_markdup(int argc, char **argv) {
                 }
 
                 break;
+            case 'u': wmode[2] = '0'; break;
             case 1001: param.include_fails = 1; break;
             case 1002: param.no_pg = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
