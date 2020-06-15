@@ -1112,7 +1112,6 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -Q, --min-BQ INT        skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp->min_baseQ);
     fprintf(fp,
 "  -r, --region REG        region in which pileup is generated\n"
-"  -R, --ignore-RG         ignore RG tags (one BAM = one sample)\n"
 "  --rf, --incl-flags STR|INT  required flags: skip reads with mask bits unset [%s]\n", tmp_require);
     fprintf(fp,
 "  --ff, --excl-flags STR|INT  filter flags: skip reads with mask bits set\n"
