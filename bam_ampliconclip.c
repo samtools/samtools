@@ -57,6 +57,7 @@ typedef struct {
     int filter_len;
     int unmapped;
     int oa_tag;
+    int del_tag;
     char *arg_list;
     char *stats_file;
     char *rejects_file;
@@ -672,6 +673,16 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                             goto fail;
                     }
 
+                    if (param->del_tag) {
+                        uint8_t *tag;
+
+                        if ((tag = bam_aux_get(b, "NM")))
+                            bam_aux_del(b, tag);
+
+                        if ((tag = bam_aux_get(b, "MD")))
+                            bam_aux_del(b, tag);
+                    }
+
                     been_clipped = 1;
                 } else {
                     if (param->mark_fail) {
@@ -711,11 +722,21 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     been_clipped = 1;
                 }
 
-                if (param->oa_tag && (left || right)) {
+                if (left || right) {
                     uint8_t *tag;
 
-                    if (bam_aux_update_str(b, "OA", oat.l + 1, (const char *)oat.s))
-                        goto fail;
+                    if (param->oa_tag) {
+                        if (bam_aux_update_str(b, "OA", oat.l + 1, (const char *)oat.s))
+                            goto fail;
+                    }
+
+                    if (param->del_tag) {
+                        if ((tag = bam_aux_get(b, "NM")))
+                            bam_aux_del(b, tag);
+
+                        if ((tag = bam_aux_get(b, "MD")))
+                            bam_aux_del(b, tag);
+                    }
                 }
 
                 if (left && right) {
@@ -838,6 +859,7 @@ static void usage(void) {
     fprintf(stderr, " --no-excluded       do not write excluded reads (unmapped or QCFAIL).\n");
     fprintf(stderr, " --rejects-file FILE file to write filtered reads.\n");
     fprintf(stderr, " --original          for clipped entries add an OA tag with original data.\n");
+    fprintf(stderr, " --keep-tag          for clipped entries keep the old NM and MD tags.\n");
     fprintf(stderr, " --no-PG             do not add an @PG line.\n");
     sam_global_opt_help(stderr, "-.O..@-.");
 }
@@ -851,7 +873,7 @@ int amplicon_clip_main(int argc, char **argv) {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL, *reject = NULL;
     clipping_type clipping = soft_clip;
-    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, NULL, NULL, NULL};
+    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, 1, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -867,6 +889,7 @@ int amplicon_clip_main(int argc, char **argv) {
         {"no-excluded", no_argument, NULL, 1011},
         {"rejects-file", required_argument, NULL, 1012},
         {"original", no_argument, NULL, 1013},
+        {"keep-tag", no_argument, NULL, 1014},
         {NULL, 0, NULL, 0}
     };
 
@@ -888,6 +911,7 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1011: param.unmapped = 1; break;
             case 1012: param.rejects_file = optarg; break;
             case 1013: param.oa_tag = 1; break;
+            case 1014: param.del_tag = 0; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);

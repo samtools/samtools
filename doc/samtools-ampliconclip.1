@@ -61,6 +61,7 @@ samtools ampliconclip
 .RB [ --rejects-file
 .IR rejects.file ]
 .RB [ --original ]
+.RB [ --keep-tag ]
 .RB [ --no-PG ]
 .RB [ -u ]
 .B -b
@@ -77,7 +78,8 @@ files will need resorting.  In such cases the sorting order in the header is set
 to unknown. Clipping of reads results in template length (\fITLEN\fR) being
 incorrect. This can be corrected by \fBsamtools fixmates\fR.  Any \fIMD\fR and
 \fINM\fR aux tags will also be incorrect, which can be fixed by \fBsamtools
-calmd\fR.
+calmd\fR.  By default \fIMD\fR and \fINM\fR tags are removed though if the
+output is in CRAM format these tags will be automatically regenerated.
 
 .SH OPTIONS
 .TP 11
@@ -127,6 +129,9 @@ Write any filtered reads out to a file.
 .TP
 .B --original
 Add an OA tag with the original data for clipped files.
+.TP
+.B --keep-tag
+In clipped reads, keep the possibly invalid NM and MD tags.  By default these tags are deleted.  
 .TP
 .B --no-PG
 Do not at a PG line to the header.

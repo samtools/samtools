@@ -3163,13 +3163,14 @@ sub test_ampliconclip
     my ($opts,%args) = @_;
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
-    test_cmd($opts, out=>'ampliconclip/1_soft_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
-    test_cmd($opts, out=>'ampliconclip/1_hard_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --hard-clip -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
-    test_cmd($opts, out=>'ampliconclip/1_soft_clipped_strand.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --strand -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
-    test_cmd($opts, out=>'ampliconclip/1_filter.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --strand --filter-len 185 -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
-    test_cmd($opts, out=>'ampliconclip/1_fail.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --strand --fail-len 185 -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
-    test_cmd($opts, out=>'ampliconclip/1_original_tag.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --original -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
-    test_cmd($opts, out=>'ampliconclip/2_both_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam --strand --both-ends -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/2_both_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/1_soft_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/1_hard_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --hard-clip -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/1_soft_clipped_strand.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --strand -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/1_filter.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --strand --filter-len 185 -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/1_fail.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --keep-tag --output-fmt=sam --strand --fail-len 185 -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/1_original_tag.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG  --keep-tag --output-fmt=sam --original -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/1_delete_tag.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG --output-fmt=sam -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/1_test_data.sam");
+    test_cmd($opts, out=>'ampliconclip/2_both_clipped.expected.sam', cmd=>"$$opts{bin}/samtools ampliconclip${threads} --no-PG  --keep-tag --output-fmt=sam --strand --both-ends -b $$opts{path}/ampliconclip/ac_test.bed $$opts{path}/ampliconclip/2_both_test_data.sam");
 }
 
 sub test_ampliconstats
