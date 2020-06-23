@@ -45,6 +45,7 @@ samtools sort \- sorts SAM/BAM/CRAM files
 samtools sort
 .RB [ -l
 .IR level ]
+.RB [ -u ]
 .RB [ -m
 .IR maxMem ]
 .RB [ -o
@@ -104,6 +105,10 @@ compression level setting.
 If
 .B -l
 is not used, the default compression level will apply.
+.TP
+.B "-u "
+Set the compression level to 0, for uncompressed output.  This is a
+synonym for \fB-l 0\fR.
 .TP
 .BI "-m " INT
 Approximately the maximum required memory per thread, specified either in bytes

@@ -60,6 +60,7 @@ samtools markdup
 .RB [ --mode ]
 .RB [ --include-fails ]
 .RB [ --no-PG ]
+.RB [ -u ]
 .I in.algsort.bam out.bam
 
 .SH DESCRIPTION
@@ -112,6 +113,9 @@ Mode \fBs\fR measures positions based on sequence start.
 While the two methods identify mostly the same reads as duplicates, mode 
 \fBs\fR tends to return more results.  Unpaired reads are treated identically
 by both modes.
+.TP
+.B -u
+Output uncompressed SAM, BAM or CRAM.
 .TP
 .B --include-fails
 Include quality checked failed reads.

@@ -2595,6 +2595,7 @@ static void sort_usage(FILE *fp)
 "Usage: samtools sort [options...] [in.bam]\n"
 "Options:\n"
 "  -l INT     Set compression level, from 0 (uncompressed) to 9 (best)\n"
+"  -u         Output uncompressed data (equivalent to -l 0)\n"
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -M         Use minimiser for clustering unaligned/unplaced reads\n"
 "  -K INT     Kmer size to use for minimiser [20]\n"
@@ -2641,7 +2642,7 @@ int bam_sort(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "l:m:no:O:T:@:t:MK:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "l:m:no:O:T:@:t:MK:u", lopts, NULL)) >= 0) {
         switch (c) {
         case 'o': fnout = optarg; o_seen = 1; break;
         case 'n': is_by_qname = 1; break;
@@ -2656,6 +2657,7 @@ int bam_sort(int argc, char *argv[])
             }
         case 'T': kputs(optarg, &tmpprefix); break;
         case 'l': level = atoi(optarg); break;
+        case 'u': level = 0; break;
         case   1: no_pg = 1; break;
         case 'M': by_minimiser = 1; break;
         case 'K':

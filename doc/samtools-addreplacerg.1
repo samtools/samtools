@@ -51,6 +51,7 @@ samtools addreplacerg
 .IR rg-ID ]
 .RB [ -m
 .IR mode ]
+.RB [ -u ]
 .RB [ -o
 .IR out.bam ]
 .I in.bam
@@ -80,12 +81,15 @@ Write the final output to STRING. The default is to write to stdout.
 By default, samtools tries to select a format based on the output
 filename extension; if output is to standard output or no format can be
 deduced,
-.B bam
+.B sam
 is selected.
-.TP
+.TP 8
+.B -u
+Output uncompressed SAM, BAM or CRAM.
+.TP 8
 .BI --no-PG
 Do not add a @PG line to the header of the output file.
-.TP
+.TP 8
 .BI "-@, --threads " INT
 Number of input/output compression threads to use in addition to main thread [0].
 
