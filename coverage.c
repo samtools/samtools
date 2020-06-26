@@ -112,8 +112,8 @@ static int usage() {
             "Input options:\n"
             "  -b, --bam-list FILE     list of input BAM filenames, one per line\n"
             "  -l, --min-read-len INT  ignore reads shorter than INT bp [0]\n"
-            "  -q, --min-MQ INT        base quality threshold [0]\n"
-            "  -Q, --min-BQ INT        mapping quality threshold [0]\n"
+            "  -q, --min-MQ INT        mapping quality threshold [0]\n"
+            "  -Q, --min-BQ INT        base quality threshold [0]\n"
             "  --rf <int|str>          required flags: skip reads with mask bits unset []\n"
             "  --ff <int|str>          filter flags: skip reads with mask bits set \n"
             "                                      [UNMAP,SECONDARY,QCFAIL,DUP]\n"
@@ -354,8 +354,8 @@ int main_coverage(int argc, char *argv[]) {
                 }; break;
             case 'o': opt_output_file = optarg; opt_full_width = false; break;
             case 'L': opt_min_len = atoi(optarg); break;
-            case 'q': opt_min_baseQ = atoi(optarg); break;
-            case 'Q': opt_min_mapQ = atoi(optarg); break;
+            case 'q': opt_min_mapQ = atoi(optarg); break;
+            case 'Q': opt_min_baseQ = atoi(optarg); break;
             case 'w': opt_n_bins = atoi(optarg); opt_full_width = false;
                       opt_print_histogram = true; opt_print_tabular = false;
                       break;
