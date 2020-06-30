@@ -469,7 +469,8 @@ int bam_tview_main(int argc, char *argv[])
         }
     }
     if (argc==optind) error(NULL);
-    if (display_width && view_mode!=display_text) error("The -w option is currently supported only with -d T\n");
+    if (display_width && view_mode == display_ncurses)
+        error("The -w option is currently supported only with -d T and -d H\n");
 
     ref = NULL;
     ref_index = optind;
@@ -499,6 +500,7 @@ int bam_tview_main(int argc, char *argv[])
 
         case display_html:
             tv = html_tv_init(argv[ref_index], ref, fn_idx, samples, &ga.in);
+            if ( display_width ) tv->mcol = display_width;
             break;
     }
     if (tv==NULL)
