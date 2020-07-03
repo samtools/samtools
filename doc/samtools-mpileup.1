@@ -160,12 +160,22 @@ that it is the fifth base of the corresponding read that is mapped to this
 genomic position.
 (Column only present when \fB-O\fR/\fB--output-BP\fR is used.)
 .IP \(ci 2
-Comma-separated read names.
-(Column only present when \fB--output-QNAME\fR is used.)
+Additional comma-separated read field columns,
+as selected via \fB--output-extra\fR.
+The fields selected appear in the same order as in SAM:
+.BR QNAME ,
+.BR FLAG ,
+.BR RNAME ,
+.BR POS ,
+.B MAPQ
+(displayed numerically),
+.BR RNEXT ,
+.BR PNEXT .
 .IP \(ci 2
-Additional columns containing other specified read fields or tags,
-as selected via the \fB--output-extra\fR, \fB--output-sep\fR,
-and \fB--output-empty\fR options.
+Additional read tag field columns, as selected via \fB--output-extra\fR.
+These columns are formatted as determined by \fB--output-sep\fR and
+\fB--output-empty\fR (comma-separated by default), and appear in the
+same order as the tags are given in \fB--output-extra\fR.
 
 .SH OPTIONS
 .TP 10
@@ -295,8 +305,7 @@ or
 Output base positions on reads.
 .TP
 .B -s, --output-MQ
-Output mapping quality.
-Equivalent to \fB--output-extra MAPQ\fR.
+Output mapping qualities encoded as ASCII characters.
 .TP
 .B --output-QNAME
 Output an extra column containing comma-separated read names.

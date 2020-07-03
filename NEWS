@@ -15,6 +15,15 @@ Release a.b
  * samtools merge now accepts a BED file as a command line argument (-L) and
    does the merging only with reads overlapping the specified regions.
 
+ * samtools mpileup can now display MAPQ either as ASCII characters (with
+   -s/--output-MQ; column now restored to its documented order as in 1.9 and
+   previous versions) or comma-separated numbers (with --output-extra MAPQ;
+   in SAM column order alongside other selected --output-extra columns).
+
+   When both -s/--output-MQ and -O/--output-BP are used, samtools 1.10 printed
+   the extra columns in the opposite order.  This changes the format produced by
+   1.10's --output-extra MAPQ. (#1281; reported by Christoffer Flensburg)
+
  * The dict command can now add AN tags containing alternative names with
    "chr" prefixes added to or removed from each sequence name as appropriate
    and listing both "M" and "MT" alternatives for mitochondria.
