@@ -21,8 +21,8 @@ Release a.b
    in SAM column order alongside other selected --output-extra columns).
 
    When both -s/--output-MQ and -O/--output-BP are used, samtools 1.10 printed
-   the extra columns in the opposite order.  This changes the format produced by
-   1.10's --output-extra MAPQ. (#1281; reported by Christoffer Flensburg)
+   the extra columns in the opposite order.  This changes the format produced
+   by 1.10's --output-extra MAPQ. (#1281; reported by Christoffer Flensburg)
 
  * The dict command can now add AN tags containing alternative names with
    "chr" prefixes added to or removed from each sequence name as appropriate
