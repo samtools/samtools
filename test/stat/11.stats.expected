@@ -89,7 +89,7 @@ GCC	7	15.38	34.62	26.92	23.08	0.00	0.00
 GCC	8	26.92	23.08	38.46	11.54	0.00	0.00
 GCC	9	23.08	26.92	26.92	23.08	0.00	0.00
 GCC	10	23.08	23.08	38.46	15.38	0.00	0.00
-# ACGT reverse complemented content per cycle. Use `grep ^GCT | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]
+# ACGT content per cycle, read oriented. Use `grep ^GCT | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]
 GCT	1	26.92	26.92	30.77	15.38
 GCT	2	7.69	38.46	26.92	26.92
 GCT	3	26.92	26.92	30.77	15.38

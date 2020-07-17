@@ -1,6 +1,6 @@
 /*  stats.c -- This is the former bamcheck integrated into samtools/htslib.
 
-    Copyright (C) 2012-2019 Genome Research Ltd.
+    Copyright (C) 2012-2020 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
     Author: Sam Nicholls <sam@samnicholls.net>
@@ -1622,7 +1622,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                 100.*(acgtno_count_1st->n + acgtno_count_2nd->n)/acgt_sum,
                 100.*(acgtno_count_1st->other + acgtno_count_2nd->other)/acgt_sum);
     }
-    fprintf(to, "# ACGT reverse complemented content per cycle. Use `grep ^GCT | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]\n");
+    fprintf(to, "# ACGT content per cycle, read oriented. Use `grep ^GCT | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]\n");
     for (ibase=0; ibase<stats->max_len; ibase++)
     {
         acgtno_count_t *acgtno_count = &(stats->acgtno_revcomp[ibase]);

@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+ * samtools stats has a new GCT section, where it reports ACGT content
+   percentages, similar to GCC but taking into account the read orientation.
+
  * samtools depth will count only the bases of one read, for the overlapping
    section of a read pair, if the -s option is used in the command line.
 
