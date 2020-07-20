@@ -3,7 +3,7 @@
 .SH NAME
 samtools faidx \- indexes or queries regions from a fasta file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2020 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -114,6 +114,13 @@ Append string <pos> to names when writing the forward strand and <neg> when
 writing the reverse strand.  Spaces are preserved, so it is possible to move
 the indicator into the comment part of the description line by including
 a leading space in the strings <pos> and <neg>.
+.RE
+.TP
+.B --fai-idx FILE
+Read/Write to specified index file.
+.TP
+.B --gzi-idx FILE
+Read/Write to specified compressed file index (used with .gz files).
 .TP
 .B -h, --help
 Print help message and exit.

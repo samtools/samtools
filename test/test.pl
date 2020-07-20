@@ -603,6 +603,11 @@ sub test_faidx
     cmd("$$opts{bin}/samtools faidx --length 5 $$opts{tmp}/faidx.fa 1:1-104 > $$opts{tmp}/output_faidx_base.fa");
     cmd("$$opts{bin}/samtools faidx --length 5 --output $$opts{tmp}/output_faidx.fa $$opts{tmp}/faidx.fa 1:1-104 && $$opts{diff} $$opts{tmp}/output_faidx.fa $$opts{tmp}/output_faidx_base.fa");
 
+    # Write indices to a file
+    cmd("$$opts{bin}/samtools faidx --fai-idx $$opts{tmp}/fa_test.fai --gzi-idx $$opts{tmp}/fa_test.gzi $$opts{tmp}/faidx.fa.gz");
+    cmd("$$opts{diff} $$opts{tmp}/faidx.fa.fai $$opts{tmp}/fa_test.fai");
+    cmd("$$opts{diff} $$opts{tmp}/faidx.fa.gz.gzi $$opts{tmp}/fa_test.gzi");
+
     # test continuing after an error
     cmd("$$opts{bin}/samtools faidx --output $$opts{tmp}/output_faidx.fa --continue $$opts{tmp}/faidx.fa 100 EEE FFF");
 
@@ -738,6 +743,11 @@ sub test_fqidx
     # Write to file
     cmd("$$opts{bin}/samtools fqidx --length 5 $$opts{tmp}/fqidx.fq 1:1-104 > $$opts{tmp}/output_fqidx_base.fq");
     cmd("$$opts{bin}/samtools fqidx --length 5 --output $$opts{tmp}/output_fqidx.fq $$opts{tmp}/fqidx.fq 1:1-104 && $$opts{diff} $$opts{tmp}/output_fqidx.fq $$opts{tmp}/output_fqidx_base.fq");
+
+    # Write indices to a file
+    cmd("$$opts{bin}/samtools fqidx --fai-idx $$opts{tmp}/fq_test.fai --gzi-idx $$opts{tmp}/fq_test.gzi $$opts{tmp}/fqidx.fq.gz");
+    cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.fai $$opts{tmp}/fq_test.fai");
+    cmd("$$opts{diff} $$opts{tmp}/fqidx.fq.gz.gzi $$opts{tmp}/fq_test.gzi");
 
     # test continuing after an error
     cmd("$$opts{bin}/samtools fqidx --output $$opts{tmp}/output_fqidx.fq --continue $$opts{tmp}/fqidx.fq 100 EEE FFF");
