@@ -65,6 +65,7 @@ LFQ	Last fragment qualities
 GCF	GC content of first fragments
 GCL	GC content of last fragments
 GCC	ACGT content per cycle
+GCT	ACGT content per cycle, read oriented
 FBC	ACGT content per cycle for first fragments only
 FTC	ACGT raw counters for first fragments
 LBC	ACGT content per cycle for last fragments only
@@ -289,6 +290,13 @@ GCC, FBC and LBC report the nucleotide content per cycle either combined
 are cycle number (integer), and percentage counts for A, C, G, T, N
 and other (typically containing ambiguity codes) normalised against
 the total counts of A, C, G and T only (excluding N and other).
+
+GCT offers a similar report to GCC, but whereas GCC counts nucleotides
+as they appear in the SAM output (in reference orientation), GCT takes into
+account whether a nucleotide belongs to a reverse complemented read and counts
+it in the original read orientation.
+If there are no reverse complemented reads in a file, the GCC and GCT reports
+will be identical.
 
 FTC and LTC report the total numbers of nucleotides for first and last
 fragments, respectively. The columns are the raw counters for A, C, G,
