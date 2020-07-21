@@ -1,6 +1,6 @@
 /* bam_addrprg.c -- samtools command to add or replace readgroups.
 
-   Copyright (c) 2013, 2015-2017, 2019 Genome Research Limited.
+   Copyright (c) 2013, 2015-2017, 2019-2020 Genome Research Limited.
 
    Author: Martin O. Pollard <mp15@sanger.ac.uk>
 

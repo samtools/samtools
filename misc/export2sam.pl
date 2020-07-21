@@ -9,7 +9,7 @@
 #
 # The MIT License
 #
-# Copyright (c) 2008-2009 Genome Research Ltd.
+# Copyright (c) 2008-2010 Genome Research Ltd.
 # Modifications Copyright (c) 2010 Illumina, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy

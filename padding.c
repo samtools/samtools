@@ -1,7 +1,7 @@
 /*  padding.c -- depad subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2014-2016, 2019 Genome Research Ltd.
+    Copyright (C) 2014-2016, 2019-2020 Genome Research Ltd.
     Portions copyright (C) 2012, 2013 Peter Cock, The James Hutton Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>

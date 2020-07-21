@@ -1,6 +1,6 @@
 /*  test/merge/test_bam_translate.c -- header merging test harness.
 
-    Copyright (C) 2013, 2014 Genome Research Ltd.
+    Copyright (C) 2013, 2014-2015 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
