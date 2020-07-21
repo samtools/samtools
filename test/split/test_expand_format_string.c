@@ -1,6 +1,6 @@
 /*  test/split/test_expand_format_string.c -- split format string test cases.
 
-    Copyright (C) 2014 Genome Research Ltd.
+    Copyright (C) 2014-2015 Genome Research Ltd.
 
     Author: Martin O. Pollard <mp15@sanger.ac.uk>
 

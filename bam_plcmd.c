@@ -1,6 +1,6 @@
 /*  bam_plcmd.c -- mpileup subcommand.
 
-    Copyright (C) 2008-2015, 2019 Genome Research Ltd.
+    Copyright (C) 2008-2015, 2019-2020 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>

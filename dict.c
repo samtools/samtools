@@ -1,6 +1,6 @@
 /*  dict.c -- create a sequence dictionary file.
 
-    Copyright (C) 2015 Genome Research Ltd.
+    Copyright (C) 2015, 2020 Genome Research Ltd.
 
     Author: Shane McCarthy <sm15@sanger.ac.uk>
 

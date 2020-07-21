@@ -1,6 +1,6 @@
 /*  test/vcf-miniview.c -- minimal BCF/VCF viewer, for use by test harness.
 
-    Copyright (C) 2014 Genome Research Ltd.
+    Copyright (C) 2014, 2016 Genome Research Ltd.
 
     Author: John Marshall <jm18@sanger.ac.uk>
 
