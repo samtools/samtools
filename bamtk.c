@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
         printf(
 "samtools %s\n"
 "Using htslib %s\n"
-"Copyright (C) 2019-2020 Genome Research Ltd.\n",
+"Copyright (C) 2020 Genome Research Ltd.\n",
                samtools_version(), hts_version());
     }
     else if (strcmp(argv[1], "--version-only") == 0) {
