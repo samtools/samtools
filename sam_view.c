@@ -679,6 +679,7 @@ int main_samview(int argc, char *argv[])
         if ((has_index_file && optind >= argc - 2) || (!has_index_file && optind >= argc - 1)) { // convert/print the entire file
             bam1_t *b = bam_init1();
             int r;
+            errno = 0;
             while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
                 if (!process_aln(header, b, &settings)) {
                     if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
@@ -688,7 +689,7 @@ int main_samview(int argc, char *argv[])
                 }
             }
             if (r < -1) {
-                fprintf(stderr, "[main_samview] truncated file.\n");
+                print_error_errno("view", "error reading file \"%s\"", fn_in);
                 ret = 1;
             }
             bam_destroy1(b);
