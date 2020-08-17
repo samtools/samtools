@@ -94,7 +94,6 @@ if ($1 < 5) {
 #-----------------------------------------------------------------------------
 # Load plot meta-data
 # This allows us to auto-scale plots.
-
 my $namp = 0;
 my $nfile = 0;
 my $ref_len = 0;
@@ -1250,3 +1249,97 @@ END
 
     $combined_done = 1;
 }
+
+#---------------------------------
+#adding html file to show plots
+my $fname  = "index.html";
+
+open(my $fh,'>',$fname) or error("$fname: $!");
+print $fh q[
+<html>
+<head>
+<style>
+.thumbnail
+{
+    text-decoration:none;
+    color:black;
+    font-weight:bold;
+}
+.thumbnail span  /*CSS for enlarged image*/
+{
+    visibility: hidden;
+    position: absolute;
+    padding: 5px;
+    border: 1px solid #000;
+    background-color: #e5e5e5;
+}
+.thumbnail:hover span  /*CSS for enlarged image on hover*/
+{
+    visibility: visible;
+    left: 550px;
+    top: 10px;
+}
+.imgs td
+{
+    vertical-align:middle;
+    padding: 0.5em;
+    border: 1px solid black;
+}
+table.imgs
+{
+    border-collapse:collapse;
+    margin-left:20px;
+}
+.pad {
+    padding-left:1em;
+    vertical-align:top;
+}
+.right {
+    text-align:right;
+    padding-left:1em;
+}
+</style>
+</head>
+<body>
+<table class="imgs">
+];
+
+my @imgs = sort {
+    my ($A,$B)=($a,$b);
+    $A=~s/(\d+)/sprintf("%09d",$1)/ge;
+    $B=~s/(\d+)/sprintf("%09d",$1)/ge;
+    $A cmp $B
+} <$prefix*.png>;
+
+my $last = "";
+my $new_section = 0;
+for (my ($i,$j)=(0,0); $i < @imgs; $i++, $j++)
+{
+    my $fn_prefix = $imgs[$i];
+    $fn_prefix =~ s/-(\w+|read-perc|read-perc-log)(-\d+)*\.png$//;
+    if ($fn_prefix ne $last || $j % 6 == 0) {
+	if ($fn_prefix ne $last) {
+	    $last=$fn_prefix;
+	    $new_section = 1;
+	    $j = 0;
+	}
+    
+	if ( $i>0 ) { print $fh "</tr>\n"; }
+	if ($new_section) {
+	    print $fh "<tr><td>$fn_prefix</td></tr>\n";
+	    $new_section = 0;
+	}
+	print $fh "<tr>";
+	print $fh qq[<td><a class="thumbnail" href="$imgs[$i]"><img src="$imgs[$i]" width="200px"></a></td>\n];
+    } else {
+	print $fh qq[<td><a class="thumbnail" href="$imgs[$i]"><img src="$imgs[$i]" width="200px"></a></td>\n];
+    }
+}
+print $fh qq[
+</tr>
+</table>
+</body>
+</html>
+];
+
+close($fh);
