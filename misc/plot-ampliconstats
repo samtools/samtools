@@ -42,11 +42,14 @@ my $res = GetOptions("size=s"      => \$opts{size},
                      "help"        => \$opts{help},
                      "page=i"      => \$opts{page},
                      "amp_add=i"   => \$opts{amp_add},
+                     "amp-add=i"   => \$opts{amp_add},
                      "orient=s"    => \$opts{orient},
                      "depth_max=s" => \$opts{depth_max},
+                     "depth-max=s" => \$opts{depth_max},
                      "thumbnails"  => \$opts{thumbnails},
                      "thumb_size=i"=> \$opts{thumb_size},
-                     "index_only"  => \$opts{index_only});
+                     "thumb-size=i"=> \$opts{thumb_size},
+                     "index-only"  => \$opts{index_only});
 
 $opts{size}      = "1000,800" unless $opts{size};
 $opts{size2}     = "1000,400" unless $opts{size2};
@@ -71,11 +74,11 @@ Options:
     -size2 W,H    Set image width to W and height to H for graphs (horizontal)
     -size3 W,H    Set image width to W and height to H for graphs (vertical)
     -page N       Maximum number of samples per page in heatmaps
-    -amp_add X    Small sample fudge: NErr/(NAll+X) in amplicon count plots
+    -amp-add X    Small sample fudge: NErr/(NAll+X) in amplicon count plots
     -orient h/v   Orientation for plots, defaults to h (horizontal)
-    -depth_max N  Force -reads.png plots to have a fixed yrange
+    -depth-max N  Force -reads.png plots to have a fixed yrange
     -thumbnails   Produce scaled down thumbnail images
-    -thumb_size N Display thumbnails as N pixels wide.
+    -thumb-size N Display thumbnails as N pixels wide.
 
 If FILE is not specified, reads from stdin.
 END
