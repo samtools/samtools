@@ -43,7 +43,10 @@ my $res = GetOptions("size=s"      => \$opts{size},
                      "page=i"      => \$opts{page},
                      "amp_add=i"   => \$opts{amp_add},
                      "orient=s"    => \$opts{orient},
-                     "depth_max=s" => \$opts{depth_max});
+                     "depth_max=s" => \$opts{depth_max},
+                     "thumbnails"  => \$opts{thumbnails},
+                     "thumb_size=i"=> \$opts{thumb_size},
+                     "index_only"  => \$opts{index_only});
 
 $opts{size}      = "1000,800" unless $opts{size};
 $opts{size2}     = "1000,400" unless $opts{size2};
@@ -52,6 +55,8 @@ $opts{page}      = 96         unless $opts{page};
 $opts{amp_add}   = 100        unless $opts{amp_add};
 $opts{orient}    = "h"        unless $opts{orient};
 $opts{depth_max} = 0          unless $opts{depth_max};
+$opts{thumbnails}= 0          unless $opts{thumbnails};
+$opts{thumb_size}= 200        unless $opts{thumb_size};
 
 my $max_depth = 0;
 
@@ -69,6 +74,8 @@ Options:
     -amp_add X    Small sample fudge: NErr/(NAll+X) in amplicon count plots
     -orient h/v   Orientation for plots, defaults to h (horizontal)
     -depth_max N  Force -reads.png plots to have a fixed yrange
+    -thumbnails   Produce scaled down thumbnail images
+    -thumb_size N Display thumbnails as N pixels wide.
 
 If FILE is not specified, reads from stdin.
 END
@@ -79,6 +86,9 @@ if ($res != 1 or $opts{help} or scalar(@ARGV) < 1) {
 }
 
 my $prefix = shift(@ARGV);
+
+# Useful for debugging, but undocumented
+goto index_only if ($opts{index_only});
 
 #-----------------------------------------------------------------------------
 # Check gnuplot version.
@@ -1252,7 +1262,11 @@ END
 
 #---------------------------------
 #adding html file to show plots
-my $fname  = "index.html";
+index_only:
+
+# index.html is in the same dir as the images
+my ($prefix_dir) = $prefix=~/(.*\/)/;
+my $fname  = "${prefix_dir}index.html";
 
 open(my $fh,'>',$fname) or error("$fname: $!");
 print $fh q[
@@ -1287,30 +1301,35 @@ my @imgs = sort {
     $A=~s/(\d+)/sprintf("%09d",$1)/ge;
     $B=~s/(\d+)/sprintf("%09d",$1)/ge;
     $A cmp $B
-} <$prefix*.png>;
+} grep {!/thumb\.png/} <$prefix*.png>;
 
 my $last = "";
 my $new_section = 0;
 for (my ($i,$j)=(0,0); $i < @imgs; $i++, $j++)
 {
-    my $fn_prefix = $imgs[$i];
-    $fn_prefix =~ s/-(\w+|read-perc|read-perc-log)(-\d+)*\.png$//;
-    if ($fn_prefix ne $last || $j % 6 == 0) {
-	if ($fn_prefix ne $last) {
-	    $last=$fn_prefix;
-	    $new_section = 1;
-	    $j = 0;
-	}
+    my $fn_base = $imgs[$i];
+    $fn_base =~ s/-(\w+|read-perc|read-perc-log)(-\d+)*\.png$//;
+    if ($fn_base ne $last || $j % 6 == 0) {
+        if ($fn_base ne $last) {
+            $last=$fn_base;
+            $new_section = 1;
+            $j = 0;
+        }
     
-	if ( $i>0 ) { print $fh "</tr>\n"; }
-	if ($new_section) {
-	    print $fh "<tr><td>$fn_prefix</td></tr>\n";
-	    $new_section = 0;
-	}
-	print $fh "<tr>";
-	print $fh qq[<td><a class="thumbnail" href="$imgs[$i]"><img src="$imgs[$i]" width="200px"></a></td>\n];
+        if ( $i>0 ) { print $fh "</tr>\n"; }
+        if ($new_section) {
+            print $fh "<tr><td>$fn_base</td></tr>\n";
+            $new_section = 0;
+        }
+        print $fh "<tr>";
+    }
+    my ($img) = $imgs[$i]=~/(?:.*\/)?(.*)/;
+    if ($opts{thumbnails}) {
+        my $scale = 100*$opts{thumb_size}/[split(",",$opts{size})]->[0],"\n";
+        system("convert -scale $scale% $imgs[$i] $imgs[$i].thumb.png") && die $!;
+        print $fh qq[<td><a class="thumbnail" href="$img"><img src="$img.thumb.png" width="$opts{thumb_size}px"></a></td>\n];
     } else {
-	print $fh qq[<td><a class="thumbnail" href="$imgs[$i]"><img src="$imgs[$i]" width="200px"></a></td>\n];
+        print $fh qq[<td><a class="thumbnail" href="$img"><img src="$img" width="$opts{thumb_size}px"></a></td>\n];
     }
 }
 print $fh qq[
