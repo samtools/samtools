@@ -89,6 +89,16 @@ Consider using
 .B samtools collate
 instead if you need name collated data without a full lexicographical sort.
 
+Note that if the sorted output file is to be indexed with
+.BR "samtools index" ,
+the default coordinate sort must be used.
+Thus the
+.B -n
+and
+.B -t
+options are incompatible with
+.BR "samtools index" .
+
 .SH OPTIONS
 
 .TP 11

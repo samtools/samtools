@@ -2599,7 +2599,7 @@ static void sort_usage(FILE *fp)
 "  -m INT     Set maximum memory per thread; suffix K/M/G recognized [768M]\n"
 "  -M         Use minimiser for clustering unaligned/unplaced reads\n"
 "  -K INT     Kmer size to use for minimiser [20]\n"
-"  -n         Sort by read name\n"
+"  -n         Sort by read name (not compatible with samtools index command)\n"
 "  -t TAG     Sort by value of TAG. Uses position as secondary index (or read name if -n is set)\n"
 "  -o FILE    Write final output to FILE rather than standard output\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
