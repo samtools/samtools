@@ -1265,20 +1265,6 @@ print $fh q[
     color:black;
     font-weight:bold;
 }
-.thumbnail span  /*CSS for enlarged image*/
-{
-    visibility: hidden;
-    position: absolute;
-    padding: 5px;
-    border: 1px solid #000;
-    background-color: #e5e5e5;
-}
-.thumbnail:hover span  /*CSS for enlarged image on hover*/
-{
-    visibility: visible;
-    left: 550px;
-    top: 10px;
-}
 .imgs td
 {
     vertical-align:middle;
@@ -1289,14 +1275,6 @@ table.imgs
 {
     border-collapse:collapse;
     margin-left:20px;
-}
-.pad {
-    padding-left:1em;
-    vertical-align:top;
-}
-.right {
-    text-align:right;
-    padding-left:1em;
 }
 </style>
 </head>
