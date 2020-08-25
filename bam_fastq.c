@@ -39,6 +39,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "htslib/bgzf.h"
 #include "htslib/thread_pool.h"
+#include "htslib/hts_endian.h"
 #include "samtools.h"
 #include "sam_opts.h"
 
@@ -260,9 +261,99 @@ static int getLength(char **s)
     return n;
 }
 
+/*
+ * Expand up a B aux tag to string form.
+ * Modelled on sam_format1_append.
+ *
+ * Returns 0 on success,
+ *        -1 on failure
+ */
+static int print_aux_B(uint8_t *s, uint8_t *s_end, kstring_t *str) {
+    int r = 0, i;
+
+    if (s_end - s < 6) return -1;
+
+    int sub_type = *++s;
+    uint32_t n;
+    n = le_to_u32(++s);
+    s += 4;
+
+    r |= kputc_(sub_type, str);
+    switch (sub_type) {
+    case 'c':
+        if (s_end - s < n) return -1;
+        if (ks_resize(str, str->l + n*2) < 0) return -1;
+        for (i = 0; i < n; ++i) {
+            r |= kputc_(',', str);
+            r |= kputw(*(int8_t*)s, str);
+            ++s;
+        }
+        break;
+    case 'C':
+        if (s_end - s < n) return -1;
+        if (ks_resize(str, str->l + n*2) < 0) return -1;
+        for (i = 0; i < n; ++i) {
+            r |= kputc_(',', str);
+            r |= kputw(*(uint8_t*)s, str);
+            ++s;
+        }
+        break;
+    case 's':
+        if (s_end - s < n*2) return -1;
+        if (ks_resize(str, str->l + n*4) < 0) return -1;
+        for (i = 0; i < n; ++i) {
+            r |= kputc_(',', str);
+            r |= kputw(le_to_i16(s), str);
+            s += 2;
+        }
+        break;
+    case 'S':
+        if (s_end - s < n*2) return -1;
+        if (ks_resize(str, str->l + n*4) < 0) return -1;
+        for (i = 0; i < n; ++i) {
+            r |= kputc_(',', str);
+            r |= kputw(le_to_u16(s), str);
+            s += 2;
+        }
+        break;
+    case 'i':
+        if (s_end - s < n*4) return -1;
+        if (ks_resize(str, str->l + n*6) < 0) return -1;
+        for (i = 0; i < n; ++i) {
+            r |= kputc_(',', str);
+            r |= kputw(le_to_i32(s), str);
+            s += 4;
+        }
+        break;
+    case 'I':
+        if (s_end - s < n*4) return -1;
+        if (ks_resize(str, str->l + n*6) < 0) return -1;
+        for (i = 0; i < n; ++i) {
+            r |= kputc_(',', str);
+            r |= kputuw(le_to_u32(s), str);
+            s += 4;
+        }
+        break;
+    case 'f':
+        if (s_end - s < n*4) return -1;
+        if (ks_resize(str, str->l + n*8) < 0) return -1;
+        for (i = 0; i < n; ++i) {
+            r |= kputc_(',', str);
+            r |= kputd(le_to_float(s), str);
+            s += 4;
+        }
+        break;
+    default:
+        return -1;
+    }
+
+    return r ? -1 : 0;
+}
+
 static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
 {
     uint8_t *s = bam_aux_get(rec, tag);
+    uint8_t *s_end = rec->data + rec->l_data;
     if (s) {
         char aux_type = *s;
         switch (aux_type) {
@@ -292,7 +383,9 @@ static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
             case 'I': kputuw(bam_aux2i(s), linebuf); break;
             case 'A': kputc(bam_aux2A(s), linebuf); break;
             case 'f': kputd(bam_aux2f(s), linebuf); break;
-            case 'B': kputs("*** Unhandled aux type ***", linebuf); return false;
+            case 'B':
+                if (print_aux_B(s, s_end, linebuf) < 0) return false;
+                break;
             default:  kputs("*** Unknown aux type ***", linebuf); return false;
        }
     }
