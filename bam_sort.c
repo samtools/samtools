@@ -522,7 +522,8 @@ static klist_t(hdrln) * trans_rg_pg(bool is_rg, sam_hdr_t *translate,
                 id_len = id_end - idp;
 
                 if (id_len < transformed_id.l) {
-                    if (ks_resize(&new_hdr_line, new_hdr_line.l + transformed_id.l - id_len))
+                    if (ks_resize(&new_hdr_line, new_hdr_line.l
+                                  + transformed_id.l - id_len + 1/*nul*/))
                         goto fail;
                 }
                 if (id_len != transformed_id.l) {
