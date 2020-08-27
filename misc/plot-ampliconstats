@@ -281,7 +281,7 @@ while (<>) {
         if (defined($fh_reads)) {
             print $fh_reads "\nend\n";
             close($fh_reads);
-            system("gnuplot $prefix-heat-reads-$fh_reads_page.gp") && die $!;
+            system("gnuplot", "$prefix-heat-reads-$fh_reads_page.gp") && die;
             undef $fh_reads;
         }
         $fh_reads_page++;
@@ -325,7 +325,7 @@ END
         if (defined($fh_depth)) {
             print $fh_depth "\nend\n";
             close($fh_depth);
-            system("gnuplot $prefix-heat-depth-$fh_depth_page.gp") && die $!;
+            system("gnuplot", "$prefix-heat-depth-$fh_depth_page.gp") && die;
             undef $fh_depth;
         }
         $fh_depth_page++;
@@ -367,7 +367,7 @@ END
         if (defined($fh_amp)) {
             print $fh_amp "\nend\n";
             close($fh_amp);
-            system("gnuplot $prefix-heat-amp-$fh_amp_page.gp") && die $!;
+            system("gnuplot", "$prefix-heat-amp-$fh_amp_page.gp") && die;
             undef $fh_amp;
         }
         $fh_amp_page++;
@@ -423,13 +423,13 @@ END
         if (defined($fh_rperc)) {
             print $fh_rperc "\nend\n";
             close($fh_rperc);
-            system("gnuplot $prefix-heat-read-perc-$fh_rperc_page.gp") && die $!;
+            system("gnuplot", "$prefix-heat-read-perc-$fh_rperc_page.gp") && die;
             undef $fh_rperc;
         }
         if (defined($fh_rperl)) {
             print $fh_rperl "\nend\n";
             close($fh_rperl);
-            system("gnuplot $prefix-heat-read-perc-log-$fh_rperc_page.gp") && die $!;
+            system("gnuplot", "$prefix-heat-read-perc-log-$fh_rperc_page.gp") && die;
             undef $fh_rperl;
         }
         $fh_rperc_page++;
@@ -497,7 +497,7 @@ END
             my $tmp = $fh_cover{$1};
             print $tmp "\nend\n";
             close($fh_cover{$1});
-            system("gnuplot $prefix-heat-coverage-$1-$fh_cover_page{$1}.gp") && die $!;
+            system("gnuplot", "$prefix-heat-coverage-$1-$fh_cover_page{$1}.gp") && die;
             undef $fh_cover{$1};
         }
         $fh_cover_page{$1}++;
@@ -595,7 +595,7 @@ END
 
         if ($2 eq "STDDEV") {
             close($fh);
-            system("gnuplot $prefix-combined-coverage-$1.gp") && die $!;
+            system("gnuplot", "$prefix-combined-coverage-$1.gp") && die;
         }
     }
 
@@ -639,37 +639,37 @@ END
 if (defined($fh_depth)) {
     print $fh_depth "\nend\n";
     close($fh_depth);
-    system("gnuplot $prefix-heat-depth-$fh_depth_page.gp") && die $!;
+    system("gnuplot", "$prefix-heat-depth-$fh_depth_page.gp") && die;
 }
 
 if (defined($fh_amp)) {
     print $fh_amp "\nend\n";
     close($fh_amp);
-    system("gnuplot $prefix-heat-amp-$fh_amp_page.gp") && die $!;
+    system("gnuplot", "$prefix-heat-amp-$fh_amp_page.gp") && die;
 }
 
 if (defined($fh_reads)) {
     print $fh_reads "\nend\n";
     close($fh_reads);
-    system("gnuplot $prefix-heat-reads-$fh_reads_page.gp") && die $!;
+    system("gnuplot", "$prefix-heat-reads-$fh_reads_page.gp") && die;
 }
 
 if (defined($fh_rperc)) {
     print $fh_rperc "\nend\n";
     close($fh_rperc);
-    system("gnuplot $prefix-heat-read-perc-$fh_rperc_page.gp") && die $!;
+    system("gnuplot", "$prefix-heat-read-perc-$fh_rperc_page.gp") && die;
 }
 
 if (defined($fh_rperl)) {
     print $fh_rperl "\nend\n";
     close($fh_rperl);
-    system("gnuplot $prefix-heat-read-perc-log-$fh_rperc_page.gp") && die $!;
+    system("gnuplot", "$prefix-heat-read-perc-log-$fh_rperc_page.gp") && die;
 }
 
 foreach (keys %fh_cover) {
     if (defined($fh_cover{$_})) {
         close($fh_cover{$_});
-        system("gnuplot $prefix-heat-coverage-$_-$fh_cover_page{$_}.gp") && die $!;
+        system("gnuplot", "$prefix-heat-coverage-$_-$fh_cover_page{$_}.gp") && die;
     }
 }
 
@@ -731,7 +731,7 @@ plot "\$mean" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : ma
 END
 }
 close($ch_reads);
-system("gnuplot $prefix-combined-reads.gp") && die $!;
+system("gnuplot", "$prefix-combined-reads.gp") && die;
 
 # combind-depth
 if ($opts{orient} eq "h") {
@@ -779,13 +779,13 @@ plot "\$mean" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : ma
 END
 }
 close($ch_depth);
-system("gnuplot $prefix-combined-depth.gp") && die $!;
+system("gnuplot", "$prefix-combined-depth.gp") && die;
 
 close($ch_rperc);
-system("gnuplot $prefix-combined-read-perc.gp") && die $!;
+system("gnuplot", "$prefix-combined-read-perc.gp") && die;
 
 close($ch_amp);
-system("gnuplot $prefix-combined-amp.gp") && die $!;
+system("gnuplot", "$prefix-combined-amp.gp") && die;
 
 
 
@@ -795,8 +795,8 @@ my $combined_done = 0;
 foreach my $f (sort keys %file) {
     next if $f eq "COMBINED";
     my $ff = $f;
-    $ff =~ s/[\\;#\$\{\}]/./g;  # safe filename component
-    my $fg = $f;                # printable in gnuplot
+    $ff =~ s/[\/\\;#\$\{\}]/./g;  # safe filename component
+    my $fg = $f;                  # printable in gnuplot
     $fg =~ s/_/\\\\_/g;
 
     #--- Template coordinates vs frequence: FILE
@@ -846,7 +846,7 @@ END
     print $fh "@{$file{$f}{FTCOORD}}\nend\n";
 
     close($fh);
-    system("gnuplot $fn.gp") && die $!;
+    system("gnuplot", "$fn.gp") && die;
 
     #--- Template coordinates vs size: FILE
     my $fn = "$prefix-$ff-tsize";  # filename prefix
@@ -899,7 +899,7 @@ END
     print $fh "@sorted\nend\n";
 
     close($fh);
-    system("gnuplot $fn.gp") && die $!;
+    system("gnuplot", "$fn.gp") && die;
   skip_coord:
 
     #--- Template coordinates: COMBINED
@@ -949,7 +949,7 @@ END
         print $fh "@combined_coord\nend\n";
 
         close($fh);
-        system("gnuplot $fn.gp") && die $!;
+        system("gnuplot", "$fn.gp") && die;
     }
 
 
@@ -1013,7 +1013,7 @@ END
     print $fh "end\n";
 
     close($fh);
-    system("gnuplot $fn.gp") && die $!;
+    system("gnuplot", "$fn.gp") && die;
 
 
     #--- Template depth: FILE
@@ -1077,7 +1077,7 @@ END
         print $fh "end\n";
 
         close($fh);
-        system("gnuplot $fn.gp") && die $!;
+        system("gnuplot", "$fn.gp") && die;
     }
 
     #--- Read count / depth
@@ -1130,7 +1130,7 @@ END
     print $fh "@{$file{$f}{FVDEPTH}}[2..$#{$file{$f}{FVDEPTH}}]\nend\n";
 
     close($fh);
-    system("gnuplot $fn.gp") && die $!;
+    system("gnuplot", "$fn.gp") && die;
 
     #--- Read %coverage and %read-per-amplicon
     my $fn = "$prefix-$ff-cov";  # filename prefix
@@ -1214,7 +1214,7 @@ END
     #print $fh "@{$file{$f}{FRPERC}}[2..$#{$file{$f}{FRPERC}}]\nend\n";
 
     close($fh);
-    system("gnuplot $fn.gp") && die $!;
+    system("gnuplot", "$fn.gp") && die;
 
 
     #--- Amplicon primer correctness
@@ -1258,7 +1258,7 @@ END
     print $fh "@{$file{$f}{FAMP}}[1..$#{$file{$f}{FAMP}}]\nend\n";
 
     close($fh);
-    system("gnuplot $fn.gp") && die $!;
+    system("gnuplot", "$fn.gp") && die;
 
     $combined_done = 1;
 }
@@ -1304,7 +1304,7 @@ my @imgs = sort {
     $A=~s/(\d+)/sprintf("%09d",$1)/ge;
     $B=~s/(\d+)/sprintf("%09d",$1)/ge;
     $A cmp $B
-} grep {!/thumb\.png/} <$prefix*.png>;
+} grep {!/thumb\.png/} <"$prefix*.png">;
 
 my $last = "";
 my $new_section = 0;
@@ -1329,7 +1329,7 @@ for (my ($i,$j)=(0,0); $i < @imgs; $i++, $j++)
     my ($img) = $imgs[$i]=~/(?:.*\/)?(.*)/;
     if ($opts{thumbnails}) {
         my $scale = 100*$opts{thumb_size}/[split(",",$opts{size})]->[0],"\n";
-        system("convert -scale $scale% $imgs[$i] $imgs[$i].thumb.png") && die $!;
+        system("convert", "-scale", "$scale%", $imgs[$i], "$imgs[$i].thumb.png") && die;
         print $fh qq[<td><a class="thumbnail" href="$img"><img src="$img.thumb.png" width="$opts{thumb_size}px"></a></td>\n];
     } else {
         print $fh qq[<td><a class="thumbnail" href="$img"><img src="$img" width="$opts{thumb_size}px"></a></td>\n];
