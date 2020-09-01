@@ -2750,6 +2750,9 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -o $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
     # Read 1/2 output, stdout and discard singletons/other
     test_cmd($opts, out=>'bam2fq/11.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -s $out.discard.s.fq -0 $out.discard.0.fq $$opts{path}/dat/bam2fq.001.sam");
+
+    # Test B aux tag
+    test_cmd($opts, out=>'bam2fq/13.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -T ba,bb,bc,bd,be,bf,bg $$opts{path}/dat/bam2fq.013.sam");
 }
 
 sub test_depad

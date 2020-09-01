@@ -269,23 +269,23 @@ static int getLength(char **s)
  *        -1 on failure
  */
 static int print_aux_B(uint8_t *s, uint8_t *s_end, kstring_t *str) {
-    int r = 0, i;
+    int r = 0;
 
     if (s_end - s < 6) return -1;
 
     int sub_type = *++s;
-    uint32_t n;
+    uint32_t i, n;
     n = le_to_u32(++s);
     s += 4;
 
-    r |= kputc_(sub_type, str);
+    r |= kputc_(sub_type, str) < 0;
     switch (sub_type) {
     case 'c':
         if (s_end - s < n) return -1;
         if (ks_resize(str, str->l + n*2) < 0) return -1;
         for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str);
-            r |= kputw(*(int8_t*)s, str);
+            r |= kputc_(',', str) < 0;
+            r |= kputw(*(int8_t*)s, str) < 0;
             ++s;
         }
         break;
@@ -293,53 +293,53 @@ static int print_aux_B(uint8_t *s, uint8_t *s_end, kstring_t *str) {
         if (s_end - s < n) return -1;
         if (ks_resize(str, str->l + n*2) < 0) return -1;
         for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str);
-            r |= kputw(*(uint8_t*)s, str);
+            r |= kputc_(',', str) < 0;
+            r |= kputw(*(uint8_t*)s, str) < 0;
             ++s;
         }
         break;
     case 's':
-        if (s_end - s < n*2) return -1;
+        if ((s_end - s) / 2 < n) return -1;
         if (ks_resize(str, str->l + n*4) < 0) return -1;
         for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str);
-            r |= kputw(le_to_i16(s), str);
+            r |= kputc_(',', str) < 0;
+            r |= kputw(le_to_i16(s), str) < 0;
             s += 2;
         }
         break;
     case 'S':
-        if (s_end - s < n*2) return -1;
+        if ((s_end - s) / 2 < n) return -1;
         if (ks_resize(str, str->l + n*4) < 0) return -1;
         for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str);
-            r |= kputw(le_to_u16(s), str);
+            r |= kputc_(',', str) < 0;
+            r |= kputw(le_to_u16(s), str) < 0;
             s += 2;
         }
         break;
     case 'i':
-        if (s_end - s < n*4) return -1;
+        if ((s_end - s) / 4 < n) return -1;
         if (ks_resize(str, str->l + n*6) < 0) return -1;
         for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str);
-            r |= kputw(le_to_i32(s), str);
+            r |= kputc_(',', str) < 0;
+            r |= kputw(le_to_i32(s), str) < 0;
             s += 4;
         }
         break;
     case 'I':
-        if (s_end - s < n*4) return -1;
+        if ((s_end - s) / 4 < n) return -1;
         if (ks_resize(str, str->l + n*6) < 0) return -1;
         for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str);
-            r |= kputuw(le_to_u32(s), str);
+            r |= kputc_(',', str) < 0;
+            r |= kputuw(le_to_u32(s), str) < 0;
             s += 4;
         }
         break;
     case 'f':
-        if (s_end - s < n*4) return -1;
+        if ((s_end - s) / 4 < n) return -1;
         if (ks_resize(str, str->l + n*8) < 0) return -1;
         for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str);
-            r |= kputd(le_to_float(s), str);
+            r |= kputc_(',', str) < 0;
+            r |= kputd(le_to_float(s), str) < 0;
             s += 4;
         }
         break;
