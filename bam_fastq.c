@@ -261,133 +261,15 @@ static int getLength(char **s)
     return n;
 }
 
-/*
- * Expand up a B aux tag to string form.
- * Modelled on sam_format1_append.
- *
- * Returns 0 on success,
- *        -1 on failure
- */
-static int print_aux_B(uint8_t *s, uint8_t *s_end, kstring_t *str) {
-    int r = 0;
-
-    if (s_end - s < 6) return -1;
-
-    int sub_type = *++s;
-    uint32_t i, n;
-    n = le_to_u32(++s);
-    s += 4;
-
-    r |= kputc_(sub_type, str) < 0;
-    switch (sub_type) {
-    case 'c':
-        if (s_end - s < n) return -1;
-        if (ks_resize(str, str->l + n*2) < 0) return -1;
-        for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str) < 0;
-            r |= kputw(*(int8_t*)s, str) < 0;
-            ++s;
-        }
-        break;
-    case 'C':
-        if (s_end - s < n) return -1;
-        if (ks_resize(str, str->l + n*2) < 0) return -1;
-        for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str) < 0;
-            r |= kputw(*(uint8_t*)s, str) < 0;
-            ++s;
-        }
-        break;
-    case 's':
-        if ((s_end - s) / 2 < n) return -1;
-        if (ks_resize(str, str->l + n*4) < 0) return -1;
-        for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str) < 0;
-            r |= kputw(le_to_i16(s), str) < 0;
-            s += 2;
-        }
-        break;
-    case 'S':
-        if ((s_end - s) / 2 < n) return -1;
-        if (ks_resize(str, str->l + n*4) < 0) return -1;
-        for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str) < 0;
-            r |= kputw(le_to_u16(s), str) < 0;
-            s += 2;
-        }
-        break;
-    case 'i':
-        if ((s_end - s) / 4 < n) return -1;
-        if (ks_resize(str, str->l + n*6) < 0) return -1;
-        for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str) < 0;
-            r |= kputw(le_to_i32(s), str) < 0;
-            s += 4;
-        }
-        break;
-    case 'I':
-        if ((s_end - s) / 4 < n) return -1;
-        if (ks_resize(str, str->l + n*6) < 0) return -1;
-        for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str) < 0;
-            r |= kputuw(le_to_u32(s), str) < 0;
-            s += 4;
-        }
-        break;
-    case 'f':
-        if ((s_end - s) / 4 < n) return -1;
-        if (ks_resize(str, str->l + n*8) < 0) return -1;
-        for (i = 0; i < n; ++i) {
-            r |= kputc_(',', str) < 0;
-            r |= kputd(le_to_float(s), str) < 0;
-            s += 4;
-        }
-        break;
-    default:
-        return -1;
-    }
-
-    return r ? -1 : 0;
-}
-
 static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
 {
     uint8_t *s = bam_aux_get(rec, tag);
     uint8_t *s_end = rec->data + rec->l_data;
     if (s) {
-        char aux_type = *s;
-        switch (aux_type) {
-            case 'C':
-            case 'S': aux_type = 'I'; break;
-            case 'c':
-            case 's': aux_type = 'i'; break;
-            case 'd': aux_type = 'f'; break;
-        }
-
-        // Ensure space.  Need 6 chars + length of tag.  Max length of
-        // i is 16, A is 21, B currently 26, Z is unknown, so
-        // have to check that one later.
-        if (ks_resize(linebuf, ks_len(linebuf) + 64) < 0) return false;
-
-        kputc('\t', linebuf);
-        kputsn(tag, 2, linebuf);
-        kputc(':', linebuf);
-        kputc(aux_type=='I'? 'i': aux_type, linebuf);
-        kputc(':', linebuf);
-        switch (aux_type) {
-            case 'H':
-            case 'Z':
-                if (kputs(bam_aux2Z(s), linebuf) < 0) return false;
-                break;
-            case 'i': kputw(bam_aux2i(s), linebuf); break;
-            case 'I': kputuw(bam_aux2i(s), linebuf); break;
-            case 'A': kputc(bam_aux2A(s), linebuf); break;
-            case 'f': kputd(bam_aux2f(s), linebuf); break;
-            case 'B':
-                if (print_aux_B(s, s_end, linebuf) < 0) return false;
-                break;
-            default:  kputs("*** Unknown aux type ***", linebuf); return false;
-       }
+        if (kputc('\t', linebuf) < 0)
+            return false;
+        if (sam_format_aux1(rec, s-2, s, s_end, linebuf) == NULL)
+            return false;
     }
     return true;
 }
