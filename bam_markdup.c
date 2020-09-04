@@ -910,6 +910,9 @@ static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_has
     int have_original = !(ori->b->core.flag & BAM_FDUP);
     int ori_paired = (ori->b->core.flag & BAM_FPAIRED) && !(ori->b->core.flag & BAM_FMUNMAP);
 
+    if (!(param->tag || param->opt_dist))
+        return ret; // nothing to do here
+
     while (current) {
         int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
 
