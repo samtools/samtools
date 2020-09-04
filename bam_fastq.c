@@ -403,6 +403,7 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
     size_t tag_len;
     int file_number = 0;
     kstring_t linebuf = { 0, 0, NULL }; // Buffer
+    int index_segment = 0, same_read = 1;
 
     if (!ifmt) return true;
 
@@ -424,7 +425,7 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
 
     // Parse the index-format string
     while (*ifmt) {
-        if (file_number > 1) break;     // shouldn't happen if we've validated paramaters correctly
+        if (file_number > 1) break;     // shouldn't happen if we've validated parameters correctly
         char action = *ifmt;        // should be 'i' or 'n'
         ifmt++; // skip over action
         int index_len = getLength(&ifmt);
@@ -451,14 +452,18 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
         }
         sub_tag[n] = '\0';
         sub_qual[n] = '\0';
+        index_segment++;
 
         if (action=='i' && *sub_tag) {
             if (state->index_sequence) {
-                char *new_index_sequence = realloc(state->index_sequence, strlen(state->index_sequence) + strlen(sub_tag) + 2);
-                if (!new_index_sequence) goto fail;
-                state->index_sequence = new_index_sequence;
-                strcat(state->index_sequence, INDEX_SEPARATOR);
-                strcat(state->index_sequence, sub_tag);
+                if (index_segment == 1) same_read = 0;
+                if (same_read) {
+                    char *new_index_sequence = realloc(state->index_sequence, strlen(state->index_sequence) + strlen(sub_tag) + 2);
+                    if (!new_index_sequence) goto fail;
+                    state->index_sequence = new_index_sequence;
+                    strcat(state->index_sequence, INDEX_SEPARATOR);
+                    strcat(state->index_sequence, sub_tag);
+                }
             } else {
                 state->index_sequence = strdup(sub_tag);    // we're going to need this later...
             }
