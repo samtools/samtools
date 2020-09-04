@@ -263,14 +263,14 @@ static int getLength(char **s)
 
 static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
 {
-    uint8_t *s = bam_aux_get(rec, tag);
-    uint8_t *s_end = rec->data + rec->l_data;
-    if (s) {
-        if (kputc('\t', linebuf) < 0)
-            return false;
-        if (sam_format_aux1(rec, s-2, s, s_end, linebuf) == NULL)
-            return false;
-    }
+    if (kputc('\t', linebuf) < 0)
+        return false;
+    int ret = bam_aux_get_str(rec, tag, linebuf);
+    if (ret < 0)
+        return false;
+    else if (ret == 0)
+        linebuf->s[--linebuf->l] = 0; // no tag so undo \t again
+
     return true;
 }
 
