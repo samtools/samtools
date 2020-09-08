@@ -65,11 +65,14 @@ static inline int printw(int c, FILE *fp)
 }
 
 static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
-                              hts_pos_t ref_len, const char *ref, kstring_t *ks,
-                              int rev_del)
+                             hts_pos_t ref_len, const char *ref, kstring_t *ks,
+                             int rev_del, int no_ins, int no_ins_mods,
+                             int no_del, int no_ends)
 {
+    no_ins_mods |= no_ins;
     int j;
-    if (p->is_head) {
+    hts_base_mod_state *m = p->cd.p;
+    if (!no_ends && p->is_head) {
         putc('^', fp);
         putc(p->b->core.qual > 93? 126 : p->b->core.qual + 33, fp);
     }
@@ -86,32 +89,74 @@ static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
             else c = bam_is_rev(p->b)? tolower(c) : toupper(c);
         }
         putc(c, fp);
+        if (m) {
+            int nm;
+            hts_base_mod mod[256];
+            if ((nm = bam_mods_at_qpos(p->b, p->qpos, m, mod, 256)) > 0) {
+                putc('[', fp);
+                int j;
+                for (j = 0; j < nm && j < 256; j++) {
+                    char qual[20];
+                    if (mod[j].qual >= 0)
+                        sprintf(qual, "%d", mod[j].qual);
+                    else
+                        *qual = 0;
+                    if (mod[j].modified_base < 0)
+                        // ChEBI
+                        fprintf(fp, "%c(%d)%s", "+-"[mod[j].strand],
+                                -mod[j].modified_base, qual);
+                    else
+                        fprintf(fp, "%c%c%s", "+-"[mod[j].strand],
+                                mod[j].modified_base, qual);
+                }
+                putc(']', fp);
+            }
+        }
     } else putc(p->is_refskip? (bam_is_rev(p->b)? '<' : '>') : ((bam_is_rev(p->b) && rev_del) ? '#' : '*'), fp);
     int del_len = -p->indel;
     if (p->indel > 0) {
-        int len = bam_plp_insertion(p, ks, &del_len);
+        int len = bam_plp_insertion_mod(p, m && !no_ins_mods ? m : NULL,
+                                        ks, &del_len);
         if (len < 0) {
             print_error("mpileup", "bam_plp_insertion() failed");
             return -1;
         }
-        putc('+', fp); printw(len, fp);
-        if (bam_is_rev(p->b)) {
-            char pad = rev_del ? '#' : '*';
-            for (j = 0; j < len; j++)
-                putc(ks->s[j] != '*' ? tolower(ks->s[j]) : pad, fp);
-        } else {
-            for (j = 0; j < len; j++)
-                putc(toupper(ks->s[j]), fp);
+        if (no_ins < 2) {
+            putc('+', fp);
+            printw(len, fp);
+        }
+        if (!no_ins) {
+            if (bam_is_rev(p->b)) {
+                char pad = rev_del ? '#' : '*';
+                int in_mod = 0;
+                for (j = 0; j < len; j++) {
+                    if (ks->s[j] == '[') in_mod = 1;
+                    else if (ks->s[j] == ']') in_mod = 0;
+                    putc(ks->s[j] != '*'
+                         ? (in_mod ? ks->s[j] : tolower(ks->s[j]))
+                         : pad, fp);
+                }
+            } else {
+                int in_mod = 0;
+                for (j = 0; j < len; j++) {
+                    if (ks->s[j] == '[') in_mod = 1;
+                    if (ks->s[j] == ']') in_mod = 0;
+                    putc(in_mod ? ks->s[j] : toupper(ks->s[j]), fp);
+                }
+            }
         }
     }
     if (del_len > 0) {
-        printw(-del_len, fp);
-        for (j = 1; j <= del_len; ++j) {
-            int c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
-            putc(bam_is_rev(p->b)? tolower(c) : toupper(c), fp);
+        if (no_del < 2)
+            printw(-del_len, fp);
+        if (!no_del) {
+            for (j = 1; j <= del_len; ++j) {
+                int c = (ref && (int)pos+j < ref_len)? ref[pos+j] : 'N';
+                putc(bam_is_rev(p->b)? tolower(c) : toupper(c), fp);
+            }
         }
     }
-    if (p->is_tail) putc('$', fp);
+    if (!no_ends && p->is_tail) putc('$', fp);
     return 0;
 }
 
@@ -144,6 +189,7 @@ static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
 #define MPLP_PRINT_TLEN  (1<<21)
 #define MPLP_PRINT_SEQ   (1<<22)
 #define MPLP_PRINT_QUAL  (1<<23)
+#define MPLP_PRINT_MODS  (1<<24)
 
 #define MPLP_MAX_DEPTH 8000
 #define MPLP_MAX_INDEL_DEPTH 250
@@ -158,7 +204,7 @@ typedef struct {
     void *bed, *rghash, *auxlist;
     int argc;
     char **argv;
-    char sep, empty;
+    char sep, empty, no_ins, no_ins_mods, no_del, no_ends;
     sam_global_args ga;
 } mplp_conf_t;
 
@@ -287,6 +333,23 @@ static int mplp_get_ref(mplp_aux_t *ma, int tid, char **ref, hts_pos_t *ref_len)
     *ref = r->ref[0];
     *ref_len = r->ref_len[0];
     return 1;
+}
+
+// Initialise and destroy the base modifier state data. This is called
+// as each new read is added or removed from the pileups.
+static
+int pileup_cd_create(void *data, const bam1_t *b, bam_pileup_cd *cd) {
+    int ret;
+    hts_base_mod_state *m = hts_base_mod_state_alloc();
+    ret = bam_parse_basemod(b, m);
+    cd->p = m;
+    return ret;
+}
+
+static
+int pileup_cd_destroy(void *data, const bam1_t *b, bam_pileup_cd *cd) {
+    hts_base_mod_state_free(cd->p);
+    return 0;
 }
 
 static void
@@ -657,6 +720,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
 
     // init pileup
     iter = bam_mplp_init(n, mplp_func, (void**)data);
+    if (conf->flag & MPLP_PRINT_MODS) {
+        bam_mplp_constructor(iter, pileup_cd_create);
+        bam_mplp_destructor(iter, pileup_cd_destroy);
+    }
     if ( conf->flag & MPLP_SMART_OVERLAPS ) bam_mplp_init_overlaps(iter);
     if ( !conf->max_depth ) {
         max_depth = INT_MAX;
@@ -779,7 +846,10 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                             : 0;
                         if (c >= conf->min_baseQ) {
                             n++;
-                            if (pileup_seq(pileup_fp, plp[i] + j, pos, ref_len, ref, &ks, conf->rev_del) < 0) {
+                            if (pileup_seq(pileup_fp, plp[i] + j, pos, ref_len,
+                                           ref, &ks, conf->rev_del,
+                                           conf->no_ins, conf->no_ins_mods,
+                                           conf->no_del, conf->no_ends) < 0) {
                                 ret = 1;
                                 goto fail;
                             }
@@ -1113,16 +1183,23 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -X, --customized-index  use customized index files\n" // -X flag for index filename
 "\n"
 "Output options:\n"
-"  -o, --output FILE       write output to FILE [standard output]\n"
-"  -O, --output-BP         output base positions on reads\n"
-"  -s, --output-MQ         output mapping quality\n"
-"      --output-QNAME      output read names\n"
-"      --output-extra STR  output extra read fields and read tag values\n"
-"      --output-sep CHAR   set the separator character for tag lists [,]\n"
-"      --output-empty CHAR set the no value character for tag lists [*]\n"
-"      --reverse-del       use '#' character for deletions on the reverse strand\n"
-"  -a                      output all positions (including zero depth)\n"
-"  -a -a (or -aa)          output absolutely all positions, including unused ref. sequences\n"
+"  -o, --output FILE        write output to FILE [standard output]\n"
+"  -O, --output-BP          output base positions on reads\n"
+"  -M, --output-mods        output base modifications\n"
+"  -s, --output-MQ          output mapping quality\n"
+"      --output-QNAME       output read names\n"
+"      --output-extra STR   output extra read fields and read tag values\n"
+"      --output-sep CHAR    set the separator character for tag lists [,]\n"
+"      --output-empty CHAR  set the no value character for tag lists [*]\n"
+"      --no-output-ins      skip insertion sequence after +NUM\n"
+"                           Use twice for complete insertion removal\n"
+"      --no-output-ins-mods skip insertion sequence after +NUM\n"
+"      --no-output-del      skip deletion sequence after -NUM\n"
+"                           Use twice for complete deletion removal\n"
+"      --no-output-ends     remove ^MQUAL and $ markup in sequence column\n"
+"      --reverse-del        use '#' character for deletions on the reverse strand\n"
+"  -a                       output all positions (including zero depth)\n"
+"  -a -a (or -aa)           output absolutely all positions, including unused ref. sequences\n"
 "\n"
 "Generic options:\n");
     sam_global_opt_help(fp, "-.--.--.");
@@ -1201,6 +1278,7 @@ int bam_mpileup(int argc, char *argv[])
         {"bcf", no_argument, NULL, 'g'},
         {"VCF", no_argument, NULL, 'v'},
         {"vcf", no_argument, NULL, 'v'},
+        {"output-mods", no_argument, NULL, 'M'},
         {"output-BP", no_argument, NULL, 'O'},
         {"output-bp", no_argument, NULL, 'O'},
         {"output-MQ", no_argument, NULL, 's'},
@@ -1221,10 +1299,14 @@ int bam_mpileup(int argc, char *argv[])
         {"output-extra", required_argument, NULL, 7},
         {"output-sep", required_argument, NULL, 8},
         {"output-empty", required_argument, NULL, 9},
+        {"no-output-ins", no_argument, NULL, 10},
+        {"no-output-ins-mods", no_argument, NULL, 11},
+        {"no-output-del", no_argument, NULL, 12},
+        {"no-output-ends", no_argument, NULL, 13},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxXt:a",lopts,NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:BDSd:L:b:P:po:e:h:Im:F:EG:6OsVvxXt:aM",lopts,NULL)) >= 0) {
         switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 :
@@ -1247,6 +1329,10 @@ int bam_mpileup(int argc, char *argv[])
             break;
         case 8: mplp.sep = optarg[0]; break;
         case 9: mplp.empty = optarg[0]; break;
+        case 10: mplp.no_ins++; break;
+        case 11: mplp.no_ins_mods = 1; break;
+        case 12: mplp.no_del++; break;
+        case 13: mplp.no_ends = 1; break;
         case 'f':
             mplp.fai = fai_load(optarg);
             if (mplp.fai == NULL) return 1;
@@ -1277,6 +1363,7 @@ int bam_mpileup(int argc, char *argv[])
         case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
         case 's': mplp.flag |= MPLP_PRINT_MAPQ_CHAR; break;
         case 'O': mplp.flag |= MPLP_PRINT_QPOS; break;
+        case 'M': mplp.flag |= MPLP_PRINT_MODS; break;
         case 'C': mplp.capQ_thres = atoi(optarg); break;
         case 'q': mplp.min_mq = atoi(optarg); break;
         case 'Q': mplp.min_baseQ = atoi(optarg); break;
