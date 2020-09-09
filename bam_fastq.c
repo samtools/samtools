@@ -262,40 +262,14 @@ static int getLength(char **s)
 
 static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
 {
-    uint8_t *s = bam_aux_get(rec, tag);
-    if (s) {
-        char aux_type = *s;
-        switch (aux_type) {
-            case 'C':
-            case 'S': aux_type = 'I'; break;
-            case 'c':
-            case 's': aux_type = 'i'; break;
-            case 'd': aux_type = 'f'; break;
-        }
+    if (kputc('\t', linebuf) < 0)
+        return false;
+    int ret = bam_aux_get_str(rec, tag, linebuf);
+    if (ret < 0)
+        return false;
+    else if (ret == 0)
+        linebuf->s[--linebuf->l] = 0; // no tag so undo \t again
 
-        // Ensure space.  Need 6 chars + length of tag.  Max length of
-        // i is 16, A is 21, B currently 26, Z is unknown, so
-        // have to check that one later.
-        if (ks_resize(linebuf, ks_len(linebuf) + 64) < 0) return false;
-
-        kputc('\t', linebuf);
-        kputsn(tag, 2, linebuf);
-        kputc(':', linebuf);
-        kputc(aux_type=='I'? 'i': aux_type, linebuf);
-        kputc(':', linebuf);
-        switch (aux_type) {
-            case 'H':
-            case 'Z':
-                if (kputs(bam_aux2Z(s), linebuf) < 0) return false;
-                break;
-            case 'i': kputw(bam_aux2i(s), linebuf); break;
-            case 'I': kputuw(bam_aux2i(s), linebuf); break;
-            case 'A': kputc(bam_aux2A(s), linebuf); break;
-            case 'f': kputd(bam_aux2f(s), linebuf); break;
-            case 'B': kputs("*** Unhandled aux type ***", linebuf); return false;
-            default:  kputs("*** Unknown aux type ***", linebuf); return false;
-       }
-    }
     return true;
 }
 
