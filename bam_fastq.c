@@ -39,7 +39,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kstring.h"
 #include "htslib/bgzf.h"
 #include "htslib/thread_pool.h"
-#include "htslib/hts_endian.h"
 #include "samtools.h"
 #include "sam_opts.h"
 
