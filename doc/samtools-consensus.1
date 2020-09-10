@@ -1,0 +1,239 @@
+'\" t
+.TH samtools-consensus 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
+.SH NAME
+samtools consensus \- produces produce a consensus Pileup/FASTA/FASTQ
+.\"
+.\" Copyright (C) 2021 Genome Research Ltd.
+.\"
+.\" Author: James Bonfield <jkb@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools consensus
+.RB [ -5aAMq ]
+.RB [ -r
+.IR region ]
+.RB [ -f
+.IR format ]
+.RB [ -l
+.IR line-len ]
+.RB [ -d
+.IR min-depth ]
+.RB [ -C
+.IR cutoff ]
+.RB [ -c
+.IR call-fract ]
+.RB [ -H
+.IR het-fract ]
+.I in.bam
+.RI [ in2.bam ]
+
+.SH DESCRIPTION
+.PP
+Generate consensus from a SAM, BAM or CRAM file based on the contents
+of the alignment records.  The consensus is written either as FASTA or
+FASTQ format, although a simplified pileup oriented format also
+exists with the reference column replaced by the consensus and depth
+by score.  This is selected using the
+.BI "-f " FORMAT
+option.  No quality column is shown in the pileup output.
+
+The default output for FASTA and FASTQ formats include one base per
+non-gap consensus.  Hence insertions with respect to the aligned
+reference will be included and deletions removed.  This behaviour can
+be controlled with the 
+.B --show-ins
+and
+.B--show-del
+options.  This could be used to compute a new reference from sequences
+assemblies to realign against.  The pileup format strictly adheres to
+one row per reference location, with insertions absent and deletions
+shown as consensus "*".
+
+Two consensus calling algorithms are offered.  The default is a pure
+frequency count, summing either +1 for each base type or
+.RI + qual
+if the
+.B --use-qual
+option is specified.  The summed share of a specific base type
+is then compared against the total possible and if this is above a the
+.BI "--call-fract " fraction
+parameter then most likely base type is called, or "N" otherwise (or
+absent if it is a gap).  The
+.B --ambig
+option permits generation of ambiguity codes instead of "N", provided
+the minimum fraction of the second most common base type to the most
+common is above the
+.BI "--het-fract " fraction "" \fR.
+
+The
+.B -5
+option enables the "Gap5" compatible consensus algorithm.  This uses
+the quality values in a Bayesian manner to derive the most likely
+consensus base instead of a pure frequency based analysis.  This
+method can also utilise mapping qualities if the
+.B -m
+option is used.  These are capped between
+.B --min-mqual
+and
+.B --max-mqual
+parameters, to avoid excessive mapping qualities from skewing the
+results too much.
+
+.SH OPTIONS
+.TP 10
+.BI "-r " REG ", --region " REG
+Limit the query to region
+.IR REG .
+This requires an index.
+.TP
+.BI "-f " FMT ", --format " FMT
+Produce format
+.IR FMT ,
+with "fastq", "fasta" and "pileup" as permitted options.
+.TP
+.BI "-l " N ", --line-len " N
+Sets the maximum line length of line-wrapped fasta and fastq formats to
+.IR N .
+.TP
+.BI "-o " FILE ", --output " FILE
+Output consensus to FILE instead of stdout.
+.TP
+.B -5
+Enable the bayesian "Gap5" consensus mode instead of the simple mode.
+.TP
+.B -a
+Outputs all bases, from start to end of reference, even when the
+aligned data does not extend to the ends.  This is most useful for
+construction of a full length reference sequence.
+
+.TP
+.BI --show-del " yes" / "no"
+Whether to show deletions as "*" (no) or to omit from the output
+(yes).  Defaults to no.
+
+.TP
+.BI --show-ins " yes" / "no"
+Whether to show insertions in the consensus.  Defaults to yes.
+
+.TP
+.BR "-q" ", " --use-qual
+For the simple consensus algorithm, this enables use of base quality
+values.  Instead of summing 1 per base called, it sums the base
+quality instead.  These sums are also used in the
+.B --call-fract
+and
+.B --het-fract
+parameters too.  Quality values are always used for the "Gap5"
+consensus method and this option has no affect.
+Note currently  quality values only affect SNPs and not inserted
+sequences, which still get scores with a fixed +1 per base type occurrence.
+
+.TP
+.BI "--use-mqual " MIN
+Restrict the mapping quality to no lower than
+.IR MIN .
+
+.TP
+.BI "--use-mqual " MAX
+Restrict the mapping quality to no higher than
+.IR MAX .
+
+.TP
+.BI "-d " D ", --min-depth " D
+The minimum depth required to make a call.  Defaults to 1.  Failing
+this depth check will produce consensus "N", or absent if it is an
+insertion.
+
+.TP
+.BI "-c " C ", --call-fract " C
+Only used for the simple consensus algorithm.  Require at least
+.I C
+fraction of bases agreeing with the most likely consensus call to omit
+that base type.  This defaults to 0.75.  Failing this check will
+output "N".
+
+.TP
+.BI "-H " H ", --het-fract " H
+For consensus columns containing multiple base types, if the second
+most frequent type is at least
+.I H
+fraction of the most common type then a heterozygous base type will be
+reported in the consensus.  Otherwise the most common base is used,
+provided it meets the
+.I --call-fract
+parameter (otherwise "N").  The fractions computed may be modified by
+the use of quality values if the
+.B -q
+option is enabled.
+Note although IUPAC has ambiguity codes for A,C,G,T vs any other
+A,C,G,T it does not have codes for A,C,G,T vs gap (such as in a
+heterozygous deletion).  Given the lack of any official code, we
+use lower-case letter to symbolise a half-present base type.
+
+.TP
+.BI "-C " C ", --cutoff " C
+Only used for the Gap5 consensus mode, which produces a Phred style
+score for the final consensus quality.  If this is below
+.I C
+then the consensus is called as "N".
+
+.TP
+.BR -A ", " --ambig
+Enables IUPAC ambiguity codes in the consensus output.  Without this
+the output will be limited to A, C, G, T, N and *.
+
+.SH EXAMPLES
+.IP -
+Create a modified FASTA reference that has a 1:1 coordinate correspondance with the original reference used in alignment.
+.EX 2
+samtools consensus -a --show-ins no in.bam -o ref.fa
+.EE
+
+.IP -
+Create a FASTQ file for the contigs with aligned data, including insertions.
+.EX 2
+samtools consensus -f fastq in.bam -o cons.fq
+.EE
+
+.SH AUTHOR
+.PP
+Written by James Bonfield from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-mpileup (1),
+.PP
+Samtools website: <http://www.htslib.org/>
