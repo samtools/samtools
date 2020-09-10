@@ -34,14 +34,14 @@ LZ4DIR   = ./lz4
 LZ4_CPPFLAGS = -I$(LZ4DIR)
 LZ4_LDFLAGS  = -L$(LZ4DIR)
 
-
-AOBJS=      bam.o bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
-            bam_cat.o bam_md.o bam_plbuf.o bam_reheader.o bam_sort.o \
-            bam_rmdup.o bam_rmdupse.o bam_mate.o bam_stat.o bam_color.o \
-            bamtk.o bam2bcf.o bam2bcf_indel.o sample.o \
-            cut_target.o phase.o bam2depth.o coverage.o padding.o bedcov.o bamshuf.o \
-            faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
-            bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
+AOBJS=      bam.o bam_aux.o bam_consensus.o bam_index.o bam_plcmd.o \
+            sam_view.o bam_fastq.o bam_cat.o bam_md.o bam_plbuf.o \
+            bam_reheader.o bam_sort.o bam_rmdup.o bam_rmdupse.o \
+            bam_mate.o bam_stat.o bam_color.o bamtk.o bam2bcf.o \
+            bam2bcf_indel.o sample.o cut_target.o phase.o bam2depth.o \
+            coverage.o padding.o bedcov.o bamshuf.o faidx.o dict.o stats.o \
+            stats_isize.o bam_flags.o bam_split.o bam_tview.o \
+            bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
             bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
@@ -177,6 +177,7 @@ bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) $(htslib_k
 bam_mate.o: bam_mate.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h)
 bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 bam_plbuf.o: bam_plbuf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
+bam_consensus.o: bam_consensus.c config.h $(sam_opts_h) $(htslib_sam_h) $(samtools_h)
 bam_plcmd.o: bam_plcmd.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_klist_h) $(htslib_khash_str2int_h) $(samtools_h) $(bedidx_h) $(sam_opts_h) $(bam2bcf_h) $(sample_h) $(htslib_cram_h)
 bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h)
 bam_reheader.o: bam_reheader.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) $(samtools_h)
