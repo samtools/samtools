@@ -1,0 +1,6 @@
+@SQ	SN:c1	LN:20
+@SQ	SN:c2	LN:15
+@SQ	SN:c3	LN:30
+s1a	0	c1	5	0	10M	*	0	0	ACGTAATGCA	*
+s2a	0	c2	3	0	3M	*	0	0	ACG	*
+s2b	0	c2	10	0	1S3M1S	*	0	0	ACGTA	*

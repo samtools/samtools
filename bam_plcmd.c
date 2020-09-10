@@ -46,6 +46,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "bedidx.h"
 #include "sam_opts.h"
+#include "bam_plbuf.h"
 
 #define dummy_free(p)
 KLIST_INIT(auxlist, char *, dummy_free)
@@ -65,10 +66,10 @@ static inline int printw(int c, FILE *fp)
     return 0;
 }
 
-static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
-                             hts_pos_t ref_len, const char *ref, kstring_t *ks,
-                             int rev_del, int no_ins, int no_ins_mods,
-                             int no_del, int no_ends)
+int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
+               hts_pos_t ref_len, const char *ref, kstring_t *ks,
+               int rev_del, int no_ins, int no_ins_mods,
+               int no_del, int no_ends)
 {
     no_ins_mods |= no_ins;
     int j;

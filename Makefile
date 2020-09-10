@@ -43,7 +43,8 @@ AOBJS=      bam.o bam_aux.o bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
-            bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o
+            bam_ampliconclip.o amplicon_stats.o bam_import.o bam_samples.o \
+            bam_consensus.o consensus_pileup.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -176,7 +177,8 @@ bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) $(htslib_k
 bam_mate.o: bam_mate.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h)
 bam_md.o: bam_md.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_thread_pool_h) $(sam_opts_h) $(samtools_h)
 bam_plbuf.o: bam_plbuf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam_plbuf_h)
-bam_plcmd.o: bam_plcmd.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_klist_h) $(htslib_khash_str2int_h) $(samtools_h) $(bedidx_h) $(sam_opts_h) $(bam2bcf_h) $(sample_h) $(htslib_cram_h)
+bam_consensus.o: bam_consensus.c config.h consensus_pileup.h $(sam_opts_h) $(htslib_sam_h) $(samtools_h) $(bam_plbuf_h)
+bam_plcmd.o: bam_plcmd.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_kstring_h) $(htslib_klist_h) $(htslib_khash_str2int_h) $(samtools_h) $(bedidx_h) $(sam_opts_h) $(bam2bcf_h) $(sample_h) $(htslib_cram_h) $(bam_plbuf_h)
 bam_quickcheck.o: bam_quickcheck.c config.h $(htslib_hts_h) $(htslib_sam_h)
 bam_reheader.o: bam_reheader.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_hfile_h) $(htslib_cram_h) $(samtools_h)
 bam_rmdup.o: bam_rmdup.c config.h $(htslib_sam_h) $(sam_opts_h) $(samtools_h) $(bam_h) $(htslib_khash_h)
@@ -192,6 +194,7 @@ bamshuf.o: bamshuf.c config.h $(htslib_sam_h) $(htslib_hts_h) $(htslib_ksort_h) 
 bamtk.o: bamtk.c config.h $(htslib_hts_h) $(htslib_hfile_h) $(samtools_h) version.h
 bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h) $(htslib_kseq_h)
 bedidx.o: bedidx.c config.h $(bedidx_h) $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h)
+consensus_pileup.o: consensus_pileup.c consensus_pileup.h config.h $(sam_opts_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(samtools_h) $(sam_opts_h)
 dict.o: dict.c config.h $(htslib_kseq_h) $(htslib_hts_h)
 faidx.o: faidx.c config.h $(htslib_faidx_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(samtools_h)
@@ -233,8 +236,9 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
-	cd test/mpileup && AWK="$(AWK)" ./regression.sh mpileup.reg
-	cd test/mpileup && AWK="$(AWK)" ./regression.sh depth.reg
+	cd test/mpileup && AWK="$(AWK)" ../regression.sh mpileup.reg
+	cd test/mpileup && AWK="$(AWK)" ../regression.sh depth.reg
+	cd test/consensus && AWK="$(AWK)" ../regression.sh consensus.reg
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)
