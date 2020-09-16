@@ -944,26 +944,28 @@ temporary directory if no home directory is found) will be used similarly.
 
 .TP
 .B REF_CACHE
-This can be defined to a single directory housing a local cache of
+This can be defined to a single location housing a local cache of
 references.  Upon downloading a reference it will be stored in the
-location pointed to by REF_CACHE.  When reading a reference it will be
-looked for in this directory before searching REF_PATH.  To avoid many
-files being stored in the same directory, a pathname may be
-constructed using %\fInum\fRs and %s notation, consuming \fInum\fR
-characters of the MD5sum.  For example
-\fB/local/ref_cache/%2s/%2s/%s\fR will create 2 nested subdirectories
-with the filenames in the deepest directory being the last 28
-characters of the md5sum.
+location pointed to by REF_CACHE.  REF_CACHE will be searched
+before attempting to load via the REF_PATH search list.  If no
+REF_PATH is defined, both REF_PATH and REF_CACHE will be automatically
+set (see above), but if REF_PATH is defined and REF_CACHE not then no
+local cache is used.
 
-The REF_CACHE directory will be searched for before attempting to load
-via the REF_PATH search list.  If no REF_PATH is defined, both
-REF_PATH and REF_CACHE will be automatically set (see above), but if
-REF_PATH is defined and REF_CACHE not then no local cache is used.
+To avoid many files being stored in the same directory, REF_CACHE may
+be defined as a pattern using \fB%\fR\fInum\fR\fBs\fR to consume \fInum\fR
+chracters of the MD5sum and \fB%s\fR to consume all remaining characters.
+If REF_CACHE lacks \fB%s\fR then it will get an implicit \fB/%s\fR appended.
 
 To aid population of the REF_CACHE directory a script
 \fBmisc/seq_cache_populate.pl\fR is provided in the Samtools
 distribution. This takes a fasta file or a directory of fasta files
 and generates the MD5sum named files.
+
+For example if you use \fBseq_cache_populate -subdirs 2 -root
+/local/ref_cache\fR to create 2 nested subdirectories (the default),
+each consuming 2 characters of the MD5sum, then REF_CACHE must be set
+to \fB/local/ref_cache/%2s/%2s/%s\fR.
 .PP
 .SH EXAMPLES
 .IP o 2
