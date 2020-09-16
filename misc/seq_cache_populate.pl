@@ -95,6 +95,11 @@ if ($find) {
     # Otherwise read from STDIN
     process_file('STDIN', \*STDIN, $root_dir, $dest_re, $max_acc);
 }
+
+print "\n";
+print "Use environment REF_CACHE=$root_dir" . "/%2s" x $subdirs .
+    "/%s for accessing these files.\n";
+print "See also https://www.htslib.org/workflow/#the-ref_path-and-ref_cache for\nfurther information.\n";
 exit;
 
 sub find_files {
