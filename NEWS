@@ -1,22 +1,74 @@
 Release a.b
 -----------
 
+ * New samtools ampliconclip sub-command for removing primers from
+   amplicon-based sequencing experiments, including the current
+   Covid-19 projects.  The primers are listed in a bed file and can be
+   either soft-clipped or hard-clipped. (#1219)
+
+ * New samtools ampliconstats sub-command to produce a textual summary
+   of primer and amplicon usage, in a similar style to "samtools
+   stats". The misc/plot-ampliconstats perl script can generate PNG
+   images based on this text report. (#1227)
+
+ * Samtools fixmate, addreplacerg, markdup, ampliconclip and sort now
+   accept a -u option to enable uncompressed output, which is useful when
+   sending data over a pipe to another process.  Other subcommands which
+   already support this option for the same purpose are calmd, collate,
+   merge, view and depad. (#1265)
+
  * samtools stats has a new GCT section, where it reports ACGT content
    percentages, similar to GCC but taking into account the read orientation.
+   (#1274)
+
+ * Samtools split now supports splitting by tag content with the -d
+   option (#1211)
+
+ * samtools merge now accepts a BED file as a command line argument (-L) and
+   does the merging only with reads overlapping the specified regions (#1156)
+
+ * Samtools sort now has a minhash collation (-M) to group unmapped
+   reads with similar sequence together.  This can sometimes
+   significantly reduce the file size. (#1093)
+
+ * Samtools bedcov now has -g and -G options to filter-in and
+   filter-out based on the FLAG field.  Also the new -d option adds
+   an extra column per file counting the number of bases with a depth
+   greater than or equal to a given threshold. (#1214)
+
+ * Fixed samtools bedcov -j option (discard deletions and ref-skips)
+   with multiple input files (#1212)
+
+ * samtools bedcov will now accept BED files with columns separated by
+   spaces as well as tabs (#1246; #1188 reported by Mary Carmack)
+
+ * samtools depth can now include deletions (D) when computing the base
+   coverage depth, if the user adds the -J option to the command
+   line (#1163).
 
  * samtools depth will count only the bases of one read, for the overlapping
-   section of a read pair, if the -s option is used in the command line.
+   section of a read pair, if the -s option is used in the command line
+   (#1241, thanks to Teng Li).
+
+ * samtools depth will now write zeros for the entire reference length,
+   when "samtools depth -aa" is run on a file with no alignments. (#1252;
+   #1249 reported by Paul Donovan)
+
+ * Stopped depth from closing stdout, which triggered test fails
+   in pysam (#1208, thanks to John Marshall).
 
  * samtools view now accepts remote URIs for FASTA and FAI files.
    Furthermore, the reference and index file can be provided in a single
    argument, such as
    samtools view -T ftp://x.com/ref.fa##idx##ftp://y.com/index.fa.fai a.cram
+   (#1176; samtools/htslib#933 reported by @uitde007)
 
- * samtools depth can now include deletions (D) when computing the base
-   coverage depth, if the user adds the -J option to the command line.
+ * samtools faidx gets new options --fai-idx and --gzi-idx to allow
+   specification of the locations of the .fai and (if needed) .gzi index
+   files. (#1283)
 
- * samtools merge now accepts a BED file as a command line argument (-L) and
-   does the merging only with reads overlapping the specified regions.
+ * The samtools fasta/fastq '-T' option can now add SAM array (type 'B') tags
+   to the output header lines.  (#1301)
 
  * samtools mpileup can now display MAPQ either as ASCII characters (with
    -s/--output-MQ; column now restored to its documented order as in 1.9 and
@@ -25,15 +77,80 @@ Release a.b
 
    When both -s/--output-MQ and -O/--output-BP are used, samtools 1.10 printed
    the extra columns in the opposite order.  This changes the format produced
-   by 1.10's --output-extra MAPQ. (#1281; reported by Christoffer Flensburg)
+   by 1.10's --output-extra MAPQ. (#1281, thanks to John Marshall; reported
+   by Christoffer Flensburg)
+
+ * samtools tview now accepts a -w option to set the output width in
+   text mode (-d T).  (#1280)
 
  * The dict command can now add AN tags containing alternative names with
    "chr" prefixes added to or removed from each sequence name as appropriate
-   and listing both "M" and "MT" alternatives for mitochondria.
+   and listing both "M" and "MT" alternatives for mitochondria. (#1164,
+   thanks to John Marshall)
 
  * The samtools import command, labelled as obsolete in May 2009 and
    removed from all help and documentation later that year, has
-   finally been removed.  Use samtools view instead.
+   finally been removed.  Use samtools view instead. (#1185)
+
+ * Replaced the remaining usage of the Samtools 0.1 legacy API with
+   htslib calls. (#1187, thanks to John Marshall)
+
+ * Documentation / help improvements (#1154; #1168; #1191; #1199;
+   #1204; #1313):
+   - Fixed a few man-page table layout issues
+   - Added <file>##idx##<index> filename documentation
+   - Fixed usage statement for samtools addreplacerg
+   - Miscellaneous spelling and grammar fixes
+   - Note fixmate/markdup name collated rather than name sorted input
+   - Note that fastq and fasta inputs should also be name collated
+   - Reshuffled order of main man-page and added -@ to more sub-pages
+   - Seq_cache_populate now gives REF_CACHE guidance
+
+ * Additional documentation improvements, thanks to John Marshall (#1181;
+   #1224; #1248; #1262; #1300)
+   - Emphasise that samtools index requires a position-sorted file
+   - Document 2^29 chromosome length limit in BAI indexes
+   - Numerous typing, spelling and formatting fixes
+
+ * Improved the message printed when samtools view fails to read its
+   input (#1296)
+
+ * Added build support for the OpenIndiana OS (#1165, thanks to John Marshall)
+
+ * Fixed failing tests on OpenBSD (#1151, thanks to John Marshall)
+
+ * The samtools sort tests now use less memory so the test suite works better
+   on small virtual machines (#1159)
+
+ * Improved markdup's calculation of insert sizes (#1161)
+   Also improved tests (#1150) and made it run faster when not checking
+   for optical duplicates or adding 'do' tags (#1308)
+
+ * Fixed samtools coverage minor inconsistency vs idxstats (#1205; #1203
+   reported by @calliza)
+
+ * Fixed samtools coverage quality thresholding options which were the
+   wrong way round compared to mpileup (-q is the mapping quality threshold
+   and -Q is base quality) (#1279; #1278 reported by @kaspernie).
+
+ * Fixed bug where `samtools fastq -i` would add two copies of the barcode
+   in the fastq header if both reads in a pair had a "BC:Z" tag (#1309;
+   #1307 reported by @mattsoup)
+
+ * Samtools calmd no longer errors with a SEQ of "*" (#1230; #1229
+   reported by Bob Harris)
+
+ * Samtools tview now honours $COLUMNS, fixing some CI tests (#1171; #1162
+   reported by @cljacobs)
+
+ * Fixed a samtools depad overflow condition (#1200)
+
+ * Improved curses detection in configure script (#1170, #577, #940)
+
+ * Fixed samtools stats integer overflows and added support for long
+   references (#1174; #1173)
+
+ * Fixed a 1-byte undersized memory allocation in samtools merge. (#1302)
 
 Release 1.10 (6th December 2019)
 --------------------------------
