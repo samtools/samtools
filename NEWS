@@ -67,6 +67,9 @@ Release a.b
    specification of the locations of the .fai and (if needed) .gzi index
    files. (#1283)
 
+ * The samtools fasta/fastq '-T' option can now add SAM array (type 'B') tags
+   to the output header lines.  (#1301)
+
  * samtools mpileup can now display MAPQ either as ASCII characters (with
    -s/--output-MQ; column now restored to its documented order as in 1.9 and
    previous versions) or comma-separated numbers (with --output-extra MAPQ;
