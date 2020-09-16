@@ -95,7 +95,8 @@ Release a.b
  * Replaced the remaining usage of the Samtools 0.1 legacy API with
    htslib calls. (#1187, thanks to John Marshall)
 
- * Documentation / help improvements (#1154; #1168; #1191; #1199; #1204):
+ * Documentation / help improvements (#1154; #1168; #1191; #1199;
+   #1204; #1313):
    - Fixed a few man-page table layout issues
    - Added <file>##idx##<index> filename documentation
    - Fixed usage statement for samtools addreplacerg
@@ -103,6 +104,7 @@ Release a.b
    - Note fixmate/markdup name collated rather than name sorted input
    - Note that fastq and fasta inputs should also be name collated
    - Reshuffled order of main man-page and added -@ to more sub-pages
+   - Seq_cache_populate now gives REF_CACHE guidance
 
  * Additional documentation improvements, thanks to John Marshall (#1181;
    #1224; #1248; #1262; #1300)
