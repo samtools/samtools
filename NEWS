@@ -3,12 +3,12 @@ Release a.b
 
  * New samtools ampliconclip sub-command for removing primers from
    amplicon-based sequencing experiments, including the current
-   Covid-19 projects.  The primers are listed in a bed file and can be
+   COVID-19 projects.  The primers are listed in a BED file and can be
    either soft-clipped or hard-clipped. (#1219)
 
  * New samtools ampliconstats sub-command to produce a textual summary
    of primer and amplicon usage, in a similar style to "samtools
-   stats". The misc/plot-ampliconstats perl script can generate PNG
+   stats". The misc/plot-ampliconstats script can generate PNG
    images based on this text report. (#1227)
 
  * Samtools fixmate, addreplacerg, markdup, ampliconclip and sort now
@@ -68,7 +68,7 @@ Release a.b
    files. (#1283)
 
  * The samtools fasta/fastq '-T' option can now add SAM array (type 'B') tags
-   to the output header lines.  (#1301)
+   to the output header lines. (#1301)
 
  * samtools mpileup can now display MAPQ either as ASCII characters (with
    -s/--output-MQ; column now restored to its documented order as in 1.9 and
@@ -81,7 +81,7 @@ Release a.b
    by Christoffer Flensburg)
 
  * samtools tview now accepts a -w option to set the output width in
-   text mode (-d T).  (#1280)
+   text mode (-d T). (#1280)
 
  * The dict command can now add AN tags containing alternative names with
    "chr" prefixes added to or removed from each sequence name as appropriate
@@ -104,7 +104,7 @@ Release a.b
    - Note fixmate/markdup name collated rather than name sorted input
    - Note that fastq and fasta inputs should also be name collated
    - Reshuffled order of main man-page and added -@ to more sub-pages
-   - Seq_cache_populate now gives REF_CACHE guidance
+   - The misc/seq_cache_populate.pl script now gives REF_CACHE guidance
 
  * Additional documentation improvements, thanks to John Marshall (#1181;
    #1224; #1248; #1262; #1300)
@@ -120,7 +120,7 @@ Release a.b
  * Fixed failing tests on OpenBSD (#1151, thanks to John Marshall)
 
  * The samtools sort tests now use less memory so the test suite works better
-   on small virtual machines (#1159)
+   on small virtual machines. (#1159)
 
  * Improved markdup's calculation of insert sizes (#1161)
    Also improved tests (#1150) and made it run faster when not checking
@@ -131,7 +131,7 @@ Release a.b
 
  * Fixed samtools coverage quality thresholding options which were the
    wrong way round compared to mpileup (-q is the mapping quality threshold
-   and -Q is base quality) (#1279; #1278 reported by @kaspernie).
+   and -Q is base quality). (#1279; #1278 reported by @kaspernie)
 
  * Fixed bug where `samtools fastq -i` would add two copies of the barcode
    in the fastq header if both reads in a pair had a "BC:Z" tag (#1309;
@@ -151,6 +151,7 @@ Release a.b
    references (#1174; #1173)
 
  * Fixed a 1-byte undersized memory allocation in samtools merge. (#1302)
+
 
 Release 1.10 (6th December 2019)
 --------------------------------
