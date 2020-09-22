@@ -1,0 +1,366 @@
+'\" t
+.TH samtools-ampliconstats 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
+.SH NAME
+samtools ampliconstats \- produces statistics from amplicon sequencing alignment file
+.\"
+.\" Copyright (C) 2020 Genome Research Ltd.
+.\"
+.\" Author: James Bonfield <jkb@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools ampliconstats
+.RI [ options ]
+.IR primers.bed
+.IR in.sam | in.bam | in.cram ...
+
+.SH DESCRIPTION
+.PP
+samtools ampliconstats collects statistics from one or more input
+alignment files and produces tables in text format.  The output can be
+visualized graphically using plot-ampliconstats.
+
+The alignment files should have previously been clipped of primer
+sequence, for example by "samtools ampliconclip" and the sites of
+these primers should be specified as a bed file in the arguments.
+Each amplicon must be present in the bed file with one or more LEFT
+primers (direction "+") followed by one or more RIGHT primers.  For
+example:
+
+.EX 2
+MN908947.3  1875  1897  nCoV-2019_7_LEFT        60  +
+MN908947.3  1868  1890  nCoV-2019_7_LEFT_alt0   60  +
+MN908947.3  2247  2269  nCoV-2019_7_RIGHT       60  -
+MN908947.3  2242  2264  nCoV-2019_7_RIGHT_alt5  60  -
+MN908947.3  2181  2205  nCoV-2019_8_LEFT        60  +
+MN908947.3  2568  2592  nCoV-2019_8_RIGHT       60  -
+.EE
+
+Ampliconstats will identify which read belongs to which amplicon.  For
+purposes of computing coverage statistics for amplicons with multiple
+primer choices, only the innermost primer locations are used.
+
+A summary of output sections is listed below, followed by more
+detailed descriptions.
+
+.TS
+lb l .
+SS	Amplicon and file counts.  Always comes first
+AMPLICON	Amplicon primer locations
+FSS	File specific: summary stats
+FRPERC	File specific: read percentage distribution between amplicons
+FDEPTH	File specific: average read depth per amplicon
+FVDEPTH	File specific: average read depth per amplicon, full length only
+FREADS	File specific: numbers of reads per amplicon
+FPCOV	File specific: percent coverage per amplicon
+FTCOORD	File specific: template start,end coordinate frequencies per amplicon
+FAMP	File specific: amplicon correct / double / treble length counts
+FDP_ALL	File specific: template depth per reference base, all templates
+FDP_VALID	File specific: template depth per reference base,
+valid templates only
+CSS	Combined  summary stats
+CRPERC	Combined: read percentage distribution between amplicons
+CDEPTH	Combined: average read depth per amplicon
+CVDEPTH	Combined: average read depth per amplicon, full length only
+CREADS	Combined: numbers of reads per amplicon
+CPCOV	Combined: percent coverage per amplicon
+CTCOORD	Combined: template coordinates per amplicon
+CAMP	Combined: amplicon correct / double / treble length counts
+CDP_ALL	Combined: template depth per reference base, all templates
+CDP_VALID	Combined: template depth per reference base,
+valid templates only
+.TE
+
+File specific sections start with both the section key and the
+filename basename (minus directory and .sam, .bam or .cram suffix).
+
+Note that the file specific sections are interleaved, ordered first by
+file and secondly by the file specific stats.  To collate them
+together, use "grep" to pull out all data of a specific type.
+
+The combined sections (C*) follow the same format as the file specific
+sections, with a different key.  For simplicity of parsing they also
+have a filename column which is filled out with "COMBINED".  These
+rows contain stats aggregated across all input files.
+
+.SH SS / AMPLICON
+
+This section is once per file and includes summary information to be
+utilised for scaling of plots, for example the total number of
+amplicons and files present, tool version number, and command line
+arguments.
+
+The AMPLICON section is a reformatting of the input BED file.  Each
+line consists of the amplicon number and the \fIstart\fR-\fIend\fR
+coordinates of the left and right primers.  Where multiple primers are
+available these are comma separated, for example \fB10-30,15-40\fR in
+the left primer column indicates two primers have been multiplex
+together covering genome coords 10-30 inclusive and 14-40 inclusively.
+
+
+.SH CSS SECTION
+
+This section consists of summary counts for the entire set of input
+files.   These may be useful for automatic scaling of plots.
+
+.TS
+lb l .
+Number of amplicons	Total number of amplicons listed in primer.bed
+Number of files	Total number of SAM, BAM or CRAM files
+End of summary	Always the last item.  Marker for end of CSS block.
+.TE
+
+
+.SH FSS SECTION
+
+This lists summary statistics specific to an individual input file.
+The values reported are:
+
+.TS
+lb l .
+raw total sequences	Total number of sequences found in the file
+filtered sequences	Number of sequences filtered with -F option
+failed primer match	Number of sequences that did not correspond to
+	a known primer location
+matching sequences	Number of sequences allocated to an amplicon
+.TE
+
+.SH FREADS / CREADS SECTION
+
+For each amplicon, this simply reports the count of reads that have
+been assigned to it.  A read is assigned to an amplicon if the start
+and/or end of the read is within a specified number of bases of the
+primer sites listed in the bed file.  This distance is controlled via
+the -m option.
+
+.SH FRPERC / CRPERC SECTION
+
+For each amplicon, this lists what percentage of reads were assigned
+to this amplicon out of the total number of assigned reads.  This may
+be used to diagnose how uniform this distribution is.
+
+Note this is a pure read count and has no relation to amplicon size.
+
+.SH FDEPTH / CDEPTH / FVDEPTH / CVDEPTH SECTION
+
+Using the reads assigned to each amplicon and their start / end
+locations on that reference, computed using the POS and CIGAR fields,
+we compute the total number of bases aligned to this amplicon and
+corresponding the average depth.  The VDEPTH variants are filtered to
+only include templates with end-to-end coverage across the amplicon.
+These can be considered to be "valid" or "usable" templates and give
+an indication of the minimum depth for the amplicon rather than the
+average depth.
+
+To compute the depth the length of the amplicon is computed using the
+innermost set of primers, if multiple choices are listed in the bed
+file.
+
+.SH FPCOV / CPCOV SECTION
+
+Similar to the FDEPTH section, this is a binary status of covered or
+not covered per position in each amplicon.  This is then expressed as
+a percentage by dividing by the amplicon length, which is computed
+using the innermost set of primers covering this amplicon.
+
+The minimum depth necessary to constitute a position as being
+"covered" is specifiable using the -d option.
+
+
+.SH FTCOORD / CTCOORD / FAMP / CAMP SECTION
+
+It is possible for an amplicon to be produced using incorrect primers,
+giving rise to extra-long amplicons (typically double or treble
+length).
+
+The FTCOORD field holds a distribution of observed template
+coordinates from the input data.  Each row consists of the file name,
+the amplicon number in question, and tab separated tuples of start,
+end, frequency and status (0 for OK, 1 for skipping amplicon, 2 for
+unknown location).  Each template is only counted for one amplicon, so
+if the read-pairs span amplicons the count will show up in the
+left-most amplicon covered.
+
+Th COORD data may indicate which primers are being utilised if there
+are alternates available for a given amplicon.
+
+The FAMP / CAMP section is a simple count per amplicon of the number
+of templates coming from this amplicon.  Templates are counted once
+per amplicon, but and like the FTCOORD field if a read-pair spans
+amplicons it is only counted in the left-most amplicon.  Each line
+consists of the file name, amplicon number and 3 counts for the number
+of templates with both ends within this amplicon, the number of
+templates with the rightmost end in another amplicon, and the number
+of templates where the other end has failed to be assigned to an
+amplicon.
+
+.SH FDP_ALL / CDP_ALL / FDP_VALID / CDP_VALID section
+
+These are for depth plots per base rather than per amplicon.  They
+distinguish between all reads in all templates, and only reads in
+templates considered to be "valid".  Such templates have both reads
+(if paired) matching known primer locations from he same amplicon and
+have full length coverage across the entire amplicon.
+
+This FDP_VALID can be considered to be the minimum template depth
+across the amplicon.
+
+The difference between the VALID and ALL plots represents additional
+data that for some reason may not be suitable for producing a
+consensus.  For example an amplicon that skips a primer, pairing
+10_LEFT with 12_RIGHT, will have coverage for the first half of
+amplicon 10 and the last half of amplicon 12.  Counting the number of
+reads or bases alone in the amplicon does not reveal the potential for
+non-uniformity of coverage.
+
+The format of the data is a series of tab separated tuples consisting
+of \fIdepth,length\fR.  The length field is a basic form of run-length
+encoding where all depth values within a specified fraction of each
+other (e.g. >= (1-fract)*midpoint and <= (1+fract)*midpoint) are
+combined into a single run.  This fraction is controlled via the
+\fB-D\fR option..
+
+.SH OPTIONS
+.TP 8
+.BI "-f, --required-flag " INT|STR
+Only output alignments with all bits set in
+.I INT
+present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0],
+or in string form by specifying a comma-separated list of keywords as
+listed by the "samtools flags" subcommand.
+
+.TP
+.BI "-F, --filter-flag " INT|STR
+Do not output alignments with any bits set in
+.I INT
+present in the FLAG field.
+.I INT
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/)
+or in octal by beginning with `0' (i.e. /^0[0-7]+/) [0],
+or in string form by specifying a comma-separated list of keywords as
+listed by the "samtools flags" subcommand.
+
+.TP
+.BI "-a, --max-amplicons " INT
+Specify the maximum number of amplicons permitted.
+
+.TP
+.BI "-b, --tcoord-bin " INT
+Bin the template start,end positions into multiples of \fINT\fR prior
+to counting their frequency and reporting in the FTCOORD / CTCOORD
+lines.  This may be useful for technologies with higher errors rates
+where the alignment ends will vary slightly.
+Defaults to 1, which is equivalent to no binning.
+
+.TP
+.BI "-c, --tcoord-min-count " INT
+In the FTCOORD and CTCOORD lines, only record template start,end
+coordinate combination if they occur at least \fIINT\fR times.
+
+.TP
+.BI "-d, --min-depth " INT
+Specifies the minimum base depth to consider a reference position to
+be covered, for purposes of the FRPERC and CRPERC sections.
+
+.TP
+.BI "-D, --depth-bin " FRACTION
+Controls the merging of neighbouring similar depths for the FDP_ALL
+and FDP_VALID plots.  The default FRACTION is 0.01, meaning depths
+within +/- 1% of a mid point will be aggregated together as a run of
+the same value.  This merging is useful to reduce the file size.  Use
+\fB-D 0\fR to record every depth.
+
+.TP
+.BI "-l, --max-amplicon-length " INT
+Specifies the maximum length of any individual amplicon.
+
+.TP
+.BI "-m, --pos-margin " INT
+Reads are compared against the primer start and end locations
+specified in the BED file.  An aligned sequence should start precisely
+at these locations, but sequencing errors may cause the primer
+clipping to be a few bases out or for the alignment to add a few extra
+bases of soft clip.  This option specifies the margin of error
+permitted when matching a read to an amplicon number.
+
+.TP
+.B "-o " FILE
+Output stats to FILE.  The default is to write to stdout.
+
+.TP
+.B "-s, --use-sample-name"
+Instead of using the basename component of the input path names, use
+the SM field from the first @RG header line.
+
+.TP
+.BI "-t, --tlen-adjust " INT
+Adjust the TLEN field by +/- \fIINT\fR to compensate for primer clipping.
+This defaults to zero, but if the primers have been clipped and the
+TLEN field has not been updated using samtools fixmate then the
+template length will be wrong by the sum of the forward and reverse
+primer lengths.
+
+This adjustment does not have to be precise as the --pos-margin field
+permits some leeway.  Hence if required, it should be set to
+approximately double the average primer length.
+
+.TP
+.BI "-@ " INT
+Number of BAM/CRAM (de)compression threads to use in addition to main thread [0].
+
+.SH EXAMPLE
+
+To run ampliconstats on a directory full of CRAM files and then
+produce a series of PNG images named "mydata*.png":
+
+.EE 2
+samtools ampliconstats V3/nCoV-2019.bed /path/*.cram > astats
+plot-ampliconstats -size 1200,900 mydata astats
+.EX
+
+.SH AUTHOR
+.PP
+Written by James Bonfield from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-ampliconclip (1)
+.IR samtools-stats (1),
+.IR samtools-flags (1)
+.PP
+Samtools website: <http://www.htslib.org/>

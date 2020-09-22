@@ -573,6 +573,14 @@ const char* bed_get(void *reg_hash, int i, int filter) {
     return kh_key(h, i);
 }
 
+/**
+ * Create a region list from a the region hash table
+ * @param  reg_hash  The region hash table
+ * @param  filter    0 - allow all regions, 1 - allow only selected regions
+ * @param  n_reg     Pointer to the returned region number
+ * @return           The regions list as a hts_reglist_t
+ */
+
 hts_reglist_t *bed_reglist(void *reg_hash, int filter, int *n_reg) {
 
     reghash_t *h;

@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2019 Genome Research Ltd.
+    Copyright (C) 2009-2020 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -71,7 +71,6 @@ typedef struct samview_settings {
 // TODO Add declarations of these to a viable htslib or samtools header
 extern const char *bam_get_library(sam_hdr_t *header, const bam1_t *b);
 extern int bam_remove_B(bam1_t *b);
-extern char *samfaipath(const char *fn_ref);
 
 // Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
@@ -267,7 +266,7 @@ int main_samview(int argc, char *argv[])
     FILE *fp_out = NULL;
     sam_hdr_t *header = NULL;
     char out_mode[5], out_un_mode[5], *out_format = "";
-    char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_list = 0, *q, *fn_un_out = 0;
+    char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_fai = 0, *q, *fn_un_out = 0;
     char *fn_out_idx = NULL, *fn_un_out_idx = NULL, *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
@@ -337,7 +336,7 @@ int main_samview(int argc, char *argv[])
         case 'S': break;
         case 'b': out_format = "b"; break;
         case 'C': out_format = "c"; break;
-        case 't': fn_list = strdup(optarg); break;
+        case 't': fn_fai = strdup(optarg); break;
         case 'h': is_header = 1; break;
         case 'H': is_header_only = 1; break;
         case 'o': fn_out = strdup(optarg); break;
@@ -466,6 +465,7 @@ int main_samview(int argc, char *argv[])
             break;
         }
     }
+    if (fn_fai == 0 && ga.reference) fn_fai = fai_path(ga.reference);
     if (compress_level >= 0 && !*out_format) out_format = "b";
     if (is_header_only) is_header = 1;
     // File format auto-detection first
@@ -488,18 +488,15 @@ int main_samview(int argc, char *argv[])
     }
 
     fn_in = (optind < argc)? argv[optind] : "-";
-    // generate the fn_list if necessary
-    if (fn_list == 0 && ga.reference) fn_list = samfaipath(ga.reference);
-    // open file handlers
     if ((in = sam_open_format(fn_in, "r", &ga.in)) == 0) {
         print_error_errno("view", "failed to open \"%s\" for reading", fn_in);
         ret = 1;
         goto view_end;
     }
 
-    if (fn_list) {
-        if (hts_set_fai_filename(in, fn_list) != 0) {
-            fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+    if (fn_fai) {
+        if (hts_set_fai_filename(in, fn_fai) != 0) {
+            fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_fai);
             ret = 1;
             goto view_end;
         }
@@ -518,9 +515,9 @@ int main_samview(int argc, char *argv[])
             ret = 1;
             goto view_end;
         }
-        if (fn_list) {
-            if (hts_set_fai_filename(out, fn_list) != 0) {
-                fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+        if (fn_fai) {
+            if (hts_set_fai_filename(out, fn_fai) != 0) {
+                fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_fai);
                 ret = 1;
                 goto view_end;
             }
@@ -565,9 +562,9 @@ int main_samview(int argc, char *argv[])
                 ret = 1;
                 goto view_end;
             }
-            if (fn_list) {
-                if (hts_set_fai_filename(un_out, fn_list) != 0) {
-                    fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_list);
+            if (fn_fai) {
+                if (hts_set_fai_filename(un_out, fn_fai) != 0) {
+                    fprintf(stderr, "[main_samview] failed to use reference \"%s\".\n", fn_fai);
                     ret = 1;
                     goto view_end;
                 }
@@ -682,6 +679,7 @@ int main_samview(int argc, char *argv[])
         if ((has_index_file && optind >= argc - 2) || (!has_index_file && optind >= argc - 1)) { // convert/print the entire file
             bam1_t *b = bam_init1();
             int r;
+            errno = 0;
             while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
                 if (!process_aln(header, b, &settings)) {
                     if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
@@ -691,7 +689,7 @@ int main_samview(int argc, char *argv[])
                 }
             }
             if (r < -1) {
-                fprintf(stderr, "[main_samview] truncated file.\n");
+                print_error_errno("view", "error reading file \"%s\"", fn_in);
                 ret = 1;
             }
             bam_destroy1(b);
@@ -766,7 +764,7 @@ view_end:
     if (un_out) check_sam_close("view", un_out, fn_un_out, "file", &ret);
     if (fp_out) fclose(fp_out);
 
-    free(fn_list); free(fn_out); free(settings.library);  free(fn_un_out);
+    free(fn_fai); free(fn_out); free(settings.library);  free(fn_un_out);
     sam_global_args_free(&ga);
     if ( header ) sam_hdr_destroy(header);
     if (settings.bed) bed_destroy(settings.bed);
@@ -890,20 +888,4 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "\n");
 
     return exit_status;
-}
-
-int main_import(int argc, char *argv[])
-{
-    int argc2, ret;
-    char **argv2;
-    if (argc != 4) {
-        fprintf(stderr, "Usage: samtools import <in.ref_list> <in.sam> <out.bam>\n");
-        return 1;
-    }
-    argc2 = 6;
-    argv2 = calloc(6, sizeof(char*));
-    argv2[0] = "import", argv2[1] = "-o", argv2[2] = argv[3], argv2[3] = "-bt", argv2[4] = argv[1], argv2[5] = argv[2];
-    ret = main_samview(argc2, argv2);
-    free(argv2);
-    return ret;
 }

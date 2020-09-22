@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-fixmate 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-fixmate 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools fixmate \- fills in mate coordinates and insert size fields.
 .\"
@@ -44,7 +44,7 @@ samtools fixmate \- fills in mate coordinates and insert size fields.
 .SH SYNOPSIS
 .PP
 samtools fixmate
-.RB [ -rpcm ]
+.RB [ -rpcmu ]
 .RB [ -O
 .IR format ]
 .I in.nameSrt.bam out.bam
@@ -52,7 +52,7 @@ samtools fixmate
 .SH DESCRIPTION
 .PP
 Fill in mate coordinates, ISIZE and mate related flags from a
-name-sorted alignment.
+name-sorted or name-collated alignment.
 
 .SH OPTIONS
 .TP 11
@@ -70,6 +70,9 @@ Add ms (mate score) tags.  These are used by
 .B markdup
 to select the best reads to keep.
 .TP
+.B -u
+Output uncompressed BAM or CRAM.
+.TP
 .BI "-O " FORMAT
 Write the final output as
 .BR sam ", " bam ", or " cram .
@@ -82,6 +85,9 @@ is selected.
 .TP
 .BI --no-PG
 Do not add a @PG line to the header of the output file.
+.TP
+.BI "-@, --threads " INT
+Number of input/output compression threads to use in addition to main thread [0].
 
 .SH AUTHOR
 .PP
@@ -90,6 +96,7 @@ Written by Heng Li from the Sanger Institute.
 .SH SEE ALSO
 .IR samtools (1),
 .IR samtools-markdup (1),
-.IR samtools-sort (1)
+.IR samtools-sort (1),
+.IR samtools-collate (1)
 .PP
 Samtools website: <http://www.htslib.org/>

@@ -1,7 +1,7 @@
 /*  bam2depth.c -- depth subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2012-2016, 2018, 2019 Genome Research Ltd.
+    Copyright (C) 2012-2016, 2018, 2019-2020 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -24,7 +24,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 /* This program demonstrates how to generate pileup from multiple BAMs
- * simutaneously, to achieve random access and to use the BED interface.
+ * simultaneously, to achieve random access and to use the BED interface.
  * To compile this program separately, you may:
  *
  *   gcc -g -O2 -Wall -o bam2depth -D_MAIN_BAM2DEPTH bam2depth.c -lhts -lz
@@ -41,8 +41,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "bedidx.h"
 #include "sam_opts.h"
-
-#define BAM_FMAX ((BAM_FSUPPLEMENTARY << 1) - 1)
 
 typedef struct {     // auxiliary data structure
     samFile *fp;     // the file handle
@@ -61,7 +59,7 @@ static int read_bam(void *data, bam1_t *b) // read level filters better go here 
     {
         ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->hdr, b);
         if ( ret<0 ) break;
-        if ( b->core.flag & aux->flags) continue;
+        if ( b->core.flag & aux->flags ) continue;
         if ( (int)b->core.qual < aux->min_mapQ ) continue;
         if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
         break;
@@ -88,9 +86,13 @@ static int usage() {
     fprintf(stderr, "   -q <int>            base quality threshold [0]\n");
     fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
     fprintf(stderr, "   -r <chr:from-to>    region\n");
-    fprintf(stderr, "   -g <flags>          include reads that have any of the specified flags set [0]\n");
-    fprintf(stderr, "   -G <flags>          filter out reads that have any of the specified flags set"
-                    "                       [UNMAP,SECONDARY,QCFAIL,DUP]\n");
+    fprintf(stderr, "   -g <flags>          remove the specified flags from the set used to filter out reads\n");
+    fprintf(stderr, "   -G <flags>          add the specified flags to the set used to filter out reads\n"
+                    "                       The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704\n");
+    fprintf(stderr, "   -J                  include reads with deletions in depth computation\n");
+    fprintf(stderr, "   -s                  for the overlapping section of a read pair, count only the bases\n"
+                    "                       of a single read. This option requires raising the base quality\n"
+                    "                       threshold to 1.\n");
 
     sam_global_opt_help(stderr, "-.--.--.");
 
@@ -106,7 +108,7 @@ static int usage() {
 int main_depth(int argc, char *argv[])
 {
     int i, n, tid, reg_tid, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, has_index_file = 0;
-    hts_pos_t beg, end, pos, last_pos = -1;
+    hts_pos_t beg, end, pos = -1, last_pos = -1;
     int all = 0, status = EXIT_SUCCESS, nfiles, max_depth = -1;
     const bam_pileup1_t **plp;
     char *reg = 0; // specified region
@@ -121,6 +123,8 @@ int main_depth(int argc, char *argv[])
     FILE *file_out = stdout;
     uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
     int tflags = 0;
+    int inc_del = 0;
+    int overlap_init = 0;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -129,7 +133,7 @@ int main_depth(int argc, char *argv[])
     };
 
     // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:g:G:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:g:G:Js", lopts, NULL)) >= 0) {
         switch (n) {
             case 'l': min_len = atoi(optarg); break; // minimum query length
             case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
@@ -150,7 +154,7 @@ int main_depth(int argc, char *argv[])
             case 'o': output_file = optarg; break;
             case 'g':
                 tflags = bam_str2flag(optarg);
-                if (tflags < 0 || tflags > BAM_FMAX) {
+                if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
                     print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
                     return 1;
                 }
@@ -158,11 +162,16 @@ int main_depth(int argc, char *argv[])
                 break;
             case 'G':
                 tflags = bam_str2flag(optarg);
-                if (tflags < 0 || tflags > BAM_FMAX) {
+                if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
                     print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
                     return 1;
                 }
                 flags |= tflags;
+                break;
+            case 'J': inc_del = 1; break;
+            case 's':
+                overlap_init = 1;
+                if (!baseQ) baseQ = 1;
                 break;
             default:  if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
@@ -238,7 +247,7 @@ int main_depth(int argc, char *argv[])
         }
         if (reg) { // if a region is specified
             hts_idx_t *idx = NULL;
-            // If index filename has not been specfied, look in BAM folder
+            // If index filename has not been specified, look in the BAM folder
             if (has_index_file) {
                 idx = sam_index_load2(data[i]->fp, argv[optind+i], argv[optind+i+n]);  // load the index
             } else {
@@ -275,7 +284,12 @@ int main_depth(int argc, char *argv[])
     }
 
     // the core multi-pileup loop
-    mplp = bam_mplp_init(n, read_bam, (void**)data); // initialization
+    mplp = bam_mplp_init(n, read_bam, (void**)data);
+    if (overlap_init && bam_mplp_init_overlaps(mplp) < 0) {
+        print_error("depth", "failed to init overlap detection\n");
+        status = EXIT_FAILURE;
+        goto depth_end;
+    }
     if (0 < max_depth)
         bam_mplp_set_maxcnt(mplp,max_depth);  // set maximum coverage depth
     else if (!max_depth)
@@ -327,8 +341,8 @@ int main_depth(int argc, char *argv[])
         for (i = 0; i < n; ++i) { // base level filters have to go here
             int j, m = 0;
             for (j = 0; j < n_plp[i]; ++j) {
-                const bam_pileup1_t *p = plp[i] + j; // DON'T modfity plp[][] unless you really know
-                if (p->is_del || p->is_refskip) ++m; // having dels or refskips at tid:pos
+                const bam_pileup1_t *p = plp[i] + j; // DON'T modify plp[][] unless you really know
+                if ((!inc_del && p->is_del) || p->is_refskip) ++m; // having dels or refskips at tid:pos
                 else if (p->qpos < p->b->core.l_qseq &&
                          bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
             }
@@ -345,6 +359,9 @@ int main_depth(int argc, char *argv[])
         if (last_tid < 0 && reg) {
             last_tid = reg_tid;
             last_pos = beg-1;
+        }
+        if (pos < 0 && all > 1 && last_tid < 0 && !reg) {
+           last_tid = 0;
         }
         while (last_tid >= 0 && last_tid < sam_hdr_nref(h)) {
             while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
@@ -365,11 +382,12 @@ int main_depth(int argc, char *argv[])
     }
 
 depth_end:
-    if (fclose(file_out) != 0) {
+    if (((file_out != stdout)? fclose(file_out) : fflush(file_out)) != 0) {
         if (status == EXIT_SUCCESS) {
-            print_error_errno("depth", "error on closing \"%s\"",
-                              (output_file && strcmp(output_file, "-") != 0
-                               ? output_file : "stdout"));
+            if (file_out != stdout)
+                print_error_errno("depth", "error on closing \"%s\"", output_file);
+            else
+                print_error_errno("depth", "error on flushing standard output");
             status = EXIT_FAILURE;
         }
     }

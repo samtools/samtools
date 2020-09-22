@@ -1,0 +1,158 @@
+'\" t
+.TH samtools-coverage 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
+.SH NAME
+samtools coverage \- produces a histogram or table of coverage per chromosome
+.\"
+.\" Copyright (C) 2019 Genome Research Ltd.
+.\"
+.\" Author: James Bonfield <jkb@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools coverage
+.RI [ options ]
+.RI "[" in1.sam | in1.bam | in1.cram " [" in2.sam | in2.bam | in2.cram "] [...]]"
+
+.SH DESCRIPTION
+.PP
+Computes the depth at each position or region and draws an ASCII-art
+histogram or tabulated text.
+
+The tabulated form uses the following headings.
+
+.TS
+lb l .
+rname	Reference name / chromosome
+startpos	Start position
+endpos	End position (or sequence length)
+numreads	Number reads aligned to the region (after filtering)
+covbases	Number of covered bases with depth >= 1
+coverage	Proportion of covered bases [0..1]
+meandepth	Mean depth of coverage
+meanbaseq	Mean baseQ in covered region
+meanmapq	Mean mapQ of selected reads
+.TE
+
+.SH OPTIONS
+
+Input options:
+
+.TP 8
+.BI -b,\ --bam-list \ FILE
+List of input BAM files, one file per line [null]
+.TP
+.BI -l,\ --min-read-len \ INT
+Ignore reads shorter than \fIINT\fR base pairs [0]
+.TP
+.BI -q,\ --min-MQ \ INT
+Minimum mapping quality for an alignment to be used [0]
+.TP
+.BI -Q,\ --min-BQ \ INT
+Minimum base quality for a base to be considered [0]
+.TP
+.BI --rf,\ --incl-flags \ STR|INT
+Required flags: skip reads with mask bits unset [null]
+.TP
+.BI --ff,\ --excl-flags \ STR|INT
+Filter flags: skip reads with mask bits set
+[UNMAP,SECONDARY,QCFAIL,DUP]
+
+.PP
+Output options:
+
+.TP 8
+.BI -m,\ --histogram
+Show histogram instead of tabular output.
+.TP
+.BI -A,\ --ascii
+Show only ASCII characters in histogram.
+.TP
+.BI -o,\ --output \ FILE
+Write output to FILE [stdout].
+.TP
+.BI -H,\ --no-header
+Don't print a header in tabular mode.
+.TP
+.BI -w,\ --n-bins \ INT
+Number of bins in histogram.  [terminal width - 40]
+.TP
+.BI -r,\ --region \ REG
+Show specified region. Format: chr:start-end. 
+.TP
+.BI -h,\ --help
+Shows command help.
+
+.SH EXAMPLES
+
+Running coverage in tabular mode, on a specific region, with tabs
+shown as spaces for clarity in this man page.
+
+.EX 2
+samtools coverage -r chr1:1M-12M input.bam
+
+#rname  startpos  endpos    numreads  covbases  coverage  meandepth  meanbaseq  meanmapq
+chr1    1000000   12000000  528695    1069995   9.72723   3.50281    34.4       55.8
+.EE
+
+An example of the histogram output is below, with ASCII block
+characters replaced by "#" for rendering in this man page.
+
+.EX 2
+samtools coverage -A -w 32 -r chr1:1M-12M input.bam
+
+chr1 (249.25Mbp)
+>  24.19% | #                              | Number of reads: 528695
+>  21.50% |##                              |     (132000 filtered)
+>  18.81% |##                              | Covered bases:   1.07Mbp
+>  16.12% |##                           #  | Percent covered: 9.727%
+>  13.44% |##  #  #       ##            # #| Mean coverage:   3.5x
+>  10.75% |## ##  #       ##          # # #| Mean baseQ:      34.4
+>   8.06% |#####  #       ##        # # # #| Mean mapQ:       55.8
+>   5.37% |##### ##      ###      # ##### #| 
+>   2.69% |##### ###     ###  ### #########| Histo bin width: 343.8Kbp
+>   0.00% |############ ###################| Histo max bin:   26.873%
+        1.00M     4.44M     7.87M       12.00M 
+.EE
+
+
+.SH AUTHOR
+.PP
+Written by Florian P Breitwieser.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-depth (1),
+.PP
+Samtools website: <http://www.htslib.org/>

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-depth 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-depth 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools depth \- computes the read depth at each position or region
 .\"
-.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -101,10 +101,10 @@ specified.
 will send the output to stdout (also the default if this option is not used).
 .TP
 .BI "-q " INT
-.RI "Only count reads with base quality greater than " INT
+.RI "Only count reads with base quality greater than or equal to " INT
 .TP
 .BI "-Q " INT
-.RI "Only count reads with mapping quality greater than " INT
+.RI "Only count reads with mapping quality greater than or equal to " INT
 .TP
 .BI "-r " CHR ":" FROM "-" TO
 Only report depth in specified region.
@@ -131,6 +131,15 @@ Discard any read that has any of the flags specified by
 set.  FLAGS are specified as for the
 .B "-g"
 option. [UNMAP,SECONDARY,QCFAIL,DUP]
+.TP
+.B -J
+Include reads with deletions in depth computation.
+.TP
+.B -s
+For the overlapping section of a read pair, count only the bases of a single
+read. This is accomplished by lowering to 0 the quality values of one read for
+the span of the overlapping section. As a consequence, the algorithm will
+consider only bases with a quality above 0.
 
 .SH AUTHOR
 .PP
@@ -139,6 +148,7 @@ Written by Heng Li from the Sanger Institute.
 .SH SEE ALSO
 .IR samtools (1),
 .IR samtools-mpileup (1),
+.IR samtools-coverage (1),
 .IR samtools-sort (1)
 .PP
 Samtools website: <http://www.htslib.org/>

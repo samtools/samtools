@@ -1,0 +1,149 @@
+'\" t
+.TH samtools-ampliconclip 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
+.SH NAME
+samtools ampliconclip \- clip reads using a BED file
+.\"
+.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
+.\" Portions copyright (C) 2010, 2011 Broad Institute.
+.\"
+.\" Author: Andrew Whitwham <aw7@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools ampliconclip
+.RB [ -o
+.IR out.file ]
+.RB [ -f
+.IR stat.file ]
+.RB [ --soft-clip ]
+.RB [ --hard-clip ]
+.RB [ --both-ends ]
+.RB [ --strand ]
+.RB [ --clipped ]
+.RB [ --fail ]
+.RB [ --filter-len
+.IR INT ]
+.RB [ --fail-len
+.IR INT ]
+.RB [ --no-excluded ]
+.RB [ --rejects-file
+.IR rejects.file ]
+.RB [ --original ]
+.RB [ --keep-tag ]
+.RB [ --no-PG ]
+.RB [ -u ]
+.B -b
+.I bed.file in.file
+
+.SH DESCRIPTION
+.PP
+Clip reads in a SAM compatible file based on data from a BED file.  By default
+the reads are soft clipped and clip is only done from the 5' end.
+
+Some things to be aware of.  While ordering is not significant, adjustments to
+the left most mapping position (\fIPOS\fR) will mean that coordinate sorted
+files will need resorting.  In such cases the sorting order in the header is set
+to unknown. Clipping of reads results in template length (\fITLEN\fR) being
+incorrect. This can be corrected by \fBsamtools fixmates\fR.  Any \fIMD\fR and
+\fINM\fR aux tags will also be incorrect, which can be fixed by \fBsamtools
+calmd\fR.  By default \fIMD\fR and \fINM\fR tags are removed though if the
+output is in CRAM format these tags will be automatically regenerated.
+
+.SH OPTIONS
+.TP 11
+.BI "-b " FILE
+BED file of amplicons to be removed.
+.TP
+.BI "-o " FILE
+Output file name (defaults to stdout).
+.TP
+.BI "-f " FILE
+File to write stats to (defaults to stderr).
+.TP
+.B -u
+Output uncompressed SAM, BAM or CRAM.
+.TP
+.B --soft-clip
+Soft clip reads (default).
+.TP
+.B --hard-clip
+Hard clip reads.
+.TP
+.B --both-ends
+Clip at both ends as opposed to just the 5' end.
+.TP
+.B --strand
+Use strand entry from the BED file.
+.TP
+.B --clipped
+Only output clipped reads.  Filter all others.
+.TP
+.B --fail
+Mark unclipped reads as QC fail.
+.TP
+.BI "--filter-len " INT
+Filter out reads of INT size or shorter.  In this case soft clips are not counted
+toward read length.  An INT of 0 will filter out reads with no matching bases.
+.TP
+.BI "--fail-len " INT
+As \fB--filter-len\fR but mark as QC fail rather then filter out.
+.TP
+.B --no-excluded
+Filter out any reads that are marked as QCFAIL or are unmapped.  This works on
+the state of the reads before clipping takes place.
+.TP
+.BI "--rejects-file " FILE
+Write any filtered reads out to a file.
+.TP
+.B --original
+Add an OA tag with the original data for clipped files.
+.TP
+.B --keep-tag
+In clipped reads, keep the possibly invalid NM and MD tags.  By default these tags are deleted.  
+.TP
+.B --no-PG
+Do not at a PG line to the header.
+
+.SH AUTHOR
+.PP
+Written by Andrew Whitwham and Rob Davies, both from the Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-sort (1),
+.IR samtools-fixmate (1),
+.IR samtools-calmd (1)
+.PP
+Samtools website: <http://www.htslib.org/>

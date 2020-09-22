@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-sort 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-sort 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools sort \- sorts SAM/BAM/CRAM files
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -45,12 +45,16 @@ samtools sort \- sorts SAM/BAM/CRAM files
 samtools sort
 .RB [ -l
 .IR level ]
+.RB [ -u ]
 .RB [ -m
 .IR maxMem ]
 .RB [ -o
 .IR out.bam ]
 .RB [ -O
 .IR format ]
+.RB [ -M ]
+.RB [ -K
+.IR kmerLen ]
 .RB [ -n ]
 .RB [ -t
 .IR tag ]
@@ -85,9 +89,22 @@ Consider using
 .B samtools collate
 instead if you need name collated data without a full lexicographical sort.
 
+Note that if the sorted output file is to be indexed with
+.BR "samtools index" ,
+the default coordinate sort must be used.
+Thus the
+.B -n
+and
+.B -t
+options are incompatible with
+.BR "samtools index" .
+
 .SH OPTIONS
 
 .TP 11
+.BI "-K " INT
+Sets the kmer size to be used in the \fB-M\fR option. [20]
+.TP
 .BI "-l " INT
 Set the desired compression level for the final output file, ranging from 0
 (uncompressed) or 1 (fastest but minimal compression) to 9 (best compression
@@ -99,6 +116,10 @@ If
 .B -l
 is not used, the default compression level will apply.
 .TP
+.B "-u "
+Set the compression level to 0, for uncompressed output.  This is a
+synonym for \fB-l 0\fR.
+.TP
 .BI "-m " INT
 Approximately the maximum required memory per thread, specified either in bytes
 or with a
@@ -108,6 +129,17 @@ suffix.
 .IP
 To prevent sort from creating a huge number of temporary files, it enforces a
 minimum value of 1M for this setting.
+.TP
+.B "-M "
+Sort unmapped reads (those in chromosome "*") by their sequence
+minimiser (Schleimer et al., 2003; Roberts et al., 2004), also reverse
+complementing as appropriate.  This has the effect of collating some
+similar data together, improving the compressibility of the unmapped
+sequence.  The minimiser kmer size is adjusted using the \fB-K\fR
+option.  Note data compressed in this manner may need to be name
+collated prior to conversion back to fastq.
+.IP
+Mapped sequences are sorted by chromosome and position.
 .TP
 .B -n
 Sort by read names (i.e., the

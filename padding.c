@@ -1,7 +1,7 @@
 /*  padding.c -- depad subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2014-2016, 2019 Genome Research Ltd.
+    Copyright (C) 2014-2016, 2019-2020 Genome Research Ltd.
     Portions copyright (C) 2012, 2013 Peter Cock, The James Hutton Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -38,24 +38,38 @@ DEALINGS IN THE SOFTWARE.  */
 
 #define bam_reg2bin(b,e) hts_reg2bin((b),(e), 14, 5)
 
-// The one and only function needed from sam.c.
-// Explicitly here to avoid including bam.h translation layer.
-extern char *samfaipath(const char *fn_ref);
-
-static void replace_cigar(bam1_t *b, int n, uint32_t *cigar)
+static int replace_cigar(bam1_t *b, uint32_t n, uint32_t *cigar)
 {
+    int diff = 0;
     if (n != b->core.n_cigar) {
         int o = b->core.l_qname + b->core.n_cigar * 4;
-        if (b->l_data + (n - b->core.n_cigar) * 4 > b->m_data) {
-            b->m_data = b->l_data + (n - b->core.n_cigar) * 4;
-            kroundup32(b->m_data);
-            b->data = (uint8_t*)realloc(b->data, b->m_data);
+        if (n > b->core.n_cigar) {
+            diff = (n - b->core.n_cigar) * 4;
+            if ((INT_MAX - b->l_data)/4 < (n - b->core.n_cigar)) {
+                fprintf(stderr, "[depad] ERROR: BAM record too big\n");
+                return -1;
+            }
+            if (b->l_data + diff > b->m_data) {
+                b->m_data = b->l_data + diff;
+                kroundup32(b->m_data);
+                uint8_t *tmp = (uint8_t*)realloc(b->data, b->m_data);
+                if (!tmp) {
+                    fprintf(stderr, "[depad] ERROR: Memory allocation failure.\n");
+                    return -1;
+                }
+                b->data = tmp;
+            }
+        } else {
+            diff = -(int)((b->core.n_cigar - n) * 4);
         }
         memmove(b->data + b->core.l_qname + n * 4, b->data + o, b->l_data - o);
-        memcpy(b->data + b->core.l_qname, cigar, n * 4);
-        b->l_data += (n - b->core.n_cigar) * 4;
         b->core.n_cigar = n;
-    } else memcpy(b->data + b->core.l_qname, cigar, n * 4);
+    }
+
+    memcpy(b->data + b->core.l_qname, cigar, n * 4);
+    b->l_data += diff;
+
+    return 0;
 }
 
 #define write_cigar(_c, _n, _m, _v) do { \
@@ -195,7 +209,8 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
     kstring_t r, q;
     int r_tid = -1;
     uint32_t *cigar2 = 0;
-    int ret = 0, n2 = 0, m2 = 0, *posmap = 0;
+    int ret = 0, *posmap = 0;
+    uint32_t n2 = 0, m2 = 0;
 
     b = bam_init1();
     if (!b) {
@@ -242,7 +257,8 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
                 }
             }
             write_cigar(cigar2, n2, m2, bam_cigar_gen(b->core.l_qseq, BAM_CMATCH));
-            replace_cigar(b, n2, cigar2);
+            if (replace_cigar(b, n2, cigar2) < 0)
+                return -1;
             posmap = update_posmap(posmap, r);
         } else if (b->core.n_cigar > 0) {
             int i, k, op;
@@ -328,7 +344,8 @@ int bam_pad2unpad(samFile *in, samFile *out,  sam_hdr_t *h, faidx_t *fai)
             for (i = k = 0; i < n2; ++i)
                 if (cigar2[i]) cigar2[k++] = cigar2[i];
             n2 = k;
-            replace_cigar(b, n2, cigar2);
+            if (replace_cigar(b, n2, cigar2) < 0)
+                return -1;
         }
         /* Even unmapped reads can have a POS value, e.g. if their mate was mapped */
         if (b->core.pos != -1) b->core.pos = posmap[b->core.pos];
@@ -430,7 +447,7 @@ int main_pad2unpad(int argc, char *argv[])
     sam_hdr_t *h = 0, *h_fix = 0;
     faidx_t *fai = 0;
     int c, compress_level = -1, is_long_help = 0, no_pg = 0;
-    char in_mode[5], out_mode[6], *fn_out = 0, *fn_list = 0, *fn_out_idx = NULL;
+    char in_mode[5], out_mode[6], *fn_out = 0, *fn_fai = 0, *fn_out_idx = NULL;
     int ret=0;
     char *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -477,8 +494,8 @@ int main_pad2unpad(int argc, char *argv[])
 
     // Load FASTA reference (also needed for SAM -> BAM if missing header)
     if (ga.reference) {
-        fn_list = samfaipath(ga.reference);
-        fai = fai_load(ga.reference);
+        fn_fai = fai_path(ga.reference);
+        fai = fai_load3(ga.reference, fn_fai, NULL, FAI_CREATE);
     }
     // open file handlers
     if ((in = sam_open_format(argv[optind], in_mode, &ga.in)) == 0) {
@@ -486,8 +503,8 @@ int main_pad2unpad(int argc, char *argv[])
         ret = 1;
         goto depad_end;
     }
-    if (fn_list && hts_set_fai_filename(in, fn_list) != 0) {
-        fprintf(stderr, "[depad] failed to load reference file \"%s\".\n", fn_list);
+    if (fn_fai && hts_set_fai_filename(in, fn_fai) != 0) {
+        fprintf(stderr, "[depad] failed to load reference file \"%s\".\n", fn_fai);
         ret = 1;
         goto depad_end;
     }
@@ -570,7 +587,7 @@ depad_end:
         fprintf(stderr, "[depad] error on closing output file.\n");
         ret = 1;
     }
-    free(fn_list); free(fn_out);
+    free(fn_fai); free(fn_out);
     if (fn_out_idx)
         free(fn_out_idx);
     sam_global_args_free(&ga);

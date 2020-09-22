@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-fasta 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-fasta 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools fasta / fastq \- converts a SAM/BAM/CRAM file to FASTA or FASTQ
 .\"
-.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -208,6 +208,9 @@ aux tag to find index reads in [default: BC]
 .TP 8
 .B --quality-tag TAG
 aux tag to find index quality in [default: QT]
+.TP
+.BI "-@, --threads " INT
+Number of input/output compression threads to use in addition to main thread [0].
 .TP 8
 .B --index-format STR
 string to describe how to parse the barcode and quality tags. For example:
@@ -227,17 +230,18 @@ mean 'read until the separator or end of tag', for example:
 ignore the left part of the tag until the separator, then use the second part
 
 .SH EXAMPLES
-Output paired reads to separate files, discarding singletons, supplementary
-and secondary reads.
+Starting from a coordinate sorted file, output paired reads to
+separate files, discarding singletons, supplementary and secondary reads.
 The resulting files can be used with, for example, the
 .B bwa
 aligner.
 .EX 4
-samtools fastq -1 paired1.fq -2 paired2.fq -0 /dev/null -s /dev/null -n in.bam
+samtools collate -u -O in_pos.bam | \\
+samtools fastq -1 paired1.fq -2 paired2.fq -0 /dev/null -s /dev/null -n
 .EE
 
-Output paired and singleton reads in a single file, discarding supplementary
-and secondary reads.
+Starting with a name collated file, output paired and singleton reads
+in a single file, discarding supplementary and secondary reads.
 To get all of the reads in a single file, it is necessary to redirect the
 output of samtools fastq.
 The output file is suitable for use with
@@ -245,7 +249,7 @@ The output file is suitable for use with
 which understands interleaved files containing a mixture of paired and
 singleton reads.
 .EX 4
-samtools fastq -0 /dev/null in.bam > all_reads.fq
+samtools fastq -0 /dev/null in_name.bam > all_reads.fq
 .EE
 
 Output paired reads in a single file, discarding supplementary and
@@ -258,7 +262,7 @@ when using its
 .BR -p " and " -q " options."
 With this aligner, paired reads must be mapped separately to the singletons.
 .EX 4
-samtools fastq -0 /dev/null -s single.fq -N in.bam > paired.fq
+samtools fastq -0 /dev/null -s single.fq -N in_name.bam > paired.fq
 .EE
 
 .SH BUGS

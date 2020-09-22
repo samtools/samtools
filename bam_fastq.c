@@ -262,40 +262,14 @@ static int getLength(char **s)
 
 static bool copy_tag(const char *tag, const bam1_t *rec, kstring_t *linebuf)
 {
-    uint8_t *s = bam_aux_get(rec, tag);
-    if (s) {
-        char aux_type = *s;
-        switch (aux_type) {
-            case 'C':
-            case 'S': aux_type = 'I'; break;
-            case 'c':
-            case 's': aux_type = 'i'; break;
-            case 'd': aux_type = 'f'; break;
-        }
+    if (kputc('\t', linebuf) < 0)
+        return false;
+    int ret = bam_aux_get_str(rec, tag, linebuf);
+    if (ret < 0)
+        return false;
+    else if (ret == 0)
+        linebuf->s[--linebuf->l] = 0; // no tag so undo \t again
 
-        // Ensure space.  Need 6 chars + length of tag.  Max length of
-        // i is 16, A is 21, B currently 26, Z is unknown, so
-        // have to check that one later.
-        if (ks_resize(linebuf, ks_len(linebuf) + 64) < 0) return false;
-
-        kputc('\t', linebuf);
-        kputsn(tag, 2, linebuf);
-        kputc(':', linebuf);
-        kputc(aux_type=='I'? 'i': aux_type, linebuf);
-        kputc(':', linebuf);
-        switch (aux_type) {
-            case 'H':
-            case 'Z':
-                if (kputs(bam_aux2Z(s), linebuf) < 0) return false;
-                break;
-            case 'i': kputw(bam_aux2i(s), linebuf); break;
-            case 'I': kputuw(bam_aux2i(s), linebuf); break;
-            case 'A': kputc(bam_aux2A(s), linebuf); break;
-            case 'f': kputd(bam_aux2f(s), linebuf); break;
-            case 'B': kputs("*** Unhandled aux type ***", linebuf); return false;
-            default:  kputs("*** Unknown aux type ***", linebuf); return false;
-       }
-    }
     return true;
 }
 
@@ -403,6 +377,7 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
     size_t tag_len;
     int file_number = 0;
     kstring_t linebuf = { 0, 0, NULL }; // Buffer
+    int index_segment = 0, same_read = 1;
 
     if (!ifmt) return true;
 
@@ -424,7 +399,7 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
 
     // Parse the index-format string
     while (*ifmt) {
-        if (file_number > 1) break;     // shouldn't happen if we've validated paramaters correctly
+        if (file_number > 1) break;     // shouldn't happen if we've validated parameters correctly
         char action = *ifmt;        // should be 'i' or 'n'
         ifmt++; // skip over action
         int index_len = getLength(&ifmt);
@@ -451,14 +426,18 @@ static bool tags2fq(bam1_t *rec, bam2fq_state_t *state, const bam2fq_opts_t* opt
         }
         sub_tag[n] = '\0';
         sub_qual[n] = '\0';
+        index_segment++;
 
         if (action=='i' && *sub_tag) {
             if (state->index_sequence) {
-                char *new_index_sequence = realloc(state->index_sequence, strlen(state->index_sequence) + strlen(sub_tag) + 2);
-                if (!new_index_sequence) goto fail;
-                state->index_sequence = new_index_sequence;
-                strcat(state->index_sequence, INDEX_SEPARATOR);
-                strcat(state->index_sequence, sub_tag);
+                if (index_segment == 1) same_read = 0;
+                if (same_read) {
+                    char *new_index_sequence = realloc(state->index_sequence, strlen(state->index_sequence) + strlen(sub_tag) + 2);
+                    if (!new_index_sequence) goto fail;
+                    state->index_sequence = new_index_sequence;
+                    strcat(state->index_sequence, INDEX_SEPARATOR);
+                    strcat(state->index_sequence, sub_tag);
+                }
             } else {
                 state->index_sequence = strdup(sub_tag);    // we're going to need this later...
             }

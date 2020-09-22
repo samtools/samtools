@@ -60,6 +60,10 @@ P d5_b3aa.out  $samtools depth -aa -b xx.bed3 xx#depth3.bam
 # Fail as -a shouldn't output xn:16-20 (it doesn't with -r)
 F d5_b3a.out   $samtools depth -a  -b xx.bed3 xx#depth3.bam
 
+# All reference positions in a file with no alignments
+INIT x $samtools view -H -b -o xx#depth-noreads.bam xx#depth1.sam
+P d5_all4.out $samtools depth -aa xx#depth-noreads.bam
+
 #-----------------------------------------------------------------------------
 # With mpileup simulation of depth
 # This is a useful check that depth vs mpileup have the the same -a, -aa, -r
@@ -86,3 +90,10 @@ P d3_12r2a.out $samtools mpileup -ABQ0 -a -l xx.bed2 xx#depth1.bam xx#depth2.bam
 P d4_12.out  $samtools mpileup -ABQ0 -a -a            xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
 P d4_12r.out $samtools mpileup -ABQ0 -a -a -r xx:5-16 xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
 P d4_12b.out $samtools mpileup -ABQ0 -a -a -l xx.bed  xx#depth1.bam xx#depth2.bam | perl -lane 'print "$F[0]\t$F[1]\t$F[3]\t$F[6]"'
+
+# With and without -J (include deletions)
+P d6_wdel.out  $samtools depth -J depth_del.sam
+P d6_nodel.out $samtools depth    depth_del.sam
+
+# With -s (remove operlaps)
+P d7_nodup.out $samtools depth -s xx#depth4.sam

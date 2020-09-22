@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-bedcov 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-bedcov 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools bedcov \- reports coverage over regions in a supplied BED file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2020 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -60,8 +60,32 @@ Counts for each alignment file supplied are reported in separate columns.
 .BI "-Q " INT
 .RI "Only count reads with mapping quality greater than " INT
 .TP
+.BI "-g " FLAGS
+By default, reads that have any of the flags UNMAP, SECONDARY, QCFAIL,
+or DUP set are skipped. To include these reads back in the analysis, use
+this option together with the desired flag or flag combination.
+.I FLAGS
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/),
+in octal by beginning with `0' (i.e. /^0[0-7]+/), as a decimal number
+not beginning with '0' or as a comma-separated list of flag names. [0]
+
+For a list of flag names see
+.IR samtools-flags (1).
+.TP
+.BI "-G " FLAGS
+Discard any read that has any of the flags specified by
+.I FLAGS
+set.  FLAGS are specified as for the
+.B "-g"
+option. [UNMAP,SECONDARY,QCFAIL,DUP]
+.TP
 .B  -j
 Do not include deletions (D) and ref skips (N) in bedcov computation.
+.TP
+.BI "-d " INT
+Print an additional column, for each file, containing the number of bases having
+a depth above and including the given threshold. If the option is not used, the
+extra column is not displayed. The option value must be an integer >= 0.
 .TP
 .B "-X"
 If this option is set, it will allows user to specify customized index file location(s) if the data

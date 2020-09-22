@@ -1,10 +1,11 @@
 # ===========================================================================
+#   Based on serial 15 of AX_WITH_CURSES from autoconf-archive
 #      http://www.gnu.org/software/autoconf-archive/ax_with_curses.html
 # ===========================================================================
 #
 # SYNOPSIS
 #
-#   AX_WITH_CURSES
+#   HTS_WITH_CURSES
 #
 # DESCRIPTION
 #
@@ -94,7 +95,7 @@
 #   If any Curses library will do (but one must be present and must support
 #   color), you could use:
 #
-#     AX_WITH_CURSES
+#     HTS_WITH_CURSES
 #     if test "x$ax_cv_curses" != xyes || test "x$ax_cv_curses_color" != xyes; then
 #         AC_MSG_ERROR([requires an X/Open-compatible Curses library with color])
 #     fi
@@ -149,12 +150,16 @@
 #   of AX_WITH_CURSES, as well as in the additional macros
 #   AX_WITH_CURSES_PANEL, AX_WITH_CURSES_MENU and AX_WITH_CURSES_FORM.
 #
+#   Based on serial 15 of AX_WITH_CURSES from autoconf-archive
+#      http://www.gnu.org/software/autoconf-archive/ax_with_curses.html
+#
 # LICENSE
 #
 #   Copyright (c) 2009 Mark Pulford <mark@kyne.com.au>
 #   Copyright (c) 2009 Damian Pietras <daper@daper.net>
 #   Copyright (c) 2012 Reuben Thomas <rrt@sc3d.org>
 #   Copyright (c) 2011 John Zaitseff <J.Zaitseff@zap.org.au>
+#   Copyright (c) 2020 Genome Research Limited
 #
 #   This program is free software: you can redistribute it and/or modify it
 #   under the terms of the GNU General Public License as published by the
@@ -182,10 +187,64 @@
 #   modified version of the Autoconf Macro, you may extend this special
 #   exception to the GPL to apply to your modified version as well.
 
-#serial 15
+dnl Check for ncursesw headers.  Expanded a lot due to the number of
+dnl places they may be stored.
+dnl
+dnl $1 is the message for AC_CACHE_CHECK
+dnl $2 is the output variable
+dnl $3 is the header file name
+dnl $4 is a test to see if the check is required
+m4_define([HTS_NCURSESW_HEADERS_CHECK],[
+    AS_IF([$4], [
+        AC_CACHE_CHECK([$1], [$2], [
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+                @%:@define _XOPEN_SOURCE_EXTENDED 1
+                @%:@include <$3>
+            ]], [[
+                chtype a = A_BOLD;
+                int b = KEY_LEFT;
+                chtype c = COLOR_PAIR(1) & A_COLOR;
+                attr_t d = WA_NORMAL;
+                cchar_t e;
+                wint_t f;
+                int g = getattrs(stdscr);
+                int h = getcurx(stdscr) + getmaxx(stdscr);
+                initscr();
+                init_pair(1, COLOR_WHITE, COLOR_RED);
+                wattr_set(stdscr, d, 0, NULL);
+                wget_wch(stdscr, &f);
+            ]])],
+            [$2=yes],
+            [$2=no])
+        ])
+    ])
+])
 
-AU_ALIAS([MP_WITH_CURSES], [AX_WITH_CURSES])
-AC_DEFUN([AX_WITH_CURSES], [
+dnl Check for ncurses headers
+dnl Parameters as for HTS_NCURSESW_HEADERS_CHECK
+
+m4_define([HTS_NCURSES_HEADERS_CHECK],[
+    AS_IF([$4], [
+        AC_CACHE_CHECK([$1], [$2], [
+            AC_LINK_IFELSE([AC_LANG_PROGRAM([[
+                @%:@include <$3>
+            ]], [[
+                chtype a = A_BOLD;
+                int b = KEY_LEFT;
+                chtype c = COLOR_PAIR(1) & A_COLOR;
+                int g = getattrs(stdscr);
+                int h = getcurx(stdscr) + getmaxx(stdscr);
+                initscr();
+                init_pair(1, COLOR_WHITE, COLOR_RED);
+            ]])],
+            [$2=yes],
+            [$2=no])
+        ])
+    ])
+])
+
+AU_ALIAS([MP_WITH_CURSES], [HTS_WITH_CURSES])
+AC_DEFUN([HTS_WITH_CURSES], [
     AC_ARG_VAR([CURSES_LIB], [linker library for Curses, e.g. -lcurses])
     AC_ARG_WITH([ncurses], [AS_HELP_STRING([--with-ncurses],
         [force the use of Ncurses or NcursesW])],
@@ -214,107 +273,55 @@ AC_DEFUN([AX_WITH_CURSES], [
         ])
 
         AS_IF([test "x$ax_cv_ncursesw" = xyes], [
-            ax_cv_curses=yes
-            ax_cv_curses_which=ncursesw
-            CURSES_LIB="-lncursesw"
-            AC_DEFINE([HAVE_NCURSESW], [1], [Define to 1 if the NcursesW library is present])
-            AC_DEFINE([HAVE_CURSES],   [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
-
-            AC_CACHE_CHECK([for working ncursesw/curses.h], [ax_cv_header_ncursesw_curses_h], [
-                AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-                        @%:@define _XOPEN_SOURCE_EXTENDED 1
-                        @%:@include <ncursesw/curses.h>
-                    ]], [[
-                        chtype a = A_BOLD;
-                        int b = KEY_LEFT;
-                        chtype c = COLOR_PAIR(1) & A_COLOR;
-                        attr_t d = WA_NORMAL;
-                        cchar_t e;
-                        wint_t f;
-                        int g = getattrs(stdscr);
-                        int h = getcurx(stdscr) + getmaxx(stdscr);
-                        initscr();
-                        init_pair(1, COLOR_WHITE, COLOR_RED);
-                        wattr_set(stdscr, d, 0, NULL);
-                        wget_wch(stdscr, &f);
-                    ]])],
-                    [ax_cv_header_ncursesw_curses_h=yes],
-                    [ax_cv_header_ncursesw_curses_h=no])
-            ])
+            HTS_NCURSESW_HEADERS_CHECK([for working ncursesw/curses.h],
+                                       [ax_cv_header_ncursesw_curses_h],
+                                       [ncursesw/curses.h],
+                                       [test "x$ax_cv_curses_which" = xno])
             AS_IF([test "x$ax_cv_header_ncursesw_curses_h" = xyes], [
-                ax_cv_curses_enhanced=yes
-                ax_cv_curses_color=yes
-                ax_cv_curses_obsolete=yes
-                AC_DEFINE([HAVE_CURSES_ENHANCED],   [1], [Define to 1 if library supports X/Open Enhanced functions])
-                AC_DEFINE([HAVE_CURSES_COLOR],      [1], [Define to 1 if library supports color (enhanced functions)])
-                AC_DEFINE([HAVE_CURSES_OBSOLETE],   [1], [Define to 1 if library supports certain obsolete features])
                 AC_DEFINE([HAVE_NCURSESW_CURSES_H], [1], [Define to 1 if <ncursesw/curses.h> is present])
+                ax_cv_curses_which=ncursesw
             ])
-
-            AC_CACHE_CHECK([for working ncursesw.h], [ax_cv_header_ncursesw_h], [
-                AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-                        @%:@define _XOPEN_SOURCE_EXTENDED 1
-                        @%:@include <ncursesw.h>
-                    ]], [[
-                        chtype a = A_BOLD;
-                        int b = KEY_LEFT;
-                        chtype c = COLOR_PAIR(1) & A_COLOR;
-                        attr_t d = WA_NORMAL;
-                        cchar_t e;
-                        wint_t f;
-                        int g = getattrs(stdscr);
-                        int h = getcurx(stdscr) + getmaxx(stdscr);
-                        initscr();
-                        init_pair(1, COLOR_WHITE, COLOR_RED);
-                        wattr_set(stdscr, d, 0, NULL);
-                        wget_wch(stdscr, &f);
-                    ]])],
-                    [ax_cv_header_ncursesw_h=yes],
-                    [ax_cv_header_ncursesw_h=no])
-            ])
+            HTS_NCURSESW_HEADERS_CHECK([for working ncursesw.h],
+                                       [ax_cv_header_ncursesw_h],
+                                       [ncursesw.h],
+                                       [test "x$ax_cv_curses_which" = xno])
             AS_IF([test "x$ax_cv_header_ncursesw_h" = xyes], [
-                ax_cv_curses_enhanced=yes
-                ax_cv_curses_color=yes
-                ax_cv_curses_obsolete=yes
-                AC_DEFINE([HAVE_CURSES_ENHANCED], [1], [Define to 1 if library supports X/Open Enhanced functions])
-                AC_DEFINE([HAVE_CURSES_COLOR],    [1], [Define to 1 if library supports color (enhanced functions)])
-                AC_DEFINE([HAVE_CURSES_OBSOLETE], [1], [Define to 1 if library supports certain obsolete features])
                 AC_DEFINE([HAVE_NCURSESW_H],      [1], [Define to 1 if <ncursesw.h> is present])
+                ax_cv_curses_which=ncursesw
             ])
-
-            AC_CACHE_CHECK([for working ncurses.h], [ax_cv_header_ncurses_h_with_ncursesw], [
-                AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-                        @%:@define _XOPEN_SOURCE_EXTENDED 1
-                        @%:@include <ncurses.h>
-                    ]], [[
-                        chtype a = A_BOLD;
-                        int b = KEY_LEFT;
-                        chtype c = COLOR_PAIR(1) & A_COLOR;
-                        attr_t d = WA_NORMAL;
-                        cchar_t e;
-                        wint_t f;
-                        int g = getattrs(stdscr);
-                        int h = getcurx(stdscr) + getmaxx(stdscr);
-                        initscr();
-                        init_pair(1, COLOR_WHITE, COLOR_RED);
-                        wattr_set(stdscr, d, 0, NULL);
-                        wget_wch(stdscr, &f);
-                    ]])],
-                    [ax_cv_header_ncurses_h_with_ncursesw=yes],
-                    [ax_cv_header_ncurses_h_with_ncursesw=no])
-            ])
+            HTS_NCURSESW_HEADERS_CHECK([for working ncurses.h],
+                                       [ax_cv_header_ncurses_h_with_ncursesw],
+                                       [ncurses.h],
+                                       [test "x$ax_cv_curses_which" = xno])
             AS_IF([test "x$ax_cv_header_ncurses_h_with_ncursesw" = xyes], [
+                AC_DEFINE([HAVE_NCURSES_H],       [1], [Define to 1 if <ncurses.h> is present])
+                ax_cv_curses_which=ncursesw
+            ])
+            HTS_NCURSESW_HEADERS_CHECK([for working ncurses/curses.h],
+                                       [ax_cv_header_ncurses_curses_h_with_ncursesw],
+                                       [ncurses/curses.h],
+                                       [test "x$ax_cv_curses_which" = xno])
+            AS_IF([test "x$ax_cv_header_ncurses_curses_h_with_ncursesw" = xyes], [
+                AC_DEFINE([HAVE_NCURSES_CURSES_H], [1], [Define to 1 if <ncurses/curses.h> is present])
+                ax_cv_curses_which=ncursesw
+            ])
+            AS_IF([test "x$ax_cv_curses_which" = xncursesw], [
+                ax_cv_curses=yes
                 ax_cv_curses_enhanced=yes
                 ax_cv_curses_color=yes
                 ax_cv_curses_obsolete=yes
+                CURSES_LIB="-lncursesw"
+                AC_DEFINE([HAVE_NCURSESW], [1], [Define to 1 if the NcursesW library is present])
+                AC_DEFINE([HAVE_CURSES],   [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
                 AC_DEFINE([HAVE_CURSES_ENHANCED], [1], [Define to 1 if library supports X/Open Enhanced functions])
                 AC_DEFINE([HAVE_CURSES_COLOR],    [1], [Define to 1 if library supports color (enhanced functions)])
                 AC_DEFINE([HAVE_CURSES_OBSOLETE], [1], [Define to 1 if library supports certain obsolete features])
-                AC_DEFINE([HAVE_NCURSES_H],       [1], [Define to 1 if <ncurses.h> is present])
-            ])
-
-            AS_IF([test "x$ax_cv_header_ncursesw_curses_h" = xno && test "x$ax_cv_header_ncursesw_h" = xno && test "x$ax_cv_header_ncurses_h_with_ncursesw" = xno], [
-                AC_MSG_WARN([could not find a working ncursesw/curses.h, ncursesw.h or ncurses.h])
+              ], [
+                AS_IF([test "x$with_ncursesw" = xyes], [
+                    AC_MSG_ERROR([--with-ncursesw specified but could not find NcursesW header])
+                ], [
+                    AC_MSG_WARN([could not find a working ncursesw/curses.h, ncursesw.h or ncurses.h])
+                ])
             ])
         ])
     ])
@@ -333,60 +340,39 @@ AC_DEFUN([AX_WITH_CURSES], [
         ])
 
         AS_IF([test "x$ax_cv_ncurses" = xyes], [
-            ax_cv_curses=yes
-            ax_cv_curses_which=ncurses
-            CURSES_LIB="-lncurses"
-            AC_DEFINE([HAVE_NCURSES], [1], [Define to 1 if the Ncurses library is present])
-            AC_DEFINE([HAVE_CURSES],  [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
-
-            AC_CACHE_CHECK([for working ncurses/curses.h], [ax_cv_header_ncurses_curses_h], [
-                AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-                        @%:@include <ncurses/curses.h>
-                    ]], [[
-                        chtype a = A_BOLD;
-                        int b = KEY_LEFT;
-                        chtype c = COLOR_PAIR(1) & A_COLOR;
-                        int g = getattrs(stdscr);
-                        int h = getcurx(stdscr) + getmaxx(stdscr);
-                        initscr();
-                        init_pair(1, COLOR_WHITE, COLOR_RED);
-                    ]])],
-                    [ax_cv_header_ncurses_curses_h=yes],
-                    [ax_cv_header_ncurses_curses_h=no])
-            ])
+            HTS_NCURSES_HEADERS_CHECK([for working ncurses/curses.h],
+                                      [ax_cv_header_ncurses_curses_h],
+                                      [ncurses/curses.h],
+                                      [test "x$ax_cv_curses_which" = xno])
             AS_IF([test "x$ax_cv_header_ncurses_curses_h" = xyes], [
-                ax_cv_curses_color=yes
-                ax_cv_curses_obsolete=yes
-                AC_DEFINE([HAVE_CURSES_COLOR],     [1], [Define to 1 if library supports color (enhanced functions)])
-                AC_DEFINE([HAVE_CURSES_OBSOLETE],  [1], [Define to 1 if library supports certain obsolete features])
                 AC_DEFINE([HAVE_NCURSES_CURSES_H], [1], [Define to 1 if <ncurses/curses.h> is present])
+                ax_cv_curses_which=ncurses
             ])
 
-            AC_CACHE_CHECK([for working ncurses.h], [ax_cv_header_ncurses_h], [
-                AC_LINK_IFELSE([AC_LANG_PROGRAM([[
-                        @%:@include <ncurses.h>
-                    ]], [[
-                        chtype a = A_BOLD;
-                        int b = KEY_LEFT;
-                        chtype c = COLOR_PAIR(1) & A_COLOR;
-                        int g = getattrs(stdscr);
-                        int h = getcurx(stdscr) + getmaxx(stdscr);
-                        initscr();
-                        init_pair(1, COLOR_WHITE, COLOR_RED);
-                    ]])],
-                    [ax_cv_header_ncurses_h=yes],
-                    [ax_cv_header_ncurses_h=no])
-            ])
+            HTS_NCURSES_HEADERS_CHECK([for working ncurses.h],
+                                      [ax_cv_header_ncurses_h],
+                                      [ncurses.h],
+                                      [test "x$ax_cv_curses_which" = xno])
             AS_IF([test "x$ax_cv_header_ncurses_h" = xyes], [
+                AC_DEFINE([HAVE_NCURSES_H],       [1], [Define to 1 if <ncurses.h> is present])
+                ax_cv_curses_which=ncurses
+            ])
+
+            AS_IF([test "x$ax_cv_curses_which" = xncurses], [
+                ax_cv_curses=yes
                 ax_cv_curses_color=yes
                 ax_cv_curses_obsolete=yes
+                CURSES_LIB="-lncurses"
+                AC_DEFINE([HAVE_NCURSES], [1], [Define to 1 if the Ncurses library is present])
+                AC_DEFINE([HAVE_CURSES],  [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
                 AC_DEFINE([HAVE_CURSES_COLOR],    [1], [Define to 1 if library supports color (enhanced functions)])
                 AC_DEFINE([HAVE_CURSES_OBSOLETE], [1], [Define to 1 if library supports certain obsolete features])
-                AC_DEFINE([HAVE_NCURSES_H],       [1], [Define to 1 if <ncurses.h> is present])
-            ])
-
-            AS_IF([test "x$ax_cv_header_ncurses_curses_h" = xno && test "x$ax_cv_header_ncurses_h" = xno], [
-                AC_MSG_WARN([could not find a working ncurses/curses.h or ncurses.h])
+              ], [
+                AS_IF([test "x$with_ncurses" = xyes], [
+                    AC_MSG_ERROR([--with-ncurses specified but could not find Ncurses header])
+                ], [
+                    AC_MSG_WARN([could not find a working ncurses/curses.h or ncurses.h])
+                ])
             ])
         ])
     ])
@@ -406,12 +392,6 @@ AC_DEFUN([AX_WITH_CURSES], [
         ])
 
         AS_IF([test "x$ax_cv_plaincurses" = xyes], [
-            ax_cv_curses=yes
-            ax_cv_curses_which=plaincurses
-            AS_IF([test "x$CURSES_LIB" = x], [
-                CURSES_LIB="-lcurses"
-            ])
-            AC_DEFINE([HAVE_CURSES], [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
 
             # Check for base conformance (and header file)
 
@@ -427,6 +407,12 @@ AC_DEFUN([AX_WITH_CURSES], [
                     [ax_cv_header_curses_h=no])
             ])
             AS_IF([test "x$ax_cv_header_curses_h" = xyes], [
+                ax_cv_curses=yes
+                ax_cv_curses_which=plaincurses
+                AS_IF([test "x$CURSES_LIB" = x], [
+                    CURSES_LIB="-lcurses"
+                ])
+                AC_DEFINE([HAVE_CURSES], [1], [Define to 1 if a SysV or X/Open compatible Curses library is present])
                 AC_DEFINE([HAVE_CURSES_H], [1], [Define to 1 if <curses.h> is present])
 
                 # Check for X/Open Enhanced conformance
@@ -507,6 +493,15 @@ AC_DEFUN([AX_WITH_CURSES], [
                 AC_MSG_WARN([could not find a working curses.h])
             ])
         ])
+    ])
+
+    AS_IF([test "x$ax_cv_curses_which" != xno], [
+        # Normally linking curses gets tinfo as well, but this doesn't
+        # always happen.  Check to see if it needs to be added explicitly.
+        AC_SEARCH_LIBS(cbreak, tinfo)
+        AS_CASE([$ac_cv_search_cbreak],
+                [-l*],[CURSES_LIB="$CURSES_LIB $ac_cv_search_cbreak"
+                       LIBS="$LIBS $ac_cv_search_cbreak"])
     ])
 
     AS_IF([test "x$ax_cv_curses"          != xyes], [ax_cv_curses=no])

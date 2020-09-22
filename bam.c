@@ -1,6 +1,6 @@
 /*  bam.c -- BAM format.
 
-    Copyright (C) 2008-2013, 2015, 2019 Genome Research Ltd.
+    Copyright (C) 2008-2013, 2015, 2019-2020 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -125,21 +125,21 @@ int bam_remove_B(bam1_t *b)
     uint8_t *seq, *qual, *p;
     // test if removal is necessary
     if (b->core.flag & BAM_FUNMAP) return 0; // unmapped; do nothing
-    cigar = bam1_cigar(b);
+    cigar = bam_get_cigar(b);
     for (k = 0; k < b->core.n_cigar; ++k)
         if (bam_cigar_op(cigar[k]) == BAM_CBACK) break;
     if (k == b->core.n_cigar) return 0; // no 'B'
     if (bam_cigar_op(cigar[0]) == BAM_CBACK) goto rmB_err; // cannot be removed
     // allocate memory for the new CIGAR
-    if (b->data_len + (b->core.n_cigar + 1) * 4 > b->m_data) { // not enough memory
-        b->m_data = b->data_len + b->core.n_cigar * 4;
+    if (b->l_data + (b->core.n_cigar + 1) * 4 > b->m_data) { // not enough memory
+        b->m_data = b->l_data + b->core.n_cigar * 4;
         kroundup32(b->m_data);
         b->data = (uint8_t*)realloc(b->data, b->m_data);
-        cigar = bam1_cigar(b); // after realloc, cigar may be changed
+        cigar = bam_get_cigar(b); // after realloc, cigar may be changed
     }
     new_cigar = (uint32_t*)(b->data + (b->m_data - b->core.n_cigar * 4)); // from the end of b->data
     // the core loop
-    seq = bam1_seq(b); qual = bam1_qual(b);
+    seq = bam_get_seq(b); qual = bam_get_qual(b);
     no_qual = (qual[0] == 0xff); // test whether base quality is available
     i = j = 0; end_j = -1;
     for (k = l = 0; k < b->core.n_cigar; ++k) {
@@ -168,9 +168,9 @@ int bam_remove_B(bam1_t *b)
                 if (i != j) { // no need to copy if i == j
                     int u, c, c0;
                     for (u = 0; u < len; ++u) { // construct the consensus
-                        c = bam1_seqi(seq, i+u);
+                        c = bam_seqi(seq, i+u);
                         if (j + u < end_j) { // in an overlap
-                            c0 = bam1_seqi(seq, j+u);
+                            c0 = bam_seqi(seq, j+u);
                             if (c != c0) { // a mismatch; choose the better base
                                 if (qual[j+u] < qual[i+u]) { // the base in the 2nd segment is better
                                     bam1_seq_seti(seq, j+u, c);
@@ -202,9 +202,9 @@ int bam_remove_B(bam1_t *b)
     p = b->data + b->core.l_qname + l * 4;
     memmove(p, seq, (j+1)>>1); p += (j+1)>>1; // set SEQ
     memmove(p, qual, j); p += j; // set QUAL
-    memmove(p, bam1_aux(b), bam_get_l_aux(b)); p += bam_get_l_aux(b); // set optional fields
+    memmove(p, bam_get_aux(b), bam_get_l_aux(b)); p += bam_get_l_aux(b); // set optional fields
     b->core.n_cigar = l, b->core.l_qseq = j; // update CIGAR length and query length
-    b->data_len = p - b->data; // update record length
+    b->l_data = p - b->data; // update record length
     return 0;
 
 rmB_err:

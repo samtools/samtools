@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-dict 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-dict 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools dict \- create a sequence dictionary file from a fasta file
 .\"
@@ -54,6 +54,13 @@ Create a sequence dictionary file from a fasta file.
 .TP 11
 .BI -a,\ --assembly \ STR
 Specify the assembly for the AS tag.
+.TP
+.B -A, --alias, --alternative-name
+Add an AN tag with the same value as the SN tag, except that a \(lqchr\(rq
+prefix is removed if SN has one or added if it does not.
+For mitochondria (i.e., when SN is \(lqM\(rq or \(lqMT\(rq, with or without a
+\(lqchr\(rq prefix), also adds the remaining combiniations of \(lqchr/M/MT\(rq
+to the AN tag.
 .TP
 .B -H,\ --no-header
 Do not print the @HD header line.

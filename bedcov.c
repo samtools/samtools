@@ -1,7 +1,7 @@
 /*  bedcov.c -- bedcov subcommand.
 
     Copyright (C) 2012 Broad Institute.
-    Copyright (C) 2013-2014, 2018, 2019 Genome Research Ltd.
+    Copyright (C) 2013-2014, 2018-2020 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -40,11 +40,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/kseq.h"
 KSTREAM_INIT(gzFile, gzread, 16384)
 
+#define DEFAULT_DEPTH 64000
+
 typedef struct {
     htsFile *fp;
     sam_hdr_t *header;
     hts_itr_t *iter;
     int min_mapQ;
+    uint32_t flags;  // read filtering flags
 } aux_t;
 
 static int read_bam(void *data, bam1_t *b)
@@ -55,7 +58,7 @@ static int read_bam(void *data, bam1_t *b)
     {
         ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->header, b);
         if ( ret<0 ) break;
-        if ( b->core.flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP) ) continue;
+        if ( b->core.flag & aux->flags ) continue;
         if ( (int)b->core.qual < aux->min_mapQ ) continue;
         break;
     }
@@ -70,9 +73,11 @@ int main_bedcov(int argc, char *argv[])
     hts_idx_t **idx;
     aux_t **aux;
     int *n_plp, dret, i, j, m, n, c, min_mapQ = 0, skip_DN = 0;
-    int64_t *cnt;
+    int64_t *cnt, *pcov = NULL;;
     const bam_pileup1_t **plp;
     int usage = 0, has_index_file = 0;
+    uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
+    int tflags = 0, min_depth = -1;
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
@@ -80,11 +85,28 @@ int main_bedcov(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "Q:Xj", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:Xg:G:jd:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
         case 'X': has_index_file = 1; break;
+        case 'g':
+            tflags = bam_str2flag(optarg);
+            if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
+                print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
+                return 1;
+            }
+            flags &= ~tflags;
+            break;
+        case 'G':
+            tflags = bam_str2flag(optarg);
+            if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
+                print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
+                return 1;
+            }
+            flags |= tflags;
+            break;
         case 'j': skip_DN = 1; break;
+        case 'd': min_depth = atoi(optarg); break;
         default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                   /* else fall-through */
         case '?': usage = 1; break;
@@ -96,7 +118,12 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "Options:\n");
         fprintf(stderr, "      -Q <int>            mapping quality threshold [0]\n");
         fprintf(stderr, "      -X                  use customized index files\n");
+        fprintf(stderr, "      -g <flags>          remove the specified flags from the set used to filter out reads\n");
+        fprintf(stderr, "      -G <flags>          add the specified flags to the set used to filter out reads\n"
+                        "                          The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704");
         fprintf(stderr, "      -j                  do not include deletions (D) and ref skips (N) in bedcov computation\n");
+        fprintf(stderr, "      -d <int>            depth threshold. Number of reference bases with coverage above and"
+                        "                          including this value will be displayed in a separate column\n");
         sam_global_opt_help(stderr, "-.--.--.");
         return 1;
     }
@@ -136,8 +163,11 @@ int main_bedcov(int argc, char *argv[])
                     argv[i+optind+1]);
             return 2;
         }
+        aux[i]->flags = flags;
     }
-    cnt = calloc(n, 8);
+    cnt = calloc(n, sizeof(*cnt));
+    if (min_depth >= 0) pcov = calloc(n, sizeof(*pcov));
+    if (!cnt || (min_depth >= 0 && !pcov)) return 2;
 
     fp = gzopen(argv[optind], "rb");
     if (fp == NULL) {
@@ -149,7 +179,8 @@ int main_bedcov(int argc, char *argv[])
     plp = calloc(n, sizeof(bam_pileup1_t*));
     while (ks_getuntil(ks, KS_SEP_LINE, &str, &dret) >= 0) {
         char *p, *q;
-        int tid, beg, end, pos;
+        int tid, pos, num = 0;
+        int64_t beg = 0, end = 0;
         bam_mplp_t mplp;
 
         if (str.l == 0 || *str.s == '#') continue; /* empty or comment line */
@@ -158,40 +189,52 @@ int main_bedcov(int argc, char *argv[])
            be followed by a tab in that case). */
         if (strncmp(str.s, "track ", 6) == 0) continue;
         if (strncmp(str.s, "browser ", 8) == 0) continue;
-        for (p = q = str.s; *p && *p != '\t'; ++p);
-        if (*p != '\t') goto bed_error;
-        *p = 0; tid = bam_name2id(aux[0]->header, q); *p = '\t';
+        for (p = q = str.s; *p && !isspace(*p); ++p);
+        if (*p == 0) goto bed_error;
+        char c = *p;
+        *p = 0; tid = bam_name2id(aux[0]->header, q); *p = c;
         if (tid < 0) goto bed_error;
-        for (q = p = p + 1; isdigit(*p); ++p);
-        if (*p != '\t') goto bed_error;
-        *p = 0; beg = atoi(q); *p = '\t';
-        for (q = p = p + 1; isdigit(*p); ++p);
-        if (*p == '\t' || *p == 0) {
-            int c = *p;
-            *p = 0; end = atoi(q); *p = c;
-        } else goto bed_error;
+        num = sscanf(p + 1, "%"SCNd64" %"SCNd64, &beg, &end);
+        if (num < 2 || end < beg) goto bed_error;
 
         for (i = 0; i < n; ++i) {
             if (aux[i]->iter) hts_itr_destroy(aux[i]->iter);
             aux[i]->iter = sam_itr_queryi(idx[i], tid, beg, end);
         }
+
         mplp = bam_mplp_init(n, read_bam, (void**)aux);
-        bam_mplp_set_maxcnt(mplp, 64000);
-        memset(cnt, 0, 8 * n);
+        if (min_depth > DEFAULT_DEPTH)
+            bam_mplp_set_maxcnt(mplp, min_depth);
+        else
+            bam_mplp_set_maxcnt(mplp, DEFAULT_DEPTH);
+
+        memset(cnt, 0, sizeof(*cnt) * n);
+        if (min_depth >= 0) memset(pcov, 0, sizeof(*pcov) * n);
+
         while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0)
             if (pos >= beg && pos < end) {
-                for (i = 0, m = 0; i < n; ++i) {
-                    if (skip_DN)
+                for (i = 0; i < n; ++i) {
+                    m = 0;
+                    if (skip_DN || min_depth >= 0) {
                         for (j = 0; j < n_plp[i]; ++j) {
                             const bam_pileup1_t *pi = plp[i] + j;
                             if (pi->is_del || pi->is_refskip) ++m;
                         }
-                    cnt[i] += n_plp[i] - m;
+                    }
+                    int pd = n_plp[i] - m;
+                    cnt[i] += pd;
+                    if (min_depth >= 0 && pd >= min_depth) pcov[i]++;
                 }
             }
         for (i = 0; i < n; ++i) {
             kputc('\t', &str);
             kputl(cnt[i], &str);
+        }
+        if (min_depth >= 0) {
+            for (i = 0; i < n; ++i) {
+                kputc('\t', &str);
+                kputl(pcov[i], &str);
+            }
         }
         puts(str.s);
         bam_mplp_destroy(mplp);
@@ -205,6 +248,7 @@ bed_error:
     gzclose(fp);
 
     free(cnt);
+    free(pcov);
     for (i = 0; i < n; ++i) {
         if (aux[i]->iter) hts_itr_destroy(aux[i]->iter);
         hts_idx_destroy(idx[i]);

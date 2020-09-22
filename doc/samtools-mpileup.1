@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-mpileup 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-mpileup 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools mpileup \- produces "pileup" textual format from an alignment
 .\"
-.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -160,12 +160,22 @@ that it is the fifth base of the corresponding read that is mapped to this
 genomic position.
 (Column only present when \fB-O\fR/\fB--output-BP\fR is used.)
 .IP \(ci 2
-Comma-separated read names.
-(Column only present when \fB--output-QNAME\fR is used.)
+Additional comma-separated read field columns,
+as selected via \fB--output-extra\fR.
+The fields selected appear in the same order as in SAM:
+.BR QNAME ,
+.BR FLAG ,
+.BR RNAME ,
+.BR POS ,
+.B MAPQ
+(displayed numerically),
+.BR RNEXT ,
+.BR PNEXT .
 .IP \(ci 2
-Additional columns containing other specified read fields or tags,
-as selected via the \fB--output-extra\fR, \fB--output-sep\fR,
-and \fB--output-empty\fR options.
+Additional read tag field columns, as selected via \fB--output-extra\fR.
+These columns are formatted as determined by \fB--output-sep\fR and
+\fB--output-empty\fR (comma-separated by default), and appear in the
+same order as the tags are given in \fB--output-extra\fR.
 
 .SH OPTIONS
 .TP 10
@@ -173,7 +183,7 @@ and \fB--output-empty\fR options.
 Assume the quality is in the Illumina 1.3+ encoding.
 .TP
 .B -A, --count-orphans
-Do not skip anomalous read pairs in variant calling.  Anomolous read
+Do not skip anomalous read pairs in variant calling.  Anomalous read
 pairs are those marked in the FLAG field as paired in sequencing but
 without the properly-paired flag set.
 .TP
@@ -237,7 +247,7 @@ While it is possible to mix both position-list and BED coordinates in
 the same file, this is strongly ill advised due to the differing
 coordinate systems. [null]
 .TP
-.BI -q,\ -min-MQ \ INT
+.BI -q,\ --min-MQ \ INT
 Minimum mapping quality for an alignment to be used [0]
 .TP
 .BI -Q,\ --min-BQ \ INT
@@ -264,9 +274,9 @@ Filter flags: skip reads with mask bits set
 Disable read-pair overlap detection.
 .TP
 .B -X
-Include customized index file as a part of arugments. See
+Include customized index file as a part of arguments. See
 .B EXAMPLES
-section for sample of useage.
+section for sample of usage.
 
 .PP
 .B Output Options:
@@ -295,8 +305,7 @@ or
 Output base positions on reads.
 .TP
 .B -s, --output-MQ
-Output mapping quality.
-Equivalent to \fB--output-extra MAPQ\fR.
+Output mapping qualities encoded as ASCII characters.
 .TP
 .B --output-QNAME
 Output an extra column containing comma-separated read names.
@@ -421,7 +430,7 @@ Generate the consensus sequence for one diploid individual:
 samtools mpileup -uf ref.fa aln.bam | bcftools call -c | vcfutils.pl vcf2fq > cns.fq
 .EE
 .IP o 2
-Include customized index file as a part of arugments.
+Include customized index file as a part of arguments.
 .EX 2
 samtools mpileup [options] -X /data_folder/in1.bam [/data_folder/in2.bam [...]] /index_folder/index1.bai [/index_folder/index2.bai [...]]
 .EE

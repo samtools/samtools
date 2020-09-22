@@ -57,19 +57,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 const char *VERSION = "0.1";
 
-typedef struct {  // auxiliary data structure to hold a BAM file
-    samFile *fp;     // file handle
-    sam_hdr_t *hdr;  // file header
-    hts_itr_t *iter; // iterator to a region - NULL for us by default
-    int min_mapQ;    // mapQ filter
-    int min_len;     // length filter
-    unsigned int n_reads;  // records the number of reads seen in file
-    unsigned int n_selected_reads; // records the number of reads passing filter
-    unsigned long summed_mapQ; // summed mapQ of all reads passing filter
-    int fail_flags;
-    int required_flags;
-} bam_aux_t;
-
 typedef struct {  // auxiliary data structure to hold stats on coverage
     unsigned long long n_covered_bases;
     unsigned long long summed_coverage;
@@ -77,11 +64,22 @@ typedef struct {  // auxiliary data structure to hold stats on coverage
     unsigned long long summed_mapQ;
     unsigned int n_reads;
     unsigned int n_selected_reads;
-    int32_t tid;    // chromosome ID, defined by header
+    bool covered;
     hts_pos_t beg;
     hts_pos_t end;
     int64_t bin_width;
 } stats_aux_t;
+
+typedef struct {  // auxiliary data structure to hold a BAM file
+    samFile *fp;     // file handle
+    sam_hdr_t *hdr;  // file header
+    hts_itr_t *iter; // iterator to a region - NULL for us by default
+    int min_mapQ;    // mapQ filter
+    int min_len;     // length filter
+    int fail_flags;
+    int required_flags;
+    stats_aux_t *stats;
+} bam_aux_t;
 
 #if __STDC_VERSION__ >= 199901L
 #define VERTICAL_LINE "\u2502" // BOX DRAWINGS LIGHT VERTICAL
@@ -114,8 +112,8 @@ static int usage() {
             "Input options:\n"
             "  -b, --bam-list FILE     list of input BAM filenames, one per line\n"
             "  -l, --min-read-len INT  ignore reads shorter than INT bp [0]\n"
-            "  -q, --min-MQ INT        base quality threshold [0]\n"
-            "  -Q, --min-BQ INT        mapping quality threshold [0]\n"
+            "  -q, --min-MQ INT        mapping quality threshold [0]\n"
+            "  -Q, --min-BQ INT        base quality threshold [0]\n"
             "  --rf <int|str>          required flags: skip reads with mask bits unset []\n"
             "  --ff <int|str>          filter flags: skip reads with mask bits set \n"
             "                                      [UNMAP,SECONDARY,QCFAIL,DUP]\n"
@@ -171,79 +169,63 @@ static char* readable_bps(double base_pairs, char *buf) {
     return buf;
 }
 
-static void set_read_counts(bam_aux_t **data, stats_aux_t *stats, int n_bam_files) {
-    int i;
-    stats->n_reads = 0;
-    stats->n_selected_reads = 0;
-    stats->summed_mapQ = 0;
-    for (i = 0; i < n_bam_files && data[i]; ++i) {
-        stats->n_reads += data[i]->n_reads;
-        stats->n_selected_reads += data[i]->n_selected_reads;
-        stats->summed_mapQ += data[i]->summed_mapQ;
-        data[i]->n_reads = 0;
-        data[i]->n_selected_reads = 0;
-        data[i]->summed_mapQ = 0;
-    }
-}
-
 // read one alignment from one BAM file
 static int read_bam(void *data, bam1_t *b) {
     bam_aux_t *aux = (bam_aux_t*)data; // data in fact is a pointer to an auxiliary structure
+    int nref = sam_hdr_nref(aux->hdr);
     int ret;
     while (1) {
         if((ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->hdr, b)) < 0) break;
-        ++aux->n_reads;
+        if (b->core.tid >= 0 && b->core.tid < nref)
+            aux->stats[b->core.tid].n_reads++;
 
         if ( aux->fail_flags && (b->core.flag & aux->fail_flags) ) continue;
         if ( aux->required_flags && !(b->core.flag & aux->required_flags) ) continue;
         if ( b->core.qual < aux->min_mapQ ) continue;
         if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
-        ++aux->n_selected_reads;
-        aux->summed_mapQ += b->core.qual;
+        if (b->core.tid >= 0 && b->core.tid < nref) {
+            aux->stats[b->core.tid].n_selected_reads++;
+            aux->stats[b->core.tid].summed_mapQ += b->core.qual;
+        }
         break;
     }
     return ret;
 }
 
-void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats) {
-    fputs(sam_hdr_tid2name(h, stats->tid), file_out);
-    double region_len = (double) stats->end - stats->beg;
+void print_tabular_line(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, int tid) {
+    fputs(sam_hdr_tid2name(h, tid), file_out);
+    double region_len = (double) stats[tid].end - stats[tid].beg;
     fprintf(file_out, "\t%"PRId64"\t%"PRId64"\t%u\t%llu\t%g\t%g\t%.3g\t%.3g\n",
-            stats->beg+1,
-            stats->end,
-            stats->n_selected_reads,
-            stats->n_covered_bases,
-            100.0 * stats->n_covered_bases / region_len,
-            stats->summed_coverage / region_len,
-            stats->summed_coverage > 0? stats->summed_baseQ/(double) stats->summed_coverage : 0,
-            stats->n_selected_reads > 0? stats->summed_mapQ/(double) stats->n_selected_reads : 0
+            stats[tid].beg+1,
+            stats[tid].end,
+            stats[tid].n_selected_reads,
+            stats[tid].n_covered_bases,
+            100.0 * stats[tid].n_covered_bases / region_len,
+            stats[tid].summed_coverage / region_len,
+            stats[tid].summed_coverage > 0? stats[tid].summed_baseQ/(double) stats[tid].summed_coverage : 0,
+            stats[tid].n_selected_reads > 0? stats[tid].summed_mapQ/(double) stats[tid].n_selected_reads : 0
            );
 }
 
-void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, const uint32_t *hist,
+void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, int tid, const uint32_t *hist,
         const int hist_size, const bool full_utf) {
     int i, col;
     bool show_percentiles = false;
     const int n_rows = 10;
     const char * const * BLOCK_CHARS = full_utf? BLOCK_CHARS8 : BLOCK_CHARS2;
     const int blockchar_len = full_utf? 8 : 2;
-    /*
-       if (stats->beg == 0) {
-       stats->end = h->target_len[stats->tid];
-       }
-       */
-    double region_len = stats->end - stats->beg;
+    double region_len = stats[tid].end - stats[tid].beg;
 
     // Calculate histogram that contains percent covered
     double hist_data[hist_size];
     double max_val = 0.0;
     for (i = 0; i < hist_size; ++i) {
-        hist_data[i] = 100 * hist[i] / (double) stats->bin_width;
+        hist_data[i] = 100 * hist[i] / (double) stats[tid].bin_width;
         if (hist_data[i] > max_val) max_val = hist_data[i];
     }
 
     char buf[30];
-    fprintf(file_out, "%s (%sbp)\n", sam_hdr_tid2name(h, stats->tid), readable_bps(sam_hdr_tid2len(h, stats->tid), buf));
+    fprintf(file_out, "%s (%sbp)\n", sam_hdr_tid2name(h, tid), readable_bps(sam_hdr_tid2len(h, tid), buf));
 
     double row_bin_size = max_val / (double) n_rows;
     for (i = n_rows-1; i >= 0; --i) {
@@ -269,19 +251,19 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, co
         fprintf(file_out, VERTICAL_LINE);
         fputc(' ', file_out);
         switch (i) {
-            case 9: fprintf(file_out, "Number of reads: %i", stats->n_selected_reads); break;
-            case 8: if (stats->n_reads - stats->n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats->n_reads - stats->n_selected_reads); break;
-            case 7: fprintf(file_out, "Covered bases:   %sbp", readable_bps(stats->n_covered_bases, buf)); break;
+            case 9: fprintf(file_out, "Number of reads: %i", stats[tid].n_selected_reads); break;
+            case 8: if (stats[tid].n_reads - stats[tid].n_selected_reads > 0) fprintf(file_out, "    (%i filtered)", stats[tid].n_reads - stats[tid].n_selected_reads); break;
+            case 7: fprintf(file_out, "Covered bases:   %sbp", readable_bps(stats[tid].n_covered_bases, buf)); break;
             case 6: fprintf(file_out, "Percent covered: %.4g%%",
-                            100.0 * stats->n_covered_bases / region_len); break;
+                            100.0 * stats[tid].n_covered_bases / region_len); break;
             case 5: fprintf(file_out, "Mean coverage:   %.3gx",
-                            stats->summed_coverage / region_len); break;
+                            stats[tid].summed_coverage / region_len); break;
             case 4: fprintf(file_out, "Mean baseQ:      %.3g",
-                            stats->summed_baseQ/(double) stats->summed_coverage); break;
+                            stats[tid].summed_baseQ/(double) stats[tid].summed_coverage); break;
             case 3: fprintf(file_out, "Mean mapQ:       %.3g",
-                            stats->summed_mapQ/(double) stats->n_selected_reads); break;
+                            stats[tid].summed_mapQ/(double) stats[tid].n_selected_reads); break;
             case 1: fprintf(file_out, "Histo bin width: %sbp",
-                            readable_bps(stats->bin_width, buf)); break;
+                            readable_bps(stats[tid].bin_width, buf)); break;
             case 0: fprintf(file_out, "Histo max bin:   %.5g%%", max_val); break;
         };
         fputc('\n', file_out);
@@ -290,20 +272,20 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, co
     // print x axis. Could be made pretty for widths that are not divisible
     // by 10 by variable spacing of the labels, instead of placing a label every 10 characters
     char buf2[50];
-    fprintf(file_out, "     %s", center_text(readable_bps(stats->beg + 1, buf), buf2, 10));
+    fprintf(file_out, "     %s", center_text(readable_bps(stats[tid].beg + 1, buf), buf2, 10));
     int rest;
     for (rest = 10; rest < 10*(hist_size/10); rest += 10) {
-        fprintf(file_out, "%s", center_text(readable_bps(stats->beg + stats->bin_width*rest, buf), buf2, 10));
+        fprintf(file_out, "%s", center_text(readable_bps(stats[tid].beg + stats[tid].bin_width*rest, buf), buf2, 10));
     }
     int last_padding = hist_size%10;
-    fprintf(file_out, "%*s%s", last_padding, " ", center_text(readable_bps(stats->end, buf), buf2, 10));
+    fprintf(file_out, "%*s%s", last_padding, " ", center_text(readable_bps(stats[tid].end, buf), buf2, 10));
     fprintf(file_out, "\n");
 }
 
 int main_coverage(int argc, char *argv[]) {
     int status = EXIT_SUCCESS;
 
-    int ret, tid, pos, i, j;
+    int ret, tid = -1, old_tid = -1, pos, i, j;
 
     int max_depth = 0;
     int opt_min_baseQ = 0;
@@ -330,7 +312,6 @@ int main_coverage(int argc, char *argv[]) {
     bool opt_print_header = true;
     bool opt_print_tabular = true;
     bool opt_print_histogram = false;
-    bool *covered_tids = NULL;
     bool opt_full_utf = true;
 
     FILE *file_out = stdout;
@@ -373,8 +354,8 @@ int main_coverage(int argc, char *argv[]) {
                 }; break;
             case 'o': opt_output_file = optarg; opt_full_width = false; break;
             case 'L': opt_min_len = atoi(optarg); break;
-            case 'q': opt_min_baseQ = atoi(optarg); break;
-            case 'Q': opt_min_mapQ = atoi(optarg); break;
+            case 'q': opt_min_mapQ = atoi(optarg); break;
+            case 'Q': opt_min_baseQ = atoi(optarg); break;
             case 'w': opt_n_bins = atoi(optarg); opt_full_width = false;
                       opt_print_histogram = true; opt_print_tabular = false;
                       break;
@@ -427,7 +408,7 @@ int main_coverage(int argc, char *argv[]) {
             if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
                 columns = csbi.srWindow.Right - csbi.srWindow.Left + 1;
             }
-#else
+#elif defined TIOCGWINSZ
             struct winsize w;
             if (ioctl(2, TIOCGWINSZ, &w) == 0)
                 columns = w.ws_col;
@@ -528,9 +509,8 @@ int main_coverage(int argc, char *argv[]) {
 
     h = data[0]->hdr; // easy access to the header of the 1st BAM
     int n_targets = sam_hdr_nref(h);
-    covered_tids = calloc(n_targets, sizeof(bool));
-    stats = calloc(1, sizeof(stats_aux_t));
-    if (!covered_tids || !stats) {
+    stats = calloc(n_targets, sizeof(stats_aux_t));
+    if (!stats) {
         print_error("coverage", "Failed to allocate memory");
         status = EXIT_FAILURE;
         goto coverage_end;
@@ -538,19 +518,20 @@ int main_coverage(int argc, char *argv[]) {
 
     int64_t n_bins = opt_n_bins;
     if (opt_reg) {
-        stats->tid = data[0]->iter->tid;
-        stats->beg = data[0]->iter->beg; // and to the parsed region coordinates
-        stats->end = data[0]->iter->end;
-        if (stats->end == HTS_POS_MAX) {
-            stats->end = sam_hdr_tid2len(h, stats->tid);
+        stats_aux_t *s = stats + data[0]->iter->tid;
+        s->beg = data[0]->iter->beg; // and to the parsed region coordinates
+        s->end = data[0]->iter->end;
+        if (s->end == HTS_POS_MAX) {
+            s->end = sam_hdr_tid2len(h, data[0]->iter->tid);
         }
-        if (opt_n_bins > stats->end - stats->beg) {
-            n_bins = stats->end - stats->beg;
+        if (opt_n_bins > s->end - s->beg) {
+            n_bins = s->end - s->beg;
         }
-        stats->bin_width = (stats->end-stats->beg) / n_bins;
-    } else {
-        stats->tid = -1;
+        s->bin_width = (s->end-s->beg) / (n_bins > 0 ? n_bins : 1);
     }
+
+    for (i=0; i<n_bam_files; i++)
+        data[i]->stats = stats;
 
     int64_t current_bin = 0;
 
@@ -573,37 +554,35 @@ int main_coverage(int argc, char *argv[]) {
     }
     while ((ret=bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
 
-        if (tid != stats->tid) { // Next target sequence
-            if (stats->tid >= 0) { // It's not the first sequence, print results
-                set_read_counts(data, stats, n_bam_files);
+        if (tid != old_tid) { // Next target sequence
+            if (old_tid >= 0) {
                 if (opt_print_histogram) {
-                    print_hist(file_out, h, stats, hist, n_bins, opt_full_utf);
+                    print_hist(file_out, h, stats, old_tid, hist, n_bins, opt_full_utf);
                     fputc('\n', file_out);
                 } else if (opt_print_tabular) {
-                    print_tabular_line(file_out, h, stats);
+                    print_tabular_line(file_out, h, stats, old_tid);
                 }
 
-                // reset data
-                memset(stats, 0, sizeof(stats_aux_t));
                 if (opt_print_histogram)
                     memset(hist, 0, n_bins*sizeof(uint32_t));
             }
 
-            stats->tid = tid;
-            covered_tids[tid] = true;
+            stats[tid].covered = true;
             if (!opt_reg)
-                stats->end = sam_hdr_tid2len(h, tid);
+                stats[tid].end = sam_hdr_tid2len(h, tid);
 
             if (opt_print_histogram) {
-                n_bins = opt_n_bins > stats->end-stats->beg? stats->end-stats->beg : opt_n_bins;
-                stats->bin_width = (stats->end-stats->beg) / n_bins;
+                n_bins = opt_n_bins > stats[tid].end-stats[tid].beg? stats[tid].end-stats[tid].beg : opt_n_bins;
+                stats[tid].bin_width = (stats[tid].end-stats[tid].beg) / n_bins;
             }
+
+            old_tid = tid;
         }
-        if (pos < stats->beg || pos >= stats->end) continue; // out of range; skip
+        if (pos < stats[tid].beg || pos >= stats[tid].end) continue; // out of range; skip
         if (tid >= n_targets) continue;     // diff number of @SQ lines per file?
 
         if (opt_print_histogram) {
-            current_bin = (pos - stats->beg) / stats->bin_width;
+            current_bin = (pos - stats[tid].beg) / stats[tid].bin_width;
         }
 
         bool count_base = false;
@@ -616,39 +595,40 @@ int main_coverage(int argc, char *argv[]) {
                 else if (p->qpos < p->b->core.l_qseq &&
                         bam_get_qual(p->b)[p->qpos] < opt_min_baseQ) --depth_at_pos; // low base quality
                 else
-                    stats->summed_baseQ += bam_get_qual(p->b)[p->qpos];
+                    stats[tid].summed_baseQ += bam_get_qual(p->b)[p->qpos];
             }
             if (depth_at_pos > 0) {
                 count_base = true;
-                stats->summed_coverage += depth_at_pos;
+                stats[tid].summed_coverage += depth_at_pos;
             }
             // hist[current_bin] += depth_at_pos;  // Add counts to the histogram here to have one based on coverage
             //fprintf(file_out, "\t%d", n_plp[i] - m); // this the depth to output
         }
         if (count_base) {
-            ++(stats->n_covered_bases);
+            stats[tid].n_covered_bases++;
             if (opt_print_histogram && current_bin < n_bins)
                 ++(hist[current_bin]); // Histogram based on breadth of coverage
         }
     }
 
-    if (stats->tid != -1) {
-        set_read_counts(data, stats, n_bam_files);
+    if (tid == -1 && opt_reg && *opt_reg != '*')
+        // Region specified but no data covering it.
+        tid = data[0]->iter->tid;
+
+    if (tid < n_targets && tid >=0) {
         if (opt_print_histogram) {
-            print_hist(file_out, h, stats, hist, n_bins, opt_full_utf);
+            print_hist(file_out, h, stats, tid, hist, n_bins, opt_full_utf);
         } else if (opt_print_tabular) {
-            print_tabular_line(file_out, h, stats);
+            print_tabular_line(file_out, h, stats, tid);
         }
     }
 
 
     if (!opt_reg && opt_print_tabular) {
-        memset(stats, 0, sizeof(stats_aux_t));
         for (i = 0; i < n_targets; ++i) {
-            if (!covered_tids[i]) {
-                stats->tid = i;
-                stats->end = sam_hdr_tid2len(h, i);
-                print_tabular_line(file_out, h, stats);
+            if (!stats[i].covered) {
+                stats[i].end = sam_hdr_tid2len(h, i);
+                print_tabular_line(file_out, h, stats, i);
             }
         }
     }
@@ -658,12 +638,10 @@ int main_coverage(int argc, char *argv[]) {
 coverage_end:
     if (n_plp) free(n_plp);
     if (plp) free(plp);
-    bam_mplp_destroy(mplp);
+    if (mplp) bam_mplp_destroy(mplp);
 
-    if (covered_tids) free(covered_tids);
     if (hist) free(hist);
     if (stats) free(stats);
-
 
     // Close files and free data structures
     if (!(file_out == stdout || fclose(file_out) == 0)) {

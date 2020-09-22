@@ -1,0 +1,8 @@
+@HD	VN:1.4
+@SQ	SN:ref1	LN:50
+@SQ	SN:ref2	LN:50	AN:r2
+@SQ	SN:r3	LN:50	AN:ref3
+r1f2g1	0	ref1	25	30	25M	*	0	0	*	*
+r2f2g1	0	ref1	27	30	6M	*	0	0	*	*
+r3f2g1	0	ref1	28	30	21M	*	0	0	*	*
+r1f2g3	0	ref3	1	30	30M	*	0	0	*	*

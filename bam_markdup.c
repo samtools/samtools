@@ -1,7 +1,7 @@
 /*  bam_markdup.c -- Mark duplicates from a coord sorted file that has gone
                      through fixmates with the mate scoring option on.
 
-    Copyright (C) 2017-2019 Genome Research Ltd.
+    Copyright (C) 2017-2020 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 
@@ -910,6 +910,9 @@ static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_has
     int have_original = !(ori->b->core.flag & BAM_FDUP);
     int ori_paired = (ori->b->core.flag & BAM_FPAIRED) && !(ori->b->core.flag & BAM_FMUNMAP);
 
+    if (!(param->tag || param->opt_dist))
+        return ret; // nothing to do here
+
     while (current) {
         int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
 
@@ -1080,30 +1083,29 @@ static inline double coverage_equation(double x, double c, double n) {
 
 
 /* estimate the library size, based on the Picard code in DuplicationMetrics.java*/
-static unsigned long estimate_library_size(unsigned long read_pairs, unsigned long duplicate_pairs) {
+static unsigned long estimate_library_size(unsigned long paired_reads, unsigned long paired_duplicate_reads, unsigned long optical) {
     unsigned long estimated_size = 0;
+    unsigned long non_optical_pairs = (paired_reads - optical) / 2;
+    unsigned long unique_pairs = (paired_reads - paired_duplicate_reads) / 2;
+    unsigned long duplicate_pairs = (paired_duplicate_reads - optical) / 2;
 
-    read_pairs /= 2;
-    duplicate_pairs /= 2;
-
-    if ((read_pairs && duplicate_pairs) && (read_pairs > duplicate_pairs)) {
-        unsigned long unique_pairs = read_pairs - duplicate_pairs;
+    if ((non_optical_pairs && duplicate_pairs && unique_pairs) && (non_optical_pairs > duplicate_pairs)) {
         double m = 1;
         double M = 100;
         int i;
 
-        if (coverage_equation(m * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) < 0) {
+        if (coverage_equation(m * (double)unique_pairs, (double)unique_pairs, (double)non_optical_pairs) < 0) {
             fprintf(stderr, "[markdup] warning: unable to calculate estimated library size.\n");
             return  estimated_size;
         }
 
-        while (coverage_equation(M * (double)unique_pairs, (double)unique_pairs, (double)read_pairs) > 0) {
+        while (coverage_equation(M * (double)unique_pairs, (double)unique_pairs, (double)non_optical_pairs) > 0) {
             M *= 10;
         }
 
         for (i = 0; i < 40; i++) {
             double r = (m + M) / 2;
-            double u = coverage_equation(r * (double)unique_pairs, (double)unique_pairs, (double)read_pairs);
+            double u = coverage_equation(r * (double)unique_pairs, (double)unique_pairs, (double)non_optical_pairs);
 
             if (u > 0) {
                 m = r;
@@ -1119,7 +1121,7 @@ static unsigned long estimate_library_size(unsigned long read_pairs, unsigned lo
         fprintf(stderr, "[markdup] warning: unable to calculate estimated library size."
                         " Read pairs %ld should be greater than duplicate pairs %ld,"
                         " which should both be non zero.\n",
-                        read_pairs, duplicate_pairs);
+                        non_optical_pairs, duplicate_pairs);
     }
 
     return estimated_size;
@@ -1669,7 +1671,7 @@ static int bam_mark_duplicates(md_param_t *param) {
             fp = stderr;
         }
 
-        els = estimate_library_size(pair, duplicate - optical);
+        els = estimate_library_size(pair, duplicate, optical);
 
         fprintf(fp,
                 "COMMAND: %s\n"
@@ -1745,6 +1747,7 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -m --mode TYPE   Duplicate decision method for paired reads.\n"
                     "                   TYPE = t measure positions based on template start/end (default).\n"
                     "                          s measure positions based on sequence start.\n");
+    fprintf(stderr, "  -u               Output uncompressed data\n");
     fprintf(stderr, "  --include-fails  Include quality check failed reads.\n");
     fprintf(stderr, "  --no-PG          Do not add a PG line\n");
     fprintf(stderr, "  -t               Mark primary duplicates with the name of the original in a \'do\' tag."
@@ -1761,7 +1764,7 @@ static int markdup_usage(void) {
 
 int bam_markdup(int argc, char **argv) {
     int c, ret;
-    char wmode[3] = {'w', 'b', 0};
+    char wmode[4] = {'w', 'b', 0, 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
     kstring_t tmpprefix = {0, 0, NULL};
@@ -1777,7 +1780,7 @@ int bam_markdup(int argc, char **argv) {
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:ncm:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:ncm:u", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': param.remove_dups = 1; break;
             case 'l': param.max_length = atoi(optarg); break;
@@ -1799,6 +1802,7 @@ int bam_markdup(int argc, char **argv) {
                 }
 
                 break;
+            case 'u': wmode[2] = '0'; break;
             case 1001: param.include_fails = 1; break;
             case 1002: param.no_pg = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-merge 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-merge 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools merge \- merges multiple sorted input files into a single output.
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -140,10 +140,19 @@ differentiate similar IDs.
 If this option is set, it will allows user to specify customized index file location(s) if the data 
 folder does not contain any index file. See
 .B EXAMPLES
-section for sample of useage.
+section for sample of usage.
+.TP
+.BI -L \ FILE
+BED file for specifying multiple regions on which the merge will be performed.
+This option extends the usage of
+.B -R
+option and cannot be used concurrently with it.
 .TP
 .BI --no-PG
 Do not add a @PG line to the header of the output file.
+.TP
+.BI "-@, --threads " INT
+Number of input/output compression threads to use in addition to main thread [0].
 
 .SH EXAMPLES
 .IP o 2
@@ -169,7 +178,7 @@ will be attached
 .IR RG:Z:454 .
 
 .IP o 2
-Include customized index file as a part of arugments:
+Include customized index file as a part of arguments:
 .EX 2
 samtools merge [options] -X <out.bam> </data_folder/in1.bam> [</data_folder/in2.bam> ... </data_folder/inN.bam>] </index_folder/index1.bai> [</index_folder/index2.bai> ... </index_folder/indexN.bai>]
 .EE

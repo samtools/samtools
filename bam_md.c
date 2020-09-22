@@ -1,6 +1,6 @@
 /*  bam_md.c -- calmd subcommand.
 
-    Copyright (C) 2009-2011, 2014-2015, 2019 Genome Research Ltd.
+    Copyright (C) 2009-2011, 2014-2015, 2019-2020 Genome Research Ltd.
     Portions copyright (C) 2009-2011 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -30,6 +30,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <errno.h>
 #include "htslib/faidx.h"
 #include "htslib/sam.h"
 #include "htslib/kstring.h"
@@ -46,102 +47,136 @@ DEALINGS IN THE SOFTWARE.  */
 
 int bam_aux_drop_other(bam1_t *b, uint8_t *s);
 
-void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max_nm, int quiet_mode)
+static int bam_fillmd1_core(const char *ref_name, bam1_t *b, char *ref,
+                            hts_pos_t ref_len, int flag, int max_nm,
+                            int quiet_mode, uint32_t *skipped)
 {
     uint8_t *seq = bam_get_seq(b);
     uint32_t *cigar = bam_get_cigar(b);
     bam1_core_t *c = &b->core;
-    int i, y, u = 0;
-    hts_pos_t x;
-    kstring_t *str;
+    int i, qpos, matched = 0;
+    hts_pos_t rpos;
+    kstring_t str = KS_INITIALIZE;
     int32_t old_nm_i = -1, nm = 0;
+    uint32_t err = 0;
 
-    str = (kstring_t*)calloc(1, sizeof(kstring_t));
-    for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
-        int j, l = cigar[i]>>4, op = cigar[i]&0xf;
+    if (c->l_qseq == 0) {
+        if (!quiet_mode) {
+            if (ref_name) {
+                fprintf(stderr, "[bam_fillmd1] no sequence in alignment "
+                        "record for '%s' at %s:%"PRIhts_pos", skipped\n",
+                        bam_get_qname(b), ref_name, c->pos + 1);
+            } else {
+                fprintf(stderr, "[bam_fillmd1] no sequence in alignment "
+                        "record for '%s', skipped", bam_get_qname(b));
+            }
+        }
+        if (skipped) (*skipped)++;
+        return 0;
+    }
+
+    for (i = qpos = 0, rpos = c->pos; i < c->n_cigar; ++i) {
+        int j, oplen = cigar[i]>>4, op = cigar[i]&0xf;
         if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
-            for (j = 0; j < l; ++j) {
-                int c1, c2, z = y + j;
-                if (x+j >= ref_len || ref[x+j] == '\0') break; // out of bounds
-                c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
+            for (j = 0; j < oplen; ++j) {
+                int c1, c2, z = qpos + j;
+                if (rpos+j >= ref_len || z >= c->l_qseq || ref[rpos+j] == '\0')
+                    break; // out of bounds
+                c1 = bam_seqi(seq, z);
+                c2 = seq_nt16_table[(uint8_t)ref[rpos+j]];
                 if ((c1 == c2 && c1 != 15 && c2 != 15) || c1 == 0) { // a match
                     if (flag&USE_EQUAL) seq[z/2] &= (z&1)? 0xf0 : 0x0f;
-                    ++u;
+                    ++matched;
                 } else {
-                    kputw(u, str); kputc(toupper(ref[x+j]), str);
-                    u = 0; ++nm;
+                    err |= kputw(matched, &str) < 0;
+                    err |= kputc(toupper(ref[rpos+j]), &str) < 0;
+                    matched = 0; ++nm;
                 }
             }
-            if (j < l) break;
-            x += l; y += l;
+            if (j < oplen) break;
+            rpos += oplen; qpos += oplen;
         } else if (op == BAM_CDEL) {
-            kputw(u, str); kputc('^', str);
-            for (j = 0; j < l; ++j) {
-                if (x+j >= ref_len || ref[x+j] == '\0') break;
-                kputc(toupper(ref[x+j]), str);
+            err |= kputw(matched, &str) < 0;
+            err |= kputc('^', &str) < 0;
+            for (j = 0; j < oplen; ++j) {
+                if (rpos+j >= ref_len || ref[rpos+j] == '\0') break;
+                err |= kputc(toupper(ref[rpos+j]), &str) < 0;
             }
-            u = 0;
-            x += j; nm += j;
-            if (j < l) break;
+            matched = 0;
+            rpos += j; nm += j;
+            if (j < oplen) break;
         } else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) {
-            y += l;
-            if (op == BAM_CINS) nm += l;
+            qpos += oplen;
+            if (op == BAM_CINS) nm += oplen;
         } else if (op == BAM_CREF_SKIP) {
-            x += l;
+            rpos += oplen;
         }
     }
-    kputw(u, str);
+    err |= kputw(matched, &str) < 0;
+    if (err) {
+        print_error_errno("calmd", "Couldn't build new MD string");
+        goto fail;
+    }
     // apply max_nm
     if (max_nm > 0 && nm >= max_nm) {
-        for (i = y = 0, x = c->pos; i < c->n_cigar; ++i) {
-            int j, l = cigar[i]>>4, op = cigar[i]&0xf;
+        for (i = qpos = 0, rpos = c->pos; i < c->n_cigar; ++i) {
+            int j, oplen = cigar[i]>>4, op = cigar[i]&0xf;
             if (op == BAM_CMATCH || op == BAM_CEQUAL || op == BAM_CDIFF) {
-                for (j = 0; j < l; ++j) {
-                    int c1, c2, z = y + j;
-                    if (x+j >= ref_len || ref[x+j] == '\0') break; // out of bounds
-                    c1 = bam_seqi(seq, z), c2 = seq_nt16_table[(int)ref[x+j]];
+                for (j = 0; j < oplen; ++j) {
+                    int c1, c2, z = qpos + j;
+                    if (rpos+j >= ref_len || z >= c->l_qseq || ref[rpos+j] == '\0')
+                        break; // out of bounds
+                    c1 = bam_seqi(seq, z);
+                    c2 = seq_nt16_table[(uint8_t)ref[rpos+j]];
                     if ((c1 == c2 && c1 != 15 && c2 != 15) || c1 == 0) { // a match
                         seq[z/2] |= (z&1)? 0x0f : 0xf0;
                         bam_get_qual(b)[z] = 0;
                     }
                 }
-                if (j < l) break;
-                x += l; y += l;
-            } else if (op == BAM_CDEL || op == BAM_CREF_SKIP) x += l;
-            else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) y += l;
+                if (j < oplen) break;
+                rpos += oplen; qpos += oplen;
+            } else if (op == BAM_CDEL || op == BAM_CREF_SKIP) rpos += oplen;
+            else if (op == BAM_CINS || op == BAM_CSOFT_CLIP) qpos += oplen;
         }
     }
     // update NM
     if ((flag & UPDATE_NM) && !(c->flag & BAM_FUNMAP)) {
         uint8_t *old_nm = bam_aux_get(b, "NM");
         if (old_nm) old_nm_i = bam_aux2i(old_nm);
-        if (!old_nm) bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
+        if (!old_nm) {
+            if (bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm) < 0)
+                goto aux_fail;
+        }
         else if (nm != old_nm_i) {
             if (!quiet_mode) {
                 fprintf(stderr, "[bam_fillmd1] different NM for read '%s': %d -> %d\n", bam_get_qname(b), old_nm_i, nm);
             }
-            bam_aux_del(b, old_nm);
-            bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm);
+            if (bam_aux_del(b, old_nm) < 0) goto aux_fail;
+            if (bam_aux_append(b, "NM", 'i', 4, (uint8_t*)&nm) < 0)
+                goto aux_fail;
         }
     }
     // update MD
     if ((flag & UPDATE_MD) && !(c->flag & BAM_FUNMAP)) {
         uint8_t *old_md = bam_aux_get(b, "MD");
-        if (!old_md) bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
-        else {
+        if (!old_md) {
+            if (bam_aux_append(b, "MD", 'Z', str.l + 1, (uint8_t*)str.s) < 0)
+                goto aux_fail;
+        } else {
             int is_diff = 0;
-            if (strlen((char*)old_md+1) == str->l) {
-                for (i = 0; i < str->l; ++i)
-                    if (toupper(old_md[i+1]) != toupper(str->s[i]))
+            if (strlen((char*)old_md+1) == str.l) {
+                for (i = 0; i < str.l; ++i)
+                    if (toupper(old_md[i+1]) != toupper(str.s[i]))
                         break;
-                if (i < str->l) is_diff = 1;
+                if (i < str.l) is_diff = 1;
             } else is_diff = 1;
             if (is_diff) {
                 if (!quiet_mode) {
-                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam_get_qname(b), old_md+1, str->s);
+                    fprintf(stderr, "[bam_fillmd1] different MD for read '%s': '%s' -> '%s'\n", bam_get_qname(b), old_md+1, str.s);
                 }
-                bam_aux_del(b, old_md);
-                bam_aux_append(b, "MD", 'Z', str->l + 1, (uint8_t*)str->s);
+                if (bam_aux_del(b, old_md) < 0) goto aux_fail;
+                if (bam_aux_append(b, "MD", 'Z', str.l + 1, (uint8_t*)str.s) < 0)
+                    goto aux_fail;
             }
         }
     }
@@ -158,12 +193,25 @@ void bam_fillmd1_core(bam1_t *b, char *ref, hts_pos_t ref_len, int flag, int max
             if (qual[i] >= 3) qual[i] = qual[i]/10*10 + 7;
     }
 
-    free(str->s); free(str);
+    free(str.s);
+    return 0;
+
+ aux_fail:
+    if (errno == ENOMEM) {
+        print_error("calmd", "Couldn't add aux tag (too long)");
+    } else if (errno == EINVAL) {
+        print_error("calmd", "Corrupt aux data");
+    } else {
+        print_error_errno("calmd", "Couldn't add aux tag");
+    }
+ fail:
+    free(str.s);
+    return -1;
 }
 
-void bam_fillmd1(bam1_t *b, char *ref, int flag, int quiet_mode)
+int bam_fillmd1(bam1_t *b, char *ref, int flag, int quiet_mode)
 {
-    bam_fillmd1_core(b, ref, INT_MAX, flag, 0, quiet_mode);
+    return bam_fillmd1_core(NULL, b, ref, INT_MAX, flag, 0, quiet_mode, NULL);
 }
 
 int calmd_usage() {
@@ -193,8 +241,10 @@ int bam_fillmd(int argc, char *argv[])
     sam_hdr_t *header = NULL;
     faidx_t *fai = NULL;
     char *ref = NULL, mode_w[8], *ref_file, *arg_list = NULL;
+    const char *ref_name = NULL;
     bam1_t *b = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+    uint32_t skipped = 0;
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0, 0,'@'),
@@ -294,20 +344,34 @@ int bam_fillmd(int argc, char *argv[])
         if (b->core.tid >= 0) {
             if (tid != b->core.tid) {
                 free(ref);
-                ref = fai_fetch64(fai, sam_hdr_tid2name(header, b->core.tid), &len);
+                ref = NULL;
+                len = 0;
+                ref_name = sam_hdr_tid2name(header, b->core.tid);
+                if (ref_name) {
+                    ref = fai_fetch64(fai, ref_name, &len);
+                }
                 tid = b->core.tid;
                 if (ref == 0) { // FIXME: Should this always be fatal?
                     fprintf(stderr, "[bam_fillmd] fail to find sequence '%s' in the reference.\n",
-                            sam_hdr_tid2name(header, tid));
+                            ref_name ? ref_name : "(unknown)");
                     if (is_realn || capQ > 10) goto fail; // Would otherwise crash
                 }
             }
-            if (is_realn) sam_prob_realn(b, ref, len, baq_flag);
+            if (is_realn) {
+                if (sam_prob_realn(b, ref, len, baq_flag) < -3) {
+                    print_error_errno("calmd", "BAQ alignment failed");
+                    goto fail;
+                }
+            }
             if (capQ > 10) {
                 int q = sam_cap_mapq(b, ref, len, capQ);
                 if (b->core.qual > q) b->core.qual = q;
             }
-            if (ref) bam_fillmd1_core(b, ref, len, flt_flag, max_nm, quiet_mode);
+            if (ref) {
+                if (bam_fillmd1_core(ref_name, b, ref, len, flt_flag, max_nm,
+                                     quiet_mode, &skipped) < 0)
+                    goto fail;
+            }
         }
         if (sam_write1(fpout, header, b) < 0) {
             print_error_errno("calmd", "failed to write to output file");
@@ -318,6 +382,13 @@ int bam_fillmd(int argc, char *argv[])
         fprintf(stderr, "[bam_fillmd] Error reading input.\n");
         goto fail;
     }
+
+    if (skipped) {
+        fprintf(stderr, "[calmd] Warning: %"PRIu32" records skipped due "
+                "to no query sequence\n",
+                skipped);
+    }
+
     bam_destroy1(b);
     sam_hdr_destroy(header);
 

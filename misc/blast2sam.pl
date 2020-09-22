@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2009 Genome Research Ltd.
+#    Copyright (C) 2009, 2014 Genome Research Ltd.
 #    Portions copyright (C) 2014 Ontario Institute for Cancer Research.
 #
 #    Author: Heng Li <lh3@sanger.ac.uk>

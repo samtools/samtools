@@ -1,6 +1,6 @@
 /*  md5sum-lite.c -- Basic md5sum implementation.
 
-    Copyright (C) 2008, 2009 Genome Research Ltd.
+    Copyright (C) 2008, 2009, 2015 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 

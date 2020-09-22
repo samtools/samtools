@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-calmd 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-calmd 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools calmd \- calculates MD and NM tags
 .\"
@@ -59,6 +59,15 @@ pointless as CRAM recalculates MD and NM tags on the fly.  The one
 exception to this case is where both input and output CRAM files
 have been / are being created with the \fIno_ref\fR option.
 
+Note that some aligners do not include sequence or confidence values
+in secondary and supplementary alignment records.
+Where this happens in SAM files, a \(lq*\(rq character will be
+seen in the \fBSEQ\fR and \fBQUAL\fR columns.
+These records will be skipped, as it is not possible to recalculate
+the MD and NM tags without access to the query sequence.
+.B samtools calmd
+will emit a warning if any records have been skipped for this reason.
+
 .SH OPTIONS
 .TP 8
 .B -A
@@ -90,6 +99,9 @@ effect is minor.
 .TP
 .BI --no-PG
 Do not add a @PG line to the header of the output file.
+.TP
+.BI "-@, --threads " INT
+Number of input/output compression threads to use in addition to main thread [0].
 
 .SH EXAMPLES
 .IP o 2

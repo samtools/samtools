@@ -1,6 +1,6 @@
 /* bam_addrprg.c -- samtools command to add or replace readgroups.
 
-   Copyright (c) 2013, 2015-2017, 2019 Genome Research Limited.
+   Copyright (c) 2013, 2015-2017, 2019-2020 Genome Research Limited.
 
    Author: Martin O. Pollard <mp15@sanger.ac.uk>
 
@@ -51,6 +51,7 @@ struct parsed_opts {
     rg_mode mode;
     sam_global_args ga;
     htsThreadPool p;
+    int uncompressed;
 };
 
 struct state;
@@ -164,13 +165,14 @@ static char* get_rg_id(const char *line)
 static void usage(FILE *fp)
 {
     fprintf(fp,
-            "Usage: samtools addreplacerg [options] [-r <@RG line> | -R <existing id>] [-o <output.bam>] <input.bam>\n"
+            "Usage: samtools addreplacerg [options] [-r <@RG line> | -R <existing id>] [-m orphan_only|overwrite_all] [-o <output.bam>] <input.bam>\n"
             "\n"
             "Options:\n"
             "  -m MODE   Set the mode of operation from one of overwrite_all, orphan_only [overwrite_all]\n"
             "  -o FILE   Where to write output to [stdout]\n"
             "  -r STRING @RG line text\n"
             "  -R STRING ID of @RG line in existing header to use\n"
+            "  -u        Output uncompressed data\n"
             "  --no-PG   Do not add a PG line\n"
             );
     sam_global_opt_help(fp, "..O..@..");
@@ -198,7 +200,7 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
     };
     kstring_t rg_line = {0,0,NULL};
 
-    while ((n = getopt_long(argc, argv, "r:R:m:o:O:l:h@:", lopts, NULL)) >= 0) {
+    while ((n = getopt_long(argc, argv, "r:R:m:o:O:h@:u", lopts, NULL)) >= 0) {
         switch (n) {
             case 'r':
                 // Are we adding to existing rg line?
@@ -234,6 +236,9 @@ static bool parse_args(int argc, char** argv, parsed_opts_t** opts)
                 return true;
             case 1:
                 retval->no_pg = 1;
+                break;
+            case 'u':
+                retval->uncompressed = 1;
                 break;
             case '?':
                 usage(stderr);
@@ -314,7 +319,7 @@ static void orphan_only_func(const state_t* state, bam1_t* file_read)
 }
 
 static bool init(const parsed_opts_t* opts, state_t** state_out) {
-    char output_mode[8] = "w";
+    char output_mode[9] = "w";
     state_t* retval = (state_t*) calloc(1, sizeof(state_t));
 
     if (retval == NULL) {
@@ -332,8 +337,12 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
     retval->input_header = sam_hdr_read(retval->input_file);
 
     retval->output_header = sam_hdr_dup(retval->input_header);
+
+    if (opts->uncompressed)
+        strcat(output_mode, "0");
     if (opts->output_name) // File format auto-detection
-        sam_open_mode(output_mode + 1, opts->output_name, NULL);
+        sam_open_mode(output_mode + strlen(output_mode),
+                      opts->output_name, NULL);
     retval->output_file = sam_open_format(opts->output_name == NULL?"-":opts->output_name, output_mode, &opts->ga.out);
 
     if (retval->output_file == NULL) {

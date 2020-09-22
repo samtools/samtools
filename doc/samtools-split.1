@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-split 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-split 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools split \- splits a file by read group.
 .\"
@@ -89,6 +89,9 @@ lb l .
 %!	@RG ID
 %.	output format filename extension
 .TE
+.TP
+.BI "-@, --threads " INT
+Number of input/output compression threads to use in addition to main thread [0].
 
 .SH AUTHOR
 .PP

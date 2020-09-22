@@ -101,6 +101,18 @@ GCC	8	25.37	19.77	31.05	23.81	0.00	0.00
 GCC	9	24.85	20.36	26.41	28.38	0.00	0.00
 GCC	10	26.56	24.78	23.52	25.15	0.00	0.00
 GCC	11	28.30	22.51	24.52	24.67	0.00	0.00
+# ACGT content per cycle, read oriented. Use `grep ^GCT | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]
+GCT	1	25.04	24.89	23.37	26.71
+GCT	2	25.04	25.85	22.63	26.48
+GCT	3	29.56	22.96	23.37	24.11
+GCT	4	22.89	32.05	19.07	26.00
+GCT	5	29.04	24.11	21.66	25.19
+GCT	6	26.89	23.00	23.37	26.74
+GCT	7	24.96	21.74	23.66	29.64
+GCT	8	26.19	18.95	31.86	23.00
+GCT	9	23.81	23.63	23.15	29.41
+GCT	10	26.82	22.37	25.93	24.89
+GCT	11	28.82	22.66	24.37	24.15
 # ACGT content per cycle for first fragments. Use `grep ^FBC | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%]; and N and O counts as a percentage of all A/C/G/T bases [%]
 FBC	1	21.22	22.33	27.74	28.71	0.00	0.00
 FBC	2	28.93	22.77	22.77	25.52	0.00	0.00

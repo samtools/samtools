@@ -1,0 +1,1345 @@
+#!/usr/bin/env perl
+#
+#    Copyright (C) 2020 Genome Research Ltd.
+#
+#    Author: James Bonfield <jkb@sanger.ac.uk>
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+# THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+# FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+# DEALINGS IN THE SOFTWARE.
+
+# Note: this script requires gnuplot version 5.0 or later.
+
+use strict;
+use Getopt::Long;
+use List::Util qw(max);
+use POSIX qw(ceil);
+
+my $version = "1.0";
+
+#-----------------------------------------------------------------------------
+# Command line argument handling & help
+
+my %opts;
+
+my $res = GetOptions("size=s"      => \$opts{size},
+                     "size2=s"     => \$opts{size2},
+                     "size3=s"     => \$opts{size3},
+                     "help"        => \$opts{help},
+                     "page=i"      => \$opts{page},
+                     "amp_add=i"   => \$opts{amp_add},
+                     "amp-add=i"   => \$opts{amp_add},
+                     "orient=s"    => \$opts{orient},
+                     "depth_max=s" => \$opts{depth_max},
+                     "depth-max=s" => \$opts{depth_max},
+                     "thumbnails"  => \$opts{thumbnails},
+                     "thumb_size=i"=> \$opts{thumb_size},
+                     "thumb-size=i"=> \$opts{thumb_size},
+                     "index-only"  => \$opts{index_only});
+
+$opts{size}      = "1000,800" unless $opts{size};
+$opts{size2}     = "1000,400" unless $opts{size2};
+$opts{size3}     = "400,847"  unless $opts{size3};
+$opts{page}      = 96         unless $opts{page};
+$opts{amp_add}   = 100        unless $opts{amp_add};
+$opts{orient}    = "h"        unless $opts{orient};
+$opts{depth_max} = 0          unless $opts{depth_max};
+$opts{thumbnails}= 0          unless $opts{thumbnails};
+$opts{thumb_size}= 200        unless $opts{thumb_size};
+
+my $max_depth = 0;
+
+my $usage = <<END;
+plot-ampliconstats version $version
+
+Usage: plot-ampliconstats prefix [FILE]
+
+Options:
+    -help         Show this usage
+    -size  W,H    Set image width to W and height to H for heatmaps
+    -size2 W,H    Set image width to W and height to H for graphs (horizontal)
+    -size3 W,H    Set image width to W and height to H for graphs (vertical)
+    -page N       Maximum number of samples per page in heatmaps
+    -amp-add X    Small sample fudge: NErr/(NAll+X) in amplicon count plots
+    -orient h/v   Orientation for plots, defaults to h (horizontal)
+    -depth-max N  Force -reads.png plots to have a fixed yrange
+    -thumbnails   Produce scaled down thumbnail images
+    -thumb-size N Display thumbnails as N pixels wide.
+
+If FILE is not specified, reads from stdin.
+END
+
+if ($res != 1 or $opts{help} or scalar(@ARGV) < 1) {
+    print $usage;
+    exit 0;
+}
+
+my $prefix = shift(@ARGV);
+
+# Useful for debugging, but undocumented
+goto index_only if ($opts{index_only});
+
+#-----------------------------------------------------------------------------
+# Check gnuplot version.
+#
+# We need >= 5.0 in order to cope with "matrix rowheaders" command.
+my $g=`gnuplot --version` || die "gnuplot: $!";
+$g=~m/gnuplot ([\d.]+)/;
+if ($1 < 5) {
+    print STDERR "Plot-ampliconstats needs gnuplot version 5.0 or later (found $1)\n";
+    exit 1;
+}
+
+#-----------------------------------------------------------------------------
+# Load plot meta-data
+# This allows us to auto-scale plots.
+my $namp = 0;
+my $nfile = 0;
+my $ref_len = 0;
+while (<>) {
+    chomp($_);
+    my @F = split("\t", $_);
+    $namp  = $F[2] if (/^SS\tNumber of amplicons/);
+    $nfile = $F[2] if (/^SS\tNumber of files/);
+    $ref_len = $F[2] if (/^SS\tReference length/);
+    last if (/^SS\tEnd of summary/);
+}
+
+#-----------------------------------------------------------------------------
+# Open up our various gnuplot output files
+
+# TODO: When nfile is too large we will need to paginate and produce
+# multiple plots in a for loop.  This may change the structure of this
+# code with the headers being printed inline with the processing loop
+# below.
+
+my $xfont = ($namp >= 100) ? 8 : 13;
+my $yfont = ($nfile >= 80) ? 5 : 8;
+my $impw1 = ($namp >= 100) ? 4 : 5;
+my $impw2 = ($namp >= 100) ? 2 : 4;
+
+#--- Combined
+open(my $ch_depth, ">", $prefix."-combined-depth.gp") ||
+    die "$prefix-combined-depth.gp";
+
+open(my $ch_reads, ">", $prefix."-combined-reads.gp") ||
+    die "$prefix-combined-reads.gp";
+
+open(my $ch_rperc, ">", $prefix."-combined-read-perc.gp") ||
+    die "$prefix-combined-read-perc.gp";
+if ($opts{orient} eq "h") {
+    print $ch_rperc <<"END";
+set title "Distribution percentage of reads across amplicons, all files"
+set xlabel "amplicon"
+set xrange [0:$namp+1]
+set ylabel "percentage of reads"
+set yrange [0:*]
+set key below
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -2,-1
+set mxtics 5
+set terminal png size $opts{size2}
+set output "$prefix-combined-read-perc.png"
+plot "-" using (column(0)+1):1 with impulses lw $impw1      title "mean",\\
+     "-" using (column(0)+1):1 with impulses lw $impw2 lt 3 title "s.d."
+END
+} else {
+    print $ch_rperc <<"END";
+set title "Read distribution, all files"
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "percentage of reads"
+set xrange [0:*]
+set grid; # xtics noytics
+set key below
+set title font "helvetica,20"
+set ytics 5 font "helvectica,$xfont" scale -2,-1
+set mytics 5
+set terminal png size $opts{size3}
+set output "$prefix-combined-read-perc.png"
+plot "-" using (0):(column(0)+1):1:(0) with vector nohead lw $impw1      title "mean",\\
+     "-" using (0):(column(0)+1):1:(0) with vector nohead lw $impw2 lt 3 title "s.d."
+END
+}
+
+open(my $ch_amp, ">", $prefix."-combined-amp.gp") ||
+    die "$prefix-combined-amp.gp";
+if ($opts{orient} eq "h") {
+    print $ch_amp <<"END";
+set title "Percentage of read-pairs with incorrectly positioned primers, all files"
+set xlabel "amplicon"
+set xrange [0:$namp+1]
+set ylabel "percentage of reads"
+set yrange [0:*]
+unset key
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -2,-1
+set mxtics 5
+set terminal png size $opts{size2}
+set output "$prefix-combined-amp.png"
+plot "-" using (column(0)+1):1 with impulses lw $impw1
+END
+} else {
+    print $ch_amp <<"END";
+set title "% mis-priming, all files"
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "percentage of reads"
+set xrange [0:*]
+unset key
+set grid
+set title font "helvetica,20"
+set ytics 5 font "helvectica,$xfont" scale -2,-1
+set mytics 5
+set terminal png size $opts{size3}
+set output "$prefix-combined-amp.png"
+plot "-" using (0):(column(0)+1):1:(0) with vector nohead lw $impw1
+END
+}
+
+my $fh_reads;
+my $fh_reads_count = 0;
+my $fh_reads_page = 1;
+my $fh_reads_nfile = 0;
+
+my $fh_depth;
+my $fh_depth_count = 0;
+my $fh_depth_page = 1;
+my $fh_depth_nfile = 0;
+
+my $fh_amp;
+my $fh_amp_count = 0;
+my $fh_amp_page = 1;
+my $fh_amp_nfile = 0;
+
+my ($fh_rperc, $fh_rperl);
+my $fh_rperc_count = 0;
+my $fh_rperc_page = 1;
+my $fh_rperc_nfile = 0;
+
+my %fh_cover; # For coverage at multiple different depths
+my %fh_cover_count;
+my %fh_cover_page;
+my %fh_cover_nfile;
+
+my @amp_start; # coords for amplicons
+my @amp_end;
+
+#-----------------------------------------------------------------------------
+# Parse stats file, writing to a number of outputs simultaneously
+my %file;
+my $fh;
+my @combined_coord;
+while (<>) {
+    chomp($_);
+    my @F = split("\t", $_);
+
+    # Amplicon coordinates
+    if (/^AMPLICON/) {
+        my $min_left=1e9;
+        foreach (split(",",$F[2])) {
+            /\d+-(\d+)/;
+            $min_left=$1 if ($min_left > $1);
+        }
+        my $max_right=0;
+        foreach (split(",",$F[3])) {
+            /(\d+)-\d+/;
+            $max_right=$1 if ($max_right < $1);
+        }
+        $amp_start[$F[1]]=$min_left;
+        $amp_end[$F[1]]=$max_right;
+
+        $ref_len = $max_right if ($ref_len < $max_right);
+    }
+
+    # Heatmaps showing all files & all amplicons
+    local $"="\t";
+    my $name=$F[1];
+    $name =~ s/_/\\\\_/g if (/^F/);
+    $name =~ s/"/\\\\"/g if (/^F/);
+
+    # Initialise gnuplot files as we create new pages
+    #----------  Heatmap READS
+
+    $fh_reads_count++ if (/^FREADS/);
+    if ($fh_reads_count > $opts{page} && $nfile-$opts{page}*$fh_reads_page!=1) {
+        print STDERR "page $fh_reads_page\n";
+        if (defined($fh_reads)) {
+            print $fh_reads "\nend\n";
+            close($fh_reads);
+            system("gnuplot", "$prefix-heat-reads-$fh_reads_page.gp") && die;
+            undef $fh_reads;
+        }
+        $fh_reads_page++;
+        $fh_reads_count = 0;
+    }
+
+    if (/^FREADS/ && !defined($fh_reads)) {
+        $fh_reads_nfile = $fh_reads_page * $opts{page} > $nfile
+            ? $nfile - ($fh_reads_page-1) * $opts{page}
+            : $opts{page};
+        $fh_reads_nfile++ if ($fh_reads_page * $opts{page} == $nfile-1);
+        open($fh_reads, ">", $prefix."-heat-reads-$fh_reads_page.gp") ||
+            die "$prefix-heat-reads-$fh_reads_page.gp";
+        print $fh_reads <<"END";
+set title "average number of log10(reads) per amplicon, page $fh_reads_page"
+unset key
+set xrange [:$namp+1]
+set yrange [-1:$fh_reads_nfile]
+set bmargin at screen 0.07
+set tmargin at screen 0.91
+#set palette rgbformula 15,4,9
+set palette rgbformula 32,31,30
+set cbrange [0:6]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -0.8,-0.4
+set mxtics 5
+set ytics font "helvetica,5" scale -0.4
+set terminal png size $opts{size}
+set output "$prefix-heat-reads-$fh_reads_page.png"
+set view map
+splot "-" using (\$1+1):2:(\$3>0?log10(\$3):0) matrix rowheaders with image
+END
+    }
+    print $fh_reads "\"$name\"\t@F[2..$#F]\n" if (/^FREADS/);
+
+
+    #----------  Heatmap DEPTH
+    $fh_depth_count++ if (/^FDEPTH/);
+    if ($fh_depth_count > $opts{page}
+        && $nfile-$opts{page}*$fh_depth_page != 1) {
+        if (defined($fh_depth)) {
+            print $fh_depth "\nend\n";
+            close($fh_depth);
+            system("gnuplot", "$prefix-heat-depth-$fh_depth_page.gp") && die;
+            undef $fh_depth;
+        }
+        $fh_depth_page++;
+        $fh_depth_count = 0;
+    }
+
+    if (/^VDEPTH/ && !defined($fh_depth)) {
+        $fh_depth_nfile = $fh_depth_page * $opts{page} > $nfile
+            ? $nfile - ($fh_depth_page-1) * $opts{page}
+            : $opts{page};
+        $fh_depth_nfile++ if ($fh_depth_page * $opts{page} == $nfile-1);
+        open($fh_depth, ">", $prefix."-heat-depth-$fh_depth_page.gp") ||
+            die "$prefix-heat-depth-$fh_depth_page.gp";
+        print $fh_depth <<"END";
+set title "average log10(depth) per amplicon, page $fh_depth_page"
+unset key
+set xrange [0:$namp+1]
+set yrange [-1:$fh_depth_nfile]
+set bmargin at screen 0.07
+set tmargin at screen 0.91
+set palette rgbformula 15,4,9
+set cbrange [0:6]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -0.8,-0.4
+set mxtics 5
+set ytics font "helvetica,5" scale -0.4
+set terminal png size $opts{size}
+set output "$prefix-heat-depth-$fh_depth_page.png"
+set view map
+splot "-" using (\$1+1):2:(\$3>0?log10(\$3):0) matrix rowheaders with image
+END
+    }
+    print $fh_depth "\"$name\"\t@F[2..$#F]\n" if (/^VDEPTH/);
+
+
+    #----------  Heatmap AMP mismatch
+    $fh_amp_count++ if (/^FAMP\t\S+\t0/);
+    if ($fh_amp_count > $opts{page} && $nfile-$opts{page}*$fh_amp_page!=1) {
+        if (defined($fh_amp)) {
+            print $fh_amp "\nend\n";
+            close($fh_amp);
+            system("gnuplot", "$prefix-heat-amp-$fh_amp_page.gp") && die;
+            undef $fh_amp;
+        }
+        $fh_amp_page++;
+        $fh_amp_count = 0;
+    }
+
+    if (/^FAMP/ && !defined($fh_amp)) {
+        $fh_amp_nfile = $fh_amp_page * $opts{page} > $nfile
+            ? $nfile - ($fh_amp_page-1) * $opts{page}
+            : $opts{page};
+        $fh_amp_nfile++ if ($fh_amp_page * $opts{page} == $nfile-1);
+        open($fh_amp, ">", $prefix."-heat-amp-$fh_amp_page.gp") ||
+            die "$prefix-heat-amp-$fh_amp_page.gp";
+        print $fh_amp <<"END";
+set title "Percentage of read-pairs with incorrectly positioned primers, page $fh_amp_page"
+unset key
+set xrange [0:$namp+1]
+set yrange [-1:$fh_amp_nfile]
+set bmargin at screen 0.07
+set tmargin at screen 0.91
+set palette rgbformula 30,31,32
+set cbrange [0:100]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -0.8,-0.4
+set mxtics 5
+set ytics font "helvetica,5" scale -0.4
+set terminal png size $opts{size}
+set output "$prefix-heat-amp-$fh_amp_page.png"
+set view map
+splot "-" using (\$1+1):2:3 matrix rowheaders with image
+END
+    }
+    if (/^FAMP/) {
+        if ($F[2] == 0) {
+            # First line will be summary across all amplicons (amp 0)
+            if ($fh_amp_count == 0) {
+                print $fh_amp "\"$name\"";
+            } else {
+                print $fh_amp "\n\"$name\"";
+            }
+        } else {
+            # Subsequent lines are per amplicon stats,
+            # corrected for small sample size via amp_add.
+            print $fh_amp "\t", 100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add});
+        }
+    }
+
+
+    #----------  Heatmap READ-PERC, clipped and log
+    $fh_rperc_count++ if (/^FRPERC/);
+    if ($fh_rperc_count > $opts{page}
+        && $nfile-$opts{page}*$fh_rperc_page != 1) {
+        if (defined($fh_rperc)) {
+            print $fh_rperc "\nend\n";
+            close($fh_rperc);
+            system("gnuplot", "$prefix-heat-read-perc-$fh_rperc_page.gp") && die;
+            undef $fh_rperc;
+        }
+        if (defined($fh_rperl)) {
+            print $fh_rperl "\nend\n";
+            close($fh_rperl);
+            system("gnuplot", "$prefix-heat-read-perc-log-$fh_rperc_page.gp") && die;
+            undef $fh_rperl;
+        }
+        $fh_rperc_page++;
+        $fh_rperc_count = 0;
+    }
+
+    if (/^FRPERC/ && !defined($fh_rperc)) {
+        $fh_rperc_nfile = $fh_rperc_page * $opts{page} > $nfile
+            ? $nfile - ($fh_rperc_page-1) * $opts{page}
+            : $opts{page};
+        $fh_rperc_nfile++ if ($fh_rperc_page * $opts{page} == $nfile-1);
+
+        open($fh_rperc, ">", $prefix."-heat-read-perc-$fh_rperc_page.gp") ||
+            die "$prefix-heat-read-perc-$fh_rperc_page.gp";
+        print $fh_rperc <<"END";
+set title "percentage of reads per amplicon (max 5%), page $fh_rperc_page
+unset key
+set xrange [0:$namp+1]
+set yrange [-1:$fh_rperc_nfile]
+set bmargin at screen 0.07
+set tmargin at screen 0.91
+#set palette rgbformula 6,5,13
+set palette rgbformula 30,31,32
+set cbrange [0:5]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -0.8,-0.4
+set mxtics 5
+set ytics font "helvetica,5" scale -0.4
+set terminal png size $opts{size}
+set output "$prefix-heat-read-perc-$fh_rperc_page.png"
+set view map
+splot "-" using (\$1+1):2:(\$3<5?\$3:5) matrix rowheaders with image
+END
+
+        open($fh_rperl, ">", $prefix."-heat-read-perc-log-$fh_rperc_page.gp") ||
+            die "$prefix-heat-read-perc-log-$fh_rperc_page.gp";
+        print $fh_rperl <<"END";
+set title "percentage of reads per amplicon (log10 scale), page $fh_rperc_page
+unset key
+set xrange [0:$namp+1]
+set yrange [-1:$fh_rperc_nfile]
+set bmargin at screen 0.07
+set tmargin at screen 0.91
+#set palette rgbformula 6,5,13
+set palette rgbformula 30,31,32
+set cbrange [-1:2]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -0.8,-0.4
+set mxtics 5
+set ytics font "helvetica,5" scale -0.4
+set terminal png size $opts{size}
+set output "$prefix-heat-read-perc-log-$fh_rperc_page.png"
+set view map
+splot "-" using (\$1+1):2:(\$3>0?log10(\$3):0) matrix rowheaders with image
+END
+    }
+    print $fh_rperc "\"$name\"\t@F[2..$#F]\n" if (/^FRPERC/);
+    print $fh_rperl "\"$name\"\t@F[2..$#F]\n" if (/^FRPERC/);
+    
+    #----------  Heatmap COVERAGE at multiple depths
+    $fh_cover_count{$1}++ if (/^FPCOV-(\d+)/);
+    if ($fh_cover_count{$1} > $opts{page}
+        && $nfile-$opts{page}*$fh_cover_page{$1} != 1) {
+        if (defined($fh_cover{$1})) {
+            my $tmp = $fh_cover{$1};
+            print $tmp "\nend\n";
+            close($fh_cover{$1});
+            system("gnuplot", "$prefix-heat-coverage-$1-$fh_cover_page{$1}.gp") && die;
+            undef $fh_cover{$1};
+        }
+        $fh_cover_page{$1}++;
+        $fh_cover_count{$1} = 0;
+    }
+
+    if (/^FPCOV-(\d+)\t/) {
+        $fh_cover_page{$1}=1 if !defined($fh_cover_page{$1});
+        $fh_cover_nfile{$1} = $fh_cover_page{$1} * $opts{page} > $nfile
+            ? $nfile - ($fh_cover_page{$1}-1) * $opts{page}
+            : $opts{page};
+        $fh_cover_nfile{$1}++ if ($fh_cover_page{$1} * $opts{page}==$nfile-1);
+        if (!defined($fh_cover{$1})) {
+            open($fh_cover{$1}, ">", $prefix."-heat-coverage-$1-$fh_cover_page{$1}.gp") ||
+                die "$prefix-heat-coverage-$1-$fh_cover_page{$1}.gp";
+            my $tmp = $fh_cover{$1};
+            print $tmp <<"END";
+set title "percentage of amplicon covered to depth $1, page $fh_cover_page{$1}"
+unset key
+set xrange [0:$namp+1]
+set yrange [-1:$fh_cover_nfile{$1}]
+set bmargin at screen 0.07
+set tmargin at screen 0.91
+set palette rgbformula -13,6,-15
+set cbrange [0:100]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -0.8, -0.4
+set mxtics 5
+set ytics 5 font "helvetica,5" scale -0.4
+#set grid xtics ytics
+set terminal png size $opts{size}
+set output "$prefix-heat-coverage-$1-$fh_cover_page{$1}.png"
+set view map
+splot "-" using (\$1+1):2:3 matrix rowheaders with image
+END
+        }
+        my $tmp = $fh_cover{$1};
+        print $tmp "\"$name\"\t@F[2..$#F]\n";
+    }
+
+    # Graphs with merged file data (mean and SD) for all amplicons
+    local $"="\n";
+    print $ch_reads "\$mean << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*MEAN/);
+    print $ch_reads "\$sd << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*STDDEV/);
+    print $ch_depth "\$mean << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*MEAN/);
+    print $ch_depth "\$sd << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*STDDEV/);
+    print $ch_rperc "@F[2..$#F]\nend\n" if (/^CRPERC.*(MEAN|STDDEV)/);
+    print $ch_amp   100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add}),"\n"
+        if (/^CAMP\tCOMBINED\t[1-9]/);
+
+    # These only occur once so we can open the file in situ rather
+    # than keep appending to it.
+    if (/^CPCOV-(\d+).*(MEAN|STDDEV)/) {
+        # ASSUMPTION mean first, followed by stddev.
+        # So open file for MEAN.  Close and plot on STDDEV
+        if ($2 eq "MEAN") {
+            open($fh, ">", $prefix."-combined-coverage-$1.gp") ||
+                die "$prefix-combined-coverage-$1.gp";
+            if ($opts{orient} eq "h") {
+                print $fh <<"END";
+set title "percentage of amplicon covered to depth >= $1, all files"
+set xlabel "amplicon"
+set xrange [0:$namp+1]
+set ylabel "percent covered"
+set yrange [0:100]
+set key below
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -2,-1
+set mxtics 5
+set terminal pngcairo size $opts{size2}
+set output "$prefix-combined-coverage-$1.png"
+plot "-" using (column(0)+1):1 with impulses lw $impw1 lt 1 title "mean", \\
+     "-" using (column(0)+1):1 with impulses lw $impw2 lt 3 title "s.d."
+END
+            } else {
+                print $fh <<"END";
+set title "%cover >=$1 deep, all files"
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "percent covered"
+set xrange [0:100]
+set grid
+set key below
+set title font "helvetica,20"
+set ytics 5 font "helvectica,$xfont" scale -2,-1
+set mytics 5
+set terminal pngcairo size $opts{size3}
+set output "$prefix-combined-coverage-$1.png"
+plot "-" using (0):(column(0)+1):1:(0) with vector nohead lw $impw1 lt 1 title "mean", \\
+     "-" using (0):(column(0)+1):1:(0) with vector nohead lw $impw2 lt 3 title "s.d."
+END
+            }
+        }
+        print $fh "@F[2..$#F]\nend\n";
+
+        if ($2 eq "STDDEV") {
+            close($fh);
+            system("gnuplot", "$prefix-combined-coverage-$1.gp") && die;
+        }
+    }
+
+    if (/^(FREADS|FDEPTH|FVDEPTH)/) {
+        my $max = max(@F[2..$#F]);
+        $max_depth = $max if $max_depth < $max;
+    }
+
+    # Per file graphs; accumulate multiple stats here and dump out at end
+    if (/^(FREADS|FDEPTH|FVDEPTH|FPCOV|FRPERC)/) {
+        $file{$F[1]}{$F[0]} = \@F;
+        #push(@{$file{$F[1]}{keys}}, $F[0]);
+    }
+    if (/^FAMP\s\S+\s[1-9]*/) {
+        push(@{$file{$F[1]}{$F[0]}}, 100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add}));
+    }
+    if (/^FTCOORD/) {
+        local $"="\t$F[2]\n";
+        $_="@F[3..$#F]";
+        s/,/\t/g;
+        push(@{$file{$F[1]}{$F[0]}}, "$_\t$F[2]") if ($_ ne "");
+    }
+
+    if (/^CTCOORD/) {
+        local $"="\t$F[2]\n";
+        $_="@F[3..$#F]";
+        s/,/\t/g;
+        push(@combined_coord, "$_\t$F[2]") if ($_ ne "");
+    }
+
+    if(/^[FC]DP_(ALL|VALID)/) {
+        local $"="\n";
+        push(@{$file{$F[1]}{$F[0]}}, "@F[2..$#F]") if ($_ ne "");
+    }
+}
+
+#-----------------------------------------------------------------------------
+# Close gnuplot files and generate PNGs
+
+#--- Per file
+if (defined($fh_depth)) {
+    print $fh_depth "\nend\n";
+    close($fh_depth);
+    system("gnuplot", "$prefix-heat-depth-$fh_depth_page.gp") && die;
+}
+
+if (defined($fh_amp)) {
+    print $fh_amp "\nend\n";
+    close($fh_amp);
+    system("gnuplot", "$prefix-heat-amp-$fh_amp_page.gp") && die;
+}
+
+if (defined($fh_reads)) {
+    print $fh_reads "\nend\n";
+    close($fh_reads);
+    system("gnuplot", "$prefix-heat-reads-$fh_reads_page.gp") && die;
+}
+
+if (defined($fh_rperc)) {
+    print $fh_rperc "\nend\n";
+    close($fh_rperc);
+    system("gnuplot", "$prefix-heat-read-perc-$fh_rperc_page.gp") && die;
+}
+
+if (defined($fh_rperl)) {
+    print $fh_rperl "\nend\n";
+    close($fh_rperl);
+    system("gnuplot", "$prefix-heat-read-perc-log-$fh_rperc_page.gp") && die;
+}
+
+foreach (keys %fh_cover) {
+    if (defined($fh_cover{$_})) {
+        close($fh_cover{$_});
+        system("gnuplot", "$prefix-heat-coverage-$_-$fh_cover_page{$_}.gp") && die;
+    }
+}
+
+#--- Combined
+if ($opts{depth_max}) {
+    if ($max_depth > $opts{depth_max}) {
+        print STDERR "Warning: specified -depth_max is lower than the data maximum of $max_depth\n";
+    }
+    $max_depth = $opts{depth_max};
+}
+$max_depth = 10**ceil(log($max_depth+1)/log(10)); # round up to power of 10
+
+# combined-reads
+if ($opts{orient} eq "h") {
+    print $ch_reads <<"END";
+set title "average number of reads per amplicon, all files"
+unset key
+set xlabel "amplicon"
+set xrange [0:$namp+1]
+set ylabel "no. reads"
+set yrange [1:$max_depth]
+set logscale y
+set key below
+set title font "helvetica,20"
+set xtics 5 font "helvetica,$xfont" scale -2,-1
+set mxtics 5
+set terminal png size $opts{size2}
+set output "$prefix-combined-reads.png"
+plot \$mean using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw1 title "mean", \\
+     \$sd using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "s.d."
+END
+} else {
+    print $ch_reads <<"END";
+# Compute max X value
+stats \$mean nooutput
+max_range = STATS_max
+stats \$sd nooutput
+max_range = max_range > STATS_max ? max_range : STATS_max
+max_range = 10**ceil(log10(max_range+0.01))
+
+set title "no. of reads, all files"
+unset key
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "no. reads"
+set xrange [0:max_range]
+set grid; # xtics noytics
+set logscale x
+set format x "%.g"
+set xtics font "helvectica,$yfont"
+set key below
+set title font "helvetica,20"
+set ytics 5 font "helvectica,$xfont" scale -2,-1
+set mytics 5
+set terminal png size $opts{size3}
+set output "$prefix-combined-reads.png"
+plot "\$mean" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : max_range ): 0.001):(0) with vector nohead lw $impw1 title "mean", \\
+     "\$sd" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : max_range ): 0.001):(0) with vector nohead lw $impw2 lt 3 title "s.d."
+END
+}
+close($ch_reads);
+system("gnuplot", "$prefix-combined-reads.gp") && die;
+
+# combind-depth
+if ($opts{orient} eq "h") {
+    print $ch_depth <<"END";
+set title "average depth per amplicon, all files"
+set xlabel "amplicon"
+set xrange [:$namp+1]
+set ylabel "depth"
+set logscale y
+set key below
+set title font "helvetica,20"
+set xtics 5 font "helvetica,$xfont" scale -2,-1
+set mxtics 5
+set terminal png size $opts{size2}
+set output "$prefix-combined-depth.png"
+plot "\$mean" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw1 title "mean", \\
+     "\$sd" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "s.d."
+END
+} else {
+    print $ch_depth <<"END";
+# Compute max X value
+stats \$mean nooutput
+max_range = STATS_max
+stats \$sd nooutput
+max_range = max_range > STATS_max ? max_range : STATS_max
+max_range = 10**ceil(log10(max_range+0.01))
+
+set title "avg depth / amp, all files"
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "depth"
+set xrange [0:max_range]
+set grid; # xtics noytics
+set logscale x
+set format x "%.g"
+set xtics font "helvectica,$yfont"
+set key below
+set title font "helvetica,20"
+set ytics 5 font "helvetica,$xfont" scale -2,-1
+set mytics 5
+set terminal png size $opts{size3}
+set output "$prefix-combined-depth.png"
+plot "\$mean" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : max_range) : 0.001):(0) with vector nohead lw $impw1 title "mean", \\
+     "\$sd" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < max_range ? \$1 : max_range) : 0.001):(0) with vector nohead lw $impw2 lt 3 title "s.d."
+END
+}
+close($ch_depth);
+system("gnuplot", "$prefix-combined-depth.gp") && die;
+
+close($ch_rperc);
+system("gnuplot", "$prefix-combined-read-perc.gp") && die;
+
+close($ch_amp);
+system("gnuplot", "$prefix-combined-amp.gp") && die;
+
+
+
+#-----------------------------------------------------------------------------
+# Also produce per file graphs
+my $combined_done = 0;
+foreach my $f (sort keys %file) {
+    next if $f eq "COMBINED";
+    my $ff = $f;
+    $ff =~ s/[\/\\;#\$\{\}]/./g;  # safe filename component
+    my $fg = $f;                  # printable in gnuplot
+    $fg =~ s/_/\\\\_/g;
+
+    #--- Template coordinates vs frequence: FILE
+    goto skip_coord if !exists($file{$f}{FTCOORD});
+    my $fn = "$prefix-$ff-tcoord";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    print $fh <<"END";
+set title "$fg: Template coordinate frequencies"
+unset key
+set xlabel "position"
+set xrange [0:$ref_len]
+set ylabel "frequency"
+set yrange [*:*]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "red"
+set linetype 3 lc "black
+seed=rand(-1)
+END
+
+    my @x2tics = ();
+    for (my $i=1;$i<=$namp;$i++) {
+        my $col = ($i%2)?"blue":"green";
+        print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+        if ($i%2 == 0) {
+            my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+            my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+            my $tpos = ($ts+$te)/2;
+            push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+        }
+    }
+    print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+    print $fh <<"END";
+plot "-" using 1:(\$3+rand(0)):(\$2-\$1):(0):(int(\$4)?\$4+1:(int(\$5) % 2)) with vector nohead lw 3 lc var
+END
+    local $"="\n";
+    print $fh "@{$file{$f}{FTCOORD}}\nend\n";
+
+    close($fh);
+    system("gnuplot", "$fn.gp") && die;
+
+    #--- Template coordinates vs size: FILE
+    my $fn = "$prefix-$ff-tsize";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    print $fh <<"END";
+set title "$fg: Template sizes"
+unset key
+set xlabel "position"
+set xrange [0:$ref_len]
+set ylabel "length"
+set yrange [10:10000]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "red"
+set linetype 3 lc "black
+seed=rand(-1)
+END
+
+    my @x2tics = ();
+    for (my $i=1;$i<=$namp;$i++) {
+        my $col = ($i%2)?"blue":"green";
+        print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+        if ($i%2 == 0) {
+            my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+            my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+            my $tpos = ($ts+$te)/2;
+            push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+        }
+    }
+    print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+    print $fh <<"END";
+plot "-" using 1:(\$2-\$1+sqrt(\$3)*rand(0)):(\$2-\$1):(0):(int(log(sqrt(\$3)))) with vector nohead lw 2 lc var
+END
+
+    # Sort by descending freq so high freq colours are on top.
+    local $"="\n";
+    my @sorted = sort {
+        [split(/\s+/,$a)]->[2] <=> [split(/\s+/,$b)]->[2]
+    } split("\n", "@{$file{$f}{FTCOORD}}");
+    print $fh "@sorted\nend\n";
+
+    close($fh);
+    system("gnuplot", "$fn.gp") && die;
+  skip_coord:
+
+    #--- Template coordinates: COMBINED
+    if (scalar(@combined_coord) > 0 && !$combined_done) {
+        my $fn = "$prefix-combined-tcoord";  # filename prefix
+        open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+        print $fh <<"END";
+set title "Template coordinate frequencies, all files"
+unset key
+set xlabel "position"
+set xrange [0:$ref_len]
+set ylabel "frequency"
+set yrange [*:*]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "red"
+set linetype 3 lc "black
+seed=rand(-1)
+END
+
+        my @x2tics = ();
+        for (my $i=1;$i<=$namp;$i++) {
+            my $col = ($i%2)?"blue":"green";
+            print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+            if ($i%2 == 0) {
+                my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+                my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+                my $tpos = ($ts+$te)/2;
+                push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+            }
+        }
+        print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+        print $fh <<"END";
+plot "-" using 1:(\$3+rand(0)):(\$2-\$1):(0):(int(\$4)?\$4+1:(int(\$5) % 2)) with vector nohead lw 3 lc var
+END
+        local $"="\n";
+        print $fh "@combined_coord\nend\n";
+
+        close($fh);
+        system("gnuplot", "$fn.gp") && die;
+    }
+
+
+    #--- Template depth: FILE
+    my $fn = "$prefix-$ff-tdepth";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    print $fh <<"END";
+set title "$fg: Template depth per base"
+set key below
+set xlabel "position"
+set xrange [0:$ref_len]
+set ylabel "depth"
+set yrange [1:$max_depth]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size2} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "#00B000"
+xa=0
+xv=0
+END
+
+    my @x2tics = ();
+    for (my $i=1;$i<=$namp;$i++) {
+        my $col = ($i%2)?"blue":"green";
+        print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+        if ($i%2 == 0) {
+            my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+            my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+            my $tpos = ($ts+$te)/2;
+            push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+        }
+    }
+    print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+    print $fh <<"END";
+plot "-" using (xa=xa+\$2):(\$1+.1) with fsteps lw 1 title "all templates", \\
+     "-" using (xv=xv+\$2):(\$1+.1) with fsteps lw 2 title "valid templates"
+END
+    if (exists($file{$f}{FDP_ALL})) {
+        foreach (split(/\s+/,"@{$file{$f}{FDP_ALL}}")) {
+            s/,/ /;
+            print $fh "$_\n";
+        }
+    }
+    print $fh "end\n";
+
+    if (exists($file{$f}{FDP_VALID})) {
+        foreach (split(/\s+/, "@{$file{$f}{FDP_VALID}}")) {
+            s/,/ /;
+            print $fh "$_\n";
+        }
+    }
+    print $fh "end\n";
+
+    close($fh);
+    system("gnuplot", "$fn.gp") && die;
+
+
+    #--- Template depth: FILE
+    if (!$combined_done) {
+        my $fn = "$prefix-combined-tdepth";  # filename prefix
+        open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+        print $fh <<"END";
+set title "Template depth per base, all files"
+set key below
+set xlabel "position"
+set xrange [0:$ref_len]
+set ylabel "depth"
+set yrange [1:$max_depth]
+set logscale y
+set mytics 10
+set title font "helvetica,20"
+set xtics out nomirror
+set mxtics 5
+set x2tics font "helvectica,6" offset 0,-0.6 scale -0.4 centre nomirror
+
+set terminal png size $opts{size2} truecolor
+set output "$fn.png"
+set linetype 1 lc "blue"
+set linetype 2 lc "#00B000"
+xa=0
+xv=0
+END
+
+        my @x2tics = ();
+        for (my $i=1;$i<=$namp;$i++) {
+            my $col = ($i%2)?"blue":"green";
+            print $fh "set obj rect from $amp_start[$i], graph 0 to $amp_end[$i], graph 1 fillcolor rgb '$col' fillstyle transparent solid 0.1 noborder\n";
+            if ($i%2 == 0) {
+                my $ts = $i>=2    ? $amp_end[$i-1]   : $amp_start[$i];
+                my $te = $i<$namp ? $amp_start[$i+1] : $amp_end[$i];
+                my $tpos = ($ts+$te)/2;
+                push(@x2tics, "\"$i\" " . ($amp_start[$i]+$amp_end[$i])/2);
+            }
+        }
+        print $fh "set x2tics (" . join(", ", @x2tics) . ")\n";
+
+        print $fh <<"END";
+plot "-" using (xa=xa+\$2):((\$1+.1)/$nfile) with fsteps lw 1 title "all templates", \\
+     "-" using (xv=xv+\$2):((\$1+.1)/$nfile) with fsteps lw 2 title "valid templates"
+END
+        if (exists($file{COMBINED}{CDP_ALL})) {
+            foreach (split(/\s+/,"@{$file{COMBINED}{CDP_ALL}}")) {
+                s/,/ /;
+                print $fh "$_\n";
+            }
+        }
+        print $fh "end\n";
+
+        if (exists($file{COMBINED}{CDP_VALID})) {
+            foreach (split(/\s+/, "@{$file{COMBINED}{CDP_VALID}}")) {
+                s/,/ /;
+                print $fh "$_\n";
+            }
+        }
+        print $fh "end\n";
+
+        close($fh);
+        system("gnuplot", "$fn.gp") && die;
+    }
+
+    #--- Read count / depth
+    my $fn = "$prefix-$ff-reads";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    if ($opts{orient} eq "h") {
+        print $fh <<"END";
+set title "$fg: read count per amplicon
+set key below
+set xlabel "amplicon"
+set xrange [0:$namp+1]
+set ylabel "no. reads"
+set logscale y
+set yrange [1:$max_depth]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -2,-1
+set mxtics 5
+set terminal png size $opts{size2}
+set output "$fn.png"
+plot "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw1 title "#reads", \\
+     "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 5 title "all depth",\\
+     "-" using (column(0)+1):(\$1 > 0.001 ? \$1 : 0.001) with impulses lw $impw2 lt 3 title "usable depth",
+END
+    } else {
+        print $fh <<"END";
+set title "$fg:\\nread count per amplicon
+set key below
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "no. reads"
+set xrange [1:$max_depth]
+set grid; # xtics noytics
+set logscale x
+set xtics font "helvectica,$yfont"
+set title font "helvetica,20"
+set ytics 5 font "helvectica,$xfont" scale -2,-1
+set mytics 5
+set terminal png size $opts{size3}
+set output "$fn.png"
+plot "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw1 title "#reads", \\
+     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw2 lt 5 title "all depth",\\
+     "-" using (0):(column(0)+1):(\$1 > 0.001 ? (\$1 < $max_depth ? \$1 : $max_depth) : 0.001):(0) with vector nohead lw $impw2 lt 3 title "usable depth",
+END
+    }
+
+    local $"="\n";
+    print $fh "@{$file{$f}{FREADS}}[2..$#{$file{$f}{FREADS}}]\nend\n";
+    print $fh "@{$file{$f}{FDEPTH}}[2..$#{$file{$f}{FDEPTH}}]\nend\n";
+    print $fh "@{$file{$f}{FVDEPTH}}[2..$#{$file{$f}{FVDEPTH}}]\nend\n";
+
+    close($fh);
+    system("gnuplot", "$fn.gp") && die;
+
+    #--- Read %coverage and %read-per-amplicon
+    my $fn = "$prefix-$ff-cov";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    if ($opts{orient} eq "h") {
+        print $fh <<"END";
+set title "$fg: percentage coverage to specific depth(s)"
+set key below
+set xlabel "amplicon"
+set xrange [0:$namp+1]
+set ylabel "%coverage"
+set yrange [0:100]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -2,-1
+set mxtics 5
+set ytics nomirror
+set y2tics
+
+set terminal png size $opts{size2}
+set output "$fn.png"
+plot \\
+END
+    } else {
+        print $fh <<"END";
+set title "$fg: % coverage at depth(s)"
+set key below
+set ylabel "amplicon"
+set yrange [$namp+1:0]
+#set xlabel "%coverage"
+set xrange [0:100]
+set title font "helvetica,14"
+set ytics 5 font "helvectica,$xfont" scale -2,-1
+set mytics 5
+set xtics 10 font "helvetica,12"
+set mxtics 5
+set x2tics 10 font "helvetica,12"
+
+set terminal png size $opts{size3}
+set output "$fn.png"
+plot \\
+END
+    }
+    #my $lw = 5;
+    my $lw = ($namp >= 100) ? 3 : 2;
+    my @lt = ("rgb \"#900020\"","rgb \"#2060FF\"",2,3,4,5,6,7,8,9);
+    my $lt = 0;
+    foreach (sort {
+                 my $x=$a; $x=~s/FPCOV-(\d+)/\1/;
+                 my $y=$b; $y=~s/FPCOV-(\d+)/\1/;
+                 $x <=> $y
+             } keys %{$file{$f}}) {
+        next unless /^FPCOV-(\d+)/;
+        if ($opts{orient} eq "h") {
+            print $fh "\"-\" using (column(0)+1):1 with impulses lw $lw lt $lt[$lt] title \"\depth >= $1\", \\\n";
+            $lw += ($namp >= 100) ? ($lw<4) : ($lw<5)*2;
+            #print $fh "\"-\" using (column(0)+1):1 with linespoints lw $lw lt $lt[$lt] title \"\%coverage >= $1\", \\\n";
+            #$lw -= ($lw>1)*2;
+        } else {
+            print $fh "\"-\" using (0):(column(0)+1):1:(0) with vector nohead lw $lw lt $lt[$lt] title \"depth>=$1\", \\\n";
+            $lw += ($lw<5)*2;
+        }
+        $lt++;
+    }
+    print $fh "\n";
+    #print $fh "\"-\" with linespoints lw 3 lt 3 title \"\%reads/amp\" axis x1y2\n";
+
+#plot "-" with linespoints lw 3 title "%coverage", \\
+#     "-" with linespoints lw 3 lt 3 title "%reads/amp" axis x1y2
+#END
+
+    local $"="\n";
+    foreach (sort {
+                 my $x=$a; $x=~s/FPCOV-(\d+)/\1/;
+                 my $y=$b; $y=~s/FPCOV-(\d+)/\1/;
+                 $x <=> $y
+             } keys %{$file{$f}}) {
+        next unless /^FPCOV-(\d+)/;
+        print $fh "@{$file{$f}{$_}}[2..$#{$file{$f}{$_}}]\nend\n";
+    }
+    #print $fh "@{$file{$f}{FRPERC}}[2..$#{$file{$f}{FRPERC}}]\nend\n";
+
+    close($fh);
+    system("gnuplot", "$fn.gp") && die;
+
+
+    #--- Amplicon primer correctness
+    my $fn = "$prefix-$ff-amp";  # filename prefix
+    open(my $fh, ">", "$fn.gp") || die "$fn.gp";
+
+    if ($opts{orient} eq "h") {
+        print $fh <<"END";
+set title "$fg: Percentage of read-pairs with incorrectly positioned primers"
+unset key
+set xlabel "amplicon"
+set xrange [0:$namp+1]
+set ylabel "%incorrect"
+set yrange [0:100]
+set title font "helvetica,20"
+set xtics 5 font "helvectica,$xfont" scale -2,-1
+set mxtics 5
+
+set terminal png size $opts{size2}
+set output "$fn.png"
+plot "-" using (column(0)+1):1 with impulses lw $impw1
+END
+    } else {
+        print $fh <<"END";
+set title "$fg:\\n% mis-priming read-pairs"
+unset key
+set grid
+set ylabel "amplicon"
+set yrange [0:$namp+1]
+set xlabel "%incorrect"
+set xrange [0:100]
+set title font "helvetica,20"
+set ytics 5 font "helvectica,$xfont" scale -2,-1
+set mytics 5
+set terminal png size $opts{size3}
+set output "$fn.png"
+plot "-" using (0):(column(0)+1):1:(0) with vector nohead lw $impw1
+END
+    }
+    local $"="\n";
+    print $fh "@{$file{$f}{FAMP}}[1..$#{$file{$f}{FAMP}}]\nend\n";
+
+    close($fh);
+    system("gnuplot", "$fn.gp") && die;
+
+    $combined_done = 1;
+}
+
+#---------------------------------
+#adding html file to show plots
+index_only:
+
+# index.html is in the same dir as the images
+my ($prefix_dir) = $prefix=~/(.*\/)/;
+my $fname  = "${prefix_dir}index.html";
+
+open(my $fh,'>',$fname) or error("$fname: $!");
+print $fh q[
+<html>
+<head>
+<style>
+.thumbnail
+{
+    text-decoration:none;
+    color:black;
+    font-weight:bold;
+}
+.imgs td
+{
+    vertical-align:middle;
+    padding: 0.5em;
+    border: 1px solid black;
+}
+table.imgs
+{
+    border-collapse:collapse;
+    margin-left:20px;
+}
+</style>
+</head>
+<body>
+<table class="imgs">
+];
+
+my @imgs = sort {
+    my ($A,$B)=($a,$b);
+    $A=~s/(\d+)/sprintf("%09d",$1)/ge;
+    $B=~s/(\d+)/sprintf("%09d",$1)/ge;
+    $A cmp $B
+} grep {!/thumb\.png/} <"$prefix*.png">;
+
+my $last = "";
+my $new_section = 0;
+for (my ($i,$j)=(0,0); $i < @imgs; $i++, $j++)
+{
+    my $fn_base = $imgs[$i];
+    $fn_base =~ s/-(\w+|read-perc|read-perc-log)(-\d+)*\.png$//;
+    if ($fn_base ne $last || $j % 6 == 0) {
+        if ($fn_base ne $last) {
+            $last=$fn_base;
+            $new_section = 1;
+            $j = 0;
+        }
+    
+        if ( $i>0 ) { print $fh "</tr>\n"; }
+        if ($new_section) {
+            print $fh "<tr><td>$fn_base</td></tr>\n";
+            $new_section = 0;
+        }
+        print $fh "<tr>";
+    }
+    my ($img) = $imgs[$i]=~/(?:.*\/)?(.*)/;
+    if ($opts{thumbnails}) {
+        my $scale = 100*$opts{thumb_size}/[split(",",$opts{size})]->[0],"\n";
+        system("convert", "-scale", "$scale%", $imgs[$i], "$imgs[$i].thumb.png") && die;
+        print $fh qq[<td><a class="thumbnail" href="$img"><img src="$img.thumb.png" width="$opts{thumb_size}px"></a></td>\n];
+    } else {
+        print $fh qq[<td><a class="thumbnail" href="$img"><img src="$img" width="$opts{thumb_size}px"></a></td>\n];
+    }
+}
+print $fh qq[
+</tr>
+</table>
+</body>
+</html>
+];
+
+close($fh);

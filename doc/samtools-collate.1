@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-collate 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-collate 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools collate \- shuffles and groups reads together by their names
 .\"
@@ -119,6 +119,9 @@ Number of reads to store in memory (for use with -f).
 .TP
 .BI --no-PG
 Do not add a @PG line to the header of the output file.
+.TP
+.BI "-@, --threads " INT
+Number of input/output compression threads to use in addition to main thread [0].
 
 .SH AUTHOR
 .PP

@@ -410,6 +410,7 @@ void usage(FILE* where)
 "  -p           Disable FR proper pair check\n"
 "  -c           Add template cigar ct tag\n"
 "  -m           Add mate score tag\n"
+"  -u           Uncompressed output\n"
 "  --no-PG      do not add a PG line\n");
 
     sam_global_opt_help(where, "-.O..@-.");
@@ -427,7 +428,7 @@ int bam_mating(int argc, char *argv[])
     samFile *in = NULL, *out = NULL;
     int c, remove_reads = 0, proper_pair_check = 1, add_ct = 0, res = 1, mate_score = 0, no_pg = 0;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
-    char wmode[3] = {'w', 'b', 0};
+    char wmode[4] = {'w', 'b', 0, 0};
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         {"no-PG", no_argument, NULL, 1},
@@ -437,12 +438,13 @@ int bam_mating(int argc, char *argv[])
 
     // parse args
     if (argc == 1) { usage(stdout); return 0; }
-    while ((c = getopt_long(argc, argv, "rpcmO:@:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rpcmO:@:u", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': remove_reads = 1; break;
             case 'p': proper_pair_check = 0; break;
             case 'c': add_ct = 1; break;
             case 'm': mate_score = 1; break;
+            case 'u': wmode[2] = '0'; break;
             case 1: no_pg = 1; break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */

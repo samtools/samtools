@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-stats 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-stats 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools stats \- produces comprehensive statistics from alignment file
 .\"
@@ -58,33 +58,34 @@ detailed descriptions.
 
 .TS
 lb l .
-CHK     Checksum
-SN      Summary numbers
-FFQ     First fragment qualities
-LFQ     Last fragment qualities
-GCF     GC content of first fragments
-GCL     GC content of last fragments
-GCC     ACGT content per cycle
-FBC     ACGT content per cycle for first fragments only
-FTC     ACGT raw counters for first fragments
-LBC     ACGT content per cycle for last fragments only
-LTC     ACGT raw counters for last fragments
-BCC     ACGT content per cycle for BC barcode
-CRC     ACGT content per cycle for CR barcode
-OXC     ACGT content per cycle for OX barcode
-RXC     ACGT content per cycle for RX barcode
-QTQ     Quality distribution for BC barcode
-CYQ     Quality distribution for CR barcode
-BZQ     Quality distribution for OX barcode
-QXQ     Quality distribution for RX barcode
-IS      Insert sizes
-RL      Read lengths
-FRL     Read lengths for first fragments only
-LRL     Read lengths for last fragments only
-ID      Indel size distribution
-IC      Indels per cycle
-COV     Coverage (depth) distribution
-GCD     GC-depth
+CHK	Checksum
+SN	Summary numbers
+FFQ	First fragment qualities
+LFQ	Last fragment qualities
+GCF	GC content of first fragments
+GCL	GC content of last fragments
+GCC	ACGT content per cycle
+GCT	ACGT content per cycle, read oriented
+FBC	ACGT content per cycle for first fragments only
+FTC	ACGT raw counters for first fragments
+LBC	ACGT content per cycle for last fragments only
+LTC	ACGT raw counters for last fragments
+BCC	ACGT content per cycle for BC barcode
+CRC	ACGT content per cycle for CR barcode
+OXC	ACGT content per cycle for OX barcode
+RXC	ACGT content per cycle for RX barcode
+QTQ	Quality distribution for BC barcode
+CYQ	Quality distribution for CR barcode
+BZQ	Quality distribution for OX barcode
+QXQ	Quality distribution for RX barcode
+IS	Insert sizes
+RL	Read lengths
+FRL	Read lengths for first fragments only
+LRL	Read lengths for last fragments only
+ID	Indel size distribution
+IC	Indels per cycle
+COV	Coverage (depth) distribution
+GCD	GC-depth
 .TE
 
 Not all sections will be reported as some depend on the data being
@@ -196,7 +197,7 @@ fragment reads (flags 0x01 and 0x80 set, 0x40 not set).
 .B reads duplicated.
 
 .B mismatches
-- number of mismatched bases, as reported by the NM tag associated wit a read, if present.
+- number of mismatched bases, as reported by the NM tag associated with a read, if present.
 
 .B error rate
 - ratio between
@@ -289,6 +290,13 @@ GCC, FBC and LBC report the nucleotide content per cycle either combined
 are cycle number (integer), and percentage counts for A, C, G, T, N
 and other (typically containing ambiguity codes) normalised against
 the total counts of A, C, G and T only (excluding N and other).
+
+GCT offers a similar report to GCC, but whereas GCC counts nucleotides
+as they appear in the SAM output (in reference orientation), GCT takes into
+account whether a nucleotide belongs to a reverse complemented read and counts
+it in the original read orientation.
+If there are no reverse complemented reads in a file, the GCC and GCT reports
+will be identical.
 
 FTC and LTC report the total numbers of nucleotides for first and last
 fragments, respectively. The columns are the raw counters for A, C, G,
@@ -443,12 +451,14 @@ Only bases with coverage above this value will be included in the target percent
 If this option is set, it will allows user to specify customized index file location(s) if the data
 folder does not contain any index file.
 Example usage: samtools stats [options] -X /data_folder/data.bam /index_folder/data.bai chrM:1-10
+.TP
+.BI "-@, --threads " INT
+Number of input/output compression threads to use in addition to main thread [0].
 
 .SH AUTHOR
 .PP
 Written by Petr Danacek with major modifications by Nicholas Clarke,
-Martin Pollard, Nicholas Clarke, Josh Randall and Valeriu Ohan, all
-from the Sanger Institute.
+Martin Pollard, Josh Randall, and Valeriu Ohan, all from the Sanger Institute.
 
 .SH SEE ALSO
 .IR samtools (1),

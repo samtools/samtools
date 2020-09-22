@@ -1,6 +1,6 @@
 /*  stats.c -- This is the former bamcheck integrated into samtools/htslib.
 
-    Copyright (C) 2012-2019 Genome Research Ltd.
+    Copyright (C) 2012-2020 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
     Author: Sam Nicholls <sam@samnicholls.net>
@@ -175,8 +175,8 @@ typedef struct
     // Arrays for the histogram data
     uint64_t *quals_1st, *quals_2nd;
     uint64_t *gc_1st, *gc_2nd;
-    acgtno_count_t *acgtno_cycles_1st;
-    acgtno_count_t *acgtno_cycles_2nd;
+    acgtno_count_t *acgtno_cycles_1st, *acgtno_cycles_2nd;
+    acgtno_count_t *acgtno_revcomp;
     uint64_t *read_lengths, *read_lengths_1st, *read_lengths_2nd;
     uint64_t *insertions, *deletions;
     uint64_t *ins_cycles_1st, *ins_cycles_2nd, *del_cycles_1st, *del_cycles_2nd;
@@ -250,7 +250,7 @@ typedef struct
     uint32_t nchunks;
 
     uint32_t pair_count;          // Number of active pairs in the pairing hash table
-    uint32_t target_count;        // Number of bases covered by the target file
+    uint64_t target_count;        // Number of bases covered by the target file
     uint32_t last_pair_tid;
     uint32_t last_read_flush;
 
@@ -647,6 +647,11 @@ void realloc_buffers(stats_t *stats, int seq_len)
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
     memset(stats->acgtno_cycles_2nd + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
 
+    stats->acgtno_revcomp = realloc(stats->acgtno_revcomp, n*sizeof(acgtno_count_t));
+    if ( !stats->acgtno_revcomp )
+        error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len, n*sizeof(acgtno_count_t));
+    memset(stats->acgtno_revcomp + stats->nbases, 0, (n-stats->nbases)*sizeof(acgtno_count_t));
+
     stats->read_lengths = realloc(stats->read_lengths, n*sizeof(uint64_t));
     if ( !stats->read_lengths )
         error("Could not realloc buffers, the sequence too long: %d (%ld)\n", seq_len,n*sizeof(uint64_t));
@@ -870,16 +875,20 @@ void collect_orig_read_stats(bam1_t *bam_line, stats_t *stats, int* gc_count_out
             switch (bam_seqi(seq, i)) {
             case 1:
                 acgtno_cycles[ read_cycle ].a++;
+                reverse ? stats->acgtno_revcomp[ read_cycle ].t++ : stats->acgtno_revcomp[ read_cycle ].a++;
                 break;
             case 2:
                 acgtno_cycles[ read_cycle ].c++;
+                reverse ? stats->acgtno_revcomp[ read_cycle ].g++ : stats->acgtno_revcomp[ read_cycle ].c++;
                 gc_count++;
                 break;
             case 4:
                 acgtno_cycles[ read_cycle ].g++;
+                reverse ? stats->acgtno_revcomp[ read_cycle ].c++ : stats->acgtno_revcomp[ read_cycle ].g++;
                 gc_count++;
                 break;
             case 8:
+                reverse ? stats->acgtno_revcomp[ read_cycle ].a++ : stats->acgtno_revcomp[ read_cycle ].t++;
                 acgtno_cycles[ read_cycle ].t++;
                 break;
             case 15:
@@ -1535,7 +1544,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\tpairs on different chromosomes:\t%ld\n", (long)stats->nreads_anomalous/2);
     fprintf(to, "SN\tpercentage of properly paired reads (%%):\t%.1f\n", (stats->nreads_1st+stats->nreads_2nd+stats->nreads_other)? (float)(100*stats->nreads_properly_paired)/(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other):0);
     if ( stats->target_count ) {
-        fprintf(to, "SN\tbases inside the target:\t%u\n", stats->target_count);
+        fprintf(to, "SN\tbases inside the target:\t%" PRIu64 "\n", stats->target_count);
         for (icov=stats->info->cov_threshold+1; icov<stats->ncov; icov++)
             cov_sum += stats->cov[icov];
         fprintf(to, "SN\tpercentage of target genome with coverage > %d (%%):\t%.2f\n", stats->info->cov_threshold, (float)(100*cov_sum)/stats->target_count);
@@ -1612,7 +1621,18 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
                 100.*(acgtno_count_1st->t + acgtno_count_2nd->t)/acgt_sum,
                 100.*(acgtno_count_1st->n + acgtno_count_2nd->n)/acgt_sum,
                 100.*(acgtno_count_1st->other + acgtno_count_2nd->other)/acgt_sum);
-
+    }
+    fprintf(to, "# ACGT content per cycle, read oriented. Use `grep ^GCT | cut -f 2-` to extract this part. The columns are: cycle; A,C,G,T base counts as a percentage of all A/C/G/T bases [%%]\n");
+    for (ibase=0; ibase<stats->max_len; ibase++)
+    {
+        acgtno_count_t *acgtno_count = &(stats->acgtno_revcomp[ibase]);
+        uint64_t acgt_sum = acgtno_count->a + acgtno_count->c + acgtno_count->g + acgtno_count->t;
+        if ( ! acgt_sum ) continue;
+        fprintf(to, "GCT\t%d\t%.2f\t%.2f\t%.2f\t%.2f\n", ibase+1,
+                100.*(acgtno_count->a)/acgt_sum,
+                100.*(acgtno_count->c)/acgt_sum,
+                100.*(acgtno_count->g)/acgt_sum,
+                100.*(acgtno_count->t)/acgt_sum);
     }
 
     uint64_t tA=0, tC=0, tG=0, tT=0, tN=0;
@@ -1800,7 +1820,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     }
 }
 
-static void init_regions(stats_t *stats, const char *file)
+static void init_regions(stats_t *stats, const char *file, stats_info_t* info)
 {
     FILE *fp = fopen(file,"r");
     if ( !fp ) error("%s: %s\n",file,strerror(errno));
@@ -1877,8 +1897,15 @@ static void init_regions(stats_t *stats, const char *file)
             }
             reg->npos = ++new_p;
         }
-        for (p = 0; p < reg->npos; p++)
-            stats->target_count += (reg->pos[p].end - reg->pos[p].beg + 1);
+        for (p = 0; p < reg->npos; p++) {
+            if (reg->pos[p].end < HTS_POS_MAX) {
+                stats->target_count += (reg->pos[p].end - reg->pos[p].beg + 1);
+            } else {
+                uint64_t hdr_end = sam_hdr_tid2len(info->sam_header, r);
+                if (hdr_end)
+                    stats->target_count += (hdr_end - reg->pos[p].beg + 1);
+            }
+        }
     }
 
     if (!(stats->chunks = calloc(stats->nchunks, sizeof(hts_pair_pos_t))))
@@ -1941,7 +1968,7 @@ int is_in_regions(bam1_t *bam_line, stats_t *stats)
     return 1;
 }
 
-int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
+int replicate_regions(stats_t *stats, hts_itr_multi_t *iter, stats_info_t *info) {
     if ( !stats || !iter)
         return 1;
 
@@ -1975,8 +2002,13 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter) {
         for (j = 0; j < stats->regions[tid].npos; j++) {
             stats->regions[tid].pos[j].beg = iter->reg_list[i].intervals[j].beg+1;
             stats->regions[tid].pos[j].end = iter->reg_list[i].intervals[j].end;
-
-            stats->target_count += (stats->regions[tid].pos[j].end - stats->regions[tid].pos[j].beg + 1);
+            if (stats->regions[tid].pos[j].end < HTS_POS_MAX) {
+                stats->target_count += (stats->regions[tid].pos[j].end - stats->regions[tid].pos[j].beg + 1);
+            } else {
+                uint64_t hdr_end = sam_hdr_tid2len(info->sam_header, tid);
+                if (hdr_end)
+                    stats->target_count += (hdr_end - stats->regions[tid].pos[j].beg + 1);
+            }
         }
     }
 
@@ -2073,6 +2105,7 @@ void cleanup_stats(stats_t* stats)
     free(stats->mpc_buf);
     free(stats->acgtno_cycles_1st);
     free(stats->acgtno_cycles_2nd);
+    free(stats->acgtno_revcomp);
     free(stats->read_lengths);
     free(stats->read_lengths_1st);
     free(stats->read_lengths_2nd);
@@ -2257,6 +2290,8 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     if (!stats->acgtno_cycles_1st) goto nomem;
     stats->acgtno_cycles_2nd  = calloc(stats->nbases,sizeof(acgtno_count_t));
     if (!stats->acgtno_cycles_2nd) goto nomem;
+    stats->acgtno_revcomp  = calloc(stats->nbases,sizeof(acgtno_count_t));
+    if (!stats->acgtno_revcomp) goto nomem;
     stats->read_lengths   = calloc(stats->nbases,sizeof(uint64_t));
     if (!stats->read_lengths)     goto nomem;
     stats->read_lengths_1st   = calloc(stats->nbases,sizeof(uint64_t));
@@ -2279,7 +2314,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
         goto nomem;
     realloc_rseq_buffer(stats);
     if ( targets )
-        init_regions(stats, targets);
+        init_regions(stats, targets, info);
     return;
  nomem:
     error("Out of memory");
@@ -2459,7 +2494,7 @@ int main_stats(int argc, char *argv[])
             if (iter) {
                 if (!targets) {
                     all_stats->nchunks = argc-optind;
-                    if (replicate_regions(all_stats, iter))
+                    if (replicate_regions(all_stats, iter, info))
                         fprintf(stderr, "Replications of the regions failed\n");
                 }
 

@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-addreplacerg 1 "6 December 2019" "samtools-1.10" "Bioinformatics tools"
+.TH samtools-addreplacerg 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
 .SH NAME
 samtools addreplacerg \- adds or replaces read group tags
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2020 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -51,8 +51,7 @@ samtools addreplacerg
 .IR rg-ID ]
 .RB [ -m
 .IR mode ]
-.RB [ -l
-.IR level ]
+.RB [ -u ]
 .RB [ -o
 .IR out.bam ]
 .I in.bam
@@ -82,11 +81,17 @@ Write the final output to STRING. The default is to write to stdout.
 By default, samtools tries to select a format based on the output
 filename extension; if output is to standard output or no format can be
 deduced,
-.B bam
+.B sam
 is selected.
-.TP
+.TP 8
+.B -u
+Output uncompressed SAM, BAM or CRAM.
+.TP 8
 .BI --no-PG
 Do not add a @PG line to the header of the output file.
+.TP 8
+.BI "-@, --threads " INT
+Number of input/output compression threads to use in addition to main thread [0].
 
 .SH AUTHOR
 .PP
