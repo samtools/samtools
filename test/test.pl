@@ -3196,5 +3196,5 @@ sub test_ampliconstats
                   "$$opts{path}/ampliconclip/2_both_clipped.expected.sam");
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
-    test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | egrep -v 'Samtools version|Command line' | tee /tmp/out.txt");
+    test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | egrep -v 'Samtools version|Command line'");
 }
