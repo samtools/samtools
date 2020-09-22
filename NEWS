@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.11 (22nd September 2020)
+----------------------------------
+
  * New samtools ampliconclip sub-command for removing primers from
    amplicon-based sequencing experiments, including the current
    COVID-19 projects.  The primers are listed in a BED file and can be
