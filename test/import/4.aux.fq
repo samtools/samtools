@@ -1,0 +1,16 @@
+@ref1_grp1_p001/1	foo
+CGAGCTCGGT
++
+!!!!!!!!!!
+@ref1_grp1_p001/2	bar
+GTCGACTCTA
++
+----------
+@ref1_grp1_p002/1	XX:i:10	XY:i:-257	XZ:i:4294967295	XA:i:-2147483648
+CTCGGTACCC
++
+##########
+@ref1_grp1_p002/2	AA:Z:	AB:Z:foo	AC:H:0123456789ABCDEF	FF:f:-1e20	FG:f:1e-20
+GCAGGTCGAC
++
+//////////

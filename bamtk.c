@@ -67,6 +67,7 @@ int dict_main(int argc, char *argv[]);
 int fqidx_main(int argc, char *argv[]);
 int amplicon_clip_main(int argc, char *argv[]);
 int main_ampliconstats(int argc, char *argv[]);
+int main_import(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -173,6 +174,7 @@ static void usage(FILE *fp)
 "     quickcheck     quickly check if SAM/BAM/CRAM file appears intact\n"
 "     fastq          converts a BAM to a FASTQ\n"
 "     fasta          converts a BAM to a FASTA\n"
+"     import         Converts FASTA or FASTQ files to SAM/BAM/CRAM\n"
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
@@ -208,11 +210,6 @@ static void usage(FILE *fp)
 int _CRT_glob = 0;
 #endif
 
-static void bam_import_err(void) {
-    fprintf(stderr, "[main] \"samtools import\" has been removed. "
-            "Please use \"samtools view\" instead.\n");
-}
-
 int main(int argc, char *argv[])
 {
 #ifdef _WIN32
@@ -233,7 +230,7 @@ int main(int argc, char *argv[])
 
     int ret = 0;
     if (strcmp(argv[1], "view") == 0)           ret = main_samview(argc-1, argv+1);
-    else if (strcmp(argv[1], "import") == 0)    { bam_import_err(); return 1; }
+    else if (strcmp(argv[1], "import") == 0)    ret = main_import(argc-1, argv+1);
     else if (strcmp(argv[1], "mpileup") == 0)   ret = bam_mpileup(argc-1, argv+1);
     else if (strcmp(argv[1], "merge") == 0)     ret = bam_merge(argc-1, argv+1);
     else if (strcmp(argv[1], "sort") == 0)      ret = bam_sort(argc-1, argv+1);

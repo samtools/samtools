@@ -79,6 +79,8 @@ samtools split merged.bam
 .PP
 samtools cat out.bam in1.bam in2.bam in3.bam
 .PP
+samtools import input.fastq > output.bam
+.PP
 samtools fastq input.bam > output.fastq
 .PP
 samtools fasta input.bam > output.fasta
@@ -484,6 +486,18 @@ dictionary of each input file must be identical, although this command
 does not check this. This command uses a similar trick to
 .B reheader
 which enables fast BAM concatenation.
+
+.TP \"-------- import
+.B import
+samtools import
+.RI [ options ]
+.IR in.fastq " [ ... ]"
+
+Converts one or more FASTQ files to unaligned SAM, BAM or CRAM.  These
+formats offer a richer capability of tracking sample meta-data via the
+SAM header and per-read meta-data via the auxiliary tags.  The
+.B fastq
+command may be used to reverse this conversion.
 
 .TP \"-------- fastq fasta
 .B fastq/a
@@ -1180,6 +1194,7 @@ for further authorship.
 .IR samtools-flagstat (1),
 .IR samtools-fqidx (1),
 .IR samtools-idxstats (1),
+.IR samtools-import (1),
 .IR samtools-index (1),
 .IR samtools-markdup (1),
 .IR samtools-merge (1),
