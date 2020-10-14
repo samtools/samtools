@@ -1088,6 +1088,7 @@ sub querylen
 #   $args->{flags_required} bits which must be set in flags (-f option)
 #   $args->{flags_rejected} bits which must not be set in flags (-F option)
 #   $args->{read_groups}    hash of read groups to output (-r or -R)
+#   $args->{read_names}     names of reads to output (-N)
 #   $args->{tag}            tag used for checking if reads match tag_values (-d or -D)
 #   $args->{tag_values}     hash of values assocated with tag to output (-d or -D)
 #   $args->{libraries}      hash of libraries to output (-l)
@@ -1142,6 +1143,7 @@ sub filter_sam
     my $flags_required = $args->{flags_required} || 0;
     my $flags_rejected = $args->{flags_rejected} || 0;
     my $read_groups    = $args->{read_groups};
+    my $read_names     = $args->{read_names};
     my $tag            = $args->{tag};
     my $tag_values     = $args->{tag_values};
     my $libraries      = $args->{libraries};
@@ -1149,7 +1151,7 @@ sub filter_sam
     my $strip_tags     = $args->{strip_tags};
     my $min_qlen       = $args->{min_qlen} || 0;
     my $body_filter = ($flags_required || $flags_rejected
-                       || $read_groups || $tag_values
+                       || $read_groups || $read_names || $tag_values
                        || $min_map_qual || $libraries || $region
                        || $strip_tags || $min_qlen);
     my $lib_read_groups = $libraries ? {} : undef;
@@ -1199,6 +1201,9 @@ sub filter_sam
                         last if (($tag_value) = $sam[$i] =~ /^${tag}:Z:(.*)/);
                     }
                     next if (!exists($tag_values->{$tag_value||""}));
+                }
+                if ($read_names) {
+                    next if (!exists($read_names->{$sam[0]}));
                 }
                 if ($region) {
                     my $in_range = 0;
@@ -2057,6 +2062,11 @@ sub test_view
     print $f "ACGT\nAATTCCGG\n" || die "Error writing to $fobc : $!\n";
     close($f) || die "Error writing to $fobc : $!\n";
 
+    # Read names file for -N test
+    my $forn = "$$opts{tmp}/view.001.forn";
+    open($f, '>', $forn) || die "Couldn't open $forn : $!\n";
+    print $f "ref1_grp1_p001\nunaligned_grp3_p001\nr008\nr009\n" || die "Error writing to $forn : $!\n";
+    close($f) || die "Error writing to $forn : $!\n";
 
     my @filter_tests = (
         # [test_name, {filter_sam options}, [samtools options], expect_fail]
@@ -2073,6 +2083,9 @@ sub test_view
          ['-R', $fogn, '-r', 'grp2'], 0],
         ['rg_both2', { read_groups => { grp1 => 1, grp2 => 1, grp3 => 1 }},
          ['-r', 'grp2', '-R', $fogn], 0],
+        # Read names
+        ['rn', { read_names => { 'unaligned_grp3_p001' => 1, 'ref1_grp1_p001' => 1, 'r008' => 1, 'r009' => 1 } },
+         ['-N', $forn], 0],
         # Tag with values
         ['tv_BC_TGCA', { tag => 'BC', tag_values => { TGCA => 1 }},
          ['-d', 'BC:TGCA'], 0],

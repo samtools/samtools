@@ -87,6 +87,7 @@ option is required whenever writing CRAM output.
 The
 .BR -L ,
 .BR -M ,
+.BR -N ,
 .BR -r ,
 .BR -R ,
 .BR -d ,
@@ -253,6 +254,10 @@ regions specified on the command line will be reported multiple times.
 The usage of a BED file is optional and its path has to be preceded by
 .BR -L
 option.
+.TP
+.BI "-N " FILE
+Output only alignments with read names listed in
+.I FILE.
 .TP
 .BI "-r " STR
 Output alignments in read group
