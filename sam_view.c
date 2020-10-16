@@ -293,7 +293,7 @@ int main_samview(int argc, char *argv[])
     samFile *in = 0, *out = 0, *un_out=0;
     FILE *fp_out = NULL;
     sam_hdr_t *header = NULL;
-    char out_mode[5], out_un_mode[5], *out_format = "";
+    char out_mode[6] = {0}, out_un_mode[6] = {0}, *out_format = "";
     char *fn_in = 0, *fn_idx_in = 0, *fn_out = 0, *fn_fai = 0, *q, *fn_un_out = 0;
     char *fn_out_idx = NULL, *fn_un_out_idx = NULL, *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -522,8 +522,7 @@ int main_samview(int argc, char *argv[])
     // Overridden by manual -b, -C
     if (*out_format)
         out_mode[1] = out_un_mode[1] = *out_format;
-    out_mode[2] = out_un_mode[2] = '\0';
-    // out_(un_)mode now 1 or 2 bytes long, followed by nul.
+    // out_(un_)mode now 1, 2 or 3 bytes long, followed by nul.
     if (compress_level >= 0) {
         char tmp[2];
         tmp[0] = compress_level + '0'; tmp[1] = '\0';

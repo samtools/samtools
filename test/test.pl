@@ -2884,6 +2884,7 @@ sub test_bam2fq
 
     # Read 1/2 output, duplicate filename (-1 -2)
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -1 $$opts{path}/o.fq -2 $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fa' => 'bam2fq/11.fa.expected'},cmd=>"$$opts{bin}/samtools fasta @$threads -N -1 $$opts{path}/o.fa -2 $$opts{path}/o.fa $$opts{path}/dat/bam2fq.001.sam");
     # Read 1/2 output, single filename (-o)
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -o $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
     # Read 1/2 output, stdout and discard singletons/other
