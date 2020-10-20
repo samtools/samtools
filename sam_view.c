@@ -40,6 +40,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/hts_expr.h"
 #include "samtools.h"
 #include "sam_opts.h"
+#include "bam.h" // for bam_get_library and bam_remove_B
 #include "bedidx.h"
 
 KHASH_SET_INIT_STR(str)
@@ -76,11 +77,6 @@ typedef struct samview_settings {
     auxhash_t remove_tag;
     auxhash_t keep_tag;
 } samview_settings_t;
-
-
-// TODO Add declarations of these to a viable htslib or samtools header
-extern const char *bam_get_library(sam_hdr_t *header, const bam1_t *b);
-extern int bam_remove_B(bam1_t *b);
 
 // Copied from htslib/sam.c.
 // TODO: we need a proper interface to find the length of an aux tag,
