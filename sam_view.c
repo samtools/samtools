@@ -286,6 +286,9 @@ static inline void change_flag(bam1_t *b, samview_settings_t *settings)
         b->core.flag &= ~settings->remove_flag;
 }
 
+// Make mnemonic distinct values for longoption-only options
+#define LONGOPT(c)  ((c) + 128)
+
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0, has_index_file = 0, no_pg = 0;
@@ -323,9 +326,44 @@ int main_samview(int argc, char *argv[])
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
-        {"no-PG", no_argument, NULL, 1},
-        {"remove-flag", required_argument, NULL, 2},
-        {"add-flag", required_argument, NULL, 3},
+        {"add-flag", required_argument, NULL, LONGOPT('a')},
+        {"bam", no_argument, NULL, 'b'},
+        {"count", no_argument, NULL, 'c'},
+        {"cram", no_argument, NULL, 'C'},
+        {"customised-index", no_argument, NULL, 'X'},
+        {"customized-index", no_argument, NULL, 'X'},
+        {"excl-flags", required_argument, NULL, 'F'},
+        {"exclude-flags", required_argument, NULL, 'F'},
+        {"expr", required_argument, NULL, 'e'},
+        {"expression", required_argument, NULL, 'e'},
+        {"fai-reference", required_argument, NULL, 't'},
+        {"fast", no_argument, NULL, '1'},
+        {"header-only", no_argument, NULL, 'H'},
+        {"help", no_argument, NULL, LONGOPT('?')},
+        {"library", required_argument, NULL, 'l'},
+        {"min-mapq", required_argument, NULL, 'q'},
+        {"min-MQ", required_argument, NULL, 'q'},
+        {"min-mq", required_argument, NULL, 'q'},
+        {"min-qlen", required_argument, NULL, 'm'},
+        {"no-header", no_argument, NULL, LONGOPT('H')},
+        {"no-PG", no_argument, NULL, LONGOPT('P')},
+        {"output", required_argument, NULL, 'o'},
+        {"output-unselected", required_argument, NULL, 'U'},
+        {"QNAME-file", required_argument, NULL, 'N'},
+        {"qname-file", required_argument, NULL, 'N'},
+        {"read-group", required_argument, NULL, 'r'},
+        {"read-group-file", required_argument, NULL, 'R'},
+        {"readgroup", required_argument, NULL, 'r'},
+        {"readgroup-file", required_argument, NULL, 'R'},
+        {"remove-B", no_argument, NULL, 'B'},
+        {"remove-flag", required_argument, NULL, LONGOPT('r')},
+        {"remove-tag", required_argument, NULL, 'x'},
+        {"require-flags", required_argument, NULL, 'f'},
+        {"tag", required_argument, NULL, 'd'},
+        {"tag-file", required_argument, NULL, 'D'},
+        {"uncompressed", no_argument, NULL, 'u'},
+        {"unoutput", required_argument, NULL, 'U'},
+        {"with-header", no_argument, NULL, 'h'},
         { NULL, 0, NULL, 0 }
     };
 
@@ -372,6 +410,7 @@ int main_samview(int argc, char *argv[])
         case 't': fn_fai = strdup(optarg); break;
         case 'h': is_header = 1; break;
         case 'H': is_header_only = 1; break;
+        case LONGOPT('H'): is_header = is_header_only = 0; break;
         case 'o': fn_out = strdup(optarg); break;
         case 'U': fn_un_out = strdup(optarg); break;
         case 'X': has_index_file = 1; break;
@@ -469,6 +508,8 @@ int main_samview(int argc, char *argv[])
         //case 'x': out_format = "x"; break;
         //case 'X': out_format = "X"; break;
                  */
+        case LONGOPT('?'):
+            return usage(stdout, EXIT_SUCCESS, 1);
         case '?':
             if (optopt == '?') {  // '-?' appeared on command line
                 return usage(stdout, EXIT_SUCCESS, 1);
@@ -498,15 +539,15 @@ int main_samview(int argc, char *argv[])
             }
             break;
         case 'M': settings.multi_region = 1; break;
-        case 1: no_pg = 1; break;
+        case LONGOPT('P'): no_pg = 1; break;
         case 'e':
             if (!(settings.filter = hts_filter_init(optarg))) {
                 print_error("main_samview", "Couldn't initialise filter");
                 return 1;
             }
             break;
-        case 2: settings.remove_flag |= bam_str2flag(optarg); break;
-        case 3: settings.add_flag |= bam_str2flag(optarg); break;
+        case LONGOPT('r'): settings.remove_flag |= bam_str2flag(optarg); break;
+        case LONGOPT('a'): settings.add_flag |= bam_str2flag(optarg); break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -869,54 +910,51 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "\n"
 "Usage: samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n"
 "\n"
-"Options:\n"
-// output options
-"  -b       output BAM\n"
-"  -C       output CRAM (requires -T)\n"
-"  -1       use fast BAM compression (implies -b)\n"
-"  -u       uncompressed BAM output (implies -b)\n"
-"  -h       include header in SAM output\n"
-"  -H       print SAM header only (no alignments)\n"
-"  -c       print only the count of matching records\n"
-"  -o FILE  output file name [stdout]\n"
-"  -U FILE  output reads not selected by filters to FILE [null]\n"
-// extra input
-"  -t FILE  FILE listing reference names and lengths (see long help) [null]\n"
-"  -X       include customized index file\n"
-// read filters
+"Output options:\n"
+"  -b, --bam                  Output BAM\n"
+"  -C, --cram                 Output CRAM (requires -T)\n"
+"  -1, --fast                 Use fast BAM compression (implies --bam)\n"
+"  -u, --uncompressed         Uncompressed BAM output (implies --bam)\n"
+"  -h, --with-header          Include header in SAM output\n"
+"  -H, --header-only          Print SAM header only (no alignments)\n"
+"      --no-header            Print SAM alignment records only [default]\n"
+"  -c, --count                Print only the count of matching records\n"
+"  -o, --output FILE          Write output to FILE [standard output]\n"
+"  -U, --unoutput FILE, --output-unselected FILE\n"
+"                             Output reads not selected by filters to FILE\n"
+"Input options:\n"
+"  -t, --fai-reference FILE   FILE listing reference names and lengths\n"
+"  -X, --customized-index     Expect extra index file argument after <in.bam>\n"
+"\n"
+"Filtering options (Only include in output reads that...):\n"
 "  -L FILE  only include reads overlapping this BED FILE [null]\n"
-"  -r STR   only include reads in read group STR [null]\n"
-"  -R FILE  only include reads with read group listed in FILE [null]\n"
-"  -N FILE  only include reads with read name listed in FILE [null]\n"
-"  -d STR1[:STR2]\n"
-"           only include reads with tag STR1 and associated value STR2 [null]\n"
-"           The value can be omitted, in which case only the tag is considered\n"
-"  -D STR:FILE\n"
-"           only include reads with tag STR and associated values listed in\n"
-"           FILE [null]\n"
-"  -q INT   only include reads with mapping quality >= INT [0]\n"
-"  -l STR   only include reads in library STR [null]\n"
-"  -m INT   only include reads with number of CIGAR operations consuming\n"
-"           query sequence >= INT [0]\n"
-"  -f FLAG  only include reads with all  of the FLAGs present\n"       //   F&x == x
-"  -F FLAG  only include reads with none of the FLAGs present\n"       //   F&x == 0
-"  -G FLAG  only EXCLUDE reads with all  of the FLAGs present\n"       // !(F&x == x)
-"  -e STR   only include reads matching the filter expression [null]\n"
+"  -r, --read-group STR       ...are in read group STR\n"
+"  -R, --read-group-file FILE ...are in a read group listed in FILE\n"
+"  -N, --qname-file FILE      ...whose read name is listed in FILE\n"
+"  -d, --tag STR1[:STR2]      ...have a tag STR1 (with associated value STR2)\n"
+"  -D, --tag-file STR:FILE    ...have a tag STR whose value is listed in FILE\n"
+"  -q, --min-MQ INT           ...have mapping quality >= INT\n"
+"  -l, --library STR          ...are in library STR\n"
+"  -m, --min-qlen INT         ...cover >= INT query bases (as measured via CIGAR)\n"
+"  -e, --expr STR             ...match the filter expression STR\n"
+"  -f, --require-flags FLAG   ...have all of the FLAGs present\n"             //   F&x == x
+"  -F, --excl[ude]-flags FLAG ...have none of the FLAGs present\n"            //   F&x == 0
+"  -G FLAG                    EXCLUDE reads with all of the FLAGs present\n"  // !(F&x == x)  TODO long option
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
 "  -M       use the multi-region iterator (increases the speed, removes\n"
 "           duplicates and outputs the reads as they are ordered in the file)\n"
-// read processing
-"  -x STR   read tag to strip (repeatable) [null]\n"
-"  -B       collapse the backward CIGAR operation\n"
-"  --add-flag FLAG\n"
-"           add FLAGs to reads\n"
-"  --remove-flag FLAG\n"
-"           remove FLAGs from reads\n"
-// general options
-"  -?       print long help, including note about region specification\n"
-"  -S       ignored (input format is auto-detected)\n"
-"  --no-PG  do not add a PG line\n");
+"\n"
+"Processing options:\n"
+"      --add-flag FLAG        Add FLAGs to reads\n"
+"      --remove-flag FLAG     Remove FLAGs from reads\n"
+"  -x, --remove-tag STR       Strip tag STR from reads (option may be repeated)\n"
+"  -B, --remove-B             Collapse the backward CIGAR operation\n"
+"\n"
+"General options:\n"
+"  -?, --help   Print long help, including note about region specification\n"
+"  -S           Ignored (input format is auto-detected)\n"
+"      --no-PG  Do not add a PG line\n");
 
     sam_global_opt_help(fp, "-.O.T@..");
     fprintf(fp, "\n");

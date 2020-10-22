@@ -158,27 +158,32 @@ Output all alignments.
 
 .SH OPTIONS
 .TP 10
-.B -b
+.BR -b ", " --bam
 Output in the BAM format.
 .TP
-.B -C
+.BR -C ", " --cram
 Output in the CRAM format (requires -T).
 .TP
-.B -1
+.BR -1 ", " --fast
 Enable fast BAM compression (implies -b).
 .TP
-.B -u
+.BR -u ", " --uncompressed
 Output uncompressed BAM. This option saves time spent on
 compression/decompression and is thus preferred when the output is piped
 to another samtools command.
 .TP
-.B -h
+.BR -h ", " --with-header
 Include the header in the output.
 .TP
-.B -H
+.BR -H ", " --header-only
 Output the header only.
 .TP
-.B -c
+.B --no-header
+When producing SAM format, output alignment records but not headers.
+This is the default; the option can be used to reset the effect of
+.BR -h / -H .
+.TP
+.BR -c ", " --count
 Instead of printing the alignments, only count them and print the
 total number. All filter options, such as
 .BR -f ,
@@ -187,14 +192,14 @@ and
 .BR -q ,
 are taken into account.
 .TP
-.B -?
+.BR -? ", " --help
 Output long help and exit immediately.
 .TP
-.BI "-o " FILE
+.BI "-o " FILE ", --output " FILE
 Output to
 .I FILE [stdout].
 .TP
-.BI "-U " FILE
+.BI "-U " FILE ", --unoutput " FILE ", --output-unselected " FILE
 Write alignments that are
 .I not
 selected by the various filter options to
@@ -203,7 +208,7 @@ When this option is used, all alignments (or all alignments intersecting the
 .I regions
 specified) are written to either the output file or this file, but never both.
 .TP
-.BI "-t " FILE
+.BI "-t " FILE ", --fai-reference " FILE
 A tab-delimited
 .IR FILE .
 Each line must contain the reference name in the first column and the length of
@@ -215,7 +220,7 @@ defines the order of the reference sequences in sorting. If you run:
 can be used as this
 .IR FILE .
 .TP
-.BI "-T " FILE
+.BI "-T " FILE ", --reference " FILE
 A FASTA format reference
 .IR FILE ,
 optionally compressed by
@@ -256,11 +261,11 @@ The usage of a BED file is optional and its path has to be preceded by
 .BR -L
 option.
 .TP
-.BI "-N " FILE
+.BI "-N " FILE ", --qname-file " FILE
 Output only alignments with read names listed in
-.I FILE.
+.IR FILE .
 .TP
-.BI "-r " STR
+.BI "-r " STR ", --read-group " STR
 Output alignments in read group
 .I STR
 [null].
@@ -269,7 +274,7 @@ Note that records with no
 tag will also be output when using this option.
 This behaviour may change in a future release.
 .TP
-.BI "-R " FILE
+.BI "-R " FILE ", --read-group-file " FILE
 Output alignments in read groups listed in
 .I FILE
 [null].
@@ -278,7 +283,7 @@ Note that records with no
 tag will also be output when using this option.
 This behaviour may change in a future release.
 .TP
-.BI "-d " STR1[:STR2]
+.BI "-d " STR1[:STR2] ", --tag " STR1[:STR2]
 Only output alignments with tag
 .I STR1
 and associated value
@@ -286,35 +291,35 @@ and associated value
 which can be a string or an integer [null].
 The value can be omitted, in which case only the tag is considered.
 .TP
-.BI "-D " STR:FILE
+.BI "-D " STR:FILE ", --tag-file " STR:FILE
 Only output alignments with tag
 .I STR
 and associated values listed in
 .I FILE
 [null].
 .TP
-.BI "-q " INT
+.BI "-q " INT ", --min-MQ " INT
 Skip alignments with MAPQ smaller than
 .I INT
 [0].
 .TP
-.BI "-l " STR
+.BI "-l " STR ", --library " STR
 Only output alignments in library
 .I STR
 [null].
 .TP
-.BI "-m " INT
+.BI "-m " INT ", --min-qlen " INT
 Only output alignments with number of CIGAR bases consuming query
 sequence \(>=
 .I INT
 [0]
 .TP
-.BI "-e " STR
+.BI "-e " STR ", --expr " STR
 Only include alignments that match the filter expression \fISTR\fR.
-The syntax for these expressions are in the main samtools(1) man page
+The syntax for these expressions is described in the main samtools(1) man page
 under the FILTER EXPRESSIONS heading.
 .TP
-.BI "-f " FLAG
+.BI "-f " FLAG ", --require-flags " FLAG
 Only output alignments with all bits set in
 .I FLAG
 present in the FLAG field.
@@ -327,7 +332,7 @@ not beginning with '0' or as a comma-separated list of flag names.
 For a list of flag names see
 .IR samtools-flags (1).
 .TP
-.BI "-F " FLAG
+.BI "-F " FLAG ", --excl-flags " FLAG ", --exclude-flags " FLAG
 Do not output alignments with any bits set in
 .I FLAG
 present in the FLAG field.
@@ -346,10 +351,10 @@ can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/),
 in octal by beginning with `0' (i.e. /^0[0-7]+/), as a decimal number
 not beginning with '0' or as a comma-separated list of flag names.
 .TP
-.BI "-x " STR
+.BI "-x " STR ", --remove-tag " STR
 Read tag to exclude from output (repeatable) [null]
 .TP
-.B -B
+.BR -B ", " --remove-B
 Collapse the backward CIGAR operation.
 .TP
 .BI "--add-flag " FLAGS
@@ -385,7 +390,7 @@ When subsampling data that has previously been subsampled, be sure to use
 a different seed value from those used previously; otherwise more reads
 will be retained than expected.
 .TP
-.BI "-@ " INT
+.BI "-@ " INT ", --threads " INT
 Number of BAM compression threads to use in addition to main thread [0].
 .TP
 .B -S
@@ -394,7 +399,7 @@ Previously this option was required if input was in SAM format, but now the
 correct format is automatically detected by examining the first few characters
 of input.
 .TP
-.B -X
+.BR -X ", " --customized-index
 Include customized index file as a part of arguments. See
 .B EXAMPLES
 section for sample of usage.
