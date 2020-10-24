@@ -355,14 +355,19 @@ int main_samview(int argc, char *argv[])
         {"read-group-file", required_argument, NULL, 'R'},
         {"readgroup", required_argument, NULL, 'r'},
         {"readgroup-file", required_argument, NULL, 'R'},
+        {"region-file", required_argument, NULL, LONGOPT('L')},
+        {"regions-file", required_argument, NULL, LONGOPT('L')},
         {"remove-B", no_argument, NULL, 'B'},
         {"remove-flag", required_argument, NULL, LONGOPT('r')},
         {"remove-tag", required_argument, NULL, 'x'},
         {"require-flags", required_argument, NULL, 'f'},
         {"tag", required_argument, NULL, 'd'},
         {"tag-file", required_argument, NULL, 'D'},
+        {"target-file", required_argument, NULL, 'L'},
+        {"targets-file", required_argument, NULL, 'L'},
         {"uncompressed", no_argument, NULL, 'u'},
         {"unoutput", required_argument, NULL, 'U'},
+        {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
         { NULL, 0, NULL, 0 }
     };
@@ -421,6 +426,9 @@ int main_samview(int argc, char *argv[])
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
         case 'l': settings.library = strdup(optarg); break;
+        case LONGOPT('L'):
+            settings.multi_region = 1;
+            // fall through
         case 'L':
             if ((settings.bed = bed_read(optarg)) == NULL) {
                 print_error_errno("view", "Could not read file \"%s\"", optarg);
@@ -924,10 +932,12 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "                             Output reads not selected by filters to FILE\n"
 "Input options:\n"
 "  -t, --fai-reference FILE   FILE listing reference names and lengths\n"
+"  -M, --use-index            Use index and multi-region iterator for regions\n"
+"      --region[s]-file FILE  Use index to include only reads overlapping FILE\n"
 "  -X, --customized-index     Expect extra index file argument after <in.bam>\n"
 "\n"
 "Filtering options (Only include in output reads that...):\n"
-"  -L FILE  only include reads overlapping this BED FILE [null]\n"
+"  -L, --target[s]-file FILE  ...overlap (BED) regions in FILE\n"
 "  -r, --read-group STR       ...are in read group STR\n"
 "  -R, --read-group-file FILE ...are in a read group listed in FILE\n"
 "  -N, --qname-file FILE      ...whose read name is listed in FILE\n"
@@ -942,8 +952,6 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -G FLAG                    EXCLUDE reads with all of the FLAGs present\n"  // !(F&x == x)  TODO long option
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
-"  -M       use the multi-region iterator (increases the speed, removes\n"
-"           duplicates and outputs the reads as they are ordered in the file)\n"
 "\n"
 "Processing options:\n"
 "      --add-flag FLAG        Add FLAGs to reads\n"
@@ -994,6 +1002,15 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "\n"
 "6. Option `-u' is preferred over `-b' when the output is piped to\n"
 "   another samtools command.\n"
+"\n"
+"7. Option `-M`/`--use-index` causes overlaps with `-L` BED file regions and\n"
+"   command-line region arguments to be computed using the multi-region iterator\n"
+"   and an index. This increases speed, omits duplicates, and outputs the reads\n"
+"   as they are ordered in the input SAM/BAM/CRAM file.\n"
+"\n"
+"8. Options `-L`/`--target[s]-file` and `--region[s]-file` may not be used\n"
+"   together. `--region[s]-file FILE` is simply equivalent to `-M -L FILE`,\n"
+"   so using both causes one of the specified BED files to be ignored.\n"
 "\n");
 
     return exit_status;
