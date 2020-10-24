@@ -361,6 +361,8 @@ int main_samview(int argc, char *argv[])
         {"remove-flag", required_argument, NULL, LONGOPT('r')},
         {"remove-tag", required_argument, NULL, 'x'},
         {"require-flags", required_argument, NULL, 'f'},
+        {"subsample", required_argument, NULL, LONGOPT('s')},
+        {"subsample-seed", required_argument, NULL, LONGOPT('S')},
         {"tag", required_argument, NULL, 'd'},
         {"tag-file", required_argument, NULL, 'D'},
         {"target-file", required_argument, NULL, 'L'},
@@ -389,12 +391,7 @@ int main_samview(int argc, char *argv[])
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
-            if ((settings.subsam_seed = strtol(optarg, &q, 10)) != 0) {
-                // Convert likely user input 0,1,2,... to pseudo-random
-                // values with more entropy and more bits set
-                srand(settings.subsam_seed);
-                settings.subsam_seed = rand();
-            }
+            settings.subsam_seed = strtol(optarg, &q, 10);
             if (q && *q == '.') {
                 settings.subsam_frac = strtod(q, &q);
                 if (*q) ret = 1;
@@ -407,6 +404,14 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
             break;
+        case LONGOPT('s'):
+            settings.subsam_frac = strtod(optarg, &q);
+            if (*q || settings.subsam_frac < 0.0 || settings.subsam_frac > 1.0) {
+                print_error("view", "Incorrect sampling argument \"%s\"", optarg);
+                goto view_end;
+            }
+            break;
+        case LONGOPT('S'): settings.subsam_seed = atoi(optarg); break;
         case 'm': settings.min_qlen = atoi(optarg); break;
         case 'c': is_count = 1; break;
         case 'S': break;
@@ -582,6 +587,12 @@ int main_samview(int argc, char *argv[])
     if (argc == optind && isatty(STDIN_FILENO)) {
         print_error("view", "No input provided or missing option argument.");
         return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
+    }
+    if (settings.subsam_seed != 0) {
+        // Convert likely user input 1,2,... to pseudo-random
+        // values with more entropy and more bits set
+        srand(settings.subsam_seed);
+        settings.subsam_seed = rand();
     }
 
     fn_in = (optind < argc)? argv[optind] : "-";
@@ -951,8 +962,9 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -f, --require-flags FLAG   ...have all of the FLAGs present\n"             //   F&x == x
 "  -F, --excl[ude]-flags FLAG ...have none of the FLAGs present\n"            //   F&x == 0
 "  -G FLAG                    EXCLUDE reads with all of the FLAGs present\n"  // !(F&x == x)  TODO long option
-"  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
-"           fraction of templates/read pairs to keep; INT part sets seed)\n"
+"      --subsample FLOAT      Keep only FLOAT fraction of templates/read pairs\n"
+"      --subsample-seed INT   Influence WHICH reads are kept in subsampling [0]\n"
+"  -s INT.FRAC                Same as --subsample 0.FRAC --subsample-seed INT\n"
 "\n"
 "Processing options:\n"
 "      --add-flag FLAG        Add FLAGs to reads\n"

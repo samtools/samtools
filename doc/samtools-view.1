@@ -381,24 +381,30 @@ is specified in the same was as the
 .B "--add-flag"
 option.
 .TP
-.BI "-s " FLOAT
-Output only a proportion of the input alignments.
+.BI "--subsample " FLOAT
+Output only a proportion of the input alignments, as specified by 0.0 \(<=
+.I FLOAT
+\(<= 1.0, which gives the fraction of templates/pairs to be kept.
 This subsampling acts in the same way on all of the alignment records in
 the same template or read pair, so it never keeps a read but not its mate.
-.IP
-The integer and fractional parts of the
-.BI "-s " INT . FRAC
-option are used separately: the part after the
-decimal point sets the fraction of templates/pairs to be kept,
-while the integer part is used as a seed that influences
+.TP
+.BI "--subsample-seed " INT
+Subsampling seed used to influence
 .I which
 subset of reads is kept.
-.IP
 .\" Reads are retained based on a score computed by hashing their QNAME
 .\" field and the seed value.
 When subsampling data that has previously been subsampled, be sure to use
 a different seed value from those used previously; otherwise more reads
 will be retained than expected.
+[0]
+.TP
+.BI "-s " FLOAT
+Subsampling shorthand option:
+.BI "-s " INT . FRAC
+is equivalent to
+.BI "--subsample-seed " INT " --subsample
+.RI 0. FRAC .
 .TP
 .BI "-@ " INT ", --threads " INT
 Number of BAM compression threads to use in addition to main thread [0].
