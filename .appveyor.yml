@@ -24,7 +24,16 @@ install:
   - set MSYSTEM=MINGW64
   - set PATH=C:/msys64/usr/bin;C:/msys64/mingw64/bin;%PATH%
   - set MINGWPREFIX=x86_64-w64-mingw32
-  - "sh -lc \"pacman -S --noconfirm --needed base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-zlib mingw-w64-x86_64-bzip2 mingw-w64-x86_64-xz mingw-w64-x86_64-curl\""
+# Update keys as MSYS upstream have revised them but this image is out of date
+  - "sh -lc \"wget http://repo.msys2.org/msys/x86_64/msys2-keyring-r21.b39fb11-1-any.pkg.tar.xz\""
+  - "sh -lc \"wget http://repo.msys2.org/msys/x86_64/msys2-keyring-r21.b39fb11-1-any.pkg.tar.xz.sig\""
+  - "sh -lc \"pacman-key --verify msys2-keyring-r21.b39fb11-1-any.pkg.tar.xz.sig\""
+# Newer MSYS packages are bundled using zstd instead of xz, but the pacman
+# version we have is too old to cope.  Explicitly upgrade this first
+  - "sh -lc \"pacman --noconfirm -U msys2-keyring-r21.b39fb11-1-any.pkg.tar.xz\""
+# Now we can update compiler and packages.
+  - "sh -lc \"pacman -Sy --noconfirm --needed pacman\""
+  - "sh -lc \"pacman -Sy --noconfirm --needed base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-zlib mingw-w64-x86_64-bzip2 mingw-w64-x86_64-xz mingw-w64-x86_64-curl\""
 
 # The user may have e.g. jkbonfield/samtools branch FOO and an associated
 # jkbonfield/htslib branch FOO.  If so use that related htslib, obtained by
