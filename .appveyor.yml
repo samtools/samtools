@@ -18,6 +18,9 @@ skip_tags: true
 #    - docs/*
 #    - '**/*.html'
 
+# Appveyor Windows images are based on Visual studio version
+image: Visual Studio 2019
+
 # We use Mingw/Msys, so use pacman for installs
 install:
   - set HOME=.
