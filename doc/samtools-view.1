@@ -277,12 +277,12 @@ Note that records with no
 tag will also be output when using this option.
 This behaviour may change in a future release.
 .TP
-.BI "-d " STR:STR
+.BI "-d " STR1[:STR2]
 Only output alignments with tag
-.I STR
+.I STR1
 and associated value
-.I STR
-[null].
+.I STR2
+[null]. The value can be omitted, in which case only the tag is considered.
 .TP
 .BI "-D " STR:FILE
 Only output alignments with tag
