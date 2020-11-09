@@ -100,11 +100,13 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
             if (k == kh_end(settings->rghash)) return 1;
         }
     }
-    if (settings->tvhash && settings->tag) {
+    if (settings->tag) {
         uint8_t *s = bam_aux_get(b, settings->tag);
         if (s) {
-            khint_t k = kh_get(str, settings->tvhash, (char*)(s + 1));
-            if (k == kh_end(settings->tvhash)) return 1;
+            if (settings->tvhash) {
+                khint_t k = kh_get(str, settings->tvhash, (char*)(s + 1));
+                if (k == kh_end(settings->tvhash)) return 1;
+            }
         } else {
             return 1;
         }
@@ -372,7 +374,7 @@ int main_samview(int argc, char *argv[])
             }
             break;
         case 'd':
-            if (strlen(optarg) < 4 || optarg[2] != ':') {
+            if (strlen(optarg) < 2 || (strlen(optarg) > 2 && optarg[2] != ':')) {
                 print_error_errno("view", "Invalid \"tag:value\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
@@ -393,7 +395,8 @@ int main_samview(int argc, char *argv[])
                 memcpy(settings.tag, optarg, 2);
             }
 
-            if (add_tag_value_single("view", &settings, optarg+3) != 0) {
+            if (strlen(optarg) > 3 && add_tag_value_single("view", &settings, optarg+3) != 0) {
+                print_error("view", "Could not add tag:value \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
@@ -401,7 +404,7 @@ int main_samview(int argc, char *argv[])
         case 'D':
             // Allow ";" as delimiter besides ":" to support MinGW CLI POSIX
             // path translation as described at:
-            //   http://www.mingw.org/wiki/Posix_path_conversion
+            // http://www.mingw.org/wiki/Posix_path_conversion
             if (strlen(optarg) < 4 || (optarg[2] != ':' && optarg[2] != ';')) {
                 print_error_errno("view", "Invalid \"tag:file\" option: \"%s\"", optarg);
                 ret = 1;
@@ -833,8 +836,9 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -r STR   only include reads in read group STR [null]\n"
 "  -R FILE  only include reads with read group listed in FILE [null]\n"
 "  -N FILE  only include reads with read name listed in FILE [null]\n"
-"  -d STR:STR\n"
-"           only include reads with tag STR and associated value STR [null]\n"
+"  -d STR1[:STR2]\n"
+"           only include reads with tag STR1 and associated value STR2 [null]\n"
+"           The value can be omitted, in which case only the tag is considered\n"
 "  -D STR:FILE\n"
 "           only include reads with tag STR and associated values listed in\n"
 "           FILE [null]\n"

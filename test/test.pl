@@ -2087,6 +2087,8 @@ sub test_view
         ['rn', { read_names => { 'unaligned_grp3_p001' => 1, 'ref1_grp1_p001' => 1, 'r008' => 1, 'r009' => 1 } },
          ['-N', $forn], 0],
         # Tag with values
+        ['tv_BC', { tag => 'BC', tag_values => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+         ['-d', 'BC'], 0],
         ['tv_BC_TGCA', { tag => 'BC', tag_values => { TGCA => 1 }},
          ['-d', 'BC:TGCA'], 0],
         ['tv_BC_fobc', { tag => 'BC', tag_values => { ACGT => 1, AATTCCGG => 1 }},
