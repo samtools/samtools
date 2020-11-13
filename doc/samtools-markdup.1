@@ -61,6 +61,7 @@ samtools markdup
 .RB [ --include-fails ]
 .RB [ --no-PG ]
 .RB [ -u ]
+.RB [ --no-multi-dup ]
 .I in.algsort.bam out.bam
 
 .SH DESCRIPTION
@@ -119,6 +120,14 @@ Output uncompressed SAM, BAM or CRAM.
 .TP
 .B --include-fails
 Include quality checked failed reads.
+.TP
+.B --no-multi-dup
+Stop checking duplicates of duplicates for correctness.  While still marking
+reads as duplicates further checks to make sure all optical duplicates are found
+are not carried out.  Also operates on \fB-t\fR tagging where reads may tagged
+with a better quality read but not necessarily the best one.  Using this option
+can speed up duplicate marking when there are a great many duplicates for each
+original read. 
 .TP
 .B --no-PG
 Do not add a PG line to the output file.
