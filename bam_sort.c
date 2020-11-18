@@ -2605,7 +2605,7 @@ static void sort_usage(FILE *fp)
 "  -o FILE    Write final output to FILE rather than standard output\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
 "  --no-PG    do not add a PG line\n");
-    sam_global_opt_help(fp, "-.O..@-.");
+    sam_global_opt_help(fp, "-.O..@..");
 }
 
 static void complain_about_memory_setting(size_t max_mem) {
