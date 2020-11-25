@@ -2128,6 +2128,22 @@ sub test_view
         ['qlen11', { min_qlen => 11 }, ['-m', 11], 0],
         ['qlen15', { min_qlen => 15 }, ['-m', 15], 0],
         ['qlen16', { min_qlen => 16 }, ['-m', 16], 0],
+	# Filter expressions
+        ['expr_rej128req2', { flags_rejected => 128, flags_required => 2 },
+	    ['-e', '!(flag & 128) && (flag & 2)'], 0],
+	# filter_sam also removes the header line, so cannot compare.
+	# ['expr_RG', { read_groups => {grp1 => 1, grp3 => 1}}, ['-e', '[RG]=~"^grp[13]$"'], 0],
+	['expr_BC', { tag => 'BC', tag_values => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+	    ['-e', '[BC]'], 0],
+	['expr_BC2', { tag => 'BC', tag_values => { ACGT => 1, AATTCCGG => 1 }},
+	    ['-e', '[BC] == "ACGT" || [BC] == "AATTCCGG"'], 0],
+	['expr_mq50',  { min_map_qual => 50  },  ['-e', 'mapq >= 50' ], 0],
+	['expr_mq99',  { min_map_qual => 99  },  ['-e', 'mapq >= 99' ], 0],
+	['expr_mq100', { min_map_qual => 100 },  ['-e', 'mapq >= 100'], 0],
+	# TODO: add library to filter expression?  It needs to go via RG.
+	# TODO: add cigar.qbase and cigar.rbase counts for consumes
+	#       N bases of query and ref?  Not the same as qlen/rlen as
+	#       indels don't count the same.
         );
 
     my @filter_inputs = ([SAM  => $sam_with_ur],

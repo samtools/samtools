@@ -307,6 +307,11 @@ sequence \(>=
 .I INT
 [0]
 .TP
+.BI "-e " STR
+Only include alignments that match the filter expression \fISTR\fR.
+The syntax for these expressions are in the main samtools(1) man page
+under the FILTER EXPRESSIONS heading.
+.TP
 .BI "-f " INT
 Only output alignments with all bits set in
 .I INT

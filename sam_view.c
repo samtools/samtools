@@ -37,6 +37,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/faidx.h"
 #include "htslib/khash.h"
 #include "htslib/thread_pool.h"
+#include "htslib/hts_expr.h"
 #include "samtools.h"
 #include "sam_opts.h"
 #include "bedidx.h"
@@ -64,6 +65,7 @@ typedef struct samview_settings {
     char** remove_aux;
     int multi_region;
     char* tag;
+    hts_filter_t *filter;
 } samview_settings_t;
 
 
@@ -130,6 +132,10 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
             }
         }
     }
+
+    if (settings->filter && sam_passes_filter(h, b, settings->filter) < 1)
+        return 1;
+
     return 0;
 }
 
@@ -286,7 +292,8 @@ int main_samview(int argc, char *argv[])
         .library = NULL,
         .bed = NULL,
         .multi_region = 0,
-        .tag = NULL
+        .tag = NULL,
+        .filter = NULL
     };
 
     static const struct option lopts[] = {
@@ -308,7 +315,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MX",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -456,7 +463,7 @@ int main_samview(int argc, char *argv[])
         case 'x':
             {
                 if (strlen(optarg) != 2) {
-                    fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
+                    print_error("main_samview", "Error parsing -x auxiliary tags should be exactly two characters long.");
                     return usage(stderr, EXIT_FAILURE, 0);
                 }
                 settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
@@ -465,6 +472,12 @@ int main_samview(int argc, char *argv[])
             break;
         case 'M': settings.multi_region = 1; break;
         case 1: no_pg = 1; break;
+        case 'e':
+            if (!(settings.filter = hts_filter_init(optarg))) {
+                print_error("main_samview", "Couldn't initialise filter");
+                return 1;
+            }
+            break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -798,6 +811,8 @@ view_end:
     if (settings.tag) {
         free(settings.tag);
     }
+    if (settings.filter)
+        hts_filter_free(settings.filter);
 
     if (p.pool)
         hts_tpool_destroy(p.pool);
@@ -849,6 +864,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -f INT   only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
 "  -F INT   only include reads with none of the FLAGS in INT present [0]\n"       //   F&x == 0
 "  -G INT   only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
+"  -e STR   only include reads matching the filter expression [null]\n"
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
 "  -M       use the multi-region iterator (increases the speed, removes\n"
