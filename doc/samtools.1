@@ -67,6 +67,8 @@ samtools bedcov aln.sorted.bam
 .PP
 samtools depth aln.sorted.bam
 .PP
+samtools ampliconstats primers.bed in.bam
+.PP
 samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
 .PP
 samtools coverage aln.sorted.bam
@@ -375,6 +377,21 @@ samtools depth
 .RI "[" in1.sam | in1.bam | in1.cram " [" in2.sam | in2.bam | in2.cram "] [...]]"
 
 Computes the read depth at each position or region.
+
+.TP \"-------- ampliconstats
+.B ampliconstats
+samtools ampliconstats
+.RI [ options ]
+.IR primers.bed
+.IR in.sam | in.bam | in.cram [...]
+
+samtools ampliconstats collects statistics from one or more input
+alignment files and produces tables in text format.  The output can be
+visualized graphically using plot-ampliconstats.
+
+The alignment files should have previously been clipped of primer
+sequence, for example by \fBsamtools ampliconclip\fR and the sites of
+these primers should be specified as a bed file in the arguments.
 
 .TP \"-------- mpileup
 .B mpileup
@@ -1014,6 +1031,7 @@ for further authorship.
 .SH SEE ALSO
 .IR samtools-addreplacerg (1),
 .IR samtools-ampliconclip (1),
+.IR samtools-ampliconstats (1),
 .IR samtools-bedcov (1),
 .IR samtools-calmd (1),
 .IR samtools-cat (1),
