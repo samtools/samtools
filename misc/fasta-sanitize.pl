@@ -23,11 +23,8 @@
 # DEALINGS IN THE SOFTWARE.
 
 
-# Usage: fasta-sanitize.pl [-t] file.in > file.out
-# Or via stdin, e.g. zcat file.in.gz | fasta-sanitize.pl [-t] > file.out
-#
-# Option -t ends names on a tab or newline, which permits spaces in names.
-# Otherwise names are considered to end on any whitespace.
+# Usage: fasta-sanitize.pl file.in > file.out
+# Or via stdin, e.g. zcat file.in.gz | fasta-sanitize.pl > file.out
 #
 # Also supports and autodetects fastq.
 
@@ -56,14 +53,7 @@ my $fastq = 0;
 my $in_qual = 0;
 my $seq_len = 0;
 
-my $name_whitespace = qr/^([>@])\s*(\S*)(.*)/;
-my $name_tab = qr/^([>@])\s*([^\t]*)(.*)/;
-
-my $name_re = $name_whitespace;
-if ($ARGV[0] eq "-t") {
-    pop(@ARGV);
-    $name_re = $name_tab;
-}
+my $name_re = qr/^([>@])\s*(\S*)(.*)/;
 
 while (<>) {
     # Name
