@@ -86,10 +86,12 @@ while (<>) {
 
         # Seq
         print;
+        chomp($_);
         $seq_len += length($_);
     } else {
         # Qual
         print;
+        chomp($_);
         $in_qual = 0 if (($seq_len -= length($_)) <= 0);
     }
 }
