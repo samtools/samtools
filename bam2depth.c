@@ -91,8 +91,8 @@ static int usage() {
                     "                       The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704\n");
     fprintf(stderr, "   -J                  include reads with deletions in depth computation\n");
     fprintf(stderr, "   -s                  for the overlapping section of a read pair, count only the bases\n"
-                    "                       of a single read. This option requires raising the base quality\n"
-                    "                       threshold to 1.\n");
+                    "                       of a single read. This option will automatically raise the base quality\n"
+                    "                       threshold to at least 1.\n");
 
     sam_global_opt_help(stderr, "-.--.--.");
 
