@@ -14,4 +14,4 @@ ref=''
 [ -z "$ref" ] && repository='git://github.com/samtools/htslib.git'
 
 set -x
-git clone --depth=50 ${ref:+--branch="$branch"} "$repository" "$localdir"
+git clone --recurse-submodules --shallow-submodules --depth=50 ${ref:+--branch="$branch"} "$repository" "$localdir"
