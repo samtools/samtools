@@ -1138,6 +1138,8 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
 
 void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pairs)
 {
+    if ( !is_in_regions(bam_line,stats) )
+        return;
     if ( stats->rg_hash )
     {
         const uint8_t *rg = bam_aux_get(bam_line, "RG");
@@ -1154,8 +1156,6 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         stats->nreads_filtered++;
         return;
     }
-    if ( !is_in_regions(bam_line,stats) )
-        return;
     if ( stats->info->filter_readlen!=-1 && bam_line->core.l_qseq!=stats->info->filter_readlen )
         return;
 
