@@ -2,7 +2,7 @@
 # CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)
 CHK	cb2d2d82	bcd83869	62ec814e
 # Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.
-SN	raw total sequences:	26
+SN	raw total sequences:	26	# excluding supplementary and secondary reads
 SN	filtered sequences:	0
 SN	sequences:	26
 SN	is sorted:	1
@@ -17,6 +17,7 @@ SN	reads duplicated:	0	# PCR or optical duplicate bit set
 SN	reads MQ0:	1	# mapped and MQ=0
 SN	reads QC failed:	0
 SN	non-primary alignments:	0
+SN	supplementary alignments:	0
 SN	total length:	260	# ignores clipping
 SN	total first fragment length:	140	# ignores clipping
 SN	total last fragment length:	120	# ignores clipping

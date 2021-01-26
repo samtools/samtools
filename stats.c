@@ -1,6 +1,6 @@
 /*  stats.c -- This is the former bamcheck integrated into samtools/htslib.
 
-    Copyright (C) 2012-2020 Genome Research Ltd.
+    Copyright (C) 2012-2021 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
     Author: Sam Nicholls <sam@samnicholls.net>
@@ -210,7 +210,7 @@ typedef struct
     uint64_t nbases_mapped_cigar;
     uint64_t nbases_trimmed;  // bwa trimmed bases
     uint64_t nmismatches;
-    uint64_t nreads_QCfailed, nreads_secondary;
+    uint64_t nreads_QCfailed, nreads_secondary, nreads_supplementary;
     struct {
         uint32_t names, reads, quals;
     } checksum;
@@ -1168,6 +1168,11 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
         return;
     }
 
+    if ( bam_line->core.flag & BAM_FSUPPLEMENTARY )
+    {
+        stats->nreads_supplementary++;
+    }
+
     // If line has no sequence cannot continue
     int seq_len = bam_line->core.l_qseq;
     if ( !seq_len ) return;
@@ -1196,8 +1201,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
 
     // These stats should only be calculated for the original reads ignoring supplementary artificial reads
     // otherwise we'll accidentally double count
-    if ( IS_ORIGINAL(bam_line) )
-    {
+    if ( IS_ORIGINAL(bam_line) ) {
         stats->read_lengths[read_len]++;
         if ( order == READ_ORDER_FIRST ) stats->read_lengths_1st[read_len]++;
         if ( order == READ_ORDER_LAST ) stats->read_lengths_2nd[read_len]++;
@@ -1209,7 +1213,7 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
 
     count_indels(stats, bam_line);
 
-    if ( IS_PAIRED_AND_MAPPED(bam_line) )
+    if ( IS_PAIRED_AND_MAPPED(bam_line) && IS_ORIGINAL(bam_line) )
     {
         // The insert size is tricky, because for long inserts the libraries are
         // prepared differently and the pairs point in other direction. BWA does
@@ -1504,7 +1508,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "# CHK, CRC32 of reads which passed filtering followed by addition (32bit overflow)\n");
     fprintf(to, "CHK\t%08x\t%08x\t%08x\n", stats->checksum.names,stats->checksum.reads,stats->checksum.quals);
     fprintf(to, "# Summary Numbers. Use `grep ^SN | cut -f 2-` to extract this part.\n");
-    fprintf(to, "SN\traw total sequences:\t%ld\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));  // not counting excluded seqs (and none of the below)
+    fprintf(to, "SN\traw total sequences:\t%ld\t# excluding supplementary and secondary reads\n", (long)(stats->nreads_filtered+stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));  // not counting excluded seqs (and none of the below)
     fprintf(to, "SN\tfiltered sequences:\t%ld\n", (long)stats->nreads_filtered);
     fprintf(to, "SN\tsequences:\t%ld\n", (long)(stats->nreads_1st+stats->nreads_2nd+stats->nreads_other));
     fprintf(to, "SN\tis sorted:\t%d\n", stats->is_sorted ? 1 : 0);
@@ -1519,6 +1523,7 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
     fprintf(to, "SN\treads MQ0:\t%ld\t# mapped and MQ=0\n", (long)stats->nreads_mq0);
     fprintf(to, "SN\treads QC failed:\t%ld\n", (long)stats->nreads_QCfailed);
     fprintf(to, "SN\tnon-primary alignments:\t%ld\n", (long)stats->nreads_secondary);
+    fprintf(to, "SN\tsupplementary alignments:\t%ld\n", (long)stats->nreads_supplementary);
     fprintf(to, "SN\ttotal length:\t%ld\t# ignores clipping\n", (long)stats->total_len);
     fprintf(to, "SN\ttotal first fragment length:\t%ld\t# ignores clipping\n", (long)stats->total_len_1st);
     fprintf(to, "SN\ttotal last fragment length:\t%ld\t# ignores clipping\n", (long)stats->total_len_2nd);

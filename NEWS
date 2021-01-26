@@ -1,6 +1,13 @@
 Release a.b
 -----------
 
+ * Samtools stats now displays the number of supplementary reads in the
+   SN section. Also, supplementary reads are no longer considered when
+   splitting read pairs by orientation (inward, outward, other).
+   
+ * Samtools stats now counts only the filtered alignments that overlap
+   target regions, if any are specified.
+
 Release 1.11 (22nd September 2020)
 ----------------------------------
 
