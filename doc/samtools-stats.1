@@ -121,7 +121,8 @@ but more comprehensive.
 
 .RS
 .B raw total sequences
-- total number of reads in a file. Same number reported by
+- total number of reads in a file, excluding supplementary and secondary reads.
+Same number reported by
 .BR "samtools view -c".
 
 .B filtered sequences
@@ -170,6 +171,9 @@ fragment reads (flags 0x01 and 0x80 set, 0x40 not set).
 
 .B non-primary alignments
 - number of secondary reads (flag 0x100 (256) set).
+
+.B supplementary alignments
+- number of supplementary reads (flag 0x800 (2048) set).
 
 .B total length
 - number of processed bases from reads that are neither secondary nor supplementary (flags 0x100 (256) and 0x800 (2048) are not set).
