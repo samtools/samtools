@@ -8,6 +8,8 @@ Release a.b
  * Samtools stats now counts only the filtered alignments that overlap
    target regions, if any are specified.
 
+ * Samtools view now supports int value tags for options -d and -D.
+
 Release 1.11 (22nd September 2020)
 ----------------------------------
 

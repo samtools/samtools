@@ -106,7 +106,15 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         uint8_t *s = bam_aux_get(b, settings->tag);
         if (s) {
             if (settings->tvhash) {
-                khint_t k = kh_get(str, settings->tvhash, (char*)(s + 1));
+                char t[32], *val;
+                if (*s == 'i' || *s == 'I' || *s == 'c' || *s == 'C') {
+                    int ret = snprintf(t, 32, "%"PRId64, bam_aux2i(s));
+                    if (ret > 0) val = t;
+                    else return 1;
+                } else {
+                    val = (char *)(s+1);
+                }
+                khint_t k = kh_get(str, settings->tvhash, val);
                 if (k == kh_end(settings->tvhash)) return 1;
             }
         } else {
