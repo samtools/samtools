@@ -16,12 +16,12 @@ timeout_in: 10m
 # Note this only works on the users own forks.  Once in the samtools
 # organisation the branch name becomes pull/<num>.
 
-# Logic for choosing which to use is in the .travis/clone script.
+# Logic for choosing which to use is in the .ci_helpers/clone script.
 # Note we could also use "clone_script" if we want to replace the samtools
 # clone with our own commands too.
 clone_template: &HTSLIB_CLONE
   htslib_clone_script: |
-    .travis/clone "git://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}"
+    .ci_helpers/clone "git://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}"
 
 htslib_compile_template: &HTSLIB_COMPILE
   << : *HTSLIB_CLONE

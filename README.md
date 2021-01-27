@@ -1,7 +1,7 @@
 samtools
 ========
 
-[![Build Status](https://travis-ci.org/samtools/samtools.svg?branch=develop)](https://travis-ci.org/samtools/samtools)
+[![Build Status](https://api.cirrus-ci.com/github/samtools/samtools.svg?branch=develop)](https://api.cirrus-ci.com/github/samtools/samtools)
 [![Build status](https://ci.appveyor.com/api/projects/status/enujqi06jlqw493t/branch/develop?svg=true)](https://ci.appveyor.com/project/samtools/samtools/branch/develop)
 [![Github All Releases](https://img.shields.io/github/downloads/samtools/samtools/total.svg)](https://github.com/samtools/samtools/releases/latest)
 
