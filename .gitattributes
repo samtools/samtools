@@ -6,8 +6,9 @@
 
 # Omit these files from release tarballs.
 /.appveyor.yml  export-ignore
+/.cirrus.yml    export-ignore
 .git*           export-ignore
-.travis*        export-ignore
+.ci-helpers*    export-ignore
 README.md       export-ignore
 
 # Correct language misidentifications.
