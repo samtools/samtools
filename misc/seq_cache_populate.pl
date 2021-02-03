@@ -2,7 +2,7 @@
 
 # The MIT License
 
-# Copyright (c) 2014 Genome Research Ltd.
+# Copyright (c) 2014, 2020 Genome Research Ltd.
 # Author: Rob Davies <rmd+sam@sanger.ac.uk>
 
 # Permission is hereby granted, free of charge, to any person obtaining a copy

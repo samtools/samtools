@@ -1,7 +1,7 @@
 /* coverage.c -- samtools coverage subcommand
 
     Copyright (C) 2018,2019 Florian Breitwieser
-    Portions copyright (C) 2019 Genome Research Ltd.
+    Portions copyright (C) 2019-2020 Genome Research Ltd.
 
     Author: Florian P Breitwieser <florian.bw@gmail.com>
 
