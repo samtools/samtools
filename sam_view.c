@@ -107,7 +107,7 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         if (s) {
             if (settings->tvhash) {
                 char t[32], *val;
-                if (*s == 'i' || *s == 'I' || *s == 'c' || *s == 'C') {
+                if (*s == 'i' || *s == 'I' || *s == 's' || *s == 'S' || *s == 'c' || *s == 'C') {
                     int ret = snprintf(t, 32, "%"PRId64, bam_aux2i(s));
                     if (ret > 0) val = t;
                     else return 1;

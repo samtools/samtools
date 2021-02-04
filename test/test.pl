@@ -1198,7 +1198,7 @@ sub filter_sam
                 if ($tag_values) {
                     my $tag_value = '';
                     for my $i (11 .. $#sam) {
-                        last if (($tag_value) = $sam[$i] =~ /^${tag}:[ZiIcC]:(.*)/);
+                        last if (($tag_value) = $sam[$i] =~ /^${tag}:[ZiIsScC]:(.*)/);
                     }
                     next if (!exists($tag_values->{$tag_value||""}));
                 }
