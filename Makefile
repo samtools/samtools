@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2020 Genome Research Ltd.
+#    Copyright (C) 2008-2021 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -123,6 +123,13 @@ version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(s
 #	echo '#define SAMTOOLS_VERSION "`git describe --always --dirty`"' > $@
 version.h:
 	echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@
+	echo '#define SAMTOOLS_CC "$(CC)"' >> $@
+	echo '#define SAMTOOLS_CPPFLAGS "$(CPPFLAGS)"' >> $@
+	echo '#define SAMTOOLS_CFLAGS "$(CFLAGS)"' >> $@
+	echo '#define SAMTOOLS_LDFLAGS "$(LDFLAGS)"' >> $@
+	echo '#define SAMTOOLS_HTSDIR "$(HTSDIR)"' >> $@
+	echo '#define SAMTOOLS_LIBS "$(LIBS)"' >> $@
+	echo '#define SAMTOOLS_CURSES_LIB "$(CURSES_LIB)"' >> $@
 
 print-version:
 	@echo $(PACKAGE_VERSION)
@@ -191,7 +198,7 @@ bam_tview_curses.o: bam_tview_curses.c config.h $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c config.h $(bam_tview_h)
 bam_flags.o: bam_flags.c config.h $(htslib_sam_h)
 bamshuf.o: bamshuf.c config.h $(htslib_sam_h) $(htslib_hts_h) $(htslib_ksort_h) $(samtools_h) $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_khash_h)
-bamtk.o: bamtk.c config.h $(htslib_hts_h) $(samtools_h) version.h
+bamtk.o: bamtk.c config.h $(htslib_hts_h) $(htslib_hfile_h) $(samtools_h) version.h
 bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h) $(htslib_kseq_h)
 bedidx.o: bedidx.c config.h $(bedidx_h) $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(samtools_h) $(sam_opts_h)
