@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2020 Genome Research Ltd.
+    Copyright (C) 2009-2021 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -107,7 +107,7 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         if (s) {
             if (settings->tvhash) {
                 char t[32], *val;
-                if (*s == 'i' || *s == 'I' || *s == 'c' || *s == 'C') {
+                if (*s == 'i' || *s == 'I' || *s == 's' || *s == 'S' || *s == 'c' || *s == 'C') {
                     int ret = snprintf(t, 32, "%"PRId64, bam_aux2i(s));
                     if (ret > 0) val = t;
                     else return 1;
