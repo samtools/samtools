@@ -1,5 +1,5 @@
 #!/bin/sh
-# Usage: .travis/clone REPOSITORY [DIR] [BRANCH]
+# Usage: .ci_helpers/clone REPOSITORY [DIR] [BRANCH]
 #
 # Creates a shallow clone, checking out the specified branch.  If BRANCH is
 # omitted or if there is no branch with that name, checks out origin/HEAD
