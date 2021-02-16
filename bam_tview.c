@@ -351,6 +351,7 @@ static int tv_push_aln(const bam1_t *b, tview_t *tv)
 
 int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos)
 {
+    int ret;
     assert(tv!=NULL);
     // reset
     tv->my_clear(tv);
@@ -379,9 +380,14 @@ int base_draw_aln(tview_t *tv, int tid, hts_pos_t pos)
     bam_lplbuf_reset(tv->lplbuf);
     hts_itr_t *iter = sam_itr_queryi(tv->idx, tv->curr_tid, tv->left_pos, tv->left_pos + tv->mcol);
     bam1_t *b = bam_init1();
-    while (sam_itr_next(tv->fp, iter, b) >= 0) tv_push_aln(b, tv);
+    while ((ret = sam_itr_next(tv->fp, iter, b)) >= 0) tv_push_aln(b, tv);
     bam_destroy1(b);
     hts_itr_destroy(iter);
+    if (ret < -1) {
+        print_error("tview", "could not read from input file");
+        exit(1);
+    }
+
     bam_lplbuf_push(0, tv->lplbuf);
 
     while (tv->ccol < tv->mcol) {

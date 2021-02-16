@@ -170,7 +170,7 @@ static int read_aln(void *data, bam1_t *b)
 
 int main_cut_target(int argc, char *argv[])
 {
-    int c, tid, pos, n, lasttid = -1, usage = 0;
+    int c, tid, pos, n, lasttid = -1, usage = 0, status = EXIT_SUCCESS;
     hts_pos_t l, max_l;
     const bam_pileup1_t *p;
     bam_plp_t plp;
@@ -237,6 +237,12 @@ int main_cut_target(int argc, char *argv[])
         cns[pos] = gencns(&g, n, p);
     }
     process_cns(g.h, lasttid, l, cns);
+
+    if (n < 0) {
+        print_error("targetcut", "error reading from \"%s\"", argv[optind]);
+        status = EXIT_FAILURE;
+    }
+
     free(cns);
     sam_hdr_destroy(g.h);
     bam_plp_destroy(plp);
@@ -247,5 +253,5 @@ int main_cut_target(int argc, char *argv[])
     errmod_destroy(g.em);
     free(g.bases);
     sam_global_args_free(&ga);
-    return 0;
+    return status;
 }

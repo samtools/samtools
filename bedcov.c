@@ -72,7 +72,7 @@ int main_bedcov(int argc, char *argv[])
     kstream_t *ks;
     hts_idx_t **idx;
     aux_t **aux;
-    int *n_plp, dret, i, j, m, n, c, min_mapQ = 0, skip_DN = 0;
+    int *n_plp, dret, i, j, m, n, c, ret, status = 0, min_mapQ = 0, skip_DN = 0;
     int64_t *cnt, *pcov = NULL;;
     const bam_pileup1_t **plp;
     int usage = 0, has_index_file = 0;
@@ -92,7 +92,7 @@ int main_bedcov(int argc, char *argv[])
         case 'g':
             tflags = bam_str2flag(optarg);
             if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
-                print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
+                print_error("bedcov", "Flag value \"%s\" is not supported", optarg);
                 return 1;
             }
             flags &= ~tflags;
@@ -100,7 +100,7 @@ int main_bedcov(int argc, char *argv[])
         case 'G':
             tflags = bam_str2flag(optarg);
             if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
-                print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
+                print_error("bedcov", "Flag value \"%s\" is not supported", optarg);
                 return 1;
             }
             flags |= tflags;
@@ -211,7 +211,7 @@ int main_bedcov(int argc, char *argv[])
         memset(cnt, 0, sizeof(*cnt) * n);
         if (min_depth >= 0) memset(pcov, 0, sizeof(*pcov) * n);
 
-        while (bam_mplp_auto(mplp, &tid, &pos, n_plp, plp) > 0)
+        while ((ret = bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0)
             if (pos >= beg && pos < end) {
                 for (i = 0; i < n; ++i) {
                     m = 0;
@@ -226,6 +226,14 @@ int main_bedcov(int argc, char *argv[])
                     if (min_depth >= 0 && pd >= min_depth) pcov[i]++;
                 }
             }
+
+        if (ret < 0) {
+            print_error("bedcov", "error reading from input file");
+            status = 2;
+            bam_mplp_destroy(mplp);
+            continue;
+        }
+
         for (i = 0; i < n; ++i) {
             kputc('\t', &str);
             kputl(cnt[i], &str);
@@ -242,6 +250,7 @@ int main_bedcov(int argc, char *argv[])
 
 bed_error:
         fprintf(stderr, "Errors in BED line '%s'\n", str.s);
+        status = 2;
     }
     free(n_plp); free(plp);
     ks_destroy(ks);
@@ -259,5 +268,5 @@ bed_error:
     free(aux); free(idx);
     free(str.s);
     sam_global_args_free(&ga);
-    return 0;
+    return status;
 }

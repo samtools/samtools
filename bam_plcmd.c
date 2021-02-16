@@ -90,8 +90,10 @@ static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
     int del_len = -p->indel;
     if (p->indel > 0) {
         int len = bam_plp_insertion(p, ks, &del_len);
-        if (len < 0)
+        if (len < 0) {
+            print_error("mpileup", "bam_plp_insertion() failed");
             return -1;
+        }
         putc('+', fp); printw(len, fp);
         if (bam_is_rev(p->b)) {
             char pad = rev_del ? '#' : '*';
@@ -935,6 +937,11 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
             if (conf->all < 2 || conf->reg)
                 break;
         }
+    }
+
+    if (ret < 0) {
+        print_error("mpileup", "error reading from input file");
+        ret = EXIT_FAILURE;
     }
 
 fail:

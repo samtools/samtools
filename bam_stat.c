@@ -81,8 +81,10 @@ bam_flagstat_t *bam_flagstat_core(samFile *fp, sam_hdr_t *h)
     while ((ret = sam_read1(fp, h, b)) >= 0)
         flagstat_loop(s, c);
     bam_destroy1(b);
-    if (ret != -1)
-        fprintf(stderr, "[bam_flagstat_core] Truncated file? Continue anyway.\n");
+    if (ret != -1) {
+        free(s);
+        return NULL;
+    }
     return s;
 }
 
@@ -242,7 +244,7 @@ int bam_flagstat(int argc, char *argv[])
     sam_hdr_t *header;
     bam_flagstat_t *s;
     const char *out_fmt = "default";
-    int c;
+    int c, status = EXIT_SUCCESS;
 
     enum {
         INPUT_FMT_OPTION = CHAR_MAX+1,
@@ -296,10 +298,17 @@ int bam_flagstat(int argc, char *argv[])
     }
 
     s = bam_flagstat_core(fp, header);
-    output_fmt(s, out_fmt);
-    free(s);
+    if (s) {
+        output_fmt(s, out_fmt);
+        free(s);
+    }
+    else {
+        print_error("flagstat", "error reading from \"%s\"", argv[optind]);
+        status = EXIT_FAILURE;
+    }
+
     sam_hdr_destroy(header);
     sam_close(fp);
     sam_global_args_free(&ga);
-    return 0;
+    return status;
 }

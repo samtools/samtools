@@ -350,7 +350,6 @@ int main_depth(int argc, char *argv[])
         }
         fputc('\n', file_out);
     }
-    if (ret < 0) status = EXIT_FAILURE;
     free(n_plp); free(plp);
     bam_mplp_destroy(mplp);
 
@@ -379,6 +378,11 @@ int main_depth(int argc, char *argv[])
             if (all < 2 || reg)
                 break;
         }
+    }
+
+    if (ret < 0) {
+        print_error("depth", "couldn't read from input file");
+        status = EXIT_FAILURE;
     }
 
 depth_end:
