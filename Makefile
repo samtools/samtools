@@ -282,6 +282,9 @@ test/split/test_parse_args.o: test/split/test_parse_args.c config.h bam_split.o 
 test/test.o: test/test.c config.h $(htslib_sam_h) $(test_test_h)
 test/vcf-miniview.o: test/vcf-miniview.c config.h $(htslib_vcf_h)
 
+# test HTSlib as well, where it is built alongside SAMtools
+
+check-all test-all: test-htslib test
 
 # misc programs
 
@@ -341,6 +344,11 @@ distclean: clean
 
 clean-all: clean clean-htslib
 
+distclean-all: distclean distclean-htslib
+
+mostlyclean-all: mostlyclean mostlyclean-htslib
+
+testclean-all: testclean testclean-htslib
 
 tags:
 	ctags -f TAGS *.[ch] misc/*.[ch]
@@ -349,5 +357,6 @@ tags:
 force:
 
 
-.PHONY: all check clean clean-all distclean force install
-.PHONY: lib mostlyclean print-version tags test testclean
+.PHONY: all check check-all clean clean-all distclean distclean-all force
+.PHONY: install lib mostlyclean mostlyclean-all print-version tags
+.PHONY: test test-all testclean testclean-all
