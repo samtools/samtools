@@ -3,7 +3,7 @@
 .SH NAME
 samtools stats \- produces comprehensive statistics from alignment file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018, 2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2020-2021 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -110,6 +110,9 @@ fragments.
 Reads where PAIRED is set and either both READ1 and READ2 are set or
 neither is set are not counted in either category.
 .PP
+Information on the meaning of the flags is given in the SAM specification
+document (https://samtools.github.io/hts-specs/SAMv1.pdf).
+
 The CHK row contains distinct CRC32 checksums of read names, sequences
 and quality values.  The checksums are computed per alignment record
 and summed, meaning the checksum does not change if the input file has
