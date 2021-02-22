@@ -231,7 +231,7 @@ int main_bedcov(int argc, char *argv[])
             print_error("bedcov", "error reading from input file");
             status = 2;
             bam_mplp_destroy(mplp);
-            continue;
+            break;
         }
 
         for (i = 0; i < n; ++i) {

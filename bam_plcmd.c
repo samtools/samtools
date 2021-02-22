@@ -918,6 +918,12 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
         }
     }
 
+    if (ret < 0) {
+        print_error("mpileup", "error reading from input file");
+        ret = EXIT_FAILURE;
+        goto fail;
+    }
+
     if (conf->all && !(conf->flag & MPLP_BCF)) {
         // Handle terminating region
         if (last_tid < 0 && conf->reg && conf->all > 1) {
@@ -937,11 +943,6 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
             if (conf->all < 2 || conf->reg)
                 break;
         }
-    }
-
-    if (ret < 0) {
-        print_error("mpileup", "error reading from input file");
-        ret = EXIT_FAILURE;
     }
 
 fail:

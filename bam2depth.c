@@ -353,6 +353,12 @@ int main_depth(int argc, char *argv[])
     free(n_plp); free(plp);
     bam_mplp_destroy(mplp);
 
+    if (ret < 0) {
+        print_error("depth", "couldn't read from input file");
+        status = EXIT_FAILURE;
+        goto depth_end;
+    }
+
     if (all) {
         // Handle terminating region
         if (last_tid < 0 && reg) {
@@ -378,11 +384,6 @@ int main_depth(int argc, char *argv[])
             if (all < 2 || reg)
                 break;
         }
-    }
-
-    if (ret < 0) {
-        print_error("depth", "couldn't read from input file");
-        status = EXIT_FAILURE;
     }
 
 depth_end:
