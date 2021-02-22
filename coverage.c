@@ -633,7 +633,10 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    if (ret < 0) status = EXIT_FAILURE;
+    if (ret < 0) {
+        print_error("coverage", "error reading from input file");
+        status = EXIT_FAILURE;
+    }
 
 coverage_end:
     if (n_plp) free(n_plp);
