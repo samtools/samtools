@@ -117,7 +117,7 @@ static void long_version(void) {
     printf("    LDFLAGS:        %s\n", hts_test_feature(HTS_FEATURE_LDFLAGS));
 
     // Plugins and schemes
-    printf("\nHTSlib plugins present:\n");
+    printf("\nHTSlib URL scheme handlers present:\n");
     const char *plugins[100];
     int np = 100, i, j;
 
