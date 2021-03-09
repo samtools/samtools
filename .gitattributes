@@ -8,7 +8,7 @@
 /.appveyor.yml  export-ignore
 /.cirrus.yml    export-ignore
 .git*           export-ignore
-.ci-helpers*    export-ignore
+.ci_helpers*    export-ignore
 README.md       export-ignore
 
 # Correct language misidentifications.
