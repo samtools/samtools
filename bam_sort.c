@@ -724,6 +724,7 @@ static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
     // Get translated header lines and fill in map for @PG records
     pg_list = trans_rg_pg(false, translate, merge_pg, merged_hdr->pg_ids,
                           tbl->pg_trans, NULL);
+    if (!pg_list) goto fail;
 
     // Fix-up PG: tags in the new @RG records and add to output
     if (finish_rg_pg(true, rg_list, tbl->pg_trans, &merged_hdr->out_rg))
