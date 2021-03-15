@@ -71,6 +71,9 @@ Release a.b
  * The documentation for `samtools depth -s` has been improved.
    Thanks to `@wulj2`. (#1355)
 
+ * Fixed a `samtools merge` segmentation fault when it failed to merge
+   header `@PG` records. Thanks to John Marshall.  (#1394; reported by
+   Kemin Zhou in #1393)
 
 Release 1.11 (22nd September 2020)
 ----------------------------------
