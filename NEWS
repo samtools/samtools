@@ -30,8 +30,9 @@ Release a.b
  * samtools view -d option now works without a tag associated value, which
    allows it to output all the reads with the given tag. (#1339; fixed #1317)
 
- * samtools view -d and -D options now accept integer values associated with
-   tags, not just strings. Thanks to `@dariome` for the suggestion. (#1357)
+ * samtools view -d and -D options now accept integer and single character
+   values associated with tags, not just strings. Thanks to `@dariome` and
+   Keiran Raine for the suggestions. (#1357, #1392)
 
  * samtools view now works with the filtering expressions introduced by HTSlib.
    The filtering expression is passed to the program using the specific option

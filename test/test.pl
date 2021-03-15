@@ -1199,7 +1199,7 @@ sub filter_sam
                 if ($tag_values) {
                     my $tag_value = '';
                     for my $i (11 .. $#sam) {
-                        last if (($tag_value) = $sam[$i] =~ /^${tag}:[ZiIsScC]:(.*)/);
+                        last if (($tag_value) = $sam[$i] =~ /^${tag}:[ZiIsScCA]:(.*)/);
                     }
                     next if (!exists($tag_values->{$tag_value||""}));
                 }
@@ -2110,6 +2110,8 @@ sub test_view
          ['-d', 'BC:ACGT', '-d', 'RG:grp2' ], 1],
         ['tv_NM_13', { tag => 'NM', tag_values => { 13 => 1 }},
          ['-d', 'NM:13'], 0],
+        ['tv_ab_z', { tag => 'ab', tag_values => { z => 2 }},
+         ['-d', 'ab:z'], 0],
         # Libraries
         ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
         ['lib3', { libraries => { 'Library 3' => 1 }}, ['-l', 'Library 3'], 0],

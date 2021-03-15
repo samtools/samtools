@@ -111,6 +111,10 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
                     int ret = snprintf(t, 32, "%"PRId64, bam_aux2i(s));
                     if (ret > 0) val = t;
                     else return 1;
+                } else if (*s == 'A') {
+                    t[0] = *(s+1);
+                    t[1] = 0;
+                    val = t;
                 } else {
                     val = (char *)(s+1);
                 }
