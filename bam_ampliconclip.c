@@ -1,7 +1,7 @@
 /*  bam_ampliconclip.c -- loads amplicons from a BED file and cuts reads
                           from the 5' end.
 
-    Copyright (C) 2020 Genome Research Ltd.
+    Copyright (C) 2020-2021 Genome Research Ltd.
 
     Authors: Andrew Whitwham <aw7@sanger.ac.uk>
              Rob Davies <rmd+git@sanger.ac.uk>
@@ -133,11 +133,22 @@ int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
                 goto error;
             }
         } else {
-            if (sscanf(line.s, "%*s %"SCNd64" %"SCNd64, &left, &right) != 2) {
+            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64,
+                       ref, &left, &right) != 3) {
                 fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s",
                                     line_count, infile);
                 ret = 1;
                 goto error;
+            }
+            if (*pairs->ref) {
+                if (strncmp(ref, pairs->ref, 256)) {
+                    fprintf(stderr, "[ampliconclip] error: "
+                            "bed file contains more than one reference.\n");
+                    ret = 1;
+                    goto error;
+                }
+            } else {
+                memcpy(pairs->ref, ref, 256);
             }
         }
 
@@ -176,7 +187,10 @@ error:
     if (hclose(fp) != 0) {
         fprintf(stderr, "[ampliconclip] warning: failed to close %s", infile);
     }
-    if (ret) free(pairs->bp);
+    if (ret) {
+        free(pairs->bp);
+        pairs->bp = NULL;
+    }
 
     return ret;
 }
