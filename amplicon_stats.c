@@ -1199,10 +1199,12 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         fprintf(ofp, "SS\tReference length:\t%"PRId64"\n", args->max_len);
 
         sam_hdr_destroy(header);
+        header = NULL;
         if (sam_close(fp) < 0) {
             fp = NULL;
             goto err;
         }
+        fp = NULL;
     }
     fprintf(ofp, "SS\tEnd of summary\n");
 
