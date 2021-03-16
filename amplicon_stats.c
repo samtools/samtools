@@ -498,8 +498,13 @@ static int accumulate_stats(astats_t *stats,
             kh_value(stats->qend, k) = start | (end << 32);
         }
     }
-    for (i = mstart; i < end; i++)
+    for (i = mstart; i < end && i < stats->max_len; i++)
         stats->depth_all[i]++;
+    if (i < end) {
+        print_error("ampliconstats", "record %s overhangs end of reference",
+                    bam_get_qname(b));
+        // But keep going, as it's harmless.
+    }
 
     // On single ended runs, eg ONT or PacBio, we just use the start/end
     // of the template to assign.
@@ -1163,6 +1168,7 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
 
     // Report ref len from first file.
     // Some minor duplication here.
+    int ref_tid = -1;
     if (filec) {
         if (!(fp = sam_open_format(filev[0], "r", &args->ga.in))) {
             print_error_errno("ampliconstats",
@@ -1173,8 +1179,22 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         if (!(header = sam_hdr_read(fp)))
             goto err;
 
-        // FIXME: permit other references to be specified.
-        if ((args->max_len = get_ref_len(header, NULL)) < 0)
+        int ref = sam_hdr_name2tid(header, args->sites.ref);
+        if (ref < 0) {
+            print_error("ampliconstats", "Unknown reference '%s' in BED file",
+                        args->sites.ref);
+            goto err;
+        }
+        if (ref_tid == -1) {
+            ref_tid = ref;
+        } else if (ref_tid != ref) {
+            print_error("ampliconstats", "Header SQ lines are not in the same"
+                        " order between files");
+            goto err;
+        }
+
+        // FIXME: permit multiple references to be specified.
+        if ((args->max_len = get_ref_len(header, args->sites.ref)) < 0)
             goto err;
         fprintf(ofp, "SS\tReference length:\t%"PRId64"\n", args->max_len);
 
@@ -1209,8 +1229,8 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         if (args->use_sample_name)
             sname = (char *)get_sample_name(header, NULL);
 
-        // FIXME: permit other references to be specified.
-        if ((args->max_len = get_ref_len(header, NULL)) < 0)
+        // FIXME: permit multiple references to be specified.
+        if ((args->max_len = get_ref_len(header, args->sites.ref)) < 0)
             goto err;
         if (initialise_amp_pos_lookup(args, amp, namp, args->max_len) < 0)
             goto err;
@@ -1243,6 +1263,8 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
 
         int r;
         while ((r = sam_read1(fp, header, b)) >= 0) {
+            if (b->core.tid != ref_tid)
+                continue;
             if (accumulate_stats(lstats, args, amp, namp, b) < 0)
                 goto err;
         }
@@ -1336,7 +1358,7 @@ int main_ampliconstats(int argc, char **argv) {
         .ga = SAM_GLOBAL_ARGS_INIT,
         .flag_require = 0,
         .flag_filter = 0x10B04,
-        .sites = {NULL, 0, 0},
+        .sites = {NULL, 0, 0, {0}},
         .max_delta = 30, // large enough to cope with alt primers
         .min_depth = {1},
         .use_sample_name = 0,

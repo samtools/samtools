@@ -35,6 +35,7 @@ typedef struct {
     bed_pair_t *bp;
     int length;
     int size;
+    char ref[256];
 } bed_pair_list_t;
 
 int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
