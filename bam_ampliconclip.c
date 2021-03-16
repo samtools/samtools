@@ -1,7 +1,7 @@
 /*  bam_ampliconclip.c -- loads amplicons from a BED file and cuts reads
                           from the 5' end.
 
-    Copyright (C) 2020 Genome Research Ltd.
+    Copyright (C) 2020-2021 Genome Research Ltd.
 
     Authors: Andrew Whitwham <aw7@sanger.ac.uk>
              Rob Davies <rmd+git@sanger.ac.uk>
@@ -92,6 +92,8 @@ int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
         goto error;
     }
 
+    *pairs->ref = 0;
+    char ref[256];
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
         line_count++;
 
@@ -102,11 +104,22 @@ int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
         if (get_strand) {
             char strand;
 
-            if (sscanf(line.s, "%*s %"SCNd64" %"SCNd64" %*s %*s %c", &left, &right, &strand) != 3) {
+            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64" %*s %*s %c",
+                       ref, &left, &right, &strand) != 4) {
                 fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s.\n",
                                     line_count, infile);
                 ret = 1;
                 goto error;
+            }
+            if (*pairs->ref) {
+                if (strncmp(ref, pairs->ref, 256)) {
+                    fprintf(stderr, "[ampliconclip] error: "
+                            "bed file contains more than one reference.\n");
+                    ret = 1;
+                    goto error;
+                }
+            } else {
+                memcpy(pairs->ref, ref, 256);
             }
 
             if (strand == '+') {
@@ -120,11 +133,22 @@ int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
                 goto error;
             }
         } else {
-            if (sscanf(line.s, "%*s %"SCNd64" %"SCNd64, &left, &right) != 2) {
+            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64,
+                       ref, &left, &right) != 3) {
                 fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s",
                                     line_count, infile);
                 ret = 1;
                 goto error;
+            }
+            if (*pairs->ref) {
+                if (strncmp(ref, pairs->ref, 256)) {
+                    fprintf(stderr, "[ampliconclip] error: "
+                            "bed file contains more than one reference.\n");
+                    ret = 1;
+                    goto error;
+                }
+            } else {
+                memcpy(pairs->ref, ref, 256);
             }
         }
 
@@ -162,6 +186,10 @@ error:
     ks_free(&line);
     if (hclose(fp) != 0) {
         fprintf(stderr, "[ampliconclip] warning: failed to close %s", infile);
+    }
+    if (ret) {
+        free(pairs->bp);
+        pairs->bp = NULL;
     }
 
     return ret;
@@ -579,7 +607,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     int64_t longest = 0;
     kstring_t str = KS_INITIALIZE;
     kstring_t oat = KS_INITIALIZE;
-    bed_pair_list_t sites = {NULL, 0, 0};
+    bed_pair_list_t sites = {NULL, 0, 0, {0}};
     FILE *stats_fp = stderr;
 
     if (load_bed_file_pairs(bedfile, param->use_strand, 1, &sites, &longest)) {

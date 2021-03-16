@@ -76,6 +76,12 @@ Release a.b
    header `@PG` records. Thanks to John Marshall.  (#1394; reported by
    Kemin Zhou in #1393)
 
+ * Ampliconclip and ampliconstats now guard against the BED file
+   containing more than one reference (chromosome) and fail when
+   found.  Adding proper support for multiple references will appear
+   later.  (#1398)
+
+
 Release 1.11 (22nd September 2020)
 ----------------------------------
 
