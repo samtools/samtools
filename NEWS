@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.12 (17th March 2021)
+------------------------------
+
  * The legacy samtools API (libbam.a, bam.h, sam.h, etc) has not been actively
    maintained since 2015. It is deprecated and will be removed entirely in a
    future SAMtools release. We recommend coding against the HTSlib API directly.
