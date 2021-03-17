@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-view 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
+.TH samtools-view 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
 .SH NAME
 samtools view \- views and converts SAM/BAM/CRAM files
 .\"
@@ -87,6 +87,7 @@ option is required whenever writing CRAM output.
 The
 .BR -L ,
 .BR -M ,
+.BR -N ,
 .BR -r ,
 .BR -R ,
 .BR -d ,
@@ -254,6 +255,10 @@ The usage of a BED file is optional and its path has to be preceded by
 .BR -L
 option.
 .TP
+.BI "-N " FILE
+Output only alignments with read names listed in
+.I FILE.
+.TP
 .BI "-r " STR
 Output alignments in read group
 .I STR
@@ -272,12 +277,13 @@ Note that records with no
 tag will also be output when using this option.
 This behaviour may change in a future release.
 .TP
-.BI "-d " STR:STR
+.BI "-d " STR1[:STR2]
 Only output alignments with tag
-.I STR
+.I STR1
 and associated value
-.I STR
-[null].
+.IR STR2 ,
+which can be a string or an integer [null].
+The value can be omitted, in which case only the tag is considered.
 .TP
 .BI "-D " STR:FILE
 Only output alignments with tag
@@ -301,6 +307,11 @@ Only output alignments with number of CIGAR bases consuming query
 sequence \(>=
 .I INT
 [0]
+.TP
+.BI "-e " STR
+Only include alignments that match the filter expression \fISTR\fR.
+The syntax for these expressions are in the main samtools(1) man page
+under the FILTER EXPRESSIONS heading.
 .TP
 .BI "-f " INT
 Only output alignments with all bits set in

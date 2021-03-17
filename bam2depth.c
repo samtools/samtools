@@ -91,8 +91,8 @@ static int usage() {
                     "                       The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704\n");
     fprintf(stderr, "   -J                  include reads with deletions in depth computation\n");
     fprintf(stderr, "   -s                  for the overlapping section of a read pair, count only the bases\n"
-                    "                       of a single read. This option requires raising the base quality\n"
-                    "                       threshold to 1.\n");
+                    "                       of a single read. This option will automatically raise the base quality\n"
+                    "                       threshold to at least 1.\n");
 
     sam_global_opt_help(stderr, "-.--.--.");
 
@@ -350,9 +350,14 @@ int main_depth(int argc, char *argv[])
         }
         fputc('\n', file_out);
     }
-    if (ret < 0) status = EXIT_FAILURE;
     free(n_plp); free(plp);
     bam_mplp_destroy(mplp);
+
+    if (ret < 0) {
+        print_error("depth", "couldn't read from input file");
+        status = EXIT_FAILURE;
+        goto depth_end;
+    }
 
     if (all) {
         // Handle terminating region

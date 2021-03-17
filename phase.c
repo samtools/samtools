@@ -583,6 +583,7 @@ static int start_output(phaseg_t *g, int c, const char *middle, const htsFormat 
 int main_phase(int argc, char *argv[])
 {
     int c, tid, pos, vpos = 0, n, lasttid = -1, max_vpos = 0, usage = 0;
+    int status = EXIT_SUCCESS;
     const bam_pileup1_t *plp;
     bam_plp_t iter;
     nseq_t *seqs;
@@ -785,6 +786,12 @@ int main_phase(int argc, char *argv[])
             return 1;
         }
     }
+
+    if (n < 0) {
+        print_error("phase", "error reading from '%s'", argv[optind]);
+        status = EXIT_FAILURE;
+    }
+
     sam_hdr_destroy(g.fp_hdr);
     bam_plp_destroy(iter);
     sam_close(g.fp);
@@ -809,5 +816,5 @@ int main_phase(int argc, char *argv[])
     }
     free(g.arg_list);
     sam_global_args_free(&ga);
-    return 0;
+    return status;
 }

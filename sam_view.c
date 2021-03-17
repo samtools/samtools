@@ -1,6 +1,6 @@
 /*  sam_view.c -- SAM<->BAM<->CRAM conversion.
 
-    Copyright (C) 2009-2020 Genome Research Ltd.
+    Copyright (C) 2009-2021 Genome Research Ltd.
     Portions copyright (C) 2009, 2011, 2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -37,20 +37,20 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/faidx.h"
 #include "htslib/khash.h"
 #include "htslib/thread_pool.h"
+#include "htslib/hts_expr.h"
 #include "samtools.h"
 #include "sam_opts.h"
 #include "bedidx.h"
 
-KHASH_SET_INIT_STR(rg)
-KHASH_SET_INIT_STR(tv)
+KHASH_SET_INIT_STR(str)
 
-typedef khash_t(rg) *rghash_t;
-typedef khash_t(tv) *tvhash_t;
+typedef khash_t(str) *strhash_t;
 
 // This structure contains the settings for a samview run
 typedef struct samview_settings {
-    rghash_t rghash;
-    tvhash_t tvhash;
+    strhash_t rghash;
+    strhash_t rnhash;
+    strhash_t tvhash;
     int min_mapQ;
     int flag_on;
     int flag_off;
@@ -65,6 +65,7 @@ typedef struct samview_settings {
     char** remove_aux;
     int multi_region;
     char* tag;
+    hts_filter_t *filter;
 } samview_settings_t;
 
 
@@ -97,16 +98,36 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     if (settings->rghash) {
         uint8_t *s = bam_aux_get(b, "RG");
         if (s) {
-            khint_t k = kh_get(rg, settings->rghash, (char*)(s + 1));
+            khint_t k = kh_get(str, settings->rghash, (char*)(s + 1));
             if (k == kh_end(settings->rghash)) return 1;
         }
     }
-    if (settings->tvhash && settings->tag) {
+    if (settings->tag) {
         uint8_t *s = bam_aux_get(b, settings->tag);
         if (s) {
-            khint_t k = kh_get(tv, settings->tvhash, (char*)(s + 1));
-            if (k == kh_end(settings->tvhash)) return 1;
+            if (settings->tvhash) {
+                char t[32], *val;
+                if (*s == 'i' || *s == 'I' || *s == 's' || *s == 'S' || *s == 'c' || *s == 'C') {
+                    int ret = snprintf(t, 32, "%"PRId64, bam_aux2i(s));
+                    if (ret > 0) val = t;
+                    else return 1;
+                } else if (*s == 'A') {
+                    t[0] = *(s+1);
+                    t[1] = 0;
+                    val = t;
+                } else {
+                    val = (char *)(s+1);
+                }
+                khint_t k = kh_get(str, settings->tvhash, val);
+                if (k == kh_end(settings->tvhash)) return 1;
+            }
         } else {
+            return 1;
+        }
+    }
+    if (settings->rnhash) {
+        const char* rn = bam_get_qname(b);
+        if (!rn || kh_get(str, settings->rnhash, rn) == kh_end(settings->rnhash)) {
             return 1;
         }
     }
@@ -123,47 +144,20 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
             }
         }
     }
+
+    if (settings->filter && sam_passes_filter(h, b, settings->filter) < 1)
+        return 1;
+
     return 0;
 }
 
 static int usage(FILE *fp, int exit_status, int is_long_help);
 
-static int add_read_group_single(const char *subcmd, samview_settings_t *settings, char *name)
-{
-    char *d = strdup(name);
-    int ret = 0;
-
-    if (d == NULL) goto err;
-
-    if (settings->rghash == NULL) {
-        settings->rghash = kh_init(rg);
-        if (settings->rghash == NULL) goto err;
-    }
-
-    kh_put(rg, settings->rghash, d, &ret);
-    if (ret == -1) goto err;
-    if (ret ==  0) free(d); /* Duplicate */
-    return 0;
-
- err:
-    print_error(subcmd, "Couldn't add \"%s\" to read group list: memory exhausted?", name);
-    free(d);
-    return -1;
-}
-
-static int add_read_groups_file(const char *subcmd, samview_settings_t *settings, char *fn)
+static int populate_lookup_from_file(const char *subcmd, strhash_t lookup, char *fn)
 {
     FILE *fp;
     char buf[1024];
     int ret = 0;
-    if (settings->rghash == NULL) {
-        settings->rghash = kh_init(rg);
-        if (settings->rghash == NULL) {
-            perror(NULL);
-            return -1;
-        }
-    }
-
     fp = fopen(fn, "r");
     if (fp == NULL) {
         print_error_errno(subcmd, "failed to open \"%s\" for reading", fn);
@@ -173,7 +167,7 @@ static int add_read_groups_file(const char *subcmd, samview_settings_t *settings
     while (ret != -1 && !feof(fp) && fscanf(fp, "%1023s", buf) > 0) {
         char *d = strdup(buf);
         if (d != NULL) {
-            kh_put(rg, settings->rghash, d, &ret);
+            kh_put(str, lookup, d, &ret);
             if (ret == 0) free(d); /* Duplicate */
         } else {
             ret = -1;
@@ -187,6 +181,53 @@ static int add_read_groups_file(const char *subcmd, samview_settings_t *settings
     return (ret != -1) ? 0 : -1;
 }
 
+static int add_read_group_single(const char *subcmd, samview_settings_t *settings, char *name)
+{
+    char *d = strdup(name);
+    int ret = 0;
+
+    if (d == NULL) goto err;
+
+    if (settings->rghash == NULL) {
+        settings->rghash = kh_init(str);
+        if (settings->rghash == NULL) goto err;
+    }
+
+    kh_put(str, settings->rghash, d, &ret);
+    if (ret == -1) goto err;
+    if (ret ==  0) free(d); /* Duplicate */
+    return 0;
+
+ err:
+    print_error(subcmd, "Couldn't add \"%s\" to read group list: memory exhausted?", name);
+    free(d);
+    return -1;
+}
+
+static int add_read_names_file(const char *subcmd, samview_settings_t *settings, char *fn)
+{
+    if (settings->rnhash == NULL) {
+        settings->rnhash = kh_init(str);
+        if (settings->rnhash == NULL) {
+            perror(NULL);
+            return -1;
+        }
+    }
+    return populate_lookup_from_file(subcmd, settings->rnhash, fn);
+}
+
+static int add_read_groups_file(const char *subcmd, samview_settings_t *settings, char *fn)
+{
+    if (settings->rghash == NULL) {
+        settings->rghash = kh_init(str);
+        if (settings->rghash == NULL) {
+            perror(NULL);
+            return -1;
+        }
+    }
+    return populate_lookup_from_file(subcmd, settings->rghash, fn);
+}
+
 static int add_tag_value_single(const char *subcmd, samview_settings_t *settings, char *name)
 {
     char *d = strdup(name);
@@ -195,11 +236,11 @@ static int add_tag_value_single(const char *subcmd, samview_settings_t *settings
     if (d == NULL) goto err;
 
     if (settings->tvhash == NULL) {
-        settings->tvhash = kh_init(tv);
+        settings->tvhash = kh_init(str);
         if (settings->tvhash == NULL) goto err;
     }
 
-    kh_put(tv, settings->tvhash, d, &ret);
+    kh_put(str, settings->tvhash, d, &ret);
     if (ret == -1) goto err;
     if (ret ==  0) free(d); /* Duplicate */
     return 0;
@@ -212,38 +253,14 @@ static int add_tag_value_single(const char *subcmd, samview_settings_t *settings
 
 static int add_tag_values_file(const char *subcmd, samview_settings_t *settings, char *fn)
 {
-    FILE *fp;
-    char buf[1024];
-    int ret = 0;
     if (settings->tvhash == NULL) {
-        settings->tvhash = kh_init(tv);
+        settings->tvhash = kh_init(str);
         if (settings->tvhash == NULL) {
             perror(NULL);
             return -1;
         }
     }
-
-    fp = fopen(fn, "r");
-    if (fp == NULL) {
-        print_error_errno(subcmd, "failed to open \"%s\" for reading", fn);
-        return -1;
-    }
-
-    while (ret != -1 && !feof(fp) && fscanf(fp, "%1023s", buf) > 0) {
-        char *d = strdup(buf);
-        if (d != NULL) {
-            kh_put(tv, settings->tvhash, d, &ret);
-            if (ret == 0) free(d); /* Duplicate */
-        } else {
-            ret = -1;
-        }
-    }
-    if (ferror(fp)) ret = -1;
-    if (ret == -1) {
-        print_error_errno(subcmd, "failed to read \"%s\"", fn);
-    }
-    fclose(fp);
-    return (ret != -1) ? 0 : -1;
+    return populate_lookup_from_file(subcmd, settings->tvhash, fn);
 }
 
 static inline int check_sam_write1(samFile *fp, const sam_hdr_t *h, const bam1_t *b, const char *fname, int *retp)
@@ -287,7 +304,8 @@ int main_samview(int argc, char *argv[])
         .library = NULL,
         .bed = NULL,
         .multi_region = 0,
-        .tag = NULL
+        .tag = NULL,
+        .filter = NULL
     };
 
     static const struct option lopts[] = {
@@ -309,7 +327,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:d:D:L:s:@:m:x:U:MX",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -368,8 +386,14 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
             break;
+        case 'N':
+            if (add_read_names_file("view", &settings, optarg) != 0) {
+                ret = 1;
+                goto view_end;
+            }
+            break;
         case 'd':
-            if (strlen(optarg) < 4 || optarg[2] != ':') {
+            if (strlen(optarg) < 2 || (strlen(optarg) > 2 && optarg[2] != ':')) {
                 print_error_errno("view", "Invalid \"tag:value\" option: \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
@@ -390,7 +414,8 @@ int main_samview(int argc, char *argv[])
                 memcpy(settings.tag, optarg, 2);
             }
 
-            if (add_tag_value_single("view", &settings, optarg+3) != 0) {
+            if (strlen(optarg) > 3 && add_tag_value_single("view", &settings, optarg+3) != 0) {
+                print_error("view", "Could not add tag:value \"%s\"", optarg);
                 ret = 1;
                 goto view_end;
             }
@@ -398,7 +423,7 @@ int main_samview(int argc, char *argv[])
         case 'D':
             // Allow ";" as delimiter besides ":" to support MinGW CLI POSIX
             // path translation as described at:
-            //   http://www.mingw.org/wiki/Posix_path_conversion
+            // http://www.mingw.org/wiki/Posix_path_conversion
             if (strlen(optarg) < 4 || (optarg[2] != ':' && optarg[2] != ';')) {
                 print_error_errno("view", "Invalid \"tag:file\" option: \"%s\"", optarg);
                 ret = 1;
@@ -450,7 +475,7 @@ int main_samview(int argc, char *argv[])
         case 'x':
             {
                 if (strlen(optarg) != 2) {
-                    fprintf(stderr, "main_samview: Error parsing -x auxiliary tags should be exactly two characters long.\n");
+                    print_error("main_samview", "Error parsing -x auxiliary tags should be exactly two characters long.");
                     return usage(stderr, EXIT_FAILURE, 0);
                 }
                 settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
@@ -459,6 +484,12 @@ int main_samview(int argc, char *argv[])
             break;
         case 'M': settings.multi_region = 1; break;
         case 1: no_pg = 1; break;
+        case 'e':
+            if (!(settings.filter = hts_filter_init(optarg))) {
+                print_error("main_samview", "Couldn't initialise filter");
+                return 1;
+            }
+            break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -772,13 +803,19 @@ view_end:
         khint_t k;
         for (k = 0; k < kh_end(settings.rghash); ++k)
             if (kh_exist(settings.rghash, k)) free((char*)kh_key(settings.rghash, k));
-        kh_destroy(rg, settings.rghash);
+        kh_destroy(str, settings.rghash);
+    }
+    if (settings.rnhash) {
+        khint_t k;
+        for (k = 0; k < kh_end(settings.rnhash); ++k)
+            if (kh_exist(settings.rnhash, k)) free((char*)kh_key(settings.rnhash, k));
+        kh_destroy(str, settings.rnhash);
     }
     if (settings.tvhash) {
         khint_t k;
         for (k = 0; k < kh_end(settings.tvhash); ++k)
             if (kh_exist(settings.tvhash, k)) free((char*)kh_key(settings.tvhash, k));
-        kh_destroy(tv, settings.tvhash);
+        kh_destroy(str, settings.tvhash);
     }
     if (settings.remove_aux_len) {
         free(settings.remove_aux);
@@ -786,6 +823,8 @@ view_end:
     if (settings.tag) {
         free(settings.tag);
     }
+    if (settings.filter)
+        hts_filter_free(settings.filter);
 
     if (p.pool)
         hts_tpool_destroy(p.pool);
@@ -823,8 +862,10 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -L FILE  only include reads overlapping this BED FILE [null]\n"
 "  -r STR   only include reads in read group STR [null]\n"
 "  -R FILE  only include reads with read group listed in FILE [null]\n"
-"  -d STR:STR\n"
-"           only include reads with tag STR and associated value STR [null]\n"
+"  -N FILE  only include reads with read name listed in FILE [null]\n"
+"  -d STR1[:STR2]\n"
+"           only include reads with tag STR1 and associated value STR2 [null]\n"
+"           The value can be omitted, in which case only the tag is considered\n"
 "  -D STR:FILE\n"
 "           only include reads with tag STR and associated values listed in\n"
 "           FILE [null]\n"
@@ -835,6 +876,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -f INT   only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
 "  -F INT   only include reads with none of the FLAGS in INT present [0]\n"       //   F&x == 0
 "  -G INT   only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
+"  -e STR   only include reads matching the filter expression [null]\n"
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
 "  -M       use the multi-region iterator (increases the speed, removes\n"

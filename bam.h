@@ -38,7 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "1.11"
+#define BAM_VERSION "1.12"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -77,7 +77,7 @@ typedef bam_hdr_t bam_header_t;
 #define BAM_OFHEX          1
 #define BAM_OFSTR          2
 
-/*! @abstract defautl mask for pileup */
+/*! @abstract default mask for pileup */
 #define BAM_DEF_MASK (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP)
 
 /*! @typedef

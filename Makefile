@@ -1,6 +1,6 @@
 # Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
-#    Copyright (C) 2008-2020 Genome Research Ltd.
+#    Copyright (C) 2008-2021 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -76,11 +76,10 @@ MISC_PROGRAMS = \
 
 MISC_SCRIPTS = \
 	misc/blast2sam.pl misc/bowtie2sam.pl misc/export2sam.pl \
-	misc/interpolate_sam.pl misc/novo2sam.pl \
-	misc/plot-bamstats misc/psl2sam.pl \
+	misc/fasta-sanitize.pl misc/interpolate_sam.pl misc/novo2sam.pl \
+	misc/plot-ampliconstats misc/plot-bamstats misc/psl2sam.pl \
 	misc/sam2vcf.pl misc/samtools.pl misc/seq_cache_populate.pl \
-	misc/soap2sam.pl misc/wgsim_eval.pl misc/zoom2sam.pl \
-	misc/plot-ampliconstats
+	misc/soap2sam.pl misc/wgsim_eval.pl misc/zoom2sam.pl
 
 TEST_PROGRAMS = \
 	test/merge/test_bam_translate \
@@ -124,6 +123,13 @@ version.h: $(if $(wildcard version.h),$(if $(findstring "$(PACKAGE_VERSION)",$(s
 #	echo '#define SAMTOOLS_VERSION "`git describe --always --dirty`"' > $@
 version.h:
 	echo '#define SAMTOOLS_VERSION "$(PACKAGE_VERSION)"' > $@
+	echo '#define SAMTOOLS_CC "$(CC)"' >> $@
+	echo '#define SAMTOOLS_CPPFLAGS "$(CPPFLAGS)"' >> $@
+	echo '#define SAMTOOLS_CFLAGS "$(CFLAGS)"' >> $@
+	echo '#define SAMTOOLS_LDFLAGS "$(LDFLAGS)"' >> $@
+	echo '#define SAMTOOLS_HTSDIR "$(HTSDIR)"' >> $@
+	echo '#define SAMTOOLS_LIBS "$(LIBS)"' >> $@
+	echo '#define SAMTOOLS_CURSES_LIB "$(CURSES_LIB)"' >> $@
 
 print-version:
 	@echo $(PACKAGE_VERSION)
@@ -192,7 +198,7 @@ bam_tview_curses.o: bam_tview_curses.c config.h $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c config.h $(bam_tview_h)
 bam_flags.o: bam_flags.c config.h $(htslib_sam_h)
 bamshuf.o: bamshuf.c config.h $(htslib_sam_h) $(htslib_hts_h) $(htslib_ksort_h) $(samtools_h) $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_khash_h)
-bamtk.o: bamtk.c config.h $(htslib_hts_h) $(samtools_h) version.h
+bamtk.o: bamtk.c config.h $(htslib_hts_h) $(htslib_hfile_h) $(samtools_h) version.h
 bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h) $(htslib_kseq_h)
 bedidx.o: bedidx.c config.h $(bedidx_h) $(htslib_ksort_h) $(htslib_kseq_h) $(htslib_khash_h)
 cut_target.o: cut_target.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(samtools_h) $(sam_opts_h)
@@ -203,7 +209,7 @@ phase.o: phase.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(
 sam.o: sam.c config.h $(htslib_faidx_h) $(sam_h)
 sam_opts.o: sam_opts.c config.h $(sam_opts_h)
 sam_utils.o: sam_utils.c config.h $(samtools_h)
-sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h) $(bedidx_h)
+sam_view.o: sam_view.c config.h $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_thread_pool_h) $(htslib_hts_expr_h) $(samtools_h) $(sam_opts_h) $(bedidx_h)
 sample.o: sample.c config.h $(sample_h) $(htslib_khash_h)
 stats_isize.o: stats_isize.c config.h $(stats_isize_h) $(htslib_khash_h)
 stats.o: stats.c config.h $(htslib_faidx_h) $(htslib_sam_h) $(htslib_hts_h) $(htslib_hts_defs_h) $(htslib_khash_str2int_h) $(samtools_h) $(htslib_khash_h) $(htslib_kstring_h) $(stats_isize_h) $(sam_opts_h) $(bedidx_h)
@@ -276,6 +282,9 @@ test/split/test_parse_args.o: test/split/test_parse_args.c config.h bam_split.o 
 test/test.o: test/test.c config.h $(htslib_sam_h) $(test_test_h)
 test/vcf-miniview.o: test/vcf-miniview.c config.h $(htslib_vcf_h)
 
+# test HTSlib as well, where it is built alongside SAMtools
+
+check-all test-all: test-htslib test
 
 # misc programs
 
@@ -335,6 +344,11 @@ distclean: clean
 
 clean-all: clean clean-htslib
 
+distclean-all: distclean distclean-htslib
+
+mostlyclean-all: mostlyclean mostlyclean-htslib
+
+testclean-all: testclean testclean-htslib
 
 tags:
 	ctags -f TAGS *.[ch] misc/*.[ch]
@@ -343,5 +357,6 @@ tags:
 force:
 
 
-.PHONY: all check clean clean-all distclean force install
-.PHONY: lib mostlyclean print-version tags test testclean
+.PHONY: all check check-all clean clean-all distclean distclean-all force
+.PHONY: install lib mostlyclean mostlyclean-all print-version tags
+.PHONY: test test-all testclean testclean-all

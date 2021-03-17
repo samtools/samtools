@@ -1,6 +1,6 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2019 Genome Research Ltd.
+    Copyright (C) 2008-2020 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -724,6 +724,7 @@ static int trans_tbl_init(merged_header_t* merged_hdr, sam_hdr_t* translate,
     // Get translated header lines and fill in map for @PG records
     pg_list = trans_rg_pg(false, translate, merge_pg, merged_hdr->pg_ids,
                           tbl->pg_trans, NULL);
+    if (!pg_list) goto fail;
 
     // Fix-up PG: tags in the new @RG records and add to output
     if (finish_rg_pg(true, rg_list, tbl->pg_trans, &merged_hdr->out_rg))
@@ -2605,7 +2606,7 @@ static void sort_usage(FILE *fp)
 "  -o FILE    Write final output to FILE rather than standard output\n"
 "  -T PREFIX  Write temporary files to PREFIX.nnnn.bam\n"
 "  --no-PG    do not add a PG line\n");
-    sam_global_opt_help(fp, "-.O..@-.");
+    sam_global_opt_help(fp, "-.O..@..");
 }
 
 static void complain_about_memory_setting(size_t max_mem) {

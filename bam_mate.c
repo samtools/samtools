@@ -372,7 +372,7 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
         curr = 1 - curr;
         pre_end = cur_end;
     }
-    if (result < -1) goto fail;
+    if (result < -1) goto read_fail;
     if (has_prev && !remove_reads) { // If we still have a BAM in the buffer it must be unpaired
         bam1_t *pre = b[1-curr];
         if (pre->core.tid < 0 || pre->core.pos < 0 || pre->core.flag&BAM_FUNMAP) { // If unmapped
@@ -390,6 +390,10 @@ static int bam_mating_core(samFile *in, samFile *out, int remove_reads, int prop
     bam_destroy1(b[1]);
     ks_free(&str);
     return 0;
+
+ read_fail:
+    print_error("fixmate", "Couldn't read from input file");
+    goto fail;
 
  write_fail:
     print_error_errno("fixmate", "Couldn't write to output file");

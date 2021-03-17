@@ -1,0 +1,173 @@
+# Note we have a maximum of 16 CPUs available, so adjust our
+# builds so we can start all concurrently without needing to schedule.
+
+# Sadly though there is still a finite limit to macOS of one instance.
+# Can we cull our Mac test to just one instance?
+
+timeout_in: 10m
+
+#--------------------------------------------------
+# Template: htslib clone & build
+#
+# We try to clone htslib using the same branch name and owner as this
+# samtools branch.  If it exists, it's likely the user is making a
+# joint samtools+htslib PR and wants both checked in unison.
+# Failing that we use samtools/htslib:develop.
+# Note this only works on the users own forks.  Once in the samtools
+# organisation the branch name becomes pull/<num>.
+
+# Logic for choosing which to use is in the .ci_helpers/clone script.
+# Note we could also use "clone_script" if we want to replace the samtools
+# clone with our own commands too.
+clone_template: &HTSLIB_CLONE
+  htslib_clone_script: |
+    .ci_helpers/clone "git://github.com/${CIRRUS_REPO_OWNER}/htslib" "${HTSDIR}" "${CIRRUS_BRANCH}"
+
+htslib_compile_template: &HTSLIB_COMPILE
+  << : *HTSLIB_CLONE
+  htslib_compile_script: |
+    cd $HTSDIR
+    autoreconf -i
+    ./configure --prefix=`pwd`/../inst || (cat config.log; /bin/false)
+    make -j3 -e install
+
+#--------------------------------------------------
+# Template: samtools compile and test
+
+compile_template: &COMPILE
+  << : *HTSLIB_COMPILE
+
+  compile_script: |
+    autoreconf -i
+    ./configure --enable-werror --with-htslib=`pwd`/inst  \
+        LDFLAGS="$LDFLAGS -Wl,-rpath,`pwd`/inst/lib" || \
+        (cat config.log; /bin/false)
+    make -j3
+
+test_template: &TEST
+  test_script: |
+    if test "x$DO_MAINTAINER_CHECKS" = "xyes" ; then
+        make -e maintainer-check
+    fi
+    make -e
+    make -e test BGZIP=inst/bin/bgzip
+
+
+#--------------------------------------------------
+# Task: linux builds.
+
+# Debian + latest GCC
+gcc_task:
+  name: debian-gcc
+  container:
+    image: gcc:latest
+    cpu: 2
+    memory: 1G
+
+  environment:
+    LC_ALL: C
+    CIRRUS_CLONE_DEPTH: 1
+    HTSDIR: ./hidden-htslib
+    DO_MAINTAINER_CHECKS: yes
+
+  << : *COMPILE
+  << : *TEST
+
+
+# Ubuntu + Clang
+ubuntu_task:
+  name: ubuntu-clang
+  container:
+    #image: ubuntu:latest   # use << : *LIBDEFLATE
+    image: ubuntu:devel
+    cpu: 2
+    memory: 1G
+
+  environment:
+    CC: clang
+    LC_ALL: C
+    CIRRUS_CLONE_DEPTH: 1
+    HTSDIR: ./hidden-htslib
+
+  matrix:
+    - environment:
+       CFLAGS: -std=gnu99 -O0
+    - environment:
+       CFLAGS: -g -Wall -O3 -fsanitize=address
+       LDFLAGS: -fsanitize=address -Wl,-rpath,`pwd`/inst/lib
+
+  # NB: we could consider building a docker image with these
+  # preinstalled and specifying that instead, to speed up testing.
+  install_script: |
+    apt-get update
+    apt-get install -y --no-install-suggests --no-install-recommends \
+        ca-certificates clang git autoconf automake make zlib1g-dev  \
+        libbz2-dev liblzma-dev libcurl4-gnutls-dev libssl-dev        \
+        libdeflate-dev libncurses5-dev
+
+  << : *COMPILE
+  << : *TEST
+
+
+# CentOS
+centos_task:
+  name: centos-gcc
+  container:
+    image: centos:latest
+    cpu: 2
+    memory: 1G
+
+  environment:
+    LC_ALL: C
+    CIRRUS_CLONE_DEPTH: 1
+    HTSDIR: ./hidden-htslib
+
+  # NB: we could consider building a docker image with these
+  # preinstalled and specifying that instead, to speed up testing.
+  install_script: |
+    yum install -y autoconf automake make gcc perl-Data-Dumper zlib-devel \
+        bzip2 bzip2-devel xz-devel curl-devel openssl-devel ncurses-devel \
+        git diffutils
+
+  << : *COMPILE
+  << : *TEST
+
+
+#--------------------------------------------------
+# Task: macOS builds
+
+macosx_task:
+  name: macosx + clang
+  osx_instance:
+    image: catalina-base
+
+  environment:
+    CC: clang
+    LC_ALL: C
+    CIRRUS_CLONE_DEPTH: 1
+    HTSDIR: ./hidden-htslib
+
+  package_install_script:
+    - HOMEBREW_NO_AUTO_UPDATE=1 brew install autoconf automake libtool xz
+
+  << : *COMPILE
+  << : *TEST
+
+
+# #--------------------------------------------------
+# # Task: FreeBSD builds
+# 
+# # Slow to launch?  Commented out for now.
+# freebsd_task:
+#   name: freebsd + gcc
+# 
+#   freebsd_instance:
+#     image_family: freebsd-12-1
+#     cpu: 1
+#     memory: 1G
+# #
+# #  install_script: |
+# #    pkg install -y ... to be determined
+# 
+#   << : *COMPILE
+#   << : *TEST
