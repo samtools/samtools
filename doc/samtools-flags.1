@@ -44,11 +44,16 @@ samtools flags \- convert between textual and numeric flag representation.
 .SH SYNOPSIS
 .PP
 samtools flags
-.IR INT | STR [,...]
+.IR FLAGS ...
 
 .SH DESCRIPTION
 .PP
 Convert between textual and numeric flag representation.
+
+Each \fIFLAGS\fP argument may be either an integer (in decimal, hexadecimal,
+or octal) representing a combination of the listed numeric flag values,
+or a comma-separated string \fINAME\fB,\fR...\fB,\fINAME\fR representing
+a combination of the flag names listed below.
 
 .B FLAGS:
 .TS
