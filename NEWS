@@ -1,6 +1,10 @@
 Release a.b
 -----------
 
+ * samtools flags now accepts any number of command line arguments,
+   allowing multiple SAM flag combinations to be converted at once. (PR #1401)
+
+
 Release 1.12 (17th March 2021)
 ------------------------------
 
