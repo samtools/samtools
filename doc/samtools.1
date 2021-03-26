@@ -955,7 +955,7 @@ Grouping	(, )	E.g. "(1+2)*3"
 Values:	literals, vars	Numbers, strings and variables
 Unary ops:	+, -, !, ~ 	E.g. -10 +10, !10 (not), ~5 (bit not)
 Math ops:	*, /, %	Multiply, division and (integer) modulo
-Math ops:	+, -	Addition / subtractin
+Math ops:	+, -	Addition / subtraction
 Bit-wise:	&	Integer AND
 Bit-wise	^	Integer XOR
 Bit-wise	|	Integer OR
@@ -1038,7 +1038,7 @@ for alignments with many mismatches and \fB[RG]=~"grp[ABC]-"\fR will
 match the read-group string.
 
 If no comparison is used with an auxiliary tag it is taken simply to
-be a test for the existance of that tag.  So "[NM]" will return any
+be a test for the existence of that tag.  So "[NM]" will return any
 record containing an NM tag, even if that tag is zero (\fBNM:i:0\fR).
 
 If you need to check specifically for a non-zero value then use \fB[NM]
@@ -1103,7 +1103,7 @@ local cache is used.
 
 To avoid many files being stored in the same directory, REF_CACHE may
 be defined as a pattern using \fB%\fR\fInum\fR\fBs\fR to consume \fInum\fR
-chracters of the MD5sum and \fB%s\fR to consume all remaining characters.
+characters of the MD5sum and \fB%s\fR to consume all remaining characters.
 If REF_CACHE lacks \fB%s\fR then it will get an implicit \fB/%s\fR appended.
 
 To aid population of the REF_CACHE directory a script
