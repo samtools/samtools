@@ -386,14 +386,14 @@ Import SAM to BAM when
 .B @SQ
 lines are present in the header:
 .EX 2
-samtools view -bS aln.sam > aln.bam
+samtools view -bo aln.bam aln.sam
 .EE
 If
 .B @SQ
 lines are absent:
 .EX 2
 samtools faidx ref.fa
-samtools view -bt ref.fa.fai aln.sam > aln.bam
+samtools view -bt ref.fa.fai -o aln.bam aln.sam
 .EE
 where
 .I ref.fa.fai
@@ -404,7 +404,7 @@ command.
 .IP o 2
 Convert a BAM file to a CRAM file using a local reference sequence.
 .EX 2
-samtools view -C -T ref.fa aln.bam > aln.cram
+samtools view -C -T ref.fa -o aln.cram aln.bam
 .EE
 
 .IP o 2
