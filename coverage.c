@@ -1,7 +1,7 @@
 /* coverage.c -- samtools coverage subcommand
 
     Copyright (C) 2018,2019 Florian Breitwieser
-    Portions copyright (C) 2019 Genome Research Ltd.
+    Portions copyright (C) 2019-2020 Genome Research Ltd.
 
     Author: Florian P Breitwieser <florian.bw@gmail.com>
 
@@ -633,7 +633,10 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    if (ret < 0) status = EXIT_FAILURE;
+    if (ret < 0) {
+        print_error("coverage", "error reading from input file");
+        status = EXIT_FAILURE;
+    }
 
 coverage_end:
     if (n_plp) free(n_plp);

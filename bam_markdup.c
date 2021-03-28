@@ -62,6 +62,7 @@ typedef struct {
     int mode;
     int write_index;
     int include_fails;
+    int check_chain;
     char *stats_file;
     char *arg_list;
     char *out_fn;
@@ -83,6 +84,7 @@ typedef struct read_queue_s {
     bam1_t *b;
     struct read_queue_s *duplicate;
     hts_pos_t pos;
+    int dup_checked;
 } read_queue_t;
 
 typedef struct {
@@ -94,7 +96,22 @@ typedef struct {
     char type;
 } dup_map_t;
 
+typedef struct {
+    bam1_t *b;
+    int64_t score;
+    int64_t mate_score;
+    long x;
+    long y;
+    int opt;
+    int xpos;
+} check_t;
 
+
+typedef struct {
+    check_t *c;
+    size_t size;
+    size_t length;
+} check_list_t;
 
 static khint32_t do_hash(unsigned char *key, khint32_t len);
 
@@ -665,6 +682,7 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_n
 }
 
 
+/* Get the position of the coordinates from the read name. */
 static inline int get_coordinate_positions(const char *qname, int *xpos, int *ypos) {
     int sep = 0;
     int pos = 0;
@@ -692,6 +710,66 @@ static inline int get_coordinate_positions(const char *qname, int *xpos, int *yp
 
     return sep;
 }
+
+
+static int get_coordinates(const char *name, int *xpos_out, long *x_coord, long *y_coord, long *warnings) {
+    int ret = 1;
+    int seps, xpos = 0, ypos = 0;
+    long x = 0, y = 0;
+    char *end;
+
+    seps = get_coordinate_positions(name, &xpos, &ypos);
+
+    /* The most current Illumina read format at time of writing is:
+       @machine:run:flowcell:lane:tile:x:y:UMI or
+       @machine:run:flowcell:lane:tile:x:y
+
+       Counting the separating colons gives us a quick format check.
+       Older name formats have fewer elements.
+    */
+
+    if (!(seps == 3 || seps == 4 || seps == 6 || seps == 7)) {
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", name);
+        }
+
+        return ret;
+    }
+
+    x = strtol(name + xpos, &end, 10);
+
+    if ((name + xpos) == end) {
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: can not decipher X coordinate in %s .\n", name);
+        }
+
+        return ret;
+    }
+
+    y = strtol(name + ypos, &end, 10);
+
+    if ((name + ypos) == end) {
+        (*warnings)++;
+
+        if (*warnings <= BMD_WARNING_MAX) {
+            fprintf(stderr, "[markdup] warning: can not decipher y coordinate in %s .\n", name);
+        }
+
+        return ret;
+    }
+
+    *x_coord = x;
+    *y_coord = y;
+    *xpos_out = xpos;
+    ret = 0;
+
+    return ret;
+}
+
 
 /* Using the coordinates from the Illumina read name, see whether the duplicated read is
    close enough (set by max_dist) to the original to be counted as optical.*/
@@ -806,6 +884,59 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist, long *warn
 }
 
 
+/* Using the coordinates from the Illumina read name, see whether the duplicated read is
+   close enough (set by max_dist) to the original to be counted as optical.
+
+   This function needs the values from the first read to be already calculated. */
+
+static int optical_duplicate_partial(const char *name, const int oxpos, const long ox, const long oy, bam1_t *dup, check_t *c, long max_dist, long *warnings) {
+    int ret = 0;
+    char *duplicate;
+    int dxpos = 0;
+    long dx, dy;
+
+    duplicate = bam_get_qname(dup);
+
+    if (get_coordinates(duplicate, &dxpos, &dx, &dy, warnings)) {
+        return ret;
+    }
+
+    if (strncmp(name, duplicate, oxpos - 1) == 0) {
+        // the initial parts match, look at the numbers
+        long xdiff, ydiff;
+
+        if (ox > dx) {
+            xdiff = ox - dx;
+        } else {
+            xdiff = dx - ox;
+        }
+
+        if (xdiff <= max_dist) {
+            // still might be optical
+
+            if (oy > dy) {
+                ydiff = oy - dy;
+            } else {
+                ydiff = dy - oy;
+            }
+
+            if (ydiff <= max_dist) ret = 1;
+        }
+    }
+
+    c->x = dx;
+    c->y = dy;
+    c->xpos = dxpos;
+
+    if (ret) {
+        c->opt = ret;
+    }
+
+    return ret;
+}
+
+
+/* Mark the read as a duplicate and update the duplicate hash (if needed) */
 static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *ori, bam1_t *dup,
                            long *optical, long *warn) {
     char dup_type = 0;
@@ -814,7 +945,7 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
     dup->core.flag |= BAM_FDUP;
 
     if (param->tag) {
-        if (bam_aux_append(dup, "do", 'Z', strlen(bam_get_qname(ori)) + 1, (uint8_t*)bam_get_qname(ori))) {
+        if (bam_aux_update_str(dup, "do", strlen(bam_get_qname(ori)) + 1, bam_get_qname(ori))) {
             fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
             return -1;
         }
@@ -822,12 +953,12 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
 
     if (param->opt_dist) { // mark optical duplicates
         if (optical_duplicate(ori, dup, param->opt_dist, warn)) {
-            bam_aux_append(dup, "dt", 'Z', 3, (const uint8_t *)"SQ");
+            bam_aux_update_str(dup, "dt", 3, "SQ");
             dup_type = 'O';
             (*optical)++;
         } else {
             // not an optical duplicate
-            bam_aux_append(dup, "dt", 'Z', 3, (const uint8_t *)"LB");
+            bam_aux_update_str(dup, "dt", 3, "LB");
         }
     }
 
@@ -853,17 +984,12 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
 }
 
 
+/* If the duplicate type has changed to optical then retag and duplicate hash. */
 static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash, bam1_t *b, int paired, long *optical_single, long *optical_pair) {
     int ret = 0;
-    uint8_t *data;
 
-    // remove any existing dt tag
-    if ((data = bam_aux_get(b, "dt")) != NULL) {
-        bam_aux_del(b, data);
-    }
-
-    if (bam_aux_append(b, "dt", 'Z', 3, (const uint8_t *)"SQ")) {
-        fprintf(stderr, "[markdup] error: unable to append 'dt' tag.\n");
+    if (bam_aux_update_str(b, "dt", 3, "SQ")) {
+        fprintf(stderr, "[markdup] error: unable to update 'dt' tag.\n");
         ret = -1;
     }
 
@@ -897,26 +1023,54 @@ static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash
 }
 
 
+/* Check all duplicates of the highest quality read (the "original") for consistancy.  Also
+   pre-calculate any values for use in check_duplicate_chain later.
+   Returns 0 on success, >0 on coordinate reading error (program can continue) or
+   <0 on an error (program should not continue. */
+static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *dup_hash, read_queue_t *ori,
+             check_list_t *list, long *warn, long *optical_single, long *optical_pair) {
 
-/*
-    Where there is more than one duplicate go down the list and check for optical duplicates and change
-    do tags (where used) to point to original (non-duplicate) read.
-*/
-static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_hash, read_queue_t *ori,
-             long *warn, long *optical_single, long *optical_pair) {
     int ret = 0;
-    read_queue_t *current = ori->duplicate;
     char *ori_name = bam_get_qname(ori->b);
-    int have_original = !(ori->b->core.flag & BAM_FDUP);
-    int ori_paired = (ori->b->core.flag & BAM_FPAIRED) && !(ori->b->core.flag & BAM_FMUNMAP);
+    read_queue_t *current = ori->duplicate;
+    int xpos;
+    long x, y;
 
-    if (!(param->tag || param->opt_dist))
-        return ret; // nothing to do here
+    if (param->opt_dist) {
+        if ((ret = get_coordinates(ori_name, &xpos, &x, &y, warn))) {
+            return ret;
+        }
+    }
+
+    list->length = 0;
 
     while (current) {
-        int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
+        check_t *c;
 
-        if (param->tag && have_original) {
+        if (list->length >= list->size) {
+            check_t *tmp;
+
+            list->size *= 2;
+
+            if (!(tmp = realloc(list->c, list->size * sizeof(check_t)))) {
+                fprintf(stderr, "[markdup] error: Unable to expand opt check list.\n");
+                return -1;
+            }
+
+            list->c = tmp;
+        }
+
+        c = &list->c[list->length];
+
+        c->b = current->b;
+        c->x = -1;
+        c->y = -1;
+        c->opt = 0;
+        c->score = 0;
+        c->mate_score = 0;
+        current->dup_checked = 1;
+
+        if (param->tag) {
             uint8_t *data;
 
             // at this stage all duplicates should have a do tag
@@ -926,10 +1080,8 @@ static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_has
 
                 if (old_name) {
                     if (strcmp(old_name, ori_name) != 0) {
-                        bam_aux_del(current->b, data);
-
-                        if (bam_aux_append(current->b, "do", 'Z', strlen(ori_name) + 1, (uint8_t*)ori_name)) {
-                            fprintf(stderr, "[markdup] error: unable to append 'do' tag.\n");
+                        if (bam_aux_update_str(current->b, "do", strlen(ori_name) + 1, (const char *)ori_name)) {
+                            fprintf(stderr, "[markdup] error: unable to update 'do' tag.\n");
                             ret =  -1;
                             break;
                         }
@@ -943,117 +1095,225 @@ static int duplicate_chain_check(md_param_t *param, khash_t(duplicates) *dup_has
         }
 
         if (param->opt_dist) {
-            int is_cur_opt = 0, is_ori_opt = 0;
             uint8_t *data;
             char *dup_type;
-
-            if ((data = bam_aux_get(ori->b, "dt"))) {
-                if ((dup_type = bam_aux2Z(data))) {
-                    if (strcmp(dup_type, "SQ") == 0) {
-                        is_ori_opt = 1;
-                    }
-                }
-            }
+            int is_opt = 0;
+            int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
 
             if ((data = bam_aux_get(current->b, "dt"))) {
                 if ((dup_type = bam_aux2Z(data))) {
                     if (strcmp(dup_type, "SQ") == 0) {
-                        is_cur_opt = 1;
+                        c->opt = 1;
                     }
                 }
             }
 
-            if (!(is_ori_opt && is_cur_opt)) {
-                // if both are already optical duplicates there is no need to check again, otherwise...
+            // need to run this to get the duplicates x and y scores
+            is_opt = optical_duplicate_partial(ori_name, xpos, x, y, current->b, c, param->opt_dist, warn);
 
-                if (optical_duplicate(ori->b, current->b, param->opt_dist, warn)) {
-                    // find out which one is the duplicate
-                    int is_cur_dup = 0;
+            if (!c->opt && is_opt) {
+                if (optical_retag(param, dup_hash, current->b, current_paired, optical_single, optical_pair)) {
+                    ret = -1;
+                    break;
+                }
 
-                    if (have_original) {
-                        // compared against an original, this is a dup.
-                        is_cur_dup = 1;
-                    } else if (ori_paired != current_paired) {
-                        if (!current_paired) {
-                            // current is single vs pair, this is a dup.
-                            is_cur_dup = 1;
-                        }
-                    } else {
-                        // do it by scores
-                        int64_t ori_score, curr_score;
+                c->opt = 1;
+            }
 
-                        if ((ori->b->core.flag & BAM_FQCFAIL) != (current->b->core.flag & BAM_FQCFAIL)) {
-                            if (ori->b->core.flag & BAM_FQCFAIL) {
-                                ori_score  = 0;
-                                curr_score = 1;
-                            } else {
-                                ori_score  = 1;
-                                curr_score = 0;
-                            }
-                        } else {
-                            ori_score  = calc_score(ori->b);
-                            curr_score = calc_score(current->b);
+            c->score = calc_score(current->b);
 
-                            if (current_paired) {
-                                // they are pairs so add mate scores.
-                                int64_t mate_tmp;
-
-                                if ((mate_tmp = get_mate_score(ori->b)) == -1) {
-                                    fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
-                                    ret = -1;
-                                    break;
-                                } else {
-                                    ori_score += mate_tmp;
-                                }
-
-                                if ((mate_tmp = get_mate_score(current->b)) == -1) {
-                                    fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
-                                    ret = -1;
-                                    break;
-                                } else {
-                                    curr_score += mate_tmp;
-                                }
-                            }
-                        }
-
-                        if (ori_score == curr_score) {
-                            if (strcmp(bam_get_qname(current->b), ori_name) < 0) {
-                                curr_score++;
-                            } else {
-                                curr_score--;
-                            }
-                        }
-
-                        if (ori_score > curr_score) {
-                            is_cur_dup = 1;
-                        }
-                    }
-
-                    if (is_cur_dup) {
-                        // the current is the optical duplicate
-                        if (!is_cur_opt) { // only change if not already an optical duplicate
-                            if (optical_retag(param, dup_hash, current->b, current_paired, optical_single, optical_pair)) {
-                                ret = -1;
-                                break;
-                            }
-                        }
-                    } else {
-                        if (!is_ori_opt) {
-                            if (optical_retag(param, dup_hash, ori->b, ori_paired, optical_single, optical_pair)) {
-                                ret = -1;
-                                break;
-                            }
-                        }
-                    }
+            if (current_paired) {
+                if ((c->mate_score = get_mate_score(current->b)) == -1) {
+                     fprintf(stderr, "[markdup] error: no ms score tag. Please run samtools fixmate on file first.\n");
+                     ret = -1;
+                     break;
                 }
             }
         }
 
         current = current->duplicate;
+        list->length++;
     }
 
     return ret;
 }
+
+
+static int xcoord_sort(const void *a, const void *b) {
+    check_t *ac = (check_t *) a;
+    check_t *bc = (check_t *) b;
+
+    return (ac->x - bc->x);
+}
+
+
+/* Check all the duplicates against each other to see if they are optical duplicates. */
+static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_hash, check_list_t *list,
+             long *warn, long *optical_single, long *optical_pair) {
+    int ret = 0;
+    size_t curr = 0;
+
+    qsort(list->c, list->length, sizeof(list->c[0]), xcoord_sort);
+
+    while (curr < list->length - 1) {
+        check_t *current = &list->c[curr];
+        size_t count = curr;
+        char *cur_name = bam_get_qname(current->b);
+        int current_paired = (current->b->core.flag & BAM_FPAIRED) && !(current->b->core.flag & BAM_FMUNMAP);
+
+        while (++count < list->length && (list->c[count].x - current->x <= param->opt_dist)) {
+            // while close enough along the x coordinate
+            check_t *chk = &list->c[count];
+
+            if (current->opt && chk->opt)
+                continue;
+
+            // if both are already optical duplicates there is no need to check again, otherwise...
+
+            long ydiff;
+
+            if (current->y > chk->y) {
+                ydiff = current->y - chk->y;
+            } else {
+                ydiff = chk->y - current->y;
+            }
+
+            if (ydiff > param->opt_dist)
+                continue;
+
+            // the number are right, check the names
+            if (strncmp(cur_name, bam_get_qname(chk->b), current->xpos - 1) != 0)
+                continue;
+
+            // optical duplicates
+            int chk_dup = 0;
+            int chk_paired = (chk->b->core.flag & BAM_FPAIRED) && !(chk->b->core.flag & BAM_FMUNMAP);
+
+            if (current_paired != chk_paired) {
+                if (!chk_paired) {
+                    // chk is single vs pair, this is a dup.
+                    chk_dup = 1;
+                }
+            } else {
+                // do it by scores
+                int64_t cur_score, chk_score;
+
+                if ((current->b->core.flag & BAM_FQCFAIL) != (chk->b->core.flag & BAM_FQCFAIL)) {
+                    if (current->b->core.flag & BAM_FQCFAIL) {
+                        cur_score = 0;
+                        chk_score = 1;
+                    } else {
+                        cur_score = 1;
+                        chk_score = 0;
+                    }
+                } else {
+                    cur_score = current->score;
+                    chk_score = chk->score;
+
+                    if (current_paired) {
+                        // they are pairs so add mate scores.
+                        chk_score += chk->mate_score;
+                        cur_score += current->mate_score;
+                    }
+                }
+
+                if (cur_score == chk_score) {
+                    if (strcmp(bam_get_qname(chk->b), cur_name) < 0) {
+                        chk_score++;
+                    } else {
+                        chk_score--;
+                    }
+                }
+
+                if (cur_score > chk_score) {
+                    chk_dup = 1;
+                }
+            }
+
+            if (chk_dup) {
+                // the duplicate is the optical duplicate
+                if (!chk->opt) { // only change if not already an optical duplicate
+                    if (optical_retag(param, dup_hash, chk->b, chk_paired, optical_single, optical_pair)) {
+                        ret = -1;
+                        goto fail;
+                    }
+
+                    chk->opt = 1;
+                }
+            } else {
+                if (!current->opt) {
+                    if (optical_retag(param, dup_hash, current->b, current_paired, optical_single, optical_pair)) {
+                        ret = -1;
+                        goto fail;
+                    }
+
+                    current->opt = 1;
+                }
+            }
+        }
+
+        curr++;
+    }
+
+ fail:
+    return ret;
+}
+
+
+/* Where there is more than one duplicate go down the list and check for optical duplicates and change
+   do tags (where used) to point to original (non-duplicate) read. */
+static int find_duplicate_chains(md_param_t *param, klist_t(read_queue) *read_buffer, khash_t(duplicates) *dup_hash, check_list_t *dup_list,
+                                const hts_pos_t prev_coord, const int32_t prev_tid, long *warn, long *optical_single,
+                                long *optical_pair, const int check_range) {
+    int ret = 0;
+    kliter_t(read_queue) *rq;
+
+    rq = kl_begin(read_buffer);
+
+    while (rq != kl_end(read_buffer)) {
+        read_queue_t *in_read = &kl_val(rq);
+
+        if (check_range) {
+            /* Just check against the moving window of reads based on coordinates and max read length. */
+            if (in_read->pos + param->max_length > prev_coord && in_read->b->core.tid == prev_tid && (prev_tid != -1 || prev_coord != -1)) {
+                break;
+            }
+        } else {
+            // this is the last set of results and the end entry will be blank
+            if (!bam_get_qname(in_read->b)) {
+                break;
+            }
+        }
+
+        if (!(in_read->b->core.flag & BAM_FDUP) && in_read->duplicate) { // is the head of a duplicate chain
+
+            // check against the original for tagging and optical duplication
+            if ((ret = check_chain_against_original(param, dup_hash, in_read, dup_list, warn, optical_single, optical_pair))) {
+                if (ret < 0) { // real error
+                    ret = -1;
+                    break;
+                } else { // coordinate decoding error
+                    ret = 0;
+                    in_read->duplicate = NULL;
+                    continue;
+                }
+            }
+
+            // check the rest of the duplicates against each other for optical duplication
+            if (param->opt_dist && check_duplicate_chain(param, dup_hash, dup_list, warn, optical_single, optical_pair)) {
+                ret = -1;
+                break;
+            }
+
+            in_read->duplicate = NULL;
+        }
+
+        rq = kl_next(rq);
+    }
+
+    return ret;
+}
+
 
 /*
   Function to use when estimating library size.
@@ -1155,6 +1415,7 @@ static int bam_mark_duplicates(md_param_t *param) {
     tmp_file_t temp;
     char *idx_fn = NULL;
     int exclude = 0;
+    check_list_t dup_list = {NULL, 0, 0};
 
     if (!pair_hash || !single_hash || !read_buffer || !dup_hash) {
         fprintf(stderr, "[markdup] out of memory\n");
@@ -1215,10 +1476,24 @@ static int bam_mark_duplicates(md_param_t *param) {
         goto fail;
     }
 
+    if (param->check_chain && !(param->tag || param->opt_dist))
+        param->check_chain = 0;
+
+    if (param->check_chain) {
+        dup_list.size = 128;
+        dup_list.c = NULL;
+
+        if ((dup_list.c = malloc(dup_list.size * sizeof(check_t))) == NULL) {
+            fprintf(stderr, "[markdup] error: unable to allocate memory for dup_list.\n");
+            goto fail;
+        }
+    }
+
     reading = writing = excluded = single_dup = duplicate = examined = pair = single = optical = single_optical = 0;
     np_duplicate = np_opt_duplicate = 0;
 
     while ((ret = sam_read1(param->in, header, in_read->b)) >= 0) {
+        int dup_checked = 0;
 
         // do some basic coordinate order checks
         if (in_read->b->core.tid >= 0) { // -1 for unmapped reads
@@ -1233,6 +1508,8 @@ static int bam_mark_duplicates(md_param_t *param) {
         prev_tid   =  in_read->b->core.tid;
         in_read->pair_key.single   = 1;
         in_read->single_key.single = 0;
+        in_read->duplicate = NULL;
+        in_read->dup_checked = 0;
 
         reading++;
 
@@ -1259,7 +1536,7 @@ static int bam_mark_duplicates(md_param_t *param) {
         // read must not be secondary, supplementary, unmapped or (possibly) failed QC
         if (!(in_read->b->core.flag & exclude)) {
             examined++;
-            in_read->duplicate = NULL;
+
 
             // look at the pairs first
             if ((in_read->b->core.flag & BAM_FPAIRED) && !(in_read->b->core.flag & BAM_FMUNMAP)) {
@@ -1302,17 +1579,15 @@ static int bam_mark_duplicates(md_param_t *param) {
                        // scores more than one read of the pair
                         bam1_t *dup = bp->p->b;
 
-                        in_read->duplicate = bp->p;
+                        if (param->check_chain)
+                            in_read->duplicate = bp->p;
+
                         bp->p = in_read;
 
                         if (mark_duplicates(param, dup_hash, bp->p->b, dup, &single_optical, &opt_warnings))
                             goto fail;
 
                         single_dup++;
-
-                        if (duplicate_chain_check(param, dup_hash, bp->p, &opt_warnings, &single_optical, &optical))
-                            goto fail;
-
                     }
                 } else {
                     fprintf(stderr, "[markdup] error: single hashing failure.\n");
@@ -1329,8 +1604,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                     in_read->pair_key = pair_key;
                 } else if (ret == 0) {
                     int64_t old_score, new_score, tie_add = 0;
-                    bam1_t *dup;
-                    int check_chain = 0;
+                    bam1_t *dup = NULL;
 
                     bp = &kh_val(pair_hash, k);
 
@@ -1371,27 +1645,46 @@ static int bam_mark_duplicates(md_param_t *param) {
 
                     if (new_score + tie_add > old_score) { // swap reads
                         dup = bp->p->b;
-                        in_read->duplicate = bp->p;
-                        bp->p = in_read;
-                    } else {
-                        if (bp->p->duplicate) {
-                            in_read->duplicate = bp->p->duplicate;
-                            check_chain = 1;
+
+                        if (param->check_chain) {
+
+                            if (in_read->duplicate) {
+                                read_queue_t *current = in_read->duplicate;
+
+                                while (current->duplicate) {
+                                    current = current->duplicate;
+                                }
+
+                                current->duplicate = bp->p;
+                            } else {
+                                in_read->duplicate = bp->p;
+                            }
                         }
 
-                        bp->p->duplicate = in_read;
+                        bp->p = in_read;
+                    } else {
+                        if (param->check_chain) {
+                            if (bp->p->duplicate) {
+                                if (in_read->duplicate) {
+                                    read_queue_t *current = bp->p->duplicate;
+
+                                    while (current->duplicate) {
+                                        current = current->duplicate;
+                                    }
+
+                                    current->duplicate = in_read->duplicate;
+                                }
+
+                                in_read->duplicate = bp->p->duplicate;
+                            }
+
+                            bp->p->duplicate = in_read;
+                        }
+
                         dup = in_read->b;
                     }
 
                     if (mark_duplicates(param, dup_hash, bp->p->b, dup, &optical, &opt_warnings))
-                        goto fail;
-
-                    if (check_chain) {
-                        if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
-                            goto fail;
-                    }
-
-                    if (duplicate_chain_check(param, dup_hash, bp->p, &opt_warnings, &single_optical, &optical))
                         goto fail;
 
                     duplicate++;
@@ -1403,7 +1696,6 @@ static int bam_mark_duplicates(md_param_t *param) {
                 int ret;
                 key_data_t single_key;
                 in_hash_t *bp;
-                int check_chain = 0;
 
                 make_single_key(&single_key, in_read->b);
 
@@ -1422,29 +1714,20 @@ static int bam_mark_duplicates(md_param_t *param) {
                     if ((bp->p->b->core.flag & BAM_FPAIRED) && !(bp->p->b->core.flag & BAM_FMUNMAP)) {
                         // if matched against one of a pair just mark as duplicate
 
-                        if (bp->p->duplicate) {
-                            in_read->duplicate = bp->p->duplicate;
-                            check_chain = 1;
-                        }
+                        if (param->check_chain) {
+                            if (bp->p->duplicate) {
+                                in_read->duplicate = bp->p->duplicate;
+                            }
 
-                        bp->p->duplicate = in_read;
+                            bp->p->duplicate = in_read;
+                        }
 
                         if (mark_duplicates(param, dup_hash, bp->p->b, in_read->b, &single_optical, &opt_warnings))
                             goto fail;
 
-                        if (check_chain) {
-                            // check the new duplicate entry in the chain
-                            if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
-                                    goto fail;
-                        }
-
-                        // check against the new original
-                        if (duplicate_chain_check(param, dup_hash, bp->p, &opt_warnings, &single_optical, &optical))
-                            goto fail;
-
                     } else {
                         int64_t old_score, new_score;
-                        bam1_t *dup;
+                        bam1_t *dup = NULL;
 
                         old_score = calc_score(bp->p->b);
                         new_score = calc_score(in_read->b);
@@ -1453,32 +1736,26 @@ static int bam_mark_duplicates(md_param_t *param) {
                         // to the single hash and mark the other as duplicate
                         if (new_score > old_score) { // swap reads
                             dup = bp->p->b;
-                            in_read->duplicate = bp->p;
+
+                            if (param->check_chain)
+                                in_read->duplicate = bp->p;
+
                             bp->p = in_read;
                         } else {
-                            if (bp->p->duplicate) {
-                                in_read->duplicate = bp->p->duplicate;
-                                check_chain = 1;
+                            if (param->check_chain) {
+                                if (bp->p->duplicate) {
+                                    in_read->duplicate = bp->p->duplicate;
+                                }
+
+                                bp->p->duplicate = in_read;
                             }
 
-                            bp->p->duplicate = in_read;
                             dup = in_read->b;
                         }
 
                         if (mark_duplicates(param, dup_hash, bp->p->b, dup, &single_optical, &opt_warnings))
                             goto fail;
-
-
-                        if (check_chain) {
-                            if (duplicate_chain_check(param, dup_hash, bp->p->duplicate, &opt_warnings, &single_optical, &optical))
-                                goto fail;
-                        }
-
-                        if (duplicate_chain_check(param, dup_hash, bp->p, &opt_warnings, &single_optical, &optical))
-                            goto fail;
-
-
-                        }
+                    }
 
                     single_dup++;
                 } else {
@@ -1499,6 +1776,22 @@ static int bam_mark_duplicates(md_param_t *param) {
             /* keep a moving window of reads based on coordinates and max read length.  Any unaligned reads
                should just be written as they cannot be matched as duplicates. */
             if (in_read->pos + param->max_length > prev_coord && in_read->b->core.tid == prev_tid && (prev_tid != -1 || prev_coord != -1)) {
+                break;
+            }
+
+            if (!dup_checked && param->check_chain) {
+                // check for multiple optical duplicates of the same original read
+
+                if (find_duplicate_chains(param, read_buffer, dup_hash, &dup_list, prev_coord, prev_tid, &opt_warnings, &single_optical, &optical, 1)) {
+                    fprintf(stderr, "[markdup] error: duplicate checking failed.\n");
+                    goto fail;
+                }
+
+                dup_checked = 1;
+            }
+
+
+            if (param->check_chain && (in_read->b->core.flag & BAM_FDUP) && !in_read->dup_checked && !(in_read->b->core.flag & exclude)) {
                 break;
             }
 
@@ -1550,6 +1843,14 @@ static int bam_mark_duplicates(md_param_t *param) {
     if (ret < -1) {
         fprintf(stderr, "[markdup] error: truncated input file.\n");
         goto fail;
+    }
+
+    // one last check
+    if (param->tag || param->opt_dist) {
+        if (find_duplicate_chains(param, read_buffer, dup_hash, &dup_list, prev_coord, prev_tid, &opt_warnings, &single_optical, &optical, 0)) {
+            fprintf(stderr, "[markdup] error: duplicate checking failed.\n");
+            goto fail;
+        }
     }
 
     // write out the end of the list
@@ -1608,7 +1909,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                     np_duplicate++;
 
                     if (param->tag && kh_val(dup_hash, k).name) {
-                        if (bam_aux_append(b, "do", 'Z', strlen(kh_val(dup_hash, k).name) + 1, (uint8_t*)kh_val(dup_hash, k).name)) {
+                        if (bam_aux_update_str(b, "do", strlen(kh_val(dup_hash, k).name) + 1, (char*)kh_val(dup_hash, k).name)) {
                             fprintf(stderr, "[markdup] error: unable to append supplementary 'do' tag.\n");
                             goto fail;
                         }
@@ -1616,10 +1917,10 @@ static int bam_mark_duplicates(md_param_t *param) {
 
                     if (param->opt_dist) {
                         if (kh_val(dup_hash, k).type) {
-                            bam_aux_append(b, "dt", 'Z', 3, (const uint8_t *)"SQ");
+                            bam_aux_update_str(b, "dt", 3, "SQ");
                             np_opt_duplicate++;
                         } else {
-                            bam_aux_append(b, "dt", 'Z', 3, (const uint8_t *)"LB");
+                            bam_aux_update_str(b, "dt", 3, "LB");
                         }
                     }
                 }
@@ -1705,6 +2006,9 @@ static int bam_mark_duplicates(md_param_t *param) {
         }
     }
 
+    if (param->check_chain && (param->tag || param->opt_dist))
+        free(dup_list.c);
+
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
     kl_destroy(read_queue, read_buffer);
@@ -1724,6 +2028,9 @@ static int bam_mark_duplicates(md_param_t *param) {
         }
     }
     kh_destroy(duplicates, dup_hash);
+
+    if (param->check_chain && (param->tag || param->opt_dist))
+        free(dup_list.c);
 
     kh_destroy(reads, pair_hash);
     kh_destroy(reads, single_hash);
@@ -1747,9 +2054,11 @@ static int markdup_usage(void) {
     fprintf(stderr, "  -m --mode TYPE   Duplicate decision method for paired reads.\n"
                     "                   TYPE = t measure positions based on template start/end (default).\n"
                     "                          s measure positions based on sequence start.\n");
+    fprintf(stderr, "  -n               Reduce optical duplicate accuracy (faster results with many duplicates).\n");
     fprintf(stderr, "  -u               Output uncompressed data\n");
     fprintf(stderr, "  --include-fails  Include quality check failed reads.\n");
     fprintf(stderr, "  --no-PG          Do not add a PG line\n");
+    fprintf(stderr, "  --no-multi-dup   Reduced duplicates of duplicates checking.\n");
     fprintf(stderr, "  -t               Mark primary duplicates with the name of the original in a \'do\' tag."
                                   " Mainly for information and debugging.\n");
 
@@ -1770,17 +2079,18 @@ int bam_markdup(int argc, char **argv) {
     kstring_t tmpprefix = {0, 0, NULL};
     struct stat st;
     unsigned int t;
-    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL, NULL};
+    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
         {"include-fails", no_argument, NULL, 1001},
         {"no-PG", no_argument, NULL, 1002},
         {"mode", required_argument, NULL, 'm'},
+        {"no-multi-dup", no_argument, NULL, 1003},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:ncm:u", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "rsl:StT:O:@:f:d:cm:u", lopts, NULL)) >= 0) {
         switch (c) {
             case 'r': param.remove_dups = 1; break;
             case 'l': param.max_length = atoi(optarg); break;
@@ -1805,6 +2115,7 @@ int bam_markdup(int argc, char **argv) {
             case 'u': wmode[2] = '0'; break;
             case 1001: param.include_fails = 1; break;
             case 1002: param.no_pg = 1; break;
+            case 1003: param.check_chain = 0; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();

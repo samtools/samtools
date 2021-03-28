@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-stats 1 "22 September 2020" "samtools-1.11" "Bioinformatics tools"
+.TH samtools-stats 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
 .SH NAME
 samtools stats \- produces comprehensive statistics from alignment file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2018 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2018, 2020-2021 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -110,6 +110,9 @@ fragments.
 Reads where PAIRED is set and either both READ1 and READ2 are set or
 neither is set are not counted in either category.
 .PP
+Information on the meaning of the flags is given in the SAM specification
+document <https://samtools.github.io/hts-specs/SAMv1.pdf>.
+
 The CHK row contains distinct CRC32 checksums of read names, sequences
 and quality values.  The checksums are computed per alignment record
 and summed, meaning the checksum does not change if the input file has
@@ -121,7 +124,8 @@ but more comprehensive.
 
 .RS
 .B raw total sequences
-- total number of reads in a file. Same number reported by
+- total number of reads in a file, excluding supplementary and secondary reads.
+Same number reported by
 .BR "samtools view -c".
 
 .B filtered sequences
@@ -170,6 +174,9 @@ fragment reads (flags 0x01 and 0x80 set, 0x40 not set).
 
 .B non-primary alignments
 - number of secondary reads (flag 0x100 (256) set).
+
+.B supplementary alignments
+- number of supplementary reads (flag 0x800 (2048) set).
 
 .B total length
 - number of processed bases from reads that are neither secondary nor supplementary (flags 0x100 (256) and 0x800 (2048) are not set).

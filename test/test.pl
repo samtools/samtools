@@ -959,6 +959,7 @@ sub test_usage
 
     # now test subcommand usage as well
     foreach my $subcommand (@subcommands) {
+        next if ($subcommand =~ /^(help|version)$/);
         # Under msys the isatty function fails to recognise the terminal.
         # Skip these tests for now.
         next if ($^O =~ /^msys/ && $subcommand =~ /^(dict|sort|stats|view|fasta|fastq)$/);
@@ -1198,7 +1199,7 @@ sub filter_sam
                 if ($tag_values) {
                     my $tag_value = '';
                     for my $i (11 .. $#sam) {
-                        last if (($tag_value) = $sam[$i] =~ /^${tag}:Z:(.*)/);
+                        last if (($tag_value) = $sam[$i] =~ /^${tag}:[ZiIsScCA]:(.*)/);
                     }
                     next if (!exists($tag_values->{$tag_value||""}));
                 }
@@ -2107,6 +2108,10 @@ sub test_view
          ['-D', "BClong:${fobc}"], 1],
         ['tv_d_different_tags', { tag => 'BC', tag_values => { ACGT => 1, grp2 => 1 }},
          ['-d', 'BC:ACGT', '-d', 'RG:grp2' ], 1],
+        ['tv_NM_13', { tag => 'NM', tag_values => { 13 => 1 }},
+         ['-d', 'NM:13'], 0],
+        ['tv_ab_z', { tag => 'ab', tag_values => { z => 2 }},
+         ['-d', 'ab:z'], 0],
         # Libraries
         ['lib2', { libraries => { 'Library 2' => 1 }}, ['-l', 'Library 2'], 0],
         ['lib3', { libraries => { 'Library 3' => 1 }}, ['-l', 'Library 3'], 0],
@@ -2128,6 +2133,22 @@ sub test_view
         ['qlen11', { min_qlen => 11 }, ['-m', 11], 0],
         ['qlen15', { min_qlen => 15 }, ['-m', 15], 0],
         ['qlen16', { min_qlen => 16 }, ['-m', 16], 0],
+        # Filter expressions
+        ['expr_rej128req2', { flags_rejected => 128, flags_required => 2 },
+        ['-e', '!(flag & 128) && (flag & 2)'], 0],
+        # filter_sam also removes the header line, so cannot compare.
+        # ['expr_RG', { read_groups => {grp1 => 1, grp3 => 1}}, ['-e', '[RG]=~"^grp[13]$"'], 0],
+        ['expr_BC', { tag => 'BC', tag_values => { ACGT => 1, TGCA => 1, AATTCCGG => 1 }},
+        ['-e', '[BC]'], 0],
+        ['expr_BC2', { tag => 'BC', tag_values => { ACGT => 1, AATTCCGG => 1 }},
+        ['-e', '[BC] == "ACGT" || [BC] == "AATTCCGG"'], 0],
+        ['expr_mq50',  { min_map_qual => 50  },  ['-e', 'mapq >= 50' ], 0],
+        ['expr_mq99',  { min_map_qual => 99  },  ['-e', 'mapq >= 99' ], 0],
+        ['expr_mq100', { min_map_qual => 100 },  ['-e', 'mapq >= 100'], 0],
+        # TODO: add library to filter expression?  It needs to go via RG.
+        # TODO: add cigar.qbase and cigar.rbase counts for consumes
+        #  N bases of query and ref?  Not the same as qlen/rlen as
+        #  indels don't count the same.
         );
 
     my @filter_inputs = ([SAM  => $sam_with_ur],

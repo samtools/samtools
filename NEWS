@@ -1,6 +1,94 @@
 Release a.b
 -----------
 
+ * samtools flags now accepts any number of command line arguments,
+   allowing multiple SAM flag combinations to be converted at once. (PR #1401)
+
+
+Release 1.12 (17th March 2021)
+------------------------------
+
+ * The legacy samtools API (libbam.a, bam.h, sam.h, etc) has not been actively
+   maintained since 2015. It is deprecated and will be removed entirely in a
+   future SAMtools release. We recommend coding against the HTSlib API directly.
+
+ * I/O errors and record parsing errors during the reading of SAM/BAM/CRAM
+   files are now always detected. Thanks to John Marshall (#1379; fixed #101)
+
+ * New make targets have been added: check-all, test-all, distclean-all,
+   mostlyclean-all, testclean-all, which allow SAMtools installations to
+   call corresponding Makefile targets from embedded HTSlib installations.
+
+ * samtools --version now displays a summary of the compilation details and
+   available features, including flags, used libraries and enabled plugins
+   from HTSlib. As an alias, `samtools version` can also be used. (#1371)
+
+ * samtools stats now displays the number of supplementary reads in the
+   SN section. Also, supplementary reads are no longer considered when
+   splitting read pairs by orientation (inward, outward, other). (#1363)
+   
+ * samtools stats now counts only the filtered alignments that overlap
+   target regions, if any are specified. (#1363)
+
+ * samtools view now accepts option -N, which takes a file containing
+   read names of interest. This allows the output of only the reads with
+   names contained in the given file. Thanks to Daniel Cameron. (#1324)
+
+ * samtools view -d option now works without a tag associated value, which
+   allows it to output all the reads with the given tag. (#1339; fixed #1317)
+
+ * samtools view -d and -D options now accept integer and single character
+   values associated with tags, not just strings. Thanks to `@dariome` and
+   Keiran Raine for the suggestions. (#1357, #1392)
+
+ * samtools view now works with the filtering expressions introduced by HTSlib.
+   The filtering expression is passed to the program using the specific option
+   -e or the global long option --input-fmt-option. E.g.
+   `samtools view -e 'qname =~ "#49$" && mrefid != refid && refid != -1 && 
+    mrefid != -1' align.bam` looks for records with query-name ending in `#49`
+   that have their mate aligned in a different chromosome. More details can be
+   found in the FILTER EXPRESSIONS section of the main man page. (#1346)
+
+ * samtools markdup now benefits from an increase in performance in the
+   situation when a single read has tens or hundreds of thousands of duplicates.
+   Thanks to `@denriquez` for reporting the issue. (#1345; fixed #1325)
+
+ * The documentation for samtools ampliconstats has been added to the samtools
+   man page. (#1351)
+
+ * A new FASTA/FASTQ sanitizer script (`fasta-sanitize.pl`) was added, which
+   corrects the invalid characters in the reference names. (#1314) Thanks to
+   John Marshall for the installation fix. (#1353)
+
+ * The CI scripts have been updated to recurse the HTSlib submodules when
+   cloning HTSlib, to accommodate for the CRAM codecs, which now reside in the
+   htscodecs submodule. (#1359)
+
+ * The CI integrations now include Cirrus-CI rather than Travis. (#1335; #1365)
+
+ * Updated the Windows image used by Appveyor to 'Visual Studio 2019'.
+  (#1333; fixed #1332)
+
+ * Fixed a bug in samtools cat, which prevented the command from running in
+   multi-threaded mode. Thanks to Alex Leonard for reporting the issue.
+   (#1337; fixed #1336)
+
+ * A couple of invalid CIGAR strings have been corrected in the test data.
+   (#1343)
+
+ * The documentation for `samtools depth -s` has been improved.
+   Thanks to `@wulj2`. (#1355)
+
+ * Fixed a `samtools merge` segmentation fault when it failed to merge
+   header `@PG` records. Thanks to John Marshall.  (#1394; reported by
+   Kemin Zhou in #1393)
+
+ * Ampliconclip and ampliconstats now guard against the BED file
+   containing more than one reference (chromosome) and fail when
+   found.  Adding proper support for multiple references will appear
+   later.  (#1398)
+
+
 Release 1.11 (22nd September 2020)
 ----------------------------------
 
