@@ -71,6 +71,146 @@ static int bed_pair_sort(const void *av, const void *bv) {
 }
 
 
+int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash_t(bed_ref) *bed_lists) {
+    hFILE *fp;
+    int line_count = 0, ret;
+    int64_t left, right;
+    kstring_t line = KS_INITIALIZE;
+    bed_pair_list_t *list;
+    khiter_t bed_itr;
+
+    if ((fp = hopen(infile, "r")) == NULL) {
+        print_error_errno("ampliconclip", "unable to open file %s.", infile);
+        return 1;
+    }
+
+    char ref[256]; // FIXME long enough?
+
+    while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
+        line_count++;
+        int hret;
+        char strand;
+
+        if (line.l == 0 || *line.s == '#') continue;
+        if (strncmp(line.s, "track ", 6) == 0) continue;
+        if (strncmp(line.s, "browser ", 8) == 0) continue;
+
+        if (get_strand) {
+            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64" %*s %*s %c",
+                       ref, &left, &right, &strand) != 4) {
+                fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s.\n",
+                                    line_count, infile);
+                ret = 1;
+                goto error;
+            }
+        } else {
+            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64,
+                       ref, &left, &right) != 3) {
+                fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s",
+                                    line_count, infile);
+                ret = 1;
+                goto error;
+            }
+        }
+
+        bed_itr = kh_get(bed_ref, bed_lists, ref);
+
+        if (bed_itr == kh_end(bed_lists)) { // new ref entry
+            char *ref_name = strdup(ref); // need a copy for the hash key
+
+            if (!ref_name) {
+                fprintf(stderr, "[amplicon] error: unable to allocate memory for ref name.\n");
+                ret = 1;
+                goto error;
+            }
+
+            bed_itr = kh_put(bed_ref, bed_lists, ref_name, &hret); // FIXME ref needs to be a strdup somewhere
+
+            if (hret >= 0) {
+                list = &kh_val(bed_lists, bed_itr);
+
+                // initialise the new hash entry
+                memcpy(list->ref, ref, 256); // FIXME keep internal ref?
+                list->longest = 0;
+                list->size = 256;
+                list->length = 0;
+
+                if ((list->bp = malloc(list->size * sizeof(bed_pair_t))) == NULL) {
+                    fprintf(stderr, "[ampliconclip] error: unable to allocate memory for bed data.\n");
+                    ret = 1;
+                    goto error;
+                }
+            } else {
+                fprintf(stderr, "[amplicon] error: ref hashing failure.\n");
+                ret = 1;
+                goto error;
+            }
+        } else { // existing ref
+            list = &kh_val(bed_lists, bed_itr);
+
+            if (list->length == list->size) {
+                bed_pair_t *tmp;
+
+                list->size *= 2;
+
+                if ((tmp = realloc(list->bp, list->size * sizeof(bed_pair_t))) == NULL) {
+                    fprintf(stderr, "[ampliconclip] error: unable to allocate more memory for bed data.\n");
+                    ret = 1;
+                    goto error;
+                }
+
+                list->bp = tmp;
+            }
+        }
+
+        list->bp[list->length].left  = left;
+        list->bp[list->length].right = right;
+
+        if (get_strand) {
+            if (strand == '+') {
+                list->bp[list->length].rev = 0;
+            } else if (strand == '-') {
+                list->bp[list->length].rev = 1;
+            } else {
+                fprintf(stderr, "[amplicon] error: bad strand value in line %d, expecting '+' or '-', found '%c'.\n",
+                            line_count, strand);
+                ret = 1;
+                goto error;
+            }
+        }
+
+        if (right - left > list->longest)
+            list->longest = right - left;
+
+        list->length++;
+    }
+
+    if (sort_by_pos) {
+        for (bed_itr = kh_begin(bed_lists); bed_itr != kh_end(bed_lists); ++bed_itr) {
+            if (kh_exist(bed_lists, bed_itr)) {
+                list = &kh_val(bed_lists, bed_itr);
+                qsort(list->bp, list->length, sizeof(list->bp[0]), bed_pair_sort);
+            }
+        }
+    }
+
+    if (kh_size(bed_lists) > 0) {// any entries
+        ret = 0;
+    } else {
+        ret = 1;
+    }
+
+error:
+    ks_free(&line);
+
+    if (hclose(fp) != 0) {
+        fprintf(stderr, "[amplicon] warning: failed to close %s", infile);
+    }
+
+    return ret;
+}
+
+
 int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
                         bed_pair_list_t *pairs, int64_t *longest) {
     hFILE *fp;
@@ -599,18 +739,20 @@ static inline int tag_original_data(bam1_t *orig, kstring_t *oa_tag) {
 
 static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     clipping_type clipping, cl_param_t *param) {
-    int ret = 1, r, exclude = 0, file_open = 0;
+    int ret = 1, r, file_open = 0;
+
     bam_hdr_t *header = NULL;
     bam1_t *b = NULL, *b_tmp = NULL;
     long f_count = 0, r_count = 0, n_count = 0, l_count = 0, l_exclude = 0, b_count = 0;
     long filtered = 0, written = 0, failed = 0;
-    int64_t longest = 0;
     kstring_t str = KS_INITIALIZE;
     kstring_t oat = KS_INITIALIZE;
-    bed_pair_list_t sites = {NULL, 0, 0, {0}};
+    bed_pair_list_t *sites;
     FILE *stats_fp = stderr;
+    khash_t(bed_ref) *bed_hash = kh_init(bed_ref);
+    khiter_t itr;
 
-    if (load_bed_file_pairs(bedfile, param->use_strand, 1, &sites, &longest)) {
+    if (load_bed_file_multi_ref(bedfile, param->use_strand, 1, bed_hash)) {
         fprintf(stderr, "[ampliconclip] error: unable to load bed file.\n");
         goto fail;
     }
@@ -662,12 +804,23 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
         int is_rev;
         int p_size;
         int been_clipped  = 0, filter = 0;
+        int ref_found = 0;
+        int exclude = (BAM_FUNMAP | BAM_FQCFAIL);
+        khiter_t itr;
+        const char *ref_name;
 
         l_count++;
 
-        exclude |= (BAM_FUNMAP | BAM_FQCFAIL);
+        if ((ref_name = sam_hdr_tid2name(header, b->core.tid)) != NULL) {
+            itr = kh_get(bed_ref, bed_hash, ref_name);
 
-        if (!(b->core.flag & exclude)) {
+            if (itr != kh_end(bed_hash)) {
+                sites = &kh_val(bed_hash, itr);
+                ref_found = 1;
+            }
+        }
+
+        if (!(b->core.flag & exclude) && ref_found) {
             if (param->oa_tag)
                 if (tag_original_data(b, &oat))
                     goto fail;
@@ -681,7 +834,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     is_rev = 0;
                 }
 
-                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest))) {
                     if (is_rev) {
                         if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
                             goto fail;
@@ -726,7 +879,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                 pos = b->core.pos;
                 is_rev = 0;
 
-                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest))) {
                     if (bam_trim_left(b, b_tmp, p_size, clipping) != 0)
                         goto fail;
 
@@ -740,7 +893,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                 pos = bam_endpos(b);
                 is_rev = 1;
 
-                if ((p_size = matching_clip_site(&sites, pos, is_rev, param->use_strand, longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest))) {
                     if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
                         goto fail;
 
@@ -860,7 +1013,15 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     ret = 0;
 
 fail:
-    free(sites.bp);
+    for (itr = kh_begin(bed_hash); itr != kh_end(bed_hash); ++itr) {
+       if (kh_exist(bed_hash, itr)) {
+           free(kh_val(bed_hash, itr).bp);
+           free((char *)kh_key(bed_hash, itr));
+           kh_key(bed_hash, itr) = NULL;
+        }
+    }
+
+    kh_destroy(bed_ref, bed_hash);
     ks_free(&oat);
     sam_hdr_destroy(header);
     bam_destroy1(b);

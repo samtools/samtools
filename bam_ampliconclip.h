@@ -25,6 +25,8 @@ DEALINGS IN THE SOFTWARE.  */
 #ifndef BAM_AMPLICONCLIP_H
 #define BAM_AMPLICONCLIP_H
 
+#include "htslib/khash.h"
+
 typedef struct {
     int64_t left;
     int64_t right;
@@ -33,12 +35,20 @@ typedef struct {
 
 typedef struct {
     bed_pair_t *bp;
+    int64_t longest;
     int length;
     int size;
     char ref[256];
 } bed_pair_list_t;
 
+KHASH_MAP_INIT_STR(bed_ref, bed_pair_list_t);
+
+
 int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
                         bed_pair_list_t *pairs, int64_t *longest);
+
+int load_bed_file_multi_ref(char *infile, int get_strand,
+                        int sort_by_pos, khash_t(bed_ref) *bed_lists);
+
 
 #endif /* BAM_AMPLICONCLIP_H */
