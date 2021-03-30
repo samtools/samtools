@@ -523,20 +523,24 @@ static int accumulate_stats(astats_t *stats,
         stats->nfailprimer++;
 
     if (anum >= 0) {
-        stats->nreads[anum]++;
-        // NB: ref bases rather than read bases
-        stats->nbases[anum] +=
-            MIN(end,amp[anum].min_right+1) - MAX(start,amp[anum].max_left);
+        int64_t c = MIN(end,amp[anum].min_right+1) - MAX(start,amp[anum].max_left);
+        if (c > 0) {
+            stats->nreads[anum]++;
+            // NB: ref bases rather than read bases
+            stats->nbases[anum] += c;
 
-        int64_t i;
-        if (start < 0) start = 0;
-        if (end > args->max_len) end = args->max_len;
+            int64_t i;
+            if (start < 0) start = 0;
+            if (end > args->max_len) end = args->max_len;
 
-        int64_t ostart = MAX(start, amp[anum].min_left-1);
-        int64_t oend = MIN(end, amp[anum].max_right);
-        int64_t offset = amp[anum].min_left-1;
-        for (i = ostart; i < oend; i++)
-            stats->coverage[anum*stats->max_amp_len + i-offset]++;
+            int64_t ostart = MAX(start, amp[anum].min_left-1);
+            int64_t oend = MIN(end, amp[anum].max_right);
+            int64_t offset = amp[anum].min_left-1;
+            for (i = ostart; i < oend; i++)
+                stats->coverage[anum*stats->max_amp_len + i-offset]++;
+        } else {
+            stats->nfailprimer++;
+        }
     }
 
     // Template length in terms of amplicon number to amplicon number.
@@ -864,8 +868,10 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
         fprintf(ofp, "CREADS\tSTDDEV");
         for (i = 0; i < namp; i++) {
             double n1 = stats->nreads[i];
-            fprintf(ofp, "\t%.1f", sqrt(stats->nreads2[i]/(double)nfile
-                                        - (n1/nfile)*(n1/nfile)));
+            fprintf(ofp, "\t%.1f", nfile > 1 && stats->nreads2[i] > 0
+                    ? sqrt(stats->nreads2[i]/(double)nfile
+                           - (n1/nfile)*(n1/nfile))
+                    : 0);
         }
         fprintf(ofp, "\n");
     }
@@ -896,7 +902,7 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
             // variance = SUM(X^2) - ((SUM(X)^2) / N)
             double n1 = stats->nrperc[i];
             double v = stats->nrperc2[i]/nfile - (n1/nfile)*(n1/nfile);
-            fprintf(ofp, "\t%.3f", sqrt(v));
+            fprintf(ofp, "\t%.3f", v>0?sqrt(v):0);
         }
         fprintf(ofp, "\n");
     }
@@ -928,7 +934,7 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
             double n1 = stats->nbases[i] / alen;
             double v = stats->nbases2[i] / (alen*alen) /nfile
                 - (n1/nfile)*(n1/nfile);
-            fprintf(ofp, "\t%.1f", sqrt(v));
+            fprintf(ofp, "\t%.1f", v>0?sqrt(v):0);
         }
         fprintf(ofp, "\n");
     }
@@ -975,7 +981,7 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
             for (i = 0; i < namp; i++) {
                 double n1 = stats->covered_perc[i][d] / nfile;
                 double v = stats->covered_perc2[i][d] / nfile - n1*n1;
-                fprintf(ofp, "\t%.1f", sqrt(v));
+                fprintf(ofp, "\t%.1f", v>0?sqrt(v):0);
             }
             fprintf(ofp, "\n");
         } while (++d < MAX_DEPTH && args->min_depth[d]);
