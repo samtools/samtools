@@ -360,9 +360,11 @@ static bool init(const parsed_opts_t* opts, state_t** state_out) {
         // Check does not already exist
         kstring_t hdr_line = { 0, 0, NULL };
         if (sam_hdr_find_line_id(retval->output_header, "RG", "ID", opts->rg_id, &hdr_line) == 0) {
-            fprintf(stderr, "[init] ID of new RG line specified conflicts with that of an existing header RG line. Overwrite not yet implemented.\n");
-            free(hdr_line.s);
-            return false;
+            if(-1 == sam_hdr_remove_line_id(retval->output_header, "RG", "ID", opts->rg_id)){
+              fprintf(stderr, "[init] Error removing the same RG lines from the output header.\n");
+              free(hdr_line.s);
+              return false;
+            };
         }
         if (-1 == sam_hdr_add_lines(retval->output_header, opts->rg_line, strlen(opts->rg_line))) {
             fprintf(stderr, "[init] Error adding RG line with ID:%s to the output header.\n", opts->rg_id);
