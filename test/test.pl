@@ -3162,6 +3162,7 @@ sub test_addrprg
     test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r '\@RG\\tID:1#8\\tCN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
     test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all -R '1#8' $$opts{path}/addrprg/1_fixup.sam");
     test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r 'ID:1#8' -r 'CN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
+    test_cmd($opts,out=>'addrprg/5_editrg.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -w -r '\@RG\\tID:1#8\\tCN:Sanger\\tDS:Testing the editing code.' $$opts{path}/addrprg/1_fixup.sam");
 }
 
 sub test_markdup
