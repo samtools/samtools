@@ -4,6 +4,11 @@ Release a.b
  * samtools flags now accepts any number of command line arguments,
    allowing multiple SAM flag combinations to be converted at once. (PR #1401)
 
+ * samtools addreplacerg now allows for updating (replacing) an existing
+   `@RG` line in the output header, if a new `@RG` line is provided in the
+   command line, via the -r argument. The update still requires the user's
+   approval, which can be given with the new -w option.
+
 
 Release 1.12 (17th March 2021)
 ------------------------------
