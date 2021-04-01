@@ -75,7 +75,7 @@ typedef struct {
     sam_global_args ga;
     uint32_t flag_require;
     uint32_t flag_filter;
-    bed_pair_list_t sites;
+    bed_entry_list_t sites;
     int max_delta;   // Used for matching read to amplicon primer loc
     int min_depth[MAX_DEPTH]; // Used for coverage; must be >= min_depth deep
     int use_sample_name;
@@ -166,7 +166,7 @@ static void free_amp_pos_lookup(void) {
 // Assumption: input BED file alternates between LEFT and RIGHT primers
 // per amplicon, thus we can count the number based on the switching
 // orientation.
-static int count_amplicon(bed_pair_list_t *sites) {
+static int count_amplicon(bed_entry_list_t *sites) {
     int i, namp, last_rev = 0;
     for (i = namp = 0; i < sites->length; i++) {
         if (sites->bp[i].rev == 0 && last_rev)
@@ -184,7 +184,7 @@ static int count_amplicon(bed_pair_list_t *sites) {
 // Returns right most amplicon position on success,
 //         < 0 on error
 static int64_t bed2amplicon(astats_args_t *args,
-                            bed_pair_list_t *sites,
+                            bed_entry_list_t *sites,
                             amplicon_t *amp, int *namp) {
     int i, j;
     int64_t max_right = 0;
@@ -1360,7 +1360,7 @@ int main_ampliconstats(int argc, char **argv) {
         .ga = SAM_GLOBAL_ARGS_INIT,
         .flag_require = 0,
         .flag_filter = 0x10B04,
-        .sites = {NULL, 0, 0, 0, {0}},
+        .sites = BED_LIST_INIT,
         .max_delta = 30, // large enough to cope with alt primers
         .min_depth = {1},
         .use_sample_name = 0,
@@ -1453,7 +1453,7 @@ int main_ampliconstats(int argc, char **argv) {
         return usage(&oargs, stderr, EXIT_FAILURE);
 
     int64_t longest;
-    if (load_bed_file_pairs(argv[optind], 1, 0, &args.sites, &longest)) {
+    if (load_bed_file_entries(argv[optind], 1, 0, &args.sites, &longest)) {
         print_error_errno("ampliconstats",
                           "Could not read file \"%s\"", argv[optind]);
         return 1;

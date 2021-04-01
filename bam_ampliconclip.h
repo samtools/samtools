@@ -31,24 +31,28 @@ typedef struct {
     int64_t left;
     int64_t right;
     int rev;
-} bed_pair_t;
+} bed_entry_t;
 
 typedef struct {
-    bed_pair_t *bp;
+    bed_entry_t *bp;
     int64_t longest;
     int length;
     int size;
     char ref[256];
-} bed_pair_list_t;
+} bed_entry_list_t;
 
-KHASH_MAP_INIT_STR(bed_ref, bed_pair_list_t);
+KHASH_MAP_INIT_STR(bed_list_hash, bed_entry_list_t);
+
+#define BED_LIST_INIT {NULL, 0, 0, 0, {0}}
 
 
-int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
-                        bed_pair_list_t *pairs, int64_t *longest);
+int load_bed_file_entries(char *infile, int get_strand, int sort_by_pos,
+                        bed_entry_list_t *entries, int64_t *longest);
 
 int load_bed_file_multi_ref(char *infile, int get_strand,
-                        int sort_by_pos, khash_t(bed_ref) *bed_lists);
+                        int sort_by_pos, khash_t(bed_list_hash) *bed_lists);
+
+void destroy_bed_hash(khash_t(bed_list_hash) *hash);
 
 
 #endif /* BAM_AMPLICONCLIP_H */
