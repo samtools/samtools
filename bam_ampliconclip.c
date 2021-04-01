@@ -64,19 +64,19 @@ typedef struct {
 } cl_param_t;
 
 
-static int bed_pair_sort(const void *av, const void *bv) {
-    bed_pair_t *a = (bed_pair_t *) av;
-    bed_pair_t *b = (bed_pair_t *) bv;
+static int bed_entry_sort(const void *av, const void *bv) {
+    bed_entry_t *a = (bed_entry_t *) av;
+    bed_entry_t *b = (bed_entry_t *) bv;
     return a->right < b->right ? -1 : (a->right == b->right ? 0 : 1);
 }
 
 
-int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash_t(bed_ref) *bed_lists) {
+int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash_t(bed_list_hash) *bed_lists) {
     hFILE *fp;
     int line_count = 0, ret;
     int64_t left, right;
     kstring_t line = KS_INITIALIZE;
-    bed_pair_list_t *list;
+    bed_entry_list_t *list;
     khiter_t bed_itr;
 
     if ((fp = hopen(infile, "r")) == NULL) {
@@ -113,7 +113,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
             }
         }
 
-        bed_itr = kh_get(bed_ref, bed_lists, ref);
+        bed_itr = kh_get(bed_list_hash, bed_lists, ref);
 
         if (bed_itr == kh_end(bed_lists)) { // new ref entry
             char *ref_name = strdup(ref); // need a copy for the hash key
@@ -124,7 +124,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
                 goto error;
             }
 
-            bed_itr = kh_put(bed_ref, bed_lists, ref_name, &hret); // FIXME ref needs to be a strdup somewhere
+            bed_itr = kh_put(bed_list_hash, bed_lists, ref_name, &hret); // FIXME ref needs to be a strdup somewhere
 
             if (hret >= 0) {
                 list = &kh_val(bed_lists, bed_itr);
@@ -135,7 +135,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
                 list->size = 256;
                 list->length = 0;
 
-                if ((list->bp = malloc(list->size * sizeof(bed_pair_t))) == NULL) {
+                if ((list->bp = malloc(list->size * sizeof(bed_entry_t))) == NULL) {
                     fprintf(stderr, "[ampliconclip] error: unable to allocate memory for bed data.\n");
                     ret = 1;
                     goto error;
@@ -149,11 +149,11 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
             list = &kh_val(bed_lists, bed_itr);
 
             if (list->length == list->size) {
-                bed_pair_t *tmp;
+                bed_entry_t *tmp;
 
                 list->size *= 2;
 
-                if ((tmp = realloc(list->bp, list->size * sizeof(bed_pair_t))) == NULL) {
+                if ((tmp = realloc(list->bp, list->size * sizeof(bed_entry_t))) == NULL) {
                     fprintf(stderr, "[ampliconclip] error: unable to allocate more memory for bed data.\n");
                     ret = 1;
                     goto error;
@@ -189,7 +189,7 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
         for (bed_itr = kh_begin(bed_lists); bed_itr != kh_end(bed_lists); ++bed_itr) {
             if (kh_exist(bed_lists, bed_itr)) {
                 list = &kh_val(bed_lists, bed_itr);
-                qsort(list->bp, list->length, sizeof(list->bp[0]), bed_pair_sort);
+                qsort(list->bp, list->length, sizeof(list->bp[0]), bed_entry_sort);
             }
         }
     }
@@ -211,8 +211,23 @@ error:
 }
 
 
-int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
-                        bed_pair_list_t *pairs, int64_t *longest) {
+void destroy_bed_hash(khash_t(bed_list_hash) *hash) {
+    khiter_t itr;
+
+    for (itr = kh_begin(hash); itr != kh_end(hash); ++itr) {
+       if (kh_exist(hash, itr)) {
+           free(kh_val(hash, itr).bp);
+           free((char *)kh_key(hash, itr));
+           kh_key(hash, itr) = NULL;
+        }
+    }
+
+    kh_destroy(bed_list_hash, hash);
+}
+
+
+int load_bed_file_entries(char *infile, int get_strand, int sort_by_pos,
+                        bed_entry_list_t *entries, int64_t *longest) {
     hFILE *fp;
     int line_count = 0, ret;
     int64_t left, right;
@@ -224,15 +239,15 @@ int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
         return 1;
     }
 
-    pairs->size = 256;
+    entries->size = 256;
 
-    if ((pairs->bp = malloc(pairs->size * sizeof(bed_pair_t))) == NULL) {
+    if ((entries->bp = malloc(entries->size * sizeof(bed_entry_t))) == NULL) {
         fprintf(stderr, "[ampliconclip] error: unable to allocate memory for bed data.\n");
         ret = 1;
         goto error;
     }
 
-    *pairs->ref = 0;
+    *entries->ref = 0;
     char ref[256];
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
         line_count++;
@@ -251,21 +266,21 @@ int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
                 ret = 1;
                 goto error;
             }
-            if (*pairs->ref) {
-                if (strncmp(ref, pairs->ref, 256)) {
+            if (*entries->ref) {
+                if (strncmp(ref, entries->ref, 256)) {
                     fprintf(stderr, "[ampliconclip] error: "
                             "bed file contains more than one reference.\n");
                     ret = 1;
                     goto error;
                 }
             } else {
-                memcpy(pairs->ref, ref, 256);
+                memcpy(entries->ref, ref, 256);
             }
 
             if (strand == '+') {
-                pairs->bp[pairs->length].rev = 0;
+                entries->bp[entries->length].rev = 0;
             } else if (strand == '-') {
-                pairs->bp[pairs->length].rev = 1;
+                entries->bp[entries->length].rev = 1;
             } else {
                 fprintf(stderr, "[ampliconclip] error: bad strand value in line %d, expecting '+' or '-', found '%c'.\n",
                             line_count, strand);
@@ -280,44 +295,44 @@ int load_bed_file_pairs(char *infile, int get_strand, int sort_by_pos,
                 ret = 1;
                 goto error;
             }
-            if (*pairs->ref) {
-                if (strncmp(ref, pairs->ref, 256)) {
+            if (*entries->ref) {
+                if (strncmp(ref, entries->ref, 256)) {
                     fprintf(stderr, "[ampliconclip] error: "
                             "bed file contains more than one reference.\n");
                     ret = 1;
                     goto error;
                 }
             } else {
-                memcpy(pairs->ref, ref, 256);
+                memcpy(entries->ref, ref, 256);
             }
         }
 
-        if (pairs->length == pairs->size) {
-            bed_pair_t *tmp;
+        if (entries->length == entries->size) {
+            bed_entry_t *tmp;
 
-            pairs->size *= 2;
+            entries->size *= 2;
 
-            if ((tmp = realloc(pairs->bp, pairs->size * sizeof(bed_pair_t))) == NULL) {
+            if ((tmp = realloc(entries->bp, entries->size * sizeof(bed_entry_t))) == NULL) {
                 fprintf(stderr, "[ampliconclip] error: unable to allocate more memory for bed data.\n");
                 ret = 1;
                 goto error;
             }
 
-            pairs->bp = tmp;
+            entries->bp = tmp;
         }
 
-        pairs->bp[pairs->length].left  = left;
-        pairs->bp[pairs->length].right = right;
+        entries->bp[entries->length].left  = left;
+        entries->bp[entries->length].right = right;
         if (right - left > *longest)
             *longest = right - left;
 
-        pairs->length++;
+        entries->length++;
     }
 
     if (sort_by_pos)
-        qsort(pairs->bp, pairs->length, sizeof(pairs->bp[0]), bed_pair_sort);
+        qsort(entries->bp, entries->length, sizeof(entries->bp[0]), bed_entry_sort);
 
-    if (pairs->length)
+    if (entries->length)
         ret = 0;
     else
         ret = 1;
@@ -328,15 +343,15 @@ error:
         fprintf(stderr, "[ampliconclip] warning: failed to close %s", infile);
     }
     if (ret) {
-        free(pairs->bp);
-        pairs->bp = NULL;
+        free(entries->bp);
+        entries->bp = NULL;
     }
 
     return ret;
 }
 
 
-static int matching_clip_site(bed_pair_list_t *sites, hts_pos_t pos,
+static int matching_clip_site(bed_entry_list_t *sites, hts_pos_t pos,
                               int is_rev, int use_strand, int64_t longest) {
     int i, tol = 5, size;  // may need this to be variable
     int l = 0, mid = sites->length / 2, r = sites->length;
@@ -747,10 +762,9 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     long filtered = 0, written = 0, failed = 0;
     kstring_t str = KS_INITIALIZE;
     kstring_t oat = KS_INITIALIZE;
-    bed_pair_list_t *sites;
+    bed_entry_list_t *sites;
     FILE *stats_fp = stderr;
-    khash_t(bed_ref) *bed_hash = kh_init(bed_ref);
-    khiter_t itr;
+    khash_t(bed_list_hash) *bed_hash = kh_init(bed_list_hash);
 
     if (load_bed_file_multi_ref(bedfile, param->use_strand, 1, bed_hash)) {
         fprintf(stderr, "[ampliconclip] error: unable to load bed file.\n");
@@ -799,24 +813,32 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
         goto fail;
     }
 
+    int32_t last_tid = -1;
+    int ref_found = 0;
+
     while ((r = sam_read1(in, header, b)) >= 0) {
         hts_pos_t pos;
         int is_rev;
         int p_size;
         int been_clipped  = 0, filter = 0;
-        int ref_found = 0;
         int exclude = (BAM_FUNMAP | BAM_FQCFAIL);
         khiter_t itr;
-        const char *ref_name;
 
         l_count++;
 
-        if ((ref_name = sam_hdr_tid2name(header, b->core.tid)) != NULL) {
-            itr = kh_get(bed_ref, bed_hash, ref_name);
+        if (b->core.tid != last_tid) {
+            const char *ref_name;
 
-            if (itr != kh_end(bed_hash)) {
-                sites = &kh_val(bed_hash, itr);
-                ref_found = 1;
+            ref_found = 0;
+            last_tid = b->core.tid;
+
+            if ((ref_name = sam_hdr_tid2name(header, b->core.tid)) != NULL) {
+                itr = kh_get(bed_list_hash, bed_hash, ref_name);
+
+                if (itr != kh_end(bed_hash)) {
+                    sites = &kh_val(bed_hash, itr);
+                    ref_found = 1;
+                }
             }
         }
 
@@ -1013,15 +1035,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
     ret = 0;
 
 fail:
-    for (itr = kh_begin(bed_hash); itr != kh_end(bed_hash); ++itr) {
-       if (kh_exist(bed_hash, itr)) {
-           free(kh_val(bed_hash, itr).bp);
-           free((char *)kh_key(bed_hash, itr));
-           kh_key(bed_hash, itr) = NULL;
-        }
-    }
-
-    kh_destroy(bed_ref, bed_hash);
+    destroy_bed_hash(bed_hash);
     ks_free(&oat);
     sam_hdr_destroy(header);
     bam_destroy1(b);
