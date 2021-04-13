@@ -88,6 +88,10 @@ Required flags: skip reads with mask bits unset [null]
 .BI --ff,\ --excl-flags \ STR|INT
 Filter flags: skip reads with mask bits set
 [UNMAP,SECONDARY,QCFAIL,DUP]
+.TP
+.BI -d,\ --depth \ INT
+Maximum allowed coverage depth [1000000]. If 0, depth is set to the maximum
+integer value effectively removing any depth limit.
 
 .PP
 Output options:

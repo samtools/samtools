@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+ * samtools coverage now allows setting the maximum depth, using the -d/--depth
+   option. Also, the default maximum depth has been set to 1000000.
+
  * samtools flags now accepts any number of command line arguments,
    allowing multiple SAM flag combinations to be converted at once. (PR #1401)
 

@@ -24,7 +24,7 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 /* This program calculates coverage from multiple BAMs
- * simutaneously, to achieve random access and to use the BED interface.
+ * simultaneously, to achieve random access and to use the BED interface.
  * To compile this program separately, you may:
  *
  *   gcc -g -O2 -Wall -o bamcov -D_MAIN_BAMCOV coverage.c -lhts -lz
@@ -117,6 +117,9 @@ static int usage() {
             "  --rf <int|str>          required flags: skip reads with mask bits unset []\n"
             "  --ff <int|str>          filter flags: skip reads with mask bits set \n"
             "                                      [UNMAP,SECONDARY,QCFAIL,DUP]\n"
+            "  -d, --depth INT         maximum allowed coverage depth [1000000].\n"
+            "                          If 0, depth is set to the maximum integer value,\n"
+            "                          effectively removing any depth limit.\n"
             "Output options:\n"
             "  -m, --histogram         show histogram instead of tabular output\n"
             "  -A, --ascii             show only ASCII characters in histogram\n"
@@ -287,7 +290,7 @@ int main_coverage(int argc, char *argv[]) {
 
     int ret, tid = -1, old_tid = -1, pos, i, j;
 
-    int max_depth = 0;
+    int max_depth = 1000000;
     int opt_min_baseQ = 0;
     int opt_min_mapQ = 0;
     int opt_min_len = 0;
@@ -336,13 +339,14 @@ int main_coverage(int argc, char *argv[]) {
         {"n-bins", required_argument, NULL, 'w'},
         {"region", required_argument, NULL, 'r'},
         {"help", no_argument, NULL, 'h'},
+        {"depth", required_argument, NULL, 'd'},
         { NULL, 0, NULL, 0 }
     };
 
     // parse the command line
     int c;
     opterr = 0;
-    while ((c = getopt_long(argc, argv, "Ao:L:q:Q:hHw:r:b:m", lopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "Ao:L:q:Q:hHw:r:b:md:", lopts, NULL)) != -1) {
         switch (c) {
             case 1:
                 if ((required_flags = bam_str2flag(optarg)) < 0) {
@@ -356,6 +360,7 @@ int main_coverage(int argc, char *argv[]) {
             case 'L': opt_min_len = atoi(optarg); break;
             case 'q': opt_min_mapQ = atoi(optarg); break;
             case 'Q': opt_min_baseQ = atoi(optarg); break;
+            case 'd': max_depth = atoi(optarg); break; // maximum coverage depth
             case 'w': opt_n_bins = atoi(optarg); opt_full_width = false;
                       opt_print_histogram = true; opt_print_tabular = false;
                       break;
