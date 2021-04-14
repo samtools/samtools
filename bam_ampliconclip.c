@@ -80,11 +80,11 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
     khiter_t bed_itr;
 
     if ((fp = hopen(infile, "r")) == NULL) {
-        print_error_errno("ampliconclip", "unable to open file %s.", infile);
+        print_error_errno("amplicon", "unable to open file %s.", infile);
         return 1;
     }
 
-    char ref[256]; // FIXME long enough?
+    char ref[1024];
 
     while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
         line_count++;
@@ -96,17 +96,19 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
         if (strncmp(line.s, "browser ", 8) == 0) continue;
 
         if (get_strand) {
-            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64" %*s %*s %c",
+            if (sscanf(line.s, "%1023s %"SCNd64" %"SCNd64" %*s %*s %c",
                        ref, &left, &right, &strand) != 4) {
-                fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s.\n",
+                fprintf(stderr, "[amplicon] error: bad bed file format in line %d of %s.\n"
+                                "(N.B. ref/chrom name limited to 1023 characters.)\n",
                                     line_count, infile);
                 ret = 1;
                 goto error;
             }
         } else {
-            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64,
+            if (sscanf(line.s, "%1023s %"SCNd64" %"SCNd64,
                        ref, &left, &right) != 3) {
-                fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s",
+                fprintf(stderr, "[amplicon] error: bad bed file format in line %d of %s\n"
+                                "(N.B. ref/chrom name limited to 1023 characters.)\n",
                                     line_count, infile);
                 ret = 1;
                 goto error;
@@ -124,22 +126,16 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
                 goto error;
             }
 
-            bed_itr = kh_put(bed_list_hash, bed_lists, ref_name, &hret); // FIXME ref needs to be a strdup somewhere
+            bed_itr = kh_put(bed_list_hash, bed_lists, ref_name, &hret);
 
-            if (hret >= 0) {
+            if (hret > 0) {
                 list = &kh_val(bed_lists, bed_itr);
 
                 // initialise the new hash entry
-                memcpy(list->ref, ref, 256); // FIXME keep internal ref?
                 list->longest = 0;
-                list->size = 256;
+                list->size = 0;
                 list->length = 0;
-
-                if ((list->bp = malloc(list->size * sizeof(bed_entry_t))) == NULL) {
-                    fprintf(stderr, "[ampliconclip] error: unable to allocate memory for bed data.\n");
-                    ret = 1;
-                    goto error;
-                }
+                list->bp = NULL;
             } else {
                 fprintf(stderr, "[amplicon] error: ref hashing failure.\n");
                 ret = 1;
@@ -147,20 +143,20 @@ int load_bed_file_multi_ref(char *infile, int get_strand, int sort_by_pos, khash
             }
         } else { // existing ref
             list = &kh_val(bed_lists, bed_itr);
+        }
 
-            if (list->length == list->size) {
-                bed_entry_t *tmp;
+        if (list->length == list->size) {
+           bed_entry_t *tmp;
 
-                list->size *= 2;
+           list->size += list->size / 2 + 256;
 
-                if ((tmp = realloc(list->bp, list->size * sizeof(bed_entry_t))) == NULL) {
-                    fprintf(stderr, "[ampliconclip] error: unable to allocate more memory for bed data.\n");
-                    ret = 1;
-                    goto error;
-                }
+           if ((tmp = realloc(list->bp, list->size * sizeof(bed_entry_t))) == NULL) {
+               fprintf(stderr, "[amplicon] error: unable to allocate more memory for bed data.\n");
+               ret = 1;
+               goto error;
+           }
 
-                list->bp = tmp;
-            }
+           list->bp = tmp;
         }
 
         list->bp[list->length].left  = left;
