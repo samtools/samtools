@@ -1,6 +1,6 @@
 # Summary statistics, used for scaling the plots.
-SS	Number of amplicons:	2
 SS	Number of files:	4
+SS	Number of amplicons:	2
 SS	Reference length:	800
 SS	End of summary
 # Amplicon locations from BED file.
