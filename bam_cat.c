@@ -270,22 +270,8 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
 
         // Copy contains and blocks within them
         while ((c = cram_read_container(in_c))) {
-            cram_block *blk;
-
-           if (cram_container_is_empty(in_c)) {
-                if (cram_write_container(out_c, c) != 0)
-                    return -1;
-
-                // Container compression header
-                if (!(blk = cram_read_block(in_c)))
-                    return -1;
-                if (cram_write_block(out_c, blk) != 0) {
-                    cram_free_block(blk);
-                    return -1;
-                }
-                cram_free_block(blk);
+            if (cram_container_is_empty(in_c)) {
                 cram_free_container(c);
-
                 continue;
             }
 
@@ -297,6 +283,7 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
                 cram_transcode_rg(in_c, out_c, c, 1, &zero, &new_rg);
             } else {
                 int32_t num_slices;
+                cram_block *blk;
 
                 // Not switching rg so do the usual read/write loop
                 if (cram_write_container(out_c, c) != 0)
