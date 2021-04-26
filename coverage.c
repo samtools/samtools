@@ -1,7 +1,7 @@
 /* coverage.c -- samtools coverage subcommand
 
     Copyright (C) 2018,2019 Florian Breitwieser
-    Portions copyright (C) 2019-2020 Genome Research Ltd.
+    Portions copyright (C) 2019-2021 Genome Research Ltd.
 
     Author: Florian P Breitwieser <florian.bw@gmail.com>
 
@@ -89,7 +89,7 @@ typedef struct {  // auxiliary data structure to hold a BAM file
 // LOWER ONE EIGHTH BLOCK … FULL BLOCK
 static const char *const BLOCK_CHARS8[8] = {"\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"};
 // In some terminals / with some fonts not all UTF8 block characters are supported (e.g. Putty). Use only half and full block for those
-static const char *const BLOCK_CHARS2[2] = {"\u2584", "\u2588"};
+static const char *const BLOCK_CHARS2[2] = {".", ":"};
 
 #else
 
@@ -100,7 +100,7 @@ static const char *const BLOCK_CHARS8[8] = {
     "\xE2\x96\x81", "\xE2\x96\x82", "\xE2\x96\x83", "\xE2\x96\x84",
     "\xE2\x96\x85", "\xE2\x96\x86", "\xE2\x96\x87", "\xE2\x96\x88" };
 
-static const char *const BLOCK_CHARS2[2] = {"\xE2\x96\x84", "\xE2\x96\x88"};
+static const char *const BLOCK_CHARS2[2] = {".", ":"};
 
 #endif
 
@@ -235,7 +235,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
         } else {
             fprintf(file_out, ">%7.2f%% ", current_bin);
         }
-        fprintf(file_out, VERTICAL_LINE);
+        fprintf(file_out, full_utf ? VERTICAL_LINE : "|");
         for (col = 0; col < hist_size; ++col) {
             // get the difference in eights, or halfs when full UTF8 is not supported
             int cur_val_diff = round(blockchar_len * (hist_data[col] - current_bin) / row_bin_size) - 1;
@@ -248,7 +248,7 @@ void print_hist(FILE *file_out, const sam_hdr_t *h, const stats_aux_t *stats, in
                 fprintf(file_out, "%s", BLOCK_CHARS[cur_val_diff]);
             }
         }
-        fprintf(file_out, VERTICAL_LINE);
+        fprintf(file_out, full_utf ? VERTICAL_LINE : "|");
         fputc(' ', file_out);
         switch (i) {
             case 9: fprintf(file_out, "Number of reads: %i", stats[tid].n_selected_reads); break;
@@ -633,10 +633,7 @@ int main_coverage(int argc, char *argv[]) {
         }
     }
 
-    if (ret < 0) {
-        print_error("coverage", "error reading from input file");
-        status = EXIT_FAILURE;
-    }
+    if (ret < 0) status = EXIT_FAILURE;
 
 coverage_end:
     if (n_plp) free(n_plp);

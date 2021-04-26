@@ -97,7 +97,8 @@ Output options:
 Show histogram instead of tabular output.
 .TP
 .BI -A,\ --ascii
-Show only ASCII characters in histogram.
+Show only ASCII characters in histogram using colon and fullstop for
+full and half height characters.
 .TP
 .BI -o,\ --output \ FILE
 Write output to FILE [stdout].
@@ -133,16 +134,16 @@ characters replaced by "#" for rendering in this man page.
 samtools coverage -A -w 32 -r chr1:1M-12M input.bam
 
 chr1 (249.25Mbp)
->  24.19% | #                              | Number of reads: 528695
->  21.50% |##                              |     (132000 filtered)
->  18.81% |##                              | Covered bases:   1.07Mbp
->  16.12% |##                           #  | Percent covered: 9.727%
->  13.44% |##  #  #       ##            # #| Mean coverage:   3.5x
->  10.75% |## ##  #       ##          # # #| Mean baseQ:      34.4
->   8.06% |#####  #       ##        # # # #| Mean mapQ:       55.8
->   5.37% |##### ##      ###      # ##### #| 
->   2.69% |##### ###     ###  ### #########| Histo bin width: 343.8Kbp
->   0.00% |############ ###################| Histo max bin:   26.873%
+>  24.19% | .                              | Number of reads: 528695
+>  21.50% |::                              |     (132000 filtered)
+>  18.81% |::                              | Covered bases:   1.07Mbp
+>  16.12% |::                           :  | Percent covered: 9.727%
+>  13.44% |::  :  .       ::            : :| Mean coverage:   3.5x
+>  10.75% |:: ::  :       ::          : : :| Mean baseQ:      34.4
+>   8.06% |:::::  :       ::        : : : :| Mean mapQ:       55.8
+>   5.37% |::::: ::      :::      : ::::: :| 
+>   2.69% |::::: :::     :::  ::: :::::::::| Histo bin width: 343.8Kbp
+>   0.00% |:::::::::::. :::::::::::::::::::| Histo max bin:   26.873%
         1.00M     4.44M     7.87M       12.00M 
 .EE
 
