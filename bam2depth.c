@@ -1,9 +1,11 @@
 /*  bam2depth.c -- depth subcommand.
 
     Copyright (C) 2011, 2012 Broad Institute.
-    Copyright (C) 2012-2016, 2018, 2019-2020 Genome Research Ltd.
+    Copyright (C) 2012-2016, 2018, 2019-2021 Genome Research Ltd.
 
-    Author: Heng Li <lh3@sanger.ac.uk>
+    Author: Heng Li <lh3@sanger.ac.uk> (to 2020)
+    Author: James Bonfield <jkb@sanger.ac.uk> (2021 rewrite)
+    
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -41,377 +43,883 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "bedidx.h"
 #include "sam_opts.h"
+#include "htslib/khash.h"
 
-typedef struct {     // auxiliary data structure
-    samFile *fp;     // the file handle
-    sam_hdr_t *hdr;  // the file header
-    hts_itr_t *iter; // NULL if a region not specified
-    int min_mapQ, min_len; // mapQ filter; length filter
-    uint32_t flags;  // read filtering flags
-} aux_t;
+// From bam_plcmd.c
+int read_file_list(const char *file_list, int *n, char **argv[]);
 
-// This function reads a BAM alignment from one BAM file.
-static int read_bam(void *data, bam1_t *b) // read level filters better go here to avoid pileup
-{
-    aux_t *aux = (aux_t*)data; // data in fact is a pointer to an auxiliary structure
-    int ret;
-    while (1)
-    {
-        ret = aux->iter? sam_itr_next(aux->fp, aux->iter, b) : sam_read1(aux->fp, aux->hdr, b);
-        if ( ret<0 ) break;
-        if ( b->core.flag & aux->flags ) continue;
-        if ( (int)b->core.qual < aux->min_mapQ ) continue;
-        if ( aux->min_len && bam_cigar2qlen(b->core.n_cigar, bam_get_cigar(b)) < aux->min_len ) continue;
-        break;
+// We accumulate to hist[pos & (size-1)].  This is a ring-buffer.
+// We track where we last got to in output and what the biggest value
+// we've written to so far (in absolute unmasked coordinates) in
+// "last_output" and "end_pos" respectively.
+// For each new record we just flush anything we haven't written yet
+// already, between "last_output" and this read's start position, and
+// initialise any newly seen positions between "end_pos" and this read's
+// end position.
+typedef struct {
+    size_t size;
+    int **hist;         // hist[nfiles][size]
+    hts_pos_t *end_pos; // end_pos[nfiles]
+    hts_pos_t last_output;
+    int last_ref;
+    int nfiles;
+    const char *ref;
+    kstring_t ks;
+    hts_pos_t beg, end; // limit to region
+    int tid;
+} depth_hist;
+
+typedef struct {
+    int header;
+    int flag;
+    int min_qual;
+    int min_mqual;
+    int min_len;
+    int skip_del;
+    int all_pos;
+    int remove_overlaps;
+    FILE *out;
+    char *reg;
+    void *bed;
+} depth_opt;
+
+static void zero_region(depth_opt *opt, depth_hist *dh,
+                        const char *name, hts_pos_t start, hts_pos_t end) {
+    hts_pos_t i;
+    kstring_t *ks = &dh->ks;
+
+    kputs(name, ks_clear(ks));
+    kputc('\t', ks);
+    size_t cur_l = ks->l;
+    if (dh->beg >= 0 && start < dh->beg)
+        start = dh->beg;
+    if (dh->end >= 0 && end > dh->end)
+        end = dh->end;
+
+    for (i = start; i < end; i++) {
+        // Could be optimised, but needs better API to skip to next
+        // bed region.
+        if (opt->bed && bed_overlap(opt->bed, name, i, i+1) == 0)
+            continue;
+
+        ks->l = cur_l;
+        kputll(i+1,  ks);
+        int n;
+        for (n = 0; n < dh->nfiles; n++) {
+            kputc_('\t', ks);
+            kputc_('0',  ks);
+        }
+        kputc('\n',  ks);
+        fputs(ks->s, opt->out);
     }
+    ks->l = cur_l;
+}
+
+// Adds the depth for a single read to a depth_hist struct.
+// For just one file, this is easy.  We just have a circular buffer
+// where we increment values for bits that overlap existing data
+// and initialise values for coordinates which we're seeing for the first
+// time.  This is tracked by "end_pos" to know where we've got to.
+//
+// As the input is sorted, we can flush output from "last_output" to
+// b->core.pos.
+//
+// With multiple files, we must feed data in sorted order as if all files
+// are merged, but track depth per file.  This also means "end_pos" is per
+// file too, but "last_output" is global as it corresponds to rows printed.
+static int add_depth(depth_opt *opt, depth_hist *dh, sam_hdr_t *h, bam1_t *b,
+                     int overlap_clip, int file) {
+    hts_pos_t i;
+    size_t hmask = dh->size-1;
+    int n;
+
+    if (!b || b->core.tid != dh->last_ref) {
+        // New ref
+        if (dh->last_ref >= 0) {
+            // do end
+            size_t cur_l = dh->ks.l;
+            int nf = dh->nfiles;
+            i = dh->last_output;
+            for (i = dh->last_output; nf; i++) {
+                nf = 0;
+                for (n = 0; n < dh->nfiles; n++) {
+                    if (i < dh->end_pos[n])
+                        nf++;
+                }
+                if (!nf)
+                    break;
+
+                if (opt->bed && bed_overlap(opt->bed, dh->ref, i, i+1) == 0)
+                    continue;
+
+                dh->ks.l = cur_l;
+                kputll(i+1, &dh->ks);
+                for (n = 0; n < dh->nfiles; n++) {
+                    kputc_('\t', &dh->ks);
+                    int d = i < dh->end_pos[n]
+                        ? dh->hist[n][i & hmask]
+                        : 0;
+                    kputuw(d, &dh->ks);
+                }
+                kputc('\n', &dh->ks);
+                fputs(dh->ks.s, opt->out);
+            }
+            if (opt->all_pos) {
+                // End of last ref
+                zero_region(opt, dh,
+                            sam_hdr_tid2name(h, dh->last_ref),
+                            i, sam_hdr_tid2len(h, dh->last_ref));
+            }
+            dh->ks.l = cur_l;
+        }
+
+        if (opt->all_pos > 1 && !opt->reg) {
+            // Any previous unused refs
+            int lr = dh->last_ref < 0 ? 0 : dh->last_ref+1;
+            int rr = b ? b->core.tid : sam_hdr_nref(h), r;
+            for (r = lr; r < rr; r++)
+                zero_region(opt, dh,
+                            sam_hdr_tid2name(h, r),
+                            0, sam_hdr_tid2len(h, r));
+        }
+
+        if (!b) {
+            // we're just flushing to end of file
+            if (opt->all_pos && opt->reg && dh->last_ref < 0)
+                // -a or -aa without a single read being output yet
+                zero_region(opt, dh, sam_hdr_tid2name(h, dh->tid), dh->beg,
+                            MIN(dh->end, sam_hdr_tid2len(h, dh->tid)));
+
+            return 0;
+        }
+
+        for (n = 0; dh->end_pos && n < dh->nfiles; n++)
+            dh->end_pos[n] = 0;
+        dh->last_output = dh->beg >= 0
+            ? MAX(b->core.pos, dh->beg)
+            : b->core.pos;
+        dh->last_ref = b->core.tid;
+        dh->ref = sam_hdr_tid2name(h, b->core.tid);
+        kputs(dh->ref, ks_clear(&dh->ks));
+        kputc('\t', &dh->ks);
+
+        if (opt->all_pos)
+            // Start of ref
+            zero_region(opt, dh, dh->ref, 0, b->core.pos);
+    } else {
+        if (dh->last_output < b->core.pos) {
+            // Flush any depth outputs up to start of new read
+            size_t cur_l = dh->ks.l;
+            int nf = dh->nfiles;
+            for (i = dh->last_output; i < b->core.pos; i++) {
+                nf = 0;
+                for (n = 0; n < dh->nfiles; n++) {
+                    if (i < dh->end_pos[n])
+                        nf++;
+                }
+                if (!nf)
+                    break;
+
+                if (opt->bed && bed_overlap(opt->bed, dh->ref, i, i+1) == 0)
+                    continue;
+
+                dh->ks.l = cur_l;
+                kputll(i+1, &dh->ks);
+                for (n = 0; n < dh->nfiles; n++) {
+                    kputc_('\t', &dh->ks);
+                    int d = i < dh->end_pos[n]
+                        ? dh->hist[n][i & hmask]
+                        : 0;
+                    kputuw(d, &dh->ks);
+                }
+                kputc('\n', &dh->ks);
+                fputs(dh->ks.s, opt->out);
+            }
+            if (opt->all_pos && i < b->core.pos)
+                // Hole in middle of ref
+                zero_region(opt, dh, dh->ref, i, b->core.pos);
+
+            dh->ks.l = cur_l;
+            dh->last_output = b->core.pos;
+        }
+    }
+
+    hts_pos_t end_pos = bam_endpos(b); // 0 based, 1 past end.
+    //printf("%d %d\n", (int)b->core.pos+1, (int)end_pos);
+
+    if (b->core.tid < dh->last_ref ||
+        (dh->last_ref == b->core.tid && end_pos < dh->last_output)) {
+        print_error_errno("depth", "Data is not position sorted");
+        return -1;
+    }
+
+    // If needed, grow the circular buffer.
+    if (end_pos+1 - b->core.pos >= dh->size) {
+        size_t old_size = dh->size;
+        size_t old_hmask = hmask;
+        while (end_pos+1 - b->core.pos >= dh->size)
+            dh->size = dh->size ? 2*dh->size : 2048;
+        hmask = dh->size-1;
+        if (!dh->hist) {
+            dh->hist = calloc(dh->nfiles, sizeof(*dh->hist));
+            dh->end_pos = calloc(dh->nfiles, sizeof(*dh->end_pos));
+            if (!dh->hist || !dh->end_pos)
+                return -1;
+        }
+        for (n = 0; n < dh->nfiles; n++) {
+            int *hist = calloc(dh->size, sizeof(*dh->hist[n]));
+            if (!hist)
+                return -1;
+
+            // Simple approach for now; copy over old histogram verbatim.
+            for (i = dh->last_output; i < dh->last_output + old_size; i++)
+                hist[i & hmask] = dh->hist[n][i & old_hmask];
+            free(dh->hist[n]);
+            dh->hist[n] = hist;
+        }
+    }
+
+    // Accumulate depth, based on CIGAR
+    uint32_t *cig = bam_get_cigar(b);
+    int ncig = b->core.n_cigar, j, k, spos = 0;
+
+    // Zero new (previously unseen) coordinates so increment works later.
+    // FIXME: do this for all files so output is easy,
+    // or do one file and check end_pos on each output line?
+    hts_pos_t end = MAX(dh->end_pos[file], b->core.pos);
+    if (end_pos > end && (end & hmask) < (end_pos & hmask)) {
+        memset(&dh->hist[file][end & hmask], 0,
+               sizeof(**dh->hist) * (end_pos - end));
+    } else {
+        for (i = end; i < end_pos; i++)
+            dh->hist[file][i & hmask] = 0;
+    }
+
+    i = b->core.pos;
+    uint8_t *qual = bam_get_qual(b);
+    int min_qual = opt->min_qual;
+    for (j = 0; j < ncig; j++) {
+        int op    = bam_cigar_op(cig[j]);
+        int oplen = bam_cigar_oplen(cig[j]);
+
+        switch (op) {
+        case BAM_CDEL:
+        case BAM_CREF_SKIP:
+            if (op != BAM_CDEL || opt->skip_del) {
+                // don't increment reference location
+                if (i + oplen >= dh->end_pos[file]) {
+                    for (k = 0; k < oplen; k++, i++) {
+                        if (i >= dh->end_pos[file])
+                            // redundant due to zero new elements above?
+                            dh->hist[file][i & hmask] = 0;
+                    }
+                } else {
+                    i += oplen;
+                }
+            } else { // op == BAM_CDEL and we count them (-J option),
+                // We don't incr spos here, but we still use qual.
+                // This doesn't make much sense, but it's for compatibility
+                // with the old code.  Arguably DEL shouldn't have a min
+                // qual and should always pass (as we've explicitly asked to
+                // include them).
+                int *hist = dh->hist[file];
+                k = 0;
+                if (overlap_clip) {
+                    if (i+oplen < overlap_clip) {
+                        i += oplen;
+                        break;
+                    } else if (i < overlap_clip) {
+                        k = overlap_clip - i;
+                        i = overlap_clip;
+                    }
+                }
+
+                // FIXME? should we even check quality values for DEL?
+                // We've explicitly asked to include them, and the quality
+                // is wrong anyway (it's the neighbouring base).  We do this
+                // for now for compatibility with the old depth command.
+
+                if (spos < b->core.l_qseq)
+                    for (; k < oplen; k++, i++)
+                        hist[i & hmask]+=qual[spos]>=min_qual;
+                else
+                    for (; k < oplen; k++, i++)
+                        hist[i & hmask]++;
+            }
+            break;
+
+        case BAM_CMATCH:
+        case BAM_CEQUAL:
+        case BAM_CDIFF:
+            if ((i & hmask) < ((i+oplen) & hmask)) {
+                // Optimisation when not wrapping around
+
+                // Unrolling doesn't help clang, but helps gcc,
+                // especially when not using -O3.
+                int *hist = &dh->hist[file][i & hmask];
+                if (min_qual || overlap_clip) {
+                    k = 0;
+                    if (overlap_clip) {
+                        if (i+oplen < overlap_clip) {
+                            i += oplen;
+                            spos += oplen;
+                            break;
+                        } else if (i < overlap_clip) {
+                            oplen -= overlap_clip - i;
+                            spos += overlap_clip - i;
+                            hist += overlap_clip - i;
+                            i = overlap_clip;
+                        }
+                    }
+
+                    // approx 50% of this func cpu time in this loop
+                    for (; k < (oplen & ~7); k+=8) {
+                        hist[k+0]+=qual[spos+0]>=min_qual;
+                        hist[k+1]+=qual[spos+1]>=min_qual;
+                        hist[k+2]+=qual[spos+2]>=min_qual;
+                        hist[k+3]+=qual[spos+3]>=min_qual;
+                        hist[k+4]+=qual[spos+4]>=min_qual;
+                        hist[k+5]+=qual[spos+5]>=min_qual;
+                        hist[k+6]+=qual[spos+6]>=min_qual;
+                        hist[k+7]+=qual[spos+7]>=min_qual;
+                        spos += 8;
+                    }
+                } else {
+                    // easier to vectorize when no min_qual
+                    for (k = 0; k < (oplen & ~7); k+=8) {
+                        hist[k+0]++;
+                        hist[k+1]++;
+                        hist[k+2]++;
+                        hist[k+3]++;
+                        hist[k+4]++;
+                        hist[k+5]++;
+                        hist[k+6]++;
+                        hist[k+7]++;
+                    }
+                    spos += k;
+                }
+                for (; k < oplen && spos < b->core.l_qseq; k++, spos++)
+                    hist[k]+=qual[spos]>=min_qual;
+                for (; k < oplen; k++, spos++)
+                    hist[k]++;
+                i += oplen;
+            } else {
+                // Simple to understand case, but slower.
+                // We use this only for reads with wrap-around.
+                int *hist = dh->hist[file];
+                k = 0;
+                if (overlap_clip) {
+                    if (i+oplen < overlap_clip) {
+                        i += oplen;
+                        break;
+                    } else if (i < overlap_clip) {
+                        oplen -= overlap_clip - i;
+                        spos += overlap_clip - i;
+                        i = overlap_clip;
+                    }
+                }
+                for (; k < oplen && spos < b->core.l_qseq; k++, i++, spos++)
+                    hist[i & hmask]+=qual[spos]>=min_qual;
+                for (; k < oplen; k++, i++, spos++)
+                    hist[i & hmask]++;
+            }
+            break;
+
+        case BAM_CINS:
+        case BAM_CSOFT_CLIP:
+            spos += oplen;
+            break;
+
+        case BAM_CPAD:
+        case BAM_CHARD_CLIP:
+            // ignore
+            break;
+
+        default:
+            print_error("depth", "Unsupported cigar op '%d'", op);
+            return -1;
+        }
+    }
+
+    if (dh->end >= 0 && end_pos > dh->end)
+        end_pos = dh->end;
+    if (dh->end_pos[file] < end_pos)
+        dh->end_pos[file] = end_pos;
+
+    return 0;
+}
+
+// Hash on name -> alignment end pos. This permits a naive overlap removal.
+// Note it cannot analyse the overlapping sequence and qualities, so the
+// interaction of basecalls/qualities and the -Q parameter cannot be
+// applied here (unlike the full mpileup algorithm).
+KHASH_MAP_INIT_STR(olap_hash, hts_pos_t)
+typedef khash_t(olap_hash) olap_hash_t;
+
+static int fastdepth_core(depth_opt *opt, uint32_t nfiles, char **fn,
+                          samFile **fp, hts_itr_t **itr, sam_hdr_t **h) {
+    int ret = -1, err = 1, i;
+    olap_hash_t **overlaps = NULL;
+    depth_hist dh = {0};
+
+    // An array of bam structs, one per input file, to hold the next entry
+    bam1_t **b = calloc(nfiles, sizeof(*b));
+    int *finished = calloc(nfiles, sizeof(*finished)), to_go = nfiles;
+    if (!b || !finished)
+        goto err;
+    
+    for (i = 0; i < nfiles; i++)
+        if (!(b[i] = bam_init1()))
+            goto err;
+
+    // Do we need one overlap hash per file? Or shared?
+    if (opt->remove_overlaps) {
+        if (!(overlaps = calloc(nfiles, sizeof(*overlaps))))
+            return -1;
+        for (i = 0; i < nfiles; i++) {
+            if (!(overlaps[i] = kh_init(olap_hash)))
+                return -1;
+        }
+    }
+
+    // Create the initial histogram
+    dh.nfiles = nfiles;
+    dh.size = 0;
+    dh.hist = NULL;
+    dh.last_ref = -99;
+    dh.end_pos = NULL;
+    dh.last_output = itr && itr[0] ? itr[0]->beg : 0;
+    ks_initialize(&dh.ks);
+
+    // Clip results to region if specified
+    dh.beg = -1;
+    dh.end = -1;
+    dh.tid = 0;
+    if (itr && itr[0]) {
+        dh.tid = itr[0]->tid;
+        dh.beg = itr[0]->beg;
+        dh.end = itr[0]->end;
+    }
+
+    if (opt->header) {
+        fprintf(opt->out, "#CHROM\tPOS");
+        for (i = 0; i < nfiles; i++)
+            fprintf(opt->out, "\t%s", fn[i]);
+        fputc('\n', opt->out);
+    }
+
+    // Populate first record per file
+    for (i = 0; i < nfiles; i++) {
+        for(;;) {
+            ret = itr && itr[i]
+                ? sam_itr_next(fp[i], itr[i], b[i])
+                : sam_read1(fp[i], h[i], b[i]);
+            if (ret < -1)
+                goto err;
+            if (ret == -1) {
+                to_go--;
+                finished[i] = 1;
+                break;
+            }
+
+            if (b[i]->core.tid < 0)
+                continue;
+            if (b[i]->core.flag & opt->flag)
+                continue;
+            if (b[i]->core.qual < opt->min_mqual)
+                continue;
+
+            // FIXME?  Should this be sequence length minus soft-clips?
+            // It doesn't seem useful to filter on sequence length.  Mapped
+            // sequence length would be more appropriate perhaps.
+            if (opt->min_len) {
+                int l_qseq = b[i]->core.l_qseq;
+                if (!l_qseq)
+                    l_qseq = bam_cigar2qlen(b[i]->core.n_cigar,
+                                            bam_get_cigar(b[i]));
+
+                if (l_qseq < opt->min_len)
+                    continue;
+            }
+
+            break;
+        }
+    }
+
+    // Loop through input files, merging in order so we're
+    // always adding the next record in sequence
+    while (to_go) {
+        // Find next record in file list
+        int best_tid = INT_MAX, best_file = 0;
+        hts_pos_t best_pos = HTS_POS_MAX;
+        
+        for (i = 0; i < nfiles; i++) {
+            if (finished[i])
+                continue;
+            if (best_tid > b[i]->core.tid) {
+                best_tid = b[i]->core.tid;
+                best_pos = b[i]->core.pos;
+                best_file = i;
+            } else if (best_tid == b[i]->core.tid &&
+                       best_pos > b[i]->core.pos) {
+                best_pos = b[i]->core.pos;
+                best_file = i;
+            }
+        }
+        i = best_file;
+
+        hts_pos_t clip = 0;
+        if (overlaps && (b[i]->core.flag & BAM_FPAIRED) &&
+            !(b[i]->core.flag & BAM_FMUNMAP)) {
+            khiter_t k = kh_get(olap_hash, overlaps[i], bam_get_qname(b[i]));
+            if (k == kh_end(overlaps[i])) {
+                // not seen before
+                hts_pos_t endpos = bam_endpos(b[i]);
+
+                // Don't add if mate location is known and can't overlap.
+                if (b[i]->core.mpos == -1 ||
+                    (b[i]->core.tid == b[i]->core.mtid &&
+                     b[i]->core.mpos <= endpos)) {
+                    k = kh_put(olap_hash, overlaps[i], bam_get_qname(b[i]),
+                               &ret);
+                    if (ret < 0)
+                        return -1;
+                    kh_key(overlaps[i], k) = strdup(bam_get_qname(b[i]));
+                    kh_value(overlaps[i], k) = endpos;
+                }
+            } else {
+                // seen before
+                clip = kh_value(overlaps[i], k);
+                free((char *)kh_key(overlaps[i], k));
+                kh_del(olap_hash, overlaps[i], k);
+            }
+        }
+
+        // Add the next merged BAM record to the depth plot
+        if ((ret = add_depth(opt, &dh, h[i], b[i], clip, i)) < 0) {
+            ret = -1;
+            goto err;
+        }
+
+        // Populate next record from this file
+        for(;!finished[i];) {
+            ret = itr && itr[i]
+                ? sam_itr_next(fp[i], itr[i], b[i])
+                : sam_read1(fp[i], h[i], b[i]);
+            if (ret < -1) {
+                ret = -1;
+                goto err;
+            }
+            if (ret == -1) {
+                to_go--;
+                finished[i] = 1;
+                break;
+            }
+
+            if (b[i]->core.tid < 0)
+                continue;
+            if (b[i]->core.flag & opt->flag)
+                continue;
+            if (b[i]->core.qual < opt->min_mqual)
+                continue;
+
+            if (opt->min_len) {
+                int l_qseq = b[i]->core.l_qseq;
+                if (!l_qseq)
+                    l_qseq = bam_cigar2qlen(b[i]->core.n_cigar,
+                                            bam_get_cigar(b[i]));
+
+                if (l_qseq < opt->min_len)
+                    continue;
+            }
+
+            break;
+        }
+    }
+
+    // Tidy up end.
+    ret = add_depth(opt, &dh, h[0], NULL, 0, 0);
+    err = 0;
+
+ err:
+    if (ret == 0 && err)
+        ret = -1;
+
+    for (i = 0; i < nfiles; i++) {
+        if (b[i])
+            bam_destroy1(b[i]);
+        if (dh.hist && dh.hist[i])
+            free(dh.hist[i]);
+    }
+    free(b);
+    free(finished);
+    ks_free(&dh.ks);
+    free(dh.hist);
+    free(dh.end_pos);
+    if (overlaps) {
+        khiter_t k;
+        for (i = 0; i < nfiles; i++) {
+            if (!overlaps[i])
+                continue;
+            for (k = kh_begin(overlaps[i]); k < kh_end(overlaps[i]); k++)
+                if (kh_exist(overlaps[i], k))
+                    free((char *)kh_key(overlaps[i], k));
+            kh_destroy(olap_hash, overlaps[i]);
+        }
+        free(overlaps);
+    }
+
     return ret;
 }
 
-int read_file_list(const char *file_list,int *n,char **argv[]);
-
-static int usage() {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Usage: samtools depth [options] in1.bam [in2.bam [...]]\n");
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr, "   -a                  output all positions (including zero depth)\n");
-    fprintf(stderr, "   -a -a (or -aa)      output absolutely all positions, including unused ref. sequences\n");
-    fprintf(stderr, "   -b <bed>            list of positions or regions\n");
-    fprintf(stderr, "   -X                  use customized index files\n");
-    fprintf(stderr, "   -f <list>           list of input BAM filenames, one per line [null]\n");
-    fprintf(stderr, "   -H                  print a file header\n");
-    fprintf(stderr, "   -l <int>            read length threshold (ignore reads shorter than <int>) [0]\n");
-    fprintf(stderr, "   -d/-m <int>         maximum coverage depth [8000]. If 0, depth is set to the maximum\n"
-                    "                       integer value, effectively removing any depth limit.\n");  // the htslib's default
-    fprintf(stderr, "   -o FILE             where to write output to [stdout]\n");
-    fprintf(stderr, "   -q <int>            base quality threshold [0]\n");
-    fprintf(stderr, "   -Q <int>            mapping quality threshold [0]\n");
-    fprintf(stderr, "   -r <chr:from-to>    region\n");
-    fprintf(stderr, "   -g <flags>          remove the specified flags from the set used to filter out reads\n");
-    fprintf(stderr, "   -G <flags>          add the specified flags to the set used to filter out reads\n"
-                    "                       The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704\n");
-    fprintf(stderr, "   -J                  include reads with deletions in depth computation\n");
-    fprintf(stderr, "   -s                  for the overlapping section of a read pair, count only the bases\n"
-                    "                       of a single read. This option will automatically raise the base quality\n"
-                    "                       threshold to at least 1.\n");
-
-    sam_global_opt_help(stderr, "-.--.--.");
-
-    fprintf(stderr, "\n");
-    fprintf(stderr, "The output is a simple tab-separated table with three columns: reference name,\n");
-    fprintf(stderr, "position, and coverage depth.  Note that positions with zero coverage may be\n");
-    fprintf(stderr, "omitted by default; see the -a option.\n");
-    fprintf(stderr, "\n");
-
-    return EXIT_FAILURE;
+static void usage_exit(FILE *fp, int exit_status)
+{
+    fprintf(fp, "Usage: samtools depth [options] in.bam [in.bam ...]\n");
+    fprintf(fp, "\nOptions:\n");
+    fprintf(fp, "  -a           Output all positions (including zero depth)\n");
+    fprintf(fp, "  -a -a, -aa   Output absolutely all positions, including unused ref seqs\n");
+    fprintf(fp, "  -r REG       Specify a region in chr or chr:from-to syntax\n");
+    fprintf(fp, "  -b FILE      Use bed FILE for list of regions\n");
+    fprintf(fp, "  -f FILE      Specify list of input BAM/SAM/CRAM filenames\n");
+    fprintf(fp, "  -X           Use custom index files (in -X *.bam *.bam.bai order)\n");
+    fprintf(fp, "  -g INT       Remove specified flags from default flag filter\n");
+    fprintf(fp, "  -G INT       Add specified flags to the default flag filter\n");
+    fprintf(fp, "  -H           Print a file header line\n");
+    fprintf(fp, "  -l INT       Minimum read length [0]\n");
+    fprintf(fp, "  -o FILE      Write output to FILE [stdout]\n");
+    fprintf(fp, "  -q INT       Minimum base quality [0]\n");
+    fprintf(fp, "  -Q INT       Minimum mapping quality [0]\n");
+    fprintf(fp, "  -H           Print a file header\n");
+    fprintf(fp, "  -J           Include reads with deletions in depth computation\n");
+    fprintf(fp, "  -s           Do not count overlapping reads within a template\n");
+    sam_global_opt_help(fp, "-.---@-.");
+    exit(exit_status);
 }
 
 int main_depth(int argc, char *argv[])
 {
-    int i, n, tid, reg_tid, *n_plp, baseQ = 0, mapQ = 0, min_len = 0, has_index_file = 0;
-    hts_pos_t beg, end, pos = -1, last_pos = -1;
-    int all = 0, status = EXIT_SUCCESS, nfiles, max_depth = -1;
-    const bam_pileup1_t **plp;
-    char *reg = 0; // specified region
-    void *bed = 0; // BED data structure
+    int nfiles, i;
+    samFile **fp;
+    sam_hdr_t **header;
+    int c, has_index_file = 0;
     char *file_list = NULL, **fn = NULL;
-    sam_hdr_t *h = NULL; // BAM header of the 1st input
-    aux_t **data;
-    bam_mplp_t mplp;
-    int last_tid = -1, ret;
-    int print_header = 0;
-    char *output_file = NULL;
-    FILE *file_out = stdout;
-    uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
-    int tflags = 0;
-    int inc_del = 0;
-    int overlap_init = 0;
+    depth_opt opt = {
+        .flag = BAM_FUNMAP | BAM_FSECONDARY | BAM_FDUP | BAM_FQCFAIL,
+        .min_qual = 0,
+        .min_mqual = 0,
+        .skip_del = 1,
+        .header = 0,
+        .min_len = 0,
+        .out = stdout,
+        .all_pos = 0,
+        .remove_overlaps = 0,
+        .reg = NULL,
+        .bed = NULL,
+    };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
-        { NULL, 0, NULL, 0 }
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', '-', '@'),
+        {NULL, 0, NULL, 0}
     };
 
-    // parse the command line
-    while ((n = getopt_long(argc, argv, "r:b:Xq:Q:l:f:am:d:Ho:g:G:Js", lopts, NULL)) >= 0) {
-        switch (n) {
-            case 'l': min_len = atoi(optarg); break; // minimum query length
-            case 'r': reg = strdup(optarg); break;   // parsing a region requires a BAM header
-            case 'b':
-                bed = bed_read(optarg); // BED or position list file can be parsed now
-                if (!bed) {
-                    print_error_errno("depth", "Could not read file \"%s\"", optarg);
-                    return EXIT_FAILURE;
-                }
+    while ((c = getopt_long(argc, argv, "@:q:Q:JHd:m:l:g:G:o:ar:Xf:b:s",
+                            lopts, NULL)) >= 0) {
+        switch (c) {
+        case 'a':
+            opt.all_pos++;
+            break;
+
+        case 'b':
+            opt.bed = bed_read(optarg);
+            if (!opt.bed) {
+                print_error_errno("depth", "Could not read file \"%s\"",
+                                  optarg);
+                return 1;
+            }
+            break;
+
+        case 'f':
+            file_list = optarg;
+            break;
+
+        case 'd':
+        case 'm':
+            // depth limit - now ignored
+            break;
+
+        case 'g':
+            opt.flag &= ~bam_str2flag(optarg);
+            break;
+        case 'G':
+            opt.flag |= bam_str2flag(optarg);
+            break;
+
+        case 'l':
+            opt.min_len = atoi(optarg);
+            break;
+
+        case 'H':
+            opt.header = 1;
+            break;
+
+        case 'q':
+            opt.min_qual = atoi(optarg);
+            break;
+        case 'Q':
+            opt.min_mqual = atoi(optarg);
+            break;
+
+        case 'J':
+            opt.skip_del = 0;
+            break;
+
+        case 'o':
+            if (opt.out != stdout)
                 break;
-            case 'X': has_index_file = 1; break;
-            case 'q': baseQ = atoi(optarg); break;   // base quality threshold
-            case 'Q': mapQ = atoi(optarg); break;    // mapping quality threshold
-            case 'f': file_list = optarg; break;
-            case 'a': all++; break;
-            case 'd': case 'm': max_depth = atoi(optarg); break; // maximum coverage depth
-            case 'H': print_header = 1; break;
-            case 'o': output_file = optarg; break;
-            case 'g':
-                tflags = bam_str2flag(optarg);
-                if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
-                    print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
-                    return 1;
-                }
-                flags &= ~tflags;
-                break;
-            case 'G':
-                tflags = bam_str2flag(optarg);
-                if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
-                    print_error_errno("depth", "Flag value \"%s\" is not supported", optarg);
-                    return 1;
-                }
-                flags |= tflags;
-                break;
-            case 'J': inc_del = 1; break;
-            case 's':
-                overlap_init = 1;
-                if (!baseQ) baseQ = 1;
-                break;
-            default:  if (parse_sam_global_opt(n, optarg, lopts, &ga) == 0) break;
-                      /* else fall-through */
-            case '?': return usage();
+            opt.out = fopen(optarg, "w");
+            if (!opt.out) {
+                print_error_errno("depth", "Cannot open \"%s\" for writing.",
+                                  optarg);
+                return EXIT_FAILURE;
+            }
+            break;
+
+        case 'r':
+            opt.reg = optarg;
+            break;
+
+        case 's':
+            opt.remove_overlaps = 1;
+            break;
+
+        case 'X':
+            has_index_file = 1;
+            break;
+
+        default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            /* else fall-through */
+        case '?':
+            usage_exit(stderr, EXIT_FAILURE);
         }
     }
-    if (optind == argc && !file_list)
-        return usage();
 
-    /* output file provided by user */
-    if (output_file != NULL && strcmp(output_file,"-")!=0) {
-        file_out = fopen( output_file, "w" );
-        if (file_out == NULL) {
-            print_error_errno("depth", "Cannot open \"%s\" for writing.", output_file);
-            return EXIT_FAILURE;
-        }
+    if (argc < optind+1 && !file_list) {
+        if (argc == optind)
+            usage_exit(stdout, EXIT_SUCCESS);
+        else
+            usage_exit(stderr, EXIT_FAILURE);
     }
 
-
-    // initialize the auxiliary data structures
-    if (file_list)
-    {
+    if (file_list) {
         if (has_index_file) {
             print_error("depth", "The -f option cannot be combined with -X");
             return 1;
         }
-        if ( read_file_list(file_list,&nfiles,&fn) ) return EXIT_FAILURE;
-        n = nfiles;
+        if (read_file_list(file_list, &nfiles, &fn))
+            return 1;
         argv = fn;
+        argc = nfiles;
         optind = 0;
+    } else {
+        nfiles = argc - optind;
     }
-    else if (has_index_file) { // Calculate # of input BAM files
-        if ((argc - optind) % 2 != 0) {
-            fprintf(stderr, "Error: Odd number of filenames detected! Each BAM file should have an index file\n");
+
+    if (has_index_file) {
+        if (nfiles%1) {
+            print_error("depth", "-X needs one index specified per bam file");
             return 1;
         }
-        n = (argc - optind) / 2;
-    } else {
-        n = argc - optind;
+        nfiles /= 2;
     }
-    data = calloc(n, sizeof(aux_t*)); // data[i] for the i-th input
-    reg_tid = 0; beg = 0; end = HTS_POS_MAX;  // set the default region
-
-    for (i = 0; i < n; ++i) {
-        int rf;
-        data[i] = calloc(1, sizeof(aux_t));
-        data[i]->fp = sam_open_format(argv[optind+i], "r", &ga.in); // open BAM
-        if (data[i]->fp == NULL) {
-            print_error_errno("depth", "Could not open \"%s\"", argv[optind+i]);
-            status = EXIT_FAILURE;
-            goto depth_end;
-        }
-        rf = SAM_FLAG | SAM_RNAME | SAM_POS | SAM_MAPQ | SAM_CIGAR | SAM_SEQ;
-        if (baseQ) rf |= SAM_QUAL;
-        if (hts_set_opt(data[i]->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
-            print_error_errno("depth", "Failed to set CRAM_OPT_REQUIRED_FIELDS value");
-            status = EXIT_FAILURE;
-            goto depth_end;
-        }
-        if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
-            print_error_errno("depth", "Failed to set CRAM_OPT_DECODE_MD value");
-            status = EXIT_FAILURE;
-            goto depth_end;
-        }
-        data[i]->min_mapQ = mapQ;                    // set the mapQ filter
-        data[i]->min_len  = min_len;                 // set the qlen filter
-        data[i]->hdr = sam_hdr_read(data[i]->fp);    // read the BAM header
-        if (data[i]->hdr == NULL) {
-            print_error_errno("depth", "Couldn't read header for \"%s\"",
-                              argv[optind+i]);
-            status = EXIT_FAILURE;
-            goto depth_end;
-        }
-        if (reg) { // if a region is specified
-            hts_idx_t *idx = NULL;
-            // If index filename has not been specified, look in the BAM folder
-            if (has_index_file) {
-                idx = sam_index_load2(data[i]->fp, argv[optind+i], argv[optind+i+n]);  // load the index
-            } else {
-                idx = sam_index_load(data[i]->fp, argv[optind+i]);
-            }
-            if (idx == NULL) {
-                print_error("depth", "can't load index for \"%s\"", argv[optind+i]);
-                status = EXIT_FAILURE;
-                goto depth_end;
-            }
-            data[i]->iter = sam_itr_querys(idx, data[i]->hdr, reg); // set the iterator
-            hts_idx_destroy(idx); // the index is not needed any more; free the memory
-            if (data[i]->iter == NULL) {
-                print_error("depth", "can't parse region \"%s\"", reg);
-                status = EXIT_FAILURE;
-                goto depth_end;
-            }
-        }
-        data[i]->flags = flags;
-    }
-    if (print_header) {
-        fputs("#CHROM\tPOS", file_out);
-        for (i = 0; i < n; ++i) {
-            fputc('\t', file_out);
-            fputs(argv[optind+i], file_out);
-            }
-        fputc('\n', file_out);
-        }
-    h = data[0]->hdr; // easy access to the header of the 1st BAM
-    if (reg) {
-        beg = data[0]->iter->beg; // and to the parsed region coordinates
-        end = data[0]->iter->end;
-        reg_tid = data[0]->iter->tid;
+    fp = malloc(nfiles * sizeof(*fp));
+    header = malloc(nfiles * sizeof(*header));
+    if (!fp || !header) {
+        print_error_errno("depth", "Out of memory");
+        return 1;
     }
 
-    // the core multi-pileup loop
-    mplp = bam_mplp_init(n, read_bam, (void**)data);
-    if (overlap_init && bam_mplp_init_overlaps(mplp) < 0) {
-        print_error("depth", "failed to init overlap detection\n");
-        status = EXIT_FAILURE;
-        goto depth_end;
-    }
-    if (0 < max_depth)
-        bam_mplp_set_maxcnt(mplp,max_depth);  // set maximum coverage depth
-    else if (!max_depth)
-        bam_mplp_set_maxcnt(mplp,INT_MAX);
-    n_plp = calloc(n, sizeof(int)); // n_plp[i] is the number of covering reads from the i-th BAM
-    plp = calloc(n, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
-    while ((ret=bam_mplp64_auto(mplp, &tid, &pos, n_plp, plp)) > 0) { // come to the next covered position
-        if (pos < beg || pos >= end) continue; // out of range; skip
-        if (tid >= sam_hdr_nref(h)) continue;     // diff number of @SQ lines per file?
-        if (all) {
-            while (tid > last_tid) {
-                if (last_tid >= 0 && !reg) {
-                    // Deal with remainder or entirety of last tid.
-                    while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
-                        // Horribly inefficient, but the bed API is an obfuscated black box.
-                        if (bed && bed_overlap(bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
-                            continue;
-                        fputs(sam_hdr_tid2name(h, last_tid), file_out);
-                        fprintf(file_out, "\t%"PRIhts_pos, last_pos+1);
-                        for (i = 0; i < n; i++)
-                            fputc('\t', file_out), fputc('0', file_out);
-                        fputc('\n', file_out);
-                    }
-                }
-                last_tid++;
-                last_pos = -1;
-                if (all < 2)
-                    break;
-            }
-
-            // Deal with missing portion of current tid
-            while (++last_pos < pos) {
-                if (last_pos < beg) continue; // out of range; skip
-                if (bed && bed_overlap(bed, sam_hdr_tid2name(h, tid), last_pos, last_pos + 1) == 0)
-                    continue;
-                fputs(sam_hdr_tid2name(h, tid), file_out);
-                fprintf(file_out, "\t%"PRIhts_pos, last_pos+1);
-                for (i = 0; i < n; i++)
-                    fputc('\t', file_out), fputc('0', file_out);
-                fputc('\n', file_out);
-            }
-
-            last_tid = tid;
-            last_pos = pos;
-        }
-        if (bed && bed_overlap(bed, sam_hdr_tid2name(h, tid), pos, pos + 1) == 0) continue;
-        fputs(sam_hdr_tid2name(h, tid), file_out);
-        fprintf(file_out, "\t%"PRIhts_pos, pos+1); // a customized printf() would be faster
-        for (i = 0; i < n; ++i) { // base level filters have to go here
-            int j, m = 0;
-            for (j = 0; j < n_plp[i]; ++j) {
-                const bam_pileup1_t *p = plp[i] + j; // DON'T modify plp[][] unless you really know
-                if ((!inc_del && p->is_del) || p->is_refskip) ++m; // having dels or refskips at tid:pos
-                else if (p->qpos < p->b->core.l_qseq &&
-                         bam_get_qual(p->b)[p->qpos] < baseQ) ++m; // low base quality
-            }
-            fprintf(file_out, "\t%d", n_plp[i] - m); // this the depth to output
-        }
-        fputc('\n', file_out);
-    }
-    free(n_plp); free(plp);
-    bam_mplp_destroy(mplp);
-
-    if (ret < 0) {
-        print_error("depth", "couldn't read from input file");
-        status = EXIT_FAILURE;
-        goto depth_end;
+    hts_itr_t **itr = NULL;
+    if (opt.reg) {
+        itr = calloc(nfiles, sizeof(*itr));
+        if (!itr)
+            return 1;
     }
 
-    if (all) {
-        // Handle terminating region
-        if (last_tid < 0 && reg) {
-            last_tid = reg_tid;
-            last_pos = beg-1;
+    for (i = 0; i < nfiles; i++, optind++) {
+        fp[i] = sam_open_format(argv[optind], "r", &ga.in);
+        if (fp[i] == NULL) {
+            print_error_errno("depth",
+                              "Cannot open input file \"%s\"", argv[optind]);
+            return 1;
         }
-        if (pos < 0 && all > 1 && last_tid < 0 && !reg) {
-           last_tid = 0;
+
+        if (ga.nthreads > 0)
+            hts_set_threads(fp[i], ga.nthreads);
+
+        if (hts_set_opt(fp[i], CRAM_OPT_REQUIRED_FIELDS,
+                        SAM_FLAG | SAM_RNAME | SAM_POS | SAM_CIGAR
+                        | (opt.remove_overlaps ? SAM_QNAME|SAM_RNEXT|SAM_PNEXT
+                                               : 0)
+                        | (opt.min_mqual       ? SAM_MAPQ  : 0)
+                        | (opt.min_len         ? SAM_SEQ   : 0)
+                        | (opt.min_qual        ? SAM_QUAL  : 0))) {
+            fprintf(stderr, "Failed to set CRAM_OPT_REQUIRED_FIELDS value\n");
+            return 1;
         }
-        while (last_tid >= 0 && last_tid < sam_hdr_nref(h)) {
-            while (++last_pos < sam_hdr_tid2len(h, last_tid)) {
-                if (last_pos >= end) break;
-                if (bed && bed_overlap(bed, sam_hdr_tid2name(h, last_tid), last_pos, last_pos + 1) == 0)
-                    continue;
-                fputs(sam_hdr_tid2name(h, last_tid), file_out);
-                fprintf(file_out, "\t%"PRIhts_pos, last_pos+1);
-                for (i = 0; i < n; i++)
-                    fputc('\t', file_out), fputc('0', file_out);
-                fputc('\n', file_out);
+
+        if (hts_set_opt(fp[i], CRAM_OPT_DECODE_MD, 0)) {
+            fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
+            return 1;
+        }
+
+        // FIXME: what if headers differ?
+        header[i] = sam_hdr_read(fp[i]);
+        if (header == NULL) {
+            fprintf(stderr, "Failed to read header for \"%s\"\n",
+                    argv[optind]);
+            return 1;
+        }
+
+        if (opt.reg) {
+            hts_idx_t *idx = has_index_file
+                ? sam_index_load2(fp[i], argv[optind], argv[optind+nfiles])
+                : sam_index_load(fp[i], argv[optind]);
+            if (!idx) {
+                print_error("depth", "cannot load index for \"%s\"",
+                            argv[optind]);
+                return 1;
             }
-            last_tid++;
-            last_pos = -1;
-            if (all < 2 || reg)
-                break;
+            if (!(itr[i] = sam_itr_querys(idx, header[i], opt.reg))) {
+                print_error("depth", "cannot parse region \"%s\"", opt.reg);
+                return 1;
+            }
+            hts_idx_destroy(idx);
         }
     }
 
-depth_end:
-    if (((file_out != stdout)? fclose(file_out) : fflush(file_out)) != 0) {
-        if (status == EXIT_SUCCESS) {
-            if (file_out != stdout)
-                print_error_errno("depth", "error on closing \"%s\"", output_file);
-            else
-                print_error_errno("depth", "error on flushing standard output");
-            status = EXIT_FAILURE;
-        }
-    }
+    int ret = fastdepth_core(&opt, nfiles, &argv[argc-nfiles], fp, itr, header)
+        ? 1 : 0;
 
-    for (i = 0; i < n && data[i]; ++i) {
-        sam_hdr_destroy(data[i]->hdr);
-        if (data[i]->fp) sam_close(data[i]->fp);
-        hts_itr_destroy(data[i]->iter);
-        free(data[i]);
+    for (i = 0; i < nfiles; i++) {
+        sam_hdr_destroy(header[i]);
+        sam_close(fp[i]);
+        if (itr && itr[i])
+            hts_itr_destroy(itr[i]);
     }
-    free(data); free(reg);
-    if (bed) bed_destroy(bed);
-    if ( file_list )
-    {
-        for (i=0; i<n; i++) free(fn[i]);
+    free(header);
+    free(fp);
+    free(itr);
+    if (file_list) {
+        for (i=0; i<nfiles; i++)
+            free(fn[i]);
         free(fn);
     }
+    if (opt.bed)
+        bed_destroy(opt.bed);
     sam_global_args_free(&ga);
-    return status;
+    fclose(opt.out);
+    return ret;
 }
 
 #ifdef _MAIN_BAM2DEPTH
