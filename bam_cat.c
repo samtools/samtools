@@ -271,6 +271,11 @@ int cram_cat(int nfn, char * const *fn, const sam_hdr_t *h, const char* outcram,
         // Copy contains and blocks within them
         while ((c = cram_read_container(in_c))) {
             if (cram_container_is_empty(in_c)) {
+                cram_block *blk;
+                // Container compression header
+                if (!(blk = cram_read_block(in_c)))
+                    return -1;
+                cram_free_block(blk);
                 cram_free_container(c);
                 continue;
             }
