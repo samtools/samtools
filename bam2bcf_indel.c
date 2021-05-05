@@ -408,6 +408,10 @@ int bcf_call_gap_prep(int n, int *n_plp, bam_pileup1_t **plp, hts_pos_t pos, bcf
                 { // do realignment; this is the bottleneck
                     const uint8_t *qual = bam_get_qual(p->b), *bq;
                     uint8_t *qq;
+                    if (qend < qbeg) {
+                        fprintf(stderr, "Impossible data in bcf_call_gap_prep\n");
+                        exit(1);
+                    }
                     qq = calloc(qend - qbeg, 1);
                     bq = (uint8_t*)bam_aux_get(p->b, "ZQ");
                     if (bq) ++bq; // skip type
