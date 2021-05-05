@@ -5,7 +5,7 @@
 
     Author: Heng Li <lh3@sanger.ac.uk> (to 2020)
     Author: James Bonfield <jkb@sanger.ac.uk> (2021 rewrite)
-    
+
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -467,7 +467,7 @@ static int fastdepth_core(depth_opt *opt, uint32_t nfiles, char **fn,
     int *finished = calloc(nfiles, sizeof(*finished)), to_go = nfiles;
     if (!b || !finished)
         goto err;
-    
+
     for (i = 0; i < nfiles; i++)
         if (!(b[i] = bam_init1()))
             goto err;
@@ -552,7 +552,7 @@ static int fastdepth_core(depth_opt *opt, uint32_t nfiles, char **fn,
         // Find next record in file list
         int best_tid = INT_MAX, best_file = 0;
         hts_pos_t best_pos = HTS_POS_MAX;
-        
+
         for (i = 0; i < nfiles; i++) {
             if (finished[i])
                 continue;
