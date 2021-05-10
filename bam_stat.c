@@ -1,6 +1,6 @@
 /*  bam_stat.c -- flagstat subcommand.
 
-    Copyright (C) 2009, 2011, 2013-2015, 2019 Genome Research Ltd.
+    Copyright (C) 2009, 2011, 2013-2015, 2019, 2021 Genome Research Ltd.
 
     Author: Heng Li <lh3@sanger.ac.uk>
 
@@ -42,32 +42,41 @@ typedef struct {
     long long n_dup[2];
     long long n_diffchr[2], n_diffhigh[2];
     long long n_secondary[2], n_supp[2];
+    long long n_primary[2], n_pmapped[2], n_pdup[2];
 } bam_flagstat_t;
 
-#define flagstat_loop(s, c) do {                                        \
-        int w = ((c)->flag & BAM_FQCFAIL)? 1 : 0;                       \
-        ++(s)->n_reads[w];                                              \
-        if ((c)->flag & BAM_FSECONDARY ) {                              \
-            ++(s)->n_secondary[w];                                      \
-        } else if ((c)->flag & BAM_FSUPPLEMENTARY ) {                   \
-            ++(s)->n_supp[w];                                           \
-        } else if ((c)->flag & BAM_FPAIRED) {                           \
-            ++(s)->n_pair_all[w];                                       \
-            if (((c)->flag & BAM_FPROPER_PAIR) && !((c)->flag & BAM_FUNMAP) ) ++(s)->n_pair_good[w];    \
-            if ((c)->flag & BAM_FREAD1) ++(s)->n_read1[w];              \
-            if ((c)->flag & BAM_FREAD2) ++(s)->n_read2[w];              \
-            if (((c)->flag & BAM_FMUNMAP) && !((c)->flag & BAM_FUNMAP)) ++(s)->n_sgltn[w];  \
-            if (!((c)->flag & BAM_FUNMAP) && !((c)->flag & BAM_FMUNMAP)) { \
-                ++(s)->n_pair_map[w];                                   \
-                if ((c)->mtid != (c)->tid) {                            \
-                    ++(s)->n_diffchr[w];                                \
-                    if ((c)->qual >= 5) ++(s)->n_diffhigh[w];           \
-                }                                                       \
-            }                                                           \
-        }                                                               \
-        if (!((c)->flag & BAM_FUNMAP)) ++(s)->n_mapped[w];              \
-        if ((c)->flag & BAM_FDUP) ++(s)->n_dup[w];                      \
-    } while (0)
+inline static void flagstat_loop(bam_flagstat_t *s, bam1_core_t *c)
+{
+    int w = (c->flag & BAM_FQCFAIL)? 1 : 0;
+    ++s->n_reads[w];
+    if (c->flag & BAM_FSECONDARY ) {
+        ++s->n_secondary[w];
+    } else if (c->flag & BAM_FSUPPLEMENTARY ) {
+        ++s->n_supp[w];
+    } else {
+        ++s->n_primary[w];
+
+        if (c->flag & BAM_FPAIRED) {
+            ++s->n_pair_all[w];
+            if ((c->flag & BAM_FPROPER_PAIR) && !(c->flag & BAM_FUNMAP) ) ++s->n_pair_good[w];
+            if (c->flag & BAM_FREAD1) ++s->n_read1[w];
+            if (c->flag & BAM_FREAD2) ++s->n_read2[w];
+            if ((c->flag & BAM_FMUNMAP) && !(c->flag & BAM_FUNMAP)) ++s->n_sgltn[w];
+            if (!(c->flag & BAM_FUNMAP) && !(c->flag & BAM_FMUNMAP)) {
+                ++s->n_pair_map[w];
+                if (c->mtid != c->tid) {
+                    ++s->n_diffchr[w];
+                    if (c->qual >= 5) ++s->n_diffhigh[w];
+                }
+            }
+        }
+
+        if (!(c->flag & BAM_FUNMAP)) ++s->n_pmapped[w];
+        if (c->flag & BAM_FDUP) ++s->n_pdup[w];
+    }
+    if (!(c->flag & BAM_FUNMAP)) ++s->n_mapped[w];
+    if (c->flag & BAM_FDUP) ++s->n_dup[w];
+}
 
 bam_flagstat_t *bam_flagstat_core(samFile *fp, sam_hdr_t *h)
 {
@@ -116,10 +125,13 @@ static void out_fmt_default(bam_flagstat_t *s)
 {
     char b0[16], b1[16];
     printf("%lld + %lld in total (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
+    printf("%lld + %lld primary\n", s->n_primary[0], s->n_primary[1]);
     printf("%lld + %lld secondary\n", s->n_secondary[0], s->n_secondary[1]);
     printf("%lld + %lld supplementary\n", s->n_supp[0], s->n_supp[1]);
     printf("%lld + %lld duplicates\n", s->n_dup[0], s->n_dup[1]);
+    printf("%lld + %lld primary duplicates\n", s->n_pdup[0], s->n_pdup[1]);
     printf("%lld + %lld mapped (%s : %s)\n", s->n_mapped[0], s->n_mapped[1], percent(b0, s->n_mapped[0], s->n_reads[0]), percent(b1, s->n_mapped[1], s->n_reads[1]));
+    printf("%lld + %lld primary mapped (%s : %s)\n", s->n_pmapped[0], s->n_pmapped[1], percent(b0, s->n_pmapped[0], s->n_primary[0]), percent(b1, s->n_pmapped[1], s->n_primary[1]));
     printf("%lld + %lld paired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);
     printf("%lld + %lld read1\n", s->n_read1[0], s->n_read1[1]);
     printf("%lld + %lld read2\n", s->n_read2[0], s->n_read2[1]);
@@ -131,14 +143,18 @@ static void out_fmt_default(bam_flagstat_t *s)
 }
 
 static void out_fmt_json(bam_flagstat_t *s) {
-    char b0[16], b1[16];
+    char b0[16], b1[16], p0[16], p1[16], pp0[16], pp1[16], s0[16], s1[16];
     printf("{\n \"QC-passed reads\": { \n"
                  "  \"total\": %lld, \n"
+                 "  \"primary\": %lld, \n"
                  "  \"secondary\": %lld, \n"
                  "  \"supplementary\": %lld, \n"
                  "  \"duplicates\": %lld, \n"
+                 "  \"primary duplicates\": %lld, \n"
                  "  \"mapped\": %lld, \n"
                  "  \"mapped %%\": %s, \n"
+                 "  \"primary mapped\": %lld, \n"
+                 "  \"primary mapped %%\": %s, \n"
                  "  \"paired in sequencing\": %lld, \n"
                  "  \"read1\": %lld, \n"
                  "  \"read2\": %lld, \n"
@@ -152,11 +168,15 @@ static void out_fmt_json(bam_flagstat_t *s) {
                  " },"
             "\n \"QC-failed reads\": { \n"
                  "  \"total\": %lld, \n"
+                 "  \"primary\": %lld, \n"
                  "  \"secondary\": %lld, \n"
                  "  \"supplementary\": %lld, \n"
                  "  \"duplicates\": %lld, \n"
+                 "  \"primary duplicates\": %lld, \n"
                  "  \"mapped\": %lld, \n"
                  "  \"mapped %%\": %s, \n"
+                 "  \"primary mapped\": %lld, \n"
+                 "  \"primary mapped %%\": %s, \n"
                  "  \"paired in sequencing\": %lld, \n"
                  "  \"read1\": %lld, \n"
                  "  \"read2\": %lld, \n"
@@ -170,35 +190,43 @@ static void out_fmt_json(bam_flagstat_t *s) {
                  " }\n"
             "}\n",
         s->n_reads[0],
+        s->n_primary[0],
         s->n_secondary[0],
         s->n_supp[0],
         s->n_dup[0],
+        s->n_pdup[0],
         s->n_mapped[0],
         percent_json(b0, s->n_mapped[0], s->n_reads[0]),
+        s->n_pmapped[0],
+        percent_json(p0, s->n_pmapped[0], s->n_primary[0]),
         s->n_pair_all[0],
         s->n_read1[0],
         s->n_read2[0],
         s->n_pair_good[0],
-        percent_json(b0, s->n_pair_good[0], s->n_pair_all[0]),
+        percent_json(pp0, s->n_pair_good[0], s->n_pair_all[0]),
         s->n_pair_map[0],
         s->n_sgltn[0],
-        percent_json(b0, s->n_sgltn[0], s->n_pair_all[0]),
+        percent_json(s0, s->n_sgltn[0], s->n_pair_all[0]),
         s->n_diffchr[0],
         s->n_diffhigh[0],
         s->n_reads[1],
+        s->n_primary[1],
         s->n_secondary[1],
         s->n_supp[1],
         s->n_dup[1],
+        s->n_pdup[1],
         s->n_mapped[1],
         percent_json(b1, s->n_mapped[1], s->n_reads[1]),
+        s->n_pmapped[1],
+        percent_json(p1, s->n_pmapped[1], s->n_primary[1]),
         s->n_pair_all[1],
         s->n_read1[1],
         s->n_read2[1],
         s->n_pair_good[1],
-        percent_json(b1, s->n_pair_good[1], s->n_pair_all[1]),
+        percent_json(pp1, s->n_pair_good[1], s->n_pair_all[1]),
         s->n_pair_map[1],
         s->n_sgltn[1],
-        percent_json(b1, s->n_sgltn[1], s->n_pair_all[1]),
+        percent_json(s1, s->n_sgltn[1], s->n_pair_all[1]),
         s->n_diffchr[1],
         s->n_diffhigh[1]
     );
@@ -207,11 +235,15 @@ static void out_fmt_json(bam_flagstat_t *s) {
 static void out_fmt_tsv(bam_flagstat_t *s) {
     char b0[16], b1[16];
     printf("%lld\t%lld\ttotal (QC-passed reads + QC-failed reads)\n", s->n_reads[0], s->n_reads[1]);
+    printf("%lld\t%lld\tprimary\n", s->n_primary[0], s->n_primary[1]);
     printf("%lld\t%lld\tsecondary\n", s->n_secondary[0], s->n_secondary[1]);
     printf("%lld\t%lld\tsupplementary\n", s->n_supp[0], s->n_supp[1]);
     printf("%lld\t%lld\tduplicates\n", s->n_dup[0], s->n_dup[1]);
+    printf("%lld\t%lld\tprimary duplicates\n", s->n_pdup[0], s->n_pdup[1]);
     printf("%lld\t%lld\tmapped\n", s->n_mapped[0], s->n_mapped[1]);
     printf("%s\t%s\tmapped %%\n", percent(b0, s->n_mapped[0], s->n_reads[0]), percent(b1, s->n_mapped[1], s->n_reads[1]));
+    printf("%lld\t%lld\tprimary mapped\n", s->n_pmapped[0], s->n_pmapped[1]);
+    printf("%s\t%s\tprimary mapped %%\n", percent(b0, s->n_pmapped[0], s->n_primary[0]), percent(b1, s->n_pmapped[1], s->n_primary[1]));
     printf("%lld\t%lld\tpaired in sequencing\n", s->n_pair_all[0], s->n_pair_all[1]);
     printf("%lld\t%lld\tread1\n", s->n_read1[0], s->n_read1[1]);
     printf("%lld\t%lld\tread2\n", s->n_read2[0], s->n_read2[1]);

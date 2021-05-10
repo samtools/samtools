@@ -73,6 +73,9 @@ Following this, additional categories are given for reads which are:
 
 .RS 18
 .TP
+primary
+neither 0x100 nor 0x800 bit set
+.TP
 secondary
 0x100 bit set
 .TP
@@ -82,8 +85,14 @@ supplementary
 duplicates
 0x400 bit set
 .TP
+primary duplicates
+0x400 bit set and neither 0x100 nor 0x800 bit set 
+.TP
 mapped
 0x4 bit not set
+.TP
+primary mapped
+0x4, 0x100 and 0x800 bits not set
 .TP
 paired in sequencing
 0x1 bit set
@@ -142,19 +151,27 @@ The top-level object contains two named objects
 These contain the various categories listed above as names and
 the corresponding count as value.
 
-For the default format, the
-.BR mapped ", " "properly paired" ", and " singletons
-show the count as a percentage of the total number of QC-passed or QC-failed
+For the default format, 
+.BR mapped "
+shows the count as a percentage of the total number of QC-passed or QC-failed
 reads after the category name.
 For example:
 .EX
 32 + 0 mapped (94.12% : N/A)
 .EE
 
+The
+.BR "properly paired" " and " singletons
+counts work in a similar way but the percentage is against the total number of
+QC-passed and QC-failed pairs.  The
+.BR "primary mapped"
+count is a percentage of the total number of QC-passed and QC-failed primary
+reads. 
+
 In the
 .BR tsv " and " json
 formats, these percentages are listed in separate categories
-.BR "mapped %" ", " "properly paired %" ", and " "singletons %" .
+.BR "mapped %" ", " "primary mapped %" ", " "properly paired %" ", and " "singletons %" .
 If the percentage cannot be calculated (because the total is zero)
 then in the
 .BR default " and " tsv
