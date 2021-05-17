@@ -106,6 +106,19 @@ are ignored.)
 The input alignments are sorted by read names rather than by chromosomal
 coordinates
 .TP
+.BI -o \ FILE
+Write merged output to
+.IR FILE ,
+specifying the filename via an option rather than as the first filename
+argument.
+When \fB-o\fP is used, all non-option filename arguments specify input
+files to be merged.
+Otherwise, as shown in the synopsis, the first filename argument specifies
+the output file and the remainder give the input files.
+
+To write to standard output (or to a pipe), use either \fB-o -\fP or the
+equivalent using \fB-\fP as the first filename argument.
+.TP
 .B -t TAG
 The input alignments have been sorted by the value of TAG, then by either
 position or name (if \fB-n\fP is given).

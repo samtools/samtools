@@ -2921,6 +2921,8 @@ sub test_merge
     test_cmd($opts,out=>'merge/6.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
     # Merge 7 - ID and SN with regex in them
     test_cmd($opts,out=>'merge/7.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
+    # Merge 8 - Standard 3 file SAM merge, output file specified via option
+    test_cmd($opts,out=>'merge/2.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -o - -s 1 -O sam $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
 
     # Sort inputs by PG, then merge
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG -m 10M $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
