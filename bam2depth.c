@@ -115,6 +115,47 @@ static void zero_region(depth_opt *opt, depth_hist *dh,
     ks->l = cur_l;
 }
 
+// A variation of bam_cigar2qlen which doesn't count soft-clips in to the
+// equation.  Basically it's the number of bases in query that are aligned
+// in some way to the reference (including insertions, which are considered
+// to be aligned by dint of being anchored either side).
+hts_pos_t qlen_used(bam1_t *b) {
+    int n_cigar = b->core.n_cigar;
+    const uint32_t *cigar = bam_get_cigar(b);
+
+    hts_pos_t l;
+
+    if (b->core.l_qseq) {
+        // Known SEQ permits of short cut of l_qseq minus CSOFT_CLIPs.
+        // Full scan not needed, which helps on excessively long CIGARs.
+        l = b->core.l_qseq;
+        int kl, kr;
+        for (kl = 0; kl < n_cigar; kl++)
+            if (bam_cigar_op(cigar[kl]) == BAM_CSOFT_CLIP)
+                l -= bam_cigar_oplen(cigar[kl]);
+            else
+                break;
+
+        for (kr = n_cigar-1; kr > kl; kr--)
+            if (bam_cigar_op(cigar[kr]) == BAM_CSOFT_CLIP)
+                l -= bam_cigar_oplen(cigar[kr]);
+            else
+                break;
+    } else {
+        // Unknown SEQ ("*") needs a full scan through the CIGAR string.
+        static int query[16] = {
+          //M I D N  S H P =  X B ? ?  ? ? ? ?
+            1,1,0,0, 0,0,0,1, 1,0,0,0, 0,0,0,0
+        };
+        int k;
+        for (k = l = 0; k < n_cigar; k++)
+            if (query[bam_cigar_op(cigar[k])])
+                l += bam_cigar_oplen(cigar[k]);
+    }
+    return l;
+
+}
+
 // Adds the depth for a single read to a depth_hist struct.
 // For just one file, this is easy.  We just have a circular buffer
 // where we increment values for bits that overlap existing data
@@ -284,8 +325,6 @@ static int add_depth(depth_opt *opt, depth_hist *dh, sam_hdr_t *h, bam1_t *b,
     int ncig = b->core.n_cigar, j, k, spos = 0;
 
     // Zero new (previously unseen) coordinates so increment works later.
-    // FIXME: do this for all files so output is easy,
-    // or do one file and check end_pos on each output line?
     hts_pos_t end = MAX(dh->end_pos[file], b->core.pos);
     if (end_pos > end && (end & hmask) < (end_pos & hmask)) {
         memset(&dh->hist[file][end & hmask], 0,
@@ -334,7 +373,7 @@ static int add_depth(depth_opt *opt, depth_hist *dh, sam_hdr_t *h, bam1_t *b,
                     }
                 }
 
-                // FIXME? should we even check quality values for DEL?
+                // Question: should we even check quality values for DEL?
                 // We've explicitly asked to include them, and the quality
                 // is wrong anyway (it's the neighbouring base).  We do this
                 // for now for compatibility with the old depth command.
@@ -529,16 +568,12 @@ static int fastdepth_core(depth_opt *opt, uint32_t nfiles, char **fn,
             if (b[i]->core.qual < opt->min_mqual)
                 continue;
 
-            // FIXME?  Should this be sequence length minus soft-clips?
-            // It doesn't seem useful to filter on sequence length.  Mapped
-            // sequence length would be more appropriate perhaps.
+            // Original samtools depth used the total sequence (l_qseq)
+            // including soft-clips.  This doesn't feel like a useful metric
+            // to be filtering on.  We now only count sequence bases that
+            // form the used part of the alignment.
             if (opt->min_len) {
-                int l_qseq = b[i]->core.l_qseq;
-                if (!l_qseq)
-                    l_qseq = bam_cigar2qlen(b[i]->core.n_cigar,
-                                            bam_get_cigar(b[i]));
-
-                if (l_qseq < opt->min_len)
+                if (qlen_used(b[i]) < opt->min_len)
                     continue;
             }
 
@@ -624,12 +659,7 @@ static int fastdepth_core(depth_opt *opt, uint32_t nfiles, char **fn,
                 continue;
 
             if (opt->min_len) {
-                int l_qseq = b[i]->core.l_qseq;
-                if (!l_qseq)
-                    l_qseq = bam_cigar2qlen(b[i]->core.n_cigar,
-                                            bam_get_cigar(b[i]));
-
-                if (l_qseq < opt->min_len)
+                if (qlen_used(b[i]) < opt->min_len)
                     continue;
             }
 

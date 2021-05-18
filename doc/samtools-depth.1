@@ -78,7 +78,8 @@ If one of the inputs came from stdin, the name \*(lq-\*(rq will be used for
 the corresponding column.
 .TP
 .BI "-l " INT
-.RI "Ignore reads shorter than " INT
+.RI "Ignore reads shorter than " INT "."
+This is the number of bases in the sequence, minus any soft clips.
 .TP
 .BI "-m, -d " INT
 (Deprecated since 1.13) This option previously limited the depth to a maximum
@@ -135,6 +136,48 @@ Include reads with deletions in depth computation.
 For the overlapping section of a read pair, count only the bases of
 the first read.  Note this algorithm changed in 1.13 so the
 results may differ slightly to older releases.
+
+.SH CAVEATS
+It may appear that "samtools depth" is simply "samtools mpileup" with some
+of the columns removed, and indeed earlier versions of this command
+were just this.  However both then and now there are subtle
+differences in parameters which make the two not entirely comparable.
+Differences, other than the obvious speed benefits, include:
+
+.IP o 2
+Deletions (CIGAR element "D") are counted by default in "depth".  This
+can be turned off with the \fB-J\fR option.  "Mpileup" always ignores
+these bases, and has no option to count them.
+
+.IP o 2
+Beware there are idiosyncrasies in option naming.  Specifically
+\fB-q\fR and \fB-Q\fR options have their meanings swapped between
+"depth" and "mpileup".
+
+.IP o 2
+The removal of overlapping sequences (option \fB-s\fR) is on by
+default in "mpileup" and off by default in "depth".  Additionally the
+overlap removal algorithm differs, giving subtle changes when Ns are
+present in the sequence.  Also any paired read is considered for overlap
+removal by "depth", rather than only those with the properly-paired flag
+set ("mpileup").  See above for a more detailed description.
+
+.IP o 2
+The default minimum quality value is 0 for "depth" and 13 for "mpileup".
+
+.IP o 2
+Specifying multiple BAMs will produce one depth column per file with
+"depth", but these are merged in "mpileup".
+
+.IP o 2
+"Depth" doesn't have a maximum depth limit, while "mpileup" defaults
+to a maximum of 8000.
+
+.IP o 2
+If a reference is specified to "mpileup" the BAQ algorithm will be
+used to adjust quality values, although it can be disabled.  "Depth"
+never uses BAQ.
+.EE
 
 .SH AUTHOR
 .PP
