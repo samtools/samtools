@@ -329,7 +329,7 @@ static int mplp_func(void *data, bam1_t *b)
             skip = 1;
             continue;
         }
-        if (ma->conf->rflag_require && !(ma->conf->rflag_require&b->core.flag)) { skip = 1; continue; }
+        if (ma->conf->rflag_require && ((ma->conf->rflag_require&b->core.flag) != ma->conf->rflag_require)) { skip = 1; continue; }
         if (ma->conf->rflag_filter && ma->conf->rflag_filter&b->core.flag) { skip = 1; continue; }
         if (ma->conf->bed && ma->conf->all == 0) { // test overlap
             skip = !bed_overlap(ma->conf->bed, sam_hdr_tid2name(ma->h, b->core.tid), b->core.pos, bam_endpos(b));
