@@ -7,6 +7,11 @@ Release a.b
  * samtools flags now accepts any number of command line arguments,
    allowing multiple SAM flag combinations to be converted at once. (PR #1401)
 
+ * samtools merge now accepts a `-o FILE` option specifying the output file,
+   similarly to most other subcommands. The existing way of specifying it
+   (as the first non-option argument, alongside the input file arguments)
+   remains supported. (PR #1434, thanks to David McGaughey and John Marshall)
+
  * samtools addreplacerg now allows for updating (replacing) an existing
    `@RG` line in the output header, if a new `@RG` line is provided in the
    command line, via the -r argument. The update still requires the user's

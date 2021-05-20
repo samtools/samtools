@@ -1396,7 +1396,8 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 static void merge_usage(FILE *to)
 {
     fprintf(to,
-"Usage: samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> [<in2.bam> ... <inN.bam>]\n"
+"Usage: samtools merge [options] -o <out.bam> [options] <in1.bam> ... <inN.bam>\n"
+"   or: samtools merge [options] <out.bam> <in1.bam> ... <inN.bam>\n"
 "\n"
 "Options:\n"
 "  -n         Input files are sorted by read name\n"
