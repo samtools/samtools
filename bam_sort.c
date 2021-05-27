@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -1506,9 +1507,8 @@ int bam_merge(int argc, char *argv[])
 
     hts_srand48(random_seed);
     if (!(flag & MERGE_FORCE) && strcmp(fnout, "-") != 0) {
-        FILE *fp = fopen(fnout, "rb");
-        if (fp != NULL) {
-            fclose(fp);
+        struct stat sbuf;
+        if (stat(fnout, &sbuf) == 0 && S_ISREG(sbuf.st_mode)) {
             fprintf(stderr, "[%s] File '%s' exists. Please apply '-f' to overwrite. Abort.\n", __func__, fnout);
             ret = 1;
             goto end;
