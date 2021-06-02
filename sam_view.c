@@ -66,6 +66,8 @@ typedef struct samview_settings {
     int multi_region;
     char* tag;
     hts_filter_t *filter;
+    int unset_flag;
+    int set_flag;
 } samview_settings_t;
 
 
@@ -275,6 +277,15 @@ static inline int check_sam_write1(samFile *fp, const sam_hdr_t *h, const bam1_t
     return r;
 }
 
+static inline void change_flag(bam1_t *b, samview_settings_t *settings)
+{
+    if (settings->set_flag)
+        b->core.flag |= settings->set_flag;
+
+    if (settings->unset_flag)
+        b->core.flag &= ~settings->unset_flag;
+}
+
 int main_samview(int argc, char *argv[])
 {
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, is_count = 0, has_index_file = 0, no_pg = 0;
@@ -305,12 +316,16 @@ int main_samview(int argc, char *argv[])
         .bed = NULL,
         .multi_region = 0,
         .tag = NULL,
-        .filter = NULL
+        .filter = NULL,
+        .unset_flag = 0,
+        .set_flag = 0
     };
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
         {"no-PG", no_argument, NULL, 1},
+        {"unset-flag", required_argument, NULL, 2},
+        {"set-flag", required_argument, NULL, 3},
         { NULL, 0, NULL, 0 }
     };
 
@@ -490,6 +505,8 @@ int main_samview(int argc, char *argv[])
                 return 1;
             }
             break;
+        case 2: settings.unset_flag |= bam_str2flag(optarg); break;
+        case 3: settings.set_flag |= bam_str2flag(optarg); break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -682,7 +699,10 @@ int main_samview(int argc, char *argv[])
                         // fetch alignments
                         while ((result = sam_itr_multi_next(in, iter, b)) >= 0) {
                             if (!process_aln(header, b, &settings)) {
-                                if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
+                                if (!is_count) {
+                                    change_flag(b, &settings);
+                                    if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
+                                }
                                 count++;
                             } else {
                                 if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
@@ -713,7 +733,10 @@ int main_samview(int argc, char *argv[])
             errno = 0;
             while ((r = sam_read1(in, header, b)) >= 0) { // read one alignment from `in'
                 if (!process_aln(header, b, &settings)) {
-                    if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
+                    if (!is_count) {
+                        change_flag(b, &settings);
+                        if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
+                    }
                     count++;
                 } else {
                     if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
@@ -751,7 +774,10 @@ int main_samview(int argc, char *argv[])
                 // fetch alignments
                 while ((result = sam_itr_next(in, iter, b)) >= 0) {
                     if (!process_aln(header, b, &settings)) {
-                        if (!is_count) { if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break; }
+                        if (!is_count) {
+                            change_flag(b, &settings);
+                            if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
+                        }
                         count++;
                     } else {
                         if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
@@ -884,6 +910,10 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
+"  --set-flag INT\n"
+"           set flag\n"
+"  --unset-flag INT\n"
+"           unset flag\n"
 // general options
 "  -?       print long help, including note about region specification\n"
 "  -S       ignored (input format is auto-detected)\n"
