@@ -910,9 +910,9 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
-"  --set-flag INT\n"
+"  --set-flag FLAG\n"
 "           set flag\n"
-"  --unset-flag INT\n"
+"  --unset-flag FLAG\n"
 "           unset flag\n"
 // general options
 "  -?       print long help, including note about region specification\n"

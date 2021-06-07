@@ -2462,6 +2462,18 @@ sub test_view
                   args => ['-h', $b_pg_sam],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   compare => $b_pg_expected);
+
+    # unset flags and clear tags associated with duplication
+    $test++;
+
+    my $dup_sam = "$$opts{path}/dat/view.005.sam";
+    my $dup_expected = "$$opts{path}/dat/view.005.expected.sam";
+
+    run_view_test($opts,
+                    msg=> "$test: Unset dup flag, remove dt and do tags",
+                    args => ['-h', '--unset-flag', 'DUP', '-x', 'do', '-x', 'dt', '--no-PG', $dup_sam],
+                    out => sprintf("%s.test%03d.sam", $out, $test),
+                    compare => $dup_expected);
 }
 
 # cat SAM files in the same way as samtools cat does with BAMs
