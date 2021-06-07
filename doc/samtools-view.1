@@ -103,9 +103,11 @@ options filter the alignments that will be included in the output to only those
 alignments that match certain criteria.
 
 The
-.B -x
+.BR -x ,
+.BR -B ,
+.B --set-flag
 and
-.B -B
+.B --unset-flag
 options modify the data which is contained in each alignment.
 
 The
@@ -343,6 +345,23 @@ Read tag to exclude from output (repeatable) [null]
 .B -B
 Collapse the backward CIGAR operation.
 .TP
+.BI "--set-flag " FLAGS
+Set flag. 
+.I FLAGS
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/),
+in octal by beginning with `0' (i.e. /^0[0-7]+/), as a decimal number
+not beginning with '0' or as a comma-separated list of flag names.
+
+For a list of flag names see
+.IR samtools-flags (1).
+.TP
+.BI "--unset-flag " FLAGS
+Unset flag.
+.I FLAGS
+is specified in the same was as the
+.B "--set-flag"
+option.
+.TP
 .BI "-s " FLOAT
 Output only a proportion of the input alignments.
 This subsampling acts in the same way on all of the alignment records in
@@ -452,6 +471,12 @@ Only keep reads with tag \fBRG\fR and read group \fBgrp2\fR.
 This does almost the same than \fB-r grp2\fR but will not keep records without the \fBRG\fR tag.
 .EX 2
 samtools view -d RG:grp2 -o /data_folder/data.rg2_only.bam /data_folder/data.bam
+.EE
+
+.IP o 2
+Remove the actions of samtools markdup.  Clear the duplicate flag and remove the \fBdt\fR tag, keep the header.
+.EX 2
+samtools view -h --unset-flag DUP -x dt -o /data_folder/dat.no_dup_markings.bam /data_folder/data.bam
 .EE
 
 .SH AUTHOR
