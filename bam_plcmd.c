@@ -160,6 +160,7 @@ typedef struct {
     char **argv;
     char sep, empty;
     sam_global_args ga;
+    double max_depth_pos;
 } mplp_conf_t;
 
 typedef struct {
@@ -670,6 +671,8 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
     // Only used when writing BCF
     max_indel_depth = conf->max_indel_depth * sm->n;
     bam_mplp_set_maxcnt(iter, max_depth);
+    if (conf->max_depth_pos)
+        bam_mplp_set_cntpos(iter, conf->max_depth_pos);
     bcf1_t *bcf_rec = bcf_init1();
     int ret;
     int last_tid = -1;
@@ -1103,7 +1106,6 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "  -Q, --min-BQ INT        skip bases with baseQ/BAQ smaller than INT [%d]\n", mplp->min_baseQ);
     fprintf(fp,
 "  -r, --region REG        region in which pileup is generated\n"
-"  -R, --ignore-RG         ignore RG tags (one BAM = one sample)\n"
 "  --rf, --incl-flags STR|INT  required flags: skip reads with mask bits unset [%s]\n", tmp_require);
     fprintf(fp,
 "  --ff, --excl-flags STR|INT  filter flags: skip reads with mask bits set\n"
@@ -1151,6 +1153,7 @@ int bam_mpileup(int argc, char *argv[])
     mplp.min_baseQ = 13;
     mplp.capQ_thres = 0;
     mplp.max_depth = MPLP_MAX_DEPTH;
+    mplp.max_depth_pos = 0.0;
     mplp.max_indel_depth = MPLP_MAX_INDEL_DEPTH;
     mplp.openQ = 40; mplp.extQ = 20; mplp.tandemQ = 100;
     mplp.min_frac = 0.002; mplp.min_support = 1;
@@ -1252,7 +1255,13 @@ int bam_mpileup(int argc, char *argv[])
             if (mplp.fai == NULL) return 1;
             mplp.fai_fname = optarg;
             break;
-        case 'd': mplp.max_depth = atoi(optarg); break;
+        case 'd': {
+            double d = atof(optarg);
+            mplp.max_depth = d;
+            mplp.max_depth_pos = d - mplp.max_depth;
+            break;
+        }
+        //case 'd': mplp.max_depth = atoi(optarg); break;
         case 'r': mplp.reg = strdup(optarg); break;
         case 'l':
                   // In the original version the whole BAM was streamed which is inefficient
