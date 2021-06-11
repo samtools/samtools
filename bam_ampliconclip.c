@@ -1,4 +1,4 @@
-/*  bam_ampliconclip.c -- loads amplicons from a BED file and cuts reads
+/*  bam_ampliconclip.c -- loads amplicon primers from a BED file and cuts reads
                           from the 5' end.
 
     Copyright (C) 2020-2021 Genome Research Ltd.
@@ -1041,16 +1041,16 @@ fail:
 
 
 static void usage(void) {
-    fprintf(stderr, "Usage samtools ampliconclip -b bedfile <input.bam> -o <output.bam>\n\n");
+    fprintf(stderr, "Usage: samtools ampliconclip -b BED file <input.bam> -o <output.bam>\n\n");
     fprintf(stderr, "Option: \n");
-    fprintf(stderr, " -b  FILE            bedfile of amplicons to be removed.\n");
+    fprintf(stderr, " -b  FILE            BED file of regions (eg amplicon primers) to be removed.\n");
     fprintf(stderr, " -o  FILE            output file name (default stdout).\n");
     fprintf(stderr, " -f  FILE            write stats to file name (default stderr)\n");
     fprintf(stderr, " -u                  Output uncompressed data\n");
-    fprintf(stderr, " --soft-clip         soft clip amplicons from reads (default)\n");
-    fprintf(stderr, " --hard-clip         hard clip amplicons from reads.\n");
-    fprintf(stderr, " --both-ends         clip on both ends.\n");
-    fprintf(stderr, " --strand            use strand data from bed file.\n");
+    fprintf(stderr, " --soft-clip         soft clip amplicon primers from reads (default)\n");
+    fprintf(stderr, " --hard-clip         hard clip amplicon primers from reads.\n");
+    fprintf(stderr, " --both-ends         clip on both 5' and 3' ends.\n");
+    fprintf(stderr, " --strand            use strand data from BED file to match read direction.\n");
     fprintf(stderr, " --clipped           only output clipped reads.\n");
     fprintf(stderr, " --fail              mark unclipped, mapped reads as QCFAIL.\n");
     fprintf(stderr, " --filter-len INT    do not output reads INT size or shorter.\n");
@@ -1061,6 +1061,8 @@ static void usage(void) {
     fprintf(stderr, " --keep-tag          for clipped entries keep the old NM and MD tags.\n");
     fprintf(stderr, " --no-PG             do not add an @PG line.\n");
     sam_global_opt_help(stderr, "-.O..@-.");
+    fprintf(stderr, "\nAbout: Soft clips read alignments where they match BED file defined regions.\n"
+                    "Default clipping is only on the 5' end.\n\n");
 }
 
 
