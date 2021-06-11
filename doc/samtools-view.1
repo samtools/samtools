@@ -473,6 +473,12 @@ This does almost the same than \fB-r grp2\fR but will not keep records without t
 samtools view -d RG:grp2 -o /data_folder/data.rg2_only.bam /data_folder/data.bam
 .EE
 
+.IP o 2
+Remove the actions of samtools markdup.  Clear the duplicate flag and remove the \fBdt\fR tag, keep the header.
+.EX 2
+samtools view -h --unset-flag DUP -x dt -o /data_folder/dat.no_dup_markings.bam /data_folder/data.bam
+.EE
+
 .SH AUTHOR
 .PP
 Written by Heng Li from the Sanger Institute.
