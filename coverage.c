@@ -327,7 +327,7 @@ int main_coverage(int argc, char *argv[]) {
         {"incl-flags", required_argument, NULL, 1}, // require flag
         {"excl-flags", required_argument, NULL, 2}, // filter flag
         {"bam-list", required_argument, NULL, 'b'},
-        {"min-read-len", required_argument, NULL, 'L'},
+        {"min-read-len", required_argument, NULL, 'l'},
         {"min-MQ", required_argument, NULL, 'q'},
         {"min-mq", required_argument, NULL, 'q'},
         {"min-BQ", required_argument, NULL, 'Q'},
@@ -346,7 +346,7 @@ int main_coverage(int argc, char *argv[]) {
     // parse the command line
     int c;
     opterr = 0;
-    while ((c = getopt_long(argc, argv, "Ao:L:q:Q:hHw:r:b:md:", lopts, NULL)) != -1) {
+    while ((c = getopt_long(argc, argv, "Ao:l:q:Q:hHw:r:b:md:", lopts, NULL)) != -1) {
         switch (c) {
             case 1:
                 if ((required_flags = bam_str2flag(optarg)) < 0) {
@@ -357,7 +357,7 @@ int main_coverage(int argc, char *argv[]) {
                     fprintf(stderr,"Could not parse --ff %s\n", optarg); return EXIT_FAILURE;
                 }; break;
             case 'o': opt_output_file = optarg; opt_full_width = false; break;
-            case 'L': opt_min_len = atoi(optarg); break;
+            case 'l': opt_min_len = atoi(optarg); break;
             case 'q': opt_min_mapQ = atoi(optarg); break;
             case 'Q': opt_min_baseQ = atoi(optarg); break;
             case 'd': max_depth = atoi(optarg); break; // maximum coverage depth
