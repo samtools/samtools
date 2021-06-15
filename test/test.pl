@@ -2471,7 +2471,7 @@ sub test_view
 
     run_view_test($opts,
                     msg=> "$test: Unset dup flag, remove dt and do tags",
-                    args => ['-h', '--unset-flag', 'DUP', '-x', 'do', '-x', 'dt', '--no-PG', $dup_sam],
+                    args => ['-h', '--remove-flag', 'DUP', '-x', 'do', '-x', 'dt', '--no-PG', $dup_sam],
                     out => sprintf("%s.test%03d.sam", $out, $test),
                     compare => $dup_expected);
 }
