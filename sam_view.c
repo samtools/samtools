@@ -66,8 +66,8 @@ typedef struct samview_settings {
     int multi_region;
     char* tag;
     hts_filter_t *filter;
-    int unset_flag;
-    int set_flag;
+    int remove_flag;
+    int add_flag;
 } samview_settings_t;
 
 
@@ -279,11 +279,11 @@ static inline int check_sam_write1(samFile *fp, const sam_hdr_t *h, const bam1_t
 
 static inline void change_flag(bam1_t *b, samview_settings_t *settings)
 {
-    if (settings->set_flag)
-        b->core.flag |= settings->set_flag;
+    if (settings->add_flag)
+        b->core.flag |= settings->add_flag;
 
-    if (settings->unset_flag)
-        b->core.flag &= ~settings->unset_flag;
+    if (settings->remove_flag)
+        b->core.flag &= ~settings->remove_flag;
 }
 
 int main_samview(int argc, char *argv[])
@@ -317,15 +317,15 @@ int main_samview(int argc, char *argv[])
         .multi_region = 0,
         .tag = NULL,
         .filter = NULL,
-        .unset_flag = 0,
-        .set_flag = 0
+        .remove_flag = 0,
+        .add_flag = 0
     };
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
         {"no-PG", no_argument, NULL, 1},
-        {"unset-flag", required_argument, NULL, 2},
-        {"set-flag", required_argument, NULL, 3},
+        {"remove-flag", required_argument, NULL, 2},
+        {"add-flag", required_argument, NULL, 3},
         { NULL, 0, NULL, 0 }
     };
 
@@ -375,9 +375,9 @@ int main_samview(int argc, char *argv[])
         case 'o': fn_out = strdup(optarg); break;
         case 'U': fn_un_out = strdup(optarg); break;
         case 'X': has_index_file = 1; break;
-        case 'f': settings.flag_on |= strtol(optarg, 0, 0); break;
-        case 'F': settings.flag_off |= strtol(optarg, 0, 0); break;
-        case 'G': settings.flag_alloff |= strtol(optarg, 0, 0); break;
+        case 'f': settings.flag_on |= bam_str2flag(optarg); break;
+        case 'F': settings.flag_off |= bam_str2flag(optarg); break;
+        case 'G': settings.flag_alloff |= bam_str2flag(optarg); break;
         case 'q': settings.min_mapQ = atoi(optarg); break;
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
@@ -505,8 +505,8 @@ int main_samview(int argc, char *argv[])
                 return 1;
             }
             break;
-        case 2: settings.unset_flag |= bam_str2flag(optarg); break;
-        case 3: settings.set_flag |= bam_str2flag(optarg); break;
+        case 2: settings.remove_flag |= bam_str2flag(optarg); break;
+        case 3: settings.add_flag |= bam_str2flag(optarg); break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -899,9 +899,9 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -l STR   only include reads in library STR [null]\n"
 "  -m INT   only include reads with number of CIGAR operations consuming\n"
 "           query sequence >= INT [0]\n"
-"  -f INT   only include reads with all  of the FLAGs in INT present [0]\n"       //   F&x == x
-"  -F INT   only include reads with none of the FLAGS in INT present [0]\n"       //   F&x == 0
-"  -G INT   only EXCLUDE reads with all  of the FLAGs in INT present [0]\n"       // !(F&x == x)
+"  -f FLAG  only include reads with all  of the FLAGs present\n"       //   F&x == x
+"  -F FLAG  only include reads with none of the FLAGs present\n"       //   F&x == 0
+"  -G FLAG  only EXCLUDE reads with all  of the FLAGs present\n"       // !(F&x == x)
 "  -e STR   only include reads matching the filter expression [null]\n"
 "  -s FLOAT subsample reads (given INT.FRAC option value, 0.FRAC is the\n"
 "           fraction of templates/read pairs to keep; INT part sets seed)\n"
@@ -910,10 +910,10 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 // read processing
 "  -x STR   read tag to strip (repeatable) [null]\n"
 "  -B       collapse the backward CIGAR operation\n"
-"  --set-flag FLAG\n"
-"           set flag\n"
-"  --unset-flag FLAG\n"
-"           unset flag\n"
+"  --add-flag FLAG\n"
+"           add FLAGs to reads\n"
+"  --remove-flag FLAG\n"
+"           remove FLAGs from reads\n"
 // general options
 "  -?       print long help, including note about region specification\n"
 "  -S       ignored (input format is auto-detected)\n"
