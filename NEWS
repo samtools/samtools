@@ -1,21 +1,75 @@
 Release a.b
 -----------
 
+ * samtools flags now accepts any number of command line arguments,
+   allowing multiple SAM flag combinations to be converted at once.  Thanks to
+   John Marshall.
+   (#1401, fixes #749)
+   
+ * Fix negative depth values in ampliconstats output.
+   (#1400)
+  
+ * samtools addreplacerg now allows for updating (replacing) an existing
+   `@RG` line in the output header, if a new `@RG` line is provided in the
+   command line, via the -r argument. The update still requires the user's
+   approval, which can be given with the new -w option.  Thanks to Chuang Yu.
+   (#1404)
+  
+ * Support multiple refs/chroms from a BED file in ampliconclip, ampiliconstats
+   and plot-ampliconstats.
+   (#1410 and #1417; fixes #1396 and #1418)
+  
+ * Stop samtools cat from outputting multiple CRAM EOF markers.
+   (#1422)
+
+ * Make samtools coverage ASCII mode produce true ASCII output.  Previously it
+   would produce UTF8 characters.
+   (#1423; fixes #1419)
+
+ * Complete rewrite of samtools depth.  This means it is now considerably faster
+   and does not need a depth limit to avoid high memory usage.  All output should
+   be identical to the old command with the potential exception of overlap
+   removal.
+   (#1428; fixes #889, helps ameliorate #1411)
+
+ * Three new counts added to samtools flagstat; primary, mapped primary and
+   duplicate primary.
+   (#1431; fixes #1382)
+
+ * Build change.  Support an HTSlib source tree that has a separate build
+   directory.  Thanks to John Marshall.
+   (#1427; companion change to samtools/htslib#1277)
+
  * samtools coverage now allows setting the maximum depth, using the -d/--depth
    option. Also, the default maximum depth has been set to 1000000.
-
- * samtools flags now accepts any number of command line arguments,
-   allowing multiple SAM flag combinations to be converted at once. (PR #1401)
+   (#1415; fixes #1395)
 
  * samtools merge now accepts a `-o FILE` option specifying the output file,
    similarly to most other subcommands. The existing way of specifying it
    (as the first non-option argument, alongside the input file arguments)
-   remains supported. (PR #1434, thanks to David McGaughey and John Marshall)
-
- * samtools addreplacerg now allows for updating (replacing) an existing
-   `@RG` line in the output header, if a new `@RG` line is provided in the
-   command line, via the -r argument. The update still requires the user's
-   approval, which can be given with the new -w option.
+   remains supported. Thanks to David McGaughey and John Marshall.
+   (#1434)
+   
+ * Replace fopen with stat for file exist checks.  Prevents hanging when used
+   on a named pipe.
+   (#1438; fixes #1438)
+   
+ * Updated the documentation on samtools ampliconclip to be clearer about what
+   it does.  From a suggestion by Nathan S Watson-Haigh.
+   (#1448)
+   
+ * Updated documentation on mpileup to highlight the fact that the filtering
+   options work with ANY rules.
+   (#1447; fixes #1435)
+   
+ * Added options to set and clear flags to samtools view.  Along with the
+   existing remove aux tags this gives the ability to remove mark duplicate
+   changes (part of #1358)
+   (#1441)
+   
+ * New tool, samtools import.  Reads one or more FASTQ files and converts them
+   into unmapped SAM, BAM or CRAM.
+   (#1323)
 
 
 Release 1.12 (17th March 2021)
