@@ -1,6 +1,12 @@
 Release a.b
 -----------
 
+ * Complete rewrite of samtools depth.  This means it is now considerably faster
+   and does not need a depth limit to avoid high memory usage.  Results should
+   mostly be the same as the old command with the potential exception of overlap
+   removal.
+   (#1428; fixes #889, helps ameliorate #1411)
+
  * samtools flags now accepts any number of command line arguments,
    allowing multiple SAM flag combinations to be converted at once.  Thanks to
    John Marshall.
@@ -25,12 +31,6 @@ Release a.b
  * Make samtools coverage ASCII mode produce true ASCII output.  Previously it
    would produce UTF8 characters.
    (#1423; fixes #1419)
-
- * Complete rewrite of samtools depth.  This means it is now considerably faster
-   and does not need a depth limit to avoid high memory usage.  All output should
-   be identical to the old command with the potential exception of overlap
-   removal.
-   (#1428; fixes #889, helps ameliorate #1411)
 
  * Three new counts added to samtools flagstat; primary, mapped primary and
    duplicate primary.
