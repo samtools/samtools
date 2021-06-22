@@ -34,7 +34,7 @@ m4_include([m4/hts_with_curses.m4])
 m4_include([m4/ax_with_htslib.m4])
 
 dnl Copyright notice to be copied into the generated configure script
-AC_COPYRIGHT([Portions copyright (C) 2015,2017 Genome Research Ltd.
+AC_COPYRIGHT([Portions copyright (C) 2015,2017, 2019 Genome Research Ltd.
 
 This configure script is free software: you are free to change and
 redistribute it.  There is NO WARRANTY, to the extent permitted by law.])
