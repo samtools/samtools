@@ -58,6 +58,7 @@ typedef struct {
     int unmapped;
     int oa_tag;
     int del_tag;
+    int tol;
     char *arg_list;
     char *stats_file;
     char *rejects_file;
@@ -222,134 +223,11 @@ void destroy_bed_hash(khash_t(bed_list_hash) *hash) {
 }
 
 
-int load_bed_file_entries(char *infile, int get_strand, int sort_by_pos,
-                        bed_entry_list_t *entries, int64_t *longest) {
-    hFILE *fp;
-    int line_count = 0, ret;
-    int64_t left, right;
-    kstring_t line = KS_INITIALIZE;
-    *longest = 0;
-
-    if ((fp = hopen(infile, "r")) == NULL) {
-        print_error_errno("ampliconclip", "unable to open file %s.", infile);
-        return 1;
-    }
-
-    entries->size = 256;
-
-    if ((entries->bp = malloc(entries->size * sizeof(bed_entry_t))) == NULL) {
-        fprintf(stderr, "[ampliconclip] error: unable to allocate memory for bed data.\n");
-        ret = 1;
-        goto error;
-    }
-
-    *entries->ref = 0;
-    char ref[256];
-    while (line.l = 0, kgetline(&line, (kgets_func *)hgets, fp) >= 0) {
-        line_count++;
-
-        if (line.l == 0 || *line.s == '#') continue;
-        if (strncmp(line.s, "track ", 6) == 0) continue;
-        if (strncmp(line.s, "browser ", 8) == 0) continue;
-
-        if (get_strand) {
-            char strand;
-
-            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64" %*s %*s %c",
-                       ref, &left, &right, &strand) != 4) {
-                fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s.\n",
-                                    line_count, infile);
-                ret = 1;
-                goto error;
-            }
-            if (*entries->ref) {
-                if (strncmp(ref, entries->ref, 256)) {
-                    fprintf(stderr, "[ampliconclip] error: "
-                            "bed file contains more than one reference.\n");
-                    ret = 1;
-                    goto error;
-                }
-            } else {
-                memcpy(entries->ref, ref, 256);
-            }
-
-            if (strand == '+') {
-                entries->bp[entries->length].rev = 0;
-            } else if (strand == '-') {
-                entries->bp[entries->length].rev = 1;
-            } else {
-                fprintf(stderr, "[ampliconclip] error: bad strand value in line %d, expecting '+' or '-', found '%c'.\n",
-                            line_count, strand);
-                ret = 1;
-                goto error;
-            }
-        } else {
-            if (sscanf(line.s, "%255s %"SCNd64" %"SCNd64,
-                       ref, &left, &right) != 3) {
-                fprintf(stderr, "[ampliconclip] error: bad bed file format in line %d of %s",
-                                    line_count, infile);
-                ret = 1;
-                goto error;
-            }
-            if (*entries->ref) {
-                if (strncmp(ref, entries->ref, 256)) {
-                    fprintf(stderr, "[ampliconclip] error: "
-                            "bed file contains more than one reference.\n");
-                    ret = 1;
-                    goto error;
-                }
-            } else {
-                memcpy(entries->ref, ref, 256);
-            }
-        }
-
-        if (entries->length == entries->size) {
-            bed_entry_t *tmp;
-
-            entries->size *= 2;
-
-            if ((tmp = realloc(entries->bp, entries->size * sizeof(bed_entry_t))) == NULL) {
-                fprintf(stderr, "[ampliconclip] error: unable to allocate more memory for bed data.\n");
-                ret = 1;
-                goto error;
-            }
-
-            entries->bp = tmp;
-        }
-
-        entries->bp[entries->length].left  = left;
-        entries->bp[entries->length].right = right;
-        if (right - left > *longest)
-            *longest = right - left;
-
-        entries->length++;
-    }
-
-    if (sort_by_pos)
-        qsort(entries->bp, entries->length, sizeof(entries->bp[0]), bed_entry_sort);
-
-    if (entries->length)
-        ret = 0;
-    else
-        ret = 1;
-
-error:
-    ks_free(&line);
-    if (hclose(fp) != 0) {
-        fprintf(stderr, "[ampliconclip] warning: failed to close %s", infile);
-    }
-    if (ret) {
-        free(entries->bp);
-        entries->bp = NULL;
-    }
-
-    return ret;
-}
-
-
 static int matching_clip_site(bed_entry_list_t *sites, hts_pos_t pos,
-                              int is_rev, int use_strand, int64_t longest) {
-    int i, tol = 5, size;  // may need this to be variable
+                              int is_rev, int use_strand, int64_t longest,
+                              cl_param_t *param) {
+    int i, size;  // may need this to be variable
+    int tol = param->tol;
     int l = 0, mid = sites->length / 2, r = sites->length;
     int pos_tol = is_rev ? (pos > tol ? pos - tol : 0) : pos;
 
@@ -852,7 +730,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                     is_rev = 0;
                 }
 
-                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest, param))) {
                     if (is_rev) {
                         if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
                             goto fail;
@@ -897,7 +775,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                 pos = b->core.pos;
                 is_rev = 0;
 
-                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest, param))) {
                     if (bam_trim_left(b, b_tmp, p_size, clipping) != 0)
                         goto fail;
 
@@ -911,7 +789,7 @@ static int bam_clip(samFile *in, samFile *out, samFile *reject, char *bedfile,
                 pos = bam_endpos(b);
                 is_rev = 1;
 
-                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest))) {
+                if ((p_size = matching_clip_site(sites, pos, is_rev, param->use_strand, sites->longest, param))) {
                     if (bam_trim_right(b, b_tmp, p_size, clipping) != 0)
                         goto fail;
 
@@ -1059,6 +937,7 @@ static void usage(void) {
     fprintf(stderr, " --rejects-file FILE file to write filtered reads.\n");
     fprintf(stderr, " --original          for clipped entries add an OA tag with original data.\n");
     fprintf(stderr, " --keep-tag          for clipped entries keep the old NM and MD tags.\n");
+    fprintf(stderr, " --tolerance         match region within this number of bases, default 5.\n");
     fprintf(stderr, " --no-PG             do not add an @PG line.\n");
     sam_global_opt_help(stderr, "-.O..@-.");
     fprintf(stderr, "\nAbout: Soft clips read alignments where they match BED file defined regions.\n"
@@ -1074,7 +953,7 @@ int amplicon_clip_main(int argc, char **argv) {
     htsThreadPool p = {NULL, 0};
     samFile *in = NULL, *out = NULL, *reject = NULL;
     clipping_type clipping = soft_clip;
-    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, 1, NULL, NULL, NULL};
+    cl_param_t param = {1, 0, 0, 0, 0, -1, -1, 0, 0, 1, 5, NULL, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -1091,6 +970,7 @@ int amplicon_clip_main(int argc, char **argv) {
         {"rejects-file", required_argument, NULL, 1012},
         {"original", no_argument, NULL, 1013},
         {"keep-tag", no_argument, NULL, 1014},
+        {"tolerance", required_argument, NULL, 1015},
         {NULL, 0, NULL, 0}
     };
 
@@ -1113,6 +993,7 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1012: param.rejects_file = optarg; break;
             case 1013: param.oa_tag = 1; break;
             case 1014: param.del_tag = 0; break;
+            case 1015: param.tol = atoi(optarg); break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);
@@ -1127,6 +1008,12 @@ int amplicon_clip_main(int argc, char **argv) {
     if (optind + 1 > argc) {
         usage();
         return 1;
+    }
+
+    if (param.tol < 0) {
+        fprintf(stderr, "[ampliconclip] warning: invalid tolerance of %d,"
+                        " reseting tolerance to default of 5.\n", param.tol);
+        param.tol = 5;
     }
 
     if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {
