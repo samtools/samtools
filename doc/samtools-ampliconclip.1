@@ -62,6 +62,7 @@ samtools ampliconclip
 .IR rejects.file ]
 .RB [ --original ]
 .RB [ --keep-tag ]
+.RB [ --tolerance ]
 .RB [ --no-PG ]
 .RB [ -u ]
 .B -b
@@ -75,8 +76,8 @@ positions which correspond to amplicon primer locations it can also be used in
 other contexts.
 
 BED file entries used are chrom, chromStart, chromEnd and, optionally, strand. 
-There is a tolerance of 5 bases when matching chromStart and chromEnd to
-alignments.
+There is a default tolerance of 5 bases when matching chromStart and chromEnd
+to alignments.
 
 By default the reads are soft clipped and clip is only done from the 5' end.
 
@@ -141,6 +142,9 @@ Add an OA tag with the original data for clipped files.
 .TP
 .B --keep-tag
 In clipped reads, keep the possibly invalid NM and MD tags.  By default these tags are deleted.  
+.TP
+.BI "--tolerance " INT
+The amount of latitude given in matching regions to alignments.  Default 5 bases.
 .TP
 .B --no-PG
 Do not at a PG line to the header.

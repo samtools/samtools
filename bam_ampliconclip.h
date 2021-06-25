@@ -38,16 +38,12 @@ typedef struct {
     int64_t longest;
     int length;
     int size;
-    char ref[256];
 } bed_entry_list_t;
 
 KHASH_MAP_INIT_STR(bed_list_hash, bed_entry_list_t);
 
 #define BED_LIST_INIT {NULL, 0, 0, 0, {0}}
 
-
-int load_bed_file_entries(char *infile, int get_strand, int sort_by_pos,
-                        bed_entry_list_t *entries, int64_t *longest);
 
 int load_bed_file_multi_ref(char *infile, int get_strand,
                         int sort_by_pos, khash_t(bed_list_hash) *bed_lists);
