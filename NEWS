@@ -12,7 +12,7 @@ Release a.b
    John Marshall.
    (#1401, fixes #749)
    
- * Fix negative depth values in ampliconstats output.
+ * Fixed negative depth values in ampliconstats output.
    (#1400)
   
  * samtools addreplacerg now allows for updating (replacing) an existing
@@ -21,14 +21,14 @@ Release a.b
    approval, which can be given with the new -w option.  Thanks to Chuang Yu.
    (#1404)
   
- * Support multiple refs/chroms from a BED file in ampliconclip, ampiliconstats
+ * Supports multiple refs/chroms from a BED file in ampliconclip, ampiliconstats
    and plot-ampliconstats.
    (#1410 and #1417; fixes #1396 and #1418)
   
- * Stop samtools cat from outputting multiple CRAM EOF markers.
+ * Stopped samtools cat from outputting multiple CRAM EOF markers.
    (#1422)
 
- * Make samtools coverage ASCII mode produce true ASCII output.  Previously it
+ * Made samtools coverage ASCII mode produce true ASCII output.  Previously it
    would produce UTF8 characters.
    (#1423; fixes #1419)
 
@@ -36,7 +36,7 @@ Release a.b
    duplicate primary.
    (#1431; fixes #1382)
 
- * Build change.  Support an HTSlib source tree that has a separate build
+ * Build change.  Supports an HTSlib source tree that has a separate build
    directory.  Thanks to John Marshall.
    (#1427; companion change to samtools/htslib#1277)
 
@@ -50,9 +50,9 @@ Release a.b
    remains supported. Thanks to David McGaughey and John Marshall.
    (#1434)
    
- * Replace fopen with stat for file exist checks.  Prevents hanging when used
+ * Replaced fopen with stat for file exist checks.  Prevents hanging when used
    on a named pipe.
-   (#1438; fixes #1438)
+   (#1438; fixes #1437)
    
  * Updated the documentation on samtools ampliconclip to be clearer about what
    it does.  From a suggestion by Nathan S Watson-Haigh.
