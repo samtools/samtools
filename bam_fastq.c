@@ -581,7 +581,7 @@ static inline bool filter_it_out(const bam1_t *b, const bam2fq_state_t *state)
 int write_index_rec(samFile *fp, bam1_t *b, bam2fq_state_t *state,
                     bam2fq_opts_t* opts, char *seq, int seq_len,
                     char *qual, int qual_len) {
-    if (!fp || !seq_len)
+    if (!fp || !b || !seq_len)
         return 0;
 
     int ret = -1;
