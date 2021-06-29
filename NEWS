@@ -29,7 +29,7 @@ Release a.b
    (#1422)
 
  * Made samtools coverage ASCII mode produce true ASCII output.  Previously it
-   would produce UTF8 characters.
+   would produce UTF-8 characters.
    (#1423; fixes #1419)
 
  * Three new counts added to samtools flagstat; primary, mapped primary and
