@@ -326,7 +326,7 @@ int main_samview(int argc, char *argv[])
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
-        {"add-flag", required_argument, NULL, LONGOPT('a')},
+        {"add-flags", required_argument, NULL, LONGOPT('a')},
         {"bam", no_argument, NULL, 'b'},
         {"count", no_argument, NULL, 'c'},
         {"cram", no_argument, NULL, 'C'},
@@ -358,7 +358,7 @@ int main_samview(int argc, char *argv[])
         {"region-file", required_argument, NULL, LONGOPT('L')},
         {"regions-file", required_argument, NULL, LONGOPT('L')},
         {"remove-B", no_argument, NULL, 'B'},
-        {"remove-flag", required_argument, NULL, LONGOPT('r')},
+        {"remove-flags", required_argument, NULL, LONGOPT('r')},
         {"remove-tag", required_argument, NULL, 'x'},
         {"require-flags", required_argument, NULL, 'f'},
         {"subsample", required_argument, NULL, LONGOPT('s')},
@@ -967,8 +967,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -s INT.FRAC                Same as --subsample 0.FRAC --subsample-seed INT\n"
 "\n"
 "Processing options:\n"
-"      --add-flag FLAG        Add FLAGs to reads\n"
-"      --remove-flag FLAG     Remove FLAGs from reads\n"
+"      --add-flags FLAG       Add FLAGs to reads\n"
+"      --remove-flags FLAG    Remove FLAGs from reads\n"
 "  -x, --remove-tag STR       Strip tag STR from reads (option may be repeated)\n"
 "  -B, --remove-B             Collapse the backward CIGAR operation\n"
 "\n"
