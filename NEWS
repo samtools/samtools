@@ -1,6 +1,17 @@
 Release a.b
 -----------
 
+ * Fixed samtools view FILE REGION, mpileup -r REGION, coverage -r REGION and
+   other region queries: fixed bug introduced in 1.12, which led to region
+   queries producing very few reads for some queries (especially for larger
+   target regions) when unmapped reads were present.
+   Thanks to @vinimfava (#1451), @JingGuo1997 (#1457) and Ramprasad Neethiraj
+   (#1460) for reporting the respective issues.
+
+ * Fixed samtools coverage error message when the target region name is not
+   present in the file header. Thanks to @Lyn16 for reporting it.
+   (#1462; fixes #1461)
+
  * Complete rewrite of samtools depth.  This means it is now considerably faster
    and does not need a depth limit to avoid high memory usage.  Results should
    mostly be the same as the old command with the potential exception of overlap
@@ -21,7 +32,7 @@ Release a.b
    approval, which can be given with the new -w option.  Thanks to Chuang Yu.
    (#1404)
   
- * Supports multiple refs/chroms from a BED file in ampliconclip, ampiliconstats
+ * Supports multiple refs/chroms from a BED file in ampliconclip, ampliconstats
    and plot-ampliconstats.
    (#1410 and #1417; fixes #1396 and #1418)
   
