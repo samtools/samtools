@@ -446,7 +446,7 @@ int main_coverage(int argc, char *argv[]) {
 
     data = (bam_aux_t **)calloc(n_bam_files, sizeof(bam_aux_t*)); // data[i] for the i-th BAM file
     if (!data) {
-        print_error("coverage", "Failed to allocate memory");
+        print_error_errno("coverage", "Failed to allocate memory");
         status = EXIT_FAILURE;
         goto coverage_end;
     }
@@ -455,7 +455,7 @@ int main_coverage(int argc, char *argv[]) {
         int rf;
         data[i] = (bam_aux_t *) calloc(1, sizeof(bam_aux_t));
         if (!data[i]) {
-            print_error("coverage", "Failed to allocate memory");
+            print_error_errno("coverage", "Failed to allocate memory");
             status = EXIT_FAILURE;
             goto coverage_end;
         }
@@ -471,12 +471,12 @@ int main_coverage(int argc, char *argv[]) {
 
         // Set CRAM options on file handle - returns 0 on success
         if (hts_set_opt(data[i]->fp, CRAM_OPT_REQUIRED_FIELDS, rf)) {
-            print_error_errno("coverage", "Failed to set CRAM_OPT_REQUIRED_FIELDS value");
+            print_error("coverage", "Failed to set CRAM_OPT_REQUIRED_FIELDS value");
             status = EXIT_FAILURE;
             goto coverage_end;
         }
         if (hts_set_opt(data[i]->fp, CRAM_OPT_DECODE_MD, 0)) {
-            print_error_errno("coverage", "Failed to set CRAM_OPT_DECODE_MD value");
+            print_error("coverage", "Failed to set CRAM_OPT_DECODE_MD value");
             status = EXIT_FAILURE;
             goto coverage_end;
         }
@@ -502,7 +502,7 @@ int main_coverage(int argc, char *argv[]) {
             data[i]->iter = sam_itr_querys(idx, data[i]->hdr, opt_reg); // set the iterator
             hts_idx_destroy(idx); // the index is not needed any more; free the memory
             if (data[i]->iter == NULL) {
-                print_error_errno("coverage", "Failed to parse region \"%s\"", opt_reg);
+                print_error("coverage", "Failed to parse region \"%s\". Check the region format or region name presence in the file \"%s\"", opt_reg, argv[optind+i]);
                 status = EXIT_FAILURE;
                 goto coverage_end;
             }
@@ -516,7 +516,7 @@ int main_coverage(int argc, char *argv[]) {
     int n_targets = sam_hdr_nref(h);
     stats = calloc(n_targets, sizeof(stats_aux_t));
     if (!stats) {
-        print_error("coverage", "Failed to allocate memory");
+        print_error_errno("coverage", "Failed to allocate memory");
         status = EXIT_FAILURE;
         goto coverage_end;
     }
@@ -553,7 +553,7 @@ int main_coverage(int argc, char *argv[]) {
     n_plp = (int*) calloc(n_bam_files, sizeof(int*)); // n_plp[i] is the number of covering reads from the i-th BAM
     plp = (const bam_pileup1_t**) calloc(n_bam_files, sizeof(bam_pileup1_t*)); // plp[i] points to the array of covering reads (internal in mplp)
     if (!hist || !n_plp || !plp) {
-        print_error("coverage", "Failed to allocate memory");
+        print_error_errno("coverage", "Failed to allocate memory");
         status = EXIT_FAILURE;
         goto coverage_end;
     }
