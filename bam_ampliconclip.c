@@ -993,7 +993,7 @@ int amplicon_clip_main(int argc, char **argv) {
             case 1012: param.rejects_file = optarg; break;
             case 1013: param.oa_tag = 1; break;
             case 1014: param.del_tag = 0; break;
-            case 1015: param.tol = atoi(optarg);  if (param.tol < 0) param.tol = 0; break;
+            case 1015: param.tol = atoi(optarg); break;
             default:  if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
                       /* else fall-through */
             case '?': usage(); exit(1);
@@ -1008,6 +1008,12 @@ int amplicon_clip_main(int argc, char **argv) {
     if (optind + 1 > argc) {
         usage();
         return 1;
+    }
+
+    if (param.tol < 0) {
+        fprintf(stderr, "[ampliconclip] warning: invalid tolerance of %d,"
+                        " reseting tolerance to default of 5.\n", param.tol);
+        param.tol = 5;
     }
 
     if ((in = sam_open_format(argv[optind], "rb", &ga.in)) == NULL) {
