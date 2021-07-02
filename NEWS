@@ -82,6 +82,11 @@ Release a.b
    into unmapped SAM, BAM or CRAM.
    (#1323)
 
+ * samtools view now has long option equivalents for most of its  single-letter
+   options. Thanks to John Marshall.
+   (#1442)
+
+
 
 Release 1.12 (17th March 2021)
 ------------------------------
