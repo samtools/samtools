@@ -13,12 +13,12 @@ Release a.b
    changes (part of #1358)
    (#1441)
 
- * samtools view now has long option equivalents for most of its  single-letter
+ * samtools view now has long option equivalents for most of its single-letter
    options. Thanks to John Marshall.
    (#1442)
 
- * New tool, samtools import.  Reads one or more FASTQ files and converts them
-   into unmapped SAM, BAM or CRAM.
+ * A new tool, samtools import, has been added.  It reads one or more FASTQ
+   files and converts them into unmapped SAM, BAM or CRAM.
    (#1323)
 
  * Fixed samtools coverage error message when the target region name is not
@@ -44,13 +44,13 @@ Release a.b
    John Marshall.
    (#1401, fixes #749)
 
- * Supports multiple refs/chroms from a BED file in ampliconclip, ampliconstats
-   and plot-ampliconstats.
+ * samtools ampliconclip, ampliconstats and plot-ampliconstats now support
+   inputs that list more than one reference.
    (#1410 and #1417; fixes #1396 and #1418)
 
  * samtools ampliconclip now accepts the --tolerance option, which allows the
-   user to set the number of base within which a region is matched. The default
-   is 5.
+   user to set the number of bases within which a region is matched.  The
+   default is 5.
    (#1456)
 
  * Updated the documentation on samtools ampliconclip to be clearer about what
@@ -69,8 +69,8 @@ Release a.b
  * Stopped samtools cat from outputting multiple CRAM EOF markers.
    (#1422)
 
- * Three new counts added to samtools flagstat; primary, mapped primary and
-   duplicate primary.
+ * Three new counts have been added to samtools flagstat: primary, mapped
+   primary and duplicate primary.
    (#1431; fixes #1382)
 
  * samtools merge now accepts a `-o FILE` option specifying the output file,
@@ -79,16 +79,19 @@ Release a.b
    remains supported. Thanks to David McGaughey and John Marshall.
    (#1434)
 
- * Replaced fopen with stat for file exist checks.  Prevents hanging when used
-   on a named pipe.
+ * The way samtools merge checks for existing files has been changed
+   so that it does not hang when used on a named pipe.
    (#1438; fixes #1437)
 
  * Updated documentation on mpileup to highlight the fact that the filtering
-   options work with ANY rules.
+   options on FLAGs work with ANY rules.
    (#1447; fixes #1435)
 
- * Build change.  Supports an HTSlib source tree that has a separate build
-   directory.  Thanks to John Marshall.
+ * samtools can now be configured to use a copy of HTSlib that has been set
+   up with separate build and source trees.  When this is the case, the
+   `--with-htslib` configure option should be given the location of the HTSlib
+   build tree.  (Note that samtools itself does not yet support out-of-tree
+   builds).  Thanks to John Marshall.
    (#1427; companion change to samtools/htslib#1277)
 
 
