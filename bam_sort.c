@@ -1012,7 +1012,6 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     sam_hdr_t **hdr = NULL;
     trans_tbl_t *translation_tbl = NULL;
     int *rtrans = NULL;
-    char *out_idx_fn = NULL;
     void *hreg = NULL;
     hts_reglist_t *lreg = NULL;
     merged_header_t *merged_hdr = init_merged_header();
@@ -1277,7 +1276,7 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         return -1;
     }
     if (write_index) {
-        if (!(out_idx_fn = auto_index(fpout, out, hout))){
+        if (auto_index(fpout, out, hout) < 0){
             sam_close(fpout);
             return -1;
         }
@@ -1296,7 +1295,6 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         if (sam_write1(fpout, hout, b) < 0) {
             print_error_errno(cmd, "failed writing to \"%s\"", out);
             sam_close(fpout);
-            free(out_idx_fn);
             return -1;
         }
         if ((j = (iter[heap->i]? sam_itr_next(fp[heap->i], iter[heap->i], b) : sam_read1(fp[heap->i], hdr[heap->i], b))) >= 0) {
@@ -1328,7 +1326,6 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
             goto fail;
         }
     }
-    free(out_idx_fn);
 
     // Clean up and close
     if (flag & MERGE_RG) {
@@ -1380,7 +1377,6 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
     free(heap);
     free(fp);
     free(rtrans);
-    free(out_idx_fn);
     return -1;
 }
 
@@ -1631,7 +1627,6 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     heap1_t *heap = NULL;
     uint64_t idx = 0;
     int i, heap_size = n + num_in_mem;
-    char *out_idx_fn = NULL;
 
     g_is_by_qname = by_qname;
     if (sort_tag) {
@@ -1707,7 +1702,7 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     }
 
     if (write_index) {
-        if (!(out_idx_fn = auto_index(fpout, out, hout))){
+        if (auto_index(fpout, out, hout) < 0){
             sam_close(fpout);
             return -1;
         }
@@ -1750,7 +1745,6 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
             print_error_errno("merge", "writing index failed");
             goto fail;
         }
-        free(out_idx_fn);
     }
 
     if (sam_close(fpout) < 0) {
@@ -1772,7 +1766,6 @@ static int bam_merge_simple(int by_qname, char *sort_tag, const char *out,
     free(fp);
     free(heap);
     if (fpout) sam_close(fpout);
-    free(out_idx_fn);
     return -1;
 }
 
@@ -1947,7 +1940,6 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
 {
     size_t i;
     samFile* fp;
-    char *out_idx_fn = NULL;
 
     fp = sam_open_format(fn, mode, fmt);
     if (fp == NULL) return -1;
@@ -1960,7 +1952,7 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
     if (sam_hdr_write(fp, h) != 0) goto fail;
 
     if (write_index)
-        if (!(out_idx_fn = auto_index(fp, fn, (sam_hdr_t *)h))) goto fail;
+        if (auto_index(fp, fn, (sam_hdr_t *)h) < 0) goto fail;
 
     if (n_threads > 1) hts_set_threads(fp, n_threads);
     for (i = 0; i < l; ++i) {
@@ -1979,7 +1971,6 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
             print_error_errno("merge", "writing index failed");
             goto fail;
         }
-        free(out_idx_fn);
     }
 
 
@@ -1987,7 +1978,6 @@ static int write_buffer(const char *fn, const char *mode, size_t l, bam1_tag *bu
     return 0;
  fail:
     sam_close(fp);
-    free(out_idx_fn);
     return -1;
 }
 

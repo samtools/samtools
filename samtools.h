@@ -41,12 +41,9 @@ void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const c
  * Utility function to add an index to a file we've opened for write.
  * NB: Call this after writing the header and before writing sequences.
  *
- * The returned index filename should be freed by the caller, but only
- * after sam_idx_save has been called.
- *
- * Returns index filename on success,
- *         NULL on failure.
+ * Returns  0 on success,
+ *         -1 on failure.
  */
-char *auto_index(htsFile *fp, const char *fn, bam_hdr_t *header);
+int auto_index(htsFile *fp, const char *fn, bam_hdr_t *header);
 
 #endif
