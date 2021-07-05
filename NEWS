@@ -1,6 +1,11 @@
 Release a.b
 -----------
 
+ * samtools ampliconclip now accepts the --tolerance option, which allows the
+   user to set the number of base within which a region is matched. The default
+   is 5.
+   (#1456)
+
  * Fixed samtools view FILE REGION, mpileup -r REGION, coverage -r REGION and
    other region queries: fixed bug introduced in 1.12, which led to region
    queries producing very few reads for some queries (especially for larger
