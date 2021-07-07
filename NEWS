@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.13 (7th July 2021)
+----------------------------
+
  * Fixed samtools view FILE REGION, mpileup -r REGION, coverage -r REGION and
    other region queries: fixed bug introduced in 1.12, which led to region
    queries producing very few reads for some queries (especially for larger
