@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -78,6 +78,8 @@ samtools merge out.bam in1.bam in2.bam in3.bam
 samtools split merged.bam
 .PP
 samtools cat out.bam in1.bam in2.bam in3.bam
+.PP
+samtools import input.fastq > output.bam
 .PP
 samtools fastq input.bam > output.fastq
 .PP
@@ -484,6 +486,18 @@ dictionary of each input file must be identical, although this command
 does not check this. This command uses a similar trick to
 .B reheader
 which enables fast BAM concatenation.
+
+.TP \"-------- import
+.B import
+samtools import
+.RI [ options ]
+.IR in.fastq " [ ... ]"
+
+Converts one or more FASTQ files to unaligned SAM, BAM or CRAM.  These
+formats offer a richer capability of tracking sample meta-data via the
+SAM header and per-read meta-data via the auxiliary tags.  The
+.B fastq
+command may be used to reverse this conversion.
 
 .TP \"-------- fastq fasta
 .B fastq/a
@@ -955,7 +969,7 @@ Grouping	(, )	E.g. "(1+2)*3"
 Values:	literals, vars	Numbers, strings and variables
 Unary ops:	+, -, !, ~ 	E.g. -10 +10, !10 (not), ~5 (bit not)
 Math ops:	*, /, %	Multiply, division and (integer) modulo
-Math ops:	+, -	Addition / subtractin
+Math ops:	+, -	Addition / subtraction
 Bit-wise:	&	Integer AND
 Bit-wise	^	Integer XOR
 Bit-wise	|	Integer OR
@@ -1038,7 +1052,7 @@ for alignments with many mismatches and \fB[RG]=~"grp[ABC]-"\fR will
 match the read-group string.
 
 If no comparison is used with an auxiliary tag it is taken simply to
-be a test for the existance of that tag.  So "[NM]" will return any
+be a test for the existence of that tag.  So "[NM]" will return any
 record containing an NM tag, even if that tag is zero (\fBNM:i:0\fR).
 
 If you need to check specifically for a non-zero value then use \fB[NM]
@@ -1103,7 +1117,7 @@ local cache is used.
 
 To avoid many files being stored in the same directory, REF_CACHE may
 be defined as a pattern using \fB%\fR\fInum\fR\fBs\fR to consume \fInum\fR
-chracters of the MD5sum and \fB%s\fR to consume all remaining characters.
+characters of the MD5sum and \fB%s\fR to consume all remaining characters.
 If REF_CACHE lacks \fB%s\fR then it will get an implicit \fB/%s\fR appended.
 
 To aid population of the REF_CACHE directory a script
@@ -1180,6 +1194,7 @@ for further authorship.
 .IR samtools-flagstat (1),
 .IR samtools-fqidx (1),
 .IR samtools-idxstats (1),
+.IR samtools-import (1),
 .IR samtools-index (1),
 .IR samtools-markdup (1),
 .IR samtools-merge (1),

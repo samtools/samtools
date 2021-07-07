@@ -1,12 +1,12 @@
-@ref1_grp1_p001 1:N:0:AC
+@ref1_grp1_p001 1:N:0:AC+GT
 AC
 +
 ""
-@ref1_grp1_p002 1:N:0:AATT
+@ref1_grp1_p002 1:N:0:AATT+CCGG
 AATT
 +
 """"
-@ref1_grp2_p001 1:N:0:TG
+@ref1_grp2_p001 1:N:0:TG+CA
 TG
 +
 ab

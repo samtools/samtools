@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2013-2020 Genome Research Ltd.
+#    Copyright (C) 2013-2021 Genome Research Ltd.
 #
 #    Author: Petr Danecek <pd3@sanger.ac.uk>
 #
@@ -44,6 +44,7 @@ test_mpileup($opts);
 test_usage($opts, cmd=>'samtools');
 test_view($opts);
 test_cat($opts);
+test_import($opts);
 test_bam2fq($opts);
 test_bam2fq($opts, threads=>2);
 test_depad($opts);
@@ -2462,6 +2463,18 @@ sub test_view
                   args => ['-h', $b_pg_sam],
                   out => sprintf("%s.test%03d.sam", $out, $test),
                   compare => $b_pg_expected);
+
+    # unset flags and clear tags associated with duplication
+    $test++;
+
+    my $dup_sam = "$$opts{path}/dat/view.005.sam";
+    my $dup_expected = "$$opts{path}/dat/view.005.expected.sam";
+
+    run_view_test($opts,
+                    msg=> "$test: Unset dup flag, remove dt and do tags",
+                    args => ['-h', '--remove-flags', 'DUP', '-x', 'do', '-x', 'dt', '--no-PG', $dup_sam],
+                    out => sprintf("%s.test%03d.sam", $out, $test),
+                    compare => $dup_expected);
 }
 
 # cat SAM files in the same way as samtools cat does with BAMs
@@ -2693,6 +2706,95 @@ sub sam2fq
     close($in) || die "Error reading $sam_in : $!\n";
 }
 
+# Conversion of FASTQ to BAM.
+# We use the bam2fq expected output to validate on.
+# This permits round trip validation
+# NB: This uses bam2fq/1.stdout.expected as a proxy for a blank filename.
+sub test_import
+{
+    my ($opts, %args) = @_;
+
+    # Just 1 end, as an unpaired read sample; eg as if ont or pacbio.
+    # -0 or implicit (lack of /1 /2 suffixes) via -s.
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"0.fq" => 'bam2fq/1.1.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import -0 test/bam2fq/1.1.fq.expected  | $$opts{bin}/samtools fastq -0 $$opts{path}/0.fq");
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"0.fq" => 'bam2fq/1.1.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import -s test/bam2fq/1.1.fq.expected  | $$opts{bin}/samtools fastq -0 $$opts{path}/0.fq");
+
+    # Just 1 end, as half of a paired-end sample.  Can be either explicit via
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"s.fq" => 'bam2fq/5.s.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import -s test/bam2fq/5.s.fq.expected  | $$opts{bin}/samtools fastq -s $$opts{path}/s.fq");
+
+    # Normal read 1 / read 2
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"1.fq" => 'bam2fq/1.1.fq.expected',
+                       "2.fq" => 'bam2fq/1.2.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import test/bam2fq/1.1.fq.expected test/bam2fq/1.2.fq.expected | $$opts{bin}/samtools fastq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
+
+    # Normal read 1 / read 2 but with /1 and /2 suffixes.
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"1.fq" => 'bam2fq/5.1.fq.expected',
+                       "2.fq" => 'bam2fq/5.2.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import test/bam2fq/5.1.fq.expected test/bam2fq/5.2.fq.expected | $$opts{bin}/samtools fastq -N -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
+
+    # Barcodes via CASAVA tags
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"1.fq" => 'bam2fq/12.1.fq.expected',
+                       "2.fq" => 'bam2fq/12.2.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import -i -1 test/bam2fq/12.1.fq.expected -2 test/bam2fq/12.2.fq.expected | $$opts{bin}/samtools fastq -i --index-format i*i* -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"1.fq" => 'bam2fq/12.1.fq.expected',
+                       "2.fq" => 'bam2fq/12.2.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import --barcode-tag OX -i -1 test/bam2fq/12.1.fq.expected -2 test/bam2fq/12.2.fq.expected | $$opts{bin}/samtools fastq --barcode-tag OX -i --index-format i*i* -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
+
+    # Barcodes via explicit aux tags; 6
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"1.fq" => 'bam2fq/6.1.fq.expected',
+                       "2.fq" => 'bam2fq/6.2.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import -T \"\" -1 test/bam2fq/6.1.fq.expected -2 test/bam2fq/6.2.fq.expected | $$opts{bin}/samtools fastq -N -T RG,BC,QT -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
+
+    # Other aux tags; 7
+    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+             out_map=>{"1.fq" => 'bam2fq/7.1.fq.expected',
+                       "2.fq" => 'bam2fq/7.2.fq.expected'},
+             cmd=>"$$opts{bin}/samtools import -T \"*\" -1 test/bam2fq/7.1.fq.expected -2 test/bam2fq/7.2.fq.expected | $$opts{bin}/samtools fastq -N -T RG,BC,QT,MD,ia -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
+
+    #------------------------
+    # Plus our own test files, using bam2fq as source
+
+    # Read-group
+    test_cmd($opts, out=>'import/1.expected.sam',
+             cmd=>"$$opts{bin}/samtools import test/bam2fq/1.1.fq.expected test/bam2fq/1.2.fq.expected -R rgid");
+    test_cmd($opts, out=>'import/1.expected.sam',
+             cmd=>"$$opts{bin}/samtools import test/bam2fq/1.1.fq.expected test/bam2fq/1.2.fq.expected -r ID:rgid");
+    test_cmd($opts, out=>'import/1.expected.sam',
+             cmd=>"$$opts{bin}/samtools import test/bam2fq/1.1.fq.expected test/bam2fq/1.2.fq.expected -r '\@RG\tID:rgid'");
+
+
+    # Interleaved data
+    test_cmd($opts, out=>'import/2.expected.sam',
+             cmd=>"$$opts{bin}/samtools import test/import/2.interleaved.fq -T \"\"");
+    test_cmd($opts, out=>'import/2.expected.sam',
+             cmd=>"$$opts{bin}/samtools import test/import/3.interleaved.fq -i");
+
+    # Non aux-tag comments (we don't use these, but also shouldn't choke).
+    test_cmd($opts, out=>'import/4.expected.sam',
+             cmd=>"$$opts{bin}/samtools import test/import/4.aux.fq -T \"*\"");
+    test_cmd($opts, out=>'import/4.expected.sam',
+             cmd=>"$$opts{bin}/samtools import test/import/4.aux.fq -T \"\"");
+    test_cmd($opts, out=>'import/4.expected-XZ,XA,AA.sam',
+             cmd=>"$$opts{bin}/samtools import test/import/4.aux.fq -T XZ,XA,AA");
+
+    # Barcode files
+    test_cmd($opts, out=>'import/5-BC.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --i1 test/import/5-i1.fq --i2  test/import/5-i2.fq --r1 test/import/5-r1.fq --r2 test/import/5-r2.fq");
+    test_cmd($opts, out=>'import/5-OX.expected.sam',
+             cmd=>"$$opts{bin}/samtools import --i1 test/import/5-i1.fq --i2  test/import/5-i2.fq --r1 test/import/5-r1.fq --r2 test/import/5-r2.fq --barcode-tag OX --quality-tag BZ");
+}
+
 sub test_bam2fq
 {
     my ($opts, %args) = @_;
@@ -2782,6 +2884,7 @@ sub test_bam2fq
 
     # Read 1/2 output, duplicate filename (-1 -2)
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -1 $$opts{path}/o.fq -2 $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fa' => 'bam2fq/11.fa.expected'},cmd=>"$$opts{bin}/samtools fasta @$threads -N -1 $$opts{path}/o.fa -2 $$opts{path}/o.fa $$opts{path}/dat/bam2fq.001.sam");
     # Read 1/2 output, single filename (-o)
     test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -o $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
     # Read 1/2 output, stdout and discard singletons/other
@@ -2921,6 +3024,8 @@ sub test_merge
     test_cmd($opts,out=>'merge/6.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -cp -s 1 -O sam - $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam");
     # Merge 7 - ID and SN with regex in them
     test_cmd($opts,out=>'merge/7.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -s 1 -O sam - $$opts{path}/dat/test_input_1_a_regex.sam $$opts{path}/dat/test_input_1_b_regex.sam");
+    # Merge 8 - Standard 3 file SAM merge, output file specified via option
+    test_cmd($opts,out=>'merge/2.merge.expected.sam', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools merge${threads} -o - -s 1 -O sam $$opts{path}/dat/test_input_1_a.sam $$opts{path}/dat/test_input_1_b.sam $$opts{path}/dat/test_input_1_c.sam");
 
     # Sort inputs by PG, then merge
     system("$$opts{bin}/samtools sort -o $$opts{tmp}/merge.tag.1.bam -t PG -m 10M $$opts{path}/dat/test_input_1_b.sam") == 0 or die "failed to create sort BAM: $?";
@@ -3162,6 +3267,7 @@ sub test_addrprg
     test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r '\@RG\\tID:1#8\\tCN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
     test_cmd($opts,out=>'addrprg/1_fixup.sam.expected', err=>'addrprg/1_fixup.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -m overwrite_all -R '1#8' $$opts{path}/addrprg/1_fixup.sam");
     test_cmd($opts,out=>'addrprg/4_fixup_norg.sam.expected', err=>'addrprg/4_fixup_norg.sam.expected.err', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -r 'ID:1#8' -r 'CN:SC' $$opts{path}/addrprg/4_fixup_norg.sam");
+    test_cmd($opts,out=>'addrprg/5_editrg.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools addreplacerg${threads} -O sam -w -r '\@RG\\tID:1#8\\tCN:Sanger\\tDS:Testing the editing code.' $$opts{path}/addrprg/1_fixup.sam");
 }
 
 sub test_markdup
@@ -3232,5 +3338,6 @@ sub test_ampliconstats
                   "$$opts{path}/ampliconclip/2_both_clipped.expected.sam");
 
     my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
-    test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | egrep -v 'Samtools version|Command line'");
+    test_cmd($opts, out=>'ampliconstats/stats.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -S -t 50 -d 1,20,100 $$opts{path}/ampliconclip/ac_test.bed @inputs | egrep -v 'Samtools version|Command line'");
+    test_cmd($opts, out=>'ampliconstats/stats_mixed.expected.txt', cmd=>"$$opts{bin}/samtools ampliconstats${threads} -c 0 $$opts{path}/ampliconclip/multi_ref.bed $$opts{path}/ampliconstats/mixed_clipped.sam | egrep -v 'Samtools version|Command line'");
 }

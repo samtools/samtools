@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-ampliconstats 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-ampliconstats 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
 .SH NAME
 samtools ampliconstats \- produces statistics from amplicon sequencing alignment file
 .\"
-.\" Copyright (C) 2020 Genome Research Ltd.
+.\" Copyright (C) 2020-2021 Genome Research Ltd.
 .\"
 .\" Author: James Bonfield <jkb@sanger.ac.uk>
 .\"
@@ -120,14 +120,17 @@ rows contain stats aggregated across all input files.
 This section is once per file and includes summary information to be
 utilised for scaling of plots, for example the total number of
 amplicons and files present, tool version number, and command line
-arguments.
+arguments.  The second column is the filename or "COMBINED".  This is
+followed by the reference name (unless single-ref mode is enabled),
+and the summary statistic name and value.
 
 The AMPLICON section is a reformatting of the input BED file.  Each
-line consists of the amplicon number and the \fIstart\fR-\fIend\fR
-coordinates of the left and right primers.  Where multiple primers are
-available these are comma separated, for example \fB10-30,15-40\fR in
-the left primer column indicates two primers have been multiplex
-together covering genome coords 10-30 inclusive and 14-40 inclusively.
+line consists of the reference name (unless single-ref mode is
+enable), the amplicon number and the \fIstart\fR-\fIend\fR coordinates
+of the left and right primers.  Where multiple primers are available
+these are comma separated, for example \fB10-30,15-40\fR in the left
+primer column indicates two primers have been multiplex together
+covering genome coordinates 10-30 inclusive and 14-40 inclusively.
 
 
 .SH CSS SECTION
@@ -216,6 +219,12 @@ left-most amplicon covered.
 Th COORD data may indicate which primers are being utilised if there
 are alternates available for a given amplicon.
 
+For COORD lines amplicon number 0 holds the frequency data for data
+that reads that have not been assigned to any amplicon.  That is, they
+may lie within an amplicon, but they do not start or end at a known
+primer location.  It is not recorded for BED files containing multiple
+references.
+
 The FAMP / CAMP section is a simple count per amplicon of the number
 of templates coming from this amplicon.  Templates are counted once
 per amplicon, but and like the FTCOORD field if a read-pair spans
@@ -225,6 +234,9 @@ of templates with both ends within this amplicon, the number of
 templates with the rightmost end in another amplicon, and the number
 of templates where the other end has failed to be assigned to an
 amplicon.
+
+Note FAMP / CAMP amplicon number 0 is the summation of data for all
+amplicons (1 onwards).
 
 .SH FDP_ALL / CDP_ALL / FDP_VALID / CDP_VALID section
 
@@ -245,12 +257,13 @@ amplicon 10 and the last half of amplicon 12.  Counting the number of
 reads or bases alone in the amplicon does not reveal the potential for
 non-uniformity of coverage.
 
-The format of the data is a series of tab separated tuples consisting
-of \fIdepth,length\fR.  The length field is a basic form of run-length
-encoding where all depth values within a specified fraction of each
-other (e.g. >= (1-fract)*midpoint and <= (1+fract)*midpoint) are
-combined into a single run.  This fraction is controlled via the
-\fB-D\fR option..
+The lines start with the type keyword, file / sample name, reference
+name (unless single-ref mode is enabled), followed by a variable
+number of tab separated tuples consisting of \fIdepth,length\fR.  The
+length field is a basic form of run-length encoding where all depth
+values within a specified fraction of each other (e.g. >=
+(1-fract)*midpoint and <= (1+fract)*midpoint) are combined into a
+single run.  This fraction is controlled via the \fB-D\fR option.
 
 .SH OPTIONS
 .TP 8
@@ -326,6 +339,14 @@ Output stats to FILE.  The default is to write to stdout.
 .B "-s, --use-sample-name"
 Instead of using the basename component of the input path names, use
 the SM field from the first @RG header line.
+
+.TP
+.B "-S, --single-ref"
+Force the output format to match the older single-reference style
+used in Samtools 1.12 and earlier.  This removes the reference names
+from the SS, AMPLICON, DP_ALL and DP_VALID sections.  It cannot be
+enabled if the input BED file has more than one reference present.
+Note that plot-ampliconstats can process both output styles.
 
 .TP
 .BI "-t, --tlen-adjust " INT

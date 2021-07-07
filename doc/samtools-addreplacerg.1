@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-addreplacerg 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-addreplacerg 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
 .SH NAME
 samtools addreplacerg \- adds or replaces read group tags
 .\"
@@ -58,7 +58,8 @@ samtools addreplacerg
 
 .SH DESCRIPTION
 .PP
-Adds or replaces read group tags in a file.
+Adds or replaces read group tags in a file. Also allows for adding and updating
+@RG lines in the header.
 
 .SH OPTIONS
 .TP 8
@@ -86,6 +87,9 @@ is selected.
 .TP 8
 .B -u
 Output uncompressed SAM, BAM or CRAM.
+.TP 8
+.B -w
+Overwrite an existing @RG line, if a new one with the same ID value is provided.
 .TP 8
 .BI --no-PG
 Do not add a @PG line to the header of the output file.

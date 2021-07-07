@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-merge 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-merge 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
 .SH NAME
-samtools merge \- merges multiple sorted input files into a single output.
+samtools merge \- merges multiple sorted files into a single file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2019 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2019, 2021 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -43,22 +43,29 @@ samtools merge \- merges multiple sorted input files into a single output.
 .
 .SH SYNOPSIS
 .PP
-.B merge
-samtools merge
-.RB [ -nur1f ]
-.RB [ -h
-.IR inh.sam ]
-.RB [ -t
-.IR tag ]
-.RB [ -R
-.IR reg ]
-.RB [ -b
-.IR list "] " out.bam " " in1.bam " [" in2.bam " " in3.bam " ... " inN.bam ]
+.B samtools merge
+.RI [ options ]
+.B -o
+.I out.bam
+.RI [ options ]
+.IR in1.bam " ... " inN.bam
+.PP
+.B samtools merge
+.RI [ options ]
+.I out.bam
+.IR in1.bam " ... " inN.bam
 
 .SH DESCRIPTION
 .PP
 Merge multiple sorted alignment files, producing a single sorted output file
 that contains all the input records and maintains the existing sort order.
+
+The output file can be specified via \fB-o\fP as shown in the first synopsis.
+Otherwise the first non-option filename argument is taken to be \fIout.bam\fP
+rather than an input file, as in the second synopsis.
+There is no default; to write to standard output (or to a pipe), use either
+\(lq\fB-o -\fP\(rq or the equivalent using \(lq\fB-\fP\(rq as the first
+filename argument.
 
 If
 .BR -h
@@ -105,6 +112,14 @@ are ignored.)
 .B -n
 The input alignments are sorted by read names rather than by chromosomal
 coordinates
+.TP
+.BI -o \ FILE
+Write merged output to
+.IR FILE ,
+specifying the filename via an option rather than as the first filename
+argument.
+When \fB-o\fP is used, all non-option filename arguments specify input
+files to be merged.
 .TP
 .B -t TAG
 The input alignments have been sorted by the value of TAG, then by either

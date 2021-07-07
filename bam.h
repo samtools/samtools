@@ -38,7 +38,7 @@ DEALINGS IN THE SOFTWARE.  */
   @copyright Genome Research Ltd.
  */
 
-#define BAM_VERSION "1.12"
+#define BAM_VERSION "1.13"
 
 #include <stdint.h>
 #include <stdlib.h>

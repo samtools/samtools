@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-mpileup 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-mpileup 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
 .SH NAME
 samtools mpileup \- produces "pileup" textual format from an alignment
 .\"
@@ -234,7 +234,7 @@ for all reads aligned to a reference in the file.  See
 below.
 .TP
 .BI -G,\ --exclude-RG \ FILE
-Exclude reads from readgroups listed in FILE (one @RG-ID per line)
+Exclude reads from read groups listed in FILE (one @RG-ID per line)
 .TP
 .BI -l,\ --positions \ FILE
 BED or position list file containing a list of regions or sites where
@@ -264,10 +264,10 @@ two requests.
 Ignore RG tags. Treat all reads in one BAM as one sample.
 .TP
 .BI --rf,\ --incl-flags \ STR|INT
-Required flags: skip reads with mask bits unset [null]
+Required flags: include reads with any of the mask bits set [null]
 .TP
 .BI --ff,\ --excl-flags \ STR|INT
-Filter flags: skip reads with mask bits set
+Filter flags: skip reads with any of the mask bits set
 [UNMAP,SECONDARY,QCFAIL,DUP]
 .TP
 .B -x,\ --ignore-overlaps
@@ -337,7 +337,7 @@ values and a list of NM tag values. Field values are always displayed before
 tag values.
 .TP
 .BI "--output-sep" \ CHAR
-Specify a different separtor character for tag value lists, when those values
+Specify a different separator character for tag value lists, when those values
 might contain one or more commas (\fB,\fR), which is the default list separator.
 This option only affects columns for two-letter tags like NM; standard
 fields like FLAG or QNAME will always be separated by commas.
@@ -381,7 +381,7 @@ option.  To disable it, use the
 .B -B
 option.
 
-It is possible to store pre-calculated BAQ values in a SAM BQ:Z tag.
+It is possible to store precalculated BAQ values in a SAM BQ:Z tag.
 Samtools mpileup will use the precalculated values if it finds them.
 The
 .B -E

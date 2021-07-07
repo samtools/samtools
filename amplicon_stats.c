@@ -75,23 +75,49 @@ typedef struct {
     sam_global_args ga;
     uint32_t flag_require;
     uint32_t flag_filter;
-    bed_pair_list_t sites;
     int max_delta;   // Used for matching read to amplicon primer loc
     int min_depth[MAX_DEPTH]; // Used for coverage; must be >= min_depth deep
     int use_sample_name;
     int max_amp;     // Total number of amplicons
     int max_amp_len; // Maximum length of an individual amplicon
-    int64_t max_len; // Maximum reference length
     double depth_bin;// aggregate depth within this fraction
     int tlen_adj;    // Adjust tlen by this amount, due to clip but no fixmate
     FILE *out_fp;
     char *argv;
     int tcoord_min_count;
     int tcoord_bin;
+    int multi_ref;
 } astats_args_t;
+
+typedef struct {
+    int nseq;       // total sequence count
+    int nfiltered;  // sequence filtered
+    int nfailprimer;// count of sequences not matching the primer locations
+
+    // Sizes of memory allocated below, to permit reset
+    int max_amp, max_amp_len, max_len;
+
+    // Summary across all samples, sum(x) plus sum(x^2) for s.d. calc
+    int64_t *nreads, *nreads2;          // [max_amp]
+    double  *nfull_reads;               // [max_amp]; 0.5/read if paired.
+    double  *nrperc, *nrperc2;          // [max_amp]
+    int64_t *nbases, *nbases2;          // [max_amp]
+    int64_t *coverage;                  // [max_amp][max_amp_len]
+    double  (*covered_perc)[MAX_DEPTH]; // [max_amp][MAX_DEPTH]
+    double  (*covered_perc2)[MAX_DEPTH];// [max_amp][MAX_DEPTH];
+    khash_t(tcoord) **tcoord;           // [max_amp+1]
+
+    // 0 is correct pair, 1 is incorrect pair, 2 is unidentified
+    int     (*amp_dist)[3];             // [MAX_AMP][3];
+
+    int *depth_valid; // [max_len]
+    int *depth_all;   // [max_len]
+    khash_t(qname) *qend;  // queryname end, for overlap removal
+} astats_t;
 
 // We can have multiple primers for LEFT / RIGHT, so this
 // permits detection by any compatible combination.
+// One reference:
 typedef struct {
     int64_t left[MAX_PRIMER_PER_AMPLICON];
     int nleft;
@@ -101,35 +127,45 @@ typedef struct {
     int64_t min_left, max_right; // outer dimensions
 } amplicon_t;
 
-// Map positions to amplicon numbers.
+// Multiple references, we have an array of amplicons_t - one per used ref.
+// We have per reference local and global stats here, as some of the stats
+// are coordinate based.  However we report them combined together as a single
+// list across all references.
+// "namp" is the number of amplicons in this reference, but they're
+// numbered first_amp to first_amp+namp-1 inclusively.
+typedef struct {
+    int tid, namp;
+    int64_t len;
+    bed_entry_list_t *sites;
+    amplicon_t *amp;
+    astats_t *lstats, *gstats; // local (1 file) and global (all file) stats
+    const char *ref;           // ref name (pointer to the bed hash table key)
+    int first_amp;             // first amplicon number for this ref
+} amplicons_t;
+
+// Reinitialised for each new reference/chromosome.
+// Counts from 1 to namp, -1 for no match and 0 for ?.
 static int *pos2start = NULL;
 static int *pos2end = NULL;
-static int64_t pos_lookup_len = 0;
+static int pos2size = 0; // allocated size of pos2start/end
 
 // Lookup table to go from position to amplicon based on
 // read start / end.
-//
-// NB: Could do bed2amplicon and this code as bed2pos() in a single step.
 static int initialise_amp_pos_lookup(astats_args_t *args,
-                                     amplicon_t *amp, int namp,
-                                     int64_t max_len) {
+                                     amplicons_t *amps,
+                                     int ref) {
     int64_t i, j;
+    amplicon_t *amp = amps[ref].amp;
+    int64_t max_len = amps[ref].len;
+    int namp = amps[ref].namp;
 
-    if (!pos_lookup_len) {
-        pos_lookup_len = max_len;
-        if (!(pos2start = calloc(max_len+1, sizeof(*pos2start))))
+    if (max_len+1 > pos2size) {
+        if (!(pos2start = realloc(pos2start, (max_len+1)*sizeof(*pos2start))))
             return -1;
-        if (!(pos2end   = calloc(max_len+1, sizeof(*pos2start)))) {
+        if (!(pos2end   = realloc(pos2end,   (max_len+1)*sizeof(*pos2end))))
             return -1;
-        }
-    } else if (pos_lookup_len != max_len) {
-        fprintf(stderr, "[ampliconstats] error: "
-                "input files with differing reference length");
-        return -1;
-    } else {
-        return 0; // already done
+        pos2size = max_len;
     }
-
     for (i = 0; i < max_len; i++)
         pos2start[i] = pos2end[i] = -1;
 
@@ -157,16 +193,11 @@ static int initialise_amp_pos_lookup(astats_args_t *args,
     return 0;
 }
 
-static void free_amp_pos_lookup(void) {
-    free(pos2start);
-    free(pos2end);
-}
-
 // Counts amplicons.
 // Assumption: input BED file alternates between LEFT and RIGHT primers
 // per amplicon, thus we can count the number based on the switching
 // orientation.
-static int count_amplicon(bed_pair_list_t *sites) {
+static int count_amplicon(bed_entry_list_t *sites) {
     int i, namp, last_rev = 0;
     for (i = namp = 0; i < sites->length; i++) {
         if (sites->bp[i].rev == 0 && last_rev)
@@ -183,9 +214,9 @@ static int count_amplicon(bed_pair_list_t *sites) {
 //
 // Returns right most amplicon position on success,
 //         < 0 on error
-static int64_t bed2amplicon(astats_args_t *args,
-                            bed_pair_list_t *sites,
-                            amplicon_t *amp, int *namp) {
+static int64_t bed2amplicon(astats_args_t *args, bed_entry_list_t *sites,
+                            amplicon_t *amp, int *namp, int do_title,
+                            const char *ref, int first_amp) {
     int i, j;
     int64_t max_right = 0;
     FILE *ofp = args->out_fp;
@@ -199,10 +230,15 @@ static int64_t bed2amplicon(astats_args_t *args,
     amp[0].min_right = INT64_MAX;
     amp[0].min_left = INT64_MAX;
     amp[0].max_right = 0;
-    fprintf(ofp, "# Amplicon locations from BED file.\n");
-    fprintf(ofp, "# LEFT/RIGHT are <start>-<end> format and "
-            "comma-separated for alt-primers.\n");
-    fprintf(ofp, "#\n# AMPLICON\tNUMBER\tLEFT\tRIGHT\n");
+    if (do_title) {
+        fprintf(ofp, "# Amplicon locations from BED file.\n");
+        fprintf(ofp, "# LEFT/RIGHT are <start>-<end> format and "
+                "comma-separated for alt-primers.\n");
+        if (args->multi_ref)
+            fprintf(ofp, "#\n# AMPLICON\tREF\tNUMBER\tLEFT\tRIGHT\n");
+        else
+            fprintf(ofp, "#\n# AMPLICON\tNUMBER\tLEFT\tRIGHT\n");
+    }
     for (i = j = 0; i < sites->length; i++) {
         if (i == 0 && sites->bp[i].rev != 0) {
             fprintf(stderr, "[ampliconstats] error: BED file should start"
@@ -224,7 +260,10 @@ static int64_t bed2amplicon(astats_args_t *args,
         if (sites->bp[i].rev == 0) {
             if (i == 0 || last_rev) {
                 if (j>0) fprintf(ofp, "\n");
-                fprintf(ofp, "AMPLICON\t%d", j+1);
+                if (args->multi_ref)
+                    fprintf(ofp, "AMPLICON\t%s\t%d", ref, j+1 + first_amp);
+                else
+                    fprintf(ofp, "AMPLICON\t%d", j+1);
             }
             if (amp[j].nleft >= MAX_PRIMER_PER_AMPLICON) {
                 print_error_errno("ampliconstats",
@@ -295,33 +334,6 @@ static int64_t bed2amplicon(astats_args_t *args,
 
     return max_right;
 }
-
-typedef struct {
-    int nseq;       // total sequence count
-    int nfiltered;  // sequence filtered
-    int nfailprimer;// count of sequences not matching the primer locations
-
-    // Sizes of memory allocated below, to permit reset
-    int max_amp, max_amp_len, max_len;
-
-    // Summary across all samples, sum(x) plus sum(x^2) for s.d. calc
-    int64_t *nreads, *nreads2;          // [max_amp]
-    double  *nfull_reads;               // [max_amp]; 0.5/read if paired.
-    double  *nrperc, *nrperc2;          // [max_amp]
-    int64_t *nbases, *nbases2;          // [max_amp]
-    int64_t *coverage;                  // [max_amp][max_amp_len]
-    double  (*covered_perc)[MAX_DEPTH]; // [max_amp][MAX_DEPTH]
-    double  (*covered_perc2)[MAX_DEPTH];// [max_amp][MAX_DEPTH];
-    khash_t(tcoord) **tcoord;           // [max_amp+1]
-
-    // 0 is correct pair, 1 is incorrect pair, 2 is unidentified
-    int     (*amp_dist)[3];             // [MAX_AMP][3];
-    //int     amp_pair[MAX_AMP][MAX_AMP]; // dotplot style
-
-    int *depth_valid; // [max_len]
-    int *depth_all;   // [max_len]
-    khash_t(qname) *qend;  // queryname end, for overlap removal
-} astats_t;
 
 void stats_free(astats_t *st) {
     if (!st)
@@ -410,7 +422,7 @@ astats_t *stats_alloc(int64_t max_len, int max_amp, int max_amp_len) {
     return NULL;
 }
 
-void stats_reset(astats_t *st) {
+static void stats_reset(astats_t *st) {
     st->nseq = 0;
     st->nfiltered = 0;
     st->nfailprimer = 0;
@@ -457,10 +469,25 @@ void stats_reset(astats_t *st) {
     memset(st->amp_dist,  0, st->max_amp * sizeof(*st->amp_dist));
 }
 
-static int accumulate_stats(astats_t *stats,
-                            astats_args_t *args,
-                            amplicon_t *amp, int namp,
+static void amp_stats_reset(amplicons_t *amps, int nref) {
+    int i;
+    for (i = 0; i < nref; i++) {
+        if (!amps[i].sites)
+            continue;
+        stats_reset(amps[i].lstats);
+    }
+}
+
+static int accumulate_stats(astats_args_t *args, amplicons_t *amps,
                             bam1_t *b) {
+    int ref = b->core.tid;
+    amplicon_t *amp = amps[ref].amp;
+    astats_t *stats = amps[ref].lstats;
+    int len = amps[ref].len;
+
+    if (!stats)
+        return 0;
+
     stats->nseq++;
     if ((b->core.flag & args->flag_require) != args->flag_require ||
         (b->core.flag & args->flag_filter)  != 0) {
@@ -498,7 +525,7 @@ static int accumulate_stats(astats_t *stats,
             kh_value(stats->qend, k) = start | (end << 32);
         }
     }
-    for (i = mstart; i < end && i < stats->max_len; i++)
+    for (i = mstart; i < end && i < len; i++)
         stats->depth_all[i]++;
     if (i < end) {
         print_error("ampliconstats", "record %s overhangs end of reference",
@@ -509,8 +536,8 @@ static int accumulate_stats(astats_t *stats,
     // On single ended runs, eg ONT or PacBio, we just use the start/end
     // of the template to assign.
     int anum = (b->core.flag & BAM_FREVERSE) || !(b->core.flag & BAM_FPAIRED)
-        ? (end-1 >= 0 && end-1 < args->max_len ? pos2end[end-1] : -1)
-        : (start >= 0 && start < args->max_len ? pos2start[start] : -1);
+        ? (end-1 >= 0 && end-1 < len ? pos2end[end-1] : -1)
+        : (start >= 0 && start < len ? pos2start[start] : -1);
 
     // ivar sometimes soft-clips 100% of the bases.
     // This is essentially unmapped
@@ -523,20 +550,24 @@ static int accumulate_stats(astats_t *stats,
         stats->nfailprimer++;
 
     if (anum >= 0) {
-        stats->nreads[anum]++;
-        // NB: ref bases rather than read bases
-        stats->nbases[anum] +=
-            MIN(end,amp[anum].min_right+1) - MAX(start,amp[anum].max_left);
+        int64_t c = MIN(end,amp[anum].min_right+1) - MAX(start,amp[anum].max_left);
+        if (c > 0) {
+            stats->nreads[anum]++;
+            // NB: ref bases rather than read bases
+            stats->nbases[anum] += c;
 
-        int64_t i;
-        if (start < 0) start = 0;
-        if (end > args->max_len) end = args->max_len;
+            int64_t i;
+            if (start < 0) start = 0;
+            if (end > len) end = len;
 
-        int64_t ostart = MAX(start, amp[anum].min_left-1);
-        int64_t oend = MIN(end, amp[anum].max_right);
-        int64_t offset = amp[anum].min_left-1;
-        for (i = ostart; i < oend; i++)
-            stats->coverage[anum*stats->max_amp_len + i-offset]++;
+            int64_t ostart = MAX(start, amp[anum].min_left-1);
+            int64_t oend = MIN(end, amp[anum].max_right);
+            int64_t offset = amp[anum].min_left-1;
+            for (i = ostart; i < oend; i++)
+                stats->coverage[anum*stats->max_amp_len + i-offset]++;
+        } else {
+            stats->nfailprimer++;
+        }
     }
 
     // Template length in terms of amplicon number to amplicon number.
@@ -558,7 +589,7 @@ static int accumulate_stats(astats_t *stats,
         // average primer length (e.g. 50).
         t_end += b->core.isize > 0 ? -args->tlen_adj : +args->tlen_adj;
 
-        if (t_end > 0 && t_end < args->max_len && b->core.isize != 0)
+        if (t_end > 0 && t_end < len && b->core.isize != 0)
             oth_anum = (b->core.flag & BAM_FREVERSE)
                 ? pos2start[t_end]
                 : pos2end[t_end];
@@ -619,7 +650,7 @@ static int accumulate_stats(astats_t *stats,
 }
 
 // Append file local stats to global stats
-int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
+int append_lstats(astats_t *lstats, astats_t *gstats, int namp, int all_nseq) {
     gstats->nseq += lstats->nseq;
     gstats->nfiltered += lstats->nfiltered;
     gstats->nfailprimer += lstats->nfailprimer;
@@ -655,8 +686,7 @@ int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
 
         // To get mean & sd for amplicon read percentage, we need
         // to do the divisions here as nseq differs for each sample.
-        int nseq = lstats->nseq - lstats->nfiltered - lstats->nfailprimer;
-        double nrperc = nseq ? 100.0 * lstats->nreads[a] / nseq : 0;
+        double nrperc = all_nseq ? 100.0 * lstats->nreads[a] / all_nseq : 0;
         gstats->nrperc[a]  += nrperc;
         gstats->nrperc2[a] += nrperc*nrperc;
 
@@ -677,6 +707,26 @@ int append_stats(astats_t *lstats, astats_t *gstats, int namp) {
     for (a = 0; a < lstats->max_len; a++) {
         gstats->depth_valid[a] += lstats->depth_valid[a];
         gstats->depth_all[a]   += lstats->depth_all[a];
+    }
+
+    return 0;
+}
+
+int append_stats(amplicons_t *amps, int nref) {
+    int i, r, all_nseq = 0;
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = amps[r].lstats;
+        all_nseq  += stats->nseq - stats->nfiltered - stats->nfailprimer;
+    }
+
+    for (i = 0; i < nref; i++) {
+        if (!amps[i].sites)
+            continue;
+        if (append_lstats(amps[i].lstats, amps[i].gstats, amps[i].namp,
+                          all_nseq) < 0)
+            return -1;
     }
 
     return 0;
@@ -787,9 +837,9 @@ static void aggregate_tcoord(astats_args_t *args, tcoord_t *tpos, size_t *np){
     *np = k;
 }
 
-int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
-               amplicon_t *amp, int namp, int nfile) {
-    int i;
+int dump_stats(astats_args_t *args, char type, char *name, int nfile,
+               amplicons_t *amps, int nref, int local) {
+    int i, r;
     FILE *ofp = args->out_fp;
     tcoord_t *tpos = NULL;
     size_t ntcoord = 0;
@@ -797,51 +847,72 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     // summary stats for this sample (or for all samples)
     fprintf(ofp, "# Summary stats.\n");
     fprintf(ofp, "# Use 'grep ^%cSS | cut -f 2-' to extract this part.\n", type);
-    fprintf(ofp, "%cSS\t%s\traw total sequences:\t%d\n",
-            type, name, stats->nseq);
-    fprintf(ofp, "%cSS\t%s\tfiltered sequences:\t%d\n",
-            type, name, stats->nfiltered);
-    fprintf(ofp, "%cSS\t%s\tfailed primer match:\t%d\n",
-            type, name, stats->nfailprimer);
-    int nmatch = stats->nseq - stats->nfiltered - stats->nfailprimer;
-    fprintf(ofp, "%cSS\t%s\tmatching sequences:\t%d\n",
-            type, name, nmatch);
 
-    int d = 0;
-    do {
-        // From first to last amplicon only, so not entire consensus.
-        // If contig length is known, maybe we want to add the missing
-        // count to < DEPTH figures?
-        int64_t start = 0, covered = 0, total = 0;
-        for (i = 0; i < namp; i++) {
-            int64_t j, offset = amp[i].min_left-1;
-            if (amp[i].min_right - amp[i].min_left > stats->max_amp_len) {
-                fprintf(stderr, "[ampliconstats] error: "
-                        "Maximum amplicon length (%d) exceeded for '%s'\n",
-                        stats->max_amp, name);
-                return -1;
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        int nmatch = stats->nseq - stats->nfiltered - stats->nfailprimer;
+        char *name_ref = malloc(strlen(name) + strlen(amps[r].ref) + 2);
+        if (!name_ref)
+            return -1;
+        if (args->multi_ref)
+            sprintf(name_ref, "%s\t%s", name, amps[r].ref);
+        else
+            sprintf(name_ref, "%s", name);
+        fprintf(ofp, "%cSS\t%s\traw total sequences:\t%d\n",
+                type, name_ref, stats->nseq);
+        fprintf(ofp, "%cSS\t%s\tfiltered sequences:\t%d\n",
+                type, name_ref, stats->nfiltered);
+        fprintf(ofp, "%cSS\t%s\tfailed primer match:\t%d\n",
+                type, name_ref, stats->nfailprimer);
+        fprintf(ofp, "%cSS\t%s\tmatching sequences:\t%d\n",
+                type, name_ref, nmatch);
+
+        int d = 0;
+        do {
+            // From first to last amplicon only, so not entire consensus.
+            // If contig length is known, maybe we want to add the missing
+            // count to < DEPTH figures?
+            int64_t start = 0, covered = 0, total = 0;
+            amplicon_t *amp = amps[r].amp;
+            for (i = 0; i < amps[r].namp; i++) {
+                int64_t j, offset = amp[i].min_left-1;
+                if (amp[i].min_right - amp[i].min_left > stats->max_amp_len) {
+                    fprintf(stderr, "[ampliconstats] error: "
+                            "Maximum amplicon length (%d) exceeded for '%s'\n",
+                            stats->max_amp, name);
+                    return -1;
+                }
+                for (j = MAX(start, amp[i].max_left-1);
+                     j < MAX(start, amp[i].min_right); j++) {
+                    if (stats->coverage[i*stats->max_amp_len + j-offset]
+                        >= args->min_depth[d])
+                        covered++;
+                    total++;
+                }
+                start = MAX(start, amp[i].min_right);
             }
-            for (j = MAX(start, amp[i].max_left-1);
-                 j < MAX(start, amp[i].min_right); j++) {
-                if (stats->coverage[i*stats->max_amp_len + j-offset]
-                    >= args->min_depth[d])
-                    covered++;
-                total++;
-            }
-            start = MAX(start, amp[i].min_right);
-        }
-        fprintf(ofp, "%cSS\t%s\tconsensus depth count < %d and >= %d:\t%"
-                PRId64"\t%"PRId64"\n", type, name,
-                args->min_depth[d], args->min_depth[d],
-                total-covered, covered);
-    } while (++d < MAX_DEPTH && args->min_depth[d]);
+            fprintf(ofp, "%cSS\t%s\tconsensus depth count < %d and >= %d:\t%"
+                    PRId64"\t%"PRId64"\n", type, name_ref,
+                    args->min_depth[d], args->min_depth[d],
+                    total-covered, covered);
+        } while (++d < MAX_DEPTH && args->min_depth[d]);
+
+        free(name_ref);
+    }
 
     // Read count
     fprintf(ofp, "# Absolute matching read counts per amplicon.\n");
     fprintf(ofp, "# Use 'grep ^%cREADS | cut -f 2-' to extract this part.\n", type);
     fprintf(ofp, "%cREADS\t%s", type, name);
-    for (i = 0; i < namp; i++) {
-        fprintf(ofp, "\t%"PRId64, stats->nreads[i]);
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        for (i = 0; i < amps[r].namp; i++) {
+            fprintf(ofp, "\t%"PRId64, stats->nreads[i]);
+        }
     }
     fprintf(ofp, "\n");
 
@@ -849,23 +920,40 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     // by the number we expect to cover), so +0.5 per read in pair.
     // A.k.a "usable depth" in the plots.
     fprintf(ofp, "%cVDEPTH\t%s", type, name);
-    for (i = 0; i < namp; i++)
-        fprintf(ofp, "\t%d", (int)stats->nfull_reads[i]);
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        for (i = 0; i < amps[r].namp; i++)
+            fprintf(ofp, "\t%d", (int)stats->nfull_reads[i]);
+    }
     fprintf(ofp, "\n");
 
     if (type == 'C') {
         // For combined we can compute mean & standard deviation too
         fprintf(ofp, "CREADS\tMEAN");
-        for (i = 0; i < namp; i++) {
-            fprintf(ofp, "\t%.1f", stats->nreads[i] / (double)nfile);
+        for (r = 0; r < nref; r++) {
+            if (!amps[r].sites)
+                continue;
+            astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+            for (i = 0; i < amps[r].namp; i++) {
+                fprintf(ofp, "\t%.1f", stats->nreads[i] / (double)nfile);
+            }
         }
         fprintf(ofp, "\n");
 
         fprintf(ofp, "CREADS\tSTDDEV");
-        for (i = 0; i < namp; i++) {
-            double n1 = stats->nreads[i];
-            fprintf(ofp, "\t%.1f", sqrt(stats->nreads2[i]/(double)nfile
-                                        - (n1/nfile)*(n1/nfile)));
+        for (r = 0; r < nref; r++) {
+            if (!amps[r].sites)
+                continue;
+            astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+            for (i = 0; i < amps[r].namp; i++) {
+                double n1 = stats->nreads[i];
+                fprintf(ofp, "\t%.1f", nfile > 1 && stats->nreads2[i] > 0
+                        ? sqrt(stats->nreads2[i]/(double)nfile
+                               - (n1/nfile)*(n1/nfile))
+                        : 0);
+            }
         }
         fprintf(ofp, "\n");
     }
@@ -873,12 +961,24 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     fprintf(ofp, "# Read percentage of distribution between amplicons.\n");
     fprintf(ofp, "# Use 'grep ^%cRPERC | cut -f 2-' to extract this part.\n", type);
     fprintf(ofp, "%cRPERC\t%s", type, name);
-    for (i = 0; i < namp; i++) {
-        if (type == 'C') {
-            fprintf(ofp, "\t%.3f", (double)stats->nrperc[i] / nfile);
-        } else {
-            int nseq = stats->nseq - stats->nfiltered - stats->nfailprimer;
-            fprintf(ofp, "\t%.3f", nseq ? 100.0 * stats->nreads[i] / nseq : 0);
+    int all_nseq = 0;
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        all_nseq  += stats->nseq - stats->nfiltered - stats->nfailprimer;
+    }
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        for (i = 0; i < amps[r].namp; i++) {
+            if (type == 'C') {
+                fprintf(ofp, "\t%.3f", (double)stats->nrperc[i] / nfile);
+            } else {
+                fprintf(ofp, "\t%.3f",
+                        all_nseq ? 100.0 * stats->nreads[i] / all_nseq : 0);
+            }
         }
     }
     fprintf(ofp, "\n");
@@ -886,17 +986,27 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     if (type == 'C') {
         // For combined we compute mean and standard deviation too
         fprintf(ofp, "CRPERC\tMEAN");
-        for (i = 0; i < namp; i++) {
-            fprintf(ofp, "\t%.3f", stats->nrperc[i] / nfile);
+        for (r = 0; r < nref; r++) {
+            if (!amps[r].sites)
+                continue;
+            astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+            for (i = 0; i < amps[r].namp; i++) {
+                fprintf(ofp, "\t%.3f", stats->nrperc[i] / nfile);
+            }
         }
         fprintf(ofp, "\n");
 
         fprintf(ofp, "CRPERC\tSTDDEV");
-        for (i = 0; i < namp; i++) {
-            // variance = SUM(X^2) - ((SUM(X)^2) / N)
-            double n1 = stats->nrperc[i];
-            double v = stats->nrperc2[i]/nfile - (n1/nfile)*(n1/nfile);
-            fprintf(ofp, "\t%.3f", sqrt(v));
+        for (r = 0; r < nref; r++) {
+            if (!amps[r].sites)
+                continue;
+            astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+            for (i = 0; i < amps[r].namp; i++) {
+                // variance = SUM(X^2) - ((SUM(X)^2) / N)
+                double n1 = stats->nrperc[i];
+                double v = stats->nrperc2[i]/nfile - (n1/nfile)*(n1/nfile);
+                fprintf(ofp, "\t%.3f", v>0?sqrt(v):0);
+            }
         }
         fprintf(ofp, "\n");
     }
@@ -905,30 +1015,48 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     fprintf(ofp, "# Read depth per amplicon.\n");
     fprintf(ofp, "# Use 'grep ^%cDEPTH | cut -f 2-' to extract this part.\n", type);
     fprintf(ofp, "%cDEPTH\t%s", type, name);
-    for (i = 0; i < namp; i++) {
-        int nseq = stats->nseq - stats->nfiltered - stats->nfailprimer;
-        int64_t alen = amp[i].min_right - amp[i].max_left+1;
-        fprintf(ofp, "\t%.1f", nseq ? stats->nbases[i] / (double)alen : 0);
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        amplicon_t *amp = amps[r].amp;
+        for (i = 0; i < amps[r].namp; i++) {
+            int nseq = stats->nseq - stats->nfiltered - stats->nfailprimer;
+            int64_t alen = amp[i].min_right - amp[i].max_left+1;
+            fprintf(ofp, "\t%.1f", nseq ? stats->nbases[i] / (double)alen : 0);
+        }
     }
     fprintf(ofp, "\n");
 
     if (type == 'C') {
         // For combined we can compute mean & standard deviation too
-        int nseq = stats->nseq - stats->nfiltered - stats->nfailprimer;
         fprintf(ofp, "CDEPTH\tMEAN");
-        for (i = 0; i < namp; i++) {
-            int64_t alen = amp[i].min_right - amp[i].max_left+1;
-            fprintf(ofp, "\t%.1f", nseq ? stats->nbases[i] / (double)alen / nfile : 0);
+        for (r = 0; r < nref; r++) {
+            if (!amps[r].sites)
+                continue;
+            astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+            amplicon_t *amp = amps[r].amp;
+            int nseq = stats->nseq - stats->nfiltered - stats->nfailprimer;
+            for (i = 0; i < amps[r].namp; i++) {
+                int64_t alen = amp[i].min_right - amp[i].max_left+1;
+                fprintf(ofp, "\t%.1f", nseq ? stats->nbases[i] / (double)alen / nfile : 0);
+            }
         }
         fprintf(ofp, "\n");
 
         fprintf(ofp, "CDEPTH\tSTDDEV");
-        for (i = 0; i < namp; i++) {
-            double alen = amp[i].min_right - amp[i].max_left+1;
-            double n1 = stats->nbases[i] / alen;
-            double v = stats->nbases2[i] / (alen*alen) /nfile
-                - (n1/nfile)*(n1/nfile);
-            fprintf(ofp, "\t%.1f", sqrt(v));
+        for (r = 0; r < nref; r++) {
+            if (!amps[r].sites)
+                continue;
+            astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+            amplicon_t *amp = amps[r].amp;
+            for (i = 0; i < amps[r].namp; i++) {
+                double alen = amp[i].min_right - amp[i].max_left+1;
+                double n1 = stats->nbases[i] / alen;
+                double v = stats->nbases2[i] / (alen*alen) /nfile
+                    - (n1/nfile)*(n1/nfile);
+                fprintf(ofp, "\t%.1f", v>0?sqrt(v):0);
+            }
         }
         fprintf(ofp, "\n");
     }
@@ -940,23 +1068,30 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
         int d = 0;
         do {
             fprintf(ofp, "%cPCOV-%d\t%s", type, args->min_depth[d], name);
-            for (i = 0; i < namp; i++) {
-                int covered = 0;
-                if (amp[i].min_right - amp[i].min_left > stats->max_amp_len) {
-                    fprintf(stderr, "[ampliconstats] error: "
-                            "Maximum amplicon length (%d) exceeded for '%s'\n",
-                            stats->max_amp, name);
-                    return -1;
+
+            for (r = 0; r < nref; r++) {
+                if (!amps[r].sites)
+                    continue;
+                astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+                amplicon_t *amp = amps[r].amp;
+                for (i = 0; i < amps[r].namp; i++) {
+                    int covered = 0;
+                    if (amp[i].min_right - amp[i].min_left > stats->max_amp_len) {
+                        fprintf(stderr, "[ampliconstats] error: "
+                                "Maximum amplicon length (%d) exceeded for '%s'\n",
+                                stats->max_amp, name);
+                        return -1;
+                    }
+                    int64_t j, offset = amp[i].min_left-1;
+                    for (j = amp[i].max_left-1; j < amp[i].min_right; j++) {
+                        int apos = i*stats->max_amp_len + j-offset;
+                        if (stats->coverage[apos] >= args->min_depth[d])
+                            covered++;
+                    }
+                    int64_t alen = amp[i].min_right - amp[i].max_left+1;
+                    stats->covered_perc[i][d] = 100.0 * covered / alen;
+                    fprintf(ofp, "\t%.2f", 100.0 * covered / alen);
                 }
-                int64_t j, offset = amp[i].min_left-1;
-                for (j = amp[i].max_left-1; j < amp[i].min_right; j++) {
-                    int apos = i*stats->max_amp_len + j-offset;
-                    if (stats->coverage[apos] >= args->min_depth[d])
-                        covered++;
-                }
-                int64_t alen = amp[i].min_right - amp[i].max_left+1;
-                stats->covered_perc[i][d] = 100.0 * covered / alen;
-                fprintf(ofp, "\t%.2f", 100.0 * covered / alen);
             }
             fprintf(ofp, "\n");
         } while (++d < MAX_DEPTH && args->min_depth[d]);
@@ -966,16 +1101,26 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
         int d = 0;
         do {
             fprintf(ofp, "CPCOV-%d\tMEAN", args->min_depth[d]);
-            for (i = 0; i < namp; i++) {
-                fprintf(ofp, "\t%.1f", stats->covered_perc[i][d] / nfile);
+            for (r = 0; r < nref; r++) {
+                if (!amps[r].sites)
+                    continue;
+                astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+                for (i = 0; i < amps[r].namp; i++) {
+                    fprintf(ofp, "\t%.1f", stats->covered_perc[i][d] / nfile);
+                }
             }
             fprintf(ofp, "\n");
 
             fprintf(ofp, "CPCOV-%d\tSTDDEV", args->min_depth[d]);
-            for (i = 0; i < namp; i++) {
-                double n1 = stats->covered_perc[i][d] / nfile;
-                double v = stats->covered_perc2[i][d] / nfile - n1*n1;
-                fprintf(ofp, "\t%.1f", sqrt(v));
+            for (r = 0; r < nref; r++) {
+                if (!amps[r].sites)
+                    continue;
+                astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+                for (i = 0; i < amps[r].namp; i++) {
+                    double n1 = stats->covered_perc[i][d] / nfile;
+                    double v = stats->covered_perc2[i][d] / nfile - n1*n1;
+                    fprintf(ofp, "\t%.1f", v>0?sqrt(v):0);
+                }
             }
             fprintf(ofp, "\n");
         } while (++d < MAX_DEPTH && args->min_depth[d]);
@@ -986,32 +1131,42 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     fprintf(ofp, "# Depth per reference base for ALL data.\n");
     fprintf(ofp, "# Use 'grep ^%cDP_ALL | cut -f 2-' to extract this part.\n",
             type);
-    fprintf(ofp, "%cDP_ALL\t%s\t", type, name); // Base depth in amplicons
-    for (i = 0; i < args->max_len; i++) {
-        // Basic run-length encoding provided all values are within
-        // +- depth_bin fraction of the mid-point.
-        int dmin = stats->depth_all[i], dmax = stats->depth_all[i], j;
-        double dmid = (dmin + dmax)/2.0;
-        double low  = dmid*(1-args->depth_bin);
-        double high = dmid*(1+args->depth_bin);
-        for (j = i+1; j < args->max_len; j++) {
-            int d = stats->depth_all[j];
-            if (d < low || d > high)
-                break;
-            if (dmin > d) {
-                dmin = d;
-                dmid = (dmin + dmax)/2.0;
-                low  = dmid*(1-args->depth_bin);
-                high = dmid*(1+args->depth_bin);
-            } else if (dmax < d) {
-                dmax = d;
-                dmid = (dmin + dmax)/2.0;
-                low  = dmid*(1-args->depth_bin);
-                high = dmid*(1+args->depth_bin);
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        if (args->multi_ref)
+            fprintf(ofp, "%cDP_ALL\t%s\t%s", type, name, amps[r].ref);
+        else
+            fprintf(ofp, "%cDP_ALL\t%s", type, name);
+
+        for (i = 0; i < amps[r].len; i++) {
+            // Basic run-length encoding provided all values are within
+            // +- depth_bin fraction of the mid-point.
+            int dmin = stats->depth_all[i], dmax = stats->depth_all[i], j;
+            double dmid = (dmin + dmax)/2.0;
+            double low  = dmid*(1-args->depth_bin);
+            double high = dmid*(1+args->depth_bin);
+            for (j = i+1; j < amps[r].len; j++) {
+                int d = stats->depth_all[j];
+                if (d < low || d > high)
+                    break;
+                if (dmin > d) {
+                    dmin = d;
+                    dmid = (dmin + dmax)/2.0;
+                    low  = dmid*(1-args->depth_bin);
+                    high = dmid*(1+args->depth_bin);
+                } else if (dmax < d) {
+                    dmax = d;
+                    dmid = (dmin + dmax)/2.0;
+                    low  = dmid*(1-args->depth_bin);
+                    high = dmid*(1+args->depth_bin);
+                }
             }
+            fprintf(ofp, "\t%d,%d", (int)dmid, j-i);
+            i = j-1;
         }
-        fprintf(ofp, "%d,%d%c", (int)dmid, j-i, "\n\t"[j < args->max_len]);
-        i = j-1;
+        fprintf(ofp, "\n");
     }
 
     // And depth for only reads matching to a single amplicon for full
@@ -1019,80 +1174,96 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     fprintf(ofp, "# Depth per reference base for full-length valid amplicon data.\n");
     fprintf(ofp, "# Use 'grep ^%cDP_VALID | cut -f 2-' to extract this "
             "part.\n", type);
-    fprintf(ofp, "%cDP_VALID\t%s\t", type, name); // Base depth in amplicons
-    for (i = 0; i < args->max_len; i++) {
-        int dmin = stats->depth_valid[i], dmax = stats->depth_valid[i], j;
-        double dmid = (dmin + dmax)/2.0;
-        double low  = dmid*(1-args->depth_bin);
-        double high = dmid*(1+args->depth_bin);
-        for (j = i+1; j < args->max_len; j++) {
-            int d = stats->depth_valid[j];
-            if (d < low || d > high)
-                break;
-            if (dmin > d) {
-                dmin = d;
-                dmid = (dmin + dmax)/2.0;
-                low  = dmid*(1-args->depth_bin);
-                high = dmid*(1+args->depth_bin);
-            } else if (dmax < d) {
-                dmax = d;
-                dmid = (dmin + dmax)/2.0;
-                low  = dmid*(1-args->depth_bin);
-                high = dmid*(1+args->depth_bin);
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        if (args->multi_ref)
+            fprintf(ofp, "%cDP_VALID\t%s\t%s", type, name, amps[r].ref);
+        else
+            fprintf(ofp, "%cDP_VALID\t%s", type, name);
+
+        for (i = 0; i < amps[r].len; i++) {
+            int dmin = stats->depth_valid[i], dmax = stats->depth_valid[i], j;
+            double dmid = (dmin + dmax)/2.0;
+            double low  = dmid*(1-args->depth_bin);
+            double high = dmid*(1+args->depth_bin);
+            for (j = i+1; j < amps[r].len; j++) {
+                int d = stats->depth_valid[j];
+                if (d < low || d > high)
+                    break;
+                if (dmin > d) {
+                    dmin = d;
+                    dmid = (dmin + dmax)/2.0;
+                    low  = dmid*(1-args->depth_bin);
+                    high = dmid*(1+args->depth_bin);
+                } else if (dmax < d) {
+                    dmax = d;
+                    dmid = (dmin + dmax)/2.0;
+                    low  = dmid*(1-args->depth_bin);
+                    high = dmid*(1+args->depth_bin);
+                }
             }
+            fprintf(ofp, "\t%d,%d", (int)dmid, j-i);
+            i = j-1;
         }
-        fprintf(ofp, "%d,%d%c", (int)dmid, j-i, "\n\t"[j < args->max_len]);
-        i = j-1;
+        fprintf(ofp, "\n");
     }
 
     // TCOORD (start to end) distribution
     fprintf(ofp, "# Distribution of aligned template coordinates.\n");
     fprintf(ofp, "# Use 'grep ^%cTCOORD | cut -f 2-' to extract this part.\n", type);
-    for (i = -1; i < namp; i++) {
-        if (ntcoord < kh_size(stats->tcoord[i+1])) {
-            ntcoord = kh_size(stats->tcoord[i+1]);
-            tcoord_t *tmp = realloc(tpos, ntcoord * sizeof(*tmp));
-            if (!tmp) {
-                free(tpos);
-                return -1;
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        for (i = 0 - (nref==1); i < amps[r].namp; i++) {
+            if (ntcoord < kh_size(stats->tcoord[i+1])) {
+                ntcoord = kh_size(stats->tcoord[i+1]);
+                tcoord_t *tmp = realloc(tpos, ntcoord * sizeof(*tmp));
+                if (!tmp) {
+                    free(tpos);
+                    return -1;
+                }
+                tpos = tmp;
             }
-            tpos = tmp;
+
+            khiter_t k;
+            size_t n = 0, j;
+            for (k = kh_begin(stats->tcoord[i+1]);
+                 k != kh_end(stats->tcoord[i+1]); k++) {
+                if (!kh_exist(stats->tcoord[i+1], k) ||
+                    (kh_value(stats->tcoord[i+1], k) & 0xFFFFFFFF) == 0)
+                    continue;
+                // Key is start,end in 32-bit quantities.
+                // Yes this limits us to 4Gb references, but just how
+                // many primers are we planning on making?  Not that many
+                // I hope.
+                tpos[n].start = kh_key(stats->tcoord[i+1], k)&0xffffffff;
+                tpos[n].end   = kh_key(stats->tcoord[i+1], k)>>32;
+
+                // Value is frequency (top 32-bits) and status (bottom 32).
+                tpos[n].freq   = kh_value(stats->tcoord[i+1], k)&0xffffffff;
+                tpos[n].status = kh_value(stats->tcoord[i+1], k)>>32;
+                n++;
+            }
+
+            if (args->tcoord_bin > 1)
+                aggregate_tcoord(args, tpos, &n);
+
+            fprintf(ofp, "%cTCOORD\t%s\t%d", type, name,
+                    i+1+amps[r].first_amp); // per amplicon
+            for (j = 0; j < n; j++) {
+                if (tpos[j].freq < args->tcoord_min_count)
+                    continue;
+                fprintf(ofp, "\t%d,%d,%u,%u",
+                        tpos[j].start,
+                        tpos[j].end,
+                        tpos[j].freq,
+                        tpos[j].status);
+            }
+            fprintf(ofp, "\n");
         }
-
-        khiter_t k;
-        size_t n = 0, j;
-        for (k = kh_begin(stats->tcoord[i+1]);
-             k != kh_end(stats->tcoord[i+1]); k++) {
-            if (!kh_exist(stats->tcoord[i+1], k) ||
-                (kh_value(stats->tcoord[i+1], k) & 0xFFFFFFFF) == 0)
-                continue;
-            // Key is start,end in 32-bit quantities.
-            // Yes this limits us to 4Gb references, but just how
-            // many primers are we planning on making?  Not that many
-            // I hope.
-            tpos[n].start = kh_key(stats->tcoord[i+1], k)&0xffffffff;
-            tpos[n].end   = kh_key(stats->tcoord[i+1], k)>>32;
-
-            // Value is frequency (top 32-bits) and status (bottom 32).
-            tpos[n].freq   = kh_value(stats->tcoord[i+1], k)&0xffffffff;
-            tpos[n].status = kh_value(stats->tcoord[i+1], k)>>32;
-            n++;
-        }
-
-        if (args->tcoord_bin > 1)
-            aggregate_tcoord(args, tpos, &n);
-
-        fprintf(ofp, "%cTCOORD\t%s\t%d", type, name, i+1); // per amplicon
-        for (j = 0; j < n; j++) {
-            if (tpos[j].freq < args->tcoord_min_count)
-                continue;
-            fprintf(ofp, "\t%d,%d,%u,%u",
-                    tpos[j].start,
-                    tpos[j].end,
-                    tpos[j].freq,
-                    tpos[j].status);
-        }
-        fprintf(ofp, "\n");
     }
 
 
@@ -1106,30 +1277,45 @@ int dump_stats(char type, char *name, astats_t *stats, astats_args_t *args,
     fprintf(ofp, "# primers from different amplicon, and number with a position\n");
     fprintf(ofp, "# not matching any valid amplicon primer site\n");
     fprintf(ofp, "# Use 'grep ^%cAMP | cut -f 2-' to extract this part.\n", type);
+
     fprintf(ofp, "%cAMP\t%s\t0", type, name); // all merged
     int amp_dist[3] = {0};
-    for (i = 0; i < namp; i++) { // accumulate for all amps
-        amp_dist[0] += stats->amp_dist[i][0];
-        amp_dist[1] += stats->amp_dist[i][1];
-        amp_dist[2] += stats->amp_dist[i][2];
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        for (i = 0; i < amps[r].namp; i++) { // accumulate for all amps
+            amp_dist[0] += stats->amp_dist[i][0];
+            amp_dist[1] += stats->amp_dist[i][1];
+            amp_dist[2] += stats->amp_dist[i][2];
+        }
     }
     fprintf(ofp, "\t%d\t%d\t%d\n", amp_dist[0], amp_dist[1], amp_dist[2]);
 
-    for (i = 0; i < namp; i++) {
-        fprintf(ofp, "%cAMP\t%s\t%d", type, name, i+1); // per amplicon
-        fprintf(ofp, "\t%d\t%d\t%d\n", stats->amp_dist[i][0],
-                stats->amp_dist[i][1], stats->amp_dist[i][2]);
+    for (r = 0; r < nref; r++) {
+        if (!amps[r].sites)
+            continue;
+        astats_t *stats = local ? amps[r].lstats : amps[r].gstats;
+        for (i = 0; i < amps[r].namp; i++) {
+            // per amplicon
+            fprintf(ofp, "%cAMP\t%s\t%d", type, name, i+1+amps[r].first_amp);
+            fprintf(ofp, "\t%d\t%d\t%d\n", stats->amp_dist[i][0],
+                    stats->amp_dist[i][1], stats->amp_dist[i][2]);
+        }
     }
-
-//    for (i = 0; i < namp; i++) {
-//        printf("%cAMP\t%s\t%d", type, name, i+1); // per amplicon
-//        for (j = 0; j < namp; j++)
-//            printf("\t%d", stats->amp_pair[i][j]);
-//        printf("\n");
-//    }
 
     free(tpos);
     return 0;
+}
+
+int dump_lstats(astats_args_t *args, char type, char *name, int nfile,
+               amplicons_t *amps, int nref) {
+    return dump_stats(args, type, name, nfile, amps, nref, 1);
+}
+
+int dump_gstats(astats_args_t *args, char type, char *name, int nfile,
+               amplicons_t *amps, int nref) {
+    return dump_stats(args, type, name, nfile, amps, nref, 0);
 }
 
 char const *get_sample_name(sam_hdr_t *header, char *RG) {
@@ -1138,37 +1324,38 @@ char const *get_sample_name(sam_hdr_t *header, char *RG) {
     return ks.s;
 }
 
-int64_t get_ref_len(sam_hdr_t *header, char *SQ) {
-    int tid = SQ ? sam_hdr_name2tid(header, SQ) : 0;
-    return tid >= 0 ? sam_hdr_tid2len(header, tid) : -1;
+// Return maximum reference length (SQ is NULL) or the length
+// of the specified reference in SQ.
+int64_t get_ref_len(sam_hdr_t *header, const char *SQ) {
+    if (SQ) {
+        int tid = SQ ? sam_hdr_name2tid(header, SQ) : 0;
+        return tid >= 0 ? sam_hdr_tid2len(header, tid) : -1;
+    } else {
+        int nref = sam_hdr_nref(header), tid;;
+        int64_t len = 0;
+        for (tid = 0; tid < nref; tid++) {
+            int64_t rl = sam_hdr_tid2len(header, tid);
+            if (len < rl)
+                len = rl;
+        }
+        return len;
+    }
 }
 
-static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
-    int i, namp;
+static int amplicon_stats(astats_args_t *args,
+                          khash_t(bed_list_hash) *bed_hash,
+                          char **filev, int filec) {
+    int i, ref = -1, ref_tid = -1, ret = -1, nref = 0;
     samFile *fp = NULL;
     sam_hdr_t *header = NULL;
     bam1_t *b = bam_init1();
     FILE *ofp = args->out_fp;
     char sname_[8192], *sname = NULL;
+    amplicons_t *amps = NULL;
 
-    // Global stats across all samples
-    astats_t *gstats = NULL, *lstats = NULL;
-
-    amplicon_t *amp = calloc(args->sites.length, sizeof(*amp));
-    if (!amp)
-        return -1;
-
-    namp = count_amplicon(&args->sites);
-
-    fprintf(ofp, "# Summary statistics, used for scaling the plots.\n");
-    fprintf(ofp, "SS\tSamtools version: %s\n", samtools_version());
-    fprintf(ofp, "SS\tCommand line: %s\n", args->argv);
-    fprintf(ofp, "SS\tNumber of amplicons:\t%d\n", namp);
-    fprintf(ofp, "SS\tNumber of files:\t%d\n", filec);
-
-    // Report ref len from first file.
-    // Some minor duplication here.
-    int ref_tid = -1;
+    // Report initial SS header.  We gather data from the bed_hash entries
+    // as well as from the first SAM header (with the requirement that all
+    // headers should be compatible).
     if (filec) {
         if (!(fp = sam_open_format(filev[0], "r", &args->ga.in))) {
             print_error_errno("ampliconstats",
@@ -1179,24 +1366,64 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         if (!(header = sam_hdr_read(fp)))
             goto err;
 
-        int ref = sam_hdr_name2tid(header, args->sites.ref);
-        if (ref < 0) {
-            print_error("ampliconstats", "Unknown reference '%s' in BED file",
-                        args->sites.ref);
-            goto err;
-        }
-        if (ref_tid == -1) {
-            ref_tid = ref;
-        } else if (ref_tid != ref) {
-            print_error("ampliconstats", "Header SQ lines are not in the same"
-                        " order between files");
-            goto err;
-        }
+        if (!amps) {
+            amps = calloc(nref=sam_hdr_nref(header), sizeof(*amps));
+            if (!amps)
+                goto err;
+            fprintf(ofp, "# Summary statistics, used for scaling the plots.\n");
+            fprintf(ofp, "SS\tSamtools version: %s\n", samtools_version());
+            fprintf(ofp, "SS\tCommand line: %s\n", args->argv);
+            fprintf(ofp, "SS\tNumber of files:\t%d\n", filec);
 
-        // FIXME: permit multiple references to be specified.
-        if ((args->max_len = get_ref_len(header, args->sites.ref)) < 0)
-            goto err;
-        fprintf(ofp, "SS\tReference length:\t%"PRId64"\n", args->max_len);
+            // Note: order of hash entries will be different to order of
+            // BED file which may also differ to order of SQ headers.
+            // SQ header is canonical ordering (pos sorted file).
+            khiter_t k;
+            int bam_nref = sam_hdr_nref(header);
+            for (i = 0; i < bam_nref; i++) {
+                k = kh_get(bed_list_hash, bed_hash,
+                           sam_hdr_tid2name(header, i));
+                if (!kh_exist(bed_hash, k))
+                    continue;
+
+                bed_entry_list_t *sites = &kh_value(bed_hash, k);
+
+                ref = i;
+                amps[ref].ref = kh_key(bed_hash, k);
+                amps[ref].sites = sites;
+                amps[ref].namp = count_amplicon(sites);
+                amps[ref].amp  = calloc(sites->length,
+                                        sizeof(*amps[ref].amp));
+                if (!amps[ref].amp)
+                    goto err;
+                if (args->multi_ref)
+                    fprintf(ofp, "SS\tNumber of amplicons:\t%s\t%d\n",
+                            kh_key(bed_hash, k), amps[ref].namp);
+                else
+                    fprintf(ofp, "SS\tNumber of amplicons:\t%d\n",
+                            amps[ref].namp);
+
+                amps[ref].tid = ref;
+                if (ref_tid == -1)
+                    ref_tid = ref;
+
+                int64_t len = get_ref_len(header, kh_key(bed_hash, k));
+                amps[ref].len = len;
+                if (args->multi_ref)
+                    fprintf(ofp, "SS\tReference length:\t%s\t%"PRId64"\n",
+                            kh_key(bed_hash, k), len);
+                else
+                    fprintf(ofp, "SS\tReference length:\t%"PRId64"\n",
+                            len);
+
+                amps[ref].lstats = stats_alloc(len, args->max_amp,
+                                               args->max_amp_len);
+                amps[ref].gstats = stats_alloc(len, args->max_amp,
+                                               args->max_amp_len);
+                if (!amps[ref].lstats || !amps[ref].gstats)
+                    goto err;
+            }
+        }
 
         sam_hdr_destroy(header);
         header = NULL;
@@ -1208,9 +1435,22 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
     }
     fprintf(ofp, "SS\tEnd of summary\n");
 
-    if (bed2amplicon(args, &args->sites, amp, &namp) < 0)
-        goto err;
+    // Extract the bits of amplicon data we need from bed hash and turn
+    // it into a position-to-amplicon lookup table.
+    int offset = 0;
+    for (i = 0; i < nref; i++) {
+        if (!amps[i].sites)
+            continue;
 
+        amps[i].first_amp = offset;
+        if (bed2amplicon(args, amps[i].sites, amps[i].amp,
+                         &amps[i].namp, i==0, amps[i].ref, offset) < 0)
+            goto err;
+
+        offset += amps[i].namp; // cumulative amplicon number across refs
+    }
+
+    // Now iterate over file contents, one at a time.
     for (i = 0; i < filec; i++) {
         char *nstart = filev[i];
 
@@ -1228,22 +1468,25 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         if (!(header = sam_hdr_read(fp)))
             goto err;
 
+        if (nref != sam_hdr_nref(header)) {
+            print_error_errno("ampliconstats",
+                              "SAM headers are not consistent across input files");
+            goto err;
+        }
+        int r;
+        for (r = 0; r < nref; r++) {
+            if (!amps[r].ref ||
+                strcmp(amps[r].ref, sam_hdr_tid2name(header, r)) != 0 ||
+                amps[r].len != sam_hdr_tid2len(header, r)) {
+                print_error_errno("ampliconstats",
+                                  "SAM headers are not consistent across "
+                                  "input files");
+                goto err;
+            }
+        }
+
         if (args->use_sample_name)
             sname = (char *)get_sample_name(header, NULL);
-
-        // FIXME: permit multiple references to be specified.
-        if ((args->max_len = get_ref_len(header, args->sites.ref)) < 0)
-            goto err;
-        if (initialise_amp_pos_lookup(args, amp, namp, args->max_len) < 0)
-            goto err;
-
-        if (!gstats) gstats = stats_alloc(args->max_len, args->max_amp,
-                                          args->max_amp_len);
-        if (!lstats) lstats = stats_alloc(args->max_len, args->max_amp,
-                                          args->max_amp_len);
-        if (!lstats || !gstats)
-            goto err;
-
 
         if (!sname) {
             sname = sname_;
@@ -1261,13 +1504,21 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         }
 
         // Stats local to this sample only
-        stats_reset(lstats);
+        amp_stats_reset(amps, nref);
 
-        int r;
+        int last_ref = -9;
         while ((r = sam_read1(fp, header, b)) >= 0) {
-            if (b->core.tid != ref_tid)
+            // Other filter options useful here?
+            if (b->core.tid < 0)
                 continue;
-            if (accumulate_stats(lstats, args, amp, namp, b) < 0)
+
+            if (last_ref != b->core.tid) {
+                last_ref  = b->core.tid;
+                if (initialise_amp_pos_lookup(args, amps, last_ref) < 0)
+                    goto err;
+            }
+
+            if (accumulate_stats(args, amps, b) < 0)
                 goto err;
         }
 
@@ -1285,10 +1536,10 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         fp = NULL;
         header = NULL;
 
-        if (dump_stats('F', sname, lstats, args, amp, namp, filec) < 0)
+        if (dump_lstats(args, 'F', sname, filec, amps, nref) < 0)
             goto err;
 
-        if (append_stats(lstats, gstats, namp) < 0)
+        if (append_stats(amps, nref) < 0)
             goto err;
 
         if (sname && sname != sname_)
@@ -1296,28 +1547,32 @@ static int amplicon_stats(astats_args_t *args, char **filev, int filec) {
         sname = NULL;
     }
 
-    dump_stats('C', "COMBINED", gstats, args, amp, namp, filec);
+    if (dump_gstats(args, 'C', "COMBINED", filec, amps, nref) < 0)
+        goto err;
 
-    stats_free(lstats);
-    stats_free(gstats);
-    bam_destroy1(b);
-    free(amp);
-    free_amp_pos_lookup();
-
-    return 0;
-
+    ret = 0;
  err:
     bam_destroy1(b);
-    if (header)
-        sam_hdr_destroy(header);
-    if (fp)
-        sam_close(fp);
-    free(amp);
-    free_amp_pos_lookup();
-    if (sname && sname != sname_)
-        free(sname);
+    if (ret) {
+        if (header)
+            sam_hdr_destroy(header);
+        if (fp)
+            sam_close(fp);
+    }
+    for (i = 0; i < nref; i++) {
+        stats_free(amps[i].lstats);
+        stats_free(amps[i].gstats);
+        free(amps[i].amp);
+    }
+    free(amps);
+    free(pos2start);
+    free(pos2end);
+    if (ret) {
+        if (sname && sname != sname_)
+            free(sname);
+    }
 
-    return -1;
+    return ret;
 }
 
 static int usage(astats_args_t *args, FILE *fp, int exit_status) {
@@ -1349,7 +1604,9 @@ static int usage(astats_args_t *args, FILE *fp, int exit_status) {
     fprintf(fp, "  -c, --tcoord-min-count INT\n"
             "               Minimum template start,end frequency for recording [%d]\n", TCOORD_MIN_COUNT);
     fprintf(fp, "  -D, --depth-bin FRACTION\n"
-            "               Merge FDP values within +/- FRACTION together.\n");
+            "               Merge FDP values within +/- FRACTION together\n");
+    fprintf(fp, "  -S, --single-ref\n"
+            "               Force single-ref (<=1.12) output format\n");
     sam_global_opt_help(fp, "I.--.@");
 
     return exit_status;
@@ -1360,7 +1617,7 @@ int main_ampliconstats(int argc, char **argv) {
         .ga = SAM_GLOBAL_ARGS_INIT,
         .flag_require = 0,
         .flag_filter = 0x10B04,
-        .sites = {NULL, 0, 0, {0}},
+        //.sites = BED_LIST_INIT,
         .max_delta = 30, // large enough to cope with alt primers
         .min_depth = {1},
         .use_sample_name = 0,
@@ -1370,7 +1627,8 @@ int main_ampliconstats(int argc, char **argv) {
         .out_fp = stdout,
         .tcoord_min_count = TCOORD_MIN_COUNT,
         .tcoord_bin = 1,
-        .depth_bin = 0.01
+        .depth_bin = 0.01,
+        .multi_ref = 1
     }, oargs = args;
 
     static const struct option loptions[] =
@@ -1389,11 +1647,12 @@ int main_ampliconstats(int argc, char **argv) {
         {"tcoord-min-count", required_argument, NULL, 'c'},
         {"tcoord-bin", required_argument, NULL, 'b'},
         {"depth-bin", required_argument, NULL, 'D'},
+        {"single-ref", no_argument, NULL, 'S'},
         {NULL, 0, NULL, 0}
     };
     int opt;
 
-    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:c:b:D:",loptions,NULL))>0 ) {
+    while ( (opt=getopt_long(argc,argv,"?hf:F:@:p:m:d:sa:l:t:o:c:b:D:S",loptions,NULL))>0 ) {
         switch (opt) {
         case 'f': args.flag_require = bam_str2flag(optarg); break;
         case 'F':
@@ -1437,6 +1696,10 @@ int main_ampliconstats(int argc, char **argv) {
             }
             break;
 
+        case 'S':
+            args.multi_ref = 0;
+            break;
+
         case '?': return usage(&oargs, stderr, EXIT_FAILURE);
         case 'h': return usage(&oargs, stdout, EXIT_SUCCESS);
 
@@ -1452,10 +1715,26 @@ int main_ampliconstats(int argc, char **argv) {
     if (argc <= optind+1 && isatty(STDIN_FILENO))
         return usage(&oargs, stderr, EXIT_FAILURE);
 
-    int64_t longest;
-    if (load_bed_file_pairs(argv[optind], 1, 0, &args.sites, &longest)) {
+    khash_t(bed_list_hash) *bed_hash = kh_init(bed_list_hash);
+    if (load_bed_file_multi_ref(argv[optind], 1, 0, bed_hash)) {
         print_error_errno("ampliconstats",
                           "Could not read file \"%s\"", argv[optind]);
+        return 1;
+
+    }
+
+    khiter_t k, ref_count = 0;
+    for (k = kh_begin(bed_hash); k != kh_end(bed_hash); k++) {
+        if (!kh_exist(bed_hash, k))
+            continue;
+        ref_count++;
+    }
+    if (ref_count == 0)
+        return 1;
+    if (ref_count > 1 && args.multi_ref == 0) {
+        print_error("ampliconstats",
+                    "Single-ref mode is not permitted for BED files\n"
+                    "containing more than one reference.");
         return 1;
     }
 
@@ -1463,13 +1742,13 @@ int main_ampliconstats(int argc, char **argv) {
     int ret;
     if (argc == ++optind) {
         char *av = "-";
-        ret = amplicon_stats(&args, &av, 1);
+        ret = amplicon_stats(&args, bed_hash, &av, 1);
     } else {
-        ret = amplicon_stats(&args, &argv[optind], argc-optind);
+        ret = amplicon_stats(&args, bed_hash, &argv[optind], argc-optind);
     }
 
-    free(args.sites.bp);
     free(args.argv);
+    destroy_bed_hash(bed_hash);
 
     return ret;
 }

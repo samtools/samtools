@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-flags 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-flags 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
 .SH NAME
 samtools flags \- convert between textual and numeric flag representation.
 .\"
@@ -44,11 +44,16 @@ samtools flags \- convert between textual and numeric flag representation.
 .SH SYNOPSIS
 .PP
 samtools flags
-.IR INT | STR [,...]
+.IR FLAGS ...
 
 .SH DESCRIPTION
 .PP
 Convert between textual and numeric flag representation.
+
+Each \fIFLAGS\fP argument may be either an integer (in decimal, hexadecimal,
+or octal) representing a combination of the listed numeric flag values,
+or a comma-separated string \fINAME\fB,\fR...\fB,\fINAME\fR representing
+a combination of the flag names listed below.
 
 .B FLAGS:
 .TS

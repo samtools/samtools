@@ -123,6 +123,9 @@ specify further optional external requirements:
     installation directory (i.e., it has 'include' and 'lib' subdirectories
     containing HTSlib headers and libraries).
 
+    (If the desired HTSlib source tree has been configured to build in a
+    separate build directory, DIR should refer to the build directory.)
+
     By default, configure looks for an HTSlib source tree within or alongside
     the samtools source directory; if there are several likely candidates,
     you will have to choose one via this option.

@@ -1,0 +1,221 @@
+'\" t
+.TH samtools-import 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
+.SH NAME
+samtools import \- converts FASTQ files to unmapped SAM/BAM/CRAM
+.\"
+.\" Copyright (C) 2020 Genome Research Ltd.
+.\"
+.\" Author: James Bonfield <jkb@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools import
+.RI [ options ]
+[
+.I fastq_file
+\fR... ]
+
+
+.SH DESCRIPTION
+.PP
+
+Reads one or more FASTQ files and converts them to unmapped SAM, BAM
+or CRAM.  The input files may be automatically decompressed if they
+have a .gz extension.
+
+The simplest usage in the absence of any other command line options is
+to provide one or two input files.
+
+If a single file is given, it will be interpreted as a single-ended
+sequencing format unless the read names end with /1 and /2 in which
+case they will be labelled as PAIRED with READ1 or READ2 BAM flags
+set.  If a pair of filenames are given they will be read from
+alternately to produce an interleaved output file, also setting PAIRED
+and READ1 / READ2 flags.
+
+The filenames may be explicitly labelled using \fB-1\fR and \fB-2\fR
+for READ1 and READ2 data files, \fB-s\fR for an interleaved paired
+file (or one half of a paired-end run), \fB-0\fR for unpaired data
+and explicit index files specified with \fB--i1\fR and \fB--i2\fR.
+These correspond to typical output produced by Illumina bcl2fastq and
+match the output from \fBsamtools fastq\fR.  The index files will set
+both the \fBBC\fR barcode code and it's associated \fBQT\fR quality tag.
+
+The Illumina CASAVA identifiers may also be processed when the \fB-i\fR
+option is given.  This tag will be processed for READ1 / READ2,
+whether or not the read failed processing (QCFAIL flag), and the
+barcode sequence which will be added to the \fBBC\fR tag.  This can be
+an alternative to explicitly specifying the index files, although note
+that doing so will not fill out the barcode quality tag.
+
+
+.SH OPTIONS
+.TP 8
+.BI -s\  FILE
+Import paired interleaved data from \fIFILE\fR.
+
+.TP 8
+.BI -0\  FILE
+Import single-ended (unpaired) data from \fIFILE\fR.
+
+Operationally there is no difference between the \fB-s\fR and \fB-0\fR
+options as given an interleaved file with /1 and /2 read name endings
+both will correctly set the PAIRED, READ1 and READ2 flags, and given
+data with no suffixes and no CASAVA identifiers being processed both will
+leave the data as unpaired.  However their inclusion here is for more
+descriptive command lines and to improve the header comment describing
+the samtools fastq decode command.
+
+.TP 8
+.BI -1\  FILE ,\ -2\  FILE
+Import paired data from a pair of FILEs.  The BAM flag PAIRED will be
+set, but not PROPER_PAIR as it has not been aligned.  READ1 and READ2
+will be stored in their original, unmapped, orientation.
+
+.TP 8
+.BI --i1\  FILE ,\ --i2\ FILE
+Specifies index barcodes associated with the \fB-1\fR and \fB-2\fR
+files.  These will be appended to READ1 and READ2 records in the
+barcode (BC) and quality (QT) tags.
+
+.TP 8
+.B -i
+Specifies that the Illumina CASAVA identifiers should be processed.
+This may set the READ1, READ2 and QCFAIL flags and add a barcode tag.
+
+.TP
+.BI --barcode-tag\ TAG
+Changes the auxiliary tag used for barcode sequence.  Defaults to BC.
+
+.TP
+.BI --quality-tag\ TAG
+Changes the auxiliary tag used for barcode quality.  Defaults to QT.
+
+.TP
+.BI -o FILE
+Output to \fIFILE\fR.  By default output will be written to stdout.
+
+.TP 8
+.BI --order\  TAG
+When outputting a SAM record, also output an integer tag containing
+the Nth record number.  This may be useful if the data is to be sorted
+or collated in some manner and we wish this to be reversible.  In this
+case the tag may be used with \fBsamtools sort -t TAG\fR to regenerate
+the original input order.
+
+.TP 8
+.BI -r\  RG_line ,\ --rg-line\  RG_line
+A complete \fB@RG\fR header line may be specified, with or without the
+initial "@RG" component.  If specified this will also use the ID field
+from \fIRG_line\fR in each SAM records RG auxiliary tag.
+
+If specified multiple times this appends to the RG line, automatically
+adding tabs between invocations.
+
+.TP 8
+.BI -R\  RG_ID ,\ --rg\  RG_ID
+This is a shorter form of the option above, equivalent to
+\fB--rg-line ID:\fR\fIRG_ID\fR.
+If both are specified then this option is ignored.  
+
+.TP
+.B -u
+Output BAM or CRAM as uncompressed data.
+
+.TP 8
+.BI -T\  TAGLIST
+This looks for any SAM-format auxiliary tags in the comment field of a fastq
+read name.  These must match the <alpha-num><alpha-num>:<type>:<data>
+pattern as specified in the SAM specification.  \fITAGLIST\fR can be blank
+or \fB*\fR to indicate all tags should be copied to the output,
+otherwise it is a comma-separated list of tag types to include with
+all others being discarded.
+
+
+.SH EXAMPLES
+Convert a single-ended fastq file to an unmapped CRAM.  Both of these
+commands perform the same action.
+
+.EX 4
+samtools import -0 in.fastq -o out.cram
+samtools import in.fastq > out.cram
+.EE
+
+Convert a pair of Illumina fastqs containing CASAVA identifiers to BAM,
+adding the barcode information to the BC auxiliary tag.
+
+.EX 4
+samtools import -i -1 in_1.fastq -2 in_2.fastq -o out.bam
+samtools import -i in_[12].fastq > out.bam
+.EE
+
+Specify the read group. These commands are equivalent
+
+.EX 4
+samtools import -r "$(echo -e 'ID:xyz\\tPL:ILLUMINA')" in.fq
+samtools import -r "$(echo -e '@RG\\tID:xyz\\tPL:ILLUMINA')" in.fq
+samtools import -r ID:xyz -r PL:ILLUMINA in.fq
+.EE
+
+Create an unmapped BAM file from a set of 4 Illumina fastqs from
+bcf2fastq, consisting of two read and two index tags.  The CASAVA identifier
+is used only for setting QC pass / failure status.
+
+.EX 4
+samtools import -i -1 R1.fq -2 R2.fq --i1 I1.fq --i2 I2.fq -o out.bam
+.EE
+
+Convert a pair of CASAVA barcoded fastq files to unmapped CRAM with an
+incremental record counter, then sort this by minimiser in order to
+reduce file space.  The reversal process is also shown using samtools
+sort and samtools fastq.
+
+.EX 4
+samtools import -i in_1.fq in_2.fq --order ro -O bam,level=0 | \\
+    samtools sort -@4 -M -o out.srt.cram -
+
+samtools sort -@4 -O bam -u -t ro out.srt.cram | \\
+    samtools fastq -1 out_1.fq -2 out_2.fq -i --index-format "i*i*"
+.EE
+
+.SH AUTHOR
+.PP
+Written by James Bonfield of the Wellcome Sanger Institute.
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-fastq (1)
+.PP
+Samtools website: <http://www.htslib.org/>

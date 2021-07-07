@@ -1,6 +1,6 @@
 /*  bam_flags.c -- flags subcommand.
 
-    Copyright (C) 2013-2014 Genome Research Ltd.
+    Copyright (C) 2013-2014, 2021 Genome Research Ltd.
 
     Author: Petr Danecek <pd3@sanger.ac.uk>
 
@@ -32,38 +32,54 @@ DEALINGS IN THE SOFTWARE.  */
 #include <unistd.h>
 #include <stdarg.h>
 #include <htslib/sam.h>
+#include "samtools.h"
 
-static void usage(void)
+static void usage(FILE *fp)
 {
-    fprintf(stderr, "\n");
-    fprintf(stderr, "About: Convert between textual and numeric flag representation\n");
-    fprintf(stderr, "Usage: samtools flags INT|STR[,...]\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Flags:\n");
-    fprintf(stderr, "\t0x%x\tPAIRED        .. paired-end (or multiple-segment) sequencing technology\n", BAM_FPAIRED);
-    fprintf(stderr, "\t0x%x\tPROPER_PAIR   .. each segment properly aligned according to the aligner\n", BAM_FPROPER_PAIR);
-    fprintf(stderr, "\t0x%x\tUNMAP         .. segment unmapped\n", BAM_FUNMAP);
-    fprintf(stderr, "\t0x%x\tMUNMAP        .. next segment in the template unmapped\n", BAM_FMUNMAP);
-    fprintf(stderr, "\t0x%x\tREVERSE       .. SEQ is reverse complemented\n", BAM_FREVERSE);
-    fprintf(stderr, "\t0x%x\tMREVERSE      .. SEQ of the next segment in the template is reversed\n", BAM_FMREVERSE);
-    fprintf(stderr, "\t0x%x\tREAD1         .. the first segment in the template\n", BAM_FREAD1);
-    fprintf(stderr, "\t0x%x\tREAD2         .. the last segment in the template\n", BAM_FREAD2);
-    fprintf(stderr, "\t0x%x\tSECONDARY     .. secondary alignment\n", BAM_FSECONDARY);
-    fprintf(stderr, "\t0x%x\tQCFAIL        .. not passing quality controls\n", BAM_FQCFAIL);
-    fprintf(stderr, "\t0x%x\tDUP           .. PCR or optical duplicate\n", BAM_FDUP);
-    fprintf(stderr, "\t0x%x\tSUPPLEMENTARY .. supplementary alignment\n", BAM_FSUPPLEMENTARY);
-    fprintf(stderr, "\n");
+    static const struct { int bit; const char *desc; } *fl, flags[] = {
+        { BAM_FPAIRED, "paired-end / multiple-segment sequencing technology" },
+        { BAM_FPROPER_PAIR, "each segment properly aligned according to aligner" },
+        { BAM_FUNMAP, "segment unmapped" },
+        { BAM_FMUNMAP, "next segment in the template unmapped" },
+        { BAM_FREVERSE, "SEQ is reverse complemented" },
+        { BAM_FMREVERSE, "SEQ of next segment in template is rev.complemented" },
+        { BAM_FREAD1, "the first segment in the template" },
+        { BAM_FREAD2, "the last segment in the template" },
+        { BAM_FSECONDARY, "secondary alignment" },
+        { BAM_FQCFAIL, "not passing quality controls or other filters" },
+        { BAM_FDUP, "PCR or optical duplicate" },
+        { BAM_FSUPPLEMENTARY, "supplementary alignment" },
+        { 0, NULL }
+    };
+
+    fprintf(fp,
+"About: Convert between textual and numeric flag representation\n"
+"Usage: samtools flags FLAGS...\n"
+"\n"
+"Each FLAGS argument is either an INT (in decimal/hexadecimal/octal) representing\n"
+"a combination of the following numeric flag values, or a comma-separated string\n"
+"NAME,...,NAME representing a combination of the following flag names:\n"
+"\n");
+    for (fl = flags; fl->desc; fl++) {
+        char *name = bam_flag2str(fl->bit);
+        fprintf(fp, "%#6x %5d  %-15s%s\n", fl->bit, fl->bit, name, fl->desc);
+        free(name);
+    }
 }
 
 
 int main_flags(int argc, char *argv[])
 {
-    if ( argc!=2 ) usage();
-    else
+    if ( argc < 2 ) { usage(stdout); return 0; }
+
+    int i;
+    for (i = 1; i < argc; i++)
     {
-        int mask = bam_str2flag(argv[1]);
-        if ( mask<0 ) { fprintf(stderr,"Error: Could not parse \"%s\"\n", argv[1]); usage(); return 1; }
-        printf("0x%x\t%d\t%s\n", mask, mask, bam_flag2str(mask));
+        int mask = bam_str2flag(argv[i]);
+        if ( mask<0 ) { print_error("flags", "Could not parse \"%s\"", argv[i]); usage(stderr); return 1; }
+        char *str = bam_flag2str(mask);
+        printf("0x%x\t%d\t%s\n", mask, mask, str);
+        free(str);
     }
     return 0;
 }

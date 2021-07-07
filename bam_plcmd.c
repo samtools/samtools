@@ -1,6 +1,6 @@
 /*  bam_plcmd.c -- mpileup subcommand.
 
-    Copyright (C) 2008-2015, 2019-2020 Genome Research Ltd.
+    Copyright (C) 2008-2015, 2019-2021 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -1104,9 +1104,9 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
     fprintf(fp,
 "  -r, --region REG        region in which pileup is generated\n"
 "  -R, --ignore-RG         ignore RG tags (one BAM = one sample)\n"
-"  --rf, --incl-flags STR|INT  required flags: skip reads with mask bits unset [%s]\n", tmp_require);
+"  --rf, --incl-flags STR|INT  required flags: include reads with any of the mask bits set [%s]\n", tmp_require);
     fprintf(fp,
-"  --ff, --excl-flags STR|INT  filter flags: skip reads with mask bits set\n"
+"  --ff, --excl-flags STR|INT  filter flags: skip reads with any of the mask bits set\n"
 "                                            [%s]\n", tmp_filter);
     fprintf(fp,
 "  -x, --ignore-overlaps   disable read-pair overlap detection\n"

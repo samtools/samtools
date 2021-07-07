@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-ampliconclip 1 "17 March 2021" "samtools-1.12" "Bioinformatics tools"
+.TH samtools-ampliconclip 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
 .SH NAME
 samtools ampliconclip \- clip reads using a BED file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2021 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Andrew Whitwham <aw7@sanger.ac.uk>
@@ -62,6 +62,7 @@ samtools ampliconclip
 .IR rejects.file ]
 .RB [ --original ]
 .RB [ --keep-tag ]
+.RB [ --tolerance ]
 .RB [ --no-PG ]
 .RB [ -u ]
 .B -b
@@ -69,8 +70,16 @@ samtools ampliconclip
 
 .SH DESCRIPTION
 .PP
-Clip reads in a SAM compatible file based on data from a BED file.  By default
-the reads are soft clipped and clip is only done from the 5' end.
+Clips the ends of read alignments if they intersect with regions defined in a
+BED file.  While this tool was originally written for clipping read alignment
+positions which correspond to amplicon primer locations it can also be used in
+other contexts.
+
+BED file entries used are chrom, chromStart, chromEnd and, optionally, strand. 
+There is a default tolerance of 5 bases when matching chromStart and chromEnd
+to alignments.
+
+By default the reads are soft clipped and clip is only done from the 5' end.
 
 Some things to be aware of.  While ordering is not significant, adjustments to
 the left most mapping position (\fIPOS\fR) will mean that coordinate sorted
@@ -84,7 +93,7 @@ output is in CRAM format these tags will be automatically regenerated.
 .SH OPTIONS
 .TP 11
 .BI "-b " FILE
-BED file of amplicons to be removed.
+BED file of regions (e.g. amplicon primers) to be removed.
 .TP
 .BI "-o " FILE
 Output file name (defaults to stdout).
@@ -102,10 +111,11 @@ Soft clip reads (default).
 Hard clip reads.
 .TP
 .B --both-ends
-Clip at both ends as opposed to just the 5' end.
+Clip at both the 5' and the 3' ends where regions match.
 .TP
 .B --strand
-Use strand entry from the BED file.
+Use strand entry from the BED file to clip on the matching forward or reverse
+alignment. 
 .TP
 .B --clipped
 Only output clipped reads.  Filter all others.
@@ -132,6 +142,9 @@ Add an OA tag with the original data for clipped files.
 .TP
 .B --keep-tag
 In clipped reads, keep the possibly invalid NM and MD tags.  By default these tags are deleted.  
+.TP
+.BI "--tolerance " INT
+The amount of latitude given in matching regions to alignments.  Default 5 bases.
 .TP
 .B --no-PG
 Do not at a PG line to the header.

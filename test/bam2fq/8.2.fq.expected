@@ -1,68 +1,68 @@
-@ref1_grp1_p001 2:N:0:GT
+@ref1_grp1_p001 2:N:0:ACGT
 GTCGACTCTA
 +
 ----------
-@ref1_grp1_p002 2:N:0:TT
+@ref1_grp1_p002 2:N:0:AATTCCGG
 GCAGGTCGAC
 +
 //////////
-@ref1_grp1_p003
+@ref1_grp1_p003 2:N:0:0
 GCCTGCAGGT
 +
 1111111111
-@ref1_grp1_p004
+@ref1_grp1_p004 2:N:0:0
 GCATGCCTGC
 +
 3333333333
-@ref1_grp1_p005
+@ref1_grp1_p005 2:N:0:0
 GCTTGCATGC
 +
 5555555555
-@ref1_grp1_p006
+@ref1_grp1_p006 2:N:0:0
 TCAAGCTTGC
 +
 7777777777
-@ref1_grp2_p001 2:N:0:CA
+@ref1_grp2_p001 2:N:0:TGCA
 AGGTCGACTC
 +
 ..........
-@ref1_grp2_p002
+@ref1_grp2_p002 2:N:0:0
 CTGCAGGTCG
 +
 0000000000
-@ref1_grp2_p003
+@ref1_grp2_p003 2:N:0:0
 ATGCCTGCAG
 +
 2222222222
-@ref1_grp2_p004
+@ref1_grp2_p004 2:N:0:0
 TTGCATGCCT
 +
 4444444444
-@ref1_grp2_p005
+@ref1_grp2_p005 2:N:0:0
 AAGCTTGCAT
 +
 6666666666
-@ref1_grp2_p006
+@ref1_grp2_p006 2:N:0:0
 ACTCAAGCTT
 +
 8888888888
-@ref2_grp3_p001
+@ref2_grp3_p001 2:N:0:0
 CTGTTTCCTGTGTGA
 +
 |||||||||||||||
-@ref2_grp3_p002
+@ref2_grp3_p002 2:N:0:0
 CGCCAAGCTATTTAG
 +
 }}}}}}}}}}}}}}}
-@ref2_grp3_p003
+@ref2_grp3_p003 2:N:0:0
 ACGTMRWSYKVHDBN
 +
 0123456789abcd!
-@ref12_grp1_p001
+@ref12_grp1_p001 2:N:0:0
 CACTATAGAA
 +
 BBBBBBBBBB
-@ref12_grp2_p001
+@ref12_grp2_p001 2:N:0:0
 ATTTAGGTGA
 +
 BBBBBBBBBB

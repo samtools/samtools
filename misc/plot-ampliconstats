@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 #
-#    Copyright (C) 2020 Genome Research Ltd.
+#    Copyright (C) 2020-2021 Genome Research Ltd.
 #
 #    Author: James Bonfield <jkb@sanger.ac.uk>
 #
@@ -107,15 +107,33 @@ if ($1 < 5) {
 #-----------------------------------------------------------------------------
 # Load plot meta-data
 # This allows us to auto-scale plots.
-my $namp = 0;
+my $namp = 0;       # total number
+my %namp = ();      # number per reference
 my $nfile = 0;
-my $ref_len = 0;
+my %ref_len = ();
+my $multi_ref = 0;  # Flag for multi-ref mode.  Autodetected.
+my $ref = "_";
+my %ref_start = (); # cumulative position in genome
+my $total_len = 0;
+
 while (<>) {
     chomp($_);
     my @F = split("\t", $_);
-    $namp  = $F[2] if (/^SS\tNumber of amplicons/);
+    if (/^SS\tNumber of amplicons/) {
+        $multi_ref = 1 if (scalar(@F) > 3);
+        $ref = $F[2];
+    }
+    if (/^SS\tNumber of amplicons/) {
+        $namp{$ref}  = $F[2+$multi_ref];
+        $namp += $namp{$ref};
+    }
     $nfile = $F[2] if (/^SS\tNumber of files/);
-    $ref_len = $F[2] if (/^SS\tReference length/);
+    if (/^SS\tReference length/) {
+        $ref_len{$ref} = $F[2+$multi_ref];
+        $ref_start{$ref} = $total_len;
+        $total_len += $ref_len{$ref};
+    }
+
     last if (/^SS\tEnd of summary/);
 }
 
@@ -236,8 +254,9 @@ my %fh_cover_count;
 my %fh_cover_page;
 my %fh_cover_nfile;
 
-my @amp_start; # coords for amplicons
+my @amp_start; # coords for amplicons; cumulative across all refs
 my @amp_end;
+my @amp2ref;   # map amplicon number to ref name
 
 #-----------------------------------------------------------------------------
 # Parse stats file, writing to a number of outputs simultaneously
@@ -251,19 +270,21 @@ while (<>) {
     # Amplicon coordinates
     if (/^AMPLICON/) {
         my $min_left=1e9;
-        foreach (split(",",$F[2])) {
+        $ref = $F[1] if $multi_ref;
+        foreach (split(",",$F[2+$multi_ref])) {
             /\d+-(\d+)/;
             $min_left=$1 if ($min_left > $1);
         }
         my $max_right=0;
-        foreach (split(",",$F[3])) {
+        foreach (split(",",$F[3+$multi_ref])) {
             /(\d+)-\d+/;
             $max_right=$1 if ($max_right < $1);
         }
-        $amp_start[$F[1]]=$min_left;
-        $amp_end[$F[1]]=$max_right;
+        $amp_start[$F[1+$multi_ref]]=$min_left + $ref_start{$ref};
+        $amp_end[$F[1+$multi_ref]]=$max_right + $ref_start{$ref};
+        $amp2ref[$F[1+$multi_ref]] = $multi_ref ? $F[1] : "_";
 
-        $ref_len = $max_right if ($ref_len < $max_right);
+        $ref_len{$ref} = $max_right if ($ref_len{$ref} < $max_right);
     }
 
     # Heatmaps showing all files & all amplicons
@@ -275,9 +296,18 @@ while (<>) {
     # Initialise gnuplot files as we create new pages
     #----------  Heatmap READS
 
+    # Input order is:
+    #     TYPE file1 ref1
+    #     TYPE file1 ref2
+    #     TYPE file2 ref1
+    #     TYPE file2 ref2
+    #
+    # Heatmaps combine file1/2 together, but the ref1/2 are interleaved.
+    # This means we need to load the file contents first so we can consume
+    # in another order.
+
     $fh_reads_count++ if (/^FREADS/);
-    if ($fh_reads_count > $opts{page} && $nfile-$opts{page}*$fh_reads_page!=1) {
-        print STDERR "page $fh_reads_page\n";
+    if (($fh_reads_count > $opts{page} || 0) && $nfile-$opts{page}*$fh_reads_page!=1) {
         if (defined($fh_reads)) {
             print $fh_reads "\nend\n";
             close($fh_reads);
@@ -411,10 +441,10 @@ END
         } else {
             # Subsequent lines are per amplicon stats,
             # corrected for small sample size via amp_add.
-            print $fh_amp "\t", 100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add});
+	    print $fh_amp "\t",
+		100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add});
         }
     }
-
 
     #----------  Heatmap READ-PERC, clipped and log
     $fh_rperc_count++ if (/^FRPERC/);
@@ -541,12 +571,12 @@ END
     # Graphs with merged file data (mean and SD) for all amplicons
     local $"="\n";
     print $ch_reads "\$mean << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*MEAN/);
-    print $ch_reads "\$sd << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*STDDEV/);
+    print $ch_reads   "\$sd << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*STDDEV/);
     print $ch_depth "\$mean << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*MEAN/);
-    print $ch_depth "\$sd << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*STDDEV/);
-    print $ch_rperc "@F[2..$#F]\nend\n" if (/^CRPERC.*(MEAN|STDDEV)/);
-    print $ch_amp   100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add}),"\n"
-        if (/^CAMP\tCOMBINED\t[1-9]/);
+    print $ch_depth   "\$sd << EOD\n@F[2..$#F]\nEOD\n\n" if (/^CDEPTH.*STDDEV/);
+    print $ch_rperc                "@F[2..$#F]\nend\n"   if (/^CRPERC.*(MEAN|STDDEV)/);
+    print $ch_amp 100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add}),"\n"
+	if (/^CAMP\tCOMBINED\t[1-9]/);
 
     # These only occur once so we can open the file in situ rather
     # than keep appending to it.
@@ -610,25 +640,35 @@ END
         #push(@{$file{$F[1]}{keys}}, $F[0]);
     }
     if (/^FAMP\s\S+\s[1-9]*/) {
-        push(@{$file{$F[1]}{$F[0]}}, 100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add}));
+	push(@{$file{$F[1]}{$F[0]}}, 100*($F[4]+$F[5])/($F[3]+$F[4]+$F[5]+$opts{amp_add}));
     }
     if (/^FTCOORD/) {
-        local $"="\t$F[2]\n";
-        $_="@F[3..$#F]";
-        s/,/\t/g;
-        push(@{$file{$F[1]}{$F[0]}}, "$_\t$F[2]") if ($_ ne "");
+        $_ = "";
+        foreach my $x (@F[3..$#F]) {
+            my @a = split(",", $x);
+            $a[0] += $ref_start{$amp2ref[$F[2]]};
+            $a[1] += $ref_start{$amp2ref[$F[2]]};
+            $_ .= join("\t", @a) . "\t$F[2]\n";
+        }
+        s/\n$//;
+        push(@{$file{$F[1]}{$F[0]}}, "$_") if ($_ ne "");
     }
 
     if (/^CTCOORD/) {
-        local $"="\t$F[2]\n";
-        $_="@F[3..$#F]";
-        s/,/\t/g;
-        push(@combined_coord, "$_\t$F[2]") if ($_ ne "");
+        $_ = "";
+        foreach my $x (@F[3..$#F]) {
+            my @a = split(",", $x);
+            $a[0] += $ref_start{$amp2ref[$F[2]]};
+            $a[1] += $ref_start{$amp2ref[$F[2]]};
+            $_ .= join("\t", @a) . "\t$F[2]\n";
+        }
+        s/\n$//;
+        push(@combined_coord, "$_") if ($_ ne "");
     }
 
     if(/^[FC]DP_(ALL|VALID)/) {
         local $"="\n";
-        push(@{$file{$F[1]}{$F[0]}}, "@F[2..$#F]") if ($_ ne "");
+        push(@{$file{$F[1]}{$F[0]}}, "@F[3..$#F]") if ($_ ne "");
     }
 }
 
@@ -808,7 +848,7 @@ foreach my $f (sort keys %file) {
 set title "$fg: Template coordinate frequencies"
 unset key
 set xlabel "position"
-set xrange [0:$ref_len]
+set xrange [0:$total_len]
 set ylabel "frequency"
 set yrange [*:*]
 set logscale y
@@ -856,7 +896,7 @@ END
 set title "$fg: Template sizes"
 unset key
 set xlabel "position"
-set xrange [0:$ref_len]
+set xrange [0:$total_len]
 set ylabel "length"
 set yrange [10:10000]
 set logscale y
@@ -911,7 +951,7 @@ END
 set title "Template coordinate frequencies, all files"
 unset key
 set xlabel "position"
-set xrange [0:$ref_len]
+set xrange [0:$total_len]
 set ylabel "frequency"
 set yrange [*:*]
 set logscale y
@@ -961,7 +1001,7 @@ END
 set title "$fg: Template depth per base"
 set key below
 set xlabel "position"
-set xrange [0:$ref_len]
+set xrange [0:$total_len]
 set ylabel "depth"
 set yrange [1:$max_depth]
 set logscale y
@@ -1025,7 +1065,7 @@ END
 set title "Template depth per base, all files"
 set key below
 set xlabel "position"
-set xrange [0:$ref_len]
+set xrange [0:$total_len]
 set ylabel "depth"
 set yrange [1:$max_depth]
 set logscale y
@@ -1211,7 +1251,6 @@ END
         next unless /^FPCOV-(\d+)/;
         print $fh "@{$file{$f}{$_}}[2..$#{$file{$f}{$_}}]\nend\n";
     }
-    #print $fh "@{$file{$f}{FRPERC}}[2..$#{$file{$f}{FRPERC}}]\nend\n";
 
     close($fh);
     system("gnuplot", "$fn.gp") && die;

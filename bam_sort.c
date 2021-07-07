@@ -1,6 +1,6 @@
 /*  bam_sort.c -- sorting and merging.
 
-    Copyright (C) 2008-2020 Genome Research Ltd.
+    Copyright (C) 2008-2021 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
 
     Author: Heng Li <lh3@sanger.ac.uk>
@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -1396,7 +1397,8 @@ int bam_merge_core(int by_qname, const char *out, const char *headers, int n, ch
 static void merge_usage(FILE *to)
 {
     fprintf(to,
-"Usage: samtools merge [-nurlf] [-h inh.sam] [-b <bamlist.fofn>] <out.bam> <in1.bam> [<in2.bam> ... <inN.bam>]\n"
+"Usage: samtools merge [options] -o <out.bam> [options] <in1.bam> ... <inN.bam>\n"
+"   or: samtools merge [options] <out.bam> <in1.bam> ... <inN.bam>\n"
 "\n"
 "Options:\n"
 "  -n         Input files are sorted by read name\n"
@@ -1404,6 +1406,7 @@ static void merge_usage(FILE *to)
 "  -r         Attach RG tag (inferred from file names)\n"
 "  -u         Uncompressed BAM output\n"
 "  -f         Overwrite the output BAM if exist\n"
+"  -o FILE    Specify output file via option instead of <out.bam> argument\n"
 "  -1         Compress level 1\n"
 "  -l INT     Compression level, from 0 to 9 [-1]\n"
 "  -R STR     Merge file in the specified region STR [all]\n"
@@ -1422,7 +1425,7 @@ int bam_merge(int argc, char *argv[])
 {
     int c, is_by_qname = 0, flag = 0, ret = 0, level = -1, has_index_file = 0;
     char *fn_headers = NULL, *reg = NULL, mode[12];
-    char *sort_tag = NULL, *arg_list = NULL;
+    char *sort_tag = NULL, *fnout = NULL, *arg_list = NULL;
     long random_seed = (long)time(NULL);
     char** fn = NULL;
     char** fn_idx = NULL, *fn_bed = NULL;
@@ -1441,12 +1444,13 @@ int bam_merge(int argc, char *argv[])
         return 0;
     }
 
-    while ((c = getopt_long(argc, argv, "h:nru1R:f@:l:cps:b:O:t:XL:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "h:nru1R:o:f@:l:cps:b:O:t:XL:", lopts, NULL)) >= 0) {
         switch (c) {
         case 'r': flag |= MERGE_RG; break;
         case 'f': flag |= MERGE_FORCE; break;
         case 'h': fn_headers = optarg; break;
         case 'n': is_by_qname = 1; break;
+        case 'o': fnout = optarg; break;
         case 't': sort_tag = optarg; break;
         case '1': flag |= MERGE_LEVEL1; level = 1; break;
         case 'u': flag |= MERGE_UNCOMP; level = 0; break;
@@ -1485,7 +1489,12 @@ int bam_merge(int argc, char *argv[])
         case '?': merge_usage(stderr); return 1;
         }
     }
-    if ( argc - optind < 1 ) {
+
+    if (fnout == NULL && argc - optind >= 1) {
+        fnout = argv[optind];
+        optind++;
+    }
+    if (fnout == NULL) {
         print_error("merge", "You must at least specify the output file");
         merge_usage(stderr);
         return 1;
@@ -1497,11 +1506,10 @@ int bam_merge(int argc, char *argv[])
     }
 
     hts_srand48(random_seed);
-    if (!(flag & MERGE_FORCE) && strcmp(argv[optind], "-")) {
-        FILE *fp = fopen(argv[optind], "rb");
-        if (fp != NULL) {
-            fclose(fp);
-            fprintf(stderr, "[%s] File '%s' exists. Please apply '-f' to overwrite. Abort.\n", __func__, argv[optind]);
+    if (!(flag & MERGE_FORCE) && strcmp(fnout, "-") != 0) {
+        struct stat sbuf;
+        if (stat(fnout, &sbuf) == 0 && S_ISREG(sbuf.st_mode)) {
+            fprintf(stderr, "[%s] File '%s' exists. Please apply '-f' to overwrite. Abort.\n", __func__, fnout);
             ret = 1;
             goto end;
         }
@@ -1509,26 +1517,26 @@ int bam_merge(int argc, char *argv[])
 
     int nargcfiles = 0;
     if (has_index_file) { // Calculate # of input BAM files
-        if ((argc - optind - 1) % 2 != 0) {
+        if ((argc - optind) % 2 != 0) {
             fprintf(stderr, "Odd number of filenames detected! Each BAM file should have an index file\n");
             ret = 1;
             goto end;
         }
-        nargcfiles = (argc - optind - 1) / 2;
+        nargcfiles = (argc - optind) / 2;
     } else {
-        nargcfiles = argc - optind - 1;
+        nargcfiles = argc - optind;
     }
 
     if (nargcfiles > 0) {
         // Add argc files to end of array
         fn = realloc(fn, (fn_size+nargcfiles) * sizeof(char*));
         if (fn == NULL) { ret = 1; goto end; }
-        memcpy(fn+fn_size, argv + (optind+1), nargcfiles * sizeof(char*));
+        memcpy(fn+fn_size, argv + optind, nargcfiles * sizeof(char*));
 
         if(has_index_file) {
             fn_idx = realloc(fn_idx, nargcfiles * sizeof(char*));
             if (fn_idx == NULL) { ret = 1; goto end; }
-            memcpy(fn_idx+fn_size, argv + nargcfiles + (optind+1), nargcfiles * sizeof(char*));
+            memcpy(fn_idx+fn_size, argv + nargcfiles + optind, nargcfiles * sizeof(char*));
         }
     }
     if (fn_size+nargcfiles < 1) {
@@ -1544,9 +1552,9 @@ int bam_merge(int argc, char *argv[])
         goto end;
     }
     strcpy(mode, "wb");
-    sam_open_mode(mode+1, argv[optind], NULL);
+    sam_open_mode(mode+1, fnout, NULL);
     if (level >= 0) sprintf(strchr(mode, '\0'), "%d", level < 9? level : 9);
-    if (bam_merge_core2(is_by_qname, sort_tag, argv[optind], mode, fn_headers,
+    if (bam_merge_core2(is_by_qname, sort_tag, fnout, mode, fn_headers,
                         fn_size+nargcfiles, fn, fn_idx, fn_bed, flag, reg, ga.nthreads,
                         "merge", &ga.in, &ga.out, ga.write_index, arg_list, no_pg) < 0)
         ret = 1;

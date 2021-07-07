@@ -46,7 +46,7 @@ AOBJS=      bam_index.o bam_plcmd.o sam_view.o bam_fastq.o \
             faidx.o dict.o stats.o stats_isize.o bam_flags.o bam_split.o \
             bam_tview.o bam_tview_curses.o bam_tview_html.o bam_lpileup.o \
             bam_quickcheck.o bam_addrprg.o bam_markdup.o tmp_file.o \
-	    bam_ampliconclip.o amplicon_stats.o
+	    bam_ampliconclip.o amplicon_stats.o bam_import.o
 LZ4OBJS  =  $(LZ4DIR)/lz4.o
 
 prefix      = /usr/local
@@ -173,13 +173,14 @@ tmp_file_h = tmp_file.h $(htslib_sam_h) $(LZ4DIR)/lz4.h
 bam.o: bam.c config.h $(bam_h) $(htslib_kstring_h)
 bam2bcf.o: bam2bcf.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_kstring_h) $(htslib_kfunc_h) $(bam2bcf_h)
 bam2bcf_indel.o: bam2bcf_indel.c config.h $(htslib_hts_h) $(htslib_sam_h) $(bam2bcf_h) $(htslib_khash_h) $(htslib_ksort_h)
-bam2depth.o: bam2depth.c config.h $(htslib_sam_h) $(samtools_h) $(bedidx_h) $(sam_opts_h)
+bam2depth.o: bam2depth.c config.h $(htslib_sam_h) $(samtools_h) $(bedidx_h) $(sam_opts_h) $(htslib_khash_h)
 coverage.o: coverage.c config.h $(htslib_sam_h) $(htslib_hts_h) $(samtools_h) $(sam_opts_h)
 bam_addrprg.o: bam_addrprg.c config.h $(htslib_sam_h) $(htslib_kstring_h) $(samtools_h) $(htslib_thread_pool_h) $(sam_opts_h)
 bam_aux.o: bam_aux.c config.h $(bam_h)
 bam_cat.o: bam_cat.c config.h $(htslib_bgzf_h) $(htslib_sam_h) $(htslib_cram_h) $(htslib_kstring_h) $(samtools_h) $(sam_opts_h)
 bam_color.o: bam_color.c config.h $(htslib_sam_h)
 bam_fastq.o: bam_fastq.c config.h $(htslib_sam_h) $(htslib_klist_h) $(htslib_kstring_h) $(htslib_bgzf_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h)
+bam_import.o: bam_import.c config.h $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h)
 bam_index.o: bam_index.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_khash_h) $(samtools_h) $(sam_opts_h)
 bam_lpileup.o: bam_lpileup.c config.h $(bam_plbuf_h) $(bam_lpileup_h) $(htslib_ksort_h)
 bam_mate.o: bam_mate.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h)
@@ -196,7 +197,7 @@ bam_stat.o: bam_stat.c config.h $(htslib_sam_h) $(samtools_h) $(sam_opts_h)
 bam_tview.o: bam_tview.c config.h $(bam_tview_h) $(htslib_faidx_h) $(htslib_sam_h) $(htslib_bgzf_h) $(samtools_h) $(sam_opts_h)
 bam_tview_curses.o: bam_tview_curses.c config.h $(bam_tview_h)
 bam_tview_html.o: bam_tview_html.c config.h $(bam_tview_h)
-bam_flags.o: bam_flags.c config.h $(htslib_sam_h)
+bam_flags.o: bam_flags.c config.h $(htslib_sam_h) $(samtools_h)
 bamshuf.o: bamshuf.c config.h $(htslib_sam_h) $(htslib_hts_h) $(htslib_ksort_h) $(samtools_h) $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_khash_h)
 bamtk.o: bamtk.c config.h $(htslib_hts_h) $(htslib_hfile_h) $(samtools_h) version.h
 bedcov.o: bedcov.c config.h $(htslib_kstring_h) $(htslib_sam_h) $(htslib_thread_pool_h) $(samtools_h) $(sam_opts_h) $(htslib_kseq_h)
