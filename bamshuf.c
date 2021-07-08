@@ -573,7 +573,21 @@ char * generate_prefix() {
         perror("collate");
         return NULL;
     }
-    snprintf(prefix, PREFIX_LEN, "/tmp/collate%x", pid);
+
+    int use_default = 1;
+    char *tmp_env = getenv("TMPDIR");
+    if (tmp_env) {
+        if (strlen(tmp_env) > PREFIX_LEN-13) {
+            fprintf(stderr, "[E::collate] Temp folder path '%s' is longer than %d. Using '/tmp' instead\n", tmp_env, PREFIX_LEN-13);
+        } else {
+            snprintf(prefix, PREFIX_LEN, "%s/collate%x", tmp_env, pid);
+            use_default = 0;
+        }
+    }
+
+    if (use_default) {
+        snprintf(prefix, PREFIX_LEN, "/tmp/collate%x", pid);
+    }
     return prefix;
 #endif
 }
