@@ -2744,11 +2744,11 @@ sub test_import
     test_cmd($opts, out=>'bam2fq/1.stdout.expected',
              out_map=>{"1.fq" => 'bam2fq/12.1.fq.expected',
                        "2.fq" => 'bam2fq/12.2.fq.expected'},
-             cmd=>"$$opts{bin}/samtools import -i -1 test/bam2fq/12.1.fq.expected -2 test/bam2fq/12.2.fq.expected | $$opts{bin}/samtools fastq -i --index-format i*i* -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
+             cmd=>"$$opts{bin}/samtools import -i -1 test/bam2fq/12.1.fq.expected -2 test/bam2fq/12.2.fq.expected | $$opts{bin}/samtools fastq -i --index-format 'i*i*' -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
     test_cmd($opts, out=>'bam2fq/1.stdout.expected',
              out_map=>{"1.fq" => 'bam2fq/12.1.fq.expected',
                        "2.fq" => 'bam2fq/12.2.fq.expected'},
-             cmd=>"$$opts{bin}/samtools import --barcode-tag OX -i -1 test/bam2fq/12.1.fq.expected -2 test/bam2fq/12.2.fq.expected | $$opts{bin}/samtools fastq --barcode-tag OX -i --index-format i*i* -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
+             cmd=>"$$opts{bin}/samtools import --barcode-tag OX -i -1 test/bam2fq/12.1.fq.expected -2 test/bam2fq/12.2.fq.expected | $$opts{bin}/samtools fastq --barcode-tag OX -i --index-format 'i*i*' -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
 
     # Barcodes via explicit aux tags; 6
     test_cmd($opts, out=>'bam2fq/1.stdout.expected',
