@@ -948,7 +948,7 @@ int main_depth(int argc, char *argv[])
     if (opt.bed)
         bed_destroy(opt.bed);
     sam_global_args_free(&ga);
-    fclose(opt.out);
+    if (opt.out != stdout) fclose(opt.out);
     return ret;
 }
 
