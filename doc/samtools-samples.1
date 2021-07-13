@@ -1,0 +1,95 @@
+'\" t
+.TH samtools-samples 1 "15 July 2021" "samtools-1.13" "Bioinformatics tools"
+.SH NAME
+samtools samples \- prints the samples from an alignment file
+.\"
+.\" Copyright (C) 2021 Genome Research Ltd.
+.\"
+.\" Author: Pierre Lindenbaum <insert@email>
+.\" Author: Valeriu Ohan <vo2@sanger.ac.uk>
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+.B samtools samples
+.RI [ options ]
+.I <input>
+.PP
+.B samtools samples
+.RI [ options ]
+.B -X
+.IR f1.bam " " f2.bam " ... " f1.bam.bai " " f2.bam.bai " ... "
+
+.SH DESCRIPTION
+.PP
+Print the sample names from alignment files.
+
+.SH OPTIONS
+.TP 8
+.B -h
+print help and exit
+.TP
+.B -H
+print a header
+.TP
+.B -i
+test if the file is indexed.
+.TP
+.BI "-T " TAG
+provide the sample tag name from the @RG line [SM].
+.TP
+.BI "-o " FILE
+output file [stdout].
+.TP
+.B -d
+enable multiple samples in one bam
+.TP
+.B -m
+enable missing sample in one bam. A dot ('.') will be used as the default name.
+.TP
+.BI "-f " FILE
+load an indexed fasta file in the collection of references. Can be used multiple times.
+.TP
+.BI "-F " FILE
+read a file containing the paths to indexed fasta files. One path per line.
+.TP
+.B -X
+use a custom index file.
+
+.SH AUTHOR
+.PP
+Written by Pierre Lindenbaum from Institut du Thorax.
+
+.PP
+Samtools website: <http://www.htslib.org/>
