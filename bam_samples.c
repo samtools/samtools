@@ -43,7 +43,7 @@ typedef struct FaidxPath {
     /** path to reference */
     char* filename;
     /** fasta index  */
-    faidx_t * faidx;
+    faidx_t* faidx;
     struct FaidxPath* next;
 } FaidxPath;
 
@@ -75,13 +75,13 @@ static void usage_samples(FILE *write_to) {
             "  -h              print help and exit\n"
             "  -H              print a header\n"
             "  -i              test if the file is indexed.\n"
-            "  -T <tag>        set the TAG in the @RG line [SM].\n"
+            "  -T <tag>        provide the sample tag name from the @RG line [SM].\n"
             "  -o <file>       output file [stdout].\n"
             "  -d              enable multiple samples in one bam\n"
             "  -m              enable missing sample in one bam. \".\" will be used as the default name.\n"
-            "  -f <file.fa>    add an indexed fasta in the collection of reference. Can be used multiple times.\n"
-            "  -F <file.txt>   read a file containing the path to the indexed fasta references. One path per line.\n"
-            "  -X              use a customised index file.\n"
+            "  -f <file.fa>    load an indexed fasta file in the collection of references. Can be used multiple times.\n"
+            "  -F <file.txt>   read a file containing the paths to indexed fasta files. One path per line.\n"
+            "  -X              use a custom index file.\n"
             "\n"
             " Using -f or -F will add a column containing the path to the reference or \".\" if the reference was not found.\n"
             "\n"
@@ -91,28 +91,28 @@ static void usage_samples(FILE *write_to) {
 
 /** loads fasta fai file into FaidxPath, add it to params->faidx */
 static int load_dictionary(struct Params* params, const char* filename) {
-    FaidxPath* prev = params->faidx;
-    FaidxPath* ptr = (struct FaidxPath*)malloc(sizeof(struct FaidxPath));
+    FaidxPath* head = params->faidx;
+    FaidxPath* ptr = (FaidxPath*)malloc(sizeof(FaidxPath));
     if (ptr == NULL) {
-        print_error("samples", "out of memory");
+        print_error_errno("samples", "Out of memory");
         return EXIT_FAILURE;
     }
     ptr->filename = strdup(filename);
     if (ptr->filename == NULL) {
         free(ptr);
-        print_error("samples", "out of memory");
+        print_error_errno("samples", "Out of memory");
         return EXIT_FAILURE;
     }
     ptr->faidx = fai_load(filename);
     if (ptr->faidx == NULL) {
         free(ptr->filename);
         free(ptr);
-        print_error_errno("samples", "cannot load index from \"%s\".", filename);
+        print_error_errno("samples", "Cannot load index from \"%s\"", filename);
         return EXIT_FAILURE;
     }
-    /* insert in chained list */
+    /* insert at the beginning of the linked list */
     params->faidx = ptr;
-    ptr->next = prev;
+    ptr->next = head;
     return EXIT_SUCCESS;
 }
 
@@ -125,13 +125,12 @@ static int load_dictionaries(Params* params, const char* filename) {
     in = hts_open(filename, "r");
 
     if (in == NULL) {
-        print_error_errno("samples", "cannot open \"%s\".", filename);
+        print_error_errno("samples", "Cannot open \"%s\"", filename);
         status = EXIT_FAILURE;
-    }
-    else {
+    } else {
         kstring_t ks = KS_INITIALIZE;
         while ((ret = hts_getline(in, KS_SEP_LINE, &ks)) >= 0) {
-            if (load_dictionary(params, ks.s)!= EXIT_SUCCESS) {
+            if (load_dictionary(params, ks_str(&ks)) != EXIT_SUCCESS) {
                 status = EXIT_FAILURE;
                 break;
             }
@@ -155,16 +154,16 @@ static int print_sample(
     if (params->test_index) {
         fprintf(params->out, "\t%d", has_index);
     }
-    if (params->faidx!=NULL) {
+    if (params->faidx != NULL) {
         FaidxPath* ref = NULL;
         FaidxPath* curr = params->faidx;
-        while(curr!=NULL) {
+        while(curr != NULL) {
             /** check names and length are the same in the same order */
             if (faidx_nseq(curr->faidx) == header->n_targets) {
                 int i;
                 for (i = 0; i < faidx_nseq(curr->faidx); i++) {
                     /** check name is the same */
-                    if (strcmp(faidx_iseq(curr->faidx, i), header->target_name[i])!=0) break;
+                    if (strcmp(faidx_iseq(curr->faidx, i), header->target_name[i]) != 0) break;
                     /** check length is the same */
                     if (faidx_seq_len(curr->faidx, faidx_iseq(curr->faidx, i)) != header->target_len[i]) break;
                 }
@@ -199,21 +198,21 @@ static int print_samples(Params* params, const char* fname, const char* baifname
     int count_samples = 0;
     int has_index = 0;
 
-    if ( (sample_set = kh_init(sm)) == NULL ) {
-        print_error("samples", "kh_init failed");
+    if ((sample_set = kh_init(sm)) == NULL) {
+        print_error("samples", "Failed to initialise sample hash");
         status = EXIT_FAILURE;
         goto end_print;
     }
 
     /* open sam file */
     if ((in = sam_open_format(fname, "r", NULL)) == 0) {
-        print_error_errno("samples", "failed to open \"%s\" for reading.", fname);
+        print_error_errno("samples", "Failed to open \"%s\" for reading", fname);
         status = EXIT_FAILURE;
         goto end_print;
     }
     /* load header */
     if ((header = sam_hdr_read(in)) == 0) {
-        print_error("samples", "failed to read the header from \"%s\".", fname);
+        print_error("samples", "Failed to read the header from \"%s\"", fname);
         status = EXIT_FAILURE;
         goto end_print;
     }
@@ -245,11 +244,11 @@ static int print_samples(Params* params, const char* fname, const char* baifname
         for (i = 0; i < n_rg; i++) {
             r = sam_hdr_find_tag_pos(header, "RG", i, params->tag, &sm_val);
             if (r < 0) continue;
-            k = kh_get(sm, sample_set, sm_val.s);
+            k = kh_get(sm, sample_set, ks_str(&sm_val));
             if (k != kh_end(sample_set)) continue;
-            sample = strdup(sm_val.s);
+            sample = strdup(ks_str(&sm_val));
             if (sample == NULL) {
-                print_error("samples", "out of memory.");
+                print_error_errno("samples", "Out of memory");
                 status = EXIT_FAILURE;
                 goto end_print;
             }
@@ -268,12 +267,12 @@ static int print_samples(Params* params, const char* fname, const char* baifname
         if (params->enable_missing) {
             print_sample(params, header, has_index, ".", fname);
         } else {
-            print_error("samples", "no @RG:%s in \"%s\". Use option -m to enable missing.", params->tag, fname);
+            print_error("samples", "No @RG:%s in \"%s\". Use option -m to enable missing", params->tag, fname);
             status = EXIT_FAILURE;
             goto end_print;
         }
     } else if (count_samples > 1 && !params->enable_multiple) {
-        print_error("samples", "multiple @RG:\"%s\" in \"%s\". Use option -d to enable multiple.", params->tag, fname);
+        print_error("samples", "Multiple @RG:\"%s\" in \"%s\". Use option -d to enable multiple", params->tag, fname);
         status = EXIT_FAILURE;
         goto end_print;
     } else {
@@ -345,8 +344,8 @@ int main_samples(int argc, char** argv) {
             }
             break;
         case 'T':
-            if (strlen(optarg)!=2) {
-                print_error("samples", "length of a TAG must be 2 but got len(\"%s\")=%d.", optarg, strlen(optarg));
+            if (strlen(optarg) != 2) {
+                print_error("samples", "Length of a tag \"%s\" is not 2", optarg);
                 return EXIT_FAILURE;
             }
             strcpy(params.tag, optarg);
@@ -363,10 +362,10 @@ int main_samples(int argc, char** argv) {
         }
     }
 
-    if(out_filename!=NULL) {
+    if(out_filename != NULL) {
         params.out = fopen(out_filename, "w");
         if (params.out == NULL) {
-            print_error_errno("samples", "cannot open \"%s\" for writing.", out_filename);
+            print_error_errno("samples", "Cannot open \"%s\" for writing", out_filename);
             return EXIT_FAILURE;
         }
     } else {
@@ -384,7 +383,7 @@ int main_samples(int argc, char** argv) {
     if (argc == optind) {
         htsFile* fp = hts_open("-", "r");
         if (fp == NULL) {
-            print_error_errno("samples", "cannot read from stdin");
+            print_error_errno("samples", "Cannot read from stdin");
             status = EXIT_FAILURE;
         } else {
             kstring_t ks = KS_INITIALIZE;
@@ -393,16 +392,16 @@ int main_samples(int argc, char** argv) {
                 char* bai_path = NULL;
                 if (has_index_file) {
                     /* bam path and bam index file are separated by a tab */
-                    char* tab = strchr(ks.s,'\t');
+                    char* tab = strchr(ks_str(&ks), '\t');
                     if (tab == NULL || *(tab+1) == '\0') {
-                        print_error_errno("samples", "expected path-to-bam(tab)path-to-index but got \"%s\".",ks.s);
+                        print_error_errno("samples", "Expected path-to-bam(tab)path-to-index but got \"%s\"", ks_str(&ks));
                         status = EXIT_FAILURE;
                         break;
                     }
                     *tab=0;
                     bai_path = (tab + 1);
                 }
-                if (print_samples(&params, ks.s, bai_path) != EXIT_SUCCESS) {
+                if (print_samples(&params, ks_str(&ks), bai_path) != EXIT_SUCCESS) {
                     status = EXIT_FAILURE;
                     break;
                 }
@@ -414,11 +413,10 @@ int main_samples(int argc, char** argv) {
     /* loop over each file in argc/argv bam index provided */
     else if (has_index_file) {
         /* Calculate # of input BAM files */
-        if ( (argc - optind) % 2 != 0) {
-            print_error("samples","odd number of filenames detected! Each BAM file should have an index file");
+        if ((argc - optind) % 2 != 0) {
+            print_error("samples","Odd number of filenames detected! Each BAM file should have an index file");
             status = EXIT_FAILURE;
-        }
-        else {
+        } else {
             int i;
             int n = (argc - optind ) / 2;
             for (i = 0; i < n; i++) {
@@ -442,18 +440,18 @@ int main_samples(int argc, char** argv) {
     /* free params */
     fai = params.faidx;
     while (fai != NULL) {
-        FaidxPath* savenext = fai -> next;
+        FaidxPath* next = fai -> next;
         free(fai->filename);
         fai_destroy(fai->faidx);
         free(fai);
-        fai = savenext;
+        fai = next;
     }
 
-    if (fflush(params.out) != 0 ) {
-        print_error_errno("samples", "cannot flush output");
+    if (fflush(params.out) != 0) {
+        print_error_errno("samples", "Cannot flush output");
         status = EXIT_FAILURE;
     }
-    if (out_filename!=NULL) {
+    if (out_filename != NULL) {
         fclose(params.out);
     }
 
