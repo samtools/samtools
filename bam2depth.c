@@ -733,6 +733,7 @@ int main_depth(int argc, char *argv[])
     sam_hdr_t **header;
     int c, has_index_file = 0;
     char *file_list = NULL, **fn = NULL;
+    char *out_file = NULL;
     depth_opt opt = {
         .flag = BAM_FUNMAP | BAM_FSECONDARY | BAM_FDUP | BAM_FQCFAIL,
         .min_qual = 0,
@@ -807,7 +808,7 @@ int main_depth(int argc, char *argv[])
         case 'o':
             if (opt.out != stdout)
                 break;
-            opt.out = fopen(optarg, "w");
+            opt.out = fopen(out_file = optarg, "w");
             if (!opt.out) {
                 print_error_errno("depth", "Cannot open \"%s\" for writing.",
                                   optarg);
@@ -948,7 +949,13 @@ int main_depth(int argc, char *argv[])
     if (opt.bed)
         bed_destroy(opt.bed);
     sam_global_args_free(&ga);
-    if (opt.out != stdout) fclose(opt.out);
+    if (opt.out != stdout) {
+        if (fclose(opt.out) != 0 && ret == 0) {
+            print_error_errno("depth", "error on closing \"%s\"", out_file);
+            ret = 1;
+        }
+    }
+
     return ret;
 }
 
