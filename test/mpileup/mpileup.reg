@@ -206,3 +206,11 @@ P mp_N.out      $samtools mpileup -ABQ0 -f mp.fa mp_N.sam
 P mp_N2.out     $samtools mpileup -ABQ0 -f mp.fa mp_N2.sam
 P mp_P.out      $samtools mpileup -ABQ0 -f mp.fa mp_P.sam
 P mp_ID_rev.out $samtools mpileup -ABQ0 --reverse-del -f mp.fa mp_ID_rev.sam
+
+# mpileup format simplifications by omitting indels
+P mp1_d.out     $samtools mpileup --no-output-del mpileup.1.bam
+P mp1_dd.out    $samtools mpileup --no-output-del --no-output-del mpileup.1.bam
+P mp1_i.out     $samtools mpileup --no-output-ins mpileup.1.bam
+P mp1_ii.out    $samtools mpileup --no-output-ins --no-output-ins mpileup.1.bam
+P mp1_iidd.out  $samtools mpileup --no-output-del --no-output-del --no-output-ins --no-output-ins mpileup.1.bam
+P mp1_ends.out  $samtools mpileup --no-output-ends mpileup.1.bam

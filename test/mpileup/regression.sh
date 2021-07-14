@@ -38,7 +38,7 @@ run_test() {
     p=$1; shift
     e=$1; shift
     test_iter=`expr $test_iter + 1`
-    #echo "p=$p e=$e cmd=$@"
+    [ "$VERBOSE_TESTS" != "" ] && echo "Test cmd: $@"
     # All output here is text, so blanket and naive removal of cr just about works.
     result=`eval ${@+"$@"} 2>/dev/null | tr -d '\015' > _out`
     #result=`eval ${@+"$@"} > _out`
