@@ -129,7 +129,7 @@ static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
             if (bam_is_rev(p->b)) {
                 char pad = rev_del ? '#' : '*';
                 int in_mod = 0;
-                for (j = 0; j < len; j++) {
+                for (j = 0; j < ks->l; j++) {
                     if (ks->s[j] == '[') in_mod = 1;
                     else if (ks->s[j] == ']') in_mod = 0;
                     putc(ks->s[j] != '*'
@@ -138,7 +138,7 @@ static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
                 }
             } else {
                 int in_mod = 0;
-                for (j = 0; j < len; j++) {
+                for (j = 0; j < ks->l; j++) {
                     if (ks->s[j] == '[') in_mod = 1;
                     if (ks->s[j] == ']') in_mod = 0;
                     putc(in_mod ? ks->s[j] : toupper(ks->s[j]), fp);
@@ -1193,7 +1193,7 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "      --output-empty CHAR  set the no value character for tag lists [*]\n"
 "      --no-output-ins      skip insertion sequence after +NUM\n"
 "                           Use twice for complete insertion removal\n"
-"      --no-output-ins-mods skip insertion sequence after +NUM\n"
+"      --no-output-ins-mods don't display base modifications within insertions\n"
 "      --no-output-del      skip deletion sequence after -NUM\n"
 "                           Use twice for complete deletion removal\n"
 "      --no-output-ends     remove ^MQUAL and $ markup in sequence column\n"
