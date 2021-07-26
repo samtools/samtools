@@ -104,23 +104,28 @@ static inline int aux_type2size(uint8_t type)
 }
 
 // Copied from htslib/sam.c.
-static inline uint8_t *skip_aux(uint8_t *s)
+static inline uint8_t *skip_aux(uint8_t *s, uint8_t *end)
 {
-    int size = aux_type2size(*s); ++s; // skip type
+    int size;
     uint32_t n;
+    if (s >= end) return end;
+    size = aux_type2size(*s); ++s; // skip type
     switch (size) {
     case 'Z':
     case 'H':
-        while (*s) ++s;
-        return s + 1;
+        while (s < end && *s) ++s;
+        return s < end ? s + 1 : end;
     case 'B':
+        if (end - s < 5) return NULL;
         size = aux_type2size(*s); ++s;
-        memcpy(&n, s, 4); s += 4;
+        n = le_to_u32(s);
+        s += 4;
+        if (size == 0 || end - s < size * n) return NULL;
         return s + size * n;
     case 0:
-        abort();
-        break;
+        return NULL;
     default:
+        if (end - s < size) return NULL;
         return s + size;
     }
 }
@@ -188,13 +193,18 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         if (!p || strcmp(p, settings->library) != 0) return 1;
     }
     if (settings->keep_tag) {
-        uint8_t *s_from, *s_to;
+        uint8_t *s_from, *s_to, *end = b->data + b->l_data;
         auxhash_t h = settings->keep_tag;
 
         s_from = s_to = bam_get_aux(b);
-        while (s_from < b->data + b->l_data) {
+        while (s_from < end) {
             int x = (int)s_from[0]<<8 | s_from[1];
-            uint8_t *s = skip_aux(s_from+2);
+            uint8_t *s = skip_aux(s_from+2, end);
+            if (s == NULL) {
+                print_error("view", "malformed aux data for record \"%s\"",
+                            bam_get_qname(b));
+                break;
+            }
 
             if (kh_get(aux_exists, h, x) != kh_end(h) ) {
                 if (s_to != s_from) memmove(s_to, s_from, s - s_from);
@@ -205,13 +215,18 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         b->l_data = s_to - b->data;
 
     } else if (settings->remove_tag) {
-        uint8_t *s_from, *s_to;
+        uint8_t *s_from, *s_to, *end = b->data + b->l_data;
         auxhash_t h = settings->remove_tag;
 
         s_from = s_to = bam_get_aux(b);
-        while (s_from < b->data + b->l_data) {
+        while (s_from < end) {
             int x = (int)s_from[0]<<8 | s_from[1];
-            uint8_t *s = skip_aux(s_from+2);
+            uint8_t *s = skip_aux(s_from+2, end);
+            if (s == NULL) {
+                print_error("view", "malformed aux data for record \"%s\"",
+                            bam_get_qname(b));
+                break;
+            }
 
             if (kh_get(aux_exists, h, x) == kh_end(h) ) {
                 if (s_to != s_from) memmove(s_to, s_from, s - s_from);
@@ -369,6 +384,8 @@ int parse_aux_list(auxhash_t *h, char *optarg) {
         int x = optarg[0]<<8 | optarg[1];
         int ret = 0;
         kh_put(aux_exists, *h, x, &ret);
+        if (ret < 0)
+            return -1;
 
         optarg += 2;
         if (*optarg == ',') // allow white-space too for easy `cat file`?
@@ -656,8 +673,13 @@ int main_samview(int argc, char *argv[])
         case LONGOPT('a'): settings.add_flag |= bam_str2flag(optarg); break;
 
         case 'x':
-            if (parse_aux_list(&settings.remove_tag, optarg))
-                return usage(stderr, EXIT_FAILURE, 0);
+            if (*optarg == '^') {
+                if (parse_aux_list(&settings.keep_tag, optarg+1))
+                    return usage(stderr, EXIT_FAILURE, 0);
+            } else {
+                if (parse_aux_list(&settings.remove_tag, optarg))
+                    return usage(stderr, EXIT_FAILURE, 0);
+            }
             break;
 
         case LONGOPT('x'):
@@ -1080,9 +1102,10 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "      --add-flags FLAG       Add FLAGs to reads\n"
 "      --remove-flags FLAG    Remove FLAGs from reads\n"
 "  -x, --remove-tag STR\n"
-"           comma-separated read tags to strip (repeatable) [null]\n"
+"               Comma-separated read tags to strip (repeatable) [null]\n"
 "      --keep-tag STR\n"
-"           comma-separated read tags to preserve (repeatable) [null]\n"
+"               Comma-separated read tags to preserve (repeatable) [null].\n"
+"               Equivalent to \"-x ^STR\"\n"
 "  -B, --remove-B             Collapse the backward CIGAR operation\n"
 "\n"
 "General options:\n"

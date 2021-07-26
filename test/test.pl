@@ -2124,6 +2124,13 @@ sub test_view
         ['tags1', { strip_tags => { fa => 1 } }, ['-x', 'fa'], 0],
         ['tags2', { strip_tags => { fa => 1, ha => 1 } },
          ['-x', 'fa', '-x', 'ha'], 0],
+        ['tags2', { strip_tags => { fa => 1, ha => 1 } },
+         ['-x', 'fa,ha'], 0],
+        ['tags2', { strip_tags => { fa => 1, ha => 1 } },
+        # All tags in test file bar fa and ha, negated
+         ['-x', '^RG,BC,NM,MD,H0,aa,ab,za,ba,bb,bc,bd,be,bf,bg,ia'], 0],
+        ['tags2', { strip_tags => { fa => 1, ha => 1 } },
+         ['--keep-tag', 'RG,BC,NM,MD,H0,aa,ab,za,ba,bb,bc,bd,be,bf,bg,ia'], 0],
         # Tag strip plus read group
         ['tags_rg1', { strip_tags => { fa => 1 }, read_groups => { grp2 => 1 }},
          ['-x', 'fa', '-r', 'grp2'], 0],
