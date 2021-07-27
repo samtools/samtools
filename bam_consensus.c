@@ -578,8 +578,8 @@ int calculate_consensus_gap5(int flags,
 // in the maths.
 //#define MOD_FIXED_PROB 0.8
 
-// Minimum cutoff for storing mod data; => approx 50%.
-#define MOD_CUTOFF 3.1
+// Minimum cutoff for storing mod data; => at least 10% chance
+#define MOD_CUTOFF 0.46
 
         if (mod_ks && !p[n].is_del && p[n].indel <= 0) {
             int strand = b->core.flag & BAM_FREVERSE ? 1 : 0;
@@ -608,7 +608,7 @@ int calculate_consensus_gap5(int flags,
                     // SUM(mod[strand][k][0..2]) = depth of called.
                     // Plus unmod[strand][base] for depth of uncalled
                     // to get total freq.
-//                    if (prob >= MOD_YES || prob <= MOD_NO) {
+//                    if (prob >= mod_yes_threshold || prob <= mod_no_threshold) {
 //                        // could just be fixed increment?
 //                        mod[strand][k][0] += prob;
 //                        mod[strand][k][1] += 1-prob;
@@ -616,12 +616,15 @@ int calculate_consensus_gap5(int flags,
 //                        mod[strand][k][2]++;
 //                    }
 
-                    if (prob >= mod_yes_threshold)
-                        mod[strand][k][0]++;
-                    else if (prob <= mod_no_threshold)
-                        mod[strand][k][1]++;
-                    else
-                        mod[strand][k][2]++;
+                    if (j == 0) {
+                        // Counts with most likely call only.
+                        if (prob >= mod_yes_threshold)
+                            mod[strand][k][0]++;
+                        else if (prob <= mod_no_threshold)
+                            mod[strand][k][1]++;
+                        else
+                            mod[strand][k][2]++;
+                    }
                 }
             } else {
                 // Else do something with MISSING_MOD_P.
@@ -729,13 +732,9 @@ int calculate_consensus_gap5(int flags,
                 else
                     c = sumsC[cons->call];;
                 cons->discrep = (m-c)/sqrt(m);
-//              printf("Discrep = %f,  %f %f %f %f %f\n", cons->discrep,
-//                     sumsC[0], sumsC[1], sumsC[2], sumsC[3], sumsC[4]);
-//              if (cons->discrep > 1)
-//                  printf("XYZZY\n");
             }
         } else {
-            cons->call = 5; /* N */
+            cons->call = 4; /* N */
             cons->het_call = 0;
             cons->het_logodd = 0;
             cons->phred = 0;
@@ -753,11 +752,15 @@ int calculate_consensus_gap5(int flags,
             char *rc = s==0 ? "ACGTN" : "TGCAN";
             double best_qual = 0;
             for (k = 0; mods_present[s][k]; k++) {
-                //printf("s=%d, k=%d: %c %c %c\n", s, k, mods_present[s][k], mod_canonical[s][k], "ACGTN"[cons->call]);
-                if (mod_canonical[s][k] != rc[cons->call]) {
-                    // TODO: cons->het_call iff score is appropriate
-                    printf("Reject non-matching mod %c vs %c\n",
-                           mod_canonical[s][k], rc[cons->call]);
+                //printf("s=%d, k=%d: %c %c %d %c\n",
+                //       s, k, mods_present[s][k], mod_canonical[s][k],
+                //       cons->call, rc[cons->call]);
+                if (mod_canonical[s][k] != rc[cons->call] &&
+                    mod_canonical[s][k] != 'N') {
+                    fprintf(stderr, "[consensus]: detected non-matching "
+                            "mod %c vs base type %c\n",
+                            mod_canonical[s][k], rc[cons->call]);
+                    // TODO: how to deal with this?  Nullify it?
                 }
                 // Treat unmod bases as bases with a very low call probability.
                 mod[s][k][1] += unmod[s][cons->call];
@@ -784,8 +787,8 @@ int calculate_consensus_gap5(int flags,
                     cons->mod_qual[s] = pqual+.5;
                 }
 
-//                printf("%c: %f %f %f canonical %d unmod %d: %f\t",
-//                       mods_present[s][k],
+//                printf("%c%c: %f %f %f canonical %d unmod %d: %f\n",
+//                       "+-"[s], mods_present[s][k],
 //                       mod[s][k][0], mod[s][k][1], mod[s][k][2],
 //                       cons->call,
 //                       unmod[s][cons->call], pqual);
@@ -936,13 +939,13 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
     if (opts->gap5) {
         consensus_t cons;
         if (opts->use_mqual)
-            calculate_consensus_gap5(CONS_ALL | CONS_MQUAL, p, np, &cons,
+            calculate_consensus_gap5(CONS_MQUAL, p, np, &cons,
                                      opts->default_qual,
                                      opts->mods ? &mod_ks : NULL,
                                      opts->mod_prob, opts->mod_yes,
                                      opts->mod_no);
         else
-            calculate_consensus_gap5(CONS_ALL, p, np, &cons,
+            calculate_consensus_gap5(0, p, np, &cons,
                                      opts->default_qual,
                                      opts->mods ? &mod_ks : NULL,
                                      opts->mod_prob, opts->mod_yes,
