@@ -13,7 +13,7 @@
 /*  bam_consensus.c -- consensus subcommand.
 
     Copyright (C) 1998-2001,2003 Medical Research Council (Gap4/5 source)
-    Copyright (C) 2003-2005,2007-2020 Genome Research Ltd.
+    Copyright (C) 2003-2005,2007-2021 Genome Research Ltd.
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
@@ -60,6 +60,9 @@ DEALINGS IN THE SOFTWARE.  */
 #  define MIN(a,b) ((a)<(b)?(a):(b))
 #endif
 
+// Minimum cutoff for storing mod data; => at least 10% chance
+#define MOD_CUTOFF 0.46
+
 enum format {
     FASTQ,
     FASTA,
@@ -89,6 +92,7 @@ typedef struct {
     double mod_yes;  // >=Q threshold for asserting mod call to be yes
     double mod_no;   // <=Q threshold for asserting mod call to be no
     int het_only;
+    int all_bases;
 } consensus_opts;
 
 static int readaln(void *data, bam1_t *b) {
@@ -360,13 +364,6 @@ static inline double fast_log2(double val)
    return val + log_2;
 }
 
-static inline double fast_log (double val) {
-    return fast_log2(val)*0.69314718;
-}
-
-//#define fast_exp exp
-//#define fast_log log
-
 #define ph_log(x) (-TENLOG2OVERLOG10*fast_log2((x)))
 
 
@@ -394,7 +391,7 @@ static inline double fast_log (double val) {
  * As per calculate_consensus_bit_het but for a single pileup column.
  */
 static
-int calculate_consensus_gap5(int flags,
+int calculate_consensus_gap5(int pos, int flags,
                              const bam_pileup1_t *p,
                              int np,
                              consensus_t *cons,
@@ -412,7 +409,8 @@ int calculate_consensus_gap5(int flags,
     double sumsC[6] = {0,0,0,0,0,0}, sumsE = 0;
     int depth = 0;
 
-    /* Base mods.
+    /* Base mods basic strategy:
+     *
      * Two things to consider; modified or not?
      * If modified, then what is the most likely modification?
      * We also do this per strand.
@@ -471,12 +469,9 @@ int calculate_consensus_gap5(int flags,
     int counts[6] = {0};
 
     /* Accumulate */
-    int n;
-    //printf("-----\n");
-
     // FIXME: also seed with unknown alleles so low coverage data is
     // less confident.
-
+    int n;
     for (n = 0; n < np; n++) {
         if (p[n].is_refskip)
             continue;
@@ -515,7 +510,6 @@ int calculate_consensus_gap5(int flags,
             //double _m = mqual_pow[mqual];
             double _m = 1-q2p[mqual];
 
-            //printf("%c %d -> %d, %f %f\n", "ACGT*N"[base], qual, (int)(-TENOVERLOG10 * log(1-(_m * _p + (1 - _m)/4))), _p, _m);
             qual = ph_log(1-(_m * _p + (1 - _m)/4));
             //qual = ph_log(1-_p*_m);
         }
@@ -569,18 +563,14 @@ int calculate_consensus_gap5(int flags,
 
         // We do clipping on our probabitilies so we can judge the number
         // of highly confidently modified bases against the number of
-        // highly confidently unmodified bases.  The inbetween ones get binned
-        // into an "unknown" category.
-//#define MOD_YES 0.8
-//#define MOD_NO 0.2
-
-// We count freqs, but when comparing Y vs N we use this probability
-// in the maths.
-//#define MOD_FIXED_PROB 0.8
-
-// Minimum cutoff for storing mod data; => at least 10% chance
-#define MOD_CUTOFF 0.46
-
+        // highly confidently unmodified bases.
+        // Very high confidence calls are used as positive evidence. [0]
+        // Very low confidence calls are used as negative evidence.  [1]
+        // Inbetween ones get put into the "unknown" category.       [2]
+        //
+        // These levels can be adjusted so users get the option of
+        // controlling whether negative calls count against the consensus or
+        // are simply ignored (as part of a heterozygous site).
         if (mod_ks && !p[n].is_del && p[n].indel <= 0) {
             int strand = b->core.flag & BAM_FREVERSE ? 1 : 0;
             hts_base_mod_state *m = p[n].cd.p;
@@ -608,14 +598,6 @@ int calculate_consensus_gap5(int flags,
                     // SUM(mod[strand][k][0..2]) = depth of called.
                     // Plus unmod[strand][base] for depth of uncalled
                     // to get total freq.
-//                    if (prob >= mod_yes_threshold || prob <= mod_no_threshold) {
-//                        // could just be fixed increment?
-//                        mod[strand][k][0] += prob;
-//                        mod[strand][k][1] += 1-prob;
-//                    } else {
-//                        mod[strand][k][2]++;
-//                    }
-
                     if (j == 0) {
                         // Counts with most likely call only.
                         if (prob >= mod_yes_threshold)
@@ -627,7 +609,7 @@ int calculate_consensus_gap5(int flags,
                     }
                 }
             } else {
-                // Else do something with MISSING_MOD_P.
+                // Else do something with MISSING_MODP.
                 // We don't know which mod types will be present, so
                 // we just record these under their canonical base type
                 // for now and add it in later.
@@ -636,7 +618,7 @@ int calculate_consensus_gap5(int flags,
         }
     }
 
-    /* and speculate */
+    /* We've accumulated stats, so now we speculate on the consensus call */
     {
         double shift, max, max_het, norm[15];
         int call = 0, het_call = 0, ph;
@@ -719,6 +701,11 @@ int calculate_consensus_gap5(int flags,
             if (norm[het_call] == 0) norm[het_call] = DBL_MIN;
             ph = TENLOG2OVERLOG10 * (fast_log2(S[het_call]) - fast_log2(norm[het_call])) + .5;
 
+            //printf("Call=%c%c %2d, hetcall = %c%c %2d\n",
+            //       "ACGT*"[map_het[call]%5], "ACGTN"[map_het[call]/5],
+            //       cons->phred,
+            //       "ACGT*"[het_call%5], "ACGTN"[het_call/5],
+            //       ph);
             cons->het_logodd = ph;
             //cons->het_prob_n = S[het_call]; // p = prob_n / prob_d
             //cons->het_prob_d = norm[het_call];
@@ -730,7 +717,7 @@ int calculate_consensus_gap5(int flags,
                 if (cons->het_logodd > 0)
                     c = sumsC[cons->het_call%5] + sumsC[cons->het_call/5];
                 else
-                    c = sumsC[cons->call];;
+                    c = sumsC[cons->call];
                 cons->discrep = (m-c)/sqrt(m);
             }
         } else {
@@ -746,21 +733,24 @@ int calculate_consensus_gap5(int flags,
     cons->mod_qual[0] = 0;
     cons->mod_qual[1] = 0;
 
+    /* We have the consensus call, so now check for base modifications. */
     if (mod_ks) {
         int s, k;
         for (s = 0; s < 2; s++) { // strand
-            char *rc = s==0 ? "ACGTN" : "TGCAN";
+            char *rc = s==0 ? "ACGT*" : "TGCA*";
             double best_qual = 0;
             for (k = 0; mods_present[s][k]; k++) {
-                //printf("s=%d, k=%d: %c %c %d %c\n",
-                //       s, k, mods_present[s][k], mod_canonical[s][k],
-                //       cons->call, rc[cons->call]);
                 if (mod_canonical[s][k] != rc[cons->call] &&
                     mod_canonical[s][k] != 'N') {
-                    fprintf(stderr, "[consensus]: detected non-matching "
-                            "mod %c vs base type %c\n",
-                            mod_canonical[s][k], rc[cons->call]);
-                    // TODO: how to deal with this?  Nullify it?
+                    // If the base modification is not compatible with the
+                    // consensus call, then we deem the modification to also
+                    // be incorrect.  (It'll have arrived due to
+                    // multiple base types aligned to this location.)
+                    continue;
+                    //fprintf(stderr, "[consensus]: detected non-matching "
+                    //        "mod %c->%c vs consensus %c at pos %d\n",
+                    //        mod_canonical[s][k], mods_present[s][k],
+                    //        rc[cons->call], pos+1);
                 }
                 // Treat unmod bases as bases with a very low call probability.
                 mod[s][k][1] += unmod[s][cons->call];
@@ -786,12 +776,6 @@ int calculate_consensus_gap5(int flags,
                     cons->mod_call[s] = mods_present[s][k];
                     cons->mod_qual[s] = pqual+.5;
                 }
-
-//                printf("%c%c: %f %f %f canonical %d unmod %d: %f\n",
-//                       "+-"[s], mods_present[s][k],
-//                       mod[s][k][0], mod[s][k][1], mod[s][k][2],
-//                       cons->call,
-//                       unmod[s][cons->call], pqual);
             }
         }
     }
@@ -939,13 +923,13 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
     if (opts->gap5) {
         consensus_t cons;
         if (opts->use_mqual)
-            calculate_consensus_gap5(CONS_MQUAL, p, np, &cons,
+            calculate_consensus_gap5(pos, CONS_MQUAL, p, np, &cons,
                                      opts->default_qual,
                                      opts->mods ? &mod_ks : NULL,
                                      opts->mod_prob, opts->mod_yes,
                                      opts->mod_no);
         else
-            calculate_consensus_gap5(0, p, np, &cons,
+            calculate_consensus_gap5(pos, 0, p, np, &cons,
                                      opts->default_qual,
                                      opts->mods ? &mod_ks : NULL,
                                      opts->mod_prob, opts->mod_yes,
@@ -1006,7 +990,8 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
                 case 'h': cb = '2'; break;
                 case 'f': cb = '3'; break;
                 case 'c': cb = '4'; break;
-                default: cb = '?'; break; // no complementary symbol avail
+                // no complementary symbol avail.  Eg 'a'.  Replace with 'n'?
+                default: cb = '?'; break;
                 }
                 cq = qm_bot;
             }
@@ -1071,28 +1056,54 @@ static int consensus_loop(consensus_opts *opts) {
         bam_plp_destructor(iter, pileup_cd_destroy);
     }
 
-
     while ((p = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
         if (opts->iter && (pos < opts->iter->beg || pos >= opts->iter->end))
             continue;
         if (tid != last_tid) {
-            if (last_tid >= 0 && opts->fmt != PILEUP)
+            if (last_tid >= 0 && opts->fmt != PILEUP) {
+                if (opts->all_bases) {
+                    int i;
+                    int N = opts->iter ? opts->iter->end : INT_MAX;
+                    N = MIN(N, sam_hdr_tid2len(opts->h,last_tid)) - last_pos-1;
+                    if (N > 0) {
+                        ks_expand(&seq, N+1);
+                        for (i = 0; i < N; i++)
+                            seq.s[seq.l++] = 'N';
+                        seq.s[seq.l] = 0;
+                    }
+                }
                 dump_fastq(sam_hdr_tid2name(opts->h, last_tid),
                            seq.s, seq.l, qual.s, qual.l, opts->fmt,
                            opts->line_len);
+            }
             seq.l = 0; qual.l = 0;
             last_tid = tid;
-            last_pos = -1;
+            if (opts->iter)
+                last_pos = opts->iter->beg-1;
+            else
+                last_pos = opts->all_bases ? -1 : pos-1;
         }
         consensus_pileup(opts, p, n, tid, pos, last_pos, &seq, &qual);
         last_pos = pos;
     }
     bam_plp_destroy(iter);
 
-    if (last_tid >= 0 && opts->fmt != PILEUP)
+    if (last_tid >= 0 && opts->fmt != PILEUP) {
+        if (opts->all_bases) {
+            int i;
+            int N = opts->iter ? opts->iter->end : INT_MAX;
+            N = MIN(N, sam_hdr_tid2len(opts->h, last_tid)) - last_pos - 1;
+            if (N > 0) {
+                ks_expand(&seq, N+1);
+                for (i = 0; i < N; i++)
+                    seq.s[seq.l++] = 'N';
+                seq.s[seq.l] = 0;
+            }
+        }
         dump_fastq(sam_hdr_tid2name(opts->h, last_tid),
                    seq.s, seq.l, qual.s, qual.l, opts->fmt,
                    opts->line_len);
+    }
 
     return 0;
 }
@@ -1104,6 +1115,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  -f, --format FMT    Output in format FASTA, FASTQ or PILEUP [FASTA]\n");
     fprintf(fp, "  -l, --line-len N    Wrap FASTA/Q at line length N [70]\n");
     fprintf(fp, "  -5                  Enable the bayesian 'gap5' consensus mode [off]\n");
+    fprintf(fp, "  -a                  Output all bases (start/end of reference)\n");
     fprintf(fp, "For simple consensus mode:\n");
     fprintf(fp, "  -q, --use-qual      Use quality values in calculation\n");
     fprintf(fp, "  -d, --min-depth D   Minimum depth of D [1]\n");
@@ -1111,7 +1123,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  -H, --het-fract C   Minimum fraction of 2nd-most to most common base [0.66]\n");
     fprintf(fp, "For gap5 consensus mode:\n");
     fprintf(fp, "  -C, --cutoff C      Consensus cutoff quality C [20]\n");
-    fprintf(fp, "  -a, --ambig         Enable IUPAC ambiguity codes [off]\n");
+    fprintf(fp, "  -A, --ambig         Enable IUPAC ambiguity codes [off]\n");
     fprintf(fp, "  -M, --output-mods   Also report base modifications [off]\n");
     fprintf(fp, "  --mod-yes-cutoff x  P>=x to consider mod as true [0.8]\n");
     fprintf(fp, "  --mod-no-cutoff x   P<=x to consider mod as false [0.2]\n");
@@ -1145,6 +1157,7 @@ int main_consensus(int argc, char **argv) {
         .mod_prob     = 0.8,
         .mod_yes      = 0.8,
         .mod_no       = 0.2,
+        .all_bases    = 0,
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -1158,7 +1171,7 @@ int main_consensus(int argc, char **argv) {
         {"region",             required_argument, NULL, 'r'},
         {"format",             required_argument, NULL, 'f'},
         {"cutoff",             required_argument, NULL, 'C'},
-        {"ambig",              no_argument,       NULL, 'a'},
+        {"ambig",              no_argument,       NULL, 'A'},
         {"line-len",           required_argument, NULL, 'l'},
         {"output-mods",        no_argument,       NULL, 'M'},
         {"default-qual",       required_argument, NULL, 1},
@@ -1170,9 +1183,10 @@ int main_consensus(int argc, char **argv) {
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:qmd:c:H:r:5f:C:al:M",
+    while ((c = getopt_long(argc, argv, "@:qmd:c:H:r:5f:C:aAl:M",
                             lopts, NULL)) >= 0) {
         switch (c) {
+        case 'a': opts.all_bases++; break;
         case 'q': opts.use_qual=1; break;
         case 'm': opts.use_mqual=1; break;
         case 'd': opts.min_depth = atoi(optarg); break;
@@ -1181,7 +1195,7 @@ int main_consensus(int argc, char **argv) {
         case 'r': opts.reg = optarg; break;
         case '5': opts.gap5 = 1; break;
         case 'C': opts.cons_cutoff = atoi(optarg); break;
-        case 'a': opts.ambig = 1; break;
+        case 'A': opts.ambig = 1; break;
         case 'M': opts.mods = 1; break;
         case 1:   opts.default_qual = atoi(optarg); break;
         case 2:   opts.mod_yes = atof(optarg); break;
