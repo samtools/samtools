@@ -622,7 +622,7 @@ int write_index_rec(samFile *fp, bam1_t *b, bam2fq_state_t *state,
 
 int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
                  bam2fq_opts_t* opts) {
-    bam1_t *b[2] = {b1, b2};
+    bam1_t *b = b1 ? b1 : b2;
 
     char *ifmt = opts->index_format;
     if (!ifmt)
@@ -675,7 +675,7 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
             break;
 
         case 'i':
-            if (write_index_rec(state->fpi[inum], b[inum], state, opts,
+            if (write_index_rec(state->fpi[inum], b, state, opts,
                                 bc, bc_end-bc, qt, qt_end-qt) < 0)
                 return -1;
             bc = bc_end + (len==0);
