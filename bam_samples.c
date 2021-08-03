@@ -55,10 +55,6 @@ typedef struct Params {
     char tag[3];
     /** first faidx/path in chained list */
     FaidxPath* faidx;
-    /** enable more than one sample in a bam */
-    int enable_multiple;
-    /** enable no sample in a bam */
-    int enable_missing;
     /** show whether the bam is indexed */
     int test_index;
 } Params;
@@ -72,13 +68,11 @@ static void usage_samples(FILE *write_to) {
             "       find dir1 dir2 -type f \\(-name \"*.bam\" -o -name \"*.bai\" \\) | sort | paste - - | samtools samples -X [options]\n"
             "\n"
             "Options:\n"
-            "  -h              print help and exit\n"
-            "  -H              print a header\n"
+            "  -?              print help and exit\n"
+            "  -h              add the columns header before printing the results\n"
             "  -i              test if the file is indexed.\n"
             "  -T <tag>        provide the sample tag name from the @RG line [SM].\n"
             "  -o <file>       output file [stdout].\n"
-            "  -d              enable multiple samples in one bam\n"
-            "  -m              enable missing sample in one bam. \".\" will be used as the default name.\n"
             "  -f <file.fa>    load an indexed fasta file in the collection of references. Can be used multiple times.\n"
             "  -F <file.txt>   read a file containing the paths to indexed fasta files. One path per line.\n"
             "  -X              use a custom index file.\n"
@@ -264,17 +258,7 @@ static int print_samples(Params* params, const char* fname, const char* baifname
         ks_free(&sm_val);
     }
     if (count_samples == 0) {
-        if (params->enable_missing) {
-            print_sample(params, header, has_index, ".", fname);
-        } else {
-            print_error("samples", "No @RG:%s in \"%s\". Use option -m to enable missing", params->tag, fname);
-            status = EXIT_FAILURE;
-            goto end_print;
-        }
-    } else if (count_samples > 1 && !params->enable_multiple) {
-        print_error("samples", "Multiple @RG:\"%s\" in \"%s\". Use option -d to enable multiple", params->tag, fname);
-        status = EXIT_FAILURE;
-        goto end_print;
+        print_sample(params, header, has_index, ".", fname);
     } else {
         for (k = kh_begin(sample_set); k != kh_end(sample_set); ++k) {
             if (kh_exist(sample_set, k)) {
@@ -311,27 +295,19 @@ int main_samples(int argc, char** argv) {
 
     strcpy(params.tag, "SM");
     params.faidx = NULL;
-    params.enable_multiple = 0;
-    params.enable_missing = 0;
     params.test_index =0;
 
     int opt;
-    while ((opt = getopt(argc, argv,  "hHdmiXo:f:F:t:T:")) != -1) {
+    while ((opt = getopt(argc, argv,  "?hiXo:f:F:T:")) != -1) {
         switch (opt) {
-        case 'H':
+        case 'h':
             print_header = 1;
             break;
         case 'o':
             out_filename = optarg;
             break;
-        case 'd':
-            params.enable_multiple = 1;
-            break;
         case 'i':
             params.test_index = 1;
-            break;
-        case 'm':
-            params.enable_missing = 1;
             break;
         case 'f':
             if (load_dictionary(&params, optarg) != EXIT_SUCCESS) {
@@ -345,12 +321,12 @@ int main_samples(int argc, char** argv) {
             break;
         case 'T':
             if (strlen(optarg) != 2) {
-                print_error("samples", "Length of a tag \"%s\" is not 2", optarg);
+                print_error("samples", "Length of tag \"%s\" is not 2.", optarg);
                 return EXIT_FAILURE;
             }
             strcpy(params.tag, optarg);
             break;
-        case 'h':
+        case '?':
             usage_samples(stdout);
             return EXIT_SUCCESS;
         case 'X':
@@ -362,6 +338,13 @@ int main_samples(int argc, char** argv) {
         }
     }
 
+
+     /* if no file was provided and input is the terminal, print the usage and exit */
+     if (argc == optind && isatty(STDIN_FILENO)) {
+        usage_samples(stderr);
+        return EXIT_FAILURE;
+        }
+
     if(out_filename != NULL) {
         params.out = fopen(out_filename, "w");
         if (params.out == NULL) {
@@ -372,6 +355,7 @@ int main_samples(int argc, char** argv) {
         params.out = stdout;
     }
 
+    
     if (print_header) {
         fprintf(params.out, "#%s\tPATH", params.tag);
         if (params.test_index) fprintf(params.out, "\tINDEX");
@@ -379,7 +363,7 @@ int main_samples(int argc, char** argv) {
         fprintf(params.out, "\n");
     }
 
-    /* input is stdin, each line contains the path to a bam file */
+    /* no file was provided,  input is stdin, each line contains the path to a bam file */
     if (argc == optind) {
         htsFile* fp = hts_open("-", "r");
         if (fp == NULL) {
