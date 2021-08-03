@@ -5,7 +5,7 @@ samtools samples \- prints the samples from an alignment file
 .\"
 .\" Copyright (C) 2021 Genome Research Ltd.
 .\"
-.\" Author: Pierre Lindenbaum <insert@email>
+.\" Author: Pierre Lindenbaum <pierre.lindenbaum@univ-nantes.fr>
 .\" Author: Valeriu Ohan <vo2@sanger.ac.uk>
 .\"
 .\" Permission is hereby granted, free of charge, to any person obtaining a
@@ -44,7 +44,7 @@ samtools samples \- prints the samples from an alignment file
 .PP
 .B samtools samples
 .RI [ options ]
-.I <input>
+.I (<input>|stdin)
 .PP
 .B samtools samples
 .RI [ options ]
@@ -53,14 +53,20 @@ samtools samples \- prints the samples from an alignment file
 
 .SH DESCRIPTION
 .PP
-Print the sample names from alignment files.
+Print the sample names found in the read-groups and the path to the reference genome from alignment files.
+The output of this tool can be used to create an input for any popular workflow manager.
+The input is a list of SAM/BAM/CRAM files, or the path to those files can be provided via stdin.
+The output is a tab-delimited file containing the sample name, the path to the alignment, the path to the reference genome and a flag indicating wether the file is indexed.
+If no reference is found for an alignment, a dot will be used in the reference column.
+If no sample is available in any read-group header, a dot will be used as the sample's name.
+If a bam file contains more than one sample, one line will be printed for each sample.
 
 .SH OPTIONS
 .TP 8
-.B -h
+.B -?
 print help and exit
 .TP
-.B -H
+.B -h
 print a header
 .TP
 .B -i
@@ -72,12 +78,6 @@ provide the sample tag name from the @RG line [SM].
 .BI "-o " FILE
 output file [stdout].
 .TP
-.B -d
-enable multiple samples in one bam
-.TP
-.B -m
-enable missing sample in one bam. A dot ('.') will be used as the default name.
-.TP
 .BI "-f " FILE
 load an indexed fasta file in the collection of references. Can be used multiple times.
 .TP
@@ -87,9 +87,107 @@ read a file containing the paths to indexed fasta files. One path per line.
 .B -X
 use a custom index file.
 
+.SH EXAMPLES
+.IP o 2
+print the samples from a set of BAM/SAM files, with a header. There is no sample defined in the header of 'toy.sam' to a dot is used.
+.EX 2
+$ samtools  samples -h S*.bam *.sam
+#SM	PATH
+S1	S1.bam
+S2	S2.bam
+S3	S3.bam
+S4	S4.bam
+S5	S5.bam
+\&.	toy.sam
+.EE
+.IP o 2
+print the samples from a set of BAM/SAM files, with a header, print wether the file is indexed.
+.EX 2
+$  samtools  samples -i -h S*.bam *.sam
+#SM	PATH	INDEX
+S1	S1.bam	1
+S2	S2.bam	1
+S3	S3.bam	1
+S4	S4.bam	1
+S5	S5.bam	1
+\&.	toy.sam	0
+.EE
+.IP o 2
+print wether the files are indexed using custom bai files.
+.EX 2
+$ samtools samples -i -h -X S1.bam S2.bam S1.bam.bai S2.bam.bai
+#SM	PATH	INDEX
+S1	S1.bam	1
+S2	S2.bam	1
+.EE
+.IP o 2
+read a tab delimited input <file>(tab)<bai> and print wether the files are indexed using custom bai files.
+.EX 2
+$ find . -type f \( -name "S*.bam" -o -name "S*.bai" \) | sort | paste - - | samtools samples -i -h -X
+#SM	PATH	INDEX
+S1	./S1.bam	1
+S2	./S2.bam	1
+S3	./S3.bam	1
+S4	./S4.bam	1
+S5	./S5.bam	1
+.EE
+.IP o 2
+print the samples from a set of BAM/CRAM files, with a header, use '@RG/LB' instead of '@RG/SM'.
+.EX 2
+$ samtools  samples -h -T LB S*.bam
+#LB	PATH
+S1	S1.bam
+S2	S2.bam
+S3	S3.bam
+S4	S4.bam
+S5Lib1	S5.bam
+S5Lib2	S5.bam
+.EE
+.IP o 2
+pipe a list of BAM/CRAM files , pipe it into  samtools samples.
+.EX 2
+$ find . -type f \( -name "S*.bam" -o -name "*.cram" \) | samtools  samples -h
+#SM	PATH
+S5	./S5.bam
+S2	./S2.bam
+S4	./S4.bam
+S3	./S3.bam
+S1	./toy.cram
+S1	./S1.bam
+.EE
+.IP o 2
+provide two reference sequences with option '-f', print the associated reference for each bam files.
+.EX 2
+$ samtools  samples  -h -f reference.fa -f toy.fa S*.bam *.sam *.cram
+#SM	PATH	REFERENCE
+S1	S1.bam	reference.fa
+S2	S2.bam	reference.fa
+S3	S3.bam	reference.fa
+S4	S4.bam	reference.fa
+S5	S5.bam	reference.fa
+\&.	toy.sam	toy.fa
+S1	toy.cram	toy.fa
+.EE
+.IP o 2
+provide a list of reference sequences with option '-F', print the associated reference for each bam files.
+.EX 2
+$ cat references.list
+reference.fa
+toy.fa
+$ samtools  samples  -h -F references.list S*.bam *.sam *.cram
+#SM	PATH	REFERENCE
+S1	S1.bam	reference.fa
+S2	S2.bam	reference.fa
+S3	S3.bam	reference.fa
+S4	S4.bam	reference.fa
+S5	S5.bam	reference.fa
+\&.	toy.sam	toy.fa
+S1	toy.cram	toy.fa
+.EE
+
 .SH AUTHOR
 .PP
-Written by Pierre Lindenbaum from Institut du Thorax.
+Written by Pierre Lindenbaum from Institut du Thorax U1087, Nantes, France.
 
 .PP
 Samtools website: <http://www.htslib.org/>
