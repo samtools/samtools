@@ -355,7 +355,6 @@ int main_samples(int argc, char** argv) {
         params.out = stdout;
     }
 
-    
     if (print_header) {
         fprintf(params.out, "#%s\tPATH", params.tag);
         if (params.test_index) fprintf(params.out, "\tINDEX");
