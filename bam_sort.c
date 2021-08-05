@@ -1101,19 +1101,21 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
                            flag & MERGE_COMBINE_RG, flag & MERGE_COMBINE_PG,
                            (flag & MERGE_FIRST_CO)? (i == 0) : true,
                            RG[i]))
-            return -1; // FIXME: memory leak
+            goto fail;
 
         hdr[i] = hin;
 
+        int order_ok = 1;
         if ((translation_tbl+i)->lost_coord_sort && !by_qname) {
             fprintf(stderr, "[bam_merge_core] Order of targets in file %s caused coordinate sort to be lost\n", fn[i]);
+            order_ok = 0;
         }
 
-        if (!refs && cram_get_refs(fp[i]))
+        if (!refs)
             refs = cram_get_refs(fp[i]);
 
-        if (refs && hts_set_opt(fp[i], CRAM_OPT_SHARED_REF, refs))
-            return -1;  // FIXME: memory leak
+        if (order_ok && refs && hts_set_opt(fp[i], CRAM_OPT_SHARED_REF, refs))
+            goto fail;
     }
 
     // Did we get an @HD line?
@@ -1132,7 +1134,8 @@ int bam_merge_core2(int by_qname, char* sort_tag, const char *out, const char *m
         goto fail;
 
     hout = merged_hdr->hdr;
-    if (!hout) return -1;  // FIXME: memory leak
+    if (!hout)
+        goto fail;
 
     // If we're only merging a specified region move our iters to start at that point
     int tid, nreg;
