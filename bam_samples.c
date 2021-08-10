@@ -33,6 +33,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <getopt.h>
 
 KHASH_MAP_INIT_STR(sm, int)
 
@@ -151,7 +152,7 @@ static int print_sample(
     if (params->faidx != NULL) {
         FaidxPath* ref = NULL;
         FaidxPath* curr = params->faidx;
-        while(curr != NULL) {
+        while (curr != NULL) {
             /** check names and length are the same in the same order */
             if (faidx_nseq(curr->faidx) == header->n_targets) {
                 int i;
@@ -298,7 +299,7 @@ int main_samples(int argc, char** argv) {
     params.test_index =0;
 
     int opt;
-    while ((opt = getopt(argc, argv,  "?hiXo:f:F:T:")) != -1) {
+    while ((opt = getopt_long(argc, argv,  "?hiXo:f:F:T:", NULL, NULL)) != -1) {
         switch (opt) {
         case 'h':
             print_header = 1;
@@ -339,13 +340,13 @@ int main_samples(int argc, char** argv) {
     }
 
 
-     /* if no file was provided and input is the terminal, print the usage and exit */
-     if (argc == optind && isatty(STDIN_FILENO)) {
-        usage_samples(stderr);
-        return EXIT_FAILURE;
-        }
+    /* if no file was provided and input is the terminal, print the usage and exit */
+    if (argc == optind && isatty(STDIN_FILENO)) {
+       usage_samples(stderr);
+       return EXIT_FAILURE;
+    }
 
-    if(out_filename != NULL) {
+    if (out_filename != NULL) {
         params.out = fopen(out_filename, "w");
         if (params.out == NULL) {
             print_error_errno("samples", "Cannot open \"%s\" for writing", out_filename);
