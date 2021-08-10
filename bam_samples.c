@@ -24,15 +24,15 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <config.h>
 #include <htslib/hts.h>
-#include <htslib/kseq.h>
 #include <htslib/sam.h>
 #include <htslib/faidx.h>
-#include <htslib/hfile.h>
-#include "htslib/khash.h"
+#include <htslib/khash.h>
+#include <htslib/kseq.h>
 #include <samtools.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <getopt.h>
 
 KHASH_MAP_INIT_STR(sm, int)
 
@@ -117,7 +117,6 @@ static int load_dictionaries(Params* params, const char* filename) {
     int status = EXIT_SUCCESS;
 
     in = hts_open(filename, "r");
-
     if (in == NULL) {
         print_error_errno("samples", "Cannot open \"%s\"", filename);
         status = EXIT_FAILURE;
@@ -146,12 +145,12 @@ static int print_sample(
     fputc('\t', params->out);
     fputs(fname, params->out);
     if (params->test_index) {
-        fprintf(params->out, "\t%d", has_index);
+        fprintf(params->out, "\t%c", has_index ? 'Y' : 'N');
     }
     if (params->faidx != NULL) {
         FaidxPath* ref = NULL;
         FaidxPath* curr = params->faidx;
-        while(curr != NULL) {
+        while (curr != NULL) {
             /** check names and length are the same in the same order */
             if (faidx_nseq(curr->faidx) == header->n_targets) {
                 int i;
@@ -180,7 +179,6 @@ static int print_sample(
     return 0;
 }
 
-
 /** open a sam file. Search for all samples in the @RG lines */
 static int print_samples(Params* params, const char* fname, const char* baifname) {
     samFile *in = 0;
@@ -198,13 +196,11 @@ static int print_samples(Params* params, const char* fname, const char* baifname
         goto end_print;
     }
 
-    /* open sam file */
     if ((in = sam_open_format(fname, "r", NULL)) == 0) {
         print_error_errno("samples", "Failed to open \"%s\" for reading", fname);
         status = EXIT_FAILURE;
         goto end_print;
     }
-    /* load header */
     if ((header = sam_hdr_read(in)) == 0) {
         print_error("samples", "Failed to read the header from \"%s\"", fname);
         status = EXIT_FAILURE;
@@ -216,17 +212,16 @@ static int print_samples(Params* params, const char* fname, const char* baifname
         hts_idx_t *bam_idx;
         /* path to bam index was specified */
         if (baifname != NULL) {
-            bam_idx = sam_index_load2(in, fname, baifname);
+            bam_idx = sam_index_load3(in, fname, baifname, HTS_IDX_SILENT_FAIL);
         }
         /* get default index */
         else {
-            bam_idx = sam_index_load(in, fname);
+            bam_idx = sam_index_load3(in, fname, NULL, HTS_IDX_SILENT_FAIL);
         }
-        has_index = bam_idx!=NULL;
+        has_index = bam_idx != NULL;
         if (bam_idx != NULL) hts_idx_destroy(bam_idx);
         /* and we continue... we have tested the index file but we always test for the samples and the references */
     }
-
 
     /* get the RG lines */
     n_rg = sam_hdr_count_lines(header, "RG");
@@ -234,7 +229,6 @@ static int print_samples(Params* params, const char* fname, const char* baifname
         int i, r, ret;
         char* sample;
         kstring_t sm_val = KS_INITIALIZE;
-        /* loop over the RG lines and search for the params->tag */
         for (i = 0; i < n_rg; i++) {
             r = sam_hdr_find_tag_pos(header, "RG", i, params->tag, &sm_val);
             if (r < 0) continue;
@@ -278,8 +272,8 @@ end_print:
         }
         kh_destroy(sm, sample_set);
     }
-    if (header!=NULL) sam_hdr_destroy(header);
-    if (in!=NULL) sam_close(in);
+    if (header != NULL) sam_hdr_destroy(header);
+    if (in != NULL) sam_close(in);
 
     return status;
 }
@@ -298,7 +292,7 @@ int main_samples(int argc, char** argv) {
     params.test_index =0;
 
     int opt;
-    while ((opt = getopt(argc, argv,  "?hiXo:f:F:T:")) != -1) {
+    while ((opt = getopt_long(argc, argv,  "?hiXo:f:F:T:", NULL, NULL)) != -1) {
         switch (opt) {
         case 'h':
             print_header = 1;
@@ -338,14 +332,13 @@ int main_samples(int argc, char** argv) {
         }
     }
 
+    /* if no file was provided and input is the terminal, print the usage and exit */
+    if (argc == optind && isatty(STDIN_FILENO)) {
+       usage_samples(stderr);
+       return EXIT_FAILURE;
+    }
 
-     /* if no file was provided and input is the terminal, print the usage and exit */
-     if (argc == optind && isatty(STDIN_FILENO)) {
-        usage_samples(stderr);
-        return EXIT_FAILURE;
-        }
-
-    if(out_filename != NULL) {
+    if (out_filename != NULL) {
         params.out = fopen(out_filename, "w");
         if (params.out == NULL) {
             print_error_errno("samples", "Cannot open \"%s\" for writing", out_filename);
@@ -362,7 +355,7 @@ int main_samples(int argc, char** argv) {
         fprintf(params.out, "\n");
     }
 
-    /* no file was provided,  input is stdin, each line contains the path to a bam file */
+    /* no file was provided, input is stdin, each line contains the path to a bam file */
     if (argc == optind) {
         htsFile* fp = hts_open("-", "r");
         if (fp == NULL) {
@@ -395,7 +388,7 @@ int main_samples(int argc, char** argv) {
     }
     /* loop over each file in argc/argv bam index provided */
     else if (has_index_file) {
-        /* Calculate # of input BAM files */
+        /* calculate number of input BAM files */
         if ((argc - optind) % 2 != 0) {
             print_error("samples","Odd number of filenames detected! Each BAM file should have an index file");
             status = EXIT_FAILURE;
@@ -409,9 +402,7 @@ int main_samples(int argc, char** argv) {
                 }
             }
         }
-    }
-    /* loop over each file in argc/argv bam index provided */
-    else {
+    } else {
         int i;
         for (i = optind; i < argc; i++) {
             if (print_samples(&params, argv[i], NULL) != EXIT_SUCCESS) {
@@ -420,7 +411,7 @@ int main_samples(int argc, char** argv) {
             }
         }
     }
-    /* free params */
+
     fai = params.faidx;
     while (fai != NULL) {
         FaidxPath* next = fai -> next;

@@ -208,7 +208,7 @@ amplicon_stats.o: amplicon_stats.c config.h $(htslib_sam_h) $(htslib_khash_h) $(
 bam_markdup.o: bam_markdup.c config.h $(htslib_thread_pool_h) $(htslib_sam_h) $(sam_opts_h) $(samtools_h) $(htslib_khash_h) $(htslib_klist_h) $(htslib_kstring_h) $(tmp_file_h)
 tmp_file.o: tmp_file.c config.h $(tmp_file_h) $(htslib_sam_h)
 bam_ampliconclip.o: bam_ampliconclip.c config.h $(htslib_thread_pool_h) $(sam_opts_h) $(htslib_hts_h) $(htslib_hfile_h) $(htslib_kstring_h) $(htslib_sam_h) $(samtools_h) bam_ampliconclip.h
-bam_samples.o: bam_samples.c config.h  $(sam_opts_h) $(htslib_hts_h) $(htslib_hfile_h) $(samtools_h)
+bam_samples.o: bam_samples.c config.h $(htslib_hts_h) $(htslib_sam_h) $(htslib_faidx_h) $(htslib_khash_h) $(htslib_kseq_h) $(samtools_h)
 
 # Maintainer source code checks
 # - copyright boilerplate presence
