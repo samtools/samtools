@@ -217,13 +217,13 @@ static int print_samples(Params* params, const char* fname, const char* baifname
         hts_idx_t *bam_idx;
         /* path to bam index was specified */
         if (baifname != NULL) {
-            bam_idx = sam_index_load2(in, fname, baifname);
+            bam_idx = sam_index_load3(in, fname, baifname, HTS_IDX_SILENT_FAIL);
         }
         /* get default index */
         else {
-            bam_idx = sam_index_load(in, fname);
+            bam_idx = sam_index_load3(in, fname, NULL, HTS_IDX_SILENT_FAIL);
         }
-        has_index = bam_idx!=NULL;
+        has_index = bam_idx != NULL;
         if (bam_idx != NULL) hts_idx_destroy(bam_idx);
         /* and we continue... we have tested the index file but we always test for the samples and the references */
     }
