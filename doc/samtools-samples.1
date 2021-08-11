@@ -53,13 +53,18 @@ samtools samples \- prints the samples from an alignment file
 
 .SH DESCRIPTION
 .PP
-Print the sample names found in the read-groups and the path to the reference genome from alignment files.
-The output of this tool can be used to create an input for any popular workflow manager.
-The input is a list of SAM/BAM/CRAM files, or the path to those files can be provided via stdin.
-The output is a tab-delimited file containing the sample name, the path to the alignment, the path to the reference genome and a flag indicating wether the file is indexed.
-If no reference is found for an alignment, a dot will be used in the reference column.
-If no sample is available in any read-group header, a dot will be used as the sample's name.
-If a bam file contains more than one sample, one line will be printed for each sample.
+Print the sample names found in the read-groups and the path to the reference
+genome from alignment files. The output of this tool can be used to create an
+input for any popular workflow manager. The input is a list of SAM/BAM/CRAM
+files, or the path to those files can be provided via stdin. The output is
+tab-delimited containing the sample name as the first column, the path to the
+alignment file as the second column, the path to the reference genome as a
+third optional column and a single character flag (Y/N) indicating whether the
+alignment file is indexed or not as the forth column.
+If no reference is found for an alignment, a dot (.) will be used in the
+reference path column. If no sample is available in any read-group header, a
+dot (.) will be used as the sample name. If a BAM file contains more than one
+sample, one line will be printed for each sample.
 
 .SH OPTIONS
 .TP 8
@@ -70,7 +75,8 @@ print help and exit
 print a header
 .TP
 .B -i
-test if the file is indexed.
+test if the file is indexed. Add an extra column to the output with a single
+character value (Y/N).
 .TP
 .BI "-T " TAG
 provide the sample tag name from the @RG line [SM].
@@ -79,7 +85,8 @@ provide the sample tag name from the @RG line [SM].
 output file [stdout].
 .TP
 .BI "-f " FILE
-load an indexed fasta file in the collection of references. Can be used multiple times.
+load an indexed fasta file in the collection of references. Can be used multiple
+times. Add an extra column with the path to the reference file.
 .TP
 .BI "-F " FILE
 read a file containing the paths to indexed fasta files. One path per line.
@@ -89,7 +96,8 @@ use a custom index file.
 
 .SH EXAMPLES
 .IP o 2
-print the samples from a set of BAM/SAM files, with a header. There is no sample defined in the header of 'toy.sam' to a dot is used.
+print the samples from a set of BAM/SAM files, with a header. There is no sample
+defined in the header of 'example.sam', so a dot is used for the sample name.
 .EX 2
 $ samtools  samples -h S*.bam *.sam
 #SM	PATH
@@ -98,41 +106,44 @@ S2	S2.bam
 S3	S3.bam
 S4	S4.bam
 S5	S5.bam
-\&.	toy.sam
+\&.	example.sam
 .EE
 .IP o 2
-print the samples from a set of BAM/SAM files, with a header, print wether the file is indexed.
+print the samples from a set of BAM/SAM files, with a header, print whether the
+file is indexed.
 .EX 2
 $  samtools  samples -i -h S*.bam *.sam
 #SM	PATH	INDEX
-S1	S1.bam	1
-S2	S2.bam	1
-S3	S3.bam	1
-S4	S4.bam	1
-S5	S5.bam	1
-\&.	toy.sam	0
+S1	S1.bam	Y
+S2	S2.bam	Y
+S3	S3.bam	Y
+S4	S4.bam	Y
+S5	S5.bam	Y
+\&.	example.sam	N
 .EE
 .IP o 2
 print wether the files are indexed using custom bai files.
 .EX 2
 $ samtools samples -i -h -X S1.bam S2.bam S1.bam.bai S2.bam.bai
 #SM	PATH	INDEX
-S1	S1.bam	1
-S2	S2.bam	1
+S1	S1.bam	Y
+S2	S2.bam	Y
 .EE
 .IP o 2
-read a tab delimited input <file>(tab)<bai> and print wether the files are indexed using custom bai files.
+read a tab delimited input <file>(tab)<bai> and print whether the files are
+indexed using custom bai files.
 .EX 2
 $ find . -type f \( -name "S*.bam" -o -name "S*.bai" \) | sort | paste - - | samtools samples -i -h -X
 #SM	PATH	INDEX
-S1	./S1.bam	1
-S2	./S2.bam	1
-S3	./S3.bam	1
-S4	./S4.bam	1
-S5	./S5.bam	1
+S1	./S1.bam	Y
+S2	./S2.bam	Y
+S3	./S3.bam	Y
+S4	./S4.bam	Y
+S5	./S5.bam	Y
 .EE
 .IP o 2
-print the samples from a set of BAM/CRAM files, with a header, use '@RG/LB' instead of '@RG/SM'.
+print the samples from a set of BAM/CRAM files, with a header, use '@RG/LB'
+instead of '@RG/SM'.
 .EX 2
 $ samtools  samples -h -T LB S*.bam
 #LB	PATH
@@ -152,28 +163,30 @@ S5	./S5.bam
 S2	./S2.bam
 S4	./S4.bam
 S3	./S3.bam
-S1	./toy.cram
+S1	./example.cram
 S1	./S1.bam
 .EE
 .IP o 2
-provide two reference sequences with option '-f', print the associated reference for each bam files.
+provide two reference sequences with option '-f', print the associated reference
+for each BAM files.
 .EX 2
-$ samtools  samples  -h -f reference.fa -f toy.fa S*.bam *.sam *.cram
+$ samtools  samples  -h -f reference.fa -f example.fa S*.bam *.sam *.cram
 #SM	PATH	REFERENCE
 S1	S1.bam	reference.fa
 S2	S2.bam	reference.fa
 S3	S3.bam	reference.fa
 S4	S4.bam	reference.fa
 S5	S5.bam	reference.fa
-\&.	toy.sam	toy.fa
-S1	toy.cram	toy.fa
+\&.	example.sam	example.fa
+S1	example.cram	example.fa
 .EE
 .IP o 2
-provide a list of reference sequences with option '-F', print the associated reference for each bam files.
+provide a list of reference sequences with option '-F', print the associated
+reference for each BAM files.
 .EX 2
 $ cat references.list
 reference.fa
-toy.fa
+example.fa
 $ samtools  samples  -h -F references.list S*.bam *.sam *.cram
 #SM	PATH	REFERENCE
 S1	S1.bam	reference.fa
@@ -181,8 +194,8 @@ S2	S2.bam	reference.fa
 S3	S3.bam	reference.fa
 S4	S4.bam	reference.fa
 S5	S5.bam	reference.fa
-\&.	toy.sam	toy.fa
-S1	toy.cram	toy.fa
+\&.	example.sam	example.fa
+S1	example.cram	example.fa
 .EE
 
 .SH AUTHOR

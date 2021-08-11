@@ -147,7 +147,7 @@ static int print_sample(
     fputc('\t', params->out);
     fputs(fname, params->out);
     if (params->test_index) {
-        fprintf(params->out, "\t%d", has_index);
+        fprintf(params->out, "\t%c", has_index ? 'Y' : 'N');
     }
     if (params->faidx != NULL) {
         FaidxPath* ref = NULL;
