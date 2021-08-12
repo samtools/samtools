@@ -133,6 +133,9 @@ static inline uint8_t *skip_aux(uint8_t *s, uint8_t *end)
 // Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
 {
+    if (settings->filter && sam_passes_filter(h, b, settings->filter) < 1)
+        return 1;
+
     if (settings->remove_B) bam_remove_B(b);
     if (settings->min_qlen > 0) {
         int k, qlen = 0;
@@ -236,9 +239,6 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         }
         b->l_data = s_to - b->data;
     }
-
-    if (settings->filter && sam_passes_filter(h, b, settings->filter) < 1)
-        return 1;
 
     return 0;
 }
