@@ -116,6 +116,13 @@ Specifies that the Illumina CASAVA identifiers should be processed.
 This may set the READ1, READ2 and QCFAIL flags and add a barcode tag.
 
 .TP
+.B -N, --name2
+Assume the read names are encoded in the SRA and ENA formats where the
+first word is an automatically generated name with the second field
+being the original name.  This option extracts that second field
+instead.
+
+.TP
 .BI --barcode-tag\ TAG
 Changes the auxiliary tag used for barcode sequence.  Defaults to BC.
 
