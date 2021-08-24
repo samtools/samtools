@@ -158,7 +158,8 @@ Alignment mapping qualities, encoded as ASCII characters.
 Comma-separated 1-based positions within the alignments, e.g., 5 indicates
 that it is the fifth base of the corresponding read that is mapped to this
 genomic position.
-(Column only present when \fB-O\fR/\fB--output-BP\fR is used.)
+(Column only present when \fB-O\fR/\fB--output-BP\fR or
+\fB--output-BP-5\fR is used.)
 .IP \(ci 2
 Additional comma-separated read field columns,
 as selected via \fB--output-extra\fR.
@@ -302,7 +303,12 @@ or
 .BR "--output 123" .)
 .TP
 .B -O, --output-BP
-Output base positions on reads.
+Output base positions on reads in orientation listed in the SAM file
+(left to right). This is mutually exclusive with \fB--output-BP-5\fR.
+.TP
+.B --output-BP-5
+Output base positions on reads in their original 5' to 3' orientation.
+This is mutually exclusive with \fB--output-BP\fR.
 .TP
 .B -s, --output-MQ
 Output mapping qualities encoded as ASCII characters.
