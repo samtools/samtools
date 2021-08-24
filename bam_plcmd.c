@@ -191,6 +191,9 @@ static inline int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
 #define MPLP_PRINT_SEQ   (1<<22)
 #define MPLP_PRINT_QUAL  (1<<23)
 #define MPLP_PRINT_MODS  (1<<24)
+#define MPLP_PRINT_QPOS5 (1<<25)
+
+#define MPLP_PRINT_LAST  (1<<26) // terminator for loop
 
 #define MPLP_MAX_DEPTH 8000
 #define MPLP_MAX_INDEL_DEPTH 250
@@ -362,8 +365,8 @@ print_empty_pileup(FILE *fp, const mplp_conf_t *conf, const char *tname,
     for (i = 0; i < n; ++i) {
         fputs("\t0\t*\t*", fp);
         int flag_value = MPLP_PRINT_MAPQ_CHAR;
-        while(flag_value < MPLP_PRINT_QUAL + 1) {
-            if (conf->flag & flag_value)
+        while(flag_value < MPLP_PRINT_LAST) {
+            if (flag_value != MPLP_PRINT_MODS && (conf->flag & flag_value))
                 fputs("\t*", fp);
             flag_value <<= 1;
         }
@@ -839,8 +842,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                 if (n_plp[i] == 0) {
                     fputs("*\t*", pileup_fp);
                     int flag_value = MPLP_PRINT_MAPQ_CHAR;
-                    while(flag_value < MPLP_PRINT_QUAL + 1) {
-                        if (conf->flag & flag_value)
+                    while(flag_value < MPLP_PRINT_LAST) {
+                        if (flag_value != MPLP_PRINT_MODS
+                            && (conf->flag & flag_value))
                             fputs("\t*", pileup_fp);
                         flag_value <<= 1;
                     }
@@ -889,8 +893,9 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
 
                     /* Print selected columns */
                     int flag_value = MPLP_PRINT_MAPQ_CHAR;
-                    while(flag_value < MPLP_PRINT_QUAL + 1) {
-                        if (conf->flag & flag_value) {
+                    while(flag_value < MPLP_PRINT_LAST) {
+                        if (flag_value != MPLP_PRINT_MODS
+                            && (conf->flag & flag_value)) {
                             n = 0;
                             putc('\t', pileup_fp);
                             for (j = 0; j < n_plp[i]; ++j) {
@@ -909,8 +914,17 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                                     putc(c, pileup_fp);
                                     break;
                                 case MPLP_PRINT_QPOS:
+                                    // query position in current orientation
                                     fprintf(pileup_fp, "%d", p->qpos + 1);
                                     break;
+                                case MPLP_PRINT_QPOS5: {
+                                    // query position in 5' to 3' orientation
+                                    int pos5 = bam_is_rev(p->b)
+                                        ? p->b->core.l_qseq-p->qpos + p->is_del
+                                        : p->qpos + 1;
+                                    fprintf(pileup_fp, "%d", pos5);
+                                    break;
+                                }
                                 case MPLP_PRINT_QNAME:
                                     fputs(bam_get_qname(p->b), pileup_fp);
                                     break;
@@ -1197,7 +1211,8 @@ static void print_usage(FILE *fp, const mplp_conf_t *mplp)
 "\n"
 "Output options:\n"
 "  -o, --output FILE        write output to FILE [standard output]\n"
-"  -O, --output-BP          output base positions on reads\n"
+"  -O, --output-BP          output base positions on reads, current orientation\n"
+"      --output-BP-5        output base positions on reads, 5' to 3' orientation\n"
 "  -M, --output-mods        output base modifications\n"
 "  -s, --output-MQ          output mapping quality\n"
 "      --output-QNAME       output read names\n"
@@ -1294,6 +1309,8 @@ int bam_mpileup(int argc, char *argv[])
         {"output-mods", no_argument, NULL, 'M'},
         {"output-BP", no_argument, NULL, 'O'},
         {"output-bp", no_argument, NULL, 'O'},
+        {"output-BP-5", no_argument, NULL, 14},
+        {"output-bp-5", no_argument, NULL, 14},
         {"output-MQ", no_argument, NULL, 's'},
         {"output-mq", no_argument, NULL, 's'},
         {"output-tags", required_argument, NULL, 't'},
@@ -1375,7 +1392,14 @@ int bam_mpileup(int argc, char *argv[])
         case '6': mplp.flag |= MPLP_ILLUMINA13; break;
         case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
         case 's': mplp.flag |= MPLP_PRINT_MAPQ_CHAR; break;
-        case 'O': mplp.flag |= MPLP_PRINT_QPOS; break;
+        case 'O':
+            if (!(mplp.flag & MPLP_PRINT_QPOS5))
+                mplp.flag |= MPLP_PRINT_QPOS;
+            break;
+        case  14:
+            mplp.flag |=  MPLP_PRINT_QPOS5;
+            mplp.flag &= ~MPLP_PRINT_QPOS;
+            break;
         case 'M': mplp.flag |= MPLP_PRINT_MODS; break;
         case 'C': mplp.capQ_thres = atoi(optarg); break;
         case 'q': mplp.min_mq = atoi(optarg); break;

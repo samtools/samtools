@@ -147,6 +147,10 @@ P 75.out $samtools mpileup -x -P LS454          -m 1 -u -f mpileup.ref.fa indels
 P 76.out $samtools mpileup -Q0 -s -x -f mpileup.ref.fa mpileup.1.bam
 P 77.out $samtools mpileup -Q0 -O -x -f mpileup.ref.fa mpileup.1.bam
 
+# A more synthetic output-BP (-O) vs output-BP-5 test.
+P 80.out $samtools mpileup --output-BP   output-BP.sam
+P 81.out $samtools mpileup --output-BP-5 output-BP.sam
+
 # Reverse strand deletions; --reverse-del
 P 78.out $samtools mpileup --reverse-del mpileup.1.bam
 
