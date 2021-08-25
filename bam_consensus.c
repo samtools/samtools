@@ -69,6 +69,8 @@ enum format {
     PILEUP
 };
 
+typedef unsigned char uc;
+
 typedef struct {
     samFile *fp;
     sam_hdr_t *h;
@@ -93,6 +95,8 @@ typedef struct {
     double mod_no;   // <=Q threshold for asserting mod call to be no
     int het_only;
     int all_bases;
+    int show_del;
+    int show_ins;
 } consensus_opts;
 
 static int readaln(void *data, bam1_t *b) {
@@ -163,6 +167,92 @@ typedef struct {
     int mod_call[2];  // +ve for char, -ve for ChEBI ID
     int mod_qual[2];  // phred scale
 } consensus_t;
+
+/*
+ * Produce the insertion portion of the consensus sequence.
+ * Returns 0 on success, filling out ins_ks and ins_ks,
+ *        -1 on failure
+ */
+static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
+                               consensus_opts *opts, int nins, int ins_len,
+                               kstring_t *ins_ks, kstring_t *inq_ks) {
+    // Map "seqi" nt16 to A,C,G,T compatibility with weights on pure bases.
+    // where seqi is A | (C<<1) | (G<<2) | (T<<3)
+    //                        * A C M  G R S V  T W Y H  K D B N
+    static int seqi2A[16] = { 0,8,0,4, 0,4,0,2, 0,4,0,2, 0,2,0,1 };
+    static int seqi2C[16] = { 0,0,8,4, 0,0,4,2, 0,0,4,2, 0,0,2,1 };
+    static int seqi2G[16] = { 0,0,0,0, 8,4,4,1, 0,0,0,0, 4,2,2,1 };
+    static int seqi2T[16] = { 0,0,0,0, 0,0,0,0, 8,4,4,2, 8,2,2,1 };
+
+    int ins_[128][16], (*ins)[16] = ins_;
+    int i;
+
+    if (ins_len > 128)
+        if (!(ins = calloc(ins_len * 16, sizeof(int))))
+            return -1;
+
+    // Accumulate into ins[][] arrays
+    kstring_t is = {0,0};
+    for (i = 0; i < nplp; i++) {
+        const bam_pileup1_t *p = plp+i;
+
+        // Slow method for now is bam_plp_insertion and parse back.
+        // NB no support for opts->use_qual yet here.  We either need
+        // a better bam_plp_insertion or inline it here with added
+        // quality value processing.
+        int il = bam_plp_insertion(p, &is, NULL), j;
+        if (il < ins_len)
+            continue;
+
+        for (j = 0; j < il; j++) {
+            if (is.s[j] == '*') {
+                ins[j][16] += 8;
+            } else {
+                int Q = seqi2A[seq_nt16_table[(uc)is.s[j]]];
+                ins[j][1] += Q;
+                Q = seqi2C[seq_nt16_table[(uc)is.s[j]]];
+                ins[j][2] += Q;
+                Q = seqi2G[seq_nt16_table[(uc)is.s[j]]];
+                ins[j][4] += Q;
+                Q = seqi2T[seq_nt16_table[(uc)is.s[j]]];
+                ins[j][8] += Q;
+            }
+        }
+    }
+
+    // Call insertion consensus from ins[][]
+    int j;
+    ins_ks->l = 0;
+    for (j = 0; j < ins_len; j++) {
+        int k, b1 = 0, b2 = 0, m1 = 0, m2 = 0;
+        for (k = 0; k < 17; k++) {
+            if (m1 < ins[j][k])
+                m2 = m1, m1 = ins[j][k], b2 = b1, b1 = k;
+            else if (m2 < ins[j][k])
+                m2 = ins[j][k], b2 = k;
+        }
+        if (b1 != 16) {
+            int call = b1;
+            int score = m1;
+            if (b2 != 16 && opts->ambig && m2 >= opts->het_fract * m1) {
+                call |= b2;
+                score += m2;
+            }
+
+            char b = opts->call_fract >= score / (nins*8.0)
+                ? 'N' : seq_nt16_str[call];
+            kputc(b, ins_ks);
+            int qual = 100 * m1 / nplp;
+            qual = qual + '!' > '~' ? '~' : qual + '!';
+            kputc(qual, inq_ks);
+        }
+    }
+
+    if (ins != ins_)
+        free(ins);
+
+    return 0;
+}
 
 #define P_HET 1e-6
 
@@ -394,12 +484,15 @@ static
 int calculate_consensus_gap5(int pos, int flags,
                              const bam_pileup1_t *p,
                              int np,
+                             consensus_opts *opts,
                              consensus_t *cons,
                              int default_qual,
                              kstring_t *mod_ks,
                              double mod_prob,
                              double mod_yes_threshold,
-                             double mod_no_threshold) {
+                             double mod_no_threshold,
+                             kstring_t *ins_ks,
+                             kstring_t *inq_ks) {
     int i, j;
     static int init_done =0;
     static double q2p[101], mqual_pow[256];
@@ -471,6 +564,7 @@ int calculate_consensus_gap5(int pos, int flags,
     /* Accumulate */
     // FIXME: also seed with unknown alleles so low coverage data is
     // less confident.
+    int ins_len[10] = {0}, ins_len_freq[10] = {0}, nins = 0;
     int n;
     for (n = 0; n < np; n++) {
         if (p[n].is_refskip)
@@ -499,6 +593,47 @@ int calculate_consensus_gap5(int pos, int flags,
         // Cannot nullify mapping quality completely.  Lots of (true)
         // SNPs means low mapping quality.  (Ideally need to know
         // hamming distance to next best location.)
+
+        if (p->indel > 0) {
+            // FIXME: add flag&CONS_MQUAL support too
+            nins++;
+            int j;
+
+            // Build insertion length distribution:
+            // We fill out ins_len[] (lengths) and ins_len_freq[] and
+            // maintain as sorted top 10, with ele 0 as most frequent.
+
+            // Length may need adjusting due to pads
+            int indel_len = p->indel;
+            uint32_t *cig = bam_get_cigar(p->b);
+            for (j = p->cigar_ind+1; j < p->b->core.n_cigar; j++) {
+                switch (cig[j] & BAM_CIGAR_MASK) {
+                case BAM_CPAD:
+                    indel_len += cig[j] >> BAM_CIGAR_SHIFT;
+                    break;
+                case BAM_CINS:
+                    break;
+                default:
+                    j = p->b->core.n_cigar; // terminate for loop
+                }
+            }
+
+            for (j = 0; j < 10 && ins_len[j]; j++)
+                if (ins_len[j] == p->indel)
+                    break;
+            if (j < 10) {
+                ins_len_freq[j]++;
+                ins_len[j] = p->indel;
+            }
+            while (j > 0 && ins_len_freq[j] > ins_len_freq[j-1]) {
+                int tmp = ins_len[j-1];
+                ins_len[j-1] = ins_len[j];
+                ins_len[j] = tmp;
+                tmp = ins_len_freq[j-1];
+                ins_len_freq[j-1] = ins_len_freq[j];
+                ins_len_freq[j] = tmp;
+            }
+        }
 
         if (flags & CONS_MQUAL) {
             double _p = 1-q2p[qual];
@@ -616,6 +751,13 @@ int calculate_consensus_gap5(int pos, int flags,
                 unmod[strand][base]++;
             }
         }
+    }
+
+    // Insertion seqeuence
+    if (ins_len_freq[0] && nins >= np/2 && nins >= opts->min_depth) {
+        if (insertion_consensus(p, np, opts, nins, ins_len[0],
+                                ins_ks, inq_ks) < 0)
+            return -1;
     }
 
     /* We've accumulated stats, so now we speculate on the consensus call */
@@ -817,14 +959,24 @@ int calculate_consensus_gap5(int pos, int flags,
  */
 
 static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
-                                      consensus_opts *opts, int *qual) {
+                                      consensus_opts *opts, int *qual,
+                                      kstring_t *ins_ks, kstring_t *inq_ks) {
     int i, min_qual = 0;
+
+    // Map "seqi" nt16 to A,C,G,T compatibility with weights on pure bases.
+    // where seqi is A | (C<<1) | (G<<2) | (T<<3)
+    //                        * A C M  G R S V  T W Y H  K D B N
+    static int seqi2A[16] = { 0,8,0,4, 0,4,0,2, 0,4,0,2, 0,2,0,1 };
+    static int seqi2C[16] = { 0,0,8,4, 0,0,4,2, 0,0,4,2, 0,0,2,1 };
+    static int seqi2G[16] = { 0,0,0,0, 8,4,4,1, 0,0,0,0, 4,2,2,1 };
+    static int seqi2T[16] = { 0,0,0,0, 0,0,0,0, 8,4,4,2, 8,2,2,1 };
 
     // Ignore ambiguous bases in seq for now, so we don't treat R, Y, etc
     // as part of one base and part another.  Based on BAM seqi values.
     // We also use freq[16] as "*" for gap.
     int freq[17] = {0};  // base frequency, aka depth
     int score[17] = {0}; // summation of base qualities
+    int ins_len[10] = {0}, ins_len_freq[10] = {0}, nins = 0;
 
     // Accumulate
     for (i = 0; i < nplp; i++) {
@@ -838,8 +990,71 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
             continue;
 
         int b = p->is_del ? 16 : bam_seqi(bam_get_seq(p->b), p->qpos);
-        freq[b]++;
-        score[b] += opts->use_qual ? q : 1;
+
+        if (p->indel > 0) {
+            nins++;
+            int j;
+
+            // Build insertion length distribution:
+            // We fill out ins_len[] (lengths) and ins_len_freq[] and
+            // maintain as sorted top 10, with ele 0 as most frequent.
+
+            // Length may need adjusting due to pads
+            int indel_len = p->indel;
+            uint32_t *cig = bam_get_cigar(p->b);
+            for (j = p->cigar_ind+1; j < p->b->core.n_cigar; j++) {
+                switch (cig[j] & BAM_CIGAR_MASK) {
+                case BAM_CPAD:
+                    indel_len += cig[j] >> BAM_CIGAR_SHIFT;
+                    break;
+                case BAM_CINS:
+                    break;
+                default:
+                    j = p->b->core.n_cigar; // terminate for loop
+                }
+            }
+
+            for (j = 0; j < 10 && ins_len[j]; j++)
+                if (ins_len[j] == p->indel)
+                    break;
+            if (j < 10) {
+                ins_len_freq[j]++;
+                ins_len[j] = p->indel;
+            }
+            while (j > 0 && ins_len_freq[j] > ins_len_freq[j-1]) {
+                int tmp = ins_len[j-1];
+                ins_len[j-1] = ins_len[j];
+                ins_len[j] = tmp;
+                tmp = ins_len_freq[j-1];
+                ins_len_freq[j-1] = ins_len_freq[j];
+                ins_len_freq[j] = tmp;
+            }
+        }
+
+        // Map ambiguity codes to one or more component bases.
+        if (b < 16) {
+            int Q = seqi2A[b] * (opts->use_qual ? q : 1);
+            freq[1]  += Q?1:0;
+            score[1] += Q?Q:0;
+            Q = seqi2C[b] * (opts->use_qual ? q : 1);
+            freq[2]  += Q?1:0;
+            score[2] += Q?Q:0;
+            Q = seqi2G[b] * (opts->use_qual ? q : 1);
+            freq[4]  += Q?1:0;
+            score[4] += Q?Q:0;
+            Q = seqi2T[b] * (opts->use_qual ? q : 1);
+            freq[8]  += Q?1:0;
+            score[8] += Q?Q:0;
+        } else { /* * */
+            freq[16] ++;
+            score[16]+=8 * (opts->use_qual ? q : 1);
+        }
+    }
+
+    if (ins_len_freq[0] && nins >= nplp/2 && nins >= opts->min_depth) {
+        if (insertion_consensus(plp, nplp, opts, nins, ins_len[0],
+                                ins_ks, inq_ks) < 0)
+            return -1;
     }
 
     // Total usable depth
@@ -915,7 +1130,7 @@ extern int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
 int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
                      int np, int tid, int pos, int last_pos,
                      kstring_t *seq, kstring_t *qual) {
-    kstring_t mod_ks = {0, 0};
+    kstring_t mod_ks = {0, 0}, ins_ks = {0, 0}, inq_ks = {0, 0};
     int cq, cb, cm_top = 0, cm_bot = 0, qm_top = 0, qm_bot = 0;
     char mod[10];
 
@@ -923,17 +1138,17 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
     if (opts->gap5) {
         consensus_t cons;
         if (opts->use_mqual)
-            calculate_consensus_gap5(pos, CONS_MQUAL, p, np, &cons,
-                                     opts->default_qual,
+            calculate_consensus_gap5(pos, CONS_MQUAL, p, np, opts,
+                                     &cons, opts->default_qual,
                                      opts->mods ? &mod_ks : NULL,
                                      opts->mod_prob, opts->mod_yes,
-                                     opts->mod_no);
+                                     opts->mod_no, &ins_ks, &inq_ks);
         else
-            calculate_consensus_gap5(pos, 0, p, np, &cons,
-                                     opts->default_qual,
+            calculate_consensus_gap5(pos, 0, p, np, opts,
+                                     &cons, opts->default_qual,
                                      opts->mods ? &mod_ks : NULL,
                                      opts->mod_prob, opts->mod_yes,
-                                     opts->mod_no);
+                                     opts->mod_no, &ins_ks, &inq_ks);
         *mod = 0;
         if (cons.het_logodd > 0 && opts->ambig) {
             cb = "AMRWa" // 5x5 matrix with ACGT* per row / col
@@ -964,12 +1179,14 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
             cq = 0;
         }
     } else {
-        cb = calculate_consensus_simple(p, np, opts, &cq);
+        cb = calculate_consensus_simple(p, np, opts, &cq, &ins_ks, &inq_ks);
+        if (cb < 0)
+            return -1;
     }
 
     if (seq) {
         if (pos > last_pos+1) {
-            if (ks_expand(seq, pos - last_pos) < 0 ||
+            if (ks_expand(seq,  pos - last_pos) < 0 ||
                 ks_expand(qual, pos - last_pos) < 0)
                 return -1;
             memset(seq->s  + seq->l,  'N', pos - (last_pos+1));
@@ -996,9 +1213,15 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
                 cq = qm_bot;
             }
         }
-        kputc(cb, seq);
+        if (cb != '*' || opts->show_del) {
+            kputc(cb, seq);
 
-        kputc(MIN(cq, '~'-'!')+'!', qual);
+            kputc(MIN(cq, '~'-'!')+'!', qual);
+        }
+        if (ins_ks.l && opts->show_ins) {
+            kputs(ins_ks.s, seq);
+            kputs(inq_ks.s, qual);
+        }
     }
 
     if (opts->fmt == PILEUP) {
@@ -1083,7 +1306,8 @@ static int consensus_loop(consensus_opts *opts) {
             else
                 last_pos = opts->all_bases ? -1 : pos-1;
         }
-        consensus_pileup(opts, p, n, tid, pos, last_pos, &seq, &qual);
+        if (consensus_pileup(opts, p, n, tid, pos, last_pos, &seq, &qual) < 0)
+            return -1;
         last_pos = pos;
     }
     bam_plp_destroy(iter);
@@ -1116,6 +1340,8 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  -l, --line-len N    Wrap FASTA/Q at line length N [70]\n");
     fprintf(fp, "  -5                  Enable the bayesian 'gap5' consensus mode [off]\n");
     fprintf(fp, "  -a                  Output all bases (start/end of reference)\n");
+    fprintf(fp, "  --show-del yes/no   Whether to show deletion as \"*\" [no]\n");
+    fprintf(fp, "  --show-ins yes/no   Whether to show insertions [yes]\n");
     fprintf(fp, "For simple consensus mode:\n");
     fprintf(fp, "  -q, --use-qual      Use quality values in calculation\n");
     fprintf(fp, "  -d, --min-depth D   Minimum depth of D [1]\n");
@@ -1158,6 +1384,8 @@ int main_consensus(int argc, char **argv) {
         .mod_yes      = 0.8,
         .mod_no       = 0.2,
         .all_bases    = 0,
+        .show_del     = 0,
+        .show_ins     = 1,
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -1180,6 +1408,8 @@ int main_consensus(int argc, char **argv) {
         {"mod-fixed-prob",     required_argument, NULL, 4},
         {"mod-cutoff",         required_argument, NULL, 5},
         {"het-only",           no_argument,       NULL, 6},
+        {"show-del",           required_argument, NULL, 7},
+        {"show-ins",           required_argument, NULL, 8},
         {NULL, 0, NULL, 0}
     };
 
@@ -1203,6 +1433,8 @@ int main_consensus(int argc, char **argv) {
         case 4:   opts.mod_prob = atof(optarg); break;
         case 5:   opts.mod_cutoff = atoi(optarg); break;
         case 6:   opts.het_only = 1; break;
+        case 7:   opts.show_del = (*optarg == 'y' || *optarg == 'Y'); break;
+        case 8:   opts.show_ins = (*optarg == 'y' || *optarg == 'Y'); break;
         case 'l':
             if ((opts.line_len = atoi(optarg)) <= 0)
                 opts.line_len = INT_MAX;
@@ -1266,7 +1498,10 @@ int main_consensus(int argc, char **argv) {
         }
     }
 
-    consensus_loop(&opts);
+    if (consensus_loop(&opts) < 0) {
+        print_error_errno("consensus", "Failed");
+        return 1;
+    }
 
     if (opts.iter)
         hts_itr_destroy(opts.iter);
@@ -1284,4 +1519,3 @@ int main_consensus(int argc, char **argv) {
 
     return 0;
 }
-
