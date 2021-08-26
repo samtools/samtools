@@ -71,6 +71,7 @@ typedef struct samview_settings {
     hts_filter_t *filter;
     int remove_flag;
     int add_flag;
+    int unmap;
     auxhash_t remove_tag;
     auxhash_t keep_tag;
 } samview_settings_t;
@@ -434,6 +435,7 @@ int main_samview(int argc, char *argv[])
         .add_flag = 0,
         .keep_tag = NULL,
         .remove_tag = NULL,
+        .unmap = 0,
     };
 
     static const struct option lopts[] = {
@@ -499,7 +501,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:p",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -543,6 +545,7 @@ int main_samview(int argc, char *argv[])
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
         case 'l': settings.library = strdup(optarg); break;
+        case 'p': settings.unmap = 1; break;
         case LONGOPT('L'):
             settings.multi_region = 1;
             // fall through
@@ -884,6 +887,9 @@ int main_samview(int argc, char *argv[])
                                     if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                                 }
                                 count++;
+                            } else if (settings.unmap) {
+                                b->core.flag |= BAM_FUNMAP;
+                                if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                             } else {
                                 if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                             }
@@ -918,6 +924,9 @@ int main_samview(int argc, char *argv[])
                         if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                     }
                     count++;
+                } else if (settings.unmap) {
+                    b->core.flag |= BAM_FUNMAP;
+                    if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                 } else {
                     if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                 }
@@ -959,6 +968,9 @@ int main_samview(int argc, char *argv[])
                             if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                         }
                         count++;
+                    } else if (settings.unmap) {
+                        b->core.flag |= BAM_FUNMAP;
+                        if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                     } else {
                         if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                     }
