@@ -3294,6 +3294,7 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/7_mark_supp_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -O sam --no-PG $$opts{path}/markdup/7_mark_supp_dup.sam -");
     test_cmd($opts, out=>'markdup/8_optical_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --no-PG $$opts{path}/markdup/8_optical_dup.sam -");
     test_cmd($opts, out=>'markdup/9_optical_dup_qcfail.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t --include-fails -O sam --no-PG $$opts{path}/markdup/9_optical_dup_qcfail.sam -");
+    test_cmd($opts, out=>'markdup/10_optical_chain.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --no-PG -S $$opts{path}/markdup/10_optical_chain.sam -");
 }
 
 sub test_bedcov
