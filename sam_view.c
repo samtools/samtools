@@ -44,12 +44,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bedidx.h"
 
 KHASH_SET_INIT_STR(str)
-
 typedef khash_t(str) *strhash_t;
-KHASH_SET_INIT_STR(rg)
-KHASH_SET_INIT_INT(aux_exists)
 
-typedef khash_t(rg) *rghash_t;
+KHASH_SET_INIT_INT(aux_exists)
 typedef khash_t(aux_exists) *auxhash_t;
 
 // This structure contains the settings for a samview run

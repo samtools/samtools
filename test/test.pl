@@ -3003,6 +3003,10 @@ sub test_stats
     test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_bc_length.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
     test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_hyphen.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
     test_cmd($opts,out=>'stat/13.barcodes.fail.expected',cmd=>"$$opts{bin}/samtools stats $$opts{path}/stat/13_barcodes_fail_qt_length.sam | tail -n+4", expect_fail=>1, exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/14.rg.s1.expected',cmd=>"$$opts{bin}/samtools stats -I s1 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/14.rg.grp2.expected',cmd=>"$$opts{bin}/samtools stats -I grp2 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/14.rg.grp3.expected',cmd=>"$$opts{bin}/samtools stats -I grp3 $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
+    test_cmd($opts,out=>'stat/14.rg.Sample.expected',cmd=>"$$opts{bin}/samtools stats -I Sample $$opts{path}/stat/11_target.bam | tail -n+4", exp_fix=>$efix);
 }
 
 sub test_merge
