@@ -54,6 +54,7 @@ int main_cat(int argc, char *argv[]);
 int main_depth(int argc, char *argv[]);
 int main_coverage(int argc, char *argv[]);
 int main_bam2fq(int argc, char *argv[]);
+int main_bam2tsv(int argc,char *argv[]);
 int main_pad2unpad(int argc, char *argv[]);
 int main_bedcov(int argc, char *argv[]);
 int main_bamshuf(int argc, char *argv[]);
@@ -264,6 +265,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "collate") == 0)   ret = main_bamshuf(argc-1, argv+1);
     else if (strcmp(argv[1], "stat") == 0 ||
              strcmp(argv[1], "stats") == 0)     ret = main_stats(argc-1, argv+1);
+    else if (strcmp(argv[1], "tsv") == 0)   ret = main_bam2tsv(argc-1, argv+1);
     else if (strcmp(argv[1], "flag") == 0 ||
              strcmp(argv[1], "flags") == 0)     ret = main_flags(argc-1, argv+1);
     else if (strcmp(argv[1], "split") == 0)     ret = main_split(argc-1, argv+1);
