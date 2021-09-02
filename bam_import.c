@@ -228,6 +228,7 @@ static int import_fastq(int argc, char **argv, opts_t *opts) {
         perror(opts->fn_out);
         goto err;
     }
+    autoflush_if_stdout(fp_out, opts->fn_out);
     if (opts->p.pool)
         hts_set_thread_pool(fp_out, &opts->p);
 
@@ -378,6 +379,7 @@ err:
     ks_free(&index_str);
     ks_free(&read_str);
     if (fp_out) {
+        release_autoflush(fp_out);
         if (sam_close(fp_out) < 0) {
             perror(opts->fn_out);
             ret |= -1;

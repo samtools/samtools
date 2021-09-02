@@ -748,6 +748,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
+        autoflush_if_stdout(out, fn_out);
 
         if (!no_pg) {
             if (!(arg_list = stringify_argv(argc+1, argv-1))) {
@@ -795,6 +796,7 @@ int main_samview(int argc, char *argv[])
                     goto view_end;
                 }
             }
+            autoflush_if_stdout(un_out, fn_un_out);
             if (*out_format || is_header ||
                 out_un_mode[1] == 'b' || out_un_mode[1] == 'c' ||
                 (ga.out.format != sam && ga.out.format != unknown_format))  {
@@ -887,7 +889,7 @@ int main_samview(int argc, char *argv[])
                             }
                         }
                         if (result < -1) {
-                            fprintf(stderr, "[main_samview] retrieval of region %d failed due to truncated file or corrupt BAM index file\n", iter->curr_tid);
+                            print_error("view", "retrieval of region %d failed due to truncated file or corrupt BAM index file", iter->curr_tid);
                             ret = 1;
                         }
 
@@ -963,7 +965,7 @@ int main_samview(int argc, char *argv[])
                 }
                 hts_itr_destroy(iter);
                 if (result < -1) {
-                    fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", argv[i]);
+                    print_error("view", "retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file", argv[i]);
                     ret = 1;
                     break;
                 }
