@@ -609,6 +609,7 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
             fprintf(stderr, "[%s] failed to write to %s: %s\n", __func__, conf->output_fname? conf->output_fname : "standard output", strerror(errno));
             exit(EXIT_FAILURE);
         }
+        autoflush_if_stdout(bcf_fp, conf->output_fname);
 
         // BCF header creation
         bcf_hdr = bcf_hdr_init("w");
@@ -1048,6 +1049,7 @@ fail:
     bcf_destroy1(bcf_rec);
     if (bcf_fp)
     {
+        release_autoflush(bcf_fp);
         hts_close(bcf_fp);
         bcf_hdr_destroy(bcf_hdr);
         bcf_call_destroy(bca);

@@ -480,6 +480,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
                     return false;
                 }
                 set_sam_opts(state->hstdout, state, opts);
+                autoflush_if_stdout(state->hstdout, "-");
             }
             state->fpr[i] = state->hstdout;
         }
@@ -546,6 +547,7 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
         }
     }
     if (state->hstdout) {
+        release_autoflush(state->hstdout);
         if (sam_close(state->hstdout) < 0) {
             print_error_errno("bam2fq", "Error closing STDOUT");
             valid = false;
@@ -787,7 +789,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
     while (true) {
         int res = sam_read1(state->fp, state->h, b[n]);
         if (res < -1) {
-            fprintf(stderr, "[bam2fq_mainloop] Failed to read bam record.\n");
+            print_error("bam2fq", "Failed to read bam record");
             goto err;
         }
         at_eof = res < 0;

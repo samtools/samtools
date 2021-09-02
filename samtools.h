@@ -37,6 +37,16 @@ void print_error_errno(const char *subcommand, const char *format, ...) CHECK_PR
 
 void check_sam_close(const char *subcmd, samFile *fp, const char *fname, const char *null_fname, int *retp);
 
+/* Utility functions to register an output htsFile/samFile/vcfFile that
+ * might be stdout. If FNAME is "-" or NULL, records FP so that print_error()
+ * et al can automatically flush it before printing an error message.
+ */
+void autoflush_if_stdout(htsFile *fp, const char *fname);
+
+/* Call this before closing FP; check_sam_close() does this automatically.
+ */
+void release_autoflush(htsFile *fp);
+
 /*
  * Utility function to add an index to a file we've opened for write.
  * NB: Call this after writing the header and before writing sequences.
