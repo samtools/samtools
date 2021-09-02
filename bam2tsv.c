@@ -27,6 +27,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <limits.h>
 #include <unistd.h>
 #include "htslib/sam.h"
+#include "htslib/faidx.h"
 #include "samtools.h"
 #include "bedidx.h"
 #include "sam_opts.h"
@@ -36,16 +37,12 @@ DEALINGS IN THE SOFTWARE.  */
 // defined in bam_markdup.c
 extern hts_pos_t unclipped_start(bam1_t *b);
 
-// From bam_plcmd.c
-int read_file_list(const char *file_list, int *n, char **argv[]);
-
-
 
 typedef struct base_info {
 	// current record
     bam1_t *b;
-    //
-    hts_pos_t ref1;
+    /* do not use hts_pos_t because can be negative due to clipping */
+    int64_t ref1;
     hts_pos_t read0;
     char op;
     char base;
@@ -56,12 +53,14 @@ typedef struct base_info {
 typedef struct tsv_opt {
     FILE *out;
     htsFile *in;
+    faidx_t *fai;
 	sam_hdr_t *header;
+    int skip_N;
 	char* query;
 	//current reference interval loaded
 	int ref_tid;
-	int ref_start;
-	int ref_end;
+	hts_pos_t ref_start;
+	hts_pos_t ref_end;
 	char* ref_seq;
 } TsvOpt,*TsvOptPtr;
 
@@ -69,13 +68,18 @@ typedef struct tsv_opt {
 static char get_reference_base_at(TsvOptPtr opt, int tid, int ref1) {
 	if(ref1<1) return 'N';
 	if(!(tid==opt->ref_tid && ref1>=opt->ref_start && ref1<= opt->ref_end)) {
-		int ref_len = opt->header[tid]->len; 
+        int len;
+		hts_pos_t ref_len = sam_hdr_tid2len(opt->header,tid); 
 		if (ref1 > ref_len) return 'N';
 		free(opt->ref_seq);
 		opt->ref_start = (ref1 <= REF_BUFFER_SIZE ? 1: ref1 - REF_BUFFER_SIZE);
 		opt->ref_end = (ref1 + REF_BUFFER_SIZE >= ref_len ? ref_len : ref1 + REF_BUFFER_SIZE);
+        opt->ref_seq = faidx_fetch_seq(opt->fai, sam_hdr_tid2name(opt->header,tid),opt->ref_start-1,opt->ref_end,&len); 
+        if(opt->ref_seq==NULL) {
+            
+            }
 		}
-	return return opt->ref_seq[tid - opt->ref_start];
+	return opt->ref_seq[tid - opt->ref_start];
 	}
 
 static int sam2tsv_base(TsvOptPtr ctx, BaseInfoPtr aln) {
@@ -89,7 +93,7 @@ static int sam2tsv_base(TsvOptPtr ctx, BaseInfoPtr aln) {
 			}
 		p++;
 		}
-	return fputc('\n',ctx->out);
+	return fputc('\n',ctx->out); 
 	}
 
 #define READ_BASE_AT(i) read_bases==NULL?'N':read_bases[i]
@@ -115,15 +119,16 @@ uint32_t *cig = bam_get_cigar(b);
 int ref1 = unclipped_start(b);
 int n_cigar = b->core.n_cigar;
 int read0 = 0;
+int unclipped_read0 = 0;
 aln.b = b;
 
 //loop over each cigar element
 for(i=0;i< n_cigar;i++) {
-	aln.op   = bam_cigar_op(cig[j]);
-	int oplen = bam_cigar_oplen(cig[j]);
+	aln.op   = bam_cigar_op(cig[i]);
+	int oplen = bam_cigar_oplen(cig[i]);
 	switch(aln.op) {
-			case BAM_PADDING: break;
-			case BAM_HCLIP:
+			case BAM_CPAD: break;
+			case BAM_CHARD_CLIP:
 				for(j=0;j< oplen;j++) {
 					aln.base = 'N';
 					aln.qual = '.';
@@ -135,9 +140,10 @@ for(i=0;i< n_cigar;i++) {
 						break;
 						}
 					ref1++;
-					}
+                    unclipped_read0++;
+         			}
 				break;
-			case BAM_INS:
+			case BAM_CINS:
 		    	for(j=0;j< oplen;j++) {
 					aln.base = READ_BASE_AT(read0);
 					aln.qual = READ_QUAL_AT(read0);
@@ -149,10 +155,11 @@ for(i=0;i< n_cigar;i++) {
 						break;
 						}
 					read0++;
+                    unclipped_read0++;
 					}
 				break;
 			case BAM_CREF_SKIP:
-				if(opt_>skip_N) {
+				if(opt->skip_N) {
 		    		ref1 += oplen;
 		    		break;
 		    		}
@@ -171,7 +178,7 @@ for(i=0;i< n_cigar;i++) {
 						ref1++;
 						}
 				break;
-			case BAM_SCLIP:
+			case BAM_CSOFT_CLIP:
 		    case BAM_CMATCH:
 		    case BAM_CEQUAL:
 		    case BAM_CDIFF:
@@ -187,7 +194,8 @@ for(i=0;i< n_cigar;i++) {
 						}
 					ref1++;
 					read0++;
-				}
+                    unclipped_read0++;
+				    }
 				break; 
 
 			default: {
@@ -203,7 +211,7 @@ return ret;
 }
 
 static int sam2tsv_core(TsvOptPtr param) {
-    int ret=0;
+    int ret=0, r;
     bam1_t *b = bam_init1();
 	while ((r = sam_read1(param->in, param->header, b)) >= 0) {
 		if ( sam2tsv_aln(param,b) != 0) {
@@ -226,10 +234,11 @@ static void usage_exit(FILE *fp, int exit_status)
 
 int main_bam2tsv(int argc, char *argv[])
 {
-    int nfiles, i, c, ret = EXIT_SUCCESS;
+    int c, ret = EXIT_SUCCESS;
+    char* p = NULL;
     TsvOpt param;
     char* out_fname = NULL;
-	htsThreadPool p = {NULL, 0};
+	htsThreadPool pool = {NULL, 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', '-', '@'),
@@ -237,12 +246,16 @@ int main_bam2tsv(int argc, char *argv[])
     };
 
 	param.out = stdout;
+    param.query = strdup("");
 
-
-    while ((c = getopt_long(argc, argv, "o:",
+    while ((c = getopt_long(argc, argv, "lo:q:",
                             lopts, NULL)) >= 0) {
         switch (c) {
 			case 'o': out_fname = optarg; break;
+            case 'q':
+                free(param.query);
+                param.query = strdup(optarg);
+                break;
 			case 'l':
         		{
         		#define CASE_OPCODE(OPCODE,DESC,FUN) printf("\t%c\t%s\n",OPCODE,DESC)
@@ -258,41 +271,66 @@ int main_bam2tsv(int argc, char *argv[])
         }
     }
 
+    // check query
+	p = param.query;
+	while(*p!=0) {
+		switch(*p) {
+			#define CASE_OPCODE(OPCODE,DESC,FUN) case OPCODE:break
+			#include "bam2tsv.h"
+			#undef CASE_OPCODE
+            default: fprintf(stderr,"In query \"%s\" unknown opcode \"%c\".\n",param.query,*p); return EXIT_FAILURE; break;
+			}
+		p++;
+		}
+
     param.in = sam_open_format(argv[optind], "r", &ga.in);
+    
+    if (ga.reference!=NULL) {
+        fprintf(stderr,"undefined reference.\n");
+        return EXIT_FAILURE;
+    }
+    char* fn_fai = fai_path(ga.reference);
+    param.fai = fai_load3(ga.reference, fn_fai, NULL, FAI_CREATE);
 
     if (!param.in) {
         print_error_errno("tsv", "failed to open \"%s\" for input", argv[optind]);
-        return 1;
+        return EXIT_FAILURE;
     }
 
+    if (fn_fai && hts_set_fai_filename(param.in, fn_fai) != 0) {
+        fprintf(stderr, "[tsv] failed to load reference file \"%s\".\n", fn_fai);
+        return EXIT_FAILURE;
+     }
+
+
 	if (out_fname!=NULL) {
-		params.out = fopen(out_fname,"w");
-		if(!params.out) {
+		param.out = fopen(out_fname,"w");
+		if(!param.out) {
 			print_error_errno("tsv", "failed to open \"%s\" for writing", out_fname);
         	return EXIT_FAILURE;
 			}
    		}
 
 	//print header
-	char* p = params.query;
+	p = param.query;
 	while(*p!=0) {
-		if(p!=ctx->query) fputc('\t',params.out);
+		if(p!=param.query) fputc('\t',param.out);
 		switch(*p) {
-			#define CASE_OPCODE(OPCODE,DESC,FUN) case OPCODE: fputs(DESC,params.out); break
+			#define CASE_OPCODE(OPCODE,DESC,FUN) case OPCODE: fputs(DESC,param.out); break
 			#include "bam2tsv.h"
 			#undef CASE_OPCODE
 			}
 		p++;
 		}
-	fputc('\n',params.out);
+	fputc('\n',param.out);
 
     if (ga.nthreads > 0)  {
-        if (!(p.pool = hts_tpool_init(ga.nthreads))) {
+        if (!(pool.pool = hts_tpool_init(ga.nthreads))) {
             fprintf(stderr, "[tsv] error creating thread pool\n");
             return 1;
         }
 
-        hts_set_opt(param.in,  HTS_OPT_THREAD_POOL, &p);
+        hts_set_opt(param.in,  HTS_OPT_THREAD_POOL, &pool);
     }
 
 
@@ -302,14 +340,14 @@ int main_bam2tsv(int argc, char *argv[])
     sam_close(param.in);
 
 	if (out_fname!=NULL) {
-		fflush(params.out);
-		fclose(params.out);
+		fflush(param.out);
+		fclose(param.out);
 		free(out_fname);
 		} 
-
-    if (p.pool) hts_tpool_destroy(p.pool);
+    if (param.fai) fai_destroy(param.fai);
+    if (pool.pool) hts_tpool_destroy(pool.pool);
     sam_global_args_free(&ga);
-
+    free(param.query);
     return ret;
 }
 
