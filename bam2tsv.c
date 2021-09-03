@@ -34,9 +34,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/thread_pool.h"
 #include "htslib/khash.h"
 
-// defined in bam_markdup.c
-extern hts_pos_t unclipped_start(bam1_t *b);
-
+#define WHERE do{fprintf(stderr,"[%s:%d]",__FILE__,__LINE__);} while(0)
+#define DEBUG(...) do{WHERE;fprintf(stderr, __VA_ARGS__);fputc('\n',stderr);} while(0)
 
 typedef struct base_info {
 	// current record
@@ -64,9 +63,32 @@ typedef struct tsv_opt {
 	char* ref_seq;
 } TsvOpt,*TsvOptPtr;
 
+
+/** code from markdup.c but use a signed position */
+static int64_t unclipped_start(bam1_t *b) {
+    uint32_t *cigar = bam_get_cigar(b);
+    int64_t clipped = 0;
+    uint32_t i;
+
+    for (i = 0; i < b->core.n_cigar; i++) {
+        char c = bam_cigar_opchr(cigar[i]);
+
+        if (c == 'S' || c == 'H') { // clips
+            clipped += (int64_t)bam_cigar_oplen(cigar[i]);
+        } else {
+            break;
+        }
+    }
+
+    return (int64_t)b->core.pos - clipped + 1;
+}
+
+
+
+
 #define REF_BUFFER_SIZE 1000000
 static char get_reference_base_at(TsvOptPtr opt, int tid, int ref1) {
-	if(ref1<1) return 'N';
+	if(ref1<1 || opt->fai==NULL) return 'N';
 	if(!(tid==opt->ref_tid && ref1>=opt->ref_start && ref1<= opt->ref_end)) {
         int len;
 		hts_pos_t ref_len = sam_hdr_tid2len(opt->header,tid); 
@@ -84,9 +106,11 @@ static char get_reference_base_at(TsvOptPtr opt, int tid, int ref1) {
 	}
 
 static int sam2tsv_base(TsvOptPtr ctx, BaseInfoPtr aln) {
+	DEBUG("ici");
 	char* p = ctx->query;
 	while(*p!=0) {
 		if(p!=ctx->query) fputc('\t',ctx->out);
+		DEBUG("");
 		switch(*p) {
 			#define CASE_OPCODE(OPCODE,DESC,FUN) case OPCODE: FUN; break
 			#include "bam2tsv.h"
@@ -94,7 +118,7 @@ static int sam2tsv_base(TsvOptPtr ctx, BaseInfoPtr aln) {
 			}
 		p++;
 		}
-	return fputc('\n',ctx->out); 
+	return fputc('\n',ctx->out) == EOF ? -1: 0;
 	}
 
 #define READ_BASE_AT(i) read_bases==NULL?'N':read_bases[i]
@@ -108,6 +132,8 @@ int ret = 0, i,j;
 uint8_t *read_bases = NULL;
 uint8_t *read_quals = NULL;
 BaseInfo aln;
+
+DEBUG("aln");
 // skip unmapped records
 if((b->core.flag & BAM_FMUNMAP)) return 0;
 // seq and qual
@@ -126,10 +152,12 @@ aln.b = b;
 //loop over each cigar element
 for(i=0;i< n_cigar;i++) {
 	aln.op   = bam_cigar_op(cig[i]);
+	DEBUG("op=%c",aln.op);
 	int oplen = bam_cigar_oplen(cig[i]);
 	switch(aln.op) {
 			case BAM_CPAD: break;
 			case BAM_CHARD_CLIP:
+				DEBUG("hard");
 				for(j=0;j< oplen;j++) {
 					aln.base = 'N';
 					aln.qual = '.';
@@ -145,6 +173,7 @@ for(i=0;i< n_cigar;i++) {
          			}
 				break;
 			case BAM_CINS:
+				DEBUG("ins");
 		    	for(j=0;j< oplen;j++) {
 					aln.base = READ_BASE_AT(read0);
 					aln.qual = READ_QUAL_AT(read0);
@@ -160,12 +189,15 @@ for(i=0;i< n_cigar;i++) {
 					}
 				break;
 			case BAM_CREF_SKIP:
+				DEBUG("N");
 				if(opt->skip_N) {
-		    		ref1 += oplen;
-		    		break;
-		    		}
+		    			ref1 += oplen;
+			    		break;
+			    		}
 		    	// NO break here, continue
 			case BAM_CDEL:
+				DEBUG("D");
+
 					for(j=0;j< oplen;j++) {
 						aln.base = '.';
 						aln.qual = '.';
@@ -183,13 +215,17 @@ for(i=0;i< n_cigar;i++) {
 		    case BAM_CMATCH:
 		    case BAM_CEQUAL:
 		    case BAM_CDIFF:
+				DEBUG("SMX=");
+
 				for(j=0;j< oplen;j++) {
 					aln.base = READ_BASE_AT(read0);
 					aln.qual = READ_QUAL_AT(read0);
 					aln.ref = REF_BASE_AT(ref1);
 					aln.ref1 = ref1;
 					aln.read0 = read0;
+					DEBUG("ref=%d",ref1);
 					if (sam2tsv_base(opt,&aln)!=0) {
+						DEBUG("error");
 						ret = -1;
 						break;
 						}
@@ -200,7 +236,7 @@ for(i=0;i< n_cigar;i++) {
 				break; 
 
 			default: {
-					print_error("tsv", "Unsupported cigar op '%c'", aln.op);
+					print_error("tsv", "Unsupported cigar op '%c'.", aln.op);
 					ret =  -1;
 					break;
 					}
@@ -214,12 +250,18 @@ return ret;
 static int sam2tsv_core(TsvOptPtr param) {
     int ret=0, r;
     bam1_t *b = bam_init1();
+	DEBUG("loop");
 	while ((r = sam_read1(param->in, param->header, b)) >= 0) {
+			DEBUG("read read");
+
 		if ( sam2tsv_aln(param,b) != 0) {
+	DEBUG("ici");
+
 			ret = -1;
 			break;
 			}
 		}
+	DEBUG("fin loop");
 	bam_destroy1(b);
     return ret;
 	}
@@ -247,7 +289,7 @@ int main_bam2tsv(int argc, char *argv[])
     };
 
 	param.out = stdout;
-    param.query = strdup("");
+    param.query = strdup("NQFRO");
 
     while ((c = getopt_long(argc, argv, "lo:q:",
                             lopts, NULL)) >= 0) {
@@ -272,6 +314,11 @@ int main_bam2tsv(int argc, char *argv[])
         }
     }
 
+    if(optind==argc) {
+	DEBUG("ici");
+	return -1;
+	}
+
     // check query
 	p = param.query;
 	while(*p!=0) {
@@ -284,7 +331,7 @@ int main_bam2tsv(int argc, char *argv[])
 		p++;
 		}
 
-    param.in = sam_open_format(argv[optind], "r", &ga.in);
+    param.in = sam_open_format(optind==argc?"-":argv[optind], "r", &ga.in);
     
     if (ga.reference!=NULL) {
         fprintf(stderr,"undefined reference.\n");
@@ -298,10 +345,18 @@ int main_bam2tsv(int argc, char *argv[])
         return EXIT_FAILURE;
     }
 
+
+
     if (fn_fai && hts_set_fai_filename(param.in, fn_fai) != 0) {
         fprintf(stderr, "[tsv] failed to load reference file \"%s\".\n", fn_fai);
         return EXIT_FAILURE;
      }
+
+    param.header= sam_hdr_read(param.in);
+    if (param.header==NULL) {
+	fprintf(stderr, "[tsv] cannot read header.\n");
+        return EXIT_FAILURE;
+	}
 
 
 	if (out_fname!=NULL) {
@@ -334,9 +389,11 @@ int main_bam2tsv(int argc, char *argv[])
         hts_set_opt(param.in,  HTS_OPT_THREAD_POOL, &pool);
     }
 
+	DEBUG("ici");
 
 
     ret = sam2tsv_core(&param);
+	DEBUG("ici");
 
     sam_close(param.in);
 
@@ -345,6 +402,7 @@ int main_bam2tsv(int argc, char *argv[])
 		fclose(param.out);
 		free(out_fname);
 		} 
+    sam_hdr_destroy(param.header);
     if (param.fai) fai_destroy(param.fai);
     if (pool.pool) hts_tpool_destroy(pool.pool);
     sam_global_args_free(&ga);
