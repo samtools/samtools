@@ -76,7 +76,8 @@ static char get_reference_base_at(TsvOptPtr opt, int tid, int ref1) {
 		opt->ref_end = (ref1 + REF_BUFFER_SIZE >= ref_len ? ref_len : ref1 + REF_BUFFER_SIZE);
         opt->ref_seq = faidx_fetch_seq(opt->fai, sam_hdr_tid2name(opt->header,tid),opt->ref_start-1,opt->ref_end,&len); 
         if(opt->ref_seq==NULL) {
-            
+            fprintf(stderr,"[tsv] warning. Cannot fetch reference.\n");
+            return 'N';
             }
 		}
 	return opt->ref_seq[tid - opt->ref_start];
