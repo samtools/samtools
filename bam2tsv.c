@@ -89,6 +89,7 @@ static int64_t unclipped_start(bam1_t *b) {
 
 #define REF_BUFFER_SIZE 1000000
 static char get_reference_base_at(TsvOptPtr opt, int tid, int ref1) {
+    DEBUG("ref");
 	if(ref1<1 || opt->fai==NULL) return 'N';
 	if(!(tid==opt->ref_tid && ref1>=opt->ref_start && ref1<= opt->ref_end)) {
         int len;
@@ -121,9 +122,9 @@ static int sam2tsv_base(TsvOptPtr ctx, BaseInfoPtr aln) {
 	return fputc('\n',ctx->out) == EOF ? -1: 0;
 	}
 
-#define READ_BASE_AT(i) read_bases==NULL?'N':seq_nt16_int[bam_seqi(read_bases, i)]
+#define READ_BASE_AT(i) read_bases==NULL?'N':seq_nt16_str[bam_seqi(read_bases, i)]
 #define REF_BASE_AT(i) get_reference_base_at(opt,b->core.tid,i);
-#define READ_QUAL_AT(i) (read_quals==NULL?'*':(read_quals[i]+33))
+#define READ_QUAL_AT(i) (read_quals==NULL?'*':(read_quals[0] == 0xff?'B':read_quals[i]+33))
 
 static int sam2tsv_aln(TsvOptPtr opt,bam1_t* b) {
 // return value
@@ -175,7 +176,7 @@ for(i=0;i< n_cigar;i++) {
 		    	for(j=0;j< oplen;j++) {
 					aln.base = READ_BASE_AT(read0);
 					aln.qual = READ_QUAL_AT(read0);
-					aln.ref = 'N';
+					aln.ref = '-';
 					aln.ref1 = -1;
 					aln.read0 = read0;
 					if (sam2tsv_base(opt,&aln)!=0) {
@@ -187,7 +188,6 @@ for(i=0;i< n_cigar;i++) {
 					}
 				break;
 			case BAM_CREF_SKIP:
-				DEBUG("N");
 				if(opt->skip_N) {
 		    			ref1 += oplen;
 			    		break;
@@ -195,8 +195,8 @@ for(i=0;i< n_cigar;i++) {
 		    	// NO break here, continue
 			case BAM_CDEL:
 					for(j=0;j< oplen;j++) {
-						aln.base = '.';
-						aln.qual = '.';
+						aln.base = '-';
+						aln.qual = '-';
 						aln.ref = REF_BASE_AT(ref1);
 						aln.ref1 = ref1;
 						aln.read0 = -1;
@@ -263,7 +263,7 @@ static void usage_exit(FILE *fp, int exit_status)
     fprintf(fp, "Usage: samtools tsv [options] (in.bam|stdin)\n");
     fprintf(fp, "\nOptions:\n");
     fprintf(fp, "  -o FILE      Write output to FILE [stdout]\n");
-    sam_global_opt_help(fp, "-.---@-.");
+    sam_global_opt_help(fp, "-.--T@-.");
     exit(exit_status);
 }
 
@@ -276,15 +276,15 @@ int main_bam2tsv(int argc, char *argv[])
 	htsThreadPool pool = {NULL, 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
-        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', '-', '@'),
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, 0, 0,'T', '@'),
         {NULL, 0, NULL, 0}
     };
 
+    memset((void*)&param,0,sizeof(TsvOpt));
 	param.out = stdout;
-	param.skip_N = 0;
-    param.query = strdup("NQFRO");
+    param.query = strdup("NQFTOBbqRp");
 
-    while ((c = getopt_long(argc, argv, "Nlo:q:",
+    while ((c = getopt_long(argc, argv, "Nlo:q:T:",
                             lopts, NULL)) >= 0) {
         switch (c) {
 			case 'o': out_fname = optarg; break;
