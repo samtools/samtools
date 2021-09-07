@@ -1804,7 +1804,8 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
             if ( stats->gcd[igcd].depth )
                 stats->gcd[igcd].gc = rint(100. * stats->gcd[igcd].gc / stats->gcd[igcd].depth);
     }
-    qsort(stats->gcd, stats->igcd+1, sizeof(gc_depth_t), gcd_cmp);
+    if ( stats->ngcd )
+        qsort(stats->gcd, stats->igcd+1, sizeof(gc_depth_t), gcd_cmp);
     igcd = 0;
     while ( igcd < stats->igcd )
     {
