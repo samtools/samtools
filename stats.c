@@ -2026,22 +2026,23 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter, stats_info_t *info)
 static void init_group_id(stats_t *stats, stats_info_t *info, const char *id)
 {
     stats->rg_hash = kh_init(rg);
-    if (!stats->rg_hash) return;
+    if (!stats->rg_hash) error("Could not initialise RG set\n");
     sam_hdr_t *hdr = info->sam_header;
     const char *key;
     kstring_t sm = KS_INITIALIZE;
     int i, ret, nrg = sam_hdr_count_lines(hdr, "RG");
+    if (nrg < 0) error("Could not parse header\n");
 
     for (i=0; i<nrg; i++) {
         key = sam_hdr_line_name(hdr, "RG", i);
         if (!strcmp(key, id)) {
             kh_put(rg, stats->rg_hash, key, &ret);
-            if (ret == -1) { ks_free(&sm); return; }
+            if (ret == -1) { ks_free(&sm); error("Could not add key \"%s\" to RG set\n", key); }
         } else { /* Check for SM name, as per manual */
             if (!sam_hdr_find_tag_pos(hdr, "RG", i, "SM", &sm)) {
                 if (!strcmp(ks_c_str(&sm), id)) {
                     kh_put(rg, stats->rg_hash, key, &ret);
-                    if (ret == -1) { ks_free(&sm); return; }
+                    if (ret == -1) { ks_free(&sm); error("Could not add key \"%s\" to RG set\n", key); }
                 }
             }
         }
