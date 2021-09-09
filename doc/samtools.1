@@ -108,6 +108,8 @@ samtools phase input.bam
 samtools depad input.bam
 .PP
 samtools ampliconclip -b bed.file input.bam
+.PP
+samtools tsv -T reference input.bam
 
 .SH DESCRIPTION
 .PP
@@ -734,6 +736,17 @@ samtools ampliconclip
 .I bed.file in.file
 
 Clip reads in a SAM compatible file based on data from a BED file.
+
+.TP \"-------- tsv
+.B tsv
+samtools tsv
+.RB [ -o
+.IR out.file ]
+.RB [ -q
+.IR query ]
+.RB [ --skip-N ]
+.RB [ --list ]
+
 
 .SH SAMTOOLS OPTIONS
 These are options that are passed after the \fBsamtools\fR command,

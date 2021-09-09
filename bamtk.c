@@ -186,6 +186,7 @@ static void usage(FILE *fp)
 "     phase          phase heterozygotes\n"
 "     stats          generate stats (former bamcheck)\n"
 "     ampliconstats  generate amplicon specific stats\n"
+"     tsv            prints info about each mapped base\n"
 "\n"
 "  -- Viewing\n"
 "     flags          explain BAM flags\n"

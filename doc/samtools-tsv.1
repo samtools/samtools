@@ -1,0 +1,164 @@
+'\" t
+.TH samtools-tsv 1 "9 Sept 2021" "samtools-1.13" "Bioinformatics tools"
+.SH NAME
+samtools tsv \- prints information about each read for each mapped position.
+.\"
+.\"
+.\" Author: Pierre Lindenbaum @yokofakun Institut du Thorax. Nantes.France
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a
+.\" copy of this software and associated documentation files (the "Software"),
+.\" to deal in the Software without restriction, including without limitation
+.\" the rights to use, copy, modify, merge, publish, distribute, sublicense,
+.\" and/or sell copies of the Software, and to permit persons to whom the
+.\" Software is furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in
+.\" all copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL
+.\" THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+.\" FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+.\" DEALINGS IN THE SOFTWARE.
+.
+.\" For code blocks and examples (cf groff's Ultrix-specific man macros)
+.de EX
+
+.  in +\\$1
+.  nf
+.  ft CR
+..
+.de EE
+.  ft
+.  fi
+.  in
+
+..
+.
+.SH SYNOPSIS
+.PP
+samtools tsv
+.RI [ options ]
+.RI "[" in.sam | in.crmam "]"
+
+.SH DESCRIPTION
+.PP
+Prints information about each read at each mapped position.
+
+.SH OPTIONS
+.TP
+.BI "-T "  FILE
+.RI "path to indexed fasta reference"
+.TP
+.BI "-q "  STRING
+.RI "A string columns' code describing each column to be printed. See also option -l"
+.TP
+.B -l
+.RI "list all the available columns to stdout and exit"
+.TP
+.B -N
+Skip cigar operator 'N'. (skip reference)
+.TP
+.BI "-o " FILE
+.RI "Write output to FILE ".
+will send the output to stdout (also the default if this option is not used).
+
+.SH EXAMPLES
+
+.TP
+.B print available columns:
+.EX 2
+$ samtools tsv -l
+#operator	label	description
+N	ReadName       	Read Name
+Q	ReadQual       	Read Mapping Quality
+F	ReadFlag       	Read Flag
+T	CHROM          	Contig name
+R	REF            	Ref base.
+p	POS            	1-based Ref position.
+O	CigarOperator  	Cigar Operator
+B	ReadPos0       	0-based Read Position
+u	UReadPos0      	0-based Unclipped Read Position
+b	ALT            	Read Base
+q	ReadQual       	Quality base
+.EE
+
+.TP
+.B invoke with default parameters
+.EX 2
+$ samtools tsv -T toy.fa toy.bam | column -t
+#ReadName  ReadQual  ReadFlag  CHROM  CigarOperator  ReadPos0  ALT  ReadQual  REF  POS  UReadPos0
+r001/2     30        163       ref    M              0         T    B         T    7    0
+r001/2     30        163       ref    M              1         T    B         T    8    1
+r001/2     30        163       ref    M              2         A    B         A    9    2
+r001/2     30        163       ref    M              3         G    B         G    10   3
+r001/2     30        163       ref    M              4         A    B         A    11   4
+r001/2     30        163       ref    M              5         T    B         T    12   5
+r001/2     30        163       ref    M              6         A    B         A    13   6
+r001/2     30        163       ref    M              7         A    B         A    14   7
+r001/2     30        163       ref    I              8         A    B         -    .    8
+r001/2     30        163       ref    I              9         G    B         -    .    9
+r001/2     30        163       ref    I              10        A    B         -    .    10
+r001/2     30        163       ref    I              11        G    B         -    .    11
+r001/2     30        163       ref    M              12        G    B         G    15   12
+r001/2     30        163       ref    M              13        A    B         A    16   13
+r001/2     30        163       ref    M              14        T    B         T    17   14
+r001/2     30        163       ref    M              15        A    B         A    18   15
+r001/2     30        163       ref    D              .         -    -         G    19   .
+r001/2     30        163       ref    M              16        C    B         C    20   16
+r001/2     30        163       ref    M              17        T    B         T    21   17
+r001/2     30        163       ref    M              18        G    B         G    22   18
+r002       30        0         ref    S              0         A    B         T    8    0
+r002       30        0         ref    I              1         A    B         -    .    1
+r002       30        0         ref    I              2         A    B         -    .    2
+r002       30        0         ref    M              3         A    B         A    9    3
+r002       30        0         ref    M              4         G    B         G    10   4
+r002       30        0         ref    M              5         A    B         A    11   5
+r002       30        0         ref    M              6         T    B         T    12   6
+r002       30        0         ref    M              7         A    B         A    13   7
+r002       30        0         ref    M              8         A    B         A    14   8
+(...)
+.EE
+
+.TP
+.B print CHROM/POS/REF/ALT in interval ref:10-20
+.EX 2
+$ samtools view -u toy.bam "ref:10-20" | samtools tsv -T toy.fa -q 'TpRbO'
+#CHROM	POS	REF	ALT	CigarOperator
+ref	7	T	T	M
+ref	8	T	T	M
+ref	9	A	A	M
+ref	10	G	G	M
+ref	11	A	A	M
+ref	12	T	T	M
+ref	13	A	A	M
+ref	14	A	A	M
+ref	.	-	A	I
+ref	.	-	G	I
+ref	.	-	A	I
+ref	.	-	G	I
+ref	15	G	G	M
+ref	16	A	A	M
+ref	17	T	T	M
+ref	18	A	A	M
+ref	19	G	-	D
+ref	20	C	C	M
+ref	21	T	T	M
+ref	22	G	G	M
+ref	8	T	A	S
+ref	.	-	A	I
+ref	.	-	A	I
+.EE
+
+.SH AUTHOR
+.PP
+Written by Pierre Lindenbaum from the Institut du Thorax (Nantes/France).
+
+.SH SEE ALSO
+.IR samtools (1),
+.IR samtools-depth (1),
+.PP
+Samtools website: <http://www.htslib.org/>
