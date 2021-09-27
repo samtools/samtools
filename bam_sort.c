@@ -1938,6 +1938,7 @@ typedef struct {
     const char *prefix;
     bam1_tag *buf;
     const sam_hdr_t *h;
+    char *tmpfile_name;
     int index;
     int error;
     int no_save;
@@ -2248,7 +2249,9 @@ static void *worker(void *data)
 {
     worker_t *w = (worker_t*)data;
     char *name;
+    size_t name_len;
     w->error = 0;
+    w->tmpfile_name = NULL;
 
     if (!g_is_by_qname && !g_is_by_tag && !g_is_by_minhash) {
         if (ks_radixsort(w->buf_len, w->buf, w->h) < 0) {
@@ -2284,40 +2287,41 @@ static void *worker(void *data)
     if (w->no_save)
         return 0;
 
-    name = (char*)calloc(strlen(w->prefix) + 20, 1);
+    name_len = strlen(w->prefix) + 30;
+    name = (char*)calloc(name_len, 1);
     if (!name) { w->error = errno; return 0; }
-    sprintf(name, "%s.%.4d.bam", w->prefix, w->index);
-
-    uint32_t max_ncigar = 0;
-    int i;
-    for (i = 0; i < w->buf_len; i++) {
-        uint32_t nc = w->buf[i].bam_record->core.n_cigar;
-        if (max_ncigar < nc)
-            max_ncigar = nc;
-    }
-
-    if (max_ncigar > 65535) {
-        htsFormat fmt;
-        memset(&fmt, 0, sizeof(fmt));
-        if (hts_parse_format(&fmt, "cram,version=3.0,no_ref,seqs_per_slice=1000") < 0) {
-            w->error = errno;
-            free(name);
-            return 0;
+    const int MAX_TRIES = 1000;
+    int tries = 0;
+    for (;;) {
+        if (tries) {
+            snprintf(name, name_len, "%s.%.4d-%.3d.bam",
+                     w->prefix, w->index, tries);
+        } else {
+            snprintf(name, name_len, "%s.%.4d.bam", w->prefix, w->index);
         }
 
-        if (write_buffer(name, "wcx1", w->buf_len, w->buf, w->h, 0, &fmt, 0, NULL, 1, 0) < 0)
+        if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL, 0, NULL, 1, 0) == 0) {
+            break;
+        }
+        if (errno == EEXIST && tries < MAX_TRIES) {
+            tries++;
+        } else {
             w->error = errno;
-    } else {
-        if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL, 0, NULL, 1, 0) < 0)
-            w->error = errno;
+            break;
+        }
     }
 
-    free(name);
+    if (w->error) {
+        free(name);
+    } else {
+        w->tmpfile_name = name;
+    }
     return 0;
 }
 
 static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
-                       const sam_hdr_t *h, int n_threads, buf_region *in_mem)
+                       const sam_hdr_t *h, int n_threads, buf_region *in_mem,
+                       char **fns, size_t fns_size)
 {
     int i;
     size_t pos, rest;
@@ -2341,6 +2345,7 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
         w[i].prefix = prefix;
         w[i].h = h;
         w[i].index = n_files + i;
+        w[i].tmpfile_name = NULL;
         if (in_mem) {
             w[i].no_save = 1;
             in_mem[i].from = pos;
@@ -2353,10 +2358,25 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
     }
     for (i = 0; i < n_threads; ++i) {
         pthread_join(tid[i], 0);
+        if (!in_mem) {
+            assert(w[i].index >= 0 && w[i].index < fns_size);
+            fns[w[i].index] = w[i].tmpfile_name;
+        }
         if (w[i].error != 0) {
             errno = w[i].error;
             print_error_errno("sort", "failed to create temporary file \"%s.%.4d.bam\"", prefix, w[i].index);
             n_failed++;
+        }
+    }
+    if (n_failed && !in_mem) {
+        // Clean up any temporary files that did get made, as we're
+        // about to lose track of them
+        for (i = 0; i < n_threads; ++i) {
+            if (fns[w[i].index]) {
+                unlink(fns[w[i].index]);
+                free(fns[w[i].index]);
+                fns[w[i].index] = NULL;
+            }
         }
     }
     free(tid); free(w);
@@ -2402,6 +2422,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     bam1_t *b = bam_init1();
     uint8_t *bam_mem = NULL;
     char **fns = NULL;
+    size_t fns_size = 0;
     const char *new_so;
     buf_region *in_mem = NULL;
     int num_in_mem = 0;
@@ -2516,10 +2537,15 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         ++k;
 
         if (mem_full) {
-            n_files = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                  NULL);
-            if (n_files < 0) {
+            if (hts_resize(char *, n_files + (n_threads > 0 ? n_threads : 1),
+                           &fns_size, &fns, 0) < 0)
                 goto err;
+            int new_n = sort_blocks(n_files, k, buf, prefix, header, n_threads,
+                                    NULL, fns, fns_size);
+            if (new_n < 0) {
+                goto err;
+            } else {
+                n_files = new_n;
             }
             k = 0;
             bam_mem_offset = 0;
@@ -2535,7 +2561,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         in_mem = calloc(n_threads > 0 ? n_threads : 1, sizeof(in_mem[0]));
         if (!in_mem) goto err;
         num_in_mem = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                 in_mem);
+                                 in_mem, fns, fns_size);
         if (num_in_mem < 0) goto err;
     } else {
         num_in_mem = 0;
@@ -2552,12 +2578,13 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         fprintf(stderr,
                 "[bam_sort_core] merging from %d files and %d in-memory blocks...\n",
                 n_files, num_in_mem);
-        fns = (char**)calloc(n_files, sizeof(char*));
-        if (!fns) goto err;
+        // Paranoia check - all temporary files should have a name
         for (i = 0; i < n_files; ++i) {
-            fns[i] = (char*)calloc(strlen(prefix) + 20, 1);
-            if (!fns[i]) goto err;
-            sprintf(fns[i], "%s.%.4d.bam", prefix, i);
+            if (!fns[i]) {
+                print_error("sort",
+                            "BUG: no name stored for temporary file %d", i);
+                abort();
+            }
         }
         if (bam_merge_simple(is_by_qname, sort_by_tag, fnout, modeout, header,
                              n_files, fns, num_in_mem, in_mem, buf,
