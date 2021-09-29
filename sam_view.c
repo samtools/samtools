@@ -55,9 +55,14 @@ typedef struct samview_settings {
     strhash_t rnhash;
     strhash_t tvhash;
     int min_mapQ;
-    int flag_on;
-    int flag_off;
-    int flag_alloff;
+
+    // Described here in the same terms as the usage statement.
+    // The code however always negates to "reject if"         keep if:
+    int flag_on;     // keep   if (FLAG & N) == N             (all on)
+    int flag_off;    // keep   if (FLAG & N) == 0             (all off)
+    int flag_anyon;  // keep   if (FLAG & N) != 0             (any on)
+    int flag_alloff; // reject if (FLAG & N) == N             (any off)
+
     int min_qlen;
     int remove_B;
     uint32_t subsam_seed;
@@ -141,6 +146,8 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off))
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
+        return 1;
+    if (settings->flag_anyon && ((b->core.flag & settings->flag_anyon) == 0))
         return 1;
     if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, sam_hdr_tid2name(h, b->core.tid), b->core.pos, bam_endpos(b))))
         return 1;
@@ -421,6 +428,7 @@ int main_samview(int argc, char *argv[])
         .flag_on = 0,
         .flag_off = 0,
         .flag_alloff = 0,
+        .flag_anyon = 0,
         .min_qlen = 0,
         .remove_B = 0,
         .subsam_seed = 0,
@@ -452,6 +460,9 @@ int main_samview(int argc, char *argv[])
         {"fast", no_argument, NULL, '1'},
         {"header-only", no_argument, NULL, 'H'},
         {"help", no_argument, NULL, LONGOPT('?')},
+        {"incl-flags", required_argument, NULL, LONGOPT('g')},
+        {"include-flags", required_argument, NULL, LONGOPT('g')},
+        {"rf", required_argument, NULL, LONGOPT('g')}, // aka incl-flags
         {"keep-tag", required_argument, NULL, LONGOPT('x') },
         {"library", required_argument, NULL, 'l'},
         {"min-mapq", required_argument, NULL, 'q'},
@@ -538,6 +549,8 @@ int main_samview(int argc, char *argv[])
         case 'X': has_index_file = 1; break;
         case 'f': settings.flag_on |= bam_str2flag(optarg); break;
         case 'F': settings.flag_off |= bam_str2flag(optarg); break;
+        case LONGOPT('g'):
+            settings.flag_anyon |= bam_str2flag(optarg); break;
         case 'G': settings.flag_alloff |= bam_str2flag(optarg); break;
         case 'q': settings.min_mapQ = atoi(optarg); break;
         case 'u': compress_level = 0; break;
