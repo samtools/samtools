@@ -2752,8 +2752,13 @@ int bam_sort(int argc, char *argv[])
     if (level >= 0) sprintf(strchr(modeout, '\0'), "%d", level < 9? level : 9);
 
     if (tmpprefix.l == 0) {
-        if (strcmp(fnout, "-") != 0) ksprintf(&tmpprefix, "%s.tmp", fnout);
-        else kputc('.', &tmpprefix);
+        if (strcmp(fnout, "-") != 0) {
+            char *idx = strstr(fnout, HTS_IDX_DELIM);
+            kputsn(fnout, idx ? idx - fnout : strlen(fnout), &tmpprefix);
+            kputs(".tmp", &tmpprefix);
+        } else {
+            kputc('.', &tmpprefix);
+        }
     }
     if (stat(tmpprefix.s, &st) == 0 && S_ISDIR(st.st_mode)) {
         unsigned t = ((unsigned) time(NULL)) ^ ((unsigned) clock());
