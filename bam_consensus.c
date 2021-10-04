@@ -168,6 +168,8 @@ typedef struct {
     int mod_qual[2];  // phred scale
 } consensus_t;
 
+static char *seq_nt16_str_pad = "=ACMGRSVTWYHKDBN=acmgrsvtwyhkdbn";
+
 /*
  * Produce the insertion portion of the consensus sequence.
  * Returns 0 on success, filling out ins_ks and ins_ks,
@@ -201,12 +203,12 @@ static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
         // a better bam_plp_insertion or inline it here with added
         // quality value processing.
         int il = bam_plp_insertion(p, &is, NULL), j;
-        if (il < ins_len)
+        if (il != ins_len)
             continue;
 
         for (j = 0; j < il; j++) {
             if (is.s[j] == '*') {
-                ins[j][16] += 8;
+                ins[j][0] += 8;
             } else {
                 int Q = seqi2A[seq_nt16_table[(uc)is.s[j]]];
                 ins[j][1] += Q;
@@ -224,23 +226,29 @@ static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
     int j;
     ins_ks->l = 0;
     for (j = 0; j < ins_len; j++) {
-        int k, b1 = 0, b2 = 0, m1 = 0, m2 = 0;
-        for (k = 0; k < 17; k++) {
+        int k, b1 = 0, b2 = 0, b3 = 0, m1 = 0, m2 = 0, m3 = 0;
+        for (k = 0; k < 16; k++) {
             if (m1 < ins[j][k])
-                m2 = m1, m1 = ins[j][k], b2 = b1, b1 = k;
+                m3 = m2, m2 = m1, m1 = ins[j][k], b2 = b1, b1 = k;
             else if (m2 < ins[j][k])
-                m2 = ins[j][k], b2 = k;
+                m3 = m2, m2 = ins[j][k], b2 = k;
+            else if (m3 < ins[j][k])
+                m3 = ins[j][k], b3 = k;
         }
-        if (b1 != 16) {
-            int call = b1;
+        if (b1+b2+b3 != 0) {
+            int call = b1 ? b1 : 16;
             int score = m1;
-            if (b2 != 16 && opts->ambig && m2 >= opts->het_fract * m1) {
-                call |= b2;
+            if (b2 != 0 && opts->ambig && m2 >= opts->het_fract * m1) {
+                call |= b2 ? b2 : 16;
                 score += m2;
             }
+            if (b3 != 0 && opts->ambig && m3 >= opts->het_fract * m1) {
+                call |= b3 ? b3 : 16;
+                score += m3;
+            }
 
-            char b = opts->call_fract >= score / (nins*8.0)
-                ? 'N' : seq_nt16_str[call];
+            char b = opts->call_fract-DBL_EPSILON >= score / (nins*8.0)
+                ? 'N' : seq_nt16_str_pad[call];
             kputc(b, ins_ks);
             int qual = 100 * m1 / nplp;
             qual = qual + '!' > '~' ? '~' : qual + '!';
@@ -499,7 +507,7 @@ int calculate_consensus_gap5(int pos, int flags,
     double min_e_exp = DBL_MIN_EXP * log(2) + 1;
 
     double S[15] ALIGNED(16) = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-    double sumsC[6] = {0,0,0,0,0,0}, sumsE = 0;
+    double sumsC[6] = {0,0,0,0,0,0};
     int depth = 0;
 
     /* Base mods basic strategy:
@@ -594,7 +602,7 @@ int calculate_consensus_gap5(int pos, int flags,
         // SNPs means low mapping quality.  (Ideally need to know
         // hamming distance to next best location.)
 
-        if (p->indel > 0) {
+        if (p[n].indel > 0) {
             // FIXME: add flag&CONS_MQUAL support too
             nins++;
             int j;
@@ -604,9 +612,9 @@ int calculate_consensus_gap5(int pos, int flags,
             // maintain as sorted top 10, with ele 0 as most frequent.
 
             // Length may need adjusting due to pads
-            int indel_len = p->indel;
-            uint32_t *cig = bam_get_cigar(p->b);
-            for (j = p->cigar_ind+1; j < p->b->core.n_cigar; j++) {
+            int indel_len = p[n].indel;
+            uint32_t *cig = bam_get_cigar(p[n].b);
+            for (j = p[n].cigar_ind+1; j < p[n].b->core.n_cigar; j++) {
                 switch (cig[j] & BAM_CIGAR_MASK) {
                 case BAM_CPAD:
                     indel_len += cig[j] >> BAM_CIGAR_SHIFT;
@@ -614,16 +622,16 @@ int calculate_consensus_gap5(int pos, int flags,
                 case BAM_CINS:
                     break;
                 default:
-                    j = p->b->core.n_cigar; // terminate for loop
+                    j = p[n].b->core.n_cigar; // terminate for loop
                 }
             }
 
             for (j = 0; j < 10 && ins_len[j]; j++)
-                if (ins_len[j] == p->indel)
+                if (ins_len[j] == indel_len)
                     break;
             if (j < 10) {
                 ins_len_freq[j]++;
-                ins_len[j] = p->indel;
+                ins_len[j] = indel_len;
             }
             while (j > 0 && ins_len_freq[j] > ins_len_freq[j-1]) {
                 int tmp = ins_len[j-1];
@@ -659,7 +667,6 @@ int calculate_consensus_gap5(int pos, int flags,
 
         if (flags & CONS_DISCREP) {
             qe = q2p[qual];
-            sumsE += qe;
             sumsC[base] += 1 - qe;
         }
 
@@ -1015,11 +1022,11 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
             }
 
             for (j = 0; j < 10 && ins_len[j]; j++)
-                if (ins_len[j] == p->indel)
+                if (ins_len[j] == indel_len)
                     break;
             if (j < 10) {
                 ins_len_freq[j]++;
-                ins_len[j] = p->indel;
+                ins_len[j] = indel_len;
             }
             while (j > 0 && ins_len_freq[j] > ins_len_freq[j-1]) {
                 int tmp = ins_len[j-1];
@@ -1058,11 +1065,9 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
     }
 
     // Total usable depth
-    int tdepth = 0, tscore = 0;
-    for (i = 0; i < 5; i++) {
-        tdepth += freq[1<<i];
+    int tscore = 0;
+    for (i = 0; i < 5; i++)
         tscore += score[1<<i];
-    }
 
     // Best and second best potential calls
     int call1  = 15, call2 = 15;
