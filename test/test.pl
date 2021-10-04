@@ -2482,6 +2482,17 @@ sub test_view
                     args => ['-h', '--remove-flags', 'DUP', '-x', 'do', '-x', 'dt', '--no-PG', $dup_sam],
                     out => sprintf("%s.test%03d.sam", $out, $test),
                     compare => $dup_expected);
+
+    # unmap excluded reads, ones marked as duplicate in this case
+    $test++;
+
+    my $unmapped_expected = "$$opts{path}/dat/view.005.unmap.expected.sam";
+
+    run_view_test($opts,
+                    msg=> "$test: Unmap dup flagged reads.",
+                    args => ['-h', '-F', 'DUP', '-p', '--no-PG', $dup_sam],
+                    out => sprintf("%s.test%03d.sam", $out, $test),
+                    compare => $unmapped_expected);
 }
 
 # cat SAM files in the same way as samtools cat does with BAMs

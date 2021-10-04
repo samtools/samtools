@@ -483,6 +483,7 @@ int main_samview(int argc, char *argv[])
         {"target-file", required_argument, NULL, 'L'},
         {"targets-file", required_argument, NULL, 'L'},
         {"uncompressed", no_argument, NULL, 'u'},
+        {"unmap", no_argument, NULL, 'p'},
         {"unoutput", required_argument, NULL, 'U'},
         {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
@@ -709,6 +710,13 @@ int main_samview(int argc, char *argv[])
         print_error("view", "No input provided or missing option argument.");
         return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
     }
+    
+    if (settings.unmap && fn_un_out) {
+        print_error("view", "Options --unoutput and --unmap are mutually exclusive.");
+        ret = 1;
+        goto view_end;
+    }
+
     if (settings.subsam_seed != 0) {
         // Convert likely user input 1,2,... to pseudo-random
         // values with more entropy and more bits set
@@ -1081,6 +1089,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -o, --output FILE          Write output to FILE [standard output]\n"
 "  -U, --unoutput FILE, --output-unselected FILE\n"
 "                             Output reads not selected by filters to FILE\n"
+"  -p, --unmap                Set flag to UNMAP on reads not selected\n"
+"                             then write to output file.\n"
 "Input options:\n"
 "  -t, --fai-reference FILE   FILE listing reference names and lengths\n"
 "  -M, --use-index            Use index and multi-region iterator for regions\n"
