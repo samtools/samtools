@@ -1942,6 +1942,7 @@ typedef struct {
     int index;
     int error;
     int no_save;
+    int large_pos;
 } worker_t;
 
 // Returns 0 for success
@@ -2300,7 +2301,8 @@ static void *worker(void *data)
             snprintf(name, name_len, "%s.%.4d.bam", w->prefix, w->index);
         }
 
-        if (write_buffer(name, "wbx1", w->buf_len, w->buf, w->h, 0, NULL, 0, NULL, 1, 0) == 0) {
+        if (write_buffer(name, w->large_pos ? "wzx1" : "wbx1",
+                         w->buf_len, w->buf, w->h, 0, NULL, 0, NULL, 1, 0) == 0) {
             break;
         }
         if (errno == EEXIST && tries < MAX_TRIES) {
@@ -2321,7 +2323,7 @@ static void *worker(void *data)
 
 static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
                        const sam_hdr_t *h, int n_threads, buf_region *in_mem,
-                       char **fns, size_t fns_size)
+                       int large_pos, char **fns, size_t fns_size)
 {
     int i;
     size_t pos, rest;
@@ -2346,6 +2348,7 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
         w[i].h = h;
         w[i].index = n_files + i;
         w[i].tmpfile_name = NULL;
+        w[i].large_pos = large_pos;
         if (in_mem) {
             w[i].no_save = 1;
             in_mem[i].from = pos;
@@ -2414,7 +2417,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
                       const htsFormat *in_fmt, const htsFormat *out_fmt,
                       char *arg_list, int no_pg, int write_index)
 {
-    int ret = -1, res, i, n_files = 0;
+    int ret = -1, res, i, nref, n_files = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
     sam_hdr_t *header = NULL;
     samFile *fp;
@@ -2426,6 +2429,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     const char *new_so;
     buf_region *in_mem = NULL;
     int num_in_mem = 0;
+    int large_pos = 0;
 
     if (!b) {
         print_error("sort", "couldn't allocate memory for bam record");
@@ -2452,6 +2456,28 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
     if (header == NULL) {
         print_error("sort", "failed to read header from \"%s\"", fn);
         goto err;
+    }
+
+    // Inspect the header looking for long chromosomes
+    // If there is one, we need to write temporary files in SAM format
+    nref = sam_hdr_nref(header);
+    for (i = 0; i < nref; i++) {
+        if (sam_hdr_tid2len(header, i) > INT32_MAX)
+            large_pos = 1;
+    }
+
+    // Also check the output format is large position compatible
+    if (large_pos) {
+        int compatible = (out_fmt->format == sam
+                          || (out_fmt->format == cram
+                              && out_fmt->version.major >= 4)
+                          || (out_fmt->format == unknown_format
+                              && modeout[0] == 'w'
+                              && (modeout[1] == 'z' || modeout[1] == '\0')));
+        if (!compatible) {
+            print_error("sort", "output format is not compatible with very large references");
+            goto err;
+        }
     }
 
     if (sort_by_tag != NULL)
@@ -2541,7 +2567,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
                            &fns_size, &fns, 0) < 0)
                 goto err;
             int new_n = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                    NULL, fns, fns_size);
+                                    NULL, large_pos, fns, fns_size);
             if (new_n < 0) {
                 goto err;
             } else {
@@ -2561,7 +2587,7 @@ int bam_sort_core_ext(int is_by_qname, char* sort_by_tag, const char *fn, const 
         in_mem = calloc(n_threads > 0 ? n_threads : 1, sizeof(in_mem[0]));
         if (!in_mem) goto err;
         num_in_mem = sort_blocks(n_files, k, buf, prefix, header, n_threads,
-                                 in_mem, fns, fns_size);
+                                 in_mem, large_pos, fns, fns_size);
         if (num_in_mem < 0) goto err;
     } else {
         num_in_mem = 0;
