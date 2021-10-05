@@ -47,6 +47,7 @@ int bam_fillmd(int argc, char *argv[]);
 int bam_idxstats(int argc, char *argv[]);
 int bam_markdup(int argc, char *argv[]);
 int main_samview(int argc, char *argv[]);
+int main_head(int argc, char *argv[]);
 int main_reheader(int argc, char *argv[]);
 int main_cut_target(int argc, char *argv[]);
 int main_phase(int argc, char *argv[]);
@@ -189,6 +190,7 @@ static void usage(FILE *fp)
 "\n"
 "  -- Viewing\n"
 "     flags          explain BAM flags\n"
+"     head           header viewer\n"
 "     tview          text alignment viewer\n"
 "     view           SAM<->BAM<->CRAM conversion\n"
 "     depad          convert padded BAM to unpadded BAM\n"
@@ -242,6 +244,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "faidx") == 0)     ret = faidx_main(argc-1, argv+1);
     else if (strcmp(argv[1], "fqidx") == 0)     ret = fqidx_main(argc-1, argv+1);
     else if (strcmp(argv[1], "dict") == 0)      ret = dict_main(argc-1, argv+1);
+    else if (strcmp(argv[1], "head") == 0)      ret = main_head(argc-1, argv+1);
     else if (strcmp(argv[1], "fixmate") == 0)   ret = bam_mating(argc-1, argv+1);
     else if (strcmp(argv[1], "rmdup") == 0)     ret = bam_rmdup(argc-1, argv+1);
     else if (strcmp(argv[1], "markdup") == 0)   ret = bam_markdup(argc-1, argv+1);
