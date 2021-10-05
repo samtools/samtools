@@ -710,7 +710,7 @@ int main_samview(int argc, char *argv[])
         print_error("view", "No input provided or missing option argument.");
         return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
     }
-    
+
     if (settings.unmap && fn_un_out) {
         print_error("view", "Options --unoutput and --unmap are mutually exclusive.");
         ret = 1;
