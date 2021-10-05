@@ -1,6 +1,12 @@
 Release a.b
 -----------
 
+ * New "samtools head" subcommand for conveniently displaying the headers
+   of a SAM, BAM, or CRAM file. Without options, this is equivalent to
+   `samtools view --header-only --no-PG` but more succinct and memorable.
+   (#1517; thanks to John Marshall)
+
+
 Release 1.14 (22nd October 2021)
 --------------------------------
 

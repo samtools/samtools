@@ -43,6 +43,7 @@ test_index($opts, threads=>2);
 test_mpileup($opts);
 test_usage($opts, cmd=>'samtools');
 test_view($opts);
+test_head($opts);
 test_cat($opts);
 test_import($opts);
 test_bam2fq($opts);
@@ -2489,6 +2490,57 @@ sub test_view
                     args => ['-h', '-F', 'DUP', '-p', '--no-PG', $dup_sam],
                     out => sprintf("%s.test%03d.sam", $out, $test),
                     compare => $unmapped_expected);
+}
+
+sub gen_head_output
+{
+    my ($opts, $h, $n, $desc, $infile) = @_;
+
+    open my $in, '<', $infile or die "Couldn't open $infile: $!\n";
+
+    my $expected = "dat/head.$desc.tmp.expected";
+    open my $out, '>', "$$opts{path}/$expected"
+        or die "Couldn't write to $expected: $!\n";
+
+    while (<$in>) {
+        my $counter = /^@/? \$h : \$n;
+        next unless $$counter > 0;
+        print $out $_;
+        $$counter--;
+    }
+    close $in;
+    close $out;
+    return $expected;
+}
+
+sub test_head
+{
+    my ($opts) = @_;
+
+    my $infile = "$$opts{path}/dat/view.001.sam";
+
+    test_cmd($opts, out => gen_head_output($opts, 1000, 0, "all", $infile),
+             cmd => "$$opts{bin}/samtools head $infile");
+    test_cmd($opts, out => gen_head_output($opts, 0, 0, "none", $infile),
+             cmd => "$$opts{bin}/samtools head -h 0 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 1, 0, "one", $infile),
+             cmd => "$$opts{bin}/samtools head -h 1 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 5, 0, "five", $infile),
+             cmd => "$$opts{bin}/samtools head -h 5 $infile");
+    # view.001.sam has 29 header lines; test exactly that and asking for 1 extra
+    test_cmd($opts, out => gen_head_output($opts, 29, 0, "exact", $infile),
+             cmd => "$$opts{bin}/samtools head -h 29 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 30, 0, "toomany", $infile),
+             cmd => "$$opts{bin}/samtools head -h 30 $infile");
+
+    test_cmd($opts, out => gen_head_output($opts, 1000, 0, "alln0", $infile),
+             cmd => "$$opts{bin}/samtools head -n 0 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 1000, 1, "onerec", $infile),
+             cmd => "$$opts{bin}/samtools head -n 1 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 1000, 5, "fiverecs", $infile),
+             cmd => "$$opts{bin}/samtools head -n 5 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 5, 5, "fiveboth", $infile),
+             cmd => "$$opts{bin}/samtools head -h 5 -n 5 < $infile");
 }
 
 # cat SAM files in the same way as samtools cat does with BAMs

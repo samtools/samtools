@@ -36,6 +36,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/sam.h"
 #include "htslib/faidx.h"
 #include "htslib/khash.h"
+#include "htslib/kstring.h"
 #include "htslib/thread_pool.h"
 #include "htslib/hts_expr.h"
 #include "samtools.h"
@@ -1193,4 +1194,124 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "\n");
 
     return exit_status;
+}
+
+static int head_usage(FILE *fp, int exit_status)
+{
+    fprintf(fp,
+"Usage: samtools head [OPTION]... [FILE]\n"
+"Options:\n"
+"  -h, --headers INT   Display INT header lines [all]\n"
+"  -n, --records INT   Display INT alignment record lines [none]\n"
+);
+    sam_global_opt_help(fp, "-.--T@-.");
+    return exit_status;
+}
+
+int main_head(int argc, char *argv[])
+{
+    static const struct option lopts[] = {
+        SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 'T', '@'),
+        { "headers", required_argument, NULL, 'h' },
+        { "records", required_argument, NULL, 'n' },
+        { NULL, 0, NULL, 0 }
+    };
+    sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
+
+    int all_headers = 1;
+    uint64_t nheaders = 0;
+    uint64_t nrecords = 0;
+
+    int c, nargs;
+    while ((c = getopt_long(argc, argv, "h:n:T:@:", lopts, NULL)) >= 0)
+        switch (c) {
+        case 'h': all_headers = 0; nheaders = strtoull(optarg, NULL, 0); break;
+        case 'n': nrecords = strtoull(optarg, NULL, 0); break;
+        default:
+            if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
+            /* else fall-through */
+        case '?':
+            return head_usage(stderr, EXIT_FAILURE);
+        }
+
+    nargs = argc - optind;
+    if (nargs == 0 && isatty(STDIN_FILENO))
+        return head_usage(stdout, EXIT_SUCCESS);
+    else if (nargs > 1)
+        return head_usage(stderr, EXIT_FAILURE);
+
+    samFile *fp = NULL;
+    sam_hdr_t *hdr = NULL;
+    kstring_t str = KS_INITIALIZE;
+    bam1_t *b = NULL;
+
+    const char *fname = (nargs == 1)? argv[optind] : "-";
+    fp = sam_open_format(fname, "r", &ga.in);
+    if (fp == NULL) {
+        if (strcmp(fname, "-") != 0)
+            print_error_errno("head", "failed to open \"%s\" for reading", fname);
+        else
+            print_error_errno("head", "failed to open standard input for reading");
+        goto err;
+    }
+
+    if (ga.nthreads > 0) hts_set_threads(fp, ga.nthreads);
+
+    hdr = sam_hdr_read(fp);
+    if (hdr == NULL) {
+        if (strcmp(fname, "-") != 0)
+            print_error("head", "failed to read the header from \"%s\"", fname);
+        else
+            print_error("head", "failed to read the header");
+        goto err;
+    }
+
+    if (all_headers) {
+        fputs(sam_hdr_str(hdr), stdout);
+    }
+    else if (nheaders > 0) {
+        const char *text = sam_hdr_str(hdr);
+        const char *lim = text;
+        uint64_t n;
+        for (n = 0; n < nheaders; n++) {
+            lim = strchr(lim, '\n');
+            if (lim) lim++;
+            else break;
+        }
+        if (lim) fwrite(text, lim - text, 1, stdout);
+        else fputs(text, stdout);
+    }
+
+    if (nrecords > 0) {
+        b = bam_init1();
+        uint64_t n;
+        int r;
+        for (n = 0; n < nrecords && (r = sam_read1(fp, hdr, b)) >= 0; n++) {
+            if (sam_format1(hdr, b, &str) < 0) {
+                print_error_errno("head", "couldn't format record");
+                goto err;
+            }
+            puts(ks_str(&str));
+        }
+        if (r < -1) {
+            print_error("head", "\"%s\" is truncated", fname);
+            goto err;
+        }
+        bam_destroy1(b);
+        ks_free(&str);
+    }
+
+    sam_hdr_destroy(hdr);
+    sam_close(fp);
+    sam_global_args_free(&ga);
+
+    return EXIT_SUCCESS;
+
+err:
+    if (fp) sam_close(fp);
+    sam_hdr_destroy(hdr);
+    bam_destroy1(b);
+    ks_free(&str);
+    sam_global_args_free(&ga);
+    return EXIT_FAILURE;
 }

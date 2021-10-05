@@ -49,6 +49,8 @@ samtools tview aln.sorted.bam ref.fasta
 .PP
 samtools quickcheck in1.bam in2.cram
 .PP
+samtools head in.bam
+.PP
 samtools index aln.sorted.bam
 .PP
 samtools sort -T /tmp/aln.sorted -o aln.sorted.bam aln.bam
@@ -203,6 +205,16 @@ intensive tasks on them.
 This command will exit with a non-zero exit code if any input files don't have a
 valid header or are missing an EOF block. Otherwise it will exit successfully
 (with a zero exit code).
+
+.TP \"-------- head
+.B head
+samtools head
+.RI [ options ]
+.IR in.sam | in.bam | in.cram
+
+Prints the input file's headers and optionally also its first few alignment
+records. This command always displays the headers as they are in the file,
+never adding an extra @PG header itself.
 
 .TP \"-------- index
 .B index
@@ -1194,6 +1206,7 @@ for further authorship.
 .IR samtools-flags (1),
 .IR samtools-flagstat (1),
 .IR samtools-fqidx (1),
+.IR samtools-head (1),
 .IR samtools-idxstats (1),
 .IR samtools-import (1),
 .IR samtools-index (1),
