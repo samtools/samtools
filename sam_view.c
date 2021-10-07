@@ -76,6 +76,7 @@ typedef struct samview_settings {
     hts_filter_t *filter;
     int remove_flag;
     int add_flag;
+    int unmap;
     auxhash_t remove_tag;
     auxhash_t keep_tag;
 } samview_settings_t;
@@ -442,6 +443,7 @@ int main_samview(int argc, char *argv[])
         .add_flag = 0,
         .keep_tag = NULL,
         .remove_tag = NULL,
+        .unmap = 0,
     };
 
     static const struct option lopts[] = {
@@ -492,6 +494,7 @@ int main_samview(int argc, char *argv[])
         {"target-file", required_argument, NULL, 'L'},
         {"targets-file", required_argument, NULL, 'L'},
         {"uncompressed", no_argument, NULL, 'u'},
+        {"unmap", no_argument, NULL, 'p'},
         {"unoutput", required_argument, NULL, 'U'},
         {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
@@ -510,7 +513,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:p",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -556,6 +559,7 @@ int main_samview(int argc, char *argv[])
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
         case 'l': settings.library = strdup(optarg); break;
+        case 'p': settings.unmap = 1; break;
         case LONGOPT('L'):
             settings.multi_region = 1;
             // fall through
@@ -719,6 +723,13 @@ int main_samview(int argc, char *argv[])
         print_error("view", "No input provided or missing option argument.");
         return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
     }
+
+    if (settings.unmap && fn_un_out) {
+        print_error("view", "Options --unoutput and --unmap are mutually exclusive.");
+        ret = 1;
+        goto view_end;
+    }
+
     if (settings.subsam_seed != 0) {
         // Convert likely user input 1,2,... to pseudo-random
         // values with more entropy and more bits set
@@ -897,6 +908,9 @@ int main_samview(int argc, char *argv[])
                                     if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                                 }
                                 count++;
+                            } else if (settings.unmap) {
+                                b->core.flag |= BAM_FUNMAP;
+                                if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                             } else {
                                 if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                             }
@@ -931,6 +945,9 @@ int main_samview(int argc, char *argv[])
                         if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                     }
                     count++;
+                } else if (settings.unmap) {
+                    b->core.flag |= BAM_FUNMAP;
+                    if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                 } else {
                     if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                 }
@@ -972,6 +989,9 @@ int main_samview(int argc, char *argv[])
                             if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                         }
                         count++;
+                    } else if (settings.unmap) {
+                        b->core.flag |= BAM_FUNMAP;
+                        if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                     } else {
                         if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                     }
@@ -1082,6 +1102,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -o, --output FILE          Write output to FILE [standard output]\n"
 "  -U, --unoutput FILE, --output-unselected FILE\n"
 "                             Output reads not selected by filters to FILE\n"
+"  -p, --unmap                Set flag to UNMAP on reads not selected\n"
+"                             then write to output file.\n"
 "Input options:\n"
 "  -t, --fai-reference FILE   FILE listing reference names and lengths\n"
 "  -M, --use-index            Use index and multi-region iterator for regions\n"
