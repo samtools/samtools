@@ -34,16 +34,16 @@ New work and changes:
    consistent with the "view -d" behaviour too. (#1480; fixes
    #1476. Reported by William Rowell)
 
- * Added filter expression "endpos" keyword. (#1464.  Thanks to John
-   Marshall)
+ * Added filter expression "endpos" keyword. (#1464.  Thanks to
+   John Marshall)
 
  * "samtools view" errors now appear after any SAM output, improving
    their visibility. (#1490.  Thanks to John Marshall)
 
  * Improved "samtools sort" use of temporary files, both tidying up
    if it fails and recovery when facing pre-existing temporary files.
-   (#1510; fixes #1035, #1503.  Reported by Vivek Rai and Maarten
-   Kooyman)
+   (#1510; fixes #1035, #1503.  Reported by Vivek Rai and
+   Maarten Kooyman)
 
  * Filtering in "samtools markdup" now sets the UNMAP BAM flag when
    given the "-p" option. (#1512; fixes 1469)
@@ -54,10 +54,10 @@ New work and changes:
 Bug fixes:
 
  * Prevent "samtools depth" from closing stdout when outputting to
-   terminal, avoiding a bad interaction with PySam. (#1465.  TRhanks
+   terminal, avoiding a bad interaction with PySam. (#1465.  Thanks
    to John Marshall)
 
- * Inplace "samtools reheader" now works on CRAMs produced using a
+ * In-place "samtools reheader" now works on CRAMs produced using a
    higher than default compression level. (#1479)
 
  * Fix setting of the dt tag in "markdup".  Optical duplicates were
