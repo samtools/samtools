@@ -46,7 +46,7 @@ New work and changes:
    Maarten Kooyman)
 
  * Filtering in "samtools markdup" now sets the UNMAP BAM flag when
-   given the "-p" option. (#1512; fixes 1469)
+   given the "-p" option. (#1512; fixes #1469)
 
  * Make CRAM references shared during "samtools merge" so merging many
    files has a lower memory usage. (#471)
