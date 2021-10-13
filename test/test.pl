@@ -2727,55 +2727,54 @@ sub sam2fq
 # Conversion of FASTQ to BAM.
 # We use the bam2fq expected output to validate on.
 # This permits round trip validation
-# NB: This uses bam2fq/1.stdout.expected as a proxy for a blank filename.
 sub test_import
 {
     my ($opts, %args) = @_;
 
     # Just 1 end, as an unpaired read sample; eg as if ont or pacbio.
     # -0 or implicit (lack of /1 /2 suffixes) via -s.
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"0.fq" => 'bam2fq/1.1.fq.expected'},
              cmd=>"$$opts{bin}/samtools import -0 test/bam2fq/1.1.fq.expected  | $$opts{bin}/samtools fastq -0 $$opts{path}/0.fq");
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"0.fq" => 'bam2fq/1.1.fq.expected'},
              cmd=>"$$opts{bin}/samtools import -s test/bam2fq/1.1.fq.expected  | $$opts{bin}/samtools fastq -0 $$opts{path}/0.fq");
 
     # Just 1 end, as half of a paired-end sample.  Can be either explicit via
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"s.fq" => 'bam2fq/5.s.fq.expected'},
              cmd=>"$$opts{bin}/samtools import -s test/bam2fq/5.s.fq.expected  | $$opts{bin}/samtools fastq -s $$opts{path}/s.fq");
 
     # Normal read 1 / read 2
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"1.fq" => 'bam2fq/1.1.fq.expected',
                        "2.fq" => 'bam2fq/1.2.fq.expected'},
              cmd=>"$$opts{bin}/samtools import test/bam2fq/1.1.fq.expected test/bam2fq/1.2.fq.expected | $$opts{bin}/samtools fastq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
 
     # Normal read 1 / read 2 but with /1 and /2 suffixes.
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"1.fq" => 'bam2fq/5.1.fq.expected',
                        "2.fq" => 'bam2fq/5.2.fq.expected'},
              cmd=>"$$opts{bin}/samtools import test/bam2fq/5.1.fq.expected test/bam2fq/5.2.fq.expected | $$opts{bin}/samtools fastq -N -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
 
     # Barcodes via CASAVA tags
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"1.fq" => 'bam2fq/12.1.fq.expected',
                        "2.fq" => 'bam2fq/12.2.fq.expected'},
              cmd=>"$$opts{bin}/samtools import -i -1 test/bam2fq/12.1.fq.expected -2 test/bam2fq/12.2.fq.expected | $$opts{bin}/samtools fastq -i --index-format 'i*i*' -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"1.fq" => 'bam2fq/12.1.fq.expected',
                        "2.fq" => 'bam2fq/12.2.fq.expected'},
              cmd=>"$$opts{bin}/samtools import --barcode-tag OX -i -1 test/bam2fq/12.1.fq.expected -2 test/bam2fq/12.2.fq.expected | $$opts{bin}/samtools fastq --barcode-tag OX -i --index-format 'i*i*' -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
 
     # Barcodes via explicit aux tags; 6
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"1.fq" => 'bam2fq/6.1.fq.expected',
                        "2.fq" => 'bam2fq/6.2.fq.expected'},
              cmd=>"$$opts{bin}/samtools import -T \"\" -1 test/bam2fq/6.1.fq.expected -2 test/bam2fq/6.2.fq.expected | $$opts{bin}/samtools fastq -N -T RG,BC,QT -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
 
     # Other aux tags; 7
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected',
+    test_cmd($opts, out=>'dat/empty.expected',
              out_map=>{"1.fq" => 'bam2fq/7.1.fq.expected',
                        "2.fq" => 'bam2fq/7.2.fq.expected'},
              cmd=>"$$opts{bin}/samtools import -T \"*\" -1 test/bam2fq/7.1.fq.expected -2 test/bam2fq/7.2.fq.expected | $$opts{bin}/samtools fastq -N -T RG,BC,QT,MD,ia -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq");
@@ -2869,42 +2868,42 @@ sub test_bam2fq
         }
     }
     # basic 2 output test without singleton tracking
-    test_cmd($opts, out=>'bam2fq/1.stdout.expected', out_map=>{'1.fq' => 'bam2fq/1.1.fq.expected', '2.fq' => 'bam2fq/1.2.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/1.1.fq.expected', '2.fq' => 'bam2fq/1.2.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.001.sam");
     # basic 2 output test with singleton tracking but no singleton
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/2.1.fq.expected', '2.fq' => 'bam2fq/2.2.fq.expected', 's.fq' => 'bam2fq/2.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/2.1.fq.expected', '2.fq' => 'bam2fq/2.2.fq.expected', 's.fq' => 'bam2fq/2.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.001.sam");
     # basic 2 output test with singleton tracking with a singleton in the middle
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/3.1.fq.expected', '2.fq' => 'bam2fq/3.2.fq.expected', 's.fq' => 'bam2fq/3.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.002.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/3.1.fq.expected', '2.fq' => 'bam2fq/3.2.fq.expected', 's.fq' => 'bam2fq/3.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.002.sam");
     # basic 2 output test with singleton tracking with a singleton as last read
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.003.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.003.sam");
     # tag output test with singleton tracking with a singleton as last read
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected', 'bc.fq' => 'bam2fq/bc.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected', 'bc.fq' => 'bam2fq/bc.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
     # test -O flag with no OQ tags
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected', 'bc.fq' => 'bam2fq/bc.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -O --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/4.1.fq.expected', '2.fq' => 'bam2fq/4.2.fq.expected', 's.fq' => 'bam2fq/4.s.fq.expected', 'bc.fq' => 'bam2fq/bc.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -O --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
     # test -O flag with OQ tags
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/10.1.fq.expected', '2.fq' => 'bam2fq/10.2.fq.expected', 's.fq' => 'bam2fq/10.s.fq.expected', 'bc.fq' => 'bam2fq/bc10.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -O --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.010.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/10.1.fq.expected', '2.fq' => 'bam2fq/10.2.fq.expected', 's.fq' => 'bam2fq/10.s.fq.expected', 'bc.fq' => 'bam2fq/bc10.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -O --index-format 'n2i2' --i1 $$opts{path}/bc.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.010.sam");
     # tag output test with separators and -N flag
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/5.1.fq.expected', '2.fq' => 'bam2fq/5.2.fq.expected', 's.fq' => 'bam2fq/5.s.fq.expected', 'bc_split.fq' => 'bam2fq/bc_split.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -N --index-format 'n*i*' --i1 $$opts{path}/bc_split.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/5.1.fq.expected', '2.fq' => 'bam2fq/5.2.fq.expected', 's.fq' => 'bam2fq/5.s.fq.expected', 'bc_split.fq' => 'bam2fq/bc_split.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -N --index-format 'n*i*' --i1 $$opts{path}/bc_split.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
     # -t flag
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/6.1.fq.expected', '2.fq' => 'bam2fq/6.2.fq.expected', 's.fq' => 'bam2fq/6.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/6.1.fq.expected', '2.fq' => 'bam2fq/6.2.fq.expected', 's.fq' => 'bam2fq/6.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
     # -T flag
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/7.1.fq.expected', '2.fq' => 'bam2fq/7.2.fq.expected', 's.fq' => 'bam2fq/7.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -T MD,ia -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/7.1.fq.expected', '2.fq' => 'bam2fq/7.2.fq.expected', 's.fq' => 'bam2fq/7.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -N -t -T MD,ia -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
     # -i flag with index
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/8.1.fq.expected', '2.fq' => 'bam2fq/8.2.fq.expected', 's.fq' => 'bam2fq/8.s.fq.expected', 'i.fq' => 'bam2fq/8.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'n2i2' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/8.1.fq.expected', '2.fq' => 'bam2fq/8.2.fq.expected', 's.fq' => 'bam2fq/8.s.fq.expected', 'i.fq' => 'bam2fq/8.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'n2i2' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.004.sam");
 
     # -i flag with dual index
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/12.1.fq.expected', '2.fq' => 'bam2fq/12.2.fq.expected', 's.fq' => 'bam2fq/12.s.fq.expected', 'i.fq' => 'bam2fq/12.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'i*i*' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/12.1.fq.expected', '2.fq' => 'bam2fq/12.2.fq.expected', 's.fq' => 'bam2fq/12.s.fq.expected', 'i.fq' => 'bam2fq/12.i.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --barcode-tag BC -i --index-format 'i*i*' --i1 $$opts{path}/i.fq -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
 
     # -i flag with dual index but no indexes
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/12.1.fq.expected', '2.fq' => 'bam2fq/12.2.fq.expected', 's.fq' => 'bam2fq/12.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -i --index-format 'i*i*' -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/12.1.fq.expected', '2.fq' => 'bam2fq/12.2.fq.expected', 's.fq' => 'bam2fq/12.s.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -i --index-format 'i*i*' -s $$opts{path}/s.fq -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.005.sam");
 
     # test for Issue #703 (failure to write all reads on uncollated input)
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'1.fq' => 'bam2fq/9.1.fq.expected', '2.fq' => 'bam2fq/9.2.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.703.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'1.fq' => 'bam2fq/9.1.fq.expected', '2.fq' => 'bam2fq/9.2.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads -1 $$opts{path}/1.fq -2 $$opts{path}/2.fq $$opts{path}/dat/bam2fq.703.sam");
 
     # Read 1/2 output, duplicate filename (-1 -2)
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -1 $$opts{path}/o.fq -2 $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fa' => 'bam2fq/11.fa.expected'},cmd=>"$$opts{bin}/samtools fasta @$threads -N -1 $$opts{path}/o.fa -2 $$opts{path}/o.fa $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -1 $$opts{path}/o.fq -2 $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'o.fa' => 'bam2fq/11.fa.expected'},cmd=>"$$opts{bin}/samtools fasta @$threads -N -1 $$opts{path}/o.fa -2 $$opts{path}/o.fa $$opts{path}/dat/bam2fq.001.sam");
     # Read 1/2 output, single filename (-o)
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -o $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'o.fq' => 'bam2fq/11.fq.expected'},cmd=>"$$opts{bin}/samtools fastq @$threads -N -o $$opts{path}/o.fq $$opts{path}/dat/bam2fq.001.sam");
     # Read 1/2 output, stdout and discard singletons/other
     test_cmd($opts, out=>'bam2fq/11.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -N -s $out.discard.s.fq -0 $out.discard.0.fq $$opts{path}/dat/bam2fq.001.sam");
 
@@ -2912,7 +2911,7 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/13.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -T ba,bb,bc,bd,be,bf,bg $$opts{path}/dat/bam2fq.013.sam");
 
     # Test single ended output with dual-indexing
-    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'0.fq' => 'bam2fq/14.0.fq.expected', 'i1.fq' => 'bam2fq/14.i1.fq.expected', 'i2.fq' => 'bam2fq/14.i2.fq.expected', '0.fq' => 'bam2fq/14.0.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --index-format 'i8n1i8' --i1 $$opts{path}/i1.fq --i2 $$opts{path}/i2.fq -0 $$opts{path}/0.fq $$opts{path}/dat/bam2fq.014.sam");
+    test_cmd($opts, out=>'dat/empty.expected', out_map=>{'0.fq' => 'bam2fq/14.0.fq.expected', 'i1.fq' => 'bam2fq/14.i1.fq.expected', 'i2.fq' => 'bam2fq/14.i2.fq.expected', '0.fq' => 'bam2fq/14.0.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --index-format 'i8n1i8' --i1 $$opts{path}/i1.fq --i2 $$opts{path}/i2.fq -0 $$opts{path}/0.fq $$opts{path}/dat/bam2fq.014.sam");
 }
 
 sub test_depad
