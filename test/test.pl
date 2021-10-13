@@ -209,7 +209,7 @@ sub cmd
     return $out;
 }
 # test harness for a command
-# %args out=> expected output
+# %args out=> expected output (must be present)
 #       err=> expected stderr output (optional)
 #       cmd=> command to test
 #       expect_fail=> as per passed()/failed()
@@ -221,7 +221,7 @@ sub cmd
 sub test_cmd
 {
     my ($opts,%args) = @_;
-    if ( !exists($args{out}) && !exists($args{out_map}) )
+    if ( !exists($args{out}) )
     {
         if ( !exists($args{in}) ) { error("FIXME: expected out or in key\n"); }
         $args{out} = "$args{in}.out";
@@ -2912,7 +2912,7 @@ sub test_bam2fq
     test_cmd($opts, out=>'bam2fq/13.fq.expected', cmd=>"$$opts{bin}/samtools fastq @$threads -T ba,bb,bc,bd,be,bf,bg $$opts{path}/dat/bam2fq.013.sam");
 
     # Test single ended output with dual-indexing
-    test_cmd($opts, out_map=>{'0.fq' => 'bam2fq/14.0.fq.expected', 'i1.fq' => 'bam2fq/14.i1.fq.expected', 'i2.fq' => 'bam2fq/14.i2.fq.expected', '0.fq' => 'bam2fq/14.0.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --index-format 'i8n1i8' --i1 $$opts{path}/i1.fq --i2 $$opts{path}/i2.fq -0 $$opts{path}/0.fq $$opts{path}/dat/bam2fq.014.sam");
+    test_cmd($opts, out=>'bam2fq/2.stdout.expected', out_map=>{'0.fq' => 'bam2fq/14.0.fq.expected', 'i1.fq' => 'bam2fq/14.i1.fq.expected', 'i2.fq' => 'bam2fq/14.i2.fq.expected', '0.fq' => 'bam2fq/14.0.fq.expected'}, cmd=>"$$opts{bin}/samtools fastq @$threads --index-format 'i8n1i8' --i1 $$opts{path}/i1.fq --i2 $$opts{path}/i2.fq -0 $$opts{path}/0.fq $$opts{path}/dat/bam2fq.014.sam");
 }
 
 sub test_depad
