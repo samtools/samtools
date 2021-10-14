@@ -80,6 +80,7 @@ Non user-visible changes and build improvements:
  * Improve quoting of options in "samtools import" tests. (#1466.
    Thanks to John Marshall)
 
+ * Fixed a faulty test which caused test harness failures on NetBSD. (#1520)
 
 Release 1.13 (7th July 2021)
 ----------------------------
