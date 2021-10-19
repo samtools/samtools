@@ -66,15 +66,6 @@ samtools mpileup
 Generate text pileup output for one or multiple BAM files.
 Each input file produces a separate group of pileup columns in the output.
 
-Samtools mpileup can still produce VCF and BCF output (with
-.BR -g \ or \ -u ),
-but this feature is
-deprecated and will be removed in a future release.  Please use
-.B bcftools mpileup
-for this instead.  (Documentation on the deprecated options has been removed
-from this manual page, but older versions are available online
-at <http://www.htslib.org/doc/>.)
-
 Note that there are two orthogonal ways to specify locations in the
 input file; via \fB-r\fR \fIregion\fR and \fB-l\fR \fIfile\fR.  The
 former uses (and requires) an index to do random access while the
@@ -468,61 +459,6 @@ The
 .B -E
 option can be used to make it ignore the contents of the BQ:Z tag and
 force it to recalculate the BAQ scores by making a new alignment.
-
-.SH EXAMPLES
-.IP o 2
-Call SNPs and short INDELs:
-.EX 2
-samtools mpileup -uf ref.fa aln.bam | bcftools call -mv > var.raw.vcf
-bcftools filter -s LowQual -e '%QUAL<20 || DP>100' var.raw.vcf  > var.flt.vcf
-.EE
-The
-.B bcftools filter
-command marks low quality sites and sites with the read depth exceeding
-a limit, which should be adjusted to about twice the average read depth
-(bigger read depths usually indicate problematic regions which are
-often enriched for artefacts).  One may consider to add
-.B -C50
-to
-.B mpileup
-if mapping quality is overestimated for reads containing excessive
-mismatches. Applying this option usually helps
-.B BWA-short
-but may not other mappers.
-
-Individuals are identified from the
-.B SM
-tags in the
-.B @RG
-header lines. Individuals can be pooled in one alignment file; one
-individual can also be separated into multiple files. The
-.B -P
-option specifies that indel candidates should be collected only from
-read groups with the
-.B @RG-PL
-tag set to
-.IR ILLUMINA .
-Collecting indel candidates from reads sequenced by an indel-prone
-technology may affect the performance of indel calling.
-
-.IP o 2
-Generate the consensus sequence for one diploid individual:
-.EX 2
-samtools mpileup -uf ref.fa aln.bam | bcftools call -c | vcfutils.pl vcf2fq > cns.fq
-.EE
-.IP o 2
-Include customized index file as a part of arguments.
-.EX 2
-samtools mpileup [options] -X /data_folder/in1.bam [/data_folder/in2.bam [...]] /index_folder/index1.bai [/index_folder/index2.bai [...]]
-.EE
-.IP o 2
-Phase one individual:
-.EX 2
-samtools calmd -AEur aln.bam ref.fa | samtools phase -b prefix - > phase.out
-.EE
-The
-.B calmd
-command is used to reduce false heterozygotes around INDELs.
 
 .SH AUTHOR
 .PP
