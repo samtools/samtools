@@ -70,6 +70,9 @@ Bug fixes:
  * Fix "samtools fastq" handling of dual index tags on single-ended
    input. (#1474)
 
+ * Improve "samtools coverage" documentation. (#1521; fixes #1504.
+   Reported by Peter Menzel)
+
 Non user-visible changes and build improvements:
 
  * Replace Curses mvprintw() with va_list-based
