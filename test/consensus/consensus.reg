@@ -1,0 +1,44 @@
+#-----------------------------------------------------------------------------
+# Simple consensus mode.
+
+# Basic simple consensus mode, with / without insertions and deletions
+P 1.out $samtools consensus consen1.sam
+P 2.out $samtools consensus consen1.sam --show-del yes
+P 3.out $samtools consensus consen1.sam --show-ins no
+P 4.out $samtools consensus consen1.sam --show-del yes --show-ins no
+
+# Consensus cutoffs
+# G: GGG out of GGGC* => 60%
+P 5.out $samtools consensus consen1.sam --call-fract 0.600
+P 1.out $samtools consensus consen1.sam --call-fract 0.601
+
+# Amibuity codes
+# G: GGG out of GGGC* => 60%
+P 5.out $samtools consensus consen1.sam --call-fract 0.6 --het-fract 0.34
+# S: GGGC out of GGG* => 80%
+P 6.out $samtools consensus consen1.sam -A -c 0.800 -H 0.33
+P 7.out $samtools consensus consen1.sam -A -c 0.801 -H 0.33
+# At H=25% and below the GGGG* becomes G/* het => "g"
+P 6.out $samtools consensus consen1.sam -A -H 0.251
+P 8.out $samtools consensus consen1.sam -A -H 0.250
+
+# With quality values, retesting -c and -H
+# C: C40 / G5 G5 G5 C40 *5 => 40/60 == 66.6%
+P 9.out $samtools consensus consen1.sam -q --call-fract 0.666
+P 1.out $samtools consensus consen1.sam -q --call-fract 0.667
+
+# S: C40 G5 G5 G5 / CGGG *5 = 55/60 == 91.66% call-cutoff
+# S: G5 G5 G5 / C40 = 15/40 = 37.5% het-cutoff
+P 6.out $samtools consensus consen1.sam -q -A -H 0.375
+P 1.out $samtools consensus consen1.sam -q -A -H 0.376
+P 6.out $samtools consensus consen1.sam -q -A -H 0.375 -c 0.916
+P 1.out $samtools consensus consen1.sam -q -A -H 0.375 -c 0.917
+
+# Minimum depth
+P 2.out $samtools consensus consen1.sam -d 3 --show-del yes
+# At depth 4, the insertions vanish
+P 10.out $samtools consensus consen1.sam -d 4 --show-del yes
+# And at 6 we have nothing, although deletion still there as "*" is still
+# more accurate than "N".
+P 11.out $samtools consensus consen1.sam -d 6 --show-del yes
+

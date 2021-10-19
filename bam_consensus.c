@@ -186,7 +186,7 @@ static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
     static int seqi2G[16] = { 0,0,0,0, 8,4,4,1, 0,0,0,0, 4,2,2,1 };
     static int seqi2T[16] = { 0,0,0,0, 0,0,0,0, 8,4,4,2, 8,2,2,1 };
 
-    int ins_[128][16], (*ins)[16] = ins_;
+    int ins_[128][16] = {0}, (*ins)[16] = ins_;
     int i;
 
     if (ins_len > 128)
@@ -1095,7 +1095,7 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
     int used_base  = call1;
     if (score2 >= opts->het_fract * score1 && opts->ambig) {
         used_base  |= call2;
-        used_score += score1;
+        used_score += score2;
         used_depth += depth2;
     }
 
@@ -1117,7 +1117,7 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
 
     //printf("%c %d\n", het[used_base], used_depth);
     if (qual)
-        *qual = 100.0 * used_score / tscore;
+        *qual = used_base ? 100.0 * used_score / tscore : 0;
     return het[used_base];
 }
 
@@ -1132,8 +1132,18 @@ extern int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
                       int rev_del, int no_ins, int no_ins_mods,
                       int no_del, int no_ends);
 
+static void empty_pileup(sam_hdr_t *h, int tid,
+                         hts_pos_t start, hts_pos_t end) {
+    const char *name = sam_hdr_tid2name(h, tid);
+    hts_pos_t i;
+
+    for (i = start; i < end; i++)
+        printf("%s\t%"PRIhts_pos"\tN\t0\t*\n", name, i+1);
+}
+
 int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
-                     int np, int tid, int pos, int last_pos,
+                     int np, int tid, hts_pos_t pos,
+                     hts_pos_t last_pos, int last_tid, int last_pos_tid,
                      kstring_t *seq, kstring_t *qual) {
     kstring_t mod_ks = {0, 0}, ins_ks = {0, 0}, inq_ks = {0, 0};
     int cq, cb, cm_top = 0, cm_bot = 0, qm_top = 0, qm_bot = 0;
@@ -1191,13 +1201,15 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
 
     if (seq) {
         if (pos > last_pos+1) {
-            if (ks_expand(seq,  pos - last_pos) < 0 ||
-                ks_expand(qual, pos - last_pos) < 0)
-                return -1;
-            memset(seq->s  + seq->l,  'N', pos - (last_pos+1));
-            memset(qual->s + qual->l, '!', pos - (last_pos+1));
-            seq->l  += pos - (last_pos+1);
-            qual->l += pos - (last_pos+1);
+            if (last_pos >= 0 || opts->all_bases) {
+                if (ks_expand(seq,  pos - last_pos) < 0 ||
+                    ks_expand(qual, pos - last_pos) < 0)
+                    return -1;
+                memset(seq->s  + seq->l,  'N', pos - (last_pos+1));
+                memset(qual->s + qual->l, '!', pos - (last_pos+1));
+                seq->l  += pos - (last_pos+1);
+                qual->l += pos - (last_pos+1);
+            }
         }
 
         // FIXME: no support for ChEBI here yet.
@@ -1233,9 +1245,19 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
         kstring_t ks = {0,0};
         int j;
 
+        if (opts->all_bases) {
+            if (tid != last_tid && last_tid >= 0) {
+                hts_pos_t i, len = sam_hdr_tid2len(opts->h, last_tid);
+                empty_pileup(opts->h, last_tid, last_pos_tid+1, len);
+                if (tid >= 0)
+                    empty_pileup(opts->h, tid, 0, pos);
+            }
+            empty_pileup(opts->h, tid, last_pos_tid+1, pos);
+        }
+
         if (opts->het_only && (!is_het || islower(cb)))
             return 0;
-        printf("%s\t%d\t%c%s\t%d\t",
+        printf("%s\t%"PRIhts_pos"\t%c%s\t%d\t",
                sam_hdr_tid2name(opts->h, tid), pos+1, cb, mod, cq);
 
         // FIXME: pileup_seq uses the mod iterator, but we've
@@ -1274,9 +1296,10 @@ static void dump_fastq(const char *name,
 static int consensus_loop(consensus_opts *opts) {
     bam_plp_t iter;
     const bam_pileup1_t *p;
-    int tid, pos, n, last_tid = -99;
+    int tid, n, last_tid = -99;
     kstring_t seq = {0}, qual = {0};
-    int last_pos = -1;
+    int pos; // can't be hts_pos_t yet as bam_plp_auto hasn't been updated
+    hts_pos_t last_pos = -1;
 
     iter = bam_plp_init(readaln, (void *)opts);
     if (opts->mods) {
@@ -1287,6 +1310,8 @@ static int consensus_loop(consensus_opts *opts) {
     while ((p = bam_plp_auto(iter, &tid, &pos, &n)) != 0) {
         if (opts->iter && (pos < opts->iter->beg || pos >= opts->iter->end))
             continue;
+        int last_tid_ = last_tid;
+        hts_pos_t last_pos_ = last_pos;
         if (tid != last_tid) {
             if (last_tid >= 0 && opts->fmt != PILEUP) {
                 if (opts->all_bases) {
@@ -1295,9 +1320,13 @@ static int consensus_loop(consensus_opts *opts) {
                     N = MIN(N, sam_hdr_tid2len(opts->h,last_tid)) - last_pos-1;
                     if (N > 0) {
                         ks_expand(&seq, N+1);
-                        for (i = 0; i < N; i++)
+                        ks_expand(&qual, N+1);
+                        for (i = 0; i < N; i++) {
                             seq.s[seq.l++] = 'N';
+                            qual.s[qual.l++] = '!';
+                        }
                         seq.s[seq.l] = 0;
+                        qual.s[qual.l] = 0;
                     }
                 }
                 dump_fastq(sam_hdr_tid2name(opts->h, last_tid),
@@ -1311,7 +1340,9 @@ static int consensus_loop(consensus_opts *opts) {
             else
                 last_pos = opts->all_bases ? -1 : pos-1;
         }
-        if (consensus_pileup(opts, p, n, tid, pos, last_pos, &seq, &qual) < 0)
+        if (consensus_pileup(opts, p, n, tid, pos, last_pos,
+                             last_tid_, last_pos_,
+                             &seq, &qual) < 0)
             return -1;
         last_pos = pos;
     }
@@ -1324,14 +1355,21 @@ static int consensus_loop(consensus_opts *opts) {
             N = MIN(N, sam_hdr_tid2len(opts->h, last_tid)) - last_pos - 1;
             if (N > 0) {
                 ks_expand(&seq, N+1);
-                for (i = 0; i < N; i++)
+                ks_expand(&qual, N+1);
+                for (i = 0; i < N; i++) {
                     seq.s[seq.l++] = 'N';
+                    qual.s[qual.l++] = '!';
+                }
                 seq.s[seq.l] = 0;
+                qual.s[qual.l] = 0;
             }
         }
         dump_fastq(sam_hdr_tid2name(opts->h, last_tid),
                    seq.s, seq.l, qual.s, qual.l, opts->fmt,
                    opts->line_len);
+
+    } else if (opts->all_bases && opts->fmt == PILEUP && tid >= 0) {
+        empty_pileup(opts->h, tid, pos, sam_hdr_tid2len(opts->h, tid));
     }
 
     return 0;
@@ -1347,6 +1385,12 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  -a                  Output all bases (start/end of reference)\n");
     fprintf(fp, "  --show-del yes/no   Whether to show deletion as \"*\" [no]\n");
     fprintf(fp, "  --show-ins yes/no   Whether to show insertions [yes]\n");
+    fprintf(fp, "  -A, --ambig         Enable IUPAC ambiguity codes [off]\n");
+    fprintf(fp, "  -M, --output-mods   Also report base modifications [off]\n");
+    fprintf(fp, "  --mod-yes-cutoff x  P>=x to consider mod as true [0.8]\n");
+    fprintf(fp, "  --mod-no-cutoff x   P<=x to consider mod as false [0.2]\n");
+    fprintf(fp, "  --mod-fixed-prob p  Use probality P for all mods above cutoff [0.8]\n");
+    fprintf(fp, "  --mod-cutoff Q      Emit mods if phred score >= Q [10]\n");
     fprintf(fp, "For simple consensus mode:\n");
     fprintf(fp, "  -q, --use-qual      Use quality values in calculation\n");
     fprintf(fp, "  -d, --min-depth D   Minimum depth of D [1]\n");
@@ -1354,12 +1398,6 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  -H, --het-fract C   Minimum fraction of 2nd-most to most common base [0.66]\n");
     fprintf(fp, "For gap5 consensus mode:\n");
     fprintf(fp, "  -C, --cutoff C      Consensus cutoff quality C [20]\n");
-    fprintf(fp, "  -A, --ambig         Enable IUPAC ambiguity codes [off]\n");
-    fprintf(fp, "  -M, --output-mods   Also report base modifications [off]\n");
-    fprintf(fp, "  --mod-yes-cutoff x  P>=x to consider mod as true [0.8]\n");
-    fprintf(fp, "  --mod-no-cutoff x   P<=x to consider mod as false [0.2]\n");
-    fprintf(fp, "  --mod-fixed-prob p  Use probality P for all mods above cutoff [0.8]\n");
-    fprintf(fp, "  --mod-cutoff Q      Emit mods if phred score >= Q [10]\n");
 
     // Plus gap5 vs simple
     // Plus -F format (fasta/fastq/pileup)
