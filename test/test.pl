@@ -888,10 +888,6 @@ sub test_mpileup
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.bam.urllist -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.urllist -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
-    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
-    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
-    test_cmd($opts,out=>'dat/mpileup.out.4',cmd=>"$$opts{bin}/samtools mpileup -uv -t DP,DPR,DV,DP4,INFO/DPR,SP -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
-    test_cmd($opts,out=>'dat/mpileup.out.4',cmd=>"$$opts{bin}/samtools mpileup -uv -t DP,DPR,DV,DP4,INFO/DPR,SP -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
     # test that filter mask replaces (not just adds to) default mask
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam | grep -v mpileup");
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram | grep -v mpileup");
