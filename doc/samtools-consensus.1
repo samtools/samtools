@@ -64,11 +64,11 @@ samtools consensus
 .PP
 Generate consensus from a SAM, BAM or CRAM file based on the contents
 of the alignment records.  The consensus is written either as FASTA or
-FASTQ format, although a simplified pileup compatible format also
-exists with the reference column replaced by the consensus.  This is
-selected using the
+FASTQ format, although a simplified pileup oriented format also
+exists with the reference column replaced by the consensus and depth
+by score.  This is selected using the
 .BI "-f " FORMAT
-option.
+option.  No quality column is shown in the pileup output.
 
 The default output for FASTA and FASTQ formats include one base per
 non-gap consensus.  Hence insertions with respect to the aligned
@@ -117,18 +117,147 @@ ot be present before calling.
 
 .SH OPTIONS
 .TP 10
-.B -x, --xyzzy
-blah
+.BI "-r " REG ", --region " REG
+Limit the query to region
+.IR REG .
+This requires an index.
 .TP
-blah...
+.BI "-f " FMT ", --format " FMT
+Produce format
+.IR FMT ,
+with "fastq", "fasta" and "pileup" as permitted options.
+.TP
+.BI "-l " N ", --line-len " N
+Sets the maximum line length of line-wrapped fasta and fastq formats to
+.IR N .
+.TP
+.BI "-o " FILE ", --output " FILE
+Output consensus to FILE instead of stdout.
+.TP
+.B -5
+Enable the bayesian "Gap5" consensus mode instead of the simple mode.
+.TP
+.B -a
+Outputs all bases, from start to end of reference, even when the
+aligned data does not extend to the ends.  This is most useful for
+construction of a full length reference sequence.
+
+.TP
+.BI --show-del " yes" / "no"
+Whether to show deletions as "*" (no) or to omit from the output
+(yes).  Defaults to no.
+
+.TP
+.BI --show-ins " yes" / "no"
+Whether to show insertions in the consensus.  Defaults to yes.
+
+.TP
+.BR "-q" ", " --use-qual
+For the simple consensus algorithm, this enables use of base quality
+values.  Instead of summing 1 per base called, it sums the base
+quality instead.  These sums are also used in the
+.B --call-fract
+and
+.B --het-fract
+parameters too.  Quality values are always used for the "Gap5"
+consensus method and this option has no affect.
+Note currently  quality values only affect SNPs and not inserted
+sequences, which still get scores with a fixed +1 per base type occurrence.
+
+.TP
+.BI "-d " D ", --min-depth " D
+The minimum depth required to make a call.  Defaults to 1.  Failing
+this depth check will produce consensus "N", or absent if it is an
+insertion.
+
+.TP
+.BI "-c " C ", --call-fract " C
+Only used for the simple consensus algorithm.  Require at least
+.I C
+fraction of bases agreeing with the most likely consensus call to omit
+that base type.  This defaults to 0.75.  Failing this check will
+output "N".
+
+.TP
+.BI "-H " H ", --het-fract " H
+For consensus columns containing multiple base types, if the second
+most frequent type is at least
+.I H
+fraction of the most common type then a heterozygous base type will be
+reported in the consensus.  Otherwise the most common base is used,
+provided it meets the
+.I --call-fract
+parameter (otherwise "N").  The fractions computed may be modified by
+the use of quality values if the
+.B -q
+option is enabled.
+Note although IUPAC has ambiguity codes for A,C,G,T vs any other
+A,C,G,T it does not have codes for A,C,G,T vs gap (such as in a
+heterozygous deletion).  Given the lack of any official code, we
+use lower-case letter to symbolise a half-present base type.
+
+.TP
+.BI "-C " C ", --cutoff " C
+Only used for the Gap5 consensus mode, which produces a Phred style
+score for the final consensus quality.  If this is below
+.I C
+then the consensus is called as "N".
+
+.TP
+.BR -A ", " --ambig
+Enables IUPAC ambiguity codes in the consensus output.  Without this
+the output will be limited to A, C, G, T, N and *.
+
+.TP
+.BR -M ", " --output-mods
+Outputs base modifications.  By default these are omitted.  If the
+data has MM and ML tags describing base modifications, then this
+attempts to compute the likelihood of the base being modified.  If it
+falls within a specific probability range (as specified in
+.IR --mod-yes-cutoff " and " --mod-no-cutoff )
+then the base modification is included in the output using a markup
+syntax of "["
+.I modification codes
+"]".
+
+.TP
+.BI "--mod-yes-cutoff " Y
+Consider a modification with probability of >=
+.I Y
+as true.  Defaults to 0.8.
+
+.TP
+.BI "--mod-no-cutoff " N
+Consider a modification with probability of <=
+.I N
+as false.  Defaults to 0.2.
+
+.TP
+.BI "--mod-fixed-prob " P
+Use
+.I P
+as the probability for all base modifications with a likelihood above
+that specified in
+.IR --mod-yes-cutoff .
+Defaults to 0.8.
+
+.TP
+.BI "--mod-cutoff " Q
+The final cutoff, specified as a Phred score
+.IR Q .
 
 .SH EXAMPLES
-.IP o 2
-blah
+.IP -
+Create a modified FASTA reference that has a 1:1 coordinate correspondance with the original reference used in alignment.
 .EX 2
-example text
+samtools consensus -a --show-ins no in.bam -o ref.fa
 .EE
-blah
+
+.IP -
+Create a FASTQ file for the contigs with aligned data, including insertions.
+.EX 2
+samtools consensus -f fastq in.bam -o cons.fq
+.EE
 
 .SH AUTHOR
 .PP

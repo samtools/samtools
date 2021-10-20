@@ -1,5 +1,12 @@
 #-----------------------------------------------------------------------------
-# Simple consensus mode.
+# Simple consensus mode; fasta and fastq
+
+# NB: We could cull most of the fasta format checks as they're just the same
+# code as fastq, but with a bit removed.
+#
+# Pileup however is different layout.
+
+INIT x $samtools view --write-index consen2.sam -o consen2.bam
 
 # Basic simple consensus mode, with / without insertions and deletions
 P 1.out $samtools consensus consen1.sam
@@ -7,38 +14,146 @@ P 2.out $samtools consensus consen1.sam --show-del yes
 P 3.out $samtools consensus consen1.sam --show-ins no
 P 4.out $samtools consensus consen1.sam --show-del yes --show-ins no
 
+P 1q.out $samtools consensus -f fastq consen1.sam
+P 2q.out $samtools consensus -f fastq consen1.sam --show-del yes
+P 3q.out $samtools consensus -f fastq consen1.sam --show-ins no
+P 4q.out $samtools consensus -f fastq consen1.sam --show-del yes --show-ins no
+
+# NB: deletions always shown in pileup output and insertions never
+# It may be useful to split pos to Pos+Nth so we can show insertions
+# one row at a time.  We'd need to use Scramble's pileup algorithm instead
+# for that I think.
+P 1p.out $samtools consensus -f pileup consen1.sam
+
+# Output file option
+P 1q.out $samtools consensus -f fastq consen1.sam -o cons.tmp; cat cons.tmp; rm cons.tmp
+P 1p.out $samtools consensus -f pileup consen1.sam --output cons.tmp; cat cons.tmp; rm cons.tmp
+
 # Consensus cutoffs
 # G: GGG out of GGGC* => 60%
-P 5.out $samtools consensus consen1.sam --call-fract 0.600
-P 1.out $samtools consensus consen1.sam --call-fract 0.601
+#P 5.out $samtools consensus consen1.sam --call-fract 0.600
+#P 1.out $samtools consensus consen1.sam --call-fract 0.601
+
+P 5q.out $samtools consensus -f fastq consen1.sam --call-fract 0.600
+P 1q.out $samtools consensus -f fastq consen1.sam --call-fract 0.601
+
+P 5p.out $samtools consensus -f pileup consen1.sam --call-fract 0.600
+P 1p.out $samtools consensus -f pileup consen1.sam --call-fract 0.601
 
 # Amibuity codes
-# G: GGG out of GGGC* => 60%
-P 5.out $samtools consensus consen1.sam --call-fract 0.6 --het-fract 0.34
-# S: GGGC out of GGG* => 80%
-P 6.out $samtools consensus consen1.sam -A -c 0.800 -H 0.33
-P 7.out $samtools consensus consen1.sam -A -c 0.801 -H 0.33
-# At H=25% and below the GGGG* becomes G/* het => "g"
-P 6.out $samtools consensus consen1.sam -A -H 0.251
-P 8.out $samtools consensus consen1.sam -A -H 0.250
+## G: GGG out of GGGC* => 60%
+#P 5.out $samtools consensus consen1.sam --call-fract 0.6 --het-fract 0.34
+## S: GGGC out of GGG* => 80%
+#P 6.out $samtools consensus consen1.sam -A -c 0.800 -H 0.33
+#P 7.out $samtools consensus consen1.sam -A -c 0.801 -H 0.33
+## At H=25% and below the GGGG* becomes G/* het => "g"
+#P 6.out $samtools consensus consen1.sam -A -H 0.251
+#P 8.out $samtools consensus consen1.sam -A -H 0.250
+
+P 5q.out $samtools consensus -f fastq consen1.sam --call-fract 0.6 --het-fract 0.34
+P 6q.out $samtools consensus -f fastq consen1.sam -A -c 0.800 -H 0.33
+P 7q.out $samtools consensus -f fastq consen1.sam -A -c 0.801 -H 0.33
+P 6q.out $samtools consensus -f fastq consen1.sam -A -H 0.251
+P 8q.out $samtools consensus -f fastq consen1.sam -A -H 0.250
+
+P 5p.out $samtools consensus -f pileup consen1.sam --call-fract 0.6 --het-fract 0.34
+P 6p.out $samtools consensus -f pileup consen1.sam -A -c 0.800 -H 0.33
+P 7p.out $samtools consensus -f pileup consen1.sam -A -c 0.801 -H 0.33
+P 6p.out $samtools consensus -f pileup consen1.sam -A -H 0.251
+P 8p.out $samtools consensus -f pileup consen1.sam -A -H 0.250
 
 # With quality values, retesting -c and -H
 # C: C40 / G5 G5 G5 C40 *5 => 40/60 == 66.6%
-P 9.out $samtools consensus consen1.sam -q --call-fract 0.666
-P 1.out $samtools consensus consen1.sam -q --call-fract 0.667
+#P 9.out $samtools consensus consen1.sam -q --call-fract 0.666
+#P 1.out $samtools consensus consen1.sam -q --call-fract 0.667
+
+P 9q.out $samtools consensus -f fastq consen1.sam -q --call-fract 0.666
+P 9.1q.out $samtools consensus -f fastq consen1.sam -q --call-fract 0.667
+
+P 9p.out $samtools consensus -f pileup consen1.sam -q --call-fract 0.666
+P 9.1p.out $samtools consensus -f pileup consen1.sam -q --call-fract 0.667
 
 # S: C40 G5 G5 G5 / CGGG *5 = 55/60 == 91.66% call-cutoff
 # S: G5 G5 G5 / C40 = 15/40 = 37.5% het-cutoff
-P 6.out $samtools consensus consen1.sam -q -A -H 0.375
-P 1.out $samtools consensus consen1.sam -q -A -H 0.376
-P 6.out $samtools consensus consen1.sam -q -A -H 0.375 -c 0.916
-P 1.out $samtools consensus consen1.sam -q -A -H 0.375 -c 0.917
+#P 6.out $samtools consensus consen1.sam -q -A -H 0.375
+#P 1.out $samtools consensus consen1.sam -q -A -H 0.376
+#P 6.out $samtools consensus consen1.sam -q -A -H 0.375 -c 0.916
+#P 1.out $samtools consensus consen1.sam -q -A -H 0.375 -c 0.917
+
+P 6.1q.out $samtools consensus -f fastq consen1.sam -q -A -H 0.375
+P 9.1q.out $samtools consensus -f fastq consen1.sam -q -A -H 0.376
+P 6.1q.out $samtools consensus -f fastq consen1.sam -q -A -H 0.375 -c 0.916
+P 9.1q.out $samtools consensus -f fastq consen1.sam -q -A -H 0.375 -c 0.917
 
 # Minimum depth
-P 2.out $samtools consensus consen1.sam -d 3 --show-del yes
+#P 2.out $samtools consensus consen1.sam -d 3 --show-del yes
+P 2q.out $samtools consensus -f fastq consen1.sam -d 3 --show-del yes
+P 1p.out $samtools consensus -f pileup consen1.sam -d 3 --show-del yes
+
 # At depth 4, the insertions vanish
-P 10.out $samtools consensus consen1.sam -d 4 --show-del yes
+#P 4.out $samtools consensus consen1.sam -d 4 --show-del yes
+P 4q.out $samtools consensus -f fastq consen1.sam -d 4 --show-del yes
+P 1p.out $samtools consensus -f pileup consen1.sam -d 4 --show-del yes
+
 # And at 6 we have nothing, although deletion still there as "*" is still
 # more accurate than "N".
-P 11.out $samtools consensus consen1.sam -d 6 --show-del yes
+#P 11.out $samtools consensus consen1.sam -d 6 --show-del yes
+P 11q.out $samtools consensus -f fastq consen1.sam -d 6 --show-del yes
+P 11p.out $samtools consensus -f pileup consen1.sam -d 6 --show-del yes
 
+# Multiple contigs, plus -a option to show all consensus
+#P 12.out $samtools consensus consen2.sam
+#P 13.out $samtools consensus -a consen2.sam
+
+P 12q.out $samtools consensus -f fastq consen2.sam
+P 13q.out $samtools consensus -f fastq -a consen2.sam
+
+P 12p.out $samtools consensus -f pileup consen2.sam
+P 13p.out $samtools consensus -f pileup -a consen2.sam
+
+# Trivial options like line length and region queries.
+# Test region in conjunction with all-bases mode.
+
+# Single bp region outside of covered data.  NB: this case trips up
+# mpileup.
+P empty.out $samtools consensus -f fastq  consen2.bam -r c2:1-2
+P empty.out $samtools consensus -f fastq  consen2.bam -r c2:13-14
+P empty.out $samtools consensus -f pileup consen2.bam -r c2:1-2
+P empty.out $samtools consensus -f pileup consen2.bam -r c2:13-14
+P 14q.out $samtools consensus -f fastq consen2.bam -a -r c2:1-2
+P 14q.out $samtools consensus -f fastq consen2.bam -a -r c2:14-15
+P 14p.out $samtools consensus -f pileup consen2.bam -a -r c2:1-2
+P 15p.out $samtools consensus -f pileup consen2.bam -a -r c2:14-15
+
+# Regions in the middle, including a base of uncovered data at either end.
+P 16q.out $samtools consensus -f fastq  consen2.bam -a -r c2:2-13
+P 16p.out $samtools consensus -f pileup consen2.bam -a -r c2:2-13
+
+# Line wrapping
+P 17p.out $samtools consensus -f fastq consen2.sam -a -l 7
+
+#-----------------------------------------------------------------------------
+# Gap5 consensus mode
+
+# cutoff
+P 18q.out $samtools consensus -f fastq -5 consen1.sam -C 18
+P 19q.out $samtools consensus -f fastq -5 consen1.sam -C 19
+
+P 18p.out $samtools consensus -f pileup -5 consen1.sam -C 18
+P 19p.out $samtools consensus -f pileup -5 consen1.sam -C 19
+
+
+# min-depth?
+
+
+#-----------------------------------------------------------------------------
+# TODO: Base modifications
+#
+# This code still needs a lot of work first.
+
+# mod-yes-cutoff
+# mod-no-cutoff
+# mod-fixed-prob
+# mod-cutoff
+
+# Both simple and gap5 modes

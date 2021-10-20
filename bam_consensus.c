@@ -55,7 +55,6 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "samtools.h"
 #include "sam_opts.h"
-#include "complement.h"
 
 #ifndef MIN
 #  define MIN(a,b) ((a)<(b)?(a):(b))
@@ -77,6 +76,7 @@ typedef unsigned char uc;
 
 typedef struct {
     samFile *fp;
+    FILE *fp_out;
     sam_hdr_t *h;
     hts_idx_t *idx;
     hts_itr_t *iter;
@@ -1137,13 +1137,13 @@ extern int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
                       int rev_del, int no_ins, int no_ins_mods,
                       int no_del, int no_ends);
 
-static void empty_pileup(sam_hdr_t *h, int tid,
+static void empty_pileup(consensus_opts *opts, sam_hdr_t *h, int tid,
                          hts_pos_t start, hts_pos_t end) {
     const char *name = sam_hdr_tid2name(h, tid);
     hts_pos_t i;
 
     for (i = start; i < end; i++)
-        printf("%s\t%"PRIhts_pos"\tN\t0\t*\n", name, i+1);
+        fprintf(opts->fp_out, "%s\t%"PRIhts_pos"\tN\t0\t*\n", name, i+1);
 }
 
 int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
@@ -1252,23 +1252,23 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
 
         if (opts->all_bases) {
             if (tid != last_tid && last_tid >= 0) {
-                hts_pos_t i, len = sam_hdr_tid2len(opts->h, last_tid);
+                hts_pos_t len = sam_hdr_tid2len(opts->h, last_tid);
                 if (opts->iter)
                     len =  MIN(opts->iter->end, len);
-                empty_pileup(opts->h, last_tid, last_pos_tid+1, len);
+                empty_pileup(opts, opts->h, last_tid, last_pos_tid+1, len);
                 if (tid >= 0)
-                    empty_pileup(opts->h, tid,
+                    empty_pileup(opts, opts->h, tid,
                                  opts->iter ? opts->iter->beg : 0,
                                  pos);
             }
             if (opts->iter && opts->iter->beg > last_pos_tid)
                 last_pos_tid = opts->iter->beg-1;
-            empty_pileup(opts->h, tid, last_pos_tid+1, pos);
+            empty_pileup(opts, opts->h, tid, last_pos_tid+1, pos);
         }
 
         if (opts->het_only && (!is_het || islower(cb)))
             return 0;
-        printf("%s\t%"PRIhts_pos"\t%c%s\t%d\t",
+        fprintf(opts->fp_out, "%s\t%"PRIhts_pos"\t%c%s\t%d\t",
                sam_hdr_tid2name(opts->h, tid), pos+1, cb, mod, cq);
 
         // FIXME: pileup_seq uses the mod iterator, but we've
@@ -1276,9 +1276,9 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
         // Thus this doesn't report them as we're beyond that location.
         // FIXME: does this also break the next cons call?
         for (j = 0; j < np; j++)
-            pileup_seq(stdout, p+j, pos, 0, NULL, &ks, 0, 2, 1, 2, 1);
+            pileup_seq(opts->fp_out, p+j, pos, 0, NULL, &ks, 0, 2, 1, 2, 1);
             //pileup_seq(stdout, p+j, pos, 0, NULL, &ks, 0, 0, 0, 0, 0);
-        putchar('\n');
+        putc('\n', opts->fp_out);
 
         free(ks.s); // FIXME: reuse this
     }
@@ -1286,20 +1286,23 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
     return 0;
 }
 
-static void dump_fastq(const char *name,
+static void dump_fastq(consensus_opts *opts,
+                       const char *name,
                        const char *seq, size_t seq_l,
-                       const char *qual, size_t qual_l,
-                       enum format fmt,
-                       int line_len) {
-    printf("%c%s\n", ">@"[fmt==FASTQ], name);
+                       const char *qual, size_t qual_l) {
+    enum format fmt = opts->fmt;
+    int line_len = opts->line_len;
+    FILE *fp = opts->fp_out;
+
+    fprintf(fp, "%c%s\n", ">@"[fmt==FASTQ], name);
     size_t i;
     for (i = 0; i < seq_l; i += line_len)
-        printf("%.*s\n", (int)MIN(line_len, seq_l - i), seq+i);
+        fprintf(fp, "%.*s\n", (int)MIN(line_len, seq_l - i), seq+i);
 
     if (fmt == FASTQ) {
-        printf("+\n");
+        fprintf(fp, "+\n");
         for (i = 0; i < seq_l; i += line_len)
-            printf("%.*s\n", (int)MIN(line_len, seq_l - i), qual+i);
+            fprintf(fp, "%.*s\n", (int)MIN(line_len, seq_l - i), qual+i);
     }
 }
 
@@ -1345,9 +1348,8 @@ static int consensus_loop(consensus_opts *opts) {
                         qual.s[qual.l] = 0;
                     }
                 }
-                dump_fastq(sam_hdr_tid2name(opts->h, last_tid),
-                           seq.s, seq.l, qual.s, qual.l, opts->fmt,
-                           opts->line_len);
+                dump_fastq(opts, sam_hdr_tid2name(opts->h, last_tid),
+                           seq.s, seq.l, qual.s, qual.l);
             }
             seq.l = 0; qual.l = 0;
             last_tid = tid;
@@ -1387,9 +1389,8 @@ static int consensus_loop(consensus_opts *opts) {
             }
         }
         if (last_tid >= 0 || opts->all_bases)
-            dump_fastq(sam_hdr_tid2name(opts->h, tid),
-                       seq.s, seq.l, qual.s, qual.l, opts->fmt,
-                       opts->line_len);
+            dump_fastq(opts, sam_hdr_tid2name(opts->h, tid),
+                       seq.s, seq.l, qual.s, qual.l);
 
     } else if (opts->all_bases && opts->fmt == PILEUP &&
                (tid >= 0 || opts->iter)) {
@@ -1399,7 +1400,7 @@ static int consensus_loop(consensus_opts *opts) {
             len = MIN(opts->iter->end, len);
             pos = MAX(opts->iter->beg, pos);
         }
-        empty_pileup(opts->h, tid, pos, len);
+        empty_pileup(opts, opts->h, tid, pos, len);
     }
 
     return 0;
@@ -1411,6 +1412,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "  -r, --region REG    Limit query to REG. Requires an index\n");
     fprintf(fp, "  -f, --format FMT    Output in format FASTA, FASTQ or PILEUP [FASTA]\n");
     fprintf(fp, "  -l, --line-len N    Wrap FASTA/Q at line length N [70]\n");
+    fprintf(fp, "  -o, --output FILE   Output consensus to FILE\n");
     fprintf(fp, "  -5                  Enable the bayesian 'gap5' consensus mode [off]\n");
     fprintf(fp, "  -a                  Output all bases (start/end of reference)\n");
     fprintf(fp, "  --show-del yes/no   Whether to show deletion as \"*\" [no]\n");
@@ -1459,6 +1461,7 @@ int main_consensus(int argc, char **argv) {
         .all_bases    = 0,
         .show_del     = 0,
         .show_ins     = 1,
+        .fp_out       = stdout,
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -1483,10 +1486,11 @@ int main_consensus(int argc, char **argv) {
         {"het-only",           no_argument,       NULL, 6},
         {"show-del",           required_argument, NULL, 7},
         {"show-ins",           required_argument, NULL, 8},
+        {"output",             required_argument, NULL, 'o'},
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "@:qmd:c:H:r:5f:C:aAl:M",
+    while ((c = getopt_long(argc, argv, "@:qmd:c:H:r:5f:C:aAl:Mo:",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 'a': opts.all_bases++; break;
@@ -1522,6 +1526,13 @@ int main_consensus(int argc, char **argv) {
                 opts.fmt = PILEUP;
             else {
                 fprintf(stderr, "Unknown format %s\n", optarg);
+                return 1;
+            }
+            break;
+
+        case 'o':
+            if (!(opts.fp_out = fopen(optarg, "w"))) {
+                perror(optarg);
                 return 1;
             }
             break;
@@ -1589,6 +1600,9 @@ int main_consensus(int argc, char **argv) {
 
     sam_hdr_destroy(opts.h);
     sam_global_args_free(&ga);
+
+    if (opts.fp_out != stdout)
+        return fclose(opts.fp_out) == 0 ? 0 : 1;
 
     return 0;
 }
