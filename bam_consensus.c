@@ -55,9 +55,13 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "samtools.h"
 #include "sam_opts.h"
+#include "complement.h"
 
 #ifndef MIN
 #  define MIN(a,b) ((a)<(b)?(a):(b))
+#endif
+#ifndef MAX
+#  define MAX(a,b) ((a)>(b)?(a):(b))
 #endif
 
 // Minimum cutoff for storing mod data; => at least 10% chance
@@ -1118,6 +1122,7 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
     //printf("%c %d\n", het[used_base], used_depth);
     if (qual)
         *qual = used_base ? 100.0 * used_score / tscore : 0;
+
     return het[used_base];
 }
 
@@ -1248,10 +1253,16 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
         if (opts->all_bases) {
             if (tid != last_tid && last_tid >= 0) {
                 hts_pos_t i, len = sam_hdr_tid2len(opts->h, last_tid);
+                if (opts->iter)
+                    len =  MIN(opts->iter->end, len);
                 empty_pileup(opts->h, last_tid, last_pos_tid+1, len);
                 if (tid >= 0)
-                    empty_pileup(opts->h, tid, 0, pos);
+                    empty_pileup(opts->h, tid,
+                                 opts->iter ? opts->iter->beg : 0,
+                                 pos);
             }
+            if (opts->iter && opts->iter->beg > last_pos_tid)
+                last_pos_tid = opts->iter->beg-1;
             empty_pileup(opts->h, tid, last_pos_tid+1, pos);
         }
 
@@ -1296,7 +1307,7 @@ static void dump_fastq(const char *name,
 static int consensus_loop(consensus_opts *opts) {
     bam_plp_t iter;
     const bam_pileup1_t *p;
-    int tid, n, last_tid = -99;
+    int tid = -99, n, last_tid = -99;
     kstring_t seq = {0}, qual = {0};
     int pos; // can't be hts_pos_t yet as bam_plp_auto hasn't been updated
     hts_pos_t last_pos = -1;
@@ -1315,8 +1326,13 @@ static int consensus_loop(consensus_opts *opts) {
         if (tid != last_tid) {
             if (last_tid >= 0 && opts->fmt != PILEUP) {
                 if (opts->all_bases) {
-                    int i;
-                    int N = opts->iter ? opts->iter->end : INT_MAX;
+                    int i, N;
+                    if (opts->iter) {
+                        last_pos = MAX(last_pos, opts->iter->beg-1);
+                        N = opts->iter->end;
+                    } else {
+                        N = INT_MAX;
+                    }
                     N = MIN(N, sam_hdr_tid2len(opts->h,last_tid)) - last_pos-1;
                     if (N > 0) {
                         ks_expand(&seq, N+1);
@@ -1348,11 +1364,17 @@ static int consensus_loop(consensus_opts *opts) {
     }
     bam_plp_destroy(iter);
 
-    if (last_tid >= 0 && opts->fmt != PILEUP) {
+    if ((last_tid >= 0 || opts->iter) && opts->fmt != PILEUP) {
+        int tid = opts->iter ? opts->iter->tid : last_tid;
         if (opts->all_bases) {
-            int i;
-            int N = opts->iter ? opts->iter->end : INT_MAX;
-            N = MIN(N, sam_hdr_tid2len(opts->h, last_tid)) - last_pos - 1;
+            int i, N;
+            if (opts->iter) {
+                last_pos = MAX(last_pos, opts->iter->beg-1);
+                N = opts->iter->end;
+            } else {
+                N = INT_MAX;
+            }
+            N = MIN(N, sam_hdr_tid2len(opts->h, tid)) - last_pos - 1;
             if (N > 0) {
                 ks_expand(&seq, N+1);
                 ks_expand(&qual, N+1);
@@ -1364,12 +1386,20 @@ static int consensus_loop(consensus_opts *opts) {
                 qual.s[qual.l] = 0;
             }
         }
-        dump_fastq(sam_hdr_tid2name(opts->h, last_tid),
-                   seq.s, seq.l, qual.s, qual.l, opts->fmt,
-                   opts->line_len);
+        if (last_tid >= 0 || opts->all_bases)
+            dump_fastq(sam_hdr_tid2name(opts->h, tid),
+                       seq.s, seq.l, qual.s, qual.l, opts->fmt,
+                       opts->line_len);
 
-    } else if (opts->all_bases && opts->fmt == PILEUP && tid >= 0) {
-        empty_pileup(opts->h, tid, pos, sam_hdr_tid2len(opts->h, tid));
+    } else if (opts->all_bases && opts->fmt == PILEUP &&
+               (tid >= 0 || opts->iter)) {
+        tid = opts->iter ? opts->iter->tid : tid;
+        int len = sam_hdr_tid2len(opts->h, tid);
+        if (opts->iter) {
+            len = MIN(opts->iter->end, len);
+            pos = MAX(opts->iter->beg, pos);
+        }
+        empty_pileup(opts->h, tid, pos, len);
     }
 
     return 0;
