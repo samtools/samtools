@@ -1,6 +1,12 @@
 Release a.b
 -----------
 
+Notice:
+
+ * Samtools mpileup VCF and BCF output (deprecated in release 1.9)
+   will be removed in the next release.  Please use bcftools mpileup
+   instead.
+
 New work and changes:
 
  * The legacy samtools API (libbam.a, bam_endian.h, sam.h and most of
