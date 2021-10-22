@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-mpileup 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
+.TH samtools-mpileup 1 "22 October 2021" "samtools-1.14" "Bioinformatics tools"
 .SH NAME
 samtools mpileup \- produces "pileup" textual format from an alignment
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2021 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -158,7 +158,8 @@ Alignment mapping qualities, encoded as ASCII characters.
 Comma-separated 1-based positions within the alignments, e.g., 5 indicates
 that it is the fifth base of the corresponding read that is mapped to this
 genomic position.
-(Column only present when \fB-O\fR/\fB--output-BP\fR is used.)
+(Column only present when \fB-O\fR/\fB--output-BP\fR or
+\fB--output-BP-5\fR is used.)
 .IP \(ci 2
 Additional comma-separated read field columns,
 as selected via \fB--output-extra\fR.
@@ -302,7 +303,12 @@ or
 .BR "--output 123" .)
 .TP
 .B -O, --output-BP
-Output base positions on reads.
+Output base positions on reads in orientation listed in the SAM file
+(left to right). This is mutually exclusive with \fB--output-BP-5\fR.
+.TP
+.B --output-BP-5
+Output base positions on reads in their original 5' to 3' orientation.
+This is mutually exclusive with \fB--output-BP\fR.
 .TP
 .B -s, --output-MQ
 Output mapping qualities encoded as ASCII characters.
@@ -350,6 +356,81 @@ default is \fB*\fR.
 This option only applies to rows that have at least one read in the pileup,
 and only to columns for two-letter tags.
 Columns for empty rows will always be printed as \fB*\fR.
+
+.TP
+.B -M, --output-mods
+Adds base modification markup into the sequence column.  This uses the
+\fBMm\fR and \fBMl\fR auxiliary tags (or their uppercase
+equivalents).  Any base in the sequence output may be followed by a
+series of \fIstrand\fR \fIcode\fR \fIquality\fR strings enclosed
+within square brackets where strand is "+" or "-", code is a single
+character (such as "m" or "h") or a ChEBI numeric in parentheses, and
+quality is an optional numeric quality value.  For example a "C" base
+with possible 5mC and 5hmC base modification may be reported as
+"C[+m179+h40]".
+
+Quality values are from 0 to 255 inclusive, representing a linear
+scale of probability 0.0 to 1.0 in 1/256ths increments.  If quality
+values are absent (no \fBMl\fR tag) these are omitted, giving an
+example string of "C[+m+h]".
+
+Note the base modifications may be identified on the reverse strand,
+either due to the native ability for this detection by the sequencing
+instrument or by the sequence subsequently being reverse
+complemented.  This can lead to modification codes, such as "m"
+meaning 5mC, being shown for their complementary bases, such as
+"G[-m50]".
+
+When \fB--output-mods\fR is selected base modifications can appear on
+any base in the sequence output, including during insertions.  This
+may make parsing the string more complex, so also see the
+\fB--no-output-ins-mods\fR and \fB--no-output-ins\fR options to
+simplify this process.
+
+.TP
+.B --no-output-ins
+Do not output the inserted bases in the sequence column.  Usually this
+is reported as "+\fIlength\fR \fIsequence\fR", but with this option
+it becomes simply "+\fIlength\fR".  For example an insertion of AGT
+in a pileup column changes from "CCC+3AGTGCC" to "CCC+3GCC".
+
+Specifying this option twice also removes the "+\fIlength\fR"
+portion, changing the example above to "CCCGCC".
+
+The purpose of this change is to simplify parsing using basic regular
+expressions, which traditionally cannot perform counting operations.
+It is particularly beneficial when used in conjunction with
+\fB--output-mods\fR as the syntax of the inserted sequence is adjusted
+to also report possible base modifications, but see also
+\fB--no-output-ins-mods\fR as an alternative.
+
+.TP
+.B --no-output-ins-mods
+Outputs the inserted bases in the sequence, but excluding any base
+modifications.  This only affects output when \fB--output-mods\FR is
+also used.
+
+.TP
+.B --no-output-del
+Do not output deleted reference bases in the sequence column.
+Normally this is reported as "+\fIlength\fR \fIsequence\fR", but with this option
+it becomes simply "+\fIlength\fR".  For example an deletion of 3
+unknown bases (due to no reference being specified) would normally be
+seen in a column as e.g. "CCC-3NNNGCC", but will be reported as
+"CCC-3GCC" with this option.
+
+Specifying this option twice also removes the "-\fIlength\fR"
+portion, changing the example above to "CCCGCC".
+
+The purpose of this change is to simplify parsing using basic regular
+expressions, which traditionally cannot perform counting operations.
+See also \fB--no-output-ins\fR.
+
+.TP
+.B --no-output-ends
+Removes the \(lq^\(rq (with mapping quality) and \(lq$\(rq markup from
+the sequence column.
+
 .TP
 .B --reverse-del
 Mark the deletions on the reverse strand with the character

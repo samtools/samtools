@@ -26,8 +26,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include <config.h>
 
 #include <ctype.h>
-#include <limits.h>
-#include "bam.h"
+#include "htslib/sam.h"
 
 static inline int bam_aux_type2size(int x)
 {
@@ -59,17 +58,4 @@ int bam_aux_drop_other(bam1_t *b, uint8_t *s)
         b->l_data -= bam_get_l_aux(b);
     }
     return 0;
-}
-
-// Only here due to libbam.a being used by some applications.
-int bam_parse_region(bam_header_t *header, const char *str, int *ref_id, int *beg, int *end)
-{
-    hts_pos_t beg64, end64;
-    int r;
-    r = sam_parse_region(header, str, ref_id, &beg64, &end64, 0) ? 0 : -1;
-    if (beg64 > INT_MAX || end64 > INT_MAX)
-        return -1;
-    *beg = beg64;
-    *end = end64;
-    return r;
 }

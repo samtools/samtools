@@ -1,4 +1,4 @@
-/*  bam.c -- BAM format.
+/*  bam.c -- miscellaneous BAM functions.
 
     Copyright (C) 2008-2013, 2015, 2019-2020 Genome Research Ltd.
     Portions copyright (C) 2009-2012 Broad Institute.
@@ -31,50 +31,8 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bam.h"
 #include "htslib/kstring.h"
 
-char *bam_format1(const bam_header_t *header, const bam1_t *b)
-{
-    kstring_t str;
-    str.l = str.m = 0; str.s = NULL;
-    if (sam_format1(header, b, &str) < 0) {
-        free(str.s);
-        str.s = NULL;
-        return NULL;
-    }
-    return str.s;
-}
-
-int bam_view1(const bam_header_t *header, const bam1_t *b)
-{
-    char *s = bam_format1(header, b);
-    int ret = -1;
-    if (!s) return -1;
-    if (puts(s) != EOF) ret = 0;
-    free(s);
-    return ret;
-}
-
-int bam_validate1(const bam_header_t *header, const bam1_t *b)
-{
-    char *s;
-
-    if (b->core.tid < -1 || b->core.mtid < -1) return 0;
-    if (header && (b->core.tid >= sam_hdr_nref(header) || b->core.mtid >= sam_hdr_nref(header))) return 0;
-
-    if (b->data_len < b->core.l_qname) return 0;
-    s = memchr(bam1_qname(b), '\0', b->core.l_qname);
-    if (s != &bam1_qname(b)[b->core.l_qname-1]) return 0;
-
-    // FIXME: Other fields could also be checked, especially the auxiliary data
-
-    return 1;
-}
-
-#ifndef MIN
-#define MIN(a,b) ((a)<(b)?(a):(b))
-#endif
-
 // FIXME: we should also check the LB tag associated with each alignment
-const char *bam_get_library(bam_header_t *h, const bam1_t *b)
+const char *bam_get_library(sam_hdr_t *h, const bam1_t *b)
 {
     const char *rg;
     kstring_t lib = { 0, 0, NULL };
@@ -97,19 +55,6 @@ const char *bam_get_library(bam_header_t *h, const bam1_t *b)
     free(lib.s);
 
     return LB_text;
-}
-
-int bam_fetch(bamFile fp, const bam_index_t *idx, int tid, int beg, int end, void *data, bam_fetch_f func)
-{
-    int ret;
-    bam_iter_t iter;
-    bam1_t *b;
-    b = bam_init1();
-    iter = bam_iter_query(idx, tid, beg, end);
-    while ((ret = bam_iter_read(fp, iter, b)) >= 0) func(b, data);
-    bam_iter_destroy(iter);
-    bam_destroy1(b);
-    return (ret == -1)? 0 : ret;
 }
 
 /************

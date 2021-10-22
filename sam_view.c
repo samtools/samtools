@@ -40,11 +40,14 @@ DEALINGS IN THE SOFTWARE.  */
 #include "htslib/hts_expr.h"
 #include "samtools.h"
 #include "sam_opts.h"
+#include "bam.h" // for bam_get_library and bam_remove_B
 #include "bedidx.h"
 
 KHASH_SET_INIT_STR(str)
-
 typedef khash_t(str) *strhash_t;
+
+KHASH_SET_INIT_INT(aux_exists)
+typedef khash_t(aux_exists) *auxhash_t;
 
 // This structure contains the settings for a samview run
 typedef struct samview_settings {
@@ -52,9 +55,14 @@ typedef struct samview_settings {
     strhash_t rnhash;
     strhash_t tvhash;
     int min_mapQ;
-    int flag_on;
-    int flag_off;
-    int flag_alloff;
+
+    // Described here in the same terms as the usage statement.
+    // The code however always negates to "reject if"         keep if:
+    int flag_on;     // keep   if (FLAG & N) == N             (all on)
+    int flag_off;    // keep   if (FLAG & N) == 0             (all off)
+    int flag_anyon;  // keep   if (FLAG & N) != 0             (any on)
+    int flag_alloff; // reject if (FLAG & N) == N             (any off)
+
     int min_qlen;
     int remove_B;
     uint32_t subsam_seed;
@@ -68,16 +76,65 @@ typedef struct samview_settings {
     hts_filter_t *filter;
     int remove_flag;
     int add_flag;
+    int unmap;
+    auxhash_t remove_tag;
+    auxhash_t keep_tag;
 } samview_settings_t;
 
+// Copied from htslib/sam.c.
+// TODO: we need a proper interface to find the length of an aux tag,
+// or at the very make exportable versions of these in htslib.
+static inline int aux_type2size(uint8_t type)
+{
+    switch (type) {
+    case 'A': case 'c': case 'C':
+        return 1;
+    case 's': case 'S':
+        return 2;
+    case 'i': case 'I': case 'f':
+        return 4;
+    case 'd':
+        return 8;
+    case 'Z': case 'H': case 'B':
+        return type;
+    default:
+        return 0;
+    }
+}
 
-// TODO Add declarations of these to a viable htslib or samtools header
-extern const char *bam_get_library(sam_hdr_t *header, const bam1_t *b);
-extern int bam_remove_B(bam1_t *b);
+// Copied from htslib/sam.c.
+static inline uint8_t *skip_aux(uint8_t *s, uint8_t *end)
+{
+    int size;
+    uint32_t n;
+    if (s >= end) return end;
+    size = aux_type2size(*s); ++s; // skip type
+    switch (size) {
+    case 'Z':
+    case 'H':
+        while (s < end && *s) ++s;
+        return s < end ? s + 1 : end;
+    case 'B':
+        if (end - s < 5) return NULL;
+        size = aux_type2size(*s); ++s;
+        n = le_to_u32(s);
+        s += 4;
+        if (size == 0 || end - s < size * n) return NULL;
+        return s + size * n;
+    case 0:
+        return NULL;
+    default:
+        if (end - s < size) return NULL;
+        return s + size;
+    }
+}
 
 // Returns 0 to indicate read should be output 1 otherwise
 static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settings)
 {
+    if (settings->filter && sam_passes_filter(h, b, settings->filter) < 1)
+        return 1;
+
     if (settings->remove_B) bam_remove_B(b);
     if (settings->min_qlen > 0) {
         int k, qlen = 0;
@@ -90,6 +147,8 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off))
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
+        return 1;
+    if (settings->flag_anyon && ((b->core.flag & settings->flag_anyon) == 0))
         return 1;
     if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, sam_hdr_tid2name(h, b->core.tid), b->core.pos, bam_endpos(b))))
         return 1;
@@ -137,18 +196,50 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         const char *p = bam_get_library((sam_hdr_t*)h, b);
         if (!p || strcmp(p, settings->library) != 0) return 1;
     }
-    if (settings->remove_aux_len) {
-        size_t i;
-        for (i = 0; i < settings->remove_aux_len; ++i) {
-            uint8_t *s = bam_aux_get(b, settings->remove_aux[i]);
-            if (s) {
-                bam_aux_del(b, s);
-            }
-        }
-    }
+    if (settings->keep_tag) {
+        uint8_t *s_from, *s_to, *end = b->data + b->l_data;
+        auxhash_t h = settings->keep_tag;
 
-    if (settings->filter && sam_passes_filter(h, b, settings->filter) < 1)
-        return 1;
+        s_from = s_to = bam_get_aux(b);
+        while (s_from < end) {
+            int x = (int)s_from[0]<<8 | s_from[1];
+            uint8_t *s = skip_aux(s_from+2, end);
+            if (s == NULL) {
+                print_error("view", "malformed aux data for record \"%s\"",
+                            bam_get_qname(b));
+                break;
+            }
+
+            if (kh_get(aux_exists, h, x) != kh_end(h) ) {
+                if (s_to != s_from) memmove(s_to, s_from, s - s_from);
+                s_to += s - s_from;
+            }
+            s_from = s;
+        }
+        b->l_data = s_to - b->data;
+
+    } else if (settings->remove_tag) {
+        uint8_t *s_from, *s_to, *end = b->data + b->l_data;
+        auxhash_t h = settings->remove_tag;
+
+        s_from = s_to = bam_get_aux(b);
+        while (s_from < end) {
+            int x = (int)s_from[0]<<8 | s_from[1];
+            uint8_t *s = skip_aux(s_from+2, end);
+            if (s == NULL) {
+                print_error("view", "malformed aux data for record \"%s\"",
+                            bam_get_qname(b));
+                break;
+            }
+
+            if (kh_get(aux_exists, h, x) == kh_end(h) ) {
+                if (s_to != s_from) memmove(s_to, s_from, s - s_from);
+                s_to += s - s_from;
+            }
+            s_from = s;
+        }
+        b->l_data = s_to - b->data;
+    }
 
     return 0;
 }
@@ -286,6 +377,33 @@ static inline void change_flag(bam1_t *b, samview_settings_t *settings)
         b->core.flag &= ~settings->remove_flag;
 }
 
+int parse_aux_list(auxhash_t *h, char *optarg) {
+    if (!*h)
+        *h = kh_init(aux_exists);
+
+    while (strlen(optarg) >= 2) {
+        int x = optarg[0]<<8 | optarg[1];
+        int ret = 0;
+        kh_put(aux_exists, *h, x, &ret);
+        if (ret < 0)
+            return -1;
+
+        optarg += 2;
+        if (*optarg == ',') // allow white-space too for easy `cat file`?
+            optarg++;
+        else if (*optarg != 0)
+            break;
+    }
+
+    if (strlen(optarg) != 0) {
+        fprintf(stderr, "main_samview: Error parsing option, "
+                "auxiliary tags should be exactly two characters long.\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 // Make mnemonic distinct values for longoption-only options
 #define LONGOPT(c)  ((c) + 128)
 
@@ -311,6 +429,7 @@ int main_samview(int argc, char *argv[])
         .flag_on = 0,
         .flag_off = 0,
         .flag_alloff = 0,
+        .flag_anyon = 0,
         .min_qlen = 0,
         .remove_B = 0,
         .subsam_seed = 0,
@@ -321,7 +440,10 @@ int main_samview(int argc, char *argv[])
         .tag = NULL,
         .filter = NULL,
         .remove_flag = 0,
-        .add_flag = 0
+        .add_flag = 0,
+        .keep_tag = NULL,
+        .remove_tag = NULL,
+        .unmap = 0,
     };
 
     static const struct option lopts[] = {
@@ -340,6 +462,10 @@ int main_samview(int argc, char *argv[])
         {"fast", no_argument, NULL, '1'},
         {"header-only", no_argument, NULL, 'H'},
         {"help", no_argument, NULL, LONGOPT('?')},
+        {"incl-flags", required_argument, NULL, LONGOPT('g')},
+        {"include-flags", required_argument, NULL, LONGOPT('g')},
+        {"rf", required_argument, NULL, LONGOPT('g')}, // aka incl-flags
+        {"keep-tag", required_argument, NULL, LONGOPT('x') },
         {"library", required_argument, NULL, 'l'},
         {"min-mapq", required_argument, NULL, 'q'},
         {"min-MQ", required_argument, NULL, 'q'},
@@ -368,10 +494,10 @@ int main_samview(int argc, char *argv[])
         {"target-file", required_argument, NULL, 'L'},
         {"targets-file", required_argument, NULL, 'L'},
         {"uncompressed", no_argument, NULL, 'u'},
+        {"unmap", no_argument, NULL, 'p'},
         {"unoutput", required_argument, NULL, 'U'},
         {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
-        { NULL, 0, NULL, 0 }
     };
 
     /* parse command-line options */
@@ -387,7 +513,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:p",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -426,11 +552,14 @@ int main_samview(int argc, char *argv[])
         case 'X': has_index_file = 1; break;
         case 'f': settings.flag_on |= bam_str2flag(optarg); break;
         case 'F': settings.flag_off |= bam_str2flag(optarg); break;
+        case LONGOPT('g'):
+            settings.flag_anyon |= bam_str2flag(optarg); break;
         case 'G': settings.flag_alloff |= bam_str2flag(optarg); break;
         case 'q': settings.min_mapQ = atoi(optarg); break;
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
         case 'l': settings.library = strdup(optarg); break;
+        case 'p': settings.unmap = 1; break;
         case LONGOPT('L'):
             settings.multi_region = 1;
             // fall through
@@ -541,16 +670,7 @@ int main_samview(int argc, char *argv[])
                 return usage(stderr, EXIT_FAILURE, 0);
             }
         case 'B': settings.remove_B = 1; break;
-        case 'x':
-            {
-                if (strlen(optarg) != 2) {
-                    print_error("main_samview", "Error parsing -x auxiliary tags should be exactly two characters long.");
-                    return usage(stderr, EXIT_FAILURE, 0);
-                }
-                settings.remove_aux = (char**)realloc(settings.remove_aux, sizeof(char*) * (++settings.remove_aux_len));
-                settings.remove_aux[settings.remove_aux_len-1] = optarg;
-            }
-            break;
+
         case 'M': settings.multi_region = 1; break;
         case LONGOPT('P'): no_pg = 1; break;
         case 'e':
@@ -561,6 +681,22 @@ int main_samview(int argc, char *argv[])
             break;
         case LONGOPT('r'): settings.remove_flag |= bam_str2flag(optarg); break;
         case LONGOPT('a'): settings.add_flag |= bam_str2flag(optarg); break;
+
+        case 'x':
+            if (*optarg == '^') {
+                if (parse_aux_list(&settings.keep_tag, optarg+1))
+                    return usage(stderr, EXIT_FAILURE, 0);
+            } else {
+                if (parse_aux_list(&settings.remove_tag, optarg))
+                    return usage(stderr, EXIT_FAILURE, 0);
+            }
+            break;
+
+        case LONGOPT('x'):
+            if (parse_aux_list(&settings.keep_tag, optarg))
+                return usage(stderr, EXIT_FAILURE, 0);
+            break;
+
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) != 0)
                 return usage(stderr, EXIT_FAILURE, 0);
@@ -587,6 +723,13 @@ int main_samview(int argc, char *argv[])
         print_error("view", "No input provided or missing option argument.");
         return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
     }
+
+    if (settings.unmap && fn_un_out) {
+        print_error("view", "Options --unoutput and --unmap are mutually exclusive.");
+        ret = 1;
+        goto view_end;
+    }
+
     if (settings.subsam_seed != 0) {
         // Convert likely user input 1,2,... to pseudo-random
         // values with more entropy and more bits set
@@ -629,6 +772,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
+        autoflush_if_stdout(out, fn_out);
 
         if (!no_pg) {
             if (!(arg_list = stringify_argv(argc+1, argv-1))) {
@@ -676,6 +820,7 @@ int main_samview(int argc, char *argv[])
                     goto view_end;
                 }
             }
+            autoflush_if_stdout(un_out, fn_un_out);
             if (*out_format || is_header ||
                 out_un_mode[1] == 'b' || out_un_mode[1] == 'c' ||
                 (ga.out.format != sam && ga.out.format != unknown_format))  {
@@ -763,12 +908,15 @@ int main_samview(int argc, char *argv[])
                                     if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                                 }
                                 count++;
+                            } else if (settings.unmap) {
+                                b->core.flag |= BAM_FUNMAP;
+                                if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                             } else {
                                 if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                             }
                         }
                         if (result < -1) {
-                            fprintf(stderr, "[main_samview] retrieval of region %d failed due to truncated file or corrupt BAM index file\n", iter->curr_tid);
+                            print_error("view", "retrieval of region %d failed due to truncated file or corrupt BAM index file", iter->curr_tid);
                             ret = 1;
                         }
 
@@ -797,6 +945,9 @@ int main_samview(int argc, char *argv[])
                         if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                     }
                     count++;
+                } else if (settings.unmap) {
+                    b->core.flag |= BAM_FUNMAP;
+                    if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                 } else {
                     if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                 }
@@ -838,13 +989,16 @@ int main_samview(int argc, char *argv[])
                             if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                         }
                         count++;
+                    } else if (settings.unmap) {
+                        b->core.flag |= BAM_FUNMAP;
+                        if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                     } else {
                         if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                     }
                 }
                 hts_itr_destroy(iter);
                 if (result < -1) {
-                    fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", argv[i]);
+                    print_error("view", "retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file", argv[i]);
                     ret = 1;
                     break;
                 }
@@ -902,6 +1056,7 @@ view_end:
             if (kh_exist(settings.tvhash, k)) free((char*)kh_key(settings.tvhash, k));
         kh_destroy(str, settings.tvhash);
     }
+
     if (settings.remove_aux_len) {
         free(settings.remove_aux);
     }
@@ -920,6 +1075,11 @@ view_end:
         free(fn_un_out_idx);
     free(arg_list);
 
+    if (settings.keep_tag)
+        kh_destroy(aux_exists, settings.keep_tag);
+    if (settings.remove_tag)
+        kh_destroy(aux_exists, settings.remove_tag);
+
     return ret;
 }
 
@@ -929,6 +1089,7 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "\n"
 "Usage: samtools view [options] <in.bam>|<in.sam>|<in.cram> [region ...]\n"
 "\n"
+
 "Output options:\n"
 "  -b, --bam                  Output BAM\n"
 "  -C, --cram                 Output CRAM (requires -T)\n"
@@ -941,6 +1102,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -o, --output FILE          Write output to FILE [standard output]\n"
 "  -U, --unoutput FILE, --output-unselected FILE\n"
 "                             Output reads not selected by filters to FILE\n"
+"  -p, --unmap                Set flag to UNMAP on reads not selected\n"
+"                             then write to output file.\n"
 "Input options:\n"
 "  -t, --fai-reference FILE   FILE listing reference names and lengths\n"
 "  -M, --use-index            Use index and multi-region iterator for regions\n"
@@ -968,7 +1131,11 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "Processing options:\n"
 "      --add-flags FLAG       Add FLAGs to reads\n"
 "      --remove-flags FLAG    Remove FLAGs from reads\n"
-"  -x, --remove-tag STR       Strip tag STR from reads (option may be repeated)\n"
+"  -x, --remove-tag STR\n"
+"               Comma-separated read tags to strip (repeatable) [null]\n"
+"      --keep-tag STR\n"
+"               Comma-separated read tags to preserve (repeatable) [null].\n"
+"               Equivalent to \"-x ^STR\"\n"
 "  -B, --remove-B             Collapse the backward CIGAR operation\n"
 "\n"
 "General options:\n"

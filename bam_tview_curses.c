@@ -78,15 +78,11 @@ static void curses_destroy(tview_t* base) {
 */
 
 static void curses_mvprintw(struct AbstractTview* tv,int y ,int x,const char* fmt,...) {
-    unsigned int size=tv->mcol+2;
-    char* str=malloc(size);
-    if(str==0) exit(EXIT_FAILURE);
     va_list argptr;
     va_start(argptr, fmt);
-    vsnprintf(str,size, fmt, argptr);
+    if (wmove(stdscr, y, x) != ERR)
+        vw_printw(stdscr, fmt, argptr);
     va_end(argptr);
-    mvprintw(y,x,str);
-    free(str);
 }
 
 static void curses_mvaddch(struct AbstractTview* tv,int y,int x,int ch) {

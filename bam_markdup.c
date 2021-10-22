@@ -1,7 +1,7 @@
 /*  bam_markdup.c -- Mark duplicates from a coord sorted file that has gone
                      through fixmates with the mate scoring option on.
 
-    Copyright (C) 2017-2020 Genome Research Ltd.
+    Copyright (C) 2017-2021 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 
@@ -927,10 +927,6 @@ static int optical_duplicate_partial(const char *name, const int oxpos, const lo
     c->x = dx;
     c->y = dy;
     c->xpos = dxpos;
-
-    if (ret) {
-        c->opt = ret;
-    }
 
     return ret;
 }

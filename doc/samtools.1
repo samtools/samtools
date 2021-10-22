@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
+.TH samtools 1 "22 October 2021" "samtools-1.14" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -999,6 +999,7 @@ Valid variable names and their data types are:
 
 .TS
 lb l l .
+endpos	int	Alignment end position (1-based)
 flag	int	Combined FLAG field
 flag.paired	int	Single bit, 0 or 1
 flag.proper_pair	int	Single bit, 0 or 2
@@ -1040,6 +1041,11 @@ equivalent to \fBflag & 1024\fR.
 number of query (sequence) and reference bases consumed.  Note "qlen"
 may not exactly match the length of the "seq" field if the sequence is
 "*".
+
+"endpos" is the (1-based inclusive) position of the rightmost mapped base
+of the read, as measured using the CIGAR string, and for mapped reads
+is equivalent to "pos+rlen-1". For unmapped reads, it is the same as
+"pos".
 
 Reference names may be matched either by their string forms ("rname"
 and "mrname") or as the Nth \fB@SQ\fR line (counting from zero) as
@@ -1156,11 +1162,6 @@ Convert a BAM file to a CRAM file using a local reference sequence.
 .EX 2
 samtools view -C -T ref.fa aln.bam > aln.cram
 .EE
-
-.SH LIMITATIONS
-.PP
-.IP o 2
-Unaligned words used in bam_endian.h, bam.c and bam_aux.c.
 
 .SH AUTHOR
 .PP

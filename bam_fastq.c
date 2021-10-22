@@ -480,6 +480,7 @@ static bool init_state(const bam2fq_opts_t* opts, bam2fq_state_t** state_out)
                     return false;
                 }
                 set_sam_opts(state->hstdout, state, opts);
+                autoflush_if_stdout(state->hstdout, "-");
             }
             state->fpr[i] = state->hstdout;
         }
@@ -546,6 +547,7 @@ static bool destroy_state(const bam2fq_opts_t *opts, bam2fq_state_t *state, int*
         }
     }
     if (state->hstdout) {
+        release_autoflush(state->hstdout);
         if (sam_close(state->hstdout) < 0) {
             print_error_errno("bam2fq", "Error closing STDOUT");
             valid = false;
@@ -622,7 +624,7 @@ int write_index_rec(samFile *fp, bam1_t *b, bam2fq_state_t *state,
 
 int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
                  bam2fq_opts_t* opts) {
-    bam1_t *b[2] = {b1, b2};
+    bam1_t *b = b1 ? b1 : b2;
 
     char *ifmt = opts->index_format;
     if (!ifmt)
@@ -675,7 +677,7 @@ int output_index(bam1_t *b1, bam1_t *b2, bam2fq_state_t *state,
             break;
 
         case 'i':
-            if (write_index_rec(state->fpi[inum], b[inum], state, opts,
+            if (write_index_rec(state->fpi[inum], b, state, opts,
                                 bc, bc_end-bc, qt, qt_end-qt) < 0)
                 return -1;
             bc = bc_end + (len==0);
@@ -787,7 +789,7 @@ static bool bam2fq_mainloop(bam2fq_state_t *state, bam2fq_opts_t* opts)
     while (true) {
         int res = sam_read1(state->fp, state->h, b[n]);
         if (res < -1) {
-            fprintf(stderr, "[bam2fq_mainloop] Failed to read bam record.\n");
+            print_error("bam2fq", "Failed to read bam record");
             goto err;
         }
         at_eof = res < 0;
