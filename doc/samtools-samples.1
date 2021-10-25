@@ -133,7 +133,7 @@ S2	S2.bam	Y
 read a tab delimited input <file>(tab)<bai> and print whether the files are
 indexed using custom bai files.
 .EX 2
-$ find . -type f \( -name "S*.bam" -o -name "S*.bai" \) | sort | paste - - | samtools samples -i -h -X
+$ find . -type f \[rs]( -name "S*.bam" -o -name "S*.bai" \[rs]) | sort | paste - - | samtools samples -i -h -X
 #SM	PATH	INDEX
 S1	./S1.bam	Y
 S2	./S2.bam	Y
@@ -157,7 +157,7 @@ S5Lib2	S5.bam
 .IP o 2
 pipe a list of BAM/CRAM files , pipe it into  samtools samples.
 .EX 2
-$ find . -type f \( -name "S*.bam" -o -name "*.cram" \) | samtools  samples -h
+$ find . -type f \[rs]( -name "S*.bam" -o -name "*.cram" \[rs]) | samtools  samples -h
 #SM	PATH
 S5	./S5.bam
 S2	./S2.bam
