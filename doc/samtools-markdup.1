@@ -189,22 +189,22 @@ They can optionally be marked as duplicates if they have a primary that is also
 a duplicate.    
 .SH EXAMPLES
 This first collate command can be omitted if the file is already name ordered or collated:
-.EX
+.EX 4
 samtools collate -o namecollate.bam example.bam
 .EE
 
 Add ms and MC tags for markdup to use later:
-.EX
+.EX 4
 samtools fixmate -m namecollate.bam fixmate.bam
 .EE
 
 Markdup needs position order:
-.EX
+.EX 4
 samtools sort -o positionsort.bam fixmate.bam
 .EE
 
 Finally mark duplicates:
-.EX
+.EX 4
 samtools markdup positionsort.bam markdup.bam
 .EE
 
