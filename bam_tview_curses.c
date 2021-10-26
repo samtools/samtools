@@ -136,13 +136,39 @@ static int curses_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos) {
     return base_draw_aln(tv,  tid, pos);
 }
 
+static int tv_win_goto_get_completions(curses_tview_t *tv, char *str, char ***matches) {
+    char **references = tv->view.header->target_name;
+    int num_references = tv->view.header->n_targets;
+    int l_matches = 0;
+
+    for (int i = 0; i < num_references; i++) {
+        char *ref = references[i];
+
+        if (strncmp(ref, str, strlen(str)) == 0) {
+            l_matches++;
+
+            *matches = realloc(*matches, sizeof(char*)*l_matches);
+            (*matches)[l_matches-1] = ref;
+        }
+    }
+
+    return l_matches;
+}
+
 static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     char str[256], *p;
-    int i, l = 0;
+    char **matches = NULL;
+    int i, l, tab_index = 0, l_matches = 0;
     tview_t *base=(tview_t*)tv;
     str[0] = '\0';
     wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
-    mvwprintw(tv->wgoto, 1, 2, "Goto: ");
+
+    char *header = tv->view.header->target_name[*tid];
+    wclear(tv->wgoto);
+    snprintf(str, 256, "%s:%"PRIhts_pos, header, tv->view.left_pos+1);
+    mvwprintw(tv->wgoto, 1, 2, "Goto: %s", str);
+    l = strlen(str);
+
     for (;;) {
         int invalid = 0;
         int c = wgetch(tv->wgoto);
@@ -167,6 +193,18 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
 
             // If we get here, the region string is invalid
             invalid = 1;
+        } else if (c == KEY_STAB || c == 9) {
+            if (tab_index == 0) {
+                l_matches = tv_win_goto_get_completions(tv, str, &matches);
+            }
+
+            if (l_matches > 0) {
+                if (tab_index > l_matches-1) {
+                    tab_index = 0;
+                }
+                snprintf(str, 256, "%s:", matches[tab_index++]);
+                l = strlen(str);
+            }
         } else if (isgraph(c)) {
             if (l < TV_MAX_GOTO) str[l++] = c;
         } else if (c == '\027') l = 0;
@@ -175,7 +213,15 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
         for (i = 0; i < TV_MAX_GOTO; ++i) mvwaddch(tv->wgoto, 1, 8 + i, ' ');
         if (invalid) mvwprintw(tv->wgoto, 1, TV_MAX_GOTO - 1, "[Invalid]");
         mvwprintw(tv->wgoto, 1, 8, "%s", str);
+
+        // reset tab_index if not cycling through tab completions
+        if (c != KEY_STAB && c != 9) {
+            invalid = 1;
+            tab_index = 0;
+        }
     }
+
+    free(matches);
 }
 
 static void tv_win_help(curses_tview_t *tv) {
