@@ -442,6 +442,11 @@ is equivalent to
 .BI "-@ " INT ", --threads " INT
 Number of BAM compression threads to use in addition to main thread [0].
 .TP
+.BR -P ", " --fetch-pairs
+Retrieve complete pairs even when the mate read is outside of the requested
+region. In case read filtering is requested (e.g. by flag), the filters are
+applied only on reads overlapping the requested regions but not their mates.
+.TP
 .B -S
 Ignored for compatibility with previous samtools versions.
 Previously this option was required if input was in SAM format, but now the

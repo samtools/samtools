@@ -2490,6 +2490,33 @@ sub test_view
                     args => ['-h', '-F', 'DUP', '-p', '--no-PG', $dup_sam],
                     out => sprintf("%s.test%03d.sam", $out, $test),
                     compare => $unmapped_expected);
+
+
+    # retrieve reads from a region including their mates
+    my $bam = 'test/dat/view.fetch-pairs.bam';
+    cmd("$$opts{bin}/samtools index $bam");
+
+    $test++;
+    run_view_test($opts,
+            msg => "$test: fetch pairs",
+            args => ['--no-PG','--fetch-pairs',$bam,'6:25515943-25515943','6:25020026-25020026','6:25515822-25515822'],
+            out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
+            compare_sam => 'test/dat/view.fetch-pairs.expected.sam');
+
+    $test++;
+    run_view_test($opts,
+            msg => "$test: fetch pairs",
+            args => ['--no-PG','--fetch-pairs',$bam,'6:25515857-25515857'],
+            out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
+            compare_sam => 'test/dat/view.fetch-pairs.filter0.expected.sam');
+
+    $test++;
+    run_view_test($opts,
+            msg => "$test: fetch pairs",
+            args => ['--no-PG','--fetch-pairs','--incl-flags','REVERSE',$bam,'6:25515857-25515857'],
+            out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
+            compare_sam => 'test/dat/view.fetch-pairs.filter1.expected.sam');
+
 }
 
 sub gen_head_output
