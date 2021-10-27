@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-ampliconstats 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
+.TH samtools-ampliconstats 1 "22 October 2021" "samtools-1.14" "Bioinformatics tools"
 .SH NAME
 samtools ampliconstats \- produces statistics from amplicon sequencing alignment file
 .\"
@@ -369,10 +369,10 @@ Number of BAM/CRAM (de)compression threads to use in addition to main thread [0]
 To run ampliconstats on a directory full of CRAM files and then
 produce a series of PNG images named "mydata*.png":
 
-.EE 2
+.EX 2
 samtools ampliconstats V3/nCoV-2019.bed /path/*.cram > astats
 plot-ampliconstats -size 1200,900 mydata astats
-.EX
+.EE
 
 .SH AUTHOR
 .PP

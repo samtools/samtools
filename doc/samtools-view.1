@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-view 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
+.TH samtools-view 1 "22 October 2021" "samtools-1.14" "Bioinformatics tools"
 .SH NAME
 samtools view \- views and converts SAM/BAM/CRAM files
 .\"
@@ -97,10 +97,16 @@ The
 .BR -m ,
 .BR -f ,
 .BR -F ,
+.BR -G ,
 and
-.B -G
+.B --rf
 options filter the alignments that will be included in the output to only those
 alignments that match certain criteria.
+
+The
+.BR -p ,
+option sets the UNMAP flag on filtered alignments then writes them to the output
+file.
 
 The
 .BR -x ,
@@ -207,6 +213,12 @@ selected by the various filter options to
 When this option is used, all alignments (or all alignments intersecting the
 .I regions
 specified) are written to either the output file or this file, but never both.
+.TP
+.BR -p ", " --unmap
+Set the UNMAP flag on alignments that are not selected by the filter options.
+These alignments are then written to the normal output.  This is not compatible
+with
+.BR -U .
 .TP
 .BI "-t " FILE ", --fai-reference " FILE
 A tab-delimited
@@ -344,6 +356,15 @@ For a list of flag names see
 .TP
 .BI "-F " FLAG ", --excl-flags " FLAG ", --exclude-flags " FLAG
 Do not output alignments with any bits set in
+.I FLAG
+present in the FLAG field.
+.I FLAG
+can be specified in hex by beginning with `0x' (i.e. /^0x[0-9A-F]+/),
+in octal by beginning with `0' (i.e. /^0[0-7]+/), as a decimal number
+not beginning with '0' or as a comma-separated list of flag names.
+.TP
+.BI "--rf " FLAG " , --incl-flags " FLAG ", --include-flags " FLAG
+Only output alignments with any bit set in
 .I FLAG
 present in the FLAG field.
 .I FLAG

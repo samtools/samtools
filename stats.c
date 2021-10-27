@@ -55,7 +55,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include <htslib/sam.h>
 #include <htslib/hts.h>
 #include <htslib/hts_defs.h>
-#include <htslib/khash_str2int.h>
 #include "samtools.h"
 #include <htslib/khash.h>
 #include <htslib/kstring.h>
@@ -270,6 +269,8 @@ typedef struct {
     hts_pair_pos_t *chunks;      // chunk array of size m
 } pair_t;
 KHASH_MAP_INIT_STR(qn2pair, pair_t*)
+
+KHASH_SET_INIT_STR(rg)
 
 
 static void HTS_NORETURN error(const char *format, ...);
@@ -1144,7 +1145,8 @@ void collect_stats(bam1_t *bam_line, stats_t *stats, khash_t(qn2pair) *read_pair
     {
         const uint8_t *rg = bam_aux_get(bam_line, "RG");
         if ( !rg ) return;  // certain read groups were requested but this record has none
-        if ( !khash_str2int_has_key(stats->rg_hash, (const char*)(rg + 1)) ) return;
+        khint_t k = kh_get(rg, stats->rg_hash, (const char*)(rg + 1));
+        if ( k == kh_end((kh_rg_t *)stats->rg_hash) ) return;
     }
     if ( stats->info->flag_require && (bam_line->core.flag & stats->info->flag_require)!=stats->info->flag_require )
     {
@@ -1802,7 +1804,8 @@ void output_stats(FILE *to, stats_t *stats, int sparse)
             if ( stats->gcd[igcd].depth )
                 stats->gcd[igcd].gc = rint(100. * stats->gcd[igcd].gc / stats->gcd[igcd].depth);
     }
-    qsort(stats->gcd, stats->igcd+1, sizeof(gc_depth_t), gcd_cmp);
+    if ( stats->ngcd )
+        qsort(stats->gcd, stats->igcd+1, sizeof(gc_depth_t), gcd_cmp);
     igcd = 0;
     while ( igcd < stats->igcd )
     {
@@ -2020,34 +2023,32 @@ int replicate_regions(stats_t *stats, hts_itr_multi_t *iter, stats_info_t *info)
     return 0;
 }
 
-void init_group_id(stats_t *stats, const char *id)
+static void init_group_id(stats_t *stats, stats_info_t *info, const char *id)
 {
-#if 0
-    if ( !stats->sam_header->dict )
-        stats->sam_header->dict = sam_header_parse2(stats->sam_header->text);
-    void *iter = stats->sam_header->dict;
-    const char *key, *val;
-    int n = 0;
-    stats->rg_hash = khash_str2int_init();
-    while ( (iter = sam_header2key_val(iter, "RG","ID","SM", &key, &val)) )
-    {
-        if ( !strcmp(id,key) || (val && !strcmp(id,val)) )
-        {
-            khiter_t k = kh_get(kh_rg, stats->rg_hash, key);
-            if ( k != kh_end(stats->rg_hash) )
-                fprintf(stderr, "[init_group_id] The group ID not unique: \"%s\"\n", key);
-            int ret;
-            k = kh_put(kh_rg, stats->rg_hash, key, &ret);
-            kh_value(stats->rg_hash, k) = val;
-            n++;
+    stats->rg_hash = kh_init(rg);
+    if (!stats->rg_hash) error("Could not initialise RG set\n");
+    sam_hdr_t *hdr = info->sam_header;
+    const char *key;
+    kstring_t sm = KS_INITIALIZE;
+    int i, ret, nrg = sam_hdr_count_lines(hdr, "RG");
+    if (nrg < 0) error("Could not parse header\n");
+
+    for (i=0; i<nrg; i++) {
+        key = sam_hdr_line_name(hdr, "RG", i);
+        if (!strcmp(key, id)) {
+            kh_put(rg, stats->rg_hash, key, &ret);
+            if (ret == -1) { ks_free(&sm); error("Could not add key \"%s\" to RG set\n", key); }
+        } else { /* Check for SM name, as per manual */
+            if (!sam_hdr_find_tag_pos(hdr, "RG", i, "SM", &sm)) {
+                if (!strcmp(ks_c_str(&sm), id)) {
+                    kh_put(rg, stats->rg_hash, key, &ret);
+                    if (ret == -1) { ks_free(&sm); error("Could not add key \"%s\" to RG set\n", key); }
+                }
+            }
         }
     }
-    if ( !n )
-        error("The sample or read group \"%s\" not present.\n", id);
-#else
-    fprintf(stderr, "Samtools-htslib: init_group_id() header parsing not yet implemented\n");
-    abort();
-#endif
+
+    ks_free(&sm);
 }
 
 
@@ -2124,7 +2125,7 @@ void cleanup_stats(stats_t* stats)
     if (stats->quals_barcode) free(stats->quals_barcode);
     free(stats->tags_barcode);
     destroy_regions(stats);
-    if ( stats->rg_hash ) khash_str2int_destroy(stats->rg_hash);
+    if ( stats->rg_hash ) kh_destroy(rg, stats->rg_hash);
     free(stats->split_name);
     free(stats);
 }
@@ -2271,7 +2272,7 @@ static void init_stat_structs(stats_t* stats, stats_info_t* info, const char* gr
     stats->cov_rbuf.size = stats->nbases*5;
     stats->cov_rbuf.buffer = calloc(sizeof(int32_t),stats->cov_rbuf.size);
     if (!stats->cov_rbuf.buffer) goto nomem;
-    if ( group_id ) init_group_id(stats, group_id);
+    if ( group_id ) init_group_id(stats, info, group_id);
     // .. arrays
     stats->quals_1st      = calloc(stats->nquals*stats->nbases,sizeof(uint64_t));
     if (!stats->quals_1st) goto nomem;

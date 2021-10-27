@@ -44,12 +44,9 @@ DEALINGS IN THE SOFTWARE.  */
 #include "bedidx.h"
 
 KHASH_SET_INIT_STR(str)
-
 typedef khash_t(str) *strhash_t;
-KHASH_SET_INIT_STR(rg)
-KHASH_SET_INIT_INT(aux_exists)
 
-typedef khash_t(rg) *rghash_t;
+KHASH_SET_INIT_INT(aux_exists)
 typedef khash_t(aux_exists) *auxhash_t;
 
 // This structure contains the settings for a samview run
@@ -58,9 +55,14 @@ typedef struct samview_settings {
     strhash_t rnhash;
     strhash_t tvhash;
     int min_mapQ;
-    int flag_on;
-    int flag_off;
-    int flag_alloff;
+
+    // Described here in the same terms as the usage statement.
+    // The code however always negates to "reject if"         keep if:
+    int flag_on;     // keep   if (FLAG & N) == N             (all on)
+    int flag_off;    // keep   if (FLAG & N) == 0             (all off)
+    int flag_anyon;  // keep   if (FLAG & N) != 0             (any on)
+    int flag_alloff; // reject if (FLAG & N) == N             (any off)
+
     int min_qlen;
     int remove_B;
     uint32_t subsam_seed;
@@ -74,6 +76,7 @@ typedef struct samview_settings {
     hts_filter_t *filter;
     int remove_flag;
     int add_flag;
+    int unmap;
     auxhash_t remove_tag;
     auxhash_t keep_tag;
 } samview_settings_t;
@@ -144,6 +147,8 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
     if (b->core.qual < settings->min_mapQ || ((b->core.flag & settings->flag_on) != settings->flag_on) || (b->core.flag & settings->flag_off))
         return 1;
     if (settings->flag_alloff && ((b->core.flag & settings->flag_alloff) == settings->flag_alloff))
+        return 1;
+    if (settings->flag_anyon && ((b->core.flag & settings->flag_anyon) == 0))
         return 1;
     if (!settings->multi_region && settings->bed && (b->core.tid < 0 || !bed_overlap(settings->bed, sam_hdr_tid2name(h, b->core.tid), b->core.pos, bam_endpos(b))))
         return 1;
@@ -424,6 +429,7 @@ int main_samview(int argc, char *argv[])
         .flag_on = 0,
         .flag_off = 0,
         .flag_alloff = 0,
+        .flag_anyon = 0,
         .min_qlen = 0,
         .remove_B = 0,
         .subsam_seed = 0,
@@ -437,6 +443,7 @@ int main_samview(int argc, char *argv[])
         .add_flag = 0,
         .keep_tag = NULL,
         .remove_tag = NULL,
+        .unmap = 0,
     };
 
     static const struct option lopts[] = {
@@ -455,6 +462,9 @@ int main_samview(int argc, char *argv[])
         {"fast", no_argument, NULL, '1'},
         {"header-only", no_argument, NULL, 'H'},
         {"help", no_argument, NULL, LONGOPT('?')},
+        {"incl-flags", required_argument, NULL, LONGOPT('g')},
+        {"include-flags", required_argument, NULL, LONGOPT('g')},
+        {"rf", required_argument, NULL, LONGOPT('g')}, // aka incl-flags
         {"keep-tag", required_argument, NULL, LONGOPT('x') },
         {"library", required_argument, NULL, 'l'},
         {"min-mapq", required_argument, NULL, 'q'},
@@ -484,6 +494,7 @@ int main_samview(int argc, char *argv[])
         {"target-file", required_argument, NULL, 'L'},
         {"targets-file", required_argument, NULL, 'L'},
         {"uncompressed", no_argument, NULL, 'u'},
+        {"unmap", no_argument, NULL, 'p'},
         {"unoutput", required_argument, NULL, 'U'},
         {"use-index", no_argument, NULL, 'M'},
         {"with-header", no_argument, NULL, 'h'},
@@ -502,7 +513,7 @@ int main_samview(int argc, char *argv[])
     opterr = 0;
 
     while ((c = getopt_long(argc, argv,
-                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:",
+                            "SbBcCt:h1Ho:O:q:f:F:G:ul:r:T:R:N:d:D:L:s:@:m:x:U:MXe:p",
                             lopts, NULL)) >= 0) {
         switch (c) {
         case 's':
@@ -541,11 +552,14 @@ int main_samview(int argc, char *argv[])
         case 'X': has_index_file = 1; break;
         case 'f': settings.flag_on |= bam_str2flag(optarg); break;
         case 'F': settings.flag_off |= bam_str2flag(optarg); break;
+        case LONGOPT('g'):
+            settings.flag_anyon |= bam_str2flag(optarg); break;
         case 'G': settings.flag_alloff |= bam_str2flag(optarg); break;
         case 'q': settings.min_mapQ = atoi(optarg); break;
         case 'u': compress_level = 0; break;
         case '1': compress_level = 1; break;
         case 'l': settings.library = strdup(optarg); break;
+        case 'p': settings.unmap = 1; break;
         case LONGOPT('L'):
             settings.multi_region = 1;
             // fall through
@@ -709,6 +723,13 @@ int main_samview(int argc, char *argv[])
         print_error("view", "No input provided or missing option argument.");
         return usage(stderr, EXIT_FAILURE, 0); // potential memory leak...
     }
+
+    if (settings.unmap && fn_un_out) {
+        print_error("view", "Options --unoutput and --unmap are mutually exclusive.");
+        ret = 1;
+        goto view_end;
+    }
+
     if (settings.subsam_seed != 0) {
         // Convert likely user input 1,2,... to pseudo-random
         // values with more entropy and more bits set
@@ -751,6 +772,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
+        autoflush_if_stdout(out, fn_out);
 
         if (!no_pg) {
             if (!(arg_list = stringify_argv(argc+1, argv-1))) {
@@ -798,6 +820,7 @@ int main_samview(int argc, char *argv[])
                     goto view_end;
                 }
             }
+            autoflush_if_stdout(un_out, fn_un_out);
             if (*out_format || is_header ||
                 out_un_mode[1] == 'b' || out_un_mode[1] == 'c' ||
                 (ga.out.format != sam && ga.out.format != unknown_format))  {
@@ -885,12 +908,15 @@ int main_samview(int argc, char *argv[])
                                     if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                                 }
                                 count++;
+                            } else if (settings.unmap) {
+                                b->core.flag |= BAM_FUNMAP;
+                                if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                             } else {
                                 if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                             }
                         }
                         if (result < -1) {
-                            fprintf(stderr, "[main_samview] retrieval of region %d failed due to truncated file or corrupt BAM index file\n", iter->curr_tid);
+                            print_error("view", "retrieval of region %d failed due to truncated file or corrupt BAM index file", iter->curr_tid);
                             ret = 1;
                         }
 
@@ -919,6 +945,9 @@ int main_samview(int argc, char *argv[])
                         if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                     }
                     count++;
+                } else if (settings.unmap) {
+                    b->core.flag |= BAM_FUNMAP;
+                    if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                 } else {
                     if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                 }
@@ -960,13 +989,16 @@ int main_samview(int argc, char *argv[])
                             if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                         }
                         count++;
+                    } else if (settings.unmap) {
+                        b->core.flag |= BAM_FUNMAP;
+                        if (check_sam_write1(out, header, b, fn_out, &ret) < 0) break;
                     } else {
                         if (un_out) { if (check_sam_write1(un_out, header, b, fn_un_out, &ret) < 0) break; }
                     }
                 }
                 hts_itr_destroy(iter);
                 if (result < -1) {
-                    fprintf(stderr, "[main_samview] retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file\n", argv[i]);
+                    print_error("view", "retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file", argv[i]);
                     ret = 1;
                     break;
                 }
@@ -1070,6 +1102,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "  -o, --output FILE          Write output to FILE [standard output]\n"
 "  -U, --unoutput FILE, --output-unselected FILE\n"
 "                             Output reads not selected by filters to FILE\n"
+"  -p, --unmap                Set flag to UNMAP on reads not selected\n"
+"                             then write to output file.\n"
 "Input options:\n"
 "  -t, --fai-reference FILE   FILE listing reference names and lengths\n"
 "  -M, --use-index            Use index and multi-region iterator for regions\n"

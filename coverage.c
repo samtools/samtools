@@ -139,7 +139,7 @@ static int usage() {
             "  endpos      End position (or sequence length)\n"
             "  numreads    Number reads aligned to the region (after filtering)\n"
             "  covbases    Number of covered bases with depth >= 1\n"
-            "  coverage    Proportion of covered bases [0..1]\n"
+            "  coverage    Percentage of covered bases [0..100]\n"
             "  meandepth   Mean depth of coverage\n"
             "  meanbaseq   Mean baseQ in covered region\n"
             "  meanmapq    Mean mapQ of selected reads\n"

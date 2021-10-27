@@ -69,6 +69,7 @@ int fqidx_main(int argc, char *argv[]);
 int amplicon_clip_main(int argc, char *argv[]);
 int main_ampliconstats(int argc, char *argv[]);
 int main_import(int argc, char *argv[]);
+int main_samples(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -193,6 +194,7 @@ static void usage(FILE *fp)
 "     tview          text alignment viewer\n"
 "     view           SAM<->BAM<->CRAM conversion\n"
 "     depad          convert padded BAM to unpadded BAM\n"
+"     samples        list the samples in a set of SAM/BAM/CRAM files\n"
 "\n"
 "  -- Misc\n"
 "     help [cmd]     display this help message or help for [cmd]\n"
@@ -278,6 +280,7 @@ int main(int argc, char *argv[])
     }
     else if (strcmp(argv[1], "tview") == 0)   ret = bam_tview_main(argc-1, argv+1);
     else if (strcmp(argv[1], "ampliconstats") == 0)     ret = main_ampliconstats(argc-1, argv+1);
+    else if (strcmp(argv[1], "samples") == 0)     ret = main_samples(argc-1, argv+1);
     else if (strcmp(argv[1], "version") == 0 || \
              strcmp(argv[1], "--version") == 0) {
         long_version();
