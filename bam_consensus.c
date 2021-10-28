@@ -5,7 +5,7 @@
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
-The primary work here is GRL since 2021, under an MIT license.  
+The primary work here is GRL since 2021, under an MIT license.
 Sections derived from Gap5, which include calculate_consensus_gap5()
 associated functions, are mostly copyright Genome Research Limited from
 2003 onwards.  These were originally under a BSD license, but as GRL is
