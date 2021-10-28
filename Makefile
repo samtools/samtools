@@ -235,8 +235,8 @@ check test: samtools $(BGZIP) $(TEST_PROGRAMS)
 	test/merge/test_bam_translate test/merge/test_bam_translate.tmp
 	test/merge/test_rtrans_build
 	test/merge/test_trans_tbl_init
-	cd test/mpileup && AWK="$(AWK)" ./regression.sh mpileup.reg
-	cd test/mpileup && AWK="$(AWK)" ./regression.sh depth.reg
+	cd test/mpileup && AWK="$(AWK)" ../regression.sh mpileup.reg
+	cd test/mpileup && AWK="$(AWK)" ../regression.sh depth.reg
 
 
 test/merge/test_bam_translate: test/merge/test_bam_translate.o test/test.o libst.a $(HTSLIB)
