@@ -15,5 +15,5 @@ CASE_OPCODE('O',"CigarOperator","Cigar Operator",fputc(aln->op_chr,ctx->out));
 CASE_OPCODE('B',"ReadPos0","0-based Read Position", if(aln->op_int == BAM_CREF_SKIP || aln->op_int == BAM_CDEL || aln->op_int == BAM_CHARD_CLIP)  fputc('.',ctx->out); else fprintf(ctx->out,"%"PRId64,aln->read0));
 CASE_OPCODE('u',"UReadPos0","0-based Unclipped Read Position", if(aln->op_int == BAM_CREF_SKIP || aln->op_int == BAM_CDEL )  fputc('.',ctx->out); else fprintf(ctx->out,"%"PRId64,aln->unclipped_read0));
 CASE_OPCODE('b',"ALT","Read Base", fputc(aln->base,ctx->out));
-CASE_OPCODE('q',"ReadQual","Quality base", fputc(aln->qual,ctx->out));
+CASE_OPCODE('q',"BaseQual","Quality base", fputc(aln->qual,ctx->out));
 
