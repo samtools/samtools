@@ -1,12 +1,3 @@
-// FIXME: also use strand to spot possible basecalling errors.
-//        Specifically het calls where mods are predominantly on one
-//        strand.  So maybe require + and - calls and check concordance
-//        before calling a het as confident.  (Still call, but low qual?)
-
-// Eg 50T 20A seems T/A het,
-// but 30T+ 20T- 18A+ 2A- seems like a consistent A miscall on one strand
-// only, while T is spread evenly across both strands.
-
 /*  bam_consensus.c -- consensus subcommand.
 
     Copyright (C) 1998-2001,2003 Medical Research Council (Gap4/5 source)
@@ -38,6 +29,15 @@ DEALINGS IN THE SOFTWARE.  */
  * rewritten again for the qual-lossy Crumble compression tool which
  * is where this algorithm has forked from.
  */
+
+// FIXME: also use strand to spot possible basecalling errors.
+//        Specifically het calls where mods are predominantly on one
+//        strand.  So maybe require + and - calls and check concordance
+//        before calling a het as confident.  (Still call, but low qual?)
+
+// Eg 50T 20A seems T/A het,
+// but 30T+ 20T- 18A+ 2A- seems like a consistent A miscall on one strand
+// only, while T is spread evenly across both strands.
 
 #include <config.h>
 
@@ -72,11 +72,7 @@ enum format {
 typedef unsigned char uc;
 
 typedef struct {
-    samFile *fp;
-    FILE *fp_out;
-    sam_hdr_t *h;
-    hts_idx_t *idx;
-    hts_itr_t *iter;
+    // User options
     char *reg;
     int use_qual;
     int use_mqual;
@@ -95,6 +91,16 @@ typedef struct {
     int all_bases;
     int show_del;
     int show_ins;
+
+    // Internal state
+    samFile *fp;
+    FILE *fp_out;
+    sam_hdr_t *h;
+    hts_idx_t *idx;
+    hts_itr_t *iter;
+    kstring_t ks_line;
+    kstring_t ks_ins_seq;
+    kstring_t ks_ins_qual;
 } consensus_opts;
 
 static int readaln(void *data, bam1_t *b) {
@@ -151,7 +157,8 @@ static char *seq_nt16_str_pad = "=ACMGRSVTWYHKDBN=acmgrsvtwyhkdbn";
  */
 static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
                                consensus_opts *opts, int nins, int ins_len,
-                               kstring_t *ins_ks, kstring_t *inq_ks) {
+                               kstring_t *ins_ks, kstring_t *inq_ks,
+                               kstring_t *tmp_ks) {
     // Map "seqi" nt16 to A,C,G,T compatibility with weights on pure bases.
     // where seqi is A | (C<<1) | (G<<2) | (T<<3)
     //                        * A C M  G R S V  T W Y H  K D B N
@@ -168,7 +175,8 @@ static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
             return -1;
 
     // Accumulate into ins[][] arrays
-    kstring_t is = {0,0};
+    //kstring_t is = {0,0};
+    kstring_t *is = tmp_ks;
     for (i = 0; i < nplp; i++) {
         const bam_pileup1_t *p = plp+i;
 
@@ -176,22 +184,18 @@ static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
         // NB no support for opts->use_qual yet here.  We either need
         // a better bam_plp_insertion or inline it here with added
         // quality value processing.
-        int il = bam_plp_insertion(p, &is, NULL), j;
+        int il = bam_plp_insertion(p, is, NULL), j;
         if (il != ins_len)
             continue;
 
         for (j = 0; j < il; j++) {
-            if (is.s[j] == '*') {
+            if (is->s[j] == '*') {
                 ins[j][0] += 8;
             } else {
-                int Q = seqi2A[seq_nt16_table[(uc)is.s[j]]];
-                ins[j][1] += Q;
-                Q = seqi2C[seq_nt16_table[(uc)is.s[j]]];
-                ins[j][2] += Q;
-                Q = seqi2G[seq_nt16_table[(uc)is.s[j]]];
-                ins[j][4] += Q;
-                Q = seqi2T[seq_nt16_table[(uc)is.s[j]]];
-                ins[j][8] += Q;
+                ins[j][1] += seqi2A[seq_nt16_table[(uc)is->s[j]]];
+                ins[j][2] += seqi2C[seq_nt16_table[(uc)is->s[j]]];
+                ins[j][4] += seqi2G[seq_nt16_table[(uc)is->s[j]]];
+                ins[j][8] += seqi2T[seq_nt16_table[(uc)is->s[j]]];
             }
         }
     }
@@ -634,7 +638,7 @@ int calculate_consensus_gap5(int pos, int flags,
     // Insertion seqeuence
     if (ins_len_freq[0] && nins >= np/2 && nins >= opts->min_depth) {
         if (insertion_consensus(p, np, opts, nins, ins_len[0],
-                                ins_ks, inq_ks) < 0)
+                                ins_ks, inq_ks, &opts->ks_line) < 0)
             return -1;
     }
 
@@ -861,18 +865,26 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
 
         // Map ambiguity codes to one or more component bases.
         if (b < 16) {
-            int Q = seqi2A[b] * (opts->use_qual ? q : 1);
-            freq[1]  += Q?1:0;
-            score[1] += Q?Q:0;
-            Q = seqi2C[b] * (opts->use_qual ? q : 1);
-            freq[2]  += Q?1:0;
-            score[2] += Q?Q:0;
-            Q = seqi2G[b] * (opts->use_qual ? q : 1);
-            freq[4]  += Q?1:0;
-            score[4] += Q?Q:0;
-            Q = seqi2T[b] * (opts->use_qual ? q : 1);
-            freq[8]  += Q?1:0;
-            score[8] += Q?Q:0;
+            if (seqi2A[b]) {
+                int Q = seqi2A[b] * (opts->use_qual ? q : 1);
+                freq[1]  += Q>0;
+                score[1] += Q;
+            }
+            if (seqi2C[b]) {
+                int Q = seqi2C[b] * (opts->use_qual ? q : 1);
+                freq[2]  += Q>0;
+                score[2] += Q;
+            }
+            if (seqi2G[b]) {
+                int Q = seqi2G[b] * (opts->use_qual ? q : 1);
+                freq[4]  += Q>0;
+                score[4] += Q;
+            }
+            if (seqi2T[b]) {
+                int Q = seqi2T[b] * (opts->use_qual ? q : 1);
+                freq[8]  += Q>0;
+                score[8] += Q;
+            }
         } else { /* * */
             freq[16] ++;
             score[16]+=8 * (opts->use_qual ? q : 1);
@@ -881,7 +893,7 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
 
     if (ins_len_freq[0] && nins >= nplp/2 && nins >= opts->min_depth) {
         if (insertion_consensus(plp, nplp, opts, nins, ins_len[0],
-                                ins_ks, inq_ks) < 0)
+                                ins_ks, inq_ks, &opts->ks_line) < 0)
             return -1;
     }
 
@@ -956,30 +968,49 @@ extern int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
 
 static void empty_pileup(consensus_opts *opts, sam_hdr_t *h, int tid,
                          hts_pos_t start, hts_pos_t end) {
+    if (end <= start)
+        return;
+
     const char *name = sam_hdr_tid2name(h, tid);
     hts_pos_t i;
 
-    for (i = start; i < end; i++)
-        fprintf(opts->fp_out, "%s\t%"PRIhts_pos"\tN\t0\t*\n", name, i+1);
+    kstring_t *ks = &opts->ks_line;
+
+    ks->l = 0;
+    kputs("\tN\t0\t*\n", ks);
+    int ks_name_start = ks->l;
+    kputs(name, ks);
+    kputc_('\t', ks);
+    int ks_name_end = ks->l;
+
+    for (i = start; i < end; i++) {
+        ks->l = ks_name_end;
+        kputw(i+1, ks);
+        fputs(ks->s + ks_name_start, opts->fp_out);
+        ks_name_start = 0;
+    }
+    fputs("\tN\t0\t*\n", opts->fp_out);
 }
 
 int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
                      int np, int tid, hts_pos_t pos,
                      hts_pos_t last_pos, int last_tid, int last_pos_tid,
                      kstring_t *seq, kstring_t *qual) {
-    kstring_t ins_ks = {0, 0}, inq_ks = {0, 0};
+    kstring_t *ins_ks = &opts->ks_ins_seq;
+    kstring_t *inq_ks = &opts->ks_ins_qual;
     int cq, cb, cm_top = 0, cm_bot = 0, qm_top = 0, qm_bot = 0;
 
+    ins_ks->l = 0; inq_ks->l = 0;
     if (opts->gap5) {
         consensus_t cons;
         if (opts->use_mqual)
             calculate_consensus_gap5(pos, CONS_MQUAL, p, np, opts,
                                      &cons, opts->default_qual,
-                                     &ins_ks, &inq_ks);
+                                     ins_ks, inq_ks);
         else
             calculate_consensus_gap5(pos, 0, p, np, opts,
                                      &cons, opts->default_qual,
-                                     &ins_ks, &inq_ks);
+                                     ins_ks, inq_ks);
         if (cons.het_logodd > 0 && opts->ambig) {
             cb = "AMRWa" // 5x5 matrix with ACGT* per row / col
                  "MCSYc"
@@ -996,7 +1027,7 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
             cq = 0;
         }
     } else {
-        cb = calculate_consensus_simple(p, np, opts, &cq, &ins_ks, &inq_ks);
+        cb = calculate_consensus_simple(p, np, opts, &cq, ins_ks, inq_ks);
         if (cb < 0)
             return -1;
     }
@@ -1037,16 +1068,17 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
 
             kputc(MIN(cq, '~'-'!')+'!', qual);
         }
-        if (ins_ks.l && opts->show_ins) {
-            kputs(ins_ks.s, seq);
-            kputs(inq_ks.s, qual);
+        if (ins_ks->l && opts->show_ins) {
+            kputs(ins_ks->s, seq);
+            kputs(inq_ks->s, qual);
         }
     }
 
     if (opts->fmt == PILEUP) {
-        kstring_t ks = {0,0};
         int j;
 
+        kstring_t *ks = &opts->ks_line;
+        ks->l = 0;
         if (opts->all_bases) {
             if (tid != last_tid && last_tid >= 0) {
                 hts_pos_t len = sam_hdr_tid2len(opts->h, last_tid);
@@ -1066,14 +1098,22 @@ int consensus_pileup(consensus_opts *opts, const bam_pileup1_t *p,
         if (opts->het_only && (cb == 'A' || cb == 'C' || cb == 'G' ||
                                cb == 'T' || cb == 'N' || cb == '*'))
             return 0;
-        fprintf(opts->fp_out, "%s\t%"PRIhts_pos"\t%c\t%d\t",
-               sam_hdr_tid2name(opts->h, tid), pos+1, cb, cq);
+
+        ks->l = 0;
+        kputs(sam_hdr_tid2name(opts->h, tid), ks);
+        kputc_('\t', ks);
+        kputw(pos+1, ks);
+        kputc_('\t', ks);
+        kputc_(cb, ks);
+        kputc_('\t', ks);
+        kputw(cq, ks);
+        kputc('\t', ks);
+        fputs(ks->s, opts->fp_out);
 
         for (j = 0; j < np; j++)
-            pileup_seq(opts->fp_out, p+j, pos, 0, NULL, &ks, 0, 2, 0, 2, 1);
-        putc('\n', opts->fp_out);
+            pileup_seq(opts->fp_out, p+j, pos, 0, NULL, ks, 0, 2, 0, 2, 1);
 
-        free(ks.s); // FIXME: reuse this
+        putc('\n', opts->fp_out);
     }
 
     return 0;
@@ -1149,8 +1189,11 @@ static int consensus_loop(consensus_opts *opts) {
         }
         if (consensus_pileup(opts, p, n, tid, pos, last_pos,
                              last_tid_, last_pos_,
-                             &seq, &qual) < 0)
+                             &seq, &qual) < 0) {
+            ks_free(&seq);
+            ks_free(&qual);
             return -1;
+        }
         last_pos = pos;
     }
     bam_plp_destroy(iter);
@@ -1192,6 +1235,8 @@ static int consensus_loop(consensus_opts *opts) {
         empty_pileup(opts, opts->h, tid, pos, len);
     }
 
+    ks_free(&seq);
+    ks_free(&qual);
     return 0;
 }
 
@@ -1226,9 +1271,10 @@ static void usage_exit(FILE *fp, int exit_status) {
 }
 
 int main_consensus(int argc, char **argv) {
-    int c;
+    int c, ret = 1;
 
     consensus_opts opts = {
+        // User options
         .use_qual   = 0,
         .use_mqual  = 0,
         .min_mqual  = 5,
@@ -1245,7 +1291,15 @@ int main_consensus(int argc, char **argv) {
         .all_bases    = 0,
         .show_del     = 0,
         .show_ins     = 1,
+
+        // Internal state
+        .ks_line      = {0,0},
+        .ks_ins_seq   = {0,0},
+        .ks_ins_qual  = {0,0},
+        .fp           = NULL,
         .fp_out       = stdout,
+        .iter         = NULL,
+        .idx          = NULL,
     };
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
@@ -1330,19 +1384,19 @@ int main_consensus(int argc, char **argv) {
     if (opts.fp == NULL) {
         print_error_errno("consensus", "Cannot open input file \"%s\"",
                           argv[optind]);
-        return 1;
+        goto err;
     }
     if (ga.nthreads > 0)
         hts_set_threads(opts.fp, ga.nthreads);
 
     if (hts_set_opt(opts.fp, CRAM_OPT_DECODE_MD, 0)) {
         fprintf(stderr, "Failed to set CRAM_OPT_DECODE_MD value\n");
-        return 1;
+        goto err;
     }
 
     if (!(opts.h = sam_hdr_read(opts.fp))) {
         fprintf(stderr, "Failed to read header for \"%s\"\n", argv[optind]);
-        return 1;
+        goto err;
     }
 
     if (opts.reg) {
@@ -1350,37 +1404,45 @@ int main_consensus(int argc, char **argv) {
         if (!opts.idx) {
             print_error("consensus", "Cannot load index for input file \"%s\"",
                         argv[optind]);
-            return 1;
+            goto err;
         }
         opts.iter = sam_itr_querys(opts.idx, opts.h, opts.reg);
         if (!opts.iter) {
             print_error("consensus", "Failed to parse region \"%s\"",
                         opts.reg);
-            return 1;
+            goto err;
         }
     }
 
     if (consensus_loop(&opts) < 0) {
         print_error_errno("consensus", "Failed");
-        return 1;
+        goto err;
     }
 
+    ret = 0;
+
+ err:
     if (opts.iter)
         hts_itr_destroy(opts.iter);
     if (opts.idx)
         hts_idx_destroy(opts.idx);
 
-    if (sam_close(opts.fp) < 0) {
+    if (opts.fp && sam_close(opts.fp) < 0) {
         print_error_errno("consensus", "Closing input file \"%s\"",
                           argv[optind]);
-        return 1;
+        ret = 1;
     }
 
-    sam_hdr_destroy(opts.h);
+    if (opts.h)
+        sam_hdr_destroy(opts.h);
     sam_global_args_free(&ga);
 
-    if (opts.fp_out != stdout)
-        return fclose(opts.fp_out) == 0 ? 0 : 1;
+    if (opts.fp_out && opts.fp_out != stdout)
+        ret = fclose(opts.fp_out) == 0 ? ret : 1;
 
-    return 0;
+    ks_free(&opts.ks_line);
+    ks_free(&opts.ks_ins_seq);
+    ks_free(&opts.ks_ins_qual);
+
+    return ret;
 }
