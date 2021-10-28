@@ -1,4 +1,4 @@
-<# Makefile for samtools, utilities for the Sequence Alignment/Map format.
+# Makefile for samtools, utilities for the Sequence Alignment/Map format.
 #
 #    Copyright (C) 2008-2021 Genome Research Ltd.
 #    Portions copyright (C) 2010-2012 Broad Institute.

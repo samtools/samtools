@@ -1,5 +1,8 @@
-/*  bam2tsc.c -- depth subcommand.
+/*  bam2tsv.c -- tsv subcommand.
 
+    Copyright (C) 2021 Pierre Lindenbaum
+    Institut du Thorax. u1087 Nantes. France.
+    @yokofakun
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -71,7 +74,7 @@ typedef struct tsv_context {
     faidx_t* fai;
     /* skip 'N' cigar operator flag */
     int skip_N;
-    /* user query a string containing some opcodes defined in 'bam2tsv.h' */
+    /* user query as a string containing some opcodes defined in 'bam2tsv.h' */
     char* query;
     /** we keep a subs-string of REFERENCE, used in function get_reference_base_at */
     /* current reference chromosome */
@@ -84,7 +87,7 @@ typedef struct tsv_context {
     char* ref_seq;
 } TsvContext, *TsvContextPtr;
 
-/** code from markdup.c but use a signed position */
+/** code copied from markdup.c but use a signed position */
 static int64_t unclipped_start(bam1_t* b) {
     uint32_t* cigar = bam_get_cigar(b);
     int64_t clipped = 0;
@@ -151,9 +154,9 @@ static int sam2tsv_base(TsvContextPtr ctx, BaseInfoPtr aln) {
 }
 
 /** set aln read base at 'i' */
-#define READ_BASE_AT(i) read_bases == NULL ? 'N' : seq_nt16_str[bam_seqi(read_bases, i)]
+#define READ_BASE_AT(i) (read_bases == NULL ? 'N' : seq_nt16_str[bam_seqi(read_bases, i)])
 /** set aln read qual at 'i' */
-#define READ_QUAL_AT(i)(read_quals == NULL ? '*' : (read_quals[0] == 0xff ? 'B' : read_quals[i] + 33))
+#define READ_QUAL_AT(i) (read_quals == NULL ? '*' : (read_quals[0] == 0xff ? 'B' : read_quals[i] + 33))
 /** fetch aln ref base at 'i' */
 #define REF_BASE_AT(i) if (get_reference_base_at(ctx, b->core.tid, i, &aln.ref_base) != 0) {\
     print_error("tsv", "Cannot fetch base.");\
@@ -325,7 +328,7 @@ int main_bam2tsv(int argc, char* argv[]) {
             lopts, NULL)) >= 0) {
         switch (c) {
         case 'o':
-            if (strcmp(optag,"-")!=0) out_fname = optarg;
+            if (strcmp(optarg,"-")!=0) out_fname = optarg;
             break;
         case 'N':
             ctx.skip_N = 1;

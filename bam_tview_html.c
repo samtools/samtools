@@ -3,7 +3,7 @@
     Copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
     Copyright (C) 2019 Genome Research Ltd.
 
-    Author: Pierre Lindenbaum <plindenbaum@yahoo.fr>
+    Author: Pierre Lindenbaum @yokofakun
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
