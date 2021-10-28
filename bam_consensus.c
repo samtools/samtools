@@ -1244,7 +1244,7 @@ static void usage_exit(FILE *fp, int exit_status) {
     fprintf(fp, "Usage: samtools consensus [options] <in.bam>\n");
     fprintf(fp, "\nOptions:\n");
     fprintf(fp, "  -r, --region REG    Limit query to REG. Requires an index\n");
-    fprintf(fp, "  -f, --format FMT    Output in format FASTA, FASTQ or PILEUP [FASTA]\n");
+    fprintf(fp, "  -f, --format FMT    Output in format FASTA or FASTQ [FASTA]\n");
     fprintf(fp, "  -l, --line-len N    Wrap FASTA/Q at line length N [70]\n");
     fprintf(fp, "  -o, --output FILE   Output consensus to FILE\n");
     fprintf(fp, "  -5                  Enable the bayesian 'gap5' consensus mode [off]\n");

@@ -1,7 +1,7 @@
 '\" t
 .TH samtools-consensus 1 "7 July 2021" "samtools-1.13" "Bioinformatics tools"
 .SH NAME
-samtools consensus \- produces produce a consensus Pileup/FASTA/FASTQ
+samtools consensus \- produces produce a consensus FASTA/FASTQ
 .\"
 .\" Copyright (C) 2021 Genome Research Ltd.
 .\"
@@ -64,11 +64,9 @@ samtools consensus
 .PP
 Generate consensus from a SAM, BAM or CRAM file based on the contents
 of the alignment records.  The consensus is written either as FASTA or
-FASTQ format, although a simplified pileup oriented format also
-exists with the reference column replaced by the consensus and depth
-by score.  This is selected using the
+FASTQ format.  This is selected using the
 .BI "-f " FORMAT
-option.  No quality column is shown in the pileup output.
+option.
 
 The default output for FASTA and FASTQ formats include one base per
 non-gap consensus.  Hence insertions with respect to the aligned
@@ -78,9 +76,7 @@ be controlled with the
 and
 .B--show-del
 options.  This could be used to compute a new reference from sequences
-assemblies to realign against.  The pileup format strictly adheres to
-one row per reference location, with insertions absent and deletions
-shown as consensus "*".
+assemblies to realign against.
 
 Two consensus calling algorithms are offered.  The default is a pure
 frequency count, summing either +1 for each base type or
@@ -122,7 +118,7 @@ This requires an index.
 .BI "-f " FMT ", --format " FMT
 Produce format
 .IR FMT ,
-with "fastq", "fasta" and "pileup" as permitted options.
+with "fastq" and "fasta".
 .TP
 .BI "-l " N ", --line-len " N
 Sets the maximum line length of line-wrapped fasta and fastq formats to
