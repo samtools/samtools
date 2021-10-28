@@ -5,6 +5,14 @@
 
     Author: James Bonfield <jkb@sanger.ac.uk>
 
+The primary work here is GRL since 2021, under an MIT license.  
+Sections derived from Gap5, which include calculate_consensus_gap5()
+associated functions, are mostly copyright Genome Research Limited from
+2003 onwards.  These were originally under a BSD license, but as GRL is
+copyright holder these portions can be considered to also be under the
+same MIT license below:
+
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
@@ -24,11 +32,46 @@ FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
 /*
- * The origins of this algorithm come from the Staden Package, initially
- * the Gap4 consensus algorithm, revised for Gap5, and substantially
- * rewritten again for the qual-lossy Crumble compression tool which
- * is where this algorithm has forked from.
+ * The Gap5 consensus algorithm was in turn derived from the earlier Gap4
+ * tool, developed by the Medical Research Council as part of the
+ * Staden Package.  It is unsure how much of this source code is still
+ * extant, without deep review, but the license used was a compatible
+ * modified BSD license, included below.
  */
+
+/*
+Modified BSD license for any legacy components from the Staden Package:
+
+Copyright (c) 2003 MEDICAL RESEARCH COUNCIL
+All rights reserved
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+   . Redistributions of source code must retain the above copyright notice,
+this list of conditions and the following disclaimer.
+
+   . Redistributions in binary form must reproduce the above copyright notice,
+this list of conditions and the following disclaimer in the documentation
+and/or other materials provided with the distribution.
+
+   . Neither the name of the MEDICAL RESEARCH COUNCIL, THE LABORATORY OF
+MOLECULAR BIOLOGY nor the names of its contributors may be used to endorse or
+promote products derived from this software without specific prior written
+permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
 
 // FIXME: also use strand to spot possible basecalling errors.
 //        Specifically het calls where mods are predominantly on one
@@ -52,6 +95,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include "samtools.h"
 #include "sam_opts.h"
+#include "bam_plbuf.h"
 
 #ifndef MIN
 #  define MIN(a,b) ((a)<(b)?(a):(b))
@@ -103,6 +147,10 @@ typedef struct {
     kstring_t ks_ins_qual;
 } consensus_opts;
 
+/*
+ * Reads a single alignment record, using either the iterator
+ * or a direct sam_read1 call.
+ */
 static int readaln(void *data, bam1_t *b) {
     consensus_opts *dat = (consensus_opts *)data;
     if (dat->iter)
@@ -111,44 +159,7 @@ static int readaln(void *data, bam1_t *b) {
         return sam_read1(dat->fp, dat->h, b);
 }
 
-/* --------------------------------------------------------------------------
- * A bayesian consensus algorithm that analyses the data to work out
- * which hypothesis of pure A/C/G/T/absent and all combinations of two
- * such bases meets the observations.
- *
- * This has its origins in Gap4 (homozygous) -> Gap5 (heterozygous)
- * -> Crumble (tidied up to use htslib's pileup) -> here.
- *
- */
-
-#define CONS_DISCREP    4
-#define CONS_ALL        15
-
-#define CONS_MQUAL      16
-
-typedef struct {
-    /* the most likely base call - we never call N here */
-    /* A=0, C=1, G=2, T=3, *=4 */
-    int call;
-
-    /* The most likely heterozygous base call */
-    /* Use "ACGT*"[het / 5] vs "ACGT*"[het % 5] for the combination */
-    int het_call;
-
-    /* Log-odds for het_call */
-    int het_logodd;
-
-    /* Single phred style call */
-    int phred;
-
-    /* Sequence depth */
-    int depth;
-
-    /* Discrepancy search score */
-    float discrep;
-} consensus_t;
-
-static char *seq_nt16_str_pad = "=ACMGRSVTWYHKDBN=acmgrsvtwyhkdbn";
+static const char *seq_nt16_str_pad = "=ACMGRSVTWYHKDBN=acmgrsvtwyhkdbn";
 
 /*
  * Produce the insertion portion of the consensus sequence.
@@ -175,7 +186,6 @@ static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
             return -1;
 
     // Accumulate into ins[][] arrays
-    //kstring_t is = {0,0};
     kstring_t *is = tmp_ks;
     for (i = 0; i < nplp; i++) {
         const bam_pileup1_t *p = plp+i;
@@ -240,45 +250,48 @@ static int insertion_consensus(const bam_pileup1_t *plp, int nplp,
     return 0;
 }
 
+/* --------------------------------------------------------------------------
+ * A bayesian consensus algorithm that analyses the data to work out
+ * which hypothesis of pure A/C/G/T/absent and all combinations of two
+ * such bases meets the observations.
+ *
+ * This has its origins in Gap4 (homozygous) -> Gap5 (heterozygous)
+ * -> Crumble (tidied up to use htslib's pileup) -> here.
+ *
+ */
+
+#define CONS_DISCREP    4
+#define CONS_ALL        15
+
+#define CONS_MQUAL      16
+
+typedef struct {
+    /* the most likely base call - we never call N here */
+    /* A=0, C=1, G=2, T=3, *=4 */
+    int call;
+
+    /* The most likely heterozygous base call */
+    /* Use "ACGT*"[het / 5] vs "ACGT*"[het % 5] for the combination */
+    int het_call;
+
+    /* Log-odds for het_call */
+    int het_logodd;
+
+    /* Single phred style call */
+    int phred;
+
+    /* Sequence depth */
+    int depth;
+
+    /* Discrepancy search score */
+    float discrep;
+} consensus_t;
+
 #define P_HET 1e-6
 
 #define LOG10            2.30258509299404568401
 #define TENOVERLOG10     4.34294481903251827652
 #define TENLOG2OVERLOG10 3.0103
-
-
-// FIXME: not known at present.
-// Best to externalise these with parameters?  Ideally would be
-// param per read-group though.
-
-/* Sequencing technologies for seq_t.seq_tech; 5 bits, so max=31 */
-#define STECH_UNKNOWN    0
-#define STECH_SANGER     1
-#define STECH_SOLEXA     2
-#define STECH_SOLID      3
-#define STECH_454        4
-#define STECH_HELICOS    5
-#define STECH_IONTORRENT 6
-#define STECH_PACBIO     7
-#define STECH_ONT        8
-#define STECH_LAST       8 // highest value
-
-// Undercall rates govern the alignment pad (deletion) vs missing observation
-// (undercall).  Single molecule techniques may miss data, but we don't want
-// to start labelling lots of places as being base/gap het calls.
-//
-// NB: Figures are pure guesses, and also unused! (forced to illumina atm)
-double tech_undercall[] = {
-    1.00, // unknown
-    1.00, // sanger
-    1.00, // solexa/illumina
-    1.00, // solid
-    1.00, // 454
-    1.00, // helicos
-    1.00, // iontorrent
-    1.00, // pacbio
-    1.20, // ont
-};
 
 #ifdef __GNUC__
 #define ALIGNED(x) __attribute((aligned(x)))
@@ -290,15 +303,9 @@ static double prior[25]    ALIGNED(16);  /* Sum to 1.0 */
 static double lprior15[15] ALIGNED(16);  /* 15 combinations of {ACGT*} */
 
 /* Precomputed matrices for the consensus algorithm */
-static double pMM[9][101] ALIGNED(16);
-static double p__[9][101] ALIGNED(16);
-static double p_M[9][101] ALIGNED(16);
-static double po_[9][101] ALIGNED(16);
-static double poM[9][101] ALIGNED(16);
-static double poo[9][101] ALIGNED(16);
-static double puu[9][101] ALIGNED(16);
-static double pum[9][101] ALIGNED(16);
-static double pmm[9][101] ALIGNED(16);
+static double pMM[101] ALIGNED(16);
+static double p__[101] ALIGNED(16);
+static double p_M[101] ALIGNED(16);
 
 static double e_tab_a[1002]  ALIGNED(16);
 static double *e_tab = &e_tab_a[500];
@@ -346,7 +353,7 @@ static double e_log[501]     ALIGNED(16);
  */
 
 static void consensus_init(double p_het) {
-    int i, t;
+    int i;
 
     for (i = -500; i <= 500; i++)
         e_tab[i] = exp(i);
@@ -378,37 +385,20 @@ static void consensus_init(double p_het) {
 
 
     // Rewrite as new form
-    for (t = STECH_UNKNOWN; t <= STECH_LAST; t++) {
-        for (i = 1; i < 101; i++) {
-            double prob = 1 - pow(10, -i / 10.0);
+    for (i = 1; i < 101; i++) {
+        double prob = 1 - pow(10, -i / 10.0);
 
-            // May want to multiply all these by 5 so pMM[i] becomes close
-            // to -0 for most data. This makes the sums increment very slowly,
-            // keeping bit precision in the accumulator.
-            pMM[t][i] = log(prob/5);
-            p__[t][i] = log((1-prob)/20);
-            p_M[t][i] = log((exp(pMM[t][i]) + exp(p__[t][i]))/2);
-
-            puu[t][i] = p__[t][i];
-
-            poM[t][i] = p_M[t][i] *= tech_undercall[t];
-            po_[t][i] = p__[t][i] *= tech_undercall[t];
-            poo[t][i] = p__[t][i] *= tech_undercall[t];
-            pum[t][i] = p_M[t][i] *= tech_undercall[t];
-            pmm[t][i] = pMM[t][i] *= tech_undercall[t];
-        }
-
-        pMM[t][0] = pMM[t][1];
-        p__[t][0] = p__[t][1];
-        p_M[t][0] = p_M[t][1];
-
-        pmm[t][0] = pmm[t][1];
-        poo[t][0] = poo[t][1];
-        po_[t][0] = po_[t][1];
-        poM[t][0] = poM[t][1];
-        puu[t][0] = puu[t][1];
-        pum[t][0] = pum[t][1];
+        // May want to multiply all these by 5 so pMM[i] becomes close
+        // to -0 for most data. This makes the sums increment very slowly,
+        // keeping bit precision in the accumulator.
+        pMM[i] = log(prob/5);
+        p__[i] = log((1-prob)/20);
+        p_M[i] = log((exp(pMM[i]) + exp(p__[i]))/2);
     }
+
+    pMM[0] = pMM[1];
+    p__[0] = p__[1];
+    p_M[0] = p_M[1];
 }
 
 static inline double fast_exp(double y) {
@@ -514,7 +504,6 @@ int calculate_consensus_gap5(int pos, int flags,
         uint8_t qual = qual_arr[p[n].qpos];
         if (qual == 255 || (qual == 0 && *qual_arr == 255))
             qual = default_qual;
-        const int stech = STECH_SOLEXA;
 
         // =ACM GRSV TWYH KDBN
         static int L[16] = {
@@ -592,9 +581,9 @@ int calculate_consensus_gap5(int pos, int flags,
         if (qual < 1)
             qual = 1;
 
-        __ = p__[stech][qual];
-        MM = pMM[stech][qual] - __;
-        _M = p_M[stech][qual] - __;
+        __ = p__[qual];
+        MM = pMM[qual] - __;
+        _M = p_M[qual] - __;
 
         if (flags & CONS_DISCREP) {
             qe = q2p[qual];
@@ -643,115 +632,111 @@ int calculate_consensus_gap5(int pos, int flags,
     }
 
     /* We've accumulated stats, so now we speculate on the consensus call */
-    {
-        double shift, max, max_het, norm[15];
-        int call = 0, het_call = 0, ph;
-        double tot1, tot2;
+    double shift, max, max_het, norm[15];
+    int call = 0, het_call = 0, ph;
+    double tot1, tot2;
 
-        /*
-         * Scale numbers so the maximum score is 0. This shift is essentially
-         * a multiplication in non-log scale to both numerator and denominator,
-         * so it cancels out. We do this to avoid calling exp(-large_num) and
-         * ending up with norm == 0 and hence a 0/0 error.
-         *
-         * Can also generate the base-call here too.
-         */
-        shift = -DBL_MAX;
-        max = -DBL_MAX;
-        max_het = -DBL_MAX;
+    /*
+     * Scale numbers so the maximum score is 0. This shift is essentially
+     * a multiplication in non-log scale to both numerator and denominator,
+     * so it cancels out. We do this to avoid calling exp(-large_num) and
+     * ending up with norm == 0 and hence a 0/0 error.
+     *
+     * Can also generate the base-call here too.
+     */
+    shift = -DBL_MAX;
+    max = -DBL_MAX;
+    max_het = -DBL_MAX;
 
-        for (j = 0; j < 15; j++) {
-            S[j] += lprior15[j];
-            if (shift < S[j])
-                shift = S[j];
+    for (j = 0; j < 15; j++) {
+        S[j] += lprior15[j];
+        if (shift < S[j])
+            shift = S[j];
 
-            /* Only call pure AA, CC, GG, TT, ** for now */
-            if (j != 0 && j != 5 && j != 9 && j != 12 && j != 14) {
-                if (max_het < S[j]) {
-                    max_het = S[j];
-                    het_call = j;
-                }
-                continue;
+        /* Only call pure AA, CC, GG, TT, ** for now */
+        if (j != 0 && j != 5 && j != 9 && j != 12 && j != 14) {
+            if (max_het < S[j]) {
+                max_het = S[j];
+                het_call = j;
             }
-
-            if (max < S[j]) {
-                max = S[j];
-                call = j;
-            }
+            continue;
         }
 
-        /*
-         * Shift and normalise.
-         * If call is, say, b we want p = b/(a+b+c+...+n), but then we do
-         * p/(1-p) later on and this has exceptions when p is very close
-         * to 1.
-         *
-         * Hence we compute b/(a+b+c+...+n - b) and
-         * rearrange (p/norm) / (1 - (p/norm)) to be p/norm2.
-         */
-        for (j = 0; j < 15; j++) {
-            S[j] -= shift;
-            double e = fast_exp(S[j]);
-            S[j] = (S[j] > min_e_exp) ? e : DBL_MIN;
-            norm[j] = 0;
+        if (max < S[j]) {
+            max = S[j];
+            call = j;
         }
+    }
 
-        tot1 = tot2 = 0;
-        for (j = 0; j < 15; j++) {
-            norm[j]    += tot1;
-            norm[14-j] += tot2;
-            tot1 += S[j];
-            tot2 += S[14-j];
-        }
+    /*
+     * Shift and normalise.
+     * If call is, say, b we want p = b/(a+b+c+...+n), but then we do
+     * p/(1-p) later on and this has exceptions when p is very close
+     * to 1.
+     *
+     * Hence we compute b/(a+b+c+...+n - b) and
+     * rearrange (p/norm) / (1 - (p/norm)) to be p/norm2.
+     */
+    for (j = 0; j < 15; j++) {
+        S[j] -= shift;
+        double e = fast_exp(S[j]);
+        S[j] = (S[j] > min_e_exp) ? e : DBL_MIN;
+        norm[j] = 0;
+    }
 
-        /* And store result */
-        if (depth && depth != counts[5] /* all N */) {
-            double m;
+    tot1 = tot2 = 0;
+    for (j = 0; j < 15; j++) {
+        norm[j]    += tot1;
+        norm[14-j] += tot2;
+        tot1 += S[j];
+        tot2 += S[14-j];
+    }
 
-            cons->depth = depth;
+    /* And store result */
+    if (depth && depth != counts[5] /* all N */) {
+        double m;
 
-            cons->call     = map_sing[call];
-            if (norm[call] == 0) norm[call] = DBL_MIN;
-            // approximation of phred for when S[call] ~= 1 and norm[call]
-            // is small.  Otherwise we need the full calculation.
-            if (S[call] == 1 && norm[call] < .01)
-                ph = ph_log(norm[call]) + .5;
+        cons->depth = depth;
+
+        cons->call     = map_sing[call];
+        if (norm[call] == 0) norm[call] = DBL_MIN;
+        // Approximation of phred for when S[call] ~= 1 and norm[call]
+        // is small.  Otherwise we need the full calculation.
+        if (S[call] == 1 && norm[call] < .01)
+            ph = ph_log(norm[call]) + .5;
+        else
+            ph = ph_log(1-S[call]/(norm[call]+S[call])) + .5;
+        cons->phred = ph < 0 ? 0 : ph;
+
+        cons->het_call = map_het[het_call];
+        if (norm[het_call] == 0) norm[het_call] = DBL_MIN;
+        ph = TENLOG2OVERLOG10 * (fast_log2(S[het_call])
+                                 - fast_log2(norm[het_call])) + .5;
+
+        //printf("Call=%c%c %2d, hetcall = %c%c %2d\n",
+        //       "ACGT*"[map_het[call]%5], "ACGTN"[map_het[call]/5],
+        //       cons->phred,
+        //       "ACGT*"[het_call%5], "ACGTN"[het_call/5],
+        //       ph);
+        cons->het_logodd = ph;
+
+        /* Compute discrepancy score */
+        if (flags & CONS_DISCREP) {
+            m = sumsC[0]+sumsC[1]+sumsC[2]+sumsC[3]+sumsC[4];
+            double c;
+            if (cons->het_logodd > 0)
+                c = sumsC[cons->het_call%5] + sumsC[cons->het_call/5];
             else
-                ph = ph_log(1-S[call]/(norm[call]+S[call])) + .5;
-            cons->phred = ph < 0 ? 0 : ph;
-            //cons->call_prob1 = norm[call]; // p = 1 - call_prob1
-
-            cons->het_call = map_het[het_call];
-            if (norm[het_call] == 0) norm[het_call] = DBL_MIN;
-            ph = TENLOG2OVERLOG10 * (fast_log2(S[het_call]) - fast_log2(norm[het_call])) + .5;
-
-            //printf("Call=%c%c %2d, hetcall = %c%c %2d\n",
-            //       "ACGT*"[map_het[call]%5], "ACGTN"[map_het[call]/5],
-            //       cons->phred,
-            //       "ACGT*"[het_call%5], "ACGTN"[het_call/5],
-            //       ph);
-            cons->het_logodd = ph;
-            //cons->het_prob_n = S[het_call]; // p = prob_n / prob_d
-            //cons->het_prob_d = norm[het_call];
-
-            /* Compute discrepancy score */
-            if (flags & CONS_DISCREP) {
-                m = sumsC[0]+sumsC[1]+sumsC[2]+sumsC[3]+sumsC[4];
-                double c;
-                if (cons->het_logodd > 0)
-                    c = sumsC[cons->het_call%5] + sumsC[cons->het_call/5];
-                else
-                    c = sumsC[cons->call];
-                cons->discrep = (m-c)/sqrt(m);
-            }
-        } else {
-            cons->call = 4; /* N */
-            cons->het_call = 0;
-            cons->het_logodd = 0;
-            cons->phred = 0;
-            cons->depth = 0;
-            cons->discrep = 0;
+                c = sumsC[cons->call];
+            cons->discrep = (m-c)/sqrt(m);
         }
+    } else {
+        cons->call = 4; /* N */
+        cons->het_call = 0;
+        cons->het_logodd = 0;
+        cons->phred = 0;
+        cons->depth = 0;
+        cons->discrep = 0;
     }
 
     return 0;
@@ -821,7 +806,7 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
             // and >= X% of all bases are high-quality Y calls.
             continue;
 
-        int b = p->is_del ? 16 : bam_seqi(bam_get_seq(p->b), p->qpos);
+        int base = p->is_del ? 16 : bam_seqi(bam_get_seq(p->b), p->qpos);
 
         if (p->indel > 0) {
             nins++;
@@ -864,24 +849,24 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
         }
 
         // Map ambiguity codes to one or more component bases.
-        if (b < 16) {
-            if (seqi2A[b]) {
-                int Q = seqi2A[b] * (opts->use_qual ? q : 1);
+        if (base < 16) {
+            if (seqi2A[base]) {
+                int Q = seqi2A[base] * (opts->use_qual ? q : 1);
                 freq[1]  += Q>0;
                 score[1] += Q;
             }
-            if (seqi2C[b]) {
-                int Q = seqi2C[b] * (opts->use_qual ? q : 1);
+            if (seqi2C[base]) {
+                int Q = seqi2C[base] * (opts->use_qual ? q : 1);
                 freq[2]  += Q>0;
                 score[2] += Q;
             }
-            if (seqi2G[b]) {
-                int Q = seqi2G[b] * (opts->use_qual ? q : 1);
+            if (seqi2G[base]) {
+                int Q = seqi2G[base] * (opts->use_qual ? q : 1);
                 freq[4]  += Q>0;
                 score[4] += Q;
             }
-            if (seqi2T[b]) {
-                int Q = seqi2T[b] * (opts->use_qual ? q : 1);
+            if (seqi2T[base]) {
+                int Q = seqi2T[base] * (opts->use_qual ? q : 1);
                 freq[8]  += Q>0;
                 score[8] += Q;
             }
@@ -948,7 +933,6 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
         "NACMGRSVTWYHKDBN"
         "*ac?g???t???????";
 
-    //printf("%c %d\n", het[used_base], used_depth);
     if (qual)
         *qual = used_base ? 100.0 * used_score / tscore : 0;
 
@@ -959,12 +943,6 @@ static int calculate_consensus_simple(const bam_pileup1_t *plp, int nplp,
 /* --------------------------------------------------------------------------
  * Main processing logic
  */
-
-// FIXME: move to header file if we intend to keep this interaction.
-extern int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
-                      hts_pos_t ref_len, const char *ref, kstring_t *ks,
-                      int rev_del, int no_ins, int no_ins_mods,
-                      int no_del, int no_ends);
 
 static void empty_pileup(consensus_opts *opts, sam_hdr_t *h, int tid,
                          hts_pos_t start, hts_pos_t end) {

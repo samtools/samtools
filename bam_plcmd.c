@@ -46,6 +46,7 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "bedidx.h"
 #include "sam_opts.h"
+#include "bam_plbuf.h"
 
 #define dummy_free(p)
 KLIST_INIT(auxlist, char *, dummy_free)
