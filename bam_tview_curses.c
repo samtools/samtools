@@ -140,12 +140,12 @@ static int tv_win_goto_get_completions(curses_tview_t *tv, char *str, char ***ma
     char **references = tv->view.header->target_name;
     int num_references = tv->view.header->n_targets;
     int i, num_matches = 0;
-    int l_str = strlen(str);
+    size_t l_str = strlen(str);
 
     for (i = 0; i < num_references; i++) {
         char *ref = references[i];
+        if (ref == NULL) return -1;
         if (strncmp(ref, str, l_str) == 0) {
-            if (ref == NULL) return -1;
             num_matches++;
             if (hts_resize(char**, num_matches, matches_size, matches, 0) == -1)
                 return -1;
@@ -159,8 +159,8 @@ static int tv_win_goto_get_completions(curses_tview_t *tv, char *str, char ***ma
 
 static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     char str[TV_MAX_GOTO+1], *p;
-    char **matches = malloc(sizeof(char**));
-    int i, l, tab_index = 0, num_matches = 0, matches_size = 1;
+    char **matches = NULL;
+    int i, l, tab_index = 0, num_matches = 0, matches_size = 0;
     tview_t *base=(tview_t*)tv;
     str[0] = '\0';
     wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
@@ -218,7 +218,6 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
 
         // reset tab_index if not cycling through tab completions
         if (c != KEY_STAB && c != 9) {
-            invalid = 1;
             tab_index = 0;
         }
     }
