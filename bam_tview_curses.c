@@ -146,11 +146,11 @@ static int tv_win_goto_get_completions(curses_tview_t *tv, char *str, char ***ma
         char *ref = references[i];
         if (strncmp(ref, str, l_str) == 0) {
             if (ref == NULL) return -1;
+            num_matches++;
             if (hts_resize(char**, num_matches, matches_size, matches, 0) == -1)
                 return -1;
 
-            (*matches)[num_matches] = ref;
-            num_matches++;
+            (*matches)[num_matches-1] = ref;
         }
     }
 
