@@ -136,36 +136,38 @@ static int curses_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos) {
     return base_draw_aln(tv,  tid, pos);
 }
 
-static int tv_win_goto_get_completions(curses_tview_t *tv, char *str, char ***matches) {
+static int tv_win_goto_get_completions(curses_tview_t *tv, char *str, char ***matches, int *matches_size) {
     char **references = tv->view.header->target_name;
     int num_references = tv->view.header->n_targets;
-    int l_matches = 0;
+    int i, num_matches = 0;
+    int l_str = strlen(str);
 
-    for (int i = 0; i < num_references; i++) {
+    for (i = 0; i < num_references; i++) {
         char *ref = references[i];
+        if (strncmp(ref, str, l_str) == 0) {
+            if (ref == NULL) return -1;
+            if (hts_resize(char**, num_matches, matches_size, matches, 0) == -1)
+                return -1;
 
-        if (strncmp(ref, str, strlen(str)) == 0) {
-            l_matches++;
-
-            *matches = realloc(*matches, sizeof(char*)*l_matches);
-            (*matches)[l_matches-1] = ref;
+            (*matches)[num_matches] = ref;
+            num_matches++;
         }
     }
 
-    return l_matches;
+    return num_matches;
 }
 
 static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
-    char str[256], *p;
-    char **matches = NULL;
-    int i, l, tab_index = 0, l_matches = 0;
+    char str[TV_MAX_GOTO+1], *p;
+    char **matches = malloc(sizeof(char**));
+    int i, l, tab_index = 0, num_matches = 0, matches_size = 1;
     tview_t *base=(tview_t*)tv;
     str[0] = '\0';
     wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
 
     char *header = tv->view.header->target_name[*tid];
     wclear(tv->wgoto);
-    snprintf(str, 256, "%s:%"PRIhts_pos, header, tv->view.left_pos+1);
+    snprintf(str, TV_MAX_GOTO+1, "%s:%"PRIhts_pos, header, tv->view.left_pos+1);
     mvwprintw(tv->wgoto, 1, 2, "Goto: %s", str);
     l = strlen(str);
 
@@ -195,14 +197,14 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
             invalid = 1;
         } else if (c == KEY_STAB || c == 9) {
             if (tab_index == 0) {
-                l_matches = tv_win_goto_get_completions(tv, str, &matches);
+                num_matches = tv_win_goto_get_completions(tv, str, &matches, &matches_size);
             }
 
-            if (l_matches > 0) {
-                if (tab_index > l_matches-1) {
+            if (num_matches > 0) {
+                if (tab_index >= num_matches) {
                     tab_index = 0;
                 }
-                snprintf(str, 256, "%s:", matches[tab_index++]);
+                snprintf(str, TV_MAX_GOTO+1, "%s:", matches[tab_index++]);
                 l = strlen(str);
             }
         } else if (isgraph(c)) {
