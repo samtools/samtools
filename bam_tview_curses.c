@@ -163,10 +163,10 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     int i, l, tab_index = 0, num_matches = 0, matches_size = 0;
     tview_t *base=(tview_t*)tv;
     str[0] = '\0';
+    wclear(tv->wgoto);
     wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
 
     char *header = tv->view.header->target_name[*tid];
-    wclear(tv->wgoto);
     snprintf(str, TV_MAX_GOTO+1, "%s:%"PRIhts_pos, header, tv->view.left_pos+1);
     mvwprintw(tv->wgoto, 1, 2, "Goto: %s", str);
     l = strlen(str);
