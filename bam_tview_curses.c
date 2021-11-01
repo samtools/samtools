@@ -52,7 +52,7 @@ DEALINGS IN THE SOFTWARE.  */
 
 typedef struct CursesTview {
     tview_t view;
-    WINDOW *wgoto, *whelp;
+    WINDOW *wgoto, *whelp, *wlistref;
 } curses_tview_t;
 
 #define FROM_TV(ptr) ((curses_tview_t*)ptr)
@@ -60,7 +60,7 @@ typedef struct CursesTview {
 static void curses_destroy(tview_t* base) {
     curses_tview_t* tv=(curses_tview_t*)base;
 
-    delwin(tv->wgoto); delwin(tv->whelp);
+    delwin(tv->wgoto); delwin(tv->whelp); delwin(tv->wlistref);
     endwin();
 
     base_tv_destroy(base);
@@ -136,31 +136,88 @@ static int curses_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos) {
     return base_draw_aln(tv,  tid, pos);
 }
 
-static int tv_win_goto_get_completions(curses_tview_t *tv, char *str, char ***matches, int *matches_size) {
+static int tv_win_goto_get_completions(curses_tview_t *tv, char *str,
+                                       char ***matches, int *matches_size,
+                                       uint32_t **lengths, int *lengths_size) {
     char **references = tv->view.header->target_name;
+    uint32_t *references_lengths = tv->view.header->target_len;
     int num_references = tv->view.header->n_targets;
     int i, num_matches = 0;
     size_t l_str = strlen(str);
 
     for (i = 0; i < num_references; i++) {
         char *ref = references[i];
-        if (ref == NULL) return -1;
+        uint32_t *len = references_lengths + i;
+        if (ref == NULL || len == NULL) return -1;
         if (strncmp(ref, str, l_str) == 0) {
             num_matches++;
             if (hts_resize(char**, num_matches, matches_size, matches, 0) == -1)
                 return -1;
+            if (hts_resize(int*, num_matches, lengths_size, lengths, 0) == -1)
+                return -1;
 
             (*matches)[num_matches-1] = ref;
+            (*lengths)[num_matches-1] = *len;
+
         }
     }
 
     return num_matches;
 }
 
+// static int get_ref_size(curses_tview_t *tv, char *reference) {
+//     sam_hdr_t header = *(tv->view.header);
+//     char **refs = header.target_name;
+//     uint32_t *lengths = header.target_len;
+//     int i, l_refs = header.n_targets;
+    
+//     for (i = 0; i < l_refs; i++) {
+//         char *ref = refs[i];
+//         if (ref == NULL) return -1;
+//         if (strncmp(ref, reference, TV_MAX_GOTO) == 0) {
+//             return lengths[i];
+//         }         
+//     }
+//     return -1;
+// }
+
+static void tv_win_listref(curses_tview_t *tv, char** matches, uint32_t* lengths, int num_matches, int tab_index, int upper_bound) {
+    int i;
+    char str[TV_MAX_GOTO+1];
+
+    wclear(tv->wlistref);
+    wborder(tv->wlistref, '|', '|', '-', '-', '+', '+', '+', '+');
+
+    int offset = upper_bound < TV_MAX_LISTREF ? 0 : upper_bound - TV_MAX_LISTREF;
+    int max = num_matches < TV_MAX_LISTREF ? num_matches : TV_MAX_LISTREF;
+    for (i = 0; i < max; i++) {
+        if (tab_index == i+offset) {
+            mvwprintw(tv->wlistref, i+1, 1, ">");
+        }
+        snprintf(str, TV_MAX_GOTO, "%s  length: %d", matches[i+offset], lengths[i+offset]);
+        mvwprintw(tv->wlistref, i+1, 2, str);
+
+    }
+
+    if (upper_bound < num_matches) {
+        mvwprintw(tv->wlistref, TV_MAX_LISTREF-1, TV_MAX_GOTO+8, "|");
+        mvwprintw(tv->wlistref, TV_MAX_LISTREF, TV_MAX_GOTO+8, "v");
+    } 
+    if (offset > 0) {
+        mvwprintw(tv->wlistref, 1, TV_MAX_GOTO+8, "^");
+        mvwprintw(tv->wlistref, 2, TV_MAX_GOTO+8, "|");
+    }
+
+    wrefresh(tv->wlistref);
+}
+
+
 static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     char str[TV_MAX_GOTO+1], *p;
     char **matches = NULL;
-    int i, l, tab_index = 0, num_matches = 0, matches_size = 0;
+    uint32_t *matches_lengths = NULL;
+    int i, l, tab_index = 0, num_matches = 0, matches_size = 0, matches_lengths_size = 0, upper_bound = TV_MAX_LISTREF;
+    int is_tabbing = 0;
     tview_t *base=(tview_t*)tv;
     str[0] = '\0';
     wclear(tv->wgoto);
@@ -195,15 +252,30 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
 
             // If we get here, the region string is invalid
             invalid = 1;
-        } else if (c == KEY_STAB || c == 9) {
-            if (tab_index == 0) {
-                num_matches = tv_win_goto_get_completions(tv, str, &matches, &matches_size);
+        } else if (c == KEY_STAB || c == 9 || (is_tabbing && ((c == KEY_UP) || c == KEY_DOWN || c == KEY_BTAB))) {
+            if (is_tabbing == 0) {
+                num_matches = tv_win_goto_get_completions(tv, str, &matches, &matches_size, &matches_lengths, &matches_lengths_size);
+                is_tabbing = 1;
+            }
+            if (c == KEY_UP || c == KEY_BTAB) {
+                tab_index -= 2;
             }
 
             if (num_matches > 0) {
                 if (tab_index >= num_matches) {
                     tab_index = 0;
+                    upper_bound = TV_MAX_LISTREF;
+                } else if (tab_index < 0) {
+                    tab_index = num_matches-1;
+                    upper_bound = num_matches-1;
                 }
+                if (tab_index >= upper_bound) {
+                    upper_bound++;
+                }
+                if (tab_index < upper_bound-TV_MAX_LISTREF) {
+                    upper_bound--;
+                }
+                tv_win_listref(tv, matches, matches_lengths, num_matches, tab_index, upper_bound);
                 snprintf(str, TV_MAX_GOTO+1, "%s:", matches[tab_index++]);
                 l = strlen(str);
             }
@@ -217,8 +289,10 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
         mvwprintw(tv->wgoto, 1, 8, "%s", str);
 
         // reset tab_index if not cycling through tab completions
-        if (c != KEY_STAB && c != 9) {
+        if (c != KEY_STAB && c != 9 && c != KEY_DOWN && c != KEY_UP) {
             tab_index = 0;
+            upper_bound = TV_MAX_LISTREF;
+            is_tabbing = false;
         }
     }
 
@@ -355,7 +429,10 @@ tview_t* curses_tv_init(const char *fn, const char *fn_fa, const char *samples,
 
     getmaxyx(stdscr, base->mrow, base->mcol);
     tv->wgoto = newwin(3, TV_MAX_GOTO + 10, 10, 5);
+    keypad(tv->wgoto, TRUE);
+    set_escdelay(0);
     tv->whelp = newwin(30, 40, 5, 5);
+    tv->wlistref = newwin(8, TV_MAX_GOTO + 10, 3, 5);
 
     start_color();
     curses_init_colors(0);
