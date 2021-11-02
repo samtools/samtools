@@ -140,6 +140,8 @@ static int curses_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos) {
 static int tv_win_goto_get_completions(curses_tview_t *tv, char *str,
                                        char ***matches, int *matches_size,
                                        uint32_t **lengths, int *lengths_size) {
+
+
     char **references = tv->view.header->target_name;
     uint32_t *references_lengths = tv->view.header->target_len;
     int num_references = tv->view.header->n_targets;
@@ -194,6 +196,10 @@ static void tv_win_listref(curses_tview_t *tv, char** matches, uint32_t* lengths
     wclear(tv->wlistref);
     wborder(tv->wlistref, '|', '|', '-', '-', '+', '+', '+', '+');
 
+    if (num_matches == 0) {
+        mvwprintw(tv->wlistref, 3, 18, "No references found.");
+    }
+
     int offset = upper_bound < TV_MAX_LISTREF ? 0 : upper_bound - TV_MAX_LISTREF;
     int max = num_matches < TV_MAX_LISTREF ? num_matches : TV_MAX_LISTREF;
     for (i = 0; i < max; i++) {
@@ -228,8 +234,10 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     wclear(tv->wgoto);
     wborder(tv->wgoto, '|', '|', '-', '-', '+', '+', '+', '+');
 
-    char *header = tv->view.header->target_name[*tid];
-    snprintf(str, TV_MAX_GOTO+1, "%s:%"PRIhts_pos, header, tv->view.left_pos+1);
+    if (tv->view.header->n_targets > *tid) {
+        char *ref = tv->view.header->target_name[*tid];
+        snprintf(str, TV_MAX_GOTO+1, "%s:%"PRIhts_pos, ref, tv->view.left_pos+1);
+    }
     mvwprintw(tv->wgoto, 1, 2, "Goto: %s", str);
     l = strlen(str);
 
@@ -289,9 +297,10 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
                 is_tabbing = true;
             }
 
-
-            snprintf(str, TV_MAX_GOTO+1, "%s:", matches[tab_index]);
-            l = strlen(str);
+            if (num_matches > 0) {
+                snprintf(str, TV_MAX_GOTO+1, "%s:", matches[tab_index]);
+                l = strlen(str);
+            }
         } else if (isgraph(c)) {
             if (l < TV_MAX_GOTO) str[l++] = c;
         } else if (c == '\027') l = 0;
