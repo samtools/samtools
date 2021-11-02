@@ -1632,6 +1632,7 @@ static int head_usage(FILE *fp, int exit_status)
     fprintf(fp,
 "Usage: samtools head [OPTION]... [FILE]\n"
 "Options:\n"
+"  -e, --expr STR      Show only header lines matching the filter expression STR\n"
 "  -h, --headers INT   Display INT header lines [all]\n"
 "  -n, --records INT   Display INT alignment record lines [none]\n"
 );
@@ -1643,20 +1644,23 @@ int main_head(int argc, char *argv[])
 {
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 'T', '@'),
+        { "expr", required_argument, NULL, 'e' },
+        { "expression", required_argument, NULL, 'e' },
         { "headers", required_argument, NULL, 'h' },
         { "records", required_argument, NULL, 'n' },
         { NULL, 0, NULL, 0 }
     };
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
 
-    int all_headers = 1;
-    uint64_t nheaders = 0;
+    uint64_t nheaders = UINT64_MAX;
     uint64_t nrecords = 0;
+    const char *filter_expr = NULL;
 
     int c, nargs;
-    while ((c = getopt_long(argc, argv, "h:n:T:@:", lopts, NULL)) >= 0)
+    while ((c = getopt_long(argc, argv, "e:h:n:T:@:", lopts, NULL)) >= 0)
         switch (c) {
-        case 'h': all_headers = 0; nheaders = strtoull(optarg, NULL, 0); break;
+        case 'e': filter_expr = optarg; break;
+        case 'h': nheaders = strtoull(optarg, NULL, 0); break;
         case 'n': nrecords = strtoull(optarg, NULL, 0); break;
         default:
             if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
@@ -1675,6 +1679,7 @@ int main_head(int argc, char *argv[])
     sam_hdr_t *hdr = NULL;
     kstring_t str = KS_INITIALIZE;
     bam1_t *b = NULL;
+    hts_filter_t *filter = NULL;
 
     const char *fname = (nargs == 1)? argv[optind] : "-";
     fp = sam_open_format(fname, "r", &ga.in);
@@ -1688,6 +1693,14 @@ int main_head(int argc, char *argv[])
 
     if (ga.nthreads > 0) hts_set_threads(fp, ga.nthreads);
 
+    if (filter_expr) {
+        filter = hts_filter_init(filter_expr);
+        if (filter == NULL) {
+            print_error("head", "failed to initialise filter");
+            goto err;
+        }
+    }
+
     hdr = sam_hdr_read(fp);
     if (hdr == NULL) {
         if (strcmp(fname, "-") != 0)
@@ -1697,25 +1710,21 @@ int main_head(int argc, char *argv[])
         goto err;
     }
 
-    if (all_headers) {
-        fputs(sam_hdr_str(hdr), stdout);
-    }
-    else if (nheaders > 0) {
-        const char *text = sam_hdr_str(hdr);
-        const char *lim = text;
-        uint64_t n;
-        for (n = 0; n < nheaders; n++) {
-            lim = strchr(lim, '\n');
-            if (lim) lim++;
-            else break;
+    uint64_t n = 0;
+    sam_hdr_line_t *line;
+    for (line = sam_hdr_first_line(hdr); line && n < nheaders; line = sam_hdr_next_line(hdr, line)) {
+        if (filter && !sam_hdr_passes_filter(hdr, line, filter)) continue;
+
+        if (sam_hdr_format_line(line, &str) < 0) {
+            print_error("head", "couldn't format header line");
+            goto err;
         }
-        if (lim) fwrite(text, lim - text, 1, stdout);
-        else fputs(text, stdout);
+        puts(ks_str(&str));
+        n++;
     }
 
     if (nrecords > 0) {
         b = bam_init1();
-        uint64_t n;
         int r = 0;
         for (n = 0; n < nrecords && (r = sam_read1(fp, hdr, b)) >= 0; n++) {
             if (sam_format1(hdr, b, &str) < 0) {
@@ -1729,16 +1738,18 @@ int main_head(int argc, char *argv[])
             goto err;
         }
         bam_destroy1(b);
-        ks_free(&str);
     }
 
+    hts_filter_free(filter);
     sam_hdr_destroy(hdr);
     sam_close(fp);
+    ks_free(&str);
     sam_global_args_free(&ga);
 
     return EXIT_SUCCESS;
 
 err:
+    hts_filter_free(filter);
     if (fp) sam_close(fp);
     sam_hdr_destroy(hdr);
     bam_destroy1(b);
