@@ -282,11 +282,16 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
         } else if (isgraph(c)) {
             if (l < TV_MAX_GOTO) str[l++] = c;
         } else if (c == '\027') l = 0;
-        else if (c == '\033') return;
+        else if (c == '\033') {
+            free(matches);
+            return;
+        }
         str[l] = '\0';
         for (i = 0; i < TV_MAX_GOTO; ++i) mvwaddch(tv->wgoto, 1, 8 + i, ' ');
         if (invalid) mvwprintw(tv->wgoto, 1, TV_MAX_GOTO - 1, "[Invalid]");
         mvwprintw(tv->wgoto, 1, 8, "%s", str);
+
+
 
         // reset tab_index if not cycling through tab completions
         if (c != KEY_STAB && c != 9 && c != KEY_DOWN && c != KEY_UP) {
