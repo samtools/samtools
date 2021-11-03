@@ -138,8 +138,7 @@ static int curses_drawaln(struct AbstractTview* tv, int tid, hts_pos_t pos) {
 }
 
 static int tv_win_goto_get_completions(curses_tview_t *tv, char *str,
-                                       char ***matches, int *matches_size,
-                                       uint32_t **lengths, int *lengths_size) {
+                                       int **matches, int *matches_size) {
 
 
     char **references = tv->view.header->target_name;
@@ -164,24 +163,19 @@ static int tv_win_goto_get_completions(curses_tview_t *tv, char *str,
             // Special case handling if the reference is already selected
             if (is_different && strnlen(ref, TV_MAX_GOTO+1) == l_str) {
                 num_matches = 1;
-                if (hts_resize(char**, num_matches, matches_size, matches, 0) == -1)
+                if (hts_resize(int, num_matches, matches_size, matches, 0) == -1)
                     return -1;
-                if (hts_resize(int*, num_matches, lengths_size, lengths, 0) == -1)
-                    return -1;
-                (*matches)[num_matches-1] = ref;
-                (*lengths)[num_matches-1] = *len;
+                (*matches)[num_matches-1] = i;
 
                 break;
             } else if (!is_different) {
                 num_matches++;
 
-                if (hts_resize(char**, num_matches, matches_size, matches, 0) == -1)
-                    return -1;
-                if (hts_resize(int*, num_matches, lengths_size, lengths, 0) == -1)
+                if (hts_resize(int, num_matches, matches_size, matches, 0) == -1)
                     return -1;
 
-                (*matches)[num_matches-1] = ref;
-                (*lengths)[num_matches-1] = *len;
+                (*matches)[num_matches-1] = i;
+
             }
         }
     }
@@ -189,9 +183,12 @@ static int tv_win_goto_get_completions(curses_tview_t *tv, char *str,
     return num_matches;
 }
 
-static void tv_win_listref(curses_tview_t *tv, char** matches, uint32_t* lengths, int num_matches, int tab_index, int upper_bound) {
+static void tv_win_listref(curses_tview_t *tv, int* matches, int num_matches,
+                           int tab_index, int upper_bound) {
     int i;
     char str[TV_MAX_GOTO+1];
+    char **refs = tv->view.header->target_name;
+    uint32_t *lengths = tv->view.header->target_len;
 
     wclear(tv->wlistref);
     wborder(tv->wlistref, '|', '|', '-', '-', '+', '+', '+', '+');
@@ -203,17 +200,21 @@ static void tv_win_listref(curses_tview_t *tv, char** matches, uint32_t* lengths
     int offset = upper_bound < TV_MAX_LISTREF ? 0 : upper_bound - TV_MAX_LISTREF;
     int max = num_matches < TV_MAX_LISTREF ? num_matches : TV_MAX_LISTREF;
     for (i = 0; i < max; i++) {
+        uint32_t match_idx = matches[i+offset];
+        char *ref = refs[match_idx];
+        uint32_t len = lengths[match_idx];
+
         if (tab_index == i+offset) {
             mvwprintw(tv->wlistref, i+1, 1, ">");
         }
-        snprintf(str, TV_MAX_GOTO, "%s  length: %d", matches[i+offset], lengths[i+offset]);
+        snprintf(str, TV_MAX_GOTO, "%s  length: %d", ref, len);
         mvwprintw(tv->wlistref, i+1, 2, str);
 
     }
 
     if (upper_bound < num_matches) {
         mvwprintw(tv->wlistref, TV_MAX_LISTREF-1, TV_MAX_GOTO+8, "|");
-        mvwprintw(tv->wlistref, TV_MAX_LISTREF, TV_MAX_GOTO+8, "v");
+        mvwprintw(tv->wlistref, TV_MAX_LISTREF,   TV_MAX_GOTO+8, "v");
     }
     if (offset > 0) {
         mvwprintw(tv->wlistref, 1, TV_MAX_GOTO+8, "^");
@@ -225,9 +226,8 @@ static void tv_win_listref(curses_tview_t *tv, char** matches, uint32_t* lengths
 
 static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     char str[TV_MAX_GOTO+1], *p;
-    char **matches = NULL;
-    uint32_t *matches_lengths = NULL;
-    int i, l, tab_index = 0, num_matches = 0, matches_size = 0, matches_lengths_size = 0, upper_bound = TV_MAX_LISTREF;
+    int *matches = NULL;
+    int i, l, tab_index = 0, num_matches = 0, matches_size = 0, upper_bound = TV_MAX_LISTREF;
     bool is_tabbing = false;
     tview_t *base=(tview_t*)tv;
     str[0] = '\0';
@@ -241,8 +241,8 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
     mvwprintw(tv->wgoto, 1, 2, "Goto: %s", str);
     l = strlen(str);
 
-    num_matches = tv_win_goto_get_completions(tv, str, &matches, &matches_size, &matches_lengths, &matches_lengths_size);
-    tv_win_listref(tv, matches, matches_lengths, num_matches, tab_index, upper_bound);
+    num_matches = tv_win_goto_get_completions(tv, str, &matches, &matches_size);
+    tv_win_listref(tv, matches, num_matches, tab_index, upper_bound);
 
     for (;;) {
         int invalid = 0;
@@ -298,7 +298,7 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
             }
 
             if (num_matches > 0) {
-                snprintf(str, TV_MAX_GOTO+1, "%s:", matches[tab_index]);
+                snprintf(str, TV_MAX_GOTO+1, "%s:", tv->view.header->target_name[matches[tab_index]]);
                 l = strlen(str);
             }
         } else if (isgraph(c)) {
@@ -317,10 +317,10 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
         if (c != KEY_STAB && c != 9 && c != KEY_DOWN && c != KEY_UP && c!= KEY_BTAB) {
             tab_index = 0;
             upper_bound = TV_MAX_LISTREF;
-            num_matches = tv_win_goto_get_completions(tv, str, &matches, &matches_size, &matches_lengths, &matches_lengths_size);
+            num_matches = tv_win_goto_get_completions(tv, str, &matches, &matches_size);
         }
 
-        tv_win_listref(tv, matches, matches_lengths, num_matches, tab_index, upper_bound);
+        tv_win_listref(tv, matches, num_matches, tab_index, upper_bound);
 
     }
 
