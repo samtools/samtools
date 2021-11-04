@@ -1100,14 +1100,8 @@ int bam_mpileup(int argc, char *argv[])
         case '6': mplp.flag |= MPLP_ILLUMINA13; break;
         case 'R': mplp.flag |= MPLP_IGNORE_RG; break;
         case 's': mplp.flag |= MPLP_PRINT_MAPQ_CHAR; break;
-        case 'O':
-            if (!(mplp.flag & MPLP_PRINT_QPOS5))
-                mplp.flag |= MPLP_PRINT_QPOS;
-            break;
-        case  14:
-            mplp.flag |=  MPLP_PRINT_QPOS5;
-            mplp.flag &= ~MPLP_PRINT_QPOS;
-            break;
+        case 'O': mplp.flag |= MPLP_PRINT_QPOS; break;
+        case  14: mplp.flag |= MPLP_PRINT_QPOS5; break;
         case 'M': mplp.flag |= MPLP_PRINT_MODS; break;
         case 'C': mplp.capQ_thres = atoi(optarg); break;
         case 'q': mplp.min_mq = atoi(optarg); break;
