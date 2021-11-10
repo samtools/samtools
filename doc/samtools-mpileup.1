@@ -278,20 +278,6 @@ Write pileup output to
 .IR FILE ,
 rather than the default of standard output.
 
-(The same short option is used for both the deprecated
-.BR --open-prob
-option and
-.BR --output .
-If
-.BR -o 's
-argument contains any non-digit characters other than a leading + or - sign,
-it is interpreted as
-.BR --output .
-Usually the filename extension will take care of this, but to write to an
-entirely numeric filename use
-.B -o ./123
-or
-.BR "--output 123" .)
 .TP
 .B -O, --output-BP
 Output base positions on reads in orientation listed in the SAM file

@@ -1054,7 +1054,7 @@ int bam_mpileup(int argc, char *argv[])
         {NULL, 0, NULL, 0}
     };
 
-    while ((c = getopt_long(argc, argv, "Agf:r:l:q:Q:uRC:Bd:b:o:EG:6OsVvxXaM",lopts,NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Af:r:l:q:Q:RC:Bd:b:o:EG:6OsxXaM",lopts,NULL)) >= 0) {
         switch (c) {
         case 'x': mplp.flag &= ~MPLP_SMART_OVERLAPS; break;
         case  1 :
