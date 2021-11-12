@@ -1,6 +1,6 @@
 /*  bam_tview_curses.c -- curses tview implementation.
 
-    Copyright (C) 2008-2015, 2019 Genome Research Ltd.
+    Copyright (C) 2008-2015, 2019, 2021 Genome Research Ltd.
     Portions copyright (C) 2013 Pierre Lindenbaum, Institut du Thorax, INSERM U1087, Université de Nantes.
 
     Author: Heng Li <lh3@sanger.ac.uk>
