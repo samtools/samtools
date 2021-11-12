@@ -257,11 +257,13 @@ static void tv_win_goto(curses_tview_t *tv, int *tid, hts_pos_t *pos) {
                 _beg = strtoll(str+1, &p, 10) - 1;
                 if (_beg > 0) {
                     *pos = _beg;
+                    free(matches);
                     return;
                 }
             } else {
                 if (sam_parse_region(base->header, str, &_tid, &_beg, &_end, 0) && _tid >= 0) {
                     *tid = _tid; *pos = _beg;
+                    free(matches);
                     return;
                 }
             }
