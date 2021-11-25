@@ -142,10 +142,12 @@
         new_node->left = NULL;                                                \
         new_node->right = NULL;                                               \
         new_node->parent = parent;                                            \
-        if (__sort_lt(value, parent->value)) {                                \
-            parent->left = new_node;                                          \
-        } else {                                                              \
-            parent->right = new_node;                                         \
+        if (parent) {                                                         \
+            if (__sort_lt(value, parent->value)) {                            \
+                parent->left = new_node;                                      \
+            } else {                                                          \
+                parent->right = new_node;                                     \
+            }                                                                 \
         }                                                                     \
         new_node = splay_tree_##name(new_node);                               \
         return new_node;                                                      \
