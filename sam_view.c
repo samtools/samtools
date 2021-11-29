@@ -703,8 +703,6 @@ int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
         }
     }
     hts_itr_multi_destroy(iter);
-    hts_idx_destroy(conf->hts_idx); // destroy the BAM index
-    conf->hts_idx = NULL;
     bam_destroy1(b);
 
     if (result < -1) {
@@ -1209,43 +1207,18 @@ int main_samview(int argc, char *argv[])
             ret = 1;
         }
         bam_destroy1(b);
-    }
-    else    // retrieve alignments in specified regions using the generic iterator
-    {
+    } else {   // retrieve alignments in specified regions
         int i;
-        bam1_t *b;
-        b = bam_init1();
-
         for (i = (has_index_file)? optind+2 : optind+1; i < argc; ++i) {
-            int result;
             hts_itr_t *iter = sam_itr_querys(settings.hts_idx, settings.header, argv[i]); // parse a region in the format like `chr2:100-200'
             if (iter == NULL) { // region invalid or reference name not found
                 fprintf(stderr, "[main_samview] region \"%s\" specifies an invalid region or unknown reference. Continue anyway.\n", argv[i]);
                 continue;
             }
             // fetch alignments
-            while ((result = sam_itr_next(settings.in, iter, b)) >= 0) {
-                if (!process_aln(settings.header, b, &settings)) {
-                    if (!settings.is_count) {
-                        change_flag(b, &settings);
-                        if (check_sam_write1(settings.out, settings.header, b, settings.fn_out, &ret) < 0) break;
-                    }
-                    settings.count++;
-                } else if (settings.unmap) {
-                    b->core.flag |= BAM_FUNMAP;
-                    if (check_sam_write1(settings.out, settings.header, b, settings.fn_out, &ret) < 0) break;
-                } else {
-                    if (settings.un_out) { if (check_sam_write1(settings.un_out, settings.header, b, settings.fn_un_out, &ret) < 0) break; }
-                }
-            }
-            hts_itr_destroy(iter);
-            if (result < -1) {
-                print_error("view", "retrieval of region \"%s\" failed due to truncated file or corrupt BAM index file", argv[i]);
-                ret = 1;
-                break;
-            }
+            ret = multi_region_view(&settings, iter);
+            if (ret) goto view_end;
         }
-        bam_destroy1(b);
     }
 
     if ( settings.hts_idx ) hts_idx_destroy(settings.hts_idx);
