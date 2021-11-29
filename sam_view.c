@@ -414,11 +414,6 @@ int parse_aux_list(auxhash_t *h, char *optarg) {
     return 0;
 }
 
-#define error(...) { \
-   print_error_errno("view",__VA_ARGS__); \
-   exit(EXIT_FAILURE); \
-}
-
 static int cmp_reglist_intervals(const void *aptr, const void *bptr)
 {
     hts_pair_pos_t *a = (hts_pair_pos_t*)aptr;
@@ -442,7 +437,11 @@ static hts_reglist_t *_reglist_dup(sam_hdr_t *hdr, hts_reglist_t *src, int nsrc)
 {
     int i,j;
     hts_reglist_t *dst = (hts_reglist_t*)calloc(nsrc,sizeof(hts_reglist_t));
-    if ( !dst ) error("[%s:%d] could not allocate memory\n",__FILE__,__LINE__);
+    if ( !dst ) {
+        print_error_errno("view", "[%s:%d] could not allocate region list"
+                          ,__FILE__ ,__LINE__);
+        return NULL;
+    }
     for (i=0; i<nsrc; i++)
     {
         // Assume tid is not set correctly, reg is informative but may not point to a long-lived memory
@@ -451,12 +450,22 @@ static hts_reglist_t *_reglist_dup(sam_hdr_t *hdr, hts_reglist_t *src, int nsrc)
         dst[i].max_end = src[i].max_end;
         dst[i].count = src[i].count;
         dst[i].intervals = (hts_pair_pos_t*)malloc(sizeof(hts_pair_pos_t)*dst[i].count);
-        if ( !dst[i].intervals ) error("[%s:%d] could not allocate memory\n",__FILE__,__LINE__);
+        if ( !dst[i].intervals ) {
+            print_error_errno("view", "[%s:%d] could not allocate region list",
+                              __FILE__, __LINE__);
+            goto fail;
+        }
         for (j=0; j<dst[i].count; j++)
             dst[i].intervals[j] = src[i].intervals[j];
     }
     qsort(dst,nsrc,sizeof(*dst),cmp_reglist_tids);
     return dst;
+
+ fail:
+    for (j = 0; j < i; j++)
+        free(dst[j].intervals);
+    free(dst);
+    return NULL;
 }
 static inline int _reglist_find_tid(hts_reglist_t *reg, int nreg, int tid) // binary search
 {
@@ -471,15 +480,19 @@ static inline int _reglist_find_tid(hts_reglist_t *reg, int nreg, int tid) // bi
     if ( i<0 || reg[i].tid < tid ) i++;    // not found, i will be the index of the inserted element
     return i;
 }
-static hts_reglist_t *_reglist_push(hts_reglist_t *reg, int *_nreg, int tid, hts_pos_t beg, hts_pos_t end)
+static int _reglist_push(hts_reglist_t **_reg, int *_nreg, int tid, hts_pos_t beg, hts_pos_t end)
 {
+    hts_reglist_t *reg = *_reg;
     int nreg = *_nreg;
     int i = _reglist_find_tid(reg,nreg,tid);
-    if ( i>=nreg || reg[i].tid!=tid )
-    {
+    if ( i>=nreg || reg[i].tid!=tid ) {
         nreg++;
         reg = (hts_reglist_t*)realloc(reg,sizeof(hts_reglist_t)*nreg);
-        if ( !reg ) error("[%s:%d] could not allocate memory\n",__FILE__,__LINE__);
+        if ( !reg ) {
+            print_error_errno("view", "[%s:%d] could not extend region list",
+                              __FILE__, __LINE__);
+            return -1;
+        }
         if ( i+1 < nreg )
             memmove(reg + i + 1, reg + i, sizeof(hts_reglist_t)*(nreg - i - 1));
         reg[i].reg = NULL;
@@ -489,14 +502,26 @@ static hts_reglist_t *_reglist_push(hts_reglist_t *reg, int *_nreg, int tid, hts
         reg[i].intervals = NULL;
         reg[i].count = 0;
     }
+    *_reg = reg;
     *_nreg = nreg;
-    if ( reg[i].count > 0 && reg[i].intervals[reg[i].count - 1].beg==beg && reg[i].intervals[reg[i].count - 1].end==end ) return reg;
+    if ( reg[i].count > 0
+         && reg[i].intervals[reg[i].count - 1].beg==beg
+         && reg[i].intervals[reg[i].count - 1].end==end ) {
+        return 0;
+    }
+    hts_pair_pos_t *new_intervals = realloc(reg[i].intervals, sizeof(hts_pair_pos_t)*(reg[i].count + 1));
+    if (!new_intervals) {
+        print_error_errno("view", "[%s:%d] could not extend region list",
+                          __FILE__, __LINE__);
+        return -1;
+    }
+    reg[i].intervals = new_intervals;
+    reg[i].intervals[reg[i].count].beg = beg;
+    reg[i].intervals[reg[i].count].end = end;
     reg[i].count++;
-    reg[i].intervals = (hts_pair_pos_t*)realloc(reg[i].intervals,sizeof(hts_pair_pos_t)*reg[i].count);
-    reg[i].intervals[reg[i].count - 1].beg = beg;
-    reg[i].intervals[reg[i].count - 1].end = end;
-    return reg;
+    return 0;
 }
+
 static void _reglist_merge(hts_reglist_t *reg, int nreg)
 {
     int i,j;
@@ -522,8 +547,7 @@ hts_itr_multi_t *multi_region_init(samview_settings_t *conf, char **regs, int nr
 {
     hts_itr_multi_t *iter = NULL;
     int filter_state = ALL;
-    if ( nregs )
-    {
+    if ( nregs ) {
         int filter_op = 0;
         conf->bed = bed_hash_regions(conf->bed, regs, 0, nregs, &filter_op); // insert(1) or filter out(0) the regions from the command line in the same hash table as the bed file
         if ( !filter_op )
@@ -531,24 +555,30 @@ hts_itr_multi_t *multi_region_init(samview_settings_t *conf, char **regs, int nr
     }
     else
         bed_unify(conf->bed);
-    if ( !conf->bed) // index is unavailable or no regions have been specified
-        error("No regions or BED file have been provided. Aborting.\n");
+    if ( !conf->bed) { // index is unavailable or no regions have been specified
+        print_error("view", "No regions or BED file have been provided. Aborting.");
+        return NULL;
+    }
 
     int regcount = 0;
     hts_reglist_t *reglist = bed_reglist(conf->bed, filter_state, &regcount);
-    if (!reglist)
-        error("Region list is empty or could not be created. Aborting.\n");
+    if (!reglist) {
+        print_error("view", "Region list is empty or could not be created. Aborting.");
+        return NULL;
+    }
 
-    if ( conf->fetch_pairs )
-    {
+    if ( conf->fetch_pairs ) {
         conf->reglist  = _reglist_dup(conf->header,reglist,regcount);
+        if (!conf->reglist)
+            return NULL;
         conf->nreglist = regcount;
     }
 
     iter = sam_itr_regions(conf->hts_idx, conf->header, reglist, regcount);
-    if ( !iter )
-        error("Iterator could not be created. Aborting.\n");
-
+    if ( !iter ) {
+        print_error("view", "Iterator could not be created. Aborting.");
+        return NULL;
+    }
     return iter;
 }
 
@@ -557,67 +587,108 @@ KHASH_SET_INIT_STR(names)
 static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *iter)
 {
     khint_t k;
-    int nunmap = 0, ret = 0, nmates = 0;
+    int nunmap = 0, r = 0, nmates = 0, write_error = 0, retval = EXIT_FAILURE;
     kh_names_t *mate_names = kh_init(names);
     bam1_t *rec = bam_init1();
-    while ( sam_itr_multi_next(conf->in, iter, rec)>=0 )
-    {
+
+    if (!mate_names) {
+        print_error_errno("view", "could not allocate mate names table");
+        goto out;
+    }
+    if (!rec) {
+        print_error_errno("view", "could not allocate bam record");
+        goto out;
+    }
+
+    while ((r =sam_itr_multi_next(conf->in, iter, rec))>=0) {
         if ( rec->core.mtid>=0 && bed_overlap(conf->bed, sam_hdr_tid2name(conf->header,rec->core.mtid), rec->core.mpos, rec->core.mpos) ) continue;
         if ( process_aln(conf->header, rec, conf) ) continue;
 
         nmates++;
 
         k = kh_get(names,mate_names,bam_get_qname(rec));
-        if ( k == kh_end(mate_names) )
-        {
-            kh_put(names,mate_names,strdup(bam_get_qname(rec)),&ret);
-            if ( ret<0 ) error("[%s:%d] could not expand memory structures, %d elements. (Todo: external sort)\n",__FILE__,__LINE__,nmates);
+        if ( k == kh_end(mate_names) ) {
+            int ret = 0;
+            char *name_copy = strdup(bam_get_qname(rec));
+            if (!name_copy) {
+                print_error_errno("view", "[%s:%d] could not store sample name, %d elements", __FILE__,__LINE__,nmates);
+                goto out;
+            }
+            kh_put(names, mate_names, name_copy, &ret);
+            if ( ret<0 ) {
+                print_error_errno("view", "[%s:%d] could not store sample name, %d elements",__FILE__,__LINE__,nmates);
+                free(name_copy);
+                goto out;
+            }
         }
 
         if ( rec->core.mtid < 0 || (rec->core.flag & BAM_FMUNMAP) ) nunmap = 1;
-        if ( rec->core.mtid >= 0 )
-        {
-            conf->reglist = _reglist_push(conf->reglist, &conf->nreglist, rec->core.mtid, rec->core.mpos,rec->core.mpos+1);
-            if ( !conf->reglist ) error("[%s:%d] could not expand memory structures, %d elements. (Todo: external sort)\n",__FILE__,__LINE__,nmates);
+        if ( rec->core.mtid >= 0 ) {
+            if (_reglist_push(&conf->reglist, &conf->nreglist, rec->core.mtid, rec->core.mpos,rec->core.mpos+1) != 0)
+                goto out;
         }
     }
+
+    if (r < -1) {
+        print_error_errno("view", "error reading file \"%s\"", conf->fn_in);
+        goto out;
+    }
+
     _reglist_merge(conf->reglist, conf->nreglist);
-    if ( nunmap )
-        conf->reglist = _reglist_push(conf->reglist,&conf->nreglist,HTS_IDX_NOCOOR,0,HTS_POS_MAX);
+    if ( nunmap ) {
+        if (_reglist_push(&conf->reglist,&conf->nreglist,HTS_IDX_NOCOOR,0,HTS_POS_MAX) != 0)
+            goto out;
+    }
     hts_itr_multi_destroy(iter);
     iter = sam_itr_regions(conf->hts_idx, conf->header, conf->reglist, conf->nreglist);
-    if ( !iter ) error("[%s:%d] iterator could not be created. Aborting.\n",__FILE__,__LINE__);
-    while ( sam_itr_multi_next(conf->in, iter, rec)>=0 )
-    {
+    if ( !iter ) {
+        print_error_errno("view", "[%s:%d] iterator could not be created",__FILE__,__LINE__);
+        goto out;
+    }
+    while ((r = sam_itr_multi_next(conf->in, iter, rec))>=0) {
         int drop = 1;
         if ( rec->core.tid >=0 &&
             bed_overlap(conf->bed, sam_hdr_tid2name(conf->header,rec->core.tid), rec->core.pos, bam_endpos(rec)) &&
             process_aln(conf->header, rec, conf)==0 ) drop = 0;
-        if ( drop )
-        {
+        if ( drop ) {
              k = kh_get(names,mate_names,bam_get_qname(rec));
              if ( k != kh_end(mate_names) ) drop = 0;
         }
-        if ( !drop && check_sam_write1(conf->out,conf->header,rec,conf->fn_out,&ret) < 0 ) error("Cannot write the output record, aborting");
+        if ( !drop && check_sam_write1(conf->out,conf->header,rec,conf->fn_out,&write_error) < 0 )
+            goto out;
     }
 
+    if (r < -1) {
+        print_error_errno("view", "error reading file \"%s\"", conf->fn_in);
+        goto out;
+    }
+
+    retval = EXIT_SUCCESS;
+
+ out:
     hts_itr_multi_destroy(iter);
     hts_idx_destroy(conf->hts_idx); // destroy the BAM index
     conf->hts_idx = NULL;
-    // free khash keys
-    for (k = 0; k < kh_end(mate_names); ++k)
-        if ( kh_exist(mate_names,k) ) free((char*)kh_key(mate_names, k));
-    kh_destroy(names,mate_names);
+    if (mate_names) {
+        // free khash keys
+        for (k = 0; k < kh_end(mate_names); ++k)
+            if ( kh_exist(mate_names,k) ) free((char*)kh_key(mate_names, k));
+        kh_destroy(names,mate_names);
+    }
     bam_destroy1(rec);
-    return 0;
+    return retval;
 }
 
 int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
 {
     bam1_t *b = bam_init1();
-    int ret;
+    int ret = 0, result;
+    if (!b) {
+        print_error_errno("view", "could not allocate bam record");
+        return 1;
+    }
     // fetch alignments
-    while ((ret = sam_itr_multi_next(conf->in, iter, b)) >= 0) {
+    while ((result = sam_itr_multi_next(conf->in, iter, b)) >= 0) {
         if (!process_aln(conf->header, b, conf)) {
             if (!conf->is_count) {
                 change_flag(b, conf);
@@ -636,11 +707,11 @@ int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
     conf->hts_idx = NULL;
     bam_destroy1(b);
 
-    if (ret < -1) {
+    if (result < -1) {
         print_error("view", "retrieval of region %d failed due to truncated file or corrupt BAM index file", iter->curr_tid);
         return 1;
     }
-    return 0;
+    return ret;
 }
 
 // Make mnemonic distinct values for longoption-only options
@@ -1089,7 +1160,7 @@ int main_samview(int argc, char *argv[])
     else if ( !has_index_file && optind < argc - 1 ) regs = &argv[optind+1], nregs = argc - optind - 1;
     else if ( has_index_file )
     {
-        fprintf(stderr, "[%s:%d] incorrect number of arguments for -X option. Aborting.\n",__FILE__,__LINE__);
+        print_error("view", "Incorrect number of arguments for -X option. Aborting.");
         return 1;
     }
     if ( settings.fn_idx_in || nregs )
@@ -1097,7 +1168,7 @@ int main_samview(int argc, char *argv[])
         settings.hts_idx = settings.fn_idx_in ? sam_index_load2(settings.in, settings.fn_in, settings.fn_idx_in) : sam_index_load(settings.in, settings.fn_in);
         if ( !settings.hts_idx )
         {
-            fprintf(stderr, "[%s:%d] random alignment retrieval only works for indexed BAM or CRAM files.\n",__FILE__,__LINE__);
+            print_error("view", "Random alignment retrieval only works for indexed SAM.gz, BAM or CRAM files.");
             return 1;
         }
     }
@@ -1105,13 +1176,14 @@ int main_samview(int argc, char *argv[])
     if ( settings.fetch_pairs )
     {
         hts_itr_multi_t *iter = multi_region_init(&settings, regs, nregs);
-        if ( !iter ) return 1;
-        fetch_pairs_collect_mates(&settings, iter);
+        ret = iter ? fetch_pairs_collect_mates(&settings, iter) : 1;
+        if (ret) goto view_end;
     }
     else if ( settings.multi_region )
     {
         hts_itr_multi_t *iter = multi_region_init(&settings, regs, nregs);
-        if ( iter ) multi_region_view(&settings, iter);
+        ret = iter ? multi_region_view(&settings, iter) : 1;
+        if (ret) goto view_end;
     }
     else if ( !settings.hts_idx )   // stream through the entire file
     {
