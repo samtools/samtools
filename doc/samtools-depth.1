@@ -145,9 +145,9 @@ differences in parameters which make the two not entirely comparable.
 Differences, other than the obvious speed benefits, include:
 
 .IP o 2
-Deletions (CIGAR element "D") are counted by default in "depth".  This
-can be turned off with the \fB-J\fR option.  "Mpileup" always ignores
-these bases, and has no option to count them.
+Deletions (CIGAR element "D") are ignored by default in "depth".  These
+may be counted by adding the \fB-J\fR option.  "Mpileup" always counts
+the deleted bases, and has no option to toggle this.
 
 .IP o 2
 Beware there are idiosyncrasies in option naming.  Specifically
