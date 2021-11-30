@@ -208,9 +208,8 @@ static void tv_win_listref(curses_tview_t *tv, int* matches, int num_matches,
             mvwprintw(tv->wlistref, i+1, 1, ">");
         }
         snprintf(str, TV_MAX_GOTO, "%s  length: %d", ref, len);
-        mvwprintw(tv->wlistref, i+1, 2, str);
-
-    }
+        mvwprintw(tv->wlistref, i+1, 2, "%s", str);
+   }
 
     if (upper_bound < num_matches) {
         mvwprintw(tv->wlistref, TV_MAX_LISTREF-1, TV_MAX_GOTO+8, "|");
