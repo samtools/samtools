@@ -679,28 +679,64 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
     return retval;
 }
 
-int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
+// Common code for processing and writing a record
+static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
+                                     int *write_error) {
+    if (!process_aln(conf->header, b, conf)) {
+        if (!conf->is_count) {
+            change_flag(b, conf);
+            if (check_sam_write1(conf->out, conf->header,
+                                 b, conf->fn_out, write_error) < 0) {
+                return -1;
+            }
+        }
+        conf->count++;
+    } else if (conf->unmap) {
+        b->core.flag |= BAM_FUNMAP;
+        if (check_sam_write1(conf->out, conf->header,
+                             b, conf->fn_out, write_error) < 0) {
+            return -1;
+        }
+    } else {
+        if (conf->un_out) {
+            if (check_sam_write1(conf->un_out, conf->header,
+                                 b, conf->fn_un_out, write_error) < 0) {
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+static int stream_view(samview_settings_t *conf) {
+    bam1_t *b = bam_init1();
+    int write_error = 0, r;
+    if (!b) {
+        print_error_errno("view", "could not allocate bam record");
+        return 1;
+    }
+    while ((r = sam_read1(conf->in, conf->header, b)) >= 0) {
+        if (process_one_record(conf, b, &write_error) < 0) break;
+    }
+    bam_destroy1(b);
+    if (r < -1) {
+        print_error_errno("view", "error reading file \"%s\"", conf->fn_in);
+        return 1;
+    }
+    return write_error;
+}
+
+static int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
 {
     bam1_t *b = bam_init1();
-    int ret = 0, result;
+    int write_error = 0, result;
     if (!b) {
         print_error_errno("view", "could not allocate bam record");
         return 1;
     }
     // fetch alignments
     while ((result = sam_itr_multi_next(conf->in, iter, b)) >= 0) {
-        if (!process_aln(conf->header, b, conf)) {
-            if (!conf->is_count) {
-                change_flag(b, conf);
-                if (check_sam_write1(conf->out, conf->header, b, conf->fn_out, &ret) < 0) break;
-            }
-            conf->count++;
-        } else if (conf->unmap) {
-            b->core.flag |= BAM_FUNMAP;
-            if (check_sam_write1(conf->out, conf->header, b, conf->fn_out, &ret) < 0) break;
-        } else {
-            if (conf->un_out) { if (check_sam_write1(conf->un_out, conf->header, b, conf->fn_un_out, &ret) < 0) break; }
-        }
+        if (process_one_record(conf, b, &write_error) < 0) break;
     }
     hts_itr_multi_destroy(iter);
     bam_destroy1(b);
@@ -709,7 +745,7 @@ int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
         print_error("view", "retrieval of region %d failed due to truncated file or corrupt BAM index file", iter->curr_tid);
         return 1;
     }
-    return ret;
+    return write_error;
 }
 
 // Make mnemonic distinct values for longoption-only options
@@ -1185,28 +1221,8 @@ int main_samview(int argc, char *argv[])
     }
     else if ( !settings.hts_idx )   // stream through the entire file
     {
-        bam1_t *b = bam_init1();
-        int r;
-        errno = 0;
-        while ((r = sam_read1(settings.in, settings.header, b)) >= 0) { // read one alignment from `in'
-            if (!process_aln(settings.header, b, &settings)) {
-                if (!settings.is_count) {
-                    change_flag(b, &settings);
-                    if (check_sam_write1(settings.out, settings.header, b, settings.fn_out, &ret) < 0) break;
-                }
-                settings.count++;
-            } else if (settings.unmap) {
-                b->core.flag |= BAM_FUNMAP;
-                if (check_sam_write1(settings.out, settings.header, b, settings.fn_out, &ret) < 0) break;
-            } else {
-                if (settings.un_out) { if (check_sam_write1(settings.un_out, settings.header, b, settings.fn_un_out, &ret) < 0) break; }
-            }
-        }
-        if (r < -1) {
-            print_error_errno("view", "error reading file \"%s\"", settings.fn_in);
-            ret = 1;
-        }
-        bam_destroy1(b);
+        ret = stream_view(&settings);
+        if (ret) goto view_end;
     } else {   // retrieve alignments in specified regions
         int i;
         for (i = (has_index_file)? optind+2 : optind+1; i < argc; ++i) {
