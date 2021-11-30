@@ -37,6 +37,7 @@ Copyright (c) 2009,2018 The Broad Institute.  MIT license.
 #include <time.h>
 #include <sys/stat.h>
 #include <math.h>
+#include <regex.h>
 #include "htslib/thread_pool.h"
 #include "htslib/sam.h"
 #include "sam_opts.h"
@@ -66,6 +67,10 @@ typedef struct {
     char *stats_file;
     char *arg_list;
     char *out_fn;
+    regex_t *rgx;
+    int rgx_x;
+    int rgx_y;
+    int rgx_t;
 } md_param_t;
 
 typedef struct {
@@ -103,7 +108,8 @@ typedef struct {
     long x;
     long y;
     int opt;
-    int xpos;
+    int beg;
+    int end;
 } check_t;
 
 
@@ -683,7 +689,7 @@ static int add_duplicate(khash_t(duplicates) *d_hash, bam1_t *dupe, char *orig_n
 
 
 /* Get the position of the coordinates from the read name. */
-static inline int get_coordinate_positions(const char *qname, int *xpos, int *ypos) {
+static inline int get_coordinate_positions_colons(const char *qname, int *xpos, int *ypos) {
     int sep = 0;
     int pos = 0;
 
@@ -711,14 +717,47 @@ static inline int get_coordinate_positions(const char *qname, int *xpos, int *yp
     return sep;
 }
 
+/* Get the position of the coordinates from the read name.
+   Positions returned are of the x and y coordinate and an optional section of
+   the read name to test (t) for string equality e.g. lane and tile part. */
+static inline int get_coordinate_positions_regex(md_param_t *param, const char *qname, int *t_beg, int *t_end, int *xpos, int *ypos) {
+    regmatch_t matches[5];
+    size_t max_matches = 5;
 
-static int get_coordinates(const char *name, int *xpos_out, long *x_coord, long *y_coord, long *warnings) {
-    int ret = 1;
-    int seps, xpos = 0, ypos = 0;
-    long x = 0, y = 0;
-    char *end;
+    if (!param->rgx_t)
+        max_matches = 4;
 
-    seps = get_coordinate_positions(name, &xpos, &ypos);
+    if (regexec(param->rgx, qname, max_matches, matches, 0))
+        return -1;
+
+    *xpos = matches[param->rgx_x].rm_so;
+    *ypos = matches[param->rgx_y].rm_so;
+
+    if (param->rgx_t) {
+        *t_beg = matches[param->rgx_t].rm_so;
+        *t_end = matches[param->rgx_t].rm_eo;
+    } else {
+        *t_beg = *t_end = 0;
+    }
+
+    if (*xpos == -1 || *ypos == -1 || *t_beg == -1)
+        return -1;
+
+    return 7; // 3, 4, 6 and 7 are succesus in the previous function
+}
+
+
+static int get_coordinate_positions(md_param_t *param, const char *qname, int *beg, int *end, int *xpos, int *ypos, long *warnings) {
+    int ret = 0;
+    int seps;
+
+    if (param->rgx == NULL) {
+        seps = get_coordinate_positions_colons(qname, xpos, ypos);
+        *beg = 0;
+        *end = *xpos;
+    } else {
+        seps = get_coordinate_positions_regex(param, qname, beg, end, xpos, ypos);
+    }
 
     /* The most current Illumina read format at time of writing is:
        @machine:run:flowcell:lane:tile:x:y:UMI or
@@ -732,9 +771,23 @@ static int get_coordinates(const char *name, int *xpos_out, long *x_coord, long 
         (*warnings)++;
 
         if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", name);
+            fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", qname);
         }
 
+        ret = 1;
+    }
+
+    return ret;
+}
+
+
+static int get_coordinates(md_param_t *param, const char *name, int *t_beg, int *t_end, long *x_coord, long *y_coord, long *warnings) {
+    int ret = 1;
+    int xpos = 0, ypos = 0;
+    long x = 0, y = 0;
+    char *end;
+
+    if (get_coordinate_positions(param, name, t_beg, t_end, &xpos, &ypos, warnings)) {
         return ret;
     }
 
@@ -764,7 +817,6 @@ static int get_coordinates(const char *name, int *xpos_out, long *x_coord, long 
 
     *x_coord = x;
     *y_coord = y;
-    *xpos_out = xpos;
     ret = 0;
 
     return ret;
@@ -774,41 +826,25 @@ static int get_coordinates(const char *name, int *xpos_out, long *x_coord, long 
 /* Using the coordinates from the Illumina read name, see whether the duplicated read is
    close enough (set by max_dist) to the original to be counted as optical.*/
 
-static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist, long *warnings) {
-    int ret = 0, seps;
+static int optical_duplicate(md_param_t *param, bam1_t *ori, bam1_t *dup, long max_dist, long *warnings) {
+    int ret = 0;
     char *original, *duplicate;
     int oxpos = 0, oypos = 0, dxpos = 0, dypos = 0;
+    int o_beg = 0, o_end = 0, d_beg = 0, d_end = 0;
 
 
     original  = bam_get_qname(ori);
     duplicate = bam_get_qname(dup);
 
-    seps = get_coordinate_positions(original, &oxpos, &oypos);
-
-    if (!(seps == 3 || seps == 4 || seps == 6 || seps == 7)) {
-        (*warnings)++;
-
-        if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", original);
-        }
-
+    if (get_coordinate_positions(param, original, &o_beg, &o_end, &oxpos, &oypos, warnings)) {
         return ret;
     }
 
-    seps = get_coordinate_positions(duplicate, &dxpos, &dypos);
-
-    if (!(seps == 3 || seps == 4 || seps == 6 || seps == 7)) {
-
-        (*warnings)++;
-
-        if (*warnings <= BMD_WARNING_MAX) {
-            fprintf(stderr, "[markdup] warning: cannot decipher read name %s for optical duplicate marking.\n", duplicate);
-        }
-
+    if (get_coordinate_positions(param, duplicate, &d_beg, &d_end, &dxpos, &dypos, warnings)) {
         return ret;
     }
 
-    if (strncmp(original, duplicate, oxpos - 1) == 0) {
+    if (strncmp(original + o_beg, duplicate + d_beg, o_end - o_beg) == 0) {
         // the initial parts match, look at the numbers
         long ox, oy, dx, dy, xdiff, ydiff;
         char *end;
@@ -889,19 +925,19 @@ static int optical_duplicate(bam1_t *ori, bam1_t *dup, long max_dist, long *warn
 
    This function needs the values from the first read to be already calculated. */
 
-static int optical_duplicate_partial(const char *name, const int oxpos, const long ox, const long oy, bam1_t *dup, check_t *c, long max_dist, long *warnings) {
+static int optical_duplicate_partial(md_param_t *param, const char *name, const int o_beg, const int o_end, const long ox, const long oy, bam1_t *dup, check_t *c, long max_dist, long *warnings) {
     int ret = 0;
     char *duplicate;
-    int dxpos = 0;
+    int d_beg = 0, d_end = 0;
     long dx, dy;
 
     duplicate = bam_get_qname(dup);
 
-    if (get_coordinates(duplicate, &dxpos, &dx, &dy, warnings)) {
+    if (get_coordinates(param, duplicate, &d_beg, &d_end, &dx, &dy, warnings)) {
         return ret;
     }
 
-    if (strncmp(name, duplicate, oxpos - 1) == 0) {
+    if (strncmp(name + o_beg, duplicate + d_beg, o_end - o_beg) == 0) {
         // the initial parts match, look at the numbers
         long xdiff, ydiff;
 
@@ -926,7 +962,8 @@ static int optical_duplicate_partial(const char *name, const int oxpos, const lo
 
     c->x = dx;
     c->y = dy;
-    c->xpos = dxpos;
+    c->beg = d_beg;
+    c->end = d_end;
 
     return ret;
 }
@@ -948,7 +985,7 @@ static int mark_duplicates(md_param_t *param, khash_t(duplicates) *dup_hash, bam
     }
 
     if (param->opt_dist) { // mark optical duplicates
-        if (optical_duplicate(ori, dup, param->opt_dist, warn)) {
+        if (optical_duplicate(param, ori, dup, param->opt_dist, warn)) {
             bam_aux_update_str(dup, "dt", 3, "SQ");
             dup_type = 'O';
             (*optical)++;
@@ -1026,16 +1063,14 @@ static inline int optical_retag(md_param_t *param, khash_t(duplicates) *dup_hash
 static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *dup_hash, read_queue_t *ori,
              check_list_t *list, long *warn, long *optical_single, long *optical_pair) {
 
-    int ret = 0;
+    int ret = 0, coord_fail = 0;
     char *ori_name = bam_get_qname(ori->b);
     read_queue_t *current = ori->duplicate;
-    int xpos;
+    int t_beg = 0, t_end = 0;
     long x, y;
 
     if (param->opt_dist) {
-        if ((ret = get_coordinates(ori_name, &xpos, &x, &y, warn))) {
-            return ret;
-        }
+        coord_fail = get_coordinates(param, ori_name, &t_beg, &t_end, &x, &y, warn);
     }
 
     list->length = 0;
@@ -1090,7 +1125,7 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
             }
         }
 
-        if (param->opt_dist) {
+        if (param->opt_dist && !coord_fail) {
             uint8_t *data;
             char *dup_type;
             int is_opt = 0;
@@ -1105,7 +1140,7 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
             }
 
             // need to run this to get the duplicates x and y scores
-            is_opt = optical_duplicate_partial(ori_name, xpos, x, y, current->b, c, param->opt_dist, warn);
+            is_opt = optical_duplicate_partial(param, ori_name, t_beg, t_end, x, y, current->b, c, param->opt_dist, warn);
 
             if (!c->opt && is_opt) {
                 if (optical_retag(param, dup_hash, current->b, current_paired, optical_single, optical_pair)) {
@@ -1130,6 +1165,9 @@ static int check_chain_against_original(md_param_t *param, khash_t(duplicates) *
         current = current->duplicate;
         list->length++;
     }
+
+    if (!ret && coord_fail)
+        ret = coord_fail;
 
     return ret;
 }
@@ -1178,7 +1216,7 @@ static int check_duplicate_chain(md_param_t *param, khash_t(duplicates) *dup_has
                 continue;
 
             // the number are right, check the names
-            if (strncmp(cur_name, bam_get_qname(chk->b), current->xpos - 1) != 0)
+            if (strncmp(cur_name + current->beg, bam_get_qname(chk->b) + chk->beg, current->end - current->beg) != 0)
                 continue;
 
             // optical duplicates
@@ -2039,24 +2077,26 @@ static int markdup_usage(void) {
     fprintf(stderr, "\n");
     fprintf(stderr, "Usage:  samtools markdup <input.bam> <output.bam>\n\n");
     fprintf(stderr, "Option: \n");
-    fprintf(stderr, "  -r               Remove duplicate reads\n");
-    fprintf(stderr, "  -l INT           Max read length (default 300 bases)\n");
-    fprintf(stderr, "  -S               Mark supplementary alignments of duplicates as duplicates (slower).\n");
-    fprintf(stderr, "  -s               Report stats.\n");
-    fprintf(stderr, "  -f NAME          Write stats to named file.  Implies -s.\n");
-    fprintf(stderr, "  -T PREFIX        Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
-    fprintf(stderr, "  -d INT           Optical distance (if set, marks with dt tag)\n");
-    fprintf(stderr, "  -c               Clear previous duplicate settings and tags.\n");
-    fprintf(stderr, "  -m --mode TYPE   Duplicate decision method for paired reads.\n"
-                    "                   TYPE = t measure positions based on template start/end (default).\n"
-                    "                          s measure positions based on sequence start.\n");
-    fprintf(stderr, "  -n               Reduce optical duplicate accuracy (faster results with many duplicates).\n");
-    fprintf(stderr, "  -u               Output uncompressed data\n");
-    fprintf(stderr, "  --include-fails  Include quality check failed reads.\n");
-    fprintf(stderr, "  --no-PG          Do not add a PG line\n");
-    fprintf(stderr, "  --no-multi-dup   Reduced duplicates of duplicates checking.\n");
-    fprintf(stderr, "  -t               Mark primary duplicates with the name of the original in a \'do\' tag."
-                                  " Mainly for information and debugging.\n");
+    fprintf(stderr, "  -r                 Remove duplicate reads\n");
+    fprintf(stderr, "  -l INT             Max read length (default 300 bases)\n");
+    fprintf(stderr, "  -S                 Mark supplementary alignments of duplicates as duplicates (slower).\n");
+    fprintf(stderr, "  -s                 Report stats.\n");
+    fprintf(stderr, "  -f NAME            Write stats to named file.  Implies -s.\n");
+    fprintf(stderr, "  -T PREFIX          Write temporary files to PREFIX.samtools.nnnn.nnnn.tmp.\n");
+    fprintf(stderr, "  -d INT             Optical distance (if set, marks with dt tag)\n");
+    fprintf(stderr, "  -c                 Clear previous duplicate settings and tags.\n");
+    fprintf(stderr, "  -m --mode TYPE     Duplicate decision method for paired reads.\n"
+                    "                     TYPE = t measure positions based on template start/end (default).\n"
+                    "                            s measure positions based on sequence start.\n");
+    fprintf(stderr, "  -u                 Output uncompressed data\n");
+    fprintf(stderr, "  --include-fails    Include quality check failed reads.\n");
+    fprintf(stderr, "  --no-PG            Do not add a PG line\n");
+    fprintf(stderr, "  --no-multi-dup     Reduced duplicates of duplicates checking.\n");
+    fprintf(stderr, "  --read-coords STR  Regex for coords from read name.\n");
+    fprintf(stderr, "  --coords-order STR Order of regex elements. txy (default).  With t being a part of\n"
+                    "                     the read names that must be equal and x/y being coordinates.\n");
+    fprintf(stderr, "  -t                 Mark primary duplicates with the name of the original in a \'do\' tag."
+                                        " Mainly for information and debugging.\n");
 
     sam_global_opt_help(stderr, "-.O..@..");
 
@@ -2075,7 +2115,9 @@ int bam_markdup(int argc, char **argv) {
     kstring_t tmpprefix = {0, 0, NULL};
     struct stat st;
     unsigned int t;
-    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, NULL, NULL, NULL};
+    char *regex = NULL;
+    char *regex_order = "txy";
+    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, NULL, NULL, NULL, NULL, 0, 0, 0};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -2083,6 +2125,8 @@ int bam_markdup(int argc, char **argv) {
         {"no-PG", no_argument, NULL, 1002},
         {"mode", required_argument, NULL, 'm'},
         {"no-multi-dup", no_argument, NULL, 1003},
+        {"read-coords", required_argument, NULL, 1004},
+        {"coords-order", required_argument, NULL, 1005},
         {NULL, 0, NULL, 0}
     };
 
@@ -2112,6 +2156,8 @@ int bam_markdup(int argc, char **argv) {
             case 1001: param.include_fails = 1; break;
             case 1002: param.no_pg = 1; break;
             case 1003: param.check_chain = 0; break;
+            case 1004: regex = optarg; break;
+            case 1005: regex_order = optarg; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
@@ -2123,6 +2169,50 @@ int bam_markdup(int argc, char **argv) {
 
     if (param.opt_dist < 0) param.opt_dist = 0;
     if (param.max_length < 0) param.max_length = 300;
+
+    if (regex) {
+        int result;
+
+        // set the order the elements of the regex are assigned to.
+        // x and y being coordinates, t being any other important part of the read
+        // e.g. tile and lane
+        // x and y order does not matter as long as it is consistent
+
+        if ((strncmp(regex_order, "txy", 3) == 0) || (strncmp(regex_order, "tyx", 3) == 0)) {
+            param.rgx_t = 1;
+            param.rgx_x = 2;
+            param.rgx_y = 3;
+        } else if ((strncmp(regex_order, "xyt", 3) == 0) || (strncmp(regex_order, "yxt", 3) == 0)) {
+            param.rgx_x = 1;
+            param.rgx_y = 2;
+            param.rgx_t = 3;
+        } else if ((strncmp(regex_order, "xty", 3) == 0) || (strncmp(regex_order, "ytx", 3) == 0)) {
+            param.rgx_x = 1;
+            param.rgx_t = 2;
+            param.rgx_y = 3;
+        } else if ((strncmp(regex_order, "xy", 2) == 0) || (strncmp(regex_order, "yx", 2) == 0)) {
+            param.rgx_x = 1;
+            param.rgx_y = 2;
+            param.rgx_t = 0;
+        } else {
+            fprintf(stderr, "[markdup] error:  could not recognise regex coorindate order \"%s\".\n", regex_order);
+            return 1;
+        }
+
+        if ((param.rgx = malloc(sizeof(regex_t))) == NULL) {
+            fprintf(stderr, "[markdup] error:  could not allocate memory for regex.\n");
+            return 1;
+        }
+
+        if ((result = regcomp(param.rgx, regex, REG_EXTENDED))) {
+            char err_msg[256];
+
+            regerror(result, param.rgx, err_msg, 256);
+            fprintf(stderr, "[markdup] error: regex error \"%s\"\n", err_msg);
+            free(param.rgx);
+            return 1;
+        }
+    }
 
     param.in = sam_open_format(argv[optind], "r", &ga.in);
 
@@ -2182,6 +2272,11 @@ int bam_markdup(int argc, char **argv) {
     }
 
     if (p.pool) hts_tpool_destroy(p.pool);
+
+    if (param.rgx) {
+        regfree(param.rgx);
+        free(param.rgx);
+    }
 
     free(param.arg_list);
     free(tmpprefix.s);

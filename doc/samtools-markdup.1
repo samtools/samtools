@@ -3,7 +3,7 @@
 .SH NAME
 samtools markdup \- mark duplicate alignments in a coordinate sorted file
 .\"
-.\" Copyright (C) 2008-2011, 2013-2020 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2021 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -62,6 +62,8 @@ samtools markdup
 .RB [ --no-PG ]
 .RB [ -u ]
 .RB [ --no-multi-dup ]
+.RB [ --read-coords ]
+.RB [ --coords-order ]
 .I in.algsort.bam out.bam
 
 .SH DESCRIPTION
@@ -99,7 +101,7 @@ optical duplicates.  When set, duplicate reads are tagged with \fBdt:Z:SQ\fR for
 optical duplicates and \fBdt:Z:LB\fR otherwise.  Calculation of distance depends
 on coordinate data embedded in the read names produced by the Illumina
 sequencing machines.  Optical duplicate detection will not work on non standard
-names.
+names without the use of \fB--read-coords\fR.
 .TP
 .B -c
 Clear previous duplicate settings and tags.
@@ -128,6 +130,18 @@ are not carried out.  Also operates on \fB-t\fR tagging where reads may tagged
 with a better quality read but not necessarily the best one.  Using this option
 can speed up duplicate marking when there are a great many duplicates for each
 original read. 
+.TP
+.BI "--read-coords " REGEX
+This takes a POSIX regular expression for at least x and y to be used in
+optical duplicate marking It can also include another part of the read name
+to test for equality, eg lane:tile elements. Elements wanted are captured with
+parentheses.  Examples below.
+.TP
+.BI "--coords-order " ORDER
+The order of the elements captured in the regular expression. Default is txy
+where t is a part of the read name selected for string comparison and x/y the
+coordinates used for optical duplicate detection.  Valid orders are: txy, tyx,
+xyt, yxt, xty, ytx, xy and yx.
 .TP
 .B --no-PG
 Do not add a PG line to the output file.
@@ -211,6 +225,23 @@ samtools markdup positionsort.bam markdup.bam
 Typically the fixmate step would be applied immediately after sequence
 alignment and the markdup step after sorting by chromosome and
 position.  Thus no \fIadditional\fR sort steps are normally needed.
+
+To use the regex to obtain coordinates from reads, two or three values have to
+be captured.  To mimic the normal behaviour and match a read name of the format
+\fImachine:run:flowcell:lane:tile:x:y\fR use:
+.EX 4
+--read-coords '(\w+:[0-9]+:[0-9]+:[0-9]+:[0-9]+):([0-9]+):([0-9]+)'
+--coords-order txy
+.EE
+
+To match only the coordinates of \fIx:y:randomstuff\fR use:
+.EX 4
+--read-coords '^([[:digit:]]):([[:digit:]])'
+--coords-order xy
+.EE
+
+It is possible that complex regular expressions may slow the running of the
+program.  It would be best to keep them simple. 
 
 .SH AUTHOR
 .PP
