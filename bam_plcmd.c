@@ -759,30 +759,38 @@ static int mpileup(mplp_conf_t *conf, int n, char **fn, char **fn_idx)
                                 continue;
                             }
 
+                            int tag_supported = 0;
+
                             /* Tag value is string */
                             if (*tag_u == 'Z' || *tag_u == 'H') {
                                 char *tag_s = bam_aux2Z(tag_u);
                                 if (!tag_s) continue;
                                 fputs(tag_s, pileup_fp);
+                                tag_supported = 1;
                             }
 
                             /* Tag value is integer */
                             if (*tag_u == 'I' || *tag_u == 'i' || *tag_u == 'C' || *tag_u == 'c' || *tag_u == 'S' || *tag_u == 's') {
                                 int64_t tag_i = bam_aux2i(tag_u);
                                 fprintf(pileup_fp, "%" PRId64 "", tag_i);
+                                tag_supported = 1;
                             }
 
                             /* Tag value is float */
                             if (*tag_u == 'd' || *tag_u == 'f') {
                                 double tag_f = bam_aux2f(tag_u);
                                 fprintf(pileup_fp, "%lf", tag_f);
+                                tag_supported = 1;
                             }
 
                             /* Tag value is character */
                             if (*tag_u == 'A') {
                                 char tag_c = bam_aux2A(tag_u);
                                 putc(tag_c, pileup_fp);
+                                tag_supported = 1;
                             }
+
+                            if (!tag_supported) putc('*', pileup_fp);
                         }
                         if (!n) putc('*', pileup_fp);
                     }
