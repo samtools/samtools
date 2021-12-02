@@ -34,8 +34,8 @@
         struct splaynode_##name *parent;                                      \
     } splaynode_##name;                                                       \
                                                                               \
-    void rotate_left(splaynode_##name *node);                                 \
-    void rotate_right(splaynode_##name *node);                                \
+    void rotate_left_##name(splaynode_##name *node);                          \
+    void rotate_right_##name(splaynode_##name *node);                         \
     int splay_sort_##name(size_t n, type_t array[] );                         \
     int splay_flatten_##name(splaynode_##name *node, type_t dest[], size_t n);\
     splaynode_##name *splay_tree_##name(splaynode_##name *node);              \
@@ -43,7 +43,7 @@
                                           type_t value,                       \
                                           splaynode_##name *node_ptr);        \
                                                                               \
-    void rotate_left(splaynode_##name *node) {                                \
+    void rotate_left_##name(splaynode_##name *node) {                         \
         splaynode_##name *parent = node->parent;                              \
         splaynode_##name *grandparent = parent->parent;                       \
         parent->right = node->left;                                           \
@@ -63,7 +63,7 @@
         }                                                                     \
     }                                                                         \
                                                                               \
-    void rotate_right(splaynode_##name *node) {                               \
+    void rotate_right_##name(splaynode_##name *node) {                        \
         splaynode_##name *parent = node->parent;                              \
         splaynode_##name *grandparent = parent->parent;                       \
         parent->left = node->right;                                           \
@@ -89,6 +89,7 @@
         }                                                                     \
         int i;                                                                \
         splaynode_##name *node_pool = malloc(sizeof(splaynode_##name) * n);   \
+        if (node_pool == NULL) return -1;                                     \
         splaynode_##name *head = node_pool;                                   \
         head->value = array[0];                                               \
         head->left = NULL; head->right = NULL; head->parent = NULL;           \
@@ -162,28 +163,28 @@
         if (node == parent->left) {                                           \
             if (parent->parent == NULL) {                                     \
                 /* zig */                                                     \
-                rotate_right(node);                                           \
+                rotate_right_##name(node);                                    \
             } else if (parent->parent->left == parent) {                      \
                 /* left zig zig */                                            \
-                rotate_right(node);                                           \
-                rotate_right(node);                                           \
+                rotate_right_##name(node);                                    \
+                rotate_right_##name(node);                                    \
             } else {                                                          \
                 /* right left zig zag */                                      \
-                rotate_right(node);                                           \
-                rotate_left(node);                                            \
+                rotate_right_##name(node);                                    \
+                rotate_left_##name(node);                                     \
             }                                                                 \
         } else {                                                              \
             if (parent->parent == NULL) {                                     \
             /* zig */                                                         \
-            rotate_left(node);                                                \
+            rotate_left_##name(node);                                         \
             } else if (parent->parent->right == parent) {                     \
                 /* right zig zig */                                           \
-                rotate_left(node);                                            \
-                rotate_left(node);                                            \
+                rotate_left_##name(node);                                     \
+                rotate_left_##name(node);                                     \
             } else  {                                                         \
                 /* left right zig zag */                                      \
-                rotate_left(node);                                            \
-                rotate_right(node);                                           \
+                rotate_left_##name(node);                                     \
+                rotate_right_##name(node);                                    \
             }                                                                 \
         }                                                                     \
                                                                               \
