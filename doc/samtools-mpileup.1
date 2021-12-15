@@ -175,6 +175,10 @@ These columns are formatted as determined by \fB--output-sep\fR and
 \fB--output-empty\fR (comma-separated by default), and appear in the
 same order as the tags are given in \fB--output-extra\fR.
 
+Any output column that would be empty, such as a tag which is not
+present or the filtered sequence depth is zero, is reported as "*".
+This ensures a consistent number of columns across all reported positions.
+
 .SH OPTIONS
 .TP 10
 .B -6, --illumina1.3+
@@ -249,7 +253,11 @@ coordinate systems. [null]
 Minimum mapping quality for an alignment to be used [0]
 .TP
 .BI -Q,\ --min-BQ \ INT
-Minimum base quality for a base to be considered [13]
+Minimum base quality for a base to be considered [13].
+Note base-quality 0 is used as a filtering mechanism for overlap
+removal.  Hence using \fB--min-BQ 0\fR will disable the overlap
+removal code and act as if the \fB--ignore-overlaps\fR option has
+been set.
 .TP
 .BI -r,\ --region \ STR
 Only generate pileup in region. Requires the BAM files to be indexed.
@@ -314,7 +322,8 @@ Anything that is not on this list is treated as a potential tag, although only
 two character tags are accepted. In the mpileup output, tag columns are
 displayed in the order they were provided by the user in the command line.
 Field and tag names have to be provided in a comma-separated string to the
-mpileup command.
+mpileup command.  Tags with type \fBB\fR (byte array) type are not
+supported.  An absent or unsupported tag will be listed as "*".
 E.g.
 .IP
 .B samtools mpileup --output-extra FLAG,QNAME,RG,NM in.bam
