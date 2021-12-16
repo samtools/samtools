@@ -206,6 +206,11 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
         const char *p = bam_get_library((sam_hdr_t*)h, b);
         if (!p || strcmp(p, settings->library) != 0) return 1;
     }
+    return 0;
+}
+
+static int adjust_tags(const sam_hdr_t *h, bam1_t *b,
+                       samview_settings_t* settings) {
     if (settings->keep_tag) {
         uint8_t *s_from, *s_to, *end = b->data + b->l_data;
         auxhash_t h = settings->keep_tag;
@@ -217,7 +222,7 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
             if (s == NULL) {
                 print_error("view", "malformed aux data for record \"%s\"",
                             bam_get_qname(b));
-                break;
+                return -1;
             }
 
             if (kh_get(aux_exists, h, x) != kh_end(h) ) {
@@ -239,7 +244,7 @@ static int process_aln(const sam_hdr_t *h, bam1_t *b, samview_settings_t* settin
             if (s == NULL) {
                 print_error("view", "malformed aux data for record \"%s\"",
                             bam_get_qname(b));
-                break;
+                return -1;
             }
 
             if (kh_get(aux_exists, h, x) == kh_end(h) ) {
@@ -654,8 +659,13 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
              k = kh_get(names,mate_names,bam_get_qname(rec));
              if ( k != kh_end(mate_names) ) drop = 0;
         }
-        if ( !drop && check_sam_write1(conf->out,conf->header,rec,conf->fn_out,&write_error) < 0 )
-            goto out;
+        if (!drop) {
+            if (adjust_tags(conf->header, rec, conf) != 0)
+                goto out;
+            if (check_sam_write1(conf->out, conf->header, rec, conf->fn_out,
+                                 &write_error) < 0)
+                goto out;
+        }
     }
 
     if (r < -1) {
@@ -685,6 +695,8 @@ static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
     if (!process_aln(conf->header, b, conf)) {
         if (!conf->is_count) {
             change_flag(b, conf);
+            if (adjust_tags(conf->header, b, conf) != 0)
+                return -1;
             if (check_sam_write1(conf->out, conf->header,
                                  b, conf->fn_out, write_error) < 0) {
                 return -1;
