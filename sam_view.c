@@ -606,6 +606,7 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
     }
 
     while ((r =sam_itr_multi_next(conf->in, iter, rec))>=0) {
+        if ( (rec->core.flag & BAM_FPAIRED) == 0 ) continue;
         if ( rec->core.mtid>=0 && bed_overlap(conf->bed, sam_hdr_tid2name(conf->header,rec->core.mtid), rec->core.mpos, rec->core.mpos) ) continue;
         if ( process_aln(conf->header, rec, conf) ) continue;
 
@@ -652,14 +653,13 @@ static int fetch_pairs_collect_mates(samview_settings_t *conf, hts_itr_multi_t *
     }
     while ((r = sam_itr_multi_next(conf->in, iter, rec))>=0) {
         int drop = 1;
-        if ( rec->core.tid >=0 &&
-            bed_overlap(conf->bed, sam_hdr_tid2name(conf->header,rec->core.tid), rec->core.pos, bam_endpos(rec)) &&
-            process_aln(conf->header, rec, conf)==0 ) drop = 0;
+        if (rec->core.tid >=0 &&
+            bed_overlap(conf->bed, sam_hdr_tid2name(conf->header,rec->core.tid), rec->core.pos, bam_endpos(rec))) drop = 0;
         if ( drop ) {
              k = kh_get(names,mate_names,bam_get_qname(rec));
              if ( k != kh_end(mate_names) ) drop = 0;
         }
-        if (!drop) {
+        if (!drop && process_aln(conf->header, rec, conf) == 0) {
             if (adjust_tags(conf->header, rec, conf) != 0)
                 goto out;
             if (check_sam_write1(conf->out, conf->header, rec, conf->fn_out,

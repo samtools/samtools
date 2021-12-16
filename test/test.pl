@@ -2513,7 +2513,7 @@ sub test_view
     $test++;
     run_view_test($opts,
             msg => "$test: fetch pairs",
-            args => ['--no-PG','--fetch-pairs','--incl-flags','REVERSE',$bam,'6:25515857-25515857'],
+            args => ['--no-PG','--fetch-pairs','--exclude-flags','DUP',$bam,'6:25515857-25515857'],
             out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
             compare_sam => 'test/dat/view.fetch-pairs.filter1.expected.sam');
 
