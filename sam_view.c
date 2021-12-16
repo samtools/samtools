@@ -649,14 +649,15 @@ int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
 int main_samview(int argc, char *argv[])
 {
     samview_settings_t settings;
-    memset(&settings,0,sizeof(settings));
-
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, has_index_file = 0, no_pg = 0;
     FILE *fp_out = NULL;
     char out_mode[6] = {0}, out_un_mode[6] = {0}, *out_format = "";
     char *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
+
+    memset(&settings,0,sizeof(settings));
+    settings.subsam_frac = -1.0;
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 'T', '@'),
