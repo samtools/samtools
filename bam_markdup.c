@@ -743,7 +743,7 @@ static inline int get_coordinate_positions_regex(md_param_t *param, const char *
     if (*xpos == -1 || *ypos == -1 || *t_beg == -1)
         return -1;
 
-    return 7; // 3, 4, 6 and 7 are succesus in the previous function
+    return 7; // 3, 4, 6 and 7 are successes in the previous function
 }
 
 
