@@ -3357,6 +3357,10 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/8_optical_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --no-PG $$opts{path}/markdup/8_optical_dup.sam -");
     test_cmd($opts, out=>'markdup/9_optical_dup_qcfail.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t --include-fails -O sam --no-PG $$opts{path}/markdup/9_optical_dup_qcfail.sam -");
     test_cmd($opts, out=>'markdup/10_optical_chain.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --no-PG -S $$opts{path}/markdup/10_optical_chain.sam -");
+    test_cmd($opts, out=>'markdup/10_optical_chain.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --read-coords '([[:digit:]]+):([[:digit:]]+):([[:digit:]]+)\$' --no-PG -S $$opts{path}/markdup/10_optical_chain.sam -");
+    test_cmd($opts, out=>'markdup/11_optical_dup_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --read-coords '^([0-9]+):([0-9]+):([[:print:]]+)' --coords-order xyt --no-PG $$opts{path}/markdup/11_optical_dup_regex.sam -");
+    test_cmd($opts, out=>'markdup/11_optical_dup_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --read-coords '^([0-9]+):([0-9]+)' --coords-order xy --no-PG $$opts{path}/markdup/11_optical_dup_regex.sam -");
+    test_cmd($opts, out=>'markdup/12_optical_chain_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --read-coords '([[:digit:]]+):([[:digit:]]+)\$' --coords-order xy --no-PG $$opts{path}/markdup/12_optical_chain_regex.sam -");
 }
 
 sub test_bedcov
