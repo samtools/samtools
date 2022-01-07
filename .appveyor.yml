@@ -27,7 +27,7 @@ install:
   - set MSYSTEM=MINGW64
   - set PATH=C:/msys64/usr/bin;C:/msys64/mingw64/bin;%PATH%
   - set MINGWPREFIX=x86_64-w64-mingw32
-  - "sh -lc \"pacman -S --noconfirm --needed base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-zlib mingw-w64-x86_64-bzip2 mingw-w64-x86_64-xz mingw-w64-x86_64-curl\""
+  - "sh -lc \"pacman -S --noconfirm --needed base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-autotools mingw-w64-x86_64-zlib mingw-w64-x86_64-bzip2 mingw-w64-x86_64-xz mingw-w64-x86_64-curl\""
 
 # The user may have e.g. jkbonfield/samtools branch FOO and an associated
 # jkbonfield/htslib branch FOO.  If so use that related htslib, obtained by
