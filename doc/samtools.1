@@ -43,75 +43,75 @@ samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .
 .SH SYNOPSIS
 .PP
-samtools view -bt ref_list.txt -o aln.bam aln.sam.gz
-.PP
-samtools tview aln.sorted.bam ref.fasta
-.PP
-samtools quickcheck in1.bam in2.cram
-.PP
-samtools head in.bam
-.PP
-samtools index aln.sorted.bam
-.PP
-samtools sort -T /tmp/aln.sorted -o aln.sorted.bam aln.bam
-.PP
-samtools collate -o aln.name_collated.bam aln.sorted.bam
-.PP
-samtools idxstats aln.sorted.bam
-.PP
-samtools flagstat aln.sorted.bam
-.PP
-samtools flags PAIRED,UNMAP,MUNMAP
-.PP
-samtools stats aln.sorted.bam
-.PP
-samtools bedcov aln.sorted.bam
-.PP
-samtools depth aln.sorted.bam
-.PP
-samtools ampliconstats primers.bed in.bam
-.PP
-samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
-.PP
-samtools coverage aln.sorted.bam
-.PP
-samtools merge out.bam in1.bam in2.bam in3.bam
-.PP
-samtools split merged.bam
-.PP
-samtools cat out.bam in1.bam in2.bam in3.bam
-.PP
-samtools import input.fastq > output.bam
-.PP
-samtools fastq input.bam > output.fastq
-.PP
-samtools fasta input.bam > output.fasta
-.PP
-samtools faidx ref.fasta
-.PP
-samtools fqidx ref.fastq
-.PP
-samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
-.PP
-samtools calmd in.sorted.bam ref.fasta
-.PP
-samtools fixmate in.namesorted.sam out.bam
-.PP
-samtools markdup in.algnsorted.bam out.bam
-.PP
 samtools addreplacerg -r 'ID:fish' -r 'LB:1334' -r 'SM:alpha' -o output.bam input.bam
-.PP
-samtools reheader in.header.sam in.bam > out.bam
-.PP
-samtools targetcut input.bam
-.PP
-samtools phase input.bam
-.PP
-samtools depad input.bam
 .PP
 samtools ampliconclip -b bed.file input.bam
 .PP
+samtools ampliconstats primers.bed in.bam
+.PP
+samtools bedcov aln.sorted.bam
+.PP
+samtools calmd in.sorted.bam ref.fasta
+.PP
+samtools cat out.bam in1.bam in2.bam in3.bam
+.PP
+samtools collate -o aln.name_collated.bam aln.sorted.bam
+.PP
+samtools coverage aln.sorted.bam
+.PP
+samtools depad input.bam
+.PP
+samtools depth aln.sorted.bam
+.PP
+samtools dict -a GRCh38 -s "Homo sapiens" ref.fasta
+.PP
+samtools faidx ref.fasta
+.PP
+samtools fasta input.bam > output.fasta
+.PP
+samtools fastq input.bam > output.fastq
+.PP
+samtools fixmate in.namesorted.sam out.bam
+.PP
+samtools flags PAIRED,UNMAP,MUNMAP
+.PP
+samtools flagstat aln.sorted.bam
+.PP
+samtools fqidx ref.fastq
+.PP
+samtools head in.bam
+.PP
+samtools idxstats aln.sorted.bam
+.PP
+samtools import input.fastq > output.bam
+.PP
+samtools index aln.sorted.bam
+.PP
+samtools markdup in.algnsorted.bam out.bam
+.PP
+samtools merge out.bam in1.bam in2.bam in3.bam
+.PP
+samtools mpileup -C50 -f ref.fasta -r chr3:1,000-2,000 in1.bam in2.bam
+.PP
+samtools phase input.bam
+.PP
+samtools quickcheck in1.bam in2.cram
+.PP
+samtools reheader in.header.sam in.bam > out.bam
+.PP
 samtools samples input.bam
+.PP
+samtools sort -T /tmp/aln.sorted -o aln.sorted.bam aln.bam
+.PP
+samtools split merged.bam
+.PP
+samtools stats aln.sorted.bam
+.PP
+samtools targetcut input.bam
+.PP
+samtools tview aln.sorted.bam ref.fasta
+.PP
+samtools view -bt ref_list.txt -o aln.bam aln.sam.gz
 
 .SH DESCRIPTION
 .PP
