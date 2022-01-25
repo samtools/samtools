@@ -717,8 +717,10 @@ static void usage_exit(FILE *fp, int exit_status)
     fprintf(fp, "  -H           Print a file header line\n");
     fprintf(fp, "  -l INT       Minimum read length [0]\n");
     fprintf(fp, "  -o FILE      Write output to FILE [stdout]\n");
-    fprintf(fp, "  -q INT       Minimum base quality [0]\n");
-    fprintf(fp, "  -Q INT       Minimum mapping quality [0]\n");
+    fprintf(fp, "  -q, --min-BQ INT\n"
+                "               Filter bases with base quality smaller than INT [0]\n");
+    fprintf(fp, "  -Q, --min-MQ INT\n"
+                "               Filter alignments with mapping quality smaller than INT [0]\n");
     fprintf(fp, "  -H           Print a file header\n");
     fprintf(fp, "  -J           Include reads with deletions in depth computation\n");
     fprintf(fp, "  -s           Do not count overlapping reads within a template\n");
@@ -750,6 +752,10 @@ int main_depth(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
+        {"min-MQ", required_argument, NULL, 'Q'},
+        {"min-mq", required_argument, NULL, 'Q'},
+        {"min-BQ", required_argument, NULL, 'q'},
+        {"min-bq", required_argument, NULL, 'q'},
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', '-', '@'),
         {NULL, 0, NULL, 0}
     };
