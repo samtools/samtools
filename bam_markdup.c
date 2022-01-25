@@ -1,7 +1,7 @@
 /*  bam_markdup.c -- Mark duplicates from a coord sorted file that has gone
                      through fixmates with the mate scoring option on.
 
-    Copyright (C) 2017-2021 Genome Research Ltd.
+    Copyright (C) 2017-2022 Genome Research Ltd.
 
     Author: Andrew Whitwham <aw7@sanger.ac.uk>
 
@@ -71,6 +71,8 @@ typedef struct {
     int rgx_x;
     int rgx_y;
     int rgx_t;
+    char *barcode;
+    regex_t *bc_rgx;
 } md_param_t;
 
 typedef struct {
@@ -78,6 +80,7 @@ typedef struct {
     hts_pos_t other_coord;
     int32_t this_ref;
     int32_t other_ref;
+    int32_t barcode;
     int8_t single;
     int8_t leftmost;
     int8_t orientation;
@@ -126,15 +129,16 @@ static khint_t hash_key(key_data_t key) {
     khint_t hash;
 
     if (key.single) {
-        unsigned char sig[13];
+        unsigned char sig[17];
 
         memcpy(sig + i, &key.this_ref, 4);      i += 4;
         memcpy(sig + i, &key.this_coord, 8);    i += 8;
         memcpy(sig + i, &key.orientation, 1);   i += 1;
+        memcpy(sig + i, &key.barcode, 4);       i += 4;
 
         hash = do_hash(sig, i);
     } else {
-        unsigned char sig[26];
+        unsigned char sig[30];
 
         memcpy(sig + i, &key.this_ref, 4);      i += 4;
         memcpy(sig + i, &key.this_coord, 8);    i += 8;
@@ -142,6 +146,7 @@ static khint_t hash_key(key_data_t key) {
         memcpy(sig + i, &key.other_coord, 8);   i += 8;
         memcpy(sig + i, &key.leftmost, 1);      i += 1;
         memcpy(sig + i, &key.orientation, 1);   i += 1;
+        memcpy(sig + i, &key.barcode, 4);       i += 4;
 
         hash = do_hash(sig, i);
     }
@@ -160,6 +165,8 @@ static int key_equal(key_data_t a, key_data_t b) {
     else if (a.this_ref != b.this_ref)
         match = 0;
     else if (a.single != b.single)
+        match = 0;
+    else if (a.barcode != b.barcode)
         match = 0;
 
     if (!a.single) {
@@ -373,129 +380,13 @@ static int64_t calc_score(bam1_t *b)
    the reference id, orientation and whether the current
    read is leftmost of the pair. */
 
-static int make_pair_key_template(key_data_t *key, bam1_t *bam) {
-    hts_pos_t this_coord, other_coord, this_end, other_end;
-    int32_t this_ref, other_ref;
-    int8_t orientation, leftmost;
-    uint8_t *data;
-    char *cig;
 
-    this_ref    = bam->core.tid + 1; // avoid a 0 being put into the hash
-    other_ref   = bam->core.mtid + 1;
-
-    this_coord = unclipped_start(bam);
-    this_end   = unclipped_end(bam);
-
-    if ((data = bam_aux_get(bam, "MC"))) {
-        if (!(cig = bam_aux2Z(data))) {
-            fprintf(stderr, "[markdup] error: MC tag wrong type. Please use the MC tag provided by samtools fixmate.\n");
-            return 1;
-        }
-
-        other_end   = unclipped_other_end(bam->core.mpos, cig);
-        other_coord = unclipped_other_start(bam->core.mpos, cig);
-    } else {
-        fprintf(stderr, "[markdup] error: no MC tag. Please run samtools fixmate on file first.\n");
-        return 1;
-    }
-
-    // work out orientations
-    if (this_ref != other_ref) {
-        leftmost = this_ref < other_ref;
-    } else {
-        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
-            if (!bam_is_rev(bam)) {
-                leftmost = this_coord <= other_coord;
-            } else {
-                leftmost = this_end <= other_end;
-            }
-        } else {
-            if (bam_is_rev(bam)) {
-                leftmost = this_end <= other_coord;
-            } else {
-                leftmost = this_coord <= other_end;
-            }
-        }
-    }
-
-    // pair orientation
-    if (leftmost) {
-        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
-            other_coord = other_end;
-
-            if (!bam_is_rev(bam)) {
-                if (bam->core.flag & BAM_FREAD1) {
-                    orientation = O_FF;
-                } else {
-                    orientation = O_RR;
-                }
-            } else {
-                if (bam->core.flag & BAM_FREAD1) {
-                    orientation = O_RR;
-                } else {
-                    orientation = O_FF;
-                }
-            }
-        } else {
-            if (!bam_is_rev(bam)) {
-                orientation = O_FR;
-                other_coord = other_end;
-            } else {
-                orientation = O_RF;
-                this_coord = this_end;
-            }
-        }
-    } else {
-        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
-            this_coord = this_end;
-
-            if (!bam_is_rev(bam)) {
-                if (bam->core.flag & BAM_FREAD1) {
-                    orientation = O_RR;
-                } else {
-                    orientation = O_FF;
-                }
-            } else {
-                if (bam->core.flag & BAM_FREAD1) {
-                    orientation = O_FF;
-                } else {
-                    orientation = O_RR;
-                }
-            }
-        } else {
-            if (!bam_is_rev(bam)) {
-                orientation = O_RF;
-                other_coord = other_end;
-            } else {
-                orientation = O_FR;
-                this_coord = this_end;
-            }
-        }
-    }
-
-    if (!leftmost)
-        leftmost = R_RI;
-    else
-        leftmost = R_LE;
-
-    key->single        = 0;
-    key->this_ref      = this_ref;
-    key->this_coord    = this_coord;
-    key->other_ref     = other_ref;
-    key->other_coord   = other_coord;
-    key->leftmost      = leftmost;
-    key->orientation   = orientation;
-
-    return 0;
-}
-
-
-static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
-    hts_pos_t this_coord, this_end, other_coord, other_end, leftmost;
-    int32_t this_ref, other_ref;
+static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam) {
+     hts_pos_t this_coord, this_end, other_coord, other_end, leftmost;
+    int32_t this_ref, other_ref, barcode = 0;
     int8_t orientation, left_read;
     uint8_t *data;
-    char *cig;
+    char *cig, *bar;
 
     this_ref    = bam->core.tid + 1; // avoid a 0 being put into the hash
     other_ref   = bam->core.mtid + 1;
@@ -517,74 +408,163 @@ static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
     }
 
     // work out orientations
-    if (this_ref != other_ref) {
-        leftmost = this_ref - other_ref;
-    } else {
-        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
-            if (!bam_is_rev(bam)) {
-                leftmost = this_coord - other_coord;
-            } else {
-                leftmost = this_end - other_end;
-            }
+    if (param->mode == MD_MODE_TEMPLATE) {
+
+        if (this_ref != other_ref) {
+            leftmost = this_ref < other_ref;
         } else {
-            if (bam_is_rev(bam)) {
-                leftmost = this_end - other_coord;
+            if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+                if (!bam_is_rev(bam)) {
+                    leftmost = this_coord <= other_coord;
+                } else {
+                    leftmost = this_end <= other_end;
+                }
             } else {
-                leftmost = this_coord - other_end;
+                if (bam_is_rev(bam)) {
+                    leftmost = this_end <= other_coord;
+                } else {
+                    leftmost = this_coord <= other_end;
+                }
             }
         }
-    }
 
-    if (leftmost < 0) {
-        leftmost = 1;
-    } else if (leftmost > 0) {
-        leftmost = 0;
-    } else {
-        // tie breaks
+        // pair orientation
+        if (leftmost) {
+            if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+                other_coord = other_end;
 
-        if (bam->core.pos == bam->core.mpos) {
-            if (bam->core.flag & BAM_FREAD1) {
+                if (!bam_is_rev(bam)) {
+                    if (bam->core.flag & BAM_FREAD1) {
+                        orientation = O_FF;
+                    } else {
+                        orientation = O_RR;
+                    }
+                } else {
+                    if (bam->core.flag & BAM_FREAD1) {
+                        orientation = O_RR;
+                    } else {
+                        orientation = O_FF;
+                    }
+                }
+            } else {
+                if (!bam_is_rev(bam)) {
+                    orientation = O_FR;
+                    other_coord = other_end;
+                } else {
+                    orientation = O_RF;
+                    this_coord = this_end;
+                }
+            }
+        } else {
+            if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+                this_coord = this_end;
+
+                if (!bam_is_rev(bam)) {
+                    if (bam->core.flag & BAM_FREAD1) {
+                        orientation = O_RR;
+                    } else {
+                        orientation = O_FF;
+                    }
+                } else {
+                    if (bam->core.flag & BAM_FREAD1) {
+                        orientation = O_FF;
+                    } else {
+                        orientation = O_RR;
+                    }
+                }
+            } else {
+                if (!bam_is_rev(bam)) {
+                    orientation = O_RF;
+                    other_coord = other_end;
+                } else {
+                    orientation = O_FR;
+                    this_coord = this_end;
+                }
+            }
+        }
+    } else { // MD_MODE_SEQUENCE
+
+        if (this_ref != other_ref) {
+            leftmost = this_ref - other_ref;
+        } else {
+            if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+                if (!bam_is_rev(bam)) {
+                    leftmost = this_coord - other_coord;
+                } else {
+                    leftmost = this_end - other_end;
+                }
+            } else {
+                if (bam_is_rev(bam)) {
+                    leftmost = this_end - other_coord;
+                } else {
+                    leftmost = this_coord - other_end;
+                }
+            }
+        }
+
+        if (leftmost < 0) {
+            leftmost = 1;
+        } else if (leftmost > 0) {
+            leftmost = 0;
+        } else {
+            // tie breaks
+
+            if (bam->core.pos == bam->core.mpos) {
+                if (bam->core.flag & BAM_FREAD1) {
+                    leftmost = 1;
+                } else {
+                    leftmost = 0;
+                }
+            } else if (bam->core.pos < bam->core.mpos) {
                 leftmost = 1;
             } else {
                 leftmost = 0;
             }
-        } else if (bam->core.pos < bam->core.mpos) {
-            leftmost = 1;
-        } else {
-            leftmost = 0;
         }
-    }
 
-    // pair orientation
-    if (leftmost) {
-        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+        // pair orientation
+        if (leftmost) {
+            if (bam_is_rev(bam) == bam_is_mrev(bam)) {
 
-            if (!bam_is_rev(bam)) {
-                    orientation = O_FF;
+                if (!bam_is_rev(bam)) {
+                        orientation = O_FF;
+                } else {
+                        orientation = O_RR;
+                }
             } else {
-                    orientation = O_RR;
+                if (!bam_is_rev(bam)) {
+                    orientation = O_FR;
+                } else {
+                    orientation = O_RF;
+                }
             }
         } else {
-            if (!bam_is_rev(bam)) {
-                orientation = O_FR;
+            if (bam_is_rev(bam) == bam_is_mrev(bam)) {
+
+                if (!bam_is_rev(bam)) {
+                        orientation = O_RR;
+                } else {
+                        orientation = O_FF;
+                }
             } else {
-                orientation = O_RF;
+                if (!bam_is_rev(bam)) {
+                    orientation = O_RF;
+                } else {
+                    orientation = O_FR;
+                }
             }
         }
-    } else {
-        if (bam_is_rev(bam) == bam_is_mrev(bam)) {
 
-            if (!bam_is_rev(bam)) {
-                    orientation = O_RR;
-            } else {
-                    orientation = O_FF;
-            }
+        if (!bam_is_rev(bam)) {
+            this_coord = unclipped_start(bam);
         } else {
-            if (!bam_is_rev(bam)) {
-                orientation = O_RF;
-            } else {
-                orientation = O_FR;
-            }
+            this_coord = unclipped_end(bam);
+        }
+
+        if (!bam_is_mrev(bam)) {
+            other_coord = unclipped_other_start(bam->core.mpos, cig);
+        } else {
+            other_coord = unclipped_other_end(bam->core.mpos, cig);
         }
     }
 
@@ -593,16 +573,36 @@ static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
     else
         left_read = R_LE;
 
-    if (!bam_is_rev(bam)) {
-        this_coord = unclipped_start(bam);
-    } else {
-        this_coord = unclipped_end(bam);
-    }
+    if (param->barcode) {
+        if ((data = bam_aux_get(bam, param->barcode))) {
+            if (!(bar = bam_aux2Z(data))) {
+                fprintf(stderr, "[markdup] error: %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
+                return 1;
+            }
 
-    if (!bam_is_mrev(bam)) {
-        other_coord = unclipped_other_start(bam->core.mpos, cig);
-    } else {
-        other_coord = unclipped_other_end(bam->core.mpos, cig);
+            barcode = do_hash((unsigned char *)bar, strlen(bar));
+        }
+    } else if (param->bc_rgx) {
+        regmatch_t matches[3];
+        size_t max_matches = 2;
+        char *qname = bam_get_qname(bam);
+        int bc_start, bc_end;
+        int result;
+
+        if ((result = regexec(param->bc_rgx, qname, max_matches, matches, 0))) {
+            char err_msg[256];
+            regerror(result, param->bc_rgx, err_msg, 256);
+
+            fprintf(stderr, "[markdup] error: unable to read barcode from %s, %s\n", qname, err_msg);
+            return -1;
+        }
+
+        bc_start = matches[1].rm_so;
+        bc_end   = matches[1].rm_eo;
+
+        if (bc_start != -1) {
+            barcode = do_hash((unsigned char *)qname + bc_start, bc_end - bc_start);
+        }
     }
 
     key->single        = 0;
@@ -612,18 +612,22 @@ static int make_pair_key_sequence(key_data_t *key, bam1_t *bam) {
     key->other_coord   = other_coord;
     key->leftmost      = left_read;
     key->orientation   = orientation;
+    key->barcode       = barcode;
 
     return 0;
 }
+
 
 /* Create a signature hash of single read (or read with an unmatched pair).
    Uses unclipped start (or end depending on orientation), reference id,
    and orientation. */
 
-static void make_single_key(key_data_t *key, bam1_t *bam) {
+static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam) {
     hts_pos_t this_coord;
-    int32_t this_ref;
+    int32_t this_ref, barcode = 0;
     int8_t orientation;
+    uint8_t *data;
+    char *bar;
 
     this_ref = bam->core.tid + 1; // avoid a 0 being put into the hash
 
@@ -635,10 +639,42 @@ static void make_single_key(key_data_t *key, bam1_t *bam) {
         orientation = O_FF;
     }
 
+    if (param->barcode) {
+        if ((data = bam_aux_get(bam, param->barcode))) {
+            if (!(bar = bam_aux2Z(data))) {
+                fprintf(stderr, "[markdup] error: %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
+                // return 1; FIXME, error checking on single keys
+            }
+
+            barcode = do_hash((unsigned char *)bar, strlen(bar));
+        }
+    } else if (param->bc_rgx) {
+        regmatch_t matches[3];
+        size_t max_matches = 2;
+        char *qname = bam_get_qname(bam);
+        int bc_start, bc_end;
+        int result;
+
+        if ((result = regexec(param->bc_rgx, qname, max_matches, matches, 0))) {
+            char err_msg[256];
+            regerror(result, param->bc_rgx, err_msg, 256);
+
+            fprintf(stderr, "[markdup] error: unable to read barcode from %s, %s\n", qname, err_msg);
+        } else {
+            bc_start = matches[1].rm_so;
+            bc_end   = matches[1].rm_eo;
+
+            if (bc_start != -1) {
+                barcode = do_hash((unsigned char *)qname + bc_start, bc_end - bc_start);
+            }
+        }
+    }
+
     key->single        = 1;
     key->this_ref      = this_ref;
     key->this_coord    = this_coord;
     key->orientation   = orientation;
+    key->barcode       = barcode;
 }
 
 
@@ -1579,19 +1615,12 @@ static int bam_mark_duplicates(md_param_t *param) {
                 key_data_t single_key;
                 in_hash_t *bp;
 
-                if (param->mode) {
-                    if (make_pair_key_sequence(&pair_key, in_read->b)) {
-                        fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
-                        goto fail;
-                    }
-                } else {
-                    if (make_pair_key_template(&pair_key, in_read->b)) {
-                        fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
-                        goto fail;
-                    }
+                if (make_pair_key(param, &pair_key, in_read->b)) {
+                    fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
+                    goto fail;
                 }
 
-                make_single_key(&single_key, in_read->b);
+                make_single_key(param, &single_key, in_read->b);
 
                 pair++;
                 in_read->pos = single_key.this_coord; // cigar/orientation modified pos
@@ -1731,7 +1760,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                 key_data_t single_key;
                 in_hash_t *bp;
 
-                make_single_key(&single_key, in_read->b);
+                make_single_key(param, &single_key, in_read->b);
 
                 single++;
                 in_read->pos = single_key.this_coord; // cigar/orientation modified pos
@@ -2095,6 +2124,8 @@ static int markdup_usage(void) {
     fprintf(stderr, "  --read-coords STR  Regex for coords from read name.\n");
     fprintf(stderr, "  --coords-order STR Order of regex elements. txy (default).  With t being a part of\n"
                     "                     the read names that must be equal and x/y being coordinates.\n");
+    fprintf(stderr, "  --barcode-tag STR  Use barcode a tag that duplicates much match.\n");
+    fprintf(stderr, "  --barcode-name     Use the UMI/barcode in the read name (eigth colon delimited part).\n");
     fprintf(stderr, "  -t                 Mark primary duplicates with the name of the original in a \'do\' tag."
                                         " Mainly for information and debugging.\n");
 
@@ -2108,7 +2139,7 @@ static int markdup_usage(void) {
 
 
 int bam_markdup(int argc, char **argv) {
-    int c, ret;
+    int c, ret, bc_name = 0;
     char wmode[4] = {'w', 'b', 0, 0};
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
@@ -2117,7 +2148,8 @@ int bam_markdup(int argc, char **argv) {
     unsigned int t;
     char *regex = NULL;
     char *regex_order = "txy";
-    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, NULL, NULL, NULL, NULL, 0, 0, 0};
+    md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                        1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL};
 
     static const struct option lopts[] = {
         SAM_OPT_GLOBAL_OPTIONS('-', 0, 'O', 0, 0, '@'),
@@ -2127,6 +2159,8 @@ int bam_markdup(int argc, char **argv) {
         {"no-multi-dup", no_argument, NULL, 1003},
         {"read-coords", required_argument, NULL, 1004},
         {"coords-order", required_argument, NULL, 1005},
+        {"barcode-tag", required_argument, NULL, 1006},
+        {"barcode-name", no_argument, NULL, 1007},
         {NULL, 0, NULL, 0}
     };
 
@@ -2158,6 +2192,8 @@ int bam_markdup(int argc, char **argv) {
             case 1003: param.check_chain = 0; break;
             case 1004: regex = optarg; break;
             case 1005: regex_order = optarg; break;
+            case 1006: param.barcode = optarg; break;
+            case 1007: bc_name = 1; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
@@ -2166,6 +2202,12 @@ int bam_markdup(int argc, char **argv) {
 
     if (optind + 2 > argc)
         return markdup_usage();
+
+    if (param.barcode && bc_name) {
+        fprintf(stderr, "[markdup] Error: cannot specify --barcode-tag and "
+                        "--barcode-name at same time.\n");
+        return 1;
+    }
 
     if (param.opt_dist < 0) param.opt_dist = 0;
     if (param.max_length < 0) param.max_length = 300;
@@ -2195,7 +2237,7 @@ int bam_markdup(int argc, char **argv) {
             param.rgx_y = 2;
             param.rgx_t = 0;
         } else {
-            fprintf(stderr, "[markdup] error:  could not recognise regex coorindate order \"%s\".\n", regex_order);
+            fprintf(stderr, "[markdup] error:  could not recognise regex coordinate order \"%s\".\n", regex_order);
             return 1;
         }
 
@@ -2210,6 +2252,28 @@ int bam_markdup(int argc, char **argv) {
             regerror(result, param.rgx, err_msg, 256);
             fprintf(stderr, "[markdup] error: regex error \"%s\"\n", err_msg);
             free(param.rgx);
+            return 1;
+        }
+    }
+
+    if (bc_name) {
+        int result;
+
+        /* From Illumina UMI documentation: "The UMI sequence is located in the
+           eighth colon-delimited field of the read name (QNAME)". */
+        char rgx[] = "[0-9A-Za-z]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:([!-?A-~]+)";
+
+        if ((param.bc_rgx = malloc(sizeof(regex_t))) == NULL) {
+            fprintf(stderr, "[markdup] error:  could not allocate memory for barcode regex.\n");
+            return 1;
+        }
+
+        if ((result = regcomp(param.bc_rgx, rgx, REG_EXTENDED))) {
+            char err_msg[256];
+
+            regerror(result, param.bc_rgx, err_msg, 256);
+            fprintf(stderr, "[markdup] error: barcode regex error \"%s\"\n", err_msg);
+            free(param.bc_rgx);
             return 1;
         }
     }
@@ -2276,6 +2340,11 @@ int bam_markdup(int argc, char **argv) {
     if (param.rgx) {
         regfree(param.rgx);
         free(param.rgx);
+    }
+
+    if (param.bc_rgx) {
+        regfree(param.bc_rgx);
+        free(param.bc_rgx);
     }
 
     free(param.arg_list);
