@@ -763,12 +763,22 @@ static int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
 // Make mnemonic distinct values for longoption-only options
 #define LONGOPT(c)  ((c) + 128)
 
+// Check for ".sam" filenames as sam_open_mode cannot distinguish between
+// foo.sam and foo.unknown, both getting mode "".
+static int is_sam(const char *fn) {
+    if (!fn)
+        return 0;
+    size_t l = strlen(fn);
+    return (l >= 4 && strcasecmp(fn + l-4, ".sam") == 0);
+}
+
 int main_samview(int argc, char *argv[])
 {
     samview_settings_t settings;
     int c, is_header = 0, is_header_only = 0, ret = 0, compress_level = -1, has_index_file = 0, no_pg = 0;
     FILE *fp_out = NULL;
-    char out_mode[6] = {0}, out_un_mode[6] = {0}, *out_format = "";
+    char out_mode[6] = {0}, out_un_mode[6] = {0};
+    char *out_format = "";
     char *arg_list = NULL;
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     htsThreadPool p = {NULL, 0};
@@ -979,10 +989,6 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
             break;
-                /* REMOVED as htslib doesn't support this
-        //case 'x': out_format = "x"; break;
-        //case 'X': out_format = "X"; break;
-                 */
         case LONGOPT('?'):
             return usage(stdout, EXIT_SUCCESS, 1);
         case '?':
@@ -1042,15 +1048,30 @@ int main_samview(int argc, char *argv[])
         return 1;
     }
     if (settings.fn_fai == 0 && ga.reference) settings.fn_fai = fai_path(ga.reference);
-    if (compress_level >= 0 && !*out_format) out_format = "b";
     if (is_header_only) is_header = 1;
     // File format auto-detection first
     if (settings.fn_out)    sam_open_mode(out_mode+1,    settings.fn_out,    NULL);
     if (settings.fn_un_out) sam_open_mode(out_un_mode+1, settings.fn_un_out, NULL);
-    // Overridden by manual -b, -C
-    if (*out_format)
+
+    // -1 or -u without an explicit format (-b, -C) => check fn extensions
+    if (!*out_format && compress_level >= 0) {
+        if (compress_level == 0 &&
+            (out_mode[strlen(out_mode)-1] == 'z' ||
+             out_un_mode[strlen(out_un_mode)-1] == 'z'))
+            // z, fz, Fz sanity check
+            fprintf(stderr, "[view] Warning option -u ignored due to"
+                    " filename suffix\n");
+
+        // If known extension, use it, otherwise BAM
+        if (!(out_mode[1] || is_sam(settings.fn_out)))
+            out_mode[1] = 'b';
+
+        if (!(out_un_mode[1] || is_sam(settings.fn_un_out)))
+            out_un_mode[1] = 'b';
+    } else if (*out_format) {
         out_mode[1] = out_un_mode[1] = *out_format;
-    // out_(un_)mode now 1, 2 or 3 bytes long, followed by nul.
+    }
+
     if (compress_level >= 0) {
         char tmp[2];
         tmp[0] = compress_level + '0'; tmp[1] = '\0';
@@ -1129,7 +1150,7 @@ int main_samview(int argc, char *argv[])
             }
         }
 
-        if (*out_format || ga.write_index || is_header ||
+        if (ga.write_index || is_header ||
             out_mode[1] == 'b' || out_mode[1] == 'c' ||
             (ga.out.format != sam && ga.out.format != unknown_format))  {
             if (sam_hdr_write(settings.out, settings.header) != 0) {
@@ -1159,7 +1180,7 @@ int main_samview(int argc, char *argv[])
                 }
             }
             autoflush_if_stdout(settings.un_out, settings.fn_un_out);
-            if (*out_format || is_header ||
+            if (ga.write_index || is_header ||
                 out_un_mode[1] == 'b' || out_un_mode[1] == 'c' ||
                 (ga.out.format != sam && ga.out.format != unknown_format))  {
                 if (sam_hdr_write(settings.un_out, settings.header) != 0) {
@@ -1336,8 +1357,8 @@ static int usage(FILE *fp, int exit_status, int is_long_help)
 "Output options:\n"
 "  -b, --bam                  Output BAM\n"
 "  -C, --cram                 Output CRAM (requires -T)\n"
-"  -1, --fast                 Use fast BAM compression (implies --bam)\n"
-"  -u, --uncompressed         Uncompressed BAM output (implies --bam)\n"
+"  -1, --fast                 Use fast BAM compression (and default to --bam)\n"
+"  -u, --uncompressed         Uncompressed BAM output (and default to --bam)\n"
 "  -h, --with-header          Include header in SAM output\n"
 "  -H, --header-only          Print SAM header only (no alignments)\n"
 "      --no-header            Print SAM alignment records only [default]\n"

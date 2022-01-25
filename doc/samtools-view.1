@@ -171,12 +171,17 @@ Output in the BAM format.
 Output in the CRAM format (requires -T).
 .TP
 .BR -1 ", " --fast
-Enable fast BAM compression (implies -b).
+Enable fast compression.  This also changes the default output format to
+BAM, but this can be overridden by the explicit format options or
+using a filename with a known suffix.
 .TP
 .BR -u ", " --uncompressed
-Output uncompressed BAM. This option saves time spent on
-compression/decompression and is thus preferred when the output is piped
-to another samtools command.
+Output uncompressed data. This also changes the default output format to
+BAM, but this can be overridden by the explicit format options or
+using a filename with a known suffix.
+
+This option saves time spent on compression/decompression and is thus
+preferred when the output is piped to another samtools command.
 .TP
 .BR -h ", " --with-header
 Include the header in the output.
