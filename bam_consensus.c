@@ -1320,7 +1320,11 @@ static int basic_fasta(void *cd, samFile *fp, sam_hdr_t *h, pileup_t *p,
             cb = "ACGT*"[cons.call];
             cq = cons.phred;
         }
-        if (cq < opts->cons_cutoff) {
+        if (cq < opts->cons_cutoff && cb != '*' &&
+            cons.het_call % 5 != 4 && cons.het_call / 5 != 4) {
+            // het base/* keeps base or * as most likely pure call, else N.
+            // This is because we don't have a traditional way of representing
+            // base or not-base ambiguity.
             cb = 'N';
             cq = 0;
         }
