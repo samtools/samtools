@@ -149,6 +149,7 @@ typedef struct {
     double scale_mqual;
     int nm_adjust;
     int nm_halo;
+    int sc_cost;
     int low_mqual;
     int high_mqual;
     int min_depth;
@@ -506,17 +507,17 @@ int nm_init(void *client_data, samFile *fp, sam_hdr_t *h, pileup_t *p) {
         ((cig[0] & BAM_CIGAR_MASK) == BAM_CHARD_CLIP && ncig > 1 &&
          (cig[1] & BAM_CIGAR_MASK) == BAM_CSOFT_CLIP)) {
         for (i = 0; i < halo && i < qlen; i++)
-            local_nm[i]+=10;
+            local_nm[i]+=opts->sc_cost;
         for (; i < halo*2 && i < qlen; i++)
-            local_nm[i]+=5;
+            local_nm[i]+=opts->sc_cost>>1;
     }
     if ( (cig[ncig-1] & BAM_CIGAR_MASK) == BAM_CSOFT_CLIP ||
         ((cig[ncig-1] & BAM_CIGAR_MASK) == BAM_CHARD_CLIP && ncig > 1 &&
          (cig[ncig-2] & BAM_CIGAR_MASK) == BAM_CSOFT_CLIP)) {
         for (i = qlen-1; i >= qlen-halo && i >= 0; i--)
-            local_nm[i]+=10;
+            local_nm[i]+=opts->sc_cost;
         for (; i >= qlen-halo*2 && i >= 0; i--)
-            local_nm[i]+=5;
+            local_nm[i]+=opts->sc_cost>>1;
     }
 
     // Now iterate over MD tag
@@ -1427,6 +1428,7 @@ int main_consensus(int argc, char **argv) {
         .scale_mqual  = 1.00,
         .nm_adjust    = 1,
         .nm_halo      = 50,
+        .sc_cost      = 60,
         .low_mqual    = 1,
         .high_mqual   = 60,
         .min_depth    = 1,
@@ -1470,6 +1472,7 @@ int main_consensus(int argc, char **argv) {
         {"adj-MQ",             no_argument,       NULL, 'm'+100},
         {"no-adj-MQ",          no_argument,       NULL, 'm'+101},
         {"NM-halo",            required_argument, NULL, 'h'+100},
+        {"SC-cost",            required_argument, NULL, 'h'+101},
         {"scale-MQ",           required_argument, NULL, 14},
         {"low-MQ"   ,          required_argument, NULL,  9},
         {"high-MQ",            required_argument, NULL, 10},
@@ -1524,6 +1527,7 @@ int main_consensus(int argc, char **argv) {
         case 'm'+100: opts.nm_adjust = 1; break;
         case 'm'+101: opts.nm_adjust = 0; break;
         case 'h'+100: opts.nm_halo = atoi(optarg); break;
+        case 'h'+101: opts.sc_cost = atoi(optarg); break;
 
         case 'm': // mode
             if (strcasecmp(optarg, "simple") == 0) {
@@ -1636,7 +1640,8 @@ int main_consensus(int argc, char **argv) {
                 goto err;
         }
     } else {
-        if (pileup_loop(opts.fp, opts.h, readaln2, NULL, basic_fasta,
+        if (pileup_loop(opts.fp, opts.h, readaln2, opts.gap5 ? nm_init : NULL,
+                        basic_fasta,
                         &opts) < 0)
             goto err;
         if (opts.all_bases) {
