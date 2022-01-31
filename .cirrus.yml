@@ -109,11 +109,11 @@ ubuntu_task:
   << : *TEST
 
 
-# CentOS
-centos_task:
-  name: centos-gcc
+# Rocky Linux
+rocky_task:
+  name: rockylinux-gcc
   container:
-    image: centos:latest
+    image: rockylinux:latest
     cpu: 2
     memory: 1G
 
