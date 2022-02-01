@@ -74,7 +74,7 @@ reference will be included and deletions removed.  This behaviour can
 be controlled with the 
 .B --show-ins
 and
-.B--show-del
+.B --show-del
 options.  This could be used to compute a new reference from sequences
 assemblies to realign against.
 
@@ -114,9 +114,9 @@ if the
 option is specified.  This is enabled with the \fB--mode simple\fR option.
 
 The summed share of a specific base type
-is then compared against the total possible and if this is above a the
+is then compared against the total possible and if this is above the
 .BI "--call-fract " fraction
-parameter then most likely base type is called, or "N" otherwise (or
+parameter then the most likely base type is called, or "N" otherwise (or
 absent if it is a gap).  The
 .B --ambig
 option permits generation of ambiguity codes instead of "N", provided
@@ -288,7 +288,7 @@ deemed to be heterozygous without \fB--ambig\fR mode enabled).
 
 .SH EXAMPLES
 .IP -
-Create a modified FASTA reference that has a 1:1 coordinate correspondance with the original reference used in alignment.
+Create a modified FASTA reference that has a 1:1 coordinate correspondence with the original reference used in alignment.
 .EX 2
 samtools consensus -a --show-ins no in.bam -o ref.fa
 .EE

@@ -1,4 +1,4 @@
-/*  consensus__pileup.h -- Pileup orientated data per consensus column
+/*  consensus_pileup.h -- Pileup orientated data per consensus column
 
     Copyright (C) 2013-2016, 2020-2021 Genome Research Ltd.
 
@@ -22,7 +22,6 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.  */
 
-#include <config.h>
 #include <htslib/sam.h>
 
 typedef struct pileup {
