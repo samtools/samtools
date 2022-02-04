@@ -1063,6 +1063,7 @@ static void remove_overlaps(bam1_t *bam_line, khash_t(qn2pair) *read_pairs, stat
         pc->chunks = calloc(pc->m, sizeof(hts_pair_pos_t));
         if ( !pc->chunks ) {
             fprintf(stderr, "Error allocating memory\n");
+            free(pc);
             return;
         }
 
