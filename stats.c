@@ -2453,13 +2453,13 @@ int main_stats(int argc, char *argv[])
     }
 
     if (init_stat_info_fname(info, bam_fname, &ga.in)) {
-        free(info);
+        cleanup_stats_info(info);
         return 1;
     }
 
     if (has_index_file && !(bam_idx_fname = argv[optind++])) {
         fprintf(stderr, "No index file provided\n");
-        free(info);
+        cleanup_stats_info(info);
         return 1;
     }
 
