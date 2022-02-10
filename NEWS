@@ -53,7 +53,7 @@ New work and changes:
 
 Bug Fixes:
  * Free memory when stats fails to read the header of a file.
-   (#1592; thanks to @mphschmitt)
+   (#1592; thanks to Mathias Schmitt)
 
  * Fixed empty field on unsupported aux tags in "mpileup --output-extra".
    Replaces the empty fields on unsupported aux tags with a '*'.
