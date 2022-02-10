@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#    Copyright (C) 2014-2015 Genome Research Ltd.
+#    Copyright (C) 2014-2015, 2020 Genome Research Ltd.
 #
 #    Author: James Bonfield <jkb@sanger.ac.uk>
 #
