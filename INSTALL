@@ -234,3 +234,23 @@ OpenSUSE
 --------
 
 sudo zypper install autoconf automake make gcc perl zlib-devel libbz2-devel xz-devel libcurl-devel libopenssl-devel ncurses-devel
+
+Windows MSYS2/MINGW64
+---------------------
+
+The configure script must be used as without it the compilation will
+likely fail.
+
+Follow MSYS2 installation instructions at
+https://www.msys2.org/wiki/MSYS2-installation/
+
+Then relaunch to MSYS2 shell using the "MSYS2 MinGW x64" executable.
+Once in that environment (check $MSYSTEM equals "MINGW64") install the
+compilers using pacman -S and the following package list:
+
+base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-libdeflate
+mingw-w64-x86_64-zlib mingw-w64-x86_64-bzip2 mingw-w64-x86_64-xz
+mingw-w64-x86_64-curl mingw-w64-x86_64-autotools
+mingw-w64-x86_64-ncurses mingw-w64-x86_64-tools-git
+
+(The last is only needed for building libraries compatible with MSVC.)
