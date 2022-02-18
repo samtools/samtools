@@ -224,11 +224,15 @@ RedHat / CentOS
 
 sudo yum install autoconf automake make gcc perl-Data-Dumper zlib-devel bzip2 bzip2-devel xz-devel curl-devel openssl-devel ncurses-devel
 
+Note: On some versions, Perl FindBin will need to be installed to make the tests work.
+
+sudo yum install perl-FindBin
+
 Alpine Linux
 ------------
 
-sudo apk update  # Ensure the package list is up to date
-sudo apk add autoconf automake make gcc musl-dev perl bash zlib-dev bzip2-dev xz-dev curl-dev libressl-dev ncurses-dev
+doas apk update  # Ensure the package list is up to date
+doas apk add autoconf automake make gcc musl-dev perl bash zlib-dev bzip2-dev xz-dev curl-dev libressl-dev ncurses-dev
 
 OpenSUSE
 --------
