@@ -1,6 +1,9 @@
 Release a.b
 -----------
 
+Release 1.15 (21st February 2022)
+---------------------------------
+
 Notice:
 
  * Samtools mpileup VCF and BCF output (deprecated in release 1.9) has been
