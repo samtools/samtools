@@ -43,6 +43,7 @@ test_index($opts, threads=>2);
 test_mpileup($opts);
 test_usage($opts, cmd=>'samtools');
 test_view($opts);
+test_head($opts);
 test_cat($opts);
 test_import($opts);
 test_bam2fq($opts);
@@ -888,10 +889,6 @@ sub test_mpileup
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.bam.urllist -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
     test_cmd($opts,out=>'dat/mpileup.out.1',err=>'dat/mpileup.err.1',cmd=>"$$opts{bin}/samtools mpileup -b $$opts{tmp}/mpileup.cram.urllist -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-150");
-    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.bam.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
-    test_cmd($opts,out=>'dat/mpileup.out.2',cmd=>"$$opts{bin}/samtools mpileup -uvDV -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
-    test_cmd($opts,out=>'dat/mpileup.out.4',cmd=>"$$opts{bin}/samtools mpileup -uv -t DP,DPR,DV,DP4,INFO/DPR,SP -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
-    test_cmd($opts,out=>'dat/mpileup.out.4',cmd=>"$$opts{bin}/samtools mpileup -uv -t DP,DPR,DV,DP4,INFO/DPR,SP -b $$opts{tmp}/mpileup.cram.list -f $$opts{tmp}/mpileup.ref.fa.gz -r17:100-600| grep -v ^##samtools | grep -v ^##ref");
     # test that filter mask replaces (not just adds to) default mask
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.bam | grep -v mpileup");
     test_cmd($opts,out=>'dat/mpileup.out.3',cmd=>"$$opts{bin}/samtools mpileup -B --ff 0x14 -f $$opts{tmp}/mpileup.ref.fa.gz -r17:1050-1060 $$opts{tmp}/mpileup.1.cram | grep -v mpileup");
@@ -2493,6 +2490,84 @@ sub test_view
                     args => ['-h', '-F', 'DUP', '-p', '--no-PG', $dup_sam],
                     out => sprintf("%s.test%03d.sam", $out, $test),
                     compare => $unmapped_expected);
+
+
+    # retrieve reads from a region including their mates
+    my $bam = 'test/dat/view.fetch-pairs.bam';
+    cmd("$$opts{bin}/samtools index $bam");
+
+    $test++;
+    run_view_test($opts,
+            msg => "$test: fetch pairs",
+            args => ['--no-PG','--fetch-pairs',$bam,'6:25515943-25515943','6:25020026-25020026','6:25515822-25515822'],
+            out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
+            compare_sam => 'test/dat/view.fetch-pairs.expected.sam');
+
+    $test++;
+    run_view_test($opts,
+            msg => "$test: fetch pairs",
+            args => ['--no-PG','--fetch-pairs',$bam,'6:25515857-25515857'],
+            out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
+            compare_sam => 'test/dat/view.fetch-pairs.filter0.expected.sam');
+
+    $test++;
+    run_view_test($opts,
+            msg => "$test: fetch pairs",
+            args => ['--no-PG','--fetch-pairs','--exclude-flags','DUP',$bam,'6:25515857-25515857'],
+            out => sprintf("%s.fetch-pairs.test%03d.bam", $out, $test),
+            compare_sam => 'test/dat/view.fetch-pairs.filter1.expected.sam');
+
+}
+
+sub gen_head_output
+{
+    my ($opts, $h, $n, $desc, $infile) = @_;
+
+    open my $in, '<', $infile or die "Couldn't open $infile: $!\n";
+
+    my $expected = "dat/head.$desc.tmp.expected";
+    open my $out, '>', "$$opts{path}/$expected"
+        or die "Couldn't write to $expected: $!\n";
+
+    while (<$in>) {
+        my $counter = /^@/? \$h : \$n;
+        next unless $$counter > 0;
+        print $out $_;
+        $$counter--;
+    }
+    close $in;
+    close $out;
+    return $expected;
+}
+
+sub test_head
+{
+    my ($opts) = @_;
+
+    my $infile = "$$opts{path}/dat/view.001.sam";
+
+    test_cmd($opts, out => gen_head_output($opts, 1000, 0, "all", $infile),
+             cmd => "$$opts{bin}/samtools head $infile");
+    test_cmd($opts, out => gen_head_output($opts, 0, 0, "none", $infile),
+             cmd => "$$opts{bin}/samtools head -h 0 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 1, 0, "one", $infile),
+             cmd => "$$opts{bin}/samtools head -h 1 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 5, 0, "five", $infile),
+             cmd => "$$opts{bin}/samtools head -h 5 $infile");
+    # view.001.sam has 29 header lines; test exactly that and asking for 1 extra
+    test_cmd($opts, out => gen_head_output($opts, 29, 0, "exact", $infile),
+             cmd => "$$opts{bin}/samtools head -h 29 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 30, 0, "toomany", $infile),
+             cmd => "$$opts{bin}/samtools head -h 30 $infile");
+
+    test_cmd($opts, out => gen_head_output($opts, 1000, 0, "alln0", $infile),
+             cmd => "$$opts{bin}/samtools head -n 0 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 1000, 1, "onerec", $infile),
+             cmd => "$$opts{bin}/samtools head -n 1 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 1000, 5, "fiverecs", $infile),
+             cmd => "$$opts{bin}/samtools head -n 5 $infile");
+    test_cmd($opts, out => gen_head_output($opts, 5, 5, "fiveboth", $infile),
+             cmd => "$$opts{bin}/samtools head -h 5 -n 5 < $infile");
 }
 
 # cat SAM files in the same way as samtools cat does with BAMs
@@ -3309,6 +3384,10 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/8_optical_dup.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --no-PG $$opts{path}/markdup/8_optical_dup.sam -");
     test_cmd($opts, out=>'markdup/9_optical_dup_qcfail.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t --include-fails -O sam --no-PG $$opts{path}/markdup/9_optical_dup_qcfail.sam -");
     test_cmd($opts, out=>'markdup/10_optical_chain.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --no-PG -S $$opts{path}/markdup/10_optical_chain.sam -");
+    test_cmd($opts, out=>'markdup/10_optical_chain.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --read-coords '([[:digit:]]+):([[:digit:]]+):([[:digit:]]+)\$' --no-PG -S $$opts{path}/markdup/10_optical_chain.sam -");
+    test_cmd($opts, out=>'markdup/11_optical_dup_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --read-coords '^([0-9]+):([0-9]+):([[:print:]]+)' --coords-order xyt --no-PG $$opts{path}/markdup/11_optical_dup_regex.sam -");
+    test_cmd($opts, out=>'markdup/11_optical_dup_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t -O sam --read-coords '^([0-9]+):([0-9]+)' --coords-order xy --no-PG $$opts{path}/markdup/11_optical_dup_regex.sam -");
+    test_cmd($opts, out=>'markdup/12_optical_chain_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --read-coords '([[:digit:]]+):([[:digit:]]+)\$' --coords-order xy --no-PG $$opts{path}/markdup/12_optical_chain_regex.sam -");
 }
 
 sub test_bedcov

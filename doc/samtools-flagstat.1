@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-flagstat 1 "22 October 2021" "samtools-1.14" "Bioinformatics tools"
+.TH samtools-flagstat 1 "21 February 2022" "samtools-1.15" "Bioinformatics tools"
 .SH NAME
 samtools flagstat \- counts the number of alignments for each FLAG type
 .\"
@@ -152,11 +152,11 @@ These contain the various categories listed above as names and
 the corresponding count as value.
 
 For the default format, 
-.BR mapped "
+.B mapped
 shows the count as a percentage of the total number of QC-passed or QC-failed
 reads after the category name.
 For example:
-.EX
+.EX 4
 32 + 0 mapped (94.12% : N/A)
 .EE
 

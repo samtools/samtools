@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#    Copyright (C) 2014-2015 Genome Research Ltd.
+#    Copyright (C) 2014-2015, 2020 Genome Research Ltd.
 #
 #    Author: James Bonfield <jkb@sanger.ac.uk>
 #
@@ -56,7 +56,7 @@ run_test() {
             echo ""
             echo "UNEXPECTED PASS: Task worked when we expected failure;" >&2
             echo "when running $@" >&2
-            echo "See PASS-$e.${test_iter} vs expected/$e" >&2
+            echo "See PASS-$e.${test_iter} expected/$e" >&2
             mv _out PASS-$e.${test_iter}
             nupass=`expr $nupass + 1`
             return 0
@@ -77,7 +77,7 @@ run_test() {
         else
             echo ""
             echo "UNEXPECTED FAIL: Output mismatch for $@" >&2
-            echo "See FAIL-$e.${test_iter} vs expected/$e" >&2
+            echo "See FAIL-$e.${test_iter} expected/$e" >&2
             mv _out FAIL-$e.${test_iter}
             nufail=`expr $nufail + 1`
             return 0

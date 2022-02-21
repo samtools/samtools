@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-bedcov 1 "22 October 2021" "samtools-1.14" "Bioinformatics tools"
+.TH samtools-bedcov 1 "21 February 2022" "samtools-1.15" "Bioinformatics tools"
 .SH NAME
 samtools bedcov \- reports coverage over regions in a supplied BED file
 .\"
@@ -57,8 +57,8 @@ Counts for each alignment file supplied are reported in separate columns.
 
 .SH OPTIONS
 .TP
-.BI "-Q " INT
-.RI "Only count reads with mapping quality greater than " INT
+.BI "-Q,\ --min-MQ " INT
+.RI "Only count reads with mapping quality greater than or equal to " INT
 .TP
 .BI "-g " FLAGS
 By default, reads that have any of the flags UNMAP, SECONDARY, QCFAIL,

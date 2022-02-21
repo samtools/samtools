@@ -1,3 +1,102 @@
+Release 1.15 (21st February 2022)
+---------------------------------
+
+Notice:
+
+ * Samtools mpileup VCF and BCF output (deprecated in release 1.9) has been
+   removed.  Please use bcftools mpileup instead.
+
+New work and changes:
+
+ * Added "--min-BQ" and "--min-MQ" options to "depth". These match the
+   equivalent long options found in "samtools mpileup" and gives a consistent
+   way of specifying the base and mapping quality filters.
+   (#1584; fixes #1580. Reported by Chang Y) 
+
+ * Improved automatic file type detection with "view -u" or "view -1".  Setting
+   either of these options would default to BAM format regardless of the usual
+   automatic file type selection based on the file name.  The defaults are now
+   only used when the file name does not indicate otherwise.
+   (#1582)
+
+ * For "markdup" optical duplicate marking add regex options for custom
+   coordinates.  For the case of non standard read names (QNAME), add options
+   to read the coordinates and, optionally, another part of the string to test
+   for optical duplication.
+   (#1558)
+
+ * New "samtools consensus" subcommand for generating consensus from SAM, BAM or
+   CRAM files based on the contents of the alignment records.  The consensus is
+   written as FASTA, FASTQ or as a pileup oriented format.  The default
+   FASTA/FASTQ output includes one base per non-gap consensus, with insertions
+   with respect to the aligned reference being included and deletions removed.
+   This could be used to compute a new reference from sequence assemblies to
+   realign against.
+   (#1557)
+
+ * New "samtools view --fetch-pairs" option.  This options retrieves pairs even
+   when the mate is outside of the requested region.  Using this option enables
+   the multi-region iterator and a region to search must be specified.  The
+   input file must be an indexed regular file.
+   (#1542)
+
+ * Building on #1530 below, add a tview reflist for Goto.
+   (#1539, thanks to Adam Blanchet)
+   
+ * Completion of references added to tview Goto.
+   (#1530; thanks to Adam Blanchet)
+
+ * New "samtools head" subcommand for conveniently displaying the headers
+   of a SAM, BAM, or CRAM file. Without options, this is equivalent to
+   `samtools view --header-only --no-PG` but more succinct and memorable.
+   (#1517; thanks to John Marshall)
+
+Bug Fixes:
+ * Free memory when stats fails to read the header of a file.
+   (#1592; thanks to Mathias Schmitt)
+
+ * Fixed empty field on unsupported aux tags in "mpileup --output-extra".
+   Replaces the empty fields on unsupported aux tags with a '*'.
+   (#1553; fixes #1544. Thanks to Adam Blanchet)
+
+ * In mpileup, the --output-BP-5 and --output-BP are no longer mutually
+   exclusive.  This fixes the problem of output columns being switched.
+   (#1540; fixes 1534.  Reported by Konstantin Riege)
+
+ * Fix for hardclip bug in ampliconclip.  Odd length sequences resulted in
+   random characters appearing in sequence.
+   (#1538; fixes #1527. Reported by Ivana Mihalek)
+   
+Documentation:
+
+ * Improved mpileup documentation.
+   (#1566; fixes #1564.  Reported by Chang Y) 
+
+ * Fixed "samtools depth -J" documentation, which was reversed.
+   (#1552; fixes #1549.  Reported by Stephan Hutter)
+
+ * Numerous minor man page fixes.
+   (#1528, #1536, #1579, #1590.  Thanks to John Marshall for some of these)
+
+Non user-visible changes and build improvements:
+
+ * Replace CentOS test build with Rocky Linux.  The CentOS Docker images that
+   our test build depended on has stopped working.  Switched to Rocky Linux as
+   the nearest available equivalent.
+   (#1589)
+
+ * Fix missing autotools on Appveyor.  Newer versions of msys2 removed autotools
+   from their base-devel package.  This is putting them back.
+   (#1575) 
+
+ * Fixed bug detected by clang-13 with -Wformat-security.
+   (#1553)
+
+ * Switch to using splaysort in bam_lpileup.  Improves speed and efficiency in
+   "tview".
+   (#1548; thanks to Adam Blanchet)
+
+
 Release 1.14 (22nd October 2021)
 --------------------------------
 

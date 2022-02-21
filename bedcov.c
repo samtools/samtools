@@ -81,6 +81,8 @@ int main_bedcov(int argc, char *argv[])
 
     sam_global_args ga = SAM_GLOBAL_ARGS_INIT;
     static const struct option lopts[] = {
+        {"min-MQ", required_argument, NULL, 'Q'},
+        {"min-mq", required_argument, NULL, 'Q'},
         SAM_OPT_GLOBAL_OPTIONS('-', 0, '-', '-', 0, '-'),
         { NULL, 0, NULL, 0 }
     };
@@ -116,7 +118,7 @@ int main_bedcov(int argc, char *argv[])
     if (usage || optind + 2 > argc) {
         fprintf(stderr, "Usage: samtools bedcov [options] <in.bed> <in1.bam> [...]\n\n");
         fprintf(stderr, "Options:\n");
-        fprintf(stderr, "      -Q <int>            mapping quality threshold [0]\n");
+        fprintf(stderr, "      -Q, --min-MQ <int>  mapping quality threshold [0]\n");
         fprintf(stderr, "      -X                  use customized index files\n");
         fprintf(stderr, "      -g <flags>          remove the specified flags from the set used to filter out reads\n");
         fprintf(stderr, "      -G <flags>          add the specified flags to the set used to filter out reads\n"

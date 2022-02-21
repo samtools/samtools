@@ -289,7 +289,7 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
     uint32_t *new_cigar;
     uint8_t *new_qual;
     size_t orig_l_aux = bam_get_l_aux(rec);
-    uint32_t i, j, odd_base = 0;
+    uint32_t i, j;
     uint32_t ref_remove = bases, qry_removed = 0, hardclip = 0;
     hts_pos_t new_pos = rec->core.pos;
     uint32_t cig_type, cig_op;
@@ -387,14 +387,13 @@ static int bam_trim_left(bam1_t *rec, bam1_t *rec_out, uint32_t bases,
 
     if (clipping == soft_clip) {
         qry_removed = 0; // Copy all the sequence and confidence values
-        odd_base = 1; // account for an odd number of bases
     }
 
     new_qual = bam_get_seq(rec_out) + (rec->core.l_qseq - qry_removed + 1) / 2;
     // Copy remaining SEQ
     if ((qry_removed & 1) == 0) {
         memcpy(bam_get_seq(rec_out), orig_seq + (qry_removed / 2),
-                (rec->core.l_qseq - qry_removed + odd_base) / 2);
+                (rec->core.l_qseq - qry_removed + 1) / 2); // +1 to account for odd numbers
     } else {
         uint8_t *in = orig_seq + qry_removed / 2;
         uint8_t *out = bam_get_seq(rec_out);

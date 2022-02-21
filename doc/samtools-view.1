@@ -1,9 +1,9 @@
 '\" t
-.TH samtools-view 1 "22 October 2021" "samtools-1.14" "Bioinformatics tools"
+.TH samtools-view 1 "21 February 2022" "samtools-1.15" "Bioinformatics tools"
 .SH NAME
 samtools view \- views and converts SAM/BAM/CRAM files
 .\"
-.\" Copyright (C) 2008-2011, 2013-2021 Genome Research Ltd.
+.\" Copyright (C) 2008-2011, 2013-2022 Genome Research Ltd.
 .\" Portions copyright (C) 2010, 2011 Broad Institute.
 .\"
 .\" Author: Heng Li <lh3@sanger.ac.uk>
@@ -171,12 +171,17 @@ Output in the BAM format.
 Output in the CRAM format (requires -T).
 .TP
 .BR -1 ", " --fast
-Enable fast BAM compression (implies -b).
+Enable fast compression.  This also changes the default output format to
+BAM, but this can be overridden by the explicit format options or
+using a filename with a known suffix.
 .TP
 .BR -u ", " --uncompressed
-Output uncompressed BAM. This option saves time spent on
-compression/decompression and is thus preferred when the output is piped
-to another samtools command.
+Output uncompressed data. This also changes the default output format to
+BAM, but this can be overridden by the explicit format options or
+using a filename with a known suffix.
+
+This option saves time spent on compression/decompression and is thus
+preferred when the output is piped to another samtools command.
 .TP
 .BR -h ", " --with-header
 Include the header in the output.
@@ -390,12 +395,16 @@ can be repeated multiple times.
 If the list starts with a `^' then it is negated and treated as a
 request to remove all tags except those in \fISTR\fR. The list may be
 empty, so \fB-x ^\fR will remove all tags.
+
+Note that tags will only be removed from reads that pass filtering.
 .TP
-.BI --keep-tag " STR
+.BI "--keep-tag " STR
 This keeps \fIonly\fR tags listed in \fISTR\fR and is directly equivalent
 to \fB--remove-tag ^\fR\fISTR\fR.  Specifying an empty list will remove
 all tags.  If both \fB--keep-tag\fR and \fB--remove-tag\fR are
 specified then \fB--keep-tag\fR has precedence.
+
+Note that tags will only be removed from reads that pass filtering.
 .TP
 .BR -B ", " --remove-B
 Collapse the backward CIGAR operation.
@@ -436,11 +445,36 @@ will be retained than expected.
 Subsampling shorthand option:
 .BI "-s " INT . FRAC
 is equivalent to
-.BI "--subsample-seed " INT " --subsample
+.BI "--subsample-seed " INT " --subsample"
 .RI 0. FRAC .
 .TP
 .BI "-@ " INT ", --threads " INT
 Number of BAM compression threads to use in addition to main thread [0].
+.TP
+.BR -P ", " --fetch-pairs
+Retrieve pairs even when the mate is outside of the requested region.
+Enabling this option also turns on the multi-region iterator (\fB-M\fR).
+A region to search must be specified, either on the command-line, or using
+the \fB-L\fR option.
+The input file must be an indexed regular file.
+
+This option first scans the requested region, using the \fBRNEXT\fR and
+\fBPNEXT\fR fields of the records that have the PAIRED flag set and pass
+other filtering options to find where paired reads are located.
+These locations are used to build an expanded region list, and a set of
+\fBQNAME\fRs to allow from the new regions.
+It will then make a second pass, collecting all reads from the
+originally-specified region list together with reads from additional locations
+that match the allowed set of \fBQNAME\fRs.
+Any other filtering options used will be applied to all reads found during this
+second pass.
+
+As this option links reads using \fBRNEXT\fR and \fBPNEXT\fR,
+it is important that these fields are set accurately.
+Use 'samtools fixmate' to correct them if necessary.
+
+Note that this option does not work with the \fB-c, --count\fR;
+\fB-U, --output-unselected\fR; or \fB-p, --unmap\fR options.
 .TP
 .B -S
 Ignored for compatibility with previous samtools versions.

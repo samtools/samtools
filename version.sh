@@ -24,7 +24,7 @@
 # DEALINGS IN THE SOFTWARE.
 
 # Master version, for use in tarballs or non-git source copies
-VERSION=1.14
+VERSION=1.15
 
 # If we have a git clone, then check against the current tag
 if [ -e .git ]
