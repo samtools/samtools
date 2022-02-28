@@ -162,8 +162,6 @@ int pileup_seq(FILE *fp, const bam_pileup1_t *p, hts_pos_t pos,
     return 0;
 }
 
-#include <assert.h>
-#include "bam2bcf.h"
 #include "sample.h"
 
 #define MPLP_NO_COMP    (1<<2)
