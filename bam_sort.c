@@ -68,6 +68,45 @@ typedef struct {
     bool is_upper_of_pair;
 } template_coordinate_key_t;
 
+// Struct to store fixed buffers of template coordinate keys
+typedef struct {
+  size_t n; // the # of keys stored
+  size_t m; // the # of buffers allocated
+  size_t buffer_size; // # the fixed size of each buffer
+  template_coordinate_key_t **buffers; // the list of buffers
+} template_coordinate_keys_t;
+
+// Gets the idx'th key; does not OOB check
+static template_coordinate_key_t* template_coordinate_keys_get(template_coordinate_keys_t *keys, size_t idx) {
+    size_t buffer_idx = idx / keys->buffer_size; // the index of the buffer to retrieve in buffer
+    size_t buffer_offset = idx % keys->buffer_size; // the offset into the given buffer to retrieve
+    //assert(buffer_idx < keys->m);
+    //assert(buffer_offset < keys->buffer_size);
+    return &keys->buffers[buffer_idx][buffer_offset];
+}
+
+// Rellocates the buffers to hold at least max_k entries
+static int template_coordinate_keys_realloc(template_coordinate_keys_t *keys, int max_k) {
+    size_t cur_m = keys->m;
+    keys->m += 0x100;
+    //assert(keys->m > cur_m);
+    //assert(keys->m * keys->buffer_size >= max_k);
+    if ((keys->buffers = realloc(keys->buffers, keys->m * sizeof(template_coordinate_key_t*))) == NULL) {
+        print_error("sort", "couldn't reallocate memory for template coordinate key buffers");
+        return -1;
+    }
+    // allocate space for new buffers
+    int j;
+    for (j = cur_m; j < keys->m; ++j) {
+        if ((keys->buffers[j]= malloc(sizeof(template_coordinate_key_t) * keys->buffer_size)) == NULL) {
+            print_error("sort", "couldn't allocate memory for template coordinate key buffer");
+            return -1;
+        }
+    }
+    return 0;
+}
+
+
 // Struct which contains the a record, and the pointer to the sort tag (if any) or
 // a combined ref / position / strand.
 // Used to speed up sorts (coordinate, by-tag, and template-coordinate).
@@ -1617,7 +1656,7 @@ end:
  * BAM sorting *
  ***************/
 
-static template_coordinate_key_t* template_coordinate_key(bam1_t *b, sam_hdr_t *hdr);
+static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_coordinate_key_t *key, sam_hdr_t *hdr);
 
 typedef struct {
     size_t from;
@@ -1630,13 +1669,23 @@ typedef struct {
 
 static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
                                 int num_in_mem, buf_region *in_mem,
-                                bam1_tag *buf, uint64_t *idx, sam_hdr_t *hout) {
+                                bam1_tag *buf, template_coordinate_keys_t *keys,
+                                uint64_t *idx, sam_hdr_t *hout) {
     int i = heap->i, res;
     if (i < nfiles) { // read from file
         res = sam_read1(fp[i], hout, heap->entry.bam_record);
+        if (res >= 0 && g_sam_order == TemplateCoordinate) { // file read OK and TemplateCoordinate order
+            // It is assumed that there are nfiles more keys allocated than keys->n; see allocation in bam_merge_simple
+            template_coordinate_key_t *key = template_coordinate_keys_get(keys, keys->n + i); // get the next key to use
+            heap->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout); // update the key
+            if (heap->entry.u.key == NULL) res = -1; // key could not be created, error out
+        }
     } else { // read from memory
         if (in_mem[i - nfiles].from < in_mem[i - nfiles].to) {
-            heap->entry.bam_record = buf[in_mem[i - nfiles].from++].bam_record;
+            size_t from = in_mem[i - nfiles].from;
+            heap->entry.bam_record = buf[from].bam_record;
+            if (g_sam_order == TemplateCoordinate) heap->entry.u.key = template_coordinate_keys_get(keys, from);
+            in_mem[i - nfiles].from++;
             res = 0;
         } else {
             res = -1;
@@ -1649,19 +1698,16 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
         heap->idx = (*idx)++;
         if (g_sam_order == TagQueryName || g_sam_order == TagCoordinate) {
             heap->entry.u.tag = bam_aux_get(heap->entry.bam_record, g_sort_tag);
-        } else if (g_sam_order == TemplateCoordinate) {
-            heap->entry.u.key = template_coordinate_key(heap->entry.bam_record, hout);
-            if (heap->entry.u.key == NULL) return -1;
-        } else {
+        } else if (g_sam_order != TemplateCoordinate) {
             heap->entry.u.tag = NULL;
-            heap->entry.u.key= NULL;
+            heap->entry.u.key = NULL;
         }
     } else if (res == -1) {
         heap->pos = HEAP_EMPTY;
         if (i < nfiles) bam_destroy1(heap->entry.bam_record);
         heap->entry.bam_record = NULL;
         heap->entry.u.tag = NULL;
-        heap->entry.u.key= NULL;
+        heap->entry.u.key = NULL;
     } else {
         return -1;
     }
@@ -1671,7 +1717,7 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
 static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                             const char *mode, sam_hdr_t *hout,
                             int n, char * const *fn, int num_in_mem,
-                            buf_region *in_mem, bam1_tag *buf, int n_threads,
+                            buf_region *in_mem, bam1_tag *buf, template_coordinate_keys_t *keys, int n_threads,
                             const char *cmd, const htsFormat *in_fmt,
                             const htsFormat *out_fmt, char *arg_list, int no_pg,
                             int write_index) {
@@ -1691,6 +1737,11 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
     }
     heap = (heap1_t*)calloc(heap_size, sizeof(heap1_t));
     if (!heap) goto mem_fail;
+
+    // Make sure that there's enough memory for template coordinate keys
+    if (keys && keys->n + n >= keys->m * keys->buffer_size) {
+        if (template_coordinate_keys_realloc(keys, keys->n + n) < 0) goto mem_fail;
+    }
 
     // Open each file, read the header and put the first read into the heap
     for (i = 0; i < heap_size; i++) {
@@ -1722,7 +1773,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
             h->entry.bam_record = bam_init1();
             if (!h->entry.bam_record) goto mem_fail;
         }
-        if (heap_add_read(h, n, fp, num_in_mem, in_mem, buf, &idx, hout) < 0) {
+        if (heap_add_read(h, n, fp, num_in_mem, in_mem, buf, keys, &idx, hout) < 0) {
             assert(i < n);
             print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
             goto fail;
@@ -1774,7 +1825,7 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
             print_error_errno(cmd, "failed writing to \"%s\"", out);
             goto fail;
         }
-        if (heap_add_read(heap, n, fp, num_in_mem, in_mem, buf, &idx, hout) < 0) {
+        if (heap_add_read(heap, n, fp, num_in_mem, in_mem, buf, keys, &idx, hout) < 0) {
             assert(heap->i < n);
             print_error(cmd, "Error reading \"%s\" : %s",
                         fn[heap->i], strerror(errno));
@@ -1988,9 +2039,11 @@ static inline int template_coordinate_key_compare_mid(const char* mid1, const ch
 
 }
 
-static template_coordinate_key_t* template_coordinate_key(bam1_t *b, sam_hdr_t *hdr) {
+
+// Builds a key use to sort in TemplateCoordinate order.  Returns NULL if the key could not be created (e.g. MC
+// tag is missing), otherwise the pointer to the provided key.
+static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_coordinate_key_t *key, sam_hdr_t *hdr) {
     uint8_t *data;
-    template_coordinate_key_t *key = (template_coordinate_key_t *)malloc(sizeof(template_coordinate_key_t));
 
     // defaults
     key->tid1 = key->tid2 = INT32_MAX;
@@ -2000,6 +2053,7 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, sam_hdr_t *
 
     // update values
     key->library = bam_get_library(hdr, b);
+    if (key->library == NULL) key->library = "";
     key->name = bam_get_qname(b);
     if (!(b->core.flag & BAM_FUNMAP)) { // read is mapped, update coordinates
         key->tid1 = b->core.tid;
@@ -2011,12 +2065,10 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, sam_hdr_t *
         if ((data = bam_aux_get(b, "MC"))) {
             if (!(cigar = bam_aux2Z(data))) {
                 fprintf(stderr, "[bam_sort] error: MC tag wrong type. Please use the MC tag provided by samtools fixmate.\n");
-                free(key);
                 return NULL;
             }
         } else {
             fprintf(stderr, "[bam_sort] error: no MC tag. Please run samtools fixmate on file first.\n");
-            free(key);
             return NULL;
         }
         key->tid2 = b->core.mtid;
@@ -2027,7 +2079,6 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, sam_hdr_t *
     if ((data = bam_aux_get(b, "MI"))) {
         if (!(key->mid=bam_aux2Z(data))) {
             fprintf(stderr, "[bam_sort] error: MI tag wrong type (not a string).\n");
-            free(key);
             return NULL;
         }
     }
@@ -2612,8 +2663,9 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     int ret = -1, res, i, nref, n_files = 0;
     size_t max_k, k, max_mem, bam_mem_offset;
     sam_hdr_t *header = NULL;
-    samFile *fp;
+    samFile *fp = NULL;
     bam1_tag *buf = NULL;
+    template_coordinate_keys_t *keys = NULL;
     bam1_t *b = bam_init1();
     uint8_t *bam_mem = NULL;
     char **fns = NULL;
@@ -2635,6 +2687,17 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     if (g_sam_order == TagQueryName || g_sam_order == TagCoordinate) {
         g_sort_tag[0] = sort_tag[0];
         g_sort_tag[1] = sort_tag[0] ? sort_tag[1] : '\0';
+    }
+
+    if (sam_order == TemplateCoordinate) {
+        if ((keys = malloc(sizeof(template_coordinate_keys_t))) == NULL) {
+            print_error("sort", "could not allocate memory for the top-level keys");
+            goto err;
+        }
+        keys->n = 0;
+        keys->m = 0;
+        keys->buffer_size = 0x10000;
+        keys->buffers = NULL;
     }
 
     max_mem = _max_mem * n_threads;
@@ -2771,6 +2834,11 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             }
             buf = new_buf;
         }
+        if (sam_order == TemplateCoordinate && k >= keys->m * keys->buffer_size) {
+            if (template_coordinate_keys_realloc(keys, k + 1) == -1) {
+                goto err;
+            }
+        }
 
         // Check if the BAM record will fit in the memory limit
         if (bam_mem_offset + sizeof(*b) + b->l_data < max_mem) {
@@ -2795,7 +2863,9 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                 buf[k].u.tag = bam_aux_get(buf[k].bam_record, g_sort_tag);
                 break;
             case TemplateCoordinate:
-                buf[k].u.key = template_coordinate_key(buf[k].bam_record, header);
+                ++keys->n;
+                template_coordinate_key_t *key = template_coordinate_keys_get(keys, k);
+                buf[k].u.key = template_coordinate_key(buf[k].bam_record, key, header);
                 if (buf[k].u.key == NULL) goto err;
                 break;
             default:
@@ -2816,6 +2886,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
                 n_files = new_n;
             }
             k = 0;
+            if (keys != NULL) keys->n = 0;
             bam_mem_offset = 0;
         }
     }
@@ -2856,7 +2927,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         }
         char *sort_by_tag = (sam_order == TagQueryName || sam_order == TagCoordinate) ? sort_tag : NULL;
         if (bam_merge_simple(sam_order, sort_by_tag, fnout, modeout, header,
-                             n_files, fns, num_in_mem, in_mem, buf,
+                             n_files, fns, num_in_mem, in_mem, buf, keys,
                              n_threads, "sort", in_fmt, out_fmt, arg_list,
                              no_pg, write_index) < 0) {
             // Propagate bam_merge_simple() failure; it has already emitted a
@@ -2879,9 +2950,14 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         free(fns);
     }
     bam_destroy1(b);
-    if (sam_order == TemplateCoordinate) {
-    }
     free(buf);
+    if (keys != NULL) {
+        for (i = 0; i < keys->m; ++i) {
+            free(keys->buffers[i]);
+        }
+        free(keys->buffers);
+        free(keys);
+    }
     free(bam_mem);
     free(in_mem);
     sam_hdr_destroy(header);
