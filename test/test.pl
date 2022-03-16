@@ -2294,6 +2294,16 @@ sub test_view
         ['bed1f1', 1,
          { region => [['ref1', 11, 16]], read_groups => { grp1 => 1}},
          ['-L', $bed1, '-r', 'grp1'], ['ref1:11-16']],
+
+        # BED file with multi-region iterator.  The result should be the
+        # same as with the normal '-L' option.  The '--unmap' option is
+        # included to ensure that the index jumping is working (if not
+        # the output will include more reads than expected).
+        ['bed1M1', 1, { region => $bed1reg },
+         ['-L', $bed1, '-M', '--unmap'], []],
+        # Intersection of a BED file with a region.
+        ['bed1M2', 1, { region => [['ref1', 11, 24]] },
+         ['-L', $bed1, '-M', '--unmap'], ['ref1:11-30']],
         );
     foreach my $rt (@region_tests) {
         my $input_sam = $region_sams[$$rt[1]];
