@@ -1206,6 +1206,7 @@ int main_samview(int argc, char *argv[])
                 goto view_end;
             }
         }
+        settings.unmap = 0;  // Not valid in counting mode
     }
 
     if (ga.nthreads > 1) {
