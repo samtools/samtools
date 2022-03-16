@@ -11,7 +11,7 @@ branch=$3
 
 ref=''
 [ -n "$branch" ] && ref=$(git ls-remote --heads "$repository" "$branch" 2>/dev/null)
-[ -z "$ref" ] && repository='git://github.com/samtools/htslib.git'
+[ -z "$ref" ] && repository='https://github.com/samtools/htslib.git'
 
 set -x
 git clone --recurse-submodules --shallow-submodules --depth=50 ${ref:+--branch="$branch"} "$repository" "$localdir"
