@@ -2501,6 +2501,14 @@ sub test_view
                     out => sprintf("%s.test%03d.sam", $out, $test),
                     compare => $unmapped_expected);
 
+    $test++;
+
+    run_view_test($opts,
+                    msg=> "$test: Unmap dup flagged reads.",
+                    args => ['-c', '-F', 'DUP', '-p', '--no-PG', $dup_sam],
+                    out => sprintf("%s.test%03d.sam", $out, $test),
+                    compare_count => 2);
+
 
     # retrieve reads from a region including their mates
     my $bam = 'test/dat/view.fetch-pairs.bam';
