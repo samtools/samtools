@@ -59,15 +59,15 @@ The output from this command should be suitable for any operation that
 requires all reads from the same template to be grouped together.
 
 If present, <prefix> is used to name the temporary files that collate
-uses when sorting the data.  If neither the '-O' nor '-o' options are used,
+uses when sorting the data.  If neither the \fB-O\fR nor \fB-o\fR options are used,
 <prefix> must be present and collate will use it to make an output file name
 by appending a suffix depending on the format written (.bam by default).
 
-If either the -O or -o option is used, <prefix> is optional.  If <prefix>
+If either the \fB-O\fR or \fB-o\fR option is used, <prefix> is optional.  If <prefix>
 is absent, collate will write the temporary files to a system-dependent
 location (/tmp on UNIX).
 
-Using -f for fast mode will output \fBonly\fR primary alignments that have
+Using \fB-f\fR for fast mode will output \fBonly\fR primary alignments that have
 either the READ1 \fBor\fR READ2 flags set (but not both).
 Any other alignment records will be filtered out.
 The collation will only work correctly if there are no more than two reads
@@ -78,7 +78,7 @@ most pairs as soon as they are found instead of storing them in temporary
 files.
 This allows collate to avoid some work and so finish more quickly compared
 to the standard mode.
-The number of alignments held can be changed using -r, storing more alignments
+The number of alignments held can be changed using \fB-r\fR, storing more alignments
 uses more memory but increases the number of pairs that can be written early.
 
 While collate normally randomises the ordering of read pairs, fast mode
