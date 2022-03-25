@@ -75,76 +75,75 @@ primer choices, only the innermost primer locations are used.
 A summary of output sections is listed below, followed by more
 detailed descriptions.
 
-.TS
-lb lx .
-SS	T{
+.PD 0
+.TP 12
+.B SS
 Amplicon and file counts.  Always comes first
-T}
-AMPLICON	T{
+.TP
+.B AMPLICON
 Amplicon primer locations
-T}
-FSS	T{
+.TP
+.B FSS
 File specific: summary stats
-T}
-FRPERC	T{
+.TP
+.B FRPERC
 File specific: read percentage distribution between amplicons
-T}
-FDEPTH	T{
+.TP
+.B FDEPTH
 File specific: average read depth per amplicon
-T}
-FVDEPTH	T{
+.TP
+.B FVDEPTH
 File specific: average read depth per amplicon, full length only
-T}
-FREADS	T{
+.TP
+.B FREADS
 File specific: numbers of reads per amplicon
-T}
-FPCOV	T{
+.TP
+.B FPCOV
 File specific: percent coverage per amplicon
-T}
-FTCOORD	T{
+.TP
+.B FTCOORD
 File specific: template start,end coordinate frequencies per amplicon
-T}
-FAMP	T{
+.TP
+.B FAMP
 File specific: amplicon correct / double / treble length counts
-T}
-FDP_ALL	T{
+.TP
+.B FDP_ALL
 File specific: template depth per reference base, all templates
-T}
-FDP_VALID	T{
+.TP
+.B FDP_VALID
 File specific: template depth per reference base, valid templates only
-T}
-CSS	T{
+.TP
+.B CSS
 Combined  summary stats
-T}
-CRPERC	T{
+.TP
+.B CRPERC
 Combined: read percentage distribution between amplicons
-T}
-CDEPTH	T{
+.TP
+.B CDEPTH
 Combined: average read depth per amplicon
-T}
-CVDEPTH	T{
+.TP
+.B CVDEPTH
 Combined: average read depth per amplicon, full length only
-T}
-CREADS	T{
+.TP
+.B CREADS
 Combined: numbers of reads per amplicon
-T}
-CPCOV	T{
+.TP
+.B CPCOV
 Combined: percent coverage per amplicon
-T}
-CTCOORD	T{
+.TP
+.B CTCOORD
 Combined: template coordinates per amplicon
-T}
-CAMP	T{
+.TP
+.B CAMP
 Combined: amplicon correct / double / treble length counts
-T}
-CDP_ALL	T{
+.TP
+.B CDP_ALL
 Combined: template depth per reference base, all templates
-T}
-CDP_VALID	T{
+.TP
+.B CDP_VALID
 Combined: template depth per reference base, valid templates only
-T}
-.TE
-
+.PD
+.PP
 File specific sections start with both the section key and the
 filename basename (minus directory and .sam, .bam or .cram suffix).
 
