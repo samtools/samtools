@@ -1,6 +1,31 @@
 Release a.b
 -----------
 
+Bug fixes:
+
+ * A bug which prevented the samtools view --region-file (and the
+   equivalent -M -L <file>) options from working in version 1.15 has
+   been fixed. (#1617)
+
+ * Fixed a crash triggered by using the samtools view -c/--count and --unmap
+   options together.  The --unmap option is now ignored in counting mode.
+   (#1619)
+
+Documentation:
+
+ * The consensus command was missing from the main samtools.1 manual page.
+   It has now been added. (#1603)
+
+ * Corrected instructions for reproducing the samtools stats "raw total
+   sequences" count using samtools view -c. (#1620; reported by @krukanna)
+
+ * Improved manual page formatting.  (#1625; thanks to John Marshall)
+
+Non user-visible changes and build improvements:
+
+ * Unnecessary #include lines have been removed from bam_plcmd.c. (#1607;
+   thanks to John Marshall)
+
 Release 1.15 (21st February 2022)
 ---------------------------------
 
