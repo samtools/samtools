@@ -55,8 +55,6 @@ DEALINGS IN THE SOFTWARE.  */
 #include "samtools.h"
 #include "sam_opts.h"
 
-const char *VERSION = "0.1";
-
 typedef struct {  // auxiliary data structure to hold stats on coverage
     unsigned long long n_covered_bases;
     unsigned long long summed_coverage;
