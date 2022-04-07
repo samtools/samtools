@@ -4,6 +4,11 @@ Release a.b
  * The dict command can now read BWA's .alt file and add AH:* tags
    indicating reference sequences that represent alternate loci.
 
+ * The "samtools index" command can now accept multiple alignment filenames
+   on the command line, and will index each of them separately. (Specifying
+   the output index filename via out.index or the new -o option is currently
+   only applicable when there is only one alignment file to be indexed.)
+
 
 Release 1.15.1 (7th April 2022)
 -------------------------------

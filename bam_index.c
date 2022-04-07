@@ -28,10 +28,10 @@ DEALINGS IN THE SOFTWARE.  */
 
 #include <htslib/hts.h>
 #include <htslib/sam.h>
+#include <htslib/hfile.h>
 #include <htslib/khash.h>
 #include <stdlib.h>
 #include <stdio.h>
-#define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include <unistd.h>
 #include <getopt.h>
@@ -44,12 +44,30 @@ DEALINGS IN THE SOFTWARE.  */
 static void index_usage(FILE *fp)
 {
     fprintf(fp,
-"Usage: samtools index [-bc] [-m INT] <in.bam> [out.index]\n"
+"Usage: samtools index [-bc] [-m INT] [-o <out.index>] <in.bam>...\n"
+"   or: samtools index [-bc] [-m INT] <in.bam> [out.index]\n"
 "Options:\n"
 "  -b       Generate BAI-format index for BAM files [default]\n"
 "  -c       Generate CSI-format index for BAM files\n"
 "  -m INT   Set minimum interval size for CSI indices to 2^INT [%d]\n"
+"  -o FILE  Write index to FILE [alternative to <out.index> as an argument]\n"
 "  -@ INT   Sets the number of threads [none]\n", BAM_LIDX_SHIFT);
+}
+
+// Returns 1 if the file does not exist or can be positively
+// identified as an index file.
+static int nonexistent_or_index(const char *fn)
+{
+    int ret1, ret2;
+    htsFormat fmt;
+    hFILE *fp = hopen(fn, "r");
+    if (fp == NULL) return 1;
+
+    ret1 = hts_detect_format2(fp, fn, &fmt);
+    ret2 = hclose(fp);
+    if (ret1 < 0 || ret2 < 0) return 0;
+
+    return fmt.category == index_file;
 }
 
 int bam_index(int argc, char *argv[])
@@ -57,50 +75,58 @@ int bam_index(int argc, char *argv[])
     int csi = 0;
     int min_shift = BAM_LIDX_SHIFT;
     int n_threads = 0;
-    int c, ret;
+    int n_files, c, i, ret;
+    const char *fn_idx = NULL;
 
-    while ((c = getopt(argc, argv, "bcm:@:")) >= 0)
+    while ((c = getopt(argc, argv, "bcm:o:@:")) >= 0)
         switch (c) {
         case 'b': csi = 0; break;
         case 'c': csi = 1; break;
         case 'm': csi = 1; min_shift = atoi(optarg); break;
+        case 'o': fn_idx = optarg; break;
         case '@': n_threads = atoi(optarg); break;
         default:
             index_usage(stderr);
             return 1;
         }
 
-    if (optind == argc) {
+    n_files = argc - optind;
+
+    if (n_files == 0) {
         index_usage(stdout);
-        return 1;
-    }
-
-    ret = sam_index_build3(argv[optind], argv[optind+1], csi? min_shift : 0, n_threads);
-    switch (ret) {
-    case 0:
         return 0;
-
-    case -2:
-        print_error_errno("index", "failed to open \"%s\"", argv[optind]);
-        break;
-
-    case -3:
-        print_error("index", "\"%s\" is in a format that cannot be usefully indexed", argv[optind]);
-        break;
-
-    case -4:
-        if (argv[optind+1])
-            print_error("index", "failed to create or write index \"%s\"", argv[optind+1]);
-        else
-            print_error("index", "failed to create or write index");
-        break;
-
-    default:
-        print_error_errno("index", "failed to create index for \"%s\"", argv[optind]);
-        break;
     }
 
-    return EXIT_FAILURE;
+    // Handle legacy synopsis
+    if (n_files == 2 && !fn_idx && nonexistent_or_index(argv[optind+1])) {
+        n_files = 1;
+        fn_idx = argv[optind+1];
+    }
+
+    if (fn_idx && n_files > 1) {
+        // TODO In future we may allow %* placeholders or similar
+        print_error("index", "can't use -o with multiple input alignment files");
+        return EXIT_FAILURE;
+    }
+
+    for (i = optind; i < optind + n_files; i++) {
+        ret = sam_index_build3(argv[i], fn_idx, csi? min_shift : 0, n_threads);
+        if (ret < 0) {
+            if (ret == -2)
+                print_error_errno("index", "failed to open \"%s\"", argv[i]);
+            else if (ret == -3)
+                print_error("index", "\"%s\" is in a format that cannot be usefully indexed", argv[i]);
+            else if (ret == -4 && fn_idx)
+                print_error("index", "failed to create or write index \"%s\"", fn_idx);
+            else if (ret == -4)
+                print_error("index", "failed to create or write index");
+            else
+                print_error_errno("index", "failed to create index for \"%s\"", argv[i]);
+            return EXIT_FAILURE;
+        }
+    }
+
+    return EXIT_SUCCESS;
 }
 
 /*
