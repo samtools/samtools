@@ -1,5 +1,5 @@
 '\" t
-.TH samtools 1 "21 February 2022" "samtools-1.15" "Bioinformatics tools"
+.TH samtools 1 "7 April 2022" "samtools-1.15.1" "Bioinformatics tools"
 .SH NAME
 samtools \- Utilities for the Sequence Alignment/Map (SAM) format
 .\"
@@ -56,6 +56,8 @@ samtools calmd in.sorted.bam ref.fasta
 samtools cat out.bam in1.bam in2.bam in3.bam
 .PP
 samtools collate -o aln.name_collated.bam aln.sorted.bam
+.PP
+samtools consensus -o out.fasta in.bam
 .PP
 samtools coverage aln.sorted.bam
 .PP
@@ -437,6 +439,27 @@ Alignment records are grouped by sample (SM) identifiers in @RG header lines.
 If sample identifiers are absent, each input file is regarded as one sample.
 
 See the samtools-mpileup man page for a description of the pileup format and options.
+
+.TP \"-------- consensus
+.B consensus
+samtools consensus
+.RB [ options ]
+.I in.bam
+
+Generate consensus from a SAM, BAM or CRAM file based on the contents
+of the alignment records.  The consensus is written either as FASTA, 
+FASTQ, or a pileup oriented format.
+
+The default output for FASTA and FASTQ formats include one base per
+non-gap consensus.  Hence insertions with respect to the aligned
+reference will be included and deletions removed.  This behaviour can
+be adjusted.
+
+Two consensus calling algorithms are offered.  The default computes a
+heterozygous consensus in a Bayesian manner, derived from the "Gap5"
+consensus algorithm.  A simpler base frequency counting method is also
+available.
+
 
 .TP \"-------- coverage
 .B coverage
@@ -1213,6 +1236,7 @@ for further authorship.
 .IR samtools-calmd (1),
 .IR samtools-cat (1),
 .IR samtools-collate (1),
+.IR samtools-consensus (1),
 .IR samtools-coverage (1),
 .IR samtools-depad (1),
 .IR samtools-depth (1),

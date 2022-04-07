@@ -1,5 +1,5 @@
 '\" t
-.TH samtools-consensus 1 "21 February 2022" "samtools-1.15" "Bioinformatics tools"
+.TH samtools-consensus 1 "7 April 2022" "samtools-1.15.1" "Bioinformatics tools"
 .SH NAME
 samtools consensus \- produces produce a consensus FASTA/FASTQ/PILEUP
 .\"
@@ -58,7 +58,6 @@ samtools consensus
 .RB [ -H
 .IR het-fract ]
 .I in.bam
-.RI [ in2.bam ]
 
 .SH DESCRIPTION
 .PP
@@ -122,7 +121,7 @@ absent if it is a gap).  The
 option permits generation of ambiguity codes instead of "N", provided
 the minimum fraction of the second most common base type to the most
 common is above the
-.BI "--het-fract " fraction "" \fR.
+.BI "--het-fract " fraction .
 
 .SH OPTIONS
 
