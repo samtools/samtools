@@ -3408,6 +3408,7 @@ sub test_markdup
     test_cmd($opts, out=>'markdup/12_optical_chain_regex.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 2500 --mode s -t -O sam --read-coords '([[:digit:]]+):([[:digit:]]+)\$' --coords-order xy --no-PG $$opts{path}/markdup/12_optical_chain_regex.sam -");
     test_cmd($opts, out=>'markdup/13_optical_barcode_tag.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-tag BX -O sam --no-PG $$opts{path}/markdup/13_optical_barcode_tag.sam -");
     test_cmd($opts, out=>'markdup/14_optical_barcode_name.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-name -O sam --no-PG $$opts{path}/markdup/14_optical_barcode_name.sam -");
+    test_cmd($opts, out=>'markdup/15_optical_barcode_rgx_name.expected.sam', cmd=>"$$opts{bin}/samtools markdup${threads} -S -d 100 --mode s -t --barcode-rgx '^([!-9;-?A-~]+):[0-9]+:' --read-coords '^[!-9;-?A-~]+:([0-9]+):([0-9]+)' --coords-order xy -O sam --no-PG $$opts{path}/markdup/15_optical_barcode_rgx_name.sam -");
 }
 
 sub test_bedcov

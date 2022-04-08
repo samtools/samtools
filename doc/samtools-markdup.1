@@ -66,6 +66,7 @@ samtools markdup
 .RB [ --coords-order ]
 .RB [ --barcode-tag ]
 .RB [ --barcode-name ]
+.RB [ --barcode-rgx ]
 .I in.algsort.bam out.bam
 
 .SH DESCRIPTION
@@ -150,7 +151,10 @@ Duplicates must now also match the barcode tag.
 .TP
 .B --barcode-name
 Use the UMI/barcode embedded in the read name (eigth colon delimited part).
-.TP 
+.TP
+.BI "--barcode-rgx " REGEX
+Regex for barcode in the readname (alternative to --barcode-name).
+.TP
 .B --no-PG
 Do not add a PG line to the output file.
 .TP
