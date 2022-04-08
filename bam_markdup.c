@@ -603,6 +603,8 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam) {
         if (bc_start != -1) {
             barcode = do_hash((unsigned char *)qname + bc_start, bc_end - bc_start);
         }
+
+
     }
 
     key->single        = 0;
@@ -2126,6 +2128,7 @@ static int markdup_usage(void) {
                     "                     the read names that must be equal and x/y being coordinates.\n");
     fprintf(stderr, "  --barcode-tag STR  Use barcode a tag that duplicates much match.\n");
     fprintf(stderr, "  --barcode-name     Use the UMI/barcode in the read name (eigth colon delimited part).\n");
+    fprintf(stderr, "  --barcode-rgx STR  Regex for barcode in the readname (alternative to --barcode-name).\n");
     fprintf(stderr, "  -t                 Mark primary duplicates with the name of the original in a \'do\' tag."
                                         " Mainly for information and debugging.\n");
 
@@ -2146,7 +2149,7 @@ int bam_markdup(int argc, char **argv) {
     kstring_t tmpprefix = {0, 0, NULL};
     struct stat st;
     unsigned int t;
-    char *regex = NULL;
+    char *regex = NULL, *bc_regex = NULL;
     char *regex_order = "txy";
     md_param_t param = {NULL, NULL, NULL, 0, 300, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                         1, NULL, NULL, NULL, NULL, 0, 0, 0, NULL, NULL};
@@ -2161,6 +2164,7 @@ int bam_markdup(int argc, char **argv) {
         {"coords-order", required_argument, NULL, 1005},
         {"barcode-tag", required_argument, NULL, 1006},
         {"barcode-name", no_argument, NULL, 1007},
+        {"barcode-rgx", required_argument, NULL, 1008},
         {NULL, 0, NULL, 0}
     };
 
@@ -2194,6 +2198,7 @@ int bam_markdup(int argc, char **argv) {
             case 1005: regex_order = optarg; break;
             case 1006: param.barcode = optarg; break;
             case 1007: bc_name = 1; break;
+            case 1008: bc_name = 1, bc_regex = optarg; break;
             default: if (parse_sam_global_opt(c, optarg, lopts, &ga) == 0) break;
             /* else fall-through */
             case '?': return markdup_usage();
@@ -2205,7 +2210,7 @@ int bam_markdup(int argc, char **argv) {
 
     if (param.barcode && bc_name) {
         fprintf(stderr, "[markdup] Error: cannot specify --barcode-tag and "
-                        "--barcode-name at same time.\n");
+                        "--barcode-name (or --barcode-rgx) at same time.\n");
         return 1;
     }
 
@@ -2261,11 +2266,15 @@ int bam_markdup(int argc, char **argv) {
 
         /* From Illumina UMI documentation: "The UMI sequence is located in the
            eighth colon-delimited field of the read name (QNAME)". */
-        char rgx[] = "[0-9A-Za-z]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:([!-?A-~]+)";
+        char *rgx = "[0-9A-Za-z]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:[0-9]+:([!-?A-~]+)";
 
         if ((param.bc_rgx = malloc(sizeof(regex_t))) == NULL) {
             fprintf(stderr, "[markdup] error:  could not allocate memory for barcode regex.\n");
             return 1;
+        }
+
+        if (bc_regex) {
+            rgx = bc_regex;
         }
 
         if ((result = regcomp(param.bc_rgx, rgx, REG_EXTENDED))) {
