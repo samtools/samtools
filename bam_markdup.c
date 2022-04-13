@@ -381,12 +381,13 @@ static int64_t calc_score(bam1_t *b)
    read is leftmost of the pair. */
 
 
-static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam) {
+static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *warnings) {
      hts_pos_t this_coord, this_end, other_coord, other_end, leftmost;
     int32_t this_ref, other_ref, barcode = 0;
     int8_t orientation, left_read;
     uint8_t *data;
     char *cig, *bar;
+    long incoming_warnings = *warnings;
 
     this_ref    = bam->core.tid + 1; // avoid a 0 being put into the hash
     other_ref   = bam->core.mtid + 1;
@@ -576,35 +577,51 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam) {
     if (param->barcode) {
         if ((data = bam_aux_get(bam, param->barcode))) {
             if (!(bar = bam_aux2Z(data))) {
-                fprintf(stderr, "[markdup] error: %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
-                return 1;
-            }
+                (*warnings)++;
 
-            barcode = do_hash((unsigned char *)bar, strlen(bar));
+                if (*warnings <= BMD_WARNING_MAX) {
+                    fprintf(stderr, "[markdup] warning: %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
+                }
+            } else {
+                barcode = do_hash((unsigned char *)bar, strlen(bar));
+            }
         }
     } else if (param->bc_rgx) {
+        int result;
         regmatch_t matches[3];
         size_t max_matches = 2;
         char *qname = bam_get_qname(bam);
-        int bc_start, bc_end;
-        int result;
 
-        if ((result = regexec(param->bc_rgx, qname, max_matches, matches, 0))) {
-            char err_msg[256];
-            regerror(result, param->bc_rgx, err_msg, 256);
+        if ((result = regexec(param->bc_rgx, qname, max_matches, matches, 0)) == 0) {
+            int bc_start, bc_end;
 
-            fprintf(stderr, "[markdup] error: unable to read barcode from %s, %s\n", qname, err_msg);
-            return -1;
+            bc_start = matches[1].rm_so;
+            bc_end   = matches[1].rm_eo;
+
+            if (bc_start != -1) {
+                barcode = do_hash((unsigned char *)qname + bc_start, bc_end - bc_start);
+            } else {
+                (*warnings)++;
+
+                if (*warnings <= BMD_WARNING_MAX) {
+                    fprintf(stderr, "[markdup] warning: barcode regex unable to match substring on %s.\n", qname);
+                }
+            }
+        } else {
+            (*warnings)++;
+
+            if (*warnings <= BMD_WARNING_MAX) {
+                char warn_msg[256];
+
+                regerror(result, param->bc_rgx, warn_msg, 256);
+                fprintf(stderr, "[markdup] warning: barcode regex match error \"%s\" on %s.\n", warn_msg, qname);
+            }
         }
+    }
 
-        bc_start = matches[1].rm_so;
-        bc_end   = matches[1].rm_eo;
-
-        if (bc_start != -1) {
-            barcode = do_hash((unsigned char *)qname + bc_start, bc_end - bc_start);
-        }
-
-
+    if ((*warnings == BMD_WARNING_MAX) && (incoming_warnings != *warnings)) {
+        fprintf(stderr, "[markdup] warning: %ld barcode read warnings.  New warnings will not be reported.\n",
+                        *warnings);
     }
 
     key->single        = 0;
@@ -624,12 +641,13 @@ static int make_pair_key(md_param_t *param, key_data_t *key, bam1_t *bam) {
    Uses unclipped start (or end depending on orientation), reference id,
    and orientation. */
 
-static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam) {
+static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam, long *warnings) {
     hts_pos_t this_coord;
     int32_t this_ref, barcode = 0;
     int8_t orientation;
     uint8_t *data;
     char *bar;
+    long incoming_warnings = *warnings;
 
     this_ref = bam->core.tid + 1; // avoid a 0 being put into the hash
 
@@ -644,32 +662,51 @@ static void make_single_key(md_param_t *param, key_data_t *key, bam1_t *bam) {
     if (param->barcode) {
         if ((data = bam_aux_get(bam, param->barcode))) {
             if (!(bar = bam_aux2Z(data))) {
-                fprintf(stderr, "[markdup] error: %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
-                // return 1; FIXME, error checking on single keys
-            }
+                (*warnings)++;
 
-            barcode = do_hash((unsigned char *)bar, strlen(bar));
+                if (*warnings <= BMD_WARNING_MAX) {
+                    fprintf(stderr, "[markdup] warning: %s tag wrong type. Aux tag needs to be a string type.\n", param->barcode);
+                }
+            } else {
+                barcode = do_hash((unsigned char *)bar, strlen(bar));
+            }
         }
     } else if (param->bc_rgx) {
+        int result;
         regmatch_t matches[3];
         size_t max_matches = 2;
         char *qname = bam_get_qname(bam);
-        int bc_start, bc_end;
-        int result;
 
-        if ((result = regexec(param->bc_rgx, qname, max_matches, matches, 0))) {
-            char err_msg[256];
-            regerror(result, param->bc_rgx, err_msg, 256);
+        if ((result = regexec(param->bc_rgx, qname, max_matches, matches, 0)) == 0) {
+            int bc_start, bc_end;
 
-            fprintf(stderr, "[markdup] error: unable to read barcode from %s, %s\n", qname, err_msg);
-        } else {
             bc_start = matches[1].rm_so;
             bc_end   = matches[1].rm_eo;
 
             if (bc_start != -1) {
                 barcode = do_hash((unsigned char *)qname + bc_start, bc_end - bc_start);
+            } else {
+                (*warnings)++;
+
+                if (*warnings <= BMD_WARNING_MAX) {
+                    fprintf(stderr, "[markdup] warning: barcode regex unable to match substring on %s.\n", qname);
+                }
+            }
+        } else {
+            (*warnings)++;
+
+            if (*warnings <= BMD_WARNING_MAX) {
+                char warn_msg[256];
+
+                regerror(result, param->bc_rgx, warn_msg, 256);
+                fprintf(stderr, "[markdup] warning: barcode regex match error \"%s\" on %s.\n", warn_msg, qname);
             }
         }
+    }
+
+    if ((*warnings == BMD_WARNING_MAX) && (incoming_warnings != *warnings)) {
+        fprintf(stderr, "[markdup] warning: %ld barcode read warnings.  New warnings will not be reported.\n",
+                        *warnings);
     }
 
     key->single        = 1;
@@ -1483,7 +1520,7 @@ static int bam_mark_duplicates(md_param_t *param) {
     int ret;
     long reading, writing, excluded, duplicate, single, pair, single_dup, examined, optical, single_optical;
     long np_duplicate, np_opt_duplicate;
-    long opt_warnings = 0;
+    long opt_warnings = 0, bc_warnings = 0;
     tmp_file_t temp;
     char *idx_fn = NULL;
     int exclude = 0;
@@ -1617,12 +1654,12 @@ static int bam_mark_duplicates(md_param_t *param) {
                 key_data_t single_key;
                 in_hash_t *bp;
 
-                if (make_pair_key(param, &pair_key, in_read->b)) {
+                if (make_pair_key(param, &pair_key, in_read->b, &bc_warnings)) {
                     fprintf(stderr, "[markdup] error: unable to assign pair hash key.\n");
                     goto fail;
                 }
 
-                make_single_key(param, &single_key, in_read->b);
+                make_single_key(param, &single_key, in_read->b, &bc_warnings);
 
                 pair++;
                 in_read->pos = single_key.this_coord; // cigar/orientation modified pos
@@ -1762,7 +1799,7 @@ static int bam_mark_duplicates(md_param_t *param) {
                 key_data_t single_key;
                 in_hash_t *bp;
 
-                make_single_key(param, &single_key, in_read->b);
+                make_single_key(param, &single_key, in_read->b, &bc_warnings);
 
                 single++;
                 in_read->pos = single_key.this_coord; // cigar/orientation modified pos
@@ -2019,6 +2056,10 @@ static int bam_mark_duplicates(md_param_t *param) {
     if (opt_warnings) {
         fprintf(stderr, "[markdup] warning: number of failed attempts to get coordinates from read names = %ld\n",
                         opt_warnings);
+    }
+
+    if (bc_warnings) {
+        fprintf(stderr, "[markdup] warning: number of failed attempts to get barcodes = %ld\n", bc_warnings);
     }
 
     if (param->do_stats) {
