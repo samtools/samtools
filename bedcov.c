@@ -48,6 +48,7 @@ typedef struct {
     hts_itr_t *iter;
     int min_mapQ;
     uint32_t flags;  // read filtering flags
+    int64_t rcnt;
 } aux_t;
 
 static int read_bam(void *data, bam1_t *b)
@@ -65,6 +66,12 @@ static int read_bam(void *data, bam1_t *b)
     return ret;
 }
 
+static int incr_rcnt(void *data, const bam1_t *b, bam_pileup_cd *cd) {
+    aux_t *aux = (aux_t *)data;
+    aux->rcnt++;
+    return 0;
+}
+
 int main_bedcov(int argc, char *argv[])
 {
     gzFile fp;
@@ -72,8 +79,9 @@ int main_bedcov(int argc, char *argv[])
     kstream_t *ks;
     hts_idx_t **idx;
     aux_t **aux;
-    int *n_plp, dret, i, j, m, n, c, ret, status = 0, min_mapQ = 0, skip_DN = 0;
-    int64_t *cnt, *pcov = NULL;;
+    int *n_plp, dret, i, j, m, n, c, ret, status = 0, min_mapQ = 0;
+    int skip_DN = 0, do_rcount = 0;
+    int64_t *cnt, *pcov = NULL;
     const bam_pileup1_t **plp;
     int usage = 0, has_index_file = 0;
     uint32_t flags = (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP);
@@ -87,10 +95,11 @@ int main_bedcov(int argc, char *argv[])
         { NULL, 0, NULL, 0 }
     };
 
-    while ((c = getopt_long(argc, argv, "Q:Xg:G:jd:", lopts, NULL)) >= 0) {
+    while ((c = getopt_long(argc, argv, "Q:Xg:G:jd:c", lopts, NULL)) >= 0) {
         switch (c) {
         case 'Q': min_mapQ = atoi(optarg); break;
         case 'X': has_index_file = 1; break;
+        case 'c': do_rcount = 1; break;
         case 'g':
             tflags = bam_str2flag(optarg);
             if (tflags < 0 || tflags > ((BAM_FSUPPLEMENTARY << 1) - 1)) {
@@ -122,10 +131,11 @@ int main_bedcov(int argc, char *argv[])
         fprintf(stderr, "      -X                  use customized index files\n");
         fprintf(stderr, "      -g <flags>          remove the specified flags from the set used to filter out reads\n");
         fprintf(stderr, "      -G <flags>          add the specified flags to the set used to filter out reads\n"
-                        "                          The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704");
+                        "                          The default set is UNMAP,SECONDARY,QCFAIL,DUP or 0x704\n");
         fprintf(stderr, "      -j                  do not include deletions (D) and ref skips (N) in bedcov computation\n");
         fprintf(stderr, "      -d <int>            depth threshold. Number of reference bases with coverage above and"
                         "                          including this value will be displayed in a separate column\n");
+        fprintf(stderr, "      -c                  add an additional column showing read count\n");
         sam_global_opt_help(stderr, "-.--.--.");
         return 1;
     }
@@ -168,8 +178,12 @@ int main_bedcov(int argc, char *argv[])
         aux[i]->flags = flags;
     }
     cnt = calloc(n, sizeof(*cnt));
+
     if (min_depth >= 0) pcov = calloc(n, sizeof(*pcov));
-    if (!cnt || (min_depth >= 0 && !pcov)) return 2;
+    if (!cnt || (min_depth >= 0 && !pcov)) {
+        print_error_errno("bedcov", "failed to allocate memory");
+        return 2;
+    }
 
     fp = gzopen(argv[optind], "rb");
     if (fp == NULL) {
@@ -202,6 +216,7 @@ int main_bedcov(int argc, char *argv[])
         for (i = 0; i < n; ++i) {
             if (aux[i]->iter) hts_itr_destroy(aux[i]->iter);
             aux[i]->iter = sam_itr_queryi(idx[i], tid, beg, end);
+            aux[i]->rcnt = 0;
         }
 
         mplp = bam_mplp_init(n, read_bam, (void**)aux);
@@ -212,6 +227,9 @@ int main_bedcov(int argc, char *argv[])
 
         memset(cnt, 0, sizeof(*cnt) * n);
         if (min_depth >= 0) memset(pcov, 0, sizeof(*pcov) * n);
+
+        if (do_rcount)
+            bam_mplp_constructor(mplp, incr_rcnt);
 
         while ((ret = bam_mplp_auto(mplp, &tid, &pos, n_plp, plp)) > 0)
             if (pos >= beg && pos < end) {
@@ -244,6 +262,12 @@ int main_bedcov(int argc, char *argv[])
             for (i = 0; i < n; ++i) {
                 kputc('\t', &str);
                 kputl(pcov[i], &str);
+            }
+        }
+        if (do_rcount) {
+            for (i = 0; i < n; ++i) {
+                kputc('\t', &str);
+                kputl(aux[i]->rcnt, &str);
             }
         }
         puts(str.s);
