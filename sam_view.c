@@ -705,6 +705,17 @@ static inline int process_one_record(samview_settings_t *conf, bam1_t *b,
         conf->count++;
     } else if (conf->unmap) {
         b->core.flag |= BAM_FUNMAP;
+        b->core.qual = 0;
+        b->core.isize = 0;
+
+        // remove CIGAR
+        if (b->core.n_cigar) {
+            memmove(bam_get_cigar(b), bam_get_seq(b),
+                    b->data + b->l_data - bam_get_seq(b));
+            b->l_data -= 4*b->core.n_cigar;
+            b->core.n_cigar = 0;
+        }
+
         if (check_sam_write1(conf->out, conf->header,
                              b, conf->fn_out, write_error) < 0) {
             return -1;
