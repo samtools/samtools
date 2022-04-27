@@ -727,6 +727,7 @@ static int stream_view(samview_settings_t *conf) {
         print_error_errno("view", "could not allocate bam record");
         return 1;
     }
+    errno = 0; // prevent false error messages.
     while ((r = sam_read1(conf->in, conf->header, b)) >= 0) {
         if (process_one_record(conf, b, &write_error) < 0) break;
     }
@@ -754,7 +755,7 @@ static int multi_region_view(samview_settings_t *conf, hts_itr_multi_t *iter)
     bam_destroy1(b);
 
     if (result < -1) {
-        print_error("view", "retrieval of region %d failed due to truncated file or corrupt BAM index file", iter->curr_tid);
+        print_error("view", "retrieval of region #%d failed", iter->curr_tid);
         return 1;
     }
     return write_error;
