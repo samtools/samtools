@@ -71,6 +71,7 @@ int main_ampliconstats(int argc, char *argv[]);
 int main_import(int argc, char *argv[]);
 int main_samples(int argc, char *argv[]);
 int main_consensus(int argc, char *argv[]);
+int main_reference(int argc, char *argv[]);
 
 const char *samtools_version()
 {
@@ -179,6 +180,7 @@ static void usage(FILE *fp)
 "     fastq          converts a BAM to a FASTQ\n"
 "     fasta          converts a BAM to a FASTA\n"
 "     import         Converts FASTA or FASTQ files to SAM/BAM/CRAM\n"
+"     reference      Generates a reference from aligned data\n"
 "\n"
 "  -- Statistics\n"
 "     bedcov         read depth per BED region\n"
@@ -284,6 +286,7 @@ int main(int argc, char *argv[])
     else if (strcmp(argv[1], "ampliconstats") == 0)     ret = main_ampliconstats(argc-1, argv+1);
     else if (strcmp(argv[1], "samples") == 0)     ret = main_samples(argc-1, argv+1);
     else if (strcmp(argv[1], "consensus") == 0) ret = main_consensus(argc-1, argv+1);
+    else if (strcmp(argv[1], "reference") == 0) ret = main_reference(argc-1, argv+1);
     else if (strcmp(argv[1], "version") == 0 || \
              strcmp(argv[1], "--version") == 0)
         long_version();

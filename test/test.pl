@@ -34,6 +34,8 @@ use IO::Handle;
 
 my $opts = parse_params();
 
+test_reference($opts);
+test_reference($opts, threads=>2);
 test_bgzip($opts);
 test_faidx($opts);
 test_fqidx($opts);
@@ -3253,6 +3255,33 @@ sub test_fixmate
     test_cmd($opts,out=>'fixmate/6_ct_replace.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -cO sam $$opts{path}/fixmate/6_ct_replace.sam -");
     test_cmd($opts,out=>'fixmate/7_two_read_mapped.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/7_two_read_mapped.sam -");
     test_cmd($opts,out=>'fixmate/8_isize_overflow_64bit.sam.expected', ignore_pg_header => 1, cmd=>"$$opts{bin}/samtools fixmate${threads} -O sam $$opts{path}/fixmate/8_isize_overflow_64bit.sam -");
+}
+
+sub test_reference
+{
+    my ($opts,%args) = @_;
+
+    # Build a CRAM file with some missing data in the middle
+    cmd("$$opts{bin}/samtools view -e 'pos<1000||pos>1200' -O cram,embed_ref=1 -T test/dat/mpileup.ref.fa -o $$opts{path}/reference/mpileup.1.cram test/dat/mpileup.1.sam");
+
+    # MD:Z mode
+    my $threads = exists($args{threads}) ? " -@ $args{threads}" : "";
+    test_cmd($opts,out=>'reference/mpileup.MD.fa.expected', cmd=>"$$opts{bin}/samtools reference${threads} test/reference/mpileup.1.cram");
+
+    # Embedded reference mode
+    test_cmd($opts,out=>'reference/mpileup.embed.fa.expected', cmd=>"$$opts{bin}/samtools reference${threads} -e test/reference/mpileup.1.cram");
+
+    # Region queries.
+    # Produce a region fasta file using faidx, and then supply this as
+    # the expected output to the reference command.
+    cmd("$$opts{bin}/samtools faidx test/reference/mpileup.MD.fa.expected");
+    cmd("$$opts{bin}/samtools faidx test/reference/mpileup.MD.fa.expected 17:1000-1500 > test/reference/mpileup.MD.fa.reg.expected");
+    cmd("$$opts{bin}/samtools faidx test/reference/mpileup.embed.fa.expected");
+    cmd("$$opts{bin}/samtools faidx test/reference/mpileup.embed.fa.expected 17:1000-1500 > test/reference/mpileup.embed.fa.reg.expected");
+    cmd("$$opts{bin}/samtools index test/reference/mpileup.1.cram");
+
+    test_cmd($opts,out=>'reference/mpileup.MD.fa.reg.expected', cmd=>"$$opts{bin}/samtools reference${threads} -r 17:1000-1500 test/reference/mpileup.1.cram");
+    test_cmd($opts,out=>'reference/mpileup.embed.fa.reg.expected', cmd=>"$$opts{bin}/samtools reference${threads} -r 17:1000-1500 -e test/reference/mpileup.1.cram");
 }
 
 sub test_calmd

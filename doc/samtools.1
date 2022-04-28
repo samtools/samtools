@@ -99,6 +99,8 @@ samtools phase input.bam
 .PP
 samtools quickcheck in1.bam in2.cram
 .PP
+samtools reference -o ref.fa in.cram
+.PP
 samtools reheader in.header.sam in.bam > out.bam
 .PP
 samtools samples input.bam
@@ -470,6 +472,17 @@ heterozygous consensus in a Bayesian manner, derived from the "Gap5"
 consensus algorithm.  A simpler base frequency counting method is also
 available.
 
+
+.TP \"-------- reference
+.B reference
+samtools reference
+.RB [ options ]
+.I in.bam
+
+Generate a reference from a SAM, BAM or CRAM file based on the
+contents of the SEQuence field and the MD:Z: auxiliary tags, or from
+the embedded reference blocks within a CRAM file (provided it was
+constructed using the \fBembed_ref=1\fR option).
 
 .TP \"-------- coverage
 .B coverage
@@ -1309,6 +1322,7 @@ for further authorship.
 .IR samtools-mpileup (1),
 .IR samtools-phase (1),
 .IR samtools-quickcheck (1),
+.IR samtools-reference (1),
 .IR samtools-reheader (1),
 .IR samtools-rmdup (1),
 .IR samtools-sort (1),
