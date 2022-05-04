@@ -2008,35 +2008,28 @@ static inline int bam1_cmp_by_minhash(const bam1_tag a, const bam1_tag b)
 }
 
 // compares to molecular identifiers, ignoring any trailing slash and subsequent single-character
-// * if mid1 is shorter than mid2, then -1 will be returned
-// * if mid1 is longer than mid2, then 1 will be returned
+// * if mid1 is less than mid2, then -1 will be returned
+// * if mid1 is greater than mid2, then 1 will be returned
 static inline int template_coordinate_key_compare_mid(const char* mid1, const char* mid2) {
-    int i = 0;
+    size_t i = 0;
+    size_t len1 = strlen(mid1);
+    size_t len2 = strlen(mid2);
+    size_t shortest;
 
-    // compute the length
-    int len1 = strlen(mid1);
-    int len2 = strlen(mid2);
-
-    // shortcut: if the lengths differ, the shorter one is less than
-    if (len1 < len2) return -1;
-    else if (len1 > len2) return 1;
-
-    // trim trailing slash and character
+    // Snip off trailing slash followed by a single character, if present
     if (len1 >= 2 && mid1[len1-2] == '/') len1 -= 2;
     if (len2 >= 2 && mid2[len2-2] == '/') len2 -= 2;
+    shortest = len1 < len2 ? len1 : len2;
 
     // find first mismatching character
-    while (mid1[i] != '\0' && mid2[i] != '\0' && mid1[i] != mid2[i]) {
-        i += 1;
-    }
+    while (i < shortest && mid1[i] == mid2[i]) i++;
 
     // compare last characters
-    if (mid1[i] == mid2[i]) return 0; // all characters match
-    else if (mid1[i] == '\0') return -1; // mid1 shorter
-    else if (mid2[i] == '\0') return 1; // mid2 shorter
-    else if (mid1[i] < mid2[i]) return -1; // mid1 earlier
+    if (i == len1 && i < len2) return -1; // mid1 shorter
+    if (i == len2 && i < len1) return  1; // mid2 shorter
+    if (i == len1 && i == len2) return 0; // all characters match
+    if (mid1[i] < mid2[i]) return -1; // mid1 earlier
     else return 1;
-
 }
 
 
