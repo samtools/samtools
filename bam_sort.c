@@ -150,6 +150,7 @@ void memset_pattern4(void *target, const void *pattern, size_t size) {
 KHASH_INIT(c2c, char*, char*, 1, kh_str_hash_func, kh_str_hash_equal)
 KHASH_INIT(cset, char*, char, 0, kh_str_hash_func, kh_str_hash_equal)
 KHASH_MAP_INIT_STR(c2i, int)
+KHASH_MAP_INIT_STR(const_c2c, char *)
 
 #define hdrln_free_char(p)
 KLIST_INIT(hdrln, char*, hdrln_free_char)
@@ -1656,7 +1657,7 @@ end:
  * BAM sorting *
  ***************/
 
-static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_coordinate_key_t *key, sam_hdr_t *hdr);
+static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_coordinate_key_t *key, sam_hdr_t *hdr, khash_t(const_c2c) *lib_lookup);
 
 typedef struct {
     size_t from;
@@ -1670,14 +1671,15 @@ typedef struct {
 static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
                                 int num_in_mem, buf_region *in_mem,
                                 bam1_tag *buf, template_coordinate_keys_t *keys,
-                                uint64_t *idx, sam_hdr_t *hout) {
+                                uint64_t *idx, sam_hdr_t *hout,
+                                khash_t(const_c2c) *lib_lookup) {
     int i = heap->i, res;
     if (i < nfiles) { // read from file
         res = sam_read1(fp[i], hout, heap->entry.bam_record);
         if (res >= 0 && g_sam_order == TemplateCoordinate) { // file read OK and TemplateCoordinate order
             // It is assumed that there are nfiles more keys allocated than keys->n; see allocation in bam_merge_simple
             template_coordinate_key_t *key = template_coordinate_keys_get(keys, keys->n + i); // get the next key to use
-            heap->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout); // update the key
+            heap->entry.u.key = template_coordinate_key(heap->entry.bam_record, key, hout, lib_lookup); // update the key
             if (heap->entry.u.key == NULL) res = -1; // key could not be created, error out
         }
     } else { // read from memory
@@ -1717,7 +1719,9 @@ static inline int heap_add_read(heap1_t *heap, int nfiles, samFile **fp,
 static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
                             const char *mode, sam_hdr_t *hout,
                             int n, char * const *fn, int num_in_mem,
-                            buf_region *in_mem, bam1_tag *buf, template_coordinate_keys_t *keys, int n_threads,
+                            buf_region *in_mem, bam1_tag *buf,
+                            template_coordinate_keys_t *keys,
+                            khash_t(const_c2c) *lib_lookup, int n_threads,
                             const char *cmd, const htsFormat *in_fmt,
                             const htsFormat *out_fmt, char *arg_list, int no_pg,
                             int write_index) {
@@ -1773,7 +1777,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
             h->entry.bam_record = bam_init1();
             if (!h->entry.bam_record) goto mem_fail;
         }
-        if (heap_add_read(h, n, fp, num_in_mem, in_mem, buf, keys, &idx, hout) < 0) {
+        if (heap_add_read(h, n, fp, num_in_mem, in_mem, buf, keys, &idx, hout,
+                          lib_lookup) < 0) {
             assert(i < n);
             print_error(cmd, "failed to read first record from \"%s\"", fn[i]);
             goto fail;
@@ -1825,7 +1830,8 @@ static int bam_merge_simple(SamOrder sam_order, char *sort_tag, const char *out,
             print_error_errno(cmd, "failed writing to \"%s\"", out);
             goto fail;
         }
-        if (heap_add_read(heap, n, fp, num_in_mem, in_mem, buf, keys, &idx, hout) < 0) {
+        if (heap_add_read(heap, n, fp, num_in_mem, in_mem, buf, keys, &idx,
+                          hout, lib_lookup) < 0) {
             assert(heap->i < n);
             print_error(cmd, "Error reading \"%s\" : %s",
                         fn[heap->i], strerror(errno));
@@ -2035,8 +2041,10 @@ static inline int template_coordinate_key_compare_mid(const char* mid1, const ch
 
 // Builds a key use to sort in TemplateCoordinate order.  Returns NULL if the key could not be created (e.g. MC
 // tag is missing), otherwise the pointer to the provided key.
-static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_coordinate_key_t *key, sam_hdr_t *hdr) {
+static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_coordinate_key_t *key, sam_hdr_t *hdr, khash_t(const_c2c) *lib_lookup) {
     uint8_t *data;
+    char *rg;
+    khiter_t k;
 
     // defaults
     key->tid1 = key->tid2 = INT32_MAX;
@@ -2045,8 +2053,13 @@ static template_coordinate_key_t* template_coordinate_key(bam1_t *b, template_co
     key->mid  = "";
 
     // update values
-    key->library = bam_get_library(hdr, b);
-    if (key->library == NULL) key->library = "";
+    rg = (char *)bam_aux_get(b, "RG");
+    if (rg && rg[0] == 'Z'
+        &&(k = kh_get(const_c2c, lib_lookup, rg + 1)) < kh_end(lib_lookup)) {
+        key->library = kh_value(lib_lookup, k);
+    } else {
+        key->library = "";
+    }
     key->name = bam_get_qname(b);
     if (!(b->core.flag & BAM_FUNMAP)) { // read is mapped, update coordinates
         key->tid1 = b->core.tid;
@@ -2623,6 +2636,61 @@ static int sort_blocks(int n_files, size_t k, bam1_tag *buf, const char *prefix,
     return n_files + n_threads;
 }
 
+static void lib_lookup_destroy(khash_t(const_c2c) *lib_lookup) {
+    khiter_t k;
+    if (lib_lookup == NULL)
+        return;
+    for (k = kh_begin(lib_lookup); k < kh_end(lib_lookup); k++) {
+        if (kh_exist(lib_lookup, k))
+            free(kh_value(lib_lookup, k));
+    }
+    kh_destroy(const_c2c, lib_lookup);
+}
+
+// Build an RG to LB lookup table, for the template coordinate sort.
+// Returns a populated hash table (which may be empty) on success;
+// NULL on failure.
+static khash_t(const_c2c) * lookup_libraries(sam_hdr_t *header)
+{
+    khash_t(const_c2c) *lib_lookup = kh_init(const_c2c);
+    kstring_t lib_name = KS_INITIALIZE;
+    int num_rg, i, res;
+    if (!lib_lookup)
+        return NULL;
+
+    // Iterate through any RG lines and look for library information
+    num_rg = sam_hdr_count_lines(header, "RG");
+    if (num_rg < 0)
+        goto fail;
+
+    for (i = 0; i < num_rg; i++) {
+        const char *rg_id = sam_hdr_line_name(header, "RG", i);
+        khiter_t k;
+        if (!rg_id)
+            goto fail;
+        res = sam_hdr_find_tag_pos(header, "RG", i, "LB", &lib_name);
+        if (res < -1) // Error
+            goto fail;
+        if (res < 0 || !lib_name.s) // No LB tag
+            continue;
+        // Add to lookup table
+        k = kh_put(const_c2c, lib_lookup, rg_id, &res);
+        if (res < 0) // Error
+            goto fail;
+        if (res > 0) { // Inserted
+            kh_value(lib_lookup, k) = ks_release(&lib_name);
+        }
+    }
+
+    free(lib_name.s);
+
+    return lib_lookup;
+
+ fail:
+    lib_lookup_destroy(lib_lookup);
+    free(lib_name.s);
+    return NULL;
+}
 
 /*!
   @abstract Sort an unsorted BAM file based on the provided sort order
@@ -2667,6 +2735,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     const char *new_go = NULL;
     const char *new_ss = NULL;
     buf_region *in_mem = NULL;
+    khash_t(const_c2c) *lib_lookup = NULL;
     int num_in_mem = 0;
     int large_pos = 0;
 
@@ -2726,6 +2795,12 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             print_error("sort", "output format is not compatible with very large references");
             goto err;
         }
+    }
+
+    if (g_sam_order == TemplateCoordinate) {
+        lib_lookup = lookup_libraries(header);
+        if (!lib_lookup)
+            goto err;
     }
 
     switch (g_sam_order) {
@@ -2858,7 +2933,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
             case TemplateCoordinate:
                 ++keys->n;
                 template_coordinate_key_t *key = template_coordinate_keys_get(keys, k);
-                buf[k].u.key = template_coordinate_key(buf[k].bam_record, key, header);
+                buf[k].u.key = template_coordinate_key(buf[k].bam_record, key, header, lib_lookup);
                 if (buf[k].u.key == NULL) goto err;
                 break;
             default:
@@ -2921,8 +2996,8 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
         char *sort_by_tag = (sam_order == TagQueryName || sam_order == TagCoordinate) ? sort_tag : NULL;
         if (bam_merge_simple(sam_order, sort_by_tag, fnout, modeout, header,
                              n_files, fns, num_in_mem, in_mem, buf, keys,
-                             n_threads, "sort", in_fmt, out_fmt, arg_list,
-                             no_pg, write_index) < 0) {
+                             lib_lookup, n_threads, "sort", in_fmt, out_fmt,
+                             arg_list, no_pg, write_index) < 0) {
             // Propagate bam_merge_simple() failure; it has already emitted a
             // message explaining the failure, so no further message is needed.
             goto err;
@@ -2953,6 +3028,7 @@ int bam_sort_core_ext(SamOrder sam_order, char* sort_tag, int minimiser_kmer,
     }
     free(bam_mem);
     free(in_mem);
+    lib_lookup_destroy(lib_lookup);
     sam_hdr_destroy(header);
     if (fp) sam_close(fp);
     return ret;
