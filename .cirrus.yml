@@ -78,8 +78,8 @@ gcc_task:
 ubuntu_task:
   name: ubuntu-clang
   container:
-    #image: ubuntu:latest   # use << : *LIBDEFLATE
-    image: ubuntu:devel
+    image: ubuntu:latest
+    #image: ubuntu:devel
     cpu: 2
     memory: 1G
 
